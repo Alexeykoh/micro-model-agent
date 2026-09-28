@@ -1,3 +1,5 @@
+// Типы MoE-исполнения: план, подзадачи, результаты, scope-запросы.
+/** Подзадача MoE: описание, эксперт, файлы, зависимости, критерии успеха. */
 export interface MoESubtask {
   id: string;
   description: string;
@@ -10,6 +12,7 @@ export interface MoESubtask {
   success_criteria: string[];
 }
 
+/** MoE-план: заголовок, подзадачи, общий контекст (правила, ссылки). */
 export interface MoEPlan {
   title: string;
   subtasks: MoESubtask[];
@@ -19,6 +22,7 @@ export interface MoEPlan {
   };
 }
 
+/** Результат подзадачи: успех, сводка, вывод/ошибка, длительность, scope-запрос. */
 export interface SubtaskResult {
   subtaskId: string;
   success: boolean;
@@ -26,11 +30,11 @@ export interface SubtaskResult {
   result: string;
   error?: string;
   durationMs: number;
-  /** Set when a failed sub-agent reported a structured scope-request block. */
+  /** Ставится, если упавший сабагент вернул структурированный scope-request блок. */
   scopeRequest?: ScopeRequestBody;
 }
 
-/** Machine-readable request from a sub-agent for access to out-of-scope files. */
+/** Машиночитаемый запрос сабагента на доступ к вне-скоп файлам. */
 export interface ScopeRequestBody {
   files: string[];
   read_only: boolean;
@@ -38,18 +42,17 @@ export interface ScopeRequestBody {
 }
 
 /**
- * Result of executing a MoE plan. `success` is `true` only when ALL
- * subtasks succeed. If ANY subtask fails — even when the orchestrator's
- * verification step compensates and produces a final answer — `success`
- * is `false` and the caller (agent-moe) should surface the partial
- * results in the final response text. The orchestrator's verdict does
- * NOT override individual subtask failure.
+ * Результат исполнения MoE-плана. `success` — `true`, только если ВСЕ подзадачи
+ * успешны. Если упала ХОТЬ ОДНА — даже когда верификация оркестратора
+ * скомпенсировала и дала финальный ответ — `success` — `false`, и вызывающий
+ * (agent-moe) показывает частичные результаты в финальном тексте. Вердикт
+ * оркестратора фейлы подзадач НЕ перекрывает.
  */
 export interface PlanResult {
   success: boolean;
   results: SubtaskResult[];
   errors: string[];
   warnings: string[];
-  /** Selective re-plan (Plan 5.1): subtasks carried over from a previous cycle. */
+  /** Селективный re-plan (Plan 5.1): подзадачи, перенесённые из прошлого цикла. */
   carriedSubtaskIds?: string[];
 }

@@ -1,23 +1,26 @@
+// Экспорт сессий: чистые форматтеры md/json/jsonl (без IO, тестируемы без диска).
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionLogEntry } from "./store";
 import { getMessageText } from "../../llm/provider";
 import { redactContextSecrets } from "../../core/agent/context-log";
 
 /**
- * Pure export formatters for `session export` / `/export`. IO and paths live
- * in the command layer; these functions only turn session data into text and
- * are unit-testable without touching disk.
+ * Чистые форматтеры экспорта для `session export` / `/export`. IO и пути —
+ * в слое команд; функции лишь превращают данные сессии в текст и тестируются
+ * без диска.
  */
 
+/** Формат экспорта. */
 export type ExportFormat = "md" | "json" | "jsonl";
 
+/** Пакет данных для экспорта: мета, сообщения, журнал. */
 export interface ExportBundle {
   meta: SessionMeta | null;
   messages: SessionMessage[];
   log: SessionLogEntry[];
 }
 
-/** `--compact`: human-readable export without tool result dumps. */
+/** `--compact`: человекочитаемый экспорт без дампов результатов тулов. */
 export interface ExportOptions {
   compact?: boolean;
 }
@@ -37,6 +40,7 @@ function roleHeading(role: string): string {
   }
 }
 
+/** Отрендерить сессию в Markdown. */
 export function renderSessionMarkdown(
   meta: SessionMeta | null,
   messages: SessionMessage[],
@@ -66,8 +70,8 @@ export function renderSessionMarkdown(
 }
 
 function appendMessageLines(lines: string[], msg: SessionMessage, opts?: ExportOptions): void {
-  // Compact mode drops tool result bodies (the bulk of long sessions);
-  // the `- tool_call:` one-liners on assistant turns still show what ran.
+  // Compact режет тела tool-результатов (основной объём длинных сессий);
+  // однострочники `- tool_call:` на ходах ассистента показывают, что запускалось.
   if (opts?.compact && msg.role === "tool") return;
   const heading = roleHeading(msg.role);
   const nameSuffix = msg.name ? ` (${msg.name})` : "";
@@ -84,6 +88,7 @@ function appendMessageLines(lines: string[], msg: SessionMessage, opts?: ExportO
   }
 }
 
+/** Собрать JSON-экспорт сессии. */
 export function buildSessionJson(
   meta: SessionMeta | null,
   messages: SessionMessage[],
@@ -93,14 +98,16 @@ export function buildSessionJson(
   return JSON.stringify({ meta, messages: list }, null, 2);
 }
 
-/** Bulky prompt-snapshot entries dropped by --compact (human reading). */
+/** Объёмные снапшот-записи, выкидываемые --compact (для чтения человеком). */
 const COMPACT_JSONL_DROP = new Set(["context", "tool_defs", "tool_result", "llm_usage"]);
 
+/** Собрать JSONL-экспорт из журнала. */
 export function buildSessionJsonl(log: SessionLogEntry[], opts?: ExportOptions): string {
   const list = opts?.compact ? log.filter((e) => !COMPACT_JSONL_DROP.has(e.type)) : log;
   return list.map((e) => JSON.stringify(e)).join("\n");
 }
 
+/** Отформатировать пакет в заданном формате. */
 export function formatExport(
   bundle: ExportBundle,
   format: ExportFormat,
@@ -116,12 +123,12 @@ export function formatExport(
   }
 }
 
-/** Apply secret redaction to an export unless disabled. */
+/** Вычистить секреты из экспорта, если не отключено. */
 export function redactExport(text: string, redact: boolean): string {
   return redact ? redactContextSecrets(text) : text;
 }
 
-/** Sanitize a session name for use as a file name. */
+/** Санитизировать имя сессии под имя файла. */
 export function sanitizeFileName(name: string): string {
   const cleaned = name
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
@@ -131,6 +138,7 @@ export function sanitizeFileName(name: string): string {
   return cleaned.length > 0 ? cleaned.slice(0, 60) : "session";
 }
 
+/** Расширение файла под формат. */
 export function extensionFor(format: ExportFormat): string {
   return format === "jsonl" ? "jsonl" : format;
 }

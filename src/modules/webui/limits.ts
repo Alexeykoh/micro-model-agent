@@ -1,8 +1,6 @@
-/**
- * Shared transport limits with no internal imports.
- *
- * Kept in its own module so `state.ts` and `util.ts` can both read
- * `MAX_BODY_BYTES` without importing each other (that edge was one of the two
- * webui import cycles).
- */
+// Общие транспортные лимиты без внутренних импортов.
+//
+// Отдельным модулем, чтобы `state.ts` и `util.ts` оба читали `MAX_BODY_BYTES`,
+// не импортируя друг друга (это ребро было одним из двух webui-циклов).
+/** Максимум байт тела запроса. */
 export const MAX_BODY_BYTES = 24 * 1024 * 1024;

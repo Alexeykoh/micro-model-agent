@@ -1,14 +1,13 @@
+// Применение ответов first-run визарда на загруженный конфиг (единый путь записи).
 /**
- * Apply first-run wizard answers onto a loaded config.
- *
- * Shared by the terminal wizard (`src/cli/setup-order.ts` re-exports this) and
- * the browser wizard (`src/modules/webui/setup-api.ts`), so there is a single
- * write path onto `AppConfig`.
+ * Применение ответов first-run визарда на загруженный конфиг.
+ * Общий для терминального визарда (`src/cli/setup-order.ts` реэкспортит) и
+ * браузерного (`src/modules/webui/setup-api.ts`) — единый путь записи в `AppConfig`.
  */
 import type { AppConfig } from "../../config/types";
 import type { SetupAnswers } from "./answers";
 
-/** Extra commands added to the bash blacklist when the wizard enables it. */
+/** Команды в довесок к bash-blacklist, если визард включил блок. */
 export const SECURITY_BASH_BLOCKLIST = [
   "rm",
   "dd",
@@ -29,19 +28,15 @@ export const SECURITY_BASH_BLOCKLIST = [
 ];
 
 /**
- * Apply first-run wizard answers onto a loaded config.
- *
- * The provider is replaced with a **fresh object** rather than mutated in
- * place: `loadConfig` may register a session-scoped `MMA_PROVIDER_*` env
- * override whose `envValue` points at the loaded `config.provider` object.
- * `saveConfig`'s `stripEnvOverrides` then matches that object by identity and
- * would revert the whole provider to the env/default value, silently losing
- * the wizard's provider/URL/key. Replacing the object keeps the override's
- * stale identity intact, so only the env key is stripped and our answers are
- * persisted.
- *
- * Also rewrites the active `provider.entries[]` entry (type/baseUrl/apiKey and
- * the context window) while preserving sibling providers and their tuning.
+ * Применить ответы first-run визарда на загруженный конфиг.
+ * Провайдер заменяется **новым объектом**, а не мутируется на месте: `loadConfig`
+ * может повесить сессионный `MMA_PROVIDER_*` env-оверрайд, чей `envValue`
+ * указывает на загруженный объект `config.provider`. `stripEnvOverrides` в
+ * `saveConfig` матчит этот объект по identity и откатил бы весь провайдер к
+ * env/дефолту, молча потеряв провайдер/URL/ключ визарда. Замена объекта
+ * сохраняет протухшую identity оверрайда — вычищается только env-ключ, а ответы
+ * персистятся. Активная запись `provider.entries[]` тоже переписывается
+ * (type/baseUrl/apiKey и окно контекста), соседи и их тюнинг целы.
  */
 export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppConfig {
   config.provider = {
@@ -54,10 +49,10 @@ export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppCon
   config.contextWindow = a.contextWindow;
   config.maxToolIterations = a.maxToolIterations;
   config.locale = a.locale;
-  // Multi-entry configs resolve the active provider from `entries[]`, so the
-  // answers must be written onto the active entry — without dropping the other
-  // providers or the entry's tuning (cache, retry, rateLimits). A deliberate
-  // custom label is preserved; a generic/default one is replaced.
+  // Мультиконфиги резолвят активный провайдер из `entries[]`, так что ответы
+  // пишутся на активную запись — без потери соседей и тюнинга записи
+  // (cache, retry, rateLimits). Осознанный кастомный label сохраняется,
+  // generic/дефолтный заменяется.
   if ((config.provider.entries?.length ?? 0) > 0) {
     const entries = config.provider.entries ?? [];
     const activeName =

@@ -1,33 +1,31 @@
+// Валидация путей: джейл baseDir, симлинки, deny/allow-паттерны, скоуп суб-агента.
 import { resolve, normalize, dirname } from "path";
 import { realpathSync } from "fs";
 import { isInsideDir, matchesScopeEntry, toForwardSlash } from "../../tools/path-utils";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
 
-/**
- * Result of path validation
- */
+/** Итог проверки пути: разрешено/запрет с причиной. */
 export interface PathValidationResult {
   allowed: boolean;
   reason?: string;
 }
 
 /**
- * Symlink containment: resolve() does NOT follow symlinks, so a symlink
- * (or Windows junction) inside baseDir can point outside it.
- *
- * For an existing target the real path must stay inside the real base. For a
- * not-yet-created leaf the nearest EXISTING ancestor is canonicalized instead,
- * so `base/link/new.txt` is caught when `link` points outside — creation is
- * no longer a bypass. Returns false (cannot judge) when baseDir itself does
- * not exist, so pure lexical validation still works on virtual paths.
+ * Симлинк-контейнмент: resolve() симлинки НЕ резолвит, и симлинк
+ * (или Windows-junction) внутри baseDir может указывать наружу.
+ * Существующая цель обязана остаться внутри реального base. Для ещё не
+ * созданного листа каноникализируется ближайший СУЩЕСТВУЮЩИЙ предок —
+ * иначе `base/link/new.txt` проскочил бы, когда `link` смотрит наружу.
+ * False (судить нельзя), если нет самого baseDir: чисто лексическая
+ * проверка продолжает работать на виртуальных путях.
  */
 function escapesViaSymlink(baseResolved: string, targetResolved: string): boolean {
   let realBase: string;
   try {
     realBase = realpathSync(baseResolved);
   } catch {
-    // baseDir missing (virtual path / test fixture) — nothing to canonicalize.
+    // baseDir нет (виртуальный путь / фикстура) — каноникализировать нечего.
     return false;
   }
 
@@ -38,15 +36,15 @@ function escapesViaSymlink(baseResolved: string, targetResolved: string): boolea
       return real !== realBase && !isInsideDir(real, realBase);
     } catch {
       const parent = dirname(probe);
-      if (parent === probe) return false; // reached the root, nothing exists
+      if (parent === probe) return false; // корень, ничего не существует
       probe = parent;
     }
   }
 }
 
 /**
- * Check if a path is within the allowed scope
- * This combines global security settings with per-tool scope
+ * Путь в разрешённом скоупе или нет.
+ * Комбинирует глобальные настройки и per-tool скоуп.
  */
 export function isPathInScope(
   baseDir: string,
@@ -57,8 +55,8 @@ export function isPathInScope(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  // First, check that path is within baseDir (separator- and case-safe: a
-  // sibling directory sharing the prefix must not pass).
+  // Сначала — внутри baseDir (сепараторо- и регистро-безопасно: соседний
+  // каталог с общим префиксом пройти не должен).
   if (!isInsideDir(targetResolved, baseResolved)) {
     return {
       allowed: false,
@@ -72,9 +70,9 @@ export function isPathInScope(
     };
   }
 
-  // If security is disabled, skip pattern validation
+  // Выключенная защита пропускает паттерны
   if (!securityConfig?.enabled) {
-    // Still enforce subagent scope if present
+    // Скоуп суб-агента действует всё равно
     if (scope) {
       const isReadScope = scope.read_only_files.some((f: string) =>
         matchesScopeEntry(targetResolved, resolve(baseDir, f)),
@@ -92,7 +90,7 @@ export function isPathInScope(
     return { allowed: true };
   }
 
-  // Check global denied patterns
+  // Глобальные denied-паттерны
   if (securityConfig?.denied?.length) {
     for (const pattern of securityConfig.denied) {
       if (matchesGlobPattern(targetResolved, baseDir, pattern)) {
@@ -104,7 +102,7 @@ export function isPathInScope(
     }
   }
 
-  // Check global allowed patterns (if non-empty, only these are allowed)
+  // Глобальные allowed-паттерны (непустые — разрешены только совпавшие)
   if (securityConfig?.allowed?.length) {
     let isAllowed = false;
     for (const pattern of securityConfig.allowed) {
@@ -121,7 +119,7 @@ export function isPathInScope(
     }
   }
 
-  // Check tool-specific scope (for subagents)
+  // Per-tool скоуп (для суб-агентов)
   if (!scope) {
     return { allowed: true };
   }
@@ -142,9 +140,7 @@ export function isPathInScope(
   };
 }
 
-/**
- * Check if a path is writable (for write/delete operations)
- */
+/** Путь доступен для записи (операции write/delete) или нет. */
 export function isPathWritable(
   baseDir: string,
   targetPath: string,
@@ -154,16 +150,16 @@ export function isPathWritable(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  // First, check that path is within baseDir (separator- and case-safe: a
-  // sibling directory sharing the prefix must not pass).
+  // Сначала — внутри baseDir (сепараторо- и регистро-безопасно: соседний
+  // каталог с общим префиксом пройти не должен).
   if (!isInsideDir(targetResolved, baseResolved)) {
     return {
       allowed: false,
       reason: "Path is outside the base working directory",
     };
   }
-  // Writes must never follow a symlink/junction out of baseDir (the read path
-  // has always checked this; the write path used to skip it).
+  // Запись не следует за симлинком/junction наружу из baseDir (путь чтения
+  // проверял это всегда; путь записи раньше пропускал).
   if (escapesViaSymlink(baseResolved, targetResolved)) {
     return {
       allowed: false,
@@ -171,9 +167,9 @@ export function isPathWritable(
     };
   }
 
-  // If security is disabled, skip pattern validation
+  // Выключенная защита пропускает паттерны
   if (!securityConfig?.enabled) {
-    // Still enforce subagent scope if present
+    // Скоуп суб-агента действует всё равно
     if (scope) {
       const isWriteScope = scope.allowed_files.some((f: string) =>
         matchesScopeEntry(targetResolved, resolve(baseDir, f)),
@@ -187,7 +183,7 @@ export function isPathWritable(
     return { allowed: true };
   }
 
-  // Check global denied patterns
+  // Глобальные denied-паттерны
   if (securityConfig?.denied?.length) {
     for (const pattern of securityConfig.denied) {
       if (matchesGlobPattern(targetResolved, baseDir, pattern)) {
@@ -199,7 +195,7 @@ export function isPathWritable(
     }
   }
 
-  // Check global allowed patterns (if non-empty, only these are allowed)
+  // Глобальные allowed-паттерны (непустые — разрешены только совпавшие)
   if (securityConfig?.allowed?.length) {
     let isAllowed = false;
     for (const pattern of securityConfig.allowed) {
@@ -216,7 +212,7 @@ export function isPathWritable(
     }
   }
 
-  // Check tool-specific scope (for subagents)
+  // Per-tool скоуп (для суб-агентов)
   if (!scope) {
     return { allowed: true };
   }
@@ -234,27 +230,27 @@ export function isPathWritable(
 }
 
 /**
- * Simple glob pattern matching (supports * and **)
- * This is a simplified version that handles common cases
+ * Простой glob-матчинг (поддерживает * и **).
+ * Упрощённая версия для типовых случаев.
  */
 function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string): boolean {
   const resolvedBaseDir = resolve(baseDir);
   const resolvedTargetPath = resolve(targetPath);
 
-  // Relative target path used for segment matching
+  // Относительный путь для посегментного матчинга
   const relPath = resolvedTargetPath.startsWith(resolvedBaseDir)
     ? resolvedTargetPath.slice(resolvedBaseDir.length).replace(/^\//, "")
     : resolvedTargetPath;
 
-  // Handle patterns with ** (recursive directory matching)
+  // Паттерны с ** (рекурсивный матчинг каталогов)
   if (pattern.includes("**")) {
-    // Split on ** to get prefix/suffix segments
+    // Разбить по ** на префикс/суффикс
     const cleaned = pattern.replace(/\/$/, "");
     const [rawPrefix, rawSuffix] = cleaned.split("**");
     const prefix = rawPrefix.replace(/\/$/, "");
     const suffix = rawSuffix.replace(/^\//, "");
 
-    // Check prefix: everything before ** must match the start of the path
+    // Префикс: всё до ** обязано совпасть с началом пути
     if (prefix) {
       const prefixParts = prefix.split("/").filter(Boolean);
       const relParts = relPath.split("/");
@@ -263,13 +259,13 @@ function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string
       }
     }
 
-    // ** at the end matches everything
+    // ** в конце матчит всё
     if (!suffix) return true;
 
-    // Check suffix against remaining path segments
+    // Суффикс против оставшихся сегментов
     const suffixParts = suffix.split("/").filter(Boolean);
     const relParts = relPath.split("/");
-    // Search for suffix match anywhere in remaining path
+    // Ищем совпадение суффикса в любой позиции оставшегося пути
     for (let start = (prefix ? prefix.split("/").filter(Boolean).length : 0); start <= relParts.length - suffixParts.length; start++) {
       let match = true;
       for (let j = 0; j < suffixParts.length; j++) {
@@ -281,14 +277,14 @@ function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string
     return false;
   }
 
-  // Handle directory patterns (ending with /) without **
+  // Паттерны каталогов (с / на конце) без **
   if (pattern.endsWith("/")) {
     const dirPattern = pattern.slice(0, -1);
     const resolvedDirPattern = resolve(baseDir, dirPattern);
     return isInsideDir(resolvedTargetPath, resolvedDirPattern);
   }
 
-  // Handle * pattern (single level) without **
+  // Паттерн * (один уровень) без **
   if (pattern.includes("*")) {
     const regexPattern = pattern
       .replace(/\*/g, "[^/\\\\]*")
@@ -300,7 +296,7 @@ function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string
     return regex.test(relativePath);
   }
 
-  // Exact match (case-insensitive on win32, where the FS is case-insensitive)
+  // Точное совпадение (на win32 регистронезависимо — там FS такая)
   const exactTarget = resolve(baseDir, pattern);
   if (process.platform === "win32") {
     return resolvedTargetPath.toLowerCase() === exactTarget.toLowerCase();

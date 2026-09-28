@@ -1,13 +1,13 @@
+// Дефолтные LSP-серверы и выбор сервера по файлу (язык, Angular-исключение).
 import { existsSync } from "fs";
 import { dirname, join } from "path";
 import type { LspConfig, LspServerConfig } from "./types";
 
 /**
- * LSP server defaults.
- *
- * Strategy: prefer `npx` (auto-downloads) over globally installed binaries.
- * Servers using system tools (rust-analyzer, gopls) have `autoInstall: false`
- * and are skipped silently when not found.
+ * Дефолты LSP-серверов.
+ * Стратегия: предпочитать `npx` (самодокачка) глобальным бинарникам.
+ * Серверы на системных тулах (rust-analyzer, gopls) — `autoInstall: false`,
+ * при отсутствии молча скипаются.
  */
 export const DEFAULT_LSP_CONFIG: LspConfig = {
   enabled: true,
@@ -145,7 +145,7 @@ const LANGUAGE_MAP: Record<string, string> = {
   scss: "css",
 };
 
-/** Language id for a file extension (via LANGUAGE_MAP), or null when unsupported. */
+/** Id языка по расширению файла (через LANGUAGE_MAP), неподдерживаемое — null. */
 export function getLanguageForFile(filePath: string): string | null {
   const ext = filePath.split(".").pop()?.toLowerCase();
   if (!ext) return null;
@@ -156,8 +156,8 @@ const ANGULAR_MARKER = "angular.json";
 const ANGULAR_LOOKUP_DEPTH = 10;
 
 /**
- * True when the file lives inside an Angular workspace (an `angular.json`
- * marker exists in one of its ancestor directories, bounded lookup).
+ * Лежит ли файл внутри Angular-workspace (маркер `angular.json` в одном из
+ * предков, поиск ограничен глубиной).
  */
 function isAngularProject(filePath: string): boolean {
   let dir = dirname(filePath);
@@ -171,9 +171,9 @@ function isAngularProject(filePath: string): boolean {
 }
 
 /**
- * Config key of the LSP server for a file. `.html` routes to the `angular`
- * server inside Angular workspaces (templates with bindings need the Angular
- * language service) and to the generic `html` server everywhere else.
+ * Ключ конфига LSP-сервера для файла. `.html` идёт на сервер `angular` внутри
+ * Angular-workspace (шаблонам с биндингами нужен Angular language service),
+ * везде иначе — на generic `html`.
  */
 export function getServerKeyForFile(filePath: string, config: LspConfig): string | null {
   const lang = getLanguageForFile(filePath);
@@ -184,6 +184,7 @@ export function getServerKeyForFile(filePath: string, config: LspConfig): string
   return lang;
 }
 
+/** Конфиг LSP-сервера для файла (null — не поддерживается). */
 export function getServerForFile(filePath: string, config: LspConfig): LspServerConfig | null {
   const key = getServerKeyForFile(filePath, config);
   if (!key) return null;

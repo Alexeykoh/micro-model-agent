@@ -1,3 +1,4 @@
+// Commander-программа: setup/meet/init/web/agents/config/session/* и фабрика createProgram.
 import { Command } from "commander";
 import { bootstrap } from "../core/bootstrap";
 import { saveConfig } from "../config/config";
@@ -38,12 +39,12 @@ import { MMA_DIR_NAME, globalConfigFile, globalExportsDir } from "../config/path
 
 const version = readMmaVersion();
 
-/** Config as shown by `mma config show`: secrets redacted unless explicitly requested. */
+/** Конфиг для `mma config show`: секреты затёрты, если явно не просили. */
 export function configForDisplay<T>(config: T, showSecrets?: boolean): T {
   return showSecrets ? config : redactConfigSecrets(config);
 }
 
-/** Shared body of the provider setup wizard (`mma setup` and deprecated `mma init`). */
+/** Общее тело визарда настройки провайдера (`mma setup` и устаревший `mma init`). */
 async function runWizardCommand(): Promise<void> {
   const answers = await runSetup();
   const configPath = globalConfigFile();
@@ -80,8 +81,8 @@ function buildWebCommand(program: Command): void {
     .option("--token <t>", t("cli.web.token"))
     .option("--no-open", t("cli.web.no_open"))
     .action(() => {
-      /* Dispatched by main.ts after program.parse() — the web server is
-         long-running and must not be cut short by the one-shot exit hook. */
+      /* Диспатчится из main.ts после program.parse(): веб-сервер долгоживущий,
+         хук one-shot выхода его резать не должен. */
     });
 }
 
@@ -164,7 +165,7 @@ function buildConfigCommands(program: Command): void {
       const { config } = loadConfig({ configDir, projectConfigPath: join(configDir, ".mmrc") });
       saveConfig(config, configPath, configDir);
 
-      // Rename legacy file
+      // Переименование legacy-файла.
       const bakPath = `${configPath}.bak`;
       const { renameSync } = await import("fs");
       renameSync(configPath, bakPath);
@@ -188,7 +189,7 @@ function buildModelCommands(program: Command): void {
       const { config } = await bootstrap();
       getDefaultChannel().writeLine(`${t("cli.current_model")} ${config.model}`);
 
-      // Fetch available models from provider
+      // Тянем доступные модели с провайдера.
       const { createProvider } = await import("../modules/providers/create");
       const provider = createProvider(config.provider.type, {
         model: config.model,
@@ -483,8 +484,8 @@ function buildProviderCommands(program: Command): void {
       if (config.provider.entries && config.provider.entries.length > 0) {
         try {
           await agent.setProvider(name);
-          // Persist: `agent.setProvider` only mutates the in-memory config, so
-          // the switch was silently lost on exit for multi-entry configs.
+          // Персист: `agent.setProvider` мутит только in-memory конфиг, так что свитч
+          // молча терялся на выходе для мульти-записных конфигов.
           saveConfig(config, configPath, dirname(configPath));
           getDefaultChannel().writeLine(t("cli.provider_set", { name }));
         } catch (e: any) {
@@ -528,7 +529,7 @@ function buildProviderCommands(program: Command): void {
         const configPath = globalConfigFile();
         const { config } = await bootstrap();
         const entries = Array.isArray(config.provider.entries) ? config.provider.entries : [];
-        // If a legacy single provider exists, seed the list with it first.
+        // Есть legacy-одиночка — сидим список сначала с него.
         if (entries.length === 0) {
           entries.push({
             type: config.provider.type,
@@ -831,10 +832,10 @@ export function createProgram(): Command {
   buildProviderCommands(program);
   buildSessionCommands(program);
 
-  // Add security commands
+  // Подключаем security-команды.
   createSecurityCommand(program);
 
-  // Add plugin commands
+  // Подключаем plugin-команды.
   createPluginCommand(program);
 
   buildChangelogCommand(program);
@@ -843,14 +844,13 @@ export function createProgram(): Command {
     .argument("[prompt...]", "Prompt to execute")
     .description("Run a single prompt")
     .action((_prompt: string[]) => {
-      /* Handled by main.ts after program.parse() */
+      /* Обрабатывает main.ts после program.parse(). */
     });
 
-  // Subcommand actions run full bootstrap() (reasoning-probe fetch, indexer,
-  // plugins…), which leaves open handles — without an explicit exit the
-  // process hangs after printing its result ("config set" printed, never
-  // exited). The prompt/REPL paths exit explicitly in main.ts; every
-  // SUBCOMMAND is one-shot, so exit as soon as its action resolves.
+  // Экшены субкоманд гонят полный bootstrap() (reasoning-пробник, индексер,
+  // плагины…), оставляющий открытые хендлы: без явного exit процесс висит после
+  // печати результата ("config set" напечатал и не вышел). Prompt/REPL-пути
+  // выходят явно в main.ts; каждая СУБКОМАНДА — one-shot: выходим, как резолвнится action.
   //
   // Хук навешиваем РЕКУРСИВНО на все подкоманды (не только верхнего уровня):
   // у вложенных (`session show`, `model certify`, `provider use` …) родитель
@@ -863,11 +863,11 @@ export function createProgram(): Command {
     });
     for (const sub of cmd.commands) attachOneShotExit(sub);
   };
-  // `meet`/`agents` are not one-shot: their empty actions only mark intent, and
-  // main.ts falls through to the interactive REPL. `web` is long-running (its
-  // server is started by main.ts after parse). The exit hook would fire during
-  // program.parse() and kill the process before the branch runs.
-  // `mma init`/`mma setup` ARE one-shot wizards and must exit after running.
+  // `meet`/`agents` — не one-shot: их пустые action лишь маркируют намерение, и
+  // main.ts проваливается в интерактивный REPL. `web` долгоживущий (сервер
+  // стартует из main.ts после parse). Хук выхода сработал бы во время
+  // program.parse() и убил процесс до ветки. `mma init`/`mma setup` — one-shot
+  // визарды, обязаны выйти после прогона.
   const longRunningCommands = new Set(["meet", "agents", "web"]);
   for (const cmd of program.commands) {
     if (longRunningCommands.has(cmd.name())) continue;

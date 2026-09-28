@@ -1,5 +1,7 @@
+/** Загрузка модели LM Studio с нужной длиной контекста. */
 import type { Logger } from "../logger/app-logger";
 
+/** Конфиг загрузки: модель, контекст, флаги GPU/батча. */
 export interface ModelLoadConfig {
   model: string;
   contextLength: number;
@@ -9,6 +11,7 @@ export interface ModelLoadConfig {
   autoLoad?: boolean;
 }
 
+/** Итог загрузки: успех, уже загружена, время, ошибка. */
 export interface LoadResult {
   success: boolean;
   alreadyLoaded?: boolean;
@@ -16,8 +19,8 @@ export interface LoadResult {
   error?: string;
 }
 
-// Live context-probe helpers live in ./provider-context.ts and
-// ./models-dev.ts; re-exported here so existing importers keep working.
+// Хелперы живой context-probe — в ./provider-context.ts и ./models-dev.ts;
+// реэкспорт отсюда, чтобы существующие импорты не ломать.
 export {
   probeModel,
   getLoadedContextLength,
@@ -32,7 +35,7 @@ interface LmStudioLoadResponse {
   loadTime?: number;
 }
 
-/** Native `/api/v1/models` shape the loader itself reads (loaded check). */
+/** Нативная форма `/api/v1/models`, которую читает сам загрузчик (проверка load). */
 interface LmStudioStatusResponse {
   models?: Array<{
     key?: string;
@@ -41,6 +44,7 @@ interface LmStudioStatusResponse {
   }>;
 }
 
+/** Загрузчик модели LM Studio: ensure + load через native API. */
 export class ModelLoader {
   private baseUrl: string;
   private logger: Logger;
@@ -51,6 +55,10 @@ export class ModelLoader {
     this.logger = logger;
   }
 
+  /**
+   * Гарантирует загруженную модель с нужным контекстом (иначе грузит).
+   * @param config конфиг загрузки; @returns итог (уже была/загружена/ошибка).
+   */
   async ensureModelLoaded(config: ModelLoadConfig): Promise<LoadResult> {
     if (config.autoLoad === false) {
       return { success: true, alreadyLoaded: true };

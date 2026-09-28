@@ -1,3 +1,4 @@
+// Фасад UI: форматтеры, вывод, таблицы, спиннер, рендерер.
 export {
   formatMarkdown,
   formatError,

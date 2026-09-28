@@ -1,3 +1,4 @@
+// Markdown-форматтер чата: стриминг строк, подсветка кода, таблицы (см. STYLE.md).
 import { pc } from "./colors";
 import stringWidth from "string-width";
 import { t } from "../i18n/index";
@@ -49,6 +50,7 @@ function isHorizontalRule(line: string): boolean {
   return /^(-{3,}|\*{3,}|_{3,})\s*$/.test(line.trim());
 }
 
+/** Стриминговый форматтер markdown в терминальные строки. */
 export class FormattingStream {
   private buffer = "";
   private inCodeBlock = false;
@@ -58,15 +60,15 @@ export class FormattingStream {
   private onWrite: (text: string) => void;
   private onRawWrite: (text: string) => void;
   private width: number;
-  /** Display columns of the raw partial currently shown on the terminal. */
+  /** Колонок сырого партиала, показанного сейчас в терминале. */
   private partialWritten = 0;
-  /** How many chars of the pending line have already been streamed raw. */
+  /** Сколько символов pending-строки уже стримлено сырьём. */
   private streamedChars = 0;
-  /** Columns reserved on the left (caller prefix) so a partial never wraps. */
+  /** Колонок зарезервировано слева (префикс вызывающего), чтобы партиал не враппился. */
   private reservedCols: number;
   /**
-   * Stream the current (not-yet-newline-terminated) line raw for live
-   * feedback. Off by default — offline callers use `formatMarkdown`.
+   * Стрим текущей (ещё не завершённой переводом строки) строки сырьём для живого
+   * фидбэка. По умолчанию выкл; офлайн-вызывающие используют `formatMarkdown`.
    */
   private streamPartials: boolean;
 
@@ -98,16 +100,15 @@ export class FormattingStream {
   }
 
   /**
-   * Stream the pending line raw for real-time feedback; the formatted line
-   * replaces it once the newline arrives.
+   * Стримит pending-строку сырьём для real-time фидбэка; форматированная строка
+   * заменяет её по приходу перевода строки.
    *
-   * The replacement uses a RELATIVE cursor move (`\x1b[<cols>D`), which is only
-   * correct while the streamed text stays on the single visual line it started
-   * on. If the partial would exceed the terminal width it wraps and every
-   * relative move lands in the wrong place — the garbled output observed after
-   * the 1.0.0 output refactor (missing/swapped characters, leaked markers,
-   * broken tables). So streaming freezes at the last chunk that fits and the
-   * line is rendered when it completes.
+   * Замена — ОТНОСИТЕЛЬНЫМ движением курсора (`\x1b[<cols>D`), корректным лишь
+   * пока стримленный текст сидит на одной визуальной строке, с которой начал.
+   * Если партиал шире терминала, он враппится и каждый относительный сдвиг бьёт
+   * мимо — та самая битая выдача после рефактора вывода 1.0.0 (потерянные/
+   * переставленные символы, потёкшие маркеры, ломаные таблицы). Поэтому стрим
+   * замирает на последнем влезшем чанке, а строка рендерится по завершении.
    */
   private streamPartial(): void {
     if (!this.streamPartials) return;
@@ -122,37 +123,37 @@ export class FormattingStream {
 
   private emitPartialRewind(): void {
     if (this.partialWritten > 0) {
-      // Move back over the streamed partial and erase any tail left by a
-      // shorter formatted replacement before the caller renders the line.
+      // Откат поверх стримленного партиала + стереть хвост, оставшийся от более
+      // короткой форматированной замены, до рендера строки вызывающим.
       this.onRawWrite(`\x1b[${this.partialWritten}D\x1b[K`);
       this.partialWritten = 0;
     }
     this.streamedChars = 0;
   }
 
-  /** True when there is displayed partial output or unprocessed buffered text. @internal */
+  /** Есть ли показанный партиал или необработанный буфер. @internal */
   hasPartial(): boolean {
     return this.partialWritten > 0 || this.buffer.length > 0 || this.tableBuffer.length > 0;
   }
 
   /**
-   * Finalize a displayed raw partial so the next write starts on a fresh line.
-   * Only the already-streamed partial is terminated (with a single newline via
-   * `onRawWrite`); any pending table buffer is flushed. An open code block is
-   * intentionally left untouched — closing it here would make the real closing
-   * fence look like a new opening fence and corrupt all following prose. The
-   * code block is emitted by the final `flush()`. Idempotent.
+   * Финализирует показанный сырой партиал, чтобы следующая запись началась с новой строки.
+   * Терминируется только уже стримленный партиал (одиночный перевод строки через
+   * `onRawWrite`); pending-буфер таблицы сбрасывается. Открытый кодовый блок
+   * осознанно не трогается: закрытие здесь сделало бы настоящий закрывающий fence
+   * похожим на новый открывающий и испортило бы всю прозу дальше. Блок эмитит
+   * финальный `flush()`. Идемпотентно.
    */
   flushPartialNow(): void {
     if (this.partialWritten > 0) {
-      // The line is already on screen raw; terminate it as-is (it may be
-      // interrupted mid-markdown) and drop it so it is not rendered twice.
+      // Строка уже на экране сырьём; терминируем как есть (может быть оборвана
+      // посреди markdown) и дропаем, чтобы не отрендерить дважды.
       this.onRawWrite("\n");
       this.partialWritten = 0;
       this.streamedChars = 0;
       this.buffer = "";
     } else if (this.buffer.length > 0 && !this.inCodeBlock) {
-      // Never streamed (plain mode) — render the pending line now.
+      // Не стримлено (plain-режим) — рендерим pending-строку сейчас.
       const line = this.buffer;
       this.buffer = "";
       this.streamedChars = 0;
@@ -169,8 +170,8 @@ export class FormattingStream {
     }
     if (this.inCodeBlock) {
       if (this.buffer.length > 0) {
-        // A closing fence at EOF has no trailing newline; treat it as the
-        // close, not as code content (otherwise "```" leaks into the block).
+        // Закрывающий fence в EOF без trailing newline: считаем закрытием, а не
+        // контентом кода (иначе "```" потечёт в блок).
         if (this.buffer.trim().startsWith("```")) {
           this.buffer = "";
         } else {
@@ -198,8 +199,8 @@ export class FormattingStream {
       if (this.inCodeBlock) {
         this.emitCodeBlock();
       } else {
-        // A pending table must not be emitted AFTER the code block that
-        // follows it: flush it before entering the fence.
+        // Pending-таблица не должна эмититься ПОСЛЕ идущего за ней кодового блока:
+        // сбрасываем до входа в fence.
         if (this.tableBuffer.length > 0) this.flushTable();
         this.inCodeBlock = true;
         this.codeLang = line.trim().slice(3).trim();
@@ -245,8 +246,8 @@ export class FormattingStream {
     if (this.codeLines.length > 0) {
       const code = this.codeLines.join("\n");
       const highlighted = highlight(code, this.codeLang);
-      // No frame: a dim language label and a left gutter only. Boxed code
-      // blocks are banned by the chat style (docs/design/ui/STYLE.md).
+      // Без рамки: только dim-ярлык языка и левый гуттер. Коробочные кодовые
+      // блоки запрещены стилем чата (docs/design/ui/STYLE.md).
       if (this.codeLang) this.onWrite(pc.dim(`  ${this.codeLang}`));
       for (const l of highlighted.split("\n")) {
         this.onWrite(pc.dim(`${glyph.group} `) + l);
@@ -322,6 +323,7 @@ export class FormattingStream {
   }
 }
 
+/** Форматирует markdown-текст целиком в терминальные строки. */
 export function formatMarkdown(text: string): string {
   const lines: string[] = [];
   const stream = new FormattingStream((l) => lines.push(l));
@@ -330,14 +332,17 @@ export function formatMarkdown(text: string): string {
   return lines.join("\n");
 }
 
+/** Форматирует ошибку (красный префикс из i18n). */
 export function formatError(text: string): string {
   return pc.red(pc.bold(t("ui.error_prefix")) + text);
 }
 
+/** Форматирует успех (зелёный префикс из i18n). */
 export function formatSuccess(text: string): string {
   return pc.green(pc.bold(t("ui.success_prefix")) + text);
 }
 
+/** Форматирует предупреждение (жёлтый префикс из i18n). */
 export function formatWarning(text: string): string {
   return pc.yellow(pc.bold(t("ui.warning_prefix")) + text);
 }

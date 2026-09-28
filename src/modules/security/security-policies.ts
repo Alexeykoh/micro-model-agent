@@ -1,40 +1,27 @@
+// Пресеты политик безопасности: strict/balanced/permissive + менеджер политик.
 import type { SecurityConfig } from "../../config/types";
 import { mergeSecurityConfig } from "../../config/security";
 
-/**
- * Security policy presets
- */
+/** Пресеты политик безопасности. */
 export type SecurityPolicyPreset = "strict" | "balanced" | "permissive" | "custom";
 
-/**
- * Security policy definition
- */
+/** Определение политики безопасности. */
 export interface SecurityPolicy {
-  /**
-   * Policy name
-   */
+  /** Имя политики */
   name: string;
-  /**
-   * Policy description
-   */
+  /** Описание политики */
   description: string;
-  /**
-   * Preset type
-   */
+  /** Тип пресета */
   preset: SecurityPolicyPreset;
-  /**
-   * Security configuration for this policy
-   */
+  /** Security-конфиг политики */
   config: Partial<SecurityConfig>;
-  /**
-   * Recommended for these use cases
-   */
+  /** Рекомендуемые кейсы */
   recommendedFor: string[];
 }
 
 /**
- * Strict security policy - maximum security, minimum flexibility
- * Recommended for: production environments, sensitive data, multi-user systems
+ * Strict: максимум безопасности, минимум гибкости.
+ * Для: продакшн, чувствительные данные, многопользовательские системы.
  */
 export const STRICT_POLICY: SecurityPolicy = {
   name: "Strict",
@@ -208,8 +195,8 @@ export const STRICT_POLICY: SecurityPolicy = {
 };
 
 /**
- * Balanced security policy - good security with reasonable flexibility
- * Recommended for: development, single-user systems, general use
+ * Balanced: вменяемая безопасность с разумной гибкостью.
+ * Для: разработка, однопользовательские системы, общее использование.
  */
 export const BALANCED_POLICY: SecurityPolicy = {
   name: "Balanced",
@@ -329,8 +316,8 @@ export const BALANCED_POLICY: SecurityPolicy = {
 };
 
 /**
- * Permissive security policy - minimal security, maximum flexibility
- * Recommended for: trusted environments, local development, testing
+ * Permissive: минимум безопасности, максимум гибкости.
+ * Для: доверенные окружения, локальная разработка, тесты.
  */
 export const PERMISSIVE_POLICY: SecurityPolicy = {
   name: "Permissive",
@@ -402,9 +389,7 @@ export const PERMISSIVE_POLICY: SecurityPolicy = {
   },
 };
 
-/**
- * All available security policies
- */
+/** Все доступные политики безопасности. */
 export const SECURITY_POLICIES: Record<SecurityPolicyPreset, SecurityPolicy> = {
   strict: STRICT_POLICY,
   balanced: BALANCED_POLICY,
@@ -418,30 +403,22 @@ export const SECURITY_POLICIES: Record<SecurityPolicyPreset, SecurityPolicy> = {
   },
 };
 
-/**
- * Security policy manager
- */
+/** Менеджер политик безопасности (текущая + кастом). */
 export class SecurityPolicyManager {
   private currentPolicy: SecurityPolicyPreset = "balanced";
   private customConfig: Partial<SecurityConfig> = {};
 
-  /**
-   * Get all available policies
-   */
+  /** Все доступные политики. */
   getPolicies(): SecurityPolicy[] {
     return Object.values(SECURITY_POLICIES);
   }
 
-  /**
-   * Get a specific policy by name
-   */
+  /** Политика по имени (неизвестная — balanced). */
   getPolicy(preset: SecurityPolicyPreset): SecurityPolicy {
     return SECURITY_POLICIES[preset] || SECURITY_POLICIES.balanced;
   }
 
-  /**
-   * Get the current policy
-   */
+  /** Текущая политика (custom — с кастомным конфигом). */
   getCurrentPolicy(): SecurityPolicy {
     if (this.currentPolicy === "custom") {
       return {
@@ -452,24 +429,18 @@ export class SecurityPolicyManager {
     return this.getPolicy(this.currentPolicy);
   }
 
-  /**
-   * Set the current policy
-   */
+  /** Назначить текущую политику. */
   setPolicy(preset: SecurityPolicyPreset): void {
     this.currentPolicy = preset;
   }
 
-  /**
-   * Set custom configuration (for 'custom' preset)
-   */
+  /** Задать кастомный конфиг (переключает на 'custom'). */
   setCustomConfig(config: Partial<SecurityConfig>): void {
     this.customConfig = config;
     this.currentPolicy = "custom";
   }
 
-  /**
-   * Get the current security configuration
-   */
+  /** Текущий security-конфиг (политика + мерж дефолтов). */
   getConfig(): SecurityConfig {
     const policy = this.getCurrentPolicy();
     return mergeSecurityConfig({
@@ -478,9 +449,7 @@ export class SecurityPolicyManager {
     });
   }
 
-  /**
-   * Apply a policy and return the merged configuration
-   */
+  /** Применить политику с опциональными оверрайдами; вернуть смерженный конфиг. */
   applyPolicy(
     preset: SecurityPolicyPreset,
     customOverrides?: Partial<SecurityConfig>,
@@ -493,9 +462,7 @@ export class SecurityPolicyManager {
     return this.getConfig();
   }
 
-  /**
-   * Get policy recommendation for a use case
-   */
+  /** Рекомендованная политика для кейса (иначе — balanced). */
   getRecommendation(useCase: string): SecurityPolicy {
     for (const policy of this.getPolicies()) {
       if (policy.recommendedFor.includes(useCase)) {
@@ -505,9 +472,7 @@ export class SecurityPolicyManager {
     return BALANCED_POLICY;
   }
 
-  /**
-   * Check if current policy allows a specific action
-   */
+  /** Разрешает ли текущая политика действие (bash/file_access/network). */
   allowsAction(
     action: string,
     context?: { type: string; path?: string; command?: string },
@@ -547,9 +512,7 @@ export class SecurityPolicyManager {
     }
   }
 
-  /**
-   * Get policy comparison
-   */
+  /** Посравнить две политики по ключам конфига. */
   comparePolicies(
     policy1: SecurityPolicyPreset,
     policy2: SecurityPolicyPreset,
@@ -571,28 +534,20 @@ export class SecurityPolicyManager {
   }
 }
 
-/**
- * Global security policy manager instance
- */
+/** Глобальный менеджер политик. */
 export const globalSecurityPolicyManager = new SecurityPolicyManager();
 
-/**
- * Create a security policy manager with custom configuration
- */
+/** Создать менеджер политик. */
 export function createSecurityPolicyManager(): SecurityPolicyManager {
   return new SecurityPolicyManager();
 }
 
-/**
- * Get a policy by name
- */
+/** Политика по имени через глобальный менеджер. */
 export function getSecurityPolicy(preset: SecurityPolicyPreset): SecurityPolicy {
   return globalSecurityPolicyManager.getPolicy(preset);
 }
 
-/**
- * Apply a security policy
- */
+/** Применить политику через глобальный менеджер. */
 export function applySecurityPolicy(
   preset: SecurityPolicyPreset,
   customOverrides?: Partial<SecurityConfig>,

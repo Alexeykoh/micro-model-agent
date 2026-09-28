@@ -1,3 +1,4 @@
+/** Тул удаления файла (с diff удалённого, security-проверки). */
 import { unlinkSync, existsSync, statSync, readFileSync } from "fs";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
@@ -8,6 +9,7 @@ import { generateDeleteDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
 import { protectedPathBlock } from "../modules/security/protected-paths";
 
+/** Удаляет файл; каталоги отклоняет. Возвращает diff удалённого. */
 export const deleteFileTool: ToolDefinition = {
   name: "delete_file",
   icon: "🗑️",
@@ -24,12 +26,11 @@ export const deleteFileTool: ToolDefinition = {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
 
-    // Get session-specific security config
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
 
-    // Check file operations limit
+    // Лимит файловых операций.
     const maxFileOps = securityConfig?.maxFileOperations ?? 100;
     const currentCount = ctx.fileOperationsCount ?? 0;
     if (currentCount >= maxFileOps) {
@@ -45,7 +46,7 @@ export const deleteFileTool: ToolDefinition = {
       };
     }
 
-    // Check path permissions
+    // Проверка прав на путь.
     const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
       logSecurityBlock(ctx.sessionId, "file_delete", scopeCheck.reason || "Path not allowed", path);
@@ -57,7 +58,7 @@ export const deleteFileTool: ToolDefinition = {
       };
     }
 
-    // Protected paths (.git/, .env, keys/secrets) — always ask the user.
+    // Защищённые пути (.git/, .env, ключи) — спросить юзера.
     const protectedBlock = protectedPathBlock(ctx, resolved, path, "file_delete");
     if (protectedBlock) return protectedBlock;
 
@@ -71,10 +72,8 @@ export const deleteFileTool: ToolDefinition = {
     unlinkSync(resolved);
     const diff = generateDeleteDiff(content);
 
-    // Increment file operations counter
     ctx.fileOperationsCount = currentCount + 1;
 
-    // Log successful file deletion
     logFileDelete(ctx.sessionId, path, true);
 
     return { success: true, output: t("file.deleted", { path }), diff };

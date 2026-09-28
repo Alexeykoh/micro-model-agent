@@ -1,4 +1,4 @@
-// src/modules/providers/capabilities.ts
+// Возможности модели (vision/tools): резолв пресет → probe → оверрайд.
 import type { ModelCapabilities } from "../../config/types";
 
 /**

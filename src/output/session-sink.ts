@@ -3,19 +3,19 @@ import type { OutputEvent } from "./types";
 import type { SessionManager } from "../modules/session/manager";
 
 /**
- * Narrow session-log seam so the sink stays testable without a real manager.
- * Typed via `SessionManager.appendLog` — no `any`, and a real manager is
- * assignable by construction.
+ * Узкий шов с логом сессии — сток остаётся тестируемым без реального менеджера.
+ * Типизирован через `SessionManager.appendLog`: без `any`, реальный менеджер
+ * присваиваем по построению.
  */
 export interface SessionLogSink {
   appendLog(entry: Parameters<SessionManager["appendLog"]>[0]): void;
 }
 
 /**
- * Persists explicitly marked output events (`data.persist === true`) into the
- * session log. Most output is transient terminal progress and is deliberately
- * NOT persisted; the primary file path for durable records stays
- * `SessionLogger.logSilent` / `logStructured`.
+ * Сохраняет в лог сессии только явно помеченные события (`data.persist === true`).
+ * Остальной вывод — транзиентный прогресс терминала и осознанно НЕ персистится;
+ * основной файловый путь долговечных записей — `SessionLogger.logSilent` /
+ * `logStructured`.
  */
 export class SessionOutputSink {
   private readonly unsub: () => void;

@@ -1,3 +1,5 @@
+// Типы LSP: диагностики, конфиги серверов, severity.
+/** LSP-диагностика (диапазон, severity, код, сообщение, источник). */
 export interface LspDiagnostic {
   range: {
     start: { line: number; character: number };
@@ -9,31 +11,36 @@ export interface LspDiagnostic {
   source?: string;
 }
 
+/** Параметры нотификации publishDiagnostics. */
 export interface PublishDiagnosticsParams {
   uri: string;
   diagnostics: LspDiagnostic[];
 }
 
+/** Результат initialize (capabilities сервера). */
 export interface InitializeResult {
   capabilities: Record<string, unknown>;
 }
 
+/** Конфиг LSP-сервера: команда, args, env, таймаут, автоустановка, флаги. */
 export interface LspServerConfig {
   command: string;
   args?: string[];
   env?: Record<string, string>;
   timeout?: number;
   autoInstall?: boolean;
-  /** Per-server kill switch (default true); AND-ed with the global `lsp.enabled`. */
+  /** Per-server kill switch (дефолт true); И с глобальным `lsp.enabled`. */
   enabled?: boolean;
-  /** Project-root markers for this language (e.g. ["package.json","tsconfig.json"]). */
+  /** Маркеры корня проекта для языка (напр. ["package.json","tsconfig.json"]). */
   workspaceMarkers?: string[];
 }
 
+/** Конфиг LSP: глобальный флаг, серверы, таймаут. */
 export interface LspConfig {
   enabled: boolean;
   servers: Record<string, LspServerConfig>;
   timeout: number;
 }
 
+/** Severity диагностики: 1 error, 2 warning, 3 info, 4 hint. */
 export type DiagnosticSeverity = 1 | 2 | 3 | 4;

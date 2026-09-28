@@ -1,3 +1,4 @@
+/** Клиент оркестратора MoE: план, verifyAndMerge, scope-роутер. */
 import type { LLMProvider, Message, Chunk } from "./provider";
 import type { ProviderConfig, RateLimitConfig, RetryConfig } from "../config/types";
 import type { Logger } from "../logger/app-logger";
@@ -8,16 +9,17 @@ import { FallbackProvider } from "../modules/providers/fallback";
 import { jsonrepair } from "jsonrepair";
 import { parseChunks } from "./response";
 
+/** Конфиг оркестратора: модель, провайдер, ретраи, эксперты. */
 export interface OrchestratorConfig {
   model?: string;
-  /** Full provider config — entries[] or legacy {type,baseUrl,apiKey}. */
+  /** Полный конфиг провайдера — entries[] или легаси {type,baseUrl,apiKey}. */
   provider?: ProviderConfig;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
-  /** Fallback context window when the provider entry does not specify one. */
+  /** Запасное окно контекста, если запись провайдера его не задаёт. */
   contextWindow?: number;
   logger?: Logger;
-  /** Expert registry rendered into the planner prompt (Plan 3.1). */
+  /** Реестр экспертов в промпт планировщика (Plan 3.1). */
   experts?: Record<string, { description?: string; tool_tags?: string[] }>;
 }
 
@@ -113,9 +115,10 @@ or
 
 const DEFAULT_BASE_URL = "http://localhost:1234/v1";
 
-/** Fallback context window when neither the provider entry nor the config sets one. */
+/** Запасное окно контекста, если ни запись провайдера, ни конфиг его не задают. */
 const DEFAULT_ORCH_CONTEXT_WINDOW = 32768;
 
+/** Клиент оркестратора: строит план, сливает результаты, роутит scope-запросы. */
 export class OrchestratorClient {
   private config: OrchestratorConfig;
   private provider: LLMProvider | null = null;
@@ -143,11 +146,10 @@ export class OrchestratorClient {
   }
 
   /**
-   * Build the orchestrator provider through ProviderManager so per-entry
-   * contextWindow/retry/rateLimits and failover entries are honored
-   * (legacy {type,baseUrl,apiKey} configs are normalized by the manager).
-   * Previously the provider was built directly with a hardcoded 32768 window
-   * and no retry/rate-limit/failover support at all.
+   * Строит провайдер оркестратора через ProviderManager: учитываются
+   * per-entry contextWindow/retry/rateLimits и failover-записи (легаси
+   * {type,baseUrl,apiKey} менеджер нормализует). Раньше провайдер строился
+   * напрямую с хардкодом окна 32768 — без ретраев/лимитов/failover вовсе.
    */
   private buildManagedProvider(config: OrchestratorConfig): LLMProvider {
     const providerCfg = config.provider!;
@@ -174,6 +176,10 @@ export class OrchestratorClient {
     return provider;
   }
 
+  /**
+   * Включён ли оркестратор (задана ли модель).
+   * @returns true, если провайдер построен.
+   */
   isEnabled(): boolean {
     return this.provider !== null;
   }
@@ -210,6 +216,11 @@ export class OrchestratorClient {
     }
   }
 
+  /**
+   * Строит MoE-план из задачи пользователя.
+   * @param userPrompt задача; @param _context неиспользуемый контекст;
+   * @returns план с сырым ответом либо ошибку.
+   */
   async plan(
     userPrompt: string,
     _context?: string,
@@ -233,6 +244,11 @@ export class OrchestratorClient {
     return { error: `Failed to parse plan from LLM output. Raw: ${text.slice(0, 500)}` };
   }
 
+  /**
+   * Сливает результаты сабтасков: финал либо запрос re-plan.
+   * @param input план, результаты, ошибки/варнинги верификатора;
+   * @returns финал с ответом либо replan с обновлённым планом.
+   */
   async verifyAndMerge(input: VerifyInput, signal?: AbortSignal): Promise<OrchestratorResult> {
     if (!this.provider)
       return { type: "final", finalAnswer: input.results.map((r) => r.summary).join("\n") };
@@ -258,8 +274,8 @@ export class OrchestratorClient {
   }
 
   /**
-   * Router decision on a sub-agent's scope request. Defaults to reject on any
-   * parse failure — scope must never expand silently.
+   * Решение роутера по scope-запросу субагента. Дефолт на любой ошибке
+   * парсинга — reject: scope молча не расширяется никогда.
    */
   async resolveScopeRequest(
     subtaskId: string,
@@ -290,7 +306,7 @@ export class OrchestratorClient {
     if (parsed && parsed.action === "approve") {
       const write = Array.isArray(parsed.write) ? parsed.write.map(String) : [];
       const read = Array.isArray(parsed.read) ? parsed.read.map(String) : [];
-      // An approve without any concrete files is meaningless — treat as reject.
+      // Approve без конкретных файлов бессмыслен — считаем reject.
       if (write.length === 0 && read.length === 0) {
         return { action: "reject", explanation: "approve carried no files" };
       }
@@ -306,6 +322,10 @@ export class OrchestratorClient {
     };
   }
 
+  /**
+   * Строит простой план-список шагов (легаси-поверхность).
+   * @param task задача; @returns шаги плана (фолбэк — сама задача).
+   */
   async createPlan(task: string): Promise<{ steps: string[] }> {
     if (!this.provider) throw new Error("Orchestrator not enabled");
 
@@ -325,6 +345,10 @@ export class OrchestratorClient {
     return { steps: [task] };
   }
 
+  /**
+   * Рекомендует путь разрешения конфликта.
+   * @param context описание ситуации; @returns рекомендация текстом.
+   */
   async resolveConflict(context: string): Promise<string> {
     if (!this.provider) throw new Error("Orchestrator not enabled");
 

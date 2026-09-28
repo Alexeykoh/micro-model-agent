@@ -1,13 +1,13 @@
+// Модель данных first-run визарда: ответы, языки, дефолты, провайдеры для UI.
 /**
- * Shared first-run wizard data model.
- *
- * Consumed by both frontends (terminal `src/cli/setup.ts` and the browser
- * `mma web` wizard) so the collected shape and its defaults never diverge.
- * No terminal/UI dependencies — safe to import from the web server.
+ * Общая модель данных first-run визарда.
+ * Едят оба фронтенда (терминальный `src/cli/setup.ts` и браузерный визард
+ * `mma web`), чтобы форма и дефолты не расходились. Без терминальных/UI
+ * зависимостей — безопасно импортить с веб-сервера.
  */
 import { BUILTIN_PROVIDERS } from "../providers/presets";
 
-/** Everything the first-run wizard collects and `applyAnswersToConfig` writes. */
+/** Всё, что собирает first-run визард и пишет `applyAnswersToConfig`. */
 export interface SetupAnswers {
   provider: string;
   apiBase: string;
@@ -21,33 +21,33 @@ export interface SetupAnswers {
   securityPathsRestrict: boolean;
 }
 
-/** UI languages offered by the wizard (labels stay in their own language). */
+/** Языки UI визарда (подписи — на своём языке). */
 export const SETUP_LANGUAGES = [
   { value: "en", label: "English" },
   { value: "ru", label: "Русский" },
 ] as const;
 
-/** Numeric defaults offered for the agent settings step. */
+/** Числовые дефолты шага настроек агента. */
 export const SETUP_DEFAULTS = {
   contextWindow: 32768,
   maxToolIterations: 1000,
 } as const;
 
-/** A provider selectable in the wizard (hosted presets carry a fixed URL). */
+/** Провайдер на выбор в визарде (у хостед-пресетов фиксированный URL). */
 export interface SetupProviderOption {
   type: string;
   label: string;
   baseUrl?: string;
 }
 
-/** Display payload returned by `GET /api/setup` for the browser wizard. */
+/** Display-пейлоад `GET /api/setup` для браузерного визарда. */
 export interface SetupDisplay {
   languages: Array<{ value: string; label: string }>;
   providers: SetupProviderOption[];
   defaults: { contextWindow: number; maxToolIterations: number };
 }
 
-/** Resolve the static display data shared by the web wizard and its tests. */
+/** Статические display-данные, общие для веб-визарда и его тестов. */
 export function buildSetupDisplay(): SetupDisplay {
   const providers: SetupProviderOption[] = BUILTIN_PROVIDERS.map((spec) => {
     const option: SetupProviderOption = { type: spec.type, label: spec.label };

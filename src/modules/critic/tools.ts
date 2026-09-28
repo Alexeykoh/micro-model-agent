@@ -1,44 +1,48 @@
+// Ограниченный read-only контур проверок критика (Phase 2, Agent-as-a-Judge).
 import type { CriticVerdict } from "./types";
 
 /**
- * Bounded read-only verification loop (Phase 2, Agent-as-a-Judge).
+ * Ограниченный read-only контур верификации (Phase 2, Agent-as-a-Judge).
  *
- * After a concern/critical verdict the critic may request concrete file
- * checks to confirm or refute an issue instead of judging blind. Only
- * read-only tools are reachable — writes, shell, web and memory stay out,
- * so a compromised or confused critic cannot mutate anything. The loop is
- * capped (extra LLM calls + check executions share the verify timeout) and
- * fails open to the first-pass verdict.
+ * После вердикта concern/critical критик может запросить конкретные файловые
+ * проверки, чтобы подтвердить/опровергнуть проблему, а не судить вслепую.
+ * Доступны только read-only тулы — записи, shell, web и память исключены,
+ * так что скомпрометированный/запутавшийся критик ничего не мутирует. Цикл
+ * ограничен (доп. LLM-вызовы + проверки делят verify-таймаут), при сбое —
+ * откат к вердикту первого прохода.
  */
 
-/** Read-only tools the critic may use. Writes/shell/web/memory are excluded by design. */
+/** Read-only тулы, доступные критику. Записи/shell/web/память исключены by design. */
 export const CRITIC_READONLY_TOOLS = ["read_file", "grep", "glob", "file_info", "list_dir"] as const;
 
-/** Hard cap on verification checks per verdict (internal default, not config — spec §4.3). */
+/** Жёсткий кап проверок на вердикт (внутренний дефолт, не конфиг — спек §4.3). */
 export const MAX_CRITIC_CHECKS = 3;
 
-/** Output chars per check fed back to the critic (bounded — the verify call has its own budget). */
+/** Символов вывода на проверку, возвращаемых критику (ограничено — у verify-вызова свой бюджет). */
 export const MAX_CHECK_OUTPUT_CHARS = 1500;
 
+/** Одна валидированная проверка критика: тул + аргументы. */
 export interface CriticCheck {
   tool: string;
   args: Record<string, unknown>;
 }
 
+/** Результат одной проверки: тул, успех, обрезанный вывод. */
 export interface CriticCheckResult {
   tool: string;
   ok: boolean;
   output: string;
 }
 
+/** True, если тул разрешён критику (входит в read-only allowlist). */
 export function isAllowedCriticTool(tool: string): boolean {
   return (CRITIC_READONLY_TOOLS as readonly string[]).includes(tool);
 }
 
 /**
- * Checks requested by the critic verdict (parsed `checks` array, allowlisted
- * and capped). Anything else — unknown tools, non-object args — is dropped
- * silently: the critic only loses verification depth, never correctness.
+ * Проверки из вердикта критика (сырой массив `checks`, allowlist + кап).
+ * Чужое — неизвестные тулы, не-объектные args — молча дропается:
+ * критик теряет только глубину верификации, не корректность.
  */
 export function parseChecks(verdict: CriticVerdict | null): CriticCheck[] {
   if (!verdict?.checks || !Array.isArray(verdict.checks)) return [];
@@ -51,7 +55,7 @@ export function parseChecks(verdict: CriticVerdict | null): CriticCheck[] {
   return out;
 }
 
-/** Single raw entry → validated check, or null when unusable/forbidden. */
+/** Одна сырая запись → валидированная проверка, или null, если непригодна/запрещена. */
 function asCriticCheck(c: unknown): CriticCheck | null {
   if (!c || typeof c !== "object") return null;
   const rec = c as { tool?: unknown; args?: unknown };
@@ -61,10 +65,10 @@ function asCriticCheck(c: unknown): CriticCheck | null {
 }
 
 /**
- * Execute validated checks through the injected runner (wired in Agent to
- * ToolExecutor with a read-only allowlist). Sequential — never concurrent
- * with main-loop tool calls. Per-check failures become failure results, so
- * one bad check never aborts the remaining ones.
+ * Выполняет валидированные проверки через инжектированный раннер (в Agent —
+ * ToolExecutor с read-only allowlist). Последовательно, никогда параллельно
+ * с вызовами тулов главного цикла. Сбой одной проверки даёт failure-результат,
+ * остальные проверки не прерываются.
  */
 export async function runCriticChecks(
   checks: CriticCheck[],
@@ -86,7 +90,7 @@ export async function runCriticChecks(
   return out;
 }
 
-/** Render check results as critic-visible evidence lines. */
+/** Рендерит результаты проверок строками доказательств, видимых критику. */
 export function renderCheckResults(results: CriticCheckResult[]): string {
   return results
     .map((r) => `${r.ok ? "✓" : "✗"} ${r.tool} » ${r.output}`)

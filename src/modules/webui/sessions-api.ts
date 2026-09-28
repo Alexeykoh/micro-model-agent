@@ -1,21 +1,13 @@
-/**
- * REST handlers for the `/api/sessions*` surface of `mma web`.
- *
- * Split out of `config-api.ts` (rule #1: ≤300 lines/file) once session
- * creation landed. Handlers read the optional `sessionManager` collaborator
- * wired from bootstrap; a missing one (or one without `create`) is a
- * server-side wiring gap, so those endpoints answer 503 instead of crashing.
- *
- * Auth + same-origin are enforced upstream in `server.ts`; these functions
- * assume the request already passed both checks.
- */
+// REST-хендлеры поверхности `/api/sessions*` `mma web` (вынесены из config-api).
+// Без менеджера/без `create` — пробел wiring: такие точки отвечают 503, не крашатся.
+// Auth и same-origin — выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { handleSessionHistory } from "./history-api";
 import { readBody, readBodyError, sendJson } from "./util";
 import { parseJsonBody, readJsonBody } from "./body";
 import type { WebUiState } from "./state";
 
-/** `GET /api/sessions` — list sessions (id/name/updatedAt/model/messageCount). */
+/** `GET /api/sessions` — список сессий (id/имя/обновление/модель/счёт). */
 export function handleSessionsGet(res: ServerResponse, s: WebUiState): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
@@ -32,11 +24,11 @@ export function handleSessionsGet(res: ServerResponse, s: WebUiState): void {
 }
 
 /**
- * `POST /api/sessions {name?}` — create a new session.
+ * `POST /api/sessions {name?}` — новая сессия.
  *
- * The real `SessionManager.create` also makes the new session active, so the UI
- * can open it as a tab and let SSE populate the feed. A manager wired without
- * `create` (or no manager at all) is a server-side gap: answer 503.
+ * Настоящий `SessionManager.create` заодно делает её активной, чтобы UI открыл
+ * вкладку и SSE наполнил ленту. Менеджер без `create` (или без менеджера) —
+ * пробел сервера: отвечаем 503.
  */
 export function handleSessionCreate(
   req: IncomingMessage,
@@ -82,7 +74,7 @@ export function handleSessionCreate(
     });
 }
 
-/** `POST /api/sessions/activate {id}` — switch the active session. */
+/** `POST /api/sessions/activate {id}` — переключить активную сессию. */
 export function handleSessionActivate(
   req: IncomingMessage,
   res: ServerResponse,
@@ -118,11 +110,11 @@ export function handleSessionActivate(
 }
 
 /**
- * `DELETE /api/sessions/:id` — remove a session.
+ * `DELETE /api/sessions/:id` — удалить сессию.
  *
- * Guard: the ACTIVE session cannot be deleted (409 `active_session`). Deleting
- * it would leave the agent pointing at a vanished session file mid-turn; the UI
- * must switch away first. Unknown ids answer 404.
+ * Гард: АКТИВНУЮ удалять нельзя (409 `active_session`) — иначе агент останется
+ * указывать на исчезнувший файл посреди хода; UI сначала переключается.
+ * Чужие id — 404.
  */
 export function handleSessionDelete(res: ServerResponse, id: string, s: WebUiState): void {
   if (!s.sessionManager) {
@@ -147,8 +139,8 @@ export function handleSessionDelete(res: ServerResponse, id: string, s: WebUiSta
 }
 
 /**
- * Dispatch `/api/sessions*` routes. Returns whether the request was handled so
- * `server.ts` keeps a flat chain without duplicating path parsing here.
+ * Диспатч роутов `/api/sessions*`. Возвращает, обработан ли запрос, чтобы
+ * `server.ts` держал плоскую цепочку без дубля парсинга путей.
  */
 export function handleSessionsApi(
   req: IncomingMessage,

@@ -1,9 +1,12 @@
+// Реестр фоновых процессов: спавн, буферизация лога, килл, ожидание выхода.
 import { spawn, spawnSync, type ChildProcess } from "child_process";
 import { platform } from "os";
 import { killTree } from "./kill-tree";
 
+/** Статус управляемого процесса. */
 export type ProcessStatus = "running" | "exited" | "killed";
 
+/** Управляемый процесс: метаданные, статус и буфер лога. */
 export interface ManagedProcess {
   id: string;
   pid: number;
@@ -14,19 +17,19 @@ export interface ManagedProcess {
   exitCode: number | null;
   startedAt: string;
   log: string[];
-  /** Set when the child failed to spawn (bad cwd, missing shell, etc.). */
+  /** Ставится, когда ребёнок не спавнится (битый cwd, нет шелла и т.п.). */
   spawnError?: string;
 }
 
 const MAX_LOG_LINES = 2000;
-/** Cap a single not-yet-terminated line so a newline-less dump cannot OOM. */
+/** Кап одной незавершённой строки, чтобы дамп без переводов не дал OOM. */
 const MAX_PARTIAL_CHARS = 64 * 1024;
 const MAX_PARTIAL_BYTES = 64 * 1024;
 const MAX_KEPT_PROCESSES = 20;
 
 let seq = 0;
 
-/** OEM decoder (Russian CP866 / active code page) — cached after first use. */
+/** OEM-декодер (русская CP866 / активная кодовая страница) — кеш после первого вызова. */
 let oemDecoder: TextDecoder | null | undefined;
 
 function getOemDecoder(): TextDecoder | null {
@@ -60,30 +63,31 @@ function getOemDecoder(): TextDecoder | null {
 }
 
 /**
- * Decode one complete line of output to UTF-8.
+ * Декодирует одну готовую строку вывода в UTF-8.
  *
- * Modern tools (Bun, Node, npm, git) write UTF-8 into the pipe regardless of
- * the console code page, while built-in cmd.exe commands (echo, type, dir)
- * emit the OEM code page (CP866 on Russian Windows). Try strict UTF-8 first;
- * fall back to the OEM decoder when the bytes are not valid UTF-8.
+ * Современные тулы (Bun, Node, npm, git) пишут UTF-8 в пайп независимо от
+ * кодовой страницы консоли, а встроенные команды cmd.exe (echo, type, dir) —
+ * OEM-страницу (CP866 на русской Windows). Сначала строгий UTF-8; если байты
+ * невалидны — откат на OEM-декодер.
  */
 function decodeLineToUtf8(buf: Buffer): string {
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(buf);
   } catch {
-    /* not valid UTF-8 → OEM code page output */
+    /* невалидный UTF-8 → вывод в OEM-кодировке */
   }
   const oem = getOemDecoder();
   if (oem) {
     try {
       return oem.decode(buf);
     } catch {
-      /* unknown encoding — latin1 fallback */
+      /* неизвестная кодировка — откат на latin1 */
     }
   }
   return buf.toString("latin1");
 }
 
+/** Реэкспорт килла дерева для потребителей реестра. */
 export { killTree } from "./kill-tree";
 
 interface ExitWaiter {
@@ -97,8 +101,8 @@ class ProcessRegistry {
   private exitWaiters = new Map<string, ExitWaiter>();
 
   /**
-   * Start a command. The returned entry buffers output and reports status; a
-   * call may check `waitForExit(id)` to learn when (if ever) it finishes.
+   * Запускает команду. Возвращённая запись буферизует вывод и отдаёт статус;
+   * дождаться завершения можно через `waitForExit(id)`.
    */
   start(command: string, cwd: string, sessionId?: string): ManagedProcess {
     const id = `proc_${Date.now()}_${++seq}`;
@@ -154,17 +158,17 @@ class ProcessRegistry {
         for (const line of lines) {
           pushLine(line);
         }
-        // Flush a very long partial line instead of buffering it unboundedly.
+        // Сбрасываем очень длинную частичную строку вместо безлимитной буферизации.
         if (buf.length > MAX_PARTIAL_CHARS) {
           pushLine(buf);
           buf = "";
         }
         return;
       }
-      // Windows: buffer raw bytes and decode per line. Modern tools (Bun, Node,
-      // npm, git) write UTF-8 into the pipe regardless of the console code
-      // page; cmd.exe builtins (echo, type, dir) emit the OEM code page. Pick
-      // the right decoding per line so Russian text survives either way.
+      // Windows: копим сырые байты и декодируем построчно. Современные тулы
+      // (Bun, Node, npm, git) пишут UTF-8 в пайп независимо от кодовой страницы
+      // консоли; встроенные команды cmd.exe (echo, type, dir) — OEM-страницу.
+      // Декодировка подбирается построчно, чтобы русский выживал в обоих случаях.
       byteBuf = byteBuf.length ? Buffer.concat([byteBuf, chunk]) : Buffer.from(chunk);
       let nl: number;
       while ((nl = byteBuf.indexOf(0x0a)) !== -1) {
@@ -172,7 +176,7 @@ class ProcessRegistry {
         byteBuf = byteBuf.subarray(nl + 1);
         pushLine(decodeLineToUtf8(raw).replace(/\r$/, ""));
       }
-      // Flush a very long partial line instead of buffering it unboundedly.
+      // Сбрасываем очень длинную частичную строку вместо безлимитной буферизации.
       if (byteBuf.length > MAX_PARTIAL_BYTES) {
         pushLine(decodeLineToUtf8(byteBuf));
         byteBuf = Buffer.alloc(0);
@@ -205,9 +209,9 @@ class ProcessRegistry {
         entry.status = "killed";
       }
       entry.spawnError = err.message;
-      // Write directly to the log, not through `append`: a failed spawn often
-      // never emits `close`, so the buffered line would never be flushed and
-      // the log would be empty (observed: "records a spawn error" test).
+      // Пишем прямо в лог, не через `append`: упавший спавн часто вообще
+      // не эмитит `close`, и буферизованная строка не сбросилась бы —
+      // лог остался бы пустым (видно в тесте "records a spawn error").
       pushLine(`[process error] ${err.message}`);
       resolveExit();
     });
@@ -231,16 +235,19 @@ class ProcessRegistry {
     return entry;
   }
 
+  /** Список процессов, опционально по сессии. */
   list(sessionId?: string): ManagedProcess[] {
     const all = Array.from(this.procs.values());
     if (!sessionId) return all;
     return all.filter((p) => p.sessionId === sessionId);
   }
 
+  /** Процесс по id; undefined, если нет. */
   get(id: string): ManagedProcess | undefined {
     return this.procs.get(id);
   }
 
+  /** Лог процесса целиком или хвостом `tail` строк. */
   getLog(id: string, tail?: number): string {
     const entry = this.procs.get(id);
     if (!entry) return "";
@@ -248,7 +255,7 @@ class ProcessRegistry {
     return lines.join("\n");
   }
 
-  /** Kill a background process tree. Returns false when not found. */
+  /** Убивает дерево фонового процесса. False, если не найден. */
   kill(id: string): boolean {
     const entry = this.procs.get(id);
     if (!entry) return false;
@@ -262,7 +269,7 @@ class ProcessRegistry {
     return true;
   }
 
-  /** Kill every managed background process (used on agent shutdown). */
+  /** Убивает все управляемые фоновые процессы (при останове агента). Возвращает число. */
   killAll(sessionId?: string): number {
     const targets = this.list(sessionId);
     for (const entry of targets) {
@@ -272,8 +279,8 @@ class ProcessRegistry {
   }
 
   /**
-   * Resolve `true` when the process exits (or fails to spawn) within
-   * `timeoutMs`, otherwise `false` (still running → a background process).
+   * Резолвит `true`, если процесс вышел (или не спавнился) за `timeoutMs`,
+   * иначе `false` (всё ещё бежит → фоновый процесс).
    */
   waitForExit(id: string, timeoutMs: number): Promise<boolean> {
     const entry = this.procs.get(id);
@@ -291,8 +298,8 @@ class ProcessRegistry {
   }
 
   /**
-   * Remove a finished entry (foreground results do not linger). A still-running
-   * entry is killed first so nothing is orphaned.
+   * Удаляет завершённую запись (foreground-результаты не залеживаются).
+   * Ещё бегущая сначала убивается, чтобы не осиротеть.
    */
   remove(id: string): boolean {
     const entry = this.procs.get(id);
@@ -322,4 +329,5 @@ class ProcessRegistry {
   }
 }
 
+/** Синглтон реестра фоновых процессов. */
 export const processRegistry = new ProcessRegistry();

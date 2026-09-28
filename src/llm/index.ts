@@ -1,3 +1,4 @@
+/** LLM-слой: провайдер, парсинг ответов, токены, оркестратор MoE. */
 export type { LLMProvider, Message, Chunk, ToolDefinition } from "./provider";
 export { OpenAICompatProvider } from "./openai-compat";
 export type { OpenAICompatConfig } from "./openai-compat";

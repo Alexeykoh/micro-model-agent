@@ -1,3 +1,4 @@
+/** Тул чтения веб-страницы в plain text (без JS; SSRF-защита, cap вывода). */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import {
@@ -10,8 +11,10 @@ import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-l
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { MAX_PREVIEW_LINES } from "./preview";
 
+/** Потолок символов до построчной обрезки. */
 const MAX_CHARS = 3000;
 
+/** Читает страницу в plain text; JS-приложения вернут пустоту — для них browser. */
 export const webBrowseTool: ToolDefinition = {
   name: "web_browse",
   icon: "🌐",
@@ -27,7 +30,6 @@ export const webBrowseTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const url = String(args.url || "");
 
-    // Get session-specific security config
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).network
       : ctx.config.security?.network;

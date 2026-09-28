@@ -1,8 +1,10 @@
+/** Тул останова фонового процесса (всё дерево, с детьми). */
 import type { ToolDefinition } from "./types";
 import { processRegistry } from "../modules/processes";
 import { t } from "../i18n/index";
 import { lookupProcess } from "./process-ids";
 
+/** Останавливает фоновый процесс по id из bash/process_list. */
 export const processKillTool: ToolDefinition = {
   name: "process_kill",
   icon: "⛔",
@@ -17,8 +19,8 @@ export const processKillTool: ToolDefinition = {
     required: ["id"],
   },
   handler: async (_ctx, args) => {
-    // ses_mt4fn58c: `process_kill -p=5173` produced "Process not found:
-    // undefined" — no hint about the correct format. Answer with usage.
+    // Без id отвечаем использованием: голое "not found: undefined" не
+    // подсказывает верный формат.
     const found = lookupProcess(args);
     if (!found.ok) return { success: false, output: found.output };
     const { id, entry } = found;

@@ -1,4 +1,3 @@
-// src/core/agent/artifact-progress
 /**
  * Обобщённый детектор churn тест/спек-артефактов.
  *
@@ -29,6 +28,7 @@ export function isTestOrSpecPath(filePath: string): boolean {
   return TEST_FILE_PATTERNS.some((re) => re.test(normalized));
 }
 
+/** Состояние churn тест-артефактов за прогон. */
 export interface ArtifactChurnState {
   /** Сколько write/edit подряд пришлось на тест/спек-файлы (сброс на production-правке). */
   testWriteStreak: number;
@@ -38,6 +38,7 @@ export interface ArtifactChurnState {
   nudged: boolean;
 }
 
+/** Начальное состояние трекера churn. */
 export function createArtifactChurnState(): ArtifactChurnState {
   return { testWriteStreak: 0, lastTestFile: null, nudged: false };
 }

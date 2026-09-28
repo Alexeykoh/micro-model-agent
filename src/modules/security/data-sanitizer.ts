@@ -1,8 +1,7 @@
-/**
- * Patterns for sensitive data that should be redacted from logs
- */
+// Вырезание секретов (ключи, токены, пароли) из логов, команд и URL.
+/** Паттерны чувствительных данных для редактуры в логах. */
 const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
-  // API keys and tokens in key=value format
+  // Ключи и токены в формате key=value
   {
     pattern: /(api[_-]?key|apikey|api_key)\s*[=:\s]\s*["']?([a-zA-Z0-9_-]{10,})["']?/gi,
     replacement: "$1=[REDACTED]",
@@ -19,7 +18,7 @@ const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
     pattern: /(secret|private[_-]?key|secret[_-]?key)\s*[=:\s]\s*["']?([^\s"'&]+)["']?/gi,
     replacement: "$1=[REDACTED]",
   },
-  // Standalone API keys (not in key=value format)
+  // Отдельные ключи (не key=value)
   {
     pattern: /\bsk-[a-zA-Z0-9_-]{20,}\b/gi,
     replacement: "sk-[REDACTED]",
@@ -40,21 +39,19 @@ const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
     pattern: /\bAKIA[0-9A-Z]{15,}\b/gi,
     replacement: "AKIA[REDACTED]",
   },
-  // Bearer tokens in headers
+  // Bearer-токены в заголовках
   {
     pattern: /Bearer\s+[a-zA-Z0-9_-]{20,}/gi,
     replacement: "Bearer [REDACTED]",
   },
-  // Generic high-entropy strings that look like secrets (30+ chars, mixed case and numbers)
+  // Прочие высокоэнтропийные строки, похожие на секреты (30+ символов)
   {
     pattern: /\b([a-zA-Z0-9_-]{30,})\b/g,
     replacement: "[REDACTED]",
   },
 ];
 
-/**
- * Sanitize a log message by removing sensitive information
- */
+/** Вычистить секреты из лог-сообщения. */
 export function sanitizeLogMessage(message: string): string {
   let sanitized = message;
 
@@ -65,16 +62,12 @@ export function sanitizeLogMessage(message: string): string {
   return sanitized;
 }
 
-/**
- * Sanitize a command string by removing sensitive information
- */
+/** Вычистить секреты из командной строки. */
 export function sanitizeCommand(command: string): string {
   return sanitizeLogMessage(command);
 }
 
-/**
- * Sanitize a URL by removing sensitive query parameters
- */
+/** Вычистить секретные query-параметры из URL; не-URL — как лог-сообщение. */
 export function sanitizeUrl(url: string): string {
   try {
     const urlObj = new URL(url);

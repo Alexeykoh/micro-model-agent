@@ -1,9 +1,11 @@
+// Бэкапы перед миграцией: config.json.bak и копия всего configDir.
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { t } from "../i18n/index";
 import { defaultOutputBus } from "../output";
 import type { AppConfig } from "../config/types";
 
+/** Делает бэкапы конфига перед миграцией v1 → v2. */
 export class BackupManager {
   private configDir: string;
 
@@ -11,6 +13,7 @@ export class BackupManager {
     this.configDir = configDir;
   }
 
+  /** Копия config.json в config.json.bak. Нет файла — ничего не делает. */
   backupConfig(): void {
     const configPath = join(this.configDir, "config.json");
     if (!existsSync(configPath)) return;
@@ -19,6 +22,7 @@ export class BackupManager {
     copyFileSync(configPath, bakPath);
   }
 
+  /** Рекурсивная копия всего configDir в `<dir>.bak` (один раз, не перезаписывает). */
   backupAll(): void {
     const bakDir = `${this.configDir}.bak`;
     if (existsSync(bakDir)) {
@@ -37,6 +41,7 @@ export class BackupManager {
     }
   }
 
+  /** Пишет свежий конфиг v2 в config.json (создаёт каталог при нужде). */
   writeFreshConfig(config: AppConfig): void {
     if (!existsSync(this.configDir)) {
       mkdirSync(this.configDir, { recursive: true });
@@ -44,6 +49,7 @@ export class BackupManager {
     writeFileSync(join(this.configDir, "config.json"), JSON.stringify(config, null, 2), "utf-8");
   }
 
+  /** Человекочитаемая сводка: какие бэкапы есть, или что миграция не нужна. */
   getBackupSummary(): string {
     const lines: string[] = [];
     const bakConfig = join(this.configDir, "config.json.bak");

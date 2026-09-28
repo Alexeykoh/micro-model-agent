@@ -1,22 +1,25 @@
+// Проверка уверенности ответа: пустота, повторы, низкое разнообразие лексики.
 import type { HallucinationCheckResult } from "./detector";
 import { t } from "../../i18n/index";
 
 const MIN_CHARS = 1;
-/** Both responses must be this long before repetition applies — a short
- *  honest answer ("Done." / "The build passes.") repeated twice is not
- *  degeneration and must not burn a hallucination retry. */
+/** Оба ответа должны быть не короче — короткий честный ответ ("Готово.") дважды
+ *  подряд не деградация и не должен жечь hallucination-retry. */
 const MIN_REPEAT_CHARS = 120;
 const MIN_REPEAT_WORDS = 20;
-/** Word-overlap above this threshold counts as repetition (was 0.5). */
+/** Пересечение слов выше порога считается повтором (было 0.5). */
 const REPEAT_OVERLAP_THRESHOLD = 0.8;
 
+/** Проверка уверенности: пустой ответ, дословный повтор, низкая diversity. */
 export class ConfidenceCheck {
   private previousResponse: string = "";
 
+  /** Запоминает предыдущий ответ для детекции повторов. */
   setPreviousResponse(response: string): void {
     this.previousResponse = response;
   }
 
+  /** Валидирует ответ: retry на пустоту/повтор, warn на низкую diversity, иначе pass. */
   validate(response: string): HallucinationCheckResult {
     if (!response || response.length < MIN_CHARS) {
       return {
@@ -26,14 +29,14 @@ export class ConfidenceCheck {
       };
     }
 
-    // Short replies are not flagged: a greeting, a terse acknowledgement or a
-    // one-line confirmation is a valid answer. Real truncation is caught by the
-    // provider's finish_reason ("length"), and emptiness by the retry above.
+    // Короткие реплики не флагуются: приветствие, скупое подтверждение или
+    // однострочник — валидный ответ. Реальное усечение ловит finish_reason
+    // провайдера ("length"), пустоту — retry выше.
     const wordCount = response.split(/\s+/).filter(Boolean).length;
 
-    // Language-agnostic: repetition detection via word overlap. Only flag when
-    // BOTH the current and the previous response are substantive — a short
-    // answer after a long one (or two short answers) is not a loop.
+    // Языконезависимо: детекция повторов по пересечению слов. Флагуем только
+    // если ОБА ответа содержательные — короткий ответ после длинного (или два
+    // коротких) не цикл.
     if (this.previousResponse) {
       const prevWords = this.previousResponse.split(/\s+/).filter(Boolean).length;
       const bothSubstantive =
@@ -53,7 +56,7 @@ export class ConfidenceCheck {
       }
     }
 
-    // Language-agnostic: very low word diversity (same words repeated)
+    // Языконезависимо: очень низкая diversity слов (одни и те же слова по кругу)
     const words = response
       .toLowerCase()
       .split(/\s+/)

@@ -1,13 +1,16 @@
+// Поиск по файлам памяти: подстрока без учёта регистра по .md и preferences.json.
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 
 const MEMORY_FILES = ["conventions", "decisions", "errors", "facts"];
 
+/** Одно совпадение: файл-источник и строка. */
 export interface SearchResult {
   file: string;
   match: string;
 }
 
+/** Поисковик по каталогу памяти (создаётся под запрос, состояния нет). */
 export class MemorySearch {
   private memoryDir: string;
 
@@ -15,6 +18,7 @@ export class MemorySearch {
     this.memoryDir = memoryDir;
   }
 
+  /** Ищет подстроку (без учёта регистра) по .md-файлам и преференсам. */
   query(query: string): SearchResult[] {
     const results: SearchResult[] = [];
     const lowerQuery = query.toLowerCase();
@@ -33,7 +37,7 @@ export class MemorySearch {
       }
     }
 
-    // Search preferences.json
+    // Поиск по preferences.json
     const prefsPath = join(this.memoryDir, "preferences.json");
     if (existsSync(prefsPath)) {
       try {

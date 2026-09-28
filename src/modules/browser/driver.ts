@@ -1,3 +1,4 @@
+// Playwright-драйвер: запуск Chromium, навигация, снапшоты, выбор транспорта.
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { ConsoleEntry, ConsoleType, NetworkErrorEntry, BrowserConfig } from "./types";
 import { ConsoleBuffer } from "./console-buffer";
@@ -6,8 +7,10 @@ import type { BrowserDriver, LaunchConfig, BrowserLaunchOverrides } from "./driv
 
 export type { BrowserDriver, LaunchConfig, BrowserLaunchOverrides } from "./driver-types";
 
+/** Таймаут прямого запуска Playwright до отката на node-мост. */
 export const DIRECT_LAUNCH_TIMEOUT_MS = 8000;
 
+/** Оверрайды запуска из env (MMA_BROWSER_EXECUTABLE/MMA_BROWSER_CHANNEL). */
 export function resolveBrowserLaunchOverrides(
   env: NodeJS.ProcessEnv = process.env,
 ): BrowserLaunchOverrides {
@@ -19,7 +22,7 @@ export function resolveBrowserLaunchOverrides(
   return out;
 }
 
-/** System browsers to try when the bundled Chromium revision is missing. */
+/** Системные браузеры, если bundled-ревизия Chromium отсутствует. */
 const SYSTEM_CHANNEL_FALLBACKS = ["chrome", "msedge"];
 
 function isMissingBrowserError(err: unknown): boolean {
@@ -28,13 +31,13 @@ function isMissingBrowserError(err: unknown): boolean {
   );
 }
 
-/** Injectable launcher so the fallback chain is unit-testable without a browser. */
+/** Инжектируемый лаунчер — цепочка фолбэков тестируется без браузера. */
 export type ChromiumLaunchFn = (opts: Record<string, unknown>) => Promise<Browser>;
 
 /**
- * Launch Chromium, falling back to an installed system Chrome/Edge when the
- * bundled revision is absent (CDN unreachable). An explicit override always
- * wins and suppresses the fallback — the user's choice must fail loudly.
+ * Запуск Chromium с фолбэком на системный Chrome/Edge, если bundled-ревизии
+ * нет (CDN недоступен). Явный оверрайд всегда побеждает и подавляет фолбэк —
+ * выбор пользователя должен падать громко.
  */
 export async function launchChromiumWithFallback(
   launch: ChromiumLaunchFn,
@@ -67,6 +70,7 @@ function launchChromium(cfg: LaunchConfig, overrides: BrowserLaunchOverrides): P
   );
 }
 
+/** Драйвер поверх Playwright: страница, консоль, сетевые ошибки. */
 export class PlaywrightDriver implements BrowserDriver {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
@@ -181,6 +185,7 @@ export class PlaywrightDriver implements BrowserDriver {
   }
 }
 
+/** Создать драйвер: прямой Playwright, при неудаче — node-мост. */
 export function createBrowserDriver(config: BrowserConfig): Promise<BrowserDriver> {
   const common: LaunchConfig = {
     headless: config.headless,
@@ -190,9 +195,9 @@ export function createBrowserDriver(config: BrowserConfig): Promise<BrowserDrive
   };
 
   return (async () => {
-    // Playwright's pipe/websocket transport is broken under Bun on some
-    // platforms (see oven-sh/bun#31105, #9911). Under Bun we always use the
-    // Node bridge. Under Node we try the direct path first.
+    // Транспорт pipe/websocket у Playwright сломан под Bun на части платформ
+    // (см. oven-sh/bun#31105, #9911). Под Bun всегда идём через node-мост,
+    // под Node сначала пробуем прямой путь.
     if (process.versions.bun) {
       return launchBridge(config, common);
     }

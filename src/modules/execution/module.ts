@@ -1,3 +1,4 @@
+// Execution-модуль: трекер плана, stuck-детектор, аудитор, гейты, автопоиск ошибок.
 import type { AgentModule } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { ToolDefinition, ToolContext, ToolCall } from "../../tools/types";
@@ -28,9 +29,9 @@ import {
 } from "./execution-plugin";
 
 /**
- * Injectable search runner. Defaults to performWebSearch (shared with the
- * web_search tool) so tests can substitute a mock. `requestTimeoutMs` lets
- * the caller override the network timeout (errorWebSearch.requestTimeoutMs).
+ * Инжектированный раннер поиска. По умолчанию performWebSearch (общий с тулом
+ * web_search), чтобы тесты подменяли моком. `requestTimeoutMs` переопределяет
+ * сетевой таймаут (errorWebSearch.requestTimeoutMs).
  */
 export type WebSearchRunner = (
   query: string,
@@ -40,26 +41,24 @@ export type WebSearchRunner = (
 ) => Promise<{ success: boolean; results: SearchResult[]; error?: string; blocked?: boolean }>;
 
 /**
- * Minimum interval between automatic error searches. The spec asked for a
- * STUCK_RECOVERY_COOLDOWN-iteration cap, but onAfterTool has no iteration
- * counter (executor context), so the same anti-spam protection is
- * time-based. Injectable via the constructor for tests (0 disables it).
+ * Минимальный интервал между автопоисками ошибок. Спек просил кап
+ * STUCK_RECOVERY_COOLDOWN-итераций, но в onAfterTool нет счётчика итераций
+ * (контекст экзекутора) — та же анти-спам защита, но по времени. Инжектится
+ * через конструктор для тестов (0 отключает).
  */
 const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
 
 /**
- * Tools that may run while a plan step is active WITHOUT a step-alignment
- * check. They either cannot touch the filesystem, or are structural/read-only
- * inspection tools the agent legitimately needs at any point (diagnostics,
- * index/search, memory, process introspection, interactive prompts). Only
- * file-mutating tools are pinned to the current step's file tokens.
+ * Тулы, которым можно при активном шаге плана БЕЗ проверки step-alignment.
+ * Либо не трогают ФС, либо структурно/read-only инспекции, нужные агенту в
+ * любой точке (диагностика, индекс/поиск, память, интроспекция процессов,
+ * интерактивные промпты). К текущему шагу пинятся только файл-мутирующие.
  *
- * `lsp_check` and `project_map` belong here explicitly: both are alwaysOn and
- * the system prompt MANDATES `lsp_check` after every write (including rewrites
- * of files owned by already-completed steps). Leaving them off the list made
- * every diagnostic call burn a plan warning and could hard-block a legitimate
- * write on the 3rd call (observed: "3 вызовов подряд вне текущего шага" while
- * the agent was writing the current step's own deliverable).
+ * `lsp_check` и `project_map` здесь явно: оба alwaysOn, а системный промпт
+ * ТРЕБУЕТ `lsp_check` после каждой записи (включая переписи файлов уже
+ * закрытых шагов). Без них каждый диагностический вызов жёг plan-warning и мог
+ * hard-block'нуть легитимную запись на 3-м вызове (было: "3 вызовов подряд вне
+ * текущего шага", пока агент писал deliverable текущего же шага).
  */
 const PLAN_ALIGNMENT_EXEMPT_TOOLS = new Set([
   // structural / execution control
@@ -96,17 +95,17 @@ const PLAN_ALIGNMENT_EXEMPT_TOOLS = new Set([
 ]);
 
 /**
- * Canonical form of a file token for plan alignment: forward slashes + lower
- * case. Model tool calls pass absolute Windows paths
- * (`C:\…\test\src\main.ts`) while plan steps name files relatively
- * (`src/main.ts`); comparing the raw strings made every on-track write look
- * off-path (backslash vs forward slash never intersects). Normalizing both
- * sides lets the substring/`endsWith` overlap below match.
+ * Каноническая форма файлового токена для alignment: прямые слэши + lowercase.
+ * Вызовы тулов несут абсолютные Windows-пути (`C:\…\test\src\main.ts`), а шаги
+ * плана — относительные (`src/main.ts`); сравнение сырых строк делало каждый
+ * on-track write off-path (бэкслэш vs прямой слэш не пересекаются).
+ * Нормализация обеих сторон чинит overlap через substring/`endsWith` ниже.
  */
 function planPathToken(p: string): string {
   return toForwardSlash(p).toLowerCase();
 }
 
+/** Execution-модуль: план, stuck-детектор, аудитор, гейты выравнивания и автопоиск ошибок. */
 export class ExecutionModule implements AgentModule {
   name = "execution";
   private tracker: PlanTracker | null = null;
@@ -115,27 +114,26 @@ export class ExecutionModule implements AgentModule {
   private auditor: Auditor;
   private store: PlanStore;
   private baseDir: string;
-  // Skip the first audit after restoring a plan from disk — gives the user
-  // one chance to change the subject before the audit gate locks in.
+  // Пропуск первого аудита после восстановления плана с диска — даём юзеру
+  // шанс сменить тему, прежде чем audit-gate зафиксируется.
   private _auditSkipsRemaining = 0;
   /**
-   * The last plan that was COMPLETED and auto-archived. `plan update` on the
-   * final step clears the tracker, which used to make runFinalAudit() return
-   * null and silently skip the final audit (tests + tsc + file checks) for a
-   * finished task. Keep the completed plan so the audit gate still runs.
+   * Последний план, ЗАВЕРШЁННЫЙ и авто-архивированный. `plan update` на
+   * финальном шаге чистит трекер — раньше runFinalAudit() возвращал null и
+   * молча скипал финальный аудит (тесты + tsc + файлы) готовой задачи.
+   * Храним завершённый план, чтобы audit-gate отработал.
    */
   private completedPlan: Plan | null = null;
   /**
-   * Deferred <system-summary> messages. Injected by onBeforeTool/onAfterTool
-   * but flushed in onBeforeThink, so they never land between an assistant
-   * tool_call message and its tool results (which breaks message pairing and
-   * buries the warnings the model should react to).
+   * Отложенные <system-summary>. Инжектятся onBeforeTool/onAfterTool, но
+   * флашатся в onBeforeThink — никогда не встают между assistant tool_call и
+   * его tool-результатами (рвёт спаривание и хоронит варнинги, на которые
+   * модель должна реагировать).
    */
   private pendingMessages: Array<{ role: "user"; content: string }> = [];
-  // Per-command failure counters for forbidden Windows commands (grep/sed/ls/
-  // find/… invoked through the bash tool). A hard stop after the second
-  // failure is evidence-based (actual command failures), not task
-  // classification (rule #10).
+  // Per-командные счётчики фейлов запрещённых Windows-команд (grep/sed/ls/
+  // find/… через тул bash). Hard stop после второго фейла evidence-based
+  // (реальные фейлы команд), не классификация задач (правило #10).
   private forbiddenBashFailures = new Map<string, number>();
   private searchRunner: WebSearchRunner;
   private searchesThisSession = 0;
@@ -146,9 +144,9 @@ export class ExecutionModule implements AgentModule {
     null;
 
   /**
-   * The execution-plugin's mutable state. Owned HERE and passed BY REFERENCE
-   * to the plugin factory — the plugin writes deps.state.* directly, so the
-   * assignments are visible on the module without any write-back.
+   * Мутабельное состояние execution-плагина. Владеем ЗДЕСЬ, передаём ПО ССЫЛКЕ
+   * фабрике плагина — плагин пишет deps.state.* напрямую, записи видны модулю
+   * без write-back.
    */
   private state: ExecutionPluginState = {
     lastRecoveryIteration: -STUCK_RECOVERY_COOLDOWN,
@@ -165,11 +163,10 @@ export class ExecutionModule implements AgentModule {
   };
 
   /**
-   * Read/write accessor for the tracker, shared with the plan-tool and
-   * execution-plugin factories. The `plan` tool's abort action clears it
-   * (current = null) — the setter keeps this.tracker in sync. Object-literal
-   * getters bind `this` to the literal, so the instance is captured in a
-   * closure instead.
+   * Read/write доступ к трекеру, общий для фабрик plan-tool и execution-plugin.
+   * Abort тула `plan` чистит его (current = null) — сеттер держит this.tracker
+   * в синхроне. Геттеры литерала биндят `this` на литерал, поэтому инстанс
+   * захвачен замыканием.
    */
   private trackerRef: {
     get current(): PlanTracker | null;
@@ -202,83 +199,87 @@ export class ExecutionModule implements AgentModule {
     this.errorSearchCooldownMs = errorSearchCooldownMs;
   }
 
+  /** Ставит план активным (синхрон указателя, персист, сброс завершённого/скипов). */
   setPlan(plan: Plan): void {
     this.tracker = new PlanTracker(plan);
-    // Advance the pointer past any done/skipped steps of a restored/replanned
-    // plan so display ("current: step N") and the off-track alignment match
-    // reality instead of always pointing at step 1.
+    // Указатель мимо done/skipped шагов восстановленного/перепланированного
+    // плана: display ("current: step N") и off-track alignment матчатся с
+    // реальностью, а не вечно указывают на шаг 1.
     this.tracker.syncCurrentStep();
     this.store.saveActive(plan);
-    this.completedPlan = null; // a new plan supersedes the completed one
-    this._auditSkipsRemaining = 0; // plan explicitly created — arm the audit gate
+    this.completedPlan = null; // новый план вытесняет завершённый
+    this._auditSkipsRemaining = 0; // план явно создан — взводим audit-gate
   }
 
-  /** Wire the hallucination detector so the plan tool can check whether
-   *  a file was tracked as deleted (auto-switch kind gate). */
+  /** Вяжет детектор галлюцинаций: тул plan проверяет удалённость файлов (auto-switch kind gate). */
   setHallucinationDetector(detector: {
     getConsistencyCheck(): { getDeletedFiles(): string[] };
   }): void {
     this.hallucinationDetector = detector;
   }
 
-  /** Remember the last completed plan so the final audit can still verify it
-   *  after the tracker was cleared by the auto-archive. */
+  /** Запоминает последний завершённый план: финальный аудит проверит его и
+   *  после очистки трекера авто-архивом. */
   recordCompleted(plan: Plan): void {
     this.completedPlan = plan;
   }
 
-  /** Forget the completed plan (abort/delete/purge — nothing left to audit). */
+  /** Забывает завершённый план (abort/delete/purge — аудитить нечего). */
   clearCompleted(): void {
     this.completedPlan = null;
   }
 
+  /** Восстанавливает активный план с диска. False, если нет/уже завершён (тогда в архив). */
   restorePlan(): boolean {
     const plan = this.store.loadActive();
     if (!plan) return false;
     const restored = new PlanTracker(plan);
-    // A plan that was already complete when saved must not come back as the
-    // active plan — archive it so it cannot re-anchor the agent (restored
-    // completed plans caused the "continue step 4" loop on restart).
+    // План, уже завершённый на момент сохранения, активным не возвращается —
+    // архивируем, чтобы не якорил агента (восстановленные готовые планы давали
+    // петлю "continue step 4" на рестарте).
     if (restored.isComplete()) {
       this.store.archivePlan(plan);
       this.tracker = null;
       return false;
     }
     this.tracker = restored;
-    // Advance to the first non-done step
+    // Двигаем к первому недонесённому шагу
     this.tracker.syncCurrentStep();
-    this._auditSkipsRemaining = 1; // restored plan — one free pass
+    this._auditSkipsRemaining = 1; // восстановленный план — один свободный проход
     return true;
   }
 
+  /** Трекер (null без активного плана). */
   getTracker(): PlanTracker | null {
     return this.tracker;
   }
 
-  /** The currently tracked plan (single source of truth for UI consumers).
-   *  Null in a fresh session — a disk-resident plan is restored only when
-   *  resuming a session with history, so the REPL must never see stale plans. */
+  /** Текущий трекаемый план (единый источник правды для UI).
+   *  Null в свежей сессии — план с диска восстанавливается только при resume
+   *  сессии с историей, REPL протухших планов не видит. */
   getActivePlan(): Plan | null {
     return this.tracker?.getPlan() ?? null;
   }
 
+  /** Стор планов. */
   getStore(): PlanStore {
     return this.store;
   }
 
+  /** Stuck-детектор. */
   getStuckDetector(): StuckDetector {
     return this.stuckDetector;
   }
 
   /**
-   * Automatic web search for a repeatedly failing error (>= errorWebSearch.threshold
-   * identical signatures). Fires the search fire-and-forget (never blocks the tool
-   * result) and queues the results as a <system-summary> in pendingMessages.
+   * Автопоиск в вебе повторяющейся ошибки (≥ порога errorWebSearch одинаковых
+   * сигнатур). Поиск fire-and-forget (результат тула не блокирует), результаты
+   * очередятся <system-summary> в pendingMessages.
    *
-   * Gates: webSearch master switch + errorWebSearch switch → repeated signature
-   * → not-searched (or retried) → session cap → meaningful error text →
-   * cooldown. One search per signature; empty results trigger a single retry
-   * (unmarkErrorSearched once), then the signature stays searched.
+   * Гейты: мастер-свитч webSearch + свитч errorWebSearch → повторная сигнатура
+   * → не-исканная (или ретрайная) → сессионный кап → содержательный текст ошибки →
+   * кулдаун. Один поиск на сигнатуру; пустые результаты — один ретрай
+   * (размаркировка раз), затем сигнатура считается исканной.
    */
   maybeSearchError(ctx: ToolContext, call: ToolCall): void {
     if (ctx.config?.webSearch?.enabled === false) return;
@@ -336,19 +337,19 @@ export class ExecutionModule implements AgentModule {
   }
 
   /**
-   * Final audit before the agent may declare the task done. Returns null when
-   * no plan is active; otherwise checks plan completion + artifact existence.
+   * Финальный аудит перед правом агента заявить "готово". Null без активного
+   * плана; иначе — готовность плана + существование артефактов.
    */
   /**
-   * Evidence-based auto-close of pending plan steps whose deliverables exist
-   * on disk. Small models routinely finish the actual work but forget the
-   * `plan update` bookkeeping (observed ses_mthn3c2a: 2/5 steps marked done
-   * while every artifact existed — the audit gate then rejected a correct
-   * final answer and burned all retry budget on bookkeeping, not on work).
+   * Evidence-based автозакрытие пендинг шагов с deliverables на диске. Мелкие
+   * модели рутинно доделывают работу, но забывают бухгалтерию `plan update`
+   * (было в ses_mthn3c2a: 2/5 шагов done при всех артефактах на месте — audit-gate
+   * реджектил корректный финальный ответ и жёг retry-бюджет на бухгалтерию, не
+   * на работу).
    *
-   * Standard is the SAME one the auditor already applies to done steps: every
-   * file-like token in the step description resolves to an existing file.
-   * Steps without any file token stay pending (nothing to verify).
+   * Стандарт ТОТ ЖЕ, что аудитор применяет к done-шагам: каждый файлоподобный
+   * токен описания резолвится в существующий файл. Шаги без файловых токенов
+   * остаются пендинг (верифицировать нечего).
    */
   private autoCloseEvidenceSteps(plan: Plan): number {
     let closed = 0;
@@ -359,14 +360,14 @@ export class ExecutionModule implements AgentModule {
       const resolved = tokens.map((f) => findExistingFile(this.baseDir, f));
 
       if (step.kind === "delete") {
-        // A delete step is satisfied only when every named target is GONE.
-        // (The old existence-only check marked it done with the files still
-        // present — the deliverable gate inverted.)
+        // Delete-шаг закрыт, только если каждая именованная цель ОТСУТСТВУЕТ.
+        // (Старая existence-проверка маркила done при файлах на месте —
+        // deliverable-gate инвертировался.)
         if (resolved.some((r) => r !== null)) continue;
       } else {
-        // create: every target must exist AND be non-empty. An empty
-        // placeholder is not a deliverable, and the auditor only checks
-        // existence — auto-closing it produced a false "passed".
+        // create: каждая цель существует И непуста. Пустой плейсхолдер — не
+        // deliverable, а аудитор смотрит только существование — автозакрытие
+        // дало бы ложный "passed".
         if (resolved.some((r) => r === null)) continue;
         const empty = resolved.some((r) => {
           try {
@@ -387,6 +388,7 @@ export class ExecutionModule implements AgentModule {
     return closed;
   }
 
+  /** Финальный аудит активного/завершённого плана: файлы, тесты, tsc, пендинги. Null — аудитить нечего. */
   async runFinalAudit(): Promise<{
     passed: boolean;
     done: number;
@@ -395,10 +397,10 @@ export class ExecutionModule implements AgentModule {
     missingFiles: string[];
     summary: string;
   } | null> {
-    // No active tracker: audit the last completed plan instead of bailing.
-    // A plan finished via `plan update` auto-archives and clears the tracker;
-    // without this the final audit (tests + tsc + file checks) was silently
-    // skipped and the model could declare success on broken artifacts.
+    // Нет активного трекера: аудитим последний завершённый план вместо bail.
+    // План, закрытый через `plan update`, авто-архивируется и чистит трекер;
+    // без этого финальный аудит (тесты + tsc + файлы) молча скипался и модель
+    // заявляла успех на битых артефактах.
     if (!this.tracker) {
       if (!this.completedPlan) return null;
       const plan = this.completedPlan;
@@ -445,6 +447,7 @@ export class ExecutionModule implements AgentModule {
     };
   }
 
+  /** Блок системного промпта с чеклистом плана (null без активного/незавершённого). */
   getSystemPromptBlock(): PromptBlock | null {
     if (!this.tracker || this.tracker.isComplete()) return null;
     return {
@@ -456,14 +459,13 @@ export class ExecutionModule implements AgentModule {
   }
 
   /**
-   * Short "current plan" line for the compaction summary. Null when no plan
-   * is active. For 9B models the explicit instruction "continue it, do NOT
-   * create a new plan" matters — after compaction the plan block is visible
-   * but the model re-creates the plan anyway (observed: ses_msvuao0h).
+   * Короткая строка "текущий план" для сводки компакции. Null без активного
+   * плана. Для 9B-моделей важна явная инструкция "continue it, do NOT create
+   * a new plan" — после компакции блок плана виден, но модель всё равно
+   * пересоздаёт план (было: ses_msvuao0h).
    *
-   * When the plan is complete, the summary says the plan is done and the
-   * model may create a new plan — NOT "continue step 4, do NOT create a
-   * new plan" which anchored the ses_msxjbnm4 loop.
+   * Готовый план в сводке — "план done, можно новый", а НЕ "continue step 4,
+   * do NOT create a new plan", якоривший петлю ses_msxjbnm4.
    */
   getPlanSummary(): string | null {
     if (!this.tracker) return null;
@@ -488,6 +490,7 @@ export class ExecutionModule implements AgentModule {
     });
   }
 
+  /** Определения тулов модуля (plan/todo/verify через фабрику plan-tool). */
   getToolDefinitions(): ToolDefinition[] {
     return createPlanToolDefinitions({
       store: this.store,
@@ -512,6 +515,7 @@ export class ExecutionModule implements AgentModule {
     });
   }
 
+  /** Плагин модуля (хуки цикла из фабрики execution-plugin). */
   getPlugin(): AgentPlugin {
     return createExecutionPlugin({
       stuckDetector: this.stuckDetector,
@@ -546,18 +550,18 @@ export class ExecutionModule implements AgentModule {
     const stepPaths = extractFileLikeTokens(stripUrls(step.description)).map(planPathToken);
     if (stepPaths.length === 0) return null;
 
-    // Only path-ish arguments are inspected. JSON-stringifying the whole args
-    // blob made write_file/edit_file `content` feed its code tokens into the
-    // off-path check (e.g. `import "./styles.css"` inside the file body) and
-    // raised phantom alignment warnings for on-track writes.
+    // Инспектируем только path-like аргументы. JSON-стринг всего blob'а args
+    // скармливал кодовые токены `content` write_file/edit_file в off-path чек
+    // (напр. `import "./styles.css"` в теле файла) и давал фантомные alignment-
+    // варнинги на on-track записях.
     const argStr = this.pathArgStrings(call.arguments).join(" ");
     const callPaths = extractFileLikeTokens(stripUrls(argStr)).map(planPathToken);
 
     if (callPaths.length === 0) return null;
 
-    // Files that already belong to COMPLETED (done/skipped) steps are
-    // legitimate rewrite targets — the agent iterates on them while fixing
-    // LSP/type errors. Blocking those would stop normal bug-fixing.
+    // Файлы уже ЗАКРЫТЫХ (done/skipped) шагов — легитимные цели переписи:
+    // агент итерируется по ним, чиня LSP/type-ошибки. Блок здесь остановил бы
+    // нормальный багфикс.
     const plan = this.tracker.getPlan();
     const finishedPaths = new Set<string>();
     for (const s of plan.steps) {
@@ -568,11 +572,11 @@ export class ExecutionModule implements AgentModule {
       }
     }
 
-    // Bidirectional path-token overlap, used for BOTH checks below. A step may
-    // name "main.ts" while the tool calls "src/main.ts" (or vice versa), so a
-    // one-directional `s.includes(p)` missed the common nested/partial case
-    // (observed: rewriting a completed step's src/main.ts was flagged as
-    // off-path for the current step and helped hard-block the third call).
+    // Двунаправленный overlap path-токенов, общий для ОБЕИХ проверок ниже. Шаг
+    // может звать "main.ts", а тул — "src/main.ts" (или наоборот): односторонний
+    // `s.includes(p)` частый nested/частичный кейс пропускал (было: перепись
+    // src/main.ts закрытого шага флаговалась off-path текущего и помогла
+    // hard-block'нуть третий вызов).
     const matchesAny = (p: string, tokens: string[]) =>
       tokens.some((t) => t === p || t.includes(p) || p.includes(t));
     const finished = [...finishedPaths];
@@ -590,10 +594,10 @@ export class ExecutionModule implements AgentModule {
     });
   }
 
-  /** String values of the path-like arguments of a tool call. Limits the
-   *  off-path alignment check to arguments that actually name files (path,
-   *  file, dir, src, dst, source, target, input, output, destination, glob,
-   *  workdir, cwd, command, pattern) and never scans payload content. */
+  /** Строковые значения path-like аргументов вызова. Ограничивает off-path
+   *  чек аргументами, реально именующими файлы (path, file, dir, src, dst,
+   *  source, target, input, output, destination, glob, workdir, cwd, command,
+   *  pattern), полезную нагрузку не сканирует. */
   private pathArgStrings(args: Record<string, unknown> | undefined): string[] {
     if (!args) return [];
     const out: string[] = [];
@@ -622,17 +626,17 @@ export class ExecutionModule implements AgentModule {
     const step = this.tracker?.getCurrentStep();
     if (!step) return;
     const stepText = step.description.toLowerCase();
-    // Shared file-token filter (allow-list of real extensions, extension-only
-    // segments rejected). A step like "Удалить .js, оставить .tsx/.ts" must
-    // NOT produce the phantom token "tsx/.ts" — that never exists, making
-    // allGone trivially true and auto-advancing a delete step while the real
-    // files to delete still exist (the raw regex path did exactly that).
+    // Общий файловый фильтр (allow-list реальных расширений, сегменты только
+    // из расширения отброшены). Шаг "Удалить .js, оставить .tsx/.ts" НЕ даёт
+    // фантомный токен "tsx/.ts" — его не существует, allGone тривиально true и
+    // автопродвинуло бы delete-шаг при живых файлах на удаление (сырой regex
+    // делал ровно так).
     const stepPaths = extractFileLikeTokens(stripUrls(step.description)) || [];
 
-    // Step gate: verify dependencies when mentioned — check BEFORE file paths.
-    // Requires an actual package-manager verb (rule #10 — no bare keyword
-    // matching: "init" alone or "setup project" must NOT trigger the lockfile
-    // hint, only concrete dependency-install commands do).
+    // Гейт шагов: зависимости проверяем при упоминании — ДО путей файлов.
+    // Нужен реальный глагол пакетного менеджера (правило #10 — без голого
+    // keyword-матчинга: один "init" или "setup project" локфайловый хинт НЕ
+    // триггерят, только конкретные install-команды).
     const isDepsStep =
       /(?:npm|bun|yarn|pnpm|pip|pip3|pipenv|poetry|composer|deno|go|gem|cargo)\s+(?:install|add|init|i|get)\b|bun\s+(?:add|install)|npm\s+(?:i|install|add)|(?:install|установ\w*)\s+(?:dependencies|зависимост\w*|пакет\w*|packages?)/i.test(
         stepText,
@@ -673,19 +677,18 @@ export class ExecutionModule implements AgentModule {
 
     if (stepPaths.length === 0) return;
 
-    // Resolve tokens with the SAME subtree walk the deliverable gate and the
-    // auditor use (findExistingFile), so a nested file
-    // ("bicycle-shop/src/bicycles.ts" for token "src/bicycles.ts") counts as
-    // present. The old exact existsSync(resolve()) never matched nested
-    // projects, so auto-advance stayed silent even after the model wrote the
-    // real file.
+    // Токены резолвим ТЕМ ЖЕ обходом поддерева, что deliverable-gate и аудитор
+    // (findExistingFile): вложенный файл ("bicycle-shop/src/bicycles.ts" для
+    // токена "src/bicycles.ts") засчитывается. Старый точный
+    // existsSync(resolve()) вложенные проекты не матчил — автопродвижение
+    // молчало и после записи реального файла.
     const resolved = stepPaths.map((p) => findExistingFile(this.baseDir, p));
     const allExist = resolved.every((r) => r !== null);
     const allGone = resolved.every((r) => r === null);
     const satisfied = step.kind === "delete" ? allGone && !allExist : allExist;
     if (!satisfied) return;
 
-    // Step gate: verify files have content (not empty)
+    // Гейт шагов: файлы проверяем на контент (не пустые)
     if (step.kind !== "delete") {
       const emptyFiles: string[] = [];
       for (const r of resolved) {
@@ -696,7 +699,7 @@ export class ExecutionModule implements AgentModule {
             emptyFiles.push(r);
           }
         } catch {
-          // If we can't read it, rely on the existence result
+          // Нечитаем — откат на existence
         }
       }
 
@@ -709,7 +712,7 @@ export class ExecutionModule implements AgentModule {
       }
     }
 
-    // All checks passed — advance
+    // Все проверки прошли — двигаем
     this.tracker?.updateStepStatus(step.id, "done");
     const hadNext = this.tracker?.advance() ?? false;
     if (this.tracker) {
@@ -735,10 +738,10 @@ export class ExecutionModule implements AgentModule {
       });
     }
 
-    // Auto-archive a plan that just became complete (all steps done/skipped).
-    // Keeps a finished plan from staying active forever and anchoring the agent
-    // to a completed task ("continue step 4, do NOT create a new plan" — the
-    // ses_msxjbnm4 loop). The per-step deliverable gate already verified files.
+    // Авто-архив только что завершённого плана (все шаги done/skipped).
+    // Готовый план не висит активным вечно, якоря агента на готовую задачу
+    // ("continue step 4, do NOT create a new plan" — петля ses_msxjbnm4).
+    // Per-step deliverable-gate файлы уже проверил.
     if (this.tracker?.isComplete()) {
       const completed = this.tracker.getPlan();
       this.store.archivePlan(completed);
@@ -749,12 +752,12 @@ export class ExecutionModule implements AgentModule {
   }
 
   /**
-   * File tokens named in a step description that do not resolve to a real
-   * file. Uses the same shared token extractor (allow-list of real file
-   * extensions, URLs stripped) and the auditor's subtree resolver, so
-   * "bicycles.ts" finds "bicycle-shop/src/data/bicycles.ts" and a hostname in
-   * the description is never reported as a missing deliverable. Steps with no
-   * file tokens (pure commands, verification runs) cannot be verified.
+   * Файловые токены из описания шага, не резолвящиеся в реальный файл.
+   * Тот же общий экстрактор токенов (allow-list реальных расширений, URL
+   * вырезаны) и subtree-резолвер аудитора: "bicycles.ts" находит
+   * "bicycle-shop/src/data/bicycles.ts", а hostname в описании — никогда
+   * missing deliverable. Шаги без файловых токенов (чистые команды, прогоны
+   * проверок) неверифицируемы.
    */
   private missingStepDeliverables(step: { description: string }): string[] {
     const tokens = extractFileLikeTokens(stripUrls(step.description));
@@ -763,9 +766,9 @@ export class ExecutionModule implements AgentModule {
   }
 
   /**
-   * File tokens named in a step description that still resolve to a real
-   * file. The inverse of missingStepDeliverables — used by the gate for
-   * delete-kind steps ("done" means the files are gone).
+   * Файловые токены из описания шага, всё ещё резолвящиеся в реальный файл.
+   * Инверсия missingStepDeliverables — для гейта delete-шагов ("done" значит
+   * файлы пропали).
    */
   private stillExistingDeliverables(step: { description: string }): string[] {
     const tokens = extractFileLikeTokens(stripUrls(step.description));
@@ -773,18 +776,18 @@ export class ExecutionModule implements AgentModule {
     return tokens.filter((p) => findExistingFile(this.baseDir, p));
   }
 
-  /** Whether a step description names at least one real file token. Steps
-   *  with no file tokens (pure commands, verification runs) cannot be
-   *  auto-verified — the done-gate is vacuous for them. */
+  /** Есть ли в описании шага хоть один реальный файловый токен. Шаги без
+   *  токенов (чистые команды, прогоны проверок) не автоверифицируются —
+   *  done-gate для них vacuous. */
   private hasStepDeliverables(step: { description: string }): boolean {
     return extractFileLikeTokens(stripUrls(step.description)).length > 0;
   }
 
   /**
-   * Validate the optional per-step `kinds` argument for plan create and
-   * update-with-steps. Returns length-aligned kinds or an i18n error string.
-   * Absent kinds → null (caller falls back to all-create semantics). Used by
-   * BOTH branches so a rebuild via update can never silently drop kinds.
+   * Валидирует опциональный пер-шаговый аргумент `kinds` для create плана и
+   * update-с-шагами. Возвращает выровненные по длине kinds или i18n-строку
+   * ошибки. Нет kinds → null (вызывающий фолбэчится на all-create). Общий для
+   * ОБЕИХ веток: перестройка через update не дропает kinds молча.
    */
   private parseKinds(
     args: Record<string, unknown>,
@@ -811,11 +814,11 @@ export class ExecutionModule implements AgentModule {
   }
 
   /**
-   * Validate the per-step `checks` argument for plan create / re-plan.
-   * Checks are REQUIRED (a step without a verification contract cannot
-   * prove its done): absent or length-mismatched or badly-prefixed checks
-   * return an i18n error string. Valid prefixes: file-exists: / command: /
-   * manual: (see plan-checks.ts).
+   * Валидирует пер-шаговый аргумент `checks` для create / re-plan плана.
+   * Checks ОБЯЗАТЕЛЬНЫ (шаг без контракта верификации свой done не докажет):
+   * отсутствующие, несовпавшие по длине или с битым префиксом возвращают
+   * i18n-строку ошибки. Валидные префиксы: file-exists: / command: /
+   * manual: (см. plan-checks.ts).
    */
   private parseChecks(
     args: Record<string, unknown>,
@@ -844,17 +847,17 @@ export class ExecutionModule implements AgentModule {
   }
 
   /**
-   * Extract the original task statement from the first user message in the
-   * conversation history. Used to validate plan coverage against requirements.
+   * Достаёт исходную формулировку задачи из первого user-сообщения истории.
+   * Нужно для валидации покрытия плана против требований.
    */
   private getTaskText(ctx: any): string {
     const manager = ctx?.contextManager;
     if (!manager) return "";
     const history = manager.getActiveHistory();
-    // The first user message may be an injected <system-summary> (compaction
-    // block) — it is NOT the task. Coverage must compare the plan against the
-    // model's real instruction (observed: a compaction summary's stale file
-    // list produced a bogus "plan is missing files" warning).
+    // Первое user-сообщение может быть инжектированным <system-summary>
+    // (блок компакции) — это НЕ задача. Покрытие сравнивает план с реальной
+    // инструкцией модели (было: протухший файловый список сводки компакции дал
+    // bogus-варнинг "в плане не хватает файлов").
     const firstUser = history.find((m: { role: string; content: string | ContentPart[] }) => {
       if (m.role !== "user") return false;
       const text = getMessageText(m.content);

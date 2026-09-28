@@ -1,3 +1,4 @@
+// Верификатор шагов: файлы, синтаксис, скрипты, typecheck, success_criteria.
 import { existsSync, readFileSync } from "fs";
 import { resolve, extname, dirname, join } from "path";
 import { spawn } from "child_process";
@@ -12,19 +13,21 @@ import { findExistingFile } from "./auditor";
 import { findTypecheckRoot } from "./audit-runners";
 import { killTree } from "../processes/kill-tree";
 
+/** Один пункт проверки: прошёл ли + сообщение. */
 export interface VerificationItem {
   passed: boolean;
   message: string;
 }
 
-/** Result of checking one subtask's machine-readable success_criteria. */
+/** Результат проверки machine-readable success_criteria одной подзадачи. */
 export interface SubtaskCriteriaResult {
   errors: string[];
-  /** LLM-only criteria (not machine-checkable) — surfaced as warnings. */
+  /** LLM-only критерии (не машиночитаемые) — отдаются варнингами. */
   warnings: string[];
   details: VerificationItem[];
 }
 
+/** Результат верификации шага: прошёл, синтаксис валиден, фейлы, флаг "без файлов". */
 export interface StepVerificationResult {
   passed: boolean;
   syntaxValid: boolean;
@@ -32,6 +35,7 @@ export interface StepVerificationResult {
   noFiles?: boolean;
 }
 
+/** Результат верификации MoE-манифеста: успех, ошибки, варнинги, детали. */
 export interface MoEVerificationResult {
   success: boolean;
   errors: string[];
@@ -39,6 +43,7 @@ export interface MoEVerificationResult {
   details: VerificationItem[];
 }
 
+/** Верификатор шагов и MoE-планов: файлы, синтаксис, скрипты, tsc, критерии. */
 export class StepVerifier {
   private baseDir: string;
 
@@ -46,9 +51,10 @@ export class StepVerifier {
     this.baseDir = baseDir;
   }
 
+  /** Проверяет существование файла (с nested-резолвером findExistingFile). */
   async checkFileExists(path: string): Promise<VerificationItem> {
-    // Nested-aware (same resolver as verifyStep): a project created in
-    // `baseDir/proj/` must not be reported missing because the file lives below.
+    // Nested-aware (тот же резолвер, что в verifyStep): проект в
+    // `baseDir/proj/` нельзя репортить пропавшим, если файл ниже.
     const resolved = findExistingFile(this.baseDir, path);
     const exists = !!resolved;
     return {
@@ -57,6 +63,7 @@ export class StepVerifier {
     };
   }
 
+  /** Запускает `bun run <script>` (60s), возвращает пункт проверки. */
   async runScript(scriptName: string): Promise<VerificationItem> {
     try {
       await this.runAsync(`bun run ${scriptName}`, this.baseDir, 60_000);
@@ -69,10 +76,11 @@ export class StepVerifier {
     }
   }
 
+  /** Проектный typecheck (tsc --noEmit); без tsconfig/tsc — пропуск, не фейл. */
   async runTypeCheck(existingFiles: string[] = []): Promise<VerificationItem> {
-    // Resolve the project root from the artifacts too, so a project nested in
-    // `baseDir/proj/` is type-checked instead of being skipped ("No
-    // tsconfig.json found") — the old baseDir-only lookup missed it.
+    // Корень проекта резолвим и по артефактам: проект во вложенном
+    // `baseDir/proj/` надо типчекать, а не скипать ("No tsconfig.json found") —
+    // старый поиск только от baseDir его не видел.
     const root = findTypecheckRoot(this.baseDir, existingFiles) ?? this.baseDir;
     const tsconfigPath = join(root, "tsconfig.json");
     if (!existsSync(tsconfigPath)) {
@@ -93,11 +101,11 @@ export class StepVerifier {
   }
 
   /**
-   * Type-check a specific file, resolving the project root from the FILE's
-   * location (not the agent baseDir). For nested layouts (`baseDir/proj/` with
-   * its own tsconfig.json) the old baseDir-based check silently skipped every
-   * type error (observed in ses_mst2r0r5: zero type feedback for the whole
-   * session). Markers mirror the TypeScript LSP server config.
+   * Типчекает конкретный файл, резолвя корень проекта от РАСПОЛОЖЕНИЯ ФАЙЛА
+   * (не от baseDir агента). Для вложенных раскладок (`baseDir/proj/` со своим
+   * tsconfig.json) старая проверка от baseDir молча скипала каждую ошибку типов
+   * (было в ses_mst2r0r5: ноль type feedback за всю сессию). Маркеры зеркалят
+   * конфиг TypeScript LSP-сервера.
    */
   async runTypeCheckForFile(filePath: string): Promise<VerificationItem> {
     const projectRoot = findProjectRoot(filePath, this.baseDir, ["tsconfig.json", "package.json"]);
@@ -119,6 +127,7 @@ export class StepVerifier {
     }
   }
 
+  /** Запускает `test`-скрипт проекта; без package.json/скрипта — пропуск. */
   async runTests(): Promise<VerificationItem> {
     const pkgPath = resolve(this.baseDir, "package.json");
     if (!existsSync(pkgPath)) {
@@ -130,23 +139,24 @@ export class StepVerifier {
         return { passed: true, message: t("verify.tests_skipped_no_script") };
       }
     } catch {
-      /* fall through — attempt to run */
+      /* fall through — пробуем запустить */
     }
     return this.runScript("test");
   }
 
+  /** Проверяет существование списка файлов-артефактов (параллельно). */
   async verifyArtifactFiles(files: string[]): Promise<VerificationItem[]> {
     return Promise.all(files.map((f) => this.checkFileExists(f)));
   }
 
   /**
-   * Check a subtask's machine-readable success_criteria BEFORE the merge
-   * decision (Plan 5.1). Supported forms:
+   * Проверяет machine-readable success_criteria подзадачи ДО решения о merge
+   * (Plan 5.1). Поддержаны формы:
    * - `file-exists:<path>`
    * - `substring-in-file:<path>:<text>`
    * - `command-exit-0:<command>`
-   * Anything else is treated as an LLM-only criterion and reported as a
-   * warning (never an error) so the Router still sees it in context.
+   * Остальное — LLM-only критерий: варнинг (не ошибка), чтобы Router всё равно
+   * видел его в контексте.
    */
   async verifySubtaskCriteria(subtask: MoESubtask): Promise<SubtaskCriteriaResult> {
     const errors: string[] = [];
@@ -214,6 +224,7 @@ export class StepVerifier {
     return { errors, warnings, details };
   }
 
+  /** Верифицирует MoE-манифест: эксперты, typecheck, файлы и критерии подзадач. */
   async verifyMoEManifest(
     plan: MoEPlan,
     config: AppConfig,
@@ -248,7 +259,7 @@ export class StepVerifier {
         }
       }
 
-      // Machine-readable success_criteria (Plan 5.1) — checked before merge.
+      // Machine-readable success_criteria (Plan 5.1) — проверяются до merge.
       const criteria = await this.verifySubtaskCriteria(sub);
       errors.push(...criteria.errors);
       warnings.push(...criteria.warnings);
@@ -263,12 +274,13 @@ export class StepVerifier {
     };
   }
 
+  /** Верифицирует шаг: файлы из описания существуют (+синтаксис; delete — наоборот). */
   async verifyStep(stepDescription: string, kind?: StepKind): Promise<StepVerificationResult> {
     const fileMatches = extractFileLikeTokens(stripUrls(stepDescription));
 
-    // No named files — this step cannot be verified by file existence. Do NOT
-    // trivially pass (empty every() = true); signal noFiles so the tool guides
-    // the model to run a real check instead.
+    // Нет именованных файлов — шаг непроверяем по существованию. НЕ пропускаем
+    // тривиально (пустой every() = true); сигналим noFiles, чтобы тул вёл
+    // модель к настоящей проверке.
     if (fileMatches.length === 0) {
       return { passed: false, syntaxValid: true, failed: [], noFiles: true };
     }
@@ -281,18 +293,18 @@ export class StepVerifier {
       const exists = !!resolved;
 
       if (kind === "delete") {
-        // For delete steps: file NOT existing is a pass
+        // Для delete-шагов: отсутствие файла — pass
         results.push({
           passed: !exists,
           message: exists
             ? t("verify.file_still_exists", { path: filePath })
             : t("verify.file_not_found", { path: filePath }),
         });
-        // Don't syntax-check a deleted file
+        // Удалённый файл синтаксически не проверяем
         continue;
       }
 
-      // Create steps: file must exist + valid syntax
+      // Create-шаги: файл обязан существовать + валидный синтаксис
       if (!exists) {
         results.push({ passed: false, message: t("verify.file_not_found", { path: filePath }) });
         continue;
@@ -323,7 +335,7 @@ export class StepVerifier {
       const tsc = resolveTscCommand(dirname(filePath));
       if (!tsc) return true;
       try {
-        // Quote the path — commands run through a shell and break on spaces.
+        // Путь в кавычках — команды идут через shell и ломаются на пробелах.
         await this.runAsync(`${tsc} --noEmit --skipLibCheck "${filePath}"`, this.baseDir, 20000);
         return true;
       } catch (err: any) {
@@ -355,8 +367,8 @@ export class StepVerifier {
   }
 
   /**
-   * Run a command asynchronously (non-blocking event loop) and resolve when it
-   * exits. Rejects with the captured stderr/stdout on non-zero exit or timeout.
+   * Запускает команду асинхронно (не блокируя event loop) и резолвится на
+   * выходе. На ненулевой exit или таймаут — reject с захваченными stderr/stdout.
    */
   private runAsync(
     command: string,
@@ -379,8 +391,8 @@ export class StepVerifier {
         stderr += d.toString();
       });
       const timer = setTimeout(() => {
-        // Kill the whole tree: with shell:true, child.kill() only stops the
-        // shell and leaves the real tsc/node grandchild running.
+        // Убиваем всё дерево: при shell:true child.kill() останавливает только
+        // shell, а реальный внук tsc/node продолжает висеть.
         killTree(child);
         reject(new Error(`Command timed out after ${timeoutMs}ms`));
       }, timeoutMs);

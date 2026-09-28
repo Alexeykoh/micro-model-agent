@@ -1,10 +1,11 @@
+// Извлечение фактов для компакции: файлы/удаления/решения/ошибки/чтения переживают сжатие.
 import type { Message } from "./manager";
 import { getMessageText } from "../../llm/provider";
 
 /**
- * Regex-based fact extraction from tool/assistant messages. Owns the file /
- * deleted / decision / error fact lists that survive compaction. Extracted
- * from ContextManager so the ~115-line regex logic has one home (rule #2).
+ * Regex-извлечение фактов из tool/assistant-сообщений. Владеет списками фактов
+ * файлов/удалений/решений/ошибок, переживающих компакцию. Вынесен из
+ * ContextManager, чтобы ~115 строк regex-логики жили в одном месте (правило #2).
  */
 export class FactExtractor {
   private fileFacts: string[] = [];
@@ -14,14 +15,15 @@ export class FactExtractor {
   private readFacts: string[] = [];
   private static readonly MAX_FACTS = 20;
 
+  /** Число накопленных фактов ошибок. */
   get errorCount(): number {
     return this.errorFacts.length;
   }
 
-  /** Scan a batch of compacted turns and fold their facts into the lists. */
+  /** Сканирует пачку уплотняемых ходов и вливает их факты в списки. */
   extract(turns: Message[]): void {
-    // Absolute Windows paths ("E:\proj\src\a.ts") need an optional drive prefix;
-    // without it the colon breaks the match and the fact is silently dropped.
+    // Абсолютные Windows-пути ("E:\proj\src\a.ts") требуют опционального префикса
+    // диска; без него двоеточие ломает матч и факт молча теряется.
     const DRIVE = "(?:[a-zA-Z]:[\\\\/])?";
     const createdPatterns = [
       new RegExp(
@@ -38,9 +40,9 @@ export class FactExtractor {
       new RegExp(`Deleted ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
       new RegExp(`(?:Удалён|Файл удалён):? ${DRIVE}([\\w./\\\\-]+\\.[a-z]+)`, "gi"),
     ];
-    // read_file output header — locale-independent prefix `── path (ext, …`
-    // (en: "lines", ru: "строк"). The path is already prefixed with the same
-    // box-drawing marker in both locales, so the pattern needs no localization.
+    // Заголовок вывода read_file — независящий от локали префикс `── path (ext, …`
+    // (en: "lines", ru: "строк"). Путь в обеих локалях с тем же маркером,
+    // поэтому паттерну локализация не нужна.
     const readPatterns = [new RegExp(`── (${DRIVE}[\\w./\\\\-]+\\.[a-z]+) \\(`, "gi")];
 
     const newFiles: string[] = [];
@@ -48,24 +50,23 @@ export class FactExtractor {
     const newDecisions: string[] = [];
     const newErrors: string[] = [];
     const newReads: string[] = [];
-    // Track the LAST tool event per path so a delete followed by a re-create
-    // (or vice versa) in the same window resolves to its final state instead of
-    // being both filtered out of [Files:] and reported as [Deleted:].
+    // Трекаем ПОСЛЕДНЕЕ событие тула на путь: удаление с пересозданием
+    // (или наоборот) в том же окне резолвится в финальное состояние, а не
+    // вылетает и из [Files:], и из [Deleted:].
     const lastEvent = new Map<string, "file" | "deleted">();
 
     for (const msg of turns) {
       const content = getMessageText(msg.content);
 
-      // The system prompt is never a fact source — the memory module embeds
-      // errors.md (with historical "Tool X failed Nx" entries from PAST days)
-      // there, and extracting that text as current [Errors:] misleads the model
-      // into thinking IT is failing (observed: ses_msvuao0h — a stale
-      // "edit_file failed 3x" from 2026-08-15 landed in every compaction
-      // summary as if it were the live session's failure).
+      // Системный промпт — никогда не источник фактов: модуль памяти встраивает
+      // туда errors.md с историческими "Tool X failed Nx" ПРОШЛЫХ дней, и их
+      // извлечение как текущих [Errors:] вводит модель в заблуждение, будто
+      // фейлит ОНА (было: ses_msvuao0h — протухшее "edit_file failed 3x"
+      // от 2026-08-15 попадало в каждую сводку как живой фейл сессии).
       if (msg.role === "system") continue;
 
-      // Never feed a previous <system-summary> block into new facts — that is
-      // the source of recursive summary nesting (summary inside summary).
+      // Прошлый <system-summary> — никогда не источник новых фактов, иначе
+      // рекурсивная вложенность сводок (сводка внутри сводки).
       if (
         msg.role === "user" &&
         (content.startsWith("<system-summary>") || content.includes("[Compressed:"))
@@ -114,8 +115,8 @@ export class FactExtractor {
           content.includes("Ошибка:") ||
           content.includes("не удалось")
         ) {
-          // A line like "3 passed, 0 failed" is a SUCCESSFUL test run, not an
-          // error — counting it degrades context quality for no reason.
+          // Строка "3 passed, 0 failed" — УСПЕШНЫЙ прогон тестов, не ошибка:
+          // считать её деградирует качество контекста без причины.
           const ZERO_FAILURES =
             /\b0\s+(?:failed|failing|failures?)\b|(?:failed?|failures?|ошиб[а-я]*)\s*[:=]\s*0\b/i;
           const candidates = content
@@ -133,12 +134,11 @@ export class FactExtractor {
       }
     }
 
-    // Deduplicate and cap facts to prevent unbounded growth. Files that were
-    // DELETED leave the "known files" list — a deleted file must not keep
-    // being reported as existing (observed: deleted .js files listed in
-    // every [Files: ...] block for the whole session). A path that is deleted
-    // then RE-CREATED (delete_file A → write_file A) is un-deleted: the last
-    // event in the window wins, so it returns to [Files:] and leaves [Deleted:].
+    // Дедуп и кап фактов против unbounded-роста. УДАЛЁННЫЕ файлы уходят из
+    // "известных": удалённый файл не должен числиться существующим (было:
+    // удалённые .js висели в каждом [Files: ...] всю сессию). Путь, удалённый
+    // и ПЕРЕСОЗДАННЫЙ (delete_file A → write_file A), возвращается в [Files:]
+    // и уходит из [Deleted:] — побеждает последнее событие окна.
     const dedup = (arr: string[]): string[] => [...new Set(arr)];
     const finalFiles = dedup(newFiles.filter((p) => lastEvent.get(p) === "file"));
     const finalDeleted = dedup(newDeleted.filter((p) => lastEvent.get(p) === "deleted"));
@@ -155,7 +155,7 @@ export class FactExtractor {
     this.readFacts = dedup([...this.readFacts, ...newReads]).slice(-FactExtractor.MAX_FACTS);
   }
 
-  /** `[Files: a; b]` line for a compaction summary, or null. */
+  /** Строка `[Files: a; b]` для сводки компакции, или null. */
   filesLine(): string | null {
     const deletedSet = new Set(this.deletedFacts);
     const liveFiles = this.fileFacts.filter((p) => !deletedSet.has(p));
@@ -163,35 +163,34 @@ export class FactExtractor {
     return `[Files: ${liveFiles.slice(-15).join("; ")}]`;
   }
 
-  /** All known live files (not deleted) — used to seed the hallucination
-   *  checker's known-files set after compaction. */
+  /** Все известные живые файлы (не удалённые) — сидируют known-files проверки
+   *  галлюцинаций после компакции. */
   getKnownFiles(): string[] {
     const deletedSet = new Set(this.deletedFacts);
     return this.fileFacts.filter((p) => !deletedSet.has(p));
   }
 
-  /** `[Deleted: c]` line, or null. */
+  /** Строка `[Deleted: c]`, или null. */
   deletedLine(): string | null {
     if (this.deletedFacts.length === 0) return null;
     return `[Deleted: ${this.deletedFacts.slice(-10).join("; ")}]`;
   }
 
-  /** `[Decisions: d]` line, or null. */
+  /** Строка `[Decisions: d]`, или null. */
   decisionsLine(): string | null {
     if (this.decisionFacts.length === 0) return null;
     return `[Decisions: ${this.decisionFacts.slice(-5).join("; ")}]`;
   }
-  /** `[Errors: e]` line, or null. */
+  /** Строка `[Errors: e]`, или null. */
   errorsLine(): string | null {
     if (this.errorFacts.length === 0) return null;
     return `[Errors: ${this.errorFacts.slice(-3).join("; ")}]`;
   }
   /**
-   * `[Read: p1; p2]` line — files already inspected via read_file. Lets the
-   * model re-orient after compaction without rescanning the whole project: it
-   * knows which files were already read and only re-reads what changed
-   * (observed: post-compaction the model re-read the same files it had already
-   * inspected, because "already read" never survived compaction).
+   * Строка `[Read: p1; p2]` — файлы, уже просмотренные через read_file. После
+   * компакции модель переориентируется без рескана проекта: знает, что уже
+   * читала, и перечитывает только изменившееся (было: после компакции модель
+   * перечитывала те же файлы, т.к. "уже прочитано" компакцию не переживало).
    */
   readLine(): string | null {
     if (this.readFacts.length === 0) return null;

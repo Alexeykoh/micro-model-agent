@@ -1,19 +1,24 @@
+/** Базовые типы ядра: состояния, тулы, ответы LLM, результаты. */
+/** Состояние агентного цикла. */
 export type AgentState = "INIT" | "THINK" | "ACT" | "OBSERVE" | "OUTPUT" | "ERROR";
 
 /**
- * Meta-channel kind: tool bodies (`display`/`output`/`diff`/failure gist from
- * `ToolBatch`) are model-facing and quiet-gated in chat renderers; genuine
- * status (context stats, compaction, hallucination warnings) is always visible.
+ * Вид мета-канала: тела тулов (`display`/`output`/`diff`/сводка из `ToolBatch`)
+ * — model-facing, в quiet-чатах скрываются; настоящий статус (статистика
+ * контекста, компакция, варнинги) виден всегда.
  */
 export type MetaKind = "tool" | "status";
 
-/** UI status-line callback — `kind` defaults to `"status"` when omitted. */
+/** Колбэк UI-статуса; `kind` по умолчанию `"status"`. */
 export type OnMeta = (meta: string, kind?: MetaKind) => void;
 
-/** Semantic class of a prompt block — lets the overflow resolver treat
- *  instructions / project map specially when they exceed the system budget. */
+/**
+ * Семантический класс блока промпта — резолвер переполнения обрабатывает
+ * инструкции/карту особо, когда они рвут системный бюджет.
+ */
 export type PromptBlockKind = "instructions" | "project-map";
 
+/** Блок системного промпта: контент, приоритет, оценка токенов. */
 export interface PromptBlock {
   content: string;
   priority: "critical" | "high" | "normal" | "low";
@@ -22,14 +27,17 @@ export interface PromptBlock {
   kind?: PromptBlockKind;
 }
 
+/** Статус вызова тула. */
 export type ToolCallStatus = "done" | "failed" | "skipped";
 
+/** Вызов тула от модели: id, имя, аргументы. */
 export interface ToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
 }
 
+/** Событие тула для UI (старт/конец, длительность, дельта контекста). */
 export interface ToolEvent {
   type: "start" | "end";
   tool: string;
@@ -38,30 +46,33 @@ export interface ToolEvent {
   duration?: number;
   error?: boolean;
   ctxDelta?: number;
-  /** Raw tool-result body on `end`; renderers clip/scrub before display. */
+  /** Сырое тело результата на `end`; рендереры режут/чистят перед показом. */
   output?: string;
-  /** Running session cost in USD at the time the tool finished (if pricing known). */
+  /** Накопленная стоимость сессии в USD на момент конца тула (если цена известна). */
   costUsd?: number;
-  /** Provider name that serviced the tool call (multi-provider mode). */
+  /** Провайдер вызова тула (мультипровайдерный режим). */
   provider?: string;
-  /** Model that serviced the tool call. */
+  /** Модель вызова тула. */
   model?: string;
 }
 
-/** Agent lifecycle phases surfaced to the renderer (spinner control). */
+/** Фазы жизни агента для рендерера (управление спиннером). */
 export type AgentPhase = "thinking" | "done";
 
+/** Результат тула: успех, вывод, id вызова. */
 export interface ToolResult {
   success: boolean;
   output: string;
   toolCallId?: string;
 }
 
+/** Ответ LLM: текст, вызовы тулов или reasoning. */
 export type LLMResponse =
   | { type: "text"; content: string }
   | { type: "tool_call"; calls: ToolCall[] }
   | { type: "reasoning"; content: string };
 
+/** Контекст агента: состояние, конфиг, сообщения, счётчик итераций. */
 export interface AgentContext {
   state: AgentState;
   config: import("../config/types").AppConfig;
@@ -72,11 +83,13 @@ export interface AgentContext {
   totalSteps?: number;
 }
 
+/** Вердикт детектора халлюцинаций: pass/warn/retry/block. */
 export interface HallucinationResult {
   status: "pass" | "warn" | "retry" | "block";
   reason?: string;
 }
 
+/** Контекст сабтаска MoE: эксперт, теги тулов, файлы, зависимости. */
 export interface SubtaskContext {
   expert_tag: string;
   tool_tags: string[];
@@ -89,6 +102,7 @@ export interface SubtaskContext {
   input_from?: string[];
 }
 
+/** Итог прогона: успех, текст, токены, стоимость, качество контекста. */
 export interface AgentResult {
   success: boolean;
   text: string;
@@ -99,9 +113,9 @@ export interface AgentResult {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
-  /** Running session cost in USD (undefined when no model price is known). */
+  /** Накопленная стоимость сессии в USD (нет, если цена модели неизвестна). */
   totalCost?: number;
-  /** Per-provider cost attribution (priced providers only, cost desc). */
+  /** Разбивка стоимости по провайдерам (только с ценами, по убыванию). */
   costBreakdown?: Array<{ provider: string; cost: number }>;
   /** Статистика кеша промпта за прогон (провайдерская или client-side). */
   cache?: {
@@ -121,18 +135,18 @@ export interface AgentResult {
   };
   compactionCount?: number;
   contextQuality?: number;
-  /** Provider name that serviced this run. */
+  /** Провайдер этого прогона. */
   provider?: string;
-  /** Model name used for this run. */
+  /** Модель этого прогона. */
   model?: string;
-  /** Total wall-clock duration in milliseconds. */
+  /** Полная длительность в миллисекундах (wall-clock). */
   durationMs?: number;
-  /** Total LLM call duration in milliseconds (excludes tool execution). */
+  /** Длительность LLM-вызовов в мс (без исполнения тулов). */
   llmDurationMs?: number;
   /**
-   * True when the MoE path actually executed (not fell back to the
-   * single-agent loop). Used by Agent.run to know whether it must write the
-   * assistant turn into context/session (the single-agent loop writes its own).
+   * True, если реально отработал MoE-путь (а не фолбэк в одиночный цикл).
+   * По нему Agent.run понимает, что должен сам записать ход ассистента
+   * в контекст/сессию (одиночный цикл пишет сам).
    */
   moeHandled?: boolean;
 }

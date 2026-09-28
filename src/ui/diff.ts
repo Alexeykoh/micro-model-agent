@@ -1,10 +1,10 @@
+// Диффы правок файлов для чата: LCS с капами, цветные строки ±.
 import { pc } from "./colors";
 
 const CONTEXT_LINES = 3;
 const MAX_DIFF_LINES = 100;
-// LCS is O(m*n) in time and memory — cap the DP input so a huge edit_file
-// can't allocate hundreds of MB. Beyond the cap, diff degrades to a
-// "changed N lines" summary instead of a full LCS.
+// LCS — O(m*n) по времени и памяти: режем вход DP, чтобы огромный edit_file не
+// отъел сотни МБ. За капом дифф деградирует до сводки "изменено N строк".
 const MAX_LCS_INPUT_LINES = 2000;
 
 interface DiffLine {
@@ -152,6 +152,7 @@ function formatLine(line: DiffLine, maxNumWidth: number): string {
   }
 }
 
+/** Строка диффа старого/нового содержимого. */
 export function generateDiff(oldContent: string, newContent: string): string {
   if (oldContent === newContent) return "";
 
@@ -162,8 +163,7 @@ export function generateDiff(oldContent: string, newContent: string): string {
     oldLines.length > MAX_LCS_INPUT_LINES ||
     newLines.length > MAX_LCS_INPUT_LINES
   ) {
-    // Too large for the O(m*n) DP — show a bounded summary instead of
-    // allocating an m*n matrix.
+    // Слишком велик для O(m*n) DP — ограниченная сводка вместо матрицы m*n.
     return pc.dim(
       `  ... (file too large for line diff: ${oldLines.length} -> ${newLines.length} lines)`,
     );
@@ -189,6 +189,7 @@ export function generateDiff(oldContent: string, newContent: string): string {
   return lines.join("\n");
 }
 
+/** Дифф нового файла: все строки как добавленные. */
 export function generateNewFileDiff(content: string): string {
   const lines = content.split("\n");
   const maxNumWidth = Math.max(String(lines.length).length, 3);

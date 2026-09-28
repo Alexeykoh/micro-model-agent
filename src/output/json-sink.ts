@@ -1,10 +1,11 @@
 import type { OutputEvent, OutputSubscriber } from "./types";
 
 /**
- * Collects bus events so a machine-readable run (`--json`) can include the
- * warn/error diagnostics that the human channel suppresses via `setQuiet`.
- * Info/debug events are ignored: they are progress noise, not diagnostics.
+ * Копит события шины, чтобы машиночитаемый прогон (`--json`) включил
+ * warn/error-диагностику, которую человеческий канал гасит через `setQuiet`.
+ * Info/debug игнорируются: это шум прогресса, а не диагностика.
  */
+/** Сток warn/error-диагностики для `--json`. @param bus шина для подписки. */
 export class JsonOutputSink {
   private events: OutputEvent[] = [];
   private readonly unsub: () => void;
@@ -15,6 +16,7 @@ export class JsonOutputSink {
     });
   }
 
+  /** Только warn/error события в виде плоских записей. */
   diagnostics(): Array<{ level: string; source: string; text: string }> {
     return this.events
       .filter((e) => e.level === "warn" || e.level === "error")

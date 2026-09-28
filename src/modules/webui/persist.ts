@@ -1,15 +1,14 @@
+// Общий шаг «сохранить + переконфигурировать» для пишущих точек `mma web`.
 /**
- * Shared persist + reconfigure step for the `mma web` write endpoints.
- *
- * `config-api`, `providers-api` and `setup-api` used to carry identical
- * inline copies: persist first, then reconfigure, neither failure swallowed
- * (the UI needs `persisted`/`warning` to tell "saved" from "changed in memory
- * only"). One copy, same contract.
+ * `config-api`, `providers-api` и `setup-api` несли идентичные инлайн-копии:
+ * сначала персист, затем reconfigure, ни один провал не глотается (UI нужны
+ * `persisted`/`warning`, чтобы отличить "сохранено" от "только в памяти").
+ * Одна копия, тот же контракт.
  */
 import type { AppConfig } from "../../config/types";
 import type { WebUiState } from "./state";
 
-/** Persist first, then reconfigure; neither failure is swallowed. */
+/** Сначала персист, затем reconfigure; ни один провал не глотается. */
 export async function persistAndReconfigure(
   s: WebUiState,
   config: AppConfig,

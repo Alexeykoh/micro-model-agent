@@ -1,17 +1,18 @@
 /**
- * Minimal line prompt for the setup wizard.
+ * Минимальный строчный промпт для визарда настройки.
  *
- * The wizard deliberately does NOT use `readline.createInterface` (Bun leaves
- * stdin in a state where the REPL's raw-mode LineEditor never receives
- * keypress events — the first-run freeze) nor the REPL's LineEditor (sharing
- * the live editor with the running REPL desynchronises input and terminal
- * state). Instead it reads stdin in COOKED mode: the terminal does its own
- * echo/editing, we only accumulate bytes until a newline and resolve the
- * pending question. No raw mode, no keypress decoding, no DSR cursor queries.
+ * Визард осознанно НЕ использует `readline.createInterface` (Bun оставляет stdin
+ * в состоянии, где raw-режимный LineEditor REPL не получает keypress — фриз
+ * первого запуска) и не LineEditor REPL (расшаривание живого редактора с
+ * работающим REPL рассинхронизирует ввод и состояние терминала). Вместо этого
+ * читает stdin в COOKED-режиме: эхо/правка — на терминале, мы лишь копим байты
+ * до перевода строки и резолвим pending-вопрос. Без raw-режима, декодинга
+ * клавиш и DSR-запросов курсора.
  *
- * Lifecycle is explicit: `new SetupPrompt()` attaches, `close()` detaches and
- * pauses stdin, leaving it clean for the REPL to take over.
+ * Жизненный цикл явный: `new SetupPrompt()` аттачит, `close()` деттачит и ставит
+ * stdin на паузу, оставляя его чистым для захвата REPL.
  */
+/** Вход промпта: вопрос + колбэк ответа. */
 export interface PromptInput {
   question(query: string, cb: (answer: string) => void): void;
 }
@@ -22,6 +23,7 @@ type StdinLike = NodeJS.ReadableStream & {
   pause?: () => void;
 };
 
+/** Cooked-режимный промпт визарда: эхо/правка на терминале, мы копим до newline. */
 export class SetupPrompt implements PromptInput {
   private pending: ((answer: string) => void) | null = null;
   private buffer = "";
@@ -32,7 +34,7 @@ export class SetupPrompt implements PromptInput {
     private readonly input: StdinLike = process.stdin,
     private readonly output: NodeJS.WritableStream = process.stdout,
   ) {
-    // Cooked mode: the console handles line editing and echo.
+    // Cooked-режим: правка строки и эхо — на консоли.
     if (typeof this.input.setRawMode === "function") this.input.setRawMode(false);
     this.onData = (buf: Buffer) => this.consume(buf.toString("utf-8"));
     this.input.on("data", this.onData);
@@ -63,7 +65,7 @@ export class SetupPrompt implements PromptInput {
     this.buffer = "";
     const cb = this.pending;
     this.pending = null;
-    // A TTY already echoes the Enter as a newline; only piped input needs one.
+    // TTY сам эхует Enter переводом строки; дописываем его только пайпам.
     if (!(this.output as { isTTY?: boolean }).isTTY) this.output.write("\n");
     cb(answer);
   }

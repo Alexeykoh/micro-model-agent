@@ -1,19 +1,19 @@
 /**
- * JS/TS global identifiers whose member access (`process.env`, `console.log`,
- * `Math.max`) looks like a file path to `\b[\w./\\-]+\.[a-z]+\b`-style regexes
- * but is code, not a file. Shared by the hallucination factual check and the
- * execution auditor so both stop flagging member access as "missing files".
+ * JS/TS-глобалы, чей member access (`process.env`, `console.log`, `Math.max`)
+ * похож на путь к файлу для `\b[\w./\\-]+\.[a-z]+\b`-regex'ов, но является
+ * кодом, а не файлом. Общий для фактической проверки галлюцинаций и аудитора
+ * исполнения — оба перестают флаговать member access как "потерянные файлы".
  *
- * Also home of the shared "is this token actually a file?" filter
- * (`isFilePathLike` / `extractFileLikeTokens` / `stripUrls`) so the two
- * extractors cannot drift apart again (observed: auditor treated a URL
- * hostname `whom-pointing-jewel-maine.trycloudflare.com` in a plan step as a
- * missing file while the factual check correctly ignored it).
+ * Здесь же общий фильтр "этот токен вообще файл?"
+ * (`isFilePathLike` / `extractFileLikeTokens` / `stripUrls`), чтобы два
+ * экстрактора не расходились (было: аудитор считал hostname URL
+ * `whom-pointing-jewel-maine.trycloudflare.com` в шаге плана потерянным
+ * файлом, а фактическая проверка корректно игнорировала).
  *
- * Bare `word.ext` tokens are gated on an allow-list of real file extensions
- * (`FILE_EXTENSIONS`) instead of a deny-list of TLDs — a domain in any present
- * or future TLD (`Gismeteo.by`, `weather.com`, `example.xyz`) can never be
- * mistaken for a file, and no TLD list needs maintaining.
+ * Голые токены `word.ext` гейтятся allow-list'ом реальных расширений
+ * (`FILE_EXTENSIONS`), а не deny-list'ом TLD — домен в любом нынешнем или
+ * будущем TLD (`Gismeteo.by`, `weather.com`, `example.xyz`) никогда не
+ * спутается с файлом, и список TLD вести не нужно.
  */
 
 const JS_GLOBALS = new Set([
@@ -74,9 +74,9 @@ const JS_GLOBALS = new Set([
 ]);
 
 /**
- * True when `candidate` starts with a known JS/TS global followed by a dot
- * (`process.env`, `console.log`, `process.env.NODE` partial matches from
- * `\b[\w./\\-]+\.[a-z]+`-style regexes) — member access, not a file path.
+ * True, если `candidate` начинается с известного JS/TS-глобала и точки
+ * (`process.env`, `console.log`, частичные совпадения `process.env.NODE`
+ * от `\b[\w./\\-]+\.[a-z]+`-regex'ов) — member access, не путь к файлу.
  */
 export function isJsMemberAccess(candidate: string): boolean {
   const lower = candidate.toLowerCase();
@@ -85,16 +85,16 @@ export function isJsMemberAccess(candidate: string): boolean {
 }
 
 /**
- * File extensions that make a bare `word.ext` token a plausible file path.
+ * Расширения, делающие голый токен `word.ext` похожим на путь к файлу.
  *
- * An allow-list, deliberately: enumerating everything that is NOT a file (TLDs,
- * brand names, …) is a brittle heuristic that can never be complete. Instead a
- * bare `word.ext` is only treated as a file when its extension is a known one —
- * so `Gismeteo.by`, `weather.com`, or any future TLD is never flagged, while a
- * genuine `config.json` / `helper.ts` still is.
+ * Allow-list осознанно: перечислять всё, что НЕ файл (TLD, бренды, …) —
+ * хрупкая эвристика, которая никогда не полна. Вместо этого голый `word.ext`
+ * считается файлом только при известном расширении — так `Gismeteo.by`,
+ * `weather.com` и любой будущий TLD не флагуются, а настоящие
+ * `config.json` / `helper.ts` — да.
  */
 const FILE_EXTENSIONS = new Set([
-  // source / code
+  // исходники / код
   "ts",
   "tsx",
   "js",
@@ -134,7 +134,7 @@ const FILE_EXTENSIONS = new Set([
   "vue",
   "svelte",
   "dart",
-  // config / data / docs
+  // конфиги / данные / доки
   "json",
   "jsonc",
   "json5",
@@ -166,7 +166,7 @@ const FILE_EXTENSIONS = new Set([
   "scss",
   "sass",
   "less",
-  // assets / binary
+  // ассеты / бинарники
   "svg",
   "png",
   "jpg",
@@ -203,7 +203,7 @@ const FILE_EXTENSIONS = new Set([
   "dylib",
 ]);
 
-/** Well-known runtime/library names that end in .js/.ts but are NOT files. */
+/** Известные рантаймы/библиотеки на .js/.ts, которые НЕ файлы. */
 const TECH_NAMES = new Set([
   "node.js",
   "react.js",
@@ -220,12 +220,12 @@ const TECH_NAMES = new Set([
 const FILE_TOKEN_RE = /\b(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{1,6}\b/gi;
 
 /**
- * True when `candidate` is a plausible file path token: for a path with a
- * directory separator the last segment must carry a non-empty stem before the
- * extension (extension-only segments like `tsx/.ts` are rejected), while a bare
- * `word.ext` is only a file when its extension is a known file extension (so
- * domains like `Gismeteo.by` / `weather.com` are never files). JS member access
- * (`process.env`) and technology names (`node.js`) are never files.
+ * True, если `candidate` — правдоподобный токен пути: у пути с разделителем
+ * последний сегмент обязан нести непустой stem перед расширением (сегменты
+ * только из расширения вроде `tsx/.ts` отбрасываются), а голый `word.ext` —
+ * файл только при известном расширении (домены `Gismeteo.by` / `weather.com`
+ * — никогда файлы). JS member access (`process.env`) и техно-имена
+ * (`node.js`) — никогда файлы.
  */
 export function isFilePathLike(s: string): boolean {
   const lower = s.toLowerCase();
@@ -236,12 +236,11 @@ export function isFilePathLike(s: string): boolean {
     if (!/^\w+\.[a-z]{1,6}$/i.test(s)) return false;
     return FILE_EXTENSIONS.has(ext);
   }
-  // Tokens with a directory separator: require the LAST segment to carry a
-  // real file name (a non-empty stem before the extension). Otherwise an
-  // extension-only segment like "tsx/.ts" (from ".tsx/.ts" in a step
-  // description) or a dotfile ("src/.env") is misread as a file and the plan
-  // deliverable gate demands "create tsx/.ts" (observed in ses_mstda6uo:
-  // step "Проверить что остались только .tsx/.ts файлы").
+  // Токены с разделителем: требуем у ПОСЛЕДНЕГО сегмента настоящее имя
+  // (непустой stem перед расширением). Иначе сегмент только из расширения
+  // вроде "tsx/.ts" (из ".tsx/.ts" в описании шага) или дотфайл ("src/.env")
+  // читается как файл, и deliverable-gate требует "создать tsx/.ts"
+  // (было в ses_mstda6uo: шаг "Проверить что остались только .tsx/.ts файлы").
   const last = s.split(/[\\/]/).pop() ?? "";
   const lastDot = last.lastIndexOf(".");
   if (lastDot <= 0) return false;
@@ -249,19 +248,18 @@ export function isFilePathLike(s: string): boolean {
 }
 
 /**
- * Extract deduplicated file-like tokens from free text. Bare `word.ext` tokens
- * are filtered through `isFilePathLike` (allow-list of real file extensions, so
- * hostnames/TLDs like `whom-pointing-jewel-maine.trycloudflare.com` or
- * `Gismeteo.by` never survive); URLs are stripped first so
- * `https://host/repo.git` never survives as a "file".
+ * Извлекает дедуплицированные файлоподобные токены из свободного текста.
+ * Голые `word.ext` фильтруются через `isFilePathLike` (allow-list реальных
+ * расширений — хосты/TLD вроде `whom-pointing-jewel-maine.trycloudflare.com`
+ * или `Gismeteo.by` не выживают); URL вырезаются заранее, чтобы
+ * `https://host/repo.git` не выжил как "файл".
  */
 export function extractFileLikeTokens(text: string): string[] {
   const matches = text.match(FILE_TOKEN_RE) || [];
   return [...new Set(matches.filter(isFilePathLike))];
 }
 
-/** Remove URL tokens (scheme://… up to whitespace/quote) so they are never
- *  parsed as file paths. */
+/** Вырезает URL (scheme://… до пробела/кавычки), чтобы они не парсились как пути. */
 export function stripUrls(text: string): string {
   return text.replace(/\bhttps?:\/\/[^\s"'<>]+/gi, " ");
 }

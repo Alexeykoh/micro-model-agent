@@ -1,3 +1,4 @@
+// Снапшот страницы: извлечение интерактивных элементов, обрезка, текстовый формат.
 import type { ElementEntry, PageSnapshot } from "./types";
 import { t } from "../../i18n/index";
 import { DEFAULT_BROWSER_CONFIG } from "./types";
@@ -48,6 +49,10 @@ function getName(
   return text.slice(0, 50);
 }
 
+/**
+ * Вытащить интерактивные элементы из HTML (ссылки, кнопки, поля).
+ * @param html сырой HTML страницы. @param maxElements лимит элементов.
+ */
 export function extractInteractiveElements(html: string, maxElements = 30): ElementEntry[] {
   const elements: ElementEntry[] = [];
   const tagRegex = /<(a|button|input|textarea|select|div|span)([^>]*)>/gi;
@@ -95,6 +100,7 @@ export function extractInteractiveElements(html: string, maxElements = 30): Elem
   return elements;
 }
 
+/** Обрезать текст по лимиту, предпочтительно по границе строки. */
 export function truncateText(text: string, maxChars: number): string {
   if (maxChars <= 0) return "";
   if (text.length <= maxChars) return text;
@@ -104,6 +110,7 @@ export function truncateText(text: string, maxChars: number): string {
   return `${safe}\n${t("browser.truncated")}`;
 }
 
+/** Собрать текстовый снапшот: элементы, контент, консоль, сетевые ошибки. */
 export function formatSnapshot(
   snapshot: PageSnapshot,
   maxContentChars = DEFAULT_BROWSER_CONFIG.maxContentChars,

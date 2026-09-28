@@ -1,3 +1,4 @@
+// Персист планов: active/drafts/archive в .mma/plans + миграция legacy plan.json.
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
 import { Logger } from "../../logger/app-logger";
@@ -7,8 +8,10 @@ import { projectMmaDir } from "../../config/paths";
 
 const log = new Logger("info", "plan-store");
 
+/** Статус плана: активный, черновик, архив. */
 export type PlanStatus = "active" | "draft" | "archived";
 
+/** Метаданные плана для списков (без тел шагов). */
 export interface PlanMeta {
   id: string;
   name?: string;
@@ -41,10 +44,10 @@ function readPlanFile(path: string, fallbackBaseDir: string): Plan | null {
 }
 
 function writePlanFile(path: string, plan: Plan): void {
-  // Atomic write: a crash mid-write must not leave a truncated plan file
-  // (readPlanFile silently returns null on broken JSON → active plan lost).
-  // The temp name is unique per process to avoid two `mma` instances sharing
-  // `.mma/plans/active.json` renaming away each other's `.tmp` (ENOENT).
+  // Атомарная запись: крах посреди записи не оставит обрезанный файл плана
+  // (readPlanFile молча вернёт null на битом JSON → активный план потерян).
+  // Имя tmp уникально на процесс: два `mma` на общем `.mma/plans/active.json`
+  // не уводят друг у друга `.tmp` (ENOENT).
   const tmpPath = `${path}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   try {
     writeFileSync(tmpPath, JSON.stringify(plan, null, 2), "utf-8");
@@ -53,7 +56,7 @@ function writePlanFile(path: string, plan: Plan): void {
     try {
       if (existsSync(tmpPath)) rmSync(tmpPath);
     } catch {
-      /* best-effort cleanup */
+      /* best-effort очистка */
     }
     log.warn(`failed to persist plan to ${path}`, { error: errMsg(e) });
     throw e;
@@ -78,6 +81,7 @@ function toMeta(plan: Plan, status: PlanStatus): PlanMeta {
   };
 }
 
+/** Хранилище планов: active/drafts/archive + миграция legacy-файла. */
 export class PlanStore {
   private baseDir: string;
   private plansDir: string;
@@ -104,19 +108,21 @@ export class PlanStore {
     return join(this.plansDir, "active.json");
   }
 
-  // ---- Active plan ----
+  // ---- Активный план ----
 
+  /** Сохраняет активный план. */
   saveActive(plan: Plan): void {
     writePlanFile(this.activePath(), plan);
   }
 
+  /** Загружает активный план (с миграцией legacy .mma/plan.json). Null, если нет. */
   loadActive(): Plan | null {
     const activePath = this.activePath();
     if (existsSync(activePath)) {
       const plan = readPlanFile(activePath, this.baseDir);
       if (plan) return plan;
     }
-    // Legacy migration: read .mma/plan.json and move to active
+    // Миграция legacy: читаем .mma/plan.json и переносим в active
     if (existsSync(this.legacyPath)) {
       const legacy = readPlanFile(this.legacyPath, this.baseDir);
       if (legacy) {
@@ -135,55 +141,64 @@ export class PlanStore {
     return null;
   }
 
+  /** Убирает активный план. */
   clearActive(): void {
     const p = this.activePath();
     if (existsSync(p)) rmSync(p, { force: true });
   }
 
-  // ---- Drafts (saved plans) ----
+  // ---- Черновики (сохранённые планы) ----
 
+  /** Сохраняет план в черновики. */
   saveDraft(plan: Plan): void {
     writePlanFile(join(this.draftsDir, `${plan.id}.json`), plan);
   }
 
+  /** Загружает черновик по id. Null, если нет. */
   loadDraft(id: string): Plan | null {
     const p = join(this.draftsDir, `${id}.json`);
     return existsSync(p) ? readPlanFile(p, this.baseDir) : null;
   }
 
+  /** Удаляет черновик по id. */
   removeDraft(id: string): void {
     const p = join(this.draftsDir, `${id}.json`);
     if (existsSync(p)) rmSync(p, { force: true });
   }
 
+  /** Все черновики. */
   listDrafts(): Plan[] {
     return listDir(this.draftsDir, this.baseDir);
   }
 
-  // ---- Archive ----
+  // ---- Архив ----
 
+  /** Архивирует план (убирает из черновиков/активного при совпадении). */
   archivePlan(plan: Plan): void {
     writePlanFile(join(this.archiveDir, `${plan.id}.json`), plan);
-    // Remove from drafts if present
+    // Убираем из черновиков, если там был
     this.removeDraft(plan.id);
-    // If archived plan was active, clear active
+    // Если архивируемый был активным — чистим active
     const active = this.loadActive();
     if (active && active.id === plan.id) {
       this.clearActive();
     }
   }
 
+  /** Все архивные планы. */
   listArchived(): Plan[] {
     return listDir(this.archiveDir, this.baseDir);
   }
 
+  /** Удаляет архивный план по id. */
   removeArchived(id: string): void {
     const p = join(this.archiveDir, `${id}.json`);
     if (existsSync(p)) rmSync(p, { force: true });
   }
 
-  // ---- Cross-status queries ----
+  // ---- Кросс-статусные запросы ----
 
+  /** Метаданные всех планов (активный + черновики + архив). */
   listAll(): PlanMeta[] {
     const metas: PlanMeta[] = [];
     const active = this.loadActive();
@@ -193,6 +208,7 @@ export class PlanStore {
     return metas;
   }
 
+  /** Находит план по id в любом статусе. Null, если нет. */
   find(id: string): { plan: Plan; status: PlanStatus } | null {
     const active = this.loadActive();
     if (active && active.id === id) return { plan: active, status: "active" };
@@ -203,10 +219,10 @@ export class PlanStore {
     return null;
   }
 
-  // ---- Deletion (the user asked for plans to actually go away) ----
+  // ---- Удаление (юзер просил: планы должны реально исчезать) ----
 
-  /** Permanently delete a plan wherever it lives. Returns its status, or null
-   *  when no plan with that id exists. */
+  /** Навсегда удаляет план, где бы ни лежал. Возвращает его статус, или null
+   *  если плана с таким id нет. */
   deletePlan(id: string): PlanStatus | null {
     const active = this.loadActive();
     if (active && active.id === id) {
@@ -226,7 +242,7 @@ export class PlanStore {
     return null;
   }
 
-  /** Delete every plan (active, drafts, archive). Returns the number removed. */
+  /** Удаляет все планы (активный, черновики, архив). Возвращает число удалённых. */
   purgeAll(): number {
     let n = 0;
     const active = this.loadActive();

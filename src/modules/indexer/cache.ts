@@ -1,34 +1,38 @@
+// Дисковый кэш индекса проекта: envelope с версией, root и сигнатурой дерева.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import type { IndexResult } from "./walker";
 
 /**
- * Bump whenever the envelope or `IndexResult` shape changes so caches written
- * by an older MMA are treated as stale and rebuilt.
+ * Инкремент при смене envelope или формы `IndexResult`: кэши старого MMA
+ * считаются протухшими и перестраиваются.
  */
+/** Версия схемы кэша индекса. */
 export const CACHE_VERSION = 2;
 
-/** On-disk wrapper carrying the validation metadata around the index. */
+/** Дисковая обёртка с валидационными метаданными вокруг индекса. */
 interface CacheEnvelope {
   version: number;
-  /** Absolute project root the index was built for. */
+  /** Абсолютный корень проекта, для которого построен индекс. */
   root: string;
-  /** Tree fingerprint from `Indexer.scanSignature()` at save time. */
+  /** Отпечаток дерева из `Indexer.scanSignature()` на момент сохранения. */
   signature: string;
   result: IndexResult;
 }
 
+/** Опции кэша индекса: корень проекта и функция сигнатуры дерева. */
 export interface IndexCacheOptions {
-  /** Absolute project root; a cache built for a different root is rejected. */
+  /** Абсолютный корень проекта; кэш под другой root отвергается. */
   root?: string;
   /**
-   * Current project-tree signature. When provided, `load()` re-computes it and
-   * rejects a cache whose stored signature differs, so a stale project map can
-   * never reach the system prompt. Omit to disable signature validation.
+   * Текущая сигнатура дерева проекта. Если задана, `load()` пересчитывает её и
+   * отвергает кэш с другой сохранённой сигнатурой — протухшая карта проекта
+   * никогда не попадёт в системный промпт. Опусти для отключения валидации.
    */
   signature?: () => string;
 }
 
+/** Дисковый кэш индекса с валидацией версии/root/сигнатуры. */
 export class IndexCache {
   private cachePath: string;
   private cache: IndexResult | null = null;
@@ -42,10 +46,10 @@ export class IndexCache {
   }
 
   /**
-   * Return the cached index only when it still describes the current tree.
-   * Rejects a cache when the schema `version`, stored `root` or tree
-   * `signature` differ; a legacy cache (raw `IndexResult`, no envelope) is
-   * treated as stale. Callers fall back to a full walk on `null`.
+   * Возвращает кэшированный индекс, только если он описывает текущее дерево.
+   * Отвергает кэш при расхождении версии схемы, сохранённого `root` или
+   * `signature`; легаси-кэш (сырой `IndexResult` без envelope) считается
+   * протухшим. Вызывающие на `null` делают полный обход.
    */
   load(): IndexResult | null {
     if (this.cache) return this.cache;
@@ -62,6 +66,7 @@ export class IndexCache {
     }
   }
 
+  /** Сохраняет результат индекса в кэш (память + диск). */
   save(result: IndexResult): void {
     this.cache = result;
     const envelope: CacheEnvelope = {
@@ -75,21 +80,22 @@ export class IndexCache {
     writeFileSync(this.cachePath, JSON.stringify(envelope), "utf-8");
   }
 
+  /** Инвалидирует кэш (память + дисковый файл). */
   invalidate(): void {
     this.cache = null;
     if (existsSync(this.cachePath)) {
       try {
         rmSync(this.cachePath);
       } catch {
-        /* ignore */
+        /* best-effort очистка */
       }
     }
   }
 
   /**
-   * Evaluate the tree signature defensively: an unreadable tree yields an
-   * empty string, which can never match a signature stored by a successful
-   * walk — so a broken tree invalidates the cache instead of trusting it.
+   * Считает сигнатуру дерева защищённо: нечитаемое дерево даёт пустую строку,
+   * которая не совпадёт с сохранённой успешным обходом — битое дерево
+   * инвалидирует кэш, а не вызывает доверие к нему.
    */
   private currentSignature(): string {
     if (!this.signature) return "";

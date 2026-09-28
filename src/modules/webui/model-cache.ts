@@ -1,22 +1,21 @@
+// Фоновый кеш списка моделей для `GET /api/models` (эндпоинт синхронен, провайдер — нет).
 /**
- * Background model-list cache for `GET /api/models`.
- *
- * Split out of `module.ts` (rule #1: ≤300 lines/file). The endpoint is
- * synchronous but the provider call is not, so the list is refreshed once at
- * startup (best-effort) and again on every reconfigure — following the active
- * provider instead of going stale. An offline provider keeps the previous
- * list rather than failing.
+ * Вынесен из `module.ts` (правило #1: ≤300 строк/файл). Список обновляется раз
+ * при старте (best-effort) и на каждый reconfigure — следуя за активным
+ * провайдером, а не протухая. Офлайн-провайдер оставляет прежний список, а не падает.
  */
 import type { Agent } from "../../core/agent";
 import type { AppConfig } from "../../config/types";
 
+/** Кеш списка моделей: чтение и обновление от активного провайдера. */
 export interface ModelCache {
-  /** Live model ids (sorted); wired into `state.knownModels`. */
+  /** Живые id моделей (сорт); подкючён к `state.knownModels`. */
   get: () => string[];
-  /** Refresh from the active provider; wired as the reconfigure hook. */
+  /** Обновить от активного провайдера; вешается хуком reconfigure. */
   refresh: () => Promise<void>;
 }
 
+/** Строит кеш на агенте и конфиге (активный провайдер резолвится при каждом refresh). */
 export function makeModelCache(
   agent: Pick<Agent, "getProviderFor">,
   config: AppConfig,
@@ -30,7 +29,7 @@ export function makeModelCache(
       const models = await provider.listModels();
       cache.splice(0, cache.length, ...models.slice().sort());
     } catch {
-      // Offline provider: keep the previous list rather than failing.
+      // Офлайн-провайдер: оставляем прежний список, а не падаем.
     }
   };
   return { get: () => cache, refresh };

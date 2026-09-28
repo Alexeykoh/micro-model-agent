@@ -1,3 +1,4 @@
+// Клиент контр-агента: верификация пакета доказательств с опциональным read-only контуром.
 import { jsonrepair } from "jsonrepair";
 import type { LLMProvider, Message } from "../../llm/provider";
 import type { CriticVerdict, EvidencePack, CriticIssue } from "./types";
@@ -13,12 +14,14 @@ Rules:
 Reply with JSON ONLY:
 {"status":"ok|concern|critical","summary":"one line","issues":[{"severity":"info|concern|critical","claim":"...","problem":"...","suggestion":"...","evidence":"..."}]}`;
 
+/** Опции клиента критика: провайдер, лимит токенов, таймаут. */
 export interface CriticClientOptions {
   provider: LLMProvider;
   maxTokens?: number;
   timeoutMs?: number;
 }
 
+/** Раннер одной проверки критика: тул + args → успех и вывод. */
 export interface CriticRunCheck {
   (tool: string, args: Record<string, unknown>): Promise<{ ok: boolean; output: string }>;
 }
@@ -27,6 +30,7 @@ const CHECK_REQUEST_INSTRUCTION = `If your verdict is concern/critical and a rea
 
 const FINAL_VERDICT_INSTRUCTION = `Check outputs above are ground truth from the workspace. Reply with your FINAL verdict as JSON (same shape, no more "checks"): confirm each issue the checks support, drop the ones they refute, and set status accordingly.`;
 
+/** Клиент критика: судит пакет доказательств, при concern/critical — до 3 read-only проверок. */
 export class CriticClient {
   constructor(private readonly opts: CriticClientOptions) {}
 
@@ -35,14 +39,14 @@ export class CriticClient {
   }
 
   /**
-   * Verify an evidence pack (Phase 2: optional bounded tool loop).
+   * Верифицирует пакет доказательств (Phase 2: опциональный ограниченный тул-контур).
    *
-   * Pass 1 judges the pack as-is (v1 behavior). On concern/critical with a
-   * `runCheck` runner, pass 2 lets the critic request up to 3 read-only
-   * checks; pass 3 renders the final verdict from their outputs. The whole
-   * sequence shares one timeout budget and fails open to the pass-1 verdict
-   * (or null when pass 1 itself failed) — verification depth is best-effort,
-   * never blocking.
+   * Проход 1 судит пакет как есть (поведение v1). При concern/critical с
+   * раннером `runCheck` проход 2 даёт критику до 3 read-only проверок,
+   * проход 3 выносит финальный вердикт по их выводам. Вся цепочка делит
+   * один таймаут-бюджет и откатывается к вердикту прохода 1
+   * (или null, если упал сам проход 1) — глубина верификации best-effort,
+   * никогда не блокирует.
    */
   async verify(
     pack: EvidencePack,
@@ -71,10 +75,10 @@ export class CriticClient {
   }
 
   /**
-   * Passes 2–3: invite bounded read-only checks (extra LLM calls only when
-   * the first verdict is actionable), run them, and ground the final verdict
-   * in their outputs. History is kept so "your verdict" resolves to pass 1.
-   * Any failure falls back to the pass-1 verdict.
+   * Проходы 2–3: запрашиваем ограниченные read-only проверки (доп. LLM-вызовы
+   * только если первый вердикт actionable), выполняем их и заземляем финальный
+   * вердикт на выводах. История сохраняется, чтобы "твой вердикт" резолвился в проход 1.
+   * Любой сбой — откат к вердикту прохода 1.
    */
   private async verifyWithChecks(
     messages: Message[],
@@ -136,6 +140,7 @@ function renderPack(pack: EvidencePack): string {
 
 const SEVERITIES = new Set(["info", "concern", "critical"]);
 
+/** Парсит вердикт критика из сырого текста (строгий JSON → jsonrepair → вырезание блока). Null, если не вердикт. */
 export function parseVerdict(text: string): CriticVerdict | null {
   let parsed: unknown = null;
   try {
@@ -158,13 +163,13 @@ export function parseVerdict(text: string): CriticVerdict | null {
   const status = obj.status;
   if (status !== "ok" && status !== "concern" && status !== "critical") return null;
   const issues = parseIssuesList(obj.issues);
-  // Requested verification checks (Phase 2): carried raw, capped here;
-  // allowlist + shape are enforced in parseChecks, never trusted blindly.
+  // Запрошенные проверки верификации (Phase 2): несём сырыми, кап здесь;
+  // форма + allowlist enforced в parseChecks, вслепую не доверяем.
   const checks = parseRawChecks(obj.checks);
   return { status, summary: String(obj.summary ?? ""), issues, ...(checks ? { checks } : {}) };
 }
 
-/** Verdict issues with sanitized severities; entries without claim+problem are dropped. */
+/** Проблемы вердикта с санитизированными severity; записи без claim+problem дропаются. */
 function parseIssuesList(raw: unknown): CriticIssue[] {
   if (!Array.isArray(raw)) return [];
   return (raw as unknown[])
@@ -179,7 +184,7 @@ function parseIssuesList(raw: unknown): CriticIssue[] {
     .filter((i) => i.claim || i.problem);
 }
 
-/** Raw requested checks (capped); shape + allowlist are enforced in parseChecks. */
+/** Сырые запрошенные проверки (с капом); форма + allowlist enforced в parseChecks. */
 function parseRawChecks(raw: unknown): Array<{ tool: string; args?: Record<string, unknown> }> | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out = (raw as unknown[])

@@ -1,3 +1,4 @@
+// Детектор застревания: повторы, фейлы, read-only петли, bash-флейлинг, хинты.
 import { t } from "../../i18n/index";
 import { isTransientError } from "./transient-error";
 
@@ -6,15 +7,16 @@ interface ToolCallRecord {
   argsKey: string;
 }
 
+/** Классификация ошибки: транзиентная, системная, блокирующая. */
 export type ErrorClassification = "transient" | "systematic" | "blocking";
 
 /**
- * Stable, machine-readable failure taxonomy for stuck/recovery diagnostics.
+ * Стабильная машиночитаемая таксономия фейлов для stuck/recovery-диагностики.
  *
- * Mapped from the detector's live states (see `classifyFailure`). The original
- * plan also named `scope_drift` and `empty_output`; neither has a reliable
- * detector signal here (scope drift is not tracked, empty output is covered by
- * `getActionableHints`), so they are intentionally not invented.
+ * Маппится из живых состояний детектора (см. `classifyFailure`). Изначальный
+ * план называл ещё `scope_drift` и `empty_output`; ни у того, ни у другого нет
+ * надёжного сигнала детектора здесь (scope drift не трекается, пустой вывод
+ * покрыт `getActionableHints`), поэтому не выдумываем.
  */
 export type FailureType =
   | "timeout" // no progress across N iterations on the current step
@@ -23,13 +25,14 @@ export type FailureType =
   | "bash_flailing" // rotating failing shell commands
   | "read_only"; // long read-only exploration loop with no writes
 
+/** Классификация фейла: тип, тул, счётчик, итерация (0 — неизвестна). */
 export interface FailureClassification {
   type: FailureType;
-  /** Tool the failure is attributable to, when known. */
+  /** Тул, к которому относится фейл, если известен. */
   tool?: string;
-  /** Repetition/failure count, when meaningful. */
+  /** Счётчик повторов/фейлов, если значим. */
   count?: number;
-  /** Agent-loop iteration at classification time (0 when unknown). */
+  /** Итерация цикла агента на момент классификации (0 — неизвестна). */
   iteration: number;
 }
 
@@ -45,6 +48,7 @@ const BLOCKING_PATTERNS = [
   /403/i,
 ];
 
+/** Классифицирует вывод ошибки: транзиентная / блокирующая / системная. */
 export function classifyError(output: string): ErrorClassification {
   if (isTransientError(output)) return "transient";
   for (const p of BLOCKING_PATTERNS) {
@@ -54,11 +58,11 @@ export function classifyError(output: string): ErrorClassification {
 }
 
 /**
- * Tools that only observe state and never change it. A long run of only these
- * with no write/exec in between means the model is reading/exploring without
- * producing anything — a read-only loop that the stuck detector must surface
- * (observed: 50+ read_file iterations with zero writes after a false-positive
- * audit rejected a completed task).
+ * Тулы только чтения: состояние наблюдают, не меняют. Длинная серия только их
+ * без write/exec между — модель читает/разведывает, ничего не производя:
+ * read-only петля, которую детектор обязан подсветить (было: 50+ read_file
+ * итераций с нулём записей после ложноположительного реджекта готового
+ * аудита задачи).
  */
 const READ_ONLY_TOOLS = new Set([
   "read_file",
@@ -83,16 +87,15 @@ const READ_ONLY_TOOLS = new Set([
   "load_skill",
 ]);
 
-/** Consecutive read-only tool calls that constitute a loop. */
+/** Подряд read-only вызовов, образующих петлю. */
 const READ_ONLY_LOOP_THRESHOLD = 10;
 
 /**
- * Bash flailing: ≥BASH_FLAIL_THRESHOLD failures within the last
- * BASH_FLAIL_WINDOW bash attempts, regardless of interleaved successes.
- * The per-word hard-stop (bash.ts) is evaded by rotating commands
- * (wc → cat → Get-Content → …); this window catches the rotation itself
- * (observed in ses_mt4x3zbo: 8 failed shell tricks across ~12 iterations
- * trying to count/merge files on Windows).
+ * Bash-флейлинг: ≥BASH_FLAIL_THRESHOLD фейлов в последних BASH_FLAIL_WINDOW
+ * bash-попытках, независимо от перемежающихся успехов. Per-word hard-stop
+ * (bash.ts) обходится ротацией команд (wc → cat → Get-Content → …); окно
+ * ловит саму ротацию (было в ses_mt4x3zbo: 8 фейловых shell-уловок за ~12
+ * итераций при подсчёте/склейке файлов на Windows).
  */
 const BASH_FLAIL_WINDOW = 6;
 const BASH_FLAIL_THRESHOLD = 4;
@@ -153,10 +156,10 @@ const FRAMEWORK_WORDS = [
 ];
 
 /**
- * Stable identity for an error: tool + normalized first error lines (ANSI
- * stripped, paths/locations replaced, whitespace collapsed, capped at 120
- * chars). Two runs failing with the same root cause produce the same
- * signature — that is what triggers the automatic web search.
+ * Стабильная идентичность ошибки: тул + нормализованные первые error-строки
+ * (ANSI вычищен, пути/локации заменены, пробелы склеены, кап 120 символов).
+ * Два прогона с одной первопричиной дают одну сигнатуру — она и триггерит
+ * автопоиск в вебе.
  */
 export function normalizeErrorSignature(toolName: string, output?: string): string | null {
   if (!output) return null;
@@ -174,9 +177,9 @@ export function normalizeErrorSignature(toolName: string, output?: string): stri
 }
 
 /**
- * Gate for the automatic web search: only real, meaningful error text is
- * worth searching for. "Command failed with exit code 1" without details is
- * noise — searching it would just burn a query.
+ * Гейт автопоиска в вебе: искать стоит только реальный содержательный текст
+ * ошибки. "Command failed with exit code 1" без деталей — шум, поиск по нему
+ * лишь жжёт запрос.
  */
 export function isSearchableError(output: string): boolean {
   if (!output?.trim()) return false;
@@ -185,10 +188,9 @@ export function isSearchableError(output: string): boolean {
 }
 
 /**
- * Build the search query for a failing error: up to 3 cleaned error lines
- * (paths stripped), prefixed with the runtime and framework detected from the
- * step/bash context, suffixed with "how to fix". Falls back to `tool step`
- * when the error text is empty. Capped at maxQueryChars.
+ * Строит поисковый запрос по падающей ошибке: до 3 чищенных error-строк (пути
+ * вырезаны) с префиксом рантайма/фреймворка из step/bash-контекста и суффиксом
+ * "how to fix". На пустом тексте — фолбэк `tool step`. Кап maxQueryChars.
  */
 export function buildSearchQuery(
   stepDescription: string,
@@ -224,6 +226,7 @@ export function buildSearchQuery(
   return query.slice(0, maxQueryChars);
 }
 
+/** Детектор застревания: счётчики итераций, ошибок, повторов, петель, эскалаций. */
 export class StuckDetector {
   private threshold: number;
   private errorThreshold: number;
@@ -264,14 +267,15 @@ export class StuckDetector {
     }
   }
 
+  /** Отмечает вызов тула (для детекции повторов; write/exec сбрасывают read-only стрик). */
   recordToolCall(name: string, args: Record<string, unknown>): void {
     const argsKey = JSON.stringify(args);
     this.recentToolCalls.push({ name, argsKey });
     if (this.recentToolCalls.length > this.maxRecentCalls) {
       this.recentToolCalls.shift();
     }
-    // Track the consecutive read-only streak. A write/exec tool resets it;
-    // plan/todo bookkeeping counts as read-only (it is not real progress).
+    // Трекаем подряд read-only стрик. Пишущий/исполняющий тул сбрасывает;
+    // plan/todo-бухгалтерия считается read-only (не реальный прогресс).
     if (READ_ONLY_TOOLS.has(name)) {
       this.readOnlyStreak++;
     } else {
@@ -280,14 +284,15 @@ export class StuckDetector {
   }
 
   /**
-   * True after a long run of read-only tool calls with no write in between.
-   * The model is exploring/looping without producing anything — inject a
-   * recovery hint so it stops re-reading and actually edits files.
+   * True после длинной серии read-only вызовов без записей между. Модель
+   * исследует/петляет, ничего не производя — инжектим recovery-хинт, чтобы
+   * перестала перечитывать и реально правила файлы.
    */
   hasReadOnlyLoop(): boolean {
     return this.readOnlyStreak >= READ_ONLY_LOOP_THRESHOLD;
   }
 
+  /** Отмечает ошибку тула (счётчики + сигнатура для автопоиска). */
   recordToolError(toolName: string, output?: string): void {
     this.toolErrors.set(toolName, (this.toolErrors.get(toolName) || 0) + 1);
     this.consecutiveFailures++;
@@ -299,14 +304,15 @@ export class StuckDetector {
     }
   }
 
+  /** Последний текст ошибки. */
   getLastErrorOutput(): string {
     return this.lastErrorOutput;
   }
 
   /**
-   * Record every bash invocation (successful or not) so stuck detection can
-   * reason about repeated runs with empty output, entry-point issues, and
-   * platform mistakes (PowerShell cmdlets in cmd.exe, bash heredocs, ...).
+   * Записывает КАЖДЫЙ вызов bash (успех или нет): детекция рассуждает о
+   * повторных прогонах с пустым выводом, проблемах entry-point и ошибках
+   * платформы (PowerShell-командлеты в cmd.exe, bash-heredoc'и, …).
    */
   recordBashOutput(command: string, output: string): void {
     const trimmed = output.trim();
@@ -319,13 +325,13 @@ export class StuckDetector {
     this.lastBashOutput = output;
   }
 
-  /** Outcome of one bash attempt (success or failure), for flailing detection. */
+  /** Исход одной bash-попытки (успех/фейл) — для детекции флейлинга. */
   recordBashAttempt(success: boolean): void {
     this.bashRecent.push(success);
     if (this.bashRecent.length > BASH_FLAIL_WINDOW) this.bashRecent.shift();
   }
 
-  /** True when most recent bash attempts failed — the model is flailing. */
+  /** True, если свежие bash-попытки в массе фейлятся — модель флейлит. */
   hasBashFlailing(): boolean {
     if (this.bashRecent.length < BASH_FLAIL_THRESHOLD) return false;
     let failures = 0;
@@ -333,23 +339,25 @@ export class StuckDetector {
     return failures >= BASH_FLAIL_THRESHOLD;
   }
 
+  /** Последняя bash-команда. */
   getLastBashCommand(): string {
     return this.lastBashCommand;
   }
 
+  /** Вывод последней bash-команды. */
   getLastBashOutput(): string {
     return this.lastBashOutput;
   }
 
+  /** Последний упавший тул. */
   getLastFailedTool(): string {
     return this.lastFailedTool;
   }
 
   /**
-   * First error signature whose repetition count reached the web-search
-   * threshold and that has NOT been searched yet (or was unmarked for a
-   * retry). This is what triggers the automatic web search — not iterations
-   * and not the per-tool error count.
+   * Первая сигнатура ошибки, чей счётчик повторов достиг порога веб-поиска и
+   * которая ЕЩЁ не искалась (или размаркирована для ретрая). Именно она
+   * триггерит автопоиск — не итерации и не per-tool счётчик ошибок.
    */
   getRepeatedErrorSignature(): string | null {
     for (const [sig, count] of this.errorSignatureCounts) {
@@ -360,50 +368,56 @@ export class StuckDetector {
     return null;
   }
 
+  /** Счётчик повторов сигнатуры ошибки. */
   getErrorSignatureCount(sig: string): number {
     return this.errorSignatureCounts.get(sig) || 0;
   }
 
+  /** Помечает сигнатуру как уже искавшуюся. */
   markErrorSearched(sig: string): void {
     this.searchedErrorSignatures.add(sig);
   }
 
+  /** Снимает метку поиска (разрешает один ретрай). */
   unmarkErrorSearched(sig: string): void {
     this.searchedErrorSignatures.delete(sig);
   }
 
+  /** True, если сигнатура уже искалась. */
   hasErrorSearched(sig: string): boolean {
     return this.searchedErrorSignatures.has(sig);
   }
 
+  /** Итераций на текущем шаге. */
   getIterationsOnCurrentStep(): number {
     return this.iterationsOnCurrentStep;
   }
 
+  /** Отмечает успешный тул: сброс фейлов, затухание per-tool счётчиков и итераций. */
   recordToolSuccess(): void {
     this.consecutiveFailures = 0;
     this.lastFailedTool = "";
-    // NOTE: escalationCount is deliberately NOT reset here. A single trivial
-    // tool success (e.g. one read_file) used to clear it, so shouldEscalate()
-    // was rarely reached on a flailing session — defeating the anti-gaming
-    // property that resetStepState() explicitly preserves.
-    // Decay per-tool error counters on productive calls: a tool that failed
-    // early must not keep the "Tool X failed N times" warning alive forever
-    // (ses_mt4fn58c — bash failed 3x, warning re-logged after 30 successful
-    // writes). Fresh failures rebuild the count.
+    // NOTE: escalationCount осознанно НЕ сбрасываем. Один тривиальный успех
+    // (напр. один read_file) раньше его чистил, и shouldEscalate() на флейлящей
+    // сессии почти не достигался — в ущерб анти-гейминг свойству, которое
+    // resetStepState() явно хранит.
+    // Затухание per-tool счётчиков на продуктивных вызовах: рано упавший тул не
+    // держит варнинг "Tool X failed N times" вечно (ses_mt4fn58c — bash упал 3x,
+    // варнинг перелоггировался после 30 успешных записей). Свежие фейлы счёт
+    // набирают заново.
     for (const [tool, count] of this.toolErrors) {
       if (count <= 1) this.toolErrors.delete(tool);
       else this.toolErrors.set(tool, count - 1);
     }
-    // Decay iteration counter on productive tool calls — reading new files,
-    // writing, editing all count as progress. Prevents false-positive stuck
-    // warnings during legitimate file exploration (e.g. reading 12 files in
-    // an analysis step).
+    // Затухание счётчика итераций на продуктивных вызовах: чтение новых файлов,
+    // записи, правки — всё прогресс. Защита от ложных stuck-варнингов при
+    // легитимной разведке файлов (напр. чтение 12 файлов в analytic-шаге).
     if (this.iterationsOnCurrentStep > 0) {
       this.iterationsOnCurrentStep = Math.max(0, this.iterationsOnCurrentStep - 1);
     }
   }
 
+  /** Ставит текущий шаг (сброс per-step состояния при смене). */
   setCurrentStep(stepId: number, description: string): void {
     if (stepId !== this.currentStepId) {
       this.resetStepState(stepId);
@@ -411,10 +425,12 @@ export class StuckDetector {
     this.currentStepDescription = description;
   }
 
+  /** True, если итераций на шаге больше порога. */
   isStuck(): boolean {
     return this.iterationsOnCurrentStep > this.threshold;
   }
 
+  /** True, если тул (или любой) ошибался ≥ порога. */
   hasRepetitiveErrors(toolName?: string): boolean {
     if (toolName) {
       return (this.toolErrors.get(toolName) || 0) >= this.errorThreshold;
@@ -422,10 +438,11 @@ export class StuckDetector {
     return Array.from(this.toolErrors.values()).some((c) => c >= this.errorThreshold);
   }
 
+  /** True при повторяющихся вызовах: подряд идентичных или перемежающихся (A,B,A,B,A). */
   hasRepetitiveToolCalls(): boolean {
     if (this.recentToolCalls.length < this.repetitionThreshold) return false;
     const last = this.recentToolCalls[this.recentToolCalls.length - 1];
-    // Check consecutive identical calls (original logic)
+    // Проверка подряд идентичных (исходная логика)
     let consecutiveCount = 1;
     for (let i = this.recentToolCalls.length - 2; i >= 0; i--) {
       if (
@@ -438,8 +455,8 @@ export class StuckDetector {
       }
     }
     if (consecutiveCount >= this.repetitionThreshold) return true;
-    // Also detect interleaved patterns (A, B, A, B, A) — count any single
-    // tool+args combo in the window and flag if it appears >= threshold times
+    // Плюс перемежающиеся паттерны (A, B, A, B, A): считаем каждую связку
+    // тул+args в окне и флагуем при ≥ порога
     const counts = new Map<string, number>();
     for (const call of this.recentToolCalls) {
       const key = `${call.name}::${call.argsKey}`;
@@ -451,30 +468,37 @@ export class StuckDetector {
     return false;
   }
 
+  /** True при ≥ порога подряд фейлов. */
   hasConsecutiveFailures(): boolean {
     return this.consecutiveFailures >= this.errorThreshold;
   }
 
+  /** Число подряд фейлов. */
   getConsecutiveFailuresCount(): number {
     return this.consecutiveFailures;
   }
 
+  /** Отмечает эскалацию (счётчик для shouldEscalate). */
   recordEscalation(): void {
     this.escalationCount++;
   }
 
+  /** True, если эскалаций набралось на порог. */
   shouldEscalate(): boolean {
     return this.escalationCount >= this.escalationThreshold;
   }
 
+  /** Сбрасывает счётчик эскалаций. */
   resetEscalation(): void {
     this.escalationCount = 0;
   }
 
+  /** Число эскалаций. */
   getEscalationCount(): number {
     return this.escalationCount;
   }
 
+  /** Хинты по описанию шага + состояниям, ещё не покрытым recovery-сообщением. */
   getHints(): string[] {
     const hints: string[] = [];
     const desc = this.currentStepDescription.toLowerCase();
@@ -492,11 +516,11 @@ export class StuckDetector {
       hints.push(t("exec.hint_deploy"));
     }
 
-    // State-based bullets. The recovery message (getRecoveryMessage) already
-    // reports the PRIMARY reason (priority: stuck > tool-errors > consecutive
-    // > repetitive > read-only). Repeating that same state here as a hint
-    // would duplicate the guidance in the same cooldown block. Only add the
-    // bullet when the recovery message is NOT already covering that state.
+    // State-based буллеты. Recovery-сообщение (getRecoveryMessage) уже репортит
+    // ПЕРВИЧНУЮ причину (приоритет: stuck > tool-errors > consecutive >
+    // repetitive > read-only). Дублировать то же состояние хинтом — задвоить
+    // гайданс в одном cooldown-блоке. Буллет добавляем, только если recovery
+    // это состояние НЕ покрывает.
     const primary = this.getPrimaryReason();
     if (this.hasRepetitiveToolCalls() && primary !== "repetitive") {
       hints.push(t("exec.hint_repetitive"));
@@ -510,12 +534,13 @@ export class StuckDetector {
     return hints;
   }
 
+  /** Actionable-хинты по последней ошибке: рантаймы, синтаксис, сеть, шелл-несоответствия. */
   getActionableHints(): string[] {
     const hints: string[] = [];
     const error = this.lastErrorOutput;
 
-    // Bash-specific hints do not depend on a tool failure — they fire even
-    // when the command "succeeded" with empty output (missing entry point).
+    // Bash-хинты от фейла тула не зависят — срабатывают, даже когда команда
+    // "успешна" с пустым выводом (потерянный entry point).
     const isScriptRun =
       /(^|[\s&])(bun|node|tsx|ts-node|deno|python|python3)\S*\s+[^|&]+\s+[^\s]+$/.test(
         this.lastBashCommand,
@@ -528,7 +553,7 @@ export class StuckDetector {
 
     if (!error) return hints;
 
-    // Runtime incompatibility — tool/module crashes on this Node version
+    // Несовместимость рантайма — тул/модуль крашится на этой версии Node
     if (/Cannot read properties of undefined|is not a function|is not a constructor/i.test(error)) {
       if (/node_modules/.test(error)) {
         hints.push(
@@ -537,41 +562,41 @@ export class StuckDetector {
       }
     }
 
-    // TypeScript syntax errors — model generated invalid code
+    // Синтаксические ошибки TypeScript — модель сгенерила невалидный код
     if (/TS1005|TS1003|TS1109|TS1128|TS1434/i.test(error)) {
       hints.push(
         "TypeScript syntax error. Read the error message carefully — it tells you the exact line and column. Fix the syntax before retrying.",
       );
     }
 
-    // TypeScript type errors — model doesn't understand the types
+    // Ошибки типов TypeScript — модель не понимает типы
     if (/TS2322|TS2345|TS2769|TS7006|TS7016/i.test(error)) {
       hints.push(
         "TypeScript type mismatch. Check the type signature of the function/API you are using. If a package lacks type declarations, install @types/<package> or use skipLibCheck.",
       );
     }
 
-    // Module not found — missing dependency or wrong import
+    // Модуль не найден — нет зависимости или неверный импорт
     if (/Cannot find module|Module not found|ERR_MODULE_NOT_FOUND/i.test(error)) {
       hints.push("Module not found. Run npm install or check if the import path is correct.");
     }
 
-    // Permission / access errors
+    // Ошибки прав доступа
     if (/EACCES|EPERM|permission denied/i.test(error)) {
       hints.push("Permission denied. Check file permissions or run with appropriate privileges.");
     }
 
-    // Network errors
+    // Сетевые ошибки
     if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|fetch failed/i.test(error)) {
       hints.push("Network error. Check if the server is running and accessible.");
     }
 
-    // Command not found
+    // Команда не найдена
     if (/is not recognized|command not found|not found in path/i.test(error)) {
       hints.push("Command not found. Check if the tool is installed and in PATH.");
     }
 
-    // File rewrite loop — same file keeps failing
+    // Петля перезаписи: один файл безуспешно переписывается
     if (this.hasExcessiveRewrites()) {
       const file = this.getExcessiveRewriteFile();
       hints.push(
@@ -579,17 +604,17 @@ export class StuckDetector {
       );
     }
 
-    // Repeated identical bash runs with empty output — likely a missing
-    // entry point (the program never calls its main function).
+    // Повторные идентичные bash-прогоны с пустым выводом — вероятно, потерянный
+    // entry point (программа не вызывает main).
 
-    // PowerShell cmdlets used inside cmd.exe (Windows shell mismatch).
+    // PowerShell-командлеты внутри cmd.exe (шелл-несоответствие Windows).
     if (/Write-Host|Get-Content|Select-String|Out-File|Set-Content/i.test(error)) {
       hints.push(
         "That looks like a PowerShell cmdlet — the shell here is cmd.exe. Use echo/type for output or the read_file/write_file tools instead.",
       );
     }
 
-    // Model invented a Bun API that does not exist.
+    // Модель выдумала несуществующий Bun API.
     if (
       /Bun\.\w+ is not a function|Bun\.\w+ is not defined|Bun\.\w+ is not a constructor/i.test(
         error,
@@ -600,15 +625,15 @@ export class StuckDetector {
       );
     }
 
-    // The model keeps writing a file whose output shows a type/syntax
-    // error — read the actual error and fix it, don't rewrite blindly.
+    // Модель продолжает писать файл, в выводе которого type/syntax ошибка —
+    // читай реальную ошибку и чини её, не переписывай вслепую.
     if (/error TS\d+|typecheck failed|syntax check failed/i.test(error)) {
       hints.push(
         "The file still has a type/syntax error (see the error line in the output). Read the file with read_file around the reported line, fix the actual error, then re-run — rewriting the whole file blindly usually makes it worse.",
       );
     }
 
-    // Bash heredoc in cmd.exe.
+    // Bash-heredoc в cmd.exe.
     if (/unexpected.*<<|Непредвиденное появление/i.test(error)) {
       hints.push(
         "Heredoc (<< EOF) is a bash feature — this shell is cmd.exe and does not support it. Write the file with write_file instead.",
@@ -618,17 +643,18 @@ export class StuckDetector {
     return hints;
   }
 
+  /** Альтернативный тул при рантайм-краше (ts-node→tsx, jest→vitest, …). Null, если нечего предложить. */
   getToolAlternative(): string | null {
     const tool = this.lastFailedTool;
     const error = this.lastErrorOutput;
 
     if (!tool) return null;
 
-    // If a tool fails with a runtime crash, suggest alternatives
+    // Упавший тул с рантайм-крашем — предлагаем альтернативы
     if (
       /Cannot read properties of undefined|is not a function|TypeError|ReferenceError/i.test(error)
     ) {
-      // Map of tools to their common alternatives
+      // Карта упавших тулов на частые альтернативы
       const alternatives: Record<string, string> = {
         "ts-node": "tsx",
         jest: "vitest",
@@ -651,19 +677,23 @@ export class StuckDetector {
     return null;
   }
 
+  /** Отмечает перезапись файла (счётчик для детекции петли). */
   recordFileRewrite(filePath: string): void {
     const count = (this.fileRewriteCount.get(filePath) || 0) + 1;
     this.fileRewriteCount.set(filePath, count);
   }
 
+  /** Число перезаписей файла. */
   getFileRewriteCount(filePath: string): number {
     return this.fileRewriteCount.get(filePath) || 0;
   }
 
+  /** True, если какой-то файл переписывается ≥ порога. */
   hasExcessiveRewrites(): boolean {
     return Array.from(this.fileRewriteCount.values()).some((c) => c >= this.fileRewriteThreshold);
   }
 
+  /** Файл с избыточными перезаписями, или null. */
   getExcessiveRewriteFile(): string | null {
     for (const [file, count] of this.fileRewriteCount) {
       if (count >= this.fileRewriteThreshold) return file;
@@ -671,6 +701,7 @@ export class StuckDetector {
     return null;
   }
 
+  /** Сообщение о повторяющемся туле (+хинт про process_wait для process_log). */
   getRepetitiveToolMessage(): string {
     if (!this.hasRepetitiveToolCalls()) return "";
     const last = this.recentToolCalls[this.recentToolCalls.length - 1];
@@ -678,8 +709,8 @@ export class StuckDetector {
       tool: last.name,
       count: this.repetitionThreshold,
     });
-    // Polling a background process one check at a time burns an LLM call per
-    // poll — point at the single blocking wait instead.
+    // Опрос фонового процесса по одному process_log за раз жжёт LLM-вызов на
+    // опрос — указываем на одиночное блокирующее ожидание.
     if (last.name === "process_log") {
       return `${base} ${t("exec.repetitive_process_log_hint")}`;
     }
@@ -687,8 +718,8 @@ export class StuckDetector {
   }
 
   /**
-   * Stable warning identity for anti-spam dedup: the same key re-logged every
-   * iteration is spam, a NEW key (or a long gap) deserves a re-warn.
+   * Стабильная идентичность варнинга для анти-спам дедупа: тот же ключ каждую
+   * итерацию — спам, НОВЫЙ ключ (или длинная пауза) заслуживает re-warn.
    */
   getWarningKey(): string {
     if (this.isStuck()) return "stuck";
@@ -703,6 +734,7 @@ export class StuckDetector {
     return "";
   }
 
+  /** Причина застревания для лога (пусто если здоров). */
   getStuckReason(): string {
     if (this.isStuck()) {
       return t("exec.stuck", {
@@ -727,9 +759,9 @@ export class StuckDetector {
     if (this.hasConsecutiveFailures()) {
       return t("exec.consecutive_failures", { count: String(this.consecutiveFailures) });
     }
-    // Repetitive identical calls are a loop even when nothing fails (e.g. a
-    // process_log poll cycle) — without this branch they stayed invisible:
-    // getWarningKey reported "repetitive" but no reason was ever logged.
+    // Повторные идентичные вызовы — петля, даже если ничего не фейлится (напр.
+    // цикл опроса process_log): без этой ветки оставались невидимы —
+    // getWarningKey репортил "repetitive", но причина не логгировалась.
     if (this.hasRepetitiveToolCalls()) {
       return this.getRepetitiveToolMessage();
     }
@@ -741,6 +773,7 @@ export class StuckDetector {
     return "";
   }
 
+  /** Recovery-сообщение по первичной причине (пусто если здоров). */
   getRecoveryMessage(): string {
     const reason = this.getPrimaryReason();
     if (reason === "stuck") {
@@ -750,7 +783,7 @@ export class StuckDetector {
         description: this.currentStepDescription,
       });
     }
-    // Per-tool error recovery (more specific — e.g., "bash failed 3 times")
+    // Per-tool recovery (конкретнее — напр. "bash упал 3 раза")
     if (reason === "tool-errors") {
       const errorTool = Array.from(this.toolErrors.entries()).find(
         ([_, c]) => c >= this.errorThreshold,
@@ -760,7 +793,7 @@ export class StuckDetector {
         count: errorTool[1],
       });
     }
-    // Consecutive failures from different tools (generic — e.g., "5 consecutive failures")
+    // Подряд фейлы разных тулов (общее — напр. "5 consecutive failures")
     if (reason === "consecutive") {
       return t("exec.consecutive_failures_recovery", {
         count: this.consecutiveFailures,
@@ -785,9 +818,9 @@ export class StuckDetector {
   }
 
   /**
-   * Classify the current failure state into a stable {@link FailureType} for
-   * diagnostics/logs. Returns null when healthy. `iteration` is supplied by the
-   * caller (the detector does not track the global loop counter).
+   * Классифицирует текущее состояние фейла в стабильный {@link FailureType}
+   * для диагностики/логов. Null если здоров. `iteration` даёт вызывающий
+   * (детектор глобальный счётчик цикла не ведёт).
    */
   classifyFailure(iteration = 0): FailureClassification | null {
     const primary = this.getPrimaryReason();
@@ -816,7 +849,7 @@ export class StuckDetector {
     }
   }
 
-  /** Compact `[STUCK: type=..., tool=..., count=..., iteration=N]` marker. */
+  /** Компактный маркер `[STUCK: type=..., tool=..., count=..., iteration=N]`. */
   formatFailureDiagnostic(c: FailureClassification): string {
     const parts = [`type=${c.type}`];
     if (c.tool) parts.push(`tool=${c.tool}`);
@@ -825,18 +858,17 @@ export class StuckDetector {
     return `[STUCK: ${parts.join(", ")}]`;
   }
 
-  /** Diagnostic marker for the current state, or "" when healthy. */
+  /** Диагностический маркер текущего состояния, или "" если здоров. */
   getStuckDiagnostic(iteration = 0): string {
     const c = this.classifyFailure(iteration);
     return c ? this.formatFailureDiagnostic(c) : "";
   }
 
   /**
-   * Single source of truth for the recovery reason priority. Used by BOTH
-   * getRecoveryMessage() and getHints() so the two cannot drift apart: the
-   * state bullet that getRecoveryMessage already reports is NOT repeated as a
-   * hint (priority: stuck > tool-errors > consecutive > repetitive >
-   * read-only).
+   * Единый источник правды приоритета recovery-причины. Общий для
+   * getRecoveryMessage() и getHints(), чтобы не расходились: bullet состояния,
+   * которое getRecoveryMessage уже репортит, хинтом НЕ дублируется
+   * (приоритет: stuck > tool-errors > consecutive > repetitive > read-only).
    */
   private getPrimaryReason():
     | "stuck"
@@ -858,6 +890,7 @@ export class StuckDetector {
     return null;
   }
 
+  /** Полный сброс всего состояния детектора. */
   reset(): void {
     this.currentStepId = null;
     this.iterationsOnCurrentStep = 0;
@@ -878,10 +911,10 @@ export class StuckDetector {
   }
 
   /**
-   * Reset only step-progress state, keeping the tool-call history and the
-   * read-only streak. Used when the plan is complete but the loop continues
-   * (e.g. the audit gate rejected a finished task): step-stuck warnings are
-   * silenced, but a read-without-write loop is still detected.
+   * Сбрасывает только step-прогресс, храня историю вызовов и read-only стрик.
+   * Нужно, когда план готов, но цикл продолжается (напр. audit-gate реджектнул
+   * готовую задачу): step-stuck варнинги глушатся, а петля чтения-без-записи
+   * всё равно детектится.
    */
   resetStepProgress(): void {
     this.currentStepId = null;
@@ -901,9 +934,9 @@ export class StuckDetector {
   }
 
   /**
-   * Reset all per-step state when moving to a new step. Prevents errors and
-   * tool repetitions from one step leaking into the next (false-positive
-   * stuck/recovery on the first iteration of the new step).
+   * Сбрасывает всё per-step состояние при переходе на новый шаг. Не даёт
+   * ошибкам и повторам одного шага протекать в следующий (ложные
+   * stuck/recovery на первой итерации нового шага).
    */
   private resetStepState(stepId: number): void {
     this.currentStepId = stepId;
@@ -921,7 +954,7 @@ export class StuckDetector {
     this.readOnlyStreak = 0;
     this.errorSignatureCounts.clear();
     this.searchedErrorSignatures.clear();
-    // Preserve escalationCount — prevents agent from "gaming" stuck detection
-    // by marking a step done and moving to the next one
+    // escalationCount храним — иначе агент "геймит" детекцию, маркируя шаг
+    // done и переходя к следующему
   }
 }

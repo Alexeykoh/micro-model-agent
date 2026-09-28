@@ -1,19 +1,15 @@
-/**
- * REST handlers for the browser first-run setup wizard of `mma web`.
- *
- * Mirrors the terminal wizard on top of the shared core in `src/modules/setup`:
- * discovery (`scan`/`models`/`test`), process locale switching, and the final
- * `POST /api/setup` which applies the answers, persists and hot-swaps the agent.
- *
- * Gating: while `state.setupRequired` is true the server refuses chat
- * (`/api/message`, `/api/command` → 409). `POST /api/setup` refuses to run again
- * once setup is done (`409 already_configured`), so a stale tab cannot silently
- * reconfigure a live instance.
- *
- * Auth + same-origin are enforced upstream in `server.ts`; these functions
- * assume the request already passed both checks. The API key is accepted but
- * never echoed back.
- */
+// REST-хендлеры браузерного визарда первого запуска `mma web`.
+// Зеркалят терминальный визард поверх shared ядра `src/modules/setup`: discovery
+// (`scan`/`models`/`test`), переключение локали, финальный `POST /api/setup`
+// (применить ответы, персист, хот-свап агента).
+//
+// Гейтинг: пока `state.setupRequired` — чат запрещён (`/api/message`,
+// `/api/command` → 409). Повторный `POST /api/setup` после настройки — отказ
+// (`409 already_configured`), чтобы протухшая вкладка молча не переконфигурила
+// живой инстанс.
+//
+// Auth и same-origin — выше в `server.ts`. API-ключ принимается, но никогда
+// не возвращается назад.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getFlatDicts, setLocale } from "../../i18n";
 import { applyAnswersToConfig } from "../setup/apply";
@@ -34,14 +30,14 @@ function str(rec: Record<string, unknown>, key: string): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-/** Positive integer, accepting a numeric string; `null` when invalid. */
+/** Положительный int, числовая строка принимается; `null` — мусор. */
 function positiveInt(rec: Record<string, unknown>, key: string): number | null {
   const v = rec[key];
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-/** Validate the `POST /api/setup` body; `null` means "reject with 400". */
+/** Валидирует тело `POST /api/setup`; `null` — реджект с 400. */
 export function parseSetupAnswers(rec: Record<string, unknown>): SetupAnswers | null {
   const provider = str(rec, "provider");
   const apiBase = str(rec, "apiBase");
@@ -75,7 +71,7 @@ export function parseSetupAnswers(rec: Record<string, unknown>): SetupAnswers | 
   };
 }
 
-/** `GET /api/setup` — whether setup is required plus static display data. */
+/** `GET /api/setup` — нужен ли сетап, плюс статика визарда. */
 export function handleSetupGet(res: ServerResponse, s: WebUiState): void {
   sendJson(res, 200, {
     required: s.setupRequired,
@@ -85,7 +81,7 @@ export function handleSetupGet(res: ServerResponse, s: WebUiState): void {
   });
 }
 
-/** `POST /api/setup/scan` — probe well-known local OpenAI-compatible servers. */
+/** `POST /api/setup/scan` — проб известных локальных OpenAI-совместимых серверов. */
 export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   readBody(req, s.maxBodyBytes)
     .then(async () => {
@@ -97,7 +93,7 @@ export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: We
     });
 }
 
-/** `POST /api/setup/models {baseUrl, apiKey}` — list model ids from a provider. */
+/** `POST /api/setup/models {baseUrl, apiKey}` — id моделей провайдера. */
 export function handleSetupModels(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   readJsonBody(req, s.maxBodyBytes)
     .then(async (rec) => {
@@ -118,7 +114,7 @@ export function handleSetupModels(req: IncomingMessage, res: ServerResponse, s: 
     });
 }
 
-/** `POST /api/setup/test {baseUrl, apiKey, model}` — cheap chat probe. */
+/** `POST /api/setup/test {baseUrl, apiKey, model}` — дешёвый чат-проб. */
 export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   readJsonBody(req, s.maxBodyBytes)
     .then(async (rec) => {
@@ -141,9 +137,9 @@ export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: We
 }
 
 /**
- * `POST /api/setup/locale {locale}` — switch the process i18n locale so the
- * following wizard steps are localized. Not persisted (the final `POST
- * /api/setup` writes the chosen locale into the config).
+ * `POST /api/setup/locale {locale}` — переключает локаль i18n процесса, чтобы
+ * следующие шаги визарда локализовались. Не персистится (финал `POST /api/setup`
+ * пишет выбранную локаль в конфиг).
  */
 export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   readJsonBody(req, s.maxBodyBytes)
@@ -165,7 +161,7 @@ export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: 
     });
 }
 
-/** `POST /api/setup` — validate, apply, persist, reconfigure, ungate. */
+/** `POST /api/setup` — валидация, применение, персист, reconfigure, снятие гейта. */
 export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -205,7 +201,7 @@ export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: We
     });
 }
 
-/** Dispatch `/api/setup*`; returns whether the request was handled. */
+/** Диспатч `/api/setup*`; возвращает, обработан ли запрос. */
 export function handleSetupApi(
   req: IncomingMessage,
   res: ServerResponse,

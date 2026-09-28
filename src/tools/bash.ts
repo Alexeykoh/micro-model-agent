@@ -1,3 +1,4 @@
+/** Тул shell-команд: автофон, редирект tool-call, хинты Windows, мемо read-only. */
 import type { ToolDefinition, ToolContext, } from "./types";
 import { isCommandAllowed, sanitizeCommandForLog } from "../modules/security/command-validator";
 import { logBashCommand, logSecurityBlock } from "../modules/security/audit-log";
@@ -10,30 +11,27 @@ import { platform } from "os";
 import { MAX_PREVIEW_LINES } from "./preview";
 
 /**
- * A command still running after this window is promoted to the background.
- * The decision is based on process *behavior* (still alive), not on matching
- * words in the command text — a command that happens to mention "vite",
- * "server", etc. runs normally, and any genuinely long-running command is
- * caught regardless of how it is written.
+ * Команда, живая после окна ожидания, уходит в фон. Решение — по поведению
+ * процесса (всё ещё жив), а не по словам в тексте: упоминание "vite"/"server"
+ * выполняется обычно, а любая реально долгая команда ловится как ни пиши.
  */
 export const BASH_GRACE_MS = 5000;
-/** Short window for explicit `background: true` — surfaces immediate spawn failures (bad cwd, missing shell). */
+/** Короткое окно для явного `background: true` — ловит ошибки спавна (плохой cwd, нет шелла). */
 const SPAWN_SETTLE_MS = 100;
-/** Number of already-emitted lines shown in the background start message. */
+/** Строк уже выданного вывода в стартовом сообщении фона. */
 const BG_OUTPUT_PREVIEW_LINES = 15;
 
 let bashGraceMs = BASH_GRACE_MS;
-/** Test hook: override the auto-background grace window. */
+/** Тестовый хук: переопределить окно автобэкграунда. */
 export function setBashGraceMs(ms: number): void {
   bashGraceMs = ms;
 }
 
 /**
- * Consecutive failures per first command word (resets on success). A model
- * that keeps calling a forbidden Unix command in cmd.exe (head/cat/grep/...)
- * gets a hint the first couple of times; after HARD_BLOCK_THRESHOLD consecutive
- * failures the tool hard-stops with a STOP directive instead of repeating the
- * same hint forever (observed: `head` called 5×, `Select-String` 3× in one run).
+ * Подряд идущие падения по первому слову команды (сброс при успехе). Модель,
+ * долбящую запрещённый Unix в cmd.exe (head/cat/grep/…), первые разы
+ * подсказываем; после HARD_BLOCK_THRESHOLD подряд — жёсткий стоп с STOP
+ * вместо вечного повтора хинта (наблюдено: `head` 5×, `Select-String` 3×).
  */
 const FAILING_FIRST_WORDS = new Map<string, number>();
 const HARD_BLOCK_THRESHOLD = 3;
@@ -41,16 +39,16 @@ const HARD_BLOCK_THRESHOLD = 3;
 // сбрасываем счётчики, чтобы старые падения не влияли на новую задачу.
 let lastFailureSessionId: string | undefined;
 
-/** Test hook: clear the consecutive-failure tracking state. */
+/** Тестовый хук: сбросить счётчики подряд-падений. */
 export function resetBashFailureTracking(): void {
   FAILING_FIRST_WORDS.clear();
 }
 
 /**
- * Detect a file write via `echo/printf ... > file` — common model habit that
- * breaks in cmd.exe: single quotes are not grouping quotes, `>` only applies
- * to the LAST line of a multi-line command, and double quotes inside the text
- * split the command. Returns the target filename or null.
+ * Детект записи файла через `echo/printf ... > file` — частая привычка модели,
+ * ломающаяся в cmd.exe: одиночные кавычки не группируют, `>` относится только
+ * к ПОСЛЕДНЕЙ строке многострочной команды, двойные кавычки внутри рвут
+ * команду. Возвращает целевой файл или null.
  */
 export function extractEchoFileWrite(command: string): string | null {
   if (!/^\s*(?:echo|printf)\b/i.test(command)) return null;
@@ -60,11 +58,10 @@ export function extractEchoFileWrite(command: string): string | null {
 }
 
 /**
- * cmd.exe uses `&` as the command separator, not `;` (bash). The model
- * regularly chains commands with `;` — without translation cmd passes the
- * `;` to the first command as an argument (e.g. `node x.ts;` → ENOENT for
- * "x.ts;"). Replace `;` with `&` only OUTSIDE double-quoted strings so
- * `echo "a;b"` stays intact. (Single quotes are not special in cmd.)
+ * В cmd.exe разделитель — `&`, а не `;` (bash). Модель регулярно чейнит через
+ * `;` — без трансляции cmd отдаёт `;` первым аргументом команды (напр.
+ * `node x.ts;` → ENOENT для "x.ts;"). `;` → `&` только ВНЕ двойных кавычек,
+ * чтобы `echo "a;b"` уцелел (одиночные в cmd не спецсимвол).
  */
 export function translateSemicolonsForCmd(command: string): string {
   let out = "";
@@ -84,14 +81,13 @@ export function translateSemicolonsForCmd(command: string): string {
 function adaptCommandForWindows(command: string): string {
   if (platform() !== "win32") return command;
 
-  // The model sometimes appends `|| true` (bash error-suppression idiom)
-  // which PowerShell doesn't understand. Replace with `; exit 0` which
-  // forces a successful exit code regardless of the previous command's result.
+  // Модель иногда дописывает `|| true` (bash-идиома гашения ошибок), которой
+  // PowerShell не знает. Замена на `; exit 0` — успешный код при любом исходе.
   if (/\|\|\s*true\b/.test(command)) {
     command = command.replace(/\s*\|\|\s*true\b/g, "; exit 0");
   }
 
-  // Windows mkdir does not support -p/--parents flag, but creates intermediate dirs by default
+  // Windows mkdir не знает -p/--parents, но промежуточные dirs создаёт по умолчанию.
   const trimmed = command.trim();
   if (/^mkdir\s+(-p|--parents)\b/.test(trimmed)) {
     return trimmed.replace(/^mkdir\s+(-p|--parents)\s*/, "mkdir ");
@@ -100,9 +96,9 @@ function adaptCommandForWindows(command: string): string {
     return "mkdir";
   }
 
-  // Translate simple Unix commands to their cmd.exe equivalents. Only the
-  // leading word is rewritten; flags are passed through (ls -la → dir -la,
-  // which cmd tolerates). Pipe-using forms are left alone — they would break.
+  // Трансляция простых Unix-команд в эквиваленты cmd.exe. Переписывается только
+  // ведущее слово; флаги сквозняком (ls -la → dir -la, cmd терпит). Формы с
+  // пайпом не трогаем — сломаются.
   const firstWord = trimmed.split(/\s+/)[0]?.split(/[\\/]/).pop();
   const translated = firstWord ? UNIX_TO_WIN_TRANSLATE[firstWord] : undefined;
   if (
@@ -115,11 +111,11 @@ function adaptCommandForWindows(command: string): string {
     return trimmed.replace(firstWord!, translated);
   }
 
-  // No encoding adaptation needed — registry.ts handles UTF-8/OEM decoding
+  // Адаптации кодировок не надо — UTF-8/OEM-декод в registry.ts.
   return translateSemicolonsForCmd(command);
 }
 
-/** Common Unix → Windows command mapping for error hints. */
+/** Типовой маппинг Unix → Windows для хинтов об ошибках. */
 const UNIX_TO_WIN_HINTS: Record<string, string> = {
   ls: "Use the list_dir tool instead.",
   pwd: "Use the file_info tool instead.",
@@ -159,7 +155,7 @@ const UNIX_TO_WIN_HINTS: Record<string, string> = {
   "Remove-Item": "Use the delete_file tool instead.",
 };
 
-/** Unix commands that can be transparently translated to cmd.exe equivalents. */
+/** Unix-команды, прозрачно транслируемые в эквиваленты cmd.exe. */
 const UNIX_TO_WIN_TRANSLATE: Record<string, string> = {
   ls: "dir",
   pwd: "cd",
@@ -167,18 +163,16 @@ const UNIX_TO_WIN_TRANSLATE: Record<string, string> = {
 };
 
 /**
- * Detect when the model mistakes a tool call for a shell command — e.g.
- * `bash` with command "create_dir path=C:\...\src" or "read_file file=x".
- * These are tool invocations, not commands; running them through the shell
- * fails. The matched tool name and raw args are returned so the caller can
- * redirect into the real tool.
+ * Детект перепутанного tool call в shell-команде — напр. `bash` с командой
+ * "create_dir path=C:\...\src" или "read_file file=x". Это вызовы тулов, а не
+ * команды; прогон через шелл падает. Возвращает имя тула и сырые аргументы
+ * для редиректа в настоящий тул.
  */
 /**
- * Shell commands that must NEVER be treated as mistaken tool calls. The
- * model often writes files via `echo '<code with = signs>'` or reads them
- * via `cat` — those are shell commands, not tool invocations. Without this
- * guard the redirect heuristic fires on any `<word> <text containing =>`
- * and fails with "Unknown tool: echo".
+ * Shell-команды, которые НИКОГДА не считать перепутанными tool call. Модель
+ * часто пишет файлы через `echo '<код со знаками =>` или читает через `cat` —
+ * это команды шелла. Без гарда эвристика редиректа срабатывает на любое
+ * `<слово> <текст с =>` и падает с "Unknown tool: echo".
  */
 const NEVER_TOOL_CALLS = new Set([
   "echo",
@@ -204,6 +198,7 @@ const NEVER_TOOL_CALLS = new Set([
   "awk",
 ]);
 
+/** Определяет перепутанный tool call в команде bash. Возврат: тул и сырые аргументы. */
 export function detectToolCallInBash(command: string): {
   tool: string;
   args: string;
@@ -211,20 +206,20 @@ export function detectToolCallInBash(command: string): {
   const match = command.trim().match(/^([\w-]+)\s+(.+)$/s);
   if (!match) return null;
   const tool = match[1];
-  // Real shell commands (echo, cat, ...) are never mistaken tool calls.
+  // Настоящие shell-команды (echo, cat, …) — никогда не перепутанные tool call.
   if (NEVER_TOOL_CALLS.has(tool)) return null;
   const rest = match[2].trim();
-  // Only treat as a tool call when the first word looks like a snake_case
-  // tool name and the rest has at least one '=' or a JSON object shape.
+  // Tool call — только если первое слово похоже на snake_case-имя тула, а
+  // остаток содержит хотя бы один '=' или JSON-форму.
   if (!/^[a-z][a-z0-9_]+$/.test(tool)) return null;
   if (!rest.includes("=") && !rest.startsWith("{")) return null;
   return { tool, args: rest };
 }
 
 /**
- * Parse the raw argument string of a mistaken tool call captured in a bash
- * command into a Record. Supports JSON objects ("{"path": "..."}") and
- * key=value pairs ("path=C:\...\src"). Values keep their literal text.
+ * Парсит сырую строку аргументов перепутанного tool call в Record. Понимает
+ * JSON-объекты ("{"path": "..."}") и пары key=value ("path=C:\...\src").
+ * Значения — дословным текстом. Возврат: словарь аргументов.
  */
 export function parseToolArgs(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
@@ -236,40 +231,40 @@ export function parseToolArgs(raw: string): Record<string, unknown> {
     }
   }
   const args: Record<string, unknown> = {};
-  // Tokenize respecting double/single-quoted values.
+  // Токенизация с уважением к кавычкам в значениях.
   const tokens = trimmed.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
   for (const token of tokens) {
     const eq = token.indexOf("=");
     if (eq > 0) {
       const key = token.slice(0, eq);
       const value = token.slice(eq + 1);
-      // Strip surrounding quotes from values.
+      // Окаймляющие кавычки значений — снять.
       args[key] = value.replace(/^["']|["']$/g, "");
     }
   }
   return args;
 }
 
+/** Сводка тест-рана: фреймворк, счёт, строка итога. */
 export interface TestRunSummary {
   framework: string;
-  /** Number of passing test cases (when the runner reports them). */
+  /** Прошедших кейсов (когда раннер сообщает). */
   passed: number;
-  /** Number of failing test cases. */
+  /** Упавших кейсов. */
   failed: number;
-  /** Line of the runner's aggregate summary, if any. */
+  /** Строка агрегатного итога раннера, если есть. */
   summary?: string;
 }
 
 /**
- * Detect a test-runner report embedded in command output (bun test / vitest /
- * jest / mocha / `go test` / pytest). Returns null when the output does not
- * look like a test run. Used to inject a warning when tests fail so the model
- * cannot close a "run the tests" step as done.
+ * Детект отчёта тест-раннера в выводе (bun test/vitest/jest/mocha/`go test`/
+ * pytest). Не похоже на тесты — null. Нужно, чтобы вставить warning при
+ * падениях и модель не закрыла шаг "прогнать тесты" как done.
  */
 export function detectTestResults(output: string): TestRunSummary | null {
   if (!output) return null;
 
-  // Framework-specific quantifiers first (unambiguous).
+  // Сначала однозначные фреймворк-специфичные счётчики.
   const jest = output.match(/Tests:\s+(\d+)\s+passed,\s*(\d+)\s+failed/i);
   if (jest) {
     return { framework: "jest", passed: +jest[1], failed: +jest[2] };
@@ -297,7 +292,7 @@ export function detectTestResults(output: string): TestRunSummary | null {
     };
   }
 
-  // bun test / vitest: per-case markers + trailing "N pass / M fail".
+  // bun test / vitest: покейсные маркеры + хвостовое "N pass / M fail".
   const failMarkers = output.match(/\(fail\)/g)?.length ?? 0;
   const passMarkers = output.match(/\(pass\)/g)?.length ?? 0;
   const xMarkers = output.match(/\s×\s/g)?.length ?? 0;
@@ -319,53 +314,51 @@ export function detectTestResults(output: string): TestRunSummary | null {
 }
 
 /**
- * R5: a command that runs a script file (bun/node/python/...) exited 0 but
- * printed nothing. The most common cause in agent sessions: the program has
- * no entry point — nobody calls its main() with the CLI args. Surface a
- * concrete hint instead of letting the model stare at an empty output.
+ * R5: команда запуска скрипта (bun/node/python/…) вышла в 0, но молча.
+ * Частая причина в агент-сессиях: нет точки входа — main() с CLI-аргументами
+ * никто не вызывает. Конкретный хинт вместо молчаливого пустого вывода.
  */
 const CLI_FILE_RUN_RE =
   /\b(bun|node|deno|python|python3|tsx|ts-node|php|ruby|go\s+run)\S*\s+(run\s+)?["']?[\w./\\-]+\.(ts|js|tsx|jsx|mjs|cjs|py)\b/;
 
+/** Хинт на пустой прогон CLI-файла (код 0, stdout пуст). */
 export function emptyCliRunHint(
   command: string,
   output: string,
   code: number | null,
 ): string | null {
   if (code !== 0 || output.trim()) return null;
-  if (/[>|]/.test(command)) return null; // redirection/pipes — output went elsewhere
+  if (/[>|]/.test(command)) return null; // редирект/пайп — вывод ушёл мимо
   if (/\b(bun test|vitest|pytest|jest|mocha|--test)\b/i.test(command)) return null;
   if (!CLI_FILE_RUN_RE.test(command)) return null;
   return "the command exited 0 but printed NOTHING to stdout. If this should run a CLI program, the file probably has no entry point: read it with read_file and check the code actually calls its main function with command-line arguments (e.g. main(process.argv[2])) and prints results with console.log.";
 }
 
 /**
- * Detect npm/npx/bunx failing with "could not determine executable to run"
- * — the package declares no `bin` (or `npm run <script>` named a missing
- * script). Append a concrete hint instead of letting the model re-try blindly
- * (observed in two agent sessions: the model burned many iterations re-running
- * the same failing `npx`/`bunx`/`npm run` command).
+ * Детект npm/npx/bunx с "could not determine executable to run" — у пакета
+ * нет `bin` (или `npm run <script>` назвал несуществующий скрипт). Конкретный
+ * хинт вместо слепых ретраев (наблюдено в двух сессиях: модель жгла итерации
+ * на повторах той же падающей команды).
  */
 const NPM_EXEC_RE = /could not determine executable to run/i;
 
 /**
- * A command that waited for interactive input with no TTY aborts with
- * "Operation cancelled" (Bun/Node prompt) or "stdin is not a TTY". Common on
- * bare `bun create`/`npm create` scaffolds. Append a concrete non-interactive
- * remedy instead of letting the model retry the identical interactive command.
+ * Команда ждала интерактивного ввода без TTY и абортнулась ("Operation
+ * cancelled" у Bun/Node или "stdin is not a TTY"). Типично для голых
+ * `bun create`/`npm create`. Конкретное неинтерактивное лечение вместо
+ * повтора той же команды.
  */
 const INTERACTIVE_PROMPT_RE =
   /operation (?:cancelled|canceled|aborted)|stdin is not a tty|not a tty|cannot prompt without a tty/i;
 
-/** process-management tools hidden behind enable_tools (tag "shell"). */
+/** Тулы управления процессами за enable_tools (тег "shell"). */
 const HIDDEN_PROCESS_TOOLS = ["process_list", "process_log", "process_kill", "process_wait"];
 
 /**
- * Read-only command prefixes eligible for result memoization (see
- * `manualMemo` on the tool). Heuristic, deliberately narrow: single
- * invocations that cannot mutate by construction. Anything compound
- * (`&`, `|`, `<`, `>`, `;`) is never memoized. A 120s TTL in the executor
- * bounds staleness from out-of-band changes.
+ * Read-only префиксы для мемоизации (см. `manualMemo` тула). Эвристика,
+ * намеренно узкая: одиночные вызовы, немутирующие по построению. Всё составное
+ * (`&`, `|`, `<`, `>`, `;`) — никогда в мемо. TTL 120с в исполнителе
+ * ограничивает протухание от внешних правок.
  */
 const READONLY_COMMAND_PREFIXES = [
   "git status",
@@ -402,8 +395,8 @@ const READONLY_COMMAND_PATTERNS = READONLY_COMMAND_PREFIXES.map(
 );
 
 /**
- * Whether a (post-adaptation) shell command is a single read-only
- * invocation whose successful result may be memoized. Exported for tests.
+ * Мемоизируема ли (post-adaptation) команда: одиночный read-only вызов,
+ * чей успешный результат можно кешировать. Экспортировано для тестов.
  */
 export function isMemoizableCommand(command: string): boolean {
   const cmd = command.trim().toLowerCase();
@@ -411,8 +404,8 @@ export function isMemoizableCommand(command: string): boolean {
   return READONLY_COMMAND_PATTERNS.some((re) => re.test(cmd));
 }
 
-// Defensive memo access: hand-rolled ToolExecutor stubs in tests (and any
-// future minimal executor) may lack the memo methods — treat as a miss.
+// Оборонительный доступ к мемо: самописные стабы ToolExecutor в тестах (и любой
+// будущий минимальный исполнитель) могут не иметь memo-методов — считать промахом.
 function memoRead(
   ctx: ToolContext,
   args: Record<string, unknown>,
@@ -467,16 +460,16 @@ function decorateCommandOutput(opts: {
   let output = opts.output;
   const { ctx, command, originalCommand, code, testRun, workdir, securityConfig } = opts;
 
-  // R5: script file ran with exit 0 but empty output — likely a missing
-  // entry point (main is never called with argv).
+  // R5: скрипт вышел в 0 молча — вероятно, нет точки входа
+  // (main с argv никто не вызывает).
   const cliHint = emptyCliRunHint(command, output, code);
   if (cliHint) {
     output = `(exit code 0, no output)\n\nHint: ${cliHint}`;
   }
 
-  // Auto-verify test runs: a failing suite must not be reported as a clean
-  // success. Inject a prominent marker the model cannot miss (the typical
-  // failure: tests fail but the CLI exit code is 0).
+  // Автоверификация тест-ранов: упавший сьют нельзя отдавать как чистый
+  // успех. Видный маркер, который модель не пропустит (типичный провал:
+  // тесты падают при нулевом exit code CLI).
   if (testRun && testRun.failed > 0) {
     output =
       t("exec.test_runner_fail", {
@@ -493,20 +486,18 @@ function decorateCommandOutput(opts: {
     output = `(exit code ${code})`;
   }
 
-  // npm/npx/bunx: "could not determine executable to run" — the package has
-  // no `bin` entry (or the script does not exist). Cross-platform, so it runs
-  // before the win32 hint block.
+  // npm/npx/bunx: "could not determine executable to run" — у пакета нет
+  // записи `bin` (или скрипта нет). Кроссплатформенно — до win32-блока хинтов.
   output = npmExecHint(output);
 
-  // Interactive prompt with no TTY (Bun/Node "Operation cancelled").
+  // Интерактивный промпт без TTY (Bun/Node "Operation cancelled").
   output = interactivePromptHint(output);
 
-  // On Windows, hint about Unix commands that don't work, and hard-stop a
-  // command that keeps failing the same way. The hint keys on the ORIGINAL
-  // command word (before adaptCommandForWindows translated cat→type): the
-  // translation is only for execution, but the model wrote `cat`, and that is
-  // what UNIX_TO_WIN_HINTS knows about. Keying on the translated word left
-  // `cat` invisible to the hint/block (observed: model ran cat 4+ times).
+  // На Windows — хинт про нерабочие Unix-команды и жёсткий стоп повторяющегося
+  // падения. Хинт ключуют по ОРИГИНАЛЬНОМУ первому слову (до трансляции
+  // adaptCommandForWindows cat→type): трансляция только для исполнения, а
+  // модель писала `cat` — его и знает UNIX_TO_WIN_HINTS. Ключ по транслированному
+  // слову делал `cat` невидимым для хинта/блока (наблюдено: cat 4+ раз).
   if (platform() === "win32") {
     if (ctx.sessionId !== lastFailureSessionId) {
       lastFailureSessionId = ctx.sessionId;
@@ -528,7 +519,7 @@ function decorateCommandOutput(opts: {
     }
   }
 
-  // Update audit log with result
+  // Запись результата в аудит-лог.
   if (securityConfig?.logCommands) {
     logBashCommand(
       ctx.sessionId,
@@ -540,9 +531,9 @@ function decorateCommandOutput(opts: {
 
   const lines = output.split("\n");
   if (testRun && testRun.failed > 0) {
-    // Keep the failure details: test runners print passing markers first and
-    // the errors + summary at the very end. A short head preview hides exactly
-    // what the model needs to fix the failures.
+    // Детали падения сохранить: раннеры печатают passing-маркеры первыми, а
+    // ошибки + итог — в самом конце. Короткий head-превью прячет ровно то,
+    // что нужно модели для починки.
     const TEST_TAIL_LINES = 400;
     const kept = lines.slice(-TEST_TAIL_LINES);
     const skipped = lines.length - kept.length;
@@ -558,6 +549,7 @@ function decorateCommandOutput(opts: {
   return output;
 }
 
+/** Дописывает хинт на npm-без-bin (по выводу). */
 export function npmExecHint(output: string): string {
   if (NPM_EXEC_RE.test(output)) {
     return `${output}\n\nHint: ${t("exec.npm_exec_hint")}`;
@@ -565,7 +557,7 @@ export function npmExecHint(output: string): string {
   return output;
 }
 
-/** Append a non-interactive remedy when a command aborted waiting on stdin. */
+/** Дописывает неинтерактивное лечение при аборте на ожидании stdin. */
 export function interactivePromptHint(output: string): string {
   if (INTERACTIVE_PROMPT_RE.test(output)) {
     return `${output}\n\nHint: ${t("exec.interactive_hint")}`;
@@ -595,14 +587,14 @@ export const bashTool: ToolDefinition = {
     },
     required: ["command"],
   },
-  /** Cacheability is per-command (see isMemoizableCommand) — managed here. */
+  /** Мемоизация покомандно (см. isMemoizableCommand) — ведётся здесь. */
   manualMemo: true,
   handler: async (ctx, args) => {
     const originalCommand = String(args.command);
 
-    // The model sometimes sends a tool invocation (e.g. "create_dir path=...")
-    // as a bash command instead of calling the tool directly. Redirect into
-    // the real tool so the intent succeeds instead of failing in the shell.
+    // Модель иногда шлёт вызов тула (напр. "create_dir path=…") командой bash
+    // вместо прямого вызова. Редирект в настоящий тул — намерение сработает,
+    // а не упадёт в шелле.
     const toolCall = detectToolCallInBash(originalCommand);
     if (
       toolCall &&
@@ -622,11 +614,9 @@ export const bashTool: ToolDefinition = {
 
     const command = adaptCommandForWindows(originalCommand);
 
-    // Hidden-tool discovery (ses_mt4fn58c): with tool-set narrowing the
-    // process_* tools are invisible to the model, so running them through
-    // cmd.exe only yields "is not recognized" — three wasted attempts in
-    // that session. Point the model at enable_tools. (k=v forms are handled
-    // by the redirect above and reach the real tool.)
+    // Discovery скрытых тулов: при сужении набора process_* невидимы модели,
+    // и прогон их через cmd.exe даёт лишь "is not recognized" (в одной сессии —
+    // три впустую). Указать на enable_tools (k=v-формы ушли редиректом выше).
     const baseCmd = originalCommand.trim().split(/\s+/)[0];
     if (
       HIDDEN_PROCESS_TOOLS.includes(baseCmd) &&
@@ -638,10 +628,9 @@ export const bashTool: ToolDefinition = {
       };
     }
 
-    // echo/printf redirection to a file is unreliable in cmd.exe (single
-    // quotes don't group, multi-line commands split, embedded double quotes
-    // break the command). Steer the model to write_file instead — it
-    // produces correct files every time.
+    // echo/printf-редирект в файл ненадёжен в cmd.exe (одиночные кавычки не
+    // группируют, многострочник рвётся, вложенные двойные кавычки ломают
+    // команду). Вести на write_file — с ним файлы корректны всегда.
     if (platform() === "win32") {
       const echoWrite = extractEchoFileWrite(originalCommand);
       if (echoWrite) {
@@ -658,7 +647,6 @@ export const bashTool: ToolDefinition = {
     const validation = isCommandAllowed(command, securityConfig);
 
     if (!validation.allowed) {
-      // Log security block
       logSecurityBlock(
         ctx.sessionId,
         "bash_command",
@@ -672,7 +660,7 @@ export const bashTool: ToolDefinition = {
       };
     }
 
-    // Log command execution if enabled
+    // Лог запуска команды, если включён.
     if (securityConfig?.logCommands) {
       logBashCommand(
         ctx.sessionId,
@@ -682,10 +670,10 @@ export const bashTool: ToolDefinition = {
       );
     }
 
-    // Result memo (manualMemo, after the security gate so a block is never
-    // masked by a stored result): single read-only invocations are served
-    // from the executor memo; anything else may mutate and wipes it.
-    // Background launches are never memoized (process ids are single-use).
+    // Мемо результата (manualMemo, после security-гейта, чтобы блок никогда не
+    // маскировался stored-результатом): одиночные read-only отдаются из мемо
+    // исполнителя; всё остальное его сбрасывает. Фоновые запуски не мемоизируются
+    // (process id одноразовые).
     const memoKey = { command, workdir };
     const memoizable = args.background !== true && isMemoizableCommand(command);
     if (memoizable) {
@@ -697,7 +685,7 @@ export const bashTool: ToolDefinition = {
 
     const entry = processRegistry.start(command, workdir, ctx.sessionId);
     if (ctx.activeCallId) {
-      // Let the executor abort/kill the child during the grace window.
+      // Исполнителю — убить дочерний процесс в grace-окне при аборте.
       registerKillable(ctx.activeCallId, () => processRegistry.kill(entry.id));
     }
 
@@ -706,7 +694,7 @@ export const bashTool: ToolDefinition = {
       const exited = await processRegistry.waitForExit(entry.id, settleMs);
 
       if (exited) {
-        // Command finished (or failed to spawn) within the window.
+        // Команда уложилась в окно (включая ошибку спавна).
         if (entry.spawnError) {
           return {
             success: false,
@@ -731,14 +719,14 @@ export const bashTool: ToolDefinition = {
           securityConfig,
         });
 
-        // Successful read-only runs are memoized (failures may be transient).
+        // Успешные read-only прогоны — в мемо (падения могут быть транзиентны).
         if (memoizable && code === 0) {
           memoWrite(ctx, memoKey, { success: true, output });
         }
         return { success: code === 0, output };
       }
 
-      // Still running — promote to a background process.
+      // Всё ещё жива — в фоновые процессы.
       const explicit = args.background === true;
       const preview = entry.log
         .filter((l) => l.trim() !== "")

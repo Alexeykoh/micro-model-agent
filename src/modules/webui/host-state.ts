@@ -1,10 +1,7 @@
+// Проекция host-снапшота для `mma web` (чистые функции: живое состояние → сайдбар).
 /**
- * Host snapshot projection for `mma web` (correction #6).
- *
- * Split out of `module.ts` (rule #1: ≤300 lines/file). Pure functions mapping
- * live module state into the `HostStateSnapshot` the sidebar renders; no
- * server, agent loop or SSE here. Re-exported from `module.ts` so existing
- * importers keep working.
+ * Вынесена из `module.ts` (правило #1: ≤300 строк/файл). Реэкспортируется из
+ * `module.ts`, чтобы существующие импортёры не чинить.
  */
 import type { AppConfig } from "../../config/types";
 import type { AgentResult } from "../../core/types";
@@ -15,8 +12,8 @@ import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
 import type { UsageSnapshot } from "./state";
 
 /**
- * Narrow inputs `buildHostState` reads. Kept separate from `WebUiDeps` so
- * the snapshot projection is testable without constructing a full `Agent`.
+ * Узкие входы, читаемые `buildHostState`. Отдельно от `WebUiDeps`, чтобы
+ * проекцию можно было тестировать без конструирования целого `Agent`.
  */
 export interface HostStateInput {
   config: AppConfig;
@@ -29,16 +26,16 @@ export interface HostStateInput {
   projectMap?: { indexed: boolean; files: number; symbols: number; tokens: number } | null;
 }
 
-/** Structural subset of the indexer module the sidebar needs (avoids a hard dep). */
+/** Структурное подмножество индексер-модуля для сайдбара (без жёсткой зависимости). */
 export interface WebIndexer {
   buildIndex(): Promise<unknown>;
   stats(): { files: number; symbols: number; tokens: number } | null;
 }
 
 /**
- * Capture the usage-bearing subset of an `AgentResult` into a
- * {@link UsageSnapshot}. Undefined fields are omitted so a partial result never
- * overwrites a previously known value with a blank cell.
+ * Забирает usage-носящее подмножество `AgentResult` в {@link UsageSnapshot}.
+ * Undefined-поля опускаются, чтобы частичный результат не затирал известное
+ * значение пустой ячейкой.
  */
 export function captureUsage(result: AgentResult, fallbackLimit?: number): UsageSnapshot {
   const usage: UsageSnapshot = {};
@@ -56,10 +53,9 @@ export function captureUsage(result: AgentResult, fallbackLimit?: number): Usage
 }
 
 /**
- * Resolve the plan snapshot to broadcast after a tool ends. Only
- * `plan`/`plan_step`/`todo` tools mutate the active plan, so any other tool
- * yields `null` (no event). Pure so the hook is testable without booting
- * the agent/server.
+ * Резолвит снапшот плана для бродкаста после конца тула. Активный план мутируют
+ * только тулы `plan`/`plan_step`/`todo`, остальные дают `null` (без события).
+ * Чистая, тестируется без подъёма агента/сервера.
  */
 export function planEventFor(
   toolName: string,
@@ -69,7 +65,7 @@ export function planEventFor(
   return planSnapshotFromModule(adaptActivePlan(execModule?.getActivePlan()));
 }
 
-/** Build the host snapshot from live module state (correction #6). */
+/** Строит host-снапшот из живого состояния модулей. */
 export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSnapshot {
   const meta = deps.sessionManager?.getActiveMeta();
   return {

@@ -1,13 +1,16 @@
+// Хранилище артефактов сессии: запись/чтение файлов в <baseDir>/.mma/artifacts/<sessionId>.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, relative, isAbsolute } from "node:path";
 
+/** Опции хранилища артефактов: корень проекта, id сессии, относительный каталог. */
 export interface ArtifactStoreOptions {
   baseDir: string;
   sessionId: string;
-  /** Directory relative to baseDir. Default: ".mma/artifacts". */
+  /** Каталог относительно baseDir. По умолчанию: ".mma/artifacts". */
   artifactsDir?: string;
 }
 
+/** Файловое хранилище артефактов сессии (jail внутри root). */
 export class ArtifactStore {
   private readonly root: string;
 
@@ -16,10 +19,9 @@ export class ArtifactStore {
     this.root = resolve(opts.baseDir, artifactsDir, opts.sessionId);
   }
 
-  /** Normalize to [a-zA-Z0-9._-]; never empty, never "." or "..". */
+  /** Нормализует имя к [a-zA-Z0-9._-]; никогда не пустое, не "." и не "..". */
   static sanitizeName(name: string): string {
-    // Strip traversal prefixes so "../../etc/passwd" becomes "etc_passwd",
-    // never ".._.._etc_passwd".
+    // Срезаем префиксы обхода: "../../etc/passwd" станет "etc_passwd", а не ".._.._etc_passwd".
     const stripped = name.replace(/^(\.\.?[\\/])+/g, "").replace(/^\.{1,2}$/, "");
     const cleaned = stripped
       .replace(/[^a-zA-Z0-9._-]/g, "_")
@@ -31,7 +33,7 @@ export class ArtifactStore {
     return cleaned;
   }
 
-  /** True when `candidate` is strictly inside (or equal to) `root`. */
+  /** True, если `candidate` строго внутри `root` (или равен ему). */
   private static isInside(root: string, candidate: string): boolean {
     const rel = relative(root, candidate);
     if (rel === "") return true;
@@ -39,8 +41,8 @@ export class ArtifactStore {
   }
 
   /**
-   * Persist content to <root>/<name>.<ext> and return the absolute path.
-   * Throws if the resolved path escapes root (defense in depth — sanitizeName already removes separators).
+   * Сохраняет контент в <root>/<name>.<ext>, возвращает абсолютный путь.
+   * Бросает, если путь выходит за root (defense in depth — sanitizeName уже убрал разделители).
    */
   save(name: string, content: string, ext = "md"): string {
     const safe = ArtifactStore.sanitizeName(name);
@@ -54,7 +56,7 @@ export class ArtifactStore {
     return abs;
   }
 
-  /** Read an artifact by its file name (relative to root); null when outside the root or missing. */
+  /** Читает артефакт по имени файла (относительно root); null, если вне root или нет файла. */
   read(path: string): string | null {
     const abs = resolve(this.root, path);
     if (!ArtifactStore.isInside(this.root, abs)) return null;
@@ -62,7 +64,7 @@ export class ArtifactStore {
     return readFileSync(abs, "utf8");
   }
 
-  /** First maxChars chars (trimmed) + truncation marker. */
+  /** Первые maxChars символов (обрезанные справа) + маркер усечения. */
   summary(content: string, maxChars: number): string {
     if (content.length <= maxChars) return content;
     const head = content.slice(0, maxChars).trimEnd();

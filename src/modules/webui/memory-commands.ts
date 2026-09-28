@@ -1,10 +1,8 @@
+// Plain-текстовый рендер `/memory` для `mma web` (без цвета — дим на браузере).
 /**
- * Plain-text `/memory` rendering for `mma web`.
- *
- * The terminal `/memory` lives in `src/cli/onboarding-commands.ts` and emits
- * ANSI-coloured strings. Web output must stay colour-free (the browser applies
- * its own dim styling), so this re-renders the same `MemoryStore` operations as
- * plain lines instead of importing the CLI layer into a module.
+ * Терминальный `/memory` живёт в `src/cli/onboarding-commands.ts` и эмитит
+ * ANSI-крашеные строки. Веб-вывод краситься не должен, поэтому те же операции
+ * `MemoryStore` перерендерены plain-строками, а не импортом CLI-слоя в модуль.
  */
 import type { MemoryStore } from "../memory/store";
 
@@ -12,7 +10,7 @@ const CATEGORIES = ["conventions", "decisions", "errors", "facts"] as const;
 
 const USAGE = "/memory [get <k> | set <k> <v> | unset <k> | find <q> | forget <category> <n>]";
 
-/** Pure dispatch: returns the lines to emit, never throws on bad input. */
+/** Чистый диспатч: возвращает строки к эмиту, на битом вводе не бросает. */
 export function memoryLines(store: MemoryStore, args: string[]): string[] {
   const [sub, ...rest] = args;
   if (!sub) return overview(store);

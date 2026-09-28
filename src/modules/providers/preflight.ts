@@ -1,14 +1,18 @@
+// Preflight провайдера: дешёвый chat-probe (max_tokens=1) перед LLM-входами.
 import type { ProviderConfig } from "../../config/types";
 import { errMsg } from "../../utils";
 
+/** Конфиг preflight-пробы: куда стучаться и какую модель спрашивать. */
 export interface PreflightConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
 }
 
+/** Итог пробы: ok / недоступен / нет модели / таймаут. */
 export type PreflightReason = "ok" | "unreachable" | "no-model" | "timeout";
 
+/** Результат preflight: успех, причина, длительность в мс. */
 export interface PreflightResult {
   ok: boolean;
   reason: PreflightReason;
@@ -17,11 +21,11 @@ export interface PreflightResult {
 
 export interface PreflightOptions {
   timeoutMs?: number;
-  /** Test seam: returns non-empty text when the model responds. */
+  /** Тестовый шов: возвращает непустой текст, если модель отвечает. */
   probe?: (cfg: PreflightConfig, timeoutMs: number) => Promise<string>;
 }
 
-/** Resolve the active provider's base URL + key (entries-first, legacy fallback). */
+/** Base URL + ключ активного провайдера (сначала entries, потом legacy). */
 export function resolveProviderTarget(provider: {
   active?: string;
   entries?: Array<{ label?: string; type: string; baseUrl: string; apiKey?: string }>;
@@ -41,12 +45,12 @@ export function resolveProviderTarget(provider: {
   return { baseUrl: provider.baseUrl, apiKey: provider.apiKey ?? "" };
 }
 
-/** Minimal shape needed to preflight the configured active provider. */
+/** Минимальная форма для preflight активного провайдера из конфига. */
 export interface PreflightContext {
   config: { provider: ProviderConfig; model: string };
 }
 
-/** Resolve the active provider from config, then preflight it. */
+/** Резолв активного провайдера из конфига, затем его preflight. */
 export function preflightFromConfig(ctx: PreflightContext): Promise<PreflightResult> {
   const target = resolveProviderTarget(ctx.config.provider);
   return preflightProvider({
@@ -56,7 +60,7 @@ export function preflightFromConfig(ctx: PreflightContext): Promise<PreflightRes
   });
 }
 
-/** Minimal, cheap chat probe: confirms the selected model is loaded. */
+/** Минимальная дешёвая chat-проба: подтверждает, что модель загружена. */
 export async function probeChat(
   cfg: PreflightConfig,
   timeoutMs: number,
@@ -90,8 +94,8 @@ export async function probeChat(
 }
 
 /**
- * Confirm the provider answers and the selected model is loaded. Uses a single
- * max_tokens=1 chat call (negligible cost). Never hangs: bounded by timeoutMs.
+ * Проверить, что провайдер отвечает и модель загружена. Один chat-вызов с
+ * max_tokens=1 (стоимость пренебрежима). Не висит: ограничен timeoutMs.
  */
 export async function preflightProvider(
   cfg: PreflightConfig,

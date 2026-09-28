@@ -1,2 +1,2 @@
-/** Maximum number of lines shown in tool output previews. */
+/** Максимум строк в превью вывода тулов. */
 export const MAX_PREVIEW_LINES = 15;

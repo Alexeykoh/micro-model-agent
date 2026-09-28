@@ -1,8 +1,10 @@
+/** Тул поиска файлов по glob-паттерну (кешируемый, jail в baseDir). */
 import { globSync } from "fs";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { MAX_PREVIEW_LINES } from "./preview";
 
+/** Ищет файлы по glob; выдача обрезана MAX_PREVIEW_LINES. */
 export const globTool: ToolDefinition = {
   name: "glob",
   icon: "🔎",
@@ -18,7 +20,7 @@ export const globTool: ToolDefinition = {
   },
   handler: async (ctx, args) => {
     const pattern = String(args.pattern);
-    // Security: absolute patterns (/etc/*) and ".." segments escape baseDir.
+    // Абсолютные паттерны (/etc/*) и ".." выводят за baseDir — запретить.
     if (/^([a-zA-Z]:)?[\\/]/.test(pattern) || pattern.split(/[\\/]/).includes("..")) {
       return {
         success: false,

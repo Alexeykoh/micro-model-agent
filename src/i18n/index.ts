@@ -1,3 +1,4 @@
+// i18n: плоские словари en/ru, t(key, params) с фолбэком на английский.
 import en from "./en.json";
 import ru from "./ru.json";
 
@@ -27,6 +28,10 @@ for (const [name, dict] of Object.entries(locales)) {
   flat[name] = flatten(dict);
 }
 
+/**
+ * Переключает текущую локаль. Неизвестное имя игнорируется.
+ * @param locale имя локали ("en" | "ru").
+ */
 export function setLocale(locale: string): void {
   if (flat[locale]) {
     currentLocale = locale;
@@ -34,22 +39,25 @@ export function setLocale(locale: string): void {
 }
 
 /**
- * Flattened dictionaries keyed by locale name. Used by the `mma web` API to
- * ship every translation to the browser so it can localize its own chrome.
- * Read-only by contract — callers must not mutate the returned maps.
+ * Плоские словари по именам локалей. Нужны веб-API, чтобы отдать все переводы
+ * в браузер для локализации его интерфейса. Только чтение — не мутировать.
  */
 export function getFlatDicts(): Record<string, Record<string, string>> {
   return flat;
 }
 
+/**
+ * Подменяет/добавляет словарь локали в рантайме (плагины, тесты).
+ * @param name имя локали; @param dict вложенный словарь переводов.
+ */
 export function loadLocale(name: string, dict: Record<string, unknown>): void {
   locales[name] = dict;
   flat[name] = flatten(dict);
 }
 
 /**
- * Опциональный репортёр отсутствующих ключей (debug-диагностика). Wire-ится
- * из bootstrap на logger.debug, чтобы не тянуть logger в i18n (циклы).
+ * Ставит обработчик отсутствующих ключей (debug-диагностика). Подключается
+ * из bootstrap на logger.debug, чтобы не тянуть логер в i18n (циклы).
  */
 let missingKeyReporter: ((key: string) => void) | undefined;
 
@@ -57,6 +65,10 @@ export function setMissingKeyReporter(reporter?: (key: string) => void): void {
   missingKeyReporter = reporter;
 }
 
+/**
+ * Переводит ключ с подстановкой `{params}`. Нет ключа — вернёт сам ключ.
+ * @param key точечный ключ; @param params значения подстановок.
+ */
 export function t(key: string, params?: Record<string, string | number>): string {
   const localeDict = flat[currentLocale];
   const enDict = flat.en;

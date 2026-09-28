@@ -1,4 +1,4 @@
-// src/core/agent/context-log
+/** Git-подобный лог контекста LLM: snapshot'ы и diff между итерациями. */
 /**
  * Запись всего контекста, уходящего в LLM, в git-подобный diff-файл.
  *
@@ -59,6 +59,7 @@ const CONTEXT_LINES = 3;
 // до полной замены, чтобы не аллоцировать сотни МБ.
 const MAX_LCS_CELLS = 4_000_000;
 
+/** Сообщение истории для лога контекста (роль, контент, тул-мета). */
 export interface ContextLogMessage {
   role: string;
   content: unknown;
@@ -68,12 +69,14 @@ export interface ContextLogMessage {
   tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>;
 }
 
+/** Определение тула для секции [TOOLS] лога. */
 export interface ContextLogTool {
   name: string;
   description: string;
   parameters: unknown;
 }
 
+/** Мета snapshot'а: итерация, время, токены по секциям. */
 export interface ContextLogMeta {
   iteration: number;
   ts: string;
@@ -84,6 +87,7 @@ export interface ContextLogMeta {
   contextWindow: number;
 }
 
+/** Вывод модели для [OUTPUT]-аннотации (в контекст LLM не входит). */
 export interface ContextLogOutput {
   reasoning?: string;
   text?: string;
@@ -92,6 +96,7 @@ export interface ContextLogOutput {
   ts: string;
 }
 
+/** Опции логгера: путь, сессия, модель, окно, редакция секретов. */
 export interface ContextLoggerOptions {
   path: string;
   sessionId: string;
@@ -510,6 +515,5 @@ export class ContextLogger {
 
   /** Append-only логгер — закрывать нечего. Оставлено для симметрии API. */
   close(): void {
-    // no-op
   }
 }

@@ -1,5 +1,7 @@
+// Минималистичный парсер YAML-описаний пайплайнов (без внешних зависимостей).
 import { t } from "../../i18n/index";
 
+/** Один шаг пайплайна: агент, промпт, зависимости и повторы. */
 export interface PipelineStep {
   id: string;
   agent: string;
@@ -9,12 +11,15 @@ export interface PipelineStep {
   max_retries?: number;
 }
 
+/** Пайплайн: имя и упорядоченный список шагов. */
 export interface Pipeline {
   name: string;
   steps: PipelineStep[];
 }
 
+/** Парсер описания пайплайна. Бросает при невалидном YAML/полях. */
 export class PipelineParser {
+  /** Разбирает YAML в `Pipeline`; бросает с локализованной ошибкой. */
   static parse(yaml: string): Pipeline {
     const lines = yaml.split("\n").filter((l) => l.trim());
     const result: any = {};

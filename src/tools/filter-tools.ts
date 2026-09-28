@@ -1,9 +1,10 @@
+/** Фильтр тулов по тегам; `alwaysOn` сохраняются всегда. */
 import type { ToolDefinition } from "./types";
 
 /**
- * Filter tools by a tag set, always keeping `alwaysOn` tools. Used by MoE
- * expert routing and subagent tool_tags so structural tools (plan/plan_step/
- * todo/verify, project_map, lsp_check, enable_tools) survive narrowing.
+ * Фильтрует тулы по набору тегов, всегда оставляя `alwaysOn`. Для MoE-роутинга
+ * экспертов и subagent tool_tags — структурные тулы (plan/todo/verify,
+ * project_map, lsp_check, enable_tools) переживают сужение.
  */
 export function filterToolsByTags(tools: ToolDefinition[], toolTags: string[]): ToolDefinition[] {
   if (!toolTags || toolTags.length === 0) return tools;

@@ -1,9 +1,11 @@
+/** Тул поиска по истории сессий (JSONL всех сессий, cap результатов). */
 import * as fs from "fs";
 import { join } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { globalSessionsDir } from "../config/paths";
 
+/** Ищет запрос в одном history.jsonl, складывает ужатые JSON-записи. */
 function searchFile(filePath: string, query: string, maxResults: number, results: string[]): void {
   if (!fs.existsSync(filePath)) return;
   const content = fs.readFileSync(filePath, "utf-8");
@@ -20,6 +22,7 @@ function searchFile(filePath: string, query: string, maxResults: number, results
   }
 }
 
+/** Ищет по прошлым взаимодействиям всех сессий. Параметры: query, maxResults, sessionId. */
 export const searchHistoryTool: ToolDefinition = {
   name: "search_history",
   icon: "🕵️",

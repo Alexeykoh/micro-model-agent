@@ -1,3 +1,4 @@
+// Тулы плана: plan / plan_step / todo / verify + зависимости через deps-замыкания.
 import type { ToolDefinition } from "../../tools/types";
 import { t } from "../../i18n/index";
 import type { Plan, StepKind, Subtask } from "./planner";
@@ -6,16 +7,17 @@ import type { PlanStore } from "./plan-store";
 import type { StepVerifier } from "./verifier";
 import { dispatchPlanAction, updatePlanStep } from "./plan-actions";
 
+/** Зависимости тулов плана: стор, верификатор, трекер, гейты, парсеры, baseDir. */
 export interface PlanToolDeps {
   store: PlanStore;
   verifier: StepVerifier;
   trackerRef: { current: PlanTracker | null };
   preserveActive(): void;
   setPlan(plan: Plan): void;
-  /** Remember a completed plan so the final audit can still verify it after
-   *  the tracker is cleared by the auto-archive. */
+  /** Запоминает завершённый план, чтобы финальный аудит проверил его после
+   *  очистки трекера авто-архивом. */
   recordCompleted(plan: Plan): void;
-  /** Forget the completed plan (abort/delete/purge). */
+  /** Забывает завершённый план (abort/delete/purge). */
   clearCompleted(): void;
   hasStepDeliverables(step: { description: string }): boolean;
   missingStepDeliverables(step: { description: string }): string[];
@@ -24,26 +26,26 @@ export interface PlanToolDeps {
     args: Record<string, unknown>,
     steps: string[],
   ): { kinds: StepKind[] | null; error: string | null };
-  /** Validate the per-step verification contracts (REQUIRED on create and
-   *  re-plan, aligned 1:1 with steps). See plan-checks.ts for prefixes. */
+  /** Валидирует пер-шаговые контракты верификации (ОБЯЗАТЕЛЬНЫ на create и
+   *  re-plan, 1:1 к шагам). Префиксы — см. plan-checks.ts. */
   parseChecks(
     args: Record<string, unknown>,
     steps: string[],
   ): { checks: string[] | null; error: string | null };
   getTaskText(ctx: any): string;
-  /** Files the last write/edit reported as compile-broken (from the execution
-   *  plugin state). The done-gate refuses while a step's files are in here. */
+  /** Файлы, которые последний write/edit пометил компиляторно-битыми (из
+   *  состояния execution-плагина). Done-gate реджектит, пока файлы шага здесь. */
   typecheckFailures: ReadonlyMap<string, string>;
   baseDir: string;
-  /** Check if a file was tracked as deleted by the agent (ConsistencyCheck).
-   *  Used by the auto-switch logic to confirm the model actually deleted the
-   *  file (via delete_file or bash rm) before switching kind to delete. */
+  /** Проверяет, трекался ли файл как удалённый агентом (ConsistencyCheck).
+   *  Нужно авто-свитчу для подтверждения: модель реально удалила файл (через
+   *  delete_file или bash rm) перед сменой kind на delete. */
   wasFileDeleted?(path: string): boolean;
 }
 
 /**
- * Mark subtasks done by numeric ids (preferred) or by exact text (fallback).
- * Returns the number marked, or an error string when nothing matched.
+ * Маркит подзадачи done по числовым id (предпочтительно) или точному тексту (фолбэк).
+ * Возвращает число отмеченных, или строку ошибки если ничего не сошлось.
  */
 function markTodoDone(
   subs: Subtask[],
@@ -82,10 +84,9 @@ function markTodoDone(
 }
 
 /**
- * The plan / todo / verify tool definitions for the execution module. The
- * handlers were extracted verbatim from ExecutionModule.getToolDefinitions() —
- * all state access goes through the `deps` closures (the module owns the
- * tracker and the plan store).
+ * Определения тулов plan / todo / verify для execution-модуля. Хендлеры
+ * вынесены дословно из ExecutionModule.getToolDefinitions() — весь доступ к
+ * состоянию идёт через `deps`-замыкания (трекер и стор принадлежат модулю).
  */
 export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] {
   return [
@@ -233,10 +234,9 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           deps.store.saveActive(tracker.getPlan());
           const doneCount = subs.filter((s) => s.done).length;
           const display = tracker.toPromptBlock();
-          // Marking a sub-task done must NOT auto-complete the plan
-          // step — the step is only done when the model confirms the
-          // whole step via plan update (observed: 3 × "todo done"
-          // returned "Step 3: done" and marked the step done early).
+          // Отметка подзадачи done НЕ должна автозавершать шаг плана: шаг done,
+          // только когда модель подтвердит весь шаг через plan update (было: 3 ×
+          // "todo done" вернули "Step 3: done" и преждевременно закрыли шаг).
           let output = t("todo.marked_done", {
             count: String(marked),
           });

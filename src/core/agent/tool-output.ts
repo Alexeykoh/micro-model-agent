@@ -1,3 +1,4 @@
+/** Утилиты вывода тулов: лимиты, усечение, сводки ошибок. */
 import { t } from "../../i18n/index";
 import {
   TOOL_RESULT_MAX_TOKENS_RATIO,
@@ -109,19 +110,20 @@ export function compactToolError(output: unknown, max = 200): string {
   return "";
 }
 
+/** Сводка падения тула для чата: текст и серьёзность. */
 export interface ToolFailureSummary {
-  /** Short, user-facing, localized summary. */
+  /** Короткая локализованная сводка для пользователя. */
   text: string;
-  /** `warn` for soft guards (security/protected paths), `error` for real failures. */
+  /** `warn` — мягкие гарды (security/protected paths), `error` — реальные сбои. */
   severity: "warn" | "error";
 }
 
 /**
- * Turn a model-facing tool failure into a calm, localized user summary.
+ * Превращает model-facing падение тула в спокойную локализованную сводку.
  *
- * Security and protected-path refusals are soft guards — the agent is expected
- * to ask the user — so they render as warnings, not errors, and the raw
- * `[SECURITY BLOCKED]` / `[PROTECTED PATH]` markers never reach the chat.
+ * Отказы security/protected-path — мягкие гарды (агент должен спросить
+ * пользователя), поэтому рисуются варнингом, а сырые маркеры
+ * `[SECURITY BLOCKED]` / `[PROTECTED PATH]` в чат не попадают.
  */
 export function toolFailureSummary(output: unknown, max = 200): ToolFailureSummary {
   const text = String(output ?? "");

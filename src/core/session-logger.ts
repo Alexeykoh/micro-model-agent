@@ -1,3 +1,4 @@
+/** Логгер сессии: тонкая обёртка над SessionManager для цикла агента. */
 import type { SessionManager } from "../modules/session/manager";
 import type { ToolCall } from "./types";
 import type { PrefixDelta } from "./agent/prefix-monitor";
@@ -8,12 +9,11 @@ import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
 import { redactContextSecrets } from "./agent/context-log";
 
 /**
- * Thin wrapper around SessionManager that eliminates repetitive
- * `if (sessionManager)` + `new Date().toISOString()` boilerplate
- * from the agent loop.
+ * Тонкая обёртка над SessionManager: убирает повторяющиеся
+ * `if (sessionManager)` + `new Date().toISOString()` из цикла агента.
  *
- * When constructed, it configures the app logger and audit log to write into
- * the session directory (instead of global ~/.mma/logs/).
+ * При создании привязывает логгер приложения и аудит-лог к каталогу сессии
+ * (вместо глобального ~/.mma/logs/).
  */
 export class SessionLogger {
   private logger: Logger | undefined;
@@ -42,10 +42,15 @@ export class SessionLogger {
     setAuditSessionDir(dir);
   }
 
+  /** Есть ли активная сессия. */
   get active(): boolean {
     return !!this.session?.getActive();
   }
 
+  /**
+   * Пишет системное сообщение в лог сессии.
+   * @param content текст системного сообщения.
+   */
   logSystem(content: string): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -54,6 +59,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет сообщение пользователя (санитизированное).
+   * @param content текст пользователя.
+   */
   logUser(content: string): void {
     const sanitized = sanitizeLogMessage(content);
     this.session?.appendMessage({
@@ -68,6 +77,11 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет ответ ассистента (+ reasoning и tool_calls при наличии).
+   * @param content текст ответа; @param reasoning reasoning-контент;
+   * @param toolCalls вызовы тулов; @param iteration номер итерации.
+   */
   logAssistant(
     content: string,
     reasoning?: string,
@@ -104,6 +118,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Сохраняет сообщение ассистента в историю сессии (для resume).
+   * @param content текст сообщения.
+   */
   saveAssistantMessage(content: string): void {
     const caller = this.getCaller?.();
     this.session?.appendMessage({
@@ -115,6 +133,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет набор определений тулов итерации (состав для пост-анализа).
+   * @param toolCount число тулов; @param toolNames имена; @param iteration итерация.
+   */
   logToolDefs(toolCount: number, toolNames: string[], iteration: number): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -125,6 +147,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет вызов тула (имя, id, санитизированные аргументы).
+   * @param call вызов тула; @param iteration номер итерации.
+   */
   logToolCall(call: ToolCall, iteration: number): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -159,6 +185,11 @@ export class SessionLogger {
     }
   }
 
+  /**
+   * Пишет результат тула (успех, вывод, diff, длительность).
+   * @param call вызов; @param result результат; @param duration длительность, мс;
+   * @param iteration номер итерации.
+   */
   logToolResult(
     call: ToolCall,
     result: { success: boolean; output: string; diff?: string },
@@ -189,6 +220,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет событие компакции (причина, токены/качество до и после).
+   * @param info параметры компакции.
+   */
   logCompaction(info: {
     reason: string;
     iteration: number;
@@ -220,6 +255,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет снапшот контекста (бюджеты, токены, качество, состав блоков).
+   * @param info параметры снапшота.
+   */
   logContext(info: {
     kind: "start" | "iteration";
     iteration: number;
@@ -268,6 +307,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет usage LLM-вызова (токены, источник, кеш, стабильность префикса).
+   * @param iteration номер итерации; @param usage токены и мета.
+   */
   logLlmUsage(
     iteration: number,
     usage: {
@@ -303,6 +346,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет ошибку в лог сессии.
+   * @param message текст ошибки.
+   */
   logError(message: string): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -311,6 +358,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет вердикт финального аудита.
+   * @param summary сводка аудита; @param iteration номер итерации.
+   */
   logAudit(summary: string, iteration: number): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -320,6 +371,10 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет событие плана MoE/обычного (создание, шаги, re-plan).
+   * @param event имя события; @param detail детали; @param iteration итерация.
+   */
   logPlan(event: string, detail: string, iteration?: number): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -331,9 +386,9 @@ export class SessionLogger {
   }
 
   /**
-   * Log session startup diagnostics: environment, LSP probe, plugins, skills.
-   * Should be the FIRST entry in session.jsonl so the file is self-describing.
-   * Skips if a session_start entry already exists (e.g. logged by REPL).
+   * Пишет стартовую диагностику сессии: окружение, LSP-проба, плагины, скиллы.
+   * Должна быть ПЕРВОЙ записью в session.jsonl (файл самоописываем).
+   * Пропускает, если session_start уже есть (напр., записан REPL).
    */
   logSessionStart(data: {
     environment?: Record<string, unknown>;
@@ -345,17 +400,16 @@ export class SessionLogger {
     plugins?: string[];
     skills?: number;
   }): void {
-    // Skip if session_start already logged (REPL may have logged it with LSP
-    // probe). Read through the decrypt-aware store: under session encryption
-    // the on-disk lines are ciphertext, so a plaintext substring check never
-    // matched and a duplicate entry was appended.
+    // Пропуск при уже записанном session_start (REPL мог записать с LSP-пробой).
+    // Чтение через decrypt-aware store: при шифровании сессии строки на диске —
+    // шифртекст, поэтому проверка подстрокой никогда не срабатывала и дубль дописывался.
     const meta = this.session?.getActiveMeta();
     if (meta) {
       try {
         const entries = this.session!.loadSessionLog(meta.id);
         if (entries.some((e) => e.type === "session_start")) return;
       } catch {
-        // File read error — proceed to write
+        // Ошибка чтения — всё равно пишем
       }
     }
     this.session?.appendLog({
@@ -370,7 +424,7 @@ export class SessionLogger {
   }
 
   /**
-   * Log a reasoning control event (level set, policy evaluation).
+   * Пишет событие управления reasoning (уровень, оценка политики).
    */
   logReasoningControl(data: {
     iteration: number;
@@ -392,8 +446,8 @@ export class SessionLogger {
   }
 
   /**
-   * Log a MoE observability event (moe_plan / moe_subtask / moe_replan /
-   * moe_verify). Emitted by runWithMoE and MoEExecutor (Plan 4.2).
+   * Пишет событие наблюдаемости MoE (moe_plan / moe_subtask / moe_replan /
+   * moe_verify). Эмитят runWithMoE и MoEExecutor (Plan 4.2).
    */
   logMoE(
     event: "moe_plan" | "moe_subtask" | "moe_replan" | "moe_verify",
@@ -407,7 +461,7 @@ export class SessionLogger {
     });
   }
 
-  /** Log an onboarding lifecycle event (meet/init) for post-mortem analysis. */
+  /** Пишет событие онбординга (meet/init) для пост-анализа. */
   logOnboarding(event: string, data: Record<string, unknown> = {}): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -417,7 +471,7 @@ export class SessionLogger {
     });
   }
 
-  /** Log a critic lifecycle event (counter-agent). */
+  /** Пишет событие критика (контр-агент). */
   logCritic(
     event: "critic_check" | "critic_verdict" | "critic_escalation",
     data: Record<string, unknown> = {},

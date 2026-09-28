@@ -1,3 +1,4 @@
+/** Тул скачивания URL в файл (байты, SSRF-защита, cap размера). */
 import { writeFileSync, mkdirSync } from "fs";
 import { dirname, resolve } from "path";
 import { t } from "../i18n/index";
@@ -15,10 +16,11 @@ import { getSessionSecurityConfig } from "../modules/security/session-isolation"
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { safeResolvePath } from "./path-utils";
 
-/** Default cap for a single download (bytes). Chunked responses without a
- * content-length header are checked after the body is read. */
+/** Дефолтный cap скачивания (байты). Чанковые ответы без content-length
+ * проверяются после чтения тела. */
 export const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 
+/** Качает бинарник в файл; возвращает путь/размер/тип. Параметры: url, path, max_bytes. */
 export const downloadFileTool: ToolDefinition = {
   name: "download_file",
   icon: "⬇️",
@@ -47,7 +49,7 @@ export const downloadFileTool: ToolDefinition = {
       return { success: false, output: t("tool.invalid_params") };
     }
 
-    // Network security: same rules as web_fetch/web_browse.
+    // Сеть: те же правила, что у web_fetch/web_browse.
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).network
       : ctx.config.security?.network || DEFAULT_SECURITY_CONFIG.network;
@@ -65,7 +67,7 @@ export const downloadFileTool: ToolDefinition = {
       };
     }
 
-    // Path safety: resolve against baseDir and verify writability.
+    // Путь: резолв от baseDir + проверка записи.
     const resolved = safeResolvePath(ctx.baseDir, path);
     const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
@@ -78,9 +80,9 @@ export const downloadFileTool: ToolDefinition = {
       };
     }
 
-    // Same write guard as write_file/edit_file: an onboarding write allowlist
-    // and the always-on protected-path check (download_file could otherwise
-    // overwrite .env / keys that every other write tool refuses).
+    // Тот же guard записи, что у write/edit: онбординг-allowlist и always-on
+    // проверка защищённых путей (иначе скачиванием перезаписали бы .env/ключи,
+    // которые остальные тулы записи отклоняют).
     if (ctx.writePathAllowlist) {
       const ok = ctx.writePathAllowlist.some(
         (p) => resolve(p).toLowerCase() === resolve(resolved).toLowerCase(),
@@ -100,7 +102,7 @@ export const downloadFileTool: ToolDefinition = {
     const maxBytes = Number(args.max_bytes) > 0 ? Number(args.max_bytes) : MAX_DOWNLOAD_BYTES;
 
     try {
-      // Redirect hops are re-validated (SSRF) inside the helper.
+      // Редиректы перевадидируются (SSRF) внутри хелпера.
       const { response } = await fetchValidated(url, securityConfig, {
         signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000),
       });

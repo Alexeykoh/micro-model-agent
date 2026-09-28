@@ -1,8 +1,7 @@
+// Сканер содержимого файлов на опасные паттерны перед записью.
 import type { ContentScanConfig } from "../../config/types";
 
-/**
- * Result of content scanning
- */
+/** Итог сканирования: разрешено/запрет с причиной и совпадениями. */
 export interface ContentScanResult {
   allowed: boolean;
   reason?: string;
@@ -10,11 +9,10 @@ export interface ContentScanResult {
 }
 
 /**
- * Default dangerous patterns to scan for in file content.
- * NOTE: only genuinely dangerous constructs are listed. Legitimate runtime
- * APIs (process.exit, setTimeout/setInterval, template literals `${}`,
- * backtick strings) are NOT scanned — they are valid JS/TS and blocking
- * them breaks ordinary CLI code (false positives).
+ * Дефолтные опасные паттерны.
+ * В списке только реально опасные конструкции. Легитимные рантайм-API
+ * (process.exit, setTimeout/setInterval, шаблонные литералы `${}`, бэктики)
+ * НЕ сканируются — это валидный JS/TS, их блок ломает обычный CLI-код.
  */
 const DEFAULT_DANGEROUS_PATTERNS: RegExp[] = [
   /eval\(/gi,
@@ -36,19 +34,20 @@ const DEFAULT_DANGEROUS_PATTERNS: RegExp[] = [
 ];
 
 /**
- * Scan file content for dangerous patterns
+ * Проверить содержимое файла на опасные паттерны.
+ * Выключенный скан и пустой список паттернов разрешают всё.
  */
 export function scanContent(
   content: string,
   filePath: string,
   config?: ContentScanConfig,
 ): ContentScanResult {
-  // If scanning is disabled, allow everything
+  // Выключенный скан разрешает всё
   if (!config?.enabled) {
     return { allowed: true };
   }
 
-  // Use default patterns if none provided
+  // Без своих паттернов — дефолтные
   const patterns = config.dangerousPatterns?.length
     ? config.dangerousPatterns
     : DEFAULT_DANGEROUS_PATTERNS;

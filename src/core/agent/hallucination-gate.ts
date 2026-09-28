@@ -1,3 +1,4 @@
+/** Вентиль халлюцинаций: проверка финального ответа перед принятием. */
 import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
 import type { HallucinationDetector, HallucinationCheckResult } from "../../modules/hallucination/detector";
@@ -13,6 +14,7 @@ import { MAX_CLAIM_CHECK_RETRIES, MAX_HALLUCINATION_RETRIES } from "./constants"
 import type { LoopState } from "./loop-state";
 import type { OnMeta } from "../types";
 
+/** Вердикт вентиля: блокировать, предупредить, переспросить, выйти или принять. */
 export type HallucinationVerdict =
   /** Ответ заблокирован — цикл должен вернуть ошибку. */
   | { action: "block"; reason: string }
@@ -25,6 +27,7 @@ export type HallucinationVerdict =
   /** Ответ принят (включая подавленный повтор после отклонения аудита). */
   | { action: "accept" };
 
+/** Зависимости вентиля: состояние, текст ответа, контекст, вывод. */
 export interface HallucinationGateDeps {
   state: LoopState;
   textContent: string;
@@ -35,11 +38,11 @@ export interface HallucinationGateDeps {
   contextManager: ContextManager;
   onMeta?: OnMeta;
   onChunk?: (chunk: string) => void;
-  /** Chat verbosity — the uncertainty warn line prints only in verbose mode. */
+  /** Verbosity чата — строка о неуверенности печатается только в verbose. */
   verbose: boolean;
   /**
-   * Disk state of artifacts mentioned in the answer (resolved by the caller,
-   * which owns baseDir). Absent/empty skips the artifact-claim check.
+   * Состояние файлов из ответа на диске (резолвит вызывающий, владелец baseDir).
+   * Отсутствует/пусто — проверка заявлений пропускается.
    */
   artifacts?: ArtifactState[];
 }
@@ -56,9 +59,9 @@ export interface HallucinationGateDeps {
  * принимает цикл. Вся мутация состояния живёт здесь — цикл остаётся тонким.
  */
 /**
- * Recent tool outputs for the success-claim check: last 10 `role:"tool"`
- * messages (capped text each — the checker caps again). Same
- * `getActiveHistory` source the critic gate uses.
+ * Свежие выводы тулов для проверки заявлений: последние 10 сообщений
+ * role:"tool" (текст урезан; чекер режет повторно). Тот же источник
+ * getActiveHistory, что у вентиля критика.
  */
 function lastToolEvidence(deps: HallucinationGateDeps): Array<{ name?: string; ok?: boolean; text: string }> {
   let history: Array<{ role: string; name?: string; content?: unknown; success?: boolean }>;
@@ -82,6 +85,10 @@ function lastToolEvidence(deps: HallucinationGateDeps): Array<{ name?: string; o
 export class HallucinationGate {
   constructor(private readonly detector: HallucinationDetector) {}
 
+  /**
+   * Проверяет финальный текст ответа (детектор + заявления об успехе).
+   * @param deps состояние, текст, контекст; @returns структурированный вердикт.
+   */
   async evaluate(deps: HallucinationGateDeps): Promise<HallucinationVerdict> {
     const { state, textContent, logger } = deps;
 
@@ -107,9 +114,9 @@ export class HallucinationGate {
       return this.applyRetry(deps, textContent, result);
     }
 
-    // Success-claim check (ses_muih0ah5): a strong completion claim ("done",
-    // "published", "готово") while recent tool results show errors. One
-    // bounded re-check — then fail open (accept as-is), never a block.
+    // Проверка заявлений (ses_muih0ah5): сильное заявление о готовности
+    // («done», «published», «готово»), когда свежие результаты тулов — с ошибками.
+    // Одна ограниченная перепроверка — затем fail-open (принять как есть), не блок.
     const claimRetry = this.checkSuccessClaim(deps, textContent);
     if (claimRetry) return claimRetry;
 
@@ -117,8 +124,8 @@ export class HallucinationGate {
   }
 
   /**
-   * Shared retry injection: record the rejected answer, append the reason as
-   * `<system-summary>`, and ask the loop for another turn.
+   * Общий инжект повтора: фиксирует отклонённый ответ, дописывает причину
+   * как `<system-summary>` и просит цикл о следующем ходе.
    */
   private applyRetry(
     deps: HallucinationGateDeps,
@@ -175,13 +182,13 @@ export class HallucinationGate {
   }
 
   /**
-   * Deterministic claim-vs-evidence checks (no LLM). The original
-   * success-claim check plus artifact grounding (file missing/unparseable on
-   * disk) and output provenance (framed-as-executed output with no execution
-   * tool behind it). Each check class has its own bounded re-check (fail
-   * open) — one consumed budget must not shield a different lie in the same
-   * answer (observed: success-claim retry ate the single budget, then
-   * "output written to fizzbuzz_output.txt" passed with the file missing).
+   * Детерминированные проверки заявлений против улик (без LLM): исходная
+   * проверка success-claim плюс заземление артефактов (файл отсутствует/
+   * не парсится) и провенанс вывода (вывод подан как исполненный без
+   * исполняющего тула). У каждого класса свой ограниченный бюджет перепроверок
+   * (fail-open): съеденный бюджет одной проверки не должен экранировать другую
+   * ложь в том же ответе (наблюдалось: retry success-claim съел единый бюджет,
+   * и «output written to fizzbuzz_output.txt» прошёл при отсутствующем файле).
    */
   private checkSuccessClaim(
     deps: HallucinationGateDeps,
@@ -237,8 +244,8 @@ export class HallucinationGate {
   }
 
   /**
-   * Shared claim-retry injection: record the rejected answer, append the
-   * reason as `<system-summary>`, and ask the loop for another turn.
+   * Общий инжект claim-повтора: фиксирует отклонённый ответ, дописывает
+   * причину как `<system-summary>` и просит цикл о следующем ходе.
    */
   private retryClaim(
     deps: HallucinationGateDeps,
@@ -248,9 +255,9 @@ export class HallucinationGate {
   ): HallucinationVerdict {
     const { state, logger } = deps;
     state.iterHallucinationRetry = true;
-    // The re-answer restates a completed task and is naturally repetitive —
-    // do not burn the hallucination budget on its shape (same rationale as
-    // the audit-triggered downgrade in applyRetry).
+    // Переответ пересказывает выполненную задачу и естественно повторяется —
+    // бюджет халлюцинаций на его форму не жжём (та же логика, что даунгрейд
+    // в applyRetry после отклонения аудита).
     state.suppressRepetitionRetry = true;
     logger.diagnostic("warn", logLine);
     if (textContent) {
@@ -264,8 +271,8 @@ export class HallucinationGate {
   }
 
   private displayWarnLine(reason: string | undefined, deps: HallucinationGateDeps): void {
-    // Diagnostic: the chat keeps only user-facing notices; the model still gets
-    // the retry context and the verdict stays in the session/app logs.
+    // Диагностика: в чате только пользовательские уведомления; модель всё равно
+    // получает retry-контекст, вердикт остаётся в логах сессии/приложения.
     if (!deps.verbose) return;
     const warnLine = `${t("hall.uncertainty_prefix").trim()} ${reason ?? ""}`;
     if (deps.onMeta) {

@@ -1,24 +1,24 @@
 /**
- * Language registry and symbol extraction for the project index.
+ * Реестр языков и извлечение символов для индекса проекта.
  *
- * Adding a language = one entry in `RULES` + one or more extensions in
- * `EXT_TO_LANGUAGE`. Each rule declares whether the language is source code
- * (used for map ranking) and how to pull public/exported symbol names out of
- * a file. Extraction is regex-based on purpose (no parser dependency): it is
- * cheap, runs on every indexed file, and only needs enough structure to make
- * the project map useful — not a full AST.
+ * Новый язык = одна запись в `RULES` + одно или больше расширений в
+ * `EXT_TO_LANGUAGE`. Каждое правило объявляет, код ли это (для ранжирования
+ * карты) и как тянуть публичные/экспортные имена из файла. Извлечение
+ * regex-based осознанно (без зависимости от парсера): дёшево, гоняется на
+ * каждом индексируемом файле, и структуры хватает для полезности карты —
+ * полный AST не нужен.
  */
 
-/** Cap per file so a single generated file cannot blow up the map. */
+/** Кап на файл: один генерированный файл не раздувает карту. */
 export const MAX_SYMBOLS_PER_FILE = 40;
 
 interface LanguageRule {
-  /** True for programming languages — used to rank files in the map. */
+  /** True для языков программирования — ранжирует файлы в карте. */
   code: boolean;
   extract: (content: string) => string[];
 }
 
-/** Unique preserved-order names. */
+/** Уникальные имена с сохранением порядка. */
 function dedupe(names: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -31,7 +31,7 @@ function dedupe(names: string[]): string[] {
   return out;
 }
 
-/** Collect captured group 1 from a list of global (multiline) regexes. */
+/** Собирает группу 1 совпадений по списку глобальных (многострочных) regex'ов. */
 function collect(content: string, patterns: RegExp[]): string[] {
   const names: string[] = [];
   for (const re of patterns) {
@@ -45,7 +45,7 @@ function collect(content: string, patterns: RegExp[]): string[] {
   return names;
 }
 
-/** Names from `export { a, b as c }` / `export type { X }` clauses. */
+/** Имена из клауз `export { a, b as c }` / `export type { X }`. */
 function collectExportClauses(content: string): string[] {
   const names: string[] = [];
   const re = /export\s+(?:type\s+)?\{([^}]*)\}/g;
@@ -193,24 +193,24 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   ".less": "css",
 };
 
-/** Language id for a file extension (lowercase, with dot), or null if not indexed. */
+/** Id языка по расширению (lowercase, с точкой), или null если не индексируем. */
 export function languageIdForExt(ext: string): string | null {
   return EXT_TO_LANGUAGE[ext.toLowerCase()] ?? null;
 }
 
-/** True when the language is source code (affects project-map ranking). */
+/** True, если язык — исходный код (влияет на ранжирование карты). */
 export function isCodeLanguage(languageId: string): boolean {
   return RULES[languageId]?.code ?? false;
 }
 
-/** Extract public/exported symbol names from file content. */
+/** Извлекает публичные/экспортные имена символов из содержимого файла. */
 export function extractSymbols(content: string, languageId: string): string[] {
   const rule = RULES[languageId];
   if (!rule) return [];
   return dedupe(rule.extract(content)).slice(0, MAX_SYMBOLS_PER_FILE);
 }
 
-/** All indexed extensions (for docs/tests). */
+/** Все индексируемые расширения (для доков/тестов). */
 export function indexedExtensions(): string[] {
   return Object.keys(EXT_TO_LANGUAGE).sort();
 }

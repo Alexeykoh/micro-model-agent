@@ -1,3 +1,5 @@
+// JS-сниппеты для действий в странице: клик, ввод, скролл, разметка, извлечение текста.
+/** JS для клика по элементу с индексом из снапшота. */
 export function buildClickScript(elementIndex: number): string {
   return `
     const el = document.querySelector('[data-browser-index="${elementIndex}"]');
@@ -6,6 +8,7 @@ export function buildClickScript(elementIndex: number): string {
   `;
 }
 
+/** JS для ввода текста в поле: фокус, установка значения, события input/change. */
 export function buildTypeScript(elementIndex: number, text: string): string {
   const escaped = JSON.stringify(text);
   return `
@@ -19,6 +22,7 @@ export function buildTypeScript(elementIndex: number, text: string): string {
   `;
 }
 
+/** JS для прокрутки страницы в заданном направлении. */
 export function buildScrollScript(direction: "up" | "down" | "top" | "bottom"): string {
   switch (direction) {
     case "down":
@@ -32,6 +36,7 @@ export function buildScrollScript(direction: "up" | "down" | "top" | "bottom"): 
   }
 }
 
+/** JS для простановки интерактивным элементам атрибутов data-browser-index. */
 export function buildIndexInjectionScript(): string {
   return `
     const selectors = 'a[href], button, input, textarea, select, [role="button"], [role="link"], [role="textbox"], [role="checkbox"], [role="radio"], [contenteditable="true"]';
@@ -45,6 +50,7 @@ export function buildIndexInjectionScript(): string {
   `;
 }
 
+/** JS для извлечения видимого текстового содержимого страницы построчно. */
 export function buildTextExtractionScript(): string {
   return `
     const contentTags = new Set(['h1','h2','h3','h4','h5','h6','p','li','article','main','section','blockquote','pre','td','th','dt','dd','figcaption']);

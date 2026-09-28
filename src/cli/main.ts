@@ -1,3 +1,4 @@
+// Точка входа CLI: parse, one-shot/REPL/web-ветки, JSON-режим, автоапдейт.
 import { createProgram } from "./commands";
 import { bootstrap, setOneShotMode, applyReasoningCliOverride } from "../core/bootstrap";
 import { Repl } from "./repl";
@@ -25,18 +26,18 @@ import type { AgentResult } from "../core/types";
 import { globalMmaDir } from "../config/paths";
 
 /**
- * Set only for one-shot `--json` runs (a positional prompt exists). Module-scoped
- * so the top-level `main().catch` can still emit a valid document when `bootstrap`
- * (or anything before the JSON branch) throws with empty stdout. Interactive
- * `mma --json` (no prompt) must not set it, or a REPL crash would emit JSON.
+ * Взведён только для one-shot `--json`-прогонов (позиционный промпт есть). На уровне
+ * модуля, чтобы топ-уровневый `main().catch` отдал валидный документ, даже когда
+ * `bootstrap` (или что-то до JSON-ветки) бросил с пустым stdout. Интерактивный
+ * `mma --json` (без промпта) его не ставит, иначе краш REPL эмитил бы JSON.
  */
 let jsonMode = false;
 
 /**
- * Resolve the UI locale BEFORE `createProgram()`: command descriptions and the
- * typo-guard suggestion are built with `t()` at registration time, so setting
- * the locale only in bootstrap left `--help` and near-miss hints in English
- * under `locale: ru`. Cheap, defensive file read — no full config load.
+ * Резолвит UI-локаль ДО `createProgram()`: описания команд и подсказка-тайпоупор
+ * строятся через `t()` в момент регистрации, так что установка локали только в
+ * bootstrap оставляла `--help` и near-miss хинты английскими при `locale: ru`.
+ * Дешёвое защитное чтение файла, не полный лоад конфига.
  */
 function resolveEarlyLocale(): string | undefined {
   const env = process.env.MMA_LOCALE;
@@ -53,13 +54,13 @@ function resolveEarlyLocale(): string | undefined {
   return undefined;
 }
 
-/** Fire-and-forget self-update in the background (never blocks startup). */
+/** Fire-and-forget самоапдейт фоном (старт никогда не блокирует). */
 function startAutoUpdate(config: {
   updater: { enabled: boolean; checkOnStart: boolean; autoInstall: boolean; intervalMs: number };
 }): UpdaterModule | undefined {
-  // Dev runs load TypeScript sources; the published bundle runs dist/main.js.
-  // Never auto-update from a checkout — its package.json version may trail npm
-  // and global-installing over the user's install is destructive.
+  // Dev-прогоны грузят TypeScript-исходники; опубликованный бандл — dist/main.js.
+  // Из чекаута не автоапдейтимся: его package.json может отставать от npm, а
+  // global-install поверх юзерской установки деструктивен.
   if (isDevEntryPath(fileURLToPath(import.meta.url))) return undefined;
   try {
     const module = new UpdaterModule(config.updater, readMmaVersion(), "micro-models-agent", {
@@ -70,21 +71,20 @@ function startAutoUpdate(config: {
     module.start();
     return module;
   } catch {
-    // Auto-update is best-effort; never let it crash startup.
+    // Автоапдейт best-effort; ронять старт ему нельзя.
     return undefined;
   }
 }
 
 async function main(): Promise<void> {
-  // Install global crash handlers first — every crash lands in
-  // ~/.mma/logs/crash.jsonl (with env report) instead of a bare stderr stack.
+  // Глобальные краш-хендлеры первым делом: каждый краш ложится в
+  // ~/.mma/logs/crash.jsonl (с env-репортом), а не голым стеком в stderr.
   installCrashHandlers();
 
-  // Eagerly create the default channel so it subscribes to `defaultOutputBus`
-  // BEFORE any config/bootstrap code can emit (config warnings, migration
-  // summary, updater notices). The channel is created lazily by
-  // `getDefaultChannel()`; without this call every bus event emitted before the
-  // first channel use would have no terminal subscriber and be dropped.
+  // Канал-дефолт создаём жадно, чтобы подписался на `defaultOutputBus` ДО того, как
+  // конфиг/bootstrap что-то эмитит (варнинги конфига, сводка миграции, апдейтер).
+  // Канал ленив через `getDefaultChannel()`: без этого вызова каждое событие шины
+  // до первого использования канала осталось бы без терминального подписчика и дропнулось.
   getDefaultChannel();
 
   setLocale(resolveEarlyLocale() ?? "en");
@@ -121,8 +121,8 @@ async function main(): Promise<void> {
 
   const cmdNames = new Set(program.commands.map((c) => c.name()));
   const opts = program.opts();
-  // commander turns `--no-agents-md` into the negatable `agentsMd` boolean
-  // (default true); there is no `noAgentsMd` key.
+  // commander превращает `--no-agents-md` в отрицаемый `agentsMd`-bool
+  // (дефолт true); ключа `noAgentsMd` нет.
   const noAgentsMd = opts.agentsMd === false;
   const projectDir = opts.dir;
   const exitOnComplete = opts.exitOnComplete === true;
@@ -131,18 +131,17 @@ async function main(): Promise<void> {
   const verboseOpt = opts.verbose === true;
   const contextLog = opts.contextLog === true;
 
-  // Quiet chat hides structured info logs; --verbose (or a verbose config)
-  // brings them back. Set before bootstrap so its own logs respect it.
-  // Loop diagnostics (`Logger.diagnostic`) follow the same visibility rule.
+  // Quiet-чат прячет структурные info-логи; --verbose (или verbose-конфиг) их
+  // возвращает. Ставим до bootstrap, чтобы его собственные логи уважали флаг.
+  // Диагностика петли (`Logger.diagnostic`) следует тому же правилу видимости.
   const applyLogVisibility = (verbose: boolean): void => {
     getDefaultChannel().setSuppressInfoLogs(!verbose);
     getDefaultChannel().setShowDiagnostics(verbose);
   };
   applyLogVisibility(verboseOpt);
 
-  // `web` is long-running: its command action is a no-op and the server is
-  // started here, after parse, so it survives the one-shot exit hook (which is
-  // intentionally not attached to `web` in commands.ts).
+  // `web` долгоживущий: его action — no-op, сервер стартует здесь, после parse,
+  // чтобы пережить one-shot exit-хук (на `web` в commands.ts он осознанно не вешается).
   if (program.args[0] === "web") {
     const webOpts = (program.commands.find((c) => c.name() === "web")?.opts() ?? {}) as {
       port?: string;
@@ -175,9 +174,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Typo guard: a misspelled subcommand must not be silently sent to the LLM
-  // as a prompt ("mma sesion list" → chat). Warn and exit when args[0] is a
-  // near-miss of a known command; free-form prompts never look like that.
+  // Тайпо-сторож: субкоманда с опечаткой не должна молча уходить в LLM как
+  // промпт ("mma sesion list" → чат). На near-miss известной команды — warn и выход;
+  // свободные промпты так не выглядят никогда.
   if (program.args.length > 0 && !onboardingStart) {
     const suggestion = closestCommand(program.args[0], [...cmdNames]);
     if (suggestion && suggestion !== program.args[0]) {
@@ -190,13 +189,12 @@ async function main(): Promise<void> {
   }
 
   if (program.args.length > 0 && !onboardingStart) {
-    // `--json` owns stdout for ONE-SHOT runs only: silence the human channel
-    // before bootstrap so config warnings cannot pollute the machine-readable
-    // document, and subscribe the sink BEFORE bootstrap so warn/error events
-    // emitted during bootstrap are captured and surfaced as diagnostics.
-    // Info-level migration notices are intentionally not captured (diagnostics
-    // are warn/error only). A no-prompt invocation (`mma --json`) opens the
-    // interactive REPL, so neither quiet nor the sink is set there.
+    // `--json` владеет stdout ТОЛЬКО в one-shot: гасим человеческий канал до
+    // bootstrap, чтобы варнинги конфига не запачкали машиночитаемый документ,
+    // и подписываем sink ДО bootstrap, чтобы warn/error bootstrap попали в
+    // captured-диагностику. Info-нотисы миграции осознанно не каптурятся
+    // (диагностика — только warn/error). Вызов без промпта (`mma --json`)
+    // открывает интерактивный REPL: ни quiet, ни sink там не ставятся.
     if (jsonOpt) {
       jsonMode = true;
       getDefaultChannel().setQuiet(true);
@@ -226,8 +224,8 @@ async function main(): Promise<void> {
       getDefaultChannel().writeLine(pc.yellow(`  ${t("cli.first_run_oneshot")}`), "stderr");
     }
 
-    // Surface the loaded-vs-configured context mismatch in one-shot mode too
-    // (previously only Repl.start() rendered it). Skipped under --json.
+    // Расхождение загруженного и настроенного контекста показываем и в one-shot
+    // (раньше только Repl.start() рендерил). Под --json скипаем.
     if (contextProbe && !jsonOpt) {
       try {
         const probe = await contextProbe;
@@ -249,7 +247,7 @@ async function main(): Promise<void> {
           }
         }
       } catch {
-        // best-effort
+        // best-effort.
       }
     }
 
@@ -260,9 +258,9 @@ async function main(): Promise<void> {
       try {
         result = await agent.run(prompt);
       } catch (err) {
-        // --json must never emit a raw stack trace: an AbortError or a
-        // crashing tool/plugin still yields a valid machine-readable result,
-        // and shutdown/waitForIdle still run.
+        // --json не эмитит сырые стеки никогда: и AbortError, и рухнувший
+        // тул/плагин дают валидный машиночитаемый результат; shutdown/waitForIdle
+        // всё равно отрабатывают.
         const message = errMsg(err);
         agent.shutdown();
         const diagnostics = jsonSink?.diagnostics() ?? [];
@@ -279,9 +277,9 @@ async function main(): Promise<void> {
       process.exit(result.success ? 0 : 1);
     }
 
-    // TODO(output): one-shot runs don't surface the context-probe warning
-    // (only Repl.start() renders it). Surface it here when bootstrap exposes
-    // the probe result to this branch.
+    // TODO(output): one-shot прогоны не показывают варнинг контекст-пробника
+    // (рендерит только Repl.start()). Показать здесь, когда bootstrap отдаст
+    // результат пробника в эту ветку.
     const renderer = new Renderer({
       spinner: config.ui?.spinner ?? true,
       baseDir,
@@ -311,8 +309,8 @@ async function main(): Promise<void> {
         (reasoning) => renderer.reasoning(reasoning),
       );
     } catch (err) {
-      // A throw from the agent loop must not skip shutdown/updater or dump a
-      // bare stack — surface it as a clean error result.
+      // Throw из цикла агента не должен скипать shutdown/updater или дампить
+      // голый стек: показываем как чистый error-результат.
       result = {
         success: false,
         text: "",
@@ -343,27 +341,26 @@ async function main(): Promise<void> {
         const { hasDomainFiles } = await import("../config/domains");
         hasAnyConfig = hasDomainFiles(mmaDir);
       } catch {
-        // Domain probing is best-effort: a missing/broken module must not block
-        // the CLI. Falls back to the legacy config.json check above.
+        // Пробник доменов best-effort: отсутствующий/битый модуль не блокирует
+        // CLI. Фолбэк — проверка legacy config.json выше.
       }
     }
 
     const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");
 
-    // First run: collect settings, persist them, then RE-EXEC the CLI in a fresh
-    // process and exit. The wizard and the REPL must not share a process: on
-    // Bun/Windows the raw-mode LineEditor only receives keypresses when it is
-    // the first consumer of stdin, and reusing one editor across
-    // wizard → bootstrap → REPL leaks prompt/frame state. The relaunched
-    // process sees the saved config, skips the wizard, and creates its editor
-    // first thing. `MMA_POST_SETUP=1` guards against a re-run loop.
+    // Первый запуск: собираем настройки, персистим, затем ПЕРЕИСПОЛНЯЕМ CLI в свежем
+    // процессе и выходим. Визард и REPL не делят процесс: на Bun/Windows raw-режимный
+    // LineEditor получает keypress, только будучи первым потребителем stdin, а
+    // переиспользование одного редактора через wizard → bootstrap → REPL протекает
+    // состоянием промпта/кадра. Перезапущенный процесс видит сохранённый конфиг,
+    // скипает визард и создаёт редактор первым делом. `MMA_POST_SETUP=1` сторожит
+    // от петли перезапуска.
     if (!hasAnyConfig && !exitOnComplete && process.env.MMA_POST_SETUP !== "1") {
       getDefaultChannel().writeLine(`\n  ${t("cli.first_run")}\n`);
       const answers = await runSetup();
       const { config } = loadConfig({ configDir: mmaDir, projectConfigPath });
-      // Preserve the CLI --reasoning override (bootstrap in the fresh process
-      // would apply it too, but persist it now so the child reads the final
-      // config).
+      // Сохраняем CLI-оверрайд --reasoning (bootstrap в свежем процессе применил бы
+      // его тоже, но персистим сейчас, чтобы ребёнок прочитал финальный конфиг).
       applyReasoningCliOverride(config, reasoningLevel);
       applyAnswersToConfig(config, answers);
       saveConfig(config, legacyConfigPath, dirname(legacyConfigPath));
@@ -410,8 +407,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  // A throw before/during bootstrap would otherwise leave `--json` callers with
-  // empty stdout; emit a valid failure document instead of a human stack.
+  // Throw до/во время bootstrap иначе оставил бы `--json`-вызывающих с пустым
+  // stdout; эмитим валидный failure-документ вместо человеческого стека.
   if (jsonMode) {
     writeMachineJson(buildJsonError(errMsg(err)));
   } else {
@@ -423,4 +420,5 @@ main().catch((err) => {
   process.exit(1);
 });
 
+/** Точка входа CLI (диспатч веток + топ-уровневый catch для `--json`). */
 export { main };

@@ -1,3 +1,4 @@
+// Запуск LSP-серверов на Windows: резолв shim (.cmd/.bat) и строка для cmd.exe.
 import { delimiter, join } from "path";
 import { existsSync } from "fs";
 import { platform } from "os";
@@ -5,16 +6,12 @@ import { platform } from "os";
 const WIN_EXTS = [".cmd", ".bat", ".exe", ".com"];
 
 /**
- * Resolve the command string passed to `child_process.spawn` on Windows.
- *
- * Node's `spawn` cannot execute `.cmd`/`.bat` shims directly without a shell,
- * and a bare `npx` fails with `spawn npx ENOENT` because on Windows the
- * real executable is `npx.cmd`. This returns the first existing shim
- * (`npx.cmd`, `npx.bat`, `npx.exe`, ...) found on PATH, or the bare command
- * when nothing exists (the spawn will then fail with a meaningful ENOENT).
- *
- * Non-Windows platforms and commands that already carry an extension or a
- * path separator are returned unchanged.
+ * Резолв команды для `child_process.spawn` на Windows.
+ * Node-`spawn` не исполняет `.cmd`/`.bat`-шимы напрямую без shell, а голый
+ * `npx` падает с `spawn npx ENOENT` — на Windows реальный бинарник это
+ * `npx.cmd`. Возвращает первый найденный на PATH шим (`npx.cmd`, `npx.bat`,
+ * `npx.exe`, …), а если ничего нет — голую команду (spawn упадёт с понятным
+ * ENOENT). Не-Windows и команды с расширением/сепаратором — как есть.
  */
 export function resolveSpawnCommand(
   command: string,
@@ -22,7 +19,7 @@ export function resolveSpawnCommand(
   pathEnv: string = process.env.PATH ?? "",
 ): string {
   if (platformName !== "win32") return command;
-  // Already a path or has an extension — pass through.
+  // Уже путь или с расширением — пропустить как есть.
   if (
     command.includes("/") ||
     command.includes("\\") ||
@@ -41,19 +38,15 @@ export function resolveSpawnCommand(
 }
 
 /**
- * Join a resolved command and its args into a single cmd.exe command line.
- *
- * Under Node on Windows, `spawn` of a `.cmd`/`.bat` shim WITHOUT a shell throws
- * `spawn EINVAL` (CreateProcess cannot run batch files directly). Resolving
- * `npx` → `npx.cmd` fixes the old `ENOENT` but not the `EINVAL` — the spawn
- * still has no shell. The reliable fix is to run the whole command line through
- * `cmd.exe /d /s /c` (i.e. `spawn(line, { shell: true })`). This helper builds
- * that line, quoting any argument that contains cmd.exe metacharacters so the
- * package names and flags in LSP configs (`typescript-language-server --stdio`,
- * `pyright --stdio`) survive the round-trip.
- *
- * Non-Windows platforms never call this (they spawn the resolved command +
- * args directly, no shell).
+ * Склейка резолвленной команды и args в одну строку для cmd.exe.
+ * Под Node на Windows `spawn` `.cmd`/`.bat`-шима БЕЗ shell бросает
+ * `spawn EINVAL` (CreateProcess не запускает батники напрямую). Резолв
+ * `npx` → `npx.cmd` чинит старый `ENOENT`, но не `EINVAL` — shell'а всё равно
+ * нет. Надёжный фикс — гнать всю строку через `cmd.exe /d /s /c`
+ * (т.е. `spawn(line, { shell: true })`). Хелпер строит строку, квотируя
+ * аргументы с cmd-метасимволами, чтобы имена пакетов и флаги LSP-конфигов
+ * (`typescript-language-server --stdio`, `pyright --stdio`) пережили round-trip.
+ * Не-Windows сюда не ходят (спавнят команду + args напрямую, без shell).
  */
 export function buildWinCommandLine(command: string, args: string[]): string {
   const quote = (part: string): string => {

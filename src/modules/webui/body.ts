@@ -1,17 +1,17 @@
+// Единый парсер JSON-тела для POST-хендлеров `mma web`.
 /**
- * Single JSON body parser for the `mma web` POST handlers.
- *
- * Every POST endpoint used to repeat the same `JSON.parse` try/catch plus the
- * object-shape narrowing (~12 sites). Behavior contract, preserved exactly:
- * - malformed JSON → `null` (caller answers 400 `invalid JSON`);
- * - valid JSON that is not an object (e.g. `"str"`, `42`) → `{}` so the
- *   endpoint's own validation rejects it with its specific error;
- * - transport errors (overflow, socket) still reject and map via `readBodyError`.
+ * Раньше каждая POST-точка повторяла тот же try/catch `JSON.parse` плюс сужение
+ * до объекта (~12 мест). Контракт поведения, сохраняется точь-в-точь:
+ * - битый JSON → `null` (вызывающий отвечает 400 `invalid JSON`);
+ * - валидный JSON-не-объект (напр. `"str"`, `42`) → `{}`, чтобы собственная
+ *   валидация точки отвергла его своей специфичной ошибкой;
+ * - транспортные ошибки (переполнение, сокет) по-прежнему реджектятся и
+ *   маппятся через `readBodyError`.
  */
 import type { IncomingMessage } from "node:http";
 import { readBody } from "./util";
 
-/** Parse a raw body; `null` means malformed JSON. Never throws. */
+/** Парсит сырое тело; `null` — битый JSON. Не бросает. */
 export function parseJsonBody(raw: string): Record<string, unknown> | null {
   let parsed: unknown;
   try {
@@ -25,8 +25,8 @@ export function parseJsonBody(raw: string): Record<string, unknown> | null {
 }
 
 /**
- * Read the request body (up to `cap`) and parse it as JSON.
- * Resolves to `null` on malformed JSON; rejects on transport errors.
+ * Читает тело запроса (до `cap`) и парсит как JSON.
+ * Резолвится в `null` на битом JSON; транспортные ошибки реджектятся.
  */
 export function readJsonBody(
   req: IncomingMessage,

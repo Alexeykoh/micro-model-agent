@@ -1,11 +1,14 @@
+/** Scope-запросы субагентов: детект отказов, коллектор, формат/парсинг. */
 import type { AgentPlugin } from "../modules/types";
 
+/** Запрос скоупа: файлы, read-only флаг, причина. */
 export interface ScopeRequest {
   files: string[];
   read_only: boolean;
   reason: string;
 }
 
+/** Тулы записи (для классификации отказа как write). */
 const WRITE_TOOLS = new Set([
   "write_file",
   "edit_file",
@@ -16,8 +19,8 @@ const WRITE_TOOLS = new Set([
 ]);
 
 /**
- * Scope denials funnel through i18n keys file.path_not_allowed(_short)
- * ("Path not allowed" / "Путь недопустим") and chunk-query's "[SCOPE]" prefix.
+ * Отказы скоупа идут через i18n-ключи file.path_not_allowed(_short)
+ * ("Path not allowed" / "Путь недопустим") и "[SCOPE]"-префикс chunk-query.
  */
 export function isPathDenialOutput(output: string | undefined): boolean {
   if (!output) return false;
@@ -28,11 +31,13 @@ export function isPathDenialOutput(output: string | undefined): boolean {
   );
 }
 
+/** Отклонённый путь: сам путь + был ли write-доступом. */
 interface DeniedPath {
   path: string;
   write: boolean;
 }
 
+/** Извлекает путь из аргументов tool call (по именам ключей, иначе по виду). */
 function pathArgOf(args: Record<string, unknown> | undefined): string {
   if (!args) return "";
   for (const key of ["path", "file", "input_path", "target", "source", "destination", "dir"]) {
@@ -45,7 +50,7 @@ function pathArgOf(args: Record<string, unknown> | undefined): string {
   return "";
 }
 
-/** Observes the sub-agent's tool results and records scope-denied paths. */
+/** Наблюдает результаты тулов субагента, копит scope-отказы по путям. */
 export class ScopeDenialCollector {
   private denied = new Map<string, DeniedPath>();
 
@@ -65,11 +70,12 @@ export class ScopeDenialCollector {
     },
   };
 
+  /** Все отказы дедуплицированно. */
   getDenied(): DeniedPath[] {
     return Array.from(this.denied.values());
   }
 
-  /** read_only=true only when every denial was a pure read denial. */
+  /** read_only=true — только если все отказы были чисто read. */
   toScopeRequest(reason = "sub-agent was denied access to files needed for the task"): ScopeRequest | null {
     const all = this.getDenied();
     if (all.length === 0) return null;
@@ -81,10 +87,12 @@ export class ScopeDenialCollector {
   }
 }
 
+/** Сериализует запрос в `<scope-request>`-блок результата. */
 export function formatScopeRequest(req: ScopeRequest): string {
   return `<scope-request>${JSON.stringify(req)}</scope-request>`;
 }
 
+/** Парсит `<scope-request>`-блок из текста. Битый/пустой — null. */
 export function parseScopeRequest(text: string | undefined): ScopeRequest | null {
   if (!text) return null;
   const match = text.match(/<scope-request>([\s\S]*?)<\/scope-request>/);

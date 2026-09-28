@@ -1,6 +1,7 @@
+// JSON-документы `--json`-прогонов: результат и ошибка с диагностикой.
 import type { AgentResult } from "../core/types";
 
-/** A warn/error captured from the output bus during a `--json` run. */
+/** Warn/error с шины вывода за `--json`-прогон. */
 export interface JsonDiagnostic {
   level: string;
   source: string;
@@ -8,9 +9,9 @@ export interface JsonDiagnostic {
 }
 
 /**
- * Machine-readable result document for a completed `--json` run. The
- * `diagnostics` array carries the warn/error bus events the human channel
- * suppressed, so a machine consumer sees probe/config/security failures.
+ * Машиночитаемый документ завершённого `--json`-прогона. Массив `diagnostics`
+ * несёт warn/error-события шины, погашенные человеческим каналом, чтобы
+ * машинный потребитель видел провалы проб/конфига/безопасности.
  */
 export function buildJsonResult(result: AgentResult, diagnostics: JsonDiagnostic[]) {
   return {
@@ -30,7 +31,7 @@ export function buildJsonResult(result: AgentResult, diagnostics: JsonDiagnostic
   };
 }
 
-/** Failure document for a throw that never produced an `AgentResult`. */
+/** Документ провала для throw, так и не давшего `AgentResult`. */
 export function buildJsonError(error: string, diagnostics: JsonDiagnostic[] = []) {
   return {
     success: false,

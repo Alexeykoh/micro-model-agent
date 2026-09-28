@@ -1,14 +1,15 @@
+// Soft-guard чувствительных путей (.git, .env, ключи): всегда включён, требует подтверждения.
+// Не жёсткий блок — тул возвращает директиву «спроси пользователя».
 import { resolve, relative } from "path";
 import { toForwardSlash } from "../../tools/path-utils";
 import { logSecurityBlock } from "./audit-log";
 import { t } from "../../i18n/index";
 
 /**
- * Sensitive paths that require explicit user confirmation before modification
- * (VCS internals + secrets/env). This guard is ALWAYS ON — independent of
- * `security.paths.enabled` — because irreversibly deleting `.git/config` or
- * rewriting `.env`/keys is a data-loss risk. It does NOT hard-block: the tool
- * returns a directive telling the model to ask the user and wait.
+ * Чувствительные пути, требующие явного подтверждения (внутренности VCS + секреты/env).
+ * Гард ВСЕГДА ВКЛЮЧЁН, независимо от `security.paths.enabled`, — удаление `.git/config`
+ * или перезапись `.env`/ключей необратимы. Не хард-блок: тул возвращает директиву
+ * «спроси пользователя и жди».
  */
 const DIR_PATTERNS = [".git", ".hg", ".svn"];
 
@@ -34,9 +35,9 @@ const EXT_PATTERNS = [
 ];
 
 /**
- * Returns the matching protected pattern for `targetPath` (relative to
- * `baseDir`), or `undefined` when the path is ordinary. Matching is
- * case-insensitive and separator-agnostic (win32-safe).
+ * Совпавший защищённый паттерн для `targetPath` (относительно `baseDir`)
+ * или `undefined` для обычного пути. Сравнение регистронезависимо
+ * и не зависит от сепаратора (win32-safe).
  */
 export function matchProtectedPath(baseDir: string, targetPath: string): string | undefined {
   const rel = toForwardSlash(relative(resolve(baseDir), resolve(targetPath))).toLowerCase();
@@ -63,9 +64,8 @@ export function matchProtectedPath(baseDir: string, targetPath: string): string 
 }
 
 /**
- * Guard helper for mutating file tools: returns a model-facing refusal that
- * tells the model to ask the user, plus an audit entry; `undefined` when the
- * path is ordinary. Never hard-blocks — the user can still approve.
+ * Гард для мутирующих файловых тулов: отказ «спроси пользователя» + запись в аудит,
+ * `undefined` — путь обычный. Не хард-блок: пользователь вправе разрешить.
  */
 export function protectedPathBlock(
   ctx: { sessionId?: string; baseDir: string },

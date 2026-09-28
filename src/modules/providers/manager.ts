@@ -1,3 +1,4 @@
+// Менеджер провайдеров: активный провайдер + модель в рантайме, hot-swap, кеш сборки.
 // src/modules/providers/manager.ts
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderConfig, ProviderEntry } from "../../config/types";
@@ -12,17 +13,17 @@ export interface ProviderManagerOptions {
   retry?: import("../../config/types").RetryConfig;
   rateLimits?: import("../../config/types").RateLimitConfig;
   registry?: ProviderRegistry;
-  /** Live conversation id, forwarded to providers (`x-opencode-session`). */
+  /** Живой id беседы, прокидывается провайдерам (`x-opencode-session`). */
   getSessionId?: () => string | undefined;
-  /** Optional logger for LLM request/response diagnostics. */
+  /** Опциональный логгер диагностики LLM-запросов/ответов. */
   logger?: import("../../logger/app-logger").Logger;
 }
 
 /**
- * Manages the active provider + model at runtime. Supports several configured
- * providers (`ProviderConfig.entries`) with hot-swap (`switch`, `setModel`).
- * Legacy single-provider configs (`{type, baseUrl, apiKey}`) are normalized
- * into a single-entry list, so existing configs keep working.
+ * Рулит активным провайдером + моделью в рантайме. Несколько настроенных
+ * провайдеров (`ProviderConfig.entries`) с hot-swap (`switch`, `setModel`).
+ * Легаси-конфиги (`{type, baseUrl, apiKey}`) нормализуются в список из одной
+ * записи — старые конфиги продолжают работать.
  */
 export class ProviderManager {
   private entries: ProviderEntry[];
@@ -42,27 +43,29 @@ export class ProviderManager {
     this.model = "";
   }
 
-  /** The model the active provider is built with. */
+  /** Модель, с которой собран активный провайдер. */
   get activeModel(): string {
     return this.model;
   }
 
-  /** Name/label of the active provider. */
+  /** Имя/label активного провайдера. */
   get activeName(): string {
     return this.activeProviderName;
   }
 
+  /** Активный провайдер (строится и кешируется). */
   get active(): LLMProvider {
     return this.build(this.activeProviderName);
   }
 
+  /** Активная запись (неизвестная — ошибка). */
   get activeEntry(): ProviderEntry {
     const entry = this.entryByName(this.activeProviderName);
     if (!entry) throw new Error(`Unknown active provider "${this.activeProviderName}"`);
     return entry;
   }
 
-  /** All configured entries (resolved with preset metadata), priority-ordered. */
+  /** Все записи (с метаданными пресетов), по приоритету. */
   list(): Array<ProviderEntry & { label: string }> {
     return this.entries
       .map((e) => {
@@ -74,14 +77,15 @@ export class ProviderManager {
       .map(({ e }) => e);
   }
 
+  /** Имена всех записей по приоритету. */
   listNames(): string[] {
     return this.list().map((e) => e.label);
   }
 
   /**
-   * CODE-ONLY capability routing (Phase 4.4): pick the first entry (priority
-   * order) whose preset capabilities and context window satisfy `needs`.
-   * Never exposed to the LLM — the model must not choose providers.
+   * CODE-ONLY роутинг capabilities: первая запись (по приоритету), чей пресет
+   * и окно контекста закрывают `needs`. Модели не exposed — модель провайдеров
+   * не выбирает.
    */
   pickFor(needs: {
     vision?: boolean;
@@ -89,7 +93,7 @@ export class ProviderManager {
     minContext?: number;
   }): string | undefined {
     const globalWindow = this.opts.contextWindow;
-    // No constraints → keep the current active provider.
+    // Без ограничений — оставить текущий активный провайдер.
     if (!needs.vision && !needs.tools && needs.minContext === undefined) {
       return this.activeProviderName;
     }
@@ -108,7 +112,7 @@ export class ProviderManager {
     return undefined;
   }
 
-  /** Hot-swap to a named provider; rebuild the active provider. */
+  /** Hot-swap на именованный провайдер; пересобрать активный. */
   switch(name: string, model?: string): LLMProvider {
     if (!this.entryByName(name)) {
       throw new Error(`Unknown provider "${name}"`);
@@ -118,7 +122,7 @@ export class ProviderManager {
     return this.active;
   }
 
-  /** Rebuild the active provider with a new model. */
+  /** Пересобрать активный провайдер с новой моделью. */
   setModel(model: string): LLMProvider {
     this.model = model;
     // Кэш ключуется `${name}|${model}`; старые записи под прежнюю модель
@@ -128,14 +132,14 @@ export class ProviderManager {
     return this.active;
   }
 
-  /** Serialize back to ProviderConfig (keeps active/entries in sync). */
+  /** Сериализовать обратно в ProviderConfig (active/entries в синхроне). */
   toConfig(fallback?: boolean): ProviderConfig {
     const active = this.activeEntry;
     return {
       active: this.activeProviderName,
       entries: this.entries,
-      // Preserve the configured value — hardcoding false silently dropped
-      // the user's provider.fallback on every hot-swap.
+      // Сохранить настроенное значение — хардкод false молча ронял
+      // пользовательский provider.fallback при каждом hot-swap.
       fallback: fallback ?? this.lastKnownFallback ?? false,
       type: active.type,
       baseUrl: active.baseUrl,
@@ -147,7 +151,7 @@ export class ProviderManager {
     if (Array.isArray(config.entries) && config.entries.length > 0) {
       return config.entries.map((e) => ({ ...e, label: e.label || e.type }));
     }
-    // Legacy single-provider form (or empty config) → one default entry.
+    // Легаси-форма одного провайдера (или пустой конфиг) → одна дефолтная запись.
     return [
       {
         type: config.type ?? "openai-compat",
@@ -198,13 +202,13 @@ export class ProviderManager {
     return { ...spec.capabilities, cache: resolveCacheCapability(spec, entry.cache) };
   }
 
-  /** Clear the build cache (on config change). */
+  /** Очистить кеш сборки (при смене конфига). */
   resetCache(): void {
     this.cache.clear();
   }
 }
 
-/** Export preset metadata for the CLI (label/capabilities/baseUrl). */
+/** Метаданные пресетов для CLI (label/capabilities/baseUrl). */
 export function presetOf(type: string): { label: string; baseUrl: string } | undefined {
   const spec = BUILTIN_PROVIDERS.find((p) => p.type === type);
   if (!spec) return undefined;
@@ -212,11 +216,11 @@ export function presetOf(type: string): { label: string; baseUrl: string } | und
 }
 
 /**
- * Resolve the ACTIVE provider endpoint for out-of-band calls (context probe,
- * model autoload, reasoning-probe cache key). The legacy flat fields
- * (`type`/`baseUrl`/`apiKey`) mirror whatever was active when the config was
- * last written and go stale after a hot-swapped `/provider use` — entries are
- * the source of truth. Falls back to the flat fields for legacy configs.
+ * Эндпоинт АКТИВНОГО провайдера для внеполосных вызовов (context probe,
+ * автозагрузка моделей, ключ кеша reasoning-пробы). Легаси-плоские поля
+ * (`type`/`baseUrl`/`apiKey`) отражают активное на момент последней записи и
+ * протухают после hot-swap `/provider use` — истина в entries. Фолбэк на
+ * плоские поля для легаси-конфигов.
  */
 export function activeProviderEndpoint(
   config?: Pick<ProviderConfig, "entries" | "active" | "type" | "baseUrl" | "apiKey">,

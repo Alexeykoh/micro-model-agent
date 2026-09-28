@@ -1,3 +1,4 @@
+// Стартовый health-check проекта: предсуществующие ошибки в промпт до начала работы.
 import { existsSync } from "fs";
 import { join } from "path";
 import { spawn } from "child_process";
@@ -11,36 +12,38 @@ import { findProjectRoot, resolveTscCommand } from "./project-root";
 import { estimateTokens } from "../../llm/token-counter";
 import { errMsg } from "../../utils";
 
-/** Startup check never examines more than this many files via LSP. */
+/** Стартовый чек смотрит не больше этого числа файлов через LSP. */
 const STARTUP_CHECK_FILE_CAP = 5;
-/** Overall cap for the whole startup check — never block session start longer. */
+/** Общий кап всего стартового чека — старт сессии дольше не блокируем. */
 const STARTUP_CHECK_TIMEOUT_MS = 60_000;
-/** Cap of tsc error lines surfaced in the prompt block. */
+/** Кап строк ошибок tsc в промпт-блоке. */
 const STARTUP_CHECK_ERROR_CAP = 20;
 
+/** Зависимости стартового чека (инжекции для тестов). */
 export interface StartupHealthDeps {
   client?: LspClient;
-  /** Injectable tsc runner (tests). Returns parsed "error TS" lines. */
+  /** Инжектируемый запуск tsc (тесты). Возвращает распарсенные "error TS" строки. */
   runTsc?: (projectRoot: string, timeoutMs: number) => Promise<string[]>;
-  /** Logger for error reporting. */
+  /** Логгер для отчётов об ошибках. */
   logger?: { debug(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void; warn(msg: string, meta?: Record<string, unknown>): void; error(msg: string, meta?: Record<string, unknown>): void };
 }
 
 /**
- * Scan the project at session start for errors that already exist, so the
- * model knows the baseline BEFORE it starts working. Addresses interrupted
- * sessions: code left half-broken by a previous run is surfaced up front
- * instead of being discovered (or missed) reactively.
+ * Сканирует проект на старте сессии на уже существующие ошибки, чтобы модель
+ * знала baseline ДО начала работы. Закрывает прерванные сессии: недоломанный
+ * прошлым запуском код всплывает сразу, а не находится (или пропускается)
+ * реактивно.
  *
- * Strategy:
- * - If the project has a tsconfig.json → one `tsc --noEmit --skipLibCheck`
- *   invocation (single process, covers the whole project).
- * - Otherwise → bounded LSP diagnostics on up to STARTUP_CHECK_FILE_CAP files
- *   (handles CSS/JSON/plain-JS projects with no TS).
+ * Стратегия:
+ * - есть tsconfig.json → один `tsc --noEmit --skipLibCheck` (один процесс на
+ *   весь проект);
+ * - иначе → ограниченные LSP-диагностики до STARTUP_CHECK_FILE_CAP файлов
+ *   (CSS/JSON/чистый-JS проекты без TS).
  *
- * Always fail-open: on any error/timeout/clean result → returns null, so the
- * check can never slow down or break session startup.
+ * Всегда fail-open: любая ошибка/таймаут/чистый результат → null, чек не
+ * может замедлить или сломать старт сессии.
  */
+/** Запустить стартовый health-check; нечего показать — null. */
 export async function runStartupHealthCheck(
   config: LspConfig,
   baseDir: string,
@@ -99,7 +102,7 @@ async function runCheck(
         }
       }
     } catch (e) {
-      // Per-file LSP failure → log and skip (fail-open).
+      // Упавший LSP на файле → лог и пропуск (fail-open).
       deps.logger?.debug(`Startup LSP check failed for ${file}: ${errMsg(e)}`);
     }
   }
@@ -142,6 +145,7 @@ async function runTscDefault(projectRoot: string, timeoutMs: number): Promise<st
   });
 }
 
+/** Распарсить "error TS" строки из вывода tsc (дедуп). */
 export function parseTscErrors(output: string): string[] {
   const lines: string[] = [];
   for (const raw of output.split("\n")) {

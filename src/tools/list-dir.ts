@@ -1,3 +1,4 @@
+/** Тул листинга каталога (игнор мусора, cap вывода, кешируемый). */
 import { readdirSync, statSync, existsSync } from "fs";
 import { resolve } from "path";
 import { t } from "../i18n/index";
@@ -6,9 +7,10 @@ import { isPathInScope } from "../modules/security/path-validator";
 import { safeResolvePath } from "./path-utils";
 import { MAX_PREVIEW_LINES } from "./preview";
 
-/** Directories hidden from list_dir output (consistent with indexer walker). */
+/** Каталоги вне выдачи list_dir (едино с walker'ом индексёра). */
 const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", "coverage", ".mma"]);
 
+/** Показывает файлы/подкаталоги (каталоги с `/`); мусор скрыт. */
 export const listDirTool: ToolDefinition = {
   name: "list_dir",
   icon: "📂",
@@ -27,7 +29,6 @@ export const listDirTool: ToolDefinition = {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
 
-    // Check path permissions
     const scopeCheck = isPathInScope(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
     if (!scopeCheck.allowed) {
       return {

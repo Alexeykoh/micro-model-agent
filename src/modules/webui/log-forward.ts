@@ -1,17 +1,15 @@
+// Мост `OutputBus` → SSE для `mma web`: варнинги/ошибки шины в браузер.
 /**
- * `OutputBus` → SSE bridge for `mma web`.
+ * Агент/bootstrap пишут человекочитаемые варнинги и ошибки в процессную
+ * глобальную шину {@link defaultOutputBus} (переполнение системного промпта,
+ * context probe, суммаризация). В терминале они рендерятся над промптом; в
+ * вебе их никто не форвардил, и медленная суммаризация первого запуска
+ * выглядела молчаливым висом. Подписывается на шину и переиздаёт интересные
+ * уровни SSE-событиями `log`. `debug` дропается (терминальный шум); диагностики
+ * петли идут с `diagnostic: true` и рендерятся клиентом только в verbose.
  *
- * The agent/bootstrap emit human-facing warnings and errors on the process
- * global {@link defaultOutputBus} (system-prompt overflow, context probe,
- * summarization). In terminal mode these render above the prompt; in web mode
- * nothing forwarded them, so a slow first-run summarization looked like a
- * silent hang. This subscribes to the bus and re-broadcasts the interesting
- * levels as SSE `log` events. `debug` is dropped (terminal-only noise); loop
- * diagnostics are forwarded with `diagnostic: true` and only rendered by the
- * client in verbose mode.
- *
- * Secrets are redacted with the same point-redaction used elsewhere in the
- * web transport; the browser renders `text` via `textContent`.
+ * Секреты вычищаются той же точечной редактурой, что везде в веб-транспорте;
+ * браузер рендерит `text` через `textContent`.
  */
 import type { OutputBus } from "../../output/bus";
 import { defaultOutputBus } from "../../output/bus";
@@ -21,7 +19,7 @@ import { broadcast, type WebUiState } from "./state";
 
 const FORWARDED: readonly OutputLevel[] = ["info", "warn", "error"];
 
-/** Subscribe `state` to `bus`; returns the unsubscribe (call it in `stop()`). */
+/** Подписывает `state` на `bus`; возвращает отписку (звать в `stop()`). */
 export function installOutputForwarding(
   state: WebUiState,
   bus: OutputBus = defaultOutputBus,
@@ -35,7 +33,7 @@ export function installOutputForwarding(
         level: ev.level,
         source: ev.source,
         text: redactContextSecrets(ev.text),
-        // Loop diagnostics are chat-visible only at verbose (client-side gate).
+        // Диагностики петли видны в чате только в verbose (гейт на клиенте).
         diagnostic: ev.data?.diagnostic === true,
       },
       state,

@@ -1,9 +1,11 @@
+// Хранилище памяти: append-only .md-категории и preferences.json в каталоге.
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { MemorySearch } from "./search";
 
 const MEMORY_FILES = ["conventions", "decisions", "errors", "facts"];
 
+/** Хранилище памяти: категории-заметки с дописыванием и ключ-значение преференсов. */
 export class MemoryStore {
   private memoryDir: string;
 
@@ -25,10 +27,10 @@ export class MemoryStore {
   }
 
   /**
-   * Reject any name outside the fixed memory categories. Without this a
-   * model-supplied `category` (the tool schema `enum` is advisory, not
-   * enforced) could traverse out of the memory dir, e.g.
-   * `recall category="../../Users/x/notes"` read `notes.md` outside it.
+   * Отклоняет имена вне фиксированных категорий памяти. Без этого
+   * подставленная моделью `category` (поле `enum` в схеме тула — подсказка,
+   * а не enforcement) могла бы выйти из каталога памяти, например
+   * `recall category="../../Users/x/notes"` прочитал бы чужой `notes.md`.
    */
   private fileFor(name: string): string {
     if (!MEMORY_FILES.includes(name)) {
@@ -37,12 +39,14 @@ export class MemoryStore {
     return join(this.memoryDir, `${name}.md`);
   }
 
+  /** Читает весь файл категории (пусто, если файла нет). */
   read(name: string): string {
     const path = this.fileFor(name);
     if (!existsSync(path)) return "";
     return readFileSync(path, "utf-8");
   }
 
+  /** Дописывает запись с таймстампом в файл категории. */
   append(name: string, entry: string): void {
     const path = this.fileFor(name);
     const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
@@ -50,6 +54,7 @@ export class MemoryStore {
     appendFileSync(path, formatted, "utf-8");
   }
 
+  /** Ищет подстроку по всем файлам памяти. */
   search(query: string): Array<{ file: string; match: string }> {
     const searchModule = new MemorySearch(this.memoryDir);
     return searchModule.query(query);
@@ -59,6 +64,7 @@ export class MemoryStore {
     return join(this.memoryDir, "preferences.json");
   }
 
+  /** Все преференсы пользователя (пусто, если файла нет/бит). */
   getPreferences(): Record<string, string> {
     const path = this.prefsPath();
     if (!existsSync(path)) return {};
@@ -69,12 +75,14 @@ export class MemoryStore {
     }
   }
 
+  /** Записывает/обновляет один преференс. */
   setPreference(key: string, value: string): void {
     const prefs = this.getPreferences();
     prefs[key] = value;
     writeFileSync(this.prefsPath(), JSON.stringify(prefs, null, 2), "utf-8");
   }
 
+  /** Удаляет преференс; false, если ключа не было. */
   deletePreference(key: string): boolean {
     const prefs = this.getPreferences();
     if (!(key in prefs)) return false;
@@ -83,7 +91,7 @@ export class MemoryStore {
     return true;
   }
 
-  /** Remove the nth (1-based) append-only entry (its full block) from a category file. */
+  /** Удаляет n-ю (с 1) append-only запись (весь её блок) из файла категории. */
   deleteEntry(name: string, n: number): boolean {
     const path = join(this.memoryDir, `${name}.md`);
     if (!existsSync(path)) return false;
@@ -99,6 +107,7 @@ export class MemoryStore {
     return true;
   }
 
+  /** Дописывает структурированное правило «паттерн/причина/решение». */
   appendRule(category: string, pattern: string, cause: string, solution: string): void {
     const entry = `**pattern:** ${pattern}\n  **cause:** ${cause}\n  **solution:** ${solution}`;
     this.append(category, entry);

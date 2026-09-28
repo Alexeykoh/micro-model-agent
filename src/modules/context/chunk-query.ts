@@ -1,54 +1,59 @@
+// RLM-стиль llm_query: ответ на запрос по большому тексту чанками + синтез.
 import type { LLMProvider, Message } from "../../llm/provider";
 import type { ReasoningLevel } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import { errMsg } from "../../utils";
 
-/** Max chars of joined chunk answers sent to the synthesis call. Prevents the
- * synthesis prompt from exceeding the model's context window on large inputs. */
+/** Макс. символов склеенных ответов чанков для синтез-вызова. Не даёт
+ * промпту синтеза вылезти за окно контекста на больших входах. */
 const MAX_SYNTHESIS_INPUT_CHARS = 20_000;
 
+/** Опции чанкового запроса: размеры, параллелизм, синтез, reasoning, логгер, abort. */
 export interface ChunkQueryOptions {
-  /** Approx chunk size in chars. Default: 12000. */
+  /** Примерный размер чанка в символах. По умолчанию: 12000. */
   chunkChars?: number;
-  /** Max concurrent chunk queries. Default: 4. */
+  /** Макс. параллельных запросов чанков. По умолчанию: 4. */
   maxParallel?: number;
-  /** Run a final synthesis call over all answers. Default: true. */
+  /** Финальный синтез-вызов по всем ответам. По умолчанию: true. */
   synthesize?: boolean;
-  /** Cap on generated tokens per chunk call. Default: 1024 (must fit reasoning + answer). */
+  /** Кап генерируемых токенов на вызов чанка. По умолчанию: 1024 (хватит на reasoning + ответ). */
   maxChunkTokens?: number;
-  /** Cap on generated tokens for the synthesis call. Default: 2048. */
+  /** Кап генерируемых токенов на синтез-вызов. По умолчанию: 2048. */
   maxSynthesisTokens?: number;
   /**
-   * Reasoning effort for chunk/synthesis calls. Defaults to "none": on reasoning
-   * models (qwen3.5) a long thinking chain can consume all of maxTokens and leave
-   * an empty text answer, which silently corrupts chunk query results. Override
-   * to "low"/"medium"/"high" when the provider/model needs it.
+   * Reasoning effort для чанк/синтез-вызовов. По умолчанию "none": на reasoning-
+   * моделях (qwen3.5) длинная цепочка размышлений съедает весь maxTokens и
+   * оставляет пустой текстовый ответ, молча портя результаты. Переопредели
+   * в "low"/"medium"/"high", если провайдер/модель требует.
    */
   reasoningEffort?: ReasoningLevel;
   querySystemPrompt?: string;
   synthesisSystemPrompt?: string;
-  /** Optional logger for chunking/parallelism diagnostics. */
+  /** Опциональный логгер для диагностики чанкинга/параллелизма. */
   logger?: Logger;
-  /** Abort signal — when fired, in-flight chunk calls abort promptly. */
+  /** Abort-сигнал — при срабатывании летящие чанк-вызовы быстро абортятся. */
   signal?: AbortSignal;
 }
 
+/** Результат чанкового запроса: чанки, ответы, синтез, объём, наблюдаемый параллелизм. */
 export interface ChunkQueryResult {
   chunks: number;
   answers: string[];
   synthesis: string;
   totalChars: number;
-  /** Highest number of chunk queries in flight at once (for tests/tuning). */
+  /** Макс. одновременно летевших чанк-запросов (для тестов/тюнинга). */
   maxParallelObserved: number;
 }
 
+/** Системный промпт чанка по умолчанию (строго по тексту, иначе NO_EVIDENCE). */
 export const DEFAULT_CHUNK_SYSTEM_PROMPT =
   'Answer the query using ONLY the provided text. Be concise. If the text does not contain the answer, say "NO_EVIDENCE".';
 
+/** Системный промпт синтеза по умолчанию (сводка ответов чанков). */
 export const DEFAULT_SYNTHESIS_SYSTEM_PROMPT =
   "You are given a query and per-chunk answers over a large text. Produce the final answer to the query, combining evidence from the chunks. If no chunk had evidence, say so.";
 
-/** Split text into newline-aware chunks, each <= chunkChars chars. */
+/** Режет текст на чанки по переводам строк, каждый ≤ chunkChars символов. */
 export function splitTextIntoChunks(text: string, chunkChars: number): string[] {
   if (chunkChars <= 0) throw new Error("chunkChars must be > 0");
   if (text.length <= chunkChars) return [text];
@@ -87,9 +92,9 @@ async function chatText(
 }
 
 /**
- * RLM-style llm_query: answer `query` over `text` by chunking and querying the
- * model per chunk with a fixed system prompt (KV-cache friendly), bounded
- * concurrency, and an optional synthesis pass.
+ * RLM-стиль llm_query: отвечает на `query` по `text` через чанкинг и опрос
+ * модели по каждому чанку фиксированным системным промптом (дружит с KV-кэшем),
+ * ограниченный параллелизм и опциональный проход синтеза.
  */
 export async function runChunkQuery(
   provider: LLMProvider,
@@ -139,8 +144,8 @@ export async function runChunkQuery(
           signal,
         );
       } catch (err: any) {
-        // A single failing chunk must not kill the entire query. Store the
-        // error and let the remaining chunks + synthesis proceed.
+        // Один упавший чанк не должен убивать весь запрос. Кладём ошибку,
+        // остальные чанки + синтез идут дальше.
         const msg = errMsg(err);
         answers[idx] = `[FAILED] ${msg.slice(0, 200)}`;
         logger?.debug(`runChunkQuery: chunk ${idx + 1}/${chunks.length} failed: ${msg}`);
@@ -156,7 +161,7 @@ export async function runChunkQuery(
     let joined = answers
       .map((a, i) => `--- Chunk ${i + 1}/${chunks.length} ---\n${a}`)
       .join("\n\n");
-    // Cap synthesis input to prevent context overflow on large texts.
+    // Кап входа синтеза — защита от переполнения контекста на больших текстах.
     if (joined.length > MAX_SYNTHESIS_INPUT_CHARS) {
       const truncated = joined.slice(0, MAX_SYNTHESIS_INPUT_CHARS);
       joined = `${truncated}\n\n[TRUNCATED — synthesis input exceeded ${MAX_SYNTHESIS_INPUT_CHARS} chars]`;

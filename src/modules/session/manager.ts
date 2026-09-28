@@ -1,3 +1,4 @@
+// Менеджер сессий: создание/удаление/переименование, активная, изоляция, лимиты.
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionStore, SessionLogEntry } from "./store";
 import { t } from "../../i18n/index";
@@ -12,55 +13,48 @@ import {
 } from "../../modules/security/session-isolation";
 import type { SecurityConfig, SessionEncryptionConfig } from "../../config/types";
 
+/** Опции менеджера сессий. */
 export interface SessionManagerOptions {
   model: string;
   contextWindow: number;
   projectDir: string;
   maxSessions?: number;
-  /**
-   * Session isolation configuration
-   */
+  /** Конфиг изоляции сессий */
   isolation?: SessionIsolationConfig;
-  /**
-   * Session file encryption configuration
-   */
+  /** Конфиг шифрования файлов сессий */
   encryption?: SessionEncryptionConfig;
 }
 
+/** Менеджер: активная сессия, контексты изоляции, maxSessions, prune пустых. */
 export class SessionManager {
   private store: SessionStore;
   private activeId: string | null = null;
   private options: SessionManagerOptions;
-  /**
-   * Map of session ID to session context (for isolation)
-   */
+  /** Контексты сессий (для изоляции) по id */
   private sessionContexts: Map<string, SessionContext> = new Map();
 
   constructor(store: SessionStore, options: SessionManagerOptions) {
     this.store = store;
     this.options = options;
 
-    // Initialize encryption if configured
+    // Шифрование — если настроено
     if (options.encryption) {
       this.store.updateEncryption(options.encryption);
     }
   }
 
-  /**
-   * Check if session file encryption is enabled
-   */
+  /** Включено ли шифрование файлов сессий. */
   isEncryptionEnabled(): boolean {
     return this.store.isEncryptionEnabled();
   }
 
-  /**
-   * Update encryption configuration
-   */
+  /** Обновить конфиг шифрования. */
   updateEncryption(config: SessionEncryptionConfig): void {
     this.store.updateEncryption(config);
     this.options.encryption = config;
   }
 
+  /** Создать сессию (имя/оверрайды опциональны), сделать активной. */
   create(name?: string, securityOverrides?: SessionMeta["securityOverrides"]): SessionMeta {
     const now = new Date().toISOString();
     const id = `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -83,10 +77,10 @@ export class SessionManager {
     try {
       this.pruneEmpty(id);
     } catch {
-      // fail-open: auto-prune must never break session creation
+      // fail-open: автопрунинг не должен ломать создание сессии
     }
 
-    // Create session context
+    // Контекст сессии
     const context = createSessionContext(
       id,
       this.options.projectDir,
@@ -98,19 +92,22 @@ export class SessionManager {
     return meta;
   }
 
+  /** Список сессий. */
   list(): SessionMeta[] {
     return this.store.listSessions();
   }
 
+  /** Мета по id (null — нет). */
   get(id: string): SessionMeta | null {
     return this.store.loadMeta(id);
   }
 
+  /** Удалить сессию (+ контекст, сброс активной). */
   delete(id: string): void {
-    // Clean up session context
+    // Чистим контекст сессии
     const context = this.sessionContexts.get(id);
     if (context) {
-      // In a real implementation, we would clean up temp files here
+      // Реально temp-файлы тут не чистятся (нет реализации)
       this.sessionContexts.delete(id);
     }
 
@@ -120,6 +117,7 @@ export class SessionManager {
     }
   }
 
+  /** Переименовать сессию (источник имени: auto/manual). */
   rename(id: string, name: string, source: "auto" | "manual" = "manual"): void {
     const meta = this.store.loadMeta(id);
     if (!meta) throw new Error(t("session.not_found", { id }));
@@ -128,7 +126,7 @@ export class SessionManager {
     this.store.saveMeta(id, meta);
   }
 
-  /** True when the session has no user message with non-empty text. Fail-open: read errors count as non-empty. */
+  /** Пустая ли сессия (нет user-сообщения с текстом). Fail-open: ошибки чтения — непустая. */
   isEmptySession(id: string): boolean {
     const meta = this.store.loadMeta(id);
     if (!meta) return false;
@@ -142,7 +140,7 @@ export class SessionManager {
     return !history.some((m) => m.role === "user" && getMessageText(m.content).trim().length > 0);
   }
 
-  /** Delete all empty sessions except `excludeId`. Returns deleted ids. Never throws. */
+  /** Удалить все пустые сессии, кроме `excludeId`. Вернуть удалённые id. Не бросает. */
   pruneEmpty(excludeId?: string): string[] {
     const deleted: string[] = [];
     for (const s of this.store.listSessions()) {
@@ -153,21 +151,24 @@ export class SessionManager {
           deleted.push(s.id);
         }
       } catch {
-        // fail-open: skip unreadable sessions
+        // fail-open: нечитаемые пропускаем
       }
     }
     return deleted;
   }
 
+  /** Id активной сессии (null — нет). */
   getActive(): string | null {
     return this.activeId;
   }
 
+  /** Мета активной сессии (null — нет). */
   getActiveMeta(): SessionMeta | null {
     if (!this.activeId) return null;
     return this.store.loadMeta(this.activeId);
   }
 
+  /** Сделать сессию активной (нет такой — ошибка). */
   setActive(id: string): void {
     if (!this.store.sessionExists(id)) {
       throw new Error(t("session.not_found", { id }));
@@ -175,17 +176,19 @@ export class SessionManager {
     this.activeId = id;
   }
 
+  /** Добавить сообщение в активную сессию (нет активной — ошибка). */
   appendMessage(msg: SessionMessage): void {
     if (!this.activeId) throw new Error(t("session.no_active"));
     this.store.appendMessage(this.activeId, msg);
   }
 
+  /** Добавить запись в лог активной сессии (без активной — молча пропуск). */
   appendLog(entry: SessionLogEntry): void {
     if (!this.activeId) return;
     this.store.appendSessionLog(this.activeId, entry);
   }
 
-  /** Read the full session.jsonl of any session (used by `session show`). */
+  /** Прочитать полный session.jsonl любой сессии (для `session show`). */
   loadSessionLog(id: string): SessionLogEntry[] {
     try {
       return this.store.loadSessionLog(id);
@@ -194,14 +197,15 @@ export class SessionManager {
     }
   }
 
+  /** История активной сессии ([] — нет активной). */
   loadHistory(): SessionMessage[] {
     if (!this.activeId) return [];
     return this.store.loadHistory(this.activeId);
   }
 
   /**
-   * History of any session, including rotated ones (falls back to the
-   * `<id>.jsonl.gz` archive when the live history file is gone). Used by
+   * История любой сессии, включая ротированные (фолбэк на архив
+   * `<id>.jsonl.gz`, если живого history-файла нет). Для
    * `session export` / `/export`.
    */
   getHistory(id: string): SessionMessage[] {
@@ -210,21 +214,18 @@ export class SessionManager {
     return this.store.loadRotatedHistory(id);
   }
 
-  /**
-   * Get the session context for the active session
-   */
+  /** Контекст активной сессии (для изоляции). */
   getSessionContext(): SessionContext | undefined {
     if (!this.activeId) return undefined;
     return this.getSessionContextById(this.activeId);
   }
 
-  /**
-   * Get the session context for a specific session
-   */
+  /** Каталог указанной сессии. */
   getSessionDirectory(id: string): string {
     return this.store.getSessionDir(id);
   }
 
+  /** Контекст сессии по id (лениво создаётся из меты). */
   getSessionContextById(sessionId: string): SessionContext | undefined {
     if (!this.sessionContexts.has(sessionId)) {
       const meta = this.store.loadMeta(sessionId);
@@ -241,23 +242,17 @@ export class SessionManager {
     return this.sessionContexts.get(sessionId);
   }
 
-  /**
-   * Get session isolation configuration
-   */
+  /** Конфиг изоляции сессий. */
   getIsolationConfig(): SessionIsolationConfig {
     return this.options.isolation ?? DEFAULT_SESSION_ISOLATION;
   }
 
-  /**
-   * Check if session isolation is enabled
-   */
+  /** Включена ли изоляция сессий. */
   isIsolationEnabled(): boolean {
     return this.getIsolationConfig().enabled;
   }
 
-  /**
-   * Normalize security overrides to match SecurityConfig structure
-   */
+  /** Нормализовать оверрайды под структуру SecurityConfig. */
   private normalizeSecurityOverrides(
     overrides?: SessionMeta["securityOverrides"],
   ): Partial<SecurityConfig> | undefined {

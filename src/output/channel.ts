@@ -1,21 +1,26 @@
+// Канал вывода: единственный владелец терминала (режимы idle/stream/modal/quiet).
 import { defaultOutputBus, type OutputBus } from "./bus";
 import { formatEventLine } from "./format";
 import type { OutputEvent, OutputStream } from "./types";
 
+/** Сток промпта: куда печатать поверх поля ввода. */
 export interface PromptSink {
   isActive(): boolean;
   printAbove(text: string): void;
   clearScreen?(): void;
 }
 
+/** Режим канала: idle — промпт владеет экраном, streaming — стрим, modal — очередь, quiet — тишина. */
 export type ChannelMode = "idle" | "streaming" | "modal" | "quiet";
 
+/** Опции канала: потоки вывода и цвет. */
 export interface OutputChannelOptions {
   out?: NodeJS.WritableStream;
   err?: NodeJS.WritableStream;
   color?: boolean;
 }
 
+/** Единственный писатель в терминал; подписывается на шину и рендерит события. */
 export class OutputChannel {
   private out: NodeJS.WritableStream;
   private err: NodeJS.WritableStream;
@@ -29,24 +34,24 @@ export class OutputChannel {
   private pending: { stream: OutputStream; text: string } | null = null;
   private partialOpen = false;
   /**
-   * Log/block stdout events captured while a prompt is active. They are
-   * flushed once per microtask so a synchronous burst (e.g. a 20-line command
-   * result) produces a single `printAbove` + one frame render instead of one
-   * per line (which erased/redrew the frame and fired a DSR query each time).
+   * Log/block-события stdout, пойманные при активном промпте. Сбрасываются раз
+   * в микротаску, чтобы синхронный всплеск (например, 20-строчный результат
+   * команды) дал один `printAbove` + один ререндер кадра, а не по одному на
+   * строку (каждый стирал/перерисовывал кадр и слал DSR-запрос).
    */
   private blockLines: string[] | null = null;
   private blockFlushScheduled = false;
   private readonly unsub: () => void;
   /**
-   * Drop `info`-level log events from the human terminal. Structured logs are
-   * diagnostics, not chat — quiet mode keeps only warn/error. `writeLine`
-   * blocks (help, status, command output) are unaffected.
+   * Глушит `info`-логи на человеческом терминале. Структурные логи — это
+   * диагностика, а не чат: quiet оставляет только warn/error. `writeLine`-блоки
+   * (help, status, вывод команд) не затрагиваются.
    */
   private suppressInfoLogs = false;
   /**
-   * Show `data.diagnostic` log events (internal loop diagnostics) on the
-   * terminal. Off by default: diagnostics stay in `.log`/`app.jsonl` and only
-   * surface in chat at `ui.verbosity === "verbose"`.
+   * Показ `data.diagnostic`-событий (внутренняя диагностика петли) в терминале.
+   * По умолчанию выкл: диагностика живёт в `.log`/`app.jsonl` и выходит в чат
+   * только при `ui.verbosity === "verbose"`.
    */
   private showDiagnostics = false;
 
@@ -61,6 +66,7 @@ export class OutputChannel {
     this.unsub = this.bus.subscribe((ev) => this.onEvent(ev));
   }
 
+  /** Отписка от шины и сброс состояния. */
   dispose(): void {
     this.flushBlocks();
     this.unsub();
@@ -71,41 +77,47 @@ export class OutputChannel {
     this.mode = "idle";
   }
 
+  /** Привязка/отвязка промпта (null — терминал свободен). */
   attachPrompt(sink: PromptSink | null): void {
     this.sink = sink;
   }
 
+  /** Текущий режим канала. */
   getMode(): ChannelMode {
     return this.mode;
   }
 
+  /** Начало стрима ответа. Quiet не сбрасывается: `--json` молчит весь прогон. */
   beginStreaming(): void {
-    // A streaming transition must never discard the quiet state: `--json`
-    // sets quiet for the whole run and streamed runs must stay silent.
+    // Переход в стрим не должен сбрасывать quiet: `--json` ставит quiet на весь
+    // прогон, и стримящиеся прогоны обязаны молчать.
     if (this.mode === "quiet") return;
     this.flushBlocks();
     this.flushPendingAsBlock();
     this.mode = "streaming";
   }
 
+  /** Конец стрима. Симметрично beginStreaming: quiet владеет режимом до setQuiet(false). */
   endStreaming(): void {
-    // Symmetric with beginStreaming: quiet owns the mode until setQuiet(false).
+    // Симметрично beginStreaming: quiet владеет режимом до setQuiet(false).
     if (this.mode === "quiet") return;
     this.closePartial();
     this.mode = "idle";
   }
 
+  /** Вход в модалку: события копятся в очередь до endModal. */
   beginModal(): void {
     this.flushBlocks();
     this.flushPendingAsBlock();
-    if (this.mode === "quiet") return; // setQuiet owns quiet
-    // Nested modals (e.g. a wizard command inside another exclusive scope)
-    // must not overwrite the mode saved by the outermost beginModal.
+    if (this.mode === "quiet") return; // quiet владеет setQuiet
+    // Вложенные модалки (визард внутри другой эксклюзивной области) не должны
+    // затирать режим, сохранённый самой внешней beginModal.
     if (this.modalDepth === 0) this.modeBeforeModal = this.mode;
     this.modalDepth++;
     this.mode = "modal";
   }
 
+  /** Выход из модалки: сброс очереди накопленных событий в onEvent. */
   endModal(): void {
     if (this.modalDepth > 0) this.modalDepth--;
     if (this.mode === "modal" && this.modalDepth === 0) this.mode = this.modeBeforeModal;
@@ -114,6 +126,7 @@ export class OutputChannel {
     for (const ev of q) this.onEvent(ev);
   }
 
+  /** Вкл/выкл quiet (`--json`): человеческий вывод дропается. */
   setQuiet(quiet: boolean): void {
     this.flushBlocks();
     if (quiet) {
@@ -126,20 +139,21 @@ export class OutputChannel {
     }
   }
 
-  /** Hide `info`-level structured logs from the terminal (warn/error remain). */
+  /** Скрыть `info`-логи терминала (warn/error остаются). */
   setSuppressInfoLogs(suppress: boolean): void {
     this.suppressInfoLogs = suppress;
   }
 
-  /** Show internal diagnostics (`Logger.diagnostic`) — verbose mode only. */
+  /** Показать внутреннюю диагностику (`Logger.diagnostic`) — только verbose. */
   setShowDiagnostics(show: boolean): void {
     this.showDiagnostics = show;
   }
 
+  /** Сырая запись в поток. В modal/quiet дропается, в idle идёт поверх промпта. */
   writeRaw(text: string, stream: OutputStream = "stdout"): void {
-    // Raw output must never jump ahead of queued block lines.
+    // Сырой вывод не должен обгонять очередь блочных строк.
     this.flushBlocks();
-    // modal intentionally drops direct writes: the Renderer never runs during a modal prompt.
+    // modal осознанно дропает прямые записи: рендерер в модальном промпте не работает.
     if (this.mode === "modal" || this.mode === "quiet") return;
     if (this.mode === "idle" && this.sink?.isActive() && stream === "stdout") {
       const prev = this.pending?.stream === "stdout" ? this.pending.text : "";
@@ -151,13 +165,15 @@ export class OutputChannel {
     (stream === "stderr" ? this.err : this.out).write(text);
   }
 
+  /** Блочная запись через шину (help, status, вывод команд). */
   writeLine(text: string, stream: OutputStream = "stdout"): void {
     this.bus.emit({ level: "info", source: "", kind: "block", text, stream });
   }
 
+  /** Очистка экрана через промпт или ANSI. Буферный raw-партиал сбрасывается первым. */
   clearScreen(): void {
     this.flushBlocks();
-    // A buffered raw partial line would otherwise re-appear after the clear.
+    // Иначе буферная raw-частичная строка всплывёт после очистки.
     this.flushPendingAsBlock();
     this.partialOpen = false;
     if (this.mode === "quiet") return;
@@ -168,29 +184,30 @@ export class OutputChannel {
     this.out.write("\x1b[2J\x1b[H");
   }
 
+  /** Оверлей (спиннер) в stderr. В modal/quiet и при активном промпте дропается. */
   writeOverlay(text: string): void {
-    // modal intentionally drops overlays: the Renderer never runs during a modal prompt.
-    // Task 6's Spinner must stop before any log so an overlay never shares a row with a log line.
+    // modal осознанно дропает оверлеи: рендерер в модальном промпте не работает.
+    // Спиннер обязан остановиться до любого лога, иначе оверлей делит строку с логом.
     if (this.mode === "modal" || this.mode === "quiet") return;
     if (this.mode === "idle" && this.sink?.isActive()) return;
     this.err.write(text);
   }
 
-  /** Modes and log filters that keep an event off the terminal. */
+  /** Режимы и фильтры, держащие событие вне терминала. */
   private shouldDrop(ev: OutputEvent): boolean {
     if (this.mode === "quiet") return true;
-    // Structured info logs are diagnostics, not chat: quiet mode hides them.
+    // Структурные info-логи — диагностика, а не чат: quiet их прячет.
     if (this.suppressInfoLogs && ev.kind === "log" && ev.level === "info") return true;
-    // Internal loop diagnostics are session-log material, not chat: only
-    // verbose mode (setShowDiagnostics) puts them on the terminal.
+    // Внутренняя диагностика петли — материал логов сессии, а не чата: в терминал
+    // только через verbose (setShowDiagnostics).
     if (!this.showDiagnostics && ev.kind === "log" && ev.data?.diagnostic === true) return true;
     return false;
   }
 
-  /** Batch a synchronous burst into one printAbove/render (see blockLines). */
+  /** Пакует синхронный всплеск в один printAbove/рендер (см. blockLines). */
   private queueBlockLine(line: string): void {
-    // Both streams route above the prompt, otherwise a stderr log writes
-    // directly over the active input frame and skips flushBlocks ordering.
+    // Оба потока идут поверх промпта, иначе stderr-лог ляжет прямо на кадр
+    // ввода в обход порядка flushBlocks.
     if (this.blockLines === null) this.blockLines = [];
     this.blockLines.push(line);
     if (this.blockFlushScheduled) return;
@@ -214,8 +231,8 @@ export class OutputChannel {
       this.queueBlockLine(line);
       return;
     }
-    // Preserve FIFO ordering: buffered blocks must not be overtaken by an
-    // event written straight to a raw stream (e.g. a stderr log mid-stream).
+    // Сохраняем FIFO: буферные блоки не должен обгонять эвент, писанный
+    // напрямую в raw-поток (например, stderr-лог посреди стрима).
     this.flushBlocks();
     if (this.mode === "streaming") this.closePartial();
     (stream === "stderr" ? this.err : this.out).write(`${line}\n`);
@@ -271,11 +288,13 @@ export class OutputChannel {
 
 let defaultChannel: OutputChannel | null = null;
 
+/** Канал-синглтон текущего процесса. */
 export function getDefaultChannel(): OutputChannel {
   if (!defaultChannel) defaultChannel = new OutputChannel(defaultOutputBus);
   return defaultChannel;
 }
 
+/** Сброс синглтона (изоляция тестов). */
 export function resetDefaultChannel(): void {
   defaultChannel?.dispose();
   defaultChannel = null;

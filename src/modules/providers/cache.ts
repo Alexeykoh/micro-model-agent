@@ -1,4 +1,4 @@
-// src/modules/providers/cache.ts
+// Кеш промптов провайдера: резолв эффективной cache-возможности (пресет + оверрайд).
 import type { CacheCapability } from "../../config/types";
 import type { ProviderSpec } from "./types";
 

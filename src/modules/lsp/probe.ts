@@ -1,3 +1,4 @@
+// Проба LSP-серверов проекта: spawn + initialize + shutdown волнами (для баннера REPL).
 import type { LspConfig, LspServerConfig } from "./types";
 import { LspClient } from "./client";
 import { getServerKeyForFile } from "./config";
@@ -6,8 +7,8 @@ import { findProjectRoot } from "./project-root";
 import { errMsg } from "../../utils";
 
 /**
- * Probe result for one server: which language it covers and whether the
- * server actually started (spawn + initialize succeeded).
+ * Итог пробы одного сервера: какой язык покрывает и реально ли стартанул
+ * (spawn + initialize успешны).
  */
 export interface LspProbeResult {
   language: string;
@@ -16,33 +17,33 @@ export interface LspProbeResult {
   durationMs: number;
 }
 
-/** Probe results for the servers applicable to a project. */
+/** Итоги проб серверов, применимых к проекту. */
 export interface LspProbeSummary {
-  /** Servers that started successfully. */
+  /** Успешно стартовавшие серверы. */
   ok: LspProbeResult[];
-  /** Servers that failed to start. */
+  /** Не стартовавшие серверы. */
   failed: LspProbeResult[];
-  /** True when no LSP server applies to the project's files. */
+  /** True, если к файлам проекта ни один LSP-сервер не применим. */
   noneApplicable: boolean;
 }
 
+/** Зависимости пробы (таймауты, параллелизм, инжекции для тестов). */
 export interface LspProbeDeps {
   client?: LspClient;
-  /** Override the per-server probe timeout cap in ms. */
+  /** Кап таймаута пробы на сервер, мс. */
   timeoutMs?: number;
-  /** Overall probe deadline in ms (bounds the banner for broken servers). */
+  /** Общий дедлайн пробы, мс (ограничивает баннер при битых серверах). */
   deadlineMs?: number;
   /**
-   * How many servers to probe concurrently. Sequential (1) is safest on a cold
-   * npx cache (see below); a higher value keeps the REPL banner fast once the
-   * cache is warm. Each server in a wave uses its own LspClient (the client is
-   * stateful, so concurrent probes on a shared instance would corrupt each
-   * other's request/response state).
+   * Сколько серверов пробить конкурентно. Последовательно (1) безопаснее на
+   * холодном npx-кеше (см. ниже); больше — быстрее баннер REPL на тёплом кеше.
+   * У каждого сервера в волне свой LspClient (клиент stateful, конкурентные
+   * пробы на общем инстансе попортили бы друг другу состояние запрос/ответ).
    */
   maxParallel?: number;
-  /** Injectable file collector (tests). */
+  /** Инжектируемый сборщик файлов (тесты). */
   collectFiles?: (baseDir: string, config: LspConfig) => Promise<string[]>;
-  /** Logger for error reporting. */
+  /** Логгер для отчётов об ошибках. */
   logger?: { debug(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void; warn(msg: string, meta?: Record<string, unknown>): void; error(msg: string, meta?: Record<string, unknown>): void };
 }
 
@@ -51,9 +52,9 @@ const DEFAULT_PROBE_DEADLINE_MS = 60_000;
 const DEFAULT_MAX_PARALLEL = 3;
 
 /**
- * Check which LSP servers apply to the project (via the same bounded file
- * walk as lsp_check) and probe each one: spawn + initialize + shutdown.
- * Used by the REPL banner so a dead server is visible before the first write.
+ * Выяснить, какие LSP-серверы применимы к проекту (тот же ограниченный обход,
+ * что в lsp_check), и пробить каждый: spawn + initialize + shutdown.
+ * Для баннера REPL — мёртвый сервер виден до первой записи.
  */
 export async function probeLspServers(
   config: LspConfig,
@@ -81,15 +82,15 @@ export async function probeLspServers(
 
   if (servers.length === 0) return { ok: [], failed: [], noneApplicable: true };
 
-  // Probe in bounded waves. Probing everything in parallel on a cold npx cache
-  // makes the servers fight over the shared cache lock — observed as `LSP
-  // request timeout: initialize` for half the servers. Fully sequential probing
-  // avoids that but doubles the REPL banner wait (each server ~2s). A wave of
-  // `maxParallel` keeps the banner fast on a warm cache while capping cold-cache
-  // contention; each server in a wave gets its own LspClient (the client is
-  // stateful — process, request ids, response buffer — so concurrent probes on
-  // a shared instance would cross-talk). When a client is injected (tests), it
-  // is reused for every server.
+  // Проба ограниченными волнами. Параллельная проба всего на холодном
+  // npx-кеше заставляет серверы драться за общий лок кеша — наблюдалось как
+  // `LSP request timeout: initialize` у половины серверов. Чисто
+  // последовательная проба убирает драку, но удваивает ожидание баннера REPL
+  // (сервер ~2с). Волна `maxParallel` держит баннер быстрым на тёплом кеше и
+  // режет конкуренцию на холодном; у каждого сервера в волне свой LspClient
+  // (клиент stateful — процесс, id запросов, буфер ответов, — конкурентные
+  // пробы на общем инстансе кросс-токали бы). Инжектированный клиент (тесты)
+  // переиспользуется на все серверы.
   const ok: LspProbeResult[] = [];
   const failed: LspProbeResult[] = [];
   const deadline = Date.now() + deadlineMs;

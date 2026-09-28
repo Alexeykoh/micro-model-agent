@@ -1,3 +1,4 @@
+// Типы провайдеров: capabilities, опции фабрики, спек регистрации.
 // src/modules/providers/types.ts
 import type { LLMProvider } from "../../llm/provider";
 import type { RetryConfig } from "../../config/types";
@@ -6,15 +7,15 @@ import type { ReasoningStrategy } from "../../config/types";
 import type { CacheCapability } from "../../config/types";
 
 /**
- * What a provider advertises it supports. The agent loop uses these to adapt
- * (e.g. skip `reasoning_effort` for backends that reject it, refuse a model
- * with no `apiKey` configured, etc.).
+ * Что провайдер заявляет как поддерживаемое. Петля агента адаптируется по ним
+ * (напр. не шлёт `reasoning_effort` бэкендам, которые его отвергают, отказывает
+ * модели без настроенного `apiKey` и т.п.).
  */
 export interface ProviderCapabilities {
   streaming: boolean;
   tools: boolean;
   vision: boolean;
-  /** How this provider expresses reasoning effort. */
+  /** Как провайдер выражает reasoning effort. */
   reasoningStrategy: ReasoningStrategy;
   listModels: boolean;
   requiresKey: boolean;
@@ -23,7 +24,7 @@ export interface ProviderCapabilities {
   cache?: CacheCapability;
 }
 
-/** Options passed to a provider factory. */
+/** Опции, передаваемые фабрике провайдера. */
 export interface ProviderOptions {
   model: string;
   baseUrl: string;
@@ -31,20 +32,20 @@ export interface ProviderOptions {
   contextWindow: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
-  /** Per-call completion cap (max_tokens). Default 8192 in openai-compat. */
+  /** Per-call кап completion (max_tokens). В openai-compat дефолт 8192. */
   maxCompletionTokens?: number;
   capabilities?: Partial<ProviderCapabilities>;
-  /** Live conversation id, sent as `x-opencode-session` when present. */
+  /** Живой id беседы, шлётся как `x-opencode-session`, если задан. */
   getSessionId?: () => string | undefined;
-  /** Optional logger for LLM request/response diagnostics. */
+  /** Опциональный логгер диагностики LLM-запросов/ответов. */
   logger?: import("../../logger/app-logger").Logger;
 }
 
-/** A registered provider: metadata + a factory that builds the LLMProvider. */
+/** Зарегистрированный провайдер: метаданные + фабрика LLMProvider. */
 export interface ProviderSpec {
   type: string;
   label: string;
-  /** Preset default base URL. Empty string = the user must enter it. */
+  /** Дефолтный base URL пресета. Пустая строка = вводит пользователь. */
   baseUrl: string;
   capabilities: ProviderCapabilities;
   create: (opts: ProviderOptions) => LLMProvider;

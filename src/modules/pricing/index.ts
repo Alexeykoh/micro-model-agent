@@ -1,17 +1,18 @@
+// Трекер стоимости сессии: накопление цены LLM-вызовов с атрибуцией провайдеру.
 import type { PricingConfig } from "../../config/types";
 import { calculateCostDetailed, formatCost, type CacheCostInput } from "./prices";
 
+/** Одна строка разбивки: провайдер и его суммарная стоимость. */
 export interface CostBreakdownEntry {
   provider: string;
   cost: number;
 }
 
 /**
- * Accumulates per-call LLM cost for a session, attributed to the provider
- * that served the call. Call `record()` after each LLM call with the
- * (estimated or API) token usage and the provider name; read `total` for the
- * running total, `totalFor(provider)` / `breakdown()` for per-provider
- * attribution. When the model has no known price, `record` is a no-op.
+ * Копит стоимость LLM-вызовов сессии с атрибуцией обслужившему провайдеру.
+ * После каждого вызова — `record()` с usage (оценочным или API) и именем
+ * провайдера; `total` даёт running-итог, `totalFor(provider)` / `breakdown()` —
+ * разбивку. Без известной цены модели `record` — no-op.
  */
 export class CostTracker {
   private config?: PricingConfig;
@@ -26,7 +27,7 @@ export class CostTracker {
     this.config = config;
   }
 
-  /** Update the model (on /model switch). Later records use the new price. */
+  /** Сменяет модель (при /model switch). Дальнейшие записи — по новой цене. */
   setModel(model: string): void {
     this.model = model;
   }
@@ -63,7 +64,7 @@ export class CostTracker {
     entry.total += result.cost;
   }
 
-  /** Running total cost in USD, or undefined if no model price is known. */
+  /** Итоговая стоимость в USD; undefined без известной цены модели. */
   get total(): number | undefined {
     return this._known ? this._total : undefined;
   }
@@ -73,13 +74,13 @@ export class CostTracker {
     return this._known ? this._saved : undefined;
   }
 
-  /** Total for one provider, or undefined when nothing was priced for it. */
+  /** Итог по одному провайдеру; undefined, если по нему ничего не оценено. */
   totalFor(provider: string): number | undefined {
     const entry = this.byProvider.get(provider);
     return entry?.known ? entry.total : undefined;
   }
 
-  /** Per-provider totals sorted by cost descending (priced providers only). */
+  /** Итоги по провайдерам по убыванию стоимости (только оценённые). */
   breakdown(): CostBreakdownEntry[] {
     const entries: CostBreakdownEntry[] = [];
     for (const [provider, entry] of this.byProvider) {
@@ -88,7 +89,7 @@ export class CostTracker {
     return entries.sort((a, b) => b.cost - a.cost);
   }
 
-  /** Human-readable total, or undefined when pricing is unavailable. */
+  /** Читаемый итог; undefined, когда цен нет. */
   get formatted(): string | undefined {
     return this._known ? formatCost(this._total) : undefined;
   }

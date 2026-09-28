@@ -1,9 +1,7 @@
+// REST-хендлер `POST /api/answer`: закрывает висящий интерактивный вопрос ответом браузера.
 /**
- * REST handler for `POST /api/answer` — settles a pending interactive question
- * (`question`/`approve` tools) with the browser's response.
- *
- * Split out of `server.ts` (rule #1: ≤300 lines/file). Auth + same-origin are
- * enforced upstream in `server.ts`; this function assumes both passed.
+ * Вынесен из `server.ts` (правило #1: ≤300 строк/файл). Auth и same-origin
+ * проверяются выше в `server.ts`; здесь оба считаются пройденными.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readBodyError, sendJson } from "./util";
@@ -12,8 +10,8 @@ import { resolveAnswer } from "./prompt-io";
 import type { WebUiState } from "./state";
 
 /**
- * Body: `{ id: string, value: unknown }`. `value` is a string for free-text
- * questions and a `number[]` of option indices for choice questions.
+ * Тело: `{ id: string, value: unknown }`. `value` — строка для free-text
+ * вопросов и `number[]` индексов опций для вопросов с выбором.
  */
 export function handleAnswerPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   readJsonBody(req, s.maxBodyBytes)

@@ -1,3 +1,4 @@
+// Спиннер прогресса: одна перезаписываемая строка в stderr (только TTY).
 import { pc } from "./colors";
 import stringWidth from "string-width";
 import { getTerminalWidth } from "./table";
@@ -5,6 +6,7 @@ import type { OutputChannel } from "../output";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+/** Опции спиннера: вкл/выкл, канал, интервал, ширина. */
 export interface SpinnerOptions {
   enabled?: boolean;
   channel?: OutputChannel;
@@ -12,15 +14,15 @@ export interface SpinnerOptions {
   width?: number;
 }
 
+/** Поддерживается ли спиннер на потоке (TTY и не CI). */
 export function isSpinnerSupported(stream?: NodeJS.WritableStream): boolean {
   const s = stream ?? process.stderr;
   return Boolean((s as { isTTY?: boolean }).isTTY) && !process.env.CI;
 }
 
 /**
- * Zero-dependency ANSI spinner. Writes to stderr using a single
- * overwritten line (`\r` + text + clear-to-end). Disabled automatically
- * when the target stream is not a TTY.
+ * ANSI-спиннер без зависимостей. Пишет в stderr одной перезаписываемой строкой
+ * (`\r` + текст + чистка до конца). На не-TTY автоматически выключен.
  */
 export class Spinner {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -41,10 +43,12 @@ export class Spinner {
     this.width = opts.width ?? getTerminalWidth();
   }
 
+  /** Крутится ли сейчас. */
   get running(): boolean {
     return this.timer !== null;
   }
 
+  /** Старт с сообщением (перезапускает, если уже крутится). */
   start(message: string): void {
     if (!this.enabled) return;
     this.stop();
@@ -55,11 +59,13 @@ export class Spinner {
     this.tick();
   }
 
+  /** Смена сообщения на лету. */
   setMessage(message: string): void {
     this.message = this.truncate(message);
     if (this.timer) this.tick();
   }
 
+  /** Стоп со стиранием строки. */
   stop(): void {
     if (this.timer) {
       clearInterval(this.timer);
@@ -84,8 +90,8 @@ export class Spinner {
     if (!this.timer) return;
     const frame = FRAMES[this.frame % FRAMES.length];
     this.frame++;
-    // Show elapsed seconds only once the wait is noticeable — a quiet hint
-    // that the tool is still working, not just fast output.
+    // Секунды показываем, лишь когда ожидание заметно: тихий хинт, что тул
+    // ещё работает, а не быстрый вывод.
     const elapsed = Date.now() - this.startedAt;
     const suffix = elapsed >= 3000 ? pc.dim(` · ${Math.floor(elapsed / 1000)}s`) : "";
     const text = `\r${pc.cyan(frame)} ${this.message}${suffix}\x1b[K`;

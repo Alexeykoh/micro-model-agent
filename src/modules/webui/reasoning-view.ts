@@ -1,30 +1,28 @@
+// Read-проекция reasoning для ряда селекторов `mma web` (чистая, без секретов).
 /**
- * Reasoning read shape for the `mma web` selector row.
- *
- * Pure config → view projection (same pattern as `providers-view.ts`):
- * no HTTP, no persistence, no secrets. Derived per request from the live
- * config object, so it is always fresh without any reconfigure plumbing —
- * `state.config` aliases the object the agent mutates.
+ * Тот же паттерн, что `providers-view.ts`: выводится на запрос из живого
+ * конфига, всегда свежая без reconfigure-обвязки — `state.config` алиасит
+ * объект, мутируемый агентом.
  */
 import type { AppConfig, ReasoningStrategy } from "../../config/types";
 import { BUILTIN_PROVIDERS } from "../providers/presets";
 import { activeProviderEndpoint } from "../providers/manager";
 import { getCachedProbeResult } from "../reasoning/probe";
 
-/** Reasoning support of the active provider+model pair. */
+/** Поддержка reasoning активной пары провайдер+модель. */
 export interface ReasoningView {
-  /** Mechanism the active provider preset declares (`none` = unsupported). */
+  /** Механика из пресета активного провайдера (`none` = не поддерживается). */
   strategy: ReasoningStrategy;
   /**
-   * Cached probe verdict for `baseUrl|model`: `true` = mechanism respected,
-   * `false` = silently ignored, `null` = probe has not run yet for this pair.
+   * Кешнутый вердикт проба для `baseUrl|model`: `true` — механика уважается,
+   * `false` — молча игнорируется, `null` — проб для пары ещё не гонялся.
    */
   supported: boolean | null;
-  /** Current `config.reasoning.mode` (default `"auto"` when unset). */
+  /** Текущий `config.reasoning.mode` (дефолт `"auto"`). */
   mode: string;
 }
 
-/** Build the view from live config (entries win over legacy flat fields). */
+/** Строит вид из живого конфига (entries побеждают легаси-плоские поля). */
 export function buildReasoningView(config: AppConfig): ReasoningView {
   const endpoint = activeProviderEndpoint(config.provider);
   const spec = BUILTIN_PROVIDERS.find((p) => p.type === endpoint.type);

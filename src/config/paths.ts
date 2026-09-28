@@ -1,61 +1,61 @@
 /**
- * Canonical filesystem locations for MMA.
+ * Канонические пути MMA на диске.
  *
- * Centralizes the `.mma` directory name and the global/project path shapes so a
- * change (e.g. a rename or an env override) has one source of truth instead of
- * ~50 literal `join(…, ".mma", …)` sites.
+ * Централизует имя каталога `.mma` и формы глобальных/проектных путей: смена
+ * (переименование, env-оверрайд) правится в одном месте, а не в ~50 литералах
+ * `join(…, ".mma", …)`.
  *
- * Layering: this module imports only `node:os`/`node:path`, so any layer may
- * import it without cycles.
+ * Слоистость: модуль импортит только `node:os`/`node:path`, его может импортить
+ * любой слой без циклов.
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-/** Directory name of the agent's data dir (global `~/.mma`, project `<ws>/.mma`). */
+/** Имя каталога данных агента (глобальный `~/.mma`, проектный `<ws>/.mma`). */
 export const MMA_DIR_NAME = ".mma";
 
-/** Legacy single-file global config path (`~/.mma/config.json`). */
+/** Имя legacy-файла глобального конфига (`~/.mma/config.json`). */
 export const MMA_CONFIG_FILE_NAME = "config.json";
 
 /**
- * Global agent data dir. Honors `MMA_CONFIG_DIR` (the same override `loadConfig`
- * and bootstrap use), falling back to `~/.mma`.
+ * Глобальный каталог данных. Уважает `MMA_CONFIG_DIR` (тот же оверрайд, что у
+ * `loadConfig` и bootstrap), иначе `~/.mma`.
  */
 export function globalMmaDir(env: NodeJS.ProcessEnv = process.env): string {
   return env.MMA_CONFIG_DIR || join(homedir(), MMA_DIR_NAME);
 }
 
-/** Project-local agent data dir (`<baseDir>/.mma`). */
+/** Проектный каталог данных (`<baseDir>/.mma`). */
 export function projectMmaDir(baseDir: string): string {
   return join(baseDir, MMA_DIR_NAME);
 }
 
-/** Legacy global config file (`<global>/.mma/config.json`). */
+/** Legacy-файл глобального конфига (`<global>/.mma/config.json`). */
 export function globalConfigFile(env: NodeJS.ProcessEnv = process.env): string {
   return join(globalMmaDir(env), MMA_CONFIG_FILE_NAME);
 }
 
-/** Global memory dir (`<global>/.mma/memory`). */
+/** Глобальный каталог памяти (`<global>/.mma/memory`). */
 export function globalMemoryDir(env: NodeJS.ProcessEnv = process.env): string {
   return join(globalMmaDir(env), "memory");
 }
 
-/** Global sessions dir (`<global>/.mma/sessions`). */
+/** Глобальный каталог сессий (`<global>/.mma/sessions`). */
 export function globalSessionsDir(env: NodeJS.ProcessEnv = process.env): string {
   return join(globalMmaDir(env), "sessions");
 }
 
-/** Global logs dir (`<global>/.mma/logs`). */
+/** Глобальный каталог логов (`<global>/.mma/logs`). */
 export function globalLogsDir(env: NodeJS.ProcessEnv = process.env): string {
   return join(globalMmaDir(env), "logs");
 }
 
-/** Default export dir (`<global>/.mma/exports`). */
+/** Каталог экспорта по умолчанию (`<global>/.mma/exports`). */
 export function globalExportsDir(env: NodeJS.ProcessEnv = process.env): string {
   return join(globalMmaDir(env), "exports");
 }
 
-/** Global plugins dir (`<global>/.mma/plugins`). */
+/** Глобальный каталог плагинов (`<global>/.mma/plugins`). */
 export function globalPluginsDir(env: NodeJS.ProcessEnv = process.env): string {
   return join(globalMmaDir(env), "plugins");
 }

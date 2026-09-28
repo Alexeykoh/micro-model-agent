@@ -1,16 +1,6 @@
-/**
- * REST handlers for the config / model surfaces of `mma web`.
- *
- * Split out of `server.ts` (rule #1: ≤300 lines/file). Every handler takes the
- * shared {@link WebUiState} and reads the optional collaborators the module
- * wires from bootstrap (`config`, `saveConfig`, `reconfigure`, `knownModels`). A
- * missing collaborator is a server-side wiring gap, not a client error: those
- * endpoints answer 503 instead of crashing. Session routes live in
- * `sessions-api.ts`.
- *
- * Auth + same-origin are enforced upstream in `server.ts`; these functions
- * assume the request already passed both checks.
- */
+// REST-хендлеры поверхностей конфига/модели `mma web` (вынесены из server.ts).
+// Отсутствующий коллаборатор — пробел wiring, такие точки отвечают 503, не крашатся.
+// Auth и same-origin проверяются выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../i18n";
 import { redactConfigSecrets } from "../../config/redact";
@@ -22,7 +12,7 @@ import { persistAndReconfigure } from "./persist";
 import { buildReasoningView } from "./reasoning-view";
 import type { WebUiState } from "./state";
 
-/** Registry entry shape consumed by the settings UI. */
+/** Запись реестра для UI настроек. */
 export interface ConfigRegistryEntry {
   key: string;
   aliases: string[];
@@ -30,26 +20,26 @@ export interface ConfigRegistryEntry {
   group: string;
   enum?: readonly string[];
   /**
-   * Numeric bounds for `int`/`share` controls. Sourced from the registry defs
-   * where real metadata exists (e.g. shares use the same 0.05–0.9 limits the
-   * parser enforces, `contextWindow` min 1024); omitted for unbounded keys.
+   * Численные границы для контролов `int`/`share`. Из дефов реестра, где есть
+   * реальная мета (напр. доли — те же лимиты 0.05–0.9, что держит парсер,
+   * `contextWindow` мин 1024); у безлимитных опускаются.
    */
   min?: number;
   max?: number;
   step?: number;
-  /** `version` and similar keys render as a non-editable value in the UI. */
+  /** `version` и подобные в UI рендерятся нередактируемым значением. */
   readOnly?: boolean;
   /**
-   * Resolved value for read-only keys. Their registry getter is authoritative
-   * and may differ from the raw config field (e.g. `version` reports the
-   * installed package version, not the stored config-schema version).
+   * Резолвленное значение read-only ключей. Их геттер реестра авторитетен и
+   * может отличаться от сырого поля конфига (напр. `version` отдаёт версию
+   * установленного пакета, а не версию схемы конфига).
    */
   value?: unknown;
-  /** GUI rendering hint for `list`/`json` values (chips, checkboxes, table). */
+  /** Подсказка GUI-рендера значений `list`/`json` (чипсы, чекбоксы, таблица). */
   editor?: ConfigKeyDef["editor"];
 }
 
-/** Serialize the registry in registry order (canonical keys only). */
+/** Сериализует реестр в порядке реестра (только канонические ключи). */
 export function buildConfigRegistry(config?: AppConfig): ConfigRegistryEntry[] {
   return configDefs().map((def) => {
     const entry: ConfigRegistryEntry = {
@@ -71,13 +61,13 @@ export function buildConfigRegistry(config?: AppConfig): ConfigRegistryEntry[] {
   });
 }
 
-/** Mask a secret for display: keep the last 4 chars, hide the rest. */
+/** Маскирует секрет для показа: последние 4 символа видны, остальное скрыто. */
 function maskToken(token: string | null): string | null {
   if (!token) return null;
   return token.length <= 4 ? "••••" : `••••${token.slice(-4)}`;
 }
 
-/** `GET /api/config` — redacted live config + key registry. */
+/** `GET /api/config` — отредактированный живой конфиг + реестр ключей. */
 export function handleConfigGet(res: ServerResponse, s: WebUiState): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -90,14 +80,14 @@ export function handleConfigGet(res: ServerResponse, s: WebUiState): void {
   });
 }
 
-/** Coerce a JSON `value` into the raw string `setConfigValue` expects. */
+/** Коэрсит JSON-`value` в сырую строку для `setConfigValue`. */
 function toRawValue(value: unknown): string | null {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return null;
 }
 
-/** `POST /api/config {key, value}` — validate, apply, persist, reconfigure. */
+/** `POST /api/config {key, value}` — валидация, применение, персист, reconfigure. */
 export function handleConfigPost(
   req: IncomingMessage,
   res: ServerResponse,
@@ -127,14 +117,14 @@ export function handleConfigPost(
         return;
       }
 
-      // `locale` has `reconfigure: false` (registry), so nothing else applies it
-      // to the process-wide i18n state. Do it here so server-side output and the
-      // browser's re-fetched dictionary agree immediately.
+      // У `locale` в реестре `reconfigure: false`, так что больше некому применить
+      // его к процесс-глобальному i18n. Делаем здесь, чтобы серверный вывод и
+      // перезапрошенный словарь браузера сошлись сразу.
       if (key === "locale") setLocale(config.locale);
 
-      // Persist first, then reconfigure — but only when the registry says the
-      // key needs a reconfigure; otherwise the shared step would needlessly
-      // refresh providers/models on every keystroke.
+      // Сначала персист, затем reconfigure — но только когда реестр требует
+      // реконфига для ключа; иначе shared шаг зря дёргал бы провайдеров/модели
+      // на каждое нажатие.
       let persisted = true;
       let warning: string | undefined;
       if (result.reconfigure) {
@@ -161,15 +151,15 @@ export function handleConfigPost(
     });
 }
 
-/** `GET /api/models` — model ids known to the active provider. */
+/** `GET /api/models` — id моделей активного провайдера. */
 export function handleModelsGet(res: ServerResponse, s: WebUiState): void {
   if (!s.knownModels) {
     sendJson(res, 503, { error: "models_unavailable" });
     return;
   }
-  // `reasoning` is additive and derived per request from the live config, so
-  // the selector row always reflects the active provider+model without any
-  // reconfigure plumbing. Omitted when no config is wired (legacy stubs).
+  // `reasoning` аддитивен и выводится на запрос из живого конфига, так что ряд
+  // селекторов всегда отражает активных провайдера+модель без reconfigure-обвязки.
+  // Без wired конфига опускается (легаси-стабы).
   const body: Record<string, unknown> = { models: s.knownModels() };
   if (s.config) body.reasoning = buildReasoningView(s.config);
   sendJson(res, 200, body);

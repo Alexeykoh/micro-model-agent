@@ -1,9 +1,10 @@
-/** Machine-readable output (CLI JSON contracts). The only place with raw stdout. */
+// Машиночитаемый вывод (JSON-контракты CLI). Единственное место с raw stdout.
+/** Пишет JSON в stdout (контракт `--json`). @param value любой сериализуемый объект. */
 export function writeMachineJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
-/** Raw stdout write for the non-TTY REPL fallback (documented single-writer exception). */
+/** Строка в stdout для non-TTY фолбэка REPL (оговорённое исключение single-writer). */
 export function writeNonTtyLine(text: string): void {
   process.stdout.write(`${text}\n`);
 }

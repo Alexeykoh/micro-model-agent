@@ -1,11 +1,12 @@
 /**
- * REPL `/skill` command — split out of `repl-commands.ts` (rule #1).
+ * Команда REPL `/skill`: вынесена из `repl-commands.ts` (нарезка крупных файлов).
  */
 import { pc } from "../ui/colors";
 import { t } from "../i18n/index";
 import { estimateTokens } from "../llm/token-counter";
 import type { ReplContext } from "./repl-commands";
 
+/** Регистрирует `/skill` (list/loaded/load/unload/search). Нет модуля скиллов — скип. */
 export function registerSkillCommands(ctx: ReplContext): void {
   if (!ctx.skillsModule) return;
 

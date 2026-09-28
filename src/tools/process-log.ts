@@ -1,3 +1,4 @@
+/** Тул хвоста вывода фонового процесса (bounded, без усечения по бюджету). */
 import type { ToolDefinition } from "./types";
 import { processRegistry } from "../modules/processes";
 import { t } from "../i18n/index";
@@ -5,9 +6,10 @@ import { MAX_PREVIEW_LINES } from "./preview";
 import { lookupProcess } from "./process-ids";
 
 const DEFAULT_TAIL = MAX_PREVIEW_LINES;
-/** Cap matching the tool description; this tool skips budget truncation. */
+/** Потолок из описания тула; тул вне усечения по бюджету. */
 const MAX_TAIL = 300;
 
+/** Показывает буферизированный вывод фонового процесса (последние N строк). */
 export const processLogTool: ToolDefinition = {
   name: "process_log",
   icon: "📜",

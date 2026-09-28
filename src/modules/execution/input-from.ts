@@ -1,13 +1,15 @@
+// input_from: нормализация ссылок и секция "входы от прошлых задач" в промпте.
 import type { MoESubtask, SubtaskResult } from "./types";
 
+/** Ссылка input_from: id подзадачи + опциональное поле. */
 export interface InputFromRef {
   subtaskId: string;
   field?: string;
 }
 
 /**
- * Accept both compact (`["task-1"]`) and detailed
- * (`[{"subtaskId": "task-1", "field": "json"}]`) forms of input_from.
+ * Принимает обе формы input_from: компактную (`["task-1"]`) и детальную
+ * (`[{"subtaskId": "task-1", "field": "json"}]`).
  */
 export function normalizeInputFrom(input: unknown): InputFromRef[] {
   if (!Array.isArray(input)) return [];
@@ -35,9 +37,9 @@ function truncate(text: string, cap: number): string {
 }
 
 /**
- * Render the "Input from previous tasks" section injected into a dependent
- * subtask's prompt. Failed dependencies are marked explicitly so the reader
- * cannot build logic on missing data.
+ * Рендерит секцию "Input from previous tasks" для промпта зависимой
+ * подзадачи. Упавшие зависимости помечаются явно, чтобы читатель не строил
+ * логику на отсутствующих данных.
  */
 export function buildInputSection(
   subtask: MoESubtask,

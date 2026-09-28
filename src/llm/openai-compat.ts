@@ -1,3 +1,4 @@
+/** OpenAI-совместимый провайдер: стрим/SSE, ретраи, reasoning, кеш-хинты. */
 import type { LLMProvider, Message, Chunk, ToolDefinition } from "./provider";
 import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
@@ -9,27 +10,28 @@ import { backoffDelay } from "../utils/retry";
 import { StreamState } from "./stream-state";
 import { parseCacheUsage } from "./cache-usage";
 
+/** Конфиг ретраев: попытки, задержки, ретраи оборванного стрима, тишина. */
 export interface RetryConfig {
   maxRetries: number;
   baseDelay: number;
   maxDelay: number;
-  /** Extra retries when the response stream breaks BEFORE any content is delivered. */
+  /** Доп. ретраи, если стрим рвётся ДО любого контента. */
   maxStreamRetries?: number;
-  /** Max silence (ms) between stream chunks before the connection is treated as dead. */
+  /** Макс. тишина (мс) между чанками — дальше соединение считается мёртвым. */
   noDataTimeoutMs?: number;
 }
 
 const REQUEST_TIMEOUT_MS = 120000;
-/** Max wait (ms) for a self-inflicted rate-limit slot before giving up. */
+/** Макс. ожидание (мс) собственного rate-limit слота перед сдачей. */
 const MAX_RATE_WAIT_MS = 30_000;
-/** Completion token cap sent as max_tokens when unset in config. */
+/** Cap completion-токенов в max_tokens, если конфиг не задал. */
 const DEFAULT_MAX_COMPLETION_TOKENS = 8192;
 
 /**
- * Client identity header. OpenCode Go asks clients to identify themselves with
- * their own user agent (not a generic SDK/HTTP-library name) so requests route
- * to coding-agent traffic. `readMmaVersion()` is memoized — every provider
- * construction would otherwise re-read package.json.
+ * Client identity-заголовок. OpenCode Go просит клиентов представляться своим
+ * user agent (не generic SDK/HTTP-библиотекой), чтобы запросы роутились в
+ * coding-agent трафик. `readMmaVersion()` мемоизирован — иначе каждая сборка
+ * провайдера перечитывала бы package.json.
  */
 let cachedUserAgent: string | null = null;
 function defaultUserAgent(): string {
@@ -37,6 +39,7 @@ function defaultUserAgent(): string {
   return cachedUserAgent;
 }
 
+/** Конфиг провайдера: модель, URL, ключ, окно, ретраи, кеш, логгер. */
 export interface OpenAICompatConfig {
   model: string;
   baseUrl: string;
@@ -46,9 +49,9 @@ export interface OpenAICompatConfig {
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
   /**
-   * Live getter for the current conversation id. When it returns a value it is
-   * sent as `x-opencode-session` — required by OpenCode Go (400
-   * MissingSessionID otherwise) and used for routing/prompt-cache affinity.
+   * Живой геттер текущего id диалога. При значении шлётся как
+   * `x-opencode-session` — требует OpenCode Go (иначе 400 MissingSessionID),
+   * плюс роутинг/аффинити промпт-кеша.
    */
   getSessionId?: () => string | undefined;
   /**
@@ -57,7 +60,7 @@ export interface OpenAICompatConfig {
    * сохраняется легаси-поведение (заголовок шлётся при наличии sessionId).
    */
   cache?: CacheCapability;
-  /** Override the User-Agent (defaults to `micro-models-agent/<version>`). */
+  /** Переопределение User-Agent (дефолт `micro-models-agent/<version>`). */
   userAgent?: string;
   logger?: import("../logger/app-logger").Logger;
 }
@@ -96,7 +99,7 @@ function buildRequestBody(opts: {
   if (opts.sessionId) body.session_id = opts.sessionId;
   if (opts.stream && opts.streamUsage) body.stream_options = { include_usage: true };
 
-  // Apply reasoning effort via the provider's strategy
+  // Применяем effort через стратегию провайдера
   const strategy = opts.reasoningStrategy ?? "openai-effort";
   const level = opts.reasoningEffort;
 
@@ -105,11 +108,11 @@ function buildRequestBody(opts: {
   } else if (strategy === "template-kwarg") {
     body.chat_template_kwargs = { enable_thinking: level !== "none" };
   } else if (strategy === "prompt-tag" && level && level !== "default") {
-    // Send reasoning_effort in body (models that respect it via API) AND
-    // add /no_think tag to message (models that only respect prompt signals).
+    // Шлём reasoning_effort в теле (модели с API-поддержкой) И тег /no_think
+    // в сообщение (модели только с prompt-сигналами).
     body.reasoning_effort = level;
   }
-  // "none" = unsupported, skip
+  // "none" = не поддерживается, пропуск
 
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools.map((t) => ({
@@ -125,6 +128,7 @@ function buildRequestBody(opts: {
   return body;
 }
 
+/** Провайдер OpenAI-совместимого API (стрим + non-stream фолбэки, ретраи). */
 export class OpenAICompatProvider implements LLMProvider {
   readonly model: string;
   readonly contextWindow: number;
@@ -160,16 +164,21 @@ export class OpenAICompatProvider implements LLMProvider {
     this.debug = config.logger ? config.logger.debug.bind(config.logger) : null;
   }
 
+  /**
+   * Стрим чата: rate-limit → стрим → фолбэк non-stream при пустом стриме.
+   * @param messages история; @param tools определения тулов;
+   * @param signal abort; @param options лимит токенов/reasoning.
+   * @returns асинхронный итератор чанков.
+   */
   async *chat(
     messages: Message[],
     tools?: ToolDefinition[],
     signal?: AbortSignal,
     options?: import("./provider").ChatOptions,
   ): AsyncIterable<Chunk> {
-    // Check rate limit before making request. A self-inflicted limit should
-    // wait for a slot (bounded) instead of aborting a healthy turn; only if
-    // no slot frees within the window do we surface a recoverable error the
-    // agent loop can feed back (rather than dying).
+    // Проверка лимита до запроса. Собственный лимит ждёт слота (ограниченно),
+    // а не роняет здоровый ход; recoverable-ошибка наружу — только если слот
+    // не освободился в окне (цикл скормит её модели, а не умрёт).
     if (!this.rateLimiter.canMakeRequest()) {
       const waitMs = Math.min(this.rateLimiter.msUntilRequest(), MAX_RATE_WAIT_MS);
       if (waitMs > 0) {
@@ -183,10 +192,10 @@ export class OpenAICompatProvider implements LLMProvider {
       }
     }
 
-    // Record this request
+    // Фиксируем запрос
     this.rateLimiter.recordRequest();
 
-    // Apply prompt-tag strategy: append /no_think to last user message (outgoing copy only)
+    // Prompt-tag стратегия: дописать /no_think в последнее user-сообщение (только исходящая копия)
     let effectiveMessages = messages;
     if (options?.reasoningStrategy === "prompt-tag" && options?.reasoningEffort === "none") {
       effectiveMessages = this.applyPromptTag(messages, "/no_think");
@@ -205,12 +214,11 @@ export class OpenAICompatProvider implements LLMProvider {
       yield chunk;
     }
 
-    // A stream that ended with reasoning but no text/tool_call means the model
-    // THOUGHT but never produced an answer (observed: qwen3.5-9b in LM Studio
-    // emits reasoning_content then stops). The streamed reasoning was already
-    // delivered; fetch the missing answer via non-streaming. The fallback's
-    // own reasoning chunk is dropped so thinking is not shown twice — no text
-    // was emitted, so there is no duplicate-answer risk.
+    // Стрим кончился на reasoning без текста/tool_call: модель ПОДУМАЛА, но
+    // ответа не дала (наблюдалось: qwen3.5-9b в LM Studio шлёт reasoning_content
+    // и встаёт). Reasoning уже отдан; недостающий ответ добираем non-stream.
+    // Reasoning-чанк фолбэка дропаем, чтобы не показать дважды — текста не было,
+    // риск дубля ответа отсутствует.
     if (!hasToolCall && !hasText) {
       this.debug?.("LLM streaming produced no text/tool_call — falling back to non-streaming");
       const fallback = await this.doNonStreaming(effectiveMessages, tools, signal, options);
@@ -222,7 +230,7 @@ export class OpenAICompatProvider implements LLMProvider {
     }
   }
 
-  /** Append a tag to the last user message (outgoing copy, never stored in context). */
+  /** Дописывает тег в последнее user-сообщение (исходящая копия, не в контекст). */
   private applyPromptTag(messages: Message[], tag: string): Message[] {
     const copy = [...messages];
     for (let i = copy.length - 1; i >= 0; i--) {
@@ -231,7 +239,7 @@ export class OpenAICompatProvider implements LLMProvider {
         if (typeof msg.content === "string") {
           msg.content = `${msg.content}\n${tag}`;
         } else {
-          // Array of parts — append a text part
+          // Массив частей — дописываем текстовую часть
           msg.content = [...msg.content, { type: "text" as const, text: tag }];
         }
         copy[i] = msg;
@@ -259,16 +267,16 @@ export class OpenAICompatProvider implements LLMProvider {
       };
       try {
         const sawDone = yield* this.streamOnce(messages, tools, signal, options, onEmit, idleTimeoutMs);
-        // Clean [DONE] or any partial content → deliver what we have.
+        // Чистый [DONE] или частичный контент — отдаём что есть.
         if (sawDone || emitted) return;
-        // Stream closed before [DONE] with zero content → retryable truncation.
+        // Стрим закрылся до [DONE] с нулевым контентом — ретраябельная обрезка.
         if (attempt >= streamRetries) return;
       } catch (err: any) {
         if (err?.name === "AbortError" || (err instanceof LlmError && err.terminal) || signal?.aborted) throw err;
 
-        // Buffered-SSE stall after tool_call deltas: re-request non-streaming
-        // once. Streaming is the broken path here, so retrying the same way
-        // would stall again; the agent must still get its tool_call.
+        // Stall буферизованного SSE после tool_call-дельт: один раз переспрашиваем
+        // non-stream. Стрим тут — битый путь, повтор тем же способом снова
+        // встанет; а tool_call агент получить обязан.
         if (err?.stalledAfterToolCall === true && !usedNonStreamingFallback) {
           usedNonStreamingFallback = true;
           this.debug?.(
@@ -277,17 +285,17 @@ export class OpenAICompatProvider implements LLMProvider {
           const fallback = await this.doNonStreaming(messages, tools, signal, options);
           this.debug?.("LLM non-streaming fallback result", { chunks: fallback.length });
           for (const chunk of fallback) {
-            // Reasoning was likely already streamed before the stall; drop the
-            // fallback's copy to avoid duplicating thinking.
+            // Reasoning до stall уже, вероятно, устримлен; копию фолбэка дропаем,
+            // чтобы не дублировать мышление.
             if (chunk.type === "reasoning") continue;
             yield chunk;
           }
           return;
         }
 
-        // Content was already delivered — a re-stream would duplicate chunks.
+        // Контент уже отдан — перестрим продублировал бы чанки.
         if (emitted || attempt >= streamRetries) throw err;
-        // Connection dropped before any content → retry the whole request.
+        // Обрыв до любого контента — переспрашиваем целиком.
       }
       // Экспоненциальный backoff с джиттером (общий хелпер из src/utils).
       await this.sleep(backoffDelay(attempt, baseDelay, maxDelay, 0.1), signal);
@@ -335,8 +343,8 @@ export class OpenAICompatProvider implements LLMProvider {
         signal: abortSignal,
       });
     } catch (err: any) {
-      // Fetch-level failures are already HTTP-retried inside fetchWithRetry —
-      // don't double-retry them at the stream level.
+      // Fetch-сбои уже HTTP-ретраятся внутри fetchWithRetry —
+      // на уровне стрима повторно не ретраим.
       if (err?.name === "AbortError") throw err;
       const wrapped = err instanceof Error ? err : new Error(String(err));
       if (wrapped instanceof LlmError) {
@@ -378,10 +386,9 @@ export class OpenAICompatProvider implements LLMProvider {
     const st = new StreamState();
 
     type ReadResult = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>;
-    // Stall after tool_call deltas started usually means the provider buffers
-    // SSE instead of streaming argument deltas (seen with LM Studio). Mark the
-    // error so `doStream` can retry the request non-streaming instead of
-    // failing the whole run.
+    // Stall после старта tool_call-дельт обычно значит: провайдер буферизует
+    // SSE вместо стрима дельт аргументов (видели на LM Studio). Помечаем ошибку,
+    // чтобы `doStream` переспросил non-stream вместо провала всего прогона.
     const idleError = (): Error => {
       const e = new Error(
         t(
@@ -432,10 +439,9 @@ export class OpenAICompatProvider implements LLMProvider {
               continue;
             }
           } else {
-            // Not SSE-framed — Ollama (and some other backends) may stream
-            // NDJSON or send mid-stream errors as bare JSON. Try to parse the
-            // raw line; unparseable noise (SSE comments, keep-alives) is
-            // counted and skipped.
+            // Не SSE-фрейм — Ollama (и часть бэкендов) стримят NDJSON или шлют
+            // mid-stream ошибки голым JSON. Пробуем парсить сырую строку;
+            // непарсящийся шум (SSE-комменты, keep-alive) считаем и пропускаем.
             st.nonDataLines++;
             if (st.nonDataSamples.length < 5) st.nonDataSamples.push(trimmed.slice(0, 200));
             data = trimmed;
@@ -446,7 +452,7 @@ export class OpenAICompatProvider implements LLMProvider {
             st.parsedChunks++;
             const choice = parsed.choices?.[0];
             if (!choice) {
-              // Usage comes in the last chunk with empty choices
+              // Usage приходит в последнем чанке с пустыми choices
               if (parsed.usage) {
                 st.usage = {
                   promptTokens: parsed.usage.prompt_tokens ?? 0,
@@ -456,14 +462,14 @@ export class OpenAICompatProvider implements LLMProvider {
                 };
                 this.debug?.("LLM stream usage", { ...st.usage });
               } else if (parsed.error) {
-                // Mid-stream provider error (Ollama sends {"error": "..."} as
-                // bare JSON once generation already started). Surface it —
-                // swallowing it makes the response look silently empty.
-                // Thrown OUTSIDE the JSON-parse try/catch below.
+                // Mid-stream ошибка провайдера (Ollama шлёт {"error": "..."}
+                // голым JSON после старта генерации). Показываем — глотание
+                // даст молча пустой ответ.
+                // Брошено ВНЕ try/catch JSON-парсинга ниже.
                 st.midStreamError = String(parsed.error);
               }
-              // NOTE: no `continue` here — it would skip the midStreamError
-              // throw below (which lives outside this try/catch).
+              // NOTE: `continue` тут нет — он пропустил бы throw midStreamError
+              // ниже (он вне этого try/catch).
             } else {
               if (st.parsedChunks <= 3 || st.parsedChunks % 50 === 0) {
                 const d = choice.delta ?? {};
@@ -478,7 +484,7 @@ export class OpenAICompatProvider implements LLMProvider {
               const finishReason = choice.finish_reason;
               if (finishReason) st.lastFinishReason = finishReason;
 
-              // `reasoning` is the Ollama alias for OpenAI's `reasoning_content`.
+              // `reasoning` — алиас Ollama для openai-`reasoning_content`.
               const reasoningDelta = delta.reasoning_content ?? delta.reasoning;
               if (reasoningDelta) {
                 onEmit();
@@ -525,7 +531,7 @@ export class OpenAICompatProvider implements LLMProvider {
               }
             }
           } catch {
-            // Skip malformed JSON lines
+            // Битые JSON-строки пропускаем
           }
           if (st.midStreamError) {
             throw new Error(
@@ -539,10 +545,10 @@ export class OpenAICompatProvider implements LLMProvider {
         yield { type: "done", usage: st.usage };
       }
 
-      // finish_reason "length": the completion hit the token limit. An
-      // unfinished tool_call would otherwise be silently swallowed (tool_calls
-      // are only yielded on finish_reason "tool_calls") and surface as an
-      // empty response → blind hallucination retries. Surface the real cause.
+      // finish_reason "length": completion упёрся в лимит токенов. Незаконченный
+      // tool_call иначе молча глотается (tool_calls отдаются только на
+      // finish_reason "tool_calls") и всплывает пустым ответом → слепые
+      // hallucination-ретраи. Показываем настоящую причину.
       if (st.lastFinishReason === "length") {
         const truncatedToolCall = st.sawToolCallStart && toolCallAccs.size > 0;
         if (truncatedToolCall || !st.sawText) {
@@ -591,7 +597,7 @@ export class OpenAICompatProvider implements LLMProvider {
     };
   }
 
-  /** Shared request setup: auth headers + timeout/abort controller wiring. */
+  /** Общая подготовка запроса: auth-заголовки + таймаут/abort-контроллер. */
   private buildRequestSetup(signal?: AbortSignal): {
     headers: Record<string, string>;
     abortSignal: AbortSignal;
@@ -681,7 +687,7 @@ export class OpenAICompatProvider implements LLMProvider {
       }
 
       const data = await response.json();
-      // Some backends (e.g. Ollama) return HTTP 200 with {"error": "..."}.
+      // Часть бэкендов (напр. Ollama) отдают HTTP 200 с {"error": "..."}.
       if (data.error && !data.choices) {
         throw new Error(t("error.llm_provider_stream_error", { error: String(data.error).slice(0, 300) }));
       }
@@ -713,8 +719,8 @@ export class OpenAICompatProvider implements LLMProvider {
         }
       }
 
-      // Completed text but hit the cap: surface a visible warning instead of
-      // silently accepting a cut-off answer (see the streaming path).
+      // Текст готов, но упёрся в cap: видимый warning вместо молча
+      // принятого обрезанного ответа (см. стрим-путь).
       if (choice.finish_reason === "length" && msg.content && !msg.tool_calls) {
         chunks.push({
           type: "warning",
@@ -722,7 +728,7 @@ export class OpenAICompatProvider implements LLMProvider {
         });
       }
 
-      // Append usage from API response
+      // Дописываем usage из ответа API
       if (data.usage) {
         chunks.push({
           type: "done",
@@ -746,10 +752,18 @@ export class OpenAICompatProvider implements LLMProvider {
     }
   }
 
+  /**
+   * Считает токены текста (tiktoken по дефолтной модели).
+   * @param text текст; @returns число токенов.
+   */
   countTokens(text: string): number {
     return this.tokenCounter.count(text);
   }
 
+  /**
+   * Список моделей провайдера (`/models`: id/name/model).
+   * @returns имена моделей; @throws при недоступности провайдера.
+   */
   async listModels(): Promise<string[]> {
     try {
       const url = `${this.config.baseUrl.replace(/\/+$/, "")}/models`;
@@ -767,8 +781,8 @@ export class OpenAICompatProvider implements LLMProvider {
       });
 
       if (!response.ok) {
-        // Surface the failure: health probes must distinguish a dead
-        // provider from one that serves an empty model list.
+        // Провал наружу: health-пробы должны отличать мёртвый провайдер
+        // от пустого списка моделей.
         throw new Error(`HTTP ${response.status} from ${url}`);
       }
 
@@ -817,8 +831,8 @@ export class OpenAICompatProvider implements LLMProvider {
       }
 
       if (attempt < maxRetries) {
-        // Prefer the provider's Retry-After window (saturating at maxDelay);
-        // otherwise exponential backoff. 429s from free tiers need a real wait.
+        // Приоритет окну Retry-After провайдера (cap на maxDelay); иначе —
+        // экспоненциальный backoff. 429 с free-тарифов требуют реального ожидания.
         const delay = lastRetryAfter > 0
           ? Math.min(lastRetryAfter, maxDelay)
           : backoffDelay(attempt, baseDelay, maxDelay, 0.1);

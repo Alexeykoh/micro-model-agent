@@ -1,3 +1,4 @@
+// CLI-команды сертификации: прогон сценариев, статусы, список и снятие меток.
 import { rmSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -28,13 +29,14 @@ function readVersion(): string {
         const raw = JSON.parse(readFileSync(p, "utf-8"));
         if (raw.version) return raw.version;
       } catch {
-        // Broken package.json — fall back to the default version
+        // Битый package.json — откат на версию по умолчанию
       }
     }
   }
   return "0.0.0";
 }
 
+/** Разбирает строку тегов через запятую в список `CertTag`. */
 export function parseTags(s: string): CertTag[] {
   return s
     .split(",")
@@ -42,6 +44,7 @@ export function parseTags(s: string): CertTag[] {
     .filter(Boolean) as CertTag[];
 }
 
+/** Опции команды `certify`: модель, провайдер, выбор сценариев и повторы. */
 export interface CertifyOptions {
   name: string;
   providerUrl?: string;
@@ -51,14 +54,18 @@ export interface CertifyOptions {
   reps: number;
   force: boolean;
   clean: boolean;
-  /** Scenario ids to (re-)run; when set, only these scenarios run and the rest of an existing certification is preserved. */
+  /** Id сценариев для (пере-)прогона; когда заданы, гоняются только они, а остаток существующей сертификации сохраняется. */
   scenarios?: string[];
-  /** Default per-rep timeout in ms (overridden by scenario.timeoutMs). */
+  /** Дефолтный таймаут одного повтора в мс (перекрывается полем `timeoutMs` сценария). */
   timeout?: number;
   config: AppConfig;
   projectDir: string;
 }
 
+/**
+ * Прогоняет выбранные сценарии на модели и сохраняет запись в манифест.
+ * Частичный прогон (по id) мержится с предыдущей записью.
+ */
 export async function certify(opts: CertifyOptions): Promise<void> {
   const providerUrl = opts.providerUrl || opts.config.provider.baseUrl;
 
@@ -84,10 +91,9 @@ export async function certify(opts: CertifyOptions): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    // A targeted re-run selects from ALL loaded scenarios (union of their
-    // tags), not the tag-filtered subset — otherwise re-running a security
-    // scenario with default core-only tags silently produced an empty
-    // selection.
+    // Точечный перепрогон выбирает из ВСЕХ загруженных сценариев (объединение
+    // тегов), а не из отфильтрованного по тегам подмножества — иначе перепрогон
+    // security-сценария с дефолтными core-тегами молча давал пустую выборку.
     selected = filterByScenarios(scenarios, opts.scenarios!);
   }
   if (selected.length === 0) {
@@ -103,8 +109,8 @@ export async function certify(opts: CertifyOptions): Promise<void> {
   const existing = manifest.certifications.find(
     (e) => e.model === opts.name && e.providerUrl === providerUrl,
   );
-  // A full-suite re-run overwrites the entry and requires --force; a partial
-  // (scenario-targeted) run is an incremental update by definition.
+  // Полный перепрогон перезаписывает запись и требует --force; частичный
+  // прогон (по id сценариев) по определению — инкрементальное обновление.
   if (existing && !opts.force && !isPartial) {
     getDefaultChannel().writeLine(pc.yellow(t("cli.cert_exists", { model: opts.name })), "stderr");
     getDefaultChannel().writeLine(pc.yellow(t("cli.cert_exists_hint")), "stderr");
@@ -160,15 +166,15 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     }
   }
 
-  // Partial run: keep previous results for scenarios that were not re-run.
+  // Частичный прогон: сохраняем прежние результаты неперегнанных сценариев.
   const runIds = new Set(selected.map((s) => s.id));
   const finalResults =
     isPartial && existing ? mergePartialResults(results, existing.results, runIds) : results;
 
   const suite = summarize(finalResults);
-  // Only a re-run that covers EVERY scenario in the suite may refresh
-  // mmaVersion — a partial re-run leaves most results from an older MMA, so
-  // stamping the current version would fake a fresh certification.
+  // Только прогон, покрывший ВСЕ сценарии набора, вправе обновить
+  // mmaVersion — частичный оставляет большинство результатов от старого MMA,
+  // и штамп текущей версии выдавал бы их за свежую сертификацию.
   const ranEntireSuite = scenarios.every((s) => runIds.has(s.id));
   const entry: CertificationEntry = {
     model: opts.name,
@@ -178,9 +184,9 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     suite,
     results: finalResults,
   };
-  // Certifications are per (model, providerUrl) — machine-scoped, not
-  // project-scoped: store them in the global manifest so marks follow the
-  // user into any directory.
+  // Сертификации привязаны к паре (модель, providerUrl) — это машинный, а не
+  // проектный скоуп: храним в глобальном манифесте, чтобы метки следовали
+  // за пользователем в любой каталог.
   upsertCertification(entry);
 
   getDefaultChannel().writeLine(
@@ -201,10 +207,11 @@ export async function certify(opts: CertifyOptions): Promise<void> {
     );
   }
 
-  // Always write report file
+  // Файл отчёта пишется всегда
   writeReport(entry, opts.projectDir);
 }
 
+/** Печатает статус сертификации модели (провайдер, версия, сводка, сценарии). */
 export async function certStatus(
   name: string,
   config: AppConfig,
@@ -229,6 +236,7 @@ export async function certStatus(
   printResults(entry.results);
 }
 
+/** Печатает все записи манифеста (модель, провайдер, версия, счёт). */
 export async function certList(projectDir: string): Promise<void> {
   const m = readMergedManifest(projectDir);
   if (m.certifications.length === 0) {
@@ -243,6 +251,7 @@ export async function certList(projectDir: string): Promise<void> {
   }
 }
 
+/** Удаляет запись о сертификации модели из глобального и проектного манифестов. */
 export async function uncertify(
   name: string,
   config: AppConfig,
@@ -266,9 +275,8 @@ function summarize(results: ScenarioResult[]): SuiteSummary {
 }
 
 /**
- * Merge a partial run's results with a previous certification: fresh results
- * replace old ones by scenario id; results for scenarios that were not re-run
- * are preserved verbatim.
+ * Сливает результаты частичного прогона с прежней сертификацией: свежие
+ * заменяют старые по id сценария; неперегнанные сохраняются как есть.
  */
 export function mergePartialResults(
   fresh: ScenarioResult[],

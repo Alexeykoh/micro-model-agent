@@ -1,6 +1,8 @@
+// Загрузчик скиллов: рекурсивный скан .md-файлов с frontmatter-метаданными.
 import { readdirSync, readFileSync, existsSync, statSync, type Stats } from "fs";
 import { join } from "path";
 
+/** Метаданные скилла: имя, описание, ключи поиска, тело и путь источника. */
 export interface SkillMeta {
   name: string;
   description: string;
@@ -9,7 +11,9 @@ export interface SkillMeta {
   sourcePath: string;
 }
 
+/** Загрузчик скиллов из каталогов (встроенные, глобальные, проектные). */
 export class SkillsLoader {
+  /** Рекурсивно грузит все скиллы из каталога; нет каталога — пусто. */
   loadFromDir(dirPath: string): SkillMeta[] {
     if (!existsSync(dirPath)) return [];
 
@@ -44,9 +48,9 @@ export class SkillsLoader {
   }
 
   private parseSkillFile(content: string, sourcePath: string): SkillMeta | null {
-    // Normalize CRLF first: a Windows checkout / Windows-authored skill has
-    // `---\r\n`, which the LF-only pattern silently failed to match (every
-    // bundled skill was dropped with no warning).
+    // Сначала нормализуем CRLF: у Windows-чекаута/авторского скилла разделитель
+    // `---\r\n`, который LF-паттерн молча не матчил (все bundled-скиллы
+    // отбрасывались без предупреждения).
     const normalized = content.replace(/\r\n/g, "\n");
     const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
     if (!match) return null;
@@ -86,6 +90,7 @@ export class SkillsLoader {
     return result;
   }
 
+  /** Грузит скиллы из трёх источников по приоритету: встроенные, глобальные, проектные. */
   loadFromAllSources(builtinDir: string, globalDir: string, projectDir: string): SkillMeta[] {
     return [
       ...this.loadFromDir(builtinDir),

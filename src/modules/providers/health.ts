@@ -1,31 +1,34 @@
+// Health-пробы провайдеров: дешёвый listModels, конкурентно, порядок входа сохраняется.
 // src/modules/providers/health.ts
 import type { LLMProvider } from "../../llm/provider";
 import { errMsg } from "../../utils";
 
-/** One probe target: a named provider with a (usually free) listModels call. */
+/** Одна цель пробы: именованный провайдер с (обычно бесплатным) listModels. */
 export interface ProbeTarget {
   name: string;
   listModels(): Promise<string[]>;
 }
 
+/** Итог health-пробы провайдера. */
 export interface ProviderHealth {
   name: string;
   ok: boolean;
-  /** Elapsed milliseconds of the probe call. */
+  /** Длительность пробы в мс. */
   ms: number;
-  /** Number of models returned by listModels (0 on failure). */
+  /** Число моделей из listModels (0 при падении). */
   models: number;
   error?: string;
 }
 
+/** Опции пробы: таймаут. */
 export interface ProbeOptions {
   timeoutMs?: number;
 }
 
 /**
- * Probe providers concurrently (bounded by the caller passing few entries)
- * and report ✓/✗ per entry. Uses `listModels()` — a free, cheap call — never
- * a billed chat completion. Input order is preserved in the output.
+ * Пробить провайдеры конкурентно и отчитаться ✓/✗ по каждой записи.
+ * Только `listModels()` — бесплатный дешёвый вызов, никогда не платный chat.
+ * Порядок входа в выводе сохраняется.
  */
 export async function probeProviders(
   targets: ProbeTarget[],
@@ -69,7 +72,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-/** Build probe targets from a name→provider mapping (priority order). */
+/** Собрать цели проб из маппинга имя→провайдер (порядок приоритетов). */
 export function targetsFromProviders(
   entries: Array<{ name: string; provider: LLMProvider }>,
 ): ProbeTarget[] {

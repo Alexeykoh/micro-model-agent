@@ -1,3 +1,4 @@
+// Интерактивный REPL: ввод, прогоны агента, slash-команды, баннер, история.
 import * as readline from "readline";
 import { pc } from "../ui/colors";
 import { LineEditor, type LineInput } from "../ui/line-editor";
@@ -64,6 +65,7 @@ import { createPromptIO, type PromptIO } from "../tools/prompt-io";
 import type { ContextProbeResult } from "../llm/model-loader";
 import { MMA_DIR_NAME, projectMmaDir } from "../config/paths";
 
+/** Рендерит бар использования контекста с компакциями и качеством. */
 function formatContextBar(
   used: number,
   limit: number,
@@ -88,12 +90,13 @@ function formatContextBar(
 
 export { createHostBridge };
 
+/** Интерактивный REPL терминала: владеет stdin, гоняет ходы агента, slash-команды. */
 export class Repl implements ReplContext, Host {
-  /** Global SIGINT handler shared across Repl instances (see registerSigint). */
+  /** Глобальный SIGINT-хендлер, общий на все инстансы Repl (см. registerSigint). */
   private static sigintHandler?: () => void;
   private completer: Completer = new Completer();
   private modelCache: string[] = [];
-  /** Boot snapshot of managed config keys — `/config reset` restores from it. */
+  /** Boot-снапшот управляемых ключей: `/config reset` откатывает из него. */
   private configSnapshot: ReadonlyMap<string, unknown> = new Map();
   private running = false;
   private agentRunning = false;
@@ -108,17 +111,17 @@ export class Repl implements ReplContext, Host {
   private noAgentsMd: boolean;
   private pendingClipboardImage: string | null = null;
   private exitOnClose = false;
-  /** Owner of plan state (bootstrap). Null in tests — plan UI degrades. */
+  /** Владелец состояния плана (bootstrap). В тестах null — план-UI деградирует. */
   private execModule?: ExecutionModule;
   /**
-   * True only once the input prompt frame is actually on screen. The channel's
-   * prompt sink stays inactive until then, so the startup banner prints plainly
-   * instead of erasing/redrawing a frame that was never drawn.
+   * True, лишь когда кадр промпта ввода реально на экране. Промпт-синк канала
+   * неактивен до тех пор, чтобы стартовый баннер печатался plain, а не стирал/
+   * перерисовывал никогда не рисованный кадр.
    */
   private promptPresented = false;
   /**
-   * Set by `runAgent` so the slash-command path knows the run already restored
-   * the prompt and must not present it a second time (e.g. `/run`).
+   * Ставит `runAgent`, чтобы slash-путь знал: прогон уже вернул промпт и второй
+   * раз его показывать нельзя (напр. `/run`).
    */
   private runHandledPrompt = false;
 
@@ -131,27 +134,27 @@ export class Repl implements ReplContext, Host {
   public logger?: Logger;
   private slog: SessionLogger;
   /**
-   * Shared HostBridge instance (plugin-facing, also the engine behind the
-   * `Host` surface). Lazily built when no PluginManager was attached.
+   * Расшаренный инстанс HostBridge (для плагинов; заодно движок `Host`-поверхности).
+   * Лениво строится, если PluginManager не аттачили.
    */
   private hostBridge?: HostBridge;
   /**
-   * Persists `data.persist === true` output events to the active session.
-   * Inert until a SessionManager exists; re-bound by `/reload`.
+   * Персистит события вывода с `data.persist === true` в активную сессию.
+   * Инертен, пока нет SessionManager; перепривязывается через `/reload`.
    */
   private sessionOutput?: SessionOutputSink;
   private envReport?: EnvironmentReport;
-  /** Background probe of the actually loaded model context (bootstrap). */
+  /** Фоновый пробник реально загруженного контекста модели (bootstrap). */
   private contextProbe?: Promise<ContextProbeResult | null>;
   /**
-   * Single terminal writer for this REPL. Public (not private) because
-   * `ReplContext` exposes it to slash commands as `ctx.output`; a private
-   * field cannot satisfy a public interface property.
+   * Единый писатель терминала этого REPL. Публичен (не private), потому что
+   * `ReplContext` отдаёт его slash-командам как `ctx.output`; private-поле не
+   * удовлетворило бы публичному свойству интерфейса.
    */
   public readonly output: OutputChannel;
-  /** Bridge that lets the channel draw above the live input frame. */
+  /** Мост, дающий каналу рисовать поверх живого кадра ввода. */
   private promptSink: PromptSink;
-  /** Terminal-aware PromptIO installed on the agent's tool executor. */
+  /** PromptIO с осознанием терминала, ставится на экзекутор тулов агента. */
   private promptIO: PromptIO;
 
   get toolCtx(): import("../tools/types").ToolContext {
@@ -198,7 +201,7 @@ export class Repl implements ReplContext, Host {
       if (matches.length > 0) return [matches, partial];
       return [[], line];
     };
-    // Node readline's completer only understands plain string matches.
+    // Комплитер node-readline понимает только plain-строковые совпадения.
     const readlineCompleter = (line: string): [string[], string] => {
       const [items, partial] = editorCompleter(line);
       return [items.map((i) => i.value), partial];
@@ -237,9 +240,9 @@ export class Repl implements ReplContext, Host {
           this.rl.printAbove(text);
           return;
         }
-        // Non-TTY fallback (readline / piped stdin): no input frame to redraw
-        // above, so write directly through the sanctioned machine-output helper
-        // — there is no frame for `printAbove` here.
+        // Не-TTY фолбэк (readline / пайпнутый stdin): кадра ввода для перерисовки
+        // сверху нет — пишем напрямую через санкционированный машинный хелпер:
+        // `printAbove` здесь не про что.
         writeNonTtyLine(text);
       },
       clearScreen: () => {
@@ -248,10 +251,10 @@ export class Repl implements ReplContext, Host {
     };
     this.output.attachPrompt(this.promptSink);
 
-    // Terminal-aware prompt surface for interactive tools (question/approve).
-    // The REPL owns stdin and is in `streaming` mode during a run, so tools
-    // must borrow the editor for a question instead of opening a competing
-    // readline that would fight the LineEditor's raw mode.
+    // Промпт-поверхность с осознанием терминала для интерактивных тулов (question/approve).
+    // stdin владеет REPL и на время прогона он в `streaming`: тулы обязаны одалживать
+    // редактор под вопрос, а не открывать конкурирующий readline, который подерётся
+    // с raw-режимом LineEditor.
     this.promptIO = createPromptIO({
       ask: (prompt) => this.askViaEditor(prompt),
       print: (line) => this.output.writeLine(line),
@@ -263,15 +266,15 @@ export class Repl implements ReplContext, Host {
     this.setupCompleter();
     this.setupListeners();
 
-    // Expose the agent to plugins (web UI etc.) through a narrow bridge.
+    // Отдаём агента плагинам (web UI и др.) через узкий мост.
     if (pluginManager) {
       this.attachHostBridge(pluginManager);
     }
   }
 
-  /** (Re)attach the plugin HostBridge. Called at construction and after
-   *  /reload replaces the PluginManager — without this, a reloaded web-ui
-   *  plugin silently loses the ability to submit messages. */
+  /** (Пере)аттач плагинного HostBridge. Зовётся в конструкторе и после того, как
+   *  /reload заменил PluginManager: без этого перезагруженный web-ui плагин
+   *  молча теряет способность сабмитить сообщения. */
   public attachHostBridge(pm?: PluginManager): void {
     const manager = pm ?? this.pluginManager;
     if (!manager) return;
@@ -279,12 +282,12 @@ export class Repl implements ReplContext, Host {
     manager.setHostBridge(this.hostBridge);
   }
 
-  /** Single busy predicate shared by the `Host` surface and the bridge. */
+  /** Единый busy-предикат для `Host`-поверхности и моста. */
   private isAgentBusy(): boolean {
     return this.agentRunning;
   }
 
-  /** Build the HostBridge over this REPL's normal run path. */
+  /** Строит HostBridge поверх обычного run-пути этого REPL. */
   private buildHostBridge(): HostBridge {
     return createHostBridge({
       isBusy: () => this.isAgentBusy(),
@@ -299,13 +302,13 @@ export class Repl implements ReplContext, Host {
     });
   }
 
-  /** Lazily resolve the shared bridge so `Host` methods work without plugins. */
+  /** Лениво резолвит общий мост, чтобы `Host`-методы работали без плагинов. */
   private getHostBridge(): HostBridge {
     this.hostBridge ??= this.buildHostBridge();
     return this.hostBridge;
   }
 
-  /** (Re)bind the session output sink after construction or `/reload`. */
+  /** (Пере)привязка синка вывода сессии после конструктора или `/reload`. */
   private bindSessionOutput(): void {
     this.sessionOutput?.dispose();
     this.sessionOutput = this.sessionManager
@@ -333,8 +336,8 @@ export class Repl implements ReplContext, Host {
 
     const result = await bootstrap(this.configDir, this.baseDir, false, false);
     this.agent = result.agent;
-    // Re-install the prompt surface on the freshly bootstrapped agent — the
-    // REPL's `askViaEditor` closure still belongs to this instance.
+    // Переустанавливаем промпт-поверхность на свежезабутстрапленного агента: замыкание
+    // `askViaEditor` этого REPL принадлежит всё ещё этому инстансу.
     this.agent.setPromptIO?.(this.promptIO);
     this.sessionManager = result.sessionManager;
     this.skillsModule = result.skillsModule;
@@ -342,13 +345,14 @@ export class Repl implements ReplContext, Host {
     this.execModule = result.execModule;
     this.bindSessionOutput();
 
-    // Fresh PluginManager has no bridge — re-register it, otherwise plugins
-    // like web-ui silently lose control of the agent.
+    // У свежего PluginManager моста нет — перерегистрируем, иначе плагины вроде
+    // web-ui молча теряют управление агентом.
     this.attachHostBridge(result.pluginManager);
 
     this.setupCompleter();
   }
 
+  /** Грузит историю ввода из файла. */
   private loadHistory(): void {
     if (existsSync(this.historyPath)) {
       try {
@@ -360,10 +364,11 @@ export class Repl implements ReplContext, Host {
     }
   }
 
+  /** Сохраняет историю ввода. Падение каталога переживает молча, не бросает. */
   private saveHistory(): void {
     try {
-      // The history dir may be gone (e.g. a temp dir removed during test or
-      // session teardown). Recreate it and never let a save throw.
+      // Каталога истории может не быть (напр. temp снесли в тесте или при teardown
+      // сессии). Пересоздаём; сейв бросать не должен никогда.
       mkdirSync(dirname(this.historyPath), { recursive: true });
       const allHistory = this.history.slice(-this.maxHistory);
       writeFileSync(this.historyPath, allHistory.join("\n"), "utf-8");
@@ -372,13 +377,13 @@ export class Repl implements ReplContext, Host {
     }
   }
 
+  /** Строит комплитер с нуля. */
   public setupCompleter(): void {
-    // Rebuild from scratch: /reload calls this again after bootstrap, and
-    // re-registering without a reset would duplicate every provider.
+    // Пересборка с нуля: /reload зовёт снова после bootstrap, и перерегистрация
+    // без reset дублировала бы каждого провайдера.
     this.completer.reset();
-    // `this.commands` is keyed by canonical name AND aliases; iterating its
-    // entries yields every completable token, each with its command's
-    // description.
+    // `this.commands` ключуется каноническими именами И алиасами; итерация даёт
+    // каждый дополняемый токен с описанием его команды.
     const slashCommands = buildSlashCompletions(this.commands);
     this.completer.registerProvider(new SlashCommandProvider(slashCommands));
     if (this.sessionManager) {
@@ -402,7 +407,7 @@ export class Repl implements ReplContext, Host {
       );
       this.completer.registerProvider(new SkillNameProvider(this.skillsModule));
     }
-    // Subcommand + argument completion for provider/model management.
+    // Комплит субкоманд + аргументов управления provider/model.
     this.completer.registerProvider(
       new SubcommandProvider("provider", [
         { name: "list", description: t("provider.sub_list") },
@@ -470,32 +475,32 @@ export class Repl implements ReplContext, Host {
       this.completer.registerProvider(new ProviderArgProvider(entryLabels));
     }
     this.completer.registerProvider(new ModelArgProvider(() => this.modelCache));
-    // File-path completion anchored to the agent workspace, not process.cwd().
+    // Комплит путей якорится на workspace агента, а не process.cwd().
     this.completer.registerProvider(new FilePathProvider(this.baseDir));
-    // Warm the model cache in the background (free listModels call).
+    // Греем кеш моделей фоном (бесплатный listModels-вызов).
     this.refreshModelCache();
   }
 
-  /** Rebuild the registry + completer — used after `/config locale` changes. */
+  /** Перестройка реестра + комплитера — после смены `/config locale`. */
   public reregisterCommands(): void {
     this.commands.clear();
     registerAllCommands(this);
     this.setupCompleter();
   }
 
-  /** Boot snapshot of managed config keys for `/config reset`. */
+  /** Boot-снапшот управляемых ключей для `/config reset`. */
   public getConfigSnapshot(): ReadonlyMap<string, unknown> {
     return this.configSnapshot;
   }
 
-  /** Cached model ids from the active provider (may be empty while offline). */
+  /** Кешированные id моделей активного провайдера (пусто, пока офлайн). */
   public knownModels(): string[] {
     return this.modelCache;
   }
 
   /**
-   * Background refresh of the cached model list used by `/model use <Tab>`.
-   * Best-effort: on failure the cache keeps its previous contents.
+   * Фоновое обновление кешированного списка моделей для `/model use <Tab>`.
+   * Best-effort: при провале кеш хранит прошлое содержимое.
    */
   public refreshModelCache(): void {
     void (async () => {
@@ -587,7 +592,7 @@ export class Repl implements ReplContext, Host {
       this.running = false;
       this.saveHistory();
       this.agent.shutdown();
-      // Close session log when REPL exits
+      // Закрываем лог сессии на выходе из REPL.
       this.logger?.closeSessionLog();
       if (this.exitOnClose) process.exit(0);
     });
@@ -597,7 +602,7 @@ export class Repl implements ReplContext, Host {
         this.running = false;
         this.saveHistory();
         this.agent.shutdown();
-        // Close session log when REPL exits
+        // Закрываем лог сессии на выходе из REPL.
         this.logger?.closeSessionLog();
         process.exit(0);
       });
@@ -611,10 +616,10 @@ export class Repl implements ReplContext, Host {
     // Запас на очистку (сессия, MCP, дочерние процессы) после второго Ctrl+C.
     const FORCE_EXIT_MS = 5000;
 
-    // Idempotent registration: a second Repl in the same process must not add
-    // another global SIGINT handler. Leaked handlers from REPL instances
-    // created in tests fired process.exit(0) on ANY process.emit("SIGINT")
-    // elsewhere and silently terminated the whole bun test runner.
+    // Идемпотентная регистрация: второй Repl в том же процессе не добавляет
+    // ещё один глобальный SIGINT-хендлер. Протёкшие хендлеры инстансов REPL,
+    // созданные в тестах, стреляли process.exit(0) на ЛЮБОЙ process.emit("SIGINT")
+    // в другом месте и молча убивали весь bun-раннер тестов.
     if (typeof Repl.sigintHandler === "function") {
       process.removeListener("SIGINT", Repl.sigintHandler);
     }
@@ -636,10 +641,10 @@ export class Repl implements ReplContext, Host {
   }
 
   /**
-   * Re-present the input prompt after a slash command. Commands do not own a
-   * frame lifecycle, so they need this explicit redraw. The agent path is
-   * deliberately excluded: `runAgent`'s finally calls `LineEditor.resumeFrame()`
-   * as its single prompt presentation, so prompting here again would double-draw.
+   * Перепоказ промпта ввода после slash-команды. У команд нет владения жизненным
+   * циклом кадра, им нужна явная перерисовка. Путь агента осознанно исключён:
+   * finally `runAgent` зовёт `LineEditor.resumeFrame()` как единственный показ —
+   * промпт здесь дал бы двойную отрисовку.
    */
   private presentPrompt(): void {
     if (!this.running) return;
@@ -648,7 +653,7 @@ export class Repl implements ReplContext, Host {
     this.promptPresented = true;
   }
 
-  /** Restore the normal input prompt after a startup question, if a LineEditor is active. */
+  /** Возврат обычного промпта после стартового вопроса, если активен LineEditor. */
   private restoreStartupPrompt(): void {
     if (this.rl instanceof LineEditor) {
       this.rl.setPrompt(this.inputPrompt());
@@ -658,12 +663,11 @@ export class Repl implements ReplContext, Host {
   }
 
   /**
-   * Reasoning label shown in the input prompt. In `auto` mode the effective
-   * level is normally decided per iteration by the policy, so we show only the
-   * fact that reasoning is automatic. If the user set an explicit override
-   * (`/reasoning <level>`, persistent) or the agent set a still-active
-   * `set_thinking` override (transient), we show `auto→<level>`. In a fixed
-   * mode we show the effective level.
+   * Ярлык reasoning в промпте ввода. В `auto` эффективный уровень обычно решает
+   * политика поитерационно, так что показываем лишь факт автоматики. При явном
+   * оверрайде юзера (`/reasoning <level>`, персистентный) или активном
+   * `set_thinking`-оверрайде агента (транзиентный) — `auto→<level>`. В фикс.
+   * режиме — эффективный уровень.
    */
   private reasoningLabel(): string {
     const mode = this.config.reasoning?.mode ?? "default";
@@ -676,17 +680,16 @@ export class Repl implements ReplContext, Host {
     return "auto";
   }
 
-  /** Localized input prompt embedding the active reasoning mode/level. */
+  /** Локализованный промпт ввода со встроенным режимом/уровнем reasoning. */
   private inputPrompt(continuation = false): string {
     const key = continuation ? "repl.you_reasoning_cont" : "repl.you_reasoning";
     return pc.cyan(t(key, { level: this.reasoningLabel() }));
   }
 
   /**
-   * Prompt bookkeeping after a slash command. A command that drove a run
-   * (e.g. `/run`) already had its prompt restored by `runAgent`; presenting
-   * again would double-render, so skip it exactly once. All other commands
-   * present the prompt here.
+   * Учёт промпта после slash-команды. Команда, прогнавшая прогон (напр. `/run`),
+   * уже вернула себе промпт через `runAgent`: повторный показ двоил бы рендер,
+   * так что скипаем ровно раз. Все прочие команды показывают промпт здесь.
    */
   private afterCommand(): void {
     if (this.runHandledPrompt) {
@@ -696,12 +699,12 @@ export class Repl implements ReplContext, Host {
     this.presentPrompt();
   }
 
+  /** Спецклавиши: двойной Esc — аборт прогона, Ctrl+V — вставка картинки, Ctrl+O — детали. */
   private handleSpecialKey(_str: string, key: any): boolean {
     if (key.name === "escape") {
-      // Bun's keypress decoder collapses a fast double-Esc into a single
-      // keypress whose `sequence` contains two ESC bytes ("\x1b\x1b").
-      // Counting bytes (not events) catches both the collapsed case and
-      // the case where two separate escape keypresses land in the window.
+      // Декодер keypress Bun схлопывает быстрый двойной Esc в один keypress, чей
+      // `sequence` содержит два ESC-байта ("\x1b\x1b"). Подсчёт байтов (не событий)
+      // ловит и схлопнутый случай, и два раздельных Esc в окне.
       const escBytes = key.sequence ? (key.sequence.match(/\x1b/g) || []).length : 1;
       const now = Date.now();
       const withinWindow = now - this.lastEscTime < this.doubleEscDelay;
@@ -726,7 +729,7 @@ export class Repl implements ReplContext, Host {
     return false;
   }
 
-  /** Ctrl+O — reprint the full detail of the most recent action. */
+  /** Ctrl+O — допечатка полных деталей последнего действия. */
   private reprintLastAction(): void {
     const last = getLastAction();
     if (!last) {
@@ -751,6 +754,7 @@ export class Repl implements ReplContext, Host {
     }
   }
 
+  /** Вставка картинки из буфера обмена (Ctrl+V). */
   private async pasteClipboardImage(): Promise<void> {
     try {
       const { readClipboardImage, bufferToDataUrl } = await import("../llm/image-utils");
@@ -770,10 +774,11 @@ export class Repl implements ReplContext, Host {
         this.rl.prompt();
       }
     } catch {
-      // clipboard read failed — ignore, let terminal paste text normally
+      // Чтение буфера не удалось — игнорим, пусть терминал вставит текст штатно.
     }
   }
 
+  /** Проверка незакрытого многострочного ввода (хвостовой `\` или `{` без `}`). */
   private isMultiLineInput(line: string): boolean {
     if (line.endsWith("\\")) return true;
 
@@ -784,6 +789,7 @@ export class Repl implements ReplContext, Host {
     return false;
   }
 
+  /** Прогон хода агента: стрим в рендерер, футер, бары, возврат промпта. */
   public async runAgent(input: string): Promise<void> {
     if (this.agentRunning) return;
     this.agentRunning = true;
@@ -801,22 +807,21 @@ export class Repl implements ReplContext, Host {
 
       this.logger?.logREPL("user", input);
 
-      // The prompt frame is about to be taken down; deactivate the sink before
-      // any streamed output so nothing tries to draw above it.
+      // Кадр промпта сейчас снимется; гасим синк до любого стримленного вывода,
+      // чтобы ничего не пыталось рисовать поверх него.
       this.promptPresented = false;
-      // Hand the terminal to the channel for the duration of the run: the
-      // editor stops drawing its frame and ignores typed keys, so streamed
-      // output cannot corrupt the input line. suspendFrame() runs before
-      // reset(), which would otherwise draw a frame only to erase it.
+      // Отдаём терминал каналу на время прогона: редактор перестаёт рисовать кадр
+      // и игнорит клавиши, и стрим не портит строку ввода. suspendFrame() идёт до
+      // reset(), который иначе нарисовал бы кадр лишь затем, чтобы стереть.
       if (this.rl instanceof LineEditor) {
         this.rl.suspendFrame();
         this.rl.setInputEnabled(false);
         this.rl.reset();
       }
       this.output.beginStreaming();
-      // Divider + agent label, written raw (no trailing newline): the next
-      // Renderer.text() chunk adds its own leading "\n" so a writeLine here
-      // would insert a blank line ("Agent:\n\n...").
+      // Разделитель + ярлык агента, сырьём (без trailing newline): следующий чанк
+      // Renderer.text() добавляет свой ведущий "\n", и writeLine здесь вставил бы
+      // пустую строку ("Agent:\n\n...").
       this.output.writeRaw(`\r${divider()}\n${pc.green(t("repl.agent"))}`);
 
       const renderer = new Renderer({
@@ -873,25 +878,25 @@ export class Repl implements ReplContext, Host {
         this.output.writeLine(pc.red(`${t("error.prefix")}${result.error}`), "stderr");
       }
       this.showContextBar(result);
-      // Close the agent's turn: a divider before the next prompt keeps
-      // consecutive user/agent messages visually separated.
+      // Закрываем ход агента: разделитель перед следующим промптом визуально
+      // разводит соседние сообщения юзера/агента.
       this.output.writeLine(`\n${divider()}`);
     } finally {
       this.agentRunning = false;
       this.output.endStreaming();
       if (this.rl instanceof LineEditor) {
         this.rl.setInputEnabled(true);
-        // Single prompt presentation for the agent path: resumeFrame()
-        // redraws the frame, so the `line` listener must NOT prompt again
-        // after runAgent() (it still does after slash commands).
-        // Re-set the prompt first so a reasoning level changed by
-        // set_thinking during the run is reflected on the resumed frame.
+        // Единственный показ промпта на пути агента: resumeFrame() перерисовывает
+        // кадр, так что слушатель `line` после runAgent() промпт НЕ показывает
+        // (после slash-команд — показывает). Промпт переставляем первым, чтобы
+        // уровень reasoning, сменённый set_thinking в прогоне, отразился на
+        // возобновлённом кадре.
         this.rl.setPrompt(this.inputPrompt());
         this.rl.resumeFrame();
         this.promptPresented = true;
       } else {
-        // Piped/non-TTY fallback has no frame to resume; present the readline
-        // prompt here to preserve the old post-run behavior.
+        // У пайпнутого/не-TTY фолбэка кадра для resume нет; показываем readline-
+        // промпт здесь ради старого пост-прогонного поведения.
         this.presentPrompt();
       }
       const onboardingCtx = this.agent.tryToolContext();
@@ -904,9 +909,9 @@ export class Repl implements ReplContext, Host {
     }
   }
 
-  /** Print the checklist of the plan currently tracked by ExecutionModule.
-   *  Called only on plan/todo tool events (a change event) — never polled,
-   *  so a disk-resident plan from a previous session cannot leak into chat. */
+  /** Печать чеклиста плана, трекаемого ExecutionModule.
+   *  Зовётся только на plan/todo-событиях (событие изменения), не поллится:
+   *  дисковый план прошлой сессии не протечёт в чат. */
   private renderPlan(renderer: Renderer): void {
     const plan = this.execModule?.getActivePlan();
     if (!plan) return;
@@ -915,6 +920,7 @@ export class Repl implements ReplContext, Host {
 
   private commands: Map<string, SlashCommand> = new Map();
 
+  /** Регистрирует slash-команду (имя + алиасы). */
   public registerCommand(cmd: SlashCommand): void {
     this.commands.set(cmd.name, cmd);
     if (cmd.aliases) {
@@ -924,12 +930,12 @@ export class Repl implements ReplContext, Host {
     }
   }
 
+  /** Эксклюзивный ввод: визард владеет терминалом через свои `rl.question()`. */
   public async withExclusiveInput(fn: () => Promise<void>): Promise<void> {
-    // The wizard owns the terminal through its own `rl.question()` calls. Between
-    // questions no frame is active, so its menus/scan results must be written
-    // directly — bracketing with beginModal/endModal would QUEUE the whole
-    // transcript and the user would only see bare `: ` prompts until completion.
-    // `inputLocked` makes `promptSink.isActive()` false, routing writes direct.
+    // Между вопросами активного кадра нет, так что меню/результаты скана пишутся
+    // напрямую: обёртка beginModal/endModal сложила бы ВЕСЬ транскрипт в очередь,
+    // и юзер видел бы голые `: ` промпты до конца. `inputLocked` гасит
+    // `promptSink.isActive()`, пуская записи напрямую.
     this.inputLocked = true;
     try {
       await fn();
@@ -939,16 +945,14 @@ export class Repl implements ReplContext, Host {
   }
 
   /**
-   * Borrow the terminal for one interactive-tool question and hand it back.
-   * During a run the LineEditor is suspended with input disabled; enabling
-   * input + resuming the frame lets `question()` read keys while the agent
-   * blocks, and the `finally` restores exactly the streaming state so the
-   * agent's own renderer keeps working afterwards.
+   * Одалживает терминал под один вопрос интерактивного тула и возвращает обратно.
+   * На время прогона LineEditor suspended с выключенным вводом; включение ввода +
+   * resume кадра даёт `question()` читать клавиши, пока агент блокирован, а `finally`
+   * восстанавливает ровно стрим-состояние, и рендерер агента работает дальше как ни в чём.
    *
-   * Order matters: `beginModal()` first flushes any output still buffered by
-   * the streaming channel so it prints plainly before the frame returns;
-   * `endModal()` runs only after the frame is suspended again, so events
-   * queued during the question flush plainly instead of corrupting the frame.
+   * Порядок важен: `beginModal()` сначала сбрасывает вывод, ещё буферный у стрим-канала,
+   * чтобы напечатался plain до возврата кадра; `endModal()` идёт лишь после повторного
+   * suspend кадра, чтобы события, накопленные за вопрос, сбросились plain, а не побили кадр.
    */
   private async askViaEditor(prompt: string): Promise<string> {
     const editor = this.rl instanceof LineEditor ? this.rl : null;
@@ -971,34 +975,34 @@ export class Repl implements ReplContext, Host {
     }
   }
 
-  /** Host/HostBridge: true while the agent is processing a turn. */
+  /** Host/HostBridge: true, пока агент крутит ход. */
   public isBusy(): boolean {
     return this.isAgentBusy();
   }
 
-  /** Host/HostBridge: submit through the shared bridge (same run path). */
+  /** Host/HostBridge: сабмит через общий мост (тот же run-путь). */
   public submit(text: string, opts?: HostBridgeSubmitOptions): Promise<unknown> {
     return this.getHostBridge().submit(text, opts);
   }
 
-  /** Host/HostBridge: interrupt the current run (no-op when idle). */
+  /** Host/HostBridge: прерывание текущего прогона (в idle — no-op). */
   public interrupt(): void {
     this.getHostBridge().interrupt();
   }
 
-  /** Host/HostBridge: subscribe to the shared output bus. */
+  /** Host/HostBridge: подписка на общую шину вывода. */
   public subscribeOutput(fn: (ev: OutputEvent) => void): () => void {
     return defaultOutputBus.subscribe(fn);
   }
 
-  /** Host: run a slash command through the same handler map as typed input. */
+  /** Host: прогон slash-команды через ту же handler-map, что и ручной ввод. */
   public async executeCommand(line: string): Promise<void> {
     const trimmed = line.trim();
     if (!trimmed.startsWith("/")) return;
     await this.dispatchCommand(trimmed);
   }
 
-  /** Host: current plan/session/model snapshot for UI surfaces. */
+  /** Host: снапшот план/сессия/модель для UI-поверхностей. */
   public getState(): HostStateSnapshot {
     const meta = this.sessionManager?.getActiveMeta();
     return {
@@ -1016,14 +1020,14 @@ export class Repl implements ReplContext, Host {
     const name = parts[0].slice(1);
     const args = parts.slice(1);
 
-    // Clear any stale run flag from a previous direct agent run so this
-    // command's own presentPrompt() decision is based on its own action.
+    // Сбрасываем протухший run-флаг прошлого прямого прогона, чтобы решение
+    // presentPrompt() этой команды строилось на её собственном действии.
     this.runHandledPrompt = false;
 
     const cmd = this.commands.get(name);
     if (!cmd) {
-      // Former aliases that moved to a subcommand — point the user at the new
-      // syntax instead of a bare "unknown command".
+      // Бывшие алиасы, уехавшие в субкоманду: указываем на новый синтаксис,
+      // а не на голое "unknown command".
       const formerAliases: Record<string, string> = { use: "resume" };
       const suggestion = formerAliases[name];
       if (suggestion) {
@@ -1050,6 +1054,7 @@ export class Repl implements ReplContext, Host {
     }
   }
 
+  /** Показ помощи: общая или по команде (`/help <команда>`). */
   public showHelp(command?: string): void {
     const { COMMAND_GROUPS } = require("./repl-commands") as typeof import("./repl-commands");
 
@@ -1227,8 +1232,8 @@ export class Repl implements ReplContext, Host {
       );
     }
 
-    // Show the agent's workspace (the `-d` dir), not the process cwd: `bun run`
-    // sets cwd to the package root, which is NOT where the agent operates.
+    // Показываем workspace агента (каталог `-d`), а не process cwd: `bun run`
+    // ставит cwd в корень пакета, где агент НЕ работает.
     row(t("repl.work_dir"), pc.dim(this.baseDir));
 
     if (this.noAgentsMd) {
@@ -1258,17 +1263,17 @@ export class Repl implements ReplContext, Host {
       );
     }
 
-    // LSP status is probed in the background — it must never block the banner.
+    // Статус LSP пробнится фоном — баннер блокировать нельзя.
     const isTty = process.stdout.isTTY === true;
     const lspEnabled = isTty && (this.config.lsp ?? DEFAULT_LSP_CONFIG).enabled !== false;
 
-    // Plain banner without a surrounding box — line-based, wraps to width.
+    // Plain-баннер без рамки: построчно, с переносом по ширине.
     for (const line of info) {
       this.output.writeLine(pc.dim(line).trimEnd());
     }
     this.output.writeLine("");
 
-    // Legacy config hint
+    // Хинт про legacy-конфиг.
     try {
       const { existsSync: exists } = await import("fs");
       const { join: pathJoin } = await import("path");
@@ -1279,11 +1284,11 @@ export class Repl implements ReplContext, Host {
         this.output.writeLine("");
       }
     } catch {
-      // Legacy-config hint is best-effort; a read failure just skips it.
+      // Хинт best-effort: ошибка чтения его просто скипает.
     }
 
-    // Single prompt presentation for startup: the banner above was written
-    // plainly (promptPresented was false), so no frame needs erasing here.
+    // Единственный показ промпта на старте: баннер выше печатался plain
+    // (promptPresented был false), так что стирать кадр здесь нечего.
     this.rl.prompt();
     this.promptPresented = true;
 
@@ -1339,7 +1344,7 @@ export class Repl implements ReplContext, Host {
         .then((lspSummary) => {
           if (lspSummary) {
             const line = `${pc.green(t("repl.agent"))}${pc.yellow(t("repl.lsp_label"))} ${lspSummary}`;
-            // Channel owns the prompt row now: no manual erase + prompt() hack.
+            // Строкой промпта владеет канал: ручной erase + prompt()-хак не нужен.
             this.output.writeLine(`${divider()}\n${line}`);
           }
         })
@@ -1347,9 +1352,9 @@ export class Repl implements ReplContext, Host {
     }
 
     if ((this.config.provider.entries?.length ?? 0) > 1) {
-      // Phase 4.4: background health probe of all entries (free listModels
-      // calls). Failed providers are surfaced as warnings — failover (Phase
-      // 4.2) would silently mask a dead primary.
+      // Phase 4.4: фоновый health-пробник всех entries (бесплатные listModels).
+      // Упавшие провайдеры — предупреждениями: фейловер (Phase 4.2) молча
+      // замаскировал бы мёртвый primary.
       void probeProviders(
         targetsFromProviders(
           (this.config.provider.entries ?? [])
@@ -1375,15 +1380,14 @@ export class Repl implements ReplContext, Host {
         .catch(() => {});
     }
 
-    // Context probe (background): compare the context length the model is
-    // actually loaded with against the configured window. Same non-blocking
-    // banner pattern as the LSP probe above.
+    // Контекст-пробник (фоном): сверяем контекст, с которым модель реально
+    // загружена, против настроенного окна. Тот же неблокирующий баннер-паттерн,
+    // что у LSP-пробника выше.
     if (this.contextProbe) {
       void this.contextProbe
         .then((probe) => {
           if (!probe) return;
-          // The probe entry is persisted by bootstrap (all modes); here we only
-          // render the banner line.
+          // Запись пробника персистит bootstrap (все режимы); здесь только строка баннера.
           const line =
             probe.actual < this.config.contextWindow
               ? `${pc.yellow("⚠")} ${t("repl.context_probe_small", { model: probe.model, actual: probe.actual, configured: this.config.contextWindow })}`
@@ -1391,7 +1395,7 @@ export class Repl implements ReplContext, Host {
                 ? `${pc.dim(t("repl.context_probe_big", { model: probe.model, actual: probe.actual }))}`
                 : null;
           if (line) {
-            // Channel owns the prompt row now: no manual erase + prompt() hack.
+            // Строкой промпта владеет канал: ручной erase + prompt()-хак не нужен.
             this.output.writeLine(`${divider()}\n${line}`);
           }
         })
@@ -1400,16 +1404,16 @@ export class Repl implements ReplContext, Host {
   }
 
   /**
-   * Probe the LSP servers applicable to the current project and format a
-   * one-line banner summary, e.g. "✓ typescript (1.2s)" or "✗ css — timeout".
-   * Returns null when LSP is disabled or no server applies.
+   * Пробнит LSP-серверы, применимые к текущему проекту, и форматирует однострочную
+   * сводку баннера, напр. "✓ typescript (1.2s)" или "✗ css — timeout".
+   * Null, если LSP выключен или серверов нет.
    */
   private async probeLspBanner(): Promise<string | null> {
     const config = this.config.lsp ?? DEFAULT_LSP_CONFIG;
     try {
       const lspOnlyLogger = this.logger ? new FileOnlyLogger(this.logger) : undefined;
       const summary = await probeLspServers(config, this.baseDir, { logger: lspOnlyLogger });
-      // Log LSP probe results to session for post-mortem visibility
+      // Результаты LSP-пробника — в сессию, для пост-мортем видимости.
       this.slog.logSessionStart({
         environment: this.envReport as unknown as Record<string, unknown>,
         lspProbe: {
@@ -1437,13 +1441,14 @@ export class Repl implements ReplContext, Host {
     }
   }
 
+  /** Останов REPL: сейв истории, шатдаун агента, закрытие лога сессии. */
   public stop(): void {
     this.running = false;
     this.saveHistory();
     this.agent.shutdown();
     this.sessionOutput?.dispose();
     this.sessionOutput = undefined;
-    // Close session log when REPL stops
+    // Закрываем лог сессии на останове REPL.
     this.logger?.closeSessionLog();
     this.rl.close();
   }

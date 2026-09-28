@@ -1,10 +1,12 @@
+/** Версия MMA: читается из package.json в рантайме. */
 import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 /**
- * Read the MMA version from package.json at runtime (never a static import —
- * bundlers inline a stale value at build time, see design rule #12).
+ * Читает версию MMA из package.json в рантайме (не статическим импортом —
+ * бандлеры инлайнят устаревшее значение на этапе сборки, см. правило №12).
+ * @returns версия из package.json либо "0.0.0", если файл не найден/бит.
  */
 export function readMmaVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -15,12 +17,12 @@ export function readMmaVersion(): string {
         const raw = JSON.parse(readFileSync(p, "utf8"));
         if (raw.version) return raw.version;
       } catch {
-        // Broken package.json — fall through to the next candidate
+        // Битый package.json — пробуем следующий кандидат
       }
     }
   }
   return "0.0.0";
 }
 
-/** Legacy alias — use readMmaVersion(). */
+/** Устаревший алиас — используй readMmaVersion(). */
 export const readVersion = readMmaVersion;

@@ -1,3 +1,4 @@
+// Шифрование файлов сессий (history.jsonl, session.jsonl): чтение/запись/append.
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import {
@@ -9,40 +10,26 @@ import {
 import { defaultOutputBus } from "../../output";
 import { globalMmaDir } from "../../config/paths";
 
-/**
- * Session file encryption configuration
- */
+/** Конфиг шифрования файлов сессии. */
 export interface SessionEncryptionConfig {
-  /**
-   * Enable session file encryption
-   */
+  /** Включить шифрование файлов сессии */
   enabled: boolean;
-  /**
-   * Encrypt history.jsonl files
-   */
+  /** Шифровать history.jsonl */
   encryptHistory: boolean;
-  /**
-   * Encrypt session.jsonl files
-   */
+  /** Шифровать session.jsonl */
   encryptSessionLog: boolean;
-  /**
-   * Custom encryption key path (optional)
-   */
+  /** Кастомный путь ключа (опционально) */
   keyPath?: string;
 }
 
-/**
- * Default session encryption configuration
- */
+/** Дефолтный конфиг шифрования сессии (выключено). */
 export const DEFAULT_SESSION_ENCRYPTION: SessionEncryptionConfig = {
   enabled: false,
   encryptHistory: true,
   encryptSessionLog: true,
 };
 
-/**
- * Session file encryptor/decryptor
- */
+/** Шифровальщик/расшифровщик файлов сессии. */
 export class SessionFileEncryptor {
   private config: SessionEncryptionConfig;
   private encryptor: ConfigEncryptor;
@@ -54,41 +41,31 @@ export class SessionFileEncryptor {
     });
   }
 
-  /**
-   * Check if session file encryption is enabled
-   */
+  /** Включено ли шифрование файлов сессии. */
   isEnabled(): boolean {
     return this.config.enabled;
   }
 
-  /**
-   * Encrypt a session file content
-   */
+  /** Зашифровать содержимое файла сессии. */
   encryptFileContent(content: string): string {
     if (!this.config.enabled) return content;
     return encryptString(content, this.encryptor.getKey());
   }
 
-  /**
-   * Decrypt a session file content
-   */
+  /** Расшифровать содержимое файла сессии (plain text — как есть). */
   decryptFileContent(content: string): string {
     if (!this.config.enabled) return content;
     if (!isEncryptedString(content)) return content;
     return decryptString(content, this.encryptor.getKey());
   }
 
-  /**
-   * Encrypt a JSON object (for structured files)
-   */
+  /** Зашифровать JSON-объект (для структурных файлов). */
   encryptJSON<T>(obj: T): string {
     if (!this.config.enabled) return JSON.stringify(obj);
     return this.encryptFileContent(JSON.stringify(obj));
   }
 
-  /**
-   * Decrypt a JSON string
-   */
+  /** Расшифровать JSON-строку; мусор — ошибка. */
   decryptJSON<T>(content: string): T {
     let plain = content;
     if (this.config.enabled) {
@@ -103,18 +80,16 @@ export class SessionFileEncryptor {
     }
   }
 
-  /**
-   * Encrypt a JSONL file (one JSON object per line)
-   */
+  /** Зашифровать JSONL-файл (по строке на объект). */
   encryptJSONL(lines: string[]): string[] {
     if (!this.config.enabled) return lines;
     return lines.map((line) => this.encryptFileContent(line));
   }
 
   /**
-   * Decrypt a JSONL file. A line that fails to decrypt (corrupted, truncated
-   * by a crash, or foreign plaintext) is logged and SKIPPED — one bad line
-   * must not make the whole session history unreadable.
+   * Расшифровать JSONL. Строка с ошибкой (битая, оборванная крашем, чужой
+   * plaintext) логируется и ПРОПУСКАЕТСЯ — одна плохая строка не должна
+   * убивать всю историю сессии.
    */
   decryptJSONL(lines: string[]): string[] {
     if (!this.config.enabled) return lines;
@@ -135,46 +110,36 @@ export class SessionFileEncryptor {
     });
   }
 
-  /**
-   * Read and decrypt a session file
-   */
+  /** Прочитать и расшифровать файл сессии. */
   readSessionFile(filePath: string): string {
     const content = readFileSync(filePath, "utf8");
     return this.decryptFileContent(content);
   }
 
-  /**
-   * Write and encrypt a session file
-   */
+  /** Зашифровать и записать файл сессии. */
   writeSessionFile(filePath: string, content: string): void {
     const encrypted = this.encryptFileContent(content);
     writeFileSync(filePath, encrypted, "utf8");
   }
 
-  /**
-   * Read and decrypt a JSON session file
-   */
+  /** Прочитать и расшифровать JSON-файл сессии. */
   readSessionJSON<T>(filePath: string): T {
     const content = readFileSync(filePath, "utf8");
     return this.decryptJSON<T>(content);
   }
 
-  /**
-   * Write and encrypt a JSON session file
-   */
+  /** Зашифровать и записать JSON-файл сессии. */
   writeSessionJSON<T>(filePath: string, obj: T): void {
     const content = this.encryptJSON(obj);
     writeFileSync(filePath, content, "utf8");
   }
 
-  /**
-   * Read and decrypt a JSONL session file
-   */
+  /** Прочитать и расшифровать JSONL-файл сессии (битые строки пропускаются). */
   readSessionJSONL<T>(filePath: string): T[] {
     const content = readFileSync(filePath, "utf8");
     const lines = content.split("\n").filter((line) => line.trim());
     const decryptedLines = this.decryptJSONL(lines);
-    // Skip malformed lines instead of crashing the whole session log
+    // Кривые строки пропускаем, а не роняем весь лог сессии
     return decryptedLines.flatMap((line) => {
       try {
         return [JSON.parse(line) as T];
@@ -184,9 +149,7 @@ export class SessionFileEncryptor {
     });
   }
 
-  /**
-   * Append an encrypted entry to a JSONL file
-   */
+  /** Добавить зашифрованную запись в JSONL-файл. */
   appendToSessionJSONL<T>(filePath: string, obj: T): void {
     const encryptedLine = this.encryptFileContent(JSON.stringify(obj));
     writeFileSync(filePath, `${encryptedLine}\n`, {
@@ -195,9 +158,7 @@ export class SessionFileEncryptor {
     });
   }
 
-  /**
-   * Encrypt all session files in a directory
-   */
+  /** Зашифровать все файлы каталога сессии (*.enc, оригиналы удаляются). */
   encryptSessionDirectory(sessionDir: string): void {
     if (!this.config.enabled) return;
 
@@ -211,15 +172,13 @@ export class SessionFileEncryptor {
           writeFileSync(`${filePath}.enc`, encrypted, "utf8");
           unlinkSync(filePath);
         } catch {
-          // Skip binary files or files we can't read
+          // Бинарники и нечитаемое пропускаем
         }
       }
     }
   }
 
-  /**
-   * Decrypt all session files in a directory
-   */
+  /** Расшифровать все *.enc в каталоге сессии (оригиналы восстанавливаются). */
   decryptSessionDirectory(sessionDir: string): void {
     if (!this.config.enabled) return;
 
@@ -227,44 +186,36 @@ export class SessionFileEncryptor {
     for (const file of files) {
       if (file.endsWith(".enc")) {
         const encFilePath = join(sessionDir, file);
-        const decFilePath = encFilePath.slice(0, -4); // Remove .enc
+        const decFilePath = encFilePath.slice(0, -4); // снять .enc
         try {
           const content = readFileSync(encFilePath, "utf8");
           const decrypted = this.decryptFileContent(content);
           writeFileSync(decFilePath, decrypted, "utf8");
           unlinkSync(encFilePath);
         } catch {
-          // Skip files we can't decrypt
+          // Нерасшифровываемое пропускаем
         }
       }
     }
   }
 }
 
-/**
- * Global session file encryptor instance
- */
+/** Глобальный шифровальщик файлов сессии. */
 export const globalSessionEncryptor = new SessionFileEncryptor();
 
-/**
- * Create a session file encryptor with custom configuration
- */
+/** Создать шифровальщик файлов сессии с кастомным конфигом. */
 export function createSessionFileEncryptor(
   config?: Partial<SessionEncryptionConfig>,
 ): SessionFileEncryptor {
   return new SessionFileEncryptor(config);
 }
 
-/**
- * Helper to encrypt a message object (for SessionMessage)
- */
+/** Хелпер: зашифровать объект сообщения (для SessionMessage). */
 export function encryptSessionMessage(msg: any): string {
   return globalSessionEncryptor.encryptJSON(msg);
 }
 
-/**
- * Helper to decrypt a session message
- */
+/** Хелпер: расшифровать сообщение сессии. */
 export function decryptSessionMessage(encrypted: string): any {
   return globalSessionEncryptor.decryptJSON(encrypted);
 }

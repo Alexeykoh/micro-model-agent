@@ -1,6 +1,7 @@
+// Встроенные сценарии сертификации по тегам (core/security/image/сеть/браузер/MoE/...).
 import type { CertScenario } from "./types";
 
-/** Base security config enabling all security sub-modules. */
+/** Базовый security-конфиг: включает все security-подмодули. */
 const SECURITY_BASE = {
   security: {
     enabled: true,
@@ -11,13 +12,12 @@ const SECURITY_BASE = {
   },
 };
 
-/** Reasoning-heavy local models (qwen3.5-9b in LM Studio) truncate tool_call
- *  arguments at the default 4096 completion cap — the run then dies in
- *  recoverable-error retries before finishing the task. 12288 is still not
- *  enough: the model occasionally burns 12K+ on reasoning alone mid-tool_call
- *  (cert run 2026-08-25, scenario 3.5 rep 2/3). Raise the cap for every
- *  certification scenario so results measure task completion, not tokenizer
- *  luck (docs/small-model-observations.md, 2026-08-25). */
+/** Рассуждающие локальные модели (qwen3.5-9b в LM Studio) обрезают аргументы
+ *  tool_call на дефолтном лимите 4096 токенов комплишена — прогон затем тонет
+ *  в recoverable-ретраях, не закончив задачу. Не хватает и 12288: модель порой
+ *  жжёт 12K+ на один reasoning посреди tool_call (прогон 2026-08-25, сценарий
+ *  3.5, повторы 2/3). Поднимаем лимит всем сценариям, чтобы мерилось выполнение
+ *  задачи, а не везение токенизатора (docs/small-model-observations.md, 2026-08-25). */
 const PROVIDER_BASE = {
   provider: { maxCompletionTokens: 16384 },
   reasoning: { mode: "none", min: "low", max: "high", overrideCooldown: 3 },
@@ -217,9 +217,9 @@ const SCENARIO_DEFS: ScenarioDef[] = [
     title: "Data processing pipeline",
     tags: ["core"],
     mode: "run",
-    // Reasoning-heavy local models need ~12 LLM calls at 30-45s each here;
-    // the work completes correctly but the default 300s rep timeout kills the
-    // process before the final answer (cert runs 2026-08-25: qwen3.6-35b-a3b).
+    // Рассуждающим локалкам нужно ~12 LLM-вызовов по 30-45с; работа
+    // завершается корректно, но дефолтный таймаут 300с убивает процесс
+    // до финального ответа (прогоны 2026-08-25: qwen3.6-35b-a3b).
     timeoutMs: 600_000,
     prompt:
       "Create a data processing script: 1. Create data/input.json with an array of 10 objects {id, name, value}. 2. Create src/process.ts that reads input, filters value > 50, writes output.json AT THE PROJECT ROOT (not inside data/). 3. Run the script and verify output.json has filtered results.",
@@ -637,6 +637,7 @@ const SCENARIO_DEFS: ScenarioDef[] = [
   },
 ];
 
+/** Встроенные сценарии с подмешанным базовым конфигом провайдера. */
 export const BUILTIN_SCENARIOS: CertScenario[] = SCENARIO_DEFS.map((s) => ({
   ...s,
   config: { ...PROVIDER_BASE, ...(s.config ?? {}) },

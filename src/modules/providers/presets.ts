@@ -1,9 +1,10 @@
+// Builtin-пресеты провайдеров: capabilities, кеш-поведение, фабрики, base URL.
 // src/modules/providers/presets.ts
 import { OpenAICompatProvider, type RetryConfig } from "../../llm/openai-compat";
 import type { RateLimitConfig } from "../../config/types";
 import type { ProviderOptions, ProviderSpec } from "./types";
 
-/** Build an OpenAI-compatible provider (default for most backends). */
+/** Сборка OpenAI-совместимого провайдера (дефолт для большинства бэкендов). */
 function openaiCompat(opts: ProviderOptions) {
   const retry = (opts.retry ?? {
     maxRetries: 3,
@@ -53,10 +54,10 @@ const OPENAI_COMPAT: ProviderSpec = {
   create: openaiCompat,
 };
 
-/** LM Studio as a first-class provider: same OpenAI-compatible transport,
- *  but its own type so the native discovery (`/api/v1/models` loaded context,
- *  capabilities) and the fixed default URL travel with it instead of hiding
- *  inside a generic `openai-compat` entry. */
+/** LM Studio как first-class провайдер: тот же OpenAI-транспорт,
+ *  но свой type — native discovery (`/api/v1/models`: загруженный контекст,
+ *  capabilities) и фиксированный дефолтный URL едут с ним, а не прячутся
+ *  внутри generic-записи `openai-compat`. */
 const LMSTUDIO: ProviderSpec = {
   type: "lmstudio",
   label: "LM Studio (localhost:1234)",
@@ -164,9 +165,9 @@ const ANTHROPIC: ProviderSpec = {
       requestStreamUsage: false,
     },
   },
-  // The Anthropic messages API is NOT OpenAI-compatible. This preset is a
-  // placeholder until a real AnthropicProvider lands; the factory still uses
-  // the OpenAI-compatible code path today (broken), flagged via capabilities.
+  // Messages API Anthropic НЕ OpenAI-совместим. Пресет — заглушка до настоящего
+  // AnthropicProvider; фабрика пока идёт по OpenAI-кодпасу (сломано), что видно
+  // через capabilities.
   create: openaiCompat,
 };
 
@@ -224,7 +225,7 @@ const OPENCODE_GO: ProviderSpec = {
   create: openaiCompat,
 };
 
-/** All builtin provider presets. */
+/** Все builtin-пресеты провайдеров. */
 export const BUILTIN_PROVIDERS: ProviderSpec[] = [
   OPENAI_COMPAT,
   LMSTUDIO,
@@ -235,7 +236,7 @@ export const BUILTIN_PROVIDERS: ProviderSpec[] = [
   OPENCODE_GO,
 ];
 
-/** Fixed base URLs for hosted providers (no port scan / model autodetect). */
+/** Фиксированные base URL хостед-провайдеров (без скан-портов / автодетекта моделей). */
 export const HOSTED_BASE_URLS: Record<string, string> = {};
 for (const spec of BUILTIN_PROVIDERS) {
   if (spec.baseUrl) HOSTED_BASE_URLS[spec.type] = spec.baseUrl;

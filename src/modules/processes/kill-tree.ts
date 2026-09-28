@@ -1,3 +1,4 @@
+// Кроссплатформенный килл дерева процессов, неблокирующий (без stall event loop).
 import { spawn, type ChildProcess } from "child_process";
 import { platform } from "os";
 
@@ -12,22 +13,21 @@ function taskkillPid(pid: number): Promise<void> {
       child.on("close", () => resolve());
       child.on("error", () => resolve());
     } catch {
-      /* already dead / taskkill missing */
+      /* уже мёртв / нет taskkill */
     }
   });
 }
 
 /**
- * Kill a spawned process tree — cross-platform, non-blocking.
+ * Убивает дерево спавненного процесса — кроссплатформенно, неблокирующе.
  *
- * Windows: two `taskkill /T /F` passes 150ms apart (the second catches children
- * that were still being created during the first tree walk, e.g.
- * `cmd → node → tsserver`). Both are ASYNC: the previous `spawnSync` +
- * `Atomics.wait` stalled the event loop (UI/streaming froze) for up to ~10s per
- * process on shutdown.
+ * Windows: два прохода `taskkill /T /F` с паузой 150мс (второй добирает детей,
+ * ещё создававшихся во время первого обхода дерева, напр. `cmd → node →
+ * tsserver`). Оба АСИНХРОННЫ: прежние `spawnSync` + `Atomics.wait` стопили
+ * event loop (фроз UI/стрима) до ~10с на процесс при шатдауне.
  *
- * POSIX: process-group kill (`-pid`), falling back to `SIGKILL` on the direct
- * child when the group kill fails (e.g. non-detached process).
+ * POSIX: килл группы (`-pid`), при неудаче — `SIGKILL` прямому ребёнку
+ * (напр. не-detached процесс).
  */
 export function killTree(child: ChildProcess): void {
   const pid = child.pid;
@@ -44,7 +44,7 @@ export function killTree(child: ChildProcess): void {
     try {
       child.kill("SIGKILL");
     } catch {
-      /* already dead */
+      /* уже мёртв */
     }
   }
 }

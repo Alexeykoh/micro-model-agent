@@ -1,13 +1,18 @@
+/** Хост-контракт: мост для плагинов + снапшот состояния для UI. */
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
 import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
 
-/** Status of a single plan step surfaced to a Host. `skipped` is not part of
- *  the host contract; execution plans map it onto a settled state. */
+/**
+ * Статус шага плана для хоста. `skipped` не входит в контракт —
+ * планы исполнения маппят его на settled-состояние.
+ */
 export type PlanStepStatus = "pending" | "in_progress" | "done" | "failed";
 
-/** Snapshot a Host can render into a sidebar/topbar. Fields are best-effort:
- *  absent when the underlying module is not available (e.g. no session yet). */
+/**
+ * Снапшот состояния для сайдбара/топбара. Поля best-effort:
+ * отсутствуют, если модуль недоступен (например, сессии ещё нет).
+ */
 export interface HostStateSnapshot {
   busy: boolean;
   sessionId?: string;
@@ -18,27 +23,25 @@ export interface HostStateSnapshot {
   contextLimit?: number;
   costUsd?: number;
   compactionCount?: number;
-  /** Prompt-cache hit rate for the last turn (0..1); absent when unknown. */
+  /** Хитрейт промпт-кэша за последний ход (0..1); нет, если неизвестен. */
   cacheHitRate?: number;
-  /** Context quality score for the last turn (0..100); absent when unknown. */
+  /** Оценка качества контекста за последний ход (0..100); нет, если неизвестна. */
   contextQuality?: number;
   /**
-   * LM Studio context probe (actual loaded context vs configured). Absent while
-   * the probe is pending or when the provider is not probeable; `null` when the
-   * probe finished without a result.
+   * Проба контекста LM Studio (фактический vs настроенный). Нет, пока проба
+   * в пути или провайдер не опрашивается; `null` — проба пустая.
    */
   contextProbe?: { model: string; actual: number } | null;
   /**
-   * Effective context window (tokens) the agent budgets against. Carried in
-   * the snapshot so web clients learn about a late provider auto-detect
-   * without re-fetching `/api/config`.
+   * Эффективное окно контекста (токены) для бюджетирования. В снапшоте,
+   * чтобы веб-клиент узнал о позднем автодетекте без перечитывания `/api/config`.
    */
   contextWindow?: number;
-  /** Agent workspace (the `-d` dir), absolute; absent when unknown. */
+  /** Workspace агента (каталог `-d`), абсолютный; нет, если неизвестен. */
   workspace?: string;
-  /** AGENTS.md instruction sources that were loaded (or `disabled` via flag). */
+  /** Источники инструкций AGENTS.md (`disabled` — флаг --no-agents-md). */
   instructions?: { files: string[]; disabled: boolean };
-  /** Project-map (index) stats; `indexed:false` until the walk finishes. */
+  /** Статистика карты проекта; `indexed:false`, пока обход не завершён. */
   projectMap?: { indexed: boolean; files: number; symbols: number; tokens: number };
   plan?: {
     steps: { text: string; status: PlanStepStatus }[];
@@ -47,17 +50,17 @@ export interface HostStateSnapshot {
 }
 
 /**
- * Full host surface. `HostBridge` (plugin-facing, narrow) stays the plugin
- * contract; `Host` adds the pieces web mode needs. `Repl` and `WebHost` are the
- * two implementations.
+ * Полная поверхность хоста. `HostBridge` (узкий, для плагинов) — контракт
+ * плагинов; `Host` добавляет нужное веб-режиму. Реализации: `Repl`, `WebHost`.
  */
 export interface Host extends HostBridge {
-  /** Execute a slash command line (e.g. "/status") through the shared handler map. */
+  /** Выполняет slash-команду (напр. "/status") через общую карту хендлеров. */
   executeCommand(line: string): Promise<void>;
-  /** Current state for sidebar/topbar rendering. */
+  /** Текущее состояние для сайдбара/топбара. */
   getState(): HostStateSnapshot;
 }
 
+/** Опции фабрики хост-моста: занятость, картинки, запуск и прерывание. */
 export interface CreateHostBridgeOptions {
   isBusy: () => boolean;
   addPendingImage: (dataUrl: string) => void;
@@ -66,10 +69,9 @@ export interface CreateHostBridgeOptions {
 }
 
 /**
- * Build the HostBridge exposed to plugins as `ctx.hostBridge`. Web clients
- * (and any other plugin) submit messages through the SAME runAgent path as
- * terminal input — rendering, session logging and single-flight guard are
- * shared, never duplicated.
+ * Строит HostBridge для плагинов (`ctx.hostBridge`). Веб-клиенты (и любой
+ * плагин) шлют сообщения через ТОТ ЖЕ runAgent-путь, что и терминальный ввод:
+ * рендеринг, лог сессии и single-flight guard общие, без дублирования.
  */
 export function createHostBridge(opts: CreateHostBridgeOptions): HostBridge {
   return {

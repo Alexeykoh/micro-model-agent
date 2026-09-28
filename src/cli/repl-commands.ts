@@ -1,3 +1,4 @@
+// Slash-команды REPL: /config, /model, /provider, сессии, сахар над mutateConfig.
 import { pc } from "../ui/colors";
 import { resolveVerbosity } from "../ui/theme";
 import { readMmaVersion } from "../core/version";
@@ -47,20 +48,22 @@ import { registerSkillCommands } from "./repl-commands-skills";
 
 const version = readMmaVersion();
 
+/** Slash-команда REPL: имя, описание, алиасы, usage и действие. */
 export interface SlashCommand {
   name: string;
   description: string;
   aliases?: string[];
   usage?: string;
-  /** Short worked examples shown by `/help <command>`. */
+  /** Короткие рабочие примеры для `/help <команда>`. */
   examples?: string[];
   action(args: string[]): void | Promise<void>;
 }
 
+/** Контекст REPL, пробрасываемый командам: агент, конфиг, сессии, вывод. */
 export interface ReplContext {
   readonly config: AppConfig;
   readonly agent: Agent;
-  /** Shared tool context — carries mode-scoped state (allowlist, onboarding). */
+  /** Общий контекст тулов: несёт состояние скоупа режима (allowlist, онбординг). */
   readonly toolCtx: import("../tools/types").ToolContext;
   readonly rl: LineInput;
   readonly sessionManager?: SessionManager;
@@ -68,17 +71,17 @@ export interface ReplContext {
   readonly pluginManager?: PluginManager;
   readonly configDir: string;
   readonly baseDir: string;
-  /** Single terminal writer — commands must never write to console/stdout directly. */
+  /** Единый писатель терминала: команды в console/stdout напрямую не пишут. */
   readonly output: OutputChannel;
   registerCommand(cmd: SlashCommand): void;
   runAgent(input: string): Promise<void>;
   withExclusiveInput(fn: () => Promise<void>): Promise<void>;
   showHelp(command?: string): void;
-  /** Rebuild the command registry + completer (used after a locale change). */
+  /** Перестройка реестра команд + комплитера (после смены локали). */
   reregisterCommands(): void;
-  /** Boot snapshot of managed config keys for `/config reset`. */
+  /** Boot-снапшот управляемых ключей для `/config reset`. */
   getConfigSnapshot(): ReadonlyMap<string, unknown>;
-  /** Cached model ids from the active provider (may be empty when offline). */
+  /** Кешированные id моделей активного провайдера (пусто, если офлайн). */
   knownModels(): string[];
   setupCompleter(): void;
   refreshModelCache(): void;
@@ -88,6 +91,7 @@ export interface ReplContext {
   stop(): void;
 }
 
+/** Группы команд для `/help` (general/agent/session/skill). */
 export const COMMAND_GROUPS: Record<string, string> = {
   help: "general",
   exit: "general",
@@ -120,6 +124,7 @@ export const COMMAND_GROUPS: Record<string, string> = {
   plugins: "agent",
 };
 
+/** Регистрирует все команды REPL (builtin + mma + онбординг + сессии + скиллы). */
 export function registerAllCommands(ctx: ReplContext): void {
   registerBuiltinCommands(ctx);
   registerMmaCommands(ctx);
@@ -336,8 +341,8 @@ function applyConfigSideEffects(
   result: ConfigSetResult & { ok: true },
 ): void {
   if (result.key === "ui.verbosity") {
-    // Mirror the startup rule (`main.ts`): structured info logs and loop
-    // diagnostics are chat-visible only in verbose mode.
+    // Зеркало стартового правила (`main.ts`): структурные info-логи и диагностика
+    // петли видимы в чате только в verbose.
     const verbose = (result.value as string) === "verbose";
     ctx.output.setSuppressInfoLogs(!verbose);
     ctx.output.setShowDiagnostics(verbose);
@@ -354,9 +359,8 @@ function persistConfig(ctx: ReplContext): void {
 }
 
 /**
- * The single write path for every settings mutation. Sugar commands must call
- * this too, so validation, side effects, persistence and reconfigure never
- * drift apart.
+ * Единый путь записи каждой мутации настроек. Сахарные команды тоже идут сюда,
+ * чтобы валидация, сайд-эффекты, персист и reconfigure не расходились.
  */
 async function mutateConfig(
   ctx: ReplContext,
@@ -519,9 +523,9 @@ function registerConfigCommands(ctx: ReplContext): void {
     usage: t("repl.config_usage"),
     examples: ["/config", "/config model", "/config reasoning.mode high", "/config reset ui.verbosity"],
     action: async (args: string[]) => {
-      // Subcommand routing: `/config migrate`. A separate registration with
-      // a space in the name was unreachable — the dispatcher splits input on
-      // whitespace, so "/config migrate" always resolved to plain "config".
+      // Роутинг субкоманды `/config migrate`. Отдельная регистрация с пробелом в
+      // имени недостижима: диспетчер режет ввод по пробелам, и "/config migrate"
+      // всегда резолвился в plain "config".
       if ((args[0] ?? "").trim().toLowerCase() === "migrate") {
         return runConfigMigrate(ctx);
       }

@@ -1,3 +1,4 @@
+/** Тул изолированного субагента (свой контекст, скоуп, теги тулов, MoE-off). */
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext, ToolScope } from "./types";
 import { Agent } from "../core/agent";
@@ -10,7 +11,7 @@ import { getSessionSecurityConfig } from "../modules/security/session-isolation"
 import { ArtifactStore } from "../modules/artifacts/store";
 import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
 
-/** Fixed system prompt (KV-cache friendly when stableSystemPrompt is on). */
+/** Фиксированный системный промпт (KV-cache дружит при stableSystemPrompt). */
 export const SUBAGENT_SYSTEM_PROMPT_TEMPLATE = `You are a sub-agent working on a specific task. You have your own context window and tool set.
 
 Workflow rules:
@@ -19,11 +20,13 @@ Workflow rules:
 - If the task is big and decomposable, delegate parts to the subagent tool instead of doing everything in one context.
 - When you finish, return a concise final answer; do not repeat file contents verbatim if you already wrote them to disk.`;
 
+/** Собирает системный промпт субагента (стабильный или с контекстом). */
 function buildSubagentSystemPrompt(context: string, stable: boolean): string {
   if (stable) return SUBAGENT_SYSTEM_PROMPT_TEMPLATE;
   return `You are a sub-agent working on a specific task. ${context ? `Context: ${context}` : ""}`;
 }
 
+/** Спавнит изолированного субагента. Параметры: task, scope-файлы, tool_tags, result_mode. */
 export const subagentTool: ToolDefinition = {
   name: "subagent",
   icon: "🤖",
@@ -90,15 +93,15 @@ export const subagentTool: ToolDefinition = {
       return { success: false, output: t("tool.name_or_task") };
     }
 
-    // Get session-specific security config
+    // Сессионный security-конфиг.
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
       : ctx.config.security;
 
-    // Security check: limit recursion depth. Read the depth from the SHARED
-    // executor ctx (which nested sub-agents actually see) — `ctx.recursionDepth`
-    // was captured once at bootstrap and never incremented, so the guard never
-    // fired and a sub-agent could spawn sub-agents unbounded.
+    // Лимит глубины рекурсии. Глубину читаем из SHARED-контекста исполнителя
+    // (его видят вложенные субагенты) — `ctx.recursionDepth` снапшотился раз при
+    // bootstrap и не инкрементился, поэтому гард не срабатывал и субагент мог
+    // спавнить субагентов безгранично.
     const executor = ctx.toolExecutor;
     const parentDepth =
       executor?.getRecursionDepth?.() ?? (ctx.recursionDepth ?? 0);
@@ -135,11 +138,11 @@ export const subagentTool: ToolDefinition = {
       };
     }
 
-    // Defensive guard: if the caller requested specific tool tags but none of the
-    // registered tools match, the sub-agent would have zero tools and would
-    // hallucinate instead of acting. Warn the caller so it can correct the tags.
-    // Uses getByTags (not getAllForLLM) because alwaysOn tools always match the
-    // latter — the guard must test real tag coverage, not schema presence.
+    // Оборонительный гард: запрошенные tool_tags ни с чем не мэтчатся — у
+    // субагента ноль тулов, и он галлюцинирует вместо действий. Предупредить
+    // вызывающего для коррекции тегов. Проверка через getByTags (не
+    // getAllForLLM): alwaysOn мэтчатся всегда — гард меряет реальное покрытие,
+    // а не присутствие в схеме.
     if (toolTags && toolTags.length > 0) {
       const matched = ctx.toolExecutor.getRegistry().getByTags(toolTags);
       if (matched.length === 0) {
@@ -150,15 +153,14 @@ export const subagentTool: ToolDefinition = {
       }
     }
 
-    // Save/restore the shared executor scope so the sub-agent doesn't
-    // permanently mutate the parent's scope. Read the CURRENT scope from the
-    // shared executor, not `ctx.scope`: MoE invokes this tool with an ad-hoc
-    // context whose `scope` is undefined, so capturing `ctx.scope` restored
-    // "unrestricted" and wiped isolation for the whole wave.
+    // Сейв/рестор shared-скоупа исполнителя, чтобы субагент не мутировал скоуп
+    // родителя навсегда. Текущий скоуп — из shared-исполнителя, не `ctx.scope`:
+    // MoE зовёт тул с ad-hoc контекстом без scope — снапшот `ctx.scope` ресторил
+    // бы "unrestricted" и сносил изоляцию всей волне.
     const parentScope = executor?.getScope?.() ?? ctx.scope;
     const appliedScope = scope || { allowed_files: [], read_only_files: [] };
-    // Compare-and-restore: under parallel MoE waves a sibling may have
-    // installed its own scope meanwhile — never clobber the newer owner.
+    // Compare-and-restore: параллельная MoE-волна могла тем временем поставить
+    // свой скоуп — чужого свежего владельца не затирать.
     const restoreScope = () => {
       if (ctx.toolExecutor?.getScope?.() === appliedScope) {
         ctx.toolExecutor.setScope(parentScope);
@@ -171,19 +173,19 @@ export const subagentTool: ToolDefinition = {
         ctx.config.contextBudget,
       );
       const subPluginManager = new PluginManager();
-      // Deterministic scope-denial tracking: when the child's file tools are
-      // blocked by the scope guard, the denial is surfaced as a machine-readable
-      // <scope-request> block in the result (see MoE executor / Router).
+      // Детерминированный трекинг scope-отказов: блокировки файловых тулов
+      // ребёнка скоуп-гардом всплывают машиночитаемым блоком <scope-request>
+      // в результате (см. MoE executor / Router).
       const scopeCollector = new ScopeDenialCollector();
       subPluginManager.register(scopeCollector.plugin, "builtin");
       const hallucinationDetector = new HallucinationDetector(ctx.baseDir, ctx.llmProvider);
 
       ctx.toolExecutor.setScope(appliedScope);
-      // Register cleanup so the executor restores scope on timeout/abort
-      // even when the agent's `finally` block never runs (abandoned promise).
+      // Cleanup на исполнителе — рестор скоупа при таймауте/аборте, даже если
+      // `finally` агента не отработал (брошенный промис).
       ctx.cleanup = restoreScope;
-      // Increment recursion depth on the shared executor ctx so NESTED
-      // sub-agents see the deeper level (and the guard above can fire).
+      // Глубину — на shared-контекст исполнителя, чтобы ВЛОЖЕННЫЕ субагенты
+      // видели уровень глубже (и гард выше мог сработать).
       ctx.recursionDepth = currentDepth + 1;
       executor?.setRecursionDepth?.(currentDepth + 1);
 
@@ -197,12 +199,11 @@ export const subagentTool: ToolDefinition = {
         estimatedTokens: 150,
       };
 
-      // MoE is a TOP-LEVEL orchestration mode: a sub-agent spawned by the
-      // subagent tool must always run the plain single-agent loop. Sharing the
-      // parent's config here made every MoE sub-agent re-enter runWithMoE —
-      // planning its own subtasks and spawning nested sub-agents recursively
-      // (bounded only by maxRecursionDepth), which hung execution for many
-      // minutes with zero progress events.
+      // MoE — TOP-LEVEL режим оркестрации: субагент от тула subagent всегда идёт
+      // plain single-agent циклом. Шаринг родительского конфига заставлял каждого
+      // MoE-субагента реентерить runWithMoE — планировать свои сабтаски и рекурсивно
+      // спавнить вложенных субагентов (лимит — лишь maxRecursionDepth), что вешало
+      // исполнение на минуты без прогресс-событий.
       const subConfig = { ...ctx.config, moe: { ...ctx.config.moe, enabled: false } };
 
       const subDeps = {
@@ -266,8 +267,8 @@ export const subagentTool: ToolDefinition = {
               iterations: String(result.iterationCount),
               summary,
             }),
-            // Structured path so callers (MoE executor) don't parse the
-            // localized `output` string.
+            // Структурированный путь, чтобы вызывающие (MoE executor) не парсили
+            // локализованную строку `output`.
             artifactPath: abs,
             usage: pickUsage(),
           };
@@ -282,9 +283,9 @@ export const subagentTool: ToolDefinition = {
           usage: pickUsage(),
         };
       } finally {
-        // Restore the parent's exact scope (compare-and-restore so a parallel
-        // sibling's newer scope is not clobbered). undefined means "no
-        // restrictions" and must not become an empty scope (denies everything).
+        // Рестор точного скоупа родителя (compare-and-restore — свежий скоуп
+        // параллельного сиблинга не затирать). undefined — "без ограничений",
+        // пустым скоупом (запрет всего) становиться не должен.
         restoreScope();
         if (ctx.cleanup === restoreScope) ctx.cleanup = undefined;
         ctx.recursionDepth = currentDepth;

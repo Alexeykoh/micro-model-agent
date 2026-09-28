@@ -1,19 +1,23 @@
-// src/llm/provider
+/** Контракт LLM-провайдера: сообщения, чанки, тулы, опции чата. */
 import type { ReasoningLevel, ReasoningStrategy } from "../config/types";
 import type { CacheUsage } from "./cache-usage";
 
+/** Текстовая часть контента сообщения. */
 export interface TextPart {
   type: "text";
   text: string;
 }
 
+/** Картиночная часть контента (image_url). */
 export interface ImageUrlPart {
   type: "image_url";
   image_url: { url: string };
 }
 
+/** Часть контента: текст или картинка. */
 export type ContentPart = TextPart | ImageUrlPart;
 
+/** Сообщение чата: роль, контент, тул-мета. */
 export interface Message {
   role: "system" | "user" | "assistant" | "tool";
   content: string | ContentPart[];
@@ -21,7 +25,7 @@ export interface Message {
   name?: string;
 }
 
-/** Helper: extract plain text from message content (for token counting, logging, etc.) */
+/** Хелпер: плоский текст из контента (подсчёт токенов, логи и т.п.). */
 export function getMessageText(content: string | ContentPart[]): string {
   if (typeof content === "string") return content;
   return content
@@ -30,17 +34,18 @@ export function getMessageText(content: string | ContentPart[]): string {
     .join("");
 }
 
+/** Определение тула для модели: имя, описание, JSON-схема параметров. */
 export interface ToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
 }
 
+/** Чанк стрима: текст/reasoning/вызов тула/done/нефатальный warning. */
 export interface Chunk {
   /**
-   * `warning` — non-fatal, user-facing notice about the model response
-   * (e.g. it was cut off by the completion token limit). Not part of the
-   * assistant text/context.
+   * `warning` — нефатальное уведомление о модели-ответе (напр., обрезка по
+   * лимиту completion-токенов). Не входит в текст/контекст ассистента.
    */
   type: "text" | "reasoning" | "tool_call" | "done" | "warning";
   content?: string;
@@ -59,15 +64,17 @@ export interface Chunk {
   };
 }
 
+/** Опции вызова chat: лимит токенов, уровень и стратегия reasoning. */
 export interface ChatOptions {
-  /** Cap on generated tokens for this call (overrides provider default). */
+  /** Cap сгенерированных токенов на вызов (перебивает дефолт провайдера). */
   maxTokens?: number;
-  /** Reasoning effort level. */
+  /** Уровень reasoning effort. */
   reasoningEffort?: ReasoningLevel;
-  /** How the provider expresses reasoning effort in the API request. */
+  /** Как провайдер выражает effort в API-запросе. */
   reasoningStrategy?: ReasoningStrategy;
 }
 
+/** Интерфейс LLM-провайдера: стрим чата, подсчёт токенов, список моделей. */
 export interface LLMProvider {
   readonly model: string;
   readonly contextWindow: number;

@@ -1,3 +1,6 @@
+/**
+ * Публичные экспорты пакета и библиотечный хелпер миграции конфига.
+ */
 export { DEFAULTS, loadConfig } from "./config/index";
 export type { AppConfig, ProviderConfig, ContextBudget } from "./config/types";
 export type { OrchestratorConfig } from "./config/types";
@@ -59,8 +62,8 @@ export function checkMigration(configDir?: string): void {
   const dir = configDir || join(homedir(), MMA_DIR_NAME);
   const detector = new MigrationDetector(dir);
   if (detector.needsMigration()) {
-    // Ensure a terminal subscriber exists before emitting to the bus; library
-    // consumers have no other eager channel creation.
+    // Терминальный подписчик должен существовать до отправки в шину: у
+    // библиотечных потребителей нет другого eager-создания канала.
     getDefaultChannel();
     const backup = new BackupManager(dir);
     backup.backupConfig();

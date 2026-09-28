@@ -1,14 +1,6 @@
-/**
- * REST handlers for the Memory / Skills / Plugins·MCP settings pages of `mma web`.
- *
- * Split out of `server.ts` (rule #1: ≤300 lines/file). Each handler reads the
- * optional collaborators `module.ts` wires from bootstrap (`memory`, `skills`,
- * `plugins`, `config`). A missing collaborator is a server-side wiring gap, not
- * a client error: those endpoints answer 503 instead of crashing.
- *
- * Auth + same-origin are enforced upstream in `server.ts`; these functions
- * assume the request already passed both checks.
- */
+// REST-хендлеры страниц настроек Memory / Skills / Plugins·MCP `mma web`.
+// Вынесены из `server.ts`. Без коллаборатора — пробел wiring: такие точки отвечают 503.
+// Auth и same-origin — выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { redactContextSecrets } from "../../core/agent/context-log";
 import { readBodyError, sendJson } from "./util";
@@ -17,19 +9,20 @@ import type { WebUiState } from "./state";
 import type { AppConfig, MCPServerConfigEntry } from "../../config/types";
 import { DEFAULT_LSP_CONFIG } from "../lsp/config";
 
-/** Append-only memory categories (mirrors `memory-commands.ts` / `MemoryStore`). */
+/** Append-only категории памяти (зеркало `memory-commands.ts` / `MemoryStore`). */
 const MEMORY_CATEGORIES = ["conventions", "decisions", "errors", "facts"] as const;
 
 function isCategory(value: string): value is (typeof MEMORY_CATEGORIES)[number] {
   return (MEMORY_CATEGORIES as readonly string[]).includes(value);
 }
 
+/** Запись памяти: номер и текст. */
 interface MemoryEntry {
   n: number;
   text: string;
 }
 
-/** Split an append-only category file into its 1-based entries (`- ` blocks). */
+/** Режет append-only файл категории на записи с нумерацией от 1 (`- `-блоки). */
 function listEntries(markdown: string): MemoryEntry[] {
   const lines = markdown.split(/\r?\n/);
   const entries: MemoryEntry[] = [];
@@ -39,7 +32,7 @@ function listEntries(markdown: string): MemoryEntry[] {
   return entries;
 }
 
-/** `GET /api/memory` — preferences + entries grouped by category (secrets redacted). */
+/** `GET /api/memory` — преференсы + записи по категориям (секреты вычищены). */
 export function handleMemoryGet(res: ServerResponse, s: WebUiState): void {
   if (!s.memory) {
     sendJson(res, 503, { error: "memory_unavailable" });
@@ -60,7 +53,7 @@ export function handleMemoryGet(res: ServerResponse, s: WebUiState): void {
   sendJson(res, 200, { preferences, categories });
 }
 
-/** `POST /api/memory {category, text}` — append an entry. */
+/** `POST /api/memory {category, text}` — дописать запись. */
 export function handleMemoryPost(
   req: IncomingMessage,
   res: ServerResponse,
@@ -91,7 +84,7 @@ export function handleMemoryPost(
     });
 }
 
-/** `DELETE /api/memory/:category/:n` — forget the nth entry. */
+/** `DELETE /api/memory/:category/:n` — забыть n-ю запись. */
 export function handleMemoryDelete(
   res: ServerResponse,
   category: string,
@@ -114,7 +107,7 @@ export function handleMemoryDelete(
   sendJson(res, 200, { ok: true });
 }
 
-/** `GET /api/skills` — available skills with a loaded/enabled indicator. */
+/** `GET /api/skills` — доступные скиллы с флагом загруженности. */
 export function handleSkillsGet(res: ServerResponse, s: WebUiState): void {
   if (!s.skills) {
     sendJson(res, 503, { error: "skills_unavailable" });
@@ -130,24 +123,24 @@ export function handleSkillsGet(res: ServerResponse, s: WebUiState): void {
   sendJson(res, 200, { skills });
 }
 
-/** Project configured MCP servers into the settings UI shape. */
+/** MCP-серверы проекта в форме для UI настроек. */
 export interface McpServerView {
   id: string;
   name: string;
   status: string;
   transport?: string;
-  /** Non-secret connection fields (safe to echo for edit prefill). */
+  /** Несекретные поля соединения (безопасно эхом для префилла правки). */
   command?: string;
   url?: string;
   args?: string[];
   timeout?: number;
   enabled?: boolean;
-  /** Secret-bearing maps are exposed as key names only, never values. */
+  /** Секрет-носящие мапы отдаются только именами ключей, никогда значениями. */
   envKeys: string[];
   headerKeys: string[];
 }
 
-/** Optional non-secret MCP fields merged into the view (stays under the complexity gate). */
+/** Опциональные несекретные поля MCP для вида (держат гейт сложности). */
 function mcpViewOptionals(cfg: MCPServerConfigEntry): Partial<McpServerView> {
   const out: Partial<McpServerView> = {};
   if (cfg.transport) out.transport = cfg.transport;
@@ -171,7 +164,7 @@ function mcpList(s: WebUiState): McpServerView[] {
   }));
 }
 
-/** `GET /api/plugins` — registered plugins + configured MCP servers. */
+/** `GET /api/plugins` — зарегистрированные плагины + настроенные MCP-серверы. */
 export function handlePluginsGet(res: ServerResponse, s: WebUiState): void {
   if (!s.plugins) {
     sendJson(res, 503, { error: "plugins_unavailable" });
@@ -192,12 +185,12 @@ export function handlePluginsGet(res: ServerResponse, s: WebUiState): void {
 }
 
 /**
- * `POST /api/mcp/:id {enabled}` — toggle a configured MCP server.
+ * `POST /api/mcp/:id {enabled}` — тоггл настроенного MCP-сервера.
  *
- * `config.mcpServers[id].enabled` is the flag the MCP module filters on at
- * bootstrap, so the change is persisted and takes effect on the next run (MCP
- * connections are not re-established by `agent.reconfigure`). The response
- * carries `restartRequired: true` so the UI can say so.
+ * `config.mcpServers[id].enabled` — флаг, фильтруемый MCP-модулем на bootstrap,
+ * так что смена персистится и вступает со следующего запуска (MCP-соединения
+ * через `agent.reconfigure` не переподнимаются). Ответ несёт
+ * `restartRequired: true`, чтобы UI так и сказал.
  */
 export function handleMcpToggle(
   req: IncomingMessage,
@@ -239,14 +232,16 @@ export function handleMcpToggle(
     });
 }
 
-/** Transports accepted for an MCP server entry (`MCPServerConfigEntry`). */
+/** Транспорты записи MCP-сервера (`MCPServerConfigEntry`). */
 const MCP_TRANSPORTS = ["stdio", "sse", "http"] as const;
 
+/** Итог записи MCP: id или код ошибки. */
 export type McpWriteResult = { ok: true; id: string } | { ok: false; error: string };
 
+/** Итог записи LSP: язык или код ошибки. */
 export type LspWriteResult = { ok: true; lang: string } | { ok: false; error: string };
 
-/** Read shape for one LSP server row (no secrets exist in LSP config). */
+/** Read-форма строки LSP-сервера (секретов в LSP-конфиге нет). */
 export interface LspServerView {
   lang: string;
   command: string;
@@ -280,7 +275,7 @@ function validTimeout(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1000 && value <= 300000;
 }
 
-/** Coherence check on a merged MCP entry: transport vs command/url + timeout. */
+/** Проверка когерентности смёрженной MCP-записи: транспорт vs command/url + таймаут. */
 function validateMcpEntry(entry: MCPServerConfigEntry): string | null {
   const transport = entry.transport ?? "stdio";
   if (!(MCP_TRANSPORTS as readonly string[]).includes(transport)) return "invalid-transport";
@@ -295,7 +290,7 @@ function validateMcpEntry(entry: MCPServerConfigEntry): string | null {
 
 type FieldApplier<T> = (target: T, value: unknown) => string | null;
 
-/** Run the per-field appliers in table order; first error wins. */
+/** Гоняет пополевые апплаеры в порядке таблицы; первая ошибка побеждает. */
 function applyFields<T>(
   target: T,
   patch: Record<string, unknown>,
@@ -322,7 +317,7 @@ function setTrimmed(
   return null;
 }
 
-/** Per-field MCP appliers (rule #17: table, no `if` chain). */
+/** Пополевые MCP-апплаеры (правило #17: таблица, без `if`-цепочки). */
 const MCP_FIELD_APPLIERS: Record<string, FieldApplier<MCPServerConfigEntry>> = {
   name: (next, v) => {
     if (typeof v !== "string" || !v.trim()) return "name-required";
@@ -376,8 +371,8 @@ function applyMcpPatch(
 }
 
 /**
- * Pure create: validates `input` and stores the entry under its trimmed name.
- * Never echoes secret values — the caller renders the masked `mcpList` view.
+ * Чистое создание: валидирует `input` и кладёт запись под тримменным именем.
+ * Секреты значениями не эхом — вызывающий рендерит маскированный `mcpList`-вид.
  */
 export function createMcpServer(config: AppConfig, input: unknown): McpWriteResult {
   if (!isRecord(input)) return { ok: false, error: "invalid-input" };
@@ -394,7 +389,7 @@ export function createMcpServer(config: AppConfig, input: unknown): McpWriteResu
   return { ok: true, id: name };
 }
 
-/** Pure full/partial edit of an MCP server entry (key stays `id`). */
+/** Чистая полная/частичная правка MCP-записи (ключ остаётся `id`). */
 export function updateMcpServer(
   config: AppConfig,
   id: string,
@@ -412,14 +407,14 @@ export function updateMcpServer(
   return { ok: true, id };
 }
 
-/** Pure delete of an MCP server entry. */
+/** Чистое удаление MCP-записи. */
 export function deleteMcpServer(config: AppConfig, id: string): McpWriteResult {
   if (!config.mcpServers?.[id]) return { ok: false, error: "not_found" };
   delete config.mcpServers[id];
   return { ok: true, id };
 }
 
-/** Pure read: LSP servers table (falls back to built-in defaults). */
+/** Чистое чтение: таблица LSP-серверов (фолбэк — встроенные дефолты). */
 export function listLspServers(config: AppConfig): LspServerView[] {
   const lsp = config.lsp ?? DEFAULT_LSP_CONFIG;
   return Object.entries(lsp.servers).map(([lang, srv]) => {
@@ -435,7 +430,7 @@ export function listLspServers(config: AppConfig): LspServerView[] {
   });
 }
 
-/** Per-field LSP appliers (rule #17: table, no `if` chain). */
+/** Пополевые LSP-апплаеры (правило #17: таблица, без `if`-цепочки). */
 const LSP_FIELD_APPLIERS: Record<
   string,
   FieldApplier<{ enabled?: boolean; command: string; args?: string[]; timeout?: number }>
@@ -463,7 +458,7 @@ const LSP_FIELD_APPLIERS: Record<
   },
 };
 
-/** Field-level LSP patch; returns the error code or null. */
+/** Пополевой LSP-патч; возвращает код ошибки или null. */
 function applyLspPatch(
   srv: { enabled?: boolean; command: string; args?: string[]; timeout?: number },
   patch: Record<string, unknown>,
@@ -471,7 +466,7 @@ function applyLspPatch(
   return applyFields(srv, patch, LSP_FIELD_APPLIERS);
 }
 
-/** Pure edit of one LSP server (creates the `lsp` section from defaults when absent). */
+/** Чистая правка одного LSP-сервера (секцию `lsp` поднимает из дефолтов, если нет). */
 export function updateLspServer(
   config: AppConfig,
   lang: string,
@@ -486,7 +481,7 @@ export function updateLspServer(
   return { ok: true, lang };
 }
 
-/** Best-effort persist; a throwing `saveConfig` must not become a 500. */
+/** Best-effort персист; бросающий `saveConfig` не должен стать 500-й. */
 function persistConfig(s: WebUiState, config: AppConfig): boolean {
   try {
     s.saveConfig?.(config);
@@ -501,9 +496,9 @@ type ConfigWriteOutcome =
   | { ok: false; status: number; error: string };
 
 /**
- * Shared envelope for config write endpoints: 503 without config, 400 on bad
- * JSON, then the pure mutation. Success persists and flags `restartRequired`
- * (MCP/LSP connections are only (re-)established at bootstrap).
+ * Общий конверт пишущих точек конфига: 503 без конфига, 400 на битом JSON,
+ * затем чистая мутация. Успех персистится и флажит `restartRequired`
+ * (MCP/LSP-соединения (пере-)поднимаются только на bootstrap).
  */
 function handleConfigWrite(
   req: IncomingMessage,
@@ -536,15 +531,15 @@ function handleConfigWrite(
     });
 }
 
-/** Map a pure `McpWriteResult` onto the shared envelope outcome (400/404 split). */
+/** Маппит чистый `McpWriteResult` на исход конверта (разводка 400/404). */
 function mcpOutcome(result: McpWriteResult): ConfigWriteOutcome {
   if (result.ok) return { ok: true };
   return { ok: false, status: result.error === "not_found" ? 404 : 400, error: result.error };
 }
 
 /**
- * `POST /api/mcp` — create a configured MCP server.
- * Persisted and takes effect on the next run (`restartRequired: true`).
+ * `POST /api/mcp` — создать настроенный MCP-сервер.
+ * Персистится и вступает со следующего запуска (`restartRequired: true`).
  */
 export function handleMcpCreate(
   req: IncomingMessage,
@@ -560,7 +555,7 @@ export function handleMcpCreate(
   );
 }
 
-/** `PUT /api/mcp/:id` — full/partial edit of a configured MCP server. */
+/** `PUT /api/mcp/:id` — полная/частичная правка настроенного MCP-сервера. */
 export function handleMcpUpdate(
   req: IncomingMessage,
   res: ServerResponse,
@@ -576,7 +571,7 @@ export function handleMcpUpdate(
   );
 }
 
-/** `DELETE /api/mcp/:id` — remove a configured MCP server. */
+/** `DELETE /api/mcp/:id` — снять настроенный MCP-сервер. */
 export function handleMcpDelete(res: ServerResponse, id: string, s: WebUiState): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -591,7 +586,7 @@ export function handleMcpDelete(res: ServerResponse, id: string, s: WebUiState):
   sendJson(res, 200, { ok: true, persisted, restartRequired: true, mcp: mcpList(s) });
 }
 
-/** `GET /api/lsp` — LSP servers table. */
+/** `GET /api/lsp` — таблица LSP-серверов. */
 export function handleLspGet(res: ServerResponse, s: WebUiState): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -600,7 +595,7 @@ export function handleLspGet(res: ServerResponse, s: WebUiState): void {
   sendJson(res, 200, { servers: listLspServers(s.config) });
 }
 
-/** `PUT /api/lsp/:lang {enabled?,timeout?,command?,args?}` — edit one LSP server. */
+/** `PUT /api/lsp/:lang {enabled?,timeout?,command?,args?}` — правит один LSP-сервер. */
 export function handleLspUpdate(
   req: IncomingMessage,
   res: ServerResponse,
@@ -627,7 +622,7 @@ type SettingsHandler = (
   s: WebUiState,
 ) => void;
 
-/** Exact `METHOD path` settings routes (rule #17: handler map, no `if` chain). */
+/** Точные роуты настроек `METHOD путь` (правило #17: карта хендлеров, без `if`). */
 const SETTINGS_EXACT: Record<string, SettingsHandler> = {
   "GET /api/memory": (_req, res, _param, s) => handleMemoryGet(res, s),
   "POST /api/memory": (req, res, _param, s) => handleMemoryPost(req, res, s),
@@ -635,7 +630,7 @@ const SETTINGS_EXACT: Record<string, SettingsHandler> = {
   "GET /api/plugins": (_req, res, _param, s) => handlePluginsGet(res, s),
 };
 
-/** Prefix settings routes carrying one path parameter (rule #17). */
+/** Префиксные роуты настроек с одним параметром пути (правило #17). */
 const SETTINGS_PREFIX: Array<{ method: string; prefix: string; handle: SettingsHandler }> = [
   {
     method: "DELETE",
@@ -673,8 +668,8 @@ const SETTINGS_PREFIX: Array<{ method: string; prefix: string; handle: SettingsH
 ];
 
 /**
- * Dispatch the settings routes. Returns whether the request was handled so
- * `server.ts` keeps a flat chain without duplicating path parsing here.
+ * Диспатч роутов настроек. Возвращает, обработан ли запрос, чтобы `server.ts`
+ * держал плоскую цепочку без дубля парсинга путей.
  */
 export function handleSettingsApi(
   req: IncomingMessage,

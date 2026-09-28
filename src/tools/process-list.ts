@@ -1,7 +1,9 @@
+/** Тул списка фоновых процессов (id, pid, статус, хвост вывода). */
 import type { ToolDefinition } from "./types";
 import { processRegistry } from "../modules/processes";
 import { t } from "../i18n/index";
 
+/** Показывает фоновые процессы сессии с хинтом управления. */
 export const processListTool: ToolDefinition = {
   name: "process_list",
   icon: "📊",

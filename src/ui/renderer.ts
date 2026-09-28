@@ -1,3 +1,4 @@
+// Рендерер чата: события агента в терминальные строки по STYLE.md.
 import { pc } from "./colors";
 import { FormattingStream } from "./md-formatter";
 import { Spinner } from "./spinner";
@@ -22,21 +23,22 @@ function formatUsd(cost: number): string {
   return formatCost(cost);
 }
 
+/** Опции рендерера: rich-TTY, спиннер, ширина, канал, корень, болтливость. */
 export interface RendererOptions {
   rich?: boolean;
   spinner?: boolean;
   width?: number;
   channel?: OutputChannel;
   /**
-   * Workspace root — absolute paths inside it are shown as short relative
-   * paths in tool headers (the agent already knows the root).
+   * Корень workspace: абсолютные пути внутри показываются короткими
+   * относительными в шапках тулов (корень агент и так знает).
    */
   baseDir?: string;
-  /** How much detail to render (see `docs/design/ui/STYLE.md`). */
+  /** Сколько деталей рендерить (см. `docs/design/ui/STYLE.md`). */
   verbosity?: Verbosity;
 }
 
-/** Tools whose `path` argument is shown in the header. */
+/** Тулы, чей аргумент `path` показывается в шапке. */
 const PATH_TOOLS = new Set([
   "read_file",
   "write_file",
@@ -51,7 +53,7 @@ const PATH_TOOLS = new Set([
 function toDisplayPath(baseDir: string | undefined, p: string): string {
   if (!baseDir || !isAbsolute(p)) return p;
   const rel = relative(baseDir, p);
-  // Outside baseDir (../ prefix) or another drive (absolute result) → keep as-is.
+  // Вне baseDir (префикс ../) или другой диск (абсолютный результат) — как есть.
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) return p;
   return rel.split(sep).join("/");
 }
@@ -64,12 +66,12 @@ function stripAnsi(text: string): string {
   return text.replace(ANSI_RE, "");
 }
 
-/** Tools that must NOT get a busy spinner — they block on a user prompt. */
+/** Тулы без busy-спиннера: висят на промпте пользователя. */
 const SPINNERLESS_TOOLS = new Set(["question", "approve"]);
 
 /**
- * Read-only exploration tools. In quiet mode a run of these is summarized into
- * a single `│ N actions ✓` line; mutating/executing tools always stay visible.
+ * Read-only тулы разведки. В quiet прогон таких сворачивается в одну строку
+ * `│ N actions ✓`; мутирующие/исполняющие всегда видимы.
  */
 const RECON_TOOLS = new Set([
   "read_file",
@@ -98,19 +100,20 @@ interface ReconItem {
 }
 
 /**
- * Leading marker for every action. The style uses one marker (`◇`) for all
- * tools — categories are conveyed by the localized label, not by a glyph.
- * Kept as a function for callers that pass an explicit `icon`.
+ * Ведущий маркер каждого действия. В стиле один маркер (`◇`) на все тулы:
+ * категории передаются локализованным ярлыком, а не глифом.
+ * Функция ради вызывающих с явным `icon`.
  */
 export function toolMarker(_tool: string): string {
   return glyph.action;
 }
 
+/** Rich-терминал: TTY и не CI. */
 export function isRichTerminal(): boolean {
   return Boolean(process.stdout.isTTY) && !process.env.CI;
 }
 
-/** Short human-friendly summary of tool arguments. */
+/** Короткая человекочитаемая сводка аргументов тула. */
 export function summarizeArgs(args: Record<string, unknown>): string {
   const preferred = ["path", "file", "query", "url", "command", "name"];
   for (const key of preferred) {
@@ -124,7 +127,7 @@ export function summarizeArgs(args: Record<string, unknown>): string {
   return serialized.length > 60 ? `${serialized.slice(0, 57)}…` : serialized;
 }
 
-/** Scalar arg keys shown as-is, in priority order, for ordinary tools. */
+/** Скалярные ключи, показываемые как есть, в порядке приоритета, для обычных тулов. */
 const GENERIC_ARG_KEYS = [
   "path",
   "file",
@@ -154,8 +157,8 @@ function truncateArg(text: string, max = 60): string {
 }
 
 /**
- * Human-readable argument summary. Structural/action tools carry raw JSON that
- * would leak into the chat, so they get a short localized phrase instead.
+ * Человекочитаемая сводка аргументов. Структурные/экшен-тулы несут сырой JSON,
+ * который потёк бы в чат, — им короткая локализованная фраза вместо него.
  */
 export function humanArgs(tool: string, args: Record<string, unknown>): string {
   if (tool === "plan") {
@@ -189,15 +192,15 @@ export function humanArgs(tool: string, args: Record<string, unknown>): string {
     if (action && items !== undefined) return t("ui.todo_action", { action, count: String(items) });
     if (action) return action;
   }
-  // Generic action-style tools (browser, project_map, lsp_check, …) carry an
-  // `action` plus a few short scalars — render a phrase, not raw JSON.
+  // Обычные экшен-тулы (browser, project_map, lsp_check, …) несут `action` плюс
+  // пару коротких скаляров — рендерим фразу, а не сырой JSON.
   if (typeof args.action === "string" && args.action) {
     const extras = ["direction", "selector", "key", "name", "path", "url", "query", "text", "id"]
       .map((k) => (typeof args[k] === "string" && args[k] ? (args[k] as string) : undefined))
       .filter((v): v is string => Boolean(v));
     return truncateArg([args.action, ...extras].join(" "));
   }
-  // Composites where a single key would drop half the meaning.
+  // Композиты, где один ключ уронил бы половину смысла.
   if (tool === "move_file") {
     const from = str(args.from);
     const to = str(args.to);
@@ -228,10 +231,10 @@ export function humanArgs(tool: string, args: Record<string, unknown>): string {
 }
 
 /**
- * Localized human label for a tool. System tool names (`read_file`, `bash`, …)
- * are NEVER shown to the user in any locale — see `docs/design/ui/STYLE.md`.
- * The raw identifier is only a lookup key; when no friendly translation exists
- * we fall back to a generic localized label, never to the identifier itself.
+ * Локализованный человеческий ярлык тула. Системные имена (`read_file`, `bash`, …)
+ * НЕ показываются юзеру ни в одной локали — см. `docs/design/ui/STYLE.md`.
+ * Сырой идентификатор — лишь ключ поиска; без friendly-перевода откатываемся на
+ * общий локализованный ярлык, но не на сам идентификатор.
  */
 function friendlyTool(tool: string): string {
   const key = `tool.friendly.${tool}`;
@@ -242,9 +245,9 @@ function friendlyTool(tool: string): string {
 }
 
 /**
- * Streams agent events to the terminal. Rich mode (TTY) adds a spinner;
- * plain mode falls back to simple prefixed lines.
- * Colors come from `colors.ts`, disabled outside a TTY, in CI, or on NO_COLOR.
+ * Стримит события агента в терминал. Rich-режим (TTY) добавляет спиннер;
+ * plain — простые строки с префиксом.
+ * Цвета из `colors.ts`, вне TTY / в CI / при NO_COLOR выключены.
  */
 export class Renderer {
   private rich: boolean;
@@ -272,14 +275,14 @@ export class Renderer {
   private thoughtStarted = false;
   private thoughtStartMs = 0;
   private thoughtHeaderPrinted = false;
-  /** Rotates short human labels so repeated thinking phases do not feel robotic. */
+  /** Чередует короткие человеческие ярлыки, чтобы повторы thinking не звучали роботно. */
   private thinkingCount = 0;
   private thinkingLabel = "";
   private textStarted = false;
   private reconBuffer: ReconItem[] = [];
   /**
-   * One-step-deferred action line (quiet mode): lets an identical repeat
-   * fold into a `×N` line. Always flushed before anything newer prints.
+   * Отложенная на шаг строка действия (quiet): даёт идентичному повтору
+   * свернуться в строку `×N`. Всегда сбрасывается до печати чего-то новее.
    */
   private pendingFooter: {
     key: string;
@@ -313,12 +316,12 @@ export class Renderer {
     );
   }
 
-  /** Show a thinking spinner while waiting for LLM response. */
+  /** Спиннер обдумывания на время ожидания ответа LLM. */
   showLoader(): void {
     this.spinner.start(t("ui.thinking"));
   }
 
-  /** Final answer streamed from the model (markdown-formatted). */
+  /** Финальный ответ модели стримом (markdown-формат). */
   text(chunk: string): void {
     this.endCard();
     this.flushRecon();
@@ -326,14 +329,14 @@ export class Renderer {
     this.spinner.stop();
     if (!this.textStarted) {
       this.textStarted = true;
-      // The answer is already introduced by the REPL's divider/label; a leading
-      // marker would clash with a code block that opens the response.
+      // Ответ уже введён разделителем/ярлыком REPL; ведущий маркер конфликтовал
+      // бы с кодовым блоком, открывающим ответ.
       this.channel.writeRaw("\n");
     }
     this.fmt.write(chunk);
   }
 
-  /** Arbitrary status/meta text (tool output, reasoning, MoE status). */
+  /** Произвольный статус/мета-текст (вывод тула, reasoning, статус MoE). */
   meta(chunk: string): void {
     this.spinner.stop();
     if (this.thoughtStarted) {
@@ -347,7 +350,7 @@ export class Renderer {
     }
   }
 
-  /** Stream tool body lines with the gutter prefix, skipping blank lines. */
+  /** Стримит строки тела тула с гуттером, пустые скипает. */
   private writeInlineBody(chunk: string): void {
     for (const line of chunk.split("\n")) {
       if (line.trim() === "") continue;
@@ -357,8 +360,8 @@ export class Renderer {
         if (!this.card.firstBody) this.card.firstBody = plain;
       }
       if (this.verbosity === "quiet") {
-        // Keep the first line so a failure still has a short explanation, but
-        // do not flood the chat — details are available via /verbose and Ctrl+O.
+        // Первую строку держим, чтобы у провала осталось короткое объяснение, но
+        // чат не заливаем: детали — через /verbose и Ctrl+O.
         continue;
       }
       this.outputLineCount++;
@@ -370,7 +373,7 @@ export class Renderer {
     }
   }
 
-  /** Dimmed reasoning stream (colored here, not by the agent). */
+  /** Dim-стрим рассуждений (красится здесь, а не агентом). */
   reasoning(chunk: string): void {
     this.spinner.stop();
     this.flushRecon();
@@ -379,9 +382,9 @@ export class Renderer {
   }
 
   /**
-   * Open a thought block: `✦ <accent label> · ` — label keeps the reasoning
-   * accent, the separator and the body stay dim, so the status verb never
-   * blurs into the model's own words.
+   * Открывает блок мысли: `✦ <акцентный ярлык> · ` — ярлык держит акцент
+   * рассуждений, разделитель и тело dim, чтобы глагол статуса не сливался
+   * с собственными словами модели.
    */
   private writeThoughtHeader(): void {
     if (!this.thoughtStarted || this.thoughtHeaderPrinted) return;
@@ -391,7 +394,7 @@ export class Renderer {
     this.thoughtHeaderPrinted = true;
   }
 
-  /** Model is loading / generating — record start time. */
+  /** Модель грузится/генерирует — фиксируем старт. */
   thinkingStart(): void {
     this.flushRecon();
     this.thoughtStarted = true;
@@ -402,8 +405,8 @@ export class Renderer {
   }
 
   /**
-   * Rotate a few short, human labels across thinking phases. The first phase
-   * always uses the canonical `ui.thinking_label` (stable in tests/screens).
+   * Чередует несколько коротких человеческих ярлыков по фазам thinking. Первая
+   * фаза всегда канонична `ui.thinking_label` (стабильно в тестах/скринах).
    */
   private nextThinkingLabel(): string {
     const index = this.thinkingCount++;
@@ -412,16 +415,16 @@ export class Renderer {
     return value !== key ? value : t("ui.thinking_label");
   }
 
-  /** LLM call finished; print duration and close the thought block. */
+  /** Вызов LLM завершён; печатаем длительность и закрываем блок мысли. */
   thinkingEnd(): void {
     this.spinner.stop();
     this.closeThought();
   }
 
   /**
-   * Close an open thought block, printing its duration. Safe to call multiple
-   * times — the final answer and the next tool both need the block closed so
-   * the duration never lands inside the answer text.
+   * Закрывает открытый блок мысли с печатью длительности. Безопасно звать
+   * многократно: и финальный ответ, и следующий тул требуют закрытого блока,
+   * чтобы длительность не приземлилась внутрь текста ответа.
    */
   private closeThought(): void {
     if (this.thoughtStarted && this.thoughtHeaderPrinted) {
@@ -432,6 +435,7 @@ export class Renderer {
     this.thoughtHeaderPrinted = false;
   }
 
+  /** Старт тула: шапка действия + busy-спиннер (кроме интерактивных). */
   toolStart(
     tool: string,
     args: Record<string, unknown>,
@@ -450,7 +454,7 @@ export class Renderer {
         : args;
     const summary = humanArgs(tool, displayArgs);
     const label = friendlyTool(tool);
-    // One glyph, colored by category — per-tool emoji icons are not used.
+    // Один глиф в цвете категории — пер-тул emoji-иконки не используются.
     const mark = actionMarkFor(tool);
     const accent = toolAccent(tool);
     const deferred = this.verbosity === "quiet";
@@ -473,22 +477,22 @@ export class Renderer {
         `${mark} ${accent(label)}${summary ? ` ${pc.dim("·")} ${pc.dim(summary)}` : ""}\n`,
       );
     }
-    // Busy indicator while the tool actually runs — read/write/edit/bash can
-    // take seconds; without this the chat looks frozen until the footer.
+    // Busy-индикатор на время реального исполнения: read/write/edit/bash могут
+    // идти секунды; без него чат выглядит зависшим до футера.
     if (!SPINNERLESS_TOOLS.has(tool)) {
       this.spinner.start(`${label}${summary ? ` ${summary}` : ""}`);
     }
   }
 
-  /** Change how much detail is rendered (used by `/verbose`). */
+  /** Смена детализации рендера (использует `/verbose`). */
   setVerbosity(verbosity: Verbosity): void {
     this.verbosity = verbosity;
   }
 
-  /** Emit a buffered run of read-only actions (quiet mode). */
+  /** Выпуск буферного прогона read-only действий (quiet). */
   private flushRecon(): void {
-    // A deferred action line is always older than any buffered recon run —
-    // print it first so the chat stays chronological.
+    // Отложенная строка действия всегда старше любого буферного recon-прогона:
+    // печатаем её первой, чтобы чат остался хронологичным.
     this.flushPendingFooter();
     if (this.reconBuffer.length === 0) return;
     const items = this.reconBuffer;
@@ -507,7 +511,7 @@ export class Renderer {
     );
   }
 
-  /** Print a deferred action line, folding repeats into one `×N` line. */
+  /** Печать отложенной строки, повторы сворачивает в одну строку `×N`. */
   private flushPendingFooter(): void {
     const p = this.pendingFooter;
     if (!p) return;
@@ -525,7 +529,7 @@ export class Renderer {
     );
   }
 
-  /** Live plan checklist — prints the plan block as-is (already colored). */
+  /** Живой чеклист плана: печатает блок как есть (уже раскрашен). */
   planBlock(lines: string[]): void {
     this.spinner.stop();
     this.fmt.flushPartialNow();
@@ -536,6 +540,7 @@ export class Renderer {
     }
   }
 
+  /** Конец тула: футер с длительностью (ошибка → красный маркер + первая строка тела). */
   toolEnd(
     _tool: string,
     duration: number,
@@ -572,23 +577,23 @@ export class Renderer {
   }
 
   /**
-   * Quiet-mode footer: fold the deferred header into a single action line.
-   * Successful read-only tools buffer into a recon summary; consecutive
-   * identical successful actions fold into one `×N` line; anything else
-   * buffers one step so a repeat can still fold into it. Errors print now.
+   * Quiet-футер: сворачивает отложенную шапку в одну строку действия.
+   * Успешные read-only тулы буферятся в recon-сводку; подряд идущие одинаковые
+   * успешные сворачиваются в строку `×N`; всё прочее буферится на шаг, чтобы
+   * повтор успел свернуться. Ошибки печатаются сразу.
    */
   private toolEndDeferred(tail: string, duration: number, error: boolean | undefined): void {
     const card = this.card;
     if (!card) return;
     const { label, summary, mark: leadMark, firstBody } = card;
-    // A run of successful read-only tools is buffered and summarized.
+    // Прогон успешных read-only тулов буферится и суммируется.
     if (!error && RECON_TOOLS.has(card.tool)) {
       this.flushPendingFooter();
       this.reconBuffer.push({ tool: card.tool, mark: leadMark, label, summary, duration });
       return;
     }
-    // Collapse consecutive identical successful actions (poll loops,
-    // repeated status checks) into one `×N` line instead of N lines.
+    // Подряд идущие одинаковые успешные действия (poll-циклы, повторные
+    // статус-чеки) — в одну строку `×N` вместо N строк.
     const repeatKey = `${card.tool}::${label}::${summary}`;
     if (!error && this.pendingFooter?.key === repeatKey) {
       this.repeatCount += 1;
@@ -598,8 +603,8 @@ export class Renderer {
     this.flushPendingFooter();
     this.flushRecon();
     if (!error) {
-      // Buffer one step: the line prints on the next action (or any
-      // flush), so an identical repeat can fold into it.
+      // Буфер на шаг: строка печатается на следующем действии (или любом сбросе),
+      // чтобы идентичный повтор успел свернуться.
       this.pendingFooter = {
         key: repeatKey,
         leadMark,
@@ -621,7 +626,7 @@ export class Renderer {
     }
   }
 
-  /** Remember the action for `Ctrl+O` reprint (survives the run). */
+  /** Запоминает действие для допечатки по `Ctrl+O` (живёт дольше прогона). */
   private recordLast(
     label: string,
     summary: string,
@@ -644,7 +649,7 @@ export class Renderer {
     });
   }
 
-  /** Raw pre-formatted text (diff blocks, warnings). */
+  /** Сырой предформатированный текст (диффы, предупреждения). */
   raw(text: string): void {
     this.spinner.stop();
     this.fmt.flushPartialNow();
@@ -653,6 +658,7 @@ export class Renderer {
     this.channel.writeRaw(text);
   }
 
+  /** Ошибка в stderr с красным маркером. */
   error(text: string): void {
     this.spinner.stop();
     this.fmt.flushPartialNow();
@@ -661,6 +667,7 @@ export class Renderer {
     this.channel.writeRaw(`${failureMark()} ${pc.red(text)}\n`, "stderr");
   }
 
+  /** Сброс всех буферов в конце хода. */
   flush(): void {
     this.endCard();
     this.flushRecon();
@@ -670,7 +677,7 @@ export class Renderer {
     this.textStarted = false;
   }
 
-  /** Footer with model, provider, and total duration. */
+  /** Футер с моделью, провайдером и общей длительностью. */
   footer(model: string, provider: string, durationMs: number): void {
     this.flushRecon();
     this.channel.writeRaw(

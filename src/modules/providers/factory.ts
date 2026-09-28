@@ -1,3 +1,4 @@
+// Сборка АКТИВНОГО провайдера из конфига (bootstrap и hot-swap — один путь).
 // src/modules/providers/factory.ts
 import type { AppConfig } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
@@ -7,19 +8,19 @@ import { FallbackProvider } from "./fallback";
 
 export interface BuiltProvider {
   manager: ProviderManager;
-  /** Active provider, transparently wrapped in FallbackProvider when enabled. */
+  /** Активный провайдер, при включённом fallback прозрачно обёрнут в FallbackProvider. */
   provider: LLMProvider;
 }
 
 /**
- * Shared factory for building the ACTIVE provider from a config, used by both
- * bootstrap and Agent.setProvider/reconfigure. Previously the three
- * construction sites drifted — bootstrap wrapped the manager in
- * FallbackProvider when `fallback && entries > 1`, but a hot-swap
- * (setProvider) rebuilt a bare manager and silently dropped failover (B4).
- * The wrapper reads `manager.active` live, so switching the manager after
- * build keeps the failover active.
+ * Общая фабрика АКТИВНОГО провайдера из конфига — для bootstrap и
+ * Agent.setProvider/reconfigure. Раньше три места сборки дрейфовали: bootstrap
+ * оборачивал менеджер в FallbackProvider при `fallback && entries > 1`, а
+ * hot-swap (setProvider) пересобирал голый менеджер и молча ронял failover (B4).
+ * Обёртка читает `manager.active` живьём, так что переключение менеджера после
+ * сборки failover сохраняет.
  */
+/** Собрать активный провайдер (+ failover-обёртка при entries > 1). */
 export function buildActiveProvider(
   config: AppConfig,
   logger?: Logger,

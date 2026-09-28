@@ -1,31 +1,34 @@
 /**
- * Remember the most recent tool action so the user can reprint its full detail
- * on demand (`Ctrl+O`) even after the run's Renderer is gone.
+ * Помнит последнее действие тула, чтобы юзер мог допечатать его полные детали
+ * по требованию (`Ctrl+O`), даже когда рендерер прогона уже ушёл.
  *
- * Only the last action is kept — this is a convenience buffer, not a log. The
- * authoritative transcript lives in the session log.
+ * Хранится только последнее действие: это буфер удобства, а не лог. Полный
+ * транскрипт живёт в логе сессии.
  */
 export interface LastAction {
-  /** Tool id — used to color the reprint with the category accent. */
+  /** Id тула — по нему допечатка красится акцентом категории. */
   tool: string;
   label: string;
   args: string;
   status: "ok" | "warn" | "error";
   durationMs: number;
-  /** Full body lines (paths, diff, output) captured regardless of verbosity. */
+  /** Полные строки тела (пути, дифф, вывод) — копятся вне зависимости от болтливости. */
   body: string[];
 }
 
 let last: LastAction | null = null;
 
+/** Запоминает последнее действие. */
 export function recordLastAction(action: LastAction): void {
   last = action;
 }
 
+/** Отдаёт последнее действие (null — не было). */
 export function getLastAction(): LastAction | null {
   return last;
 }
 
+/** Сбрасывает запомненное действие. */
 export function clearLastAction(): void {
   last = null;
 }

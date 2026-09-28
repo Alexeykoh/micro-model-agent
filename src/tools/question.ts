@@ -1,3 +1,4 @@
+/** Тул вопросов юзеру: меню, memory pre-check, батч-cap, сессионные ответы. */
 import { t } from "../i18n/index";
 import { askUser } from "./user-input";
 import type { InputOption } from "./user-input";
@@ -5,6 +6,7 @@ import type { ToolContext, ToolDefinition } from "./types";
 import { MemoryStore } from "../modules/memory/store";
 import { globalMemoryDir } from "../config/paths";
 
+/** Спецификация вопроса: текст, заголовок, опции, мультивыбор, кастом. */
 export interface QuestionSpec {
   question: string;
   header?: string;
@@ -36,12 +38,14 @@ Usage notes:
   Call "remember" separately to persist something, and only when asked to
 - At most 3 unknown questions are asked per call; keep batches small`;
 
+/** Проверяет форму опции (label + description — строки). */
 function isOption(val: unknown): val is InputOption {
   if (!val || typeof val !== "object") return false;
   const opt = val as Record<string, unknown>;
   return typeof opt.label === "string" && typeof opt.description === "string";
 }
 
+/** Нормализует args в спеки (массив + legacy `{ question }`). Битые — пропуск. */
 function normalizeQuestions(args: Record<string, unknown>): QuestionSpec[] {
   const raw = args.questions;
   if (Array.isArray(raw)) {
@@ -51,8 +55,8 @@ function normalizeQuestions(args: Record<string, unknown>): QuestionSpec[] {
       const q = item as Record<string, unknown>;
       if (typeof q.question !== "string" || !q.question.trim()) continue;
       const options = Array.isArray(q.options) ? q.options.filter(isOption) : undefined;
-      // An explicitly provided options array with no valid entries is a
-      // malformed call — skip the question instead of blocking on stdin.
+      // Явно данный массив опций без валидных записей — malformed вызов:
+      // вопрос пропустить, а не висеть на stdin.
       if (Array.isArray(q.options) && options!.length === 0) continue;
       specs.push({
         question: q.question,
@@ -64,28 +68,29 @@ function normalizeQuestions(args: Record<string, unknown>): QuestionSpec[] {
     }
     return specs;
   }
-  // Legacy format: { question: "..." } — plain free-text question.
+  // Legacy-формат: { question: "..." } — plain free-text вопрос.
   if (typeof args.question === "string" && args.question.trim()) {
     return [{ question: args.question }];
   }
   return [];
 }
 
-/** Max unknown questions asked per call — small models lose track of larger batches. */
+/** Максимум незнакомых вопросов за вызов — большие батчи малые модели теряют. */
 export const MAX_QUESTIONS_PER_CALL = 3;
 
-/** Token bound for the memory pre-check: hits reported per question. */
+/** Токенный bound memory pre-check: хиты репортятся повопросно. */
 const MAX_MEMORY_HITS = 2;
 const MAX_HIT_CHARS = 200;
 
+/** Вопрос, закрытый памятью: спека + найденные сниппеты. */
 export interface KnownQuestion {
   spec: QuestionSpec;
   hits: string[];
 }
 
 /**
- * Split specs into memory-known (report, do not ask) vs unknown (ask).
- * Pure over an injected lookup fn so tests never touch the real memory dir.
+ * Делит спеки на известные памяти (репорт, не спрашивать) и незнакомые.
+ * Чистая через инжектируемый lookup — тесты не трогают реальный memory dir.
  */
 export function splitByMemory(
   specs: QuestionSpec[],
@@ -102,8 +107,8 @@ export function splitByMemory(
 }
 
 /**
- * Significant words of a text: lowercased, unicode-split, length ≥ 4.
- * Shorter words ("тип", "для", "что") are noise for overlap matching.
+ * Значимые слова текста: lowercase, unicode-разбивка, длина ≥ 4. Короче
+ * ("тип", "для", "что") — шум для overlap-мэтчинга.
  */
 export function extractKeywords(...texts: Array<string | undefined>): string[] {
   const out = new Set<string>();
@@ -117,21 +122,22 @@ export function extractKeywords(...texts: Array<string | undefined>): string[] {
 }
 
 /**
- * A memory line counts as an answer only if it shares at least this many
- * distinct keywords with the question. A single shared word ("какой",
- * "город") is usually coincidence — skipping on it would answer from stale
- * data instead of asking. Precision beats recall here: a miss just asks.
+ * Строка памяти считается ответом, только если делит со вопросом не меньше
+ * стольких distinct keywords. Одно общее слово ("какой", "город") — обычно
+ * совпадение: пропуск на нём ответил бы из stale-данных вместо вопроса.
+ * Precision важнее recall: промах просто спросит.
  */
 const MIN_KEYWORD_OVERLAP = 2;
 
+/** Найденное в памяти: файл + совпадение. */
 interface MemoryHit {
   file: string;
   match: string;
 }
 
 /**
- * Keyword-overlap memory lookup over an injected per-keyword search.
- * Pure — the production wiring (`lookupMemory`) passes `MemoryStore.search`.
+ * Keyword-overlap поиск по памяти через инжектируемый покейвордный поиск.
+ * Чистая — прод-обвязка (`lookupMemory`) передаёт `MemoryStore.search`.
  */
 export function collectMemoryHits(
   searchOne: (keyword: string) => MemoryHit[],
@@ -168,8 +174,8 @@ export function collectMemoryHits(
 }
 
 /**
- * Fail-open memory lookup: unreadable/missing memory never blocks asking.
- * Returns short `file: match` snippets, token-capped.
+ * Fail-open поиск по памяти: нечитаемая/отсутствующая память вопрос не блокирует.
+ * Возврат — короткие `file: match`-сниппеты, токенно ограниченные.
  */
 function lookupMemory(spec: QuestionSpec): string[] {
   try {
@@ -181,9 +187,9 @@ function lookupMemory(spec: QuestionSpec): string[] {
 }
 
 /**
- * Test seam: a `memorySearch` on the context stubs the memory pre-check
- * (same override pattern as `ToolContext.agentFactory` — Bun module mocks
- * are process-global, so plain vi.mock cannot be used here).
+ * Тестовый шов: `memorySearch` на контексте стабит memory pre-check (тот же
+ * override-паттерн, что `ToolContext.agentFactory` — моки Bun-модулей глобальны
+ * на процесс, plain vi.mock тут не годится).
  */
 function resolveSearch(ctx: ToolContext): (spec: QuestionSpec) => string[] {
   const stub = (ctx as unknown as { memorySearch?: (spec: QuestionSpec) => string[] })
@@ -191,13 +197,14 @@ function resolveSearch(ctx: ToolContext): (spec: QuestionSpec) => string[] {
   return typeof stub === "function" ? stub : lookupMemory;
 }
 
+/** Тул вопросов: выбор/мультивыбор/free-text, memory pre-check, батч-cap 3. */
 export const questionTool: ToolDefinition = {
   name: "question",
   icon: "❓",
   description: DESCRIPTION,
   tags: ["core"],
-  // Interactive user-facing tools must survive tag narrowing: the model must
-  // always be able to ask, whatever the task type (P5 auto-narrowing).
+  // Интерактивные тулы переживают сужение тегов: спросить модель должна уметь
+  // всегда, при любом типе задачи (P5 auto-narrowing).
   alwaysOn: true,
   interactive: true,
   parameters: {
@@ -259,13 +266,13 @@ export const questionTool: ToolDefinition = {
       return { success: false, output: t("tool.question.no_questions") };
     }
 
-    // Memory pre-check: never ask what memory already answers. Known
-    // questions are reported back, not asked. Nothing is written to memory —
-    // answers live only in this session (persist via "remember" if asked to).
+    // Memory pre-check: известное памяти не спрашивать. Известные вопросы —
+    // репорт, не опрос. В память ничего не пишется: ответы живут только в сессии
+    // (persist — отдельным "remember" по просьбе).
     const { known, unknown } = splitByMemory(questions, resolveSearch(ctx));
 
-    // Batch cap: ask at most MAX_QUESTIONS_PER_CALL, note the rest so the
-    // model calls again instead of losing questions silently.
+    // Батч-cap: не больше MAX_QUESTIONS_PER_CALL за раз, остаток — пометкой,
+    // чтобы модель довызвала, а не потеряла вопросы молча.
     const truncated = unknown.length - MAX_QUESTIONS_PER_CALL;
     const toAsk = truncated > 0 ? unknown.slice(0, MAX_QUESTIONS_PER_CALL) : unknown;
 
@@ -321,11 +328,10 @@ export const questionTool: ToolDefinition = {
         }),
       );
     }
-    // display:"" suppresses the UI echo (tool-batch prefers display over
-    // output and skips empty ones): the model still gets the full output in
-    // role:"tool", while the chat keeps only the question block with ↳ answers.
-    // The output text is model-facing directives (session/memory/batch rules),
-    // never user content — even verbose shows it via tool_end, not meta.
+    // display:"" гасит UI-эхо (tool-batch предпочитает display и пропускает
+    // пустые): модели — полный output в role:"tool", чату — только блок вопроса
+    // с ↳-ответами. Текст output — model-facing директивы (сессия/память/батч),
+    // не контент юзера: и verbose идёт через tool_end, не meta.
     return { success: true, output: parts.join(" "), display: "" };
   },
 };

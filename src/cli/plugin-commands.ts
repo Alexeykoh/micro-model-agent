@@ -4,8 +4,10 @@ import { readMmaVersion } from "../core/version";
 import { t } from "../i18n/index";
 import { getDefaultChannel } from "../output";
 
+// CLI-группа `mma plugins`: список плагинов.
+
 /**
- * Create the `mma plugins` subcommand group.
+ * Создаёт группу субкоманд `mma plugins`.
  */
 export function createPluginCommand(program: Command): void {
   const pluginsCmd = program.command("plugins").description(t("cli.plugins.description"));

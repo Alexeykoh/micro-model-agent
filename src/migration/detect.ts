@@ -1,8 +1,10 @@
+// Детект необходимости миграции: отличает конфиг v1 от v2 и битого файла.
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
 const V1_ONLY_FIELDS = ["apiBase", "apiKey", "chatEndpoint", "temperature", "maxTokens"];
 
+/** Проверяет, лежит ли в configDir конфиг формата v1. Битый файл — не v1. */
 export class MigrationDetector {
   private configDir: string;
 
@@ -10,6 +12,11 @@ export class MigrationDetector {
     this.configDir = configDir;
   }
 
+  /**
+   * Нужна ли миграция: есть v1-поля или нет всех обязательных v2-полей.
+   * Битый/вручную правленный конфиг — не повод: loadConfig предупредит
+   * и откатится на дефолты, файл не трогаем.
+   */
   needsMigration(): boolean {
     const configPath = join(this.configDir, "config.json");
     if (!existsSync(configPath)) return false;
@@ -30,18 +37,20 @@ export class MigrationDetector {
 
       return false;
     } catch {
-      // A corrupt or hand-edited config must NOT be treated as v1 and deleted.
-      // loadConfig will warn and fall back to defaults instead.
+      // Битый или вручную правленный конфиг — НЕ v1, удалять нельзя.
+      // loadConfig предупредит и откатится на дефолты.
       return false;
     }
   }
 
+  /** Есть ли старые сессии в каталоге sessions. */
   hasOldSessions(): boolean {
     const sessionsDir = join(this.configDir, "sessions");
     if (!existsSync(sessionsDir)) return false;
     return readdirSync(sessionsDir).length > 0;
   }
 
+  /** Профиль старого формата: есть profile.json без полей platform/os. */
   hasOldProfile(): boolean {
     const profilePath = join(this.configDir, "profile.json");
     if (!existsSync(profilePath)) return false;

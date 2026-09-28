@@ -1,14 +1,15 @@
+// Дефолты безопасности и мерж с пользовательскими настройками.
 import type { SecurityConfig, } from "./types";
 
 /**
- * Default security configuration for MMA.
- * These settings provide a balance between security and usability.
+ * Дефолтный конфиг безопасности MMA.
+ * Баланс между защитой и удобством.
  */
 export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   enabled: true,
   bash: {
     enabled: true,
-    // Commands that are always blocked (dangerous)
+    // Всегда блокируемые команды (опасные).
     blacklist: [
       "rm",
       "dd",
@@ -55,10 +56,10 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "python",
       "python3",
       "node",
-      // "bun" intentionally NOT blacklisted: the system prompt tells the model
-      // to run TypeScript with `bun <file.ts>` — banning it here contradicts
-      // that and burned a whole session on blocked `bun run build` calls.
-      // Arbitrary-code execution via flags is still caught by INTERPRETER_FLAGS.
+      // "bun" осознанно НЕ в блэклисте: системный промпт велит модели
+      // гонять TypeScript через `bun <file.ts>` — запрет здесь противоречил бы
+      // ему и сжёг целую сессию на блокированных `bun run build`.
+      // Произвольный код через флаги всё равно ловит INTERPRETER_FLAGS.
       "perl",
       "ruby",
       "del",
@@ -66,16 +67,15 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "erase",
       "taskkill",
     ],
-    // If whitelist is non-empty, only these commands are allowed
+    // Непустой whitelist — разрешены только эти команды.
     whitelist: [],
-    // Block dangerous flags like --force, -rf, etc.
+    // Блок опасных флагов вида --force, -rf и т.п.
     blockDangerousFlags: true,
-    // Log all executed commands to audit log
+    // Лог всех выполненных команд в аудит-лог.
     logCommands: true,
-    // Dangerous flags that are always blocked
-    // Note: -y/--yes are intentionally absent — they are routine, harmless
-    // confirmation flags (npm init -y, apt-get -y) and blocking them breaks
-    // project scaffolding.
+    // Всегда блокируемые опасные флаги.
+    // Замечание: -y/--yes осознанно отсутствуют — это рутинные безвредные
+    // флаги подтверждения (npm init -y, apt-get -y), их блок ломал бы скаффолдинг.
     dangerousFlags: [
       "--force",
       "-rf",
@@ -89,14 +89,14 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "--dangerous",
       "--no-confirm",
     ],
-    // Dangerous operators that are always blocked
-    // Note: "&" (background) is not blocked — "&&" (AND) is a legitimate shell operator.
-    // Single "&" for backgrounding is harmless and blocking it breaks "cd dir && npm install".
+    // Всегда блокируемые опасные операторы.
+    // Замечание: "&" (фон) не блокируется — "&&" (AND) легитимен. Одиночный "&"
+    // безвреден, а его блок ломал бы "cd dir && npm install".
     dangerousOperators: [">", ">>", "2>", "2>>", ";", "&&", "||", "|", "`", "$("],
   },
   paths: {
     enabled: false,
-    // Glob patterns for paths that are always denied
+    // Glob-паттерны всегда запрещённых путей.
     denied: [
       ".git/",
       "node_modules/",
@@ -113,36 +113,36 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "yarn.lock",
       "pnpm-lock.yaml",
     ],
-    // If allowed is non-empty, only these paths are allowed
+    // Непустой allowed — разрешены только эти пути.
     allowed: [],
   },
   network: {
-    // SSRF protection (private/link-local IPs, non-http schemes) is part of
-    // the balanced default policy — without this flag the checks in
-    // isUrlAllowed never fire and web tools can reach internal networks.
+    // SSRF-защита (приватные/link-local IP, не-http схемы) — часть сбалансированной
+    // дефолтной политики: без флага проверки isUrlAllowed не стреляют, и веб-тулы
+    // дотягиваются до внутренних сетей.
     enabled: true,
-    // Domains that are always denied
+    // Всегда запрещённые домены.
     deniedDomains: ["localhost", "127.0.0.1", "::1"],
-    // If allowedDomains is non-empty, only these domains are allowed
+    // Непустой allowedDomains — разрешены только эти домены.
     allowedDomains: [],
-    // Timeout for network requests (ms)
+    // Таймаут сетевых запросов (мс).
     requestTimeout: 15000,
-    // Maximum response size (bytes)
+    // Максимум размера ответа (байты).
     maxResponseSize: 15000,
   },
-  // Maximum depth of subagent recursion
+  // Максимум глубины рекурсии субагентов.
   maxRecursionDepth: 3,
-  // Maximum number of file operations per session
+  // Максимум файловых операций за сессию.
   maxFileOperations: 100,
-  // Rate limits for LLM requests
+  // Лимиты частоты LLM-запросов.
   rateLimits: {
     maxRequestsPerMinute: 60,
     maxParallelTasks: 5,
   },
-  // Content scanning settings
+  // Настройки сканирования контента.
   contentScan: {
     enabled: false,
-    // Patterns that are considered dangerous in file content
+    // Паттерны, считающиеся опасными в содержимом файлов.
     dangerousPatterns: [
       /eval\(/,
       /new Function\(/,
@@ -159,13 +159,13 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       /chmod 777/,
     ],
   },
-  // Session file encryption settings
+  // Настройки шифрования файлов сессии.
   sessionEncryption: {
     enabled: false,
     encryptHistory: true,
     encryptSessionLog: true,
   },
-  // Audit notification settings
+  // Настройки аудит-нотификаций.
   auditNotifier: {
     enabled: false,
     minSeverity: "medium",
@@ -176,8 +176,8 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
 };
 
 /**
- * Merge user-provided security config with defaults.
- * User config takes precedence over defaults.
+ * Мержит пользовательский конфиг безопасности с дефолтами.
+ * Пользовательский конфиг приоритетнее.
  */
 export function mergeSecurityConfig(userConfig?: Partial<SecurityConfig>): SecurityConfig {
   return {

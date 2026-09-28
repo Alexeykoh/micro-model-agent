@@ -1,18 +1,18 @@
+// Имена записей провайдеров: display-имя и проверка коллизий.
 // src/modules/providers/naming.ts
 import type { ProviderEntry } from "../../config/types";
 
-/** Display/identity name of an entry: its label, or its type when unlabelled. */
+/** Display/identity-имя записи: label, иначе type. */
 export function providerEntryName(entry: Pick<ProviderEntry, "label" | "type">): string {
   return entry.label || entry.type;
 }
 
 /**
- * True when `name` is already used by an entry other than `exceptName`.
- *
- * Entries are addressed by `label || type`, and legacy lookups also match a
- * bare `type`. A new/renamed provider must therefore not collide with either —
- * otherwise `provider.active` and edit/delete could silently target the wrong
- * entry. `exceptName` lets an edit keep/reuse its own current name.
+ * Занято ли `name` другой записью (кроме `exceptName`).
+ * Записи адресуются по `label || type`, легаси-поиск матчит и голый `type`,
+ * так что новый/переименованный провайдер не должен коллизить ни с тем, ни с
+ * другим — иначе `provider.active` и edit/delete молча бьют не в ту запись.
+ * `exceptName` позволяет правке сохранить собственное текущее имя.
  */
 export function providerNameTaken(
   entries: Array<Pick<ProviderEntry, "label" | "type">>,

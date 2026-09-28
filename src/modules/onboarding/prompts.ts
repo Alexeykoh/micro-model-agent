@@ -1,7 +1,8 @@
-/** Tools available during the meet interview (strict allowlist). */
+// Промпты и allowlist онбординга: интервью «Познакомимся» и автор AGENTS.md.
+/** Тулы, доступные во время интервью (строгий allowlist). */
 export const MEET_TOOLS = ["remember", "question", "meet_done"] as const;
 
-/** Tools available during AGENTS.md init (strict allowlist). */
+/** Тулы, доступные при генерации AGENTS.md (строгий allowlist). */
 export const INIT_TOOLS = [
   "read_file",
   "list_dir",
@@ -14,8 +15,9 @@ export const INIT_TOOLS = [
 ] as const;
 
 /**
- * Semi-script interview. The guide owns coverage and the preference-key
- * whitelist; the model owns wording and light follow-ups. Domain-neutral.
+ * Полускриптовое интервью. Гайд отвечает за покрытие и вайтлист ключей
+ * преференсов; модель — за формулировки и лёгкие уточнения. Домен-нейтрально.
+ * Тело промпта — на английском: уходит модели как есть.
  */
 export const MEET_SYSTEM_PROMPT = `You are getting acquainted with the user. This is a short interview, not a task.
 Rules:
@@ -31,8 +33,8 @@ Rules:
 - When every topic is covered (or the user wants to stop), give a one-line summary of what you remembered, then call the "meet_done" tool.`;
 
 /**
- * AGENTS.md authoring guide. Domain-neutral: works for code, docs, notes or
- * configs; code is only one case.
+ * Гайд автора AGENTS.md. Домен-нейтрален: код, доки, заметки или конфиги;
+ * код — лишь частный случай. Тело промпта — на английском: уходит модели как есть.
  */
 export const INIT_SYSTEM_PROMPT = `You create or improve an AGENTS.md file for the current workspace.
 Rules:

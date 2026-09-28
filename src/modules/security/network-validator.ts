@@ -1,17 +1,16 @@
+// Валидация URL: SSRF-защита, allow/deny-домены, fetch с ручными редиректами.
 import type { NetworkSecurityConfig } from "../../config/types";
 import { sanitizeLogMessage } from "./data-sanitizer";
 
-/**
- * Result of URL validation
- */
+/** Итог проверки URL: разрешено/запрет с причиной. */
 export interface NetworkValidationResult {
   allowed: boolean;
   reason?: string;
 }
 
 /**
- * Parse a numeric IP component honoring decimal, hex (0x…) and octal (0…)
- * notations. Returns null when the token is not purely numeric.
+ * Разобрать числовой компонент IP с учётом decimal, hex (0x…) и octal (0…).
+ * Не числовой токен — null.
  */
 function parseIpNumber(s: string): number | null {
   if (/^0x[0-9a-f]+$/.test(s)) return parseInt(s.slice(2), 16);
@@ -20,7 +19,7 @@ function parseIpNumber(s: string): number | null {
   return null;
 }
 
-/** Check whether four decoded octets form a private/reserved IPv4 address. */
+/** Образуют ли четыре октета приватный/резервный IPv4. */
 function isPrivateIpv4(o: number[]): boolean {
   const [a, b = 0, _c = 0, _d = 0] = o;
   return (
@@ -34,8 +33,8 @@ function isPrivateIpv4(o: number[]): boolean {
 }
 
 /**
- * Rewrite a trailing dotted-quad (IPv4-mapped literal, e.g. `::ffff:127.0.0.1`)
- * as two hex groups so the generic IPv6 expansion can parse it.
+ * Переписать хвостовой dotted-quad (IPv4-mapped литерал, напр. `::ffff:127.0.0.1`)
+ * двумя hex-группами, чтобы общий парсер IPv6 его разобрал.
  */
 function normalizeIpv4Tail(input: string): string | null {
   const idx = input.lastIndexOf(":");
@@ -48,7 +47,7 @@ function normalizeIpv4Tail(input: string): string | null {
   return `${idx >= 0 ? input.slice(0, idx + 1) : ""}${hi}:${lo}`;
 }
 
-/** Expand an IPv6 literal (no zone) into 8 groups; null when malformed. */
+/** Развернуть IPv6-литерал (без зоны) в 8 групп; кривой — null. */
 function expandIpv6(input: string): number[] | null {
   const normalized = normalizeIpv4Tail(input.split("%")[0]);
   if (normalized === null) return null;
@@ -73,13 +72,12 @@ function expandIpv6(input: string): number[] | null {
 }
 
 /**
- * Check if a hostname is a private/link-local address (SSRF protection).
- *
- * Handles more than just dotted quads: bare integer / hex / octal encodings
- * (every HTTP client decodes them as a 32-bit IPv4), shorthand quads
- * ("127.1" → 127.0.0.1) and IPv6 — loopback/unspecified/link-local/
- * unique-local and IPv4-mapped, in any expansion form (the old string prefix
- * checks missed `0:0:0:0:0:0:0:1` and `::ffff:0:7f00:1`).
+ * Приватный/link-local адрес в hostname (SSRF-защита) или нет.
+ * Покрывает не только dotted-quad: голые int/hex/octal-кодировки
+ * (любой HTTP-клиент декодит их как 32-битный IPv4), короткие квады
+ * ("127.1" → 127.0.0.1) и IPv6 — loopback/unspecified/link-local/
+ * unique-local и IPv4-mapped в любой форме раскрытия (старые строковые
+ * префиксы пропускали `0:0:0:0:0:0:0:1` и `::ffff:0:7f00:1`).
  */
 export function isIpPrivate(hostname: string): boolean {
   const h = hostname.toLowerCase().trim().replace(/^\[|\]$/g, "");
@@ -87,8 +85,8 @@ export function isIpPrivate(hostname: string): boolean {
   if (h.includes(":")) {
     const g = expandIpv6(h);
     if (!g) return false;
-    // IPv4-mapped/translated (::ffff:a.b.c.d) in any zero-padded form: the high
-    // 96 bits are zeros/ffff and the low 32 bits are a private IPv4.
+    // IPv4-mapped/translated (::ffff:a.b.c.d) в любой форме с нулями: старшие
+    // 96 бит — нули/ffff, младшие 32 — приватный IPv4.
     const high = g.slice(0, 6);
     if (
       high.some((n) => n === 0xffff) &&
@@ -105,21 +103,21 @@ export function isIpPrivate(hostname: string): boolean {
 
   if (h === "localhost") return true;
 
-  // Bare integer/hex/octal: interpreted as one 32-bit IPv4 word.
+  // Голый int/hex/octal: интерпретируется как одно 32-битное слово IPv4.
   if (!h.includes(".")) {
     const n = parseIpNumber(h);
-    if (n === null) return false; // a domain name, not an IP
+    if (n === null) return false; // доменное имя, не IP
     if (n < 0 || n > 0xffffffff) return false;
     return isPrivateIpv4([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]);
   }
 
-  // Dotted form: decode each part (hex/octal aware); shorthand like
-  // "127.1" pads the missing groups before the last.
+  // Точечная форма: декодим каждую часть (hex/octal-aware); короткие вроде
+  // "127.1" добивают пропущенные группы нулями перед последней.
   const parts = h.split(".");
   const nums: number[] = [];
   for (let i = 0; i < parts.length; i++) {
     const n = parseIpNumber(parts[i]);
-    if (n === null || n > 255) return false; // domain or malformed — not our concern
+    if (n === null || n > 255) return false; // домен или мусор — не наша забота
     nums.push(n);
   }
   while (nums.length < 4) nums.splice(nums.length - 1, 0, 0);
@@ -127,14 +125,12 @@ export function isIpPrivate(hostname: string): boolean {
   return isPrivateIpv4(nums);
 }
 
-/**
- * Check if a URL is allowed based on security configuration
- */
+/** Разрешён ли URL по конфигу (схема, SSRF, deny/allow-домены). */
 export function isUrlAllowed(
   url: string,
   securityConfig?: NetworkSecurityConfig,
 ): NetworkValidationResult {
-  // If security is disabled, allow everything
+  // Выключенная защита разрешает всё
   if (!securityConfig?.enabled) {
     return { allowed: true };
   }
@@ -151,7 +147,7 @@ export function isUrlAllowed(
       return { allowed: false, reason: `Private address "${domain}" is blocked (SSRF)` };
     }
 
-    // Check denied domains first
+    // Сначала denied-домены
     if (securityConfig.deniedDomains?.length) {
       for (const deniedDomain of securityConfig.deniedDomains) {
         const denied = deniedDomain.toLowerCase();
@@ -161,7 +157,7 @@ export function isUrlAllowed(
       }
     }
 
-    // Check allowed domains (if non-empty, only these are allowed)
+    // Затем allowed-домены (непустой — разрешены только перечисленные)
     if (securityConfig.allowedDomains?.length) {
       let isAllowed = false;
       for (const allowedDomain of securityConfig.allowedDomains) {
@@ -185,10 +181,10 @@ export function isUrlAllowed(
   }
 }
 
-/** Max redirect hops followed (and re-validated) by {@link fetchValidated}. */
+/** Максимум редиректов, которые проходит (и ревалидирует) {@link fetchValidated}. */
 export const MAX_REDIRECTS = 5;
 
-/** Thrown by {@link fetchValidated} when a hop is disallowed by the policy. */
+/** Бросает {@link fetchValidated}, когда хоп запрещён политикой. */
 export class BlockedRedirectError extends Error {
   constructor(public readonly reason: string) {
     super(`redirect blocked: ${reason}`);
@@ -196,17 +192,18 @@ export class BlockedRedirectError extends Error {
   }
 }
 
+/** Итог валидированного fetch: ответ и финальный URL. */
 export interface ValidatedFetchResult {
   response: Response;
   finalUrl: string;
 }
 
 /**
- * Fetch a URL following redirects MANUALLY, re-validating every hop against the
- * SSRF/domain policy. Plain `fetch` with the default `redirect: "follow"` only
- * validates the initial URL, so a public URL that 302s to `127.0.0.1` or the
- * cloud metadata endpoint reaches the internal service. Throws
- * {@link BlockedRedirectError} when a hop is disallowed or the cap is exceeded.
+ * Fetch URL с РУЧНЫМИ редиректами, ревалидируя каждый хоп против SSRF/доменной
+ * политики. Обычный `fetch` с `redirect: "follow"` проверяет только стартовый
+ * URL, и публичный URL с 302 на `127.0.0.1` или metadata-эндпоинт облака
+ * дотягивается до внутреннего сервиса. Запрещённый хоп или превышение лимита —
+ * {@link BlockedRedirectError}.
  */
 export async function fetchValidated(
   url: string,
@@ -234,9 +231,7 @@ export async function fetchValidated(
   throw new BlockedRedirectError("too many redirects");
 }
 
-/**
- * Sanitize URL for logging (remove sensitive information)
- */
+/** Санитизация URL для логов (вырезание секретов). */
 export function sanitizeUrl(url: string): string {
   try {
     const urlObj = new URL(url);
@@ -252,12 +247,12 @@ export function sanitizeUrl(url: string): string {
     urlObj.search = sanitizedParams.toString();
     let result = urlObj.toString();
 
-    // Also sanitize credentials in URL (user:pass@host)
+    // Плюс креды в URL (user:pass@host)
     if (urlObj.username || urlObj.password) {
       result = result.replace(/:\/\/[^:]+:[^@]+@/, "://[REDACTED]:[REDACTED]@");
     }
 
-    // Decode URL-encoded [REDACTED] back to plain text
+    // Декодим URL-encoded [REDACTED] обратно в plain text
     result = decodeURIComponent(result);
 
     return result;

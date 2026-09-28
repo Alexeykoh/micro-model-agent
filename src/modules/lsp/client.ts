@@ -1,3 +1,4 @@
+// LSP-клиент: spawn сервера, JSON-RPC поверх stdio, диагностики, tree-kill при shutdown.
 import { spawn, execSync, type ChildProcess, type SpawnOptions } from "child_process";
 import { resolve } from "path";
 import { platform } from "os";
@@ -9,10 +10,9 @@ import type { Logger } from "../../logger/app-logger";
 import { errMsg } from "../../utils";
 
 /**
- * Logger adapter that writes LSP diagnostics to app.jsonl only — never to
- * console/terminal. LSP warnings are noisy (timeout on first run, npx
- * install) and should be diagnosable from session files without polluting
- * the user's chat.
+ * Логгер-адаптер: LSP-диагностику только в app.jsonl, никогда в консоль/терминал.
+ * LSP-предупреждения шумные (таймаут на первом запуске, установка npx) и должны
+ * диагностироваться из файлов сессии, не мусор в чате пользователя.
  */
 export class FileOnlyLogger implements LspClientLogger {
   constructor(private logger: Logger) {}
@@ -35,6 +35,7 @@ interface PendingRequest {
   reject: (reason: Error) => void;
 }
 
+/** Логгер клиента (интерфейс). */
 export interface LspClientLogger {
   debug(msg: string, meta?: Record<string, unknown>): void;
   info(msg: string, meta?: Record<string, unknown>): void;
@@ -44,9 +45,11 @@ export interface LspClientLogger {
 
 const DEFAULT_TIMEOUT = 15000;
 
+/** LSP-клиент: checkFile/probe поверх spawn + initialize + shutdown. */
 export class LspClient {
   private logger: LspClientLogger | null = null;
 
+  /** Назначить логгер (null — молчать). */
   setLogger(logger: LspClientLogger | null): void {
     this.logger = logger;
   }
@@ -60,6 +63,7 @@ export class LspClient {
   private diagnosticsTimer: ReturnType<typeof setTimeout> | null = null;
   private initialized = false;
 
+  /** Проверить файл: открыть в сервере, дождаться publishDiagnostics, вернуть их. */
   async checkFile(
     filePath: string,
     baseDir: string,
@@ -96,7 +100,7 @@ export class LspClient {
 
       return await diagPromise;
     } catch (e) {
-      // Re-throw so the LspModule can surface failures instead of hiding them.
+      // Пробросить наружу, чтобы LspModule показал падение, а не спрятал.
       throw e instanceof Error ? e : new Error(String(e));
     } finally {
       await this.shutdown();
@@ -104,10 +108,9 @@ export class LspClient {
   }
 
   /**
-   * Lightweight "does the server actually start" probe: spawn + initialize +
-   * shutdown. Used by the REPL banner to surface a dead server (npx
-   * auto-install failure, wrong package name, missing binary) up front instead
-   * of the first write_file timing out.
+   * Лёгкая проба «сервер реально стартует»: spawn + initialize + shutdown.
+   * Для баннера REPL — мёртвый сервер (упавшая npx-автоустановка, неверное имя
+   * пакета, нет бинарника) виден заранее, а не таймаутом первого write_file.
    */
   async probe(config: LspServerConfig, projectRoot: string, timeout: number): Promise<void> {
     try {
@@ -139,7 +142,7 @@ export class LspClient {
         command: config.command,
         projectRoot,
       });
-      // npx auto-install can blow past the initialize timeout on first run — retry once.
+      // npx-автоустановка может вылететь за таймаут initialize на первом запуске — один ретрай.
       if (!(e instanceof Error) || !e.message.includes("initialize")) throw e;
       await this.shutdown();
       await this.startServer(config, projectRoot);
@@ -166,9 +169,9 @@ export class LspClient {
       }
     }
 
-    // When the command is npx, try to find the actual binary globally first.
-    // npx downloads packages on every invocation (slow on Windows, ~8-15s),
-    // even when the binary is already installed globally.
+    // Команда npx — сначала ищем реальный бинарник глобально.
+    // npx качает пакеты на каждый вызов (на Windows медленно, ~8-15с),
+    // даже если бинарник уже стоит глобально.
     let effectiveCommand = config.command;
     let effectiveArgs = config.args ?? [];
     if (config.command === "npx" && effectiveArgs.length > 0) {
@@ -177,14 +180,14 @@ export class LspClient {
         const whichCmd = platform() === "win32" ? `where ${binaryName}` : `which ${binaryName}`;
         try {
           execSync(whichCmd, { stdio: "pipe", timeout: 3000 });
-          // Binary found globally — use it directly, skip npx.
+          // Бинарник есть глобально — напрямую, без npx.
           effectiveCommand = binaryName;
           effectiveArgs = effectiveArgs.filter(
             (a) => a !== "--yes" && a !== "--package" && a !== binaryName && !this.isPackageVersion(a),
           );
           this.logger?.debug(`LSP: using globally installed ${binaryName} (skipped npx)`);
         } catch {
-          // Not found globally — fall back to npx (will auto-install).
+          // Глобально нет — фолбэк на npx (самоустановится).
           this.logger?.debug(`LSP: ${binaryName} not found globally, falling back to npx`);
         }
       }
@@ -199,14 +202,13 @@ export class LspClient {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...config.env },
         cwd: projectRoot,
-        // POSIX: make the child a process-group leader so killTree()'s
-        // `kill(-pid)` reaches the whole chain (npx → node → tsserver).
-        // Without it the group kill fails with ESRCH and grandchildren
-        // survive as orphans. Windows relies on taskkill /T instead.
+        // POSIX: потомок — лидер группы, чтобы `kill(-pid)` killTree() доставал
+        // всю цепочку (npx → node → tsserver). Без этого групповой kill падает
+        // с ESRCH, а внуки выживают сиротами. Windows — taskkill /T.
         detached: !isWin,
       };
       if (isWin) {
-        // A `.cmd` shim can't be spawned directly under Node (`spawn npx EINVAL`) — run via cmd.exe.
+        // `.cmd`-шим напрямую под Node не спавнится (`spawn npx EINVAL`) — через cmd.exe.
         spawnCommand = buildWinCommandLine(spawnCommand, args);
         spawnArgs = [];
         spawnOpts.shell = true;
@@ -248,7 +250,7 @@ export class LspClient {
         const headerEnd = this.buffer.indexOf("\r\n\r\n");
         if (headerEnd === -1) return;
 
-        // Headers are ASCII — decode just the header slice.
+        // Заголовки — ASCII: декодим только срез заголовка.
         const header = this.buffer.subarray(0, headerEnd).toString("utf8");
         const match = header.match(/Content-Length: (\d+)/i);
         if (!match) {
@@ -257,7 +259,7 @@ export class LspClient {
         }
 
         this.contentLength = parseInt(match[1], 10);
-        // Guard against malicious/buggy servers sending absurd Content-Length
+        // Защита от злонамеренных/битых серверов с абсурдным Content-Length
         if (this.contentLength > 10 * 1024 * 1024) {
           this.buffer = this.buffer.subarray(headerEnd + 4);
           this.contentLength = -1;
@@ -266,9 +268,9 @@ export class LspClient {
         this.buffer = this.buffer.subarray(headerEnd + 4);
       }
 
-      // Content-Length counts BYTES, not JS characters. Slicing a decoded
-      // string by character count corrupts frames containing multi-byte
-      // UTF-8 (e.g. Cyrillic diagnostics) — keep the remainder as raw bytes.
+      // Content-Length считает БАЙТЫ, не JS-символы. Нарезка декодированной
+      // строки по числу символов портит фреймы с многобайтным UTF-8
+      // (напр. кириллические диагностики) — остаток держим сырыми байтами.
       if (this.buffer.length < this.contentLength) return;
 
       const body = this.buffer.subarray(0, this.contentLength).toString("utf8");
@@ -354,10 +356,9 @@ export class LspClient {
   private async shutdown(): Promise<void> {
     try {
       if (this.process && this.initialized && this.process.stdin?.writable) {
-        // Await the shutdown response (with timeout) so the server has time to
-        // acknowledge before we send exit and kill the process.  The old code
-        // fired shutdown as fire-and-forget, then killed immediately — the
-        // server never had a chance to reply, producing spurious timeout warnings.
+        // Ответ shutdown ждём (с таймаутом), чтобы сервер успел подтвердить до
+        // exit и kill. Старый код слал shutdown fire-and-forget и тут же убивал —
+        // сервер ответить не успевал, сыпались ложные timeout-предупреждения.
         try {
           await this.sendRequest("shutdown", null, 3000);
         } catch (e) {
@@ -370,9 +371,9 @@ export class LspClient {
       this.logger?.debug(`LSP shutdown error: ${errMsg(e)}`);
     } finally {
       if (this.process) {
-        // The direct child on win32 is the cmd.exe wrapper; killing it alone
-        // orphans the npx → node → tsserver tree (observed as leaked node
-        // processes after every check). Tree-kill so the whole chain dies.
+        // Прямой потомок на win32 — cmd.exe-обёртка; её убийство в одиночку
+        // сиротит дерево npx → node → tsserver (наблюдались текущие node после
+        // каждого чека). Tree-kill — умирает вся цепочка.
         try {
           killTree(this.process);
         } catch (e) {
@@ -421,11 +422,11 @@ export class LspClient {
   }
 
   /**
-   * Extract the actual binary name from npx args — only for the strict layout
-   * `[--yes] [--package X]... <binary> --stdio`. Servers with trailing server
-   * arguments (e.g. angular's `ngserver --stdio --tsProbeLocations …`) return
-   * null and always run through npx, so their flags are never mistaken for the
-   * binary or stripped.
+   * Имя реального бинарника из npx-args — только строгий layout
+   * `[--yes] [--package X]... <binary> --stdio`. Серверы с хвостовыми
+   * серверными аргументами (напр. angular `ngserver --stdio --tsProbeLocations …`)
+   * дают null и всегда идут через npx — их флаги не принять за бинарник
+   * и не вырезать.
    */
   private extractBinaryFromNpxArgs(args: string[]): string | null {
     const stdioIdx = args.lastIndexOf("--stdio");
@@ -444,7 +445,7 @@ export class LspClient {
     return binary;
   }
 
-  /** Check if a string looks like a package version specifier (e.g. "typescript@5"). */
+  /** Похоже ли на спецификатор версии пакета (напр. "typescript@5"). */
   private isPackageVersion(s: string): boolean {
     return /^[\w-]+@[\d.+*-]/.test(s);
   }

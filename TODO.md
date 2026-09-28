@@ -40,7 +40,7 @@
 - [x] ~~`fallow security`~~ ✅ прогнан, триаж `docs/analysis/2026-09-25-fallow-security.md`: actionable-находок нет.
 - [x] ~~**Lint (Biome)**~~ ✅ `@biomejs/biome` + `biome.json` (линтер, formatter/assist off — Prettier остаётся), `bun run lint`, включён в `quality` и CI. Правила-полировка: `noConsole` error (allowlist cli/output/ui), `noUnusedVariables/Imports/Unreachable` error; `noExplicitAny` — **warn** (186, ratchet до error отдельной задачей); осознанно off: `noNonNullAssertion`, `noAssignInExpressions`, control-char-regex, `useNodejsImportProtocol`, `noStaticOnlyClass`. Авто-фиксы применены по всему репо; заодно исправлен flaky тест encryption.
 - [x] ~~README + `docs/` актуализация~~ ✅ README переписан под 2.6.0; `docs/mma-features-overview.md` поднят до 2.10.0 (секция «Что нового в 2.7.0–2.10.0», ветка `chore/small-tails`); `docs/agents/*` актуальны (AGENTS.md — канон).
-- [ ] Русские комментарии/JSDoc (81 файл с кириллицей в `src/` — сверка 2026-09-28, было ~76). Осознанно не в `chore/small-tails`: объём ~110 файлов отдельным проходом по слоям (см. Этап 5 ниже), не мелкий хвост.
+- [x] ~~Русские комментарии/JSDoc~~ ✅ Этап 5 закрыт (ветка `chore/ru-jsdoc`, коммит `f03bedf`): 347 файлов — русские заголовки + JSDoc каждому экспорту, тривиальные удалены, код не тронут. Проверки: `tsc` 0, `biome` 0 errors, `bun test` 2813 pass / 0 fail.
 
 ### P4 — бэклог
 - [x] ~~Автоназвание сессии по контексту~~ ✅ СДЕЛАНО (релиз 2.6.0): `deriveSessionName` + fire-and-forget `generateSessionTitle` в хуке `Agent.run()`, `session.autoName` (default true), `nameSource` (`auto` не затирает `manual`). Строка «только ручной `rename`» устарела (сверка 2026-09-28).

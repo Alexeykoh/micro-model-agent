@@ -1,3 +1,4 @@
+/** Отчёт об окружении: рантайм, ОС, тулы, провайдер, Playwright. */
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { spawnSync } from "child_process";
 import { createRequire } from "module";
@@ -11,8 +12,10 @@ import { t } from "../i18n/index";
 import type { Logger } from "../logger/app-logger";
 import type { AppConfig } from "../config/types";
 
+/** Имя рантайма JS. */
 export type RuntimeName = "bun" | "node" | "unknown";
 
+/** Информация о рантайме: движок, версии, соответствие engines. */
 export interface RuntimeInfo {
   runtime: RuntimeName;
   runtimeVersion: string;
@@ -21,6 +24,7 @@ export interface RuntimeInfo {
   engineOk: boolean;
 }
 
+/** Структурный отчёт об окружении для лога и диагностики. */
 export interface EnvironmentReport {
   ts: string;
   mmaVersion: string;
@@ -52,7 +56,7 @@ export interface EnvironmentReport {
   warnings: string[];
 }
 
-/** Tools probed for availability on PATH (real executables only — no .cmd shims). */
+/** Тулы, проверяемые в PATH (только реальные бинари, без .cmd-шимов). */
 const TOOL_CHECKS = ["bun", "node", "git", "python"];
 
 function readEngineRequirement(): string {
@@ -64,13 +68,17 @@ function readEngineRequirement(): string {
       const raw = JSON.parse(readFileSync(p, "utf8"));
       if (raw.engines?.node) return String(raw.engines.node);
     } catch {
-      // Broken package.json — fall through
+      // Битый package.json — пропускаем
     }
   }
   return ">=20";
 }
 
-/** Numeric tuple comparison: does `version` meet the minimum in `requirement` (e.g. `>=20`)? */
+/**
+ * Проверяет версию against минимума из requirement (напр. `>=20`).
+ * @param version проверяемая версия; @param requirement требование engines.
+ * @returns true, если версия не ниже минимальной.
+ */
 export function satisfiesMinimum(version: string, requirement: string): boolean {
   const minMatch = requirement.match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
   if (!minMatch) return true;
@@ -92,6 +100,10 @@ export function satisfiesMinimum(version: string, requirement: string): boolean 
   return true;
 }
 
+/**
+ * Детектит рантайм (Bun vs Node) и сверяет Node с engines из package.json.
+ * @returns информация о рантайме.
+ */
 export function detectRuntime(): RuntimeInfo {
   const bun = (globalThis as { Bun?: { version?: string } }).Bun;
   const isBun = typeof bun !== "undefined" && typeof bun?.version !== "undefined";
@@ -103,9 +115,9 @@ export function detectRuntime(): RuntimeInfo {
     runtimeVersion,
     nodeVersion: process.version,
     engine,
-    // engines.node applies to the Node runtime. Bun satisfies it through its
-    // embedded Node (process.version) — never compare the Bun version itself
-    // against a Node requirement (Bun 1.x would always look "too old").
+    // engines.node — про Node-рантайм. Bun проходит через встроенный Node
+    // (process.version); версию самого Bun с требованием не сравниваем
+    // (Bun 1.x всегда выглядел бы «слишком старым»).
     engineOk: satisfiesMinimum(process.version, engine),
   };
 }
@@ -126,7 +138,10 @@ function toolVersion(cmd: string): string {
   }
 }
 
-/** Where Playwright keeps downloaded browser binaries (env override wins). */
+/**
+ * Каталог бинарников браузеров Playwright (env-переменная приоритетнее).
+ * @returns путь к каталогу браузеров.
+ */
 export function playwrightBrowsersDir(): string {
   if (process.env.PLAYWRIGHT_BROWSERS_PATH) return process.env.PLAYWRIGHT_BROWSERS_PATH;
   return process.platform === "win32"
@@ -134,7 +149,10 @@ export function playwrightBrowsersDir(): string {
     : join(homedir(), ".cache", "ms-playwright");
 }
 
-/** Playwright package presence/version + whether browser binaries are downloaded. */
+/**
+ * Наличие/версия пакета Playwright + скачаны ли бинарники браузеров.
+ * @returns installed/version/browsersDir/browsersInstalled.
+ */
 export function playwrightInfo(): {
   installed: boolean;
   version: string;
@@ -145,8 +163,8 @@ export function playwrightInfo(): {
   let version = "";
   const browsersDir = playwrightBrowsersDir();
   try {
-    // Rule #12: resolve from disk at runtime — works in both src/ and dist/
-    // layouts, and under both Bun and Node (the bridge uses createRequire too).
+    // Правило №12: резолв с диска в рантайме — работает и в src/, и в dist/,
+    // и под Bun, и под Node (мост тоже через createRequire).
     const require = createRequire(import.meta.url);
     const pkgPath = require.resolve("playwright/package.json");
     installed = existsSync(pkgPath);
@@ -165,7 +183,10 @@ export function playwrightInfo(): {
   return { installed, version, browsersDir, browsersInstalled };
 }
 
-/** Pure requirements check — produces warnings from a report (no side effects). */
+/**
+ * Чистая проверка требований — варнинги из отчёта, без сайд-эффектов.
+ * @param report отчёт collectEnvironment; @returns список варнингов.
+ */
 export function checkEnvironmentRequirements(report: EnvironmentReport): string[] {
   const warnings: string[] = [];
   if (report.runtime.runtime === "node") {
@@ -195,6 +216,10 @@ export function checkEnvironmentRequirements(report: EnvironmentReport): string[
   return warnings;
 }
 
+/**
+ * Собирает полный отчёт об окружении (рантайм, ОС, тулы, провайдер).
+ * @param opts configDir/baseDir/config/scanTools; @returns готовый отчёт.
+ */
 export function collectEnvironment(opts: {
   configDir: string;
   baseDir?: string;
@@ -246,7 +271,10 @@ export function collectEnvironment(opts: {
   return report;
 }
 
-/** Compact human line + full structured report into the JSONL log. */
+/**
+ * Компактная строка для человека + полный отчёт в JSONL-лог.
+ * @param report отчёт окружения; @param logger логгер сессии.
+ */
 export function logEnvironment(report: EnvironmentReport, logger: Logger): void {
   logger.info(
     `Environment: ${report.os.platform} ${report.os.arch} | ${report.runtime.runtime} ${report.runtime.runtimeVersion} (node ${report.runtime.nodeVersion}) | mma ${report.mmaVersion} | ${report.provider?.model ?? "no provider"}`,

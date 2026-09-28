@@ -1,15 +1,19 @@
+/** Фабрика тула загрузки скилла (инжект в системный промпт). */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import type { SkillsModule } from "../modules/skills/module";
 import { estimateTokens } from "../llm/token-counter";
 
+/**
+ * Фабрика тула load_skill. Контент скилла инжектится в системный промпт
+ * (не в историю) — переживает компакцию. Возврат: определение тула.
+ */
 export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition {
   return {
     name: "load_skill",
     icon: "🎯",
     tags: ["core"],
-    // Skill routing must stay available under narrowing (P5): the model can
-    // only use a skill it can see.
+    // Роутинг скиллов — вне сужения (P5): модель использует только видимый скилл.
     alwaysOn: true,
     description:
       "Load a skill by name. Skills provide specialized instructions and workflows. When loaded, the skill content is injected into the system prompt (not conversation history) so it persists through context compaction. Only use when the task clearly requires domain-specific knowledge.",

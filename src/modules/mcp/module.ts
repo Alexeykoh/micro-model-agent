@@ -1,3 +1,4 @@
+// Модуль MCP: ленивый коннект к серверам, discovery тулов, дефиниции, cleanup.
 import type { PromptBlock } from "../../core/types";
 import type { AgentModule, AgentPlugin } from "../types";
 import type { ToolDefinition } from "../../tools/types";
@@ -8,6 +9,7 @@ import { Logger } from "../../logger/app-logger";
 
 const logger = new Logger("warn", "mcp");
 
+/** Тул, найденный на MCP-сервере. */
 interface DiscoveredTool {
   serverName: string;
   toolName: string;
@@ -15,12 +17,14 @@ interface DiscoveredTool {
   inputSchema: Record<string, unknown>;
 }
 
+/** Безопасное имя тула: mcp__server__tool. */
 function sanitizeToolName(server: string, tool: string): string {
   const safeServer = server.replace(/[^a-zA-Z0-9_-]/g, "_");
   const safeTool = tool.replace(/[^a-zA-Z0-9_-]/g, "_");
   return `mcp__${safeServer}__${safeTool}`;
 }
 
+/** Привести input-схему MCP к форме дефиниций тулов. */
 function convertInputSchema(schema: Record<string, unknown>): Record<string, unknown> {
   if (schema && typeof schema === "object" && "properties" in schema) {
     const required = Array.isArray(schema.required) ? schema.required : [];
@@ -33,26 +37,26 @@ function convertInputSchema(schema: Record<string, unknown>): Record<string, unk
   return { type: "object", properties: {} };
 }
 
-/** Timeout for the initial tool discovery call (avoids hanging startup). */
+/** Таймаут первичного discovery тулов (не вешать старт). */
 const DISCOVERY_TIMEOUT_MS = 5_000;
 
+/** Модуль MCP: конфиги при init, коннект лениво, тул-дефиниции из найденного. */
 export class MCPModule implements AgentModule {
   readonly name = "mcp";
 
   private connections: Map<string, MCPClient> = new Map();
-  /** Server configs registered at init, not yet connected. */
+  /** Конфиги серверов с init, ещё без коннекта. */
   private serverConfigs: Map<string, MCPServerConfig> = new Map();
   private discovered: DiscoveredTool[] = [];
   private initialized = false;
-  /** Servers that failed initial discovery — will not be retried. */
+  /** Серверы с упавшим первичным discovery — не ретраятся. */
   private failedServers: Set<string> = new Set();
 
   constructor(private config: AppConfig) {}
 
   /**
-   * Register MCP server configs WITHOUT connecting. Actual connection and tool
-   * discovery happens lazily on first tool call — keeps startup fast and
-   * offline-safe.
+   * Зарегистрировать конфиги MCP-серверов БЕЗ коннекта. Коннект и discovery
+   * тулов — лениво, на первом вызове: старт быстрый и офлайн-безопасный.
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -79,23 +83,23 @@ export class MCPModule implements AgentModule {
       registry.register(serverConfig);
     }
 
-    // Store configs for lazy connection — no network calls here.
+    // Конфиги — для ленивого коннекта, сетевых вызовов тут нет.
     for (const serverName of registry.list()) {
       this.serverConfigs.set(serverName, registry.get(serverName)!);
     }
 
-    // Discover tools BEFORE the caller snapshots tool definitions. This used
-    // to be fire-and-forget, so `collectToolDefinitions()` at bootstrap ran
-    // before any server finished connecting and the real MCP tools were never
-    // registered. Discovery is bounded (per-server timeout, servers in
-    // parallel) and best-effort: failures leave the lazy "connect" placeholder.
+    // Discovery ДО снапшота тул-дефиниций вызывающим. Раньше был
+    // fire-and-forget, и `collectToolDefinitions()` при bootstrap отрабатывал
+    // раньше, чем серверы успевали подключиться, — настоящие MCP-тулы не
+    // регистрировались. Discovery ограничен (таймаут на сервер, серверы
+    // параллельно) и best-effort: падения оставляют ленивый плейсхолдер "connect".
     await this.discoverAllTools();
   }
 
   /**
-   * Try to connect and discover tools for all registered servers, in parallel,
-   * each bounded by DISCOVERY_TIMEOUT_MS. A timed-out attempt is cancelled: its
-   * late completion must not register a server already marked failed.
+   * Подключиться и найти тулы всех зарегистрированных серверов параллельно,
+   * каждый ограничен DISCOVERY_TIMEOUT_MS. Отменённая по таймауту попытка:
+   * её позднее завершение не должно регистрировать сервер, уже помеченный упавшим.
    */
   private async discoverAllTools(): Promise<void> {
     await Promise.all(
@@ -111,7 +115,7 @@ export class MCPModule implements AgentModule {
             (async () => {
               await client.connect();
               const tools = await client.listTools();
-              if (timedOut) return; // lost the race — do not mutate state
+              if (timedOut) return; // проиграл гонку — состояние не мутировать
               this.connections.set(serverName, client);
               for (const tool of tools) {
                 this.discovered.push({
@@ -144,15 +148,15 @@ export class MCPModule implements AgentModule {
   }
 
   /**
-   * Ensure a specific server is connected and its tools are discovered.
-   * Called lazily on first tool invocation for that server.
+   * Гарантировать коннект конкретного сервера и discovery его тулов.
+   * Лениво вызывается на первом обращении к тулу сервера.
    */
   private async ensureConnected(serverName: string): Promise<MCPClient | null> {
-    // Already connected?
+    // Уже подключён?
     const existing = this.connections.get(serverName);
     if (existing?.isConnected()) return existing;
 
-    // Failed during init — don't retry.
+    // Упал при init — не ретраить.
     if (this.failedServers.has(serverName)) return null;
 
     const serverConfig = this.serverConfigs.get(serverName);
@@ -164,7 +168,7 @@ export class MCPModule implements AgentModule {
       const tools = await client.listTools();
       this.connections.set(serverName, client);
 
-      // Add newly discovered tools (if not already present).
+      // Добавить новонайденные тулы (если ещё нет).
       for (const tool of tools) {
         const alreadyDiscovered = this.discovered.some(
           (d) => d.serverName === serverName && d.toolName === tool.name,
@@ -226,13 +230,14 @@ export class MCPModule implements AgentModule {
   }
 
   getToolDefinitions(): ToolDefinition[] {
-    // Build definitions from discovered tools AND from registered-but-not-yet-discovered
-    // servers (so the LLM sees all configured MCP tools even if discovery failed at startup).
+    // Дефиниции из найденных тулов И из зарегистрированных, но ещё не
+    // найденных серверов (модель видит все настроенные MCP-тулы, даже если
+    // discovery при старте упал).
     const defs: ToolDefinition[] = [];
 
-    // Sanitization can collapse distinct names to the same id (`a.b`/`a-b`,
-    // `x.y`/`x-y`); the registry throws on a duplicate, which used to crash
-    // bootstrap. Disambiguate with a numeric suffix before registering.
+    // Санитизация может схлопнуть разные имена в один id (`a.b`/`a-b`,
+    // `x.y`/`x-y`); реестр на дубле бросал, что роняло bootstrap.
+    // Разруливаем числовым суффиксом до регистрации.
     const usedNames = new Set<string>();
     const uniqueName = (base: string): string => {
       if (!usedNames.has(base)) {
@@ -246,7 +251,7 @@ export class MCPModule implements AgentModule {
       return name;
     };
 
-    // Tools already discovered (connected at startup).
+    // Уже найденные тулы (подключены при старте).
     for (const d of this.discovered) {
       defs.push({
         name: uniqueName(sanitizeToolName(d.serverName, d.toolName)),
@@ -274,14 +279,13 @@ export class MCPModule implements AgentModule {
       });
     }
 
-    // Servers that haven't been discovered yet — register placeholder tools
-    // that will connect lazily on first call.
+    // Ещё не найденные серверы — плейсхолдеры, коннект лениво на первом вызове.
     for (const [serverName] of this.serverConfigs) {
       if (this.failedServers.has(serverName)) continue;
       const alreadyDiscovered = this.discovered.some((d) => d.serverName === serverName);
       if (alreadyDiscovered) continue;
 
-      // Register a single "connect" tool so the LLM can trigger discovery.
+      // Один тул "connect", чтобы модель могла триггернуть discovery.
       defs.push({
         name: uniqueName(sanitizeToolName(serverName, "connect")),
         description: `Connect to MCP server "${serverName}" and discover its tools`,
@@ -317,8 +321,8 @@ export class MCPModule implements AgentModule {
           try {
             await client.disconnect();
           } catch (e: any) {
-            // Best-effort cleanup at session end — a failed disconnect must
-            // not crash the shutdown path, but must stay diagnosable.
+            // Best-effort cleanup на конце сессии: упавший disconnect не
+            // должен ронять shutdown, но обязан остаться в диагностике.
             logger.warn(`disconnect from "${serverName}" failed`, { error: String(e?.message ?? e) });
           }
         }

@@ -1,13 +1,13 @@
+// Meet-режим на shared-агенте: allowlist тулов и гайд интервью между ходами REPL.
 import type { ReplContext } from "../../cli/repl-commands";
 import type { PromptBlock } from "../../core/types";
 import { estimateTokens } from "../../llm/token-counter";
 import { MEET_SYSTEM_PROMPT, MEET_TOOLS } from "./prompts";
 
 /**
- * Enter meet mode on the shared agent: restrict tools to the allowlist,
- * create the shared onboarding state (carrying the guide block), and inject
- * the interview guide. Meet mode persists across REPL turns until
- * `exitMeetMode` (driven by the `meet_done` sentinel).
+ * Входит в meet-режим на shared-агенте: режет тулы до allowlist, создаёт
+ * shared-состояние онбординга (с блоком гайда) и инжектит гайд интервью.
+ * Режим живёт между ходами REPL до `exitMeetMode` (по сентинелу `meet_done`).
  */
 export function enterMeetMode(ctx: ReplContext): void {
   const block: PromptBlock = {
@@ -21,7 +21,7 @@ export function enterMeetMode(ctx: ReplContext): void {
   ctx.agent.pushPromptBlock(block);
 }
 
-/** Leave meet mode: remove the guide and restore unrestricted tools. */
+/** Выходит из meet-режима: убирает гайд и возвращает полные тулы. */
 export function exitMeetMode(ctx: ReplContext): void {
   const block = ctx.toolCtx.onboarding?.block;
   if (block) ctx.agent.removePromptBlock(block);
@@ -29,7 +29,7 @@ export function exitMeetMode(ctx: ReplContext): void {
   ctx.toolCtx.onboarding = undefined;
 }
 
-/** True when the sentinel tool has fired for the active meet session. */
+/** True, когда сентинел-тул сработал в активной meet-сессии. */
 export function isMeetDone(ctx: ReplContext): boolean {
   return ctx.toolCtx.onboarding?.done === true;
 }

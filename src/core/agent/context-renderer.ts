@@ -1,3 +1,4 @@
+/** Рендер UI-индикаторов контекста (stats-бар, уведомление о компакции). */
 import { pc } from "../../ui/colors";
 import type { UiConfig } from "../../config/types";
 import type { ContextManager } from "../../modules/context/manager";
@@ -14,6 +15,10 @@ import type { OnMeta } from "../types";
 export class ContextRenderer {
   private lastCompactionShown = 0;
 
+  /**
+   * Рисует индикаторы контекста (stats либо уведомление о компакции).
+   * @param ui UI-конфиг; @param contextManager менеджер контекста; @param onMeta sink мета-вывода.
+   */
   render(ui: UiConfig | undefined, contextManager: ContextManager, onMeta?: OnMeta): void {
     if (ui?.showContextStats) {
       this.renderStats(contextManager, onMeta);

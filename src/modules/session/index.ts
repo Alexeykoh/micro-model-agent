@@ -1,3 +1,4 @@
+// Публичный фасад модуля сессий: стор, менеджер, модуль, типы.
 export { SessionStore } from "./store";
 export { SessionManager } from "./manager";
 export { SessionModule } from "./module";

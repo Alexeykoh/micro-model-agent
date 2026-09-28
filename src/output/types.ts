@@ -1,23 +1,31 @@
+// Типы шины вывода: уровни, события, подписчики, стоки-приёмники.
 export type OutputLevel = "debug" | "info" | "warn" | "error";
+/** Вид события: log — строка с префиксом, raw — как есть, block — блок. */
 export type OutputKind = "log" | "raw" | "block";
+/** Поток вывода события. */
 export type OutputStream = "stdout" | "stderr";
 
+/** Событие вывода: продюсеры эмитят, стоки рисуют/сохраняют. */
 export interface OutputEvent {
+  /** Порядковый номер в шине. */
   id: number;
+  /** Время создания (мс). */
   ts: number;
   level: OutputLevel;
-  /** Producer tag: "mma", "indexer", "probe.context", "tool:bash". */
+  /** Тег продюсера: "mma", "indexer", "probe.context", "tool:bash". */
   source: string;
   kind: OutputKind;
-  /** Terminal-ready text (may contain ANSI). */
+  /** Текст, готовый для терминала (может содержать ANSI). */
   text: string;
   stream?: OutputStream;
-  /** Machine-readable payload for non-terminal surfaces. */
+  /** Машиночитаемая нагрузка для нетерминальных поверхностей. */
   data?: Record<string, unknown>;
 }
 
+/** Подписчик шины: получает каждое событие. */
 export type OutputSubscriber = (ev: OutputEvent) => void;
 
+/** Приёмник: шина, умеющая эмитить события (id/ts проставляет сама). */
 export interface OutputSink {
   emit(ev: Omit<OutputEvent, "id" | "ts">): OutputEvent;
 }

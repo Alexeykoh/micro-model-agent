@@ -1,3 +1,4 @@
+/** Тул вызова тула на MCP-сервере (ленивая регистрация из конфига). */
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext } from "./types";
 import { MCPClient } from "../modules/mcp/client";
@@ -6,6 +7,7 @@ import { MCPRegistry } from "../modules/mcp/registry";
 const registry = new MCPRegistry();
 let initialized = false;
 
+/** Ленивая регистрация MCP-серверов из конфига (один раз на процесс). */
 function ensureInitialized(ctx: ToolContext): void {
   if (initialized) return;
   initialized = true;
@@ -27,6 +29,7 @@ function ensureInitialized(ctx: ToolContext): void {
   }
 }
 
+/** Вызывает тул на MCP-сервере. Параметры: server, tool, args. */
 export const mcpCallTool: ToolDefinition = {
   name: "mcp_call",
   icon: "🔗",
@@ -76,8 +79,8 @@ export const mcpCallTool: ToolDefinition = {
     } catch (e: any) {
       return { success: false, output: t("tool.mcp_call_failed", { error: e.message }) };
     } finally {
-      // Always close the client — an error/timeout during callTool used to
-      // skip disconnect and orphan the stdio child process for the session.
+      // Клиент закрывать всегда: раньше ошибка/таймаут в callTool пропускала
+      // disconnect и сиротила stdio-дочерний процесс на сессию.
       await client.disconnect().catch(() => {});
     }
   },

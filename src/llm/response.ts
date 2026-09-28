@@ -1,12 +1,19 @@
+/** Парсинг чанков стрима в итоговый ответ (текст/тулы/reasoning/пусто). */
 import type { Chunk } from "./provider";
 import type { ToolCall } from "../core/types";
 
+/** Распарсенный ответ: текст, вызовы тулов, reasoning или пусто. */
 export type ParsedResponse =
   | { type: "text"; content: string; reasoning?: string }
   | { type: "tool_call"; calls: ToolCall[]; reasoning?: string }
   | { type: "reasoning"; content: string }
   | { type: "empty" };
 
+/**
+ * Сворачивает чанки стрима в ответ (текст склеивается, reasoning копится,
+ * аргументы тулов JSON-парсятся с фолбэком {}).
+ * @param chunks чанки стрима; @returns распарсенный ответ.
+ */
 export function parseChunks(chunks: Chunk[]): ParsedResponse {
   let text = "";
   let reasoning: string | undefined;

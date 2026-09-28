@@ -1,3 +1,4 @@
+// CLI-группа `mma security`: статус, политики, шифрование, аудит.
 import type { Command } from "commander";
 import { bootstrap } from "../core/bootstrap";
 import { saveConfig } from "../config/config";
@@ -15,9 +16,9 @@ import { getDefaultChannel } from "../output";
 import { globalConfigFile } from "../config/paths";
 
 /**
- * Toggle session-file encryption in place: flips `enabled` (and the two
- * per-file flags) while PRESERVING user-set fields already stored in the
- * config (keyPath etc.). Mutates the passed security object.
+ * Переключает шифрование файлов сессии на месте: флипает `enabled` (и оба
+ * пофайловых флага), СОХРАНЯЯ уже лежащие в конфиге юзер-поля (keyPath и др.).
+ * Мутирует переданный объект security.
  */
 export function toggleSessionEncryption(security: Record<string, any>, enabled: boolean): void {
   const enc = (security.sessionEncryption ?? {}) as Record<string, any>;
@@ -28,8 +29,8 @@ export function toggleSessionEncryption(security: Record<string, any>, enabled: 
 }
 
 /**
- * Toggle audit notifications in place: flips `enabled` only, preserving
- * webhookUrl / filePath / minSeverity / eventTypes set by the user.
+ * Переключает аудит-нотификации на месте: флипает только `enabled`, сохраняя
+ * юзерские webhookUrl / filePath / minSeverity / eventTypes.
  */
 export function toggleAuditNotifier(security: Record<string, any>, enabled: boolean): void {
   const notifier = (security.auditNotifier ?? {}) as Record<string, any>;
@@ -38,12 +39,12 @@ export function toggleAuditNotifier(security: Record<string, any>, enabled: bool
 }
 
 /**
- * Create security subcommand
+ * Создаёт субкоманду security.
  */
 export function createSecurityCommand(program: Command): void {
   const securityCmd = program.command("security").description(t("cli.security.description"));
 
-  // security status - show current security configuration
+  // security status — текущий конфиг безопасности.
   securityCmd
     .command("status")
     .description(t("cli.security.status"))
@@ -88,7 +89,7 @@ export function createSecurityCommand(program: Command): void {
       );
     });
 
-  // security policies - manage security policies
+  // security policies — список политик.
   securityCmd
     .command("policies")
     .description(t("cli.security.policies"))
@@ -109,7 +110,7 @@ export function createSecurityCommand(program: Command): void {
       }
     });
 
-  // security set-policy - apply a security policy
+  // security set-policy — применить политику.
   securityCmd
     .command("set-policy")
     .argument("<preset>", t("cli.security.preset"))
@@ -129,7 +130,7 @@ export function createSecurityCommand(program: Command): void {
       const policy = getSecurityPolicy(preset as SecurityPolicyPreset);
       const newSecurityConfig = applySecurityPolicy(preset as SecurityPolicyPreset);
 
-      // Merge with existing config
+      // Мерж с существующим конфигом.
       appConfig.security = newSecurityConfig;
       saveConfig(appConfig, configPath, dirname(configPath));
 
@@ -139,7 +140,7 @@ export function createSecurityCommand(program: Command): void {
       );
     });
 
-  // security enable-encryption - enable session file encryption
+  // security enable-encryption — включить шифрование файлов сессии.
   securityCmd
     .command("enable-encryption")
     .description(t("cli.security.enable_encryption"))
@@ -155,7 +156,7 @@ export function createSecurityCommand(program: Command): void {
       getDefaultChannel().writeLine(t("cli.security.encryption_enabled"));
     });
 
-  // security disable-encryption - disable session file encryption
+  // security disable-encryption — выключить шифрование файлов сессии.
   securityCmd
     .command("disable-encryption")
     .description(t("cli.security.disable_encryption"))
@@ -171,7 +172,7 @@ export function createSecurityCommand(program: Command): void {
       getDefaultChannel().writeLine(t("cli.security.encryption_disabled"));
     });
 
-  // security enable-audit - enable audit notifications
+  // security enable-audit — включить аудит-нотификации.
   securityCmd
     .command("enable-audit")
     .description(t("cli.security.enable_audit"))
@@ -187,7 +188,7 @@ export function createSecurityCommand(program: Command): void {
       getDefaultChannel().writeLine(t("cli.security.audit_enabled"));
     });
 
-  // security disable-audit - disable audit notifications
+  // security disable-audit — выключить аудит-нотификации.
   securityCmd
     .command("disable-audit")
     .description(t("cli.security.disable_audit"))
@@ -203,7 +204,7 @@ export function createSecurityCommand(program: Command): void {
       getDefaultChannel().writeLine(t("cli.security.audit_disabled"));
     });
 
-  // security audit-stats - show audit notification statistics
+  // security audit-stats — статистика аудит-нотификаций.
   securityCmd
     .command("audit-stats")
     .description(t("cli.security.audit_stats"))

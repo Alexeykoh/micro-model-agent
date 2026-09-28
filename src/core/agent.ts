@@ -1,3 +1,4 @@
+/** Агент: одиночный цикл (INIT→…→OUTPUT) и MoE-путь, бюджеты, гейты. */
 import type { LLMProvider, ContentPart } from "../llm/provider";
 import { ProviderManager, activeProviderEndpoint } from "../modules/providers/manager";
 import { buildActiveProvider } from "../modules/providers/factory";
@@ -71,11 +72,10 @@ import {
 export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
 
 /**
- * Read-only introspection tools. Repeating one with identical arguments can
- * never make progress, so the interactive loop hard-stops after a few repeats
- * (observed: `session_info` called in a tight loop after the task was already
- * complete). Mutating tools stay nudge-only so a legitimate edit/build/read
- * cycle is never cut short.
+ * Read-only тулты-интроспекции. Повтор одного с теми же аргументами прогресса
+ * не даст никогда, поэтому интерактивный цикл жёстко стопает после нескольких
+ * повторов (наблюдалось: `session_info` в тугом цикле после готовой задачи).
+ * Мутирующие — только nudge, чтобы легитимный edit/build/read-цикл не резать.
  */
 const LOOP_PRONE_STATUS_TOOLS = new Set([
   "session_info",
@@ -85,12 +85,13 @@ const LOOP_PRONE_STATUS_TOOLS = new Set([
   "project_map",
 ]);
 
+/** Зависимости агента: конфиг, провайдер, тулы, контекст, логгеры, швы. */
 export interface AgentDeps {
   config: AppConfig;
   /**
-   * Shared live-config box. `reconfigure` swaps both `config` and
-   * `configRef.current` so bootstrap-captured references (toolCtx.config,
-   * security validators) keep seeing the current settings.
+   * Общий живой бокс конфига. `reconfigure` меняет и `config`, и
+   * `configRef.current`, чтобы захваченные при bootstrap ссылки (toolCtx.config,
+   * валидаторы) видели текущие настройки.
    */
   configRef?: { current: AppConfig };
   llmProvider: LLMProvider;
@@ -105,10 +106,10 @@ export interface AgentDeps {
   promptBlocks: PromptBlock[];
   getDynamicPromptBlocks?: () => PromptBlock[];
   /**
-   * Prompt blocks computed asynchronously (e.g. the startup LSP/tsc health
-   * check). The promise starts at bootstrap so it never blocks the banner;
-   * `run()` awaits it before the first system prompt so the model still gets
-   * the baseline before the first LLM call. Only the first `run()` waits.
+   * Блоки промпта, вычисляемые асинхронно (напр., стартовый LSP/tsc health-check).
+   * Промис стартует при bootstrap и баннер не блокирует; `run()` ждёт его
+   * перед первым системным промптом, чтобы модель получила baseline до первого
+   * LLM-вызова. Ждёт только первый `run()`.
    */
   lazyPromptBlocks?: () => Promise<PromptBlock[]>;
   finalAudit?: () => Promise<{
@@ -120,54 +121,54 @@ export interface AgentDeps {
     summary: string;
   } | null>;
   sessionManager?: SessionManager;
-  /** Shared ToolContext (mode-scoped state: allowlist, onboarding). */
+  /** Общий ToolContext (состояние скоупа: allowlist, онбординг). */
   toolCtx?: import("../tools/types").ToolContext;
-  /** Opt-in git-style context logger (--context-log). Null/undefined disables it. */
+  /** Opt-in git-style логгер контекста (--context-log). Null/undefined — выкл. */
   contextLogger?: ContextLogger;
   memoryStore?: MemoryStore;
   moduleRegistry?: ModuleRegistry;
   exitOnComplete?: boolean;
   envReport?: EnvironmentReport;
   /**
-   * Whether the reasoning effort mechanism was validated by probe. Initial
-   * value only — the live result comes from `reasoningProbe` (B2), which the
-   * agent awaits lazily before the first LLM call.
+   * Прошёл ли механизм reasoning-effort валидацию пробой. Только стартовое
+   * значение — живой итог даёт `reasoningProbe` (B2), который агент лениво
+   * ждёт перед первым LLM-вызовом.
    */
   reasoningProbePassed?: boolean;
   /**
-   * Resolves the background reasoning probe. Consumed lazily next to
-   * `lazyPromptBlocks` so bootstrap never blocks on the probe LLM round-trip;
-   * until resolved the mechanism is treated as NOT passed.
+   * Резолвит фоновую reasoning-пробу. Потребляется лениво рядом с
+   * `lazyPromptBlocks`, чтобы bootstrap не блокировался на round-trip пробы;
+   * до резолва механизм считается НЕ прошедшим.
    */
   reasoningProbe?: () => Promise<boolean>;
-  /** Strategy for expressing reasoning effort on this provider. */
+  /** Стратегия выражения reasoning effort на этом провайдере. */
   reasoningStrategy?: import("../config/types").ReasoningStrategy;
-  /** Config directory — used for the "raise context window" hint in overflow warnings. */
+  /** Каталог конфига — для хинта «подними окно контекста» в варнингах. */
   configDir?: string;
   /**
-   * Compact plan status line for the <system-summary> envelope. Replaces the
-   * dynamic plan block in the system prompt so the prompt stays immutable
-   * (KV-cache friendly). Returns null when no plan is active.
+   * Компактная статус-строка плана для <system-summary>. Заменяет динамический
+   * план-блок в системном промпте, чтобы промпт оставался иммутабельным
+   * (дружелюбен KV-кешу). Null, если активного плана нет.
    */
   planSummary?: () => string | null;
-  /** Test seam — replaces the real runWithMoE (Bun module mocks are process-global). */
+  /** Тестовый шов — подменяет настоящий runWithMoE (моки Bun глобальны на процесс). */
   runWithMoEOverride?: typeof runWithMoE;
-  /** Test seam — replaces the real critic verify (Bun module mocks are process-global). */
+  /** Тестовый шов — подменяет настоящий verify критика (моки Bun глобальны). */
   criticOverride?: {
     verify: (pack: import("../modules/critic/types").EvidencePack, signal?: AbortSignal) => Promise<import("../modules/critic/types").CriticVerdict | null>;
   };
   /**
-   * Live name of the active provider entry. Needed because transparent
-   * failover (FallbackProvider) switches the manager's active entry without
-   * updating `config.provider.active`; provenance/cost must reflect the
-   * provider that actually served the call.
+   * Живое имя активной записи провайдера. Нужно, т.к. прозрачный failover
+   * (FallbackProvider) переключает активную запись менеджера без обновления
+   * `config.provider.active`; провенанс/стоимость должны отражать реально
+   * обслужившего провайдера.
    */
   getProviderName?: () => string;
 }
 
 /**
- * Model/backend identity a context probe ran against (value snapshot —
- * see `Agent.lastProbeIdentity`).
+ * Идентичность модели/бэкенда, против которой гонялась context-probe (снимок
+ * значений — см. `Agent.lastProbeIdentity`).
  */
 interface ProbeIdentity {
   model: string;
@@ -211,20 +212,24 @@ export function mutationTargetKey(
     const cmd = a.command.replace(/\s+/g, " ").trim().slice(0, 80).toLowerCase();
     return cmd ? `bash:${cmd}` : null;
   }
-  // Bookkeeping churn: plan/todo repeated over the same action with slightly
-  // different args burned 10+ iterations in ses_mthn3c2a after an audit
-  // rejection (the model "fixed" the plan instead of the work).
+  // Bookkeeping-churn: повторы plan/todo над тем же действием с чуть разными
+  // аргументами сожгли 10+ итераций в ses_mthn3c2a после отклонения аудита
+  // (модель «чинила» план вместо работы).
   if ((name === "plan" || name === "todo") && typeof a.action === "string") {
     return `book:${name}:${a.action.toLowerCase()}`;
   }
-  // plan_step has no action — key on status so repeated identical updates
-  // hit the same consecutive-duplicate guard.
+  // У plan_step нет action — ключ по status, чтобы повторные апдейты
+  // били в тот же гард подряд-дубликатов.
   if (name === "plan_step" && typeof a.status === "string") {
     return `book:${name}:${a.status.toLowerCase()}`;
   }
   return null;
 }
 
+/**
+ * Агент: владеет циклом, конфигом, стоимостью, гейтами. Состояние хода —
+ * в LoopState, шаги — в extracted-модулях.
+ */
 export class Agent {
   private deps: AgentDeps;
   private systemPromptAdded = false;
@@ -235,23 +240,22 @@ export class Agent {
    * переживает несколько запусков цикла — хранит lastCompactionShown. */
   private contextRenderer: ContextRenderer;
   private policyState: PolicyState;
-  /** Reasoning probe result (B2): starts from deps, refreshed lazily in run(). */
+  /** Итог reasoning-пробы (B2): старт из deps, лениво обновляется в run(). */
   private probePassed: boolean;
-  /** Shared mutable reasoning state (owned by agent, shared with set_thinking tool). */
+  /** Общее мутабельное reasoning-состояние (владелец — агент, делит с set_thinking). */
   readonly reasoningState: ReasoningState;
-  /** Current iteration counter (exposed for tool cooldown checks). */
+  /** Счётчик текущей итерации (для кулдаунов тулов). */
   private _currentIteration = 0;
-  /** Kind → replacement block for instructions/project-map blocks that
-   *  exceeded the system budget (resolved once before the first LLM call). */
+  /** Kind → блок-замена для instructions/project-map сверх бюджета (резолв раз до первого LLM-вызова). */
   private promptOverrides = new Map<PromptBlockKind, PromptBlock>();
-  /** Identity the context probe last ran against. Compared by VALUE because
-   *  every write path mutates the live config in place and then passes the
-   *  SAME object to `reconfigure` — a prev/next object comparison would never
-   *  observe a change. Seeded in the constructor (pre-mutation strings). */
+  /** Идентичность, против которой гонялась проба. Сравнение ПО ЗНАЧЕНИЮ: все
+   *  write-пути мутят живой конфиг in place и передают ТОТ ЖЕ объект в
+   *  `reconfigure` — сравнение объектов изменения бы не увидело. Сидируется
+   *  в конструкторе (строки до мутаций). */
   private lastProbeIdentity: ProbeIdentity;
-  /** Small always-included block explaining the compressed instructions. */
+  /** Малый всегда-включённый блок про сжатые инструкции. */
   private overflowHintBlock: PromptBlock | null = null;
-  /** Guards the one-time async overflow resolution in run(). */
+  /** Гард одноразового асинхронного резолва переполнения в run(). */
   private overflowResolved = false;
 
   constructor(deps: AgentDeps) {
@@ -265,17 +269,17 @@ export class Agent {
     this.reasoningState = { level: initialLevel, overrideIteration: -100 };
   }
 
-  /** Expose context manager for REPL image attachment and other direct access. */
+  /** Менеджер контекста наружу (аттач картинок в REPL и др. прямой доступ). */
   get contextManager(): ContextManager {
     return this.deps.contextManager;
   }
 
-  /** Current effective reasoning level. */
+  /** Текущий эффективный уровень reasoning. */
   get reasoningLevel(): ReasoningLevel {
     return this.reasoningState.level;
   }
 
-  /** Set reasoning level (used by REPL and CLI). "auto" clears a manual override. */
+  /** Ставит уровень reasoning (REPL/CLI). "auto" снимает ручной override. */
   setReasoningLevel(level: ReasoningLevel | "auto"): void {
     if (level === "auto") {
       this.reasoningState.manual = false;
@@ -285,21 +289,25 @@ export class Agent {
     this.reasoningState.manual = true;
   }
 
-  /** Current iteration number (for tool cooldown checks). */
+  /** Номер текущей итерации (для кулдаунов тулов). */
   get currentIteration(): number {
     return this._currentIteration;
   }
 
+  /**
+   * Провенанс вызывающего: живой провайдер и модель (для стоимости/логов).
+   * @returns {provider, model} реально обслужившие вызов.
+   */
   callerProvenance(): { provider: string; model: string } {
-    // Live provider name first: sticky failover switches the manager's active
-    // entry without touching config.provider.active.
+    // Сначала живое имя: sticky failover переключает активную запись
+    // менеджера, не трогая config.provider.active.
     const live = this.deps.getProviderName?.();
     if (live) return { provider: live, model: this.deps.config.model };
 
     const p = this.deps.config.provider;
     let providerName = p?.type || "unknown";
-    // When provider.entries exist, use the active entry's label for
-    // distinguishable cost provenance (e.g. "lmstudio" vs "ollama").
+    // При записях провайдера — метка активной, чтобы провенанс стоимости
+    // различался (напр. "lmstudio" vs "ollama").
     if (p?.entries && p.entries.length > 0) {
       const entry = p.active
         ? p.entries.find((e) => e.label === p.active || e.type === p.active)
@@ -309,7 +317,7 @@ export class Agent {
     return { provider: providerName, model: this.deps.config.model };
   }
 
-  /** Typed module accessor for CLI/REPL commands (e.g. /lsp). */
+  /** Типизированный доступ к модулям для CLI/REPL (напр. /lsp). */
   getModule<T>(name: string): T | undefined {
     return this.deps.moduleRegistry?.get(name) as T | undefined;
   }
@@ -329,40 +337,41 @@ export class Agent {
   }
 
   /**
-   * Install (or clear) the terminal-aware prompt surface used by interactive
-   * tools. Delegates to the tool executor so the shared ToolContext — the one
-   * tools actually receive — carries the same instance.
+   * Ставит (или снимает) терминальную prompt-поверхность для интерактивных
+   * тулов. Делегирует исполнителю, чтобы общий ToolContext — тот, что реально
+   * получают тулы — нёс тот же инстанс.
    */
   setPromptIO(io?: import("../tools/prompt-io").PromptIO): void {
     this.deps.toolExecutor.setPromptIO(io);
   }
 
   /**
-   * Append a system-prompt block for the current run (onboarding guide).
-   * Identity-based removal via `removePromptBlock`. Prompt blocks are read on
-   * every `buildSystemPrompt`, so the block takes effect on the next turn.
+   * Дописывает системный блок на текущий прогон (гайд онбординга).
+   * Удаление по идентичности через `removePromptBlock`. Блоки читаются при
+   * каждой `buildSystemPrompt`, эффект — со следующего хода.
    */
   pushPromptBlock(block: PromptBlock): void {
     this.deps.promptBlocks.push(block);
   }
 
-  /** Remove a previously pushed block (by reference). */
+  /** Убирает ранее запушенный блок (по ссылке). */
   removePromptBlock(block: PromptBlock): void {
     const i = this.deps.promptBlocks.indexOf(block);
     if (i >= 0) this.deps.promptBlocks.splice(i, 1);
   }
 
-  /** Test-only view of the current prompt blocks. */
+  /** Тестовый вид текущих блоков промпта. */
   getPromptBlocksForTest(): PromptBlock[] {
     return this.deps.promptBlocks;
   }
 
+  /** Общий ToolContext (бросает, если bootstrap его не дал). */
   get toolContext(): import("../tools/types").ToolContext {
     if (!this.deps.toolCtx) throw new Error("toolCtx not provided to Agent");
     return this.deps.toolCtx;
   }
 
-  /** Non-throwing variant of `toolContext` for optional/lifecycle checks. */
+  /** Небросающийся вариант `toolContext` для опциональных/lifecycle-проверок. */
   tryToolContext(): import("../tools/types").ToolContext | undefined {
     return this.deps.toolCtx;
   }
@@ -382,8 +391,8 @@ export class Agent {
       this.deps.config.contextWindow * this.deps.config.contextBudget.systemPrompt,
     );
     const builder = new PromptBuilder(systemBudget);
-    // Overflow replacements (compressed instructions / project map) take
-    // precedence over the original oversized blocks.
+    // Замены переполнения (сжатые инструкции/карта) приоритетнее исходных
+    // негабаритных блоков.
     const applyOverrides = (blocks: PromptBlock[]): PromptBlock[] =>
       blocks.map((b) => (b.kind && this.promptOverrides.has(b.kind) ? this.promptOverrides.get(b.kind)! : b));
     builder.addBlocks(applyOverrides(this.deps.promptBlocks));
@@ -421,11 +430,9 @@ export class Agent {
   }
 
   /**
-   * Log the current context state to the session log. Called every iteration
-   * so the session.jsonl shows a full timeline of how the context grows,
-   * compacts, and what it consists of. The `start` snapshot additionally
-   * carries the system-prompt block breakdown (which blocks, priorities,
-   * token estimates, what was excluded by the budget).
+   * Пишет состояние контекста в лог сессии. Каждую итерацию — полный таймлайн
+   * роста/компакции/состава; `start`-снимок дополнительно несёт разбивку
+   * системных блоков (что, приоритеты, оценки, что срезал бюджет).
    */
   private logContextStat(
     kind: "start" | "iteration",
@@ -464,6 +471,10 @@ export class Agent {
     });
   }
 
+  /**
+   * Текущий системный промпт с подсчётом токенов (для /sysprompt, диагностики).
+   * @returns текст, число токенов, исключённые блоки.
+   */
   getSystemPromptInfo(): {
     text: string;
     tokenCount: number;
@@ -475,10 +486,9 @@ export class Agent {
   }
 
   /**
-   * One-time (first run) handling of instructions/project-map blocks that did
-   * not fit the system-prompt budget: they are summarized by the LLM into the
-   * remaining budget (disk-cached) or truncated, and a small hint block tells
-   * the model what happened and how to read the full source.
+   * Одноразовая (первый прогон) обработка instructions/project-map сверх
+   * бюджета: LLM суммаризирует в остаток (диск-кэш) или усекает, а малый
+   * hint-блок говорит модели что случилось и как читать полный источник.
    */
   private async resolvePromptOverflowOnce(): Promise<void> {
     const cfg = this.deps.config;
@@ -544,6 +554,11 @@ export class Agent {
     onPhase?.(phase);
   }
 
+  /**
+   * Прогоняет ход агента: MoE-путь или одиночный цикл, с автонеймингом сессии.
+   * @param input сообщение пользователя; @param onChunk/onMeta/onTool/onPhase/onReasoning колбэки вывода;
+   * @returns итог прогона.
+   */
   async run(
     input: string,
     onChunk?: (chunk: string) => void,
@@ -552,16 +567,16 @@ export class Agent {
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult> {
-    // Reset shutdown flag from previous interrupt
+    // Сброс флага shutdown от прошлого прерывания
     this.shutdownRequested = false;
-    // Fresh controller per turn — the MoE path relies on it for Esc handling
-    // (executeSingleAgentLoop re-creates it again for the single-agent path).
+    // Свежий контроллер на ход — MoE-путь полагается на него для Esc
+    // (executeSingleAgentLoop пересоздаёт его же для одиночного пути).
     this.abortController = new AbortController();
     this.setScope();
-    // P5 auto-narrowing: deterministically pre-seed tool tags from the raw
-    // user message BEFORE the first LLM call (system prompt + tool schemas).
-    // Additive only — mid-session enable_tools grants are never removed.
-    // Skipped when narrowing is off (enableOnDemand: false → all tools).
+    // P5 автосужение: детерминированно пред-посеваем теги тулов из сырого
+    // сообщения ДО первого LLM-вызова (системный промпт + схемы тулов).
+    // Только добавление — mid-session гранты enable_tools не снимаются.
+    // Пропуск при выключенном сужении (enableOnDemand: false → все тулы).
     if (this.deps.config.tools?.enableOnDemand !== false && this.deps.toolTags) {
       const added = seedToolTags(this.deps.toolTags, input);
       if (added.length > 0) {
@@ -592,11 +607,10 @@ export class Agent {
       !this.systemPromptAdded &&
       !contextManager.getActiveHistory().some((m) => m.role === "system")
     ) {
-      // Log session startup diagnostics (environment, plugins, skills) as the
-      // first entry in session.jsonl so the file is self-describing for
-      // post-mortem analysis. LSP probe is logged separately from repl.ts
-      // since it may complete after this point. Dedup: logSessionStart
-      // checks for existing session_start entry to avoid double-logging.
+      // Стартовую диагностику сессии (окружение, плагины, скиллы) — первой
+      // записью в session.jsonl, чтобы файл был самоописываем для пост-анализа.
+      // LSP-проба логируется отдельно из repl.ts (может завершиться позже).
+      // Дедуп: logSessionStart проверяет существующий session_start от дублей.
       slog.logSessionStart({
         environment: this.deps.envReport as unknown as Record<string, unknown>,
       });
@@ -605,9 +619,8 @@ export class Agent {
       if (lazy.length > 0) {
         this.deps.promptBlocks.push(...lazy);
       }
-      // One-time resolution of instructions/project-map blocks that exceed
-      // the system-prompt budget: summarize (cached) or truncate them BEFORE
-      // the first real build so the model still receives the instructions.
+      // Одноразовый резолв instructions/project-map сверх бюджета: суммаризация
+      // (кэш) или усечение ДО первой сборки, чтобы модель инструкции получила.
       if (!this.overflowResolved) {
         this.overflowResolved = true;
         try {
@@ -618,9 +631,8 @@ export class Agent {
           );
         }
       }
-      // B2: await the background reasoning probe next to the lazy prompt
-      // blocks so the FIRST LLM call already knows whether the backend
-      // respects the reasoning mechanism (bootstrap no longer blocks on it).
+      // B2: ждём фоновую reasoning-пробу рядом с ленивыми блоками, чтобы ПЕРВЫЙ
+      // LLM-вызов уже знал, держит ли бэкенд механизм (bootstrap больше не ждёт).
       if (this.deps.reasoningProbe) {
         this.probePassed = await this.deps.reasoningProbe();
       }
@@ -638,10 +650,9 @@ export class Agent {
       });
     }
 
-    // A new user message starts a fresh compaction interval — iterations
-    // from the previous turn must not trigger a compaction on iteration 1
-    // of this one (observed: turn 2 compacted at iteration 8, deleting the
-    // just-sent task along with 40+ old turns).
+    // Новое сообщение — новый интервал компакции: итерации прошлого хода не
+    // должны триггерить компакцию на итерации 1 этого (наблюдалось: ход 2
+    // скомпактился на итерации 8, снеся только что присланную задачу с 40+ ходами).
     if (typeof contextManager.resetUserTurn === "function") {
       contextManager.resetUserTurn();
     }
@@ -678,8 +689,8 @@ export class Agent {
       }
     }
 
-    // Turn lifecycle for plugins: count tool events without touching the loop,
-    // and dispatch onTurnEnd exactly once — success, error or interrupt.
+    // Жизненный цикл хода для плагинов: считаем тул-события вне цикла,
+    // onTurnEnd — ровно один раз (успех, ошибка или прерывание).
     const startedAt = Date.now();
     let toolCalls = 0;
     const countTool = (ev: ToolEvent) => {
@@ -730,10 +741,10 @@ export class Agent {
           )
         : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning);
 
-      // In MoE mode the single-agent loop (the only writer of assistant turns)
-      // never runs — without this the history ends user→user across turns and
-      // session.jsonl is missing the assistant answer. Write the result once,
-      // only when MoE actually handled the turn (a fallback already wrote it).
+      // В MoE-режиме одиночный цикл (единственный писатель ходов ассистента)
+      // не бежит — без этого история схлопнется user→user между ходами, а в
+      // session.jsonl не будет ответа. Пишем итог один раз и только когда MoE
+      // реально вёл ход (фолбэк уже записал сам).
       if (moeEnabled && result.moeHandled) {
         if (result.text) {
           contextManager.addMessage({ role: "assistant", content: result.text });
@@ -809,8 +820,8 @@ export class Agent {
     });
     const hallucinationGate = new HallucinationGate(hallucinationDetector);
     const auditGate = new AuditGate(this.deps.finalAudit);
-    // Defensive: partial/legacy configs (tests, old config.json) may lack the
-    // `critic` domain — treat it as disabled rather than crashing the loop.
+    // Защита: частичные/легаси конфиги (тесты, старый config.json) могут не иметь
+    // домена `critic` — считаем выключенным, а не роняем цикл.
     const criticConfig = {
       enabled: config.critic?.enabled ?? false,
       tools: config.critic?.tools ?? true,
@@ -818,8 +829,8 @@ export class Agent {
       maxRepairCycles: config.critic?.maxRepairCycles ?? 1,
       timeoutMs: config.critic?.timeoutMs ?? 15000,
     };
-    // Phase 2: dedicated provider/model when configured, else the active
-    // provider (v1). A broken override warns and falls back — never silent.
+    // Phase 2: выделенные провайдер/модель, если настроены, иначе активный
+    // провайдер (v1). Битый оверрайд — warn + фолбэк, никогда не молча.
     const criticProvider = buildCriticProvider(config.critic, config, this.deps.llmProvider, {
       logger,
       getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
@@ -834,9 +845,9 @@ export class Agent {
       maxRepairCycles: criticConfig.maxRepairCycles,
       verify: this.deps.criticOverride?.verify ?? ((pack, signal) =>
         criticClient.verify(pack, signal, {
-          // Phase 2 read-only loop: checks run sequentially here (the gate
-          // is awaited between tool batches), through the shared executor
-          // with a read-only allowlist — writes/shell stay unreachable.
+          // Phase 2 read-only цикл: проверки бегут последовательно здесь (гейт
+          // await'ится между пакетами тулов), через общий executor с read-only
+          // allowlist — записи/shell недостижимы.
           runCheck: criticConfig.tools && this.deps.toolCtx
             ? async (tool, args) => {
                 const res = await toolExecutor.executeByName(tool, args, {
@@ -857,11 +868,11 @@ export class Agent {
       signal: this.abortController?.signal,
     });
 
-    // Account for tool definitions in context budget (they're sent via body.tools, not messages)
-    // Tool definitions are recomputed each iteration so `enable_tools`
-    // (which mutates the shared activeToolTags array) can grow the
-    // LLM-visible tool set mid-run. Bound per-iteration to keep the budget
-    // estimate and boundedOutput set in sync with what is actually sent.
+    // Определения тулов учитываем в бюджете контекста (идут через body.tools, не messages).
+    // Пересчитываем каждую итерацию, чтобы `enable_tools` (мутит общий
+    // activeToolTags) мог растить видимый модели набор прямо в прогоне.
+    // Привязка к итерации держит оценку бюджета и boundedOutput в синхроне
+    // с реально отправляемым.
     let allToolsForBudget = toolExecutor.getToolDefinitions(this.deps.toolTags);
     let boundedToolNames = new Set(
       allToolsForBudget.filter((t) => t.boundedOutput).map((t) => t.name),
@@ -877,7 +888,7 @@ export class Agent {
       this._currentIteration = state.iteration;
       contextManager.noteIteration();
 
-      // Re-read the mutable tag set in case enable_tools was called.
+      // Перечитываем мутабельный набор тегов — вдруг вызывали enable_tools.
       allToolsForBudget = toolExecutor.getToolDefinitions(this.deps.toolTags);
       boundedToolNames = new Set(
         allToolsForBudget.filter((t) => t.boundedOutput).map((t) => t.name),
@@ -1052,10 +1063,9 @@ export class Agent {
             tokenTracker.recordApiUsage(state, baseline, chunk.usage);
           }
           if (chunk.type === "warning" && chunk.content) {
-            // Non-fatal provider notice (e.g. answer cut by the completion
-            // cap). Rendered through the text stream so it lands after the
-            // partial line without disturbing markdown formatting; it is NOT
-            // added to the assistant context/history.
+            // Нефатальное уведомление провайдера (напр., ответ срезан cap'ом).
+            // Рендерим через текстовый стрим, чтобы легло после частичной строки,
+            // не ломая markdown; в контекст/историю ассистента НЕ добавляем.
             logger.diagnostic("warn", `LLM warning: ${chunk.content}`);
             onChunk?.(`\n\n> ⚠️ ${chunk.content}\n`);
           }
@@ -1177,12 +1187,11 @@ export class Agent {
           .join("|");
         if (signature && signature === state.lastToolSignature) {
           state.iterRepetitive = true;
-          // Nudge fires in ALL modes: an identical (tool,args) repeat is a
-          // wasted iteration — observed with qwen3.5-9b re-running the same
-          // verification command back-to-back after the answer was already
-          // in the result. Mutating tools stay nudge-only in interactive
-          // sessions (the user keeps control); status tools, which can never
-          // make progress by repeating, hard-stop after a few identical calls.
+          // Nudge во ВСЕХ режимах: идентичный (тул,аргументы) повтор — пустая
+          // итерация (наблюдалось: qwen3.5-9b гонял ту же verify-команду подряд,
+          // когда ответ уже был в результате). Мутирующие в интерактиве —
+          // только nudge (контроль у пользователя); status-тулы, которым повтор
+          // прогресса не даст никогда, — жёсткий стоп после нескольких повторов.
           logger.diagnostic(
             "info",
             `Repeated identical tool call detected (iteration ${state.iteration}) — nudging model to finish or change approach`,
@@ -1310,10 +1319,10 @@ export class Agent {
         contextManager,
         onMeta,
         onChunk,
-        // The uncertainty warn line is diagnostic: verbose mode only.
+        // Строка о неуверенности — диагностика: только verbose-режим.
         verbose: resolveVerbosity(this.deps.config.ui) === "verbose",
-        // Disk grounding for artifact claims (missing/unparseable files
-        // presented as created/valid). Resolved here — the gate owns no fs.
+        // Заземление заявлений на диск (отсутствующие/непарсящиеся файлы,
+        // поданные как созданные/валидные). Резолвится здесь — у гейта нет fs.
         artifacts: resolveArtifactStates(this.deps.baseDir, textContent),
       });
       if (verdict.action === "block") {
@@ -1487,18 +1496,24 @@ export class Agent {
     };
   }
 
+  /** Сбрасывает контекст (следующий прогон пересоберёт системный промпт). */
   clearContext(): void {
     this.deps.contextManager.clear();
     this.systemPromptAdded = false;
   }
 
+  /**
+   * Применяет новый конфиг живьём: provider-first проба контекста, пересборка
+   * провайдера, ресайз бюджетов, обновление стоимости.
+   * @param config новый конфиг приложения.
+   */
   async reconfigure(config: AppConfig): Promise<void> {
     const { TokenCounter } = await import("../llm/token-counter");
-    // Provider-first context: when the model or backend identity changed,
-    // ask the new provider for the context it actually serves before
-    // rebuilding budgets around the (possibly stale) configured value.
-    // Manual `contextWindow` edits without an identity change are respected
-    // as-is. Fail-open: probe errors keep the configured value.
+    // Provider-first контекст: при смене модели/бэкенда спрашиваем новый
+    // провайдер о реально отдаваемом окне ДО пересборки бюджетов вокруг
+    // (возможно протухшего) настроенного значения. Ручные правки
+    // `contextWindow` без смены идентичности уважаются как есть.
+    // Fail-open: ошибки пробы хранят настроенное значение.
     try {
       const nextId = probeIdentityOf(config);
       const prevId = this.lastProbeIdentity;
@@ -1525,7 +1540,7 @@ export class Agent {
         this.lastProbeIdentity = nextId;
       }
     } catch {
-      // Probe is best-effort — never block a model/provider switch.
+      // Проба — best-effort, переключение модели/провайдера не блокируем никогда.
     }
     const built = buildActiveProvider(config, this.deps.logger, {
       getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
@@ -1541,6 +1556,10 @@ export class Agent {
     this.costTracker.setModel(config.model);
   }
 
+  /**
+   * Переключает активного провайдера (и модель опционально).
+   * @param name имя записи провайдера; @param model новая модель.
+   */
   setProvider(name: string, model?: string): void {
     const { manager, provider } = buildActiveProvider(this.deps.config, this.deps.logger, {
       getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
@@ -1553,6 +1572,10 @@ export class Agent {
     this.deps.toolExecutor.updateProvider(provider);
   }
 
+  /**
+   * Список записей провайдеров с флагом активности.
+   * @returns записи с label и active.
+   */
   listProviders(): Array<ProviderEntry & { label: string; active: boolean }> {
     const manager = new ProviderManager(this.deps.config.provider, {
       contextWindow: this.deps.config.contextWindow,
@@ -1567,7 +1590,7 @@ export class Agent {
     }));
   }
 
-  /** Build (or get cached) the provider for a named entry — health checks, routing. */
+  /** Строит (или берёт кэшированный) провайдер именованной записи — health-чеки, роутинг. */
   getProviderFor(name: string): import("../llm/provider").LLMProvider | undefined {
     try {
       const manager = new ProviderManager(this.deps.config.provider, {
@@ -1586,6 +1609,10 @@ export class Agent {
     }
   }
 
+  /**
+   * Заменяет контекст историей (resume): системный промпт + сообщения без дубля system.
+   * @param messages сообщения для восстановления.
+   */
   setContext(
     messages: Array<{
       role: string;
@@ -1608,6 +1635,11 @@ export class Agent {
     }
   }
 
+  /**
+   * Останавливает прогон: abort, kill фоновых процессов, onSessionEnd.
+   * Лог сессии НЕ закрываем — сессия ещё активна (закрытие только на
+   * реальном конце: exit, delete).
+   */
   shutdown(): void {
     this.shutdownRequested = true;
     this.abortController?.abort();
@@ -1617,8 +1649,8 @@ export class Agent {
     if (killed > 0) {
       logger.info(t("env.killed_processes", { count: String(killed) }));
     }
-    // Note: do NOT close session log here — the session is still active.
-    // Session log is closed only when the session actually ends (exit, session delete).
+    // Сессионный лог тут НЕ закрываем — сессия ещё активна.
+    // Закрытие только на реальном конце (exit, удаление сессии).
     pluginManager.runOnSessionEnd({
       logger,
       sessionManager: sessionManager?.getActiveMeta(),

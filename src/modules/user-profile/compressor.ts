@@ -1,6 +1,9 @@
+// Компрессор профиля: сворачивает ProfileInfo в одну строку для промпта.
 import type { ProfileInfo } from "./profile";
 
+/** Сворачивает профиль в компактную строку `OS/Shell/Platform/Prefs`. */
 export class ProfileCompressor {
+  /** Сжимает инфо профиля в одну строку; пустые преференсы опускаются. */
   compress(info: ProfileInfo): string {
     const parts: string[] = [
       `OS: ${info.os}`,

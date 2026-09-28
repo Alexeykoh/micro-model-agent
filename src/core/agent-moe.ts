@@ -1,3 +1,4 @@
+/** MoE-путь агента: план → валидация → исполнение → верификация с re-plan. */
 import type { AppConfig } from "../config/types";
 import type { LLMProvider } from "../llm/provider";
 import type { ToolExecutor } from "../tools/executor";
@@ -12,17 +13,19 @@ import type { VerifyInput, OrchestratorResult } from "../llm/types";
 import { newAbortError, type TagUsage } from "../modules/execution/moe-executor";
 import { t } from "../i18n/index";
 
+/** Дефолтный лимит циклов re-plan MoE. */
 export const DEFAULT_MOE_MAX_REPLAN_CYCLES = 3;
 
-/** MoE observability event types written to session.jsonl (Plan 4.2). */
+/** Типы MoE-событий наблюдаемости в session.jsonl (Plan 4.2). */
 export type MoEEventType = "moe_plan" | "moe_subtask" | "moe_replan" | "moe_verify";
 
+/** Событие MoE: тип и данные для session log. */
 export interface MoEEvent {
   type: MoEEventType;
   data: Record<string, unknown>;
 }
 
-/** Minimal structural surface of the collaborators, for test seam injection. */
+/** Минимальная поверхность коллабораторов MoE — шов для подмен в тестах. */
 export interface MoEOrchestratorLike {
   isEnabled(): boolean;
   plan(input: string, context?: string, signal?: AbortSignal): Promise<{ plan: MoEPlan; raw: string } | { error: string }>;
@@ -37,6 +40,7 @@ export interface MoEOrchestratorLike {
   >;
 }
 
+/** Шов исполнителя плана MoE для тестов. */
 export interface MoEExecutorLike {
   executePlan(
     plan: MoEPlan,
@@ -45,6 +49,7 @@ export interface MoEExecutorLike {
   getUsageByTag?(): Record<string, TagUsage>;
 }
 
+/** Шов верификатора манифеста MoE для тестов. */
 export interface MoEVerifierLike {
   verifyMoEManifest(
     plan: MoEPlan,
@@ -53,23 +58,24 @@ export interface MoEVerifierLike {
   ): Promise<{ success: boolean; errors: string[]; warnings: string[] }>;
 }
 
+/** Зависимости MoE-пути: конфиг, провайдер, тулы, логгер, швы тестов. */
 export interface MoEDeps {
   config: AppConfig;
   llmProvider: LLMProvider;
   toolExecutor: ToolExecutor;
   logger: Logger;
   baseDir: string;
-  /** Test seams — when set, replace the real collaborators. */
+  /** Тестовые швы — при задании заменяют реальных коллабораторов. */
   orchestratorOverride?: MoEOrchestratorLike;
   executorOverride?: MoEExecutorLike;
   verifierOverride?: MoEVerifierLike;
 }
 
 /**
- * Execute the MoE (Mixture of Experts) path: plan → validate → execute → verify,
- * with a re-plan loop driven by the orchestrator's verifyAndMerge decision.
- * Returns a fallback signal when MoE cannot proceed so the caller can fall
- * back to the single-agent loop.
+ * Исполняет MoE-путь (Mixture of Experts): план → валидация → исполнение →
+ * верификация, с re-plan циклом по решению verifyAndMerge оркестратора.
+ * Возвращает сигнал фолбэка, когда MoE не может продолжить: вызывающий
+ * откатывается в одиночный цикл агента.
  */
 export async function runWithMoE(
   deps: MoEDeps,
@@ -79,11 +85,11 @@ export async function runWithMoE(
     onMeta?: OnMeta;
     onTool?: (ev: ToolEvent) => void;
     onPhase?: (phase: AgentPhase) => void;
-    /** Abort signal (Esc / shutdown). AbortError propagates — no MoE fallback. */
+    /** Abort-сигнал (Esc / shutdown). AbortError пробрасывается — без MoE-фолбэка. */
     signal?: AbortSignal;
-    /** Observability sink — wired to SessionLogger.logMoE by Agent.run. */
+    /** Sink наблюдаемости — Agent.run вешает сюда SessionLogger.logMoE. */
     onEvent?: (event: MoEEvent) => void;
-    /** Real session id, propagated to sub-agents for audit/artifacts. */
+    /** Реальный id сессии, прокидывается субагентам для аудита/артефактов. */
     sessionId?: string;
   } = {},
 ): Promise<AgentResult> {
@@ -94,8 +100,8 @@ export async function runWithMoE(
   const ensureNotAborted = () => {
     if (signal?.aborted) throw newAbortError();
   };
-  // Orchestration one-liners are machine-facing: emit them to the chat only
-  // when the user opted into verbose UI (config.ui.verbose).
+  // Однострочники оркестрации — machine-facing: в чат только при
+  // включённом verbose UI (config.ui.verbose).
   const verbose = config.ui?.verbose === true;
   const status = (message: string) => {
     if (verbose) onMeta?.(message);
@@ -121,8 +127,8 @@ export async function runWithMoE(
   }
 
   if (!orchestrator.isEnabled()) {
-    // Visible at default log level: a user who enabled moe.enabled must be
-    // able to tell why MoE never kicked in (missing orchestrator.model).
+    // Видно на дефолтном лог-уровне: включивший moe.enabled должен понимать,
+    // почему MoE не стартовал (нет orchestrator.model).
     logger.warn(t("moe.no_orchestrator"));
     return fallback();
   }
@@ -162,8 +168,8 @@ export async function runWithMoE(
       });
     }
 
-    // Validate every plan before executing it — never trust an LLM-produced
-    // plan, including re-plans produced by verifyAndMerge.
+    // Валидируем каждый план до исполнения — LLM-плану не доверяем никогда,
+    // включая re-plan от verifyAndMerge.
     const validation = validatePlan(currentPlan, config);
     if (!validation.valid) {
       const applied = applyAutoFixes(currentPlan, validation.autoFixes);
@@ -214,8 +220,8 @@ export async function runWithMoE(
       `${t("moe.executing", { count: String(currentPlan.subtasks.length), cycle: String(cycle) })}\n`,
     );
 
-    // Selective re-plan (Plan 5.1): subtasks already successfully executed in
-    // an earlier cycle are carried over — only failed/new ones re-execute.
+    // Селективный re-plan (Plan 5.1): успешные сабтаски прошлого цикла
+    // переносятся — переисполняются только упавшие/новые.
     const skipIds = new Set<string>();
     const carriedResults: SubtaskResult[] = [];
     for (const s of currentPlan.subtasks) {
@@ -300,7 +306,7 @@ export async function runWithMoE(
     }
 
     if (!verifyResult.plan || !Array.isArray(verifyResult.plan.subtasks)) {
-      // Verifier asked for a re-plan but produced none usable — stop honestly.
+      // Верификатор просил re-plan, но годного не дал — останавливаемся честно.
       return partialFailure(
         mergedResults,
         verifyResult.explanation || "re-plan requested but no plan returned",

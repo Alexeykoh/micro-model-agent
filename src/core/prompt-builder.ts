@@ -1,5 +1,7 @@
+/** Сборщик системного промпта: блоки по приоритету в бюджет токенов. */
 import type { PromptBlock } from "./types";
 
+/** Диагностика блока: метка, приоритет, токены, вошёл ли в бюджет. */
 export interface BlockBuildInfo {
   label: string;
   priority: string;
@@ -8,13 +10,16 @@ export interface BlockBuildInfo {
   included: boolean;
 }
 
+/** Итог сборки: промпт, исключённое, разбивка по блокам для лога. */
 export interface BuildResult {
   prompt: string;
   excluded: string[];
-  /** Full block objects that did not fit the budget — used by the overflow
-   *  resolver to summarize instructions/project-map blocks (agent.ts). */
+  /**
+   * Невместившиеся блоки целиком — резолвер переполнения суммаризирует
+   * из них instructions/project-map (agent.ts).
+   */
   excludedBlocks: PromptBlock[];
-  /** Per-block breakdown — used to log what the system prompt actually consists of. */
+  /** Поблочная разбивка — логирует реальный состав системного промпта. */
   blocks: BlockBuildInfo[];
 }
 
@@ -30,6 +35,10 @@ function blockLabel(content: string): string {
   return firstLine.length > 70 ? `${firstLine.slice(0, 67)}...` : firstLine;
 }
 
+/**
+ * Собирает системный промпт из блоков: essential всегда, остальные по
+ * приоритету, пока влезают в бюджет.
+ */
 export class PromptBuilder {
   private blocks: PromptBlock[] = [];
   private budget: number;
@@ -38,16 +47,28 @@ export class PromptBuilder {
     this.budget = budget;
   }
 
+  /**
+   * Добавляет один блок.
+   * @param block блок промпта с приоритетом и оценкой токенов.
+   */
   addBlock(block: PromptBlock): void {
     this.blocks.push(block);
   }
 
+  /**
+   * Добавляет несколько блоков.
+   * @param blocks массив блоков промпта.
+   */
   addBlocks(blocks: PromptBlock[]): void {
     for (const b of blocks) {
       this.blocks.push(b);
     }
   }
 
+  /**
+   * Строит промпт: essential-блоки всегда, остальные по приоритету в бюджет.
+   * @returns промпт, исключённое и поблочная разбивка.
+   */
   build(): BuildResult {
     const essential: PromptBlock[] = [];
     const nonEssential: PromptBlock[] = [];

@@ -1,7 +1,8 @@
+/** Резолвинг путей workspace: поиск корня проекта по манифестам. */
 import { existsSync, readdirSync } from "fs";
 import { resolve, isAbsolute, join } from "path";
 
-/** Files/dirs that mark a directory as a project root. */
+/** Файлы/каталоги — маркеры корня проекта. */
 const PROJECT_MANIFESTS = [
   "package.json",
   "bun.lockb",
@@ -16,7 +17,7 @@ const PROJECT_MANIFESTS = [
   "composer.json",
 ];
 
-/** Immediate subdirectories that are never candidate project roots. */
+/** Подкаталоги, никогда не кандидаты в корень проекта. */
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".hg", ".svn"]);
 
 const subdirCache = new Map<string, string[]>();
@@ -37,28 +38,31 @@ function scanSubdirs(baseDir: string): string[] {
   return dirs;
 }
 
+/**
+ * Есть ли в каталоге манифест проекта.
+ * @param dir каталог для проверки.
+ * @returns true, если найден известный манифест.
+ */
 export function hasProjectManifest(dir: string): boolean {
   return PROJECT_MANIFESTS.some((m) => existsSync(join(dir, m)));
 }
 
 /**
- * Resolve a file/dir path inside a workspace, tolerating the common case
- * where the agent runs from a parent directory while the actual project
- * lives in a single immediate subdirectory (e.g. baseDir=<repo>,
- * project=<repo>/app). Resolution order:
- *   1. absolute path as-is;
- *   2. baseDir/<p> тАФ project rooted directly at baseDir;
- *   3. <subdir>/<p> for each immediate project subdirectory of baseDir
- *      (manifest-bearing subdirectories are preferred).
- * Returns baseDir/<p> as a fallback when nothing exists, so callers that
- * check existsSync() still correctly report the path as missing.
+ * Резолвит путь внутри workspace. Терпит запуск из родителя, когда проект
+ * лежит в одном подкаталоге (baseDir=<repo>, проект=<repo>/app). Порядок:
+ *   1. абсолютный путь как есть;
+ *   2. baseDir/<p> — проект прямо в baseDir;
+ *   3. <subdir>/<p> по подкаталогам (приоритет — с манифестом).
+ * Фолбэк — baseDir/<p>, чтобы вызывающий через existsSync() корректно
+ * определил отсутствие пути.
+ * @param baseDir корень workspace; @param p относительный/абсолютный путь.
  */
 export function resolveProjectPath(baseDir: string, p: string): string {
   const abs = isAbsolute(p) ? p : resolve(baseDir, p);
   if (existsSync(abs)) return abs;
 
-  // baseDir itself is a project root тАФ paths are relative to it. Probing
-  // subdirectories here would match files in unrelated nested packages.
+  // Сам baseDir — корень проекта: подкаталоги не сканируем, иначе
+  // зацепим файлы посторонних вложенных пакетов.
   if (hasProjectManifest(baseDir)) return abs;
 
   let fallback = abs;
@@ -72,7 +76,7 @@ export function resolveProjectPath(baseDir: string, p: string): string {
   return fallback;
 }
 
-/** Clear the internal subdirectory cache (used by tests). */
+/** Сбрасывает кэш подкаталогов (нужен тестам). */
 export function clearWorkspaceCache(): void {
   subdirCache.clear();
 }

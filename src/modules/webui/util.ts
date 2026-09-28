@@ -1,8 +1,7 @@
+// Транспортные хелперы сервера `mma web` (auth, тела, JSON, single-flight сабмита).
 /**
- * Transport helpers for the `mma web` server.
- *
- * Split out of `server.ts` to keep each file well under the 300-line budget
- * (rule #1). Pure-ish request/response plumbing — no app state transitions.
+ * Вынесены из `server.ts`, чтобы каждый файл был сильно меньше бюджета 300 строк
+ * (правило #1). Чистая обвязка запрос/ответ — без переходов состояния приложения.
  */
 import { exec } from "node:child_process";
 import { timingSafeEqual } from "node:crypto";
@@ -15,16 +14,16 @@ import { MAX_BODY_BYTES } from "./limits";
 
 export { MAX_BODY_BYTES } from "./limits";
 
-/** Hard cap on a single message's text, independent of the transport body cap. */
+/** Жёсткий кап текста одного сообщения, независимый от капа тела транспорта. */
 export const MAX_MESSAGE_CHARS = 32 * 1024;
 
-/** Max images per message (matches the design's ≤3 intent). */
+/** Максимум картинок на сообщение (по дизайну ≤3). */
 export const MAX_IMAGES = 3;
 
-/** Max size of a single `data:image/...` URL (design: ~6MB each). */
+/** Максимум размера одного `data:image/...` URL (по дизайну ~6MB). */
 export const MAX_IMAGE_DATA_URL_BYTES = 6 * 1024 * 1024;
 
-/** Thrown by readBody when the payload exceeds the cap (maps to HTTP 413). */
+/** Бросается из readBody при превышении капа (маппится в HTTP 413). */
 export class BodyTooLargeError extends Error {
   constructor() {
     super("body too large");
@@ -32,11 +31,12 @@ export class BodyTooLargeError extends Error {
   }
 }
 
+/** True для loopback-хостов. */
 export function isLoopback(host: string): boolean {
   return host === "127.0.0.1" || host === "localhost" || host === "::1";
 }
 
-/** Constant-time string compare; unequal lengths short-circuit (timingSafeEqual throws). */
+/** Сравнение строк за константное время; разные длины коротко замыкаются (timingSafeEqual бросает). */
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);
@@ -44,10 +44,10 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ab, bb);
 }
 
-/** Name of the HttpOnly cookie that carries the web token for GET navigations. */
+/** Имя HttpOnly-куки, несущей веб-токен для GET-навигаций. */
 const AUTH_COOKIE = "mma_web_auth";
 
-/** Read a cookie value from a raw `Cookie:` header. Malformed encodings yield null. */
+/** Читает значение куки из сырого заголовка `Cookie:`; битые кодировки дают null. */
 function cookieValue(header: string | undefined, name: string): string | null {
   if (!header) return null;
   for (const part of header.split(";")) {
@@ -65,7 +65,7 @@ function cookieValue(header: string | undefined, name: string): string | null {
   return null;
 }
 
-/** Token auth for HTTP surfaces (header `x-mma-token`, `?token=` or cookie); no token → allow. */
+/** Токен-auth HTTP-поверхностей (заголовок `x-mma-token`, `?token=` или кука); без токена — разрешено. */
 export function checkAuth(req: IncomingMessage, reqUrl: URL, s: WebUiState): boolean {
   if (!s.token) return true;
   const header = req.headers["x-mma-token"];
@@ -77,10 +77,10 @@ export function checkAuth(req: IncomingMessage, reqUrl: URL, s: WebUiState): boo
 }
 
 /**
- * Hand the browser a same-site cookie holding the token so a plain
- * `<a target="_blank" href="/api/file?...">` navigation (which cannot set the
- * `x-mma-token` header) still authenticates. `SameSite=Strict` means a
- * cross-site request never carries it, so this adds no CSRF surface.
+ * Выдаёт браузеру same-site куку с токеном, чтобы plain-навигация
+ * `<a target="_blank" href="/api/file?...">` (не умеющая ставить заголовок
+ * `x-mma-token`) всё равно аутентифицировалась. `SameSite=Strict` — кросс-сайт
+ * запрос её никогда не несёт, так что CSRF-поверхности не добавляется.
  */
 export function setAuthCookie(res: ServerResponse, s: WebUiState): void {
   if (!s.token) return;
@@ -90,7 +90,7 @@ export function setAuthCookie(res: ServerResponse, s: WebUiState): void {
   );
 }
 
-/** Reject browser-initiated cross-origin writes (CSRF hardening). */
+/** Отклоняет кросс-доменные записи из браузера (CSRF-закалка). */
 export function sameOrigin(req: IncomingMessage, reqUrl: URL): boolean {
   const origin = req.headers.origin;
   if (!origin) return true; // curl / same-origin GET
@@ -101,16 +101,16 @@ export function sameOrigin(req: IncomingMessage, reqUrl: URL): boolean {
   }
 }
 
+/** Отправляет JSON-ответ со статусом. */
 export function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
 }
 
 /**
- * Buffer a request body up to `cap`. Rejects with `BodyTooLargeError` on
- * overflow WITHOUT destroying the socket: the caller owns the 413 response and
- * drops the request only after the response is flushed — иначе клиент получает
- * socket error вместо 413.
+ * Буферизует тело запроса до `cap`. На переполнении реджектит `BodyTooLargeError`
+ * БЕЗ убийства сокета: вызывающий владеет ответом 413 и рвёт запрос только
+ * после флаша ответа — иначе клиент получит socket error вместо 413.
  */
 export function readBody(req: IncomingMessage, cap = MAX_BODY_BYTES): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -139,7 +139,7 @@ export function readBody(req: IncomingMessage, cap = MAX_BODY_BYTES): Promise<st
   });
 }
 
-/** Pull `{ text, images }` out of a parsed body; invalid JSON and empty are distinct. */
+/** Достаёт `{ text, images }` из распарсенного тела; битый JSON и пусто — разные ошибки. */
 export function parseMessageBody(
   raw: string,
 ): { text: string; images: string[] } | { error: string } {
@@ -169,20 +169,20 @@ export function parseMessageBody(
 }
 
 /**
- * Redact credentials from an error message before it enters an SSE payload.
- * Reuses `redactContextSecrets` (точечная редакция) — generic `sanitizeLogMessage`
- * would mangle ordinary text, and the web UI shows these to users.
+ * Вычищает credentials из текста ошибки перед укладкой в SSE-пейлоад.
+ * Переиспользует `redactContextSecrets` (точечная редактура) — общий
+ * `sanitizeLogMessage` покалечил бы обычный текст, а веб-UI показывает их людям.
  */
 export function scrubError(err: unknown): string {
   return redactContextSecrets(errMsg(err));
 }
 
-/** Map a body-read failure to a response; oversized bodies get a flush-safe 413. */
+/** Маппит провал чтения тела в ответ; переполненные получают flush-safe 413. */
 export function readBodyError(req: IncomingMessage, res: ServerResponse, err: unknown): void {
   if (err instanceof BodyTooLargeError) {
     res.writeHead(413, { "Content-Type": "application/json; charset=utf-8" });
-    // Destroy the request only after the 413 is flushed; destroying first makes
-    // the client see a socket error instead of the status.
+    // Уничтожаем запрос только после флаша 413; убийство раньше —
+    // и клиент видит socket error вместо статуса.
     res.end(JSON.stringify({ error: "body too large" }), () => req.destroy());
     return;
   }
@@ -190,15 +190,14 @@ export function readBodyError(req: IncomingMessage, res: ServerResponse, err: un
 }
 
 /**
- * `POST /api/message`: reserve the single-flight slot and forward to the host.
+ * `POST /api/message`: резервирует single-flight слот и отдаёт хосту.
  *
- * Single-flight invariant: the busy pre-check and {@link reserveBusy} happen in
- * ONE synchronous tick (no `await` between them), so two concurrent POSTs can
- * never both pass. `bridge.isBusy()` tracks an actually-running turn
- * (`agentRunning`), distinct from this UI reservation (`s.busy`) — that is what
- * lets the owner's `submit` clear the host's own `isBusy()` guard. The
- * forwarder's `turn_end` is the sole reset for a turn that started;
- * `releaseBusy` covers a submit that never started.
+ * Инвариант single-flight: пречек busy и {@link reserveBusy} — в ОДИН
+ * синхронный тик (без `await` между), иначе два конкурентных POST оба пройдут.
+ * `bridge.isBusy()` следит за реально бегущим ходом (`agentRunning`) отдельно
+ * от UI-резервации (`s.busy`) — поэтому сабмит владельца сбрасывает собственный
+ * `isBusy()`-гард хоста. Форвардерный `turn_end` — единственный сброс для
+ * стартовавшего хода; `releaseBusy` покрывает сабмит, так и не стартовавший.
  */
 export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   if (s.setupRequired) {
@@ -233,11 +232,11 @@ export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: 
       s.lastPostTs = Date.now();
       const run = Promise.resolve(bridge.submit(body.text, { images: body.images }));
       run.catch((err: unknown) => {
-        // Single error owner: for any turn that actually started, the forwarder
-        // emits `turn_end {success:false}` and clears the reservation first, so
-        // `releaseBusy` returns false here and we must NOT broadcast a second
-        // `error` (the browser would show two lines). Only a submit rejected
-        // before the turn began (reservation still ours) reports `error`.
+        // Единственный владелец ошибки: для любого реально стартовавшего хода
+        // форвардер эмитит `turn_end {success:false}` и первым чистит резерв,
+        // так что `releaseBusy` здесь вернёт false и второй `error` слать НЕЛЬЗЯ
+        // (браузер показал бы две строки). `error` репортит только сабмит,
+        // зареджекченный до начала хода (резерв ещё наш).
         if (releaseBusy(s, token)) {
           broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
           broadcast({ type: "state", ts: Date.now(), busy: false }, s);
@@ -253,7 +252,7 @@ export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: 
     });
 }
 
-/** Best-effort open of the UI in the default browser (MMA_WEBUI_OPEN=0 disables). */
+/** Best-effort открытие UI в браузере по умолчанию (MMA_WEBUI_OPEN=0 отключает). */
 export function tryOpenBrowser(url: string): void {
   if (process.env.MMA_WEBUI_OPEN === "0") return;
   try {
@@ -267,6 +266,6 @@ export function tryOpenBrowser(url: string): void {
     const child = exec(cmd, { windowsHide: true });
     child.unref?.();
   } catch {
-    /* best-effort — opening a browser must never break startup */
+    /* best-effort — открытие браузера не должно ломать старт */
   }
 }

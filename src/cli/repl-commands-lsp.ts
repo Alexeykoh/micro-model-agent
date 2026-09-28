@@ -1,5 +1,5 @@
 /**
- * REPL `/lsp` command — split out of `repl-commands.ts` (rule #1).
+ * Команда REPL `/lsp`: вынесена из `repl-commands.ts` (нарезка крупных файлов).
  */
 import { pc } from "../ui/colors";
 import { t } from "../i18n/index";
@@ -7,6 +7,7 @@ import { errMsg } from "../utils";
 import type { LspModule } from "../modules/lsp/module";
 import type { ReplContext } from "./repl-commands";
 
+/** Регистрирует `/lsp` (status/restart/check) через handler-map (правило #17). */
 export function registerLspCommands(ctx: ReplContext): void {
   ctx.registerCommand({
     name: "lsp",
@@ -14,7 +15,7 @@ export function registerLspCommands(ctx: ReplContext): void {
     usage: t("repl.lsp_usage"),
     examples: ["/lsp status", "/lsp restart", "/lsp check src/index.ts"],
     action: async (args: string[]) => {
-      // Access LSP module via the agent's module registry
+      // Доступ к LSP-модулю через реестр модулей агента.
       const lspModule = ctx.agent.getModule<LspModule>("lsp");
       if (!lspModule) {
         ctx.output.writeLine(pc.yellow(t("repl.lsp_not_available")));

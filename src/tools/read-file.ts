@@ -1,3 +1,4 @@
+/** Тул чтения файла: постранично, со стримингом больших файлов. */
 import { readFileSync, existsSync, statSync, openSync, readSync, closeSync } from "fs";
 import { extname } from "path";
 import { t } from "../i18n/index";
@@ -9,30 +10,27 @@ import { safeResolvePath } from "./path-utils";
 import { errMsg } from "../utils";
 
 /**
- * Default lines per read_file call. Deliberately much larger than
- * MAX_PREVIEW_LINES (15): a 15-line default forces the model to issue 10-17
- * calls per file, which floods the context and drives compaction every 15
- * iterations (observed: 96 read_file calls, App.tsx read 23x, then 11
- * compactions in ~20 min that deleted the user's task mid-turn). 300 lines
- * covers typical component files in one call while still capping output.
+ * Строк на вызов read_file по умолчанию. Намеренно больше MAX_PREVIEW_LINES
+ * (15): дефолт 15 заставлял модель делать 10–17 вызовов на файл, что заливало
+ * контекст и дёргало компакцию каждые 15 итераций (наблюдено: 96 вызовов
+ * read_file, 11 компакций за ~20 мин со сносом задачи). 300 строк покрывают
+ * типичный файл за один вызов, вывод всё равно ограничен.
  */
 const DEFAULT_LIMIT = 300;
-/** Hard cap for an explicit `limit` (this tool is exempt from budget truncation). */
+/** Жёсткий потолок явного `limit` (тул исключён из усечения по бюджету). */
 const MAX_READ_LIMIT = 2000;
 
 /**
- * Files larger than this are read through a bounded streaming path instead of
- * readFileSync (which loads the whole file into memory just to slice a few
- * hundred lines).
+ * Файлы крупнее — через ограниченный стриминг вместо readFileSync (который
+ * грузит весь файл в память ради пары сотен строк).
  */
 const LARGE_FILE_BYTES = 1024 * 1024;
 const STREAM_CHUNK = 256 * 1024;
 
 /**
- * Bounded line-slice read for large files: streams the file in chunks,
- * collects only the requested [offset, offset+limit) window, then counts the
- * remaining newlines raw (no decode) to produce the total. Memory stays
- * bounded regardless of file size.
+ * Ограниченное построчное чтение больших файлов: стримит чанками, собирает
+ * только окно [offset, offset+limit), остаток переводов строк считает сырым
+ * (без декода) для total. Память ограничена при любом размере файла.
  */
 function readLineSlice(
   path: string,
@@ -62,7 +60,7 @@ function readLineSlice(
         lineNumber++;
       }
       if (lineNumber >= endLine && collected.length >= limit) {
-        // Window complete — count remaining newlines without decoding.
+        // Окно собрано — остаток переводов строк считаем без декодирования.
         const rest: Buffer[] = [];
         while (true) {
           const n = readSync(fd, buf, 0, STREAM_CHUNK, pos);
@@ -72,8 +70,8 @@ function readLineSlice(
         }
         const tail = Buffer.concat([...rest, Buffer.from(carry, "utf-8")]);
         for (let i = 0; i < tail.length; i++) if (tail[i] === 0x0a) total++;
-        // Add the final (newline-less) line only when the file does not end in
-        // a newline — otherwise the count included a phantom empty line.
+        // Плюс финальная строка без перевода — только если файл им не
+        // кончается, иначе посчитаем фантомную пустую строку.
         if (tail.length > 0 && tail[tail.length - 1] !== 0x0a) total++;
         return { selected: collected.join("\n"), total };
       }
@@ -88,6 +86,7 @@ function readLineSlice(
   }
 }
 
+/** Читает файл постранично (offset/limit); кешируемый, с cap вывода. */
 export const readFileTool: ToolDefinition = {
   name: "read_file",
   icon: "👀",
@@ -131,8 +130,8 @@ export const readFileTool: ToolDefinition = {
       };
     }
     if (!existsSync(resolved)) {
-      // For relative paths, tell the model WHERE the path resolved — the
-      // "not found" alone is confusing (it cannot tell baseDir from cwd).
+      // Для относительных путей показываем, КУДА резолвилось: голое
+      // "not found" не даёт модели отличить baseDir от cwd.
       const output =
         resolved !== path
           ? t("file.notfound_resolved", {
@@ -142,9 +141,9 @@ export const readFileTool: ToolDefinition = {
           : t("file.notfound", { path });
       return { success: false, output };
     }
-    // Clamp both: `offset: 0` made slice(-1, end) return the LAST line, and an
-    // unbounded `limit` (this tool skips budget truncation) could pull a whole
-    // large file into context.
+    // Кламп обоих: `offset: 0` давал slice(-1, end) с ПОСЛЕДНЕЙ строкой, а
+    // безграничный `limit` (тул вне усечения по бюджету) тянул бы целый
+    // большой файл в контекст.
     const offset = Math.max(
       1,
       typeof args.offset === "number" ? Math.floor(args.offset) : 1,
@@ -165,8 +164,8 @@ export const readFileTool: ToolDefinition = {
       } else {
         const content = readFileSync(resolved, "utf-8");
         lines = content.split("\n");
-        // A file ending in a newline yields a phantom empty last element;
-        // drop it so the advertised line count matches the streaming path.
+        // Файл с финальным переводом даёт фантомный пустой элемент — снять,
+        // чтобы счёт строк совпал со стриминг-путем.
         if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
         total = lines.length;
         const end = Math.min(offset - 1 + limit, total);
@@ -196,9 +195,8 @@ export const readFileTool: ToolDefinition = {
             next: String(end + 1),
           })
         : "";
-    // Compact user-facing display: the tool header already shows the path,
-    // so only a partial read needs extra info (the range within the file).
-    // A full read adds nothing — keeps the card to two lines.
+    // Компактный display: заголовок уже показывает путь, доп. инфо (диапазон)
+    // нужна только частичному чтению. Полное чтение — пусто, карточка в 2 строки.
     const fullRead = offset === 1 && end >= total;
     const display = fullRead
       ? ""

@@ -1,21 +1,24 @@
+// Контракты верификации шагов: file-exists/command/manual + парсер.
 /**
- * Step verification contracts ("checks").
+ * Контракты верификации шагов ("checks").
  *
- * A check is a one-line contract declared per step at plan create/re-plan
- * time. Three prefixes:
- * - "file-exists:<path>" — hard-verified by StepVerifier on done;
- * - "command:<cmd>" — the exact command proving the step (self-certified);
- * - "manual:<text>" — eye-check for UI/visual work (self-certified).
+ * Check — однострочный контракт на шаг, объявляется при create/re-plan.
+ * Три префикса:
+ * - "file-exists:<path>" — жёстко проверяет StepVerifier на done;
+ * - "command:<cmd>" — точная команда-доказательство шага (self-certified);
+ * - "manual:<text>" — проверка глазами для UI/визуалки (self-certified).
  *
- * Pure helpers shared by the validator (module.parseChecks) and the
- * done-gate (plan-actions.updateStep).
+ * Чистые хелперы, общие для валидатора (module.parseChecks) и done-gate
+ * (plan-actions.updateStep).
  */
 
+/** Вид контракта: файл, команда, ручная проверка. */
 export type CheckKind = "file" | "command" | "manual";
 
+/** Распарсенный check: вид + цель. */
 export interface ParsedCheck {
   kind: CheckKind;
-  /** Path after "file-exists:", command after "command:", text after "manual:". */
+  /** Путь после "file-exists:", команда после "command:", текст после "manual:". */
   target: string;
 }
 
@@ -25,8 +28,7 @@ const PREFIXES: Array<{ prefix: string; kind: CheckKind }> = [
   { prefix: "manual:", kind: "manual" },
 ];
 
-/** Parse a check string. Returns null when the prefix is missing/unknown
- *  or the target is empty. */
+/** Парсит строку check. Null, если префикс неизвестен/нет или цель пуста. */
 export function parseCheck(check: string): ParsedCheck | null {
   const trimmed = check.trim();
   for (const { prefix, kind } of PREFIXES) {
@@ -39,7 +41,7 @@ export function parseCheck(check: string): ParsedCheck | null {
   return null;
 }
 
-/** Whether a check string is a well-formed contract. */
+/** True, если строка check — well-formed контракт. */
 export function isValidCheck(check: unknown): check is string {
   return typeof check === "string" && parseCheck(check) !== null;
 }

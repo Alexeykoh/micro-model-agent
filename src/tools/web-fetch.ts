@@ -1,3 +1,4 @@
+/** Тул чтения URL в markdown (plain HTTP, без JS; SSRF-защита, cap вывода). */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import {
@@ -11,8 +12,10 @@ import { getSessionSecurityConfig } from "../modules/security/session-isolation"
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { MAX_PREVIEW_LINES } from "./preview";
 
+/** Потолок символов до построчной обрезки. */
 const MAX_CHARS = 5000;
 
+/** Сносит скрипты/стили/теги/сущности в plain text. */
 function stripHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -23,6 +26,7 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+/** Тянет URL в markdown; JS-страницы вернут пустоту — для них тул browser. */
 export const webFetchTool: ToolDefinition = {
   name: "web_fetch",
   icon: "⬇️",
@@ -39,7 +43,6 @@ export const webFetchTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const url = String(args.url);
 
-    // Get session-specific security config
     const config = ctx.config || {};
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(config, ctx.sessionContext).network
@@ -60,8 +63,8 @@ export const webFetchTool: ToolDefinition = {
     }
 
     try {
-      // Every redirect hop is re-validated (SSRF); the old code re-checked one
-      // hop then used redirect:"follow", leaving later hops unchecked.
+      // Каждый хоп редиректа перевадидируется (SSRF); старый код проверял один
+      // хоп и ставил redirect:"follow", оставляя остальные без проверки.
       const { response: finalResponse, finalUrl } = await fetchValidated(url, securityConfig, {
         signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000),
       });

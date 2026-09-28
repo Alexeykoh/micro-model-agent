@@ -1,13 +1,13 @@
+/** On-demand тул: включает скрытые категории тулов на сессию. */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 
 /**
- * On-demand tool activation. The main loop exposes only `config.tools.defaultTags`
- * (+ `alwaysOn` structural tools). Specialized tools (web, browser, memory,
- * process) are hidden from the schema to shrink the token footprint; the model
- * activates them by calling this tool with the desired tag. The handler pushes
- * the tags into the shared mutable `ctx.activeToolTags` array, which the agent
- * loop re-reads each iteration to recompute the LLM-visible tool set.
+ * On-demand активация тулов. Главный цикл показывает только
+ * `config.tools.defaultTags` (+ структурные `alwaysOn`); спецтулы (web,
+ * browser, memory, process) скрыты из схемы ради экономии токенов. Модель
+ * включает их этим тулом; хендлер дописывает теги в общий мутабельный
+ * `ctx.activeToolTags`, который цикл перечитывает каждую итерацию.
  */
 export const enableToolsTool: ToolDefinition = {
   name: "enable_tools",

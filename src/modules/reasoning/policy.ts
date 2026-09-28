@@ -1,66 +1,71 @@
-// src/modules/reasoning/policy.ts
+// Политика reasoning-уровня: подъём на сбоях/плане, спад на рутине (policy.ts).
 import type { ReasoningLevel } from "../../config/types";
 
+/** Вход политики: события итерации + базовый уровень из конфига. */
 export interface PolicyInput {
-  /** Hallucination-retry triggered this iteration. */
+  /** Итерация вызвана hallucination-retry. */
   hallucinationRetry: boolean;
-  /** Final-audit rejection triggered this iteration. */
+  /** Итерация вызвана отклонением финального аудита. */
   auditRejection: boolean;
-  /** Recoverable LLM error triggered this iteration. */
+  /** Итерация вызвана recoverable-ошибкой LLM. */
   recoverableLlmError: boolean;
-  /** Plan was created or re-planned this iteration. */
+  /** На итерации создан/перепланирован план. */
   planCreated: boolean;
-  /** Consecutive successful file-mutating calls on the current step. */
+  /** Подряд успешных файловых вызовов на текущем шаге. */
   consecutiveSuccesses: number;
-  /** Stuck detector reports repetitive tool calls. */
+  /** Stuck-детектор сообщает о повторяющихся вызовах. */
   isRepetitive: boolean;
-  /** Baseline level from config (the default level). */
+  /** Базовый уровень из конфига (уровень по умолчанию). */
   baseline: ReasoningLevel;
 }
 
+/** Решение политики: уровень + причина. */
 export interface PolicyResult {
   level: ReasoningLevel;
   reason: string;
 }
 
+/** Состояние политики: затухание подъёма и буст от создания плана. */
 export interface PolicyState {
-  /** Iterations since the last raise event. */
+  /** Итераций с последнего подъёма. */
   iterationsSinceRaise: number;
-  /** If >0, boost level for this many iterations (plan created). */
+  /** Если >0 — держать подъём ещё столько итераций (создан план). */
   boostRemaining: number;
 }
 
+/** Начальное состояние политики. */
 export function createPolicyState(): PolicyState {
   return { iterationsSinceRaise: 0, boostRemaining: 0 };
 }
 
 const DECAY_THRESHOLD = 5;
 
+/** Вычисляет reasoning-уровень: подъём на сбоях, буст после плана, спад на рутине. */
 export function evaluateReasoningPolicy(
   input: PolicyInput,
   state: PolicyState,
 ): PolicyResult {
-  // Raise signals (highest priority)
+  // Сигналы подъёма (высший приоритет)
   if (input.hallucinationRetry || input.auditRejection || input.recoverableLlmError) {
     state.iterationsSinceRaise = 0;
     return { level: "high", reason: input.hallucinationRetry ? "policy:hallucination-retry" : input.auditRejection ? "policy:audit-rejection" : "policy:recoverable-llm-error" };
   }
 
-  // Plan created → boost for N iterations
+  // Создан план → буст на N итераций
   if (input.planCreated) {
     state.boostRemaining = 3;
     state.iterationsSinceRaise = 0;
     return { level: "high", reason: "policy:plan-created" };
   }
 
-  // Active boost from plan creation
+  // Активный буст от создания плана
   if (state.boostRemaining > 0) {
     state.boostRemaining--;
     state.iterationsSinceRaise = 0;
     return { level: "high", reason: "policy:plan-boost" };
   }
 
-  // Lower signals
+  // Сигналы понижения
   if (input.consecutiveSuccesses >= 2) {
     state.iterationsSinceRaise++;
     return { level: "low", reason: "policy:routine-write" };
@@ -71,13 +76,13 @@ export function evaluateReasoningPolicy(
     return { level: "low", reason: "policy:repetitive-tools" };
   }
 
-  // Decay: if raised for too long, return to baseline
+  // Затухание: подъём держался слишком долго — возврат к базовому
   if (state.iterationsSinceRaise >= DECAY_THRESHOLD) {
     state.iterationsSinceRaise = 0;
     return { level: input.baseline, reason: "policy:decay" };
   }
 
-  // Default: baseline
+  // По умолчанию: базовый уровень
   state.iterationsSinceRaise++;
   return { level: input.baseline, reason: "policy:default" };
 }

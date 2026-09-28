@@ -1,16 +1,15 @@
-// src/llm/token-counter.ts
+/** Подсчёт токенов: точный (tiktoken) и дешёвая эвристика для блоков. */
 import { encodingForModel, getEncoding } from "js-tiktoken";
 import { getMessageText } from "./provider";
 import type { ContentPart } from "./provider";
 
 /**
- * Script-aware token ESTIMATE (cheap, no full tokenization). Cheap enough for
- * every hand-built PromptBlock; used at block-build time where the exact
- * TokenCounter may not be in scope. Measured on cl100k_base: Latin AND
- * Cyrillic both encode at ~3.3-5 chars/token (the old flat len/4 was actually
- * close for Cyrillic — the "cyr ≈ /2" assumption was wrong); CJK/Hangul are
- * the real outliers at ~1-1.5 tokens/char, so they get /1.5. Within ±30% of
- * tiktoken for Russian text.
+ * Скриптозависимая ОЦЕНКА токенов (дешёвая, без полной токенизации). Достаточно
+ * дешёвая для каждого PromptBlock; на этапе сборки точного TokenCounter может
+ * не быть в scope. Замерено на cl100k_base: латиница И кириллица — ~3.3–5
+ * символов/токен (старый плоский len/4 для кириллицы был почти верен —
+ * гипотеза «кириллица ≈ /2» ошибочна); CJK/хангыль — выбросы ~1–1.5 токена/
+ * символ, им /1.5. В пределах ±30% от tiktoken на русском.
  */
 export function estimateTokens(text: string): number {
   if (!text) return 0;
@@ -31,6 +30,7 @@ export function estimateTokens(text: string): number {
   return Math.ceil(cjk / 1.5 + rest / 4);
 }
 
+/** Точный счётчик токенов поверх tiktoken (энкодинг по модели). */
 export class TokenCounter {
   private encoder: ReturnType<typeof getEncoding>;
 
@@ -38,33 +38,49 @@ export class TokenCounter {
     try {
       this.encoder = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
     } catch {
-      // Fallback to cl100k_base for unknown models
+      // Фолбэк на cl100k_base для неизвестных моделей
       this.encoder = getEncoding("cl100k_base");
     }
   }
 
+  /**
+   * Считает токены текста.
+   * @param text текст; @returns число токенов.
+   */
   count(text: string): number {
     if (!text) return 0;
     return this.encoder.encode(text).length;
   }
 
+  /**
+   * Считает токены сообщений с оверхедом ролей/границ (~4/сообщение).
+   * @param messages сообщения чата; @returns суммарные токены.
+   */
   countMessages(messages: Array<{ role: string; content: string | ContentPart[] }>): number {
     let total = 0;
     for (const msg of messages) {
-      // ~4 tokens per message overhead (role, boundaries)
+      // ~4 токена оверхеда на сообщение (роль, границы)
       total += 4;
       const text = getMessageText(msg.content);
       total += this.count(text);
       if (msg.role === "tool") total += 2; // tool_call_id
     }
-    total += 2; // assistant priming
+    total += 2; // прайминг ассистента
     return total;
   }
 
+  /**
+   * Кодирует текст в токены.
+   * @param text текст; @returns массив id токенов.
+   */
   encode(text: string): number[] {
     return this.encoder.encode(text);
   }
 
+  /**
+   * Декодирует токены в текст.
+   * @param tokens id токенов; @returns текст.
+   */
   decode(tokens: number[]): string {
     return this.encoder.decode(tokens);
   }

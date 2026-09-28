@@ -1,13 +1,16 @@
+// Бюджет контекста: разбивка окна на system/reserve/history и доли.
 import type { AppConfig } from "./types";
 import { t } from "../i18n/index";
 
+/** Какая доля меняется: system или reserve. */
 export type BudgetShareKey = "system" | "reserve";
 
 const MIN_SHARE = 0.05;
 const MAX_SHARE = 0.9;
-/** system + reserve must leave room for history. */
+/** system + reserve обязаны оставить место под историю. */
 const MAX_COMBINED = 0.95;
 
+/** Разбивка контекстного окна в токенах и долях. */
 export interface BudgetBreakdown {
   window: number;
   system: number;
@@ -18,7 +21,7 @@ export interface BudgetBreakdown {
   historyFraction: number;
 }
 
-/** Split the context window into its system / reserve / history parts. */
+/** Режет окно контекста на части system / reserve / history. */
 export function budgetBreakdown(config: AppConfig): BudgetBreakdown {
   const window = config.contextWindow;
   const budget = config.contextBudget;
@@ -37,8 +40,8 @@ export function budgetBreakdown(config: AppConfig): BudgetBreakdown {
 }
 
 /**
- * Validate and apply a share change. Returns an error reason on failure
- * (`"range"` or `"combined"`), or null on success. Callers localize the reason.
+ * Проверяет и применяет смену доли. При неуспехе возвращает причину
+ * (`"range"` или `"combined"`), при успехе — null. Причину локализует вызывающий.
  */
 export function setBudgetShare(
   config: AppConfig,
@@ -54,7 +57,7 @@ export function setBudgetShare(
   return null;
 }
 
-/** Localized budget breakdown lines (shared by `mma context` and `/context`). */
+/** Локализованные строки разбивки бюджета (общие для `mma context` и `/context`). */
 export function budgetBreakdownLines(config: AppConfig): string[] {
   const bd = budgetBreakdown(config);
   const pct = (f: number) => Math.round(f * 100);

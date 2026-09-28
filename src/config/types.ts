@@ -1,3 +1,4 @@
+// Типы конфига AppConfig: провайдеры, бюджет, MoE, критик, безопасность, UI.
 /** Как провайдер предоставляет кеширование промпта. */
 export type CacheMechanism = "auto" | "explicit" | "local" | "none";
 
@@ -49,21 +50,21 @@ export interface ModelCapabilities {
   tools?: boolean;
 }
 
-/** A single configured provider (one of possibly many). */
+/** Одна настроенная запись провайдера (из возможных многих). */
 export interface ProviderEntry {
-  /** Registry type: "openai-compat" | "openrouter" | "openai" | "opencode-zen" | ... */
+  /** Тип из реестра: "openai-compat" | "openrouter" | "openai" | "opencode-zen" | ... */
   type: string;
-  /** User-facing name (defaults to type when empty). */
+  /** Имя для пользователя (пустое = тип). */
   label?: string;
   baseUrl: string;
   apiKey?: string;
   contextWindow?: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
-  /** Completion token cap sent as max_tokens (default 8192). Raise for
-   *  reasoning-heavy models that truncate tool_call arguments. */
+  /** Потолок completion-токенов, шлётся как max_tokens (дефолт 8192). Подними для
+   *  reasoning-моделей, режущих аргументы tool_call. */
   maxCompletionTokens?: number;
-  /** Fallback order (lower = tried first). */
+  /** Порядок фолбэка (меньше = пробуется раньше). */
   priority?: number;
   /** Переопределения кеша для записи, накладываются на пресет провайдера. */
   cache?: Partial<CacheCapability>;
@@ -71,25 +72,26 @@ export interface ProviderEntry {
 
 export interface ProviderConfig {
   /**
-   * Name/label of the active provider (matches a `ProviderEntry.label` or
-   * `.type`). When `entries` is absent, this is a single-provider legacy
-   * config and `type`/`baseUrl`/`apiKey` apply.
+   * Имя/лейбл активного провайдера (совпадает с `ProviderEntry.label` или
+   * `.type`). Без `entries` — legacy-конфиг одного провайдера, действуют
+   * `type`/`baseUrl`/`apiKey`.
    */
   active?: string;
-  /** All configured providers (multi-provider mode). */
+  /** Все настроенные провайдеры (мультирежим). */
   entries?: ProviderEntry[];
   /**
-   * Last model used per provider name (`label` or `type`). Written whenever the
-   * active model changes, so switching providers restores each one's model.
+   * Последняя модель каждого провайдера (имя — `label` или `type`). Пишется при
+   * каждой смене активной модели, чтобы переключение провайдеров возвращало
+   * каждому его модель.
    */
   models?: Record<string, string>;
-  /** Auto-failover to the next provider on 429/5xx (default false). */
+  /** Автофейловер на следующий провайдер при 429/5xx (дефолт false). */
   fallback?: boolean;
-  // Legacy single-provider fields — kept working (mirror the active entry).
+  // Legacy-плоские поля одного провайдера — продолжают работать (зеркалят активную запись).
   type: string;
   baseUrl: string;
   apiKey?: string;
-  /** Legacy flat completion cap (mirrored onto the normalized entry). */
+  /** Legacy-плоский потолок completion (зеркалится в нормализованную запись). */
   maxCompletionTokens?: number;
 }
 
@@ -104,21 +106,21 @@ export interface ModelPrice {
 }
 
 /**
- * Tariff / cost tracking. `overrides` lets the user set or override per-model
- * prices (USD per 1M tokens) manually; `builtin` tables cover known providers
- * (OpenCode Zen / Go). When no price is known, cost is not shown.
+ * Тарифы / трекинг стоимости. `overrides` — ручные цены по моделям (USD за 1M
+ * токенов); `builtin` покрывает известных провайдеров (OpenCode Zen / Go).
+ * Нет цены — стоимость не показывается.
  */
 export interface PricingConfig {
-  /** Master switch for cost tracking and display. */
+  /** Мастер-выключатель трекинга и показа стоимости. */
   enabled: boolean;
-  /** User-supplied per-model prices (model id -> {input, output}). */
+  /** Пользовательские цены по моделям (id модели -> {input, output}). */
   overrides: Record<string, ModelPrice>;
 }
 
 export interface OrchestratorConfig {
   model?: string;
   provider?: ProviderConfig;
-  /** Context window for the orchestrator model (default 32768; entry overrides). */
+  /** Окно контекста модели оркестратора (дефолт 32768; запись перекрывает). */
   contextWindow?: number;
 }
 
@@ -127,19 +129,18 @@ export interface ContextBudget {
   responseReserve: number;
   compactionThreshold: number;
   /**
-   * Minimum history load (fraction) for the compaction iteration interval to
-   * fire. Default 0.5. Prevents compacting a lightly-loaded context purely
-   * because N iterations elapsed.
+   * Минимальная загрузка истории (доля), при которой срабатывает интервальная
+   * компакция по итерациям. Дефолт 0.5. Не даёт компактить слабозагруженный
+   * контекст лишь потому, что прошло N итераций.
    */
   compactionMinLoad?: number;
 }
 
 /**
- * Handling of prompt blocks (AGENTS.md, project map) that exceed the
- * system-prompt budget. When `summarize` is on, the overflowing block is
- * summarized by the LLM into the remaining budget (cached in
- * `<project>/.mma/cache/prompt-summaries`); on failure the block is
- * truncated with a marker and the model is hinted to read the full file.
+ * Обработка промпт-блоков (AGENTS.md, карта проекта), превышающих бюджет
+ * системного промпта. При включённом `summarize` переполненный блок суммаризирует
+ * LLM в остаток бюджета (кеш в `<project>/.mma/cache/prompt-summaries`); при
+ * неуспехе блок режется с маркером, а модели хинтится чтение полного файла.
  */
 export interface InstructionsConfig {
   summarize: boolean;
@@ -149,15 +150,15 @@ export interface SessionConfig {
   autoSave: boolean;
   maxSessions: number;
   isolateMemory: boolean;
-  /** LLM-refine the session name after the first message (deterministic name always applies). */
+  /** LLM-уточнение имени сессии после первого сообщения (детерминированное имя — всегда). */
   autoName: boolean;
 }
 
 /**
- * Git-style context log. When enabled, every LLM context snapshot is written to
- * `<session>/context.diff`: snapshot 0 is the full context (all lines "+"),
- * later snapshots are line diffs (- removed, + added). `redact` runs the
- * context through sanitizeLogMessage before writing.
+ * Git-подобный лог контекста. При включении каждый снапшот LLM-контекста пишется
+ * в `<session>/context.diff`: снапшот 0 — полный контекст (все строки "+"),
+ * дальше — построчные диффы (- удалено, + добавлено). `redact` прогоняет
+ * контекст через sanitizeLogMessage до записи.
  */
 export interface ContextLogConfig {
   enabled: boolean;
@@ -175,30 +176,29 @@ export interface RetryConfig {
   maxRetries: number;
   baseDelay: number;
   maxDelay: number;
-  /** Extra retries when the response stream breaks BEFORE any content is delivered. */
+  /** Доп. ретраи, если стрим ответа рвётся ДО выдачи любого контента. */
   maxStreamRetries?: number;
-  /** Max silence (ms) between stream chunks before the connection is treated as dead. */
+  /** Макс. тишина (мс) между чанками стрима — дальше соединение считается мёртвым. */
   noDataTimeoutMs?: number;
 }
 
 export interface MoeConfig {
   enabled: boolean;
-  /** Max plan→execute→verify cycles per MoE run (initial cycle + N-1 re-plans). */
+  /** Макс. циклов план→выполнение→проверка за MoE-прогон (стартовый цикл + N-1 репланов). */
   maxReplanCycles?: number;
 }
 
 export interface ToolsConfig {
   /**
-   * Tool tags always exposed to the LLM in the main agent loop. Tools not
-   * matching these tags (and not `alwaysOn`) are hidden from the schema and
-   * must be enabled on demand via the `enable_tools` tool or routed to MoE
-   * experts / subagents.
+   * Теги тулов, всегда видимые LLM в главном цикле агента. Тулы вне этих тегов
+   * (и не `alwaysOn`) скрыты из схемы и включаются по требованию через тул
+   * `enable_tools` либо уходят MoE-экспертам / субагентам.
    */
   defaultTags: string[];
   /**
-   * Master switch for the `enable_tools` on-demand tool. When false, the tool
-   * is not registered and the tag set stays empty — the legacy behavior of
-   * exposing every registered tool is restored.
+   * Мастер-выключатель ондеманд-тула `enable_tools`. При false тул не
+   * регистрируется, набор тегов пуст — возвращается legacy-поведение показа
+   * всех зарегистрированных тулов.
    */
   enableOnDemand: boolean;
 }
@@ -207,7 +207,7 @@ export interface ExpertConfig {
   model: string;
   tool_tags: string[];
   max_attempts?: number;
-  /** One-line capability summary rendered into the MoE planner prompt. */
+  /** Однострочная сводка возможностей для промпта MoE-планировщика. */
   description?: string;
 }
 
@@ -216,6 +216,7 @@ export interface MCPHeader {
 }
 
 export interface MCPServerConfigEntry {
+  /** Имя MCP-сервера (ключ записи). */
   name: string;
   command?: string;
   args?: string[];
@@ -228,6 +229,7 @@ export interface MCPServerConfigEntry {
 }
 
 export interface BrowserToolConfig {
+  /** Мастер-выключатель браузерного тула. */
   enabled: boolean;
   headless: boolean;
   maxElements: number;
@@ -242,31 +244,30 @@ export interface BrowserToolConfig {
 export interface UiConfig {
   spinner: boolean;
   /**
-   * Activity rail above the input line while a turn runs: `line` = compact
-   * one-liner (default), `meta` = inside the hint row, `full` = full width,
-   * `off` = hidden.
+   * Activity rail над строкой ввода на время хода: `line` — компактная
+   * однострочная (дефолт), `meta` — в строке хинта, `full` — на всю ширину,
+   * `off` — скрыт.
    */
   activityRail?: "off" | "line" | "meta" | "full";
-  /** Show context usage bar after each tool cycle (ctx: N/M, compactions, quality). */
+  /** Бар использования контекста после каждого цикла тулов (ctx: N/M, компакции, качество). */
   showContextStats: boolean;
-  /** Show a one-line indicator when context compaction happens. */
+  /** Однострочный индикатор при срабатывании компакции контекста. */
   showCompaction: boolean;
   /**
-   * Chatty internal status: MoE planning/execution phases and other
-   * orchestration one-liners. Off by default — these are meant for the
-   * machine pipeline, not the user.
+   * Болтливый внутренний статус: фазы MoE-планирования/выполнения и прочие
+   * однострочники оркестрации. По умолчанию выкл — это для машинного
+   * конвейера, а не для пользователя.
    */
   verbose?: boolean;
   /**
-   * Chat verbosity level. `quiet` shows one line per action and hides tool
-   * bodies; `verbose` shows full detail. Defaults to `quiet` for fresh
-   * configs and falls back to `verbose ? "verbose" : "quiet"` when unset.
-   * See `docs/design/ui/STYLE.md`.
+   * Уровень болтливости чата. `quiet` — строка на действие, тела тулов скрыты;
+   * `verbose` — полные детали. Дефолт `quiet` для свежих конфигов, фолбэк
+   * `verbose ? "verbose" : "quiet"`, если не задан. См. `docs/design/ui/STYLE.md`.
    */
   verbosity?: "quiet" | "normal" | "verbose";
   /**
-   * Web chat font size (`mma web` only, the terminal is unaffected).
-   * `compact` = 13px, `comfortable` = 15px (default), `large` = 17px.
+   * Размер шрифта веб-чата (только `mma web`, терминал не затрагивается).
+   * `compact` = 13px, `comfortable` = 15px (дефолт), `large` = 17px.
    */
   fontSize?: "compact" | "comfortable" | "large";
 }
@@ -296,26 +297,26 @@ export interface NetworkSecurityConfig {
 }
 
 /**
- * Master switch for the web search capability. When enabled=false the
- * web_search tool replies "disabled" and the automatic error search
- * (errorWebSearch) never fires — the feature is tied to this switch.
+ * Мастер-выключатель веб-поиска. При enabled=false тул web_search отвечает
+ * "disabled", а автопоиск ошибок (errorWebSearch) не стреляет: фича завязана
+ * на этот флаг.
  */
 export interface WebSearchConfig {
   enabled: boolean;
 }
 
 export interface ErrorWebSearchConfig {
-  /** Independent switch for the auto error-search feature itself. */
+  /** Независимый выключатель самого автопоиска ошибок. */
   enabled: boolean;
-  /** Same error signature repetition count that triggers the search (5). */
+  /** Столько повторов одной сигнатуры ошибки триггерит поиск (5). */
   threshold: number;
-  /** Number of results injected into the context (5). */
+  /** Столько результатов инжектится в контекст (5). */
   maxResults: number;
-  /** Maximum length of the generated search query (200). */
+  /** Макс. длина генерируемого поискового запроса (200). */
   maxQueryChars: number;
-  /** Session cap on automatic error searches (3). */
+  /** Потолок автопоисков ошибок за сессию (3). */
   maxSearchesPerSession: number;
-  /** Network request timeout for the search in ms (10000). */
+  /** Сетевой таймаут поиска в мс (10000). */
   requestTimeoutMs: number;
 }
 
@@ -349,9 +350,9 @@ export interface SkillsConfig {
 export interface HallucinationConfig {
   judge: {
     /**
-     * Run an LLM-as-judge consistency pass on the worker model. Disabled by
-     * default: on small models it adds up to 15s latency for a verdict that can
-     * only produce a cosmetic "warn", never a retry/block.
+     * Прогон LLM-as-judge на консистентность worker-модели. По умолчанию выкл:
+     * на маленьких моделях это до +15с латентности ради вердикта, дающего лишь
+     * косметический "warn", но не ретрай/блок.
      */
     enabled: boolean;
   };
@@ -359,18 +360,18 @@ export interface HallucinationConfig {
 
 export interface SubagentConfig {
   /**
-   * "text" (default, backward compatible): sub-agent result text is returned
-   * into the parent context. "file": the result is persisted to an artifact
-   * file and the parent receives a path + bounded summary.
+   * "text" (дефолт, обратно совместимо): текст результата субагента возвращается
+   * в родительский контекст. "file": результат складывается в файл-артефакт,
+   * а родитель получает путь + ограниченную сводку.
    */
   resultMode: "text" | "file";
-  /** Max chars of the summary returned into context when resultMode is "file". */
+  /** Макс. символов сводки, возвращаемой в контекст при resultMode "file". */
   maxSummaryChars: number;
-  /** Directory relative to the workspace root for artifact files. */
+  /** Каталог файлов-артефактов относительно корня workspace. */
   artifactsDir: string;
-  /** Keep the sub-agent system prompt byte-identical across calls (KV-cache friendly). */
+  /** Держать системный промпт субагента побайтово одинаковым между вызовами (дружелюбно к KV-кешу). */
   stableSystemPrompt: boolean;
-  /** Default cap on parallel chunk queries in runChunkQuery. */
+  /** Дефолтный потолок параллельных chunk-запросов в runChunkQuery. */
   maxParallelChunkQueries: number;
 }
 
@@ -412,44 +413,43 @@ import type { LspConfig, } from "../modules/lsp/types";
 
 export interface UpdaterConfig {
   enabled: boolean;
-  /** Check for updates asynchronously at startup (non-blocking). */
+  /** Проверка обновлений асинхронно на старте (не блокирует). */
   checkOnStart: boolean;
-  /** Automatically run `npm install -g` when a newer version is found. */
+  /** Автозапуск `npm install -g` при найденной новой версии. */
   autoInstall: boolean;
-  /** Ms between background update checks. 0 = single check at startup. */
+  /** Мс между фоновыми проверками. 0 = одна проверка на старте. */
   intervalMs: number;
 }
 
-/** Reasoning effort levels aligned with opencode + OpenAI API. */
+/** Уровни reasoning-усилия, совместимые с opencode + OpenAI API. */
 export type ReasoningLevel = "default" | "none" | "low" | "medium" | "high" | "max";
 
 /**
- * How a provider expresses reasoning effort in the API request.
- * - "openai-effort": `reasoning_effort` field in body (OpenAI, OpenRouter, vLLM)
- * - "template-kwarg": backend-specific body field (llama.cpp `chat_template_kwargs`)
- * - "prompt-tag": tag appended to last user message (`/no_think` for Qwen)
- * - "none": unsupported — feature disabled
+ * Как провайдер выражает reasoning-усилие в запросе API.
+ * - "openai-effort": поле `reasoning_effort` в теле (OpenAI, OpenRouter, vLLM);
+ * - "template-kwarg": бэкенд-специфичное поле тела (llama.cpp `chat_template_kwargs`);
+ * - "prompt-tag": тег в конце последнего user-сообщения (`/no_think` для Qwen);
+ * - "none": не поддерживается — фича выключена.
  */
 export type ReasoningStrategy = "openai-effort" | "template-kwarg" | "prompt-tag" | "none";
 
-/** Mode: "auto" = policy-driven dynamic control; anything else = fixed level. */
+/** Режим: "auto" — динамическое управление политикой; прочее — фикс. уровень. */
 export type ReasoningMode = ReasoningLevel | "auto";
 
 export interface ReasoningConfig {
-  /** Active mode. "auto" = harness policy adjusts level per iteration. */
+  /** Активный режим. "auto" — политика харнесса крутит уровень по итерациям. */
   mode: ReasoningMode;
-  /** Minimum level in auto mode (clamp floor). */
+  /** Минимум в auto-режиме (нижний кламп). */
   min: Exclude<ReasoningLevel, "default" | "auto">;
-  /** Maximum level in auto mode (clamp ceiling). */
+  /** Максимум в auto-режиме (верхний кламп). */
   max: Exclude<ReasoningLevel, "default" | "auto">;
-  /** Min iterations between agent override calls. */
+  /** Мин. итераций между оверрайд-вызовами агента. */
   overrideCooldown: number;
   /**
-   * Starting level for the auto policy before any iteration signals exist
-   * (iteration 1 and quiet iterations). When unset it falls back to `min`
-   * ("low" in `DEFAULTS`), so trivial Q&A turns no longer pay "medium"
-   * reasoning; the policy still raises to high on hallucinations / audit
-   * rejections / plan creation.
+   * Стартовый уровень auto-политики до сигналов итераций (итерация 1 и тихие
+   * итерации). Без значения — фолбэк на `min` ("low" в `DEFAULTS`): тривиальные
+   * Q&A-ходы больше не платят "medium"; политика всё равно поднимает до high
+   * на галлюцинациях / отклонениях аудита / создании плана.
    */
   baseline?: Exclude<ReasoningLevel, "default" | "auto">;
 }
@@ -457,23 +457,23 @@ export interface ReasoningConfig {
 export interface CriticConfig {
   enabled: boolean;
   /**
-   * Dedicated critic provider (Phase 2). Full provider config — entries[] or
-   * legacy {type,baseUrl,apiKey} — resolved through ProviderManager like the
-   * MoE orchestrator. Only used when `model` is set; otherwise the critic
-   * shares the active provider (v1 behavior).
+   * Выделенный провайдер критика (Phase 2). Полный конфиг провайдера — entries[]
+   * или legacy {type,baseUrl,apiKey} — резолвится через ProviderManager, как
+   * MoE-оркестратор. Используется только при заданном `model`; иначе критик
+   * делит активный провайдер (поведение v1).
    */
   provider?: ProviderConfig;
-  /** Dedicated critic model. Unset → active model. */
+  /** Выделенная модель критика. Не задана — активная модель. */
   model?: string;
   /**
-   * Read-only verification loop (Phase 2): after a concern/critical verdict
-   * the critic may request up to MAX_CRITIC_CHECKS read-only tool checks
-   * (read_file/grep/glob/file_info/list_dir) before the final verdict.
+   * Read-only verify-цикл (Phase 2): после вердикта concern/critical критик
+   * может запросить до MAX_CRITIC_CHECKS read-only проверок тулами
+   * (read_file/grep/glob/file_info/list_dir) до финального вердикта.
    */
   tools: boolean;
-  /** Hard cap on critic LLM calls per run. */
+  /** Жёсткий потолок LLM-вызовов критика за прогон. */
   maxCalls: number;
-  /** Bounded number of critical-triggered repair cycles per run. */
+  /** Ограниченное число critical-ремонтных циклов за прогон. */
   maxRepairCycles: number;
   timeoutMs: number;
 }
@@ -486,9 +486,9 @@ export interface AppConfig {
   moe: MoeConfig;
   experts: Record<string, ExpertConfig>;
   /**
-   * Per-model capability overrides keyed by model id. Highest-priority source
-   * in `resolveModelCapabilities` — wins over the live probe and the provider
-   * preset. Lets a user pin vision/tools for a model the preset/probe get wrong.
+   * Переопределения возможностей по моделям (ключ — id модели). Самый приоритетный
+   * источник в `resolveModelCapabilities`: бьёт живой пробник и пресет провайдера.
+   * Позволяет пригвоздить vision/tools модели, где пресет/пробник ошибаются.
    */
   modelCapabilities?: Record<string, ModelCapabilities>;
   tools: ToolsConfig;

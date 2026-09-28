@@ -1,3 +1,4 @@
+// LLM-судья консистентности: противоречит ли новый ответ ранним решениям.
 import { t } from "../../i18n/index";
 import type { Message } from "../../llm/provider";
 import type { LLMProvider } from "../../llm/provider";
@@ -14,14 +15,15 @@ interface Verdict {
 }
 
 /**
- * LLM-as-judge consistency check. Asks a model whether the agent's latest
- * response contradicts any of its earlier decisions — replacing the fragile
- * word-matching heuristic that only caught exact substring reversals.
+ * Консистентность через LLM-судью. Спрашивает модель, противоречит ли свежий
+ * ответ агента его ранним решениям — вместо хрупкой эвристики совпадения слов,
+ * ловившей только дословные развороты.
  *
- * Fast path: when no decisions are tracked, returns pass without any LLM call.
- * Any judge failure (timeout, provider error, unparseable verdict) degrades to
- * pass so the agent loop is never blocked by the judge.
+ * Быстрый путь: нет отслеживаемых решений — pass без LLM-вызова.
+ * Любой сбой судьи (таймаут, ошибка провайдера, непарсящийся вердикт) —
+ * деградация в pass, чтобы цикл агента не блокировался судьёй.
  */
+/** LLM-судья: проверяет новый ответ на противоречие ранним решениям. */
 export class LLMJudge {
   private provider: LLMProvider;
 
@@ -29,6 +31,7 @@ export class LLMJudge {
     this.provider = provider;
   }
 
+  /** Валидирует ответ против решений: warn при противоречии, иначе pass (сбои — тоже pass). */
   async validate(
     response: string,
     consistency: ConsistencyCheck,
@@ -75,6 +78,7 @@ Reply with ONLY valid JSON, no other text:
     }
   }
 
+  /** Один запрос к судье со сбором текстовых чанков. */
   private async askJudge(messages: Message[]): Promise<string> {
     let text = "";
     const controller = new AbortController();
@@ -88,8 +92,8 @@ Reply with ONLY valid JSON, no other text:
       }
       return text;
     })();
-    // The timeout can settle the race while the background stream is still
-    // running; its later rejection must not surface as an unhandled rejection.
+    // Таймаут может завершить гонку, пока фоновый стрим ещё идёт;
+    // его позднее rejection не должно всплыть как unhandled rejection.
     consume.catch(() => {});
 
     const timeout = new Promise<never>((_, reject) => {
@@ -103,12 +107,13 @@ Reply with ONLY valid JSON, no other text:
       return await Promise.race([consume, timeout]);
     } finally {
       if (timer) clearTimeout(timer);
-      // Abort the background stream on the success path too, so a judge that
-      // resolved early never keeps streaming in the background.
+      // Абортим фоновый стрим и на успешном пути, чтобы рано завершившийся
+      // судья не продолжал стримить в фоне.
       controller.abort();
     }
   }
 
+  /** Парсит вердикт: строгий JSON → терпимый разбор, иначе "не противоречит". */
   private parseVerdict(text: string): Verdict {
     const block = text.match(/\{[\s\S]*\}/);
     if (block) {
@@ -121,7 +126,7 @@ Reply with ONLY valid JSON, no other text:
           };
         }
       } catch {
-        // fall through to lenient parsing
+        // Не парсится строго — ниже терпимый разбор
       }
     }
     const lower = text.toLowerCase();

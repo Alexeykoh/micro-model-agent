@@ -1,24 +1,26 @@
+// MCP-клиент: JSON-RPC поверх stdio/sse/http, listTools/callTool, таймауты.
 import { spawn, type ChildProcess } from "child_process";
 import type { MCPServerConfig } from "./registry";
 import { defaultOutputBus } from "../../output";
 
-/** Default timeout for MCP HTTP requests (connect + tool calls). */
+/** Дефолтный таймаут MCP HTTP-запросов (коннект + вызовы тулов). */
 const HTTP_TIMEOUT_MS = 10_000;
 
 /**
- * Accept header required by the MCP Streamable HTTP transport — the server
- * responds with 406 if the client doesn't accept both media types.
+ * Accept-заголовок для MCP Streamable HTTP: сервер отвечает 406, если клиент
+ * не принимает оба media type.
  */
 const MCP_ACCEPT_HEADER = "application/json, text/event-stream";
 
+/** MCP-клиент: коннект по транспорту, listTools, callTool. */
 export class MCPClient {
   readonly serverName: string;
   private config: MCPServerConfig;
   private process: ChildProcess | null = null;
   private _connected = false;
   private abortController: AbortController | null = null;
-  /** In-flight SSE calls keyed by JSON-RPC id (a single slot cross-talked
-   *  concurrent calls and matched responses by any id). */
+  /** In-flight SSE-вызовы по JSON-RPC id (один слот мешал конкурентные
+   *  вызовы и матчил ответы по любому id — теперь слот на вызов). */
   private ssePending = new Map<
     number,
     { resolve: (value: unknown) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }
@@ -30,10 +32,12 @@ export class MCPClient {
     this.serverName = config.name;
   }
 
+  /** Подключён ли клиент. */
   isConnected(): boolean {
     return this._connected;
   }
 
+  /** Подключиться по транспорту из конфига (http/sse/stdio). */
   async connect(): Promise<void> {
     if (this._connected) return;
 
@@ -138,8 +142,8 @@ export class MCPClient {
         }
       }
     } catch (e) {
-      // Heartbeats/comments are not JSON — expected noise, but still logged
-      // so a genuinely broken stream is visible in diagnostics.
+      // Хартбиты/комменты — не JSON: ожидаемый шум, но логируем, чтобы
+      // реально битый стрим был виден в диагностике.
       defaultOutputBus.log(
         "error",
         "mcp",
@@ -184,8 +188,8 @@ export class MCPClient {
       child.on("spawn", () => {
         this._connected = true;
         this.process = child;
-        // MCP handshake: real servers require `initialize` before any
-        // tools/list or tools/call request.
+        // MCP-handshake: настоящие серверы требуют `initialize` перед
+        // tools/list и tools/call.
         this.stdioRequest(
           "initialize",
           {
@@ -215,15 +219,15 @@ export class MCPClient {
     });
   }
 
-  /** Unparsed trailing bytes from stdio responses (partial line). */
+  /** Неразобранный хвост stdio-ответов (частичная строка). */
   private stdioBuffer = "";
-  /** Monotonic stdio request id (Date.now() collided for same-ms calls). */
+  /** Монотонный id stdio-запросов (Date.now() коллизил на вызовах в одну мс). */
   private stdioRequestSeq = 0;
 
   /**
-   * JSON-RPC request over stdio with timeout, exit handling and
-   * buffer-aware line parsing (notifications and stale responses between
-   * our request and its response no longer break matching).
+   * JSON-RPC запрос поверх stdio: таймаут, обработка exit и построчный парсинг
+   * с учётом буфера (нотификации и чужие ответы между запросом и ответом
+   * матчинг больше не ломают).
    */
   private stdioRequest<T>(method: string, params?: unknown, timeoutMs?: number): Promise<T> {
     const proc = this.process;
@@ -268,7 +272,7 @@ export class MCPClient {
           } catch {
             continue;
           }
-          if (msg.id !== request.id) continue; // notification or foreign response
+          if (msg.id !== request.id) continue; // нотификация или чужой ответ
           finish(() => {
             if (msg.error) {
               reject(new Error(msg.error!.message));
@@ -293,6 +297,7 @@ export class MCPClient {
     });
   }
 
+  /** Список тулов сервера (автоконнект; транспорт выбирается из конфига). */
   async listTools(): Promise<
     Array<{
       name: string;
@@ -407,6 +412,7 @@ export class MCPClient {
     return result?.tools || [];
   }
 
+  /** Отключиться: http — флаг, sse — abort, stdio — kill процесса. */
   async disconnect(): Promise<void> {
     if (this.config.transport === "http") {
       this._connected = false;
@@ -422,6 +428,7 @@ export class MCPClient {
     this._connected = false;
   }
 
+  /** Вызвать тул (без коннекта — ошибка; транспорт из конфига). */
   async callTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this._connected) {
       throw new Error("Not connected to MCP server");

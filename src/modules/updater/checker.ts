@@ -1,6 +1,8 @@
+// Проверка обновлений в npm-реестре и установка свежей версии глобально.
 import { platform } from "os";
 import { resolveSpawnCommand } from "../lsp/command";
 
+/** Итог проверки: есть ли апдейт, текущая/свежая версии, ошибка. */
 export interface UpdateCheckResult {
   updateAvailable: boolean;
   current: string;
@@ -8,19 +10,21 @@ export interface UpdateCheckResult {
   error?: string;
 }
 
+/** Итог установки: успех, поставленная версия, ошибка. */
 export interface InstallResult {
   success: boolean;
   installed?: string;
   error?: string;
 }
 
+/** Запуск установки (инжект для тестов; дефолт — execFile). */
 export type InstallRunner = (
   command: string,
   args: string[],
   options: { timeout: number; windowsHide: boolean },
 ) => Promise<{ error?: string }>;
 
-/** Numeric semver comparison (x.y.z, prerelease ignored). */
+/** Численное сравнение semver (x.y.z, пререлизы игнорируются). */
 export function semverGt(a: string, b: string): boolean {
   const pa = a
     .replace(/^v/, "")
@@ -45,6 +49,7 @@ const defaultRunner: InstallRunner = async (command, args, options) => {
   });
 };
 
+/** Апдейтер пакета: опрос npm-реестра и глобальная установка. */
 export class Updater {
   private currentVersion: string;
   private packageName: string;
@@ -56,14 +61,17 @@ export class Updater {
     this.runner = runner ?? defaultRunner;
   }
 
+  /** Текущая версия пакета. */
   getCurrentVersion(): string {
     return this.currentVersion;
   }
 
+  /** Имя пакета в реестре. */
   getPackageName(): string {
     return this.packageName;
   }
 
+  /** Спрашивает реестр о latest-теге; офлайн/ошибка — флаг false с причиной. */
   async check(): Promise<UpdateCheckResult> {
     try {
       const response = await fetch(`https://registry.npmjs.org/${this.packageName}`, {
@@ -94,8 +102,8 @@ export class Updater {
   }
 
   /**
-   * Install the latest version globally via `npm install -g`.
-   * Returns an InstallResult (never throws).
+   * Ставит свежую версию глобально через `npm install -g`.
+   * Возвращает InstallResult (не бросает).
    */
   async install(latest: string): Promise<InstallResult> {
     try {
@@ -116,7 +124,7 @@ export class Updater {
     const npmArgs = ["install", "-g", `${this.packageName}@${latest}`];
     const command = resolveSpawnCommand("npm");
     if (platform() === "win32" && /\.(cmd|bat)$/i.test(command)) {
-      // Node cannot spawn .cmd/.bat shims directly (spawn EINVAL) — route via cmd.exe.
+      // Node не спавнит .cmd/.bat-шимы напрямую (spawn EINVAL) — идём через cmd.exe.
       return { command: "cmd.exe", args: ["/c", command, ...npmArgs] };
     }
     return { command, args: npmArgs };

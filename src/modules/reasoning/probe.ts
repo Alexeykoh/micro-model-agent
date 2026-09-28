@@ -1,4 +1,4 @@
-// src/modules/reasoning/probe.ts
+// Проба поддержки reasoning: проверяет, уважает ли бэкенд механизм effort, кэш на 24ч.
 import type { LLMProvider, Message } from "../../llm/provider";
 import type { ReasoningStrategy } from "../../config/types";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
@@ -9,33 +9,30 @@ const PROBE_MESSAGES: Message[] = [
   { role: "user", content: "Reply with exactly: ok" },
 ];
 
-/** Cache entry stored on disk. */
+/** Запись дискового кэша. */
 interface CacheEntry {
   result: boolean;
-  /** ISO timestamp of when the probe ran. */
+  /** ISO-метка времени прогона пробы. */
   ts: string;
 }
 
-/** TTL: re-probe after 24 hours. */
+/** TTL: повторная проба через 24 часа. */
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Disk cache path: ~/.mma/reasoning-cache.json (override with MMA_REASONING_CACHE). */
+/** Путь дискового кэша: ~/.mma/reasoning-cache.json (переопределяется MMA_REASONING_CACHE). */
 function cachePath(): string {
   return process.env.MMA_REASONING_CACHE ?? join(globalMmaDir(), "reasoning-cache.json");
 }
 
-/** In-memory L1 cache (same-process fast path). */
+/** In-memory L1-кэш (быстрый путь в пределах процесса). */
 const memCache = new Map<string, { result: boolean; ts: number }>();
 
 /**
- * Probe whether the backend actually respects the reasoning effort mechanism.
- * Sends a trivial non-streaming request with level forced to "none" via the
- * mapped strategy. If reasoning_content still appears, the mechanism is ignored.
- */
-/**
- * Probe whether the backend actually respects the reasoning effort mechanism.
- * @returns `true` = mechanism respected, `false` = mechanism ignored,
- *          `null` = transient error (caller must NOT cache this).
+ * Проверяет, уважает ли бэкенд механизм reasoning effort.
+ * Шлёт тривиальный запрос с уровнем "none": если reasoning_content всё равно
+ * появился — механизм игнорируется.
+ * @returns `true` — механизм уважается, `false` — игнорируется,
+ *          `null` — транзиентная ошибка (вызывающий НЕ должен кэшировать).
  */
 export async function probeReasoningSupport(
   provider: LLMProvider,
@@ -53,32 +50,33 @@ export async function probeReasoningSupport(
     })) {
       if (chunk.type === "reasoning") hasReasoning = true;
     }
-    // If reasoning content appeared despite "none", the mechanism is ignored
+    // reasoning_content появился вопреки "none" — механизм игнорируется
     return !hasReasoning;
   } catch {
-    // Transient error (network/auth/stream) — do NOT report "not supported".
-    // Returning null signals the caller to skip caching, so a one-off failure
-    // does not disable the reasoning mechanism for the 24h TTL.
+    // Транзиентная ошибка (сеть/авторизация/стрим) — НЕ сообщаем "не поддерживается".
+    // Возврат null запрещает вызывающему кэшировать, чтобы разовый сбой
+    // не отключал reasoning-механизм на весь 24ч TTL.
     return null;
   }
 }
 
+/** Ключ кэша пробы: baseUrl + модель. */
 export function cacheKey(baseUrl: string, model: string): string {
   return `${baseUrl}|${model}`;
 }
 
 /**
- * Read cached probe result. Checks in-memory first, then disk.
- * Returns `undefined` if cache miss or stale (>24h).
+ * Читает кэшированный результат пробы. Сначала память, потом диск.
+ * Возвращает `undefined` при промахе или протухании (>24ч).
  */
 export function getCachedProbeResult(key: string): boolean | undefined {
-  // L1: in-memory
+  // L1: память
   const mem = memCache.get(key);
   if (mem && Date.now() - mem.ts < CACHE_TTL_MS) {
     return mem.result;
   }
 
-  // L2: disk
+  // L2: диск
   const disk = readDiskCache();
   const entry = disk[key];
   if (entry) {
@@ -93,7 +91,7 @@ export function getCachedProbeResult(key: string): boolean | undefined {
 }
 
 /**
- * Store probe result in both in-memory and disk cache.
+ * Кладет результат пробы в память и на диск.
  */
 export function setCachedProbeResult(key: string, result: boolean): void {
   const now = new Date().toISOString();
@@ -104,6 +102,7 @@ export function setCachedProbeResult(key: string, result: boolean): void {
   writeDiskCache(disk);
 }
 
+/** Сбрасывает кэш пробы (память + дисковый файл). */
 export function resetProbeCache(): void {
   memCache.clear();
   const path = cachePath();
@@ -119,7 +118,7 @@ function readDiskCache(): Record<string, CacheEntry> {
       return JSON.parse(readFileSync(path, "utf-8"));
     }
   } catch {
-    // Corrupted cache — start fresh
+    // Битый кэш — начинаем с чистого
   }
   return {};
 }
@@ -130,6 +129,6 @@ function writeDiskCache(data: Record<string, CacheEntry>): void {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(data, null, 2), "utf-8");
   } catch {
-    // Best-effort — disk write failure must not crash the agent
+    // Best-effort: сбой записи на диск не должен ронять агента
   }
 }

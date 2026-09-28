@@ -1,3 +1,4 @@
+/** Веб-поиск (DuckDuckGo HTML): тул и shared-функция для автопоиска ошибок. */
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import type { NetworkSecurityConfig } from "../config/types";
@@ -5,26 +6,27 @@ import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator
 import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 
+/** Элемент выдачи: заголовок, URL, сниппет. */
 export interface SearchResult {
   title: string;
   url: string;
   snippet: string;
 }
 
+/** Итог поиска: успех, результаты, ошибка. */
 export interface WebSearchOutcome {
   success: boolean;
   results: SearchResult[];
   error?: string;
-  /** true when the URL was blocked by the security policy (not an I/O error). */
+  /** true — URL отклонён security-политикой (не I/O-ошибка). */
   blocked?: boolean;
 }
 
 /**
- * Shared web search (DuckDuckGo HTML) used by BOTH the web_search tool and
- * the automatic error search (execution module). `networkConfig` is the
- * resolved security network config (may be undefined when security is off);
- * `requestTimeoutMs` overrides the timeout when the caller has its own
- * setting (the error search uses errorWebSearch.requestTimeoutMs).
+ * Общий веб-поиск (DuckDuckGo HTML) для тула web_search и автопоиска ошибок
+ * (execution-модуль). `networkConfig` — резолвленная сетевая security-конфигурация
+ * (undefined при выключенной безопасности); `requestTimeoutMs` переопределяет
+ * таймаут, когда у вызывающего свой (автопоиск — errorWebSearch.requestTimeoutMs).
  */
 export async function performWebSearch(
   query: string,
@@ -64,12 +66,14 @@ export async function performWebSearch(
   }
 }
 
+/** Форматирует выдачу нумерованным списком. */
 function formatResults(results: SearchResult[]): string {
   return results
     .map((r, i) => `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet}`)
     .join("\n");
 }
 
+/** Ищет в вебе (заголовки + сниппеты); поисковики открывать не надо. */
 export const webSearchTool: ToolDefinition = {
   name: "web_search",
   icon: "🌍",

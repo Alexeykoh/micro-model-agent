@@ -1,3 +1,4 @@
+// Раннеры финального аудита: поиск тестов, прогон тестов, поиск корня typecheck.
 import { existsSync, readdirSync, readFileSync } from "fs";
 import type { Dirent } from "fs";
 import { dirname, join, resolve } from "path";
@@ -5,7 +6,7 @@ import { detectTestResults } from "../../tools/bash";
 import { processRegistry } from "../processes";
 import { resolveTscCommand } from "../lsp/project-root";
 
-/** Directories never searched for test files. */
+/** Каталоги, где тестовые файлы не ищем. */
 export const SKIP_DIRS = new Set([
   "node_modules",
   ".git",
@@ -22,13 +23,12 @@ const TEST_EXT_RE = /\.(test|spec)\.[jt]sx?$/i;
 const PY_TEST_RE = /^test_.*\.py$|^.*_test\.py$/i;
 
 /**
- * Resolve the project's test command from its manifest, so the final audit
- * actually runs the runner the project uses instead of always assuming
- * `bun test` (a Python or Go project, or a vitest/jest setup, would fail or
- * silently produce no summary under bun test).
+ * Резолвит тестовую команду проекта из манифеста: финальный аудит реально
+ * гоняет раннер проекта, а не всегда `bun test` (Python/Go-проект или
+ * vitest/jest-сетап под bun test упал бы или молча не дал сводки).
  *
- * Priority: package.json scripts.test → test-framework config files → Python
- * markers (pyproject/pytest.ini/conftest.py) → go.mod → Cargo.toml → bun.
+ * Приоритет: package.json scripts.test → конфиги тест-фреймворков → Python-
+ * маркеры (pyproject/pytest.ini/conftest.py) → go.mod → Cargo.toml → bun.
  */
 export function resolveTestCommand(dir: string): string {
   const pkgPath = join(dir, "package.json");
@@ -38,7 +38,7 @@ export function resolveTestCommand(dir: string): string {
       const script = pkg?.scripts?.test;
       if (typeof script === "string" && script.trim()) return script.trim();
     } catch {
-      /* invalid package.json — fall through */
+      /* битый package.json — идём дальше */
     }
   }
   for (const f of [
@@ -69,19 +69,20 @@ export function resolveTestCommand(dir: string): string {
   return "bun test";
 }
 
+/** Результат тестового прогона: был ли прогон, прошёл ли, счётчики, детали, команда. */
 export interface TestRunCheck {
-  /** Whether a real test run was executed at all. */
+  /** Реальный тестовый прогон вообще выполнялся. */
   checked: boolean;
-  /** All detected tests passed. */
+  /** Все найденные тесты прошли. */
   passed: boolean;
   failed: number;
   passedCount: number;
-  /** Short list of failing test names (up to 5), or the runner summary. */
+  /** Короткий список упавших тестов (до 5) или сводка раннера. */
   detail: string;
   command: string;
 }
 
-/** Recursive, depth-limited walk that stops early on the first test file. */
+/** Рекурсивный поиск тестового файла с капом глубины и ранним выходом. */
 export function findTestFile(dir: string, depth = 0): string | null {
   if (depth > 5) return null;
   let entries: Dirent[];
@@ -103,7 +104,7 @@ export function findTestFile(dir: string, depth = 0): string | null {
   return null;
 }
 
-/** Extract failing test names from a runner's output (bun/vitest style). */
+/** Вытаскивает имена упавших тестов из вывода раннера (стиль bun/vitest). */
 function extractFailingNames(output: string, limit = 5): string[] {
   const names: string[] = [];
   for (const m of output.matchAll(/\(fail\)\s*([^\n]+)/g)) {
@@ -114,6 +115,7 @@ function extractFailingNames(output: string, limit = 5): string[] {
   return names;
 }
 
+/** Прогоняет тесты проекта (90s) и разбирает сводку раннера. Таймаут — inconclusive. */
 export async function runTests(baseDir: string): Promise<TestRunCheck> {
   const command = resolveTestCommand(baseDir);
   const entry = processRegistry.start(command, baseDir);
@@ -122,7 +124,7 @@ export async function runTests(baseDir: string): Promise<TestRunCheck> {
   processRegistry.remove(entry.id);
 
   if (!exited) {
-    // Timed out — we cannot claim success or failure from an unfinished run.
+    // Таймаут — успех/фейл незавершённого прогона утверждать не можем.
     return {
       checked: true,
       passed: true, // don't block completion on an inconclusive run
@@ -135,10 +137,9 @@ export async function runTests(baseDir: string): Promise<TestRunCheck> {
 
   const run = detectTestResults(output);
   if (!run) {
-    // No recognizable runner summary. A non-zero exit means the test run
-    // (or its runner) failed — the audit must not pass on it; report a
-    // single "at least one failed" since we cannot count them. Exit 0
-    // with unrecognized output stays checked-but-inconclusive.
+    // Нет узнаваемой сводки раннера. Ненулевой exit — прогон (или раннер) упал:
+    // аудит его пропускать не должен; репортим "как минимум один фейл", т.к.
+    // посчитать не можем. Exit 0 с неузнанным выводом — checked, но inconclusive.
     return {
       checked: true,
       passed: entry.exitCode === 0,
@@ -162,25 +163,23 @@ export async function runTests(baseDir: string): Promise<TestRunCheck> {
   };
 }
 
-/** First `error TS…` line in a tsc output, or null when none/inconclusive. */
+/** Первая строка `error TS…` из вывода tsc, или null если нет/inconclusive. */
 export function parseTypecheckErrors(output: string): string | null {
   const line = output.split("\n").find((l) => /error TS\d+/.test(l));
   return line ? line.trim().slice(0, 300) : null;
 }
 
 /**
- * Locate the nearest project root that owns a tsconfig.json.
+ * Находит ближайший корень проекта с tsconfig.json.
  *
- * The agent frequently creates the project in a nested subfolder of its
- * baseDir (e.g. `bicycle-shop/`), so the tsconfig lives at
- * `baseDir/bicycle-shop/` and the old `existsSync(baseDir/tsconfig.json)`
- * gate silently skipped the final typecheck — the audit passed even with
- * dozens of tsc errors (observed in both analyzed sessions). This walks each
- * candidate (baseDir plus the resolved step files) upward to the nearest
- * tsconfig.json, preferring the shallowest hit so the baseDir project wins
- * over a stray tsconfig further up. Returns null when no tsconfig exists in
- * any reachable subtree. `existingFiles` must contain resolved absolute paths
- * (relative tokens would resolve against the process cwd, not baseDir).
+ * Агент часто создаёт проект во вложенной папке baseDir (напр. `bicycle-shop/`),
+ * и tsconfig лежит в `baseDir/bicycle-shop/`; старый гейт `existsSync(baseDir/tsconfig.json)`
+ * молча скипал финальный typecheck — аудит проходил при десятках tsc-ошибок
+ * (было в обеих разобранных сессиях). Обходит каждого кандидата (baseDir плюс
+ * резолвленные файлы шагов) вверх до ближайшего tsconfig.json, предпочитая
+ * мельчайшее попадание (проект baseDir бьёт шальной tsconfig выше). Null, если
+ * tsconfig недостижим. `existingFiles` — резолвленные абсолютные пути
+ * (относительные токены резолвились бы от cwd процесса, не от baseDir).
  */
 export function findTypecheckRoot(baseDir: string, existingFiles: string[] = []): string | null {
   const candidates: string[] = [baseDir, ...existingFiles];
@@ -200,6 +199,7 @@ export function findTypecheckRoot(baseDir: string, existingFiles: string[] = [])
   return best?.root ?? null;
 }
 
+/** Прогоняет `tsc --noEmit --skipLibCheck` (90s). Null, если проверить нельзя/таймаут. */
 export async function runTypecheck(baseDir: string): Promise<string | null> {
   // Локальный tsc напрямую: npx-обёртка добавляет секунды и без локального
   // пакета уходит в сеть. Нет tsc — проверка невозможна, не блокируем.
@@ -209,8 +209,8 @@ export async function runTypecheck(baseDir: string): Promise<string | null> {
   const exited = await processRegistry.waitForExit(entry.id, 90_000);
   const output = entry.log.join("\n");
   processRegistry.remove(entry.id);
-  // A timeout, or output with no `error TS` lines (missing typescript / wrong
-  // working dir) is inconclusive — never block completion on those.
+  // Таймаут или вывод без строк `error TS` (нет typescript / не та рабочая
+  // папка) — inconclusive, завершение на этом не блокируем.
   if (!exited) return null;
   return parseTypecheckErrors(output);
 }

@@ -1,15 +1,16 @@
+// Команда карты проекта, общая для `mma map` (CLI) и `/map` (REPL).
 import type { IndexerModule } from "./module";
 import { t } from "../../i18n/index";
 
+/** Результат действия карты: успех + текстовый вывод. */
 export interface MapActionResult {
   ok: boolean;
   output: string;
 }
 
 /**
- * Shared implementation of the project-map command used by both `mma map`
- * (CLI) and `/map` (REPL): summary (the exact text injected into the system
- * prompt), refresh, and find.
+ * Общая реализация команды карты проекта для `mma map` (CLI) и `/map` (REPL):
+ * summary (точный текст из системного промпта), refresh и find.
  */
 export async function runMapAction(
   module: IndexerModule,

@@ -1,3 +1,4 @@
+/** Вентиль контр-агента (критика): проверка мутаций перед финалом. */
 import { t } from "../../i18n/index";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
@@ -7,9 +8,10 @@ import type { LoopState } from "./loop-state";
 
 const MUTATIONS_BEFORE_CHECK = 3;
 
-/** Tail of a tool output attached to an evidence event (bounded — the critic call has its own budget). */
+/** Хвост вывода тула в evidence-событии (ограничен — у критика свой бюджет). */
 const MAX_EVENT_OUTPUT_CHARS = 600;
 
+/** Зависимости вентиля критика: состояние, логгеры, события тулов хода. */
 export interface CriticGateDeps {
   state: LoopState;
   iteration: number;
@@ -19,12 +21,14 @@ export interface CriticGateDeps {
   task: string;
   planSummary?: string;
   toolEvents: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }>;
-  /** True when evaluated right before the loop would accept the final answer. */
+  /** True, если проверка идёт прямо перед принятием финального ответа. */
   beforeFinish: boolean;
 }
 
+/** Действие вентиля: пропустить или переспросить модель. */
 export type CriticAction = "pass" | "retry";
 
+/** Опции вентиля: лимиты, верификатор и сборщик evidence-пакета. */
 export interface CriticGateOptions {
   enabled: boolean;
   maxCalls: number;
@@ -45,9 +49,17 @@ function renderIssues(issues: CriticIssue[]): string {
     .join("\n");
 }
 
+/**
+ * Вентиль критика: триггерит проверку по мутациям, инжектит вердикт в контекст.
+ * Fail-open: сломанный/перебюджетный критик никогда не блокирует агента.
+ */
 export class CriticGate {
   constructor(private readonly opts: CriticGateOptions) {}
 
+  /**
+   * Оценивает ход через критика.
+   * @param deps состояние цикла и события тулов; @returns "pass" или "retry".
+   */
   async evaluate(deps: CriticGateDeps): Promise<CriticAction> {
     if (!this.shouldRun(deps)) return "pass";
 
@@ -70,7 +82,7 @@ export class CriticGate {
     return "retry";
   }
 
-  /** Fail open: a broken/over-budget critic must never block the agent. */
+  /** Fail-open: битый/перебюджетный критик не блокирует агента. */
   private async verifySafely(deps: CriticGateDeps): Promise<CriticVerdict | null> {
     try {
       return await this.opts.verify(this.opts.buildPack(deps), this.opts.signal);
@@ -146,6 +158,10 @@ export class CriticGate {
   }
 }
 
+/**
+ * Собирает события тулов хода из активной истории (для evidence-пакета критика).
+ * @param contextManager менеджер с getActiveHistory; @returns события role:"tool".
+ */
 export function gatherTurnToolEvents(contextManager: {
   getActiveHistory: () => Array<{
     role: string;
@@ -158,11 +174,10 @@ export function gatherTurnToolEvents(contextManager: {
   const events: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> = [];
   for (const m of contextManager.getActiveHistory()) {
     if (m.role !== "tool" || !m.name) continue;
-    // role:"tool" messages already carry the call arguments (tool-batch)
-    // and the (budget-truncated) output — pass both through so the critic
-    // sees WHAT was touched and WHAT came back, not just bare tool names.
-    // Without args the evidence pack is blind (changedFiles/commands always
-    // empty) and the critic must return "ok" for lack of evidence.
+    // Сообщения role:"tool" уже несут аргументы (tool-batch) и обрезанный
+    // вывод — пробрасываем оба, чтобы критик видел ЧТО тронуто и ЧТО вернулось.
+    // Без аргументов пакет слеп (changedFiles/commands пусты) и критик
+    // вынужден вернуть "ok" за отсутствием улик.
     const output = typeof m.content === "string" ? m.content.slice(-MAX_EVENT_OUTPUT_CHARS) : undefined;
     events.push({ tool: m.name, args: m.arguments, ok: m.success, output });
   }

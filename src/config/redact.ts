@@ -1,4 +1,5 @@
-/** Keys whose string values are secrets and must be masked on display. */
+// Маскирование секретов для показа конфига (`mma config show`).
+/** Ключи, чьи строковые значения — секреты и маскируются при показе. */
 const SECRET_KEYS = new Set([
   "apiKey",
   "api_key",
@@ -11,7 +12,7 @@ const SECRET_KEYS = new Set([
   "webhookUrl",
 ]);
 
-/** Object-valued keys whose every value is sensitive (header/env maps). */
+/** Объектные ключи, где чувствительно КАЖДОЕ значение (карты headers/env). */
 const SECRET_MAPS = new Set(["headers", "env"]);
 
 const MASK = "***";
@@ -39,7 +40,7 @@ function walk(value: unknown, parentKey?: string, depth = 0): unknown {
   return value;
 }
 
-/** Return a deep copy of `config` with secret values replaced by `***`. */
+/** Возвращает глубокую копию `config` с секретами, заменёнными на `***`. */
 export function redactConfigSecrets<T>(config: T): T {
   return walk(config) as T;
 }

@@ -1,3 +1,4 @@
+// Failover-обёртка: ретраируемые ошибки (429/5xx/сеть) переключают на следующий провайдер.
 // src/modules/providers/fallback.ts
 import type {
   ChatOptions,
@@ -8,8 +9,8 @@ import type {
 import { LlmError } from "../../llm/llm-errors";
 
 /**
- * Minimal surface of ProviderManager the failover wrapper needs. Structural
- * typing lets tests inject a stub without constructing a real manager.
+ * Минимальная поверхность ProviderManager для failover-обёртки. Структурная
+ * типизация позволяет тестам инжектить стаб без настоящего менеджера.
  */
 export interface FallbackSource {
   readonly activeName: string;
@@ -18,17 +19,18 @@ export interface FallbackSource {
   readonly active: LLMProvider;
 }
 
+/** Колбэк переключения: с какого на какой и по какой ошибке. */
 export type FailoverListener = (from: string, to: string, error: Error) => void;
 
-/** True when the error is worth failing over to another provider. */
+/** Стоит ли ошибка переключения на другой провайдер. */
 export function isFailoverError(err: unknown): boolean {
   if (err instanceof Error && err.name === "AbortError") return false;
-  // HTTP status, attached by openai-compat as a typed LlmError: retryable only.
+  // HTTP-статус, прикреплённый openai-compat как типизированный LlmError: только ретраируемые.
   if (err instanceof LlmError && typeof err.llmStatus === "number") {
     return err.llmStatus === 429 || err.llmStatus >= 500;
   }
-  // Network-level failures by errno-style code (Bun: "ConnectionRefused",
-  // Node: "ECONNREFUSED", DNS: "ENOTFOUND"/"EAI_AGAIN", etc).
+  // Сетевые падения по errno-коду (Bun: "ConnectionRefused",
+  // Node: "ECONNREFUSED", DNS: "ENOTFOUND"/"EAI_AGAIN" и т.д.).
   const e = err as { code?: string; message?: string };
   const normCode = (e?.code ?? "").replace(/[-_]/g, "").toLowerCase();
   if (/^abort/.test(normCode)) return false;
@@ -37,18 +39,18 @@ export function isFailoverError(err: unknown): boolean {
   ) {
     return true;
   }
-  // Network-level failures by message (fetch failed, timeouts, socket resets).
+  // Сетевые падения по сообщению (fetch failed, таймауты, сбросы сокета).
   return /fetch failed|unable to connect|network|econnrefused|enotfound|etimedout|socket hang up|connection refused|connection reset/i.test(
     e?.message ?? "",
   );
 }
 
 /**
- * Wraps a FallbackSource so that retryable failures (429/5xx/network) on the
- * active provider transparently switch to the next configured entry and retry
- * there. Failover happens ONLY before any chunk was emitted — mid-stream
- * failures rethrow to avoid duplicated output. The last provider that served
- * a successful call becomes the new active entry (sticky).
+ * Оборачивает FallbackSource: ретраируемые падения (429/5xx/сеть) активного
+ * провайдера прозрачно переключаются на следующую запись с ретраем там.
+ * Failover — ТОЛЬКО до первого чанка: падение посреди стрима пробрасывается,
+ * чтобы не дублировать вывод. Последний провайдер с успешным вызовом
+ * становится активным (sticky).
  */
 export class FallbackProvider implements LLMProvider {
   constructor(
@@ -92,8 +94,8 @@ export class FallbackProvider implements LLMProvider {
         }
         return;
       } catch (err) {
-        // Mid-stream failure after content was delivered: a restart would
-        // duplicate chunks — surface the error instead of failing over.
+        // Падение посреди стрима после отданного контента: рестарт
+        // задублировал бы чанки — пробросить ошибку вместо failover.
         if (emitted || !isFailoverError(err)) throw err;
         lastError = err;
         idx = (idx + 1) % names.length;

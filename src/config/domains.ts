@@ -1,3 +1,4 @@
+// Домены конфига: раскладка AppConfig по файлам ~/.mma/config/<домен>.json.
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
 import { join } from "path";
 import type { AppConfig } from "./types";
@@ -6,8 +7,8 @@ import { deepMerge, regexReplacer, regexReviver } from "./utils";
 import { defaultOutputBus } from "../output";
 
 /**
- * Mapping: domain name → AppConfig keys that belong to it.
- * Each domain becomes one JSON file in ~/.mma/config/<domain>.json.
+ * Маппинг: имя домена → ключи AppConfig. Каждый домен — один JSON-файл
+ * в ~/.mma/config/<domain>.json.
  */
 export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
   core: [
@@ -41,9 +42,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
   updater: ["updater"],
 };
 
-/**
- * Extract a domain subset from a full AppConfig.
- */
+/** Вырезает подмножество ключей домена из полного AppConfig. */
 export function extractDomain(config: AppConfig, domain: string): Record<string, unknown> {
   const keys = CONFIG_DOMAINS[domain];
   if (!keys) return {};
@@ -57,16 +56,12 @@ export function extractDomain(config: AppConfig, domain: string): Record<string,
   return subset;
 }
 
-/**
- * Get the file path for a domain config file.
- */
+/** Путь к файлу домена. */
 export function getDomainFilePath(configDir: string, domain: string): string {
   return join(configDir, "config", `${domain}.json`);
 }
 
-/**
- * Check if domain files exist in config/ directory.
- */
+/** Проверяет, есть ли файлы доменов в каталоге config/. */
 export function hasDomainFiles(configDir: string): boolean {
   const configDirPath = join(configDir, "config");
   if (!existsSync(configDirPath)) return false;
@@ -79,9 +74,9 @@ export function hasDomainFiles(configDir: string): boolean {
 }
 
 /**
- * Load all domain files from ~/.mma/config/ and merge into a partial AppConfig.
- * Each file is parsed with regexReviver to restore RegExp objects.
- * Returns null if no domain files exist.
+ * Грузит все файлы доменов из ~/.mma/config/ и мержит в частичный AppConfig.
+ * Каждый файл парсится с regexReviver (восстановление RegExp).
+ * Возвращает null, если файлов доменов нет.
  */
 export function loadDomainFiles(configDir: string): Partial<AppConfig> | null {
   const configDirPath = join(configDir, "config");
@@ -100,8 +95,8 @@ export function loadDomainFiles(configDir: string): Partial<AppConfig> | null {
       result = deepMerge(result, data);
       anyLoaded = true;
     } catch {
-      // Never silent: surface the offending path instead of silently ignoring
-      // a domain the user believes is active.
+      // Не молчим: показываем битый путь, а не тихо игнорим домен,
+      // который пользователь считает активным.
       defaultOutputBus.log("warn", "config", t("config.parse_failed", { path: filePath }));
     }
   }
@@ -110,9 +105,9 @@ export function loadDomainFiles(configDir: string): Partial<AppConfig> | null {
 }
 
 /**
- * Save a full AppConfig to domain files in ~/.mma/config/.
- * Each domain's keys are extracted and written to config/<domain>.json.
- * RegExp objects are serialized via regexReplacer.
+ * Пишет полный AppConfig по файлам доменов в ~/.mma/config/.
+ * Ключи каждого домена вырезаются и пишутся в config/<domain>.json.
+ * RegExp сериализуются через regexReplacer.
  */
 export function saveDomainFiles(config: AppConfig, configDir: string): void {
   const configDirPath = join(configDir, "config");
@@ -136,8 +131,7 @@ export function saveDomainFiles(config: AppConfig, configDir: string): void {
 }
 
 /**
- * Determine which domain a config key belongs to.
- * Returns the domain name or null if not found.
+ * Определяет домен ключа конфига. Возвращает имя домена или null.
  */
 export function domainForKey(key: string): string | null {
   for (const [domain, keys] of Object.entries(CONFIG_DOMAINS)) {

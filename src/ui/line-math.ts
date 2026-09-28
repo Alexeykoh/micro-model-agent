@@ -1,11 +1,14 @@
+// Математика строк редактора: ANSI-стрип, перенос по ширине, буфер↔экран маппинг.
 import stringWidth from "string-width";
 
+/** Строка раскладки: какая строка буфера и с какого символа начинается. */
 export interface LayoutRow {
   bufRow: number;
   charStart: number;
   text: string;
 }
 
+/** Визуальная строка после переноса. */
 export interface WrappedRow {
   text: string;
   charStart: number;
@@ -13,18 +16,21 @@ export interface WrappedRow {
 
 const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
 
+/** Срезает ANSI-последовательности. */
 export function stripAnsi(s: string): string {
   return s.replace(ANSI_RE, "");
 }
 
+/** Длина в символах (не в байтах/ячейках). */
 export function charLen(s: string): number {
   return Array.from(s).length;
 }
 
+/** Перенос строки по ширине (по словам, CJK-корректно). */
 export function wrapLine(line: string, width: number, firstRowWidth?: number): WrappedRow[] {
   const w = width > 0 ? width : 80;
-  // Only the FIRST visual row shares its screen line with something else
-  // (e.g. the prompt); every continuation row uses the full width.
+  // Только ПЕРВАЯ визуальная строка делит экранную строку с чем-то ещё
+  // (напр. с промптом); все продолжения — на полную ширину.
   let limit = firstRowWidth !== undefined && firstRowWidth > 0 ? firstRowWidth : w;
   const chars = Array.from(line);
   const rows: WrappedRow[] = [];
@@ -68,6 +74,7 @@ export function wrapLine(line: string, width: number, firstRowWidth?: number): W
   return rows;
 }
 
+/** Раскладка всех строк буфера в визуальные ряды. */
 export function buildLayout(
   lines: string[],
   width: number,
@@ -82,6 +89,7 @@ export function buildLayout(
   return rows;
 }
 
+/** Индекс визуального ряда по позиции буфера. */
 export function layoutIndexFor(rows: LayoutRow[], bufRow: number, col: number): number {
   let idx = 0;
   for (let i = 0; i < rows.length; i++) {
@@ -90,12 +98,14 @@ export function layoutIndexFor(rows: LayoutRow[], bufRow: number, col: number): 
   return idx;
 }
 
+/** Визуальная колонка по смещению в буфере. */
 export function visualColAt(rows: LayoutRow[], idx: number, col: number): number {
   const r = rows[idx];
   const upTo = col - r.charStart;
   return stringWidth(Array.from(r.text).slice(0, upTo).join(""));
 }
 
+/** Смещение в буфере по визуальной колонке. */
 export function charOffsetFor(rows: LayoutRow[], idx: number, visualCol: number): number {
   const r = rows[idx];
   const chars = Array.from(r.text);
