@@ -12,3 +12,4 @@ images*.jpg
 certification/report-*.json
 .superpowers/
 .fallow/
+.playwright-mcp/

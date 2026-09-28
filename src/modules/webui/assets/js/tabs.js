@@ -57,19 +57,18 @@ function renderTabstrip() {
     tabstripEl.appendChild(tab);
   });
   scrollActiveTabIntoView();
+  renderSessBar();
 }
 
-// Keep the active tab inside the visible area of the horizontal strip:
-// new tabs are appended at the end (out of view on phones), and switching
-// via dropdown/click can also leave the active tab off-screen.
+// Keep the active tab visible, aligned to its START so the beginning of the
+// session name stays readable (aligning the end would cut the name off,
+// which is exactly what phones showed when tapping a tab on the right).
 function scrollActiveTabIntoView() {
   const active = tabstripEl.querySelector(".stab.on");
   if (!active) return;
-  const left = active.offsetLeft;
-  const right = left + active.offsetWidth;
-  if (left < tabstripEl.scrollLeft) tabstripEl.scrollLeft = left;
-  else if (right > tabstripEl.scrollLeft + tabstripEl.clientWidth) {
-    tabstripEl.scrollLeft = right - tabstripEl.clientWidth;
+  const left = Math.max(0, active.offsetLeft - 4);
+  if (left < tabstripEl.scrollLeft || left + active.offsetWidth > tabstripEl.scrollLeft + tabstripEl.clientWidth) {
+    tabstripEl.scrollLeft = left;
   }
 }
 
@@ -290,6 +289,73 @@ sessBtn.addEventListener("click", (e) => {
   document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
   setSessOpen(!sessDD.classList.contains("open"));
 });
+
+// --- mobile session sub-header -------------------------------------------
+// Phones show a session control bar under the topbar: prev/next arrows step
+// through the open tabs, ✕ closes the active tab, and the + / list tools
+// relocate here (see placeTopTools) so the topbar keeps room for tabs.
+const sessBar = document.getElementById("sessBar");
+const sessNameBtn = document.getElementById("sessNameBtn");
+const sessNameEl = document.getElementById("sessName");
+const sessPrevBtn = document.getElementById("sessPrev");
+const sessNextBtn = document.getElementById("sessNext");
+const sessCloseBtn = document.getElementById("sessClose");
+const sessTools = document.getElementById("sessTools");
+const barTop = document.querySelector(".bar-top");
+const newChatBtn = document.getElementById("newChat");
+// Anchor remembering the desktop slot of the + / list controls.
+const topToolsAnchor = document.createComment("top-tools");
+if (barTop && newChatBtn) barTop.insertBefore(topToolsAnchor, newChatBtn);
+
+function stepTab(dir) {
+  if (S.tabs.length < 2) return;
+  const i = S.tabs.findIndex((x) => x.id === S.activeTabId);
+  const n = i === -1 ? 0 : (i + dir + S.tabs.length) % S.tabs.length;
+  const tab = S.tabs[n];
+  // Same semantics as clicking the tab in the strip.
+  if (tab) openTab(tab.id, tab.name, tab.kind, true);
+}
+
+function renderSessBar() {
+  if (!sessBar) return;
+  const active = S.tabs.find((x) => x.id === S.activeTabId);
+  const label = active ? active.name || String(active.id) : "—";
+  sessNameEl.textContent = label;
+  sessNameBtn.title = label;
+  const has = S.tabs.length > 0;
+  sessPrevBtn.disabled = S.tabs.length < 2;
+  sessNextBtn.disabled = S.tabs.length < 2;
+  sessCloseBtn.disabled = !has;
+  sessNameBtn.disabled = !has;
+}
+
+// Nodes are relocated (not duplicated), so their listeners and the sessions
+// dropdown anchoring (.dd is position:relative) survive the move.
+function placeTopTools() {
+  if (!barTop || !sessTools || !newChatBtn || !sessDD) return;
+  if (window.matchMedia("(max-width: 760px)").matches) {
+    sessTools.append(newChatBtn, sessDD);
+  } else {
+    barTop.insertBefore(newChatBtn, topToolsAnchor);
+    barTop.insertBefore(sessDD, topToolsAnchor);
+  }
+}
+
+if (sessPrevBtn) sessPrevBtn.addEventListener("click", () => stepTab(-1));
+if (sessNextBtn) sessNextBtn.addEventListener("click", () => stepTab(1));
+if (sessCloseBtn) sessCloseBtn.addEventListener("click", () => {
+  if (S.activeTabId) closeTab(S.activeTabId);
+});
+if (sessNameBtn) sessNameBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
+  setSessOpen(!sessDD.classList.contains("open"));
+});
+if (typeof window.matchMedia === "function") {
+  const narrowMq = window.matchMedia("(max-width: 760px)");
+  if (typeof narrowMq.addEventListener === "function") narrowMq.addEventListener("change", placeTopTools);
+  placeTopTools();
+}
 
 document.addEventListener("click", () => {
   document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
