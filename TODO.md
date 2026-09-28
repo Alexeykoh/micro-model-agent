@@ -19,7 +19,7 @@
 - [x] ~~**Валидация кэша индекса**~~ ✅ `index-cache.json` — envelope `{version,root,signature}`; `load()` сверяет SHA-1 сигнатуру дерева (`Indexer.scanSignature()`, stat-only) и отклоняет устаревший/легаси-кэш (ветка `fix/index-cache-validation`).
 
 ### P1 — поведение агента
-- **P5 — авто-сужение набора тулов**: тривиальный запрос тянет все схемы (~3.1K токенов, ~9% окна 32K); сейчас `enableOnDemand:false` отдаёт полный набор. Приоритет высокий, но риск высокий (уже откатывали) — нужен дизайн, а не быстрый фикс.
+- [x] ~~**P5 — авто-сужение набора тулов**~~ ✅ закрыто (ветка `feat/auto-tool-narrowing`): `enableOnDemand: true` по умолчанию + детерминированный пред-посев тегов по первому сообщению (`src/tools/auto-tags.ts`, только добавление, до первого LLM-вызова) + `question`/`approve`/`load_skill` → `alwaysOn`. Причина отката mitigation: hidden-tools блок, bash hidden-hint + redirect, пред-посев убирает нужду в `enable_tools`-roundtrip на веб-задачах.
 - [x] ~~**System Prompt — DONE CONDITIONS**~~ ✅ в `buildSystemInfo` добавлены секции `DONE CONDITIONS` и `STOP AND ASK THE USER` (ветка `feat/system-prompt-done-conditions`). Остальные задачи плана `2026-08-27-system-prompt-optimization.md` (реструктуризация, failure classification, FORBIDDEN) — открыты.
 - [x] ~~**Аудит волн B/C/D/E**~~ ✅ проведён 2026-09-25, отчёт `docs/analysis/2026-09-25-waves-bcde-audit.md`: 6 находок sev 4 (→ P0, исправлены), ~24 sev 3, ~25 sev 2. **Исправлено большинство** (ветка `fix/audit-waves-bcde`): sev 4 + stuck-детектор, plan-correctness, SSRF/секреты/symlink/injection, MCP reliability, read/process/pipeline-харды, skills CRLF, command-validator wrappers. Остаток — в P2 (см. «Остатки аудита»).
 - **Linux watcher**: `walker.ts:140` (`Indexer.watch()`, `watch(baseDir, { recursive: true })` без fallback — сверено 2026-09-28) — поднимать в P1 только если Linux в целевых платформах, иначе остаётся здесь как условный.
@@ -285,7 +285,7 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 3. **npm publish** — актуальная версия **2.10.0** (сверка 2026-09-28; перечисленные 0.46.0–0.61.0 давно выпущены, CHANGELOG покрывает 0.62.0→2.10.0).
 
 4. **Качество агентных прогонов — P5/P6 из аудита 2026-08-31** (`_testing/agent-quality-review-2026-08-31.md`; P0–P4 из того же аудита закрыты коммитами `7ff98dc`, `98dc7a2`):
-   - [ ] **P5 — авто-сужение набора тулов**: тривиальный вопрос тянет все 23 схемы тулов (~3.1K токенов, ~9% окна 32K); tool narrowing (`enable_tools`) есть, но не применяется автоматически — сужать по типу задачи до первого LLM-вызова
+    - [x] ~~**P5 — авто-сужение набора тулов**~~ ✅ см. выше (ветка `feat/auto-tool-narrowing`)
    - [x] ~~**P6a — Unix-команды на Windows**~~ ✅ реализовано: `windows-commands.ts` (hard-stop `<system-summary>`) + `bash.ts` `UNIX_TO_WIN_HINTS`/`FAILING_FIRST_WORDS`/`HARD_BLOCK_THRESHOLD`
    - [x] ~~**P6b — reasoning policy на тривиальных задачах**~~ ✅ baseline `"low"` + fallback на `reasoningConfig.min` вместо `"medium"`
 

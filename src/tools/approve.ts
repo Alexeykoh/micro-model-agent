@@ -7,6 +7,8 @@ export const approveTool: ToolDefinition = {
   icon: "🙋",
   description: "Request user approval for an action. The user picks Yes or No from a menu.",
   tags: ["core"],
+  // See question.ts: interactive tools always survive narrowing (P5).
+  alwaysOn: true,
   interactive: true,
   parameters: {
     type: "object",

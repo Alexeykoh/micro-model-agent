@@ -196,6 +196,9 @@ export const questionTool: ToolDefinition = {
   icon: "❓",
   description: DESCRIPTION,
   tags: ["core"],
+  // Interactive user-facing tools must survive tag narrowing: the model must
+  // always be able to ask, whatever the task type (P5 auto-narrowing).
+  alwaysOn: true,
   interactive: true,
   parameters: {
     type: "object",
