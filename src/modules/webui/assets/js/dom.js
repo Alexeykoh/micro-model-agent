@@ -67,7 +67,8 @@ refresh: [
   ["path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }],
   ["path", { d: "M8 21H3v-5" }],
 ],
-"chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
+  "chevron-down": [["path", { d: "m6 9 6 6 6-6" }]],
+  "chevron-left": [["path", { d: "m15 18-6-6 6-6" }]],
 "chevron-right": [["path", { d: "m9 18 6-6-6-6" }]],
 search: [
   ["circle", { cx: 11, cy: 11, r: 8 }],

@@ -200,6 +200,9 @@ function applyStaticI18n() {
     closeSettings: ["x", t("web.topbar.close")],
     sessNew: ["plus", t("web.sessions.new")],
     sessRefresh: ["refresh", t("web.sessions.refresh")],
+    sessPrev: ["chevron-left", t("web.sessbar.prev")],
+    sessNext: ["chevron-right", t("web.sessbar.next")],
+    sessClose: ["x", t("web.topbar.close")],
   };
   Object.keys(controls).forEach((id) => {
     const node = document.getElementById(id);

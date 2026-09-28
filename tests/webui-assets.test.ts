@@ -181,6 +181,22 @@ describe("webui assets", () => {
     expect(a.css).toContain(".pform-base");
   });
 
+  it("wires the mobile session sub-header and start-aligned tab scrolling", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(a.html).toContain('id="sessBar"');
+    expect(a.html).toContain('id="sessPrev"');
+    expect(a.html).toContain('id="sessNext"');
+    expect(a.html).toContain('id="sessClose"');
+    expect(a.html).toContain('id="sessTools"');
+    expect(src).toContain("renderSessBar(");
+    expect(src).toContain("stepTab(");
+    expect(src).toContain("placeTopTools(");
+    expect(src).toContain("chevron-left");
+    expect(a.css).toContain(".bar-sub");
+    expect(a.css).toContain(".sess-tools .dd-menu");
+  });
+
   it("wires the activity rail above the composer", () => {
     const a = loadAssets();
     expect(a.html).toContain('id="railWrap"');

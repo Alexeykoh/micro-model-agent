@@ -1018,6 +1018,8 @@
   "web.topbar.all_sessions": "all sessions",
   "web.topbar.sidebar": "sidebar",
   "web.topbar.close": "close",
+  "web.sessbar.prev": "previous session",
+  "web.sessbar.next": "next session",
   "web.conn.reconnecting": "reconnecting…",
   "web.sidebar.plan": "plan",
   "web.sidebar.session": "session",
