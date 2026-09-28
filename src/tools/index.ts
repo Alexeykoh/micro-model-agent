@@ -29,9 +29,10 @@ import { webSearchTool } from "./web-search";
 import { webFetchTool } from "./web-fetch";
 import { webBrowseTool } from "./web-browse";
 import { downloadFileTool } from "./download-file";
-// questionTool and approveTool are NOT registered by default — interactive menus are too
-// disruptive for small models. The model should ask questions as plain text in its response
-// instead. Web mode (`mma web`) registers them explicitly after bootstrap.
+// questionTool and approveTool are main-set tools: question covers
+// single/multi-choice + free text (with a memory pre-check), approve covers
+// explicit Yes/No confirmation (reject returns success:false, so the loop
+// treats it as a failure signal instead of answer text).
 import { questionTool } from "./question";
 import { approveTool } from "./approve";
 import { createLoadSkillTool } from "./load-skill";
@@ -120,6 +121,8 @@ export function registerAllTools(
     attachImageTool,
     sessionInfoTool,
     meetDoneTool,
+    questionTool,
+    approveTool,
   ];
 
   // On-demand tool activation is the default. When explicitly disabled

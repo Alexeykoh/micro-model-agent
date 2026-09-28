@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Memory-aware `question` tool in the core set** (`src/tools/question.ts`, `src/tools/index.ts`, `src/core/system-prompt.ts`, `src/i18n/en.json`, `src/i18n/ru.json`): single/multi-choice and free-text prompts now registered in `registerAllTools()` (visible in REPL and web UI; `approve` registered alongside for explicit Yes/No — reject returns `success:false` so the loop treats it as a failure signal). The handler pre-checks agent memory itself (`splitByMemory` over `MemoryStore.search`, fail-open) — questions memory already answers are reported, not asked; answers live only in the session (persist via `remember` only when asked to); at most `MAX_QUESTIONS_PER_CALL = 3` unknown questions per call with a re-call note. System prompt carries a one-line `ASK RULE`; REPL rendering already matched `STYLE.md`, web rendering reuses `feed.js onQuestion`.
+
 - **Activity rail above the composer** (`src/modules/webui/assets/js/rail.js`, `index.html`, `styles.css`, `app.js`, `tabs.js`, `settings.js`): an indicator that lives for the whole turn — indeterminate scanner with phase/elapsed/tool & event counters when no plan exists, honest `done/total` progress with step ticks when an MoE plan is active, and a short flash on every real SSE event (`tool_start`/`tool_end`/`text`/`plan`). Layouts `off|line|meta|full` via the new config key `ui.activityRail` (default `line`), editable in `/config` and web Settings → Chat output and applied live; en/ru localized, `prefers-reduced-motion` respected, phase announced politely (`role="status"`, timer/counters `aria-hidden`). Spec: `docs/specs/2026-09-27-activity-rail-design.md`.
 
 ### Changed

@@ -2,11 +2,11 @@
 
 ## Question Tool
 
-> **Status: DISABLED** — interactive menus are too disruptive for small models (Qwen3.5-9B). The model should ask questions as plain text in its response instead. Source files (`question.ts`, `approve.ts`) exist but imports are commented out in `src/tools/index.ts:29-32`. Re-enable requires uncommenting imports + adding to `registerAllTools()`.
+> **Status: ENABLED (core set)** — `question` is registered in `registerAllTools()` and visible to the model in REPL and web UI. It is memory-aware: a pre-check skips questions memory already answers (reported, not asked), answers are session-only (persist via `remember` only when asked to), at most 3 unknown questions are asked per call. `approve` is registered alongside it for explicit Yes/No confirmation (reject returns `success:false`, so the loop treats it as a failure signal rather than answer text).
 
 Interactive Q&A for clarifying ambiguous tasks, gathering preferences, and offering choices to the user.
 
-### API (disabled — kept for reference)
+### API
 
 The model sends a `question` tool call with one or more questions:
 
@@ -49,7 +49,7 @@ The model sends a `question` tool call with one or more questions:
 ### Implementation
 
 - `src/tools/user-input.ts` — shared interactive primitive (`parseSelection`, `formatMenu`, `askChoice`, `askText`, `askUser`).
-- `src/tools/question.ts` — tool definition, normalizes legacy `{question: string}` format, calls `askUser()` sequentially per question.
+- `src/tools/question.ts` — tool definition, normalizes legacy `{question: string}` format, runs the memory pre-check (`splitByMemory`, max 3 unknown questions per call via `MAX_QUESTIONS_PER_CALL`), calls `askUser()` sequentially per question.
 - `src/tools/approve.ts` — thin wrapper: two options (Yes/No), `success:false` on reject.
 
 ### Timeout Bypass
@@ -59,7 +59,8 @@ The model sends a `question` tool call with one or more questions:
 ### Known Limitations
 
 - Multiple subagents in MoE parallel waves asking questions on the same stdin would conflict. Not supported.
-- No REST/SSE event system (unlike opencode). Questions work only in CLI/REPL with direct stdin.
+- Headless/one-shot runs (`exitOnComplete`) fail fast instead of prompting; web UI works over SSE + `/api/answer`.
+- Memory pre-check is keyword overlap (a memory line must share ≥2 significant words with question+options), not semantic: paraphrase or cross-language misses fail open (the user is asked normally).
 
 ### REPL Input Locking (`withExclusiveInput`)
 

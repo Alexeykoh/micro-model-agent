@@ -307,12 +307,12 @@ const SCENARIO_DEFS: ScenarioDef[] = [
   },
   {
     id: "1.1-question-tool",
-    title: "Question tool (removed)",
+    title: "Question tool (interactive-only)",
     tags: ["core"],
     mode: "skip",
     prompt: "",
     checks: [],
-    skipReason: "question/approve tools removed from tools/index.ts",
+    skipReason: "question tool needs a live user; headless cert runs fail fast by design",
   },
 
   // ─── Plan / Execution ────────────────────────────────────────────────
