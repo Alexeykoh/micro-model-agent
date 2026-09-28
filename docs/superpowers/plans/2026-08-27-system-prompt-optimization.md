@@ -2,7 +2,7 @@
 
 > **For agentic workers:** implement task-by-task, TDD (test first), atomic commits `feat(scope): description`. Steps use checkbox (`- [ ]`) syntax.
 
-**Status (2026-09-25):** Task 3 (DONE CONDITIONS + STOP) implemented in `src/core/bootstrap.ts` (branch `feat/system-prompt-done-conditions`). Task 5 (failure classification) implemented in `stuck-detector.ts` as `FailureType`/`classifyFailure`/`getStuckDiagnostic` — `scope_drift`/`empty_output` intentionally omitted (no reliable detector signal). Tasks 1, 2, 4, 6 remain open.
+**Status (2026-09-28):** all 6 tasks closed. Task 3 (DONE CONDITIONS + STOP) in `src/core/bootstrap.ts` (branch `feat/system-prompt-done-conditions`). Task 5 (failure classification) in `stuck-detector.ts` — `scope_drift`/`empty_output` intentionally omitted (no reliable detector signal). Tasks 1+2 (Wave 1 restructure + dedup), 4 (SESSION START), 6 (FORBIDDEN) in `src/core/system-prompt.ts` (branch `feat/system-prompt-waves`): header sections ≤120 chars/line (was 20/21 over, max 608), −22% tokens (1744→1360 est.), `Design:` line removed; SESSION START as prompt section (baseline for code tasks only); FORBIDDEN always-on compact (decisions: prompt over plugin-hook, always over autoPlan-only).
 
 **Goal:** Restructure `buildSystemInfo` system prompt for 9B models — reduce token count, improve readability, add missing behavioral directives.
 

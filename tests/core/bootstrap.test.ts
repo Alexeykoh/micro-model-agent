@@ -300,6 +300,32 @@ describe("bootstrap", () => {
     expect(info).toContain("MEMORY PRIVACY");
   });
 
+  it("keeps every line short for small models (Wave 1: ≤120 chars)", () => {
+    const info = buildSystemInfo(
+      { model: "test-model", autoPlan: true, security: { enabled: false }, mcpServers: {} } as any,
+      "/tmp",
+      "win32 shell=cmd",
+    );
+    const long = info.split("\n").filter((l) => l.length > 120);
+    expect(long).toEqual([]);
+  });
+
+  it("has a session-start baseline protocol for code tasks (Wave 2, Task 4)", () => {
+    const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32");
+    expect(info).toContain("SESSION START");
+    expect(info).toContain("list_dir");
+    expect(info).toContain("bun test");
+    expect(info.toLowerCase()).toContain("trivial");
+  });
+
+  it("has an always-on FORBIDDEN section (Wave 4, Task 6)", () => {
+    const plain = buildSystemInfo({ model: "test-model", autoPlan: false } as any, "/tmp", "win32");
+    expect(plain).toContain("FORBIDDEN");
+    expect(plain).toContain("3rd time");
+    const planned = buildSystemInfo({ model: "test-model", autoPlan: true } as any, "/tmp", "win32");
+    expect(planned).toContain("FORBIDDEN");
+  });
+
   it("lists security restrictions only when security is enabled", () => {
     const sec = {
       enabled: true,
