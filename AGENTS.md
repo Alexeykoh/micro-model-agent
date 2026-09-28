@@ -500,7 +500,8 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 ### Counter-Agent (In-Loop Critic) (2.6.0)
 
 - **Модули:** `src/modules/critic/` (`types.ts`, `evidence.ts` — `buildEvidencePack`/`isWorkMutation`,
-  `client.ts` — `CriticClient`/`parseVerdict`/`CRITIC_SYSTEM_PROMPT`) + `src/core/agent/critic-gate.ts`
+  `client.ts` — `CriticClient`/`parseVerdict`/`CRITIC_SYSTEM_PROMPT`, `provider.ts` — `buildCriticProvider`,
+  `tools.ts` — read-only verification loop) + `src/core/agent/critic-gate.ts`
   (`CriticGate`, `gatherTurnToolEvents`). Встроен в `executeSingleAgentLoop` рядом с `AuditGate`/
   `HallucinationGate`; **MoE-путь не тронут**.
 - **Поведение:** триггер по work-мутациям (`write_file`/`edit_file`/`delete_file`/`move_file`/
@@ -508,16 +509,20 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   ограниченный repair (`critic.maxRepairCycles`), `concern` → совет; оба инжектят
   `<system-summary>` и делают retry по одному разу на свежую проблему (дедуп). Жёсткий лимит
   `critic.maxCalls` за прогон. Fail-open (null/timeout/битый JSON/throw ⇒ `pass`).
-- **Конфиг:** `critic.{enabled,maxCalls,maxRepairCycles,timeoutMs}` (дефолты `true`/`4`/`1`/`15000`);
-  доступны в `/config` и web settings (Advanced), вместе с `moe.enabled`/`moe.maxReplanCycles`.
+- **Конфиг:** `critic.{enabled,model,provider,tools,maxCalls,maxRepairCycles,timeoutMs}`
+  (дефолты `true`/unset/unset/`true`/`4`/`1`/`15000`); доступны в `/config` и web settings (Advanced),
+  вместе с `moe.enabled`/`moe.maxReplanCycles`.
 - **Observability:** события `critic_check` (вызов)/`critic_verdict`/`critic_escalation` в `session.jsonl`
   (`SessionLogger.logCritic`) + диагностическая строка `Logger.diagnostic("info", …)` — видна в терминале/web
   только при `ui.verbosity === "verbose"`. **В чат вердикт не рисуется:** `Renderer.criticVerdict`,
   SSE `critic`, UI-колбэк `onCritic` и ключи i18n `ui.critic_*`/`web.critic_*` удалены;
-  model-facing repair/advice (`<system-summary>`) в чат не попадает. v1 использует активный провайдер +
-  детерминированный evidence pack.
-- **Phase 2 (отложено, `TODO.md`):** выделенный critic-провайдер (`critic.provider`/`critic.model`)
-  и ограниченный read-only tool-loop (`critic.tools`).
+  model-facing repair/advice (`<system-summary>`) в чат не попадает.
+- **Phase 2:** выделенный critic-провайдер (`critic.provider`/`critic.model` через `ProviderManager`,
+  `src/modules/critic/provider.ts`; без `model` — активный провайдер, битый оверрайд — warn + fallback)
+  и ограниченный read-only tool-loop (`critic.tools`, default true): после concern/critical критик может
+  запросить до 3 проверок (`read_file`/`grep`/`glob`/`file_info`/`list_dir`, `src/modules/critic/tools.ts`,
+  выполнение через общий `ToolExecutor` с read-only allowlist) и выносит финальный вердикт по их выводам.
+  Лимит — общий таймаут verify, fail-open к вердикту первого прохода.
 
 ### Current Version: 2.10.0
 

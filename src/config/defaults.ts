@@ -23,6 +23,12 @@ export const DEFAULTS: AppConfig = {
   },
   critic: {
     enabled: true,
+    // Phase 2: dedicated provider/model are opt-in — unset shares the active
+    // provider (v1 behavior). The read-only verification loop is on: it only
+    // runs after a concern/critical verdict and is bounded + fail-open.
+    provider: undefined,
+    model: undefined,
+    tools: true,
     maxCalls: 4,
     maxRepairCycles: 1,
     timeoutMs: 15000,

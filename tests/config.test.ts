@@ -40,7 +40,15 @@ describe("config defaults", () => {
   });
 
   it("defaults critic to enabled with bounded loops", () => {
-    expect(DEFAULTS.critic).toEqual({ enabled: true, maxCalls: 4, maxRepairCycles: 1, timeoutMs: 15000 });
+    expect(DEFAULTS.critic).toEqual({
+      enabled: true,
+      provider: undefined,
+      model: undefined,
+      tools: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      timeoutMs: 15000,
+    });
   });
 });
 

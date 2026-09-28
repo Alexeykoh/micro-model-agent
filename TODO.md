@@ -45,8 +45,8 @@
 ### P4 — бэклог
 - [x] ~~Автоназвание сессии по контексту~~ ✅ СДЕЛАНО (релиз 2.6.0): `deriveSessionName` + fire-and-forget `generateSessionTitle` в хуке `Agent.run()`, `session.autoName` (default true), `nameSource` (`auto` не затирает `manual`). Строка «только ручной `rename`» устарела (сверка 2026-09-28).
 - [x] ~~Контр-агент для проверки работы (+ подобрать литературу)~~ ✅ v1 (ветка `feat/critic-agent`): in-loop `CriticGate` + `src/modules/critic/` (evidence pack + LLM-клиент, JSON-вердикт, fail-open), конфиг `critic.*`, события `critic_*` в `session.jsonl`; MoE не тронут. Дизайн: `docs/specs/2026-09-25-session-autoname-and-critic-design.md` §4, план `docs/superpowers/plans/2026-09-25-critic-agent.md`.
-  - **Phase 2:** выделенный critic-провайдер (`critic.provider`/`critic.model` через `ProviderManager`).
-  - **Phase 2:** ограниченный read-only tool-loop для критика (`critic.tools`) вместо только детерминированного evidence pack.
+  - [x] ~~**Phase 2:** выделенный critic-провайдер (`critic.provider`/`critic.model` через `ProviderManager`)~~ ✅ (ветка `feat/critic-phase2`): `src/modules/critic/provider.ts` (managed-путь только при заданном `model`, битый оверрайд — warn + fallback на активный).
+  - [x] ~~**Phase 2:** ограниченный read-only tool-loop для критика (`critic.tools`)~~ ✅ (ветка `feat/critic-phase2`): `src/modules/critic/tools.ts` (до 3 проверок `read_file`/`grep`/`glob`/`file_info`/`list_dir` через общий executor с allowlist), second-pass в `CriticClient.verify`, fail-open к первому вердикту.
 
 ## Актуальное
 
@@ -59,10 +59,10 @@
 2. Давление плана: `PLAN QUALITY` требует «шаг = конкретные deliverables (точные пути)», а гейт деливераблов (`plan-actions.ts:568-574`, `t("plan.no_deliverables")`, не `module.ts`) после каждого `done`-шага без файлов инжектит «шаг N не называет файлов — его выполнение нельзя проверить автоматически» + совет «добавить пути / запустить сборку/тесты» → модель материализует файлы, чтобы шаги стали «проверяемыми» (сверка 2026-09-28).
 3. Нота гейта кодоцентрична («запусти сборку/тесты») — мусор в некодовой задаче.
 
-**Что починить (вне скоупа ветки `feat/ask-interactive-tool`):**
-- [ ] `ARTIFACTS`: создавать файл только по явному запросу файла («запиши в файл», имя с расширением); слова «рекомендация/итог/отчёт» без запроса файла ≠ файл.
-- [ ] Нота деливерабл-гейта: для шагов без файлов не требовать файлы; убрать «сборку/тесты» из подсказки, когда задача некодовая.
-- [ ] Утечка памяти в workspace: персональные факты из памяти (ДР, рост) оказались в файлах пользовательской папки без спроса — нужен guard (предупреждение/подтверждение) или правило «не выносить факты памяти в файлы».
+**Что починить (вне скоупа ветки `feat/ask-interactive-tool`) — ✅ всё три закрыты отдельными ветками (сверка 2026-09-28):**
+- [x] ~~`ARTIFACTS`: создавать файл только по явному запросу файла~~ ✅ `system-prompt.ts:21` («recommendation/summary/report alone = answer in chat»).
+- [x] ~~Нота деливерабл-гейта~~ ✅ `plan.no_deliverables` (en+ru): проверять способом под задачу, НЕ создавать файлы ради деливераблов (ветка `fix/plan-note-pure-noncode`).
+- [x] ~~Утечка памяти в workspace~~ ✅ `MEMORY PRIVACY` (`system-prompt.ts:25`): факты памяти в файлы только по явному запросу.
 
 ### ~~MMA Web — первый запуск (мастер настройки)~~ ✅ ЗАКРЫТО (2026-09-25), релиз 2.6.0
 

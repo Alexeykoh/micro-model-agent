@@ -318,6 +318,55 @@ const DEFINITIONS: ConfigKeyDef[] = [
     },
   },
   {
+    key: "critic.model",
+    aliases: [],
+    domain: "agent",
+    valueType: "string",
+    reconfigure: true,
+    get: (c) => c.critic?.model ?? "",
+    set: (c, v) => {
+      const s = String(v).trim();
+      c.critic = { ...(c.critic ?? DEFAULTS.critic), model: s ? s : undefined };
+    },
+  },
+  {
+    key: "critic.tools",
+    aliases: [],
+    domain: "agent",
+    valueType: "bool",
+    reconfigure: true,
+    get: (c) => c.critic?.tools ?? DEFAULTS.critic.tools,
+    set: (c, v) => {
+      c.critic = { ...(c.critic ?? DEFAULTS.critic), tools: v as boolean };
+    },
+  },
+  {
+    key: "critic.provider",
+    aliases: [],
+    domain: "agent",
+    valueType: "json",
+    reconfigure: true,
+    get: (c) => c.critic?.provider ?? {},
+    set: (c, v) => {
+      const rec = v as Record<string, unknown>;
+      c.critic = {
+        ...(c.critic ?? DEFAULTS.critic),
+        provider: Object.keys(rec).length > 0
+          ? (rec as unknown as AppConfig["critic"]["provider"])
+          : undefined,
+      };
+    },
+    extraValidate: (_c, v) => {
+      if (!v || typeof v !== "object" || Array.isArray(v)) return "invalid";
+      const rec = v as Record<string, unknown>;
+      if (rec.type !== undefined && typeof rec.type !== "string") return "invalid";
+      if (rec.baseUrl !== undefined && typeof rec.baseUrl !== "string") return "invalid";
+      if (rec.active !== undefined && typeof rec.active !== "string") return "invalid";
+      if (rec.entries !== undefined && !Array.isArray(rec.entries)) return "invalid";
+      return null;
+    },
+  },
+  {
     key: "logLevel",
     aliases: [],
     domain: "agent",
