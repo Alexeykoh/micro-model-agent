@@ -1,6 +1,7 @@
 import { pc } from "../../ui/colors";
 import type { UiConfig } from "../../config/types";
 import type { ContextManager } from "../../modules/context/manager";
+import type { OnMeta } from "../types";
 
 /**
  * Рендер UI-индикаторов контекста (stats-бар и уведомление о компакции).
@@ -13,7 +14,7 @@ import type { ContextManager } from "../../modules/context/manager";
 export class ContextRenderer {
   private lastCompactionShown = 0;
 
-  render(ui: UiConfig | undefined, contextManager: ContextManager, onMeta?: (meta: string) => void): void {
+  render(ui: UiConfig | undefined, contextManager: ContextManager, onMeta?: OnMeta): void {
     if (ui?.showContextStats) {
       this.renderStats(contextManager, onMeta);
     } else if (ui?.showCompaction) {
@@ -21,7 +22,7 @@ export class ContextRenderer {
     }
   }
 
-  private renderStats(contextManager: ContextManager, onMeta?: (meta: string) => void): void {
+  private renderStats(contextManager: ContextManager, onMeta?: OnMeta): void {
     const ctxTokens = contextManager.getEstimatedTokens();
     const ctxBudget = contextManager.getBudget();
     const ctxPct = Math.min(100, Math.round((ctxTokens / ctxBudget.history) * 100));
@@ -37,7 +38,7 @@ export class ContextRenderer {
     );
   }
 
-  private renderCompaction(contextManager: ContextManager, onMeta?: (meta: string) => void): void {
+  private renderCompaction(contextManager: ContextManager, onMeta?: OnMeta): void {
     const compCount = contextManager.getCompactionCount();
     if (compCount > this.lastCompactionShown) {
       this.lastCompactionShown = compCount;

@@ -6,6 +6,7 @@ import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
 import { MAX_CLAIM_CHECK_RETRIES, MAX_HALLUCINATION_RETRIES } from "./constants";
 import type { LoopState } from "./loop-state";
+import type { OnMeta } from "../types";
 
 export type HallucinationVerdict =
   /** Ответ заблокирован — цикл должен вернуть ошибку. */
@@ -27,7 +28,7 @@ export interface HallucinationGateDeps {
   hasFinalAudit: boolean;
   logger: Logger;
   contextManager: ContextManager;
-  onMeta?: (meta: string) => void;
+  onMeta?: OnMeta;
   onChunk?: (chunk: string) => void;
   /** Chat verbosity — the uncertainty warn line prints only in verbose mode. */
   verbose: boolean;

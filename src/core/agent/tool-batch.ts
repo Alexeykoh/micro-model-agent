@@ -10,6 +10,7 @@ import type { CostTracker } from "../../modules/pricing/index";
 import type { ToolExecutor } from "../../tools/executor";
 import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
+import type { MetaKind, OnMeta } from "../types";
 import type { ToolResult } from "../../tools/types";
 import type { LoopState } from "./loop-state";
 import {
@@ -75,7 +76,7 @@ export class ToolBatchExecutor {
     reasoningContent: string,
     input: string,
     onTool?: (ev: ToolEvent) => void,
-    onMeta?: (meta: string) => void,
+    onMeta?: OnMeta,
     slog?: SessionLogger,
   ): Promise<ToolBatchExecution> {
     const { config, pluginManager, contextManager, logger } = this.deps;
@@ -193,16 +194,19 @@ export class ToolBatchExecutor {
       // Проверка наличия, а не истинности: read_file возвращает display ""
       // на полном чтении (заголовок уже показывает путь) — фолбэк на пустую
       // строку вывалил бы всё содержимое файла в REPL.
+      // kind="tool": тела тулов model-facing, в quiet-чатах скрываются
+      // (статусы контекста/компакции идут с kind по умолчанию и всегда видны).
+      const TOOL_META: MetaKind = "tool";
       if (result.display !== undefined) {
         if (result.display.length > 0) {
-          onMeta?.(`\n${result.display}\n`);
+          onMeta?.(`\n${result.display}\n`, TOOL_META);
         }
       } else if (result.success) {
         const metaOut = pluginManager.runOnMeta(
           { iteration, logger, contextManager },
           result.output,
         );
-        onMeta?.(`\n${pc.dim(metaOut)}\n`);
+        onMeta?.(`\n${pc.dim(metaOut)}\n`, TOOL_META);
       } else {
         // Failed tool: its `output` is model-facing (Hints, recovery
         // directives, "Do NOT …"). The user only needs a calm gist — the first
@@ -215,11 +219,11 @@ export class ToolBatchExecutor {
         if (metaOut) {
           const color = failure.severity === "warn" ? pc.yellow : pc.red;
           const glyph = failure.severity === "warn" ? "⚠" : "✗";
-          onMeta?.(`\n${color(`${glyph} ${metaOut}`)}\n`);
+          onMeta?.(`\n${color(`${glyph} ${metaOut}`)}\n`, TOOL_META);
         }
       }
       if (result.diff) {
-        onMeta?.(`\n${result.diff}\n`);
+        onMeta?.(`\n${result.diff}\n`, TOOL_META);
       }
 
       const currentTokens = contextManager.getEstimatedTokens();

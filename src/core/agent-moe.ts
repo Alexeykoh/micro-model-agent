@@ -2,7 +2,7 @@ import type { AppConfig } from "../config/types";
 import type { LLMProvider } from "../llm/provider";
 import type { ToolExecutor } from "../tools/executor";
 import type { Logger } from "../logger/app-logger";
-import type { ToolEvent, AgentPhase, AgentResult } from "./types";
+import type { ToolEvent, AgentPhase, AgentResult, OnMeta } from "./types";
 import { OrchestratorClient } from "../llm/orchestrator";
 import { validatePlan, applyAutoFixes } from "../modules/execution/plan-validator";
 import { MoEExecutor } from "../modules/execution/moe-executor";
@@ -76,7 +76,7 @@ export async function runWithMoE(
   input: string,
   fallback: () => Promise<AgentResult>,
   opts: {
-    onMeta?: (meta: string) => void;
+    onMeta?: OnMeta;
     onTool?: (ev: ToolEvent) => void;
     onPhase?: (phase: AgentPhase) => void;
     /** Abort signal (Esc / shutdown). AbortError propagates — no MoE fallback. */

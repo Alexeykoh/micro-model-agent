@@ -25,6 +25,10 @@ Usage notes:
 - If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
 - Execution blocks until the user answers every question
 - Omit "options" for a free-text question
+- Never ask choice questions as a plain-text list in your reply — always call
+  this tool (it renders interactive buttons and blocks until answered).
+  When the user asks for a Q&A session with options, use this tool for every
+  question, not chat text
 - Before asking, the tool checks agent memory itself: questions memory
   already answers are skipped (reported back, not asked) — never ask what
   is already known
@@ -314,6 +318,11 @@ export const questionTool: ToolDefinition = {
         }),
       );
     }
-    return { success: true, output: parts.join(" ") };
+    // display:"" suppresses the UI echo (tool-batch prefers display over
+    // output and skips empty ones): the model still gets the full output in
+    // role:"tool", while the chat keeps only the question block with ↳ answers.
+    // The output text is model-facing directives (session/memory/batch rules),
+    // never user content — even verbose shows it via tool_end, not meta.
+    return { success: true, output: parts.join(" "), display: "" };
   },
 };

@@ -235,6 +235,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Prompt:** `LineEditor.printAbove` печатает блок над полем ввода; `suspendFrame`/`resumeFrame` отдают терминал агенту на время стрима; `setInputEnabled(false)` глотает печатные клавиши, оставляя Ctrl+C. DSR-якорь с таймаутом 150мс и opt-out `MMA_DSR=0`.
 - **Sinks:** `JsonOutputSink` (`--json` `diagnostics`, warn/error), `SessionOutputSink` (события с `data.persist === true`). Плагины подписываются через `HostBridge.subscribeOutput`.
 - **Guard:** `tests/output/no-direct-console.test.ts` (AST) запрещает `console.*`/`process.*.write` в `src/` и `examples/`; allowlist — crash-handler, machine JSON, browser bridge, non-TTY REPL fallback.
+- **Meta kinds:** `onMeta(chunk, kind?)` (`MetaKind = "tool"|"status"`, `src/core/types.ts`) — `ToolBatch` помечает `display`/`output`/`diff`/failure-gist как `tool`; web `feed.js onMeta` дропает их в `quiet` (терминальный рендерер гейтит через состояние карточки), статусная мета видна всегда. `question` возвращает `display: ""`, чтобы model-директивы не эходились в чат.
 
 ### Streaming & Loop Fixes (1.0.1)
 

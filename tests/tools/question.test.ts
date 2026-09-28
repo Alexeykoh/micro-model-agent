@@ -100,6 +100,19 @@ describe("questionTool", () => {
     expect(io.askText).not.toHaveBeenCalled();
     expect(io.askChoice).not.toHaveBeenCalled();
   });
+
+  it("suppresses the UI echo via empty display, keeping the full model output", async () => {
+    // The answered/memory/session/batch directives are model-facing; the chat
+    // already shows the question block with ↳ answers, so tool-batch (which
+    // prefers display over output and skips empty ones) sends no onMeta.
+    const io = fakeIO({ askText: vi.fn(async () => "hello") });
+    const result = await questionTool.handler({ promptIO: io, ...noMemory } as any, {
+      questions: [{ question: "What is your name?" }],
+    });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("hello");
+    expect(result.display).toBe("");
+  });
 });
 
 describe("questionTool memory pre-check", () => {
