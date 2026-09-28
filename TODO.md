@@ -268,11 +268,11 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 Цель: перестроить `buildSystemInfo` для 9B моделей — уменьшить токены, улучшить читаемость, добавить недостающие директивы.
 
-**6 задач, 4 волны:**
-- Wave 1: Реструктуризация ядра + удаление дублирования — [ ] открыто (крупный рефактор промпта, нужен ручной прогон)
-- Wave 2: [x] DONE CONDITIONS + STOP directives ✅ реализовано; [ ] Session start protocol — открыто
+**6 задач, 4 волны (ветка `feat/system-prompt-waves`, сверка 2026-09-28):**
+- Wave 1: [x] ~~Реструктуризация ядра + удаление дублирования~~ ✅ `system-prompt.ts`: секции `HEADER:` + буллеты ≤120 символов (было 20/21 строк >120, max 608); токены −22% (1744→1360, замер `estimateTokens`, win32+autoPlan); `Design: YAGNI/KISS/DRY` удалён (дубль AGENTS.md, Task 2).
+- Wave 2: [x] DONE CONDITIONS + STOP directives ✅ реализовано; [x] ~~Session start protocol~~ ✅ секция `SESSION START` в системном промпте (inspect → baseline только для code-задач → trivial chat без baseline). Решение развилки: system prompt, не plugin-hook (нулевой механики, условная формулировка не грузит тривиальные чаты).
 - Wave 3: [x] Failure classification в StuckDetector ✅ (`FailureType`/`classifyFailure`/`getStuckDiagnostic`, `[STUCK: type=…]` префикс recovery-сообщения); ветка `feat/failure-classification`. `scope_drift`/`empty_output` из плана не реализованы — нет надёжного сигнала.
-- Wave 4: FORBIDDEN patterns (autoPlan или always — решить) — [ ] открыто
+- Wave 4: [x] ~~FORBIDDEN patterns~~ ✅ always-on компакт (4 строки-«never» как индекс к ARTIFACTS/VERIFY/WORK; autoPlan-gate отклонён — анти-паттерны важны и в тривиальных задачах). Решение развилки: always.
 
 ---
 
