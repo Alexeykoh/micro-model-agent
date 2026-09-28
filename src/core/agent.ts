@@ -10,7 +10,7 @@ import type { AppConfig, ProviderEntry } from "../config/types";
 import type { ToolScope, ToolDefinition, ToolResult } from "../tools/types";
 import type { PromptBlock } from "./types";
 import type { EnvironmentReport } from "./environment";
-import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult } from "./types";
+import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult, OnMeta } from "./types";
 import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
@@ -538,7 +538,7 @@ export class Agent {
   async run(
     input: string,
     onChunk?: (chunk: string) => void,
-    onMeta?: (meta: string) => void,
+    onMeta?: OnMeta,
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
@@ -744,7 +744,7 @@ export class Agent {
     input: string,
     slog: SessionLogger,
     onChunk?: (chunk: string) => void,
-    onMeta?: (meta: string) => void,
+    onMeta?: OnMeta,
     onTool?: (ev: ToolEvent) => void,
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,

@@ -124,7 +124,7 @@ function connectSSE() {
 // checks and stay bespoke below; everything else is `parse → null-guard → call`.
 const handlers = [
   ["text", (d) => onText(d.chunk || "", d.sessionId)],
-  ["meta", (d) => onMeta(d.chunk || "", d.sessionId)],
+  ["meta", (d) => onMeta(d.chunk || "", d.sessionId, d.kind)],
   ["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId)],
   ["phase", (d) => onPhase(d.phase, d.sessionId)],
   ["tool_start", onToolStart],

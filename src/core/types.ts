@@ -1,5 +1,15 @@
 export type AgentState = "INIT" | "THINK" | "ACT" | "OBSERVE" | "OUTPUT" | "ERROR";
 
+/**
+ * Meta-channel kind: tool bodies (`display`/`output`/`diff`/failure gist from
+ * `ToolBatch`) are model-facing and quiet-gated in chat renderers; genuine
+ * status (context stats, compaction, hallucination warnings) is always visible.
+ */
+export type MetaKind = "tool" | "status";
+
+/** UI status-line callback — `kind` defaults to `"status"` when omitted. */
+export type OnMeta = (meta: string, kind?: MetaKind) => void;
+
 /** Semantic class of a prompt block — lets the overflow resolver treat
  *  instructions / project map specially when they exceed the system budget. */
 export type PromptBlockKind = "instructions" | "project-map";

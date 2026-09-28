@@ -61,7 +61,7 @@ describe("webui assets", () => {
   it("listens for the dedicated reasoning event", () => {
     const a = loadAssets();
     expect(js(a)).toContain('["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId)]');
-    expect(js(a)).toContain('["meta", (d) => onMeta(d.chunk || "", d.sessionId)]');
+    expect(js(a)).toContain('["meta", (d) => onMeta(d.chunk || "", d.sessionId, d.kind)]');
     expect(js(a)).not.toContain("finishMeta");
   });
 
@@ -70,6 +70,11 @@ describe("webui assets", () => {
     expect(js(a)).toContain("metaln");
     expect(a.css).toContain(".metaln");
     expect(a.css).toContain(".metaln.warn");
+  });
+
+  it("quiet-gates tool-body meta in the feed, keeping status visible", () => {
+    const a = loadAssets();
+    expect(js(a)).toContain('if (kind === "tool" && verbosity() === "quiet") return;');
   });
 
   it("persists the active session in the URL and restores it on boot", () => {

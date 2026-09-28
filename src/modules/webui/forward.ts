@@ -14,6 +14,7 @@ import type { SseEvent, WebUiState } from "./state";
 import { broadcast } from "./state";
 import { redactContextSecrets } from "../../core/agent/context-log";
 import { stripAnsi } from "../../ui/line-math";
+import type { MetaKind } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { HostStateSnapshot } from "../../core/host";
 import type { TurnSummary } from "../types";
@@ -83,7 +84,7 @@ export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
 
 export interface Forwarder {
   onText(chunk: string): void;
-  onMeta(chunk: string): void;
+  onMeta(chunk: string, kind?: MetaKind): void;
   onReasoning(chunk: string): void;
   onPhase(phase: string): void;
   onToolStart(call: ToolCall): void;
@@ -102,7 +103,7 @@ export function makeForwarder(
   opts: { flushMs?: number } = {},
 ): Forwarder {
   const flushMs = opts.flushMs ?? DEFAULT_FLUSH_MS;
-  const buf = { text: "", meta: "", reasoning: "" };
+  const buf = { text: "", meta: "", reasoning: "", metaKind: undefined as MetaKind | undefined };
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const flush = () => {
@@ -121,8 +122,14 @@ export function makeForwarder(
       buf.text = "";
     }
     if (buf.meta) {
-      sink({ type: "meta", ts: Date.now(), chunk: stripAnsi(buf.meta) });
+      sink({
+        type: "meta",
+        ts: Date.now(),
+        chunk: stripAnsi(buf.meta),
+        ...(buf.metaKind ? { kind: buf.metaKind } : {}),
+      });
       buf.meta = "";
+      buf.metaKind = undefined;
     }
   };
   const schedule = () => {
@@ -134,8 +141,16 @@ export function makeForwarder(
       buf.text += chunk;
       schedule();
     },
-    onMeta(chunk) {
+    onMeta(chunk, kind) {
+      // Tool bodies and status lines must not share one SSE event: the client
+      // quiet-gates `kind: "tool"` but always shows status. Flush first when
+      // the kind changes so every event carries a pure kind. Status events
+      // stay byte-identical to before (no `kind` field) — only tool bodies
+      // are tagged.
+      const next = kind ?? "status";
+      if (buf.meta && (buf.metaKind ?? "status") !== next) flush();
       buf.meta += chunk;
+      buf.metaKind = kind;
       schedule();
     },
     onReasoning(chunk) {

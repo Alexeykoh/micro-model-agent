@@ -32,6 +32,46 @@ describe("webui forwarder", () => {
     expect(seen[0].chunk).toBe("mn");
   });
 
+  it("tags tool-body meta with kind so quiet clients can hide it", () => {
+    vi.useFakeTimers();
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onMeta("tool-body", "tool");
+    vi.advanceTimersByTime(350);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].type).toBe("meta");
+    expect(seen[0].chunk).toBe("tool-body");
+    expect(seen[0].kind).toBe("tool");
+  });
+
+  it("leaves status meta untagged (wire-identical to before)", () => {
+    vi.useFakeTimers();
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onMeta("stats");
+    vi.advanceTimersByTime(350);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].type).toBe("meta");
+    expect(seen[0].chunk).toBe("stats");
+    expect("kind" in seen[0]).toBe(false);
+  });
+
+  it("splits tool and status meta into separate events on kind change", () => {
+    vi.useFakeTimers();
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onMeta("status-line");
+    fwd.onMeta("tool-line", "tool");
+    vi.advanceTimersByTime(350);
+    expect(seen.map((e) => e.type)).toEqual(["meta", "meta"]);
+    expect(seen[0].chunk).toBe("status-line");
+    expect("kind" in seen[0]).toBe(false);
+    expect(seen[1].chunk).toBe("tool-line");
+    expect(seen[1].kind).toBe("tool");
+  });
   it("emits a dedicated reasoning event, not meta", () => {
     vi.useFakeTimers();
     const s = createWebUiState();

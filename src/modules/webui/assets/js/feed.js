@@ -247,8 +247,12 @@ export function onReasoning(chunk, sid) {
 }
 
 // Generic agent status (context stats, compaction, MoE status, warnings):
-// always visible, one dim line per chunk, never collapsed.
-export function onMeta(chunk, sid) {
+// always visible, one dim line per chunk, never collapsed. Tool bodies
+// (`kind: "tool"` — display/output/diff/failure-gist from ToolBatch) are
+// model-facing and hidden in quiet mode, mirroring the terminal renderer
+// (`writeInlineBody`); failures still surface once via `tool_end` ↳ cause.
+export function onMeta(chunk, sid, kind) {
+  if (kind === "tool" && verbosity() === "quiet") return;
   const feed = feedForEvent(sid);
   clearBusy(feed);
   const text = (chunk || "").trim();

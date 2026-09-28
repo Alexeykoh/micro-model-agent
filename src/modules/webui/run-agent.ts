@@ -77,7 +77,7 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
       const result = await agent.run(
         text,
         (chunk) => forwarder.onText(chunk),
-        (meta) => forwarder.onMeta(meta),
+        (meta, kind) => forwarder.onMeta(meta, kind),
         (ev) => {
           if (ev.type === "start") {
             forwarder.onToolStart(callFor(ev, startId(ev.tool)));
