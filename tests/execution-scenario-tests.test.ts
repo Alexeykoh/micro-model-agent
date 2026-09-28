@@ -17,6 +17,22 @@ function mockCtx(): any {
   };
 }
 
+/** ctx, собирающий добавленные <system-summary> для ассертов step-gate. */
+function messagesCtx(): { messages: string[]; ctx: any } {
+  const messages: string[] = [];
+  const ctx: any = {
+    contextManager: { addMessage: (m: any) => messages.push(m.content) },
+  };
+  return { messages, ctx };
+}
+
+/** Прогоняет успешный write_file через плагин и флашит отложенные сообщения. */
+function writeBatch(execModule: ExecutionModule, ctx: any): void {
+  const plugin = execModule.getPlugin();
+  plugin.onAfterTool!(ctx, mockToolCall({ name: "write_file" }), mockResult());
+  plugin.onBeforeThink!(ctx);
+}
+
 function mockResult(overrides: any = {}): any {
   return { success: true, output: "ok", ...overrides };
 }
@@ -334,13 +350,8 @@ describe("Scenario: Step Gate verification", () => {
       'import { greet } from "./greet";\nconsole.log(greet("world"));',
     );
 
-    const messages: string[] = [];
-    const ctx: any = {
-      contextManager: { addMessage: (m: any) => messages.push(m.content) },
-    };
-    const plugin = execModule.getPlugin();
-
-    plugin.onAfterTool!(ctx, mockToolCall({ name: "write_file" }), mockResult());
+    const { messages, ctx } = messagesCtx();
+    writeBatch(execModule, ctx);
 
     expect(execModule.getTracker()!.getCurrentStep()?.id).toBe(2);
     const okMsg = messages.find((m) => m.includes("MOVING") || m.includes("ПЕРЕХОДИМ"));
@@ -360,13 +371,8 @@ describe("Scenario: Step Gate verification", () => {
       JSON.stringify({ name: "test", dependencies: {} }, null, 2),
     );
 
-    const messages: string[] = [];
-    const ctx: any = {
-      contextManager: { addMessage: (m: any) => messages.push(m.content) },
-    };
-    const plugin = execModule.getPlugin();
-
-    plugin.onAfterTool!(ctx, mockToolCall({ name: "write_file" }), mockResult());
+    const { messages, ctx } = messagesCtx();
+    writeBatch(execModule, ctx);
 
     // package.json exists but no lock file — deps gate blocks advancement
     expect(execModule.getTracker()!.getCurrentStep()?.id).toBe(1);
@@ -385,18 +391,14 @@ describe("Scenario: Step Gate verification", () => {
     );
     writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "test" }, null, 2));
 
-    const messages: string[] = [];
-    const ctx: any = {
-      contextManager: { addMessage: (m: any) => messages.push(m.content) },
-    };
-    const plugin = execModule.getPlugin();
+    const { messages, ctx } = messagesCtx();
 
     // First tool result → soft hint (step_gate_deps)
-    plugin.onAfterTool!(ctx, mockToolCall({ name: "write_file" }), mockResult());
+    writeBatch(execModule, ctx);
     expect(messages.some((m) => m.includes("dependencies are not installed"))).toBe(true);
 
     // Second tool result on the same step → forced instruction
-    plugin.onAfterTool!(ctx, mockToolCall({ name: "write_file" }), mockResult());
+    writeBatch(execModule, ctx);
     expect(
       messages.some((m) => m.includes("2nd warning") || m.includes("второе предупреждение")),
     ).toBe(true);
@@ -414,10 +416,7 @@ describe("Scenario: Step Gate verification", () => {
     writeFileSync(join(tempDir, "package-lock.json"), "{}");
     mkdirSync(join(tempDir, "node_modules"), { recursive: true });
 
-    const ctx = mockCtx();
-    const plugin = execModule.getPlugin();
-
-    plugin.onAfterTool!(ctx, mockToolCall({ name: "write_file" }), mockResult());
+    writeBatch(execModule, mockCtx());
 
     // Should have advanced — lock file exists + package.json has content
     expect(execModule.getTracker()!.getCurrentStep()?.id).toBe(2);
@@ -430,13 +429,8 @@ describe("Scenario: Step Gate verification", () => {
     mkdirSync(join(tempDir, "final"), { recursive: true });
     writeFileSync(join(tempDir, "final", "config.ts"), "export const config = { debug: true };\n");
 
-    const messages: string[] = [];
-    const ctx: any = {
-      contextManager: { addMessage: (m: any) => messages.push(m.content) },
-    };
-    const plugin = execModule.getPlugin();
-
-    plugin.onAfterTool!(ctx, mockToolCall({ name: "write_file" }), mockResult());
+    const { messages, ctx } = messagesCtx();
+    writeBatch(execModule, ctx);
 
     // Step 1 done, current step is now 2 (in_progress).
     expect(execModule.getTracker()!.getStep(1)?.status).toBe("done");

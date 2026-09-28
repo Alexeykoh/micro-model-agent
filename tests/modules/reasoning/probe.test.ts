@@ -66,4 +66,10 @@ describe("probeReasoningSupport", () => {
     const provider = makeProvider("throw");
     expect(await probeReasoningSupport(provider, "none")).toBe(false);
   });
+
+  it("treats 'openai-effort' as supported without a network probe", async () => {
+    const provider = makeProvider("throw");
+    expect(await probeReasoningSupport(provider, "openai-effort")).toBe(true);
+    expect(provider.chat).not.toHaveBeenCalled();
+  });
 });

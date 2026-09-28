@@ -9,6 +9,7 @@ import { applyAnswersToConfig } from "./setup-order";
 import { saveConfig } from "../config/config";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { providerNameTaken } from "../modules/providers/naming";
+import { activeProviderEndpoint } from "../modules/providers/manager";
 import { budgetBreakdownLines } from "../config/budget";
 import {
   setConfigValue,
@@ -714,8 +715,9 @@ function registerProviderCommands(ctx: ReplContext): void {
   const list = (): void => {
     const providers = ctx.agent.listProviders();
     if (providers.length === 0) {
-      ctx.output.writeLine(`${t("repl.provider_current")}  ${ctx.config.provider.type}`);
-      ctx.output.writeLine(`  ${ctx.config.provider.baseUrl}`);
+      const endpoint = activeProviderEndpoint(ctx.config.provider);
+      ctx.output.writeLine(`${t("repl.provider_current")}  ${endpoint.type}`);
+      ctx.output.writeLine(`  ${endpoint.baseUrl}`);
       return;
     }
     ctx.output.writeLine(t("repl.provider_current"));
@@ -1017,8 +1019,9 @@ function registerAgentCommands(ctx: ReplContext): void {
       ctx.output.writeLine(pc.green(t("repl.reloaded")));
       ctx.output.writeLine(`${t("repl.model")}       ${ctx.config.model}`);
       ctx.output.writeLine(`${t("repl.context")}     ${ctx.config.contextWindow}`);
+      const endpoint = activeProviderEndpoint(ctx.config.provider);
       ctx.output.writeLine(
-        `${t("repl.provider")}    ${ctx.config.provider.type} @ ${ctx.config.provider.baseUrl}`,
+        `${t("repl.provider")}    ${endpoint.type} @ ${endpoint.baseUrl}`,
       );
     },
   });

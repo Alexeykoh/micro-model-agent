@@ -300,8 +300,10 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   Голый OpenAI-совместимый `/models` (только id) → `null`, конфиг сохраняется (fail-open).
 - **Активная запись, не legacy-плоские поля:** `activeProviderEndpoint` (`src/modules/providers/manager.ts`)
   резолвит `{baseUrl, apiKey, type}` по `provider.active` из `entries` (фолбэк — плоские поля).
-  Плоские поля протухают после `/provider use` (наблюдено: flat `localhost:1234` при активном `opencode-go` —
-  Zen вообще не опрашивался). Используют: пробник, autoload, reasoning-cache-key (bootstrap),
+  Смена `provider.active` через `setConfigValue` зеркалит плоские поля из активной записи
+  (`applyProviderModelMemory`, `src/config/registry.ts`), баннер/`/provider list`/`/reload` читают
+  `activeProviderEndpoint` — рассинхрон 2026-09-28 (flat `localhost:1234` при активном `opencode-go`)
+  закрыт. Используют: пробник, autoload, reasoning-cache-key (bootstrap),
   identity-сравнение (reconfigure).
 - **models.dev-кэш:** slim-проекция (`id → context`) в `~/.mma/models-dev-cache.json`
   (override `MMA_MODELS_DEV_CACHE`), TTL 24h как у reasoning-пробника; stale-кэш используется при офлайне.

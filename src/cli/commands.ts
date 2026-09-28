@@ -191,10 +191,12 @@ function buildModelCommands(program: Command): void {
 
       // Тянем доступные модели с провайдера.
       const { createProvider } = await import("../modules/providers/create");
-      const provider = createProvider(config.provider.type, {
+      const { activeProviderEndpoint } = await import("../modules/providers/manager");
+      const endpoint = activeProviderEndpoint(config.provider);
+      const provider = createProvider(endpoint.type, {
         model: config.model,
-        baseUrl: config.provider.baseUrl,
-        apiKey: config.provider.apiKey,
+        baseUrl: endpoint.baseUrl,
+        apiKey: endpoint.apiKey,
         contextWindow: config.contextWindow,
       });
 

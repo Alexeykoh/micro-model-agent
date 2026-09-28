@@ -39,6 +39,11 @@ export async function probeReasoningSupport(
   signal?: AbortSignal,
 ): Promise<boolean | null> {
   if (strategy === "none") return false;
+  // "openai-effort" — стандартное поле OpenAI. Sentinel "none", которым проба
+  // измеряет подавление, транспорт вырезает (strict OpenAI на "none" отвечает
+  // 400), поэтому измерить нечем — считаем механизм поддерживаемым. Если
+  // бэкенд поле игнорирует, это безопасно (effort просто не влияет).
+  if (strategy === "openai-effort") return true;
 
   try {
     let hasReasoning = false;

@@ -10,10 +10,9 @@ import { ModelLoader, probeModel, probeProviderContext } from "../../llm/model-l
 import { join as joinDir } from "path";
 import type { ContextProbeResult } from "../../llm/model-loader";
 import { buildActiveProvider } from "../../modules/providers/factory";
-import { activeProviderEndpoint } from "../../modules/providers/manager";
+import { activeProviderEndpoint, reasoningStrategyForProvider } from "../../modules/providers/manager";
 /** Эндпоинт активной записи (резолв из entries, фолбэк — легаси-плоские поля). */
 export type ProbeEndpoint = ReturnType<typeof activeProviderEndpoint>;
-import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
 import type { ProviderManager } from "../../modules/providers/manager";
 import type { LLMProvider } from "../../llm/provider";
 import { UserProfile } from "../../modules/user-profile/profile";
@@ -197,9 +196,9 @@ export async function setupProviderPhase(
   const providerManager = builtProvider.manager;
   const llmProvider = builtProvider.provider;
 
-  // Стратегия reasoning из пресета провайдера + пробы
-  const providerSpec = BUILTIN_PROVIDERS.find((p) => p.type === config.provider.type);
-  const reasoningStrategy = providerSpec?.capabilities.reasoningStrategy ?? "none";
+  // Стратегия reasoning АКТИВНОЙ записи (легаси-плоское `type` протухает после
+  // `/provider use` и давало чужую стратегию — напр. prompt-tag при opencode-go).
+  const reasoningStrategy = reasoningStrategyForProvider(config.provider);
 
   // Reasoning-проба — ФОНОМ (B2). Раньше блокировала bootstrap лишним LLM
   // round-trip на каждый запуск; теперь агент потребляет её лениво перед первым

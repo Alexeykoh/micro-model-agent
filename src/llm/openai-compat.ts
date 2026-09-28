@@ -72,6 +72,22 @@ interface ToolCallAcc {
   arguments: string;
 }
 
+/**
+ * Нормализует харнессный уровень reasoning под контракт провайдерского поля
+ * `reasoning_effort` (strict OpenAI/o-series принимает только
+ * low|medium|high). Иначе:
+ * - "default"/undefined → не шлём (решает провайдерский дефолт);
+ * - "none" → не шлём (strict OpenAI отвечает 400; отсутствие поля = не просим
+ *   повышать, а prompt-tag ещё и получает тег /no_think в `chat()`);
+ * - "max" → клампим к "high" (наибольшее валидное значение).
+ * Без нормализации неизвестное значение роняет ВЕСЬ запрос HTTP 400.
+ */
+function normalizeReasoningEffort(level: string | undefined): string | undefined {
+  if (!level || level === "default" || level === "none") return undefined;
+  if (level === "max") return "high";
+  return level;
+}
+
 function buildRequestBody(opts: {
   model: string;
   messages: unknown[];
@@ -100,18 +116,19 @@ function buildRequestBody(opts: {
   if (opts.sessionId) body.session_id = opts.sessionId;
   if (opts.stream && opts.streamUsage) body.stream_options = { include_usage: true };
 
-  // Применяем effort через стратегию провайдера
+  // Применяем effort через стратегию провайдера (уровень нормализуется под
+  // контракт OpenAI: low|medium|high).
   const strategy = opts.reasoningStrategy ?? "openai-effort";
-  const level = opts.reasoningEffort;
+  const effort = normalizeReasoningEffort(opts.reasoningEffort);
 
-  if (strategy === "openai-effort" && level && level !== "default") {
-    body.reasoning_effort = level;
+  if (strategy === "openai-effort") {
+    if (effort) body.reasoning_effort = effort;
   } else if (strategy === "template-kwarg") {
-    body.chat_template_kwargs = { enable_thinking: level !== "none" };
-  } else if (strategy === "prompt-tag" && level && level !== "default") {
+    body.chat_template_kwargs = { enable_thinking: opts.reasoningEffort !== "none" };
+  } else if (strategy === "prompt-tag") {
     // Шлём reasoning_effort в теле (модели с API-поддержкой) И тег /no_think
-    // в сообщение (модели только с prompt-сигналами).
-    body.reasoning_effort = level;
+    // в сообщение (модели только с prompt-сигналами; тег ставит `chat()`).
+    if (effort) body.reasoning_effort = effort;
   }
   // "none" = не поддерживается, пропуск
 
