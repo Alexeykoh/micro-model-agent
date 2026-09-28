@@ -108,6 +108,45 @@ export class PlanStore {
     return join(this.plansDir, "active.json");
   }
 
+  /** Корень per-session слотов активного плана. */
+  private sessionsDir(): string {
+    return join(this.plansDir, "sessions");
+  }
+
+  /** Проверяет id сессии как сегмент пути (без сепараторов/..). */
+  private sessionActivePath(sessionId: string): string {
+    if (!/^[A-Za-z0-9_-]+$/.test(sessionId)) {
+      throw new Error(`invalid session id: ${sessionId}`);
+    }
+    return join(this.sessionsDir(), sessionId, "active.json");
+  }
+
+  // ---- Активный план сессии ----
+
+  /** Сохраняет активный план сессии. */
+  saveSessionActive(sessionId: string, plan: Plan): void {
+    const p = this.sessionActivePath(sessionId);
+    const dir = join(this.sessionsDir(), sessionId);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writePlanFile(p, plan);
+  }
+
+  /** Загружает активный план сессии. Пустая/новая сессия — null.
+   *  Без fallback на глобальный active.json: усыновление legacy-плана делает
+   *  явно только bootstrap (через switchSession-персист), иначе каждая новая
+   *  сессия наследовала бы чужой план. */
+  loadSessionActive(sessionId: string): Plan | null {
+    const p = this.sessionActivePath(sessionId);
+    if (!existsSync(p)) return null;
+    return readPlanFile(p, this.baseDir);
+  }
+
+  /** Убирает активный план сессии. Нет слота — no-op. */
+  clearSessionActive(sessionId: string): void {
+    const p = this.sessionActivePath(sessionId);
+    if (existsSync(p)) rmSync(p, { force: true });
+  }
+
   // ---- Активный план ----
 
   /** Сохраняет активный план. */

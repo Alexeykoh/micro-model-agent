@@ -146,6 +146,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   // читает агент после `reconfigure`.
   state.config = deps.config;
   state.sessionManager = deps.sessionManager;
+  state.execModule = deps.execModule;
   state.memory = deps.memory;
   state.skills = deps.skills;
   state.plugins = deps.plugins;

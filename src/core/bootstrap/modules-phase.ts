@@ -87,10 +87,15 @@ async function registerCoreModules(
     config.stuckThreshold,
     config.errorWebSearch?.threshold ?? 5,
   );
-  // План в .mma/plans/active.json — состояние ПРОЕКТА, не сессии: восстанавливаем
-  // в каждой сессии, чтобы `plan show` работал и чеклист был виден. Без спроса
-  // не печатаем ничего: REPL рисует чеклист только на plan/todo-событиях.
+  // План следует за сессией: restorePlan поднимает legacy-глобальный план,
+  // switchSession усыновляет его в слот стартовой сессии (или грузит её свой).
+  // REPL рисует чеклист только на plan/todo-событиях — без спроса не печатаем.
   execModule.restorePlan();
+  try {
+    execModule.switchSession(input.sessionManager.getActive());
+  } catch {
+    // fail-open: без сессии трекер остаётся как поднял restorePlan
+  }
   moduleRegistry.register(execModule);
   execModule.setHallucinationDetector(hallucinationDetector);
 

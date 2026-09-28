@@ -165,6 +165,25 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Test seams:** `orchestratorOverride/executorOverride/verifierOverride` (MoEDeps),
   `AgentDeps.runWithMoEOverride`, `ToolContext.agentFactory` — vi.mock в Bun глобален на процесс, не использовать.
 
+### Session ↔ Plan Binding (unreleased, ветка `fix/session-plan-binding`)
+
+Спека: [docs/specs/2026-09-29-session-plan-binding-design.md](./docs/specs/2026-09-29-session-plan-binding-design.md).
+
+- **План следует за сессией:** активный план лежит в per-session слоте
+  `.mma/plans/sessions/<sessionId>/active.json` (`PlanStore.save/load/clearSessionActive`;
+  id валидируется `^[A-Za-z0-9_-]+$`). Черновики/архив — общая библиотека, как раньше.
+- **Трекер переключается явно:** `ExecutionModule.switchSession(id)` (персист уходящей
+  стороны + загрузка плана новой; пустая сессия → трекер null) и `forgetSession(id)`
+  (чистка слота + сброс трекера, если удаляемая была текущей). `setPlan` пишет и в слот;
+  `trackerRef`-сеттер зеркалит слот для план-тулов, пишущих мимо `setPlan`
+  (`abort/switch/delete/purge`); `flushSessionPlan` — для внутренних `saveActive`.
+- **Точки вызова:** bootstrap (`restorePlan` → `switchSession(active)` — усыновление legacy
+  `active.json` стартовой сессией), REPL `/new`/`/resume` (+`/delete` → `forgetSession`,
+  `/resume` печатает `◇ <план>`-статус), web `POST /api/sessions|/activate` → `switchSession`,
+  `DELETE /api/sessions/:id` → `forgetSession` (коллаборатор `WebUiState.execModule`).
+  Фронт после activate/create сразу тянет `/api/state` и перерисовывает сайдбар
+  (`renderPlan` + rail), не дожидаясь 2с-полла.
+
 ### Instructions Overflow & Context Probe (0.59.0)
 
 - **Overflow:** AGENTS.md (`kind: "instructions"`) и project map (`kind: "project-map"`) — PromptBlock с `kind`
