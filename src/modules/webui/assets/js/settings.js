@@ -132,6 +132,52 @@ export function renderSelectors() {
     setTimeout(() => input.focus(), 0);
   });
   ctxMenu.appendChild(custom);
+
+  renderReasoningSelector();
+
+  // Keep the pending paint in sync: boot (config === null) and an in-flight
+  // switch both show the mark; a mid-switch re-read must not clear it.
+  paintSelectorPending();
+}
+
+const REASONING_LEVELS_FULL = ["auto", "default", "none", "low", "medium", "high", "max"];
+// Backends without granularity (prompt-tag, template-kwarg) collapse
+// medium/max into low/high — show the collapsed set, no duplicates.
+const REASONING_LEVELS_COARSE = ["auto", "default", "none", "low", "high"];
+
+// 4th selector row: reasoning effort filtered to what the active
+// provider+model actually supports (`GET /api/models` → `reasoning`).
+// Unknown (boot) or `strategy: "none"` → hidden, never a wrong option list.
+// Probe failed → the row stays with an honest `off` mark and a shortcut to
+// Settings → Reasoning instead of dead levels.
+function renderReasoningSelector() {
+  const wrap = document.querySelector('[data-sel="reasoning"]');
+  const btn = document.getElementById("selReasoningBtn");
+  const menu = document.getElementById("selReasoningMenu");
+  if (!wrap || !btn || !menu) return;
+  const info = S.state.reasoning;
+  if (!info || info.strategy === "none") {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  if (info.supported === false) {
+    setSelButton(btn, t("web.selectors.reasoning"), t("web.selectors.reasoning_off"));
+    menu.textContent = "";
+    menu.appendChild(el("div", "mi dim", t("reasoning.probe_failed")));
+    menu.appendChild(el("div", "sep"));
+    menu.appendChild(
+      menuAction(t("web.settings.reasoning"), "settings", () => openSettingsAt("reasoning")),
+    );
+    return;
+  }
+  const mode = (S.state.config && getPath(S.state.config, "reasoning.mode")) || info.mode || "auto";
+  setSelButton(btn, t("web.selectors.reasoning"), String(mode));
+  menu.textContent = "";
+  const levels = info.strategy === "openai-effort" ? REASONING_LEVELS_FULL : REASONING_LEVELS_COARSE;
+  levels.forEach((lvl) => {
+    menu.appendChild(menuItem(lvl, lvl === mode ? t("web.selectors.current") : "", lvl === mode, () => postConfig("reasoning.mode", lvl, false)));
+  });
 }
 
 document.querySelectorAll("[data-sel]").forEach((sel) => {
@@ -153,9 +199,61 @@ document.querySelectorAll("[data-sel]").forEach((sel) => {
   });
 });
 
+// Selector keys (`provider/model/context/reasoning`) share the switch treatment:
+// pending paint + single-flight + parallel re-reads. Settings-panel writes
+// bypass it (plain POST + save toast).
+const SELECTOR_KEYS = ["provider.active", "model", "contextWindow", "reasoning.mode"];
+
+// Monotonic id for selector switches: a slow A→B→A pair must not let the
+// stale reply repaint over the fresh one.
+let switchSeq = 0;
+// Key of the in-flight selector switch, if any. While set, every selector
+// button carries the pending mark and all selector menus are inert (CSS gates
+// on `.selectors[data-pending]`), so a double-click is answered with a toast
+// instead of a second concurrent switch.
+let pendingKey = null;
+
+// Paint the pending mark (`⋯` via CSS `::after`, no label rewrites) and the
+// `aria-busy` flag. Boot (`config === null`) paints the same mark, so the
+// skeleton state is visible while `boot()` loads config/models/providers.
+function paintSelectorPending() {
+  const show = pendingKey !== null || !S.state.config;
+  const wrap = document.querySelector(".selectors");
+  if (wrap) {
+    if (show) wrap.setAttribute("data-pending", pendingKey || "boot");
+    else wrap.removeAttribute("data-pending");
+  }
+  ["selProviderBtn", "selModelBtn", "selContextBtn", "selReasoningBtn"].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.classList.toggle("pending", show);
+    btn.setAttribute("aria-busy", show ? "true" : "false");
+  });
+}
+
 async function postConfig(key, value, refreshSettings) {
-  const r = await api("/api/config", { method: "POST", body: { key, value } });
-  if (r.ok && r.data && r.data.ok) {
+  const isSelector = SELECTOR_KEYS.indexOf(key) !== -1;
+  if (isSelector && pendingKey !== null) {
+    setIndicator(t("web.selectors.switch_busy"), true);
+    return false;
+  }
+  // Non-selector writes must not touch the sequence: otherwise a settings
+  // write landing mid-switch would orphan `pendingKey` (stale-guard skips the
+  // only `finally` that clears it).
+  let seq = 0;
+  if (isSelector) {
+    seq = ++switchSeq;
+    pendingKey = key;
+    closeAllMenus();
+    paintSelectorPending();
+  }
+  try {
+    const r = await api("/api/config", { method: "POST", body: { key, value } });
+    if (!r.ok || !r.data || !r.data.ok) {
+      const err = (r.data && (r.data.error || r.data.reason)) || r.status || t("web.settings.save_failed");
+      setIndicator(String(err), true);
+      return false;
+    }
     const persisted = r.data.persisted !== false;
     setIndicator(persisted ? t("web.settings.saved") : (r.data.warning || "not persisted"), !persisted);
     if (S.state.config && r.data.value !== undefined) setPath(S.state.config, key, r.data.value);
@@ -167,18 +265,26 @@ async function postConfig(key, value, refreshSettings) {
       renderSettings();
     }
     // A provider switch restores the per-provider model; a model change
-    // updates that provider's remembered model. Re-read both server-side.
+    // updates that provider's remembered model. Both are independent GETs,
+    // so re-read them in parallel. Context/reasoning switches only need the
+    // config back (no extra model round-trip).
     if (key === "provider.active" || key === "model") {
+      await Promise.all([loadConfig(), loadModels()]);
+    } else if (isSelector) {
       await loadConfig();
-      await loadModels();
     }
+    // Stale reply (a newer switch started while this one was in flight):
+    // leave the paint and the final render to the newer operation.
+    if (isSelector && seq !== switchSeq) return true;
     renderSelectors();
     if (refreshSettings) renderSettings();
     return true;
+  } finally {
+    if (isSelector && seq === switchSeq) {
+      pendingKey = null;
+      paintSelectorPending();
+    }
   }
-  const err = (r.data && (r.data.error || r.data.reason)) || r.status || t("web.settings.save_failed");
-  setIndicator(String(err), true);
-  return false;
 }
 
 export async function loadConfig() {
@@ -196,6 +302,9 @@ export async function loadModels() {
   const r = await api("/api/models");
   if (!r.ok || !r.data) return;
   S.state.models = Array.isArray(r.data.models) ? r.data.models : [];
+  // Reasoning support rides along with the model list (one round-trip):
+  // the 4th selector row renders from this, never from a separate GET.
+  if (r.data.reasoning && typeof r.data.reasoning === "object") S.state.reasoning = r.data.reasoning;
   renderSelectors();
 }
 
@@ -1541,6 +1650,12 @@ function openSettings() {
   void loadLsp();
   const active = document.querySelector("#setMenu .mi.on") || settingsTabs[0];
   if (active) setTimeout(() => active.focus(), 0);
+}
+// Open settings straight at a panel (used by the reasoning selector when the
+// backend probe failed: the row links to Settings → Reasoning).
+function openSettingsAt(panel) {
+  openSettings();
+  selectSettingsPanel(panel);
 }
 function closeSettings() {
   closeSubDialog();

@@ -22,6 +22,9 @@ state: {
   skills: undefined,
   pluginsData: undefined,
   providers: undefined,
+  // Reasoning support of the active provider+model (`GET /api/models`
+  // `reasoning` shape); `undefined` until the first model list arrives.
+  reasoning: undefined,
   providerPresets: [],
   providerForm: null,
   // Transient error shown inline in the sessions dropdown (visible without the modal).

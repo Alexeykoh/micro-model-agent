@@ -19,6 +19,7 @@ import type { AppConfig } from "../../config/types";
 import { readBodyError, sendJson } from "./util";
 import { readJsonBody } from "./body";
 import { persistAndReconfigure } from "./persist";
+import { buildReasoningView } from "./reasoning-view";
 import type { WebUiState } from "./state";
 
 /** Registry entry shape consumed by the settings UI. */
@@ -166,5 +167,10 @@ export function handleModelsGet(res: ServerResponse, s: WebUiState): void {
     sendJson(res, 503, { error: "models_unavailable" });
     return;
   }
-  sendJson(res, 200, { models: s.knownModels() });
+  // `reasoning` is additive and derived per request from the live config, so
+  // the selector row always reflects the active provider+model without any
+  // reconfigure plumbing. Omitted when no config is wired (legacy stubs).
+  const body: Record<string, unknown> = { models: s.knownModels() };
+  if (s.config) body.reasoning = buildReasoningView(s.config);
+  sendJson(res, 200, body);
 }
