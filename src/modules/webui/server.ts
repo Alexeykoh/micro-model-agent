@@ -28,6 +28,7 @@ import { handleProvidersApi } from "./providers-api";
 import { handleFileApi } from "./file-api";
 import { handleSetupApi } from "./setup-api";
 import type { WebUiState, WebUiAssets } from "./state";
+import { readEnv } from "../../config/env";
 
 /** Реэкспорт открытия браузера для CLI. */
 export { tryOpenBrowser } from "./util";
@@ -270,7 +271,7 @@ export function startServer(
   if (!isLoopback(s.host) && !s.token) {
     return Promise.reject(new Error(`refusing to bind ${s.host} without a token (non-loopback)`));
   }
-  const desired = Number(process.env.MMA_WEBUI_PORT) || 0;
+  const desired = Number(readEnv("WEBUI_PORT")) || 0;
   s.starting = new Promise<string>((resolve, reject) => {
     const srv = createServer((req, res) => handleRequest(req, res, assets, s));
     srv.on("error", (err) => {

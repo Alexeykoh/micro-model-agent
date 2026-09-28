@@ -11,6 +11,7 @@ import { redactContextSecrets } from "../../core/agent/context-log";
 import type { WebUiState } from "./state";
 import { broadcast, releaseBusy, reserveBusy } from "./state";
 import { MAX_BODY_BYTES } from "./limits";
+import { readEnv } from "../../config/env";
 
 export { MAX_BODY_BYTES } from "./limits";
 
@@ -254,7 +255,7 @@ export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: 
 
 /** Best-effort открытие UI в браузере по умолчанию (MMA_WEBUI_OPEN=0 отключает). */
 export function tryOpenBrowser(url: string): void {
-  if (process.env.MMA_WEBUI_OPEN === "0") return;
+  if (readEnv("WEBUI_OPEN") === "0") return;
   try {
     const platform = process.platform;
     const cmd =

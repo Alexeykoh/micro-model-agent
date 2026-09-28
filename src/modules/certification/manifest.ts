@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { homedir } from "os";
 import type { CertManifest, CertificationEntry, CertMark } from "./types";
 import { MMA_DIR_NAME } from "../../config/paths";
+import { readEnv } from "../../config/env";
 
 /** Путь к проектному манифесту внутри каталога проекта. */
 export function manifestPath(projectDir: string): string {
@@ -13,7 +14,7 @@ export function manifestPath(projectDir: string): string {
 
 /** Каталог глобального (per-user) манифеста. Переопределяется для тестов. */
 export function globalManifestDir(override?: string): string {
-  return override || process.env.MMA_CERT_HOME || join(homedir(), MMA_DIR_NAME);
+  return override || readEnv("CERT_HOME") || join(homedir(), MMA_DIR_NAME);
 }
 
 /** Путь к глобальному манифесту. */

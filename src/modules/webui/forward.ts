@@ -16,6 +16,7 @@ import type { MetaKind } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { HostStateSnapshot } from "../../core/host";
 import type { TurnSummary } from "../types";
+import { WEBUI_FORWARD_FLUSH_MS as DEFAULT_FLUSH_MS } from "../../config/timeouts";
 
 /**
  * Ненулевой снапшот плана в выделенном SSE-событии `plan`. Переиспользует
@@ -94,8 +95,6 @@ export interface Forwarder {
   onTurnEnd(summary: TurnEndSummary): void;
   flushNow(): void;
 }
-
-const DEFAULT_FLUSH_MS = 350;
 
 /** Строит форвардер на состояние и синк (дефолт — broadcast всем клиентам). */
 export function makeForwarder(

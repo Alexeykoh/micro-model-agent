@@ -9,6 +9,7 @@ import type { SessionLogEntry } from "../../modules/session/store";
 import type { MemoryStore } from "../memory/store";
 import type { SetupDisplay } from "../setup/answers";
 import { MAX_BODY_BYTES } from "./limits";
+import { readEnv } from "../../config/env";
 
 /**
  * Структурное подмножество `SessionManager` для веб-REST. Узкость даёт реальному
@@ -210,8 +211,8 @@ export function createWebUiState(): WebUiState {
     server: null,
     starting: null,
     url: "",
-    host: process.env.MMA_WEBUI_HOST || "127.0.0.1",
-    token: process.env.MMA_WEBUI_TOKEN || null,
+    host: readEnv("WEBUI_HOST") || "127.0.0.1",
+    token: readEnv("WEBUI_TOKEN") || null,
     clients: new Set(),
     bridge: null,
     busy: false,
@@ -221,7 +222,7 @@ export function createWebUiState(): WebUiState {
     minPostIntervalMs: 500,
     historyTail: 200,
     maxBodyBytes: MAX_BODY_BYTES,
-    maxClients: parseMaxClients(process.env.MMA_WEBUI_MAX_CLIENTS),
+    maxClients: parseMaxClients(readEnv("WEBUI_MAX_CLIENTS")),
     pendingQuestions: new Map(),
     setupRequired: false,
   };

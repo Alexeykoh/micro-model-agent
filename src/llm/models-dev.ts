@@ -17,11 +17,13 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { globalMmaDir } from "../config/paths";
+import { readEnv } from "../config/env";
+import {
+  MODELS_DEV_CATALOG_TTL_MS,
+  MODELS_DEV_FETCH_TIMEOUT_MS,
+} from "../config/timeouts";
 
 const MODELS_DEV_URL = "https://models.dev/api.json";
-
-/** TTL: перечитывать каталог после 24 часов. */
-const CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Slim-проекция на диске (никогда не весь каталог). */
 interface ModelsDevCache {
@@ -36,7 +38,7 @@ export interface ModelsDevOpts {
 }
 
 function cachePath(): string {
-  return process.env.MMA_MODELS_DEV_CACHE ?? join(globalMmaDir(), "models-dev-cache.json");
+  return readEnv("MODELS_DEV_CACHE") ?? join(globalMmaDir(), "models-dev-cache.json");
 }
 
 /** In-memory L1: свежая проекция на время жизни процесса. */
@@ -108,12 +110,12 @@ export async function lookupModelsDevContext(
   model: string,
   opts: ModelsDevOpts = {},
 ): Promise<number | null> {
-  const timeoutMs = opts.timeoutMs ?? 10000;
-  if (memCache && Date.now() - memCache.ts < CATALOG_TTL_MS) {
+  const timeoutMs = opts.timeoutMs ?? MODELS_DEV_FETCH_TIMEOUT_MS;
+  if (memCache && Date.now() - memCache.ts < MODELS_DEV_CATALOG_TTL_MS) {
     return memCache.models[model] ?? null;
   }
   const disk = readDiskCache();
-  if (disk && Date.now() - new Date(disk.ts).getTime() < CATALOG_TTL_MS) {
+  if (disk && Date.now() - new Date(disk.ts).getTime() < MODELS_DEV_CATALOG_TTL_MS) {
     memCache = { models: disk.models, ts: Date.now() };
     return disk.models[model] ?? null;
   }

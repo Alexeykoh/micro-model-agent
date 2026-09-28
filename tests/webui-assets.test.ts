@@ -53,6 +53,19 @@ describe("webui assets", () => {
     expect(a.css).toContain(".filecard .fc-open");
   });
 
+  it("wires universal file actions: download, copy path and drawio hint", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(src).toContain("download=1");
+    expect(src).toContain("web.card.download");
+    expect(src).toContain("web.card.copy_path");
+    expect(src).toContain("fc-actions");
+    expect(src).toContain("fc-hint");
+    expect(src).toContain("drawio");
+    expect(a.css).toContain(".filecard .fc-actions");
+    expect(a.css).toContain(".filecard .fc-hint");
+  });
+
   it("renders reasoning blocks collapsed by default", () => {
     const a = loadAssets();
     expect(js(a)).toContain('"think-body hidden"');

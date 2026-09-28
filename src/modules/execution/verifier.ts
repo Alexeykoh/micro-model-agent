@@ -12,6 +12,7 @@ import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifier
 import { findExistingFile } from "./auditor";
 import { findTypecheckRoot } from "./audit-runners";
 import { killTree } from "../processes/kill-tree";
+import { settleChildClose } from "../../utils/child-run";
 
 /** Один пункт проверки: прошёл ли + сообщение. */
 export interface VerificationItem {
@@ -402,15 +403,7 @@ export class StepVerifier {
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        if (code === 0) {
-          resolve({ stdout, stderr });
-        } else {
-          const err: any = new Error(`Command failed with exit code ${code}`);
-          err.stdout = stdout;
-          err.stderr = stderr;
-          err.status = code;
-          reject(err);
-        }
+        settleChildClose(code, stdout, stderr, `Command failed with exit code ${code}`, resolve, reject);
       });
     });
   }

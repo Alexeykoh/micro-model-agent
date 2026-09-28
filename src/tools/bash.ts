@@ -9,15 +9,19 @@ import { processRegistry, registerKillable, unregisterKillable } from "../module
 import { t } from "../i18n/index";
 import { platform } from "os";
 import { MAX_PREVIEW_LINES } from "./preview";
+import {
+  BASH_GRACE_MS as CANONICAL_BASH_GRACE_MS,
+  /** Короткое окно для явного `background: true` — ловит ошибки спавна. */
+  BASH_SPAWN_SETTLE_MS as SPAWN_SETTLE_MS,
+} from "../config/timeouts";
 
 /**
  * Команда, живая после окна ожидания, уходит в фон. Решение — по поведению
  * процесса (всё ещё жив), а не по словам в тексте: упоминание "vite"/"server"
  * выполняется обычно, а любая реально долгая команда ловится как ни пиши.
  */
-export const BASH_GRACE_MS = 5000;
-/** Короткое окно для явного `background: true` — ловит ошибки спавна (плохой cwd, нет шелла). */
-const SPAWN_SETTLE_MS = 100;
+/** Публичный экспорт-алиас: то же значение из реестра (используют тесты). */
+export const BASH_GRACE_MS = CANONICAL_BASH_GRACE_MS;
 /** Строк уже выданного вывода в стартовом сообщении фона. */
 const BG_OUTPUT_PREVIEW_LINES = 15;
 

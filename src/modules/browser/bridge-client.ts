@@ -8,8 +8,7 @@ import type { ConsoleEntry, NetworkErrorEntry } from "./types";
 import { ConsoleBuffer } from "./console-buffer";
 import type { StoredCookie } from "./cookie-store";
 import { pickExistingPath } from "./bridge-path";
-
-const BRIDGE_REQUEST_TIMEOUT_MS = 30000;
+import { BROWSER_BRIDGE_REQUEST_TIMEOUT_MS as BRIDGE_REQUEST_TIMEOUT_MS } from "../../config/timeouts";
 
 interface BridgeResponse {
   id: number;

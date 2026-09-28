@@ -4,18 +4,21 @@ import type { ConsoleEntry, ConsoleType, NetworkErrorEntry, BrowserConfig } from
 import { ConsoleBuffer } from "./console-buffer";
 import type { StoredCookie } from "./cookie-store";
 import type { BrowserDriver, LaunchConfig, BrowserLaunchOverrides } from "./driver-types";
+import { MMA_ENV } from "../../config/env";
+import { BROWSER_DIRECT_LAUNCH_TIMEOUT_MS as CANONICAL_DIRECT_LAUNCH_TIMEOUT_MS } from "../../config/timeouts";
 
 export type { BrowserDriver, LaunchConfig, BrowserLaunchOverrides } from "./driver-types";
 
 /** Таймаут прямого запуска Playwright до отката на node-мост. */
-export const DIRECT_LAUNCH_TIMEOUT_MS = 8000;
+/** Публичный экспорт-алиас: то же значение из реестра. */
+export const DIRECT_LAUNCH_TIMEOUT_MS = CANONICAL_DIRECT_LAUNCH_TIMEOUT_MS;
 
 /** Оверрайды запуска из env (MMA_BROWSER_EXECUTABLE/MMA_BROWSER_CHANNEL). */
 export function resolveBrowserLaunchOverrides(
   env: NodeJS.ProcessEnv = process.env,
 ): BrowserLaunchOverrides {
-  const executablePath = env.MMA_BROWSER_EXECUTABLE?.trim();
-  const channel = env.MMA_BROWSER_CHANNEL?.trim();
+  const executablePath = env[MMA_ENV.BROWSER_EXECUTABLE]?.trim();
+  const channel = env[MMA_ENV.BROWSER_CHANNEL]?.trim();
   const out: BrowserLaunchOverrides = {};
   if (executablePath) out.executablePath = executablePath;
   if (channel) out.channel = channel;

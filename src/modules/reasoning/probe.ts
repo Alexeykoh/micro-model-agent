@@ -4,6 +4,8 @@ import type { ReasoningStrategy } from "../../config/types";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { globalMmaDir } from "../../config/paths";
+import { readEnv } from "../../config/env";
+import { REASONING_CACHE_TTL_MS as CACHE_TTL_MS } from "../../config/timeouts";
 
 const PROBE_MESSAGES: Message[] = [
   { role: "user", content: "Reply with exactly: ok" },
@@ -16,12 +18,9 @@ interface CacheEntry {
   ts: string;
 }
 
-/** TTL: повторная проба через 24 часа. */
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
 /** Путь дискового кэша: ~/.mma/reasoning-cache.json (переопределяется MMA_REASONING_CACHE). */
 function cachePath(): string {
-  return process.env.MMA_REASONING_CACHE ?? join(globalMmaDir(), "reasoning-cache.json");
+  return readEnv("REASONING_CACHE") ?? join(globalMmaDir(), "reasoning-cache.json");
 }
 
 /** In-memory L1-кэш (быстрый путь в пределах процесса). */

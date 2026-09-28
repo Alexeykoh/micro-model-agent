@@ -16,6 +16,7 @@ import { ConfigEncryptor } from "../modules/security/encryption";
 import { loadDomainFiles, saveDomainFiles } from "./domains";
 import { defaultOutputBus } from "../output";
 import { MMA_DIR_NAME } from "./paths";
+import { MMA_ENV } from "./env";
 
 // ── Централизованные константы путей ──────────────────────────────────────
 /** Глобальный каталог конфига. */
@@ -115,9 +116,9 @@ function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOve
     if (original !== envValue) overrides.push({ key, envValue, originalValue: original });
   };
 
-  if (env.MMA_MODEL) {
-    record("model", env.MMA_MODEL);
-    result.model = env.MMA_MODEL;
+  if (env[MMA_ENV.MODEL]) {
+    record("model", env[MMA_ENV.MODEL]);
+    result.model = env[MMA_ENV.MODEL]!;
   }
 
   const originalProvider = result.provider;
@@ -142,64 +143,64 @@ function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOve
     result.provider = { ...result.provider, entries: next };
   };
 
-  if (env.MMA_PROVIDER_TYPE) {
-    result.provider = { ...result.provider, type: env.MMA_PROVIDER_TYPE };
-    patchActiveEntry({ type: env.MMA_PROVIDER_TYPE });
+  if (env[MMA_ENV.PROVIDER_TYPE]) {
+    result.provider = { ...result.provider, type: env[MMA_ENV.PROVIDER_TYPE]! };
+    patchActiveEntry({ type: env[MMA_ENV.PROVIDER_TYPE]! });
   }
-  if (env.MMA_PROVIDER_BASEURL) {
-    result.provider = { ...result.provider, baseUrl: env.MMA_PROVIDER_BASEURL };
-    patchActiveEntry({ baseUrl: env.MMA_PROVIDER_BASEURL });
+  if (env[MMA_ENV.PROVIDER_BASEURL]) {
+    result.provider = { ...result.provider, baseUrl: env[MMA_ENV.PROVIDER_BASEURL]! };
+    patchActiveEntry({ baseUrl: env[MMA_ENV.PROVIDER_BASEURL]! });
   }
-  if (env.MMA_PROVIDER_APIKEY) {
-    result.provider = { ...result.provider, apiKey: env.MMA_PROVIDER_APIKEY };
-    patchActiveEntry({ apiKey: env.MMA_PROVIDER_APIKEY });
+  if (env[MMA_ENV.PROVIDER_APIKEY]) {
+    result.provider = { ...result.provider, apiKey: env[MMA_ENV.PROVIDER_APIKEY]! };
+    patchActiveEntry({ apiKey: env[MMA_ENV.PROVIDER_APIKEY]! });
   }
-  if (env.MMA_PROVIDER_TYPE || env.MMA_PROVIDER_BASEURL || env.MMA_PROVIDER_APIKEY) {
+  if (env[MMA_ENV.PROVIDER_TYPE] || env[MMA_ENV.PROVIDER_BASEURL] || env[MMA_ENV.PROVIDER_APIKEY]) {
     // Пишем один раз с ФИНАЛЬНЫМ env-мутированным объектом провайдера, чтобы
     // identity-проверка в stripEnvOverrides сошлась с загруженным конфигом.
     overrides.push({ key: "provider", envValue: result.provider, originalValue: originalProvider });
   }
-  if (env.MMA_LOG_LEVEL) {
-    record("logLevel", env.MMA_LOG_LEVEL);
-    result.logLevel = env.MMA_LOG_LEVEL;
+  if (env[MMA_ENV.LOG_LEVEL]) {
+    record("logLevel", env[MMA_ENV.LOG_LEVEL]);
+    result.logLevel = env[MMA_ENV.LOG_LEVEL]!;
   }
-  if (env.MMA_LOCALE) {
-    record("locale", env.MMA_LOCALE);
-    result.locale = env.MMA_LOCALE;
+  if (env[MMA_ENV.LOCALE]) {
+    record("locale", env[MMA_ENV.LOCALE]);
+    result.locale = env[MMA_ENV.LOCALE]!;
   }
-  if (env.MMA_CONTEXT_WINDOW) {
-    const v = parseInt(env.MMA_CONTEXT_WINDOW, 10);
+  if (env[MMA_ENV.CONTEXT_WINDOW]) {
+    const v = parseInt(env[MMA_ENV.CONTEXT_WINDOW]!, 10);
     if (!Number.isNaN(v)) {
       record("contextWindow", v);
       result.contextWindow = v;
     }
   }
-  if (env.MMA_MAX_TOOL_ITERATIONS) {
-    const v = parseInt(env.MMA_MAX_TOOL_ITERATIONS, 10);
+  if (env[MMA_ENV.MAX_TOOL_ITERATIONS]) {
+    const v = parseInt(env[MMA_ENV.MAX_TOOL_ITERATIONS]!, 10);
     if (!Number.isNaN(v)) {
       record("maxToolIterations", v);
       result.maxToolIterations = v;
     }
   }
-  if (env.MMA_STUCK_THRESHOLD) {
-    const v = parseInt(env.MMA_STUCK_THRESHOLD, 10);
+  if (env[MMA_ENV.STUCK_THRESHOLD]) {
+    const v = parseInt(env[MMA_ENV.STUCK_THRESHOLD]!, 10);
     if (!Number.isNaN(v)) {
       record("stuckThreshold", v);
       result.stuckThreshold = v;
     }
   }
-  if (env.MMA_AUTO_PLAN) {
-    const v = env.MMA_AUTO_PLAN === "true";
+  if (env[MMA_ENV.AUTO_PLAN]) {
+    const v = env[MMA_ENV.AUTO_PLAN] === "true";
     record("autoPlan", v);
     result.autoPlan = v;
   }
-  if (env.MMA_MOE_ENABLED) {
-    const next = { ...result.moe, enabled: env.MMA_MOE_ENABLED === "true" };
+  if (env[MMA_ENV.MOE_ENABLED]) {
+    const next = { ...result.moe, enabled: env[MMA_ENV.MOE_ENABLED] === "true" };
     record("moe", next);
     result.moe = next;
   }
-  if (env.MMA_CONTEXT_LOG) {
-    const next = { ...result.contextLog, enabled: env.MMA_CONTEXT_LOG !== "false" };
+  if (env[MMA_ENV.CONTEXT_LOG]) {
+    const next = { ...result.contextLog, enabled: env[MMA_ENV.CONTEXT_LOG] !== "false" };
     record("contextLog", next);
     result.contextLog = next;
   }

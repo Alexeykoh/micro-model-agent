@@ -399,6 +399,9 @@ body.light .imgcard .ph { background: var(--ph-light); }
 }
 .filecard .fc-open:hover { border-color: var(--accent); text-decoration: none; }
 .filecard .fc-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.filecard button.fc-open { font: inherit; }
+.filecard .fc-actions { display: flex; gap: 6px; align-items: center; margin-left: auto; flex: 0 0 auto; }
+.filecard .fc-hint { color: var(--dim-a); font-size: 12px; }
 .linkline { margin-left: 26px; min-width: 0; overflow-wrap: anywhere; }
 .linkline a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; word-break: break-word; }
 .linkline a:hover { text-decoration: underline; }

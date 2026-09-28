@@ -5,6 +5,10 @@ import { getServerKeyForFile } from "./config";
 import { collectCheckFiles } from "./check-tool";
 import { findProjectRoot } from "./project-root";
 import { errMsg } from "../../utils";
+import {
+  LSP_PROBE_TIMEOUT_MS as DEFAULT_PROBE_TIMEOUT_MS,
+  LSP_PROBE_DEADLINE_MS as DEFAULT_PROBE_DEADLINE_MS,
+} from "../../config/timeouts";
 
 /**
  * Итог пробы одного сервера: какой язык покрывает и реально ли стартанул
@@ -47,8 +51,6 @@ export interface LspProbeDeps {
   logger?: { debug(msg: string, meta?: Record<string, unknown>): void; info(msg: string, meta?: Record<string, unknown>): void; warn(msg: string, meta?: Record<string, unknown>): void; error(msg: string, meta?: Record<string, unknown>): void };
 }
 
-const DEFAULT_PROBE_TIMEOUT_MS = 30_000;
-const DEFAULT_PROBE_DEADLINE_MS = 60_000;
 const DEFAULT_MAX_PARALLEL = 3;
 
 /**

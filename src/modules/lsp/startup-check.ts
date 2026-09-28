@@ -11,11 +11,10 @@ import { getServerForFile } from "./config";
 import { findProjectRoot, resolveTscCommand } from "./project-root";
 import { estimateTokens } from "../../llm/token-counter";
 import { errMsg } from "../../utils";
+import { LSP_STARTUP_CHECK_TIMEOUT_MS as STARTUP_CHECK_TIMEOUT_MS } from "../../config/timeouts";
 
 /** Стартовый чек смотрит не больше этого числа файлов через LSP. */
 const STARTUP_CHECK_FILE_CAP = 5;
-/** Общий кап всего стартового чека — старт сессии дольше не блокируем. */
-const STARTUP_CHECK_TIMEOUT_MS = 60_000;
 /** Кап строк ошибок tsc в промпт-блоке. */
 const STARTUP_CHECK_ERROR_CAP = 20;
 

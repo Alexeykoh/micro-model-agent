@@ -3,14 +3,16 @@ import type { ToolDefinition } from "./types";
 import { processRegistry } from "../modules/processes";
 import { t } from "../i18n/index";
 import { lookupProcess } from "./process-ids";
+import {
+  PROCESS_WAIT_DEFAULT_MS as DEFAULT_WAIT_MS,
+  PROCESS_WAIT_MAX_MS as MAX_WAIT_MS,
+} from "../config/timeouts";
 
 /**
  * Дефолтное ожидание: хватает на типичный тест/билд, но в пределах таймаута
  * исполнителя. `timeoutMs` тула даёт запас под явное долгое ожидание
  * (кламп MAX_WAIT_MS).
- */
-const DEFAULT_WAIT_MS = 30000;
-const MAX_WAIT_MS = 110000;
+  */
 const DEFAULT_TAIL = 20;
 const MAX_TAIL = 100;
 

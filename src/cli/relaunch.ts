@@ -1,6 +1,8 @@
 // Перезапуск CLI в свежем процессе после визарда настройки.
 import { spawnSync } from "node:child_process";
+import { t } from "../i18n/index";
 import { getDefaultChannel } from "../output";
+import { MMA_ENV } from "../config/env";
 
 /**
  * Аргументы для перезапуска текущего CLI в свежем процессе: дропаем argv[0]
@@ -29,10 +31,10 @@ export function relaunchCli(): never {
   if (!entry) process.exit(0);
   const child = spawnSync(process.execPath, args, {
     stdio: "inherit",
-    env: { ...process.env, MMA_POST_SETUP: "1" },
+    env: { ...process.env, [MMA_ENV.POST_SETUP]: "1" },
   });
   if (child.error) {
-    getDefaultChannel().writeLine(`Failed to relaunch the CLI: ${child.error.message}`, "stderr");
+    getDefaultChannel().writeLine(t("cli.relaunch_failed", { message: child.error.message }), "stderr");
     process.exit(1);
   }
   process.exit(child.status ?? 0);

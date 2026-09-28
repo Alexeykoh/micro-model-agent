@@ -6,6 +6,11 @@
  * ни терминала, ни output-канала.
  */
 import { probeChat } from "../providers/preflight";
+import {
+  SETUP_SCAN_TIMEOUT_MS as SCAN_TIMEOUT_MS,
+  SETUP_MODELS_TIMEOUT_MS as MODELS_TIMEOUT_MS,
+  SETUP_CHAT_TIMEOUT_MS as CHAT_TIMEOUT_MS,
+} from "../../config/timeouts";
 
 /** Локальные серверы для скана. */
 const KNOWN_PORTS = [
@@ -14,10 +19,6 @@ const KNOWN_PORTS = [
   { port: 8080, label: "vLLM / custom" },
   { port: 4891, label: "GPT4All" },
 ];
-
-const SCAN_TIMEOUT_MS = 2000;
-const MODELS_TIMEOUT_MS = 5000;
-const CHAT_TIMEOUT_MS = 10000;
 
 /** Проба известных локальных портов на OpenAI-совместимый `/v1/models`. */
 export async function scanLocalServers(): Promise<{ label: string; url: string }[]> {

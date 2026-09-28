@@ -4,6 +4,10 @@ import { resolve, isAbsolute, join } from "path";
 import type { HallucinationCheckResult } from "./detector";
 import { t } from "../../i18n/index";
 import { extractFileLikeTokens, stripUrls } from "./js-identifiers";
+import {
+  HALLUCINATION_NAME_CACHE_TTL_MS,
+  HALLUCINATION_RESCAN_COOLDOWN_MS,
+} from "../../config/timeouts";
 
 /** Генерированные/кэшированные каталоги — пропускаем при поиске голых имён. */
 const IGNORED_DIRS = new Set([
@@ -22,8 +26,8 @@ export class FactualCheck {
   private nameCache: Map<string, string[]> | null = null;
   private nameCacheTime = 0;
   private lastRescan = 0;
-  private static readonly NAME_CACHE_TTL_MS = 5_000;
-  private static readonly RESCAN_COOLDOWN_MS = 2_000;
+  private static readonly NAME_CACHE_TTL_MS = HALLUCINATION_NAME_CACHE_TTL_MS;
+  private static readonly RESCAN_COOLDOWN_MS = HALLUCINATION_RESCAN_COOLDOWN_MS;
   private static readonly MAX_INDEXED_FILES = 20_000;
   /** Файлы, известные из сводок компакции — переживают сбросы контекста. */
   private knownFiles = new Set<string>();
