@@ -316,3 +316,27 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
   (`tests/e2e/web-provider-dialog.e2e-test.ts`: boot + вложенный поп-ап провайдера —
   open/Esc/backdrop/save; артефакты в `_testing/web-e2e/<scenario>/`), запуск `bun run test:e2e`
   (`vitest.e2e.config.ts`, только по явной просьбе). Ветка `chore/web-e2e-harness`.
+
+## Production readiness — gap-анализ (2026-09-28)
+
+> Полная спека: [docs/specs/2026-09-28-production-readiness-design.md](./docs/specs/2026-09-28-production-readiness-design.md).
+> Сверено: `master` @ 2.10.0 vs. MLflow 05.2026 / Alice Labs 08–09.2026 / Arthur 05.2026 / OWASP LLM01+AST10 / EU AI Act (high-risk с 02.08.2026).
+> Вывод: MMA — зрелый single-user dev-харнесс; до продакшена не хватает 6/6 условий Alice Labs
+> (durable state, trace-observability, архитектурные guardrails, HITL-gates, cost caps upstream, rollback артефактом).
+> Каждый пункт ниже — отдельная ветка от актуального `master` (`bun test` + `tsc --noEmit` зелёные).
+
+### P0 — без этого в прод нельзя
+- [ ] **1. Изоляция исполнения** — `bash`/тулы бегут на хосте (`execa`); cert-«sandbox» — лишь temp-папки. Ввести `execution.profile: local-trusted|sandbox`, sandbox с deny-by-default egress, угрозу задокументировать.
+- [ ] **2. Durable state** — `session.jsonl` не переживает краш посреди хода. Опциональный checkpointer (Postgres-совместимый интерфейс), стабильный `thread_id` <255, prune по retention, long-term store с TTL.
+- [ ] **3. Observability (OTel)** — нет GenAI-спанов и внешнего бэкенда. Adapter над `gen_ai.*` v1.41, OTLP-экспорт, метрики faithfulness/drift/bypass, связка trace↔session↔cost↔approvals.
+- [ ] **4. Evals в контуре + staged rollout** — cert проверяет harness, не продукт. Eval-набор с trajectory-оценкой, ensemble-судья + human-gold, eval-gate в CI, стадии shadow→canary→percentage→full, скоркард (success/cost/p95/safety).
+
+### P1 — управляемость
+- [ ] **5. Cost/LLM-gateway** — счёт есть, enforcement нет. Per-run бюджет, `max_turns` hard-stop, per-tenant caps до вызова модели, intent-routing, cache-anchoring промпта.
+- [ ] **6. MCP/plugin supply-chain** — нет OAuth 2.1 per-user и gateway с allowlist/rate-limit, нет signed skill-манифестов/SBOM, спек MCP устаревает.
+- [ ] **7. HITL + kill-switch** — `question`/`approve` не переживают рестарт. Durable `interrupt()`, escalation по impact, oversight-панель (задел Art.14), глобальный kill-switch.
+- [ ] **8. Поставка и эксплуатация** — нет Dockerfile/K8s/`/healthz`, релиз не артефакт. Манифест (prompt+model+tools+evals), откат одной командой, RBAC/тенанты заделом, SLO + runbook 6 классов.
+
+### P2 — зрелость
+- [ ] **9. Compliance (EU AI Act)** — логи без подписи, нет артефактов high-risk (risk file, lineage, oversight-панель, adversarial-лог Art.15). Append-only + подпись, retention ≥6 мес.
+- [ ] **10. Внутренние хвосты** — overview зафиксирован на 2.6.0 (релиз 2.10.0); 5 файлов >>300 строк (только чистые швы); Linux watcher не рекурсивен (`walker.ts:140`); `noExplicitAny` warn; русские комменты (81 файл); coverage-threshold в CI.
