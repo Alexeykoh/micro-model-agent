@@ -1349,8 +1349,11 @@ body.setup-active .layout { display: none; }
 .setup-summary .k { color: var(--dim-a); width: 150px; flex: 0 0 auto; }
 .setup-summary .v { color: var(--fg); word-break: break-all; }
 
-.setup-toggle { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 13px; cursor: pointer; }
-.setup-toggle input { accent-color: var(--green-fill); width: 15px; height: 15px; }
+.setup-toggle { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; font-size: 13px; cursor: pointer; }
+.setup-toggle input { accent-color: var(--green-fill); width: 15px; height: 15px; margin-top: 2px; flex: 0 0 auto; }
+.setup-toggle-texts { display: flex; flex-direction: column; gap: 2px; }
+.setup-toggle-texts .t { font-weight: 500; }
+.setup-toggle-texts .d { color: var(--dim-a); font-size: 12px; line-height: 1.5; }
 
 @media (max-width: 640px) {
   .setup-gate { padding: 24px 14px; }

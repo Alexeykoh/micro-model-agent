@@ -249,6 +249,29 @@ describe("webui setup REST", () => {
     });
   });
 
+  it("POST /api/setup/context rejects a missing model", async () => {
+    const s = virginState();
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/setup/context", {
+        baseUrl: "http://127.0.0.1:1/v1",
+      });
+      expect(res.status).toBe(400);
+      expect(res.json.error).toBe("invalid-context-request");
+    });
+  });
+
+  it("POST /api/setup/context fail-opens when the provider is unreachable", async () => {
+    const s = virginState();
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/setup/context", {
+        baseUrl: "http://127.0.0.1:1/v1",
+        model: "no-such-model",
+      });
+      expect(res.status).toBe(200);
+      expect(res.json.ok).toBe(false);
+    });
+  });
+
   it("still serves /api/state and static assets while gated", async () => {
     const s = virginState();
     await withServer(s, async (base) => {

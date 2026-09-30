@@ -258,6 +258,27 @@
     });
     box.appendChild(field(tr("web.setup.provider.base_url"), input));
 
+    const actions = h("div", "setup-row-inline");
+    const test = h("button", "setup-btn", tr("web.setup.provider.test"));
+    test.type = "button";
+    test.addEventListener("click", async () => {
+      if (!state.answers.apiBase) {
+        setMsg(box, "err", tr("web.setup.provider.required"));
+        return;
+      }
+      test.disabled = true;
+      setMsg(box, "", tr("web.setup.provider.testing"));
+      const r = await api("/api/setup/models", {
+        method: "POST",
+        body: { baseUrl: state.answers.apiBase, apiKey: state.answers.apiKey },
+      });
+      test.disabled = false;
+      const models = (r.ok && r.data && r.data.models) || [];
+      if (r.ok && models.length) setMsg(box, "ok", tr("web.setup.provider.test_ok"));
+      else setMsg(box, "warn", tr("web.setup.provider.test_fail"));
+    });
+    actions.appendChild(test);
+
     if (state.answers.provider === "openai-compat" || state.answers.provider === "lmstudio") {
       const scan = h("button", "setup-btn", tr("web.setup.provider.scan"));
       scan.type = "button";
@@ -291,8 +312,11 @@
           results.appendChild(b);
         });
       });
-      box.appendChild(scan);
+      actions.appendChild(scan);
+      box.appendChild(actions);
       box.appendChild(results);
+    } else {
+      box.appendChild(actions);
     }
     box.appendChild(messageEl());
     return box;
@@ -393,6 +417,38 @@
     });
     box.appendChild(field(tr("web.setup.context.contextWindow"), cw));
 
+    const detect = h("button", "setup-btn", tr("web.setup.context.detect"));
+    detect.type = "button";
+    detect.addEventListener("click", async () => {
+      if (!state.answers.apiBase || !state.answers.model) {
+        setMsg(box, "err", tr("web.setup.context.detect_fail"));
+        return;
+      }
+      detect.disabled = true;
+      setMsg(box, "", tr("web.setup.context.detecting"));
+      const r = await api("/api/setup/context", {
+        method: "POST",
+        body: {
+          baseUrl: state.answers.apiBase,
+          apiKey: state.answers.apiKey,
+          model: state.answers.model,
+          providerType: state.answers.provider,
+        },
+      });
+      detect.disabled = false;
+      const n = r.ok && r.data && r.data.contextWindow;
+      if (r.ok && r.data && r.data.ok && typeof n === "number" && n > 0) {
+        state.answers.contextWindow = n;
+        cw.value = String(n);
+        setMsg(box, "ok", tr("web.setup.context.detect_ok", { count: n }));
+      } else {
+        setMsg(box, "warn", tr("web.setup.context.detect_fail"));
+      }
+    });
+    const row = h("div", "setup-row-inline");
+    row.appendChild(detect);
+    box.appendChild(row);
+
     const it = h("input", "setup-input");
     it.type = "number";
     it.min = "1";
@@ -408,11 +464,11 @@
   function renderSecurity() {
     const box = stepBody("security");
     const toggles = [
-      ["securityPathsRestrict", "web.setup.security.paths"],
-      ["securityBashBlock", "web.setup.security.bash"],
-      ["securityFlagsBlock", "web.setup.security.flags"],
+      ["securityPathsRestrict", "web.setup.security.paths", "web.setup.security.paths_desc"],
+      ["securityBashBlock", "web.setup.security.bash", "web.setup.security.bash_desc"],
+      ["securityFlagsBlock", "web.setup.security.flags", "web.setup.security.flags_desc"],
     ];
-    toggles.forEach(([key, labelKey]) => {
+    toggles.forEach(([key, labelKey, descKey]) => {
       const row = h("label", "setup-toggle");
       const cb = h("input");
       cb.type = "checkbox";
@@ -421,7 +477,11 @@
         state.answers[key] = cb.checked;
       });
       row.appendChild(cb);
-      row.appendChild(h("span", null, tr(labelKey)));
+      const texts = h("span", "setup-toggle-texts");
+      texts.appendChild(h("span", "t", tr(labelKey)));
+      const desc = tr(descKey);
+      if (desc !== descKey) texts.appendChild(h("span", "d", desc));
+      row.appendChild(texts);
       box.appendChild(row);
     });
     return box;

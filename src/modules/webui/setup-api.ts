@@ -14,11 +14,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { getFlatDicts, setLocale } from "../../i18n";
 import { applyAnswersToConfig } from "../setup/apply";
 import { SETUP_LANGUAGES, type SetupAnswers } from "../setup/answers";
-import {
-  fetchProviderModels,
-  scanLocalServers,
-  testProviderChat,
-} from "../setup/discovery";
+import { fetchProviderModels, scanLocalServers, testProviderChat } from "../setup/discovery";
+import { probeProviderContext } from "../../llm/provider-context";
 import { broadcast } from "./state";
 import type { WebUiState } from "./state";
 import { readBody, readBodyError, sendJson } from "./util";
@@ -136,6 +133,39 @@ export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: We
     });
 }
 
+/** `POST /api/setup/context {baseUrl, apiKey, model, providerType?}` — окно контекста у провайдера. */
+export function handleSetupContext(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: WebUiState,
+): void {
+  readJsonBody(req, s.maxBodyBytes)
+    .then(async (rec) => {
+      if (!rec) {
+        sendJson(res, 400, { ok: false, error: "invalid JSON" });
+        return;
+      }
+      const baseUrl = str(rec, "baseUrl");
+      const model = str(rec, "model");
+      if (!baseUrl || !model) {
+        sendJson(res, 400, { ok: false, error: "invalid-context-request" });
+        return;
+      }
+      const probe = await probeProviderContext(baseUrl, model, {
+        apiKey: str(rec, "apiKey") || undefined,
+        providerType: str(rec, "providerType") || undefined,
+      });
+      if (!probe) {
+        sendJson(res, 200, { ok: false });
+        return;
+      }
+      sendJson(res, 200, { ok: true, contextWindow: probe.actual, model: probe.model });
+    })
+    .catch((err: unknown) => {
+      readBodyError(req, res, err);
+    });
+}
+
 /**
  * `POST /api/setup/locale {locale}` — переключает локаль i18n процесса, чтобы
  * следующие шаги визарда локализовались. Не персистится (финал `POST /api/setup`
@@ -227,6 +257,10 @@ export function handleSetupApi(
   }
   if (p === "/api/setup/test" && req.method === "POST") {
     handleSetupTest(req, res, s);
+    return true;
+  }
+  if (p === "/api/setup/context" && req.method === "POST") {
+    handleSetupContext(req, res, s);
     return true;
   }
   if (p === "/api/setup/locale" && req.method === "POST") {
