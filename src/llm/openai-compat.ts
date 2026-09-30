@@ -183,6 +183,14 @@ export class OpenAICompatProvider implements LLMProvider {
   }
 
   /**
+   * Тишина между чанками, после которой стрим считается мёртвым.
+   * Единый источник дефолта (дублировался в doStream/chat).
+   */
+  private get idleTimeoutMs(): number {
+    return this.retryConfig.noDataTimeoutMs ?? 180000;
+  }
+
+  /**
    * Стрим чата: rate-limit → стрим → фолбэк non-stream при пустом стриме.
    * @param messages история; @param tools определения тулов;
    * @param signal abort; @param options лимит токенов/reasoning.
@@ -239,7 +247,15 @@ export class OpenAICompatProvider implements LLMProvider {
     // риск дубля ответа отсутствует.
     if (!hasToolCall && !hasText) {
       this.debug?.("LLM streaming produced no text/tool_call — falling back to non-streaming");
-      const fallback = await this.doNonStreaming(effectiveMessages, tools, signal, options);
+      // Фолбэк — продолжение того же хода на медленном железе: ждём столько же,
+      // сколько разрешили стриму, а не жёсткие 120с.
+      const fallback = await this.doNonStreaming(
+        effectiveMessages,
+        tools,
+        signal,
+        options,
+        this.idleTimeoutMs,
+      );
       this.debug?.("LLM non-streaming fallback result", { chunks: fallback.length });
       for (const chunk of fallback) {
         if (hasReasoning && chunk.type === "reasoning") continue;
@@ -273,9 +289,9 @@ export class OpenAICompatProvider implements LLMProvider {
     signal?: AbortSignal,
     options?: import("./provider").ChatOptions,
   ): AsyncIterable<Chunk> {
-    const { baseDelay, maxDelay, maxStreamRetries, noDataTimeoutMs } = this.retryConfig;
+    const { baseDelay, maxDelay, maxStreamRetries } = this.retryConfig;
     const streamRetries = maxStreamRetries ?? 2;
-    const idleTimeoutMs = noDataTimeoutMs ?? 180000;
+    const idleTimeoutMs = this.idleTimeoutMs;
     let usedNonStreamingFallback = false;
 
     for (let attempt = 0; ; attempt++) {
@@ -300,7 +316,15 @@ export class OpenAICompatProvider implements LLMProvider {
           this.debug?.(
             "LLM stream stalled after tool_call — falling back to non-streaming request",
           );
-          const fallback = await this.doNonStreaming(messages, tools, signal, options);
+          // Тот же ход на медленном железе: non-stream ждёт idle-лимит,
+          // а не жёсткие 120с (иначе фолбэк умрёт раньше, чем умер бы стрим).
+          const fallback = await this.doNonStreaming(
+            messages,
+            tools,
+            signal,
+            options,
+            idleTimeoutMs,
+          );
           this.debug?.("LLM non-streaming fallback result", { chunks: fallback.length });
           for (const chunk of fallback) {
             // Reasoning до stall уже, вероятно, устримлен; копию фолбэка дропаем,
@@ -363,7 +387,15 @@ export class OpenAICompatProvider implements LLMProvider {
     } catch (err: any) {
       // Fetch-сбои уже HTTP-ретраятся внутри fetchWithRetry —
       // на уровне стрима повторно не ретраим.
-      if (err?.name === "AbortError") throw err;
+      // Аборт по total-дедлайну до headers — честный llm_timeout, а не голый
+      // AbortError (иначе причина «ждали коннект 120с» теряется).
+      // Пользовательский abort (isTimeout() === false) — пробрасываем как был.
+      if (err?.name === "AbortError") {
+        if (isTimeout()) {
+          throw new Error(t("error.llm_timeout", { timeout: REQUEST_TIMEOUT_MS }));
+        }
+        throw err;
+      }
       const wrapped = err instanceof Error ? err : new Error(String(err));
       if (wrapped instanceof LlmError) {
         wrapped.markTerminal();
@@ -396,6 +428,14 @@ export class OpenAICompatProvider implements LLMProvider {
       cleanup();
       throw new Error(t("error.no_response_body"));
     }
+    // Сервер ответил headers — он жив. Total-дедлайн (120с на весь запрос)
+    // дальше только вредил бы: медленная генерация на слабом железе длится
+    // дольше, хотя данные текут. Разоружаем его; тело охраняет per-read
+    // idle-таймер (retry.noDataTimeoutMs). Бонус: аборт в фазе тела теперь
+    // может прийти только от idle-таймера — сообщение «нет данных Nмс»
+    // снова честное, а не маска total-дедлайна.
+    // Фаза коннекта (до headers) по-прежнему под total-дедлайном.
+    cleanup();
 
     const decoder = new TextDecoder();
     let buffer = "";
@@ -616,7 +656,10 @@ export class OpenAICompatProvider implements LLMProvider {
   }
 
   /** Общая подготовка запроса: auth-заголовки + таймаут/abort-контроллер. */
-  private buildRequestSetup(signal?: AbortSignal): {
+  private buildRequestSetup(
+    signal?: AbortSignal,
+    totalTimeoutMs: number = REQUEST_TIMEOUT_MS,
+  ): {
     headers: Record<string, string>;
     abortSignal: AbortSignal;
     cleanup: () => void;
@@ -641,7 +684,7 @@ export class OpenAICompatProvider implements LLMProvider {
     const timeoutId = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, REQUEST_TIMEOUT_MS);
+    }, totalTimeoutMs);
     const abortSignal: AbortSignal = (() => {
       if (!signal) return controller.signal;
       try {
@@ -670,6 +713,7 @@ export class OpenAICompatProvider implements LLMProvider {
     tools?: ToolDefinition[],
     signal?: AbortSignal,
     options?: import("./provider").ChatOptions,
+    totalTimeoutMs: number = REQUEST_TIMEOUT_MS,
   ): Promise<Chunk[]> {
     const maxTokens = options?.maxTokens ?? this.config.maxCompletionTokens ?? DEFAULT_MAX_COMPLETION_TOKENS;
     const body = buildRequestBody({
@@ -683,7 +727,10 @@ export class OpenAICompatProvider implements LLMProvider {
       ...this.cacheHints(),
     });
 
-    const { headers, abortSignal, cleanup, isTimeout } = this.buildRequestSetup(signal);
+    const { headers, abortSignal, cleanup, isTimeout } = this.buildRequestSetup(
+      signal,
+      totalTimeoutMs,
+    );
 
     try {
       const response = await this.fetchWithRetry(`${this.config.baseUrl}/chat/completions`, {
@@ -762,7 +809,7 @@ export class OpenAICompatProvider implements LLMProvider {
       return chunks;
     } catch (err: any) {
       if (isTimeout() && err?.name === "AbortError") {
-        throw new Error(t("error.llm_timeout", { timeout: REQUEST_TIMEOUT_MS }));
+        throw new Error(t("error.llm_timeout", { timeout: totalTimeoutMs }));
       }
       throw err instanceof Error ? err : new Error(String(err));
     } finally {
