@@ -142,7 +142,7 @@
 ```
 index.html     .sb-tabs + .sb-name + три .sb-pane (session/map/trace)
 styles.css     секция «sidebar tabs»: .sb-tabs/.sb-tab/.sb-name/.sb-pane,
-               .sb.sb-expanded (ширина+transition), .trace/.trc, .detail*,
+               .sb.sb-expanded (ширина+transition), .trace-list/.trc, .trc-detail*,
                media ≤760px скрывает trace-таб и trace-панель
 js/sidebar.js  новый leaf-модуль: вкладки, Trace-буфер, master-detail, Map-рендер
 app.js         import sidebar; boot initSidebar(); SSE-подписка Trace;

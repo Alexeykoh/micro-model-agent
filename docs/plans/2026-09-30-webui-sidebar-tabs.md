@@ -610,7 +610,7 @@ git commit -m "feat(i18n): sidebar tabs strings (en/ru)"
 
     <div class="sb-pane" id="pane-trace" role="tabpanel" data-pane="trace" hidden>
       <div class="trace-list" id="traceList"></div>
-      <div class="detail" id="traceDetail" hidden>
+      <div class="trc-detail" id="traceDetail" hidden>
         <div class="detail-h"><span class="g" id="detailGlyph">◇</span><span id="detailTitle"></span><button class="x linkbtn" type="button" id="detailClose">✕</button></div>
         <div class="detail-b" id="detailBody"></div>
       </div>
@@ -685,8 +685,8 @@ git commit -m "feat(webui): sidebar tab bar markup"
 .trc .t { color: var(--dim-b); margin-left: auto; flex: 0 0 auto; }
 .trc.warn .g, .trc.warn .lab { color: var(--yellow); }
 .trc.phase .lab { color: var(--think); }
-.detail { display: flex; flex-direction: column; flex: 0 0 340px; min-width: 0; border-left: 1px solid var(--border); }
-.detail[hidden] { display: none; }
+.trc-detail { display: flex; flex-direction: column; flex: 0 0 340px; min-width: 0; border-left: 1px solid var(--border); }
+.trc-detail[hidden] { display: none; }
 .detail-h { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--fg); font-size: 12.5px; flex-shrink: 0; }
 .detail-h .g { color: var(--accent); }
 .detail-h .x { margin-left: auto; color: var(--dim-b); cursor: pointer; }
@@ -1287,7 +1287,7 @@ it("wires the sidebar tabs (session / map / trace) with master-detail", () => {
   expect(a.html).toContain('id="mapBody"');
   expect(a.css).toContain(".sb-tab.on");
   expect(a.css).toContain(".sb.sb-expanded");
-  expect(a.css).toContain(".detail-b");
+  expect(a.css).toContain(".trc-detail");
   expect(src).toContain("initSidebar(");
   expect(src).toContain("sidebarTraceEvent(");
   expect(src).toContain("sidebarMapState(");
