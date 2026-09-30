@@ -43,6 +43,7 @@ export interface SessionLogEntry {
     | "critic_check"
     | "critic_verdict"
     | "critic_escalation"
+    | "claim_retry"
     | `onboarding_${string}`;
   tool?: string;
   tool_call_id?: string;
@@ -123,6 +124,8 @@ export interface SessionLogEntry {
   level?: string;
   strategy?: string;
   probePassed?: boolean;
+  /** Класс claim-retry (success | artifact | output | repetition | …). */
+  kind?: string;
   // Поля moe_*-событий (observability)
   title?: string;
   subtaskId?: string;

@@ -1333,6 +1333,7 @@ export class Agent {
         // Заземление заявлений на диск (отсутствующие/непарсящиеся файлы,
         // поданные как созданные/валидные). Резолвится здесь — у гейта нет fs.
         artifacts: resolveArtifactStates(this.deps.baseDir, textContent),
+        slog,
       });
       if (verdict.action === "block") {
         return {
@@ -1410,6 +1411,7 @@ export class Agent {
         // Текст ответа — только для ходов без мутаций (чат-доставка):
         // при изменённых файлах судья — файлы/команды, проза ему не нужна.
         answerText: state.mutationsSinceCritic === 0 ? textContent : undefined,
+        onMeta,
       });
       if (criticAction === "retry") {
         state.suppressRepetitionRetry = true;
@@ -1423,6 +1425,7 @@ export class Agent {
         logger,
         contextManager,
         slog,
+        onMeta,
       });
       if (auditVerdict === null || auditVerdict.action === "pass") {
         state.finalAnswerAccepted = true;

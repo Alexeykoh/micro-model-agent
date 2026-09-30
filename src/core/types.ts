@@ -5,9 +5,11 @@ export type AgentState = "INIT" | "THINK" | "ACT" | "OBSERVE" | "OUTPUT" | "ERRO
 /**
  * Вид мета-канала: тела тулов (`display`/`output`/`diff`/сводка из `ToolBatch`)
  * — model-facing, в quiet-чатах скрываются; настоящий статус (статистика
- * контекста, компакция, варнинги) виден всегда.
+ * контекста, компакция, варнинги) виден всегда. `retract` — гейт забраковал
+ * уже отстримленный черновик и переспрашивает модель: потребители убирают
+ * черновик из ленты (иначе финал встанет дублем следом).
  */
-export type MetaKind = "tool" | "status";
+export type MetaKind = "tool" | "status" | "retract";
 
 /** Колбэк UI-статуса; `kind` по умолчанию `"status"`. */
 export type OnMeta = (meta: string, kind?: MetaKind) => void;

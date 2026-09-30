@@ -5,6 +5,7 @@ import { S, hooks } from "./js/store.js";
 import {
 onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
 onTurnEnd, onErrorEvent, onCommandOutput, onLog, onPlan, onQuestion,
+onRetract,
 showEmptyFeed, renderPlan, renderUsage, renderEnvironment, renderWorkspace,
 feedHasContent, loadHistory,
 } from "./js/feed.js";
@@ -141,6 +142,7 @@ const handlers = [
   ["question", onQuestion],
   ["turn_end", (d) => { onTurnEnd(d); sidebarTurnEnd(); sidebarBusy(false); }],
   ["log", onLog],
+  ["retract", (d) => onRetract(d.reason || "", d.sessionId)],
 ];
 for (const [event, fn] of handlers) {
   es.addEventListener(event, (e) => {

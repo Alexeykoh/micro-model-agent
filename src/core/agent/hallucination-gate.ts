@@ -10,6 +10,7 @@ import {
 } from "../../modules/hallucination/artifact-claim";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
+import type { SessionLogger } from "../session-logger";
 import { MAX_CLAIM_CHECK_RETRIES, MAX_HALLUCINATION_RETRIES } from "./constants";
 import type { LoopState } from "./loop-state";
 import type { OnMeta } from "../types";
@@ -45,6 +46,11 @@ export interface HallucinationGateDeps {
    * Отсутствует/пусто — проверка заявлений пропускается.
    */
   artifacts?: ArtifactState[];
+  /**
+   * Логгер сессии для `claim_retry` (опционален — без него в session.jsonl
+   * дырка: llm_usage отклонённого черновика без записи assistant).
+   */
+  slog?: SessionLogger;
 }
 
 /**
@@ -111,6 +117,8 @@ export class HallucinationGate {
     }
 
     if (result.status === "retry") {
+      // Черновик уже отстримлен — убираем до переответа (иначе дубль в ленте).
+      this.retractDraft(deps, result.kind ?? "retry", result.reason ?? "");
       return this.applyRetry(deps, textContent, result);
     }
 
@@ -209,6 +217,7 @@ export class HallucinationGate {
             snippet: contradiction.snippet,
           }),
           `Success-claim contradiction: ${contradiction.tool}: ${contradiction.snippet}`,
+          "success",
         );
       }
     }
@@ -225,6 +234,7 @@ export class HallucinationGate {
           textContent,
           t("hall.claim_artifact", { path: artifact.path, detail: artifact.snippet }),
           `Artifact-claim contradiction: ${artifact.snippet}`,
+          "artifact",
         );
       }
     }
@@ -237,10 +247,21 @@ export class HallucinationGate {
           textContent,
           t("hall.claim_output_unverified", { detail: unverified.snippet }),
           `Unverified output: ${unverified.snippet}`,
+          "output",
         );
       }
     }
     return null;
+  }
+
+  /**
+   * Отклонённый черновик уже отстримлен в ленту: уведомляем потребителей
+   * (`retract`), чтобы убрать его до переответа — иначе финал встанет дублем.
+   * Плюс пишем `claim_retry` в сессию (иначе llm_usage без assistant — дырка).
+   */
+  private retractDraft(deps: HallucinationGateDeps, kind: string, reason: string): void {
+    deps.onMeta?.(t("ui.draft_retracted"), "retract");
+    deps.slog?.logClaimRetry({ kind, reason, iteration: deps.state.iteration });
   }
 
   /**
@@ -252,6 +273,7 @@ export class HallucinationGate {
     textContent: string | undefined,
     reason: string,
     logLine: string,
+    kind: string,
   ): HallucinationVerdict {
     const { state, logger } = deps;
     state.iterHallucinationRetry = true;
@@ -260,6 +282,7 @@ export class HallucinationGate {
     // в applyRetry после отклонения аудита).
     state.suppressRepetitionRetry = true;
     logger.diagnostic("warn", logLine);
+    this.retractDraft(deps, kind, reason);
     if (textContent) {
       deps.contextManager.addMessage({ role: "assistant", content: textContent });
     }

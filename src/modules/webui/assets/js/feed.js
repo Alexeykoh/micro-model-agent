@@ -350,6 +350,31 @@ export function onMeta(chunk, sid, kind) {
   if (feed === activeFeed()) scroll();
 }
 
+// Гейт забраковал уже отстримленный черновик (SSE `retract`): убираем его
+// из ленты до переответа, иначе финал встанет дублем следом
+// (ses_munvrcfz_na9ze3). Копипаст хода тоже чистим — отклонённого текста
+// в «copy / copy as markdown» быть не должно. Без видимого черновика
+// (пустой ответ, только тулы) — тихо, без шумовой строки.
+export function onRetract(reason, sid) {
+  const feed = feedForEvent(sid);
+  if (!feed) return;
+  clearBusy(feed);
+  const draftRoot = S.curMd ? S.curMd.root : null;
+  const hadDraft = !!draftRoot || (S.curText != null && S.curText !== "");
+  const draftLen = S.curText ? S.curText.length : 0;
+  finishMd();
+  finishThink();
+  if (draftRoot) {
+    const idx = S.turnRoots.indexOf(draftRoot);
+    if (idx !== -1) S.turnRoots.splice(idx, 1);
+    draftRoot.remove();
+  }
+  if (draftLen > 0) S.turnMd = S.turnMd.slice(0, Math.max(0, S.turnMd.length - draftLen));
+  if (!hadDraft) return;
+  if (reason) appendTo(feed, el("div", "metaln", reason));
+  if (feed === activeFeed()) scroll();
+}
+
 export function onPhase(phase, sid) {
   const feed = feedForEvent(sid);
   if (phase === "thinking") {

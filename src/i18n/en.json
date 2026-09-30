@@ -895,6 +895,7 @@
   "ui.todo_action": "{action} · {count}",
   "ui.tool_running": "{tool}…",
   "ui.step_context": "step {id}: {desc}",
+  "ui.draft_retracted": "↳ draft rejected by verification, refining…",
   "indexer.map_header": "Project map",
   "indexer.top_directories": "Top directories",
   "indexer.files": "Files",

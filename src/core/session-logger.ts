@@ -471,6 +471,21 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Пишет отклонение уже отстримленного черновика гейтом (hallucination /
+   * success-claim / artifact-claim / output-claim): без этого в session.jsonl
+   * дырка (llm_usage без assistant), а в ленте — дубль при переответе.
+   */
+  logClaimRetry(data: { kind: string; reason: string; iteration: number }): void {
+    this.session?.appendLog({
+      ts: new Date().toISOString(),
+      type: "claim_retry",
+      content: data.reason,
+      kind: data.kind,
+      iteration: data.iteration,
+    });
+  }
+
   /** Пишет событие критика (контр-агент). */
   logCritic(
     event: "critic_check" | "critic_verdict" | "critic_escalation",

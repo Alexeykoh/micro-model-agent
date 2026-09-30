@@ -4,6 +4,7 @@ import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
 import type { CriticIssue, CriticVerdict, EvidencePack } from "../../modules/critic/types";
 import type { SessionLogger } from "../session-logger";
+import type { OnMeta } from "../types";
 import type { LoopState } from "./loop-state";
 
 /** Хвост вывода тула в evidence-событии (ограничен — у критика свой бюджет). */
@@ -26,6 +27,11 @@ export interface CriticGateDeps {
    * Обрезается и редактируется в buildEvidencePack, не раньше.
    */
   answerText?: string;
+  /**
+   * Мета-канал для `retract`: repair отклоняет уже отстримленный черновик,
+   * потребители убирают его до переответа (иначе дубль в ленте).
+   */
+  onMeta?: OnMeta;
 }
 
 /** Действие вентиля: пропустить или переспросить модель. */
@@ -129,7 +135,10 @@ export class CriticGate {
   private async verifySafely(deps: CriticGateDeps): Promise<CriticVerdict | null> {
     try {
       return await this.opts.verify(this.opts.buildPack(deps), this.opts.signal);
-    } catch {
+    } catch (err) {
+      // Одинокий critic_check без вердикта неотличим от pass — фиксируем
+      // fail-open диагностикой, чтобы разбор сессии не упирался в "критик завис?".
+      deps.logger.diagnostic("warn", `Critic verify failed (fail-open): ${String((err as Error)?.message ?? err)}`);
       return null;
     }
   }
@@ -192,6 +201,8 @@ export class CriticGate {
   /** Починка: тратит repair-бюджет, пишет escalation, ретраит. */
   private injectRepair(deps: CriticGateDeps, verdict: CriticVerdict, fresh: CriticIssue[]): void {
     deps.state.criticRepairCycles++;
+    // Черновик уже в ленте — убираем до переответа, иначе дубль.
+    deps.onMeta?.(t("ui.draft_retracted"), "retract");
     deps.slog.logCritic("critic_escalation", {
       summary: verdict.summary,
       cycle: deps.state.criticRepairCycles,

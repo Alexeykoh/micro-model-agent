@@ -16,6 +16,7 @@ import { extname, isAbsolute, relative, resolve } from "node:path";
 import { extractFileLikeTokens } from "../../modules/hallucination/js-identifiers";
 import type { ArtifactState } from "../../modules/hallucination/artifact-claim";
 import { checkXmlWellFormed } from "../../tools/syntax-validator";
+import { findExistingFile } from "../../modules/execution/auditor";
 
 const MAX_PATHS = 10;
 const MAX_BYTES = 500 * 1024;
@@ -50,26 +51,35 @@ export function resolveArtifactStates(baseDir: string, response: string): Artifa
     const abs = isAbsolute(token) ? token : resolve(baseDir, token);
     const rel = relative(baseDir, abs);
     if (rel.startsWith("..") || isAbsolute(rel)) continue;
-    const state = resolveOneArtifact(token, abs);
+    const state = resolveOneArtifact(token, baseDir);
     if (state) out.push(state);
   }
   return out;
 }
 
-/** Смотрит один путь внутри jail (и парсит, если формат поддерживается). Null, если нечитаем. */
-function resolveOneArtifact(token: string, abs: string): ArtifactState | null {
+/**
+ * Смотрит один путь внутри jail (и парсит, если формат поддерживается).
+ * Точный резолв первым, затем поиск по basename/суффиксу в поддереве:
+ * ответ часто называет файл голым именем ("game.ts"), а лежит он в `src/`
+ * — строгий резолв давал exists:false и ложный claim-retry с дублем
+ * ответа в ленте (ses_munvrcfz_na9ze3). Null, если нечитаем.
+ */
+function resolveOneArtifact(token: string, baseDir: string): ArtifactState | null {
+  // findExistingFile сам идёт в jail baseDir: точный путь, иначе basename/суффикс.
+  const found = findExistingFile(baseDir, token);
+  if (!found) return { path: token, exists: false };
   let size: number;
   try {
-    const st = statSync(abs);
+    const st = statSync(found);
     if (!st.isFile()) return { path: token, exists: false };
     size = st.size;
   } catch {
-    return { path: token, exists: false };
+    return { path: token, exists: true };
   }
   if (size > MAX_BYTES) return { path: token, exists: true };
   let content: string;
   try {
-    content = readFileSync(abs, "utf-8");
+    content = readFileSync(found, "utf-8");
   } catch {
     // Нечитаем между stat и read — существует, но не проверен.
     return { path: token, exists: true };
