@@ -1448,6 +1448,7 @@
   "web.history.loading": "loading…",
   "web.history.unavailable": "— history unavailable",
   "web.history.empty": "— empty session —",
+  "web.scroll.latest": "latest",
   "web.tool.output_one": "output · {count} char",
   "web.tool.output_few": "output · {count} chars",
   "web.tool.output_many": "output · {count} chars",
