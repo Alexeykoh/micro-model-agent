@@ -801,8 +801,8 @@ body.light .sel > button { border: 1px solid var(--border); }
 .trc .t { color: var(--dim-b); margin-left: auto; flex: 0 0 auto; }
 .trc.warn .g, .trc.warn .lab { color: var(--yellow); }
 .trc.phase .lab { color: var(--think); }
-.detail { display: flex; flex-direction: column; flex: 0 0 340px; min-width: 0; border-left: 1px solid var(--border); }
-.detail[hidden] { display: none; }
+.trc-detail { display: flex; flex-direction: column; flex: 0 0 340px; min-width: 0; border-left: 1px solid var(--border); }
+.trc-detail[hidden] { display: none; }
 .detail-h { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--fg); font-size: 12.5px; flex-shrink: 0; }
 .detail-h .g { color: var(--accent); }
 .detail-h .x { margin-left: auto; color: var(--dim-b); cursor: pointer; }
