@@ -796,6 +796,147 @@ describe("OpenAICompatProvider", () => {
     expect(toolCall!.name).toBe("write_file");
   });
 
+  it("does not kill a flowing stream at the 120s total deadline (slow hardware)", async () => {
+    // Regression: the total request deadline (120s) used to abort even streams
+    // that kept delivering data, and the abort was misreported as
+    // "no data for {noDataTimeoutMs}ms". Slow 9B-on-CPU generations routinely
+    // run longer than 120s while trickling tokens.
+    // NOTE: bun's `vi` shim has no advanceTimersByTimeAsync — sync advance +
+    // microtask flushes (ReadableStream delivery is microtask-driven).
+    vi.useFakeTimers();
+    try {
+      const provider = new OpenAICompatProvider({
+        model: "test-model",
+        baseUrl: "http://localhost:11434/v1",
+        retry: {
+          maxRetries: 1,
+          baseDelay: 5,
+          maxDelay: 50,
+          maxStreamRetries: 0,
+          noDataTimeoutMs: 300000,
+        },
+      });
+
+      const flush = async (rounds = 20): Promise<void> => {
+        for (let i = 0; i < rounds; i++) await Promise.resolve();
+      };
+      const encoder = new TextEncoder();
+      let releaseSecond: (() => void) | null = null;
+      let gated = false;
+      const mockFetch = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+        const signal = init.signal;
+        return Promise.resolve({
+          ok: true,
+          headers: new Map(),
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode('data: {"choices":[{"delta":{"content":"a"}}]}\n\n'),
+              );
+              signal?.addEventListener("abort", () => {
+                try {
+                  controller.error(new DOMException("Aborted", "AbortError"));
+                } catch {
+                  // Already closed — nothing to error.
+                }
+              });
+            },
+            pull(controller) {
+              if (gated) return Promise.resolve();
+              gated = true;
+              // Second chunk arrives only when the test releases it —
+              // keeps a read pending across the 120s mark.
+              return new Promise<void>((resolve) => {
+                releaseSecond = () => {
+                  try {
+                    controller.enqueue(
+                      encoder.encode('data: {"choices":[{"delta":{"content":"b"}}]}\n\n'),
+                    );
+                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                    controller.close();
+                  } catch {
+                    // Aborted mid-test (old behaviour) — just unlock the pull.
+                  }
+                  resolve();
+                };
+              });
+            },
+          }),
+        });
+      });
+      global.fetch = mockFetch as any;
+
+      const collected: string[] = [];
+      let runError: unknown = null;
+      const run = (async () => {
+        try {
+          for await (const chunk of provider.chat([{ role: "user", content: "hi" }])) {
+            if (chunk.type === "text" && chunk.content) collected.push(chunk.content);
+          }
+        } catch (e) {
+          runError = e;
+        }
+      })();
+      // Let headers + the first chunk flow.
+      await flush();
+      expect(collected.join("")).toBe("a");
+      // Jump past the old 120s total deadline while a read is pending.
+      vi.advanceTimersByTime(130000);
+      await flush();
+      releaseSecond?.();
+      await run;
+      expect(runError).toBeNull();
+      expect(collected.join("")).toBe("ab");
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports a request timeout (not a bare abort) when headers never arrive", async () => {
+    vi.useFakeTimers();
+    try {
+      const provider = new OpenAICompatProvider({
+        model: "test-model",
+        baseUrl: "http://localhost:11434/v1",
+        retry: { maxRetries: 0, baseDelay: 5, maxDelay: 50, maxStreamRetries: 0 },
+      });
+
+      const flush = async (rounds = 20): Promise<void> => {
+        for (let i = 0; i < rounds; i++) await Promise.resolve();
+      };
+      const mockFetch = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+        const signal = init.signal;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        });
+      });
+      global.fetch = mockFetch as any;
+
+      let runError: unknown = null;
+      const run = (async () => {
+        try {
+          for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+          }
+        } catch (e) {
+          runError = e;
+        }
+      })();
+      await flush();
+      vi.advanceTimersByTime(121000);
+      await run;
+      // Locale-proof: both en/ru messages carry the deadline value; a bare
+      // abort (old behaviour) is a DOMException named "AbortError".
+      expect((runError as Error | null)?.name).not.toBe("AbortError");
+      expect(String((runError as Error | null)?.message)).toContain("120000");
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("should throw an actionable error when a tool_call is cut off by the length limit", async () => {
     const provider = new OpenAICompatProvider({
       model: "test-model",
