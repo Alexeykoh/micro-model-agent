@@ -40,6 +40,22 @@ function issueSignature(issue: CriticIssue): string {
   return `${issue.severity}:${issue.claim}`.toLowerCase().replace(/\s+/g, " ").slice(0, 120);
 }
 
+/**
+ * Грубая нормализация жалобы для ловли near-identical повторов (регистр,
+ * пунктуация, пробелы). Настоящие перефразы («ran weather searches» vs
+ * «ignored the task») этим не ловятся — их останавливает advice=pass
+ * при исчерпанном repair-бюджете, а не эта эвристика.
+ */
+export function normalizedSignature(issue: CriticIssue): string {
+  const body = `${issue.severity}:${issue.claim}`
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  return `~${body}`;
+}
+
 function renderIssues(issues: CriticIssue[]): string {
   return issues
     .slice(0, 5)
@@ -68,6 +84,10 @@ export class CriticGate {
     const verdict = await this.verifySafely(deps);
     if (!verdict || verdict.status === "ok") return "pass";
 
+    // Повтор уже виденной жалобы — считаем ДО takeFreshIssues (он пополняет набор).
+    const isRepeat =
+      verdict.issues.length > 0 &&
+      verdict.issues.every((i) => deps.state.seenCriticIssues.has(normalizedSignature(i)));
     const fresh = this.takeFreshIssues(deps.state, verdict.issues);
     if (fresh.length === 0) return "pass";
 
@@ -76,7 +96,15 @@ export class CriticGate {
       verdict.status === "critical" &&
       deps.beforeFinish &&
       deps.state.criticRepairCycles < this.opts.maxRepairCycles;
-    this.inject(deps, verdict, fresh, canRepair);
+    if (!canRepair || isRepeat) {
+      // Совет/повтор — не retry: иначе advice крутит модель по кругу до
+      // maxCalls теми же ответами (наблюдалось: 4 идентичных critical подряд).
+      // Повтор дополнительно требует сменить подход, repair-бюджет не тратится.
+      this.injectRepeatOrAdvice(deps, verdict, fresh, isRepeat);
+      return "pass";
+    }
+
+    this.injectRepair(deps, verdict, fresh);
     return "retry";
   }
 
@@ -106,6 +134,7 @@ export class CriticGate {
       const sig = issueSignature(issue);
       if (state.seenCriticIssues.has(sig)) continue;
       state.seenCriticIssues.add(sig);
+      state.seenCriticIssues.add(normalizedSignature(issue));
       fresh.push(issue);
     }
     return fresh;
@@ -129,20 +158,23 @@ export class CriticGate {
     deps.logger.diagnostic("info", `Critic ${verdict.status}: ${verdict.summary} (${count} issue(s))`);
   }
 
-  private inject(
+  /** Совет или директива при повторе: инжектит текст, но НЕ ретраит (возврат — pass). */
+  private injectRepeatOrAdvice(
     deps: CriticGateDeps,
     verdict: CriticVerdict,
     fresh: CriticIssue[],
-    canRepair: boolean,
+    isRepeat: boolean,
   ): void {
-    if (!canRepair) {
-      deps.contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${t("critic.advice", { issues: renderIssues(fresh) })}</system-summary>`,
-      });
-      return;
-    }
+    deps.contextManager.addMessage({
+      role: "user",
+      content: `<system-summary>${isRepeat
+        ? t("critic.repeat", { issues: renderIssues(fresh) })
+        : t("critic.advice", { issues: renderIssues(fresh) })}</system-summary>`,
+    });
+  }
 
+  /** Починка: тратит repair-бюджет, пишет escalation, ретраит. */
+  private injectRepair(deps: CriticGateDeps, verdict: CriticVerdict, fresh: CriticIssue[]): void {
     deps.state.criticRepairCycles++;
     deps.slog.logCritic("critic_escalation", {
       summary: verdict.summary,
