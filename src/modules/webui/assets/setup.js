@@ -103,6 +103,7 @@
       securityBashBlock: false,
       securityFlagsBlock: false,
       securityPathsRestrict: true,
+      securityDetail: { bash: {}, paths: {}, flags: {}, network: {}, advanced: {} },
     },
   };
 
@@ -118,6 +119,12 @@
       state.answers.contextWindow = r.data.defaults.contextWindow || state.answers.contextWindow;
       state.answers.maxToolIterations =
         r.data.defaults.maxToolIterations || state.answers.maxToolIterations;
+      if (r.data.defaults.security) {
+        state.answers.securityDetail = Object.assign(
+          state.answers.securityDetail,
+          r.data.defaults.security,
+        );
+      }
     }
     const first = (r.data.providers || [])[0];
     if (first) {
@@ -137,6 +144,7 @@
   // --- rendering -------------------------------------------------------------
 
   function render() {
+    closePopup();
     const wrap = h("div", "setup-wrap");
     const title = h("h1", "setup-h");
     title.appendChild(h("span", "glyph", "◇"));
@@ -258,6 +266,27 @@
     });
     box.appendChild(field(tr("web.setup.provider.base_url"), input));
 
+    const actions = h("div", "setup-row-inline");
+    const test = h("button", "setup-btn", tr("web.setup.provider.test"));
+    test.type = "button";
+    test.addEventListener("click", async () => {
+      if (!state.answers.apiBase) {
+        setMsg(box, "err", tr("web.setup.provider.required"));
+        return;
+      }
+      test.disabled = true;
+      setMsg(box, "", tr("web.setup.provider.testing"));
+      const r = await api("/api/setup/models", {
+        method: "POST",
+        body: { baseUrl: state.answers.apiBase, apiKey: state.answers.apiKey },
+      });
+      test.disabled = false;
+      const models = (r.ok && r.data && r.data.models) || [];
+      if (r.ok && models.length) setMsg(box, "ok", tr("web.setup.provider.test_ok"));
+      else setMsg(box, "warn", tr("web.setup.provider.test_fail"));
+    });
+    actions.appendChild(test);
+
     if (state.answers.provider === "openai-compat" || state.answers.provider === "lmstudio") {
       const scan = h("button", "setup-btn", tr("web.setup.provider.scan"));
       scan.type = "button";
@@ -291,8 +320,11 @@
           results.appendChild(b);
         });
       });
-      box.appendChild(scan);
+      actions.appendChild(scan);
+      box.appendChild(actions);
       box.appendChild(results);
+    } else {
+      box.appendChild(actions);
     }
     box.appendChild(messageEl());
     return box;
@@ -393,6 +425,38 @@
     });
     box.appendChild(field(tr("web.setup.context.contextWindow"), cw));
 
+    const detect = h("button", "setup-btn", tr("web.setup.context.detect"));
+    detect.type = "button";
+    detect.addEventListener("click", async () => {
+      if (!state.answers.apiBase || !state.answers.model) {
+        setMsg(box, "err", tr("web.setup.context.detect_fail"));
+        return;
+      }
+      detect.disabled = true;
+      setMsg(box, "", tr("web.setup.context.detecting"));
+      const r = await api("/api/setup/context", {
+        method: "POST",
+        body: {
+          baseUrl: state.answers.apiBase,
+          apiKey: state.answers.apiKey,
+          model: state.answers.model,
+          providerType: state.answers.provider,
+        },
+      });
+      detect.disabled = false;
+      const n = r.ok && r.data && r.data.contextWindow;
+      if (r.ok && r.data && r.data.ok && typeof n === "number" && n > 0) {
+        state.answers.contextWindow = n;
+        cw.value = String(n);
+        setMsg(box, "ok", tr("web.setup.context.detect_ok", { count: n }));
+      } else {
+        setMsg(box, "warn", tr("web.setup.context.detect_fail"));
+      }
+    });
+    const row = h("div", "setup-row-inline");
+    row.appendChild(detect);
+    box.appendChild(row);
+
     const it = h("input", "setup-input");
     it.type = "number";
     it.min = "1";
@@ -408,23 +472,217 @@
   function renderSecurity() {
     const box = stepBody("security");
     const toggles = [
-      ["securityPathsRestrict", "web.setup.security.paths"],
-      ["securityBashBlock", "web.setup.security.bash"],
-      ["securityFlagsBlock", "web.setup.security.flags"],
+      ["securityPathsRestrict", "web.setup.security.paths", "web.setup.security.paths_desc", "paths"],
+      ["securityBashBlock", "web.setup.security.bash", "web.setup.security.bash_desc", "bash"],
+      ["securityFlagsBlock", "web.setup.security.flags", "web.setup.security.flags_desc", "flags"],
     ];
-    toggles.forEach(([key, labelKey]) => {
-      const row = h("label", "setup-toggle");
+    toggles.forEach(([key, labelKey, descKey, group]) => {
+      const row = h("div", "setup-sec-row");
+      const label = h("label", "setup-toggle");
       const cb = h("input");
       cb.type = "checkbox";
       cb.checked = Boolean(state.answers[key]);
       cb.addEventListener("change", () => {
         state.answers[key] = cb.checked;
       });
-      row.appendChild(cb);
-      row.appendChild(h("span", null, tr(labelKey)));
+      label.appendChild(cb);
+      const texts = h("span", "setup-toggle-texts");
+      texts.appendChild(h("span", "t", tr(labelKey)));
+      const desc = tr(descKey);
+      if (desc !== descKey) texts.appendChild(h("span", "d", desc));
+      label.appendChild(texts);
+      row.appendChild(label);
+      row.appendChild(detailButton(group, tr(labelKey)));
       box.appendChild(row);
     });
+
+    const advRow = h("div", "setup-sec-row");
+    const advTexts = h("span", "setup-toggle setup-adv-label");
+    advTexts.appendChild(h("span", "t", tr("web.setup.security.advanced")));
+    advRow.appendChild(advTexts);
+    advRow.appendChild(detailButton("advanced", tr("web.setup.security.advanced")));
+    box.appendChild(advRow);
     return box;
+  }
+
+  // Описание поп-апов тонкой настройки: путь в securityDetail + тип поля.
+  const SECURITY_POPUPS = {
+    paths: [
+      ["paths.denied", "list", "web.setup.security.denied"],
+      ["paths.allowed", "list", "web.setup.security.allowed"],
+    ],
+    bash: [
+      ["bash.blacklist", "list", "web.setup.security.blacklist"],
+      ["bash.whitelist", "list", "web.setup.security.whitelist"],
+      ["bash.logCommands", "bool", "web.setup.security.log_commands"],
+    ],
+    flags: [
+      ["flags.dangerousFlags", "list", "web.setup.security.dangerous_flags"],
+      ["flags.dangerousOperators", "list", "web.setup.security.dangerous_operators"],
+    ],
+    advanced: [
+      ["network.enabled", "bool", "web.setup.security.network_enabled"],
+      ["network.deniedDomains", "list", "web.setup.security.denied_domains"],
+      ["network.allowedDomains", "list", "web.setup.security.allowed_domains"],
+      ["network.requestTimeout", "int", "web.setup.security.request_timeout"],
+      ["network.maxResponseSize", "int", "web.setup.security.max_response_size"],
+      ["advanced.maxRecursionDepth", "int", "web.setup.security.max_recursion"],
+      ["advanced.maxFileOperations", "int", "web.setup.security.max_file_ops"],
+      ["advanced.maxRequestsPerMinute", "int", "web.setup.security.rate_rpm"],
+      ["advanced.maxParallelTasks", "int", "web.setup.security.rate_parallel"],
+      ["advanced.contentScanEnabled", "bool", "web.setup.security.content_scan"],
+      ["advanced.sessionEncryptionEnabled", "bool", "web.setup.security.session_encryption"],
+      ["advanced.auditNotifierEnabled", "bool", "web.setup.security.audit_enabled"],
+      ["advanced.auditNotifierMinSeverity", "enum", "web.setup.security.audit_severity"],
+      ["advanced.auditNotifierEventTypes", "list", "web.setup.security.audit_events"],
+      ["advanced.auditNotifierMaxRetries", "int", "web.setup.security.audit_retries"],
+      ["advanced.auditNotifierWebhookTimeout", "int", "web.setup.security.audit_timeout"],
+    ],
+  };
+  const SEVERITIES = ["low", "medium", "high", "critical"];
+  const GROUP_KEYS = {
+    paths: ["paths"],
+    bash: ["bash"],
+    flags: ["flags"],
+    advanced: ["network", "advanced"],
+  };
+
+  function getPath(obj, path) {
+    return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
+  }
+  function setPath(obj, path, value) {
+    const keys = path.split(".");
+    let cur = obj;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (typeof cur[keys[i]] !== "object" || cur[keys[i]] === null) cur[keys[i]] = {};
+      cur = cur[keys[i]];
+    }
+    cur[keys[keys.length - 1]] = value;
+  }
+
+  function detailButton(group, title) {
+    const btn = h("button", "setup-detail-btn");
+    btn.type = "button";
+    btn.appendChild(h("span", "g", "⚙"));
+    btn.appendChild(h("span", "t", tr("web.setup.security.configure")));
+    btn.title = title;
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      openSecurityPopup(group, title);
+    });
+    return btn;
+  }
+
+  let popup = null;
+
+  function openSecurityPopup(group, title) {
+    const overlay = h("div", "setup-overlay");
+    const modal = h("div", "setup-modal");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+
+    const head = h("div", "setup-modal-head");
+    const hIcon = h("span", "glyph", "⚙");
+    head.appendChild(hIcon);
+    head.appendChild(h("span", "setup-modal-title", title));
+    const close = h("button", "setup-modal-x", "✕");
+    close.type = "button";
+    close.addEventListener("click", closePopup);
+    head.appendChild(close);
+    modal.appendChild(head);
+
+    const body = h("div", "setup-modal-body");
+    body.appendChild(h("p", "setup-hint", tr("web.setup.security.popup_hint")));
+    SECURITY_POPUPS[group].forEach(([path, type, labelKey]) => {
+      body.appendChild(popupField(path, type, tr(labelKey)));
+    });
+    modal.appendChild(body);
+
+    const foot = h("div", "setup-modal-foot");
+    const reset = h("button", "setup-btn link", tr("web.setup.security.reset"));
+    reset.type = "button";
+    reset.addEventListener("click", () => {
+      const defaults = (state.display && state.display.defaults && state.display.defaults.security) || {};
+      (GROUP_KEYS[group] || [group]).forEach((src) => {
+        const fresh = defaults[src] || {};
+        Object.keys(fresh).forEach((k) => setPath(state.answers.securityDetail, src + "." + k, fresh[k]));
+      });
+      closePopup();
+      openSecurityPopup(group, title);
+    });
+    foot.appendChild(reset);
+    foot.appendChild(h("span", "spacer"));
+    const done = h("button", "setup-btn primary", tr("web.setup.security.popup_done"));
+    done.type = "button";
+    done.addEventListener("click", closePopup);
+    foot.appendChild(done);
+    modal.appendChild(foot);
+
+    overlay.appendChild(modal);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) closePopup();
+    });
+    popup = overlay;
+    gate.appendChild(overlay);
+  }
+
+  function popupField(path, type, label) {
+    const wrap = h("div", "setup-field");
+    if (type === "list") {
+      wrap.appendChild(h("label", "setup-label", label));
+      const ta = h("textarea", "setup-input setup-textarea");
+      const cur = getPath(state.answers.securityDetail, path);
+      ta.value = Array.isArray(cur) ? cur.join("\n") : "";
+      ta.rows = 5;
+      ta.spellcheck = false;
+      ta.addEventListener("input", () => {
+        const items = ta.value
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        setPath(state.answers.securityDetail, path, items);
+      });
+      wrap.appendChild(ta);
+    } else if (type === "bool") {
+      const row = h("label", "setup-toggle");
+      const cb = h("input");
+      cb.type = "checkbox";
+      cb.checked = Boolean(getPath(state.answers.securityDetail, path));
+      cb.addEventListener("change", () => setPath(state.answers.securityDetail, path, cb.checked));
+      row.appendChild(cb);
+      row.appendChild(h("span", "t", label));
+      wrap.appendChild(row);
+    } else if (type === "int") {
+      wrap.appendChild(h("label", "setup-label", label));
+      const inp = h("input", "setup-input");
+      inp.type = "number";
+      inp.min = "1";
+      const cur = getPath(state.answers.securityDetail, path);
+      inp.value = typeof cur === "number" ? String(cur) : "";
+      inp.addEventListener("input", () => {
+        const n = parseInt(inp.value, 10);
+        setPath(state.answers.securityDetail, path, Number.isFinite(n) && n > 0 ? n : undefined);
+      });
+      wrap.appendChild(inp);
+    } else if (type === "enum") {
+      wrap.appendChild(h("label", "setup-label", label));
+      const sel = h("select", "setup-input");
+      const cur = getPath(state.answers.securityDetail, path);
+      SEVERITIES.forEach((sev) => {
+        const opt = h("option", null, tr("web.setup.security.severity." + sev));
+        opt.value = sev;
+        if (cur === sev) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener("change", () => setPath(state.answers.securityDetail, path, sel.value));
+      wrap.appendChild(sel);
+    }
+    return wrap;
+  }
+
+  function closePopup() {
+    if (popup && popup.parentNode) popup.parentNode.removeChild(popup);
+    popup = null;
   }
 
   function securitySummary() {
@@ -534,6 +792,7 @@
         securityBashBlock: state.answers.securityBashBlock,
         securityFlagsBlock: state.answers.securityFlagsBlock,
         securityPathsRestrict: state.answers.securityPathsRestrict,
+        securityDetail: state.answers.securityDetail,
       },
     });
     if (!r.ok) {

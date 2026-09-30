@@ -139,7 +139,8 @@ function isNonNegNum(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v) && v >= 0;
 }
 
-const AUDIT_EVENT_TYPES: readonly AuditEventType[] = [
+/** Канонический набор типов аудит-событий (валидация реестра и setup-визарда). */
+export const AUDIT_EVENT_TYPES: readonly AuditEventType[] = [
   "security_block",
   "bash_command",
   "file_operation",

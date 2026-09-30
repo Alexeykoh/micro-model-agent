@@ -490,6 +490,16 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   и после успеха делает `location.reload()`. Локализация `web.setup.*` (en+ru, RU-плюрализация `_few`),
   стиль по `docs/design/ui/STYLE.md` (строки/глифы, без boxed-панелей). `/setup.js` отдаётся как статик
   (`WebUiAssets.setupJs`, `Cache-Control: no-store`).
+- **Проверка подключения и контекста:** шаг Provider имеет кнопку «Проверить подключение» (`POST
+  /api/setup/models` — достижим ли `/models`), шаг Context — «Определить у провайдера»
+  (`POST /api/setup/context` → `probeProviderContext`, подставляет реальное окно; fail-open).
+- **Тонкая настройка безопасности из поп-апов:** каждая опция шага Security (paths/bash/flags) и
+  «Расширенные настройки» открывают модалку (`#setupOverlay`-подобный `.setup-overlay`, `openSecurityPopup`)
+  с полями группы (списки — textarea «по одному в строке», булы — чекбоксы, числа/enum). Данные —
+  `SetupSecurityDetail` (`answers.ts`), снепшот живого конфига отдаётся в `GET /api/setup`
+  (`securityDetailFromConfig`, без `contentScan.dangerousPatterns` — RegExp не сериализуется). `POST
+  /api/setup` валидирует (`parseSecurityDetail`: типы, трим, лимит 200×200) и `applySecurityDetail`
+  переопределяет указанные поля поверх логики трёх тумблеров. Правила/списки попадают и в системный промпт (Protected Paths).
 
 ### Web Markdown, Highlighting & Copy (2.7.0)
 
