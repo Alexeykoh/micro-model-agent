@@ -158,6 +158,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
       const refresh = deps.indexer.refresh.bind(deps.indexer);
       state.refreshIndex = async () => {
         await refresh();
+        broadcast({ type: "state", ts: Date.now(), busy: state.busy, usage: state.usage }, state);
       };
     }
   }

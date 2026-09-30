@@ -383,6 +383,17 @@ describe("webui server", () => {
       expect(r.status).toBe(503);
     });
   });
+
+  it("POST /api/index returns 202 even if refreshIndex rejects", async () => {
+    const s = createWebUiState();
+    s.refreshIndex = async () => {
+      throw new Error("boom");
+    };
+    await withServer(s, async (base) => {
+      const r = await postJson(base, "/api/index");
+      expect(r.status).toBe(202);
+    });
+  });
 });
 
 describe("webui message body validation", () => {
