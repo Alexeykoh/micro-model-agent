@@ -223,12 +223,16 @@ export interface ProjectMapInfo {
   `refresh(): Promise<unknown>`; `HostStateInput.projectMap?: ProjectMapInfo`.
   `buildHostState` пробрасывает объект как есть.
 - `module.ts` `getState()`: `projectMap: deps.indexer?.mapInfo?.() ?? undefined`.
-  Плюс `state.refreshIndex = () => deps.indexer?.refresh?.() ?? Promise.resolve()`.
+  Плюс (только если у индексера есть `refresh`):
+  `state.refreshIndex = async () => { await refresh(); broadcast({type:"state", ts,
+  busy:state.busy, usage:state.usage}, state); }` — завершающий `state`-event шлётся
+  из замыкания (там уже импортирован `broadcast`), а не из HTTP-хендлера.
 - `state.ts`: `WebUiState.refreshIndex?: () => Promise<void>`.
 - `server.ts` `API_ROUTES`: `"POST /api/index"` → `handleIndexPost` (auth + same-origin
-  уже проверены общим путём): fire-and-forget `s.refreshIndex?.()`, по завершении
-  `broadcast({type:"state", ts, busy:s.busy, usage:s.usage})`; сразу `202 {ok:true}`.
-  Если `refreshIndex` не задан — `503 {error:"unavailable"}`.
+  уже проверены общим путём): fire-and-forget `Promise.resolve(s.refreshIndex()).catch(()=>{})`
+  и сразу `202 {ok:true}`; если `refreshIndex` не задан — `503 {error:"unavailable"}`.
+  Серверный флаг `mapInfo().indexing` уже `true` к моменту ответа 202 (refresh
+  выставляет его синхронно), так что клиент опирается на него, а не на свой таймер.
 
 ## 7. i18n (en + ru, паритет обязателен)
 

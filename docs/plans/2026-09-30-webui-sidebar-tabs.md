@@ -1040,17 +1040,21 @@ function mapKv(label, value, cls) {
   return row;
 }
 
-let reindexing = false;
+let reindexing = false;   // клиентский спиннер до свежего снапшота
+let postResolved = false; // POST вернулся; следующий снапшот снимет спиннер
+let reindexError = false; // последний POST не удался
 
 export function sidebarMapState(host) {
   if (!mapEl) return;
   const map = (host && host.projectMap) || null;
+  const serverIndexing = !!(map && map.indexing);
+  if (postResolved && !serverIndexing) { reindexing = false; postResolved = false; }
+  const indexing = serverIndexing || reindexing;
   mapEl.textContent = "";
   if (!map) {
     mapEl.appendChild(mapKv(t("web.sidebar.map_status"), t("web.sidebar.map_never")));
     return;
   }
-  const indexing = !!map.indexing || reindexing;
   const status = indexing ? t("web.sidebar.map_indexing")
     : !map.indexed ? t("web.sidebar.map_never")
     : (map.watcher ? t("web.sidebar.map_ready") : t("web.sidebar.map_stale"));
@@ -1060,7 +1064,7 @@ export function sidebarMapState(host) {
   mapEl.appendChild(mapKv(t("web.sidebar.map_files"), String(map.files || 0)));
   mapEl.appendChild(mapKv(t("web.sidebar.map_symbols"), String(map.symbols || 0)));
   mapEl.appendChild(mapKv(t("web.sidebar.map_tokens"), fmtTokens(map.tokens)));
-  if (host.workspace) mapEl.appendChild(mapKv(t("web.sidebar.map_root"), host.workspace));
+  if (host && host.workspace) mapEl.appendChild(mapKv(t("web.sidebar.map_root"), host.workspace));
 
   if (Array.isArray(map.languages) && map.languages.length > 0) {
     const head = el("div", "kv");
@@ -1068,20 +1072,26 @@ export function sidebarMapState(host) {
     mapEl.appendChild(head);
     map.languages.forEach((l) => mapEl.appendChild(mapKv(l.language, l.files + " · " + l.symbols)));
   }
+  if (reindexError) mapEl.appendChild(mapKv(t("web.sidebar.map_reindex_failed"), "—", "wn"));
 
   const btn = el("button", "map-reindex", indexing ? t("web.sidebar.map_reindexing") : t("web.sidebar.map_reindex"));
   btn.type = "button";
   btn.disabled = indexing;
   btn.addEventListener("click", async () => {
     reindexing = true;
+    postResolved = false;
+    reindexError = false;
     sidebarMapState(host);
-    try {
-      await api("/api/index", { method: "POST" });
-    } catch (err) {
-      btn.textContent = t("web.sidebar.map_reindex_failed");
-    } finally {
+    const r = await api("/api/index", { method: "POST" });
+    if (!r.ok) {
       reindexing = false;
+      postResolved = false;
+      reindexError = true;
+      sidebarMapState(host);
+      return;
     }
+    // Свежий снапшот (поллинг / `state`-broadcast по завершении) снимет спиннер.
+    postResolved = true;
   });
   mapEl.appendChild(btn);
 }
@@ -1224,7 +1234,10 @@ es.addEventListener("text", (e) => { const d = parse(e); if (d) sidebarTraceEven
 ```
 
 В bespoke `state`-хендлере (строка 156) после `reflectBusy()` добавить
-`sidebarBusy(!!d.busy);`. В `turn_end`-хендлере: обернуть `onTurnEnd` — в таблице
+`sidebarBusy(!!d.busy);` и `refresh();` — завершающий `state`-broadcast от
+`POST /api/index` не несёт `projectMap`, поэтому перетягиваем свежий `/api/state`
+(там `renderState` дёрнет `sidebarMapState`/`sidebarMapIndicator`).
+В `turn_end`-хендлере: обернуть `onTurnEnd` — в таблице
 `handlers` заменить `["turn_end", onTurnEnd],` на:
 
 ```js
