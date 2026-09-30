@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.13.1] - 2026-09-30
+
 ### Fixed
 
 - **In-loop critic is now selective instead of always-on** (`src/core/agent/critic-gate.ts`, `loop-state.ts`, `src/core/agent.ts`): evidence is scoped to the current run (`LoopState.criticHistoryMark` + `gatherTurnToolEvents(cm, mark)`), so tool calls from previous questions no longer testify against the current task (observed: weather lookups from an earlier turn caused 4 false `critical` verdicts on a chat-only "show a React example" answer). Chat-only turns (no tool events in the run) now `pass` without an LLM call and without spending `maxCalls`; the dead mid-turn `mutationsSinceCritic` trigger branch is removed.
