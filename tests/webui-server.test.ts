@@ -12,7 +12,7 @@ import {
 import { createWebUiState } from "../src/modules/webui/state";
 import { makeForwarder } from "../src/modules/webui/forward";
 import type { Host } from "../src/core/host";
-import { withServer, doFetch, webuiAssets as assets } from "./helpers/webui-server";
+import { withServer, doFetch, postJson, webuiAssets as assets } from "./helpers/webui-server";
 
 
 function makeBridge(): Host {
@@ -360,6 +360,27 @@ describe("webui server", () => {
     await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/interrupt`, { method: "POST" });
       expect(res.status).toBe(409);
+    });
+  });
+
+  it("POST /api/index triggers refreshIndex and returns 202", async () => {
+    const s = createWebUiState();
+    let called = 0;
+    s.refreshIndex = async () => {
+      called += 1;
+    };
+    await withServer(s, async (base) => {
+      const r = await postJson(base, "/api/index");
+      expect(r.status).toBe(202);
+    });
+    expect(called).toBe(1);
+  });
+
+  it("POST /api/index returns 503 when no refreshIndex is wired", async () => {
+    const s = createWebUiState();
+    await withServer(s, async (base) => {
+      const r = await postJson(base, "/api/index");
+      expect(r.status).toBe(503);
     });
   });
 });
