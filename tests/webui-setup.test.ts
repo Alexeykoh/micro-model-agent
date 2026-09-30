@@ -3,8 +3,9 @@ import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
 import { handleRequest } from "../src/modules/webui/server";
 import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
-import { parseSetupAnswers } from "../src/modules/webui/setup-api";
-import { buildSetupDisplay } from "../src/modules/setup/answers";
+import { parseSetupAnswers, parseSecurityDetail } from "../src/modules/webui/setup-api";
+import { buildSetupDisplay, securityDetailFromConfig } from "../src/modules/setup/answers";
+import { applySecurityDetail } from "../src/modules/setup/apply";
 import { DEFAULTS } from "../src/config/defaults";
 import type { AppConfig } from "../src/config/types";
 import { setLocale } from "../src/i18n";
@@ -97,6 +98,47 @@ describe("parseSetupAnswers", () => {
   });
 });
 
+describe("security detail", () => {
+  it("projects a live config to a JSON-safe detail (no RegExp patterns)", () => {
+    const d = securityDetailFromConfig(DEFAULTS.security);
+    expect(d.bash?.blacklist).toContain("rm");
+    expect(d.paths?.denied).toContain(".env");
+    expect(d.flags?.dangerousFlags).toContain("--force");
+    expect(d.advanced?.maxRecursionDepth).toBe(3);
+    // dangerousPatterns are RegExp and must not leak into the wire object.
+    expect(JSON.stringify(d)).not.toContain("dangerousPatterns");
+  });
+
+  it("sanitizes lists (trims, drops empties, caps length) and rejects bad types", () => {
+    const d = parseSecurityDetail({
+      bash: { blacklist: ["  rm  ", "", "curl", 42, "x".repeat(500)], logCommands: "yes" },
+      paths: { denied: ["a", "b"] },
+      advanced: { maxRecursionDepth: -2, auditNotifierMinSeverity: "bogus" },
+    });
+    expect(d?.bash?.blacklist).toEqual(["rm", "curl"]);
+    expect(d?.bash?.logCommands).toBeUndefined();
+    expect(d?.paths?.denied).toEqual(["a", "b"]);
+    expect(d?.advanced?.maxRecursionDepth).toBeUndefined();
+    expect(d?.advanced?.auditNotifierMinSeverity).toBeUndefined();
+  });
+
+  it("ignores non-object detail", () => {
+    expect(parseSecurityDetail(null)).toBeUndefined();
+    expect(parseSecurityDetail("nope")).toBeUndefined();
+    expect(parseSecurityDetail(42)).toBeUndefined();
+  });
+
+  it("applies only provided fields, leaving the rest of the config intact", () => {
+    const security = structuredClone(DEFAULTS.security);
+    applySecurityDetail(security, { paths: { denied: ["secret.md"] }, advanced: { maxRecursionDepth: 9 } });
+    expect(security.paths.denied).toEqual(["secret.md"]);
+    expect(security.maxRecursionDepth).toBe(9);
+    // Untouched groups keep their defaults.
+    expect(security.bash.blacklist).toContain("rm");
+    expect(security.paths.allowed).toEqual([]);
+  });
+});
+
 describe("webui setup REST", () => {
   // `/api/setup/locale` mutates the process-global i18n locale; restore it so
   // later tests in the shared worker still see English output.
@@ -111,13 +153,19 @@ describe("webui setup REST", () => {
         required: boolean;
         languages: Array<{ value: string }>;
         providers: Array<{ type: string; baseUrl?: string }>;
-        defaults: { contextWindow: number; maxToolIterations: number };
+        defaults: {
+          contextWindow: number;
+          maxToolIterations: number;
+          security?: { paths?: { denied?: string[] } };
+        };
       };
       expect(body.required).toBe(true);
       expect(body.languages.map((l) => l.value)).toContain("ru");
       expect(body.providers.some((p) => p.type === "openai-compat")).toBe(true);
       expect(body.providers.find((p) => p.type === "openrouter")?.baseUrl).toContain("openrouter.ai");
-      expect(body.defaults).toEqual({ contextWindow: 32768, maxToolIterations: 1000 });
+      expect(body.defaults.contextWindow).toBe(32768);
+      expect(body.defaults.maxToolIterations).toBe(1000);
+      expect(body.defaults.security?.paths?.denied).toContain(".env");
     });
   });
 
@@ -178,6 +226,33 @@ describe("webui setup REST", () => {
       expect(reconfigured).toBe(1);
     });
     expect(events.join("")).toContain("setup_done");
+  });
+
+  it("POST /api/setup applies securityDetail from the popups", async () => {
+    const s = virginState();
+    s.saveConfig = () => {};
+    s.reconfigure = () => {};
+    await withServer(s, async (base) => {
+      const res = await postJson(
+        base,
+        "/api/setup",
+        validAnswers({
+          securityDetail: {
+            bash: { blacklist: ["rm", "mkfs"], logCommands: false },
+            paths: { denied: ["only-this"] },
+            advanced: { maxRecursionDepth: 7, auditNotifierEnabled: true },
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(s.config?.security?.bash.blacklist).toEqual(["rm", "mkfs"]);
+      expect(s.config?.security?.bash.logCommands).toBe(false);
+      expect(s.config?.security?.paths.denied).toEqual(["only-this"]);
+      expect(s.config?.security?.maxRecursionDepth).toBe(7);
+      expect(s.config?.security?.auditNotifier.enabled).toBe(true);
+      // Untouched: dangerousPatterns survives (RegExp, never sent over the wire).
+      expect(Array.isArray(s.config?.security?.contentScan.dangerousPatterns)).toBe(true);
+    });
   });
 
   it("POST /api/setup reports not-persisted when saveConfig throws", async () => {

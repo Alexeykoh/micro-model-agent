@@ -1422,6 +1422,40 @@ body.setup-active .layout { display: none; }
 .setup-toggle-texts .t { font-weight: 500; }
 .setup-toggle-texts .d { color: var(--dim-a); font-size: 12px; line-height: 1.5; }
 
+.setup-sec-row { display: flex; align-items: center; gap: 8px; }
+.setup-sec-row .setup-toggle { flex: 1; }
+.setup-adv-label { padding: 7px 0; }
+.setup-detail-btn {
+  display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
+  background: transparent; color: var(--dim-a);
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 5px 9px; font-size: 12px; font-family: inherit; cursor: pointer;
+}
+.setup-detail-btn:hover { background: var(--hover-bg); color: var(--fg); }
+.setup-detail-btn .g { color: var(--accent); }
+
+.setup-textarea { resize: vertical; min-height: 84px; font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; line-height: 1.5; }
+
+.setup-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, .55);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.setup-modal {
+  width: 100%; max-width: 560px; max-height: 86vh; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border-2); border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+}
+.setup-modal-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--border-3); }
+.setup-modal-head .glyph { color: var(--accent); }
+.setup-modal-title { font-weight: 600; font-size: 14px; flex: 1; }
+.setup-modal-x { background: none; border: none; color: var(--dim-a); font-size: 15px; cursor: pointer; padding: 2px 6px; }
+.setup-modal-x:hover { color: var(--fg); }
+.setup-modal-body { padding: 14px 16px; overflow-y: auto; }
+.setup-modal-body .setup-field:last-child { margin-bottom: 0; }
+.setup-modal-foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--border-3); }
+.setup-modal-foot .spacer { flex: 1; }
+
 @media (max-width: 640px) {
   .setup-gate { padding: 24px 14px; }
   .setup-summary .k { width: 110px; }
