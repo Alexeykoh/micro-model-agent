@@ -201,7 +201,7 @@ export function sidebarTraceEvent(kind, data) {
   switch (kind) {
     case "tool_start":
       pendingArgs.set(data.toolCallId, data.args || {});
-      append({ kind: "tool", name: data.name, args: data.args || {} });
+      append({ kind: "tool", name: data.name, args: data.args || {}, toolCallId: data.toolCallId });
       pushRow(trace[trace.length - 1]);
       break;
     case "tool_end": {
@@ -209,7 +209,7 @@ export function sidebarTraceEvent(kind, data) {
       pendingArgs.delete(data.toolCallId);
       append({
         kind: data.success === false ? "tool_fail" : "tool",
-        name: data.name, args, success: data.success !== false,
+        name: data.name, args, success: data.success !== false, toolCallId: data.toolCallId,
         durationMs: data.durationMs, output: data.output || "",
       });
       pushRow(trace[trace.length - 1]);
@@ -338,24 +338,21 @@ let reindexError = false; // последний POST не удался
 
 export function sidebarMapState(host) {
   if (!mapEl) return;
-  const map = (host && host.projectMap) || null;
+  const map = (host && host.projectMap) || { indexed: false, files: 0, symbols: 0, tokens: 0, languages: [] };
   const serverIndexing = !!(map && map.indexing);
   if (postResolved && !serverIndexing) { reindexing = false; postResolved = false; }
   const indexing = serverIndexing || reindexing;
+  const num = (v) => (map.indexed ? String(v || 0) : "—");
   mapEl.textContent = "";
-  if (!map) {
-    mapEl.appendChild(mapKv(t("web.sidebar.map_status"), t("web.sidebar.map_never")));
-    return;
-  }
   const status = indexing ? t("web.sidebar.map_indexing")
     : !map.indexed ? t("web.sidebar.map_never")
     : (map.watcher ? t("web.sidebar.map_ready") : t("web.sidebar.map_stale"));
   mapEl.appendChild(mapKv(t("web.sidebar.map_status"), status));
   mapEl.appendChild(mapKv(t("web.sidebar.map_updated"), fmtUpdated(map.updatedAt)));
   mapEl.appendChild(mapKv(t("web.sidebar.map_watcher"), map.watcher ? t("web.sidebar.map_on") : t("web.sidebar.map_off")));
-  mapEl.appendChild(mapKv(t("web.sidebar.map_files"), String(map.files || 0)));
-  mapEl.appendChild(mapKv(t("web.sidebar.map_symbols"), String(map.symbols || 0)));
-  mapEl.appendChild(mapKv(t("web.sidebar.map_tokens"), fmtTokens(map.tokens)));
+  mapEl.appendChild(mapKv(t("web.sidebar.map_files"), num(map.files)));
+  mapEl.appendChild(mapKv(t("web.sidebar.map_symbols"), num(map.symbols)));
+  mapEl.appendChild(mapKv(t("web.sidebar.map_tokens"), map.indexed ? fmtTokens(map.tokens) : "—"));
   if (host && host.workspace) mapEl.appendChild(mapKv(t("web.sidebar.map_root"), host.workspace));
 
   if (Array.isArray(map.languages) && map.languages.length > 0) {
@@ -368,7 +365,7 @@ export function sidebarMapState(host) {
 
   const btn = el("button", "map-reindex", indexing ? t("web.sidebar.map_reindexing") : t("web.sidebar.map_reindex"));
   btn.type = "button";
-  btn.disabled = indexing;
+  btn.disabled = indexing || !map.indexed;
   btn.addEventListener("click", async () => {
     reindexing = true;
     postResolved = false;
