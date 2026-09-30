@@ -282,6 +282,7 @@ async function boot() {
   await loadConfig();
   initRail(S.state.config && S.state.config.ui ? S.state.config.ui.activityRail : undefined);
   initSidebar();
+  applySidebarI18n();
   await loadModels();
   await loadProviders();
   await loadSessions();
