@@ -93,6 +93,24 @@ describe("CriticGate", () => {
     expect(await gate.evaluate(d)).toBe("pass"); // repair budget spent -> accept
   });
 
+  it("emits retract on repair so clients drop the streamed draft", async () => {
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => critical, buildPack: (d: any) => d });
+    const onMeta = vi.fn();
+    const d = deps({ onMeta });
+    expect(await gate.evaluate(d)).toBe("retry");
+    expect(onMeta).toHaveBeenCalledWith(expect.any(String), "retract");
+  });
+
+  it("diagnoses fail-open verify errors instead of a silent lone critic_check", async () => {
+    const verify = vi.fn(async () => {
+      throw new Error("boom");
+    });
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify, buildPack: (d: any) => d });
+    const d = deps();
+    expect(await gate.evaluate(d)).toBe("pass");
+    expect(d.logger.diagnostic).toHaveBeenCalledWith("warn", expect.stringContaining("fail-open"));
+  });
+
   it("dedupes identical issues (second identical verdict adds nothing)", async () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => concern, buildPack: (d: any) => d });
     const d = deps();

@@ -3,6 +3,7 @@ import { t } from "../../i18n/index";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
 import type { SessionLogger } from "../session-logger";
+import type { OnMeta } from "../types";
 import { MAX_AUDIT_RETRIES } from "./constants";
 import type { LoopState } from "./loop-state";
 
@@ -33,6 +34,11 @@ export interface AuditGateDeps {
   logger: Logger;
   contextManager: ContextManager;
   slog: SessionLogger;
+  /**
+   * Мета-канал для `retract`: reject отклоняет уже отстримленный черновик,
+   * потребители убирают его до переответа (иначе дубль в ленте).
+   */
+  onMeta?: OnMeta;
 }
 
 /**
@@ -88,6 +94,8 @@ export class AuditGate {
     // Следующий текстовый ответ — принудительный повтор уже выполненной
     // задачи: разрешаем одну повторность без халлюцинационного повтора.
     state.suppressRepetitionRetry = true;
+    // Черновик уже в ленте — убираем до переответа, иначе дубль.
+    deps.onMeta?.(t("ui.draft_retracted"), "retract");
     return { action: "reject" };
   }
 }

@@ -896,6 +896,7 @@
   "ui.todo_action": "{action} · {count}",
   "ui.tool_running": "{tool}…",
   "ui.step_context": "шаг {id}: {desc}",
+  "ui.draft_retracted": "↳ черновик отклонён проверкой, уточняю…",
   "indexer.map_header": "Карта проекта",
   "indexer.top_directories": "Основные директории",
   "indexer.files": "Файлы",

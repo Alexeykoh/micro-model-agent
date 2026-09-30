@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveArtifactStates } from "../../src/core/agent/artifact-resolve";
@@ -45,5 +45,19 @@ describe("resolveArtifactStates", () => {
     const out = resolveArtifactStates(dir, "bad.json создан. sub/../../evil.json создан.");
     expect(out.find((a) => a.path === "bad.json")?.parseError).toContain("invalid JSON");
     expect(out.some((a) => a.path.includes("evil"))).toBe(false);
+  });
+
+  it("resolves a bare basename to a nested file (ses_munvrcfz_na9ze3)", () => {
+    mkdirSync(join(dir, "src"), { recursive: true });
+    writeFileSync(join(dir, "src", "game.ts"), "export const x = 1;\n");
+    // Ответ называет game.ts голым именем рядом со словом успеха —
+    // строгий резолв давал exists:false и ложный claim-retry с дублем в ленте.
+    const out = resolveArtifactStates(dir, "game.ts проверен, валидация на месте.");
+    expect(out.find((a) => a.path === "game.ts")).toMatchObject({ exists: true });
+  });
+
+  it("still reports a genuinely missing bare basename", () => {
+    const out = resolveArtifactStates(dir, "game.ts создан и готов.");
+    expect(out.find((a) => a.path === "game.ts")).toMatchObject({ exists: false });
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { HallucinationGate } from "../../src/core/agent/hallucination-gate";
 import { createLoopState } from "../../src/core/agent/loop-state";
 
@@ -89,6 +89,23 @@ describe("HallucinationGate success-claim check", () => {
     const gate = new HallucinationGate(detectorStub);
     const verdict = await gate.evaluate(deps);
     expect(verdict.action).toBe("retry");
+  });
+
+  it("emits retract and logs claim_retry when a claim forces a re-answer", async () => {
+    // Отклонённый черновик уже отстримлен: без retract клиенты покажут дубль.
+    const { deps } = gateDeps([
+      { role: "tool", name: "bash", content: '{"latest": "2.5.0"}', success: true },
+      { role: "tool", name: "bash", content: "npm error 404 No match found", success: false },
+    ]);
+    const onMeta = vi.fn();
+    const logClaimRetry = vi.fn();
+    const gate = new HallucinationGate(detectorStub);
+    const verdict = await gate.evaluate({ ...deps, onMeta, slog: { logClaimRetry } });
+    expect(verdict.action).toBe("retry");
+    expect(onMeta).toHaveBeenCalledWith(expect.any(String), "retract");
+    expect(logClaimRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "success", iteration: expect.any(Number) }),
+    );
   });
 
   it("gives each claim class its own retry budget", async () => {
