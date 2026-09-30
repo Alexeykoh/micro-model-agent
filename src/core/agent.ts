@@ -793,6 +793,9 @@ export class Agent {
     this.abortController = new AbortController();
     // Единый контейнер состояния цикла — заменяет ~24 разрозненных `let`.
     const state = createLoopState();
+    // Маркер начала захода для критика: события тулов прошлых вопросов
+    // (прошлых run'ов) в evidence-пакеты этого захода не входят.
+    state.criticHistoryMark = contextManager.getActiveHistory().length;
 
     // Модули цикла: каждый инкапсулирует одну ответственность и получает
     // зависимости через конструктор (никаких глобальных синглтонов).
@@ -1401,7 +1404,7 @@ export class Agent {
         slog,
         task: input,
         planSummary: this.deps.planSummary?.() ?? undefined,
-        toolEvents: gatherTurnToolEvents(contextManager),
+        toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
         beforeFinish: true,
       });
       if (criticAction === "retry") {

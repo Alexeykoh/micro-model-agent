@@ -30,6 +30,16 @@ describe("CriticGate", () => {
     expect(verify).not.toHaveBeenCalled();
   });
 
+  it("skips chat-only runs without spending the critic budget", async () => {
+    const verify = vi.fn(async () => concern);
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify, buildPack: (d: any) => d });
+    const d = deps({ toolEvents: [] });
+    expect(await gate.evaluate(d)).toBe("pass");
+    expect(verify).not.toHaveBeenCalled();
+    expect(d.state.criticCalls).toBe(0);
+    expect(d.slog.logCritic).not.toHaveBeenCalledWith("critic_check", expect.anything());
+  });
+
   it("returns pass on ok verdict", async () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
     expect(await gate.evaluate(deps())).toBe("pass");
@@ -129,5 +139,33 @@ describe("gatherTurnToolEvents", () => {
     } as any);
     expect(events).toHaveLength(1);
     expect(events[0]).toEqual({ tool: "read_file", args: undefined, ok: true, output: undefined });
+  });
+
+  it("sees only tool events since the run marker (no leak from previous questions)", () => {
+    const history = [
+      { role: "user", content: "какая погода в минске?" },
+      { role: "tool", name: "web_search", content: "sunny", success: true, arguments: { query: "погода" } },
+      { role: "assistant", content: "Погода хорошая" },
+      { role: "user", content: "покажи пример кода react" },
+      { role: "assistant", content: "```tsx const a = 1 ```" },
+    ];
+    const events = gatherTurnToolEvents({ getActiveHistory: () => history } as any, 4);
+    expect(events).toHaveLength(0);
+  });
+
+  it("keeps current-run tool events after the marker", () => {
+    const history = [
+      { role: "tool", name: "web_search", content: "old", success: true },
+      { role: "tool", name: "write_file", content: "ok", success: true, arguments: { path: "a.ts" } },
+    ];
+    const events = gatherTurnToolEvents({ getActiveHistory: () => history } as any, 1);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ tool: "write_file", args: { path: "a.ts" }, ok: true, output: "ok" });
+  });
+
+  it("clamps an out-of-range marker (e.g. history compacted mid-run) to empty", () => {
+    const history = [{ role: "tool", name: "read_file", content: "x", success: true }];
+    expect(gatherTurnToolEvents({ getActiveHistory: () => history } as any, 99)).toHaveLength(0);
+    expect(gatherTurnToolEvents({ getActiveHistory: () => history } as any, -5)).toHaveLength(1);
   });
 });

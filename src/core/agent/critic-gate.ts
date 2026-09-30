@@ -6,8 +6,6 @@ import type { CriticIssue, CriticVerdict, EvidencePack } from "../../modules/cri
 import type { SessionLogger } from "../session-logger";
 import type { LoopState } from "./loop-state";
 
-const MUTATIONS_BEFORE_CHECK = 3;
-
 /** Хвост вывода тула в evidence-событии (ограничен — у критика свой бюджет). */
 const MAX_EVENT_OUTPUT_CHARS = 600;
 
@@ -94,9 +92,11 @@ export class CriticGate {
   private shouldRun(deps: CriticGateDeps): boolean {
     if (!this.opts.enabled) return false;
     if (deps.state.criticCalls >= this.opts.maxCalls) return false;
-    if (!deps.beforeFinish && deps.state.mutationsSinceCritic < MUTATIONS_BEFORE_CHECK) {
-      return false;
-    }
+    // Единственный вызов — перед финалом (beforeFinish, см. agent.ts):
+    // mid-turn ветки по mutationsSinceCritic нет, счётчик — только лог-поле.
+    // Чистый чат (нет тул-событий текущего захода) — нечего верифицировать,
+    // pass без LLM-вызова, бюджет не тратится.
+    if (!deps.beforeFinish) return false;
     return deps.toolEvents.length !== 0;
   }
 
@@ -159,20 +159,28 @@ export class CriticGate {
 }
 
 /**
- * Собирает события тулов хода из активной истории (для evidence-пакета критика).
- * @param contextManager менеджер с getActiveHistory; @returns события role:"tool".
+ * Собирает события тулов текущего захода из активной истории (для evidence-пакета критика).
+ * @param contextManager менеджер с getActiveHistory;
+ * @param fromIndex маркер начала захода (длина истории на старте run'а) — всё, что раньше,
+ *   принадлежит прошлым вопросам и в пакет не входит; клампится к длине (компакция ужимает историю).
+ * @returns события role:"tool" начиная с маркера.
  */
-export function gatherTurnToolEvents(contextManager: {
-  getActiveHistory: () => Array<{
-    role: string;
-    name?: string;
-    content?: unknown;
-    success?: boolean;
-    arguments?: Record<string, unknown>;
-  }>;
-}): Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> {
+export function gatherTurnToolEvents(
+  contextManager: {
+    getActiveHistory: () => Array<{
+      role: string;
+      name?: string;
+      content?: unknown;
+      success?: boolean;
+      arguments?: Record<string, unknown>;
+    }>;
+  },
+  fromIndex = 0,
+): Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> {
   const events: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> = [];
-  for (const m of contextManager.getActiveHistory()) {
+  const history = contextManager.getActiveHistory();
+  const start = Math.max(0, Math.min(fromIndex, history.length));
+  for (const m of history.slice(start)) {
     if (m.role !== "tool" || !m.name) continue;
     // Сообщения role:"tool" уже несут аргументы (tool-batch) и обрезанный
     // вывод — пробрасываем оба, чтобы критик видел ЧТО тронуто и ЧТО вернулось.
