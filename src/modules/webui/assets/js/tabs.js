@@ -13,6 +13,7 @@ import {
 makeFeed, showEmptyFeed, activeFeed, liveFeed, appendTo,
 clearEmpty, showBusy, clearFeed, finishMd, resetTurnText,
 finishThink, feedHasContent, loadHistory, syncUrl, renderPlan,
+scrollToBottom,
 } from "./feed.js";
 import { openConfirm, setIndicator } from "./dialog.js";
 import { setBusy, setPlan as railSetPlan } from "./rail.js";
@@ -122,7 +123,7 @@ export function openTab(id, name, kind, server) {
   msgs.replaceChildren(tab.feed);
   renderTabstrip();
   renderSessionsDropdown();
-  msgs.scrollTop = msgs.scrollHeight;
+  scrollToBottom();
   if (tab.kind === "session" && !server) {
     // Auto-opened live session: SSE fills the feed, no transcript fetch.
     tab.historyLoaded = true;
@@ -159,6 +160,7 @@ function closeTab(id) {
       S.activeTabId = next.id;
       S.liveTabId = next.id;
       msgs.replaceChildren(next.feed);
+      scrollToBottom();
     } else {
       S.activeTabId = null;
       S.liveTabId = null;
@@ -636,6 +638,7 @@ async function send() {
   finishThink();
   if (text.startsWith("/")) {
     appendTo(feed, el("div", "u", text));
+    scrollToBottom();
     clearInput();
     const name = text.slice(1).split(/\s+/)[0].toLowerCase();
     // `/clear` and `/new` never reach the server: both are pure browser-side
@@ -663,6 +666,7 @@ async function send() {
     feed.insertBefore(banner, feed.firstChild);
   }
   appendTo(feed, userMessageNode(text, images));
+  scrollToBottom();
   clearInput();
   const body = { text };
   if (images.length) body.images = images;
@@ -672,7 +676,9 @@ async function send() {
     appendTo(feed, el("div", "warnline", "⚠ " + msg));
   } else {
     if (images.length) clearAttachments();
-    showBusy(feed);
+    // Delay the spinner so fast first tokens never flash it: `showBusy`
+    // itself skips when a stream/think block already started.
+    window.setTimeout(() => showBusy(feed), 180);
   }
 }
 

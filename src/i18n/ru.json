@@ -1424,6 +1424,7 @@
   "web.history.loading": "загрузка…",
   "web.history.unavailable": "— история недоступна",
   "web.history.empty": "— пустая сессия —",
+  "web.scroll.latest": "к новому",
   "web.tool.output_one": "вывод · {count} символ",
   "web.tool.output_few": "вывод · {count} символа",
   "web.tool.output_many": "вывод · {count} символов",

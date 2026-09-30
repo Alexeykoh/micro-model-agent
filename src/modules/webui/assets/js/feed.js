@@ -36,12 +36,16 @@ export function makeFeed() {
 
 export function showEmptyFeed() {
   msgs.replaceChildren(emptyView());
+  follow = true;
+  hideToLatest();
   syncUrl();
 }
 
 export function clearFeed(feed) {
   if (!feed) return;
   feed.replaceChildren(emptyView());
+  follow = true;
+  hideToLatest();
   const tab = S.tabs.find((x) => x.feed === feed);
   if (tab) tab.planCard = null;
   if (feed === activeFeed()) scroll();
@@ -71,9 +75,79 @@ function nearBottom() {
   return msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 140;
 }
 
-function scroll() {
-  if (nearBottom()) msgs.scrollTop = msgs.scrollHeight;
+// Sticky follow: while the reader is at the live edge we pin to the bottom
+// on every append; the moment they scroll up we leave them alone (the
+// "jump to latest" pill offers the trip back). A new user turn always
+// force-scrolls — otherwise one missed pin cascades into "no autoscroll"
+// for the whole turn, since every later `scroll()` would see `nearBottom()`
+// as false and skip.
+let follow = true;
+
+function scroll(force) {
+  if (force || follow || nearBottom()) {
+    msgs.scrollTop = msgs.scrollHeight;
+    follow = true;
+    hideToLatest();
+  } else {
+    maybeShowToLatest();
+  }
 }
+
+// Force-pin to the live edge (send / history load / pill click).
+export function scrollToBottom(smooth) {
+  follow = true;
+  hideToLatest();
+  if (smooth && typeof msgs.scrollTo === "function") {
+    try {
+      msgs.scrollTo({ top: msgs.scrollHeight, behavior: "smooth" });
+      return;
+    } catch (err) {
+      /* fall through to instant */
+    }
+  }
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+export function isFollowing() {
+  return follow;
+}
+
+// Floating "jump to latest" pill: appears only when the reader scrolled up
+// and new content landed below. Created lazily so tests/SSR without `.chat`
+// never break.
+let toLatestBtn = null;
+function ensureToLatest() {
+  if (toLatestBtn) return toLatestBtn;
+  const chat = document.querySelector(".chat");
+  if (!chat) return null;
+  toLatestBtn = el("button", "to-latest");
+  toLatestBtn.type = "button";
+  toLatestBtn.hidden = true;
+  toLatestBtn.addEventListener("click", () => scrollToBottom(true));
+  chat.appendChild(toLatestBtn);
+  return toLatestBtn;
+}
+
+function maybeShowToLatest() {
+  const btn = ensureToLatest();
+  if (!btn) return;
+  btn.textContent = "↓ " + t("web.scroll.latest");
+  btn.hidden = false;
+  msgs.classList.add("unfollowed");
+}
+
+function hideToLatest() {
+  if (toLatestBtn) toLatestBtn.hidden = true;
+  msgs.classList.remove("unfollowed");
+}
+
+msgs.addEventListener("scroll", () => {
+  const nb = nearBottom();
+  follow = nb;
+  msgs.classList.toggle("scrolled", msgs.scrollTop > 24);
+  if (nb) hideToLatest();
+  else if (liveFeed() && feedHasContent(liveFeed())) maybeShowToLatest();
+});
 
 export function appendTo(feed, node) {
   if (!feed) return node;
@@ -109,6 +183,9 @@ function clearBusy(feed) {
 export function showBusy(feed) {
   feed = feed || liveFeed();
   if (!feed) return;
+  // The delayed post-send call must not flash a spinner over a stream that
+  // already started (fast first token).
+  if (S.curMd || S.curThink) return;
   clearEmpty(feed);
   if (feed.querySelector(".busy")) return;
   if (S.busyTimer) {
@@ -142,7 +219,10 @@ function flushRun() {
   // replacing the per-action lines (mirrors `Renderer.flushRecon`). `normal`
   // and `verbose` keep the individual action lines and add nothing.
   if (verbosity() === "quiet" && S.runReconOnly && S.runFails === 0 && S.runCount > 1) {
-    S.runNodes.forEach((node) => node.remove());
+    // Fade the folded lines out instead of snapping them away.
+    const folding = S.runNodes.slice();
+    folding.forEach((node) => node.classList.add("fold-out"));
+    window.setTimeout(() => folding.forEach((node) => node.remove()), 160);
     const line = el("div", "grouped");
     line.appendChild(el("span", "pipe", "│"));
     const dur = formatMs(S.runDuration);
@@ -177,6 +257,7 @@ function mdOpts() {
 // Close the active Markdown segment (if any) and clear the text S.state.
 export function finishMd() {
   if (S.curMd) {
+    S.curMd.root.classList.remove("streaming");
     S.curMd.end();
     S.curMd = null;
   }
@@ -195,6 +276,7 @@ export function onText(chunk, sid) {
     flushRun();
     S.curText = "";
     S.curMd = mountMarkdown(feed, mdOpts());
+    S.curMd.root.classList.add("streaming");
     S.turnRoots.push(S.curMd.root);
   }
   S.curText += chunk;
@@ -204,17 +286,21 @@ export function onText(chunk, sid) {
 }
 
 export function finishThink() {
-  if (S.curThink && S.curThink.startedAt) {
-    const dur = S.curThink.head.querySelector(".dur");
-    if (dur) dur.textContent = "· " + ((Date.now() - S.curThink.startedAt) / 1000).toFixed(1) + "s";
+  if (S.curThink) {
+    if (S.curThink.wrap) S.curThink.wrap.classList.remove("live");
+    if (S.curThink.startedAt) {
+      const dur = S.curThink.head.querySelector(".dur");
+      if (dur) dur.textContent = "· " + ((Date.now() - S.curThink.startedAt) / 1000).toFixed(1) + "s";
+    }
   }
   S.curThink = null;
 }
 
 // Build the collapsible reasoning block. The global `.think-h` click handler
 // depends on this exact structure: wrap > [head, body], body carries `hidden`.
-function buildThinkBlock(withDur) {
-  const wrap = el("div", "think");
+// `live` marks an in-progress block (pulsing label); history renders static.
+function buildThinkBlock(withDur, live) {
+  const wrap = el("div", "think" + (live === false ? "" : " live"));
   const head = el("button", "think-h");
   head.type = "button";
   head.setAttribute("aria-expanded", "false");
@@ -291,6 +377,7 @@ export function onToolStart(data) {
   }
   const status = el("span", "ok", "");
   line.appendChild(status);
+  line.classList.add("running");
   appendTo(feed, line);
   S.toolNodes.set(data.toolCallId, { status, line });
   if (categoryOf(data.name) !== "recon") S.runReconOnly = false;
@@ -419,6 +506,7 @@ export function onToolEnd(data) {
   const node = S.toolNodes.get(data.toolCallId);
   const line = node ? node.line : null;
   if (node) {
+    node.line.classList.remove("running");
     const dur = formatMs(data.durationMs);
     node.status.textContent = data.success ? " ✓" + (dur ? " " + dur : "") : " ✗" + (dur ? " " + dur : "");
     if (!data.success) {
@@ -456,6 +544,11 @@ export function onTurnEnd(data) {
   finishThink();
   finishMd();
   flushRun();
+  // Interrupted tools never get `tool_end`: drop their pulse so nothing
+  // looks alive after the turn is over.
+  S.toolNodes.forEach((n) => {
+    if (n && n.line && feed && n.line.parentNode === feed) n.line.classList.remove("running");
+  });
   const owner = S.tabs.find((x) => x.id === data.sessionId);
   if (owner) owner.planCard = null;
   if (!feed) {
@@ -562,7 +655,7 @@ function renderAssistantText(feed, text) {
 }
 
 function renderThinkBlock(feed, text) {
-  const { wrap, body } = buildThinkBlock(false);
+  const { wrap, body } = buildThinkBlock(false, false);
   body.textContent = text || "";
   feed.appendChild(wrap);
 }
@@ -659,7 +752,8 @@ export async function loadHistory(tab) {
   if (feedHasContent(tab.feed)) return;
   renderHistory(tab.feed, r.data.history);
   if (!r.data.history.length) tab.feed.appendChild(el("div", "detail", t("web.history.empty")));
-  if (tab.feed === activeFeed()) scroll();
+  if (tab.feed === activeFeed()) scrollToBottom();
+  else if (tab.feed === liveFeed()) scrollToBottom();
 }
 
 export function syncUrl() {
