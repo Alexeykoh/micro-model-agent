@@ -154,9 +154,12 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.agentsMd = deps.agentsMd;
   if (deps.indexer) {
     state.projectMapStats = () => deps.indexer?.stats() ?? null;
-    state.refreshIndex = async () => {
-      await deps.indexer?.refresh?.();
-    };
+    if (deps.indexer.refresh) {
+      const refresh = deps.indexer.refresh.bind(deps.indexer);
+      state.refreshIndex = async () => {
+        await refresh();
+      };
+    }
   }
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
 
@@ -221,7 +224,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           contextProbe: probe,
           workspace: deps.baseDir,
           instructions: deps.agentsMd,
-          projectMap: deps.indexer?.mapInfo?.() ?? undefined,
+          projectMap: deps.indexer?.mapInfo?.(),
         },
         state.busy,
       ),

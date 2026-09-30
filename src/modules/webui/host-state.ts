@@ -30,7 +30,9 @@ export interface HostStateInput {
 export interface WebIndexer {
   buildIndex(): Promise<unknown>;
   stats(): { files: number; symbols: number; tokens: number } | null;
+  /** Полная статистика карты (вкладка Map); undefined у старых стабов. */
   mapInfo?(): ProjectMapInfo;
+  /** Принудительная пересборка индекса (`POST /api/index`). */
   refresh?(): Promise<unknown>;
 }
 
