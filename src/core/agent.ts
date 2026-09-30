@@ -868,6 +868,7 @@ export class Agent {
           planSummary: d.planSummary,
           toolEvents: d.toolEvents,
           baseDir: this.deps.baseDir,
+          answerText: d.answerText,
         }),
       signal: this.abortController?.signal,
     });
@@ -1406,6 +1407,9 @@ export class Agent {
         planSummary: this.deps.planSummary?.() ?? undefined,
         toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
         beforeFinish: true,
+        // Текст ответа — только для ходов без мутаций (чат-доставка):
+        // при изменённых файлах судья — файлы/команды, проза ему не нужна.
+        answerText: state.mutationsSinceCritic === 0 ? textContent : undefined,
       });
       if (criticAction === "retry") {
         state.suppressRepetitionRetry = true;

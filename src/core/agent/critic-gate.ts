@@ -21,6 +21,11 @@ export interface CriticGateDeps {
   toolEvents: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }>;
   /** True, если проверка идёт прямо перед принятием финального ответа. */
   beforeFinish: boolean;
+  /**
+   * Финальный текст ответа (для ходов без work-мутаций — чат-доставка).
+   * Обрезается и редактируется в buildEvidencePack, не раньше.
+   */
+  answerText?: string;
 }
 
 /** Действие вентиля: пропустить или переспросить модель. */
@@ -64,6 +69,14 @@ function renderIssues(issues: CriticIssue[]): string {
 }
 
 /**
+ * True, если вердикт повторяет уже виденные жалобы (вплоть до перефраза
+ * на уровне регистра/пунктуации). Вызывать ДО takeFreshIssues.
+ */
+function isRepeatedVerdict(state: LoopState, issues: CriticIssue[]): boolean {
+  return issues.length > 0 && issues.every((i) => state.seenCriticIssues.has(normalizedSignature(i)));
+}
+
+/**
  * Вентиль критика: триггерит проверку по мутациям, инжектит вердикт в контекст.
  * Fail-open: сломанный/перебюджетный критик никогда не блокирует агента.
  */
@@ -85,18 +98,12 @@ export class CriticGate {
     if (!verdict || verdict.status === "ok") return "pass";
 
     // Повтор уже виденной жалобы — считаем ДО takeFreshIssues (он пополняет набор).
-    const isRepeat =
-      verdict.issues.length > 0 &&
-      verdict.issues.every((i) => deps.state.seenCriticIssues.has(normalizedSignature(i)));
+    const isRepeat = isRepeatedVerdict(deps.state, verdict.issues);
     const fresh = this.takeFreshIssues(deps.state, verdict.issues);
     if (fresh.length === 0) return "pass";
 
     this.logVerdict(deps, verdict, fresh.length);
-    const canRepair =
-      verdict.status === "critical" &&
-      deps.beforeFinish &&
-      deps.state.criticRepairCycles < this.opts.maxRepairCycles;
-    if (!canRepair || isRepeat) {
+    if (!this.shouldRepair(deps, verdict, isRepeat)) {
       // Совет/повтор — не retry: иначе advice крутит модель по кругу до
       // maxCalls теми же ответами (наблюдалось: 4 идентичных critical подряд).
       // Повтор дополнительно требует сменить подход, repair-бюджет не тратится.
@@ -106,6 +113,16 @@ export class CriticGate {
 
     this.injectRepair(deps, verdict, fresh);
     return "retry";
+  }
+
+  /** Починка положена только свежему critical в пределах repair-бюджета. */
+  private shouldRepair(deps: CriticGateDeps, verdict: CriticVerdict, isRepeat: boolean): boolean {
+    return (
+      verdict.status === "critical" &&
+      deps.beforeFinish &&
+      deps.state.criticRepairCycles < this.opts.maxRepairCycles &&
+      !isRepeat
+    );
   }
 
   /** Fail-open: битый/перебюджетный критик не блокирует агента. */
