@@ -123,8 +123,9 @@ function renderRow(entry) {
   if (entry.durationMs) row.appendChild(el("span", "t", formatMs(entry.durationMs)));
   row.addEventListener("click", () => {
     if (selected === entry.id) { collapseDetail(); return; }
+    if (listEl) listEl.querySelectorAll(".trc.sel").forEach((n) => n.classList.remove("sel"));
     selected = entry.id;
-    renderList();
+    row.classList.add("sel");
     renderDetail(entry);
     if (sbEl) sbEl.classList.add("sb-expanded");
   });
@@ -258,7 +259,7 @@ export function sidebarTraceEvent(kind, data) {
       break;
     }
     case "phase":
-      pushRow(append({ kind: "phase", phase: data.phase }));
+      if (data.phase !== "done") pushRow(append({ kind: "phase", phase: data.phase }));
       break;
     case "plan":
       pushRow(append({
@@ -358,9 +359,10 @@ function fmtUpdated(updatedAt) {
   if (typeof updatedAt !== "number") return t("web.sidebar.map_never");
   const d = new Date(updatedAt);
   const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toTimeString().slice(0, 5);
-  return sameDay ? t("web.sidebar.map_today", { time }) : d.toLocaleString();
+  const pad = (n) => String(n).padStart(2, "0");
+  const time = pad(d.getHours()) + ":" + pad(d.getMinutes());
+  if (d.toDateString() === now.toDateString()) return t("web.sidebar.map_today", { time });
+  return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + " " + time;
 }
 
 function mapKv(label, value, cls) {
@@ -411,6 +413,7 @@ export function sidebarMapState(host) {
     postResolved = false;
     reindexError = false;
     sidebarMapState(host);
+    sidebarMapIndicator(host);
     const r = await api("/api/index", { method: "POST" });
     if (!r.ok) {
       reindexing = false;
