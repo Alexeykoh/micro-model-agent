@@ -87,7 +87,9 @@ function commandOf(ev: EvidenceToolEvent): EvidencePack["commands"][number] | un
   if (ev.tool !== "bash" || typeof ev.args?.command !== "string") return undefined;
   return {
     command: ev.args.command,
-    exitCode: ev.ok === false ? 1 : 0,
+    // Реальный код неизвестен (в evidence только флаг успеха) — для успеха
+    // не синтезируем 0, иначе критик видит выдуманные коды; рендер покажет "?".
+    exitCode: ev.ok === false ? 1 : undefined,
     output: ev.output?.slice(-MAX_DIGEST_OUTPUT_CHARS),
   };
 }

@@ -536,11 +536,21 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   `tools.ts` — read-only verification loop) + `src/core/agent/critic-gate.ts`
   (`CriticGate`, `gatherTurnToolEvents`). Встроен в `executeSingleAgentLoop` рядом с `AuditGate`/
   `HallucinationGate`; **MoE-путь не тронут**.
-- **Поведение:** триггер по work-мутациям (`write_file`/`edit_file`/`delete_file`/`move_file`/
-  `create_dir`/`bash`; `plan` не считается) и перед принятием финального ответа. `critical` →
-  ограниченный repair (`critic.maxRepairCycles`), `concern` → совет; оба инжектят
-  `<system-summary>` и делают retry по одному разу на свежую проблему (дедуп). Жёсткий лимит
-  `critic.maxCalls` за прогон. Fail-open (null/timeout/битый JSON/throw ⇒ `pass`).
+- **Поведение:** единственная точка вызова — перед принятием финального ответа
+  (`beforeFinish`, `agent.ts`); mid-turn ветки нет. Evidence скоупится текущим заходом
+  (`LoopState.criticHistoryMark` + `gatherTurnToolEvents(cm, mark)` — тулы прошлых
+  вопросов в пакет не входят). Чистый чат (нет тул-событий захода) — `pass` без
+  LLM-вызова, бюджет не тратится. `critical` в пределах `critic.maxRepairCycles` →
+  repair + retry (один раз); `concern`, `critical` сверх бюджета и near-identical
+  повтор (`critic.repeat`, нормализация регистра/пунктуации) → инжект
+  `<system-summary>` + `pass` без retry. Дедуп по `severity:claim` (+ нормализованный
+  вариант в том же наборе). Жёсткий лимит `critic.maxCalls` за прогон.
+  Fail-open (null/timeout/битый JSON/throw ⇒ `pass`).
+- **Что видит критик:** `task/planSummary/toolDigest/changedFiles/commands/fileExcerpts`
+  + `answerExcerpt` (выдержка финального ответа ≤2000 символов, redact секретов —
+  только для ходов без work-мутаций; при мутациях судья — файлы/команды).
+  Систем-промпт: чат-доставка без файлов — не issue. `exitCode` успеха не синтезируется
+  (`undefined` → рендер `?`; `1` только при известном фейле).
 - **Конфиг:** `critic.{enabled,model,provider,tools,maxCalls,maxRepairCycles,timeoutMs}`
   (дефолты `true`/unset/unset/`true`/`4`/`1`/`15000`); доступны в `/config` и web settings (Advanced),
   вместе с `moe.enabled`/`moe.maxReplanCycles`.

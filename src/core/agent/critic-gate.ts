@@ -107,7 +107,7 @@ export class CriticGate {
       // Совет/повтор — не retry: иначе advice крутит модель по кругу до
       // maxCalls теми же ответами (наблюдалось: 4 идентичных critical подряд).
       // Повтор дополнительно требует сменить подход, repair-бюджет не тратится.
-      this.injectRepeatOrAdvice(deps, verdict, fresh, isRepeat);
+      this.injectRepeatOrAdvice(deps, fresh, isRepeat);
       return "pass";
     }
 
@@ -178,7 +178,6 @@ export class CriticGate {
   /** Совет или директива при повторе: инжектит текст, но НЕ ретраит (возврат — pass). */
   private injectRepeatOrAdvice(
     deps: CriticGateDeps,
-    verdict: CriticVerdict,
     fresh: CriticIssue[],
     isRepeat: boolean,
   ): void {

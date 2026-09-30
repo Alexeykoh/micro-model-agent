@@ -33,7 +33,14 @@ export function buildCriticProvider(
   deps?: CriticProviderDeps,
 ): LLMProvider {
   const model = critic?.model?.trim();
-  if (!model) return defaultProvider;
+  if (!model) {
+    // Немая опция: провайдер без модели ни на что не влияет (поведение v1) —
+    // предупреждаем, иначе настройка выглядит рабочей, а эффекта ноль.
+    if (critic?.provider && Object.keys(critic.provider).length > 0) {
+      deps?.logger?.warn("critic.provider is set without critic.model — provider ignored, using active provider");
+    }
+    return defaultProvider;
+  }
   try {
     const providerCfg = critic?.provider ?? {
       type: "openai-compat",
