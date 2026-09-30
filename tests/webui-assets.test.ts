@@ -235,7 +235,6 @@ describe("webui assets", () => {
 
   it("wires the sidebar tabs (session / map / trace) with master-detail", () => {
     const a = loadAssets();
-    const src = js(a);
     expect(a.html).toContain('class="sb-tabs"');
     expect(a.html).toContain('data-tab="session"');
     expect(a.html).toContain('data-tab="map"');
@@ -247,19 +246,18 @@ describe("webui assets", () => {
     expect(a.css).toContain(".sb-tab.on");
     expect(a.css).toContain(".sb.sb-expanded");
     expect(a.css).toContain(".trc-detail");
-    expect(src).toContain("initSidebar(");
-    expect(src).toContain("sidebarTraceEvent(");
-    expect(src).toContain("sidebarMapState(");
-    expect(src).toContain("/api/index");
+    expect(a.js).toContain("initSidebar()");
+    expect(a.js).toContain("sidebarTraceEvent(");
+    expect(a.js).toContain("sidebarMapState(");
+    expect(a.jsModules?.["js/sidebar.js"]).toContain("/api/index");
     expect(a.jsModules?.["js/sidebar.js"]).toBeTruthy();
   });
 
   it("hides the Trace tab on mobile and applies sidebar i18n on boot", () => {
     const a = loadAssets();
-    const src = js(a);
     expect(a.css).toContain('.sb-tab[data-tab="trace"]');
-    expect(src).toContain("applySidebarI18n(");
-    expect(src).toContain('sidebarTraceEvent("error"');
-    expect(src).toContain("sidebarTurnEnd(");
+    expect(a.js).toContain("applySidebarI18n(");
+    expect(a.js).toContain('sidebarTraceEvent("error"');
+    expect(a.js).toContain("sidebarTurnEnd(");
   });
 });
