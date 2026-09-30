@@ -152,7 +152,12 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.plugins = deps.plugins;
   state.workspace = deps.baseDir;
   state.agentsMd = deps.agentsMd;
-  if (deps.indexer) state.projectMapStats = () => deps.indexer?.stats() ?? null;
+  if (deps.indexer) {
+    state.projectMapStats = () => deps.indexer?.stats() ?? null;
+    state.refreshIndex = async () => {
+      await deps.indexer?.refresh?.();
+    };
+  }
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
 
   // Веб-онли интерактивные тулы: `question`/`approve` через SSE + `/api/answer`.
@@ -216,10 +221,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           contextProbe: probe,
           workspace: deps.baseDir,
           instructions: deps.agentsMd,
-          projectMap: (() => {
-            const s = deps.indexer?.stats();
-            return s ? { indexed: true, ...s } : { indexed: false, files: 0, symbols: 0, tokens: 0 };
-          })(),
+          projectMap: deps.indexer?.mapInfo?.() ?? undefined,
         },
         state.busy,
       ),

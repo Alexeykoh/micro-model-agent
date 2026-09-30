@@ -173,6 +173,8 @@ export interface WebUiState {
   agentsMd?: { files: string[]; disabled: boolean };
   /** Статистика карты проекта (`null`, пока обход индекса не кончился). */
   projectMapStats?: () => { files: number; symbols: number; tokens: number } | null;
+  /** Ручной пересбор индекса карты проекта (`POST /api/index`). */
+  refreshIndex?: () => Promise<void>;
   /**
    * Глобальный стор памяти, общий с агентом (владелец — `bootstrap`).
    * Вяжет `module.ts`; опционален, чтобы тесты гоняли диспатч команд без

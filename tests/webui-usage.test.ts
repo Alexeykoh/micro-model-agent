@@ -186,4 +186,24 @@ describe("webui usage metrics", () => {
       expect(body.state.projectMap?.indexed).toBe(false);
     });
   });
+
+  it("passes a full ProjectMapInfo through to the snapshot", () => {
+    const snapshot = buildHostState(
+      {
+        config: structuredClone(DEFAULTS),
+        projectMap: {
+          indexed: true,
+          indexing: false,
+          files: 3,
+          symbols: 9,
+          tokens: 100,
+          updatedAt: 1700000000000,
+          languages: [{ language: "typescript", files: 2, symbols: 8 }],
+          watcher: true,
+        },
+      },
+      false,
+    );
+    expect(snapshot.projectMap).toMatchObject({ updatedAt: 1700000000000, watcher: true });
+  });
 });
