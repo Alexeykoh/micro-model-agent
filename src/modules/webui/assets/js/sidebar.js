@@ -27,8 +27,8 @@ let turn = 0;
 let seq = 0;
 const nodeById = new Map();   // entry id → row node
 const callIndex = new Map();  // toolCallId → entry
+const headerByTurn = new Map(); // turn → header node
 let textEntry = null;         // current text row (updated in place)
-let domRows = 0;              // row nodes currently in the list
 
 function paneEl(id) { return document.getElementById("pane-" + id); }
 
@@ -44,9 +44,9 @@ function storeTab(id) {
   try { localStorage.setItem(TAB_KEY, id); } catch { /* private mode */ }
 }
 
-export function setSidebarTab(id) {
+export function setSidebarTab(id, persist = true) {
   if (!TABS.includes(id)) id = "session";
-  storeTab(id);                       // remember the REQUESTED tab
+  if (persist) storeTab(id);
   const effective = id === "trace" && mqMobile() ? "session" : id;
   active = effective;
   TABS.forEach((name) => {
@@ -136,7 +136,7 @@ function renderList() {
   listEl.textContent = "";
   listEl.dataset.lastTurn = "-1";
   nodeById.clear();
-  domRows = 0;
+  headerByTurn.clear();
   if (selected && !trace.some((e) => e.id === selected)) selected = null;
   if (trace.length === 0) {
     listEl.appendChild(el("div", "trace-turn", t("web.sidebar.trace_empty")));
@@ -146,13 +146,15 @@ function renderList() {
   for (const entry of trace) {
     if (entry.turn !== shownTurn) {
       shownTurn = entry.turn;
-      listEl.appendChild(el("div", "trace-turn", t("web.sidebar.trace_turn", { n: entry.turn })));
+      const h = el("div", "trace-turn", t("web.sidebar.trace_turn", { n: entry.turn }));
+      headerByTurn.set(entry.turn, h);
+      listEl.appendChild(h);
     }
     const row = renderRow(entry);
     nodeById.set(entry.id, row);
     listEl.appendChild(row);
-    domRows += 1;
   }
+  listEl.dataset.lastTurn = String(shownTurn);
   listEl.scrollTop = listEl.scrollHeight;
 }
 
@@ -164,8 +166,12 @@ function append(entry) {
   while (trace.length > TRACE_CAP) {
     const old = trace.shift();
     const node = nodeById.get(old.id);
-    if (node) { node.remove(); nodeById.delete(old.id); domRows -= 1; }
-    if (old.toolCallId) callIndex.delete(old.toolCallId);
+    if (node) { node.remove(); nodeById.delete(old.id); }
+    if (old.toolCallId != null) callIndex.delete(old.toolCallId);
+    if (!trace.some((e) => e.turn === old.turn)) {
+      const h = headerByTurn.get(old.turn);
+      if (h) { h.remove(); headerByTurn.delete(old.turn); }
+    }
   }
   return entry;
 }
@@ -174,14 +180,14 @@ function pushRow(entry) {
   if (!listEl) return;
   const last = listEl.dataset.lastTurn ? Number(listEl.dataset.lastTurn) : -1;
   if (entry.turn !== last) {
-    listEl.appendChild(el("div", "trace-turn", t("web.sidebar.trace_turn", { n: entry.turn })));
+    const h = el("div", "trace-turn", t("web.sidebar.trace_turn", { n: entry.turn }));
+    headerByTurn.set(entry.turn, h);
+    listEl.appendChild(h);
     listEl.dataset.lastTurn = String(entry.turn);
   }
   const row = renderRow(entry);
   nodeById.set(entry.id, row);
   listEl.appendChild(row);
-  domRows += 1;
-  if (domRows > TRACE_CAP + 200) { renderList(); return; }
   listEl.scrollTop = listEl.scrollHeight;
 }
 
@@ -228,13 +234,13 @@ export function sidebarTraceEvent(kind, data) {
   switch (kind) {
     case "tool_start": {
       const entry = append({ kind: "tool", name: data.name, args: data.args || {}, toolCallId: data.toolCallId });
-      callIndex.set(data.toolCallId, entry);
+      if (data.toolCallId != null) callIndex.set(data.toolCallId, entry);
       pushRow(entry);
       break;
     }
     case "tool_end": {
-      const entry = callIndex.get(data.toolCallId);
-      callIndex.delete(data.toolCallId);
+      const entry = data.toolCallId != null ? callIndex.get(data.toolCallId) : undefined;
+      if (data.toolCallId != null) callIndex.delete(data.toolCallId);
       if (entry) {
         entry.kind = data.success === false ? "tool_fail" : "tool";
         entry.success = data.success !== false;
@@ -386,7 +392,7 @@ export function sidebarMapState(host) {
   mapEl.appendChild(mapKv(t("web.sidebar.map_watcher"), map.watcher ? t("web.sidebar.map_on") : t("web.sidebar.map_off")));
   mapEl.appendChild(mapKv(t("web.sidebar.map_files"), num(map.files)));
   mapEl.appendChild(mapKv(t("web.sidebar.map_symbols"), num(map.symbols)));
-  mapEl.appendChild(mapKv(t("web.sidebar.map_tokens"), map.indexed ? fmtTokens(map.tokens) : "—"));
+  mapEl.appendChild(mapKv(t("web.sidebar.map_tokens"), map.indexed ? fmtTokens(map.tokens || 0) : "—"));
   if (host && host.workspace) mapEl.appendChild(mapKv(t("web.sidebar.map_root"), host.workspace));
 
   if (Array.isArray(map.languages) && map.languages.length > 0) {
@@ -442,7 +448,7 @@ export function applySidebarI18n() {
     const tab = sbEl.querySelector('.sb-tab[data-tab="' + id + '"]');
     if (tab) { const label = t("web.sidebar.tab_" + id); tab.title = label; tab.setAttribute("aria-label", label); }
   });
-  setSidebarTab(active);
+  setSidebarTab(active, false);
   renderList();
   if (selected) {
     const entry = trace.find((x) => x.id === selected);
