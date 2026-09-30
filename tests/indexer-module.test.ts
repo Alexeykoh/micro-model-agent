@@ -151,6 +151,34 @@ describe("IndexerModule", () => {
     expect(mod.mapInfo().watcher).toBe(false);
   });
 
+  it("shares one in-flight walk and reports indexing during it", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "export const a = 1");
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+
+    const p1 = mod.buildIndex();
+    const p2 = mod.buildIndex();
+    expect(p1).toBe(p2);
+    expect(mod.mapInfo().indexing).toBe(true);
+    await p1;
+    expect(mod.mapInfo().indexing).toBe(false);
+  });
+
+  it("reports an empty index without fabricating files", async () => {
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+    await mod.buildIndex();
+    expect(mod.mapInfo()).toMatchObject({ indexed: true, files: 0, languages: [] });
+  });
+
+  it("refresh reports a fresh updatedAt and clears indexing", async () => {
+    writeFileSync(join(tmpDir, "a.ts"), "export const a = 1");
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+    await mod.buildIndex();
+    await mod.refresh();
+    const info = mod.mapInfo();
+    expect(typeof info.updatedAt).toBe("number");
+    expect(info.indexing).toBe(false);
+  });
+
   it("flags files sharing a basename across extensions in the map block", async () => {
     // ses_mst2r0r5: ProductCard.js (stale transpiled) and ProductCard.tsx
     // (real source) both exist; Vite resolves .js first. The map must surface

@@ -72,13 +72,14 @@ export class IndexCache {
 
   /** Сохраняет результат индекса в кэш (память + диск). */
   save(result: IndexResult): void {
+    const now = Date.now();
     this.cache = result;
-    this.cachedBuiltAt = Date.now();
+    this.cachedBuiltAt = now;
     const envelope: CacheEnvelope = {
       version: CACHE_VERSION,
       root: this.root ?? "",
       signature: this.currentSignature(),
-      builtAt: Date.now(),
+      builtAt: now,
       result,
     };
     const dir = join(this.cachePath, "..");

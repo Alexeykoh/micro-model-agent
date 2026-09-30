@@ -31,6 +31,7 @@ export class IndexerModule implements AgentModule {
   private baseDir: string;
   private index: IndexResult | null = null;
   private mapCache: { index: IndexResult; value: ProjectMapInfo } | null = null;
+  private buildPromise: Promise<IndexResult | null> | null = null;
   private indexing = false;
   private builtAt: number | null = null;
   private watcherActive = false;
@@ -49,28 +50,33 @@ export class IndexerModule implements AgentModule {
   }
 
   /** Строит индекс (кэш → обход), null при неустранимой ошибке. */
-  async buildIndex(): Promise<IndexResult | null> {
-    if (this.index) return this.index;
+  buildIndex(): Promise<IndexResult | null> {
+    if (this.index) return Promise.resolve(this.index);
+    if (this.buildPromise) return this.buildPromise;
 
     const cached = this.cache.load();
     if (cached) {
       this.index = cached;
-      this.builtAt = this.cache.getBuiltAt() ?? Date.now();
-      return cached;
+      this.builtAt = this.cache.getBuiltAt();
+      return Promise.resolve(cached);
     }
 
     this.indexing = true;
-    try {
-      const result = await this.indexer.walk();
-      this.cache.save(result);
-      this.index = result;
-      this.builtAt = Date.now();
-      return result;
-    } catch {
-      return null;
-    } finally {
-      this.indexing = false;
-    }
+    this.buildPromise = (async () => {
+      try {
+        const result = await this.indexer.walk();
+        this.cache.save(result);
+        this.index = result;
+        this.builtAt = Date.now();
+        return result;
+      } catch {
+        return null;
+      } finally {
+        this.indexing = false;
+        this.buildPromise = null;
+      }
+    })();
+    return this.buildPromise;
   }
 
   /** Принудительно перестраивает индекс (сброс кэша + обход). */
@@ -176,7 +182,7 @@ export class IndexerModule implements AgentModule {
     const symbols = this.index.files.reduce((n, f) => n + f.exports.length, 0);
     const langMap = new Map<string, { files: number; symbols: number }>();
     for (const f of this.index.files) {
-      const lang = f.language || "other";
+      const lang = f.language;
       const cur = langMap.get(lang) ?? { files: 0, symbols: 0 };
       cur.files += 1;
       cur.symbols += f.exports.length;
