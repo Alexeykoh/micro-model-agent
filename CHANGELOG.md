@@ -14,6 +14,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Honest critic evidence bits** (`src/modules/critic/evidence.ts`, `provider.ts`): successful bash no longer gets a synthesized `exitCode: 0` (`undefined` renders as `?`; `1` stays for known failures); setting `critic.provider` without `critic.model` now warns instead of silently doing nothing.
 - **Method calls no longer flagged as missing files** (`src/modules/hallucination/js-identifiers.ts`): `extractFileLikeTokens` drops tokens glued to `(` (`prev.map(`, `todos.map(` — `map` is a sourcemap extension), fixing false "mentioned files not found" warnings on code answers. Applies to all consumers (factual check, execution auditor, verifier).
 
+## [2.13.0] - 2026-09-30
+
+### Added
+
+- **Web UI**: sidebar tabs — Session / Map / Trace. Square icon tabs with the active
+  tab name shown below them (`assets/js/sidebar.js`, `index.html`, `styles.css`).
+- **Map tab**: project-map index state — status, last-updated timestamp, watcher,
+  files/symbols/tokens, root, per-language breakdown, and a Re-index button
+  (`POST /api/index`). `IndexerModule.mapInfo()` + `ProjectMapInfo` host contract.
+- **Trace tab**: live per-session log of tool calls, phases, plan updates, errors,
+  questions and the answer text stream; clicking a row opens a detail panel (full
+  args, output, metadata) and doubles the sidebar width. Desktop only (hidden ≤760px).
+- **i18n**: `web.sidebar.tab_*`, `web.sidebar.map_*`, `web.sidebar.trace_*`,
+  `web.sidebar.detail_*` (en + ru).
+
 ## [2.12.0] - 2026-09-29
 
 ### Added
