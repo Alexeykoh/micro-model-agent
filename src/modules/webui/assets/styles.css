@@ -229,7 +229,7 @@ body[data-font="large"] { font-size: 17px; }
 .layout { flex: 1; display: flex; min-height: 0; }
 
 /* chat */
-.chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.chat { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .msgs { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 18px 22px; display: flex; flex-direction: column; gap: 11px; }
 .msgs > * { flex-shrink: 0; min-height: fit-content; }
 /* messages live inside a per-tab `.feed` wrapper; it must mirror the `.msgs`
@@ -452,6 +452,18 @@ body.light .imgcard .ph { background: var(--ph-light); }
 }
 .empty .g { color: var(--green); }
 
+/* jump-to-latest pill: only visible when the reader scrolled up */
+.to-latest {
+  position: absolute; left: 50%; bottom: 148px; transform: translateX(-50%);
+  z-index: 20; font: inherit; font-size: 12.5px; cursor: pointer;
+  color: var(--accent); background: var(--panel);
+  border: 1px solid var(--border-2); border-radius: 999px;
+  padding: 5px 14px; box-shadow: var(--shadow-menu);
+  white-space: nowrap;
+}
+.to-latest:hover { border-color: var(--accent); }
+.to-latest[hidden] { display: none; }
+
 /* ---- composer: selectors, attachments, input, autocomplete ---- */
 .input-area { margin: 14px 22px 16px; position: relative; }
 .selectors { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; min-width: 0; }
@@ -589,6 +601,61 @@ body.light .sel > button { border: 1px solid var(--border); }
 .attach-err[hidden] { display: none; }
 .input-area.dragover .composer { border-color: var(--accent); box-shadow: 0 0 0 2px var(--input-shadow); }
 @keyframes blink { 50% { opacity: 0; } }
+
+/* ---- chat motion ("magic"): entrances, caret, pulses, pops -----------------
+   Rules: only opacity/transform animations (never height/margin), 100–200ms,
+   calm single pulses. Killed globally by the `prefers-reduced-motion` block
+   below. Glyphs stay textual per STYLE.md — motion, not decoration. */
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(.98) translateY(2px); } to { opacity: 1; transform: none; } }
+@keyframes softPulse { 50% { opacity: .45; } }
+@keyframes fadeIn { from { opacity: 0; } }
+
+/* new rows rise in softly (a bulk history render animates once as a whole —
+   one shared fade, still cheap: opacity/transform only) */
+.feed > :is(.u, .md, .act, .think, .q, .filecard, .planblock, .imgcard, .linkline,
+  .toolout, .metric, .detail, .metaln, .warnline, .errline, .cmdout, .sysline,
+  .startbanner, .grouped, .msg-actions, .busy) {
+  animation: rise .18s ease-out;
+}
+/* quiet-mode run folding fades instead of snapping away */
+.fold-out { opacity: 0; transition: opacity .15s ease-out; }
+
+/* streaming caret at the tail of live markdown */
+.md.streaming::after {
+  content: "▌"; color: var(--accent); margin-left: 2px;
+  animation: blink 1s steps(2, start) infinite;
+}
+/* alive labels: in-feed spinner, the *live* think block, rail phase,
+   a running tool. Finished blocks stay static — a pulsing "думаю" after
+   the turn reads as hung. */
+.busy .lab, .think.live .think-h .lab, .rail-l1 .lab, .act.running .lab {
+  animation: softPulse 1.6s ease-in-out infinite;
+}
+
+/* menus, autocomplete and dialogs pop instead of snapping */
+.dd.open .dd-menu, .sel.open .menu, .cmdk:not([hidden]) { animation: pop .12s ease-out; }
+.to-latest:not([hidden]) { animation: pop .15s ease-out; }
+.overlay.open { animation: fadeIn .15s ease-out; }
+.overlay.open .modal { animation: rise .18s ease-out; }
+
+/* hover/active blends */
+.sel > button, .menu .mi, .stab, .q .qopt, .q .qsend, .filecard, .icon-btn,
+.btn, .linkbtn, .chip, .cb-copy, .act-btn, .copy-btn, .composer .attach-btn,
+.composer .send-btn, .dd-menu .si, .dd-menu .act, .cmdk-item, .toggle {
+  transition: background-color .12s, color .12s, border-color .12s;
+}
+.composer { transition: border-color .15s, box-shadow .15s; }
+
+/* scroll edge fades on the transcript (classes from the feed scroll hook) */
+.msgs::before, .msgs::after {
+  content: ""; position: sticky; display: block; height: 22px; flex: 0 0 auto;
+  pointer-events: none; z-index: 5; opacity: 0; transition: opacity .25s;
+}
+.msgs::before { top: 0; margin-bottom: -22px; background: linear-gradient(var(--bg), transparent); }
+.msgs::after { bottom: 0; margin-top: -22px; background: linear-gradient(transparent, var(--bg)); }
+.msgs.scrolled::before { opacity: 1; }
+.msgs.unfollowed::after { opacity: 1; }
 
 /* ---- activity rail — indicator above the composer while a turn runs ----
    Reproduces docs/design/ui/demo-activity-rail-chat.html (variant №12).
