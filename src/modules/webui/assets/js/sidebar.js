@@ -10,7 +10,7 @@ import { el, icon } from "./dom.js";
 import { api } from "./api.js";
 import { S } from "./store.js";
 import { t } from "./i18n.js";
-import { labelOf, categoryOf, argText, formatMs } from "./format.js";
+import { labelOf, categoryOf, argText, formatMs, fmtTokens } from "./format.js";
 
 const TAB_KEY = "mma-sidebar-tab";
 const TABS = ["session", "map", "trace"];
@@ -25,8 +25,10 @@ let trace = [];          // { id, kind, ts, name, args, output, success, duratio
 let selected = null;     // trace id
 let turn = 0;
 let seq = 0;
-const pendingArgs = new Map();  // toolCallId → args (tool_start before tool_end)
-let textEntry = null;           // current text row (updated in place)
+const nodeById = new Map();   // entry id → row node
+const callIndex = new Map();  // toolCallId → entry
+let textEntry = null;         // current text row (updated in place)
+let domRows = 0;              // row nodes currently in the list
 
 function paneEl(id) { return document.getElementById("pane-" + id); }
 
@@ -44,22 +46,22 @@ function storeTab(id) {
 
 export function setSidebarTab(id) {
   if (!TABS.includes(id)) id = "session";
-  if (id === "trace" && mqMobile()) id = "session";
-  active = id;
-  storeTab(id);
+  storeTab(id);                       // remember the REQUESTED tab
+  const effective = id === "trace" && mqMobile() ? "session" : id;
+  active = effective;
   TABS.forEach((name) => {
     const pane = paneEl(name);
-    if (pane) pane.hidden = name !== id;
+    if (pane) pane.hidden = name !== effective;
     const tab = sbEl && sbEl.querySelector('.sb-tab[data-tab="' + name + '"]');
     if (tab) {
-      const on = name === id;
+      const on = name === effective;
       tab.classList.toggle("on", on);
       tab.setAttribute("aria-selected", on ? "true" : "false");
     }
   });
-  if (nameTextEl) nameTextEl.textContent = t("web.sidebar.tab_" + id);
+  if (nameTextEl) nameTextEl.textContent = t("web.sidebar.tab_" + effective);
   const nic = nameEl && nameEl.querySelector(".sb-ico");
-  if (nic) { nic.textContent = ""; nic.appendChild(icon(ICON_NAME[id])); }
+  if (nic) { nic.textContent = ""; nic.appendChild(icon(ICON_NAME[effective])); }
 }
 
 function collapseDetail() {
@@ -87,7 +89,7 @@ function rowLabel(entry) {
     case "phase": return phaseLabel(entry.phase);
     case "plan": return t("web.sidebar.trace_plan");
     case "question": return t("web.sidebar.trace_question");
-    case "text": return t("web.sidebar.trace_text", { count: entry.text.length });
+    case "text": return t("web.sidebar.trace_text", { count: entry.chars || 0 });
     default: return labelOf(entry.name);
   }
 }
@@ -132,18 +134,24 @@ function renderRow(entry) {
 function renderList() {
   if (!listEl) return;
   listEl.textContent = "";
-  listEl.dataset.lastTurn = "0";
+  listEl.dataset.lastTurn = "-1";
+  nodeById.clear();
+  domRows = 0;
+  if (selected && !trace.some((e) => e.id === selected)) selected = null;
   if (trace.length === 0) {
     listEl.appendChild(el("div", "trace-turn", t("web.sidebar.trace_empty")));
     return;
   }
-  let shownTurn = 0;
+  let shownTurn = -1;
   for (const entry of trace) {
     if (entry.turn !== shownTurn) {
       shownTurn = entry.turn;
       listEl.appendChild(el("div", "trace-turn", t("web.sidebar.trace_turn", { n: entry.turn })));
     }
-    listEl.appendChild(renderRow(entry));
+    const row = renderRow(entry);
+    nodeById.set(entry.id, row);
+    listEl.appendChild(row);
+    domRows += 1;
   }
   listEl.scrollTop = listEl.scrollHeight;
 }
@@ -153,27 +161,46 @@ function append(entry) {
   entry.turn = turn;
   entry.ts = Date.now();
   trace.push(entry);
-  if (trace.length > TRACE_CAP) trace.splice(0, trace.length - TRACE_CAP);
+  while (trace.length > TRACE_CAP) {
+    const old = trace.shift();
+    const node = nodeById.get(old.id);
+    if (node) { node.remove(); nodeById.delete(old.id); domRows -= 1; }
+    if (old.toolCallId) callIndex.delete(old.toolCallId);
+  }
+  return entry;
 }
 
 function pushRow(entry) {
   if (!listEl) return;
-  const last = listEl.dataset.lastTurn ? Number(listEl.dataset.lastTurn) : 0;
+  const last = listEl.dataset.lastTurn ? Number(listEl.dataset.lastTurn) : -1;
   if (entry.turn !== last) {
     listEl.appendChild(el("div", "trace-turn", t("web.sidebar.trace_turn", { n: entry.turn })));
     listEl.dataset.lastTurn = String(entry.turn);
   }
-  listEl.appendChild(renderRow(entry));
+  const row = renderRow(entry);
+  nodeById.set(entry.id, row);
+  listEl.appendChild(row);
+  domRows += 1;
+  if (domRows > TRACE_CAP + 200) { renderList(); return; }
   listEl.scrollTop = listEl.scrollHeight;
 }
 
+function replaceRow(entry) {
+  const old = nodeById.get(entry.id);
+  const next = renderRow(entry);
+  nodeById.set(entry.id, next);
+  if (old && old.parentNode) old.replaceWith(next);
+  else if (listEl) listEl.appendChild(next);
+  if (listEl) listEl.scrollTop = listEl.scrollHeight;
+}
+
 function updateTextRow(entry) {
-  const row = listEl && listEl.querySelector('.trc[data-id="' + entry.id + '"]');
+  const row = nodeById.get(entry.id);
   if (!row) return;
   row.textContent = "";
   row.appendChild(el("span", "g", "✦"));
   row.appendChild(el("span", "lab", rowLabel(entry)));
-  listEl.scrollTop = listEl.scrollHeight;
+  if (listEl) listEl.scrollTop = listEl.scrollHeight;
 }
 
 // ---- public API ----
@@ -183,10 +210,10 @@ export function sidebarSessionChanged(sid) {
   if (prev === (sid || "")) return;
   if (sbEl) sbEl.dataset.sid = sid || "";
   trace = [];
+  callIndex.clear();
   textEntry = null;
   turn = 0;
   seq = 0;
-  pendingArgs.clear();
   collapseDetail();
   renderList();
 }
@@ -199,48 +226,55 @@ export function sidebarTurnEnd() {
 export function sidebarTraceEvent(kind, data) {
   if (!data) return;
   switch (kind) {
-    case "tool_start":
-      pendingArgs.set(data.toolCallId, data.args || {});
-      append({ kind: "tool", name: data.name, args: data.args || {}, toolCallId: data.toolCallId });
-      pushRow(trace[trace.length - 1]);
+    case "tool_start": {
+      const entry = append({ kind: "tool", name: data.name, args: data.args || {}, toolCallId: data.toolCallId });
+      callIndex.set(data.toolCallId, entry);
+      pushRow(entry);
       break;
+    }
     case "tool_end": {
-      const args = pendingArgs.get(data.toolCallId) || {};
-      pendingArgs.delete(data.toolCallId);
-      append({
-        kind: data.success === false ? "tool_fail" : "tool",
-        name: data.name, args, success: data.success !== false, toolCallId: data.toolCallId,
-        durationMs: data.durationMs, output: data.output || "",
-      });
-      pushRow(trace[trace.length - 1]);
+      const entry = callIndex.get(data.toolCallId);
+      callIndex.delete(data.toolCallId);
+      if (entry) {
+        entry.kind = data.success === false ? "tool_fail" : "tool";
+        entry.success = data.success !== false;
+        entry.durationMs = data.durationMs;
+        entry.output = data.output || "";
+        replaceRow(entry);
+      } else {
+        const e2 = append({
+          kind: data.success === false ? "tool_fail" : "tool",
+          name: data.name, args: data.args || {}, toolCallId: data.toolCallId,
+          success: data.success !== false, durationMs: data.durationMs, output: data.output || "",
+        });
+        pushRow(e2);
+      }
       break;
     }
     case "phase":
-      append({ kind: "phase", phase: data.phase });
-      pushRow(trace[trace.length - 1]);
+      pushRow(append({ kind: "phase", phase: data.phase }));
       break;
     case "plan":
-      append({
+      pushRow(append({
         kind: "plan",
         steps: Array.isArray(data.steps) ? data.steps : [],
         currentIndex: typeof data.currentIndex === "number" ? data.currentIndex : 0,
-      });
-      pushRow(trace[trace.length - 1]);
+      }));
       break;
     case "question":
-      append({ kind: "question", text: data.question || data.text || "" });
-      pushRow(trace[trace.length - 1]);
+      pushRow(append({ kind: "question", text: data.question || data.text || "" }));
       break;
     case "text": {
-      if (!textEntry) { append({ kind: "text", text: "" }); textEntry = trace[trace.length - 1]; pushRow(textEntry); }
-      textEntry.text += data.chunk || "";
+      if (!textEntry) { textEntry = append({ kind: "text", text: "", chars: 0 }); pushRow(textEntry); }
+      const chunk = data.chunk || "";
+      textEntry.chars += chunk.length;
+      textEntry.text += chunk;
       if (textEntry.text.length > 4000) textEntry.text = textEntry.text.slice(-4000);
       updateTextRow(textEntry);
       break;
     }
     case "error":
-      append({ kind: "error", message: data.message || data.error || "" });
-      pushRow(trace[trace.length - 1]);
+      pushRow(append({ kind: "error", message: data.message || data.error || "" }));
       break;
     default:
       break;
@@ -266,6 +300,10 @@ function codeBlock(text) {
   c.textContent = text;
   return c;
 }
+function capOutput(text) {
+  if (typeof text !== "string") return "";
+  return text.length <= MAX_OUTPUT_CHARS ? text : text.slice(0, MAX_OUTPUT_CHARS) + "\n… [truncated from " + text.length + " chars]";
+}
 
 function renderDetail(entry) {
   if (!detailEl) return;
@@ -290,7 +328,7 @@ function renderDetail(entry) {
 
   if (entry.kind === "tool" || entry.kind === "tool_fail") {
     detailBody.appendChild(detailGroup(t("web.sidebar.detail_arguments"), codeBlock(JSON.stringify(entry.args || {}, null, 2))));
-    detailBody.appendChild(detailGroup(t("web.sidebar.detail_output"), codeBlock((entry.output || "").slice(0, MAX_OUTPUT_CHARS))));
+    detailBody.appendChild(detailGroup(t("web.sidebar.detail_output"), codeBlock(capOutput(entry.output))));
   } else if (entry.kind === "text") {
     detailBody.appendChild(detailGroup(t("web.sidebar.detail_text"), codeBlock(entry.text || "")));
   } else if (entry.kind === "plan") {
@@ -309,10 +347,6 @@ function renderDetail(entry) {
 }
 
 // ---- Map tab ----
-
-function fmtTokens(n) {
-  return n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n || 0);
-}
 
 function fmtUpdated(updatedAt) {
   if (typeof updatedAt !== "number") return t("web.sidebar.map_never");
@@ -395,7 +429,8 @@ export function sidebarMapIndicator(host) {
   const tab = sbEl && sbEl.querySelector('.sb-tab[data-tab="map"]');
   if (!tab) return;
   const map = (host && host.projectMap) || null;
-  const next = map && map.indexing ? "busy" : map && map.indexed && !map.watcher ? "stale" : "";
+  const busy = (map && map.indexing) || reindexing;
+  const next = busy ? "busy" : map && map.indexed && !map.watcher ? "stale" : "";
   tab.dataset.indicator = next;
 }
 
@@ -417,6 +452,7 @@ export function applySidebarI18n() {
 }
 
 export function initSidebar() {
+  if (sbEl) return;
   sbEl = document.querySelector(".sb");
   if (!sbEl) return;
   nameEl = document.getElementById("sbName");
