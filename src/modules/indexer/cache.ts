@@ -17,6 +17,8 @@ interface CacheEnvelope {
   root: string;
   /** Отпечаток дерева из `Indexer.scanSignature()` на момент сохранения. */
   signature: string;
+  /** Время сборки индекса (epoch ms). */
+  builtAt?: number;
   result: IndexResult;
 }
 
@@ -36,6 +38,7 @@ export interface IndexCacheOptions {
 export class IndexCache {
   private cachePath: string;
   private cache: IndexResult | null = null;
+  private cachedBuiltAt: number | null = null;
   private root: string | undefined;
   private signature: (() => string) | undefined;
 
@@ -60,6 +63,7 @@ export class IndexCache {
       if (this.root !== undefined && parsed.root !== this.root) return null;
       if (this.signature && parsed.signature !== this.currentSignature()) return null;
       this.cache = parsed.result;
+      this.cachedBuiltAt = typeof parsed.builtAt === "number" ? parsed.builtAt : null;
       return this.cache;
     } catch {
       return null;
@@ -68,11 +72,14 @@ export class IndexCache {
 
   /** Сохраняет результат индекса в кэш (память + диск). */
   save(result: IndexResult): void {
+    const now = Date.now();
     this.cache = result;
+    this.cachedBuiltAt = now;
     const envelope: CacheEnvelope = {
       version: CACHE_VERSION,
       root: this.root ?? "",
       signature: this.currentSignature(),
+      builtAt: now,
       result,
     };
     const dir = join(this.cachePath, "..");
@@ -83,6 +90,7 @@ export class IndexCache {
   /** Инвалидирует кэш (память + дисковый файл). */
   invalidate(): void {
     this.cache = null;
+    this.cachedBuiltAt = null;
     if (existsSync(this.cachePath)) {
       try {
         rmSync(this.cachePath);
@@ -90,6 +98,11 @@ export class IndexCache {
         /* best-effort очистка */
       }
     }
+  }
+
+  /** Время сборки кэшированного индекса (epoch ms) или null. */
+  getBuiltAt(): number | null {
+    return this.cachedBuiltAt;
   }
 
   /**

@@ -5,7 +5,7 @@
  */
 import type { AppConfig } from "../../config/types";
 import type { AgentResult } from "../../core/types";
-import type { HostStateSnapshot } from "../../core/host";
+import type { HostStateSnapshot, ProjectMapInfo } from "../../core/host";
 import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
 import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
@@ -23,13 +23,17 @@ export interface HostStateInput {
   contextProbe?: { model: string; actual: number } | null;
   workspace?: string;
   instructions?: { files: string[]; disabled: boolean };
-  projectMap?: { indexed: boolean; files: number; symbols: number; tokens: number } | null;
+  projectMap?: ProjectMapInfo | null;
 }
 
 /** Структурное подмножество индексер-модуля для сайдбара (без жёсткой зависимости). */
 export interface WebIndexer {
   buildIndex(): Promise<unknown>;
   stats(): { files: number; symbols: number; tokens: number } | null;
+  /** Полная статистика карты (вкладка Map); undefined у старых стабов. */
+  mapInfo?(): ProjectMapInfo;
+  /** Принудительная пересборка индекса (`POST /api/index`). */
+  refresh?(): Promise<unknown>;
 }
 
 /**

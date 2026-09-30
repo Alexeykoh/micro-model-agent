@@ -110,6 +110,7 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "GET /api/models": (_req, res, s) => handleModelsGet(res, s),
   "POST /api/command": (req, res, s) => handleCommandPost(req, res, s),
   "POST /api/interrupt": (_req, res, s) => handleInterruptPost(res, s),
+  "POST /api/index": (_req, res, s) => handleIndexPost(res, s),
   "POST /api/mcp": (req, res, s) => handleMcpCreate(req, res, s),
   "GET /api/lsp": (_req, res, s) => handleLspGet(res, s),
 };
@@ -174,6 +175,16 @@ function handleInterruptPost(res: ServerResponse, s: WebUiState): void {
   // бежит (только резерв), `interrupt()` — no-op, и слот отпустит путь висящего сабмита.
   s.bridge?.interrupt();
   sendJson(res, 200, { ok: true });
+}
+
+/** `POST /api/index` — fire-and-forget пересбор индекса; результат виден в `/api/state`. */
+function handleIndexPost(res: ServerResponse, s: WebUiState): void {
+  if (!s.refreshIndex) {
+    sendJson(res, 503, { error: "unavailable" });
+    return;
+  }
+  Promise.resolve(s.refreshIndex()).catch(() => {});
+  sendJson(res, 202, { ok: true });
 }
 
 /**

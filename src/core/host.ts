@@ -9,6 +9,28 @@ import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
  */
 export type PlanStepStatus = "pending" | "in_progress" | "done" | "failed";
 
+/** Разбивка карты проекта по языку (для вкладки Map). */
+export interface ProjectMapLanguage {
+  language: string;
+  files: number;
+  symbols: number;
+}
+
+/** Статистика карты проекта, отдаваемая веб-сайдбару. */
+export interface ProjectMapInfo {
+  indexed: boolean;
+  /** Обход идёт прямо сейчас. */
+  indexing?: boolean;
+  files: number;
+  symbols: number;
+  tokens: number;
+  /** Время сборки индекса (epoch ms) или null. */
+  updatedAt?: number | null;
+  languages?: ProjectMapLanguage[];
+  /** Вотчер индексатора активен. */
+  watcher?: boolean;
+}
+
 /**
  * Снапшот состояния для сайдбара/топбара. Поля best-effort:
  * отсутствуют, если модуль недоступен (например, сессии ещё нет).
@@ -42,7 +64,7 @@ export interface HostStateSnapshot {
   /** Источники инструкций AGENTS.md (`disabled` — флаг --no-agents-md). */
   instructions?: { files: string[]; disabled: boolean };
   /** Статистика карты проекта; `indexed:false`, пока обход не завершён. */
-  projectMap?: { indexed: boolean; files: number; symbols: number; tokens: number };
+  projectMap?: ProjectMapInfo;
   plan?: {
     steps: { text: string; status: PlanStepStatus }[];
     currentIndex: number;

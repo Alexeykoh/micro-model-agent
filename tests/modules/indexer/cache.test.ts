@@ -130,6 +130,34 @@ describe("IndexCache validation", () => {
   });
 });
 
+describe("IndexCache builtAt", () => {
+  it("persists and reads back builtAt", () => {
+    const dir = makeProject();
+    const c = new IndexCache(dir);
+    const result = { files: [], totalSize: 0 };
+    c.save(result);
+    const fresh = new IndexCache(dir);
+    expect(fresh.load()).toEqual(result);
+    expect(typeof fresh.getBuiltAt()).toBe("number");
+  });
+
+  it("returns null builtAt for an envelope without the field", () => {
+    const dir = makeProject();
+    writeFileSync(
+      join(dir, "index-cache.json"),
+      JSON.stringify({
+        version: 2,
+        root: "",
+        signature: "",
+        result: { files: [], totalSize: 0 },
+      }),
+    );
+    const c = new IndexCache(dir);
+    c.load();
+    expect(c.getBuiltAt()).toBeNull();
+  });
+});
+
 describe("IndexerModule cache staleness", () => {
   it("rebuilds instead of serving a stale cache after a file is added", async () => {
     const dir = makeProject();

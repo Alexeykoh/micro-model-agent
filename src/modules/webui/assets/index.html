@@ -96,19 +96,49 @@
   </div>
 
   <div class="sb">
-    <div class="sec plan-sec">
-      <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="planHeaderLabel">plan</span> <span class="n" id="planCount"></span></button>
-      <div class="sec-body" id="plan"></div>
+    <div class="sb-tabs" role="tablist" aria-label="sidebar">
+      <button class="sb-tab on" type="button" role="tab" data-tab="session" aria-selected="true" aria-controls="pane-session" title="Session">
+        <span class="sb-ico" data-icon="session" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="map" aria-selected="false" aria-controls="pane-map" title="Map">
+        <span class="sb-ico" data-icon="map" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="trace" aria-selected="false" aria-controls="pane-trace" title="Trace">
+        <span class="sb-ico" data-icon="trace" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="sb-name" id="sbName"><span class="sb-ico" data-icon="session" aria-hidden="true"></span><span id="sbNameText">Session</span></div>
+
+    <div class="sb-pane" id="pane-session" role="tabpanel" data-pane="session">
+      <div class="sec plan-sec">
+        <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="planHeaderLabel">plan</span> <span class="n" id="planCount"></span></button>
+        <div class="sec-body" id="plan"></div>
+      </div>
+      <div class="sec usage-sec">
+        <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="usageHeaderLabel">session · usage</span></button>
+        <div class="sec-body" id="usage"></div>
+      </div>
+      <div class="sec env-sec">
+        <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="envHeaderLabel">environment</span></button>
+        <div class="sec-body" id="env"></div>
+      </div>
     </div>
 
-    <div class="sec usage-sec">
-      <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="usageHeaderLabel">session · usage</span></button>
-      <div class="sec-body" id="usage"></div>
+    <div class="sb-pane" id="pane-map" role="tabpanel" data-pane="map" hidden>
+      <div class="sec map-sec">
+        <div class="sec-body" id="mapBody"></div>
+      </div>
     </div>
 
-    <div class="sec env-sec">
-      <button class="sec-h" type="button" data-collapse aria-expanded="true"><span class="arrow">▾</span> <span id="envHeaderLabel">environment</span></button>
-      <div class="sec-body" id="env"></div>
+    <div class="sb-pane" id="pane-trace" role="tabpanel" data-pane="trace" hidden>
+      <div class="trace-list" id="traceList"></div>
+      <div class="trc-detail" id="traceDetail" hidden>
+        <div class="detail-h"><span class="g" id="detailGlyph">◇</span><span id="detailTitle"></span><button class="x linkbtn" type="button" id="detailClose">✕</button></div>
+        <div class="detail-b" id="detailBody"></div>
+      </div>
     </div>
   </div>
 </div>

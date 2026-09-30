@@ -19,6 +19,11 @@ loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyFontSize, se
 import {
 initRail, setPlan as railPlan, railEvent, applyRailI18n,
 } from "./js/rail.js";
+import {
+  initSidebar, sidebarSessionChanged, sidebarMapState,
+  sidebarTraceEvent, sidebarTurnEnd, sidebarBusy, sidebarMapIndicator,
+  applySidebarI18n,
+} from "./js/sidebar.js";
 
 document.querySelectorAll("[data-collapse]").forEach((head) => {
   const initArrow = head.querySelector(".arrow");
@@ -77,6 +82,9 @@ function renderState(snapshot, busy) {
     renderSelectors();
   }
   renderEnvironment(S.state.host);
+  sidebarMapState(S.state.host);
+  sidebarMapIndicator(S.state.host);
+  sidebarSessionChanged(sessionId);
   renderWorkspace(S.state.host);
   renderSessionsDropdown();
 }
@@ -131,7 +139,7 @@ const handlers = [
   ["tool_end", onToolEnd],
   ["plan", onPlan],
   ["question", onQuestion],
-  ["turn_end", onTurnEnd],
+  ["turn_end", (d) => { onTurnEnd(d); sidebarTurnEnd(); sidebarBusy(false); }],
   ["log", onLog],
 ];
 for (const [event, fn] of handlers) {
@@ -149,6 +157,11 @@ for (const ev of ["tool_start", "tool_end", "text", "plan"]) {
     else railEvent(ev, d.name);
   });
 }
+// Sidebar Trace: live per-session event log. Feed handlers stay untouched.
+for (const ev of ["tool_start", "tool_end", "phase", "plan", "question"]) {
+  es.addEventListener(ev, (e) => { const d = parse(e); if (d) sidebarTraceEvent(ev, d); });
+}
+es.addEventListener("text", (e) => { const d = parse(e); if (d) sidebarTraceEvent("text", d); });
 es.addEventListener("command", (e) => {
   const d = parse(e);
   if (d && typeof d.text === "string") onCommandOutput(d.text, d.sessionId);
@@ -158,6 +171,8 @@ es.addEventListener("command", (e) => {
     if (d) {
       S.state.busy = !!d.busy;
       reflectBusy();
+      sidebarBusy(!!d.busy);
+      refresh();
       if (d.usage && typeof d.usage === "object") {
         S.state.host = Object.assign({}, S.state.host, d.usage);
         renderUsage(S.state.host);
@@ -167,7 +182,7 @@ es.addEventListener("command", (e) => {
   es.addEventListener("error", (e) => {
     if (!e.data) return;
     const d = parse(e);
-    if (d) onErrorEvent(d);
+    if (d) { onErrorEvent(d); sidebarTraceEvent("error", d); }
   });
 }
 
@@ -239,6 +254,7 @@ function applyStaticI18n() {
   renderSelectors();
   renderSessionsDropdown();
   applyRailI18n();
+  applySidebarI18n();
   if (msgs.querySelector(".empty")) showEmptyFeed();
   if (connStatus && !connStatus.hidden) setConnStatus(true);
 }
@@ -265,6 +281,8 @@ async function boot() {
   renderSettings();
   await loadConfig();
   initRail(S.state.config && S.state.config.ui ? S.state.config.ui.activityRail : undefined);
+  initSidebar();
+  applySidebarI18n();
   await loadModels();
   await loadProviders();
   await loadSessions();

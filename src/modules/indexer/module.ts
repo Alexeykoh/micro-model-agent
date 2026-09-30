@@ -2,6 +2,7 @@
 import { dirname } from "path";
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
+import type { ProjectMapInfo } from "../../core/host";
 import type { ToolDefinition, ToolContext, ToolResult } from "../../tools/types";
 import { Indexer } from "./walker";
 import { IndexCache } from "./cache";
@@ -29,7 +30,11 @@ export class IndexerModule implements AgentModule {
   private cache: IndexCache;
   private baseDir: string;
   private index: IndexResult | null = null;
-  private statsCache: { index: IndexResult; value: { files: number; symbols: number; tokens: number } } | null = null;
+  private mapCache: { index: IndexResult; value: ProjectMapInfo } | null = null;
+  private buildPromise: Promise<IndexResult | null> | null = null;
+  private indexing = false;
+  private builtAt: number | null = null;
+  private watcherActive = false;
   private rebuildTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: IndexerModuleOptions) {
@@ -45,29 +50,40 @@ export class IndexerModule implements AgentModule {
   }
 
   /** Строит индекс (кэш → обход), null при неустранимой ошибке. */
-  async buildIndex(): Promise<IndexResult | null> {
-    if (this.index) return this.index;
+  buildIndex(): Promise<IndexResult | null> {
+    if (this.index) return Promise.resolve(this.index);
+    if (this.buildPromise) return this.buildPromise;
 
     const cached = this.cache.load();
     if (cached) {
       this.index = cached;
-      return cached;
+      this.builtAt = this.cache.getBuiltAt();
+      return Promise.resolve(cached);
     }
 
-    try {
-      const result = await this.indexer.walk();
-      this.cache.save(result);
-      this.index = result;
-      return result;
-    } catch {
-      return null;
-    }
+    this.indexing = true;
+    this.buildPromise = (async () => {
+      try {
+        const result = await this.indexer.walk();
+        this.cache.save(result);
+        this.index = result;
+        this.builtAt = Date.now();
+        return result;
+      } catch {
+        return null;
+      } finally {
+        this.indexing = false;
+        this.buildPromise = null;
+      }
+    })();
+    return this.buildPromise;
   }
 
   /** Принудительно перестраивает индекс (сброс кэша + обход). */
   async refresh(): Promise<IndexResult | null> {
     this.cache.invalidate();
     this.index = null;
+    this.builtAt = null;
     return this.buildIndex();
   }
 
@@ -113,6 +129,7 @@ export class IndexerModule implements AgentModule {
           this.refresh().catch(() => {});
         }, 2000);
       });
+      this.watcherActive = true;
     } catch {
       // Вотчинг best-effort; ручной refresh всё равно работает.
     }
@@ -120,6 +137,7 @@ export class IndexerModule implements AgentModule {
 
   /** Отписывается от вотчера и чистит дебаунс-таймер. */
   unwatch(): void {
+    this.watcherActive = false;
     if (this.rebuildTimeout) {
       clearTimeout(this.rebuildTimeout);
       this.rebuildTimeout = null;
@@ -141,21 +159,56 @@ export class IndexerModule implements AgentModule {
   }
 
   /**
-   * Компактная статистика карты для сайдбара хоста (`null` до конца обхода).
-   * Кэшируется на объект индекса, чтобы поллинг `/api/state` не ререндерил
-   * всю карту.
+   * Полная статистика карты для сайдбара: счётчики, время сборки, разбивка по
+   * языкам, статус вотчера/обхода. Кэшируется на объект индекса, чтобы поллинг
+   * `/api/state` не пересобирал разбивку.
    */
-  stats(): { files: number; symbols: number; tokens: number } | null {
-    if (!this.index) return null;
-    if (this.statsCache && this.statsCache.index === this.index) return this.statsCache.value;
+  mapInfo(): ProjectMapInfo {
+    if (!this.index) {
+      return {
+        indexed: false,
+        indexing: this.indexing,
+        files: 0,
+        symbols: 0,
+        tokens: 0,
+        updatedAt: this.builtAt,
+        languages: [],
+        watcher: this.watcherActive,
+      };
+    }
+    if (this.mapCache && this.mapCache.index === this.index) {
+      return { ...this.mapCache.value, indexing: this.indexing, watcher: this.watcherActive };
+    }
     const symbols = this.index.files.reduce((n, f) => n + f.exports.length, 0);
-    const value = {
+    const langMap = new Map<string, { files: number; symbols: number }>();
+    for (const f of this.index.files) {
+      const lang = f.language;
+      const cur = langMap.get(lang) ?? { files: 0, symbols: 0 };
+      cur.files += 1;
+      cur.symbols += f.exports.length;
+      langMap.set(lang, cur);
+    }
+    const languages = [...langMap.entries()]
+      .map(([language, v]) => ({ language, ...v }))
+      .sort((a, b) => b.files - a.files || a.language.localeCompare(b.language))
+      .slice(0, 8);
+    const value: ProjectMapInfo = {
+      indexed: true,
       files: this.index.files.length,
       symbols,
       tokens: this.estimateTokens(this.formatMap(this.index)),
+      updatedAt: this.builtAt,
+      languages,
+      watcher: this.watcherActive,
     };
-    this.statsCache = { index: this.index, value };
-    return value;
+    this.mapCache = { index: this.index, value };
+    return { ...value, indexing: this.indexing };
+  }
+
+  /** Компактная статистика карты для совместимости (null до конца обхода). */
+  stats(): { files: number; symbols: number; tokens: number } | null {
+    const info = this.mapInfo();
+    return info.indexed ? { files: info.files, symbols: info.symbols, tokens: info.tokens } : null;
   }
 
   /** Определения тулов модуля (project_map). */

@@ -520,6 +520,24 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Ассеты/роуты:** `WebUiAssets.mdJs/smdJs/hljsJs`, `STATIC_ASSETS["/md.js"|"/smd.js"|"/hljs.js"]`;
   `index.html` грузит `hljs.js` (defer) и `app.js` как `type="module"`. `build:prod` копирует их автоматически.
 
+### Web Sidebar Tabs (2.13.0)
+
+- **Tab bar** (`src/modules/webui/assets/js/sidebar.js`, `index.html`, `styles.css`):
+  квадратные Lucide-иконочные вкладки **Session / Map / Trace** сверху сайдбара; имя активной
+  вкладки показано строкой ниже вкладок. Дефолт — Session; последняя вкладка помнится в
+  `localStorage["mma-sidebar-tab"]`; хоткеи `Alt+1/2/3`; вкладка и панель Trace скрыты на ≤760px.
+- **Session** — существующие секции plan / session·usage / environment без изменений.
+- **Map** (`ProjectMapInfo`: status, `updatedAt`, watcher, files/symbols/tokens, root, top-8 языков)
+  рендерится `assets/js/sidebar.js`; кнопка **Re-index** шлёт `POST /api/index`
+  (новый роут → `WebUiState.refreshIndex` → `broadcast` события `state` по завершении).
+- **Trace** — живой per-session буфер (cap 500, DOM ограничен, одна строка на вызов тула,
+  текстовый стрим сворачивается в одну обновляемую строку); master-detail
+  (`.sb.sb-expanded` → 680px + панель `.trc-detail` с метаданными/аргументами/выводом).
+- **Backend:** `ProjectMapInfo`/`ProjectMapLanguage` в `src/core/host.ts`; `IndexerModule.mapInfo()`
+  + `builtAt` в кэше индекса; `WebIndexer.mapInfo?/refresh?`; `POST /api/index`.
+- **Тесты:** `tests/indexer-module.test.ts`, `tests/modules/indexer/cache.test.ts`,
+  `tests/webui-usage.test.ts`, `tests/webui-server.test.ts`, `tests/webui-assets.test.ts`, `tests/i18n.test.ts`.
+
 ### Session Auto-Naming (2.6.0)
 
 - **Детерминированно + LLM:** имя сессии выводится из первого user-сообщения
@@ -590,7 +608,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   пропуск. Резолвер ограничен baseDir (jail), 10 путями, 500KB; `.drawio` добавлен в
   `FILE_EXTENSIONS` токенайзера. i18n: `hall.claim_artifact`, `hall.claim_output_unverified` (en+ru).
 
-### Current Version: 2.12.0
+### Current Version: 2.13.0
 
 ### Changelog
 
