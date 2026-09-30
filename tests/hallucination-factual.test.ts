@@ -57,6 +57,21 @@ describe("FactualCheck", () => {
     expect(result.status).toBe("pass");
   });
 
+  it("does not flag JS method calls like prev.map or todos.map", () => {
+    const check = new FactualCheck(dir);
+    const result = check.validate(
+      "setTodos((prev) => [...prev, x]); todos.map((t) => t.text); prev.map((t) => t)",
+    );
+    expect(result.status).toBe("pass");
+  });
+
+  it("still warns on a past-tense claim about a missing file", () => {
+    const check = new FactualCheck(dir);
+    const result = check.validate("Создал src/NopeComponent.tsx и обновил импорты");
+    expect(result.status).toBe("warn");
+    expect(result.reason).toContain("NopeComponent.tsx");
+  });
+
   it("does not warn when a filename contains a space", () => {
     // «report 1.txt» извлекается токеном «1.txt» — файл существует.
     const check = new FactualCheck(dir);

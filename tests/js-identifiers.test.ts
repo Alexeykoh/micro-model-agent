@@ -59,6 +59,18 @@ describe("extractFileLikeTokens", () => {
   it("extracts no tokens from an extension-list phrase", () => {
     expect(extractFileLikeTokens("Проверить что остались только .tsx/.ts файлы")).toEqual([]);
   });
+
+  it("ignores method calls glued to an open paren (not files)", () => {
+    expect(
+      extractFileLikeTokens("setTodos((prev) => [...prev, { id: 1 }]); todos.map((t) => t.text)"),
+    ).toEqual([]);
+  });
+
+  it("still extracts a real sourcemap next to a method call", () => {
+    expect(extractFileLikeTokens("see dist/bundle.js.map; prev.map((t) => t)")).toEqual([
+      "dist/bundle.js.map",
+    ]);
+  });
 });
 
 describe("stripUrls", () => {

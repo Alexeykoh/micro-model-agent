@@ -78,4 +78,31 @@ describe("critic evidence", () => {
       expect(withoutDir.fileExcerpts).toBeUndefined();
     });
   });
+
+  describe("answer excerpt", () => {
+    it("carries the chat answer for mutation-free turns", () => {
+      const pack = buildEvidencePack({
+        task: "покажи пример кода react",
+        toolEvents: [],
+        answerText: "```tsx\nexport function TodoList() {}\n```",
+      });
+      expect(pack.answerExcerpt).toContain("TodoList");
+    });
+
+    it("omits the excerpt without answer text", () => {
+      const pack = buildEvidencePack({ task: "fix bug", toolEvents: [] });
+      expect(pack.answerExcerpt).toBeUndefined();
+    });
+
+    it("caps length and redacts recognizable secrets", () => {
+      const pack = buildEvidencePack({
+        task: "t",
+        toolEvents: [],
+        answerText: `key sk-abcdefghijklmnopqrstuvwx here\n${"x".repeat(5000)}`,
+      });
+      expect(pack.answerExcerpt).not.toContain("sk-abcdefghijklmnopqrstuvwx");
+      expect(pack.answerExcerpt).toContain("sk-[REDACTED]");
+      expect(pack.answerExcerpt!.length).toBeLessThanOrEqual(2000);
+    });
+  });
 });

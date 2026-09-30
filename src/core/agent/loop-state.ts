@@ -121,6 +121,14 @@ export interface LoopState {
   criticRepairCycles: number;
   /** Рабочие мутации с последнего вызова критика. */
   mutationsSinceCritic: number;
+  /**
+   * Длина активной истории на старте захода (executeSingleAgentLoop).
+   * Маркер для gatherTurnToolEvents: критик видит только тул-события
+   * текущего захода, а не всей сессии (иначе тулы прошлого вопроса —
+   * напр. погода — ложно свидетельствуют против текущей задачи).
+   * После компакции история короче маркера — сборщик клампит к длине.
+   */
+  criticHistoryMark: number;
   /** Сигнатуры уже показанных проблем критика (дедупликация). */
   seenCriticIssues: Set<string>;
 
@@ -200,6 +208,7 @@ export function createLoopState(): LoopState {
     criticCalls: 0,
     criticRepairCycles: 0,
     mutationsSinceCritic: 0,
+    criticHistoryMark: 0,
     seenCriticIssues: new Set(),
     emptyResponseRetries: 0,
     emptyResponseExhausted: false,

@@ -6,8 +6,6 @@ import type { CriticIssue, CriticVerdict, EvidencePack } from "../../modules/cri
 import type { SessionLogger } from "../session-logger";
 import type { LoopState } from "./loop-state";
 
-const MUTATIONS_BEFORE_CHECK = 3;
-
 /** Хвост вывода тула в evidence-событии (ограничен — у критика свой бюджет). */
 const MAX_EVENT_OUTPUT_CHARS = 600;
 
@@ -23,6 +21,11 @@ export interface CriticGateDeps {
   toolEvents: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }>;
   /** True, если проверка идёт прямо перед принятием финального ответа. */
   beforeFinish: boolean;
+  /**
+   * Финальный текст ответа (для ходов без work-мутаций — чат-доставка).
+   * Обрезается и редактируется в buildEvidencePack, не раньше.
+   */
+  answerText?: string;
 }
 
 /** Действие вентиля: пропустить или переспросить модель. */
@@ -42,11 +45,35 @@ function issueSignature(issue: CriticIssue): string {
   return `${issue.severity}:${issue.claim}`.toLowerCase().replace(/\s+/g, " ").slice(0, 120);
 }
 
+/**
+ * Грубая нормализация жалобы для ловли near-identical повторов (регистр,
+ * пунктуация, пробелы). Настоящие перефразы («ran weather searches» vs
+ * «ignored the task») этим не ловятся — их останавливает advice=pass
+ * при исчерпанном repair-бюджете, а не эта эвристика.
+ */
+export function normalizedSignature(issue: CriticIssue): string {
+  const body = `${issue.severity}:${issue.claim}`
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  return `~${body}`;
+}
+
 function renderIssues(issues: CriticIssue[]): string {
   return issues
     .slice(0, 5)
     .map((i) => `- [${i.severity}] ${i.problem || i.claim}${i.suggestion ? ` → ${i.suggestion}` : ""}`)
     .join("\n");
+}
+
+/**
+ * True, если вердикт повторяет уже виденные жалобы (вплоть до перефраза
+ * на уровне регистра/пунктуации). Вызывать ДО takeFreshIssues.
+ */
+function isRepeatedVerdict(state: LoopState, issues: CriticIssue[]): boolean {
+  return issues.length > 0 && issues.every((i) => state.seenCriticIssues.has(normalizedSignature(i)));
 }
 
 /**
@@ -70,16 +97,32 @@ export class CriticGate {
     const verdict = await this.verifySafely(deps);
     if (!verdict || verdict.status === "ok") return "pass";
 
+    // Повтор уже виденной жалобы — считаем ДО takeFreshIssues (он пополняет набор).
+    const isRepeat = isRepeatedVerdict(deps.state, verdict.issues);
     const fresh = this.takeFreshIssues(deps.state, verdict.issues);
     if (fresh.length === 0) return "pass";
 
     this.logVerdict(deps, verdict, fresh.length);
-    const canRepair =
+    if (!this.shouldRepair(deps, verdict, isRepeat)) {
+      // Совет/повтор — не retry: иначе advice крутит модель по кругу до
+      // maxCalls теми же ответами (наблюдалось: 4 идентичных critical подряд).
+      // Повтор дополнительно требует сменить подход, repair-бюджет не тратится.
+      this.injectRepeatOrAdvice(deps, fresh, isRepeat);
+      return "pass";
+    }
+
+    this.injectRepair(deps, verdict, fresh);
+    return "retry";
+  }
+
+  /** Починка положена только свежему critical в пределах repair-бюджета. */
+  private shouldRepair(deps: CriticGateDeps, verdict: CriticVerdict, isRepeat: boolean): boolean {
+    return (
       verdict.status === "critical" &&
       deps.beforeFinish &&
-      deps.state.criticRepairCycles < this.opts.maxRepairCycles;
-    this.inject(deps, verdict, fresh, canRepair);
-    return "retry";
+      deps.state.criticRepairCycles < this.opts.maxRepairCycles &&
+      !isRepeat
+    );
   }
 
   /** Fail-open: битый/перебюджетный критик не блокирует агента. */
@@ -94,9 +137,11 @@ export class CriticGate {
   private shouldRun(deps: CriticGateDeps): boolean {
     if (!this.opts.enabled) return false;
     if (deps.state.criticCalls >= this.opts.maxCalls) return false;
-    if (!deps.beforeFinish && deps.state.mutationsSinceCritic < MUTATIONS_BEFORE_CHECK) {
-      return false;
-    }
+    // Единственный вызов — перед финалом (beforeFinish, см. agent.ts):
+    // mid-turn ветки по mutationsSinceCritic нет, счётчик — только лог-поле.
+    // Чистый чат (нет тул-событий текущего захода) — нечего верифицировать,
+    // pass без LLM-вызова, бюджет не тратится.
+    if (!deps.beforeFinish) return false;
     return deps.toolEvents.length !== 0;
   }
 
@@ -106,6 +151,7 @@ export class CriticGate {
       const sig = issueSignature(issue);
       if (state.seenCriticIssues.has(sig)) continue;
       state.seenCriticIssues.add(sig);
+      state.seenCriticIssues.add(normalizedSignature(issue));
       fresh.push(issue);
     }
     return fresh;
@@ -129,20 +175,22 @@ export class CriticGate {
     deps.logger.diagnostic("info", `Critic ${verdict.status}: ${verdict.summary} (${count} issue(s))`);
   }
 
-  private inject(
+  /** Совет или директива при повторе: инжектит текст, но НЕ ретраит (возврат — pass). */
+  private injectRepeatOrAdvice(
     deps: CriticGateDeps,
-    verdict: CriticVerdict,
     fresh: CriticIssue[],
-    canRepair: boolean,
+    isRepeat: boolean,
   ): void {
-    if (!canRepair) {
-      deps.contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${t("critic.advice", { issues: renderIssues(fresh) })}</system-summary>`,
-      });
-      return;
-    }
+    deps.contextManager.addMessage({
+      role: "user",
+      content: `<system-summary>${isRepeat
+        ? t("critic.repeat", { issues: renderIssues(fresh) })
+        : t("critic.advice", { issues: renderIssues(fresh) })}</system-summary>`,
+    });
+  }
 
+  /** Починка: тратит repair-бюджет, пишет escalation, ретраит. */
+  private injectRepair(deps: CriticGateDeps, verdict: CriticVerdict, fresh: CriticIssue[]): void {
     deps.state.criticRepairCycles++;
     deps.slog.logCritic("critic_escalation", {
       summary: verdict.summary,
@@ -159,20 +207,28 @@ export class CriticGate {
 }
 
 /**
- * Собирает события тулов хода из активной истории (для evidence-пакета критика).
- * @param contextManager менеджер с getActiveHistory; @returns события role:"tool".
+ * Собирает события тулов текущего захода из активной истории (для evidence-пакета критика).
+ * @param contextManager менеджер с getActiveHistory;
+ * @param fromIndex маркер начала захода (длина истории на старте run'а) — всё, что раньше,
+ *   принадлежит прошлым вопросам и в пакет не входит; клампится к длине (компакция ужимает историю).
+ * @returns события role:"tool" начиная с маркера.
  */
-export function gatherTurnToolEvents(contextManager: {
-  getActiveHistory: () => Array<{
-    role: string;
-    name?: string;
-    content?: unknown;
-    success?: boolean;
-    arguments?: Record<string, unknown>;
-  }>;
-}): Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> {
+export function gatherTurnToolEvents(
+  contextManager: {
+    getActiveHistory: () => Array<{
+      role: string;
+      name?: string;
+      content?: unknown;
+      success?: boolean;
+      arguments?: Record<string, unknown>;
+    }>;
+  },
+  fromIndex = 0,
+): Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> {
   const events: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> = [];
-  for (const m of contextManager.getActiveHistory()) {
+  const history = contextManager.getActiveHistory();
+  const start = Math.max(0, Math.min(fromIndex, history.length));
+  for (const m of history.slice(start)) {
     if (m.role !== "tool" || !m.name) continue;
     // Сообщения role:"tool" уже несут аргументы (tool-batch) и обрезанный
     // вывод — пробрасываем оба, чтобы критик видел ЧТО тронуто и ЧТО вернулось.

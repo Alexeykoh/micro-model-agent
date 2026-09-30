@@ -146,6 +146,7 @@
   "tool.truncated": "[Truncated: {tokens} tokens removed]",
   "critic.repair": "A verifier flagged critical problems; fix them before finishing:\n{issues}\nSummary: {summary}",
   "critic.advice": "A verifier flagged issues worth checking before you finish:\n{issues}",
+  "critic.repeat": "The verifier repeats a previously flagged problem — do not produce the same answer again. Change the approach, or finish honestly if the complaint does not apply:\n{issues}",
   "tool.subagent_queued": "Sub-agent task queued: {task}",
   "tool.subagent_artifact": "Sub-agent completed. Full result saved to artifact: {path}\nIterations: {iterations}\nSummary:\n{summary}",
   "tool.pipeline_started": "Pipeline \"{name}\" execution started. Pipeline engine is a stub — run dispatched.",

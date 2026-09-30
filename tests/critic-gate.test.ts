@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { CriticGate, gatherTurnToolEvents } from "../src/core/agent/critic-gate";
+import { CriticGate, gatherTurnToolEvents, normalizedSignature } from "../src/core/agent/critic-gate";
 import { createLoopState } from "../src/core/agent/loop-state";
 
 function deps(overrides: Partial<any> = {}) {
@@ -30,14 +30,60 @@ describe("CriticGate", () => {
     expect(verify).not.toHaveBeenCalled();
   });
 
+  it("skips chat-only runs without spending the critic budget", async () => {
+    const verify = vi.fn(async () => concern);
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify, buildPack: (d: any) => d });
+    const d = deps({ toolEvents: [] });
+    expect(await gate.evaluate(d)).toBe("pass");
+    expect(verify).not.toHaveBeenCalled();
+    expect(d.state.criticCalls).toBe(0);
+    expect(d.slog.logCritic).not.toHaveBeenCalledWith("critic_check", expect.anything());
+  });
+
   it("returns pass on ok verdict", async () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
     expect(await gate.evaluate(deps())).toBe("pass");
   });
 
-  it("injects advice and retries on concern", async () => {
+  it("injects advice without retry on concern", async () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => concern, buildPack: (d: any) => d });
-    expect(await gate.evaluate(deps())).toBe("retry");
+    const d = deps();
+    expect(await gate.evaluate(d)).toBe("pass");
+    expect(d.contextManager.addMessage).toHaveBeenCalledTimes(1);
+    expect(d.state.criticRepairCycles).toBe(0);
+  });
+
+  it("passes (no retry) on critical once the repair budget is spent", async () => {
+    const second = {
+      status: "critical" as const,
+      summary: "still broken",
+      issues: [{ severity: "critical" as const, claim: "different fresh claim", problem: "p" }],
+    };
+    const verify = vi.fn(async () => critical);
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify, buildPack: (d: any) => d });
+    const d = deps();
+    expect(await gate.evaluate(d)).toBe("retry");
+    verify.mockResolvedValue(second);
+    expect(await gate.evaluate(d)).toBe("pass");
+    expect(d.state.criticRepairCycles).toBe(1);
+    const names = d.slog.logCritic.mock.calls.map((c: any[]) => c[0]);
+    expect(names.filter((n: string) => n === "critic_escalation")).toHaveLength(1);
+  });
+
+  it("does not spend the repair budget on a near-identical repeat", async () => {
+    const first = {
+      status: "critical" as const,
+      summary: "broken!",
+      issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p" }],
+    };
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => first, buildPack: (d: any) => d });
+    // Ручной набор: жалоба уже видена (другой кейс), бюджет цел.
+    const d = deps();
+    d.state.seenCriticIssues.add(
+      normalizedSignature({ severity: "critical", claim: "Missing file!", problem: "p" }),
+    );
+    expect(await gate.evaluate(d)).toBe("pass");
+    expect(d.state.criticRepairCycles).toBe(0);
   });
 
   it("repairs on critical, bounded by maxRepairCycles", async () => {
@@ -47,11 +93,13 @@ describe("CriticGate", () => {
     expect(await gate.evaluate(d)).toBe("pass"); // repair budget spent -> accept
   });
 
-  it("dedupes identical issues", async () => {
+  it("dedupes identical issues (second identical verdict adds nothing)", async () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => concern, buildPack: (d: any) => d });
     const d = deps();
-    expect(await gate.evaluate(d)).toBe("retry");
     expect(await gate.evaluate(d)).toBe("pass");
+    const added = (d.contextManager.addMessage as any).mock.calls.length;
+    expect(await gate.evaluate(d)).toBe("pass");
+    expect((d.contextManager.addMessage as any).mock.calls.length).toBe(added);
   });
 
   it("stops after maxCalls", async () => {
@@ -129,5 +177,33 @@ describe("gatherTurnToolEvents", () => {
     } as any);
     expect(events).toHaveLength(1);
     expect(events[0]).toEqual({ tool: "read_file", args: undefined, ok: true, output: undefined });
+  });
+
+  it("sees only tool events since the run marker (no leak from previous questions)", () => {
+    const history = [
+      { role: "user", content: "какая погода в минске?" },
+      { role: "tool", name: "web_search", content: "sunny", success: true, arguments: { query: "погода" } },
+      { role: "assistant", content: "Погода хорошая" },
+      { role: "user", content: "покажи пример кода react" },
+      { role: "assistant", content: "```tsx const a = 1 ```" },
+    ];
+    const events = gatherTurnToolEvents({ getActiveHistory: () => history } as any, 4);
+    expect(events).toHaveLength(0);
+  });
+
+  it("keeps current-run tool events after the marker", () => {
+    const history = [
+      { role: "tool", name: "web_search", content: "old", success: true },
+      { role: "tool", name: "write_file", content: "ok", success: true, arguments: { path: "a.ts" } },
+    ];
+    const events = gatherTurnToolEvents({ getActiveHistory: () => history } as any, 1);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ tool: "write_file", args: { path: "a.ts" }, ok: true, output: "ok" });
+  });
+
+  it("clamps an out-of-range marker (e.g. history compacted mid-run) to empty", () => {
+    const history = [{ role: "tool", name: "read_file", content: "x", success: true }];
+    expect(gatherTurnToolEvents({ getActiveHistory: () => history } as any, 99)).toHaveLength(0);
+    expect(gatherTurnToolEvents({ getActiveHistory: () => history } as any, -5)).toHaveLength(1);
   });
 });

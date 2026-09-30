@@ -9,6 +9,7 @@ Rules:
 - Flag ONLY issues that can be verified from the evidence provided. Do not speculate or invent.
 - Do not nitpick style, wording, or preferences unless the user's task demanded it.
 - If the evidence is insufficient to judge, return status "ok" (prefer silence over noise).
+- A chat-delivered answer (ANSWER section) can fully satisfy the task without any files or commands; absence of changed files is NOT itself an issue when ANSWER contains the requested result.
 - "critical" = the task's stated result is demonstrably not delivered. "concern" = a concrete, checkable gap. "info" = minor.
 - Every issue must reference concrete evidence (file, command, output).
 Reply with JSON ONLY:
@@ -133,6 +134,7 @@ function renderPack(pack: EvidencePack): string {
     "TOOL TRAIL:",
     pack.toolDigest || "(empty)",
     files.length > 0 ? `FILE CONTENTS:\n${files.join("\n")}` : "",
+    pack.answerExcerpt ? `ANSWER (the agent's chat delivery — may satisfy the task without files):\n${pack.answerExcerpt}` : "",
   ]
     .filter(Boolean)
     .join("\n");

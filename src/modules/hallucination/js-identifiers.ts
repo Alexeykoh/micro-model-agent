@@ -253,10 +253,20 @@ export function isFilePathLike(s: string): boolean {
  * расширений — хосты/TLD вроде `whom-pointing-jewel-maine.trycloudflare.com`
  * или `Gismeteo.by` не выживают); URL вырезаются заранее, чтобы
  * `https://host/repo.git` не выжил как "файл".
+ * Вызовы методов (`prev.map(`, `todos.map(` — переменная + метод, а `map`
+ * есть в FILE_EXTENSIONS как sourcemap) — не файлы: путь к файлу никогда
+ * не стоит вплотную перед `(`.
  */
 export function extractFileLikeTokens(text: string): string[] {
-  const matches = text.match(FILE_TOKEN_RE) || [];
-  return [...new Set(matches.filter(isFilePathLike))];
+  const out = new Set<string>();
+  const re = new RegExp(FILE_TOKEN_RE.source, "gi");
+  for (const m of text.matchAll(re)) {
+    const token = m[0];
+    const after = text[(m.index ?? 0) + token.length];
+    if (after === "(") continue;
+    if (isFilePathLike(token)) out.add(token);
+  }
+  return [...out];
 }
 
 /** Вырезает URL (scheme://… до пробела/кавычки), чтобы они не парсились как пути. */

@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import type { EvidencePack } from "./types";
 import { summarizeToolArgs } from "../../core/agent/tool-output";
+import { redactContextSecrets } from "../../core/agent/context-log";
 
 const MUTATING_TOOLS = new Set(["write_file", "edit_file", "delete_file", "move_file", "create_dir"]);
 
@@ -27,6 +28,8 @@ export interface EvidenceInput {
   toolEvents: EvidenceToolEvent[];
   /** Корень проекта — если задан, изменённые файлы дочитываются (ограниченные выдержки), чтобы критик проверял контент, а не пути. */
   baseDir?: string;
+  /** Финальный ответ модели для ходов без мутаций (чат-доставка). Обрезается и редактируется здесь. */
+  answerText?: string;
 }
 
 const MAX_DIGEST_LINES = 40;
@@ -34,6 +37,8 @@ const MAX_DIGEST_LINES = 40;
 const MAX_DIGEST_OUTPUT_CHARS = 300;
 const MAX_EXCERPT_FILES = 5;
 const MAX_EXCERPT_CHARS = 1200;
+/** Выдержка ответа модели в пакете (у критика свой бюджет; секреты редактируются). */
+const MAX_ANSWER_CHARS = 2000;
 
 /** Собирает EvidencePack из событий тулов: дайджест, файлы, команды, выдержки. */
 export function buildEvidencePack(input: EvidenceInput): EvidencePack {
@@ -54,6 +59,9 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
     commands,
     toolDigest: digest.slice(-MAX_DIGEST_LINES).join("\n"),
     fileExcerpts: input.baseDir ? readExcerpts(input.baseDir, [...changedFiles]) : undefined,
+    answerExcerpt: input.answerText
+      ? redactContextSecrets(input.answerText).slice(0, MAX_ANSWER_CHARS)
+      : undefined,
   };
 }
 
@@ -79,7 +87,9 @@ function commandOf(ev: EvidenceToolEvent): EvidencePack["commands"][number] | un
   if (ev.tool !== "bash" || typeof ev.args?.command !== "string") return undefined;
   return {
     command: ev.args.command,
-    exitCode: ev.ok === false ? 1 : 0,
+    // Реальный код неизвестен (в evidence только флаг успеха) — для успеха
+    // не синтезируем 0, иначе критик видит выдуманные коды; рендер покажет "?".
+    exitCode: ev.ok === false ? 1 : undefined,
     output: ev.output?.slice(-MAX_DIGEST_OUTPUT_CHARS),
   };
 }

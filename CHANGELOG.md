@@ -4,6 +4,16 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **In-loop critic is now selective instead of always-on** (`src/core/agent/critic-gate.ts`, `loop-state.ts`, `src/core/agent.ts`): evidence is scoped to the current run (`LoopState.criticHistoryMark` + `gatherTurnToolEvents(cm, mark)`), so tool calls from previous questions no longer testify against the current task (observed: weather lookups from an earlier turn caused 4 false `critical` verdicts on a chat-only "show a React example" answer). Chat-only turns (no tool events in the run) now `pass` without an LLM call and without spending `maxCalls`; the dead mid-turn `mutationsSinceCritic` trigger branch is removed.
+- **Advice and repeat verdicts no longer retry** (`src/core/agent/critic-gate.ts`, `src/i18n/en.json`, `ru.json`): only a fresh `critical` inside `maxRepairCycles` repairs + retries; `concern`, over-budget `critical` and near-identical repeats inject `<system-summary>` (`critic.advice`, new `critic.repeat` — "change approach or finish honestly") and `pass`. Previously every non-ok verdict retried identically until `maxCalls`, looping the same answer 4 times.
+- **Critic sees chat-delivered answers** (`src/modules/critic/types.ts`, `evidence.ts`, `client.ts`, `src/core/agent.ts`): `EvidencePack.answerExcerpt` (≤2000 chars, secrets redacted) carries the final text for mutation-free turns, and the critic prompt states that a chat answer without files is not itself an issue. Previously the critic judged chat tasks blind (tools only) and demanded file artifacts the user never asked for.
+- **Honest critic evidence bits** (`src/modules/critic/evidence.ts`, `provider.ts`): successful bash no longer gets a synthesized `exitCode: 0` (`undefined` renders as `?`; `1` stays for known failures); setting `critic.provider` without `critic.model` now warns instead of silently doing nothing.
+- **Method calls no longer flagged as missing files** (`src/modules/hallucination/js-identifiers.ts`): `extractFileLikeTokens` drops tokens glued to `(` (`prev.map(`, `todos.map(` — `map` is a sourcemap extension), fixing false "mentioned files not found" warnings on code answers. Applies to all consumers (factual check, execution auditor, verifier).
+
 ## [2.12.0] - 2026-09-29
 
 ### Added
