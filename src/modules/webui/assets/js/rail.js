@@ -11,7 +11,7 @@ import { labelOf } from "./format.js";
 
 const LAYOUTS = ["off", "line", "meta", "full"];
 
-let root = null, trackEl = null, fillEl = null;
+let root = null, trackEl = null, fillEl = null, notchesEl = null;
 let labEl = null, timeEl = null, stepsEl = null, escEl = null;
 let toolsEl = null, eventsEl = null, lastEl = null;
 let layout = "line";
@@ -20,6 +20,20 @@ let tools = 0, events = 0, lastTool = "";
 let sawText = false, pendingTool = false;
 let plan = null;
 let timer = null;
+let notchesFor = 0;
+
+// Step boundaries are drawn from the real plan length: a single notch sits on
+// every boundary (total - 1 of them), so 5 steps always yield 4 dividers.
+function renderNotches(total) {
+  if (!notchesEl || total === notchesFor) return;
+  notchesFor = total;
+  notchesEl.textContent = "";
+  for (let i = 1; i < total; i++) {
+    const mark = document.createElement("i");
+    mark.style.left = ((i / total) * 100).toFixed(3) + "%";
+    notchesEl.appendChild(mark);
+  }
+}
 
 function render() {
   if (!root) return;
@@ -35,6 +49,7 @@ function render() {
   if (steps.length > 0) {
     const done = steps.filter((s) => s && s.status === "done").length;
     trackEl.dataset.mode = "plan";
+    renderNotches(steps.length);
     fillEl.style.setProperty("--prog", String((done / steps.length) * 100));
     stepsEl.textContent = t("web.rail.step_of", { cur: Math.min(done + 1, steps.length), total: steps.length });
   } else {
@@ -59,6 +74,8 @@ export function initRail(cfgLayout) {
   if (!root) return;
   trackEl = root.querySelector(".rl-track");
   fillEl = root.querySelector(".rl-fill");
+  notchesEl = root.querySelector(".rl-notches");
+  notchesFor = 0;
   labEl = root.querySelector(".lab");
   timeEl = root.querySelector(".time");
   stepsEl = root.querySelector(".st");

@@ -742,12 +742,16 @@ body.light .sel > button { border: 1px solid var(--border); }
   transform: translateX(-100%); animation: rlSweep 1.5s linear infinite;
 }
 @keyframes rlSweep { to { transform: translateX(100%); } }
-/* Засечки шагов плана — только в режиме plan */
-.rl-track[data-mode="plan"]::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: repeating-linear-gradient(90deg,
-    transparent 0, transparent calc(33.333% - 1.5px),
-    var(--bg) calc(33.333% - 1.5px), var(--bg) 33.333%);
+/* Засечки шагов плана — только в режиме plan.
+   Границы рисует JS (.rl-notches) по фактическому steps.length: статичный
+   repeating-gradient с шагом 33.333% всегда давал 3 деления, независимо от плана. */
+.rl-notches {
+  display: none; position: absolute; inset: 0; pointer-events: none;
+}
+.rl-track[data-mode="plan"] .rl-notches { display: block; }
+.rl-notches i {
+  position: absolute; top: 0; bottom: 0; width: 1.5px;
+  background: var(--bg); transform: translateX(-50%);
 }
 /* indeterminate: бегущий сканер по всей длине */
 .rl-track[data-mode="scan"] .rl-fill { display: none; }
