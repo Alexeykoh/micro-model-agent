@@ -1501,7 +1501,6 @@
   "web.msg.copy": "copy",
   "web.msg.copy_md": "copy as markdown",
   "web.card.open_title": "Preview in a browser tab",
-  "web.card.download_title": "Download the file",
   "web.card.copy_title": "Copy the workspace path",
   "web.card.drawio_hint": "Draw.io diagram is XML — preview shows code; open it in draw.io / VS Code to see the scheme.",
   "web.card.screenshot": "screenshot",

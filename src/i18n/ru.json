@@ -1477,7 +1477,6 @@
   "web.msg.copy": "копировать",
   "web.msg.copy_md": "копировать как markdown",
   "web.card.open_title": "Предпросмотр во вкладке браузера",
-  "web.card.download_title": "Скачать файл",
   "web.card.copy_title": "Скопировать путь в рабочей папке",
   "web.card.drawio_hint": "Диаграмма draw.io — это XML: предпросмотр покажет код, схему смотри в draw.io / VS Code.",
   "web.card.screenshot": "снимок экрана",
