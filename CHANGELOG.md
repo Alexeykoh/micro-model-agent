@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-10-01
+
 ### Added
 
 - **Web UI: stale-translations badge** (`src/modules/webui/i18n-stale.ts`, `i18n-api.ts`, `host-state.ts`, `core/host.ts`, `assets/index.html`, `js/dom.js`, `js/settings.js`, `app.js`, `styles.css`): `GET /api/i18n` and the state snapshot carry `i18nStale` (dict files on disk newer than the server process); the topbar shows a yellow badge with a reload action instead of silently rendering raw keys. New keys `web.i18n.stale`/`web.i18n.reload` (en+ru). Tests: `tests/webui-i18n.test.ts`, `tests/webui-usage.test.ts`, `tests/webui-assets.test.ts`.
