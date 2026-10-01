@@ -445,7 +445,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 - **`mma web [--port N] [--host H] [--token T] [--no-open]`** — браузерный чат **без TTY**: тот же `bootstrap()`/`Agent`/сессии, вторая реализация `Host` (`WebHost`, `src/core/web-host.ts`) поверх `src/modules/webui/`. Терминальный REPL не меняется; терминал и веб — отдельные процессы.
 - **Env:** `MMA_WEBUI_PORT` (default random), `MMA_WEBUI_HOST` (`127.0.0.1`), `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
-- **Transport:** SSE `GET /events` (`state, text, meta, reasoning, phase, tool_start, tool_end, turn_end, plan, command, error`); REST `GET/POST /api/config`, `GET /api/models`, `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`, `POST /api/answer`, `GET /api/i18n`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`, `GET/POST /api/memory`, `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`, `GET /api/file?path=` (просмотр файла из карточки, ответы `text/plain`); static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов. GET-навигации (клик по карточке) аутентифицируются HttpOnly `SameSite=Strict` cookie `mma_web_auth`, которую сервер ставит на любой успешный запрос, — токен в URL ссылки не попадает.
+- **Transport:** SSE `GET /events` (`state, text, meta, reasoning, phase, tool_start, tool_end, turn_end, plan, command, error, log, retract, index`); REST `GET/POST /api/config`, `GET /api/models`, `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`, `POST /api/answer`, `GET /api/i18n`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`, `GET /api/sessions/:id/log`, `GET/POST /api/memory`, `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`, `GET /api/file?path=` (просмотр файла из карточки, ответы `text/plain`); static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов. GET-навигации (клик по карточке) аутентифицируются HttpOnly `SameSite=Strict` cookie `mma_web_auth`, которую сервер ставит на любой успешный запрос, — токен в URL ссылки не попадает.
 - **UI:** паритет с каноническим мокапом — topbar (new chat/sessions/tabs/settings), feed с карточками (plan/file/link/image), reasoning-тоггл, селекторы model/provider/context, сворачиваемый сайдбар, settings-модалка (General/Model/Context/Reasoning/UI/Memory/Skills/Plugins·MCP/Security/Advanced), тема dark/light/auto, вложения изображений, создание сессии.
 - **Композер:** attach + textarea + send — единая bordered-поверхность поля (контролы внутри, focus-ring на группе); send (`arrow-up`) на время хода становится stop (`square`); textarea авто-растёт (≤200px); чипы селекторов с Lucide-шевронами; хинт `Esc` — только во время хода.
 - **Chrome-иконки:** инлайн SVG [Lucide](https://lucide.dev) (MIT) в `app.js` (`icon()`/`ICONS`, zero-dep) вместо emoji/`⚙`; чат-глифы (`◇ ✓ ✗ ✦ ⟡ …`) остаются текстовыми по STYLE.md.
@@ -532,12 +532,22 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   рендерится `assets/js/sidebar.js`; кнопка **Re-index** шлёт `POST /api/index`
   (новый роут → `WebUiState.refreshIndex` → `broadcast` события `state` по завершении).
 - **Trace** — живой per-session буфер (cap 500, DOM ограничен, одна строка на вызов тула,
-  текстовый стрим сворачивается в одну обновляемую строку); master-detail
+  текстовый стрим сворачивается в одну обновляемую строку, полный текст — в деталях,
+  cap 20K); master-detail
   (`.sb.sb-expanded` → 680px + панель `.trc-detail` с метаданными/аргументами/выводом).
+  Живые строки: tool/phase/plan/question/text/error + status (SSE `meta`), log (SSE `log`,
+  кроме info-diagnostic), retract, index (SSE `index` start/done/error из `refreshIndex`).
+  Диагностика без новых продюсеров: `GET /api/sessions/:id/log` (`log-api.ts`, фильтр
+  `?types=&since=&limit=`, whitelist полей, скраб) — Trace докачивает critic/MoE/compaction/
+  probe/usage/audit/claim_retry/output инкрементом на каждый `turn_end`; деталь текста
+  сверяется с логом (число assistant-сообщений, итерации, модель/токены). `turn_end` несёт
+  серверный `turnSeq` (`WebUiState.turnSeq`). Git-операции отдельным событием не выделяются
+  (тонут в `bash`, эвристика по префиксу хрупкая) — команда видна в строке тула.
 - **Backend:** `ProjectMapInfo`/`ProjectMapLanguage` в `src/core/host.ts`; `IndexerModule.mapInfo()`
   + `builtAt` в кэше индекса; `WebIndexer.mapInfo?/refresh?`; `POST /api/index`.
 - **Тесты:** `tests/indexer-module.test.ts`, `tests/modules/indexer/cache.test.ts`,
-  `tests/webui-usage.test.ts`, `tests/webui-server.test.ts`, `tests/webui-assets.test.ts`, `tests/i18n.test.ts`.
+  `tests/webui-usage.test.ts`, `tests/webui-server.test.ts`, `tests/webui-assets.test.ts`, `tests/i18n.test.ts`,
+  `tests/webui-log.test.ts` (хвост лога + `turnSeq`), e2e `web-boot` (Trace-панель + жизненный цикл индекса).
 
 ### Session Auto-Naming (2.6.0)
 

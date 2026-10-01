@@ -23,6 +23,7 @@ initRail, setPlan as railPlan, railEvent, applyRailI18n,
 import {
   initSidebar, sidebarSessionChanged, sidebarMapState,
   sidebarTraceEvent, sidebarTurnEnd, sidebarBusy, sidebarMapIndicator,
+  sidebarPullLog,
   applySidebarI18n,
 } from "./js/sidebar.js";
 
@@ -141,7 +142,7 @@ const handlers = [
   ["tool_end", onToolEnd],
   ["plan", onPlan],
   ["question", onQuestion],
-  ["turn_end", (d) => { onTurnEnd(d); sidebarTurnEnd(); sidebarBusy(false); }],
+  ["turn_end", (d) => { onTurnEnd(d); sidebarTurnEnd(d.turnSeq); sidebarBusy(false); sidebarPullLog(); }],
   ["log", onLog],
   ["retract", (d) => onRetract(d.reason || "", d.sessionId)],
 ];
@@ -161,7 +162,10 @@ for (const ev of ["tool_start", "tool_end", "text", "plan"]) {
   });
 }
 // Sidebar Trace: live per-session event log. Feed handlers stay untouched.
-for (const ev of ["tool_start", "tool_end", "phase", "plan", "question"]) {
+// Tool/text/phase/plan/question/error stream live; status/log/retract/index
+// ride the same SSE bus; critic/MoE/compaction/probe/usage/audit/claim rows
+// arrive via the session-log supplement Trace pulls on every turn_end.
+for (const ev of ["tool_start", "tool_end", "phase", "plan", "question", "meta", "log", "retract", "index"]) {
   es.addEventListener(ev, (e) => { const d = parse(e); if (d) sidebarTraceEvent(ev, d); });
 }
 es.addEventListener("text", (e) => { const d = parse(e); if (d) sidebarTraceEvent("text", d); });

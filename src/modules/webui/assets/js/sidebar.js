@@ -25,6 +25,8 @@ let trace = [];          // { id, kind, ts, name, args, output, success, duratio
 let selected = null;     // trace id
 let turn = 0;
 let seq = 0;
+let logCursor = null;    // max session-log ts already pulled (supplement fetch)
+let logPulling = false;
 const nodeById = new Map();   // entry id → row node
 const callIndex = new Map();  // toolCallId → entry
 const headerByTurn = new Map(); // turn → header node
@@ -90,6 +92,18 @@ function rowLabel(entry) {
     case "plan": return t("web.sidebar.trace_plan");
     case "question": return t("web.sidebar.trace_question");
     case "text": return t("web.sidebar.trace_text", { count: entry.chars || 0 });
+    case "status": return t("web.sidebar.trace_status");
+    case "log": return t("web.sidebar.trace_log", { level: entry.level || "" });
+    case "retract": return t("web.sidebar.trace_retract");
+    case "index": return t("web.sidebar.trace_index", { phase: entry.phase || "" });
+    case "critic": return t("web.sidebar.trace_critic", { status: entry.status || "" });
+    case "moe": return t("web.sidebar.trace_moe");
+    case "compaction": return t("web.sidebar.trace_compaction");
+    case "probe": return t("web.sidebar.trace_probe");
+    case "usage": return t("web.sidebar.trace_usage");
+    case "audit": return t("web.sidebar.trace_audit");
+    case "claim": return t("web.sidebar.trace_claim", { kind: entry.subkind || "" });
+    case "output": return t("web.sidebar.trace_output");
     default: return labelOf(entry.name);
   }
 }
@@ -103,11 +117,19 @@ function rowArgs(entry) {
     return t("web.rail.step_of", { cur: Math.min(idx + 1, total), total });
   }
   if (entry.kind === "question") return entry.text || "";
+  // Диагностические строки несут смысл в одной строке (статус/лог/ретракт/
+  // индекс/критик/MoE/компакция/проба/usage/аудит/claim/вывод).
+  if (entry.text && typeof entry.text === "string" && entry.kind !== "tool" && entry.kind !== "tool_fail") {
+    const line = entry.text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) || "";
+    return line.slice(0, 160);
+  }
   return argText(entry.args);
 }
 
 function isWarn(entry) {
-  return entry.kind === "tool_fail" || entry.kind === "error";
+  return entry.kind === "tool_fail" || entry.kind === "error" || entry.kind === "claim" ||
+    (entry.kind === "critic" && entry.status === "critical") ||
+    (entry.kind === "log" && (entry.level === "warn" || entry.level === "error"));
 }
 
 function renderRow(entry) {
@@ -221,12 +243,16 @@ export function sidebarSessionChanged(sid) {
   textEntry = null;
   turn = 0;
   seq = 0;
+  // Trace живой: старые ходы чужой сессии не докачиваем, только новые события.
+  logCursor = new Date().toISOString();
+  logPulling = false;
   collapseDetail();
   renderList();
 }
 
-export function sidebarTurnEnd() {
-  turn += 1;
+export function sidebarTurnEnd(turnSeq) {
+  // Серверный номер хода (реконнекты локальный счётчик не сбивают).
+  turn = typeof turnSeq === "number" && turnSeq > turn ? turnSeq : turn + 1;
   textEntry = null;
 }
 
@@ -276,12 +302,117 @@ export function sidebarTraceEvent(kind, data) {
       const chunk = data.chunk || "";
       textEntry.chars += chunk.length;
       textEntry.text += chunk;
-      if (textEntry.text.length > 4000) textEntry.text = textEntry.text.slice(-4000);
+      // Полный текст хода — в память (деталь покажет целиком); обрезка честная,
+      // тем же капом и маркером, что у выводов тулов.
+      if (textEntry.text.length > MAX_OUTPUT_CHARS) {
+        textEntry.text = textEntry.text.slice(0, MAX_OUTPUT_CHARS) +
+          "\n… [truncated from " + textEntry.chars + " chars]";
+      }
       updateTextRow(textEntry);
       break;
     }
     case "error":
       pushRow(append({ kind: "error", message: data.message || data.error || "" }));
+      break;
+    case "meta": {
+      // Тела тулов (`kind: "tool"`) уже идут строками tool_start/tool_end —
+      // в Trace несём только статусы (stuck/escalation/honest-stop и т.п.).
+      if (data.kind !== undefined && data.kind !== "status") break;
+      const text = data.chunk || "";
+      if (!text.trim()) break;
+      pushRow(append({ kind: "status", text }));
+      break;
+    }
+    case "log": {
+      // Внутренний шёпот петли (`diagnostic` + info) в Trace не несём —
+      // только варнинги/ошибки и пользовательские info (probe/overflow).
+      if (data.diagnostic && data.level === "info") break;
+      const text = data.text || "";
+      if (!text.trim()) break;
+      pushRow(append({ kind: "log", text, level: data.level || "", source: data.source || "" }));
+      break;
+    }
+    case "retract":
+      pushRow(append({ kind: "retract", text: data.reason || "" }));
+      break;
+    case "index": {
+      const stats = data.stats && typeof data.stats === "object"
+        ? Object.entries(data.stats).map(([k, v]) => k + ": " + v).join(", ")
+        : "";
+      pushRow(append({ kind: "index", phase: data.phase || "", text: stats }));
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+/**
+ * Докачка диагностических событий из session-лога (критик, MoE, компакция,
+ * проба контекста, usage, аудит, claim-retry, вывод). Отдельных SSE-продюсеров
+ * нет — данные уже лежат в логе с `iteration`; тянем инкремент по курсору на
+ * каждый `turn_end`. Живые tool/text-строки не дублируются (другие kinds).
+ */
+export async function sidebarPullLog() {
+  const sid = sbEl && sbEl.dataset.sid;
+  if (!sid || logPulling) return;
+  logPulling = true;
+  try {
+    let url = "/api/sessions/" + encodeURIComponent(sid) + "/log?limit=100";
+    if (logCursor) url += "&since=" + encodeURIComponent(logCursor);
+    const r = await api(url);
+    if (!r.ok || !r.data || !Array.isArray(r.data.log)) return;
+    for (const e of r.data.log) {
+      if (typeof e.ts === "string" && (logCursor === null || e.ts > logCursor)) logCursor = e.ts;
+      appendLogEntry(e);
+    }
+  } catch {
+    /* best-effort supplement: Trace живёт и без докачки */
+  } finally {
+    logPulling = false;
+  }
+}
+
+function appendLogEntry(e) {
+  if (!e || typeof e.type !== "string") return;
+  switch (e.type) {
+    case "critic_check":
+      pushRow(append({ kind: "critic", status: "check", text: "", iteration: e.iteration }));
+      break;
+    case "critic_verdict":
+      pushRow(append({ kind: "critic", status: e.status || "", text: e.content || "", iteration: e.iteration }));
+      break;
+    case "critic_escalation":
+      pushRow(append({ kind: "critic", status: "escalation", text: e.content || "", iteration: e.iteration }));
+      break;
+    case "moe_plan":
+    case "moe_subtask":
+    case "moe_replan":
+    case "moe_verify": {
+      const bits = [e.title, e.subtaskId, e.expertTag, e.status].filter((x) => typeof x === "string" && x).join(" · ");
+      pushRow(append({ kind: "moe", subtype: e.type, text: bits, iteration: e.iteration }));
+      break;
+    }
+    case "compaction":
+      pushRow(append({ kind: "compaction", text: e.content || "", iteration: e.iteration }));
+      break;
+    case "context_probe":
+      pushRow(append({ kind: "probe", text: e.content || "" }));
+      break;
+    case "llm_usage": {
+      const toks = typeof e.totalTokens === "number" ? e.totalTokens : (e.promptTokens || 0) + (e.completionTokens || 0);
+      const who = [e.model || e.provider, toks ? toks + " tok" : ""].filter(Boolean).join(" · ");
+      pushRow(append({ kind: "usage", text: who, iteration: e.iteration }));
+      break;
+    }
+    case "audit":
+      pushRow(append({ kind: "audit", text: e.content || "", iteration: e.iteration }));
+      break;
+    case "claim_retry":
+      pushRow(append({ kind: "claim", subkind: e.kind || "", text: e.content || "", iteration: e.iteration }));
+      break;
+    case "output":
+      pushRow(append({ kind: "output", text: e.content || "", iteration: e.iteration }));
       break;
     default:
       break;
@@ -331,6 +462,8 @@ function renderDetail(entry) {
   if (d) meta.appendChild(kv(t("web.sidebar.detail_time"), d.toLocaleTimeString()));
   if (entry.toolCallId) meta.appendChild(kv(t("web.sidebar.detail_tool_call"), String(entry.toolCallId)));
   if (sbEl && sbEl.dataset.sid) meta.appendChild(kv(t("web.sidebar.detail_session"), sbEl.dataset.sid));
+  meta.appendChild(kv(t("web.sidebar.detail_turn"), String(entry.turn)));
+  if (typeof entry.iteration === "number") meta.appendChild(kv(t("web.sidebar.detail_iteration"), String(entry.iteration)));
   detailBody.appendChild(meta);
 
   if (entry.kind === "tool" || entry.kind === "tool_fail") {
@@ -338,6 +471,7 @@ function renderDetail(entry) {
     detailBody.appendChild(detailGroup(t("web.sidebar.detail_output"), codeBlock(capOutput(entry.output))));
   } else if (entry.kind === "text") {
     detailBody.appendChild(detailGroup(t("web.sidebar.detail_text"), codeBlock(entry.text || "")));
+    loadTextProvenance(entry);
   } else if (entry.kind === "plan") {
     const list = el("div");
     (entry.steps || []).forEach((s) => {
@@ -350,6 +484,52 @@ function renderDetail(entry) {
     detailBody.appendChild(detailGroup(t("web.sidebar.trace_question"), codeBlock(entry.text || "")));
   } else if (entry.kind === "error") {
     detailBody.appendChild(detailGroup(t("web.sidebar.detail_error"), codeBlock(entry.message || "")));
+  } else if (
+    entry.kind === "status" || entry.kind === "log" || entry.kind === "retract" ||
+    entry.kind === "index" || entry.kind === "critic" || entry.kind === "moe" ||
+    entry.kind === "compaction" || entry.kind === "probe" || entry.kind === "usage" ||
+    entry.kind === "audit" || entry.kind === "claim" || entry.kind === "output"
+  ) {
+    const title =
+      entry.kind === "moe" && entry.subtype ? entry.subtype
+      : entry.kind === "log" && entry.level ? "log · " + entry.level
+      : entry.kind === "index" && entry.phase ? "index · " + entry.phase
+      : entry.kind === "critic" && entry.status ? "critic · " + entry.status
+      : entry.kind === "claim" && entry.subkind ? "claim_retry · " + entry.subkind
+      : rowLabel(entry);
+    detailBody.appendChild(detailGroup(title, codeBlock(entry.text || "")));
+  }
+}
+
+/**
+ * Привязка текста хода к session-логу: сколько assistant-сообщений в сессии,
+ * их итерации и провенанс последнего LLM-вызова (модель/провайдер/токены).
+ * Живой текст хода уже показан выше целиком; это — сверка с логом.
+ */
+async function loadTextProvenance(entry) {
+  const sid = sbEl && sbEl.dataset.sid;
+  if (!sid || !detailBody || selected !== entry.id) return;
+  try {
+    const r = await api(
+      "/api/sessions/" + encodeURIComponent(sid) + "/log?types=assistant,llm_usage&limit=20",
+    );
+    if (!r.ok || !r.data || !Array.isArray(r.data.log) || selected !== entry.id) return;
+    const assistants = r.data.log.filter((e) => e.type === "assistant");
+    const usages = r.data.log.filter((e) => e.type === "llm_usage");
+    const iters = assistants.map((e) => e.iteration).filter((n) => typeof n === "number");
+    const last = usages.length > 0 ? usages[usages.length - 1] : null;
+    const bits = [
+      t("web.sidebar.detail_provenance_count", { n: assistants.length }) +
+        (iters.length > 0 ? " · iter " + Math.min(...iters) + "–" + Math.max(...iters) : ""),
+      last
+        ? [last.model || last.provider, last.totalTokens ?? (last.promptTokens || 0) + (last.completionTokens || 0)]
+            .filter(Boolean)
+            .join(" · ")
+        : "",
+    ].filter(Boolean).join("\n");
+    if (bits) detailBody.appendChild(detailGroup(t("web.sidebar.detail_provenance"), codeBlock(bits)));
+  } catch {
+    /* best-effort: живой текст уже на месте */
   }
 }
 
