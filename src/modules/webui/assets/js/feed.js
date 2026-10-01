@@ -578,6 +578,30 @@ export function onToolEnd(data) {
   S.toolNodes.delete(data.toolCallId);
   const args = S.pendingArgs.get(data.toolCallId) || {};
   S.pendingArgs.delete(data.toolCallId);
+  // File tools render as a single filerow (viewer link + copy): the `.act`
+  // line from `onToolStart` is replaced, otherwise the feed shows the same
+  // action twice (act + filerow). Without a path `cardFor` renders nothing,
+  // so keep the generic act line in that case.
+  const filePath = args.path || args.file || args.dir;
+  if (FILE_TOOLS.indexOf(data.name) !== -1 && filePath) {
+    if (line && line.parentNode) line.remove();
+    if (verbosity() === "quiet") {
+      if (data.success) {
+        const card = cardFor(data.name, args, data.sessionId, data.success);
+        if (card) S.runNodes.push(card);
+        S.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
+      } else {
+        const card = cardFor(data.name, args, data.sessionId, data.success);
+        const cause = firstOutputLine(data.output);
+        if (cause) insertAfter(card || line, el("div", "detail", "↳ " + cause));
+        if (card) S.runNodes.push(card);
+      }
+      return;
+    }
+    const card = cardFor(data.name, args, data.sessionId, data.success);
+    renderToolOutput(card || line, data.output);
+    return;
+  }
   if (verbosity() === "quiet") {
     // Quiet hides tool bodies. Track successful nodes so a run of read-only
     // actions can fold at the next segment; a failure keeps its line and adds
