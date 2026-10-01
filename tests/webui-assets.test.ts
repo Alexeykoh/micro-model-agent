@@ -45,25 +45,29 @@ describe("webui assets", () => {
     expect(js(a)).toContain('if (data.diagnostic && verbosity() !== "verbose") return;');
   });
 
-  it("wires the file card's Open link to /api/file in a new tab", () => {
-    const a = loadAssets();
-    expect(js(a)).toMatch(/el\("a", "fc-open"[\s\S]{0,200}?target = "_blank"/);
-    expect(js(a)).toContain('openLink.rel = "noopener noreferrer"');
-    expect(js(a)).not.toContain("&token=");
-    expect(a.css).toContain(".filecard .fc-open");
-  });
-
-  it("wires universal file actions: download, copy path and drawio hint", () => {
+  it("renders file actions as quiet filerow lines with viewer link and icon copy", () => {
     const a = loadAssets();
     const src = js(a);
-    expect(src).toContain("download=1");
-    expect(src).toContain("web.card.download");
-    expect(src).toContain("web.card.copy_path");
-    expect(src).toContain("fc-actions");
-    expect(src).toContain("fc-hint");
-    expect(src).toContain("drawio");
-    expect(a.css).toContain(".filecard .fc-actions");
-    expect(a.css).toContain(".filecard .fc-hint");
+    expect(src).toContain('el("div", "filerow")');
+    expect(src).toContain('icon("copy")');
+    expect(src).toContain('icon("check")');
+    expect(src).toMatch(/el\("a", "path"[\s\S]{0,200}?target = "_blank"/);
+    expect(src).toContain('openLink.rel = "noopener noreferrer"');
+    expect(src).not.toContain("&token=");
+    expect(src).not.toContain("download=1");
+    expect(src).not.toContain("fc-open");
+    expect(src).not.toContain("fc-actions");
+    expect(a.css).toContain(".filerow");
+    expect(a.css).not.toContain(".filecard");
+  });
+
+  it("groups consecutive file rows with a chevron toggle and keeps drawio verbose-only", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(src).toContain("filegroup");
+    expect(src).toContain("chevron-down");
+    expect(src).toContain("aria-expanded");
+    expect(src).not.toContain("fc-hint");
   });
 
   it("renders reasoning blocks collapsed by default", () => {
