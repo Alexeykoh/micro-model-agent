@@ -646,6 +646,12 @@ body.light .sel > button { border: 1px solid var(--border); }
   content: "▌"; color: var(--accent); margin-left: 2px;
   animation: blink 1s steps(2, start) infinite;
 }
+/* per-chunk typewriter fade for live markdown (md.js wraps each streamed
+   text chunk in `span.tk` when `opts.animate` is set; history render and
+   code blocks skip it). Opacity-only: `.tk` stays inline so wrapping is
+   untouched. Killed by the `prefers-reduced-motion` block below. */
+@keyframes tkIn { from { opacity: 0; } }
+.md.streaming .tk { animation: tkIn .15s ease-out backwards; }
 /* alive labels: in-feed spinner, the *live* think block, rail phase,
    a running tool. Finished blocks stay static — a pulsing "думаю" after
    the turn reads as hung. */

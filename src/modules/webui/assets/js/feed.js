@@ -246,22 +246,58 @@ function resetRun() {
 
 // Options passed to the streaming Markdown renderer: localized code-block
 // copy labels. Highlighting is applied by `md.js` once a fence closes.
-function mdOpts() {
+// `animate` wraps live-streamed text chunks in `span.tk` (CSS `tkIn` fade);
+// history render and code blocks skip it.
+function mdOpts(animate) {
   return {
     copyLabel: t("web.code.copy"),
     copiedLabel: t("web.code.copied"),
     copyFailedLabel: t("web.code.copy_failed"),
+    animate: animate === true,
   };
 }
 
 // Close the active Markdown segment (if any) and clear the text S.state.
 export function finishMd() {
+  flushText();
   if (S.curMd) {
     S.curMd.root.classList.remove("streaming");
     S.curMd.end();
     S.curMd = null;
   }
   S.curText = null;
+}
+
+// Text chunks arrive in bursts (several SSE `text` events per frame); writing
+// and scrolling on every one thrashes layout and stacks overlapping `tkIn`
+// fades ("рвано"). Buffer them and flush once per animation frame instead.
+let textBuf = "";
+let textFeed = null;
+let textScheduled = false;
+
+function flushText() {
+  textScheduled = false;
+  if (!textBuf || !S.curMd) {
+    textBuf = "";
+    textFeed = null;
+    return;
+  }
+  const buf = textBuf;
+  const feed = textFeed;
+  textBuf = "";
+  textFeed = null;
+  S.curMd.write(buf);
+  if (feed && feed === activeFeed()) scroll();
+}
+
+function scheduleText() {
+  if (textScheduled) return;
+  textScheduled = true;
+  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(flushText);
+  } else {
+    flushText();
+  }
 }
 
 export function onText(chunk, sid) {
@@ -275,14 +311,17 @@ export function onText(chunk, sid) {
   if (S.curText == null) {
     flushRun();
     S.curText = "";
-    S.curMd = mountMarkdown(feed, mdOpts());
+    S.curMd = mountMarkdown(feed, mdOpts(true));
     S.curMd.root.classList.add("streaming");
     S.turnRoots.push(S.curMd.root);
   }
   S.curText += chunk;
   S.turnMd += chunk;
-  S.curMd.write(chunk);
-  if (feed === activeFeed()) scroll();
+  // A second session streaming concurrently must not merge into another feed's buffer.
+  if (textFeed && textFeed !== feed) flushText();
+  textFeed = feed;
+  textBuf += chunk;
+  scheduleText();
 }
 
 export function finishThink() {
