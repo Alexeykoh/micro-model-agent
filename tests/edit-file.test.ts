@@ -76,4 +76,37 @@ describe("edit_file", () => {
     // Файл не должен быть изменён.
     expect(readFileSync(join(tmpDir, "test.txt"), "utf-8")).toBe("hello world");
   });
+
+  it("matches LF anchors in a CRLF file (ses_mup6p61q)", async () => {
+    // Windows checkout: файл с \r\n, модель шлёт якорь с \n.
+    // Раньше — «Строка не найдена», ~22 провала за сессию.
+    writeFileSync(join(tmpDir, "crlf.txt"), "line1\r\nline2\r\nline3\r\n");
+    const result = await editFileTool.handler(ctx, {
+      path: join(tmpDir, "crlf.txt"),
+      old: "line1\nline2",
+      new: "one\ntwo",
+    });
+    expect(result.success).toBe(true);
+    // Окончания строк файла сохранены, вставка — в стиле файла.
+    expect(readFileSync(join(tmpDir, "crlf.txt"), "utf-8")).toBe("one\r\ntwo\r\nline3\r\n");
+  });
+
+  it("keeps LF style in LF files and still fails on truly absent anchors", async () => {
+    writeFileSync(join(tmpDir, "lf.txt"), "a\nb\nc\n");
+    const ok = await editFileTool.handler(ctx, {
+      path: join(tmpDir, "lf.txt"),
+      old: "a\nb",
+      new: "x\ny",
+    });
+    expect(ok.success).toBe(true);
+    expect(readFileSync(join(tmpDir, "lf.txt"), "utf-8")).toBe("x\ny\nc\n");
+
+    const miss = await editFileTool.handler(ctx, {
+      path: join(tmpDir, "lf.txt"),
+      old: "nope\nnothing",
+      new: "z",
+    });
+    expect(miss.success).toBe(false);
+    expect(miss.output).toContain("read_file");
+  });
 });

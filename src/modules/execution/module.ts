@@ -14,7 +14,7 @@ import type { ContentPart } from "../../llm/provider";
 import type { Plan, StepKind } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
 import { toForwardSlash } from "../../tools/path-utils";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 import { resolve } from "path";
 import type { NetworkSecurityConfig } from "../../config/types";
 import { performWebSearch, type SearchResult } from "../../tools/web-search";
@@ -103,6 +103,28 @@ const PLAN_ALIGNMENT_EXEMPT_TOOLS = new Set([
  */
 function planPathToken(p: string): string {
   return toForwardSlash(p).toLowerCase();
+}
+
+/**
+ * Доказанная старость файлов шага (ses_mup6p61q): КАЖДЫЙ резолвленный файл
+ * читается и создан/изменён не позже `sinceMs` (рождение плана). Только тогда
+ * existence — вакуумная истина («файл лежал с рождения плана, трекер отмечал
+ * шаги до строчки кода») и автопродвижение/автозакрытие запрещены.
+ * Fail-open в обе стороны: битая дата плана, нечитаемый mtime (Windows
+ * AV-лок на только что записанном файле), пропавший между резолвом и статом
+ * файл — НЕ старость, гейт пропускает как раньше.
+ */
+function provablyStale(resolved: (string | null)[], sinceMs: number): boolean {
+  if (Number.isNaN(sinceMs)) return false;
+  for (const r of resolved) {
+    if (!r) return false;
+    try {
+      if (statSync(r).mtimeMs > sinceMs) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Execution-модуль: план, stuck-детектор, аудитор, гейты выравнивания и автопоиск ошибок. */
@@ -479,6 +501,10 @@ export class ExecutionModule implements AgentModule {
           }
         });
         if (empty) continue;
+        // Vacuous-truth guard (ses_mup6p61q): как в живом гейте выше —
+        // пендинг-шаг по доказанно старым файлам не закрываем, только по
+        // файлам, тронутым за жизнь плана (или нечитаемым — fail-open).
+        if (provablyStale(resolved, Date.parse(plan.createdAt))) continue;
       }
 
       step.status = "done";
@@ -786,6 +812,14 @@ export class ExecutionModule implements AgentModule {
     const allGone = resolved.every((r) => r === null);
     const satisfied = step.kind === "delete" ? allGone && !allExist : allExist;
     if (!satisfied) return;
+
+    // Vacuous-truth guard (ses_mup6p61q): для НЕ-delete шагов existence давно
+    // лежащих файлов — не done. Delete-шаги проверяют отсутствие файлов,
+    // свежесть mtime к ним неприменима.
+    if (step.kind !== "delete") {
+      const plan = this.tracker?.getPlan();
+      if (plan && provablyStale(resolved, Date.parse(plan.createdAt))) return;
+    }
 
     // Гейт шагов: файлы проверяем на контент (не пустые)
     if (step.kind !== "delete") {

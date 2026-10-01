@@ -13,6 +13,48 @@ import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
 import { errMsg } from "../utils";
 import { protectedPathBlock } from "../modules/security/protected-paths";
 
+/**
+ * CRLF-толерантная замена: ищет `oldStr` в `content` после нормализации
+ * `\r\n` → `\n` у обеих строк, вырезает найденный диапазон из ОРИГИНАЛА
+ * (смещения отображаются через карту нормализованных позиций).
+ * Возвращает обновлённый контент или null, если якорь не найден.
+ * Окончания строк файла сохраняются; вставка подгоняется под доминирующий
+ * стиль файла, чтобы не плодить смешанные окончания.
+ */
+export function spliceNormalized(
+  content: string,
+  oldStr: string,
+  newStr: string,
+): string | null {
+  const normOld = oldStr.replace(/\r\n/g, "\n");
+  // Карта: нормализованная позиция -> позиция в оригинале.
+  const norm: string[] = [];
+  const map: number[] = [];
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === "\r" && content[i + 1] === "\n") {
+      norm.push("\n");
+      map.push(i);
+      i++; // пропускаем \n пары — у неё нет своей нормализованной позиции
+    } else {
+      norm.push(content[i]);
+      map.push(i);
+    }
+  }
+  const normContent = norm.join("");
+  const idx = normContent.indexOf(normOld);
+  if (idx === -1 || normOld.length === 0) return null;
+  const startOrig = map[idx];
+  const endNorm = idx + normOld.length;
+  const endOrig = endNorm < map.length ? map[endNorm] : content.length;
+
+  // Вставка в стиле файла: CRLF-файл + LF-вставка → переводим вставку в CRLF.
+  let insert = newStr;
+  if (content.includes("\r\n") && !newStr.includes("\r\n") && newStr.includes("\n")) {
+    insert = newStr.replace(/\n/g, "\r\n");
+  }
+  return content.slice(0, startOrig) + insert + content.slice(endOrig);
+}
+
 /** Заменяет точный фрагмент в существующем файле (не regex). */
 export const editFileTool: ToolDefinition = {
   name: "edit_file",
@@ -107,16 +149,26 @@ export const editFileTool: ToolDefinition = {
         output: t("file.read_failed", { path, error: errMsg(err) }),
       };
     }
-    if (!content.includes(oldStr)) {
-      return {
-        success: false,
-        output: t("file.string_not_found", { str: oldStr, path }),
-      };
-    }
 
     // Замена через функцию — иначе newStr трактуется как шаблон и `$&`, `$1`
     // молча испортят содержимое файла.
-    const updated = content.replace(oldStr, () => newStr);
+    let updated: string;
+    if (content.includes(oldStr)) {
+      updated = content.replace(oldStr, () => newStr);
+    } else {
+      // CRLF-фолбэк (ses_mup6p61q): модель шлёт LF-якоря в CRLF-файл (Windows
+      // checkout) — точный матч не срабатывает никогда. Матчим на
+      // нормализованных окончаниях, вырезаем по отображённым смещениям
+      // оригинала, окончания строк файла не трогаем.
+      const spliced = spliceNormalized(content, oldStr, newStr);
+      if (!spliced) {
+        return {
+          success: false,
+          output: t("file.string_not_found", { str: oldStr, path }),
+        };
+      }
+      updated = spliced;
+    }
 
     // Скан нового контента — только при включённой безопасности.
     if (securityConfig?.enabled && securityConfig?.contentScan?.enabled) {

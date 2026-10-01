@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, rmSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync, utimesSync } from "fs";
 import { join } from "path";
-import { ExecutionModule } from "../src/modules/execution/module";
+import type { ExecutionModule } from "../src/modules/execution/module";
 import { createTestPlan, createTestModule, cleanupTestModule, writeTestFile } from "./plan-test-utils";
 
 function planTool(execModule: ExecutionModule) {
@@ -508,6 +508,92 @@ describe("auto-advance after non-file tools", () => {
       );
       expect(execModule.getTracker()!.getStep(1)!.status).not.toBe("done");
     }
+  });
+});
+
+describe("auto-advance requires fresh file evidence (ses_mup6p61q)", () => {
+  let tmpDir: string;
+  let execModule: ExecutionModule;
+
+  beforeEach(() => {
+    ({ tmpDir, execModule } = createTestModule("mma-plan-fresh-"));
+  });
+
+  afterEach(() => {
+    cleanupTestModule(tmpDir);
+  });
+
+  function pluginCtx() {
+    return {
+      contextManager: { addMessage: () => {} },
+      sessionLog: { plan: () => {} },
+    } as any;
+  }
+
+  /** Файл «давно лежит»: mtime гарантированно старше рождения плана. */
+  function backdate(rel: string) {
+    const past = new Date(Date.now() - 120_000);
+    utimesSync(join(tmpDir, rel), past, past);
+  }
+
+  function editSignal(path: string) {
+    execModule.getPlugin().onAfterTool!(
+      pluginCtx(),
+      { name: "edit_file", arguments: { path } } as any,
+      { success: true, output: "ok" } as any,
+    );
+  }
+
+  it("does NOT auto-advance a modify-step whose files predate the plan", async () => {
+    // Точный кейс сессии: шаг «изменить существующий файл», файл на месте
+    // с рождения плана, успешный тул — трекер отмечал done до строчки кода.
+    writeTestFile(tmpDir, "src/old.ts", "export const x = 1;\n");
+    backdate("src/old.ts");
+    await createTestPlan(execModule, "T", ["Update src/old.ts with feature X"]);
+
+    editSignal("src/old.ts");
+    expect(execModule.getTracker()!.getStep(1)!.status).not.toBe("done");
+  });
+
+  it("auto-advances the same step once its file is touched during the plan", async () => {
+    // Два шага, чтобы трекер пережил закрытие первого (одношаговый план
+    // авто-архивируется и getTracker() становится null).
+    writeTestFile(tmpDir, "src/old.ts", "export const x = 1;\n");
+    backdate("src/old.ts");
+    await createTestPlan(execModule, "T", [
+      "Update src/old.ts with feature X",
+      "Verify the change manually",
+    ]);
+
+    editSignal("src/old.ts");
+    expect(execModule.getTracker()!.getStep(1)!.status).not.toBe("done");
+
+    // Агент реально поработал — файл тронут за жизнь плана.
+    writeTestFile(tmpDir, "src/old.ts", "export const x = 2;\n");
+    editSignal("src/old.ts");
+    expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
+    expect(execModule.getTracker()!.getCurrentStepIndex()).toBe(1);
+  });
+
+  it("final audit does not auto-close pending steps on predated files", async () => {
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
+    backdate("src/a.ts");
+    await createTestPlan(execModule, "T", ["Update src/a.ts with content"]);
+
+    const audit = await execModule.runFinalAudit();
+    expect(audit).not.toBeNull();
+    expect(audit!.done).toBe(0);
+    expect(audit!.pendingSteps).toHaveLength(1);
+  });
+
+  it("final audit still auto-closes steps on files touched during the plan", async () => {
+    await createTestPlan(execModule, "T", ["Create src/a.ts with content"]);
+    writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
+
+    const audit = await execModule.runFinalAudit();
+    expect(audit).not.toBeNull();
+    expect(audit!.passed).toBe(true);
+    expect(audit!.done).toBe(1);
   });
 });
 

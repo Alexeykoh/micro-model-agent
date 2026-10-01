@@ -61,8 +61,10 @@ export interface LoopState {
   consecutiveToolSuccesses: number;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
   repeatedToolCount: number;
-  /** Общий счётчик неудач по каждому тулу + последняя ошибка (не только подряд). */
-  toolFailureCounts: Map<string, { count: number; error: string }>;
+  /** Общий счётчик неудач по каждому тулу + последняя ошибка и distinct
+   *  первые строки ошибок (не только подряд). Distinct-заголовки нужны
+   *  diagnoseRepeatedFailures: причина/решение по сигнатуре, а не boilerplate. */
+  toolFailureCounts: Map<string, { count: number; error: string; samples: string[] }>;
   /** Тулы, по которым правило в память уже записано (дедупликация). */
   memoryRuleRecorded: Set<string>;
 

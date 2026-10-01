@@ -220,4 +220,19 @@ describe("FactualCheck", () => {
     const result = check.validate("Cleaned up target.json", deletedFiles);
     expect(result.status).toBe("pass");
   });
+
+  it("passes when a relative path is a suffix of the real path (ses_mup6p61q)", () => {
+    // Кейс сессии: «webui/state.ts» при реальном src/modules/webui/state.ts
+    // давал ложный warn. Здесь: «utils/helper.ts» при src/utils/helper.ts.
+    const check = new FactualCheck(dir);
+    const result = check.validate("Updated utils/helper.ts and data/bikes.json");
+    expect(result.status).toBe("pass");
+  });
+
+  it("still warns on a suffix that matches nothing", () => {
+    const check = new FactualCheck(dir);
+    const result = check.validate("Updated utils/ghost.ts");
+    expect(result.status).toBe("warn");
+    expect(result.reason).toContain("ghost.ts");
+  });
 });

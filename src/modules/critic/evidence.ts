@@ -1,5 +1,6 @@
 // Сборка пакета доказательств для критика: дайджест тулов, файлы, команды.
 import { readFileSync } from "fs";
+import { execFileSync } from "node:child_process";
 import { resolve } from "path";
 import type { EvidencePack } from "./types";
 import { summarizeToolArgs } from "../../core/agent/tool-output";
@@ -52,6 +53,10 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
     const cmd = commandOf(ev);
     if (cmd) commands.push(cmd);
   }
+  // Добивка из git: ловит правки мимо файловых тулов (см. gitChangedFiles).
+  if (input.baseDir) {
+    for (const f of gitChangedFiles(input.baseDir)) changedFiles.add(f);
+  }
   return {
     task: input.task,
     planSummary: input.planSummary,
@@ -80,6 +85,56 @@ function digestLine(ev: EvidenceToolEvent): string {
 function changedFileOf(ev: EvidenceToolEvent): string | undefined {
   if (ev.tool !== "write_file" && ev.tool !== "edit_file") return undefined;
   return typeof ev.args?.path === "string" ? ev.args.path : undefined;
+}
+
+/** Лимит git-добивки: evidence-пакет обязан оставаться компактным. */
+const MAX_GIT_FILES = 20;
+
+/** Разбирает одну строку `git status --porcelain` в путь (null — пропуск). */
+function parsePorcelainLine(line: string): string | null {
+  if (line.length < 4) return null;
+  let p = line.slice(3).trim();
+  // Переименования: "old -> new" — берём новое имя.
+  const arrow = p.indexOf(" -> ");
+  if (arrow !== -1) p = p.slice(arrow + 4).trim();
+  // Porcelain квотит пути со спецсимволами.
+  if (p.length >= 2 && p.startsWith('"') && p.endsWith('"')) {
+    try {
+      p = JSON.parse(p) as string;
+    } catch {
+      p = p.slice(1, -1);
+    }
+  }
+  return p || null;
+}
+
+/**
+ * Фактически изменённые файлы из git (ses_mup6p61q): правки, внесённые мимо
+ * файловых тулов (Bun-скрипты через bash, heredoc, внешние редакторы),
+ * невидимы для changedFileOf — критик судил по пустому списку и выдал ложный
+ * concern («styles.css is not in git diff», хотя файл был изменён).
+ * `git status --porcelain` видит staged + unstaged + untracked. Fail-open:
+ * не репозиторий / нет git — пусто, поведение как раньше.
+ */
+function gitChangedFiles(baseDir: string): string[] {
+  let out: string;
+  try {
+    out = execFileSync("git", ["status", "--porcelain"], {
+      cwd: resolve(baseDir),
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 10_000,
+    });
+  } catch {
+    return [];
+  }
+  const files: string[] = [];
+  for (const line of out.split("\n")) {
+    const p = parsePorcelainLine(line);
+    if (p) files.push(p);
+    if (files.length >= MAX_GIT_FILES) break;
+  }
+  return files;
 }
 
 /** Событие bash как запись команды, видимая критику (с ограниченным хвостом вывода). */

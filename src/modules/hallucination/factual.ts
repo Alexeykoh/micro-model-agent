@@ -96,7 +96,36 @@ export class FactualCheck {
       return this.bareNameExists(fp);
     }
 
-    return false;
+    // Суффиксный матч (ses_mup6p61q): "webui/state.ts" — хвост реального пути
+    // "src/modules/webui/state.ts". Резолв только от корня давал ложный warn
+    // на существующие файлы. Новых обходов ФС нет — кандидаты берутся из
+    // basename-индекса (уже ограничен и кэширован) и knownFiles.
+    return this.suffixExists(fp);
+  }
+
+  private suffixExists(fp: string): boolean {
+    const norm = fp.replace(/\\/g, "/");
+    const tail = `/${norm}`;
+    const base = norm.split("/").pop() ?? norm;
+    const fwd = (p: string): string => p.replace(/\\/g, "/");
+    for (const known of this.knownFiles) {
+      if (fwd(known).endsWith(tail)) return true;
+    }
+    const checkIndex = (): boolean => {
+      for (const full of this.getNameIndex().get(base) ?? []) {
+        if (fwd(full).endsWith(tail)) return true;
+      }
+      return false;
+    };
+    if (checkIndex()) return true;
+    // Файл сессии мог появиться после сборки индекса — разовый рескан
+    // (rate-limited, общий с bareNameExists).
+    const now = Date.now();
+    if (now - this.lastRescan < FactualCheck.RESCAN_COOLDOWN_MS) return false;
+    this.lastRescan = now;
+    this.nameCache = null;
+    this.nameCacheTime = 0;
+    return checkIndex();
   }
 
   /**
