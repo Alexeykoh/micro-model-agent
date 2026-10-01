@@ -244,11 +244,14 @@ body[data-font="large"] { font-size: 17px; }
 
 /* chat */
 .chat { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
-.msgs { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 18px 22px; display: flex; flex-direction: column; gap: 11px; }
+.msgs { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 22px; display: flex; flex-direction: column; gap: 11px; }
 .msgs > * { flex-shrink: 0; min-height: fit-content; }
 /* messages live inside a per-tab `.feed` wrapper; it must mirror the `.msgs`
-   column gap so turns are separated instead of running together */
-.feed { display: flex; flex-direction: column; gap: 11px; }
+   column gap so turns are separated instead of running together.
+   Vertical breathing lives on `.feed`, NOT on the scroller: sticky edge fades
+   are constrained to the content box, so scroller padding would offset them
+   from the header/composer edges. */
+.feed { display: flex; flex-direction: column; gap: 11px; padding: 18px 0; }
 .feed > * { flex-shrink: 0; min-height: fit-content; }
 .u {
   color: var(--u-fg); background: var(--u-bg); border-left: 2px solid var(--u-border);
@@ -270,7 +273,7 @@ body[data-font="large"] { font-size: 17px; }
   font-size: 12.5px; overflow-wrap: anywhere;
 }
 .metaln.warn { color: var(--yellow); }
-.act { display: flex; gap: 8px; min-width: 0; }
+.act { display: flex; gap: 8px; min-width: 0; line-height: 1.35; }
 .act .lab { white-space: nowrap; }
 .act .args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .act.recon .g, .act.recon .lab { color: var(--cyan); }
@@ -311,7 +314,15 @@ body.light .code { border: 1px solid var(--border); }
 .toolout .more { color: var(--dim-b); cursor: pointer; font-size: 12px; }
 .toolout .more:hover { color: var(--dim-a); }
 
-/* markdown answers (streamed by md.js) — lines and glyphs, no boxes */
+/* markdown answers (streamed by md.js) — lines and glyphs, no boxes.
+   Top-level answers carry a quiet accent rail (mirrors the user's `> ` block),
+   so the finished message reads instantly apart from the dim work process
+   (tool/think rows stay plain). Scoped to `.feed >` — code blocks inside keep
+   their own styling. */
+.feed > .md, .feed > .ans {
+  border-left: 2px solid var(--accent);
+  padding-left: 12px;
+}
 .md { color: var(--ans); overflow-wrap: anywhere; }
 .md > * { flex-shrink: 0; }
 .md p { margin: 4px 0; white-space: pre-wrap; }
@@ -391,7 +402,14 @@ body.light .codeblock { border: 1px solid var(--border); }
 }
 body.light .imgcard .ph { background: var(--ph-light); }
 .imgcard .cap { padding: 6px 10px; color: var(--dim-a); font-size: 12px; }
-.filerow { margin-left: 26px; display: flex; gap: 8px; align-items: baseline; min-width: 0; font-size: 12.5px; color: var(--muted); }
+.filerow { margin-left: 26px; display: flex; gap: 8px; align-items: baseline; min-width: 0; font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+/* Compact tool lists: consecutive action/file rows sit tight (~4px visual),
+// while turns keep the airy 11px feed gap. Negative margin compensates the
+// `.feed { gap: 11px }` only between siblings in a run. */
+.feed > .filerow + .filerow,
+.feed > .act + .act,
+.feed > .filerow + .act,
+.feed > .act + .filerow { margin-top: -7px; }
 .filerow .g { flex: 0 0 auto; }
 .filerow.recon .g, .filerow.recon .lab { color: var(--cyan); }
 .filerow.mutate .g, .filerow.mutate .lab { color: var(--magenta); }
@@ -404,10 +422,6 @@ body.light .imgcard .ph { background: var(--ph-light); }
 @media (pointer: coarse) { .filerow .copy-btn { opacity: 1; } }
 .filerow .copy-btn:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; }
 .filerow .copy-btn .svg-icon { width: 14px; height: 14px; }
-.filegroup { margin-left: 26px; font-size: 12.5px; color: var(--muted); }
-.filegroup .head { background: transparent; border: 0; color: inherit; font: inherit; cursor: pointer; display: flex; gap: 6px; align-items: baseline; padding: 0; }
-.filegroup .items.hidden { display: none; }
-.filegroup .items > .filerow { margin-left: 0; }
 .linkline { margin-left: 26px; min-width: 0; overflow-wrap: anywhere; }
 .linkline a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; word-break: break-word; }
 .linkline a:hover { text-decoration: underline; }
@@ -619,7 +633,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 
 /* new rows rise in softly (a bulk history render animates once as a whole —
    one shared fade, still cheap: opacity/transform only) */
-.feed > :is(.u, .md, .act, .think, .q, .filerow, .filegroup, .planblock, .imgcard, .linkline,
+.feed > :is(.u, .md, .act, .think, .q, .filerow, .planblock, .imgcard, .linkline,
   .toolout, .metric, .detail, .metaln, .warnline, .errline, .cmdout, .sysline,
   .startbanner, .grouped, .msg-actions, .busy) {
   animation: rise .18s ease-out;
@@ -646,20 +660,25 @@ body.light .sel > button { border: 1px solid var(--border); }
 .overlay.open .modal { animation: rise .18s ease-out; }
 
 /* hover/active blends */
-.sel > button, .menu .mi, .stab, .q .qopt, .q .qsend, .filerow, .filegroup, .icon-btn,
+.sel > button, .menu .mi, .stab, .q .qopt, .q .qsend, .filerow, .icon-btn,
 .btn, .linkbtn, .chip, .cb-copy, .act-btn, .copy-btn, .composer .attach-btn,
 .composer .send-btn, .dd-menu .si, .dd-menu .act, .cmdk-item, .toggle {
   transition: background-color .12s, color .12s, border-color .12s;
 }
 .composer { transition: border-color .15s, box-shadow .15s; }
 
-/* scroll edge fades on the transcript (classes from the feed scroll hook) */
+/* scroll edge fades on the transcript (classes from the feed scroll hook).
+   Sticky in-flow pseudos glued exactly to the scrollport edges: they sit in
+   the scroller's padding-free content box (breathing lives on `.feed`), so
+   `top: 0` / `bottom: 0` meet the header above and the composer below with
+   no visible offset. Negative margins neutralize their flow height plus the
+   flex gap, so hidden fades take no space. */
 .msgs::before, .msgs::after {
   content: ""; position: sticky; display: block; height: 22px; flex: 0 0 auto;
   pointer-events: none; z-index: 5; opacity: 0; transition: opacity .25s;
 }
-.msgs::before { top: 0; margin-bottom: -22px; background: linear-gradient(var(--bg), transparent); }
-.msgs::after { bottom: 0; margin-top: -22px; background: linear-gradient(transparent, var(--bg)); }
+.msgs::before { top: 0; margin-bottom: -33px; background: linear-gradient(var(--bg), transparent); }
+.msgs::after { bottom: 0; margin-top: -33px; background: linear-gradient(transparent, var(--bg)); }
 .msgs.scrolled::before { opacity: 1; }
 .msgs.unfollowed::after { opacity: 1; }
 
@@ -1372,7 +1391,8 @@ button.toggle:disabled { opacity: .5; cursor: default; }
     border-left: 1px solid var(--border); border-top: none;
     box-shadow: var(--shadow-dd);
   }
-  .msgs { padding: 14px; }
+  .msgs { padding: 0 14px; }
+  .feed { padding: 14px 0; }
   .input-area { margin: 10px 14px 12px; }
   .inp-meta { flex-wrap: wrap; gap: 8px; }
 }
@@ -1395,7 +1415,8 @@ button.toggle:disabled { opacity: .5; cursor: default; }
   .content-col { padding: 14px; }
   .row { font-size: 12.5px; }
   .input-area { margin: 8px 10px 10px; }
-  .msgs { padding: 12px 10px; }
+  .msgs { padding: 0 10px; }
+  .feed { padding: 12px 0; }
   /* narrow phones: rail stacks vertically, track takes the full row */
   .rail-wrap.l-line, .rail-wrap.l-meta {
     flex-direction: column; align-items: stretch; gap: 6px;

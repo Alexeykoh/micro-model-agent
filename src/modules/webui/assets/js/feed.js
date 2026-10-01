@@ -444,44 +444,23 @@ function safeUrl(url) {
   return null;
 }
 
-function maybeGroupFilerow(feed, row) {
-  const prev = row.previousElementSibling;
-  const group = prev && prev.classList && prev.classList.contains("filegroup") ? prev : null;
-  const prevRow = prev && prev.classList && prev.classList.contains("filerow") ? prev : null;
-  if (group && group.dataset.open !== "1") {
-    group.querySelector(".items").appendChild(row);
-    if (row.dataset.fail === "1") group.dataset.fail = "1";
-    const n = group.querySelectorAll(".items > .filerow").length;
-    group.querySelector(".count").textContent = pluralCount("web.card.files", n);
-    group.querySelector(".ok").textContent = group.dataset.fail === "1" ? " ✗" : " ✓";
-    return group;
+// File rows are always expanded: one `filerow` per file-tool call, no
+// collapsing group. Consecutive rows stay a plain expanded list (the old
+// E grouping with a chevron toggle hid the list and failed to open).
+function displayPathFromRoot(path) {
+  const raw = String(path == null ? "" : path).replace(/\\/g, "/");
+  try {
+    const ws = S && S.state && S.state.host && S.state.host.workspace
+      ? String(S.state.host.workspace).replace(/\\/g, "/").replace(/\/+$/, "")
+      : "";
+    if (ws && (raw === ws || raw.indexOf(ws + "/") === 0)) {
+      const rel = raw === ws ? "" : raw.slice(ws.length + 1);
+      if (rel) return rel;
+    }
+  } catch (err) {
+    /* fail-open: show raw path */
   }
-  if (prevRow) {
-    const wrap = el("div", "filegroup");
-    const head = el("button", "head");
-    head.setAttribute("aria-expanded", "false");
-    head.appendChild(el("span", "g", "│ "));
-    head.appendChild(el("span", "count", pluralCount("web.card.files", 2)));
-    const fail = prevRow.dataset.fail === "1" || row.dataset.fail === "1";
-    if (fail) wrap.dataset.fail = "1";
-    head.appendChild(el("span", "ok", fail ? " ✗" : " ✓"));
-    const chev = icon("chevron-down");
-    head.appendChild(chev);
-    const items = el("div", "items hidden");
-    feed.replaceChild(wrap, prevRow);
-    items.appendChild(prevRow);
-    items.appendChild(row);
-    wrap.appendChild(head);
-    wrap.appendChild(items);
-    head.addEventListener("click", () => {
-      const open = wrap.dataset.open === "1";
-      wrap.dataset.open = open ? "" : "1";
-      head.setAttribute("aria-expanded", open ? "false" : "true");
-      items.classList.toggle("hidden", open);
-    });
-    return wrap;
-  }
-  return null;
+  return raw;
 }
 
 function cardFor(name, args, sid, ok) {
@@ -490,22 +469,21 @@ function cardFor(name, args, sid, ok) {
   if (FILE_TOOLS.indexOf(name) !== -1) {
     const path = args.path || args.file || args.dir;
     if (!path) return null;
+    const shown = displayPathFromRoot(path);
     const row = el("div", "filerow " + categoryOf(name));
     row.appendChild(el("span", "g", "◇"));
     row.appendChild(el("span", "lab", labelOf(name)));
     row.appendChild(el("span", "sep", " · "));
     if (OPENABLE_TOOLS.indexOf(name) !== -1) {
-      const openLink = el("a", "path", String(path).split(/[\\/]/).pop() || path);
-      openLink.href = "/api/file?path=" + encodeURIComponent(path);
+      const openLink = el("a", "path", shown || String(path));
+      openLink.href = "/api/file?path=" + encodeURIComponent(String(path));
       openLink.target = "_blank";
       openLink.rel = "noopener noreferrer";
-      openLink.title = t("web.card.open_title") + " · " + path;
+      openLink.title = t("web.card.open_title") + " · " + String(path);
       row.appendChild(openLink);
-      const tail = String(path).split(/[\\/]/).slice(0, -1).join("/");
-      if (tail) row.appendChild(el("span", "tail", " · " + tail));
     } else {
-      const s = el("span", "tail", path);
-      s.title = path;
+      const s = el("span", "tail", shown || String(path));
+      s.title = String(path);
       row.appendChild(s);
     }
     const copyBtn = el("button", "copy-btn");
@@ -514,7 +492,7 @@ function cardFor(name, args, sid, ok) {
     copyBtn.setAttribute("aria-label", t("web.card.copy_title"));
     copyBtn.appendChild(icon("copy"));
     copyBtn.addEventListener("click", () => {
-      copyText(path).then((ok) => {
+      copyText(String(path)).then((ok) => {
         copyBtn.replaceChildren(icon(ok ? "check" : "copy"));
         if (!ok) { const st = row.querySelector(".st"); if (st) st.textContent = " ⚠"; }
         window.setTimeout(() => copyBtn.replaceChildren(icon("copy")), 1400);
@@ -523,11 +501,10 @@ function cardFor(name, args, sid, ok) {
     row.appendChild(copyBtn);
     row.appendChild(el("span", "st", ok === false ? " ✗" : ok === true ? " ✓" : ""));
     if (ok === false) row.dataset.fail = "1";
-    if (/\.drawio(\.xml)?$/i.test(path) && verbosity() === "verbose") {
+    if (/\.drawio(\.xml)?$/i.test(String(path)) && verbosity() === "verbose") {
       row.appendChild(el("span", "detail", "↳ " + t("web.card.drawio_hint")));
     }
     appendTo(feed, row);
-    try { maybeGroupFilerow(feed, row); } catch (err) { /* fail-open: plain row stays */ }
     return row;
   }
   if (LINK_TOOLS.indexOf(name) !== -1 && args.url) {

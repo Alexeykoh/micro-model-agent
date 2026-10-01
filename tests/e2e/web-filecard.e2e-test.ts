@@ -1,10 +1,10 @@
 /**
- * Filecard redesign (D quiet line + E grouping) — isolated `MMA_CONFIG_DIR`
+ * File rows are always expanded — isolated `MMA_CONFIG_DIR`
  * Playwright check, see `./web-harness.ts` / `./web-helpers.ts`.
  *
- * Verifies the served assets carry the new markup (no `.filecard` box) and
- * renders sample rows with the real classes for a visual proof + interaction
- * (hover reveals copy icon, chevron expands the group).
+ * Verifies the served assets render one quiet `filerow` per file-tool call
+ * with a full root-relative path link (no `.filecard` box, no collapsed
+ * `.filegroup`): consecutive rows stay an expanded list, never a chevron group.
  */
 import { describe, expect } from "vitest";
 import { join } from "node:path";
@@ -18,7 +18,7 @@ import { expectNonVirgin } from "./web-harness";
 
 describe("web e2e (isolated MMA_CONFIG_DIR)", () => {
   e2e(
-    "filecard redesign: quiet filerow lines, no box, group expands",
+    "file rows always expand with full root-relative links, no group",
     async () => {
       const dir = artifactsDirFor("filecard");
       await withE2E(dir, async (srv, { page, errors }) => {
@@ -29,9 +29,9 @@ describe("web e2e (isolated MMA_CONFIG_DIR)", () => {
           return await r.text();
         });
         expect(js).toContain('"filerow');
-        expect(js).toContain("chevron-down");
-        expect(js).toContain("maybeGroupFilerow");
-        expect(js).toContain("previousElementSibling");
+        expect(js).toContain("displayPathFromRoot");
+        expect(js).not.toContain("maybeGroupFilerow");
+        expect(js).not.toContain("filegroup");
         expect(js).not.toContain("fc-open");
         expect(js).not.toContain("download=1");
         expect(js).not.toContain("fc-hint");
@@ -41,7 +41,7 @@ describe("web e2e (isolated MMA_CONFIG_DIR)", () => {
           return r.ok ? await r.text() : "";
         });
         expect(css).toContain(".filerow");
-        expect(css).toContain(".filegroup");
+        expect(css).not.toContain(".filegroup");
         expect(css).not.toContain(".filecard");
 
         // NOTE: samples live in an isolated #probe container, not #msgs —
@@ -54,22 +54,39 @@ describe("web e2e (isolated MMA_CONFIG_DIR)", () => {
             "padding:24px;max-width:640px;";
           probe.innerHTML = "<h3>filecard probe</h3>";
           document.body.appendChild(probe);
-          const row = document.createElement("div");
-          row.className = "filerow recon";
-          row.innerHTML = `<span class="g">◇</span><span class="lab">Reading file</span><span class="sep"> · </span><a class="path" href="#" onclick="return false">feed.js</a><span class="tail"> · src/modules/webui/assets/js</span><button class="copy-btn" aria-label="copy path"><svg class="svg-icon" viewBox="0 0 24 24"></svg></button><span class="st"> ✓</span>`;
-          probe.appendChild(row);
-          const g = document.createElement("div");
-          g.className = "filegroup";
-          g.innerHTML = `<button class="head" aria-expanded="false"><span class="g">│ </span><span class="count">2 files</span><span class="ok"> ✓</span></button><div class="items hidden"><div class="filerow recon"><span class="g">◇</span><span class="lab">Reading file</span><span class="sep"> · </span><a class="path" href="#" onclick="return false">sidebar.js</a></div></div>`;
-          const head = g.querySelector(".head") as HTMLButtonElement;
-          head.addEventListener("click", () => {
-            const open = g.dataset.open === "1";
-            g.dataset.open = open ? "" : "1";
-            head.setAttribute("aria-expanded", open ? "false" : "true");
-            g.querySelector(".items")!.classList.toggle("hidden", open);
-          });
-          probe.appendChild(g);
+          const paths = [
+            "src/modules/webui/assets/js/feed.js",
+            "src/modules/webui/assets/js/sidebar.js",
+          ];
+          for (const p of paths) {
+            const row = document.createElement("div");
+            row.className = "filerow recon";
+            row.innerHTML = `<span class="g">◇</span><span class="lab">Reading file</span><span class="sep"> · </span><a class="path" href="/api/file?path=${encodeURIComponent(p)}">${p}</a><button class="copy-btn" aria-label="copy path"><svg class="svg-icon" viewBox="0 0 24 24"></svg></button><span class="st"> ✓</span>`;
+            probe.appendChild(row);
+          }
         });
+
+        const state = await page.evaluate(() => {
+          const rows = Array.from(document.querySelectorAll("#probe .filerow")) as HTMLElement[];
+          const links = Array.from(document.querySelectorAll('#probe .filerow a.path')) as HTMLAnchorElement[];
+          return {
+            rows: rows.length,
+            groups: document.querySelectorAll("#probe .filegroup").length,
+            hidden: document.querySelectorAll("#probe .items.hidden").length,
+            linkTexts: links.map((a) => a.textContent),
+            hrefs: links.map((a) => a.getAttribute("href")),
+          };
+        });
+        expect(state.rows).toBe(2);
+        expect(state.groups).toBe(0);
+        expect(state.hidden).toBe(0);
+        expect(state.linkTexts).toEqual([
+          "src/modules/webui/assets/js/feed.js",
+          "src/modules/webui/assets/js/sidebar.js",
+        ]);
+        for (const href of state.hrefs) {
+          expect(href).toMatch(/^\/api\/file\?path=/);
+        }
 
         const style = await page.evaluate(() => {
           const el = document.querySelector(".filerow") as HTMLElement;
@@ -102,33 +119,12 @@ describe("web e2e (isolated MMA_CONFIG_DIR)", () => {
           .toBe("1");
         await page.locator("#probe").screenshot({ path: join(dir, "filerow-quiet.png") });
 
-        await page.click(".filegroup .head");
-        await expect
-          .poll(async () =>
-            page.evaluate(
-              () =>
-                document
-                  .querySelector(".filegroup .head")!
-                  .getAttribute("aria-expanded"),
-            ),
-          )
-          .toBe("true");
-        const expanded = await page.evaluate(() => ({
-          open: (document.querySelector(".filegroup") as HTMLElement).dataset
-            .open,
-          hidden: document
-            .querySelector(".filegroup .items")!
-            .classList.contains("hidden"),
-        }));
-        expect(expanded.open).toBe("1");
-        expect(expanded.hidden).toBe(false);
-        await page.locator("#probe").screenshot({ path: join(dir, "filegroup-open.png") });
-
         expect(await page.locator(".filecard").count()).toBe(0);
+        expect(await page.locator(".filegroup").count()).toBe(0);
         writeArtifacts(dir, "filecard", {
           html: await page.content(),
           consoleErrors: errors,
-          extra: { style, expanded },
+          extra: { style, state },
         });
         expect(errors).toEqual([]);
       });

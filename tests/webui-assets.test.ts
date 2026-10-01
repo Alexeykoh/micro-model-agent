@@ -61,13 +61,37 @@ describe("webui assets", () => {
     expect(a.css).not.toContain(".filecard");
   });
 
-  it("groups consecutive file rows with a chevron toggle and keeps drawio verbose-only", () => {
+  it("always expands file rows (no grouping) with full root-relative links", () => {
     const a = loadAssets();
     const src = js(a);
-    expect(src).toContain("filegroup");
-    expect(src).toContain("chevron-down");
-    expect(src).toContain("aria-expanded");
+    expect(src).toContain("displayPathFromRoot");
+    expect(src).not.toContain("filegroup");
+    expect(src).not.toContain("maybeGroupFilerow");
     expect(src).not.toContain("fc-hint");
+    expect(a.css).not.toContain(".filegroup");
+  });
+
+  it("keeps consecutive file/action rows compact", () => {
+    const a = loadAssets();
+    expect(a.css).toContain(".filerow + .filerow");
+    expect(a.css).toContain("margin-top: -7px");
+  });
+
+  it("glues scroll edge fades to the transcript edges", () => {
+    const a = loadAssets();
+    // Breathing lives on `.feed`, so sticky fades stick to the exact
+    // scrollport edges instead of floating on scroller padding.
+    expect(a.css).toContain(".msgs::before");
+    expect(a.css).toContain(".msgs::after");
+    expect(a.css).toContain("margin-bottom: -33px");
+    expect(a.css).toContain("margin-top: -33px");
+    expect(a.css).toMatch(/\.feed \{[^}]*padding: 18px 0/);
+  });
+
+  it("marks the finished answer apart from the work process", () => {
+    const a = loadAssets();
+    expect(a.css).toContain(".feed > .md");
+    expect(a.css).toContain("border-left: 2px solid var(--accent)");
   });
 
   it("renders reasoning blocks collapsed by default", () => {
