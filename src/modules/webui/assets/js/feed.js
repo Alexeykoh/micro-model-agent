@@ -444,56 +444,50 @@ function safeUrl(url) {
   return null;
 }
 
+function maybeGroupFilerow(feed, row) { return null; }
+
 function cardFor(name, args, sid) {
   const feed = feedForEvent(sid);
   if (!feed) return null;
   if (FILE_TOOLS.indexOf(name) !== -1) {
     const path = args.path || args.file || args.dir;
     if (!path) return null;
-    const card = el("div", "filecard");
-    const top = el("div", "fc-top");
-    top.appendChild(el("span", "g", "◇"));
-    const nameEl = el("span", "name", path);
-    nameEl.title = path;
-    top.appendChild(nameEl);
-    card.appendChild(top);
-    const bottom = el("div", "fc-bottom");
-    bottom.appendChild(el("span", "lab", labelOf(name)));
-    const actions = el("span", "fc-actions");
-    const baseName = String(path.split(/[\\/]/).pop() || path);
+    const row = el("div", "filerow " + categoryOf(name));
+    row.appendChild(el("span", "g", "◇"));
+    row.appendChild(el("span", "lab", labelOf(name)));
+    row.appendChild(el("span", "sep", " · "));
     if (OPENABLE_TOOLS.indexOf(name) !== -1) {
-      const openLink = el("a", "fc-open", t("web.card.open"));
+      const openLink = el("a", "path", String(path).split(/[\\/]/).pop() || path);
       openLink.href = "/api/file?path=" + encodeURIComponent(path);
       openLink.target = "_blank";
       openLink.rel = "noopener noreferrer";
-      openLink.title = t("web.card.open_title");
-      actions.appendChild(openLink);
-      const dlLink = el("a", "fc-open", t("web.card.download"));
-      dlLink.href = "/api/file?path=" + encodeURIComponent(path) + "&download=1";
-      dlLink.title = t("web.card.download_title");
-      dlLink.setAttribute("download", baseName);
-      actions.appendChild(dlLink);
+      openLink.title = t("web.card.open_title") + " · " + path;
+      row.appendChild(openLink);
+      const tail = String(path).split(/[\\/]/).slice(0, -1).join("/");
+      if (tail) row.appendChild(el("span", "tail", " · " + tail));
+    } else {
+      const s = el("span", "tail", path);
+      s.title = path;
+      row.appendChild(s);
     }
-    const copyBtn = el("button", "fc-open", t("web.card.copy_path"));
+    const copyBtn = el("button", "copy-btn");
     copyBtn.type = "button";
     copyBtn.title = t("web.card.copy_title");
+    copyBtn.setAttribute("aria-label", t("web.card.copy_title"));
+    copyBtn.appendChild(icon("copy"));
     copyBtn.addEventListener("click", () => {
       copyText(path).then((ok) => {
-        copyBtn.textContent = ok ? "✓ " + t("web.code.copied") : "⚠ " + t("web.code.copy_failed");
-        window.setTimeout(() => {
-          copyBtn.textContent = t("web.card.copy_path");
-        }, 1400);
+        copyBtn.replaceChildren(icon(ok ? "check" : "copy"));
+        window.setTimeout(() => copyBtn.replaceChildren(icon("copy")), 1400);
       });
     });
-    actions.appendChild(copyBtn);
-    bottom.appendChild(actions);
-    card.appendChild(bottom);
-    if (/\.drawio(\.xml)?$/i.test(path)) {
-      const hint = el("div", "fc-hint", t("web.card.drawio_hint"));
-      card.appendChild(hint);
+    row.appendChild(copyBtn);
+    if (/\.drawio(\.xml)?$/i.test(path) && verbosity() === "verbose") {
+      row.appendChild(el("span", "detail", "↳ " + t("web.card.drawio_hint")));
     }
-    appendTo(feed, card);
-    return card;
+    appendTo(feed, row);
+    try { maybeGroupFilerow(feed, row); } catch (err) { /* fail-open: plain row stays */ }
+    return row;
   }
   if (LINK_TOOLS.indexOf(name) !== -1 && args.url) {
     const line = el("div", "linkline");
