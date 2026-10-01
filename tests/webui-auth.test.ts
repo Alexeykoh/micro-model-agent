@@ -83,7 +83,7 @@ describe("webui auth + limits", () => {
     });
   });
 
-  it("409 on /api/message when already busy", async () => {
+  it("queues /api/message when already busy instead of 409", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
     s.bridge = makeBridge();
@@ -94,8 +94,8 @@ describe("webui auth + limits", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "hi" }),
       });
-      expect(res.status).toBe(409);
-      expect(await res.json()).toEqual({ error: "busy" });
+      expect(res.status).toBe(202);
+      expect(await res.json()).toEqual({ ok: true, queued: 1 });
     });
   });
 

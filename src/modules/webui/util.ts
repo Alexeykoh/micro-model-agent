@@ -10,8 +10,9 @@ import { errMsg } from "../../utils/error";
 import { redactContextSecrets } from "../../core/agent/context-log";
 import type { WebUiState } from "./state";
 import { broadcast, releaseBusy, reserveBusy } from "./state";
-import { MAX_BODY_BYTES } from "./limits";
+import { MAX_BODY_BYTES, MAX_QUEUE_LENGTH } from "./limits";
 import { readEnv } from "../../config/env";
+import type { Host } from "../../core/host";
 
 export { MAX_BODY_BYTES } from "./limits";
 
@@ -191,6 +192,56 @@ export function readBodyError(req: IncomingMessage, res: ServerResponse, err: un
 }
 
 /**
+ * Запускает один ход через мост: сабмит по готовому резерву + разбор ошибок.
+ * Общий путь немедленного сабмита (`handleMessagePost`, резерв взят синхронно
+ * с пречеком) и дренажа очереди (`drainQueueTurn`, резерв берётся здесь —
+ * вызов синхронен из `onTurnEnd` после сброса, гонки нет).
+ */
+function submitTurn(s: WebUiState, bridge: Host, text: string, images: string[], token: object = reserveBusy(s)): void {
+  broadcast({ type: "state", ts: Date.now(), busy: true, queueLen: s.pendingQueue.length }, s);
+  const run = Promise.resolve(bridge.submit(text, { images }));
+  run.catch((err: unknown) => {
+    // Единственный владелец ошибки: для любого реально стартовавшего хода
+    // форвардер эмитит `turn_end {success:false}` и первым чистит резерв,
+    // так что `releaseBusy` здесь вернёт false и второй `error` слать НЕЛЬЗЯ
+    // (браузер показал бы две строки). `error` репортит только сабмит,
+    // зареджекченный до начала хода (резерв ещё наш).
+    if (releaseBusy(s, token)) {
+      broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
+      broadcast(
+        { type: "state", ts: Date.now(), busy: false, queueLen: s.pendingQueue.length },
+        s,
+      );
+    }
+  });
+}
+
+/**
+ * Забирает голову очереди и стартует её следующим ходом. Вызывается из
+ * форвардерного `onTurnEnd` (после сброса busy), поэтому гарды ниже — защита
+ * от чужих вызовов, а не от гонки: в том же тике слот уже свободен.
+ * Возвращает, стартовал ли ход.
+ */
+export function drainQueueTurn(s: WebUiState): boolean {
+  const bridge = s.bridge;
+  if (!bridge || s.busy || bridge.isBusy()) return false;
+  const next = s.pendingQueue.shift();
+  if (!next) return false;
+  submitTurn(s, bridge, next.text, next.images);
+  return true;
+}
+
+/**
+ * Кладёт сообщение в очередь входящих (ход идёт). Возвращает позицию (1-based)
+ * или null, если очередь полна.
+ */
+function enqueueMessage(s: WebUiState, text: string, images: string[]): number | null {
+  if (s.pendingQueue.length >= MAX_QUEUE_LENGTH) return null;
+  s.pendingQueue.push({ text, images, ts: Date.now() });
+  return s.pendingQueue.length;
+}
+
+/**
  * `POST /api/message`: резервирует single-flight слот и отдаёт хосту.
  *
  * Инвариант single-flight: пречек busy и {@link reserveBusy} — в ОДИН
@@ -199,6 +250,10 @@ export function readBodyError(req: IncomingMessage, res: ServerResponse, err: un
  * от UI-резервации (`s.busy`) — поэтому сабмит владельца сбрасывает собственный
  * `isBusy()`-гард хоста. Форвардерный `turn_end` — единственный сброс для
  * стартовавшего хода; `releaseBusy` покрывает сабмит, так и не стартовавший.
+ *
+ * Ход идёт — сообщение не отклоняется `409 busy`, а встаёт в очередь входящих
+ * (`202 {queued: n}`) и выполняется следующим ходом по завершении текущего.
+ * Хвост сверх `MAX_QUEUE_LENGTH` — `429 queue_full`.
  */
 export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   if (s.setupRequired) {
@@ -210,7 +265,34 @@ export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: 
     return;
   }
   if (s.busy || s.bridge.isBusy()) {
-    sendJson(res, 409, { error: "busy" });
+    // Ход идёт: сообщение встаёт в очередь входящих вместо `409 busy`.
+    // Тело читаем здесь же — без текста класть нечего, а клиент ввод уже очистил.
+    if (s.minPostIntervalMs > 0 && Date.now() - s.lastPostTs < s.minPostIntervalMs) {
+      sendJson(res, 429, { error: "rate_limited" });
+      return;
+    }
+    readBody(req, s.maxBodyBytes)
+      .then((raw) => {
+        const body = parseMessageBody(raw);
+        if ("error" in body) {
+          sendJson(res, 400, { error: body.error });
+          return;
+        }
+        s.lastPostTs = Date.now();
+        const pos = enqueueMessage(s, body.text, body.images);
+        if (pos === null) {
+          sendJson(res, 429, { error: "queue_full" });
+          return;
+        }
+        broadcast(
+          { type: "state", ts: Date.now(), busy: true, queueLen: s.pendingQueue.length },
+          s,
+        );
+        sendJson(res, 202, { ok: true, queued: pos });
+      })
+      .catch((err: unknown) => {
+        readBodyError(req, res, err);
+      });
     return;
   }
   if (s.minPostIntervalMs > 0 && Date.now() - s.lastPostTs < s.minPostIntervalMs) {
@@ -218,36 +300,33 @@ export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: 
     return;
   }
   const bridge = s.bridge;
+  // Резерв — в ТОМ ЖЕ тике, что пречек выше (без await между): иначе два
+  // конкурентных POST оба пройдут. Чтение тела и сабмит — уже под резервом.
   const token = reserveBusy(s);
-  broadcast({ type: "state", ts: Date.now(), busy: true }, s);
+  broadcast({ type: "state", ts: Date.now(), busy: true, queueLen: s.pendingQueue.length }, s);
   readBody(req, s.maxBodyBytes)
     .then((raw) => {
       const body = parseMessageBody(raw);
       if ("error" in body) {
         if (releaseBusy(s, token)) {
-          broadcast({ type: "state", ts: Date.now(), busy: false }, s);
+          broadcast(
+            { type: "state", ts: Date.now(), busy: false, queueLen: s.pendingQueue.length },
+            s,
+          );
         }
         sendJson(res, 400, { error: body.error });
         return;
       }
       s.lastPostTs = Date.now();
-      const run = Promise.resolve(bridge.submit(body.text, { images: body.images }));
-      run.catch((err: unknown) => {
-        // Единственный владелец ошибки: для любого реально стартовавшего хода
-        // форвардер эмитит `turn_end {success:false}` и первым чистит резерв,
-        // так что `releaseBusy` здесь вернёт false и второй `error` слать НЕЛЬЗЯ
-        // (браузер показал бы две строки). `error` репортит только сабмит,
-        // зареджекченный до начала хода (резерв ещё наш).
-        if (releaseBusy(s, token)) {
-          broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
-          broadcast({ type: "state", ts: Date.now(), busy: false }, s);
-        }
-      });
+      submitTurn(s, bridge, body.text, body.images, token);
       sendJson(res, 202, { ok: true });
     })
     .catch((err: unknown) => {
       if (releaseBusy(s, token)) {
-        broadcast({ type: "state", ts: Date.now(), busy: false }, s);
+        broadcast(
+          { type: "state", ts: Date.now(), busy: false, queueLen: s.pendingQueue.length },
+          s,
+        );
       }
       readBodyError(req, res, err);
     });

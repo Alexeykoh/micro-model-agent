@@ -6,9 +6,11 @@ import { handleRequest, startServer, stopServer } from "../src/modules/webui/ser
 import {
   BodyTooLargeError,
   MAX_IMAGE_DATA_URL_BYTES,
+  drainQueueTurn,
   parseMessageBody,
   readBody,
 } from "../src/modules/webui/util";
+import { MAX_QUEUE_LENGTH } from "../src/modules/webui/limits";
 import { createWebUiState } from "../src/modules/webui/state";
 import { makeForwarder } from "../src/modules/webui/forward";
 import type { Host } from "../src/core/host";
@@ -267,7 +269,7 @@ describe("webui server", () => {
     });
   });
 
-  it("single-flight: concurrent POSTs run exactly one; reset only on turn_end", async () => {
+  it("queues mid-turn POSTs and drains them in order after turn_end", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
     let release: (() => void) | null = null;
@@ -285,32 +287,97 @@ describe("webui server", () => {
       executeCommand: () => Promise.resolve(),
     };
     s.bridge = bridge;
-    const fwd = makeForwarder(s, () => {});
+    // Production wiring (module.ts): the forwarder drains the queue on turn_end.
+    const fwd = makeForwarder(s, () => {}, { onQueueDrained: () => drainQueueTurn(s) });
 
     await withServer(s, async (base) => {
-      const post = () =>
+      const post = (text: string) =>
         doFetch(`${base}/api/message`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: "hi" }),
+          body: JSON.stringify({ text }),
         });
 
-      // Both POSTs pass the same pre-check only if reservation is not atomic.
-      const [a, b] = await Promise.all([post(), post()]);
-      expect([a.status, b.status].sort()).toEqual([202, 409]);
-      expect(started).toHaveLength(1);
+      // First POST starts the turn immediately.
+      const a = await post("first");
+      expect(a.status).toBe(202);
+      expect(await a.json()).toEqual({ ok: true });
+      expect(started).toEqual(["first"]);
       expect(s.busy).toBe(true);
 
-      // The forwarder's turn_end is the sole reset for a started turn.
+      // Mid-turn POSTs queue instead of 409 (the old contract).
+      const b = await post("second");
+      expect(b.status).toBe(202);
+      expect(await b.json()).toEqual({ ok: true, queued: 1 });
+      expect(started).toHaveLength(1);
+      expect(s.pendingQueue).toHaveLength(1);
+
+      const state = await (await doFetch(`${base}/api/state`)).json();
+      expect(state.queueLen).toBe(1);
+
+      // turn_end drains the head as the next turn (same tick, still ordered).
+      release?.();
+      await new Promise((r) => setTimeout(r, 0));
+      fwd.onTurnEnd({ success: true });
+      expect(started).toEqual(["first", "second"]);
+      expect(s.busy).toBe(true);
+      expect(s.pendingQueue).toHaveLength(0);
+
+      // Drained turn ends: the slot is free again.
       release?.();
       await new Promise((r) => setTimeout(r, 0));
       fwd.onTurnEnd({ success: true });
       expect(s.busy).toBe(false);
 
-      const c = await post();
+      const c = await post("third");
       expect(c.status).toBe(202);
-      expect(started).toHaveLength(2);
+      expect(await c.json()).toEqual({ ok: true });
+      expect(started).toEqual(["first", "second", "third"]);
     });
+  });
+
+  it("rejects past the queue cap with 429 queue_full", async () => {
+    const s = createWebUiState();
+    s.minPostIntervalMs = 0;
+    s.bridge = {
+      isBusy: () => true, // turn never ends: everything queues
+      submit: () => Promise.resolve(),
+      interrupt: () => {},
+      getState: () => ({ busy: s.busy }),
+      executeCommand: () => Promise.resolve(),
+    };
+
+    await withServer(s, async (base) => {
+      const post = (text: string) =>
+        doFetch(`${base}/api/message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+      for (let i = 0; i < MAX_QUEUE_LENGTH; i++) {
+        const r = await post(`q${i}`);
+        expect(r.status).toBe(202);
+        expect(await r.json()).toEqual({ ok: true, queued: i + 1 });
+      }
+      const full = await post("overflow");
+      expect(full.status).toBe(429);
+      expect(await full.json()).toEqual({ error: "queue_full" });
+      expect(s.pendingQueue).toHaveLength(MAX_QUEUE_LENGTH);
+    });
+  });
+
+  it("drainQueueTurn is a no-op without bridge, while busy, or when empty", () => {
+    const s = createWebUiState();
+    s.pendingQueue.push({ text: "x", images: [], ts: 0 });
+    expect(drainQueueTurn(s)).toBe(false); // no bridge: entry kept
+    expect(s.pendingQueue).toHaveLength(1);
+
+    s.bridge = makeBridge();
+    s.busy = true;
+    expect(drainQueueTurn(s)).toBe(false);
+    s.busy = false;
+    s.pendingQueue.length = 0;
+    expect(drainQueueTurn(s)).toBe(false);
   });
 
   it("interrupt does not clear busy; the turn_end reset owns it", async () => {

@@ -627,11 +627,8 @@ async function send() {
   const images = S.attachments.slice();
   if (!text && !images.length) return;
   const feed = liveFeed() || activeFeed();
-  if (S.state.busy) {
-    // Don't drop the input silently: tell the user a turn is still running.
-    if (feed) appendTo(feed, el("div", "warnline", "⚠ " + t("web.input.busy")));
-    return;
-  }
+  // No client-side busy gate: a message sent mid-turn is queued server-side
+  // (`202 {queued: n}`) and runs after the current turn, in order.
   clearEmpty(feed);
   finishMd();
   resetTurnText();
@@ -672,13 +669,18 @@ async function send() {
   if (images.length) body.images = images;
   const r = await api("/api/message", { method: "POST", body });
   if (!r.ok) {
-    const msg = (r.data && r.data.error) || r.status;
+    const err = (r.data && r.data.error) || r.status;
+    const msg = err === "queue_full" ? t("web.input.queue_full") : err;
     appendTo(feed, el("div", "warnline", "⚠ " + msg));
   } else {
     if (images.length) clearAttachments();
-    // Delay the spinner so fast first tokens never flash it: `showBusy`
-    // itself skips when a stream/think block already started.
-    window.setTimeout(() => showBusy(feed), 180);
+    if (r.data && r.data.queued) {
+      appendTo(feed, el("div", "detail", "↳ " + t("web.input.queued", { n: r.data.queued })));
+    } else {
+      // Delay the spinner so fast first tokens never flash it: `showBusy`
+      // itself skips when a stream/think block already started.
+      window.setTimeout(() => showBusy(feed), 180);
+    }
   }
 }
 

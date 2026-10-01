@@ -105,6 +105,14 @@ export interface UsageSnapshot {
   contextBreakdown?: ContextBreakdown;
 }
 
+/** Одно входящее сообщение, ждущее конца текущего хода (`POST /api/message` при busy). */
+export interface QueuedMessage {
+  text: string;
+  images: string[];
+  /** Когда принято (для сортировки/диагностики; порядок — порядок прихода). */
+  ts: number;
+}
+
 /** Состояние веб-модуля: сервер, клиенты, мост хоста, коллабораторы REST. */
 export interface WebUiState {
   server: Server | null;
@@ -129,6 +137,14 @@ export interface WebUiState {
   agentRunning: boolean;
   /** Токен владения {@link busy}; см. {@link reserveBusy}/{@link releaseBusy}. */
   turnToken: object | null;
+  /**
+   * FIFO входящих сообщений, принятых во время хода. Обрабатываются по одному
+   * по завершении текущего хода (`drainQueueTurn` в `util.ts`, вызывается из
+   * форвардерного `onTurnEnd`); кап — `MAX_QUEUE_LENGTH`, хвост — `429`.
+   * Очередь глобальна (не per-сессия): запись выполняется в тогда-активной
+   * сессии, переключения вкладок посреди хода это не меняют (v1).
+   */
+  pendingQueue: QueuedMessage[];
   lastPostTs: number;
   minPostIntervalMs: number;
   historyTail: number;
@@ -230,6 +246,7 @@ export function createWebUiState(): WebUiState {
     busy: false,
     agentRunning: false,
     turnToken: null,
+    pendingQueue: [],
     lastPostTs: 0,
     minPostIntervalMs: 500,
     historyTail: 200,
