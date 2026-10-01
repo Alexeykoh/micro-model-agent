@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-10-01
+
+### Changed
+
+- **Web UI**: file actions now render as quiet terminal-style lines instead of boxed cards (`src/modules/webui/assets/js/feed.js`, `styles.css`). Each file tool shows `◇ <label> · <path-link> [copy-icon] <status>` in the tool-category color — no more Open/Download/Path pill buttons (path click opens the viewer, copy is an icon-only hover action). Consecutive file rows collapse into an expandable `│ N files` group with a chevron toggle. File-type badges are gone (format detection stays silent for highlighting only; draw.io hint is verbose-only). Dead strings `web.card.open/download/copy_path/download_title` removed, count via new `web.card.files_*` (en+ru). Tests: `tests/webui-assets.test.ts`, `tests/webui-smoke.test.ts`, new `tests/e2e/web-filecard.e2e-test.ts`.
+
 ## [2.13.1] - 2026-09-30
 
 ### Fixed
