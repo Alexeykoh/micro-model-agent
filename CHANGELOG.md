@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **Web UI boot was dead on 2.15.0** (`src/modules/webui/assets/js/settings.js`): a stray `}` in `setStaleBar` pushed `return` to top level (`Uncaught SyntaxError: Illegal return statement`), killing the whole `app.js` import graph — blank page, no feed, selectors stuck at `–`. One-line brace fix.
+- **Web e2e boot smoke** (`tests/e2e/web-boot.e2e-test.ts`): `mma web` boots in a real Chromium with zero console/page errors (live session tab, chrome skeleton, settings modal) and every served JS module in the live `/app.js` import graph answers 200; `web-helpers.launch` now names collected console errors when the feed never boots, so the next broken module fails with its `SyntaxError` in the message instead of a bare timeout.
+
 ## [2.15.0] - 2026-10-01
 
 ### Added
