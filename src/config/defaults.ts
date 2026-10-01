@@ -149,18 +149,7 @@ export const DEFAULTS: AppConfig = {
     verbosity: "quiet",
     fontSize: "comfortable",
   },
-  mcpServers: {
-    context7: {
-      name: "context7",
-      transport: "http",
-      url: "https://mcp.context7.com/mcp",
-      headers: {
-        CONTEXT7_API_KEY: process.env.CONTEXT7_API_KEY || "",
-      },
-      enabled: true,
-      timeout: 30000,
-    },
-  },
+  mcpServers: {},
   security: DEFAULT_SECURITY_CONFIG,
   sessionIsolation: {
     enabled: false,
