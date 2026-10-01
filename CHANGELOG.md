@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Web UI: stale-translations badge** (`src/modules/webui/i18n-stale.ts`, `i18n-api.ts`, `host-state.ts`, `core/host.ts`, `assets/index.html`, `js/dom.js`, `js/settings.js`, `app.js`, `styles.css`): `GET /api/i18n` and the state snapshot carry `i18nStale` (dict files on disk newer than the server process); the topbar shows a yellow badge with a reload action instead of silently rendering raw keys. New keys `web.i18n.stale`/`web.i18n.reload` (en+ru). Tests: `tests/webui-i18n.test.ts`, `tests/webui-usage.test.ts`, `tests/webui-assets.test.ts`.
+
 ### Fixed
 
 - **Plan auto-advance no longer completes modify-steps on stale files** (`src/modules/execution/module.ts`): `advancePlanIfStepComplete` and final-audit `autoCloseEvidenceSteps` now require `provablyStale()` to be false — every named file must be created/modified after `plan.createdAt` (fail-open on bad dates and unreadable mtimes, delete-kind unchanged). Previously a step naming a long-existing file auto-completed before a line of code was written (observed: 6 plan steps auto-closed while the agent was still on step 1). Tests: `tests/execution-plan-deliverables.test.ts`.
@@ -14,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Factual check resolves path suffixes** (`src/modules/hallucination/factual.ts`): `webui/state.ts` now matches `src/modules/webui/state.ts` via the cached basename index (no new FS walks), fixing false "mentioned files not found" warnings on short paths. Tests: `tests/hallucination-factual.test.ts`.
 - **`edit_file` tolerates LF anchors in CRLF files** (`src/tools/edit-file.ts`): `spliceNormalized()` matches on normalized line endings and splices the original, keeping the file's ending style (no more "string not found" loops on Windows checkouts). Tests: `tests/edit-file.test.ts`.
 - **Web usage re-render covers the context breakdown** (`src/modules/webui/assets/js/feed.js`): `h.contextBreakdown` added to the `renderUsage` signature so part shifts at constant used/limit repaint the segmented bar and legend. Guard: `tests/webui-assets.test.ts`.
+- **Terminal context-budget part words are localized** (`src/cli/repl.ts`, `src/i18n/en.json`, `ru.json`): the startup banner showed untranslated latin `sys/res/hist` in both locales; now `repl.ctx_part_system/reserve/history` (`system/reserve/history` + `система/резерв/история`). Web legend (usage parts) intentionally unchanged. Tests: `tests/i18n.test.ts`.
+- **Verification hygiene is model-facing** (`src/core/system-prompt.ts`, `src/tools/browser.ts`): verification `mma web` servers must run isolated (`MMA_CONFIG_DIR`), never against the user's live server; without vision capabilities the browser description steers to snapshot text and DOM/API assertions. Tests: `tests/core/bootstrap.test.ts`, `tests/tools/browser.test.ts`.
 
 ## [2.14.0] - 2026-10-01
 
