@@ -198,6 +198,20 @@ function addText(data, text) {
     data.code.codeEl.appendChild(document.createTextNode(text));
     return;
   }
+  if (data.opts.animate) {
+    // Stagger cascade within a flush: each span starts before the previous
+    // one finishes ((n%4)*20ms delay, .15s duration). Modulo keeps long
+    // outputs cascading instead of settling on a permanent max delay.
+    const n = data.animN || 0;
+    data.animN = n + 1;
+    const span = document.createElement("span");
+    span.className = "tk";
+    const delay = (n % 4) * 20;
+    if (delay) span.style.animationDelay = delay + "ms";
+    span.appendChild(document.createTextNode(text));
+    data.nodes[data.index].appendChild(span);
+    return;
+  }
   smd.default_add_text(data, text);
 }
 
