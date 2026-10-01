@@ -98,6 +98,33 @@ describe("web e2e: boot smoke", () => {
   );
 
   e2e(
+    "trace tab shows the index lifecycle without console errors",
+    async () => {
+      const dir = artifactsDirFor("boot-trace");
+      await withE2E(dir, async (_srv, { page, errors }: Launched) => {
+        await waitForLiveTab(page);
+
+        // Index via the Map tab: POST /api/index broadcasts index start/done.
+        await page.click('.sb-tab[data-tab="map"]');
+        await page.click(".map-reindex");
+
+        // Trace tab renders the index rows live.
+        await page.click('.sb-tab[data-tab="trace"]');
+        const rows = page.locator("#pane-trace .trc");
+        await expect.poll(() => rows.count(), { timeout: 20_000 }).toBeGreaterThan(0);
+        await page.screenshot({ path: `${dir}/boot-trace.png` });
+
+        writeArtifacts(dir, "boot-trace", {
+          html: await page.content(),
+          consoleErrors: errors,
+        });
+        expect(errors).toEqual([]);
+      });
+    },
+    180_000,
+  );
+
+  e2e(
     "serves every frontend js module in the app.js import graph",
     async () => {
       const dir = artifactsDirFor("boot-assets");

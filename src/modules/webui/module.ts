@@ -158,7 +158,15 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     if (deps.indexer.refresh) {
       const refresh = deps.indexer.refresh.bind(deps.indexer);
       state.refreshIndex = async () => {
-        await refresh();
+        broadcast({ type: "index", ts: Date.now(), phase: "start" }, state);
+        try {
+          await refresh();
+        } catch {
+          broadcast({ type: "index", ts: Date.now(), phase: "error" }, state);
+          throw new Error("index refresh failed");
+        }
+        const stats = state.projectMapStats?.() ?? null;
+        broadcast({ type: "index", ts: Date.now(), phase: "done", stats }, state);
         broadcast({ type: "state", ts: Date.now(), busy: state.busy, queueLen: state.pendingQueue.length, usage: state.usage }, state);
       };
     }

@@ -138,6 +138,12 @@ export interface WebUiState {
   /** Токен владения {@link busy}; см. {@link reserveBusy}/{@link releaseBusy}. */
   turnToken: object | null;
   /**
+   * Сквозной счётчик завершённых ходов (инкремент — форвардерный `onTurnEnd`).
+   * Едет в SSE `turn_end` как `turnSeq`, чтобы Trace привязывал строки к ходу
+   * серверным номером, а не клиентским счётчиком (реконнекты его не сбивают).
+   */
+  turnSeq: number;
+  /**
    * FIFO входящих сообщений, принятых во время хода. Обрабатываются по одному
    * по завершении текущего хода (`drainQueueTurn` в `util.ts`, вызывается из
    * форвардерного `onTurnEnd`); кап — `MAX_QUEUE_LENGTH`, хвост — `429`.
@@ -246,6 +252,7 @@ export function createWebUiState(): WebUiState {
     busy: false,
     agentRunning: false,
     turnToken: null,
+    turnSeq: 0,
     pendingQueue: [],
     lastPostTs: 0,
     minPostIntervalMs: 500,

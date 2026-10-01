@@ -207,7 +207,8 @@ export function makeForwarder(
       s.busy = false;
       s.agentRunning = false;
       s.turnToken = null;
-      sink({ type: "turn_end", ts: Date.now(), ...summary });
+      s.turnSeq += 1;
+      sink({ type: "turn_end", ts: Date.now(), turnSeq: s.turnSeq, ...summary });
       // Очередь входящих дренируется следующим ходом сразу (по одному):
       // слот уже свободен, вызов синхронен — вклиниться некому.
       opts.onQueueDrained?.();

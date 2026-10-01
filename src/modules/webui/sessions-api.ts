@@ -3,6 +3,7 @@
 // Auth и same-origin — выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { handleSessionHistory } from "./history-api";
+import { handleSessionLog } from "./log-api";
 import { readBody, readBodyError, sendJson } from "./util";
 import { parseJsonBody, readJsonBody } from "./body";
 import type { WebUiState } from "./state";
@@ -183,6 +184,11 @@ export function handleSessionsApi(
   if (p.startsWith("/api/sessions/") && p.endsWith("/history") && req.method === "GET") {
     const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/history".length));
     handleSessionHistory(res, id, s);
+    return true;
+  }
+  if (p.startsWith("/api/sessions/") && p.endsWith("/log") && req.method === "GET") {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/log".length));
+    handleSessionLog(req, res, id, s);
     return true;
   }
   if (p.startsWith("/api/sessions/") && req.method === "DELETE") {
