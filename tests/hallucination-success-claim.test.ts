@@ -39,4 +39,31 @@ describe("checkSuccessClaim", () => {
     ]);
     expect(hit).toBeNull();
   });
+
+  it("ignores stale plan-bookkeeping failures against a success claim (ses_mupgenhq_75f66l)", () => {
+    // Честное «тесты прошли» ветировалось stale-ошибкой `plan re-plan`
+    // («Длина checks должна совпадать») — фейл блокнота, а не исхода задачи.
+    const hit = checkSuccessClaim("Результат: ✅ Тесты прошли успешно!", [
+      { name: "plan", ok: false, text: "Длина checks должна совпадать с числом шагов" },
+      { name: "bash", ok: true, text: "2 pass, 0 fail" },
+      { name: "plan_step", ok: true, text: "step 3 → done" },
+    ]);
+    expect(hit).toBeNull();
+  });
+
+  it("ignores a lone plan failure with no other evidence", () => {
+    const hit = checkSuccessClaim("Done, all tests pass", [
+      { name: "todo", ok: false, text: "Error: subtask id not found" },
+    ]);
+    expect(hit).toBeNull();
+  });
+
+  it("still flags a real failure next to plan noise", () => {
+    const hit = checkSuccessClaim("Done, all tests pass", [
+      { name: "plan", ok: false, text: "Длина checks должна совпадать с числом шагов" },
+      { name: "bash", ok: false, text: "npm error 404 No match found" },
+    ]);
+    expect(hit).not.toBeNull();
+    expect(hit!.snippet).toContain("404");
+  });
 });
