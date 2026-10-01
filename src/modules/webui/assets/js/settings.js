@@ -3,7 +3,7 @@
 // share from tabs; confirm/toast from dialog. Never imports app (the locale
 // refresh reaches the app shell through the store hooks registry).
 import {
-el, icon, link, inlineTextNodes, connStatus, makeToggle,
+el, icon, link, inlineTextNodes, connStatus, staleBar, makeToggle,
 } from "./dom.js";
 import { api } from "./api.js";
 import { t, loadI18n } from "./i18n.js";
@@ -322,6 +322,26 @@ export function setConnStatus(disconnected) {
   if (!connStatus) return;
   connStatus.hidden = !disconnected;
   connStatus.textContent = disconnected ? "⋯ " + t("web.conn.reconnecting") : "";
+}
+
+// Stale-translations banner: dict files on disk are newer than the running
+// server process, so the chrome may show raw keys. Rebuilt only on S.state
+// change (not on every 2s poll) to keep the reload-button focus stable;
+// `force` re-renders the label after a locale switch.
+let lastStale = null;
+export function setStaleBar(stale, force) {
+  if (!staleBar) return;
+  // undefined = перерисовать последнее состояние (смена локали).
+  const on = stale === undefined ? !!lastStale : !!stale;
+  if (!force && on === lastStale) return;
+  lastStale = on;
+  staleBar.hidden = !on;
+  staleBar.textContent = "";
+  if (!on) return;
+  staleBar.appendChild(el("span", "", "⚠ " + t("web.i18n.stale") + " "));
+  staleBar.appendChild(link(t("web.i18n.reload"), "", () => location.reload()));
+}
+  return lastStale;
 }
 
 // Panel → named sections lives in `settings-controls.js` (PANEL_SECTIONS).

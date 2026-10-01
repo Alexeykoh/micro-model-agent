@@ -179,6 +179,8 @@ body[data-font="large"] { font-size: 17px; }
 #openSettings { margin-left: auto; margin-right: 6px; }
 #toggleSidebar { display: none; }
 .conn { color: var(--dim-a); font-size: 11.5px; white-space: nowrap; }
+.conn.stale { color: var(--yellow); }
+.conn.stale .linkbtn { font-size: 11.5px; }
 .tabstrip {
   display: flex; gap: 4px; align-items: center; overflow-x: auto;
   flex: 1; min-width: 0;

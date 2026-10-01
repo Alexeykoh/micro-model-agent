@@ -14,6 +14,7 @@ export const attachStrip = document.getElementById("attachStrip");
 export const attachErr = document.getElementById("attachErr");
 export const imgPicker = document.getElementById("imgPicker");
 export const connStatus = document.getElementById("connStatus");
+export const staleBar = document.getElementById("staleBar");
 export const liveEl = document.getElementById("live");
 export const sendBtn = document.getElementById("sendBtn");
 
