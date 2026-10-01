@@ -444,7 +444,42 @@ function safeUrl(url) {
   return null;
 }
 
-function maybeGroupFilerow(feed, row) { return null; }
+function maybeGroupFilerow(feed, row) {
+  const prev = feed.lastElementChild;
+  const group = prev && prev.classList && prev.classList.contains("filegroup") ? prev : null;
+  const prevRow = prev && prev.classList && prev.classList.contains("filerow") ? prev : null;
+  if (group && group.dataset.open !== "1") {
+    group.querySelector(".items").appendChild(row);
+    const n = group.querySelectorAll(".items > .filerow").length + 1;
+    group.querySelector(".count").textContent = n + " files";
+    return group;
+  }
+  if (prevRow) {
+    const wrap = el("div", "filegroup");
+    const head = el("button", "head");
+    head.setAttribute("aria-expanded", "false");
+    head.appendChild(el("span", "g", "│ "));
+    head.appendChild(el("span", "count", "2 files"));
+    head.appendChild(el("span", "ok", " ✓"));
+    const chev = icon("chevron-down");
+    head.appendChild(chev);
+    const items = el("div", "items hidden");
+    feed.replaceChild(wrap, prevRow);
+    items.appendChild(prevRow);
+    items.appendChild(row);
+    wrap.appendChild(head);
+    wrap.appendChild(items);
+    head.addEventListener("click", () => {
+      const open = wrap.dataset.open === "1";
+      wrap.dataset.open = open ? "" : "1";
+      head.setAttribute("aria-expanded", open ? "false" : "true");
+      items.classList.toggle("hidden", open);
+    });
+    appendTo(feed, wrap);
+    return wrap;
+  }
+  return null;
+}
 
 function cardFor(name, args, sid) {
   const feed = feedForEvent(sid);
