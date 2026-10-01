@@ -60,7 +60,8 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 - **Testing:** vitest (`bun test`)
 - **Linting:** TypeScript strict mode (`tsc --noEmit`) + Biome (`biome.json`; linter only, formatter off — Prettier remains)
 - **Quality gate:** `bun run quality` = `typecheck` + `lint` + `fallow` (dead-code vs `.fallow-baseline.json`); CI — `.gitea/workflows/quality.yml`; git pre-commit hook — fallow
-- **Dependencies:** commander, js-tiktoken, picocolors, execa, jsonrepair, playwright
+- **Dependencies:** commander, js-tiktoken, jsonrepair, picocolors, playwright, string-width, yaml
+- **DevDependencies:** @biomejs/biome, @types/bun, @types/node, @vitest/coverage-v8, prettier, typescript, vitest
 
 ## Commands
 
