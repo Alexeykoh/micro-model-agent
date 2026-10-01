@@ -445,13 +445,15 @@ function safeUrl(url) {
 }
 
 function maybeGroupFilerow(feed, row) {
-  const prev = feed.lastElementChild;
+  const prev = row.previousElementSibling;
   const group = prev && prev.classList && prev.classList.contains("filegroup") ? prev : null;
   const prevRow = prev && prev.classList && prev.classList.contains("filerow") ? prev : null;
   if (group && group.dataset.open !== "1") {
     group.querySelector(".items").appendChild(row);
+    if (row.dataset.fail === "1") group.dataset.fail = "1";
     const n = group.querySelectorAll(".items > .filerow").length;
-    group.querySelector(".count").textContent = n + " files";
+    group.querySelector(".count").textContent = pluralCount("web.card.files", n);
+    group.querySelector(".ok").textContent = group.dataset.fail === "1" ? " ✗" : " ✓";
     return group;
   }
   if (prevRow) {
@@ -459,8 +461,10 @@ function maybeGroupFilerow(feed, row) {
     const head = el("button", "head");
     head.setAttribute("aria-expanded", "false");
     head.appendChild(el("span", "g", "│ "));
-    head.appendChild(el("span", "count", "2 files"));
-    head.appendChild(el("span", "ok", " ✓"));
+    head.appendChild(el("span", "count", pluralCount("web.card.files", 2)));
+    const fail = prevRow.dataset.fail === "1" || row.dataset.fail === "1";
+    if (fail) wrap.dataset.fail = "1";
+    head.appendChild(el("span", "ok", fail ? " ✗" : " ✓"));
     const chev = icon("chevron-down");
     head.appendChild(chev);
     const items = el("div", "items hidden");
@@ -475,13 +479,12 @@ function maybeGroupFilerow(feed, row) {
       head.setAttribute("aria-expanded", open ? "false" : "true");
       items.classList.toggle("hidden", open);
     });
-    appendTo(feed, wrap);
     return wrap;
   }
   return null;
 }
 
-function cardFor(name, args, sid) {
+function cardFor(name, args, sid, ok) {
   const feed = feedForEvent(sid);
   if (!feed) return null;
   if (FILE_TOOLS.indexOf(name) !== -1) {
@@ -513,10 +516,13 @@ function cardFor(name, args, sid) {
     copyBtn.addEventListener("click", () => {
       copyText(path).then((ok) => {
         copyBtn.replaceChildren(icon(ok ? "check" : "copy"));
+        if (!ok) { const st = row.querySelector(".st"); if (st) st.textContent = " ⚠"; }
         window.setTimeout(() => copyBtn.replaceChildren(icon("copy")), 1400);
       });
     });
     row.appendChild(copyBtn);
+    row.appendChild(el("span", "st", ok === false ? " ✗" : ok === true ? " ✓" : ""));
+    if (ok === false) row.dataset.fail = "1";
     if (/\.drawio(\.xml)?$/i.test(path) && verbosity() === "verbose") {
       row.appendChild(el("span", "detail", "↳ " + t("web.card.drawio_hint")));
     }
@@ -578,7 +584,7 @@ export function onToolEnd(data) {
     // a single `↳` cause instead of the whole model-facing body.
     if (data.success) {
       if (line) S.runNodes.push(line);
-      const card = cardFor(data.name, args, data.sessionId);
+      const card = cardFor(data.name, args, data.sessionId, data.success);
       if (card) S.runNodes.push(card);
       S.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
     } else {
@@ -587,7 +593,7 @@ export function onToolEnd(data) {
     }
     return;
   }
-  if (data.success) cardFor(data.name, args, data.sessionId);
+  if (data.success) cardFor(data.name, args, data.sessionId, data.success);
   renderToolOutput(line, data.output);
 }
 
