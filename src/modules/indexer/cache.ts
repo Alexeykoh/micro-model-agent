@@ -1,7 +1,7 @@
 // Дисковый кэш индекса проекта: envelope с версией, root и сигнатурой дерева.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
-import type { IndexResult } from "./walker";
+import type { IndexResult, IndexedFile } from "./walker";
 
 /**
  * Инкремент при смене envelope или формы `IndexResult`: кэши старого MMA
@@ -9,6 +9,34 @@ import type { IndexResult } from "./walker";
  */
 /** Версия схемы кэша индекса. */
 export const CACHE_VERSION = 2;
+
+/**
+ * Проверяет форму значения как `IndexResult` перед доверием дисковому кэшу.
+ * Кэш могут писать другие версии агента (старые читают envelope как индекс и
+ * наоборот) или сторонние процессы — любая чужая/битая форма обязана давать
+ * тихий переобход, а не `TypeError` на старте (`index.files.length`).
+ */
+function isIndexedFile(v: unknown): v is IndexedFile {
+  if (typeof v !== "object" || v === null) return false;
+  const f = v as Record<string, unknown>;
+  return (
+    typeof f.path === "string" &&
+    typeof f.language === "string" &&
+    Array.isArray(f.exports) &&
+    typeof f.size === "number"
+  );
+}
+
+/** True, если значение — целый `IndexResult` пригодной для использования формы. */
+function isIndexResult(v: unknown): v is IndexResult {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    Array.isArray(r.files) &&
+    (r.files as unknown[]).every(isIndexedFile) &&
+    typeof r.totalSize === "number"
+  );
+}
 
 /** Дисковая обёртка с валидационными метаданными вокруг индекса. */
 interface CacheEnvelope {
@@ -49,17 +77,18 @@ export class IndexCache {
   }
 
   /**
-   * Возвращает кэшированный индекс, только если он описывает текущее дерево.
-   * Отвергает кэш при расхождении версии схемы, сохранённого `root` или
-   * `signature`; легаси-кэш (сырой `IndexResult` без envelope) считается
-   * протухшим. Вызывающие на `null` делают полный обход.
+   * Возвращает кэшированный индекс, только если он описывает текущее дерево
+   * И имеет пригодную форму. Отвергает кэш при расхождении версии схемы,
+   * сохранённого `root`, `signature` или формы `result` (чужая версия агента,
+   * битый JSON, частично записанный файл); легаси-кэш (сырой `IndexResult`
+   * без envelope) считается протухшим. Вызывающие на `null` делают полный обход.
    */
   load(): IndexResult | null {
     if (this.cache) return this.cache;
     if (!existsSync(this.cachePath)) return null;
     try {
       const parsed = JSON.parse(readFileSync(this.cachePath, "utf-8")) as Partial<CacheEnvelope>;
-      if (parsed.version !== CACHE_VERSION || !parsed.result) return null;
+      if (parsed.version !== CACHE_VERSION || !isIndexResult(parsed.result)) return null;
       if (this.root !== undefined && parsed.root !== this.root) return null;
       if (this.signature && parsed.signature !== this.currentSignature()) return null;
       this.cache = parsed.result;
