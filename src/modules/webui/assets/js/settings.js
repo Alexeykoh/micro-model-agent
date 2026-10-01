@@ -8,7 +8,7 @@ el, icon, link, inlineTextNodes, connStatus, staleBar, makeToggle,
 import { api } from "./api.js";
 import { t, loadI18n } from "./i18n.js";
 import { S, setPath, getPath, THEME_KEY, hooks } from "./store.js";
-import { contextLabel } from "./format.js";
+import { contextLabel, matchesQuery } from "./format.js";
 import { closeAllMenus, setSessOpen } from "./tabs.js";
 import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
 import { controlFor, PANEL_SECTIONS, keyToPanel } from "./settings-controls.js";
@@ -48,6 +48,11 @@ function menuAction(label, iconName, onClick) {
   return mi;
 }
 
+// Live filter text of the composer model dropdown. Kept module-level so a
+// `renderSelectors()` re-read (config/models reload) preserves the query and
+// the input is rebuilt with it; cleared once a model is actually picked.
+let modelFilter = "";
+
 export function renderSelectors() {
   const cfg = S.state.config || {};
   const provider = cfg.provider || {};
@@ -55,13 +60,70 @@ export function renderSelectors() {
   setSelButton(document.getElementById("selModelBtn"), t("web.selectors.model"), cfg.model || "—");
   const modelMenu = document.getElementById("selModelMenu");
   modelMenu.textContent = "";
-  if (!S.state.models.length) {
-    modelMenu.appendChild(el("div", "mi dim", t("web.selectors.no_models")));
-  } else {
-    S.state.models.forEach((m) => {
-      modelMenu.appendChild(menuItem(m, "", m === cfg.model, () => postConfig("model", m, true)));
+  // Search row stays outside the filtered list: `drawModelList` only touches
+  // `listBox`, so typing never rebuilds (or unfocuses) the input itself.
+  const search = document.createElement("input");
+  search.id = "selModelSearch";
+  search.className = "searchbox";
+  search.type = "search";
+  search.autocomplete = "off";
+  search.spellcheck = false;
+  search.placeholder = t("web.selectors.search_models");
+  search.setAttribute("aria-label", t("web.selectors.search_models"));
+  search.value = modelFilter;
+  search.addEventListener("click", (e) => e.stopPropagation());
+  modelMenu.appendChild(search);
+  const listBox = el("div", "model-menu-list");
+  modelMenu.appendChild(listBox);
+  const drawModelList = () => {
+    listBox.textContent = "";
+    const models = S.state.models.filter((m) => matchesQuery(m, modelFilter));
+    if (!models.length) {
+      listBox.appendChild(el("div", "mi dim", S.state.models.length ? t("web.settings.no_matches") : t("web.selectors.no_models")));
+      return;
+    }
+    models.forEach((m) => {
+      const item = menuItem(m, "", m === cfg.model, () => {
+        modelFilter = "";
+        postConfig("model", m, true);
+      });
+      // ArrowUp on the first row returns focus to the search field.
+      item.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowUp" && item === listBox.querySelector(".mi:not(.dim)")) {
+          e.preventDefault();
+          e.stopPropagation();
+          search.focus();
+        }
+      });
+      listBox.appendChild(item);
     });
-  }
+  };
+  search.addEventListener("input", () => {
+    modelFilter = search.value;
+    drawModelList();
+  });
+  search.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const first = listBox.querySelector(".mi:not(.dim)");
+      if (first) first.focus();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const first = listBox.querySelector(".mi:not(.dim)");
+      if (first) first.click();
+    } else if (e.key === "Escape") {
+      if (search.value) {
+        e.preventDefault();
+        search.value = "";
+        modelFilter = "";
+        drawModelList();
+      } else {
+        closeAllMenus();
+      }
+    }
+  });
+  drawModelList();
   modelMenu.appendChild(el("div", "sep"));
   modelMenu.appendChild(
     menuAction(t("web.selectors.refresh_list"), "refresh", () => {
@@ -196,6 +258,11 @@ document.querySelectorAll("[data-sel]").forEach((sel) => {
     });
     const open = sel.classList.toggle("open");
     btn.setAttribute("aria-expanded", open ? "true" : "false");
+    // Opening the model menu lands focus in its search field.
+    if (open && sel.dataset && sel.dataset.sel === "model") {
+      const search = document.getElementById("selModelSearch");
+      if (search) setTimeout(() => search.focus(), 0);
+    }
   });
 });
 
