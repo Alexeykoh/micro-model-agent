@@ -237,7 +237,7 @@ describe("webui smoke", () => {
             mk("code", long);
             mk("detail", `↳ ${long}`);
             mk("cmdout", long);
-            mk("filecard", `<span class="g">◇</span><span class="name">${long}</span><span class="meta">view</span>`);
+            mk("filerow", `<span class="g">◇</span><span class="lab">Reading file</span><span class="sep"> · </span><a class="path" href="#">${long}</a>`);
             mk("linkline", `↳ <a href="#">https://example.com/${long}</a>`);
             const act = document.createElement("div");
             act.className = "act recon";

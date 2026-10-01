@@ -444,56 +444,91 @@ function safeUrl(url) {
   return null;
 }
 
-function cardFor(name, args, sid) {
+function maybeGroupFilerow(feed, row) {
+  const prev = row.previousElementSibling;
+  const group = prev && prev.classList && prev.classList.contains("filegroup") ? prev : null;
+  const prevRow = prev && prev.classList && prev.classList.contains("filerow") ? prev : null;
+  if (group && group.dataset.open !== "1") {
+    group.querySelector(".items").appendChild(row);
+    if (row.dataset.fail === "1") group.dataset.fail = "1";
+    const n = group.querySelectorAll(".items > .filerow").length;
+    group.querySelector(".count").textContent = pluralCount("web.card.files", n);
+    group.querySelector(".ok").textContent = group.dataset.fail === "1" ? " ✗" : " ✓";
+    return group;
+  }
+  if (prevRow) {
+    const wrap = el("div", "filegroup");
+    const head = el("button", "head");
+    head.setAttribute("aria-expanded", "false");
+    head.appendChild(el("span", "g", "│ "));
+    head.appendChild(el("span", "count", pluralCount("web.card.files", 2)));
+    const fail = prevRow.dataset.fail === "1" || row.dataset.fail === "1";
+    if (fail) wrap.dataset.fail = "1";
+    head.appendChild(el("span", "ok", fail ? " ✗" : " ✓"));
+    const chev = icon("chevron-down");
+    head.appendChild(chev);
+    const items = el("div", "items hidden");
+    feed.replaceChild(wrap, prevRow);
+    items.appendChild(prevRow);
+    items.appendChild(row);
+    wrap.appendChild(head);
+    wrap.appendChild(items);
+    head.addEventListener("click", () => {
+      const open = wrap.dataset.open === "1";
+      wrap.dataset.open = open ? "" : "1";
+      head.setAttribute("aria-expanded", open ? "false" : "true");
+      items.classList.toggle("hidden", open);
+    });
+    return wrap;
+  }
+  return null;
+}
+
+function cardFor(name, args, sid, ok) {
   const feed = feedForEvent(sid);
   if (!feed) return null;
   if (FILE_TOOLS.indexOf(name) !== -1) {
     const path = args.path || args.file || args.dir;
     if (!path) return null;
-    const card = el("div", "filecard");
-    const top = el("div", "fc-top");
-    top.appendChild(el("span", "g", "◇"));
-    const nameEl = el("span", "name", path);
-    nameEl.title = path;
-    top.appendChild(nameEl);
-    card.appendChild(top);
-    const bottom = el("div", "fc-bottom");
-    bottom.appendChild(el("span", "lab", labelOf(name)));
-    const actions = el("span", "fc-actions");
-    const baseName = String(path.split(/[\\/]/).pop() || path);
+    const row = el("div", "filerow " + categoryOf(name));
+    row.appendChild(el("span", "g", "◇"));
+    row.appendChild(el("span", "lab", labelOf(name)));
+    row.appendChild(el("span", "sep", " · "));
     if (OPENABLE_TOOLS.indexOf(name) !== -1) {
-      const openLink = el("a", "fc-open", t("web.card.open"));
+      const openLink = el("a", "path", String(path).split(/[\\/]/).pop() || path);
       openLink.href = "/api/file?path=" + encodeURIComponent(path);
       openLink.target = "_blank";
       openLink.rel = "noopener noreferrer";
-      openLink.title = t("web.card.open_title");
-      actions.appendChild(openLink);
-      const dlLink = el("a", "fc-open", t("web.card.download"));
-      dlLink.href = "/api/file?path=" + encodeURIComponent(path) + "&download=1";
-      dlLink.title = t("web.card.download_title");
-      dlLink.setAttribute("download", baseName);
-      actions.appendChild(dlLink);
+      openLink.title = t("web.card.open_title") + " · " + path;
+      row.appendChild(openLink);
+      const tail = String(path).split(/[\\/]/).slice(0, -1).join("/");
+      if (tail) row.appendChild(el("span", "tail", " · " + tail));
+    } else {
+      const s = el("span", "tail", path);
+      s.title = path;
+      row.appendChild(s);
     }
-    const copyBtn = el("button", "fc-open", t("web.card.copy_path"));
+    const copyBtn = el("button", "copy-btn");
     copyBtn.type = "button";
     copyBtn.title = t("web.card.copy_title");
+    copyBtn.setAttribute("aria-label", t("web.card.copy_title"));
+    copyBtn.appendChild(icon("copy"));
     copyBtn.addEventListener("click", () => {
       copyText(path).then((ok) => {
-        copyBtn.textContent = ok ? "✓ " + t("web.code.copied") : "⚠ " + t("web.code.copy_failed");
-        window.setTimeout(() => {
-          copyBtn.textContent = t("web.card.copy_path");
-        }, 1400);
+        copyBtn.replaceChildren(icon(ok ? "check" : "copy"));
+        if (!ok) { const st = row.querySelector(".st"); if (st) st.textContent = " ⚠"; }
+        window.setTimeout(() => copyBtn.replaceChildren(icon("copy")), 1400);
       });
     });
-    actions.appendChild(copyBtn);
-    bottom.appendChild(actions);
-    card.appendChild(bottom);
-    if (/\.drawio(\.xml)?$/i.test(path)) {
-      const hint = el("div", "fc-hint", t("web.card.drawio_hint"));
-      card.appendChild(hint);
+    row.appendChild(copyBtn);
+    row.appendChild(el("span", "st", ok === false ? " ✗" : ok === true ? " ✓" : ""));
+    if (ok === false) row.dataset.fail = "1";
+    if (/\.drawio(\.xml)?$/i.test(path) && verbosity() === "verbose") {
+      row.appendChild(el("span", "detail", "↳ " + t("web.card.drawio_hint")));
     }
-    appendTo(feed, card);
-    return card;
+    appendTo(feed, row);
+    try { maybeGroupFilerow(feed, row); } catch (err) { /* fail-open: plain row stays */ }
+    return row;
   }
   if (LINK_TOOLS.indexOf(name) !== -1 && args.url) {
     const line = el("div", "linkline");
@@ -549,7 +584,7 @@ export function onToolEnd(data) {
     // a single `↳` cause instead of the whole model-facing body.
     if (data.success) {
       if (line) S.runNodes.push(line);
-      const card = cardFor(data.name, args, data.sessionId);
+      const card = cardFor(data.name, args, data.sessionId, data.success);
       if (card) S.runNodes.push(card);
       S.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
     } else {
@@ -558,7 +593,7 @@ export function onToolEnd(data) {
     }
     return;
   }
-  if (data.success) cardFor(data.name, args, data.sessionId);
+  if (data.success) cardFor(data.name, args, data.sessionId, data.success);
   renderToolOutput(line, data.output);
 }
 
