@@ -8,7 +8,7 @@ el, icon,
 import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { S, MAX_IMAGES, MAX_IMAGE_BYTES } from "./store.js";
-import { relTime, contextLabel } from "./format.js";
+import { relTime, contextLabel, matchesQuery } from "./format.js";
 import {
 makeFeed, showEmptyFeed, activeFeed, liveFeed, appendTo,
 clearEmpty, showBusy, clearFeed, finishMd, resetTurnText,
@@ -204,18 +204,70 @@ document.getElementById("sessRefresh").addEventListener("click", () => {
   loadSessions();
 });
 
+// Live filter text of the sessions dropdown. Module-level so the 2s
+// `renderState` poll and the 15s `loadSessions` poll (both re-render the lists)
+// never wipe an in-progress query: the `<input id="sessSearch">` itself lives
+// statically in `index.html` and only the row lists are redrawn.
+let sessQuery = "";
+let sessSearchWired = false;
+
+// One-time wiring for the static `#sessSearch` input: placeholder follows the
+// locale on every render, listeners attach once. Returns the input or null.
+function ensureSessSearch() {
+  const search = document.getElementById("sessSearch");
+  if (!search) return null;
+  search.placeholder = t("web.sessions.search");
+  search.setAttribute("aria-label", t("web.sessions.search"));
+  if (!sessSearchWired) {
+    sessSearchWired = true;
+    search.addEventListener("click", (e) => e.stopPropagation());
+    search.addEventListener("input", () => {
+      sessQuery = search.value;
+      renderSessionsDropdown();
+      // Re-render must not steal the caret: the input node itself survives
+      // (only the lists redraw), but re-query it to be safe.
+      const again = document.getElementById("sessSearch");
+      if (again && document.activeElement !== again) again.focus();
+    });
+    search.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        if (search.value) {
+          e.preventDefault();
+          search.value = "";
+          sessQuery = "";
+          renderSessionsDropdown();
+          search.focus();
+        } else {
+          setSessOpen(false);
+        }
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        const first = document.querySelector("#sessActiveList .si-row .dd-row-main, #sessRecentList .si-row .dd-row-main");
+        if (first) first.focus();
+      }
+    });
+  }
+  return search;
+}
+
 export function renderSessionsDropdown() {
+  ensureSessSearch();
   const activeList = document.getElementById("sessActiveList");
   const recentList = document.getElementById("sessRecentList");
+  const activeHeader = document.getElementById("sessActiveHeader");
+  const recentHeader = document.getElementById("sessRecentHeader");
   activeList.textContent = "";
   recentList.textContent = "";
+  const q = sessQuery.trim();
   const activeId = S.state.activeSessionId;
   const sorted = S.state.sessions.slice().sort((a, b) => {
     const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
     const bt = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
     return bt - at;
-  });
+  }).filter((s) => matchesQuery((s.name || "") + " " + String(s.id || ""), q));
   let activePlaced = false;
+  let recentPlaced = false;
   sorted.forEach((s) => {
     const isActive = s.id === activeId;
     const row = sessionRow(s, isActive);
@@ -224,13 +276,27 @@ export function renderSessionsDropdown() {
       activePlaced = true;
     } else {
       recentList.appendChild(row);
+      recentPlaced = true;
     }
   });
-  if (!activePlaced) {
-    activeList.appendChild(el("div", "si", t("web.sessions.none_active")));
-  }
-  if (!recentList.childNodes.length) {
-    recentList.appendChild(el("div", "si", t("web.sessions.none")));
+  if (q) {
+    // Filtered view: empty sections hide with their headers; zero hits total
+    // show a single no-matches row instead of the unfiltered placeholders.
+    if (activeHeader) activeHeader.hidden = !activePlaced;
+    if (recentHeader) recentHeader.hidden = !recentPlaced;
+    if (!activePlaced && !recentPlaced) {
+      if (recentHeader) recentHeader.hidden = true;
+      recentList.appendChild(el("div", "si dim", t("web.settings.no_matches")));
+    }
+  } else {
+    if (activeHeader) activeHeader.hidden = false;
+    if (recentHeader) recentHeader.hidden = false;
+    if (!activePlaced) {
+      activeList.appendChild(el("div", "si", t("web.sessions.none_active")));
+    }
+    if (!recentPlaced) {
+      recentList.appendChild(el("div", "si", t("web.sessions.none")));
+    }
   }
   if (S.state.sessionsError) {
     recentList.appendChild(el("div", "dd-err", S.state.sessionsError));
@@ -304,11 +370,28 @@ const sessBtn = document.getElementById("sessBtn");
 export function setSessOpen(open) {
   sessDD.classList.toggle("open", !!open);
   sessBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  if (!open && sessQuery) {
+    // Closing wipes the filter so the next opening starts from the full list.
+    sessQuery = "";
+    const search = document.getElementById("sessSearch");
+    if (search && search.value) {
+      search.value = "";
+      renderSessionsDropdown();
+    }
+  }
+}
+function focusSessSearch() {
+  setTimeout(() => {
+    const search = document.getElementById("sessSearch");
+    if (search) search.focus();
+  }, 0);
 }
 sessBtn.addEventListener("click", (e) => {
   e.stopPropagation();
   document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
-  setSessOpen(!sessDD.classList.contains("open"));
+  const willOpen = !sessDD.classList.contains("open");
+  setSessOpen(willOpen);
+  if (willOpen) focusSessSearch();
 });
 
 // --- mobile session sub-header -------------------------------------------
@@ -370,7 +453,9 @@ if (sessCloseBtn) sessCloseBtn.addEventListener("click", () => {
 if (sessNameBtn) sessNameBtn.addEventListener("click", (e) => {
   e.stopPropagation();
   document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
-  setSessOpen(!sessDD.classList.contains("open"));
+  const willOpen = !sessDD.classList.contains("open");
+  setSessOpen(willOpen);
+  if (willOpen) focusSessSearch();
 });
 if (typeof window.matchMedia === "function") {
   const narrowMq = window.matchMedia("(max-width: 760px)");

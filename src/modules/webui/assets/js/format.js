@@ -90,6 +90,14 @@ for (const raw of text.split("\n")) {
 return "";
 }
 
+// Case-insensitive substring match for dropdown filters (model / session
+// search). Empty query matches everything; non-strings stringify safely.
+export function matchesQuery(haystack, q) {
+const needle = String(q == null ? "" : q).trim().toLowerCase();
+if (!needle) return true;
+return String(haystack == null ? "" : haystack).toLowerCase().indexOf(needle) !== -1;
+}
+
 export function relTime(ts) {
 if (!ts) return "";
 const diff = Date.now() - new Date(ts).getTime();

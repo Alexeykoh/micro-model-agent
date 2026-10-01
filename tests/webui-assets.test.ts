@@ -325,4 +325,26 @@ describe("webui assets", () => {
     expect(a.js).toContain('sidebarTraceEvent("error"');
     expect(a.js).toContain("sidebarTurnEnd(");
   });
+
+  it("filters the composer model dropdown through a search field", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(src).toContain("selModelSearch");
+    expect(src).toContain("web.selectors.search_models");
+    expect(src).toContain("model-menu-list");
+    expect(src).toContain("matchesQuery(");
+    expect(a.css).toContain(".menu .searchbox");
+    expect(a.css).toContain(".model-menu-list");
+  });
+
+  it("filters the sessions dropdown by name and id through a static search field", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(a.html).toContain('id="sessSearch"');
+    expect(src).toContain("sessSearch");
+    expect(src).toContain("web.sessions.search");
+    expect(src).toContain("sessQuery");
+    expect(src).toContain("ensureSessSearch(");
+    expect(a.css).toContain(".dd-menu .searchbox");
+  });
 });
