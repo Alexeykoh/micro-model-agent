@@ -95,6 +95,7 @@ export function createBrowserTool(): ToolDefinition {
       "Do NOT use it for search queries: search engines (Google, Yandex, Bing) block headless browsers with CAPTCHA/429/redirect pages — use the web_search tool for searching.",
       "Each snapshot returns: a numbered list of interactive elements, the visible page text (Content section), browser console messages, and network errors.",
       "Use the Content section to understand what the page says; use element numbers as targets for click/type.",
+      "Without vision capabilities screenshots return only a text note — verify visuals through snapshot text, and for local web UI prefer DOM/API assertions (fetch /api/* endpoints, grep built assets) over driving the browser.",
       "Actions: open (url), click (target), type (target, text), scroll (direction), back, forward, screenshot, snapshot, close, wait (ms).",
     ].join(" "),
     parameters: {

@@ -132,6 +132,8 @@ export function buildSystemInfo(
     `runs the old pipeline and keeps failing after the fix.`,
     `Restart/kill it (process_kill) and verify the exact endpoint/port reported —`,
     `a fresh port does NOT prove the user's error is gone.`,
+    `Verification "mma web" servers run isolated (MMA_CONFIG_DIR=<empty tmp dir>) —`,
+    `never verify against the user's live server/sessions/state.`,
   );
 
   // Правила безопасности: при включённой защите модель должна знать ограничения

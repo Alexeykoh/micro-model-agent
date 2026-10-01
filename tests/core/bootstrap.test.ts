@@ -269,6 +269,14 @@ describe("bootstrap", () => {
     expect(info).toContain("plan_step");
   });
 
+  it("isolates verification web servers from user state (ses_mup6p61q F3)", () => {
+    // Проверочный `mma web` на боевом ~/.mma трогал живые сессии/конфиг
+    // пользователя — только изолированный MMA_CONFIG_DIR.
+    const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32 shell=cmd");
+    expect(info).toContain("MMA_CONFIG_DIR");
+    expect(info).toContain("isolated");
+  });
+
   it("states explicit DONE conditions so the model knows when to stop", () => {
     const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32");
     expect(info).toContain("DONE CONDITIONS");

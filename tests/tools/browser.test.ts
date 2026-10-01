@@ -25,6 +25,14 @@ describe("createBrowserTool", () => {
     expect(props.action.enum).toContain("close");
     expect(tool.parameters.required).toContain("action");
   });
+
+  it("tells text-only models to prefer DOM/API assertions (ses_mup6p61q F3)", () => {
+    // 7 browser-вызовов вслепую: скриншот недоступен текстовой модели,
+    // снапшоты не показали сайдбар — API/DOM-проверки были бы сразу точнее.
+    const tool = createBrowserTool();
+    expect(tool.description).toContain("Without vision");
+    expect(tool.description).toContain("/api/");
+  });
 });
 
 describe("formatScreenshotForTextModel", () => {
