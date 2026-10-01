@@ -1189,7 +1189,7 @@ export class Repl implements ReplContext, Host {
     );
     row(
       t("repl.context"),
-      `${pc.white(String(ctx))}  ${pc.dim(`(sys:${sysBudget}  res:${resBudget}  hist:${histBudget})`)}`,
+      `${pc.white(String(ctx))}  ${pc.dim(`(${t("repl.ctx_part_system")}:${sysBudget}  ${t("repl.ctx_part_reserve")}:${resBudget}  ${t("repl.ctx_part_history")}:${histBudget})`)}`,
     );
 
     const si = this.agent.getSystemPromptInfo();
