@@ -340,7 +340,6 @@ export function setStaleBar(stale, force) {
   if (!on) return;
   staleBar.appendChild(el("span", "", "⚠ " + t("web.i18n.stale") + " "));
   staleBar.appendChild(link(t("web.i18n.reload"), "", () => location.reload()));
-}
   return lastStale;
 }
 

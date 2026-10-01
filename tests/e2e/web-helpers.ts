@@ -77,9 +77,15 @@ export async function launch(url: string): Promise<Launched> {
   await page.goto(`${url}/`, { waitUntil: "domcontentloaded", timeout: 15_000 });
   await page.waitForSelector(".bar-top", { timeout: 10_000 });
   // Let the boot sequence (i18n, config, sessions) settle before scenarios.
-  await page.waitForFunction(() => document.querySelector("#msgs .empty, #msgs .feed"), {
-    timeout: 15_000,
-  });
+  // On failure name the collected console/page errors: a dead feed is usually
+  // a broken frontend module (e.g. Uncaught SyntaxError kills the import graph).
+  try {
+    await page.waitForFunction(() => document.querySelector("#msgs .empty, #msgs .feed"), {
+      timeout: 15_000,
+    });
+  } catch (err) {
+    throw new Error(`feed never booted; console/page errors: ${errors.join(" | ") || "(none)"} — ${String(err)}`);
+  }
   return { browser, page, errors };
 }
 
