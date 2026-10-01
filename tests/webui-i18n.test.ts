@@ -60,6 +60,16 @@ describe("webui i18n", () => {
     });
   });
 
+  it("stale-banner keys resolve in both locales (no raw keys in chrome)", () => {
+    // Регрессия F1: ключи были потеряны `git checkout --` при живой проверке
+    // и ни один тест не заметил — бейдж показывал бы сырые ключи.
+    const dicts = getFlatDicts();
+    for (const key of ["web.i18n.stale", "web.i18n.reload"]) {
+      expect(typeof dicts.en[key], `${key} (en)`).toBe("string");
+      expect(typeof dicts.ru[key], `${key} (ru)`).toBe("string");
+    }
+  });
+
   it("POST /api/config {locale} applies setLocale process-wide", async () => {
     const s = createWebUiState();
     s.config = testConfig();
