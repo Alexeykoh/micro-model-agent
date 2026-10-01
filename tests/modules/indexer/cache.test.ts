@@ -118,6 +118,79 @@ describe("IndexCache validation", () => {
     expect(cacheFor(dir).load()).toBeNull();
   });
 
+  it("rejects a cache written by a newer schema version", async () => {
+    const dir = makeProject();
+    const cacheDir = join(dir, ".mma");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      join(cacheDir, "index-cache.json"),
+      JSON.stringify({
+        version: CACHE_VERSION + 1,
+        root: dir,
+        signature: new Indexer(dir).scanSignature(),
+        result: { files: [], totalSize: 0 },
+      }),
+    );
+    expect(cacheFor(dir).load()).toBeNull();
+  });
+
+  it("rejects an envelope whose result has a foreign shape (no files array)", async () => {
+    // Чужая версия агента / будущая схема: версия совпала, форма — нет.
+    // Без проверки формы это падало бы на `index.files.length` при старте.
+    const dir = makeProject();
+    const cacheDir = join(dir, ".mma");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      join(cacheDir, "index-cache.json"),
+      JSON.stringify({
+        version: CACHE_VERSION,
+        root: dir,
+        signature: new Indexer(dir).scanSignature(),
+        result: { totalSize: 0 },
+      }),
+    );
+    expect(cacheFor(dir).load()).toBeNull();
+  });
+
+  it("rejects an envelope with malformed file entries", async () => {
+    const dir = makeProject();
+    const cacheDir = join(dir, ".mma");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      join(cacheDir, "index-cache.json"),
+      JSON.stringify({
+        version: CACHE_VERSION,
+        root: dir,
+        signature: new Indexer(dir).scanSignature(),
+        result: { files: [{ path: 42, language: "ts", exports: [], size: 1 }], totalSize: 1 },
+      }),
+    );
+    expect(cacheFor(dir).load()).toBeNull();
+  });
+
+  it("buildIndex rebuilds instead of crashing on a foreign-shape cache file", async () => {
+    // Сценарий пользователя: кэш записала другая версия агента.
+    // Должен быть тихий переобход + самопочинка файла, а не TypeError.
+    const dir = makeProject();
+    const cacheDir = join(dir, ".mma");
+    mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(
+      join(cacheDir, "index-cache.json"),
+      JSON.stringify({
+        version: CACHE_VERSION,
+        root: dir,
+        signature: new Indexer(dir).scanSignature(),
+        result: { files: "oops", totalSize: "lots" },
+      }),
+    );
+    const mod = new IndexerModule({ baseDir: dir, cacheDir });
+    const result = await mod.buildIndex();
+    expect(result?.files).toHaveLength(2);
+    expect(mod.getPromptMap()).toContain("[Index:");
+    // Файл кэша после переобхода снова валиден.
+    expect(cacheFor(dir).load()).not.toBeNull();
+  });
+
   it("invalidate() removes the cache file", async () => {
     const dir = makeProject();
     const cacheDir = join(dir, ".mma");
