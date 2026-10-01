@@ -56,6 +56,15 @@ const EVIDENCE_TEXT_CAP = 400;
 const SNIPPET_MAX_CHARS = 160;
 
 /**
+ * Тулы-блокнот агента: их фейлы — про механику плана (валидация checks,
+ * покрытие шагов), а не про исход задачи; целостность плана полисит финальный
+ * аудит, а не claim-check. Учитывать их здесь — значит ветировать честное
+ * «тесты прошли» из-за stale-ошибки `re-plan` (ses_mupgenhq_75f66l: «Длина
+ * checks должна совпадать с числом шагов» против реально прошедших тестов).
+ */
+const BOOKKEEPING_TOOLS = new Set(["plan", "plan_step", "todo"]);
+
+/**
  * Возвращает противоречащее доказательство, или null если ответ в порядке:
  * нет заявления об успехе, есть хеджирование, или нет сигналов ошибок в свежих тулах.
  */
@@ -65,7 +74,9 @@ export function checkSuccessClaim(
 ): ClaimContradiction | null {
   if (!response || !SUCCESS_CLAIM_RE.test(response)) return null;
   if (HEDGE_RE.test(response)) return null;
-  const recent = tools.filter((t) => t.text?.trim()).slice(-EVIDENCE_WINDOW);
+  const recent = tools
+    .filter((t) => t.text?.trim() && !BOOKKEEPING_TOOLS.has(t.name ?? ""))
+    .slice(-EVIDENCE_WINDOW);
   // Свежайшее противоречие первым — цитируется самое актуальное доказательство.
   for (let i = recent.length - 1; i >= 0; i--) {
     const entry = recent[i];

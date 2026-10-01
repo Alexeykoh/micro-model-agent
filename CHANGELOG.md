@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Success-claim no longer vetoed by plan-bookkeeping failures** (`src/modules/hallucination/success-claim.ts`): `checkSuccessClaim` ignores `plan`/`plan_step`/`todo` evidences — their failures police the agent's own notebook (covered by the final audit), never task outcome. Lived-in case (ses_mupgenhq_75f66l, qwen3.5-9b): an honest "tests passed" was retracted over a stale `re-plan` error ("Длина checks должна совпадать"), forcing a same-substance re-answer after the task was done. Tests: `tests/hallucination-success-claim.test.ts`.
+
 - **Web UI boot was dead on 2.15.0** (`src/modules/webui/assets/js/settings.js`): a stray `}` in `setStaleBar` pushed `return` to top level (`Uncaught SyntaxError: Illegal return statement`), killing the whole `app.js` import graph — blank page, no feed, selectors stuck at `–`. One-line brace fix.
 - **Web e2e boot smoke** (`tests/e2e/web-boot.e2e-test.ts`): `mma web` boots in a real Chromium with zero console/page errors (live session tab, chrome skeleton, settings modal) and every served JS module in the live `/app.js` import graph answers 200; `web-helpers.launch` now names collected console errors when the feed never boots, so the next broken module fails with its `SyntaxError` in the message instead of a bare timeout.
 
