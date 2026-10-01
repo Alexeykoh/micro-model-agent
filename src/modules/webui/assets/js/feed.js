@@ -1121,7 +1121,7 @@ export function renderUsage(h) {
   const cfg = S.state.config || {};
   const sig = JSON.stringify([
     h.sessionId, h.model, h.contextUsed, h.contextLimit, h.cacheHitRate, h.costUsd,
-    h.compactionCount, h.contextQuality, h.contextProbe, cfg.model, cfg.contextWindow,
+    h.compactionCount, h.contextQuality, h.contextProbe, h.contextBreakdown, cfg.model, cfg.contextWindow,
     I18N.locale,
   ]);
   if (sig === S.lastUsageSig) return;

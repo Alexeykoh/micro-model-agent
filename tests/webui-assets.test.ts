@@ -269,6 +269,16 @@ describe("webui assets", () => {
     expect(a.css).toContain("--seg-system");
   });
 
+  it("includes the breakdown in the usage re-render signature (ses_mup6p61q)", () => {
+    // Без h.contextBreakdown в sig смена частей при тех же used/limit
+    // не перерисовывала полосу и легенду (stale UI).
+    const a = loadAssets();
+    const src = js(a);
+    const sigIdx = src.indexOf("S.lastUsageSig");
+    expect(sigIdx).toBeGreaterThan(-1);
+    expect(src.slice(Math.max(0, sigIdx - 700), sigIdx)).toContain("h.contextBreakdown");
+  });
+
   it("hides the Trace tab on mobile and applies sidebar i18n on boot", () => {
     const a = loadAssets();
     expect(a.css).toContain('.sb-tab[data-tab="trace"]');

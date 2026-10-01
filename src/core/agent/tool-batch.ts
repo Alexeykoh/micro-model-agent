@@ -68,8 +68,64 @@ export interface ToolBatchExecution {
  * Не знает о структуре цикла — возвращает флаг `interrupted`, решение о
  * `break`/`continue` принимает вызывающий цикл.
  */
-export class ToolBatchExecutor {
-  constructor(private readonly deps: ToolBatchDeps) {}
+
+/** Диагноз повторных падений тула для записи в память. */
+export interface RepeatedFailureDiagnosis {
+  /** true — промах модели, а не системы: в глобальную память не писать. */
+  skip: boolean;
+  cause: string;
+  solution: string;
+}
+
+/**
+ * Диагноз по сигнатуре ошибок (ses_mup6p61q): раньше в память шёл boilerplate
+ * («проверьте зависимости») и туда же попадали собственные промахи модели
+ * (несуществующий путь теста как «системная проблема bash»).
+ * - bash с «не найдено/не сматчилось» по именованной моделью цели → skip;
+ * - edit_file «строка не найдена» → гипотеза расхождения якоря (CRLF/устаревшее
+ *   чтение), а не сломанный тул;
+ * - остальное → запись с наблюдаемыми заголовками ошибок.
+ */
+export function diagnoseRepeatedFailures(
+  tool: string,
+  headlines: string[],
+): RepeatedFailureDiagnosis {
+  const genericCause =
+    "Repeated failures suggest a systemic problem (config, environment, or a broken tool), not a one-off";
+  const genericSolution =
+    "Check the error message, verify the tool's dependencies are installed/configured, and consider a different tool";
+
+  const modelMiss =
+    tool === "bash"
+      ? [/did not match any test files?/i, /no such file/i, /cannot find (the )?path/i]
+      : [];
+  if (
+    headlines.length > 0 &&
+    headlines.every(
+      (h) => /^\(exit code \d+\)$/.test(h.trim()) || modelMiss.some((re) => re.test(h)),
+    )
+  ) {
+    return {
+      skip: true,
+      cause: "Model named a wrong target (path/filter); the tool itself works",
+      solution: "Re-check the target path or filter instead of blaming the tool",
+    };
+  }
+
+  if (tool === "edit_file" && headlines.some((h) => /string not found|не найдена/i.test(h))) {
+    return {
+      skip: false,
+      cause:
+        "Anchor mismatch between the model anchor and file content — often CRLF vs LF line endings or a stale read, not a broken tool",
+      solution:
+        "Re-read the exact block with read_file and retry with a short unique single-line anchor",
+    };
+  }
+
+  return { skip: false, cause: genericCause, solution: genericSolution };
+}
+
+export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDeps) {}
 
   /**
    * Выполняет пакет tool_calls одной итерации (контекст, UI, учёт неудач).
@@ -310,19 +366,25 @@ export class ToolBatchExecutor {
       // до памяти по пути "5 подряд неудач").
       if (!result.success && !result.blocked && !infoTools.has(call.name)) {
         const key = call.name;
-        const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "" };
+        const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
         prev.count++;
-        prev.error = String(result.output ?? "").slice(0, 200);
+        const errText = String(result.output ?? "");
+        prev.error = errText.slice(0, 200);
+        const headline = errText.split("\n")[0].slice(0, 160).trim();
+        if (headline && !prev.samples.includes(headline) && prev.samples.length < 3) {
+          prev.samples.push(headline);
+        }
         state.toolFailureCounts.set(key, prev);
         if (prev.count >= MIN_REPEATED_TOOL_FAILURES && !state.memoryRuleRecorded.has(key)) {
           state.memoryRuleRecorded.add(key);
           const memStore = this.deps.memoryStore;
-          if (memStore) {
+          const diagnosis = diagnoseRepeatedFailures(key, prev.samples);
+          if (memStore && !diagnosis.skip) {
             memStore.appendRule(
               "errors",
-              `Tool ${key} failed ${prev.count}x (${prev.error})`,
-              `Repeated ${key} failures suggest a systemic problem (config, environment, or a broken tool), not a one-off`,
-              "Check the error message, verify the tool's dependencies are installed/configured, and consider a different tool",
+              `Tool ${key} failed ${prev.count}x (${prev.samples.join(" | ") || prev.error})`,
+              diagnosis.cause,
+              diagnosis.solution,
             );
             logger.diagnostic(
               "warn",

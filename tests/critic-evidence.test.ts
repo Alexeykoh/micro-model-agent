@@ -1,8 +1,18 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import { buildEvidencePack, isWorkMutation } from "../src/modules/critic/evidence";
+
+function gitAvailable(): boolean {
+  try {
+    execFileSync("git", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("critic evidence", () => {
   it("detects work mutations", () => {
@@ -79,8 +89,7 @@ describe("critic evidence", () => {
     });
   });
 
-  describe("answer excerpt", () => {
-    it("carries the chat answer for mutation-free turns", () => {
+  describe("answer excerpt", () => {    it("carries the chat answer for mutation-free turns", () => {
       const pack = buildEvidencePack({
         task: "покажи пример кода react",
         toolEvents: [],
@@ -105,4 +114,54 @@ describe("critic evidence", () => {
       expect(pack.answerExcerpt!.length).toBeLessThanOrEqual(2000);
     });
   });
+
+  // runIf нет в раннере (bun test) — обычный условный describe.
+  if (gitAvailable()) {
+    describe("git fallback", () => {
+    let tmpDir = "";
+    afterEach(() => {
+      if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+      tmpDir = "";
+    });
+
+    function initRepo(): void {
+      const opts = { cwd: tmpDir, stdio: "ignore" } as const;
+      execFileSync("git", ["init"], opts);
+      execFileSync("git", ["config", "user.email", "t@t.t"], opts);
+      execFileSync("git", ["config", "user.name", "t"], opts);
+      execFileSync("git", ["config", "commit.gpgsign", "false"], opts);
+      writeFileSync(join(tmpDir, "tracked.txt"), "v1\n");
+      execFileSync("git", ["add", "."], opts);
+      execFileSync("git", ["commit", "-m", "init"], opts);
+    }
+
+    it("sees files changed outside file tools (ses_mup6p61q)", () => {
+      // Кейс сессии: палитра внесена Bun-скриптом через bash — в событиях
+      // тулов styles.css нет, но в git diff он есть. Критик без добивки
+      // выдал ложный concern.
+      tmpDir = mkdtempSync(join(tmpdir(), "mma-critic-git-"));
+      initRepo();
+      writeFileSync(join(tmpDir, "tracked.txt"), "v2\n"); // мимо edit_file
+      writeFileSync(join(tmpDir, "new.txt"), "new\n"); // untracked
+
+      const pack = buildEvidencePack({
+        task: "recolor",
+        baseDir: tmpDir,
+        toolEvents: [{ tool: "bash", args: { command: "bun scripts/fix.mjs" }, ok: true }],
+      });
+      expect(pack.changedFiles).toContain("tracked.txt");
+      expect(pack.changedFiles).toContain("new.txt");
+    });
+
+    it("is fail-open outside a repo", () => {
+      tmpDir = mkdtempSync(join(tmpdir(), "mma-critic-nogit-"));
+      const pack = buildEvidencePack({
+        task: "t",
+        baseDir: tmpDir,
+        toolEvents: [{ tool: "edit_file", args: { path: "a.ts" }, ok: true }],
+      });
+      expect(pack.changedFiles).toEqual(["a.ts"]);
+    });
+    });
+  }
 });

@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plan auto-advance no longer completes modify-steps on stale files** (`src/modules/execution/module.ts`): `advancePlanIfStepComplete` and final-audit `autoCloseEvidenceSteps` now require `provablyStale()` to be false — every named file must be created/modified after `plan.createdAt` (fail-open on bad dates and unreadable mtimes, delete-kind unchanged). Previously a step naming a long-existing file auto-completed before a line of code was written (observed: 6 plan steps auto-closed while the agent was still on step 1). Tests: `tests/execution-plan-deliverables.test.ts`.
+- **Critic evidence includes git-tracked changes** (`src/modules/critic/evidence.ts`): `buildEvidencePack` unions tool-arg file lists with `git status --porcelain` (staged + unstaged + untracked, capped, fail-open outside repos), so edits made outside file tools (helper scripts via bash, heredocs) no longer produce false `concern` verdicts about missing changes. Tests: `tests/critic-evidence.test.ts`.
+- **Repeated-failure memory writes are diagnosed, model misses skipped** (`src/core/agent/tool-batch.ts`, `loop-state.ts`): `diagnoseRepeatedFailures()` records distinct error headlines with signature-based cause/solution (edit_file anchor miss → CRLF/stale-read hypothesis) and skips global-memory writes for model errors (invented test paths, exit-code-only grep misses). Previously boilerplate causes and the model's own wrong guesses landed in `errors.md`. Tests: `tests/tool-failure-diagnosis.test.ts`.
+- **Factual check resolves path suffixes** (`src/modules/hallucination/factual.ts`): `webui/state.ts` now matches `src/modules/webui/state.ts` via the cached basename index (no new FS walks), fixing false "mentioned files not found" warnings on short paths. Tests: `tests/hallucination-factual.test.ts`.
+- **`edit_file` tolerates LF anchors in CRLF files** (`src/tools/edit-file.ts`): `spliceNormalized()` matches on normalized line endings and splices the original, keeping the file's ending style (no more "string not found" loops on Windows checkouts). Tests: `tests/edit-file.test.ts`.
+- **Web usage re-render covers the context breakdown** (`src/modules/webui/assets/js/feed.js`): `h.contextBreakdown` added to the `renderUsage` signature so part shifts at constant used/limit repaint the segmented bar and legend. Guard: `tests/webui-assets.test.ts`.
+
 ## [2.14.0] - 2026-10-01
 
 ### Changed
