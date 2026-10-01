@@ -3,6 +3,7 @@
 // истории здесь нет.
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
+import type { ContextBreakdown } from "../../core/types";
 import type { AppConfig } from "../../config/types";
 import type { SessionMeta, SessionMessage } from "../../modules/session/types";
 import type { SessionLogEntry } from "../../modules/session/store";
@@ -101,6 +102,7 @@ export interface UsageSnapshot {
   cacheHitRate?: number;
   cacheSaved?: number;
   contextQuality?: number;
+  contextBreakdown?: ContextBreakdown;
 }
 
 /** Состояние веб-модуля: сервер, клиенты, мост хоста, коллабораторы REST. */

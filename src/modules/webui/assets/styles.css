@@ -54,6 +54,12 @@
   --checker-border: #2e2e2e;
   --ph-light: #eaeef2;
   --track: #262626;
+  /* Context-breakdown segments (system/tools/history/reserve/free). */
+  --seg-system: #a78bfa;
+  --seg-tools: #38bdf8;
+  --seg-history: #34d399;
+  --seg-reserve: #fbbf24;
+  --seg-free: #3f3f46;
   --plan-line: #2e2e2e;
   --plan-bar-fg: #a3a3a3;
   --sec-h: #a3a3a3;
@@ -124,6 +130,12 @@ body.light {
   --checker-border: #d0d7de;
   --ph-light: #eaeef2;
   --track: #eaeef2;
+  /* Context-breakdown segments (system/tools/history/reserve/free). */
+  --seg-system: #7c3aed;
+  --seg-tools: #0284c7;
+  --seg-history: #059669;
+  --seg-reserve: #d97706;
+  --seg-free: #d0d7de;
   --plan-line: #d0d7de;
   --plan-bar-fg: #57606a;
   --sec-h: #57606a;
@@ -840,6 +852,26 @@ body.light .kv .wn { color: var(--yellow); }
 #env .env-v { color: var(--dim-b); font-size: 11.5px; overflow-wrap: anywhere; }
 .bar { height: 4px; background: var(--track); border-radius: 2px; margin-top: 6px; overflow: hidden; }
 .bar i { display: block; height: 100%; width: 0; background: var(--green-fill); transition: width .2s; }
+
+/* Segmented context bar: flex row so widths add up to the full window. */
+.bar.segbar { display: flex; }
+.bar.segbar i { width: auto; flex: 0 0 auto; transition: width .25s; }
+.bar.segbar .seg-system { background: var(--seg-system); }
+.bar.segbar .seg-tools { background: var(--seg-tools); }
+.bar.segbar .seg-history { background: var(--seg-history); }
+.bar.segbar .seg-reserve { background: var(--seg-reserve); }
+.bar.segbar .seg-free { background: var(--seg-free); }
+/* Legend of context parts (dim dot + label + tokens): rows, no boxes. */
+.seglegend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 5px; }
+.segl-item { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dim-b); }
+.segl-dot { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 auto; }
+.segl-dot.seg-system { background: var(--seg-system); }
+.segl-dot.seg-tools { background: var(--seg-tools); }
+.segl-dot.seg-history { background: var(--seg-history); }
+.segl-dot.seg-reserve { background: var(--seg-reserve); }
+.segl-dot.seg-free { background: var(--seg-free); }
+.segl-item b { color: var(--muted); font-weight: 600; }
+.segl-label { color: var(--dim-b); }
 
 /* ---- settings modal + nested dialogs (provider, confirm) ---- */
 .overlay {

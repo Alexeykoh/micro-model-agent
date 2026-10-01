@@ -257,6 +257,18 @@ describe("webui assets", () => {
     expect(a.jsModules?.["js/sidebar.js"]).toBeTruthy();
   });
 
+  it("renders the context breakdown as a segmented bar with a legend", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(src).toContain("contextSegBar(");
+    expect(src).toContain("contextLegend(");
+    expect(src).toContain("web.usage.part_system");
+    expect(src).toContain("seg-free");
+    expect(a.css).toContain(".bar.segbar");
+    expect(a.css).toContain(".seglegend");
+    expect(a.css).toContain("--seg-system");
+  });
+
   it("hides the Trace tab on mobile and applies sidebar i18n on boot", () => {
     const a = loadAssets();
     expect(a.css).toContain('.sb-tab[data-tab="trace"]');

@@ -1039,6 +1039,58 @@ function usageRow(label, value, cls) {
   return row;
 }
 
+// Segmented context bar: system · tools · history · reserve · free, widths
+// relative to the full context window so the parts always sum to one bar.
+function contextSegBar(h, used, limit) {
+  const bar = el("div", "bar segbar");
+  const bd = h.contextBreakdown;
+  if (!bd || typeof bd.window !== "number" || bd.window <= 0) {
+    // Legacy fallback (pre-breakdown payloads): single used/limit fill.
+    const fill = el("i");
+    fill.style.width = Math.min(100, Math.round((used / limit) * 100)) + "%";
+    bar.appendChild(fill);
+    return bar;
+  }
+  const denom = Math.max(bd.window, bd.used + bd.reserve);
+  const parts = [
+    ["seg-system", bd.system],
+    ["seg-tools", bd.tools],
+    ["seg-history", bd.history],
+    ["seg-reserve", bd.reserve],
+    ["seg-free", bd.free],
+  ];
+  for (const [cls, n] of parts) {
+    if (!n || n <= 0) continue;
+    const seg = el("i", cls);
+    seg.style.width = (n / denom) * 100 + "%";
+    bar.appendChild(seg);
+  }
+  return bar;
+}
+
+// Dim legend under the segmented bar: one dot+label+value per context part.
+function contextLegend(h) {
+  const box = el("div", "seglegend");
+  const bd = h.contextBreakdown;
+  if (!bd) return box;
+  const items = [
+    ["seg-system", "web.usage.part_system", bd.system],
+    ["seg-tools", "web.usage.part_tools", bd.tools],
+    ["seg-history", "web.usage.part_history", bd.history],
+    ["seg-reserve", "web.usage.part_reserve", bd.reserve],
+    ["seg-free", "web.usage.part_free", bd.free],
+  ];
+  for (const [cls, labelKey, n] of items) {
+    if (!n || n <= 0) continue;
+    const item = el("span", "segl-item");
+    item.appendChild(el("i", "segl-dot " + cls));
+    item.appendChild(el("span", "segl-label", t(labelKey)));
+    item.appendChild(el("b", "", fmtTokens(n)));
+    box.appendChild(item);
+  }
+  return box;
+}
+
 // Session row with a copy button next to the id (icon-only, ✓ on success).
 function usageSessionRow(sessionId) {
   const row = el("div", "kv");
@@ -1082,11 +1134,8 @@ export function renderUsage(h) {
   const limit = typeof h.contextLimit === "number" ? h.contextLimit : cfg.contextWindow || null;
   usageEl.appendChild(usageRow(t("web.usage.context"), used != null && limit ? fmtTokens(used) + " / " + fmtTokens(limit) : "—"));
   if (used != null && limit) {
-    const bar = el("div", "bar");
-    const fill = el("i");
-    fill.style.width = Math.min(100, Math.round((used / limit) * 100)) + "%";
-    bar.appendChild(fill);
-    usageEl.appendChild(bar);
+    usageEl.appendChild(contextSegBar(h, used, limit));
+    usageEl.appendChild(contextLegend(h));
   }
   const hit = typeof h.cacheHitRate === "number" ? h.cacheHitRate : null;
   usageEl.appendChild(usageRow(t("web.usage.cache"), hit != null ? Math.round(hit * 100) + "%" : "—", hit != null ? "" : "dim"));
