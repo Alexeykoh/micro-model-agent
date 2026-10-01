@@ -104,6 +104,32 @@ export interface SubtaskContext {
   input_from?: string[];
 }
 
+/**
+ * Сегментная разбивка контекста по частям (для полосы в UI/сайдбаре).
+ * Инвариант: `system + tools + history === used` (system — часть сообщений),
+ * `reserve` — отдельный бюджет ответа, `free` — остаток бюджета истории.
+ */
+export interface ContextBreakdown {
+  /** Токены системного сообщения (промпт, AGENTS.md). */
+  system: number;
+  /** Токены определений тулов (схемы JSON). */
+  tools: number;
+  /** Токены сообщений истории (всё, кроме system). */
+  history: number;
+  /** Всего занято = system + tools + history. */
+  used: number;
+  /** Бюджет системного промпта. */
+  systemBudget: number;
+  /** Бюджет истории. */
+  historyBudget: number;
+  /** Зарезервировано под ответ модели. */
+  reserve: number;
+  /** Свободный остаток бюджета истории (не ниже нуля). */
+  free: number;
+  /** Полное окно контекста. */
+  window: number;
+}
+
 /** Итог прогона: успех, текст, токены, стоимость, качество контекста. */
 export interface AgentResult {
   success: boolean;
@@ -137,6 +163,8 @@ export interface AgentResult {
   };
   compactionCount?: number;
   contextQuality?: number;
+  /** Сегментная разбивка контекста (system/tools/history/reserve/free). */
+  contextBreakdown?: ContextBreakdown;
   /** Провайдер этого прогона. */
   provider?: string;
   /** Модель этого прогона. */

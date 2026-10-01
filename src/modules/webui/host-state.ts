@@ -53,6 +53,7 @@ export function captureUsage(result: AgentResult, fallbackLimit?: number): Usage
     if (typeof result.cache.saved === "number") usage.cacheSaved = result.cache.saved;
   }
   if (typeof result.contextQuality === "number") usage.contextQuality = result.contextQuality;
+  if (result.contextBreakdown) usage.contextBreakdown = result.contextBreakdown;
   return usage;
 }
 
@@ -85,6 +86,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     compactionCount: deps.usage?.compactionCount,
     cacheHitRate: deps.usage?.cacheHitRate,
     contextQuality: deps.usage?.contextQuality,
+    contextBreakdown: deps.usage?.contextBreakdown,
     contextProbe: deps.contextProbe,
     workspace: deps.workspace,
     instructions: deps.instructions,

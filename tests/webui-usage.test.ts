@@ -129,6 +129,51 @@ describe("webui usage metrics", () => {
     expect(s.usage).toEqual({ contextLimit: 49152 });
   });
 
+  it("captureUsage maps the context breakdown", () => {
+    const bd = {
+      system: 3000,
+      tools: 12000,
+      history: 5000,
+      used: 20000,
+      systemBudget: 8000,
+      historyBudget: 60000,
+      reserve: 12000,
+      free: 40000,
+      window: 80000,
+    };
+    const usage = captureUsage(
+      { success: true, text: "", iterationCount: 1, contextUsed: 20000, contextBreakdown: bd },
+      32768,
+    );
+    expect(usage.contextBreakdown).toEqual(bd);
+  });
+
+  it("buildHostState surfaces the context breakdown in the snapshot", () => {
+    const snapshot = buildHostState(
+      {
+        config: structuredClone(DEFAULTS),
+        usage: {
+          contextUsed: 20000,
+          contextLimit: 60000,
+          contextBreakdown: {
+            system: 3000,
+            tools: 12000,
+            history: 5000,
+            used: 20000,
+            systemBudget: 8000,
+            historyBudget: 60000,
+            reserve: 12000,
+            free: 40000,
+            window: 80000,
+          },
+        },
+      },
+      false,
+    );
+    expect(snapshot.contextBreakdown?.system).toBe(3000);
+    expect(snapshot.contextBreakdown?.reserve).toBe(12000);
+  });
+
   it("GET /api/state reflects usage after a turn", async () => {
     const config = structuredClone(DEFAULTS);
     const bridge = fakeHost({

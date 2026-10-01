@@ -1458,6 +1458,7 @@ export class Agent {
         cache: cacheStats,
         compactionCount: contextManager.getCompactionCount(),
         contextQuality: contextManager.getQuality(),
+        contextBreakdown: contextManager.getBreakdown?.(),
       };
     }
 
@@ -1482,6 +1483,7 @@ export class Agent {
       cache: cacheStats,
       compactionCount: contextManager.getCompactionCount(),
       contextQuality: contextManager.getQuality(),
+      contextBreakdown: contextManager.getBreakdown?.(),
       llmDurationMs: state.totalLlmDuration,
     };
   }

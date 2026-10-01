@@ -589,6 +589,11 @@ describe("ContextManager snapshot", () => {
     expect(snap.quality).toBeGreaterThanOrEqual(0);
     expect(snap.compactionCount).toBe(0);
     expect(snap.iterationsSinceCompaction).toBe(0);
+    const b = snap.breakdown;
+    expect(b.used).toBe(snap.tokens);
+    expect(b.system + b.tools + b.history).toBe(b.used);
+    expect(b.tools).toBe(100);
+    expect(b.used + b.reserve + b.free).toBe(b.window);
   });
 });
 

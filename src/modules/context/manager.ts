@@ -3,6 +3,8 @@ import type { ContentPart, TextPart } from "../../llm/provider";
 import { getMessageText } from "../../llm/provider";
 import { FactExtractor } from "./fact-extractor";
 import { truncate } from "../../utils/truncate";
+import type { ContextBreakdown } from "../../core/types";
+export type { ContextBreakdown };
 
 /** Сообщение истории: роль, контент, tool-метаданные. */
 export interface Message {
@@ -61,6 +63,8 @@ export interface ContextSnapshot {
   quality: number;
   compactionCount: number;
   iterationsSinceCompaction: number;
+  /** Разбивка контекста по частям (сегменты полосы в UI). */
+  breakdown: ContextBreakdown;
 }
 
 /** Запись "пробовали и не вышло": тул, args, ошибка, счётчик повторов. */
@@ -525,6 +529,36 @@ export class ContextManager {
    * Снапшот текущего состояния контекста — для лога начальной структуры
    * контекста на старте сессии и per-iteration статистики.
    */
+  /** Токены системного сообщения (0, если его нет). */
+  private systemTokens(): number {
+    const sys = this.messages.find((m) => m.role === "system");
+    return sys ? this.estimateMessageTokensCached(sys) : 0;
+  }
+
+  /**
+   * Сегментная разбивка контекста: system / tools / history / reserve / free.
+   * `used` = все сообщения (включая system) + токены тулов, поэтому
+   * `system + tools + history === used` — дерево разбивки сходится.
+   */
+  getBreakdown(): ContextBreakdown {
+    const used = this.getEstimatedTokens();
+    const system = this.systemTokens();
+    const tools = this.toolTokens;
+    const history = Math.max(0, used - system - tools);
+    const b = this.budget;
+    return {
+      system,
+      tools,
+      history,
+      used,
+      systemBudget: b.systemPrompt,
+      historyBudget: b.history,
+      reserve: b.responseReserve,
+      free: Math.max(0, this.contextWindow - used - b.responseReserve),
+      window: this.contextWindow,
+    };
+  }
+
   getSnapshot(): ContextSnapshot {
     return {
       window: this.contextWindow,
@@ -535,6 +569,7 @@ export class ContextManager {
       quality: this.getQuality(),
       compactionCount: this.compactionCount,
       iterationsSinceCompaction: this.iterationsSinceCompaction,
+      breakdown: this.getBreakdown(),
     };
   }
 
