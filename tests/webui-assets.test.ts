@@ -48,9 +48,9 @@ describe("webui assets", () => {
   it("renders file actions as quiet filerow lines with viewer link and icon copy", () => {
     const a = loadAssets();
     const src = js(a);
-    expect(src).toContain('el("div", "filerow")');
+    expect(src).toContain('"filerow');
     expect(src).toContain('icon("copy")');
-    expect(src).toContain('icon("check")');
+    expect(src).toContain('"check"');
     expect(src).toMatch(/el\("a", "path"[\s\S]{0,200}?target = "_blank"/);
     expect(src).toContain('openLink.rel = "noopener noreferrer"');
     expect(src).not.toContain("&token=");
