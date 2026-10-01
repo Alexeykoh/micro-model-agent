@@ -450,7 +450,7 @@ function maybeGroupFilerow(feed, row) {
   const prevRow = prev && prev.classList && prev.classList.contains("filerow") ? prev : null;
   if (group && group.dataset.open !== "1") {
     group.querySelector(".items").appendChild(row);
-    const n = group.querySelectorAll(".items > .filerow").length + 1;
+    const n = group.querySelectorAll(".items > .filerow").length;
     group.querySelector(".count").textContent = n + " files";
     return group;
   }
