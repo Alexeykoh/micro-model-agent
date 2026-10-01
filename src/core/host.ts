@@ -68,6 +68,9 @@ export interface HostStateSnapshot {
   instructions?: { files: string[]; disabled: boolean };
   /** Статистика карты проекта; `indexed:false`, пока обход не завершён. */
   projectMap?: ProjectMapInfo;
+  /** Словари i18n на диске новее старта сервера — клиенту показан бейдж
+   *  «перезапустите сервер» (иначе сырые ключи вместо подписей). */
+  i18nStale?: boolean;
   plan?: {
     steps: { text: string; status: PlanStepStatus }[];
     currentIndex: number;

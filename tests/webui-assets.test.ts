@@ -279,6 +279,14 @@ describe("webui assets", () => {
     expect(src.slice(Math.max(0, sigIdx - 700), sigIdx)).toContain("h.contextBreakdown");
   });
 
+  it("renders a stale-translations banner driven by i18nStale (ses_mup6p61q)", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(src).toContain("setStaleBar(");
+    expect(src).toContain("web.i18n.stale");
+    expect(a.html).toContain('id="staleBar"');
+  });
+
   it("hides the Trace tab on mobile and applies sidebar i18n on boot", () => {
     const a = loadAssets();
     expect(a.css).toContain('.sb-tab[data-tab="trace"]');

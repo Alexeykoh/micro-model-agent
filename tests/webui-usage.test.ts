@@ -174,6 +174,11 @@ describe("webui usage metrics", () => {
     expect(snapshot.contextBreakdown?.reserve).toBe(12000);
   });
 
+  it("buildHostState surfaces the i18n staleness flag (ses_mup6p61q)", () => {
+    const snapshot = buildHostState({ config: structuredClone(DEFAULTS) }, false);
+    expect(typeof snapshot.i18nStale).toBe("boolean");
+  });
+
   it("GET /api/state reflects usage after a turn", async () => {
     const config = structuredClone(DEFAULTS);
     const bridge = fakeHost({

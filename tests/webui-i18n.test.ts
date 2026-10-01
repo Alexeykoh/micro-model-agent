@@ -47,6 +47,19 @@ describe("webui i18n", () => {
     });
   });
 
+  it("GET /api/i18n reports whether server dicts are stale (ses_mup6p61q)", async () => {
+    // Словари на диске новее процесса — клиент показывает бейдж рестарта,
+    // иначе сырые ключи вместо подписей. В тестовом прогоне файлы из
+    // checkout старше процесса, но формально проверяем только форму флага.
+    const s = createWebUiState();
+    s.config = testConfig();
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/i18n`);
+      const body = (await res.json()) as { i18nStale: boolean };
+      expect(typeof body.i18nStale).toBe("boolean");
+    });
+  });
+
   it("POST /api/config {locale} applies setLocale process-wide", async () => {
     const s = createWebUiState();
     s.config = testConfig();

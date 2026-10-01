@@ -15,7 +15,7 @@ loadCommands,
 } from "./js/tabs.js";
 import {
 renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
-loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyFontSize, setConnStatus,
+loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyFontSize, setConnStatus, setStaleBar,
 } from "./js/settings.js";
 import {
 initRail, setPlan as railPlan, railEvent, applyRailI18n,
@@ -88,6 +88,7 @@ function renderState(snapshot, busy) {
   sidebarSessionChanged(sessionId);
   renderWorkspace(S.state.host);
   renderSessionsDropdown();
+  setStaleBar(!!(snapshot && snapshot.i18nStale));
 }
 
 async function refresh() {
@@ -259,6 +260,7 @@ function applyStaticI18n() {
   applySidebarI18n();
   if (msgs.querySelector(".empty")) showEmptyFeed();
   if (connStatus && !connStatus.hidden) setConnStatus(true);
+  setStaleBar(undefined, true);
 }
 
 async function boot() {

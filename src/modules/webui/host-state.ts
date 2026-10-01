@@ -10,6 +10,7 @@ import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
 import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
 import type { UsageSnapshot } from "./state";
+import { isI18nStale } from "./i18n-stale";
 
 /**
  * Узкие входы, читаемые `buildHostState`. Отдельно от `WebUiDeps`, чтобы
@@ -91,6 +92,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     workspace: deps.workspace,
     instructions: deps.instructions,
     projectMap: deps.projectMap ?? undefined,
+    i18nStale: isI18nStale(),
     plan: planSnapshotFromModule(adaptActivePlan(deps.execModule?.getActivePlan())),
   };
 }

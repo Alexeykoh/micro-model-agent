@@ -8,11 +8,14 @@ import type { ServerResponse } from "node:http";
 import { getFlatDicts } from "../../i18n";
 import { sendJson } from "./util";
 import type { WebUiState } from "./state";
+import { isI18nStale } from "./i18n-stale";
 
 /** `GET /api/i18n` — текущая локаль конфига + все плоские словари. */
 export function handleI18nGet(res: ServerResponse, s: WebUiState): void {
   sendJson(res, 200, {
     locale: s.config?.locale ?? "en",
     dicts: getFlatDicts(),
+    // Словари на диске новее процесса — клиенту нужен рестарт сервера.
+    i18nStale: isI18nStale(),
   });
 }
