@@ -50,6 +50,7 @@ export function setSidebarTab(id, persist = true) {
   if (!TABS.includes(id)) id = "session";
   if (persist) storeTab(id);
   const effective = id === "trace" && mqMobile() ? "session" : id;
+  if (effective !== active) collapseDetail();
   active = effective;
   TABS.forEach((name) => {
     const pane = paneEl(name);
@@ -554,6 +555,18 @@ function mapKv(label, value, cls) {
   return row;
 }
 
+// Корень — всегда длинный путь: подпись сверху, путь снизу на всю ширину.
+// В одну flex-строку с подписью он не влезает и склеивается с ней.
+function mapPathRow(label, value) {
+  const wrap = el("div", "map-path");
+  wrap.appendChild(el("span", "dim", label));
+  const b = el("b");
+  b.textContent = value;
+  b.title = value;
+  wrap.appendChild(b);
+  return wrap;
+}
+
 let reindexing = false;   // клиентский спиннер до свежего снапшота
 let postResolved = false; // POST вернулся; следующий снапшот снимет спиннер
 let reindexError = false; // последний POST не удался
@@ -575,7 +588,7 @@ export function sidebarMapState(host) {
   mapEl.appendChild(mapKv(t("web.sidebar.map_files"), num(map.files)));
   mapEl.appendChild(mapKv(t("web.sidebar.map_symbols"), num(map.symbols)));
   mapEl.appendChild(mapKv(t("web.sidebar.map_tokens"), map.indexed ? fmtTokens(map.tokens || 0) : "—"));
-  if (host && host.workspace) mapEl.appendChild(mapKv(t("web.sidebar.map_root"), host.workspace));
+  if (host && host.workspace) mapEl.appendChild(mapPathRow(t("web.sidebar.map_root"), host.workspace));
 
   if (Array.isArray(map.languages) && map.languages.length > 0) {
     const head = el("div", "kv");

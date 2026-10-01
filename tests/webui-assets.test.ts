@@ -279,6 +279,13 @@ describe("webui assets", () => {
     expect(a.js).toContain("sidebarMapState(");
     expect(a.jsModules?.["js/sidebar.js"]).toContain("/api/index");
     expect(a.jsModules?.["js/sidebar.js"]).toBeTruthy();
+    // No horizontal scroll in any tab: sidebar panes clip on x, values wrap.
+    expect(a.css).toContain("overflow-x: hidden");
+    expect(a.css).toContain(".kv > span:first-child");
+    // Trace detail collapses on tab switch; the long map root stacks vertically.
+    expect(a.jsModules?.["js/sidebar.js"]).toContain("collapseDetail()");
+    expect(a.jsModules?.["js/sidebar.js"]).toContain("mapPathRow(");
+    expect(a.css).toContain(".map-path");
   });
 
   it("renders the context breakdown as a segmented bar with a legend", () => {
