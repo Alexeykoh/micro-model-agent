@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Web UI incoming message queue** (`src/modules/webui/state.ts`, `util.ts`, `forward.ts`, `module.ts`, `server.ts`, `run-agent.ts`, `assets/js/tabs.js`): a message sent mid-turn no longer dies on `409 busy` — it queues (`202 {queued: n}`, cap `MAX_QUEUE_LENGTH = 5`, overflow `429 queue_full`) and runs as the next turn on `turn_end`, in order. Drain reuses the single-flight submit path; the queue clears on server stop; `GET /api/state` and SSE `state` carry `queueLen`. The composer stays editable during a turn with a `↳ queued · position N` receipt (`web.input.queued/queue_full`, en+ru; dead `web.input.busy` removed). Docs: `docs/agents/modules.md`. Tests: `tests/webui-server.test.ts`, `tests/webui-auth.test.ts`.
+
 ### Fixed
 
 - **Web UI boot was dead on 2.15.0** (`src/modules/webui/assets/js/settings.js`): a stray `}` in `setStaleBar` pushed `return` to top level (`Uncaught SyntaxError: Illegal return statement`), killing the whole `app.js` import graph — blank page, no feed, selectors stuck at `–`. One-line brace fix.

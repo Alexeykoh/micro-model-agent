@@ -100,7 +100,7 @@ export interface Forwarder {
 export function makeForwarder(
   s: WebUiState,
   sink: (ev: SseEvent) => void = (ev) => broadcast(ev, s),
-  opts: { flushMs?: number } = {},
+  opts: { flushMs?: number; onQueueDrained?: () => void } = {},
 ): Forwarder {
   const flushMs = opts.flushMs ?? DEFAULT_FLUSH_MS;
   const buf = { text: "", meta: "", reasoning: "", metaKind: undefined as MetaKind | undefined };
@@ -208,6 +208,9 @@ export function makeForwarder(
       s.agentRunning = false;
       s.turnToken = null;
       sink({ type: "turn_end", ts: Date.now(), ...summary });
+      // Очередь входящих дренируется следующим ходом сразу (по одному):
+      // слот уже свободен, вызов синхронен — вклиниться некому.
+      opts.onQueueDrained?.();
     },
     flushNow: flush,
   };

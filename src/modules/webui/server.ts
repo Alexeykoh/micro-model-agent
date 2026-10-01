@@ -63,7 +63,7 @@ function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState):
   });
   const greeted =
     res.write("retry: 1200\n\n") &&
-    res.write(`event: state\ndata: ${JSON.stringify({ busy: s.busy })}\n\n`);
+    res.write(`event: state\ndata: ${JSON.stringify({ busy: s.busy, queueLen: s.pendingQueue.length })}\n\n`);
   if (!greeted) {
     res.end();
     return;
@@ -97,7 +97,11 @@ function dropClient(res: ServerResponse, s: WebUiState): void {
 /** Точные роуты `METHOD путь` (правило #17: карта хендлеров, без `if`). */
 const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: WebUiState) => void> = {
   "GET /api/state": (_req, res, s) => {
-    sendJson(res, 200, { busy: s.busy, state: s.bridge?.getState?.() ?? null });
+    sendJson(res, 200, {
+      busy: s.busy,
+      queueLen: s.pendingQueue.length,
+      state: s.bridge?.getState?.() ?? null,
+    });
   },
   "POST /api/message": (req, res, s) => handleMessagePost(req, res, s),
   "GET /api/config": (_req, res, s) => handleConfigGet(res, s),
@@ -323,5 +327,6 @@ export function stopServer(s: WebUiState = getDefaultState()): void {
   s.busy = false;
   s.agentRunning = false;
   s.turnToken = null;
+  s.pendingQueue.length = 0;
   s.lastPostTs = 0;
 }

@@ -20,6 +20,7 @@ import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
 import { makeWebCommands } from "./commands";
 import { makeForwarder, type Forwarder } from "./forward";
+import { drainQueueTurn } from "./util";
 import { installOutputForwarding } from "./log-forward";
 import { installWebPromptIO, type PromptIORegistry } from "./prompt-io";
 import { startServer, stopServer } from "./server";
@@ -124,7 +125,7 @@ export function makeReconfigure(
         /* результат reconfigure сохраняем, даже если рефреш моделей упал */
       }
     }
-    broadcast({ type: "state", ts: Date.now(), busy: state.busy, usage: state.usage }, state);
+    broadcast({ type: "state", ts: Date.now(), busy: state.busy, queueLen: state.pendingQueue.length, usage: state.usage }, state);
   };
 }
 
@@ -158,7 +159,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
       const refresh = deps.indexer.refresh.bind(deps.indexer);
       state.refreshIndex = async () => {
         await refresh();
-        broadcast({ type: "state", ts: Date.now(), busy: state.busy, usage: state.usage }, state);
+        broadcast({ type: "state", ts: Date.now(), busy: state.busy, queueLen: state.pendingQueue.length, usage: state.usage }, state);
       };
     }
   }
@@ -183,7 +184,11 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     modelCache ? () => modelCache.refresh() : undefined,
   );
 
-  const forwarder = makeForwarder(state);
+  const forwarder = makeForwarder(state, undefined, {
+    // Очередь входящих: голова стартует следующим ходом сразу после `turn_end`.
+    // `state.bridge` читается в момент вызова (к тому времени уже привязан ниже).
+    onQueueDrained: () => drainQueueTurn(state),
+  });
   const stopOutputForwarding = installOutputForwarding(state);
 
   // Context probe: резолвится в фоне; `undefined`, пока не устоялся, чтобы

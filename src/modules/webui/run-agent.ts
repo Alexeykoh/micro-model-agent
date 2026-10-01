@@ -99,7 +99,7 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
         toolCalls,
         interrupted: interrupted || undefined,
       });
-      broadcast({ type: "state", ts: Date.now(), busy: state.busy, usage: state.usage }, state);
+      broadcast({ type: "state", ts: Date.now(), busy: state.busy, queueLen: state.pendingQueue.length, usage: state.usage }, state);
       return result;
     } catch (err) {
       forwarder.onTurnEnd({ success: false, interrupted: interrupted || undefined });
