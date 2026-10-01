@@ -1052,6 +1052,8 @@
   "web.sessbar.prev": "previous session",
   "web.sessbar.next": "next session",
   "web.conn.reconnecting": "reconnecting…",
+  "web.i18n.stale": "translations updated — restart the server",
+  "web.i18n.reload": "reload page",
   "web.sidebar.plan": "plan",
   "web.sidebar.session": "session",
   "web.sidebar.usage": "usage",

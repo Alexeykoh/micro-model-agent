@@ -1055,6 +1055,8 @@
   "web.sessbar.prev": "предыдущая сессия",
   "web.sessbar.next": "следующая сессия",
   "web.conn.reconnecting": "переподключение…",
+  "web.i18n.stale": "переводы обновлены — перезапустите сервер",
+  "web.i18n.reload": "обновить страницу",
   "web.sidebar.plan": "план",
   "web.sidebar.session": "сессия",
   "web.sidebar.usage": "использование",
