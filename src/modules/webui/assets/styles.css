@@ -837,7 +837,11 @@ body.light .sel > button { border: 1px solid var(--border); }
 .sb.sb-expanded { width: 680px; min-width: 680px; }
 #pane-trace { flex-direction: row; }
 .sb-expanded #pane-trace { position: relative; }
-.trace-list { flex: 1; min-width: 0; max-width: 100%; overflow-y: auto; overflow-x: hidden; padding: 6px 10px 12px; display: flex; flex-direction: column; gap: 1px; }
+.trace-list { flex: 1; min-width: 0; min-height: 0; max-width: 100%; overflow-y: auto; overflow-x: hidden; padding: 6px 10px 12px; display: flex; flex-direction: column; gap: 1px; }
+/* Строки трассировки не сжимаются: иначе flex-column втискивает сотни
+   событий в видимую высоту, скролл не появляется, а текст сплющивается
+   в пунктирные линии. Тот же инвариант, что у `.msgs > *` / `.feed > *`. */
+.trace-list > * { flex-shrink: 0; }
 .trace-turn { color: var(--dim-c); font-size: 11px; margin: 8px 6px 2px; overflow-wrap: anywhere; }
 .trc { display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; font-size: 12px; color: var(--muted); border-radius: 4px; cursor: pointer; min-width: 0; max-width: 100%; overflow: hidden; }
 .trc:hover { background: var(--hover-bg); }
@@ -850,12 +854,13 @@ body.light .sel > button { border: 1px solid var(--border); }
 .trc .t { color: var(--dim-b); margin-left: auto; flex: 0 0 auto; }
 .trc.warn .g, .trc.warn .lab { color: var(--yellow); }
 .trc.phase .lab { color: var(--think); }
-.trc-detail { display: flex; flex-direction: column; flex: 0 0 340px; min-width: 0; max-width: 100%; overflow-x: hidden; border-left: 1px solid var(--border); }
+.trc-detail { display: flex; flex-direction: column; flex: 0 0 340px; min-width: 0; min-height: 0; max-width: 100%; overflow-x: hidden; border-left: 1px solid var(--border); }
 .trc-detail[hidden] { display: none; }
 .detail-h { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--fg); font-size: 12.5px; flex-shrink: 0; min-width: 0; max-width: 100%; overflow: hidden; }
 .detail-h .g { color: var(--accent); }
 .detail-h .x { margin-left: auto; color: var(--dim-b); cursor: pointer; }
-.detail-b { padding: 10px 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; overflow-x: hidden; min-width: 0; max-width: 100%; }
+.detail-b { flex: 1; min-height: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; overflow-x: hidden; min-width: 0; max-width: 100%; }
+.detail-b > * { flex-shrink: 0; }
 .detail-b .code { max-width: 100%; }
 .detail-b h5 { margin: 0 0 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--sec-h); font-weight: 600; }
 .map-sec { flex: 1 1 auto; }

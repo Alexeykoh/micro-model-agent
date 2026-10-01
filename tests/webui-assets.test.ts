@@ -286,6 +286,9 @@ describe("webui assets", () => {
     expect(a.jsModules?.["js/sidebar.js"]).toContain("collapseDetail()");
     expect(a.jsModules?.["js/sidebar.js"]).toContain("mapPathRow(");
     expect(a.css).toContain(".map-path");
+    // Trace rows must not shrink: flex-column otherwise squeezes hundreds
+    // of events into the visible height (no scrollbar, dotted-line mush).
+    expect(a.css).toContain(".trace-list > *");
   });
 
   it("renders the context breakdown as a segmented bar with a legend", () => {
