@@ -72,7 +72,7 @@ export function appendActionsRow(feed, plain, markdown) {
   appendTo(feed, bar);
 }
 
-function insertAfter(ref, node) {
+export function insertAfter(ref, node) {
   if (ref && ref.parentNode) ref.parentNode.insertBefore(node, ref.nextSibling);
   else appendTo(liveFeed(), node);
 }
