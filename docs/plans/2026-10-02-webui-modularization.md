@@ -170,12 +170,24 @@ Modify ~35 модулей-потребителей.
       `tsc --noEmit` (чисто) + `fallow audit --base HEAD` (exit 0); e2e — по запросу.
       **Fix-up note:** `flushRun` был временно потерян в `feed.js` при выносе `stream`
       (`4b2f7ad`), восстановлен в `turn.js` в `5b857c9`.
-- [~] **Step 2: `tabs.js`.** `session/tabs.js` (модель + tabstrip + статусы + `openTab` hub +
-      busy/reconcile/loadSessions), `session/sessions-menu.js` (дропдаун + delete + error),
-      `session/cmdk.js` (slash-автокомплит), `session/composer.js` (attachments + send +
-      interrupt + мобильный sub-bar). `closeTab` экспортировать для `sessions-menu`.
-      **RESUME:** не начато. `tabs.js` импортит примитивы из `./feed.js` (barrel) и
-      `./core/menus.js`; `setSessOpen`/`closeAllMenus` уже в `core/menus.js` (Phase 4).
+- [x] **Step 2: `tabs.js` — DONE (2026-10-02).** `tabs.js` переехал в `session/tabs.js`
+      (hub: модель/tabstrip/статусы/`openTab`/`closeTab`/`newChatTab`/`loadSessions`),
+      рядом `session/composer.js` (attachments + send + interrupt + мобильный sub-bar),
+      `session/sessions-menu.js` (дропдаун + delete + error), `session/cmdk.js`
+      (slash-автокомплит). Commit `f716655`. app.js и ключи `tests/webui-assets.test.ts`
+      (`js/tabs.js` → `js/session/tabs.js`) обновлены.
+      **Как разорван цикл (hub ↔ siblings):** siblings не импортит hub — получают операции
+      через `initComposer(...)`/`initSessionsMenu(...)`, вызываемые в конце `tabs.js`;
+      `composer` → `sessions-menu` (`openSessionsMenu`), `cmdk` — leaf (`initCmdk({autogrow})`).
+      Поведение сохранено (DI вместо прямых обратных импортов).
+      **Гейт:** `node --check`; guard фронт-графа ацикличен; `bun test tests/webui-*`
+      (331 pass/5 skip); `tsc --noEmit`; полный `bun test` (3022 pass/0 fail); `bun run quality`
+      exit 0. **Новый статический гейт:** `bun build assets/app.js` ловит несуществующие
+      named-import/export через все 32 модуля (см. fix-up ниже); e2e — по запросу.
+      **Fix-up note:** бандлер выявил два отсутствующих `export` (`insertAfter` в
+      `feed/core.js` — латентный баг Phase 3, `renderAttachments` в `composer.js`), плюс
+      `renderSessionsDropdown` реэкспортирован из `tabs.js` для app.js. `insertAfter` починен
+      отдельным коммитом `f53b7ca`.
 - [ ] **Step 3: `settings.js` (последним).** `settings/subdialog.js` (`openSubDialog`/trapTab),
       `settings/search.js`, `settings/providers.js` (провайдер-форма + model panel),
       `settings/panels.js` (generic-рендер + панели memory/skills/plugins/lsp/security/ui),
