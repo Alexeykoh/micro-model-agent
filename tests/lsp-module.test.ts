@@ -64,6 +64,47 @@ describe("LspModule", () => {
     expect(result.output).toContain("[LSP check failed]");
   });
 
+  it("appends a classified hint to an LSP check failure", async () => {
+    const baseDir = join(tmp, "proj-hint");
+    const srcDir = join(baseDir, "src");
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(join(srcDir, "a.rs"), "fn main() {}", "utf-8");
+
+    const module = new LspModule({
+      enabled: true,
+      servers: { rust: { command: "rust-analyzer", autoInstall: false } },
+    } as any);
+    const plugin = module.getPlugin();
+    const result = { success: true, output: "file written ok" };
+    (module as any).client.checkFile = async () => {
+      throw new Error("rust-analyzer not found in PATH");
+    };
+    await plugin.onAfterTool!(
+      { baseDir, logger: { warn: () => {} } } as any,
+      { id: "call-1", name: "write_file", arguments: { path: "src/a.rs" } },
+      result,
+    );
+    expect(result.output).toContain("[LSP check failed]");
+    expect(result.output).toContain("install the language server");
+  });
+
+  it("exposes diagnose(baseDir) for /lsp doctor", async () => {
+    const baseDir = join(tmp, "proj-diag");
+    const srcDir = join(baseDir, "src");
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(join(srcDir, "a.ts"), "export const a = 1;", "utf-8");
+
+    const module = new LspModule({ enabled: true } as any);
+    const diag = await module.diagnose(baseDir, {
+      collectFiles: async () => [join(srcDir, "a.ts")],
+      findOnPath: () => null,
+      offline: true,
+      client: { probe: async () => {} } as any,
+    });
+    const ts = diag.servers.find((s) => s.language === "typescript");
+    expect(ts?.reason).toBe("offline");
+  });
+
   it("disables LSP for the session after N consecutive failures and says so once", async () => {
     const baseDir = join(tmp, "proj2");
     const srcDir = join(baseDir, "src");
