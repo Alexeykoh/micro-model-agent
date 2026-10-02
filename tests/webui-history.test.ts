@@ -123,6 +123,39 @@ describe("webui session history REST", () => {
     });
   });
 
+  it("drops system prompt and context snapshots from the transcript", async () => {
+    const log: SessionLogEntry[] = [
+      { ts: TS, type: "system", content: "You are MMA v2, an AI agent..." },
+      { ts: TS, type: "context", content: "context snapshot at session start" },
+      { ts: TS, type: "user", content: "hi" },
+      { ts: TS, type: "assistant", content: "hello" },
+    ];
+    const s = createWebUiState();
+    s.sessionManager = fakeSessions({ metas: [meta("s1")], logs: { s1: log } });
+
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/sessions/s1/history`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { history: Array<Record<string, unknown>> };
+      expect(body.history.map((h) => h.kind)).toEqual(["user", "assistant"]);
+    });
+  });
+
+  it("drops system messages in the message-history fallback", async () => {
+    const history: SessionMessage[] = [
+      { role: "system", content: "You are MMA v2, an AI agent...", timestamp: TS },
+      { role: "user", content: "hi", timestamp: TS },
+    ];
+    const s = createWebUiState();
+    s.sessionManager = fakeSessions({ metas: [meta("s1")], history: { s1: history } });
+
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/sessions/s1/history`);
+      const body = (await res.json()) as { history: Array<Record<string, unknown>> };
+      expect(body.history.map((h) => h.kind)).toEqual(["user"]);
+    });
+  });
+
   it("returns 404 for an unknown session", async () => {
     const s = createWebUiState();
     s.sessionManager = fakeSessions({ metas: [meta("s1")] });
