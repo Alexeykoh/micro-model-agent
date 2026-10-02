@@ -25,9 +25,11 @@ happy-dom (dev-dep, для DOM-тестов), i18n en/ru.
 > `activeSessionId`/`sidebarSessionChanged`),
 > Phase 4 (loading-состояние секции Session: `.sb-loading` + `aria-busy`),
 > Phase 5 (персист per-session usage + ленивая гидратация),
-> Phase 3 (per-session SSE-подписки: `GET /events?session=`, `clientSessions`,
-> маршрутизация `broadcast`; авто-штамп `activeSessionId` убран; клиент
-> пересоздаёт EventSource на переключении),
+> Phase 3 (SSE-доставка: сначала per-session подписки `GET /events?session=`,
+> затем **откат** — событие доставляется всем клиентам, раскладка по вкладкам
+> на клиенте `feedForEvent`; один общий EventSource, фоновая вкладка стримится
+> живьём. Причина отката: подписка только на активную сессию глушила фоновые
+> вкладки — «второй поток» выглядел неработающим),
 > Phase 0 (happy-dom-харнесс, `tests/webui-sidebar-dom.test.ts`),
 > Phase 7 (e2e-сценарий переключения вкладок в `web-chat-tabs.e2e-test.ts`),
 > Phase 6 (снятие legacy single-agent пути: `turns.ts` больше не ветвится по
@@ -144,6 +146,11 @@ git commit -m "fix(webui): trace binds to the opened tab immediately"
 ---
 
 ## Phase 3: Подписки
+
+> **Откат (2026-10-02):** per-session подписка оказалась вредной — браузер держит
+> много вкладок-сессий, а подписка на одну глушила фоновые. Итог: сервер шлёт всё
+> всем, клиент раскладывает по `sessionId`. `clientSessions`/`?session=` удалены.
+> См. `fix/webui-multitab-sse`.
 
 ### Task 3.1: `GET /events?session=`
 
