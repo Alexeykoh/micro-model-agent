@@ -690,7 +690,7 @@ export const bashTool: ToolDefinition = {
     const entry = processRegistry.start(command, workdir, ctx.sessionId);
     if (ctx.activeCallId) {
       // Исполнителю — убить дочерний процесс в grace-окне при аборте.
-      registerKillable(ctx.activeCallId, () => processRegistry.kill(entry.id));
+      registerKillable(ctx.activeCallId, () => processRegistry.kill(entry.id), ctx.sessionId);
     }
 
     try {
@@ -758,7 +758,7 @@ export const bashTool: ToolDefinition = {
       return { success: true, output };
     } finally {
       if (ctx.activeCallId) {
-        unregisterKillable(ctx.activeCallId);
+        unregisterKillable(ctx.activeCallId, ctx.sessionId);
       }
     }
   },
