@@ -257,6 +257,11 @@ export function sidebarSessionChanged(sid) {
   renderList();
 }
 
+/** Сессия, которой сейчас принадлежит сайдбар (dataset.sid), или null. */
+export function sidebarSessionId() {
+  return (sbEl && sbEl.dataset.sid) || null;
+}
+
 export function sidebarTurnEnd(turnSeq) {
   // Серверный номер хода (реконнекты локальный счётчик не сбивают).
   turn = typeof turnSeq === "number" && turnSeq > turn ? turnSeq : turn + 1;

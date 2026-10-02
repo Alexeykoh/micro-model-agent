@@ -15,6 +15,7 @@ export class Logger {
   private prefix: string;
   private logDir: string | null = null;
   private sessionDir: string | null = null;
+  private sessionId: string | null = null;
   private fileLog: FileLogWriter;
   private sink: OutputSink;
 
@@ -122,6 +123,7 @@ export class Logger {
     );
     if (this.logDir) childLogger.setLogDir(this.logDir);
     if (this.sessionDir) childLogger.setSessionDir(this.sessionDir);
+    childLogger.sessionId = this.sessionId;
     return childLogger;
   }
 
@@ -139,6 +141,7 @@ export class Logger {
     if (this.logDir) scoped.setLogDir(this.logDir);
     if (sessionDir) scoped.setSessionDir(sessionDir);
     scoped.initSessionLog(sessionId);
+    scoped.sessionId = sessionId;
     return scoped;
   }
 
@@ -190,6 +193,7 @@ export class Logger {
         source: this.prefix || "mma",
         kind: "log",
         text: line,
+        sessionId: this.sessionId ?? undefined,
         data: diagnostic ? { diagnostic: true } : undefined,
       });
     } catch {

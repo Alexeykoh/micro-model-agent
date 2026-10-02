@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Logger } from "../src/logger/app-logger";
+import { OutputBus } from "../src/output/bus";
 import {
   setAuditSessionDir,
   clearAuditSessionDir,
@@ -41,6 +42,17 @@ describe("session-scope isolation", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("Logger.forSession tags its output events with the sessionId", () => {
+    const bus = new OutputBus();
+    const seen: Array<string | undefined> = [];
+    bus.subscribe((ev) => seen.push(ev.sessionId));
+    const base = new Logger("debug", "test", bus);
+    base.warn("global");
+    base.forSession("A").warn("scoped");
+    expect(seen[0]).toBeUndefined();
+    expect(seen[1]).toBe("A");
   });
 
   it("audit entries route to their own session dir, not the last bound", () => {
