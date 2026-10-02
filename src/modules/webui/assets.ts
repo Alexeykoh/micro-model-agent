@@ -29,16 +29,24 @@ export function loadAssets(): WebUiAssets {
     const p = join(ASSET_DIR, name);
     return existsSync(p) ? readFileSync(p, "utf8") : fallback;
   };
-  // Разделённые фронтенд-модули (`assets/js/*.js`, импортируются относительно из app.js).
+  // Разделённые фронтенд-модули (`assets/js/**`, импортируются относительно
+  // из `/app.js`). Рекурсивно: модули сгруппированы по фичам (`js/settings/*`
+  // и т.п.), ключ — путь без ведущего слеша (`js/settings/controls.js`).
   // Копируются в dist скриптом `scripts/copy-assets.ts` вместе с остальным `assets/`.
   const jsModules: Record<string, string> = {};
   if (ASSET_DIR) {
-    const jsDir = join(ASSET_DIR, "js");
-    if (existsSync(jsDir)) {
-      for (const name of readdirSync(jsDir)) {
-        if (name.endsWith(".js")) jsModules[`js/${name}`] = readFileSync(join(jsDir, name), "utf8");
+    const walkJs = (dir: string, prefix: string): void => {
+      if (!existsSync(dir)) return;
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        const key = `${prefix}/${entry.name}`;
+        if (entry.isDirectory()) walkJs(full, key);
+        else if (entry.isFile() && entry.name.endsWith(".js")) {
+          jsModules[key] = readFileSync(full, "utf8");
+        }
       }
-    }
+    };
+    walkJs(join(ASSET_DIR, "js"), "js");
   }
   return {
     html: read("index.html", "<!DOCTYPE html><h1>MMA web assets missing</h1>"),

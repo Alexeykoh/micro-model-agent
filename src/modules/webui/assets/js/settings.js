@@ -11,7 +11,7 @@ import { S, setPath, getPath, THEME_KEY, hooks } from "./store.js";
 import { contextLabel, matchesQuery } from "./format.js";
 import { closeAllMenus, setSessOpen } from "./tabs.js";
 import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
-import { controlFor, PANEL_SECTIONS, keyToPanel } from "./settings-controls.js";
+import { controlFor, PANEL_SECTIONS, keyToPanel } from "./settings/controls.js";
 import { setLayout } from "./rail.js";
 
 function setSelButton(btn, label, value) {
@@ -410,7 +410,7 @@ export function setStaleBar(stale, force) {
   return lastStale;
 }
 
-// Panel → named sections lives in `settings-controls.js` (PANEL_SECTIONS).
+// Panel → named sections lives in `settings/controls.js` (PANEL_SECTIONS).
 // Custom panels (model/ui/browser…) render a bespoke body first and then their
 // sections; purely generic panels (general/context/…) render sections only.
 
@@ -456,7 +456,7 @@ function descFor(key) {
   return d === k ? "" : d;
 }
 
-// Generic per-type control (`settings-controls.js`): bool toggle, enum
+// Generic per-type control (`settings/controls.js`): bool toggle, enum
 // select, int/share/list/json inputs. `post` funnels through `postConfig`.
 function configControl(def, key) {
   // Read-only keys carry their resolved value in the registry entry: the getter
