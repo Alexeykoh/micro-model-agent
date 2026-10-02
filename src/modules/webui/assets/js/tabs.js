@@ -20,6 +20,59 @@ import { setBusy, setPlan as railSetPlan } from "./rail.js";
 
 let sessionsErrTimer = null;
 
+// Per-tab composer + status (общепринято: черновик свой у каждой сессии).
+// `draft`/`attachments` живут на табе и переживают переключения (single `#inp`
+// остаётся один на весь браузер, но ощущается как свой за счёт save/restore).
+// `status`: idle | working | waiting | queued | failed (done схлопывается в idle).
+function activeTab() {
+  return S.tabs.find((x) => x.id === S.activeTabId) || null;
+}
+
+function saveComposer() {
+  const tab = activeTab();
+  if (!tab || !inp) return;
+  tab.draft = inp.value;
+  tab.attachments = S.attachments.slice();
+}
+
+function restoreComposer(tab) {
+  if (!tab || !inp) return;
+  inp.value = tab.draft || "";
+  S.attachments = (tab.attachments || []).slice();
+  renderAttachments();
+  autogrow();
+  closeCmdk();
+}
+
+// Grow the composer with its content up to a max, then scroll.
+const INPUT_MAX_PX = 200;
+function autogrow() {
+  if (!inp) return;
+  inp.style.height = "auto";
+  inp.style.height = Math.min(inp.scrollHeight, INPUT_MAX_PX) + "px";
+}
+
+// Статусы вкладок: working — идёт ход, waiting — ждёт ответа (question),
+// queued — стоит в per-session очереди, failed — ход упал. Рендерится точкой
+// в табстрипе; завершение в чужой вкладке фокус не крадёт, только бейдж.
+const TAB_DOT = { working: "●", waiting: "◉", queued: "○", failed: "✗" };
+
+function statusTitle(status) {
+  if (status === "working") return t("web.tab.working");
+  if (status === "waiting") return t("web.tab.waiting");
+  if (status === "queued") return t("web.tab.queued");
+  if (status === "failed") return t("web.tab.failed");
+  return "";
+}
+
+export function setTabStatus(id, status) {
+  if (!id) return;
+  const tab = S.tabs.find((x) => x.id === id);
+  if (!tab || tab.status === status) return;
+  tab.status = status;
+  renderTabstrip();
+}
+
 function renderTabstrip() {
   tabstripEl.textContent = "";
   S.tabs.forEach((item) => {
@@ -34,6 +87,12 @@ function renderTabstrip() {
     tab.setAttribute("aria-selected", on ? "true" : "false");
     tab.setAttribute("aria-label", label);
     tab.title = tip;
+    if (item.status && item.status !== "idle") {
+      const dot = el("span", "dot st-" + item.status, TAB_DOT[item.status] || "●");
+      dot.title = statusTitle(item.status);
+      dot.setAttribute("aria-label", statusTitle(item.status));
+      tab.appendChild(dot);
+    }
     const nameEl = el("span", "name", label);
     nameEl.title = tip;
     tab.appendChild(nameEl);
@@ -103,6 +162,7 @@ export function updateTabName(id, name) {
 }
 
 export function openTab(id, name, kind, server) {
+  saveComposer();
   let tab = S.tabs.find((x) => x.id === id);
   if (!tab) {
     tab = {
@@ -113,6 +173,9 @@ export function openTab(id, name, kind, server) {
       historyLoaded: false,
       historyLoading: false,
       planCard: null,
+      draft: "",
+      attachments: [],
+      status: "idle",
     };
     S.tabs.push(tab);
   } else if (name) {
@@ -121,6 +184,7 @@ export function openTab(id, name, kind, server) {
   S.activeTabId = id;
   S.liveTabId = id;
   msgs.replaceChildren(tab.feed);
+  restoreComposer(tab);
   renderTabstrip();
   renderSessionsDropdown();
   scrollToBottom();
@@ -141,8 +205,14 @@ export function openTab(id, name, kind, server) {
         if (!r.ok || !r.data) return;
         S.state.host = r.data.state || {};
         S.state.busy = !!r.data.busy;
+        S.state.runningSessionId = r.data.runningSessionId || null;
+        S.state.runningSessionIds = r.data.runningSessionIds ||
+          (S.state.runningSessionId ? [S.state.runningSessionId] : []);
+        S.state.queued = r.data.queued || {};
         renderPlan(S.state.host.plan);
         railSetPlan(S.state.busy && r.data.state ? r.data.state.plan : null);
+        reflectBusy();
+        reconcileTabStatuses();
       });
     });
     loadHistory(tab);
@@ -153,17 +223,23 @@ export function openTab(id, name, kind, server) {
 function closeTab(id) {
   const i = S.tabs.findIndex((x) => x.id === id);
   if (i === -1) return;
+  const closingActive = S.activeTabId === id;
+  if (closingActive) saveComposer();
   S.tabs = S.tabs.filter((x) => x.id !== id);
-  if (S.activeTabId === id) {
+  if (closingActive) {
     const next = S.tabs[Math.min(i, S.tabs.length - 1)];
     if (next) {
       S.activeTabId = next.id;
       S.liveTabId = next.id;
       msgs.replaceChildren(next.feed);
+      restoreComposer(next);
       scrollToBottom();
     } else {
       S.activeTabId = null;
       S.liveTabId = null;
+      if (inp) inp.value = "";
+      S.attachments = [];
+      renderAttachments();
       showEmptyFeed();
     }
   }
@@ -183,8 +259,14 @@ async function newChatTab() {
     if (st.ok && st.data) {
       S.state.host = st.data.state || {};
       S.state.busy = !!st.data.busy;
+      S.state.runningSessionId = st.data.runningSessionId || null;
+      S.state.runningSessionIds = st.data.runningSessionIds ||
+        (S.state.runningSessionId ? [S.state.runningSessionId] : []);
+      S.state.queued = st.data.queued || {};
       renderPlan(S.state.host.plan);
       railSetPlan(S.state.busy && st.data.state ? st.data.state.plan : null);
+      reflectBusy();
+      reconcileTabStatuses();
     }
     return;
   }
@@ -358,7 +440,11 @@ async function deleteSession(id) {
   const r = await api("/api/sessions/" + encodeURIComponent(id), { method: "DELETE" });
   if (!r.ok) {
     const code = r.data && typeof r.data.error === "string" ? r.data.error : "";
-    showSessionsError(code === "active_session" ? t("web.sessions.active_guard") : t("web.sessions.delete_failed"));
+    showSessionsError(
+      code === "active_session" || code === "session_busy"
+        ? t("web.sessions.active_guard")
+        : t("web.sessions.delete_failed"),
+    );
   } else {
     S.state.sessionsError = null;
   }
@@ -425,7 +511,7 @@ function renderSessBar() {
   const active = S.tabs.find((x) => x.id === S.activeTabId);
   const label = active ? active.name || String(active.id) : "—";
   sessNameEl.textContent = label;
-  sessNameBtn.title = label;
+  sessNameBtn.title = label + (active && active.status && active.status !== "idle" ? " · " + statusTitle(active.status) : "");
   const has = S.tabs.length > 0;
   sessPrevBtn.disabled = S.tabs.length < 2;
   sessNextBtn.disabled = S.tabs.length < 2;
@@ -501,6 +587,9 @@ function renderAttachments() {
     thumb.appendChild(rm);
     attachStrip.appendChild(thumb);
   });
+  // Черновик аттачей живёт на активной вкладке (см. saveComposer/restoreComposer).
+  const owner = activeTab();
+  if (owner) owner.attachments = S.attachments.slice();
 }
 
 function clearAttachments() {
@@ -689,13 +778,6 @@ function acceptCmdk(i) {
   inp.focus();
 }
 
-// Grow the composer with its content up to a max, then scroll.
-const INPUT_MAX_PX = 200;
-function autogrow() {
-  if (!inp) return;
-  inp.style.height = "auto";
-  inp.style.height = Math.min(inp.scrollHeight, INPUT_MAX_PX) + "px";
-}
 function clearInput() {
   inp.value = "";
   autogrow();
@@ -703,6 +785,8 @@ function clearInput() {
 }
 if (inp)
   inp.addEventListener("input", () => {
+    const owner = activeTab();
+    if (owner) owner.draft = inp.value;
     autogrow();
     updateCmdk();
   });
@@ -711,9 +795,14 @@ async function send() {
   const text = inp.value.trim();
   const images = S.attachments.slice();
   if (!text && !images.length) return;
+  const tab = activeTab();
+  // Владелец сообщения — активная сессионная вкладка; локальные `new`-табы
+  // шлют без sessionId (фолбэк сервера — тогда-активная).
+  const sessionId = tab && tab.kind === "session" ? tab.id : null;
   const feed = liveFeed() || activeFeed();
   // No client-side busy gate: a message sent mid-turn is queued server-side
-  // (`202 {queued: n}`) and runs after the current turn, in order.
+  // (per-session: `202 {queued: n, sessionId}`) and runs after the current
+  // turn, in order.
   clearEmpty(feed);
   finishMd();
   resetTurnText();
@@ -721,6 +810,12 @@ async function send() {
   if (text.startsWith("/")) {
     appendTo(feed, el("div", "u", text));
     scrollToBottom();
+    if (tab) {
+      tab.draft = "";
+      tab.attachments = [];
+    }
+    S.attachments = [];
+    renderAttachments();
     clearInput();
     const name = text.slice(1).split(/\s+/)[0].toLowerCase();
     // `/clear` and `/new` never reach the server: both are pure browser-side
@@ -733,7 +828,9 @@ async function send() {
       newChatTab();
       return;
     }
-    const r = await api("/api/command", { method: "POST", body: { line: text } });
+    const body = { line: text };
+    if (sessionId) body.sessionId = sessionId;
+    const r = await api("/api/command", { method: "POST", body });
     if (!r.ok) {
       appendTo(feed, el("div", "detail", "↳ " + t("web.misc.command_unavailable")));
     }
@@ -749,18 +846,28 @@ async function send() {
   }
   appendTo(feed, userMessageNode(text, images));
   scrollToBottom();
+  if (tab) {
+    tab.draft = "";
+    tab.attachments = [];
+  }
+  S.attachments = [];
+  renderAttachments();
   clearInput();
+  if (sessionId) setTabStatus(sessionId, "working");
   const body = { text };
   if (images.length) body.images = images;
+  if (sessionId) body.sessionId = sessionId;
   const r = await api("/api/message", { method: "POST", body });
   if (!r.ok) {
     const err = (r.data && r.data.error) || r.status;
     const msg = err === "queue_full" ? t("web.input.queue_full") : err;
     appendTo(feed, el("div", "warnline", "⚠ " + msg));
+    if (sessionId) setTabStatus(sessionId, "failed");
   } else {
-    if (images.length) clearAttachments();
     if (r.data && r.data.queued) {
-      appendTo(feed, el("div", "detail", "↳ " + t("web.input.queued", { n: r.data.queued })));
+      const n = r.data.queuedForSession || r.data.queued;
+      appendTo(feed, el("div", "detail", "↳ " + t("web.input.queued", { n })));
+      if (sessionId) setTabStatus(sessionId, "queued");
     } else {
       // Delay the spinner so fast first tokens never flash it: `showBusy`
       // itself skips when a stream/think block already started.
@@ -770,8 +877,14 @@ async function send() {
 }
 
 async function interrupt() {
-  if (!S.state.busy) return;
-  await api("/api/interrupt", { method: "POST", body: {} });
+  // Per-tab семантика: Esc/стоп в idle-вкладке чужой ход не трогает —
+  // сервер ответит 409 `idle`, если бежит не наша сессия.
+  const tab = activeTab();
+  const sessionId = tab && tab.kind === "session" ? tab.id : null;
+  const running = S.state.runningSessionIds || [];
+  if (sessionId && !running.includes(sessionId)) return;
+  if (!sessionId && !S.state.busy) return;
+  await api("/api/interrupt", { method: "POST", body: sessionId ? { sessionId } : {} });
 }
 
 inp.addEventListener("keydown", (e) => {
@@ -824,7 +937,10 @@ inp.addEventListener("keydown", (e) => {
 
 if (sendBtn) {
   sendBtn.addEventListener("click", () => {
-    if (S.state.busy) interrupt();
+    // Стоп — только свой ход: чужая вкладка шлёт как обычно (встанет в очередь).
+    const tab = activeTab();
+    const own = tab && tab.kind === "session" && S.state.runningSessionIds.includes(tab.id);
+    if (own) interrupt();
     else send();
   });
 }
@@ -839,24 +955,51 @@ export function closeAllMenus() {
 }
 
 // Reflect the busy flag on the composer so a turn in progress is visible and
-// `aria-busy` is honest for assistive tech.
+// `aria-busy` is honest for assistive tech. Per-tab: стоп/ Esc — только когда
+// бежит ход СВОЕЙ сессии; чужой ход композер не блокирует (send встанет
+// в per-session очередь). Глобальный rail (`setBusy`) живёт своим флагом.
 export function reflectBusy() {
-  if (inp) inp.setAttribute("aria-busy", S.state.busy ? "true" : "false");
+  const tab = activeTab();
+  const running = S.state.runningSessionIds || [];
+  const own = !!(tab && tab.kind === "session" && running.includes(tab.id));
+  if (inp) inp.setAttribute("aria-busy", own ? "true" : "false");
   const area = document.querySelector(".input-area");
-  if (area) area.classList.toggle("busy", S.state.busy);
-  // Send button doubles as stop while a turn is running; the Esc hint is only
-  // meaningful then.
+  if (area) area.classList.toggle("busy", own);
+  // Send button doubles as stop while OWN turn is running; the Esc hint is
+  // only meaningful then.
   if (sendBtn) {
-    const label = S.state.busy ? t("web.input.stop") : t("web.input.send");
+    const label = own ? t("web.input.stop") : t("web.input.send");
     sendBtn.textContent = "";
-    sendBtn.appendChild(icon(S.state.busy ? "square" : "arrow-up"));
-    sendBtn.classList.toggle("busy", S.state.busy);
+    sendBtn.appendChild(icon(own ? "square" : "arrow-up"));
+    sendBtn.classList.toggle("busy", own);
     sendBtn.title = label;
     sendBtn.setAttribute("aria-label", label);
   }
   const escHint = document.getElementById("hintEsc");
-  if (escHint) escHint.hidden = !S.state.busy;
+  if (escHint) escHint.hidden = !own;
   setBusy(S.state.busy);
+}
+
+/**
+ * Сверяет бейджи вкладок с серверным per-session статусом (2с-полл `/api/state`
+ * и SSE `state`): бегущая → working, в очереди → queued, прочие working/queued
+ * → idle. `waiting` (висит question) и `failed` не трогаем — их снимают только
+ * события хода (ответ/turn_end) или новый send, иначе полл затёр бы «ждёт вас».
+ */
+export function reconcileTabStatuses() {
+  const running = S.state.runningSessionIds || [];
+  const queued = S.state.queued || {};
+  let changed = false;
+  S.tabs.forEach((tab) => {
+    if (tab.kind !== "session") return;
+    if (tab.status === "waiting" || tab.status === "failed") return;
+    const next = running.includes(tab.id) ? "working" : queued[tab.id] > 0 ? "queued" : "idle";
+    if (tab.status !== next) {
+      tab.status = next;
+      changed = true;
+    }
+  });
+  if (changed) renderTabstrip();
 }
 
 export async function loadSessions() {

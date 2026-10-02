@@ -9,6 +9,7 @@
  * собственный `submit` владельца не отвергался резервом сервера.
  */
 import type { Agent } from "../../core/agent";
+import type { SessionRunner } from "../../core/bootstrap/session-runner";
 import type { AppConfig } from "../../config/types";
 import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
@@ -20,7 +21,8 @@ import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
 import { makeWebCommands } from "./commands";
 import { makeForwarder, type Forwarder } from "./forward";
-import { drainQueueTurn } from "./util";
+import { finishTurn } from "./turns";
+import { makeReconfigure } from "./reconfigure";
 import { installOutputForwarding } from "./log-forward";
 import { installWebPromptIO, type PromptIORegistry } from "./prompt-io";
 import { startServer, stopServer } from "./server";
@@ -35,6 +37,7 @@ import {
   type WebSkillsModule,
   type WebUiState,
 } from "./state";
+import { sessionStatus } from "./session-status";
 
 // Чистые снапшот-хелперы живут в `./host-state`; реэкспорт, чтобы существующие
 // импортёры (`webui-usage`, `webui-plan` тесты) не чинить.
@@ -76,6 +79,12 @@ export interface WebUiDeps {
   contextProbe?: Promise<{ model: string; actual: number } | null>;
   /** Id моделей активного провайдера (дефолт — фоновый кеш). */
   knownModels?: () => string[];
+  /**
+   * Фабрика per-session раннеров из bootstrap (свой агент/контекст/трекер).
+   * Есть — настоящий параллелизм слотов; нет (тесты, старые вызывающие) —
+   * legacy single-flight на общем агенте.
+   */
+  spawnRunner?: (sessionId: string) => SessionRunner;
   /** Оверрайд адреса бинда (дефолт — дефолт состояния / env). */
   host?: string;
   /** Оверрайд токена (обязателен для не-loopback бинда). */
@@ -91,42 +100,6 @@ export interface WebUiHandle {
   forwarder: Forwarder;
   url: Promise<string>;
   stop(): void;
-}
-
-/**
- * Поверхность агента для веб-хука reconfigure. Узкая, чтобы тесты стабили
- * без конструирования настоящего `Agent` (а то потянет всю петлю).
- */
-export interface WebReconfigurableAgent {
-  reconfigure(config: AppConfig): void | Promise<void>;
-  readonly contextManager: { getBudget(): { history: number } };
-}
-
-/**
- * Строит вебовый хук `reconfigure`. Он может менять окно/бюджет контекста,
- * и кешнутый лимит сайдбара (история прошлого хода, `budget.history`) протухает.
- * Перечитываем живой бюджет и пушим событие `state`, чтобы браузер обновился
- * сразу, не дожидаясь следующего хода или 2с-полла `/api/state`.
- */
-export function makeReconfigure(
-  state: WebUiState,
-  agent: WebReconfigurableAgent,
-  after?: () => Promise<void> | void,
-): (config: AppConfig) => Promise<void> {
-  return async (config) => {
-    await agent.reconfigure(config);
-    state.usage = { ...state.usage, contextLimit: agent.contextManager.getBudget().history };
-  // Провайдер мог смениться: сначала рефрешим список моделей под провайдера,
-  // чтобы follow-up `/api/models` клиента увидел модели нового провайдера.
-    if (after) {
-      try {
-        await after();
-      } catch {
-        /* результат reconfigure сохраняем, даже если рефреш моделей упал */
-      }
-    }
-    broadcast({ type: "state", ts: Date.now(), busy: state.busy, queueLen: state.pendingQueue.length, usage: state.usage }, state);
-  };
 }
 
 /**
@@ -167,7 +140,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         }
         const stats = state.projectMapStats?.() ?? null;
         broadcast({ type: "index", ts: Date.now(), phase: "done", stats }, state);
-        broadcast({ type: "state", ts: Date.now(), busy: state.busy, queueLen: state.pendingQueue.length, usage: state.usage }, state);
+        broadcast({ type: "state", ts: Date.now(), ...sessionStatus(state), usage: state.usage }, state);
       };
     }
   }
@@ -181,6 +154,24 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     toolCtx: deps.toolCtx,
   });
 
+  // Параллелизм: спавн per-session раннера + его интерактивный ввод.
+  // Реестр-клон уже несёт question/approve из main (install выше), install
+  // только ставит exitOnComplete=false и тегирует PromptIO сессией раннера.
+  if (deps.spawnRunner) {
+    const spawnRunner = deps.spawnRunner;
+    state.pool.setFactory((id: string) => {
+      const runner = spawnRunner(id);
+      installWebPromptIO({
+        state,
+        agent: runner.agent,
+        registry: runner.registry,
+        toolCtx: runner.toolCtx,
+        sessionId: id,
+      });
+      return runner;
+    });
+  }
+
   // Список моделей: явный источник побеждает; иначе фоновый кеш за активным
   // провайдером (рефреш на каждый reconfigure).
   const modelCache = deps.knownModels ? null : makeModelCache(deps.agent, deps.config);
@@ -192,10 +183,14 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     modelCache ? () => modelCache.refresh() : undefined,
   );
 
+  // Владелец текущего хода main-раннера: legacy-мост серийно обслуживает
+  // ходы разных сессий, дренаж на turn_end идёт в слот владельца, а не в "".
+  const mainOwnerRef = { current: null as string | null };
   const forwarder = makeForwarder(state, undefined, {
     // Очередь входящих: голова стартует следующим ходом сразу после `turn_end`.
     // `state.bridge` читается в момент вызова (к тому времени уже привязан ниже).
-    onQueueDrained: () => drainQueueTurn(state),
+    onQueueDrained: (owner) => finishTurn(state, owner),
+    ownerRef: mainOwnerRef,
   });
   const stopOutputForwarding = installOutputForwarding(state);
 
@@ -219,10 +214,11 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     sessionManager: deps.sessionManager,
     execModule: deps.execModule,
     contextWindow: deps.config.contextWindow,
+    ownerRef: mainOwnerRef,
   });
 
   const host = new WebHost({
-    isBusy: () => state.agentRunning,
+    isBusy: () => state.pool.isBusy(null),
     runAgent: runAgent.run,
     interrupt: () => runAgent.interrupt(),
     // Слеш-команды идут через shared карту хендлеров; вывод стримится по SSE
@@ -264,6 +260,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
       cancelPendingQuestions(state);
       forwarder.flushNow();
       stopOutputForwarding();
+      state.pool.clear();
       stopServer(state);
     },
   };

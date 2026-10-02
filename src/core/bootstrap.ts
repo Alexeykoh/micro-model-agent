@@ -16,6 +16,10 @@ import { setupWorkspacePhase } from "./bootstrap/workspace-phase";
 import { setupSessionPhase } from "./bootstrap/session-phase";
 import { setupModulesPhase } from "./bootstrap/modules-phase";
 import { assembleAgent } from "./bootstrap/agent-phase";
+import {
+  createSessionRunnerFactory,
+  type SessionRunner,
+} from "./bootstrap/session-runner";
 
 // Публичные экспорты 1:1 (сигнатуры и поведение не меняются) — потребители
 // (cli/main, web-command, тесты) продолжают импортить из "../core/bootstrap".
@@ -55,6 +59,13 @@ export interface BootstrapResult {
   memoryStore: MemoryStore;
   /** Индексатор карты проекта — веб-режим показывает статистику в панели окружения. */
   indexerModule: IndexerModule;
+  /**
+   * Фабрика per-session раннеров для настоящего параллелизма (`mma web`):
+   * `(sessionId) => SessionRunner` (свой агент/контекст/трекер поверх общего
+   * стора и провайдера). Отсутствует только в тестах, собирающих результат
+   * вручную, — веб без неё работает в legacy single-flight режиме.
+   */
+  spawnSessionRunner?: (sessionId: string) => SessionRunner;
 }
 
 /**
@@ -174,5 +185,30 @@ export async function bootstrap(
     contextProbe: provider.contextProbePromise,
     memoryStore: modules.memoryStore,
     indexerModule: workspace.indexerModule,
+    spawnSessionRunner: createSessionRunnerFactory({
+      config,
+      configRef: session.configRef,
+      llmProvider: provider.llmProvider,
+      providerManager: provider.providerManager,
+      logger,
+      baseDir: workspace.baseDir,
+      configDir: dir,
+      promptBlocks: modules.promptBlocks,
+      envReport: workspace.envReport,
+      lazyPromptBlocks: modules.lazyPromptBlocks,
+      memoryStore: modules.memoryStore,
+      moduleRegistry: modules.moduleRegistry,
+      reasoningProbePromise: provider.reasoningProbePromise,
+      reasoningStrategy: provider.reasoningStrategy,
+      contextProbePromise: provider.contextProbePromise,
+      toolRegistry: workspace.toolRegistry,
+      pluginManager: workspace.pluginManager,
+      sessionManager: session.sessionManager,
+      skillsModule: workspace.skillsModule,
+      indexerModule: workspace.indexerModule,
+      activeToolTags: session.activeToolTags,
+      capabilitiesProbeRef: provider.capabilitiesRef,
+      contextLogEnabled: session.contextLogger !== undefined,
+    }),
   };
 }

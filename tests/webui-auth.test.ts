@@ -4,7 +4,7 @@ import { stopServer } from "../src/modules/webui/server";
 import { createWebUiState } from "../src/modules/webui/state";
 import { checkAuth } from "../src/modules/webui/util";
 import type { Host } from "../src/core/host";
-import { withServer, doFetch, } from "./helpers/webui-server";
+import { withServer, doFetch, postJson } from "./helpers/webui-server";
 
 
 function makeBridge(): Host {
@@ -73,13 +73,9 @@ describe("webui auth + limits", () => {
     s.minPostIntervalMs = 0;
     s.bridge = null;
     await withServer(s, async (base) => {
-      const res = await doFetch(`${base}/api/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "hi" }),
-      });
+      const res = await postJson(base, "/api/message", { text: "hi" });
       expect(res.status).toBe(503);
-      expect(await res.json()).toEqual({ error: "no_bridge" });
+      expect(res.json).toEqual({ error: "no_bridge" });
     });
   });
 
@@ -87,15 +83,12 @@ describe("webui auth + limits", () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
     s.bridge = makeBridge();
+    s.pool.reserve(null);
     s.busy = true;
     await withServer(s, async (base) => {
-      const res = await doFetch(`${base}/api/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "hi" }),
-      });
+      const res = await postJson(base, "/api/message", { text: "hi" });
       expect(res.status).toBe(202);
-      expect(await res.json()).toEqual({ ok: true, queued: 1 });
+      expect(res.json).toEqual({ ok: true, queued: 1, sessionId: null, queuedForSession: 1 });
     });
   });
 

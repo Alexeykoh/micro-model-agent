@@ -11,7 +11,7 @@ feedHasContent, loadHistory,
 } from "./js/feed.js";
 import {
 openTab, updateTabName, renderSessionsDropdown, reflectBusy, loadSessions,
-loadCommands,
+loadCommands, setTabStatus, reconcileTabStatuses,
 } from "./js/tabs.js";
 import {
 renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
@@ -62,10 +62,15 @@ if (sidebarBtn) {
   });
 }
 
-function renderState(snapshot, busy) {
+function renderState(snapshot, busy, extra) {
   S.state.host = snapshot || {};
   S.state.busy = !!busy;
+  S.state.runningSessionId = (extra && extra.runningSessionId) || null;
+  S.state.runningSessionIds = (extra && extra.runningSessionIds) ||
+    (S.state.runningSessionId ? [S.state.runningSessionId] : []);
+  S.state.queued = (extra && extra.queued) || {};
   reflectBusy();
+  reconcileTabStatuses();
   const sessionId = S.state.host.sessionId || null;
   S.state.activeSessionId = sessionId;
   if (sessionId && !S.tabs.some((x) => x.id === sessionId)) {
@@ -95,7 +100,7 @@ function renderState(snapshot, busy) {
 async function refresh() {
   const r = await api("/api/state");
   if (!r.ok || !r.data) return;
-  renderState(r.data.state, r.data.busy);
+  renderState(r.data.state, r.data.busy, r.data);
 }
 
 function resyncAfterReconnect() {
@@ -161,6 +166,24 @@ for (const ev of ["tool_start", "tool_end", "text", "plan"]) {
     else railEvent(ev, d.name);
   });
 }
+// Per-tab status dots: its own listeners — feed handlers stay untouched
+// (source-level guards pin the handler table above). Working streams mark the
+// owner tab, `question` marks waiting-for-you, `turn_end`/`error` settle it.
+// Completion never steals focus, only the badge.
+for (const ev of ["text", "reasoning", "phase", "tool_start", "plan"]) {
+  es.addEventListener(ev, (e) => {
+    const d = parse(e);
+    if (d && d.sessionId) setTabStatus(d.sessionId, "working");
+  });
+}
+es.addEventListener("question", (e) => {
+  const d = parse(e);
+  if (d && d.sessionId) setTabStatus(d.sessionId, "waiting");
+});
+es.addEventListener("turn_end", (e) => {
+  const d = parse(e);
+  if (d && d.sessionId) setTabStatus(d.sessionId, d.success === false ? "failed" : "idle");
+});
 // Sidebar Trace: live per-session event log. Feed handlers stay untouched.
 // Tool/text/phase/plan/question/error stream live; status/log/retract/index
 // ride the same SSE bus; critic/MoE/compaction/probe/usage/audit/claim rows
@@ -177,7 +200,12 @@ es.addEventListener("command", (e) => {
     const d = parse(e);
     if (d) {
       S.state.busy = !!d.busy;
+      S.state.runningSessionId = d.runningSessionId || null;
+      S.state.runningSessionIds = d.runningSessionIds ||
+        (S.state.runningSessionId ? [S.state.runningSessionId] : []);
+      S.state.queued = d.queued || {};
       reflectBusy();
+      reconcileTabStatuses();
       sidebarBusy(!!d.busy);
       refresh();
       if (d.usage && typeof d.usage === "object") {
@@ -189,7 +217,10 @@ es.addEventListener("command", (e) => {
   es.addEventListener("error", (e) => {
     if (!e.data) return;
     const d = parse(e);
-    if (d) { onErrorEvent(d); sidebarTraceEvent("error", d); }
+    if (d) {
+      if (d.sessionId) setTabStatus(d.sessionId, "failed");
+      onErrorEvent(d); sidebarTraceEvent("error", d);
+    }
   });
 }
 

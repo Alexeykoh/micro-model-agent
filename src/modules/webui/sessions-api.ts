@@ -6,6 +6,7 @@ import { handleSessionHistory } from "./history-api";
 import { handleSessionLog } from "./log-api";
 import { readBody, readBodyError, sendJson } from "./util";
 import { parseJsonBody, readJsonBody } from "./body";
+import { isSessionBusy } from "./session-status";
 import type { WebUiState } from "./state";
 
 /** `GET /api/sessions` — список сессий (id/имя/обновление/модель/счёт). */
@@ -143,12 +144,23 @@ export function handleSessionDelete(res: ServerResponse, id: string, s: WebUiSta
     sendJson(res, 409, { error: "active_session" });
     return;
   }
+  // Per-session очередь: бегущую или стоящую в очереди сессию удалять нельзя —
+  // иначе дренаж останется с владельцем-призраком. Клиент сначала переключается
+  // / дожидается конца хода (тот же гард, что у активной).
+  if (isSessionBusy(s, id)) {
+    sendJson(res, 409, { error: "session_busy" });
+    return;
+  }
   try {
     s.sessionManager.delete(id);
   } catch {
     sendJson(res, 404, { error: "not_found" });
     return;
   }
+  // Раннер простаивающей сессии больше не нужен: контекст/трекер выгружаются,
+  // файлы слота остаются — следующий ход поднимет свежего из стора.
+  // Сюда доходят только полностью idle сессии (бегущие/queued — 409 выше).
+  s.pool.drop(id);
   // План следует за сессией: слот удалённой сессии не оставляем мусором.
   try {
     s.execModule?.forgetSession(id);

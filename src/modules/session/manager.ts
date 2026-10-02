@@ -176,6 +176,23 @@ export class SessionManager {
     this.activeId = id;
   }
 
+  /**
+   * Сibling-менеджер поверх ТОГО ЖЕ стора, запиненный на сессию `id`.
+   * Общий стор (и его метакеш) держит записи консистентными между форками:
+   * `appendMessage` читает счётчик с диска, файлы сессий не пересекаются.
+   * Нужен параллельным раннерам: каждый ход пишет в свою сессию, не трогая
+   * чужой `activeId`. Никогда не зовёт create/setActive — только чтение/запись
+   * своей сессии. Нет такой сессии — ошибка, как у setActive.
+   */
+  forkPinned(id: string): SessionManager {
+    if (!this.store.sessionExists(id)) {
+      throw new Error(t("session.not_found", { id }));
+    }
+    const sibling = new SessionManager(this.store, this.options);
+    sibling.activeId = id;
+    return sibling;
+  }
+
   /** Добавить сообщение в активную сессию (нет активной — ошибка). */
   appendMessage(msg: SessionMessage): void {
     if (!this.activeId) throw new Error(t("session.no_active"));

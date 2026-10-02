@@ -22,6 +22,12 @@ state: {
   skills: undefined,
   pluginsData: undefined,
   providers: undefined,
+  // Per-session run state from the server (`GET /api/state` + SSE `state`):
+  // which sessions own running turns and per-session queue counters.
+  // Drives per-tab status dots and per-tab composer gating (see tabs.js).
+  runningSessionId: null,
+  runningSessionIds: [],
+  queued: {},
   // Reasoning support of the active provider+model (`GET /api/models`
   // `reasoning` shape); `undefined` until the first model list arrives.
   reasoning: undefined,

@@ -1670,14 +1670,17 @@ export class Agent {
   /**
    * Останавливает прогон: abort, kill фоновых процессов, onSessionEnd.
    * Лог сессии НЕ закрываем — сессия ещё активна (закрытие только на
-   * реальном конце: exit, delete).
+   * реальном конце: exit, удаление сессии).
+   * @param sessionId когда задан — убиваются только процессы этой сессии
+   * (параллельные раннеры не трогают чужие фоновые процессы; без него —
+   * все, как раньше).
    */
-  shutdown(): void {
+  shutdown(sessionId?: string): void {
     this.shutdownRequested = true;
     this.abortController?.abort();
     const { pluginManager, logger, sessionManager, contextManager } = this.deps;
     contextManager.onCompact = null;
-    const killed = processRegistry.killAll();
+    const killed = processRegistry.killAll(sessionId);
     if (killed > 0) {
       logger.info(t("env.killed_processes", { count: String(killed) }));
     }

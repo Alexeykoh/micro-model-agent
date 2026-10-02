@@ -200,6 +200,13 @@ body[data-font="large"] { font-size: 17px; }
 .stab:hover { color: var(--fg); }
 .stab.on { background: var(--accent-bg); color: var(--accent); border-color: transparent; }
 .stab .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Per-tab run status dot: working pulses, waiting warns, queued idles dim. */
+.stab .dot { flex: 0 0 auto; font-size: 9px; line-height: 1; }
+.stab .dot.st-working { color: var(--accent); animation: tabpulse 1.2s ease-in-out infinite; }
+.stab .dot.st-waiting { color: var(--yellow); }
+.stab .dot.st-queued { color: var(--dim-b); }
+.stab .dot.st-failed { color: var(--red-strong); }
+@keyframes tabpulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 .stab .stab-x {
   flex: 0 0 auto; width: 18px; height: 18px; padding: 0; justify-content: center;
   color: var(--dim-b); border-radius: 3px; cursor: pointer;

@@ -7,6 +7,7 @@ import type { ContextBreakdown } from "../../core/types";
 import type { AppConfig } from "../../config/types";
 import type { SessionMeta, SessionMessage } from "../../modules/session/types";
 import type { SessionLogEntry } from "../../modules/session/store";
+import { RunPool } from "./session-pool";
 import type { MemoryStore } from "../memory/store";
 import type { SetupDisplay } from "../setup/answers";import { MAX_BODY_BYTES } from "./limits";
 import { readEnv } from "../../config/env";
@@ -109,6 +110,12 @@ export interface UsageSnapshot {
 export interface QueuedMessage {
   text: string;
   images: string[];
+  /**
+   * Сессия-владелец сообщения. Заполняется из `POST /api/message {sessionId}`
+   * (фолбэк — тогда-активная); дренаж переключается на неё перед стартом хода,
+   * чтобы сообщение из вкладки B не уехало в сессию A (v2, per-session очередь).
+   */
+  sessionId: string | null;
   /** Когда принято (для сортировки/диагностики; порядок — порядок прихода). */
   ts: number;
 }
@@ -123,9 +130,11 @@ export interface WebUiState {
   clients: Set<ServerResponse>;
   bridge: Host | null;
   /**
-   * Single-flight резерв UI (`/api/message`). Владелец — сервер: ставится
-   * синхронно при принятом сабмите, сбрасывается форвардерным `turn_end`
-   * (или {@link releaseBusy}, если ход так и не стартовал).
+   * Агрегат занятости: true, пока бежит ХОТЬ ОДИН ход (владелец — пул:
+   * ставится на резерве слота, сбрасывается форвардерным `turn_end` через
+   * пересчёт, или {@link releaseBusy}, если ход так и не стартовал).
+   * Per-session busy — в пуле (`pool.isBusy`), бейджи вкладок — из
+   * `sessionStatus().runningSessionIds`.
    */
   busy: boolean;
   /**
@@ -135,22 +144,18 @@ export interface WebUiState {
    * `turn_end`.
    */
   agentRunning: boolean;
-  /** Токен владения {@link busy}; см. {@link reserveBusy}/{@link releaseBusy}. */
-  turnToken: object | null;
+  /**
+   * Per-session пул прогонов: очереди, busy-слоты, кеш раннеров.
+   * Настоящий параллелизм — слоты разных сессий бегут одновременно;
+   * в пределах сессии — single-flight + FIFO (как раньше глобально).
+   */
+  pool: RunPool;
   /**
    * Сквозной счётчик завершённых ходов (инкремент — форвардерный `onTurnEnd`).
    * Едет в SSE `turn_end` как `turnSeq`, чтобы Trace привязывал строки к ходу
    * серверным номером, а не клиентским счётчиком (реконнекты его не сбивают).
    */
   turnSeq: number;
-  /**
-   * FIFO входящих сообщений, принятых во время хода. Обрабатываются по одному
-   * по завершении текущего хода (`drainQueueTurn` в `util.ts`, вызывается из
-   * форвардерного `onTurnEnd`); кап — `MAX_QUEUE_LENGTH`, хвост — `429`.
-   * Очередь глобальна (не per-сессия): запись выполняется в тогда-активной
-   * сессии, переключения вкладок посреди хода это не меняют (v1).
-   */
-  pendingQueue: QueuedMessage[];
   lastPostTs: number;
   minPostIntervalMs: number;
   historyTail: number;
@@ -222,7 +227,7 @@ export interface WebUiState {
    * `cancelPendingQuestions` дренирует мапу на interrupt/shutdown, чтобы
    * заблокированный тул не вешал ход.
    */
-  pendingQuestions: Map<string, (value: unknown) => void>;
+  pendingQuestions: Map<string, import("./prompt-io").PendingQuestion>;
   /**
    * True для virgin-конфига (`runWeb` вычислил `virgin`): сначала браузерный
    * визард, потом чат. Принуждается сервером — `/api/message` и `/api/command`
@@ -251,9 +256,8 @@ export function createWebUiState(): WebUiState {
     bridge: null,
     busy: false,
     agentRunning: false,
-    turnToken: null,
+    pool: new RunPool(),
     turnSeq: 0,
-    pendingQueue: [],
     lastPostTs: 0,
     minPostIntervalMs: 500,
     historyTail: 200,
@@ -289,30 +293,4 @@ export function broadcast(ev: SseEvent, s: WebUiState): void {
       s.clients.delete(client);
     }
   }
-}
-
-/**
- * Атомарно резервирует single-flight слот, возвращает токен владения.
- *
- * Звать СИНХРОННО в том же тике, что пречек busy: любой `await` между чеком
- * и резервом даст двум конкурентным сабмитам оба выиграть. Токен явно фиксирует
- * владельца сброса — поздний колбэк провала прошлого хода чужой резерв не снесёт.
- */
-export function reserveBusy(s: WebUiState): object {
-  const token = {};
-  s.turnToken = token;
-  s.busy = true;
-  return token;
-}
-
-/**
- * Отпускает слот, только если `token` всё ещё владеет им. Возвращает, был ли
- * вызывающий владельцем (чтобы скипнуть дублирующий бродкаст `state`, когда
- * форвардерный `turn_end` флаг уже сбросил).
- */
-export function releaseBusy(s: WebUiState, token: object): boolean {
-  if (s.turnToken !== token) return false;
-  s.turnToken = null;
-  s.busy = false;
-  return true;
 }

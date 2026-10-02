@@ -7,17 +7,16 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createWebUiState } from "./state";
+import { sessionStatus } from "./session-status";
 import {
   checkAuth,
-  handleMessagePost,
   isLoopback,
-  readBody,
-  readBodyError,
   sameOrigin,
   sendJson,
   setAuthCookie,
 } from "./util";
-import { parseJsonBody } from "./body";
+import { handleMessagePost } from "./turns";
+import { handleCommandPost, handleInterruptPost, handleIndexPost } from "./actions-api";
 import { handleConfigGet, handleConfigPost, handleModelsGet } from "./config-api";
 import { handleI18nGet } from "./i18n-api";
 import { webCommandList } from "./commands";
@@ -63,7 +62,7 @@ function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState):
   });
   const greeted =
     res.write("retry: 1200\n\n") &&
-    res.write(`event: state\ndata: ${JSON.stringify({ busy: s.busy, queueLen: s.pendingQueue.length })}\n\n`);
+    res.write(`event: state\ndata: ${JSON.stringify({ ts: Date.now(), ...sessionStatus(s) })}\n\n`);
   if (!greeted) {
     res.end();
     return;
@@ -98,8 +97,7 @@ function dropClient(res: ServerResponse, s: WebUiState): void {
 const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: WebUiState) => void> = {
   "GET /api/state": (_req, res, s) => {
     sendJson(res, 200, {
-      busy: s.busy,
-      queueLen: s.pendingQueue.length,
+      ...sessionStatus(s),
       state: s.bridge?.getState?.() ?? null,
     });
   },
@@ -113,7 +111,7 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   },
   "GET /api/models": (_req, res, s) => handleModelsGet(res, s),
   "POST /api/command": (req, res, s) => handleCommandPost(req, res, s),
-  "POST /api/interrupt": (_req, res, s) => handleInterruptPost(res, s),
+  "POST /api/interrupt": (req, res, s) => handleInterruptPost(req, res, s),
   "POST /api/index": (_req, res, s) => handleIndexPost(res, s),
   "POST /api/mcp": (req, res, s) => handleMcpCreate(req, res, s),
   "GET /api/lsp": (_req, res, s) => handleLspGet(res, s),
@@ -143,53 +141,7 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
   sendJson(res, 404, { error: "not found" });
 }
 
-/** `POST /api/command` — fire-and-forget диспатч, вывод стримится по SSE. */
-function handleCommandPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
-  if (s.setupRequired) {
-    sendJson(res, 409, { error: "setup_required" });
-    return;
-  }
-  const bridge = s.bridge;
-  readBody(req, s.maxBodyBytes)
-    .then((raw) => {
-      let line = "";
-      // Битое тело: диспатчер игнорирует не-слеш строку, так что это безвредный
-      // no-op, а не 400.
-      const rec = parseJsonBody(raw) ?? {};
-      if (typeof rec.line === "string") line = rec.line;
-      // Ошибка хоста не должна стать 5xx: POST лишь подтверждает приём,
-      // вывод стримится по SSE событиями `command`.
-      Promise.resolve(bridge?.executeCommand(line)).catch(() => {});
-      sendJson(res, 202, { ok: true });
-    })
-    .catch((err: unknown) => {
-      readBodyError(req, res, err);
-    });
-}
-
-/** `POST /api/interrupt` — аборт бегущего хода без раннего разлока. */
-function handleInterruptPost(res: ServerResponse, s: WebUiState): void {
-  if (!s.busy && !s.bridge?.isBusy()) {
-    sendJson(res, 409, { error: "idle" });
-    return;
-  }
-  // `busy` здесь НЕ чистим: сбросом владеет форвардерный `onTurnEnd` для любого
-  // реально стартовавшего хода. Очистка сейчас разлочила бы UI, пока абортнутый
-  // ход ещё разматывается, и второй сабмит проскочил бы. Если хост реально не
-  // бежит (только резерв), `interrupt()` — no-op, и слот отпустит путь висящего сабмита.
-  s.bridge?.interrupt();
-  sendJson(res, 200, { ok: true });
-}
-
-/** `POST /api/index` — fire-and-forget пересбор индекса; результат виден в `/api/state`. */
-function handleIndexPost(res: ServerResponse, s: WebUiState): void {
-  if (!s.refreshIndex) {
-    sendJson(res, 503, { error: "unavailable" });
-    return;
-  }
-  Promise.resolve(s.refreshIndex()).catch(() => {});
-  sendJson(res, 202, { ok: true });
-}
+/** `POST /api/command|interrupt|index` — действия, вывод стримится по SSE (см. `./actions-api`). */
 
 /**
  * Точка входа запросов: SSE, статика, `/js`-модули, `/api/*`, иначе 404.
@@ -326,7 +278,6 @@ export function stopServer(s: WebUiState = getDefaultState()): void {
   s.starting = null;
   s.busy = false;
   s.agentRunning = false;
-  s.turnToken = null;
-  s.pendingQueue.length = 0;
+  s.pool.clear();
   s.lastPostTs = 0;
 }
