@@ -395,6 +395,57 @@ git commit -m "feat(cli): /lsp doctor command"
 
 ---
 
+## Часть 2: WebUI LSP tab
+
+### Task 7: Проброс `LspModule` из bootstrap
+
+**Files:** `src/core/bootstrap/modules-phase.ts`, `src/core/bootstrap/state.ts`,
+`src/core/bootstrap.ts`, `src/cli/web-command.ts`
+
+- [ ] `startLanguageModules` возвращает `{ lspModule, startupCheck }`
+  (вместо `Promise<PromptBlock|null>`); `setupModulesPhase` кладёт `lspModule`
+  в `ModulesPhase`.
+- [ ] `BootstrapResult.lspModule?: LspModule` (опционально — не ломать тестовые
+  литералы), `bootstrap()` возвращает `modules.lspModule`.
+- [ ] `web-command.ts` деструктурирует `lspModule` и передаёт `lsp: lspModule`.
+- [ ] `bun test tests/core/bootstrap.test.ts && tsc --noEmit`.
+
+### Task 8: Backend API `GET/POST /api/lsp/doctor`
+
+**Files:** Create `src/modules/webui/lsp-api.ts`; modify `state.ts`, `module.ts`,
+`server.ts`; test `tests/webui-lsp-doctor.test.ts`
+
+- [ ] `state.ts`: `lspDiagnose?: () => Promise<LspDiagnosis>`, `lspDoctor?`,
+  `lspProbing?`.
+- [ ] `module.ts`: `WebUiDeps.lsp?: WebLsp`; в `startWebUi` —
+  `if (deps.lsp) state.lspDiagnose = () => deps.lsp!.diagnose(deps.baseDir ?? process.cwd());`
+- [ ] `lsp-api.ts`: `handleLspDoctorGet`/`handleLspDoctorPost` (SSE `lsp`,
+  single-flight, 503 без модуля).
+- [ ] `server.ts`: роуты `GET /api/lsp/doctor`, `POST /api/lsp/doctor`.
+- [ ] Тесты: GET 503 без модуля; GET отдаёт кэш; POST запускает diagnose,
+  пишет `lspDoctor`, шлёт `lsp`, повторный POST single-flight; POST 503.
+- [ ] `bun test tests/webui-lsp-doctor.test.ts && tsc --noEmit`.
+
+### Task 9: Frontend tab
+
+**Files:** `assets/index.html`, `assets/js/dom.js`, `assets/js/sidebar.js`,
+`assets/app.js`, `assets/styles.css` (по необходимости)
+
+- [ ] `dom.js`: иконка `stethoscope`.
+- [ ] `index.html`: таб + `#pane-lsp`/`#lspBody`.
+- [ ] `sidebar.js`: `TABS` += `lsp`, refs, `renderLsp`, `sidebarLspState`,
+  `sidebarLspEvent`, авто-запуск при открытии вкладки, «Re-check», `Alt+4`.
+- [ ] `app.js`: SSE `lsp` → `sidebarLspEvent`; `renderState` → `sidebarLspState`.
+- [ ] `bun test tests/webui-assets.test.ts`.
+
+### Task 10: i18n, доки, версия
+
+- [ ] `web.sidebar.tab_lsp`, `web.sidebar.lsp_*`, `web.sidebar.lsp_reason_*`
+  (en+ru); `tests/i18n.test.ts`.
+- [ ] `docs/agents/modules.md` (Web UI) — абзац про вкладку LSP;
+  `AGENTS.md` — дополнить раздел 2.17.0; CHANGELOG — дополнить запись 2.17.0.
+- [ ] `bun test && bun run quality`.
+
 ## Ручная проверка
 
 1. `bun run mma` в TS-проекте → `/lsp doctor` → `✓ typescript · ok`.
@@ -404,3 +455,6 @@ git commit -m "feat(cli): /lsp doctor command"
    → `binary-missing`/`spawn-failed` + `↳`-подсказка.
 4. `lsp_check`/write при мёртвом сервере → `[LSP check failed]` + `hint:`
    класса; после 3 сбоев — прежнее `[LSP disabled]`.
+5. `mma web` → сайдбар: вкладка LSP; открытие запускает проверку, строки
+   серверов появляются, «Re-check» повторяет; `Alt+4`; прочерк при недоступном
+   модуле.
