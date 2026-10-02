@@ -166,6 +166,13 @@ export interface WebUiState {
   /** Метрики usage последнего завершённого хода (см. {@link UsageSnapshot}). */
   usage?: UsageSnapshot;
   /**
+   * Метрики usage по сессиям: последний завершённый ход КАЖДОЙ сессии.
+   * Сайдбар показывает метрики серверно-активной сессии (а не глобальный
+   * last-turn, одинаковый во всех вкладках). Пишет run-agent по владельцу
+   * хода; чистится вместе с удалением сессии.
+   */
+  sessionUsage: Record<string, UsageSnapshot>;
+  /**
    * Id сессии-владельца текущего/последнего хода. Штампуется на каждое
    * SSE-событие, чтобы браузер клал стрим во вкладку исходной сессии,
    * а не в случайно активную.
@@ -265,7 +272,23 @@ export function createWebUiState(): WebUiState {
     maxClients: parseMaxClients(readEnv("WEBUI_MAX_CLIENTS")),
     pendingQuestions: new Map(),
     setupRequired: false,
+    sessionUsage: {},
   };
+}
+
+/**
+ * Usage для сайдбара: метрики серверно-активной сессии, фолбэк — глобальный
+ * last-turn (legacy, пока сессионных данных нет).
+ */
+export function activeUsage(s: WebUiState): UsageSnapshot | undefined {
+  try {
+    const active =
+      s.sessionManager?.getActive?.() ?? s.activeSessionId ?? null;
+    if (active && s.sessionUsage[active]) return s.sessionUsage[active];
+  } catch {
+    /* fail-open: отдаём глобальный */
+  }
+  return s.usage;
 }
 
 /** SSE-событие: тип, время, произвольный пейлоад. */

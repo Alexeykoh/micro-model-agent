@@ -103,13 +103,23 @@ export function resolveAnswer(state: WebUiState, id: string, value: unknown): bo
 /**
  * Закрывает висящие вопросы через `undefined` (тулы прочтут пусто/`[]`).
  * Звать на interrupt/shutdown, чтобы заблокированный `question`/`approve`
- * не держал ход после того, как браузер перестал отвечать. С `sessionId` —
- * только вопросы этой сессии (чужой параллельный ход не трогаем).
+ * не держал ход после того, как браузер перестал отвечать.
+ * Без sessionId — все (legacy); со строкой — только вопросы этой сессии
+ * (плюс нетегированные legacy — fail-safe от вечного виса); с null —
+ * только нетегированные (legacy-слот в фабричном режиме не трогает чужие).
  */
-export function cancelPendingQuestions(state: WebUiState, sessionId?: string): void {
+export function cancelPendingQuestions(state: WebUiState, sessionId?: string | null): void {
   const pending: Array<(value: unknown) => void> = [];
   for (const [id, q] of state.pendingQuestions) {
-    if (sessionId === undefined || q.sessionId === sessionId || q.sessionId === undefined) {
+    if (sessionId === undefined) {
+      pending.push(q.resolve);
+      state.pendingQuestions.delete(id);
+    } else if (sessionId === null) {
+      if (q.sessionId == null) {
+        pending.push(q.resolve);
+        state.pendingQuestions.delete(id);
+      }
+    } else if (q.sessionId === sessionId || q.sessionId == null) {
       pending.push(q.resolve);
       state.pendingQuestions.delete(id);
     }

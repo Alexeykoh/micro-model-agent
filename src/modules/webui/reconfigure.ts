@@ -34,7 +34,13 @@ export function makeReconfigure(
         /* результат reconfigure сохраняем, даже если раннер упал */
       }
     }
-    state.usage = { ...state.usage, contextLimit: agent.contextManager.getBudget().history };
+    const limit = agent.contextManager.getBudget().history;
+    state.usage = { ...state.usage, contextLimit: limit };
+    // Тот же лимит — во все per-session снимки, иначе чужой таб покажет
+    // протухший знаменатель после смены модели/окна.
+    for (const id of Object.keys(state.sessionUsage)) {
+      state.sessionUsage[id] = { ...state.sessionUsage[id], contextLimit: limit };
+    }
   // Провайдер мог смениться: сначала рефрешим список моделей под провайдера,
   // чтобы follow-up `/api/models` клиента увидел модели нового провайдера.
     if (after) {

@@ -1,11 +1,11 @@
 // Одноходовой раннер агента для `mma web`: матчинг id тул-событий, флаг прерывания, usage.
 // Вынесен из `module.ts` (правило #1: ≤300 строк/файл).
 import type { Agent } from "../../core/agent";
-import type { ToolEvent } from "../../core/types";
+import type { AgentResult, ToolEvent } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
-import { broadcast, type WebUiState } from "./state";
+import { broadcast, type UsageSnapshot, type WebUiState } from "./state";
 import { sessionStatus } from "./session-status";
 import { captureUsage, planEventFor } from "./host-state";
 import { cancelPendingQuestions } from "./prompt-io";
@@ -31,6 +31,11 @@ export interface RunAgentDeps {
    * ownerRef со своим форвардером; пул создаёт пару на сабмит.
    */
   ownerRef?: { current: string | null };
+  /**
+   * Слот раннера для scoped interrupt (null — legacy-слот без сессии).
+   * undefined — до-пул legacy: стопаем всё, как раньше.
+   */
+  slotId?: string | null;
   execModule?: Pick<ExecutionModule, "getActivePlan">;
   /** Фолбэк лимита для usage сайдбара, когда ход лимит не сообщил. */
   contextWindow?: number;
@@ -42,6 +47,23 @@ export interface RunAgent {
   run: (text: string) => Promise<unknown>;
   /** Помечает прерванным, разблокирует висящие вопросы, стопает агента. */
   interrupt: () => void;
+}
+
+/**
+ * Сохраняет метрики завершённого хода: в per-session карту под владельцем
+ * (сайдбар показывает метрики своей сессии, а не глобальный last-turn)
+ * и в legacy-глобал для совместимости. Возвращает сохранённый снимок.
+ */
+function recordTurnUsage(
+  state: WebUiState,
+  result: AgentResult,
+  contextWindow: number | undefined,
+  owner: string | null,
+): UsageSnapshot {
+  const usage = captureUsage(result, contextWindow);
+  state.usage = usage;
+  if (owner) state.sessionUsage[owner] = usage;
+  return usage;
 }
 
 /** Строит раннер: матчинг id тул-событий, флаг прерывания, захват usage. */
@@ -112,14 +134,17 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
       // Usage забираем ДО `onTurnEnd`, чтобы бродкаст `state` сразу после хода
       // уже нёс свежие метрики сайдбара (клиент и так поллит `/api/state`,
       // так что это оптимизация, а не единственный путь).
-      state.usage = captureUsage(result, deps.contextWindow);
+      const usage = recordTurnUsage(state, result, deps.contextWindow, owner);
       forwarder.onTurnEnd({
         success: result.success,
         durationMs: result.durationMs,
         toolCalls,
         interrupted: interrupted || undefined,
       });
-      broadcast({ type: "state", ts: Date.now(), ...sessionStatus(state), usage: state.usage }, state);
+      broadcast(
+        { type: "state", ts: Date.now(), ...sessionStatus(state), usage, usageSessionId: owner },
+        state,
+      );
       return result;
     } catch (err) {
       forwarder.onTurnEnd({ success: false, interrupted: interrupted || undefined });
@@ -130,8 +155,10 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
   const interrupt = (): void => {
     interrupted = true;
     // Разблокируем тулы, ждущие ответа браузера, до размотки хода.
-    cancelPendingQuestions(state);
-    agent.shutdown();
+    // Scoped по слоту: чужой параллельный ход своих вопросов не лишается
+    // (undefined — legacy: всё, как раньше).
+    cancelPendingQuestions(state, deps.slotId);
+    agent.shutdown(deps.slotId ?? undefined);
   };
 
   return { run, interrupt };

@@ -11,7 +11,7 @@ import {
 } from "../src/modules/webui/util";
 import { drainQueueTurn, finishTurn } from "../src/modules/webui/turns";
 import { MAX_QUEUE_LENGTH } from "../src/modules/webui/limits";
-import { createWebUiState } from "../src/modules/webui/state";
+import { activeUsage, createWebUiState } from "../src/modules/webui/state";
 import { makeForwarder } from "../src/modules/webui/forward";
 import type { Host } from "../src/core/host";
 import { withServer, doFetch, postJson, webuiAssets as assets } from "./helpers/webui-server";
@@ -774,11 +774,16 @@ describe("webui parallel sessions (runner factory)", () => {
       expect(ends.length).toBeGreaterThan(0);
 
       // Конец хода B и второго хода A: всё свободно.
-      stub("B").resolvers.shift()?.({ success: true });
-      stub("A").resolvers.shift()?.({ success: true });
+      stub("B").resolvers.shift()?.({ success: true, contextUsed: 222, contextLimit: 444 });
+      stub("A").resolvers.shift()?.({ success: true, contextUsed: 111, contextLimit: 333 });
       await new Promise((r) => setTimeout(r, 50));
       expect(s.pool.anyBusy()).toBe(false);
       expect(s.busy).toBe(false);
+      // Usage — per-сессия: у каждой свои цифры последнего хода, а не общий last-turn.
+      expect(s.sessionUsage.A?.contextUsed).toBe(111);
+      expect(s.sessionUsage.B?.contextUsed).toBe(222);
+      // Сайдбар берёт метрики серверно-активной сессии (A), а не чужой ход.
+      expect(activeUsage(s)?.contextUsed).toBe(111);
     });
   });
 
