@@ -24,6 +24,7 @@ import {
   initSidebar, sidebarSessionChanged, sidebarMapState,
   sidebarTraceEvent, sidebarTurnEnd, sidebarBusy, sidebarMapIndicator,
   sidebarPullLog, sidebarSessionId, setSessionLoading,
+  sidebarLspState, sidebarLspEvent,
   applySidebarI18n,
 } from "./js/sidebar.js";
 
@@ -374,7 +375,13 @@ async function boot() {
   await loadMemory();
   await loadSkills();
   await loadPlugins();
-  await refresh();
+  try {
+    await refresh();
+  } catch (err) {
+    // A render bug must never kill boot before the SSE stream connects:
+    // without SSE no streamed answers, tools or loaders reach the page.
+    console.error("initial refresh failed", err);
+  }
   // Restore the session from the URL AFTER the first refresh: `renderState`
   // may auto-open the server's active session, and the requested one must win.
   if (initialSession) {
@@ -382,7 +389,9 @@ async function boot() {
     if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
   }
   connectSSE();
-  setInterval(refresh, 2000);
+  setInterval(() => {
+    refresh().catch((err) => console.error("refresh failed", err));
+  }, 2000);
   setInterval(loadSessions, 15000);
 }
 

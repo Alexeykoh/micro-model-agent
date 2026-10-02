@@ -346,6 +346,27 @@ describe("webui assets", () => {
     expect(a.css).toContain(".trace-list > *");
   });
 
+  it("imports every sidebar helper it calls (no undefined render crash)", () => {
+    const a = loadAssets();
+    const src = a.js;
+    const importMatch = src.match(/import\s*\{([^}]*)\}\s*from\s*"\.\/js\/sidebar\.js"/);
+    expect(importMatch).toBeTruthy();
+    const imported = new Set(
+      importMatch![1]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+    // Locally declared `sidebarXxx` (const/let/function) are not imports.
+    const locals = new Set(
+      [...src.matchAll(/(?:const|let|function)\s+(sidebar[A-Z]\w*)/g)].map((m) => m[1]),
+    );
+    const body = src.replace(importMatch![0], "");
+    const used = [...body.matchAll(/\b(sidebar[A-Z]\w*)\b/g)].map((m) => m[1]);
+    const missing = [...new Set(used)].filter((n) => !imported.has(n) && !locals.has(n));
+    expect(missing).toEqual([]);
+  });
+
   it("wires the LSP sidebar tab (doctor) with an on-demand check", () => {
     const a = loadAssets();
     const sidebar = a.jsModules?.["js/sidebar.js"] || "";

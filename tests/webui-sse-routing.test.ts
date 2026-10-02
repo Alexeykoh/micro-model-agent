@@ -61,3 +61,64 @@ describe("webui per-session SSE routing", () => {
     expect(chunks.join("")).not.toContain('"sessionId":"A"');
   });
 });
+
+describe("webui SSE end-to-end (subscription)", () => {
+  it("a client subscribed to A receives A's runner stream over /events", async () => {
+    const { withServer, doFetch, postJson } = await import("./helpers/webui-server");
+    const s = createWebUiState();
+    s.minPostIntervalMs = 0;
+    s.sessionManager = {
+      list: () => [],
+      get: (id: string) => ({ id }) as never,
+      getActive: () => "A",
+      setActive: () => {},
+      delete: () => {},
+    };
+    const chunks: Array<(c: string) => void> = [];
+    s.pool.setFactory(
+      (id: string) =>
+        ({
+          sessionId: id,
+          agent: {
+            run: (_t: string, onChunk?: (c: string) => void) => {
+              if (onChunk) chunks.push(onChunk);
+              return new Promise(() => {});
+            },
+            shutdown: () => {},
+          },
+          contextManager: { addPendingImage: () => {} },
+          execModule: { getActivePlan: () => null },
+        }) as never,
+    );
+
+    await withServer(s, async (base) => {
+      const ac = new AbortController();
+      const res = await doFetch(`${base}/events?session=A`, { signal: ac.signal });
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      const read = (async () => {
+        try {
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value);
+          }
+        } catch {
+          /* aborted */
+        }
+      })();
+      await new Promise((r) => setTimeout(r, 60));
+
+      const post = await postJson(base, "/api/message", { text: "hi", sessionId: "A" });
+      expect(post.status).toBe(202);
+      chunks[0]?.("hello-stream");
+      await new Promise((r) => setTimeout(r, 600));
+      ac.abort();
+      await read;
+
+      expect(buf).toContain("hello-stream");
+      expect(buf).toContain('"sessionId":"A"');
+    });
+  });
+});
