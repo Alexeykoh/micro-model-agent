@@ -18,6 +18,7 @@ scrollToBottom,
 import { openConfirm, setIndicator } from "./dialog.js";
 import { setBusy } from "./rail.js";
 import { sidebarSessionChanged, setSessionLoading } from "./sidebar.js";
+import { setSessOpen, setSessionCloseHook } from "./core/menus.js";
 
 let sessionsErrTimer = null;
 
@@ -487,19 +488,18 @@ async function deleteSession(id) {
 
 const sessDD = document.getElementById("sessDD");
 const sessBtn = document.getElementById("sessBtn");
-export function setSessOpen(open) {
-  sessDD.classList.toggle("open", !!open);
-  sessBtn.setAttribute("aria-expanded", open ? "true" : "false");
-  if (!open && sessQuery) {
-    // Closing wipes the filter so the next opening starts from the full list.
-    sessQuery = "";
-    const search = document.getElementById("sessSearch");
-    if (search && search.value) {
-      search.value = "";
-      renderSessionsDropdown();
-    }
+// The open/close chrome lives in the leaf `core/menus.js`; register the filter
+// cleanup it must run on close (menus must not depend on `tabs` upward).
+setSessionCloseHook(() => {
+  if (!sessQuery) return;
+  // Closing wipes the filter so the next opening starts from the full list.
+  sessQuery = "";
+  const search = document.getElementById("sessSearch");
+  if (search && search.value) {
+    search.value = "";
+    renderSessionsDropdown();
   }
-}
+});
 function focusSessSearch() {
   setTimeout(() => {
     const search = document.getElementById("sessSearch");
@@ -984,15 +984,6 @@ if (sendBtn) {
     if (own) interrupt();
     else send();
   });
-}
-
-export function closeAllMenus() {
-  document.querySelectorAll("[data-sel]").forEach((s) => {
-    s.classList.remove("open");
-    const b = s.querySelector("button");
-    if (b) b.setAttribute("aria-expanded", "false");
-  });
-  setSessOpen(false);
 }
 
 // Reflect the busy flag on the composer so a turn in progress is visible and

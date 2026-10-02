@@ -6,17 +6,17 @@ import { buildImportGraph, collectFiles, findCycles } from "./helpers/import-gra
 /**
  * Frontend (src/modules/webui/assets/**) ESM graph guard.
  *
- * Enforces acyclicity across `assets/*.js` + `assets/js/*.js` and tracks the one
- * documented layer inversion (`settings.js -> tabs.js`) as a known list. Phase 4
- * moves the menu helpers into a leaf (`core/menus.js`), after which the known
- * list must become empty — the equality assertion below forces that update.
+ * Enforces acyclicity across `assets/**` and that there are no layer inversions
+ * (a lower module importing a higher one). Phase 4 moved the menu helpers into a
+ * leaf (`core/menus.js`), so the previously-known `settings.js -> tabs.js` edge
+ * is gone — the list must stay empty.
  */
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const ASSETS_DIR = resolve(REPO_ROOT, "src/modules/webui/assets");
 
-/** Edges that are known-but-undesired; must be removed by Phase 4. */
-const KNOWN_INVERSIONS = ["src/modules/webui/assets/js/settings.js -> src/modules/webui/assets/js/tabs.js"];
+/** Edges that are known-but-undesired; kept empty on purpose (no inversions). */
+const KNOWN_INVERSIONS: string[] = [];
 
 function formatCycles(cycles: string[][]): string {
   return cycles.map((c) => `  ${c.join(" -> ")} -> ${c[0]}`).join("\n");
@@ -29,7 +29,7 @@ describe("webui frontend import graph", () => {
     expect(cycles, `Import cycles in src/modules/webui/assets:\n${formatCycles(cycles)}`).toEqual([]);
   });
 
-  it("has exactly the documented layer inversions (settings -> tabs)", () => {
+  it("has no settings -> tabs layer inversion (menus live in a leaf)", () => {
     const files = collectFiles(ASSETS_DIR, REPO_ROOT, [".js"], { skipTests: true });
     const graph = buildImportGraph(files);
     const settingsImports = [...graph.entries()]

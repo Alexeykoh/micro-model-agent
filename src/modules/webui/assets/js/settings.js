@@ -1,7 +1,7 @@
 // Settings panels, provider form + overlays, selectors, postConfig, loaders.
-// Imports loaders-adjacent chrome (closeAllMenus, setSessOpen) and data loaders
-// share from tabs; confirm/toast from dialog. Never imports app (the locale
-// refresh reaches the app shell through the store hooks registry).
+// Menu chrome (closeAllMenus, setSessOpen) comes from the leaf `core/menus.js`;
+// data loaders are shared from tabs; confirm/toast from dialog. Never imports
+// app (the locale refresh reaches the app shell through the store hooks registry).
 import {
 el, icon, link, inlineTextNodes, connStatus, staleBar, makeToggle,
 } from "./dom.js";
@@ -9,7 +9,7 @@ import { api } from "./api.js";
 import { t, loadI18n } from "./i18n.js";
 import { S, setPath, getPath, THEME_KEY, hooks } from "./store.js";
 import { contextLabel, matchesQuery } from "./format.js";
-import { closeAllMenus, setSessOpen } from "./tabs.js";
+import { closeAllMenus, setSessOpen } from "./core/menus.js";
 import { setIndicator, closeConfirm, confirmOverlay, trapTab } from "./dialog.js";
 import { controlFor, PANEL_SECTIONS, keyToPanel } from "./settings/controls.js";
 import { setLayout } from "./rail.js";
