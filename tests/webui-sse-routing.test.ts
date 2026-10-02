@@ -13,37 +13,30 @@ function fakeClient(chunks: string[]): ServerResponse {
   } as unknown as ServerResponse;
 }
 
-describe("webui per-session SSE routing", () => {
-  it("delivers a session event only to subscribers of that session", () => {
+describe("webui SSE delivery (multi-tab)", () => {
+  it("delivers every session's events to all clients (background tabs stream live)", () => {
     const s = createWebUiState();
     const a: string[] = [];
     const b: string[] = [];
-    const any: string[] = [];
-    const ca = fakeClient(a);
-    const cb = fakeClient(b);
-    const cn = fakeClient(any);
-    s.clients.add(ca);
-    s.clientSessions.set(ca, "A");
-    s.clients.add(cb);
-    s.clientSessions.set(cb, "B");
-    s.clients.add(cn); // legacy client without a subscription
+    s.clients.add(fakeClient(a));
+    s.clients.add(fakeClient(b));
 
-    broadcast({ type: "text", ts: 1, sessionId: "A", chunk: "hi" }, s);
-    expect(a.join("")).toContain("hi");
-    expect(b.join("")).not.toContain("hi");
-    expect(any.join("")).toContain("hi");
+    broadcast({ type: "text", ts: 1, sessionId: "A", chunk: "hello-a" }, s);
+    broadcast({ type: "text", ts: 2, sessionId: "B", chunk: "hello-b" }, s);
+
+    // Each client sees both sessions' streams; tabs are split client-side.
+    expect(a.join("")).toContain("hello-a");
+    expect(a.join("")).toContain("hello-b");
+    expect(b.join("")).toContain("hello-a");
+    expect(b.join("")).toContain("hello-b");
   });
 
   it("delivers global events (no sessionId) to everyone", () => {
     const s = createWebUiState();
     const a: string[] = [];
     const b: string[] = [];
-    const ca = fakeClient(a);
-    const cb = fakeClient(b);
-    s.clients.add(ca);
-    s.clientSessions.set(ca, "A");
-    s.clients.add(cb);
-    s.clientSessions.set(cb, "B");
+    s.clients.add(fakeClient(a));
+    s.clients.add(fakeClient(b));
 
     broadcast({ type: "state", ts: 1, busy: true }, s);
     expect(a.join("")).toContain('"busy":true');
@@ -54,16 +47,15 @@ describe("webui per-session SSE routing", () => {
     const s = createWebUiState();
     s.activeSessionId = "A";
     const chunks: string[] = [];
-    const c = fakeClient(chunks);
-    s.clients.add(c);
+    s.clients.add(fakeClient(chunks));
 
     broadcast({ type: "state", ts: 1, busy: false }, s);
     expect(chunks.join("")).not.toContain('"sessionId":"A"');
   });
 });
 
-describe("webui SSE end-to-end (subscription)", () => {
-  it("a client subscribed to A receives A's runner stream over /events", async () => {
+describe("webui SSE end-to-end", () => {
+  it("a connected client receives a runner's stream for its session", async () => {
     const { withServer, doFetch, postJson } = await import("./helpers/webui-server");
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
@@ -93,7 +85,7 @@ describe("webui SSE end-to-end (subscription)", () => {
 
     await withServer(s, async (base) => {
       const ac = new AbortController();
-      const res = await doFetch(`${base}/events?session=A`, { signal: ac.signal });
+      const res = await doFetch(`${base}/events`, { signal: ac.signal });
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buf = "";

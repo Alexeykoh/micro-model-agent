@@ -287,12 +287,11 @@ describe("webui assets", () => {
     expect(a.js).toContain("if (S.activeTabId !== sid) return;");
   });
 
-  it("subscribes the EventSource to the active session and resubscribes on switch", () => {
+  it("uses one shared EventSource so all tabs stream live (no per-session reconnect)", () => {
     const a = loadAssets();
-    expect(a.js).toContain("syncSseSession(");
-    expect(a.js).toContain('params.push("session=" + encodeURIComponent(sid))');
-    expect(a.js).toContain("sseSession !== sid");
-    expect(a.js).toContain("es.close()");
+    expect(a.js).toContain('new EventSource(sseUrl)');
+    expect(a.js).not.toContain("syncSseSession");
+    expect(a.js).not.toContain('params.push("session="');
   });
 
   it("shows a loading indicator for the session sidebar section", () => {

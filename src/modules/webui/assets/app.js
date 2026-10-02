@@ -74,7 +74,6 @@ function renderState(snapshot, busy, extra) {
   reconcileTabStatuses();
   const sessionId = S.state.host.sessionId || null;
   S.state.activeSessionId = sessionId;
-  syncSseSession();
   if (sessionId && !S.tabs.some((x) => x.id === sessionId)) {
     openTab(sessionId, S.state.host.sessionName || String(sessionId), "session", false);
   }
@@ -127,32 +126,13 @@ function resyncAfterReconnect() {
   }
 }
 
-// Single live EventSource; re-subscribed when the active session changes so
-// the server routes only this tab's session events (+ global ones).
-let es = null;
-let sseSession = null;
-
-function syncSseSession() {
-  const sid = S.state.activeSessionId || null;
-  if (es && sseSession !== sid) connectSSE();
-}
-
+// One live EventSource for the whole browser window: the server delivers every
+// session's events, and each tab routes them client-side (`feedForEvent` by
+// `sessionId`). A single stream keeps ALL open tabs (background included)
+// streaming live — no per-tab reconnect.
 function connectSSE() {
-  if (es) {
-    try {
-      es.close();
-    } catch {
-      /* already closed */
-    }
-    es = null;
-  }
-  const params = [];
-  if (token) params.push("token=" + encodeURIComponent(token));
-  const sid = S.activeTabId;
-  if (sid) params.push("session=" + encodeURIComponent(sid));
-  sseSession = sid || null;
-  const sseUrl = "/events" + (params.length ? "?" + params.join("&") : "");
-  es = new EventSource(sseUrl);
+  const sseUrl = "/events" + (token ? "?token=" + encodeURIComponent(token) : "");
+  const es = new EventSource(sseUrl);
   let dropped = false;
   es.onopen = () => {
     if (!dropped) return;

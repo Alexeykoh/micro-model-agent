@@ -51,12 +51,7 @@ const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = 
  * читатель). Дропаем клиента сразу, а не копим события безгранично — живой вид
  * не стоит OOM.
  */
-function handleEvents(
-  req: IncomingMessage,
-  res: ServerResponse,
-  s: WebUiState,
-  sessionId?: string,
-): void {
+function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
   if (s.clients.size >= s.maxClients) {
     sendJson(res, 503, { error: "too many clients" });
     return;
@@ -74,7 +69,6 @@ function handleEvents(
     return;
   }
   s.clients.add(res);
-  if (sessionId) s.clientSessions.set(res, sessionId);
   const hb = setInterval(() => {
     try {
       if (!res.write(`: hb ${Date.now()}\n\n`)) dropClient(res, s);
@@ -85,7 +79,6 @@ function handleEvents(
   const close = (): void => {
     clearInterval(hb);
     s.clients.delete(res);
-    s.clientSessions.delete(res);
   };
   req.on("close", close);
   res.on("close", close);
@@ -94,7 +87,6 @@ function handleEvents(
 /** Убирает медленного/битого SSE-клиента и закрывает его ответ. */
 function dropClient(res: ServerResponse, s: WebUiState): void {
   s.clients.delete(res);
-  s.clientSessions.delete(res);
   try {
     res.end();
   } catch {
@@ -191,7 +183,7 @@ export function handleRequest(
       return;
     }
     setAuthCookie(res, s);
-    handleEvents(req, res, s, reqUrl.searchParams.get("session") ?? undefined);
+    handleEvents(req, res, s);
     return;
   }
 
