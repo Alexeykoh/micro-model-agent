@@ -10,7 +10,7 @@ export interface WebHostDeps {
   isBusy: () => boolean;
   interrupt: () => void;
   executeCommand: (line: string) => Promise<void>;
-  getState: () => HostStateSnapshot;
+  getState: (sessionId?: string) => HostStateSnapshot;
   addPendingImage?: (dataUrl: string) => void;
 }
 
@@ -42,7 +42,7 @@ export class WebHost implements Host {
     await this.deps.executeCommand(trimmed);
   }
 
-  getState(): HostStateSnapshot {
-    return this.deps.getState();
+  getState(sessionId?: string): HostStateSnapshot {
+    return this.deps.getState(sessionId);
   }
 }

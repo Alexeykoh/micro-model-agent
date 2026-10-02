@@ -273,6 +273,30 @@ describe("webui assets", () => {
     expect(a.css).toContain('body[data-font="large"]');
   });
 
+  it("scopes /api/state to the active tab and refreshes fully on switch", () => {
+    const a = loadAssets();
+    const tabs = a.jsModules?.["js/tabs.js"] || "";
+    expect(a.js).toContain("/api/state?session=");
+    expect(a.js).toContain("hooks.applyState = renderState");
+    expect(a.js).toContain("hooks.refreshState = refresh");
+    // Switch sets the client-active session immediately and resets Trace.
+    expect(tabs).toContain("S.state.activeSessionId = id");
+    expect(tabs).toContain("sidebarSessionChanged(id)");
+    expect(tabs).toContain("hooks.refreshState?.()");
+    // Guard against a stale response clobbering a newer tab.
+    expect(a.js).toContain("if (S.activeTabId !== sid) return;");
+  });
+
+  it("shows a loading indicator for the session sidebar section", () => {
+    const a = loadAssets();
+    const sidebar = a.jsModules?.["js/sidebar.js"] || "";
+    const tabs = a.jsModules?.["js/tabs.js"] || "";
+    expect(sidebar).toContain("setSessionLoading");
+    expect(tabs).toContain("setSessionLoading(true)");
+    expect(a.js).toContain("setSessionLoading(false)");
+    expect(a.css).toContain(".sb.sb-loading #pane-session");
+  });
+
   it("filters the sidebar Trace by its own session", () => {
     const a = loadAssets();
     const sidebar = a.jsModules?.["js/sidebar.js"] || "";

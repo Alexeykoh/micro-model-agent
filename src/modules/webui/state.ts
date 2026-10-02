@@ -13,6 +13,7 @@ import type { SetupDisplay } from "../setup/answers";
 import type { LspDiagnosis } from "../lsp/diagnose";
 import { MAX_BODY_BYTES } from "./limits";
 import { readEnv } from "../../config/env";
+import { loadSessionUsage } from "./session-usage";
 
 /**
  * Структурное подмножество `SessionManager` для веб-REST. Узкость даёт реальному
@@ -36,6 +37,8 @@ export interface WebSessionManager {
   create?(name?: string): SessionMeta;
   loadSessionLog?(id: string): SessionLogEntry[];
   getHistory?(id: string): SessionMessage[];
+  /** Каталог сессии (для персиста web-метрик). Опционален — у лёгких стабов нет. */
+  getSessionDirectory?(id: string): string;
 }
 
 /** Статические веб-ассеты (снапшот на старт; live-перечитывание — через `assetSource`). */
@@ -285,16 +288,31 @@ export function createWebUiState(): WebUiState {
 }
 
 /**
- * Usage для сайдбара: метрики серверно-активной сессии. У сессии без ходов —
- * undefined (сайдбар показывает прочерки), а НЕ чужой last-turn: иначе новая
- * вкладка открывается с цифрами прошлого чата. Глобальный fallback — только
- * legacy-режим без фабрики, где исполнитель один на всех.
+ * Usage для сайдбара: метрики серверно-активной сессии (или явной `sessionId`
+ * веб-вкладки). У сессии без ходов — undefined (сайдбар показывает прочерки),
+ * а НЕ чужой last-turn: иначе новая вкладка открывается с цифрами прошлого
+ * чата. Глобальный fallback — только legacy-режим без фабрики.
  */
-export function activeUsage(s: WebUiState): UsageSnapshot | undefined {
+export function activeUsage(s: WebUiState, sessionId?: string): UsageSnapshot | undefined {
   try {
     const active =
-      s.sessionManager?.getActive?.() ?? s.activeSessionId ?? null;
-    if (active && s.sessionUsage[active]) return s.sessionUsage[active];
+      sessionId ??
+      s.sessionManager?.getActive?.() ??
+      s.activeSessionId ??
+      null;
+    if (active) {
+      if (s.sessionUsage[active]) return s.sessionUsage[active];
+      // Reload/restart: in-memory карта пуста — поднимаем снимок с диска
+      // (каталог сессии) и кэшируем, чтобы не читать файл на каждый полл.
+      const dir = s.sessionManager?.getSessionDirectory?.(active);
+      if (dir) {
+        const persisted = loadSessionUsage(dir);
+        if (persisted) {
+          s.sessionUsage[active] = persisted;
+          return persisted;
+        }
+      }
+    }
   } catch {
     /* fail-open: отдаём глобальный */
   }

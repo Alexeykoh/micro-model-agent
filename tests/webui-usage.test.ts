@@ -62,6 +62,22 @@ describe("webui usage metrics", () => {
     expect(usage).toEqual({});
   });
 
+  it("buildHostState resolves the requested session over the active one", () => {
+    const snapshot = buildHostState(
+      {
+        config: structuredClone(DEFAULTS),
+        sessionManager: {
+          getActiveMeta: () => ({ id: "active", name: "Active" }),
+          get: (id: string) => (id === "other" ? { id: "other", name: "Other" } : null),
+        } as never,
+        sessionId: "other",
+      },
+      false,
+    );
+    expect(snapshot.sessionId).toBe("other");
+    expect(snapshot.sessionName).toBe("Other");
+  });
+
   it("buildHostState surfaces captured usage in the snapshot", () => {
     const config = structuredClone(DEFAULTS);
     const snapshot: HostStateSnapshot = buildHostState(

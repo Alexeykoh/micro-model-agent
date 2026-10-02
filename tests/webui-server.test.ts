@@ -328,6 +328,29 @@ describe("webui server", () => {
     });
   });
 
+  it("GET /api/state?session= forwards the session id to getState", async () => {
+    const s = createWebUiState();
+    const seen: Array<string | undefined> = [];
+    s.bridge = {
+      isBusy: () => false,
+      submit: () => Promise.resolve(),
+      interrupt: () => {},
+      getState: (sessionId?: string) => {
+        seen.push(sessionId);
+        return { busy: false, sessionId };
+      },
+      executeCommand: () => Promise.resolve(),
+    };
+
+    await withServer(s, async (base) => {
+      const withQ = await (await doFetch(`${base}/api/state?session=ses_a`)).json();
+      expect(withQ.state.sessionId).toBe("ses_a");
+      const noQ = await (await doFetch(`${base}/api/state`)).json();
+      expect(noQ.state.sessionId).toBeUndefined();
+    });
+    expect(seen).toEqual(["ses_a", undefined]);
+  });
+
   it("rejects past the queue cap with 429 queue_full", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;

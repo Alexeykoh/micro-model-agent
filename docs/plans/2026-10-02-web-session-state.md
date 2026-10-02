@@ -15,8 +15,21 @@ per-session метрики переживают reload.
 happy-dom (dev-dep, для DOM-тестов), i18n en/ru.
 
 **Спека:** [docs/specs/2026-10-02-web-session-state-design.md](../specs/2026-10-02-web-session-state-design.md)
-**Зависимость:** [Session-Scope Isolation Plan](./2026-10-02-session-scope-isolation.md) — сначала он.
-**Ветка:** `feat/web-session-state` (создать от `master` после мержа изоляции).
+**Зависимость:** [Session-Scope Isolation Plan](./2026-10-02-session-scope-isolation.md) — выполнен (слит в `master`).
+**Ветка:** `feat/web-session-state`.
+
+> **Статус (2026-10-02):** сделано — Phase 1 (`snapshot(sessionId)` +
+> `GET /api/state?session=`; `buildHostState`/`activeUsage`/`activeExecModule`
+> принимают сессию), Phase 2 (клиентский `refresh` под `?session=<activeTab>`
+> с guard'ом от гонки, `openTab`/`newChatTab` через `hooks.refreshState`,
+> `S.state.activeSessionId` и `sidebarSessionChanged` синхронно на переключении),
+> Phase 4 (loading-состояние секции Session: `.sb-loading` + `aria-busy`),
+> Phase 5 (персист per-session usage в каталог сессии, ленивая гидратация
+> после reload/restart).
+> Проверка: `bun test` 3002 pass / 6 skip / 0 fail, `bun run quality` зелёный.
+> Осталось — Phase 3 (per-session SSE-подписки), Phase 6 (снятие legacy-пути),
+> Phase 7 (e2e переключения вкладок). Phase 0 (DOM-харнесс `happy-dom`) не
+> поднимался — клиент покрыт source-guard тестами (существующий паттерн).
 
 ---
 

@@ -7,16 +7,17 @@ el, icon, link,
 } from "./dom.js";
 import { api } from "./api.js";
 import { t } from "./i18n.js";
-import { S, MAX_IMAGES, MAX_IMAGE_BYTES } from "./store.js";
+import { S, hooks, MAX_IMAGES, MAX_IMAGE_BYTES } from "./store.js";
 import { relTime, contextLabel, matchesQuery } from "./format.js";
 import {
 makeFeed, showEmptyFeed, activeFeed, liveFeed, appendTo,
 clearEmpty, showBusy, clearFeed, finishMd, resetTurnText,
-finishThink, feedHasContent, loadHistory, syncUrl, renderPlan,
+finishThink, feedHasContent, loadHistory, syncUrl,
 scrollToBottom,
 } from "./feed.js";
 import { openConfirm, setIndicator } from "./dialog.js";
-import { setBusy, setPlan as railSetPlan } from "./rail.js";
+import { setBusy } from "./rail.js";
+import { sidebarSessionChanged, setSessionLoading } from "./sidebar.js";
 
 let sessionsErrTimer = null;
 
@@ -91,6 +92,7 @@ export function markTabDead(id) {
   tab.historyLoaded = true;
   tab.historyFailed = false;
   tab.planCard = null;
+  setSessionLoading(false);
   tab.feed.replaceChildren();
   const card = el("div", "warnline", "✗ " + t("web.session.gone"));
   appendTo(tab.feed, card);
@@ -212,6 +214,12 @@ export function openTab(id, name, kind, server) {
   }
   S.activeTabId = id;
   S.liveTabId = id;
+  // Сайдбар следует за вкладкой сразу: активная сессия — эта, Trace сбрасывается
+  // синхронно (не ждём activate/полл). Новые (ещё не серверные) вкладки — мимо.
+  if ((kind || "session") === "session") {
+    S.state.activeSessionId = id;
+    sidebarSessionChanged(id);
+  }
   msgs.replaceChildren(tab.feed);
   restoreComposer(tab);
   renderTabstrip();
@@ -234,10 +242,10 @@ export function openTab(id, name, kind, server) {
     // historyFailed (транзиентная ошибка прошлого захода) — тоже повод
     // повторить; мёртвые (404) сюда не доходят — их держит tab.dead выше.
     if (!feedHasContent(tab.feed) || tab.historyFailed) tab.historyLoaded = false;
-    // План следует за сессией: сервер уже переключил трекер на activate,
-    // сразу тянем свежий план в сайдбар (не ждём 2с-полла `/api/state`).
-    // 404 — сессия исчезла (удалена/подчищена): помечаем вкладку мёртвой
-    // вместо молчаливого рассинхрона сайдбара (он останется на живой сессии).
+    // Индикатор загрузки секции Session до первого полного снапшота.
+    setSessionLoading(true);
+    // План следует за сессией: сервер переключает трекер на activate. 404 —
+    // сессия исчезла: помечаем вкладку мёртвой вместо рассинхрона сайдбара.
     api("/api/sessions/activate", { method: "POST", body: { id } }).then((r) => {
       if (r.status === 404) {
         markTabDead(id);
@@ -245,19 +253,7 @@ export function openTab(id, name, kind, server) {
         return;
       }
       loadSessions();
-      api("/api/state").then((r) => {
-        if (!r.ok || !r.data) return;
-        S.state.host = r.data.state || {};
-        S.state.busy = !!r.data.busy;
-        S.state.runningSessionId = r.data.runningSessionId || null;
-        S.state.runningSessionIds = r.data.runningSessionIds ||
-          (S.state.runningSessionId ? [S.state.runningSessionId] : []);
-        S.state.queued = r.data.queued || {};
-        renderPlan(S.state.host.plan);
-        railSetPlan(S.state.busy && r.data.state ? r.data.state.plan : null);
-        reflectBusy();
-        reconcileTabStatuses();
-      });
+      if (S.activeTabId === id) hooks.refreshState?.();
     });
     loadHistory(tab).then((st) => {
       if (st && st.gone) markTabDead(tab.id);
@@ -300,20 +296,9 @@ async function newChatTab() {
     const meta = r.data.session;
     openTab(meta.id, meta.name || String(meta.id), "session", false);
     await loadSessions();
-    // Новая сессия — без плана: сервер уже сбросил трекер, сразу чистим сайдбар.
-    const st = await api("/api/state");
-    if (st.ok && st.data) {
-      S.state.host = st.data.state || {};
-      S.state.busy = !!st.data.busy;
-      S.state.runningSessionId = st.data.runningSessionId || null;
-      S.state.runningSessionIds = st.data.runningSessionIds ||
-        (S.state.runningSessionId ? [S.state.runningSessionId] : []);
-      S.state.queued = st.data.queued || {};
-      renderPlan(S.state.host.plan);
-      railSetPlan(S.state.busy && st.data.state ? st.data.state.plan : null);
-      reflectBusy();
-      reconcileTabStatuses();
-    }
+    // Новая сессия — без плана: полный снапшот под ?session=<id> чистит сайдбар.
+    setSessionLoading(true);
+    if (S.activeTabId === meta.id) hooks.refreshState?.();
     return;
   }
   // Server-side creation failed (no manager / offline): keep a local-only tab

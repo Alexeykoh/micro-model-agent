@@ -116,9 +116,14 @@ export interface WebUiHandle {
 function activeExecModule(
   state: WebUiState,
   shared: ExecutionModule | undefined,
+  sessionId?: string,
 ): ExecutionModule | undefined {
   try {
-    const active = state.sessionManager?.getActive?.() ?? state.activeSessionId ?? null;
+    const active =
+      sessionId ??
+      state.sessionManager?.getActive?.() ??
+      state.activeSessionId ??
+      null;
     if (active) {
       const runner = state.pool.getRunner(active);
       if (runner) return runner.execModule;
@@ -259,17 +264,18 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     // Слеш-команды идут через shared карту хендлеров; вывод стримится по SSE
     // событиями `command` (HTTP POST лишь подтверждает приём).
     executeCommand: makeWebCommands({ state }),
-    getState: () =>
+    getState: (sessionId?: string) =>
       buildHostState(
         {
           config: deps.config,
           sessionManager: deps.sessionManager,
-          execModule: activeExecModule(state, deps.execModule),
-          usage: activeUsage(state),
+          execModule: activeExecModule(state, deps.execModule, sessionId),
+          usage: activeUsage(state, sessionId),
           contextProbe: probe,
           workspace: deps.baseDir,
           instructions: deps.agentsMd,
           projectMap: deps.indexer?.mapInfo?.(),
+          sessionId,
         },
         state.busy,
       ),

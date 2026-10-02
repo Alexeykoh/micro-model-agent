@@ -84,8 +84,11 @@ export interface HostStateSnapshot {
 export interface Host extends HostBridge {
   /** Выполняет slash-команду (напр. "/status") через общую карту хендлеров. */
   executeCommand(line: string): Promise<void>;
-  /** Текущее состояние для сайдбара/топбара. */
-  getState(): HostStateSnapshot;
+  /**
+   * Текущее состояние для сайдбара/топбара.
+   * @param sessionId конкретная сессия (веб-вкладка); без него — активная.
+   */
+  getState(sessionId?: string): HostStateSnapshot;
 }
 
 /** Опции фабрики хост-моста: занятость, картинки, запуск и прерывание. */
