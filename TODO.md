@@ -42,17 +42,22 @@
   - Фаза 0 baseline+guard → Фаза 1 подпапки → Фаза 2 role-интерфейсы → Фаза 3 leaf-модули
     → Фаза 4 `menus.js` (снять инверсию) → Фаза 5 разрез feed/tabs/settings → Фаза 6 срезы `S`
     → Фаза 7 docs/release. Фазы 0–4 = A+C без глубокого риска; 5–6 = B.
-- **Статус (2026-10-02):** Phase 0–4 ✅; Phase 5 в процессе. Коммиты: `a75fd52` (guard+baseline),
+- **Статус (2026-10-02): Phase 0–6 ✅.** Коммиты (ранние): `a75fd52` (guard+baseline),
   `c61d062` (доменные подпапки), `7f3b8bf` (role-интерфейсы `WebUiState` + строгий guard без whitelist),
   `80888e0` (`settings/{controls,editors}`), `ed7c952` (barrel `sidebar` + `sidebar/{state,trace,map,lsp,core}`),
   `e945e53` (`feed/core.js`), `5904bab` (`core/menus.js`, снята инверсия `settings → tabs`),
   `837046f` (`feed/sidebar.js`).
-  `assets.ts` читает `js/**` рекурсивно. 37 webui-тест-файлов `331 pass / 0 fail`, `tsc` чисто.
-  **Осталось (свежий контекст):** Phase 5 — из `feed.js` вынести `stream`/`turn`/`history`/`plan`/`question`,
-  затем `tabs.js` → `session/*`, `settings.js` → `settings/*` (пошаговые RESUME-заметки в
-  [плане](./docs/plans/2026-10-02-webui-modularization.md#phase-5-frontend--разрез-feed--tabs--settings));
-  Phase 6 (срезы `S`); Phase 7 (docs/release). Побочно: работа параллельной сессии (index-watcher)
-  сохранена отдельным коммитом `e8955e7`.
+  Phase 5: `07947b5`/`89f860d`/`4a801ac`/`4b2f7ad`/`5b857c9` (`feed/*` + barrel),
+  `f716655` (`tabs.js` → `session/*`, DI через `init*`), `1530cc5` (`settings.js` → `settings/*`,
+  `postConfig`-funnel в `write.js` + `setWriteHooks`), `f53b7ca` (fixup `insertAfter`).
+  Phase 6: `62f05fa` (`store.js` → `core/store/*` срезы), `2257ae6` (потребители на срезы, `S`
+  удалён полностью).
+  `assets.ts` читает `js/**` рекурсивно. 37 webui-тест-файлов `331 pass / 0 fail`; полный
+  `bun test` 3022 pass / 0 fail; `tsc` чисто; `bun run quality` exit 0; `bun build app.js`
+  резолвит 44 модуля; JS-static `tsc` — 0 `Cannot find name`.
+  **Осталось:** Phase 7 (docs/release) — обновление `AGENTS.md`/`CHANGELOG` сделано; бамп версии
+  и публикация — по отдельному явному решению. Побочно: работа параллельной сессии
+  (index-watcher) сохранена отдельным коммитом `e8955e7`.
 
 ## Осталось (по приоритетам, 2026-09-25)
 

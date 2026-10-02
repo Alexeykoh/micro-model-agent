@@ -49,10 +49,11 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 - `src/config/registry-extra.ts` (~570 строк), `src/modules/webui/settings-api.ts` (~650 строк) —
   плоские таблицы `ConfigKeyDef`/REST-хендлеров без shared mutable state; нарезка дала бы
   искусственные швы по доменам без выигрыша (решение 2026-09-27, full-config-surfaces).
-- `src/modules/webui/turns.ts` (~330 строк), `src/modules/webui/assets/js/tabs.js` (~1000 строк) —
-  оркестрация ходов/композер держат связный цикл (слоты→сабмит→дренаж; черновики→отправка→статусы);
-  дальнейшая нарезка дала бы искусственные швы и риск циклов tabs↔composer
-  (решение 2026-10-01, web-parallel-sessions).
+- `src/modules/webui/turns.ts` (~330 строк) — оркестрация ходов держит связный цикл
+  (слоты→сабмит→дренаж) с per-session состоянием (решение 2026-10-01, web-parallel-sessions).
+  Бывшее исключение `assets/js/tabs.js` (~1000 строк) **снято**: в phase 5 он разрезан на
+  `assets/js/session/{tabs,composer,sessions-menu,cmdk}.js` (DI через `init*`), вместе с
+  `feed.js` и `settings.js` (см. ниже).
 
 ## Git & Branching
 
@@ -651,6 +652,36 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   класса (`lsp.hint_*`), чтобы модель уходила на build/test. Порог 3 подряд → `[LSP disabled]`
   без изменений.
 - Доки: `docs/agents/tools.md` → «LSP Diagnostics → Locked-down networks».
+
+### WebUI Modularization (unreleased, phases 5–6)
+
+План: [docs/plans/2026-10-02-webui-modularization.md](./docs/plans/2026-10-02-webui-modularization.md);
+спека: [docs/specs/2026-10-02-webui-modularization-design.md](./docs/specs/2026-10-02-webui-modularization-design.md).
+Внутренний рефакторинг, контракты (SSE/REST/сессии/конфиг/plugin API) не менялись.
+
+- **Фронтенд-раскладка (barrel + подпапки).** `assets/js/feed.js` — barrel над
+  `feed/{core,sidebar,stream,turn,history,plan,question}.js`; `feed/core.js` держит
+  контейнер/липкий-скролл/сворачивание recon-ранов и общие render-хелперы
+  (`mdOpts`/`buildThinkBlock`/`appendActionsRow`). `assets/js/tabs.js` переехал в
+  `session/tabs.js` (hub) + `session/{composer,sessions-menu,cmdk}.js`. `assets/js/settings.js`
+  — barrel над `settings/{write,panels,providers,modal,subdialog,search,form}.js`
+  (`controls/editors` — с phase 3). `sidebar.js`/`store.js` — тоже бары.
+- **Разрыв циклов через DI (не обратные импорты).** Siblings не импортят hub: операции
+  приходят через `initComposer(...)`/`initSessionsMenu(...)`/`initCmdk({autogrow})`,
+  вызываемые в конце `session/tabs.js`. В настройках `postConfig` — единый funnel в
+  `settings/write.js` (низ), UI-ререндеры (`renderSettings`/`openSettingsAt`) регистрируются
+  им через `setWriteHooks`; `search` импортит `modal` только в одну сторону.
+- **Срезы `S` (phase 6).** `assets/js/store.js` — barrel над
+  `core/store/{index,feed,tabs,settings,session}.js`. Каждый домен владеет своим объектом
+  (`feed`/`tabs`/`settings`/`session`), потребители импортят нужный срез; старый god-object
+  `S` (и `S.state`) **удалён** (`grep '\bS\.'` в `assets/js` пуст).
+- **Guard-тесты.** `tests/webui-boundaries.test.ts` (+ `tests/helpers/import-graph.ts`) —
+  AST-граф бэкенд-импортов: циклы и правило «доменные модули зависят от role-интерфейсов,
+  а не от композитного `WebUiState`». `tests/webui-frontend-graph.test.ts` — ацикличность
+  `assets/**` + отсутствие инверсий слоёв (список `KNOWN_INVERSIONS` пуст). Дополнительные
+  ворота при разрезах: `node --check` по изменённым `assets/js/**`, `bun build
+  assets/app.js --target=browser` (резолвит все именованные импорты/экспорты), и статическая
+  JS-проверка `tsc --allowJs --checkJs --lib dom` (ловкий сигнал «0 `Cannot find name`»).
 
 ### Current Version: 2.17.0
 

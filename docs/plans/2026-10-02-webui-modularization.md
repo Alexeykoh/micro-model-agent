@@ -249,17 +249,18 @@ Modify ~35 модулей-потребителей.
       ошибок (`.value` на `HTMLElement`, `dataset`/`tabIndex` на `Element`, `Event.key`),
       не реальных багов. Включать ratchet на весь js без `jsconfig`/JSDoc-хитростей — отдельная
       задача с нулевым runtime-выигрышем; отложено.
-- [ ] Прогон: `bun test` + guard-граф + `bun run test:e2e` + ручной smoke (e2e — по запросу).
+- [x] Прогон: `bun test` + guard-граф + `bun run test:e2e` + ручной smoke (e2e — по запросу).
 
 ---
 
 ## Phase 7: Docs / release
 
-- [ ] **Step 1:** AGENTS.md — раздел про модуляризацию webui (раскладка, role-интерфейсы,
-      guard-тесты), обновить «Large files — accepted exceptions» (что осталось и почему).
-- [ ] **Step 2:** CHANGELOG `[Unreleased]` → секция Changed (внутренний рефакторинг, поведение
-      без смены контрактов). Версия — MINOR/PATCH по факту (смена внутренних путей не публичная).
-- [ ] **Step 3:** TODO.md — отметить пункт закрытым; ссылки уже добавлены (см. ниже).
+- [x] **Step 1:** AGENTS.md — добавлен раздел «WebUI Modularization (unreleased, phases 5–6)»;
+      «Large files — accepted exceptions» обновлён (снято исключение `assets/js/tabs.js`).
+- [x] **Step 2:** CHANGELOG `[Unreleased]` → секция Changed (внутренний рефакторинг, контракты
+      без смены). Бамп версии/публикация **не делались** — это отдельное явное релизное решение
+      ([Unreleased] уже накапливает изменения).
+- [x] **Step 3:** TODO.md — статус обновлён на «Phase 0–6 ✅», ссылки на план/спеку на месте.
 
 ---
 
