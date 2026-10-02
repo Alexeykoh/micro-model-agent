@@ -156,22 +156,30 @@ Modify ~35 модулей-потребителей.
 
 Резать **только по швам из анализа** (см. ниже), каждый шаг — отдельный коммит, e2e — гейт.
 
-- [ ] **Step 1: `feed.js`.** По кластерам: `feed/core` (готов в Phase 3),
-      `feed/stream.js` (text/reasoning/meta/phase/retract), `feed/turn.js` (tool-start/end,
-      turn-end, ошибки, command-output, log), `feed/history.js` (реплей), `feed/plan.js`
-      (`planStepMark`/`renderPlan`/`onPlan`), `feed/question.js`, `feed/sidebar.js`
-      (`renderUsage`/`renderWorkspace`/`renderEnvironment`). `planStepMark` — в `feed/core`
-      или tiny `plan-format.js` (нужен и `feed/plan`, и `feed/sidebar`).
-- [ ] **Step 2: `tabs.js`.** `session/tabs.js` (модель + tabstrip + статусы + `openTab` hub +
+- [~] **Step 1: `feed.js`.** По кластерам: `feed/core` (готов в Phase 3), `feed/sidebar.js`
+      (**готово, `837046f`**), `feed/stream.js` (text/reasoning/meta/phase/retract),
+      `feed/turn.js` (tool-start/end, turn-end, ошибки, command-output, log),
+      `feed/history.js` (реплей), `feed/plan.js` (`planStepMark`/`renderPlan`/`onPlan`),
+      `feed/question.js`. `planStepMark` — в `feed/core` или tiny `plan-format.js`
+      (нужен и `feed/plan`, и `feed/sidebar`).
+      **RESUME (свежий контекст):** `feed.js` после Phase 3/5 — barrel (`export *` из
+      `./feed/core.js` и `./feed/sidebar.js`); порядок выноса оставшихся кластеров —
+      `history` (525-637), `plan` (638-700), `question` (701-819), `stream` (26-200),
+      `turn` (201-524). После каждого: `node --check`, guard-граф, `bun test tests/webui-*`.
+      Значения строк — из `feed.js` до выноса; сверять `grep '^function|^export'`.
+      Каждый шаг — отдельный коммит.
+- [~] **Step 2: `tabs.js`.** `session/tabs.js` (модель + tabstrip + статусы + `openTab` hub +
       busy/reconcile/loadSessions), `session/sessions-menu.js` (дропдаун + delete + error),
       `session/cmdk.js` (slash-автокомплит), `session/composer.js` (attachments + send +
       interrupt + мобильный sub-bar). `closeTab` экспортировать для `sessions-menu`.
+      **RESUME:** не начато. `tabs.js` импортит примитивы из `./feed.js` (barrel) и
+      `./core/menus.js`; `setSessOpen`/`closeAllMenus` уже в `core/menus.js` (Phase 4).
 - [ ] **Step 3: `settings.js` (последним).** `settings/subdialog.js` (`openSubDialog`/trapTab),
       `settings/search.js`, `settings/providers.js` (провайдер-форма + model panel),
       `settings/panels.js` (generic-рендер + панели memory/skills/plugins/lsp/security/ui),
       `settings/modal.js` (оверлей/табы/escape + `renderSettings`). `postConfig` — в
       `settings/modal.js` (или tiny `settings/write.js`) как общий funnel; панели зависят
-      от него вниз, без апward-импортов.
+      от него вниз, без апward-импортов. **RESUME:** не начато.
 - [ ] Прогон: guard фронт-графа + `node --check` + `bun test` + `bun run test:e2e` +
       ручной smoke `bun run web:dev` (чат/вкладки/настройки/сайдбар).
 

@@ -42,13 +42,17 @@
   - Фаза 0 baseline+guard → Фаза 1 подпапки → Фаза 2 role-интерфейсы → Фаза 3 leaf-модули
     → Фаза 4 `menus.js` (снять инверсию) → Фаза 5 разрез feed/tabs/settings → Фаза 6 срезы `S`
     → Фаза 7 docs/release. Фазы 0–4 = A+C без глубокого риска; 5–6 = B.
-- **Статус (2026-10-02):** Phase 0–4 ✅. Коммиты: `a75fd52` (guard+baseline), `c61d062`
-  (доменные подпапки), `7f3b8bf` (role-интерфейсы `WebUiState` + строгий guard без whitelist),
+- **Статус (2026-10-02):** Phase 0–4 ✅; Phase 5 в процессе. Коммиты: `a75fd52` (guard+baseline),
+  `c61d062` (доменные подпапки), `7f3b8bf` (role-интерфейсы `WebUiState` + строгий guard без whitelist),
   `80888e0` (`settings/{controls,editors}`), `ed7c952` (barrel `sidebar` + `sidebar/{state,trace,map,lsp,core}`),
-  `e945e53` (`feed/core.js`), `5904bab` (`core/menus.js`, снята инверсия `settings → tabs`).
+  `e945e53` (`feed/core.js`), `5904bab` (`core/menus.js`, снята инверсия `settings → tabs`),
+  `837046f` (`feed/sidebar.js`).
   `assets.ts` читает `js/**` рекурсивно. 37 webui-тест-файлов `331 pass / 0 fail`, `tsc` чисто.
-  Осталось: Phase 5 (разрез feed/tabs/settings), Phase 6 (срезы `S`), Phase 7 (docs/release).
-  Побочно: работа параллельной сессии (index-watcher) сохранена отдельным коммитом `e8955e7`.
+  **Осталось (свежий контекст):** Phase 5 — из `feed.js` вынести `stream`/`turn`/`history`/`plan`/`question`,
+  затем `tabs.js` → `session/*`, `settings.js` → `settings/*` (пошаговые RESUME-заметки в
+  [плане](./docs/plans/2026-10-02-webui-modularization.md#phase-5-frontend--разрез-feed--tabs--settings));
+  Phase 6 (срезы `S`); Phase 7 (docs/release). Побочно: работа параллельной сессии (index-watcher)
+  сохранена отдельным коммитом `e8955e7`.
 
 ## Осталось (по приоритетам, 2026-09-25)
 
