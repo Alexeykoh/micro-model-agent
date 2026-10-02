@@ -5,7 +5,7 @@
 import { inp, imgPicker, attachStrip, attachErr, sendBtn, el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { S, MAX_IMAGES, MAX_IMAGE_BYTES } from "../store.js";
+import { tabs as tabState, session, settings, MAX_IMAGES, MAX_IMAGE_BYTES } from "../store.js";
 import { contextLabel } from "../format.js";
 import {
   clearEmpty, activeFeed, liveFeed, appendTo, scrollToBottom, clearFeed,
@@ -46,8 +46,8 @@ function setAttachError(msg) {
   if (!attachErr) return;
   attachErr.textContent = msg;
   attachErr.hidden = false;
-  clearTimeout(S.attachErrTimer);
-  S.attachErrTimer = setTimeout(() => {
+  clearTimeout(tabState.attachErrTimer);
+  tabState.attachErrTimer = setTimeout(() => {
     attachErr.hidden = true;
   }, 4000);
 }
@@ -55,8 +55,8 @@ function setAttachError(msg) {
 export function renderAttachments() {
   if (!attachStrip) return;
   attachStrip.textContent = "";
-  attachStrip.hidden = S.attachments.length === 0;
-  S.attachments.forEach((src, i) => {
+  attachStrip.hidden = tabState.attachments.length === 0;
+  tabState.attachments.forEach((src, i) => {
     const thumb = el("div", "thumb");
     const img = document.createElement("img");
     img.alt = "";
@@ -68,7 +68,7 @@ export function renderAttachments() {
     rm.setAttribute("aria-label", t("web.attach.remove"));
     rm.appendChild(icon("x"));
     rm.addEventListener("click", () => {
-      S.attachments.splice(i, 1);
+      tabState.attachments.splice(i, 1);
       renderAttachments();
     });
     thumb.appendChild(rm);
@@ -76,11 +76,11 @@ export function renderAttachments() {
   });
   // Черновик аттачей живёт на активной вкладке (см. saveComposer/restoreComposer).
   const owner = deps.activeTab();
-  if (owner) owner.attachments = S.attachments.slice();
+  if (owner) owner.attachments = tabState.attachments.slice();
 }
 
 function clearAttachments() {
-  S.attachments = [];
+  tabState.attachments = [];
   renderAttachments();
 }
 
@@ -100,7 +100,7 @@ async function addFiles(files) {
       err = t("web.attach.only_images");
       continue;
     }
-    if (S.attachments.length >= MAX_IMAGES) {
+    if (tabState.attachments.length >= MAX_IMAGES) {
       err = t("web.attach.too_many", { max: MAX_IMAGES });
       break;
     }
@@ -114,11 +114,11 @@ async function addFiles(files) {
         err = t("web.attach.invalid");
         continue;
       }
-      if (S.attachments.length >= MAX_IMAGES) {
+      if (tabState.attachments.length >= MAX_IMAGES) {
         err = t("web.attach.too_many", { max: MAX_IMAGES });
         break;
       }
-      S.attachments.push(url);
+      tabState.attachments.push(url);
     } catch (e) {
       err = t("web.attach.read_failed");
     }
@@ -143,13 +143,13 @@ export function saveComposer() {
   const tab = deps.activeTab();
   if (!tab || !inp) return;
   tab.draft = inp.value;
-  tab.attachments = S.attachments.slice();
+  tab.attachments = tabState.attachments.slice();
 }
 
 export function restoreComposer(tab) {
   if (!tab || !inp) return;
   inp.value = tab.draft || "";
-  S.attachments = (tab.attachments || []).slice();
+  tabState.attachments = (tab.attachments || []).slice();
   renderAttachments();
   autogrow();
   closeCmdk();
@@ -174,23 +174,23 @@ const topToolsAnchor = document.createComment("top-tools");
 if (barTop && newChatBtn) barTop.insertBefore(topToolsAnchor, newChatBtn);
 
 function stepTab(dir) {
-  if (S.tabs.length < 2) return;
-  const i = S.tabs.findIndex((x) => x.id === S.activeTabId);
-  const n = i === -1 ? 0 : (i + dir + S.tabs.length) % S.tabs.length;
-  const tab = S.tabs[n];
+  if (tabState.tabs.length < 2) return;
+  const i = tabState.tabs.findIndex((x) => x.id === tabState.activeTabId);
+  const n = i === -1 ? 0 : (i + dir + tabState.tabs.length) % tabState.tabs.length;
+  const tab = tabState.tabs[n];
   // Same semantics as clicking the tab in the strip.
   if (tab) deps.openTab(tab.id, tab.name, tab.kind, true);
 }
 
 export function renderSessBar() {
   if (!sessBar) return;
-  const active = S.tabs.find((x) => x.id === S.activeTabId);
+  const active = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   const label = active ? active.name || String(active.id) : "—";
   sessNameEl.textContent = label;
   sessNameBtn.title = label + (active && active.status && active.status !== "idle" ? " · " + deps.statusTitle(active.status) : "");
-  const has = S.tabs.length > 0;
-  sessPrevBtn.disabled = S.tabs.length < 2;
-  sessNextBtn.disabled = S.tabs.length < 2;
+  const has = tabState.tabs.length > 0;
+  sessPrevBtn.disabled = tabState.tabs.length < 2;
+  sessNextBtn.disabled = tabState.tabs.length < 2;
   sessCloseBtn.disabled = !has;
   sessNameBtn.disabled = !has;
 }
@@ -210,7 +210,7 @@ function placeTopTools() {
 if (sessPrevBtn) sessPrevBtn.addEventListener("click", () => stepTab(-1));
 if (sessNextBtn) sessNextBtn.addEventListener("click", () => stepTab(1));
 if (sessCloseBtn) sessCloseBtn.addEventListener("click", () => {
-  if (S.activeTabId) deps.closeTab(S.activeTabId);
+  if (tabState.activeTabId) deps.closeTab(tabState.activeTabId);
 });
 if (sessNameBtn) sessNameBtn.addEventListener("click", (e) => {
   e.stopPropagation();
@@ -284,7 +284,7 @@ if (inp)
 
 async function send() {
   const text = inp.value.trim();
-  const images = S.attachments.slice();
+  const images = tabState.attachments.slice();
   if (!text && !images.length) return;
   const tab = deps.activeTab();
   // Владелец сообщения — активная сессионная вкладка; локальные `new`-табы
@@ -312,7 +312,7 @@ async function send() {
       tab.draft = "";
       tab.attachments = [];
     }
-    S.attachments = [];
+    tabState.attachments = [];
     renderAttachments();
     clearInput();
     const name = text.slice(1).split(/\s+/)[0].toLowerCase();
@@ -337,9 +337,9 @@ async function send() {
   if (feed && feed.querySelector(".startbanner") === null && feed.querySelector(".u") === null) {
     const banner = el("div", "startbanner");
     banner.appendChild(document.createTextNode(t("web.start.label") + " "));
-    banner.appendChild(el("b", "", (S.state.config && S.state.config.model) || S.state.host.model || "—"));
-    const sessionPart = S.state.host.sessionId ? " · " + t("web.start.session") + " " + String(S.state.host.sessionId) : "";
-    banner.appendChild(document.createTextNode(" · " + (S.state.host.provider || (S.state.config && S.state.config.provider && S.state.config.provider.active) || "—") + " · " + contextLabel() + sessionPart));
+    banner.appendChild(el("b", "", (settings.config && settings.config.model) || session.host.model || "—"));
+    const sessionPart = session.host.sessionId ? " · " + t("web.start.session") + " " + String(session.host.sessionId) : "";
+    banner.appendChild(document.createTextNode(" · " + (session.host.provider || (settings.config && settings.config.provider && settings.config.provider.active) || "—") + " · " + contextLabel() + sessionPart));
     feed.insertBefore(banner, feed.firstChild);
   }
   appendTo(feed, userMessageNode(text, images));
@@ -348,7 +348,7 @@ async function send() {
     tab.draft = "";
     tab.attachments = [];
   }
-  S.attachments = [];
+  tabState.attachments = [];
   renderAttachments();
   clearInput();
   if (sessionId) deps.setTabStatus(sessionId, "working");
@@ -379,9 +379,9 @@ async function interrupt() {
   // сервер ответит 409 `idle`, если бежит не наша сессия.
   const tab = deps.activeTab();
   const sessionId = tab && tab.kind === "session" ? tab.id : null;
-  const running = S.state.runningSessionIds || [];
+  const running = session.runningSessionIds || [];
   if (sessionId && !running.includes(sessionId)) return;
-  if (!sessionId && !S.state.busy) return;
+  if (!sessionId && !session.busy) return;
   await api("/api/interrupt", { method: "POST", body: sessionId ? { sessionId } : {} });
 }
 
@@ -404,7 +404,7 @@ if (sendBtn) {
   sendBtn.addEventListener("click", () => {
     // Стоп — только свой ход: чужая вкладка шлёт как обычно (встанет в очередь).
     const tab = deps.activeTab();
-    const own = tab && tab.kind === "session" && S.state.runningSessionIds.includes(tab.id);
+    const own = tab && tab.kind === "session" && session.runningSessionIds.includes(tab.id);
     if (own) interrupt();
     else send();
   });
@@ -416,7 +416,7 @@ if (sendBtn) {
 // в per-session очередь). Глобальный rail (`setBusy`) живёт своим флагом.
 export function reflectBusy() {
   const tab = deps.activeTab();
-  const running = S.state.runningSessionIds || [];
+  const running = session.runningSessionIds || [];
   const own = !!(tab && tab.kind === "session" && running.includes(tab.id));
   if (inp) inp.setAttribute("aria-busy", own ? "true" : "false");
   const area = document.querySelector(".input-area");
@@ -433,5 +433,5 @@ export function reflectBusy() {
   }
   const escHint = document.getElementById("hintEsc");
   if (escHint) escHint.hidden = !own;
-  setBusy(S.state.busy);
+  setBusy(session.busy);
 }

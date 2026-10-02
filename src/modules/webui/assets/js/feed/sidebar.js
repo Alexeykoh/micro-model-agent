@@ -2,7 +2,7 @@
 // environment section. Extracted from `feed.js` (re-exported there).
 import { usageEl, envEl, wsLine, el, icon } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
-import { S } from "../store.js";
+import { feed, settings } from "../store.js";
 import { fmtTokens } from "../format.js";
 import { copyText } from "../../md.js";
 
@@ -92,14 +92,14 @@ function usageSessionRow(sessionId) {
 }
 
 export function renderUsage(h) {
-  const cfg = S.state.config || {};
+  const cfg = settings.config || {};
   const sig = JSON.stringify([
     h.sessionId, h.model, h.contextUsed, h.contextLimit, h.cacheHitRate, h.costUsd,
     h.compactionCount, h.contextQuality, h.contextProbe, h.contextBreakdown, cfg.model, cfg.contextWindow,
     I18N.locale,
   ]);
-  if (sig === S.lastUsageSig) return;
-  S.lastUsageSig = sig;
+  if (sig === feed.lastUsageSig) return;
+  feed.lastUsageSig = sig;
   usageEl.textContent = "";
   const sid = h.sessionId ? String(h.sessionId) : "";
   usageEl.appendChild(usageSessionRow(sid));
@@ -168,8 +168,8 @@ export function renderEnvironment(h) {
   const files = h.instructions && !disabled ? h.instructions.files || [] : [];
   const map = h.projectMap || null;
   const sig = JSON.stringify([disabled, files, map, I18N.locale]);
-  if (sig === S.lastEnvSig) return;
-  S.lastEnvSig = sig;
+  if (sig === feed.lastEnvSig) return;
+  feed.lastEnvSig = sig;
   envEl.textContent = "";
   envEl.appendChild(
     envItem(

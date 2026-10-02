@@ -3,7 +3,7 @@
 // the layout. Extracted from `settings.js`.
 import { el, icon } from "../dom.js";
 import { t } from "../i18n.js";
-import { S } from "../store.js";
+import { settings } from "../store.js";
 import { keyToPanel } from "./controls.js";
 import { configLabel, descFor, defFor } from "./panels.js";
 import { selectSettingsPanel } from "./modal.js";
@@ -17,7 +17,7 @@ if (setSearchIcon) setSearchIcon.appendChild(icon("search", "set-search-svg"));
 
 function searchIndex() {
   const owner = keyToPanel();
-  return (S.state.registry || [])
+  return (settings.registry || [])
     .filter((def) => def && typeof def.key === "string")
     .map((def) => {
       const label = configLabel(def);

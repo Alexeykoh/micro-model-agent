@@ -2,7 +2,7 @@
 // (`onPlan`). Extracted from `feed.js`; re-exported there.
 import { planEl, planCountEl, el } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
-import { S } from "../store.js";
+import { feed, tabs as tabState } from "../store.js";
 import { feedForEvent, clearEmpty, appendTo, activeFeed, scroll } from "./core.js";
 
 // One marking for a plan step, shared by the sidebar (`renderPlan`) and the
@@ -19,8 +19,8 @@ export function renderPlan(plan) {
   // The sidebar polls `/api/state` every 2s; skip a rebuild (and the scroll
   // reset it would cause) when the snapshot is unchanged.
   const sig = JSON.stringify([plan, I18N.locale]);
-  if (sig === S.lastPlanSig) return;
-  S.lastPlanSig = sig;
+  if (sig === feed.lastPlanSig) return;
+  feed.lastPlanSig = sig;
   planEl.textContent = "";
   if (!plan || !Array.isArray(plan.steps) || !plan.steps.length) {
     planCountEl.textContent = "";
@@ -50,7 +50,7 @@ export function onPlan(data) {
   const feed = feedForEvent(data && data.sessionId);
   if (!feed || !data || !Array.isArray(data.steps) || !data.steps.length) return;
   clearEmpty(feed);
-  const tab = S.tabs.find((x) => x.feed === feed);
+  const tab = tabState.tabs.find((x) => x.feed === feed);
   let card = tab ? tab.planCard : null;
   if (!card || card.parentNode !== feed) {
     card = el("div", "planblock");

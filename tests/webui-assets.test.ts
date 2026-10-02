@@ -226,7 +226,7 @@ describe("webui assets", () => {
 
   it("offers one-click builtin provider presets in the form", () => {
     const a = loadAssets();
-    expect(js(a)).toContain("state.providerPresets");
+    expect(js(a)).toContain("settings.providerPresets");
     expect(js(a)).toContain("provider_preset");
     expect(js(a)).toContain("provider_custom");
     expect(a.css).toContain(".pform-field select");
@@ -271,7 +271,7 @@ describe("webui assets", () => {
     expect(js(a)).toContain("railEvent(");
     expect(js(a)).toContain('["tool_start", "tool_end", "text", "plan"]');
     expect(js(a)).toContain('"ui.activityRail"');
-    expect(js(a)).toContain("setBusy(S.state.busy)");
+    expect(js(a)).toContain("setBusy(session.busy)");
   });
 
   it("wires the ui.fontSize setting to body[data-font]", () => {
@@ -290,11 +290,11 @@ describe("webui assets", () => {
     expect(a.js).toContain("hooks.applyState = renderState");
     expect(a.js).toContain("hooks.refreshState = refresh");
     // Switch sets the client-active session immediately and resets Trace.
-    expect(tabs).toContain("S.state.activeSessionId = id");
+    expect(tabs).toContain("session.activeSessionId = id");
     expect(tabs).toContain("sidebarSessionChanged(id)");
     expect(tabs).toContain("hooks.refreshState?.()");
     // Guard against a stale response clobbering a newer tab.
-    expect(a.js).toContain("if (S.activeTabId !== sid) return;");
+    expect(a.js).toContain("if (tabState.activeTabId !== sid) return;");
   });
 
   it("uses one shared EventSource so all tabs stream live (no per-session reconnect)", () => {
@@ -407,7 +407,7 @@ describe("webui assets", () => {
     // не перерисовывала полосу и легенду (stale UI).
     const a = loadAssets();
     const src = js(a);
-    const sigIdx = src.indexOf("S.lastUsageSig");
+    const sigIdx = src.indexOf("feed.lastUsageSig");
     expect(sigIdx).toBeGreaterThan(-1);
     expect(src.slice(Math.max(0, sigIdx - 700), sigIdx)).toContain("h.contextBreakdown");
   });

@@ -5,7 +5,7 @@
 import { el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { S } from "../store.js";
+import { session } from "../store.js";
 import { relTime, matchesQuery } from "../format.js";
 import { openConfirm } from "../dialog.js";
 import { setSessOpen, setSessionCloseHook } from "../core/menus.js";
@@ -81,8 +81,8 @@ export function renderSessionsDropdown() {
   activeList.textContent = "";
   recentList.textContent = "";
   const q = sessQuery.trim();
-  const activeId = S.state.activeSessionId;
-  const sorted = S.state.sessions.slice().sort((a, b) => {
+  const activeId = session.activeSessionId;
+  const sorted = session.sessions.slice().sort((a, b) => {
     const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
     const bt = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
     return bt - at;
@@ -119,8 +119,8 @@ export function renderSessionsDropdown() {
       recentList.appendChild(el("div", "si", t("web.sessions.none")));
     }
   }
-  if (S.state.sessionsError) {
-    recentList.appendChild(el("div", "dd-err", S.state.sessionsError));
+  if (session.sessionsError) {
+    recentList.appendChild(el("div", "dd-err", session.sessionsError));
   }
 }
 
@@ -166,11 +166,11 @@ function confirmDeleteSession(id, name) {
 }
 
 function showSessionsError(msg) {
-  S.state.sessionsError = msg;
+  session.sessionsError = msg;
   renderSessionsDropdown();
   if (sessionsErrTimer) clearTimeout(sessionsErrTimer);
   sessionsErrTimer = setTimeout(() => {
-    S.state.sessionsError = null;
+    session.sessionsError = null;
     renderSessionsDropdown();
   }, 4500);
 }
@@ -185,7 +185,7 @@ async function deleteSession(id) {
         : t("web.sessions.delete_failed"),
     );
   } else {
-    S.state.sessionsError = null;
+    session.sessionsError = null;
     // Удалённая сессия не должна оставаться открытой вкладкой с мёртвым id
     // (иначе — activate/history 404, сайдбар не следует, "история недоступна").
     deps.closeTab(id);

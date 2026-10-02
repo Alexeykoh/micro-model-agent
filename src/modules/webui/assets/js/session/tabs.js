@@ -1,12 +1,12 @@
 // Tabs hub: tab model/strip/status, openTab/closeTab, session loaders.
-// Owns S.state hydration (loaders render their own chrome). The session
+// Owns session-state hydration (loaders render their own chrome). The session
 // dropdown, composer and slash-autocomplete are siblings under `./session/`;
 // they receive the tab operations they need via their `init*` functions, so
 // this hub is the only importer and the frontend DAG stays acyclic.
 import { msgs, inp, tabstripEl, el, icon, link } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { S, hooks } from "../store.js";
+import { tabs as tabState, session, hooks } from "../store.js";
 import {
   makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent,
   loadHistory, syncUrl, scrollToBottom,
@@ -46,12 +46,12 @@ function statusTitle(status) {
 // остаётся один на весь браузер, но ощущается как свой за счёт save/restore).
 // `status`: idle | working | waiting | queued | failed (done схлопывается в idle).
 export function activeTab() {
-  return S.tabs.find((x) => x.id === S.activeTabId) || null;
+  return tabState.tabs.find((x) => x.id === tabState.activeTabId) || null;
 }
 
 export function setTabStatus(id, status) {
   if (!id) return;
-  const tab = S.tabs.find((x) => x.id === id);
+  const tab = tabState.tabs.find((x) => x.id === id);
   if (!tab || tab.status === status || tab.dead) return;
   tab.status = status;
   renderTabstrip();
@@ -65,7 +65,7 @@ export function setTabStatus(id, status) {
  * Идемпотентна (повторные 404 её же вкладки — no-op).
  */
 export function markTabDead(id) {
-  const tab = S.tabs.find((x) => x.id === id);
+  const tab = tabState.tabs.find((x) => x.id === id);
   if (!tab || tab.dead) return;
   tab.dead = true;
   tab.status = "dead";
@@ -84,8 +84,8 @@ export function markTabDead(id) {
 
 function renderTabstrip() {
   tabstripEl.textContent = "";
-  S.tabs.forEach((item) => {
-    const on = item.id === S.activeTabId;
+  tabState.tabs.forEach((item) => {
+    const on = item.id === tabState.activeTabId;
     const label = item.name || item.id;
     // The id lives in the tooltip (and the sidebar copy button), not inline,
     // so the session name keeps the tab width.
@@ -155,14 +155,14 @@ tabstripEl.addEventListener(
 // Only the active tab is persisted; the token param is preserved as-is.
 export function updateTabName(id, name) {
   if (!id || !name) return;
-  const tab = S.tabs.find((x) => x.id === id);
+  const tab = tabState.tabs.find((x) => x.id === id);
   if (tab && tab.name !== name) {
     tab.name = name;
     renderTabstrip();
   }
   // Patch the session list too, otherwise the dropdown keeps the stale name
   // until the next `loadSessions()` poll (15s).
-  const sess = S.state.sessions.find((s) => s.id === id);
+  const sess = session.sessions.find((s) => s.id === id);
   if (sess && sess.name !== name) {
     sess.name = name;
     renderSessionsDropdown();
@@ -171,7 +171,7 @@ export function updateTabName(id, name) {
 
 export function openTab(id, name, kind, server) {
   saveComposer();
-  let tab = S.tabs.find((x) => x.id === id);
+  let tab = tabState.tabs.find((x) => x.id === id);
   if (!tab) {
     tab = {
       id,
@@ -187,16 +187,16 @@ export function openTab(id, name, kind, server) {
       attachments: [],
       status: "idle",
     };
-    S.tabs.push(tab);
+    tabState.tabs.push(tab);
   } else if (name) {
     tab.name = name;
   }
-  S.activeTabId = id;
-  S.liveTabId = id;
+  tabState.activeTabId = id;
+  tabState.liveTabId = id;
   // Сайдбар следует за вкладкой сразу: активная сессия — эта, Trace сбрасывается
   // синхронно (не ждём activate/полл). Новые (ещё не серверные) вкладки — мимо.
   if ((kind || "session") === "session") {
-    S.state.activeSessionId = id;
+    session.activeSessionId = id;
     sidebarSessionChanged(id);
   }
   msgs.replaceChildren(tab.feed);
@@ -232,7 +232,7 @@ export function openTab(id, name, kind, server) {
         return;
       }
       loadSessions();
-      if (S.activeTabId === id) hooks.refreshState?.();
+      if (tabState.activeTabId === id) hooks.refreshState?.();
     });
     loadHistory(tab).then((st) => {
       if (st && st.gone) markTabDead(tab.id);
@@ -242,24 +242,24 @@ export function openTab(id, name, kind, server) {
 }
 
 export function closeTab(id) {
-  const i = S.tabs.findIndex((x) => x.id === id);
+  const i = tabState.tabs.findIndex((x) => x.id === id);
   if (i === -1) return;
-  const closingActive = S.activeTabId === id;
+  const closingActive = tabState.activeTabId === id;
   if (closingActive) saveComposer();
-  S.tabs = S.tabs.filter((x) => x.id !== id);
+  tabState.tabs = tabState.tabs.filter((x) => x.id !== id);
   if (closingActive) {
-    const next = S.tabs[Math.min(i, S.tabs.length - 1)];
+    const next = tabState.tabs[Math.min(i, tabState.tabs.length - 1)];
     if (next) {
-      S.activeTabId = next.id;
-      S.liveTabId = next.id;
+      tabState.activeTabId = next.id;
+      tabState.liveTabId = next.id;
       msgs.replaceChildren(next.feed);
       restoreComposer(next);
       scrollToBottom();
     } else {
-      S.activeTabId = null;
-      S.liveTabId = null;
+      tabState.activeTabId = null;
+      tabState.liveTabId = null;
       if (inp) inp.value = "";
-      S.attachments = [];
+      tabState.attachments = [];
       renderAttachments();
       showEmptyFeed();
     }
@@ -277,13 +277,13 @@ async function newChatTab() {
     await loadSessions();
     // Новая сессия — без плана: полный снапшот под ?session=<id> чистит сайдбар.
     setSessionLoading(true);
-    if (S.activeTabId === meta.id) hooks.refreshState?.();
+    if (tabState.activeTabId === meta.id) hooks.refreshState?.();
     return;
   }
   // Server-side creation failed (no manager / offline): keep a local-only tab
   // so the user is not blocked, but surface the failure.
-  S.newSeq++;
-  openTab("new" + S.newSeq, t("web.empty.title"), "new", false);
+  tabState.newSeq++;
+  openTab("new" + tabState.newSeq, t("web.empty.title"), "new", false);
   setIndicator(t("web.sessions.create_failed"), true);
 }
 
@@ -296,10 +296,10 @@ document.getElementById("newChat").addEventListener("click", newChatTab);
  * события хода (ответ/turn_end) или новый send, иначе полл затёр бы «ждёт вас».
  */
 export function reconcileTabStatuses() {
-  const running = S.state.runningSessionIds || [];
-  const queued = S.state.queued || {};
+  const running = session.runningSessionIds || [];
+  const queued = session.queued || {};
   let changed = false;
-  S.tabs.forEach((tab) => {
+  tabState.tabs.forEach((tab) => {
     if (tab.kind !== "session") return;
     if (tab.status === "waiting" || tab.status === "failed" || tab.status === "dead") return;
     const next = running.includes(tab.id) ? "working" : queued[tab.id] > 0 ? "queued" : "idle";
@@ -314,7 +314,7 @@ export function reconcileTabStatuses() {
 export async function loadSessions() {
   const r = await api("/api/sessions");
   if (!r.ok || !r.data) return;
-  S.state.sessions = Array.isArray(r.data.sessions) ? r.data.sessions : [];
+  session.sessions = Array.isArray(r.data.sessions) ? r.data.sessions : [];
   renderSessionsDropdown();
 }
 

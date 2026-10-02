@@ -1,7 +1,7 @@
 // Sidebar core for `mma web`: tab switching, indicators, i18n and init. Wires
 // the Trace/Map/LSP submodules; `sidebar.js` is the public barrel.
 import { icon } from "../dom.js";
-import { S } from "../store.js";
+import { session } from "../store.js";
 import { t } from "../i18n.js";
 import { sb, TABS, ICON_NAME, paneEl, mqMobile, readStored, storeTab } from "./state.js";
 import { collapseDetail, renderList, renderDetail } from "./trace.js";
@@ -47,7 +47,7 @@ export function applySidebarI18n() {
     const entry = sb.trace.find((x) => x.id === sb.selected);
     if (entry) renderDetail(entry);
   }
-  sidebarMapState(S.state.host);
+  sidebarMapState(session.host);
   renderLsp();
 }
 

@@ -5,7 +5,7 @@
 import { el, icon, link, inlineTextNodes, makeToggle } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { S, getPath, THEME_KEY } from "../store.js";
+import { settings, getPath, THEME_KEY } from "../store.js";
 import { setIndicator } from "../dialog.js";
 import { controlFor, PANEL_SECTIONS } from "./controls.js";
 import { postConfig } from "./write.js";
@@ -29,7 +29,7 @@ export function enumLabel(v) {
 }
 
 export function defFor(key) {
-  return S.state.registry.find((d) => d.key === key) || null;
+  return settings.registry.find((d) => d.key === key) || null;
 }
 
 export function row(label, control, desc) {
@@ -62,8 +62,8 @@ function configControl(def, key) {
   const value =
     def.readOnly && def.value !== undefined
       ? def.value
-      : S.state.config
-        ? getPath(S.state.config, key)
+      : settings.config
+        ? getPath(settings.config, key)
         : undefined;
   return controlFor(def, value, {
     label: configLabel(def),
@@ -213,7 +213,7 @@ function renderSecurityPanel() {
   access.appendChild(head);
   const body = el("div", "sec-body");
   body.appendChild(
-    row(t("web.settings.web_token"), el("span", "val dim", S.state.webToken || t("web.settings.web_token_none")), t("config.desc.webToken")),
+    row(t("web.settings.web_token"), el("span", "val dim", settings.webToken || t("web.settings.web_token_none")), t("config.desc.webToken")),
   );
   const note = el("div", "placeholder");
   note.appendChild(el("span", "tag", t("web.settings.terminal_tag")));
@@ -267,11 +267,11 @@ function renderMemoryPanel() {
   const container = document.querySelector('[data-panel="memory"]');
   if (!container) return;
   container.textContent = "";
-  if (S.state.memory === undefined || S.state.memory === null) {
-    container.appendChild(placeholderFor(S.state.memory, t("web.settings.memory_unavailable")));
+  if (settings.memory === undefined || settings.memory === null) {
+    container.appendChild(placeholderFor(settings.memory, t("web.settings.memory_unavailable")));
     return;
   }
-  const data = S.state.memory;
+  const data = settings.memory;
 
   // Adding an entry opens the shared nested dialog: a category + a multi-line
   // note with room to write, instead of a cramped inline field.
@@ -358,18 +358,18 @@ function renderSkillsPanel() {
   const container = document.querySelector('[data-panel="skills"]');
   if (!container) return;
   container.textContent = "";
-  if (S.state.skills === undefined || S.state.skills === null) {
-    container.appendChild(placeholderFor(S.state.skills, t("web.settings.skills_unavailable")));
+  if (settings.skills === undefined || settings.skills === null) {
+    container.appendChild(placeholderFor(settings.skills, t("web.settings.skills_unavailable")));
     return;
   }
-  if (!S.state.skills.length) {
+  if (!settings.skills.length) {
     const empty = el("div", "placeholder");
     empty.textContent = t("web.settings.no_skills");
     container.appendChild(empty);
     return;
   }
   const list = el("div", "settings-list");
-  S.state.skills.forEach((s) => {
+  settings.skills.forEach((s) => {
     const item = el("div", "skill-item");
     const head = el("div", "skill-head");
     head.appendChild(el("span", s.enabled ? "g" : "dim", s.enabled ? "✓" : "○"));
@@ -393,11 +393,11 @@ function renderPluginsPanel() {
   const container = document.querySelector('[data-panel="plugins"]');
   if (!container) return;
   container.textContent = "";
-  if (S.state.pluginsData === undefined || S.state.pluginsData === null) {
-    container.appendChild(placeholderFor(S.state.pluginsData, t("web.settings.plugins_unavailable")));
+  if (settings.pluginsData === undefined || settings.pluginsData === null) {
+    container.appendChild(placeholderFor(settings.pluginsData, t("web.settings.plugins_unavailable")));
     return;
   }
-  const data = S.state.pluginsData;
+  const data = settings.pluginsData;
   const list = el("div", "settings-list");
   list.appendChild(groupHeader(t("web.settings.plugins_header"), (data.plugins || []).length));
   if (!(data.plugins || []).length) {
@@ -472,7 +472,7 @@ function renderPluginsPanel() {
     }));
     list.appendChild(line);
   });
-  if (S.state.mcpForm) list.appendChild(mcpForm());
+  if (settings.mcpForm) list.appendChild(mcpForm());
   if ((data.mcp || []).length) {
     const mnote = el("div", "settings-note");
     mnote.textContent = t("web.settings.mcp_note");
@@ -486,8 +486,8 @@ function renderPluginsPanel() {
 // start blank — leaving them blank on edit keeps the stored values (patch
 // semantics: absent keys are not touched).
 function mcpForm() {
-  const mode = (S.state.mcpForm && S.state.mcpForm.mode) || "add";
-  const editing = (S.state.mcpForm && S.state.mcpForm.entry) || {};
+  const mode = (settings.mcpForm && settings.mcpForm.mode) || "add";
+  const editing = (settings.mcpForm && settings.mcpForm.entry) || {};
   const box = el("div", "pform");
   const grid = el("div", "pform-grid");
   const fName = providerInput(editing.name || "", "text", "my-server");
@@ -526,12 +526,12 @@ function mcpForm() {
 
 /** Open the MCP add/edit nested dialog. */
 function openMcpForm(mode, entry) {
-  S.state.mcpForm = { mode, entry: entry || null };
+  settings.mcpForm = { mode, entry: entry || null };
   openSubDialog(
     t(mode === "edit" ? "web.settings.mcp_edit_title" : "web.settings.mcp_add"),
     mcpForm(),
     () => {
-      S.state.mcpForm = null;
+      settings.mcpForm = null;
       renderPluginsPanel();
       void loadPlugins();
     },
@@ -607,7 +607,7 @@ async function submitMcpForm(f, mode, editing) {
 }
 
 function renderLspSection(list) {
-  const servers = S.state.lsp;
+  const servers = settings.lsp;
   list.appendChild(groupHeader(t("web.settings.lsp_servers"), Array.isArray(servers) ? servers.length : null));
   if (servers === undefined || servers === null) {
     list.appendChild(placeholderFor(servers, t("web.settings.lsp_unavailable")));
@@ -639,9 +639,9 @@ function renderLspSection(list) {
 
 /** Open the LSP server edit nested dialog. */
 function openLspForm(entry) {
-  S.state.lspForm = { lang: entry.lang, entry };
+  settings.lspForm = { lang: entry.lang, entry };
   openSubDialog(entry.lang, lspForm(), () => {
-    S.state.lspForm = null;
+    settings.lspForm = null;
     renderPluginsPanel();
     void loadLsp();
   });
@@ -649,8 +649,8 @@ function openLspForm(entry) {
 
 // LSP server edit form (enabled toggle, timeout, command, args JSON).
 function lspForm() {
-  const editing = (S.state.lspForm && S.state.lspForm.entry) || {};
-  const lang = (S.state.lspForm && S.state.lspForm.lang) || editing.lang || "";
+  const editing = (settings.lspForm && settings.lspForm.entry) || {};
+  const lang = (settings.lspForm && settings.lspForm.lang) || editing.lang || "";
   const box = el("div", "pform");
   const grid = el("div", "pform-grid");
   const fCommand = providerInput(editing.command || "", "text", "npx");
@@ -709,25 +709,25 @@ function lspForm() {
 // --- loaders -------------------------------------------------------------
 export async function loadLsp() {
   const r = await api("/api/lsp");
-  S.state.lsp = r.ok && r.data && Array.isArray(r.data.servers) ? r.data.servers : null;
+  settings.lsp = r.ok && r.data && Array.isArray(r.data.servers) ? r.data.servers : null;
   renderPluginsPanel();
 }
 
 export async function loadMemory() {
   const r = await api("/api/memory");
-  S.state.memory = r.ok && r.data ? r.data : null;
+  settings.memory = r.ok && r.data ? r.data : null;
   renderMemoryPanel();
 }
 
 export async function loadSkills() {
   const r = await api("/api/skills");
-  S.state.skills = r.ok && r.data && Array.isArray(r.data.skills) ? r.data.skills : null;
+  settings.skills = r.ok && r.data && Array.isArray(r.data.skills) ? r.data.skills : null;
   renderSkillsPanel();
 }
 
 export async function loadPlugins() {
   const r = await api("/api/plugins");
-  S.state.pluginsData =
+  settings.pluginsData =
     r.ok && r.data
       ? { plugins: r.data.plugins || [], mcp: r.data.mcp || [] }
       : null;

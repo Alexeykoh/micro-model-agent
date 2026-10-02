@@ -1,7 +1,7 @@
 // Settings shell: the modal overlay, its section tablist, `renderSettings`
 // dispatch and open/close/escape. Extracted from `settings.js`. Also registers
 // the render callbacks the write funnel (`settings/write.js`) calls back into.
-import { S } from "../store.js";
+import { settings } from "../store.js";
 import { closeConfirm, confirmOverlay, trapTab } from "../dialog.js";
 import {
   renderPanel, renderUiPanel, renderMemoryPanel, renderSkillsPanel,
@@ -91,9 +91,9 @@ function openSettingsAt(panel) {
 }
 function closeSettings() {
   closeSubDialog();
-  S.state.providerForm = null;
-  S.state.mcpForm = null;
-  S.state.lspForm = null;
+  settings.providerForm = null;
+  settings.mcpForm = null;
+  settings.lspForm = null;
   overlay.classList.remove("open");
   settingsBtn.setAttribute("aria-expanded", "false");
   if (settingsReturnFocus && settingsReturnFocus.focus) settingsReturnFocus.focus();

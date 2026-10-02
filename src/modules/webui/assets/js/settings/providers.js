@@ -5,7 +5,7 @@
 import { el, icon, link } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { S } from "../store.js";
+import { settings } from "../store.js";
 import { contextLabel } from "../format.js";
 import { setIndicator } from "../dialog.js";
 import { PANEL_SECTIONS } from "./controls.js";
@@ -15,10 +15,10 @@ import { pfield, providerInput, providerSelect, providerCheck } from "./form.js"
 import { openSubDialog, closeSubDialog } from "./subdialog.js";
 
 function providerEntries() {
-  if (S.state.providers && Array.isArray(S.state.providers.entries) && S.state.providers.entries.length) {
-    return S.state.providers.entries;
+  if (settings.providers && Array.isArray(settings.providers.entries) && settings.providers.entries.length) {
+    return settings.providers.entries;
   }
-  const provider = (S.state.config && S.state.config.provider) || {};
+  const provider = (settings.config && settings.config.provider) || {};
   if (Array.isArray(provider.entries) && provider.entries.length) {
     return provider.entries.map((e) => ({
       type: e.type,
@@ -140,7 +140,7 @@ const BASE_URL_CUSTOM = "__custom__";
 // hosted providers need no URL knowledge. `custom` leaves the fields free.
 // Returns the row node (null when no presets) plus the raw select for wiring.
 function providerPresetField(editing) {
-  const presets = S.state.providerPresets || [];
+  const presets = settings.providerPresets || [];
   if (!presets.length) return { presets, sel: null, node: null };
   const sel = el("select", "pform-preset");
   const custom = el("option", "", t("web.settings.provider_custom"));
@@ -311,8 +311,8 @@ async function submitProviderForm(f, mode, editing) {
 }
 
 function providerForm() {
-  const mode = (S.state.providerForm && S.state.providerForm.mode) || "add";
-  const editing = (S.state.providerForm && S.state.providerForm.entry) || {};
+  const mode = (settings.providerForm && settings.providerForm.mode) || "add";
+  const editing = (settings.providerForm && settings.providerForm.entry) || {};
   const box = el("div", "pform");
 
   const { presets, sel: presetSel, node: presetNode } = providerPresetField(editing);
@@ -345,7 +345,7 @@ export function renderModelPanel() {
   const container = document.querySelector('[data-panel="model"]');
   if (!container) return;
   container.textContent = "";
-  const cfg = S.state.config || {};
+  const cfg = settings.config || {};
 
   // --- Model section ---
   const modelSec = settingsSection("web.settings.section_models");
@@ -358,9 +358,9 @@ export function renderModelPanel() {
   const draw = () => {
     list.textContent = "";
     const q = search.value.trim().toLowerCase();
-    const models = S.state.models.filter((m) => !q || m.toLowerCase().indexOf(q) !== -1);
+    const models = settings.models.filter((m) => !q || m.toLowerCase().indexOf(q) !== -1);
     if (!models.length) {
-      list.appendChild(el("div", "placeholder", S.state.models.length ? t("web.settings.no_matches") : t("web.settings.no_models")));
+      list.appendChild(el("div", "placeholder", settings.models.length ? t("web.settings.no_matches") : t("web.settings.no_models")));
       return;
     }
     models.forEach((m) => {
@@ -395,7 +395,7 @@ export function renderModelPanel() {
     const n = providerName(e);
     return n && n !== "—";
   });
-  const activeName = (S.state.providers && S.state.providers.active) || cfg.provider?.active || cfg.provider?.type || "—";
+  const activeName = (settings.providers && settings.providers.active) || cfg.provider?.active || cfg.provider?.type || "—";
   const provList = el("div", "provider-list");
   entries.forEach((entry) => {
     const name = providerName(entry);
@@ -440,13 +440,13 @@ export function renderModelPanel() {
 
 export async function loadProviders() {
   const r = await api("/api/providers");
-  S.state.providers = r.ok && r.data && Array.isArray(r.data.entries) ? r.data : undefined;
-  S.state.providerPresets = r.ok && r.data && Array.isArray(r.data.presets) ? r.data.presets : [];
+  settings.providers = r.ok && r.data && Array.isArray(r.data.entries) ? r.data : undefined;
+  settings.providerPresets = r.ok && r.data && Array.isArray(r.data.presets) ? r.data.presets : [];
   renderModelPanel();
 }
 
 function openProviderForm(mode, entry) {
-  S.state.providerForm = { mode, entry: entry || null };
+  settings.providerForm = { mode, entry: entry || null };
   openSubDialog(
     t(mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title"),
     providerForm(),
@@ -455,6 +455,6 @@ function openProviderForm(mode, entry) {
 }
 
 function closeProviderForm() {
-  S.state.providerForm = null;
+  settings.providerForm = null;
   closeSubDialog();
 }

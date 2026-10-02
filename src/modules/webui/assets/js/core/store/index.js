@@ -1,11 +1,9 @@
 // Sliced shared frontend state (was a single `S` object in `store.js`).
 //
 // ESM live bindings cannot be reassigned from importers, so every mutable field
-// lives on a domain slice (`feed`/`tabs`/`settings`/`session`) and the modules
-// read/write the slice they own. The legacy `S` god-object is kept temporarily
-// as an accessor *view* over the slices (top-level fields + the `state` group)
-// so not-yet-migrated consumers keep working unchanged; the slices are the
-// single source of truth.
+// lives on a domain slice (`feed`/`tabs`/`settings`/`session`) and each module
+// reads/writes the slice it owns. The old `S` god-object (and its `state` group)
+// is gone; `grep -n "\\bS\\."` in `assets/js` should be empty.
 import { feed } from "./feed.js";
 import { tabs } from "./tabs.js";
 import { settings } from "./settings.js";
@@ -42,70 +40,3 @@ export function getPath(obj, path) {
   return cur;
 }
 
-// Define accessors on `target` for every own key of `source`, so reads/writes
-// (including whole-value reassignment) alias the slice.
-function defineAliases(target, source) {
-  for (const key of Object.keys(source)) {
-    Object.defineProperty(target, key, {
-      enumerable: true,
-      configurable: true,
-      get: () => source[key],
-      set: (v) => {
-        source[key] = v;
-      },
-    });
-  }
-  return target;
-}
-
-// Which slice owns each field historically exposed under `S.state`.
-const STATE_SLICES = {
-  // settings-owned
-  config: settings,
-  registry: settings,
-  webToken: settings,
-  models: settings,
-  memory: settings,
-  skills: settings,
-  pluginsData: settings,
-  providers: settings,
-  providerPresets: settings,
-  providerForm: settings,
-  mcpForm: settings,
-  lspForm: settings,
-  lsp: settings,
-  // session-owned
-  sessions: session,
-  host: session,
-  busy: session,
-  activeSessionId: session,
-  runningSessionId: session,
-  runningSessionIds: session,
-  queued: session,
-  sessionsError: session,
-  reasoning: session,
-};
-
-const stateView = {};
-for (const [key, slice] of Object.entries(STATE_SLICES)) {
-  Object.defineProperty(stateView, key, {
-    enumerable: true,
-    configurable: true,
-    get: () => slice[key],
-    set: (v) => {
-      slice[key] = v;
-    },
-  });
-}
-
-/** Compatibility view over the slices; new code should import slices directly. */
-export const S = {};
-defineAliases(S, tabs);
-defineAliases(S, session);
-defineAliases(S, settings);
-defineAliases(S, feed);
-Object.defineProperty(S, "state", {
-  enumerable: true,
-  configurable: true,
-  get: () => stateView,
-});

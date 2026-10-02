@@ -2,7 +2,7 @@
 // Extracted from `feed.js`; `feed.js` re-exports this module's public surface.
 import { msgs, el, setIcon } from "../dom.js";
 import { t } from "../i18n.js";
-import { S } from "../store.js";
+import { feed } from "../store.js";
 import { verbosity } from "../format.js";
 import { mountMarkdown } from "../../md.js";
 import {
@@ -19,7 +19,7 @@ let textScheduled = false;
 
 function flushText() {
   textScheduled = false;
-  if (!textBuf || !S.curMd) {
+  if (!textBuf || !feed.curMd) {
     textBuf = "";
     textFeed = null;
     return;
@@ -28,7 +28,7 @@ function flushText() {
   const feed = textFeed;
   textBuf = "";
   textFeed = null;
-  S.curMd.write(buf);
+  feed.curMd.write(buf);
   if (feed && feed === activeFeed()) scroll();
 }
 
@@ -42,15 +42,15 @@ function scheduleText() {
   }
 }
 
-// Close the active Markdown segment (if any) and clear the text S.state.
+// Close the active Markdown segment (if any) and clear the feed text state.
 export function finishMd() {
   flushText();
-  if (S.curMd) {
-    S.curMd.root.classList.remove("streaming");
-    S.curMd.end();
-    S.curMd = null;
+  if (feed.curMd) {
+    feed.curMd.root.classList.remove("streaming");
+    feed.curMd.end();
+    feed.curMd = null;
   }
-  S.curText = null;
+  feed.curText = null;
 }
 
 export function onText(chunk, sid) {
@@ -58,18 +58,18 @@ export function onText(chunk, sid) {
   clearBusy(feed);
   if (!feed) return;
   clearEmpty(feed);
-  if (S.curThink) {
+  if (feed.curThink) {
     finishThink();
   }
-  if (S.curText == null) {
+  if (feed.curText == null) {
     flushRun();
-    S.curText = "";
-    S.curMd = mountMarkdown(feed, mdOpts(true));
-    S.curMd.root.classList.add("streaming");
-    S.turnRoots.push(S.curMd.root);
+    feed.curText = "";
+    feed.curMd = mountMarkdown(feed, mdOpts(true));
+    feed.curMd.root.classList.add("streaming");
+    feed.turnRoots.push(feed.curMd.root);
   }
-  S.curText += chunk;
-  S.turnMd += chunk;
+  feed.curText += chunk;
+  feed.turnMd += chunk;
   // A second session streaming concurrently must not merge into another feed's buffer.
   if (textFeed && textFeed !== feed) flushText();
   textFeed = feed;
@@ -78,14 +78,14 @@ export function onText(chunk, sid) {
 }
 
 export function finishThink() {
-  if (S.curThink) {
-    if (S.curThink.wrap) S.curThink.wrap.classList.remove("live");
-    if (S.curThink.startedAt) {
-      const dur = S.curThink.head.querySelector(".dur");
-      if (dur) dur.textContent = "· " + ((Date.now() - S.curThink.startedAt) / 1000).toFixed(1) + "s";
+  if (feed.curThink) {
+    if (feed.curThink.wrap) feed.curThink.wrap.classList.remove("live");
+    if (feed.curThink.startedAt) {
+      const dur = feed.curThink.head.querySelector(".dur");
+      if (dur) dur.textContent = "· " + ((Date.now() - feed.curThink.startedAt) / 1000).toFixed(1) + "s";
     }
   }
-  S.curThink = null;
+  feed.curThink = null;
 }
 
 export function onReasoning(chunk, sid) {
@@ -94,13 +94,13 @@ export function onReasoning(chunk, sid) {
   if (!feed) return;
   clearEmpty(feed);
   finishMd();
-  if (!S.curThink) {
+  if (!feed.curThink) {
     flushRun();
     const { wrap, head, body } = buildThinkBlock(true);
     appendTo(feed, wrap);
-    S.curThink = { wrap, head, body, startedAt: Date.now() };
+    feed.curThink = { wrap, head, body, startedAt: Date.now() };
   }
-  S.curThink.body.textContent += chunk;
+  feed.curThink.body.textContent += chunk;
   if (feed === activeFeed()) scroll();
 }
 
@@ -131,17 +131,17 @@ export function onRetract(reason, sid) {
   const feed = feedForEvent(sid);
   if (!feed) return;
   clearBusy(feed);
-  const draftRoot = S.curMd ? S.curMd.root : null;
-  const hadDraft = !!draftRoot || (S.curText != null && S.curText !== "");
-  const draftLen = S.curText ? S.curText.length : 0;
+  const draftRoot = feed.curMd ? feed.curMd.root : null;
+  const hadDraft = !!draftRoot || (feed.curText != null && feed.curText !== "");
+  const draftLen = feed.curText ? feed.curText.length : 0;
   finishMd();
   finishThink();
   if (draftRoot) {
-    const idx = S.turnRoots.indexOf(draftRoot);
-    if (idx !== -1) S.turnRoots.splice(idx, 1);
+    const idx = feed.turnRoots.indexOf(draftRoot);
+    if (idx !== -1) feed.turnRoots.splice(idx, 1);
     draftRoot.remove();
   }
-  if (draftLen > 0) S.turnMd = S.turnMd.slice(0, Math.max(0, S.turnMd.length - draftLen));
+  if (draftLen > 0) feed.turnMd = feed.turnMd.slice(0, Math.max(0, feed.turnMd.length - draftLen));
   if (!hadDraft) return;
   if (reason) appendTo(feed, el("div", "metaln", reason));
   if (feed === activeFeed()) scroll();

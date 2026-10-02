@@ -3,7 +3,7 @@
 // import these primitives. `feed.js` re-exports this module's public surface.
 import { msgs, el, setIcon } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
-import { S } from "../store.js";
+import { feed, tabs as tabState } from "../store.js";
 import { formatMs, verbosity } from "../format.js";
 import { copyText } from "../../md.js";
 
@@ -104,18 +104,18 @@ export function clearFeed(feed) {
   feed.replaceChildren(emptyView());
   follow = true;
   hideToLatest();
-  const tab = S.tabs.find((x) => x.feed === feed);
+  const tab = tabState.tabs.find((x) => x.feed === feed);
   if (tab) tab.planCard = null;
   if (feed === activeFeed()) scroll();
 }
 
 export function activeFeed() {
-  const tab = S.tabs.find((x) => x.id === S.activeTabId);
+  const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   return tab ? tab.feed : null;
 }
 
 export function liveFeed() {
-  const tab = S.tabs.find((x) => x.id === S.liveTabId) || S.tabs.find((x) => x.id === S.activeTabId);
+  const tab = tabState.tabs.find((x) => x.id === tabState.liveTabId) || tabState.tabs.find((x) => x.id === tabState.activeTabId);
   return tab ? tab.feed : null;
 }
 
@@ -123,7 +123,7 @@ export function liveFeed() {
 // enrichment); fall back to the live/active tab for events without one.
 export function feedForEvent(sessionId) {
   if (sessionId) {
-    const tab = S.tabs.find((x) => x.id === sessionId);
+    const tab = tabState.tabs.find((x) => x.id === sessionId);
     if (tab) return tab.feed;
   }
   return liveFeed();
@@ -180,7 +180,7 @@ export function feedHasContent(feed) {
 
 export function syncUrl() {
   const url = new URL(location.href);
-  const tab = S.tabs.find((x) => x.id === S.activeTabId);
+  const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   if (tab && tab.kind === "session") url.searchParams.set("session", tab.id);
   else url.searchParams.delete("session");
   history.replaceState(null, "", url);
@@ -236,9 +236,9 @@ export function clearEmpty(feed) {
 }
 
 export function clearBusy(feed) {
-  if (S.busyTimer) {
-    clearInterval(S.busyTimer);
-    S.busyTimer = null;
+  if (feed.busyTimer) {
+    clearInterval(feed.busyTimer);
+    feed.busyTimer = null;
   }
   feed = feed || liveFeed();
   if (!feed) return;
@@ -255,12 +255,12 @@ export function showBusy(feed) {
   if (!feed) return;
   // The delayed post-send call must not flash a spinner over a stream that
   // already started (fast first token).
-  if (S.curMd || S.curThink) return;
+  if (feed.curMd || feed.curThink) return;
   clearEmpty(feed);
   if (feed.querySelector(".busy")) return;
-  if (S.busyTimer) {
-    clearInterval(S.busyTimer);
-    S.busyTimer = null;
+  if (feed.busyTimer) {
+    clearInterval(feed.busyTimer);
+    feed.busyTimer = null;
   }
   const line = el("div", "busy");
   line.appendChild(el("span", "spin", "✦"));
@@ -270,10 +270,10 @@ export function showBusy(feed) {
   line.appendChild(el("span", "", "· " + t("web.input.esc")));
   appendTo(feed, line);
   const started = Date.now();
-  S.busyTimer = setInterval(() => {
+  feed.busyTimer = setInterval(() => {
     if (!line.parentNode) {
-      clearInterval(S.busyTimer);
-      S.busyTimer = null;
+      clearInterval(feed.busyTimer);
+      feed.busyTimer = null;
       return;
     }
     time.textContent = "· " + Math.round((Date.now() - started) / 1000) + "s";
@@ -281,24 +281,24 @@ export function showBusy(feed) {
 }
 
 export function flushRun() {
-  if (S.runCount <= 0) {
+  if (feed.runCount <= 0) {
     resetRun();
     return;
   }
   // Quiet: a run of successful read-only actions folds into one summary line,
   // replacing the per-action lines (mirrors `Renderer.flushRecon`). `normal`
   // and `verbose` keep the individual action lines and add nothing.
-  if (verbosity() === "quiet" && S.runReconOnly && S.runFails === 0 && S.runCount > 1) {
+  if (verbosity() === "quiet" && feed.runReconOnly && feed.runFails === 0 && feed.runCount > 1) {
     // Fade the folded lines out instead of snapping them away.
-    const folding = S.runNodes.slice();
+    const folding = feed.runNodes.slice();
     folding.forEach((node) => node.classList.add("fold-out"));
     window.setTimeout(() => folding.forEach((node) => node.remove()), 160);
     const line = el("div", "grouped");
     line.appendChild(el("span", "pipe", "│"));
-    const dur = formatMs(S.runDuration);
+    const dur = formatMs(feed.runDuration);
     line.appendChild(
       document.createTextNode(
-        " " + pluralCount("web.action.actions", S.runCount) + " ✓" + (dur ? " · " + dur : ""),
+        " " + pluralCount("web.action.actions", feed.runCount) + " ✓" + (dur ? " · " + dur : ""),
       ),
     );
     appendTo(liveFeed(), line);
@@ -307,9 +307,9 @@ export function flushRun() {
 }
 
 function resetRun() {
-  S.runCount = 0;
-  S.runFails = 0;
-  S.runReconOnly = true;
-  S.runNodes = [];
-  S.runDuration = 0;
+  feed.runCount = 0;
+  feed.runFails = 0;
+  feed.runReconOnly = true;
+  feed.runNodes = [];
+  feed.runDuration = 0;
 }

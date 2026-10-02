@@ -5,7 +5,7 @@
 import { el, icon, link, connStatus, staleBar } from "../dom.js";
 import { api } from "../api.js";
 import { t, loadI18n } from "../i18n.js";
-import { S, setPath, getPath, hooks } from "../store.js";
+import { settings, session, setPath, getPath, hooks } from "../store.js";
 import { contextLabel, matchesQuery } from "../format.js";
 import { closeAllMenus, setSessOpen } from "../core/menus.js";
 import { setIndicator } from "../dialog.js";
@@ -51,7 +51,7 @@ function menuAction(label, iconName, onClick) {
 let modelFilter = "";
 
 export function renderSelectors() {
-  const cfg = S.state.config || {};
+  const cfg = settings.config || {};
   const provider = cfg.provider || {};
 
   setSelButton(document.getElementById("selModelBtn"), t("web.selectors.model"), cfg.model || "—");
@@ -74,9 +74,9 @@ export function renderSelectors() {
   modelMenu.appendChild(listBox);
   const drawModelList = () => {
     listBox.textContent = "";
-    const models = S.state.models.filter((m) => matchesQuery(m, modelFilter));
+    const models = settings.models.filter((m) => matchesQuery(m, modelFilter));
     if (!models.length) {
-      listBox.appendChild(el("div", "mi dim", S.state.models.length ? t("web.settings.no_matches") : t("web.selectors.no_models")));
+      listBox.appendChild(el("div", "mi dim", settings.models.length ? t("web.settings.no_matches") : t("web.selectors.no_models")));
       return;
     }
     models.forEach((m) => {
@@ -214,7 +214,7 @@ function renderReasoningSelector() {
   const btn = document.getElementById("selReasoningBtn");
   const menu = document.getElementById("selReasoningMenu");
   if (!wrap || !btn || !menu) return;
-  const info = S.state.reasoning;
+  const info = session.reasoning;
   if (!info || info.strategy === "none") {
     wrap.hidden = true;
     return;
@@ -230,7 +230,7 @@ function renderReasoningSelector() {
     );
     return;
   }
-  const mode = (S.state.config && getPath(S.state.config, "reasoning.mode")) || info.mode || "auto";
+  const mode = (settings.config && getPath(settings.config, "reasoning.mode")) || info.mode || "auto";
   setSelButton(btn, t("web.selectors.reasoning"), String(mode));
   menu.textContent = "";
   const levels = info.strategy === "openai-effort" ? REASONING_LEVELS_FULL : REASONING_LEVELS_COARSE;
@@ -290,7 +290,7 @@ export function setWriteHooks(d) {
 // `aria-busy` flag. Boot (`config === null`) paints the same mark, so the
 // skeleton state is visible while `boot()` loads config/models/providers.
 function paintSelectorPending() {
-  const show = pendingKey !== null || !S.state.config;
+  const show = pendingKey !== null || !settings.config;
   const wrap = document.querySelector(".selectors");
   if (wrap) {
     if (show) wrap.setAttribute("data-pending", pendingKey || "boot");
@@ -329,7 +329,7 @@ export async function postConfig(key, value, refreshSettings) {
     }
     const persisted = r.data.persisted !== false;
     setIndicator(persisted ? t("web.settings.saved") : (r.data.warning || "not persisted"), !persisted);
-    if (S.state.config && r.data.value !== undefined) setPath(S.state.config, key, r.data.value);
+    if (settings.config && r.data.value !== undefined) setPath(settings.config, key, r.data.value);
     if (key === "ui.activityRail") setLayout(String(r.data.value));
     if (key === "ui.fontSize") applyFontSize(String(r.data.value));
     if (key === "locale") {
@@ -363,9 +363,9 @@ export async function postConfig(key, value, refreshSettings) {
 export async function loadConfig() {
   const r = await api("/api/config");
   if (!r.ok || !r.data) return;
-  S.state.config = r.data.config || {};
-  S.state.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
-  S.state.webToken = typeof r.data.webToken === "string" ? r.data.webToken : null;
+  settings.config = r.data.config || {};
+  settings.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
+  settings.webToken = typeof r.data.webToken === "string" ? r.data.webToken : null;
   applyFontSize();
   renderSelectors();
   writeHooks.renderSettings?.();
@@ -374,15 +374,15 @@ export async function loadConfig() {
 export async function loadModels() {
   const r = await api("/api/models");
   if (!r.ok || !r.data) return;
-  S.state.models = Array.isArray(r.data.models) ? r.data.models : [];
+  settings.models = Array.isArray(r.data.models) ? r.data.models : [];
   // Reasoning support rides along with the model list (one round-trip):
   // the 4th selector row renders from this, never from a separate GET.
-  if (r.data.reasoning && typeof r.data.reasoning === "object") S.state.reasoning = r.data.reasoning;
+  if (r.data.reasoning && typeof r.data.reasoning === "object") session.reasoning = r.data.reasoning;
   renderSelectors();
 }
 
 // Connection-state banner: shown while the SSE stream is down. The server
-// never replays events, so a reconnect only resyncs S.state — the feed keeps
+// never replays events, so a reconnect only resyncs the state slices — the feed keeps
 // whatever the live session already rendered (no duplication).
 export function setConnStatus(disconnected) {
   if (!connStatus) return;
@@ -391,7 +391,7 @@ export function setConnStatus(disconnected) {
 }
 
 // Stale-translations banner: dict files on disk are newer than the running
-// server process, so the chrome may show raw keys. Rebuilt only on S.state
+// server process, so the chrome may show raw keys. Rebuilt only on a state
 // change (not on every 2s poll) to keep the reload-button focus stable;
 // `force` re-renders the label after a locale switch.
 let lastStale = null;
@@ -413,7 +413,7 @@ export function setStaleBar(stale, force) {
 // is a browser-local preference). Applied as `body[data-font]` so the switch
 // is instant and survives re-renders; unknown values fall back to the default.
 export function applyFontSize(value) {
-  const v = value || (S.state.config && S.state.config.ui && S.state.config.ui.fontSize) || "comfortable";
+  const v = value || (settings.config && settings.config.ui && settings.config.ui.fontSize) || "comfortable";
   const known = v === "compact" || v === "large" ? v : "comfortable";
   if (known === "comfortable") document.body.removeAttribute("data-font");
   else document.body.setAttribute("data-font", known);
