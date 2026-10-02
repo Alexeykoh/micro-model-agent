@@ -131,8 +131,7 @@ describe("session runner factory", () => {
   it("two runners do not share context or plan tracker", () => {
     const { sessionManager, template } = setup();
     const a = sessionManager.create("A");
-    // Непустая A переживёт авто-prune пустых при создании B (как в проде:
-    // параллелят живые сессии, а не пустые черновики).
+    // Параллелят живые сессии; create() больше не удаляет чужие пустые.
     sessionManager.appendMessage({
       role: "user",
       content: "task-a",

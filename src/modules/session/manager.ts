@@ -74,11 +74,9 @@ export class SessionManager {
     this.store.saveMeta(id, meta);
     this.activeId = id;
     this.enforceMaxSessions();
-    try {
-      this.pruneEmpty(id);
-    } catch {
-      // fail-open: автопрунинг не должен ломать создание сессии
-    }
+    // Авто-прунинг пустых сессий из create() убран: в web параллельные вкладки
+    // держат пустые сессии, и создание новой затирало бы их (вкладки уходили в
+    // dead). Чистка — явная команда `session prune` (CLI/REPL).
 
     // Контекст сессии
     const context = createSessionContext(
