@@ -3,13 +3,11 @@
 import type { Agent } from "../../core/agent";
 import type { AgentResult, ToolEvent } from "../../core/types";
 import type { ToolCall, ToolResult } from "../../tools/types";
-import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
 import { broadcast, type UsageSnapshot, type WebUiState } from "./state";
 import { sessionStatus } from "./session-status";
 import { captureUsage, planEventFor } from "./host-state";
 import { saveSessionUsage } from "./session-usage";
-import { cancelPendingQuestions } from "./prompt-io";
 import type { Forwarder } from "./forward";
 
 /** Входы раннера: агент, состояние, форвардер, сессия/план для сайдбара. */
@@ -17,37 +15,22 @@ export interface RunAgentDeps {
   agent: Agent;
   state: WebUiState;
   forwarder: Forwarder;
-  sessionManager?: Pick<SessionManager, "getActiveMeta">;
+  /** Сессия-владелец хода: штампуется в события и в per-session usage. */
+  ownerSessionId: string;
   /**
-   * Явный владелец хода. Задан — штампуется в `activeSessionId` (совместимость
-   * SSE-роутинга); пул параллельных раннеров передаёт id своей сессии вместо
-   * чтения общей активной (при параллели она чужая). Не задан — legacy:
-   * читаем активную из менеджера.
-   */
-  ownerSessionId?: string | null;
-  /**
-   * Живая ссылка владельца текущего хода для дренажа его же слота на turn_end.
+   * Живая ссылка владельца текущего хода для дренажа его слота на `turn_end`.
    * Раннер ставит её на старте хода; форвардер читает в `onTurnEnd`.
-   * Legacy main-раннер (ходы разных сессий через общий мост) делит один
-   * ownerRef со своим форвардером; пул создаёт пару на сабмит.
    */
   ownerRef?: { current: string | null };
-  /**
-   * Слот раннера для scoped interrupt (null — legacy-слот без сессии).
-   * undefined — до-пул legacy: стопаем всё, как раньше.
-   */
-  slotId?: string | null;
   execModule?: Pick<ExecutionModule, "getActivePlan">;
   /** Фолбэк лимита для usage сайдбара, когда ход лимит не сообщил. */
   contextWindow?: number;
 }
 
-/** Раннер одного хода: запуск и прерывание. */
+/** Раннер одного хода. */
 export interface RunAgent {
   /** Гоняет один ход; владеет всеми его SSE-событиями для стартовой сессии. */
   run: (text: string) => Promise<unknown>;
-  /** Помечает прерванным, разблокирует висящие вопросы, стопает агента. */
-  interrupt: () => void;
 }
 
 /**
@@ -59,15 +42,13 @@ function recordTurnUsage(
   state: WebUiState,
   result: AgentResult,
   contextWindow: number | undefined,
-  owner: string | null,
+  owner: string,
 ): UsageSnapshot {
   const usage = captureUsage(result, contextWindow);
   state.usage = usage;
-  if (owner) {
-    state.sessionUsage[owner] = usage;
-    const dir = state.sessionManager?.getSessionDirectory?.(owner);
-    if (dir) saveSessionUsage(dir, usage);
-  }
+  state.sessionUsage[owner] = usage;
+  const dir = state.sessionManager?.getSessionDirectory?.(owner);
+  if (dir) saveSessionUsage(dir, usage);
   return usage;
 }
 
@@ -98,24 +79,18 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
     output: ev.output ?? "",
   });
 
-  // У `AgentResult` нет поля `interrupted`, а `agent.shutdown()` может вернуть
-  // `success: true` — трекаем прерывание локально. REPL рвёт через
-  // `agent.shutdown()` (repl.ts `interruptRun`); повторяем.
-  let interrupted = false;
+  // `AgentResult` не несёт поля `interrupted`, а ход-раннер останавливают
+  // через `agent.shutdown` напрямую (actions-api). Отдельный флаг не нужен.
   let toolCalls = 0;
 
   const run = async (text: string): Promise<unknown> => {
-    interrupted = false;
     toolCalls = 0;
     state.agentRunning = true;
     // Все события хода — за стартовавшей сессией, чтобы SSE лёг в правильную
     // вкладку, даже если пользователь переключил табы.
-    const owner =
-      deps.ownerSessionId !== undefined
-        ? deps.ownerSessionId
-        : (deps.sessionManager?.getActiveMeta()?.id ?? null);
+    const owner = deps.ownerSessionId;
     if (deps.ownerRef) deps.ownerRef.current = owner;
-    state.activeSessionId = owner ?? undefined;
+    state.activeSessionId = owner;
     try {
       const result = await agent.run(
         text,
@@ -144,7 +119,6 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
         success: result.success,
         durationMs: result.durationMs,
         toolCalls,
-        interrupted: interrupted || undefined,
       });
       broadcast(
         { type: "state", ts: Date.now(), ...sessionStatus(state), usage, usageSessionId: owner },
@@ -152,19 +126,10 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
       );
       return result;
     } catch (err) {
-      forwarder.onTurnEnd({ success: false, interrupted: interrupted || undefined });
+      forwarder.onTurnEnd({ success: false });
       throw err;
     }
   };
 
-  const interrupt = (): void => {
-    interrupted = true;
-    // Разблокируем тулы, ждущие ответа браузера, до размотки хода.
-    // Scoped по слоту: чужой параллельный ход своих вопросов не лишается
-    // (undefined — legacy: всё, как раньше).
-    cancelPendingQuestions(state, deps.slotId);
-    agent.shutdown(deps.slotId ?? undefined);
-  };
-
-  return { run, interrupt };
+  return { run };
 }

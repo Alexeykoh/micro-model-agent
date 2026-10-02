@@ -38,7 +38,7 @@ function maybeAdoptSession(s: WebUiState, sessionId: string | null): void {
   }
 }
 
-/** Стопает все бегущие слоты (legacy-клиенты без sessionId). */
+/** Стопает все бегущие слоты (interrupt без `sessionId`). */
 function stopAllSlots(s: WebUiState): void {
   for (const id of s.pool.busyIds()) interruptSlot(s, id);
 }
@@ -75,7 +75,7 @@ export function handleCommandPost(
  * `POST /api/interrupt [ {sessionId?} ]` — аборт бегущего хода без раннего разлока.
  * С sessionId — только свой слот: чужой параллельный ход не трогаем, отвечаем
  * 409 `idle`, чтобы Esc в idle-вкладке не убивал работу соседней. Без sessionId
- * (legacy-клиенты) — стопаем всё бегущее.
+ * — стопаем все бегущие слоты.
  */
 export function handleInterruptPost(
   req: IncomingMessage,
@@ -111,20 +111,13 @@ export function handleInterruptPost(
 }
 
 /**
- * Останавливает ход слота: свой раннер — scoped shutdown (чужие фоновые
- * процессы живы) + scoped cancel висящих вопросов; legacy-слот — общий мост.
+ * Останавливает ход слота: scoped shutdown раннера (чужие фоновые процессы
+ * живы) + scoped cancel висящих вопросов этой сессии.
  */
-function interruptSlot(s: WebUiState, sessionId: string | null): void {
-  if (sessionId !== null) {
-    const runner = s.pool.getRunner(sessionId);
-    if (runner) {
-      runner.agent.shutdown(sessionId);
-      cancelPendingQuestions(s, sessionId);
-      return;
-    }
-  }
-  s.bridge?.interrupt();
-  cancelPendingQuestions(s, sessionId ?? undefined);
+function interruptSlot(s: WebUiState, sessionId: string): void {
+  const runner = s.pool.getRunner(sessionId);
+  if (runner) runner.agent.shutdown(sessionId);
+  cancelPendingQuestions(s, sessionId);
 }
 
 /** `POST /api/index` — fire-and-forget пересбор индекса; результат виден в `/api/state`. */

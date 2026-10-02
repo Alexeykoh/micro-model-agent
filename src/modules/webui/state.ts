@@ -299,7 +299,7 @@ export function createWebUiState(): WebUiState {
  * Usage для сайдбара: метрики серверно-активной сессии (или явной `sessionId`
  * веб-вкладки). У сессии без ходов — undefined (сайдбар показывает прочерки),
  * а НЕ чужой last-turn: иначе новая вкладка открывается с цифрами прошлого
- * чата. Глобальный fallback — только legacy-режим без фабрики.
+ * чата. Снимок лениво поднимается с диска после reload.
  */
 export function activeUsage(s: WebUiState, sessionId?: string): UsageSnapshot | undefined {
   try {
@@ -322,10 +322,9 @@ export function activeUsage(s: WebUiState, sessionId?: string): UsageSnapshot | 
       }
     }
   } catch {
-    /* fail-open: отдаём глобальный */
+    /* fail-open: нет метрик */
   }
-  if (s.pool.hasFactory()) return undefined;
-  return s.usage;
+  return undefined;
 }
 
 /** SSE-событие: тип, время, произвольный пейлоад. */
