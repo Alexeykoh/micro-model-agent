@@ -17,15 +17,17 @@ providerIdentity/processRegistry), передаваемый main и каждом
 **Ветка:** `feat/session-scope-isolation` (создать от актуального `master`).
 **Базовая линия:** `tsc --noEmit` — 0 ошибок; web-тесты сессий — 52 pass.
 
-> **Статус (2026-10-02, ветка `feat/session-scope-isolation`):**
-> сделано — P0-4 (`create` не прунит пустые), P0-5 (busy-gate записи конфига,
-> slash + REST 409), P0-1 (per-session `Logger.forSession` + session-scoped
-> audit-dir), P0-6 (session-scoped kill-реестр процессов). Полный `bun test`:
-> 2989 pass / 0 fail, `tsc` 0.
-> осталось — **P0-2** (identity сессии провайдера: упирается в shared
-> `llmProvider`/`ProviderManager.getSessionId`, требует решения §4.3 спеки) и
-> **P0-3** (OutputEvent.sessionId + фильтрация на web-стоке/в сайдбаре —
-> смыкается с подписками плана B).
+> **Статус (2026-10-02, ветка `feat/session-scope-isolation`): ВСЕ P0 закрыты.**
+> P0-1 per-session `Logger.forSession` + session-scoped audit-dir; P0-2 owning
+> session id прокинут в LLM-вызовы (`ChatOptions.sessionId` → `x-opencode-session`/
+> `prompt_cache_key`/`session_id`; main loop, overflow-суммаризация, LLM-судья,
+> chunk_query); P0-3 `OutputEvent.sessionId` + маршрутизация Trace по своей
+> вкладке; P0-4 `create` не прунит пустые; P0-5 busy-gate записи конфига;
+> P0-6 session-scoped kill-реестр процессов.
+> Проверка: `bun test` 2995 pass / 6 skip / 0 fail, `bun run quality`
+> (typecheck + lint + fallow) зелёный.
+> Дальше — план B (`docs/plans/2026-10-02-web-session-state.md`), смыкает
+> per-tab projection и подписки.
 
 ---
 
