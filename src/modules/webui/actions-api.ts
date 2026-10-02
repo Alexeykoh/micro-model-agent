@@ -41,7 +41,6 @@ function maybeAdoptSession(s: WebUiState, sessionId: string | null): void {
 /** Стопает все бегущие слоты (legacy-клиенты без sessionId). */
 function stopAllSlots(s: WebUiState): void {
   for (const id of s.pool.busyIds()) interruptSlot(s, id);
-  if (s.pool.isBusy(null)) interruptSlot(s, null);
 }
 
 /** `POST /api/command` — fire-and-forget диспатч, вывод стримится по SSE. */

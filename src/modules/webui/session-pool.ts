@@ -145,23 +145,6 @@ export class RunPool {
     return this.slotFor(id).queue.shift();
   }
 
-  /**
-   * Голова с минимальным ts по всем непустым слотам (без извлечения).
-   * Legacy-режим без фабрики серийный глобально: следующий ход — самая
-   * ранняя запись из всех очередей, а не голова своего слота.
-   */
-  peekEarliest(): { id: string | null; entry: QueuedMessage } | null {
-    let best: { id: string | null; entry: QueuedMessage } | null = null;
-    for (const [key, slot] of this.slots) {
-      const head = slot.queue[0];
-      if (!head) continue;
-      if (!best || head.ts < best.entry.ts) {
-        best = { id: key === "" ? null : key, entry: head };
-      }
-    }
-    return best;
-  }
-
   /** Длина очереди слота. */
   queueLen(id: string | null): number {
     return this.slotFor(id).queue.length;

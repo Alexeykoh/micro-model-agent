@@ -17,6 +17,27 @@ function makeBridge(): Host {
   };
 }
 
+/** Сессия + фабрика стаб-раннеров (ходы повисают, пока не разрешены). */
+function withRunner(s: ReturnType<typeof createWebUiState>, ids: string[] = ["A"]): void {
+  const alive = new Set(ids);
+  s.sessionManager = {
+    list: () => [],
+    get: (id: string) => (alive.has(id) ? { id } : null) as never,
+    getActive: () => ids[0] ?? null,
+    setActive: () => {},
+    delete: () => {},
+  };
+  s.pool.setFactory(
+    (id: string) =>
+      ({
+        sessionId: id,
+        agent: { run: () => new Promise(() => {}), shutdown: () => {} },
+        contextManager: { addPendingImage: () => {} },
+        execModule: { getActivePlan: () => null },
+      }) as never,
+  );
+}
+
 
 describe("webui auth + limits", () => {
   afterEach(() => stopServer());
@@ -68,27 +89,33 @@ describe("webui auth + limits", () => {
     });
   });
 
-  it("503 on /api/message when no bridge is set", async () => {
+  it("503 on /api/message when no session/runner is available", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
     s.bridge = null;
     await withServer(s, async (base) => {
       const res = await postJson(base, "/api/message", { text: "hi" });
       expect(res.status).toBe(503);
-      expect(res.json).toEqual({ error: "no_bridge" });
+      expect(res.json).toEqual({ error: "no_session" });
     });
   });
 
-  it("queues /api/message when already busy instead of 409", async () => {
+  it("queues /api/message when the session slot is already busy", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
     s.bridge = makeBridge();
-    s.pool.reserve(null);
+    withRunner(s, ["A"]);
+    s.pool.reserve("A");
     s.busy = true;
     await withServer(s, async (base) => {
-      const res = await postJson(base, "/api/message", { text: "hi" });
+      const res = await postJson(base, "/api/message", { text: "hi", sessionId: "A" });
       expect(res.status).toBe(202);
-      expect(res.json).toEqual({ ok: true, queued: 1, sessionId: null, queuedForSession: 1 });
+      expect(res.json).toEqual({
+        ok: true,
+        queued: 1,
+        sessionId: "A",
+        queuedForSession: 1,
+      });
     });
   });
 
@@ -96,12 +123,13 @@ describe("webui auth + limits", () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 60_000;
     s.bridge = makeBridge();
+    withRunner(s, ["A"]);
     s.lastPostTs = Date.now();
     await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "hi" }),
+        body: JSON.stringify({ text: "hi", sessionId: "A" }),
       });
       expect(res.status).toBe(429);
       expect(await res.json()).toEqual({ error: "rate_limited" });
