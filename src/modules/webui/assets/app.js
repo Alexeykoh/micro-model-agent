@@ -208,7 +208,11 @@ es.addEventListener("command", (e) => {
       reconcileTabStatuses();
       sidebarBusy(!!d.busy);
       refresh();
-      if (d.usage && typeof d.usage === "object") {
+      // Usage чужого хода в свой сайдбар не мержим: смотрим вкладку своей
+      // (серверно-активной) сессии. Legacy-события без владельца — мержим,
+      // как раньше. Промах по активной (гонка activate) закроет 2с-полл.
+      if (d.usage && typeof d.usage === "object" &&
+          (d.usageSessionId == null || d.usageSessionId === S.state.activeSessionId)) {
         S.state.host = Object.assign({}, S.state.host, d.usage);
         renderUsage(S.state.host);
       }

@@ -31,6 +31,7 @@ import { makeRunAgent } from "./run-agent";
 import { buildHostState, type WebIndexer } from "./host-state";
 import { cancelPendingQuestions } from "./prompt-io";
 import {
+  activeUsage,
   broadcast,
   createWebUiState,
   type WebPluginManager,
@@ -215,6 +216,10 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     execModule: deps.execModule,
     contextWindow: deps.config.contextWindow,
     ownerRef: mainOwnerRef,
+    // Фабричный режим: main-раннер обслуживает только legacy-слот (null) —
+    // scoped interrupt не трогает чужие вопросы. Без фабрики — undefined,
+    // legacy-глобал (стоп всего), как раньше.
+    slotId: deps.spawnRunner ? null : undefined,
   });
 
   const host = new WebHost({
@@ -230,7 +235,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           config: deps.config,
           sessionManager: deps.sessionManager,
           execModule: deps.execModule,
-          usage: state.usage,
+          usage: activeUsage(state),
           contextProbe: probe,
           workspace: deps.baseDir,
           instructions: deps.agentsMd,
