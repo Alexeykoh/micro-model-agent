@@ -188,12 +188,24 @@ Modify ~35 модулей-потребителей.
       `feed/core.js` — латентный баг Phase 3, `renderAttachments` в `composer.js`), плюс
       `renderSessionsDropdown` реэкспортирован из `tabs.js` для app.js. `insertAfter` починен
       отдельным коммитом `f53b7ca`.
-- [ ] **Step 3: `settings.js` (последним).** `settings/subdialog.js` (`openSubDialog`/trapTab),
-      `settings/search.js`, `settings/providers.js` (провайдер-форма + model panel),
-      `settings/panels.js` (generic-рендер + панели memory/skills/plugins/lsp/security/ui),
-      `settings/modal.js` (оверлей/табы/escape + `renderSettings`). `postConfig` — в
-      `settings/modal.js` (или tiny `settings/write.js`) как общий funnel; панели зависят
-      от него вниз, без апward-импортов. **RESUME:** не начато.
+- [x] **Step 3: `settings.js` — DONE (2026-10-02).** `settings.js` — barrel; реализация в
+      `settings/`: `write.js` (postConfig funnel + composer-селекторы + loadConfig/loadModels
+      + тема-шрифт/conn/stale), `panels.js` (generic-рендер + ui/security/memory/skills/
+      plugins·MCP·LSP + их лоадеры + applyTheme/currentTheme), `providers.js` (провайдер-форма
+      + model panel + loadProviders), `modal.js` (оверлей/табы/escape + `renderSettings` +
+      `selectSettingsPanel`), `subdialog.js`, `search.js`, + `form.js` (мелкие form-примитивы).
+      Commit `1530cc5`.
+      **Разрыв рекурсии:** `postConfig` живёт в `write.js` (без импортов вверх) и зовёт
+      `renderSettings`/`openSettingsAt` через `setWriteHooks(...)`, регистрируемый `modal.js`.
+      Остальные рёбра строго вниз: `providers → panels/write/form/subdialog`;
+      `search → modal/panels/controls` (modal не импортирует search); `modal → panels/providers`.
+      `form.js` (не был в плане) вынес `pfield/providerInput/providerSelect/providerCheck/
+      mcpLiteralField`, чтобы `providers` и `panels` не закольцевались.
+      **Гейт:** `node --check`; guard ацикличен; `bun build assets/app.js` (39 модулей);
+      статическая JS-проверка `tsc --allowJs --checkJs --lib dom` — 0 `Cannot find name`;
+      `bun test tests/webui-*` 331 pass/5 skip; полный `bun test` 3022 pass/0 fail;
+      `tsc --noEmit`; `bun run quality` exit 0. Обновлён source-guard `tests/webui-i18n.test.ts`
+      (section-keys теперь в `settings/panels.js`). e2e — по запросу (не запускался).
 - [ ] Прогон: guard фронт-графа + `node --check` + `bun test` + `bun run test:e2e` +
       ручной smoke `bun run web:dev` (чат/вкладки/настройки/сайдбар).
 
