@@ -1,0 +1,235 @@
+# WebUI Modularization — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Второй проход модуляризации webui по трём целям — A (навигация по доменам),
+B (узкие контракты вместо god-object `WebUiState`/`S`), C (разрезать крупные файлы по
+чистым швам). Поведение сохраняется: SSE/REST/сессии/конфиг/plugin API — без смены контрактов
+по умолчанию.
+
+**Spec:** [docs/specs/2026-10-02-webui-modularization-design.md](../specs/2026-10-02-webui-modularization-design.md)
+
+**Branch:** `refactor/webui-modularize` (от `master` @ `066a215`).
+
+**Решения (2026-10-02):** договорились, что внешние контракты формально не заморожены (можно
+менять), но каждая смена — осознанная, не побочный эффект. Заход — один, но фазами;
+фазы 0–4 дают A+C без глубокого риска, фазы 5–6 — B. После каждой фазы `bun test` +
+`tsc --noEmit` зелёные.
+
+**Учитываем последние коммиты (сверка 2026-10-02):** `master` уже вобрал per-session раннеры
+(`RunPool`/`session-pool.ts`), per-session SSE (`706350d`, `c657b2b`), session-scoped state
+(`0daef56`, `41f8a2f`), удаление legacy-пути (`e8ca5ec`, `833a402`) и LSP-вкладку (`2e190b9`).
+Эти файлы **не переписываются** — только переносятся и меняют тип аргумента состояния.
+
+---
+
+## File Structure (целевая)
+
+| File | Ответственность |
+|---|---|
+| `src/modules/webui/module.ts` | composition root (остаётся; внешняя точка входа) |
+| `src/modules/webui/server.ts` | только транспорт: `handleRequest`, SSE, статика, `API_ROUTES` |
+| `src/modules/webui/state.ts` | compatibility-barrel → `./state/index` (фаза 1); возможно удаление после фазы 2 |
+| `src/modules/webui/state/{types,transport,runtime,sessions,config,workspace,index}.ts` | role-интерфейсы + композиция `WebUiState` |
+| `src/modules/webui/http/{body,persist}.ts` | транспортные утилиты POST/персист |
+| `src/modules/webui/session/*` | REST сессий + рантайм хода (`sessions-api`, `history`, `log`, `session-pool`, `session-status`, `run-agent`, `turns`, `forward`, `prompt-io`, `answer-api`) |
+| `src/modules/webui/settings/*` | REST/логика настроек (`settings-api`, `config-api`, `providers-api`, `providers-view`, `model-cache`, `reconfigure`, `setup-api`, `reasoning-view`, `commands-settings`) |
+| `src/modules/webui/chat/*` | команды/экшены чата (`actions-api`, `commands`, `commands-shared`, `memory-commands`) |
+| `src/modules/webui/{file,lsp,i18n}/*` | домены файлов/LSP/i18n |
+| `assets/js/core/menus.js` (new) | leaf-меню (`closeAllMenus`, `setSessOpen`) — снимает инверсию `settings → tabs` |
+| `assets/js/settings/{modal,search,providers,panels,subdialog,controls,editors}.js` | разрезанный `settings.js` |
+| `assets/js/feed/{core,stream,turn,history,plan,question,sidebar}.js` | разрезанный `feed.js` |
+| `assets/js/session/{tabs,composer,sessions-menu,cmdk}.js` + `session/sidebar/*` | разрезанный `tabs.js` + `sidebar.js` |
+| `assets/js/core/store/{index,feed,tabs,settings,session}.js` | срезы `S` (фаза 6) |
+| tests | существующие ~45 `webui-*` + `tests/e2e/*` как регресс; новые guard-тесты границ |
+
+---
+
+## Phase 0: Baseline + guard-тесты
+
+**Files:** New `tests/webui-boundaries.test.ts`, `tests/webui-frontend-graph.test.ts`; baseline-замер.
+
+- [ ] **Step 1: Зафиксировать baseline.** `bun test`, `tsc --noEmit`, `bun run quality` —
+      записать число pass/fail в шапку этого файла (до рефакторинга).
+- [ ] **Step 2: guard бэкенд-графа.** Тест парсит `import` в `src/modules/webui/**/*.ts`
+      и проверяет: нет циклов; доменные модули не импортируют composition `WebUiState` из
+      `state.ts`/`state/index` (whitelist: `module.ts`, `state/index.ts`, тесты).
+      На фазе 0 — только детекция циклов (остальное включится в фазе 2).
+- [ ] **Step 3: guard фронт-графа.** Тест парсит `import` в `assets/js/**/*.js` и падает на
+      цикле. На фазе 0 дополнительно инвентаризует «обратные» рёбра (`settings → tabs`) как
+      `known`-список; фазой 4 список должен опустеть.
+- [ ] Прогон: `bun test tests/webui-boundaries.test.ts tests/webui-frontend-graph.test.ts`.
+
+---
+
+## Phase 1: Backend — доменные подпапки
+
+**Files:** Move внутри `src/modules/webui/`; Modify `server.ts`, `module.ts`, `assets.ts`; New `state.ts` barrel.
+
+Только перенос файлов + правка import-путей. Никакой логики. Порядок групп: `session/`,
+`settings/`, `chat/`, затем мелкие домены (`file/`, `lsp/`, `i18n/`) и `http/`.
+
+- [ ] **Step 1:** вынести `session/` — `sessions-api`, `history-api`, `log-api`,
+      `session-pool`, `session-status`, `run-agent`, `turns`, `forward`, `prompt-io`,
+      `answer-api`. Поправить импорты внутри группы и в `server.ts`/`module.ts`.
+- [ ] **Step 2:** вынести `settings/` — `settings-api`, `config-api`, `providers-api`,
+      `providers-view`, `model-cache`, `reconfigure`, `setup-api`, `reasoning-view`,
+      `commands-settings`.
+- [ ] **Step 3:** вынести `chat/` — `actions-api`, `commands`, `commands-shared`,
+      `memory-commands`; `file/` — `file-api`; `lsp/` — `lsp-api`; `i18n/` — `i18n-api`,
+      `i18n-stale`; `http/` — `body`, `persist`.
+- [ ] **Step 4:** `state.ts` на этой фазе **не трогаем** (остаётся на месте, файлы `state/*`
+      ещё не созданы — их делает фаза 2). Если решено не делать barrel (§9.1 спеки), обновить
+      32 тест-импорта на новые пути уже здесь.
+- [ ] **Step 5:** `assets.ts` (`ASSET_DIR_CANDIDATES`), `module.ts`, `server.ts`, `web-command.ts`
+      — импорты на новые пути.
+- [ ] Прогон: `bun test` + `tsc --noEmit`. Diff — только перемещения/пути.
+
+---
+
+## Phase 2: Backend — role-интерфейсы
+
+**Files:** New `state/{types,transport,runtime,sessions,config,workspace,index}.ts`;
+Modify ~35 модулей-потребителей.
+
+- [ ] **Step 1:** разнести `state.ts` по `state/*`:
+      `types.ts` (`UsageSnapshot`, `QueuedMessage`, `WebUiAssets`, `SseEvent`, web-адаптеры),
+      `transport.ts` (`SseTransport` + `broadcast`), `runtime.ts` (`RunPool`/busy/bridge/turnSeq/
+      pendingQuestions), `sessions.ts` (`WebSessionManager`/sessionUsage/activeUsage),
+      `config.ts`, `workspace.ts`, `index.ts` (`WebUiState` + `createWebUiState`).
+      `state.ts`-barrel продолжает реэкспортить.
+- [ ] **Step 2:** определить role-интерфейсы (пересечения/`Pick`) и перевести модули по
+      таблице из спеки §5.2: `forward`/`log-forward` → `SseTransport`; `config-api` →
+      `ConfigStore & SseTransport`; `sessions-api` → `SessionStore & …`; `file-api`/`log-api`
+      → `SessionStore`; `run-agent`/`turns` → `RuntimeState & …`; `settings-api` →
+      `WorkspaceStore & ConfigStore & …`.
+- [ ] **Step 3:** включить в guard-тест (Phase 0, Step 2) запрет импорта полного `WebUiState`
+      доменными модулями; убрать из whitelist всё, кроме оркестратора/composition/тестов.
+- [ ] **Step 4 (решение §9.1):** удалить barrel, переведя тесты на `./state`, **или** оставить
+      как фасад. Зафиксировать в этой строке.
+- [ ] Прогон: `bun test` + `tsc --noEmit` + `bun run quality`.
+
+---
+
+## Phase 3: Frontend — leaf-модули (низкий риск)
+
+**Files:** `settings-controls.js` → `settings/controls.js` + `settings/editors.js`;
+`sidebar.js` → `session/sidebar/{core,trace,map,lsp}.js`; `feed.js` → `feed/core.js`.
+
+- [ ] **Step 1:** `settings-controls.js` (452) → `controls.js` (`controlFor`, `PANEL_SECTIONS`,
+      `keyToPanel`) + `editors.js` (`tagsEditor`/`checkboxEditor`/`tableEditor`); `validateJson`
+      — в `controls.js` или tiny `json.js`. Цель — ≤300 каждый.
+- [ ] **Step 2:** `sidebar.js` (859) → `sidebar/core.js` (DOM-рефы, вкладки, `mapKv`,
+      `applySidebarI18n`, `initSidebar`), `sidebar/trace.js` (формат/список/деталь/log-добор),
+      `sidebar/map.js`, `sidebar/lsp.js`. `sbEl`/`mapKv` — в `core` (лист).
+- [ ] **Step 3:** `feed.js` (1260) → выделить `feed/core.js`: контейнер/скролл/примитивы
+      (`activeFeed`, `liveFeed`, `appendTo`, `clearEmpty`, `finishMd`, `finishThink`,
+      `scrollToBottom`, `feedHasContent`) — их импортит `tabs`. Остальные кластеры `feed/*` —
+      следующие шаги (или отложить в фазу 5).
+- [ ] **Step 4:** `app.js` и другие потребители — импорты на новые пути; сервер отдаёт
+      `js/**` рекурсивно (уже `jsModules` в `assets.ts` — проверить рекурсию/ключи).
+- [ ] Прогон: `node --check` по новым файлам, обход import-графа (guard Phase 0), `bun test`,
+      `bun run test:e2e` (по запросу).
+
+---
+
+## Phase 4: Frontend — `menus.js`, снятие инверсии
+
+**Files:** New `assets/js/core/menus.js`; Modify `tabs.js`, `settings.js`, `store.js`.
+
+- [ ] **Step 1:** вынести `closeAllMenus` из `tabs.js:1004` и `setSessOpen` из `tabs.js:505`
+      в leaf `core/menus.js`. `setSessOpen` завязан на `sessQuery` в `tabs.js`: состояние
+      поиска сессий переносится в `menus.js` (или `sessQuery` инжектится), а `tabs.js`
+      импортирует `setSessOpen` оттуда.
+- [ ] **Step 2:** `settings.js` импортирует меню из `core/menus.js` — ребро `settings → tabs`
+      исчезает. Guard Phase 0 (Step 3) `known`-список пуст.
+- [ ] **Step 3:** обновить комментарий DAG в `store.js:84-87`.
+- [ ] Прогон: guard фронт-графа + `bun test` + e2e меню сессий.
+
+---
+
+## Phase 5: Frontend — разрез `feed` / `tabs` / `settings`
+
+**Files:** `assets/js/feed/*`, `assets/js/session/*`, `assets/js/settings/*`.
+
+Резать **только по швам из анализа** (см. ниже), каждый шаг — отдельный коммит, e2e — гейт.
+
+- [ ] **Step 1: `feed.js`.** По кластерам: `feed/core` (готов в Phase 3),
+      `feed/stream.js` (text/reasoning/meta/phase/retract), `feed/turn.js` (tool-start/end,
+      turn-end, ошибки, command-output, log), `feed/history.js` (реплей), `feed/plan.js`
+      (`planStepMark`/`renderPlan`/`onPlan`), `feed/question.js`, `feed/sidebar.js`
+      (`renderUsage`/`renderWorkspace`/`renderEnvironment`). `planStepMark` — в `feed/core`
+      или tiny `plan-format.js` (нужен и `feed/plan`, и `feed/sidebar`).
+- [ ] **Step 2: `tabs.js`.** `session/tabs.js` (модель + tabstrip + статусы + `openTab` hub +
+      busy/reconcile/loadSessions), `session/sessions-menu.js` (дропдаун + delete + error),
+      `session/cmdk.js` (slash-автокомплит), `session/composer.js` (attachments + send +
+      interrupt + мобильный sub-bar). `closeTab` экспортировать для `sessions-menu`.
+- [ ] **Step 3: `settings.js` (последним).** `settings/subdialog.js` (`openSubDialog`/trapTab),
+      `settings/search.js`, `settings/providers.js` (провайдер-форма + model panel),
+      `settings/panels.js` (generic-рендер + панели memory/skills/plugins/lsp/security/ui),
+      `settings/modal.js` (оверлей/табы/escape + `renderSettings`). `postConfig` — в
+      `settings/modal.js` (или tiny `settings/write.js`) как общий funnel; панели зависят
+      от него вниз, без апward-импортов.
+- [ ] Прогон: guard фронт-графа + `node --check` + `bun test` + `bun run test:e2e` +
+      ручной smoke `bun run web:dev` (чат/вкладки/настройки/сайдбар).
+
+**Швы/предупреждения из анализа (не резать «по интуиции»):**
+- `tabs.send()` дёргает примитивы фида (`finishMd`, `finishThink`, `resetTurnText`,
+  `clearEmpty`, `appendTo`, `scrollToBottom`) — они обязаны быть в `feed/core` до разреза.
+- `renderTabstrip` взаимно связан с `renderSessBar`/`renderSessionsDropdown` — hub оставляем.
+- `settings.postConfig` вызывает `renderSelectors`/`renderSettings`/rail/font —
+  extraction панелей только вниз от funnel.
+- Состояние стрима/turn (`curMd`, `curText`, `curThink`, `run*`, `busyTimer`, `pendingArgs`,
+  `toolNodes`) пока живёт на `S` — это Phase 6.
+
+---
+
+## Phase 6: Frontend — срезы `S` (+ опц. точки входа)
+
+**Files:** New `assets/js/core/store/{index,feed,tabs,settings,session}.js`; Modify все
+потребители.
+
+- [ ] **Step 1:** завести `store/index.js` (`hooks` + реэкспорт срезов) и срезы по домену,
+      перенеся поля из `S` по владельцу (анализ): `feed` — `curMd/curText/curThink/turnMd/
+      turnRoots/last*Sig/run*/busyTimer/pendingArgs/toolNodes`; `tabs` — `tabs/activeTabId/
+      liveTabId/attachments/newSeq`; `settings` — `config/registry/webToken/models/memory/
+      skills/pluginsData/providers/providerPresets/providerForm/mcpForm/lspForm`; `session` —
+      `sessions/host/busy/activeSessionId/runningSessionId(s)/queued/sessionsError/reasoning`.
+- [ ] **Step 2:** перевод по домену (feed → session → settings), с временными accessors для
+      неразобранных мест, чтобы держать `bun test` зелёным на каждом шаге.
+- [ ] **Step 3 (решение §9.3):** при необходимости перенести `app.js`/`md.js` в `js/` и
+      обновить `index.html` + `assets.ts` (`js`, `mdJs`, роут `/md.js`). `setup.js` — отдельный
+      classic-вход, не трогать.
+- [ ] **Step 4 (решение §9.4):** оценить `// @ts-check` на `assets/js/**` (ratchet) — включить
+      или отклонить.
+- [ ] Прогон: `bun test` + guard-граф + `bun run test:e2e` + ручной smoke.
+
+---
+
+## Phase 7: Docs / release
+
+- [ ] **Step 1:** AGENTS.md — раздел про модуляризацию webui (раскладка, role-интерфейсы,
+      guard-тесты), обновить «Large files — accepted exceptions» (что осталось и почему).
+- [ ] **Step 2:** CHANGELOG `[Unreleased]` → секция Changed (внутренний рефакторинг, поведение
+      без смены контрактов). Версия — MINOR/PATCH по факту (смена внутренних путей не публичная).
+- [ ] **Step 3:** TODO.md — отметить пункт закрытым; ссылки уже добавлены (см. ниже).
+
+---
+
+## Verification (после каждой фазы)
+
+1. `bun test` — 0 fail (база зафиксирована в Phase 0).
+2. `bunx tsc --noEmit` — чисто.
+3. `bun run quality` — без новых lint/dead-code находок.
+4. `bun run test:e2e` — зелёный (только по явной команде, Playwright).
+5. Guard-тесты границ/циклов — зелёные; `known`-список обратных рёбер пуст после Phase 4.
+6. `node --check` по каждому изменённому `assets/js/**` (до прогона guard-тестов).
+
+## Не трогаем
+
+- `src/core/**` (агент, bootstrap, session-runner, web-host), терминальный REPL/UI, MoE-путь.
+- `assets/setup.js` (отдельный classic-вход визарда), vendor (`smd.js`, `hljs.js`).
+- `src/modules/webui/settings-api.ts` (693) — принятое исключение AGENTS.md.
+- `styles.css` — только если по отдельному решению (§9.2 спеки); секции уже размечены.

@@ -23,6 +23,26 @@
 - **План (UI/state):** [docs/plans/2026-10-02-web-session-state.md](./docs/plans/2026-10-02-web-session-state.md)
   - Обязательный задел: DOM-харнесс (`happy-dom`) — сейчас клиент проверяется только строковым матчингом (`webui-assets.test.ts:19-20`)
 
+## WebUI Modularization (2026-10-02)
+
+> Второй проход модуляризации webui (после [декомпозиции 2026-09-26](./docs/plans/2026-09-26-webui-decompose.md)).
+> Цели: **A** навигация (доменные подпапки), **B** change-safety (узкие role-интерфейсы
+> вместо god-object `WebUiState`; срезы стора `S` вместо singleton), **C** размер (чистые швы).
+> Предпосылка: циклов импортов нет (ацикличные DAG и на бэке, и на фронте); реальная
+> связность — в двух общих мутабельных объектах, а не в размере файлов. Поведение
+> behaviour-preserving: SSE/REST/сессии/конфиг/plugin API по умолчанию без смены контрактов.
+> Ветка: `refactor/webui-modularize` (от `master` @ `066a215`, сверка с последними
+> per-session/remove-legacy/LSP коммитами).
+
+- **Спека (дизайн):** [docs/specs/2026-10-02-webui-modularization-design.md](./docs/specs/2026-10-02-webui-modularization-design.md)
+  - `state.ts` god-object (`state.ts:126-254`, ~60 полей; **35**/38 файлов импортят `./state`)
+  - `S` singleton (`assets/js/store.js`; `S.state` — ~169 доступов)
+  - инверсия слоёв `settings.js → tabs.js` (`settings.js:12`)
+- **План:** [docs/plans/2026-10-02-webui-modularization.md](./docs/plans/2026-10-02-webui-modularization.md)
+  - Фаза 0 baseline+guard → Фаза 1 подпапки → Фаза 2 role-интерфейсы → Фаза 3 leaf-модули
+    → Фаза 4 `menus.js` (снять инверсию) → Фаза 5 разрез feed/tabs/settings → Фаза 6 срезы `S`
+    → Фаза 7 docs/release. Фазы 0–4 = A+C без глубокого риска; 5–6 = B.
+
 ## Осталось (по приоритетам, 2026-09-25)
 
 > Сверено с кодом на `master` @ 2.5.0. Закрытые пункты вычеркнуты ниже.
