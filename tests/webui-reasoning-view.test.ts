@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULTS } from "../src/config/defaults";
 import type { AppConfig } from "../src/config/types";
-import { buildReasoningView } from "../src/modules/webui/reasoning-view";
+import { buildReasoningView } from "../src/modules/webui/settings/reasoning-view";
 import {
   setCachedProbeResult,
   resetProbeCache,

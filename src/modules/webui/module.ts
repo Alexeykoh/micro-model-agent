@@ -11,22 +11,22 @@
 import type { Agent } from "../../core/agent";
 import type { SessionRunner } from "../../core/bootstrap/session-runner";
 import type { AppConfig } from "../../config/types";
-import type { SessionManager } from "../../modules/session/manager";
-import type { ExecutionModule } from "../../modules/execution/module";
-import type { MemoryStore } from "../../modules/memory/store";
+import type { SessionManager } from "../session/manager";
+import type { ExecutionModule } from "../execution/module";
+import type { MemoryStore } from "../memory/store";
 import type { Host } from "../../core/host";
 import { CONFIG_FILE, saveConfig as persistConfig } from "../../config/config";
 import { buildSetupDisplay } from "../setup/answers";
 import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
-import { makeWebCommands } from "./commands";
-import { makeReconfigure } from "./reconfigure";
+import { makeWebCommands } from "./chat/commands";
+import { makeReconfigure } from "./settings/reconfigure";
 import { installOutputForwarding } from "./log-forward";
-import { installWebPromptIO, type PromptIORegistry } from "./prompt-io";
+import { installWebPromptIO, type PromptIORegistry } from "./session/prompt-io";
 import { startServer, stopServer } from "./server";
-import { makeModelCache } from "./model-cache";
+import { makeModelCache } from "./settings/model-cache";
 import { buildHostState, type WebIndexer, type WebLsp } from "./host-state";
-import { cancelPendingQuestions } from "./prompt-io";
+import { cancelPendingQuestions } from "./session/prompt-io";
 import {
   activeUsage,
   broadcast,
@@ -35,7 +35,7 @@ import {
   type WebSkillsModule,
   type WebUiState,
 } from "./state";
-import { sessionStatus } from "./session-status";
+import { sessionStatus } from "./session/session-status";
 
 // Чистые снапшот-хелперы живут в `./host-state`; реэкспорт, чтобы существующие
 // импортёры (`webui-usage`, `webui-plan` тесты) не чинить.

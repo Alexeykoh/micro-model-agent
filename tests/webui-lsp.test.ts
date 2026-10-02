@@ -5,7 +5,7 @@ import { withServer, doFetch } from "./helpers/webui-server";
 
 describe("lsp read/edit", () => {
   it("lists default servers", async () => {
-    const mod = await import("../src/modules/webui/settings-api");
+    const mod = await import("../src/modules/webui/settings/settings-api");
     expect(typeof (mod as Record<string, unknown>).listLspServers).toBe("function");
     const cfg = structuredClone(DEFAULTS);
     const list = (

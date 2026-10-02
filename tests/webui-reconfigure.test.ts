@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { AppConfig } from "../src/config/types";
-import { makeReconfigure } from "../src/modules/webui/reconfigure";
+import { makeReconfigure } from "../src/modules/webui/settings/reconfigure";
 import { createWebUiState } from "../src/modules/webui/state";
 
 describe("webui reconfigure", () => {

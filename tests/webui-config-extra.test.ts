@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildConfigRegistry } from "../src/modules/webui/config-api";
+import { buildConfigRegistry } from "../src/modules/webui/settings/config-api";
 import { loadAssets } from "../src/modules/webui/assets";
 
 // NOTE (Task 6): registry Tasks 3-4 already merged, so the backend half of

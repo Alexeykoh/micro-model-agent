@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { createWebUiState, type SseEvent } from "../src/modules/webui/state";
-import { makeForwarder } from "../src/modules/webui/forward";
+import { makeForwarder } from "../src/modules/webui/session/forward";
 
 describe("webui forwarder", () => {
   afterEach(() => vi.useRealTimers());

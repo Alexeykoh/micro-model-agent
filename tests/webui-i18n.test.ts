@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { createWebUiState, } from "../src/modules/webui/state";
 import { DEFAULTS } from "../src/config/defaults";
-import { getFlatDicts, setLocale, t } from "../src/i18n";
+import { getFlatDicts, setLocale, t } from "../src/i18n/index";
 import { configDefs } from "../src/config/registry";
 import type { AppConfig } from "../src/config/types";
 import { withServer, postJson, doFetch, } from "./helpers/webui-server";

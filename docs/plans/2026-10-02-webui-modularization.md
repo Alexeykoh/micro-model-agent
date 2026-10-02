@@ -72,21 +72,24 @@ New `tests/helpers/import-graph.ts`; baseline-замер.
 Только перенос файлов + правка import-путей. Никакой логики. Порядок групп: `session/`,
 `settings/`, `chat/`, затем мелкие домены (`file/`, `lsp/`, `i18n/`) и `http/`.
 
-- [ ] **Step 1:** вынести `session/` — `sessions-api`, `history-api`, `log-api`,
-      `session-pool`, `session-status`, `run-agent`, `turns`, `forward`, `prompt-io`,
-      `answer-api`. Поправить импорты внутри группы и в `server.ts`/`module.ts`.
-- [ ] **Step 2:** вынести `settings/` — `settings-api`, `config-api`, `providers-api`,
+- [x] **Step 1:** вынести `session/` — 11 файлов (включая `session-usage.ts`, добавленный
+      фичей persist-usage). Импорты поправлены codemod-ом.
+- [x] **Step 2:** вынести `settings/` — 9 файлов (`settings-api`, `config-api`, `providers-api`,
       `providers-view`, `model-cache`, `reconfigure`, `setup-api`, `reasoning-view`,
-      `commands-settings`.
-- [ ] **Step 3:** вынести `chat/` — `actions-api`, `commands`, `commands-shared`,
-      `memory-commands`; `file/` — `file-api`; `lsp/` — `lsp-api`; `i18n/` — `i18n-api`,
-      `i18n-stale`; `http/` — `body`, `persist`.
-- [ ] **Step 4:** `state.ts` на этой фазе **не трогаем** (остаётся на месте, файлы `state/*`
-      ещё не созданы — их делает фаза 2). Если решено не делать barrel (§9.1 спеки), обновить
-      32 тест-импорта на новые пути уже здесь.
-- [ ] **Step 5:** `assets.ts` (`ASSET_DIR_CANDIDATES`), `module.ts`, `server.ts`, `web-command.ts`
-      — импорты на новые пути.
-- [ ] Прогон: `bun test` + `tsc --noEmit`. Diff — только перемещения/пути.
+      `commands-settings`).
+- [x] **Step 3:** вынести `chat/` (4), `file/` (1), `lsp/` (1), `i18n/` (2), `http/` (2).
+      Корень оставлен: `module.ts`, `server.ts`, `assets.ts`, `limits.ts`, `util.ts`,
+      `state.ts`, `host-state.ts`, `log-forward.ts` (композиция/транспорт).
+- [x] **Step 4:** `state.ts` на этой фазе **не тронут** (файлы `state/*` — фаза 2). Barrel
+      не делали: 32 тест-импорта `webui/state` продолжают работать без правок.
+- [x] **Step 5:** `server.ts`, `module.ts`, `assets.ts` и 33 тест-файла обновлены на новые
+      пути (codemod, 58 замен); внешняя точка `src/cli/web-command.ts` не менялась
+      (`module.ts`/`server.ts` остались на месте).
+- [x] Прогон: перенос — 30 `git mv`; `bunx tsc --noEmit` чисто; 37 webui-тест-файлов —
+      **329 pass / 0 fail / 5 skip**. Непреднамеренную нормализацию чужих путей вне webui
+      из первого прогона codemod откатили.
+- **Заметка:** во время фазы в общем дереве параллельно велась задача index-watcher;
+      её правки вынесены в отдельный коммит перед Phase 1 (см. историю ветки).
 
 ---
 

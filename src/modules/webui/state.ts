@@ -5,15 +5,15 @@ import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
 import type { ContextBreakdown } from "../../core/types";
 import type { AppConfig } from "../../config/types";
-import type { SessionMeta, SessionMessage } from "../../modules/session/types";
-import type { SessionLogEntry } from "../../modules/session/store";
-import { RunPool } from "./session-pool";
+import type { SessionMeta, SessionMessage } from "../session/types";
+import type { SessionLogEntry } from "../session/store";
+import { RunPool } from "./session/session-pool";
 import type { MemoryStore } from "../memory/store";
 import type { SetupDisplay } from "../setup/answers";
 import type { LspDiagnosis } from "../lsp/diagnose";
 import { MAX_BODY_BYTES } from "./limits";
 import { readEnv } from "../../config/env";
-import { loadSessionUsage } from "./session-usage";
+import { loadSessionUsage } from "./session/session-usage";
 
 /**
  * Структурное подмножество `SessionManager` для веб-REST. Узкость даёт реальному
@@ -245,7 +245,7 @@ export interface WebUiState {
    * `cancelPendingQuestions` дренирует мапу на interrupt/shutdown, чтобы
    * заблокированный тул не вешал ход.
    */
-  pendingQuestions: Map<string, import("./prompt-io").PendingQuestion>;
+  pendingQuestions: Map<string, import("./session/prompt-io").PendingQuestion>;
   /**
    * True для virgin-конфига (`runWeb` вычислил `virgin`): сначала браузерный
    * визард, потом чат. Принуждается сервером — `/api/message` и `/api/command`

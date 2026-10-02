@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createWebUiState, type SseEvent } from "../src/modules/webui/state";
-import { makeForwarder } from "../src/modules/webui/forward";
+import { makeForwarder } from "../src/modules/webui/session/forward";
 import { planEventFor } from "../src/modules/webui/module";
 import type { Plan } from "../src/modules/execution/planner";
 

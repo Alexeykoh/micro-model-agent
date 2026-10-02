@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createWebUiState } from "../src/modules/webui/state";
-import { parseJsonBody } from "../src/modules/webui/body";
+import { parseJsonBody } from "../src/modules/webui/http/body";
 import { DEFAULTS } from "../src/config/defaults";
 import { doFetch, postJson, withServer } from "./helpers/webui-server";
 

@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { decodeText, MAX_FILE_VIEW_BYTES, mimeForView, safeFileName } from "../src/modules/webui/file-api";
+import { decodeText, MAX_FILE_VIEW_BYTES, mimeForView, safeFileName } from "../src/modules/webui/file/file-api";
 import { createWebUiState, } from "../src/modules/webui/state";
 import { withServer, doFetch, } from "./helpers/webui-server";
 

@@ -6,7 +6,7 @@ import {
   cancelPendingQuestions,
   createWebPromptIO,
   resolveAnswer,
-} from "../src/modules/webui/prompt-io";
+} from "../src/modules/webui/session/prompt-io";
 import { doFetch, withServer } from "./helpers/webui-server";
 
 

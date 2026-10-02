@@ -3,12 +3,12 @@ import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
 import { handleRequest } from "../src/modules/webui/server";
 import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
-import { parseSetupAnswers, parseSecurityDetail } from "../src/modules/webui/setup-api";
+import { parseSetupAnswers, parseSecurityDetail } from "../src/modules/webui/settings/setup-api";
 import { buildSetupDisplay, securityDetailFromConfig } from "../src/modules/setup/answers";
 import { applySecurityDetail } from "../src/modules/setup/apply";
 import { DEFAULTS } from "../src/config/defaults";
 import type { AppConfig } from "../src/config/types";
-import { setLocale } from "../src/i18n";
+import { setLocale } from "../src/i18n/index";
 
 const assets = {
   html: "<h1>hi</h1>",

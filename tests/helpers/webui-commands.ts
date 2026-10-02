@@ -1,5 +1,5 @@
 import { createWebUiState, type WebUiState, type WebSessionManager } from "../../src/modules/webui/state";
-import { makeWebCommands } from "../../src/modules/webui/commands";
+import { makeWebCommands } from "../../src/modules/webui/chat/commands";
 import { DEFAULTS } from "../../src/config/defaults";
 import type { AppConfig } from "../../src/config/types";
 import type { SessionMeta } from "../../src/modules/session/types";
