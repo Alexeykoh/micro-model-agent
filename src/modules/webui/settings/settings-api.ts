@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { redactContextSecrets } from "../../../core/agent/context-log";
 import { readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
-import type { WebUiState } from "../state";
+import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";
 import type { AppConfig, MCPServerConfigEntry } from "../../../config/types";
 import { DEFAULT_LSP_CONFIG } from "../../lsp/config";
 
@@ -33,7 +33,7 @@ function listEntries(markdown: string): MemoryEntry[] {
 }
 
 /** `GET /api/memory` — преференсы + записи по категориям (секреты вычищены). */
-export function handleMemoryGet(res: ServerResponse, s: WebUiState): void {
+export function handleMemoryGet(res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   if (!s.memory) {
     sendJson(res, 503, { error: "memory_unavailable" });
     return;
@@ -57,7 +57,7 @@ export function handleMemoryGet(res: ServerResponse, s: WebUiState): void {
 export function handleMemoryPost(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
   if (!s.memory) {
     sendJson(res, 503, { error: "memory_unavailable" });
@@ -89,7 +89,7 @@ export function handleMemoryDelete(
   res: ServerResponse,
   category: string,
   nRaw: string,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
   if (!s.memory) {
     sendJson(res, 503, { error: "memory_unavailable" });
@@ -108,7 +108,7 @@ export function handleMemoryDelete(
 }
 
 /** `GET /api/skills` — доступные скиллы с флагом загруженности. */
-export function handleSkillsGet(res: ServerResponse, s: WebUiState): void {
+export function handleSkillsGet(res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   if (!s.skills) {
     sendJson(res, 503, { error: "skills_unavailable" });
     return;
@@ -152,7 +152,7 @@ function mcpViewOptionals(cfg: MCPServerConfigEntry): Partial<McpServerView> {
   return out;
 }
 
-function mcpList(s: WebUiState): McpServerView[] {
+function mcpList(s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): McpServerView[] {
   const servers = s.config?.mcpServers ?? {};
   return Object.entries(servers).map(([key, cfg]) => ({
     id: key,
@@ -165,7 +165,7 @@ function mcpList(s: WebUiState): McpServerView[] {
 }
 
 /** `GET /api/plugins` — зарегистрированные плагины + настроенные MCP-серверы. */
-export function handlePluginsGet(res: ServerResponse, s: WebUiState): void {
+export function handlePluginsGet(res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   if (!s.plugins) {
     sendJson(res, 503, { error: "plugins_unavailable" });
     return;
@@ -196,7 +196,7 @@ export function handleMcpToggle(
   req: IncomingMessage,
   res: ServerResponse,
   id: string,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -482,7 +482,7 @@ export function updateLspServer(
 }
 
 /** Best-effort персист; бросающий `saveConfig` не должен стать 500-й. */
-function persistConfig(s: WebUiState, config: AppConfig): boolean {
+function persistConfig(s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport, config: AppConfig): boolean {
   try {
     s.saveConfig?.(config);
     return true;
@@ -503,9 +503,9 @@ type ConfigWriteOutcome =
 function handleConfigWrite(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
   mutate: (config: AppConfig, body: Record<string, unknown>) => ConfigWriteOutcome,
-  view: (config: AppConfig, state: WebUiState) => Record<string, unknown>,
+  view: (config: AppConfig, state: ConfigStore & WorkspaceStore & HttpTransport & SseTransport) => Record<string, unknown>,
 ): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -544,7 +544,7 @@ function mcpOutcome(result: McpWriteResult): ConfigWriteOutcome {
 export function handleMcpCreate(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
   handleConfigWrite(
     req,
@@ -560,7 +560,7 @@ export function handleMcpUpdate(
   req: IncomingMessage,
   res: ServerResponse,
   id: string,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
   handleConfigWrite(
     req,
@@ -572,7 +572,7 @@ export function handleMcpUpdate(
 }
 
 /** `DELETE /api/mcp/:id` — снять настроенный MCP-сервер. */
-export function handleMcpDelete(res: ServerResponse, id: string, s: WebUiState): void {
+export function handleMcpDelete(res: ServerResponse, id: string, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
     return;
@@ -587,7 +587,7 @@ export function handleMcpDelete(res: ServerResponse, id: string, s: WebUiState):
 }
 
 /** `GET /api/lsp` — таблица LSP-серверов. */
-export function handleLspGet(res: ServerResponse, s: WebUiState): void {
+export function handleLspGet(res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
     return;
@@ -600,7 +600,7 @@ export function handleLspUpdate(
   req: IncomingMessage,
   res: ServerResponse,
   lang: string,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
   handleConfigWrite(
     req,
@@ -619,7 +619,7 @@ type SettingsHandler = (
   req: IncomingMessage,
   res: ServerResponse,
   param: string,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ) => void;
 
 /** Точные роуты настроек `METHOD путь` (правило #17: карта хендлеров, без `if`). */
@@ -675,7 +675,7 @@ export function handleSettingsApi(
   req: IncomingMessage,
   res: ServerResponse,
   reqUrl: URL,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): boolean {
   const p = reqUrl.pathname;
   const exact = SETTINGS_EXACT[`${req.method} ${p}`];

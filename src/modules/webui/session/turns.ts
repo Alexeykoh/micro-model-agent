@@ -6,7 +6,7 @@
 // однo-сессионного main-агента удалён. Главный агент обслуживает только CLI/REPL
 // (и хост-команды/плагины), не ходы браузера.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { WebUiState, SseEvent } from "../state";
+import type { SessionStore, RuntimeState, ConfigStore, HttpTransport, SseTransport, WorkspaceStore, SseEvent } from "../state";
 import { broadcast } from "../state";
 import { releaseBusy, reserveBusy, sessionStatus, syncBusy } from "./session-status";
 import { makeForwarder } from "./forward";
@@ -40,7 +40,7 @@ function extractSessionId(raw: string): string | null {
 }
 
 /** Тогда-активная сессия (фолбэк, когда фронт sessionId не прислал). */
-function activeSessionOf(s: WebUiState): string | null {
+function activeSessionOf(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore): string | null {
   try {
     const manager = s.sessionManager as unknown as
       | { getActive?: () => string | null; getActiveMeta?: () => { id: string } | null }
@@ -57,7 +57,7 @@ function activeSessionOf(s: WebUiState): string | null {
  * через `finishTurn` — ключ слота при этом `""`).
  */
 function startTurn(
-  s: WebUiState,
+  s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
   target: string | null,
   text: string,
   images: string[],
@@ -81,7 +81,7 @@ function startTurn(
  * форвардер и runAgent — свежие на ход (изоляция буферов и id тул-событий).
  */
 function runRunnerTurn(
-  s: WebUiState,
+  s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
   runner: SessionRunner,
   text: string,
   images: string[],
@@ -125,7 +125,7 @@ function runRunnerTurn(
  * Вызывается из форвардерного `onTurnEnd` (слот уже сброшен форвардером,
  * вызов синхронен, вклиниться некому). Возвращает, стартовал ли ход.
  */
-export function finishTurn(s: WebUiState, id: string | null): boolean {
+export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore, id: string | null): boolean {
   s.pool.forceRelease(id);
   syncBusy(s);
   broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
@@ -172,7 +172,7 @@ type ParsedPost =
  * Валидирует тело сообщения: формат, существование сессии, наличие раннера.
  * Чистая (без записи состояния) — решение о резерве/очереди принимает диспетчер.
  */
-function parsePost(s: WebUiState, raw: string): ParsedPost {
+function parsePost(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore, raw: string): ParsedPost {
   const body = parseMessageBody(raw);
   if ("error" in body) return { error: body.error, status: 400 };
   const target = extractSessionId(raw) ?? activeSessionOf(s);
@@ -191,7 +191,7 @@ function parsePost(s: WebUiState, raw: string): ParsedPost {
  * иначе два конкурентных POST в одну сессию оба выиграют слот.
  */
 function dispatchPost(
-  s: WebUiState,
+  s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
   res: ServerResponse,
   parsed: { text: string; images: string[]; target: string },
 ): void {
@@ -225,7 +225,7 @@ function dispatchPost(
   sendJson(res, 202, { ok: true, sessionId: target });
 }
 
-export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore): void {
   if (s.setupRequired) {
     sendJson(res, 409, { error: "setup_required" });
     return;

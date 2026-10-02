@@ -21,7 +21,7 @@ import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { matchProtectedPath } from "../../security/protected-paths";
 import { t } from "../../../i18n/index";
-import type { WebUiState } from "../state";
+import type { WorkspaceStore, SessionStore } from "../state";
 
 /** Кап просматриваемого файла; большие отвергаются, а не режутся. */
 export const MAX_FILE_VIEW_BYTES = 512 * 1024;
@@ -118,7 +118,7 @@ export function handleFileApi(
   req: IncomingMessage,
   res: ServerResponse,
   reqUrl: URL,
-  s: WebUiState,
+  s: WorkspaceStore & SessionStore,
 ): boolean {
   if (reqUrl.pathname !== "/api/file" || req.method !== "GET") return false;
 

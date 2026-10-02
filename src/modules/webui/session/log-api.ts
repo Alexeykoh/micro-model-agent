@@ -13,7 +13,7 @@ import type { SessionLogEntry } from "../../session/store";
 import { redactContextSecrets } from "../../../core/agent/context-log";
 import { stripAnsi } from "../../../ui/line-math";
 import { sendJson } from "../util";
-import type { WebUiState } from "../state";
+import type { SessionStore } from "../state";
 
 /** Диагностические типы по умолчанию (живой Trace докачивает именно их). */
 export const TRACE_LOG_TYPES = [
@@ -160,7 +160,7 @@ export function handleSessionLog(
   req: IncomingMessage,
   res: ServerResponse,
   id: string,
-  s: WebUiState,
+  s: SessionStore,
 ): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });

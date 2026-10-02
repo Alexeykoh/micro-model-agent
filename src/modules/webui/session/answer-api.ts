@@ -7,13 +7,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { resolveAnswer } from "./prompt-io";
-import type { WebUiState } from "../state";
+import type { HttpTransport, RuntimeState, SseTransport } from "../state";
 
 /**
  * Тело: `{ id: string, value: unknown }`. `value` — строка для free-text
  * вопросов и `number[]` индексов опций для вопросов с выбором.
  */
-export function handleAnswerPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+export function handleAnswerPost(req: IncomingMessage, res: ServerResponse, s: HttpTransport & RuntimeState & SseTransport): void {
   readJsonBody(req, s.maxBodyBytes)
     .then((rec) => {
       if (!rec) {

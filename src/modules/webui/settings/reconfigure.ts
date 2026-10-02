@@ -1,6 +1,6 @@
 // Вебовый хук `reconfigure` — вынесен из `module.ts` (правило #1).
 import type { AppConfig } from "../../../config/types";
-import { broadcast, type WebUiState } from "../state";
+import { broadcast, type RuntimeState, type SessionStore, type SseTransport } from "../state";
 import { sessionStatus } from "../session/session-status";
 
 /**
@@ -19,7 +19,7 @@ export interface WebReconfigurableAgent {
  * сразу, не дожидаясь следующего хода или 2с-полла `/api/state`.
  */
 export function makeReconfigure(
-  state: WebUiState,
+  state: RuntimeState & SessionStore & SseTransport,
   agent: WebReconfigurableAgent,
   after?: () => Promise<void> | void,
 ): (config: AppConfig) => Promise<void> {

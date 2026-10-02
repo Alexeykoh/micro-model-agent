@@ -4,7 +4,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { parseJsonBody } from "../http/body";
 import { cancelPendingQuestions } from "../session/prompt-io";
-import type { WebUiState } from "../state";
+import type { SessionStore, RuntimeState, WorkspaceStore, HttpTransport, SseTransport } from "../state";
 import { readBody, readBodyError, sendJson } from "../util";
 
 /** Достаёт `sessionId` вкладки-отправителя из JSON-тела (нет — null). */
@@ -21,7 +21,7 @@ function extractSessionField(raw: string): string | null {
  * Переключает серверную активную сессию под команду из вкладки — только пока
  * сервер простаивает (ход владеет активной до turn_end). Fail-open.
  */
-function maybeAdoptSession(s: WebUiState, sessionId: string | null): void {
+function maybeAdoptSession(s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport, sessionId: string | null): void {
   if (!sessionId || s.busy || s.bridge?.isBusy() || !s.sessionManager) return;
   try {
     if (s.sessionManager.get(sessionId)) {
@@ -39,7 +39,7 @@ function maybeAdoptSession(s: WebUiState, sessionId: string | null): void {
 }
 
 /** Стопает все бегущие слоты (interrupt без `sessionId`). */
-function stopAllSlots(s: WebUiState): void {
+function stopAllSlots(s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport): void {
   for (const id of s.pool.busyIds()) interruptSlot(s, id);
 }
 
@@ -47,7 +47,7 @@ function stopAllSlots(s: WebUiState): void {
 export function handleCommandPost(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
   if (s.setupRequired) {
     sendJson(res, 409, { error: "setup_required" });
@@ -80,7 +80,7 @@ export function handleCommandPost(
 export function handleInterruptPost(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
   readBody(req, s.maxBodyBytes)
     .then((raw) => {
@@ -114,14 +114,14 @@ export function handleInterruptPost(
  * Останавливает ход слота: scoped shutdown раннера (чужие фоновые процессы
  * живы) + scoped cancel висящих вопросов этой сессии.
  */
-function interruptSlot(s: WebUiState, sessionId: string): void {
+function interruptSlot(s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport, sessionId: string): void {
   const runner = s.pool.getRunner(sessionId);
   if (runner) runner.agent.shutdown(sessionId);
   cancelPendingQuestions(s, sessionId);
 }
 
 /** `POST /api/index` — fire-and-forget пересбор индекса; результат виден в `/api/state`. */
-export function handleIndexPost(res: ServerResponse, s: WebUiState): void {
+export function handleIndexPost(res: ServerResponse, s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport): void {
   if (!s.refreshIndex) {
     sendJson(res, 503, { error: "unavailable" });
     return;

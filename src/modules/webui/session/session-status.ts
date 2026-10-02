@@ -1,15 +1,15 @@
 // Per-session статус слотов пула: счётчики, busy-агрегаты, резервы.
 // Вынесено из `state.ts` (правило #1: ≤300 строк/файл). Сам `WebUiState`
 // (типы, создание, broadcast) остаётся в `state.ts`.
-import type { WebUiState } from "../state";
+import type { RuntimeState } from "../state";
 
 /** Счётчики очереди по сессиям (для бейджей вкладок; legacy-слот мимо). */
-export function queuedCounts(s: WebUiState): Record<string, number> {
+export function queuedCounts(s: RuntimeState): Record<string, number> {
   return s.pool.queuedCounts();
 }
 
 /** Занята ли сессия: бежит или стоит в очереди. */
-export function isSessionBusy(s: WebUiState, id: string): boolean {
+export function isSessionBusy(s: RuntimeState, id: string): boolean {
   return s.pool.isBusy(id) || (s.pool.queuedCounts()[id] ?? 0) > 0;
 }
 
@@ -18,7 +18,7 @@ export function isSessionBusy(s: WebUiState, id: string): boolean {
  * `busy/queueLen` (совместимость) + `runningSessionIds` и счётчики `queued`
  * по сессиям для бейджей вкладок (`runningSessionId` — первый, legacy).
  */
-export function sessionStatus(s: WebUiState): {
+export function sessionStatus(s: RuntimeState): {
   busy: boolean;
   queueLen: number;
   runningSessionId: string | null;
@@ -36,7 +36,7 @@ export function sessionStatus(s: WebUiState): {
 }
 
 /** Пересчёт агрегатов после переходов слотов (любой бежит → busy). */
-export function syncBusy(s: WebUiState): void {
+export function syncBusy(s: RuntimeState): void {
   s.busy = s.pool.anyBusy();
   s.agentRunning = s.busy;
 }
@@ -49,7 +49,7 @@ export function syncBusy(s: WebUiState): void {
  * и резервом даст двум конкурентным сабмитам оба выиграть. Токен явно фиксирует
  * владельца сброса — поздний колбэк провала прошлого хода чужой резерв не снесёт.
  */
-export function reserveBusy(s: WebUiState, id: string | null = null): object {
+export function reserveBusy(s: RuntimeState, id: string | null = null): object {
   const token = s.pool.reserve(id);
   syncBusy(s);
   return token;
@@ -60,7 +60,7 @@ export function reserveBusy(s: WebUiState, id: string | null = null): object {
  * вызывающий владельцем (чтобы скипнуть дублирующий бродкаст `state`, когда
  * форвардерный `turn_end` флаг уже сбросил).
  */
-export function releaseBusy(s: WebUiState, token: object, id: string | null = null): boolean {
+export function releaseBusy(s: RuntimeState, token: object, id: string | null = null): boolean {
   const owned = s.pool.release(id, token);
   if (owned) syncBusy(s);
   return owned;

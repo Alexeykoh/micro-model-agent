@@ -17,7 +17,7 @@ import { errMsg } from "../../../utils/error";
 import { memoryLines } from "./memory-commands";
 import { makeSettingsHandlers } from "../settings/commands-settings";
 import { activeMeta, applyConfigWrite, withConfig, type Handler, type Out } from "./commands-shared";
-import { broadcast, type WebUiState } from "../state";
+import { broadcast, type SessionStore, type ConfigStore, type WorkspaceStore, type SseTransport, type RuntimeState } from "../state";
 
 /**
  * Поддерживаемое подмножество для `/help` (по строке). Описания — ключи i18n
@@ -52,7 +52,7 @@ export function webCommandList(): Array<{ name: string; usage: string; desc: str
 
 /** Входы диспатчера: состояние и sink захвата (для тестов). */
 export interface WebCommandDeps {
-  state: WebUiState;
+  state: SessionStore & ConfigStore & WorkspaceStore & SseTransport & RuntimeState;
   /** Sink захвата для тестов; дефолт — SSE-бродкаст `command`. */
   emit?: (text: string) => void;
 }
@@ -97,7 +97,7 @@ export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise
 }
 
 /** Однострочный статус: модель · провайдер · контекст · сессия · verbosity (+ окружение). */
-function status(cfg: AppConfig, state: WebUiState, out: Out): void {
+function status(cfg: AppConfig, state: SessionStore & ConfigStore & WorkspaceStore & SseTransport & RuntimeState, out: Out): void {
   const provider = cfg.provider.active ?? cfg.provider.type;
   const parts = [cfg.model, provider, `${cfg.contextWindow} tok`];
   const meta = activeMeta(state);
@@ -122,7 +122,7 @@ async function configCmd(
   cfg: AppConfig,
   args: string[],
   out: Out,
-  state: WebUiState,
+  state: SessionStore & ConfigStore & WorkspaceStore & SseTransport & RuntimeState,
 ): Promise<void> {
   if (args.length === 0) {
     for (const key of canonicalKeys()) {
@@ -144,7 +144,7 @@ async function modelCmd(
   cfg: AppConfig,
   args: string[],
   out: Out,
-  state: WebUiState,
+  state: SessionStore & ConfigStore & WorkspaceStore & SseTransport & RuntimeState,
 ): Promise<void> {
   const [sub, ...rest] = args;
   if (!sub || sub === "list") {
@@ -173,7 +173,7 @@ async function providerCmd(
   cfg: AppConfig,
   args: string[],
   out: Out,
-  state: WebUiState,
+  state: SessionStore & ConfigStore & WorkspaceStore & SseTransport & RuntimeState,
 ): Promise<void> {
   const [sub, ...rest] = args;
   if (!sub || sub === "list") {
@@ -199,7 +199,7 @@ async function providerCmd(
   out(`↳ unknown subcommand: provider ${sub}`);
 }
 
-function memoryCmd(state: WebUiState, args: string[], out: Out): void {
+function memoryCmd(state: SessionStore & ConfigStore & WorkspaceStore & SseTransport & RuntimeState, args: string[], out: Out): void {
   if (!state.memory) {
     out("↳ memory unavailable");
     return;

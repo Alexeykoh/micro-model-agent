@@ -19,7 +19,7 @@ import { redactContextSecrets } from "../../../core/agent/context-log";
 import { stripAnsi } from "../../../ui/line-math";
 import { scrubToolArgs } from "./forward";
 import { sendJson } from "../util";
-import type { WebUiState } from "../state";
+import type { SessionStore, HttpTransport } from "../state";
 
 /** Вид записи истории. */
 export type HistoryKind =
@@ -133,7 +133,7 @@ export function normalizeHistory(
 }
 
 /** `GET /api/sessions/:id/history` — 200 транскрипт, 404 чужой, 503 неввязанный. */
-export function handleSessionHistory(res: ServerResponse, id: string, s: WebUiState): void {
+export function handleSessionHistory(res: ServerResponse, id: string, s: SessionStore & HttpTransport): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
     return;

@@ -6,11 +6,11 @@
  * Одна копия, тот же контракт.
  */
 import type { AppConfig } from "../../../config/types";
-import type { WebUiState } from "../state";
+import type { ConfigStore } from "../state";
 
 /** Сначала персист, затем reconfigure; ни один провал не глотается. */
 export async function persistAndReconfigure(
-  s: WebUiState,
+  s: ConfigStore,
   config: AppConfig,
 ): Promise<{ persisted: boolean; warning?: string }> {
   let persisted = true;

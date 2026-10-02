@@ -9,10 +9,10 @@ import { readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
 import { buildProviderViews } from "./providers-view";
-import type { WebUiState } from "../state";
+import type { ConfigStore, HttpTransport, SseTransport } from "../state";
 
 /** `GET /api/providers` — отредактированные записи + имя активного. */
-export function handleProvidersGet(res: ServerResponse, s: WebUiState): void {
+export function handleProvidersGet(res: ServerResponse, s: ConfigStore & HttpTransport & SseTransport): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
     return;
@@ -260,7 +260,7 @@ export function upsertProvider(config: AppConfig, input: ProviderInput): UpsertP
 }
 
 /** `POST /api/providers` — add/update, персист, reconfigure. */
-export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s: ConfigStore & HttpTransport & SseTransport): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
     return;
@@ -305,7 +305,7 @@ export function removeProvider(config: AppConfig, name: string): "ok" | "active"
 }
 
 /** `DELETE /api/providers/:name` — удалить, персист, reconfigure. */
-export function handleProvidersDelete(res: ServerResponse, name: string, s: WebUiState): void {
+export function handleProvidersDelete(res: ServerResponse, name: string, s: ConfigStore & HttpTransport & SseTransport): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
     return;
@@ -339,7 +339,7 @@ export function handleProvidersApi(
   req: IncomingMessage,
   res: ServerResponse,
   reqUrl: URL,
-  s: WebUiState,
+  s: ConfigStore & HttpTransport & SseTransport,
 ): boolean {
   const p = reqUrl.pathname;
   if (p === "/api/providers" && req.method === "GET") {

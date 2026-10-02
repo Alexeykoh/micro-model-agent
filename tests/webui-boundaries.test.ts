@@ -1,19 +1,37 @@
 import { describe, it, expect } from "vitest";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildImportGraph, collectFiles, findCycles, type ScanFile } from "./helpers/import-graph";
+import {
+  buildImportGraph,
+  collectFiles,
+  findCycles,
+  findIdentifierRefs,
+  type ScanFile,
+} from "./helpers/import-graph";
 
 /**
  * Backend (src/modules/webui/**) structural guard.
  *
- * Phase 0 only enforces acyclicity — the webui module has no legitimate import
- * cycle, and a second-pass modularization must not introduce one. Phase 2 will
- * extend this file with a narrow-interface rule (domains may not depend on the
- * composed `WebUiState`).
+ * Enforces two invariants of the second-pass modularization:
+ * 1. No import cycles (value edges; `import type` is erased at runtime).
+ * 2. Domain modules consume the narrow role interfaces (`SseTransport`,
+ *    `SessionStore`, …) and never the composed `WebUiState` god-object. Only the
+ *    composition root and the transport entry points may see the whole state.
  */
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const WEBUI_DIR = resolve(REPO_ROOT, "src/modules/webui");
+
+/**
+ * Files allowed to reference the composed `WebUiState`: the state composition
+ * itself, the orchestrator, and the transport entry points (`server`/`util`).
+ */
+const COMPOSITE_STATE_ALLOWED = new Set([
+  "src/modules/webui/state.ts",
+  "src/modules/webui/module.ts",
+  "src/modules/webui/server.ts",
+  "src/modules/webui/util.ts",
+]);
 
 function formatCycles(cycles: string[][]): string {
   return cycles.map((c) => `  ${c.join(" -> ")} -> ${c[0]}`).join("\n");
@@ -33,6 +51,18 @@ describe("webui backend import boundaries", () => {
     const cycles = findCycles(buildImportGraph(files));
     expect(cycles, `Import cycles in src/modules/webui:\n${formatCycles(cycles)}`).toEqual([]);
   });
+
+  it("domain modules depend on role interfaces, not the composed WebUiState", () => {
+    const files = collectFiles(WEBUI_DIR, REPO_ROOT, [".ts"], { skipTests: true });
+    const offenders = findIdentifierRefs(files, "WebUiState")
+      .filter((ref) => !COMPOSITE_STATE_ALLOWED.has(ref.path))
+      .map((ref) => `  ${ref.path}:${ref.line}`);
+    expect(
+      offenders,
+      `Domain modules must take a narrow role (SseTransport/SessionStore/ConfigStore/` +
+        `RuntimeState/WorkspaceStore/HttpTransport), not the whole WebUiState:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
 });
 
 describe("import-graph helper", () => {
@@ -44,5 +74,14 @@ describe("import-graph helper", () => {
     const cycles = findCycles(buildImportGraph(fixtures));
     expect(cycles).toHaveLength(1);
     expect(cycles[0].sort()).toEqual(["a.ts", "b.ts"]);
+  });
+
+  it("finds identifier refs in code but not in comments", () => {
+    const fixtures: ScanFile[] = [
+      { path: "x.ts", text: "// WebUiState in a comment\nconst y: WebUiState = 1 as never;\n" },
+    ];
+    const refs = findIdentifierRefs(fixtures, "WebUiState");
+    expect(refs).toHaveLength(1);
+    expect(refs[0].line).toBe(2);
   });
 });

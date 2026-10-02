@@ -4,7 +4,7 @@ import type { Agent } from "../../../core/agent";
 import type { AgentResult, ToolEvent } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import type { ExecutionModule } from "../../execution/module";
-import { broadcast, type UsageSnapshot, type WebUiState } from "../state";
+import { broadcast, type UsageSnapshot, type SessionStore, type RuntimeState, type SseTransport } from "../state";
 import { sessionStatus } from "./session-status";
 import { captureUsage, planEventFor } from "../host-state";
 import { saveSessionUsage } from "./session-usage";
@@ -13,7 +13,7 @@ import type { Forwarder } from "./forward";
 /** Входы раннера: агент, состояние, форвардер, сессия/план для сайдбара. */
 export interface RunAgentDeps {
   agent: Agent;
-  state: WebUiState;
+  state: SessionStore & RuntimeState & SseTransport;
   forwarder: Forwarder;
   /** Сессия-владелец хода: штампуется в события и в per-session usage. */
   ownerSessionId: string;
@@ -39,7 +39,7 @@ export interface RunAgent {
  * и в legacy-глобал для совместимости. Возвращает сохранённый снимок.
  */
 function recordTurnUsage(
-  state: WebUiState,
+  state: SessionStore & RuntimeState & SseTransport,
   result: AgentResult,
   contextWindow: number | undefined,
   owner: string,

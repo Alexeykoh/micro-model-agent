@@ -8,7 +8,7 @@
 import type { AppConfig } from "../../../config/types";
 import { setLocale } from "../../../i18n/index";
 import { setConfigValue } from "../../../config/registry";
-import type { WebUiState } from "../state";
+import type { SessionStore, ConfigStore, RuntimeState } from "../state";
 
 /** Вывод строки в ленту команды. */
 export type Out = (line: string) => void;
@@ -17,7 +17,7 @@ export type Handler = (args: string[], out: Out) => void | Promise<void>;
 
 /** Гоняет `fn` только при wired конфиге; иначе — подсказка. */
 export function withConfig(
-  state: WebUiState,
+  state: SessionStore & ConfigStore & RuntimeState,
   out: Out,
   fn: (cfg: AppConfig) => void | Promise<void>,
 ): void | Promise<void> {
@@ -29,7 +29,7 @@ export function withConfig(
 }
 
 /** Мета активной сессии; null, если сессий нет. */
-export function activeMeta(state: WebUiState) {
+export function activeMeta(state: SessionStore & ConfigStore & RuntimeState) {
   const id = state.sessionManager?.getActive();
   return id ? (state.sessionManager?.get(id) ?? null) : null;
 }
@@ -57,7 +57,7 @@ export async function applyConfigWrite(
   name: string,
   value: string,
   out: Out,
-  state: WebUiState,
+  state: SessionStore & ConfigStore & RuntimeState,
 ): Promise<void> {
   // Конфиг меняет живой раннер через `reconfigure` (resize контекста, подмена
   // провайдера) — во время хода это гонка. Читающие команды (`/status`,

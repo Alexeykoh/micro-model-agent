@@ -7,11 +7,11 @@
 import type { ServerResponse } from "node:http";
 import { getFlatDicts } from "../../../i18n/index";
 import { sendJson } from "../util";
-import type { WebUiState } from "../state";
+import type { ConfigStore } from "../state";
 import { isI18nStale } from "./i18n-stale";
 
 /** `GET /api/i18n` — текущая локаль конфига + все плоские словари. */
-export function handleI18nGet(res: ServerResponse, s: WebUiState): void {
+export function handleI18nGet(res: ServerResponse, s: ConfigStore): void {
   sendJson(res, 200, {
     locale: s.config?.locale ?? "en",
     dicts: getFlatDicts(),

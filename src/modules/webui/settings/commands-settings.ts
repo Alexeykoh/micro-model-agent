@@ -21,7 +21,7 @@ import {
 } from "../../session/export";
 import { errMsg } from "../../../utils/error";
 import { applyConfigWrite, withConfig, type Handler, type Out } from "../chat/commands-shared";
-import type { WebUiState } from "../state";
+import type { SessionStore, ConfigStore, SseTransport, RuntimeState } from "../state";
 import { globalExportsDir } from "../../../config/paths";
 
 const REASONING_USAGE = "/reasoning [show|hide|on|off|level <auto|default|none|low|medium|high|max>]";
@@ -29,7 +29,7 @@ const CONTEXT_USAGE = "/context [<tokens> | system <share> | reserve <share>]";
 const SECURITY_USAGE = "/security [status|<key> [value]]";
 
 /** Хендлеры, вмёрженные в ядерный диспатч; ключи — имена команд в нижнем регистре. */
-export function makeSettingsHandlers(state: WebUiState): Record<string, Handler> {
+export function makeSettingsHandlers(state: SessionStore & ConfigStore & SseTransport & RuntimeState): Record<string, Handler> {
   return {
     reasoning: (args, o) => withConfig(state, o, (cfg) => reasoningCmd(cfg, args, o, state)),
     verbose: (args, o) => withConfig(state, o, (cfg) => verboseCmd(cfg, args, o, state)),
@@ -44,7 +44,7 @@ function reasoningCmd(
   cfg: AppConfig,
   args: string[],
   out: Out,
-  state: WebUiState,
+  state: SessionStore & ConfigStore & SseTransport & RuntimeState,
 ): void | Promise<void> {
   const sub = args[0]?.trim().toLowerCase();
   if (!sub) {
@@ -73,7 +73,7 @@ function verboseCmd(
   cfg: AppConfig,
   args: string[],
   out: Out,
-  state: WebUiState,
+  state: SessionStore & ConfigStore & SseTransport & RuntimeState,
 ): void | Promise<void> {
   const level = args[0]?.trim().toLowerCase();
   if (!level) {
@@ -88,7 +88,7 @@ function contextCmd(
   cfg: AppConfig,
   args: string[],
   out: Out,
-  state: WebUiState,
+  state: SessionStore & ConfigStore & SseTransport & RuntimeState,
 ): void | Promise<void> {
   if (args.length === 0) {
     const used = state.usage?.contextUsed;
@@ -118,7 +118,7 @@ function securityCmd(
   cfg: AppConfig,
   args: string[],
   out: Out,
-  state: WebUiState,
+  state: SessionStore & ConfigStore & SseTransport & RuntimeState,
 ): void | Promise<void> {
   const sub = args[0]?.trim().toLowerCase();
   if (!sub || sub === "status") {
@@ -138,7 +138,7 @@ function securityCmd(
   out(`usage: ${SECURITY_USAGE}`);
 }
 
-function sessionCmd(state: WebUiState, args: string[], out: Out): void {
+function sessionCmd(state: SessionStore & ConfigStore & SseTransport & RuntimeState, args: string[], out: Out): void {
   const mgr = state.sessionManager;
   if (!mgr) {
     out("↳ sessions unavailable");
@@ -188,7 +188,7 @@ function sessionCmd(state: WebUiState, args: string[], out: Out): void {
   out(`↳ unknown subcommand: session ${sub}`);
 }
 
-function exportCmd(state: WebUiState, args: string[], out: Out): void {
+function exportCmd(state: SessionStore & ConfigStore & SseTransport & RuntimeState, args: string[], out: Out): void {
   const mgr = state.sessionManager;
   if (!mgr) {
     out("↳ sessions unavailable");

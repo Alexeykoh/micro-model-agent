@@ -23,7 +23,7 @@ import {
 import { fetchProviderModels, scanLocalServers, testProviderChat } from "../../setup/discovery";
 import { probeProviderContext } from "../../../llm/provider-context";
 import { broadcast } from "../state";
-import type { WebUiState } from "../state";
+import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";
 import { readBody, readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
@@ -164,7 +164,7 @@ export function parseSetupAnswers(rec: Record<string, unknown>): SetupAnswers | 
 }
 
 /** `GET /api/setup` — нужен ли сетап, плюс статика визарда. */
-export function handleSetupGet(res: ServerResponse, s: WebUiState): void {
+export function handleSetupGet(res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   const defaults = s.setup?.defaults ?? { contextWindow: 0, maxToolIterations: 0 };
   sendJson(res, 200, {
     required: s.setupRequired,
@@ -177,7 +177,7 @@ export function handleSetupGet(res: ServerResponse, s: WebUiState): void {
 }
 
 /** `POST /api/setup/scan` — проб известных локальных OpenAI-совместимых серверов. */
-export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   readBody(req, s.maxBodyBytes)
     .then(async () => {
       const servers = await scanLocalServers();
@@ -189,7 +189,7 @@ export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: We
 }
 
 /** `POST /api/setup/models {baseUrl, apiKey}` — id моделей провайдера. */
-export function handleSetupModels(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+export function handleSetupModels(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   readJsonBody(req, s.maxBodyBytes)
     .then(async (rec) => {
       if (!rec) {
@@ -210,7 +210,7 @@ export function handleSetupModels(req: IncomingMessage, res: ServerResponse, s: 
 }
 
 /** `POST /api/setup/test {baseUrl, apiKey, model}` — дешёвый чат-проб. */
-export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   readJsonBody(req, s.maxBodyBytes)
     .then(async (rec) => {
       if (!rec) {
@@ -235,7 +235,7 @@ export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: We
 export function handleSetupContext(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
   readJsonBody(req, s.maxBodyBytes)
     .then(async (rec) => {
@@ -269,7 +269,7 @@ export function handleSetupContext(
  * следующие шаги визарда локализовались. Не персистится (финал `POST /api/setup`
  * пишет выбранную локаль в конфиг).
  */
-export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   readJsonBody(req, s.maxBodyBytes)
     .then((rec) => {
       if (!rec) {
@@ -290,7 +290,7 @@ export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: 
 }
 
 /** `POST /api/setup` — валидация, применение, персист, reconfigure, снятие гейта. */
-export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: WebUiState): void {
+export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
     return;
@@ -334,7 +334,7 @@ export function handleSetupApi(
   req: IncomingMessage,
   res: ServerResponse,
   reqUrl: URL,
-  s: WebUiState,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): boolean {
   const p = reqUrl.pathname;
   if (p === "/api/setup" && req.method === "GET") {

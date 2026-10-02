@@ -10,7 +10,7 @@ import { readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
 import { buildReasoningView } from "./reasoning-view";
-import type { WebUiState } from "../state";
+import type { ConfigStore, RuntimeState, HttpTransport, SseTransport } from "../state";
 
 /** Запись реестра для UI настроек. */
 export interface ConfigRegistryEntry {
@@ -68,7 +68,7 @@ function maskToken(token: string | null): string | null {
 }
 
 /** `GET /api/config` — отредактированный живой конфиг + реестр ключей. */
-export function handleConfigGet(res: ServerResponse, s: WebUiState): void {
+export function handleConfigGet(res: ServerResponse, s: ConfigStore & RuntimeState & HttpTransport & SseTransport): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
     return;
@@ -91,7 +91,7 @@ function toRawValue(value: unknown): string | null {
 export function handleConfigPost(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: ConfigStore & RuntimeState & HttpTransport & SseTransport,
 ): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -159,7 +159,7 @@ export function handleConfigPost(
 }
 
 /** `GET /api/models` — id моделей активного провайдера. */
-export function handleModelsGet(res: ServerResponse, s: WebUiState): void {
+export function handleModelsGet(res: ServerResponse, s: ConfigStore & RuntimeState & HttpTransport & SseTransport): void {
   if (!s.knownModels) {
     sendJson(res, 503, { error: "models_unavailable" });
     return;

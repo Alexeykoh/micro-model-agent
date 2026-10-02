@@ -8,7 +8,7 @@
  * `onTurnEnd` ОБЯЗАН сбрасывать `state.busy = false`: сервер ставит `busy = true`
  * на `/api/message` и полагается на этот сброс, чтобы принять следующий сабмит.
  */
-import type { SseEvent, WebUiState } from "../state";
+import type { SseEvent, RuntimeState, SseTransport } from "../state";
 import { broadcast } from "../state";
 import { syncBusy } from "./session-status";
 import { redactContextSecrets } from "../../../core/agent/context-log";
@@ -99,7 +99,7 @@ export interface Forwarder {
 
 /** Строит форвардер на состояние и синк (дефолт — broadcast всем клиентам). */
 export function makeForwarder(
-  s: WebUiState,
+  s: RuntimeState & SseTransport,
   sink: (ev: SseEvent) => void = (ev) => broadcast(ev, s),
   opts: { flushMs?: number; onQueueDrained?: (owner: string | null) => void; ownerRef?: { current: string | null } } = {},
 ): Forwarder {

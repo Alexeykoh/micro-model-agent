@@ -7,10 +7,10 @@ import { handleSessionLog } from "./log-api";
 import { readBody, readBodyError, sendJson } from "../util";
 import { parseJsonBody, readJsonBody } from "../http/body";
 import { isSessionBusy } from "./session-status";
-import type { WebUiState } from "../state";
+import type { SessionStore, RuntimeState, HttpTransport, SseTransport } from "../state";
 
 /** `GET /api/sessions` — список сессий (id/имя/обновление/модель/счёт). */
-export function handleSessionsGet(res: ServerResponse, s: WebUiState): void {
+export function handleSessionsGet(res: ServerResponse, s: SessionStore & RuntimeState & HttpTransport & SseTransport): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
     return;
@@ -35,7 +35,7 @@ export function handleSessionsGet(res: ServerResponse, s: WebUiState): void {
 export function handleSessionCreate(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
 ): void {
   const manager = s.sessionManager;
   if (!manager || typeof manager.create !== "function") {
@@ -86,7 +86,7 @@ export function handleSessionCreate(
 export function handleSessionActivate(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
 ): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
@@ -131,7 +131,7 @@ export function handleSessionActivate(
  * указывать на исчезнувший файл посреди хода; UI сначала переключается.
  * Чужие id — 404.
  */
-export function handleSessionDelete(res: ServerResponse, id: string, s: WebUiState): void {
+export function handleSessionDelete(res: ServerResponse, id: string, s: SessionStore & RuntimeState & HttpTransport & SseTransport): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
     return;
@@ -179,7 +179,7 @@ export function handleSessionsApi(
   req: IncomingMessage,
   res: ServerResponse,
   reqUrl: URL,
-  s: WebUiState,
+  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
 ): boolean {
   const p = reqUrl.pathname;
   if (p === "/api/sessions" && req.method === "GET") {

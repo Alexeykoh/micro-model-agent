@@ -11,7 +11,7 @@ import type { InputOption, AskChoiceOptions } from "../../../tools/user-input";
 import type { ToolDefinition } from "../../../tools/types";
 import { questionTool } from "../../../tools/question";
 import { approveTool } from "../../../tools/approve";
-import { broadcast, type WebUiState } from "../state";
+import { broadcast, type RuntimeState, type SseTransport } from "../state";
 
 let questionSeq = 0;
 
@@ -52,7 +52,7 @@ export interface PendingQuestion {
 
 /** Регистрирует висящий вопрос, бродкастит его, резолвится приведённым ответом. */
 function ask<T>(
-  state: WebUiState,
+  state: RuntimeState & SseTransport,
   payload: Record<string, unknown>,
   coerce: (value: unknown) => T,
   sessionId?: string,
@@ -69,7 +69,7 @@ function ask<T>(
  * С `sessionId` вопрос тегируется сессией-владельцем: параллельные ходы
  * кладут карточку в правильную вкладку, interrupt чистит только свои.
  */
-export function createWebPromptIO(state: WebUiState, sessionId?: string): PromptIO {
+export function createWebPromptIO(state: RuntimeState & SseTransport, sessionId?: string): PromptIO {
   return {
     askText(question) {
       return ask(state, { text: question, kind: "text" }, toText, sessionId);
@@ -92,7 +92,7 @@ export function createWebPromptIO(state: WebUiState, sessionId?: string): Prompt
 }
 
 /** Закрывает висящий вопрос по id. False — id неизвестен. */
-export function resolveAnswer(state: WebUiState, id: string, value: unknown): boolean {
+export function resolveAnswer(state: RuntimeState & SseTransport, id: string, value: unknown): boolean {
   const pending = state.pendingQuestions.get(id);
   if (!pending) return false;
   state.pendingQuestions.delete(id);
@@ -108,7 +108,7 @@ export function resolveAnswer(state: WebUiState, id: string, value: unknown): bo
  * (плюс нетегированные legacy — fail-safe от вечного виса); с null —
  * только нетегированные (legacy-слот в фабричном режиме не трогает чужие).
  */
-export function cancelPendingQuestions(state: WebUiState, sessionId?: string | null): void {
+export function cancelPendingQuestions(state: RuntimeState & SseTransport, sessionId?: string | null): void {
   const pending: Array<(value: unknown) => void> = [];
   for (const [id, q] of state.pendingQuestions) {
     if (sessionId === undefined) {
@@ -145,7 +145,7 @@ export interface PromptIORegistry {
  * Терминал сюда не ходит, его поведение не меняется.
  */
 export function installWebPromptIO(deps: {
-  state: WebUiState;
+  state: RuntimeState & SseTransport;
   agent: PromptIOAgent;
   registry?: PromptIORegistry;
   toolCtx?: { exitOnComplete?: boolean };

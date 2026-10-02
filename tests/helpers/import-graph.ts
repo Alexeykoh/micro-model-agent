@@ -186,6 +186,34 @@ export function buildImportGraph(files: ScanFile[]): Map<string, ImportEdge[]> {
   return graph;
 }
 
+export interface IdentifierRef {
+  /** Repo-relative path, forward slashes. */
+  path: string;
+  /** 1-based line number. */
+  line: number;
+}
+
+/** Code references to an identifier (AST nodes only — comments/strings are ignored). */
+export function findIdentifierRefs(files: ScanFile[], name: string): IdentifierRef[] {
+  const out: IdentifierRef[] = [];
+  for (const file of files) {
+    const ext = file.path.slice(file.path.lastIndexOf("."));
+    const kind = KIND_BY_EXT[ext] ?? ts.ScriptKind.TS;
+    const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, false, kind);
+    const visit = (node: ts.Node): void => {
+      if (ts.isIdentifier(node) && node.text === name) {
+        out.push({
+          path: file.path,
+          line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+        });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return out;
+}
+
 /**
  * All elementary cycles in the graph (each returned once, in DFS discovery order).
  * Type-only edges are ignored by default: `import type` is erased at runtime, so a

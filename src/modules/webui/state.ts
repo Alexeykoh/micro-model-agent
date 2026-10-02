@@ -256,6 +256,65 @@ export interface WebUiState {
   setup?: SetupDisplay;
 }
 
+/**
+ * Роли `WebUiState`: доменные модули принимают узкий срез, который реально
+ * используют, а не весь god-object. Композиция живёт в `WebUiState`; транспорт
+ * и оркестратор (`server.ts`/`util.ts`/`module.ts`) по-прежнему видят её целиком.
+ */
+
+/** Роль: SSE-рассылка (буфер клиентов). */
+export type SseTransport = Pick<WebUiState, "clients">;
+
+/** Роль: HTTP-транспорт (хост/токен/капы/хвост истории/куки). */
+export type HttpTransport = Pick<
+  WebUiState,
+  | "server"
+  | "starting"
+  | "url"
+  | "host"
+  | "token"
+  | "maxClients"
+  | "maxBodyBytes"
+  | "lastPostTs"
+  | "minPostIntervalMs"
+  | "historyTail"
+>;
+
+/** Роль: рантайм хода (busy-флаги, пул, вопросы, мост хоста). */
+export type RuntimeState = Pick<
+  WebUiState,
+  "busy" | "agentRunning" | "pool" | "bridge" | "turnSeq" | "pendingQuestions"
+>;
+
+/** Роль: сессии (менеджер, план-трекер, usage). */
+export type SessionStore = Pick<
+  WebUiState,
+  "sessionManager" | "execModule" | "sessionUsage" | "usage" | "activeSessionId"
+>;
+
+/** Роль: конфиг (живой объект, запись, reconfigure, список моделей). */
+export type ConfigStore = Pick<
+  WebUiState,
+  "config" | "saveConfig" | "reconfigure" | "knownModels"
+>;
+
+/** Роль: рабочее окружение и настройки (workspace, память, скиллы, плагины, LSP, setup). */
+export type WorkspaceStore = Pick<
+  WebUiState,
+  | "workspace"
+  | "agentsMd"
+  | "projectMapStats"
+  | "refreshIndex"
+  | "lspDiagnose"
+  | "lspDoctor"
+  | "lspProbing"
+  | "memory"
+  | "skills"
+  | "plugins"
+  | "setup"
+  | "setupRequired"
+>;
+
 /** Только положительный int; мусор даёт фолбэк 5. */
 export function parseMaxClients(raw: string | undefined): number {
   const n = Number(raw);
@@ -293,7 +352,7 @@ export function createWebUiState(): WebUiState {
  * а НЕ чужой last-turn: иначе новая вкладка открывается с цифрами прошлого
  * чата. Снимок лениво поднимается с диска после reload.
  */
-export function activeUsage(s: WebUiState, sessionId?: string): UsageSnapshot | undefined {
+export function activeUsage(s: SessionStore, sessionId?: string): UsageSnapshot | undefined {
   try {
     const active =
       sessionId ??
@@ -335,7 +394,7 @@ export interface SseEvent {
  * по `sessionId`). Авто-штампа `activeSessionId` нет: сессионные события несут
  * свой `sessionId` явно, глобальные (`state`/`index`) идут без него.
  */
-export function broadcast(ev: SseEvent, s: WebUiState): void {
+export function broadcast(ev: SseEvent, s: SseTransport): void {
   const payload = `event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`;
   for (const client of [...s.clients]) {
     // Backpressure: `false` — буфер сокета полон (медленный/виснущий читатель).

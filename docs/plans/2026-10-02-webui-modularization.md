@@ -98,22 +98,21 @@ New `tests/helpers/import-graph.ts`; baseline-замер.
 **Files:** New `state/{types,transport,runtime,sessions,config,workspace,index}.ts`;
 Modify ~35 модулей-потребителей.
 
-- [ ] **Step 1:** разнести `state.ts` по `state/*`:
-      `types.ts` (`UsageSnapshot`, `QueuedMessage`, `WebUiAssets`, `SseEvent`, web-адаптеры),
-      `transport.ts` (`SseTransport` + `broadcast`), `runtime.ts` (`RunPool`/busy/bridge/turnSeq/
-      pendingQuestions), `sessions.ts` (`WebSessionManager`/sessionUsage/activeUsage),
-      `config.ts`, `workspace.ts`, `index.ts` (`WebUiState` + `createWebUiState`).
-      `state.ts`-barrel продолжает реэкспортить.
-- [ ] **Step 2:** определить role-интерфейсы (пересечения/`Pick`) и перевести модули по
-      таблице из спеки §5.2: `forward`/`log-forward` → `SseTransport`; `config-api` →
-      `ConfigStore & SseTransport`; `sessions-api` → `SessionStore & …`; `file-api`/`log-api`
-      → `SessionStore`; `run-agent`/`turns` → `RuntimeState & …`; `settings-api` →
-      `WorkspaceStore & ConfigStore & …`.
-- [ ] **Step 3:** включить в guard-тест (Phase 0, Step 2) запрет импорта полного `WebUiState`
-      доменными модулями; убрать из whitelist всё, кроме оркестратора/composition/тестов.
-- [ ] **Step 4 (решение §9.1):** удалить barrel, переведя тесты на `./state`, **или** оставить
-      как фасад. Зафиксировать в этой строке.
-- [ ] Прогон: `bun test` + `tsc --noEmit` + `bun run quality`.
+- [x] **Step 1:** role-интерфейсы объявлены **в `state.ts`** (не разносим файл: `Pick`-алиасы
+      дешевле и не плодят churn). `SseTransport`, `HttpTransport`, `RuntimeState`,
+      `SessionStore`, `ConfigStore`, `WorkspaceStore`. Наборы полей — по факту чтения
+      каждого домена (скан `s.<field>`).
+- [x] **Step 2:** `broadcast`/`activeUsage` сужены до `SseTransport`/`SessionStore`; 24 файла
+      переведены codemod-ом с `WebUiState` на пересечения ролей; итерации tsc (6 файлов
+      добрали недостающие роли). Композитный `WebUiState` остался только в
+      `state.ts`/`module.ts`/`server.ts`/`util.ts`.
+- [x] **Step 3:** guard `domain modules depend on role interfaces, not the composed WebUiState`
+      включён в `tests/webui-boundaries.test.ts` (AST-проверка `findIdentifierRefs`, whitelist
+      = `state.ts`/`module.ts`/`server.ts`/`util.ts`; комментарии не считаются).
+- [x] **Step 4 (решение §9.1):** barrel `state.ts` **не делали** — `state.ts` остаётся
+      исходным файлом композиции, 32 тест-импорта `webui/state` не менялись.
+- [x] Прогон: `bunx tsc --noEmit` чисто; guard-тесты `7 pass`; 37 webui-тест-файлов
+      **331 pass / 0 fail / 5 skip**.
 
 ---
 
