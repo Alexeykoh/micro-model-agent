@@ -43,24 +43,36 @@ function toText(value: unknown): string {
   return String(value);
 }
 
+/** Висящий вопрос: резолвер ответа + сессия-владелец (для scoped cancel). */
+export interface PendingQuestion {
+  resolve: (value: unknown) => void;
+  /** Сессия-владелец; undefined — legacy (main-раннер без фабрики). */
+  sessionId?: string;
+}
+
 /** Регистрирует висящий вопрос, бродкастит его, резолвится приведённым ответом. */
 function ask<T>(
   state: WebUiState,
   payload: Record<string, unknown>,
   coerce: (value: unknown) => T,
+  sessionId?: string,
 ): Promise<T> {
   return new Promise((resolve) => {
     const id = nextQuestionId();
-    state.pendingQuestions.set(id, (value) => resolve(coerce(value)));
-    broadcast({ type: "question", ts: Date.now(), id, ...payload }, state);
+    state.pendingQuestions.set(id, { resolve: (value) => resolve(coerce(value)), sessionId });
+    broadcast({ type: "question", ts: Date.now(), id, ...(sessionId ? { sessionId } : {}), ...payload }, state);
   });
 }
 
-/** Браузерный `PromptIO`: спрашивает через SSE, закрывается в `resolveAnswer`. */
-export function createWebPromptIO(state: WebUiState): PromptIO {
+/**
+ * Браузерный `PromptIO`: спрашивает через SSE, закрывается в `resolveAnswer`.
+ * С `sessionId` вопрос тегируется сессией-владельцем: параллельные ходы
+ * кладут карточку в правильную вкладку, interrupt чистит только свои.
+ */
+export function createWebPromptIO(state: WebUiState, sessionId?: string): PromptIO {
   return {
     askText(question) {
-      return ask(state, { text: question, kind: "text" }, toText);
+      return ask(state, { text: question, kind: "text" }, toText, sessionId);
     },
     askChoice(question, options: InputOption[], opts: AskChoiceOptions = {}) {
       return ask(
@@ -73,6 +85,7 @@ export function createWebPromptIO(state: WebUiState): PromptIO {
           allowCustom: !!opts.allowCustom,
         },
         toIndexes,
+        sessionId,
       );
     },
   };
@@ -80,21 +93,27 @@ export function createWebPromptIO(state: WebUiState): PromptIO {
 
 /** Закрывает висящий вопрос по id. False — id неизвестен. */
 export function resolveAnswer(state: WebUiState, id: string, value: unknown): boolean {
-  const resolver = state.pendingQuestions.get(id);
-  if (!resolver) return false;
+  const pending = state.pendingQuestions.get(id);
+  if (!pending) return false;
   state.pendingQuestions.delete(id);
-  resolver(value);
+  pending.resolve(value);
   return true;
 }
 
 /**
- * Закрывает все висящие вопросы через `undefined` (тулы прочтут пусто/`[]`).
+ * Закрывает висящие вопросы через `undefined` (тулы прочтут пусто/`[]`).
  * Звать на interrupt/shutdown, чтобы заблокированный `question`/`approve`
- * не держал ход после того, как браузер перестал отвечать.
+ * не держал ход после того, как браузер перестал отвечать. С `sessionId` —
+ * только вопросы этой сессии (чужой параллельный ход не трогаем).
  */
-export function cancelPendingQuestions(state: WebUiState): void {
-  const pending = [...state.pendingQuestions.values()];
-  state.pendingQuestions.clear();
+export function cancelPendingQuestions(state: WebUiState, sessionId?: string): void {
+  const pending: Array<(value: unknown) => void> = [];
+  for (const [id, q] of state.pendingQuestions) {
+    if (sessionId === undefined || q.sessionId === sessionId || q.sessionId === undefined) {
+      pending.push(q.resolve);
+      state.pendingQuestions.delete(id);
+    }
+  }
   for (const resolve of pending) resolve(undefined);
 }
 
@@ -120,6 +139,8 @@ export function installWebPromptIO(deps: {
   agent: PromptIOAgent;
   registry?: PromptIORegistry;
   toolCtx?: { exitOnComplete?: boolean };
+  /** Сессия-владелец вопросов (параллельные раннеры тегируют свои). */
+  sessionId?: string;
 }): PromptIO {
   if (deps.registry) {
     for (const tool of [questionTool, approveTool]) {
@@ -127,7 +148,7 @@ export function installWebPromptIO(deps: {
     }
   }
   if (deps.toolCtx) deps.toolCtx.exitOnComplete = false;
-  const io = createWebPromptIO(deps.state);
+  const io = createWebPromptIO(deps.state, deps.sessionId);
   deps.agent.setPromptIO(io);
   return io;
 }

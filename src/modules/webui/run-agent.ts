@@ -6,6 +6,7 @@ import type { ToolCall, ToolResult } from "../../tools/types";
 import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
 import { broadcast, type WebUiState } from "./state";
+import { sessionStatus } from "./session-status";
 import { captureUsage, planEventFor } from "./host-state";
 import { cancelPendingQuestions } from "./prompt-io";
 import type { Forwarder } from "./forward";
@@ -16,6 +17,20 @@ export interface RunAgentDeps {
   state: WebUiState;
   forwarder: Forwarder;
   sessionManager?: Pick<SessionManager, "getActiveMeta">;
+  /**
+   * Явный владелец хода. Задан — штампуется в `activeSessionId` (совместимость
+   * SSE-роутинга); пул параллельных раннеров передаёт id своей сессии вместо
+   * чтения общей активной (при параллели она чужая). Не задан — legacy:
+   * читаем активную из менеджера.
+   */
+  ownerSessionId?: string | null;
+  /**
+   * Живая ссылка владельца текущего хода для дренажа его же слота на turn_end.
+   * Раннер ставит её на старте хода; форвардер читает в `onTurnEnd`.
+   * Legacy main-раннер (ходы разных сессий через общий мост) делит один
+   * ownerRef со своим форвардером; пул создаёт пару на сабмит.
+   */
+  ownerRef?: { current: string | null };
   execModule?: Pick<ExecutionModule, "getActivePlan">;
   /** Фолбэк лимита для usage сайдбара, когда ход лимит не сообщил. */
   contextWindow?: number;
@@ -68,7 +83,12 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
     state.agentRunning = true;
     // Все события хода — за стартовавшей сессией, чтобы SSE лёг в правильную
     // вкладку, даже если пользователь переключил табы.
-    state.activeSessionId = deps.sessionManager?.getActiveMeta()?.id;
+    const owner =
+      deps.ownerSessionId !== undefined
+        ? deps.ownerSessionId
+        : (deps.sessionManager?.getActiveMeta()?.id ?? null);
+    if (deps.ownerRef) deps.ownerRef.current = owner;
+    state.activeSessionId = owner ?? undefined;
     try {
       const result = await agent.run(
         text,
@@ -99,7 +119,7 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
         toolCalls,
         interrupted: interrupted || undefined,
       });
-      broadcast({ type: "state", ts: Date.now(), busy: state.busy, queueLen: state.pendingQueue.length, usage: state.usage }, state);
+      broadcast({ type: "state", ts: Date.now(), ...sessionStatus(state), usage: state.usage }, state);
       return result;
     } catch (err) {
       forwarder.onTurnEnd({ success: false, interrupted: interrupted || undefined });

@@ -10,6 +10,7 @@
  */
 import type { SseEvent, WebUiState } from "./state";
 import { broadcast } from "./state";
+import { syncBusy } from "./session-status";
 import { redactContextSecrets } from "../../core/agent/context-log";
 import { stripAnsi } from "../../ui/line-math";
 import type { MetaKind } from "../../core/types";
@@ -100,7 +101,7 @@ export interface Forwarder {
 export function makeForwarder(
   s: WebUiState,
   sink: (ev: SseEvent) => void = (ev) => broadcast(ev, s),
-  opts: { flushMs?: number; onQueueDrained?: () => void } = {},
+  opts: { flushMs?: number; onQueueDrained?: (owner: string | null) => void; ownerRef?: { current: string | null } } = {},
 ): Forwarder {
   const flushMs = opts.flushMs ?? DEFAULT_FLUSH_MS;
   const buf = { text: "", meta: "", reasoning: "", metaKind: undefined as MetaKind | undefined };
@@ -201,17 +202,23 @@ export function makeForwarder(
     },
     onTurnEnd(summary) {
       // Владение: форвардер — единственный эмиттер `turn_end` и единственный
-      // сброс busy для любого реально стартовавшего хода. Заодно чистит токен
-      // резервации, чтобы поздний колбэк провала `submit` не снёс слот нового хода.
+      // сброс для любого реально стартовавшего хода: legacy-флаги + слот
+      // владельца в пуле (иначе поздний колбэк провала `submit` увидит чужой
+      // резерв своим и продублирует error). Хук ниже пересчитает агрегаты
+      // и дренует очередь (слот уже свободен, вызов синхронен).
       flush();
       s.busy = false;
       s.agentRunning = false;
-      s.turnToken = null;
+      s.pool.forceRelease(opts.ownerRef?.current ?? null);
+      syncBusy(s);
       s.turnSeq += 1;
       sink({ type: "turn_end", ts: Date.now(), turnSeq: s.turnSeq, ...summary });
       // Очередь входящих дренируется следующим ходом сразу (по одному):
-      // слот уже свободен, вызов синхронен — вклиниться некому.
-      opts.onQueueDrained?.();
+      // слот уже свободен, вызов синхронен — вклиниться некому. Дренируем
+      // слот ВЛАДЕЛЬЦА завершённого хода (ownerRef ставит раннер на старте),
+      // а не legacy-пустышку: в legacy-режиме ходы разных сессий тоже
+      // серийны, но очередь у каждой своя.
+      opts.onQueueDrained?.(opts.ownerRef?.current ?? null);
     },
     flushNow: flush,
   };

@@ -11,6 +11,17 @@ export class ToolRegistry {
     this.tools.set(tool.name, tool);
   }
 
+  /**
+   * Поверхностная копия реестра (те же определения, новая Map).
+   * Параллельным раннерам: свои plan/set_thinking поверх общих хендлеров —
+   * хендлеры `(ctx, args)`-чисты, состояние несут ctx/executor, а не реестр.
+   */
+  clone(): ToolRegistry {
+    const copy = new ToolRegistry();
+    for (const tool of this.tools.values()) copy.tools.set(tool.name, tool);
+    return copy;
+  }
+
   get(name: string): ToolDefinition | undefined {
     return this.tools.get(name);
   }
