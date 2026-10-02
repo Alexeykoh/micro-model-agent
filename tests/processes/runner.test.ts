@@ -51,4 +51,17 @@ describe("killByCallId", () => {
     });
     expect(killByCallId("call-4")).toBe(true);
   });
+
+  it("isolates callbacks by session for colliding call ids", () => {
+    let killedA = false;
+    let killedB = false;
+    registerKillable("call-dup", () => { killedA = true; }, "ses_A");
+    registerKillable("call-dup", () => { killedB = true; }, "ses_B");
+
+    expect(killByCallId("call-dup", "ses_A")).toBe(true);
+    expect(killedA).toBe(true);
+    expect(killedB).toBe(false);
+    expect(killByCallId("call-dup", "ses_B")).toBe(true);
+    expect(killedB).toBe(true);
+  });
 });

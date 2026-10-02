@@ -172,7 +172,7 @@ export class ToolExecutor {
         const timeoutMs = tool.timeoutMs ?? TOOL_EXECUTION_TIMEOUT_MS;
         const failFast = (message: string) => {
           // Убить долгоживущий дочерний процесс этого вызова.
-          killByCallId(call.id);
+          killByCallId(call.id, this.ctx.sessionId);
           // Тул-специфичный cleanup (напр. восстановление скоупа subagent) —
           // до reject, чтобы общее состояние восстановилось и при abandonment.
           const cleanup = this.ctx.cleanup;

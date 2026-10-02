@@ -7,21 +7,31 @@ interface ActiveChild {
 
 const activeChildren = new Map<string, ActiveChild>();
 
+/**
+ * Ключ реестра: сессионный, иначе два параллельных раннера с совпавшим
+ * LLM-`callId` затирали бы kill-колбэки друг друга (аборт одной сессии убивал
+ * бы процесс другой). Без `sessionId` — legacy-ключ по `callId`.
+ */
+function killKey(callId: string, sessionId?: string): string {
+  return sessionId ? `${sessionId}\u0000${callId}` : callId;
+}
+
 /** Регистрирует kill-колбэк тул-вызова (для таймаута/аборта экзекутора). */
-export function registerKillable(callId: string, kill: () => void): void {
-  activeChildren.set(callId, { kill });
+export function registerKillable(callId: string, kill: () => void, sessionId?: string): void {
+  activeChildren.set(killKey(callId, sessionId), { kill });
 }
 
 /** Снимает kill-колбэк завершившегося хендлера. */
-export function unregisterKillable(callId: string): void {
-  activeChildren.delete(callId);
+export function unregisterKillable(callId: string, sessionId?: string): void {
+  activeChildren.delete(killKey(callId, sessionId));
 }
 
 /** Вызывает (и снимает) kill-колбэк для `callId`; false — не было. */
-export function killByCallId(callId: string): boolean {
-  const entry = activeChildren.get(callId);
+export function killByCallId(callId: string, sessionId?: string): boolean {
+  const key = killKey(callId, sessionId);
+  const entry = activeChildren.get(key);
   if (!entry) return false;
-  activeChildren.delete(callId);
+  activeChildren.delete(key);
   try {
     entry.kill();
   } catch {

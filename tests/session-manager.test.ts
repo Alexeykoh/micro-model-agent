@@ -164,8 +164,8 @@ describe("SessionManager", () => {
   });
 
   it("pruneEmpty removes sessions without user messages and keeps the rest", () => {
-    // Seed via the store: manager.create() would auto-prune, so bypass it
-    // to stage coexisting empty sessions.
+    // Seed via the store: stage several coexisting empty sessions without
+    // create() touching them (create no longer auto-prunes).
     const now = new Date().toISOString();
     const mk = (id: string, name: string) => ({
       id,
@@ -189,10 +189,10 @@ describe("SessionManager", () => {
     expect(manager.get("real1")).not.toBeNull();
   });
 
-  it("create auto-prunes older empty sessions but keeps the new one", () => {
+  it("create does not auto-prune other empty sessions (web tabs coexist)", () => {
     const stale = manager.create("Stale");
     const fresh = manager.create("Fresh");
-    expect(manager.get(stale.id)).toBeNull();
+    expect(manager.get(stale.id)).not.toBeNull();
     expect(manager.get(fresh.id)).not.toBeNull();
   });
 

@@ -273,6 +273,17 @@ describe("webui assets", () => {
     expect(a.css).toContain('body[data-font="large"]');
   });
 
+  it("filters the sidebar Trace by its own session", () => {
+    const a = loadAssets();
+    const sidebar = a.jsModules?.["js/sidebar.js"] || "";
+    expect(sidebar).toContain("sidebarSessionId");
+    expect(a.js).toContain("sidebarOwns(");
+    expect(a.js).toContain("sidebarSessionId()");
+    // Background sessions must not advance the sidebar turn counter or clear
+    // its live indicator.
+    expect(a.js).toContain("if (sidebarOwns(d)) { sidebarTurnEnd(");
+  });
+
   it("wires the sidebar tabs (session / map / trace) with master-detail", () => {
     const a = loadAssets();
     expect(a.html).toContain('class="sb-tabs"');

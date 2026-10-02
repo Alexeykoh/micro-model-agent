@@ -33,6 +33,8 @@ export interface ChunkQueryOptions {
   logger?: Logger;
   /** Abort-сигнал — при срабатывании летящие чанк-вызовы быстро абортятся. */
   signal?: AbortSignal;
+  /** Id сессии-владельца: cache/session-заголовки запросов. */
+  sessionId?: string;
 }
 
 /** Результат чанкового запроса: чанки, ответы, синтез, объём, наблюдаемый параллелизм. */
@@ -80,11 +82,13 @@ async function chatText(
   maxTokens?: number,
   reasoningEffort?: ReasoningLevel,
   signal?: AbortSignal,
+  sessionId?: string,
 ): Promise<string> {
   let out = "";
   for await (const chunk of provider.chat(messages, undefined, signal, {
     maxTokens,
     reasoningEffort,
+    sessionId,
   })) {
     if (chunk.type === "text" && chunk.content) out += chunk.content;
   }
@@ -142,6 +146,7 @@ export async function runChunkQuery(
           maxChunkTokens,
           reasoningEffort,
           signal,
+          opts.sessionId,
         );
       } catch (err: any) {
         // Один упавший чанк не должен убивать весь запрос. Кладём ошибку,
@@ -182,6 +187,7 @@ export async function runChunkQuery(
       maxSynthesisTokens,
       reasoningEffort,
       signal,
+      opts.sessionId,
     );
   }
 

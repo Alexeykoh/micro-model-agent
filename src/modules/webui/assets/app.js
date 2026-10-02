@@ -23,7 +23,7 @@ initRail, setPlan as railPlan, railEvent, applyRailI18n,
 import {
   initSidebar, sidebarSessionChanged, sidebarMapState,
   sidebarTraceEvent, sidebarTurnEnd, sidebarBusy, sidebarMapIndicator,
-  sidebarPullLog, sidebarLspState, sidebarLspEvent,
+  sidebarPullLog, sidebarSessionId,
   applySidebarI18n,
 } from "./js/sidebar.js";
 
@@ -137,6 +137,9 @@ function connectSSE() {
       return null;
     }
   };
+  // Sidebar Trace follows its own session: drop events stamped with a different
+  // sessionId (background runners). Events without one are global/legacy.
+  const sidebarOwns = (d) => !d.sessionId || d.sessionId === sidebarSessionId();
 // SSE event → feed handler table. `command`/`state`/`error` need envelope
 // checks and stay bespoke below; everything else is `parse → null-guard → call`.
 const handlers = [
@@ -148,7 +151,7 @@ const handlers = [
   ["tool_end", onToolEnd],
   ["plan", onPlan],
   ["question", onQuestion],
-  ["turn_end", (d) => { onTurnEnd(d); sidebarTurnEnd(d.turnSeq); sidebarBusy(false); sidebarPullLog(); }],
+  ["turn_end", (d) => { onTurnEnd(d); if (sidebarOwns(d)) { sidebarTurnEnd(d.turnSeq); sidebarBusy(false); sidebarPullLog(); } }],
   ["log", onLog],
   ["retract", (d) => onRetract(d.reason || "", d.sessionId)],
 ];
@@ -190,9 +193,9 @@ es.addEventListener("turn_end", (e) => {
 // ride the same SSE bus; critic/MoE/compaction/probe/usage/audit/claim rows
 // arrive via the session-log supplement Trace pulls on every turn_end.
 for (const ev of ["tool_start", "tool_end", "phase", "plan", "question", "meta", "log", "retract", "index"]) {
-  es.addEventListener(ev, (e) => { const d = parse(e); if (d) sidebarTraceEvent(ev, d); });
+  es.addEventListener(ev, (e) => { const d = parse(e); if (d && sidebarOwns(d)) sidebarTraceEvent(ev, d); });
 }
-es.addEventListener("text", (e) => { const d = parse(e); if (d) sidebarTraceEvent("text", d); });
+es.addEventListener("text", (e) => { const d = parse(e); if (d && sidebarOwns(d)) sidebarTraceEvent("text", d); });
 // LSP tab: server emits `lsp {phase}` around an on-demand diagnosis.
 es.addEventListener("lsp", (e) => { const d = parse(e); if (d) sidebarLspEvent(d); });
 es.addEventListener("command", (e) => {

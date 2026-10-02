@@ -39,7 +39,7 @@ export class SessionLogger {
       this.logger.initSessionLog(meta.id);
     }
 
-    setAuditSessionDir(dir);
+    setAuditSessionDir(dir, meta.id);
   }
 
   /** Есть ли активная сессия. */

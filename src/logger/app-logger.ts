@@ -15,6 +15,7 @@ export class Logger {
   private prefix: string;
   private logDir: string | null = null;
   private sessionDir: string | null = null;
+  private sessionId: string | null = null;
   private fileLog: FileLogWriter;
   private sink: OutputSink;
 
@@ -122,7 +123,26 @@ export class Logger {
     );
     if (this.logDir) childLogger.setLogDir(this.logDir);
     if (this.sessionDir) childLogger.setSessionDir(this.sessionDir);
+    childLogger.sessionId = this.sessionId;
     return childLogger;
+  }
+
+  /**
+   * Независимый логер одной сессии: свой `FileLogWriter` (посессионный `.log`)
+   * и свой `sessionDir` (app.jsonl). Нужен параллельным раннерам: если делить
+   * один `Logger`, `initSessionLog`/`setSessionDir` последнего стартовавшего
+   * хода перевешивают путь и чужие строки уезжают в лог соседней сессии.
+   * Делит уровень, префикс, шину вывода и общий каталог логов.
+   * @param sessionId id сессии (имя посессионного `.log`); @param sessionDir каталог сессии для app.jsonl.
+   * @returns независимый Logger.
+   */
+  forSession(sessionId: string, sessionDir?: string): Logger {
+    const scoped = new Logger(this.level, this.prefix, this.sink);
+    if (this.logDir) scoped.setLogDir(this.logDir);
+    if (sessionDir) scoped.setSessionDir(sessionDir);
+    scoped.initSessionLog(sessionId);
+    scoped.sessionId = sessionId;
+    return scoped;
   }
 
   debug(msg: string, meta?: Record<string, unknown>): void {
@@ -173,6 +193,7 @@ export class Logger {
         source: this.prefix || "mma",
         kind: "log",
         text: line,
+        sessionId: this.sessionId ?? undefined,
         data: diagnostic ? { diagnostic: true } : undefined,
       });
     } catch {

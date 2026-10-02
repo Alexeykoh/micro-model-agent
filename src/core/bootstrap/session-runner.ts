@@ -135,6 +135,16 @@ export function createSessionRunnerFactory(
     // чужой activeId не трогает. Нет сессии — бросает (коллер уже вернул 404).
     const pinned = sessionManager.forkPinned(sessionId);
 
+    // Свой Logger на раннер: посессионный `.log` и `sessionDir` (app.jsonl) —
+    // иначе общий Logger перевешивался бы ходом соседней параллельной сессии.
+    let runnerSessionDir: string | undefined;
+    try {
+      runnerSessionDir = sessionManager.getSessionDirectory(sessionId);
+    } catch {
+      runnerSessionDir = undefined;
+    }
+    const runnerLogger = logger.forSession(sessionId, runnerSessionDir);
+
     const contextManager = new ContextManager(
       config.contextWindow,
       config.contextBudget,
@@ -150,6 +160,7 @@ export function createSessionRunnerFactory(
     runnerExec.switchSession(sessionId);
     const runnerDetector = new HallucinationDetector(baseDir, llmProvider, {
       judgeEnabled: config.hallucination?.judge?.enabled ?? false,
+      sessionId,
     });
     runnerExec.setHallucinationDetector(runnerDetector);
     contextManager.setPlanSummaryProvider(() => runnerExec.getPlanSummary());
@@ -188,7 +199,7 @@ export function createSessionRunnerFactory(
       sessionManager: pinned,
       sessionId,
       config,
-      logger,
+      logger: runnerLogger,
     });
 
     const agent = assembleRunnerAgent({
@@ -200,7 +211,7 @@ export function createSessionRunnerFactory(
       runnerPlugins,
       contextManager,
       runnerDetector,
-      logger,
+      logger: runnerLogger,
       baseDir,
       configDir,
       runnerTags,

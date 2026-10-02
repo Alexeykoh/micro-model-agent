@@ -118,6 +118,7 @@ export const chunkQueryTool: ToolDefinition = {
         ? (args.reasoning_effort as "none" | "low" | "medium" | "high" | "max")
         : undefined,
       logger: ctx.logger,
+      sessionId: ctx.sessionId,
     });
 
     ctx.logger.debug(

@@ -18,6 +18,8 @@ export interface OutputEvent {
   /** Текст, готовый для терминала (может содержать ANSI). */
   text: string;
   stream?: OutputStream;
+  /** Сессия-владелец события; отсутствует у процессно-глобальных сообщений. */
+  sessionId?: string;
   /** Машиночитаемая нагрузка для нетерминальных поверхностей. */
   data?: Record<string, unknown>;
 }

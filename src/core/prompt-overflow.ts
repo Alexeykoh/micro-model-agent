@@ -110,6 +110,7 @@ async function collectText(
   provider: LLMProvider,
   prompt: string,
   maxTokens: number,
+  sessionId?: string,
 ): Promise<string> {
   let text = "";
   // Reasoning выкл: думающая модель сожгла бы cap на <think> до любого
@@ -119,6 +120,7 @@ async function collectText(
   for await (const chunk of provider.chat([{ role: "user", content: prompt }], undefined, undefined, {
     maxTokens: maxTokens * 2,
     reasoningEffort: "none",
+    sessionId,
   })) {
     if (chunk.type === "text" && chunk.content) text += chunk.content;
   }
@@ -153,8 +155,10 @@ export async function resolvePromptOverflow(opts: {
   provider: LLMProvider | null;
   cacheDir: string;
   logger?: Logger;
+  /** Id сессии-владельца: прокидывается в LLM-вызовы для cache/session-заголовков. */
+  sessionId?: string;
 }): Promise<OverflowResolution> {
-  const { overflow, includedTokens, systemBudget, provider, cacheDir, logger } = opts;
+  const { overflow, includedTokens, systemBudget, provider, cacheDir, logger, sessionId } = opts;
 
   const sorted = [...overflow].sort(
     (a, b) => KIND_ORDER.indexOf(a.kind as PromptBlockKind) - KIND_ORDER.indexOf(b.kind as PromptBlockKind),
@@ -211,7 +215,7 @@ export async function resolvePromptOverflow(opts: {
           block.content,
           `--- DOCUMENT END ---`,
         ].join("\n");
-        text = await collectText(provider, prompt, maxTokens);
+        text = await collectText(provider, prompt, maxTokens, sessionId);
         // Маленькие модели регулярно игнорируют лимит длины (наблюдалось: 9B
         // выдала ~4700 символов при цели 3170). Один retry самокомпрессии на
         // перелёт — короткий вход резко повышает послушание — затем жёсткий clamp.
@@ -231,6 +235,7 @@ export async function resolvePromptOverflow(opts: {
               `--- TEXT END ---`,
             ].join("\n"),
             maxTokens,
+            sessionId,
           );
         }
       } catch (err: any) {

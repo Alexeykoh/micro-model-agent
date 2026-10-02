@@ -26,9 +26,11 @@ interface Verdict {
 /** LLM-судья: проверяет новый ответ на противоречие ранним решениям. */
 export class LLMJudge {
   private provider: LLMProvider;
+  private sessionId?: string;
 
-  constructor(provider: LLMProvider) {
+  constructor(provider: LLMProvider, sessionId?: string) {
     this.provider = provider;
+    this.sessionId = sessionId;
   }
 
   /** Валидирует ответ против решений: warn при противоречии, иначе pass (сбои — тоже pass). */
@@ -85,7 +87,9 @@ Reply with ONLY valid JSON, no other text:
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const consume = (async () => {
-      for await (const chunk of this.provider.chat(messages, [], controller.signal)) {
+      for await (const chunk of this.provider.chat(messages, [], controller.signal, {
+        sessionId: this.sessionId,
+      })) {
         if (chunk.type === "text" && chunk.content) {
           text += chunk.content;
         }

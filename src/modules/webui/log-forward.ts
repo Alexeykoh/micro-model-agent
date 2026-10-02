@@ -33,6 +33,9 @@ export function installOutputForwarding(
         level: ev.level,
         source: ev.source,
         text: redactContextSecrets(ev.text),
+        // Сессия-владелец: без неё broadcast заштампует last-active, и лог
+        // соседнего раннера попадёт в чужую вкладку/Trace.
+        ...(ev.sessionId ? { sessionId: ev.sessionId } : {}),
         // Диагностики петли видны в чате только в verbose (гейт на клиенте).
         diagnostic: ev.data?.diagnostic === true,
       },

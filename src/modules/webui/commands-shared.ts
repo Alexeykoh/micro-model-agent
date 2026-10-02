@@ -59,6 +59,13 @@ export async function applyConfigWrite(
   out: Out,
   state: WebUiState,
 ): Promise<void> {
+  // Конфиг меняет живой раннер через `reconfigure` (resize контекста, подмена
+  // провайдера) — во время хода это гонка. Читающие команды (`/status`,
+  // `/model list`, `/config <key>`) проходят мимо этого пути и остаются.
+  if (state.busy) {
+    out("↳ busy: stop the running turn before changing settings");
+    return;
+  }
   const result = setConfigValue(cfg, name, value);
   if (!result.ok) {
     out(`↳ ${configErrorText(result.reason, result.input, result.key)}`);

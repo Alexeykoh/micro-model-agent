@@ -24,7 +24,7 @@ export class HallucinationDetector {
   constructor(
     baseDir?: string,
     llmProvider?: LLMProvider,
-    options?: { judgeEnabled?: boolean },
+    options?: { judgeEnabled?: boolean; sessionId?: string },
   ) {
     this.consistency = new ConsistencyCheck();
     this.confidence = new ConfidenceCheck();
@@ -33,7 +33,8 @@ export class HallucinationDetector {
     // его не отключил (главный агент отключает по умолчанию через
     // config.hallucination.judge.enabled).
     const judgeEnabled = options?.judgeEnabled ?? true;
-    this.judge = llmProvider && judgeEnabled ? new LLMJudge(llmProvider) : null;
+    this.judge =
+      llmProvider && judgeEnabled ? new LLMJudge(llmProvider, options?.sessionId) : null;
   }
 
   /** Доступ к проверке консистентности (решения, созданные/удалённые файлы). */

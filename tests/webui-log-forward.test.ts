@@ -71,4 +71,26 @@ describe("webui log forwarding", () => {
     expect(wire).toContain('"diagnostic":false');
     expect(wire.split('"diagnostic":true')).toHaveLength(2);
   });
+
+  it("preserves the event's own sessionId instead of the last-active one", () => {
+    const chunks: string[] = [];
+    const s = createWebUiState();
+    s.clients.add(fakeClient(chunks));
+    s.activeSessionId = "ses_MAIN";
+    const bus = new OutputBus();
+    const off = installOutputForwarding(s, bus);
+
+    bus.emit({
+      level: "warn",
+      source: "agent",
+      kind: "log",
+      text: "background warning",
+      sessionId: "ses_B",
+    });
+
+    const wire = chunks.join("");
+    expect(wire).toContain('"sessionId":"ses_B"');
+    expect(wire).not.toContain('"sessionId":"ses_MAIN"');
+    off();
+  });
 });
