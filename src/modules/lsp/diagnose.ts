@@ -2,7 +2,7 @@
 import type { LspConfig, LspServerConfig } from "./types";
 import { LspClient, type LspClientLogger } from "./client";
 import { getServerKeyForFile } from "./config";
-import { collectCheckFiles } from "./check-tool";
+import { collectCheckFiles, LSP_DIAGNOSE_SCAN_LIMIT } from "./check-tool";
 import { findProjectRoot } from "./project-root";
 import { findOnPath, resolveNpxLaunch, isOfflineLsp } from "./resolve";
 import {
@@ -99,7 +99,9 @@ export async function diagnoseLspServers(
   const offline = deps.offline ?? isOfflineLsp();
   const timeoutCap = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const deadlineMs = deps.deadlineMs ?? DEFAULT_DEADLINE_MS;
-  const collect = deps.collectFiles ?? collectCheckFiles;
+  const collect =
+    deps.collectFiles ??
+    ((dir: string, cfg: LspConfig) => collectCheckFiles(dir, cfg, LSP_DIAGNOSE_SCAN_LIMIT));
   const probePath = deps.findOnPath ?? findOnPath;
   const entries = Object.entries(config.servers);
 
