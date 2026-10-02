@@ -156,18 +156,20 @@ Modify ~35 модулей-потребителей.
 
 Резать **только по швам из анализа** (см. ниже), каждый шаг — отдельный коммит, e2e — гейт.
 
-- [~] **Step 1: `feed.js`.** По кластерам: `feed/core` (готов в Phase 3), `feed/sidebar.js`
-      (**готово, `837046f`**), `feed/stream.js` (text/reasoning/meta/phase/retract),
-      `feed/turn.js` (tool-start/end, turn-end, ошибки, command-output, log),
-      `feed/history.js` (реплей), `feed/plan.js` (`planStepMark`/`renderPlan`/`onPlan`),
-      `feed/question.js`. `planStepMark` — в `feed/core` или tiny `plan-format.js`
-      (нужен и `feed/plan`, и `feed/sidebar`).
-      **RESUME (свежий контекст):** `feed.js` после Phase 3/5 — barrel (`export *` из
-      `./feed/core.js` и `./feed/sidebar.js`); порядок выноса оставшихся кластеров —
-      `history` (525-637), `plan` (638-700), `question` (701-819), `stream` (26-200),
-      `turn` (201-524). После каждого: `node --check`, guard-граф, `bun test tests/webui-*`.
-      Значения строк — из `feed.js` до выноса; сверять `grep '^function|^export'`.
-      Каждый шаг — отдельный коммит.
+- [x] **Step 1: `feed.js` — DONE (2026-10-02).** Кластеры вынесены: `feed/history.js`
+      (`07947b5`), `feed/plan.js` (`89f860d`), `feed/question.js` (`4a801ac`),
+      `feed/stream.js` (`4b2f7ad`), `feed/turn.js` (`5b857c9`); `feed.js` — чистый barrel
+      (`export *` из `core`/`sidebar`/`history`/`plan`/`question`/`stream`/`turn`).
+      Общие render-хелперы (`mdOpts`/`buildThinkBlock`/`copyAction`/`appendActionsRow`)
+      легли в `feed/core.js` (не `plan-format.js`): его импортит каждый кластер, так
+      исключены межкилстерные рёбра. `planStepMark` — приватный в `feed/plan.js`
+      (sidebar его не использует). Заодно поправлены source-guard'ы:
+      `tests/webui-assets.test.ts` (regex импорта md.js теперь допускает `../../md.js`) и
+      e2e `web-filecard` (filerow-исходник переехал в `/js/feed/turn.js`).
+      Гейт на каждом коммите: `node --check` + `bun test tests/webui-*` (331 pass/5 skip) +
+      `tsc --noEmit` (чисто) + `fallow audit --base HEAD` (exit 0); e2e — по запросу.
+      **Fix-up note:** `flushRun` был временно потерян в `feed.js` при выносе `stream`
+      (`4b2f7ad`), восстановлен в `turn.js` в `5b857c9`.
 - [~] **Step 2: `tabs.js`.** `session/tabs.js` (модель + tabstrip + статусы + `openTab` hub +
       busy/reconcile/loadSessions), `session/sessions-menu.js` (дропдаун + delete + error),
       `session/cmdk.js` (slash-автокомплит), `session/composer.js` (attachments + send +
