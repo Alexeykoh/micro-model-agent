@@ -34,6 +34,7 @@ import {
   activeUsage,
   broadcast,
   createWebUiState,
+  type SseEvent,
   type WebPluginManager,
   type WebSkillsModule,
   type WebUiState,
@@ -222,7 +223,13 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   // Владелец текущего хода main-раннера: legacy-мост серийно обслуживает
   // ходы разных сессий, дренаж на turn_end идёт в слот владельца, а не в "".
   const mainOwnerRef = { current: null as string | null };
-  const forwarder = makeForwarder(state, undefined, {
+  // Legacy-мост обслуживает main-агент (без явного sessionId в событиях):
+  // штампуем активную сессию здесь, чтобы пер-сессионная маршрутизация
+  // `broadcast` отнесла поток к вкладке владельца. Раннеры штампуют сами.
+  const legacySink = (ev: SseEvent): void => {
+    broadcast(state.activeSessionId ? { sessionId: state.activeSessionId, ...ev } : ev, state);
+  };
+  const forwarder = makeForwarder(state, legacySink, {
     // Очередь входящих: голова стартует следующим ходом сразу после `turn_end`.
     // `state.bridge` читается в момент вызова (к тому времени уже привязан ниже).
     onQueueDrained: (owner) => finishTurn(state, owner),

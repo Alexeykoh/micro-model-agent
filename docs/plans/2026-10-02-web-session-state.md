@@ -16,20 +16,26 @@ happy-dom (dev-dep, для DOM-тестов), i18n en/ru.
 
 **Спека:** [docs/specs/2026-10-02-web-session-state-design.md](../specs/2026-10-02-web-session-state-design.md)
 **Зависимость:** [Session-Scope Isolation Plan](./2026-10-02-session-scope-isolation.md) — выполнен (слит в `master`).
-**Ветка:** `feat/web-session-state`.
+**Ветка:** `feat/web-session-state` (Phase 1/2/4/5 слиты), `feat/webui-subscriptions` (Phase 0/3/7).
 
-> **Статус (2026-10-02):** сделано — Phase 1 (`snapshot(sessionId)` +
-> `GET /api/state?session=`; `buildHostState`/`activeUsage`/`activeExecModule`
-> принимают сессию), Phase 2 (клиентский `refresh` под `?session=<activeTab>`
-> с guard'ом от гонки, `openTab`/`newChatTab` через `hooks.refreshState`,
-> `S.state.activeSessionId` и `sidebarSessionChanged` синхронно на переключении),
+> **Статус (2026-10-02):** сделано —
+> Phase 1 (`snapshot(sessionId)` + `GET /api/state?session=`),
+> Phase 2 (клиентский `refresh` под `?session=<activeTab>` с guard'ом,
+> `openTab`/`newChatTab` через `hooks.refreshState`, синхронные
+> `activeSessionId`/`sidebarSessionChanged`),
 > Phase 4 (loading-состояние секции Session: `.sb-loading` + `aria-busy`),
-> Phase 5 (персист per-session usage в каталог сессии, ленивая гидратация
-> после reload/restart).
-> Проверка: `bun test` 3002 pass / 6 skip / 0 fail, `bun run quality` зелёный.
-> Осталось — Phase 3 (per-session SSE-подписки), Phase 6 (снятие legacy-пути),
-> Phase 7 (e2e переключения вкладок). Phase 0 (DOM-харнесс `happy-dom`) не
-> поднимался — клиент покрыт source-guard тестами (существующий паттерн).
+> Phase 5 (персист per-session usage + ленивая гидратация),
+> Phase 3 (per-session SSE-подписки: `GET /events?session=`, `clientSessions`,
+> маршрутизация `broadcast`; авто-штамп `activeSessionId` убран, legacy-мост
+> штампует сам; клиент пересоздаёт EventSource на переключении),
+> Phase 0 (happy-dom-харнесс, `tests/webui-sidebar-dom.test.ts`),
+> Phase 7 (e2e-сценарий переключения вкладок в `web-chat-tabs.e2e-test.ts`).
+> Проверка: `bun test` 3010 pass / 6 skip / 0 fail, `bun run quality` зелёный.
+> **Осознанно отложено — Phase 6** (снятие legacy single-agent пути): требует
+> перевода всех web-ходов на `SessionRuntime` (у каждого сообщения обязательна
+> сессия) и переписывания bridge-стабов в тестах; план сам ставит её последней
+> после e2e. Функционально legacy не мешает: корректность обеспечена scoped
+> snapshot/subscriptions, dual-path изолирован.
 
 ---
 

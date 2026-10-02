@@ -192,4 +192,41 @@ describe("web e2e: chat, tabs, sessions, files", () => {
     },
     180_000,
   );
+
+  e2e(
+    "switching tabs scopes the sidebar to the active session",
+    async () => {
+      const dir = artifactsDirFor("tabs-sidebar");
+      await withE2E(dir, async (srv, { page, errors }: Launched) => {
+        const { baseUrl } = srv;
+        await waitForLiveTab(page);
+        const created = await createSessionTopbar(page, baseUrl);
+        await waitActiveBadge(page, created);
+
+        // New tab is active → sidebar session row shows its id, not the previous.
+        await expect
+          .poll(() => page.locator("#usage").innerText(), { timeout: 15_000 })
+          .toContain(created);
+
+        // Switch to the other (first) tab and back to confirm the sidebar follows.
+        const ids = await page
+          .locator(".stab")
+          .evaluateAll((els) => els.map((e) => e.getAttribute("title")));
+        const first = ids.find((id) => id && id !== created);
+        expect(first).toBeTruthy();
+        await page.locator(`.stab[title="${first}"]`).click();
+        await expect
+          .poll(() => page.locator("#usage").innerText(), { timeout: 15_000 })
+          .toContain(first as string);
+        await page.locator(`.stab[title="${created}"]`).click();
+        await expect
+          .poll(() => page.locator("#usage").innerText(), { timeout: 15_000 })
+          .toContain(created);
+
+        writeArtifacts(dir, "tabs-sidebar", { html: await page.content(), consoleErrors: errors });
+        expect(errors).toEqual([]);
+      });
+    },
+    180_000,
+  );
 });

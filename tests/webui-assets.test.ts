@@ -287,6 +287,14 @@ describe("webui assets", () => {
     expect(a.js).toContain("if (S.activeTabId !== sid) return;");
   });
 
+  it("subscribes the EventSource to the active session and resubscribes on switch", () => {
+    const a = loadAssets();
+    expect(a.js).toContain("syncSseSession(");
+    expect(a.js).toContain('params.push("session=" + encodeURIComponent(sid))');
+    expect(a.js).toContain("sseSession !== sid");
+    expect(a.js).toContain("es.close()");
+  });
+
   it("shows a loading indicator for the session sidebar section", () => {
     const a = loadAssets();
     const sidebar = a.jsModules?.["js/sidebar.js"] || "";

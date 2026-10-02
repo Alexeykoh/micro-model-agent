@@ -133,6 +133,13 @@ export interface WebUiState {
   host: string;
   token: string | null;
   clients: Set<ServerResponse>;
+  /**
+   * Сессия, на которую подписан каждый SSE-клиент (`GET /events?session=`).
+   * Событие с `sessionId` доставляется только подписчикам этой сессии; клиенты
+   * без подписки (тесты/legacy) получают всё. Глобальные события (без
+   * `sessionId`) — всем.
+   */
+  clientSessions: Map<ServerResponse, string>;
   bridge: Host | null;
   /**
    * Агрегат занятости: true, пока бежит ХОТЬ ОДИН ход (владелец — пул:
@@ -271,6 +278,7 @@ export function createWebUiState(): WebUiState {
     host: readEnv("WEBUI_HOST") || "127.0.0.1",
     token: readEnv("WEBUI_TOKEN") || null,
     clients: new Set(),
+    clientSessions: new Map(),
     bridge: null,
     busy: false,
     agentRunning: false,
@@ -327,22 +335,34 @@ export interface SseEvent {
   [k: string]: unknown;
 }
 
-/** Шлёт событие всем SSE-клиентам (с backpressure-дропом зависших). */
+/**
+ * Шлёт событие SSE-клиентам с backpressure-дропом зависших.
+ *
+ * Сессионная маршрутизация: событие с `sessionId` уходит только клиентам,
+ * подписанным на эту сессию (`clientSessions`); клиенты без подписки получают
+ * всё (тесты/legacy). Глобальные события (без `sessionId`) — всем. Авто-штампа
+ * `activeSessionId` больше нет: продюсеры сессионных событий помечают их явно,
+ * иначе глобальный `state`/`index` ошибочно считался бы чужим для подписчика.
+ */
 export function broadcast(ev: SseEvent, s: WebUiState): void {
-  // Штампуем активную сессию на каждое событие, чтобы клиент клал стрим
-  // в правильную вкладку. Событие вправе переопределить явно.
-  const data: SseEvent = s.activeSessionId ? { sessionId: s.activeSessionId, ...ev } : ev;
-  const payload = `event: ${ev.type}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const client of s.clients) {
+  const payload = `event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`;
+  const sid = typeof ev.sessionId === "string" ? ev.sessionId : null;
+  for (const client of [...s.clients]) {
+    if (sid) {
+      const sub = s.clientSessions.get(client);
+      if (sub !== undefined && sub !== sid) continue;
+    }
     // Backpressure: `false` — буфер сокета полон (медленный/виснущий читатель).
     // Дропаем клиента, а не копим события безгранично.
     try {
       if (!client.write(payload)) {
         s.clients.delete(client);
+        s.clientSessions.delete(client);
         client.end();
       }
     } catch {
       s.clients.delete(client);
+      s.clientSessions.delete(client);
     }
   }
 }
