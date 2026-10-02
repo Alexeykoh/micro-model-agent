@@ -271,6 +271,70 @@ The model can answer questions about the session it is running in without shelli
 - `enableOnDemand: false` restores legacy all-tools behavior (no `enable_tools` registered, empty tags → `getAllForLLM` returns everything).
 - Subagent guard (`src/tools/subagent.ts`) uses `getByTags` for unknown-tag detection (alwaysOn tools otherwise masked it).
 
+## LSP Diagnostics
+
+Language Server Protocol over stdio (`src/modules/lsp/`). One client for all
+languages; a fresh server is spawned per check (`spawn → initialize → didOpen →
+publishDiagnostics → shutdown`). Diagnostics reach the model three ways:
+`onAfterTool` after `write_file`/`edit_file` (appends `[LSP errors]`/`[LSP
+warnings]`), the on-demand `lsp_check` tool, and the session-start baseline
+(`startup-check.ts`). The REPL banner probes applicable servers (`probe.ts`) and
+`/lsp doctor` diagnoses them on demand.
+
+### Download & launch
+
+- **npx servers** (typescript/javascript, python `pyright`, json/html/css,
+  angular) auto-download from the npm registry on first use; timeouts are
+  30–60s to cover a cold cache, and `initialize` retries once.
+- **Native servers** (`rust-analyzer`, `gopls`) are `autoInstall: false` — not
+  downloaded; missing → `binary-missing`.
+- **A globally installed binary wins over npx.** `resolveNpxLaunch`
+  (`resolve.ts`) recognizes the strict `[--yes] [--package X]… <binary> --stdio`
+  layout and, if `<binary>` is on PATH (`findOnPath`), runs it directly and
+  strips the npx wrapper. This is the supported path for locked-down machines.
+- Workspace root comes from the edited file's project markers
+  (`project-root.ts`), not from the agent's baseDir.
+
+### Locked-down networks (`/lsp doctor`, `MMA_LSP_OFFLINE`)
+
+When there is no internet / no registry access, `/lsp doctor` prints per-server
+applicability, whether the binary is on PATH, whether npx would be used, and a
+classified reason + hint:
+
+| Class | Meaning | Fix |
+| --- | --- | --- |
+| `binary-missing` | native server not on PATH | install it / set `command` |
+| `offline` | npx needed but `MMA_LSP_OFFLINE` is set | install binary / unset flag |
+| `network` | npx download/initialize failed (registry?) | PATH, registry mirror, offline |
+| `timeout` | initialize too slow, binary present | raise `lsp.servers.<lang>.timeout` |
+| `spawn-failed` | command failed to spawn | check command and PATH |
+| `server-error` | other protocol/server error | check server logs |
+
+Options for a closed network (in `~/.mma/config.json` or `<project>/.mma/config.json`):
+
+1. **Install the language server once** (internal mirror) and put it on PATH —
+   MMA then skips npx automatically.
+2. **Point at an absolute binary**:
+   ```json
+   { "lsp": { "servers": { "python": {
+     "command": "C:/tools/pyright-langserver.cmd",
+     "args": ["--stdio"], "autoInstall": false } } } }
+   ```
+3. **Point npx at an internal registry** (npx honours the env it is spawned
+   with; server `env` is merged over `process.env`):
+   ```json
+   { "lsp": { "servers": { "typescript": {
+     "env": { "npm_config_registry": "https://npm.internal.example/" } } } } }
+   ```
+4. **`MMA_LSP_OFFLINE=1`** — no npx at all: only PATH binaries are used; a server
+   that would need npx reports `offline` instead of silently hanging.
+5. **Disable** — `lsp.enabled: false` globally or `enabled: false` per server.
+
+Since `LspModule` copies `config.lsp` at bootstrap, these settings apply on the
+next start (there is no `/config lsp.*` surface yet). A failed check appends a
+`hint:` line under `[LSP check failed]`; after 3 consecutive failures the server
+is disabled for the session with `[LSP disabled]`.
+
 ## Process Management
 
 Long-running commands (dev servers, watchers) no longer block the agent.

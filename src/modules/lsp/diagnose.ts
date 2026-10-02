@@ -78,8 +78,8 @@ export function classifyLspError(
   message: string,
   opts: { npxFallback?: boolean } = {},
 ): LspFailureReason {
-  if (/not found in PATH/i.test(message)) return "binary-missing";
   if (/MMA_LSP_OFFLINE|auto-install is disabled/i.test(message)) return "offline";
+  if (/not found/i.test(message)) return "binary-missing";
   if (/ENOENT|EINVAL|\bspawn\b/i.test(message)) return "spawn-failed";
   if (/timeout/i.test(message)) return opts.npxFallback ? "network" : "timeout";
   return "server-error";

@@ -624,7 +624,25 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   пропуск. Резолвер ограничен baseDir (jail), 10 путями, 500KB; `.drawio` добавлен в
   `FILE_EXTENSIONS` токенайзера. i18n: `hall.claim_artifact`, `hall.claim_output_unverified` (en+ru).
 
-### Current Version: 2.16.1
+### LSP Doctor & Locked-Down Networks (2.17.0)
+
+- **`/lsp doctor`** (`src/cli/repl-commands-lsp.ts`, `src/modules/lsp/diagnose.ts`):
+  per-server диагностика для ответа «почему LSP не работает» — применимость, наличие
+  бинарника в PATH, пойдёт ли через npx, реальная проба `spawn+initialize` и класс
+  причины (`ok/disabled/not-applicable/binary-missing/offline/network/timeout/spawn-failed/server-error/deadline`)
+  с actionable `↳`-подсказкой. Фасад — `LspModule.diagnose(baseDir, deps?)`.
+- **npx-резолв вынесен** в `src/modules/lsp/resolve.ts` (`findOnPath`, `resolveNpxLaunch`,
+  `isOfflineLsp`); `client.startServer` использует его, глобальный бинарник важнее npx.
+- **Офлайн `MMA_LSP_OFFLINE=1`** (`config/env.ts`): npx не вызывается вообще; сервер,
+  которому он нужен, падает с `offline: <binary> not found in PATH`. Правки
+  `lsp.servers.<lang>` (`command`/`args`/`env.npm_config_registry`/`autoInstall`/`enabled`) —
+  через JSON-конфиг (ключа `/config lsp.*` пока нет; модуль копирует `config.lsp` на bootstrap).
+- **Классифицированные hints**: под `[LSP check failed]` идёт одна строка `hint:` нужного
+  класса (`lsp.hint_*`), чтобы модель уходила на build/test. Порог 3 подряд → `[LSP disabled]`
+  без изменений.
+- Доки: `docs/agents/tools.md` → «LSP Diagnostics → Locked-down networks».
+
+### Current Version: 2.17.0
 
 ### Changelog
 

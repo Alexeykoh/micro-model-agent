@@ -4,6 +4,16 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.17.0] - 2026-10-02
+
+### Added
+
+- **`/lsp doctor`** (`src/cli/repl-commands-lsp.ts`, `src/modules/lsp/diagnose.ts`): per-server diagnosis — applicability, whether the binary is on PATH, whether npx would be used, a real `spawn+initialize` probe, and a **classified reason** (`ok` / `disabled` / `not-applicable` / `binary-missing` / `offline` / `network` / `timeout` / `spawn-failed` / `server-error` / `deadline`) with an actionable hint. Answers "why is LSP dead" instead of leaving it in `app.jsonl`. `LspModule.diagnose(baseDir)` + `diagnoseLspServers`.
+- **Offline mode `MMA_LSP_OFFLINE=1`** (`src/modules/lsp/resolve.ts`, `client.ts`, `config/env.ts`): never invoke npx; only PATH binaries are used, and a server that would need npx fails fast with a clear `offline: <binary> not found in PATH (MMA_LSP_OFFLINE)` message.
+- **Classified failure hints** (`src/modules/lsp/module.ts`): a failed check appends one `hint:` line under `[LSP check failed]` (binary missing / network / offline / spawn / timeout) so the model falls back to the project's own build/test instead of blindly retrying.
+- **`resolve.ts`** — extracted npx→global-binary resolution (`findOnPath`, `resolveNpxLaunch`) shared by the client and the doctor.
+- **Docs**: `docs/agents/tools.md` "LSP in locked-down networks" (PATH binaries, `lsp.servers.<lang>` overrides, registry mirror via `env`, `MMA_LSP_OFFLINE`, classes table).
+
 ## [Unreleased]
 
 ### Added
