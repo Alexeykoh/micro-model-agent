@@ -23,12 +23,13 @@ happy-dom (dev-dep, для DOM-тестов), i18n en/ru.
 > принимают сессию), Phase 2 (клиентский `refresh` под `?session=<activeTab>`
 > с guard'ом от гонки, `openTab`/`newChatTab` через `hooks.refreshState`,
 > `S.state.activeSessionId` и `sidebarSessionChanged` синхронно на переключении),
-> Phase 4 (loading-состояние секции Session: `.sb-loading` + `aria-busy`).
-> Проверка: `bun test` 2999 pass / 6 skip / 0 fail, `bun run quality` зелёный.
-> Осталось — Phase 3 (per-session SSE-подписки), Phase 5 (персист per-session
-> usage), Phase 6 (снятие legacy-пути), Phase 7 (e2e переключения вкладок).
-> Phase 0 (DOM-харнесс `happy-dom`) не поднимался — клиент покрыт
-> source-guard тестами (существующий паттерн).
+> Phase 4 (loading-состояние секции Session: `.sb-loading` + `aria-busy`),
+> Phase 5 (персист per-session usage в каталог сессии, ленивая гидратация
+> после reload/restart).
+> Проверка: `bun test` 3002 pass / 6 skip / 0 fail, `bun run quality` зелёный.
+> Осталось — Phase 3 (per-session SSE-подписки), Phase 6 (снятие legacy-пути),
+> Phase 7 (e2e переключения вкладок). Phase 0 (DOM-харнесс `happy-dom`) не
+> поднимался — клиент покрыт source-guard тестами (существующий паттерн).
 
 ---
 
