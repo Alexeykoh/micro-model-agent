@@ -9,10 +9,9 @@ import {
   parseMessageBody,
   readBody,
 } from "../src/modules/webui/util";
-import { drainQueueTurn, finishTurn } from "../src/modules/webui/turns";
+import { finishTurn } from "../src/modules/webui/turns";
 import { MAX_QUEUE_LENGTH } from "../src/modules/webui/limits";
 import { activeUsage, createWebUiState } from "../src/modules/webui/state";
-import { makeForwarder } from "../src/modules/webui/forward";
 import type { Host } from "../src/core/host";
 import { withServer, doFetch, postJson, webuiAssets as assets } from "./helpers/webui-server";
 
@@ -25,6 +24,88 @@ function makeBridge(): Host {
     getState: () => ({ busy: false }),
     executeCommand: () => Promise.resolve(),
   };
+}
+
+/** Стаб раннера: управляемые deferred-ходы, счётчики стартов/стопов/картинок. */
+function stubRunnerPool() {
+  const stubs = new Map<
+    string,
+    {
+      started: string[];
+      shutdowns: number;
+      images: unknown[];
+      resolvers: Array<(v: unknown) => void>;
+      rejecters: Array<(e: unknown) => void>;
+      chunks: Array<(chunk: string) => void>;
+    }
+  >();
+  const stub = (id: string) => {
+    let entry = stubs.get(id);
+    if (!entry) {
+      entry = { started: [], shutdowns: 0, images: [], resolvers: [], rejecters: [], chunks: [] };
+      stubs.set(id, entry);
+    }
+    return entry;
+  };
+  const factory = (id: string) =>
+    ({
+      sessionId: id,
+      agent: {
+        run: (text: string, onChunk?: (chunk: string) => void) => {
+          const entry = stub(id);
+          entry.started.push(text);
+          if (onChunk) entry.chunks.push(onChunk);
+          return new Promise<unknown>((resolve, reject) => {
+            entry.resolvers.push(resolve);
+            entry.rejecters.push(reject);
+          });
+        },
+        shutdown: () => {
+          stub(id).shutdowns++;
+        },
+      },
+      contextManager: {
+        addPendingImage: (part: unknown) => {
+          stub(id).images.push(part);
+        },
+      },
+      execModule: { getActivePlan: () => null },
+    }) as never;
+  return { stubs, stub, factory };
+}
+
+/** Минимальный менеджер сессий на заданном наборе id (getActive — первый). */
+function sessionStub(ids: string[]) {
+  const alive = new Set(ids);
+  return {
+    list: () => [],
+    get: (id: string) => (alive.has(id) ? { id } : null) as never,
+    getActive: () => ids[0] ?? null,
+    setActive: () => {},
+    delete: (id: string) => {
+      alive.delete(id);
+    },
+  };
+}
+
+/** Готовит состояние под раннерный путь: сессии + фабрика стаб-раннеров. */
+function fixture(s: ReturnType<typeof createWebUiState>, ids: string[] = ["A"]) {
+  const pool = stubRunnerPool();
+  s.sessionManager = sessionStub(ids);
+  s.pool.setFactory(pool.factory);
+  s.minPostIntervalMs = 0;
+  return pool;
+}
+
+/** POST /api/message с явной сессией/картинками. */
+function postMsg(base: string, text: string, sessionId?: string, images?: string[]) {
+  return doFetch(`${base}/api/message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(
+      Object.assign({ text }, sessionId ? { sessionId } : {}, images ? { images } : {}),
+    ),
+  });
 }
 
 function get(url: string): Promise<{ status: number; body: string }> {
@@ -80,103 +161,66 @@ describe("webui server", () => {
 
   it("caps the message text at 32K before submitting", async () => {
     const s = createWebUiState();
-    s.minPostIntervalMs = 0;
-    const submitted: string[] = [];
-    const bridge: Host = {
-      isBusy: () => false,
-      submit: (text) => {
-        submitted.push(text);
-        return Promise.resolve();
-      },
-      interrupt: () => {},
-      getState: () => ({ busy: false }),
-      executeCommand: () => Promise.resolve(),
-    };
-    s.bridge = bridge;
+    const { stub } = fixture(s, ["A"]);
 
     await withServer(s, async (base) => {
       const long = "a".repeat(40_000);
-      const res = await doFetch(`${base}/api/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: long }),
-      });
+      const res = await postMsg(base, long, "A");
       expect(res.status).toBe(202);
-      expect(submitted).toHaveLength(1);
-      expect(submitted[0].length).toBeLessThanOrEqual(32768);
+      expect(stub("A").started).toHaveLength(1);
+      expect(stub("A").started[0].length).toBeLessThanOrEqual(32768);
     });
   });
 
-  it("reports a submit rejection as error + state, never turn_end", async () => {
+  it("returns 500 when the runner spawn fails", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
-    const chunks: string[] = [];
-    s.bridge = {
-      isBusy: () => false,
-      submit: () => Promise.reject(new Error("boom")),
-      interrupt: () => {},
-      getState: () => ({ busy: false }),
-      executeCommand: () => Promise.resolve(),
-    };
-    // Test seam: broadcast only calls write/end; a full ServerResponse is overkill.
-    const fake = {
-      write: (chunk: string) => {
-        chunks.push(chunk);
-        return true;
-      },
-      end: () => {},
-    };
-    s.clients.add(fake as unknown as ServerResponse);
-
-    await withServer(s, async (base) => {
-      const res = await postJson(base, "/api/message", { text: "hi" });
-      expect(res.status).toBe(202);
-      // Let the fire-and-forget rejection handler run.
-      await new Promise((r) => setTimeout(r, 0));
+    s.sessionManager = sessionStub(["A"]);
+    s.pool.setFactory(() => {
+      throw new Error("spawn boom");
     });
 
-    const events = chunks.join("");
-    expect(events).toContain("event: error");
-    expect(events).toContain("boom");
-    expect(events).toContain('"busy":false');
-    expect(events).not.toContain("turn_end");
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/message", { text: "hi", sessionId: "A" });
+      expect(res.status).toBe(500);
+      expect(res.json.error).toBe("spawn_failed");
+    });
     expect(s.busy).toBe(false);
   });
 
-  it("does not double-report a failed turn: the forwarder's turn_end owns the error", async () => {
+  it("emits a single turn_end (no extra error) when a runner turn fails", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
-    const fwd = makeForwarder(s); // default sink broadcasts to s.clients
+    s.sessionManager = sessionStub(["A"]);
+    s.pool.setFactory(
+      () =>
+        ({
+          sessionId: "A",
+          agent: {
+            run: () => Promise.reject(new Error("boom")),
+            shutdown: () => {},
+          },
+          contextManager: { addPendingImage: () => {} },
+          execModule: { getActivePlan: () => null },
+        }) as never,
+    );
     const chunks: string[] = [];
-    const fake = {
+    s.clients.add({
       write: (chunk: string) => {
         chunks.push(chunk);
         return true;
       },
       end: () => {},
-    };
-    s.clients.add(fake as unknown as ServerResponse);
-    s.bridge = {
-      isBusy: () => s.agentRunning,
-      // Realistic failed turn: the agent's catch emits turn_end {success:false}
-      // (which clears the reservation) and THEN rethrows.
-      submit: () => {
-        fwd.onTurnEnd({ success: false });
-        return Promise.reject(new Error("boom"));
-      },
-      interrupt: () => {},
-      getState: () => ({ busy: s.busy }),
-      executeCommand: () => Promise.resolve(),
-    };
+    } as unknown as ServerResponse);
 
     await withServer(s, async (base) => {
-      const res = await postJson(base, "/api/message", { text: "hi" });
+      const res = await postMsg(base, "hi", "A");
       expect(res.status).toBe(202);
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 10));
     });
 
     const events = chunks.join("");
-    expect(events).toContain("event: turn_end");
+    expect((events.match(/event: turn_end/g) ?? []).length).toBe(1);
     expect(events).not.toContain("event: error");
     expect(s.busy).toBe(false);
   });
@@ -263,68 +307,42 @@ describe("webui server", () => {
 
   it("queues mid-turn POSTs and drains them in order after turn_end", async () => {
     const s = createWebUiState();
-    s.minPostIntervalMs = 0;
-    let release: (() => void) | null = null;
-    const started: string[] = [];
-    const bridge: Host = {
-      isBusy: () => s.agentRunning,
-      submit: (text) => {
-        started.push(text);
-        return new Promise<void>((r) => {
-          release = r;
-        });
-      },
-      interrupt: () => {},
-      getState: () => ({ busy: s.busy }),
-      executeCommand: () => Promise.resolve(),
-    };
-    s.bridge = bridge;
-    // Production wiring (module.ts): the forwarder drains the queue on turn_end.
-    const fwd = makeForwarder(s, () => {}, { onQueueDrained: () => drainQueueTurn(s) });
+    const { stub } = fixture(s, ["A"]);
 
     await withServer(s, async (base) => {
-      const post = (text: string) =>
-        doFetch(`${base}/api/message`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-
       // First POST starts the turn immediately.
-      const a = await post("first");
+      const a = await postMsg(base, "first", "A");
       expect(a.status).toBe(202);
-      expect(await a.json()).toEqual({ ok: true, sessionId: null });
-      expect(started).toEqual(["first"]);
-      expect(s.busy).toBe(true);
+      expect(await a.json()).toEqual({ ok: true, sessionId: "A" });
+      expect(stub("A").started).toEqual(["first"]);
+      expect(s.pool.isBusy("A")).toBe(true);
 
-      // Mid-turn POSTs queue instead of 409 (the old contract).
-      const b = await post("second");
+      // Mid-turn POST queues under the same session slot.
+      const b = await postMsg(base, "second", "A");
       expect(b.status).toBe(202);
-      expect(await b.json()).toEqual({ ok: true, queued: 1, sessionId: null, queuedForSession: 1 });
-      expect(started).toHaveLength(1);
-      expect(s.pool.queueLen(null)).toBe(1);
+      expect(await b.json()).toEqual({ ok: true, queued: 1, sessionId: "A", queuedForSession: 1 });
+      expect(stub("A").started).toEqual(["first"]);
+      expect(s.pool.queueLen("A")).toBe(1);
 
       const state = await (await doFetch(`${base}/api/state`)).json();
       expect(state.queueLen).toBe(1);
 
-      // turn_end drains the head as the next turn (same tick, still ordered).
-      release?.();
-      await new Promise((r) => setTimeout(r, 0));
-      fwd.onTurnEnd({ success: true });
-      expect(started).toEqual(["first", "second"]);
-      expect(s.busy).toBe(true);
-      expect(s.pool.queueLen(null)).toBe(0);
+      // End the turn: the queued message drains next on the same session.
+      stub("A").resolvers.shift()?.({ success: true });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(stub("A").started).toEqual(["first", "second"]);
+      expect(s.pool.isBusy("A")).toBe(true);
+      expect(s.pool.queueLen("A")).toBe(0);
 
       // Drained turn ends: the slot is free again.
-      release?.();
-      await new Promise((r) => setTimeout(r, 0));
-      fwd.onTurnEnd({ success: true });
-      expect(s.busy).toBe(false);
+      stub("A").resolvers.shift()?.({ success: true });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(s.pool.isBusy("A")).toBe(false);
 
-      const c = await post("third");
+      const c = await postMsg(base, "third", "A");
       expect(c.status).toBe(202);
-      expect(await c.json()).toEqual({ ok: true, sessionId: null });
-      expect(started).toEqual(["first", "second", "third"]);
+      expect(await c.json()).toEqual({ ok: true, sessionId: "A" });
+      expect(stub("A").started).toEqual(["first", "second", "third"]);
     });
   });
 
@@ -353,120 +371,66 @@ describe("webui server", () => {
 
   it("rejects past the queue cap with 429 queue_full", async () => {
     const s = createWebUiState();
-    s.minPostIntervalMs = 0;
-    s.bridge = {
-      isBusy: () => true, // turn never ends: everything queues
-      submit: () => Promise.resolve(),
-      interrupt: () => {},
-      getState: () => ({ busy: s.busy }),
-      executeCommand: () => Promise.resolve(),
-    };
+    const { stub } = fixture(s, ["A"]);
 
     await withServer(s, async (base) => {
-      const post = (text: string) =>
-        doFetch(`${base}/api/message`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
       // First POST always starts immediately (slot was free); the rest queue
       // behind the never-ending turn until the cap, then 429.
-      const first = await post("q-first");
+      const first = await postMsg(base, "q-first", "A");
       expect(first.status).toBe(202);
-      expect(await first.json()).toEqual({ ok: true, sessionId: null });
+      expect(await first.json()).toEqual({ ok: true, sessionId: "A" });
       for (let i = 0; i < MAX_QUEUE_LENGTH; i++) {
-        const r = await post(`q${i}`);
+        const r = await postMsg(base, `q${i}`, "A");
         expect(r.status).toBe(202);
-        expect(await r.json()).toEqual({ ok: true, queued: i + 1, sessionId: null, queuedForSession: i + 1 });
+        expect(await r.json()).toEqual({
+          ok: true,
+          queued: i + 1,
+          sessionId: "A",
+          queuedForSession: i + 1,
+        });
       }
-      const full = await post("overflow");
+      const full = await postMsg(base, "overflow", "A");
       expect(full.status).toBe(429);
       expect(await full.json()).toEqual({ error: "queue_full" });
-      expect(s.pool.queueLen(null)).toBe(MAX_QUEUE_LENGTH);
+      expect(s.pool.queueLen("A")).toBe(MAX_QUEUE_LENGTH);
+      stub("A").resolvers.shift()?.({ success: true });
+      await new Promise((r) => setTimeout(r, 20));
     });
   });
 
-  it("drainQueueTurn is a no-op without bridge, while busy, or when empty", () => {
+  it("finishTurn is a no-op when the slot queue is empty", () => {
     const s = createWebUiState();
-    s.pool.enqueue(null, "x", [], null);
-    expect(drainQueueTurn(s)).toBe(false); // no bridge: entry kept
-    expect(s.pool.queueLen(null)).toBe(1);
-
-    s.bridge = makeBridge();
-    s.busy = true;
-    expect(drainQueueTurn(s)).toBe(false);
-    s.busy = false;
-    s.pool.shift(null);
-    expect(drainQueueTurn(s)).toBe(false);
+    expect(finishTurn(s, "A")).toBe(false);
+    s.pool.reserve("A");
+    expect(finishTurn(s, "A")).toBe(false); // releases the slot, no queue
+    expect(s.pool.isBusy("A")).toBe(false);
   });
 
-  it("routes each POST to its own session and switches on drain", async () => {
+  it("routes each POST to its own independent session slot", async () => {
     const s = createWebUiState();
-    s.minPostIntervalMs = 0;
-    let active = "A";
-    s.sessionManager = {
-      list: () => [],
-      get: (id: string) => (id === "A" || id === "B" ? { id } : null) as never,
-      getActive: () => active,
-      setActive: (id: string) => {
-        active = id;
-      },
-      delete: () => {},
-    };
-    let release: (() => void) | null = null;
-    const started: string[] = [];
-    s.bridge = {
-      isBusy: () => s.agentRunning,
-      submit: (text) => {
-        started.push(text as string);
-        return new Promise<void>((r) => {
-          release = r;
-        });
-      },
-      interrupt: () => {},
-      getState: () => ({ busy: s.busy }),
-      executeCommand: () => Promise.resolve(),
-    };
-    const ownerRef = { current: null as string | null };
-    const fwd = makeForwarder(s, () => {}, {
-      onQueueDrained: (owner) => finishTurn(s, owner),
-      ownerRef,
-    });
+    const { stub } = fixture(s, ["A", "B"]);
 
     await withServer(s, async (base) => {
-      const post = (text: string, sessionId?: string) =>
-        doFetch(`${base}/api/message`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(sessionId ? { text, sessionId } : { text }),
-        });
-
-      // Idle POST from tab B runs in B even though A was active.
-      // (Legacy: shared bridge, so the test stamps the owner like run-agent.)
-      ownerRef.current = "B";
-      const first = await post("from-b", "B");
+      const first = await postMsg(base, "from-b", "B");
       expect(first.status).toBe(202);
       expect(await first.json()).toEqual({ ok: true, sessionId: "B" });
-      expect(active).toBe("B");
+      expect(stub("B").started).toEqual(["from-b"]);
       expect(s.pool.isBusy("B")).toBe(true);
 
-      // Mid-turn POST from tab A queues under A, not B.
-      const second = await post("for-a", "A");
+      // Session A is a different slot: starts concurrently, not queued.
+      const second = await postMsg(base, "for-a", "A");
       expect(second.status).toBe(202);
-      expect(await second.json()).toEqual({ ok: true, queued: 1, sessionId: "A", queuedForSession: 1 });
+      expect(await second.json()).toEqual({ ok: true, sessionId: "A" });
+      expect(stub("A").started).toEqual(["for-a"]);
+      expect(s.pool.isBusy("A")).toBe(true);
 
       const state = await (await doFetch(`${base}/api/state`)).json();
-      expect(state.runningSessionIds).toEqual(["B"]);
-      expect(state.runningSessionId).toBe("B");
-      expect(state.queued).toEqual({ A: 1 });
+      expect(new Set(state.runningSessionIds)).toEqual(new Set(["A", "B"]));
 
-      // turn_end drains A next and switches back to it.
-      release?.();
-      await new Promise((r) => setTimeout(r, 0));
-      fwd.onTurnEnd({ success: true });
-      expect(started).toEqual(["from-b", "for-a"]);
-      expect(active).toBe("A");
-      expect(s.pool.isBusy("A")).toBe(true);
+      stub("A").resolvers.shift()?.({ success: true });
+      stub("B").resolvers.shift()?.({ success: true });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(s.pool.anyBusy()).toBe(false);
     });
   });
 
@@ -495,49 +459,27 @@ describe("webui server", () => {
 
   it("interrupt with a foreign sessionId leaves someone else's turn alone", async () => {
     const s = createWebUiState();
-    s.minPostIntervalMs = 0;
-    let release: (() => void) | null = null;
-    let interrupted = 0;
-    s.bridge = {
-      isBusy: () => s.agentRunning,
-      submit: () =>
-        new Promise<void>((r) => {
-          release = r;
-        }),
-      interrupt: () => {
-        interrupted++;
-      },
-      getState: () => ({ busy: s.busy }),
-      executeCommand: () => Promise.resolve(),
-    };
-    const fwd = makeForwarder(s, () => {});
+    const { stub } = fixture(s, ["A", "B"]);
+
     await withServer(s, async (base) => {
-      const stop = (sessionId?: string) =>
-        doFetch(`${base}/api/interrupt`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(sessionId ? { sessionId } : {}),
-        });
-      const started = await doFetch(`${base}/api/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "hi" }),
-      });
+      const started = await postMsg(base, "hi", "A");
       expect(started.status).toBe(202);
-      // Idle POST above has no session target (legacy "" slot); a foreign
-      // stop must not touch it.
-      const foreign = await stop("B");
-      expect(foreign.status).toBe(409);
-      expect(interrupted).toBe(0);
-      expect(s.busy).toBe(true);
+      expect(s.pool.isBusy("A")).toBe(true);
 
-      const own = await stop();
+      const foreign = await postJson(base, "/api/interrupt", { sessionId: "B" });
+      expect(foreign.status).toBe(409); // B is idle
+      expect(stub("A").shutdowns).toBe(0);
+      expect(s.pool.isBusy("A")).toBe(true);
+
+      const own = await postJson(base, "/api/interrupt", { sessionId: "A" });
       expect(own.status).toBe(200);
-      expect(interrupted).toBe(1);
+      expect(stub("A").shutdowns).toBe(1);
+      // Interrupt does not clear busy: the turn_end reset owns it.
+      expect(s.pool.isBusy("A")).toBe(true);
 
-      release?.();
-      fwd.onTurnEnd({ success: true });
-      expect(s.busy).toBe(false);
+      stub("A").resolvers.shift()?.({ success: true });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(s.pool.isBusy("A")).toBe(false);
     });
   });
 
@@ -565,41 +507,21 @@ describe("webui server", () => {
 
   it("interrupt does not clear busy; the turn_end reset owns it", async () => {
     const s = createWebUiState();
-    s.minPostIntervalMs = 0;
-    let release: (() => void) | null = null;
-    let interrupted = 0;
-    const bridge: Host = {
-      isBusy: () => s.agentRunning,
-      submit: () =>
-        new Promise<void>((r) => {
-          release = r;
-        }),
-      interrupt: () => {
-        interrupted++;
-      },
-      getState: () => ({ busy: s.busy }),
-      executeCommand: () => Promise.resolve(),
-    };
-    s.bridge = bridge;
-    const fwd = makeForwarder(s, () => {});
+    const { stub } = fixture(s, ["A"]);
 
     await withServer(s, async (base) => {
-      const started = await doFetch(`${base}/api/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "hi" }),
-      });
+      const started = await postMsg(base, "hi", "A");
       expect(started.status).toBe(202);
       expect(s.busy).toBe(true);
 
-      const res = await doFetch(`${base}/api/interrupt`, { method: "POST" });
+      const res = await postJson(base, "/api/interrupt", { sessionId: "A" });
       expect(res.status).toBe(200);
-      expect(interrupted).toBe(1);
+      expect(stub("A").shutdowns).toBe(1);
       // The aborted turn is still unwinding: busy must NOT be cleared here.
       expect(s.busy).toBe(true);
 
-      release?.();
-      fwd.onTurnEnd({ success: true, interrupted: true });
+      stub("A").resolvers.shift()?.({ success: true, interrupted: true });
+      await new Promise((r) => setTimeout(r, 20));
       expect(s.busy).toBe(false);
     });
   });
@@ -674,83 +596,11 @@ describe("webui message body validation", () => {
 });
 
 describe("webui parallel sessions (runner factory)", () => {
-  /** Стаб раннера: управляемые deferred-ходы, счётчики стартов/стопов. */
-  function stubRunnerPool() {
-    const stubs = new Map<
-      string,
-      {
-        started: string[];
-        shutdowns: number;
-        images: unknown[];
-        resolvers: Array<(v: unknown) => void>;
-        chunks: Array<(chunk: string) => void>;
-      }
-    >();
-    const stub = (id: string) => {
-      let entry = stubs.get(id);
-      if (!entry) {
-        entry = { started: [], shutdowns: 0, images: [], resolvers: [], chunks: [] };
-        stubs.set(id, entry);
-      }
-      return entry;
-    };
-    const factory = (id: string) =>
-      ({
-        sessionId: id,
-        agent: {
-          run: (text: string, onChunk?: (chunk: string) => void) => {
-            const entry = stub(id);
-            entry.started.push(text);
-            if (onChunk) entry.chunks.push(onChunk);
-            return new Promise<unknown>((resolve) => {
-              entry.resolvers.push(resolve);
-            });
-          },
-          shutdown: () => {
-            stub(id).shutdowns++;
-          },
-        },
-        contextManager: {
-          addPendingImage: (part: unknown) => {
-            stub(id).images.push(part);
-          },
-        },
-        execModule: { getActivePlan: () => null },
-      }) as never;
-    return { stubs, stub, factory };
-  }
-
-  function sessionStub(ids: string[]) {
-    const alive = new Set(ids);
-    return {
-      list: () => [],
-      get: (id: string) => (alive.has(id) ? { id } : null) as never,
-      getActive: () => ids[0] ?? null,
-      setActive: () => {},
-      delete: (id: string) => {
-        alive.delete(id);
-      },
-    };
-  }
-
-  const postMsg = (base: string, text: string, sessionId?: string, images?: string[]) =>
-    doFetch(`${base}/api/message`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        Object.assign(
-          { text },
-          sessionId ? { sessionId } : {},
-          images ? { images } : {},
-        ),
-      ),
-    });
-
   it("runs two sessions concurrently with own streams and serial order within", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
     s.sessionManager = sessionStub(["A", "B"]);
-    const { stubs, stub, factory } = stubRunnerPool();
+    const { stub, factory } = stubRunnerPool();
     s.pool.setFactory(factory);
     // Ловим SSE, чтобы проверить per-tab роутинг событий параллельных ходов.
     const chunks: string[] = [];

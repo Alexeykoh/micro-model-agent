@@ -20,21 +20,17 @@ import { buildSetupDisplay } from "../setup/answers";
 import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
 import { makeWebCommands } from "./commands";
-import { makeForwarder, type Forwarder } from "./forward";
-import { finishTurn } from "./turns";
 import { makeReconfigure } from "./reconfigure";
 import { installOutputForwarding } from "./log-forward";
 import { installWebPromptIO, type PromptIORegistry } from "./prompt-io";
 import { startServer, stopServer } from "./server";
 import { makeModelCache } from "./model-cache";
-import { makeRunAgent } from "./run-agent";
 import { buildHostState, type WebIndexer, type WebLsp } from "./host-state";
 import { cancelPendingQuestions } from "./prompt-io";
 import {
   activeUsage,
   broadcast,
   createWebUiState,
-  type SseEvent,
   type WebPluginManager,
   type WebSkillsModule,
   type WebUiState,
@@ -98,11 +94,10 @@ export interface WebUiDeps {
   setupRequired?: boolean;
 }
 
-/** Хендл запущенного веб-UI: состояние, хост, форвардер, URL, стоп. */
+/** Хендл запущенного веб-UI: состояние, хост, URL, стоп. */
 export interface WebUiHandle {
   state: WebUiState;
   host: Host;
-  forwarder: Forwarder;
   url: Promise<string>;
   stop(): void;
 }
@@ -220,21 +215,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     modelCache ? () => modelCache.refresh() : undefined,
   );
 
-  // Владелец текущего хода main-раннера: legacy-мост серийно обслуживает
-  // ходы разных сессий, дренаж на turn_end идёт в слот владельца, а не в "".
-  const mainOwnerRef = { current: null as string | null };
-  // Legacy-мост обслуживает main-агент (без явного sessionId в событиях):
-  // штампуем активную сессию здесь, чтобы пер-сессионная маршрутизация
-  // `broadcast` отнесла поток к вкладке владельца. Раннеры штампуют сами.
-  const legacySink = (ev: SseEvent): void => {
-    broadcast(state.activeSessionId ? { sessionId: state.activeSessionId, ...ev } : ev, state);
-  };
-  const forwarder = makeForwarder(state, legacySink, {
-    // Очередь входящих: голова стартует следующим ходом сразу после `turn_end`.
-    // `state.bridge` читается в момент вызова (к тому времени уже привязан ниже).
-    onQueueDrained: (owner) => finishTurn(state, owner),
-    ownerRef: mainOwnerRef,
-  });
+  // OutputBus → SSE (предупреждения/ошибки процесса). Ходы идут раннерами
+  // (см. turns.ts), main-агент в web ходы не обслуживает.
   const stopOutputForwarding = installOutputForwarding(state);
 
   // Context probe: резолвится в фоне; `undefined`, пока не устоялся, чтобы
@@ -250,24 +232,14 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
       });
   }
 
-  const runAgent = makeRunAgent({
-    agent: deps.agent,
-    state,
-    forwarder,
-    sessionManager: deps.sessionManager,
-    execModule: deps.execModule,
-    contextWindow: deps.config.contextWindow,
-    ownerRef: mainOwnerRef,
-    // Фабричный режим: main-раннер обслуживает только legacy-слот (null) —
-    // scoped interrupt не трогает чужие вопросы. Без фабрики — undefined,
-    // legacy-глобал (стоп всего), как раньше.
-    slotId: deps.spawnRunner ? null : undefined,
-  });
-
   const host = new WebHost({
-    isBusy: () => state.pool.isBusy(null),
-    runAgent: runAgent.run,
-    interrupt: () => runAgent.interrupt(),
+    isBusy: () => state.pool.anyBusy(),
+    // Ходы браузера — только `POST /api/message` → per-session раннер.
+    // `Host.submit` (плагинный `hostBridge`) в web не поддерживается.
+    runAgent: () => Promise.reject(new Error("web submit: use POST /api/message")),
+    // Scoped-стоп раннеров ведёт `actions-api` (по владельцу слота); здесь —
+    // no-op fallback для легаси-слота без сессии.
+    interrupt: () => {},
     // Слеш-команды идут через shared карту хендлеров; вывод стримится по SSE
     // событиями `command` (HTTP POST лишь подтверждает приём).
     executeCommand: makeWebCommands({ state }),
@@ -286,12 +258,6 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         },
         state.busy,
       ),
-    addPendingImage: (url) => {
-      deps.agent.contextManager?.addPendingImage?.({
-        type: "image_url",
-        image_url: { url },
-      });
-    },
   });
 
   state.bridge = host;
@@ -302,11 +268,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   return {
     state,
     host,
-    forwarder,
     url,
     stop: () => {
       cancelPendingQuestions(state);
-      forwarder.flushNow();
       stopOutputForwarding();
       state.pool.clear();
       stopServer(state);

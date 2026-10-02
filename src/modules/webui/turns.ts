@@ -1,16 +1,14 @@
 // Оркестрация ходов `mma web`: сабмиты, per-session слоты, очереди, дренаж.
 // Вынесено из `util.ts` (правило #1: ≤300 строк/файл). В `util.ts` остаются
 // чистый транспорт (auth, тела, JSON, ошибки) и `tryOpenBrowser`.
+//
+// Web ВСЕГДА идёт через per-session раннер (`SessionRunner`): legacy-путь
+// однo-сессионного main-агента удалён. Главный агент обслуживает только CLI/REPL
+// (и хост-команды/плагины), не ходы браузера.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Host } from "../../core/host";
 import type { WebUiState, SseEvent } from "./state";
 import { broadcast } from "./state";
-import {
-  releaseBusy,
-  reserveBusy,
-  sessionStatus,
-  syncBusy,
-} from "./session-status";
+import { releaseBusy, reserveBusy, sessionStatus, syncBusy } from "./session-status";
 import { makeForwarder } from "./forward";
 import { makeRunAgent } from "./run-agent";
 import type { SessionRunner } from "../../core/bootstrap/session-runner";
@@ -54,35 +52,9 @@ function activeSessionOf(s: WebUiState): string | null {
 }
 
 /**
- * Переключает серверную активную сессию на `id` (менеджер + план-трекер +
- * штамп `activeSessionId` для SSE-роутинга). Неизвестный id → false, ничего
- * не тронуто. Fail-open по трекеру: сессия переключена, план остался как был.
- * Только legacy-режим без фабрики; фабричные раннеры запинены и не нуждаются.
- */
-function switchToSession(s: WebUiState, id: string | null): boolean {
-  if (!id) return false;
-  const manager = s.sessionManager;
-  if (manager) {
-    try {
-      if (!manager.get(id)) return false;
-      manager.setActive(id);
-    } catch {
-      return false;
-    }
-  }
-  try {
-    s.execModule?.switchSession(id);
-  } catch {
-    /* fail-open */
-  }
-  s.activeSessionId = id;
-  return true;
-}
-
-/**
- * Стартует ход в уже зарезервированном слоте: раннер сессии (фабричный режим,
- * настоящий параллелизм) или legacy-мост shared-агента (слот "" / без фабрики
- * с переключением общей активной сессии, как раньше).
+ * Стартует ход в уже зарезервированном слоте сессии: спавн/подъём её раннера.
+ * `target` всегда конкретная сессия (слот может быть `null` только в тестах
+ * через `finishTurn` — ключ слота при этом `""`).
  */
 function startTurn(
   s: WebUiState,
@@ -91,34 +63,21 @@ function startTurn(
   images: string[],
   token: object,
 ): void {
-  if (target !== null && s.pool.hasFactory()) {
-    // Спавн под резервом: второй конкурентный POST видит busy и встаёт
-    // в очередь — двойного спавна нет. Упавший спавн отпускает слот сам.
-    let runner: SessionRunner;
-    try {
-      runner = s.pool.getOrCreateRunner(target);
-    } catch (err) {
-      releaseBusy(s, token, target);
-      broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
-      throw err;
-    }
-    runRunnerTurn(s, runner, text, images, target, token);
-    return;
-  }
-  const bridge = s.bridge;
-  if (!bridge) {
-    // Недостижимо: handleMessagePost отвечает 503 раньше. Гарда ради —
-    // слот не висит занятым.
+  const sessionId = target ?? "";
+  let runner: SessionRunner;
+  try {
+    runner = s.pool.getOrCreateRunner(sessionId);
+  } catch (err) {
     releaseBusy(s, token, target);
-    return;
+    broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
+    throw err;
   }
-  if (target) switchToSession(s, target);
-  submitLegacy(s, bridge, text, images, target, token);
+  runRunnerTurn(s, runner, text, images, sessionId, token);
 }
 
 /**
  * Ход фабричного раннера: картинки — в его контекст, события — с явным
- * sessionId (не через activeSessionId-штамп — при параллели он чужой),
+ * sessionId (не через activeSessionId-штамп — при параллели у него чужой),
  * форвардер и runAgent — свежие на ход (изоляция буферов и id тул-событий).
  */
 function runRunnerTurn(
@@ -162,90 +121,34 @@ function runRunnerTurn(
 }
 
 /**
- * Legacy-ход через общий мост (слот "" или режим без фабрики).
- */
-function submitLegacy(
-  s: WebUiState,
-  bridge: Host,
-  text: string,
-  images: string[],
-  sessionId: string | null,
-  token: object,
-): void {
-  broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
-  const run = Promise.resolve(bridge.submit(text, { images }));
-  run.catch((err: unknown) => {
-    // Единственный владелец ошибки: для любого реально стартовавшего хода
-    // форвардер эмитит `turn_end {success:false}` и первым чистит резерв,
-    // так что `releaseBusy` здесь вернёт false и второй `error` слать НЕЛЬЗЯ
-    // (браузер показал бы две строки). `error` репортит только сабмит,
-    // зареджекченный до начала хода (резерв ещё наш).
-    if (releaseBusy(s, token, sessionId)) {
-      broadcast({ type: "error", ts: Date.now(), error: scrubError(err) }, s);
-      broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
-    }
-  });
-}
-
-/**
  * Завершает ход слота и стартует следующий queued (per-session FIFO).
  * Вызывается из форвардерного `onTurnEnd` (слот уже сброшен форвардером,
  * вызов синхронен, вклиниться некому). Возвращает, стартовал ли ход.
- *
- * Фабричный режим: следующий — голова очереди ТОГО ЖЕ слота (сессии серийны
- * по себе, параллельны между собой). Legacy без фабрики (один shared-агент):
- * следующий — самая ранняя запись по всем слотам (глобальный FIFO, как раньше).
  */
 export function finishTurn(s: WebUiState, id: string | null): boolean {
   s.pool.forceRelease(id);
   syncBusy(s);
   broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
-  if (s.pool.hasFactory()) {
-    const next = s.pool.shift(id);
-    if (!next) return false;
-    if (next.sessionId && s.sessionManager && !s.sessionManager.get(next.sessionId)) {
-      // Сессия исчезла между постановкой и дренажем — дропаем, дальше пусто:
-      // в фабричном режиме чужие слоты не трогаем.
-      return false;
-    }
-    const token = reserveBusy(s, id);
-    broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
-    try {
-      startTurn(s, id, next.text, next.images, token);
-    } catch {
-      // Спавн упал после резерва (сессия испарилась): слот уже отпущен
-      // в startTurn, запись дропнута — сообщаем владельцу в ленту.
-      broadcast(
-        { type: "error", ts: Date.now(), sessionId: id, error: "spawn_failed" },
-        s,
-      );
-      return false;
-    }
-    return true;
+  const next = s.pool.shift(id);
+  if (!next) return false;
+  if (next.sessionId && s.sessionManager && !s.sessionManager.get(next.sessionId)) {
+    // Сессия исчезла между постановкой и дренажем — дропаем запись.
+    return false;
   }
-  for (;;) {
-    const earliest = s.pool.peekEarliest();
-    if (!earliest) return false;
-    if (earliest.entry.sessionId && s.sessionManager && !s.sessionManager.get(earliest.entry.sessionId)) {
-      // Сессия исчезла между постановкой и дренажем — дропаем запись.
-      s.pool.shift(earliest.id);
-      continue;
-    }
-    s.pool.shift(earliest.id);
-    const token = reserveBusy(s, earliest.id);
-    broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
-    startTurn(s, earliest.id, earliest.entry.text, earliest.entry.images, token);
-    return true;
+  const token = reserveBusy(s, id);
+  broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
+  try {
+    startTurn(s, id, next.text, next.images, token);
+  } catch {
+    // Спавн упал после резерва (сессия испарилась): слот уже отпущен
+    // в startTurn, запись дропнута — сообщаем владельцу в ленту.
+    broadcast(
+      { type: "error", ts: Date.now(), sessionId: id, error: "spawn_failed" },
+      s,
+    );
+    return false;
   }
-}
-
-/**
- * Дренаж legacy-слота (""). Гард — защита от чужих вызовов: вызывается
- * синхронно из форвардерного `onTurnEnd` после сброса (см. hook в module.ts).
- */
-export function drainQueueTurn(s: WebUiState): boolean {
-  if (!s.bridge || s.busy) return false;
-  return finishTurn(s, null);
+  return true;
 }
 
 /**
@@ -262,25 +165,23 @@ export function drainQueueTurn(s: WebUiState): boolean {
  */
 /** Разобранное тело `POST /api/message`: текст, картинки, сессия-владелец. */
 type ParsedPost =
-  | { text: string; images: string[]; target: string | null }
+  | { text: string; images: string[]; target: string }
   | { error: string; status: number };
 
 /**
- * Валидирует тело сообщения: формат, существование сессии, наличие исполнителя.
+ * Валидирует тело сообщения: формат, существование сессии, наличие раннера.
  * Чистая (без записи состояния) — решение о резерве/очереди принимает диспетчер.
  */
 function parsePost(s: WebUiState, raw: string): ParsedPost {
   const body = parseMessageBody(raw);
   if ("error" in body) return { error: body.error, status: 400 };
   const target = extractSessionId(raw) ?? activeSessionOf(s);
-  if (target && s.sessionManager && !s.sessionManager.get(target)) {
+  if (!target) return { error: "no_session", status: 503 };
+  if (s.sessionManager && !s.sessionManager.get(target)) {
     return { error: "not_found", status: 404 };
   }
-  // Legacy-слот (без сессии) бежит только на общем мосту; сессионные —
-  // на фабрике либо (без неё) на мосту с переключением активной.
-  if (!s.bridge && (target === null || !s.pool.hasFactory())) {
-    return { error: "no_bridge", status: 503 };
-  }
+  // Web всегда через раннер: без фабрики исполнителя нет.
+  if (!s.pool.hasFactory()) return { error: "no_runner", status: 503 };
   return { text: body.text, images: body.images, target };
 }
 
@@ -292,13 +193,11 @@ function parsePost(s: WebUiState, raw: string): ParsedPost {
 function dispatchPost(
   s: WebUiState,
   res: ServerResponse,
-  parsed: { text: string; images: string[]; target: string | null },
+  parsed: { text: string; images: string[]; target: string },
 ): void {
   const { text, images, target } = parsed;
-  // Без фабрики исполнение серийно глобально (один shared-агент): любой
-  // бегущий ход блокирует все слоты, очередь — per-session. С фабрикой
-  // слоты независимы: занятость проверяется только по своему.
-  const blocked = s.pool.hasFactory() ? s.pool.isBusy(target) : s.pool.anyBusy();
+  // Слоты независимы: занятость — только по своему.
+  const blocked = s.pool.isBusy(target);
   if (blocked) {
     // Слот занят: сообщение встаёт в очередь входящих вместо `409 busy`.
     const pos = s.pool.enqueue(target, text, images, target);
@@ -307,8 +206,12 @@ function dispatchPost(
       return;
     }
     broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
-    const queuedForSession = target ? s.pool.queueLen(target) : pos;
-    sendJson(res, 202, { ok: true, queued: s.pool.totalQueued(), sessionId: target, queuedForSession });
+    sendJson(res, 202, {
+      ok: true,
+      queued: s.pool.totalQueued(),
+      sessionId: target,
+      queuedForSession: s.pool.queueLen(target),
+    });
     return;
   }
   const token = reserveBusy(s, target);

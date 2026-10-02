@@ -26,16 +26,15 @@ happy-dom (dev-dep, для DOM-тестов), i18n en/ru.
 > Phase 4 (loading-состояние секции Session: `.sb-loading` + `aria-busy`),
 > Phase 5 (персист per-session usage + ленивая гидратация),
 > Phase 3 (per-session SSE-подписки: `GET /events?session=`, `clientSessions`,
-> маршрутизация `broadcast`; авто-штамп `activeSessionId` убран, legacy-мост
-> штампует сам; клиент пересоздаёт EventSource на переключении),
+> маршрутизация `broadcast`; авто-штамп `activeSessionId` убран; клиент
+> пересоздаёт EventSource на переключении),
 > Phase 0 (happy-dom-харнесс, `tests/webui-sidebar-dom.test.ts`),
-> Phase 7 (e2e-сценарий переключения вкладок в `web-chat-tabs.e2e-test.ts`).
+> Phase 7 (e2e-сценарий переключения вкладок в `web-chat-tabs.e2e-test.ts`),
+> Phase 6 (снятие legacy single-agent пути: `turns.ts` больше не ветвится по
+> `hasFactory()`, web-ход всегда через раннер; `drainQueueTurn`/`submitLegacy`/
+> `peekEarliest` удалены, `WebHost.submit` в web не поддерживается; тесты
+> `webui-server`/`webui-auth` переведены на стаб-фабрику раннеров).
 > Проверка: `bun test` 3010 pass / 6 skip / 0 fail, `bun run quality` зелёный.
-> **Осознанно отложено — Phase 6** (снятие legacy single-agent пути): требует
-> перевода всех web-ходов на `SessionRuntime` (у каждого сообщения обязательна
-> сессия) и переписывания bridge-стабов в тестах; план сам ставит её последней
-> после e2e. Функционально legacy не мешает: корректность обеспечена scoped
-> snapshot/subscriptions, dual-path изолирован.
 
 ---
 

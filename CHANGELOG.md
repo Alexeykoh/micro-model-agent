@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **Web turns always use a per-session runner** (`src/modules/webui/turns.ts`, `module.ts`, `server.ts`, `state.ts`, `session-pool.ts`): the legacy single-agent bridge path (`hasFactory()` branches, global-FIFO drain, `drainQueueTurn`, `submitLegacy`) is removed. Every `POST /api/message` requires a session and a runner factory (`503 no_session` / `503 no_runner`), runs in that session's slot with per-session queueing, and reuses the same runner path as the parallel executor. Per-session SSE subscriptions (`GET /events?session=`) route events to the owning tab; `broadcast` no longer auto-stamps `activeSessionId`. The main agent stays for CLI/REPL and host commands/plugins (`Host.submit` is unsupported in web). Tests: `tests/webui-server.test.ts`, `tests/webui-auth.test.ts`, `tests/webui-sse-routing.test.ts`.
+
 ### Added
 
 - **Web UI incoming message queue** (`src/modules/webui/state.ts`, `util.ts`, `forward.ts`, `module.ts`, `server.ts`, `run-agent.ts`, `assets/js/tabs.js`): a message sent mid-turn no longer dies on `409 busy` — it queues (`202 {queued: n}`, cap `MAX_QUEUE_LENGTH = 5`, overflow `429 queue_full`) and runs as the next turn on `turn_end`, in order. Drain reuses the single-flight submit path; the queue clears on server stop; `GET /api/state` and SSE `state` carry `queueLen`. The composer stays editable during a turn with a `↳ queued · position N` receipt (`web.input.queued/queue_full`, en+ru; dead `web.input.busy` removed). Docs: `docs/agents/modules.md`. Tests: `tests/webui-server.test.ts`, `tests/webui-auth.test.ts`.
