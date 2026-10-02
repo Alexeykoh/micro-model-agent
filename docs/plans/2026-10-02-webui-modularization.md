@@ -225,20 +225,31 @@ Modify ~35 модулей-потребителей.
 **Files:** New `assets/js/core/store/{index,feed,tabs,settings,session}.js`; Modify все
 потребители.
 
-- [ ] **Step 1:** завести `store/index.js` (`hooks` + реэкспорт срезов) и срезы по домену,
-      перенеся поля из `S` по владельцу (анализ): `feed` — `curMd/curText/curThink/turnMd/
-      turnRoots/last*Sig/run*/busyTimer/pendingArgs/toolNodes`; `tabs` — `tabs/activeTabId/
-      liveTabId/attachments/newSeq`; `settings` — `config/registry/webToken/models/memory/
-      skills/pluginsData/providers/providerPresets/providerForm/mcpForm/lspForm`; `session` —
-      `sessions/host/busy/activeSessionId/runningSessionId(s)/queued/sessionsError/reasoning`.
-- [ ] **Step 2:** перевод по домену (feed → session → settings), с временными accessors для
-      неразобранных мест, чтобы держать `bun test` зелёным на каждом шаге.
-- [ ] **Step 3 (решение §9.3):** при необходимости перенести `app.js`/`md.js` в `js/` и
-      обновить `index.html` + `assets.ts` (`js`, `mdJs`, роут `/md.js`). `setup.js` — отдельный
-      classic-вход, не трогать.
-- [ ] **Step 4 (решение §9.4):** оценить `// @ts-check` на `assets/js/**` (ratchet) — включить
-      или отклонить.
-- [ ] Прогон: `bun test` + guard-граф + `bun run test:e2e` + ручной smoke.
+- [x] **Step 1 (commit `62f05fa`):** `store.js` → barrel над
+      `core/store/{index,feed,tabs,settings,session}.js`. Композиция сначала сохранила `S` как
+      accessor-view (нулевой churn), затем Step 2 её убрал.
+- [x] **Step 2 (commit `2257ae6`):** потребители переведены на срезы, `S` удалён полностью
+      (0 совпадений `\bS\.` в `assets/js`, кроме комментариев). Маппинг: `feed.*` —
+      стрим/run-буферы; `tabState.*` (alias `tabs`) — вкладки/черновики; `settings.*` —
+      config/registry/models/providers/memory/skills/plugins/формы; `session.*` —
+      sessions/host/busy/activeSessionId/running*/queued/error/reasoning. `attachErrTimer`
+      добавлен в `tabs` slice; `lsp`/`lspForm`/`mcpForm` — в `settings`. Source-guard'ы
+      `tests/webui-assets.test.ts` обновлены (`setBusy(session.busy)`,
+      `session.activeSessionId = id`, `feed.lastUsageSig`, `tabState.activeTabId`,
+      `settings.providerPresets`).
+      Гейт: `node --check`; guard-граф ацикличен; `bun build app.js` (44 модуля);
+      `tsc --allowJs --checkJs --lib dom` — 0 `Cannot find name`; `bun test tests/webui-*`
+      331 pass/5 skip; полный `bun test` 3022 pass/0 fail; `tsc --noEmit`; `bun run quality`
+      exit 0.
+- [ ] **Step 3 (решение §9.3) — ОТКЛОНЁН:** перенос `app.js`/`md.js` в `js/` не нужен —
+      текущие пути (`/app.js`, `/md.js`) работают, а перенос дал бы churn в `index.html`/
+      `assets.ts`/роутах без выигрыша. `setup.js` не трогаем.
+- [x] **Step 4 (решение §9.4) — ОТКЛОНЁН `// @ts-check`:** пилотный прогон
+      `tsc --allowJs --checkJs --lib dom` по `assets/js/**` даёт ~59 DOM-типизационных
+      ошибок (`.value` на `HTMLElement`, `dataset`/`tabIndex` на `Element`, `Event.key`),
+      не реальных багов. Включать ratchet на весь js без `jsconfig`/JSDoc-хитростей — отдельная
+      задача с нулевым runtime-выигрышем; отложено.
+- [ ] Прогон: `bun test` + guard-граф + `bun run test:e2e` + ручной smoke (e2e — по запросу).
 
 ---
 
