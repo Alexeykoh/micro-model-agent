@@ -277,8 +277,10 @@ export function createWebUiState(): WebUiState {
 }
 
 /**
- * Usage для сайдбара: метрики серверно-активной сессии, фолбэк — глобальный
- * last-turn (legacy, пока сессионных данных нет).
+ * Usage для сайдбара: метрики серверно-активной сессии. У сессии без ходов —
+ * undefined (сайдбар показывает прочерки), а НЕ чужой last-turn: иначе новая
+ * вкладка открывается с цифрами прошлого чата. Глобальный fallback — только
+ * legacy-режим без фабрики, где исполнитель один на всех.
  */
 export function activeUsage(s: WebUiState): UsageSnapshot | undefined {
   try {
@@ -288,6 +290,7 @@ export function activeUsage(s: WebUiState): UsageSnapshot | undefined {
   } catch {
     /* fail-open: отдаём глобальный */
   }
+  if (s.pool.hasFactory()) return undefined;
   return s.usage;
 }
 

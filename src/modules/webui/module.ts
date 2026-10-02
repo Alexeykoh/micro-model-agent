@@ -104,6 +104,29 @@ export interface WebUiHandle {
 }
 
 /**
+ * Execution-модуль для сайдбара: живой трекер раннера серверно-активной
+ * сессии, если он закеширован (план обновляется прямо по ходу её хода),
+ * иначе shared-модуль (слот, поднятый switchSession на activate).
+ * Без этого сайдбар показывал бы протухший план бегущей сессии до
+ * следующего переключения вкладок.
+ */
+function activeExecModule(
+  state: WebUiState,
+  shared: ExecutionModule | undefined,
+): ExecutionModule | undefined {
+  try {
+    const active = state.sessionManager?.getActive?.() ?? state.activeSessionId ?? null;
+    if (active) {
+      const runner = state.pool.getRunner(active);
+      if (runner) return runner.execModule;
+    }
+  } catch {
+    /* fail-open: shared-модуль */
+  }
+  return shared;
+}
+
+/**
  * Стартует браузерный UI. Сначала состояние, затем `WebHost`, затем сервер —
  * чтобы флаг busy был общим сквозняком.
  */
@@ -234,7 +257,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         {
           config: deps.config,
           sessionManager: deps.sessionManager,
-          execModule: deps.execModule,
+          execModule: activeExecModule(state, deps.execModule),
           usage: activeUsage(state),
           contextProbe: probe,
           workspace: deps.baseDir,
