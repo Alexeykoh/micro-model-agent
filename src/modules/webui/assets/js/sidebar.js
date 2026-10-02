@@ -672,6 +672,7 @@ function lspRow(s) {
 export function renderLsp() {
   if (!lspEl) return;
   lspEl.textContent = "";
+  lspEl.appendChild(el("div", "lsp-what", t("web.sidebar.lsp_what")));
   if (lspUnavailable) {
     lspEl.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_unavailable")));
     return;

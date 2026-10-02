@@ -874,6 +874,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 .map-sec { flex: 1 1 auto; }
 .map-reindex { margin-top: 10px; font: inherit; font-size: 12px; color: var(--accent); background: transparent; border: 1px solid var(--border-2); border-radius: 5px; padding: 4px 10px; cursor: pointer; width: fit-content; }
 .map-reindex:disabled { color: var(--dim-b); cursor: default; }
+.lsp-what { color: var(--dim-c); font-size: 11px; line-height: 1.4; margin-bottom: 8px; overflow-wrap: anywhere; }
 .lsp-row { align-items: baseline; }
 .lsp-g.ok { color: var(--green); }
 .lsp-g.fail { color: var(--red); }

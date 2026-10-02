@@ -626,6 +626,11 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 
 ### LSP Doctor & Locked-Down Networks (2.17.0)
 
+**LSP = Language Server Protocol** (протокол языковых серверов) — стандарт связи
+редактора с языковым сервером; тот же движок, что подсвечивает ошибки в VS Code.
+В MMA (`src/modules/lsp/`) один JSON-RPC клиент поверх stdio гоняет серверы по
+языкам и подмешивает их диагностики в контекст модели (проверка кода без сборки).
+
 - **`/lsp doctor`** (`src/cli/repl-commands-lsp.ts`, `src/modules/lsp/diagnose.ts`):
   per-server диагностика для ответа «почему LSP не работает» — применимость, наличие
   бинарника в PATH, пойдёт ли через npx, реальная проба `spawn+initialize` и класс

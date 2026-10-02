@@ -6,6 +6,12 @@
 
 ## 1. Проблема и цель
 
+**LSP — Language Server Protocol** (протокол языковых серверов): стандарт общения
+редактора с сервером, который отдаёт настоящие ошибки/предупреждения компилятора
+(тот же движок, что подсвечивает ошибки в VS Code). В MMA один клиент
+(`src/modules/lsp/`) гоняет серверы по языкам и подмешивает их диагностики в
+контекст модели; для пользователя это «статическая проверка кода» без сборки.
+
 Когда LSP не работает (офисный/корпоративный ПК, запертый npm-реестр, нет
 интернета, нет бинарника в PATH), пользователь **не может понять почему**:
 причина оседает в `app.jsonl` (`FileOnlyLogger` пишет `logSilent`), в чат идёт
@@ -304,3 +310,58 @@ hint: cannot reach the npm registry to download the LSP server — install it on
 4. При сбое записи файла в tool-output появляется `[LSP check failed]` + `hint:`
    класса; после 3 сбоев — прежнее `[LSP disabled]`.
 5. en/ru паритет; `AGENTS.md`/`CHANGELOG.md` обновлены; версия — MINOR.
+
+## 12. WebUI LSP tab (часть 2)
+
+Четвёртая вкладка web-сайдбара (`Session / Map / Trace / LSP`) с тем же
+содержанием, что `/lsp doctor`, но по HTTP.
+
+### 12.1 Backend
+
+- **`BootstrapResult.lspModule?: LspModule`** + `ModulesPhase.lspModule`:
+  `startLanguageModules` возвращает зарегистрированный `LspModule`; bootstrap
+  пробрасывает его наружу. `web-command.ts` передаёт `lsp: lspModule` в
+  `startWebUi`.
+- **`WebUiDeps.lsp?: WebLsp`** (узкий: `diagnose(baseDir): Promise<LspDiagnosis>`).
+  `module.ts` вяжет `state.lspDiagnose = () => deps.lsp.diagnose(deps.baseDir)`.
+- **`WebUiState`**: `lspDiagnose?`, `lspDoctor?` (кэш), `lspProbing?`.
+- **`lsp-api.ts`** (new):
+  - `GET /api/lsp/doctor` → `{ diagnosis: lspDoctor ?? null, probing }`; без
+    `lspDiagnose` → `503 unavailable`.
+  - `POST /api/lsp/doctor` → single-flight re-probe: busy → `202 {probing:true}`;
+    иначе `202`, SSE `lsp {phase:"start"}`, асинхронная проба →
+    `lsp {phase:"done"|"error"}`, запись кэша, `state`-broadcast (`lspProbing` в
+    конце). Проба может идти до 45с — HTTP не держим, клиент слушает SSE.
+- Роуты — в точной таблице `API_ROUTES` (`GET`/`POST /api/lsp/doctor`); они не
+  конфликтуют с существующим `GET /api/lsp` (таблица настроек, 2.10.0).
+
+### 12.2 Frontend
+
+- `index.html`: 4-я кнопка `.sb-tab[data-tab="lsp"]` (Lucide `stethoscope`) +
+  `<div class="sb-pane" id="pane-lsp"><div class="sec"><div id="lspBody"></div></div></div>`.
+- `dom.js`: иконка `stethoscope`.
+- `sidebar.js`: `TABS` += `lsp`, `ICON_NAME.lsp="stethoscope"`, `lspEl`,
+  `renderLsp()`; публичные `sidebarLspState()` (рендер из кэша) и
+  `sidebarLspEvent()` (SSE `lsp` → refetch). Клик по вкладке при пустом кэше
+  авто-запускает проверку; кнопка «Re-check» повторяет. Горячая клавиша `Alt+4`.
+- `app.js`: SSE-подписка `lsp` → `sidebarLspEvent()`; `renderState` →
+  `sidebarLspState()`; `applyStaticI18n` → `applySidebarI18n` уже покрывает.
+- Раскладка вкладки — переиспользует `.sec`/`.kv`/кнопку `.map-reindex`; никаких
+  боксов, по STYLE.md.
+
+### 12.3 i18n (en+ru)
+
+`web.sidebar.tab_lsp`, `web.sidebar.lsp_status/enabled/offline/check/checking/
+not_checked/none/via/via_global/via_npx/hint` и 10 ярлыков `web.sidebar.lsp_reason_*`
+(ok/disabled/not_applicable/binary_missing/offline/network/timeout/spawn_failed/
+server_error/deadline).
+
+### 12.4 Приёмка (часть 2)
+
+- В сайдбаре 4 вкладки; `Alt+4` открывает LSP; вкладка рисует `enabled/offline`
+  и строки серверов с глифами/классом/длительностью.
+- «Re-check» заново пробует серверы; во время пробы — статус «проверяется» и
+  disabled-кнопка; полученный результат кэшируется в state и переживает
+ 2с-поллинг.
+- Без `lspModule` (тесты) — вкладка показывает «недоступно», `GET/POST` → `503`.
+- en/ru паритет.
