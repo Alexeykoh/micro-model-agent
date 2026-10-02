@@ -285,7 +285,7 @@ describe("webui assets", () => {
 
   it("scopes /api/state to the active tab and refreshes fully on switch", () => {
     const a = loadAssets();
-    const tabs = a.jsModules?.["js/tabs.js"] || "";
+    const tabs = a.jsModules?.["js/session/tabs.js"] || "";
     expect(a.js).toContain("/api/state?session=");
     expect(a.js).toContain("hooks.applyState = renderState");
     expect(a.js).toContain("hooks.refreshState = refresh");
@@ -307,7 +307,7 @@ describe("webui assets", () => {
   it("shows a loading indicator for the session sidebar section", () => {
     const a = loadAssets();
     const sidebar = sidebarSources(a) || "";
-    const tabs = a.jsModules?.["js/tabs.js"] || "";
+    const tabs = a.jsModules?.["js/session/tabs.js"] || "";
     expect(sidebar).toContain("setSessionLoading");
     expect(tabs).toContain("setSessionLoading(true)");
     expect(a.js).toContain("setSessionLoading(false)");

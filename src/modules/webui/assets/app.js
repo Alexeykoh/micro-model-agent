@@ -12,7 +12,7 @@ feedHasContent, loadHistory,
 import {
 openTab, updateTabName, renderSessionsDropdown, reflectBusy, loadSessions,
 loadCommands, setTabStatus, reconcileTabStatuses,
-} from "./js/tabs.js";
+} from "./js/session/tabs.js";
 import {
 renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
 loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyFontSize, setConnStatus, setStaleBar,
