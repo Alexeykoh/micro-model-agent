@@ -78,13 +78,13 @@ function mapLogEntry(e: SessionLogEntry): HistoryEntry | null {
       };
     case "plan":
       return { ts: e.ts, kind: "plan", text: scrub(e.content) };
-    case "context":
-      return { ts: e.ts, kind: "context", text: scrub(e.content) };
     case "error":
       return { ts: e.ts, kind: "error", text: scrub(e.content) };
-    case "system":
-      return { ts: e.ts, kind: "system", text: scrub(e.content) };
     default:
+      // system (текст системного промпта из slog.logSystem) и context
+      // (снапшоты "context snapshot at session start") — внутренняя
+      // диагностика: в живом SSE-потоке их нет, а в истории после reload
+      // они всплывали шумом поверх чата. Смотрятся в Trace (/api/.../log).
       // tool_defs / llm_usage / session_start / baseline_typecheck /
       // reasoning_control / context_probe / output / compaction / audit / moe_*
       // в чат-транскрипте бесполезны.
@@ -109,8 +109,9 @@ function fromMessages(messages: SessionMessage[]): HistoryEntry[] {
         tool: m.name,
         success: true,
       });
-    } else if (m.role === "system" && text) {
-      out.push({ ts: m.timestamp, kind: "system", text });
+    } else if (m.role === "system") {
+      // Системный промпт из history.jsonl — не чат, в транскрипт не идёт.
+      continue;
     }
   }
   return out;
