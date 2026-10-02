@@ -29,7 +29,10 @@ WebUI уже проходил декомпозицию (2026-09-26): бэкен�
 
 ### Предпосылки, подтверждённые кодом
 
-- **Циклов импортов нет.** И бэкенд (`*.ts`), и фронт (`assets/js/*.js`) — ацикличные DAG.
+- **Runtime-циклов нет.** И бэкенд (`*.ts`), и фронт (`assets/js/*.js`) — ацикличные DAG
+  по value-импортам. На бэкенде есть только *type-only* обратные рёбра (например,
+  `session-pool.ts`/`session-usage.ts` → `import type … from "./state"` при value-импорте
+  обратно) — это нормальный TS-паттерн, erasure на рантайме; guard-тест их игнорирует.
   Единственная инверсия слоёв во фронте: `settings.js → tabs.js`.
 - **Реальная связность — не в размере файлов, а в двух объектах:**
   - backend: `WebUiState` (`src/modules/webui/state.ts`) — **35** из 38 файлов модуля
@@ -240,9 +243,9 @@ assets/
 - **Backend:** тест, который парсит импорты `src/modules/webui/**` и падает, если доменный
   модуль импортирует `state.ts`/`state/index` ради полного `WebUiState` (whitelist для
   `module.ts`/composition). По образцу `tests/output/no-direct-console.test.ts`.
-- **Frontend:** тест-обход import-графа `assets/js/**` — запрет циклов и «обратных»
+- **Frontend:** тест-обход import-графа `assets/js/**` — запрет runtime-циклов и «обратных»
   рёбер (`settings/* → session/tabs`, `feed/* → settings/*` и т.п.).
-- Оба — детерминированные, без сети/браузера.
+- Оба — детерминированные, без сети/браузера; type-only рёбра не считаются runtime-циклами.
 
 ## 6. Стратегия миграции
 

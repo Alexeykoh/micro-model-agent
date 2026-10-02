@@ -49,18 +49,19 @@ B (узкие контракты вместо god-object `WebUiState`/`S`), C (�
 
 ## Phase 0: Baseline + guard-тесты
 
-**Files:** New `tests/webui-boundaries.test.ts`, `tests/webui-frontend-graph.test.ts`; baseline-замер.
+**Files:** New `tests/webui-boundaries.test.ts`, `tests/webui-frontend-graph.test.ts`,
+New `tests/helpers/import-graph.ts`; baseline-замер.
 
-- [ ] **Step 1: Зафиксировать baseline.** `bun test`, `tsc --noEmit`, `bun run quality` —
-      записать число pass/fail в шапку этого файла (до рефакторинга).
-- [ ] **Step 2: guard бэкенд-графа.** Тест парсит `import` в `src/modules/webui/**/*.ts`
-      и проверяет: нет циклов; доменные модули не импортируют composition `WebUiState` из
-      `state.ts`/`state/index` (whitelist: `module.ts`, `state/index.ts`, тесты).
-      На фазе 0 — только детекция циклов (остальное включится в фазе 2).
-- [ ] **Step 3: guard фронт-графа.** Тест парсит `import` в `assets/js/**/*.js` и падает на
-      цикле. На фазе 0 дополнительно инвентаризует «обратные» рёбра (`settings → tabs`) как
-      `known`-список; фазой 4 список должен опустеть.
-- [ ] Прогон: `bun test tests/webui-boundaries.test.ts tests/webui-frontend-graph.test.ts`.
+- [x] **Step 1: Зафиксировать baseline.** `bun test` **3012 pass / 0 fail / 6 skip**
+      (2026-10-02; первый прогон дал 2 flaky, второй — чисто), `bunx tsc --noEmit` чисто,
+      `bun run quality` — fallow 0 issues.
+- [x] **Step 2: guard бэкенд-графа.** `tests/webui-boundaries.test.ts` + `tests/helpers/import-graph.ts`
+      (AST-парсер импортов, резолв относительных путей, детекция циклов с игнором `import type`).
+      На фазе 0 — только детекция циклов (narrow-interface правило включится в фазе 2).
+- [x] **Step 3: guard фронт-графа.** `tests/webui-frontend-graph.test.ts` — ацикличность
+      `assets/**` + equality-проверка `KNOWN_INVERSIONS` (сейчас один: `settings.js -> tabs.js`;
+      фазой 4 список опустеет).
+- [x] Прогон: `bun test` — **3017 pass / 0 fail / 6 skip** (5 новых), `tsc` чисто, `quality` зелёный.
 
 ---
 
