@@ -8,6 +8,7 @@ import type { ExecutionModule } from "../../modules/execution/module";
 import { broadcast, type UsageSnapshot, type WebUiState } from "./state";
 import { sessionStatus } from "./session-status";
 import { captureUsage, planEventFor } from "./host-state";
+import { saveSessionUsage } from "./session-usage";
 import { cancelPendingQuestions } from "./prompt-io";
 import type { Forwarder } from "./forward";
 
@@ -62,7 +63,11 @@ function recordTurnUsage(
 ): UsageSnapshot {
   const usage = captureUsage(result, contextWindow);
   state.usage = usage;
-  if (owner) state.sessionUsage[owner] = usage;
+  if (owner) {
+    state.sessionUsage[owner] = usage;
+    const dir = state.sessionManager?.getSessionDirectory?.(owner);
+    if (dir) saveSessionUsage(dir, usage);
+  }
   return usage;
 }
 
