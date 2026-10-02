@@ -194,7 +194,7 @@ describe("webui assets", () => {
 
   it("renders answers through the streaming markdown module", () => {
     const a = loadAssets();
-    expect(js(a)).toMatch(/from "\.{1,2}\/md\.js"/);
+    expect(js(a)).toMatch(/from "(?:\.\.\/)+md\.js"/);
     expect(js(a)).toContain("mountMarkdown(");
     expect(js(a)).toContain("renderMarkdown(");
     expect(js(a)).not.toContain("parseFences");
