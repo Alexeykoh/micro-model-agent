@@ -19,13 +19,15 @@ import { isI18nStale } from "./i18n-stale";
  */
 export interface HostStateInput {
   config: AppConfig;
-  sessionManager?: Pick<SessionManager, "getActiveMeta">;
+  sessionManager?: Pick<SessionManager, "getActiveMeta"> & Partial<Pick<SessionManager, "get">>;
   execModule?: Pick<ExecutionModule, "getActivePlan">;
   usage?: UsageSnapshot;
   contextProbe?: { model: string; actual: number } | null;
   workspace?: string;
   instructions?: { files: string[]; disabled: boolean };
   projectMap?: ProjectMapInfo | null;
+  /** Конкретная сессия (веб-вкладка); без неё — активная. */
+  sessionId?: string;
 }
 
 /** Структурное подмножество индексер-модуля для сайдбара (без жёсткой зависимости). */
@@ -79,7 +81,10 @@ export function planEventFor(
 
 /** Строит host-снапшот из живого состояния модулей. */
 export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSnapshot {
-  const meta = deps.sessionManager?.getActiveMeta();
+  const meta =
+    deps.sessionId && deps.sessionManager?.get
+      ? deps.sessionManager.get(deps.sessionId)
+      : deps.sessionManager?.getActiveMeta();
   return {
     busy,
     sessionId: meta?.id,

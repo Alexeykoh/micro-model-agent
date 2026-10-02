@@ -285,15 +285,18 @@ export function createWebUiState(): WebUiState {
 }
 
 /**
- * Usage для сайдбара: метрики серверно-активной сессии. У сессии без ходов —
- * undefined (сайдбар показывает прочерки), а НЕ чужой last-turn: иначе новая
- * вкладка открывается с цифрами прошлого чата. Глобальный fallback — только
- * legacy-режим без фабрики, где исполнитель один на всех.
+ * Usage для сайдбара: метрики серверно-активной сессии (или явной `sessionId`
+ * веб-вкладки). У сессии без ходов — undefined (сайдбар показывает прочерки),
+ * а НЕ чужой last-turn: иначе новая вкладка открывается с цифрами прошлого
+ * чата. Глобальный fallback — только legacy-режим без фабрики.
  */
-export function activeUsage(s: WebUiState): UsageSnapshot | undefined {
+export function activeUsage(s: WebUiState, sessionId?: string): UsageSnapshot | undefined {
   try {
     const active =
-      s.sessionManager?.getActive?.() ?? s.activeSessionId ?? null;
+      sessionId ??
+      s.sessionManager?.getActive?.() ??
+      s.activeSessionId ??
+      null;
     if (active && s.sessionUsage[active]) return s.sessionUsage[active];
   } catch {
     /* fail-open: отдаём глобальный */
