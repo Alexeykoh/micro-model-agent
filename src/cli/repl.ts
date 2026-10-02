@@ -440,6 +440,7 @@ export class Repl implements ReplContext, Host {
       new SubcommandProvider("lsp", [
         { name: "status", description: t("lsp.sub_status") },
         { name: "restart", description: t("lsp.sub_restart") },
+        { name: "doctor", description: t("lsp.sub_doctor") },
         { name: "check", description: t("lsp.sub_check") },
       ]),
     );

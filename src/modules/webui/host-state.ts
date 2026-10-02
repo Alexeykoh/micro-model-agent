@@ -6,6 +6,7 @@
 import type { AppConfig } from "../../config/types";
 import type { AgentResult } from "../../core/types";
 import type { HostStateSnapshot, ProjectMapInfo } from "../../core/host";
+import type { LspDiagnosis } from "../lsp/diagnose";
 import type { SessionManager } from "../../modules/session/manager";
 import type { ExecutionModule } from "../../modules/execution/module";
 import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
@@ -35,6 +36,11 @@ export interface WebIndexer {
   mapInfo?(): ProjectMapInfo;
   /** Принудительная пересборка индекса (`POST /api/index`). */
   refresh?(): Promise<unknown>;
+}
+
+/** Узкое подмножество LSP-модуля для вкладки LSP (`/api/lsp/doctor`). */
+export interface WebLsp {
+  diagnose(baseDir: string): Promise<LspDiagnosis>;
 }
 
 /**

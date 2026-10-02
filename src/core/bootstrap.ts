@@ -59,6 +59,8 @@ export interface BootstrapResult {
   memoryStore: MemoryStore;
   /** Индексатор карты проекта — веб-режим показывает статистику в панели окружения. */
   indexerModule: IndexerModule;
+  /** Модуль LSP — веб-режим показывает диагностику во вкладке LSP. */
+  lspModule?: import("../modules/lsp/module").LspModule;
   /**
    * Фабрика per-session раннеров для настоящего параллелизма (`mma web`):
    * `(sessionId) => SessionRunner` (свой агент/контекст/трекер поверх общего
@@ -185,6 +187,7 @@ export async function bootstrap(
     contextProbe: provider.contextProbePromise,
     memoryStore: modules.memoryStore,
     indexerModule: workspace.indexerModule,
+    lspModule: modules.lspModule,
     spawnSessionRunner: createSessionRunnerFactory({
       config,
       configRef: session.configRef,

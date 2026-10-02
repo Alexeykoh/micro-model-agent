@@ -26,6 +26,7 @@ import type { ExecutionModule } from "../../modules/execution/module";
 import type { SessionModule } from "../../modules/session/index";
 import type { MCPModule } from "../../modules/mcp/index";
 import type { MemoryStore } from "../../modules/memory/store";
+import type { LspModule } from "../../modules/lsp/module";
 import { projectMmaDir } from "../../config/paths";
 
 /** Входные опции bootstrap — 1:1 параметры функции `bootstrap()`. */
@@ -194,6 +195,8 @@ export interface ModulesPhase {
   mcpModule: MCPModule;
   /** Общий стор памяти (один инстанс у модуля и цикла агента). */
   memoryStore: MemoryStore;
+  /** Модуль LSP (вкладка LSP в web-сайдбаре, `/lsp doctor`). */
+  lspModule: LspModule;
   /** Статичные промпт-блоки первой сборки (system + модули + AGENTS.md + reminder). */
   promptBlocks: PromptBlock[];
   /**

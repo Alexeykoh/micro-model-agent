@@ -7,7 +7,7 @@ import {
   getServerForFile,
   getServerKeyForFile,
 } from "../src/modules/lsp/config";
-import { LspClient } from "../src/modules/lsp/client";
+import { extractBinaryFromNpxArgs } from "../src/modules/lsp/resolve";
 
 describe("angular LSP support", () => {
   let tmp: string;
@@ -90,10 +90,7 @@ describe("angular LSP support", () => {
   });
 
   it("extractBinaryFromNpxArgs only matches the strict [packages] binary --stdio layout", () => {
-    const client = new LspClient();
-    const extract = (args: string[]) =>
-      (client as unknown as { extractBinaryFromNpxArgs(a: string[]): string | null })
-        .extractBinaryFromNpxArgs(args);
+    const extract = (args: string[]) => extractBinaryFromNpxArgs(args);
 
     expect(
       extract([

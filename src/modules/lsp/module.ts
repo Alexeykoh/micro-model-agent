@@ -14,6 +14,12 @@ import { safeResolvePath } from "../../tools/path-utils";
 import { t } from "../../i18n/index";
 import type { LspConfig, LspServerConfig, LspDiagnostic } from "./types";
 import { severityLabels, collectCheckFiles, formatCheckDiagnostics } from "./check-tool";
+import {
+  diagnoseLspServers,
+  classifyLspError,
+  type LspDiagnoseDeps,
+  type LspFailureReason,
+} from "./diagnose";
 import { errMsg } from "../../utils";
 import { join } from "path";
 
@@ -38,6 +44,21 @@ const MAX_CONSECUTIVE_LSP_FAILURES = 3;
  */
 const TYPE_ENV_DIAG_PATTERN =
   /Cannot find module ['"][^'"]+['"] or its corresponding type declarations|Cannot find name '(__dirname|__filename|require|process|Buffer|console)'|Do you need to install type definitions/;
+
+/** Ключи actionable-подсказок по классу причины сбоя LSP (одна строка модели). */
+const LSP_HINT_KEYS: Partial<Record<LspFailureReason, string>> = {
+  "binary-missing": "lsp.hint_binary_missing",
+  offline: "lsp.hint_offline",
+  network: "lsp.hint_network",
+  timeout: "lsp.hint_timeout",
+  "spawn-failed": "lsp.hint_spawn",
+};
+
+/** Подсказка под `[LSP check failed]` (пусто, если класса с действием нет). */
+function failureHint(message: string, npxFallback: boolean): string {
+  const key = LSP_HINT_KEYS[classifyLspError(message, { npxFallback })];
+  return key ? `\n${t(key)}` : "";
+}
 
 function hasTypeEnvironment(projectRoot: string): boolean {
   return (
@@ -83,6 +104,19 @@ export class LspModule implements AgentModule {
   /** Счётчики падений по серверам. */
   getFailureCounts(): Map<string, number> {
     return new Map(this.failuresByServer);
+  }
+
+  /**
+   * Структурная диагностика серверов проекта (для `/lsp doctor`): применимость,
+   * резолв запуска, реальная проба и класс причины. По умолчанию использует
+   * собственный клиент и логгер модуля.
+   */
+  diagnose(baseDir: string, deps: LspDiagnoseDeps = {}) {
+    return diagnoseLspServers(this.config, baseDir, {
+      ...deps,
+      client: deps.client ?? this.client,
+      logger: deps.logger ?? this.logger ?? undefined,
+    });
   }
 
   /** Тест-хук: отключал ли модуль какой-то LSP-сервер на сессии. */
@@ -164,7 +198,10 @@ export class LspModule implements AgentModule {
             this.disabledServers.add(key);
             result.output += `\n\n[LSP disabled: ${t("lsp.unavailable")}]`;
           } else {
-            result.output += `\n\n[LSP check failed]: ${msg}`;
+            result.output += `\n\n[LSP check failed]: ${msg}${failureHint(
+              msg,
+              serverConfig.command === "npx",
+            )}`;
           }
         }
       },
@@ -273,7 +310,12 @@ export class LspModule implements AgentModule {
           this.disabledServers.add(key);
           notes.push(`[LSP disabled: ${t("lsp.unavailable")}]`);
         } else {
-          notes.push(`[LSP check failed for ${file}: ${msg}]`);
+          notes.push(
+            `[LSP check failed for ${file}: ${msg}]${failureHint(
+              msg,
+              serverConfig.command === "npx",
+            )}`,
+          );
         }
       }
     }

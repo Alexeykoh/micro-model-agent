@@ -23,7 +23,7 @@ initRail, setPlan as railPlan, railEvent, applyRailI18n,
 import {
   initSidebar, sidebarSessionChanged, sidebarMapState,
   sidebarTraceEvent, sidebarTurnEnd, sidebarBusy, sidebarMapIndicator,
-  sidebarPullLog,
+  sidebarPullLog, sidebarLspState, sidebarLspEvent,
   applySidebarI18n,
 } from "./js/sidebar.js";
 
@@ -91,6 +91,7 @@ function renderState(snapshot, busy, extra) {
   renderEnvironment(S.state.host);
   sidebarMapState(S.state.host);
   sidebarMapIndicator(S.state.host);
+  sidebarLspState();
   sidebarSessionChanged(sessionId);
   renderWorkspace(S.state.host);
   renderSessionsDropdown();
@@ -192,6 +193,8 @@ for (const ev of ["tool_start", "tool_end", "phase", "plan", "question", "meta",
   es.addEventListener(ev, (e) => { const d = parse(e); if (d) sidebarTraceEvent(ev, d); });
 }
 es.addEventListener("text", (e) => { const d = parse(e); if (d) sidebarTraceEvent("text", d); });
+// LSP tab: server emits `lsp {phase}` around an on-demand diagnosis.
+es.addEventListener("lsp", (e) => { const d = parse(e); if (d) sidebarLspEvent(d); });
 es.addEventListener("command", (e) => {
   const d = parse(e);
   if (d && typeof d.text === "string") onCommandOutput(d.text, d.sessionId);

@@ -4,6 +4,7 @@ import { resolve } from "path";
 import { platform } from "os";
 import type { LspDiagnostic, LspServerConfig, PublishDiagnosticsParams } from "./types";
 import { resolveSpawnCommand, buildWinCommandLine } from "./command";
+import { resolveNpxLaunch, isOfflineLsp } from "./resolve";
 import { killTree } from "../processes/registry";
 import { toForwardSlash } from "../../tools/path-utils";
 import type { Logger } from "../../logger/app-logger";
@@ -159,6 +160,26 @@ export class LspClient {
     this.initialized = true;
   }
 
+  /**
+   * Эффективная команда запуска: npx→глобальный бинарник, офлайн-гейт.
+   * Вынесено из `startServer`, чтобы spawn-код оставался плоским.
+   */
+  private resolveLaunch(config: LspServerConfig): { command: string; args: string[] } {
+    const launch = resolveNpxLaunch(config.command, config.args ?? []);
+    if (launch.command !== config.command) {
+      this.logger?.debug(`LSP: using globally installed ${launch.binaryName} (skipped npx)`);
+    } else if (launch.useNpxFallback && launch.binaryName) {
+      this.logger?.debug(`LSP: ${launch.binaryName} not found globally, falling back to npx`);
+    }
+    if (launch.useNpxFallback && isOfflineLsp()) {
+      throw new Error(
+        `LSP offline mode: ${launch.binaryName ?? "npx"} not found in PATH; ` +
+          "npx auto-install is disabled (MMA_LSP_OFFLINE)",
+      );
+    }
+    return { command: launch.command, args: launch.args };
+  }
+
   private async startServer(config: LspServerConfig, projectRoot: string): Promise<void> {
     if (config.autoInstall === false) {
       try {
@@ -168,29 +189,7 @@ export class LspClient {
       }
     }
 
-    // Команда npx — сначала ищем реальный бинарник глобально.
-    // npx качает пакеты на каждый вызов (на Windows медленно, ~8-15с),
-    // даже если бинарник уже стоит глобально.
-    let effectiveCommand = config.command;
-    let effectiveArgs = config.args ?? [];
-    if (config.command === "npx" && effectiveArgs.length > 0) {
-      const binaryName = this.extractBinaryFromNpxArgs(effectiveArgs);
-      if (binaryName) {
-        const whichCmd = platform() === "win32" ? `where ${binaryName}` : `which ${binaryName}`;
-        try {
-          execSync(whichCmd, { stdio: "pipe", timeout: 3000 });
-          // Бинарник есть глобально — напрямую, без npx.
-          effectiveCommand = binaryName;
-          effectiveArgs = effectiveArgs.filter(
-            (a) => a !== "--yes" && a !== "--package" && a !== binaryName && !this.isPackageVersion(a),
-          );
-          this.logger?.debug(`LSP: using globally installed ${binaryName} (skipped npx)`);
-        } catch {
-          // Глобально нет — фолбэк на npx (самоустановится).
-          this.logger?.debug(`LSP: ${binaryName} not found globally, falling back to npx`);
-        }
-      }
-    }
+    const { command: effectiveCommand, args: effectiveArgs } = this.resolveLaunch(config);
 
     return new Promise((resolve, reject) => {
       const args = effectiveArgs;
@@ -418,34 +417,5 @@ export class LspClient {
       yml: "yaml",
     };
     return map[ext ?? ""] ?? "plaintext";
-  }
-
-  /**
-   * Имя реального бинарника из npx-args — только строгий layout
-   * `[--yes] [--package X]... <binary> --stdio`. Серверы с хвостовыми
-   * серверными аргументами (напр. angular `ngserver --stdio --tsProbeLocations …`)
-   * дают null и всегда идут через npx — их флаги не принять за бинарник
-   * и не вырезать.
-   */
-  private extractBinaryFromNpxArgs(args: string[]): string | null {
-    const stdioIdx = args.lastIndexOf("--stdio");
-    if (stdioIdx !== args.length - 1 || stdioIdx < 1) return null;
-    const binary = args[stdioIdx - 1];
-    if (!binary || binary.startsWith("-") || this.isPackageVersion(binary)) return null;
-    for (let i = 0; i < stdioIdx - 1; i++) {
-      const a = args[i];
-      if (a === "--yes") continue;
-      if (a === "--package") {
-        i++;
-        continue;
-      }
-      return null;
-    }
-    return binary;
-  }
-
-  /** Похоже ли на спецификатор версии пакета (напр. "typescript@5"). */
-  private isPackageVersion(s: string): boolean {
-    return /^[\w-]+@[\d.+*-]/.test(s);
   }
 }

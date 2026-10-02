@@ -34,6 +34,7 @@ export const MMA_ENV = {
   CERT_HOME: "MMA_CERT_HOME",
   BROWSER_EXECUTABLE: "MMA_BROWSER_EXECUTABLE",
   BROWSER_CHANNEL: "MMA_BROWSER_CHANNEL",
+  LSP_OFFLINE: "MMA_LSP_OFFLINE",
 } as const;
 
 /** Ключ реестра (семантическое имя переменной). */

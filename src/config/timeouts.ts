@@ -63,6 +63,10 @@ export const LSP_PROBE_TIMEOUT_MS = 30_000;
 export const LSP_PROBE_DEADLINE_MS = 60_000;
 /** Общий кап стартового health-check — старт сессии дольше не блокируем. */
 export const LSP_STARTUP_CHECK_TIMEOUT_MS = 60_000;
+/** Кап таймаута одного сервера в `/lsp doctor`. */
+export const LSP_DOCTOR_TIMEOUT_MS = 20_000;
+/** Общий дедлайн `/lsp doctor` (ограничивает ожидание на битых серверах). */
+export const LSP_DOCTOR_DEADLINE_MS = 45_000;
 
 /* ── browser ─────────────────────────────────────────────────────────── */
 

@@ -42,7 +42,8 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   const moduleRegistry = new ModuleRegistry();
 
   const core = await registerCoreModules(input, moduleRegistry);
-  const startupCheckPromise = startLanguageModules(input, moduleRegistry);
+  const languages = startLanguageModules(input, moduleRegistry);
+  const startupCheckPromise = languages.startupCheck;
   registerModuleToolsAndPlugins(input, moduleRegistry, core);
 
   const promptBlocks = buildStaticPromptBlocks(input, moduleRegistry, core);
@@ -61,6 +62,7 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
     sessionModule: core.sessionModule,
     mcpModule: core.mcpModule,
     memoryStore: core.memoryStore,
+    lspModule: languages.lspModule,
     promptBlocks,
     lazyPromptBlocks,
     getDynamicPromptBlocks,
@@ -128,12 +130,13 @@ async function registerCoreModules(
 
 /**
  * Языковые модули: Browser (опционально) + LSP + фоновый стартовый health-check.
- * @returns промис стартовой проверки (без await — резолвится к первому вводу).
+ * @returns LSP-модуль (для web-вкладки) и промис стартовой проверки (без await —
+ * резолвится к первому вводу).
  */
 function startLanguageModules(
   input: ModulesPhaseInput,
   moduleRegistry: ModuleRegistry,
-): Promise<PromptBlock | null> {
+): { lspModule: LspModule; startupCheck: Promise<PromptBlock | null> } {
   const { config, logger, baseDir, exitOnComplete, pluginManager } = input;
 
   if (config.browser.enabled) {
@@ -152,9 +155,11 @@ function startLanguageModules(
   // await), чтобы баннер REPL не ждал `npx tsc` по проекту; Agent дожидается
   // через `lazyPromptBlocks` перед первым LLM-вызовом (к вводу пользователя
   // в интерактиве уже резолвнут).
-  return !isOneShotMode() && !exitOnComplete && process.env.NODE_ENV !== "test"
-    ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger: lspLogger })
-    : Promise.resolve(null);
+  const startupCheck =
+    !isOneShotMode() && !exitOnComplete && process.env.NODE_ENV !== "test"
+      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger: lspLogger })
+      : Promise.resolve(null);
+  return { lspModule, startupCheck };
 }
 
 /** Тулы модулей в реестр + builtin/external плагины в менеджер. */
