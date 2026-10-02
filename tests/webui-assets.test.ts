@@ -8,6 +8,16 @@ function js(a: WebUiAssets): string {
   return [a.js, ...Object.values(a.jsModules ?? {})].join("\n");
 }
 
+// Sidebar is split into `js/sidebar.js` (barrel) + `js/sidebar/*.js`; combine
+// them so the source guards below match regardless of which submodule holds a
+// given symbol.
+function sidebarSources(a: WebUiAssets): string {
+  return Object.entries(a.jsModules ?? {})
+    .filter(([k]) => k === "js/sidebar.js" || k.startsWith("js/sidebar/"))
+    .map(([, v]) => v)
+    .join("\n");
+}
+
 describe("webui assets", () => {
   it("loads html/css/js from disk", () => {
     const a = loadAssets();
@@ -296,7 +306,7 @@ describe("webui assets", () => {
 
   it("shows a loading indicator for the session sidebar section", () => {
     const a = loadAssets();
-    const sidebar = a.jsModules?.["js/sidebar.js"] || "";
+    const sidebar = sidebarSources(a) || "";
     const tabs = a.jsModules?.["js/tabs.js"] || "";
     expect(sidebar).toContain("setSessionLoading");
     expect(tabs).toContain("setSessionLoading(true)");
@@ -306,7 +316,7 @@ describe("webui assets", () => {
 
   it("filters the sidebar Trace by its own session", () => {
     const a = loadAssets();
-    const sidebar = a.jsModules?.["js/sidebar.js"] || "";
+    const sidebar = sidebarSources(a) || "";
     expect(sidebar).toContain("sidebarSessionId");
     expect(a.js).toContain("sidebarOwns(");
     expect(a.js).toContain("sidebarSessionId()");
@@ -331,14 +341,14 @@ describe("webui assets", () => {
     expect(a.js).toContain("initSidebar()");
     expect(a.js).toContain("sidebarTraceEvent(");
     expect(a.js).toContain("sidebarMapState(");
-    expect(a.jsModules?.["js/sidebar.js"]).toContain("/api/index");
-    expect(a.jsModules?.["js/sidebar.js"]).toBeTruthy();
+    expect(sidebarSources(a)).toContain("/api/index");
+    expect(sidebarSources(a)).toBeTruthy();
     // No horizontal scroll in any tab: sidebar panes clip on x, values wrap.
     expect(a.css).toContain("overflow-x: hidden");
     expect(a.css).toContain(".kv > span:first-child");
     // Trace detail collapses on tab switch; the long map root stacks vertically.
-    expect(a.jsModules?.["js/sidebar.js"]).toContain("collapseDetail()");
-    expect(a.jsModules?.["js/sidebar.js"]).toContain("mapPathRow(");
+    expect(sidebarSources(a)).toContain("collapseDetail()");
+    expect(sidebarSources(a)).toContain("mapPathRow(");
     expect(a.css).toContain(".map-path");
     // Trace rows must not shrink: flex-column otherwise squeezes hundreds
     // of events into the visible height (no scrollbar, dotted-line mush).
@@ -368,7 +378,7 @@ describe("webui assets", () => {
 
   it("wires the LSP sidebar tab (doctor) with an on-demand check", () => {
     const a = loadAssets();
-    const sidebar = a.jsModules?.["js/sidebar.js"] || "";
+    const sidebar = sidebarSources(a) || "";
     expect(a.html).toContain('data-tab="lsp"');
     expect(a.html).toContain('id="lspBody"');
     expect(sidebar).toContain("/api/lsp/doctor");
