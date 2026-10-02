@@ -139,14 +139,14 @@ Modify ~35 модулей-потребителей.
 
 **Files:** New `assets/js/core/menus.js`; Modify `tabs.js`, `settings.js`, `store.js`.
 
-- [ ] **Step 1:** вынести `closeAllMenus` из `tabs.js:1004` и `setSessOpen` из `tabs.js:505`
-      в leaf `core/menus.js`. `setSessOpen` завязан на `sessQuery` в `tabs.js`: состояние
-      поиска сессий переносится в `menus.js` (или `sessQuery` инжектится), а `tabs.js`
-      импортирует `setSessOpen` оттуда.
-- [ ] **Step 2:** `settings.js` импортирует меню из `core/menus.js` — ребро `settings → tabs`
-      исчезает. Guard Phase 0 (Step 3) `known`-список пуст.
-- [ ] **Step 3:** обновить комментарий DAG в `store.js:84-87`.
-- [ ] Прогон: guard фронт-графа + `bun test` + e2e меню сессий.
+- [x] **Step 1:** `closeAllMenus` + `setSessOpen` вынесены в leaf `js/core/menus.js`. Очистка
+      фильтра сессий (`sessQuery` + ре-рендер) осталась в `tabs.js` и регистрируется через
+      `setSessionCloseHook` (menus не зависит вверх).
+- [x] **Step 2:** `settings.js` импортирует меню из `core/menus.js` — ребро `settings → tabs`
+      исчезло; `KNOWN_INVERSIONS = []` в guard-тесте.
+- [x] **Step 3:** комментарий DAG в `store.js` обновлён (`menus`/`dialog` — листья).
+- [x] Прогон: guard фронт-графа, `tsc`, `node --check`, 37 webui-тест-файлов **331 pass /
+      0 fail**. e2e — по запросу. Commit `5904bab`.
 
 ---
 
