@@ -2,14 +2,13 @@
 // All SSE `on*` handlers live here; `app.js` only wires them to EventSource.
 import { mountMarkdown, copyText } from "../md.js";
 import {
-msgs, el, icon, setIcon, link, announce,
+msgs, el, icon, setIcon, announce,
 } from "./dom.js";
-import { api } from "./api.js";
 import { t, pluralCount } from "./i18n.js";
 import { S } from "./store.js";
 import {
 FILE_TOOLS, OPENABLE_TOOLS, IMAGE_TOOLS, LINK_TOOLS,
-categoryOf, labelOf, argText, formatMs, verbosity, firstOutputLine, fmtTokens,
+categoryOf, labelOf, argText, formatMs, verbosity, firstOutputLine,
 } from "./format.js";
 import {
   activeFeed, liveFeed, feedForEvent, clearBusy, clearEmpty, flushRun,
@@ -20,6 +19,7 @@ export * from "./feed/core.js";
 export * from "./feed/sidebar.js";
 export * from "./feed/history.js";
 export * from "./feed/plan.js";
+export * from "./feed/question.js";
 
 
 // Close the active Markdown segment (if any) and clear the text S.state.
@@ -461,127 +461,6 @@ export function onLog(data) {
   line.textContent = glyph + data.text;
   appendTo(feed, line);
   if (level === "error" || level === "warn") announce(data.text);
-}
-
-// `? ` glyph on the last line, matching the terminal menu (the tool may have
-// already prefixed it — don't double it).
-function questionLabel(text) {
-  const lines = String(text).split("\n");
-  const last = lines[lines.length - 1];
-  if (/^\s*\?/.test(last)) return String(text);
-  lines[lines.length - 1] = "? " + last;
-  return lines.join("\n");
-}
-
-// Answered-state + settle wiring shared by both question kinds. `display` is
-// what the user sees; `raw` is exactly what goes to `/api/answer`.
-function makeQuestionBlock(feed, promptText, id) {
-  const block = el("div", "q");
-  block.appendChild(el("div", "qtext", promptText));
-  let answered = false;
-  const settle = (display, raw) => {
-    if (answered) return;
-    answered = true;
-    block.classList.add("answered");
-    block.textContent = "";
-    block.appendChild(el("div", "qtext", promptText));
-    block.appendChild(el("div", "qans", "↳ " + (String(display || "").trim() || t("web.question.answered"))));
-    api("/api/answer", { method: "POST", body: { id, value: raw } });
-    if (feed === activeFeed()) scroll();
-  };
-  return { block, feed, settle, isAnswered: () => answered };
-}
-
-// Free-text prompt (a `text` question, or the tool's follow-up after the
-// "own answer" choice — see `askUser`/`CUSTOM_INDEX`).
-function questionTextInput(q, placeholder) {
-  const wrap = el("div", "qcustom");
-  const input = el("input", "qinput");
-  input.type = "text";
-  input.placeholder = placeholder;
-  input.setAttribute("aria-label", placeholder);
-  input.addEventListener("keydown", (e) => {
-    if (e.isComposing || e.keyCode === 229) return;
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const value = input.value.trim();
-      if (value) q.settle(value, value);
-    }
-  });
-  wrap.appendChild(input);
-  wrap.appendChild(
-    link(t("web.question.custom_send"), "", () => {
-      const value = input.value.trim();
-      if (value) q.settle(value, value);
-    }),
-  );
-  if (q.feed === activeFeed()) setTimeout(() => input.focus(), 0);
-  return wrap;
-}
-
-// Choice prompt: single-select settles on click, multi-select collects into a
-// send button. The "own answer" entry maps to CUSTOM_INDEX (-1) so the tool
-// then asks the free-text follow-up.
-function questionChoice(q, data, options) {
-  const multiple = !!data.multiple;
-  const allowCustom = !!data.allowCustom;
-  const entries = options.map((label) => ({ label, raw: null }));
-  if (allowCustom) entries.push({ label: t("web.question.custom"), raw: -1 });
-  const rawOf = (i) => (entries[i].raw != null ? entries[i].raw : i);
-  const opts = el("div", "opts");
-  const selected = [];
-  let sendBtn = null;
-  entries.forEach((entry, i) => {
-    const row = el("button", "qopt", i + 1 + ". " + entry.label);
-    row.type = "button";
-    row.setAttribute("aria-checked", "false");
-    row.addEventListener("click", () => {
-      if (q.isAnswered()) return;
-      if (multiple) {
-        const pos = selected.indexOf(i);
-        if (pos === -1) {
-          selected.push(i);
-          row.classList.add("on");
-          row.setAttribute("aria-checked", "true");
-        } else {
-          selected.splice(pos, 1);
-          row.classList.remove("on");
-          row.setAttribute("aria-checked", "false");
-        }
-        if (sendBtn) sendBtn.disabled = selected.length === 0;
-      } else {
-        row.setAttribute("aria-checked", "true");
-        q.settle(entry.label, [rawOf(i)]);
-      }
-    });
-    opts.appendChild(row);
-  });
-  q.block.appendChild(opts);
-  if (multiple) {
-    q.block.appendChild(el("div", "qmulti-hint", t("web.question.multi_hint")));
-    sendBtn = el("button", "qsend", t("web.question.send"));
-    sendBtn.type = "button";
-    sendBtn.disabled = true;
-    sendBtn.addEventListener("click", () => {
-      if (q.isAnswered() || !selected.length) return;
-      const chosen = selected.slice().sort((a, b) => a - b);
-      q.settle(chosen.map((i) => entries[i].label).join(", "), chosen.map(rawOf));
-    });
-    q.block.appendChild(sendBtn);
-  }
-}
-
-export function onQuestion(data) {
-  if (!data || typeof data.text !== "string") return;
-  const feed = feedForEvent(data.sessionId);
-  if (!feed) return;
-  clearEmpty(feed);
-  const q = makeQuestionBlock(feed, questionLabel(data.text), data.id);
-  const options = Array.isArray(data.options) ? data.options : [];
-  if (data.kind === "choice" && options.length) questionChoice(q, data, options);
-  else q.block.appendChild(questionTextInput(q, t("web.question.placeholder")));
-  appendTo(feed, q.block);
-  if (feed === activeFeed()) scroll();
 }
 
 // Global `.think-h` toggle (depends on the wrap > [head, body] structure
