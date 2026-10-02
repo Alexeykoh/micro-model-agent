@@ -125,7 +125,19 @@ describe("webui assets", () => {
     expect(js(a)).toContain('searchParams.delete("session")');
     expect(js(a)).toContain('URLSearchParams(location.search).get("session")');
     expect(js(a)).toMatch(/openTab\(initialSession/);
-    expect(js(a)).toContain("if (!feedHasContent(tab.feed)) tab.historyLoaded = false;");
+    expect(js(a)).toContain("if (!feedHasContent(tab.feed) || tab.historyFailed) tab.historyLoaded = false;");
+  });
+
+  it("marks tabs of server-deleted sessions dead instead of retry-looping", () => {
+    const a = loadAssets();
+    // 404 activate/history → dead card, no silent desync.
+    expect(js(a)).toContain("markTabDead");
+    expect(js(a)).toContain('r.status === 404');
+    // Status dots know the dead state.
+    expect(js(a)).toContain('dead: "✗"');
+    expect(js(a)).toContain("web.session.gone");
+    expect(js(a)).toContain("web.tab.gone");
+    expect(a.css).toContain(".st-dead");
   });
 
   it("ships the first-run setup gate and wizard assets", () => {

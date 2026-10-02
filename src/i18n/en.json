@@ -1444,6 +1444,8 @@
   "web.tab.waiting": "waiting for you",
   "web.tab.queued": "queued",
   "web.tab.failed": "failed",
+  "web.tab.gone": "gone",
+  "web.session.gone": "session deleted or unavailable — close the tab",
   "web.empty.title": "new chat",
   "web.empty.hint": "type a message below · / — commands · model and context are chosen above the input",
   "web.attach.title": "attach image",

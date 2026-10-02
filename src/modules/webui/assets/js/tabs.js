@@ -3,7 +3,7 @@
 // loaders from here. Imports openConfirm/setIndicator from dialog (leaf).
 import {
 msgs, inp, tabstripEl, imgPicker, attachStrip, attachErr, sendBtn,
-el, icon,
+el, icon, link,
 } from "./dom.js";
 import { api } from "./api.js";
 import { t } from "./i18n.js";
@@ -53,23 +53,50 @@ function autogrow() {
 }
 
 // Статусы вкладок: working — идёт ход, waiting — ждёт ответа (question),
-// queued — стоит в per-session очереди, failed — ход упал. Рендерится точкой
-// в табстрипе; завершение в чужой вкладке фокус не крадёт, только бейдж.
-const TAB_DOT = { working: "●", waiting: "◉", queued: "○", failed: "✗" };
+// queued — стоит в per-session очереди, failed — ход упал, dead — сессии нет
+// на сервере (удалена/подчищена: activate и history отвечают 404).
+// Рендерится точкой в табстрипе; завершение в чужой вкладке фокус не крадёт,
+// только бейдж.
+const TAB_DOT = { working: "●", waiting: "◉", queued: "○", failed: "✗", dead: "✗" };
 
 function statusTitle(status) {
   if (status === "working") return t("web.tab.working");
   if (status === "waiting") return t("web.tab.waiting");
   if (status === "queued") return t("web.tab.queued");
   if (status === "failed") return t("web.tab.failed");
+  if (status === "dead") return t("web.tab.gone");
   return "";
 }
 
 export function setTabStatus(id, status) {
   if (!id) return;
   const tab = S.tabs.find((x) => x.id === id);
-  if (!tab || tab.status === status) return;
+  if (!tab || tab.status === status || tab.dead) return;
   tab.status = status;
+  renderTabstrip();
+}
+
+/**
+ * Помечает вкладку мёртвой: сессии нет на сервере (удалена, подчищена
+ * pruneEmpty, другая директория) — activate и history отвечают 404.
+ * Лента заменяется честной карточкой с кнопкой закрытия; ретраи и очередь
+ * больше её не трогают, сайдбар остаётся на последней живой сессии.
+ * Идемпотентна (повторные 404 её же вкладки — no-op).
+ */
+export function markTabDead(id) {
+  const tab = S.tabs.find((x) => x.id === id);
+  if (!tab || tab.dead) return;
+  tab.dead = true;
+  tab.status = "dead";
+  tab.historyLoaded = true;
+  tab.historyFailed = false;
+  tab.planCard = null;
+  tab.feed.replaceChildren();
+  const card = el("div", "warnline", "✗ " + t("web.session.gone"));
+  appendTo(tab.feed, card);
+  const closer = link(t("web.topbar.close"), "", () => closeTab(id));
+  appendTo(tab.feed, closer);
+  if (tab.feed === activeFeed()) scrollToBottom();
   renderTabstrip();
 }
 
@@ -172,6 +199,8 @@ export function openTab(id, name, kind, server) {
       feed: makeFeed(),
       historyLoaded: false,
       historyLoading: false,
+      historyFailed: false,
+      dead: false,
       planCard: null,
       draft: "",
       attachments: [],
@@ -193,13 +222,28 @@ export function openTab(id, name, kind, server) {
     tab.historyLoaded = true;
   }
   if (server && tab.kind === "session") {
+    // Мёртвую вкладку (сессии нет на сервере) не дёргаем: карточка уже
+    // показана, ретраи бесполезны.
+    if (tab.dead) {
+      syncUrl();
+      return;
+    }
     // A tab auto-opened as "live" (server=false) sets historyLoaded=true; when
     // it is opened from the server afterward we must actually fetch the
     // transcript, or a reload of the active session shows an empty feed.
-    if (!feedHasContent(tab.feed)) tab.historyLoaded = false;
+    // historyFailed (транзиентная ошибка прошлого захода) — тоже повод
+    // повторить; мёртвые (404) сюда не доходят — их держит tab.dead выше.
+    if (!feedHasContent(tab.feed) || tab.historyFailed) tab.historyLoaded = false;
     // План следует за сессией: сервер уже переключил трекер на activate,
     // сразу тянем свежий план в сайдбар (не ждём 2с-полла `/api/state`).
-    api("/api/sessions/activate", { method: "POST", body: { id } }).then(() => {
+    // 404 — сессия исчезла (удалена/подчищена): помечаем вкладку мёртвой
+    // вместо молчаливого рассинхрона сайдбара (он останется на живой сессии).
+    api("/api/sessions/activate", { method: "POST", body: { id } }).then((r) => {
+      if (r.status === 404) {
+        markTabDead(id);
+        loadSessions();
+        return;
+      }
       loadSessions();
       api("/api/state").then((r) => {
         if (!r.ok || !r.data) return;
@@ -215,7 +259,9 @@ export function openTab(id, name, kind, server) {
         reconcileTabStatuses();
       });
     });
-    loadHistory(tab);
+    loadHistory(tab).then((st) => {
+      if (st && st.gone) markTabDead(tab.id);
+    });
   }
   syncUrl();
 }
@@ -447,6 +493,9 @@ async function deleteSession(id) {
     );
   } else {
     S.state.sessionsError = null;
+    // Удалённая сессия не должна оставаться открытой вкладкой с мёртвым id
+    // (иначе — activate/history 404, сайдбар не следует, "история недоступна").
+    closeTab(id);
   }
   await loadSessions();
 }
@@ -800,6 +849,13 @@ async function send() {
   // шлют без sessionId (фолбэк сервера — тогда-активная).
   const sessionId = tab && tab.kind === "session" ? tab.id : null;
   const feed = liveFeed() || activeFeed();
+  // Мёртвая вкладка (сессии нет на сервере): POST даст 404 — не шлём,
+  // показываем карточку с кнопкой закрытия.
+  if (tab && tab.dead) {
+    clearEmpty(feed);
+    markTabDead(tab.id);
+    return;
+  }
   // No client-side busy gate: a message sent mid-turn is queued server-side
   // (per-session: `202 {queued: n, sessionId}`) and runs after the current
   // turn, in order.
@@ -992,7 +1048,7 @@ export function reconcileTabStatuses() {
   let changed = false;
   S.tabs.forEach((tab) => {
     if (tab.kind !== "session") return;
-    if (tab.status === "waiting" || tab.status === "failed") return;
+    if (tab.status === "waiting" || tab.status === "failed" || tab.status === "dead") return;
     const next = running.includes(tab.id) ? "working" : queued[tab.id] > 0 ? "queued" : "idle";
     if (tab.status !== next) {
       tab.status = next;

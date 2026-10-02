@@ -829,11 +829,15 @@ function renderHistory(feed, entries) {
 }
 
 export function feedHasContent(feed) {
-  return !!feed.querySelector(".u, .md, .ans, .code, .act, .think, .metaln, .errline, .sysline");
+  // `.detail` тоже контент: строки статуса/ошибок загрузки ("история
+  // недоступна") не должны провоцировать повторный fetch при каждом открытии
+  // вкладки — иначе каждый клик плодит ещё одну строку (сессия удалена,
+  // сервер отвечает 404, а фид "пуст" снова и снова).
+  return !!feed.querySelector(".u, .md, .ans, .code, .act, .think, .metaln, .errline, .sysline, .detail");
 }
 
 export async function loadHistory(tab) {
-  if (!tab || tab.historyLoaded || tab.historyLoading) return;
+  if (!tab || tab.historyLoaded || tab.historyLoading) return { gone: !!tab.dead };
   tab.historyLoading = true;
   const placeholder = el("div", "detail", t("web.history.loading"));
   if (!feedHasContent(tab.feed)) {
@@ -844,9 +848,15 @@ export async function loadHistory(tab) {
   tab.historyLoading = false;
   placeholder.remove();
   tab.historyLoaded = true;
+  tab.historyFailed = false;
   if (!r.ok || !r.data || !Array.isArray(r.data.history)) {
+    // 404 — сессии нет на сервере (удалена/подчищена): таб мёртв, ретраи
+    // бесполезны, их размечает вызывающий (markTabDead). Остальное —
+    // транзиент: одна строка и повтор при следующем открытии.
+    if (r.status === 404) return { gone: true };
+    tab.historyFailed = true;
     if (!feedHasContent(tab.feed)) tab.feed.appendChild(el("div", "detail", t("web.history.unavailable")));
-    return;
+    return { gone: false };
   }
   // A live session already rendered its content over SSE: don't duplicate it.
   if (feedHasContent(tab.feed)) return;

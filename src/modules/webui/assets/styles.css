@@ -206,6 +206,7 @@ body[data-font="large"] { font-size: 17px; }
 .stab .dot.st-waiting { color: var(--yellow); }
 .stab .dot.st-queued { color: var(--dim-b); }
 .stab .dot.st-failed { color: var(--red-strong); }
+.stab .dot.st-dead { color: var(--red-strong); }
 @keyframes tabpulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 .stab .stab-x {
   flex: 0 0 auto; width: 18px; height: 18px; padding: 0; justify-content: center;
