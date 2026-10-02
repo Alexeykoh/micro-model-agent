@@ -1,5 +1,28 @@
 # TODO — Micro Models Agent
 
+## Web session state / изоляция сессий (2026-10-02)
+
+> Аудит багов переключения вкладок в `mma web` (grill-me): первопричина — два
+> представления «активной сессии» (клиентская вкладка vs `sessionManager.getActive()`)
+> и сессионно-зависимые модуль-глобалы, оставшиеся от однo-сессионного ядра.
+> Ветка работ: `docs/web-session-state` (документы), затем `feat/session-scope-isolation`
+> и `feat/web-session-state`.
+
+- **Спека (фундамент, P0-изоляция):** [docs/specs/2026-10-02-session-scope-isolation-design.md](./docs/specs/2026-10-02-session-scope-isolation-design.md)
+  - P0-1 общий `Logger`/`sessionLogPath` + глобальный `_sessionAuditDir` (`session-logger.ts:30-43`, `audit-log.ts:27-51`)
+  - P0-2 identity сессии провайдера привязана к main (`provider-phase.ts:193-197`)
+  - P0-3 `OutputEvent` без `sessionId`, `defaultOutputBus` — синглтон (`log-forward.ts:27-41`)
+  - P0-4 `SessionManager.create` удаляет чужие пустые сессии (`manager.ts:77-78`)
+  - P0-5 команды не гейтятся busy и реконфигурят бегущие раннеры (`actions-api.ts:48-73`)
+  - P0-6 глобальный kill-реестр процессов без сессии (`processes/runner.ts:8`)
+- **План (фундамент):** [docs/plans/2026-10-02-session-scope-isolation.md](./docs/plans/2026-10-02-session-scope-isolation.md)
+- **Спека (UI/state):** [docs/specs/2026-10-02-web-session-state-design.md](./docs/specs/2026-10-02-web-session-state-design.md)
+  - Сайдбар от `getActive()` (`host-state.ts:76`), полный апдейт только по 2с-поллу (`app.js:343`)
+  - `openTab` обновляет не всё (`tabs.js:248-260`); нет guard по `sessionId`; Trace не переключается
+  - Нет loading-индикаторов Session/Plan/Usage; `sessionUsage` не персистится
+- **План (UI/state):** [docs/plans/2026-10-02-web-session-state.md](./docs/plans/2026-10-02-web-session-state.md)
+  - Обязательный задел: DOM-харнесс (`happy-dom`) — сейчас клиент проверяется только строковым матчингом (`webui-assets.test.ts:19-20`)
+
 ## Осталось (по приоритетам, 2026-09-25)
 
 > Сверено с кодом на `master` @ 2.5.0. Закрытые пункты вычеркнуты ниже.
