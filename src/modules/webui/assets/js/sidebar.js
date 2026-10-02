@@ -1,10 +1,11 @@
-// Sidebar tabs (Session / Map / Trace) for `mma web`.
+// Sidebar tabs (Session / Map / Trace / LSP) for `mma web`.
 //
 // Owns: active-tab state (localStorage), the live per-session Trace buffer with
-// master-detail expansion, and the Map tab rendering. Leaf module: imports only
-// dom/i18n/format/store/api — the frontend DAG stays acyclic
-// (app → sidebar → {dom,i18n,format,store,api}).
-// Design: docs/specs/2026-09-30-webui-sidebar-tabs-design.md.
+// master-detail expansion, the Map tab rendering, and the on-demand LSP
+// diagnosis. Leaf module: imports only dom/i18n/format/store/api — the frontend
+// DAG stays acyclic (app → sidebar → {dom,i18n,format,store,api}).
+// Design: docs/specs/2026-09-30-webui-sidebar-tabs-design.md,
+//         docs/specs/2026-10-02-lsp-doctor-design.md (§12).
 
 import { el, icon } from "./dom.js";
 import { api } from "./api.js";
@@ -13,13 +14,13 @@ import { t } from "./i18n.js";
 import { labelOf, categoryOf, argText, formatMs, fmtTokens } from "./format.js";
 
 const TAB_KEY = "mma-sidebar-tab";
-const TABS = ["session", "map", "trace"];
-const ICON_NAME = { session: "list-checks", map: "map", trace: "activity" };
+const TABS = ["session", "map", "trace", "lsp"];
+const ICON_NAME = { session: "list-checks", map: "map", trace: "activity", lsp: "stethoscope" };
 const TRACE_CAP = 500;
 const MAX_OUTPUT_CHARS = 20000;
 
 let sbEl = null, nameEl = null, nameTextEl = null, mapEl = null, listEl = null, detailEl = null;
-let detailGlyph = null, detailTitle = null, detailBody = null, detailClose = null;
+let detailGlyph = null, detailTitle = null, detailBody = null, detailClose = null, lspEl = null;
 let active = "session";
 let trace = [];          // { id, kind, ts, name, args, output, success, durationMs, phase, text, steps, currentIndex }
 let selected = null;     // trace id
@@ -31,6 +32,10 @@ const nodeById = new Map();   // entry id → row node
 const callIndex = new Map();  // toolCallId → entry
 const headerByTurn = new Map(); // turn → header node
 let textEntry = null;         // current text row (updated in place)
+let lspDiag = null;           // last LspDiagnosis (web.sidebar LSP tab)
+let lspProbing = false;       // a diagnosis is running right now
+let lspLoaded = false;        // cache was fetched at least once
+let lspUnavailable = false;   // the server has no LSP module wired
 
 function paneEl(id) { return document.getElementById("pane-" + id); }
 
@@ -65,6 +70,7 @@ export function setSidebarTab(id, persist = true) {
   if (nameTextEl) nameTextEl.textContent = t("web.sidebar.tab_" + effective);
   const nic = nameEl && nameEl.querySelector(".sb-ico");
   if (nic) { nic.textContent = ""; nic.appendChild(icon(ICON_NAME[effective])); }
+  if (effective === "lsp") sidebarLspState();
 }
 
 function collapseDetail() {
@@ -621,6 +627,135 @@ export function sidebarMapState(host) {
   mapEl.appendChild(btn);
 }
 
+// ---- LSP tab ----
+
+/** i18n-ключ ярлыка класса причины (`not-applicable` → `..._not_applicable`). */
+function lspReasonKey(reason) {
+  return "web.sidebar.lsp_reason_" + String(reason || "").replace(/-/g, "_");
+}
+
+/** Глиф и класс строки сервера по классу причины. */
+function lspGlyph(reason) {
+  if (reason === "ok") return ["✓", "ok"];
+  if (reason === "disabled" || reason === "not-applicable" || reason === "deadline") return ["–", "dim"];
+  return ["✗", "fail"];
+}
+
+/** Хвост-detail строки сервера (время/способ запуска/бинарник/ошибка). */
+function lspDetail(s) {
+  if (s.reason === "ok") {
+    const via = s.useNpxFallback ? t("web.sidebar.lsp_via_npx") : t("web.sidebar.lsp_via_global");
+    return formatMs(s.durationMs || 0) + " · " + t("web.sidebar.lsp_via") + " " + via;
+  }
+  if (s.reason === "binary-missing" || s.reason === "offline" || s.reason === "network") {
+    return s.binaryName || s.command || "";
+  }
+  if (s.reason === "spawn-failed" || s.reason === "server-error") {
+    return String(s.error || "").split("\n")[0];
+  }
+  return "";
+}
+
+function lspRow(s) {
+  const row = el("div", "kv lsp-row");
+  row.appendChild(el("span", "dim", s.language));
+  const b = el("b");
+  const [g, cls] = lspGlyph(s.reason);
+  b.appendChild(el("span", "lsp-g " + cls, g));
+  b.appendChild(document.createTextNode(" " + t(lspReasonKey(s.reason))));
+  const detail = lspDetail(s);
+  if (detail) b.appendChild(el("span", "lsp-detail", " · " + detail));
+  row.appendChild(b);
+  return row;
+}
+
+export function renderLsp() {
+  if (!lspEl) return;
+  lspEl.textContent = "";
+  if (lspUnavailable) {
+    lspEl.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_unavailable")));
+    return;
+  }
+  if (lspProbing) {
+    lspEl.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_checking")));
+  } else if (!lspDiag) {
+    lspEl.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_not_checked")));
+  } else {
+    const onOff = (v) => (v ? t("web.sidebar.map_on") : t("web.sidebar.map_off"));
+    lspEl.appendChild(mapKv(t("web.sidebar.lsp_enabled"), onOff(lspDiag.enabled)));
+    lspEl.appendChild(mapKv(t("web.sidebar.lsp_offline"), onOff(lspDiag.offline)));
+    const servers = Array.isArray(lspDiag.servers) ? lspDiag.servers : [];
+    if (servers.length === 0) {
+      lspEl.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_none")));
+    } else {
+      servers.forEach((s) => lspEl.appendChild(lspRow(s)));
+    }
+  }
+  const btn = el(
+    "button",
+    "map-reindex",
+    lspProbing ? t("web.sidebar.lsp_checking") : t("web.sidebar.lsp_check"),
+  );
+  btn.type = "button";
+  btn.disabled = lspProbing || lspUnavailable;
+  btn.addEventListener("click", () => void runLspDoctor());
+  lspEl.appendChild(btn);
+}
+
+/** Загрузить кэш диагностики с сервера; при пустом кэше — запустить проверку. */
+async function loadLspDoctor() {
+  const r = await api("/api/lsp/doctor");
+  if (!r.ok) {
+    lspUnavailable = true;
+    lspProbing = false;
+    renderLsp();
+    return;
+  }
+  lspUnavailable = false;
+  lspDiag = (r.data && r.data.diagnosis) || null;
+  lspProbing = !!(r.data && r.data.probing);
+  lspLoaded = true;
+  renderLsp();
+  if (lspDiag === null && !lspProbing) void runLspDoctor();
+}
+
+/** Запустить диагностику (fire-and-forget; результат придёт по SSE `lsp`). */
+async function runLspDoctor() {
+  if (lspUnavailable || lspProbing) return;
+  lspProbing = true;
+  renderLsp();
+  const r = await api("/api/lsp/doctor", { method: "POST" });
+  if (r.status === 503) {
+    lspUnavailable = true;
+    lspProbing = false;
+    renderLsp();
+  }
+}
+
+/**
+ * Ленивая загрузка вкладки LSP: срабатывает только когда вкладка активна.
+ * Зовётся из `renderState` (2с-полл) и при переключении вкладки.
+ */
+export function sidebarLspState() {
+  if (active !== "lsp" || lspUnavailable) return;
+  if (!lspLoaded) {
+    void loadLspDoctor();
+  } else if (lspDiag === null && !lspProbing) {
+    void runLspDoctor();
+  }
+}
+
+/** SSE `lsp`: `start` — показать проверку, `done`/`error` — перечитать результат. */
+export function sidebarLspEvent(d) {
+  if (!d) return;
+  if (d.phase === "start") {
+    lspProbing = true;
+    renderLsp();
+    return;
+  }
+  void loadLspDoctor();
+}
+
 // ---- indicators ----
 
 export function sidebarBusy(on) {
@@ -651,6 +786,7 @@ export function applySidebarI18n() {
     if (entry) renderDetail(entry);
   }
   sidebarMapState(S.state.host);
+  renderLsp();
 }
 
 export function initSidebar() {
@@ -660,6 +796,7 @@ export function initSidebar() {
   nameEl = document.getElementById("sbName");
   nameTextEl = document.getElementById("sbNameText");
   mapEl = document.getElementById("mapBody");
+  lspEl = document.getElementById("lspBody");
   listEl = document.getElementById("traceList");
   detailEl = document.getElementById("traceDetail");
   detailGlyph = document.getElementById("detailGlyph");
@@ -688,7 +825,7 @@ export function initSidebar() {
   });
 
   document.addEventListener("keydown", (e) => {
-    if (!e.altKey || !["1", "2", "3"].includes(e.key)) return;
+    if (!e.altKey || !["1", "2", "3", "4"].includes(e.key)) return;
     const tag = document.activeElement ? String(document.activeElement.tagName) : "";
     if (tag === "INPUT" || tag === "TEXTAREA") return;
     e.preventDefault();

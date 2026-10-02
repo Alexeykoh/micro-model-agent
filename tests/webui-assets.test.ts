@@ -303,6 +303,20 @@ describe("webui assets", () => {
     expect(a.css).toContain(".trace-list > *");
   });
 
+  it("wires the LSP sidebar tab (doctor) with an on-demand check", () => {
+    const a = loadAssets();
+    const sidebar = a.jsModules?.["js/sidebar.js"] || "";
+    expect(a.html).toContain('data-tab="lsp"');
+    expect(a.html).toContain('id="lspBody"');
+    expect(sidebar).toContain("/api/lsp/doctor");
+    expect(sidebar).toContain("sidebarLspState(");
+    expect(sidebar).toContain("sidebarLspEvent(");
+    expect(sidebar).toContain("web.sidebar.lsp_reason_");
+    expect(a.js).toContain("sidebarLspEvent(");
+    expect(a.js).toContain("sidebarLspState(");
+    expect(a.css).toContain(".lsp-g.fail");
+  });
+
   it("renders the context breakdown as a segmented bar with a legend", () => {
     const a = loadAssets();
     const src = js(a);

@@ -112,6 +112,10 @@
         <span class="sb-ico" data-icon="trace" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="lsp" aria-selected="false" aria-controls="pane-lsp" title="LSP">
+        <span class="sb-ico" data-icon="lsp" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
     </div>
     <div class="sb-name" id="sbName"><span class="sb-ico" data-icon="session" aria-hidden="true"></span><span id="sbNameText">Session</span></div>
 
@@ -141,6 +145,12 @@
       <div class="trc-detail" id="traceDetail" hidden>
         <div class="detail-h"><span class="g" id="detailGlyph">◇</span><span id="detailTitle"></span><button class="x linkbtn" type="button" id="detailClose">✕</button></div>
         <div class="detail-b" id="detailBody"></div>
+      </div>
+    </div>
+
+    <div class="sb-pane" id="pane-lsp" role="tabpanel" data-pane="lsp" hidden>
+      <div class="sec map-sec">
+        <div class="sec-body" id="lspBody"></div>
       </div>
     </div>
   </div>
