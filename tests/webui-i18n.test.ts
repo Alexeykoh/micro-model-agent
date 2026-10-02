@@ -135,12 +135,12 @@ describe("webui i18n", () => {
 
   it("titles and explains every settings section in both locales", async () => {
     // settings/controls.js is DOM-coupled (via dom.js) — parse the section
-    // table out of the source instead of importing it. `settings.js` adds a few
-    // section titles inline, so scan it too (and `config.field.*` labels).
+    // table out of the source instead of importing it. `settings/panels.js`
+    // adds a few section titles inline, so scan it too (and `config.field.*` labels).
     const { readFileSync } = await import("node:fs");
     const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf-8");
     const src = read("../src/modules/webui/assets/js/settings/controls.js");
-    const settingsSrc = read("../src/modules/webui/assets/js/settings.js");
+    const settingsSrc = read("../src/modules/webui/assets/js/settings/panels.js");
     const titles = [
       ...[...src.matchAll(/titleKey:\s*"(web\.settings\.[a-z0-9.-]+)"/g)].map((m) => m[1]),
       ...[...settingsSrc.matchAll(/"(web\.settings\.sec\.[a-z0-9.-]+)"/g)].map((m) => m[1]),
