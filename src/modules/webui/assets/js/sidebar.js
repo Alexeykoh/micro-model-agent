@@ -262,6 +262,17 @@ export function sidebarSessionId() {
   return (sbEl && sbEl.dataset.sid) || null;
 }
 
+/**
+ * Индикатор загрузки секции «Session» (plan/usage). Ставится на переключении
+ * вкладки/новой сессии, снимается первым полным снапшотом (`applyState`).
+ */
+export function setSessionLoading(on) {
+  if (!sbEl) return;
+  sbEl.classList.toggle("sb-loading", !!on);
+  const pane = paneEl("session");
+  if (pane) pane.setAttribute("aria-busy", on ? "true" : "false");
+}
+
 export function sidebarTurnEnd(turnSeq) {
   // Серверный номер хода (реконнекты локальный счётчик не сбивают).
   turn = typeof turnSeq === "number" && turnSeq > turn ? turnSeq : turn + 1;

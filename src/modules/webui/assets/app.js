@@ -23,7 +23,7 @@ initRail, setPlan as railPlan, railEvent, applyRailI18n,
 import {
   initSidebar, sidebarSessionChanged, sidebarMapState,
   sidebarTraceEvent, sidebarTurnEnd, sidebarBusy, sidebarMapIndicator,
-  sidebarPullLog, sidebarSessionId,
+  sidebarPullLog, sidebarSessionId, setSessionLoading,
   applySidebarI18n,
 } from "./js/sidebar.js";
 
@@ -95,14 +95,26 @@ function renderState(snapshot, busy, extra) {
   sidebarSessionChanged(sessionId);
   renderWorkspace(S.state.host);
   renderSessionsDropdown();
+  setSessionLoading(false);
   setStaleBar(!!(snapshot && snapshot.i18nStale));
 }
 
 async function refresh() {
-  const r = await api("/api/state");
+  // Scope the snapshot to the client's active tab: the sidebar must show the
+  // session it is actually viewing, not the server's active one.
+  const sid = S.activeTabId;
+  const url = sid ? "/api/state?session=" + encodeURIComponent(sid) : "/api/state";
+  const r = await api(url);
   if (!r.ok || !r.data) return;
+  // Guard: a switch during the fetch must not clobber the new tab.
+  if (S.activeTabId !== sid) return;
   renderState(r.data.state, r.data.busy, r.data);
 }
+
+// Cross-module hooks (registered once app boot wires the renderers). Lets
+// `tabs.js` trigger a full state refresh on switch without importing app.
+hooks.applyState = renderState;
+hooks.refreshState = refresh;
 
 function resyncAfterReconnect() {
   refresh();

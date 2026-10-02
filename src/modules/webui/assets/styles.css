@@ -840,6 +840,12 @@ body.light .sel > button { border: 1px solid var(--border); }
 .sb-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; max-width: 100%; overflow-x: hidden; }
 .sb-pane[hidden] { display: none; }
 
+/* Session-секция (plan/usage) тускнеет на время загрузки своей сессии. */
+.sb.sb-loading #pane-session { opacity: .5; }
+@media (prefers-reduced-motion: no-preference) {
+  #pane-session { transition: opacity .15s ease; }
+}
+
 /* master-detail expansion */
 .sb { transition: width .22s ease, min-width .22s ease; }
 .sb.sb-expanded { width: 680px; min-width: 680px; }
