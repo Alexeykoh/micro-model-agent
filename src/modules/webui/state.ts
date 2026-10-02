@@ -9,7 +9,9 @@ import type { SessionMeta, SessionMessage } from "../../modules/session/types";
 import type { SessionLogEntry } from "../../modules/session/store";
 import { RunPool } from "./session-pool";
 import type { MemoryStore } from "../memory/store";
-import type { SetupDisplay } from "../setup/answers";import { MAX_BODY_BYTES } from "./limits";
+import type { SetupDisplay } from "../setup/answers";
+import type { LspDiagnosis } from "../lsp/diagnose";
+import { MAX_BODY_BYTES } from "./limits";
 import { readEnv } from "../../config/env";
 
 /**
@@ -211,6 +213,12 @@ export interface WebUiState {
   projectMapStats?: () => { files: number; symbols: number; tokens: number } | null;
   /** Ручной пересбор индекса карты проекта (`POST /api/index`). */
   refreshIndex?: () => Promise<void>;
+  /** Диагностика LSP по требованию (вкладка LSP, `POST /api/lsp/doctor`). */
+  lspDiagnose?: () => Promise<LspDiagnosis>;
+  /** Последний результат диагностики LSP (кэш; `GET /api/lsp/doctor`). */
+  lspDoctor?: LspDiagnosis;
+  /** LSP-проба идёт прямо сейчас (single-flight). */
+  lspProbing?: boolean;
   /**
    * Глобальный стор памяти, общий с агентом (владелец — `bootstrap`).
    * Вяжет `module.ts`; опционален, чтобы тесты гоняли диспатч команд без

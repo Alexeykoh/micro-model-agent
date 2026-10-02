@@ -26,6 +26,7 @@ import { handleLspGet, handleMcpCreate, handleSettingsApi } from "./settings-api
 import { handleProvidersApi } from "./providers-api";
 import { handleFileApi } from "./file-api";
 import { handleSetupApi } from "./setup-api";
+import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp-api";
 import type { WebUiState, WebUiAssets } from "./state";
 import { readEnv } from "../../config/env";
 
@@ -115,6 +116,8 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "POST /api/index": (_req, res, s) => handleIndexPost(res, s),
   "POST /api/mcp": (req, res, s) => handleMcpCreate(req, res, s),
   "GET /api/lsp": (_req, res, s) => handleLspGet(res, s),
+  "GET /api/lsp/doctor": (_req, res, s) => handleLspDoctorGet(res, s),
+  "POST /api/lsp/doctor": (_req, res, s) => handleLspDoctorPost(res, s),
 };
 
 /**

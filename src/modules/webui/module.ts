@@ -28,7 +28,7 @@ import { installWebPromptIO, type PromptIORegistry } from "./prompt-io";
 import { startServer, stopServer } from "./server";
 import { makeModelCache } from "./model-cache";
 import { makeRunAgent } from "./run-agent";
-import { buildHostState, type WebIndexer } from "./host-state";
+import { buildHostState, type WebIndexer, type WebLsp } from "./host-state";
 import { cancelPendingQuestions } from "./prompt-io";
 import {
   activeUsage,
@@ -48,6 +48,7 @@ export {
   planEventFor,
   type HostStateInput,
   type WebIndexer,
+  type WebLsp,
 } from "./host-state";
 
 /** Входы старта веб-UI: агент, конфиг, менеджеры, окружение. */
@@ -72,6 +73,8 @@ export interface WebUiDeps {
   agentsMd?: { files: string[]; disabled: boolean };
   /** Модуль карты проекта (индекс) для статистики сайдбара. */
   indexer?: WebIndexer;
+  /** Модуль LSP (диагностика) для вкладки LSP сайдбара. */
+  lsp?: WebLsp;
   /**
    * Промис context-probe bootstrap (загруженный контекст LM Studio). Резолвится
    * лениво и светится в сайдбаре; на старте не await'ится, чтобы медленный проб
@@ -167,6 +170,10 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         broadcast({ type: "state", ts: Date.now(), ...sessionStatus(state), usage: state.usage }, state);
       };
     }
+  }
+  if (deps.lsp) {
+    const lsp = deps.lsp;
+    state.lspDiagnose = () => lsp.diagnose(deps.baseDir ?? process.cwd());
   }
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
 
