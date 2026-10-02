@@ -49,6 +49,16 @@ describe("webui slash commands", () => {
     expect(h.lines).toEqual(["contextWindow = 65536 · saved"]);
   });
 
+  it("rejects config writes while a turn is running (no reconfigure race)", async () => {
+    const h = makeHarness();
+    h.state.busy = true;
+    await h.run("/config model m2");
+    expect(h.config.model).toBe("original-model");
+    expect(h.saved).toHaveLength(0);
+    expect(h.reconfigures()).toBe(0);
+    expect(h.lines[0]).toContain("busy");
+  });
+
   it("/config accepts aliases", async () => {
     const h = makeHarness();
     await h.run("/config context.window 16384");

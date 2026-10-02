@@ -107,6 +107,29 @@ describe("webui config/session/model REST", () => {
     });
   });
 
+  it("POST /api/config rejects writes while a turn is running (409 busy)", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    let saved = 0;
+    let reconfigured = 0;
+    s.saveConfig = () => {
+      saved++;
+    };
+    s.reconfigure = () => {
+      reconfigured++;
+    };
+    s.busy = true;
+
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/config", { key: "model", value: "new-model" });
+      expect(res.status).toBe(409);
+      expect(res.json.error).toBe("busy");
+      expect(s.config?.model).toBe("original-model");
+      expect(saved).toBe(0);
+      expect(reconfigured).toBe(0);
+    });
+  });
+
   it("POST /api/config accepts boolean/number values and coerces them", async () => {
     const s = createWebUiState();
     s.config = testConfig();

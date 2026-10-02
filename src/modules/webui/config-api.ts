@@ -97,6 +97,13 @@ export function handleConfigPost(
     sendJson(res, 503, { error: "config_unavailable" });
     return;
   }
+  // Во время хода reconfigure рискует живым раннером (resize/подмена
+  // провайдера) — отклоняем запись до `turn_end`. Чтение (`GET /api/config`)
+  // не затронуто.
+  if (s.busy) {
+    sendJson(res, 409, { ok: false, error: "busy" });
+    return;
+  }
   const config = s.config;
   readJsonBody(req, s.maxBodyBytes)
     .then(async (rec) => {
