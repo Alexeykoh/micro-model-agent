@@ -26,6 +26,7 @@ import { installWebPromptIO, type PromptIORegistry } from "./session/prompt-io";
 import { startServer, stopServer } from "./server";
 import { makeModelCache } from "./settings/model-cache";
 import { buildHostState, type WebIndexer, type WebLsp } from "./host-state";
+import { attachIndexWatcher } from "./index-watcher";
 import { cancelPendingQuestions } from "./session/prompt-io";
 import {
   activeUsage,
@@ -176,6 +177,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     const lsp = deps.lsp;
     state.lspDiagnose = () => lsp.diagnose(deps.baseDir ?? process.cwd());
   }
+  // Общий вотчер карты: в web сессия главного агента не запускается, поэтому
+  // плагин индексатора его не поднимает — владельцем становится веб-хост.
+  const detachIndexWatcher = attachIndexWatcher(deps.indexer);
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
 
   // Веб-онли интерактивные тулы: `question`/`approve` через SSE + `/api/answer`.
@@ -270,6 +274,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     host,
     url,
     stop: () => {
+      detachIndexWatcher();
       cancelPendingQuestions(state);
       stopOutputForwarding();
       state.pool.clear();

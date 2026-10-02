@@ -536,6 +536,9 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Map** (`ProjectMapInfo`: status, `updatedAt`, watcher, files/symbols/tokens, root, top-8 языков)
   рендерится `assets/js/sidebar.js`; кнопка **Re-index** шлёт `POST /api/index`
   (новый роут → `WebUiState.refreshIndex` → `broadcast` события `state` по завершении).
+  Вотчер карты (`watch`/`unwatch`) в вебе поднимает сам веб-хост (`attachIndexWatcher`,
+  `src/modules/webui/index-watcher.ts`) на старте `startWebUi` и снимает в `stop()`: в web
+  сессия главного агента не гоняется, поэтому REPL-хук `onSessionStart` индексатора не срабатывает.
 - **Trace** — живой per-session буфер (cap 500, DOM ограничен, одна строка на вызов тула,
   текстовый стрим сворачивается в одну обновляемую строку, полный текст — в деталях,
   cap 20K); master-detail
@@ -549,10 +552,12 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   серверный `turnSeq` (`WebUiState.turnSeq`). Git-операции отдельным событием не выделяются
   (тонут в `bash`, эвристика по префиксу хрупкая) — команда видна в строке тула.
 - **Backend:** `ProjectMapInfo`/`ProjectMapLanguage` в `src/core/host.ts`; `IndexerModule.mapInfo()`
-  + `builtAt` в кэше индекса; `WebIndexer.mapInfo?/refresh?`; `POST /api/index`.
+  + `builtAt` в кэше индекса; `WebIndexer.mapInfo?/refresh?/watch?/unwatch?`; `attachIndexWatcher`
+  (`src/modules/webui/index-watcher.ts`, вотчер на время жизни web-хоста); `POST /api/index`.
 - **Тесты:** `tests/indexer-module.test.ts`, `tests/modules/indexer/cache.test.ts`,
   `tests/webui-usage.test.ts`, `tests/webui-server.test.ts`, `tests/webui-assets.test.ts`, `tests/i18n.test.ts`,
-  `tests/webui-log.test.ts` (хвост лога + `turnSeq`), e2e `web-boot` (Trace-панель + жизненный цикл индекса).
+  `tests/webui-index-watcher.test.ts`, `tests/webui-log.test.ts` (хвост лога + `turnSeq`),
+  e2e `web-boot` (Trace-панель + жизненный цикл индекса).
 
 ### Session Auto-Naming (2.6.0)
 
