@@ -1,10 +1,76 @@
 // Feed container + sticky-scroll + read-only run folding for `mma web`.
 // Extracted from `feed.js`; the streaming/turn/history handlers stay there and
 // import these primitives. `feed.js` re-exports this module's public surface.
-import { msgs, el } from "../dom.js";
+import { msgs, el, setIcon } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
 import { S } from "../store.js";
 import { formatMs, verbosity } from "../format.js";
+import { copyText } from "../../md.js";
+
+// ---------------------------------------------------------------------------
+// Shared render helpers used by the stream/turn/history clusters. They live
+// here (the base module every cluster imports) so those clusters never need to
+// import one another.
+// ---------------------------------------------------------------------------
+
+// Options passed to the streaming Markdown renderer: localized code-block copy
+// labels. Highlighting is applied by `md.js` once a fence closes. `animate`
+// wraps live-streamed text chunks in `span.tk` (CSS `tkIn` fade); history
+// render and code blocks skip it.
+export function mdOpts(animate) {
+  return {
+    copyLabel: t("web.code.copy"),
+    copiedLabel: t("web.code.copied"),
+    copyFailedLabel: t("web.code.copy_failed"),
+    animate: animate === true,
+  };
+}
+
+// Build the collapsible reasoning block. The global `.think-h` click handler
+// depends on this exact structure: wrap > [head, body], body carries `hidden`.
+// `live` marks an in-progress block (pulsing label); history renders static.
+export function buildThinkBlock(withDur, live) {
+  const wrap = el("div", "think" + (live === false ? "" : " live"));
+  const head = el("button", "think-h");
+  head.type = "button";
+  head.setAttribute("aria-expanded", "false");
+  head.appendChild(el("span", "g", "✦"));
+  head.appendChild(el("span", "lab", t("web.action.thinking")));
+  if (withDur) head.appendChild(el("span", "dur", ""));
+  const tog = el("span", "tog");
+  setIcon(tog, "chevron-right", t("web.action.show"));
+  head.appendChild(tog);
+  const body = el("div", "think-body hidden");
+  wrap.appendChild(head);
+  wrap.appendChild(body);
+  return { wrap, head, body };
+}
+
+// Per-message copy action button (whole response as plain text / as Markdown).
+export function copyAction(payload, labelKey) {
+  const btn = el("button", "act-btn", t(labelKey));
+  btn.type = "button";
+  btn.addEventListener("click", () => {
+    copyText(payload).then((ok) => {
+      btn.textContent = ok ? "✓ " + t("web.code.copied") : "⚠ " + t("web.code.copy_failed");
+      window.setTimeout(() => {
+        btn.textContent = t(labelKey);
+      }, 1400);
+    });
+  });
+  return btn;
+}
+
+// Copy-actions row appended after a completed assistant answer.
+export function appendActionsRow(feed, plain, markdown) {
+  const text = String(plain == null ? "" : plain);
+  const md = String(markdown == null ? "" : markdown);
+  if (!feed || (!text.trim() && !md.trim())) return;
+  const bar = el("div", "msg-actions");
+  if (text.trim()) bar.appendChild(copyAction(text, "web.msg.copy"));
+  if (md.trim()) bar.appendChild(copyAction(md, "web.msg.copy_md"));
+  appendTo(feed, bar);
+}
 
 function insertAfter(ref, node) {
   if (ref && ref.parentNode) ref.parentNode.insertBefore(node, ref.nextSibling);

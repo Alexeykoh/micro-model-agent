@@ -1,6 +1,6 @@
 // Feed, turn-stream handlers, history, question UI and sidebar renders.
 // All SSE `on*` handlers live here; `app.js` only wires them to EventSource.
-import { mountMarkdown, renderMarkdown, copyText } from "../md.js";
+import { mountMarkdown, copyText } from "../md.js";
 import {
 msgs, planEl, planCountEl,
 el, icon, setIcon, link, announce,
@@ -14,24 +14,13 @@ categoryOf, labelOf, argText, formatMs, verbosity, firstOutputLine, fmtTokens,
 } from "./format.js";
 import {
   activeFeed, liveFeed, feedForEvent, clearBusy, clearEmpty, flushRun,
-  appendTo, scroll, showBusy, insertAfter, scrollToBottom, feedHasContent,
+  appendTo, scroll, showBusy, insertAfter,
+  mdOpts, buildThinkBlock, appendActionsRow,
 } from "./feed/core.js";
 export * from "./feed/core.js";
 export * from "./feed/sidebar.js";
+export * from "./feed/history.js";
 
-
-// Options passed to the streaming Markdown renderer: localized code-block
-// copy labels. Highlighting is applied by `md.js` once a fence closes.
-// `animate` wraps live-streamed text chunks in `span.tk` (CSS `tkIn` fade);
-// history render and code blocks skip it.
-function mdOpts(animate) {
-  return {
-    copyLabel: t("web.code.copy"),
-    copiedLabel: t("web.code.copied"),
-    copyFailedLabel: t("web.code.copy_failed"),
-    animate: animate === true,
-  };
-}
 
 // Close the active Markdown segment (if any) and clear the text S.state.
 export function finishMd() {
@@ -109,26 +98,6 @@ export function finishThink() {
     }
   }
   S.curThink = null;
-}
-
-// Build the collapsible reasoning block. The global `.think-h` click handler
-// depends on this exact structure: wrap > [head, body], body carries `hidden`.
-// `live` marks an in-progress block (pulsing label); history renders static.
-function buildThinkBlock(withDur, live) {
-  const wrap = el("div", "think" + (live === false ? "" : " live"));
-  const head = el("button", "think-h");
-  head.type = "button";
-  head.setAttribute("aria-expanded", "false");
-  head.appendChild(el("span", "g", "✦"));
-  head.appendChild(el("span", "lab", t("web.action.thinking")));
-  if (withDur) head.appendChild(el("span", "dur", ""));
-  const tog = el("span", "tog");
-  setIcon(tog, "chevron-right", t("web.action.show"));
-  head.appendChild(tog);
-  const body = el("div", "think-body hidden");
-  wrap.appendChild(head);
-  wrap.appendChild(body);
-  return { wrap, head, body };
 }
 
 export function onReasoning(chunk, sid) {
@@ -459,31 +428,6 @@ export function resetTurnText() {
   S.turnRoots = [];
 }
 
-// Per-message copy actions (whole response as plain text / as Markdown).
-function copyAction(payload, labelKey) {
-  const btn = el("button", "act-btn", t(labelKey));
-  btn.type = "button";
-  btn.addEventListener("click", () => {
-    copyText(payload).then((ok) => {
-      btn.textContent = ok ? "✓ " + t("web.code.copied") : "⚠ " + t("web.code.copy_failed");
-      window.setTimeout(() => {
-        btn.textContent = t(labelKey);
-      }, 1400);
-    });
-  });
-  return btn;
-}
-
-function appendActionsRow(feed, plain, markdown) {
-  const text = String(plain == null ? "" : plain);
-  const md = String(markdown == null ? "" : markdown);
-  if (!feed || (!text.trim() && !md.trim())) return;
-  const bar = el("div", "msg-actions");
-  if (text.trim()) bar.appendChild(copyAction(text, "web.msg.copy"));
-  if (md.trim()) bar.appendChild(copyAction(md, "web.msg.copy_md"));
-  appendTo(feed, bar);
-}
-
 export function onErrorEvent(data) {
   if (!data || !data.error) return;
   const feed = feedForEvent(data.sessionId);
@@ -517,121 +461,6 @@ export function onLog(data) {
   line.textContent = glyph + data.text;
   appendTo(feed, line);
   if (level === "error" || level === "warn") announce(data.text);
-}
-
-// In-loop critic verdicts are session-log only (`critic_verdict` in
-// `session.jsonl`): the chat keeps user-facing notices and verbose-mode
-// diagnostics, not verifier verdicts.
-
-function renderAssistantText(feed, text) {
-  const raw = String(text == null ? "" : text);
-  if (!raw.trim()) return;
-  const root = renderMarkdown(feed, raw, mdOpts());
-  appendActionsRow(feed, root.innerText || root.textContent || "", raw);
-}
-
-function renderThinkBlock(feed, text) {
-  const { wrap, body } = buildThinkBlock(false, false);
-  body.textContent = text || "";
-  feed.appendChild(wrap);
-}
-
-function renderHistoryAct(feed, entry, statusNodes) {
-  const line = el("div", "act " + categoryOf(entry.name));
-  line.appendChild(el("span", "g", "◇"));
-  line.appendChild(el("span", "lab", labelOf(entry.name)));
-  const args = argText(entry.args);
-  if (args) {
-    line.appendChild(el("span", "sep", "·"));
-    line.appendChild(el("span", "args", args));
-  }
-  const status = el("span", "ok", "");
-  line.appendChild(status);
-  feed.appendChild(line);
-  if (entry.toolCallId) statusNodes.set(entry.toolCallId, status);
-}
-
-function renderHistoryResult(feed, entry, statusNodes) {
-  const dur = formatMs(entry.duration);
-  const mark = (entry.success ? " ✓" : " ✗") + (dur ? " " + dur : "");
-  const status = entry.toolCallId ? statusNodes.get(entry.toolCallId) : null;
-  if (status) {
-    status.textContent = mark;
-    if (!entry.success) status.classList.add("fail");
-    statusNodes.delete(entry.toolCallId);
-    return;
-  }
-  const line = el("div", "act " + categoryOf(entry.tool));
-  line.appendChild(el("span", "g", "↳"));
-  line.appendChild(el("span", "lab", labelOf(entry.tool)));
-  line.appendChild(el("span", "ok" + (entry.success ? "" : " fail"), mark));
-  feed.appendChild(line);
-}
-
-function renderHistory(feed, entries) {
-  const statusNodes = new Map();
-  entries.forEach((entry) => {
-    if (!entry || typeof entry.kind !== "string") return;
-    switch (entry.kind) {
-      case "user":
-        feed.appendChild(el("div", "u", entry.text || ""));
-        break;
-      case "assistant":
-        renderAssistantText(feed, entry.text || "");
-        break;
-      case "reasoning":
-        renderThinkBlock(feed, entry.text || "");
-        break;
-      case "tool_call":
-        renderHistoryAct(feed, entry, statusNodes);
-        break;
-      case "tool_result":
-        renderHistoryResult(feed, entry, statusNodes);
-        break;
-      case "plan":
-        if (entry.text) feed.appendChild(el("div", "sysline", "▸ " + entry.text));
-        break;
-      case "context":
-        if (entry.text) feed.appendChild(el("div", "detail", "↳ " + entry.text));
-        break;
-      case "error":
-        feed.appendChild(el("div", "errline", "✗ " + (entry.text || "")));
-        break;
-      case "system":
-        if (entry.text) feed.appendChild(el("div", "sysline", entry.text));
-        break;
-    }
-  });
-}
-
-export async function loadHistory(tab) {
-  if (!tab || tab.historyLoaded || tab.historyLoading) return { gone: !!tab.dead };
-  tab.historyLoading = true;
-  const placeholder = el("div", "detail", t("web.history.loading"));
-  if (!feedHasContent(tab.feed)) {
-    clearEmpty(tab.feed);
-    tab.feed.appendChild(placeholder);
-  }
-  const r = await api("/api/sessions/" + encodeURIComponent(tab.id) + "/history");
-  tab.historyLoading = false;
-  placeholder.remove();
-  tab.historyLoaded = true;
-  tab.historyFailed = false;
-  if (!r.ok || !r.data || !Array.isArray(r.data.history)) {
-    // 404 — сессии нет на сервере (удалена/подчищена): таб мёртв, ретраи
-    // бесполезны, их размечает вызывающий (markTabDead). Остальное —
-    // транзиент: одна строка и повтор при следующем открытии.
-    if (r.status === 404) return { gone: true };
-    tab.historyFailed = true;
-    if (!feedHasContent(tab.feed)) tab.feed.appendChild(el("div", "detail", t("web.history.unavailable")));
-    return { gone: false };
-  }
-  // A live session already rendered its content over SSE: don't duplicate it.
-  if (feedHasContent(tab.feed)) return;
-  renderHistory(tab.feed, r.data.history);
-  if (!r.data.history.length) tab.feed.appendChild(el("div", "detail", t("web.history.empty")));
-  if (tab.feed === activeFeed()) scrollToBottom();
-  else if (tab.feed === liveFeed()) scrollToBottom();
 }
 
 // One marking for a plan step, shared by the sidebar (`renderPlan`) and the
