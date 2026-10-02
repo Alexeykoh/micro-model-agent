@@ -22,13 +22,15 @@ import {
 } from "../src/core/bootstrap/session-runner";
 
 function silentLogger() {
-  return {
+  const l = {
     debug: () => {},
     info: () => {},
     warn: () => {},
     error: () => {},
     diagnostic: () => {},
-  } as never;
+    forSession: () => l,
+  };
+  return l as never;
 }
 
 function testConfig() {

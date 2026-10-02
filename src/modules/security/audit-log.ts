@@ -25,41 +25,58 @@ export interface AuditLogEntry {
 }
 
 let _globalAuditDir = globalLogsDir();
-let _sessionAuditDir: string | null = null;
+let _defaultSessionDir: string | null = null;
+/** Каталог аудита по сессиям: параллельные раннеры пишут каждый в свой. */
+const _sessionDirs = new Map<string, string>();
 
-function getAuditDir(): string {
-  return _sessionAuditDir ?? _globalAuditDir;
-}
-
-/**
- * Назначить каталог аудита для сессии: записи идут туда вместо глобального.
- */
-export function setAuditSessionDir(dir: string): void {
-  _sessionAuditDir = dir;
+function ensureDir(dir: string): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 }
 
-/** Сбросить каталог сессии — возврат к глобальному каталогу аудита. */
-export function clearAuditSessionDir(): void {
-  _sessionAuditDir = null;
+function getAuditDir(sessionId?: string): string {
+  if (sessionId) {
+    const dir = _sessionDirs.get(sessionId);
+    if (dir) return dir;
+  }
+  return _defaultSessionDir ?? _globalAuditDir;
+}
+
+/**
+ * Назначить каталог аудита для сессии: записи с этим `sessionId` идут туда.
+ * Без `sessionId` — каталог по умолчанию (одно-сессионный CLI-режим).
+ * @param dir каталог; @param sessionId id сессии (опционально).
+ */
+export function setAuditSessionDir(dir: string, sessionId?: string): void {
+  ensureDir(dir);
+  if (sessionId) _sessionDirs.set(sessionId, dir);
+  else _defaultSessionDir = dir;
+}
+
+/**
+ * Сбросить каталог сессии — записи снова идут в каталог по умолчанию.
+ * Без `sessionId` — сброс дефолтного каталога (legacy).
+ * @param sessionId id сессии (опционально).
+ */
+export function clearAuditSessionDir(sessionId?: string): void {
+  if (sessionId) _sessionDirs.delete(sessionId);
+  else _defaultSessionDir = null;
 }
 
 /** Назначить глобальный каталог аудита (когда каталог сессии не активен). */
 export function setGlobalAuditDir(dir: string): void {
   _globalAuditDir = dir;
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
-  }
+  ensureDir(dir);
 }
 
 /**
  * Записать запись аудита в audit.jsonl и уведомить notifier.
+ * Каталог резолвится по `entry.sessionId` (параллельные сессии не смешиваются).
  * Ошибки записи/уведомления глушатся — аудит не должен ронять агента.
  */
 export function logAudit(entry: AuditLogEntry): void {
-  const dir = getAuditDir();
+  const dir = getAuditDir(entry.sessionId);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
