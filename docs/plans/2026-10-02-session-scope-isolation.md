@@ -17,6 +17,16 @@ providerIdentity/processRegistry), передаваемый main и каждом
 **Ветка:** `feat/session-scope-isolation` (создать от актуального `master`).
 **Базовая линия:** `tsc --noEmit` — 0 ошибок; web-тесты сессий — 52 pass.
 
+> **Статус (2026-10-02, ветка `feat/session-scope-isolation`):**
+> сделано — P0-4 (`create` не прунит пустые), P0-5 (busy-gate записи конфига,
+> slash + REST 409), P0-1 (per-session `Logger.forSession` + session-scoped
+> audit-dir), P0-6 (session-scoped kill-реестр процессов). Полный `bun test`:
+> 2989 pass / 0 fail, `tsc` 0.
+> осталось — **P0-2** (identity сессии провайдера: упирается в shared
+> `llmProvider`/`ProviderManager.getSessionId`, требует решения §4.3 спеки) и
+> **P0-3** (OutputEvent.sessionId + фильтрация на web-стоке/в сайдбаре —
+> смыкается с подписками плана B).
+
 ---
 
 ## Phase 0: Тестовая сеть (без неё дальше вслепую)
