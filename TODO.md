@@ -42,10 +42,13 @@
   - Фаза 0 baseline+guard → Фаза 1 подпапки → Фаза 2 role-интерфейсы → Фаза 3 leaf-модули
     → Фаза 4 `menus.js` (снять инверсию) → Фаза 5 разрез feed/tabs/settings → Фаза 6 срезы `S`
     → Фаза 7 docs/release. Фазы 0–4 = A+C без глубокого риска; 5–6 = B.
-- **Статус (2026-10-02):** Phase 0–2 ✅ (backend, цели A+B). Коммиты: `a75fd52` (guard+baseline),
-  `c61d062` (доменные подпапки), `7f3b8bf` (role-интерфейсы `WebUiState` + строгий guard без
-  whitelist). Полный прогон `3022 pass / 0 fail`. Фронт (Phase 3–6) — не начат. Побочно:
-  работа параллельной сессии (index-watcher) сохранена отдельным коммитом `e8955e7`.
+- **Статус (2026-10-02):** Phase 0–3 ✅. Коммиты: `a75fd52` (guard+baseline), `c61d062`
+  (доменные подпапки), `7f3b8bf` (role-интерфейсы `WebUiState` + строгий guard без whitelist),
+  `80888e0` (`settings/{controls,editors}`), `ed7c952` (barrel `sidebar` + `sidebar/{state,trace,map,lsp,core}`),
+  `e945e53` (`feed/core.js`). `assets.ts` читает `js/**` рекурсивно. 37 webui-тест-файлов
+  `331 pass / 0 fail`, `tsc` чисто. Осталось: Phase 4 (`menus.js`), Phase 5 (разрез feed/tabs/settings),
+  Phase 6 (срезы `S`), Phase 7 (docs/release). Побочно: работа параллельной сессии (index-watcher)
+  сохранена отдельным коммитом `e8955e7`.
 
 ## Осталось (по приоритетам, 2026-09-25)
 

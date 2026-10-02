@@ -121,20 +121,17 @@ Modify ~35 модулей-потребителей.
 **Files:** `settings-controls.js` → `settings/controls.js` + `settings/editors.js`;
 `sidebar.js` → `session/sidebar/{core,trace,map,lsp}.js`; `feed.js` → `feed/core.js`.
 
-- [ ] **Step 1:** `settings-controls.js` (452) → `controls.js` (`controlFor`, `PANEL_SECTIONS`,
-      `keyToPanel`) + `editors.js` (`tagsEditor`/`checkboxEditor`/`tableEditor`); `validateJson`
-      — в `controls.js` или tiny `json.js`. Цель — ≤300 каждый.
-- [ ] **Step 2:** `sidebar.js` (859) → `sidebar/core.js` (DOM-рефы, вкладки, `mapKv`,
-      `applySidebarI18n`, `initSidebar`), `sidebar/trace.js` (формат/список/деталь/log-добор),
-      `sidebar/map.js`, `sidebar/lsp.js`. `sbEl`/`mapKv` — в `core` (лист).
-- [ ] **Step 3:** `feed.js` (1260) → выделить `feed/core.js`: контейнер/скролл/примитивы
-      (`activeFeed`, `liveFeed`, `appendTo`, `clearEmpty`, `finishMd`, `finishThink`,
-      `scrollToBottom`, `feedHasContent`) — их импортит `tabs`. Остальные кластеры `feed/*` —
-      следующие шаги (или отложить в фазу 5).
-- [ ] **Step 4:** `app.js` и другие потребители — импорты на новые пути; сервер отдаёт
-      `js/**` рекурсивно (уже `jsModules` в `assets.ts` — проверить рекурсию/ключи).
-- [ ] Прогон: `node --check` по новым файлам, обход import-графа (guard Phase 0), `bun test`,
-      `bun run test:e2e` (по запросу).
+- [x] **Step 1:** `settings-controls.js` (452) → `js/settings/controls.js` + `js/settings/editors.js`.
+      `settings.js` и тесты обновлены. Commit `80888e0`.
+- [x] **Step 2:** `sidebar.js` → тонкий barrel + `js/sidebar/{state,trace,map,lsp,core}.js`
+      (путь `js/sidebar/*` вместо `session/sidebar/*` — сохраняет существующие импорты/ключи,
+      тот же эффект; общий контекст `sb` в `state.js`). Commit `ed7c952`.
+- [x] **Step 3:** `feed.js` → `js/feed/core.js` (контейнер/скролл/сворачивание + `feedHasContent`/
+      `syncUrl`, чтобы не было цикла core→feed); `feed.js` реэкспортит core. Commit `e945e53`.
+- [x] **Step 4:** `assets.ts` читает `js/**` **рекурсивно** (ключи `js/settings/controls.js` и
+      т.п.); сервер уже отдаёт `/js/<subpath>`. Проверено `loadAssets()`.
+- [x] Прогон: `node --check` по новым файлам; guard-граф ацикличен; 37 webui-тест-файлов
+      **331 pass / 0 fail / 5 skip**; `tsc` чисто. e2e — по запросу.
 
 ---
 
