@@ -160,6 +160,7 @@ export function createSessionRunnerFactory(
     runnerExec.switchSession(sessionId);
     const runnerDetector = new HallucinationDetector(baseDir, llmProvider, {
       judgeEnabled: config.hallucination?.judge?.enabled ?? false,
+      sessionId,
     });
     runnerExec.setHallucinationDetector(runnerDetector);
     contextManager.setPlanSummaryProvider(() => runnerExec.getPlanSummary());

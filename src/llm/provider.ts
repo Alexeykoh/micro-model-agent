@@ -72,6 +72,12 @@ export interface ChatOptions {
   reasoningEffort?: ReasoningLevel;
   /** Как провайдер выражает effort в API-запросе. */
   reasoningStrategy?: ReasoningStrategy;
+  /**
+   * Id сессии-владельца запроса: перебивает провайдерский `getSessionId`.
+   * Нужно параллельным раннерам — иначе заголовок `x-opencode-session` и
+   * cache-ключи брались бы из main-сессии, а не из своей.
+   */
+  sessionId?: string;
 }
 
 /** Интерфейс LLM-провайдера: стрим чата, подсчёт токенов, список моделей. */

@@ -361,7 +361,7 @@ export class OpenAICompatProvider implements LLMProvider {
       maxTokens,
       reasoningEffort: options?.reasoningEffort,
       reasoningStrategy: options?.reasoningStrategy,
-      ...this.cacheHints(),
+      ...this.cacheHints(options?.sessionId),
     });
     this.debug?.("LLM stream request", {
       baseUrl: this.config.baseUrl,
@@ -374,7 +374,7 @@ export class OpenAICompatProvider implements LLMProvider {
       messagesCount: messages.length,
     });
     const { headers, abortSignal, cleanup, isTimeout, flagTimeout, controller } =
-      this.buildRequestSetup(signal);
+      this.buildRequestSetup(signal, REQUEST_TIMEOUT_MS, options?.sessionId);
 
     let response: Response;
     try {
@@ -640,13 +640,13 @@ export class OpenAICompatProvider implements LLMProvider {
    * Вычисляет запросные подсказки кеша из возможностей провайдера и текущего
    * session id. Без capability возвращает «ничего», сохраняя прежнее тело.
    */
-  private cacheHints(): {
+  private cacheHints(overrideSessionId?: string): {
     cachePrompt: boolean;
     promptCacheKey?: string;
     sessionId?: string;
     streamUsage: boolean;
   } {
-    const sessionId = this.getSessionId?.();
+    const sessionId = overrideSessionId ?? this.getSessionId?.();
     return {
       cachePrompt: this.cache?.requestCachePrompt === true,
       promptCacheKey: this.cache?.requestPromptCacheKey ? sessionId : undefined,
@@ -659,6 +659,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private buildRequestSetup(
     signal?: AbortSignal,
     totalTimeoutMs: number = REQUEST_TIMEOUT_MS,
+    overrideSessionId?: string,
   ): {
     headers: Record<string, string>;
     abortSignal: AbortSignal;
@@ -674,7 +675,7 @@ export class OpenAICompatProvider implements LLMProvider {
     if (this.config.apiKey && this.config.apiKey !== "not-needed") {
       headers.Authorization = `Bearer ${this.config.apiKey}`;
     }
-    const sessionId = this.getSessionId?.();
+    const sessionId = overrideSessionId ?? this.getSessionId?.();
     // Когда capability задана — шлём заголовок только тем, кому он нужен
     // (Zen/Go). Без capability сохраняем легаси-поведение.
     const sendSessionHeader = this.cache ? this.cache.sessionHeader : true;
@@ -724,12 +725,13 @@ export class OpenAICompatProvider implements LLMProvider {
       maxTokens,
       reasoningEffort: options?.reasoningEffort,
       reasoningStrategy: options?.reasoningStrategy,
-      ...this.cacheHints(),
+      ...this.cacheHints(options?.sessionId),
     });
 
     const { headers, abortSignal, cleanup, isTimeout } = this.buildRequestSetup(
       signal,
       totalTimeoutMs,
+      options?.sessionId,
     );
 
     try {

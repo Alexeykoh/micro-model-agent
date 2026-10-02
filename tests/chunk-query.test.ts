@@ -10,15 +10,20 @@ import type { Message } from "../src/llm/provider";
 function mockProvider(answers: string[], delayMs = 5) {
   let inFlight = 0;
   let maxInFlight = 0;
-  const calls: Array<{ system: string; user: string }> = [];
+  const calls: Array<{ system: string; user: string; sessionId?: string }> = [];
   const provider = {
-    chat: async function* (messages: Message[]) {
+    chat: async function* (
+      messages: Message[],
+      _tools?: unknown,
+      _signal?: unknown,
+      options?: { sessionId?: string },
+    ) {
       inFlight++;
       maxInFlight = Math.max(maxInFlight, inFlight);
       await new Promise((r) => setTimeout(r, delayMs));
       const system = messages.find((m) => m.role === "system")?.content as string;
       const user = messages.find((m) => m.role === "user")?.content as string;
-      calls.push({ system, user });
+      calls.push({ system, user, sessionId: options?.sessionId });
       const isChunkCall = system === DEFAULT_CHUNK_SYSTEM_PROMPT;
       const isSynthCall = system === DEFAULT_SYNTHESIS_SYSTEM_PROMPT;
       let content = "";
@@ -64,6 +69,18 @@ describe("runChunkQuery", () => {
     expect(res.synthesis).toBe("SYNTHESIS");
     expect(maxInFlight()).toBeLessThanOrEqual(2);
     expect(res.maxParallelObserved).toBeLessThanOrEqual(2);
+  });
+
+  it("forwards the owning sessionId to every chunk and synthesis call", async () => {
+    const { provider, calls } = mockProvider(["A1", "A2", "A3"]);
+    const text = Array.from({ length: 90 }, (_, i) => `row${i}${"-".repeat(15)}`).join("\n");
+    await runChunkQuery(provider as any, text, "q", {
+      chunkChars: 200,
+      maxParallel: 2,
+      sessionId: "ses_owner",
+    });
+    expect(calls.length).toBeGreaterThan(1);
+    expect(calls.every((c) => c.sessionId === "ses_owner")).toBe(true);
   });
 
   it("skips synthesis when synthesize=false", async () => {

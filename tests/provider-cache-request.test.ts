@@ -155,6 +155,42 @@ describe("cache request hints", () => {
   });
 });
 
+describe("per-call session override (parallel runners)", () => {
+  it("options.sessionId overrides provider getSessionId for the session header", async () => {
+    const capture: Capture = {};
+    mockStream(capture);
+    const provider = makeProvider(cache({ sessionHeader: true }), "ses_main");
+
+    for await (const _ of provider.chat(
+      [{ role: "user", content: "hi" }],
+      undefined,
+      undefined,
+      { sessionId: "ses_runner" },
+    )) {
+    }
+    expect(capture.headers?.["x-opencode-session"]).toBe("ses_runner");
+  });
+
+  it("options.sessionId overrides for prompt_cache_key and session_id", async () => {
+    const capture: Capture = {};
+    mockStream(capture);
+    const provider = makeProvider(
+      cache({ requestPromptCacheKey: true, requestSessionId: true }),
+      "ses_main",
+    );
+
+    for await (const _ of provider.chat(
+      [{ role: "user", content: "hi" }],
+      undefined,
+      undefined,
+      { sessionId: "ses_runner" },
+    )) {
+    }
+    expect(capture.body.prompt_cache_key).toBe("ses_runner");
+    expect(capture.body.session_id).toBe("ses_runner");
+  });
+});
+
 describe("x-opencode-session gating", () => {
   it("sends the session header when sessionHeader is on (Zen/Go)", async () => {
     const capture: Capture = {};

@@ -505,6 +505,7 @@ export class Agent {
       provider: cfg.instructions?.summarize === false ? null : this.deps.llmProvider,
       cacheDir: join(projectMmaDir(this.deps.baseDir), "cache", "prompt-summaries"),
       logger: this.deps.logger,
+      sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
     });
     for (const r of res.replacements) {
       if (r.kind) this.promptOverrides.set(r.kind, r);
@@ -671,7 +672,7 @@ export class Agent {
               [{ role: "user", content: prompt }],
               undefined,
               signal,
-              { maxTokens: 48, reasoningEffort: "none" },
+              { maxTokens: 48, reasoningEffort: "none", sessionId: meta?.id },
             )) {
               if (chunk.type === "text" && chunk.content) text += chunk.content;
             }
@@ -1015,7 +1016,7 @@ export class Agent {
           history,
           allToolsForBudget as ToolDefinition[],
           this.abortController?.signal,
-          reasoning.level ? { reasoningEffort: reasoning.level, reasoningStrategy: reasoning.strategy } : undefined,
+          reasoning.level ? { reasoningEffort: reasoning.level, reasoningStrategy: reasoning.strategy, sessionId: this.deps.sessionManager?.getActiveMeta()?.id } : { sessionId: this.deps.sessionManager?.getActiveMeta()?.id },
         )) {
           if (this.shutdownRequested) break;
           if (chunk.type === "text" && chunk.content) {
