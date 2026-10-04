@@ -11,13 +11,28 @@
 // no `innerHTML`. Link/image URLs are restricted to http(s)/mailto/data-image.
 
 import * as smd from "./smd.js";
+import type { Dict } from "./js/core/store/types.js";
+
+// Vendored `smd.js` ships its own inferred renderer-data type; our token bag is
+// structurally compatible but typed loosely, so cast at the interop boundary.
+type SmdData = Parameters<typeof smd.default_add_token>[0];
+
+declare global {
+  interface Window {
+    hljs?: {
+      getLanguage(lang: string): unknown;
+      highlight(code: string, opts: { language: string; ignoreIllegals: boolean }): { value: string };
+      highlightAuto(code: string): { value: string };
+    };
+  }
+}
 
 const COPY_ICON =
   '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>';
 const CHECK_ICON = '<path d="M20 6 9 17l-5-5"/>';
 
-function svgIcon(inner) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+function svgIcon(inner: string): SVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg") as SVGSVGElement;
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("fill", "none");
   svg.setAttribute("stroke", "currentColor");
@@ -36,12 +51,12 @@ function svgIcon(inner) {
   return svg;
 }
 
-function setBtnIcon(btn, inner) {
+function setBtnIcon(btn: HTMLElement, inner: string): void {
   btn.replaceChildren(svgIcon(inner));
 }
 
 /** Copy `text` to the clipboard. Resolves to `true` on success. */
-export function copyText(text) {
+export function copyText(text: unknown): Promise<boolean> {
   const value = String(text == null ? "" : text);
   if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
     return navigator.clipboard.writeText(value).then(
@@ -54,7 +69,7 @@ export function copyText(text) {
 
 // Legacy path for non-secure origins (`mma web --host <lan-ip>`) and older
 // browsers without the async Clipboard API.
-function fallbackCopy(text) {
+function fallbackCopy(text: string): boolean {
   const ta = document.createElement("textarea");
   ta.value = text;
   ta.setAttribute("readonly", "");
@@ -66,20 +81,20 @@ function fallbackCopy(text) {
   try {
     ta.select();
     ok = document.execCommand("copy");
-  } catch (err) {
+  } catch {
     ok = false;
   }
   ta.remove();
   return ok;
 }
 
-function nodesFromHtml(html) {
+function nodesFromHtml(html: string): Node[] {
   const doc = new DOMParser().parseFromString(html, "text/html");
   return Array.from(doc.body.childNodes).map((n) => document.importNode(n, true));
 }
 
 /** Highlight `codeEl` in place. Returns `true` when highlighting was applied. */
-export function highlightInto(codeEl, code, lang) {
+export function highlightInto(codeEl: HTMLElement, code: string, lang: string): boolean {
   const hljs = window.hljs;
   if (!hljs || !code) return false;
   try {
@@ -90,12 +105,12 @@ export function highlightInto(codeEl, code, lang) {
     codeEl.replaceChildren(...nodesFromHtml(html));
     codeEl.classList.add("hljs");
     return true;
-  } catch (err) {
+  } catch {
     return false;
   }
 }
 
-function safeUrl(raw, isImage) {
+function safeUrl(raw: unknown, isImage: boolean): string | null {
   if (typeof raw !== "string" || !raw) return null;
   const s = raw.trim();
   if (isImage && /^data:image\/[a-z0-9.+-]+;/i.test(s)) return s;
@@ -104,13 +119,13 @@ function safeUrl(raw, isImage) {
     if (u.protocol === "http:" || u.protocol === "https:" || u.protocol === "mailto:") {
       return u.href;
     }
-  } catch (err) {
+  } catch {
     /* relative or malformed */
   }
   return null;
 }
 
-function makeCopyButton(opts) {
+function makeCopyButton(opts: Dict): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "cb-copy";
@@ -121,7 +136,7 @@ function makeCopyButton(opts) {
   return btn;
 }
 
-function flashButton(btn, inner, label, ms) {
+function flashButton(btn: HTMLButtonElement, inner: string, label: string | null | undefined, ms: number): void {
   const prevTitle = btn.title;
   setBtnIcon(btn, inner);
   if (label) {
@@ -137,17 +152,17 @@ function flashButton(btn, inner, label, ms) {
   }, ms);
 }
 
-function wireCopy(btn, codeEl, opts) {
+function wireCopy(btn: HTMLButtonElement, codeEl: HTMLElement, opts: Dict): void {
   btn.addEventListener("click", () => {
     if (btn.disabled) return;
-    copyText(codeEl.textContent).then((ok) => {
+    void copyText(codeEl.textContent).then((ok) => {
       if (ok) flashButton(btn, CHECK_ICON, opts.copiedLabel || "copied", 1400);
       else flashButton(btn, COPY_ICON, opts.copyFailedLabel || "copy failed", 1800);
     });
   });
 }
 
-function addToken(data, type) {
+function addToken(data: Dict, type: unknown): void {
   data.types.push(type);
   if (type === smd.CODE_BLOCK || type === smd.CODE_FENCE) {
     const parent = data.nodes[data.index];
@@ -171,10 +186,10 @@ function addToken(data, type) {
     wireCopy(btn, codeEl, data.opts);
     return;
   }
-  smd.default_add_token(data, type);
+  smd.default_add_token(data as unknown as SmdData, type as never);
 }
 
-function finalizeCode(data) {
+function finalizeCode(data: Dict): void {
   const c = data.code;
   if (!c) return;
   if (data.opts.highlight !== false) highlightInto(c.codeEl, c.text, c.lang);
@@ -183,16 +198,16 @@ function finalizeCode(data) {
   c.btn.disabled = false;
 }
 
-function endToken(data) {
+function endToken(data: Dict): void {
   const type = data.types.pop();
   if (type === smd.CODE_BLOCK || type === smd.CODE_FENCE) {
     finalizeCode(data);
     data.code = null;
   }
-  smd.default_end_token(data);
+  smd.default_end_token(data as unknown as SmdData);
 }
 
-function addText(data, text) {
+function addText(data: Dict, text: string): void {
   if (data.code) {
     data.code.text += text;
     data.code.codeEl.appendChild(document.createTextNode(text));
@@ -212,10 +227,10 @@ function addText(data, text) {
     data.nodes[data.index].appendChild(span);
     return;
   }
-  smd.default_add_text(data, text);
+  smd.default_add_text(data as unknown as SmdData, text);
 }
 
-function setAttr(data, type, value) {
+function setAttr(data: Dict, type: unknown, value: unknown): void {
   if (data.code && type === smd.LANG) {
     const lang = String(value || "").trim().toLowerCase().split(/\s+/)[0] || "";
     data.code.lang = lang;
@@ -240,19 +255,25 @@ function setAttr(data, type, value) {
     }
     return;
   }
-  smd.default_set_attr(data, type, value);
+  smd.default_set_attr(data as unknown as SmdData, type as never, value as string);
+}
+
+export interface MdHandle {
+  root: HTMLElement;
+  write(chunk: unknown): void;
+  end(): void;
 }
 
 /**
  * Mount a streaming Markdown renderer that appends a `.md` container to
  * `parent`. Feed chunks with `write`, finish the segment with `end`.
  */
-export function mountMarkdown(parent, opts) {
+export function mountMarkdown(parent: HTMLElement, opts?: Dict): MdHandle {
   const options = opts || {};
   const root = document.createElement("div");
   root.className = "md";
   parent.appendChild(root);
-  const data = {
+  const data: Dict = {
     root,
     nodes: [root],
     index: 0,
@@ -261,7 +282,7 @@ export function mountMarkdown(parent, opts) {
     opts: options,
   };
   const parser = smd.parser({
-    data,
+    data: data as unknown as SmdData,
     add_token: addToken,
     end_token: endToken,
     add_text: addText,
@@ -283,7 +304,7 @@ export function mountMarkdown(parent, opts) {
 }
 
 /** Render a complete Markdown string into a fresh `.md` container. */
-export function renderMarkdown(parent, text, opts) {
+export function renderMarkdown(parent: HTMLElement, text: string, opts?: Dict): HTMLElement {
   const m = mountMarkdown(parent, opts);
   m.write(text);
   m.end();

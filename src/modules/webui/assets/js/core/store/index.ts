@@ -23,6 +23,7 @@ export interface StoreHooks {
   // biome-ignore lint/suspicious/noExplicitAny: hook signature owned by app.ts.
   applyStaticI18n: ((...args: any[]) => void) | null;
   refreshState?: (() => void) | null;
+  applyState?: ((snapshot: Dict, busy: unknown, extra?: Dict) => void) | null;
 }
 
 export const hooks: StoreHooks = { applyStaticI18n: null };

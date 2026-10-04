@@ -294,7 +294,7 @@ describe("webui assets", () => {
     expect(tabs).toContain("sidebarSessionChanged(id)");
     expect(tabs).toContain("hooks.refreshState?.()");
     // Guard against a stale response clobbering a newer tab.
-    expect(a.js).toContain("if (tabState.activeTabId !== sid) return;");
+    expect(a.js).toMatch(/tabState\.activeTabId !== sid\)\s*return;/);
   });
 
   it("uses one shared EventSource so all tabs stream live (no per-session reconnect)", () => {
@@ -322,7 +322,7 @@ describe("webui assets", () => {
     expect(a.js).toContain("sidebarSessionId()");
     // Background sessions must not advance the sidebar turn counter or clear
     // its live indicator.
-    expect(a.js).toContain("if (sidebarOwns(d)) { sidebarTurnEnd(");
+    expect(a.js).toMatch(/if \(sidebarOwns\(d\)\) \{\s*sidebarTurnEnd\(/);
   });
 
   it("wires the sidebar tabs (session / map / trace) with master-detail", () => {

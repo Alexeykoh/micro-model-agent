@@ -2,23 +2,24 @@ import { msgs, inp, connStatus, setIcon, icon } from "./js/dom.js";
 import { api, token } from "./js/api.js";
 import { I18N, t, loadI18n } from "./js/i18n.js";
 import { tabs as tabState, session, settings, hooks } from "./js/store.js";
+import type { Dict } from "./js/core/store/types.js";
 import {
-onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
-onTurnEnd, onErrorEvent, onCommandOutput, onLog, onPlan, onQuestion,
-onRetract,
-showEmptyFeed, renderPlan, renderUsage, renderEnvironment, renderWorkspace,
-feedHasContent, loadHistory,
+  onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
+  onTurnEnd, onErrorEvent, onCommandOutput, onLog, onPlan, onQuestion,
+  onRetract,
+  showEmptyFeed, renderPlan, renderUsage, renderEnvironment, renderWorkspace,
+  feedHasContent, loadHistory,
 } from "./js/feed.js";
 import {
-openTab, updateTabName, renderSessionsDropdown, reflectBusy, loadSessions,
-loadCommands, setTabStatus, reconcileTabStatuses,
+  openTab, updateTabName, renderSessionsDropdown, reflectBusy, loadSessions,
+  loadCommands, setTabStatus, reconcileTabStatuses,
 } from "./js/session/tabs.js";
 import {
-renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
-loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyFontSize, setConnStatus, setStaleBar,
+  renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
+  loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyFontSize, setConnStatus, setStaleBar,
 } from "./js/settings.js";
 import {
-initRail, setPlan as railPlan, railEvent, applyRailI18n,
+  initRail, setPlan as railPlan, railEvent, applyRailI18n,
 } from "./js/rail.js";
 import {
   initSidebar, sidebarSessionChanged, sidebarMapState,
@@ -28,7 +29,13 @@ import {
   applySidebarI18n,
 } from "./js/sidebar.js";
 
-document.querySelectorAll("[data-collapse]").forEach((head) => {
+declare global {
+  interface Window {
+    MmaSetup?: { maybeOpen: () => Promise<boolean> };
+  }
+}
+
+document.querySelectorAll<HTMLElement>("[data-collapse]").forEach((head) => {
   const initArrow = head.querySelector(".arrow");
   if (initArrow) {
     initArrow.textContent = "";
@@ -63,7 +70,7 @@ if (sidebarBtn) {
   });
 }
 
-function renderState(snapshot, busy, extra) {
+function renderState(snapshot: Dict, busy: unknown, extra?: Dict): void {
   session.host = snapshot || {};
   session.busy = !!busy;
   session.runningSessionId = (extra && extra.runningSessionId) || null;
@@ -100,16 +107,16 @@ function renderState(snapshot, busy, extra) {
   setStaleBar(!!(snapshot && snapshot.i18nStale));
 }
 
-async function refresh() {
+async function refresh(): Promise<void> {
   // Scope the snapshot to the client's active tab: the sidebar must show the
   // session it is actually viewing, not the server's active one.
   const sid = tabState.activeTabId;
   const url = sid ? "/api/state?session=" + encodeURIComponent(sid) : "/api/state";
-  const r = await api(url);
+  const r = await api<{ state?: Dict; busy?: unknown }>(url);
   if (!r.ok || !r.data) return;
   // Guard: a switch during the fetch must not clobber the new tab.
   if (tabState.activeTabId !== sid) return;
-  renderState(r.data.state, r.data.busy, r.data);
+  renderState(r.data.state || {}, r.data.busy, r.data);
 }
 
 // Cross-module hooks (registered once app boot wires the renderers). Lets
@@ -117,12 +124,12 @@ async function refresh() {
 hooks.applyState = renderState;
 hooks.refreshState = refresh;
 
-function resyncAfterReconnect() {
-  refresh();
+function resyncAfterReconnect(): void {
+  void refresh();
   const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   if (tab && tab.kind === "session" && !feedHasContent(tab.feed)) {
     tab.historyLoaded = false;
-    loadHistory(tab);
+    void loadHistory(tab);
   }
 }
 
@@ -130,7 +137,7 @@ function resyncAfterReconnect() {
 // session's events, and each tab routes them client-side (`feedForEvent` by
 // `sessionId`). A single stream keeps ALL open tabs (background included)
 // streaming live — no per-tab reconnect.
-function connectSSE() {
+function connectSSE(): void {
   const sseUrl = "/events" + (token ? "?token=" + encodeURIComponent(token) : "");
   const es = new EventSource(sseUrl);
   let dropped = false;
@@ -143,23 +150,23 @@ function connectSSE() {
   es.onerror = (e) => {
     // A server-sent `event: error` also lands here but carries `data`; only a
     // real transport drop has none. Don't flag a live stream as disconnected.
-    if (e && typeof e.data === "string") return;
+    if (e && typeof (e as MessageEvent).data === "string") return;
     dropped = true;
     setConnStatus(true);
   };
-  const parse = (e) => {
+  const parse = (e: MessageEvent): Dict | null => {
     try {
-      return JSON.parse(e.data);
-    } catch (err) {
+      return JSON.parse(e.data) as Dict;
+    } catch {
       return null;
     }
   };
   // Sidebar Trace follows its own session: drop events stamped with a different
   // sessionId (background runners). Events without one are global/legacy.
-  const sidebarOwns = (d) => !d.sessionId || d.sessionId === sidebarSessionId();
+  const sidebarOwns = (d: Dict) => !d.sessionId || d.sessionId === sidebarSessionId();
 // SSE event → feed handler table. `command`/`state`/`error` need envelope
 // checks and stay bespoke below; everything else is `parse → null-guard → call`.
-const handlers = [
+const handlers: Array<[string, (d: Dict) => void]> = [
   ["text", (d) => onText(d.chunk || "", d.sessionId)],
   ["meta", (d) => onMeta(d.chunk || "", d.sessionId, d.kind)],
   ["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId)],
@@ -168,7 +175,7 @@ const handlers = [
   ["tool_end", onToolEnd],
   ["plan", onPlan],
   ["question", onQuestion],
-  ["turn_end", (d) => { onTurnEnd(d); if (sidebarOwns(d)) { sidebarTurnEnd(d.turnSeq); sidebarBusy(false); sidebarPullLog(); } }],
+  ["turn_end", (d) => { onTurnEnd(d); if (sidebarOwns(d)) { sidebarTurnEnd(d.turnSeq); sidebarBusy(false); void sidebarPullLog(); } }],
   ["log", onLog],
   ["retract", (d) => onRetract(d.reason || "", d.sessionId)],
 ];
@@ -230,7 +237,7 @@ es.addEventListener("command", (e) => {
       reflectBusy();
       reconcileTabStatuses();
       sidebarBusy(!!d.busy);
-      refresh();
+      void refresh();
       // Usage чужого хода в свой сайдбар не мержим: смотрим вкладку своей
       // (серверно-активной) сессии. Legacy-события без владельца — мержим,
       // как раньше. Промах по активной (гонка activate) закроет 2с-полл.
@@ -242,8 +249,8 @@ es.addEventListener("command", (e) => {
     }
   });
   es.addEventListener("error", (e) => {
-    if (!e.data) return;
-    const d = parse(e);
+    if (!(e as MessageEvent).data) return;
+    const d = parse(e as MessageEvent);
     if (d) {
       if (d.sessionId) setTabStatus(d.sessionId, "failed");
       onErrorEvent(d); sidebarTraceEvent("error", d);
@@ -253,9 +260,9 @@ es.addEventListener("command", (e) => {
 
 // Re-apply the dictionary to static chrome after a locale switch. Dynamic
 // feeds (tool output, model text) are localized server-side and untouched.
-function applyStaticI18n() {
+function applyStaticI18n(): void {
   document.documentElement.lang = I18N.locale;
-  const setText = (id, text) => {
+  const setText = (id: string, text: string) => {
     const node = document.getElementById(id);
     if (node) node.textContent = text;
   };
@@ -271,7 +278,7 @@ function applyStaticI18n() {
   setText("hintAttach", t("web.input.attach"));
 
   // Chrome controls: Lucide icon + label, plus matching title/aria-label.
-  const controls = {
+  const controls: Record<string, [string, string]> = {
     newChat: ["plus", t("web.topbar.new_chat")],
     sessBtn: ["menu", t("web.topbar.all_sessions")],
     toggleSidebar: ["panel", t("web.topbar.sidebar")],
@@ -301,13 +308,13 @@ function applyStaticI18n() {
     inp.setAttribute("aria-label", t("web.input.placeholder"));
   }
 
-  document.querySelectorAll("#setMenu .mi").forEach((mi) => {
+  document.querySelectorAll<HTMLElement>("#setMenu .mi").forEach((mi) => {
     const p = mi.dataset.p;
     if (p) mi.textContent = t("web.settings." + p);
   });
   const settingsSearch = document.getElementById("setSearch");
   if (settingsSearch) {
-    settingsSearch.placeholder = t("web.settings.search_placeholder");
+    settingsSearch.setAttribute("placeholder", t("web.settings.search_placeholder"));
     settingsSearch.setAttribute("aria-label", t("web.settings.search_placeholder"));
   }
   document.querySelectorAll(".content-col .panel").forEach((panel) => {
@@ -325,7 +332,7 @@ function applyStaticI18n() {
   setStaleBar(undefined, true);
 }
 
-async function boot() {
+async function boot(): Promise<void> {
   // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
   const initialSession = new URLSearchParams(location.search).get("session");
   // First-run wizard owns the screen when the server reports a virgin config;
@@ -333,7 +340,7 @@ async function boot() {
   if (window.MmaSetup) {
     try {
       if (await window.MmaSetup.maybeOpen()) return;
-    } catch (err) {
+    } catch {
       /* wizard failure must never brick the chat boot */
     }
   }
@@ -370,11 +377,11 @@ async function boot() {
   }
   connectSSE();
   setInterval(() => {
-    refresh().catch((err) => console.error("refresh failed", err));
+    void refresh().catch((err) => console.error("refresh failed", err));
   }, 2000);
-  setInterval(loadSessions, 15000);
+  setInterval(() => void loadSessions(), 15000);
 }
 
 hooks.applyStaticI18n = applyStaticI18n;
 
-boot();
+void boot();

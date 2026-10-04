@@ -14,29 +14,58 @@
 (() => {
   "use strict";
 
+  type Dict = Record<string, any>;
+
+  interface SetupAnswers {
+    provider: string;
+    apiBase: string;
+    apiKey: string;
+    model: string;
+    contextWindow: number;
+    maxToolIterations: number;
+    locale: string;
+    securityBashBlock: boolean;
+    securityFlagsBlock: boolean;
+    securityPathsRestrict: boolean;
+    securityDetail: Dict;
+    [k: string]: any;
+  }
+
+  interface ApiResult<T> {
+    ok: boolean;
+    status: number;
+    data: T | null;
+  }
+
+  interface ApiOptions {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+  }
+
   const token = new URLSearchParams(location.search).get("token") || "";
-  const gate = document.getElementById("setupGate");
+  const gate = document.getElementById("setupGate") as HTMLElement;
 
   const STEPS = ["language", "provider", "key", "model", "context", "security", "review"];
 
-  const I18N = { locale: "en", dicts: {} };
+  const I18N: { locale: string; dicts: Record<string, Record<string, string>> } = { locale: "en", dicts: {} };
 
-  function tr(key, params) {
+  function tr(key: string, params?: Record<string, string | number>): string {
     const dict = I18N.dicts[I18N.locale] || I18N.dicts.en || {};
     const en = I18N.dicts.en || {};
-    let template = dict[key];
+    let template: string | undefined = dict[key];
     if (template === undefined) template = en[key];
     if (template === undefined) return key;
     if (params) {
       Object.keys(params).forEach((k) => {
-        template = template.split("{" + k + "}").join(String(params[k]));
+        template = (template as string).split("{" + k + "}").join(String(params[k]));
       });
     }
     return template;
   }
 
-  function pluralCount(baseKey, n) {
-    let form;
+  function pluralCount(baseKey: string, n: number): string {
+    let form: string;
     if (I18N.locale === "ru") {
       const m10 = n % 10;
       const m100 = n % 100;
@@ -51,45 +80,51 @@
     return s === key ? tr(baseKey, { count: n }) : s;
   }
 
-  async function api(path, opts = {}) {
-    const headers = Object.assign({}, opts.headers || {});
+  async function api<T = unknown>(path: string, opts: ApiOptions = {}): Promise<ApiResult<T>> {
+    const headers: Record<string, string> = Object.assign({}, opts.headers || {});
     if (opts.body !== undefined) headers["content-type"] = "application/json";
     if (token) headers["x-mma-token"] = token;
-    let res;
+    let res: Response;
     try {
       res = await fetch(path, {
         method: opts.method || "GET",
         headers,
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       });
-    } catch (err) {
+    } catch {
       return { ok: false, status: 0, data: null };
     }
-    let data = null;
+    let data: T | null = null;
     try {
-      data = await res.json();
-    } catch (err) {
+      data = (await res.json()) as T;
+    } catch {
       data = null;
     }
     return { ok: res.ok, status: res.status, data };
   }
 
-  function h(tag, cls, text) {
+  function h<K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    cls?: string | null,
+    text?: string | number | null,
+  ): HTMLElementTagNameMap[K];
+  function h(tag: string, cls?: string | null, text?: string | number | null): HTMLElement;
+  function h(tag: string, cls?: string | null, text?: string | number | null): HTMLElement {
     const node = document.createElement(tag);
     if (cls) node.className = cls;
-    if (text != null) node.textContent = text;
+    if (text != null) node.textContent = String(text);
     return node;
   }
 
-  async function loadI18n() {
-    const r = await api("/api/i18n");
+  async function loadI18n(): Promise<void> {
+    const r = await api<{ locale?: string; dicts?: Record<string, Record<string, string>> }>("/api/i18n");
     if (r.ok && r.data) {
       I18N.locale = r.data.locale || "en";
       I18N.dicts = r.data.dicts || {};
     }
   }
 
-  const state = {
+  const state: { display: Dict | null; step: number; answers: SetupAnswers } = {
     display: null,
     step: 0,
     answers: {
@@ -109,9 +144,9 @@
 
   let opened = false;
 
-  async function maybeOpen() {
+  async function maybeOpen(): Promise<boolean> {
     if (!gate || opened) return opened;
-    const r = await api("/api/setup");
+    const r = await api<Dict>("/api/setup");
     if (!r.ok || !r.data || !r.data.required) return false;
 
     state.display = r.data;
@@ -143,7 +178,7 @@
 
   // --- rendering -------------------------------------------------------------
 
-  function render() {
+  function render(): void {
     closePopup();
     const wrap = h("div", "setup-wrap");
     const title = h("h1", "setup-h");
@@ -158,7 +193,7 @@
     gate.appendChild(wrap);
   }
 
-  function renderSteps() {
+  function renderSteps(): HTMLElement {
     const box = h("div", "setup-steps");
     STEPS.forEach((name, i) => {
       if (i) box.appendChild(h("span", "sep", "·"));
@@ -168,7 +203,7 @@
     return box;
   }
 
-  function stepBody(name) {
+  function stepBody(name: string): HTMLElement {
     const box = h("div", "setup-step");
     box.appendChild(h("h2", "setup-step-title", tr("web.setup." + name + ".title")));
     const hint = tr("web.setup." + name + ".hint");
@@ -176,17 +211,17 @@
     return box;
   }
 
-  function field(label, input) {
+  function field(label: string, input: HTMLElement): HTMLElement {
     const box = h("div", "setup-field");
     box.appendChild(h("label", "setup-label", label));
     box.appendChild(input);
     return box;
   }
 
-  function inputEl(value, type, placeholder) {
+  function inputEl(value: string | number, type?: string, placeholder?: string): HTMLInputElement {
     const input = h("input", "setup-input");
     input.type = type || "text";
-    input.value = value || "";
+    input.value = String(value || "");
     if (placeholder) input.placeholder = placeholder;
     input.addEventListener("input", () => {
       msg = null;
@@ -194,8 +229,8 @@
     return input;
   }
 
-  let msg = null;
-  function messageEl() {
+  let msg: { kind: string; text: string } | null = null;
+  function messageEl(): HTMLElement {
     const el = h("div", "setup-msg");
     if (msg) {
       el.className = "setup-msg " + msg.kind;
@@ -203,16 +238,16 @@
     }
     return el;
   }
-  function setMsg(box, kind, text) {
+  function setMsg(box: Element | null, kind: string, text: string): void {
     msg = { kind, text };
-    const el = box.querySelector(".setup-msg");
+    const el = box ? box.querySelector(".setup-msg") : null;
     if (el) {
       el.className = "setup-msg " + kind;
       el.textContent = text;
     }
   }
 
-  function renderBody() {
+  function renderBody(): HTMLElement {
     const name = STEPS[state.step];
     if (name === "language") return renderLanguage();
     if (name === "provider") return renderProvider();
@@ -223,16 +258,16 @@
     return renderReview();
   }
 
-  function renderLanguage() {
+  function renderLanguage(): HTMLElement {
     const box = stepBody("language");
-    (state.display.languages || []).forEach((l) => {
+    (state.display?.languages || []).forEach((l: Dict) => {
       const btn = h("button", "setup-opt" + (state.answers.locale === l.value ? " on" : ""));
       btn.type = "button";
       btn.appendChild(h("span", "g", state.answers.locale === l.value ? "✓" : "◇"));
       btn.appendChild(h("span", "t", l.label));
       btn.addEventListener("click", async () => {
         state.answers.locale = l.value;
-        const r = await api("/api/setup/locale", { method: "POST", body: { locale: l.value } });
+        const r = await api<{ dicts?: Record<string, Record<string, string>> }>("/api/setup/locale", { method: "POST", body: { locale: l.value } });
         if (r.ok && r.data && r.data.dicts) {
           I18N.dicts = r.data.dicts;
           I18N.locale = l.value;
@@ -244,9 +279,9 @@
     return box;
   }
 
-  function renderProvider() {
+  function renderProvider(): HTMLElement {
     const box = stepBody("provider");
-    (state.display.providers || []).forEach((p) => {
+    (state.display?.providers || []).forEach((p: Dict) => {
       const on = state.answers.provider === p.type;
       const btn = h("button", "setup-opt" + (on ? " on" : ""));
       btn.type = "button";
@@ -276,7 +311,7 @@
       }
       test.disabled = true;
       setMsg(box, "", tr("web.setup.provider.testing"));
-      const r = await api("/api/setup/models", {
+      const r = await api<{ models?: unknown[] }>("/api/setup/models", {
         method: "POST",
         body: { baseUrl: state.answers.apiBase, apiKey: state.answers.apiKey },
       });
@@ -294,7 +329,7 @@
       scan.addEventListener("click", async () => {
         scan.disabled = true;
         setMsg(box, "", "");
-        const r = await api("/api/setup/scan", { method: "POST" });
+        const r = await api<{ servers?: Dict[] }>("/api/setup/scan", { method: "POST" });
         scan.disabled = false;
         const servers = (r.ok && r.data && r.data.servers) || [];
         if (!r.ok) {
@@ -307,7 +342,7 @@
         }
         setMsg(box, "ok", pluralCount("web.setup.provider.scan_found", servers.length));
         results.innerHTML = "";
-        servers.forEach((srv) => {
+        servers.forEach((srv: Dict) => {
           const b = h("button", "setup-opt");
           b.type = "button";
           b.appendChild(h("span", "g", "↳"));
@@ -330,7 +365,7 @@
     return box;
   }
 
-  function renderKey() {
+  function renderKey(): HTMLElement {
     const box = stepBody("key");
     const input = inputEl(state.answers.apiKey, "password", tr("web.setup.key.placeholder"));
     input.addEventListener("input", () => {
@@ -341,7 +376,7 @@
     return box;
   }
 
-  function renderModel() {
+  function renderModel(): HTMLElement {
     const box = stepBody("model");
     const input = inputEl(state.answers.model, "text", "qwen/qwen3.5-9b");
     input.addEventListener("input", () => {
@@ -359,7 +394,7 @@
     load.addEventListener("click", async () => {
       load.disabled = true;
       setMsg(box, "", "");
-      const r = await api("/api/setup/models", {
+      const r = await api<{ models?: string[] }>("/api/setup/models", {
         method: "POST",
         body: { baseUrl: state.answers.apiBase, apiKey: state.answers.apiKey },
       });
@@ -392,7 +427,7 @@
       }
       test.disabled = true;
       setMsg(box, "", tr("web.setup.model.testing"));
-      const r = await api("/api/setup/test", {
+      const r = await api<{ ok?: boolean }>("/api/setup/test", {
         method: "POST",
         body: {
           baseUrl: state.answers.apiBase,
@@ -413,7 +448,7 @@
     return box;
   }
 
-  function renderContext() {
+  function renderContext(): HTMLElement {
     const box = stepBody("context");
     const cw = h("input", "setup-input");
     cw.type = "number";
@@ -434,7 +469,7 @@
       }
       detect.disabled = true;
       setMsg(box, "", tr("web.setup.context.detecting"));
-      const r = await api("/api/setup/context", {
+      const r = await api<{ ok?: boolean; contextWindow?: number }>("/api/setup/context", {
         method: "POST",
         body: {
           baseUrl: state.answers.apiBase,
@@ -469,9 +504,9 @@
     return box;
   }
 
-  function renderSecurity() {
+  function renderSecurity(): HTMLElement {
     const box = stepBody("security");
-    const toggles = [
+    const toggles: Array<[string, string, string, string]> = [
       ["securityPathsRestrict", "web.setup.security.paths", "web.setup.security.paths_desc", "paths"],
       ["securityBashBlock", "web.setup.security.bash", "web.setup.security.bash_desc", "bash"],
       ["securityFlagsBlock", "web.setup.security.flags", "web.setup.security.flags_desc", "flags"],
@@ -506,7 +541,7 @@
   }
 
   // Описание поп-апов тонкой настройки: путь в securityDetail + тип поля.
-  const SECURITY_POPUPS = {
+  const SECURITY_POPUPS: Record<string, Array<[string, string, string]>> = {
     paths: [
       ["paths.denied", "list", "web.setup.security.denied"],
       ["paths.allowed", "list", "web.setup.security.allowed"],
@@ -540,19 +575,19 @@
     ],
   };
   const SEVERITIES = ["low", "medium", "high", "critical"];
-  const GROUP_KEYS = {
+  const GROUP_KEYS: Record<string, string[]> = {
     paths: ["paths"],
     bash: ["bash"],
     flags: ["flags"],
     advanced: ["network", "advanced"],
   };
 
-  function getPath(obj, path) {
-    return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
+  function getPath(obj: Dict, path: string): unknown {
+    return path.split(".").reduce<unknown>((o, k) => (o == null ? undefined : (o as Dict)[k]), obj);
   }
-  function setPath(obj, path, value) {
+  function setPath(obj: Dict, path: string, value: unknown): void {
     const keys = path.split(".");
-    let cur = obj;
+    let cur: Dict = obj;
     for (let i = 0; i < keys.length - 1; i++) {
       if (typeof cur[keys[i]] !== "object" || cur[keys[i]] === null) cur[keys[i]] = {};
       cur = cur[keys[i]];
@@ -560,7 +595,7 @@
     cur[keys[keys.length - 1]] = value;
   }
 
-  function detailButton(group, title) {
+  function detailButton(group: string, title: string): HTMLButtonElement {
     const btn = h("button", "setup-detail-btn");
     btn.type = "button";
     btn.appendChild(h("span", "g", "⚙"));
@@ -573,9 +608,9 @@
     return btn;
   }
 
-  let popup = null;
+  let popup: HTMLElement | null = null;
 
-  function openSecurityPopup(group, title) {
+  function openSecurityPopup(group: string, title: string): void {
     const overlay = h("div", "setup-overlay");
     const modal = h("div", "setup-modal");
     modal.setAttribute("role", "dialog");
@@ -602,9 +637,9 @@
     const reset = h("button", "setup-btn link", tr("web.setup.security.reset"));
     reset.type = "button";
     reset.addEventListener("click", () => {
-      const defaults = (state.display && state.display.defaults && state.display.defaults.security) || {};
+      const defaults: Dict = (state.display && state.display.defaults && state.display.defaults.security) || {};
       (GROUP_KEYS[group] || [group]).forEach((src) => {
-        const fresh = defaults[src] || {};
+        const fresh: Dict = defaults[src] || {};
         Object.keys(fresh).forEach((k) => setPath(state.answers.securityDetail, src + "." + k, fresh[k]));
       });
       closePopup();
@@ -626,13 +661,13 @@
     gate.appendChild(overlay);
   }
 
-  function popupField(path, type, label) {
+  function popupField(path: string, type: string, label: string): HTMLElement {
     const wrap = h("div", "setup-field");
     if (type === "list") {
       wrap.appendChild(h("label", "setup-label", label));
       const ta = h("textarea", "setup-input setup-textarea");
       const cur = getPath(state.answers.securityDetail, path);
-      ta.value = Array.isArray(cur) ? cur.join("\n") : "";
+      ta.value = Array.isArray(cur) ? (cur as string[]).join("\n") : "";
       ta.rows = 5;
       ta.spellcheck = false;
       ta.addEventListener("input", () => {
@@ -680,28 +715,28 @@
     return wrap;
   }
 
-  function closePopup() {
+  function closePopup(): void {
     if (popup && popup.parentNode) popup.parentNode.removeChild(popup);
     popup = null;
   }
 
-  function securitySummary() {
-    const on = [];
+  function securitySummary(): string {
+    const on: string[] = [];
     if (state.answers.securityPathsRestrict) on.push(tr("web.setup.security.paths"));
     if (state.answers.securityBashBlock) on.push(tr("web.setup.security.bash"));
     if (state.answers.securityFlagsBlock) on.push(tr("web.setup.security.flags"));
     return on.length ? on.join(", ") : tr("web.setup.review.security_off");
   }
 
-  function maskedKey() {
+  function maskedKey(): string {
     const k = state.answers.apiKey;
     if (!k) return tr("web.setup.review.not_needed");
     return k.length <= 4 ? "••••" : "••••" + k.slice(-4);
   }
 
-  function renderReview() {
+  function renderReview(): HTMLElement {
     const box = stepBody("review");
-    const rows = [
+    const rows: Array<[string, string]> = [
       [tr("web.setup.review.provider"), state.answers.provider],
       [tr("web.setup.review.baseUrl"), state.answers.apiBase],
       [tr("web.setup.review.apiKey"), maskedKey()],
@@ -723,7 +758,7 @@
     return box;
   }
 
-  function validate() {
+  function validate(): string | null {
     const name = STEPS[state.step];
     if (name === "provider" && !state.answers.apiBase) return tr("web.setup.provider.required");
     if (name === "model" && !state.answers.model) return tr("web.setup.model.required");
@@ -734,7 +769,7 @@
     return null;
   }
 
-  function renderActions() {
+  function renderActions(): HTMLElement {
     const box = h("div", "setup-actions");
     const back = h("button", "setup-btn", tr("web.setup.back"));
     back.type = "button";
@@ -765,13 +800,13 @@
     } else {
       const finish = h("button", "setup-btn primary", tr("web.setup.finish"));
       finish.type = "button";
-      finish.addEventListener("click", () => finishSetup(finish));
+      finish.addEventListener("click", () => void finishSetup(finish));
       box.appendChild(finish);
     }
     return box;
   }
 
-  async function finishSetup(btn) {
+  async function finishSetup(btn: HTMLButtonElement): Promise<void> {
     const err = validate();
     if (err) {
       setMsg(gate.querySelector(".setup-step"), "err", err);
@@ -779,7 +814,7 @@
     }
     btn.disabled = true;
     setMsg(gate.querySelector(".setup-step"), "", tr("web.setup.saving"));
-    const r = await api("/api/setup", {
+    const r = await api<{ warning?: string }>("/api/setup", {
       method: "POST",
       body: {
         provider: state.answers.provider,
