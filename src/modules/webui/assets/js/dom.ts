@@ -2,7 +2,7 @@
 // No dependencies: every other module builds on these.
 
 export const msgs = document.getElementById("msgs") as HTMLElement;
-export const inp = document.getElementById("inp") as HTMLElement;
+export const inp = document.getElementById("inp") as HTMLTextAreaElement;
 export const tabstripEl = document.getElementById("tabstrip") as HTMLElement;
 export const planEl = document.getElementById("plan") as HTMLElement;
 export const planCountEl = document.getElementById("planCount") as HTMLElement;
@@ -12,7 +12,7 @@ export const wsLine = document.getElementById("wsLine") as HTMLElement;
 export const saveIndicator = document.getElementById("saveIndicator") as HTMLElement;
 export const attachStrip = document.getElementById("attachStrip") as HTMLElement;
 export const attachErr = document.getElementById("attachErr") as HTMLElement;
-export const imgPicker = document.getElementById("imgPicker") as HTMLElement;
+export const imgPicker = document.getElementById("imgPicker") as HTMLInputElement;
 export const connStatus = document.getElementById("connStatus") as HTMLElement;
 export const staleBar = document.getElementById("staleBar") as HTMLElement;
 export const liveEl = document.getElementById("live") as HTMLElement;

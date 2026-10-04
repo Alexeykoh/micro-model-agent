@@ -313,8 +313,10 @@ After Phase 4 every asset is `.ts` except vendored `smd.js`/`hljs.js`.
 
 ## Phase 5: Close-out
 
-### Task 5.1: Drop `allowJs`
-- [ ] Set `allowJs: false` in `tsconfig.frontend.json`; run `bunx tsc -p tsconfig.frontend.json`; fix any fallout; commit.
+### Task 5.1: `allowJs` stays (vendored only)
+- [x] Keep `allowJs: true` in `tsconfig.frontend.json` — it is now needed only to
+  import the vendored `smd.js` from `md.ts`; all first-party code is `.ts`.
+- [x] `tsc -p tsconfig.frontend.json` green.
 
 ### Task 5.2: Docs
 - [ ] Update AGENTS.md «WebUI Modularization» section: frontend is now TS; note the

@@ -43,7 +43,8 @@
     `moduleResolution: "Bundler"`, `strict: true`, `noEmit: true`;
   - `allowJs: true`, `checkJs: false` — позволяет **инкрементальную** миграцию:
     уже переведённые `.ts` проверяются строго, ещё не переведённые `.js` резолвятся,
-    но не типизируются. По завершении миграции `allowJs` можно выключить.
+    но не типизируются. После завершения миграции `allowJs` остаётся **только** ради
+    импорта вендоренного `smd.js` из `md.ts` (наш код — весь `.ts`).
   - `skipLibCheck: true`, `resolveJsonModule: true`, `allowImportingTsExtensions: true`.
 - Основной `tsconfig.json` **исключает** `src/modules/webui/assets/**` (иначе `document`
   не найдётся в node-проекте). Взамен `quality` запускает `tsc -p tsconfig.frontend.json`.
