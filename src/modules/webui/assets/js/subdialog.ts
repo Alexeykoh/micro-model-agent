@@ -5,32 +5,32 @@ import { trapTab } from "./dialog.js";
 
 const subOverlay = document.getElementById("subOverlay");
 const subHost = document.getElementById("subHost");
-const subTitle = document.getElementById("subTitle");
+const subTitle = document.getElementById("subTitle") as HTMLElement;
 const closeSubBtn = document.getElementById("closeSub");
-let subReturnFocus = null;
-let subOnClose = null;
+let subReturnFocus: HTMLElement | null = null;
+let subOnClose: (() => void) | null = null;
 
-export function isSubDialogOpen() {
+export function isSubDialogOpen(): boolean {
   return !!subOverlay && subOverlay.classList.contains("open");
 }
 
 /** Open the nested dialog with a built content node. `onClose` runs after. */
-export function openSubDialog(title, node, onClose) {
+export function openSubDialog(title: string, node: Node, onClose?: (() => void) | null): void {
   if (!subOverlay || !subHost) return;
-  subReturnFocus = document.activeElement;
+  subReturnFocus = document.activeElement as HTMLElement | null;
   subOnClose = onClose || null;
   subTitle.textContent = title;
   subHost.textContent = "";
   subHost.appendChild(node);
   subOverlay.classList.add("open");
   setTimeout(() => {
-    const first = subHost.querySelector("input, select, textarea");
+    const first = subHost.querySelector<HTMLElement>("input, select, textarea");
     if (first) first.focus();
   }, 0);
 }
 
-export function closeSubDialog() {
-  if (!isSubDialogOpen()) return;
+export function closeSubDialog(): void {
+  if (!isSubDialogOpen() || !subOverlay) return;
   subOverlay.classList.remove("open");
   const after = subOnClose;
   subOnClose = null;
