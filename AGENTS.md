@@ -714,6 +714,26 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   зависящие от форматирования (`if (…) return;`), сделаны whitespace-толерантными
   (транспилятор переносит `return` на новую строку).
 
+### npm Build Optimization (unreleased)
+
+Спека: [docs/specs/2026-10-04-npm-build-optimization-design.md](./docs/specs/2026-10-04-npm-build-optimization-design.md);
+план: [docs/plans/2026-10-04-npm-build-optimization.md](./docs/plans/2026-10-04-npm-build-optimization.md).
+Прод-пакет **8.17 MB → 1.73 MB**, `main.js` **7.68 MB → 1.11 MB**. Контракты не менялись.
+
+- **Внешние зависимости:** `build:bundle` = `bun build … --packages external`.
+  Зависимости (все в `dependencies`) резолвятся из `node_modules` при запуске —
+  в рантайме ничего не докачивается из сети.
+- **Минификация:** `scripts/optimize-dist.ts` (esbuild) минифицирует `dist/**/*.{js,mjs,css}`
+  (`charset: "utf8"` — иначе кириллица эскейпится в `\uXXXX` и ru-словарь пухнет ~2×)
+  и `*.json` через `JSON.parse/stringify`. Mangling идентификаторов = лёгкая
+  обфускация; sourcemaps не кладём. `build:prod` = `clean → bundle → frontend →
+  copy-assets → optimize`.
+- **Чистота:** `scripts/clean.ts` (портативно вместо Windows-only `cmd`),
+  `build-frontend` пропускает пустые type-only транспиляции (0-байтный `types.js`).
+- **Лёгкий tiktoken:** `token-counter.ts` использует `js-tiktoken/lite` +
+  `js-tiktoken/ranks/cl100k_base` (~1.1 MB вместо ~5.6 MB всех таблиц); `estimateTokens`
+  перекалиброван под cl100k (кириллица ≈ /2.5).
+
 ### Current Version: 2.17.0
 
 ### Changelog
