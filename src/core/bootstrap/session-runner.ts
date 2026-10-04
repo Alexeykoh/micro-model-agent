@@ -36,6 +36,7 @@ import type { ContextProbeResult } from "../../llm/model-loader";
 import type { EnvironmentReport } from "../environment";
 import { ContextLogger } from "../agent/context-log";
 import { createSetThinkingTool } from "../../tools/set-thinking";
+import { buildActiveProvider } from "../../modules/providers/factory";
 import { applyProbedContext } from "./provider-phase";
 import type { SilentLogger } from "./state";
 import {
@@ -67,8 +68,6 @@ export interface SessionRunner {
 export interface SessionRunnerTemplate {
   config: AppConfig;
   configRef: { current: AppConfig };
-  llmProvider: LLMProvider;
-  providerManager: ProviderManager;
   logger: Logger;
   baseDir: string;
   configDir: string;
@@ -106,10 +105,8 @@ export function createSessionRunnerFactory(
 ): (sessionId: string) => SessionRunner {
   return (sessionId: string): SessionRunner => {
     const {
-      config,
+      config: bootConfig,
       configRef,
-      llmProvider,
-      providerManager,
       logger,
       baseDir,
       configDir,
@@ -134,6 +131,17 @@ export function createSessionRunnerFactory(
     // Запиненный sibling поверх общего стора: пишет только свою сессию,
     // чужой activeId не трогает. Нет сессии — бросает (коллер уже вернул 404).
     const pinned = sessionManager.forkPinned(sessionId);
+
+    // Живой конфиг — источник правды. Раннер, поднятый ПОСЛЕ смены модели/
+    // провайдера, обязан собрать провайдера из него, а не из bootstrap-снимка
+    // (`reconfigure` догоняет лишь уже закешированные раннеры): иначе новая
+    // сессия/вкладка до первого reconfigure ходит старой моделью.
+    const config = configRef.current ?? bootConfig;
+    const { manager: providerManager, provider: llmProvider } = buildActiveProvider(
+      config,
+      logger,
+      { getSessionId: () => pinned.getActiveMeta()?.id ?? sessionId },
+    );
 
     // Свой Logger на раннер: посессионный `.log` и `sessionDir` (app.jsonl) —
     // иначе общий Logger перевешивался бы ходом соседней параллельной сессии.

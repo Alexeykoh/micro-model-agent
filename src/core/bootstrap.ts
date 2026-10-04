@@ -191,8 +191,6 @@ export async function bootstrap(
     spawnSessionRunner: createSessionRunnerFactory({
       config,
       configRef: session.configRef,
-      llmProvider: provider.llmProvider,
-      providerManager: provider.providerManager,
       logger,
       baseDir: workspace.baseDir,
       configDir: dir,

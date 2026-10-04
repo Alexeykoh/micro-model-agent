@@ -58,8 +58,6 @@ function setup() {
   const template = {
     config: testConfig(),
     configRef: { current: testConfig() },
-    llmProvider: {} as never,
-    providerManager: { activeName: "test" } as never,
     logger: silentLogger(),
     baseDir,
     configDir: dir,
@@ -162,6 +160,22 @@ describe("session runner factory", () => {
     expect(() => sessionManager.forkPinned("ses_nope")).toThrow();
     expect(sessionManager.list().length).toBe(1);
     expect(() => createSessionRunnerFactory(template)("ses_nope")).toThrow();
+  });
+
+  it("spawns a runner with the LIVE model after a config switch", () => {
+    const { template } = setup();
+    const spawn = createSessionRunnerFactory(template);
+
+    const first = spawn(template.sessionManager.create("first").id);
+    const providerModel = (agent: unknown): string =>
+      (agent as { deps: { llmProvider: { model: string } } }).deps.llmProvider.model;
+    expect(providerModel(first.agent)).toBe("test-model");
+
+    // Model switch mutates the live shared config (as `setConfigValue` does).
+    // A runner spawned afterwards must NOT inherit the bootstrap snapshot.
+    template.configRef.current.model = "switched-model";
+    const second = spawn(template.sessionManager.create("second").id);
+    expect(providerModel(second.agent)).toBe("switched-model");
   });
 
   it("registry clone carries shared tools without touching the original", () => {
