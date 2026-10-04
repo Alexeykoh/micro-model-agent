@@ -15,6 +15,7 @@ import {
   sendLine,
   waitCmdOut,
   apiGet,
+  apiPost,
   artifactsDirFor,
   writeArtifacts,
   type Launched,
@@ -204,6 +205,15 @@ describe("web e2e: settings", () => {
       const dir = artifactsDirFor("settings-data");
       await withE2E(dir, async (srv, { page, errors }: Launched) => {
         const { baseUrl } = srv;
+        // Seed one MCP server so the plugins panel actually has a toggle to
+        // exercise (the default config ships none).
+        const seeded = await apiPost(baseUrl, "/api/mcp", {
+          name: "e2e-toggle",
+          transport: "stdio",
+          command: "node",
+          enabled: true,
+        });
+        expect(seeded.status).toBe(200);
         await openSettings(page);
 
         // Model panel renders something: the live catalog when this box serves

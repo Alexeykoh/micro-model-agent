@@ -21,7 +21,15 @@ import { describe, expect } from "vitest";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { expectNonVirgin } from "./web-harness";
-import { e2e, launch, withE2E, artifactsDirFor, writeArtifacts, type Launched } from "./web-helpers";
+import {
+  e2e,
+  launch,
+  withE2E,
+  fillProviderForm,
+  artifactsDirFor,
+  writeArtifacts,
+  type Launched,
+} from "./web-helpers";
 
 async function openModelPanel(page: Page): Promise<void> {
   await page.click("#openSettings");
@@ -65,11 +73,8 @@ async function saveNewProvider(page: Page, baseUrl: string, dir: string): Promis
   const before = await page.locator(".provider-item").count();
   await page.click(".sec-add");
   await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
-  const inputs = page.locator("#subHost input");
   const label = `e2e-prov-${Date.now().toString(36)}`;
-  await inputs.nth(0).fill("openai-compat");
-  await inputs.nth(1).fill(label);
-  await inputs.nth(2).fill("http://127.0.0.1:9/v1");
+  await fillProviderForm(page, { type: "openai-compat", label, baseUrl: "http://127.0.0.1:9/v1" });
   await page.screenshot({ path: join(dir, "dialog-filled.png") });
   // Save/cancel are <button class="linkbtn"> (see `link()` in assets/app.js).
   await page.locator(".pform-actions button").first().click();

@@ -49,7 +49,9 @@ describe("web e2e: composer selectors", () => {
         await page.click("#selReasoningBtn");
         await page.waitForSelector("#selReasoningMenu .mi");
         const items = await page.locator("#selReasoningMenu .mi").allInnerTexts();
-        expect(items.map((s) => s.trim())).toEqual(["auto", "default", "none", "low", "high"]);
+        // The active level carries a `current` sub-label on a second line; the
+        // option set itself is what this asserts.
+        expect(items.map((s) => s.trim().split("\n")[0])).toEqual(["auto", "default", "none", "low", "high"]);
 
         // Switch to high through the real menu; the button follows the server.
         await page.locator("#selReasoningMenu .mi", { hasText: /^high$/ }).click();

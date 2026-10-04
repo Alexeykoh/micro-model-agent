@@ -19,6 +19,7 @@ import {
   waitCmdOut,
   waitForLiveTab,
   apiGet,
+  fillProviderForm,
   artifactsDirFor,
   writeArtifacts,
   type Launched,
@@ -212,9 +213,11 @@ describe("web e2e: config surfaces", () => {
         await form.locator("details.pform-adv > summary").click();
         await form.locator('input[placeholder="8192"]').waitFor({ state: "visible", timeout: 10_000 });
 
-        await form.locator('input[placeholder="openai-compat"]').fill("openai-compat");
-        await form.locator('input[placeholder="my-provider"]').fill("e2e-cap-probe");
-        await form.locator('input[placeholder="http://localhost:1234/v1"]').fill("http://127.0.0.1:9/v1");
+        await fillProviderForm(page, {
+          type: "openai-compat",
+          label: "e2e-cap-probe",
+          baseUrl: "http://127.0.0.1:9/v1",
+        });
         await form.locator('input[placeholder="8192"]').fill("16384");
         await form.locator('select[aria-label="cache mechanism"]').selectOption("local");
         await form.locator(".pform-actions button").first().click();
