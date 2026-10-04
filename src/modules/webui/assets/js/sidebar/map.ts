@@ -4,20 +4,21 @@ import { el } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { fmtTokens } from "../format.js";
+import type { Dict } from "../core/store/types.js";
 import { sb } from "./state.js";
 
-function fmtUpdated(updatedAt) {
+function fmtUpdated(updatedAt: unknown): string {
   if (typeof updatedAt !== "number") return t("web.sidebar.map_never");
   const d = new Date(updatedAt);
   const now = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
+  const pad = (n: number) => String(n).padStart(2, "0");
   const time = pad(d.getHours()) + ":" + pad(d.getMinutes());
   if (d.toDateString() === now.toDateString()) return t("web.sidebar.map_today", { time });
   return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + " " + time;
 }
 
 /** Labelled value row (shared with the LSP tab). */
-export function mapKv(label, value, cls) {
+export function mapKv(label: string, value: string, cls?: string): HTMLElement {
   const row = el("div", ("kv" + (cls ? " " + cls : "")).trim());
   row.appendChild(el("span", "dim", label));
   const b = el("b");
@@ -28,7 +29,7 @@ export function mapKv(label, value, cls) {
 
 // Корень — всегда длинный путь: подпись сверху, путь снизу на всю ширину.
 // В одну flex-строку с подписью он не влезает и склеивается с ней.
-function mapPathRow(label, value) {
+function mapPathRow(label: string, value: string): HTMLElement {
   const wrap = el("div", "map-path");
   wrap.appendChild(el("span", "dim", label));
   const b = el("b");
@@ -38,13 +39,13 @@ function mapPathRow(label, value) {
   return wrap;
 }
 
-export function sidebarMapState(host) {
+export function sidebarMapState(host: Dict): void {
   if (!sb.mapEl) return;
   const map = (host && host.projectMap) || { indexed: false, files: 0, symbols: 0, tokens: 0, languages: [] };
   const serverIndexing = !!(map && map.indexing);
   if (sb.postResolved && !serverIndexing) { sb.reindexing = false; sb.postResolved = false; }
   const indexing = serverIndexing || sb.reindexing;
-  const num = (v) => (map.indexed ? String(v || 0) : "—");
+  const num = (v: unknown) => (map.indexed ? String(v || 0) : "—");
   sb.mapEl.textContent = "";
   const status = indexing ? t("web.sidebar.map_indexing")
     : !map.indexed ? t("web.sidebar.map_never")
@@ -61,7 +62,7 @@ export function sidebarMapState(host) {
     const head = el("div", "kv");
     head.appendChild(el("span", "dim", t("web.sidebar.map_languages")));
     sb.mapEl.appendChild(head);
-    map.languages.forEach((l) => sb.mapEl.appendChild(mapKv(l.language, l.files + " · " + l.symbols)));
+    map.languages.forEach((l: Dict) => sb.mapEl?.appendChild(mapKv(l.language, l.files + " · " + l.symbols)));
   }
   if (sb.reindexError) sb.mapEl.appendChild(mapKv(t("web.sidebar.map_reindex_failed"), "—", "wn"));
 
@@ -88,8 +89,8 @@ export function sidebarMapState(host) {
   sb.mapEl.appendChild(btn);
 }
 
-export function sidebarMapIndicator(host) {
-  const tab = sb.el && sb.el.querySelector('.sb-tab[data-tab="map"]');
+export function sidebarMapIndicator(host: Dict): void {
+  const tab = sb.el && sb.el.querySelector<HTMLElement>('.sb-tab[data-tab="map"]');
   if (!tab) return;
   const map = (host && host.projectMap) || null;
   const busy = (map && map.indexing) || sb.reindexing;

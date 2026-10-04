@@ -4,22 +4,23 @@ import { el } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { labelOf, categoryOf, argText, formatMs } from "../format.js";
-import { sb, paneEl, TRACE_CAP, MAX_OUTPUT_CHARS } from "./state.js";
+import type { Dict } from "../core/store/types.js";
+import { sb, paneEl, TRACE_CAP, MAX_OUTPUT_CHARS, type TraceEntry } from "./state.js";
 
-function phaseLabel(phase) {
+function phaseLabel(phase: unknown): string {
   if (phase === "composing") return t("web.rail.composing");
   if (phase === "tool") return t("web.rail.working");
   if (phase === "thinking") return t("web.action.thinking");
   return String(phase || "");
 }
 
-function catClass(kind, name) {
+function catClass(kind: string, name: string): string {
   if (kind === "tool" || kind === "tool_fail") return categoryOf(name);
   if (kind === "phase") return "phase";
   return "meta";
 }
 
-function rowLabel(entry) {
+function rowLabel(entry: TraceEntry): string {
   switch (entry.kind) {
     case "phase": return phaseLabel(entry.phase);
     case "plan": return t("web.sidebar.trace_plan");
@@ -41,7 +42,7 @@ function rowLabel(entry) {
   }
 }
 
-function rowArgs(entry) {
+function rowArgs(entry: TraceEntry): string {
   if (entry.kind === "text" || entry.kind === "phase") return "";
   if (entry.kind === "plan") {
     const idx = typeof entry.currentIndex === "number" ? entry.currentIndex : 0;
@@ -53,19 +54,19 @@ function rowArgs(entry) {
   // Диагностические строки несут смысл в одной строке (статус/лог/ретракт/
   // индекс/критик/MoE/компакция/проба/usage/аудит/claim/вывод).
   if (entry.text && typeof entry.text === "string" && entry.kind !== "tool" && entry.kind !== "tool_fail") {
-    const line = entry.text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) || "";
+    const line = entry.text.split("\n").map((l: string) => l.trim()).find((l: string) => l.length > 0) || "";
     return line.slice(0, 160);
   }
   return argText(entry.args);
 }
 
-function isWarn(entry) {
+function isWarn(entry: TraceEntry): boolean {
   return entry.kind === "tool_fail" || entry.kind === "error" || entry.kind === "claim" ||
     (entry.kind === "critic" && entry.status === "critical") ||
     (entry.kind === "log" && (entry.level === "warn" || entry.level === "error"));
 }
 
-function renderRow(entry) {
+function renderRow(entry: TraceEntry): HTMLElement {
   const cls = ["trc", catClass(entry.kind, entry.name)];
   if (isWarn(entry)) cls.push("warn");
   if (sb.selected === entry.id) cls.push("sel");
@@ -87,15 +88,16 @@ function renderRow(entry) {
   return row;
 }
 
-export function renderList() {
-  if (!sb.listEl) return;
-  sb.listEl.textContent = "";
-  sb.listEl.dataset.lastTurn = "-1";
+export function renderList(): void {
+  const list = sb.listEl;
+  if (!list) return;
+  list.textContent = "";
+  list.dataset.lastTurn = "-1";
   sb.nodeById.clear();
   sb.headerByTurn.clear();
   if (sb.selected && !sb.trace.some((e) => e.id === sb.selected)) sb.selected = null;
   if (sb.trace.length === 0) {
-    sb.listEl.appendChild(el("div", "trace-turn", t("web.sidebar.trace_empty")));
+    list.appendChild(el("div", "trace-turn", t("web.sidebar.trace_empty")));
     return;
   }
   let shownTurn = -1;
@@ -104,23 +106,24 @@ export function renderList() {
       shownTurn = entry.turn;
       const h = el("div", "trace-turn", t("web.sidebar.trace_turn", { n: entry.turn }));
       sb.headerByTurn.set(entry.turn, h);
-      sb.listEl.appendChild(h);
+      list.appendChild(h);
     }
     const row = renderRow(entry);
     sb.nodeById.set(entry.id, row);
-    sb.listEl.appendChild(row);
+    list.appendChild(row);
   }
-  sb.listEl.dataset.lastTurn = String(shownTurn);
-  sb.listEl.scrollTop = sb.listEl.scrollHeight;
+  list.dataset.lastTurn = String(shownTurn);
+  list.scrollTop = list.scrollHeight;
 }
 
-function append(entry) {
+function append(entry: TraceEntry): TraceEntry {
   entry.id = ++sb.seq;
   entry.turn = sb.turn;
   entry.ts = Date.now();
   sb.trace.push(entry);
   while (sb.trace.length > TRACE_CAP) {
     const old = sb.trace.shift();
+    if (!old) break;
     const node = sb.nodeById.get(old.id);
     if (node) { node.remove(); sb.nodeById.delete(old.id); }
     if (old.toolCallId != null) sb.callIndex.delete(old.toolCallId);
@@ -132,22 +135,23 @@ function append(entry) {
   return entry;
 }
 
-function pushRow(entry) {
-  if (!sb.listEl) return;
-  const last = sb.listEl.dataset.lastTurn ? Number(sb.listEl.dataset.lastTurn) : -1;
+function pushRow(entry: TraceEntry): void {
+  const list = sb.listEl;
+  if (!list) return;
+  const last = list.dataset.lastTurn ? Number(list.dataset.lastTurn) : -1;
   if (entry.turn !== last) {
     const h = el("div", "trace-turn", t("web.sidebar.trace_turn", { n: entry.turn }));
     sb.headerByTurn.set(entry.turn, h);
-    sb.listEl.appendChild(h);
-    sb.listEl.dataset.lastTurn = String(entry.turn);
+    list.appendChild(h);
+    list.dataset.lastTurn = String(entry.turn);
   }
   const row = renderRow(entry);
   sb.nodeById.set(entry.id, row);
-  sb.listEl.appendChild(row);
-  sb.listEl.scrollTop = sb.listEl.scrollHeight;
+  list.appendChild(row);
+  list.scrollTop = list.scrollHeight;
 }
 
-function replaceRow(entry) {
+function replaceRow(entry: TraceEntry): void {
   const old = sb.nodeById.get(entry.id);
   const next = renderRow(entry);
   sb.nodeById.set(entry.id, next);
@@ -156,7 +160,7 @@ function replaceRow(entry) {
   if (sb.listEl) sb.listEl.scrollTop = sb.listEl.scrollHeight;
 }
 
-function updateTextRow(entry) {
+function updateTextRow(entry: TraceEntry): void {
   const row = sb.nodeById.get(entry.id);
   if (!row) return;
   row.textContent = "";
@@ -167,7 +171,7 @@ function updateTextRow(entry) {
 
 // ---- public API ----
 
-export function sidebarSessionChanged(sid) {
+export function sidebarSessionChanged(sid: string | null | undefined): void {
   const prev = sb.el && sb.el.dataset.sid;
   if (prev === (sid || "")) return;
   if (sb.el) sb.el.dataset.sid = sid || "";
@@ -184,7 +188,7 @@ export function sidebarSessionChanged(sid) {
 }
 
 /** Сессия, которой сейчас принадлежит сайдбар (dataset.sid), или null. */
-export function sidebarSessionId() {
+export function sidebarSessionId(): string | null {
   return (sb.el && sb.el.dataset.sid) || null;
 }
 
@@ -192,20 +196,20 @@ export function sidebarSessionId() {
  * Индикатор загрузки секции «Session» (plan/usage). Ставится на переключении
  * вкладки/новой сессии, снимается первым полным снапшотом (`applyState`).
  */
-export function setSessionLoading(on) {
+export function setSessionLoading(on: unknown): void {
   if (!sb.el) return;
   sb.el.classList.toggle("sb-loading", !!on);
   const pane = paneEl("session");
   if (pane) pane.setAttribute("aria-busy", on ? "true" : "false");
 }
 
-export function sidebarTurnEnd(turnSeq) {
+export function sidebarTurnEnd(turnSeq: unknown): void {
   // Серверный номер хода (реконнекты локальный счётчик не сбивают).
   sb.turn = typeof turnSeq === "number" && turnSeq > sb.turn ? turnSeq : sb.turn + 1;
   sb.textEntry = null;
 }
 
-export function sidebarTraceEvent(kind, data) {
+export function sidebarTraceEvent(kind: string, data: Dict): void {
   if (!data) return;
   switch (kind) {
     case "tool_start": {
@@ -302,14 +306,14 @@ export function sidebarTraceEvent(kind, data) {
  * нет — данные уже лежат в логе с `iteration`; тянем инкремент по курсору на
  * каждый `turn_end`. Живые tool/text-строки не дублируются (другие kinds).
  */
-export async function sidebarPullLog() {
+export async function sidebarPullLog(): Promise<void> {
   const sid = sb.el && sb.el.dataset.sid;
   if (!sid || sb.logPulling) return;
   sb.logPulling = true;
   try {
     let url = "/api/sessions/" + encodeURIComponent(sid) + "/log?limit=100";
     if (sb.logCursor) url += "&since=" + encodeURIComponent(sb.logCursor);
-    const r = await api(url);
+    const r = await api<{ log?: Dict[] }>(url);
     if (!r.ok || !r.data || !Array.isArray(r.data.log)) return;
     for (const e of r.data.log) {
       if (typeof e.ts === "string" && (sb.logCursor === null || e.ts > sb.logCursor)) sb.logCursor = e.ts;
@@ -322,7 +326,7 @@ export async function sidebarPullLog() {
   }
 }
 
-function appendLogEntry(e) {
+function appendLogEntry(e: Dict): void {
   if (!e || typeof e.type !== "string") return;
   switch (e.type) {
     case "critic_check":
@@ -368,13 +372,13 @@ function appendLogEntry(e) {
   }
 }
 
-function detailGroup(title, bodyNode) {
+function detailGroup(title: string, bodyNode: Node): HTMLElement {
   const g = el("div");
   g.appendChild(el("h5", "", title));
   g.appendChild(bodyNode);
   return g;
 }
-function kv(label, value) {
+function kv(label: string, value: string): HTMLElement {
   const row = el("div", "kv");
   row.appendChild(el("span", "dim", label));
   const b = el("b");
@@ -382,24 +386,28 @@ function kv(label, value) {
   row.appendChild(b);
   return row;
 }
-function codeBlock(text) {
+function codeBlock(text: string): HTMLElement {
   const c = el("div", "code");
   c.textContent = text;
   return c;
 }
-function capOutput(text) {
+function capOutput(text: unknown): string {
   if (typeof text !== "string") return "";
   return text.length <= MAX_OUTPUT_CHARS ? text : text.slice(0, MAX_OUTPUT_CHARS) + "\n… [truncated from " + text.length + " chars]";
 }
 
-export function renderDetail(entry) {
-  if (!sb.detailEl) return;
-  sb.detailEl.hidden = false;
+export function renderDetail(entry: TraceEntry): void {
+  const glyph = sb.detailGlyph;
+  const titleEl = sb.detailTitle;
+  const body = sb.detailBody;
+  const detail = sb.detailEl;
+  if (!detail || !glyph || !titleEl || !body) return;
+  detail.hidden = false;
   const warn = isWarn(entry);
-  sb.detailGlyph.textContent = warn ? "⚠" : entry.kind === "question" ? "?" : "◇";
-  sb.detailGlyph.style.color = warn ? "var(--yellow)" : "var(--accent)";
-  sb.detailTitle.textContent = rowLabel(entry);
-  sb.detailBody.textContent = "";
+  glyph.textContent = warn ? "⚠" : entry.kind === "question" ? "?" : "◇";
+  glyph.style.color = warn ? "var(--yellow)" : "var(--accent)";
+  titleEl.textContent = rowLabel(entry);
+  body.textContent = "";
 
   const meta = el("div");
   meta.appendChild(el("h5", "", t("web.sidebar.detail_metadata")));
@@ -413,26 +421,26 @@ export function renderDetail(entry) {
   if (sb.el && sb.el.dataset.sid) meta.appendChild(kv(t("web.sidebar.detail_session"), sb.el.dataset.sid));
   meta.appendChild(kv(t("web.sidebar.detail_turn"), String(entry.turn)));
   if (typeof entry.iteration === "number") meta.appendChild(kv(t("web.sidebar.detail_iteration"), String(entry.iteration)));
-  sb.detailBody.appendChild(meta);
+  body.appendChild(meta);
 
   if (entry.kind === "tool" || entry.kind === "tool_fail") {
-    sb.detailBody.appendChild(detailGroup(t("web.sidebar.detail_arguments"), codeBlock(JSON.stringify(entry.args || {}, null, 2))));
-    sb.detailBody.appendChild(detailGroup(t("web.sidebar.detail_output"), codeBlock(capOutput(entry.output))));
+    body.appendChild(detailGroup(t("web.sidebar.detail_arguments"), codeBlock(JSON.stringify(entry.args || {}, null, 2))));
+    body.appendChild(detailGroup(t("web.sidebar.detail_output"), codeBlock(capOutput(entry.output))));
   } else if (entry.kind === "text") {
-    sb.detailBody.appendChild(detailGroup(t("web.sidebar.detail_text"), codeBlock(entry.text || "")));
+    body.appendChild(detailGroup(t("web.sidebar.detail_text"), codeBlock(entry.text || "")));
     loadTextProvenance(entry);
   } else if (entry.kind === "plan") {
     const list = el("div");
-    (entry.steps || []).forEach((s) => {
+    (entry.steps || []).forEach((s: Dict) => {
       const mark = s.status === "done" ? "✓" : s.status === "failed" ? "✗" : s.status === "in_progress" ? "▸" : "○";
       const cls = s.status === "failed" ? "fail" : s.status === "in_progress" ? "cur" : s.status === "done" ? "done" : "";
       list.appendChild(el("div", ("plan-step " + cls).trim(), mark + " " + s.text));
     });
-    sb.detailBody.appendChild(detailGroup(t("web.sidebar.detail_plan"), list));
+    body.appendChild(detailGroup(t("web.sidebar.detail_plan"), list));
   } else if (entry.kind === "question") {
-    sb.detailBody.appendChild(detailGroup(t("web.sidebar.trace_question"), codeBlock(entry.text || "")));
+    body.appendChild(detailGroup(t("web.sidebar.trace_question"), codeBlock(entry.text || "")));
   } else if (entry.kind === "error") {
-    sb.detailBody.appendChild(detailGroup(t("web.sidebar.detail_error"), codeBlock(entry.message || "")));
+    body.appendChild(detailGroup(t("web.sidebar.detail_error"), codeBlock(entry.message || "")));
   } else if (
     entry.kind === "status" || entry.kind === "log" || entry.kind === "retract" ||
     entry.kind === "index" || entry.kind === "critic" || entry.kind === "moe" ||
@@ -446,7 +454,7 @@ export function renderDetail(entry) {
       : entry.kind === "critic" && entry.status ? "critic · " + entry.status
       : entry.kind === "claim" && entry.subkind ? "claim_retry · " + entry.subkind
       : rowLabel(entry);
-    sb.detailBody.appendChild(detailGroup(title, codeBlock(entry.text || "")));
+    body.appendChild(detailGroup(title, codeBlock(entry.text || "")));
   }
 }
 
@@ -455,16 +463,18 @@ export function renderDetail(entry) {
  * их итерации и провенанс последнего LLM-вызова (модель/провайдер/токены).
  * Живой текст хода уже показан выше целиком; это — сверка с логом.
  */
-async function loadTextProvenance(entry) {
+async function loadTextProvenance(entry: TraceEntry): Promise<void> {
   const sid = sb.el && sb.el.dataset.sid;
-  if (!sid || !sb.detailBody || sb.selected !== entry.id) return;
+  const body = sb.detailBody;
+  if (!sid || !body || sb.selected !== entry.id) return;
   try {
-    const r = await api(
+    const r = await api<{ log?: Dict[] }>(
       "/api/sessions/" + encodeURIComponent(sid) + "/log?types=assistant,llm_usage&limit=20",
     );
     if (!r.ok || !r.data || !Array.isArray(r.data.log) || sb.selected !== entry.id) return;
-    const assistants = r.data.log.filter((e) => e.type === "assistant");
-    const usages = r.data.log.filter((e) => e.type === "llm_usage");
+    const log = r.data.log;
+    const assistants = log.filter((e) => e.type === "assistant");
+    const usages = log.filter((e) => e.type === "llm_usage");
     const iters = assistants.map((e) => e.iteration).filter((n) => typeof n === "number");
     const last = usages.length > 0 ? usages[usages.length - 1] : null;
     const bits = [
@@ -476,13 +486,13 @@ async function loadTextProvenance(entry) {
             .join(" · ")
         : "",
     ].filter(Boolean).join("\n");
-    if (bits) sb.detailBody.appendChild(detailGroup(t("web.sidebar.detail_provenance"), codeBlock(bits)));
+    if (bits) body.appendChild(detailGroup(t("web.sidebar.detail_provenance"), codeBlock(bits)));
   } catch {
     /* best-effort: живой текст уже на месте */
   }
 }
 
-export function collapseDetail() {
+export function collapseDetail(): void {
   sb.selected = null;
   if (sb.el) sb.el.classList.remove("sb-expanded");
   if (sb.detailEl) sb.detailEl.hidden = true;
