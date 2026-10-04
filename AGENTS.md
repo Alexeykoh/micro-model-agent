@@ -644,10 +644,17 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   с actionable `↳`-подсказкой. Фасад — `LspModule.diagnose(baseDir, deps?)`.
 - **npx-резолв вынесен** в `src/modules/lsp/resolve.ts` (`findOnPath`, `resolveNpxLaunch`,
   `isOfflineLsp`); `client.startServer` использует его, глобальный бинарник важнее npx.
-- **Офлайн `MMA_LSP_OFFLINE=1`** (`config/env.ts`): npx не вызывается вообще; сервер,
-  которому он нужен, падает с `offline: <binary> not found in PATH`. Правки
-  `lsp.servers.<lang>` (`command`/`args`/`env.npm_config_registry`/`autoInstall`/`enabled`) —
-  через JSON-конфиг (ключа `/config lsp.*` пока нет; модуль копирует `config.lsp` на bootstrap).
+- **Офлайн-режим** (`config/env.ts`, `config.lsp.offline` + env `MMA_LSP_OFFLINE`): npx не
+  вызывается вообще; сервер, которому он нужен, падает с `offline: <binary> not found in PATH`.
+  Env сильнее конфига (`isOfflineLsp(env?, configOffline?)`). Правки `lsp.servers.<lang>`
+  (`command`/`args`/`env.npm_config_registry`/`autoInstall`/`enabled`) — через JSON-конфиг.
+- **Настройка LSP из UI** (`lsp.enabled`/`lsp.offline` в реестре `/config` и Settings → Plugins·LSP;
+  вкладка LSP в web — кнопка `ⓘ`): глобальные тумблеры живьём через `LspModule.setEnabled/setOffline`
+  (+ `getFlags` в `GET /api/lsp/doctor`; `config-api` сбрасывает кэш `lspDoctor`). Для применимых
+  проблемных серверов (`useNpxFallback`/`binary-missing`/`offline`/`network`) диагноз несёт
+  `installCommand` (`npm i -g <packages>`, `rustup component add rust-analyzer`, `go install .../gopls@latest`) —
+  показывается во вкладке LSP и в `/lsp doctor`. Тесты: `tests/modules/lsp/diagnose.test.ts`,
+  `tests/lsp-module.test.ts`, `tests/webui-config.test.ts`, e2e `web-lsp`.
 - **Классифицированные hints**: под `[LSP check failed]` идёт одна строка `hint:` нужного
   класса (`lsp.hint_*`), чтобы модель уходила на build/test. Порог 3 подряд → `[LSP disabled]`
   без изменений.

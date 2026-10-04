@@ -222,6 +222,12 @@ export interface WebUiState {
   lspDoctor?: LspDiagnosis;
   /** LSP-проба идёт прямо сейчас (single-flight). */
   lspProbing?: boolean;
+  /** Живой тумблер глобального LSP (`config.lsp.enabled`) для `/api/config`. */
+  lspSetEnabled?: (enabled: boolean) => void;
+  /** Живой тумблер офлайн-режима (`config.lsp.offline`) для `/api/config`. */
+  lspSetOffline?: (offline: boolean) => void;
+  /** Текущие флаги LSP-модуля (ответ `GET /api/lsp/doctor`). */
+  lspFlags?: () => { enabled: boolean; offline: boolean };
   /**
    * Глобальный стор памяти, общий с агентом (владелец — `bootstrap`).
    * Вяжет `module.ts`; опционален, чтобы тесты гоняли диспатч команд без
@@ -308,6 +314,9 @@ export type WorkspaceStore = Pick<
   | "lspDiagnose"
   | "lspDoctor"
   | "lspProbing"
+  | "lspSetEnabled"
+  | "lspSetOffline"
+  | "lspFlags"
   | "memory"
   | "skills"
   | "plugins"

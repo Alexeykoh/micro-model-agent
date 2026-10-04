@@ -100,4 +100,14 @@ describe("isOfflineLsp", () => {
     expect(isOfflineLsp({ MMA_LSP_OFFLINE: "" } as NodeJS.ProcessEnv)).toBe(false);
     expect(isOfflineLsp({} as NodeJS.ProcessEnv)).toBe(false);
   });
+
+  it("falls back to the config flag when the env var is unset", () => {
+    expect(isOfflineLsp({} as NodeJS.ProcessEnv, true)).toBe(true);
+    expect(isOfflineLsp({} as NodeJS.ProcessEnv, false)).toBe(false);
+  });
+
+  it("lets the env var override the config flag either way", () => {
+    expect(isOfflineLsp({ MMA_LSP_OFFLINE: "0" } as NodeJS.ProcessEnv, true)).toBe(false);
+    expect(isOfflineLsp({ MMA_LSP_OFFLINE: "1" } as NodeJS.ProcessEnv, false)).toBe(true);
+  });
 });

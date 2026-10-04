@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { diagnoseLspServers, classifyLspError } from "../../../src/modules/lsp/diagnose";
+import {
+  diagnoseLspServers,
+  classifyLspError,
+  installCommandFor,
+  npxPackages,
+} from "../../../src/modules/lsp/diagnose";
 import type { LspConfig, LspServerConfig } from "../../../src/modules/lsp/types";
 
 const TS_SERVER: LspServerConfig = {
@@ -108,6 +113,64 @@ describe("diagnoseLspServers", () => {
       client: { probe: async () => {} } as never,
     });
     expect(d.servers[0].reason).toBe("deadline");
+  });
+
+  it("honours config.offline when no explicit override is passed", async () => {
+    const saved = process.env.MMA_LSP_OFFLINE;
+    delete process.env.MMA_LSP_OFFLINE;
+    try {
+      const cfg: LspConfig = { ...config({ typescript: TS_SERVER }), offline: true };
+      const d = await diagnoseLspServers(cfg, "C:/proj", {
+        collectFiles: async () => [file("a.ts")],
+        findOnPath: () => null,
+      });
+      expect(d.offline).toBe(true);
+      expect(d.servers[0].reason).toBe("offline");
+    } finally {
+      if (saved !== undefined) process.env.MMA_LSP_OFFLINE = saved;
+    }
+  });
+
+  it("suggests a global install for an npx-backed server that started via npx", async () => {
+    const d = await diagnoseLspServers(config({ typescript: TS_SERVER }), "C:/proj", {
+      collectFiles: async () => [file("a.ts")],
+      findOnPath: () => null,
+      client: { probe: async () => {} } as never,
+    });
+    expect(d.servers[0].installCommand).toBe("npm i -g typescript-language-server typescript@5");
+  });
+
+  it("suggests the native installer for a missing native server", async () => {
+    const rust: LspServerConfig = { command: "rust-analyzer", autoInstall: false };
+    const d = await diagnoseLspServers(config({ rust }), "C:/proj", {
+      collectFiles: async () => [file("main.rs")],
+      findOnPath: () => null,
+    });
+    expect(d.servers[0].installCommand).toBe("rustup component add rust-analyzer");
+  });
+
+  it("omits the install hint when the global binary already runs", async () => {
+    const d = await diagnoseLspServers(config({ typescript: TS_SERVER }), "C:/proj", {
+      collectFiles: async () => [file("a.ts")],
+      findOnPath: (n) => (n === "typescript-language-server" ? "/usr/bin/tls" : null),
+      client: { probe: async () => {} } as never,
+    });
+    expect(d.servers[0].installCommand).toBeUndefined();
+  });
+});
+
+describe("installCommandFor", () => {
+  it("collects --package values and dedupes", () => {
+    expect(npxPackages(TS_SERVER.args)).toEqual(["typescript-language-server", "typescript@5"]);
+    expect(npxPackages(["--yes", "pyright", "--stdio"])).toEqual([]);
+  });
+
+  it("returns null for a healthy global server and unknown natives", () => {
+    expect(installCommandFor({ command: "gopls" }, "ok", false)).toBeNull();
+    expect(installCommandFor({ command: "custom-ls" }, "ok", false)).toBeNull();
+    expect(installCommandFor({ command: "gopls" }, "binary-missing", false)).toBe(
+      "go install golang.org/x/tools/gopls@latest",
+    );
   });
 });
 

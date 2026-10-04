@@ -10,7 +10,7 @@ import { readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
 import { buildReasoningView } from "./reasoning-view";
-import type { ConfigStore, RuntimeState, HttpTransport, SseTransport } from "../state";
+import type { ConfigStore, RuntimeState, HttpTransport, SseTransport, WorkspaceStore } from "../state";
 
 /** Запись реестра для UI настроек. */
 export interface ConfigRegistryEntry {
@@ -91,7 +91,7 @@ function toRawValue(value: unknown): string | null {
 export function handleConfigPost(
   req: IncomingMessage,
   res: ServerResponse,
-  s: ConfigStore & RuntimeState & HttpTransport & SseTransport,
+  s: ConfigStore & RuntimeState & HttpTransport & SseTransport & WorkspaceStore,
 ): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
@@ -128,6 +128,17 @@ export function handleConfigPost(
       // его к процесс-глобальному i18n. Делаем здесь, чтобы серверный вывод и
       // перезапрошенный словарь браузера сошлись сразу.
       if (key === "locale") setLocale(config.locale);
+
+      // LSP-тумблеры живут в снапшоте `LspModule`, который `reconfigure` не
+      // пересобирает: применяем их точечными сеттерами и сбрасываем кэш
+      // диагностики, чтобы вкладка LSP перепробила серверы.
+      if (key === "lsp.enabled") {
+        s.lspSetEnabled?.(config.lsp?.enabled ?? true);
+        s.lspDoctor = undefined;
+      } else if (key === "lsp.offline") {
+        s.lspSetOffline?.(config.lsp?.offline ?? false);
+        s.lspDoctor = undefined;
+      }
 
       // Сначала персист, затем reconfigure — но только когда реестр требует
       // реконфига для ключа; иначе shared шаг зря дёргал бы провайдеров/модели

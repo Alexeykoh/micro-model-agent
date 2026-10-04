@@ -45,11 +45,13 @@ export function findOnPath(name: string): string | null {
 
 /**
  * Офлайн-режим LSP (`MMA_LSP_OFFLINE`): не использовать npx совсем.
- * Ложные значения `0`/`false`/`no`/пусто — выключено.
+ * Env сильнее конфига: задан явно — берётся он; иначе — флаг `configOffline`
+ * (`config.lsp.offline`, выключатель в UI). Ложные значения `0`/`false`/`no`/пусто
+ * у env означают «выключено», перекрывая конфиг.
  */
-export function isOfflineLsp(env?: NodeJS.ProcessEnv): boolean {
+export function isOfflineLsp(env?: NodeJS.ProcessEnv, configOffline?: boolean): boolean {
   const raw = readEnv("LSP_OFFLINE", env);
-  if (raw === undefined) return false;
+  if (raw === undefined) return configOffline === true;
   const v = raw.trim().toLowerCase();
   return v !== "" && v !== "0" && v !== "false" && v !== "no";
 }

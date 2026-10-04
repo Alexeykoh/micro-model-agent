@@ -35,11 +35,16 @@ export interface LspServerConfig {
   workspaceMarkers?: string[];
 }
 
-/** Конфиг LSP: глобальный флаг, серверы, таймаут. */
+/** Конфиг LSP: глобальный флаг, серверы, таймаут, офлайн-режим. */
 export interface LspConfig {
   enabled: boolean;
   servers: Record<string, LspServerConfig>;
   timeout: number;
+  /**
+   * Офлайн-режим: не использовать `npx`, только глобально установленные
+   * бинарники. Env `MMA_LSP_OFFLINE` переопределяет это поле (env сильнее).
+   */
+  offline?: boolean;
 }
 
 /** Severity диагностики: 1 error, 2 warning, 3 info, 4 hint. */

@@ -182,6 +182,9 @@ export const PANEL_SECTIONS = {
     { id: "advanced.retry", titleKey: "web.settings.sec.advanced.retry", descKey: "web.settings.sec.advanced.retry.desc", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
     { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "updater.enabled", "updater.checkOnStart", "updater.autoInstall", "updater.intervalMs"] },
   ],
+  plugins: [
+    { id: "plugins.lsp", titleKey: "web.settings.sec.plugins.lsp", descKey: "web.settings.sec.plugins.lsp.desc", keys: ["lsp.enabled", "lsp.offline"] },
+  ],
 };
 
 /** Flat `key -> panelId` index (search + "where does this setting live"). */

@@ -47,6 +47,12 @@ export interface WebIndexer {
 /** Узкое подмножество LSP-модуля для вкладки LSP (`/api/lsp/doctor`). */
 export interface WebLsp {
   diagnose(baseDir: string): Promise<LspDiagnosis>;
+  /** Живой тумблер глобального LSP. Может отсутствовать у старых стабов. */
+  setEnabled?(enabled: boolean): void;
+  /** Живой тумблер офлайн-режима. Может отсутствовать у старых стабов. */
+  setOffline(offline: boolean): void;
+  /** Текущие флаги для ответа `GET /api/lsp/doctor`. */
+  getFlags?(): { enabled: boolean; offline: boolean };
 }
 
 /**

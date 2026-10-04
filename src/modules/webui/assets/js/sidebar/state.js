@@ -32,6 +32,7 @@ export const sb = {
   headerByTurn: new Map(), // turn → header node
   textEntry: null, // current text row (updated in place)
   lspDiag: null, // last LspDiagnosis (web.sidebar LSP tab)
+  lspFlags: null, // { enabled, offline } global switches (config.lsp.*)
   lspProbing: false, // a diagnosis is running right now
   lspLoaded: false, // cache was fetched at least once
   lspUnavailable: false, // the server has no LSP module wired

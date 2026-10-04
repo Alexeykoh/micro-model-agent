@@ -80,6 +80,7 @@ export class LspModule implements AgentModule {
   constructor(config?: Partial<LspConfig>, client?: LspClient, logger?: LspClientLogger) {
     this.config = { ...DEFAULT_LSP_CONFIG, ...config };
     this.client = client ?? new LspClient();
+    this.client.setOffline(this.config.offline);
     this.logger = logger ?? null;
     this.client.setLogger(this.logger);
   }
@@ -88,6 +89,23 @@ export class LspModule implements AgentModule {
   setLogger(logger: LspClientLogger | null): void {
     this.logger = logger;
     this.client.setLogger(logger);
+  }
+
+  /** Глобальный тумблер LSP (живьём; плагин читает `this.config.enabled`). */
+  setEnabled(enabled: boolean): void {
+    this.config.enabled = enabled;
+    this.client.setOffline(this.config.offline);
+  }
+
+  /** Офлайн-режим живьём: не использовать npx (env `MMA_LSP_OFFLINE` сильнее). */
+  setOffline(offline: boolean): void {
+    this.config.offline = offline;
+    this.client.setOffline(offline);
+  }
+
+  /** Текущие глобальные флаги для UI (`GET /api/lsp/doctor`, вкладка LSP). */
+  getFlags(): { enabled: boolean; offline: boolean } {
+    return { enabled: this.config.enabled !== false, offline: this.config.offline === true };
   }
 
   /** Сбросить отключённые серверы (напр. после /lsp restart). */

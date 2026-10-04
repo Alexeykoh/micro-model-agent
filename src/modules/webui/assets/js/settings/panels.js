@@ -480,6 +480,7 @@ function renderPluginsPanel() {
   }
   renderLspSection(list);
   container.appendChild(list);
+  renderSections("plugins", PANEL_SECTIONS.plugins || []);
 }
 
 // Inline MCP add/edit form. Secrets are never echoed by the API, so env/headers

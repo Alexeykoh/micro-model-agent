@@ -107,8 +107,41 @@ describe("webui config/session/model REST", () => {
     });
   });
 
-  it("POST /api/config rejects writes while a turn is running (409 busy)", async () => {
+  it("POST /api/config {lsp.enabled} hot-applies and clears the doctor cache", async () => {
     const s = createWebUiState();
+    s.config = testConfig();
+    s.saveConfig = () => {};
+    s.reconfigure = () => {};
+    const calls: boolean[] = [];
+    s.lspSetEnabled = (v) => calls.push(v);
+    s.lspDoctor = { enabled: true, offline: false, projectRoot: "/x", servers: [] };
+
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/config", { key: "lsp.enabled", value: false });
+      expect(res.status).toBe(200);
+      expect(s.config?.lsp?.enabled).toBe(false);
+      expect(calls).toEqual([false]);
+      expect(s.lspDoctor).toBeUndefined();
+    });
+  });
+
+  it("POST /api/config {lsp.offline} hot-applies the offline flag", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    s.saveConfig = () => {};
+    s.reconfigure = () => {};
+    const calls: boolean[] = [];
+    s.lspSetOffline = (v) => calls.push(v);
+
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/config", { key: "lsp.offline", value: true });
+      expect(res.status).toBe(200);
+      expect(s.config?.lsp?.offline).toBe(true);
+      expect(calls).toEqual([true]);
+    });
+  });
+
+  it("POST /api/config rejects writes while a turn is running (409 busy)", async () => {    const s = createWebUiState();
     s.config = testConfig();
     let saved = 0;
     let reconfigured = 0;

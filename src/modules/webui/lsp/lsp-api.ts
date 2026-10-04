@@ -10,7 +10,14 @@ export function handleLspDoctorGet(res: ServerResponse, s: WorkspaceStore & SseT
     sendJson(res, 503, { error: "unavailable" });
     return;
   }
-  sendJson(res, 200, { diagnosis: s.lspDoctor ?? null, probing: s.lspProbing ?? false });
+  const body: Record<string, unknown> = {
+    diagnosis: s.lspDoctor ?? null,
+    probing: s.lspProbing ?? false,
+  };
+  // Живые флаги глобальных тумблеров (config.lsp.enabled/offline) для диалога
+  // информации во вкладке LSP; без вязанного модуля поле опускается.
+  if (s.lspFlags) body.flags = s.lspFlags();
+  sendJson(res, 200, body);
 }
 
 /**

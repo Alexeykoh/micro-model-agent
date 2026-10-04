@@ -269,4 +269,21 @@ describe("LspModule", () => {
     expect(tsResult.output).toBe("ts written ok");
     expect(checkedPaths.some((p) => p.endsWith("a.ts"))).toBe(true);
   });
+
+  it("exposes live global flags and applies hot toggles", () => {
+    const module = new LspModule({ enabled: true } as any);
+    expect(module.getFlags()).toEqual({ enabled: true, offline: false });
+
+    module.setEnabled(false);
+    module.setOffline(true);
+    expect(module.getFlags()).toEqual({ enabled: false, offline: true });
+
+    // The client carries the offline flag into its launch resolution.
+    expect((module as any).client.offlineFlag).toBe(true);
+  });
+
+  it("defaults getFlags when lsp is explicitly disabled", () => {
+    const module = new LspModule({ enabled: false } as any);
+    expect(module.getFlags()).toEqual({ enabled: false, offline: false });
+  });
 });

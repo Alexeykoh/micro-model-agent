@@ -3,6 +3,7 @@ import type { AppConfig, AuditEventType } from "./types";
 import type { ConfigKeyDef, ConfigRangeReason } from "./registry";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
+import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 
 type ReasoningBound = "low" | "medium" | "high";
 
@@ -633,5 +634,18 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
         { key: "max_attempts", type: "number", optional: true },
         { key: "description", optional: true },
       ],
+    }),
+
+  bool("lsp.enabled", "lsp", false,
+    (c) => c.lsp?.enabled ?? true,
+    (c, v) => {
+      c.lsp ??= structuredClone(DEFAULT_LSP_CONFIG);
+      c.lsp.enabled = v as boolean;
+    }),
+  bool("lsp.offline", "lsp", false,
+    (c) => c.lsp?.offline ?? false,
+    (c, v) => {
+      c.lsp ??= structuredClone(DEFAULT_LSP_CONFIG);
+      c.lsp.offline = v as boolean;
     }),
 ];

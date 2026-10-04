@@ -102,6 +102,10 @@ function formatDoctor(diag: LspDiagnosis): string[] {
       lines.push(pc.dim(`      ${glyph.detail} ${hint}`));
       if (s.reason !== "timeout") actionable = true;
     }
+    if (s.installCommand) {
+      lines.push(pc.dim(`      ${glyph.detail} ${t("repl.lsp_install", { command: s.installCommand })}`));
+      actionable = true;
+    }
   }
   if (actionable || diag.offline) {
     lines.push(pc.dim(`  ${glyph.detail} ${t("repl.lsp_doctor_hint")}`));

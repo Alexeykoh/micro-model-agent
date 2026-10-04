@@ -1,9 +1,11 @@
 // LSP tab for `mma web`: on-demand language-server diagnosis. Split out of
 // `sidebar.js`. Design: docs/specs/2026-10-02-lsp-doctor-design.md (§12).
-import { el } from "../dom.js";
+import { el, icon, makeToggle } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { formatMs } from "../format.js";
+import { setIndicator } from "../dialog.js";
+import { openSubDialog } from "../subdialog.js";
 import { sb } from "./state.js";
 import { mapKv } from "./map.js";
 
@@ -50,7 +52,17 @@ function lspRow(s) {
 export function renderLsp() {
   if (!sb.lspEl) return;
   sb.lspEl.textContent = "";
-  sb.lspEl.appendChild(el("div", "lsp-what", t("web.sidebar.lsp_what")));
+  const head = el("div", "lsp-head");
+  head.appendChild(el("span", "lsp-what", t("web.sidebar.lsp_what")));
+  const infoBtn = el("button", "lsp-info-btn");
+  infoBtn.type = "button";
+  infoBtn.title = t("web.sidebar.lsp_info");
+  infoBtn.setAttribute("aria-label", t("web.sidebar.lsp_info"));
+  infoBtn.appendChild(icon("info"));
+  infoBtn.addEventListener("click", openLspInfoDialog);
+  head.appendChild(infoBtn);
+  sb.lspEl.appendChild(head);
+
   if (sb.lspUnavailable) {
     sb.lspEl.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_unavailable")));
     return;
@@ -81,6 +93,97 @@ export function renderLsp() {
   sb.lspEl.appendChild(btn);
 }
 
+/** Информационный поп-ап: глобальные тумблеры + команды ручной установки. */
+let lspInfoRedraw = null;
+
+function openLspInfoDialog() {
+  const box = el("div", "lsp-info");
+  lspInfoRedraw = () => drawLspInfo(box);
+  lspInfoRedraw();
+  openSubDialog(t("web.sidebar.lsp_info"), box, () => {
+    lspInfoRedraw = null;
+  });
+}
+
+/** Перерисовать содержимое поп-апа (после тумблера или свежего диагноза). */
+function drawLspInfo(box) {
+  box.textContent = "";
+  const flags =
+    sb.lspFlags || (sb.lspDiag ? { enabled: sb.lspDiag.enabled, offline: sb.lspDiag.offline } : null);
+  if (!flags) {
+    box.appendChild(el("div", "lsp-hint", t("web.sidebar.lsp_not_checked")));
+    return;
+  }
+  const onRow = el("div", "kv lsp-toggle");
+  onRow.appendChild(el("span", "dim", t("web.sidebar.lsp_switch_enabled")));
+  const on = makeToggle(flags.enabled, (next) => {
+    void setLspFlag("lsp.enabled", next);
+    return false;
+  });
+  on.title = t("web.sidebar.lsp_switch_enabled");
+  onRow.appendChild(on);
+  box.appendChild(onRow);
+
+  const offRow = el("div", "kv lsp-toggle");
+  offRow.appendChild(el("span", "dim", t("web.sidebar.lsp_switch_offline")));
+  const off = makeToggle(flags.offline, (next) => {
+    void setLspFlag("lsp.offline", next);
+    return false;
+  });
+  off.title = t("web.sidebar.lsp_switch_offline");
+  offRow.appendChild(off);
+  box.appendChild(offRow);
+  box.appendChild(el("div", "lsp-hint", t("web.sidebar.lsp_offline_hint")));
+
+  const servers = (sb.lspDiag && Array.isArray(sb.lspDiag.servers) ? sb.lspDiag.servers : []).filter(
+    (s) => s.installCommand,
+  );
+  if (!servers.length) return;
+  box.appendChild(el("div", "lsp-install-title", t("web.sidebar.lsp_install_title")));
+  servers.forEach((s) => {
+    const row = el("div", "lsp-install");
+    row.appendChild(el("span", "dim", s.language));
+    row.appendChild(el("code", "lsp-cmd", s.installCommand));
+    const copy = el("button", "linkbtn lsp-copy");
+    copy.type = "button";
+    copy.title = t("web.sidebar.lsp_copy");
+    copy.setAttribute("aria-label", t("web.sidebar.lsp_copy"));
+    copy.appendChild(icon("copy"));
+    copy.addEventListener("click", () => copyCommand(s.installCommand, copy));
+    row.appendChild(copy);
+    box.appendChild(row);
+  });
+}
+
+/** Переключить глобальный флаг LSP через единый путь записи `/api/config`. */
+async function setLspFlag(key, value) {
+  const r = await api("/api/config", { method: "POST", body: { key, value } });
+  if (!r.ok || !r.data || !r.data.ok) {
+    const err = (r.data && (r.data.error || r.data.reason)) || String(r.status);
+    setIndicator(err === "busy" ? t("web.sidebar.lsp_busy") : t("web.settings.save_failed"), true);
+    return;
+  }
+  const field = key === "lsp.enabled" ? "enabled" : "offline";
+  sb.lspFlags = { ...(sb.lspFlags || { enabled: true, offline: false }), [field]: value };
+  sb.lspDiag = null;
+  lspInfoRedraw?.();
+  void runLspDoctor();
+}
+
+function copyCommand(text, btn) {
+  const setIcon = (name) => {
+    btn.textContent = "";
+    btn.appendChild(icon(name));
+  };
+  const done = () => {
+    setIcon("check");
+    setTimeout(() => setIcon("copy"), 1500);
+  };
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(done).catch(() => {});
+  }
+}
+
 /** Загрузить кэш диагностики с сервера; при пустом кэше — запустить проверку. */
 async function loadLspDoctor() {
   const r = await api("/api/lsp/doctor");
@@ -93,8 +196,10 @@ async function loadLspDoctor() {
   sb.lspUnavailable = false;
   sb.lspDiag = (r.data && r.data.diagnosis) || null;
   sb.lspProbing = !!(r.data && r.data.probing);
+  sb.lspFlags = (r.data && r.data.flags) || sb.lspFlags;
   sb.lspLoaded = true;
   renderLsp();
+  lspInfoRedraw?.();
   if (sb.lspDiag === null && !sb.lspProbing) void runLspDoctor();
 }
 

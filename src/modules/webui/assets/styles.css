@@ -886,6 +886,20 @@ body.light .sel > button { border: 1px solid var(--border); }
 .lsp-g.fail { color: var(--red); }
 .lsp-g.dim { color: var(--dim-c); }
 .lsp-detail { color: var(--muted); font-weight: 400; overflow-wrap: anywhere; }
+.lsp-head { display: flex; align-items: flex-start; gap: 6px; }
+.lsp-head .lsp-what { flex: 1; }
+.lsp-info-btn { display: inline-flex; align-items: center; padding: 2px; background: transparent; border: 0; color: var(--dim-c); cursor: pointer; }
+.lsp-info-btn:hover, .lsp-info-btn.on { color: var(--accent); }
+.lsp-info-btn .svg-icon { width: 14px; height: 14px; }
+.lsp-toggle { align-items: center; }
+.lsp-hint { color: var(--dim-c); font-size: 11px; line-height: 1.4; margin: 2px 0 6px; overflow-wrap: anywhere; }
+.lsp-info { padding: 2px 0; }
+.lsp-install-title { color: var(--dim-b); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin: 10px 0 4px; }
+.lsp-install { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin: 3px 0; }
+.lsp-cmd { font-size: 11px; color: var(--muted); padding: 1px 0; overflow-wrap: anywhere; }
+.lsp-copy { display: inline-flex; align-items: center; color: var(--dim-b); }
+.lsp-copy .svg-icon { width: 13px; height: 13px; }
+.lsp-copy:hover { color: var(--accent); }
 .kv.wn b { color: var(--yellow); }
 
 ::-webkit-scrollbar { width: 8px; }

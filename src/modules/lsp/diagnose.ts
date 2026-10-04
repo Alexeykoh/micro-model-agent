@@ -44,6 +44,12 @@ export interface LspServerDiagnosis {
   reason: LspFailureReason;
   error?: string;
   durationMs?: number;
+  /**
+   * Команда ручной установки сервера глобально (чтобы не гонять `npx` каждый
+   * раз). Заполняется только для проблемных/медлящих серверов, применимых к
+   * проекту; `undefined` — ставить нечего или сервер уже глобальный.
+   */
+  installCommand?: string;
 }
 
 /** Полная диагностика LSP проекта (для `/lsp doctor`). */
@@ -85,6 +91,48 @@ export function classifyLspError(
   return "server-error";
 }
 
+/** Нативные установщики LSP-серверов, которым npx не подходит. */
+const NATIVE_INSTALL: Record<string, string> = {
+  "rust-analyzer": "rustup component add rust-analyzer",
+  gopls: 'go install golang.org/x/tools/gopls@latest',
+};
+
+/** Пакеты из npx-args (`--package X`), дедуп с сохранением порядка. */
+export function npxPackages(args: string[] | undefined): string[] {
+  const list = args ?? [];
+  const out: string[] = [];
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] === "--package" && list[i + 1]) {
+      const pkg = list[i + 1];
+      if (!out.includes(pkg)) out.push(pkg);
+      i++;
+    }
+  }
+  return out;
+}
+
+/**
+ * Команда ручной глобальной установки сервера. Заполняется только когда это
+ * реально помогает: сервер идёт через `npx` (медленный старт) либо глобального
+ * бинарника нет (`binary-missing`/`offline`/`network`). Уже глобальный и
+ * работающий сервер — `null`.
+ */
+export function installCommandFor(
+  server: LspServerConfig,
+  reason: LspFailureReason,
+  useNpxFallback: boolean,
+): string | null {
+  const useful =
+    useNpxFallback ||
+    reason === "binary-missing" ||
+    reason === "offline" ||
+    reason === "network";
+  if (!useful) return null;
+  const pkgs = npxPackages(server.args);
+  if (pkgs.length > 0) return `npm i -g ${pkgs.join(" ")}`;
+  return NATIVE_INSTALL[server.command] ?? null;
+}
+
 /**
  * Продиагностировать LSP-серверы, применимые к проекту: применимость,
  * включённость, резолв запуска, реальная проба (`spawn+initialize`) и класс
@@ -96,7 +144,7 @@ export async function diagnoseLspServers(
   baseDir: string,
   deps: LspDiagnoseDeps = {},
 ): Promise<LspDiagnosis> {
-  const offline = deps.offline ?? isOfflineLsp();
+  const offline = deps.offline ?? isOfflineLsp(undefined, config.offline);
   const timeoutCap = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const deadlineMs = deps.deadlineMs ?? DEFAULT_DEADLINE_MS;
   const collect =
@@ -124,7 +172,10 @@ export async function diagnoseLspServers(
   }
 
   const client = deps.client ?? new LspClient();
-  if (!deps.client) client.setLogger(deps.logger ?? null);
+  if (!deps.client) {
+    client.setLogger(deps.logger ?? null);
+    client.setOffline(config.offline);
+  }
 
   const ctx: ServerContext = {
     offline,
@@ -175,8 +226,12 @@ async function diagnoseServer(
     useNpxFallback: launch.useNpxFallback,
   };
   const skip = skipReason(server, launch, ctx.offline);
-  if (skip) return { ...withLaunch, reason: skip };
-  if (Date.now() >= ctx.deadline) return { ...withLaunch, reason: "deadline" };
+  if (skip) {
+    return withCommand({ ...withLaunch, reason: skip }, server, skip, launch.useNpxFallback);
+  }
+  if (Date.now() >= ctx.deadline) {
+    return withCommand({ ...withLaunch, reason: "deadline" }, server, "deadline", launch.useNpxFallback);
+  }
 
   const probe = await probeServer(
     ctx.client,
@@ -186,7 +241,18 @@ async function diagnoseServer(
     ctx.timeoutCap,
     launch.useNpxFallback,
   );
-  return { ...withLaunch, ...probe };
+  return withCommand({ ...withLaunch, ...probe }, server, probe.reason, launch.useNpxFallback);
+}
+
+/** Дополнить диагноз командой установки, если она применима. */
+function withCommand(
+  diag: LspServerDiagnosis,
+  server: LspServerConfig,
+  reason: LspFailureReason,
+  useNpxFallback: boolean,
+): LspServerDiagnosis {
+  const installCommand = installCommandFor(server, reason, useNpxFallback);
+  return installCommand ? { ...diag, installCommand } : diag;
 }
 
 /** Резолв запуска сервера: npx→глобальный бинарник или собственный бинарник. */

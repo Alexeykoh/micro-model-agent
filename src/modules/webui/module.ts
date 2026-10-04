@@ -176,6 +176,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   if (deps.lsp) {
     const lsp = deps.lsp;
     state.lspDiagnose = () => lsp.diagnose(deps.baseDir ?? process.cwd());
+    state.lspSetEnabled = (v) => lsp.setEnabled?.(v);
+    state.lspSetOffline = (v) => lsp.setOffline?.(v);
+    state.lspFlags = () => lsp.getFlags?.() ?? { enabled: true, offline: false };
   }
   // Общий вотчер карты: в web сессия главного агента не запускается, поэтому
   // плагин индексатора его не поднимает — владельцем становится веб-хост.

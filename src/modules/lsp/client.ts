@@ -53,6 +53,17 @@ export class LspClient {
   setLogger(logger: LspClientLogger | null): void {
     this.logger = logger;
   }
+
+  private offlineFlag: boolean | undefined = undefined;
+
+  /**
+   * Офлайн-флаг из конфига (`config.lsp.offline`). Env `MMA_LSP_OFFLINE`
+   * по-прежнему сильнее (см. `isOfflineLsp`). `undefined` — только env.
+   */
+  setOffline(offline: boolean | undefined): void {
+    this.offlineFlag = offline;
+  }
+
   private process: ChildProcess | null = null;
   private requestId = 0;
   private pending = new Map<number, PendingRequest>();
@@ -171,7 +182,7 @@ export class LspClient {
     } else if (launch.useNpxFallback && launch.binaryName) {
       this.logger?.debug(`LSP: ${launch.binaryName} not found globally, falling back to npx`);
     }
-    if (launch.useNpxFallback && isOfflineLsp()) {
+    if (launch.useNpxFallback && isOfflineLsp(undefined, this.offlineFlag)) {
       throw new Error(
         `LSP offline mode: ${launch.binaryName ?? "npx"} not found in PATH; ` +
           "npx auto-install is disabled (MMA_LSP_OFFLINE)",
