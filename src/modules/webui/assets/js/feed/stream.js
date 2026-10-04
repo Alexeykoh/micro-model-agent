@@ -2,7 +2,7 @@
 // Extracted from `feed.js`; `feed.js` re-exports this module's public surface.
 import { msgs, el, setIcon } from "../dom.js";
 import { t } from "../i18n.js";
-import { feed } from "../store.js";
+import { feed as feedState } from "../store.js";
 import { verbosity } from "../format.js";
 import { mountMarkdown } from "../../md.js";
 import {
@@ -19,7 +19,7 @@ let textScheduled = false;
 
 function flushText() {
   textScheduled = false;
-  if (!textBuf || !feed.curMd) {
+  if (!textBuf || !feedState.curMd) {
     textBuf = "";
     textFeed = null;
     return;
@@ -28,7 +28,7 @@ function flushText() {
   const feed = textFeed;
   textBuf = "";
   textFeed = null;
-  feed.curMd.write(buf);
+  feedState.curMd.write(buf);
   if (feed && feed === activeFeed()) scroll();
 }
 
@@ -45,12 +45,12 @@ function scheduleText() {
 // Close the active Markdown segment (if any) and clear the feed text state.
 export function finishMd() {
   flushText();
-  if (feed.curMd) {
-    feed.curMd.root.classList.remove("streaming");
-    feed.curMd.end();
-    feed.curMd = null;
+  if (feedState.curMd) {
+    feedState.curMd.root.classList.remove("streaming");
+    feedState.curMd.end();
+    feedState.curMd = null;
   }
-  feed.curText = null;
+  feedState.curText = null;
 }
 
 export function onText(chunk, sid) {
@@ -58,18 +58,18 @@ export function onText(chunk, sid) {
   clearBusy(feed);
   if (!feed) return;
   clearEmpty(feed);
-  if (feed.curThink) {
+  if (feedState.curThink) {
     finishThink();
   }
-  if (feed.curText == null) {
+  if (feedState.curText == null) {
     flushRun();
-    feed.curText = "";
-    feed.curMd = mountMarkdown(feed, mdOpts(true));
-    feed.curMd.root.classList.add("streaming");
-    feed.turnRoots.push(feed.curMd.root);
+    feedState.curText = "";
+    feedState.curMd = mountMarkdown(feed, mdOpts(true));
+    feedState.curMd.root.classList.add("streaming");
+    feedState.turnRoots.push(feedState.curMd.root);
   }
-  feed.curText += chunk;
-  feed.turnMd += chunk;
+  feedState.curText += chunk;
+  feedState.turnMd += chunk;
   // A second session streaming concurrently must not merge into another feed's buffer.
   if (textFeed && textFeed !== feed) flushText();
   textFeed = feed;
@@ -78,14 +78,14 @@ export function onText(chunk, sid) {
 }
 
 export function finishThink() {
-  if (feed.curThink) {
-    if (feed.curThink.wrap) feed.curThink.wrap.classList.remove("live");
-    if (feed.curThink.startedAt) {
-      const dur = feed.curThink.head.querySelector(".dur");
-      if (dur) dur.textContent = "· " + ((Date.now() - feed.curThink.startedAt) / 1000).toFixed(1) + "s";
+  if (feedState.curThink) {
+    if (feedState.curThink.wrap) feedState.curThink.wrap.classList.remove("live");
+    if (feedState.curThink.startedAt) {
+      const dur = feedState.curThink.head.querySelector(".dur");
+      if (dur) dur.textContent = "· " + ((Date.now() - feedState.curThink.startedAt) / 1000).toFixed(1) + "s";
     }
   }
-  feed.curThink = null;
+  feedState.curThink = null;
 }
 
 export function onReasoning(chunk, sid) {
@@ -94,13 +94,13 @@ export function onReasoning(chunk, sid) {
   if (!feed) return;
   clearEmpty(feed);
   finishMd();
-  if (!feed.curThink) {
+  if (!feedState.curThink) {
     flushRun();
     const { wrap, head, body } = buildThinkBlock(true);
     appendTo(feed, wrap);
-    feed.curThink = { wrap, head, body, startedAt: Date.now() };
+    feedState.curThink = { wrap, head, body, startedAt: Date.now() };
   }
-  feed.curThink.body.textContent += chunk;
+  feedState.curThink.body.textContent += chunk;
   if (feed === activeFeed()) scroll();
 }
 
@@ -131,17 +131,17 @@ export function onRetract(reason, sid) {
   const feed = feedForEvent(sid);
   if (!feed) return;
   clearBusy(feed);
-  const draftRoot = feed.curMd ? feed.curMd.root : null;
-  const hadDraft = !!draftRoot || (feed.curText != null && feed.curText !== "");
-  const draftLen = feed.curText ? feed.curText.length : 0;
+  const draftRoot = feedState.curMd ? feedState.curMd.root : null;
+  const hadDraft = !!draftRoot || (feedState.curText != null && feedState.curText !== "");
+  const draftLen = feedState.curText ? feedState.curText.length : 0;
   finishMd();
   finishThink();
   if (draftRoot) {
-    const idx = feed.turnRoots.indexOf(draftRoot);
-    if (idx !== -1) feed.turnRoots.splice(idx, 1);
+    const idx = feedState.turnRoots.indexOf(draftRoot);
+    if (idx !== -1) feedState.turnRoots.splice(idx, 1);
     draftRoot.remove();
   }
-  if (draftLen > 0) feed.turnMd = feed.turnMd.slice(0, Math.max(0, feed.turnMd.length - draftLen));
+  if (draftLen > 0) feedState.turnMd = feedState.turnMd.slice(0, Math.max(0, feedState.turnMd.length - draftLen));
   if (!hadDraft) return;
   if (reason) appendTo(feed, el("div", "metaln", reason));
   if (feed === activeFeed()) scroll();

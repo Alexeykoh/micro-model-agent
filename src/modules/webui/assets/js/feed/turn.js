@@ -2,7 +2,7 @@
 // Extracted from `feed.js`; `feed.js` re-exports this module's public surface.
 import { el, icon, announce } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
-import { feed, tabs as tabState, session } from "../store.js";
+import { feed as feedState, tabs as tabState, session } from "../store.js";
 import {
   FILE_TOOLS, OPENABLE_TOOLS, IMAGE_TOOLS, LINK_TOOLS,
   categoryOf, labelOf, argText, formatMs, verbosity, firstOutputLine,
@@ -21,7 +21,7 @@ export function onToolStart(data) {
   clearEmpty(feed);
   finishMd();
   finishThink();
-  feed.pendingArgs.set(data.toolCallId, data.args || {});
+  feedState.pendingArgs.set(data.toolCallId, data.args || {});
   const line = el("div", "act " + categoryOf(data.name));
   line.appendChild(el("span", "g", "◇"));
   line.appendChild(el("span", "lab", labelOf(data.name)));
@@ -34,9 +34,9 @@ export function onToolStart(data) {
   line.appendChild(status);
   line.classList.add("running");
   appendTo(feed, line);
-  feed.toolNodes.set(data.toolCallId, { status, line });
-  if (categoryOf(data.name) !== "recon") feed.runReconOnly = false;
-  feed.runCount++;
+  feedState.toolNodes.set(data.toolCallId, { status, line });
+  if (categoryOf(data.name) !== "recon") feedState.runReconOnly = false;
+  feedState.runCount++;
 }
 
 function renderToolOutput(line, text) {
@@ -170,7 +170,7 @@ function cardFor(name, args, sid, ok) {
 }
 
 export function onToolEnd(data) {
-  const node = feed.toolNodes.get(data.toolCallId);
+  const node = feedState.toolNodes.get(data.toolCallId);
   const line = node ? node.line : null;
   if (node) {
     node.line.classList.remove("running");
@@ -178,13 +178,13 @@ export function onToolEnd(data) {
     node.status.textContent = data.success ? " ✓" + (dur ? " " + dur : "") : " ✗" + (dur ? " " + dur : "");
     if (!data.success) {
       node.status.classList.add("fail");
-      feed.runFails++;
-      feed.runReconOnly = false;
+      feedState.runFails++;
+      feedState.runReconOnly = false;
     }
   }
-  feed.toolNodes.delete(data.toolCallId);
-  const args = feed.pendingArgs.get(data.toolCallId) || {};
-  feed.pendingArgs.delete(data.toolCallId);
+  feedState.toolNodes.delete(data.toolCallId);
+  const args = feedState.pendingArgs.get(data.toolCallId) || {};
+  feedState.pendingArgs.delete(data.toolCallId);
   // File tools render as a single filerow (viewer link + copy): the `.act`
   // line from `onToolStart` is replaced, otherwise the feed shows the same
   // action twice (act + filerow). Without a path `cardFor` renders nothing,
@@ -195,13 +195,13 @@ export function onToolEnd(data) {
     if (verbosity() === "quiet") {
       if (data.success) {
         const card = cardFor(data.name, args, data.sessionId, data.success);
-        if (card) feed.runNodes.push(card);
-        feed.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
+        if (card) feedState.runNodes.push(card);
+        feedState.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
       } else {
         const card = cardFor(data.name, args, data.sessionId, data.success);
         const cause = firstOutputLine(data.output);
         if (cause) insertAfter(card || line, el("div", "detail", "↳ " + cause));
-        if (card) feed.runNodes.push(card);
+        if (card) feedState.runNodes.push(card);
       }
       return;
     }
@@ -214,10 +214,10 @@ export function onToolEnd(data) {
     // actions can fold at the next segment; a failure keeps its line and adds
     // a single `↳` cause instead of the whole model-facing body.
     if (data.success) {
-      if (line) feed.runNodes.push(line);
+      if (line) feedState.runNodes.push(line);
       const card = cardFor(data.name, args, data.sessionId, data.success);
-      if (card) feed.runNodes.push(card);
-      feed.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
+      if (card) feedState.runNodes.push(card);
+      feedState.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
     } else {
       const cause = firstOutputLine(data.output);
       if (cause) insertAfter(line, el("div", "detail", "↳ " + cause));
@@ -237,7 +237,7 @@ export function onTurnEnd(data) {
   flushRun();
   // Interrupted tools never get `tool_end`: drop their pulse so nothing
   // looks alive after the turn is over.
-  feed.toolNodes.forEach((n) => {
+  feedState.toolNodes.forEach((n) => {
     if (n && n.line && feed && n.line.parentNode === feed) n.line.classList.remove("running");
   });
   const owner = tabState.tabs.find((x) => x.id === data.sessionId);
@@ -264,14 +264,14 @@ export function onTurnEnd(data) {
     // The visible turn-end banner is redundant noise; keep the screen-reader cue.
     announce(t("web.turn.end", { count: data.toolCalls || 0 }));
   }
-  const plain = feed.turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
-  appendActionsRow(feed, plain, feed.turnMd);
+  const plain = feedState.turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
+  appendActionsRow(feed, plain, feedState.turnMd);
   resetTurnText();
 }
 
 export function resetTurnText() {
-  feed.turnMd = "";
-  feed.turnRoots = [];
+  feedState.turnMd = "";
+  feedState.turnRoots = [];
 }
 
 export function onErrorEvent(data) {

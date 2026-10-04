@@ -3,7 +3,7 @@
 // import these primitives. `feed.js` re-exports this module's public surface.
 import { msgs, el, setIcon } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
-import { feed, tabs as tabState } from "../store.js";
+import { feed as feedState, tabs as tabState } from "../store.js";
 import { formatMs, verbosity } from "../format.js";
 import { copyText } from "../../md.js";
 
@@ -236,9 +236,9 @@ export function clearEmpty(feed) {
 }
 
 export function clearBusy(feed) {
-  if (feed.busyTimer) {
-    clearInterval(feed.busyTimer);
-    feed.busyTimer = null;
+  if (feedState.busyTimer) {
+    clearInterval(feedState.busyTimer);
+    feedState.busyTimer = null;
   }
   feed = feed || liveFeed();
   if (!feed) return;
@@ -255,12 +255,12 @@ export function showBusy(feed) {
   if (!feed) return;
   // The delayed post-send call must not flash a spinner over a stream that
   // already started (fast first token).
-  if (feed.curMd || feed.curThink) return;
+  if (feedState.curMd || feedState.curThink) return;
   clearEmpty(feed);
   if (feed.querySelector(".busy")) return;
-  if (feed.busyTimer) {
-    clearInterval(feed.busyTimer);
-    feed.busyTimer = null;
+  if (feedState.busyTimer) {
+    clearInterval(feedState.busyTimer);
+    feedState.busyTimer = null;
   }
   const line = el("div", "busy");
   line.appendChild(el("span", "spin", "✦"));
@@ -270,10 +270,10 @@ export function showBusy(feed) {
   line.appendChild(el("span", "", "· " + t("web.input.esc")));
   appendTo(feed, line);
   const started = Date.now();
-  feed.busyTimer = setInterval(() => {
+  feedState.busyTimer = setInterval(() => {
     if (!line.parentNode) {
-      clearInterval(feed.busyTimer);
-      feed.busyTimer = null;
+      clearInterval(feedState.busyTimer);
+      feedState.busyTimer = null;
       return;
     }
     time.textContent = "· " + Math.round((Date.now() - started) / 1000) + "s";
@@ -281,24 +281,24 @@ export function showBusy(feed) {
 }
 
 export function flushRun() {
-  if (feed.runCount <= 0) {
+  if (feedState.runCount <= 0) {
     resetRun();
     return;
   }
   // Quiet: a run of successful read-only actions folds into one summary line,
   // replacing the per-action lines (mirrors `Renderer.flushRecon`). `normal`
   // and `verbose` keep the individual action lines and add nothing.
-  if (verbosity() === "quiet" && feed.runReconOnly && feed.runFails === 0 && feed.runCount > 1) {
+  if (verbosity() === "quiet" && feedState.runReconOnly && feedState.runFails === 0 && feedState.runCount > 1) {
     // Fade the folded lines out instead of snapping them away.
-    const folding = feed.runNodes.slice();
+    const folding = feedState.runNodes.slice();
     folding.forEach((node) => node.classList.add("fold-out"));
     window.setTimeout(() => folding.forEach((node) => node.remove()), 160);
     const line = el("div", "grouped");
     line.appendChild(el("span", "pipe", "│"));
-    const dur = formatMs(feed.runDuration);
+    const dur = formatMs(feedState.runDuration);
     line.appendChild(
       document.createTextNode(
-        " " + pluralCount("web.action.actions", feed.runCount) + " ✓" + (dur ? " · " + dur : ""),
+        " " + pluralCount("web.action.actions", feedState.runCount) + " ✓" + (dur ? " · " + dur : ""),
       ),
     );
     appendTo(liveFeed(), line);
@@ -307,9 +307,9 @@ export function flushRun() {
 }
 
 function resetRun() {
-  feed.runCount = 0;
-  feed.runFails = 0;
-  feed.runReconOnly = true;
-  feed.runNodes = [];
-  feed.runDuration = 0;
+  feedState.runCount = 0;
+  feedState.runFails = 0;
+  feedState.runReconOnly = true;
+  feedState.runNodes = [];
+  feedState.runDuration = 0;
 }
