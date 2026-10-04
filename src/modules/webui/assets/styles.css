@@ -880,12 +880,16 @@ body.light .sel > button { border: 1px solid var(--border); }
 .map-sec { flex: 1 1 auto; }
 .map-reindex { margin-top: 10px; font: inherit; font-size: 12px; color: var(--accent); background: transparent; border: 1px solid var(--border-2); border-radius: 5px; padding: 4px 10px; cursor: pointer; width: fit-content; }
 .map-reindex:disabled { color: var(--dim-b); cursor: default; }
-.lsp-what { color: var(--dim-c); font-size: 11px; line-height: 1.4; margin-bottom: 8px; overflow-wrap: anywhere; }
-.lsp-row { align-items: baseline; }
+.lsp-what { color: var(--dim-c); font-size: 11px; line-height: 1.4; margin-bottom: 6px; overflow-wrap: anywhere; }
+/* Каждый сервер — вертикальная пара: язык, под ним приглушённый статус. */
+.lsp-row { display: flex; flex-direction: column; gap: 1px; padding: 3px 0; }
+.lsp-lang { color: var(--muted); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.lsp-status { color: var(--dim-c); font-size: 11.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.lsp-muted .lsp-lang { color: var(--dim-b); }
+.lsp-muted .lsp-status { color: var(--dim-c); }
 .lsp-g.ok { color: var(--green); }
 .lsp-g.fail { color: var(--red); }
 .lsp-g.dim { color: var(--dim-c); }
-.lsp-detail { color: var(--muted); font-weight: 400; overflow-wrap: anywhere; }
 .lsp-head { display: flex; align-items: flex-start; gap: 6px; }
 .lsp-head .lsp-what { flex: 1; }
 .lsp-info-btn { display: inline-flex; align-items: center; padding: 2px; background: transparent; border: 0; color: var(--dim-c); cursor: pointer; }

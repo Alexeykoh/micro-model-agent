@@ -21,11 +21,18 @@ function lspGlyph(reason) {
   return ["✗", "fail"];
 }
 
+// Причины, которые не заслуживают отдельной строки: сервер либо не применим к
+// проекту, либо выключен. Схлопываем их в одну dim-строку на причину.
+const MUTED_REASONS = new Set(["not-applicable", "disabled"]);
+
 /** Хвост-detail строки сервера (время/способ запуска/бинарник/ошибка). */
 function lspDetail(s) {
   if (s.reason === "ok") {
-    const via = s.useNpxFallback ? t("web.sidebar.lsp_via_npx") : t("web.sidebar.lsp_via_global");
-    return formatMs(s.durationMs || 0) + " · " + t("web.sidebar.lsp_via") + " " + via;
+    const parts = [];
+    const ms = formatMs(s.durationMs || 0);
+    if (ms) parts.push(ms);
+    if (s.useNpxFallback) parts.push(t("web.sidebar.lsp_via_npx"));
+    return parts.join(" · ");
   }
   if (s.reason === "binary-missing" || s.reason === "offline" || s.reason === "network") {
     return s.binaryName || s.command || "";
@@ -37,15 +44,33 @@ function lspDetail(s) {
 }
 
 function lspRow(s) {
-  const row = el("div", "kv lsp-row");
-  row.appendChild(el("span", "dim", s.language));
-  const b = el("b");
+  const row = el("div", "lsp-row");
+  row.appendChild(el("span", "lsp-lang", s.language));
+  const st = el("span", "lsp-status");
   const [g, cls] = lspGlyph(s.reason);
-  b.appendChild(el("span", "lsp-g " + cls, g));
-  b.appendChild(document.createTextNode(" " + t(lspReasonKey(s.reason))));
+  st.appendChild(el("span", "lsp-g " + cls, g));
+  st.appendChild(document.createTextNode(" " + t(lspReasonKey(s.reason))));
   const detail = lspDetail(s);
-  if (detail) b.appendChild(el("span", "lsp-detail", " · " + detail));
-  row.appendChild(b);
+  if (detail) st.appendChild(document.createTextNode(" · " + detail));
+  if (s.reason === "ok") {
+    const via = s.useNpxFallback ? t("web.sidebar.lsp_via_npx") : t("web.sidebar.lsp_via_global");
+    row.title = t("web.sidebar.lsp_via") + " " + via;
+  }
+  row.appendChild(st);
+  return row;
+}
+
+/** Одна dim-строка на причину: `javascript, python, …` + статус снизу. */
+function lspMutedRow(reason, list) {
+  const row = el("div", "lsp-row lsp-muted");
+  const langs = el("span", "lsp-lang", list.map((s) => s.language).join(", "));
+  langs.title = langs.textContent;
+  row.appendChild(langs);
+  const st = el("span", "lsp-status");
+  const [g, cls] = lspGlyph(reason);
+  st.appendChild(el("span", "lsp-g " + cls, g));
+  st.appendChild(document.createTextNode(" " + t(lspReasonKey(reason))));
+  row.appendChild(st);
   return row;
 }
 
@@ -73,13 +98,37 @@ export function renderLsp() {
     sb.lspEl.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_not_checked")));
   } else {
     const onOff = (v) => (v ? t("web.sidebar.map_on") : t("web.sidebar.map_off"));
-    sb.lspEl.appendChild(mapKv(t("web.sidebar.lsp_enabled"), onOff(sb.lspDiag.enabled)));
-    sb.lspEl.appendChild(mapKv(t("web.sidebar.lsp_offline"), onOff(sb.lspDiag.offline)));
+    const enabled = sb.lspDiag.enabled;
+    const flags = el("div", "lsp-row lsp-flags");
+    flags.appendChild(el("span", "lsp-lang", "LSP"));
+    const st = el("span", "lsp-status");
+    st.appendChild(el("span", "lsp-g " + (enabled ? "ok" : "dim"), enabled ? "✓" : "–"));
+    st.appendChild(
+      document.createTextNode(
+        " " + (enabled ? t("web.sidebar.lsp_enabled") : t("web.sidebar.lsp_reason_disabled")),
+      ),
+    );
+    if (sb.lspDiag.offline) {
+      st.appendChild(document.createTextNode(" · " + t("web.sidebar.lsp_offline") + " " + onOff(true)));
+    }
+    flags.appendChild(st);
+    sb.lspEl.appendChild(flags);
     const servers = Array.isArray(sb.lspDiag.servers) ? sb.lspDiag.servers : [];
     if (servers.length === 0) {
       sb.lspEl.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_none")));
     } else {
-      servers.forEach((s) => sb.lspEl.appendChild(lspRow(s)));
+      const active = [];
+      const muted = new Map();
+      servers.forEach((s) => {
+        if (MUTED_REASONS.has(s.reason)) {
+          if (!muted.has(s.reason)) muted.set(s.reason, []);
+          muted.get(s.reason).push(s);
+        } else {
+          active.push(s);
+        }
+      });
+      active.forEach((s) => sb.lspEl.appendChild(lspRow(s)));
+      muted.forEach((list, reason) => sb.lspEl.appendChild(lspMutedRow(reason, list)));
     }
   }
   const btn = el(
