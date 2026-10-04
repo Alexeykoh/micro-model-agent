@@ -4,9 +4,11 @@ import {
   splitByMemory,
   collectMemoryHits,
   extractKeywords,
+  markRepeatedKnown,
   MAX_QUESTIONS_PER_CALL,
 } from "../../src/tools/question";
 import type { PromptIO } from "../../src/tools/prompt-io";
+import { t } from "../../src/i18n/index";
 
 // Hermetic by default: stub the memory pre-check so tests never depend on
 // (or touch) the developer's real ~/.mma memory.
@@ -203,13 +205,33 @@ describe("collectMemoryHits keyword overlap", () => {
     expect(hits).toHaveLength(0);
   });
 
-  it("uses option labels in the overlap (frame size question)", () => {
+  it("ignores option-only overlap (options are answers, not the question intent)", () => {
+    // Question shares only "размер" with the line (1 keyword < threshold), so
+    // the rich option labels (рама/средний/дюймов) must NOT push it over the
+    // edge: option wording is answer vocabulary, not what the question asks.
     const line = "frame = рама 17 дюймов, размер средний";
     const hits = collectMemoryHits(searchLine(line), {
       question: "Какой размер?",
       options: [{ label: "Средний 17-17.5", description: "рама 17 дюймов" }],
     });
-    expect(hits).toHaveLength(1);
+    expect(hits).toHaveLength(0);
+  });
+
+  it("does not suppress a project question via a generic profile fact (landing regression)", () => {
+    // Real bug (ses_muu76tpy): profile fact "Стек: JavaScript/TypeScript"
+    // suppressed "какой стек для лендинга?" because option labels added
+    // "TypeScript"/"разработка" to the overlap. Question text alone shares
+    // only "стек" (1 < 2) → must be asked, not answered from memory.
+    const profile = "- **2026-10-02** — Сфера: разработка / IT. Стек: JavaScript/TypeScript, Python.";
+    const hits = collectMemoryHits(searchLine(profile), {
+      question: "Какой стек технологий предпочтительнее для лендинга?",
+      header: "Технологии",
+      options: [
+        { label: "Next.js + TypeScript (рекомендуется)", description: "быстрая разработка" },
+        { label: "Чистый HTML/CSS/JS", description: "простой вариант" },
+      ],
+    });
+    expect(hits).toHaveLength(0);
   });
 
   it("filters out single-keyword overlap (too easy to be coincidence)", () => {
@@ -228,5 +250,33 @@ describe("collectMemoryHits keyword overlap", () => {
       { question: "Какой бюджет?" },
     );
     expect(hits).toEqual([]);
+  });
+});
+
+describe("questionTool memory anti-loop", () => {
+  const knownSearch = () => ["[facts] city = Kazan"];
+
+  it("markRepeatedKnown flags only the second report of the same question", () => {
+    const c = {};
+    const spec = { question: "Which city?" };
+    expect(markRepeatedKnown(c, [])).toBe(false);
+    expect(markRepeatedKnown(c, [{ spec, hits: ["x"] }])).toBe(false);
+    expect(markRepeatedKnown(c, [{ spec, hits: ["x"] }])).toBe(true);
+  });
+
+  it("adds a hard stop directive when a known question is re-asked", async () => {
+    const io = fakeIO();
+    const c = { promptIO: io, memorySearch: knownSearch } as any;
+    const args = { questions: [{ question: "Which city?" }] };
+    const first = await questionTool.handler(c, args);
+    const second = await questionTool.handler(c, args);
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    // Same memory-known report, plus the anti-loop directive on the repeat.
+    expect(second.output.length).toBeGreaterThan(first.output.length);
+    expect(first.output).not.toContain(t("tool.question.memory_repeat"));
+    expect(second.output).toContain(t("tool.question.memory_repeat"));
+    expect(io.askText).not.toHaveBeenCalled();
+    expect(io.askChoice).not.toHaveBeenCalled();
   });
 });

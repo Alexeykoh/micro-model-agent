@@ -107,6 +107,42 @@ export function splitByMemory(
 }
 
 /**
+ * Сигнатура вопроса для анти-петли: нормализованный текст (регистр, пунктуация,
+ * пробелы). Опции/заголовок не входят — модель часто переформулирует варианты,
+ * но намерение то же.
+ */
+export function questionSignature(spec: QuestionSpec): string {
+  return spec.question
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/**
+ * Анти-петля: вопросы, уже отчёченные как «известные памяти» в этой сессии.
+ * WeakMap по ctx (стабилен на сессию) — состояние не течёт между сессиями и
+ * убирается сборщиком. `true`, если хоть один из `known` уже репортился, т.е.
+ * модель переспрашивает то, что память уже закрыла.
+ */
+const reportedKnown = new WeakMap<object, Set<string>>();
+
+export function markRepeatedKnown(ctx: object, known: KnownQuestion[]): boolean {
+  if (known.length === 0) return false;
+  let seen = reportedKnown.get(ctx);
+  if (!seen) {
+    seen = new Set<string>();
+    reportedKnown.set(ctx, seen);
+  }
+  let repeated = false;
+  for (const k of known) {
+    const sig = questionSignature(k.spec);
+    if (seen.has(sig)) repeated = true;
+    else seen.add(sig);
+  }
+  return repeated;
+}
+
+/**
  * Значимые слова текста: lowercase, unicode-разбивка, длина ≥ 4. Короче
  * ("тип", "для", "что") — шум для overlap-мэтчинга.
  */
@@ -138,16 +174,20 @@ interface MemoryHit {
 /**
  * Keyword-overlap поиск по памяти через инжектируемый покейвордный поиск.
  * Чистая — прод-обвязка (`lookupMemory`) передаёт `MemoryStore.search`.
+ *
+ * Слова опций (label/description) в overlap НЕ входят: опции — это варианты
+ * ответа, а не намерение вопроса. Их терминология (напр. "TypeScript" в
+ * вариантах стека) часто случайно пересекается с профилем пользователя и
+ * глушила проектные вопросы, на которые память на самом деле не отвечает
+ * (наблюдалось: вопрос «какой стек для лендинга?» подавлялся строкой
+ * «Стек: JavaScript/TypeScript, Python» из facts.md). Precision важнее recall:
+ * ложное подавление зацикливает слабую модель, лишний вопрос — безопасен.
  */
 export function collectMemoryHits(
   searchOne: (keyword: string) => MemoryHit[],
   spec: QuestionSpec,
 ): string[] {
-  const keywords = extractKeywords(
-    spec.question,
-    spec.header,
-    ...(spec.options ?? []).flatMap((o) => [o.label, o.description]),
-  );
+  const keywords = extractKeywords(spec.question, spec.header);
   if (keywords.length === 0) return [];
   const lines = new Map<string, { text: string; matched: Set<string> }>();
   for (const kw of keywords) {
@@ -301,6 +341,11 @@ export const questionTool: ToolDefinition = {
       );
     }
 
+    // Анти-петля: та же память-известная тема, запрошенная повторно в сессии
+    // (наблюдалось: qwen3.5-9b трижды звал question с одним смыслом, получал
+    // memory_known и в итоге «сдавался», выливая вопрос текстом).
+    const repeatedKnown = markRepeatedKnown(ctx, known);
+
     const parts: string[] = [];
     if (toAsk.length > 0) {
       const formatted = toAsk
@@ -318,6 +363,9 @@ export const questionTool: ToolDefinition = {
         .map((k) => `"${k.spec.question}"="${k.hits.join("; ")}"`)
         .join(", ");
       parts.push(t("tool.question.memory_known", { formatted }));
+    }
+    if (repeatedKnown) {
+      parts.push(t("tool.question.memory_repeat"));
     }
     parts.push(t("tool.question.session_only"));
     if (truncated > 0) {

@@ -771,7 +771,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 - **Тесты:** `tests/modules/indexer/{rank,gitignore,symbols,incremental,module-search,graph}.test.ts`,
   `tests/modules/lsp/symbols.test.ts`.
 
-### Current Version: 2.18.0
+### Current Version: 2.18.2
 
 ### Changelog
 

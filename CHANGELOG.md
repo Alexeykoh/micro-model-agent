@@ -4,6 +4,17 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.18.2] - 2026-10-04
+
+### Fixed
+
+- **Question memory pre-check suppressed project questions** (`src/tools/question.ts`): the keyword-overlap threshold counted option labels/descriptions as if they were the question intent, so a generic profile fact (`Стек: JavaScript/TypeScript, Python`) matched "Какой стек технологий предпочтительнее для лендинга?" via "TypeScript"/"разработка" in the options and silently suppressed it. The small model then looped on `question` (every result `memory_known`) and finally dumped the question as plain text, ending the turn. The threshold now counts only `question` + `header` keywords - option wording is answer vocabulary, not the question.
+- **Repeated memory-known question now hard-stops** (`src/tools/question.ts`, i18n `tool.question.memory_repeat`): the same question reported as known twice in a session returns an explicit "do not call question again, continue with the known value" directive. `tool.question.memory_only` / `tool.question.memory_known` no longer end on the contradictory "these were NOT asked" without a follow-up instruction.
+
+### Added
+
+- **`markRepeatedKnown`** (`src/tools/question.ts`): per-session (WeakMap by tool context) tracking of questions already reported as memory-known, powering the anti-loop directive.
+
 ## [2.18.1] - 2026-10-04
 
 ### Changed
