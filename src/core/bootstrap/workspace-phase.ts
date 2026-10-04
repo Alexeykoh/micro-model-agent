@@ -99,6 +99,7 @@ export async function setupWorkspacePhase(
     cacheDir: projectMapCacheDir,
     maxFiles: config.indexer?.maxFiles,
     respectGitignore: config.indexer?.respectGitignore,
+    mapTokenBudget: config.indexer?.mapTokenBudget,
   });
   try {
     // Строим (или грузим из кэша) индекс проекта. На большом workspace первый

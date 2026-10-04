@@ -171,6 +171,8 @@ export interface IndexerConfig {
   maxFiles: number;
   /** Следовать `.gitignore`/`.mmaignore` корня проекта при обходе. */
   respectGitignore: boolean;
+  /** Токен-бюджет списка файлов в карте проекта (PageRank-отбор). */
+  mapTokenBudget: number;
 }
 
 export interface ModelLoadConfig {

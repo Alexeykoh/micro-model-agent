@@ -299,3 +299,35 @@ export function extractSymbols(content: string, languageId: string): string[] {
 export function indexedExtensions(): string[] {
   return Object.keys(EXT_TO_LANGUAGE).sort();
 }
+
+/** Паттерны спецификаторов импорта (TS/JS/Python/Rust/Ruby/PHP). */
+const IMPORT_PATTERNS: RegExp[] = [
+  /\bfrom\s*['"]([^'"]+)['"]/g,
+  /\bimport\s*\(?\s*['"]([^'"]+)['"]/g,
+  /\brequire\s*\(\s*['"]([^'"]+)['"]/g,
+  /^\s*use\s+([A-Za-z_][\w:]*)/gm,
+  /^\s*#include\s+["<]([^">]+)[">]/gm,
+];
+
+/**
+ * Извлекает сырые спецификаторы импорта/require из содержимого. Используется
+ * графом ссылок (PageRank): резолв локальных путей — в `graph.ts`. Дубликаты
+ * убираются, порядок — первый.
+ */
+export function extractImports(content: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const re of IMPORT_PATTERNS) {
+    re.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(content)) !== null) {
+      const spec = match[1];
+      if (spec && !seen.has(spec)) {
+        seen.add(spec);
+        out.push(spec);
+      }
+      if (match.index === re.lastIndex) re.lastIndex++;
+    }
+  }
+  return out;
+}

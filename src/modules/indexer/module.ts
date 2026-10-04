@@ -8,7 +8,8 @@ import { Indexer, DEFAULT_MAX_FILES } from "./walker";
 import { IndexCache } from "./cache";
 import { selectMapFiles } from "./map-select";
 import { buildProjectProfileLine } from "./project-profile";
-import { rankFiles, rankSymbols, matchOutline } from "./rank";
+import { rankFiles, rankSymbols, matchOutline, selectByRank } from "./rank";
+import { buildFileGraph } from "./graph";
 import type { IndexResult, IndexedFile } from "./walker";
 import { t } from "../../i18n/index";
 import { toForwardSlash } from "../../tools/path-utils";
@@ -22,10 +23,15 @@ export interface IndexerModuleOptions {
   maxFiles?: number;
   /** Следовать `.gitignore`/`.mmaignore` корня проекта (default true). */
   respectGitignore?: boolean;
+  /** Токен-бюджет списка файлов карты (PageRank-отбор; см. selectByRank). */
+  mapTokenBudget?: number;
 }
 
-/** Макс. файлов в блоке карты проекта (сначала код; см. map-select). */
+/** Макс. файлов в блоке карты проекта (фолбэк без графа; см. map-select). */
 const MAP_FILE_LIMIT = 80;
+
+/** Дефолтный токен-бюджет списка файлов карты. */
+const MAP_TOKEN_BUDGET = 1500;
 
 /** Макс. строк в результатах find/symbol (хвост — счётчиком). */
 const FIND_LIMIT = 50;
@@ -41,7 +47,9 @@ export class IndexerModule implements AgentModule {
   private cache: IndexCache;
   private baseDir: string;
   private maxFiles: number;
+  private mapTokenBudget: number;
   private index: IndexResult | null = null;
+  private rankCache: { index: IndexResult; ranks: Map<string, number> } | null = null;
   private mapCache: { index: IndexResult; value: ProjectMapInfo } | null = null;
   private buildPromise: Promise<IndexResult | null> | null = null;
   private indexing = false;
@@ -52,6 +60,7 @@ export class IndexerModule implements AgentModule {
   constructor(opts: IndexerModuleOptions) {
     this.baseDir = opts.baseDir;
     this.maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES;
+    this.mapTokenBudget = opts.mapTokenBudget ?? MAP_TOKEN_BUDGET;
     this.indexer = new Indexer(opts.baseDir, {
       maxFiles: this.maxFiles,
       respectGitignore: opts.respectGitignore,
@@ -101,6 +110,7 @@ export class IndexerModule implements AgentModule {
   async refresh(): Promise<IndexResult | null> {
     this.cache.invalidate();
     this.index = null;
+    this.rankCache = null;
     this.builtAt = null;
     return this.buildIndex();
   }
@@ -294,7 +304,11 @@ export class IndexerModule implements AgentModule {
         .map(([dir, count]) => `${dir} (${count})`)
         .join(", ") || "-";
 
-    const listed = selectMapFiles(result.files, MAP_FILE_LIMIT);
+    const ranks = this.getRanks(result);
+    const listed =
+      ranks.size > 0
+        ? selectByRank(result.files, ranks, this.mapTokenBudget, (s) => estimateTokens(s))
+        : selectMapFiles(result.files, MAP_FILE_LIMIT);
     const fileLines = listed.map((f) => {
       const path = toForwardSlash(f.path);
       const exports = f.exports.length > 0 ? `: ${f.exports.join(", ")}` : "";
@@ -371,6 +385,14 @@ export class IndexerModule implements AgentModule {
 
   private estimateTokens(content: string): number {
     return estimateTokens(content);
+  }
+
+  /** PageRank-ранги файлов, кэшированные на объект индекса (граф дёшев, но не на поллинг). */
+  private getRanks(result: IndexResult): Map<string, number> {
+    if (this.rankCache?.index === result) return this.rankCache.ranks;
+    const { ranks } = buildFileGraph(result.files);
+    this.rankCache = { index: result, ranks };
+    return ranks;
   }
 
   private createProjectMapTool(): ToolDefinition {

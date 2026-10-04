@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Incremental re-index by mtime** (`src/modules/indexer/walker.ts`, `cache.ts`): `IndexedFile` carries `size`/`mtimeMs`; `walk(prev)` reuses unchanged files (no read, no regex) and re-reads only changed ones. On a synthetic 3000-file tree, rebuilding after a one-file edit drops from ~302 ms to ~168 ms (1.8×). Cache schema bumped to v3.
 - **Indexer config** (`config.indexer.maxFiles`, `config.indexer.respectGitignore`): the file cap is now configurable (default **1000 → 5000**) and surfaced in `/config` and Settings → Context → Project index; when the cap is hit the map shows an explicit truncation marker instead of silently listing a subset.
 - **`.gitignore` / `.mmaignore` support** (`src/modules/indexer/gitignore.ts`): best-effort matcher (comments, `!` negation, `/` anchoring, `dir/`, `*`, `?`, `**`), fail-open. On this repo it filters 971 → 934 indexed files.
+- **PageRank-ranked project map under a token budget** (`src/modules/indexer/graph.ts`, `rank.ts`, `module.ts`): a file→file reference graph is built from imports/require (local specifiers and path aliases resolved), PageRank scores architectural importance, and `selectByRank` fits the highest-ranked files into `indexer.mapTokenBudget` (default 1500 tokens) instead of a fixed 80-file list. On this repo the map shrinks 2444 → 1481 tokens (80 → 40 files) while surfacing hubs (types/registry modules).
 
 ### Changed
 

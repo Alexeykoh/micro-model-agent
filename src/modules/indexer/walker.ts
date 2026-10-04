@@ -12,7 +12,12 @@ import {
 import { createHash } from "node:crypto";
 import { join, relative, extname } from "path";
 import { Logger } from "../../logger/app-logger";
-import { languageIdForExt, extractSymbolsDetailed, type SymbolLocation } from "./symbols";
+import {
+  languageIdForExt,
+  extractSymbolsDetailed,
+  extractImports,
+  type SymbolLocation,
+} from "./symbols";
 import { loadIgnoreMatcher, type IgnoreMatcher } from "./gitignore";
 import { t } from "../../i18n/index";
 
@@ -127,6 +132,8 @@ export interface IndexedFile {
   exports: string[];
   /** Символы с позициями/kind (пусто у языков без извлечения). */
   symbols: SymbolLocation[];
+  /** Сырые спецификаторы импорта — рёбра графа ссылок (PageRank). */
+  imports?: string[];
   size: number;
   /** mtime файла (epoch ms) — ключ инкрементального переиспользования. */
   mtimeMs: number;
@@ -352,6 +359,7 @@ export class Indexer {
           path: relPath,
           language,
           symbols,
+          imports: extractImports(content),
           exports: symbols.map((s) => s.name),
           size: stat.size,
           mtimeMs: stat.mtimeMs,

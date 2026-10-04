@@ -754,7 +754,13 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   `[!] Index truncated…`, а не молча отдаёт подмножество.
 - **`.gitignore`/`.mmaignore`** (`src/modules/indexer/gitignore.ts`, fail-open; комментарии,
   `!`-негация, `/`-якорь, `dir/`, `*`, `?`, `**`). На этом репо 971→934 файла.
-- **Тесты:** `tests/modules/indexer/{rank,gitignore,symbols,incremental,module-search}.test.ts`.
+- **PageRank-карта под токен-бюджет** (`src/modules/indexer/graph.ts`, `rank.ts`): граф
+  файл→файл из импортов/require (`extractImports`, резолв `./`,`@/`,`~/`, index-файлов),
+  PageRank (damping 0.85, 20 итераций), `selectByRank` под `indexer.mapTokenBudget`
+  (default 1500) вместо фиксированных 80 файлов. На этом репо карта 2444→1481 токенов
+  (80→40 файлов), наверх выходят хабы (`src/config/types.ts`, `lsp/types.ts`). Граф ленивый,
+  кэш на объект индекса (`getRanks`).
+- **Тесты:** `tests/modules/indexer/{rank,gitignore,symbols,incremental,module-search,graph}.test.ts`.
 
 ### Current Version: 2.18.0
 

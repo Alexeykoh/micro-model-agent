@@ -1753,6 +1753,8 @@
   "config.desc.indexer.maxFiles": "Кап файлов, попадающих в карту проекта (100-100000).",
   "config.key.indexer.respectGitignore": "учитывать .gitignore",
   "config.desc.indexer.respectGitignore": "Пропускать файлы из .gitignore/.mmaignore при построении карты.",
+  "config.key.indexer.mapTokenBudget": "бюджет токенов карты",
+  "config.desc.indexer.mapTokenBudget": "Бюджет токенов для PageRank-списка файлов в карте проекта (200-20000).",
   "config.key.lsp.enabled": "LSP",
   "config.desc.lsp.enabled": "Запускать языковые серверы после записи файлов и через тул lsp_check.",
   "config.key.lsp.offline": "офлайн-режим LSP",

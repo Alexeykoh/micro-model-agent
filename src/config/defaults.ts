@@ -117,6 +117,7 @@ export const DEFAULTS: AppConfig = {
   indexer: {
     maxFiles: 5000,
     respectGitignore: true,
+    mapTokenBudget: 1500,
   },
   browser: {
     enabled: true,

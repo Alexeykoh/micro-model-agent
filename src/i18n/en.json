@@ -1750,6 +1750,8 @@
   "config.desc.indexer.maxFiles": "Cap on files scanned into the project map (100-100000).",
   "config.key.indexer.respectGitignore": "respect .gitignore",
   "config.desc.indexer.respectGitignore": "Skip files ignored by .gitignore/.mmaignore when building the map.",
+  "config.key.indexer.mapTokenBudget": "map token budget",
+  "config.desc.indexer.mapTokenBudget": "Token budget for the PageRank-ranked file list in the project map (200-20000).",
   "config.key.lsp.enabled": "LSP",
   "config.desc.lsp.enabled": "Run language servers after file writes and via the lsp_check tool.",
   "config.key.lsp.offline": "LSP offline mode",

@@ -120,6 +120,39 @@ export function rankSymbols(files: IndexedFile[], query: string): SymbolHit[] {
   );
 }
 
+/**
+ * Отбирает файлы для блока карты по PageRank-важности под токен-бюджет.
+ * Файлы без рёбер получают низкий ранг и идут последними; код всё равно выше
+ * тестов/доков при равном ранге. Всегда берётся хотя бы один файл.
+ */
+export function selectByRank(
+  files: IndexedFile[],
+  ranks: Map<string, number>,
+  maxTokens: number,
+  estimate: (text: string) => number,
+): IndexedFile[] {
+  const ranked = [...files].sort((a, b) => {
+    const ra = ranks.get(a.path.replace(/\\/g, "/")) ?? 0;
+    const rb = ranks.get(b.path.replace(/\\/g, "/")) ?? 0;
+    return (
+      rb - ra ||
+      fileClass(a) - fileClass(b) ||
+      a.path.length - b.path.length ||
+      a.path.localeCompare(b.path)
+    );
+  });
+  const out: IndexedFile[] = [];
+  let tokens = 0;
+  for (const file of ranked) {
+    const line = `- ${file.path.replace(/\\/g, "/")}: ${file.exports.join(", ")}`;
+    const cost = estimate(line);
+    if (out.length > 0 && tokens + cost > maxTokens) break;
+    out.push(file);
+    tokens += cost;
+  }
+  return out;
+}
+
 /** Находит файл для outline по пути/суффиксу/имени (null, если нет). */
 export function matchOutline(files: IndexedFile[], query: string): IndexedFile | null {
   const q = query.trim().replace(/\\/g, "/").toLowerCase();

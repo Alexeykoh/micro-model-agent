@@ -22,15 +22,16 @@ function write(rel: string, content: string): void {
   writeFileSync(full, content);
 }
 
+async function runAction(action: string, query?: string) {
+  const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+  await mod.buildIndex();
+  return mod.getToolDefinitions()[0].handler({} as never, { action, query });
+}
+
 describe("project_map search actions", () => {
   it("symbol action returns definition sites with line and kind", async () => {
     write("src/registry.ts", "export function registerThing() {}\nexport const other = 1;");
-    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
-    await mod.buildIndex();
-    const res = await mod.getToolDefinitions()[0].handler({} as never, {
-      action: "symbol",
-      query: "registerThing",
-    });
+    const res = await runAction("symbol", "registerThing");
     expect(res.success).toBe(true);
     expect(res.output).toContain("registerThing");
     expect(res.output).toContain(":1");
@@ -39,12 +40,7 @@ describe("project_map search actions", () => {
 
   it("outline action lists a file's symbols by line", async () => {
     write("src/mod.ts", "export const a = 1;\nexport class B {}\n");
-    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
-    await mod.buildIndex();
-    const res = await mod.getToolDefinitions()[0].handler({} as never, {
-      action: "outline",
-      query: "mod.ts",
-    });
+    const res = await runAction("outline", "mod.ts");
     expect(res.success).toBe(true);
     expect(res.output).toContain("src/mod.ts");
     expect(res.output).toMatch(/1: a \(const\)/);
@@ -53,9 +49,7 @@ describe("project_map search actions", () => {
 
   it("requires a query for symbol/outline", async () => {
     write("src/a.ts", "export const a = 1");
-    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
-    await mod.buildIndex();
-    const res = await mod.getToolDefinitions()[0].handler({} as never, { action: "symbol" });
+    const res = await runAction("symbol");
     expect(res.success).toBe(false);
   });
 
