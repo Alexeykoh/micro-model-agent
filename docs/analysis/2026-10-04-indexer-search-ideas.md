@@ -50,7 +50,8 @@ entire.io/blog (improving agentic search), zzet.org (three search modalities).
 |---|---|---|---|
 | 1 | Инкрементальный индекс по mtime | `IndexedFile.mtimeMs`; `walk(prev)` переиспользует неизменные, `cache.loadForReuse()` (схема v3) | 3000 файлов: пересбор после 1 правки 302→168 мс (1.8×) |
 | 2 | Ранжирование `find` | `rank.ts`: exact>prefix>substring>path, код>тест>доки, короче путь | MRR 0.93→1.00, Hit@1 0.90→1.00 (`plugin` 7→1) |
-| 3 | Символы с позициями + `symbol`/`outline` | `extractSymbolsDetailed` → `{name,line,kind}`; новые действия `project_map` | навигация без чтения тела; тул-набор не вырос |
+| 3 | Символы с позициями + `symbol`/`outline` | `extractSymbolsDetailed` → `{name,line,kind,signature}`; новые действия `project_map` | навигация без чтения тела; тул-набор не вырос |
+| 3b | Сигнатуры без парсера | `readSignature` (до `{`/`;`, учёт скобок) | покрытие ~83%, +0 к времени индексации |
 | 5 | Конфиг `indexer.maxFiles` (1000→5000) | `registry-extra`, Settings → Context, маркер `[!] truncated` | убран «упор в 1000» |
 | 6 | `.gitignore`/`.mmaignore` | `gitignore.ts`, fail-open (комментарии, `!`, `/`, `dir/`, `*`, `?`, `**`) | 971→934 файла |
 
@@ -70,9 +71,15 @@ entire.io/blog (improving agentic search), zzet.org (three search modalities).
 сервера, с фолбэком на индекс. Детерминированный ответ «где символ» точнее
 regex; для типизированных языков — крупный выигрыш.
 
-### Идея 8 — tree-sitter (WASM)
-Точные сигнатуры и call-граф (Aider/Cline/Roo). Ломает zero-dep: нужны
-vendor-грамматики (хотя бы JS/TS/Python). Даёт основу точного PageRank из Фазы B.
+### Идея 8 — tree-sitter (WASM) — отложена
+Точные сигнатуры и call-граф (Aider/Cline/Roo). Но: bundle TS/JS/Python ≈ 3–4 МБ
+(текущий пакет 1.73 МБ), ABI-риски prebuilt-wasm, точность всё равно упирается в
+отсутствие типов (эвристика рёбер резолвится на 25–37%, LSP — до 44–81%).
+Дешёвый шаг-замена: сигнатуры эвристикой `readSignature` — 80% model-facing
+выигрыша при нулевой зависимости. Tree-sitter оправдан только как opt-in бэкенд
+(`indexer.parser`) с ленивой загрузкой грамматик, если понадобится call-graph.
+Варианты-источники: `web-tree-sitter` (MIT), `tree-sitter-wasms`, паттерн
+on-demand загрузки (open-swarm `src/lang/runtime.ts`).
 
 ### Отложено осознанно
 - **Trigram persistent index** (Zoekt) — не нужен до 100k+ файлов.

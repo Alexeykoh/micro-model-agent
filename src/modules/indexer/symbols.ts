@@ -15,11 +15,48 @@
 /** Кап на файл: один генерированный файл не раздувает карту. */
 export const MAX_SYMBOLS_PER_FILE = 40;
 
-/** Один извлечённый символ: имя, 1-based строка, категория. */
+/** Один извлечённый символ: имя, 1-based строка, категория, сигнатура. */
 export interface SymbolLocation {
   name: string;
   line: number;
   kind: string;
+  /** Текст объявления до тела/`;` одной строкой (эвристика, без AST). */
+  signature?: string;
+}
+
+/** Макс. длина сигнатуры (модель видит API, не тело). */
+export const MAX_SIGNATURE_CHARS = 160;
+
+/** Глубина круглых/квадратных скобок при сканировании сигнатуры. */
+interface BracketDepth {
+  paren: number;
+  bracket: number;
+}
+
+/** Обновляет глубину скобок по символу. */
+function updateDepth(ch: string, depth: BracketDepth): void {
+  if (ch === "(") depth.paren++;
+  else if (ch === ")") depth.paren--;
+  else if (ch === "[") depth.bracket++;
+  else if (ch === "]") depth.bracket--;
+}
+
+/** True для `{`/`;`/перевода строки на нулевой глубине — конец сигнатуры. */
+function isSignatureEnd(ch: string, depth: BracketDepth): boolean {
+  return depth.paren <= 0 && depth.bracket <= 0 && (ch === "{" || ch === ";" || ch === "\n");
+}
+
+/** Строка до `;`/`{`/перевода строки на нулевой глубине скобок — сигнатура. */
+export function readSignature(content: string, start: number): string {
+  let out = "";
+  const depth: BracketDepth = { paren: 0, bracket: 0 };
+  for (let i = start; i < content.length && out.length < MAX_SIGNATURE_CHARS; i++) {
+    const ch = content[i];
+    updateDepth(ch, depth);
+    if (isSignatureEnd(ch, depth)) break;
+    out += ch;
+  }
+  return out.trim().replace(/\s+/g, " ");
 }
 
 /** Регексп + метаданные для одной группы определений. */
@@ -72,7 +109,12 @@ function collect(content: string, patterns: Pattern[]): SymbolLocation[] {
       const name = match[nameGroup];
       if (name) {
         const resolvedKind = kindGroup !== undefined ? (match[kindGroup] ?? kind ?? "") : (kind ?? "");
-        symbols.push({ name, line: lineAt(content, match.index), kind: resolvedKind });
+        symbols.push({
+          name,
+          line: lineAt(content, match.index),
+          kind: resolvedKind,
+          signature: readSignature(content, match.index),
+        });
       }
       if (match.index === re.lastIndex) re.lastIndex++;
     }

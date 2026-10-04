@@ -36,6 +36,7 @@ describe("project_map search actions", () => {
     expect(res.output).toContain("registerThing");
     expect(res.output).toContain(":1");
     expect(res.output).toContain("(function)");
+    expect(res.output).toContain("export function registerThing()");
   });
 
   it("outline action lists a file's symbols by line", async () => {

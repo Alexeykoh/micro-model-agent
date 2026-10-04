@@ -47,6 +47,11 @@ const MAP_FILE_LIMIT = 80;
 /** Дефолтный токен-бюджет списка файлов карты. */
 const MAP_TOKEN_BUDGET = 1500;
 
+/** Суффикс `— <сигнатура>` к строке символа (пусто, если сигнатуры нет). */
+function signatureSuffix(signature?: string): string {
+  return signature ? ` — ${signature}` : "";
+}
+
 /** Макс. строк в результатах find/symbol (хвост — счётчиком). */
 const FIND_LIMIT = 50;
 
@@ -173,7 +178,10 @@ export class IndexerModule implements AgentModule {
     if (hits.length === 0) return t("indexer.no_matches", { query });
     const shown = hits.slice(0, FIND_LIMIT);
     const lines = shown
-      .map((h) => `- ${toForwardSlash(h.file.path)}:${h.line} ${h.name} (${h.kind})`)
+      .map(
+        (h) =>
+          `- ${toForwardSlash(h.file.path)}:${h.line} ${h.name} (${h.kind})${signatureSuffix(h.signature)}`,
+      )
       .join("\n");
     const more =
       hits.length > shown.length
@@ -192,7 +200,9 @@ export class IndexerModule implements AgentModule {
       return `${path}\n${t("indexer.outline_empty")}`;
     }
     const shown = file.symbols.slice(0, OUTLINE_LIMIT);
-    const lines = shown.map((s) => `  ${s.line}: ${s.name} (${s.kind})`).join("\n");
+    const lines = shown
+      .map((s) => `  ${s.line}: ${s.name} (${s.kind})${signatureSuffix(s.signature)}`)
+      .join("\n");
     const more =
       file.symbols.length > shown.length
         ? `\n${t("indexer.find_more", { count: file.symbols.length - shown.length })}`

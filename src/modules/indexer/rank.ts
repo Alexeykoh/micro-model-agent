@@ -94,6 +94,7 @@ export interface SymbolHit {
   name: string;
   line: number;
   kind: string;
+  signature?: string;
   rank: number;
 }
 
@@ -106,7 +107,7 @@ export function rankSymbols(files: IndexedFile[], query: string): SymbolHit[] {
     for (const sym of file.symbols) {
       const rank = matchRank(sym.name, q);
       if (rank >= 0) {
-        out.push({ file, name: sym.name, line: sym.line, kind: sym.kind, rank });
+        out.push({ file, name: sym.name, line: sym.line, kind: sym.kind, signature: sym.signature, rank });
       }
     }
   }
