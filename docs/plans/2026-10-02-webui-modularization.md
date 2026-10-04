@@ -249,7 +249,10 @@ Modify ~35 модулей-потребителей.
       ошибок (`.value` на `HTMLElement`, `dataset`/`tabIndex` на `Element`, `Event.key`),
       не реальных багов. Включать ratchet на весь js без `jsconfig`/JSDoc-хитростей — отдельная
       задача с нулевым runtime-выигрышем; отложено.
-- [x] Прогон: `bun test` + guard-граф + `bun run test:e2e` + ручной smoke (e2e — по запросу).
+- [x] Прогон: `bun test` + guard-граф + `bun run test:e2e` — **9 файлов / 31 тест зелёные**.
+      e2e вскрыл и закрыл регресс среза (`feed` shadow в `feed/*.js`, коммит `6d66b7a`) и
+      устаревшие сценарии; харнесс стал герметичным по умолчанию (dead-port провайдер,
+      `27d1e4d`). Ручной smoke не требовался.
 
 ---
 
