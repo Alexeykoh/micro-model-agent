@@ -14,6 +14,17 @@ const transpiler = new Bun.Transpiler({ loader: "ts" });
 await rm(outDir, { recursive: true, force: true });
 await mkdir(outDir, { recursive: true });
 
+// Transpile a `.ts` source to `.js` (skip type-only modules that emit nothing);
+// copy any other file (vendored `.js`, html, css) verbatim.
+async function emit(full: string, dest: string): Promise<void> {
+  if (!full.endsWith(".ts")) {
+    await cp(full, dest);
+    return;
+  }
+  const js = transpiler.transformSync(await readFile(full, "utf8"));
+  if (js.trim()) await writeFile(dest.replace(/\.ts$/, ".js"), js);
+}
+
 async function walk(dir: string): Promise<void> {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
@@ -23,12 +34,7 @@ async function walk(dir: string): Promise<void> {
       await walk(full);
       continue;
     }
-    if (entry.name.endsWith(".ts")) {
-      const js = transpiler.transformSync(await readFile(full, "utf8"));
-      await writeFile(dest.replace(/\.ts$/, ".js"), js);
-    } else {
-      await cp(full, dest);
-    }
+    await emit(full, dest);
   }
 }
 
