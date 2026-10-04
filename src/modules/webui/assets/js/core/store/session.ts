@@ -10,7 +10,7 @@ export interface SessionSlice {
   activeSessionId: string | null;
   runningSessionId: string | null;
   runningSessionIds: string[];
-  queued: Record<string, unknown>;
+  queued: Record<string, number>;
   sessionsError: string | null;
   // biome-ignore lint/suspicious/noExplicitAny: opaque reasoning payload.
   reasoning: any;

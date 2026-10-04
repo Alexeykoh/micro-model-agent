@@ -4,6 +4,7 @@
 import { el, inp } from "../dom.js";
 import { t } from "../i18n.js";
 import { api } from "../api.js";
+import type { Dict } from "../core/store/types.js";
 
 // List comes from the server (`/api/commands`) so it stays in sync with `/help`.
 const cmdk = el("div", "cmdk");
@@ -12,32 +13,32 @@ cmdk.hidden = true;
 cmdk.setAttribute("role", "listbox");
 const inputArea = document.querySelector(".input-area");
 if (inputArea) inputArea.appendChild(cmdk);
-let webCommands = [];
-let cmdkItems = [];
+let webCommands: Dict[] = [];
+let cmdkItems: Dict[] = [];
 let cmdkIndex = 0;
 
-let autogrowFn = () => {};
+let autogrowFn: () => void = () => {};
 
 /** Composer supplies the textarea autogrow; keeps this module a leaf. */
-export function initCmdk(deps) {
+export function initCmdk(deps: { autogrow?: () => void } | null): void {
   if (deps && typeof deps.autogrow === "function") autogrowFn = deps.autogrow;
 }
 
-export async function loadCommands() {
-  const r = await api("/api/commands");
+export async function loadCommands(): Promise<void> {
+  const r = await api<{ commands?: Dict[] }>("/api/commands");
   if (r.ok && r.data && Array.isArray(r.data.commands)) webCommands = r.data.commands;
 }
 
-function slashToken() {
+function slashToken(): string | null {
   const v = inp.value;
   return v.startsWith("/") && !/\s/.test(v) ? v : null;
 }
 
-export function isCmdkOpen() {
+export function isCmdkOpen(): boolean {
   return !cmdk.hidden;
 }
 
-export function closeCmdk() {
+export function closeCmdk(): void {
   if (cmdk.hidden) return;
   cmdk.hidden = true;
   cmdk.textContent = "";
@@ -47,13 +48,13 @@ export function closeCmdk() {
   inp.removeAttribute("aria-activedescendant");
 }
 
-function highlightCmdk() {
+function highlightCmdk(): void {
   Array.from(cmdk.children).forEach((node, i) => node.classList.toggle("on", i === cmdkIndex));
   const on = cmdk.children[cmdkIndex];
   if (on) inp.setAttribute("aria-activedescendant", on.id);
 }
 
-export function updateCmdk() {
+export function updateCmdk(): void {
   const token = slashToken();
   if (token === null || !webCommands.length) {
     closeCmdk();
@@ -87,7 +88,7 @@ export function updateCmdk() {
   highlightCmdk();
 }
 
-export function acceptCmdk(i) {
+export function acceptCmdk(i: number): void {
   const c = cmdkItems[i];
   if (!c) return;
   inp.value = "/" + c.name + " ";
@@ -98,7 +99,7 @@ export function acceptCmdk(i) {
 
 // Keyboard navigation while the list is open. Returns true when the key was
 // consumed (the composer then skips its send/interrupt handling).
-export function cmdkKeydown(e) {
+export function cmdkKeydown(e: KeyboardEvent): boolean {
   if (cmdk.hidden) return false;
   if (e.key === "ArrowDown") {
     e.preventDefault();

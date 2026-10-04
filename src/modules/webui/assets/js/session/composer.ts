@@ -6,6 +6,7 @@ import { inp, imgPicker, attachStrip, attachErr, sendBtn, el, icon } from "../do
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, session, settings, MAX_IMAGES, MAX_IMAGE_BYTES } from "../store.js";
+import type { Dict } from "../core/store/types.js";
 import { contextLabel } from "../format.js";
 import {
   clearEmpty, activeFeed, liveFeed, appendTo, scrollToBottom, clearFeed,
@@ -16,7 +17,17 @@ import { setSessOpen } from "../core/menus.js";
 import { openSessionsMenu } from "./sessions-menu.js";
 import { closeCmdk, updateCmdk, cmdkKeydown, initCmdk } from "./cmdk.js";
 
-let deps = {
+interface ComposerDeps {
+  activeTab: () => Dict | null;
+  setTabStatus: (id: string, status: string) => void;
+  newChatTab: () => void | Promise<void>;
+  markTabDead: (id: string) => void;
+  openTab: (id: string, name?: string, kind?: string, server?: boolean) => void;
+  closeTab: (id: string) => void;
+  statusTitle: (status: unknown) => string;
+}
+
+let deps: ComposerDeps = {
   activeTab: () => null,
   setTabStatus: () => {},
   newChatTab: async () => {},
@@ -27,7 +38,7 @@ let deps = {
 };
 
 /** Tab hub injects its operations; keeps the module DAG acyclic. */
-export function initComposer(d) {
+export function initComposer(d: Partial<ComposerDeps>): void {
   deps = { ...deps, ...d };
 }
 
@@ -36,13 +47,13 @@ initCmdk({ autogrow });
 
 // Grow the composer with its content up to a max, then scroll.
 const INPUT_MAX_PX = 200;
-function autogrow() {
+function autogrow(): void {
   if (!inp) return;
   inp.style.height = "auto";
   inp.style.height = Math.min(inp.scrollHeight, INPUT_MAX_PX) + "px";
 }
 
-function setAttachError(msg) {
+function setAttachError(msg: string): void {
   if (!attachErr) return;
   attachErr.textContent = msg;
   attachErr.hidden = false;
@@ -52,11 +63,11 @@ function setAttachError(msg) {
   }, 4000);
 }
 
-export function renderAttachments() {
+export function renderAttachments(): void {
   if (!attachStrip) return;
   attachStrip.textContent = "";
   attachStrip.hidden = tabState.attachments.length === 0;
-  tabState.attachments.forEach((src, i) => {
+  tabState.attachments.forEach((src: string, i: number) => {
     const thumb = el("div", "thumb");
     const img = document.createElement("img");
     img.alt = "";
@@ -79,12 +90,7 @@ export function renderAttachments() {
   if (owner) owner.attachments = tabState.attachments.slice();
 }
 
-function clearAttachments() {
-  tabState.attachments = [];
-  renderAttachments();
-}
-
-function readAsDataUrl(file) {
+function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onload = () => resolve(String(fr.result));
@@ -93,7 +99,7 @@ function readAsDataUrl(file) {
   });
 }
 
-async function addFiles(files) {
+async function addFiles(files: File[]): Promise<void> {
   let err = "";
   for (const file of files) {
     if (!file || typeof file.type !== "string" || file.type.indexOf("image/") !== 0) {
@@ -119,7 +125,7 @@ async function addFiles(files) {
         break;
       }
       tabState.attachments.push(url);
-    } catch (e) {
+    } catch {
       err = t("web.attach.read_failed");
     }
   }
@@ -127,7 +133,7 @@ async function addFiles(files) {
   if (err) setAttachError(err);
 }
 
-function userMessageNode(text, images) {
+function userMessageNode(text: string, images: string[] | null | undefined): HTMLElement {
   const node = el("div", "u", text);
   (images || []).forEach((src) => {
     const img = document.createElement("img");
@@ -139,14 +145,14 @@ function userMessageNode(text, images) {
   return node;
 }
 
-export function saveComposer() {
+export function saveComposer(): void {
   const tab = deps.activeTab();
   if (!tab || !inp) return;
   tab.draft = inp.value;
   tab.attachments = tabState.attachments.slice();
 }
 
-export function restoreComposer(tab) {
+export function restoreComposer(tab: Dict | null): void {
   if (!tab || !inp) return;
   inp.value = tab.draft || "";
   tabState.attachments = (tab.attachments || []).slice();
@@ -160,11 +166,11 @@ export function restoreComposer(tab) {
 // through the open tabs, ✕ closes the active tab, and the + / list tools
 // relocate here (see placeTopTools) so the topbar keeps room for tabs.
 const sessBar = document.getElementById("sessBar");
-const sessNameBtn = document.getElementById("sessNameBtn");
-const sessNameEl = document.getElementById("sessName");
-const sessPrevBtn = document.getElementById("sessPrev");
-const sessNextBtn = document.getElementById("sessNext");
-const sessCloseBtn = document.getElementById("sessClose");
+const sessNameBtn = document.getElementById("sessNameBtn") as HTMLButtonElement;
+const sessNameEl = document.getElementById("sessName") as HTMLElement;
+const sessPrevBtn = document.getElementById("sessPrev") as HTMLButtonElement;
+const sessNextBtn = document.getElementById("sessNext") as HTMLButtonElement;
+const sessCloseBtn = document.getElementById("sessClose") as HTMLButtonElement;
 const sessTools = document.getElementById("sessTools");
 const sessDD = document.getElementById("sessDD");
 const barTop = document.querySelector(".bar-top");
@@ -173,7 +179,7 @@ const newChatBtn = document.getElementById("newChat");
 const topToolsAnchor = document.createComment("top-tools");
 if (barTop && newChatBtn) barTop.insertBefore(topToolsAnchor, newChatBtn);
 
-function stepTab(dir) {
+function stepTab(dir: number): void {
   if (tabState.tabs.length < 2) return;
   const i = tabState.tabs.findIndex((x) => x.id === tabState.activeTabId);
   const n = i === -1 ? 0 : (i + dir + tabState.tabs.length) % tabState.tabs.length;
@@ -182,7 +188,7 @@ function stepTab(dir) {
   if (tab) deps.openTab(tab.id, tab.name, tab.kind, true);
 }
 
-export function renderSessBar() {
+export function renderSessBar(): void {
   if (!sessBar) return;
   const active = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   const label = active ? active.name || String(active.id) : "—";
@@ -197,7 +203,7 @@ export function renderSessBar() {
 
 // Nodes are relocated (not duplicated), so their listeners and the sessions
 // dropdown anchoring (.dd is position:relative) survive the move.
-function placeTopTools() {
+function placeTopTools(): void {
   if (!barTop || !sessTools || !newChatBtn || !sessDD) return;
   if (window.matchMedia("(max-width: 760px)").matches) {
     sessTools.append(newChatBtn, sessDD);
@@ -236,7 +242,7 @@ if (attachBtn && imgPicker) {
 inp.addEventListener("paste", (e) => {
   const items = e.clipboardData && e.clipboardData.items;
   if (!items) return;
-  const files = [];
+  const files: File[] = [];
   for (const it of items) {
     if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
       const f = it.getAsFile();
@@ -258,18 +264,19 @@ if (inputArea) {
     });
   });
   inputArea.addEventListener("dragleave", (e) => {
-    if (e.relatedTarget && inputArea.contains(e.relatedTarget)) return;
+    const de = e as DragEvent;
+    if (de.relatedTarget && inputArea.contains(de.relatedTarget as Node)) return;
     inputArea.classList.remove("dragover");
   });
   inputArea.addEventListener("drop", (e) => {
     e.preventDefault();
     inputArea.classList.remove("dragover");
-    const dt = e.dataTransfer;
+    const dt = (e as DragEvent).dataTransfer;
     if (dt && dt.files && dt.files.length) addFiles(Array.from(dt.files));
   });
 }
 
-function clearInput() {
+function clearInput(): void {
   inp.value = "";
   autogrow();
   closeCmdk();
@@ -282,7 +289,7 @@ if (inp)
     updateCmdk();
   });
 
-async function send() {
+async function send(): Promise<void> {
   const text = inp.value.trim();
   const images = tabState.attachments.slice();
   if (!text && !images.length) return;
@@ -326,7 +333,7 @@ async function send() {
       deps.newChatTab();
       return;
     }
-    const body = { line: text };
+    const body: Record<string, unknown> = { line: text };
     if (sessionId) body.sessionId = sessionId;
     const r = await api("/api/command", { method: "POST", body });
     if (!r.ok) {
@@ -352,10 +359,10 @@ async function send() {
   renderAttachments();
   clearInput();
   if (sessionId) deps.setTabStatus(sessionId, "working");
-  const body = { text };
+  const body: Record<string, unknown> = { text };
   if (images.length) body.images = images;
   if (sessionId) body.sessionId = sessionId;
-  const r = await api("/api/message", { method: "POST", body });
+  const r = await api<Dict>("/api/message", { method: "POST", body });
   if (!r.ok) {
     const err = (r.data && r.data.error) || r.status;
     const msg = err === "queue_full" ? t("web.input.queue_full") : err;
@@ -374,7 +381,7 @@ async function send() {
   }
 }
 
-async function interrupt() {
+async function interrupt(): Promise<void> {
   // Per-tab семантика: Esc/стоп в idle-вкладке чужой ход не трогает —
   // сервер ответит 409 `idle`, если бежит не наша сессия.
   const tab = deps.activeTab();
@@ -393,10 +400,10 @@ inp.addEventListener("keydown", (e) => {
   if (cmdkKeydown(e)) return;
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    send();
+    void send();
   } else if (e.key === "Escape") {
     e.preventDefault();
-    interrupt();
+    void interrupt();
   }
 });
 
@@ -405,8 +412,8 @@ if (sendBtn) {
     // Стоп — только свой ход: чужая вкладка шлёт как обычно (встанет в очередь).
     const tab = deps.activeTab();
     const own = tab && tab.kind === "session" && session.runningSessionIds.includes(tab.id);
-    if (own) interrupt();
-    else send();
+    if (own) void interrupt();
+    else void send();
   });
 }
 
@@ -414,7 +421,7 @@ if (sendBtn) {
 // `aria-busy` is honest for assistive tech. Per-tab: стоп/ Esc — только когда
 // бежит ход СВОЕЙ сессии; чужой ход композер не блокирует (send встанет
 // в per-session очередь). Глобальный rail (`setBusy`) живёт своим флагом.
-export function reflectBusy() {
+export function reflectBusy(): void {
   const tab = deps.activeTab();
   const running = session.runningSessionIds || [];
   const own = !!(tab && tab.kind === "session" && running.includes(tab.id));

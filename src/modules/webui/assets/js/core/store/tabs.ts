@@ -8,7 +8,7 @@ export interface TabsSlice {
   activeTabId: string | null;
   liveTabId: string | null;
   newSeq: number;
-  attachments: Dict[];
+  attachments: string[];
   // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
   attachErrTimer: any;
 }

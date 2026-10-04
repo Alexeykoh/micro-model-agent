@@ -135,7 +135,7 @@ describe("webui assets", () => {
     expect(js(a)).toContain('searchParams.delete("session")');
     expect(js(a)).toContain('URLSearchParams(location.search).get("session")');
     expect(js(a)).toMatch(/openTab\(initialSession/);
-    expect(js(a)).toContain("if (!feedHasContent(tab.feed) || tab.historyFailed) tab.historyLoaded = false;");
+    expect(js(a)).toMatch(/!feedHasContent\(tab\.feed\) \|\| tab\.historyFailed\)\s*tab\.historyLoaded = false;/);
   });
 
   it("marks tabs of server-deleted sessions dead instead of retry-looping", () => {

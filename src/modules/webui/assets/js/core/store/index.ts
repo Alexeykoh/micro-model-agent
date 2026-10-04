@@ -22,6 +22,7 @@ export const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 export interface StoreHooks {
   // biome-ignore lint/suspicious/noExplicitAny: hook signature owned by app.ts.
   applyStaticI18n: ((...args: any[]) => void) | null;
+  refreshState?: (() => void) | null;
 }
 
 export const hooks: StoreHooks = { applyStaticI18n: null };

@@ -7,6 +7,7 @@ import { msgs, inp, tabstripEl, el, icon, link } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, session, hooks } from "../store.js";
+import type { Dict } from "../core/store/types.js";
 import {
   makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent,
   loadHistory, syncUrl, scrollToBottom,
@@ -30,9 +31,9 @@ export { renderSessionsDropdown } from "./sessions-menu.js";
 // на сервере (удалена/подчищена: activate и history отвечают 404).
 // Рендерится точкой в табстрипе; завершение в чужой вкладке фокус не крадёт,
 // только бейдж.
-const TAB_DOT = { working: "●", waiting: "◉", queued: "○", failed: "✗", dead: "✗" };
+const TAB_DOT: Record<string, string> = { working: "●", waiting: "◉", queued: "○", failed: "✗", dead: "✗" };
 
-function statusTitle(status) {
+function statusTitle(status: unknown): string {
   if (status === "working") return t("web.tab.working");
   if (status === "waiting") return t("web.tab.waiting");
   if (status === "queued") return t("web.tab.queued");
@@ -45,11 +46,11 @@ function statusTitle(status) {
 // `draft`/`attachments` живут на табе и переживают переключения (single `#inp`
 // остаётся один на весь браузер, но ощущается как свой за счёт save/restore).
 // `status`: idle | working | waiting | queued | failed (done схлопывается в idle).
-export function activeTab() {
+export function activeTab(): Dict | null {
   return tabState.tabs.find((x) => x.id === tabState.activeTabId) || null;
 }
 
-export function setTabStatus(id, status) {
+export function setTabStatus(id: string | null | undefined, status: string): void {
   if (!id) return;
   const tab = tabState.tabs.find((x) => x.id === id);
   if (!tab || tab.status === status || tab.dead) return;
@@ -64,7 +65,7 @@ export function setTabStatus(id, status) {
  * больше её не трогают, сайдбар остаётся на последней живой сессии.
  * Идемпотентна (повторные 404 её же вкладки — no-op).
  */
-export function markTabDead(id) {
+export function markTabDead(id: string): void {
   const tab = tabState.tabs.find((x) => x.id === id);
   if (!tab || tab.dead) return;
   tab.dead = true;
@@ -82,9 +83,9 @@ export function markTabDead(id) {
   renderTabstrip();
 }
 
-function renderTabstrip() {
+function renderTabstrip(): void {
   tabstripEl.textContent = "";
-  tabState.tabs.forEach((item) => {
+  tabState.tabs.forEach((item: Dict) => {
     const on = item.id === tabState.activeTabId;
     const label = item.name || item.id;
     // The id lives in the tooltip (and the sidebar copy button), not inline,
@@ -132,8 +133,8 @@ function renderTabstrip() {
 // Keep the active tab visible, aligned to its START so the beginning of the
 // session name stays readable (aligning the end would cut the name off,
 // which is exactly what phones showed when tapping a tab on the right).
-function scrollActiveTabIntoView() {
-  const active = tabstripEl.querySelector(".stab.on");
+function scrollActiveTabIntoView(): void {
+  const active = tabstripEl.querySelector<HTMLElement>(".stab.on");
   if (!active) return;
   const left = Math.max(0, active.offsetLeft - 4);
   if (left < tabstripEl.scrollLeft || left + active.offsetWidth > tabstripEl.scrollLeft + tabstripEl.clientWidth) {
@@ -148,12 +149,12 @@ tabstripEl.addEventListener(
     e.preventDefault();
     tabstripEl.scrollLeft += e.deltaY;
   },
-  { passive: false }
+  { passive: false },
 );
 
 // Mirror the active session into `?session=` so a page refresh restores it.
 // Only the active tab is persisted; the token param is preserved as-is.
-export function updateTabName(id, name) {
+export function updateTabName(id: string, name: string): void {
   if (!id || !name) return;
   const tab = tabState.tabs.find((x) => x.id === id);
   if (tab && tab.name !== name) {
@@ -169,7 +170,7 @@ export function updateTabName(id, name) {
   }
 }
 
-export function openTab(id, name, kind, server) {
+export function openTab(id: string, name?: string, kind?: string, server?: boolean): void {
   saveComposer();
   let tab = tabState.tabs.find((x) => x.id === id);
   if (!tab) {
@@ -228,10 +229,10 @@ export function openTab(id, name, kind, server) {
     api("/api/sessions/activate", { method: "POST", body: { id } }).then((r) => {
       if (r.status === 404) {
         markTabDead(id);
-        loadSessions();
+        void loadSessions();
         return;
       }
-      loadSessions();
+      void loadSessions();
       if (tabState.activeTabId === id) hooks.refreshState?.();
     });
     loadHistory(tab).then((st) => {
@@ -241,7 +242,7 @@ export function openTab(id, name, kind, server) {
   syncUrl();
 }
 
-export function closeTab(id) {
+export function closeTab(id: string): void {
   const i = tabState.tabs.findIndex((x) => x.id === id);
   if (i === -1) return;
   const closingActive = tabState.activeTabId === id;
@@ -269,8 +270,8 @@ export function closeTab(id) {
   syncUrl();
 }
 
-async function newChatTab() {
-  const r = await api("/api/sessions", { method: "POST", body: {} });
+async function newChatTab(): Promise<void> {
+  const r = await api<{ session?: Dict }>("/api/sessions", { method: "POST", body: {} });
   if (r.ok && r.data && r.data.session && r.data.session.id) {
     const meta = r.data.session;
     openTab(meta.id, meta.name || String(meta.id), "session", false);
@@ -287,7 +288,7 @@ async function newChatTab() {
   setIndicator(t("web.sessions.create_failed"), true);
 }
 
-document.getElementById("newChat").addEventListener("click", newChatTab);
+document.getElementById("newChat")?.addEventListener("click", () => void newChatTab());
 
 /**
  * Сверяет бейджи вкладок с серверным per-session статусом (2с-полл `/api/state`
@@ -295,11 +296,11 @@ document.getElementById("newChat").addEventListener("click", newChatTab);
  * → idle. `waiting` (висит question) и `failed` не трогаем — их снимают только
  * события хода (ответ/turn_end) или новый send, иначе полл затёр бы «ждёт вас».
  */
-export function reconcileTabStatuses() {
+export function reconcileTabStatuses(): void {
   const running = session.runningSessionIds || [];
   const queued = session.queued || {};
   let changed = false;
-  tabState.tabs.forEach((tab) => {
+  tabState.tabs.forEach((tab: Dict) => {
     if (tab.kind !== "session") return;
     if (tab.status === "waiting" || tab.status === "failed" || tab.status === "dead") return;
     const next = running.includes(tab.id) ? "working" : queued[tab.id] > 0 ? "queued" : "idle";
@@ -311,8 +312,8 @@ export function reconcileTabStatuses() {
   if (changed) renderTabstrip();
 }
 
-export async function loadSessions() {
-  const r = await api("/api/sessions");
+export async function loadSessions(): Promise<void> {
+  const r = await api<{ sessions?: Dict[] }>("/api/sessions");
   if (!r.ok || !r.data) return;
   session.sessions = Array.isArray(r.data.sessions) ? r.data.sessions : [];
   renderSessionsDropdown();

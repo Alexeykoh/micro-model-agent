@@ -6,11 +6,19 @@ import { el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { session } from "../store.js";
+import type { Dict } from "../core/store/types.js";
 import { relTime, matchesQuery } from "../format.js";
 import { openConfirm } from "../dialog.js";
 import { setSessOpen, setSessionCloseHook } from "../core/menus.js";
 
-let deps = {
+interface SessionsMenuDeps {
+  openTab: (id: string, name?: string, kind?: string, server?: boolean) => void;
+  closeTab: (id: string) => void;
+  loadSessions: () => void | Promise<void>;
+  newChatTab: () => void | Promise<void>;
+}
+
+let deps: SessionsMenuDeps = {
   openTab: () => {},
   closeTab: () => {},
   loadSessions: async () => {},
@@ -18,11 +26,12 @@ let deps = {
 };
 
 /** Tab hub injects its operations; keeps the module DAG acyclic. */
-export function initSessionsMenu(d) {
+export function initSessionsMenu(d: Partial<SessionsMenuDeps>): void {
   deps = { ...deps, ...d };
 }
 
-let sessionsErrTimer = null;
+// biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
+let sessionsErrTimer: any = null;
 
 // Live filter text of the sessions dropdown. Module-level so the 2s
 // `renderState` poll and the 15s `loadSessions` poll (both re-render the lists)
@@ -33,8 +42,8 @@ let sessSearchWired = false;
 
 // One-time wiring for the static `#sessSearch` input: placeholder follows the
 // locale on every render, listeners attach once. Returns the input or null.
-function ensureSessSearch() {
-  const search = document.getElementById("sessSearch");
+function ensureSessSearch(): HTMLInputElement | null {
+  const search = document.getElementById("sessSearch") as HTMLInputElement | null;
   if (!search) return null;
   search.placeholder = t("web.sessions.search");
   search.setAttribute("aria-label", t("web.sessions.search"));
@@ -63,7 +72,7 @@ function ensureSessSearch() {
         }
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        const first = document.querySelector("#sessActiveList .si-row .dd-row-main, #sessRecentList .si-row .dd-row-main");
+        const first = document.querySelector<HTMLElement>("#sessActiveList .si-row .dd-row-main, #sessRecentList .si-row .dd-row-main");
         if (first) first.focus();
       }
     });
@@ -71,7 +80,7 @@ function ensureSessSearch() {
   return search;
 }
 
-export function renderSessionsDropdown() {
+export function renderSessionsDropdown(): void {
   ensureSessSearch();
   const activeList = document.getElementById("sessActiveList");
   const recentList = document.getElementById("sessRecentList");
@@ -82,14 +91,14 @@ export function renderSessionsDropdown() {
   recentList.textContent = "";
   const q = sessQuery.trim();
   const activeId = session.activeSessionId;
-  const sorted = session.sessions.slice().sort((a, b) => {
+  const sorted = session.sessions.slice().sort((a: Dict, b: Dict) => {
     const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
     const bt = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
     return bt - at;
-  }).filter((s) => matchesQuery((s.name || "") + " " + String(s.id || ""), q));
+  }).filter((s: Dict) => matchesQuery((s.name || "") + " " + String(s.id || ""), q));
   let activePlaced = false;
   let recentPlaced = false;
-  sorted.forEach((s) => {
+  sorted.forEach((s: Dict) => {
     const isActive = s.id === activeId;
     const row = sessionRow(s, isActive);
     if (isActive && !activePlaced) {
@@ -124,7 +133,7 @@ export function renderSessionsDropdown() {
   }
 }
 
-function sessionRow(s, isActive) {
+function sessionRow(s: Dict, isActive: boolean): HTMLElement {
   const row = el("div", "si si-row" + (isActive ? " on" : ""));
   const name = s.name || String(s.id);
   const main = el("button", "dd-row-main");
@@ -157,15 +166,15 @@ function sessionRow(s, isActive) {
 }
 
 // --- session delete: confirmation dialog --------------------------------
-function confirmDeleteSession(id, name) {
+function confirmDeleteSession(id: string, name: string): void {
   openConfirm({
     title: t("web.sessions.confirm_title"),
     body: t("web.sessions.confirm_body", { name }),
-    onAccept: () => deleteSession(id),
+    onAccept: () => void deleteSession(id),
   });
 }
 
-function showSessionsError(msg) {
+function showSessionsError(msg: string): void {
   session.sessionsError = msg;
   renderSessionsDropdown();
   if (sessionsErrTimer) clearTimeout(sessionsErrTimer);
@@ -175,8 +184,8 @@ function showSessionsError(msg) {
   }, 4500);
 }
 
-async function deleteSession(id) {
-  const r = await api("/api/sessions/" + encodeURIComponent(id), { method: "DELETE" });
+async function deleteSession(id: string): Promise<void> {
+  const r = await api<Dict>("/api/sessions/" + encodeURIComponent(id), { method: "DELETE" });
   if (!r.ok) {
     const code = r.data && typeof r.data.error === "string" ? r.data.error : "";
     showSessionsError(
@@ -202,22 +211,22 @@ setSessionCloseHook(() => {
   if (!sessQuery) return;
   // Closing wipes the filter so the next opening starts from the full list.
   sessQuery = "";
-  const search = document.getElementById("sessSearch");
+  const search = document.getElementById("sessSearch") as HTMLInputElement | null;
   if (search && search.value) {
     search.value = "";
     renderSessionsDropdown();
   }
 });
 
-function focusSessSearch() {
+function focusSessSearch(): void {
   setTimeout(() => {
-    const search = document.getElementById("sessSearch");
+    const search = document.getElementById("sessSearch") as HTMLInputElement | null;
     if (search) search.focus();
   }, 0);
 }
 
 /** Toggle the dropdown (shared by the topbar and mobile sub-header buttons). */
-export function openSessionsMenu() {
+export function openSessionsMenu(): void {
   document.querySelectorAll("[data-sel]").forEach((s) => s.classList.remove("open"));
   if (!sessDD) return;
   const willOpen = !sessDD.classList.contains("open");
@@ -235,13 +244,13 @@ if (sessBtn) {
 const sessNewBtn = document.getElementById("sessNew");
 if (sessNewBtn) {
   sessNewBtn.addEventListener("click", () => {
-    deps.newChatTab();
+    void deps.newChatTab();
     setSessOpen(false);
   });
 }
 const sessRefreshBtn = document.getElementById("sessRefresh");
 if (sessRefreshBtn) {
   sessRefreshBtn.addEventListener("click", () => {
-    deps.loadSessions();
+    void deps.loadSessions();
   });
 }
