@@ -52,7 +52,7 @@ describe("webui assets", () => {
 
   it("renders diagnostic log lines only in verbose mode", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('if (data.diagnostic && verbosity() !== "verbose") return;');
+    expect(js(a)).toMatch(/data\.diagnostic && verbosity\(\) !== "verbose"\)\s*return;/);
   });
 
   it("renders file actions as quiet filerow lines with viewer link and icon copy", () => {
@@ -125,7 +125,7 @@ describe("webui assets", () => {
 
   it("quiet-gates tool-body meta in the feed, keeping status visible", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('if (kind === "tool" && verbosity() === "quiet") return;');
+    expect(js(a)).toMatch(/kind === "tool" && verbosity\(\) === "quiet"\)\s*return;/);
   });
 
   it("persists the active session in the URL and restores it on boot", () => {
@@ -135,7 +135,7 @@ describe("webui assets", () => {
     expect(js(a)).toContain('searchParams.delete("session")');
     expect(js(a)).toContain('URLSearchParams(location.search).get("session")');
     expect(js(a)).toMatch(/openTab\(initialSession/);
-    expect(js(a)).toContain("if (!feedHasContent(tab.feed) || tab.historyFailed) tab.historyLoaded = false;");
+    expect(js(a)).toMatch(/!feedHasContent\(tab\.feed\) \|\| tab\.historyFailed\)\s*tab\.historyLoaded = false;/);
   });
 
   it("marks tabs of server-deleted sessions dead instead of retry-looping", () => {
@@ -294,7 +294,7 @@ describe("webui assets", () => {
     expect(tabs).toContain("sidebarSessionChanged(id)");
     expect(tabs).toContain("hooks.refreshState?.()");
     // Guard against a stale response clobbering a newer tab.
-    expect(a.js).toContain("if (tabState.activeTabId !== sid) return;");
+    expect(a.js).toMatch(/tabState\.activeTabId !== sid\)\s*return;/);
   });
 
   it("uses one shared EventSource so all tabs stream live (no per-session reconnect)", () => {
@@ -322,7 +322,7 @@ describe("webui assets", () => {
     expect(a.js).toContain("sidebarSessionId()");
     // Background sessions must not advance the sidebar turn counter or clear
     // its live indicator.
-    expect(a.js).toContain("if (sidebarOwns(d)) { sidebarTurnEnd(");
+    expect(a.js).toMatch(/if \(sidebarOwns\(d\)\) \{\s*sidebarTurnEnd\(/);
   });
 
   it("wires the sidebar tabs (session / map / trace) with master-detail", () => {

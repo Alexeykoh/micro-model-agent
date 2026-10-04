@@ -159,6 +159,11 @@ export function resolveSpecifier(
     else stack.push(seg);
   }
   const joined = stack.join("/");
+  // TS sources import runtime paths (`./foo.js`) that tsc/esbuild resolve to the
+  // sibling `.ts` — mirror that so mixed JS/TS trees (incremental migration) and
+  // fully-migrated trees both resolve.
+  const ext = joined.slice(joined.lastIndexOf("."));
+  const tsExtensions: Record<string, string[]> = { ".js": ["ts", "tsx"], ".mjs": ["ts"] };
   const candidates = [
     joined,
     `${joined}.ts`,
@@ -166,6 +171,7 @@ export function resolveSpecifier(
     `${joined}.mjs`,
     `${joined}/index.ts`,
     `${joined}/index.js`,
+    ...(tsExtensions[ext] ?? []).map((e) => joined.replace(/\.[^.]+$/, `.${e}`)),
   ];
   for (const c of candidates) if (known.has(c)) return c;
   return null;

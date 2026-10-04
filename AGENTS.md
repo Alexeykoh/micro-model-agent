@@ -690,6 +690,30 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   assets/app.js --target=browser` (резолвит все именованные импорты/экспорты), и статическая
   JS-проверка `tsc --allowJs --checkJs --lib dom` (ловкий сигнал «0 `Cannot find name`»).
 
+### WebUI Frontend TypeScript Migration (unreleased)
+
+Спека: [docs/specs/2026-10-04-webui-frontend-ts-design.md](./docs/specs/2026-10-04-webui-frontend-ts-design.md);
+план: [docs/plans/2026-10-04-webui-frontend-ts.md](./docs/plans/2026-10-04-webui-frontend-ts.md).
+Весь наш браузерный фронтенд переведён на TypeScript со `strict: true`; контракты
+(URL/имена файлов, REST/SSE/сессии/конфиг) не менялись.
+
+- **Исходники — `.ts`.** `assets/app.ts`, `md.ts`, `setup.ts`, `js/**/*.ts`
+  (вендоренные `smd.js`/`hljs.js` остаются `.js`). Импорты — с `.js`-суффиксами
+  (валидно и для `tsc` Bundler-резолюции, и для браузера после транспиляции).
+- **Проверка:** новый `tsconfig.frontend.json` (`lib: DOM`, `strict`, `noEmit`),
+  основной `tsconfig.json` **исключает** `src/modules/webui/assets/**`; `quality` +=
+  `typecheck:frontend` (`tsc -p tsconfig.frontend.json`). `allowJs: true` оставлен
+  **только** ради импорта вендоренного `smd.js` из `md.ts` (наш код — весь `.ts`).
+- **Транспиляция на лету (dev/тесты):** `loadAssets()` (`src/modules/webui/assets.ts`)
+  при чтении `.ts` прогоняет через `Bun.Transpiler` и отдаёт `.js` под тем же ключом
+  (`js/foo.js`); `web:dev` без шага сборки. В prod ассеты уже готовы (`build:frontend`).
+- **Prod-сборка:** `scripts/build-frontend.ts` пофайлово транспилит `.ts` → `dist/assets`
+  (имена и граф модулей сохранены) и копирует вендор/html/css; `build:prod` =
+  `build:bundle && build:frontend && build:copy-assets`.
+- **Guard:** `tests/webui-frontend-graph.test.ts` читает `.ts`; строковые guard'ы,
+  зависящие от форматирования (`if (…) return;`), сделаны whitespace-толерантными
+  (транспилятор переносит `return` на новую строку).
+
 ### Current Version: 2.17.0
 
 ### Changelog

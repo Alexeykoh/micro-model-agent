@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "strict": true,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": []
+  },
+  "include": ["src/modules/webui/assets/**/*.ts", "src/modules/webui/assets/**/*.js"],
+  "exclude": [
+    "node_modules",
+    "src/modules/webui/assets/smd.js",
+    "src/modules/webui/assets/hljs.js"
+  ]
+}

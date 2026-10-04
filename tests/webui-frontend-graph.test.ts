@@ -24,19 +24,21 @@ function formatCycles(cycles: string[][]): string {
 
 describe("webui frontend import graph", () => {
   it("has no import cycles across entry points and js/ modules", () => {
-    const files = collectFiles(ASSETS_DIR, REPO_ROOT, [".js"], { skipTests: true });
+    const files = collectFiles(ASSETS_DIR, REPO_ROOT, [".js", ".ts"], { skipTests: true });
     const cycles = findCycles(buildImportGraph(files));
     expect(cycles, `Import cycles in src/modules/webui/assets:\n${formatCycles(cycles)}`).toEqual([]);
   });
 
   it("has no settings -> tabs layer inversion (menus live in a leaf)", () => {
-    const files = collectFiles(ASSETS_DIR, REPO_ROOT, [".js"], { skipTests: true });
+    const files = collectFiles(ASSETS_DIR, REPO_ROOT, [".js", ".ts"], { skipTests: true });
     const graph = buildImportGraph(files);
+    const isSettings = (p: string) => /\/settings\.(js|ts)$/.test(p);
+    const isTabs = (p: string) => /\/tabs\.(js|ts)$/.test(p);
     const settingsImports = [...graph.entries()]
-      .filter(([path]) => path.endsWith("/settings.js"))
+      .filter(([path]) => isSettings(path))
       .flatMap(([, edges]) => edges.map((e) => e.target));
     const inversions = settingsImports
-      .filter((target) => target.endsWith("/tabs.js"))
+      .filter((target) => isTabs(target))
       .map((target) => `src/modules/webui/assets/js/settings.js -> ${target}`);
     expect(inversions).toEqual(KNOWN_INVERSIONS);
   });

@@ -139,8 +139,8 @@ describe("webui i18n", () => {
     // adds a few section titles inline, so scan it too (and `config.field.*` labels).
     const { readFileSync } = await import("node:fs");
     const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf-8");
-    const src = read("../src/modules/webui/assets/js/settings/controls.js");
-    const settingsSrc = read("../src/modules/webui/assets/js/settings/panels.js");
+    const src = read("../src/modules/webui/assets/js/settings/controls.ts");
+    const settingsSrc = read("../src/modules/webui/assets/js/settings/panels.ts");
     const titles = [
       ...[...src.matchAll(/titleKey:\s*"(web\.settings\.[a-z0-9.-]+)"/g)].map((m) => m[1]),
       ...[...settingsSrc.matchAll(/"(web\.settings\.sec\.[a-z0-9.-]+)"/g)].map((m) => m[1]),
