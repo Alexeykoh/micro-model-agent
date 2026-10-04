@@ -36,8 +36,9 @@ const ZEN_PRICES: Record<string, ModelPrice> = {
   "qwen3.5-plus": { input: 0.2, output: 1.2 },
   "qwen3.8-max": { input: 2.5, output: 7.5 },
   // DeepSeek (внепиковые тарифы)
-  "deepseek-v4-pro": { input: 0.66, output: 1.98 },
-  "deepseek-v4-flash": { input: 0.22, output: 0.66 },
+  "deepseek-v4.1-flash": { input: 0.15, output: 0.6, cachedInput: 0.003 },
+  "deepseek-v4-pro": { input: 0.66, output: 1.98, cachedInput: 0.022 },
+  "deepseek-v4-flash": { input: 0.15, output: 0.6, cachedInput: 0.003 },
   // Claude
   "claude-fable-5": { input: 10, output: 50 },
   "claude-opus-5": { input: 5, output: 25 },
