@@ -4,6 +4,21 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.18.0] - 2026-10-04
+
+### Added
+
+- **Symbol-level project map** (`src/modules/indexer/symbols.ts`): extraction now carries a 1-based `line` and a `kind` (`function`/`class`/`interface`/`type`/`export`/…) alongside the name, for every supported language. `extractSymbols` (names only) stays for compatibility; `extractSymbolsDetailed` is the new source.
+- **`project_map` actions `symbol` and `outline`** (`src/modules/indexer/module.ts`, `rank.ts`): `symbol` locates definition sites (`path:line name (kind)`, ranked exact→prefix→substring), `outline` returns a file's symbol table of contents by line. Both stay on the existing tool, so the tool count and context budget are unchanged.
+- **Definition-first, path-aware ranking for `find`** (`src/modules/indexer/rank.ts`): exact symbol name > prefix > substring > path, source > tests > docs, then shorter path and stable order. Measured on this repo: MRR 0.93→1.00, Hit@1 0.90→1.00 over 60 symbol queries (ambiguous queries such as `plugin` move from rank 7 to rank 1).
+- **Incremental re-index by mtime** (`src/modules/indexer/walker.ts`, `cache.ts`): `IndexedFile` carries `size`/`mtimeMs`; `walk(prev)` reuses unchanged files (no read, no regex) and re-reads only changed ones. On a synthetic 3000-file tree, rebuilding after a one-file edit drops from ~302 ms to ~168 ms (1.8×). Cache schema bumped to v3.
+- **Indexer config** (`config.indexer.maxFiles`, `config.indexer.respectGitignore`): the file cap is now configurable (default **1000 → 5000**) and surfaced in `/config` and Settings → Context → Project index; when the cap is hit the map shows an explicit truncation marker instead of silently listing a subset.
+- **`.gitignore` / `.mmaignore` support** (`src/modules/indexer/gitignore.ts`): best-effort matcher (comments, `!` negation, `/` anchoring, `dir/`, `*`, `?`, `**`), fail-open. On this repo it filters 971 → 934 indexed files.
+
+### Changed
+
+- **Search latency trade-off**: ranked `find` costs ~1.6 ms per query vs ~0.4 ms for the old linear filter on an ~930-file index — still sub-2ms and independent of result count; symbol/outline give the model a direct path to definitions.
+
 ## [2.17.0] - 2026-10-02
 
 ### Added

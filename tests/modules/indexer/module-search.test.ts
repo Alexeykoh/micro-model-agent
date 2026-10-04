@@ -1,0 +1,81 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
+import { IndexerModule } from "../../../src/modules/indexer/module";
+import { setLocale } from "../../../src/i18n/index";
+
+let tmpDir: string;
+
+beforeEach(() => {
+  setLocale("en");
+  tmpDir = mkdtempSync(join(tmpdir(), "mma-modsearch-"));
+});
+
+afterEach(() => {
+  rmSync(tmpDir, { recursive: true, force: true });
+});
+
+function write(rel: string, content: string): void {
+  const full = join(tmpDir, rel);
+  mkdirSync(join(full, ".."), { recursive: true });
+  writeFileSync(full, content);
+}
+
+describe("project_map search actions", () => {
+  it("symbol action returns definition sites with line and kind", async () => {
+    write("src/registry.ts", "export function registerThing() {}\nexport const other = 1;");
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+    await mod.buildIndex();
+    const res = await mod.getToolDefinitions()[0].handler({} as never, {
+      action: "symbol",
+      query: "registerThing",
+    });
+    expect(res.success).toBe(true);
+    expect(res.output).toContain("registerThing");
+    expect(res.output).toContain(":1");
+    expect(res.output).toContain("(function)");
+  });
+
+  it("outline action lists a file's symbols by line", async () => {
+    write("src/mod.ts", "export const a = 1;\nexport class B {}\n");
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+    await mod.buildIndex();
+    const res = await mod.getToolDefinitions()[0].handler({} as never, {
+      action: "outline",
+      query: "mod.ts",
+    });
+    expect(res.success).toBe(true);
+    expect(res.output).toContain("src/mod.ts");
+    expect(res.output).toMatch(/1: a \(const\)/);
+    expect(res.output).toMatch(/2: B \(class\)/);
+  });
+
+  it("requires a query for symbol/outline", async () => {
+    write("src/a.ts", "export const a = 1");
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+    await mod.buildIndex();
+    const res = await mod.getToolDefinitions()[0].handler({} as never, { action: "symbol" });
+    expect(res.success).toBe(false);
+  });
+
+  it("marks the map as truncated when the file cap is hit", async () => {
+    write("src/a.ts", "export const a = 1");
+    write("src/b.ts", "export const b = 1");
+    write("src/c.ts", "export const c = 1");
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma"), maxFiles: 2 });
+    await mod.buildIndex();
+    expect(mod.getPromptMap()).toContain("[!]");
+  });
+
+  it("respects .gitignore when configured", async () => {
+    write(".gitignore", "generated/\n");
+    write("generated/skip.ts", "export const skip = 1");
+    write("src/keep.ts", "export const keep = 1");
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+    await mod.buildIndex();
+    const map = mod.getPromptMap() ?? "";
+    expect(map).toContain("keep.ts");
+    expect(map).not.toContain("skip.ts");
+  });
+});

@@ -144,6 +144,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "context.window", titleKey: "web.settings.sec.context.window", descKey: "web.settings.sec.context.window.desc", keys: ["contextWindow", "contextBudget.systemPrompt", "contextBudget.responseReserve"] },
     { id: "context.compaction", titleKey: "web.settings.sec.context.compaction", descKey: "web.settings.sec.context.compaction.desc", keys: ["contextBudget.compactionThreshold", "contextBudget.compactionMinLoad"] },
     { id: "context.instructions", titleKey: "web.settings.sec.context.instructions", descKey: "web.settings.sec.context.instructions.desc", keys: ["instructions.summarize"] },
+    { id: "context.indexer", titleKey: "web.settings.sec.context.indexer", descKey: "web.settings.sec.context.indexer.desc", keys: ["indexer.maxFiles", "indexer.respectGitignore"] },
     { id: "context.log", titleKey: "web.settings.sec.context.log", descKey: "web.settings.sec.context.log.desc", keys: ["contextLog.enabled", "contextLog.redact"] },
   ],
   reasoning: [

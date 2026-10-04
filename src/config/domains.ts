@@ -17,6 +17,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
     "contextWindow",
     "contextBudget",
     "instructions",
+    "indexer",
     "modelLoad",
     "maxToolIterations",
     "stuckThreshold",

@@ -114,6 +114,10 @@ export const DEFAULTS: AppConfig = {
     enabled: false,
     redact: true,
   },
+  indexer: {
+    maxFiles: 5000,
+    respectGitignore: true,
+  },
   browser: {
     enabled: true,
     headless: true,

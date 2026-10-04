@@ -12,10 +12,14 @@ import {
 import { createHash } from "node:crypto";
 import { join, relative, extname } from "path";
 import { Logger } from "../../logger/app-logger";
-import { languageIdForExt, extractSymbols } from "./symbols";
+import { languageIdForExt, extractSymbolsDetailed, type SymbolLocation } from "./symbols";
+import { loadIgnoreMatcher, type IgnoreMatcher } from "./gitignore";
 import { t } from "../../i18n/index";
 
 const logger = new Logger("warn", "indexer");
+
+/** Дефолтный кап файлов, если вызывающий не задал (см. `config.indexer.maxFiles`). */
+export const DEFAULT_MAX_FILES = 1000;
 
 /**
  * Каталоги, где исходников проекта не бывает, но индекс бы утонул:
@@ -116,12 +120,16 @@ function isIgnoredPath(filename: string): boolean {
   return segments.some((segment) => isIgnoredDirName(segment)) || isIgnoredFileName(base);
 }
 
-/** Один проиндексированный файл: путь, язык, экспорты, размер. */
+/** Один проиндексированный файл: путь, язык, символы, размер, mtime. */
 export interface IndexedFile {
   path: string;
   language: string;
   exports: string[];
+  /** Символы с позициями/kind (пусто у языков без извлечения). */
+  symbols: SymbolLocation[];
   size: number;
+  /** mtime файла (epoch ms) — ключ инкрементального переиспользования. */
+  mtimeMs: number;
 }
 
 /** Результат обхода: файлы + суммарный размер. */
@@ -130,14 +138,35 @@ export interface IndexResult {
   totalSize: number;
 }
 
+/** Опции воркера: кап файлов и следование `.gitignore`/`.mmaignore`. */
+export interface IndexerOptions {
+  maxFiles?: number;
+  respectGitignore?: boolean;
+}
+
+/** Читает файл игноров из корня проекта; null при любой ошибке (fail-open). */
+function readIgnoreFile(path: string): string | null {
+  try {
+    return readFileSync(path, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
 /** Индексер: обход исходников, вотчер, сигнатура дерева, сводка. */
 export class Indexer {
   private baseDir: string;
-  private MAX_FILES = 1000;
+  private maxFiles: number;
+  private ignores: IgnoreMatcher;
   private watcher: FSWatcher | FSWatcher[] | null = null;
 
-  constructor(baseDir: string) {
+  constructor(baseDir: string, opts: IndexerOptions = {}) {
     this.baseDir = baseDir;
+    this.maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES;
+    this.ignores =
+      opts.respectGitignore === false
+        ? { ignores: () => false }
+        : loadIgnoreMatcher(baseDir, readIgnoreFile);
   }
 
   /** Подписка на изменения дерева (игнорируемые пути не пробрасываются). */
@@ -218,69 +247,115 @@ export class Indexer {
 
   /**
    * Обходит каждый индексируемый исходник под `baseDir` и зовёт `visit` с
-   * полным путём, относительным путём, id языка и stat. Уважает `MAX_FILES` и
-   * `IGNORE_DIRS`; содержимое НЕ читает — `walk()` читает его для извлечения
-   * символов, а `scanSignature()` пользуется только stat. Общий, чтобы оба
-   * прохода видели ровно то же множество файлов.
+   * полным путём, относительным путём, id языка и stat. Уважает `maxFiles`,
+   * `IGNORE_DIRS` и `.gitignore`/`.mmaignore`; содержимое НЕ читает — `walk()`
+   * читает его для извлечения символов, а `scanSignature()` пользуется только
+   * stat. Общий, чтобы оба прохода видели ровно то же множество файлов.
    */
   private eachSourceFile(
     visit: (fullPath: string, relPath: string, language: string, stat: Stats) => void,
   ): void {
-    let count = 0;
-
-    const walkDir = (dir: string): void => {
-      if (!existsSync(dir)) return;
-      let entries: string[];
-      try {
-        entries = readdirSync(dir);
-      } catch {
-        return;
-      }
-
-      for (const entry of entries) {
-        if (count >= this.MAX_FILES) return;
-        const fullPath = join(dir, entry);
-        const relPath = relative(this.baseDir, fullPath);
-        // Изоляция на запись: файл, удалённый (или нечитаемый) между readdir
-        // и stat, не должен убивать весь обход. Симлинки пропускаем — могут
-        // вести наружу или образовывать циклы каталогов.
-        try {
-          const lst = lstatSync(fullPath, { throwIfNoEntry: false });
-          if (!lst || lst.isSymbolicLink()) continue;
-          const stat = statSync(fullPath);
-
-          if (stat.isDirectory()) {
-            if (!isIgnoredDirName(entry)) {
-              walkDir(fullPath);
-            }
-          } else if (stat.isFile()) {
-            if (isIgnoredFileName(entry)) continue;
-            const language = languageIdForExt(extname(entry).toLowerCase());
-            if (language) {
-              visit(fullPath, relPath, language, stat);
-              count++;
-            }
-          }
-        } catch (e) {
-          // Запись пропала или нечитаема — пропускаем, индексируем остальные.
-          logger.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
-        }
-      }
-    };
-
-    walkDir(this.baseDir);
+    this.walkDir(this.baseDir, visit, { count: 0 });
   }
 
-  /** Полный обход: читает файлы, извлекает символы. Нечитаемые пропускает. */
-  async walk(): Promise<IndexResult> {
+  /** Рекурсивный обход каталога с общим счётчиком визитов. */
+  private walkDir(
+    dir: string,
+    visit: (fullPath: string, relPath: string, language: string, stat: Stats) => void,
+    state: { count: number },
+  ): void {
+    if (state.count >= this.maxFiles || !existsSync(dir)) return;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (state.count >= this.maxFiles) return;
+      if (this.visitEntry(dir, entry, visit, state)) state.count++;
+    }
+  }
+
+  /**
+   * Обрабатывает одну запись каталога: рекурсия в подкаталог или `visit`
+   * исходника. Возвращает true, если запись — проиндексированный файл.
+   */
+  private visitEntry(
+    dir: string,
+    entry: string,
+    visit: (fullPath: string, relPath: string, language: string, stat: Stats) => void,
+    state: { count: number },
+  ): boolean {
+    const fullPath = join(dir, entry);
+    const relPath = relative(this.baseDir, fullPath);
+    // Изоляция на запись: файл, удалённый (или нечитаемый) между readdir
+    // и stat, не должен убивать весь обход. Симлинки пропускаем — могут
+    // вести наружу или образовывать циклы каталогов.
+    try {
+      const lst = lstatSync(fullPath, { throwIfNoEntry: false });
+      if (!lst || lst.isSymbolicLink()) return false;
+      const stat = statSync(fullPath);
+
+      if (stat.isDirectory()) {
+        if (!isIgnoredDirName(entry) && !this.ignores.ignores(relPath, true)) {
+          this.walkDir(fullPath, visit, state);
+        }
+        return false;
+      }
+      if (!stat.isFile()) return false;
+      if (isIgnoredFileName(entry) || this.ignores.ignores(relPath, false)) return false;
+      const language = languageIdForExt(extname(entry).toLowerCase());
+      if (!language) return false;
+      visit(fullPath, relPath, language, stat);
+      return true;
+    } catch (e) {
+      // Запись пропала или нечитаема — пропускаем, индексируем остальные.
+      logger.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
+      return false;
+    }
+  }
+
+  /**
+   * Полный обход: читает файлы, извлекает символы. Нечитаемые пропускает.
+   *
+   * Если передан предыдущий индекс, файлы с совпадающими `size` и `mtimeMs`
+   * переиспользуются без чтения и повторного regex-разбора — тёплый пересбор
+   * после правки одного файла стоит один обход `stat` + чтение изменённых.
+   */
+  async walk(prev?: IndexResult | null): Promise<IndexResult> {
     const files: IndexedFile[] = [];
     let totalSize = 0;
 
+    const prevByPath = new Map<string, IndexedFile>();
+    if (prev) {
+      for (const f of prev.files) prevByPath.set(f.path.replace(/\\/g, "/"), f);
+    }
+
     this.eachSourceFile((fullPath, relPath, language, stat) => {
+      const key = relPath.replace(/\\/g, "/");
+      const cached = prevByPath.get(key);
+      if (
+        cached &&
+        cached.size === stat.size &&
+        typeof cached.mtimeMs === "number" &&
+        cached.mtimeMs === stat.mtimeMs
+      ) {
+        files.push({ ...cached, path: relPath });
+        totalSize += stat.size;
+        return;
+      }
       try {
         const content = readFileSync(fullPath, "utf-8");
-        const exports = extractSymbols(content, language);
-        files.push({ path: relPath, language, exports, size: stat.size });
+        const symbols = extractSymbolsDetailed(content, language);
+        files.push({
+          path: relPath,
+          language,
+          symbols,
+          exports: symbols.map((s) => s.name),
+          size: stat.size,
+          mtimeMs: stat.mtimeMs,
+        });
         totalSize += stat.size;
       } catch (e) {
         // Чтение упало после успешного stat — пропускаем файл, берём остальные.

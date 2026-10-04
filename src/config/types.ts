@@ -165,6 +165,14 @@ export interface ContextLogConfig {
   redact: boolean;
 }
 
+/** Настройки индексатора карты проекта. */
+export interface IndexerConfig {
+  /** Кап индексируемых файлов; при достижении карта помечается усечённой. */
+  maxFiles: number;
+  /** Следовать `.gitignore`/`.mmaignore` корня проекта при обходе. */
+  respectGitignore: boolean;
+}
+
 export interface ModelLoadConfig {
   autoLoad: boolean;
   flashAttention?: boolean;
@@ -505,6 +513,7 @@ export interface AppConfig {
   locale: string;
   session: SessionConfig;
   contextLog: ContextLogConfig;
+  indexer: IndexerConfig;
   browser: BrowserToolConfig;
   webSearch?: WebSearchConfig;
   errorWebSearch?: ErrorWebSearchConfig;
