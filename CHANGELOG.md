@@ -4,6 +4,12 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.18.1] - 2026-10-04
+
+### Changed
+
+- **README rewritten in English** (`README.md`): fully translated from Russian, reorganized into scannable themes (agent loop / orchestration / tools / experience / safety), and given a sharper intro and feature framing. Content — commands, config, tools, architecture, testing, principles — preserved. Documentation only, no behavior change.
+
 ## [2.18.0] - 2026-10-04
 
 ### Added

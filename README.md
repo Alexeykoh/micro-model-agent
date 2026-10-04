@@ -3,83 +3,99 @@
 [![npm version](https://img.shields.io/npm/v/micro-models-agent)](https://www.npmjs.com/package/micro-models-agent)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**MMA** — универсальный агент-харнесс, оптимизированный для **небольших локальных языковых моделей** (9B параметров, 32K–64K контекст). Работает на ноутбуке, облачное API не требуется. Это не «агент только для кода»: разработка, поиск в интернете, автоматизация, работа с API, умный дом, персональный ассистент — любой сценарий.
+**A universal agent harness built for small local LLMs** — the kind that fit on your laptop
+(9B parameters, 32K–64K context). No cloud API required. And it is *not* a coding-only agent:
+dev work, web research, home automation, API glue, personal assistant — bring any task you like.
 
 ```bash
 npm install -g micro-models-agent
-mma "перепиши модуль авторизации на JWT"
-mma "какая погода в Москве и собери сводку за неделю"
+mma "rewrite the auth module to use JWT"
+mma "what's the weather in Berlin? summarize the week"
 ```
 
-Создан и протестирован с [Qwen3.5-9B](https://qwen.readthedocs.io/) через LM Studio / Ollama / llama.cpp.
+Built and battle-tested with [Qwen3.5-9B](https://qwen.readthedocs.io/) via LM Studio / Ollama / llama.cpp.
 
 ---
 
-## Зачем MMA?
+## Why MMA?
 
-Большинство агентов (Devin, Cursor, Copilot) завязаны на облачные модели или дорогие API — и предполагают, что задача про код. MMA работает иначе: это **общий** харнесс, где программирование — лишь один из сценариев.
+Most agents (Devin, Cursor, Copilot) are glued to cloud models or pricey APIs — and assume the job is writing code. MMA takes a different bet: a **general-purpose** harness where coding is just one use case.
 
-- **Создан для моделей 9B** — оптимизирован под Qwen3.5-9B на обычном железе
-- **Не требует облака** — полностью работает офлайн с любым OpenAI-совместимым бэкендом
-- **Выживает в узком контексте** — умное sliding-window compaction держит 32K-модели продуктивными
-- **Отлавливает галлюцинации** — 3-стадийный пайплайн валидации ловит выдумки, к которым склонны маленькие модели
-- **Agent-Level MoE** — иерархическая декомпозиция задач: маленькие модели справляются со сложной многошаговой работой
-
----
-
-## Возможности
-
-- **6-состояний цикл агента** (INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR) — чистый, предсказуемый, отлаживаемый
-- **Управление бюджетом контекста** — динамический бюджет под модель, sliding-window compaction с извлечением фактов/решений/ошибок
-- **Детекция галлюцинаций** — фактическая (пути файлов), согласованности (откат решений), уверенности (короткие/повторяющиеся ответы)
-- **Гарантии выполнения** — авто-планирование через LLM (без keyword-эвристик), stuck-detection, off-track предупреждения, авто-продвижение плана
-- **Agent-Level MoE** — Router + экспертные сабагенты с фильтрацией инструментов, изолированным контекстом, файловым скоупом, топологическим параллельным выполнением, re-plan-циклом и машиночитаемой верификацией (`success_criteria`)
-- **Инструменты** — ФС, шелл, веб-поиск/fetch, браузер (Playwright), планирование, память, сабагенты, MCP, пайплайны, LSP, процессы. Ядро (~26) + модульные `plan`/`todo`/`verify`/`lsp_check`/`project_map`/`set_thinking`/`scope_request`; `question`/`approve` включаются только в веб-режиме
-- **24 модуля** — скиллы, плагины, MCP, пайплайны, indexer, память, контекст, сессии, браузер, выполнение, детекция галлюцинаций, апдейтер, профиль пользователя, LSP, сертификация моделей, безопасность, артефакты, процессы, ценообразование, онбординг, провайдеры, reasoning, setup, webui
-- **Веб-режим `mma web`** — браузерный чат (SSE + REST) на том же ядре и сессиях, без TTY; первый запуск открывает мастер настройки прямо в браузере
-- **Онбординг** — `mma setup` (мастер провайдера), `mma meet` («Познакомимся»: интервью в глобальную память), `mma agents init` (генерация/улучшение `AGENTS.md`)
-- **MCP-клиент** — подключение к любому MCP-серверу (stdio или SSE)
-- **Модуль безопасности** — включён по умолчанию (balanced): валидация bash-команд, path/network-политики (SSRF), сканирование контента, шифрование сессий, audit-лог; always-on защита путей (`.git/`, `.env*`, ключи)
-- **LSP-диагностика** — TypeScript/CSS/HTML серверы: проверка типов после каждой правки и по запросу
-- **YAML-пайплайны** — DAG-движок с параллельными волнами, зависимостями и повторными попытками
-- **Промпт-кешинг** — cache-подсказки (llama.cpp / OpenAI / OpenRouter) + метрики hit-rate и экономии (`⟡` cache line)
-- **Context log** — `--context-log` пишет весь уходящий в модель контекст в git-подобный diff (`context.diff`)
-- **Управление сессиями** — постоянные JSONL-сессии, REPL-команды, `mma session export`
-- **Карта проекта** — обход файлов + извлечение экспортов + дисковый кэш с валидацией свежести (signature)
-- **Единый `/config`** — реестр настроек с валидацией + сахар `/model`, `/provider`, `/context`, `/reasoning`, `/verbose`
-- **i18n** — все строки интерфейса через `t()`, включены английский и русский
-- **Вывод без гонок** — single-writer `OutputChannel`: никаких прямых `console.*`/stdout вне CLI и машинного JSON
-- **8K–120K контекст** — адаптируется под любое контекстное окно модели
-- **Без TUI** — минимальный CLI + REPL с markdown→ANSI форматированием
-- **llama.cpp / Jinja proven** — проверено на граничных случаях Jinja-шаблонов (system-first, streaming fallback, явный `stream: false`)
+- **Tuned for 9B models** — designed around Qwen3.5-9B running on ordinary hardware
+- **Cloud-optional by design** — works fully offline against any OpenAI-compatible backend
+- **Thrives in a tight context** — smart sliding-window compaction keeps 32K models productive
+- **Catches hallucinations** — a 3-stage validation pipeline spots the lies small models love to tell
+- **Agent-Level MoE** — hierarchical task decomposition lets small models ship big multi-step work
 
 ---
 
-## Установка
+## Features
 
-### Требования
+**The agent loop**
 
-- **Среда выполнения:** [Bun](https://bun.sh) (рекомендуется) или Node.js ≥ 20
-- **LLM-бэкенд:** Любой OpenAI-совместимый сервер (LM Studio, Ollama, vLLM, llama.cpp, Together AI)
+- **6-state agent loop** (`INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR`) — clean, predictable, debuggable
+- **Context budget management** — per-model budgets with sliding-window compaction that preserves facts, decisions, and errors
+- **Hallucination detection** — fact checks (file paths), consistency checks (decision rollbacks), confidence checks (short or repeated answers)
+- **Execution guarantees** — LLM-driven auto-planning (no keyword heuristics), stuck detection, off-track warnings, automatic plan advancement
 
-### Через npm (рекомендуется)
+**Orchestration & scale**
+
+- **Agent-Level MoE** — a router plus expert subagents with tool filtering, isolated context, file scoping, topological parallel execution, a re-plan cycle, and machine-readable verification (`success_criteria`)
+- **YAML pipelines** — a DAG engine with parallel waves, dependencies, and retries
+- **Project map** — file walking, export extraction, and an on-disk cache validated by freshness signature
+
+**Tools & integrations**
+
+- **Tools** — filesystem, shell, web search/fetch, browser (Playwright), planning, memory, subagents, MCP, pipelines, LSP, processes. A core set (~26) plus modular `plan`/`todo`/`verify`/`lsp_check`/`project_map`/`set_thinking`/`scope_request`; `question`/`approve` register only in web mode
+- **24 modules** — skills, plugins, MCP, pipelines, indexer, memory, context, sessions, browser, execution, hallucination detection, updater, user profile, LSP, model certification, security, artifacts, processes, pricing, onboarding, providers, reasoning, setup, webui
+- **MCP client** — connect to any MCP server (stdio or SSE)
+- **LSP diagnostics** — TypeScript/CSS/HTML servers: type checks after every edit and on demand
+
+**Experience**
+
+- **Web mode `mma web`** — a browser chat (SSE + REST) on the same core and sessions, no TTY needed; first run opens the setup wizard right in the browser
+- **Onboarding** — `mma setup` (provider wizard), `mma meet` ("Let's get acquainted": an interview written to global memory), `mma agents init` (generate/improve `AGENTS.md`)
+- **Unified `/config`** — a validated settings registry plus sugar commands `/model`, `/provider`, `/context`, `/reasoning`, `/verbose`
+- **Prompt caching** — cache hints (llama.cpp / OpenAI / OpenRouter) with hit-rate and savings metrics (the `⟡` cache line)
+- **Context log** — `--context-log` writes the full outgoing model context to a git-style diff (`context.diff`)
+- **Session management** — persistent JSONL sessions, REPL commands, `mma session export`
+- **i18n** — every UI string goes through `t()`, with English and Russian bundled
+- **Race-free output** — single-writer `OutputChannel`: no stray `console.*`/stdout outside the CLI and machine JSON
+- **Flexible context** — adapts to any model window from 8K to 120K
+- **No TUI** — a minimal CLI + REPL with markdown→ANSI formatting
+- **llama.cpp / Jinja proven** — tested against tricky Jinja-template edge cases (system-first, streaming fallback, explicit `stream: false`)
+
+**Safety**
+
+- **Security module** — on by default (balanced policy): bash validation, path/network policies (SSRF), content scanning, session encryption, audit log, plus always-on protected paths (`.git/`, `.env*`, keys)
+
+---
+
+## Installation
+
+### Requirements
+
+- **Runtime:** [Bun](https://bun.sh) (recommended) or Node.js ≥ 20
+- **LLM backend:** any OpenAI-compatible server (LM Studio, Ollama, vLLM, llama.cpp, Together AI)
+
+### From npm (recommended)
 
 ```bash
 npm install -g micro-models-agent@latest
 ```
 
-После установки команда `mma` будет доступна в терминале. Если после установки `mma` не находится — попробуйте переоткрыть терминал или выполните:
+The `mma` command is then available in your terminal. If `mma` isn't found, reopen your terminal or run:
 
 ```bash
 # PowerShell
 npm uninstall -g micro-models-agent
 npm install -g micro-models-agent@latest
 
-# Проверка
+# Verify
 mma --version
 ```
 
-### Из исходников
+### From source
 
 ```bash
 git clone https://github.com/your-org/micro-models-agent
@@ -90,79 +106,79 @@ bun run build:prod
 
 ---
 
-## Быстрый старт
+## Quick Start
 
-### 1. Запустите LLM-бэкенд
+### 1. Start an LLM backend
 
-Направьте MMA на любой OpenAI-совместимый эндпоинт. Пример с LM Studio:
+Point MMA at any OpenAI-compatible endpoint. With LM Studio:
 
 ```bash
-# LM Studio слушает http://localhost:1234 по умолчанию
+# LM Studio listens on http://localhost:1234 by default
 ```
 
-### 2. Запустите мастер настройки
+### 2. Run the setup wizard
 
 ```bash
 bun run mma setup
 ```
 
-Сканирует локальные порты, находит модель, тестирует соединение и записывает конфиг. Устаревший алиас: `bun run mma init`.
+It scans local ports, finds a model, tests the connection, and writes your config. Legacy alias: `bun run mma init`.
 
-### 3. Используйте агента
+### 3. Use the agent
 
 ```bash
-# Одноразовый режим
-bun run mma "создай REST API на Express и добавь тесты"
+# One-shot
+bun run mma "build an Express REST API and add tests"
 
-# Интерактивный REPL
+# Interactive REPL
 bun run dev
 ```
 
 ---
 
-## Использование
+## Usage
 
 ### CLI
 
 ```bash
 bun run mma "<prompt>"
 
-# Подкоманды
-bun run mma setup                      # Интерактивный мастер настройки
-bun run mma init                       # Устаревший алиас mma setup (мастер провайдера)
-bun run mma meet                       # «Познакомимся» — интервью, пишет в память
-bun run mma agents init                # Создать/улучшить AGENTS.md для workspace
+# Subcommands
+bun run mma setup                      # Interactive setup wizard
+bun run mma init                       # Legacy alias of mma setup (provider wizard)
+bun run mma meet                       # "Let's get acquainted" — interview, writes to memory
+bun run mma agents init                # Generate/improve AGENTS.md for the workspace
 bun run mma config set model qwen/qwen3.5-9b
 bun run mma config show
-bun run mma model list                 # Список доступных моделей (✔ = сертифицирована)
-bun run mma model use qwen3.5-9b       # Переключить модель
-bun run mma model certify <name>       # Сертификация модели на бэкенде
-bun run mma model cert-status <name>   # Статус сертификации
-bun run mma model cert-list            # Все сертификации
-bun run mma model uncertify <name>     # Отозвать сертификацию
-bun run mma provider list              # Список провайдеров
-bun run mma provider add local --url http://localhost:1234/v1  # Добавить провайдера
-bun run mma provider use opencode-zen  # Хостед-провайдер (zen / go)
-bun run mma context                    # Токены/бюджет контекста (--system/--reserve)
-bun run mma map [summary|refresh|find] # Карта проекта
-bun run mma usage                      # Баланс провайдера (OpenRouter /key, /credits)
-bun run mma security status            # Текущая конфигурация безопасности
-bun run mma security policies          # Доступные политики (strict/balanced/permissive)
-bun run mma security set-policy strict # Применить политику
-bun run mma plugins list               # Загруженные плагины (--all — включая встроенные)
-bun run mma session list               # Список сессий
-bun run mma session show <id>          # Детали сессии
-bun run mma session export <id>        # Экспорт сессии (--format md|json|jsonl, --out -)
-bun run mma session delete <id>        # Удалить сессию
-bun run mma web [--port N] [--host H] [--token T] [--no-open]  # Браузерный чат
+bun run mma model list                 # Available models (✔ = certified)
+bun run mma model use qwen3.5-9b       # Switch model
+bun run mma model certify <name>       # Certify a model against the backend
+bun run mma model cert-status <name>   # Certification status
+bun run mma model cert-list            # All certifications
+bun run mma model uncertify <name>     # Revoke a certification
+bun run mma provider list              # List providers
+bun run mma provider add local --url http://localhost:1234/v1  # Add a provider
+bun run mma provider use opencode-zen  # Hosted provider (zen / go)
+bun run mma context                    # Context tokens/budget (--system/--reserve)
+bun run mma map [summary|refresh|find] # Project map
+bun run mma usage                      # Provider balance (OpenRouter /key, /credits)
+bun run mma security status            # Current security configuration
+bun run mma security policies          # Available policies (strict/balanced/permissive)
+bun run mma security set-policy strict # Apply a policy
+bun run mma plugins list               # Loaded plugins (--all includes built-in)
+bun run mma session list               # List sessions
+bun run mma session show <id>          # Session details
+bun run mma session export <id>        # Export a session (--format md|json|jsonl, --out -)
+bun run mma session delete <id>        # Delete a session
+bun run mma web [--port N] [--host H] [--token T] [--no-open]  # Browser chat
 
-# Флаги одноразового запуска
-bun run mma "<prompt>" --json              # Машиночитаемый JSON-результат
-bun run mma "<prompt>" -d <dir>            # Рабочая директория агента
-bun run mma "<prompt>" --no-agents-md      # Не грузить AGENTS.md в системный промпт
-bun run mma "<prompt>" --exit-on-complete  # Выйти после первого финального ответа
-bun run mma "<prompt>" --context-log       # Записать контекст в <session>/context.diff
-bun run mma "<prompt>" --verbose           # Подробный вывод (уровень verbosity)
+# One-shot flags
+bun run mma "<prompt>" --json              # Machine-readable JSON result
+bun run mma "<prompt>" -d <dir>            # Agent working directory
+bun run mma "<prompt>" --no-agents-md      # Don't load AGENTS.md into the system prompt
+bun run mma "<prompt>" --exit-on-complete  # Exit after the first final answer
+bun run mma "<prompt>" --context-log       # Write context to <session>/context.diff
+bun run mma "<prompt>" --verbose           # Verbose output (verbosity level)
 bun run mma "<prompt>" --reasoning <auto|low|medium|high|max>
 ```
 
@@ -172,93 +188,93 @@ bun run mma "<prompt>" --reasoning <auto|low|medium|high|max>
 bun run dev
 ```
 
-| Команда | Алиасы | Описание |
-|---------|--------|----------|
-| `/help` | | Показать справку |
-| `/sessions` | `/ls` | Список сессий (* = активная) |
-| `/new <name>` | `/create` | Создать новую сессию |
-| `/resume <id\|name>` | `/switch`, `/use` | Переключиться на сессию |
-| `/rename <name>` | | Переименовать текущую сессию |
-| `/delete <id>` | `/rm` | Удалить сессию |
-| `/model [name]` | | Показать/сменить модель |
-| `/provider [list\|use <name>\|add …]` | | Провайдеры (список/переключить/добавить) |
-| `/status` | | Статус: модель, плагины, сессия, стоимость |
-| `/config [<ключ> [<значение>]]` | | Единый реестр настроек (`/config reset <key>`) |
-| `/context` | `/ctx` | Токены и бюджет контекста |
-| `/reasoning [show\|hide\|level <...>]` | | Показ reasoning / уровень (`auto`/`low`/…/`max`) |
-| `/verbose [quiet\|normal\|verbose]` | | Уровень детализации вывода |
-| `/memory [get\|set\|unset\|find\|forget]` | | Просмотр/правка памяти |
-| `/meet` | `/познакомимся` | Онбординг-интервью (пишет в глобальную память) |
-| `/map [summary\|refresh\|find]` | | Карта проекта |
-| `/export [md\|json\|jsonl]` | | Экспорт текущей сессии |
-| `/image <path\|url>` | | Прикрепить изображение (или Ctrl+V) |
-| `/run <cmd>` | | Выполнить shell-команду без агента |
-| `/sysprompt` | | Показать системный промпт |
-| `/wizard` | | Мастер настройки |
-| `/skill <name>` | | Загрузить скилл |
-| `/plugins` | | Плагины (`--all` — все) |
-| `/lsp [status\|restart\|check <path>]` | | Диагностика LSP |
-| `/reload` | | Перечитать конфиг и модули |
-| `/clear` | | Очистить экран (контекст сессии сохраняется) |
-| `/exit` | | Выйти из REPL |
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/help` | | Show help |
+| `/sessions` | `/ls` | List sessions (* = active) |
+| `/new <name>` | `/create` | Create a new session |
+| `/resume <id\|name>` | `/switch`, `/use` | Switch to a session |
+| `/rename <name>` | | Rename the current session |
+| `/delete <id>` | `/rm` | Delete a session |
+| `/model [name]` | | Show/switch model |
+| `/provider [list\|use <name>\|add …]` | | Providers (list/switch/add) |
+| `/status` | | Status: model, plugins, session, cost |
+| `/config [<key> [<value>]]` | | Unified settings registry (`/config reset <key>`) |
+| `/context` | `/ctx` | Context tokens and budget |
+| `/reasoning [show\|hide\|level <...>]` | | Reasoning display / level (`auto`/`low`/…/`max`) |
+| `/verbose [quiet\|normal\|verbose]` | | Output verbosity level |
+| `/memory [get\|set\|unset\|find\|forget]` | | View/edit memory |
+| `/meet` | `/познакомимся` | Onboarding interview (writes to global memory) |
+| `/map [summary\|refresh\|find]` | | Project map |
+| `/export [md\|json\|jsonl]` | | Export the current session |
+| `/image <path\|url>` | | Attach an image (or Ctrl+V) |
+| `/run <cmd>` | | Run a shell command without the agent |
+| `/sysprompt` | | Show the system prompt |
+| `/wizard` | | Setup wizard |
+| `/skill <name>` | | Load a skill |
+| `/plugins` | | Plugins (`--all` for all) |
+| `/lsp [status\|restart\|check <path>]` | | LSP diagnostics |
+| `/reload` | | Reload config and modules |
+| `/clear` | | Clear the screen (session context is preserved) |
+| `/exit` | | Exit the REPL |
 
-Горячие клавиши: `Esc Esc` — прервать агента; `Ctrl+C` — выход; `Ctrl+V` — вставить изображение из буфера обмена; `Shift+Enter` — перенос строки.
+**Hotkeys:** `Esc Esc` — interrupt the agent; `Ctrl+C` — quit; `Ctrl+V` — paste an image from the clipboard; `Shift+Enter` — newline.
 
-### Веб-режим (`mma web`)
+### Web mode (`mma web`)
 
-Тот же `bootstrap()` / `Agent` / сессии, но в браузере (SSE + REST, без TTY):
+The same `bootstrap()` / `Agent` / sessions, but in the browser (SSE + REST, no TTY):
 
 ```bash
-bun run mma web                                        # откроет браузер
+bun run mma web                                        # opens the browser
 bun run mma web --port 8080 --host 127.0.0.1 --no-open
 ```
 
-- **Первый запуск** с пустым конфигом: мастер прямо в браузере (язык → провайдер → ключ → модель → контекст → безопасность → проверка). Чат закрыт, пока настройка не завершена (сервер отвечает `409 setup_required`).
-- Панель настроек: модели/провайдеры, контекст, reasoning, память, скиллы, плагины/MCP, безопасность; slash-команды (`/help`, `/status`, `/config`, `/model`, `/provider`, `/memory`, …) работают и в браузере.
+- **First run** with an empty config: the wizard opens right in the browser (language → provider → key → model → context → security → review). Chat stays locked until setup is complete (the server answers `409 setup_required`).
+- Settings panel: models/providers, context, reasoning, memory, skills, plugins/MCP, security. Slash commands (`/help`, `/status`, `/config`, `/model`, `/provider`, `/memory`, …) work in the browser too.
 - Env: `MMA_WEBUI_PORT`, `MMA_WEBUI_HOST`, `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
 
-### Разработка
+### Development
 
 ```bash
-bun run mma "почини страницу логина"    # Запуск агента
-bun run dev                             # Watch-режим (авто-перезапуск при изменениях)
-bun run build:prod                      # Сборка для публикации (clean → bundle → frontend → assets → minify)
-bun test                                # Запуск тестов
-bun run typecheck                       # Проверка типов бэкенда (tsc --noEmit)
-bun run typecheck:frontend              # Проверка типов фронтенда (tsconfig.frontend.json)
-bun run lint                            # Линтер Biome
-bun run quality                         # typecheck + frontend + lint + fallow (dead-code gate)
+bun run mma "fix the login page"   # Run the agent
+bun run dev                        # Watch mode (auto-restart on changes)
+bun run build:prod                 # Publish build (clean → bundle → frontend → assets → minify)
+bun test                           # Run tests
+bun run typecheck                  # Backend type check (tsc --noEmit)
+bun run typecheck:frontend         # Frontend type check (tsconfig.frontend.json)
+bun run lint                       # Biome linter
+bun run quality                    # typecheck + frontend + lint + fallow (dead-code gate)
 ```
 
-> Прод-сборка (`build:prod`) очищает `dist`, выносит зависимости из бандла
-> (`--packages external`) и минифицирует весь `dist` через esbuild. Пакет ~1.7 MB;
-> в рантайме ничего не докачивается — всё приходит с `npm install`.
+> The production build (`build:prod`) cleans `dist`, externalizes dependencies
+> (`--packages external`), and minifies everything via esbuild. The package is ~1.7 MB;
+> nothing is downloaded at runtime — it all arrives with `npm install`.
 
 ---
 
-## Конфигурация
+## Configuration
 
-3-слойный конфиг: `defaults.ts` → `~/.mma/config/*.json` (глобальные домены; legacy `~/.mma/config.json` мигрируется автоматически, с бэкапом) → `.mmrc` (проект) + переменные окружения `MMA_*`.
+A 3-layer config: `defaults.ts` → `~/.mma/config/*.json` (global domains; legacy `~/.mma/config.json` migrates automatically with a backup) → `.mmrc` (project) + `MMA_*` environment variables.
 
-Ключевые опции (полный список в `src/config/defaults.ts`, просмотр/правка — `/config` в REPL или `mma config show`):
+Key options (full list in `src/config/defaults.ts`; view/edit via `/config` in the REPL or `mma config show`):
 
-| Опция | По умолчанию | Описание |
-|-------|-------------|----------|
-| `model` | `qwen/qwen3.5-9b` | Имя модели для бэкенда |
-| `provider.baseUrl` | `http://localhost:1234/v1` | URL OpenAI-совместимого API (или `provider.entries[]` для failover) |
-| `contextWindow` | `32768` | Контекстное окно модели в токенах |
-| `contextBudget.systemPrompt` | `0.10` | Доля окна под системный промпт |
-| `contextBudget.responseReserve` | `0.15` | Резерв под ответ |
-| `autoPlan` | `true` | Авто-создание планов для многошаговых задач |
-| `reasoning.mode` | `auto` | `auto` (политика) или фиксированный `none`…`max` |
-| `reasoning.baseline` | `low` | Стартовый уровень в auto (растёт на сигналах) |
-| `maxToolIterations` | `1000` | Макс. вызовов инструментов за запуск |
-| `stuckThreshold` | `6` | Итераций без прогресса до stuck-detection |
-| `moe.enabled` | `false` | Включить Agent-Level MoE |
-| `security.enabled` | `true` | Модуль безопасности (balanced-политика по умолчанию) |
+| Option | Default | Description |
+|--------|---------|-------------|
+| `model` | `qwen/qwen3.5-9b` | Model name for the backend |
+| `provider.baseUrl` | `http://localhost:1234/v1` | OpenAI-compatible API URL (or `provider.entries[]` for failover) |
+| `contextWindow` | `32768` | Model context window in tokens |
+| `contextBudget.systemPrompt` | `0.10` | Share of the window for the system prompt |
+| `contextBudget.responseReserve` | `0.15` | Reserve for the response |
+| `autoPlan` | `true` | Auto-create plans for multi-step tasks |
+| `reasoning.mode` | `auto` | `auto` (policy) or fixed `none`…`max` |
+| `reasoning.baseline` | `low` | Starting level in auto (grows on signals) |
+| `maxToolIterations` | `1000` | Max tool calls per run |
+| `stuckThreshold` | `6` | Iterations without progress before stuck detection |
+| `moe.enabled` | `false` | Enable Agent-Level MoE |
+| `security.enabled` | `true` | Security module (balanced policy by default) |
 | `ui.verbosity` | `normal` | `quiet` / `normal` / `verbose` |
-| `locale` | `en` | Язык интерфейса (`en` / `ru`) |
-| `logLevel` | `info` | Уровень логирования |
+| `locale` | `en` | UI language (`en` / `ru`) |
+| `logLevel` | `info` | Logging level |
 
 ### Agent-Level MoE
 
@@ -279,7 +295,7 @@ bun run quality                         # typecheck + frontend + lint + fallow (
 
 ---
 
-## Архитектура
+## Architecture
 
 ```
 CLI (main.ts → commands.ts / repl.ts / setup.ts / web-command.ts)
@@ -293,124 +309,124 @@ CLI (main.ts → commands.ts / repl.ts / setup.ts / web-command.ts)
   → Output (OutputBus → OutputChannel single writer; JSON/SSE sinks)
 ```
 
-### Структура проекта
+### Project structure
 
 ```
 src/
-├── core/          # Цикл агента, bootstrap/системный промпт, WebHost, типы
-├── llm/           # Абстракция провайдера, OpenAI-совместимость, стриминг, токены, кеш-метрики
-├── tools/         # Ядро инструментов (~26) + реестр, исполнитель, скоуп-гарды
-├── modules/       # 24 модуля (скиллы, плагины, mcp, пайплайны, indexer, память, контекст,
-│                  #   сессии, галлюцинации, выполнение, апдейтер, профиль, браузер, LSP,
-│                  #   безопасность, сертификация, артефакты, процессы, цены, онбординг,
-│                  #   провайдеры, reasoning, setup, webui)
+├── core/          # Agent loop, bootstrap/system prompt, WebHost, types
+├── llm/           # Provider abstraction, OpenAI compatibility, streaming, tokens, cache metrics
+├── tools/         # Tool core (~26) + registry, executor, scope guards
+├── modules/       # 24 modules (skills, plugins, mcp, pipelines, indexer, memory, context,
+│                  #   sessions, hallucination, execution, updater, profile, browser, LSP,
+│                  #   security, certification, artifacts, processes, pricing, onboarding,
+│                  #   providers, reasoning, setup, webui)
 ├── output/        # Single-writer OutputChannel + OutputBus, JSON/SSE sinks
-├── cli/           # Точка входа, команды, REPL, мастера (setup), `mma web`
-├── config/        # 3-слойный конфиг: defaults → домены → проект
+├── cli/           # Entry point, commands, REPL, wizards (setup), `mma web`
+├── config/        # 3-layer config: defaults → domains → project
 ├── i18n/          # en.json + ru.json + t()
-├── ui/            # Markdown→ANSI форматтер, renderer, line-editor
-└── logger/        # Структурированный логгер с уровнями и дочерними логгерами
+├── ui/            # Markdown→ANSI formatter, renderer, line-editor
+└── logger/        # Structured logger with levels and child loggers
 ```
 
 ---
 
-## Инструменты
+## Tools
 
-| Инструмент | Описание |
-|------------|----------|
-| `read_file` | Чтение файла с offset/limit |
-| `write_file` | Создание/перезапись с созданием директорий |
-| `edit_file` | Поиск-и-замена в существующих файлах |
-| `glob` | Поиск по glob-паттернам |
-| `grep` | Поиск по содержимому через ripgrep |
-| `list_dir` | Список содержимого директории |
-| `create_dir` | Создание директории (рекурсивно) |
-| `delete_file` | Удаление файла или пустой директории |
-| `move_file` | Перемещение/переименование файла или директории |
-| `file_info` | Метаданные файла/директории |
-| `bash` | Выполнение shell-команд |
-| `subagent` | Изолированный сабагент со скоупом |
-| `web_search` | Поиск в интернете |
-| `web_fetch` | Загрузка веб-страницы → markdown (~5K символов, 15s таймаут, SSRF-safe редиректы) |
-| `web_browse` | JS-less HTTP fetch страницы без движка (до 3K символов) |
-| `browser` | Браузер на Playwright (клик, ввод, скролл, скриншот) |
-| `plan` | Создание/обновление/отмена планов |
-| `todo` | Отслеживание задач |
-| `load_skill` | Загрузить скилл во время выполнения |
-| `pipeline_run` | Выполнить YAML-пайплайн |
-| `mcp_call` | Вызвать инструмент MCP-сервера |
-| `search_history` | Поиск по истории сессий |
-| `project_map` | Запрос карты проекта (summary, refresh, find) |
-| `chunk_query` | Параллельная обработка больших текстов чанками |
-| `download_file` | Скачать бинарный файл по URL на диск |
-| `process_list` / `process_log` / `process_kill` | Управление фоновыми процессами |
-| `remember` / `recall` | Постоянная память агента |
-| `attach_image` | Прикрепить изображение (файл/URL/буфер обмена; в контекст — при vision-модели) |
-| `enable_tools` | Включить скрытые группы инструментов на ходу |
-| `lsp_check` | Диагностика LSP (TypeScript/CSS/HTML) |
-| `verify` | Верификация шагов плана |
-| `session_info` | Сведения о текущей сессии (id, модель, контекст, сообщения) |
-| `set_thinking` | Сменить уровень reasoning для следующих итераций |
-| `scope_request` | Запросить расширение файлового скоупа сабагента |
-| `question` / `approve` | Интерактивные меню (регистрируются только в веб-режиме `mma web`) |
+| Tool | Description |
+|------|-------------|
+| `read_file` | Read a file with offset/limit |
+| `write_file` | Create/overwrite, creating directories as needed |
+| `edit_file` | Find-and-replace in existing files |
+| `glob` | Search by glob patterns |
+| `grep` | Search file contents via ripgrep |
+| `list_dir` | List directory contents |
+| `create_dir` | Create a directory (recursively) |
+| `delete_file` | Delete a file or empty directory |
+| `move_file` | Move/rename a file or directory |
+| `file_info` | File/directory metadata |
+| `bash` | Run shell commands |
+| `subagent` | Isolated, scoped subagent |
+| `web_search` | Web search |
+| `web_fetch` | Fetch a web page → markdown (~5K chars, 15s timeout, SSRF-safe redirects) |
+| `web_browse` | JS-less HTTP page fetch without an engine (up to 3K chars) |
+| `browser` | Playwright browser (click, type, scroll, screenshot) |
+| `plan` | Create/update/cancel plans |
+| `todo` | Task tracking |
+| `load_skill` | Load a skill at runtime |
+| `pipeline_run` | Run a YAML pipeline |
+| `mcp_call` | Call an MCP server tool |
+| `search_history` | Search session history |
+| `project_map` | Query the project map (summary, refresh, find) |
+| `chunk_query` | Process large texts in parallel chunks |
+| `download_file` | Download a binary file by URL to disk |
+| `process_list` / `process_log` / `process_kill` | Manage background processes |
+| `remember` / `recall` | Persistent agent memory |
+| `attach_image` | Attach an image (file/URL/clipboard; added to context with a vision model) |
+| `enable_tools` | Enable hidden tool groups on the fly |
+| `lsp_check` | LSP diagnostics (TypeScript/CSS/HTML) |
+| `verify` | Verify plan steps |
+| `session_info` | Current session info (id, model, context, messages) |
+| `set_thinking` | Change the reasoning level for upcoming iterations |
+| `scope_request` | Request a subagent file-scope extension |
+| `question` / `approve` | Interactive menus (registered only in web mode `mma web`) |
 
-> Примечание: в терминале интерактивные тулзы `question`/`approve` не регистрируются — модель задаёт вопросы текстом. В `mma web` они работают через SSE + `POST /api/answer`.
+> Note: in the terminal, the interactive tools `question`/`approve` are not registered — the model asks questions as plain text. In `mma web` they work via SSE + `POST /api/answer`.
 
 ---
 
-## Тестирование
+## Testing
 
 ```bash
-bun test                              # Модульные + компонентные тесты
-bun test tests/agent.test.ts          # Один файл
-bun run test:integration              # Интеграционные тесты (требуют LLM-бэкенд)
-bun run typecheck                     # Проверка типов
+bun test                              # Unit + component tests
+bun test tests/agent.test.ts          # A single file
+bun run test:integration              # Integration tests (need an LLM backend)
+bun run typecheck                     # Type check
 ```
 
-### Тестирование агента из консоли (agent-driven)
+### Agent-driven testing from the console
 
-MMA можно тестировать в одноразовом headless-режиме без интерактивного REPL — это удобно для проверки фич и регрессий из терминала или другим агентом:
+MMA can run headless in one-shot mode without the interactive REPL — handy for checking features and regressions from a terminal or another agent:
 
 ```bash
-# Одноразовый прогон: без AGENTS.md, выход сразу после ответа, песочница
-bun run mma "<промпт>" --no-agents-md --exit-on-complete -d <путь-к-песочнице>
+# One-shot: no AGENTS.md, exit right after the answer, sandboxed
+bun run mma "<prompt>" --no-agents-md --exit-on-complete -d <sandbox-path>
 ```
 
-- **Песочница** — всегда внутри `_testing/` в корне проекта (например `_testing/<case-name>/`), никогда в корне или в `src/`. Папка `_testing/` добавлена в `.gitignore`.
-- **`--no-agents-md`** — не грузить AGENTS.md проекта в системный промпт (чистая среда).
-- **`--exit-on-complete`** — выйти сразу после первого финального ответа; интерактивные тулзы (`question`/`approve`) не блокируют stdin, а возвращают ошибку.
-- **`-d <dir>`** — рабочая директория агента (туда он создаёт файлы).
-- Каждый прогон сохраняется в сессию `~/.mma/sessions/<id>/` — можно посмотреть через `bun run mma session list` / `session show <id>`.
+- **Sandbox** — always inside `_testing/` at the project root (e.g. `_testing/<case-name>/`), never at the root or in `src/`. The `_testing/` folder is in `.gitignore`.
+- **`--no-agents-md`** — don't load the project's AGENTS.md into the system prompt (clean environment).
+- **`--exit-on-complete`** — exit right after the first final answer; interactive tools (`question`/`approve`) don't block stdin but return an error.
+- **`-d <dir>`** — the agent's working directory (where it creates files).
+- Every run is saved to the session `~/.mma/sessions/<id>/` — inspect it via `bun run mma session list` / `session show <id>`.
 
 ---
 
-## Принципы дизайна
+## Design Principles
 
-1. **Ни одного файла >300 строк** — разделяй при приближении к лимиту
-2. **Маленькие файлы, одна ответственность** — каждый файл делает одно дело
-3. **KISS state machine** — никаких god-объектов, никакой вложенности if-else в цикле агента
-4. **Изоляция ошибок плагинов** — падение одного плагина не останавливает другие
-5. **Безопасность путей** — файловые инструменты резолвят `realpath` (защита от symlink/junction вне `baseDir`) и блокируют always-on защищённые пути (`.git/`, `.env*`, ключи)
-6. **Single-writer вывод** — всё через `OutputChannel`; прямой stdout только в CLI и машинном JSON
-7. **TDD** — сначала тест, потом реализация, потом коммит
-8. **Никаких захардкоженных строк** — весь текст через `t()` i18n
-9. **Никакого keyword matching** — LLM решает когда планировать, не эвристики
-10. **Без TUI** — минимальный CLI + REPL с markdown→ANSI
+1. **No file over 300 lines** — split as you approach the limit
+2. **Small files, one responsibility** — each file does one thing
+3. **KISS state machine** — no god objects, no nested if-else inside the agent loop
+4. **Plugin error isolation** — one plugin crashing doesn't stop the others
+5. **Path safety** — file tools resolve `realpath` (symlink/junction protection outside `baseDir`) and block always-on protected paths (`.git/`, `.env*`, keys)
+6. **Single-writer output** — everything through `OutputChannel`; direct stdout only in the CLI and machine JSON
+7. **TDD** — test first, then implementation, then commit
+8. **No hardcoded strings** — all text through `t()` i18n
+9. **No keyword matching** — the LLM decides when to plan, not heuristics
+10. **No TUI** — a minimal CLI + REPL with markdown→ANSI
 
 ---
 
-## Лицензия
+## License
 
 MIT
 
 ---
 
-## Благодарности
+## Acknowledgements
 
-- [Qwen3.5-9B](https://qwen.readthedocs.io/) — основная целевая модель
-- [LM Studio](https://lmstudio.ai/) — рекомендуемый локальный инференс-сервер
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) — инференс-движок
+- [Qwen3.5-9B](https://qwen.readthedocs.io/) — the primary target model
+- [LM Studio](https://lmstudio.ai/) — the recommended local inference server
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) — the inference engine
 
 ---
 
-**Сделано для локальных моделей. Работает везде.**
+**Built for local models. Runs anywhere.**
