@@ -24,15 +24,24 @@ const ASSET_DIR = ASSET_DIR_CANDIDATES.find((d) => existsSync(join(d, "index.htm
 
 /** Грузит все ассеты в память (с заглушками, если каталог не найден). */
 export function loadAssets(): WebUiAssets {
+  // Исходники фронта — TypeScript; в dev/тестах транспилируются на лету
+  // (`web:dev` без шага сборки). В prod `build:frontend` кладёт готовые `.js`
+  // в `dist/assets`, и та же функция просто читает их.
+  const transpiler = new Bun.Transpiler({ loader: "ts" });
   const read = (name: string, fallback: string) => {
     if (!ASSET_DIR) return fallback;
-    const p = join(ASSET_DIR, name);
-    return existsSync(p) ? readFileSync(p, "utf8") : fallback;
+    if (name.endsWith(".js")) {
+      const tsPath = join(ASSET_DIR, name.replace(/\.js$/, ".ts"));
+      if (existsSync(tsPath)) return transpiler.transformSync(readFileSync(tsPath, "utf8"));
+    }
+    const jsPath = join(ASSET_DIR, name);
+    return existsSync(jsPath) ? readFileSync(jsPath, "utf8") : fallback;
   };
   // Разделённые фронтенд-модули (`assets/js/**`, импортируются относительно
   // из `/app.js`). Рекурсивно: модули сгруппированы по фичам (`js/settings/*`
   // и т.п.), ключ — путь без ведущего слеша (`js/settings/controls.js`).
-  // Копируются в dist скриптом `scripts/copy-assets.ts` вместе с остальным `assets/`.
+  // `.ts` транспилируется в `.js` под тем же ключом. Копируются в dist скриптом
+  // `scripts/build-frontend.ts` вместе с остальным `assets/`.
   const jsModules: Record<string, string> = {};
   if (ASSET_DIR) {
     const walkJs = (dir: string, prefix: string): void => {
@@ -41,7 +50,11 @@ export function loadAssets(): WebUiAssets {
         const full = join(dir, entry.name);
         const key = `${prefix}/${entry.name}`;
         if (entry.isDirectory()) walkJs(full, key);
-        else if (entry.isFile() && entry.name.endsWith(".js")) {
+        else if (entry.isFile() && entry.name.endsWith(".ts")) {
+          jsModules[key.replace(/\.ts$/, ".js")] = transpiler.transformSync(
+            readFileSync(full, "utf8"),
+          );
+        } else if (entry.isFile() && entry.name.endsWith(".js")) {
           jsModules[key] = readFileSync(full, "utf8");
         }
       }
