@@ -37,8 +37,14 @@ describe("pricing module", () => {
     it("finds builtin Zen prices", () => {
       expect(resolvePrice("opencode/gpt-5.5", config)).toEqual({ input: 5, output: 30 });
       expect(resolvePrice("opencode-go/deepseek-v4-flash", config)).toEqual({
-        input: 0.22,
-        output: 0.66,
+        input: 0.15,
+        output: 0.6,
+        cachedInput: 0.003,
+      });
+      expect(resolvePrice("opencode-go/deepseek-v4.1-flash", config)).toEqual({
+        input: 0.15,
+        output: 0.6,
+        cachedInput: 0.003,
       });
     });
 

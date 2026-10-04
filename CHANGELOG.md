@@ -4,6 +4,12 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Cost hidden for `deepseek-v4.1-flash`** (`src/modules/pricing/prices.ts`): the Zen/Go price table had `deepseek-v4-flash`/`deepseek-v4-pro` but not `deepseek-v4.1-flash`, so `resolvePrice` returned `undefined` and no cost was shown for the model the `opencode-go` provider remembers. Added the entry and corrected the stale DeepSeek prices/cached-read rates to the current Go off-peak table.
+
 ## [2.18.2] - 2026-10-04
 
 ### Fixed
