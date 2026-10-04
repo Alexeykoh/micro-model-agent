@@ -16,6 +16,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.17.2] - 2026-10-04
+
+### Changed
+
+- **Docs**: refresh README, AGENTS.md and `docs/agents/*` for the TypeScript frontend and the optimized build — dev commands (`typecheck:frontend`), minified `build:prod` (external deps + esbuild), corrected stale frontend `.js` paths.
+
 ## [2.17.1] - 2026-10-04
 
 ### Changed

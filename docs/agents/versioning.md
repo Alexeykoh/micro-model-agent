@@ -96,7 +96,9 @@ Renaming **with a working deprecation alias** is **MINOR**, not MAJOR.
 3. At most one MAJOR per package of breaking changes; do not bump MAJOR without an explicit request.
 4. Versions are **milestones, not per-PR counters** — batch unrelated changes into one release instead of chaining MINOR/MAJOR bumps.
 
-### Current Version: 2.17.1
+### Current Version: 2.17.2
+
+- **2.17.2** = docs refresh (README/AGENTS/`docs/agents/*`) for the TypeScript frontend and optimized build. No code changes.
 
 - **2.17.1** = WebUI frontend migrated to TypeScript (`strict: true`, `tsconfig.frontend.json`, `tsc` transpile via `Bun.Transpiler` in dev/tests, `scripts/build-frontend.ts` for prod) + npm build optimization (external-deps `bun build`, esbuild minification of `dist/**`, portable `clean`, `js-tiktoken/lite` + `cl100k_base`). Internal, non-breaking: package **8.17 MB → 1.73 MB**, `main.js` **7.68 MB → 1.11 MB**. Specs: `docs/specs/2026-10-04-webui-frontend-ts-design.md`, `docs/specs/2026-10-04-npm-build-optimization-design.md`.
 

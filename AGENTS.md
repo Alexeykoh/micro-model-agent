@@ -733,7 +733,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   `js-tiktoken/ranks/cl100k_base` (~1.1 MB вместо ~5.6 MB всех таблиц); `estimateTokens`
   перекалиброван под cl100k (кириллица ≈ /2.5).
 
-### Current Version: 2.17.1
+### Current Version: 2.17.2
 
 ### Changelog
 
