@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { saveSessionUsage, loadSessionUsage } from "../src/modules/webui/session-usage";
+import { saveSessionUsage, loadSessionUsage } from "../src/modules/webui/session/session-usage";
 import { activeUsage, createWebUiState } from "../src/modules/webui/state";
 
 describe("webui session usage persistence", () => {

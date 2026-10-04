@@ -15,13 +15,13 @@ import type { OutputBus } from "../../output/bus";
 import { defaultOutputBus } from "../../output/bus";
 import type { OutputEvent, OutputLevel } from "../../output/types";
 import { redactContextSecrets } from "../../core/agent/context-log";
-import { broadcast, type WebUiState } from "./state";
+import { broadcast, type SseTransport } from "./state";
 
 const FORWARDED: readonly OutputLevel[] = ["info", "warn", "error"];
 
 /** Подписывает `state` на `bus`; возвращает отписку (звать в `stop()`). */
 export function installOutputForwarding(
-  state: WebUiState,
+  state: SseTransport,
   bus: OutputBus = defaultOutputBus,
 ): () => void {
   return bus.subscribe((ev: OutputEvent) => {

@@ -23,6 +23,42 @@
 - **План (UI/state):** [docs/plans/2026-10-02-web-session-state.md](./docs/plans/2026-10-02-web-session-state.md)
   - Обязательный задел: DOM-харнесс (`happy-dom`) — сейчас клиент проверяется только строковым матчингом (`webui-assets.test.ts:19-20`)
 
+## WebUI Modularization (2026-10-02)
+
+> Второй проход модуляризации webui (после [декомпозиции 2026-09-26](./docs/plans/2026-09-26-webui-decompose.md)).
+> Цели: **A** навигация (доменные подпапки), **B** change-safety (узкие role-интерфейсы
+> вместо god-object `WebUiState`; срезы стора `S` вместо singleton), **C** размер (чистые швы).
+> Предпосылка: циклов импортов нет (ацикличные DAG и на бэке, и на фронте); реальная
+> связность — в двух общих мутабельных объектах, а не в размере файлов. Поведение
+> behaviour-preserving: SSE/REST/сессии/конфиг/plugin API по умолчанию без смены контрактов.
+> Ветка: `refactor/webui-modularize` (от `master` @ `066a215`, сверка с последними
+> per-session/remove-legacy/LSP коммитами).
+
+- **Спека (дизайн):** [docs/specs/2026-10-02-webui-modularization-design.md](./docs/specs/2026-10-02-webui-modularization-design.md)
+  - `state.ts` god-object (`state.ts:126-254`, ~60 полей; **35**/38 файлов импортят `./state`)
+  - `S` singleton (`assets/js/store.js`; `S.state` — ~169 доступов)
+  - инверсия слоёв `settings.js → tabs.js` (`settings.js:12`)
+- **План:** [docs/plans/2026-10-02-webui-modularization.md](./docs/plans/2026-10-02-webui-modularization.md)
+  - Фаза 0 baseline+guard → Фаза 1 подпапки → Фаза 2 role-интерфейсы → Фаза 3 leaf-модули
+    → Фаза 4 `menus.js` (снять инверсию) → Фаза 5 разрез feed/tabs/settings → Фаза 6 срезы `S`
+    → Фаза 7 docs/release. Фазы 0–4 = A+C без глубокого риска; 5–6 = B.
+- **Статус (2026-10-02): Phase 0–6 ✅.** Коммиты (ранние): `a75fd52` (guard+baseline),
+  `c61d062` (доменные подпапки), `7f3b8bf` (role-интерфейсы `WebUiState` + строгий guard без whitelist),
+  `80888e0` (`settings/{controls,editors}`), `ed7c952` (barrel `sidebar` + `sidebar/{state,trace,map,lsp,core}`),
+  `e945e53` (`feed/core.js`), `5904bab` (`core/menus.js`, снята инверсия `settings → tabs`),
+  `837046f` (`feed/sidebar.js`).
+  Phase 5: `07947b5`/`89f860d`/`4a801ac`/`4b2f7ad`/`5b857c9` (`feed/*` + barrel),
+  `f716655` (`tabs.js` → `session/*`, DI через `init*`), `1530cc5` (`settings.js` → `settings/*`,
+  `postConfig`-funnel в `write.js` + `setWriteHooks`), `f53b7ca` (fixup `insertAfter`).
+  Phase 6: `62f05fa` (`store.js` → `core/store/*` срезы), `2257ae6` (потребители на срезы, `S`
+  удалён полностью).
+  `assets.ts` читает `js/**` рекурсивно. 37 webui-тест-файлов `331 pass / 0 fail`; полный
+  `bun test` 3022 pass / 0 fail; `tsc` чисто; `bun run quality` exit 0; `bun build app.js`
+  резолвит 44 модуля; JS-static `tsc` — 0 `Cannot find name`.
+  **Осталось:** Phase 7 (docs/release) — обновление `AGENTS.md`/`CHANGELOG` сделано; бамп версии
+  и публикация — по отдельному явному решению. Побочно: работа параллельной сессии
+  (index-watcher) сохранена отдельным коммитом `e8955e7`.
+
 ## Осталось (по приоритетам, 2026-09-25)
 
 > Сверено с кодом на `master` @ 2.5.0. Закрытые пункты вычеркнуты ниже.

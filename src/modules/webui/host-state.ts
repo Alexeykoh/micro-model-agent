@@ -7,11 +7,11 @@ import type { AppConfig } from "../../config/types";
 import type { AgentResult } from "../../core/types";
 import type { HostStateSnapshot, ProjectMapInfo } from "../../core/host";
 import type { LspDiagnosis } from "../lsp/diagnose";
-import type { SessionManager } from "../../modules/session/manager";
-import type { ExecutionModule } from "../../modules/execution/module";
+import type { SessionManager } from "../session/manager";
+import type { ExecutionModule } from "../execution/module";
 import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
 import type { UsageSnapshot } from "./state";
-import { isI18nStale } from "./i18n-stale";
+import { isI18nStale } from "./i18n/i18n-stale";
 
 /**
  * Узкие входы, читаемые `buildHostState`. Отдельно от `WebUiDeps`, чтобы
@@ -38,6 +38,10 @@ export interface WebIndexer {
   mapInfo?(): ProjectMapInfo;
   /** Принудительная пересборка индекса (`POST /api/index`). */
   refresh?(): Promise<unknown>;
+  /** Подписка на изменения файлов (вотчер). Есть у `IndexerModule`, нет у стабов. */
+  watch?(): void;
+  /** Отписка от вотчера. */
+  unwatch?(): void;
 }
 
 /** Узкое подмножество LSP-модуля для вкладки LSP (`/api/lsp/doctor`). */

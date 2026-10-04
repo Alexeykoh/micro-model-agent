@@ -7,7 +7,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createWebUiState } from "./state";
-import { sessionStatus } from "./session-status";
+import { sessionStatus } from "./session/session-status";
 import {
   checkAuth,
   isLoopback,
@@ -15,18 +15,18 @@ import {
   sendJson,
   setAuthCookie,
 } from "./util";
-import { handleMessagePost } from "./turns";
-import { handleCommandPost, handleInterruptPost, handleIndexPost } from "./actions-api";
-import { handleConfigGet, handleConfigPost, handleModelsGet } from "./config-api";
-import { handleI18nGet } from "./i18n-api";
-import { webCommandList } from "./commands";
-import { handleAnswerPost } from "./answer-api";
-import { handleSessionsApi } from "./sessions-api";
-import { handleLspGet, handleMcpCreate, handleSettingsApi } from "./settings-api";
-import { handleProvidersApi } from "./providers-api";
-import { handleFileApi } from "./file-api";
-import { handleSetupApi } from "./setup-api";
-import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp-api";
+import { handleMessagePost } from "./session/turns";
+import { handleCommandPost, handleInterruptPost, handleIndexPost } from "./chat/actions-api";
+import { handleConfigGet, handleConfigPost, handleModelsGet } from "./settings/config-api";
+import { handleI18nGet } from "./i18n/i18n-api";
+import { webCommandList } from "./chat/commands";
+import { handleAnswerPost } from "./session/answer-api";
+import { handleSessionsApi } from "./session/sessions-api";
+import { handleLspGet, handleMcpCreate, handleSettingsApi } from "./settings/settings-api";
+import { handleProvidersApi } from "./settings/providers-api";
+import { handleFileApi } from "./file/file-api";
+import { handleSetupApi } from "./settings/setup-api";
+import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp/lsp-api";
 import type { WebUiState, WebUiAssets } from "./state";
 import { readEnv } from "../../config/env";
 

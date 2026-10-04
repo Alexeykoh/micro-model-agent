@@ -78,6 +78,9 @@ MMA automatically builds and maintains a map of the current workspace.
 
 - Triggered at agent startup; cached to `<project>/.mma/index-cache.json`.
 - Re-scans on file changes via a file watcher and exposes the result as a system prompt block.
+  In the REPL the watcher is armed by the indexer plugin on session start; in `mma web` it is owned by the
+  web host (`attachIndexWatcher`, `src/modules/webui/index-watcher.ts`) for the process lifetime, because web
+  turns run in per-session runners that intentionally exclude the shared `indexer` plugin.
 - `project_map` tool lets the model query the current map:
 
 | Action    | Parameters | Description                                          |

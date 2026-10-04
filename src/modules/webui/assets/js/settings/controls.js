@@ -1,0 +1,196 @@
+// Generic settings controls for the `mma web` settings modal (`settings.js`).
+// One renderer per registry `valueType`; rows, labels and descriptions stay in
+// `settings.js` (same `row`/`el` styling). Structured editors (`tags`/
+// `checkboxes`/`table`) live in `./editors.js`. Never uses innerHTML — all user
+// or config data goes through `textContent` (XSS rule).
+import { el, makeToggle } from "../dom.js";
+import { tagsEditor, checkboxEditor, tableEditor } from "./editors.js";
+
+// Validate raw JSON text without posting. Empty input is invalid (the backend
+// would reject it too); the caller shows `error` inline and skips the POST.
+export function validateJson(text) {
+  const raw = String(text == null ? "" : text).trim();
+  if (!raw) return { ok: false, error: "required" };
+  try {
+    JSON.parse(raw);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "invalid JSON" };
+  }
+}
+
+function textInput(label, value) {
+  const input = el("input");
+  input.setAttribute("aria-label", label);
+  input.value = value;
+  return input;
+}
+
+// `def`: registry entry ({valueType, enum, min, max, step, readOnly}).
+// `value`: current config value at the key (`getPath` result).
+// `ctx`: { label, enumLabel(v), post(rawValue) } — `post` is `settings.js`
+// `postConfig`, injected so this module never touches the API directly.
+export function controlFor(def, value, ctx) {
+  if (def.readOnly) {
+    const ro = el("span", "val dim", value == null ? "—" : String(value));
+    if (value != null) ro.title = String(value);
+    return ro;
+  }
+  if (def.valueType === "bool") {
+    return makeToggle(!!value, (next) => {
+      ctx.post(next);
+      return true;
+    });
+  }
+  if (def.valueType === "enum") {
+    const sel = el("select");
+    sel.setAttribute("aria-label", ctx.label);
+    (def.enum || []).forEach((v) => {
+      const o = el("option", "", ctx.enumLabel(v));
+      o.value = v;
+      if (v === value) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", () => ctx.post(sel.value));
+    return sel;
+  }
+  if (def.valueType === "int") {
+    const input = textInput(ctx.label, value == null ? "" : String(value));
+    input.type = "number";
+    if (def.min != null) input.min = String(def.min);
+    if (def.max != null) input.max = String(def.max);
+    if (def.step != null) input.step = String(def.step);
+    input.addEventListener("change", () => ctx.post(input.value));
+    return input;
+  }
+  if (def.valueType === "share") {
+    const input = textInput(ctx.label, value == null ? "" : Math.round(Number(value) * 100) + "%");
+    input.addEventListener("change", () => ctx.post(input.value));
+    return input;
+  }
+  const editor = def.editor;
+  if (editor && editor.kind === "tags" && (def.valueType === "list" || def.valueType === "json")) {
+    return tagsEditor(value, ctx, editor);
+  }
+  if (editor && editor.kind === "checkboxes") {
+    return checkboxEditor(value, ctx, editor);
+  }
+  if (editor && editor.kind === "table") {
+    return tableEditor(value, ctx, editor);
+  }
+  if (def.valueType === "list") {
+    const shown = Array.isArray(value) ? value.join(", ") : value == null ? "" : String(value);
+    const input = textInput(ctx.label, shown);
+    input.placeholder = "a, b, c";
+    // The backend splits the raw comma string — post it verbatim.
+    input.addEventListener("change", () => ctx.post(input.value));
+    return input;
+  }
+  if (def.valueType === "json") {
+    const wrap = el("div", "jsonctl");
+    const area = el("textarea");
+    area.setAttribute("aria-label", ctx.label);
+    area.rows = 3;
+    area.value = value == null ? "" : JSON.stringify(value, null, 2);
+    const err = el("div", "json-err");
+    err.hidden = true;
+    area.addEventListener("input", () => {
+      const r = validateJson(area.value);
+      err.hidden = r.ok;
+      err.textContent = r.ok ? "" : String(r.error || "invalid JSON");
+    });
+    // Post only when valid — an invalid draft stays editable, no error toast.
+    area.addEventListener("change", () => {
+      if (validateJson(area.value).ok) ctx.post(area.value.trim());
+      else area.focus();
+    });
+    wrap.appendChild(area);
+    wrap.appendChild(err);
+    return wrap;
+  }
+  const input = textInput(ctx.label, value == null ? "" : String(value));
+  input.addEventListener("change", () => ctx.post(input.value));
+  return input;
+}
+
+// Single source of truth for the settings information architecture.
+//
+// Every panel is a list of *named sections* — the title must describe exactly
+// what is inside (research: settings fail when category names do not match the
+// controls under them, and when an "Advanced" bucket collects unrelated keys).
+// `search` (settings.js) indexes the same table, so a key can never be
+// reachable but unfindable.
+//
+// Panel ids match `data-p` / `data-panel` in index.html. Panels with custom
+// bodies (model, ui, memory, skills, plugins) render their own content first
+// and then these sections.
+export const PANEL_SECTIONS = {
+  general: [
+    { id: "general.interface", titleKey: "web.settings.sec.general.interface", keys: ["locale", "ui.verbosity"] },
+    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan"] },
+    { id: "general.provider", titleKey: "web.settings.sec.general.provider", keys: ["provider.fallback"] },
+  ],
+  model: [
+    { id: "model.tuning", titleKey: "web.settings.sec.model.tuning", descKey: "web.settings.sec.model.tuning.desc", keys: ["provider.maxCompletionTokens", "modelLoad.autoLoad", "modelLoad.flashAttention", "modelLoad.evalBatchSize", "modelLoad.offloadKvCacheToGpu"] },
+    { id: "model.capabilities", titleKey: "web.settings.sec.model.capabilities", descKey: "web.settings.sec.model.capabilities.desc", keys: ["modelCapabilities"] },
+  ],
+  context: [
+    { id: "context.window", titleKey: "web.settings.sec.context.window", descKey: "web.settings.sec.context.window.desc", keys: ["contextWindow", "contextBudget.systemPrompt", "contextBudget.responseReserve"] },
+    { id: "context.compaction", titleKey: "web.settings.sec.context.compaction", descKey: "web.settings.sec.context.compaction.desc", keys: ["contextBudget.compactionThreshold", "contextBudget.compactionMinLoad"] },
+    { id: "context.instructions", titleKey: "web.settings.sec.context.instructions", descKey: "web.settings.sec.context.instructions.desc", keys: ["instructions.summarize"] },
+    { id: "context.log", titleKey: "web.settings.sec.context.log", descKey: "web.settings.sec.context.log.desc", keys: ["contextLog.enabled", "contextLog.redact"] },
+  ],
+  reasoning: [
+    { id: "reasoning.display", titleKey: "web.settings.sec.reasoning.display", keys: ["showReasoning"] },
+    { id: "reasoning.effort", titleKey: "web.settings.sec.reasoning.effort", descKey: "web.settings.sec.reasoning.effort.desc", keys: ["reasoning.mode", "reasoning.min", "reasoning.max", "reasoning.baseline", "reasoning.overrideCooldown"] },
+  ],
+  agent: [
+    { id: "agent.moe", titleKey: "web.settings.sec.agent.moe", descKey: "web.settings.sec.agent.moe.desc", keys: ["moe.enabled", "moe.maxReplanCycles", "experts"] },
+    { id: "agent.critic", titleKey: "web.settings.sec.agent.critic", descKey: "web.settings.sec.agent.critic.desc", keys: ["critic.enabled", "critic.model", "critic.provider", "critic.tools", "critic.maxCalls", "critic.maxRepairCycles", "critic.timeoutMs"] },
+    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "skills.budget"] },
+    { id: "agent.subagent", titleKey: "web.settings.sec.agent.subagent", descKey: "web.settings.sec.agent.subagent.desc", keys: ["subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt"] },
+    { id: "agent.hallucination", titleKey: "web.settings.sec.agent.hallucination", descKey: "web.settings.sec.agent.hallucination.desc", keys: ["hallucination.judge.enabled"] },
+  ],
+  network: [
+    { id: "network.web", titleKey: "web.settings.sec.network.web", descKey: "web.settings.sec.network.web.desc", keys: ["webSearch.enabled"] },
+    { id: "network.error", titleKey: "web.settings.sec.network.error", descKey: "web.settings.sec.network.error.desc", keys: ["errorWebSearch.enabled", "errorWebSearch.threshold", "errorWebSearch.maxResults", "errorWebSearch.maxQueryChars", "errorWebSearch.maxSearchesPerSession", "errorWebSearch.requestTimeoutMs"] },
+  ],
+  browser: [
+    { id: "browser.main", titleKey: "web.settings.sec.browser.main", keys: ["browser.enabled", "browser.headless"] },
+    { id: "browser.limits", titleKey: "web.settings.sec.browser.limits", descKey: "web.settings.sec.browser.limits.desc", keys: ["browser.maxElements", "browser.maxContentChars", "browser.maxConsoleEntries", "browser.maxConsoleLineChars"] },
+    { id: "browser.viewport", titleKey: "web.settings.sec.browser.viewport", keys: ["browser.viewportWidth", "browser.viewportHeight", "browser.navigationTimeout"] },
+  ],
+  sessions: [
+    { id: "sessions.main", titleKey: "web.settings.sec.sessions.main", descKey: "web.settings.sec.sessions.main.desc", keys: ["session.autoSave", "session.autoName", "session.maxSessions", "session.isolateMemory"] },
+    { id: "sessions.isolation", titleKey: "web.settings.sec.sessions.isolation", descKey: "web.settings.sec.sessions.isolation.desc", keys: ["sessionIsolation.enabled", "sessionIsolation.isolatePlugins", "sessionIsolation.isolateTempFiles"] },
+  ],
+  ui: [
+    { id: "ui.chat", titleKey: "web.settings.sec.ui.chat", descKey: "web.settings.sec.ui.chat.desc", keys: ["ui.fontSize", "ui.activityRail", "ui.spinner", "ui.showContextStats", "ui.showCompaction"] },
+  ],
+  security: [
+    { id: "security.switches", titleKey: "web.settings.sec.security.switches", descKey: "web.settings.sec.security.switches.desc", keys: ["security.enabled", "security.bash.enabled", "security.bash.blockDangerousFlags", "security.paths.enabled", "security.contentScan.enabled", "security.network.enabled", "security.sessionEncryption.enabled"] },
+    { id: "security.limits", titleKey: "web.settings.sec.security.limits", descKey: "web.settings.sec.security.limits.desc", keys: ["security.maxRecursionDepth", "security.maxFileOperations", "security.rateLimits.maxRequestsPerMinute", "security.rateLimits.maxParallelTasks", "security.network.requestTimeout", "security.network.maxResponseSize"] },
+    { id: "security.bash", titleKey: "web.settings.sec.security.bash", descKey: "web.settings.sec.security.bash.desc", keys: ["security.bash.blacklist", "security.bash.whitelist", "security.bash.dangerousFlags", "security.bash.dangerousOperators"] },
+    { id: "security.paths", titleKey: "web.settings.sec.security.paths", descKey: "web.settings.sec.security.paths.desc", keys: ["security.paths.denied", "security.paths.allowed"] },
+    { id: "security.network", titleKey: "web.settings.sec.security.network", descKey: "web.settings.sec.security.network.desc", keys: ["security.network.deniedDomains", "security.network.allowedDomains"] },
+    { id: "security.scan", titleKey: "web.settings.sec.security.scan", descKey: "web.settings.sec.security.scan.desc", keys: ["security.contentScan.dangerousPatterns"] },
+    { id: "security.audit", titleKey: "web.settings.sec.security.audit", descKey: "web.settings.sec.security.audit.desc", keys: ["security.auditNotifier.enabled", "security.auditNotifier.filePath", "security.auditNotifier.webhookUrl", "security.auditNotifier.webhookTimeout", "security.auditNotifier.minSeverity", "security.auditNotifier.maxRetries", "security.auditNotifier.eventTypes"] },
+    { id: "security.encryption", titleKey: "web.settings.sec.security.encryption", descKey: "web.settings.sec.security.encryption.desc", keys: ["security.sessionEncryption.encryptHistory", "security.sessionEncryption.encryptSessionLog", "security.sessionEncryption.keyPath"] },
+  ],
+  advanced: [
+    { id: "advanced.diagnostics", titleKey: "web.settings.sec.advanced.diagnostics", descKey: "web.settings.sec.advanced.diagnostics.desc", keys: ["logLevel", "version"] },
+    { id: "advanced.retry", titleKey: "web.settings.sec.advanced.retry", descKey: "web.settings.sec.advanced.retry.desc", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
+    { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "updater.enabled", "updater.checkOnStart", "updater.autoInstall", "updater.intervalMs"] },
+  ],
+};
+
+/** Flat `key -> panelId` index (search + "where does this setting live"). */
+export function keyToPanel() {
+  const map = new Map();
+  for (const [panel, sections] of Object.entries(PANEL_SECTIONS)) {
+    for (const section of sections) {
+      for (const key of section.keys) map.set(key, panel);
+    }
+  }
+  return map;
+}

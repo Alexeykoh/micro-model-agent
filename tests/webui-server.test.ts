@@ -9,7 +9,7 @@ import {
   parseMessageBody,
   readBody,
 } from "../src/modules/webui/util";
-import { finishTurn } from "../src/modules/webui/turns";
+import { finishTurn } from "../src/modules/webui/session/turns";
 import { MAX_QUEUE_LENGTH } from "../src/modules/webui/limits";
 import { activeUsage, createWebUiState } from "../src/modules/webui/state";
 import type { Host } from "../src/core/host";

@@ -8,6 +8,16 @@ function js(a: WebUiAssets): string {
   return [a.js, ...Object.values(a.jsModules ?? {})].join("\n");
 }
 
+// Sidebar is split into `js/sidebar.js` (barrel) + `js/sidebar/*.js`; combine
+// them so the source guards below match regardless of which submodule holds a
+// given symbol.
+function sidebarSources(a: WebUiAssets): string {
+  return Object.entries(a.jsModules ?? {})
+    .filter(([k]) => k === "js/sidebar.js" || k.startsWith("js/sidebar/"))
+    .map(([, v]) => v)
+    .join("\n");
+}
+
 describe("webui assets", () => {
   it("loads html/css/js from disk", () => {
     const a = loadAssets();
@@ -184,7 +194,7 @@ describe("webui assets", () => {
 
   it("renders answers through the streaming markdown module", () => {
     const a = loadAssets();
-    expect(js(a)).toMatch(/from "\.{1,2}\/md\.js"/);
+    expect(js(a)).toMatch(/from "(?:\.\.\/)+md\.js"/);
     expect(js(a)).toContain("mountMarkdown(");
     expect(js(a)).toContain("renderMarkdown(");
     expect(js(a)).not.toContain("parseFences");
@@ -216,7 +226,7 @@ describe("webui assets", () => {
 
   it("offers one-click builtin provider presets in the form", () => {
     const a = loadAssets();
-    expect(js(a)).toContain("state.providerPresets");
+    expect(js(a)).toContain("settings.providerPresets");
     expect(js(a)).toContain("provider_preset");
     expect(js(a)).toContain("provider_custom");
     expect(a.css).toContain(".pform-field select");
@@ -261,7 +271,7 @@ describe("webui assets", () => {
     expect(js(a)).toContain("railEvent(");
     expect(js(a)).toContain('["tool_start", "tool_end", "text", "plan"]');
     expect(js(a)).toContain('"ui.activityRail"');
-    expect(js(a)).toContain("setBusy(S.state.busy)");
+    expect(js(a)).toContain("setBusy(session.busy)");
   });
 
   it("wires the ui.fontSize setting to body[data-font]", () => {
@@ -275,16 +285,16 @@ describe("webui assets", () => {
 
   it("scopes /api/state to the active tab and refreshes fully on switch", () => {
     const a = loadAssets();
-    const tabs = a.jsModules?.["js/tabs.js"] || "";
+    const tabs = a.jsModules?.["js/session/tabs.js"] || "";
     expect(a.js).toContain("/api/state?session=");
     expect(a.js).toContain("hooks.applyState = renderState");
     expect(a.js).toContain("hooks.refreshState = refresh");
     // Switch sets the client-active session immediately and resets Trace.
-    expect(tabs).toContain("S.state.activeSessionId = id");
+    expect(tabs).toContain("session.activeSessionId = id");
     expect(tabs).toContain("sidebarSessionChanged(id)");
     expect(tabs).toContain("hooks.refreshState?.()");
     // Guard against a stale response clobbering a newer tab.
-    expect(a.js).toContain("if (S.activeTabId !== sid) return;");
+    expect(a.js).toContain("if (tabState.activeTabId !== sid) return;");
   });
 
   it("uses one shared EventSource so all tabs stream live (no per-session reconnect)", () => {
@@ -296,8 +306,8 @@ describe("webui assets", () => {
 
   it("shows a loading indicator for the session sidebar section", () => {
     const a = loadAssets();
-    const sidebar = a.jsModules?.["js/sidebar.js"] || "";
-    const tabs = a.jsModules?.["js/tabs.js"] || "";
+    const sidebar = sidebarSources(a) || "";
+    const tabs = a.jsModules?.["js/session/tabs.js"] || "";
     expect(sidebar).toContain("setSessionLoading");
     expect(tabs).toContain("setSessionLoading(true)");
     expect(a.js).toContain("setSessionLoading(false)");
@@ -306,7 +316,7 @@ describe("webui assets", () => {
 
   it("filters the sidebar Trace by its own session", () => {
     const a = loadAssets();
-    const sidebar = a.jsModules?.["js/sidebar.js"] || "";
+    const sidebar = sidebarSources(a) || "";
     expect(sidebar).toContain("sidebarSessionId");
     expect(a.js).toContain("sidebarOwns(");
     expect(a.js).toContain("sidebarSessionId()");
@@ -331,14 +341,14 @@ describe("webui assets", () => {
     expect(a.js).toContain("initSidebar()");
     expect(a.js).toContain("sidebarTraceEvent(");
     expect(a.js).toContain("sidebarMapState(");
-    expect(a.jsModules?.["js/sidebar.js"]).toContain("/api/index");
-    expect(a.jsModules?.["js/sidebar.js"]).toBeTruthy();
+    expect(sidebarSources(a)).toContain("/api/index");
+    expect(sidebarSources(a)).toBeTruthy();
     // No horizontal scroll in any tab: sidebar panes clip on x, values wrap.
     expect(a.css).toContain("overflow-x: hidden");
     expect(a.css).toContain(".kv > span:first-child");
     // Trace detail collapses on tab switch; the long map root stacks vertically.
-    expect(a.jsModules?.["js/sidebar.js"]).toContain("collapseDetail()");
-    expect(a.jsModules?.["js/sidebar.js"]).toContain("mapPathRow(");
+    expect(sidebarSources(a)).toContain("collapseDetail()");
+    expect(sidebarSources(a)).toContain("mapPathRow(");
     expect(a.css).toContain(".map-path");
     // Trace rows must not shrink: flex-column otherwise squeezes hundreds
     // of events into the visible height (no scrollbar, dotted-line mush).
@@ -368,7 +378,7 @@ describe("webui assets", () => {
 
   it("wires the LSP sidebar tab (doctor) with an on-demand check", () => {
     const a = loadAssets();
-    const sidebar = a.jsModules?.["js/sidebar.js"] || "";
+    const sidebar = sidebarSources(a) || "";
     expect(a.html).toContain('data-tab="lsp"');
     expect(a.html).toContain('id="lspBody"');
     expect(sidebar).toContain("/api/lsp/doctor");
@@ -397,7 +407,7 @@ describe("webui assets", () => {
     // не перерисовывала полосу и легенду (stale UI).
     const a = loadAssets();
     const src = js(a);
-    const sigIdx = src.indexOf("S.lastUsageSig");
+    const sigIdx = src.indexOf("feed.lastUsageSig");
     expect(sigIdx).toBeGreaterThan(-1);
     expect(src.slice(Math.max(0, sigIdx - 700), sigIdx)).toContain("h.contextBreakdown");
   });

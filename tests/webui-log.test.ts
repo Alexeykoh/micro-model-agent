@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createWebUiState } from "../src/modules/webui/state";
-import { tailSessionLog } from "../src/modules/webui/log-api";
+import { tailSessionLog } from "../src/modules/webui/session/log-api";
 import type { SessionLogEntry } from "../src/modules/session/store";
 import { withServer, doFetch } from "./helpers/webui-server";
 
@@ -116,7 +116,7 @@ describe("handleSessionLog route", () => {
 
 describe("turn_end carries the server turn sequence", () => {
   it("onTurnEnd stamps turnSeq=1,2,…", async () => {
-    const { makeForwarder } = await import("../src/modules/webui/forward");
+    const { makeForwarder } = await import("../src/modules/webui/session/forward");
     const s = createWebUiState();
     const seen: Array<{ type: string; turnSeq?: number }> = [];
     const fwd = makeForwarder(s, (ev) => seen.push(ev as { type: string; turnSeq?: number }));

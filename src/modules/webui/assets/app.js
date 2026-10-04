@@ -1,7 +1,7 @@
 import { msgs, inp, connStatus, setIcon, icon } from "./js/dom.js";
 import { api, token } from "./js/api.js";
 import { I18N, t, loadI18n } from "./js/i18n.js";
-import { S, hooks } from "./js/store.js";
+import { tabs as tabState, session, settings, hooks } from "./js/store.js";
 import {
 onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
 onTurnEnd, onErrorEvent, onCommandOutput, onLog, onPlan, onQuestion,
@@ -12,7 +12,7 @@ feedHasContent, loadHistory,
 import {
 openTab, updateTabName, renderSessionsDropdown, reflectBusy, loadSessions,
 loadCommands, setTabStatus, reconcileTabStatuses,
-} from "./js/tabs.js";
+} from "./js/session/tabs.js";
 import {
 renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
 loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyFontSize, setConnStatus, setStaleBar,
@@ -64,37 +64,37 @@ if (sidebarBtn) {
 }
 
 function renderState(snapshot, busy, extra) {
-  S.state.host = snapshot || {};
-  S.state.busy = !!busy;
-  S.state.runningSessionId = (extra && extra.runningSessionId) || null;
-  S.state.runningSessionIds = (extra && extra.runningSessionIds) ||
-    (S.state.runningSessionId ? [S.state.runningSessionId] : []);
-  S.state.queued = (extra && extra.queued) || {};
+  session.host = snapshot || {};
+  session.busy = !!busy;
+  session.runningSessionId = (extra && extra.runningSessionId) || null;
+  session.runningSessionIds = (extra && extra.runningSessionIds) ||
+    (session.runningSessionId ? [session.runningSessionId] : []);
+  session.queued = (extra && extra.queued) || {};
   reflectBusy();
   reconcileTabStatuses();
-  const sessionId = S.state.host.sessionId || null;
-  S.state.activeSessionId = sessionId;
-  if (sessionId && !S.tabs.some((x) => x.id === sessionId)) {
-    openTab(sessionId, S.state.host.sessionName || String(sessionId), "session", false);
+  const sessionId = session.host.sessionId || null;
+  session.activeSessionId = sessionId;
+  if (sessionId && !tabState.tabs.some((x) => x.id === sessionId)) {
+    openTab(sessionId, session.host.sessionName || String(sessionId), "session", false);
   }
-  if (sessionId) updateTabName(sessionId, S.state.host.sessionName);
-  if (!S.tabs.length) showEmptyFeed();
-  renderPlan(S.state.host.plan);
+  if (sessionId) updateTabName(sessionId, session.host.sessionName);
+  if (!tabState.tabs.length) showEmptyFeed();
+  renderPlan(session.host.plan);
   railPlan(busy && snapshot ? snapshot.plan : null);
-  renderUsage(S.state.host);
+  renderUsage(session.host);
   // Late provider auto-detect may change the effective window after boot —
   // the snapshot carries it so the topbar follows without a config re-fetch.
-  if (snapshot && typeof snapshot.contextWindow === "number" && S.state.config &&
-      S.state.config.contextWindow !== snapshot.contextWindow) {
-    S.state.config.contextWindow = snapshot.contextWindow;
+  if (snapshot && typeof snapshot.contextWindow === "number" && settings.config &&
+      settings.config.contextWindow !== snapshot.contextWindow) {
+    settings.config.contextWindow = snapshot.contextWindow;
     renderSelectors();
   }
-  renderEnvironment(S.state.host);
-  sidebarMapState(S.state.host);
-  sidebarMapIndicator(S.state.host);
+  renderEnvironment(session.host);
+  sidebarMapState(session.host);
+  sidebarMapIndicator(session.host);
   sidebarLspState();
   sidebarSessionChanged(sessionId);
-  renderWorkspace(S.state.host);
+  renderWorkspace(session.host);
   renderSessionsDropdown();
   setSessionLoading(false);
   setStaleBar(!!(snapshot && snapshot.i18nStale));
@@ -103,12 +103,12 @@ function renderState(snapshot, busy, extra) {
 async function refresh() {
   // Scope the snapshot to the client's active tab: the sidebar must show the
   // session it is actually viewing, not the server's active one.
-  const sid = S.activeTabId;
+  const sid = tabState.activeTabId;
   const url = sid ? "/api/state?session=" + encodeURIComponent(sid) : "/api/state";
   const r = await api(url);
   if (!r.ok || !r.data) return;
   // Guard: a switch during the fetch must not clobber the new tab.
-  if (S.activeTabId !== sid) return;
+  if (tabState.activeTabId !== sid) return;
   renderState(r.data.state, r.data.busy, r.data);
 }
 
@@ -119,7 +119,7 @@ hooks.refreshState = refresh;
 
 function resyncAfterReconnect() {
   refresh();
-  const tab = S.tabs.find((x) => x.id === S.activeTabId);
+  const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   if (tab && tab.kind === "session" && !feedHasContent(tab.feed)) {
     tab.historyLoaded = false;
     loadHistory(tab);
@@ -222,11 +222,11 @@ es.addEventListener("command", (e) => {
   es.addEventListener("state", (e) => {
     const d = parse(e);
     if (d) {
-      S.state.busy = !!d.busy;
-      S.state.runningSessionId = d.runningSessionId || null;
-      S.state.runningSessionIds = d.runningSessionIds ||
-        (S.state.runningSessionId ? [S.state.runningSessionId] : []);
-      S.state.queued = d.queued || {};
+      session.busy = !!d.busy;
+      session.runningSessionId = d.runningSessionId || null;
+      session.runningSessionIds = d.runningSessionIds ||
+        (session.runningSessionId ? [session.runningSessionId] : []);
+      session.queued = d.queued || {};
       reflectBusy();
       reconcileTabStatuses();
       sidebarBusy(!!d.busy);
@@ -235,9 +235,9 @@ es.addEventListener("command", (e) => {
       // (серверно-активной) сессии. Legacy-события без владельца — мержим,
       // как раньше. Промах по активной (гонка activate) закроет 2с-полл.
       if (d.usage && typeof d.usage === "object" &&
-          (d.usageSessionId == null || d.usageSessionId === S.state.activeSessionId)) {
-        S.state.host = Object.assign({}, S.state.host, d.usage);
-        renderUsage(S.state.host);
+          (d.usageSessionId == null || d.usageSessionId === session.activeSessionId)) {
+        session.host = Object.assign({}, session.host, d.usage);
+        renderUsage(session.host);
       }
     }
   });
@@ -346,7 +346,7 @@ async function boot() {
   renderSelectors();
   renderSettings();
   await loadConfig();
-  initRail(S.state.config && S.state.config.ui ? S.state.config.ui.activityRail : undefined);
+  initRail(settings.config && settings.config.ui ? settings.config.ui.activityRail : undefined);
   initSidebar();
   applySidebarI18n();
   await loadModels();
@@ -365,7 +365,7 @@ async function boot() {
   // Restore the session from the URL AFTER the first refresh: `renderState`
   // may auto-open the server's active session, and the requested one must win.
   if (initialSession) {
-    const meta = S.state.sessions.find((s) => s.id === initialSession);
+    const meta = session.sessions.find((s) => s.id === initialSession);
     if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
   }
   connectSSE();

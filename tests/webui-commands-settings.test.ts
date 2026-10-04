@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { t } from "../src/i18n";
+import { t } from "../src/i18n/index";
 import type { SessionMessage } from "../src/modules/session/types";
 import { fakeSessions, makeHarness, meta } from "./helpers/webui-commands";
 

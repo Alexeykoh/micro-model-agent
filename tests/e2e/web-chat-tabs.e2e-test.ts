@@ -2,7 +2,7 @@
  * Playwright e2e: chat turn (dummy-provider failure path), tabs, sessions
  * dropdown, image attach, /clear + /new, /export with history, file viewer.
  *
- * The isolated server has no LLM (dummy `localhost:1234` provider), so a chat
+ * The isolated server has no LLM (hermetic dead-port provider), so a chat
  * turn deterministically FAILS fast — this exercises the error path
  * (`.errline` + `turn_end{success:false}`) rather than model output, which is
  * covered by unit tests with stubbed providers.
@@ -10,7 +10,7 @@
  * Run ONLY on explicit request: `bun run test:e2e`.
  */
 import { describe, expect } from "vitest";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -169,9 +169,13 @@ describe("web e2e: chat, tabs, sessions, files", () => {
       await withE2E(dir, async (srv, { page, errors }: Launched) => {
         const { baseUrl } = srv;
 
-        const png = join(mkdtempSync(join(tmpdir(), "mma-e2e-")), "pixel.png");
-        writeFileSync(png, PIXEL_PNG);
-        await page.setInputFiles("#imgPicker", png);
+        // Attach through the real composer button (the picker is `hidden`, so
+        // setInputFiles on the input itself is a no-op in Chromium).
+        const [chooser] = await Promise.all([
+          page.waitForEvent("filechooser"),
+          page.click("#attachBtn"),
+        ]);
+        await chooser.setFiles({ name: "pixel.png", mimeType: "image/png", buffer: PIXEL_PNG });
         await page.waitForSelector(".thumb", { timeout: 10_000 });
         await page.screenshot({ path: `${dir}/attached.png` });
         await page.locator(".thumb .rm").first().click();

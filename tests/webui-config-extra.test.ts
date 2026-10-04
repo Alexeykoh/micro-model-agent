@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildConfigRegistry } from "../src/modules/webui/config-api";
+import { buildConfigRegistry } from "../src/modules/webui/settings/config-api";
 import { loadAssets } from "../src/modules/webui/assets";
 
 // NOTE (Task 6): registry Tasks 3-4 already merged, so the backend half of
@@ -56,7 +56,7 @@ describe("web config registry extras", () => {
     // Deep settings live in named sections inside their owning panel.
     const { readFileSync } = await import("node:fs");
     const controls = readFileSync(
-      new URL("../src/modules/webui/assets/js/settings-controls.js", import.meta.url),
+      new URL("../src/modules/webui/assets/js/settings/controls.js", import.meta.url),
       "utf-8",
     );
     for (const k of [
@@ -82,7 +82,7 @@ describe("web config registry extras", () => {
     // reverse (a key in two panels) makes "where does X live" ambiguous.
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(
-      new URL("../src/modules/webui/assets/js/settings-controls.js", import.meta.url),
+      new URL("../src/modules/webui/assets/js/settings/controls.js", import.meta.url),
       "utf-8",
     );
     const blocks = [...src.matchAll(/keys:\s*\[([^\]]*)\]/g)].map((m) => m[1]);

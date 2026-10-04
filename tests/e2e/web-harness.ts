@@ -24,6 +24,13 @@ export const REPO_ROOT = resolve(here, "..", "..");
 /** Where scenario artifacts go (screenshots, DOM snapshots, console logs). */
 export const ARTIFACTS_ROOT = join(REPO_ROOT, "_testing", "web-e2e");
 
+/**
+ * Dead-loopback provider URL used by the hermetic dummy config. Nothing listens
+ * here, so "the provider fails" scenarios are deterministic and never reach a
+ * real server the developer happens to have running.
+ */
+export const DEAD_PROVIDER_URL = "http://127.0.0.1:9/v1";
+
 export interface E2EConfig {
   /** Directory holding the isolated `config.json` (i.e. `MMA_CONFIG_DIR`). */
   dir: string;
@@ -139,7 +146,11 @@ export async function startE2EServer(opts?: {
   providerBaseUrl?: string;
 }): Promise<E2EConfig> {
   const dir = mkdtempSync(join(tmpdir(), "mma-web-e2e-"));
-  seedE2EConfigDir(dir, { providerBaseUrl: opts?.providerBaseUrl });
+  // Hermetic by default: point the dummy provider at a dead port unless the
+  // scenario supplies its own backend. Without this, a lived-in local server
+  // (e.g. LM Studio on :1234) would answer "failing" scenarios and make them
+  // depend on the developer's machine.
+  seedE2EConfigDir(dir, { providerBaseUrl: opts?.providerBaseUrl ?? DEAD_PROVIDER_URL });
   const artifactsDir = opts?.artifactsDir ?? join(ARTIFACTS_ROOT, `run-${Date.now()}`);
   mkdirSync(artifactsDir, { recursive: true });
 

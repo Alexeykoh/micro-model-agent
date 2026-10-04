@@ -73,7 +73,7 @@ export async function launch(url: string): Promise<Launched> {
   page.on("console", (msg) => {
     if (msg.type() === "error") errors.push(msg.text());
   });
-  page.on("pageerror", (err) => errors.push(err.message));
+  page.on("pageerror", (err) => errors.push(err.stack || err.message));
   await page.goto(`${url}/`, { waitUntil: "domcontentloaded", timeout: 15_000 });
   await page.waitForSelector(".bar-top", { timeout: 10_000 });
   // Let the boot sequence (i18n, config, sessions) settle before scenarios.
@@ -159,6 +159,29 @@ export async function apiPost(
 export async function apiGet(baseUrl: string, path: string): Promise<{ status: number; json: never }> {
   const res = await fetch(`${baseUrl}${path}`);
   return { status: res.status, json: (await res.json()) as never };
+}
+
+/**
+ * Fill the provider add/edit form inside the nested dialog. The form is
+ * select-based (`type` and known base URLs are `<select>`s, custom URL is a
+ * free-text input) — positional `#subHost input` indexing is stale.
+ */
+export async function fillProviderForm(
+  page: Page,
+  opts: { type: string; label: string; baseUrl: string },
+): Promise<void> {
+  await page.locator('#subHost select[aria-label="type"]').selectOption(opts.type);
+  await page.locator('#subHost input[placeholder="my-provider"]').fill(opts.label);
+  const base = page.locator("#subHost .pform-base");
+  const known = await base
+    .locator("select option")
+    .evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
+  if (known.includes(opts.baseUrl)) {
+    await base.locator("select").selectOption(opts.baseUrl);
+  } else {
+    await base.locator("select").selectOption("__custom__");
+    await base.locator("input").fill(opts.baseUrl);
+  }
 }
 
 /** Session ids on the isolated server. */

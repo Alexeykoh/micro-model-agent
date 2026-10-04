@@ -233,7 +233,7 @@ describe("webui providers REST", () => {
   });
 
   it("upserts provider cache + completion caps", async () => {
-    const { upsertProvider } = await import("../src/modules/webui/providers-api");
+    const { upsertProvider } = await import("../src/modules/webui/settings/providers-api");
     const { DEFAULTS } = await import("../src/config/defaults");
     const cfg = structuredClone(DEFAULTS);
     const r = upsertProvider(cfg, { type: "openai-compat", baseUrl: "http://x/v1", maxCompletionTokens: 16384, cache: { mechanism: "local" } } as never);
@@ -246,7 +246,7 @@ describe("webui providers REST", () => {
   });
 
   it("lone legacy-seeded entry + colliding create-POST updates in place (no duplicate, no 409)", async () => {
-    const { upsertProvider } = await import("../src/modules/webui/providers-api");
+    const { upsertProvider } = await import("../src/modules/webui/settings/providers-api");
     const { DEFAULTS } = await import("../src/config/defaults");
     const cfg = structuredClone(DEFAULTS);
     const r = upsertProvider(cfg, { type: "openai-compat", baseUrl: "http://new/v1" });
@@ -256,7 +256,7 @@ describe("webui providers REST", () => {
   });
 
   it("multi-entry colliding name without originalName is a name-conflict", async () => {
-    const { upsertProvider } = await import("../src/modules/webui/providers-api");
+    const { upsertProvider } = await import("../src/modules/webui/settings/providers-api");
     const cfg = testConfig();
     const r = upsertProvider(cfg, { type: "openai-compat", label: "or", baseUrl: "http://x/v1" });
     expect(r).toEqual({ ok: false, error: "name-conflict" });

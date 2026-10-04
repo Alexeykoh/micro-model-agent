@@ -5,7 +5,7 @@ import {
   captureUsage,
   type HostStateInput,
 } from "../src/modules/webui/module";
-import { makeReconfigure } from "../src/modules/webui/reconfigure";
+import { makeReconfigure } from "../src/modules/webui/settings/reconfigure";
 import { DEFAULTS } from "../src/config/defaults";
 import type { AgentResult } from "../src/core/types";
 import type { Host, HostStateSnapshot } from "../src/core/host";

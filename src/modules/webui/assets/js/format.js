@@ -1,7 +1,7 @@
 // Pure formatting helpers + tool taxonomy for the `mma web` frontend.
 
 import { t } from "./i18n.js";
-import { S } from "./store.js";
+import { settings } from "./store.js";
 
 export const CATEGORIES = {
 recon: [
@@ -74,7 +74,7 @@ return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : Math.round(ms) + "ms";
 // explicit `ui.verbosity` wins; the legacy boolean maps to verbose/quiet. A
 // fresh config defaults to `quiet`, so the web feed matches the terminal.
 export function verbosity() {
-const ui = (S.state.config && S.state.config.ui) || {};
+const ui = (settings.config && settings.config.ui) || {};
 if (ui.verbosity) return ui.verbosity;
 return ui.verbose ? "verbose" : "quiet";
 }
@@ -116,7 +116,7 @@ return n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n);
 }
 // Compact context-window label for selectors and the model panel.
 export function contextLabel() {
-const n = (S.state.config && S.state.config.contextWindow) || 0;
+const n = (settings.config && settings.config.contextWindow) || 0;
 return n ? Math.round(n / 1024) + "K" : "—";
 }
 

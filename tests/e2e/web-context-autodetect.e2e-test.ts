@@ -89,10 +89,12 @@ describe("web e2e: provider context auto-detect", () => {
         await page.click(".sec-add");
         await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
         await page.locator(".pform-preset").selectOption("lmstudio");
-        const inputs = page.locator("#subHost input");
-        await expect.poll(() => inputs.nth(0).inputValue(), { timeout: 10_000 }).toBe("lmstudio");
-        expect(await inputs.nth(2).inputValue()).toBe("http://localhost:1234/v1");
-        await inputs.nth(1).fill("e2e-lmstudio");
+        // The preset fills the type <select> and the base-URL <select>.
+        await expect
+          .poll(() => page.locator('#subHost select[aria-label="type"]').inputValue(), { timeout: 10_000 })
+          .toBe("lmstudio");
+        expect(await page.locator("#subHost .pform-base select").inputValue()).toBe("http://localhost:1234/v1");
+        await page.locator('#subHost input[placeholder="my-provider"]').fill("e2e-lmstudio");
         await page.locator(".pform-actions button").first().click();
         await page.waitForSelector("#subOverlay.open", { state: "hidden", timeout: 10_000 });
         await expect

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { MemoryStore } from "../src/modules/memory/store";
 import { createWebUiState, } from "../src/modules/webui/state";
-import { webCommandList } from "../src/modules/webui/commands";
+import { webCommandList } from "../src/modules/webui/chat/commands";
 import { makeHarness } from "./helpers/webui-commands";
 import { doFetch, withServer } from "./helpers/webui-server";
 

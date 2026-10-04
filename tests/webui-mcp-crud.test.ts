@@ -5,7 +5,7 @@ import { withServer, postJson, doFetch } from "./helpers/webui-server";
 
 describe("mcp crud", () => {
   it("validates create input", async () => {
-    const mod = await import("../src/modules/webui/settings-api");
+    const mod = await import("../src/modules/webui/settings/settings-api");
     expect(typeof (mod as Record<string, unknown>).createMcpServer).toBe("function");
     const cfg = structuredClone(DEFAULTS);
     const bad = (
