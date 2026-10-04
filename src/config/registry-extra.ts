@@ -188,6 +188,25 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       c.contextLog.redact = v as boolean;
     }),
 
+  int("indexer.maxFiles", "budget", 100, 100000, 100, false,
+    (c) => c.indexer?.maxFiles ?? DEFAULTS.indexer.maxFiles,
+    (c, v) => {
+      c.indexer ??= structuredClone(DEFAULTS.indexer);
+      c.indexer.maxFiles = v as number;
+    }),
+  bool("indexer.respectGitignore", "budget", false,
+    (c) => c.indexer?.respectGitignore ?? DEFAULTS.indexer.respectGitignore,
+    (c, v) => {
+      c.indexer ??= structuredClone(DEFAULTS.indexer);
+      c.indexer.respectGitignore = v as boolean;
+    }),
+  int("indexer.mapTokenBudget", "budget", 200, 20000, 100, false,
+    (c) => c.indexer?.mapTokenBudget ?? DEFAULTS.indexer.mapTokenBudget,
+    (c, v) => {
+      c.indexer ??= structuredClone(DEFAULTS.indexer);
+      c.indexer.mapTokenBudget = v as number;
+    }),
+
   enumOf("reasoning.min", "reasoning", REASONING_BOUNDS, true,
     (c) => c.reasoning?.min ?? DEFAULTS.reasoning!.min,
     (c, v) => {

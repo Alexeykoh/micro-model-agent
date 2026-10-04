@@ -150,6 +150,12 @@ function startLanguageModules(
   moduleRegistry.register(lspModule);
   registerBuiltinPlugin(pluginManager, lspModule.getPlugin());
 
+  // LSP как внешний источник определений для `project_map symbol`: включается
+  // только когда индекс не нашёл совпадений (спавн сервера не на каждый запрос).
+  input.indexerModule.setSymbolProvider((query, language) =>
+    lspModule.workspaceSymbol(query, baseDir, language),
+  );
+
   // Стартовый health-check: сканируем проект на существующие ошибки, чтобы модель
   // знала baseline до работы. Пропуск для one-shot и тестов. Старт фоном (без
   // await), чтобы баннер REPL не ждал `npx tsc` по проекту; Agent дожидается

@@ -6,6 +6,7 @@ import type { LspDiagnostic, LspServerConfig, PublishDiagnosticsParams } from ".
 import { resolveSpawnCommand, buildWinCommandLine } from "./command";
 import { resolveNpxLaunch, isOfflineLsp } from "./resolve";
 import { killTree } from "../processes/registry";
+import { mapWorkspaceSymbols, type LspSymbolLocation } from "./symbols";
 import { toForwardSlash } from "../../tools/path-utils";
 import type { Logger } from "../../logger/app-logger";
 import { errMsg } from "../../utils";
@@ -131,6 +132,27 @@ export class LspClient {
     }
   }
 
+  /**
+   * Поиск символа по имени через `workspace/symbol` (одноразовый цикл
+   * initialize → запрос → shutdown, как `checkFile`). Пустой/битый ответ
+   * → пустой список; ошибки пробрасываются вызывающему (LspModule гасит).
+   */
+  async workspaceSymbol(
+    query: string,
+    config: LspServerConfig,
+    projectRoot: string,
+    timeout: number = config.timeout ?? DEFAULT_TIMEOUT,
+  ): Promise<LspSymbolLocation[]> {
+    await this.initialize(config, projectRoot, timeout);
+    this.sendNotification("initialized", {});
+    try {
+      const result = await this.sendRequest("workspace/symbol", { query }, timeout);
+      return mapWorkspaceSymbols(result, projectRoot);
+    } finally {
+      await this.shutdown();
+    }
+  }
+
   private async initialize(
     config: LspServerConfig,
     projectRoot: string,
@@ -143,7 +165,10 @@ export class LspClient {
       processId: process.pid,
       rootUri,
       workspaceFolders: [{ uri: rootUri, name: "workspace" }],
-      capabilities: { textDocument: { publishDiagnostics: {} } },
+      capabilities: {
+        textDocument: { publishDiagnostics: {} },
+        workspace: { symbol: {} },
+      },
     };
     try {
       await this.sendRequest("initialize", initParams, timeout);

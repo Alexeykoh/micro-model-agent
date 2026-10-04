@@ -733,7 +733,45 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   `js-tiktoken/ranks/cl100k_base` (~1.1 MB вместо ~5.6 MB всех таблиц); `estimateTokens`
   перекалиброван под cl100k (кириллица ≈ /2.5).
 
-### Current Version: 2.17.2
+### Project Map Indexer (2.18.0)
+
+Дизайн-разбор и лучшие практики: `docs/analysis/2026-10-04-indexer-search-ideas.md`. Контракты
+(`project_map` — тот же тул, SSE/REST не менялись) сохранены; аддитивные изменения.
+
+- **Символы с позициями** (`src/modules/indexer/symbols.ts`): `extractSymbolsDetailed` отдаёт
+  `{name, line, kind}`; `extractSymbols` (только имена) остаётся. Порядок — по строке исходника.
+- **Ранжирование `find`** (`src/modules/indexer/rank.ts`): definition-first, path-aware
+  (точный символ → префикс → подстрока → путь; код → тесты → доки; короче путь, стабильно).
+  Замер на этом репо: MRR 0.93→1.00, Hit@1 0.90→1.00 на 60 символьных запросах.
+- **Новые действия `project_map`**: `symbol` (места определения `path:line name (kind)`) и
+  `outline` (оглавление файла по строкам). Тул-набор не растёт — действия в существующем тулe.
+- **Сигнатуры символов без парсера** (`symbols.ts`, `readSignature`): текст объявления до
+  `{`/`;`/конца строки с учётом глубины скобок (многострочные параметры) — `symbol`/`outline`
+  показывают API, а не только имя (покрытие на этом репо ~83%, стоимость индексации не выросла).
+- **Инкрементальный пересбор** (`walker.ts`, `cache.ts`, схема кэша v3): `IndexedFile` несёт
+  `size`/`mtimeMs`; `walk(prev)` не читает совпавшие файлы и перечитывает только изменённые
+  (1 файл на 3000-файловом дереве: ~302→168 мс, 1.8×). `IndexCache.loadForReuse()` — без
+  сигнатуры (per-file reuse), строгая `load()` сохранена как быстрый путь «ничего не менялось».
+- **Конфиг** `indexer.maxFiles` (default **1000→5000**) и `indexer.respectGitignore` в
+  `/config` и Settings → Context → Project index; при упоре в кап карта помечается
+  `[!] Index truncated…`, а не молча отдаёт подмножество.
+- **`.gitignore`/`.mmaignore`** (`src/modules/indexer/gitignore.ts`, fail-open; комментарии,
+  `!`-негация, `/`-якорь, `dir/`, `*`, `?`, `**`). На этом репо 971→934 файла.
+- **PageRank-карта под токен-бюджет** (`src/modules/indexer/graph.ts`, `rank.ts`): граф
+  файл→файл из импортов/require (`extractImports`, резолв `./`,`@/`,`~/`, index-файлов),
+  PageRank (damping 0.85, 20 итераций), `selectByRank` под `indexer.mapTokenBudget`
+  (default 1500) вместо фиксированных 80 файлов. На этом репо карта 2444→1481 токенов
+  (80→40 файлов), наверх выходят хабы (`src/config/types.ts`, `lsp/types.ts`). Граф ленивый,
+  кэш на объект индекса (`getRanks`).
+- **LSP-фолбэк для `symbol`** (`src/modules/lsp/symbols.ts`, `client.ts`, `module.ts`,
+  `config.ts`; `IndexerModule.setSymbolProvider`): когда индекс не нашёл совпадений,
+  `project_map symbol` спрашивает LSP `workspace/symbol` (правильный примитив для
+  поиска по имени; `textDocument/definition` требует позицию). Wire в `modules-phase`:
+  сервер спавнится только на мисс, ошибка/выключенный LSP тихо откатываются на индекс.
+- **Тесты:** `tests/modules/indexer/{rank,gitignore,symbols,incremental,module-search,graph}.test.ts`,
+  `tests/modules/lsp/symbols.test.ts`.
+
+### Current Version: 2.18.0
 
 ### Changelog
 

@@ -8,13 +8,13 @@ import type { IndexResult, IndexedFile } from "./walker";
  * считаются протухшими и перестраиваются.
  */
 /** Версия схемы кэша индекса. */
-export const CACHE_VERSION = 2;
+export const CACHE_VERSION = 3;
 
 /**
- * Проверяет форму значения как `IndexResult` перед доверием дисковому кэшу.
- * Кэш могут писать другие версии агента (старые читают envelope как индекс и
- * наоборот) или сторонние процессы — любая чужая/битая форма обязана давать
- * тихий переобход, а не `TypeError` на старте (`index.files.length`).
+ * Проверяет форму значения как `IndexedFile` перед доверием дисковому кэшу.
+ * `symbols`/`mtimeMs` опциональны для чтения: запись всегда их ставит, но
+ * форма не должна рушиться на кэше, где их ещё нет (инкрементальный reuse
+ * просто отключится и файл перечитается).
  */
 function isIndexedFile(v: unknown): v is IndexedFile {
   if (typeof v !== "object" || v === null) return false;
@@ -62,6 +62,13 @@ export interface IndexCacheOptions {
   signature?: () => string;
 }
 
+/** Разобранный envelope до валидации сигнатуры. */
+interface ParsedCache {
+  result: IndexResult;
+  builtAt: number | null;
+  signature: string;
+}
+
 /** Дисковый кэш индекса с валидацией версии/root/сигнатуры. */
 export class IndexCache {
   private cachePath: string;
@@ -77,6 +84,26 @@ export class IndexCache {
   }
 
   /**
+   * Разбирает `index-cache.json` и проверяет версию схемы, `root` и форму
+   * результата — общее для строгой загрузки и загрузки для reuse.
+   */
+  private readEnvelope(): ParsedCache | null {
+    if (!existsSync(this.cachePath)) return null;
+    try {
+      const parsed = JSON.parse(readFileSync(this.cachePath, "utf-8")) as Partial<CacheEnvelope>;
+      if (parsed.version !== CACHE_VERSION || !isIndexResult(parsed.result)) return null;
+      if (this.root !== undefined && parsed.root !== this.root) return null;
+      return {
+        result: parsed.result,
+        builtAt: typeof parsed.builtAt === "number" ? parsed.builtAt : null,
+        signature: typeof parsed.signature === "string" ? parsed.signature : "",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Возвращает кэшированный индекс, только если он описывает текущее дерево
    * И имеет пригодную форму. Отвергает кэш при расхождении версии схемы,
    * сохранённого `root`, `signature` или формы `result` (чужая версия агента,
@@ -85,18 +112,22 @@ export class IndexCache {
    */
   load(): IndexResult | null {
     if (this.cache) return this.cache;
-    if (!existsSync(this.cachePath)) return null;
-    try {
-      const parsed = JSON.parse(readFileSync(this.cachePath, "utf-8")) as Partial<CacheEnvelope>;
-      if (parsed.version !== CACHE_VERSION || !isIndexResult(parsed.result)) return null;
-      if (this.root !== undefined && parsed.root !== this.root) return null;
-      if (this.signature && parsed.signature !== this.currentSignature()) return null;
-      this.cache = parsed.result;
-      this.cachedBuiltAt = typeof parsed.builtAt === "number" ? parsed.builtAt : null;
-      return this.cache;
-    } catch {
-      return null;
-    }
+    const parsed = this.readEnvelope();
+    if (!parsed) return null;
+    if (this.signature && this.currentSignature() !== parsed.signature) return null;
+    this.cache = parsed.result;
+    this.cachedBuiltAt = parsed.builtAt;
+    return this.cache;
+  }
+
+  /**
+   * Возвращает кэш для инкрементального переиспользования: проверяются только
+   * версия/root/форма, сигнатура игнорируется. `walk(prev)` сам решит по
+   * per-file `size`/`mtimeMs`, какие файлы перечитать. Не заполняет `this.cache`
+   * (строгая `load()` должна остаться честной).
+   */
+  loadForReuse(): IndexResult | null {
+    return this.readEnvelope()?.result ?? null;
   }
 
   /** Сохраняет результат индекса в кэш (память + диск). */
