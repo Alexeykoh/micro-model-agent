@@ -86,7 +86,7 @@ bun run web:dev
 # E2E web scenarios (isolated MMA_CONFIG_DIR, Playwright; on explicit request only)
 bun run test:e2e
 
-# Build (bundle + copy skills — use this for npm releases)
+# Build (clean + external-deps bundle + frontend + assets + minify — use this for npm releases)
 bun run build:prod
 
 # Test (component tests)
@@ -690,7 +690,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   assets/app.js --target=browser` (резолвит все именованные импорты/экспорты), и статическая
   JS-проверка `tsc --allowJs --checkJs --lib dom` (ловкий сигнал «0 `Cannot find name`»).
 
-### WebUI Frontend TypeScript Migration (unreleased)
+### WebUI Frontend TypeScript Migration (2.17.1)
 
 Спека: [docs/specs/2026-10-04-webui-frontend-ts-design.md](./docs/specs/2026-10-04-webui-frontend-ts-design.md);
 план: [docs/plans/2026-10-04-webui-frontend-ts.md](./docs/plans/2026-10-04-webui-frontend-ts.md).
@@ -714,7 +714,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   зависящие от форматирования (`if (…) return;`), сделаны whitespace-толерантными
   (транспилятор переносит `return` на новую строку).
 
-### npm Build Optimization (unreleased)
+### npm Build Optimization (2.17.1)
 
 Спека: [docs/specs/2026-10-04-npm-build-optimization-design.md](./docs/specs/2026-10-04-npm-build-optimization-design.md);
 план: [docs/plans/2026-10-04-npm-build-optimization.md](./docs/plans/2026-10-04-npm-build-optimization.md).
@@ -734,7 +734,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   `js-tiktoken/ranks/cl100k_base` (~1.1 MB вместо ~5.6 MB всех таблиц); `estimateTokens`
   перекалиброван под cl100k (кириллица ≈ /2.5).
 
-### Current Version: 2.17.0
+### Current Version: 2.17.1
 
 ### Changelog
 

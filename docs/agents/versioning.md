@@ -20,8 +20,10 @@
 
 ### Release Process
 
-1. **Code changes complete** → `bun test` + `tsc --noEmit` must pass
-2. **Update version** in `package.json`:
+1. **Code changes complete** → `bun test` + `bun run quality` must pass
+2. **CHANGELOG** — move the `## [Unreleased]` block under a new
+   `## [X.Y.Z] - YYYY-MM-DD` heading (Keep a Changelog groups: Added/Fixed/Changed/Removed)
+3. **Update version** in `package.json`:
 
    ```bash
    # For patch
@@ -34,13 +36,27 @@
    npm version major
    ```
 
-3. **Build**: `bun run build:prod`
-4. **Publish**: `npm publish --access public`
+   > `npm version` also updates `package-lock.json` and creates the git tag (`vX.Y.Z`).
+
+4. **Build**: `bun run build:prod`
+
+   > The release build **cleans `dist` first**, externalizes dependencies
+   > (`bun build --packages external`) and minifies every `dist/**/*.{js,mjs,css}`
+   > plus JSON with esbuild (`scripts/optimize-dist.ts`, no source maps — light
+   > mangling obfuscation). Result: package ~1.7 MB, `main.js` ~1.1 MB. Note: the
+   > backend `main.js` is minified; for readable stacks debug from a source build
+   > (`bun run build:bundle` without `optimize`).
+
+5. **Verify package contents** (optional): `npm pack --dry-run` — ships only
+   `dist/`, `bin/`, `CHANGELOG.md`; nothing is fetched at runtime (all deps come
+   from `dependencies` via `npm install`).
+
+6. **Publish**: `npm publish --access public`
 
    > **Note:** npm's registry now processes publishes **asynchronously** — the upload returns `PUT 202 Accepted` and the CLI prints «Your package is being processed and may take a few minutes to become available.» The version may not appear in `npm view` / `registry.npmjs.org` for a while. **Do not wait for it:** a `202` + `+ <pkg>@<version>` output is a successful publish. Proceed to tagging/pushing.
 
-5. **Git tag**: `npm version` creates tag automatically, push with `git push --follow-tags`
-6. **Update CHANGELOG** (if exists) or AGENTS.md with notable changes
+7. **Git tag/push**: `git push --follow-tags`
+8. **Update AGENTS.md** with notable changes.
 
 ### Commands that require MINOR bump
 
@@ -80,7 +96,9 @@ Renaming **with a working deprecation alias** is **MINOR**, not MAJOR.
 3. At most one MAJOR per package of breaking changes; do not bump MAJOR without an explicit request.
 4. Versions are **milestones, not per-PR counters** — batch unrelated changes into one release instead of chaining MINOR/MAJOR bumps.
 
-### Current Version: 2.8.0
+### Current Version: 2.17.1
+
+- **2.17.1** = WebUI frontend migrated to TypeScript (`strict: true`, `tsconfig.frontend.json`, `tsc` transpile via `Bun.Transpiler` in dev/tests, `scripts/build-frontend.ts` for prod) + npm build optimization (external-deps `bun build`, esbuild minification of `dist/**`, portable `clean`, `js-tiktoken/lite` + `cl100k_base`). Internal, non-breaking: package **8.17 MB → 1.73 MB**, `main.js` **7.68 MB → 1.11 MB**. Specs: `docs/specs/2026-10-04-webui-frontend-ts-design.md`, `docs/specs/2026-10-04-npm-build-optimization-design.md`.
 
 - **84** = provider context auto-detect + LM Studio as a first-class provider (branch `feat/provider-context-autodetect`): (1) **Provider context auto-detect** (`src/llm/provider-context.ts`, `src/llm/models-dev.ts`, `src/core/bootstrap.ts`, `src/core/agent.ts`) — MMA asks the active backend for the context window it actually serves and adopts it as the effective `contextWindow` (provider wins over config, in-memory only; late `agent.reconfigure` so budgets follow; skipped on manual override). Probe chain: LM Studio native (`loaded_instances[].config.context_length`) → Ollama native (`/api/ps` → `/api/show`) → llama.cpp `/props` (`n_ctx`) → OpenAI-compat `/models` metadata (`context_length`/`max_model_len`/`n_ctx`) → models.dev catalog (last resort for OpenCode Zen/Go, slim `id → context` disk cache `~/.mma/models-dev-cache.json`, 24h TTL, fail-open). `HostStateSnapshot.contextWindow` + `renderState` keep the web topbar in sync. (2) **Active provider endpoint resolution** (`src/modules/providers/manager.ts`) — new `activeProviderEndpoint()` resolves `{baseUrl, apiKey, type}` from `provider.active` in `entries` (fallback: legacy flat fields) instead of stale flat fields after `/provider use`. (3) **LM Studio as a builtin provider type** (`src/modules/providers/presets.ts`) — new `lmstudio` type (fixed `http://localhost:1234/v1`, no key, model list, local prompt-cache) on the same OpenAI-compatible transport, wired through both setup wizards, the web provider form and `mma provider add lmstudio`; the old `openai-compat`-typed local preset is retired (existing entries keep working). Version: **2.8.0** (MINOR — new behavior + new provider preset).
 

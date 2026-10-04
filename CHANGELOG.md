@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.17.1] - 2026-10-04
+
 ### Changed
 
 - **npm package build optimized (internal)**: the CLI bundle externalizes its dependencies (`bun build --packages external`) and the whole `dist` is minified with esbuild (`scripts/optimize-dist.ts`; no source maps, identifier mangling) — package **8.17 MB → 1.73 MB**, `main.js` **7.68 MB → 1.11 MB**. `build:prod` now cleans `dist` first (portable `scripts/clean.ts`), the frontend build skips empty type-only outputs, and nothing is downloaded at runtime (all deps ship via `npm install`). `token-counter.ts` switches to `js-tiktoken/lite` + `cl100k_base` (~1.1 MB vs ~5.6 MB) and `estimateTokens` is recalibrated for cl100k. Spec: `docs/specs/2026-10-04-npm-build-optimization-design.md`.
