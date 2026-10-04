@@ -15,6 +15,20 @@ import { t } from "../../i18n/index";
 import { toForwardSlash } from "../../tools/path-utils";
 import { estimateTokens } from "../../llm/token-counter";
 
+/** Локация символа, отданная внешним провайдером (LSP workspace/symbol). */
+export interface SymbolLocationHit {
+  path: string;
+  line: number;
+  name: string;
+  kind: string;
+}
+
+/** Внешний источник определений символа (LSP); null-совместим с фолбэком на индекс. */
+export type SymbolProvider = (
+  query: string,
+  language: string,
+) => Promise<SymbolLocationHit[]>;
+
 /** Опции модуля индексатора: корень проекта, каталог кэша, кап файлов. */
 export interface IndexerModuleOptions {
   baseDir: string;
@@ -50,6 +64,7 @@ export class IndexerModule implements AgentModule {
   private mapTokenBudget: number;
   private index: IndexResult | null = null;
   private rankCache: { index: IndexResult; ranks: Map<string, number> } | null = null;
+  private symbolProvider: SymbolProvider | null = null;
   private mapCache: { index: IndexResult; value: ProjectMapInfo } | null = null;
   private buildPromise: Promise<IndexResult | null> | null = null;
   private indexing = false;
@@ -73,6 +88,15 @@ export class IndexerModule implements AgentModule {
       root: opts.baseDir,
       signature: () => this.indexer.scanSignature(),
     });
+  }
+
+  /**
+   * Подключает внешний источник определений (LSP `workspace/symbol`).
+   * Вызывается только когда индекс не нашёл совпадений — так спавн языкового
+   * сервера не платится на каждый `symbol`-запрос. null — отключить.
+   */
+  setSymbolProvider(provider: SymbolProvider | null): void {
+    this.symbolProvider = provider;
   }
 
   /** Строит индекс (кэш → обход), null при неустранимой ошибке. */
@@ -430,7 +454,7 @@ export class IndexerModule implements AgentModule {
       case "find":
         return this.queryResult(query, () => this.formatFind(query));
       case "symbol":
-        return this.queryResult(query, () => this.formatSymbols(query));
+        return this.symbolResult(query);
       case "outline":
         return this.queryResult(query, () => this.formatOutline(query));
       default:
@@ -455,6 +479,43 @@ export class IndexerModule implements AgentModule {
     const stackLine = buildProjectProfileLine(this.baseDir);
     const output = summary && stackLine ? `${summary}\n${stackLine}` : summary;
     return this.makeResult(t("indexer.summary", { summary: output }));
+  }
+
+  /**
+   * `symbol`: сначала индекс (быстро, без процессов). Если совпадений нет —
+   * запрашивает внешний провайдер (LSP `workspace/symbol`) и форматирует его
+   * локации; ошибка/пусто → откат на индексный ответ.
+   */
+  private async symbolResult(query: string): Promise<ToolResult> {
+    if (!query) return { success: false, output: t("tool.invalid_params") };
+    if (!this.index) await this.buildIndex();
+    const indexed = this.index ? rankSymbols(this.index.files, query) : [];
+    if (indexed.length > 0) return this.makeResult(this.formatSymbols(query));
+    if (this.symbolProvider) {
+      const language = this.mapInfo().languages?.[0]?.language ?? "typescript";
+      let hits: SymbolLocationHit[] = [];
+      try {
+        hits = await this.symbolProvider(query, language);
+      } catch {
+        hits = [];
+      }
+      if (hits.length > 0) return this.makeResult(this.formatLspSymbols(hits));
+    }
+    if (!this.index) return this.makeResult(t("indexer.not_indexed"));
+    return this.makeResult(this.formatSymbols(query));
+  }
+
+  /** Формат локаций внешнего провайдера (`path:line name (kind)`). */
+  private formatLspSymbols(hits: SymbolLocationHit[]): string {
+    const shown = hits.slice(0, FIND_LIMIT);
+    const lines = shown
+      .map((h) => `- ${toForwardSlash(h.path)}:${h.line} ${h.name} (${h.kind})`)
+      .join("\n");
+    const more =
+      hits.length > shown.length
+        ? `\n${t("indexer.find_more", { count: hits.length - shown.length })}`
+        : "";
+    return t("indexer.symbol_results", { count: hits.length, results: lines + more });
   }
 
   /** Поисковое действие: проверяет запрос и индекс, отдаёт готовый текст. */

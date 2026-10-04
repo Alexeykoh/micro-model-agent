@@ -760,7 +760,13 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   (default 1500) вместо фиксированных 80 файлов. На этом репо карта 2444→1481 токенов
   (80→40 файлов), наверх выходят хабы (`src/config/types.ts`, `lsp/types.ts`). Граф ленивый,
   кэш на объект индекса (`getRanks`).
-- **Тесты:** `tests/modules/indexer/{rank,gitignore,symbols,incremental,module-search,graph}.test.ts`.
+- **LSP-фолбэк для `symbol`** (`src/modules/lsp/symbols.ts`, `client.ts`, `module.ts`,
+  `config.ts`; `IndexerModule.setSymbolProvider`): когда индекс не нашёл совпадений,
+  `project_map symbol` спрашивает LSP `workspace/symbol` (правильный примитив для
+  поиска по имени; `textDocument/definition` требует позицию). Wire в `modules-phase`:
+  сервер спавнится только на мисс, ошибка/выключенный LSP тихо откатываются на индекс.
+- **Тесты:** `tests/modules/indexer/{rank,gitignore,symbols,incremental,module-search,graph}.test.ts`,
+  `tests/modules/lsp/symbols.test.ts`.
 
 ### Current Version: 2.18.0
 

@@ -190,3 +190,27 @@ export function getServerForFile(filePath: string, config: LspConfig): LspServer
   if (!key) return null;
   return config.servers[key] ?? null;
 }
+
+/** Алиасы языковых id индексатора к ключам серверов LSP. */
+const LANGUAGE_ALIAS: Record<string, string> = {
+  "typescript-react": "typescript",
+  "javascript-react": "javascript",
+  typescript: "typescript",
+  javascript: "javascript",
+};
+
+/** Ключ сервера LSP по языковому id индексатора (напр. `typescript-react` → `typescript`). */
+export function getServerKeyForLanguage(language: string, config: LspConfig): string | null {
+  const key = LANGUAGE_ALIAS[language] ?? language;
+  return config.servers[key] ? key : null;
+}
+
+/** Конфиг LSP-сервера по языковому id (null — нет сервера для языка). */
+export function getServerForLanguage(
+  language: string,
+  config: LspConfig,
+): LspServerConfig | null {
+  const key = getServerKeyForLanguage(language, config);
+  if (!key) return null;
+  return config.servers[key] ?? null;
+}

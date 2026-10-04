@@ -5,7 +5,8 @@ import type { ToolDefinition, ToolContext, ToolCall, ToolResult } from "../../to
 import { existsSync } from "fs";
 import { relative, resolve } from "path";
 import { LspClient, type LspClientLogger } from "./client";
-import { getServerForFile, DEFAULT_LSP_CONFIG } from "./config";
+import { getServerForFile, getServerForLanguage, DEFAULT_LSP_CONFIG } from "./config";
+import type { LspSymbolLocation } from "./symbols";
 import { findProjectRoot } from "./project-root";
 import { isPathInScope } from "../security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
@@ -106,6 +107,28 @@ export class LspModule implements AgentModule {
   /** Текущие глобальные флаги для UI (`GET /api/lsp/doctor`, вкладка LSP). */
   getFlags(): { enabled: boolean; offline: boolean } {
     return { enabled: this.config.enabled !== false, offline: this.config.offline === true };
+  }
+
+  /**
+   * Поиск символов по имени через LSP `workspace/symbol` (для карты проекта).
+   * Best-effort: без сервера для языка / при отключённом LSP / ошибке — пустой
+   * список, чтобы вызывающий (IndexerModule) откатился на собственный индекс.
+   */
+  async workspaceSymbol(
+    query: string,
+    baseDir: string,
+    language: string,
+  ): Promise<LspSymbolLocation[]> {
+    if (this.config.enabled === false || !query.trim()) return [];
+    const server = getServerForLanguage(language, this.config);
+    if (!server) return [];
+    const projectRoot = findProjectRoot(baseDir, baseDir, server.workspaceMarkers ?? []);
+    try {
+      return await this.client.workspaceSymbol(query, server, projectRoot, server.timeout);
+    } catch (e) {
+      this.logger?.debug(`LSP workspace/symbol failed: ${errMsg(e)}`);
+      return [];
+    }
   }
 
   /** Сбросить отключённые серверы (напр. после /lsp restart). */

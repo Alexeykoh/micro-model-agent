@@ -62,6 +62,38 @@ describe("project_map search actions", () => {
     expect(mod.getPromptMap()).toContain("[!]");
   });
 
+  it("falls back to an external symbol provider when the index has no match", async () => {
+    write("src/a.ts", "export const a = 1");
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+    mod.setSymbolProvider(async () => [
+      { path: "src/elsewhere.ts", line: 12, name: "ghost", kind: "class" },
+    ]);
+    await mod.buildIndex();
+    const res = await mod.getToolDefinitions()[0].handler({} as never, {
+      action: "symbol",
+      query: "ghost",
+    });
+    expect(res.success).toBe(true);
+    expect(res.output).toContain("src/elsewhere.ts:12 ghost (class)");
+  });
+
+  it("prefers the index over the provider and survives provider errors", async () => {
+    write("src/a.ts", "export function known() {}");
+    const mod = new IndexerModule({ baseDir: tmpDir, cacheDir: join(tmpDir, ".mma") });
+    let called = false;
+    mod.setSymbolProvider(async () => {
+      called = true;
+      return [];
+    });
+    await mod.buildIndex();
+    const res = await mod.getToolDefinitions()[0].handler({} as never, {
+      action: "symbol",
+      query: "known",
+    });
+    expect(res.output).toContain("(function)");
+    expect(called).toBe(false);
+  });
+
   it("respects .gitignore when configured", async () => {
     write(".gitignore", "generated/\n");
     write("generated/skip.ts", "export const skip = 1");
