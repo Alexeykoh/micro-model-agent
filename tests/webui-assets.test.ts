@@ -52,7 +52,7 @@ describe("webui assets", () => {
 
   it("renders diagnostic log lines only in verbose mode", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('if (data.diagnostic && verbosity() !== "verbose") return;');
+    expect(js(a)).toMatch(/data\.diagnostic && verbosity\(\) !== "verbose"\)\s*return;/);
   });
 
   it("renders file actions as quiet filerow lines with viewer link and icon copy", () => {
@@ -125,7 +125,7 @@ describe("webui assets", () => {
 
   it("quiet-gates tool-body meta in the feed, keeping status visible", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('if (kind === "tool" && verbosity() === "quiet") return;');
+    expect(js(a)).toMatch(/kind === "tool" && verbosity\(\) === "quiet"\)\s*return;/);
   });
 
   it("persists the active session in the URL and restores it on boot", () => {

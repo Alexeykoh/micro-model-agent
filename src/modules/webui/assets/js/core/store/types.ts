@@ -5,3 +5,24 @@
 //
 // biome-ignore lint/suspicious/noExplicitAny: opaque JSON payloads, typed at consumers.
 export type Dict = Record<string, any>;
+
+// Streaming Markdown handle returned by `mountMarkdown` (see `md.ts`).
+export interface MdHandle {
+  root: HTMLElement;
+  write(chunk: string): void;
+  end(): void;
+}
+
+// In-progress reasoning block (`buildThinkBlock` result + timing).
+export interface ThinkState {
+  wrap: HTMLElement;
+  head: HTMLElement;
+  body: HTMLElement;
+  startedAt: number;
+}
+
+// Per-tool-call DOM bookkeeping used during a turn.
+export interface ToolNode {
+  status: HTMLElement;
+  line: HTMLElement;
+}

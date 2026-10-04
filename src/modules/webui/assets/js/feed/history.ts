@@ -5,25 +5,30 @@ import { t } from "../i18n.js";
 import { categoryOf, labelOf, argText, formatMs } from "../format.js";
 import { renderMarkdown } from "../../md.js";
 import { api } from "../api.js";
+import type { Dict } from "../core/store/types.js";
 import {
   feedHasContent, clearEmpty, scrollToBottom, activeFeed, liveFeed,
   mdOpts, buildThinkBlock, appendActionsRow,
 } from "./core.js";
 
-function renderAssistantText(feed, text) {
+function renderAssistantText(feed: HTMLElement, text: unknown): void {
   const raw = String(text == null ? "" : text);
   if (!raw.trim()) return;
   const root = renderMarkdown(feed, raw, mdOpts());
   appendActionsRow(feed, root.innerText || root.textContent || "", raw);
 }
 
-function renderThinkBlock(feed, text) {
+function renderThinkBlock(feed: HTMLElement, text: unknown): void {
   const { wrap, body } = buildThinkBlock(false, false);
-  body.textContent = text || "";
+  body.textContent = text == null ? "" : String(text);
   feed.appendChild(wrap);
 }
 
-function renderHistoryAct(feed, entry, statusNodes) {
+function renderHistoryAct(
+  feed: HTMLElement,
+  entry: Dict,
+  statusNodes: Map<string, HTMLElement>,
+): void {
   const line = el("div", "act " + categoryOf(entry.name));
   line.appendChild(el("span", "g", "◇"));
   line.appendChild(el("span", "lab", labelOf(entry.name)));
@@ -38,7 +43,11 @@ function renderHistoryAct(feed, entry, statusNodes) {
   if (entry.toolCallId) statusNodes.set(entry.toolCallId, status);
 }
 
-function renderHistoryResult(feed, entry, statusNodes) {
+function renderHistoryResult(
+  feed: HTMLElement,
+  entry: Dict,
+  statusNodes: Map<string, HTMLElement>,
+): void {
   const dur = formatMs(entry.duration);
   const mark = (entry.success ? " ✓" : " ✗") + (dur ? " " + dur : "");
   const status = entry.toolCallId ? statusNodes.get(entry.toolCallId) : null;
@@ -55,8 +64,8 @@ function renderHistoryResult(feed, entry, statusNodes) {
   feed.appendChild(line);
 }
 
-function renderHistory(feed, entries) {
-  const statusNodes = new Map();
+function renderHistory(feed: HTMLElement, entries: Dict[]): void {
+  const statusNodes = new Map<string, HTMLElement>();
   entries.forEach((entry) => {
     if (!entry || typeof entry.kind !== "string") return;
     switch (entry.kind) {
@@ -91,7 +100,7 @@ function renderHistory(feed, entries) {
   });
 }
 
-export async function loadHistory(tab) {
+export async function loadHistory(tab: Dict): Promise<{ gone: boolean } | undefined> {
   if (!tab || tab.historyLoaded || tab.historyLoading) return { gone: !!tab.dead };
   tab.historyLoading = true;
   const placeholder = el("div", "detail", t("web.history.loading"));
@@ -99,7 +108,7 @@ export async function loadHistory(tab) {
     clearEmpty(tab.feed);
     tab.feed.appendChild(placeholder);
   }
-  const r = await api("/api/sessions/" + encodeURIComponent(tab.id) + "/history");
+  const r = await api<{ history?: Dict[] }>("/api/sessions/" + encodeURIComponent(tab.id) + "/history");
   tab.historyLoading = false;
   placeholder.remove();
   tab.historyLoaded = true;

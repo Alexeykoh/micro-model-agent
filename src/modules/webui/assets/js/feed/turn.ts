@@ -3,6 +3,7 @@
 import { el, icon, announce } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
 import { feed as feedState, tabs as tabState, session } from "../store.js";
+import type { Dict } from "../core/store/types.js";
 import {
   FILE_TOOLS, OPENABLE_TOOLS, IMAGE_TOOLS, LINK_TOOLS,
   categoryOf, labelOf, argText, formatMs, verbosity, firstOutputLine,
@@ -14,7 +15,7 @@ import {
 } from "./core.js";
 import { finishMd, finishThink } from "./stream.js";
 
-export function onToolStart(data) {
+export function onToolStart(data: Dict): void {
   const feed = feedForEvent(data.sessionId);
   clearBusy(feed);
   if (!feed) return;
@@ -39,7 +40,7 @@ export function onToolStart(data) {
   feedState.runCount++;
 }
 
-function renderToolOutput(line, text) {
+function renderToolOutput(line: HTMLElement | null, text: unknown): void {
   if (typeof text !== "string" || !text) return;
   const wrap = el("div", "toolout");
   const code = el("div", "code");
@@ -61,14 +62,14 @@ function renderToolOutput(line, text) {
   else appendTo(feed, wrap);
 }
 
-function safeUrl(url) {
+function safeUrl(url: unknown): string | null {
   if (typeof url !== "string" || !url) return null;
   try {
     const u = new URL(url, location.href);
     if (u.protocol === "http:" || u.protocol === "https:" || u.protocol === "file:") {
       return u.href;
     }
-  } catch (err) {
+  } catch {
     return null;
   }
   return null;
@@ -77,7 +78,7 @@ function safeUrl(url) {
 // File rows are always expanded: one `filerow` per file-tool call, no
 // collapsing group. Consecutive rows stay a plain expanded list (the old
 // E grouping with a chevron toggle hid the list and failed to open).
-function displayPathFromRoot(path) {
+function displayPathFromRoot(path: unknown): string {
   const raw = String(path == null ? "" : path).replace(/\\/g, "/");
   try {
     const ws = session && session.host && session.host.workspace
@@ -87,13 +88,13 @@ function displayPathFromRoot(path) {
       const rel = raw === ws ? "" : raw.slice(ws.length + 1);
       if (rel) return rel;
     }
-  } catch (err) {
+  } catch {
     /* fail-open: show raw path */
   }
   return raw;
 }
 
-function cardFor(name, args, sid, ok) {
+function cardFor(name: string, args: Dict, sid: string | undefined, ok: boolean): HTMLElement | null {
   const feed = feedForEvent(sid);
   if (!feed) return null;
   if (FILE_TOOLS.indexOf(name) !== -1) {
@@ -122,7 +123,7 @@ function cardFor(name, args, sid, ok) {
     copyBtn.setAttribute("aria-label", t("web.card.copy_title"));
     copyBtn.appendChild(icon("copy"));
     copyBtn.addEventListener("click", () => {
-      copyText(String(path)).then((ok) => {
+      copyText(String(path)).then((ok: boolean) => {
         copyBtn.replaceChildren(icon(ok ? "check" : "copy"));
         if (!ok) { const st = row.querySelector(".st"); if (st) st.textContent = " ⚠"; }
         window.setTimeout(() => copyBtn.replaceChildren(icon("copy")), 1400);
@@ -150,7 +151,7 @@ function cardFor(name, args, sid, ok) {
       try {
         const host = new URL(safe).hostname;
         if (host) line.appendChild(el("span", "dom", " · " + host));
-      } catch (err) {
+      } catch {
         /* no hostname */
       }
     } else {
@@ -169,7 +170,7 @@ function cardFor(name, args, sid, ok) {
   return null;
 }
 
-export function onToolEnd(data) {
+export function onToolEnd(data: Dict): void {
   const node = feedState.toolNodes.get(data.toolCallId);
   const line = node ? node.line : null;
   if (node) {
@@ -228,7 +229,7 @@ export function onToolEnd(data) {
   renderToolOutput(line, data.output);
 }
 
-export function onTurnEnd(data) {
+export function onTurnEnd(data: Dict): void {
   session.busy = false;
   const feed = feedForEvent(data.sessionId);
   clearBusy(feed);
@@ -255,7 +256,7 @@ export function onTurnEnd(data) {
       announce(t("web.turn.failed"));
     }
   } else {
-    const parts = [];
+    const parts: string[] = [];
     if (typeof data.toolCalls === "number" && data.toolCalls > 0) {
       parts.push(t("web.turn.tools", { count: data.toolCalls }));
     }
@@ -269,19 +270,19 @@ export function onTurnEnd(data) {
   resetTurnText();
 }
 
-export function resetTurnText() {
+export function resetTurnText(): void {
   feedState.turnMd = "";
   feedState.turnRoots = [];
 }
 
-export function onErrorEvent(data) {
+export function onErrorEvent(data: Dict): void {
   if (!data || !data.error) return;
   const feed = feedForEvent(data.sessionId);
   if (feed) appendTo(feed, el("div", "errline", "✗ " + data.error));
   announce(String(data.error));
 }
 
-export function onCommandOutput(text, sid) {
+export function onCommandOutput(text: unknown, sid?: string): void {
   const feed = feedForEvent(sid) || activeFeed();
   if (!feed) return;
   clearEmpty(feed);
@@ -293,7 +294,7 @@ export function onCommandOutput(text, sid) {
 // Server-forwarded `OutputBus` line (system-prompt overflow, context probe,
 // summarization). Text is already redacted server-side; render via
 // `textContent` so nothing untrusted is parsed as HTML.
-export function onLog(data) {
+export function onLog(data: Dict): void {
   if (!data || typeof data.text !== "string" || !data.text) return;
   // Internal loop diagnostics (retry counters, audit/compaction internals) are
   // session-log material — the chat shows them only in verbose mode.

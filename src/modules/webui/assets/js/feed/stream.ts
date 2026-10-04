@@ -14,10 +14,10 @@ import {
 // and scrolling on every one thrashes layout and stacks overlapping `tkIn`
 // fades ("рвано"). Buffer them and flush once per animation frame instead.
 let textBuf = "";
-let textFeed = null;
+let textFeed: HTMLElement | null = null;
 let textScheduled = false;
 
-function flushText() {
+function flushText(): void {
   textScheduled = false;
   if (!textBuf || !feedState.curMd) {
     textBuf = "";
@@ -32,7 +32,7 @@ function flushText() {
   if (feed && feed === activeFeed()) scroll();
 }
 
-function scheduleText() {
+function scheduleText(): void {
   if (textScheduled) return;
   textScheduled = true;
   if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
@@ -43,7 +43,7 @@ function scheduleText() {
 }
 
 // Close the active Markdown segment (if any) and clear the feed text state.
-export function finishMd() {
+export function finishMd(): void {
   flushText();
   if (feedState.curMd) {
     feedState.curMd.root.classList.remove("streaming");
@@ -53,7 +53,7 @@ export function finishMd() {
   feedState.curText = null;
 }
 
-export function onText(chunk, sid) {
+export function onText(chunk: string, sid?: string): void {
   const feed = feedForEvent(sid);
   clearBusy(feed);
   if (!feed) return;
@@ -77,7 +77,7 @@ export function onText(chunk, sid) {
   scheduleText();
 }
 
-export function finishThink() {
+export function finishThink(): void {
   if (feedState.curThink) {
     if (feedState.curThink.wrap) feedState.curThink.wrap.classList.remove("live");
     if (feedState.curThink.startedAt) {
@@ -88,7 +88,7 @@ export function finishThink() {
   feedState.curThink = null;
 }
 
-export function onReasoning(chunk, sid) {
+export function onReasoning(chunk: string, sid?: string): void {
   const feed = feedForEvent(sid);
   clearBusy(feed);
   if (!feed) return;
@@ -109,7 +109,7 @@ export function onReasoning(chunk, sid) {
 // (`kind: "tool"` — display/output/diff/failure-gist from ToolBatch) are
 // model-facing and hidden in quiet mode, mirroring the terminal renderer
 // (`writeInlineBody`); failures still surface once via `tool_end` ↳ cause.
-export function onMeta(chunk, sid, kind) {
+export function onMeta(chunk: string, sid?: string, kind?: string): void {
   if (kind === "tool" && verbosity() === "quiet") return;
   const feed = feedForEvent(sid);
   clearBusy(feed);
@@ -127,7 +127,7 @@ export function onMeta(chunk, sid, kind) {
 // (ses_munvrcfz_na9ze3). Копипаст хода тоже чистим — отклонённого текста
 // в «copy / copy as markdown» быть не должно. Без видимого черновика
 // (пустой ответ, только тулы) — тихо, без шумовой строки.
-export function onRetract(reason, sid) {
+export function onRetract(reason: string, sid?: string): void {
   const feed = feedForEvent(sid);
   if (!feed) return;
   clearBusy(feed);
@@ -147,7 +147,7 @@ export function onRetract(reason, sid) {
   if (feed === activeFeed()) scroll();
 }
 
-export function onPhase(phase, sid) {
+export function onPhase(phase: string, sid?: string): void {
   const feed = feedForEvent(sid);
   if (phase === "thinking") {
     showBusy(feed);
@@ -159,12 +159,13 @@ export function onPhase(phase, sid) {
 // Global `.think-h` toggle (depends on the wrap > [head, body] structure
 // built by `buildThinkBlock`).
 msgs.addEventListener("click", (e) => {
-  const head = e.target.closest(".think-h");
+  const target = e.target as HTMLElement;
+  const head = target.closest(".think-h");
   if (!head) return;
   const body = head.nextElementSibling;
   if (!body) return;
   const hidden = body.classList.toggle("hidden");
   head.setAttribute("aria-expanded", hidden ? "false" : "true");
   const tog = head.querySelector(".tog");
-  if (tog) setIcon(tog, hidden ? "chevron-right" : "chevron-down", t(hidden ? "web.action.show" : "web.action.hide"));
+  if (tog) setIcon(tog as HTMLElement, hidden ? "chevron-right" : "chevron-down", t(hidden ? "web.action.show" : "web.action.hide"));
 });

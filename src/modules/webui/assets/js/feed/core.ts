@@ -13,11 +13,18 @@ import { copyText } from "../../md.js";
 // import one another.
 // ---------------------------------------------------------------------------
 
+export interface MdOpts {
+  copyLabel: string;
+  copiedLabel: string;
+  copyFailedLabel: string;
+  animate: boolean;
+}
+
 // Options passed to the streaming Markdown renderer: localized code-block copy
 // labels. Highlighting is applied by `md.js` once a fence closes. `animate`
 // wraps live-streamed text chunks in `span.tk` (CSS `tkIn` fade); history
 // render and code blocks skip it.
-export function mdOpts(animate) {
+export function mdOpts(animate?: boolean): MdOpts {
   return {
     copyLabel: t("web.code.copy"),
     copiedLabel: t("web.code.copied"),
@@ -26,10 +33,16 @@ export function mdOpts(animate) {
   };
 }
 
+export interface ThinkBlock {
+  wrap: HTMLElement;
+  head: HTMLButtonElement;
+  body: HTMLElement;
+}
+
 // Build the collapsible reasoning block. The global `.think-h` click handler
 // depends on this exact structure: wrap > [head, body], body carries `hidden`.
 // `live` marks an in-progress block (pulsing label); history renders static.
-export function buildThinkBlock(withDur, live) {
+export function buildThinkBlock(withDur: boolean, live?: boolean): ThinkBlock {
   const wrap = el("div", "think" + (live === false ? "" : " live"));
   const head = el("button", "think-h");
   head.type = "button";
@@ -47,11 +60,11 @@ export function buildThinkBlock(withDur, live) {
 }
 
 // Per-message copy action button (whole response as plain text / as Markdown).
-export function copyAction(payload, labelKey) {
+export function copyAction(payload: string, labelKey: string): HTMLButtonElement {
   const btn = el("button", "act-btn", t(labelKey));
   btn.type = "button";
   btn.addEventListener("click", () => {
-    copyText(payload).then((ok) => {
+    copyText(payload).then((ok: boolean) => {
       btn.textContent = ok ? "✓ " + t("web.code.copied") : "⚠ " + t("web.code.copy_failed");
       window.setTimeout(() => {
         btn.textContent = t(labelKey);
@@ -62,7 +75,11 @@ export function copyAction(payload, labelKey) {
 }
 
 // Copy-actions row appended after a completed assistant answer.
-export function appendActionsRow(feed, plain, markdown) {
+export function appendActionsRow(
+  feed: HTMLElement | null,
+  plain: string | null | undefined,
+  markdown: string | null | undefined,
+): void {
   const text = String(plain == null ? "" : plain);
   const md = String(markdown == null ? "" : markdown);
   if (!feed || (!text.trim() && !md.trim())) return;
@@ -72,12 +89,12 @@ export function appendActionsRow(feed, plain, markdown) {
   appendTo(feed, bar);
 }
 
-export function insertAfter(ref, node) {
+export function insertAfter(ref: Node | null, node: Node): void {
   if (ref && ref.parentNode) ref.parentNode.insertBefore(node, ref.nextSibling);
   else appendTo(liveFeed(), node);
 }
 
-function emptyView() {
+function emptyView(): HTMLElement {
   const wrap = el("div", "empty");
   wrap.appendChild(el("span", "g", "✦"));
   wrap.appendChild(document.createTextNode(" " + t("web.empty.title")));
@@ -86,20 +103,20 @@ function emptyView() {
   return wrap;
 }
 
-export function makeFeed() {
+export function makeFeed(): HTMLElement {
   const feed = el("div", "feed");
   feed.appendChild(emptyView());
   return feed;
 }
 
-export function showEmptyFeed() {
+export function showEmptyFeed(): void {
   msgs.replaceChildren(emptyView());
   follow = true;
   hideToLatest();
   syncUrl();
 }
 
-export function clearFeed(feed) {
+export function clearFeed(feed: HTMLElement | null): void {
   if (!feed) return;
   feed.replaceChildren(emptyView());
   follow = true;
@@ -109,19 +126,19 @@ export function clearFeed(feed) {
   if (feed === activeFeed()) scroll();
 }
 
-export function activeFeed() {
+export function activeFeed(): HTMLElement | null {
   const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   return tab ? tab.feed : null;
 }
 
-export function liveFeed() {
+export function liveFeed(): HTMLElement | null {
   const tab = tabState.tabs.find((x) => x.id === tabState.liveTabId) || tabState.tabs.find((x) => x.id === tabState.activeTabId);
   return tab ? tab.feed : null;
 }
 
 // Route a server event to the tab that owns its session (item from `broadcast`
 // enrichment); fall back to the live/active tab for events without one.
-export function feedForEvent(sessionId) {
+export function feedForEvent(sessionId?: string | null): HTMLElement | null {
   if (sessionId) {
     const tab = tabState.tabs.find((x) => x.id === sessionId);
     if (tab) return tab.feed;
@@ -129,7 +146,7 @@ export function feedForEvent(sessionId) {
   return liveFeed();
 }
 
-function nearBottom() {
+function nearBottom(): boolean {
   return msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 140;
 }
 
@@ -141,7 +158,7 @@ function nearBottom() {
 // as false and skip.
 let follow = true;
 
-export function scroll(force) {
+export function scroll(force?: boolean): void {
   if (force || follow || nearBottom()) {
     msgs.scrollTop = msgs.scrollHeight;
     follow = true;
@@ -152,25 +169,25 @@ export function scroll(force) {
 }
 
 // Force-pin to the live edge (send / history load / pill click).
-export function scrollToBottom(smooth) {
+export function scrollToBottom(smooth?: boolean): void {
   follow = true;
   hideToLatest();
   if (smooth && typeof msgs.scrollTo === "function") {
     try {
       msgs.scrollTo({ top: msgs.scrollHeight, behavior: "smooth" });
       return;
-    } catch (err) {
+    } catch {
       /* fall through to instant */
     }
   }
   msgs.scrollTop = msgs.scrollHeight;
 }
 
-export function isFollowing() {
+export function isFollowing(): boolean {
   return follow;
 }
 
-export function feedHasContent(feed) {
+export function feedHasContent(feed: HTMLElement): boolean {
   // `.detail` тоже контент: строки статуса/ошибок загрузки ("история
   // недоступна") не должны провоцировать повторный fetch при каждом открытии
   // вкладки — иначе каждый клик плодит ещё одну строку (сессия удалена,
@@ -178,7 +195,7 @@ export function feedHasContent(feed) {
   return !!feed.querySelector(".u, .md, .ans, .code, .act, .think, .metaln, .errline, .sysline, .detail");
 }
 
-export function syncUrl() {
+export function syncUrl(): void {
   const url = new URL(location.href);
   const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   if (tab && tab.kind === "session") url.searchParams.set("session", tab.id);
@@ -189,8 +206,8 @@ export function syncUrl() {
 // Floating "jump to latest" pill: appears only when the reader scrolled up
 // and new content landed below. Created lazily so tests/SSR without `.chat`
 // never break.
-let toLatestBtn = null;
-function ensureToLatest() {
+let toLatestBtn: HTMLButtonElement | null = null;
+function ensureToLatest(): HTMLButtonElement | null {
   if (toLatestBtn) return toLatestBtn;
   const chat = document.querySelector(".chat");
   if (!chat) return null;
@@ -202,7 +219,7 @@ function ensureToLatest() {
   return toLatestBtn;
 }
 
-function maybeShowToLatest() {
+function maybeShowToLatest(): void {
   const btn = ensureToLatest();
   if (!btn) return;
   btn.textContent = "↓ " + t("web.scroll.latest");
@@ -210,7 +227,7 @@ function maybeShowToLatest() {
   msgs.classList.add("unfollowed");
 }
 
-function hideToLatest() {
+function hideToLatest(): void {
   if (toLatestBtn) toLatestBtn.hidden = true;
   msgs.classList.remove("unfollowed");
 }
@@ -220,22 +237,22 @@ msgs.addEventListener("scroll", () => {
   follow = nb;
   msgs.classList.toggle("scrolled", msgs.scrollTop > 24);
   if (nb) hideToLatest();
-  else if (liveFeed() && feedHasContent(liveFeed())) maybeShowToLatest();
+  else if (liveFeed() && feedHasContent(liveFeed() as HTMLElement)) maybeShowToLatest();
 });
 
-export function appendTo(feed, node) {
+export function appendTo<T extends Node>(feed: HTMLElement | null, node: T): T {
   if (!feed) return node;
   feed.appendChild(node);
   if (feed === activeFeed()) scroll();
   return node;
 }
 
-export function clearEmpty(feed) {
+export function clearEmpty(feed: HTMLElement | null): void {
   const empty = feed && feed.querySelector(".empty");
   if (empty) empty.remove();
 }
 
-export function clearBusy(feed) {
+export function clearBusy(feed?: HTMLElement | null): void {
   if (feedState.busyTimer) {
     clearInterval(feedState.busyTimer);
     feedState.busyTimer = null;
@@ -250,7 +267,7 @@ export function clearBusy(feed) {
 // `/api/message` POST (202) so the wait during a slow first-run
 // summarization is visible before the first `phase` event arrives; the
 // normal event flow (`onText`/`onPhase`/`onTurnEnd`) clears it.
-export function showBusy(feed) {
+export function showBusy(feed?: HTMLElement | null): void {
   feed = feed || liveFeed();
   if (!feed) return;
   // The delayed post-send call must not flash a spinner over a stream that
@@ -280,7 +297,7 @@ export function showBusy(feed) {
   }, 1000);
 }
 
-export function flushRun() {
+export function flushRun(): void {
   if (feedState.runCount <= 0) {
     resetRun();
     return;
@@ -306,7 +323,7 @@ export function flushRun() {
   resetRun();
 }
 
-function resetRun() {
+function resetRun(): void {
   feedState.runCount = 0;
   feedState.runFails = 0;
   feedState.runReconOnly = true;

@@ -3,10 +3,11 @@
 import { usageEl, envEl, wsLine, el, icon } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
 import { feed, settings } from "../store.js";
+import type { Dict } from "../core/store/types.js";
 import { fmtTokens } from "../format.js";
 import { copyText } from "../../md.js";
 
-function usageRow(label, value, cls) {
+function usageRow(label: string, value: string, cls?: string): HTMLElement {
   const row = el("div", "kv");
   row.appendChild(el("span", "", label));
   row.appendChild(el("b", cls || "", value));
@@ -15,7 +16,7 @@ function usageRow(label, value, cls) {
 
 // Segmented context bar: system · tools · history · reserve · free, widths
 // relative to the full context window so the parts always sum to one bar.
-function contextSegBar(h, used, limit) {
+function contextSegBar(h: Dict, used: number, limit: number): HTMLElement {
   const bar = el("div", "bar segbar");
   const bd = h.contextBreakdown;
   if (!bd || typeof bd.window !== "number" || bd.window <= 0) {
@@ -26,7 +27,7 @@ function contextSegBar(h, used, limit) {
     return bar;
   }
   const denom = Math.max(bd.window, bd.used + bd.reserve);
-  const parts = [
+  const parts: Array<[string, number]> = [
     ["seg-system", bd.system],
     ["seg-tools", bd.tools],
     ["seg-history", bd.history],
@@ -43,11 +44,11 @@ function contextSegBar(h, used, limit) {
 }
 
 // Dim legend under the segmented bar: one dot+label+value per context part.
-function contextLegend(h) {
+function contextLegend(h: Dict): HTMLElement {
   const box = el("div", "seglegend");
   const bd = h.contextBreakdown;
   if (!bd) return box;
-  const items = [
+  const items: Array<[string, string, number]> = [
     ["seg-system", "web.usage.part_system", bd.system],
     ["seg-tools", "web.usage.part_tools", bd.tools],
     ["seg-history", "web.usage.part_history", bd.history],
@@ -66,7 +67,7 @@ function contextLegend(h) {
 }
 
 // Session row with a copy button next to the id (icon-only, ✓ on success).
-function usageSessionRow(sessionId) {
+function usageSessionRow(sessionId: string): HTMLElement {
   const row = el("div", "kv");
   row.appendChild(el("span", "", t("web.usage.session")));
   const val = el("span", "kv-val");
@@ -80,7 +81,7 @@ function usageSessionRow(sessionId) {
     btn.setAttribute("aria-label", t("web.usage.copy_id"));
     btn.appendChild(icon("copy"));
     btn.addEventListener("click", () => {
-      copyText(sessionId).then((ok) => {
+      copyText(sessionId).then((ok: boolean) => {
         btn.replaceChildren(icon(ok ? "check" : "copy"));
         setTimeout(() => btn.replaceChildren(icon("copy")), 1500);
       });
@@ -91,7 +92,7 @@ function usageSessionRow(sessionId) {
   return row;
 }
 
-export function renderUsage(h) {
+export function renderUsage(h: Dict): void {
   const cfg = settings.config || {};
   const sig = JSON.stringify([
     h.sessionId, h.model, h.contextUsed, h.contextLimit, h.cacheHitRate, h.costUsd,
@@ -138,7 +139,7 @@ export function renderUsage(h) {
 }
 
 // Workspace path under the composer (dim, own line).
-export function renderWorkspace(h) {
+export function renderWorkspace(h: Dict): void {
   const ws = h.workspace || "";
   if (wsLine.dataset.ws === ws) return;
   wsLine.dataset.ws = ws;
@@ -152,7 +153,7 @@ export function renderWorkspace(h) {
 }
 
 // Environment (sidebar): stacked name/value items — AGENTS.md sources, map size.
-function envItem(label, values) {
+function envItem(label: string, values: string[]): HTMLElement {
   const item = el("div", "env-item");
   item.appendChild(el("div", "env-k", label));
   values.forEach((val) => {
@@ -163,7 +164,7 @@ function envItem(label, values) {
   return item;
 }
 
-export function renderEnvironment(h) {
+export function renderEnvironment(h: Dict): void {
   const disabled = !!(h.instructions && h.instructions.disabled);
   const files = h.instructions && !disabled ? h.instructions.files || [] : [];
   const map = h.projectMap || null;

@@ -3,11 +3,19 @@
 import { el, link } from "../dom.js";
 import { t } from "../i18n.js";
 import { api } from "../api.js";
+import type { Dict } from "../core/store/types.js";
 import { feedForEvent, clearEmpty, appendTo, activeFeed, scroll } from "./core.js";
+
+interface QuestionBlock {
+  block: HTMLElement;
+  feed: HTMLElement;
+  settle(display: unknown, raw: unknown): void;
+  isAnswered(): boolean;
+}
 
 // `? ` glyph on the last line, matching the terminal menu (the tool may have
 // already prefixed it — don't double it).
-function questionLabel(text) {
+function questionLabel(text: unknown): string {
   const lines = String(text).split("\n");
   const last = lines[lines.length - 1];
   if (/^\s*\?/.test(last)) return String(text);
@@ -17,18 +25,18 @@ function questionLabel(text) {
 
 // Answered-state + settle wiring shared by both question kinds. `display` is
 // what the user sees; `raw` is exactly what goes to `/api/answer`.
-function makeQuestionBlock(feed, promptText, id) {
+function makeQuestionBlock(feed: HTMLElement, promptText: string, id: string): QuestionBlock {
   const block = el("div", "q");
   block.appendChild(el("div", "qtext", promptText));
   let answered = false;
-  const settle = (display, raw) => {
+  const settle = (display: unknown, raw: unknown): void => {
     if (answered) return;
     answered = true;
     block.classList.add("answered");
     block.textContent = "";
     block.appendChild(el("div", "qtext", promptText));
     block.appendChild(el("div", "qans", "↳ " + (String(display || "").trim() || t("web.question.answered"))));
-    api("/api/answer", { method: "POST", body: { id, value: raw } });
+    void api("/api/answer", { method: "POST", body: { id, value: raw } });
     if (feed === activeFeed()) scroll();
   };
   return { block, feed, settle, isAnswered: () => answered };
@@ -36,7 +44,7 @@ function makeQuestionBlock(feed, promptText, id) {
 
 // Free-text prompt (a `text` question, or the tool's follow-up after the
 // "own answer" choice — see `askUser`/`CUSTOM_INDEX`).
-function questionTextInput(q, placeholder) {
+function questionTextInput(q: QuestionBlock, placeholder: string): HTMLElement {
   const wrap = el("div", "qcustom");
   const input = el("input", "qinput");
   input.type = "text";
@@ -64,15 +72,18 @@ function questionTextInput(q, placeholder) {
 // Choice prompt: single-select settles on click, multi-select collects into a
 // send button. The "own answer" entry maps to CUSTOM_INDEX (-1) so the tool
 // then asks the free-text follow-up.
-function questionChoice(q, data, options) {
+function questionChoice(q: QuestionBlock, data: Dict, options: unknown[]): void {
   const multiple = !!data.multiple;
   const allowCustom = !!data.allowCustom;
-  const entries = options.map((label) => ({ label, raw: null }));
+  const entries: Array<{ label: string; raw: number | null }> = options.map((label) => ({
+    label: String(label),
+    raw: null,
+  }));
   if (allowCustom) entries.push({ label: t("web.question.custom"), raw: -1 });
-  const rawOf = (i) => (entries[i].raw != null ? entries[i].raw : i);
+  const rawOf = (i: number): unknown => (entries[i].raw != null ? entries[i].raw : i);
   const opts = el("div", "opts");
-  const selected = [];
-  let sendBtn = null;
+  const selected: number[] = [];
+  let sendBtn: HTMLButtonElement | null = null;
   entries.forEach((entry, i) => {
     const row = el("button", "qopt", i + 1 + ". " + entry.label);
     row.type = "button";
@@ -113,7 +124,7 @@ function questionChoice(q, data, options) {
   }
 }
 
-export function onQuestion(data) {
+export function onQuestion(data: Dict): void {
   if (!data || typeof data.text !== "string") return;
   const feed = feedForEvent(data.sessionId);
   if (!feed) return;

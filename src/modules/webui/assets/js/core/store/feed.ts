@@ -1,12 +1,14 @@
 // Feed slice of the shared frontend state: stream/turn buffers and the
 // read-only run-folding bookkeeping. Owned by `feed/**`; the legacy composed
 // `S` aliases these fields (see `./index.js`).
+import type { Dict, MdHandle, ThinkState, ToolNode } from "./types.js";
+
 export interface FeedSlice {
-  curText: HTMLElement | null;
-  curMd: HTMLElement | null;
+  curText: string | null;
+  curMd: MdHandle | null;
   turnMd: string;
   turnRoots: HTMLElement[];
-  curThink: HTMLElement | null;
+  curThink: ThinkState | null;
   lastPlanSig: string | null;
   lastUsageSig: string | null;
   lastEnvSig: string | null;
@@ -15,11 +17,10 @@ export interface FeedSlice {
   runReconOnly: boolean;
   runNodes: HTMLElement[];
   runDuration: number;
-  // biome-ignore lint/suspicious/noExplicitAny: opaque DOM node / timer payloads.
+  // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
   busyTimer: any;
-  // biome-ignore lint/suspicious/noExplicitAny: opaque tool-call bookkeeping.
-  pendingArgs: Map<string, any>;
-  toolNodes: Map<string, HTMLElement>;
+  pendingArgs: Map<string, Dict>;
+  toolNodes: Map<string, ToolNode>;
 }
 
 export const feed: FeedSlice = {
