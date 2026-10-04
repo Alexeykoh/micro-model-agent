@@ -7,20 +7,20 @@
 const sessDD = document.getElementById("sessDD");
 const sessBtn = document.getElementById("sessBtn");
 
-let onSessionClosed = null;
+let onSessionClosed: (() => void) | null = null;
 
 /** `tabs.js` registers the query-reset + re-render to run when the dropdown closes. */
-export function setSessionCloseHook(fn) {
+export function setSessionCloseHook(fn: () => void): void {
   onSessionClosed = fn;
 }
 
-export function setSessOpen(open) {
+export function setSessOpen(open: boolean): void {
   if (sessDD) sessDD.classList.toggle("open", !!open);
   if (sessBtn) sessBtn.setAttribute("aria-expanded", open ? "true" : "false");
   if (!open && onSessionClosed) onSessionClosed();
 }
 
-export function closeAllMenus() {
+export function closeAllMenus(): void {
   document.querySelectorAll("[data-sel]").forEach((s) => {
     s.classList.remove("open");
     const b = s.querySelector("button");
