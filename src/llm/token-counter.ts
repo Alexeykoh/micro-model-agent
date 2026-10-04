@@ -1,19 +1,20 @@
 /** Подсчёт токенов: точный (tiktoken) и дешёвая эвристика для блоков. */
-import { encodingForModel, getEncoding } from "js-tiktoken";
+import { Tiktoken } from "js-tiktoken/lite";
+import cl100k from "js-tiktoken/ranks/cl100k_base";
 import { getMessageText } from "./provider";
 import type { ContentPart } from "./provider";
 
 /**
  * Скриптозависимая ОЦЕНКА токенов (дешёвая, без полной токенизации). Достаточно
  * дешёвая для каждого PromptBlock; на этапе сборки точного TokenCounter может
- * не быть в scope. Замерено на cl100k_base: латиница И кириллица — ~3.3–5
- * символов/токен (старый плоский len/4 для кириллицы был почти верен —
- * гипотеза «кириллица ≈ /2» ошибочна); CJK/хангыль — выбросы ~1–1.5 токена/
- * символ, им /1.5. В пределах ±30% от tiktoken на русском.
+ * не быть в scope. Замерено на cl100k_base: латиница ~4 символа/токен, кириллица
+ * ~2.5 символа/токен (плотнее латиницы), CJK/хангыль — выбросы ~1–1.5 токена/
+ * символ. Держим оценку в пределах ±30% от точного cl100k-счётчика.
  */
 export function estimateTokens(text: string): number {
   if (!text) return 0;
   let cjk = 0;
+  let cyr = 0;
   let rest = 0;
   for (const ch of text) {
     const code = ch.codePointAt(0)!;
@@ -23,24 +24,26 @@ export function estimateTokens(text: string): number {
       (code >= 0xff00 && code <= 0xffef) // fullwidth forms
     ) {
       cjk++;
+    } else if (code >= 0x0400 && code <= 0x052f) {
+      cyr++;
     } else {
       rest++;
     }
   }
-  return Math.ceil(cjk / 1.5 + rest / 4);
+  return Math.ceil(cjk / 1.5 + cyr / 2.5 + rest / 4);
 }
 
-/** Точный счётчик токенов поверх tiktoken (энкодинг по модели). */
+/**
+ * Точный счётчик токенов поверх cl100k_base (единая rank-таблица, ~1.1 MB вместо
+ * ~5.6 MB полного `js-tiktoken` со всеми таблицами). `cl100k_base` — тот же
+ * энкодинг, в который и раньше уходил фолбэк для локальных моделей; модели
+ * o200k-класса (OpenAI GPT-4o) считаются им же — расхождение в несколько процентов.
+ */
 export class TokenCounter {
-  private encoder: ReturnType<typeof getEncoding>;
+  private encoder: Tiktoken;
 
-  constructor(model: string = "gpt-4o") {
-    try {
-      this.encoder = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
-    } catch {
-      // Фолбэк на cl100k_base для неизвестных моделей
-      this.encoder = getEncoding("cl100k_base");
-    }
+  constructor(_model: string = "gpt-4o") {
+    this.encoder = new Tiktoken(cl100k);
   }
 
   /**
