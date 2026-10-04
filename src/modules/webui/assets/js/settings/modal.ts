@@ -12,7 +12,7 @@ import { renderModelPanel } from "./providers.js";
 import { closeSubDialog, isSubDialogOpen } from "./subdialog.js";
 import { setWriteHooks } from "./write.js";
 
-export function renderSettings() {
+export function renderSettings(): void {
   // Generic panels render straight from PANEL_SECTIONS; custom panels
   // (model/ui/memory/skills/plugins/security) append their sections themselves
   // or render bespoke widgets alongside.
@@ -27,14 +27,14 @@ export function renderSettings() {
   renderSecurityPanel();
 }
 
-const overlay = document.getElementById("overlay");
-const settingsBtn = document.getElementById("openSettings");
-const closeSettingsBtn = document.getElementById("closeSettings");
-let settingsReturnFocus = null;
+const overlay = document.getElementById("overlay") as HTMLElement;
+const settingsBtn = document.getElementById("openSettings") as HTMLElement;
+const closeSettingsBtn = document.getElementById("closeSettings") as HTMLElement;
+let settingsReturnFocus: HTMLElement | null = null;
 
 // Settings sections act as a real tablist: roles, roving tabindex, arrow keys.
-const settingsTabs = Array.from(document.querySelectorAll("#setMenu .mi"));
-export function selectSettingsPanel(name) {
+const settingsTabs: HTMLElement[] = Array.from(document.querySelectorAll<HTMLElement>("#setMenu .mi"));
+export function selectSettingsPanel(name: string): void {
   settingsTabs.forEach((x) => {
     const on = x.dataset.p === name;
     x.classList.toggle("on", on);
@@ -46,7 +46,7 @@ export function selectSettingsPanel(name) {
   if (panel) panel.classList.add("on");
 }
 settingsTabs.forEach((mi) => {
-  const name = mi.dataset.p;
+  const name = mi.dataset.p || "";
   mi.setAttribute("role", "tab");
   mi.setAttribute("id", "tab-" + name);
   mi.setAttribute("aria-controls", "p-" + name);
@@ -55,14 +55,14 @@ settingsTabs.forEach((mi) => {
   mi.addEventListener("click", () => selectSettingsPanel(name));
   mi.addEventListener("keydown", (e) => {
     const i = settingsTabs.indexOf(mi);
-    let next = null;
+    let next: HTMLElement | null = null;
     if (e.key === "ArrowDown" || e.key === "ArrowRight") next = settingsTabs[(i + 1) % settingsTabs.length];
     else if (e.key === "ArrowUp" || e.key === "ArrowLeft") next = settingsTabs[(i - 1 + settingsTabs.length) % settingsTabs.length];
     else if (e.key === "Home") next = settingsTabs[0];
     else if (e.key === "End") next = settingsTabs[settingsTabs.length - 1];
     if (next) {
       e.preventDefault();
-      selectSettingsPanel(next.dataset.p);
+      selectSettingsPanel(next.dataset.p || "");
       next.focus();
     }
   });
@@ -72,24 +72,24 @@ document.querySelectorAll(".content-col .panel").forEach((panel) => {
   panel.setAttribute("aria-labelledby", "tab-" + panel.id.replace(/^p-/, ""));
 });
 
-function openSettings() {
-  settingsReturnFocus = document.activeElement;
+function openSettings(): void {
+  settingsReturnFocus = document.activeElement as HTMLElement | null;
   overlay.classList.add("open");
   settingsBtn.setAttribute("aria-expanded", "true");
   void loadMemory();
   void loadSkills();
   void loadPlugins();
   void loadLsp();
-  const active = document.querySelector("#setMenu .mi.on") || settingsTabs[0];
+  const active = document.querySelector<HTMLElement>("#setMenu .mi.on") || settingsTabs[0];
   if (active) setTimeout(() => active.focus(), 0);
 }
 // Open settings straight at a panel (used by the reasoning selector when the
 // backend probe failed: the row links to Settings → Reasoning).
-function openSettingsAt(panel) {
+function openSettingsAt(panel: string): void {
   openSettings();
   selectSettingsPanel(panel);
 }
-function closeSettings() {
+function closeSettings(): void {
   closeSubDialog();
   settings.providerForm = null;
   settings.mcpForm = null;

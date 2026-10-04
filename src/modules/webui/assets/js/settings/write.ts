@@ -6,18 +6,20 @@ import { el, icon, link, connStatus, staleBar } from "../dom.js";
 import { api } from "../api.js";
 import { t, loadI18n } from "../i18n.js";
 import { settings, session, setPath, getPath, hooks } from "../store.js";
+import type { Dict } from "../core/store/types.js";
 import { contextLabel, matchesQuery } from "../format.js";
 import { closeAllMenus, setSessOpen } from "../core/menus.js";
 import { setIndicator } from "../dialog.js";
 import { setLayout } from "../rail.js";
 
-function setSelButton(btn, label, value) {
+function setSelButton(btn: HTMLElement | null, label: string, value: string): void {
+  if (!btn) return;
   btn.textContent = label + ":";
   btn.appendChild(el("b", "", value));
   btn.appendChild(icon("chevron-down"));
 }
 
-function menuItem(label, sub, active, onClick) {
+function menuItem(label: string, sub: string, active: boolean, onClick: () => void): HTMLButtonElement {
   const mi = el("button", "mi" + (active ? " on" : ""));
   mi.type = "button";
   mi.setAttribute("aria-pressed", active ? "true" : "false");
@@ -32,7 +34,7 @@ function menuItem(label, sub, active, onClick) {
 }
 
 // Menu action row (refresh, custom, add…) with an optional leading icon.
-function menuAction(label, iconName, onClick) {
+function menuAction(label: string, iconName: string | null, onClick: () => void): HTMLButtonElement {
   const mi = el("button", "mi row-mi");
   mi.type = "button";
   if (iconName) mi.appendChild(icon(iconName));
@@ -50,12 +52,12 @@ function menuAction(label, iconName, onClick) {
 // the input is rebuilt with it; cleared once a model is actually picked.
 let modelFilter = "";
 
-export function renderSelectors() {
-  const cfg = settings.config || {};
-  const provider = cfg.provider || {};
+export function renderSelectors(): void {
+  const cfg: Dict = settings.config || {};
+  const provider: Dict = cfg.provider || {};
 
   setSelButton(document.getElementById("selModelBtn"), t("web.selectors.model"), cfg.model || "—");
-  const modelMenu = document.getElementById("selModelMenu");
+  const modelMenu = document.getElementById("selModelMenu") as HTMLElement;
   modelMenu.textContent = "";
   // Search row stays outside the filtered list: `drawModelList` only touches
   // `listBox`, so typing never rebuilds (or unfocuses) the input itself.
@@ -80,9 +82,9 @@ export function renderSelectors() {
       return;
     }
     models.forEach((m) => {
-      const item = menuItem(m, "", m === cfg.model, () => {
+      const item = menuItem(String(m), "", m === cfg.model, () => {
         modelFilter = "";
-        postConfig("model", m, true);
+        void postConfig("model", m, true);
       });
       // ArrowUp on the first row returns focus to the search field.
       item.addEventListener("keydown", (e) => {
@@ -103,11 +105,11 @@ export function renderSelectors() {
     e.stopPropagation();
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      const first = listBox.querySelector(".mi:not(.dim)");
+      const first = listBox.querySelector<HTMLElement>(".mi:not(.dim)");
       if (first) first.focus();
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const first = listBox.querySelector(".mi:not(.dim)");
+      const first = listBox.querySelector<HTMLElement>(".mi:not(.dim)");
       if (first) first.click();
     } else if (e.key === "Escape") {
       if (search.value) {
@@ -124,28 +126,28 @@ export function renderSelectors() {
   modelMenu.appendChild(el("div", "sep"));
   modelMenu.appendChild(
     menuAction(t("web.selectors.refresh_list"), "refresh", () => {
-      loadModels().then(renderSelectors);
+      void loadModels().then(renderSelectors);
     }),
   );
 
   setSelButton(document.getElementById("selProviderBtn"), t("web.selectors.provider"), provider.active || provider.type || "—");
-  const provMenu = document.getElementById("selProviderMenu");
+  const provMenu = document.getElementById("selProviderMenu") as HTMLElement;
   provMenu.textContent = "";
   const entries = Array.isArray(provider.entries) && provider.entries.length
     ? provider.entries
     : [{ label: provider.active || provider.type, type: provider.type }];
-  entries.forEach((entry) => {
+  entries.forEach((entry: Dict) => {
     const name = entry.label || entry.type;
     if (!name) return;
-    provMenu.appendChild(menuItem(name, entry.type || "", name === (provider.active || provider.type), () => postConfig("provider.active", name, true)));
+    provMenu.appendChild(menuItem(name, entry.type || "", name === (provider.active || provider.type), () => void postConfig("provider.active", name, true)));
   });
 
   setSelButton(document.getElementById("selContextBtn"), t("web.selectors.context"), contextLabel());
-  const ctxMenu = document.getElementById("selContextMenu");
+  const ctxMenu = document.getElementById("selContextMenu") as HTMLElement;
   ctxMenu.textContent = "";
   const sizes = [8192, 16384, 32768, 65536, 131072];
   sizes.forEach((n) => {
-    ctxMenu.appendChild(menuItem(Math.round(n / 1024) + "K", n === cfg.contextWindow ? t("web.selectors.current") : "", n === cfg.contextWindow, () => postConfig("contextWindow", n, false)));
+    ctxMenu.appendChild(menuItem(Math.round(n / 1024) + "K", n === cfg.contextWindow ? t("web.selectors.current") : "", n === cfg.contextWindow, () => void postConfig("contextWindow", n, false)));
   });
   ctxMenu.appendChild(el("div", "sep"));
   // Inline custom size (no native `window.prompt`): the menu stays open while
@@ -169,7 +171,7 @@ export function renderSelectors() {
       const n = Number(input.value.trim());
       if (Number.isFinite(n) && n >= 1024) {
         closeAllMenus();
-        postConfig("contextWindow", n, false);
+        void postConfig("contextWindow", n, false);
       } else {
         input.focus();
       }
@@ -209,12 +211,12 @@ const REASONING_LEVELS_COARSE = ["auto", "default", "none", "low", "high"];
 // Unknown (boot) or `strategy: "none"` → hidden, never a wrong option list.
 // Probe failed → the row stays with an honest `off` mark and a shortcut to
 // Settings → Reasoning instead of dead levels.
-function renderReasoningSelector() {
-  const wrap = document.querySelector('[data-sel="reasoning"]');
+function renderReasoningSelector(): void {
+  const wrap = document.querySelector<HTMLElement>('[data-sel="reasoning"]');
   const btn = document.getElementById("selReasoningBtn");
   const menu = document.getElementById("selReasoningMenu");
   if (!wrap || !btn || !menu) return;
-  const info = session.reasoning;
+  const info: Dict = session.reasoning;
   if (!info || info.strategy === "none") {
     wrap.hidden = true;
     return;
@@ -235,18 +237,19 @@ function renderReasoningSelector() {
   menu.textContent = "";
   const levels = info.strategy === "openai-effort" ? REASONING_LEVELS_FULL : REASONING_LEVELS_COARSE;
   levels.forEach((lvl) => {
-    menu.appendChild(menuItem(lvl, lvl === mode ? t("web.selectors.current") : "", lvl === mode, () => postConfig("reasoning.mode", lvl, false)));
+    menu.appendChild(menuItem(lvl, lvl === mode ? t("web.selectors.current") : "", lvl === mode, () => void postConfig("reasoning.mode", lvl, false)));
   });
 }
 
-document.querySelectorAll("[data-sel]").forEach((sel) => {
+document.querySelectorAll<HTMLElement>("[data-sel]").forEach((sel) => {
   const btn = sel.querySelector("button");
+  if (!btn) return;
   btn.setAttribute("aria-haspopup", "menu");
   btn.setAttribute("aria-expanded", "false");
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
     setSessOpen(false);
-    document.querySelectorAll("[data-sel]").forEach((s) => {
+    document.querySelectorAll<HTMLElement>("[data-sel]").forEach((s) => {
       if (s !== sel) {
         s.classList.remove("open");
         const b = s.querySelector("button");
@@ -275,21 +278,26 @@ let switchSeq = 0;
 // button carries the pending mark and all selector menus are inert (CSS gates
 // on `.selectors[data-pending]`), so a double-click is answered with a toast
 // instead of a second concurrent switch.
-let pendingKey = null;
+let pendingKey: string | null = null;
+
+interface WriteHooks {
+  renderSettings: (() => void) | null;
+  openSettingsAt: ((id: string) => void) | null;
+}
 
 // UI callbacks registered by the settings shell (`settings/modal.js`). Kept as
 // a hook so this write funnel never imports the panels/shell (no cycle).
-let writeHooks = { renderSettings: null, openSettingsAt: null };
+let writeHooks: WriteHooks = { renderSettings: null, openSettingsAt: null };
 
 /** Settings shell injects its render entry points; keeps the module DAG acyclic. */
-export function setWriteHooks(d) {
+export function setWriteHooks(d: Partial<WriteHooks>): void {
   writeHooks = { ...writeHooks, ...d };
 }
 
 // Paint the pending mark (`⋯` via CSS `::after`, no label rewrites) and the
 // `aria-busy` flag. Boot (`config === null`) paints the same mark, so the
 // skeleton state is visible while `boot()` loads config/models/providers.
-function paintSelectorPending() {
+function paintSelectorPending(): void {
   const show = pendingKey !== null || !settings.config;
   const wrap = document.querySelector(".selectors");
   if (wrap) {
@@ -304,7 +312,7 @@ function paintSelectorPending() {
   });
 }
 
-export async function postConfig(key, value, refreshSettings) {
+export async function postConfig(key: string, value: unknown, refreshSettings?: boolean): Promise<boolean> {
   const isSelector = SELECTOR_KEYS.indexOf(key) !== -1;
   if (isSelector && pendingKey !== null) {
     setIndicator(t("web.selectors.switch_busy"), true);
@@ -321,7 +329,7 @@ export async function postConfig(key, value, refreshSettings) {
     paintSelectorPending();
   }
   try {
-    const r = await api("/api/config", { method: "POST", body: { key, value } });
+    const r = await api<Dict>("/api/config", { method: "POST", body: { key, value } });
     if (!r.ok || !r.data || !r.data.ok) {
       const err = (r.data && (r.data.error || r.data.reason)) || r.status || t("web.settings.save_failed");
       setIndicator(String(err), true);
@@ -360,8 +368,8 @@ export async function postConfig(key, value, refreshSettings) {
   }
 }
 
-export async function loadConfig() {
-  const r = await api("/api/config");
+export async function loadConfig(): Promise<void> {
+  const r = await api<{ config?: Dict; registry?: Dict[]; webToken?: string }>("/api/config");
   if (!r.ok || !r.data) return;
   settings.config = r.data.config || {};
   settings.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
@@ -371,8 +379,8 @@ export async function loadConfig() {
   writeHooks.renderSettings?.();
 }
 
-export async function loadModels() {
-  const r = await api("/api/models");
+export async function loadModels(): Promise<void> {
+  const r = await api<{ models?: Dict[]; reasoning?: Dict }>("/api/models");
   if (!r.ok || !r.data) return;
   settings.models = Array.isArray(r.data.models) ? r.data.models : [];
   // Reasoning support rides along with the model list (one round-trip):
@@ -384,7 +392,7 @@ export async function loadModels() {
 // Connection-state banner: shown while the SSE stream is down. The server
 // never replays events, so a reconnect only resyncs the state slices — the feed keeps
 // whatever the live session already rendered (no duplication).
-export function setConnStatus(disconnected) {
+export function setConnStatus(disconnected: unknown): void {
   if (!connStatus) return;
   connStatus.hidden = !disconnected;
   connStatus.textContent = disconnected ? "⋯ " + t("web.conn.reconnecting") : "";
@@ -394,16 +402,16 @@ export function setConnStatus(disconnected) {
 // server process, so the chrome may show raw keys. Rebuilt only on a state
 // change (not on every 2s poll) to keep the reload-button focus stable;
 // `force` re-renders the label after a locale switch.
-let lastStale = null;
-export function setStaleBar(stale, force) {
-  if (!staleBar) return;
+let lastStale: boolean | null = null;
+export function setStaleBar(stale: unknown, force?: boolean): boolean | null {
+  if (!staleBar) return null;
   // undefined = перерисовать последнее состояние (смена локали).
   const on = stale === undefined ? !!lastStale : !!stale;
-  if (!force && on === lastStale) return;
+  if (!force && on === lastStale) return lastStale;
   lastStale = on;
   staleBar.hidden = !on;
   staleBar.textContent = "";
-  if (!on) return;
+  if (!on) return lastStale;
   staleBar.appendChild(el("span", "", "⚠ " + t("web.i18n.stale") + " "));
   staleBar.appendChild(link(t("web.i18n.reload"), "", () => location.reload()));
   return lastStale;
@@ -412,7 +420,7 @@ export function setStaleBar(stale, force) {
 // Web chat font size (`ui.fontSize`, server config — unlike the theme, which
 // is a browser-local preference). Applied as `body[data-font]` so the switch
 // is instant and survives re-renders; unknown values fall back to the default.
-export function applyFontSize(value) {
+export function applyFontSize(value?: string): void {
   const v = value || (settings.config && settings.config.ui && settings.config.ui.fontSize) || "comfortable";
   const known = v === "compact" || v === "large" ? v : "comfortable";
   if (known === "comfortable") document.body.removeAttribute("data-font");

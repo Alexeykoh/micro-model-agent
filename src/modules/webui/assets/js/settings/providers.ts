@@ -6,6 +6,7 @@ import { el, icon, link } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { settings } from "../store.js";
+import type { Dict } from "../core/store/types.js";
 import { contextLabel } from "../format.js";
 import { setIndicator } from "../dialog.js";
 import { PANEL_SECTIONS } from "./controls.js";
@@ -14,13 +15,13 @@ import { settingsSection, chip, renderSections } from "./panels.js";
 import { pfield, providerInput, providerSelect, providerCheck } from "./form.js";
 import { openSubDialog, closeSubDialog } from "./subdialog.js";
 
-function providerEntries() {
+function providerEntries(): Dict[] {
   if (settings.providers && Array.isArray(settings.providers.entries) && settings.providers.entries.length) {
     return settings.providers.entries;
   }
-  const provider = (settings.config && settings.config.provider) || {};
+  const provider: Dict = (settings.config && settings.config.provider) || {};
   if (Array.isArray(provider.entries) && provider.entries.length) {
-    return provider.entries.map((e) => ({
+    return provider.entries.map((e: Dict) => ({
       type: e.type,
       label: e.label || e.type,
       baseUrl: e.baseUrl,
@@ -39,11 +40,11 @@ function providerEntries() {
   ];
 }
 
-function providerName(p) {
+function providerName(p: Dict): string {
   return p.label || p.type || "—";
 }
 
-function providerMeta(p) {
+function providerMeta(p: Dict): string {
   const parts = [p.type];
   if (p.contextWindow) parts.push(Math.round(p.contextWindow / 1024) + "K");
   if (typeof p.rpm === "number" || typeof p.parallel === "number") {
@@ -52,11 +53,20 @@ function providerMeta(p) {
   return parts.join(" · ");
 }
 
+interface BaseField {
+  node: HTMLElement;
+  sel: HTMLSelectElement;
+  custom: HTMLInputElement;
+  value: string;
+  addEventListener(ev: string, fn: EventListenerOrEventListenerObject): void;
+  setAttribute(k: string, v: string): void;
+}
+
 // Base-URL field: a dropdown of well-known URLs plus a "custom URL" option
 // revealing a free-text input, so corporate proxies stay enterable.
 // Exposes a `.value` get/set compatible with plain inputs, plus the raw
 // `sel`/`custom` nodes for event wiring.
-function providerBaseField(value) {
+function providerBaseField(value: unknown): BaseField {
   const node = el("div", "pform-base");
   const sel = el("select");
   PROVIDER_BASE_URLS.forEach(([label, url]) => {
@@ -72,14 +82,14 @@ function providerBaseField(value) {
   const sync = () => {
     custom.style.display = sel.value === BASE_URL_CUSTOM ? "" : "none";
   };
-  const field = {
+  const field: BaseField = {
     node,
     sel,
     custom,
     get value() {
       return sel.value === BASE_URL_CUSTOM ? custom.value : sel.value;
     },
-    set value(v) {
+    set value(v: string) {
       if (v && known.has(v)) {
         sel.value = v;
       } else {
@@ -96,7 +106,7 @@ function providerBaseField(value) {
       sel.setAttribute(k, v);
     },
   };
-  field.value = value || "";
+  field.value = value ? String(value) : "";
   sel.addEventListener("change", sync);
   node.appendChild(sel);
   node.appendChild(custom);
@@ -126,7 +136,7 @@ const PROVIDER_TYPES = [
   "opencode-go",
 ];
 
-const PROVIDER_BASE_URLS = [
+const PROVIDER_BASE_URLS: Array<[string, string]> = [
   ["LM Studio", "http://localhost:1234/v1"],
   ["Ollama", "http://localhost:11434/v1"],
   ["OpenRouter", "https://openrouter.ai/api/v1"],
@@ -136,31 +146,42 @@ const PROVIDER_BASE_URLS = [
 
 const BASE_URL_CUSTOM = "__custom__";
 
+interface PresetField {
+  presets: Dict[];
+  sel: HTMLSelectElement | null;
+  node: HTMLElement | null;
+}
+
 // One-click preset row: selecting a builtin fills type/label/base URL, so
 // hosted providers need no URL knowledge. `custom` leaves the fields free.
 // Returns the row node (null when no presets) plus the raw select for wiring.
-function providerPresetField(editing) {
+function providerPresetField(editing: Dict): PresetField {
   const presets = settings.providerPresets || [];
   if (!presets.length) return { presets, sel: null, node: null };
   const sel = el("select", "pform-preset");
   const custom = el("option", "", t("web.settings.provider_custom"));
   custom.value = "";
   sel.appendChild(custom);
-  presets.forEach((p) => {
+  presets.forEach((p: Dict) => {
     const o = el("option", "", p.label || p.type);
     o.value = p.id;
     sel.appendChild(o);
   });
   const match =
-    presets.find((p) => p.type === editing.type && p.baseUrl && p.baseUrl === editing.baseUrl) ||
-    presets.find((p) => p.type === editing.type && !p.baseUrl) ||
-    presets.find((p) => p.type === editing.type);
+    presets.find((p: Dict) => p.type === editing.type && p.baseUrl && p.baseUrl === editing.baseUrl) ||
+    presets.find((p: Dict) => p.type === editing.type && !p.baseUrl) ||
+    presets.find((p: Dict) => p.type === editing.type);
   if (match) sel.value = match.id;
   return { presets, sel, node: pfield("web.settings.provider_preset", sel) };
 }
 
 // Keep the preset select and the type field in sync both ways.
-function wirePresetSync(presets, presetSel, mode, f) {
+function wirePresetSync(
+  presets: Dict[],
+  presetSel: HTMLSelectElement | null,
+  mode: string,
+  f: { type: HTMLSelectElement; label: HTMLInputElement; base: BaseField },
+): void {
   if (!presetSel) return;
   presetSel.addEventListener("change", () => {
     const p = presets.find((x) => x.id === presetSel.value);
@@ -180,8 +201,14 @@ function wirePresetSync(presets, presetSel, mode, f) {
   });
 }
 
+interface CacheFlag {
+  key: string;
+  box: HTMLInputElement;
+  node: HTMLElement;
+}
+
 // Optional tuning fields stay collapsed so the form reads as "type + URL".
-function providerAdvancedFields(editing) {
+function providerAdvancedFields(editing: Dict) {
   const adv = el("details", "pform-adv");
   adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
   const advGrid = el("div", "pform-grid");
@@ -198,6 +225,7 @@ function providerAdvancedFields(editing) {
     retryMax: providerInput(retry.maxRetries, "number", "3"),
     retryBase: providerInput(retry.baseDelay, "number", "1000"),
     retryMaxD: providerInput(retry.maxDelay, "number", "30000"),
+    cacheFlags: [] as CacheFlag[],
   };
   // Flags keep the raw config key in `title` so it stays searchable, but the
   // visible label is localized like every other field of the form.
@@ -241,14 +269,14 @@ function providerAdvancedFields(editing) {
 }
 
 // Validate the field bag, POST it, and refresh the panels on success.
-async function submitProviderForm(f, mode, editing) {
+async function submitProviderForm(f: Dict, mode: string, editing: Dict): Promise<void> {
   const type = f.type.value.trim();
   const baseUrl = f.base.value.trim();
   if (!type || !baseUrl) {
     setIndicator(t("web.settings.provider_required"), true);
     return;
   }
-  const body = { type, baseUrl };
+  const body: Dict = { type, baseUrl };
   const label = f.label.value.trim();
   if (label) body.label = label;
   if (mode === "edit") {
@@ -259,7 +287,7 @@ async function submitProviderForm(f, mode, editing) {
   // Empty means "keep the stored key" (the field is never prefilled, only a
   // hint). `"***"` guards password-manager autofill of a masked placeholder.
   if (key && key !== "***") body.apiKey = key;
-  const nums = [
+  const nums: Array<[string, HTMLInputElement, number, number?]> = [
     ["contextWindow", f.ctx, 1024],
     ["priority", f.prio, 0],
     ["rpm", f.rpm, 1],
@@ -269,7 +297,7 @@ async function submitProviderForm(f, mode, editing) {
     ["baseDelay", f.retryBase, 0, 60000],
     ["maxDelay", f.retryMaxD, 0, 300000],
   ];
-  const retry = {};
+  const retry: Dict = {};
   for (const entry of nums) {
     const raw = entry[1].value.trim();
     if (!raw) continue;
@@ -286,15 +314,15 @@ async function submitProviderForm(f, mode, editing) {
     }
   }
   if (Object.keys(retry).length) body.retry = retry;
-  const cache = {};
+  const cache: Dict = {};
   if (f.cacheMech.value) cache.mechanism = f.cacheMech.value;
   if (f.cacheReport.value) cache.report = f.cacheReport.value;
-  const prevCache = (editing && editing.cache) || {};
-  f.cacheFlags.forEach(({ key, box }) => {
+  const prevCache: Dict = (editing && editing.cache) || {};
+  f.cacheFlags.forEach(({ key, box }: CacheFlag) => {
     if (box.checked !== (prevCache[key] === true)) cache[key] = box.checked;
   });
   if (Object.keys(cache).length) body.cache = cache;
-  const r = await api("/api/providers", { method: "POST", body });
+  const r = await api<Dict>("/api/providers", { method: "POST", body });
   if (r.ok && r.data && r.data.ok) {
     const persisted = r.data.persisted !== false;
     setIndicator(persisted ? t("web.settings.saved") : r.data.warning || "not persisted", !persisted);
@@ -310,9 +338,9 @@ async function submitProviderForm(f, mode, editing) {
   }
 }
 
-function providerForm() {
+function providerForm(): HTMLElement {
   const mode = (settings.providerForm && settings.providerForm.mode) || "add";
-  const editing = (settings.providerForm && settings.providerForm.entry) || {};
+  const editing: Dict = (settings.providerForm && settings.providerForm.entry) || {};
   const box = el("div", "pform");
 
   const { presets, sel: presetSel, node: presetNode } = providerPresetField(editing);
@@ -332,20 +360,20 @@ function providerForm() {
 
   const { node: advNode, ...advF } = providerAdvancedFields(editing);
   box.appendChild(advNode);
-  const f = { type: fType, label: fLabel, base: fBase, key: fKey, ...advF };
+  const f: Dict = { type: fType, label: fLabel, base: fBase, key: fKey, ...advF };
 
   const actions = el("div", "pform-actions");
-  actions.appendChild(link(t("web.settings.save"), "", () => submitProviderForm(f, mode, editing)));
+  actions.appendChild(link(t("web.settings.save"), "", () => void submitProviderForm(f, mode, editing)));
   actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeProviderForm()));
   box.appendChild(actions);
   return box;
 }
 
-export function renderModelPanel() {
-  const container = document.querySelector('[data-panel="model"]');
+export function renderModelPanel(): void {
+  const container = document.querySelector<HTMLElement>('[data-panel="model"]');
   if (!container) return;
   container.textContent = "";
-  const cfg = settings.config || {};
+  const cfg: Dict = settings.config || {};
 
   // --- Model section ---
   const modelSec = settingsSection("web.settings.section_models");
@@ -358,7 +386,7 @@ export function renderModelPanel() {
   const draw = () => {
     list.textContent = "";
     const q = search.value.trim().toLowerCase();
-    const models = settings.models.filter((m) => !q || m.toLowerCase().indexOf(q) !== -1);
+    const models = settings.models.filter((m) => !q || String(m).toLowerCase().indexOf(q) !== -1);
     if (!models.length) {
       list.appendChild(el("div", "placeholder", settings.models.length ? t("web.settings.no_matches") : t("web.settings.no_models")));
       return;
@@ -366,13 +394,13 @@ export function renderModelPanel() {
     models.forEach((m) => {
       const active = m === cfg.model;
       const item = el("div", "model-item" + (active ? " active" : ""));
-      const nameEl = el("span", "m-name", m);
-      nameEl.title = m;
+      const nameEl = el("span", "m-name", String(m));
+      nameEl.title = String(m);
       item.appendChild(nameEl);
       if (active) {
         item.appendChild(el("span", "m-meta", contextLabel() + " · " + t("web.settings.active_check")));
       } else {
-        item.appendChild(chip(t("web.settings.use"), "", () => postConfig("model", m, true)));
+        item.appendChild(chip(t("web.settings.use"), "", () => void postConfig("model", m, true)));
       }
       list.appendChild(item);
     });
@@ -409,7 +437,7 @@ export function renderModelPanel() {
     if (meta) item.appendChild(el("div", "p-meta", meta));
     const actions = el("div", "p-actions");
     if (!active) {
-      actions.appendChild(chip(t("web.settings.provider_make_active"), "", () => postConfig("provider.active", name, true)));
+      actions.appendChild(chip(t("web.settings.provider_make_active"), "", () => void postConfig("provider.active", name, true)));
     }
     actions.appendChild(
       chip(t("web.settings.edit"), "", () => openProviderForm("edit", entry)),
@@ -417,7 +445,7 @@ export function renderModelPanel() {
     if (!active) {
       actions.appendChild(
         chip(t("web.settings.delete"), "danger", async () => {
-          const r = await api("/api/providers/" + encodeURIComponent(name), { method: "DELETE" });
+          const r = await api<Dict>("/api/providers/" + encodeURIComponent(name), { method: "DELETE" });
           if (r.ok && r.data && r.data.ok) {
             setIndicator(t("web.settings.saved"));
             await loadProviders();
@@ -438,14 +466,14 @@ export function renderModelPanel() {
   renderSections("model", PANEL_SECTIONS.model || []);
 }
 
-export async function loadProviders() {
-  const r = await api("/api/providers");
+export async function loadProviders(): Promise<void> {
+  const r = await api<Dict>("/api/providers");
   settings.providers = r.ok && r.data && Array.isArray(r.data.entries) ? r.data : undefined;
   settings.providerPresets = r.ok && r.data && Array.isArray(r.data.presets) ? r.data.presets : [];
   renderModelPanel();
 }
 
-function openProviderForm(mode, entry) {
+function openProviderForm(mode: string, entry: Dict | null): void {
   settings.providerForm = { mode, entry: entry || null };
   openSubDialog(
     t(mode === "edit" ? "web.settings.provider_edit_title" : "web.settings.provider_add_title"),
@@ -454,7 +482,7 @@ function openProviderForm(mode, entry) {
   );
 }
 
-function closeProviderForm() {
+function closeProviderForm(): void {
   settings.providerForm = null;
   closeSubDialog();
 }

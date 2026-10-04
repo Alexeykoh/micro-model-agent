@@ -4,11 +4,17 @@
 // `checkboxes`/`table`) live in `./editors.js`. Never uses innerHTML — all user
 // or config data goes through `textContent` (XSS rule).
 import { el, makeToggle } from "../dom.js";
+import type { Dict } from "../core/store/types.js";
 import { tagsEditor, checkboxEditor, tableEditor } from "./editors.js";
+
+export interface JsonValidation {
+  ok: boolean;
+  error?: string;
+}
 
 // Validate raw JSON text without posting. Empty input is invalid (the backend
 // would reject it too); the caller shows `error` inline and skips the POST.
-export function validateJson(text) {
+export function validateJson(text: unknown): JsonValidation {
   const raw = String(text == null ? "" : text).trim();
   if (!raw) return { ok: false, error: "required" };
   try {
@@ -19,7 +25,7 @@ export function validateJson(text) {
   }
 }
 
-function textInput(label, value) {
+function textInput(label: string, value: string): HTMLInputElement {
   const input = el("input");
   input.setAttribute("aria-label", label);
   input.value = value;
@@ -30,7 +36,7 @@ function textInput(label, value) {
 // `value`: current config value at the key (`getPath` result).
 // `ctx`: { label, enumLabel(v), post(rawValue) } — `post` is `settings.js`
 // `postConfig`, injected so this module never touches the API directly.
-export function controlFor(def, value, ctx) {
+export function controlFor(def: Dict, value: unknown, ctx: Dict): HTMLElement {
   if (def.readOnly) {
     const ro = el("span", "val dim", value == null ? "—" : String(value));
     if (value != null) ro.title = String(value);
@@ -45,7 +51,7 @@ export function controlFor(def, value, ctx) {
   if (def.valueType === "enum") {
     const sel = el("select");
     sel.setAttribute("aria-label", ctx.label);
-    (def.enum || []).forEach((v) => {
+    (def.enum || []).forEach((v: string) => {
       const o = el("option", "", ctx.enumLabel(v));
       o.value = v;
       if (v === value) o.selected = true;
@@ -124,7 +130,7 @@ export function controlFor(def, value, ctx) {
 // Panel ids match `data-p` / `data-panel` in index.html. Panels with custom
 // bodies (model, ui, memory, skills, plugins) render their own content first
 // and then these sections.
-export const PANEL_SECTIONS = {
+export const PANEL_SECTIONS: Record<string, Dict[]> = {
   general: [
     { id: "general.interface", titleKey: "web.settings.sec.general.interface", keys: ["locale", "ui.verbosity"] },
     { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan"] },
@@ -188,8 +194,8 @@ export const PANEL_SECTIONS = {
 };
 
 /** Flat `key -> panelId` index (search + "where does this setting live"). */
-export function keyToPanel() {
-  const map = new Map();
+export function keyToPanel(): Map<string, string> {
+  const map = new Map<string, string>();
   for (const [panel, sections] of Object.entries(PANEL_SECTIONS)) {
     for (const section of sections) {
       for (const key of section.keys) map.set(key, panel);

@@ -6,6 +6,7 @@ import { el, icon, link, inlineTextNodes, makeToggle } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { settings, getPath, THEME_KEY } from "../store.js";
+import type { Dict } from "../core/store/types.js";
 import { setIndicator } from "../dialog.js";
 import { controlFor, PANEL_SECTIONS } from "./controls.js";
 import { postConfig } from "./write.js";
@@ -14,7 +15,7 @@ import { mcpLiteralField, providerInput, providerSelect, providerCheck } from ".
 
 // Localized label for a registry key: `config.key.<canonical>`, falling back
 // to the raw key when no translation exists (so a new key is never blank).
-export function configLabel(def) {
+export function configLabel(def: Dict): string {
   const k = "config.key." + def.key;
   const tr = t(k);
   return tr === k ? def.key : tr;
@@ -22,17 +23,17 @@ export function configLabel(def) {
 
 // Localized enum value: `config.enum.<value>`, falling back to the raw value.
 // The raw value is still what gets POSTed — only the label is translated.
-export function enumLabel(v) {
+export function enumLabel(v: string): string {
   const k = "config.enum." + v;
   const tr = t(k);
   return tr === k ? v : tr;
 }
 
-export function defFor(key) {
+export function defFor(key: string): Dict | null {
   return settings.registry.find((d) => d.key === key) || null;
 }
 
-export function row(label, control, desc) {
+export function row(label: string, control: string | Node | null, desc?: string): HTMLElement {
   const r = el("div", "row");
   const left = el("div", "row-label");
   left.appendChild(el("span", "row-name", label));
@@ -48,7 +49,7 @@ export function row(label, control, desc) {
   return r;
 }
 
-export function descFor(key) {
+export function descFor(key: string): string {
   const k = "config.desc." + key;
   const d = t(k);
   return d === k ? "" : d;
@@ -56,7 +57,7 @@ export function descFor(key) {
 
 // Generic per-type control (`settings/controls.js`): bool toggle, enum
 // select, int/share/list/json inputs. `post` funnels through `postConfig`.
-function configControl(def, key) {
+function configControl(def: Dict, key: string): HTMLElement {
   // Read-only keys carry their resolved value in the registry entry: the getter
   // is authoritative and may differ from the raw config field (`version`).
   const value =
@@ -69,19 +70,19 @@ function configControl(def, key) {
     label: configLabel(def),
     enumLabel,
     emptyLabel: t("config.enum.none"),
-    fieldLabel: (k) => {
+    fieldLabel: (k: string) => {
       const kk = "config.field." + k;
       const tr = t(kk);
       return tr === kk ? k : tr;
     },
-    post: (v) => postConfig(key, v, false),
+    post: (v: unknown) => void postConfig(key, v, false),
   });
 }
 
 // One titled section card: uppercase title + optional one-line explanation,
 // then its setting rows. Titles come from PANEL_SECTIONS so a section name can
 // never drift from the keys under it.
-function sectionCard(section) {
+function sectionCard(section: Dict): HTMLElement {
   const card = el("div", "settings-section");
   const head = el("div", "sec-head");
   head.appendChild(el("span", "sec-title", t(section.titleKey)));
@@ -91,7 +92,7 @@ function sectionCard(section) {
     if (d !== section.descKey) card.appendChild(el("div", "sec-desc", d));
   }
   const body = el("div", "sec-body");
-  section.keys.forEach((key) => {
+  section.keys.forEach((key: string) => {
     const def = defFor(key);
     if (!def) return;
     body.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
@@ -102,13 +103,13 @@ function sectionCard(section) {
 
 // Render the PANEL_SECTIONS table for a panel. Panels with custom bodies call
 // this after their own content so bespoke widgets stay on top.
-export function renderSections(panel, sections) {
+export function renderSections(panel: string, sections: Dict[]): void {
   const container = document.querySelector('[data-panel="' + panel + '"]');
   if (!container) return;
   sections.forEach((section) => container.appendChild(sectionCard(section)));
 }
 
-export function renderPanel(panel) {
+export function renderPanel(panel: string): void {
   const container = document.querySelector('[data-panel="' + panel + '"]');
   if (!container) return;
   container.textContent = "";
@@ -116,7 +117,7 @@ export function renderPanel(panel) {
 }
 
 // A titled group inside a settings panel (models / providers).
-export function settingsSection(titleKey) {
+export function settingsSection(titleKey: string): { el: HTMLElement; head: HTMLElement; body: HTMLElement } {
   const sec = el("div", "settings-section");
   const head = el("div", "sec-head");
   head.appendChild(el("span", "sec-title", t(titleKey)));
@@ -127,21 +128,21 @@ export function settingsSection(titleKey) {
 }
 
 // Compact action control used inside list items (use / edit / delete).
-export function chip(label, cls, onClick) {
+export function chip(label: string, cls: string | null, onClick: (e: MouseEvent) => void): HTMLButtonElement {
   const b = el("button", "chip" + (cls ? " " + cls : ""), label);
   b.type = "button";
   b.addEventListener("click", onClick);
   return b;
 }
 
-export function placeholderFor(data, empty) {
+export function placeholderFor(data: unknown, empty: string): HTMLElement {
   const d = el("div", "placeholder");
   if (data === undefined) d.textContent = t("web.settings.loading");
   else d.textContent = empty;
   return d;
 }
 
-export function groupHeader(label, count) {
+export function groupHeader(label: string, count?: number | null): HTMLElement {
   const head = el("div", "row");
   head.appendChild(el("span", "val accent", label));
   if (count != null) head.appendChild(el("span", "val dim", String(count)));
@@ -149,12 +150,12 @@ export function groupHeader(label, count) {
 }
 
 // --- UI panel (theme, browser-local) -------------------------------------
-export function currentTheme() {
+export function currentTheme(): string {
   return localStorage.getItem(THEME_KEY) || "auto";
 }
 
-function renderUiPanel() {
-  const container = document.querySelector('[data-panel="ui"]');
+function renderUiPanel(): void {
+  const container = document.querySelector<HTMLElement>('[data-panel="ui"]');
   if (!container) return;
   container.textContent = "";
   const seg = el("span", "seg");
@@ -163,7 +164,7 @@ function renderUiPanel() {
     b.type = "button";
     b.setAttribute("aria-pressed", currentTheme() === theme ? "true" : "false");
     b.addEventListener("click", () => {
-      seg.querySelectorAll("button").forEach((x) => {
+      seg.querySelectorAll<HTMLElement>("button").forEach((x) => {
         x.classList.remove("on");
         x.setAttribute("aria-pressed", "false");
       });
@@ -188,7 +189,7 @@ function renderUiPanel() {
   renderSections("ui", PANEL_SECTIONS.ui || []);
 }
 
-export function applyTheme(theme) {
+export function applyTheme(theme: string): void {
   localStorage.setItem(THEME_KEY, theme);
   const light = theme === "light" || (theme === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
   document.body.classList.toggle("light", !!light);
@@ -202,8 +203,8 @@ if (window.matchMedia) {
 }
 
 // --- Security panel ------------------------------------------------------
-function renderSecurityPanel() {
-  const container = document.querySelector('[data-panel="security"]');
+function renderSecurityPanel(): void {
+  const container = document.querySelector<HTMLElement>('[data-panel="security"]');
   if (!container) return;
   container.textContent = "";
   renderSections("security", PANEL_SECTIONS.security || []);
@@ -227,7 +228,7 @@ function renderSecurityPanel() {
 const MEMORY_CATEGORIES = ["conventions", "decisions", "errors", "facts"];
 
 /** Nested dialog: pick a memory category and write the note. */
-function openMemoryForm() {
+function openMemoryForm(): void {
   const box = el("div", "pform");
   const grid = el("div", "pform-grid");
   const catSel = el("select");
@@ -249,7 +250,7 @@ function openMemoryForm() {
         area.focus();
         return;
       }
-      const r = await api("/api/memory", { method: "POST", body: { category: catSel.value, text } });
+      const r = await api<Dict>("/api/memory", { method: "POST", body: { category: catSel.value, text } });
       if (r.ok && r.data && r.data.ok) {
         closeSubDialog();
         await loadMemory();
@@ -263,8 +264,8 @@ function openMemoryForm() {
   openSubDialog(t("web.settings.memory_add_title"), box, () => renderMemoryPanel());
 }
 
-function renderMemoryPanel() {
-  const container = document.querySelector('[data-panel="memory"]');
+function renderMemoryPanel(): void {
+  const container = document.querySelector<HTMLElement>('[data-panel="memory"]');
   if (!container) return;
   container.textContent = "";
   if (settings.memory === undefined || settings.memory === null) {
@@ -294,17 +295,17 @@ function renderMemoryPanel() {
   const list = el("div", "settings-list");
   container.appendChild(list);
 
-  const categoryHeader = (label, count) => {
+  const categoryHeader = (label: string, count?: number | null) => {
     const head = el("div", "mem-cat");
     head.appendChild(el("span", "", label));
     if (count != null) head.appendChild(el("span", "n", String(count)));
     return head;
   };
 
-  const entryBlock = (text, onForget) => {
+  const entryBlock = (text: unknown, onForget?: () => void) => {
     const block = el("div", "mem-entry");
     const body = el("span", "mem-text");
-    body.appendChild(inlineTextNodes(text));
+    body.appendChild(inlineTextNodes(String(text == null ? "" : text)));
     body.title = String(text == null ? "" : text);
     block.appendChild(body);
     if (onForget) block.appendChild(link(t("web.settings.forget"), "mem-del", onForget));
@@ -315,14 +316,14 @@ function renderMemoryPanel() {
     list.textContent = "";
     const q = search.value.trim().toLowerCase();
     let any = false;
-    (data.categories || []).forEach((cat) => {
+    (data.categories || []).forEach((cat: Dict) => {
       const entries = (cat.entries || []).filter(
-        (e) => !q || String(e.text).toLowerCase().indexOf(q) !== -1,
+        (e: Dict) => !q || String(e.text).toLowerCase().indexOf(q) !== -1,
       );
       if (!entries.length) return;
       any = true;
       list.appendChild(categoryHeader(cat.name, entries.length));
-      entries.forEach((e) => {
+      entries.forEach((e: Dict) => {
         list.appendChild(
           entryBlock(e.text, async () => {
             const r = await api(
@@ -354,8 +355,8 @@ function renderMemoryPanel() {
 }
 
 // --- Skills panel --------------------------------------------------------
-function renderSkillsPanel() {
-  const container = document.querySelector('[data-panel="skills"]');
+function renderSkillsPanel(): void {
+  const container = document.querySelector<HTMLElement>('[data-panel="skills"]');
   if (!container) return;
   container.textContent = "";
   if (settings.skills === undefined || settings.skills === null) {
@@ -369,7 +370,7 @@ function renderSkillsPanel() {
     return;
   }
   const list = el("div", "settings-list");
-  settings.skills.forEach((s) => {
+  settings.skills.forEach((s: Dict) => {
     const item = el("div", "skill-item");
     const head = el("div", "skill-head");
     head.appendChild(el("span", s.enabled ? "g" : "dim", s.enabled ? "✓" : "○"));
@@ -389,8 +390,8 @@ function renderSkillsPanel() {
 }
 
 // --- Plugins / MCP / LSP panel -------------------------------------------
-function renderPluginsPanel() {
-  const container = document.querySelector('[data-panel="plugins"]');
+function renderPluginsPanel(): void {
+  const container = document.querySelector<HTMLElement>('[data-panel="plugins"]');
   if (!container) return;
   container.textContent = "";
   if (settings.pluginsData === undefined || settings.pluginsData === null) {
@@ -405,7 +406,7 @@ function renderPluginsPanel() {
     empty.textContent = t("web.settings.no_plugins");
     list.appendChild(empty);
   }
-  (data.plugins || []).forEach((p) => {
+  (data.plugins || []).forEach((p: Dict) => {
     const line = el("div", "list-line");
     line.appendChild(el("span", "g", "✓"));
     const nameEl = el("span", "name", p.name);
@@ -437,11 +438,11 @@ function renderPluginsPanel() {
     empty.textContent = t("web.settings.no_mcp");
     list.appendChild(empty);
   }
-  (data.mcp || []).forEach((m) => {
+  (data.mcp || []).forEach((m: Dict) => {
     const line = el("div", "list-line");
     const on = m.status !== "disabled";
     const toggle = makeToggle(on, (next) => {
-      api("/api/mcp/" + encodeURIComponent(m.id || m.name), {
+      void api<Dict>("/api/mcp/" + encodeURIComponent(m.id || m.name), {
         method: "POST",
         body: { enabled: next },
       }).then(async (r) => {
@@ -462,7 +463,7 @@ function renderPluginsPanel() {
     line.appendChild(el("span", "st", m.status || "—"));
     line.appendChild(chip(t("web.settings.edit"), "", () => openMcpForm("edit", m)));
     line.appendChild(chip(t("web.settings.delete"), "danger", async () => {
-      const r = await api("/api/mcp/" + encodeURIComponent(m.id || m.name), { method: "DELETE" });
+      const r = await api<Dict>("/api/mcp/" + encodeURIComponent(m.id || m.name), { method: "DELETE" });
       if (r.ok && r.data && r.data.ok) {
         setIndicator(t("web.settings.mcp_saved"), false);
         await loadPlugins();
@@ -486,9 +487,9 @@ function renderPluginsPanel() {
 // Inline MCP add/edit form. Secrets are never echoed by the API, so env/headers
 // start blank — leaving them blank on edit keeps the stored values (patch
 // semantics: absent keys are not touched).
-function mcpForm() {
+function mcpForm(): HTMLElement {
   const mode = (settings.mcpForm && settings.mcpForm.mode) || "add";
-  const editing = (settings.mcpForm && settings.mcpForm.entry) || {};
+  const editing: Dict = (settings.mcpForm && settings.mcpForm.entry) || {};
   const box = el("div", "pform");
   const grid = el("div", "pform-grid");
   const fName = providerInput(editing.name || "", "text", "my-server");
@@ -517,16 +518,16 @@ function mcpForm() {
   adv.appendChild(mcpLiteralField("headers (JSON)", fHeaders));
   adv.appendChild(mcpLiteralField("enabled", fEnabled));
   box.appendChild(adv);
-  const f = { name: fName, transport: fTransport, command: fCommand, url: fUrl, args: fArgs, timeout: fTimeout, env: fEnv, headers: fHeaders, enabled: fEnabled };
+  const f: Dict = { name: fName, transport: fTransport, command: fCommand, url: fUrl, args: fArgs, timeout: fTimeout, env: fEnv, headers: fHeaders, enabled: fEnabled };
   const actions = el("div", "pform-actions");
-  actions.appendChild(link(t("web.settings.save"), "", () => submitMcpForm(f, mode, editing)));
+  actions.appendChild(link(t("web.settings.save"), "", () => void submitMcpForm(f, mode, editing)));
   actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeSubDialog()));
   box.appendChild(actions);
   return box;
 }
 
 /** Open the MCP add/edit nested dialog. */
-function openMcpForm(mode, entry) {
+function openMcpForm(mode: string, entry: Dict | null): void {
   settings.mcpForm = { mode, entry: entry || null };
   openSubDialog(
     t(mode === "edit" ? "web.settings.mcp_edit_title" : "web.settings.mcp_add"),
@@ -539,10 +540,10 @@ function openMcpForm(mode, entry) {
   );
 }
 
-function parseJsonMap(raw) {
+function parseJsonMap(raw: string): { present: boolean; value: Dict | null } {
   const text = raw.trim();
   if (!text) return { present: false, value: null };
-  let parsed = null;
+  let parsed: unknown = null;
   try {
     parsed = JSON.parse(text);
   } catch {
@@ -550,10 +551,10 @@ function parseJsonMap(raw) {
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { present: true, value: null };
   if (!Object.values(parsed).every((v) => typeof v === "string")) return { present: true, value: null };
-  return { present: true, value: parsed };
+  return { present: true, value: parsed as Dict };
 }
 
-async function submitMcpForm(f, mode, editing) {
+async function submitMcpForm(f: Dict, mode: string, editing: Dict): Promise<void> {
   const name = f.name.value.trim();
   const transport = f.transport.value || "stdio";
   const command = f.command.value.trim();
@@ -562,12 +563,12 @@ async function submitMcpForm(f, mode, editing) {
     setIndicator(t("web.settings.mcp_required"), true);
     return;
   }
-  const body = { name, transport };
+  const body: Dict = { name, transport };
   if (command) body.command = command;
   if (url) body.url = url;
   const argsRaw = f.args.value.trim();
   if (argsRaw) {
-    let args = null;
+    let args: unknown = null;
     try {
       args = JSON.parse(argsRaw);
     } catch {
@@ -598,7 +599,7 @@ async function submitMcpForm(f, mode, editing) {
   }
   body.enabled = f.enabled.checked;
   const target = mode === "edit" ? "/api/mcp/" + encodeURIComponent(editing.id || editing.name) : "/api/mcp";
-  const r = await api(target, { method: mode === "edit" ? "PUT" : "POST", body });
+  const r = await api<Dict>(target, { method: mode === "edit" ? "PUT" : "POST", body });
   if (r.ok && r.data && r.data.ok) {
     setIndicator(t("web.settings.mcp_saved"), false);
     closeSubDialog();
@@ -607,7 +608,7 @@ async function submitMcpForm(f, mode, editing) {
   }
 }
 
-function renderLspSection(list) {
+function renderLspSection(list: HTMLElement): void {
   const servers = settings.lsp;
   list.appendChild(groupHeader(t("web.settings.lsp_servers"), Array.isArray(servers) ? servers.length : null));
   if (servers === undefined || servers === null) {
@@ -619,7 +620,7 @@ function renderLspSection(list) {
     empty.textContent = t("web.settings.no_lsp");
     list.appendChild(empty);
   }
-  servers.forEach((entry) => {
+  servers.forEach((entry: Dict) => {
     const line = el("div", "list-line");
     line.appendChild(el("span", entry.enabled ? "g" : "dim", entry.enabled ? "✓" : "○"));
     const nameEl = el("span", "name", entry.lang);
@@ -639,7 +640,7 @@ function renderLspSection(list) {
 }
 
 /** Open the LSP server edit nested dialog. */
-function openLspForm(entry) {
+function openLspForm(entry: Dict): void {
   settings.lspForm = { lang: entry.lang, entry };
   openSubDialog(entry.lang, lspForm(), () => {
     settings.lspForm = null;
@@ -649,8 +650,8 @@ function openLspForm(entry) {
 }
 
 // LSP server edit form (enabled toggle, timeout, command, args JSON).
-function lspForm() {
-  const editing = (settings.lspForm && settings.lspForm.entry) || {};
+function lspForm(): HTMLElement {
+  const editing: Dict = (settings.lspForm && settings.lspForm.entry) || {};
   const lang = (settings.lspForm && settings.lspForm.lang) || editing.lang || "";
   const box = el("div", "pform");
   const grid = el("div", "pform-grid");
@@ -667,7 +668,7 @@ function lspForm() {
   box.appendChild(mcpLiteralField("args (JSON)", fArgs));
   const actions = el("div", "pform-actions");
   actions.appendChild(link(t("web.settings.save"), "", async () => {
-    const body = {};
+    const body: Dict = {};
     const command = fCommand.value.trim();
     if (command) body.command = command;
     const timeoutRaw = fTimeout.value.trim();
@@ -681,7 +682,7 @@ function lspForm() {
     }
     const argsRaw = fArgs.value.trim();
     if (argsRaw) {
-      let args = null;
+      let args: unknown = null;
       try {
         args = JSON.parse(argsRaw);
       } catch {
@@ -694,7 +695,7 @@ function lspForm() {
       body.args = args;
     }
     body.enabled = fEnabled.checked;
-    const r = await api("/api/lsp/" + encodeURIComponent(lang), { method: "PUT", body });
+    const r = await api<Dict>("/api/lsp/" + encodeURIComponent(lang), { method: "PUT", body });
     if (r.ok && r.data && r.data.ok) {
       setIndicator(t("web.settings.mcp_saved"), false);
       closeSubDialog();
@@ -708,26 +709,26 @@ function lspForm() {
 }
 
 // --- loaders -------------------------------------------------------------
-export async function loadLsp() {
-  const r = await api("/api/lsp");
+export async function loadLsp(): Promise<void> {
+  const r = await api<{ servers?: Dict[] }>("/api/lsp");
   settings.lsp = r.ok && r.data && Array.isArray(r.data.servers) ? r.data.servers : null;
   renderPluginsPanel();
 }
 
-export async function loadMemory() {
-  const r = await api("/api/memory");
+export async function loadMemory(): Promise<void> {
+  const r = await api<Dict>("/api/memory");
   settings.memory = r.ok && r.data ? r.data : null;
   renderMemoryPanel();
 }
 
-export async function loadSkills() {
-  const r = await api("/api/skills");
+export async function loadSkills(): Promise<void> {
+  const r = await api<{ skills?: Dict[] }>("/api/skills");
   settings.skills = r.ok && r.data && Array.isArray(r.data.skills) ? r.data.skills : null;
   renderSkillsPanel();
 }
 
-export async function loadPlugins() {
-  const r = await api("/api/plugins");
+export async function loadPlugins(): Promise<void> {
+  const r = await api<Dict>("/api/plugins");
   settings.pluginsData =
     r.ok && r.data
       ? { plugins: r.data.plugins || [], mcp: r.data.mcp || [] }

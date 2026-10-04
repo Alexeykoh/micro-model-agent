@@ -8,9 +8,9 @@ export interface SettingsSlice {
   registry: Dict[];
   webToken: string | null;
   models: Dict[];
-  memory: Dict | undefined;
-  skills: Dict | undefined;
-  pluginsData: Dict | undefined;
+  memory: Dict | null | undefined;
+  skills: Dict[] | null | undefined;
+  pluginsData: Dict | null | undefined;
   providers: Dict | undefined;
   providerPresets: Dict[];
   // biome-ignore lint/suspicious/noExplicitAny: opaque open-form state.

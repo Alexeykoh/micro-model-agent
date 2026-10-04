@@ -4,38 +4,48 @@
 import { el, icon } from "../dom.js";
 import { t } from "../i18n.js";
 import { settings } from "../store.js";
+import type { Dict } from "../core/store/types.js";
 import { keyToPanel } from "./controls.js";
 import { configLabel, descFor, defFor } from "./panels.js";
 import { selectSettingsPanel } from "./modal.js";
 
 const setMenuEl = document.getElementById("setMenu");
-const setSearch = document.getElementById("setSearch");
+const setSearch = document.getElementById("setSearch") as HTMLInputElement | null;
 const setSearchClear = document.getElementById("setSearchClear");
 const setSearchIcon = document.getElementById("setSearchIcon");
 const setResults = document.getElementById("setResults");
 if (setSearchIcon) setSearchIcon.appendChild(icon("search", "set-search-svg"));
 
-function searchIndex() {
+interface SearchEntry {
+  def: Dict;
+  panel: string;
+  label: string;
+  desc: string;
+  haystack: string;
+}
+
+function searchIndex(): SearchEntry[] {
   const owner = keyToPanel();
   return (settings.registry || [])
     .filter((def) => def && typeof def.key === "string")
     .map((def) => {
       const label = configLabel(def);
+      const desc = descFor(def.key);
       return {
         def,
-        panel: owner.get(def.key) || null,
+        panel: owner.get(def.key) || "",
         label,
-        desc: descFor(def.key),
-        haystack: `${label} ${def.key} ${descFor(def.key)}`.toLowerCase(),
+        desc,
+        haystack: `${label} ${def.key} ${desc}`.toLowerCase(),
       };
     })
     .filter((e) => e.panel);
 }
 
-let searchRows = [];
+let searchRows: SearchEntry[] = [];
 let searchCursor = -1;
 
-function closeSearch() {
+function closeSearch(): void {
   if (setSearch) setSearch.value = "";
   if (setResults) {
     setResults.hidden = true;
@@ -47,7 +57,7 @@ function closeSearch() {
   searchCursor = -1;
 }
 
-function flashRow(panel, key) {
+function flashRow(panel: string, key: string): void {
   const panelEl = document.getElementById("p-" + panel);
   if (!panelEl) return;
   const rows = Array.from(panelEl.querySelectorAll(".row"));
@@ -64,14 +74,14 @@ function flashRow(panel, key) {
   setTimeout(() => target.classList.remove("row-flash"), 1200);
 }
 
-function pickResult(entry) {
+function pickResult(entry: SearchEntry | undefined): void {
   if (!entry || !entry.panel) return;
   closeSearch();
   selectSettingsPanel(entry.panel);
   flashRow(entry.panel, entry.def.key);
 }
 
-function renderResults(query) {
+function renderResults(query: string): void {
   if (!setResults) return;
   const q = query.trim().toLowerCase();
   if (!q) {
@@ -100,12 +110,12 @@ function renderResults(query) {
     setResults.appendChild(item);
   });
   setResults.hidden = false;
-  setMenuEl.hidden = true;
-  setSearchClear.hidden = false;
+  if (setMenuEl) setMenuEl.hidden = true;
+  if (setSearchClear) setSearchClear.hidden = false;
 }
 
-function moveSearchCursor(delta) {
-  if (!searchRows.length) return;
+function moveSearchCursor(delta: number): void {
+  if (!searchRows.length || !setResults) return;
   searchCursor = (searchCursor + delta + searchRows.length) % searchRows.length;
   Array.from(setResults.children).forEach((node, i) => node.classList.toggle("on", i === searchCursor));
   const active = setResults.children[searchCursor];

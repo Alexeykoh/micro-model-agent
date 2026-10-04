@@ -4,7 +4,7 @@ import { el } from "../dom.js";
 import { t } from "../i18n.js";
 
 /** Labelled field wrapper (label above control). */
-export function pfield(labelKey, input) {
+export function pfield(labelKey: string, input: HTMLElement): HTMLElement {
   const f = el("div", "pform-field");
   f.appendChild(el("label", "", t(labelKey)));
   input.setAttribute("aria-label", t(labelKey));
@@ -13,7 +13,7 @@ export function pfield(labelKey, input) {
 }
 
 /** Plain text/number/password input with optional placeholder. */
-export function providerInput(value, type, placeholder) {
+export function providerInput(value: unknown, type?: string, placeholder?: string): HTMLInputElement {
   const input = el("input");
   input.type = type || "text";
   if (placeholder) input.placeholder = placeholder;
@@ -22,7 +22,7 @@ export function providerInput(value, type, placeholder) {
 }
 
 /** `<select>` with a leading "—" option; keeps unknown stored values selectable. */
-export function providerSelect(options, value) {
+export function providerSelect(options: string[], value: string | null | undefined): HTMLSelectElement {
   const sel = el("select");
   const none = el("option", "", "—");
   none.value = "";
@@ -48,7 +48,7 @@ export function providerSelect(options, value) {
 }
 
 /** Checkbox reflecting a boolean config value. */
-export function providerCheck(value) {
+export function providerCheck(value: unknown): HTMLInputElement {
   const input = el("input");
   input.type = "checkbox";
   input.checked = value === true;
@@ -56,7 +56,7 @@ export function providerCheck(value) {
 }
 
 /** Labelled field whose label is a literal string (not an i18n key). */
-export function mcpLiteralField(label, input) {
+export function mcpLiteralField(label: string, input: HTMLElement): HTMLElement {
   const f = el("div", "pform-field");
   const lab = el("label", "", label);
   f.appendChild(lab);

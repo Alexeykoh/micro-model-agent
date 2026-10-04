@@ -4,10 +4,11 @@
 // Never uses innerHTML — all user or config data goes through `textContent`.
 import { el } from "../dom.js";
 import { t } from "../i18n.js";
+import type { Dict } from "../core/store/types.js";
 
 /** String chips with per-item remove and an inline "add" field. */
-export function tagsEditor(value, ctx, editor) {
-  const items = Array.isArray(value) ? value.map(String) : [];
+export function tagsEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElement {
+  const items: string[] = Array.isArray(value) ? value.map(String) : [];
   const wrap = el("div", "tagsctl ctl-block");
   const list = el("div", "tags-list");
   const commit = () => ctx.post(JSON.stringify(items));
@@ -67,10 +68,10 @@ export function tagsEditor(value, ctx, editor) {
 }
 
 /** Multiselect over a fixed option list (an empty selection = all). */
-export function checkboxEditor(value, ctx, editor) {
-  const selected = new Set(Array.isArray(value) ? value.map(String) : []);
+export function checkboxEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElement {
+  const selected = new Set<string>(Array.isArray(value) ? value.map(String) : []);
   const wrap = el("div", "checksctl ctl-block");
-  (editor.options || []).forEach((opt) => {
+  (editor.options || []).forEach((opt: string) => {
     const label = el("label", "check-line");
     const box = el("input");
     box.type = "checkbox";
@@ -87,20 +88,32 @@ export function checkboxEditor(value, ctx, editor) {
   return wrap;
 }
 
+interface TableRow {
+  name: string;
+  val: Dict;
+  error: string;
+}
+
+interface BuildResult {
+  ok: boolean;
+  reason?: string;
+  value?: Dict;
+}
+
 /** Record editor: one row per key, typed columns, add/remove.
  *
  * Rows are held locally and the whole record is validated client-side before
  * posting, so a half-filled new row never round-trips to the server (which
  * would reject the object with a generic "invalid"). Nothing is posted until
  * the record satisfies the required columns. */
-export function tableEditor(value, ctx, editor) {
-  const columns = editor.columns || [];
+export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElement {
+  const columns: Dict[] = editor.columns || [];
   const keyCol = columns[0];
   const rest = columns.slice(1);
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const rows = Object.entries(source).map(([name, val]) => ({
+  const source: Dict = value && typeof value === "object" && !Array.isArray(value) ? (value as Dict) : {};
+  const rows: TableRow[] = Object.entries(source).map(([name, val]) => ({
     name,
-    val: val && typeof val === "object" ? { ...val } : {},
+    val: val && typeof val === "object" ? { ...(val as Dict) } : {},
     error: "",
   }));
   const wrap = el("div", "tablectl ctl-block");
@@ -111,16 +124,17 @@ export function tableEditor(value, ctx, editor) {
   const error = el("div", "json-err");
   error.hidden = true;
 
-  const colIsArray = (col) => col.array === true;
-  const isBlank = (v) => v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
+  const colIsArray = (col: Dict) => col.array === true;
+  const isBlank = (v: unknown) =>
+    v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
 
   /** Build the record; empty optional values are dropped. Returns null + reason. */
-  const build = () => {
-    const out = {};
+  const build = (): BuildResult => {
+    const out: Dict = {};
     for (const row of rows) {
       if (!row.name) return { ok: false, reason: "empty name" };
       if (out[row.name] !== undefined) return { ok: false, reason: `duplicate: ${row.name}` };
-      const entry = {};
+      const entry: Dict = {};
       for (const col of rest) {
         const v = row.val[col.key];
         if (col.optional && isBlank(v)) continue;
@@ -144,7 +158,7 @@ export function tableEditor(value, ctx, editor) {
     const built = build();
     if (!built.ok) {
       error.hidden = false;
-      error.textContent = t("web.settings.table_invalid", { field: built.reason });
+      error.textContent = t("web.settings.table_invalid", { field: built.reason || "" });
       return false;
     }
     error.hidden = true;
@@ -153,7 +167,7 @@ export function tableEditor(value, ctx, editor) {
     return true;
   };
 
-  const writeValue = (row, col, input) => {
+  const writeValue = (row: TableRow, col: Dict, input: HTMLInputElement) => {
     if (col.type === "bool") {
       if (input.checked) row.val[col.key] = true;
       else delete row.val[col.key];
@@ -168,7 +182,7 @@ export function tableEditor(value, ctx, editor) {
     }
   };
 
-  const inputFor = (row, col) => {
+  const inputFor = (row: TableRow, col: Dict): HTMLInputElement => {
     const input = el("input");
     const v = row.val[col.key];
     if (col.type === "bool") {
@@ -234,12 +248,12 @@ export function tableEditor(value, ctx, editor) {
       nameInput.select();
       return;
     }
-    const seed = {};
+    const seed: Dict = {};
     rows.push({ name, val: seed, error: "" });
     nameInput.value = "";
     draw();
     const last = body.lastElementChild;
-    const first = last && last.querySelectorAll("input")[1];
+    const first = last && last.querySelectorAll<HTMLInputElement>("input")[1];
     if (first) first.focus();
   };
   nameInput.addEventListener("keydown", (e) => {
