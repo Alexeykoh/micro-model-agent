@@ -81,6 +81,22 @@ vendor-грамматики (хотя бы JS/TS/Python). Даёт основу 
 
 ## 5. Верификация
 
-- Тесты: `tests/modules/indexer/{rank,gitignore,symbols,incremental,module-search}.test.ts`.
+- Тесты: `tests/modules/indexer/{rank,gitignore,symbols,incremental,module-search,graph}.test.ts`,
+  `tests/modules/lsp/symbols.test.ts`.
 - `tsc --noEmit`, `tsc -p tsconfig.frontend.json`, `biome` — зелёные.
 - Бенчмарки: `bench-after.ts` (реальный проект + синтетика 3000 файлов).
+
+### Живой прогон (qwen3.5-9b через LM Studio)
+
+Изолированный `MMA_CONFIG_DIR` + песочница из 8 файлов, задача «найди определение
+`computeDiscount`, ответь `путь:строка`»:
+
+| Сборка | Ответ | Итераций | prompt-токенов | Тул-вызовы |
+|---|---|---|---|---|
+| master | `src/billing/discount.ts:3` (неверно) | 2 | 13 195 | `read_file` |
+| ветка (свободный выбор) | `src/billing/discount.ts:6` (верно) | 3 | 20 053 | `project_map find` + `read_file` |
+| ветка (`project_map symbol`) | `src/billing/discount.ts:6` (верно) | 2 | 13 192 | только `project_map symbol` |
+
+Вывод: действие `symbol` даёт точную строку **без чтения тела файла** при том же
+бюджете, что старый `read_file`-путь. Один прогон на сборку — не статистика, но
+интеграция новых действий с реальной моделью подтверждена.
