@@ -222,12 +222,17 @@ bun run mma web --port 8080 --host 127.0.0.1 --no-open
 ```bash
 bun run mma "почини страницу логина"    # Запуск агента
 bun run dev                             # Watch-режим (авто-перезапуск при изменениях)
-bun run build:prod                      # Сборка для публикации
+bun run build:prod                      # Сборка для публикации (clean → bundle → frontend → assets → minify)
 bun test                                # Запуск тестов
-bun run typecheck                       # Проверка типов (tsc --noEmit)
+bun run typecheck                       # Проверка типов бэкенда (tsc --noEmit)
+bun run typecheck:frontend              # Проверка типов фронтенда (tsconfig.frontend.json)
 bun run lint                            # Линтер Biome
-bun run quality                         # typecheck + lint + fallow (dead-code gate)
+bun run quality                         # typecheck + frontend + lint + fallow (dead-code gate)
 ```
+
+> Прод-сборка (`build:prod`) очищает `dist`, выносит зависимости из бандла
+> (`--packages external`) и минифицирует весь `dist` через esbuild. Пакет ~1.7 MB;
+> в рантайме ничего не докачивается — всё приходит с `npm install`.
 
 ---
 

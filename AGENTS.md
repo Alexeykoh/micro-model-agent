@@ -51,9 +51,9 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
   искусственные швы по доменам без выигрыша (решение 2026-09-27, full-config-surfaces).
 - `src/modules/webui/turns.ts` (~330 строк) — оркестрация ходов держит связный цикл
   (слоты→сабмит→дренаж) с per-session состоянием (решение 2026-10-01, web-parallel-sessions).
-  Бывшее исключение `assets/js/tabs.js` (~1000 строк) **снято**: в phase 5 он разрезан на
-  `assets/js/session/{tabs,composer,sessions-menu,cmdk}.js` (DI через `init*`), вместе с
-  `feed.js` и `settings.js` (см. ниже).
+  Бывшее исключение `assets/js/tabs.ts` (~1000 строк) **снято**: в phase 5 он разрезан на
+  `assets/js/session/{tabs,composer,sessions-menu,cmdk}.ts` (DI через `init*`), вместе с
+  `feed.ts` и `settings.ts` (см. ниже).
 
 ## Git & Branching
 
@@ -64,9 +64,9 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 - **Runtime:** Bun + TypeScript (ES2022, NodeNext module)
 - **Testing:** vitest (`bun test`)
 - **Linting:** TypeScript strict mode (`tsc --noEmit`) + Biome (`biome.json`; linter only, formatter off — Prettier remains)
-- **Quality gate:** `bun run quality` = `typecheck` + `lint` + `fallow` (dead-code vs `.fallow-baseline.json`); CI — `.gitea/workflows/quality.yml`; git pre-commit hook — fallow
-- **Dependencies:** commander, js-tiktoken, jsonrepair, picocolors, playwright, string-width, yaml
-- **DevDependencies:** @biomejs/biome, @types/bun, @types/node, @vitest/coverage-v8, prettier, typescript, vitest
+- **Quality gate:** `bun run quality` = `typecheck` + `typecheck:frontend` + `lint` + `fallow` (dead-code vs `.fallow-baseline.json`); CI — `.gitea/workflows/quality.yml`; git pre-commit hook — fallow
+- **Dependencies:** commander, js-tiktoken, jsonrepair, picocolors, playwright, string-width, yaml (all kept external in the CLI bundle)
+- **DevDependencies:** @biomejs/biome, @types/bun, @types/node, @vitest/coverage-v8, esbuild, happy-dom, prettier, typescript, vitest
 
 ## Commands
 
@@ -343,7 +343,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   после этого действует до конца сессии. Диагностика пробника — только `logSilent` (контракт
   `tests/core/bootstrap.test.ts`: в консоль/шину не попадает).
 - **Живой топбар:** `HostStateSnapshot.contextWindow` (`src/core/host.ts`, `webui/host-state.ts`) +
-  `renderState` в `assets/app.js` подтягивает селектор при расхождении — иначе топбар навсегда показывал
+  `renderState` в `assets/app.ts` подтягивает селектор при расхождении — иначе топбар навсегда показывал
   стартовые 32K.
 - **Тесты:** `tests/llm/provider-context-probe.test.ts` (16 кейсов на моке `fetch`),
   `tests/core/bootstrap-probe-apply.test.ts` (late-apply), `tests/providers/active-endpoint.test.ts`.
@@ -355,7 +355,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   `requiresKey: false`, `listModels: true`, локальный prompt-cache. Native discovery (`/api/v1/models` —
   загруженный контекст + capabilities) работает через общий пробник по `baseUrl` независимо от типа.
 - **Wiring:** оба setup-визарда (скан портов + ключ `not-needed`, `setup.ts`/`setup.js`), web-форма
-  (`buildProviderPresets`, подсказки типов в `settings.js`), CLI (`HOSTED_BASE_URLS` → `mma provider add lmstudio`
+  (`buildProviderPresets`, подсказки типов в `settings/providers.ts`), CLI (`HOSTED_BASE_URLS` → `mma provider add lmstudio`
   без `--url`). Старый локальный пресет `lmstudio` типа `openai-compat` удалён из `providers-view.ts`
   (существующие записи продолжают работать).
 - **Тесты:** `tests/providers.test.ts` (регистрация типа, URL, сборка провайдера), `tests/webui-providers.test.ts`
@@ -437,10 +437,10 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **`/config` — все ключи** (`src/config/registry.ts` + `registry-extra.ts`): ~110 ключей, типы `string/int/share/bool/enum` + новые `json` (объекты, лимит 20K, `JSON.parse`) и `list` (массивы строк, в REPL — через запятую). `registry.ts` grandfathered (>300 строк) — новые дефы только в `registry-extra.ts`, мердж конкатом в `DEFINITIONS`; `allConfigNames()`/`configDefs()` подхватывают их автоматически (комплитер без правок).
 - **`mma config set <key> <value> [--force]`** (`src/cli/commands.ts`): по умолчанию валидация через `setConfigValue` (bad value → `cli.config_invalid`, запись не пишется); `--force` — сырая запись по dotted-пути без валидации (escape hatch для битых конфигов).
 - **`/security status` + `/security <key> [value]`** (REPL `repl-commands.ts`, web `commands-settings.ts`, handler-maps по правилу #17): read-only сводка (`security · on/off`, `↳`-строки по STYLE.md, без боксов) + запись отдельных ключей через тот же `setConfigValue`. Web HELP/`/api/commands` подхватывает автоматически.
-- **Web settings — IA + generic controls** (`assets/js/settings-controls.js` → `PANEL_SECTIONS` + `controlFor`: bool→toggle, enum→select, int→number, share→%, list→tag-input, json→textarea с inline-ошибкой). Единственный источник правды: **панель → именованные секции**, имя секции обязано описывать её ключи (никаких бакетов «Дополнительно» с чужими ключами). 14 разделов меню (general/model/context/reasoning/agent/network/browser/sessions/ui/memory/skills/plugins/security/advanced); внутри — карточки-секции с заголовком и однострочным пояснением (`sec-title`/`sec-desc`). Счётчиков в меню нет. Панели с кастомным телом (model/ui/memory/skills/plugins/security) рендерят его первым и добирают секции из таблицы. Тесты-сторожа: каждый ключ реестра ровно в одной секции, у каждой секции есть en+ru подпись.
-- **Settings search** (`settings.js`): индекс строится из той же `PANEL_SECTIONS` + i18n-подписей, поэтому поиск не может разойтись с раскладкой. Результат = подпись + панель + dotted-ключ; выбор переключает панель и подсвечивает строку (`.row-flash`). Меню скрывается за результатами, `Esc` очищает.
-- **Структурные редакторы** (`registry-extra.ts` → `ConfigKeyDef.editor`, рендер в `settings-controls.js`): UI-подсказка, как показывать `list`/`json`, не меняя сам ключ. `kind: "tags"` — чипсы с ✕ и полем добавления (bash/paths/network-списки, `tools.defaultTags`, `dangerousPatterns`); `kind: "checkboxes"` — мультивыбор из фиксированного набора (`auditNotifier.eventTypes`); `kind: "table"` — строки-записи с типизированными колонками (`pricing.overrides`, `experts`, `modelCapabilities`; `columns[].array` = колонка-список, `optional` = можно не заполнять). Таблица валидирует запись на клиенте и **не** постит неполную строку. Редакторы постят JSON-строку; `parseConfigValue` для `list` принимает и JSON-массив, и запятые (значения с запятыми, например `a{1,3}`, больше не ломаются). Метаданные отдаются веб-UI в `GET /api/config` (`registry[].editor`).
-- **Один вложенный диалог** (`#subOverlay`/`openSubDialog` в `settings.js`): правка провайдера, MCP-сервера, LSP-сервера **и добавление записи памяти** открывается поверх настроек (не inline), с focus-trap, возвратом фокуса и закрытием по Esc/фону. `hideProviderOverlay`/inline-формы удалены.
+- **Web settings — IA + generic controls** (`assets/js/settings/controls.ts` → `PANEL_SECTIONS` + `controlFor`: bool→toggle, enum→select, int→number, share→%, list→tag-input, json→textarea с inline-ошибкой). Единственный источник правды: **панель → именованные секции**, имя секции обязано описывать её ключи (никаких бакетов «Дополнительно» с чужими ключами). 14 разделов меню (general/model/context/reasoning/agent/network/browser/sessions/ui/memory/skills/plugins/security/advanced); внутри — карточки-секции с заголовком и однострочным пояснением (`sec-title`/`sec-desc`). Счётчиков в меню нет. Панели с кастомным телом (model/ui/memory/skills/plugins/security) рендерят его первым и добирают секции из таблицы. Тесты-сторожа: каждый ключ реестра ровно в одной секции, у каждой секции есть en+ru подпись.
+- **Settings search** (`settings/search.ts`): индекс строится из той же `PANEL_SECTIONS` + i18n-подписей, поэтому поиск не может разойтись с раскладкой. Результат = подпись + панель + dotted-ключ; выбор переключает панель и подсвечивает строку (`.row-flash`). Меню скрывается за результатами, `Esc` очищает.
+- **Структурные редакторы** (`registry-extra.ts` → `ConfigKeyDef.editor`, рендер в `settings/controls.ts`): UI-подсказка, как показывать `list`/`json`, не меняя сам ключ. `kind: "tags"` — чипсы с ✕ и полем добавления (bash/paths/network-списки, `tools.defaultTags`, `dangerousPatterns`); `kind: "checkboxes"` — мультивыбор из фиксированного набора (`auditNotifier.eventTypes`); `kind: "table"` — строки-записи с типизированными колонками (`pricing.overrides`, `experts`, `modelCapabilities`; `columns[].array` = колонка-список, `optional` = можно не заполнять). Таблица валидирует запись на клиенте и **не** постит неполную строку. Редакторы постят JSON-строку; `parseConfigValue` для `list` принимает и JSON-массив, и запятые (значения с запятыми, например `a{1,3}`, больше не ломаются). Метаданные отдаются веб-UI в `GET /api/config` (`registry[].editor`).
+- **Один вложенный диалог** (`#subOverlay`/`openSubDialog` в `settings/modal.ts`): правка провайдера, MCP-сервера, LSP-сервера **и добавление записи памяти** открывается поверх настроек (не inline), с focus-trap, возвратом фокуса и закрытием по Esc/фону. `hideProviderOverlay`/inline-формы удалены.
 - **Provider form** (`providers-api.ts`): `maxCompletionTokens` (512–128000), `cache` (mechanism/report selects + 6 bool-флагов), `retry{maxRetries,baseDelay,maxDelay}`; зеркалится в legacy при active. Ошибка валидации — существующий `400 invalid-provider`.
 - **MCP CRUD + LSP read/edit** (web, `settings-api.ts`, таблица `API_ROUTES`): `POST /api/mcp` (create) + `PUT /api/mcp/:id` (full edit, `stdio→command` / `sse|http→url` обязательны), `GET /api/lsp` + `PUT /api/lsp/:lang` (только `enabled/timeout/command/args`; add/remove серверов — JSON вручную, бинарники host-specific). Всё с `restartRequired: true` (эффект со следующего запуска), персист через общий `persistAndReconfigure`.
 
@@ -470,7 +470,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Activity rail (над композером, unreleased):** индикатор занятости агента (`js/rail.js`, leaf-модуль, подписан на свои слушатели SSE в `app.js` + `setBusy` в `reflectBusy`): живёт весь `busy`-период (in-feed `.busy` гаснет на первом `text`), без плана — indeterminate-сканер + вспышка на каждое `tool_*`/`text`/`plan`, с планом MoE — честный `done/total` и засечки шагов; фаза (thinking/tool/composing), таймер, счётчики тулов/событий, последний тул (`labelOf` из `format.js`). Раскладки `ui.activityRail` = `off|line`(default)|`meta|full` (меняются live в Settings → Chat output и через `/config`); спека: [docs/specs/2026-09-27-activity-rail-design.md](./docs/specs/2026-09-27-activity-rail-design.md).
 - **Chat motion + sticky autoscroll (unreleased, ветка `fix/web-autoscroll`):** только opacity/transform, 100–200мс, всё гаснет под `prefers-reduced-motion` (существующий kill-switch в `styles.css`). Новое: entrance `rise` строк ленты (`.feed > *`), `▌`-каретка стрима (`.md.streaming::after` + имеющийся `blink`), пульс живых ярлыков (`.busy .lab`, `.think.live .think-h .lab`, `.rail-l1 .lab`, `.act.running .lab` — `live` снимает `finishThink`, `running` снимает `onToolEnd`/`onTurnEnd`, иначе «думаю» выглядит зависшим после хода), `pop` меню/диалогов, hover-переходы, `fade` сворачивания quiet-ран (`fold-out` + 160мс перед `remove`), edge-fades транскрипта (классы `scrolled/unfollowed` из скролл-хука), пилюля «↓ к новому» (`web.scroll.latest`, en+ru). Скролл липкий: флаг `follow` (`feed.js`) — у края пинимся на каждый аппенд, при уходе вверх не дёргаем; форс-пин на отправке/открытии таба/загрузке истории (`scrollToBottom`, экспорт в `tabs.js`); спиннер `showBusy` задержан на 180мс и не вспыхивает поверх стартовавшего стрима.
 - **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
-- **Структура после рефакторинга 2026-09-26 (unreleased):** backend — `body.ts` (`parseJsonBody`/`readJsonBody`, единый парсинг POST), `persist.ts` (`persistAndReconfigure`), `server.ts` — таблица `API_ROUTES` + `API_GROUPS` (правило #17), `host-state.ts` (снапшот/usage/plan), `run-agent.ts` (турн-раннер), `model-cache.ts`, `providers-view.ts` (read-модели); каждый файл ≤300 строк, `maxClients` живёт в `createWebUiState()`. Фронтенд — ES-модули `assets/js/`: `app.js` (~240: boot/SSE/renderState) + `dom`/`api`/`i18n`/`store` (`S` + хуки)/`format`/`feed`/`tabs`/`settings`/`dialog`; сервер отдаёт `/js/*` (`jsModules`, live-reload как остальная статика). DAG ацикличен: app → settings → tabs → {feed, dialog}; связь локали — хук `S.hooks.applyStaticI18n`. `settings.js` (~1100) оставлен крупным сознательно (разрез панелей дал бы цикл) — исключение в духе крупных файлов выше. Дедуп: `planStepMark`, `makeToggle` (dom), `trapTab` (dialog), очередь тостов в `setIndicator`, `web.command.*` i18n для `/help`+`/api/commands`. План: [docs/plans/2026-09-26-webui-decompose.md](./docs/plans/2026-09-26-webui-decompose.md).
+- **Структура после рефакторинга 2026-09-26:** backend — `body.ts` (`parseJsonBody`/`readJsonBody`, единый парсинг POST), `persist.ts` (`persistAndReconfigure`), `server.ts` — таблица `API_ROUTES` + `API_GROUPS` (правило #17), `host-state.ts` (снапшот/usage/plan), `run-agent.ts` (турн-раннер), `model-cache.ts`, `providers-view.ts` (read-модели); каждый файл ≤300 строк, `maxClients` живёт в `createWebUiState()`. Фронтенд — ES-модули `assets/js/` (с 2.17.1 на TS): `app.ts` (~240: boot/SSE/renderState) + `dom`/`api`/`i18n`/`store`/`format`/`feed`/`tabs`/`settings`/`dialog`; сервер отдаёт `/js/*` (`jsModules`, live-reload как остальная статика). DAG ацикличен: app → settings → tabs → {feed, dialog}; связь локали — хук `hooks.applyStaticI18n`. Дедуп: `planStepMark`, `makeToggle` (dom), `trapTab` (dialog), очередь тостов в `setIndicator`, `web.command.*` i18n для `/help`+`/api/commands`. План: [docs/plans/2026-09-26-webui-decompose.md](./docs/plans/2026-09-26-webui-decompose.md).
 - **E2E-покрытие фич** (`tests/e2e/`, `bun run test:e2e`, только по явной команде): `web-helpers.ts` + `web-commands`/`web-chat-tabs`/`web-settings` — все 13 slash-команд, чат (успех и чистая ошибка без LLM), табы/сессии/confirm, аттачи, file viewer, 11 панелей, тема, локаль, память, MCP; файлы гоняются последовательно (`maxWorkers: 1` в `vitest.e2e.config.ts`). Найденный там баг: web `/config locale` теперь применяет `setLocale` (`commands-shared.ts`, как REST).
 
 ### Web First-Run Setup (2.6.0)
@@ -491,7 +491,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   `POST /api/message` и `POST /api/command` отвечают `409 setup_required`; разрешены `/events`, статика,
   `/api/state`, `/api/i18n`, `/api/setup*`. Реализовано в `util.ts` (`handleMessagePost`) и `server.ts`
   (`/api/command`), чтобы curl/вторая вкладка не обошли UI.
-- **Фронтенд** (`assets/setup.js`, `index.html`, `app.js`, `styles.css`): скрытый полноэкранный `#setupGate`,
+- **Фронтенд** (`assets/setup.ts`, `index.html`, `app.js`, `styles.css`): скрытый полноэкранный `#setupGate`,
   `window.MmaSetup.maybeOpen()` (Promise<boolean>) вызывается первым в `app.js` `boot()`; при `required`
   визард (Language → Provider → Key → Model → Context → Security → Review) берёт экран (`body.setup-active`)
   и после успеха делает `location.reload()`. Локализация `web.setup.*` (en+ru, RU-плюрализация `_few`),
@@ -510,10 +510,10 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Web Markdown, Highlighting & Copy (2.7.0)
 
-- **Рендерер:** `src/modules/webui/assets/md.js` (ESM) поверх вендоренного `smd.js`
+- **Рендерер:** `src/modules/webui/assets/md.ts` (ESM) поверх вендоренного `smd.js`
   (streaming-markdown, MIT). `mountMarkdown(parent, opts)` стримит чанки, `renderMarkdown(parent, text, opts)`
   рендерит готовый текст (история). Инкрементально — только append в DOM, без полного ре-рендера (старый `parseFences`/`renderTextSegment` удалён).
-  Half-open inline (`**bo`) достраивается без мерцания. `app.js` — ES-модуль, импортит `./md.js`.
+  Half-open inline (`**bo`) достраивается без мерцания. `app.ts` — ES-модуль, импортит `./md.ts`.
 - **Безопасность:** текст только `createTextNode`; `innerHTML` не используется. HTML от highlight.js парсится
   через `DOMParser` (инертный) и импортируется узлами. URL — allowlist `http(s):`/`mailto:`/`data:image`; `javascript:` отбрасывается; ссылки получают `target=_blank` + `rel=noopener noreferrer`.
 - **Подсветка:** вендоренный `hljs.js` (highlight.js common, MIT, `window.hljs`). Подсветка — **один раз при
@@ -529,13 +529,13 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Web Sidebar Tabs (2.13.0)
 
-- **Tab bar** (`src/modules/webui/assets/js/sidebar.js`, `index.html`, `styles.css`):
+- **Tab bar** (`src/modules/webui/assets/js/sidebar.ts`, `index.html`, `styles.css`):
   квадратные Lucide-иконочные вкладки **Session / Map / Trace** сверху сайдбара; имя активной
   вкладки показано строкой ниже вкладок. Дефолт — Session; последняя вкладка помнится в
   `localStorage["mma-sidebar-tab"]`; хоткеи `Alt+1/2/3`; вкладка и панель Trace скрыты на ≤760px.
 - **Session** — существующие секции plan / session·usage / environment без изменений.
 - **Map** (`ProjectMapInfo`: status, `updatedAt`, watcher, files/symbols/tokens, root, top-8 языков)
-  рендерится `assets/js/sidebar.js`; кнопка **Re-index** шлёт `POST /api/index`
+  рендерится `assets/js/sidebar.ts`; кнопка **Re-index** шлёт `POST /api/index`
   (новый роут → `WebUiState.refreshIndex` → `broadcast` события `state` по завершении).
   Вотчер карты (`watch`/`unwatch`) в вебе поднимает сам веб-хост (`attachIndexWatcher`,
   `src/modules/webui/index-watcher.ts`) на старте `startWebUi` и снимает в `stop()`: в web
@@ -666,29 +666,28 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 спека: [docs/specs/2026-10-02-webui-modularization-design.md](./docs/specs/2026-10-02-webui-modularization-design.md).
 Внутренний рефакторинг, контракты (SSE/REST/сессии/конфиг/plugin API) не менялись.
 
-- **Фронтенд-раскладка (barrel + подпапки).** `assets/js/feed.js` — barrel над
-  `feed/{core,sidebar,stream,turn,history,plan,question}.js`; `feed/core.js` держит
+- **Фронтенд-раскладка (barrel + подпапки).** `assets/js/feed.ts` — barrel над
+  `feed/{core,sidebar,stream,turn,history,plan,question}.ts`; `feed/core.ts` держит
   контейнер/липкий-скролл/сворачивание recon-ранов и общие render-хелперы
-  (`mdOpts`/`buildThinkBlock`/`appendActionsRow`). `assets/js/tabs.js` переехал в
-  `session/tabs.js` (hub) + `session/{composer,sessions-menu,cmdk}.js`. `assets/js/settings.js`
-  — barrel над `settings/{write,panels,providers,modal,subdialog,search,form}.js`
-  (`controls/editors` — с phase 3). `sidebar.js`/`store.js` — тоже бары.
+  (`mdOpts`/`buildThinkBlock`/`appendActionsRow`). `assets/js/tabs.ts` переехал в
+  `session/tabs.ts` (hub) + `session/{composer,sessions-menu,cmdk}.ts`. `assets/js/settings.ts`
+  — barrel над `settings/{write,panels,providers,modal,subdialog,search,form}.ts`
+  (`controls/editors` — с phase 3). `sidebar.ts`/`store.ts` — тоже бары.
 - **Разрыв циклов через DI (не обратные импорты).** Siblings не импортят hub: операции
   приходят через `initComposer(...)`/`initSessionsMenu(...)`/`initCmdk({autogrow})`,
-  вызываемые в конце `session/tabs.js`. В настройках `postConfig` — единый funnel в
-  `settings/write.js` (низ), UI-ререндеры (`renderSettings`/`openSettingsAt`) регистрируются
+  вызываемые в конце `session/tabs.ts`. В настройках `postConfig` — единый funnel в
+  `settings/write.ts` (низ), UI-ререндеры (`renderSettings`/`openSettingsAt`) регистрируются
   им через `setWriteHooks`; `search` импортит `modal` только в одну сторону.
-- **Срезы `S` (phase 6).** `assets/js/store.js` — barrel над
-  `core/store/{index,feed,tabs,settings,session}.js`. Каждый домен владеет своим объектом
+- **Срезы `S` (phase 6).** `assets/js/store.ts` — barrel над
+  `core/store/{index,feed,tabs,settings,session}.ts`. Каждый домен владеет своим объектом
   (`feed`/`tabs`/`settings`/`session`), потребители импортят нужный срез; старый god-object
   `S` (и `S.state`) **удалён** (`grep '\bS\.'` в `assets/js` пуст).
 - **Guard-тесты.** `tests/webui-boundaries.test.ts` (+ `tests/helpers/import-graph.ts`) —
   AST-граф бэкенд-импортов: циклы и правило «доменные модули зависят от role-интерфейсов,
   а не от композитного `WebUiState`». `tests/webui-frontend-graph.test.ts` — ацикличность
-  `assets/**` + отсутствие инверсий слоёв (список `KNOWN_INVERSIONS` пуст). Дополнительные
-  ворота при разрезах: `node --check` по изменённым `assets/js/**`, `bun build
-  assets/app.js --target=browser` (резолвит все именованные импорты/экспорты), и статическая
-  JS-проверка `tsc --allowJs --checkJs --lib dom` (ловкий сигнал «0 `Cannot find name`»).
+  `assets/**` + отсутствие инверсий слоёв (список `KNOWN_INVERSIONS` пуст). Ворота после
+  перехода на TS: `tsc -p tsconfig.frontend.json` (см. ниже) и `bun build
+  assets/app.ts --target=browser` (резолвит именованные импорты/экспорты).
 
 ### WebUI Frontend TypeScript Migration (2.17.1)
 
@@ -709,7 +708,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   (`js/foo.js`); `web:dev` без шага сборки. В prod ассеты уже готовы (`build:frontend`).
 - **Prod-сборка:** `scripts/build-frontend.ts` пофайлово транспилит `.ts` → `dist/assets`
   (имена и граф модулей сохранены) и копирует вендор/html/css; `build:prod` =
-  `build:bundle && build:frontend && build:copy-assets`.
+  `clean → bundle → frontend → copy-assets → optimize`.
 - **Guard:** `tests/webui-frontend-graph.test.ts` читает `.ts`; строковые guard'ы,
   зависящие от форматирования (`if (…) return;`), сделаны whitespace-толерантными
   (транспилятор переносит `return` на новую строку).
