@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **Compaction progress threshold** (`src/core/agent/compaction.ts`, `src/modules/context/manager.ts`): the significance threshold is now `max(2% history budget, 3% current context)` instead of 2% of the history budget alone, so a marginal shrink (e.g. −1.2% on a 24K context) no longer counts as success and short-circuits stage escalation — it now escalates to `aggressive`/`hard-drop`. `compactAdaptive` reports `reducedBy` as the total reduction from the original context (previously measured incrementally between stages, which could understate real progress to 0). An overflow attempt now consumes the iteration even when it is a no-op, keeping the "one trigger per iteration" guarantee.
+
 ## [2.19.0] - 2026-10-05
 
 Harness hardening from the live-session post-mortem (`ses_muu8kfbw_nyxkre`): false
