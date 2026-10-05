@@ -114,12 +114,15 @@ function planPathToken(p: string): string {
  * AV-лок на только что записанном файле), пропавший между резолвом и статом
  * файл — НЕ старость, гейт пропускает как раньше.
  */
-function provablyStale(resolved: (string | null)[], sinceMs: number): boolean {
+export function provablyStale(resolved: (string | null)[], sinceMs: number): boolean {
   if (Number.isNaN(sinceMs)) return false;
   for (const r of resolved) {
     if (!r) return false;
     try {
-      if (statSync(r).mtimeMs > sinceMs) return false;
+      // `>=`: файл, записанный в ту же миллисекунду, что и план, считается
+      // свежим. Строгое `>` давало гонку — файл, реально созданный после плана
+      // в пределах 1 мс, помечался «старым» и шаг не авто-завершался.
+      if (statSync(r).mtimeMs >= sinceMs) return false;
     } catch {
       return false;
     }
