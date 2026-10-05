@@ -29,6 +29,19 @@ export interface RetryConfig {
 const DEFAULT_MAX_COMPLETION_TOKENS = 8192;
 
 /**
+ * Консервативный классификатор ошибок провайдера по телу ответа. Возвращает
+ * `"context_length"`, только если текст явно про превышение контекста, иначе
+ * `undefined` (fail-open: неверная классификация приведёт к агрессивному
+ * поведению, чего нельзя).
+ */
+export function classifyProviderError(errorText: string): string | undefined {
+  if (!errorText) return undefined;
+  const re =
+    /(context (?:length|window|size)|maximum context|max(?:imum)? (?:number of )?tokens|too many tokens|input is too long|prompt is too long|reduce the length|exceed[s]? .{0,30}context)/i;
+  return re.test(errorText) ? "context_length" : undefined;
+}
+
+/**
  * Client identity-заголовок. OpenCode Go просит клиентов представляться своим
  * user agent (не generic SDK/HTTP-библиотекой), чтобы запросы роутились в
  * coding-agent трафик. `readMmaVersion()` мемоизирован — иначе каждая сборка
@@ -407,13 +420,18 @@ export class OpenAICompatProvider implements LLMProvider {
     if (!response.ok) {
       cleanup();
       const errorText = await response.text();
+      // Консервативная классификация: context-length 400 → recoverable, чтобы
+      // агент мог реактивно компактить и повторить, а не умереть.
+      const kind = classifyProviderError(errorText);
       throw new LlmError(
         t("error.llm_api", {
           status: response.status,
           statusText: response.statusText,
           errorText,
         }),
-        { terminal: true },
+        kind === "context_length"
+          ? { terminal: true, recoverable: true, kind }
+          : { terminal: true },
       );
     }
 

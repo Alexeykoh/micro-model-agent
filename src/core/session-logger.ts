@@ -236,6 +236,10 @@ export class SessionLogger {
     removedTurns?: number;
     keptTurns?: number;
     summary?: string;
+    /** Насколько упал объём (токены). */
+    reducedBy?: number;
+    /** Стадия сокращения: summarize|prune-tools|aggressive|hard-drop. */
+    strategy?: string;
   }): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -252,6 +256,8 @@ export class SessionLogger {
       removedTurns: info.removedTurns,
       keptTurns: info.keptTurns,
       summary: info.summary,
+      reducedBy: info.reducedBy,
+      strategy: info.strategy,
     });
   }
 

@@ -24,6 +24,7 @@ export interface Message {
 }
 
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
+import { DEFAULTS } from "../../config/defaults";
 import type { TokenCounter } from "../../llm/token-counter";
 import { ContextCalibrator, isImplausibleJump } from "../../core/agent/context-calibration";
 import type { CalibrationState } from "../../core/agent/context-calibration";
@@ -52,6 +53,20 @@ export interface CompactResult {
   messagesAfter: number;
   /** Внутренний блок [Compressed: ...] (без обёртки <system-summary>). */
   summary: string;
+  /** Насколько упал объём в токенах (tokensBefore − tokensAfter). */
+  reducedBy: number;
+  /** Стадия, давшая сокращение: summarize|prune-tools|aggressive|hard-drop. */
+  strategy: string;
+}
+
+/** Опции компакции (v2). */
+export interface CompactOptions {
+  /** Сколько свежих сообщений оставить дословно (по умолчанию KEEP_LAST_N). */
+  keepLastN?: number;
+  /** Сколько последних tool-результатов не чистить при prune-tools. */
+  toolResultKeep?: number;
+  /** Порог значимости: ниже него счётчик/лог не обновляются. */
+  minReduction?: number;
 }
 
 /** Снапшот состояния контекста для логов/наблюдаемости. */
@@ -171,6 +186,12 @@ export class ContextManager {
    * (было: компакция на ~40% бюджета стирала 33-44 полезных хода посреди задачи).
    */
   private compactionMinLoad: number;
+  /** Политика компакции v2/legacy. */
+  private policy: "legacy" | "v2";
+  /** Мин. итераций между overflow-компакциями (v2). */
+  private overflowCooldown: number;
+  /** Сколько последних tool-результатов не чистить (v2). */
+  private toolResultKeep: number;
   private facts = new FactExtractor();
   /** Последняя реальная инструкция юзера (мимо <system-summary>). */
   private lastUserTask = "";
@@ -208,15 +229,33 @@ export class ContextManager {
     tokenCounter?: TokenCounter | null,
   ) {
     this.contextWindow = contextWindow;
-    this.compactionThreshold = contextBudget?.compactionThreshold ?? 0.75;
-    this.compactionMinLoad = contextBudget?.compactionMinLoad ?? 0.5;
+    const tuning = ContextManager.resolveTuning(contextBudget);
+    this.compactionThreshold = tuning.compactionThreshold;
+    this.compactionMinLoad = tuning.compactionMinLoad;
+    this.policy = tuning.policy;
+    this.overflowCooldown = tuning.overflowCooldown;
+    this.toolResultKeep = tuning.toolResultKeep;
     this.budget = this.calculateBudget(contextWindow, contextBudget);
     this.tokenCounter = tokenCounter ?? null;
-    this.calibrationOptions = {
-      warmup: contextBudget?.calibrationWarmup,
-      ratioFloor: contextBudget?.ratioFloor,
-    };
+    this.calibrationOptions = { warmup: tuning.calibrationWarmup, ratioFloor: tuning.ratioFloor };
     this.calibrator = new ContextCalibrator(this.calibrationOptions);
+  }
+
+  /** Резолвит тюнинг-параметры бюджета с безопасными дефолтами. */
+  private static resolveTuning(b: ConfigContextBudget | undefined) {
+    const merged = {
+      ...DEFAULTS.contextBudget,
+      ...(b ?? {}),
+    } as Required<ConfigContextBudget>;
+    return {
+      compactionThreshold: merged.compactionThreshold,
+      compactionMinLoad: merged.compactionMinLoad,
+      policy: merged.policy,
+      overflowCooldown: merged.overflowCooldown,
+      toolResultKeep: merged.toolResultKeep,
+      calibrationWarmup: merged.calibrationWarmup,
+      ratioFloor: merged.ratioFloor,
+    };
   }
 
   /**
@@ -257,6 +296,21 @@ export class ContextManager {
     return this.iterationsSinceCompaction;
   }
 
+  /** Политика компакции (v2/legacy). */
+  getPolicy(): "legacy" | "v2" {
+    return this.policy;
+  }
+
+  /** Мин. итераций между overflow-компакциями (v2). */
+  getOverflowCooldown(): number {
+    return this.overflowCooldown;
+  }
+
+  /** Сколько последних tool-результатов не чистить (v2). */
+  getToolResultKeep(): number {
+    return this.toolResultKeep;
+  }
+
   /** Файлы, известные из сводок компакции — сидируют known-files проверки
    *  галлюцинаций, чтобы голые имена переживали сбросы контекста. */
   getKnownFiles(): string[] {
@@ -286,7 +340,7 @@ export class ContextManager {
 
   /** Оценка качества контекста 0–100 (нагрузка, компакции, ошибки, свежесть). */
   getQuality(): number {
-    const usedTokens = this.getEstimatedTokens();
+    const usedTokens = this.getContextTokens();
     const tokenLoad = this.budget.history > 0
       ? Math.max(0, 1 - usedTokens / this.budget.history)
       : 0;
@@ -461,7 +515,11 @@ export class ContextManager {
 
   /** True, если истории нужна компакция (бюджет превышен или интервал + загрузка). */
   needsCompaction(): boolean {
-    const totalTokens = this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
+    // v2: пороги по калиброванной оценке; legacy — по сырой (2.18.2).
+    const totalTokens =
+      this.policy === "v2"
+        ? this.getContextTokens()
+        : this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
     if (totalTokens > this.budget.history * this.compactionThreshold) return true;
 
     // Интервал итераций уплотняет только значимо загруженную историю.
@@ -472,8 +530,24 @@ export class ContextManager {
     return load >= this.compactionMinLoad;
   }
 
+  /**
+   * Только интервальный триггер (без порога переполнения): итераций прошло
+   * достаточно и история значимо загружена. В v2 порог переполнения живёт в
+   * отдельной проверке с cooldown, поэтому здесь только интервал.
+   */
+  needsIntervalCompaction(): boolean {
+    if (this.iterationsSinceCompaction < COMPACTION_INTERVAL) return false;
+    const totalTokens =
+      this.policy === "v2"
+        ? this.getContextTokens()
+        : this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
+    const load = this.budget.history > 0 ? totalTokens / this.budget.history : 0;
+    return load >= this.compactionMinLoad;
+  }
+
   /** Уплотняет историю: старые ходы → сводка фактов, свежие — дословно. Null, если уплотнять нечего. */
-  compact(): CompactResult | null {
+  compact(opts?: CompactOptions): CompactResult | null {
+    const keepLastN = opts?.keepLastN ?? KEEP_LAST_N;
     // Снимаем состояние ДО компакции ПЕРЕД сбросом/ростом счётчиков —
     // qualityBefore обязан отражать контекст, который реально видела модель.
     const tokensBefore = this.getEstimatedTokens();
@@ -483,65 +557,15 @@ export class ContextManager {
     // Сбрасываем счётчик, даже если уплотнять нечего — иначе
     // needsCompaction() вечно true после 15 итераций с малым числом сообщений.
     this.iterationsSinceCompaction = 0;
-    if (this.messages.length <= KEEP_LAST_N * 2) return null;
+    if (this.messages.length <= keepLastN * 2) return null;
 
-    this.compactionCount++;
-
-    let cutoff = this.messages.length - KEEP_LAST_N * 2;
-    // Не режем группу assistant(tool_calls) по cutoff: сохранённая история не
-    // должна начинаться с сиротских role:"tool", а assistant-половина — остаться
-    // в уплотняемой части (OpenAI-совместимые бэкенды такие истории отвергают).
-    while (
-      cutoff > 0 &&
-      (this.messages[cutoff]?.role === "tool" || this.messages[cutoff - 1]?.tool_calls?.length)
-    ) {
-      cutoff--;
-    }
+    const cutoff = this.computeCutoff(keepLastN);
     const oldTurns = this.messages.slice(0, cutoff);
     const recentTurns = this.messages.slice(cutoff);
 
     this.facts.extract(oldTurns);
 
-    const parts: string[] = [];
-    parts.push(`[Compressed: ${oldTurns.length} old turns removed]`);
-
-    // Проносим реальную инструкцию юзера — модель не должна терять задачу,
-    // над которой работает, лишь потому что уплотнилось 40 ходов. Задача хода
-    // фолбэчится на миссию сессии (первую реальную инструкцию), чтобы вставка
-    // ошибки/лога в текущем ходе не стирала цель.
-    const task = (this.lastUserTask || this.sessionMission).slice(0, 400);
-    if (task) parts.push(`[Task: ${task}]`);
-    if (this.lastUserFeedback && !task.startsWith(this.lastUserFeedback)) {
-      parts.push(`[User feedback: ${this.lastUserFeedback}]`);
-    }
-
-    // Ориентируем модель после компакции: активный план нельзя пересоздавать
-    // с нуля (см. доку planSummaryProvider).
-    const planLine = this.planSummaryProvider?.();
-    if (planLine) parts.push(`[Plan: ${planLine}]`);
-
-    const filesLine = this.facts.filesLine();
-    if (filesLine) parts.push(filesLine);
-    const deletedLine = this.facts.deletedLine();
-    if (deletedLine) parts.push(deletedLine);
-    const readLine = this.facts.readLine();
-    if (readLine) parts.push(readLine);
-    const decisionsLine = this.facts.decisionsLine();
-    if (decisionsLine) parts.push(decisionsLine);
-    const errorsLine = this.facts.errorsLine();
-    if (errorsLine) parts.push(errorsLine);
-
-    if (this.thinkingLevel) parts.push(`[Thinking: ${this.thinkingLevel}]`);
-
-    const triedAndFailed = extractTriedAndFailed(oldTurns);
-    if (triedAndFailed.length > 0) {
-      const lines = triedAndFailed.map(
-        (t) => `- ${t.tool}(${t.args}): ${t.error} (failed ${t.count}x)`,
-      );
-      parts.push(`[Already tried & failed — do NOT repeat:]\n${lines.join("\n")}`);
-    }
-
-    this.compactedBlock = parts.join(" ");
+    this.compactedBlock = this.buildCompactionBlock(oldTurns);
     const summary: Message = {
       role: "user",
       content: `<system-summary>${this.compactedBlock}</system-summary>`,
@@ -561,20 +585,251 @@ export class ContextManager {
     this.lastEstimateRaw = 0;
     this.lastEstimateMessageCount = 0;
 
-    if (this.onCompact) {
-      this.onCompact(summary);
+    return this.finalizeCompact({
+      opts,
+      summary,
+      oldTurns,
+      freshRecent,
+      tokensBefore,
+      qualityBefore,
+      messagesBefore,
+    });
+  }
+
+  /** Собирает результат компакции, решает значимость и ведёт счётчик/onCompact. */
+  private finalizeCompact(ctx: {
+    opts?: CompactOptions;
+    summary: Message;
+    oldTurns: Message[];
+    freshRecent: Message[];
+    tokensBefore: number;
+    qualityBefore: number;
+    messagesBefore: number;
+  }): CompactResult {
+    const tokensAfter = this.getEstimatedTokens();
+    const reducedBy = ctx.tokensBefore - tokensAfter;
+    // Значимое сокращение: только тогда инкрементим счётчик и зовём onCompact.
+    // No-op (reducedBy <= minReduction) не логируется и не искажает качество.
+    const significant = ctx.opts?.minReduction === undefined || reducedBy > ctx.opts.minReduction;
+    if (significant) this.compactionCount++;
+    const result: CompactResult = {
+      removedTurns: ctx.oldTurns.length,
+      keptTurns: ctx.freshRecent.length,
+      tokensBefore: ctx.tokensBefore,
+      tokensAfter,
+      qualityBefore: ctx.qualityBefore,
+      qualityAfter: this.getQuality(),
+      messagesBefore: ctx.messagesBefore,
+      messagesAfter: this.messages.length,
+      summary: this.compactedBlock ?? "",
+      reducedBy,
+      strategy:
+        ctx.opts?.keepLastN !== undefined && ctx.opts.keepLastN < KEEP_LAST_N
+          ? "aggressive"
+          : "summarize",
+    };
+    if (significant && this.onCompact) this.onCompact(ctx.summary);
+    return result;
+  }
+
+  /**
+   * Граница компакции. Не режет группу assistant(tool_calls): сохранённая
+   * история не должна начинаться с сиротских role:"tool", а assistant-половина —
+   * остаться в уплотняемой части (OpenAI-совместимые бэкенды такие истории отвергают).
+   */
+  private computeCutoff(keepLastN: number): number {
+    let cutoff = this.messages.length - keepLastN * 2;
+    while (
+      cutoff > 0 &&
+      (this.messages[cutoff]?.role === "tool" || this.messages[cutoff - 1]?.tool_calls?.length)
+    ) {
+      cutoff--;
+    }
+    return cutoff;
+  }
+
+  /**
+   * Собирает внутренний блок сводки компакции из фактов и pinning-констант
+   * (задача, план, thinking, «пробовали и не вышло»).
+   */
+  private buildCompactionBlock(oldTurns: Message[]): string {
+    const parts: string[] = [];
+    parts.push(`[Compressed: ${oldTurns.length} old turns removed]`);
+
+    // Проносим реальную инструкцию юзера — модель не должна терять задачу,
+    // над которой работает, лишь потому что уплотнилось 40 ходов. Задача хода
+    // фолбэчится на миссию сессии (первую реальную инструкцию), чтобы вставка
+    // ошибки/лога в текущем ходе не стирала цель.
+    const task = (this.lastUserTask || this.sessionMission).slice(0, 400);
+    if (task) parts.push(`[Task: ${task}]`);
+    if (this.lastUserFeedback && !task.startsWith(this.lastUserFeedback)) {
+      parts.push(`[User feedback: ${this.lastUserFeedback}]`);
     }
 
+    // Ориентируем модель после компакции: активный план нельзя пересоздавать
+    // с нуля (см. доку planSummaryProvider).
+    const planLine = this.planSummaryProvider?.();
+    if (planLine) parts.push(`[Plan: ${planLine}]`);
+
+    for (const line of [
+      this.facts.filesLine(),
+      this.facts.deletedLine(),
+      this.facts.readLine(),
+      this.facts.decisionsLine(),
+      this.facts.errorsLine(),
+    ]) {
+      if (line) parts.push(line);
+    }
+
+    if (this.thinkingLevel) parts.push(`[Thinking: ${this.thinkingLevel}]`);
+
+    const triedAndFailed = extractTriedAndFailed(oldTurns);
+    if (triedAndFailed.length > 0) {
+      const lines = triedAndFailed.map(
+        (t) => `- ${t.tool}(${t.args}): ${t.error} (failed ${t.count}x)`,
+      );
+      parts.push(`[Already tried & failed — do NOT repeat:]\n${lines.join("\n")}`);
+    }
+
+    return parts.join(" ");
+  }
+
+  /**
+   * Stage A: детерминированная чистка старых tool-результатов (содержимое →
+   * короткая заглушка). Никогда не трогает последние `protectLast` сообщений.
+   * @returns число очищенных результатов.
+   */
+  pruneStaleToolResults(toolResultKeep = this.toolResultKeep, protectLast = KEEP_LAST_N): number {
+    const toolIdx: number[] = [];
+    for (let i = 0; i < this.messages.length; i++) {
+      if (this.messages[i].role === "tool") toolIdx.push(i);
+    }
+    const protectedFrom = this.messages.length - protectLast;
+    const keepFrom = toolIdx.length - toolResultKeep;
+    let pruned = 0;
+    for (let j = 0; j < toolIdx.length; j++) {
+      const i = toolIdx[j];
+      if (i >= protectedFrom) continue;
+      if (j >= keepFrom) continue;
+      const m = this.messages[i];
+      const text = getMessageText(m.content);
+      if (text.startsWith("[tool result pruned")) continue;
+      this.messages[i] = { ...m, content: "[tool result pruned to save context]" };
+      pruned++;
+    }
+    if (pruned > 0) {
+      this.calibrator.invalidate();
+      this.lastEstimateRaw = 0;
+      this.lastEstimateMessageCount = 0;
+    }
+    return pruned;
+  }
+
+  /**
+   * v2-компакция с гарантией прогресса: summarize → prune tool results →
+   * aggressive keepLastN → hard drop. Возвращает результат первой стадии,
+   * давшей значимое сокращение; иначе последний (hard-drop).
+   */
+  compactAdaptive(opts?: CompactOptions): CompactResult | null {
+    const { minReduction, keepLastN, toolResultKeep } = this.resolveCompactOptions(opts);
+
+    let result = this.compact({ keepLastN, minReduction });
+    if (this.isReduced(result, minReduction)) return result;
+
+    result = this.escalatePrune(result, keepLastN, toolResultKeep, minReduction);
+    if (this.isReduced(result, minReduction)) return result;
+
+    result = this.escalateAggressive(result, keepLastN, minReduction);
+    if (this.isReduced(result, minReduction)) return result;
+
+    const smaller = Math.max(2, Math.floor(keepLastN / 2));
+    return this.hardDropOldest(smaller) ?? result;
+  }
+
+  /** Резолвит опции компакции с дефолтами менеджера. */
+  private resolveCompactOptions(opts?: CompactOptions): {
+    minReduction: number;
+    keepLastN: number;
+    toolResultKeep: number;
+  } {
     return {
-      removedTurns: oldTurns.length,
-      keptTurns: freshRecent.length,
+      minReduction: opts?.minReduction ?? 0,
+      keepLastN: opts?.keepLastN ?? KEEP_LAST_N,
+      toolResultKeep: opts?.toolResultKeep ?? this.toolResultKeep,
+    };
+  }
+
+  /** True, если результат дал значимое сокращение. */
+  private isReduced(result: CompactResult | null, minReduction: number): boolean {
+    return result !== null && result.reducedBy > minReduction;
+  }
+
+  /** Стадия A: чистка старых tool-результатов + повторная суммаризация. */
+  private escalatePrune(
+    prev: CompactResult | null,
+    keepLastN: number,
+    toolResultKeep: number,
+    minReduction: number,
+  ): CompactResult | null {
+    if (this.pruneStaleToolResults(toolResultKeep, keepLastN) <= 0) return prev;
+    const pruned = this.compact({ keepLastN, minReduction });
+    if (!pruned) return prev;
+    return this.isReduced(pruned, minReduction) ? { ...pruned, strategy: "prune-tools" } : pruned;
+  }
+
+  /** Стадия B: агрессивнее оставляем свежих сообщений. */
+  private escalateAggressive(
+    prev: CompactResult | null,
+    keepLastN: number,
+    minReduction: number,
+  ): CompactResult | null {
+    const smaller = Math.max(2, Math.floor(keepLastN / 2));
+    if (smaller >= keepLastN) return prev;
+    const aggressive = this.compact({ keepLastN: smaller, minReduction });
+    if (!aggressive) return prev;
+    return this.isReduced(aggressive, minReduction)
+      ? { ...aggressive, strategy: "aggressive" }
+      : aggressive;
+  }
+
+  /**
+   * Stage C: жёсткий дроп старейших групп сверх `keep` (system и активный
+   * system-summary сохраняются). Пишет диагностику вызывающему.
+   */
+  private hardDropOldest(keep: number): CompactResult | null {
+    const firstSystem = this.messages.find((m) => m.role === "system");
+    const nonSystem = this.messages.filter((m) => m.role !== "system");
+    if (nonSystem.length <= keep) return null;
+    const tokensBefore = this.getEstimatedTokens();
+    const qualityBefore = this.getQuality();
+    const messagesBefore = this.messages.length;
+    const head = nonSystem.slice(0, Math.max(0, nonSystem.length - keep * 2));
+    const tail = nonSystem.slice(Math.max(0, nonSystem.length - keep * 2));
+    this.facts.extract(head);
+    const summary: Message = {
+      role: "user",
+      content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context]${this.compactedBlock ? ` ${this.compactedBlock}` : ""}</system-summary>`,
+    };
+    this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...tail];
+    this.iterationsSinceCompaction = 0;
+    this.calibrator.invalidate();
+    this.lastEstimateRaw = 0;
+    this.lastEstimateMessageCount = 0;
+    this.compactionCount++;
+    const tokensAfter = this.getEstimatedTokens();
+    if (this.onCompact) this.onCompact(summary);
+    return {
+      removedTurns: head.length,
+      keptTurns: tail.length,
       tokensBefore,
-      tokensAfter: this.getEstimatedTokens(),
+      tokensAfter,
       qualityBefore,
       qualityAfter: this.getQuality(),
       messagesBefore,
       messagesAfter: this.messages.length,
-      summary: this.compactedBlock ?? "",
+      summary: (this.compactedBlock ?? ""),
+      reducedBy: tokensBefore - tokensAfter,
+      strategy: "hard-drop",
     };
   }
 

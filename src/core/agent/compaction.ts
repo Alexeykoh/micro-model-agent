@@ -1,4 +1,4 @@
-/** Компакция контекста: единая точка всех четырёх триггеров цикла. */
+/** Компакция контекста: единая точка всех триггеров цикла. */
 import type { ContextManager } from "../../modules/context/manager";
 import type { HallucinationDetector } from "../../modules/hallucination/detector";
 import type { Logger } from "../../logger/app-logger";
@@ -13,9 +13,9 @@ import { FORCED_COMPACTION_COOLDOWN, QUALITY_TRIGGER_THRESHOLD } from "./constan
  * 3) принудительно по переполнению бюджета истории;
  * 4) после добавления результата тула.
  *
- * Все четыре консолидированы здесь и выполняют одинаковый контракт:
- * компакция → логирование в session log → обогащение детектора халлюцинаций
- * известными файлами из сводки.
+ * Политика `legacy` воспроизводит поведение 2.18.2 (все четыре триггера
+ * независимо). Политика `v2` (дефолт) добавляет канонический порог по истории,
+ * cooldown переполнения, гарантию прогресса и один триггер на итерацию.
  */
 export class CompactionService {
   constructor(
@@ -27,20 +27,35 @@ export class CompactionService {
     },
   ) {}
 
+  /** Политика v2 для текущего менеджера. */
+  private isV2(): boolean {
+    return this.deps.contextManager.getPolicy?.() === "v2";
+  }
+
   /**
-   * Пре-итерационные проверки: интервал → качество → переполнение.
-   * Порядок сохранён из оригинального цикла: каждая следующая проверка
-   * видит контекст уже ПОСЛЕ предыдущей компакции.
+   * Пре-итерационные проверки. В legacy порядок сохранён из оригинала
+   * (интервал → качество → переполнение). В v2 выполняется не более одного
+   * триггера за итерацию с приоритетом overflow.
    */
   compactIfNeeded(state: LoopState): void {
-    this.compactOnInterval(state.iteration);
-    this.compactOnQuality(state);
-    this.compactOnOverflow(state.iteration);
+    if (!this.isV2()) {
+      this.compactOnInterval(state.iteration);
+      this.compactOnQuality(state);
+      this.compactOnOverflow(state.iteration);
+      return;
+    }
+    this.compactIfNeededV2(state);
   }
 
   /** Проверка после добавления результата тула в контекст. */
   compactAfterTool(state: LoopState): void {
     const { contextManager } = this.deps;
+    if (this.isV2()) {
+      // Лёгкий pre-check: не компактим здесь, только выставляем флаг на старт
+      // следующей итерации (один триггер на итерацию).
+      if (contextManager.needsCompaction()) state.pendingCompaction = true;
+      return;
+    }
     if (!contextManager.needsCompaction()) return;
     const result = contextManager.compact();
     if (!result) return;
@@ -48,6 +63,110 @@ export class CompactionService {
     this.deps.slog.logCompaction({ reason: "after_tool", iteration: state.iteration, ...result });
     this.deps.hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
   }
+
+  // ── v2 ────────────────────────────────────────────────────────────────────
+
+  private compactIfNeededV2(state: LoopState): void {
+    // 1) Overflow — канонический порог по истории (калиброванная оценка),
+    //    cooldown и safety-clamp от неправдоподобного скачка.
+    if (this.tryOverflowV2(state)) return;
+    // 2) Один из оставшихся триггеров: pending (после тула), качество, интервал.
+    this.tryFallbackV2(state);
+  }
+
+  /** Overflow-триггер v2 с cooldown и safety-clamp. True — компакция прошла. */
+  private tryOverflowV2(state: LoopState): boolean {
+    const { contextManager } = this.deps;
+    const cooldown = contextManager.getOverflowCooldown();
+    if (state.iteration - state.lastOverflowCompactionIteration < cooldown) return false;
+    const check = contextManager.checkOverflowAllowed();
+    if (check.implausible) {
+      this.deps.logger.diagnostic(
+        "warn",
+        `Implausible context estimate jump (raw ${check.raw}, calibrated ${check.calibrated}) — overflow compaction skipped`,
+      );
+      return false;
+    }
+    if (!check.allowed) return false;
+    state.lastOverflowCompactionIteration = state.iteration;
+    return this.compactV2(
+      state,
+      `overflow (${check.calibrated} > ${contextManager.getBudget().history})`,
+    );
+  }
+
+  /** Fallback-триггеры v2: pending/качество/интервал. */
+  private tryFallbackV2(state: LoopState): void {
+    const trigger = this.fallbackTrigger(state);
+    if (!trigger) return;
+    if (trigger.qualityDue) state.lastForcedCompactionIteration = state.iteration;
+    this.compactV2(state, trigger.reason);
+  }
+
+  /** Решает, есть ли fallback-причина компакции, и какова она. */
+  private fallbackTrigger(
+    state: LoopState,
+  ): { reason: string; qualityDue: boolean } | null {
+    const { contextManager } = this.deps;
+    const pending = state.pendingCompaction;
+    state.pendingCompaction = false;
+    const quality = contextManager.getQuality();
+    if (this.qualityFallbackDue(state, quality)) {
+      return {
+        reason: `quality-triggered (${quality}% < ${QUALITY_TRIGGER_THRESHOLD}%)`,
+        qualityDue: true,
+      };
+    }
+    if (contextManager.needsIntervalCompaction?.() ?? false) {
+      return { reason: "interval", qualityDue: false };
+    }
+    if (this.pendingFallbackDue(state, pending)) {
+      return { reason: "after-tool", qualityDue: false };
+    }
+    return null;
+  }
+
+  /** Quality-триггер с cooldown. */
+  private qualityFallbackDue(state: LoopState, quality: number): boolean {
+    const { contextManager } = this.deps;
+    return (
+      quality < QUALITY_TRIGGER_THRESHOLD &&
+      contextManager.getCompactionCount() > 0 &&
+      state.iteration - state.lastForcedCompactionIteration >= FORCED_COMPACTION_COOLDOWN
+    );
+  }
+
+  /**
+   * pending после тула обычно означает превышение порога — это территория
+   * overflow, не дублируем его внутри cooldown.
+   */
+  private pendingFallbackDue(state: LoopState, pending: boolean): boolean {
+    if (!pending) return false;
+    const recentOverflow =
+      state.iteration - state.lastOverflowCompactionIteration <
+      this.deps.contextManager.getOverflowCooldown();
+    return !recentOverflow;
+  }
+
+  /**
+   * v2-компакция с гарантией прогресса. No-op (reducedBy ≤ 2% бюджета) не
+   * логируется и не инкрементит счётчик.
+   */
+  private compactV2(state: LoopState, reason: string): boolean {
+    const { contextManager } = this.deps;
+    const minReduction = Math.floor(contextManager.getBudget().history * 0.02);
+    const result = contextManager.compactAdaptive({
+      toolResultKeep: contextManager.getToolResultKeep(),
+      minReduction,
+    });
+    if (!result || result.reducedBy <= minReduction) return false;
+    this.deps.logger.debug(`Context compacted (${result.strategy})`);
+    this.deps.slog.logCompaction({ reason, iteration: state.iteration, ...result });
+    this.deps.hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
+    return true;
+  }
+
+  // ── legacy ────────────────────────────────────────────────────────────────
 
   private compactOnInterval(iteration: number): void {
     const { contextManager } = this.deps;

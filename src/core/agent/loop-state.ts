@@ -35,6 +35,12 @@ export interface LoopState {
 
   /** Итерация последней принудительной компакции по качеству (для cooldown). */
   lastForcedCompactionIteration: number;
+  /** Итерация последней overflow-компакции (v2 cooldown). */
+  lastOverflowCompactionIteration: number;
+  /** Лёгкий pre-check после тула выставил флаг — компакция на старте итерации. */
+  pendingCompaction: boolean;
+  /** Реактивная компакция (context-length error) уже применена в этом ходу. */
+  reactiveCompactionUsed: boolean;
 
   /** Счётчик повторов при вердикте халлюцинации "retry". */
   hallucinationRetries: number;
@@ -179,6 +185,9 @@ export function createLoopState(): LoopState {
     lastText: "",
     lastModelText: "",
     lastForcedCompactionIteration: -FORCED_COMPACTION_COOLDOWN,
+    lastOverflowCompactionIteration: -1e9,
+    pendingCompaction: false,
+    reactiveCompactionUsed: false,
     hallucinationRetries: 0,
     claimCheckRetries: 0,
     artifactClaimRetries: 0,

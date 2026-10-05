@@ -96,6 +96,8 @@ export interface SessionLogEntry {
   removedTurns?: number;
   keptTurns?: number;
   summary?: string;
+  /** Компакция: насколько упал объём (токены). Стадия — в `strategy`. */
+  reducedBy?: number;
   // Поля llm_usage / провенанса
   provider?: string;
   model?: string;

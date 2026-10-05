@@ -1104,6 +1104,33 @@ export class Agent {
           logger.diagnostic("info", "LLM call aborted (interrupt)");
           break;
         }
+        // Реактивная компакция: провайдер вернул context-length ошибку —
+        // один раз форсированно уплотняем и повторяем (circuit-breaker на ход).
+        if (
+          err instanceof LlmError &&
+          err.recoverable &&
+          err.kind === "context_length" &&
+          !state.reactiveCompactionUsed
+        ) {
+          state.reactiveCompactionUsed = true;
+          state.iterRecoverableLlmError = true;
+          const reactive = contextManager.compactAdaptive?.({
+            toolResultKeep: contextManager.getToolResultKeep?.() ?? 6,
+            minReduction: 0,
+          });
+          this.deps.logger.diagnostic(
+            "warn",
+            `Context-length error — reactive compaction (reduced ${reactive?.reducedBy ?? 0} tokens)`,
+          );
+          if (reactive) {
+            slog.logCompaction({
+              reason: "reactive (context-length)",
+              iteration: state.iteration,
+              ...reactive,
+            });
+          }
+          continue;
+        }
         // Восстановимые ошибки LLM (например, токен-лимит на середине
         // tool_call): отдаём локализованную причину обратно в контекст, чтобы
         // модель адаптировалась (разбить запись на куски) вместо смерти всей
