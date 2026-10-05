@@ -732,18 +732,43 @@ export class ContextManager {
    */
   compactAdaptive(opts?: CompactOptions): CompactResult | null {
     const { minReduction, keepLastN, toolResultKeep } = this.resolveCompactOptions(opts);
+    // Исходный объём — база для ОБЩЕГО прогресса. Стадии сжимают историю
+    // последовательно, поэтому reducedBy отдельной стадии занижен; клиент
+    // (CompactionService) должен видеть суммарное сокращение от исходного.
+    const originalTokens = this.getEstimatedTokens();
 
-    let result = this.compact({ keepLastN, minReduction });
+    let result = this.finalizeAdaptive(this.compact({ keepLastN, minReduction }), originalTokens);
     if (this.isReduced(result, minReduction)) return result;
 
-    result = this.escalatePrune(result, keepLastN, toolResultKeep, minReduction);
+    result = this.finalizeAdaptive(
+      this.escalatePrune(result, keepLastN, toolResultKeep, minReduction),
+      originalTokens,
+    );
     if (this.isReduced(result, minReduction)) return result;
 
-    result = this.escalateAggressive(result, keepLastN, minReduction);
+    result = this.finalizeAdaptive(
+      this.escalateAggressive(result, keepLastN, minReduction),
+      originalTokens,
+    );
     if (this.isReduced(result, minReduction)) return result;
 
     const smaller = Math.max(2, Math.floor(keepLastN / 2));
-    return this.hardDropOldest(smaller) ?? result;
+    return this.finalizeAdaptive(this.hardDropOldest(smaller) ?? result, originalTokens);
+  }
+
+  /** Пересчитывает токены результата как ОБЩЕЕ сокращение от исходного объёма. */
+  private finalizeAdaptive(
+    result: CompactResult | null,
+    originalTokens: number,
+  ): CompactResult | null {
+    if (!result) return null;
+    const tokensAfter = this.getEstimatedTokens();
+    return {
+      ...result,
+      tokensBefore: originalTokens,
+      tokensAfter,
+      reducedBy: originalTokens - tokensAfter,
+    };
   }
 
   /** Резолвит опции компакции с дефолтами менеджера. */
@@ -773,8 +798,7 @@ export class ContextManager {
   ): CompactResult | null {
     if (this.pruneStaleToolResults(toolResultKeep, keepLastN) <= 0) return prev;
     const pruned = this.compact({ keepLastN, minReduction });
-    if (!pruned) return prev;
-    return this.isReduced(pruned, minReduction) ? { ...pruned, strategy: "prune-tools" } : pruned;
+    return pruned ? { ...pruned, strategy: "prune-tools" } : prev;
   }
 
   /** Стадия B: агрессивнее оставляем свежих сообщений. */
@@ -786,10 +810,7 @@ export class ContextManager {
     const smaller = Math.max(2, Math.floor(keepLastN / 2));
     if (smaller >= keepLastN) return prev;
     const aggressive = this.compact({ keepLastN: smaller, minReduction });
-    if (!aggressive) return prev;
-    return this.isReduced(aggressive, minReduction)
-      ? { ...aggressive, strategy: "aggressive" }
-      : aggressive;
+    return aggressive ? { ...aggressive, strategy: "aggressive" } : prev;
   }
 
   /**
