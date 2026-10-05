@@ -7,6 +7,16 @@ import type { LoopState } from "./loop-state";
 import { FORCED_COMPACTION_COOLDOWN, QUALITY_TRIGGER_THRESHOLD } from "./constants";
 
 /**
+ * Порог значимости компакции. Больше из двух: 2% бюджета истории и 3% текущего
+ * (калиброванного) контекста. Привязка к контексту не даёт «сжатию впустую»
+ * (напр. −1.2% на 24K) считаться успехом и короткозамкнуть эскалацию стадий —
+ * такой результат уходит на aggressive/hard-drop.
+ */
+export function computeMinReduction(budgetHistory: number, contextTokens: number): number {
+  return Math.max(Math.floor(budgetHistory * 0.02), Math.floor(contextTokens * 0.03));
+}
+
+/**
  * Единая точка компакции контекста. В agent.ts логика дублировалась в 4 местах:
  * 1) интервал (needsCompaction) в начале итерации;
  * 2) принудительно по низкому качеству (< QUALITY_TRIGGER_THRESHOLD) с cooldown;
@@ -74,7 +84,12 @@ export class CompactionService {
     this.tryFallbackV2(state);
   }
 
-  /** Overflow-триггер v2 с cooldown и safety-clamp. True — компакция прошла. */
+  /**
+   * Overflow-триггер v2 с cooldown и safety-clamp. Возвращает true, если
+   * компакция БЫЛА ПОПЫТАНА (порог превышен, cooldown истёк) — независимо от
+   * того, дала ли она значимое сокращение. Это гарантирует «один триггер на
+   * итерацию»: no-op overflow не открывает дорогу fallback-компакции в том же ходу.
+   */
   private tryOverflowV2(state: LoopState): boolean {
     const { contextManager } = this.deps;
     const cooldown = contextManager.getOverflowCooldown();
@@ -89,10 +104,11 @@ export class CompactionService {
     }
     if (!check.allowed) return false;
     state.lastOverflowCompactionIteration = state.iteration;
-    return this.compactV2(
+    this.compactV2(
       state,
       `overflow (${check.calibrated} > ${contextManager.getBudget().history})`,
     );
+    return true;
   }
 
   /** Fallback-триггеры v2: pending/качество/интервал. */
@@ -149,12 +165,15 @@ export class CompactionService {
   }
 
   /**
-   * v2-компакция с гарантией прогресса. No-op (reducedBy ≤ 2% бюджета) не
-   * логируется и не инкрементит счётчик.
+   * v2-компакция с гарантией прогресса. No-op (reducedBy ≤ порога значимости,
+   * см. `computeMinReduction`) не логируется и не инкрементит счётчик.
    */
   private compactV2(state: LoopState, reason: string): boolean {
     const { contextManager } = this.deps;
-    const minReduction = Math.floor(contextManager.getBudget().history * 0.02);
+    const minReduction = computeMinReduction(
+      contextManager.getBudget().history,
+      contextManager.getContextTokens(),
+    );
     const result = contextManager.compactAdaptive({
       toolResultKeep: contextManager.getToolResultKeep(),
       minReduction,
