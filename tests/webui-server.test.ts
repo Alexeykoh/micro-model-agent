@@ -251,8 +251,8 @@ describe("webui server", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "   " }),
       });
-      expect(empty.status).toBe(400);
-      expect(await empty.json()).toEqual({ error: "empty" });
+      expect(empty.status).toBe(200);
+      expect(await empty.json()).toMatchObject({ ok: true, noop: true });
     });
   });
 

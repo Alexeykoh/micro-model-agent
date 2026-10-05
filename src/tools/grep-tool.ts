@@ -2,7 +2,7 @@
 import { spawn, } from "child_process";
 import { resolve } from "path";
 import { t } from "../i18n/index";
-import type { ToolDefinition } from "./types";
+import type { ToolDefinition, ToolResult } from "./types";
 import { logBashCommand, logSecurityBlock } from "../modules/security/audit-log";
 import { isPathInScope } from "../modules/security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
@@ -64,7 +64,7 @@ export function runSearch(
 }
 
 /** Классифицирует ошибку внешнего поиска в результат или null (ENOENT). */
-function classifySearchError(e: any): { success: boolean; output: string } | null {
+function classifySearchError(e: any): ToolResult | null {
   if (/timed out/.test(e?.message)) {
     return { success: false, output: t("error.grep_failed", { message: e.message }) };
   }
@@ -81,7 +81,7 @@ async function runExternalEngine(
   bin: "rg" | "grep",
   argv: string[],
   ctx: { baseDir: string; sessionId?: string },
-): Promise<{ success: boolean; output: string } | null> {
+): Promise<ToolResult | null> {
   logBashCommand(ctx.sessionId, `${bin} ${argv.join(" ")}`, false, "grep-tool");
   try {
     const output = await runSearch(bin, argv, ctx.baseDir);
@@ -113,7 +113,7 @@ function runJsEngine(
   pattern: string,
   searchPath: string,
   include: string | undefined,
-): { success: boolean; output: string } {
+): ToolResult {
   try {
     const output = searchWithJs(pattern, searchPath, ctx.baseDir, {
       include,
@@ -132,7 +132,7 @@ async function runGrepEngines(
   searchPath: string,
   include: string | undefined,
   engine: "auto" | "rg" | "grep" | "js",
-): Promise<{ success: boolean; output: string }> {
+): Promise<ToolResult> {
   const { rgArgs, grepArgs } = buildSearchArgs(pattern, searchPath, include);
   const engines = new Set(engine === "auto" ? ["rg", "grep", "js"] : [engine]);
   if (engines.has("rg")) {
@@ -145,7 +145,11 @@ async function runGrepEngines(
   }
   if (engines.has("js")) return runJsEngine(ctx, pattern, searchPath, include);
   // Движок задан явно и недоступен — actionable-ошибка вместо ENOENT.
-  return { success: false, output: t("error.grep_no_engine", { engine }) };
+  return {
+    success: false,
+    output: t("error.grep_no_engine", { engine }),
+    errorMeta: { code: "grep_no_engine", retryable: true, hint: "set tools.grepEngine=auto or js" },
+  };
 }
 
 /**
@@ -156,7 +160,7 @@ function checkGrepScope(
   ctx: any,
   args: Record<string, unknown>,
   searchPath: string,
-): { success: boolean; output: string } | null {
+): ToolResult | null {
   const scopeCheck = isPathInScope(
     ctx.baseDir,
     searchPath,
@@ -175,6 +179,7 @@ function checkGrepScope(
     output: t("file.path_not_allowed", {
       path: `${args.path ?? "."} — ${scopeCheck.reason}`,
     }),
+    errorMeta: { code: "path_not_allowed", retryable: false, hint: "search inside the project root" },
   };
 }
 

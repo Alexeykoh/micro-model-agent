@@ -177,6 +177,12 @@ export interface ToolResult {
   artifactPath?: string;
   /** Токены прогона субагента (атрибуция стоимости MoE по expert_tag). */
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  /**
+   * Структурированная ошибка: код, повторяемость, подсказка. Отдельное
+   * model-facing поле — доставляется модели компактной директивой, но НЕ
+   * протекает в чат (см. `appendErrorMeta`).
+   */
+  errorMeta?: { code: string; retryable?: boolean; hint?: string };
 }
 
 /** Вызов тула: id, имя, аргументы. */

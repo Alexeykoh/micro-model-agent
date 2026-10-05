@@ -19,6 +19,7 @@ import {
   truncateToolOutput,
   toolFailureSummary,
   isExecutableScriptPath,
+  appendErrorMeta,
 } from "./tool-output";
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
@@ -303,7 +304,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       );
       contextManager.addMessage({
         role: "tool",
-        content: truncatedOutput,
+        content: appendErrorMeta(truncatedOutput, result.errorMeta),
         name: call.name,
         tool_call_id: call.id,
         success: result.success,
