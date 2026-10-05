@@ -224,6 +224,12 @@ export interface ToolsConfig {
    * всех зарегистрированных тулов.
    */
   enableOnDemand: boolean;
+  /**
+   * Движок поиска для тула `grep`: `auto` (rg → grep → zero-dep JS),
+   * `rg`/`grep` (только системный бинарь), `js` (только встроенный обход).
+   * Дефолт auto.
+   */
+  grepEngine?: "auto" | "rg" | "grep" | "js";
 }
 
 export interface ExpertConfig {

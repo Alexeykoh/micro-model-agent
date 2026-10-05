@@ -103,8 +103,20 @@ class ProcessRegistry {
   /**
    * Запускает команду. Возвращённая запись буферизует вывод и отдаёт статус;
    * дождаться завершения можно через `waitForExit(id)`.
+   *
+   * Дедуп: если та же команда (нормализованные command+cwd) уже бежит в этой
+   * сессии — возвращаем существующий процесс без дубля (если не `force`).
    */
-  start(command: string, cwd: string, sessionId?: string): ManagedProcess {
+  start(
+    command: string,
+    cwd: string,
+    sessionId?: string,
+    opts?: { force?: boolean },
+  ): ManagedProcess {
+    if (!opts?.force) {
+      const existing = this.findRunning(command, cwd, sessionId);
+      if (existing) return existing;
+    }
     const id = `proc_${Date.now()}_${++seq}`;
     const entry: ManagedProcess = {
       id,
@@ -233,6 +245,21 @@ class ProcessRegistry {
     this.exitWaiters.set(id, { promise, resolve });
 
     return entry;
+  }
+
+  /** Ищет уже бегущий процесс с той же нормализованной командой и cwd. */
+  private findRunning(command: string, cwd: string, sessionId?: string): ManagedProcess | null {
+    const key = this.dedupeKey(command, cwd, sessionId);
+    for (const p of this.procs.values()) {
+      if (p.status === "running" && this.dedupeKey(p.command, p.cwd, p.sessionId) === key) {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  private dedupeKey(command: string, cwd: string, sessionId?: string): string {
+    return `${sessionId ?? ""}\u0000${cwd}\u0000${command.trim().replace(/\s+/g, " ")}`;
   }
 
   /** Список процессов, опционально по сессии. */

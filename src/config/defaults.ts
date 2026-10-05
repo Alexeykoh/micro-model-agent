@@ -45,6 +45,7 @@ export const DEFAULTS: AppConfig = {
     // question/approve.
     defaultTags: ["file", "code"],
     enableOnDemand: true,
+    grepEngine: "auto",
   },
   experts: {
     code: {

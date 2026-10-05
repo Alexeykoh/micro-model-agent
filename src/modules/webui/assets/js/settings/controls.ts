@@ -154,7 +154,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   agent: [
     { id: "agent.moe", titleKey: "web.settings.sec.agent.moe", descKey: "web.settings.sec.agent.moe.desc", keys: ["moe.enabled", "moe.maxReplanCycles", "experts"] },
     { id: "agent.critic", titleKey: "web.settings.sec.agent.critic", descKey: "web.settings.sec.agent.critic.desc", keys: ["critic.enabled", "critic.model", "critic.provider", "critic.tools", "critic.maxCalls", "critic.maxRepairCycles", "critic.timeoutMs"] },
-    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "skills.budget"] },
+    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "tools.grepEngine", "skills.budget"] },
     { id: "agent.subagent", titleKey: "web.settings.sec.agent.subagent", descKey: "web.settings.sec.agent.subagent.desc", keys: ["subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt"] },
     { id: "agent.hallucination", titleKey: "web.settings.sec.agent.hallucination", descKey: "web.settings.sec.agent.hallucination.desc", keys: ["hallucination.judge.enabled"] },
   ],

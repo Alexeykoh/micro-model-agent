@@ -259,6 +259,9 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
   bool("tools.enableOnDemand", "agent", true,
     (c) => c.tools.enableOnDemand,
     (c, v) => { c.tools.enableOnDemand = v as boolean; }),
+  enumOf("tools.grepEngine", "agent", ["auto", "rg", "grep", "js"] as const, false,
+    (c) => c.tools.grepEngine ?? DEFAULTS.tools.grepEngine,
+    (c, v) => { c.tools.grepEngine = v as "auto" | "rg" | "grep" | "js"; }),
 
   bool("session.autoSave", "session", false,
     (c) => c.session?.autoSave ?? DEFAULTS.session.autoSave,
