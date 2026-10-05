@@ -82,6 +82,11 @@ export const DEFAULTS: AppConfig = {
     responseReserve: 0.15,
     compactionThreshold: 0.75,
     compactionMinLoad: 0.5,
+    policy: "v2",
+    overflowCooldown: 3,
+    toolResultKeep: 6,
+    calibrationWarmup: 3,
+    ratioFloor: 0.5,
   },
   instructions: {
     summarize: true,

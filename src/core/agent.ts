@@ -449,6 +449,9 @@ export class Agent {
     const cm = this.deps.contextManager;
     if (typeof cm.getSnapshot !== "function") return;
     const snap = cm.getSnapshot();
+    const diag = typeof cm.getEstimateDiagnostics === "function"
+      ? cm.getEstimateDiagnostics()
+      : undefined;
     const history = cm.getActiveHistory();
     const systemMsg = history.find((m) => m.role === "system");
     slog.logContext({
@@ -464,6 +467,10 @@ export class Agent {
           : undefined,
       toolTokens: snap.toolTokens,
       tokens: snap.tokens,
+      estimatedTokensRaw: diag?.raw,
+      contextTokens: diag?.calibrated,
+      calibrationRatio: diag?.ratio,
+      calibrationState: diag?.state,
       quality: snap.quality,
       messageCount: snap.messageCount,
       compactionCount: snap.compactionCount,
@@ -900,8 +907,7 @@ export class Agent {
         allToolsForBudget.filter((t) => t.boundedOutput).map((t) => t.name),
       );
       toolTokenEstimate = allToolsForBudget.reduce(
-        (sum, t) =>
-          sum + Math.ceil((t.description.length + JSON.stringify(t.parameters).length) / 4),
+        (sum, t) => sum + estimateTokens(t.description + JSON.stringify(t.parameters)),
         0,
       );
       contextManager.setToolTokens(toolTokenEstimate);
@@ -976,12 +982,16 @@ export class Agent {
       let reasoningContent = "";
       const toolCalls: ToolCall[] = [];
       let sawToolCall = false;
+      let sawUsage = false;
       let emittedReasoning = false;
       let malformedToolArgs = 0;
 
       this.emitPhase(state.iteration, "thinking", onPhase);
       const llmStart = Date.now();
-      const baseline = tokenTracker.beginIteration(state, contextManager.getEstimatedTokens());
+      // Сырая оценка на момент отправки — вход калибровки по реальному usage.
+      const estimateAtSend = contextManager.getEstimatedTokens();
+      const messageCountAtSend = contextManager.getMessageCount?.() ?? 0;
+      const baseline = tokenTracker.beginIteration(state, estimateAtSend);
       logger.logLLMRequest(config.model, history.length, input, "agent");
 
       // Оценка reasoning-effort на итерацию. Сигналы описывают события
@@ -1071,6 +1081,15 @@ export class Agent {
             // non-streaming fallback дают два done). ЗАМЕНЯЕМ running-суммы
             // вместо аккумуляции, иначе один реальный запрос посчитается дважды.
             tokenTracker.recordApiUsage(state, baseline, chunk.usage);
+            // Реальный prompt-usage — достоверный якорь калибровки оценки.
+            if (chunk.usage.promptTokens > 0) {
+              sawUsage = true;
+              contextManager.calibrate?.(
+                chunk.usage.promptTokens,
+                estimateAtSend,
+                messageCountAtSend,
+              );
+            }
           }
           if (chunk.type === "warning" && chunk.content) {
             // Нефатальное уведомление провайдера (напр., ответ срезан cap'ом).
@@ -1123,6 +1142,9 @@ export class Agent {
       } finally {
         this.emitPhase(state.iteration, "done", onPhase);
       }
+
+      // Провайдер не отдал usage — калибровка помечается stale (>1 вызова).
+      if (!sawUsage) contextManager.noteMissingUsage?.();
 
       // Совокупная длина ответа — метрики токенов остаются валидными, даже
       // когда бэкенд опускает `usage`.

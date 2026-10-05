@@ -25,6 +25,8 @@ export interface Message {
 
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import type { TokenCounter } from "../../llm/token-counter";
+import { ContextCalibrator, isImplausibleJump } from "../../core/agent/context-calibration";
+import type { CalibrationState } from "../../core/agent/context-calibration";
 
 /** Бюджет контекста в токенах: системный промпт, резерв ответа, история. */
 export interface ContextBudget {
@@ -65,6 +67,22 @@ export interface ContextSnapshot {
   iterationsSinceCompaction: number;
   /** Разбивка контекста по частям (сегменты полосы в UI). */
   breakdown: ContextBreakdown;
+  /** Сырая оценка (сообщения + тулы) без калибровки. */
+  estimatedTokensRaw: number;
+  /** Калиброванная оценка — вход для порогов компакции. */
+  contextTokens: number;
+  /** Текущее отношение actual/estimated калибратора. */
+  calibrationRatio: number;
+  /** Состояние калибратора. */
+  calibrationState: CalibrationState;
+}
+
+/** Диагностика оценки контекста (аддитивные поля лога/снимка). */
+export interface ContextEstimateDiagnostics {
+  raw: number;
+  calibrated: number;
+  ratio: number;
+  state: CalibrationState;
 }
 
 /** Запись "пробовали и не вышло": тул, args, ошибка, счётчик повторов. */
@@ -163,6 +181,15 @@ export class ContextManager {
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
   private toolTokens = 0;
+  /** Калибратор оценки по реальному usage провайдера. */
+  private calibrator: ContextCalibrator;
+  /** Опции калибратора — чтобы пересоздать при clear(). */
+  private calibrationOptions: { warmup?: number; ratioFloor?: number };
+  /** Предыдущая сырая оценка и число сообщений — вход safety-clamp. */
+  private lastEstimateRaw = 0;
+  private lastEstimateMessageCount = 0;
+  /** Последняя проверка overflow отказана safety-clamp (для лога). */
+  private lastJumpWasImplausible = false;
   /** Текущий reasoning-уровень (ставит цикл агента, входит в сводку компакции). */
   thinkingLevel: string | null = null;
   onCompact: ((summary: Message) => void) | null = null;
@@ -185,6 +212,11 @@ export class ContextManager {
     this.compactionMinLoad = contextBudget?.compactionMinLoad ?? 0.5;
     this.budget = this.calculateBudget(contextWindow, contextBudget);
     this.tokenCounter = tokenCounter ?? null;
+    this.calibrationOptions = {
+      warmup: contextBudget?.calibrationWarmup,
+      ratioFloor: contextBudget?.ratioFloor,
+    };
+    this.calibrator = new ContextCalibrator(this.calibrationOptions);
   }
 
   /**
@@ -348,18 +380,35 @@ export class ContextManager {
     return this.messages.length;
   }
 
-  // Токенный кэш на сообщение: сообщения считаются иммутабельными после добавления
-  // (компакция/updateSystemPrompt создают новые объекты), поэтому WeakMap безопасен
-  // и превращает повторную оценку всей истории из O(n) кодирований в O(1).
-  private tokenCache = new WeakMap<Message, number>();
+  // Токенный кэш на сообщение. Сообщения считаются иммутабельными после
+  // добавления, но защищаемся от in-place мутаций (напр. поздний аттач
+  // картинок): кэш хранит сигнатуру контента и пересчитывает при её смене.
+  // Это устраняет класс багов «оценка выросла на +44K, добавлено 2 сообщения».
+  private tokenCache = new WeakMap<Message, { sig: string; tokens: number }>();
+
+  /** Дешёвая сигнатура контента сообщения (детект мутации без токенизации). */
+  private messageSignature(m: Message): string {
+    const text = typeof m.content === "string" ? m.content : getMessageText(m.content);
+    const parts = Array.isArray(m.content)
+      ? m.content
+          .map((p) =>
+            p.type === "image_url" ? `i:${p.image_url?.url?.length ?? 0}` : "t",
+          )
+          .join(",")
+      : "s";
+    const tc = m.tool_calls
+      ? m.tool_calls.map((t) => `${t.id}:${t.function.name}:${t.function.arguments.length}`).join("|")
+      : "";
+    return `${m.role}\u0001${text.length}\u0001${parts}\u0001${tc}`;
+  }
 
   private estimateMessageTokensCached(m: Message): number {
-    let t = this.tokenCache.get(m);
-    if (t === undefined) {
-      t = this.estimateMessageTokens(m);
-      this.tokenCache.set(m, t);
-    }
-    return t;
+    const sig = this.messageSignature(m);
+    const cached = this.tokenCache.get(m);
+    if (cached !== undefined && cached.sig === sig) return cached.tokens;
+    const tokens = this.estimateMessageTokens(m);
+    this.tokenCache.set(m, { sig, tokens });
+    return tokens;
   }
 
   private estimateMessageTokens(m: Message): number {
@@ -507,6 +556,10 @@ export class ContextManager {
     });
     this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...freshRecent];
     this.iterationsSinceCompaction = 0;
+    // Компакция переписала историю — baseline калибровки недействителен.
+    this.calibrator.invalidate();
+    this.lastEstimateRaw = 0;
+    this.lastEstimateMessageCount = 0;
 
     if (this.onCompact) {
       this.onCompact(summary);
@@ -560,6 +613,7 @@ export class ContextManager {
   }
 
   getSnapshot(): ContextSnapshot {
+    const diag = this.getEstimateDiagnostics();
     return {
       window: this.contextWindow,
       budget: { ...this.budget },
@@ -570,6 +624,10 @@ export class ContextManager {
       compactionCount: this.compactionCount,
       iterationsSinceCompaction: this.iterationsSinceCompaction,
       breakdown: this.getBreakdown(),
+      estimatedTokensRaw: diag.raw,
+      contextTokens: diag.calibrated,
+      calibrationRatio: diag.ratio,
+      calibrationState: diag.state,
     };
   }
 
@@ -584,6 +642,9 @@ export class ContextManager {
     } else {
       this.messages.unshift({ role: "system", content });
     }
+    // Baseline калибровки НЕ сбрасываем: схема baseline+delta инвариантна к
+    // составу промпта (raw пересчитывается с новым system, дельта корректна).
+    // Сброс на каждый плановый чеклист держал бы калибровку вечно в warmup.
   }
 
   /** Копия активной истории сообщений. */
@@ -605,6 +666,10 @@ export class ContextManager {
     this.lastUserTask = "";
     this.lastUserFeedback = "";
     this.sessionMission = "";
+    this.calibrator = new ContextCalibrator(this.calibrationOptions);
+    this.lastEstimateRaw = 0;
+    this.lastEstimateMessageCount = 0;
+    this.lastJumpWasImplausible = false;
   }
 
   /** Оценка токенов истории (сообщения + токены тулов). */
@@ -612,6 +677,70 @@ export class ContextManager {
     return (
       this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0) + this.toolTokens
     );
+  }
+
+  /**
+   * Калиброванная оценка — вход для порогов компакции. Сырая оценка остаётся
+   * в `getEstimatedTokens()` для бюджета cost-tracking/prefix/critic.
+   */
+  getContextTokens(): number {
+    return this.calibrator.calibrate(this.getEstimatedTokens(), this.messages.length);
+  }
+
+  /**
+   * Принимает реальный `usage` после LLM-вызова и обновляет калибровку.
+   * @param actual реальные `prompt_tokens`; `estimatedAtSend` — сырая оценка
+   *   на момент отправки; `messageCount` — число сообщений в тот момент.
+   */
+  calibrate(actual: number, estimatedAtSend: number, messageCount: number): void {
+    this.calibrator.observe(actual, estimatedAtSend, messageCount);
+  }
+
+  /** Помечает LLM-вызов без `usage` (провайдер не отдал токены). */
+  noteMissingUsage(): void {
+    this.calibrator.noteMissingUsage();
+  }
+
+  /** Диагностика оценки контекста (аддитивные поля лога/снимка). */
+  getEstimateDiagnostics(): ContextEstimateDiagnostics {
+    const raw = this.getEstimatedTokens();
+    return {
+      raw,
+      calibrated: this.calibrator.calibrate(raw, this.messages.length),
+      ratio: this.calibrator.getRatio(),
+      state: this.calibrator.getState(),
+    };
+  }
+
+  /**
+   * Проверка порога overflow с safety-clamp: неправдоподобный скачок сырой
+   * оценки не запускает компакцию (warn-диагностика в логе). Вызывается один
+   * раз на итерацию, обновляет замеренную точку.
+   */
+  checkOverflowAllowed(): { allowed: boolean; raw: number; calibrated: number; implausible: boolean } {
+    const raw = this.getEstimatedTokens();
+    const messageCount = this.messages.length;
+    const implausible = isImplausibleJump(
+      raw,
+      this.lastEstimateRaw,
+      messageCount,
+      this.lastEstimateMessageCount,
+    );
+    this.lastEstimateRaw = raw;
+    this.lastEstimateMessageCount = messageCount;
+    this.lastJumpWasImplausible = implausible;
+    const calibrated = this.calibrator.calibrate(raw, messageCount);
+    return {
+      allowed: !implausible && calibrated > this.budget.history,
+      raw,
+      calibrated,
+      implausible,
+    };
+  }
+
+  /** True, если последняя проверка overflow была отброшена safety-clamp. */
+  wasLastJumpImplausible(): boolean {
+    return this.lastJumpWasImplausible;
   }
 
   /** Задаёт токены определений тулов (прибавляются к оценке). */
@@ -630,5 +759,15 @@ export class ContextManager {
     if (tokenCounter !== undefined) {
       this.tokenCounter = tokenCounter ?? null;
     }
+    // Reconfigure/смена окна — калибровка недействительна.
+    this.calibrator.invalidate();
+  }
+
+  /**
+   * Токены истории для порога overflow: `used − system − tools` (калибровано).
+   * Эквивалент `getBreakdown().history` в терминах калиброванной оценки.
+   */
+  getHistoryTokens(): number {
+    return Math.max(0, this.getContextTokens() - this.systemTokens() - this.toolTokens);
   }
 }
