@@ -322,14 +322,16 @@ await createTestPlan(execModule, "T", ["Create src/missing.ts with content", "Re
 await createTestPlan(execModule, "T", ["Create src/a.ts with content"]);
     writeTestFile(tmpDir, "src/a.ts", "export const a = 1;\n");
 
-    // A successful write on the step file auto-completes the last step → the
-    // plan auto-archives and clears the tracker.
+    // A successful write on the step file auto-completes the last step; the
+    // plan is archived at the turn boundary, which records it for the audit.
     const plugin = execModule.getPlugin();
     const ctx2 = mockCtx();
     plugin.onAfterTool!(ctx2, { name: "write_file", arguments: { path: "src/a.ts" } } as any, {
       success: true,
       output: "Written src/a.ts",
     });
+    expect(execModule.getTracker()).not.toBeNull();
+    execModule.archiveCompletedPlan();
     expect(execModule.getTracker()).toBeNull();
     const audit = await execModule.runFinalAudit();
     expect(audit).not.toBeNull();

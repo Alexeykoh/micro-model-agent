@@ -151,6 +151,13 @@ export class ExecutionModule implements AgentModule {
    */
   private completedPlan: Plan | null = null;
   /**
+   * Авто-advance шагов по файловым деливераблам (config execution.autoAdvance).
+   * При false харнесс только подталкивает модель закрыть шаг самому.
+   */
+  private autoAdvance = true;
+  /** План завершён в этом ходу — архивировать на границе хода (onTurnEnd). */
+  private pendingAutoArchive = false;
+  /**
    * Отложенные <system-summary>. Инжектятся onBeforeTool/onAfterTool, но
    * флашатся в onBeforeThink — никогда не встают между assistant tool_call и
    * его tool-результатами (рвёт спаривание и хоронит варнинги, на которые
@@ -351,6 +358,43 @@ export class ExecutionModule implements AgentModule {
   /** Забывает завершённый план (abort/delete/purge — аудитить нечего). */
   clearCompleted(): void {
     this.completedPlan = null;
+  }
+
+  /** Включает/выключает авто-advance шагов (config execution.autoAdvance). */
+  setAutoAdvance(enabled: boolean): void {
+    this.autoAdvance = enabled;
+  }
+
+  /**
+   * Архивирует завершённый план на границе хода (onTurnEnd). Раньше архив
+   * происходил посреди хода в advancePlanIfStepComplete — модель продолжала
+   * звать plan_step/re-plan и получала «нет активного плана». Теперь план
+   * живёт до конца хода, а при архивации модель получает явное уведомление.
+   */
+  archiveCompletedPlan(): void {
+    if (!this.pendingAutoArchive && !(this.tracker && this.tracker.isComplete())) return;
+    const tracker = this.tracker;
+    if (!tracker) {
+      this.pendingAutoArchive = false;
+      return;
+    }
+    const completed = tracker.getPlan();
+    this.store.archivePlan(completed);
+    this.recordCompleted(completed); // final audit still verifies it
+    this.tracker = null;
+    this.pendingAutoArchive = false;
+    this.flushSessionPlan();
+    const settled = completed.steps.filter(
+      (s) => s.status === "done" || s.status === "skipped",
+    ).length;
+    this.pendingMessages.push({
+      role: "user",
+      content: `<system-summary>${t("plan.completed_archived", {
+        id: completed.id,
+        done: String(settled),
+        total: String(completed.steps.length),
+      })}</system-summary>`,
+    });
   }
 
   /** Восстанавливает активный план с диска. False, если нет/уже завершён (тогда в архив). */
@@ -636,6 +680,7 @@ export class ExecutionModule implements AgentModule {
       parseKinds: (a, st) => this.parseKinds(a, st),
       parseChecks: (a, st) => this.parseChecks(a, st),
       getTaskText: (c) => this.getTaskText(c),
+      noActivePlanMessage: () => this.noActivePlanMessage(),
       typecheckFailures: this.state.typecheckFailures,
       baseDir: this.baseDir,
       wasFileDeleted: this.hallucinationDetector
@@ -656,6 +701,7 @@ export class ExecutionModule implements AgentModule {
       store: this.store,
       checkPlanAlignment: (call) => this.checkPlanAlignment(call),
       advancePlanIfStepComplete: (sl) => this.advancePlanIfStepComplete(sl),
+      archiveCompletedPlan: () => this.archiveCompletedPlan(),
       maybeSearchError: (ctx, call) => this.maybeSearchError(ctx, call),
     });
   }
@@ -845,6 +891,18 @@ export class ExecutionModule implements AgentModule {
       }
     }
 
+    // При выключенном autoAdvance статус ставит модель: подталкиваем её
+    // закрыть шаг явно, не мутируя план молча (step-gate nudge сохраняется).
+    if (!this.autoAdvance) {
+      this.pendingMessages.push({
+        role: "user",
+        content: `<system-summary>${t("exec.step_gate_manual", {
+          step: String(step.id),
+        })}</system-summary>`,
+      });
+      return;
+    }
+
     // Все проверки прошли — двигаем
     this.tracker?.updateStepStatus(step.id, "done");
     const hadNext = this.tracker?.advance() ?? false;
@@ -870,17 +928,12 @@ export class ExecutionModule implements AgentModule {
       content: `<system-summary>${nextMsg}</system-summary>`,
     });
 
-    // Авто-архив только что завершённого плана (все шаги done/skipped).
-    // Готовый план не висит активным вечно, якоря агента на готовую задачу
-    // ("continue step 4, do NOT create a new plan" — петля ses_msxjbnm4).
-    // Per-step deliverable-gate файлы уже проверил.
+    // Авто-архив НЕ здесь: план живёт до границы хода (onTurnEnd →
+    // archiveCompletedPlan), чтобы модель не получала «нет активного плана»
+    // посреди работы (петля ses_msxjbnm4). Помечаем — архивируется в конце хода.
     if (this.tracker?.isComplete()) {
-      const completed = this.tracker.getPlan();
-      this.store.archivePlan(completed);
-      this.recordCompleted(completed); // final audit still verifies it
-      this.tracker = null;
-      this.flushSessionPlan(); // завершённый план не висит в слоте сессии
-      sessionLog?.plan("auto-archive", `Plan ${completed.id} complete — archived`);
+      this.pendingAutoArchive = true;
+      sessionLog?.plan("auto-advance", `Plan ${this.tracker.getPlan().id} complete — archive at turn end`);
     }
   }
 
@@ -948,24 +1001,34 @@ export class ExecutionModule implements AgentModule {
 
   /**
    * Валидирует пер-шаговый аргумент `checks` для create / re-plan плана.
-   * Checks ОБЯЗАТЕЛЬНЫ (шаг без контракта верификации свой done не докажет):
-   * отсутствующие, несовпавшие по длине или с битым префиксом возвращают
-   * i18n-строку ошибки. Валидные префиксы: file-exists: / command: /
-   * manual: (см. plan-checks.ts).
+   * Checks НЕОБЯЗАТЕЛЬНЫ: если массив не передан, харнесс проставляет
+   * self-certified `manual:<краткая формулировка шага>` (никогда не блокирует
+   * прогресс). Если передан, но длина не совпала — actionable-ошибка с числами.
+   * Валидные префиксы: file-exists: / command: / manual: (см. plan-checks.ts).
    */
   private parseChecks(
     args: Record<string, unknown>,
     steps: string[],
   ): { checks: string[] | null; error: string | null } {
     if (args.checks === undefined) {
-      return { checks: null, error: t("plan.checks_required") };
+      // Необязательный контракт: self-certified manual-фолбэк, без hard-гейта.
+      return {
+        checks: steps.map((s) => `manual:${s.trim().slice(0, 60)}`),
+        error: null,
+      };
     }
     if (!Array.isArray(args.checks)) {
       return { checks: null, error: t("plan.checks_not_array") };
     }
     const raw = args.checks.map(String);
     if (raw.length !== steps.length) {
-      return { checks: null, error: t("plan.checks_mismatch") };
+      return {
+        checks: null,
+        error: t("plan.checks_mismatch", {
+          expected: String(steps.length),
+          actual: String(raw.length),
+        }),
+      };
     }
     const bad = raw.filter((c) => !isValidCheck(c));
     if (bad.length > 0) {
@@ -977,6 +1040,23 @@ export class ExecutionModule implements AgentModule {
       };
     }
     return { checks: raw.map((c) => c.trim()), error: null };
+  }
+
+  /**
+   * Модельно-видимое actionable-сообщение «нет активного плана». Содержит
+   * сведения о последнем завершённом плане и действие для продолжения — вместо
+   * голого «No active plan», на котором 9B зацикливалась после авто-архива.
+   */
+  private noActivePlanMessage(): string {
+    const last = this.store.listArchived().at(-1);
+    if (!last) return t("plan.no_active");
+    const done = last.steps.filter((s) => s.status === "done" || s.status === "skipped").length;
+    return t("plan.no_active_with_last", {
+      id: last.id,
+      title: last.title,
+      done: String(done),
+      total: String(last.steps.length),
+    });
   }
 
   /**

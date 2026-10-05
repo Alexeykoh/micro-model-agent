@@ -45,6 +45,7 @@ export const DEFAULTS: AppConfig = {
     // question/approve.
     defaultTags: ["file", "code"],
     enableOnDemand: true,
+    grepEngine: "auto",
   },
   experts: {
     code: {
@@ -82,6 +83,11 @@ export const DEFAULTS: AppConfig = {
     responseReserve: 0.15,
     compactionThreshold: 0.75,
     compactionMinLoad: 0.5,
+    policy: "v2",
+    overflowCooldown: 3,
+    toolResultKeep: 6,
+    calibrationWarmup: 3,
+    ratioFloor: 0.5,
   },
   instructions: {
     summarize: true,
@@ -101,6 +107,9 @@ export const DEFAULTS: AppConfig = {
   maxToolIterations: 1000,
   stuckThreshold: 6,
   autoPlan: true,
+  execution: {
+    autoAdvance: true,
+  },
   showReasoning: true,
   logLevel: "info",
   locale: "en",

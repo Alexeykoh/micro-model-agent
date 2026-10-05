@@ -88,6 +88,8 @@ export interface ExecutionPluginDeps {
   advancePlanIfStepComplete(sessionLog?: {
     plan(event: string, detail: string, iteration?: number): void;
   }): void;
+  /** Архивирует завершённый план на границе хода (onTurnEnd). */
+  archiveCompletedPlan(): void;
   maybeSearchError: (ctx: any, call: any) => void;
 }
 
@@ -556,5 +558,8 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       // падают в pendingMessages на следующем флаше onBeforeThink).
       deps.maybeSearchError(ctx, call);
     },
+    // Граница хода: завершённый авто-advance'ом план архивируется здесь, а не
+    // посреди работы (модель не видит «нет активного плана» в своём же ходу).
+    onTurnEnd: () => deps.archiveCompletedPlan(),
   };
 }

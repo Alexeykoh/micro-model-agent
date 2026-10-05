@@ -69,6 +69,12 @@ export interface SessionLogEntry {
   historyBudget?: number;
   systemTokens?: number;
   toolTokens?: number;
+  /** Сырая оценка контекста (аддитивное диагностическое поле). */
+  estimatedTokensRaw?: number;
+  /** Отношение actual/estimated калибратора (аддитивное поле context). */
+  calibrationRatio?: number;
+  /** Состояние калибратора: cold|warming|trusted|stale. */
+  calibrationState?: string;
   quality?: number;
   messageCount?: number;
   compactionCount?: number;
@@ -90,6 +96,8 @@ export interface SessionLogEntry {
   removedTurns?: number;
   keptTurns?: number;
   summary?: string;
+  /** Компакция: насколько упал объём (токены). Стадия — в `strategy`. */
+  reducedBy?: number;
   // Поля llm_usage / провенанса
   provider?: string;
   model?: string;

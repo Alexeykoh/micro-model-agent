@@ -164,6 +164,7 @@ export function createSessionRunnerFactory(
       config.stuckThreshold,
       config.errorWebSearch?.threshold ?? 5,
     );
+    runnerExec.setAutoAdvance(config.execution?.autoAdvance ?? true);
     // Только слот своей сессии (без legacy-adopt — его сделал main на старте).
     runnerExec.switchSession(sessionId);
     const runnerDetector = new HallucinationDetector(baseDir, llmProvider, {

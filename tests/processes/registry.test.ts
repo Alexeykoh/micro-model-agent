@@ -56,7 +56,10 @@ describe("processRegistry", () => {
 
   it("killAll stops everything for a session", async () => {
     const a = processRegistry.start(`node ${idleScript}`, process.cwd(), "ses-clean");
-    const b = processRegistry.start(`node ${idleScript}`, process.cwd(), "ses-clean");
+    // force: dedup would otherwise reuse the first identical process.
+    const b = processRegistry.start(`node ${idleScript}`, process.cwd(), "ses-clean", {
+      force: true,
+    });
     const count = processRegistry.killAll("ses-clean");
     expect(count).toBeGreaterThanOrEqual(2);
     await sleep(300);

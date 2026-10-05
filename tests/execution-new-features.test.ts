@@ -293,9 +293,11 @@ describe("auto-detect delete kind from delete_file call", () => {
     );
 
     // Since auto-advance covers delete_file (fs-mutating), the kind switch
-    // ALSO completes the step: the only deliverable is gone → done → the
-    // single-step plan auto-archives. Verify via the archive, not the
-    // (now null) tracker.
+    // ALSO completes the step: the only deliverable is gone → done. The plan
+    // is archived at the turn boundary, not mid-turn (tracker still present).
+    expect(execModule.getTracker()).not.toBeNull();
+    expect(execModule.getTracker()!.getPlan().steps[0].kind).toBe("delete");
+    execModule.archiveCompletedPlan();
     expect(execModule.getTracker()).toBeNull();
     const archived = execModule.getStore().listArchived().at(-1);
     expect(archived).toBeDefined();

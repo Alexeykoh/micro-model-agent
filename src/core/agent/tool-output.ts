@@ -110,6 +110,21 @@ export function compactToolError(output: unknown, max = 200): string {
   return "";
 }
 
+/**
+ * Добавляет структурированную ошибку (`ToolResult.errorMeta`) к тексту,
+ * который уходит модели в `role:"tool"`. Отдельное поле не рисуется в чате —
+ * туда идёт `result.output` через `compactToolError`/`toolFailureSummary`.
+ */
+export function appendErrorMeta(
+  output: string,
+  meta: { code: string; retryable?: boolean; hint?: string } | undefined,
+): string {
+  if (!meta) return output;
+  const retry = meta.retryable === undefined ? "" : ` retryable=${meta.retryable}`;
+  const hint = meta.hint ? ` hint: ${meta.hint}` : "";
+  return `${output}\n[error code=${meta.code}${retry}]${hint}`;
+}
+
 /** Сводка падения тула для чата: текст и серьёзность. */
 export interface ToolFailureSummary {
   /** Короткая локализованная сводка для пользователя. */

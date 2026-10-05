@@ -17,6 +17,11 @@ describe("config key/value completion", () => {
       "contextBudget.responseReserve",
       "contextBudget.compactionThreshold",
       "contextBudget.compactionMinLoad",
+      "contextBudget.policy",
+      "contextBudget.overflowCooldown",
+      "contextBudget.toolResultKeep",
+      "contextBudget.calibrationWarmup",
+      "contextBudget.ratioFloor",
     ]);
   });
 

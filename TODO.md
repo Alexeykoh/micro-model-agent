@@ -1,42 +1,33 @@
 # TODO — Micro Models Agent
 
-> ## 🚨 КРИТИЧНО / ПЕРВООЧЕРЕДНОЕ — Harness Hardening (2026-10-05)
+> ## ✅ ВЫПОЛНЕНО — Harness Hardening (2026-10-05, ветка `fix/harness-hardening`)
 >
-> **Эту спеку НЕЛЬЗЯ обходить. Без неё продолжать разработку и релизы агента нельзя.**
 > Разбор живой сессии `ses_muu8kfbw_nyxkre` (`qwen3.5-9b`, web, лендинг) выявил
 > первопричинные дефекты харнесса, не связанные с конкретной моделью/задачей:
 > ложная компакция и потеря рабочего контекста (58 компакций, 23 no-op, оценка до 4.85×
 > от реальных токенов), рассинхрон плана/шагов, неработающий `grep` на Windows, утечки
-> фоновых процессов. Любая работа над качеством прогонов или новый релиз **до** этих
-> исправлений бессмысленны — они маскируются этими багами.
+> фоновых процессов. Все фазы 0→4 закрыты (по коммиту на фазу, `bun test` + `tsc --noEmit`
+> зелёные, `bun run quality` exit 0).
 >
 > **Спека:** [docs/specs/2026-10-05-harness-hardening-design.md](./docs/specs/2026-10-05-harness-hardening-design.md)
-> · **Ветка:** `fix/harness-hardening` · **Инварианты (ломать нельзя):** §1 спеки.
-> Выполнять фазами 0→4, по одному коммиту на фазу, `bun test` + `tsc --noEmit` зелёные.
+> · **Реализация:** AGENTS.md → «Harness Hardening (2.19.0)».
 
-## P0 — Harness Hardening (выполнять ПЕРВЫМ в следующих сессиях)
+## P0 — Harness Hardening ✅ ЗАКРЫТО (2026-10-05)
 
-- [ ] **Фаза 0 — Диагностика и калибровка контекста.** 0.1 диагностика скачка +44K (фикстурный
-      регресс, локализовать WeakMap/мутацию), 0.2 починка измерения + унификация tool-токенов,
-      0.3–0.5 `ContextCalibrator` (baseline+delta, floor-ratio, shadow-warmup, stale-фолбэк),
-      `getContextTokens()`, safety-clamp. Без новых зависимостей. Приёмка: ±15% при свежем
-      `usage` и без обрезки; вне условий — консервативный фолбэк.
-- [ ] **Фаза 1 — Политика компакции.** Канонический порог (`history > budget.history`), cooldown,
-      гарантия прогресса (tool-result clearing → тримминг → LLM-суммаризация), pinning,
-      один триггер/итерацию, `compactionCount` только при значимом уменьшении, реактивная
-      компакция. Флаг `contextBudget.policy: legacy|v2` (default v2, legacy = 2.18.2).
-      Приёмка: 0 no-op overflow в фикстурном реплее.
-- [ ] **Фаза 2 — План и шаги.** Auto-advance объявляется модели и больше не архивирует план до
-      `onTurnEnd` (флаг `execution.autoAdvance`, nudge сохраняется при `false`); actionable
-      `plan.no_active` с последним планом; **`checks` необязателен** (default `manual:`, авто-
-      деривация `file-exists:` отклонена как overfit), mismatch-ошибка с числами.
-- [ ] **Фаза 3 — Тулы и портируемость.** `grep` без новых зависимостей (system rg → grep →
-      zero-dep JS-обход, gitignore/maxFiles); generic `--cwd`→`workdir`; обобщённый редирект
-      tool-as-command; `ProcessRegistry` (дедуп фоновых, reap только на stop сессии).
-- [ ] **Фаза 4 — Слабо-модельный UX.** `ToolResult.errorMeta` (не протекает в чат), `load_skill`
-      top-k подсказки (без автозагрузки), защита от пустого пользовательского ввода.
-- [ ] **Generality-прогон (обязателен):** спека не должна подгоняться под лендинг/React/CSS —
-      проверить не-кодовой задачей (письмо/погода/URL) и не-JS стеком (Rust/Go/Python/документы).
+- [x] **Фаза 0 — Диагностика и калибровка контекста.** `ContextCalibrator` (baseline+delta,
+      floor-ratio, shadow-warmup, stale-фолбэк), `getContextTokens()`, safety-clamp
+      `isImplausibleJump`, кэш по сигнатуре контента. Без новых зависимостей.
+- [x] **Фаза 1 — Политика компакции.** Канонический порог по `history`, cooldown,
+      гарантия прогресса (prune→trim→hard-drop), pinning, один триггер/итерацию,
+      реактивная компакция. Флаг `contextBudget.policy: legacy|v2` (default v2).
+- [x] **Фаза 2 — План и шаги.** Авто-архив на `onTurnEnd` + уведомление модели,
+      `execution.autoAdvance`, actionable `plan.no_active`, `checks` необязателен (`manual:`).
+- [x] **Фаза 3 — Тулы и портируемость.** JS-фолбэк `grep` + `tools.grepEngine`,
+      generic `--cwd`→`workdir`, редирект tool-as-command, дедуп фоновых процессов.
+- [x] **Фаза 4 — Слабо-модельный UX.** `ToolResult.errorMeta`, fuzzy top-3 `load_skill`,
+      пустой web-сабмит → no-op.
+- [x] **Generality:** исправления обобщены; не-кодовые шаги самоподтверждаются `manual:`
+      (тест `tests/execution-plan-hardening.test.ts`), grep/калибровка без привязки к языку.
 
 ## Web session state / изоляция сессий (2026-10-02)
 

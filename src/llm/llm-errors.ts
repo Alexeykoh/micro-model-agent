@@ -24,16 +24,19 @@ export class LlmError extends Error {
   recoverable: boolean;
   /** HTTP-статус (для failover), если известен. */
   llmStatus: number | undefined;
+  /** Консервативная классификация причины (напр. "context_length"). */
+  kind: string | undefined;
 
   constructor(
     message: string,
-    options: { terminal?: boolean; recoverable?: boolean; llmStatus?: number } = {},
+    options: { terminal?: boolean; recoverable?: boolean; llmStatus?: number; kind?: string } = {},
   ) {
     super(message);
     this.name = "LlmError";
     this.terminal = options.terminal ?? false;
     this.recoverable = options.recoverable ?? false;
     this.llmStatus = options.llmStatus;
+    this.kind = options.kind;
   }
 
   /**

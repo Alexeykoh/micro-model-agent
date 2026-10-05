@@ -6,8 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.19.0] - 2026-10-05
+
+Harness hardening from the live-session post-mortem (`ses_muu8kfbw_nyxkre`): false
+compaction and lost working context, plan/step desync, broken `grep` on Windows,
+background-process leaks. Harness fixes only (no model/task-specific tuning).
+
+### Added
+
+- **Context calibration** (`src/core/agent/context-calibration.ts`): the token estimate is calibrated against real provider `prompt_tokens` (baseline+delta, EMA fallback, floor-ratio against silent provider truncation, shadow warmup, stale fallback). `ContextManager.getContextTokens()` is the single input for compaction thresholds; `getEstimatedTokens()` stays raw for cost/prefix/critic. New diagnostic fields (`estimatedTokensRaw`, `contextTokens`, `calibrationRatio`, `calibrationState`) in the `context` session event.
+- **Safety-clamp** (`isImplausibleJump`): an implausible estimate jump (>3× and >20K tokens without message growth) no longer triggers overflow compaction.
+- **Compaction policy v2** (`contextBudget.policy: legacy|v2`, default `v2`): canonical `history` threshold, overflow cooldown, progress guarantee (prune old tool results → aggressive trim → hard drop), pinned task/plan, one trigger per iteration, and reactive compaction on a provider context-length error (circuit-broken once per turn). `legacy` reproduces 2.18.2.
+- **Plan ownership**: `execution.autoAdvance` (default true); auto-archived plans now archive at the turn boundary (not mid-turn) and the model gets an explicit notice; `plan.no_active` reports the last completed plan; plan `checks` are optional and self-certify (`manual:<step>`) when omitted.
+- **Tool portability**: zero-dependency JS `grep` fallback (rg → grep → built-in walker respecting `.gitignore`/`.mmaignore`, size/time/maxFiles limits) with `tools.grepEngine: auto|rg|grep|js`; generic bash redirect for a registered tool invoked as a shell command and a generic `--cwd` → `workdir` hint; `ProcessRegistry` dedups identical running background commands (`force: true` to bypass).
+- **Weak-model UX**: `ToolResult.errorMeta` (`code`/`retryable`/`hint`) delivered to the model without leaking into the chat; fuzzy top-3 `load_skill` suggestions; empty web message returns a localized no-op instead of a hard error.
+- New config keys (registry + i18n en/ru): `contextBudget.policy`, `contextBudget.overflowCooldown`, `contextBudget.toolResultKeep`, `contextBudget.calibrationWarmup`, `contextBudget.ratioFloor`, `execution.autoAdvance`, `tools.grepEngine`.
+
+### Changed
+
+- **Compaction** thresholds now use the calibrated estimate; `legacy` policy keeps raw behaviour.
+- **Plan auto-archive** moved from the auto-advance mutation to `onTurnEnd` (web/REPL turns no longer see "no active plan" mid-work).
+
 ### Fixed
 
+- **Token-estimate cache** (`src/modules/context/manager.ts`): the per-message cache is now keyed by a content signature, so an in-place mutation cannot return a stale estimate (root-cause class of the phantom +44K jump).
+- **`grep` on Windows** no longer fails with `Executable not found in $PATH: "grep"` — the built-in walker runs when neither `rg` nor `grep` exists.
 - **Cost hidden for `deepseek-v4.1-flash`** (`src/modules/pricing/prices.ts`): the Zen/Go price table had `deepseek-v4-flash`/`deepseek-v4-pro` but not `deepseek-v4.1-flash`, so `resolvePrice` returned `undefined` and no cost was shown for the model the `opencode-go` provider remembers. Added the entry and corrected the stale DeepSeek prices/cached-read rates to the current Go off-peak table.
 
 ## [2.18.2] - 2026-10-04

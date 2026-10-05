@@ -10,20 +10,18 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 
 > **Этот файл должен периодически обновляться при изменениях в проекте.** При добавлении новых модулей, тулов, команд, изменении архитектуры или конфигурации — обнови соответствующий раздел ниже. AGENTS.md должен всегда отражать актуальное состояние проекта, чтобы агенты и разработчики имели достоверный контекст.
 
-> ## 🚨 P0 CRITICAL — Harness Hardening (2026-10-05): без этого продолжать НЕЛЬЗЯ
+> ## ✅ P0 Harness Hardening — ВЫПОЛНЕНО (2026-10-05, ветка `fix/harness-hardening`)
 >
-> Разбор живой сессии `ses_muu8kfbw_nyxkre` (`qwen3.5-9b`, `mma web`) выявил **первопричинные
-> дефекты харнесса**, не связанные с конкретной моделью/задачей: ложная компакция и потеря
-> рабочего контекста (58 компакций, 23 no-op, оценка токенов до **4.85×** от реальной),
-> рассинхрон плана/шагов, неработающий `grep` на Windows, утечки фоновых процессов.
-> **Любая работа над качеством прогонов и новые релизы до устранения этих дефектов
-> бессмысленны** — они маскируются этими багами. Это обязательный первый приоритет для
-> последующих сессий.
+> Разбор живой сессии `ses_muu8kfbw_nyxkre` (`qwen3.5-9b`, `mma web`) выявил
+> первопричинные дефекты харнесса: ложная компакция и потеря рабочего контекста,
+> оценка токенов до **4.85×** от реальной, рассинхрон плана/шагов, неработающий
+> `grep` на Windows, утечки фоновых процессов. Все фазы 0→4 закрыты (по коммиту
+> на фазу, `bun test` + `tsc --noEmit` зелёные, `bun run quality` exit 0).
 >
-> - **Спека (инварианты «ломать нельзя» — §1):** [docs/specs/2026-10-05-harness-hardening-design.md](./docs/specs/2026-10-05-harness-hardening-design.md)
-> - **Ветка:** `fix/harness-hardening` · **Порядок:** фазы 0→4, по одному коммиту на фазу; каждая — `bun test` + `tsc --noEmit` зелёные.
-> - **Задача-трекер:** `TODO.md` → «P0 — Harness Hardening (выполнять ПЕРВЫМ)».
-> - **Generality:** исправления не должны подгоняться под лендинг/React/CSS — проверять не-кодовой задачей и не-JS стеком (§1.1 спеки).
+> - **Спека (инварианты §1):** [docs/specs/2026-10-05-harness-hardening-design.md](./docs/specs/2026-10-05-harness-hardening-design.md)
+> - **Реализация:** см. раздел «Harness Hardening (2.19.0)» ниже.
+> - **Generality:** исправления обобщены (grep JS-фолбэк, optional checks, калибровка
+>   без привязки к языку/задаче); не-кодовые шаги самоподтверждаются `manual:`.
 
 ## Positioning: universal agent, not code-only
 
@@ -786,7 +784,31 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 - **Тесты:** `tests/modules/indexer/{rank,gitignore,symbols,incremental,module-search,graph}.test.ts`,
   `tests/modules/lsp/symbols.test.ts`.
 
-### Current Version: 2.18.2
+### Harness Hardening (2.19.0)
+
+Спека: [docs/specs/2026-10-05-harness-hardening-design.md](./docs/specs/2026-10-05-harness-hardening-design.md).
+Правки харнесса (не модели), обобщённые; фазы 0→4, по коммиту на фазу.
+
+- **Калибровка контекста** (`src/core/agent/context-calibration.ts`): оценка токенов
+  калибруется по реальному `prompt_tokens` (baseline+delta, EMA-fallback, floor-ratio
+  против усечения провайдером, shadow-warmup, stale-фолбэк). `ContextManager.getContextTokens()`
+  — единственный вход порогов компакции; `getEstimatedTokens()` остаётся raw (cost/prefix/critic).
+  Safety-clamp `isImplausibleJump` (>3× и >20K без роста сообщений) блокирует ложную overflow-компакцию.
+  Кэш оценки сообщения ключуется по сигнатуре контента (детект in-place мутаций — класс «+44K»).
+- **Компакция v2** (`contextBudget.policy: legacy|v2`, default `v2`): канонический порог по
+  `history`, overflow cooldown, гарантия прогресса (prune старых tool-результатов → агрессивный
+  тримминг → hard drop), pinning задачи/плана, один триггер на итерацию, реактивная компакция
+  на context-length ошибку (circuit-breaker раз на ход). `legacy` = 2.18.2.
+- **План:** `execution.autoAdvance` (default true); авто-архив перенесён с auto-advance на
+  `onTurnEnd` (`archiveCompletedPlan`, хук execution-плагина); `plan.no_active` несёт последний
+  завершённый план; `checks` необязательны (self-certified `manual:<шаг>`), mismatch-ошибка с числами.
+- **Тулы:** zero-dep JS-фолбэк `grep` (`src/tools/grep-js.ts`; rg → grep → JS, gitignore/maxFiles/
+  лимиты) + `tools.grepEngine: auto|rg|grep|js`; generic bash-редирект tool-as-command и `--cwd`→`workdir`;
+  `ProcessRegistry.start(..., { force })` дедуп одинаковых фоновых команд.
+- **Слабо-модельный UX:** `ToolResult.errorMeta` (`appendErrorMeta` в tool-batch — модель видит,
+  чат нет); fuzzy top-3 `load_skill` (`nearestSkillNames`); пустой web-сабмит → `200 {noop,notice}`.
+
+### Current Version: 2.19.0
 
 ### Changelog
 

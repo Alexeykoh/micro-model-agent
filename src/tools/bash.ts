@@ -588,6 +588,11 @@ export const bashTool: ToolDefinition = {
         description:
           "Return a process id immediately without waiting (default: commands still running after a few seconds are auto-promoted to the background)",
       },
+      force: {
+        type: "boolean",
+        description:
+          "Start a new process even if an identical command is already running (default: reuse the running one)",
+      },
     },
     required: ["command"],
   },
@@ -629,6 +634,29 @@ export const bashTool: ToolDefinition = {
       return {
         success: false,
         output: t("exec.hidden_tool_hint", { tool: baseCmd }),
+      };
+    }
+
+    // Обобщённый редирект tool-as-command: команда начинается с имени
+    // зарегистрированного тула (без k=v, иначе пойман выше). Настоящие
+    // shell-команды (grep/cat/…) исключены NEVER_TOOL_CALLS.
+    if (
+      baseCmd &&
+      !NEVER_TOOL_CALLS.has(baseCmd) &&
+      ctx.toolExecutor?.hasTool?.(baseCmd)
+    ) {
+      return {
+        success: false,
+        output: t("exec.tool_as_command_hint", { tool: baseCmd }),
+      };
+    }
+
+    // Generic `--cwd` → параметр workdir: флаг не является стандартным для
+    // большинства CLI (модель изобретала `bun run build --cwd`).
+    if (/(?:^|\s)--cwd(?:[=\s]|$)/.test(originalCommand)) {
+      return {
+        success: false,
+        output: t("bash.cwd_flag_hint", { workdir: ctx.baseDir }),
       };
     }
 
@@ -687,7 +715,9 @@ export const bashTool: ToolDefinition = {
       memoClear(ctx);
     }
 
-    const entry = processRegistry.start(command, workdir, ctx.sessionId);
+    const entry = processRegistry.start(command, workdir, ctx.sessionId, {
+      force: args.force === true,
+    });
     if (ctx.activeCallId) {
       // Исполнителю — убить дочерний процесс в grace-окне при аборте.
       registerKillable(ctx.activeCallId, () => processRegistry.kill(entry.id), ctx.sessionId);

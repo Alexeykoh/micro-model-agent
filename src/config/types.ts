@@ -134,6 +134,19 @@ export interface ContextBudget {
    * контекст лишь потому, что прошло N итераций.
    */
   compactionMinLoad?: number;
+  /**
+   * Политика компакции: `legacy` — поведение 2.18.2, `v2` (дефолт) —
+   * канонический порог по истории, cooldown, гарантия прогресса, pinning.
+   */
+  policy?: "legacy" | "v2";
+  /** Мин. число итераций между overflow-компакциями (v2). Дефолт = FORCED_COMPACTION_COOLDOWN. */
+  overflowCooldown?: number;
+  /** Сколько последних tool-результатов не чистить при компакции (v2). Дефолт 6. */
+  toolResultKeep?: number;
+  /** Число вызовов прогрева калибровки (cold/warming). Дефолт 3. */
+  calibrationWarmup?: number;
+  /** Нижняя граница калибровки как доля raw. Дефолт 0.5. */
+  ratioFloor?: number;
 }
 
 /**
@@ -211,6 +224,12 @@ export interface ToolsConfig {
    * всех зарегистрированных тулов.
    */
   enableOnDemand: boolean;
+  /**
+   * Движок поиска для тула `grep`: `auto` (rg → grep → zero-dep JS),
+   * `rg`/`grep` (только системный бинарь), `js` (только встроенный обход).
+   * Дефолт auto.
+   */
+  grepEngine?: "auto" | "rg" | "grep" | "js";
 }
 
 export interface ExpertConfig {
@@ -510,6 +529,14 @@ export interface AppConfig {
   maxToolIterations: number;
   stuckThreshold: number;
   autoPlan: boolean;
+  /** Настройки execution-модуля (владение статусом плана). */
+  execution?: {
+    /**
+     * Харнесс автоматически помечает шаг done по факту существования файловых
+     * деливераблов. При false — только nudge, статус ставит модель. Дефолт true.
+     */
+    autoAdvance?: boolean;
+  };
   showReasoning: boolean;
   logLevel: string;
   locale: string;

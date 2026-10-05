@@ -19,6 +19,7 @@ import {
   scrubError,
   sendJson,
 } from "../util";
+import { t } from "../../../i18n/index";
 
 /**
  * Достаёт `sessionId` из сырого JSON-тела (фронт шлёт вкладку-владельца).
@@ -234,6 +235,11 @@ export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: 
     .then((raw) => {
       const parsed = parsePost(s, raw);
       if ("error" in parsed) {
+        // Пустой ввод — no-op с локализованной подсказкой, без LLM-вызова.
+        if (parsed.error === "empty") {
+          sendJson(res, 200, { ok: true, noop: true, notice: t("web.message_empty") });
+          return;
+        }
         sendJson(res, parsed.status, { error: parsed.error });
         return;
       }

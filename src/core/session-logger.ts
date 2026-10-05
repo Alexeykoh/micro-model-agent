@@ -236,6 +236,10 @@ export class SessionLogger {
     removedTurns?: number;
     keptTurns?: number;
     summary?: string;
+    /** Насколько упал объём (токены). */
+    reducedBy?: number;
+    /** Стадия сокращения: summarize|prune-tools|aggressive|hard-drop. */
+    strategy?: string;
   }): void {
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -252,6 +256,8 @@ export class SessionLogger {
       removedTurns: info.removedTurns,
       keptTurns: info.keptTurns,
       summary: info.summary,
+      reducedBy: info.reducedBy,
+      strategy: info.strategy,
     });
   }
 
@@ -271,6 +277,14 @@ export class SessionLogger {
     systemTokens?: number;
     toolTokens?: number;
     tokens: number;
+    /** Сырая оценка контекста (аддитивное диагностическое поле). */
+    estimatedTokensRaw?: number;
+    /** Калиброванная оценка контекста (аддитивное поле). */
+    contextTokens?: number;
+    /** Отношение actual/estimated калибратора. */
+    calibrationRatio?: number;
+    /** Состояние калибратора: cold|warming|trusted|stale. */
+    calibrationState?: string;
     quality: number;
     messageCount: number;
     compactionCount: number;
@@ -298,7 +312,10 @@ export class SessionLogger {
       historyBudget: info.historyBudget,
       systemTokens: info.systemTokens,
       toolTokens: info.toolTokens,
-      contextTokens: info.tokens,
+      estimatedTokensRaw: info.estimatedTokensRaw ?? info.tokens,
+      contextTokens: info.contextTokens ?? info.tokens,
+      calibrationRatio: info.calibrationRatio,
+      calibrationState: info.calibrationState,
       quality: info.quality,
       messageCount: info.messageCount,
       compactionCount: info.compactionCount,
