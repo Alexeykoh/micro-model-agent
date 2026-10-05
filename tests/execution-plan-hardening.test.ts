@@ -39,6 +39,19 @@ describe("plan checks are optional", () => {
     expect(res.output).toContain("1");
     expect(res.output).toContain("file-exists");
   });
+
+  it("non-code steps self-certify without false file checks", async () => {
+    // Generality: a non-code task must not get file-exists contracts.
+    const res = await planTool(execModule).handler(
+      {},
+      { action: "create", title: "Weather", steps: ["Fetch the forecast", "Write the answer in chat"] },
+    );
+    expect(res.success).toBe(true);
+    for (const s of execModule.getTracker()!.getPlan().steps) {
+      expect(s.check?.startsWith("manual:")).toBe(true);
+      expect(s.check?.startsWith("file-exists:")).toBe(false);
+    }
+  });
 });
 
 describe("plan no_active is actionable", () => {

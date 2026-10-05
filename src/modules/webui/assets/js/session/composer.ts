@@ -368,6 +368,9 @@ async function send(): Promise<void> {
     const msg = err === "queue_full" ? t("web.input.queue_full") : err;
     appendTo(feed, el("div", "warnline", "⚠ " + msg));
     if (sessionId) deps.setTabStatus(sessionId, "failed");
+  } else if (r.data && r.data.noop) {
+    // Пустой сабмит — сервер вернул no-op с подсказкой, хода нет.
+    if (r.data.notice) appendTo(feed, el("div", "detail", String(r.data.notice)));
   } else {
     if (r.data && r.data.queued) {
       const n = r.data.queuedForSession || r.data.queued;
