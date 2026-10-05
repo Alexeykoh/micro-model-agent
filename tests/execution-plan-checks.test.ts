@@ -48,17 +48,16 @@ describe("plan create checks gate", () => {
     cleanupTestModule(tmpDir);
   });
 
-  it("blocks create without checks", async () => {
+  it("self-certifies create without checks", async () => {
     const res = await planTool(execModule).handler(
       {},
       { action: "create", title: "T", steps: ["Create src/a.ts"] },
     );
-    expect(res.success).toBe(false);
-    expect(res.output).toContain("checks");
-    expect(execModule.getTracker()).toBeNull();
+    expect(res.success).toBe(true);
+    expect(execModule.getTracker()!.getStep(1)!.check?.startsWith("manual:")).toBe(true);
   });
 
-  it("blocks create on checks length mismatch", async () => {
+  it("blocks create on checks length mismatch with actionable counts", async () => {
     const res = await planTool(execModule).handler(
       {},
       {
@@ -69,7 +68,8 @@ describe("plan create checks gate", () => {
       },
     );
     expect(res.success).toBe(false);
-    expect(res.output).toContain("match steps");
+    expect(res.output).toContain("2");
+    expect(res.output).toContain("1");
   });
 
   it("blocks create on an invalid check prefix", async () => {
@@ -130,7 +130,7 @@ describe("plan create checks gate", () => {
     expect(res.success).toBe(true);
   });
 
-  it("re-plan requires checks for new steps and keeps old ones", async () => {
+  it("re-plan self-certifies new steps when checks are omitted", async () => {
     const tool = planTool(execModule);
     await tool.handler(
       {},
@@ -141,18 +141,11 @@ describe("plan create checks gate", () => {
         checks: ["file-exists:src/a.ts", "file-exists:src/b.ts"],
       },
     );
-    const bad = await tool.handler(
-      {},
-      { action: "re-plan", steps: ["Create src/c.ts"] },
-    );
-    expect(bad.success).toBe(false);
-    expect(bad.output).toContain("checks");
-
-    const ok = await tool.handler(
-      {},
-      { action: "re-plan", steps: ["Create src/c.ts"], checks: ["file-exists:src/c.ts"] },
-    );
+    const ok = await tool.handler({}, { action: "re-plan", steps: ["Create src/c.ts"] });
     expect(ok.success).toBe(true);
+    const replanned = execModule.getTracker()!.getPlan();
+    const newStep = replanned.steps.find((s) => s.description.includes("src/c.ts"));
+    expect(newStep?.check?.startsWith("manual:")).toBe(true);
   });
 
   it("hard-verifies file-exists checks on done", async () => {

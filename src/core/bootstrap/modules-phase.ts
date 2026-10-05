@@ -89,6 +89,7 @@ async function registerCoreModules(
     config.stuckThreshold,
     config.errorWebSearch?.threshold ?? 5,
   );
+  execModule.setAutoAdvance(config.execution?.autoAdvance ?? true);
   // План следует за сессией: restorePlan поднимает legacy-глобальный план,
   // switchSession усыновляет его в слот стартовой сессии (или грузит её свой).
   // REPL рисует чеклист только на plan/todo-событиях — без спроса не печатаем.

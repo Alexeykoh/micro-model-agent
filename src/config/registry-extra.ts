@@ -250,6 +250,12 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
   bool("autoPlan", "agent", true,
     (c) => c.autoPlan,
     (c, v) => { c.autoPlan = v as boolean; }),
+  bool("execution.autoAdvance", "agent", true,
+    (c) => c.execution?.autoAdvance ?? DEFAULTS.execution?.autoAdvance ?? true,
+    (c, v) => {
+      c.execution ??= structuredClone(DEFAULTS.execution ?? { autoAdvance: true });
+      c.execution.autoAdvance = v as boolean;
+    }),
   bool("tools.enableOnDemand", "agent", true,
     (c) => c.tools.enableOnDemand,
     (c, v) => { c.tools.enableOnDemand = v as boolean; }),

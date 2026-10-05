@@ -93,7 +93,7 @@ function actionSwitch(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string
 
 function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string, unknown>): ToolResult {
   if (!deps.trackerRef.current) {
-    return { success: false, output: t("plan.no_active") };
+    return { success: false, output: deps.noActivePlanMessage() };
   }
   const newSteps = Array.isArray(args.steps) ? args.steps.map(String) : [];
   if (newSteps.length === 0) {
@@ -228,7 +228,7 @@ function actionShow(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string, 
     };
   }
   if (!deps.trackerRef.current) {
-    return { success: false, output: t("plan.no_active") };
+    return { success: false, output: deps.noActivePlanMessage() };
   }
   const display = deps.trackerRef.current.toPromptBlock();
   return {
@@ -640,7 +640,7 @@ function actionAbort(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string,
     // Аборт без активного плана и без id — раньше возвращал success:true, и
     // модель верила, что абортнула несуществующий план (было: 3× abort на
     // пустом списке).
-    return { success: false, output: t("plan.no_active") };
+    return { success: false, output: deps.noActivePlanMessage() };
   }
   deps.store.archivePlan(tracker.getPlan());
   deps.trackerRef.current = null;
@@ -702,7 +702,7 @@ function noActiveOrUnknown(
         };
       }
     }
-    return { success: false, output: t("plan.no_active") };
+    return { success: false, output: deps.noActivePlanMessage() };
   }
   return {
     success: false,

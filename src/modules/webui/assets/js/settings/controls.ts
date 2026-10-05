@@ -133,7 +133,7 @@ export function controlFor(def: Dict, value: unknown, ctx: Dict): HTMLElement {
 export const PANEL_SECTIONS: Record<string, Dict[]> = {
   general: [
     { id: "general.interface", titleKey: "web.settings.sec.general.interface", keys: ["locale", "ui.verbosity"] },
-    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan"] },
+    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan", "execution.autoAdvance"] },
     { id: "general.provider", titleKey: "web.settings.sec.general.provider", keys: ["provider.fallback"] },
   ],
   model: [

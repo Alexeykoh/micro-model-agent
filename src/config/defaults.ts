@@ -106,6 +106,9 @@ export const DEFAULTS: AppConfig = {
   maxToolIterations: 1000,
   stuckThreshold: 6,
   autoPlan: true,
+  execution: {
+    autoAdvance: true,
+  },
   showReasoning: true,
   logLevel: "info",
   locale: "en",

@@ -33,6 +33,8 @@ export interface PlanToolDeps {
     steps: string[],
   ): { checks: string[] | null; error: string | null };
   getTaskText(ctx: any): string;
+  /** Модельно-видимое actionable-сообщение «нет активного плана». */
+  noActivePlanMessage(): string;
   /** Файлы, которые последний write/edit пометил компиляторно-битыми (из
    *  состояния execution-плагина). Done-gate реджектит, пока файлы шага здесь. */
   typecheckFailures: ReadonlyMap<string, string>;
@@ -95,7 +97,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
       icon: "📋",
       alwaysOn: true,
       description:
-        'Create, update, show, abort, list, switch, delete, purge, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped). To change the plan\'s steps use "re-plan" (keeps completed steps) or "create".\n- show: Print current plan checklist.\n- abort: Archive the current plan (or the plan given by id) and clear the active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n- delete: Permanently delete a plan by id (plan delete id=plan_xxx).\n- purge: Delete ALL plans (active, drafts, archived).\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)\n- Steps that REMOVE files need no extra flag: create/delete intent is detected automatically from what the agent actually does.\n- Every step needs a verification contract: pass "checks" aligned 1:1 with "steps". Each check is "file-exists:<path>" (verified automatically on done), "command:<exact command>" (run it before done), or "manual:<what to check by eye>" (UI/visual work only). Example: steps ["Create src/a.ts with X"] + checks ["file-exists:src/a.ts"].',
+        'Create, update, show, abort, list, switch, delete, purge, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped). To change the plan\'s steps use "re-plan" (keeps completed steps) or "create".\n- show: Print current plan checklist.\n- abort: Archive the current plan (or the plan given by id) and clear the active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n- delete: Permanently delete a plan by id (plan delete id=plan_xxx).\n- purge: Delete ALL plans (active, drafts, archived).\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)\n- Steps that REMOVE files need no extra flag: create/delete intent is detected automatically from what the agent actually does.\n- Every step may carry a verification contract: pass "checks" aligned 1:1 with "steps". Each check is "file-exists:<path>" (verified automatically on done), "command:<exact command>" (run it before done), or "manual:<what to check by eye>". Checks are RECOMMENDED, not required: if you omit them, each step self-certifies. Example: steps ["Create src/a.ts with X"] + checks ["file-exists:src/a.ts"].',
       parameters: {
         type: "object",
         properties: {
@@ -119,7 +121,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
             type: "array",
             items: { type: "string" },
             description:
-              'REQUIRED on create/re-plan, aligned 1:1 with steps. One contract per step: "file-exists:<path>", "command:<cmd>", or "manual:<text>".',
+              'Optional on create/re-plan, aligned 1:1 with steps. One contract per step: "file-exists:<path>", "command:<cmd>", or "manual:<text>". Omit entirely to let each step self-certify.',
           },
           step: { type: "number" },
           status: { type: "string", enum: ["done", "failed", "skipped"] },
@@ -156,7 +158,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
       },
       handler: async (ctx, args) => {
         if (!deps.trackerRef.current) {
-          return { success: false, output: t("plan.no_active") };
+          return { success: false, output: deps.noActivePlanMessage() };
         }
         if (args.step === undefined || args.step === null || Number.isNaN(Number(args.step))) {
           return { success: false, output: t("plan.step_required") };
@@ -185,7 +187,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
       },
       handler: async (_ctx, args) => {
         if (!deps.trackerRef.current) {
-          return { success: false, output: t("plan.no_active") };
+          return { success: false, output: deps.noActivePlanMessage() };
         }
         const tracker = deps.trackerRef.current;
         const action = String(args.action);
@@ -275,7 +277,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
         },
       },
       handler: async (_ctx, args) => {
-        if (!deps.trackerRef.current) return { success: false, output: t("plan.no_active") };
+        if (!deps.trackerRef.current) return { success: false, output: deps.noActivePlanMessage() };
         const tracker = deps.trackerRef.current;
         const step = args.step ? tracker.getStep(Number(args.step)) : tracker.getCurrentStep();
         if (!step) return { success: false, output: t("plan.step_not_found") };

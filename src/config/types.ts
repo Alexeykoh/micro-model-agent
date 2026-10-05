@@ -523,6 +523,14 @@ export interface AppConfig {
   maxToolIterations: number;
   stuckThreshold: number;
   autoPlan: boolean;
+  /** Настройки execution-модуля (владение статусом плана). */
+  execution?: {
+    /**
+     * Харнесс автоматически помечает шаг done по факту существования файловых
+     * деливераблов. При false — только nudge, статус ставит модель. Дефолт true.
+     */
+    autoAdvance?: boolean;
+  };
   showReasoning: boolean;
   logLevel: string;
   locale: string;
