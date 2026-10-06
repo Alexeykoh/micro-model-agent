@@ -226,28 +226,38 @@ es.addEventListener("command", (e) => {
   const d = parse(e);
   if (d && typeof d.text === "string") onCommandOutput(d.text, d.sessionId);
 });
-  es.addEventListener("state", (e) => {
-    const d = parse(e);
-    if (d) {
-      session.busy = !!d.busy;
-      session.runningSessionId = d.runningSessionId || null;
-      session.runningSessionIds = d.runningSessionIds ||
-        (session.runningSessionId ? [session.runningSessionId] : []);
-      session.queued = d.queued || {};
-      reflectBusy();
-      reconcileTabStatuses();
-      sidebarBusy(!!d.busy);
-      void refresh();
-      // Usage чужого хода в свой сайдбар не мержим: смотрим вкладку своей
-      // (серверно-активной) сессии. Legacy-события без владельца — мержим,
-      // как раньше. Промах по активной (гонка activate) закроет 2с-полл.
-      if (d.usage && typeof d.usage === "object" &&
-          (d.usageSessionId == null || d.usageSessionId === session.activeSessionId)) {
-        session.host = Object.assign({}, session.host, d.usage);
-        renderUsage(session.host);
-      }
+es.addEventListener("state", (e) => {
+  const d = parse(e);
+  if (d) {
+    session.busy = !!d.busy;
+    session.runningSessionId = d.runningSessionId || null;
+    session.runningSessionIds = d.runningSessionIds ||
+      (session.runningSessionId ? [session.runningSessionId] : []);
+    session.queued = d.queued || {};
+    reflectBusy();
+    reconcileTabStatuses();
+    sidebarBusy(!!d.busy);
+    void refresh();
+    // Usage чужого хода в свой сайдбар не мержим: смотрим вкладку своей
+    // (серверно-активной) сессии. Legacy-события без владельца — мержим,
+    // как раньше. Промах по активной (гонка activate) закроет 2с-полл.
+    if (d.usage && typeof d.usage === "object" &&
+        (d.usageSessionId == null || d.usageSessionId === session.activeSessionId)) {
+      session.host = Object.assign({}, session.host, d.usage);
+      renderUsage(session.host);
     }
-  });
+  }
+});
+// Live context metrics while a turn runs (server broadcasts `usage` every
+// ~800ms): merge into the owning tab's sidebar without a state re-fetch.
+es.addEventListener("usage", (e) => {
+  const d = parse(e);
+  if (d && d.usage && typeof d.usage === "object" &&
+      (d.usageSessionId == null || d.usageSessionId === session.activeSessionId)) {
+    session.host = Object.assign({}, session.host, d.usage);
+    renderUsage(session.host);
+  }
+});
   es.addEventListener("error", (e) => {
     if (!(e as MessageEvent).data) return;
     const d = parse(e as MessageEvent);

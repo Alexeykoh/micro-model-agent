@@ -4,7 +4,7 @@
  * `module.ts`, чтобы существующие импортёры не чинить.
  */
 import type { AppConfig } from "../../config/types";
-import type { AgentResult } from "../../core/types";
+import type { AgentResult, ContextBreakdown } from "../../core/types";
 import type { HostStateSnapshot, ProjectMapInfo } from "../../core/host";
 import type { LspDiagnosis } from "../lsp/diagnose";
 import type { SessionManager } from "../session/manager";
@@ -74,6 +74,41 @@ export function captureUsage(result: AgentResult, fallbackLimit?: number): Usage
   if (typeof result.contextQuality === "number") usage.contextQuality = result.contextQuality;
   if (result.contextBreakdown) usage.contextBreakdown = result.contextBreakdown;
   return usage;
+}
+
+/**
+ * Живой источник контекстных метрик во время хода (структурное подмножество
+ * `ContextManager`, чтобы не тянуть весь класс в проекцию сайдбара).
+ */
+export interface LiveContextSource {
+  getSnapshot(): {
+    tokens: number;
+    budget: { history: number };
+    quality: number;
+    compactionCount: number;
+    breakdown: ContextBreakdown;
+  };
+}
+
+/**
+ * Собирает живой usage-снимок контекста прямо из менеджера — для бродкаста
+ * во время хода, не дожидаясь `AgentResult`. Cost/cache не трогаем: они
+ * обновляются только по завершении хода (провайдерские числа). Предыдущий
+ * снимок сохраняется, чтобы не гасить известные значения.
+ */
+export function liveContextUsage(
+  prev: UsageSnapshot | undefined,
+  context: LiveContextSource,
+): UsageSnapshot {
+  const snap = context.getSnapshot();
+  return {
+    ...prev,
+    contextUsed: snap.tokens,
+    contextLimit: snap.budget.history,
+    contextBreakdown: snap.breakdown,
+    compactionCount: snap.compactionCount,
+    contextQuality: snap.quality,
+  };
 }
 
 /**

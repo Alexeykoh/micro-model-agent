@@ -4,6 +4,19 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.22.0] - 2026-10-06
+
+Web sidebar metrics are no longer frozen until a turn ends, and the cache cell no
+longer shows a misleading `0%` on backends that do not report prompt caching.
+
+### Added
+
+- **Live context metrics** (`src/modules/webui/session/run-agent.ts`, `host-state.ts`, `assets/app.ts`): while a turn runs the runner reads the live `ContextManager` snapshot every ~800ms and broadcasts a new `usage` SSE event for the owning session. The sidebar context bar/legend, compaction count and quality now update in real time instead of only at `turn_end`; the client merges it into the tab without a full state re-fetch.
+
+### Fixed
+
+- **Cache hit-rate on non-reporting backends** (`src/core/agent/cache-stats.ts`, `src/core/agent.ts`, `types.ts`, `src/cli/cache-line.ts`): `hitRate` is now emitted only when the provider actually returned cache tokens. Previously the prefix monitor always supplied `stableRatio`, so `buildCacheStats` fabricated `hitRate: 0` and the web sidebar showed `0%` (and JSON/CLI consumers saw a false miss) on providers without prompt caching; it now renders `—`.
+
 ## [2.21.0] - 2026-10-06
 
 Additive hardening on top of 2.20.0: deterministic grounding for stated figures,

@@ -32,7 +32,6 @@ import type { ReasoningState } from "../tools/set-thinking";
 import { estimateTokens } from "../llm/token-counter";
 import { LlmError } from "../llm/llm-errors";
 import { createLoopState, clearIterationSignals } from "./agent/loop-state";
-import type { LoopState } from "./agent/loop-state";
 import { CompactionService } from "./agent/compaction";
 import { TokenTracker } from "./agent/token-tracker";
 import { buildPromptSnapshot, diffPrompt } from "./agent/prefix-monitor";
@@ -46,6 +45,7 @@ import { HallucinationGate } from "./agent/hallucination-gate";
 import { resolveArtifactStates } from "./agent/artifact-resolve";
 import { AuditGate } from "./agent/audit-gate";
 import { CriticGate, gatherTurnToolEvents } from "./agent/critic-gate";
+import { computeCacheStats } from "./agent/cache-stats";
 import { seedToolTags } from "../tools/auto-tags";
 import { CriticClient } from "../modules/critic/client";
 import { buildCriticProvider } from "../modules/critic/provider";
@@ -1509,7 +1509,7 @@ export class Agent {
     const tokensUsed = contextManager.getEstimatedTokens();
     const budget = contextManager.getBudget();
     const usageTokens = tokenTracker.resolveFinal(state);
-    const cacheStats = this.buildCacheStats(state);
+    const cacheStats = computeCacheStats(state, this.costTracker.saved);
 
     if (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted) {
       return {
@@ -1561,31 +1561,6 @@ export class Agent {
       contextQuality: contextManager.getQuality(),
       contextBreakdown: contextManager.getBreakdown?.(),
       llmDurationMs: state.totalLlmDuration,
-    };
-  }
-
-  /**
-   * Собирает статистику кеша промпта за прогон: провайдерские токены (если
-   * были) плюс client-side стабильность префикса. Возвращает undefined, когда
-   * нет ни данных провайдера, ни префикс-монитора — чтобы не засорять вывод.
-   */
-  private buildCacheStats(state: LoopState): AgentResult["cache"] {
-    const hasTokens =
-      state.cacheCachedTotal > 0 || state.cacheUncachedTotal > 0 || state.cacheWriteTotal > 0;
-    // Приоритет — последнему реальному разрыву, иначе состояние текущей
-    // итерации (нормальная дописка / первая итерация).
-    const prefix = state.lastPrefixBreak ?? state.prefixDelta;
-    if (!hasTokens && prefix?.stableRatio === undefined) return undefined;
-    const denom = state.cacheCachedTotal + state.cacheUncachedTotal;
-    return {
-      cachedTokens: state.cacheCachedTotal,
-      uncachedTokens: state.cacheUncachedTotal,
-      cacheWriteTokens: state.cacheWriteTotal,
-      hitRate: denom > 0 ? state.cacheCachedTotal / denom : 0,
-      saved: this.costTracker.saved,
-      prefixStable: prefix?.stableRatio,
-      prefixCause: prefix?.cause,
-      source: state.cacheSource,
     };
   }
 

@@ -150,8 +150,12 @@ export interface AgentResult {
     cachedTokens: number;
     uncachedTokens: number;
     cacheWriteTokens: number;
-    /** cached / (cached + uncached), 0..1. */
-    hitRate: number;
+    /**
+     * cached / (cached + uncached), 0..1. Отсутствует, когда провайдер не
+     * сообщил cache-токенов: «нет данных» — не «промах». Потребители (сайдбар,
+     * футер CLI) обязаны в этом случае показывать прочерк, а не `0%`.
+     */
+    hitRate?: number;
     /** Экономия в USD относительно полной input-цены (если цена известна). */
     saved?: number;
     /** Стабильность префикса последней итерации (0..1), client-side. */

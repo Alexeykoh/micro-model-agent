@@ -62,6 +62,25 @@ describe("webui usage metrics", () => {
     expect(usage).toEqual({});
   });
 
+  it("captureUsage omits the cache hit rate when the provider reported no cache tokens", () => {
+    const result: AgentResult = {
+      success: true,
+      text: "",
+      iterationCount: 1,
+      cache: {
+        cachedTokens: 0,
+        uncachedTokens: 0,
+        cacheWriteTokens: 0,
+        prefixStable: 0.9,
+        prefixCause: "none",
+        source: "none",
+      },
+    };
+    const usage = captureUsage(result, 32768);
+    expect(usage.cacheHitRate).toBeUndefined();
+    expect(usage.cacheSaved).toBeUndefined();
+  });
+
   it("buildHostState resolves the requested session over the active one", () => {
     const snapshot = buildHostState(
       {
