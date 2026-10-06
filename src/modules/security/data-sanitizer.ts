@@ -1,6 +1,9 @@
 // Вырезание секретов (ключи, токены, пароли) из логов, команд и URL.
-/** Паттерны чувствительных данных для редактуры в логах. */
-const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+/**
+ * Целевые паттерны: безошибочно опознаваемые секреты (префиксы, key=value).
+ * Не трогают длинные URL/слаги/хеши — их ложная редакция ломала историю.
+ */
+const TARGETED_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   // Ключи и токены в формате key=value
   {
     pattern: /(api[_-]?key|apikey|api_key)\s*[=:\s]\s*["']?([a-zA-Z0-9_-]{10,})["']?/gi,
@@ -44,22 +47,40 @@ const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
     pattern: /Bearer\s+[a-zA-Z0-9_-]{20,}/gi,
     replacement: "Bearer [REDACTED]",
   },
-  // Прочие высокоэнтропийные строки, похожие на секреты (30+ символов)
+];
+
+/**
+ * Строгий набор: целевые + высокоэнтропийные строки 30+ символов. Применять
+ * только там, где длинный токен почти наверняка секрет; для tool-args/URL
+ * использовать `sanitizeLogMessageTargeted` (иначе режутся слаги и хеши).
+ */
+const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+  ...TARGETED_PATTERNS,
   {
     pattern: /\b([a-zA-Z0-9_-]{30,})\b/g,
     replacement: "[REDACTED]",
   },
 ];
 
-/** Вычистить секреты из лог-сообщения. */
-export function sanitizeLogMessage(message: string): string {
+function applyPatterns(
+  message: string,
+  patterns: Array<{ pattern: RegExp; replacement: string }>,
+): string {
   let sanitized = message;
-
-  for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
+  for (const { pattern, replacement } of patterns) {
     sanitized = sanitized.replace(pattern, replacement);
   }
-
   return sanitized;
+}
+
+/** Вычистить секреты из лог-сообщения (только целевые паттерны, без generic). */
+export function sanitizeLogMessageTargeted(message: string): string {
+  return applyPatterns(message, TARGETED_PATTERNS);
+}
+
+/** Вычистить секреты из лог-сообщения (строго: целевые + высокоэнтропийные). */
+export function sanitizeLogMessage(message: string): string {
+  return applyPatterns(message, SENSITIVE_PATTERNS);
 }
 
 /** Вычистить секреты из командной строки. */
@@ -67,7 +88,7 @@ export function sanitizeCommand(command: string): string {
   return sanitizeLogMessage(command);
 }
 
-/** Вычистить секретные query-параметры из URL; не-URL — как лог-сообщение. */
+/** Вычистить секретные query-параметры из URL; не-URL — целевая редакция. */
 export function sanitizeUrl(url: string): string {
   try {
     const urlObj = new URL(url);
@@ -83,6 +104,6 @@ export function sanitizeUrl(url: string): string {
     urlObj.search = sanitizedParams.toString();
     return urlObj.toString();
   } catch {
-    return sanitizeLogMessage(url);
+    return sanitizeLogMessageTargeted(url);
   }
 }

@@ -209,4 +209,19 @@ describe("session-logger sanitization", () => {
     expect(entry).toBeDefined();
     expect(entry.tool).toBe("bash");
   });
+
+  it("keeps long URLs/slugs in tool args and results (no false redaction)", () => {
+    const { logger, logs, messages } = makeLogger();
+    const longSlug = "https://catalog.example.com/bike/specialized/rockhopper-27.5-m-2023-gloss-birch";
+    logger.logToolCall({ id: "t1", name: "web_fetch", arguments: { url: longSlug } }, 1);
+    logger.logToolResult(
+      { id: "t1", name: "web_fetch", arguments: {} },
+      { success: true, output: `page ${longSlug} fetched` },
+      5,
+      1,
+    );
+    const all = JSON.stringify({ logs, messages });
+    expect(all).toContain("rockhopper-27.5-m-2023-gloss-birch");
+    expect(all).not.toContain("[REDACTED]");
+  });
 });
