@@ -5,7 +5,7 @@ import type { PrefixDelta } from "./agent/prefix-monitor";
 import type { CacheUsage } from "../llm/cache-usage";
 import type { Logger } from "../logger/app-logger";
 import { setAuditSessionDir } from "../modules/security/audit-log";
-import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
+import { sanitizeLogMessageTargeted } from "../modules/security/data-sanitizer";
 import { redactContextSecrets } from "./agent/context-log";
 
 /**
@@ -64,7 +64,7 @@ export class SessionLogger {
    * @param content текст пользователя.
    */
   logUser(content: string): void {
-    const sanitized = sanitizeLogMessage(content);
+    const sanitized = sanitizeLogMessageTargeted(content);
     this.session?.appendMessage({
       role: "user",
       content: sanitized,
@@ -170,7 +170,7 @@ export class SessionLogger {
    */
   private sanitizeArgs(args: unknown): Record<string, unknown> {
     const raw = JSON.stringify(args ?? {});
-    const sanitized = sanitizeLogMessage(raw);
+    const sanitized = sanitizeLogMessageTargeted(raw);
     try {
       const parsed: unknown = JSON.parse(sanitized);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -199,7 +199,7 @@ export class SessionLogger {
     const caller = this.getCaller?.();
     this.session?.appendMessage({
       role: "tool",
-      content: sanitizeLogMessage(result.output),
+      content: sanitizeLogMessageTargeted(result.output),
       name: call.name,
       timestamp: new Date().toISOString(),
       provider: caller?.provider,
@@ -211,7 +211,7 @@ export class SessionLogger {
       tool: call.name,
       tool_call_id: call.id,
       success: result.success,
-      content: sanitizeLogMessage(result.output.slice(0, 1000)),
+      content: sanitizeLogMessageTargeted(result.output.slice(0, 1000)),
       diff: result.diff,
       duration,
       iteration,
