@@ -39,6 +39,19 @@ describe("isFilePathLike", () => {
     expect(isFilePathLike("dist\\app.js.map")).toBe(true);
     expect(isFilePathLike("src/App.TSX")).toBe(true);
   });
+
+  it("accepts dotfiles that carry a real extension (regression ses_mux70meb_gvqbed)", () => {
+    // `.eslintrc.cjs` was read as `eslintrc.cjs` (leading dot dropped) and
+    // rejected, so the plan deliverable-gate demanded a file that never
+    // existed and looped forever.
+    expect(isFilePathLike(".eslintrc.cjs")).toBe(true);
+    expect(isFilePathLike(".prettierrc.json")).toBe(true);
+    expect(isFilePathLike(".stylelintrc.json")).toBe(true);
+    // Extension-less dotfiles stay non-files for the `word.ext` heuristic.
+    expect(isFilePathLike(".env")).toBe(false);
+    expect(isFilePathLike(".gitignore")).toBe(false);
+    expect(isFilePathLike(".prettierrc")).toBe(false);
+  });
 });
 
 describe("extractFileLikeTokens", () => {
@@ -70,6 +83,11 @@ describe("extractFileLikeTokens", () => {
     expect(extractFileLikeTokens("see dist/bundle.js.map; prev.map((t) => t)")).toEqual([
       "dist/bundle.js.map",
     ]);
+  });
+
+  it("keeps the leading dot of a dotfile token", () => {
+    expect(extractFileLikeTokens("Создать .eslintrc.cjs для ESLint")).toEqual([".eslintrc.cjs"]);
+    expect(extractFileLikeTokens("Create .prettierrc.json with rules")).toEqual([".prettierrc.json"]);
   });
 });
 

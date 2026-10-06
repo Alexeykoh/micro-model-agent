@@ -76,6 +76,27 @@ describe("plan update deliverable gate", () => {
     expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
   });
 
+  it("accepts a dotfile deliverable once it exists (regression ses_mux70meb_gvqbed)", async () => {
+    // Step "Создать .eslintrc.cjs" used to extract the token `eslintrc.cjs`
+    // (leading dot stripped), so the gate demanded a file that was never
+    // created — `.eslintrc.cjs` sat on disk while every `done` was rejected,
+    // and the model re-planned in a loop.
+    const tool = planTool(execModule);
+    const ctx: any = {};
+    await createTestPlan(execModule, "T", ["Создать .eslintrc.cjs для ESLint", "Update readme"]);
+
+    const blocked = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+    expect(blocked.success).toBe(false);
+    expect(blocked.output).toContain(".eslintrc.cjs");
+    expect(execModule.getTracker()!.getStep(1)!.status).not.toBe("done");
+
+    writeTestFile(tmpDir, ".eslintrc.cjs", "module.exports = {};\n");
+
+    const res = await tool.handler(ctx, { action: "update", step: 1, status: "done" });
+    expect(res.success).toBe(true);
+    expect(execModule.getTracker()!.getStep(1)!.status).toBe("done");
+  });
+
   it("allows marking done when a step has no file tokens (pure command)", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};

@@ -116,6 +116,10 @@
         <span class="sb-ico" data-icon="lsp" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="files" aria-selected="false" aria-controls="pane-files" title="Files">
+        <span class="sb-ico" data-icon="files" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
     </div>
     <div class="sb-name" id="sbName"><span class="sb-ico" data-icon="session" aria-hidden="true"></span><span id="sbNameText">Session</span></div>
 
@@ -151,6 +155,19 @@
     <div class="sb-pane" id="pane-lsp" role="tabpanel" data-pane="lsp" hidden>
       <div class="sec map-sec">
         <div class="sec-body" id="lspBody"></div>
+      </div>
+    </div>
+
+    <div class="sb-pane" id="pane-files" role="tabpanel" data-pane="files" hidden>
+      <div class="files-tree" id="filesTree"></div>
+      <div class="files-detail" id="filesDetail" hidden>
+        <div class="detail-h">
+          <span class="g" id="filesGlyph" aria-hidden="true">◆</span>
+          <span id="filesTitle"></span>
+          <button class="x linkbtn" type="button" id="filesAttach" title="attach path">◧</button>
+          <button class="x linkbtn" type="button" id="filesClose" title="close">✕</button>
+        </div>
+        <div class="detail-b" id="filesBody"></div>
       </div>
     </div>
   </div>

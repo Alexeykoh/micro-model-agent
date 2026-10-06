@@ -217,7 +217,11 @@ const TECH_NAMES = new Set([
   "jquery.js",
 ]);
 
-const FILE_TOKEN_RE = /\b(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{1,6}\b/gi;
+// Лидирующий `\b` убран осознанно: он не матчится перед точкой dotfile'а
+// (пробел → `.` — обе стороны не-словесные), поэтому `.eslintrc.cjs`
+// извлекался как `eslintrc.cjs` без ведущей точки, и deliverable-gate плана
+// вечно требовал несуществующий файл (петля ses_mux70meb_gvqbed).
+const FILE_TOKEN_RE = /(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{1,6}\b/gi;
 
 /**
  * True, если `candidate` — правдоподобный токен пути: у пути с разделителем
@@ -233,7 +237,10 @@ export function isFilePathLike(s: string): boolean {
   if (isJsMemberAccess(s)) return false;
   const ext = s.split(".").pop()?.toLowerCase() || "";
   if (!s.includes("/") && !s.includes("\\")) {
-    if (!/^\w+\.[a-z]{1,6}$/i.test(s)) return false;
+    // Ведущая точка допустима: `.eslintrc.cjs` / `.prettierrc.json` — файлы
+    // с реальным расширением. Безext'овые dotfiles (`.env`, `.gitignore`)
+    // по-прежнему не файлы для `word.ext`-эвристики (нет `\.ext` после stem).
+    if (!/^\.?\w+\.[a-z]{1,6}$/i.test(s)) return false;
     return FILE_EXTENSIONS.has(ext);
   }
   // Токены с разделителем: требуем у ПОСЛЕДНЕГО сегмента настоящее имя

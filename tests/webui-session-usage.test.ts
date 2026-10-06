@@ -33,7 +33,7 @@ describe("webui session usage persistence", () => {
       s.pool.setFactory(() => ({}) as never);
 
       expect(activeUsage(s, "ses_p")).toEqual({ contextUsed: 42, contextLimit: 1000 });
-      expect(s.sessionUsage["ses_p"]).toEqual({ contextUsed: 42, contextLimit: 1000 });
+      expect(s.sessionUsage.ses_p).toEqual({ contextUsed: 42, contextLimit: 1000 });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
