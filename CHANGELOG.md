@@ -4,10 +4,34 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.20.0] - 2026-10-06
+
+Harness reliability fixes from the live-session post-mortem (`ses_muwinhpk_2e69iq`):
+silent critic skip after compaction, information-losing compaction that fed a
+re-exploration loop, unbounded read-only loops, provider/context desync,
+fabricated artifacts, and redaction-induced history loss. Harness-only (no
+model/task-specific tuning).
+
+### Added
+
+- **Read-only budget** (`src/core/agent/tool-batch.ts`, `constants.ts`): N consecutive batches of only read-only tools (read/search/fetch, no mutation) now trigger an "answer or make a change" directive (8th batch) and an honest stop (12th) — successful-but-useless fetches never tripped the failure-oriented honest-stop, so loops ran for minutes.
+- **Compaction tool ledger** (`src/modules/context/manager.ts`): a pinned `[Tool ledger]` (tool + args + result digest, deduped, capped at 12) survives compaction, so the model does not re-explore the same sources after the history is trimmed. Config `contextBudget.compactionSummary: off|ledger` (default `ledger`).
+- **Targeted log redaction** (`src/modules/security/data-sanitizer.ts`): new `sanitizeLogMessageTargeted` (no generic 30+ character rule) is used for tool args/results and user messages, so long URLs/slugs/hashes are preserved in `session.jsonl`/`history.jsonl` (resume fidelity) while real secrets stay masked.
+- **Web content extraction** (`src/tools/html-content.ts`): `extractMainContent` (densest `<main>`/`<article>`) plus JS-shell detection; `web_fetch` now reports "no readable content — use browser" instead of returning navigation/boilerplate as success.
+- **Web grounding in critic evidence** (`src/modules/critic/`): the evidence pack carries `webGrounding` (`attempted`/`verified`); the critic flags numeric/price claims asserted without a content-bearing fetch.
+- **`subagent.timeoutMs`** config (default 180000) and a working `expert_tag` (resolved to the configured expert's `tool_tags`; unknown tag errors with the known list). `ToolDefinition.timeoutMs` may be a function of the tool context.
+
+### Changed
+
+- **Provider hot-swap** (`src/core/agent.ts`): `setProvider` now delegates to `reconfigure`, re-probing the active provider's context and resizing budgets (extracted `reprobeActiveProvider`); previously the window/budgets stayed at their startup value.
+- **Session metadata** (`src/modules/session/manager.ts`): new `setEffectiveContext` keeps `meta.contextWindow`/`model` in sync with the effective values; the per-session runner's `envReport` is rebuilt from its own config instead of the bootstrap snapshot.
 
 ### Fixed
 
+- **Critic skipped after compaction** (`src/core/agent/critic-gate.ts`, `agent.ts`): the turn marker is now a monotonic message `seq` (stored in a `WeakMap`), immune to compaction dropping history — the in-loop critic runs again on compacted turns (it was silently disabled on exactly the long, thrashing turns).
+- **DuckDuckGo redirects** (`src/tools/web-search.ts`): search results are unwrapped to direct URLs (`unwrapDdgUrl`) instead of unusable `//duckduckgo.com/l/?uddg=…` links.
+- **Memory noise** (`src/core/agent/tool-batch.ts`): transient `web_fetch`/`web_search` failures are no longer recorded to `errors.md`.
+- **POSIX workdir on Windows** (`src/tools/bash.ts`): a `/tmp`-style `workdir` is rejected with a corrective hint instead of a cryptic spawn error.
 - **Compaction progress threshold** (`src/core/agent/compaction.ts`, `src/modules/context/manager.ts`): the significance threshold is now `max(2% history budget, 3% current context)` instead of 2% of the history budget alone, so a marginal shrink (e.g. −1.2% on a 24K context) no longer counts as success and short-circuits stage escalation — it now escalates to `aggressive`/`hard-drop`. `compactAdaptive` reports `reducedBy` as the total reduction from the original context (previously measured incrementally between stages, which could understate real progress to 0). An overflow attempt now consumes the iteration even when it is a no-op, keeping the "one trigger per iteration" guarantee.
 
 ## [2.19.0] - 2026-10-05

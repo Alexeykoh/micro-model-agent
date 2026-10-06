@@ -808,7 +808,42 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 - **Слабо-модельный UX:** `ToolResult.errorMeta` (`appendErrorMeta` в tool-batch — модель видит,
   чат нет); fuzzy top-3 `load_skill` (`nearestSkillNames`); пустой web-сабмит → `200 {noop,notice}`.
 
-### Current Version: 2.19.0
+### Harness Reliability Fixes (2.20.0)
+
+Разбор живой сессии `ses_muwinhpk_2e69iq` (`mma web`, локальный 27B): критик молча
+пропускался после компакции, компакция не несла информации → петля переисследования,
+read-only петля без стопа, рассинхрон провайдера/контекста, выдуманный артефакт,
+редакция съедала URL в истории. План: [docs/plans/2026-10-06-harness-reliability-fixes.md](./docs/plans/2026-10-06-harness-reliability-fixes.md).
+
+- **Критик после компакции** (`src/core/agent/critic-gate.ts`, `agent.ts`): маркер захода —
+  монотонный `seq` сообщения в `WeakMap` (`ContextManager.beginTurn/seqOf`), а не индекс
+  массива; переживает удаление истории спереди. Раньше `gatherTurnToolEvents` при компакции
+  получал пустой срез и критик не запускался на длинных ходах.
+- **Read-only бюджет** (`src/core/agent/tool-batch.ts`, `constants.ts`): `MAX_READONLY_BATCHES=8`
+  (директива `exec.readonly_directive`) → `HARD_STOP_READONLY_BATCHES=12` (честный стоп
+  `error.readonly_loop_stopped`). Пакет только из read-only тулов без мутаций; сбрасывается
+  мутацией. Успешные fetch-и не ловились honest-stop (тот про провалы).
+- **Леджер тулов при компакции** (`src/modules/context/manager.ts`): pin `[Tool ledger]`
+  (`tool(args) → digest`, дедуп, cap 12) через компакции; `contextBudget.compactionSummary: off|ledger`
+  (default `ledger`). Модель видит, что уже прочитано/fetched, и не повторяет.
+- **Целевая редакция логов** (`src/modules/security/data-sanitizer.ts`): `sanitizeLogMessageTargeted`
+  (без generic-правила `{30,}`) для tool-args/результатов и user-сообщений; URL/слаги/хеши
+  сохраняются, секреты маскируются. `sanitizeLogMessage` (строгий) — для команд.
+- **Веб-контент** (`src/tools/html-content.ts`, `web-fetch.ts`, `web-search.ts`): `extractMainContent`
+  (плотнейший `<main>`/`<article>`), детект JS-шелла (`tool.web_fetch_no_content`), `unwrapDdgUrl`
+  разворачивает редиректы DDG в прямые URL.
+- **Web-grounding критика** (`src/modules/critic/evidence.ts`, `client.ts`): `EvidencePack.webGrounding`
+  (`attempted`/`verified`); числовые/ценовые утверждения без содержательного fetch → issue.
+- **Провайдер hot-swap** (`src/core/agent.ts`): `setProvider` делегирует в `reconfigure`
+  (re-probe + resize), приватный `reprobeActiveProvider`; `SessionManager.setEffectiveContext`
+  синхронит `meta.contextWindow`/`model`; раннер строит `envReport` от своего конфига, а не bootstrap-снимка.
+- **subagent** (`src/tools/subagent.ts`, `executor.ts`, `types.ts`): `expert_tag` резолвится в
+  `tool_tags` эксперта (неизвестный → ошибка со списком); `subagent.timeoutMs` (default 180000),
+  `ToolDefinition.timeoutMs` может быть функцией от `ctx`.
+- **Мелочи:** транзиентные `web_fetch`/`web_search` фейлы не пишутся в память; POSIX-`workdir`
+  на Windows (`/tmp`, `/Users/…`) отклоняется с хинтом `bash.posix_workdir_hint`.
+
+### Current Version: 2.20.0
 
 ### Changelog
 

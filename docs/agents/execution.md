@@ -48,6 +48,8 @@ Plans are stored in `<project>/.mma/plans/` with automatic history management:
 - `stuckThreshold` (default 6) — too many iterations on the same step injects a recovery message
 - `tool repetition` — 3 identical tool calls with the same arguments inject a recovery message
 - `off-track` — tool calls touching files not in the current step trigger a warning
+- **Read-only budget** (2.20.0, `src/core/agent/tool-batch.ts`): consecutive batches of only read-only tools (read/search/fetch, no mutation) inject an "answer or make a change" directive at `MAX_READONLY_BATCHES` (8) and hard-stop with `error.readonly_loop_stopped` at `HARD_STOP_READONLY_BATCHES` (12). Successful-but-useless fetches never tripped the failure-oriented `honest-stop`, so this covers the "reading forever" loop.
+- **In-loop critic** (2.20.0): its turn marker is a monotonic message `seq` (`ContextManager.beginTurn/seqOf`, stored in a `WeakMap`) rather than an array index, so it survives compaction — previously `gatherTurnToolEvents` saw an empty slice after compaction and the critic was silently skipped on the long, thrashing turns. The critic evidence pack also carries `webGrounding` (`attempted`/`verified`): numeric/price claims asserted without a content-bearing `web_fetch` are flagged.
 
 ### Auto-Verification
 

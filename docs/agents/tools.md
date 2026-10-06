@@ -270,6 +270,16 @@ The model can answer questions about the session it is running in without shelli
 - **System-prompt block** (`SessionModule.getSystemPromptBlock`, collected via `getDynamicPromptBlocks` in `bootstrap.ts`) — a compact `[Session: "name" (id) | model: … | context: … tokens]` line. Deliberately carries **stable per-session fields only** (no message count) so the system prompt does not mutate every turn and the prefix KV-cache survives (rule #10). Live values are served by the `session_info` tool. It is collected dynamically, not at bootstrap: the session is created during bootstrap with `messageCount === 0`, so a static collect always yielded `null` (the previous silent bug).
 - `enableOnDemand: false` restores legacy all-tools behavior (no `enable_tools` registered, empty tags → `getAllForLLM` returns everything).
 - Subagent guard (`src/tools/subagent.ts`) uses `getByTags` for unknown-tag detection (alwaysOn tools otherwise masked it).
+- **`subagent` `expert_tag`** (2.20.0): resolved to the configured expert's `tool_tags` (via `getExpertConfig`) when no explicit `tool_tags` are given; an unknown tag fails fast with the list of configured experts. Previously the parameter was silently ignored. The subagent timeout is `subagent.timeoutMs` (default 180000); `ToolDefinition.timeoutMs` may now be a function of the tool context.
+
+## Web Fetch / Search (2.20.0)
+
+- **Content extraction** (`src/tools/html-content.ts`): `web_fetch` extracts the densest `<main>`/`<article>` instead of dumping every tag, and flags JS shells (lots of markup, almost no text) as `tool.web_fetch_no_content` ("use the browser tool") rather than returning navigation as a success.
+- **Direct URLs** (`src/tools/web-search.ts`): DuckDuckGo redirect links (`//duckduckgo.com/l/?uddg=…`) are unwrapped to direct URLs (`unwrapDdgUrl`) so the model can actually fetch them.
+
+## Log Redaction (2.20.0)
+
+- `sanitizeLogMessageTargeted` (`src/modules/security/data-sanitizer.ts`) — targeted secret patterns only (no generic 30+ char rule) — is used for tool args/results and user messages, so long URLs/slugs/hashes survive in `session.jsonl`/`history.jsonl` (resume fidelity) while real secrets stay masked. `sanitizeLogMessage` (strict, includes the generic rule) remains for command sanitization.
 
 ## LSP Diagnostics
 
