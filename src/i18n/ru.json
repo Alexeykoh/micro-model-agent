@@ -993,6 +993,7 @@
   "file.notfound_resolved": "Файл не найден: {path} (резолвится в {resolved})\nПуть был склеен с рабочей директорией, потому что в исходном виде он не существует. Выполни list_dir, чтобы найти корректный путь.",
   "bash.echo_write_blocked": "Запись файлов через echo/printf ненадёжна в Windows cmd.exe (кавычки и многострочность ломаются). Используй инструмент write_file вместо этого (цель: {path}).",
   "bash.cwd_flag_hint": "--cwd не стандартный флаг. Передай каталог через параметр \"workdir\" тула bash (например, workdir=\"{workdir}\").",
+  "bash.posix_workdir_hint": "workdir \"{workdir}\" — POSIX-путь, но это оболочка Windows cmd.exe. Используй Windows-путь или не указывай workdir, чтобы взять корень workspace ({baseDir}).",
   "updater.check_error": "[updater] Ошибка проверки обновления: {error}",
   "updater.available": "[updater] Доступно обновление: {current} → {latest}. Выполните `npm install -g micro-models-agent` для обновления.",
   "updater.installing": "[updater] Установка {latest} глобально (текущая: {current})…",
