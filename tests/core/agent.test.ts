@@ -26,6 +26,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     execute: vi.fn().mockResolvedValue({ success: true, output: "tool ok" }),
     getToolDefinitions: vi.fn().mockReturnValue([]),
     getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+    updateProvider: vi.fn(),
   };
 
   const mockPluginManager = {
@@ -66,6 +67,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     getQuality: vi.fn().mockReturnValue(100),
     noteIteration: vi.fn(),
     setToolTokens: vi.fn(),
+    resize: vi.fn(),
   };
 
   const mockHallucinationDetector = {
@@ -177,6 +179,39 @@ describe("Agent", () => {
     const deps = createMockDeps({ getProviderName: () => "live" });
     const agent = new Agent(deps as any);
     expect(agent.callerProvenance()).toEqual({ provider: "live", model: "test-model" });
+  });
+
+  it("setProvider re-probes/resizes context and syncs session meta", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = (async () => {
+      throw new Error("offline");
+    }) as unknown as typeof global.fetch;
+    try {
+      const setEffectiveContext = vi.fn();
+      const resize = vi.fn();
+      const base = createMockDeps();
+      const deps = createMockDeps({
+        config: {
+          ...base.config,
+          provider: {
+            type: "openai-compat",
+            baseUrl: "http://localhost:1234/v1",
+            active: "lm studio",
+            entries: [
+              { type: "openai-compat", label: "lm studio", baseUrl: "http://localhost:1234/v1" },
+            ],
+          } as any,
+        },
+        contextManager: { ...base.contextManager, resize },
+        sessionManager: { getActiveMeta: () => ({ id: "s1" }), setEffectiveContext },
+      });
+      const agent = new Agent(deps as any);
+      await agent.setProvider("lm studio");
+      expect(resize).toHaveBeenCalled();
+      expect(setEffectiveContext).toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   it("returns text response for simple text LLM output", async () => {
@@ -1609,7 +1644,7 @@ describe("Agent", () => {
           (async function* () {
             yield {
               type: "tool_call" as const,
-              toolCall: { id: "call_1", name: "read_file", arguments: "{}" },
+              toolCall: { id: "call_1", name: "write_file", arguments: "{}" },
             };
             yield { type: "done" as const, finishReason: "tool_calls" as const };
           })(),

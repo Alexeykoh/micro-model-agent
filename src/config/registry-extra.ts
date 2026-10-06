@@ -171,6 +171,9 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
   enumOf("contextBudget.policy", "budget", ["legacy", "v2"] as const, true,
     (c) => c.contextBudget.policy ?? DEFAULTS.contextBudget.policy,
     (c, v) => { c.contextBudget.policy = v as "legacy" | "v2"; }),
+  enumOf("contextBudget.compactionSummary", "budget", ["off", "ledger"] as const, true,
+    (c) => c.contextBudget.compactionSummary ?? DEFAULTS.contextBudget.compactionSummary,
+    (c, v) => { c.contextBudget.compactionSummary = v as "off" | "ledger"; }),
   int("contextBudget.overflowCooldown", "budget", 1, 20, 1, true,
     (c) => c.contextBudget.overflowCooldown ?? DEFAULTS.contextBudget.overflowCooldown,
     (c, v) => { c.contextBudget.overflowCooldown = v as number; }),
@@ -387,6 +390,12 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
     (c, v) => {
       c.subagent ??= structuredClone(DEFAULTS.subagent);
       c.subagent.maxParallelChunkQueries = v as number;
+    }),
+  int("subagent.timeoutMs", "agent", 10000, 1800000, 1000, false,
+    (c) => c.subagent?.timeoutMs ?? DEFAULTS.subagent.timeoutMs,
+    (c, v) => {
+      c.subagent ??= structuredClone(DEFAULTS.subagent);
+      c.subagent.timeoutMs = v as number;
     }),
   bool("subagent.stableSystemPrompt", "agent", false,
     (c) => c.subagent?.stableSystemPrompt ?? DEFAULTS.subagent.stableSystemPrompt,

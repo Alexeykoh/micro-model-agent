@@ -674,6 +674,16 @@ export const bashTool: ToolDefinition = {
     }
     const workdir = args.workdir ? String(args.workdir) : ctx.baseDir;
 
+    // POSIX-workdir на Windows: cmd.exe не понимает "/tmp"/"/Users/…" — это
+    // почти всегда путаница ОС у модели (наблюдалось: mkdir -p /Users/Alexe/…).
+    // Даём корректирующий хинт вместо непонятной ошибки spawn.
+    if (platform() === "win32" && /^[~/]/.test(workdir)) {
+      return {
+        success: false,
+        output: t("bash.posix_workdir_hint", { workdir, baseDir: ctx.baseDir }),
+      };
+    }
+
     // Session-specific security config (мастер-выключатель учтён внутри).
     const securityConfig = resolveBashSecurityConfig(ctx);
     const validation = isCommandAllowed(command, securityConfig);

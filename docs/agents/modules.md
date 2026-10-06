@@ -228,7 +228,7 @@ Unlike trace-server (read-only), web-ui is **bidirectional**: the browser sends 
 | 64K           | 6K           | 10K           | 48K           |
 | 128K          | 13K          | 19K           | 96K           |
 
-Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages. Token counting uses `js-tiktoken` via injected `TokenCounter` when available, falling back to `content.length / 2` heuristic for backwards compatibility.
+Compaction triggers at 75% history budget or every 15 iterations. Keeps last 6 turns full; older turns → structured summary preserving created/updated files, plan state, key decisions, and errors. The summary is saved once to the session log — no duplication of old messages. Token counting uses `js-tiktoken` via injected `TokenCounter` when available, falling back to `content.length / 2` heuristic for backwards compatibility. Since 2.20.0 the summary also pins a `[Tool ledger]` (`contextBudget.compactionSummary: off|ledger`, default `ledger`): a deduped, capped list of `tool(args) → result-digest` that survives compaction, so the model does not re-fetch/re-read the same sources after the history is trimmed.
 
 ### Instructions overflow (AGENTS.md / project map exceeding the system budget)
 

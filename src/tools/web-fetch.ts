@@ -11,20 +11,10 @@ import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-l
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { MAX_PREVIEW_LINES } from "./preview";
+import { extractMainContent, looksLikeShell } from "./html-content";
 
-/** Потолок символов до построчной обрезки. */
+/** Максимум символов до обрезки вывода тула. */
 const MAX_CHARS = 5000;
-
-/** Сносит скрипты/стили/теги/сущности в plain text. */
-function stripHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&[^;]+;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 /** Тянет URL в markdown; JS-страницы вернут пустоту — для них тул browser. */
 export const webFetchTool: ToolDefinition = {
@@ -79,9 +69,25 @@ export const webFetchTool: ToolDefinition = {
       }
       const contentType = finalResponse.headers.get("content-type") || "";
       const text = await finalResponse.text();
-      const cleaned = contentType.includes("html") ? stripHtml(text) : text;
+      const isHtml = contentType.includes("html");
+      const cleaned = isHtml ? extractMainContent(text) : text;
 
       logNetworkRequest(ctx.sessionId, sanitizeUrl(finalUrl), true, `Status: ${finalResponse.status}`);
+
+      // JS-шелл: много разметки, почти нет текста — не выдаём навигацию за
+      // данные. distinct-сигнал (не success), чтобы модель ушла на browser.
+      if (isHtml && looksLikeShell(text, cleaned)) {
+        return {
+          success: false,
+          output: t("tool.web_fetch_no_content", { url: sanitizeUrl(finalUrl) }),
+          display: t("tool.web_fetch_result", {
+            url: sanitizeUrl(url),
+            chars: "0",
+            lines: "0",
+            truncated: "",
+          }),
+        };
+      }
 
       const fullChars = cleaned.length;
       const fullLines = cleaned.split("\n").length;

@@ -36,6 +36,7 @@ function createMockDeps(overrides: Partial<AgentDeps> = {}) {
   const contextManager = {
     addMessage: vi.fn((m: any) => messages.push(m)),
     getActiveHistory: vi.fn(() => messages),
+    beginTurn: vi.fn(() => 0),
     getMessageCount: vi.fn(() => messages.length),
     needsCompaction: vi.fn().mockReturnValue(false),
     compact: vi.fn(),

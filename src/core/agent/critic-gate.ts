@@ -220,8 +220,9 @@ export class CriticGate {
 /**
  * Собирает события тулов текущего захода из активной истории (для evidence-пакета критика).
  * @param contextManager менеджер с getActiveHistory;
- * @param fromIndex маркер начала захода (длина истории на старте run'а) — всё, что раньше,
- *   принадлежит прошлым вопросам и в пакет не входит; клампится к длине (компакция ужимает историю).
+ * @param fromSeq маркер начала захода (`ContextManager.beginTurn()`): берутся сообщения
+ *   со штампом `seq >= fromSeq`. Штамп монотонный и переживает компакцию, поэтому
+ *   сжатие истории посреди хода больше не «теряет» улики текущего захода.
  * @returns события role:"tool" начиная с маркера.
  */
 export function gatherTurnToolEvents(
@@ -232,14 +233,17 @@ export function gatherTurnToolEvents(
       content?: unknown;
       success?: boolean;
       arguments?: Record<string, unknown>;
+      seq?: number;
     }>;
+    seqOf?: (msg: object) => number;
   },
-  fromIndex = 0,
+  fromSeq = 0,
 ): Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> {
   const events: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> = [];
   const history = contextManager.getActiveHistory();
-  const start = Math.max(0, Math.min(fromIndex, history.length));
-  for (const m of history.slice(start)) {
+  for (const m of history) {
+    const seq = contextManager.seqOf ? contextManager.seqOf(m) : (m.seq ?? 0);
+    if (seq < fromSeq) continue;
     if (m.role !== "tool" || !m.name) continue;
     // Сообщения role:"tool" уже несут аргументы (tool-batch) и обрезанный
     // вывод — пробрасываем оба, чтобы критик видел ЧТО тронуто и ЧТО вернулось.

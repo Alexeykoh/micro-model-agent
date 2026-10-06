@@ -24,7 +24,35 @@ import {
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES } from "./constants";
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_READONLY_BATCHES, HARD_STOP_READONLY_BATCHES } from "./constants";
+
+/**
+ * Тулы, не производящие побочных эффектов (чтение/поиск/fetch/статус). Пакет
+ * только из них считается «read-only исследованием»: серия таких пакетов без
+ * единой мутации питает read-only бюджет (см. `MAX_READONLY_BATCHES`).
+ * Намеренно НЕ включены: process_wait (ожидание), plan/enable_tools/set_thinking
+ * (мена состояния), question/approve (интерактив), subagent (может мутировать).
+ */
+const READONLY_TOOLS = new Set([
+  "read_file",
+  "list_dir",
+  "glob",
+  "grep",
+  "file_info",
+  "project_map",
+  "web_search",
+  "web_fetch",
+  "web_browse",
+  "chunk_query",
+  "recall",
+  "search_history",
+  "session_info",
+  "process_list",
+  "process_log",
+]);
+
+/** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
+const TRANSIENT_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
 
 /** Зависимости исполнителя пакетов: конфиг, тулы, контекст, логгеры, хуки. */
 export interface ToolBatchDeps {
@@ -361,11 +389,13 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       }
       this.deps.compactionService.compactAfterTool(state);
 
-      // Учёт общих неудач (НЕ только подряд идущих): тул, который стабильно
-      // падает между успехами других тулов, всё равно учится (наблюдалось:
-      // LSP spawn npx ENOENT упал 8x за сессию, ни разу подряд — и не дошёл
-      // до памяти по пути "5 подряд неудач").
-      if (!result.success && !result.blocked && !infoTools.has(call.name)) {
+    // Учёт общих неудач (НЕ только подряд идущих): тул, который стабильно
+    // падает между успехами других тулов, всё равно учится (наблюдалось:
+    // LSP spawn npx ENOENT упал 8x за сессию, ни разу подряд — и не дошёл
+    // до памяти по пути "5 подряд неудач"). Транзиентные сетевые тулы
+    // (web_fetch/web_search) исключены: смена сайта/лимит — не системная
+    // поломка, а запись в память засоряла errors.md мусором (404/TLS/сертификат).
+    if (!result.success && !result.blocked && !infoTools.has(call.name) && !TRANSIENT_TOOLS.has(call.name)) {
         const key = call.name;
         const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
         prev.count++;
@@ -464,6 +494,36 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       logger.diagnostic(
         "warn",
         `Retry loop hard-stopped after ${state.consecutiveFailedBatches} consecutive failed batches`,
+      );
+      return { interrupted: true };
+    }
+
+    // Read-only бюджет: серия пакетов только из read-only тулов без мутаций.
+    // Успешные, но бесполезные fetch/read не попадают под honest-stop (тот про
+    // провалы), поэтому петля «читаю и не могу остановиться» гасится отдельно.
+    const batchAllReadOnly = toolCalls.length > 0 && toolCalls.every((c) => READONLY_TOOLS.has(c.name));
+    if (batchAllReadOnly) {
+      state.consecutiveReadOnlyBatches++;
+    } else {
+      state.consecutiveReadOnlyBatches = 0;
+      state.readonlyNudged = false;
+    }
+    if (state.consecutiveReadOnlyBatches >= MAX_READONLY_BATCHES && !state.readonlyNudged) {
+      state.readonlyNudged = true;
+      logger.diagnostic(
+        "warn",
+        `Read-only exploration streak: ${state.consecutiveReadOnlyBatches} batches — directive`,
+      );
+      contextManager.addMessage({
+        role: "user",
+        content: `<system-summary>${t("exec.readonly_directive", { count: state.consecutiveReadOnlyBatches })}</system-summary>`,
+      });
+    }
+    if (state.consecutiveReadOnlyBatches >= HARD_STOP_READONLY_BATCHES) {
+      state.readonlyStopped = true;
+      logger.diagnostic(
+        "warn",
+        `Read-only loop hard-stopped after ${state.consecutiveReadOnlyBatches} consecutive read-only batches`,
       );
       return { interrupted: true };
     }

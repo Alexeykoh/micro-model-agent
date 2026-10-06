@@ -78,6 +78,25 @@ function hasHonestStop(added: string[]): boolean {
   return added.some((m) => m.includes("STOP retrying") || m.includes("ХВАТИТ"));
 }
 
+async function runReadonlyBatch(
+  ex: ToolBatchExecutor,
+  state: ReturnType<typeof createLoopState>,
+) {
+  (ex as any).deps.toolExecutor.execute = async () => ok;
+  return ex.execute(
+    state,
+    [{ id: "1", name: "web_fetch", arguments: { url: "https://example.com" } }],
+    new Set(),
+    "",
+    "",
+    "task",
+  );
+}
+
+function hasReadonlyDirective(added: string[]): boolean {
+  return added.some((m) => m.includes("only been reading") || m.includes("только читаешь"));
+}
+
 function makeCase() {
   const added: string[] = [];
   const ex = new ToolBatchExecutor(stubDeps(() => fail, added));
@@ -136,5 +155,67 @@ describe("ToolBatchExecutor honest-stop", () => {
     });
     await runSingleBatch(ex, state);
     expect(state.consecutiveFailedBatches).toBe(1);
+  });
+});
+
+describe("ToolBatchExecutor read-only budget", () => {
+  it("directive on 8th read-only batch, hard stop on 12th", async () => {
+    const { added, ex, state } = makeCase();
+    for (let n = 0; n < 7; n++) {
+      expect((await runReadonlyBatch(ex, state)).interrupted).toBe(false);
+    }
+    expect(state.consecutiveReadOnlyBatches).toBe(7);
+    expect(hasReadonlyDirective(added)).toBe(false);
+
+    const eighth = await runReadonlyBatch(ex, state);
+    expect(eighth.interrupted).toBe(false);
+    expect(state.consecutiveReadOnlyBatches).toBe(8);
+    expect(hasReadonlyDirective(added)).toBe(true);
+
+    for (let n = 0; n < 3; n++) await runReadonlyBatch(ex, state);
+    const twelfth = await runReadonlyBatch(ex, state);
+    expect(twelfth.interrupted).toBe(true);
+    expect(state.readonlyStopped).toBe(true);
+  });
+
+  it("resets the read-only streak on a mutating batch", async () => {
+    const { ex, state } = makeCase();
+    await runReadonlyBatch(ex, state);
+    await runReadonlyBatch(ex, state);
+    expect(state.consecutiveReadOnlyBatches).toBe(2);
+    (ex as any).deps.toolExecutor.execute = async () => ok;
+    await runSingleBatch(ex, state); // bash — мутирующий
+    expect(state.consecutiveReadOnlyBatches).toBe(0);
+  });
+});
+
+describe("ToolBatchExecutor failure-memory gating", () => {
+  async function failTool(
+    ex: ToolBatchExecutor,
+    state: ReturnType<typeof createLoopState>,
+    name: string,
+    times: number,
+  ) {
+    (ex as any).deps.toolExecutor.execute = async () => ({
+      success: false,
+      output: "HTTP 404: Not Found",
+    });
+    for (let i = 0; i < times; i++) {
+      await ex.execute(state, [{ id: "1", name, arguments: {} }], new Set(), "", "", "task");
+    }
+  }
+
+  it("does not record transient web tool failures to memory", async () => {
+    const ex = new ToolBatchExecutor(stubDeps(() => fail, []));
+    const state = createLoopState();
+    await failTool(ex, state, "web_fetch", 4);
+    expect(state.memoryRuleRecorded.has("web_fetch")).toBe(false);
+  });
+
+  it("records repeated non-transient tool failures", async () => {
+    const ex = new ToolBatchExecutor(stubDeps(() => fail, []));
+    const state = createLoopState();
+    await failTool(ex, state, "bash", 4);
+    expect(state.memoryRuleRecorded.has("bash")).toBe(true);
   });
 });

@@ -147,6 +147,12 @@ export interface ContextBudget {
   calibrationWarmup?: number;
   /** Нижняя граница калибровки как доля raw. Дефолт 0.5. */
   ratioFloor?: number;
+  /**
+   * Сводка компакции: `off` — только task/plan/facts; `ledger` (дефолт) —
+   * дополнительно пинить структурный `[Tool ledger]` (что уже прочитано/
+   * прочитано/fetched), чтобы модель не переисследовала то же после сжатия.
+   */
+  compactionSummary?: "off" | "ledger";
 }
 
 /**
@@ -402,6 +408,8 @@ export interface SubagentConfig {
   stableSystemPrompt: boolean;
   /** Дефолтный потолок параллельных chunk-запросов в runChunkQuery. */
   maxParallelChunkQueries: number;
+  /** Таймаут выполнения субагента, мс (дефолт 180000). */
+  timeoutMs: number;
 }
 
 export interface SessionIsolationConfig {

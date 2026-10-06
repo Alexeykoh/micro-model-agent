@@ -165,3 +165,35 @@ describe("critic evidence", () => {
     });
   }
 });
+
+describe("critic evidence web grounding", () => {
+  it("marks web grounding unverified when only failed/shell fetches happened", () => {
+    const pack = buildEvidencePack({
+      task: "collect bike prices",
+      toolEvents: [
+        { tool: "web_fetch", args: { url: "https://x" }, ok: false, output: "HTTP 404" },
+        { tool: "web_fetch", args: { url: "https://y" }, ok: true, output: "nav" },
+        { tool: "web_search", args: { query: "bikes" }, ok: true, output: "links" },
+      ],
+    });
+    expect(pack.webGrounding).toEqual({ attempted: 3, verified: false });
+  });
+
+  it("marks web grounding verified when a fetch returned substantive content", () => {
+    const pack = buildEvidencePack({
+      task: "collect bike prices",
+      toolEvents: [
+        { tool: "web_fetch", args: { url: "https://x" }, ok: true, output: "R".repeat(400) },
+      ],
+    });
+    expect(pack.webGrounding).toEqual({ attempted: 1, verified: true });
+  });
+
+  it("omits web grounding when no web tools were used", () => {
+    const pack = buildEvidencePack({
+      task: "t",
+      toolEvents: [{ tool: "read_file", args: { path: "a" }, ok: true }],
+    });
+    expect(pack.webGrounding).toBeUndefined();
+  });
+});

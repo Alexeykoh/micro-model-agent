@@ -1,6 +1,7 @@
 // Хардненинг оценки контекста: инвалидация кэша, калибровка, safety-clamp.
 import { describe, it, expect } from "vitest";
 import { ContextManager } from "../src/modules/context/manager";
+import { gatherTurnToolEvents } from "../src/core/agent/critic-gate";
 
 describe("ContextManager estimate hardening", () => {
   it("recomputes a message's estimate when its content is mutated in place", () => {
@@ -81,5 +82,25 @@ describe("ContextManager estimate hardening", () => {
     const second = mgr.checkOverflowAllowed();
     expect(second.implausible).toBe(true);
     expect(second.allowed).toBe(false);
+  });
+
+  it("keeps current-run tool events across compaction via seq marker", () => {
+    const mgr = new ContextManager(32768);
+    // Прошлый заход: его tool-события не должны попасть в пакет нового.
+    mgr.addMessage({ role: "tool", name: "web_search", content: "old", success: true } as any);
+    mgr.addMessage({ role: "assistant", content: "old answer" } as any);
+    const mark = mgr.beginTurn();
+    // Текущий заход.
+    mgr.addMessage({ role: "user", content: "new task" } as any);
+    for (let i = 0; i < 30; i++) mgr.addMessage({ role: "assistant", content: `step ${i}` } as any);
+    mgr.addMessage({ role: "tool", name: "web_fetch", content: "DATA", success: true } as any);
+    // Компакция посреди захода удаляет старые сообщения, но не должна «съесть» улики.
+    mgr.compactAdaptive({ keepLastN: 2 });
+    const events = gatherTurnToolEvents(
+      { getActiveHistory: () => mgr.getActiveHistory(), seqOf: (m) => mgr.seqOf(m) },
+      mark,
+    );
+    expect(events.some((e) => e.tool === "web_fetch")).toBe(true);
+    expect(events.some((e) => e.tool === "web_search")).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { ArtifactStore } from "../modules/artifacts/store";
 import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
+import { getExpertConfig } from "../config/experts";
 
 /** Фиксированный системный промпт (KV-cache дружит при stableSystemPrompt). */
 export const SUBAGENT_SYSTEM_PROMPT_TEMPLATE = `You are a sub-agent working on a specific task. You have your own context window and tool set.
@@ -33,7 +34,7 @@ export const subagentTool: ToolDefinition = {
   description:
     "Spawn an isolated sub-agent to work on a task independently. The sub-agent has its own context and executes autonomously. Use for parallel work or complex sub-tasks.",
   tags: ["code"],
-  timeoutMs: 180000,
+  timeoutMs: (ctx) => ctx.config?.subagent?.timeoutMs ?? 180000,
   parameters: {
     type: "object",
     properties: {
@@ -47,7 +48,8 @@ export const subagentTool: ToolDefinition = {
       },
       expert_tag: {
         type: "string",
-        description: "Expert tag for tool filtering and model selection",
+        description:
+          "Configured expert tag (from config.experts) — derives the sub-agent's tool_tags. Ignored if tool_tags is given.",
       },
       allowed_files: {
         type: "array",
@@ -129,7 +131,24 @@ export const subagentTool: ToolDefinition = {
           }
         : ctx.scope;
 
-    const toolTags = args.tool_tags ? (args.tool_tags as string[]) : undefined;
+    const explicitTags = args.tool_tags ? (args.tool_tags as string[]) : undefined;
+    const expertTag = args.expert_tag ? String(args.expert_tag) : undefined;
+    // expert_tag — сахар над tool_tags: если явные теги не даны, берём tags
+    // сконфигурированного эксперта. Раньше параметр молча игнорировался, и
+    // модель, передав expert_tag, получала дефолтный набор (наблюдалось:
+    // expert_tag:"web" → ноль фильтрации → сабтаск ушёл в таймаут).
+    let toolTags = explicitTags;
+    if ((!toolTags || toolTags.length === 0) && expertTag) {
+      const expert = getExpertConfig(ctx.config, expertTag);
+      if (!expert) {
+        const known = Object.keys(ctx.config.experts ?? {});
+        return {
+          success: false,
+          output: `[SECURITY BLOCKED] Unknown expert_tag "${expertTag}". Known experts: [${known.join(", ") || "none"}]. Pass a configured expert tag or explicit tool_tags.`,
+        };
+      }
+      toolTags = expert.tool_tags;
+    }
 
     if (!ctx.llmProvider || !ctx.toolExecutor) {
       return {

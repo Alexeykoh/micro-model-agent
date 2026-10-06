@@ -63,6 +63,16 @@ export interface LoopState {
   consecutiveFailedBatches: number;
   /** Honest-stop директива уже отправлена для текущего стрика (1 раз на стрик). */
   honestStopNudged: boolean;
+  /**
+   * Подряд идущие пакеты только из read-only тулов без мутаций. Питает
+   * read-only бюджет: директива «ответь или измени», затем жёсткий стоп.
+   * Успешные, но бесполезные fetch-и не ловятся honest-stop (тот про провалы).
+   */
+  consecutiveReadOnlyBatches: number;
+  /** Директива read-only уже отправлена для текущего стрика (1 раз). */
+  readonlyNudged: boolean;
+  /** Read-only петля остановлена жёстко — итоговый результат success:false. */
+  readonlyStopped: boolean;
   /** Подряд идущие успешные итерации с тулами — вход для reasoning policy. */
   consecutiveToolSuccesses: number;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
@@ -130,11 +140,12 @@ export interface LoopState {
   /** Рабочие мутации с последнего вызова критика. */
   mutationsSinceCritic: number;
   /**
-   * Длина активной истории на старте захода (executeSingleAgentLoop).
+   * Маркер seq на старте захода (executeSingleAgentLoop), из `ContextManager.beginTurn()`.
    * Маркер для gatherTurnToolEvents: критик видит только тул-события
    * текущего захода, а не всей сессии (иначе тулы прошлого вопроса —
    * напр. погода — ложно свидетельствуют против текущей задачи).
-   * После компакции история короче маркера — сборщик клампит к длине.
+   * Монотонный seq переживает компакцию, поэтому сжатие истории посреди
+   * хода больше не обнуляет улики текущего захода.
    */
   criticHistoryMark: number;
   /** Сигнатуры уже показанных проблем критика (дедупликация). */
@@ -196,6 +207,9 @@ export function createLoopState(): LoopState {
     consecutiveToolFailures: 0,
     consecutiveFailedBatches: 0,
     honestStopNudged: false,
+    consecutiveReadOnlyBatches: 0,
+    readonlyNudged: false,
+    readonlyStopped: false,
     consecutiveToolSuccesses: 0,
     repeatedToolCount: 0,
     toolFailureCounts: new Map(),

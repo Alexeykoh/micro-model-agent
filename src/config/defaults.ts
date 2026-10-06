@@ -84,6 +84,7 @@ export const DEFAULTS: AppConfig = {
     compactionThreshold: 0.75,
     compactionMinLoad: 0.5,
     policy: "v2",
+    compactionSummary: "ledger",
     overflowCooldown: 3,
     toolResultKeep: 6,
     calibrationWarmup: 3,
@@ -184,6 +185,7 @@ export const DEFAULTS: AppConfig = {
     artifactsDir: ".mma/artifacts",
     stableSystemPrompt: true,
     maxParallelChunkQueries: 4,
+    timeoutMs: 180000,
   },
   lsp: DEFAULT_LSP_CONFIG,
   updater: {

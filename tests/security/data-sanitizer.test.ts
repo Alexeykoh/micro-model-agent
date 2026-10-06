@@ -1,11 +1,26 @@
 import {
   sanitizeLogMessage,
+  sanitizeLogMessageTargeted,
   sanitizeCommand,
   sanitizeUrl,
 } from "../../src/modules/security/data-sanitizer";
 import { describe, it, expect } from "vitest";
 
 describe("Data Sanitizer", () => {
+  describe("sanitizeLogMessageTargeted", () => {
+    it("redacts real secrets (key=value and prefixed tokens)", () => {
+      expect(sanitizeLogMessageTargeted('api_key: sk-abcdefghij0123456789')).toContain("[REDACTED]");
+      expect(sanitizeLogMessageTargeted("Bearer abcdefghij0123456789xyz")).toContain("[REDACTED]");
+    });
+
+    it("keeps long non-secret tokens (URLs, slugs) intact", () => {
+      const longPath = "https://catalog.example.com/bike/specialized/rockhopper-27.5-m-2023-gloss";
+      expect(sanitizeLogMessageTargeted(longPath)).toBe(longPath);
+      const sha = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4";
+      expect(sanitizeLogMessageTargeted(`hash ${sha}`)).toBe(`hash ${sha}`);
+    });
+  });
+
   describe("sanitizeLogMessage", () => {
     it("should redact API keys", () => {
       const message = "Using API key: sk-abc123def456789ghi012jkl345";

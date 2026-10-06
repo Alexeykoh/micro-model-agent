@@ -23,6 +23,24 @@ export interface WebSearchOutcome {
 }
 
 /**
+ * Разворачивает редирект DuckDuckGo `//duckduckgo.com/l/?uddg=<enc>` в прямой
+ * URL. Иначе выдача отдаёт непроходимые редирект-ссылки, и модель не может по
+ * ним перейти (`web_fetch` вернёт обёртку DDG). Не-DDG/битые URL — как есть.
+ */
+export function unwrapDdgUrl(url: string): string {
+  try {
+    const u = new URL(url, "https://duckduckgo.com");
+    if (/(^|\.)duckduckgo\.com$/i.test(u.hostname) && u.pathname === "/l/") {
+      const target = u.searchParams.get("uddg");
+      if (target) return decodeURIComponent(target);
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Общий веб-поиск (DuckDuckGo HTML) для тула web_search и автопоиска ошибок
  * (execution-модуль). `networkConfig` — резолвленная сетевая security-конфигурация
  * (undefined при выключенной безопасности); `requestTimeoutMs` переопределяет
@@ -55,7 +73,7 @@ export async function performWebSearch(
     let match: RegExpExecArray | null;
     while ((match = snippetRegex.exec(html)) !== null && results.length < numResults) {
       results.push({
-        url: match[1].trim(),
+        url: unwrapDdgUrl(match[1].trim()),
         title: match[2].replace(/<[^>]+>/g, "").trim(),
         snippet: match[3].replace(/<[^>]+>/g, "").trim(),
       });

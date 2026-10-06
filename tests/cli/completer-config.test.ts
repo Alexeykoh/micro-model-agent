@@ -18,6 +18,7 @@ describe("config key/value completion", () => {
       "contextBudget.compactionThreshold",
       "contextBudget.compactionMinLoad",
       "contextBudget.policy",
+      "contextBudget.compactionSummary",
       "contextBudget.overflowCooldown",
       "contextBudget.toolResultKeep",
       "contextBudget.calibrationWarmup",

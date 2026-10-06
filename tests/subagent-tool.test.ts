@@ -95,6 +95,28 @@ describe("subagent tool defensive guard", () => {
     expect(String(result.output)).not.toContain("No tools match");
   });
 
+  it("rejects an unknown expert_tag with the list of known experts", async () => {
+    const ctx = makeCtx({ config: { experts: { research: { tool_tags: ["research"] } } } });
+    const result = await subagentTool.handler(ctx, { task: "x", expert_tag: "web" });
+    expect(result.success).toBe(false);
+    expect(String(result.output)).toContain("Unknown expert_tag");
+    expect(String(result.output)).toContain("research");
+  });
+
+  it("derives tool_tags from a configured expert_tag", async () => {
+    const ctx = makeCtx({ config: { experts: { research: { tool_tags: ["research"] } } } });
+    const result = await subagentTool.handler(ctx, { task: "search the web", expert_tag: "research" });
+    expect(String(result.output)).not.toContain("Unknown expert_tag");
+    expect(String(result.output)).not.toContain("No tools match");
+  });
+
+  it("uses subagent.timeoutMs from config (functional timeout)", () => {
+    const tm = subagentTool.timeoutMs;
+    expect(typeof tm).toBe("function");
+    const resolved = (tm as (ctx: unknown) => number)({ config: { subagent: { timeoutMs: 45000 } } });
+    expect(resolved).toBe(45000);
+  });
+
   it("increments recursion depth while the sub-agent runs and restores it after", async () => {
     const ctx = makeFullCtx(0);
     let observed: number | undefined;

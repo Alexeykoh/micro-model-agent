@@ -199,28 +199,28 @@ describe("gatherTurnToolEvents", () => {
 
   it("sees only tool events since the run marker (no leak from previous questions)", () => {
     const history = [
-      { role: "user", content: "какая погода в минске?" },
-      { role: "tool", name: "web_search", content: "sunny", success: true, arguments: { query: "погода" } },
-      { role: "assistant", content: "Погода хорошая" },
-      { role: "user", content: "покажи пример кода react" },
-      { role: "assistant", content: "```tsx const a = 1 ```" },
+      { role: "user", content: "какая погода в минске?", seq: 0 },
+      { role: "tool", name: "web_search", content: "sunny", success: true, arguments: { query: "погода" }, seq: 1 },
+      { role: "assistant", content: "Погода хорошая", seq: 2 },
+      { role: "user", content: "покажи пример кода react", seq: 3 },
+      { role: "assistant", content: "```tsx const a = 1 ```", seq: 4 },
     ];
-    const events = gatherTurnToolEvents({ getActiveHistory: () => history } as any, 4);
+    const events = gatherTurnToolEvents({ getActiveHistory: () => history } as any, 3);
     expect(events).toHaveLength(0);
   });
 
   it("keeps current-run tool events after the marker", () => {
     const history = [
-      { role: "tool", name: "web_search", content: "old", success: true },
-      { role: "tool", name: "write_file", content: "ok", success: true, arguments: { path: "a.ts" } },
+      { role: "tool", name: "web_search", content: "old", success: true, seq: 0 },
+      { role: "tool", name: "write_file", content: "ok", success: true, arguments: { path: "a.ts" }, seq: 5 },
     ];
     const events = gatherTurnToolEvents({ getActiveHistory: () => history } as any, 1);
     expect(events).toHaveLength(1);
     expect(events[0]).toEqual({ tool: "write_file", args: { path: "a.ts" }, ok: true, output: "ok" });
   });
 
-  it("clamps an out-of-range marker (e.g. history compacted mid-run) to empty", () => {
-    const history = [{ role: "tool", name: "read_file", content: "x", success: true }];
+  it("marker beyond all seqs yields empty; non-positive marker yields all", () => {
+    const history = [{ role: "tool", name: "read_file", content: "x", success: true, seq: 0 }];
     expect(gatherTurnToolEvents({ getActiveHistory: () => history } as any, 99)).toHaveLength(0);
     expect(gatherTurnToolEvents({ getActiveHistory: () => history } as any, -5)).toHaveLength(1);
   });

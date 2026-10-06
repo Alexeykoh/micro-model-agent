@@ -38,6 +38,8 @@ export interface ContextBudget {
 
 const COMPACTION_INTERVAL = 15;
 const KEEP_LAST_N = 6;
+/** Потолок строк леджера тулов в сводке компакции. */
+const TOOL_LEDGER_MAX_ENTRIES = 12;
 
 /** Результат компакции: счётчики ходов/токенов/качества + внутренняя сводка. */
 export interface CompactResult {
@@ -192,6 +194,15 @@ export class ContextManager {
   private overflowCooldown: number;
   /** Сколько последних tool-результатов не чистить (v2). */
   private toolResultKeep: number;
+  /** Режим сводки компакции: пинить `[Tool ledger]` или нет. */
+  private compactionSummaryMode: "off" | "ledger";
+  /**
+   * Структурный леджер тулов: что уже прочитано/найдено/запущено. Копится через
+   * компакции (пинится в каждой сводке), чтобы модель не переисследовала тот же
+   * источник после сжатия истории (наблюдалось: 6× один и тот же web_fetch).
+   */
+  private toolLedger: string[] = [];
+  private toolLedgerKeys = new Set<string>();
   private facts = new FactExtractor();
   /** Последняя реальная инструкция юзера (мимо <system-summary>). */
   private lastUserTask = "";
@@ -202,6 +213,14 @@ export class ContextManager {
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
   private toolTokens = 0;
+  /**
+   * Монотонный счётчик штампов сообщений (см. `beginTurn`/`seqOf`). Храним seq
+   * в WeakMap, а не полем Message: объекты истории уходят в LLM как есть
+   * (`body.messages = opts.messages`), и лишнее поле могло бы ломать строгие
+   * OpenAI-совместимые бэкенды. WeakMap не сериализуется и следует за объектом.
+   */
+  private nextSeq = 0;
+  private seqByMessage = new WeakMap<object, number>();
   /** Калибратор оценки по реальному usage провайдера. */
   private calibrator: ContextCalibrator;
   /** Опции калибратора — чтобы пересоздать при clear(). */
@@ -235,6 +254,7 @@ export class ContextManager {
     this.policy = tuning.policy;
     this.overflowCooldown = tuning.overflowCooldown;
     this.toolResultKeep = tuning.toolResultKeep;
+    this.compactionSummaryMode = tuning.compactionSummary;
     this.budget = this.calculateBudget(contextWindow, contextBudget);
     this.tokenCounter = tokenCounter ?? null;
     this.calibrationOptions = { warmup: tuning.calibrationWarmup, ratioFloor: tuning.ratioFloor };
@@ -255,6 +275,7 @@ export class ContextManager {
       toolResultKeep: merged.toolResultKeep,
       calibrationWarmup: merged.calibrationWarmup,
       ratioFloor: merged.ratioFloor,
+      compactionSummary: merged.compactionSummary,
     };
   }
 
@@ -396,7 +417,7 @@ export class ContextManager {
       };
       this.pendingImageParts = [];
     }
-    this.messages.push(msg);
+    this.messages.push(this.stampSeq(msg));
     const tokens = this.getEstimatedTokens();
     if (tokens > this.peakTokens) this.peakTokens = tokens;
   }
@@ -564,12 +585,13 @@ export class ContextManager {
     const recentTurns = this.messages.slice(cutoff);
 
     this.facts.extract(oldTurns);
+    this.absorbToolLedger(oldTurns);
 
     this.compactedBlock = this.buildCompactionBlock(oldTurns);
-    const summary: Message = {
+    const summary: Message = this.stampSeq({
       role: "user",
       content: `<system-summary>${this.compactedBlock}</system-summary>`,
-    };
+    });
 
     const firstSystem = this.messages.find((m) => m.role === "system");
     // Чистим протухшие system-summary из свежих ходов против вложенности
@@ -683,6 +705,12 @@ export class ContextManager {
 
     if (this.thinkingLevel) parts.push(`[Thinking: ${this.thinkingLevel}]`);
 
+    // Леджер тулов: что уже сделано/прочитано/найдено. Пинится, чтобы модель
+    // после сжатия не переисследовала те же URL/файлы (питало петлю повторов).
+    if (this.compactionSummaryMode !== "off" && this.toolLedger.length > 0) {
+      parts.push(`[Tool ledger]\n${this.toolLedger.join("\n")}`);
+    }
+
     const triedAndFailed = extractTriedAndFailed(oldTurns);
     if (triedAndFailed.length > 0) {
       const lines = triedAndFailed.map(
@@ -692,6 +720,32 @@ export class ContextManager {
     }
 
     return parts.join(" ");
+  }
+
+  /**
+   * Пополняет леджер тулов из удаляемых сообщений: `- tool(args) → первая
+   * строка результата`. Дедуп по `tool+args`, потолок `TOOL_LEDGER_MAX_ENTRIES`
+   * (вытесняются старейшие). Леджер переживает компакции и пинится в сводке.
+   */
+  private absorbToolLedger(messages: Message[]): void {
+    if (this.compactionSummaryMode === "off") return;
+    for (const m of messages) {
+      if (m.role !== "tool" || !m.name) continue;
+      const args = summarizeArgs(m.arguments);
+      const key = `${m.name}:${args}`;
+      if (this.toolLedgerKeys.has(key)) continue;
+      const text = typeof m.content === "string" ? m.content : getMessageText(m.content);
+      const firstLine = text
+        .split("\n")
+        .map((s) => s.trim())
+        .find(Boolean);
+      const digest = firstLine ? ` → ${firstLine.slice(0, 120)}` : "";
+      this.toolLedgerKeys.add(key);
+      this.toolLedger.push(`- ${m.name}(${args})${digest}`);
+    }
+    if (this.toolLedger.length > TOOL_LEDGER_MAX_ENTRIES) {
+      this.toolLedger.splice(0, this.toolLedger.length - TOOL_LEDGER_MAX_ENTRIES);
+    }
   }
 
   /**
@@ -827,10 +881,11 @@ export class ContextManager {
     const head = nonSystem.slice(0, Math.max(0, nonSystem.length - keep * 2));
     const tail = nonSystem.slice(Math.max(0, nonSystem.length - keep * 2));
     this.facts.extract(head);
-    const summary: Message = {
+    this.absorbToolLedger(head);
+    const summary: Message = this.stampSeq({
       role: "user",
       content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context]${this.compactedBlock ? ` ${this.compactedBlock}` : ""}</system-summary>`,
-    };
+    });
     this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...tail];
     this.iterationsSinceCompaction = 0;
     this.calibrator.invalidate();
@@ -916,7 +971,7 @@ export class ContextManager {
     if (idx >= 0) {
       this.messages[idx] = { ...this.messages[idx], content };
     } else {
-      this.messages.unshift({ role: "system", content });
+      this.messages.unshift(this.stampSeq({ role: "system", content }));
     }
     // Baseline калибровки НЕ сбрасываем: схема baseline+delta инвариантна к
     // составу промпта (raw пересчитывается с новым system, дельта корректна).
@@ -929,6 +984,26 @@ export class ContextManager {
   }
 
   /**
+   * Снимает маркер начала захода для сбора tool-событий (критик/evidence).
+   * Возвращает текущее значение счётчика seq: всё, что добавлено позже, имеет
+   * `seqOf >= маркера`. Устойчиво к компакции — выжившие сообщения не меняют seq.
+   */
+  beginTurn(): number {
+    return this.nextSeq;
+  }
+
+  /** Монотонный seq сообщения (0, если штамп не ставился — напр. system до старта). */
+  seqOf(msg: object): number {
+    return this.seqByMessage.get(msg) ?? 0;
+  }
+
+  /** Ставит монотонный seq в WeakMap и возвращает сообщение. */
+  private stampSeq<T extends Message>(msg: T): T {
+    this.seqByMessage.set(msg, this.nextSeq++);
+    return msg;
+  }
+
+  /**
    * Сбрасывает всё, что принадлежит текущему ходу диалога.
    * Списки фактов (FactExtractor) осознанно переживают clear() — это
    * session-scoped состояние компакции, не per-turn.
@@ -936,6 +1011,8 @@ export class ContextManager {
   clear(): void {
     this.messages = [];
     this.compactedBlock = null;
+    this.toolLedger = [];
+    this.toolLedgerKeys = new Set();
     this.iterationsSinceCompaction = 0;
     this.compactionCount = 0;
     this.peakTokens = 0;

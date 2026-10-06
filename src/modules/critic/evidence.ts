@@ -40,6 +40,22 @@ const MAX_EXCERPT_FILES = 5;
 const MAX_EXCERPT_CHARS = 1200;
 /** Выдержка ответа модели в пакете (у критика свой бюджет; секреты редактируются). */
 const MAX_ANSWER_CHARS = 2000;
+/** Минимальный объём вывода web_fetch, считающийся содержательным (не навбар/шелл). */
+const MIN_GROUNDING_CHARS = 200;
+/** Сетевые тулы, дающие веб-обоснование. */
+const GROUNDING_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
+
+/** Веб-обоснование по событиям тулов: сколько было сетевых чтений и дало ли хоть одно контент. */
+function computeWebGrounding(
+  events: EvidenceToolEvent[],
+): { attempted: number; verified: boolean } | undefined {
+  const web = events.filter((ev) => GROUNDING_TOOLS.has(ev.tool));
+  if (web.length === 0) return undefined;
+  const verified = web.some(
+    (ev) => ev.tool === "web_fetch" && ev.ok !== false && (ev.output?.length ?? 0) >= MIN_GROUNDING_CHARS,
+  );
+  return { attempted: web.length, verified };
+}
 
 /** Собирает EvidencePack из событий тулов: дайджест, файлы, команды, выдержки. */
 export function buildEvidencePack(input: EvidenceInput): EvidencePack {
@@ -67,6 +83,7 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
     answerExcerpt: input.answerText
       ? redactContextSecrets(input.answerText).slice(0, MAX_ANSWER_CHARS)
       : undefined,
+    webGrounding: computeWebGrounding(input.toolEvents),
   };
 }
 
