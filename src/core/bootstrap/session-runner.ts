@@ -37,13 +37,13 @@ import type { EnvironmentReport } from "../environment";
 import { ContextLogger } from "../agent/context-log";
 import { createSetThinkingTool } from "../../tools/set-thinking";
 import { buildActiveProvider } from "../../modules/providers/factory";
+import { activeProviderEndpoint } from "../../modules/providers/manager";
 import { applyProbedContext } from "./provider-phase";
 import type { SilentLogger } from "./state";
 import {
   buildRunnerDynamicBlocks,
   buildRunnerExecutor,
-  buildRunnerPlugins,
-  buildRunnerRegistry,
+  buildRunnerPlugins,  buildRunnerRegistry,
   buildRunnerToolCtx,
 } from "./session-runner-scope";
 
@@ -94,6 +94,31 @@ export interface SessionRunnerTemplate {
   capabilitiesProbeRef: { probe?: ModelCapabilities };
   /** Был ли включён --context-log (раннер пишет свой context.diff). */
   contextLogEnabled: boolean;
+}
+
+/**
+ * Провайдер-срез env-отчёта под ФАКТИЧЕСКИЙ конфиг раннера. Раннер наследует
+ * `envReport` bootstrap (провайдер на старте процесса), из-за чего
+ * `session_start.environment` показывал чужой model/contextWindow после смены
+ * провайдера/модели. Перезаписываем только provider-срез из живого конфига.
+ */
+function runnerEnvReport(base: EnvironmentReport, config: AppConfig): EnvironmentReport {
+  if (!base.provider) return base;
+  let baseUrl = base.provider.baseUrl;
+  try {
+    baseUrl = activeProviderEndpoint(config.provider).baseUrl || baseUrl;
+  } catch {
+    /* keep bootstrap baseUrl */
+  }
+  return {
+    ...base,
+    provider: {
+      ...base.provider,
+      model: config.model,
+      baseUrl,
+      contextWindow: config.contextWindow,
+    },
+  };
 }
 
 /**
@@ -225,7 +250,7 @@ export function createSessionRunnerFactory(
       configDir,
       runnerTags,
       promptBlocks,
-      envReport,
+      envReport: runnerEnvReport(envReport, config),
       getDynamicPromptBlocks,
       lazyPromptBlocks,
       sessionManager: pinned,

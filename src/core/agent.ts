@@ -1575,40 +1575,7 @@ export class Agent {
    * @param config новый конфиг приложения.
    */
   async reconfigure(config: AppConfig): Promise<void> {
-    const { TokenCounter } = await import("../llm/token-counter");
-    // Provider-first контекст: при смене модели/бэкенда спрашиваем новый
-    // провайдер о реально отдаваемом окне ДО пересборки бюджетов вокруг
-    // (возможно протухшего) настроенного значения. Ручные правки
-    // `contextWindow` без смены идентичности уважаются как есть.
-    // Fail-open: ошибки пробы хранят настроенное значение.
-    try {
-      const nextId = probeIdentityOf(config);
-      const prevId = this.lastProbeIdentity;
-      const identityChanged =
-        prevId.model !== nextId.model ||
-        prevId.baseUrl !== nextId.baseUrl ||
-        prevId.active !== nextId.active;
-      if (identityChanged) {
-        const nextEndpoint = activeProviderEndpoint(config.provider);
-        const { probeModel, probeProviderContext } = await import("../llm/model-loader");
-        const lmProbe = await probeModel(nextEndpoint.baseUrl, config.model);
-        const detected =
-          (lmProbe ? { model: lmProbe.model, actual: lmProbe.contextLength } : null) ??
-          (await probeProviderContext(nextEndpoint.baseUrl, config.model, {
-            apiKey: nextEndpoint.apiKey,
-            providerType: nextEndpoint.type,
-          }));
-        if (detected && detected.actual !== config.contextWindow) {
-          this.deps.logger?.info(
-            `Context probe: auto-set contextWindow from provider — model "${detected.model}" serves ${detected.actual} tokens (configured was ${config.contextWindow}).`,
-          );
-          config.contextWindow = detected.actual;
-        }
-        this.lastProbeIdentity = nextId;
-      }
-    } catch {
-      // Проба — best-effort, переключение модели/провайдера не блокируем никогда.
-    }
+    await this.reprobeActiveProvider(config);
     const built = buildActiveProvider(config, this.deps.logger, {
       getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
     });
@@ -1616,12 +1583,52 @@ export class Agent {
     this.deps.llmProvider = newProvider;
     this.deps.getProviderName = () => built.manager.activeName;
     this.deps.toolExecutor.updateProvider(newProvider);
+    const { TokenCounter } = await import("../llm/token-counter");
     const newTokenCounter = new TokenCounter(config.model);
     this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
     this.deps.config = config;
     if (this.deps.configRef) this.deps.configRef.current = config;
     this.costTracker.setModel(config.model);
     this.applyReasoningStrategy(config.provider);
+    // Мета сессии должна отражать РЕАЛЬНОЕ окно/модель, а не снимок на create()
+    // (иначе topbar/session show показывают стартовое значение после смены
+    // провайдера/модели — наблюдалось: meta 262144 при фактических 32768).
+    this.deps.sessionManager?.setEffectiveContext?.(config.contextWindow, config.model);
+  }
+
+  /**
+   * Provider-first проба контекста активной записи при смене идентичности
+   * (модель/baseUrl/active). Общая для `reconfigure` и `setProvider`: без неё
+   * hot-swap мимо `reconfigure` оставлял бюджеты на старом окне. Fail-open.
+   */
+  private async reprobeActiveProvider(config: AppConfig): Promise<void> {
+    try {
+      const nextId = probeIdentityOf(config);
+      const prevId = this.lastProbeIdentity;
+      const identityChanged =
+        prevId.model !== nextId.model ||
+        prevId.baseUrl !== nextId.baseUrl ||
+        prevId.active !== nextId.active;
+      if (!identityChanged) return;
+      const nextEndpoint = activeProviderEndpoint(config.provider);
+      const { probeModel, probeProviderContext } = await import("../llm/model-loader");
+      const lmProbe = await probeModel(nextEndpoint.baseUrl, config.model);
+      const detected =
+        (lmProbe ? { model: lmProbe.model, actual: lmProbe.contextLength } : null) ??
+        (await probeProviderContext(nextEndpoint.baseUrl, config.model, {
+          apiKey: nextEndpoint.apiKey,
+          providerType: nextEndpoint.type,
+        }));
+      if (detected && detected.actual !== config.contextWindow) {
+        this.deps.logger?.info(
+          `Context probe: auto-set contextWindow from provider — model "${detected.model}" serves ${detected.actual} tokens (configured was ${config.contextWindow}).`,
+        );
+        config.contextWindow = detected.actual;
+      }
+      this.lastProbeIdentity = nextId;
+    } catch {
+      // Проба — best-effort, переключение модели/провайдера не блокируем никогда.
+    }
   }
 
   /**
@@ -1639,19 +1646,19 @@ export class Agent {
 
   /**
    * Переключает активного провайдера (и модель опционально).
+   * Делегирует в `reconfigure`, чтобы hot-swap шёл тем же путём, что и смена
+   * через `/provider use`/`/config`: re-probe контекста активной записи и
+   * resize бюджетов (иначе окно оставалось стартовым — наблюдалось в сессии).
    * @param name имя записи провайдера; @param model новая модель.
    */
-  setProvider(name: string, model?: string): void {
-    const { manager, provider } = buildActiveProvider(this.deps.config, this.deps.logger, {
+  async setProvider(name: string, model?: string): Promise<void> {
+    const { manager } = buildActiveProvider(this.deps.config, this.deps.logger, {
       getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
     });
     manager.switch(name, model);
-    const providerCfg = manager.toConfig();
-    this.deps.config.provider = providerCfg;
-    this.applyReasoningStrategy(providerCfg);
-    this.deps.llmProvider = provider;
-    this.deps.getProviderName = () => manager.activeName;
-    this.deps.toolExecutor.updateProvider(provider);
+    this.deps.config.provider = manager.toConfig();
+    if (model !== undefined) this.deps.config.model = model;
+    await this.reconfigure(this.deps.config);
   }
 
   /**
