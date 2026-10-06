@@ -84,6 +84,7 @@ export const DEFAULTS: AppConfig = {
     compactionThreshold: 0.75,
     compactionMinLoad: 0.5,
     policy: "v2",
+    compactionSummary: "ledger",
     overflowCooldown: 3,
     toolResultKeep: 6,
     calibrationWarmup: 3,
