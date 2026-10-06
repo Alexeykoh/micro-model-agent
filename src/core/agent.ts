@@ -1518,7 +1518,12 @@ export class Agent {
     }
 
     return {
-      success: !(state.emptyResponseExhausted || state.auditFailed || state.retryLoopStopped),
+      success: !(
+        state.emptyResponseExhausted ||
+        state.auditFailed ||
+        state.retryLoopStopped ||
+        state.readonlyStopped
+      ),
       text: state.lastText,
       error: state.emptyResponseExhausted
         ? t("error.empty_response")
@@ -1526,7 +1531,9 @@ export class Agent {
           ? t("error.audit_failed", { summary: state.lastAuditSummary })
           : state.retryLoopStopped
             ? t("error.retry_loop_stopped", { count: state.consecutiveFailedBatches })
-            : undefined,
+            : state.readonlyStopped
+              ? t("error.readonly_loop_stopped", { count: state.consecutiveReadOnlyBatches })
+              : undefined,
       iterationCount: state.iteration,
       contextUsed: tokensUsed,
       contextLimit: budget.history,

@@ -63,6 +63,16 @@ export interface LoopState {
   consecutiveFailedBatches: number;
   /** Honest-stop директива уже отправлена для текущего стрика (1 раз на стрик). */
   honestStopNudged: boolean;
+  /**
+   * Подряд идущие пакеты только из read-only тулов без мутаций. Питает
+   * read-only бюджет: директива «ответь или измени», затем жёсткий стоп.
+   * Успешные, но бесполезные fetch-и не ловятся honest-stop (тот про провалы).
+   */
+  consecutiveReadOnlyBatches: number;
+  /** Директива read-only уже отправлена для текущего стрика (1 раз). */
+  readonlyNudged: boolean;
+  /** Read-only петля остановлена жёстко — итоговый результат success:false. */
+  readonlyStopped: boolean;
   /** Подряд идущие успешные итерации с тулами — вход для reasoning policy. */
   consecutiveToolSuccesses: number;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
@@ -197,6 +207,9 @@ export function createLoopState(): LoopState {
     consecutiveToolFailures: 0,
     consecutiveFailedBatches: 0,
     honestStopNudged: false,
+    consecutiveReadOnlyBatches: 0,
+    readonlyNudged: false,
+    readonlyStopped: false,
     consecutiveToolSuccesses: 0,
     repeatedToolCount: 0,
     toolFailureCounts: new Map(),

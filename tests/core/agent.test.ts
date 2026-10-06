@@ -1609,7 +1609,7 @@ describe("Agent", () => {
           (async function* () {
             yield {
               type: "tool_call" as const,
-              toolCall: { id: "call_1", name: "read_file", arguments: "{}" },
+              toolCall: { id: "call_1", name: "write_file", arguments: "{}" },
             };
             yield { type: "done" as const, finishReason: "tool_calls" as const };
           })(),
