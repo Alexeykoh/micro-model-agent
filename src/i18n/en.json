@@ -1852,6 +1852,8 @@
   "config.desc.subagent.maxSummaryChars": "Max chars kept from a subagent summary (100-50000).",
   "config.key.subagent.maxParallelChunkQueries": "subagent parallel chunks",
   "config.desc.subagent.maxParallelChunkQueries": "Max parallel chunk queries per subagent wave (1-16).",
+  "config.key.subagent.timeoutMs": "subagent timeout (ms)",
+  "config.desc.subagent.timeoutMs": "Subagent execution timeout in milliseconds (10000-1800000).",
   "config.key.subagent.stableSystemPrompt": "stable subagent prompt",
   "config.desc.subagent.stableSystemPrompt": "Reuse one frozen system prompt for all subagents in a run.",
   "config.key.modelLoad.autoLoad": "auto-load model",

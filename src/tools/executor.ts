@@ -169,7 +169,10 @@ export class ToolExecutor {
         // Интерактивные тулы ждут ввода — без таймаута.
         result = memoHit ?? (await tool.handler(this.ctx, call.arguments));
       } else {
-        const timeoutMs = tool.timeoutMs ?? TOOL_EXECUTION_TIMEOUT_MS;
+        const timeoutMs =
+          typeof tool.timeoutMs === "function"
+            ? tool.timeoutMs(this.ctx)
+            : (tool.timeoutMs ?? TOOL_EXECUTION_TIMEOUT_MS);
         const failFast = (message: string) => {
           // Убить долгоживущий дочерний процесс этого вызова.
           killByCallId(call.id, this.ctx.sessionId);
