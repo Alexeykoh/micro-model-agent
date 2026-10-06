@@ -187,6 +187,20 @@ describe("ToolBatchExecutor read-only budget", () => {
     await runSingleBatch(ex, state); // bash — мутирующий
     expect(state.consecutiveReadOnlyBatches).toBe(0);
   });
+
+  it("treats browser/plan batches as non-progress, resets on write", async () => {
+    const { added, ex, state } = makeCase();
+    (ex as any).deps.toolExecutor.execute = async () => ok;
+    const run = (name: string) =>
+      ex.execute(state, [{ id: "1", name, arguments: {} }], new Set(), "", "", "task");
+    for (let i = 0; i < 7; i++) await run("browser");
+    expect(state.consecutiveReadOnlyBatches).toBe(7);
+    await run("plan"); // книга плана — не рабочий артефакт, стрик продолжается
+    expect(state.consecutiveReadOnlyBatches).toBe(8);
+    expect(hasReadonlyDirective(added)).toBe(true);
+    await run("write_file"); // реальная мутация — сброс
+    expect(state.consecutiveReadOnlyBatches).toBe(0);
+  });
 });
 
 describe("ToolBatchExecutor failure-memory gating", () => {

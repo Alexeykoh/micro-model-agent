@@ -25,31 +25,23 @@ import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
 import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_READONLY_BATCHES, HARD_STOP_READONLY_BATCHES } from "./constants";
+import { isWorkMutation } from "../../modules/critic/evidence";
 
 /**
- * Тулы, не производящие побочных эффектов (чтение/поиск/fetch/статус). Пакет
- * только из них считается «read-only исследованием»: серия таких пакетов без
- * единой мутации питает read-only бюджет (см. `MAX_READONLY_BATCHES`).
- * Намеренно НЕ включены: process_wait (ожидание), plan/enable_tools/set_thinking
- * (мена состояния), question/approve (интерактив), subagent (может мутировать).
+ * Тулы-тупики, которые НЕ считаются прогрессом для read-only бюджета, хотя и не
+ * мутируют ФС: `subagent` может «поработать», но для родительской петли это
+ * такой же незавершённый шаг, как лишний fetch. Используется вместе с
+ * `isWorkMutation`: пакет питает стрик, если в нём нет ни worker-мутаций, ни
+ * subagent. Так `browser`/`web_*`/`plan`/`todo` (не производят артефакт) больше
+ * не сбрасывают счётчик — раньше белый список пропускал `browser` и `plan`,
+ * из-за чего петля из browser+plan не ловилась.
  */
-const READONLY_TOOLS = new Set([
-  "read_file",
-  "list_dir",
-  "glob",
-  "grep",
-  "file_info",
-  "project_map",
-  "web_search",
-  "web_fetch",
-  "web_browse",
-  "chunk_query",
-  "recall",
-  "search_history",
-  "session_info",
-  "process_list",
-  "process_log",
-]);
+const NON_PROGRESS_TOOLS = new Set(["subagent"]);
+
+/** Пакет не продвинул работу: ни рабочей мутации, ни subagent. */
+function isNonProgressBatch(toolCalls: Array<{ name: string }>): boolean {
+  return toolCalls.length > 0 && toolCalls.every((c) => !isWorkMutation(c.name) && !NON_PROGRESS_TOOLS.has(c.name));
+}
 
 /** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
 const TRANSIENT_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
@@ -498,11 +490,11 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       return { interrupted: true };
     }
 
-    // Read-only бюджет: серия пакетов только из read-only тулов без мутаций.
-    // Успешные, но бесполезные fetch/read не попадают под honest-stop (тот про
-    // провалы), поэтому петля «читаю и не могу остановиться» гасится отдельно.
-    const batchAllReadOnly = toolCalls.length > 0 && toolCalls.every((c) => READONLY_TOOLS.has(c.name));
-    if (batchAllReadOnly) {
+    // Read-only бюджет: серия пакетов БЕЗ рабочей мутации (read/search/fetch/
+    // browser/plan/todo — всё, что не создаёт и не меняет артефакт). Успешные,
+    // но бесполезные fetch-и не попадают под honest-stop (тот про провалы),
+    // поэтому петля «читаю/ищу и не могу остановиться» гасится отдельно.
+    if (isNonProgressBatch(toolCalls)) {
       state.consecutiveReadOnlyBatches++;
     } else {
       state.consecutiveReadOnlyBatches = 0;
