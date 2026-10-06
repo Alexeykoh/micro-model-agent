@@ -856,7 +856,20 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Reasoning на петле** (`src/modules/reasoning/policy.ts`): повтор идентичного вызова (застревание)
   поднимает effort до `high` (раньше — понижало до `low`); рутинные успешные записи по-прежнему `low`.
 
-### Current Version: 2.20.0
+### Harness Reliability Fixes — 2.21.0 (аддендум к 2.20.0)
+
+- **Web-claim** (`src/modules/hallucination/web-claims.ts`): суммы в финальном ответе сверяются с текстом
+  успешных web-тулов; не найдены → bounded retry `hall.claim_web_unverified`.
+- **File-creation claim** (`src/modules/hallucination/file-creation-claim.ts`): задача просила файл, ответ
+  заявляет сохранение, но `write_file`/`edit_file` не было → bounded retry `hall.claim_file_not_created`.
+  Guard-ы (file-intent, вне фенсов/цитат, без контекста статьи/доков) — не срабатывает на пересказе.
+- **Read-only бюджет по рабочей мутации** (`src/core/agent/tool-batch.ts`): стрик растёт на любом пакете
+  без `isWorkMutation` (browser/plan/todo больше не сбрасывают) → ловит browser/web-петли.
+- **`session_start` эффективное окно** (`src/core/agent.ts`): env-срез берёт `model`/`contextWindow`
+  из живого конфига (probe), а не из bootstrap-снимка.
+- Проверено 12 живыми прогонами `prism-ml/bonsai-27b`; план — [docs/plans/2026-10-06-harness-reliability-fixes.md](./docs/plans/2026-10-06-harness-reliability-fixes.md).
+
+### Current Version: 2.21.0
 
 ### Changelog
 

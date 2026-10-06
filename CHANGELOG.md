@@ -4,6 +4,25 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.21.0] - 2026-10-06
+
+Additive hardening on top of 2.20.0: deterministic grounding for stated figures,
+a guarded "claimed a file without a write" check, a stricter read-only budget,
+and the effective window in `session_start`. Verified across 12 live
+`prism-ml/bonsai-27b` runs (see `docs/plans/2026-10-06-harness-reliability-fixes.md`).
+
+### Added
+
+- **Web-claim check** (`src/modules/hallucination/web-claims.ts`): deterministic check that money amounts in the final answer (`45 000`, `15000 BYN`) actually appear in the text returned by a web tool; unmatched amounts trigger one bounded retry (`hall.claim_web_unverified`) instead of silently shipping fabricated figures. New `webClaimRetries` counter.
+- **File-creation claim check** (`src/modules/hallucination/file-creation-claim.ts`): when the task asked for a file and the answer claims it was saved/created but no `write_file`/`edit_file` ran that turn, one bounded retry (`hall.claim_file_not_created`). Conservative guards — file-intent in the task, claim outside code fences/blockquotes, no article/documentation context — so summaries that merely mention filenames do not trigger it. New `fileCreationRetries` counter.
+- **Claim-aware critic grounding** (`src/modules/critic/`): `webGrounding` now also carries `unverifiedClaims` (amounts asserted in the answer but absent from the fetched text), and the critic prompt treats an unverified figure as a concern.
+- **WEB RESEARCH prompt policy** (`src/core/system-prompt.ts`): report only what a page returned; never invent a price/model table you could not read — mark unavailable values unverified/approximate.
+
+### Changed
+
+- **Read-only budget classified by work mutation** (`src/core/agent/tool-batch.ts`): the streak now advances on any batch with no work mutation (`isWorkMutation`) rather than a read-only allowlist, so `browser`/`plan`/`todo` batches no longer reset it and such loops are bounded (directive at 8, hard stop at 12).
+- **Effective window in `session_start`** (`src/core/agent.ts`): the environment snapshot reads `model`/`contextWindow` from the live config instead of the bootstrap `envReport`, so it reports the probed window (e.g. 34048) rather than the pre-probe value (32768).
+
 ## [2.20.0] - 2026-10-06
 
 Harness reliability fixes from the live-session post-mortem (`ses_muwinhpk_2e69iq`):
@@ -14,14 +33,11 @@ model/task-specific tuning).
 
 ### Added
 
-- **Read-only budget** (`src/core/agent/tool-batch.ts`, `constants.ts`): N consecutive batches with **no work mutation** (read/search/fetch/browser/plan/todo — anything that neither creates nor changes an artifact) now trigger an "answer or make a change" directive (8th batch) and an honest stop (12th) — successful-but-useless fetches never tripped the failure-oriented honest-stop, so loops ran for minutes. Classified by `isWorkMutation` (not a read-only allowlist) so browser/plan batches no longer reset the streak.
+- **Read-only budget** (`src/core/agent/tool-batch.ts`, `constants.ts`): N consecutive batches of only read-only tools (read/search/fetch, no mutation) now trigger an "answer or make a change" directive (8th batch) and an honest stop (12th) — successful-but-useless fetches never tripped the failure-oriented honest-stop, so loops ran for minutes.
 - **Compaction tool ledger** (`src/modules/context/manager.ts`): a pinned `[Tool ledger]` (tool + args + result digest, deduped, capped at 12) survives compaction, so the model does not re-explore the same sources after the history is trimmed. Config `contextBudget.compactionSummary: off|ledger` (default `ledger`).
 - **Targeted log redaction** (`src/modules/security/data-sanitizer.ts`): new `sanitizeLogMessageTargeted` (no generic 30+ character rule) is used for tool args/results and user messages, so long URLs/slugs/hashes are preserved in `session.jsonl`/`history.jsonl` (resume fidelity) while real secrets stay masked.
 - **Web content extraction** (`src/tools/html-content.ts`): `extractMainContent` (densest `<main>`/`<article>`) plus JS-shell detection; `web_fetch` now reports "no readable content — use browser" instead of returning navigation/boilerplate as success.
-- **Web grounding in critic evidence** (`src/modules/critic/`): the evidence pack carries `webGrounding` (`attempted`/`verified`, now claim-aware with `unverifiedClaims`); the critic flags numeric/price claims asserted without a content-bearing fetch.
-- **Web-claim check** (`src/modules/hallucination/web-claims.ts`): deterministic check that money amounts in the final answer (`45 000`, `15000 BYN`) actually appear in the text returned by a web tool; unmatched amounts trigger one bounded retry (`hall.claim_web_unverified`) instead of silently shipping fabricated figures. New `webClaimRetries` counter.
-- **File-creation claim check** (`src/modules/hallucination/file-creation-claim.ts`): when the task asked for a file and the answer claims it was saved/created but no `write_file`/`edit_file` ran that turn, one bounded retry (`hall.claim_file_not_created`). Conservative guards — file-intent in the task, claim outside code fences/blockquotes, no article/documentation context — so summaries that merely mention filenames do not trigger it.
-- **WEB RESEARCH prompt policy** (`src/core/system-prompt.ts`): report only what a page returned; never invent a price/model table you could not read — mark unavailable values unverified/approximate.
+- **Web grounding in critic evidence** (`src/modules/critic/`): the evidence pack carries `webGrounding` (`attempted`/`verified`); the critic flags numeric/price claims asserted without a content-bearing fetch.
 - **`subagent.timeoutMs`** config (default 180000) and a working `expert_tag` (resolved to the configured expert's `tool_tags`; unknown tag errors with the known list). `ToolDefinition.timeoutMs` may be a function of the tool context.
 
 ### Changed
@@ -30,7 +46,6 @@ model/task-specific tuning).
 - **Session metadata** (`src/modules/session/manager.ts`): new `setEffectiveContext` keeps `meta.contextWindow`/`model` in sync with the effective values; the per-session runner's `envReport` is rebuilt from its own config instead of the bootstrap snapshot.
 - **Plan `checks` self-repair** (`src/modules/execution/module.ts`): a `checks`/`steps` length mismatch no longer rejects plan creation — missing checks are padded with self-certified `manual:<step>` and extras are dropped. Rejection made a small model abandon planning entirely (two failed `create` calls → no plan at all in `ses_muwinhpk_2e69iq`).
 - **Reasoning escalation on loops** (`src/modules/reasoning/policy.ts`): a repeated identical tool call (stuck loop) now raises reasoning effort to `high` instead of lowering it to `low`. Consecutive *successful* routine writes still lower effort.
-- **Effective context in env snapshot** (`src/core/bootstrap/agent-phase.ts`, `session-runner.ts`): when the background provider probe is applied, `session_start.environment.provider.contextWindow`/`model` are updated in memory, so the snapshot no longer shows the pre-probe window (e.g. 32768 while the effective was 34048).
 
 ### Fixed
 
