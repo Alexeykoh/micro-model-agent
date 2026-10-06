@@ -25,6 +25,8 @@ model/task-specific tuning).
 
 - **Provider hot-swap** (`src/core/agent.ts`): `setProvider` now delegates to `reconfigure`, re-probing the active provider's context and resizing budgets (extracted `reprobeActiveProvider`); previously the window/budgets stayed at their startup value.
 - **Session metadata** (`src/modules/session/manager.ts`): new `setEffectiveContext` keeps `meta.contextWindow`/`model` in sync with the effective values; the per-session runner's `envReport` is rebuilt from its own config instead of the bootstrap snapshot.
+- **Plan `checks` self-repair** (`src/modules/execution/module.ts`): a `checks`/`steps` length mismatch no longer rejects plan creation — missing checks are padded with self-certified `manual:<step>` and extras are dropped. Rejection made a small model abandon planning entirely (two failed `create` calls → no plan at all in `ses_muwinhpk_2e69iq`).
+- **Reasoning escalation on loops** (`src/modules/reasoning/policy.ts`): a repeated identical tool call (stuck loop) now raises reasoning effort to `high` instead of lowering it to `low`. Consecutive *successful* routine writes still lower effort.
 
 ### Fixed
 

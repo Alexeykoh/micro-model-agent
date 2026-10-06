@@ -71,9 +71,12 @@ export function evaluateReasoningPolicy(
     return { level: "low", reason: "policy:routine-write" };
   }
 
+  // Зацикливание (тот же тул/аргументы повторно) — не рутина, а застревание:
+  // поднимаем усилие, а не понижаем (раньше здесь стоял "low", из-за чего
+  // 9B крутила один и тот же вызов на минимальном reasoning — ses_muwinhpk).
   if (input.isRepetitive) {
-    state.iterationsSinceRaise++;
-    return { level: "low", reason: "policy:repetitive-tools" };
+    state.iterationsSinceRaise = 0;
+    return { level: "high", reason: "policy:repetitive-tools" };
   }
 
   // Затухание: подъём держался слишком долго — возврат к базовому

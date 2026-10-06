@@ -842,6 +842,11 @@ read-only петля без стопа, рассинхрон провайдер�
   `ToolDefinition.timeoutMs` может быть функцией от `ctx`.
 - **Мелочи:** транзиентные `web_fetch`/`web_search` фейлы не пишутся в память; POSIX-`workdir`
   на Windows (`/tmp`, `/Users/…`) отклоняется с хинтом `bash.posix_workdir_hint`.
+- **Plan `checks` self-repair** (`src/modules/execution/module.ts`): несовпадение длины `checks`/`steps`
+  не отклоняет `create` — недостающие проверки добиваются self-certified `manual:`, лишние
+  отбрасываются (отказ заставлял слабую модель вообще бросить планирование).
+- **Reasoning на петле** (`src/modules/reasoning/policy.ts`): повтор идентичного вызова (застревание)
+  поднимает effort до `high` (раньше — понижало до `low`); рутинные успешные записи по-прежнему `low`.
 
 ### Current Version: 2.20.0
 

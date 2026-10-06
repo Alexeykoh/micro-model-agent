@@ -1005,9 +1005,10 @@ export class ExecutionModule implements AgentModule {
   /**
    * Валидирует пер-шаговый аргумент `checks` для create / re-plan плана.
    * Checks НЕОБЯЗАТЕЛЬНЫ: если массив не передан, харнесс проставляет
-   * self-certified `manual:<краткая формулировка шага>` (никогда не блокирует
-   * прогресс). Если передан, но длина не совпала — actionable-ошибка с числами.
-   * Валидные префиксы: file-exists: / command: / manual: (см. plan-checks.ts).
+   * self-certified `manual:<краткая формулировка шага>`. Если длина не совпала —
+   * авто-ремонт (паддинг/обрезка), а не отказ: меньше, чем число шагов,
+   * добивается `manual:`, лишние отбрасываются. Отдельно валидируются
+   * префиксы: file-exists: / command: / manual: (см. plan-checks.ts).
    */
   private parseChecks(
     args: Record<string, unknown>,
@@ -1025,13 +1026,22 @@ export class ExecutionModule implements AgentModule {
     }
     const raw = args.checks.map(String);
     if (raw.length !== steps.length) {
-      return {
-        checks: null,
-        error: t("plan.checks_mismatch", {
-          expected: String(steps.length),
-          actual: String(raw.length),
-        }),
-      };
+      // Авто-ремонт вместо отказа: паддинг self-certified `manual:` для шагов
+      // без проверки и обрезка лишних. Отказ на мисматче заставлял слабую
+      // модель бросить планирование целиком (ses_muwinhpk_2e69iq: два
+      // отклонённых create → плана нет). Переданные контракты всё равно
+      // валидируются по префиксу.
+      const repaired = steps.map((s, i) => raw[i] ?? `manual:${s.trim().slice(0, 60)}`);
+      const bad = repaired.filter((c) => !isValidCheck(c));
+      if (bad.length > 0) {
+        return {
+          checks: null,
+          error: t("plan.checks_invalid", {
+            kinds: bad.slice(0, 3).join("; "),
+          }),
+        };
+      }
+      return { checks: repaired, error: null };
     }
     const bad = raw.filter((c) => !isValidCheck(c));
     if (bad.length > 0) {
