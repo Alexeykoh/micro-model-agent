@@ -109,9 +109,9 @@ describe("webui files listing", () => {
   it("rejects escapes and protected directories with JSON errors", async () => {
     const ws = makeWorkspace();
     await withFilesApi(ws, async (base) => {
-      const escape = await doFetch(filesUrl(base, "../"));
-      expect(escape.status).toBe(403);
-      expect(((await escape.json()) as { error: string }).error).toBe("outside_workspace");
+      const esc = await doFetch(filesUrl(base, "../"));
+      expect(esc.status).toBe(403);
+      expect(((await esc.json()) as { error: string }).error).toBe("outside_workspace");
 
       mkdirSync(join(ws, ".git"));
       const git = await doFetch(filesUrl(base, ".git"));

@@ -4,6 +4,22 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.23.0] - 2026-10-07
+
+A new **Files** sidebar tab in `mma web`: browse the workspace as a lazy tree,
+read files in-app (read-only) and attach a file to the message by inserting its
+path. Live-refreshes on workspace changes.
+
+### Added
+
+- **Files sidebar tab** (`src/modules/webui/assets/js/sidebar/files.ts`, `index.html`, `styles.css`): a fifth sidebar tab (`Alt+5`) renders a lazy file tree (fetch a directory only when it is expanded), master-detail read-only viewer (text with highlight.js, markdown, images/PDF/media) and an "attach path" action on file rows and in the viewer header. Attaching inserts the workspace-relative path (backticked) into the active composer draft — no new attachment channel; the agent reads it via `read_file`.
+- **`GET /api/files?path=`** (`src/modules/webui/file/files-api.ts`): JSON listing of one directory (dirs first, then files; `MAX_DIR_ENTRIES` cap with `truncated`), jailed to the workspace and filtered with the indexer's ignore primitives (`IGNORE_DIRS`, `.gitignore`/`.mmaignore`) and protected paths.
+- **Live tree updates** (`src/modules/indexer/module.ts`, `src/modules/webui/index-watcher.ts`, `module.ts`, `assets/app.ts`): the workspace watcher now invokes an `onSettled` callback after its debounced rebuild, which bumps `HostStateSnapshot.filesRevision` and broadcasts a `files` SSE event; the Files tab re-reads expanded directories.
+
+### Changed
+
+- **Shared workspace path resolver** (`src/modules/webui/file/paths.ts`): `resolveWorkspacePath` centralizes the lexical + `realpath` + protected-path jail; `file-api.ts` and the new `files-api.ts` both use it.
+
 ## [2.22.0] - 2026-10-06
 
 Web sidebar metrics are no longer frozen until a turn ends, and the cache cell no

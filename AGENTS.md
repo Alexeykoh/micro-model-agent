@@ -890,7 +890,37 @@ read-only петля без стопа, рассинхрон провайдер�
   и сайдбар показывал `0%` вместо `—`. `AgentResult.cache.hitRate`/`CacheReport.hitRate` — optional;
   тесты `tests/core/cache-stats.test.ts`, `tests/webui-live-usage.test.ts`.
 
-### Current Version: 2.22.0
+### WebUI Files Tab (2.23.0)
+
+Вкладка **Files** в сайдбаре `mma web`: ленивое дерево файлов workspace, read-only просмотр
+в приложении и attach файла в чат вставкой пути. Спека:
+[docs/specs/2026-10-07-webui-files-tab-design.md](./docs/specs/2026-10-07-webui-files-tab-design.md).
+
+- **Листинг** (`src/modules/webui/file/files-api.ts`): новый `GET /api/files?path=<rel>` — JSON
+  одной директории (папки сверху, затем файлы; кап `MAX_DIR_ENTRIES`, флаг `truncated`).
+  Фильтр шума — примитивы индексатора (`isIgnoredDirName`/`isIgnoredFileName`, `.gitignore`/
+  `.mmaignore`), protected-пути скрыты. Джейл — общий `resolveWorkspacePath`
+  (`src/modules/webui/file/paths.ts`; на него же переведён `file-api.ts`).
+- **Дерево** (`assets/js/sidebar/files.ts`, пятая вкладка `Alt+5`, Lucide `folder-tree`):
+  lazy — папка фетчится при раскрытии (`expanded`/`listings` в `sb.files`), кэш инвалидируется
+  событием. Стиль — строки + глифы (STYLE.md), без рамок.
+- **Просмотр**: master-detail (`.sb.sb-expanded`, как Trace). Текст — `fetch /api/file` +
+  highlight.js (без `innerHTML`, через `DOMParser`); markdown — общий `renderMarkdown`;
+  картинки/PDF/медиа — нативные элементы; бинарь/лимит — локализованная ошибка (`web.file.error.*`).
+  Никаких write-операций.
+- **Attach = вставка пути**: иконка на строке + кнопка в шапке просмотрщика зовут
+  `composer.insertIntoDraft` (DI через `initFiles`), вставляя `` `relpath` `` в черновик.
+  Новый канал вложений НЕ вводится — существующий `parseMessageBody` (только `data:image/`)
+  не тронут; путь читает агент через `read_file`.
+- **Live**: `IndexerModule.watch(onSettled?)` зовёт колбэк после дебаунс-пересборки;
+  web (`attachIndexWatcher(indexer, onChange)`) бампит `HostStateSnapshot.filesRevision` и шлёт
+  SSE `files {phase:"changed"}` → вкладка перечитывает раскрытые папки и открытый файл
+  (фолбэк — 2с-полл по `filesRevision`).
+- **Тесты**: `tests/modules/webui/files-api.test.ts`, `tests/webui-files-dom.test.ts`,
+  `tests/webui-index-watcher.test.ts`; обновлены `tests/webui-file.test.ts`,
+  `tests/webui-assets.test.ts`.
+
+### Current Version: 2.23.0
 
 ### Changelog
 
