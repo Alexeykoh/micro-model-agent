@@ -888,6 +888,7 @@
   "hall.claim_artifact": "The answer presents {path} as done, but on disk: {detail}. Either fix the file and re-verify by actually reading it — or soften the claim to what was really checked.",
   "hall.claim_output_unverified": "The answer shows output as if produced by a run ({detail}). Either execute it with an allowed tool and quote the real output — or label it clearly as expected/example output.",
   "hall.claim_web_unverified": "The answer states figures ({detail}) that do not appear in any page actually fetched. Either find and quote a source, or mark those values as unverified/approximate and say the pages could not be read.",
+  "hall.claim_file_not_created": "You stated a file was saved ({detail}), but no file was written this turn. Actually create it with write_file (the user asked for a file), or correct the statement and deliver the content.",
   "hall.uncertainty_prefix": "\n\n[⚠️ Uncertainty] ",
   "browser.repeated_action": "You have repeated the same action ({action}) {threshold} times. Try a different approach: use \"snapshot\" to re-read the page, try different element numbers, or navigate to a different URL.",
   "browser.unknown_action": "Unknown action: {action}",

@@ -838,6 +838,10 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Web-claim проверка** (`src/modules/hallucination/web-claims.ts`, `hallucination-gate.ts`): суммы в финальном
   ответе (`45 000`, `15000 BYN`) сверяются с текстом успешных web-тулов; не найдены → один bounded retry
   (`hall.claim_web_unverified`), а не молчаливая выдумка. Промпт-правило `WEB RESEARCH` в `system-prompt.ts`.
+- **File-creation claim** (`src/modules/hallucination/file-creation-claim.ts`): если задача просила файл, а
+  ответ заявляет о сохранении, но `write_file`/`edit_file` за ход не вызывался → один bounded retry
+  (`hall.claim_file_not_created`). Guard-ы (file-intent, вне фенсов/цитат, без контекста статьи/доков)
+  не дают срабатывать на простом упоминании файлов в пересказе.
 - **Провайдер hot-swap** (`src/core/agent.ts`): `setProvider` делегирует в `reconfigure`
   (re-probe + resize), приватный `reprobeActiveProvider`; `SessionManager.setEffectiveContext`
   синхронит `meta.contextWindow`/`model`; раннер строит `envReport` от своего конфига, а не bootstrap-снимка.
