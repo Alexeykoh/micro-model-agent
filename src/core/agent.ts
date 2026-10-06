@@ -620,8 +620,22 @@ export class Agent {
       // записью в session.jsonl, чтобы файл был самоописываем для пост-анализа.
       // LSP-проба логируется отдельно из repl.ts (может завершиться позже).
       // Дедуп: logSessionStart проверяет существующий session_start от дублей.
+      // Провайдер-срез берём из ЖИВОГО конфига (model/contextWindow), а не из
+      // bootstrap-снимка envReport: фоновая context-probe приземляется позже,
+      // и снимок показывал до-пробное окно (32768 при эффективных 34048).
+      const env = this.deps.envReport;
+      const liveProvider = env?.provider
+        ? {
+            ...env.provider,
+            model: this.deps.config.model,
+            contextWindow: this.deps.config.contextWindow,
+          }
+        : undefined;
       slog.logSessionStart({
-        environment: this.deps.envReport as unknown as Record<string, unknown>,
+        environment: {
+          ...((env ?? {}) as Record<string, unknown>),
+          provider: liveProvider,
+        },
       });
 
       const lazy = this.deps.lazyPromptBlocks ? await this.deps.lazyPromptBlocks() : [];
