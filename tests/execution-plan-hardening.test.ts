@@ -29,15 +29,15 @@ describe("plan checks are optional", () => {
     expect(steps[1].check?.startsWith("manual:")).toBe(true);
   });
 
-  it("mismatch error carries counts and an example", async () => {
+  it("self-repairs a mismatch: keeps given checks, pads the rest with manual:", async () => {
     const res = await planTool(execModule).handler(
       {},
       { action: "create", title: "T", steps: ["a", "b"], checks: ["file-exists:a"] },
     );
-    expect(res.success).toBe(false);
-    expect(res.output).toContain("2");
-    expect(res.output).toContain("1");
-    expect(res.output).toContain("file-exists");
+    expect(res.success).toBe(true);
+    const steps = execModule.getTracker()!.getPlan().steps;
+    expect(steps[0].check).toBe("file-exists:a");
+    expect(steps[1].check?.startsWith("manual:")).toBe(true);
   });
 
   it("non-code steps self-certify without false file checks", async () => {

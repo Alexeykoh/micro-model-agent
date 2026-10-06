@@ -57,7 +57,7 @@ describe("plan create checks gate", () => {
     expect(execModule.getTracker()!.getStep(1)!.check?.startsWith("manual:")).toBe(true);
   });
 
-  it("blocks create on checks length mismatch with actionable counts", async () => {
+  it("self-repairs a checks length mismatch instead of blocking create", async () => {
     const res = await planTool(execModule).handler(
       {},
       {
@@ -67,9 +67,24 @@ describe("plan create checks gate", () => {
         checks: ["file-exists:src/a.ts"],
       },
     );
-    expect(res.success).toBe(false);
-    expect(res.output).toContain("2");
-    expect(res.output).toContain("1");
+    expect(res.success).toBe(true);
+    const tracker = execModule.getTracker()!;
+    expect(tracker.getStep(1)!.check).toBe("file-exists:src/a.ts");
+    expect(tracker.getStep(2)!.check?.startsWith("manual:")).toBe(true);
+  });
+
+  it("drops extra checks beyond the step count", async () => {
+    const res = await planTool(execModule).handler(
+      {},
+      {
+        action: "create",
+        title: "T",
+        steps: ["Create src/a.ts"],
+        checks: ["file-exists:src/a.ts", "file-exists:src/extra.ts"],
+      },
+    );
+    expect(res.success).toBe(true);
+    expect(execModule.getTracker()!.getStep(1)!.check).toBe("file-exists:src/a.ts");
   });
 
   it("blocks create on an invalid check prefix", async () => {
