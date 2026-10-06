@@ -237,7 +237,10 @@ export function isFilePathLike(s: string): boolean {
   if (isJsMemberAccess(s)) return false;
   const ext = s.split(".").pop()?.toLowerCase() || "";
   if (!s.includes("/") && !s.includes("\\")) {
-    if (!/^\w+\.[a-z]{1,6}$/i.test(s)) return false;
+    // Ведущая точка допустима: `.eslintrc.cjs` / `.prettierrc.json` — файлы
+    // с реальным расширением. Безext'овые dotfiles (`.env`, `.gitignore`)
+    // по-прежнему не файлы для `word.ext`-эвристики (нет `\.ext` после stem).
+    if (!/^\.?\w+\.[a-z]{1,6}$/i.test(s)) return false;
     return FILE_EXTENSIONS.has(ext);
   }
   // Токены с разделителем: требуем у ПОСЛЕДНЕГО сегмента настоящее имя
