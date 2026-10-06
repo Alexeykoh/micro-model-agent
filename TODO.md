@@ -443,3 +443,13 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 - [x] ~~**Протухание `/api/i18n` на живом сервере**~~ ✅ (ветка `feat/webui-i18n-stale`): `GET /api/i18n` и снапшот состояния несут `i18nStale` (mtime словарей на диске новее старта процесса); топбар показывает жёлтый бейдж с кнопкой reload вместо молчаливых сырых ключей. Ключи `web.i18n.stale/reload` (en+ru).
 - [x] ~~**Сверка терминологии частей контекста терминал vs web**~~ ✅ (ветка `fix/context-parts-terminology`): зафиксировано осознанное расхождение — web-легенда показывает *использование* (подписи одобрены пользователем, EN `dialogue` оставлен как перевод одобренного «диалог»), терминальный баннер — *бюджеты*, но теперь локализован (`repl.ctx_part_system/reserve/history`: `system/reserve/history` + `система/резерв/история` вместо непереведённых `sys/res/hist`).
 - [x] ~~**Изоляция проверочных web-серверов + гайд браузерной верификации**~~ ✅ (ветка `docs/verification-hygiene`): правило ушло в читаемые моделью места — системный промпт (`MMA_CONFIG_DIR=<empty tmp dir>`, никогда против живого сервера пользователя) + описание browser-тула (без vision — snapshot-текст и DOM/API-ассерты `/api/*` вместо вождения браузера). Тесты: `tests/core/bootstrap.test.ts`, `tests/tools/browser.test.ts`.
+
+## Новое (2026-10-07)
+
+- [ ] **WebUI Files tab — дерево файлов + attach (read-only)** — ветка `feat/webui-files-tab`.
+  Спека: [docs/specs/2026-10-07-webui-files-tab-design.md](./docs/specs/2026-10-07-webui-files-tab-design.md).
+  Ленивое дерево (новый `GET /api/files` + ignore-примитивы индексера), просмотр в master-detail
+  через существующий `/api/file` (текст с подсветкой, md, картинки; без write), attach = вставка
+  пути в бэктиках в черновик (нового канала вложений нет), live через `IndexerModule.watch(onSettled)`
+  → SSE `files` + `filesRevision`. Тип релиза — MINOR (2.23.0). Статус: спека (draft) написана и
+  запушена; план реализации и код — впереди.
