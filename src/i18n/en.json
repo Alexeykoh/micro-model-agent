@@ -133,6 +133,7 @@
   "tool.friendly.download_file": "Downloading file",
   "tool.friendly.chunk_query": "Querying chunks",
   "tool.web_fetch_result": "Fetched page: {url} — {chars} chars, {lines} lines{truncated}",
+  "tool.web_fetch_no_content": "No readable content at {url} — the page needs JavaScript or is a bot wall. Use the \"browser\" tool, or pick a different source.",
   "tool.web_browse_result": "Browsed page: {url} — {chars} chars, {lines} lines{truncated}",
   "tool.web_search_result": "Search results for \"{query}\" — {count} results",
   "tool.downloaded": "Downloaded {url} → {path} ({size} bytes, {type})",
