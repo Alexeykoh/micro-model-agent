@@ -7,6 +7,7 @@ import { sb, TABS, ICON_NAME, paneEl, mqMobile, readStored, storeTab, type Trace
 import { collapseDetail, renderList, renderDetail } from "./trace.js";
 import { sidebarMapState, sidebarMapIndicator } from "./map.js";
 import { renderLsp, sidebarLspState } from "./lsp.js";
+import { renderFilesTree, refreshFilesTree } from "./files.js";
 
 export function setSidebarTab(id: string, persist = true): void {
   if (!TABS.includes(id)) id = "session";
@@ -28,6 +29,7 @@ export function setSidebarTab(id: string, persist = true): void {
   const nic = sb.nameEl && sb.nameEl.querySelector<HTMLElement>(".sb-ico");
   if (nic) { nic.textContent = ""; nic.appendChild(icon(ICON_NAME[effective])); }
   if (effective === "lsp") sidebarLspState();
+  if (effective === "files") renderFilesTree();
 }
 
 export function sidebarBusy(on: unknown): void {
@@ -49,6 +51,7 @@ export function applySidebarI18n(): void {
   }
   sidebarMapState(session.host);
   renderLsp();
+  refreshFilesTree();
 }
 
 export function initSidebar(): void {
@@ -88,7 +91,7 @@ export function initSidebar(): void {
   });
 
   document.addEventListener("keydown", (e) => {
-    if (!e.altKey || !["1", "2", "3", "4"].includes(e.key)) return;
+    if (!e.altKey || !["1", "2", "3", "4", "5"].includes(e.key)) return;
     const tag = document.activeElement ? String(document.activeElement.tagName) : "";
     if (tag === "INPUT" || tag === "TEXTAREA") return;
     e.preventDefault();

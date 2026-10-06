@@ -27,7 +27,9 @@ import {
   sidebarPullLog, sidebarSessionId, setSessionLoading,
   sidebarLspState, sidebarLspEvent,
   applySidebarI18n,
+  initFiles, sidebarFilesState, sidebarFilesChanged,
 } from "./js/sidebar.js";
+import { insertIntoDraft } from "./js/session/composer.js";
 
 declare global {
   interface Window {
@@ -70,6 +72,10 @@ if (sidebarBtn) {
   });
 }
 
+// Track the workspace file-change counter: a rise (missed SSE fallback) makes
+// the Files tab re-read its expanded directories.
+let lastFilesRevision = -1;
+
 function renderState(snapshot: Dict, busy: unknown, extra?: Dict): void {
   session.host = snapshot || {};
   session.busy = !!busy;
@@ -100,6 +106,13 @@ function renderState(snapshot: Dict, busy: unknown, extra?: Dict): void {
   sidebarMapState(session.host);
   sidebarMapIndicator(session.host);
   sidebarLspState();
+  sidebarFilesState(session.host);
+  const rev = snapshot && typeof snapshot.filesRevision === "number" ? snapshot.filesRevision : undefined;
+  if (rev !== undefined && rev !== lastFilesRevision) {
+    const first = lastFilesRevision === -1;
+    lastFilesRevision = rev;
+    if (!first && rev > 0) sidebarFilesChanged();
+  }
   sidebarSessionChanged(sessionId);
   renderWorkspace(session.host);
   renderSessionsDropdown();
@@ -222,6 +235,8 @@ for (const ev of ["tool_start", "tool_end", "phase", "plan", "question", "meta",
 es.addEventListener("text", (e) => { const d = parse(e); if (d && sidebarOwns(d)) sidebarTraceEvent("text", d); });
 // LSP tab: server emits `lsp {phase}` around an on-demand diagnosis.
 es.addEventListener("lsp", (e) => { const d = parse(e); if (d) sidebarLspEvent(d); });
+// Files tab: workspace watcher fired — re-read the expanded directories.
+es.addEventListener("files", () => sidebarFilesChanged());
 es.addEventListener("command", (e) => {
   const d = parse(e);
   if (d && typeof d.text === "string") onCommandOutput(d.text, d.sessionId);
@@ -366,6 +381,7 @@ async function boot(): Promise<void> {
   initRail(settings.config && settings.config.ui ? settings.config.ui.activityRail : undefined);
   initSidebar();
   applySidebarI18n();
+  initFiles({ insertPath: (p) => insertIntoDraft("`" + p + "` ") });
   await loadModels();
   await loadProviders();
   await loadSessions();

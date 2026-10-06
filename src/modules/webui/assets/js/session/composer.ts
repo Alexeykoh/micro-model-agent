@@ -281,6 +281,23 @@ function clearInput(): void {
   autogrow();
   closeCmdk();
 }
+
+/**
+ * Inserts `text` into the active draft at the caret (used by the Files tab to
+ * attach a workspace path). Keeps the owner tab's draft and caret in sync.
+ */
+export function insertIntoDraft(text: string): void {
+  if (!inp || !text) return;
+  const start = inp.selectionStart ?? inp.value.length;
+  const end = inp.selectionEnd ?? start;
+  inp.value = inp.value.slice(0, start) + text + inp.value.slice(end);
+  const caret = start + text.length;
+  inp.selectionStart = inp.selectionEnd = caret;
+  const owner = deps.activeTab();
+  if (owner) owner.draft = inp.value;
+  autogrow();
+  inp.focus();
+}
 if (inp)
   inp.addEventListener("input", () => {
     const owner = deps.activeTab();

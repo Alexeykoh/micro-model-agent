@@ -4,12 +4,13 @@
 import type { Dict } from "../core/store/types.js";
 
 export const TAB_KEY = "mma-sidebar-tab";
-export const TABS = ["session", "map", "trace", "lsp"];
+export const TABS = ["session", "map", "trace", "lsp", "files"];
 export const ICON_NAME: Record<string, string> = {
   session: "list-checks",
   map: "map",
   trace: "activity",
   lsp: "stethoscope",
+  files: "folder-tree",
 };
 export const TRACE_CAP = 500;
 export const MAX_OUTPUT_CHARS = 20000;
@@ -17,6 +18,28 @@ export const MAX_OUTPUT_CHARS = 20000;
 // One Trace row. Fields are loosely typed on purpose — the entry is built from
 // heterogeneous SSE/log payloads (`sidebarTraceEvent`/`appendLogEntry`).
 export type TraceEntry = Dict;
+
+/** Одна запись дерева Files (ответ `GET /api/files`). */
+export interface FileEntry {
+  name: string;
+  type: "dir" | "file";
+  size?: number;
+}
+
+/** Состояние вкладки Files: DOM-узлы, раскрытые папки, кэш листингов. */
+export interface FilesView {
+  treeEl: HTMLElement | null;
+  detailEl: HTMLElement | null;
+  detailTitleEl: HTMLElement | null;
+  detailBodyEl: HTMLElement | null;
+  detailAttachEl: HTMLElement | null;
+  /** Раскрытые каталоги (ключ — относительный posix-путь; "" — корень). */
+  expanded: Set<string>;
+  /** Кэш листинга по относительному пути. */
+  listings: Map<string, FileEntry[]>;
+  /** Открытый в просмотрщике файл (relative path) или null. */
+  selectedPath: string | null;
+}
 
 export interface SidebarState {
   el: HTMLElement | null;
@@ -49,6 +72,7 @@ export interface SidebarState {
   reindexing: boolean;
   postResolved: boolean;
   reindexError: boolean;
+  files: FilesView;
 }
 
 export const sb: SidebarState = {
@@ -83,6 +107,16 @@ export const sb: SidebarState = {
   reindexing: false, // client spinner until a fresh snapshot
   postResolved: false, // POST returned; next snapshot clears the spinner
   reindexError: false, // last POST failed
+  files: {
+    treeEl: null,
+    detailEl: null,
+    detailTitleEl: null,
+    detailBodyEl: null,
+    detailAttachEl: null,
+    expanded: new Set(), // "" (root) is expanded implicitly in render
+    listings: new Map(),
+    selectedPath: null,
+  },
 };
 
 export function paneEl(id: string): HTMLElement | null {

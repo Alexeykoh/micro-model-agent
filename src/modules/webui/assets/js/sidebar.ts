@@ -8,3 +8,4 @@ export * from "./sidebar/core.js";
 export * from "./sidebar/trace.js";
 export * from "./sidebar/map.js";
 export * from "./sidebar/lsp.js";
+export * from "./sidebar/files.js";
