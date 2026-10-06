@@ -184,6 +184,7 @@ export const DEFAULTS: AppConfig = {
     artifactsDir: ".mma/artifacts",
     stableSystemPrompt: true,
     maxParallelChunkQueries: 4,
+    timeoutMs: 180000,
   },
   lsp: DEFAULT_LSP_CONFIG,
   updater: {

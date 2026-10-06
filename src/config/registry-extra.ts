@@ -388,6 +388,12 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       c.subagent ??= structuredClone(DEFAULTS.subagent);
       c.subagent.maxParallelChunkQueries = v as number;
     }),
+  int("subagent.timeoutMs", "agent", 10000, 1800000, 1000, false,
+    (c) => c.subagent?.timeoutMs ?? DEFAULTS.subagent.timeoutMs,
+    (c, v) => {
+      c.subagent ??= structuredClone(DEFAULTS.subagent);
+      c.subagent.timeoutMs = v as number;
+    }),
   bool("subagent.stableSystemPrompt", "agent", false,
     (c) => c.subagent?.stableSystemPrompt ?? DEFAULTS.subagent.stableSystemPrompt,
     (c, v) => {

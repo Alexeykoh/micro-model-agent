@@ -402,6 +402,8 @@ export interface SubagentConfig {
   stableSystemPrompt: boolean;
   /** Дефолтный потолок параллельных chunk-запросов в runChunkQuery. */
   maxParallelChunkQueries: number;
+  /** Таймаут выполнения субагента, мс (дефолт 180000). */
+  timeoutMs: number;
 }
 
 export interface SessionIsolationConfig {

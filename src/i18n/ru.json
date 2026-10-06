@@ -1852,6 +1852,8 @@
   "config.desc.subagent.maxSummaryChars": "Максимум символов сводки субагента (100-50000).",
   "config.key.subagent.maxParallelChunkQueries": "параллельные чанки субагента",
   "config.desc.subagent.maxParallelChunkQueries": "Максимум параллельных запросов чанков за волну субагента (1-16).",
+  "config.key.subagent.timeoutMs": "таймаут субагента (мс)",
+  "config.desc.subagent.timeoutMs": "Таймаут выполнения субагента в миллисекундах (10000-1800000).",
   "config.key.subagent.stableSystemPrompt": "стабильный промпт субагента",
   "config.desc.subagent.stableSystemPrompt": "Переиспользовать один замороженный системный промпт для всех субагентов прогона.",
   "config.key.modelLoad.autoLoad": "автозагрузка модели",
