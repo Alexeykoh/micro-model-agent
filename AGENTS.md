@@ -821,8 +821,9 @@ read-only петля без стопа, рассинхрон провайдер�
   получал пустой срез и критик не запускался на длинных ходах.
 - **Read-only бюджет** (`src/core/agent/tool-batch.ts`, `constants.ts`): `MAX_READONLY_BATCHES=8`
   (директива `exec.readonly_directive`) → `HARD_STOP_READONLY_BATCHES=12` (честный стоп
-  `error.readonly_loop_stopped`). Пакет только из read-only тулов без мутаций; сбрасывается
-  мутацией. Успешные fetch-и не ловились honest-stop (тот про провалы).
+  `error.readonly_loop_stopped`). Пакет «без рабочей мутации» (по `isWorkMutation`: не write/edit/
+  delete/move/create_dir/bash; browser/web/plan/todo считаются исследованием) — сбрасывается только
+  реальной мутацией. Успешные fetch-и не ловились honest-stop (тот про провалы).
 - **Леджер тулов при компакции** (`src/modules/context/manager.ts`): pin `[Tool ledger]`
   (`tool(args) → digest`, дедуп, cap 12) через компакции; `contextBudget.compactionSummary: off|ledger`
   (default `ledger`). Модель видит, что уже прочитано/fetched, и не повторяет.
