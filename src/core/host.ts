@@ -68,6 +68,12 @@ export interface HostStateSnapshot {
   instructions?: { files: string[]; disabled: boolean };
   /** Статистика карты проекта; `indexed:false`, пока обход не завершён. */
   projectMap?: ProjectMapInfo;
+  /**
+   * Монотонный счётчик изменений файлов workspace (вотчер индексатора).
+   * Клиент вкладки Files перечитывает раскрытые папки при его росте — это
+   * фолбэк на случай пропущенного SSE `files`.
+   */
+  filesRevision?: number;
   /** Словари i18n на диске новее старта сервера — клиенту показан бейдж
    *  «перезапустите сервер» (иначе сырые ключи вместо подписей). */
   i18nStale?: boolean;

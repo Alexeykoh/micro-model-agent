@@ -25,6 +25,7 @@ import { handleSessionsApi } from "./session/sessions-api";
 import { handleLspGet, handleMcpCreate, handleSettingsApi } from "./settings/settings-api";
 import { handleProvidersApi } from "./settings/providers-api";
 import { handleFileApi } from "./file/file-api";
+import { handleFilesApi } from "./file/files-api";
 import { handleSetupApi } from "./settings/setup-api";
 import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp/lsp-api";
 import type { WebUiState, WebUiAssets } from "./state";
@@ -138,7 +139,7 @@ const API_GROUPS: Array<(
   res: ServerResponse,
   reqUrl: URL,
   s: WebUiState,
-) => boolean> = [handleSetupApi, handleSessionsApi, handleSettingsApi, handleProvidersApi, handleFileApi];
+) => boolean> = [handleSetupApi, handleSessionsApi, handleSettingsApi, handleProvidersApi, handleFileApi, handleFilesApi];
 
 /** REST-хендлер `/api/*`; auth + same-origin уже проверены. */
 function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: WebUiState): void {

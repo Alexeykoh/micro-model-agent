@@ -26,6 +26,8 @@ export interface HostStateInput {
   workspace?: string;
   instructions?: { files: string[]; disabled: boolean };
   projectMap?: ProjectMapInfo | null;
+  /** Счётчик изменений файлов workspace (см. `HostStateSnapshot.filesRevision`). */
+  filesRevision?: number;
   /** Конкретная сессия (веб-вкладка); без неё — активная. */
   sessionId?: string;
 }
@@ -148,6 +150,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     workspace: deps.workspace,
     instructions: deps.instructions,
     projectMap: deps.projectMap ?? undefined,
+    filesRevision: deps.filesRevision,
     i18nStale: isI18nStale(),
     plan: planSnapshotFromModule(adaptActivePlan(deps.execModule?.getActivePlan())),
   };

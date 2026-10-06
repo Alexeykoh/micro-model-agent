@@ -214,6 +214,12 @@ export interface WebUiState {
   agentsMd?: { files: string[]; disabled: boolean };
   /** Статистика карты проекта (`null`, пока обход индекса не кончился). */
   projectMapStats?: () => { files: number; symbols: number; tokens: number } | null;
+  /**
+   * Монотонный счётчик изменений файлов workspace (инкремент — колбэк вотчера
+   * индексатора). Едет в снапшот как `filesRevision`; клиент вкладки Files
+   * перечитывает раскрытые папки при росте (фолбэк к SSE `files`).
+   */
+  filesRevision: number;
   /** Ручной пересбор индекса карты проекта (`POST /api/index`). */
   refreshIndex?: () => Promise<void>;
   /** Диагностика LSP по требованию (вкладка LSP, `POST /api/lsp/doctor`). */
@@ -352,6 +358,7 @@ export function createWebUiState(): WebUiState {
     pendingQuestions: new Map(),
     setupRequired: false,
     sessionUsage: {},
+    filesRevision: 0,
   };
 }
 
