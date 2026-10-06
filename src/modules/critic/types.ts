@@ -38,4 +38,11 @@ export interface EvidencePack {
    * иначе чат-задачи («покажи пример») он судит вслепую по одним тулам.
    */
   answerExcerpt?: string;
+  /**
+   * Веб-обоснование: были ли реально получены содержательные данные из сети.
+   * `attempted` — сколько web_fetch/web_search; `verified` — хотя бы один
+   * web_fetch вернул непустой содержательный текст. Ложь вида «цена X BYN»
+   * без `verified` критик должен помечать (наблюдалось: выдуманный md-файл).
+   */
+  webGrounding?: { attempted: number; verified: boolean };
 }
