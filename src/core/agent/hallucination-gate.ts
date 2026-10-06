@@ -3,12 +3,14 @@ import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
 import type { HallucinationDetector, HallucinationCheckResult } from "../../modules/hallucination/detector";
 import { checkSuccessClaim } from "../../modules/hallucination/success-claim";
+import type { ClaimContradiction } from "../../modules/hallucination/success-claim";
 import {
   checkArtifactClaims,
   checkUnverifiedOutput,
   type ArtifactState,
 } from "../../modules/hallucination/artifact-claim";
 import { checkWebClaims } from "../../modules/hallucination/web-claims";
+import { checkClaimedFileCreation } from "../../modules/hallucination/file-creation-claim";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
 import type { SessionLogger } from "../session-logger";
@@ -199,6 +201,12 @@ export class HallucinationGate {
    * ложь в том же ответе (наблюдалось: retry success-claim съел единый бюджет,
    * и «output written to fizzbuzz_output.txt» прошёл при отсутствующем файле).
    */
+  /**
+   * Детерминированные проверки заявлений финального ответа (без LLM): каждая —
+   * свой класс с отдельным bounded-бюджетом. Возвращает первый вердикт retry
+   * или null. Разнесено на таблицу классов, чтобы не держать всё в одном
+   * методе (сложность/читаемость).
+   */
   private checkSuccessClaim(
     deps: HallucinationGateDeps,
     textContent: string | undefined,
@@ -206,64 +214,69 @@ export class HallucinationGate {
     const { state } = deps;
     const text = textContent ?? "";
     const evidence = lastToolEvidence(deps);
-    if (state.claimCheckRetries < MAX_CLAIM_CHECK_RETRIES) {
-      const contradiction = checkSuccessClaim(text, evidence);
-      if (contradiction) {
-        state.claimCheckRetries++;
-        return this.retryClaim(
-          deps,
-          textContent,
-          t("hall.claim_contradiction", {
-            tool: contradiction.tool,
-            snippet: contradiction.snippet,
-          }),
-          `Success-claim contradiction: ${contradiction.tool}: ${contradiction.snippet}`,
-          "success",
-        );
-      }
-    }
-    if (
-      state.artifactClaimRetries < MAX_CLAIM_CHECK_RETRIES &&
-      deps.artifacts &&
-      deps.artifacts.length > 0
-    ) {
-      const artifact = checkArtifactClaims(text, deps.artifacts);
-      if (artifact) {
-        state.artifactClaimRetries++;
-        return this.retryClaim(
-          deps,
-          textContent,
-          t("hall.claim_artifact", { path: artifact.path, detail: artifact.snippet }),
-          `Artifact-claim contradiction: ${artifact.snippet}`,
-          "artifact",
-        );
-      }
-    }
-    if (state.outputClaimRetries < MAX_CLAIM_CHECK_RETRIES) {
-      const unverified = checkUnverifiedOutput(text, evidence);
-      if (unverified) {
-        state.outputClaimRetries++;
-        return this.retryClaim(
-          deps,
-          textContent,
-          t("hall.claim_output_unverified", { detail: unverified.snippet }),
-          `Unverified output: ${unverified.snippet}`,
-          "output",
-        );
-      }
-    }
-    if (state.webClaimRetries < MAX_CLAIM_CHECK_RETRIES) {
-      const webClaim = checkWebClaims(text, evidence);
-      if (webClaim) {
-        state.webClaimRetries++;
-        return this.retryClaim(
-          deps,
-          textContent,
-          t("hall.claim_web_unverified", { detail: webClaim.snippet }),
-          `Unverified web figures: ${webClaim.snippet}`,
-          "web",
-        );
-      }
+    const classes: Array<{
+      remaining: number;
+      bump: () => void;
+      detect: () => (ClaimContradiction & { path?: string }) | null;
+      reason: (c: ClaimContradiction & { path?: string }) => string;
+      log: string;
+      kind: string;
+    }> = [
+      {
+        remaining: MAX_CLAIM_CHECK_RETRIES - state.claimCheckRetries,
+        bump: () => state.claimCheckRetries++,
+        detect: () => checkSuccessClaim(text, evidence),
+        reason: (c) => t("hall.claim_contradiction", { tool: c.tool, snippet: c.snippet }),
+        log: "Success-claim contradiction",
+        kind: "success",
+      },
+      {
+        remaining: deps.artifacts?.length
+          ? MAX_CLAIM_CHECK_RETRIES - state.artifactClaimRetries
+          : 0,
+        bump: () => state.artifactClaimRetries++,
+        detect: () => checkArtifactClaims(text, deps.artifacts ?? []),
+        reason: (c) => t("hall.claim_artifact", { path: c.path ?? "", detail: c.snippet }),
+        log: "Artifact-claim contradiction",
+        kind: "artifact",
+      },
+      {
+        remaining: MAX_CLAIM_CHECK_RETRIES - state.outputClaimRetries,
+        bump: () => state.outputClaimRetries++,
+        detect: () => checkUnverifiedOutput(text, evidence),
+        reason: (c) => t("hall.claim_output_unverified", { detail: c.snippet }),
+        log: "Unverified output",
+        kind: "output",
+      },
+      {
+        remaining: MAX_CLAIM_CHECK_RETRIES - state.webClaimRetries,
+        bump: () => state.webClaimRetries++,
+        detect: () => checkWebClaims(text, evidence),
+        reason: (c) => t("hall.claim_web_unverified", { detail: c.snippet }),
+        log: "Unverified web figures",
+        kind: "web",
+      },
+      {
+        remaining: MAX_CLAIM_CHECK_RETRIES - state.fileCreationRetries,
+        bump: () => state.fileCreationRetries++,
+        detect: () => checkClaimedFileCreation(text, evidence, deps.input),
+        reason: (c) => t("hall.claim_file_not_created", { detail: c.snippet }),
+        log: "Claimed file creation without a write",
+        kind: "file",
+      },
+    ];
+    for (const cls of classes) {
+      if (cls.remaining <= 0) continue;
+      const contradiction = cls.detect();
+      if (!contradiction) continue;
+      cls.bump();
+      return this.retryClaim(
+        deps,
+        textContent,
+        cls.reason(contradiction),
+        `${cls.log}: ${contradiction.snippet}`,
+        cls.kind,
+      );
     }
     return null;
   }
