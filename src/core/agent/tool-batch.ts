@@ -26,6 +26,9 @@ import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
 import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES } from "./constants";
 
+/** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
+const TRANSIENT_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
+
 /** Зависимости исполнителя пакетов: конфиг, тулы, контекст, логгеры, хуки. */
 export interface ToolBatchDeps {
   config: AppConfig;
@@ -361,11 +364,13 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       }
       this.deps.compactionService.compactAfterTool(state);
 
-      // Учёт общих неудач (НЕ только подряд идущих): тул, который стабильно
-      // падает между успехами других тулов, всё равно учится (наблюдалось:
-      // LSP spawn npx ENOENT упал 8x за сессию, ни разу подряд — и не дошёл
-      // до памяти по пути "5 подряд неудач").
-      if (!result.success && !result.blocked && !infoTools.has(call.name)) {
+    // Учёт общих неудач (НЕ только подряд идущих): тул, который стабильно
+    // падает между успехами других тулов, всё равно учится (наблюдалось:
+    // LSP spawn npx ENOENT упал 8x за сессию, ни разу подряд — и не дошёл
+    // до памяти по пути "5 подряд неудач"). Транзиентные сетевые тулы
+    // (web_fetch/web_search) исключены: смена сайта/лимит — не системная
+    // поломка, а запись в память засоряла errors.md мусором (404/TLS/сертификат).
+    if (!result.success && !result.blocked && !infoTools.has(call.name) && !TRANSIENT_TOOLS.has(call.name)) {
         const key = call.name;
         const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
         prev.count++;

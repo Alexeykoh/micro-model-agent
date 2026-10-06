@@ -138,3 +138,34 @@ describe("ToolBatchExecutor honest-stop", () => {
     expect(state.consecutiveFailedBatches).toBe(1);
   });
 });
+
+describe("ToolBatchExecutor failure-memory gating", () => {
+  async function failTool(
+    ex: ToolBatchExecutor,
+    state: ReturnType<typeof createLoopState>,
+    name: string,
+    times: number,
+  ) {
+    (ex as any).deps.toolExecutor.execute = async () => ({
+      success: false,
+      output: "HTTP 404: Not Found",
+    });
+    for (let i = 0; i < times; i++) {
+      await ex.execute(state, [{ id: "1", name, arguments: {} }], new Set(), "", "", "task");
+    }
+  }
+
+  it("does not record transient web tool failures to memory", async () => {
+    const ex = new ToolBatchExecutor(stubDeps(() => fail, []));
+    const state = createLoopState();
+    await failTool(ex, state, "web_fetch", 4);
+    expect(state.memoryRuleRecorded.has("web_fetch")).toBe(false);
+  });
+
+  it("records repeated non-transient tool failures", async () => {
+    const ex = new ToolBatchExecutor(stubDeps(() => fail, []));
+    const state = createLoopState();
+    await failTool(ex, state, "bash", 4);
+    expect(state.memoryRuleRecorded.has("bash")).toBe(true);
+  });
+});

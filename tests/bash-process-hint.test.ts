@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { platform } from "os";
 import { bashTool } from "../src/tools/bash";
 
 /**
@@ -45,5 +46,20 @@ describe("bash: hidden process_* tool hint", () => {
     const res = await bashTool.handler(ctx, { command: "echo hi" });
     expect(res.success).toBe(true);
     expect(res.output.trim()).toBe("hi");
+  });
+});
+
+describe("bash: POSIX workdir on Windows", () => {
+  const winOnly = platform() === "win32" ? it : it.skip;
+  const ctx = {
+    baseDir: process.cwd(),
+    config: { security: { enabled: false } },
+    logger: { info: () => {}, error: () => {} },
+  } as any;
+
+  winOnly("rejects a POSIX workdir with a corrective hint instead of a spawn error", async () => {
+    const res = await bashTool.handler(ctx, { command: "echo hi", workdir: "/tmp" });
+    expect(res.success).toBe(false);
+    expect(res.output).toContain("cmd.exe");
   });
 });
