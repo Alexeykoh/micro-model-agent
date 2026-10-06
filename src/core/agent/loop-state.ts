@@ -50,6 +50,8 @@ export interface LoopState {
   artifactClaimRetries: number;
   /** Счётчик перепроверок неподтверждённого вывода (output-provenance check). */
   outputClaimRetries: number;
+  /** Счётчик перепроверок веб-обоснования числовых утверждений (web-claim check). */
+  webClaimRetries: number;
 
   /** Подпись последнего пакета тулов (имя + JSON аргументов) для детекции повторов. */
   lastToolSignature: string;
@@ -203,6 +205,7 @@ export function createLoopState(): LoopState {
     claimCheckRetries: 0,
     artifactClaimRetries: 0,
     outputClaimRetries: 0,
+    webClaimRetries: 0,
     lastToolSignature: "",
     consecutiveToolFailures: 0,
     consecutiveFailedBatches: 0,

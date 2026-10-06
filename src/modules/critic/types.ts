@@ -44,5 +44,5 @@ export interface EvidencePack {
    * web_fetch вернул непустой содержательный текст. Ложь вида «цена X BYN»
    * без `verified` критик должен помечать (наблюдалось: выдуманный md-файл).
    */
-  webGrounding?: { attempted: number; verified: boolean };
+  webGrounding?: { attempted: number; verified: boolean; unverifiedClaims?: string[] };
 }

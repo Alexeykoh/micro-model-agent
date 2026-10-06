@@ -833,7 +833,10 @@ read-only петля без стопа, рассинхрон провайдер�
   (плотнейший `<main>`/`<article>`), детект JS-шелла (`tool.web_fetch_no_content`), `unwrapDdgUrl`
   разворачивает редиректы DDG в прямые URL.
 - **Web-grounding критика** (`src/modules/critic/evidence.ts`, `client.ts`): `EvidencePack.webGrounding`
-  (`attempted`/`verified`); числовые/ценовые утверждения без содержательного fetch → issue.
+  (`attempted`/`verified`/`unverifiedClaims`); числовые/ценовые утверждения без содержательного fetch → issue.
+- **Web-claim проверка** (`src/modules/hallucination/web-claims.ts`, `hallucination-gate.ts`): суммы в финальном
+  ответе (`45 000`, `15000 BYN`) сверяются с текстом успешных web-тулов; не найдены → один bounded retry
+  (`hall.claim_web_unverified`), а не молчаливая выдумка. Промпт-правило `WEB RESEARCH` в `system-prompt.ts`.
 - **Провайдер hot-swap** (`src/core/agent.ts`): `setProvider` делегирует в `reconfigure`
   (re-probe + resize), приватный `reprobeActiveProvider`; `SessionManager.setEffectiveContext`
   синхронит `meta.contextWindow`/`model`; раннер строит `envReport` от своего конфига, а не bootstrap-снимка.

@@ -8,6 +8,7 @@ import {
   checkUnverifiedOutput,
   type ArtifactState,
 } from "../../modules/hallucination/artifact-claim";
+import { checkWebClaims } from "../../modules/hallucination/web-claims";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../modules/context/manager";
 import type { SessionLogger } from "../session-logger";
@@ -248,6 +249,19 @@ export class HallucinationGate {
           t("hall.claim_output_unverified", { detail: unverified.snippet }),
           `Unverified output: ${unverified.snippet}`,
           "output",
+        );
+      }
+    }
+    if (state.webClaimRetries < MAX_CLAIM_CHECK_RETRIES) {
+      const webClaim = checkWebClaims(text, evidence);
+      if (webClaim) {
+        state.webClaimRetries++;
+        return this.retryClaim(
+          deps,
+          textContent,
+          t("hall.claim_web_unverified", { detail: webClaim.snippet }),
+          `Unverified web figures: ${webClaim.snippet}`,
+          "web",
         );
       }
     }

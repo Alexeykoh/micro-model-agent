@@ -18,7 +18,9 @@ model/task-specific tuning).
 - **Compaction tool ledger** (`src/modules/context/manager.ts`): a pinned `[Tool ledger]` (tool + args + result digest, deduped, capped at 12) survives compaction, so the model does not re-explore the same sources after the history is trimmed. Config `contextBudget.compactionSummary: off|ledger` (default `ledger`).
 - **Targeted log redaction** (`src/modules/security/data-sanitizer.ts`): new `sanitizeLogMessageTargeted` (no generic 30+ character rule) is used for tool args/results and user messages, so long URLs/slugs/hashes are preserved in `session.jsonl`/`history.jsonl` (resume fidelity) while real secrets stay masked.
 - **Web content extraction** (`src/tools/html-content.ts`): `extractMainContent` (densest `<main>`/`<article>`) plus JS-shell detection; `web_fetch` now reports "no readable content — use browser" instead of returning navigation/boilerplate as success.
-- **Web grounding in critic evidence** (`src/modules/critic/`): the evidence pack carries `webGrounding` (`attempted`/`verified`); the critic flags numeric/price claims asserted without a content-bearing fetch.
+- **Web grounding in critic evidence** (`src/modules/critic/`): the evidence pack carries `webGrounding` (`attempted`/`verified`, now claim-aware with `unverifiedClaims`); the critic flags numeric/price claims asserted without a content-bearing fetch.
+- **Web-claim check** (`src/modules/hallucination/web-claims.ts`): deterministic check that money amounts in the final answer (`45 000`, `15000 BYN`) actually appear in the text returned by a web tool; unmatched amounts trigger one bounded retry (`hall.claim_web_unverified`) instead of silently shipping fabricated figures. New `webClaimRetries` counter.
+- **WEB RESEARCH prompt policy** (`src/core/system-prompt.ts`): report only what a page returned; never invent a price/model table you could not read — mark unavailable values unverified/approximate.
 - **`subagent.timeoutMs`** config (default 180000) and a working `expert_tag` (resolved to the configured expert's `tool_tags`; unknown tag errors with the known list). `ToolDefinition.timeoutMs` may be a function of the tool context.
 
 ### Changed
@@ -27,6 +29,7 @@ model/task-specific tuning).
 - **Session metadata** (`src/modules/session/manager.ts`): new `setEffectiveContext` keeps `meta.contextWindow`/`model` in sync with the effective values; the per-session runner's `envReport` is rebuilt from its own config instead of the bootstrap snapshot.
 - **Plan `checks` self-repair** (`src/modules/execution/module.ts`): a `checks`/`steps` length mismatch no longer rejects plan creation — missing checks are padded with self-certified `manual:<step>` and extras are dropped. Rejection made a small model abandon planning entirely (two failed `create` calls → no plan at all in `ses_muwinhpk_2e69iq`).
 - **Reasoning escalation on loops** (`src/modules/reasoning/policy.ts`): a repeated identical tool call (stuck loop) now raises reasoning effort to `high` instead of lowering it to `low`. Consecutive *successful* routine writes still lower effort.
+- **Effective context in env snapshot** (`src/core/bootstrap/agent-phase.ts`, `session-runner.ts`): when the background provider probe is applied, `session_start.environment.provider.contextWindow`/`model` are updated in memory, so the snapshot no longer shows the pre-probe window (e.g. 32768 while the effective was 34048).
 
 ### Fixed
 
