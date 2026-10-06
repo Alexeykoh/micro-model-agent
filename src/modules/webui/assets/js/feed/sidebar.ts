@@ -1,6 +1,6 @@
 // Sidebar renders owned by the feed module: usage panel, workspace path and the
 // environment section. Extracted from `feed.js` (re-exported there).
-import { usageEl, envEl, wsLine, el, icon } from "../dom.js";
+import { usageEl, envEl, wsLine, el, icon, attachTooltip } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
 import { feed, settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
@@ -14,30 +14,50 @@ function usageRow(label: string, value: string, cls?: string): HTMLElement {
   return row;
 }
 
-// Segmented context bar: system · tools · history · reserve · free, widths
-// relative to the full context window so the parts always sum to one bar.
+// Context parts shared by the bar and the legend: segment class, i18n label
+// key and token count. Widths on the bar are token proportions.
+type ContextPart = [cls: string, labelKey: string, n: number];
+function contextParts(bd: Dict): ContextPart[] {
+  return [
+    ["seg-system", "web.usage.part_system", bd.system],
+    ["seg-tools", "web.usage.part_tools", bd.tools],
+    ["seg-history", "web.usage.part_history", bd.history],
+    ["seg-reserve", "web.usage.part_reserve", bd.reserve],
+    ["seg-free", "web.usage.part_free", bd.free],
+  ];
+}
+
+// Tooltip body: colored dot + label + tokens + share of the window.
+function tipContent(cls: string, labelKey: string, n: number, denom: number): Node {
+  const frag = document.createDocumentFragment();
+  frag.appendChild(el("i", "ctip-dot " + cls));
+  frag.appendChild(el("span", "ctip-label", t(labelKey)));
+  frag.appendChild(el("b", "", fmtTokens(n)));
+  frag.appendChild(el("span", "ctip-pct", Math.round((n / denom) * 100) + "%"));
+  return frag;
+}
+
+// Segmented context bar: system · tools · history · reserve · free as separate
+// rounded pills (flex-grow = tokens) so parts + gaps fill the full window.
 function contextSegBar(h: Dict, used: number, limit: number): HTMLElement {
   const bar = el("div", "bar segbar");
   const bd = h.contextBreakdown;
   if (!bd || typeof bd.window !== "number" || bd.window <= 0) {
     // Legacy fallback (pre-breakdown payloads): single used/limit fill.
     const fill = el("i");
-    fill.style.width = Math.min(100, Math.round((used / limit) * 100)) + "%";
+    fill.style.flex = "0 0 " + Math.min(100, Math.round((used / limit) * 100)) + "%";
     bar.appendChild(fill);
     return bar;
   }
   const denom = Math.max(bd.window, bd.used + bd.reserve);
-  const parts: Array<[string, number]> = [
-    ["seg-system", bd.system],
-    ["seg-tools", bd.tools],
-    ["seg-history", bd.history],
-    ["seg-reserve", bd.reserve],
-    ["seg-free", bd.free],
-  ];
-  for (const [cls, n] of parts) {
+  for (const [cls, labelKey, n] of contextParts(bd)) {
     if (!n || n <= 0) continue;
     const seg = el("i", cls);
-    seg.style.width = (n / denom) * 100 + "%";
+    seg.style.flexGrow = String(n);
+    seg.style.flexBasis = "0";
+    seg.tabIndex = 0;
+    seg.setAttribute("aria-label", [t(labelKey), fmtTokens(n), Math.round((n / denom) * 100) + "%"].join(" · "));
+    attachTooltip(seg, () => tipContent(cls, labelKey, n, denom));
     bar.appendChild(seg);
   }
   return bar;
@@ -48,19 +68,16 @@ function contextLegend(h: Dict): HTMLElement {
   const box = el("div", "seglegend");
   const bd = h.contextBreakdown;
   if (!bd) return box;
-  const items: Array<[string, string, number]> = [
-    ["seg-system", "web.usage.part_system", bd.system],
-    ["seg-tools", "web.usage.part_tools", bd.tools],
-    ["seg-history", "web.usage.part_history", bd.history],
-    ["seg-reserve", "web.usage.part_reserve", bd.reserve],
-    ["seg-free", "web.usage.part_free", bd.free],
-  ];
-  for (const [cls, labelKey, n] of items) {
+  const denom = Math.max(bd.window, bd.used + bd.reserve);
+  for (const [cls, labelKey, n] of contextParts(bd)) {
     if (!n || n <= 0) continue;
     const item = el("span", "segl-item");
+    item.tabIndex = 0;
+    item.setAttribute("aria-label", [t(labelKey), fmtTokens(n), Math.round((n / denom) * 100) + "%"].join(" · "));
     item.appendChild(el("i", "segl-dot " + cls));
     item.appendChild(el("span", "segl-label", t(labelKey)));
     item.appendChild(el("b", "", fmtTokens(n)));
+    attachTooltip(item, () => tipContent(cls, labelKey, n, denom));
     box.appendChild(item);
   }
   return box;

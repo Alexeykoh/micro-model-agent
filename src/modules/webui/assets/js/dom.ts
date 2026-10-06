@@ -41,6 +41,49 @@ export function el(tag: string, cls?: string | null, text?: string | number | nu
   return node;
 }
 
+// --- Hover/focus tooltips: one shared body-level node, positioned above the
+// anchor (below when there is no room). Callers pass a builder so the content
+// stays live (i18n changes, new values on re-render).
+let tipEl: HTMLElement | null = null;
+let tipBound = false;
+function tipNode(): HTMLElement {
+  if (!tipEl) {
+    tipEl = el("div", "ctip");
+    tipEl.setAttribute("role", "tooltip");
+    document.body.appendChild(tipEl);
+  }
+  return tipEl;
+}
+function hideTip(): void {
+  if (tipEl) tipEl.classList.remove("show");
+}
+function bindTipDismiss(): void {
+  if (tipBound) return;
+  tipBound = true;
+  window.addEventListener("scroll", hideTip, true);
+  window.addEventListener("resize", hideTip);
+}
+export function attachTooltip(anchor: HTMLElement, build: () => Node): void {
+  const show = (): void => {
+    const tip = tipNode();
+    tip.replaceChildren(build());
+    tip.classList.add("show");
+    const a = anchor.getBoundingClientRect();
+    const t = tip.getBoundingClientRect();
+    let left = a.left + a.width / 2 - t.width / 2;
+    left = Math.max(6, Math.min(left, window.innerWidth - t.width - 6));
+    let top = a.top - t.height - 7;
+    if (top < 6) top = a.bottom + 7;
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  };
+  anchor.addEventListener("mouseenter", show);
+  anchor.addEventListener("mouseleave", hideTip);
+  anchor.addEventListener("focus", show);
+  anchor.addEventListener("blur", hideTip);
+  bindTipDismiss();
+}
+
 // --- Lucide icons (MIT), inlined: chrome only. Chat status glyphs (◇ ✓ ✗ ✦ ⟡ …)
 // stay textual per docs/design/ui/STYLE.md; icons replace emoji/gear chrome.
 export const SVG_NS = "http://www.w3.org/2000/svg";
