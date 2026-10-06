@@ -446,10 +446,10 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
 
 ## Новое (2026-10-07)
 
-- [ ] **WebUI Files tab — дерево файлов + attach (read-only)** — ветка `feat/webui-files-tab`.
+- [x] **WebUI Files tab — дерево файлов + attach (read-only)** — ветка `feat/webui-files-tab`.
   Спека: [docs/specs/2026-10-07-webui-files-tab-design.md](./docs/specs/2026-10-07-webui-files-tab-design.md).
   Ленивое дерево (новый `GET /api/files` + ignore-примитивы индексера), просмотр в master-detail
   через существующий `/api/file` (текст с подсветкой, md, картинки; без write), attach = вставка
   пути в бэктиках в черновик (нового канала вложений нет), live через `IndexerModule.watch(onSettled)`
-  → SSE `files` + `filesRevision`. Тип релиза — MINOR (2.23.0). Статус: спека (draft) написана и
-  запушена; план реализации и код — впереди.
+  → SSE `files` + `filesRevision`. Тип релиза — MINOR (2.23.0). ✅ Реализовано и запушено
+  (`bun test webui` 355 pass, `tsc` + `tsc -p tsconfig.frontend.json` чисто, `bun run quality` exit 0).
