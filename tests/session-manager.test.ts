@@ -41,6 +41,14 @@ describe("SessionManager", () => {
     expect(meta.name).toMatch(/^Session \d{4}-\d{2}-\d{2}/);
   });
 
+  it("setEffectiveContext updates the active session's window and model", () => {
+    manager.create("S");
+    manager.setEffectiveContext(64000, "prism-ml/bonsai-27b");
+    const active = manager.getActiveMeta()!;
+    expect(active.contextWindow).toBe(64000);
+    expect(active.model).toBe("prism-ml/bonsai-27b");
+  });
+
   it("should list sessions in reverse chronological order", () => {
     const a = manager.create("First");
     manager.appendMessage({ role: "user", content: "m1", timestamp: new Date().toISOString() });

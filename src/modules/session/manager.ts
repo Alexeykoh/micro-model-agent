@@ -124,6 +124,22 @@ export class SessionManager {
     this.store.saveMeta(id, meta);
   }
 
+  /**
+   * Обновить эффективные окно/модель активной сессии. Вызывается после probe/
+   * reconfigure: `create()` фиксирует стартовый `contextWindow`, и без этого
+   * мета/topbar показывали устаревшее значение после смены провайдера/модели.
+   * Fail-open: нет активной сессии/меты — no-op.
+   */
+  setEffectiveContext(contextWindow: number, model?: string): void {
+    if (!this.activeId) return;
+    const meta = this.store.loadMeta(this.activeId);
+    if (!meta) return;
+    meta.contextWindow = contextWindow;
+    if (model) meta.model = model;
+    meta.updatedAt = new Date().toISOString();
+    this.store.saveMeta(this.activeId, meta);
+  }
+
   /** Пустая ли сессия (нет user-сообщения с текстом). Fail-open: ошибки чтения — непустая. */
   isEmptySession(id: string): boolean {
     const meta = this.store.loadMeta(id);
