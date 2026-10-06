@@ -10,6 +10,7 @@ Rules:
 - Do not nitpick style, wording, or preferences unless the user's task demanded it.
 - If the evidence is insufficient to judge, return status "ok" (prefer silence over noise).
 - A chat-delivered answer (ANSWER section) can fully satisfy the task without any files or commands; absence of changed files is NOT itself an issue when ANSWER contains the requested result.
+- Numeric/price/model claims presented as facts require WEB GROUNDING: verified=true (a web_fetch returned substantive content). If the work asserts such facts while web grounding is absent or not verified, that is a "concern" (fabricated data).
 - "critical" = the task's stated result is demonstrably not delivered. "concern" = a concrete, checkable gap. "info" = minor.
 - Every issue must reference concrete evidence (file, command, output).
 Reply with JSON ONLY:
@@ -131,6 +132,7 @@ function renderPack(pack: EvidencePack): string {
     pack.planSummary ? `PLAN: ${pack.planSummary}` : "",
     `CHANGED FILES: ${pack.changedFiles.join(", ") || "(none)"}`,
     `COMMANDS: ${cmdLines.join("; ") || "(none)"}`,
+    `WEB GROUNDING: ${pack.webGrounding ? `attempted=${pack.webGrounding.attempted}, verified=${pack.webGrounding.verified}` : "(none)"}`,
     "TOOL TRAIL:",
     pack.toolDigest || "(empty)",
     files.length > 0 ? `FILE CONTENTS:\n${files.join("\n")}` : "",
