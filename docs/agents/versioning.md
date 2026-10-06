@@ -55,7 +55,9 @@
 
    > **Note:** npm's registry now processes publishes **asynchronously** — the upload returns `PUT 202 Accepted` and the CLI prints «Your package is being processed and may take a few minutes to become available.» The version may not appear in `npm view` / `registry.npmjs.org` for a while. **Do not wait for it:** a `202` + `+ <pkg>@<version>` output is a successful publish. Proceed to tagging/pushing.
 
-7. **Git tag/push**: `git push --follow-tags`
+7. **Git tag/push**: `git push --follow-tags origin master`
+
+   > **Push может упасть с первого раза** (`Failed to authenticate user`) даже при настроенном `credential.helper=store`/GCM — это транзиентка/auth-гонка, а не отсутствие прав. **Просто повтори команду** — со второго раза обычно проходит (`b781e21..<sha> master -> master` + `[new tag]`).
 8. **Update AGENTS.md** with notable changes.
 
 ### Commands that require MINOR bump
