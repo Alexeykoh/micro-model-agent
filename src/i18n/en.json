@@ -887,6 +887,7 @@
   "hall.claim_contradiction": "The answer claims success, but a recent tool result indicates a problem ({tool}: {snippet}). Either verify and fix, then re-run the check — or soften the claim to match the evidence (e.g. staged, will appear shortly).",
   "hall.claim_artifact": "The answer presents {path} as done, but on disk: {detail}. Either fix the file and re-verify by actually reading it — or soften the claim to what was really checked.",
   "hall.claim_output_unverified": "The answer shows output as if produced by a run ({detail}). Either execute it with an allowed tool and quote the real output — or label it clearly as expected/example output.",
+  "hall.claim_web_unverified": "The answer states figures ({detail}) that do not appear in any page actually fetched. Either find and quote a source, or mark those values as unverified/approximate and say the pages could not be read.",
   "hall.uncertainty_prefix": "\n\n[⚠️ Uncertainty] ",
   "browser.repeated_action": "You have repeated the same action ({action}) {threshold} times. Try a different approach: use \"snapshot\" to re-read the page, try different element numbers, or navigate to a different URL.",
   "browser.unknown_action": "Unknown action: {action}",

@@ -376,10 +376,15 @@ function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
 
   // Поздний резолв пробы (зеркало agent-phase): окно могло попасть в конфиг
   // после сборки провайдера. No-op, если значение то же или ход уже был.
+  // При применении правим env-снимок раннера (session_start без до-пробного окна).
   void contextProbePromise
-    .then((probe) => {
+    .then(async (probe) => {
       if (!probe) return;
-      return applyProbedContext(agent, config, probe, logger as SilentLogger);
+      const applied = await applyProbedContext(agent, config, probe, logger as SilentLogger);
+      if (applied && envReport.provider) {
+        envReport.provider.contextWindow = config.contextWindow;
+        envReport.provider.model = config.model;
+      }
     })
     .catch(() => {});
 

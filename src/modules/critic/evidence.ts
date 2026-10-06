@@ -5,6 +5,7 @@ import { resolve } from "path";
 import type { EvidencePack } from "./types";
 import { summarizeToolArgs } from "../../core/agent/tool-output";
 import { redactContextSecrets } from "../../core/agent/context-log";
+import { extractAmountClaims, normalizeDigits } from "../hallucination/web-claims";
 
 const MUTATING_TOOLS = new Set(["write_file", "edit_file", "delete_file", "move_file", "create_dir"]);
 
@@ -48,13 +49,26 @@ const GROUNDING_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
 /** Веб-обоснование по событиям тулов: сколько было сетевых чтений и дало ли хоть одно контент. */
 function computeWebGrounding(
   events: EvidenceToolEvent[],
-): { attempted: number; verified: boolean } | undefined {
+  answerText?: string,
+): { attempted: number; verified: boolean; unverifiedClaims?: string[] } | undefined {
   const web = events.filter((ev) => GROUNDING_TOOLS.has(ev.tool));
   if (web.length === 0) return undefined;
-  const verified = web.some(
-    (ev) => ev.tool === "web_fetch" && ev.ok !== false && (ev.output?.length ?? 0) >= MIN_GROUNDING_CHARS,
+  const fetchedText = normalizeDigits(
+    web
+      .filter((ev) => ev.tool === "web_fetch" && ev.ok !== false && (ev.output?.length ?? 0) >= MIN_GROUNDING_CHARS)
+      .map((ev) => ev.output ?? "")
+      .join("\n"),
   );
-  return { attempted: web.length, verified };
+  const hadContent = fetchedText.length > 0;
+  // Claim-aware: суммы из ответа, которых нет в прочитанном тексте, помечаем
+  // явно — критик должен считать это concern (выдуманные числа после веба).
+  const claims = answerText ? extractAmountClaims(answerText) : [];
+  const unverifiedClaims = hadContent ? claims.filter((c) => !fetchedText.includes(c)) : claims;
+  return {
+    attempted: web.length,
+    verified: hadContent && unverifiedClaims.length === 0,
+    unverifiedClaims: unverifiedClaims.length > 0 ? unverifiedClaims : undefined,
+  };
 }
 
 /** Собирает EvidencePack из событий тулов: дайджест, файлы, команды, выдержки. */
@@ -83,7 +97,7 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
     answerExcerpt: input.answerText
       ? redactContextSecrets(input.answerText).slice(0, MAX_ANSWER_CHARS)
       : undefined,
-    webGrounding: computeWebGrounding(input.toolEvents),
+    webGrounding: computeWebGrounding(input.toolEvents, input.answerText),
   };
 }
 

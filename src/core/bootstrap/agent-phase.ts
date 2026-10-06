@@ -159,10 +159,19 @@ export async function assembleAgent(
   // ContextManager/провайдера — один reconfigure, чтобы бюджеты и провайдер
   // его реально использовали. No-op, если проба села рано (то же значение)
   // или ход уже был.
+  // Поздний резолв пробы: окно могло попасть в `config` после сборки
+  // ContextManager/провайдера — нужен reconfigure, чтобы бюджеты реально
+  // использовали probe. No-op, если проба цель ранняя (в окне) или ход уже был.
+  // При применении обновляем env-снимок, чтобы session_start не показывал
+  // до-пробное окно (наблюдалось: env 32768 при эффективном 34048).
   void contextProbePromise
-    .then((probe) => {
+    .then(async (probe) => {
       if (!probe) return;
-      return applyProbedContext(agent, config, probe, logger as SilentLogger);
+      const applied = await applyProbedContext(agent, config, probe, logger as SilentLogger);
+      if (applied && envReport.provider) {
+        envReport.provider.contextWindow = config.contextWindow;
+        envReport.provider.model = config.model;
+      }
     })
     .catch(() => {});
 
