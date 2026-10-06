@@ -802,8 +802,13 @@ export class Agent {
     // Единый контейнер состояния цикла — заменяет ~24 разрозненных `let`.
     const state = createLoopState();
     // Маркер начала захода для критика: события тулов прошлых вопросов
-    // (прошлых run'ов) в evidence-пакеты этого захода не входят.
-    state.criticHistoryMark = contextManager.getActiveHistory().length;
+    // (прошлых run'ов) в evidence-пакеты этого захода не входят. Штамп seq
+    // монотонный и переживает компакцию посреди хода. Fallback на длину —
+    // для неполных контекст-моков (легаси-совместимость).
+    state.criticHistoryMark =
+      typeof contextManager.beginTurn === "function"
+        ? contextManager.beginTurn()
+        : contextManager.getActiveHistory().length;
 
     // Модули цикла: каждый инкапсулирует одну ответственность и получает
     // зависимости через конструктор (никаких глобальных синглтонов).

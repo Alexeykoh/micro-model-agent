@@ -202,6 +202,14 @@ export class ContextManager {
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
   private toolTokens = 0;
+  /**
+   * Монотонный счётчик штампов сообщений (см. `beginTurn`/`seqOf`). Храним seq
+   * в WeakMap, а не полем Message: объекты истории уходят в LLM как есть
+   * (`body.messages = opts.messages`), и лишнее поле могло бы ломать строгие
+   * OpenAI-совместимые бэкенды. WeakMap не сериализуется и следует за объектом.
+   */
+  private nextSeq = 0;
+  private seqByMessage = new WeakMap<object, number>();
   /** Калибратор оценки по реальному usage провайдера. */
   private calibrator: ContextCalibrator;
   /** Опции калибратора — чтобы пересоздать при clear(). */
@@ -396,7 +404,7 @@ export class ContextManager {
       };
       this.pendingImageParts = [];
     }
-    this.messages.push(msg);
+    this.messages.push(this.stampSeq(msg));
     const tokens = this.getEstimatedTokens();
     if (tokens > this.peakTokens) this.peakTokens = tokens;
   }
@@ -566,10 +574,10 @@ export class ContextManager {
     this.facts.extract(oldTurns);
 
     this.compactedBlock = this.buildCompactionBlock(oldTurns);
-    const summary: Message = {
+    const summary: Message = this.stampSeq({
       role: "user",
       content: `<system-summary>${this.compactedBlock}</system-summary>`,
-    };
+    });
 
     const firstSystem = this.messages.find((m) => m.role === "system");
     // Чистим протухшие system-summary из свежих ходов против вложенности
@@ -827,10 +835,10 @@ export class ContextManager {
     const head = nonSystem.slice(0, Math.max(0, nonSystem.length - keep * 2));
     const tail = nonSystem.slice(Math.max(0, nonSystem.length - keep * 2));
     this.facts.extract(head);
-    const summary: Message = {
+    const summary: Message = this.stampSeq({
       role: "user",
       content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context]${this.compactedBlock ? ` ${this.compactedBlock}` : ""}</system-summary>`,
-    };
+    });
     this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...tail];
     this.iterationsSinceCompaction = 0;
     this.calibrator.invalidate();
@@ -916,7 +924,7 @@ export class ContextManager {
     if (idx >= 0) {
       this.messages[idx] = { ...this.messages[idx], content };
     } else {
-      this.messages.unshift({ role: "system", content });
+      this.messages.unshift(this.stampSeq({ role: "system", content }));
     }
     // Baseline калибровки НЕ сбрасываем: схема baseline+delta инвариантна к
     // составу промпта (raw пересчитывается с новым system, дельта корректна).
@@ -926,6 +934,26 @@ export class ContextManager {
   /** Копия активной истории сообщений. */
   getActiveHistory(): Message[] {
     return [...this.messages];
+  }
+
+  /**
+   * Снимает маркер начала захода для сбора tool-событий (критик/evidence).
+   * Возвращает текущее значение счётчика seq: всё, что добавлено позже, имеет
+   * `seqOf >= маркера`. Устойчиво к компакции — выжившие сообщения не меняют seq.
+   */
+  beginTurn(): number {
+    return this.nextSeq;
+  }
+
+  /** Монотонный seq сообщения (0, если штамп не ставился — напр. system до старта). */
+  seqOf(msg: object): number {
+    return this.seqByMessage.get(msg) ?? 0;
+  }
+
+  /** Ставит монотонный seq в WeakMap и возвращает сообщение. */
+  private stampSeq<T extends Message>(msg: T): T {
+    this.seqByMessage.set(msg, this.nextSeq++);
+    return msg;
   }
 
   /**
