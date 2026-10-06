@@ -41,7 +41,7 @@ export interface WebIndexer {
   /** Принудительная пересборка индекса (`POST /api/index`). */
   refresh?(): Promise<unknown>;
   /** Подписка на изменения файлов (вотчер). Есть у `IndexerModule`, нет у стабов. */
-  watch?(): void;
+  watch?(onSettled?: () => void): void;
   /** Отписка от вотчера. */
   unwatch?(): void;
 }

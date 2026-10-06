@@ -182,7 +182,11 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   }
   // Общий вотчер карты: в web сессия главного агента не запускается, поэтому
   // плагин индексатора его не поднимает — владельцем становится веб-хост.
-  const detachIndexWatcher = attachIndexWatcher(deps.indexer);
+  // Колбэк уведомляет вкладку Files: рост `filesRevision` + событие `files`.
+  const detachIndexWatcher = attachIndexWatcher(deps.indexer, () => {
+    state.filesRevision += 1;
+    broadcast({ type: "files", ts: Date.now(), phase: "changed" }, state);
+  });
   state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
 
   // Веб-онли интерактивные тулы: `question`/`approve` через SSE + `/api/answer`.
@@ -261,6 +265,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           workspace: deps.baseDir,
           instructions: deps.agentsMd,
           projectMap: deps.indexer?.mapInfo?.(),
+          filesRevision: state.filesRevision,
           sessionId,
         },
         state.busy,

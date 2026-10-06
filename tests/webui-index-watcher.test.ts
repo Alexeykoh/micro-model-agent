@@ -27,6 +27,22 @@ describe("attachIndexWatcher", () => {
     expect(off).toBe(1);
   });
 
+  it("forwards the change callback into the watcher", () => {
+    let received: (() => void) | undefined;
+    const indexer: WatchableIndexer = {
+      watch: (onSettled?: () => void) => {
+        received = onSettled;
+      },
+    };
+    let fired = 0;
+    attachIndexWatcher(indexer, () => {
+      fired += 1;
+    });
+    expect(typeof received).toBe("function");
+    received?.();
+    expect(fired).toBe(1);
+  });
+
   it("is a no-op for a stub without watch/unwatch", () => {
     const detach = attachIndexWatcher(undefined);
     expect(() => detach()).not.toThrow();
@@ -40,7 +56,7 @@ describe("attachIndexWatcher", () => {
       join(import.meta.dirname, "..", "src", "modules", "webui", "module.ts"),
       "utf-8",
     );
-    expect(src).toContain("attachIndexWatcher(deps.indexer)");
+    expect(src).toContain("attachIndexWatcher(deps.indexer,");
     expect(src).toContain("detachIndexWatcher()");
   });
 });

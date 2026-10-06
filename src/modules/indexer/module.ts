@@ -215,15 +215,21 @@ export class IndexerModule implements AgentModule {
     return this.index ? this.formatMap(this.index) : null;
   }
 
-  /** Подписка на изменения файлов с дебаунсом перестройки (best-effort). */
-  watch(): void {
+  /**
+   * Подписка на изменения файлов с дебаунсом перестройки (best-effort).
+   * `onSettled` зовётся после отреагировавшей пересборки (или её ошибки) —
+   * веб-вкладка Files по нему перечитывает раскрытые папки.
+   */
+  watch(onSettled?: () => void): void {
     this.unwatch();
     try {
       this.indexer.watch((_event, filename) => {
         if (!filename) return;
         if (this.rebuildTimeout) clearTimeout(this.rebuildTimeout);
         this.rebuildTimeout = setTimeout(() => {
-          this.refresh().catch(() => {});
+          void this.refresh()
+            .catch(() => {})
+            .finally(() => onSettled?.());
         }, 2000);
       });
       this.watcherActive = true;
