@@ -463,7 +463,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 - **`mma web [--port N] [--host H] [--token T] [--no-open]`** — браузерный чат **без TTY**: тот же `bootstrap()`/`Agent`/сессии, вторая реализация `Host` (`WebHost`, `src/core/web-host.ts`) поверх `src/modules/webui/`. Терминальный REPL не меняется; терминал и веб — отдельные процессы.
 - **Env:** `MMA_WEBUI_PORT` (default random), `MMA_WEBUI_HOST` (`127.0.0.1`), `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
-- **Transport:** SSE `GET /events` (`state, text, meta, reasoning, phase, tool_start, tool_end, turn_end, plan, command, error, log, retract, index`); REST `GET/POST /api/config`, `GET /api/models`, `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`, `POST /api/answer`, `GET /api/i18n`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`, `GET /api/sessions/:id/log`, `GET/POST /api/memory`, `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`, `GET /api/file?path=` (просмотр файла из карточки, ответы `text/plain`); static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов. GET-навигации (клик по карточке) аутентифицируются HttpOnly `SameSite=Strict` cookie `mma_web_auth`, которую сервер ставит на любой успешный запрос, — токен в URL ссылки не попадает.
+- **Transport:** SSE `GET /events` (`state, text, meta, reasoning, phase, tool_start, tool_end, turn_end, usage, plan, command, error, log, retract, index`); REST `GET/POST /api/config`, `GET /api/models`, `GET /api/state`, `POST /api/message`, `POST /api/interrupt`, `POST /api/command`, `POST /api/answer`, `GET /api/i18n`, `GET/POST /api/sessions`, `POST /api/sessions/activate`, `DELETE /api/sessions/:id`, `GET /api/sessions/:id/history`, `GET /api/sessions/:id/log`, `GET/POST /api/memory`, `DELETE /api/memory/:category/:n`, `GET /api/skills`, `GET /api/plugins`, `GET /api/file?path=` (просмотр файла из карточки, ответы `text/plain`); static `/`, `/app.js`, `/styles.css`. Auth: loopback по умолчанию, non-loopback требует токен; same-origin на запись; caps на body/клиентов. GET-навигации (клик по карточке) аутентифицируются HttpOnly `SameSite=Strict` cookie `mma_web_auth`, которую сервер ставит на любой успешный запрос, — токен в URL ссылки не попадает.
 - **UI:** паритет с каноническим мокапом — topbar (new chat/sessions/tabs/settings), feed с карточками (plan/file/link/image), reasoning-тоггл, селекторы model/provider/context, сворачиваемый сайдбар, settings-модалка (General/Model/Context/Reasoning/UI/Memory/Skills/Plugins·MCP/Security/Advanced), тема dark/light/auto, вложения изображений, создание сессии.
 - **Композер:** attach + textarea + send — единая bordered-поверхность поля (контролы внутри, focus-ring на группе); send (`arrow-up`) на время хода становится stop (`square`); textarea авто-растёт (≤200px); чипы селекторов с Lucide-шевронами; хинт `Esc` — только во время хода.
 - **Per-tab ввод + настоящий параллелизм:** черновик текста и аттачи живут на табе (`tab.draft/tab.attachments`, save/restore в `openTab/closeTab`), `#inp` один на браузер, но ощущается своим. `POST /api/message|command|interrupt` несут `sessionId` вкладки-отправителя. Каждая сессия ходит СВОИМ раннером (`RunPool` в `session-pool.ts`, фабрика `createSessionRunnerFactory` в `core/bootstrap/session-runner.ts` + скоуп в `session-runner-scope.ts`: свой `Agent` + `ContextManager` + запиненный `SessionManager.forkPinned` + `ExecutionModule` + `ToolExecutor`/`ToolContext`/реестр поверх shared провайдера/стора/памяти) — слоты бегут параллельно, в пределах сессии single-flight + FIFO (`queued`, кап `MAX_QUEUE_LENGTH`). Оркестрация ходов — `turns.ts`, статусы — `session-status.ts`, POST-действия — `actions-api.ts`, reconfigure — `reconfigure.ts`. События SSE тегируются владельцем (per-run форвардер), вопросы — тоже (`createWebPromptIO(state, sessionId)`, scoped cancel); interrupt scoped (`shutdown(sessionId)` + kill только своих процессов). Web **всегда** идёт через per-session раннер: legacy-путь однo-сессионного main-агента удалён (`turns.ts` без `hasFactory()`-ветвлений, `drainQueueTurn`/`submitLegacy` убраны; без сессии/фабрики — `503 no_session`/`no_runner`), `Host.submit` в web не поддерживается. SSE доставляется **всем клиентам** (одно окно = много вкладок, фоновая должна стримиться живьём); раскладка по вкладкам — на клиенте (`feedForEvent` по `sessionId`). Сессии делят workspace (worktree-изоляции нет — как два терминала в одном каталоге). Табы несут бейдж `idle|working|waiting|queued|failed` (точка `.dot`, `setTabStatus/reconcileTabStatuses` в `tabs.js`, own-листенеры SSE в `app.js`, титулы `web.tab.*`, `runningSessionIds[]` в `/api/state`/SSE `state`); завершение в чужой вкладке фокус не крадёт.
@@ -869,7 +869,28 @@ read-only петля без стопа, рассинхрон провайдер�
   из живого конфига (probe), а не из bootstrap-снимка.
 - Проверено 12 живыми прогонами `prism-ml/bonsai-27b`; план — [docs/plans/2026-10-06-harness-reliability-fixes.md](./docs/plans/2026-10-06-harness-reliability-fixes.md).
 
-### Current Version: 2.21.0
+### Web Live Context Metrics & Cache Reporting (2.22.0)
+
+- **Live контекст в сайдбаре** (`src/modules/webui/session/run-agent.ts`, `host-state.ts`,
+  `turns.ts`, `assets/app.ts`): `makeRunAgent` получает `contextManager` (живой `ContextManager`
+  вкладки) и, пока ход бежит, раз в ~800мс читает `getSnapshot()` через `liveContextUsage`
+  (`host-state.ts`) и шлёт **новое SSE-событие `usage`** владельцу (`usageSessionId`). Ранее
+  `contextUsed`/`contextBreakdown`/`compactionCount`/`contextQuality` снапшотились только в
+  `AgentResult` по завершении хода, и бар «замирал» до `turn_end`. Клиент мержит `usage` в
+  `session.host` своей вкладки без полного `/api/state`-рефетча. Таймер останавливается в
+  `finally` (прерывание/ошибка тоже). Cost/cache по-прежнему обновляются по завершении хода.
+- **Анимация полосы** (`assets/js/feed/sidebar.ts`): `renderUsage` пересобирает панель целиком,
+  поэтому сегменты полосы больше не прыгают в финальный `flex-grow` — `applyBarStep` сидирует
+  новую полосу прежними ширинами (`lastBarParts`) и на следующем кадре ведёт к целевым
+  (CSS `transition: flex-grow .25s`; гасится `prefers-reduced-motion`).
+- **Cache hit-rate без ложного нуля** (`src/core/agent/cache-stats.ts` + `agent.ts`, `core/types.ts`,
+  `src/cli/cache-line.ts`): выделенная чистая `computeCacheStats(state, saved)` выставляет `hitRate`
+  **только** при наличии провайдерских cache-токенов. Prefix-монитор заполняет `stableRatio`
+  всегда, из-за чего раньше `buildCacheStats` возвращал `hitRate: 0` на бэкендах без отчёта о кеше,
+  и сайдбар показывал `0%` вместо `—`. `AgentResult.cache.hitRate`/`CacheReport.hitRate` — optional;
+  тесты `tests/core/cache-stats.test.ts`, `tests/webui-live-usage.test.ts`.
+
+### Current Version: 2.22.0
 
 ### Changelog
 

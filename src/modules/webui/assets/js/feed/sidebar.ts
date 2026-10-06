@@ -37,6 +37,30 @@ function tipContent(cls: string, labelKey: string, n: number, denom: number): No
   return frag;
 }
 
+// Previous context-part widths (segment class → tokens), kept across renders so
+// a rebuilt bar can animate from the old width to the new one. `renderUsage`
+// recreates the whole panel each update; without seeding, the fresh segments
+// would jump straight to the final `flex-grow` with nothing to transition from.
+const lastBarParts = new Map<string, number>();
+
+// Seeds a segment at its previous width, then moves it to `target` on the next
+// frame so the CSS `transition: flex-grow` runs. First sight / unchanged parts
+// are set directly (no motion).
+function applyBarStep(seg: HTMLElement, cls: string, target: number): void {
+  const prev = lastBarParts.get(cls);
+  lastBarParts.set(cls, target);
+  if (prev === undefined || prev === target) {
+    seg.style.flexGrow = String(target);
+    return;
+  }
+  seg.style.flexGrow = String(prev);
+  const apply = (): void => {
+    seg.style.flexGrow = String(target);
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(apply);
+  else apply();
+}
+
 // Segmented context bar: system · tools · history · reserve · free as separate
 // rounded pills (flex-grow = tokens) so parts + gaps fill the full window.
 function contextSegBar(h: Dict, used: number, limit: number): HTMLElement {
@@ -53,8 +77,8 @@ function contextSegBar(h: Dict, used: number, limit: number): HTMLElement {
   for (const [cls, labelKey, n] of contextParts(bd)) {
     if (!n || n <= 0) continue;
     const seg = el("i", cls);
-    seg.style.flexGrow = String(n);
     seg.style.flexBasis = "0";
+    applyBarStep(seg, cls, n);
     seg.tabIndex = 0;
     seg.setAttribute("aria-label", [t(labelKey), fmtTokens(n), Math.round((n / denom) * 100) + "%"].join(" · "));
     attachTooltip(seg, () => tipContent(cls, labelKey, n, denom));

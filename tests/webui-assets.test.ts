@@ -412,6 +412,17 @@ describe("webui assets", () => {
     expect(src.slice(Math.max(0, sigIdx - 700), sigIdx)).toContain("h.contextBreakdown");
   });
 
+  it("animates the segmented bar across live re-renders (seeds old widths)", () => {
+    // renderUsage пересобирает панель целиком; без сидирования прежних ширин
+    // новые сегменты прыгали в финальный flex-grow без анимации (бар «замирал»).
+    const a = loadAssets();
+    const src = js(a);
+    expect(src).toContain("lastBarParts");
+    expect(src).toContain("applyBarStep(");
+    expect(src).toContain("requestAnimationFrame");
+    expect(a.css).toContain("transition: flex-grow");
+  });
+
   it("renders a stale-translations banner driven by i18nStale (ses_mup6p61q)", () => {
     const a = loadAssets();
     const src = js(a);

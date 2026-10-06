@@ -7,7 +7,8 @@ export interface CacheReport {
   cachedTokens: number;
   uncachedTokens: number;
   cacheWriteTokens: number;
-  hitRate: number;
+  /** cached / (cached + uncached); отсутствует, когда провайдер не отдал токены. */
+  hitRate?: number;
   saved?: number;
   prefixStable?: number;
   prefixCause?: string;
@@ -22,9 +23,9 @@ export interface CacheReport {
 export function formatCacheLine(cache?: CacheReport): string | undefined {
   if (!cache) return undefined;
   const total = cache.cachedTokens + cache.uncachedTokens;
-  const hit = Math.round(cache.hitRate * 100);
 
   if (total > 0) {
+    const hit = Math.round((cache.hitRate ?? 0) * 100);
     if (cache.saved !== undefined && cache.saved > 0) {
       return t("repl.cache", { hit, saved: formatCost(cache.saved) });
     }

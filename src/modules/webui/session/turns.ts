@@ -109,6 +109,7 @@ function runRunnerTurn(
     ownerRef,
     execModule: runner.execModule,
     contextWindow: s.config?.contextWindow,
+    contextManager: runner.contextManager,
   });
   broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
   runAgent.run(text).catch((err: unknown) => {

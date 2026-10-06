@@ -6,9 +6,16 @@ import type { ToolCall, ToolResult } from "../../../tools/types";
 import type { ExecutionModule } from "../../execution/module";
 import { broadcast, type UsageSnapshot, type SessionStore, type RuntimeState, type SseTransport } from "../state";
 import { sessionStatus } from "./session-status";
-import { captureUsage, planEventFor } from "../host-state";
+import { captureUsage, liveContextUsage, planEventFor, type LiveContextSource } from "../host-state";
 import { saveSessionUsage } from "./session-usage";
 import type { Forwarder } from "./forward";
+
+/**
+ * Интервал live-бродкаста контекстных метрик во время хода. Достаточно часто,
+ * чтобы бар «дышал» вместе с агентом, но не спамить SSE (клиент рисует только
+ * при реальном изменении — сигнатура в `renderUsage`).
+ */
+const LIVE_USAGE_INTERVAL_MS = 800;
 
 /** Входы раннера: агент, состояние, форвардер, сессия/план для сайдбара. */
 export interface RunAgentDeps {
@@ -25,6 +32,8 @@ export interface RunAgentDeps {
   execModule?: Pick<ExecutionModule, "getActivePlan">;
   /** Фолбэк лимита для usage сайдбара, когда ход лимит не сообщил. */
   contextWindow?: number;
+  /** Живой контекст владельца: сайдбар обновляет заполнение по ходу, а не в конце. */
+  contextManager?: LiveContextSource;
 }
 
 /** Раннер одного хода. */
@@ -83,6 +92,32 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
   // через `agent.shutdown` напрямую (actions-api). Отдельный флаг не нужен.
   let toolCalls = 0;
 
+  // Real-time метрики сайдбара: пока ход идёт, раз в ~800мс читаем живой
+  // снапшот контекста владельца и шлём `usage`-событие (клиент мержит его в
+  // свою вкладку без лишнего `/api/state`-рефетча). Возвращает стоп-функцию.
+  const startLiveUsage = (owner: string): (() => void) => {
+    const cm = deps.contextManager;
+    if (!cm) return () => {};
+    const tick = (): void => {
+      try {
+        const usage = liveContextUsage(state.sessionUsage[owner] ?? state.usage, cm);
+        state.usage = usage;
+        state.sessionUsage[owner] = usage;
+        broadcast(
+          { type: "usage", ts: Date.now(), sessionId: owner, usage, usageSessionId: owner },
+          state,
+        );
+      } catch {
+        /* fail-open: живой снимок не должен ронять ход */
+      }
+    };
+    const timer = setInterval(tick, LIVE_USAGE_INTERVAL_MS);
+    // Не держим процесс живым только ради таймера (Bun/Node).
+    (timer as { unref?: () => void }).unref?.();
+    tick(); // первый снимок сразу — сайдбар не ждёт 800мс
+    return () => clearInterval(timer);
+  };
+
   const run = async (text: string): Promise<unknown> => {
     toolCalls = 0;
     state.agentRunning = true;
@@ -91,6 +126,7 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
     const owner = deps.ownerSessionId;
     if (deps.ownerRef) deps.ownerRef.current = owner;
     state.activeSessionId = owner;
+    const stopLiveUsage = startLiveUsage(owner);
     try {
       const result = await agent.run(
         text,
@@ -128,6 +164,8 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
     } catch (err) {
       forwarder.onTurnEnd({ success: false });
       throw err;
+    } finally {
+      stopLiveUsage();
     }
   };
 
