@@ -107,7 +107,56 @@ export function validateDraftSpec(spec: DraftSpec): string | null {
   if (!Array.isArray(spec.permissions) || spec.permissions.length === 0) {
     return "permissions are required for a draft capability";
   }
+  const syntax = validateDraftCode(spec.code);
+  if (syntax) return `code has a syntax error: ${syntax}`;
   return null;
+}
+
+/**
+ * Синтаксическая проверка тела хендлера **без исполнения**.
+ *
+ * Тело — обычные стейтменты (с `return`), поэтому оборачиваем в стрелку и
+ * прогоняем через `Bun.Transpiler` (парсит TS, ничего не запускает). Вне Bun
+ * (degraded Node-фолбэк) проверку пропускаем — fail-open, как и остальной
+ * Bun-зависимый функционал.
+ */
+export function validateDraftCode(code: string): string | null {
+  if (!code.trim() || typeof Bun === "undefined") return null;
+  try {
+    new Bun.Transpiler({ loader: "ts" }).transformSync(`async (ctx, args) => {\n${code}\n}`);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
+/**
+ * Причёсывает тело хендлера: CRLF→LF, срезает пустые края, убирает общий
+ * отступ (dedent), схлопывает подряд пустые строки (≤1), обрезает хвостовые
+ * пробелы, добавляет финальный `\n`. Без внешнего форматтера — «каша» из
+ * отступов и пустых строк, которую часто пишет малая модель, уходит.
+ */
+export function normalizeDraftCode(code: string): string {
+  const lines = code.replace(/\r\n?/g, "\n").split("\n");
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const indents = lines
+    .filter((l) => l.trim())
+    .map((l) => (l.match(/^[ \t]*/) as RegExpMatchArray)[0].length);
+  const min = indents.length ? Math.min(...indents) : 0;
+  const out: string[] = [];
+  let blank = 0;
+  for (const raw of lines) {
+    const line = raw.slice(min).replace(/\s+$/, "");
+    if (line) {
+      blank = 0;
+      out.push(line);
+    } else {
+      blank += 1;
+      if (blank <= 1) out.push("");
+    }
+  }
+  return out.length ? `${out.join("\n")}\n` : "";
 }
 
 /**
@@ -118,12 +167,15 @@ export function validateDraftSpec(spec: DraftSpec): string | null {
  */
 export function renderDraft(spec: DraftSpec): string {
   const perms = JSON.stringify(spec.permissions);
+  const body = normalizeDraftCode(spec.code)
+    .split("\n")
+    .map((l) => (l ? `  ${l}` : l))
+    .join("\n");
   return `// Черновик capability "${spec.name}", создан агентом через define_capability.
 // Файл НЕ выполняется, пока пользователь не разрешит черновики этого проекта
 // (mma plugins drafts approve). Код ниже написан агентом и исполняется в процессе агента.
 const handler = async (ctx, args) => {
-${spec.code}
-};
+${body}};
 
 export default {
   name: ${JSON.stringify(spec.name)},
@@ -262,4 +314,6 @@ export interface DraftHost {
    * обязан подхватить только что записанный файл без рестарта процесса.
    */
   reloadDrafts(): ReloadReport;
+  /** Причина провала загрузки черновика (после reload) — для модели; иначе null. */
+  lastError(name: string): string | null;
 }

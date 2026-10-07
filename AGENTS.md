@@ -1132,7 +1132,33 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Побочно:** `subdialog.ts` теперь резолвит узлы оверлея лениво, а не на уровне модуля
   (захват на импорте молча no-op'ился, если оверлея ещё нет в DOM).
 
-### Current Version: 2.29.0
+### Plugin Draft Quality (2.29.1)
+
+Спека: [docs/specs/2026-10-07-plugin-draft-quality-design.md](./docs/specs/2026-10-07-plugin-draft-quality-design.md);
+план: [docs/plans/2026-10-07-plugin-draft-quality.md](./docs/plans/2026-10-07-plugin-draft-quality.md).
+Черновики `define_capability` (код, который пишет малая модель) теперь проходят
+quality-gate и выглядят аккуратно.
+
+- **Синтаксис до записи** (`src/modules/plugins/drafts.ts`): `validateDraftCode`
+  парсит тело хендлера через `Bun.Transpiler` (обёртка `async (ctx,args)=>{…}`,
+  без исполнения; вне Bun — skip). `validateDraftSpec` отклоняет битый код с
+  «code has a syntax error: …» до записи файла.
+- **Нормализация** (`normalizeDraftCode`, `renderDraft`): CRLF→LF, dedent, ≤1
+  пустая строка, trim EOL, финальный `\n`, индент тела 2 пробела — без внешнего
+  форматтера (prettier/biome не тащим в рантайм-зависимости).
+- **Обратная связь при провале загрузки**: `DraftHost.lastError(name)` читает
+  `PluginManager.getFailures()`; `define_capability` при `reloadDrafts().failed>0`
+  возвращает `success:false` + `draft.capability_load_failed` (текст ошибки),
+  вызывает `host.remove(name)` (битый одобренный черновик не остаётся), модель
+  чинит и повторяет. `mma plugins drafts approve` печатает причины провала.
+- **Контракт в описании тула**: хендлер возвращает `{ output, success? }`,
+  доступны `ctx`/`args`, без импортов/топ-левел кода.
+- **Инвариант сохранён**: черновик не исполняется до согласия (загрузка/импорт —
+  только после approve).
+- **Тесты**: `tests/plugin-drafts.test.ts` (синтаксис, нормализация, откат при
+  провале загрузки).
+
+### Current Version: 2.29.1
 
 ### Changelog
 

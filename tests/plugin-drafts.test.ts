@@ -13,8 +13,10 @@ import {
   enforceLimit,
   isApproved,
   listDrafts,
+  normalizeDraftCode,
   removeDraft,
   renderDraft,
+  validateDraftCode,
   validateDraftSpec,
   writeDraft,
   type DraftSpec,
@@ -54,6 +56,26 @@ describe("plugin drafts — валидация и запись", () => {
     expect(validateDraftSpec(spec({ parameters: null as never }))).toContain("parameters");
     // Права обязательны: декларация без единого заявления ничего не значит.
     expect(validateDraftSpec(spec({ permissions: [] }))).toContain("permissions");
+  });
+
+  it("ловит синтаксическую ошибку тела до записи", () => {
+    expect(validateDraftCode("return { output: 'ok' };")).toBeNull();
+    expect(validateDraftCode("return { output: 'ok' }")).toBeNull();
+    // Незакрытая скобка — ошибка, и spec её отклоняет.
+    const broken = "return { output: (1 + 2 };";
+    expect(validateDraftCode(broken)).toBeTruthy();
+    expect(validateDraftSpec(spec({ code: broken }))).toContain("syntax error");
+  });
+
+  it("нормализует отступы, пустые строки и хвостовые пробелы", () => {
+    const messy = "    const a = 1;   \r\n\r\n\r\n    const b = 2;\n    ";
+    expect(normalizeDraftCode(messy)).toBe("const a = 1;\n\nconst b = 2;\n");
+    expect(normalizeDraftCode("   \n  \n")).toBe("");
+  });
+
+  it("шаблон вставляет нормализованное тело с отступом", () => {
+    const source = renderDraft(spec({ code: "  const a = 1;\n  return { output: String(a) };" }));
+    expect(source).toContain("const handler = async (ctx, args) => {\n  const a = 1;\n  return { output: String(a) };\n};");
   });
 
   it("пишет черновик и НЕ выполняет его без согласия", () => {
@@ -234,6 +256,38 @@ describe("define_capability", () => {
     expect(result.success).toBe(false);
     expect(result.output).toContain("permissions");
     expect(existsSync(join(draftsDir(base), "greeter.ts"))).toBe(false);
+  });
+
+  it("провал загрузки после согласия — ошибка модели и откат файла", async () => {
+    const removed: string[] = [];
+    const fakeHost = {
+      baseDir: base,
+      state: () => ({ approved: true, drafts: [], loaded: [] }),
+      approve: () => {},
+      revoke: () => {},
+      write: () => ({ ok: true, path: join(draftsDir(base), "greeter.ts"), evicted: [], written: true }),
+      remove: (n: string) => {
+        removed.push(n);
+        return true;
+      },
+      consentPreview: () => "",
+      reloadDrafts: () => ({ loaded: 0, unloaded: 0, failed: 1, staleTs: 0 }),
+      lastError: () => "SyntaxError: Unexpected token",
+    };
+    const io = createPromptIO({ ask: async () => "1", print: () => {} });
+    const ctx = {
+      baseDir: base,
+      logger: { warn: () => {}, info: () => {}, error: () => {}, debug: () => {} },
+      config: { plugins: {} },
+      pluginDrafts: fakeHost,
+      promptIO: io,
+    } as unknown as ToolContext;
+
+    const result = await defineCapabilityTool.handler(ctx, args);
+
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("Unexpected token");
+    expect(removed).toEqual(["greeter"]);
   });
 
   it("без хоста черновиков тул отвечает честно, а не падает", async () => {

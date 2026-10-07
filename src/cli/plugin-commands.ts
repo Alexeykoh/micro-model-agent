@@ -8,6 +8,7 @@ import { setConfigValue } from "../config/registry";
 import { saveConfig } from "../config/config";
 import { formatPluginDetails, formatPluginList } from "../modules/plugins/format";
 import { reloadSummaryLines } from "../modules/plugins/reload";
+import { draftsDir } from "../modules/plugins/drafts";
 import type { PluginManager } from "../modules/plugins/manager";
 import { pc } from "../ui/colors";
 
@@ -82,7 +83,7 @@ export function createPluginCommand(program: Command): void {
     .description(t("cli.plugins.drafts"))
     .argument("[action]", t("cli.plugins.drafts_action"), "")
     .action(async (action: string) => {
-      const { draftHost } = await bootstrap();
+      const { draftHost, pluginManager } = await bootstrap();
       const channel = getDefaultChannel();
       const state = draftHost.state();
       if (action === "approve") {
@@ -94,6 +95,12 @@ export function createPluginCommand(program: Command): void {
             failed: String(report.failed),
           }),
         );
+        if (report.failed > 0) {
+          const dir = draftsDir(draftHost.baseDir);
+          for (const f of pluginManager.getFailures().filter((x) => x.path.startsWith(dir))) {
+            channel.writeLine(pc.dim(`  ✗ ${f.entry}: ${f.message}`), "stderr");
+          }
+        }
         return;
       }
       if (action === "revoke") {
