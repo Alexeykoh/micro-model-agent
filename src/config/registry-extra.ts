@@ -432,6 +432,15 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
     },
     { kind: "tags", placeholder: "my-plugin" }),
 
+  // Лимит черновиков capabilities на проект (LRU-вытеснение). Ключ видит хост
+  // черновиков через живой конфиг, поэтому `reconfigure: false`.
+  int("plugins.maxDrafts", "agent", 10, 100, 1, false,
+    (c) => c.plugins?.maxDrafts ?? DEFAULTS.plugins!.maxDrafts!,
+    (c, v) => {
+      c.plugins ??= structuredClone(DEFAULTS.plugins);
+      (c.plugins as NonNullable<AppConfig["plugins"]>).maxDrafts = Math.max(1, v as number);
+    }),
+
   bool("hallucination.judge.enabled", "agent", true,
     (c) => c.hallucination?.judge.enabled ?? DEFAULTS.hallucination!.judge.enabled,
     (c, v) => {

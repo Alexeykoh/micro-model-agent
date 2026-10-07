@@ -20,6 +20,7 @@ import {
   createSessionRunnerFactory,
   type SessionRunner,
 } from "./bootstrap/session-runner";
+import { t } from "../i18n/index";
 
 // Публичные экспорты 1:1 (сигнатуры и поведение не меняются) — потребители
 // (cli/main, web-command, тесты) продолжают импортить из "../core/bootstrap".
@@ -37,6 +38,8 @@ export interface BootstrapResult {
   sessionManager: SessionManager;
   skillsModule: SkillsModule;
   pluginManager: PluginManager;
+  /** Хост черновиков capabilities (черновик — проектный, не сессионный). */
+  draftHost: import("../modules/plugins/drafts").DraftHost;
   /** Владелец состояния плана — UI (REPL) читают активный план отсюда, а не перечитывают .mma/plans/active.json. */
   execModule: ExecutionModule;
   /** Общий ToolContext; `sessionId`/`sessionContext` — живые геттеры поверх
@@ -114,6 +117,7 @@ export async function bootstrap(
     bindSessionManager: provider.bindSessionManager,
     toolRegistry: workspace.toolRegistry,
     pluginManager: workspace.pluginManager,
+    draftHost: workspace.draftHost,
   });
 
   // Фаза 5: модули, плагины, промпт-блоки, dry-run переполнения.
@@ -135,6 +139,16 @@ export async function bootstrap(
     hallucinationDetector: session.hallucinationDetector,
     systemInfoPrompt: workspace.systemInfoPrompt,
   });
+
+  // Черновики capabilities: грузим только одобренные проектом. Именно здесь,
+  // а не в фазе workspace, — менеджер уже знает про плагины, а `toolRegistry`
+  // уже подписан на вклад тулов, так что capability сразу попадёт в набор.
+  const draftReport = workspace.draftHost.loadApproved();
+  if (draftReport && draftReport.loaded > 0) {
+    logger.warn(
+      t("plugin.drafts_loaded", { loaded: String(draftReport.loaded), failed: String(draftReport.failed) }),
+    );
+  }
 
   // Фаза 6: AgentDeps, late-apply пробы, set_thinking.
   const agent = await assembleAgent(
@@ -188,6 +202,8 @@ export async function bootstrap(
     memoryStore: modules.memoryStore,
     indexerModule: workspace.indexerModule,
     lspModule: modules.lspModule,
+    /** Хост черновиков capabilities (`mma plugins drafts`, тул `define_capability`). */
+    draftHost: workspace.draftHost,
     spawnSessionRunner: createSessionRunnerFactory({
       config,
       configRef: session.configRef,
@@ -204,6 +220,7 @@ export async function bootstrap(
       contextProbePromise: provider.contextProbePromise,
       toolRegistry: workspace.toolRegistry,
       pluginManager: workspace.pluginManager,
+      draftHost: workspace.draftHost,
       sessionManager: session.sessionManager,
       skillsModule: workspace.skillsModule,
       indexerModule: workspace.indexerModule,

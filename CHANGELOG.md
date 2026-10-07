@@ -14,6 +14,8 @@ silently missing.
 
 ### Added
 
+- **Agent-written capability drafts** (`src/modules/plugins/drafts.ts`, `draft-host.ts`, `src/tools/define-capability.ts`): the `define_capability` tool writes a capability into `.mma/plugins/drafts/<name>.ts` and asks the user for permission with the full code shown. A draft is **inert until approved** - the catalog is not read at all without a marker (`.mma/plugins/.drafts-approved`, project-scoped and outside the catalog so the plugin scan never sees it). After approval the capability is registered live (`plugin__<name>__<name>` tool, `plugin:<name>` tag), and it reaches already-open `mma web` sessions. Declared `permissions` are required - an empty declaration would make the consent prompt a lie. `plugins.maxDrafts` (default 10) caps the drafts per project with LRU eviction; `mma plugins drafts [approve|revoke]` and a startup warning cover the pending state.
+- **`[PLUGIN CAPABILITIES]` prompt block** (`src/modules/plugins/capabilities-block.ts`): lists the tools installed plugins contributed and states that `define_capability` exists. Omitted when the tool set is narrowed by an allowlist (onboarding), where the tool is unavailable anyway.
 - **Plugin tools** (`src/modules/plugins/tools.ts`, `AgentPlugin.getToolDefinitions()`): a plugin can add its own tools to the harness. Definitions enter the registry under `plugin__<plugin>__<tool>` (same convention as `mcp__<server>__<tool>`), get a `plugin:<name>` tag and `alwaysOn: true` by default so `enable_tools` cannot hide them; the core fills `provides.tools`, which the sidebar popup, `mma plugins list` and `mma plugins show` already read. Toggling a plugin with tools resets the provider prompt cache - the details popup says so instead of hiding it.
 - **Live plugin reload** (`src/modules/plugins/reload.ts`, `manager.ts`, `loader.ts`): edits to a plugin file are picked up without restarting the process - unload (`onUnload`), drop the `require` cache, read again. Available as `mma plugins reload`, `/plugins reload`, `POST /api/reload/plugins`, and a "reload plugins" button in Settings > Plugins. Skills reload the same way, so a skill written at runtime is loadable in the same turn.
 - **`onUnload` hook** on `AgentPlugin`: release servers, timers and sockets when a plugin goes away. Without it a reload leaks - `examples/plugins/web-ui` starts an HTTP server in `onSessionStart`, and copies used to accumulate across `/reload`.
@@ -55,7 +57,7 @@ silently missing.
 ### Known limits (documented, not fixed)
 
 - Disabling a plugin stops its hooks and tool contributions but does **not** undo the module import that already ran, and `permissions` is a declaration shown to the user rather than enforcement. Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
-- Agent-authored draft plugins (`.mma/plugins/drafts/`, the `define_capability` tool and the consent prompt) are still not implemented - spec phase 6.
+- Approving a draft is still a decision, not a boundary: the code runs in the agent process with the harness's own reach (fs, network, `bash`). Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
 
 ## [2.28.0] - 2026-10-07
 

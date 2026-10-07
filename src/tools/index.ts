@@ -44,6 +44,7 @@ import { recallTool } from "./recall";
 import { meetDoneTool } from "./meet-done";
 import { createBrowserTool } from "./browser";
 import { attachImageTool } from "./attach-image";
+import { defineCapabilityTool } from "./define-capability";
 import { enableToolsTool } from "./enable-tools";
 import { sessionInfoTool } from "./session-info";
 import type { SkillsModule } from "../modules/skills/module";
@@ -122,6 +123,7 @@ export function registerAllTools(
     attachImageTool,
     sessionInfoTool,
     meetDoneTool,
+    defineCapabilityTool,
     questionTool,
     approveTool,
   ];

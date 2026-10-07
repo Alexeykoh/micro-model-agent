@@ -1040,8 +1040,9 @@ read-only петля без стопа, рассинхрон провайдер�
 ### Plugin Registry: метаданные, вкл/выкл, вкладка Plugins (2.29.0)
 
 Спека: [docs/specs/2026-10-07-plugin-registry-design.md](./docs/specs/2026-10-07-plugin-registry-design.md)
-(со статусом фаз). Реализованы **фазы 1–5**; не начата **фаза 6** (черновики + тул
-`define_capability`).
+(со статусом фаз). Реализованы **фазы 1–6** — плагин может отдать свой тул, а агент —
+написать себе capability черновиком (`define_capability`), который не выполняется без
+явного согласия пользователя.
 
 - **Метаданные** (`src/modules/types.ts`, `plugins/records.ts`): `description`, `author`, `homepage`,
   `permissions`, `provides` — все опциональны; жёсткая валидация только на `name`
@@ -1078,6 +1079,21 @@ read-only петля без стопа, рассинхрон провайдер�
   плагином, мусор в определении, дубль после санитизации или throw в методе **отбрасывают весь
   вклад** плагина (ворн в лог + `getToolConflicts()` → `mma plugins show`), хуки остаются живы.
   `ToolRegistry.upsert/unregister` (`register` по-прежнему кидает).
+- **Черновики capabilities (фаза 6):** `.mma/plugins/drafts/<name>.ts` + маркер согласия
+  `.mma/plugins/.drafts-approved` (**вне** каталога — иначе скан плагинов съел бы маркер;
+  проектный, а не глобальный). Каталог без маркера **не читается вообще** — инертность по
+  умолчанию, а не «спросим при старте»: в headless вопрос некому задать, а молча грузить
+  нельзя. Тул `define_capability` (`tags:["meta"]`, `alwaysOn:false`) пишет черновик, показывает
+  **полный код** и спрашивает consent через `askUser` (`ctx.promptIO`); после «allow» —
+  `draftHost.reloadDrafts()` (живая регистрация, доезжает и до открытых вкладок веба).
+  Права (`permissions`) обязательны — иначе модальное окно врёт. LRU-лимит `plugins.maxDrafts`
+  (10). Хост черновиков — `createDraftHost` (`plugins/draft-host.ts`), в контекст тулов
+  прокидывается узким `ToolContext.pluginDrafts` (main — `session-phase.ts`, раннеры —
+  `session-runner-scope.ts`). `mma plugins drafts [approve|revoke]`; неодобренные черновики дают
+  warn при старте (`plugin.drafts_pending`).
+- **Промпт-блок `[PLUGIN CAPABILITIES]`** (`plugins/capabilities-block.ts`, в
+  `collectDynamicPromptBlocks`): перечисляет тулы плагинов + упоминает `define_capability`;
+  **не добавляется** при сужении набора дочерним allowlist'ом (онбординг) — там тул недоступен.
 - **Клоны реестра (фаза 5):** набор реестров держит `PluginManager`
   (`attachToolRegistry`/`detachToolRegistry`; главный — `modules-phase.ts`, раннер — сразу после
   `buildRunnerRegistry`), per-session менеджеры делят **объект-гейт** deny-list с главным
@@ -1108,7 +1124,8 @@ read-only петля без стопа, рассинхрон провайдер�
   enforcement. Настоящая изоляция/доверие — открытый P1 в
   `docs/specs/2026-09-28-production-readiness-design.md`.
 - **Тесты:** `tests/plugin-records.test.ts`, `tests/plugin-enabled.test.ts`,
-  `tests/plugin-reload.test.ts`, `tests/plugin-tools.test.ts`, `tests/skills-reload.test.ts`,
+  `tests/plugin-reload.test.ts`, `tests/plugin-tools.test.ts`, `tests/plugin-drafts.test.ts`,
+  `tests/skills-reload.test.ts`,
   `tests/plugin-loader.test.ts`, `tests/tools/registry-upsert.test.ts`,
   `tests/webui-plugins-api.test.ts`, `tests/webui-plugins-dom.test.ts`, guard в
   `tests/webui-assets.test.ts`, e2e `tests/e2e/web-plugins.e2e-test.ts`.

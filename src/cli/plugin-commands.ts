@@ -9,6 +9,7 @@ import { saveConfig } from "../config/config";
 import { formatPluginDetails, formatPluginList } from "../modules/plugins/format";
 import { reloadSummaryLines } from "../modules/plugins/reload";
 import type { PluginManager } from "../modules/plugins/manager";
+import { pc } from "../ui/colors";
 
 // CLI-группа `mma plugins`: список, подробности, вкл/выкл.
 
@@ -74,6 +75,47 @@ export function createPluginCommand(program: Command): void {
       const plugins = pluginManager.reload();
       const skills = skillsModule?.reloadSources() ?? { added: 0, removed: 0 };
       for (const line of reloadSummaryLines(plugins, skills)) channel.writeLine(line);
+    });
+
+  pluginsCmd
+    .command("drafts")
+    .description(t("cli.plugins.drafts"))
+    .argument("[action]", t("cli.plugins.drafts_action"), "")
+    .action(async (action: string) => {
+      const { draftHost } = await bootstrap();
+      const channel = getDefaultChannel();
+      const state = draftHost.state();
+      if (action === "approve") {
+        draftHost.approve();
+        const report = draftHost.reloadDrafts();
+        channel.writeLine(
+          t("cli.plugins.drafts_approved", {
+            loaded: String(report.loaded),
+            failed: String(report.failed),
+          }),
+        );
+        return;
+      }
+      if (action === "revoke") {
+        draftHost.revoke();
+        channel.writeLine(t("cli.plugins.drafts_revoked"));
+        return;
+      }
+      if (state.drafts.length === 0) {
+        channel.writeLine(t("cli.plugins.drafts_none"));
+        return;
+      }
+      channel.writeLine(
+        t("cli.plugins.drafts_header", {
+          count: String(state.drafts.length),
+          approved: state.approved ? t("cli.plugins.on") : t("cli.plugins.off"),
+        }),
+      );
+for (const draft of state.drafts) {
+        const mark = state.loaded.includes(draft.name) ? ` · ${t("cli.plugins.drafts_loaded_mark")}` : "";
+        channel.writeLine(`  ◇ ${draft.name}${mark}`);
+      }
+      channel.writeLine(pc.dim(t("cli.plugins.drafts_hint")));
     });
 
   for (const [name, on, key] of [

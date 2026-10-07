@@ -23,6 +23,7 @@ import { ContextLogger } from "../agent/context-log";
 import { t } from "../../i18n/index";
 import type { ToolRegistry } from "../../tools/index";
 import type { PluginManager } from "../../modules/plugins/manager";
+import type { DraftHost } from "../../modules/plugins/drafts";
 import type { AppConfig, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
@@ -56,6 +57,8 @@ export interface SessionPhaseInput {
   toolRegistry: ToolRegistry;
   /** Менеджер плагинов (из фазы workspace) — для ToolExecutor. */
   pluginManager: PluginManager;
+  /** Хост черновиков capabilities (из фазы workspace); undefined — тул недоступен. */
+  draftHost?: DraftHost;
 }
 
 /** Итог фазы сессий: менеджер, контекст, живой toolCtx и окружение исполнения. */
@@ -269,6 +272,15 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
     },
     configurable: true,
   });
+
+  // Хост черновиков capabilities (`define_capability`). Ставится и в main, и в
+  // раннеры: тул может прийти в любой вкладке веба, а черновик — проектный.
+  if (input.draftHost) {
+    Object.defineProperty(toolCtx, "pluginDrafts", {
+      get: () => input.draftHost,
+      configurable: true,
+    });
+  }
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
   toolCtx.llmProvider = llmProvider;

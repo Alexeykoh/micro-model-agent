@@ -181,6 +181,7 @@ export const DEFAULTS: AppConfig = {
   },
   plugins: {
     disabled: [],
+    maxDrafts: 10,
   },
   hallucination: {
     judge: {

@@ -28,6 +28,7 @@ import { HallucinationDetector } from "../../modules/hallucination/detector";
 import type { ToolExecutor } from "../../tools/executor";
 import type { ToolRegistry } from "../../tools/registry";
 import type { PluginManager } from "../../modules/plugins/manager";
+import type { DraftHost } from "../../modules/plugins/drafts";
 import type { ToolContext } from "../../tools/types";
 import type { PromptBlock } from "../types";
 import type { MemoryStore } from "../../modules/memory/store";
@@ -91,6 +92,8 @@ export interface SessionRunnerTemplate {
   toolRegistry: ToolRegistry;
   /** Живой менеджер main-агента (инстансы плагинов переиспользуются). */
   pluginManager: PluginManager;
+  /** Хост черновиков capabilities (общий: черновики — проектные, не сессионные). */
+  draftHost?: DraftHost;
   /** Живой менеджер сессий (forkPinned поверх общего стора). */
   sessionManager: SessionManager;
   skillsModule: { getSystemPromptBlock(): PromptBlock | null };
@@ -152,6 +155,7 @@ export function createSessionRunnerFactory(
       contextProbePromise,
       toolRegistry,
       pluginManager,
+      draftHost,
       sessionManager,
       skillsModule,
       indexerModule,
@@ -222,6 +226,7 @@ export function createSessionRunnerFactory(
       sessionId,
       activeToolTags,
       capabilitiesProbeRef,
+      draftHost,
     });
     const toolExecutor = buildRunnerExecutor(registry, toolCtx, runnerPlugins);
     toolCtx.llmProvider = llmProvider;

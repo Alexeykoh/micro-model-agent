@@ -12,6 +12,7 @@ import { ToolExecutor } from "../../tools/executor";
 import { ToolRegistry } from "../../tools/registry";
 import { PluginManager } from "../../modules/plugins/manager";
 import type { ToolContext } from "../../tools/types";
+import type { DraftHost } from "../../modules/plugins/drafts";
 import type { PromptBlock } from "../types";
 import { buildHiddenToolsBlock } from "../../tools/hidden-tools-block";
 import { estimateTokens } from "../../llm/token-counter";
@@ -83,6 +84,11 @@ export interface RunnerToolCtxInput {
   activeToolTags: string[];
   /** Живой capabilities-пробник провайдера (та же ссылка, что у main). */
   capabilitiesProbeRef: { probe?: ModelCapabilities };
+  /**
+   * Хост черновиков capabilities. Тот же инстанс, что у main: черновик —
+   * проектный, и вкладка веба пишет те же файлы, что и терминал.
+   */
+  draftHost?: DraftHost;
 }
 
 /**
@@ -153,6 +159,10 @@ export function buildRunnerToolCtx(input: RunnerToolCtxInput): {
         cfg.modelCapabilities?.[cfg.model],
       );
     },
+    configurable: true,
+  });
+  Object.defineProperty(toolCtx, "pluginDrafts", {
+    get: () => input.draftHost,
     configurable: true,
   });
   return { toolCtx, runnerTags };

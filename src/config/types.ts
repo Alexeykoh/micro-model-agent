@@ -534,6 +534,12 @@ export interface PluginsConfig {
    * disable останавливает поведение, а не исполнение кода (см. `docs/plugins.md`).
    */
   disabled?: string[];
+  /**
+   * Сколько черновиков capabilities (код, написанный агентом) держим на проект.
+   * Лишние вытесняются по LRU. Черновики не выполняются, пока пользователь
+   * явно не разрешит их для этого проекта (`mma plugins drafts approve`).
+   */
+  maxDrafts?: number;
 }
 
 export interface AppConfig {

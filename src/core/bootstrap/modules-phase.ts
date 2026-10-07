@@ -12,6 +12,7 @@ import { join } from "path";
 import { buildHiddenToolsBlock } from "../../tools/hidden-tools-block";
 import { ModuleRegistry } from "../../modules/registry";
 import { PluginLoader } from "../../modules/plugins/loader";
+import { pluginCapabilitiesBlock } from "../../modules/plugins/capabilities-block";
 import { plugin as lintOnWritePlugin } from "../../modules/plugins/builtin/lint-on-write";
 import { plugin as notifyPlugin } from "../../modules/plugins/builtin/notify";
 import { ExecutionModule } from "../../modules/execution/module";
@@ -321,6 +322,13 @@ function collectDynamicPromptBlocks(
   if (sessionBlock) blocks.push(sessionBlock);
   const mapBlock = indexerModule.getSystemPromptBlock();
   if (mapBlock) blocks.push(mapBlock);
+  const capabilitiesBlock = pluginCapabilitiesBlock({
+    pluginManager: input.pluginManager,
+    // Суженный набор (онбординг с allowlist'ом) не должен получать блок про
+    // плагины: там `define_capability` модели всё равно недоступен.
+    pluginsVisible: !toolCtx.toolAllowlist,
+  });
+  if (capabilitiesBlock) blocks.push(capabilitiesBlock);
   const hiddenToolsBlock = toolCtx.toolAllowlist
     ? null
     : buildHiddenToolsBlock(toolRegistry.getAll(), activeToolTags);

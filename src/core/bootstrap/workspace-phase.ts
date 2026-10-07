@@ -14,6 +14,7 @@ import { IndexerModule } from "../../modules/indexer/index";
 import { SkillsLoader, SkillsModule } from "../../modules/skills/index";
 import { ToolRegistry, registerAllTools } from "../../tools/index";
 import { PluginManager } from "../../modules/plugins/manager";
+import { createDraftHost, pendingDrafts, type DraftHostWithLoad } from "../../modules/plugins/draft-host";
 import { setPluginGateApplier } from "../../config/registry";
 import { estimateTokens } from "../../llm/token-counter";
 import type { UserProfile } from "../../modules/user-profile/profile";
@@ -61,6 +62,11 @@ export interface WorkspacePhase {
   toolRegistry: ToolRegistry;
   /** Пустой менеджер плагинов (наполнение — в фазе модулей). */
   pluginManager: PluginManager;
+  /**
+   * Хост черновиков capabilities (`define_capability`). Одобренные черновики
+   * проекта уже загружены, неодобренные — инертны (см. `modules/plugins/drafts.ts`).
+   */
+  draftHost: DraftHostWithLoad;
   /** Критичный systemInfo-блок для системного промпта. */
   systemInfoPrompt: PromptBlock;
 }
@@ -143,6 +149,16 @@ export async function setupWorkspacePhase(
   // Стартовый deny-list — до загрузки плагинов, иначе он не к чему примениться.
   pluginManager.setDisabledAll(config.plugins?.disabled ?? []);
 
+  // Черновики capabilities: одобренные проектом — грузим сразу, неодобренные
+  // лежат на диске инертно. Наличие неодобренных черновиков — это предупреждение
+  // при старте, а не тихая загрузка кода: согласие даётся явно
+  // (`mma plugins drafts approve` или вопрос в `define_capability`).
+  const draftHost = createDraftHost({ baseDir, pluginManager, configRef: { current: config } });
+  const pending = pendingDrafts(baseDir);
+  if (pending.length > 0) {
+    logger.warn(t("plugin.drafts_pending", { count: String(pending.length) }));
+  }
+
   // SystemInfo собирается здесь из готового профиля (в исходнике — сразу
   // после создания pluginManager; сайд-эффектов чтения профиля тут уже нет).
   const systemInfoContent = buildSystemInfo(config, baseDir, profile.compress());
@@ -160,6 +176,7 @@ export async function setupWorkspacePhase(
     skillsModule,
     toolRegistry,
     pluginManager,
+    draftHost,
     systemInfoPrompt,
   };
 }

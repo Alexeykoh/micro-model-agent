@@ -234,7 +234,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "updater.enabled", "updater.checkOnStart", "updater.autoInstall", "updater.intervalMs"] },
   ],
   plugins: [
-    { id: "plugins.registry", titleKey: "web.settings.sec.plugins.registry", descKey: "web.settings.sec.plugins.registry.desc", keys: ["plugins.disabled"] },
+    { id: "plugins.registry", titleKey: "web.settings.sec.plugins.registry", descKey: "web.settings.sec.plugins.registry.desc", keys: ["plugins.disabled", "plugins.maxDrafts"] },
     { id: "plugins.lsp", titleKey: "web.settings.sec.plugins.lsp", descKey: "web.settings.sec.plugins.lsp.desc", keys: ["lsp.enabled", "lsp.offline"] },
   ],
 };

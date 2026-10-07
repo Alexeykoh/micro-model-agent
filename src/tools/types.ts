@@ -159,6 +159,12 @@ export interface ToolContext {
    * на legacy readline-путь.
    */
   promptIO?: import("./prompt-io").PromptIO;
+  /**
+   * Хост черновиков capabilities (`define_capability`). Ставится bootstrap'ом;
+   * в тестах и headless без blackboard — undefined, и тул честно отвечает, что
+   * недоступен. Узкий интерфейс: контекст тулов не знает про загрузчик плагинов.
+   */
+  pluginDrafts?: import("../modules/plugins/drafts").DraftHost;
 }
 
 /** Результат тула: успех, вывод, вложения, артефакты. */
