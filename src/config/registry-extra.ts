@@ -88,6 +88,34 @@ function strOpt(
   return str(key, domain, get, set);
 }
 
+/**
+ * Необязательная string-ссылка (модель/провайдер) с выпадающим списком.
+ * `allowEmpty` — пустой выбор UI означает «использовать активное»; `set`
+ * чистит значение в undefined. `reconfigure: false` — потребители читают
+ * конфиг живьём при построении провайдера.
+ */
+function strRef(
+  key: string,
+  domain: string,
+  optionsSource: "models" | "providers",
+  get: (c: AppConfig) => unknown,
+  set: (c: AppConfig, v: unknown) => void,
+  extraValidate?: ConfigKeyDef["extraValidate"],
+): ConfigKeyDef {
+  return {
+    key,
+    aliases: [],
+    domain,
+    valueType: "string",
+    reconfigure: false,
+    allowEmpty: true,
+    editor: { kind: "select", optionsSource },
+    get,
+    set,
+    extraValidate,
+  };
+}
+
 /** Фабрика json-дефа с опц. валидацией и редактором. */
 function json(
   key: string,
@@ -161,6 +189,37 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
   int("provider.maxCompletionTokens", "provider", 512, 128000, 1024, true,
     (c) => c.provider.maxCompletionTokens ?? 8192,
     (c, v) => { c.provider.maxCompletionTokens = v as number; }),
+
+  strRef("orchestrator.model", "provider", "models",
+    (c) => c.orchestrator?.model ?? "",
+    (c, v) => {
+      const s = String(v).trim();
+      c.orchestrator = { ...(c.orchestrator ?? DEFAULTS.orchestrator), model: s ? s : undefined };
+    }),
+  strRef("orchestrator.provider", "provider", "providers",
+    (c) => {
+      const p = c.orchestrator?.provider;
+      if (!p) return "";
+      if (typeof p === "string") return p;
+      return p.active ?? p.type ?? "";
+    },
+    (c, v) => {
+      const s = String(v).trim();
+      c.orchestrator = { ...(c.orchestrator ?? DEFAULTS.orchestrator), provider: s ? s : undefined };
+    },
+    (c, v) => {
+      const s = String(v).trim();
+      if (!s) return null;
+      const entries = c.provider.entries ?? [];
+      if (entries.length === 0) return null;
+      const found = entries.some((e) => (e.label || e.type) === s || e.type === s);
+      return found ? null : "invalid";
+    }),
+  int("orchestrator.contextWindow", "provider", 1024, 2000000, 1024, false,
+    (c) => c.orchestrator?.contextWindow ?? 32768,
+    (c, v) => {
+      c.orchestrator = { ...(c.orchestrator ?? DEFAULTS.orchestrator), contextWindow: v as number };
+    }),
 
   share("contextBudget.compactionThreshold", "budget", false,
     (c) => c.contextBudget.compactionThreshold,
@@ -681,7 +740,7 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       kind: "table",
       columns: [
         { key: "name" },
-        { key: "model" },
+        { key: "model", optionsSource: "models" },
         { key: "tool_tags", array: true },
         { key: "max_attempts", type: "number", optional: true },
         { key: "description", optional: true },

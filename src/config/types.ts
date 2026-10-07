@@ -119,7 +119,12 @@ export interface PricingConfig {
 
 export interface OrchestratorConfig {
   model?: string;
-  provider?: ProviderConfig;
+  /**
+   * Провайдер оркестратора: полный конфиг (entries[]/легаси) либо имя записи
+   * `provider.entries[]` (резолвится `resolveProviderRef`). Пусто — активный
+   * провайдер агента.
+   */
+  provider?: ProviderConfig | string;
   /** Окно контекста модели оркестратора (дефолт 32768; запись перекрывает). */
   contextWindow?: number;
 }
@@ -495,11 +500,11 @@ export interface CriticConfig {
   enabled: boolean;
   /**
    * Выделенный провайдер критика (Phase 2). Полный конфиг провайдера — entries[]
-   * или legacy {type,baseUrl,apiKey} — резолвится через ProviderManager, как
-   * MoE-оркестратор. Используется только при заданном `model`; иначе критик
-   * делит активный провайдер (поведение v1).
+   * или legacy {type,baseUrl,apiKey} — либо имя записи `provider.entries[]`
+   * (резолвится `resolveProviderRef`). Используется только при заданном
+   * `model`; иначе критик делит активный провайдер (поведение v1).
    */
-  provider?: ProviderConfig;
+  provider?: ProviderConfig | string;
   /** Выделенная модель критика. Не задана — активная модель. */
   model?: string;
   /**

@@ -4,6 +4,29 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.27.0] - 2026-10-07
+
+MoE is now usable out of the box: `moe.enabled: true` starts on the active
+model instead of silently falling back when no planner model is set, the
+planner keys are configurable from `/config` and Web UI, and model/provider
+references render as dropdowns instead of free-text/JSON fields.
+
+### Added
+
+- **Orchestrator config keys** (`src/config/registry-extra.ts`): `orchestrator.model`, `orchestrator.provider`, `orchestrator.contextWindow` (domain `provider`). Previously reachable only by hand-editing `config.json`; now in `/config`, `mma config set` and Web UI settings (Agent → Mixture of experts).
+- **Dynamic `select` editor** (`src/config/registry.ts`, `src/modules/webui/assets/js/settings/{controls,editors}.ts`): `ConfigEditorSpec.kind: "select"` with `optionsSource: "models" | "providers"` renders a dropdown fed by the live model/provider lists, with text-input fallback when the list is unavailable. Applied to `critic.model`, `orchestrator.model` and the `experts[*].model` table column.
+- **`resolveProviderRef`** (`src/modules/providers/resolve-ref.ts`): resolves a provider name (`provider.entries[]` label/type) to its entry.
+- **Per-expert models** (`src/modules/execution/expert-provider.ts`): `experts[*].model` now takes effect — an expert whose model differs from the active one runs on a dedicated provider built on the active provider (`buildManagedProvider`); a matching/empty model reuses the shared provider, a build error fails open. Applies both to MoE subtasks and to the `subagent` tool called directly with `expert_tag`.
+
+### Changed
+
+- **Shared managed-provider builder** (`src/modules/providers/managed.ts`): the ProviderManager-based builder (per-entry contextWindow/retry/rateLimits + failover) is extracted and reused by the MoE orchestrator, the critic and per-expert providers instead of being duplicated in three places.
+
+- **MoE default-model fallback** (`src/llm/orchestrator.ts`, `src/core/agent-moe.ts`): `OrchestratorClient` reuses the active agent provider when `orchestrator.model` is unset, and builds a dedicated provider on the active provider when `orchestrator.model` differs — so enabling MoE no longer requires hand-configuring a planner model.
+- **`critic.provider` / `orchestrator.provider`** (`src/config/types.ts`, `src/modules/critic/provider.ts`): accept a provider name string (reference) as well as a full `ProviderConfig`; the Web UI shows a provider dropdown.
+- **`ConfigKeyDef.allowEmpty`** (`src/config/registry.ts`): optional string keys accept an empty value (clears to unset), so a dropdown can restore "use active".
+- **Cert MoE scenarios** (`src/modules/certification/scenarios.ts`): dropped the `orchestrator: { model: "" }` override that disabled MoE and let the file-level checks pass without ever exercising the MoE path.
+
 ## [2.26.0] - 2026-10-07
 
 Web UI polish: the sidebar now has a fixed width with the detail panel on the

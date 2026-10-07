@@ -123,7 +123,7 @@ bun run mma model cert-list                       # все сертификац�
 |----|----------|------------|----------|
 | `5.1-moe-basic` | MoE маршрутизация | Создать 2 файла параллельно через MoE | оба файла созданы + содержимое |
 
-Требует настроенный orchestrator model. Сценарий сам включает `moe.enabled: true` через `config:` override.
+Требует активного провайдера/модели. Сценарий сам включает `moe.enabled: true` через `config:` override; при пустом `orchestrator.model` MoE стартует на активной модели агента (fallback), поэтому отдельная orchestrator-модель не обязательна.
 
 ### Skip (пропущены) — 1 сценарий
 
@@ -270,7 +270,7 @@ fixtures:
 
 2. **Security-тесты** — теперь работают с per-scenario config. Не нужно включать `security.enabled` в глобальном конфиге. Каждый security-сценарий сам включает нужные модули через `config:` override.
 
-3. **MoE-тесты** — требуют настроенного orchestrator model. Сценарий включает `moe.enabled: true` через `config:` override, но orchestrator model берётся из базового конфига.
+3. **MoE-тесты** — требуют активного провайдера. Сценарий включает `moe.enabled: true` через `config:` override; `orchestrator.model` при пустом значении наследует активную модель агента (fallback), отдельная orchestrator-модель опциональна.
 
 4. **Network/browser-тесты** — требуют реального доступа в интернет и Playwright. На LM Studio (localhost) это работает, если Playwright установлен.
 
@@ -293,7 +293,7 @@ fixtures:
 - [ ] `bun run mma "hello" --exit-on-complete` работает (Smoke test)
 - [ ] Для image: `docs/testing/fixtures/test.png` существует
 - [ ] Для browser: Playwright установлен (`npx playwright install chromium`)
-- [ ] Для moe: настроен orchestrator model в конфиге
+- [ ] Для moe: настроен активный провайдер/модель (отдельная orchestrator-модель опциональна)
 
 ## Частые ошибки
 

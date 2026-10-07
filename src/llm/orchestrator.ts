@@ -4,16 +4,29 @@ import type { ProviderConfig, RateLimitConfig, RetryConfig } from "../config/typ
 import type { Logger } from "../logger/app-logger";
 import type { MoEPlan } from "../modules/execution/types";
 import type { OrchestratorResult, VerifyInput } from "./types";
-import { ProviderManager } from "../modules/providers/manager";
-import { FallbackProvider } from "../modules/providers/fallback";
+import { buildManagedProvider } from "../modules/providers/managed";
 import { jsonrepair } from "jsonrepair";
 import { parseChunks } from "./response";
 
 /** Конфиг оркестратора: модель, провайдер, ретраи, эксперты. */
 export interface OrchestratorConfig {
   model?: string;
-  /** Полный конфиг провайдера — entries[] или легаси {type,baseUrl,apiKey}. */
-  provider?: ProviderConfig;
+  /**
+   * Полный конфиг провайдера — entries[] или легаси {type,baseUrl,apiKey} —
+   * либо имя записи `provider.entries[]` (резолвится вызывающим до конструктора).
+   */
+  provider?: ProviderConfig | string;
+  /**
+   * Модель активного агента. MoE не отключается молча при пустом
+   * `orchestrator.model` — оркестратор стартует на активной модели.
+   */
+  fallbackModel?: string;
+  /**
+   * Конфиг активного провайдера агента. Нужен, когда задан `orchestrator.model`
+   * без `orchestrator.provider`: позволяет построить провайдер на другой модели,
+   * не требуя дублировать провайдера вручную.
+   */
+  fallbackProvider?: ProviderConfig;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
   /** Запасное окно контекста, если запись провайдера его не задаёт. */
@@ -131,49 +144,58 @@ export class OrchestratorClient {
   ) {
     this.config = config;
     this.getSessionId = opts?.getSessionId;
-    if (!config.model) return;
 
-    if (config.provider) {
-      this.provider = this.buildManagedProvider(config);
-    } else if (defaultProvider) {
-      this.provider = defaultProvider;
-    } else {
+    const explicitModel = config.model?.trim();
+    // Fallback на активную модель агента: включённый `moe.enabled` без
+    // `orchestrator.model` больше не выключает MoE молча.
+    const model = explicitModel || config.fallbackModel?.trim();
+    const explicitProvider = config.provider;
+
+    if (explicitProvider) {
+      // Выделенный провайдер оркестратора (entries[]/легаси/имя-запись).
       this.provider = this.buildManagedProvider({
         ...config,
+        model,
+        provider: explicitProvider,
+      });
+    } else if (explicitModel && explicitModel !== config.fallbackModel?.trim() && config.fallbackProvider) {
+      // Выделенная модель на активном провайдере: строим провайдер с другой
+      // моделью, не требуя дублировать `orchestrator.provider`.
+      this.provider = this.buildManagedProvider({
+        ...config,
+        model: explicitModel,
+        provider: config.fallbackProvider,
+      });
+    } else if (defaultProvider) {
+      // Нет выделенной модели/провайдера — делим активный провайдер агента.
+      this.provider = defaultProvider;
+    } else if (model) {
+      // Нет ни провайдера, ни активного: last-resort локальный бэкенд.
+      this.provider = this.buildManagedProvider({
+        ...config,
+        model,
         provider: { type: "openai-compat", baseUrl: DEFAULT_BASE_URL },
       });
     }
   }
 
   /**
-   * Строит провайдер оркестратора через ProviderManager: учитываются
-   * per-entry contextWindow/retry/rateLimits и failover-записи (легаси
-   * {type,baseUrl,apiKey} менеджер нормализует). Раньше провайдер строился
-   * напрямую с хардкодом окна 32768 — без ретраев/лимитов/failover вовсе.
+   * Строит провайдер оркестратора через общий `buildManagedProvider`
+   * (`src/modules/providers/managed.ts`): per-entry contextWindow/retry/
+   * rateLimits и failover-записи (легаси {type,baseUrl,apiKey} менеджер
+   * нормализует).
    */
   private buildManagedProvider(config: OrchestratorConfig): LLMProvider {
-    const providerCfg = config.provider!;
-    const manager = new ProviderManager(
-      { ...providerCfg, baseUrl: providerCfg.baseUrl || DEFAULT_BASE_URL },
-      {
-        contextWindow: config.contextWindow ?? DEFAULT_ORCH_CONTEXT_WINDOW,
-        retry: config.retry,
-        rateLimits: config.rateLimits,
-        getSessionId: this.getSessionId,
-        logger: config.logger,
-      },
-    );
-    manager.setModel(config.model!);
-
-    let provider: LLMProvider = manager.active;
-    if (providerCfg.fallback && manager.listNames().length > 1) {
-      provider = new FallbackProvider(manager, (from, to, error) => {
-        config.logger?.warn(
-          `orchestrator provider failover: ${from} -> ${to} (${error.message.slice(0, 120)})`,
-        );
-      });
-    }
-    return provider;
+    const providerCfg = config.provider as ProviderConfig;
+    const model = config.model as string;
+    return buildManagedProvider(providerCfg, model, {
+      contextWindow: config.contextWindow ?? DEFAULT_ORCH_CONTEXT_WINDOW,
+      retry: config.retry,
+      rateLimits: config.rateLimits,
+      getSessionId: this.getSessionId,
+      logger: config.logger,
+      label: "orchestrator",
+    });
   }
 
   /**

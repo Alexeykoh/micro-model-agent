@@ -32,6 +32,46 @@ function textInput(label: string, value: string): HTMLInputElement {
   return input;
 }
 
+// Dropdown fed by a *live* source (`models`/`providers` from `/api`), not by a
+// static `enumValues`. An empty selection posts `""` (unset → use active). A
+// stored value missing from the list stays selectable. No options available
+// (boot / 503) degrades to a plain text input so the user is never trapped.
+function selectEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElement {
+  const source = editor.optionsSource;
+  const opts: string[] = source === "providers" ? ctx.providerOptions || [] : ctx.modelOptions || [];
+  const current = typeof value === "string" ? value : "";
+  if (!opts.length) {
+    const input = textInput(ctx.label, current);
+    input.addEventListener("change", () => ctx.post(input.value));
+    return input;
+  }
+  const sel = el("select");
+  sel.setAttribute("aria-label", ctx.label);
+  const none = el("option", "", ctx.emptyLabel || "—");
+  none.value = "";
+  sel.appendChild(none);
+  const seen = new Set([""]);
+  opts.forEach((v: string) => {
+    if (seen.has(v)) return;
+    seen.add(v);
+    const o = el("option", "", v);
+    o.value = v;
+    if (v === current) o.selected = true;
+    sel.appendChild(o);
+  });
+  if (current && !seen.has(current)) {
+    const o = el("option", "", current);
+    o.value = current;
+    o.selected = true;
+    sel.appendChild(o);
+  }
+  // Set explicitly: some DOM implementations don't reflect per-option
+  // `selected` set before the option is attached to the select.
+  sel.value = current || "";
+  sel.addEventListener("change", () => ctx.post(sel.value));
+  return sel;
+}
+
 // `def`: registry entry ({valueType, enum, min, max, step, readOnly}).
 // `value`: current config value at the key (`getPath` result).
 // `ctx`: { label, enumLabel(v), post(rawValue) } — `post` is `settings.js`
@@ -75,6 +115,9 @@ export function controlFor(def: Dict, value: unknown, ctx: Dict): HTMLElement {
     return input;
   }
   const editor = def.editor;
+  if (editor && editor.kind === "select") {
+    return selectEditor(value, ctx, editor);
+  }
   if (editor && editor.kind === "tags" && (def.valueType === "list" || def.valueType === "json")) {
     return tagsEditor(value, ctx, editor);
   }
@@ -152,7 +195,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "reasoning.effort", titleKey: "web.settings.sec.reasoning.effort", descKey: "web.settings.sec.reasoning.effort.desc", keys: ["reasoning.mode", "reasoning.min", "reasoning.max", "reasoning.baseline", "reasoning.overrideCooldown"] },
   ],
   agent: [
-    { id: "agent.moe", titleKey: "web.settings.sec.agent.moe", descKey: "web.settings.sec.agent.moe.desc", keys: ["moe.enabled", "moe.maxReplanCycles", "experts"] },
+    { id: "agent.moe", titleKey: "web.settings.sec.agent.moe", descKey: "web.settings.sec.agent.moe.desc", keys: ["moe.enabled", "moe.maxReplanCycles", "orchestrator.model", "orchestrator.provider", "orchestrator.contextWindow", "experts"] },
     { id: "agent.critic", titleKey: "web.settings.sec.agent.critic", descKey: "web.settings.sec.agent.critic.desc", keys: ["critic.enabled", "critic.model", "critic.provider", "critic.tools", "critic.maxCalls", "critic.maxRepairCycles", "critic.timeoutMs"] },
     { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "tools.grepEngine", "skills.budget"] },
     { id: "agent.subagent", titleKey: "web.settings.sec.agent.subagent", descKey: "web.settings.sec.agent.subagent.desc", keys: ["subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt", "subagent.timeoutMs"] },

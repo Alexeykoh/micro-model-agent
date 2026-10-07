@@ -551,7 +551,6 @@ const SCENARIO_DEFS: ScenarioDef[] = [
       "Create two files in the working directory root (no subdirectories) in parallel: file-a.txt with content 'alpha' and file-b.txt with content 'beta'. Verify both exist.",
     config: {
       moe: { enabled: true },
-      orchestrator: { model: "" },
       experts: {
         code: { model: "", tool_tags: ["file", "code"], max_attempts: 3 },
       },
@@ -573,7 +572,6 @@ const SCENARIO_DEFS: ScenarioDef[] = [
       "Create three files in the working directory root (no subdirectories). These are independent tasks that must run in parallel: wave-one.txt containing 'w1-done', wave-two.txt containing 'w2-done', and wave-three.txt containing 'w3-done'. After all three exist, report completion.",
     config: {
       moe: { enabled: true },
-      orchestrator: { model: "" },
       experts: {
         code: { model: "", tool_tags: ["file", "code"], max_attempts: 3 },
       },
@@ -597,7 +595,6 @@ const SCENARIO_DEFS: ScenarioDef[] = [
       "Two sequential steps. Step 1: create data.txt in the working directory root containing the exact token DATA_TOKEN_XYZ. Step 2 (depends on step 1 — it reads data.txt): create summary.txt in the working directory root that contains the exact token DATA_TOKEN_XYZ copied from data.txt. Step 2 must only run after data.txt exists.",
     config: {
       moe: { enabled: true },
-      orchestrator: { model: "" },
       experts: {
         code: { model: "", tool_tags: ["file", "code"], max_attempts: 3 },
       },

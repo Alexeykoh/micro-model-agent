@@ -11,6 +11,7 @@ import { getSessionSecurityConfig } from "../modules/security/session-isolation"
 import { ArtifactStore } from "../modules/artifacts/store";
 import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
 import { getExpertConfig } from "../config/experts";
+import { resolveExpertProvider } from "../modules/execution/expert-provider";
 
 /** Фиксированный системный промпт (KV-cache дружит при stableSystemPrompt). */
 export const SUBAGENT_SYSTEM_PROMPT_TEMPLATE = `You are a sub-agent working on a specific task. You have your own context window and tool set.
@@ -141,7 +142,8 @@ export const subagentTool: ToolDefinition = {
     // модель, передав expert_tag, получала дефолтный набор (наблюдалось:
     // expert_tag:"web" → ноль фильтрации → сабтаск ушёл в таймаут).
     let toolTags = explicitTags;
-    if ((!toolTags || toolTags.length === 0) && expertTag) {
+    let expertModel: string | undefined;
+    if (expertTag) {
       const expert = getExpertConfig(ctx.config, expertTag);
       if (!expert) {
         const known = Object.keys(ctx.config.experts ?? {});
@@ -150,7 +152,8 @@ export const subagentTool: ToolDefinition = {
           output: `[SECURITY BLOCKED] Unknown expert_tag "${expertTag}". Known experts: [${known.join(", ") || "none"}]. Pass a configured expert tag or explicit tool_tags.`,
         };
       }
-      toolTags = expert.tool_tags;
+      expertModel = expert.model;
+      if (!toolTags || toolTags.length === 0) toolTags = expert.tool_tags;
     }
 
     if (!ctx.llmProvider || !ctx.toolExecutor) {
@@ -159,6 +162,10 @@ export const subagentTool: ToolDefinition = {
         output: t("tool.subagent_cannot_run"),
       };
     }
+
+    // Модель эксперта (если задан expert_tag) исполняется на выделенном
+    // провайдере поверх активного; иначе — общий провайдер родителя.
+    const provider = resolveExpertProvider(ctx.config, expertModel, ctx.llmProvider, ctx.logger);
 
     // Оборонительный гард: запрошенные tool_tags ни с чем не мэтчатся — у
     // субагента ноль тулов, и он галлюцинирует вместо действий. Предупредить
@@ -200,7 +207,7 @@ export const subagentTool: ToolDefinition = {
       // в результате (см. MoE executor / Router).
       const scopeCollector = new ScopeDenialCollector();
       subPluginManager.register(scopeCollector.plugin, "builtin");
-      const hallucinationDetector = new HallucinationDetector(ctx.baseDir, ctx.llmProvider);
+      const hallucinationDetector = new HallucinationDetector(ctx.baseDir, provider);
 
       ctx.toolExecutor.setScope(appliedScope);
       // Cleanup на исполнителе — рестор скоупа при таймауте/аборте, даже если
@@ -230,7 +237,7 @@ export const subagentTool: ToolDefinition = {
 
       const subDeps = {
         config: subConfig,
-        llmProvider: ctx.llmProvider,
+        llmProvider: provider,
         toolExecutor: ctx.toolExecutor,
         pluginManager: subPluginManager,
         contextManager: subContextManager,

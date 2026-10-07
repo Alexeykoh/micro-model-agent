@@ -182,9 +182,43 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
     }
   };
 
-  const inputFor = (row: TableRow, col: Dict): HTMLInputElement => {
-    const input = el("input");
+  const inputFor = (row: TableRow, col: Dict): HTMLInputElement | HTMLSelectElement => {
     const v = row.val[col.key];
+    // Column whose value is a reference to a live list (models/providers):
+    // render a dropdown so the user picks an id instead of typing it.
+    if (col.optionsSource) {
+      const source = col.optionsSource;
+      const opts: string[] = source === "providers" ? ctx.providerOptions || [] : ctx.modelOptions || [];
+      const cur = v == null ? "" : String(v);
+      const sel = el("select");
+      const none = el("option", "", "—");
+      none.value = "";
+      sel.appendChild(none);
+      const seen = new Set([""]);
+      opts.forEach((o: string) => {
+        if (seen.has(o)) return;
+        seen.add(o);
+        const op = el("option", "", o);
+        op.value = o;
+        if (o === cur) op.selected = true;
+        sel.appendChild(op);
+      });
+      if (cur && !seen.has(cur)) {
+        const op = el("option", "", cur);
+        op.value = cur;
+        op.selected = true;
+        sel.appendChild(op);
+      }
+      sel.value = cur || "";
+      sel.setAttribute("aria-label", `${row.name}: ${ctx.fieldLabel(col.key)}`);
+      sel.addEventListener("change", () => {
+        if (sel.value) row.val[col.key] = sel.value;
+        else delete row.val[col.key];
+        sync();
+      });
+      return sel;
+    }
+    const input = el("input");
     if (col.type === "bool") {
       input.type = "checkbox";
       input.checked = v === true;
@@ -253,7 +287,7 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
     nameInput.value = "";
     draw();
     const last = body.lastElementChild;
-    const first = last && last.querySelectorAll<HTMLInputElement>("input")[1];
+    const first = last && last.querySelectorAll<HTMLElement>("input,select")[1];
     if (first) first.focus();
   };
   nameInput.addEventListener("keydown", (e) => {

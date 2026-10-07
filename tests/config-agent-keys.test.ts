@@ -46,3 +46,47 @@ describe("registry: MoE + critic keys", () => {
     }
   });
 });
+
+describe("registry: orchestrator keys + provider references", () => {
+  it("exposes the orchestrator planner keys (empty by default)", () => {
+    const c = cfg();
+    expect(getConfigValue(c, "orchestrator.model").value).toBe("");
+    expect(getConfigValue(c, "orchestrator.provider").value).toBe("");
+    expect(getConfigValue(c, "orchestrator.contextWindow").value).toBe(32768);
+  });
+
+  it("writes orchestrator.model and clears it on empty (allowEmpty)", () => {
+    const c = cfg();
+    expect(setConfigValue(c, "orchestrator.model", "big-model").ok).toBe(true);
+    expect(c.orchestrator.model).toBe("big-model");
+    // Empty selection means "use the active model".
+    expect(setConfigValue(c, "orchestrator.model", "").ok).toBe(true);
+    expect(c.orchestrator.model).toBeUndefined();
+  });
+
+  it("validates orchestrator.provider against provider.entries", () => {
+    const c = cfg();
+    c.provider.entries = [{ type: "openai-compat", label: "local", baseUrl: "http://x/v1" }];
+    expect(setConfigValue(c, "orchestrator.provider", "local").ok).toBe(true);
+    expect(c.orchestrator.provider).toBe("local");
+    expect(setConfigValue(c, "orchestrator.provider", "missing").ok).toBe(false);
+    expect(setConfigValue(c, "orchestrator.provider", "").ok).toBe(true);
+    expect(c.orchestrator.provider).toBeUndefined();
+  });
+
+  it("critic.model accepts empty (use active model)", () => {
+    const c = cfg();
+    expect(setConfigValue(c, "critic.model", "judge").ok).toBe(true);
+    expect(c.critic.model).toBe("judge");
+    expect(setConfigValue(c, "critic.model", "").ok).toBe(true);
+    expect(c.critic.model).toBeUndefined();
+  });
+
+  it("critic.provider accepts a provider name reference", () => {
+    const c = cfg();
+    c.provider.entries = [{ type: "openai-compat", label: "judge", baseUrl: "http://j/v1" }];
+    expect(setConfigValue(c, "critic.provider", "judge").ok).toBe(true);
+    expect(c.critic.provider).toBe("judge");
+    expect(getConfigValue(c, "critic.provider").value).toBe("judge");
+  });
+});

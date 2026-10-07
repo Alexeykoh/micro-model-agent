@@ -50,8 +50,14 @@ export type ConfigRangeReason = "range" | "combined";
  * regex с запятыми). Без значения — plain-input (list) или JSON-textarea (json).
  */
 export interface ConfigEditorSpec {
-  /** `tags` — чипсы строк; `checkboxes` — мультивыбор; `table` — строки записей. */
-  kind: "tags" | "checkboxes" | "table";
+  /**
+   * `tags` — чипсы строк; `checkboxes` — мультивыбор; `table` — строки записей;
+   * `select` — выпадающий список, наполняемый из живого источника
+   * (`optionsSource`), а не из статического `enumValues`.
+   */
+  kind: "tags" | "checkboxes" | "table" | "select";
+  /** Живой источник опций для `select` (модели/провайдеры из `/api`). */
+  optionsSource?: "models" | "providers";
   /** Допустимые значения для `checkboxes`. */
   options?: readonly string[];
   /** Колонки для `table`. Первая колонка — ключ записи. */
@@ -62,6 +68,8 @@ export interface ConfigEditorSpec {
     optional?: boolean;
     /** Текстовая колонка со значением-списком (правится через запятую). */
     array?: boolean;
+    /** Колонка-`select`, наполняемая из живого источника опций. */
+    optionsSource?: "models" | "providers";
   }>;
   /** Свободный хинт в добавлялке строк (напр. пример regex). */
   placeholder?: string;
@@ -80,6 +88,12 @@ export interface ConfigKeyDef {
   step?: number;
   reconfigure: boolean;
   readOnly?: boolean;
+  /**
+   * Разрешает пустое значение для `string` (пустая строка → сброс в undefined
+   * через `set`). Нужно необязательным ссылкам (модель/провайдер), где пустой
+   * выбор UI означает «использовать активное».
+   */
+  allowEmpty?: boolean;
   /** GUI-хинт рендера значений `list`/`json` (см. {@link ConfigEditorSpec}). */
   editor?: ConfigEditorSpec;
   get(config: AppConfig): unknown;
@@ -331,6 +345,8 @@ const DEFINITIONS: ConfigKeyDef[] = [
     domain: "agent",
     valueType: "string",
     reconfigure: true,
+    allowEmpty: true,
+    editor: { kind: "select", optionsSource: "models" },
     get: (c) => c.critic?.model ?? "",
     set: (c, v) => {
       const s = String(v).trim();
@@ -352,26 +368,30 @@ const DEFINITIONS: ConfigKeyDef[] = [
     key: "critic.provider",
     aliases: [],
     domain: "agent",
-    valueType: "json",
+    valueType: "string",
     reconfigure: true,
-    get: (c) => c.critic?.provider ?? {},
+    allowEmpty: true,
+    editor: { kind: "select", optionsSource: "providers" },
+    get: (c) => {
+      const p = c.critic?.provider;
+      if (!p) return "";
+      if (typeof p === "string") return p;
+      return p.active ?? p.type ?? "";
+    },
     set: (c, v) => {
-      const rec = v as Record<string, unknown>;
+      const s = String(v).trim();
       c.critic = {
         ...(c.critic ?? DEFAULTS.critic),
-        provider: Object.keys(rec).length > 0
-          ? (rec as unknown as AppConfig["critic"]["provider"])
-          : undefined,
+        provider: s ? s : undefined,
       };
     },
-    extraValidate: (_c, v) => {
-      if (!v || typeof v !== "object" || Array.isArray(v)) return "invalid";
-      const rec = v as Record<string, unknown>;
-      if (rec.type !== undefined && typeof rec.type !== "string") return "invalid";
-      if (rec.baseUrl !== undefined && typeof rec.baseUrl !== "string") return "invalid";
-      if (rec.active !== undefined && typeof rec.active !== "string") return "invalid";
-      if (rec.entries !== undefined && !Array.isArray(rec.entries)) return "invalid";
-      return null;
+    extraValidate: (c, v) => {
+      const s = String(v).trim();
+      if (!s) return null;
+      const entries = c.provider.entries ?? [];
+      if (entries.length === 0) return null;
+      const found = entries.some((e) => (e.label || e.type) === s || e.type === s);
+      return found ? null : "invalid";
     },
   },
   {
@@ -494,7 +514,10 @@ export function parseConfigValue(def: ConfigKeyDef, raw: string): ParseResult {
   const trimmed = raw.trim();
   switch (def.valueType) {
     case "string":
-      return trimmed.length > 0 ? { ok: true, value: trimmed } : { ok: false, reason: "invalid" };
+      if (trimmed.length === 0) {
+        return def.allowEmpty ? { ok: true, value: "" } : { ok: false, reason: "invalid" };
+      }
+      return { ok: true, value: trimmed };
     case "bool":
       return parseBool(trimmed);
     case "enum": {
