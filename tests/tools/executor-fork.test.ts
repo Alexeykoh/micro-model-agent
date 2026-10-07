@@ -80,6 +80,41 @@ describe("ToolExecutor.fork", () => {
     expect(result.output).toContain('"model":"b"');
   });
 
+  it("serializes plugin hooks across sibling forks (shared hook lock)", async () => {
+    const live = { current: {} };
+    const ctx = makeCtx(live);
+    let active = 0;
+    let maxActive = 0;
+    const plugins = {
+      getAllPlugins: () => [
+        {
+          name: "stateful",
+          onBeforeTool: async () => {
+            active++;
+            maxActive = Math.max(maxActive, active);
+            await new Promise((r) => setTimeout(r, 15));
+            active--;
+            return true;
+          },
+        },
+      ],
+    } as any;
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "noop",
+      description: "noop",
+      parameters: { type: "object", properties: {} },
+      handler: async () => ({ success: true, output: "ok" }),
+    });
+    const parent = new ToolExecutor(registry, ctx, plugins);
+    await Promise.all([
+      parent.fork().execute({ id: "1", name: "noop", arguments: {} }),
+      parent.fork().execute({ id: "2", name: "noop", arguments: {} }),
+    ]);
+    // Hooks never overlapped: the shared lock made dispatch mutually exclusive.
+    expect(maxActive).toBe(1);
+  });
+
   it("shares the memo: a fork's non-cacheable run invalidates the parent cache", async () => {
     const live = { current: {} };
     const ctx = makeCtx(live);

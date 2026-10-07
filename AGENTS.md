@@ -962,9 +962,16 @@ read-only петля без стопа, рассинхрон провайдер�
   serial → конкурентное исполнение через `fork()` с капом `security.rateLimits.maxParallelTasks`
   (default 5) → финализация serial в исходном порядке. Одиночные и не-параллелизуемые — прежний
   serial-путь. Порядок `role:"tool"`-сообщений и UI-событий детерминирован.
+- **Плагин-хуки сериализованы** (`src/tools/executor.ts`, `AsyncLock`): `onBeforeTool`/`onAfterTool`
+  идут под общим FIFO-локом (один на корневой executor, наследуется форками) — stateful-плагины
+  (execution stuck-detector, lint-on-write, LSP) не гоняются конкурентно между сиблингами; тело
+  тула остаётся конкурентным. Лок берётся только при наличии хука (иначе не сдвигаем старт хендлера).
+- **MoE-сабтаски изолированы** (`src/modules/execution/moe-executor.ts`): каждая сабтаска бежит на
+  своём `fork()` — устранена гонка scope/recursionDepth между конкурентными волнами.
 - **Тесты**: `tests/core/tool-batch-parallel.test.ts` (перекрытие, порядок, кап, serial не-параллельных),
-  `tests/tools/executor-fork.test.ts` (изоляция, живые геттеры, общий мемо). Пре-существующая
-  конкуренция плагин-хуков в MoE-операциях — известное ограничение, не чинилось здесь.
+  `tests/tools/executor-fork.test.ts` (изоляция, живые геттеры, общий мемо, сериализация хуков),
+  `tests/core/subagent-parallel-e2e.test.ts` (реальный путь: registry→batch→fork→subagent handler с
+  `agentFactory`-швом, без живой модели).
 
 ### Current Version: 2.25.0
 

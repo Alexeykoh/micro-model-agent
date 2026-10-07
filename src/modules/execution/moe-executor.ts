@@ -138,6 +138,12 @@ async function executeSubtask(
     };
   }
 
+  // Изолированный исполнитель на сабтаску: волны MoE бегут конкурентно, а
+  // общий executor не конкурентно-безопасен (scope/recursionDepth/cleanup на
+  // общем ctx). Форк даёт каждой сабтаске свои — без гонок между волнами.
+  // `fork` опционален: тестовые/минимальные исполнители его не несут.
+  const subtaskExecutor = deps.toolExecutor.fork ? deps.toolExecutor.fork() : deps.toolExecutor;
+
   const allTools = deps.toolRegistry.getAll();
   const filteredTools = filterToolsByTags(allTools, expertConfig.tool_tags);
 
@@ -201,7 +207,7 @@ async function executeSubtask(
           baseDir: deps.baseDir,
           logger: deps.logger,
           llmProvider: deps.llmProvider,
-          toolExecutor: deps.toolExecutor,
+          toolExecutor: subtaskExecutor,
           sessionId: deps.sessionId || "moe",
         },
         subagentArgs,

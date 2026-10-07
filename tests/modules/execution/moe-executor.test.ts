@@ -183,6 +183,8 @@ describe("MoEExecutor executePlan", () => {
       execute: vi.fn(),
       getToolDefinitions: vi.fn().mockReturnValue([]),
       registry,
+      // Each subtask forks an isolated executor; the mock returns itself.
+      fork: vi.fn(() => mockToolExecutor),
     };
   });
 
