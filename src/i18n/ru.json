@@ -1516,7 +1516,7 @@
   "web.attach.remove": "удалить",
   "web.attach.only_images": "можно прикреплять только изображения",
   "web.attach.too_many": "слишком много изображений (максимум {max})",
-  "web.attach.too_large": "изображение слишком большое (максимум 6 МБ)",
+  "web.attach.too_large": "изображение слишком большое (максимум 50 МБ)",
   "web.attach.invalid": "некорректное изображение",
   "web.attach.read_failed": "не удалось прочитать изображение",
   "web.sessions.active": "активные",

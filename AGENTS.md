@@ -986,6 +986,13 @@ read-only петля без стопа, рассинхрон провайдер�
   сайдбара (`:has(.files-detail:not([hidden]))`), код переносится по строкам
   (`white-space: pre-wrap; overflow-wrap: anywhere`), чтобы длинные строки были читаемы.
 
+### Web Attachment Size (unreleased)
+
+- **До 10 вложений по 50 МБ**: клиент `MAX_IMAGE_BYTES` (`core/store/index.ts`) 6 → 50 МБ, `MAX_IMAGES`
+  3 → 10 (клиент, `webui/util.ts`, пример-плагин); сервер `MAX_IMAGE_DATA_URL_BYTES` (`webui/util.ts`)
+  6 → 70 МБ (base64 ≈4/3 файла + заголовок), `MAX_BODY_BYTES` (`webui/limits.ts`) 24 → 768 МБ
+  (вмещает 10 × 50 МБ в base64). i18n `web.attach.too_large` обновлён (en+ru).
+
 ### Current Version: 2.25.0
 
 ### Changelog

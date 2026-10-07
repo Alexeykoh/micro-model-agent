@@ -13,8 +13,8 @@ import type { Dict } from "./types.js";
 export { feed, tabs, settings, session };
 
 export const THEME_KEY = "mma-theme";
-export const MAX_IMAGES = 3;
-export const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+export const MAX_IMAGES = 10;
+export const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
 
 // Cross-module UI hooks, registered by `app.js` boot. Lets settings-level
 // writes refresh app-shell chrome (locale) without importing app - keeps the

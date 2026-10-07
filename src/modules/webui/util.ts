@@ -18,11 +18,11 @@ export { MAX_BODY_BYTES } from "./limits";
 /** Жёсткий кап текста одного сообщения, независимый от капа тела транспорта. */
 export const MAX_MESSAGE_CHARS = 32 * 1024;
 
-/** Максимум картинок на сообщение (по дизайну ≤3). */
-export const MAX_IMAGES = 3;
+/** Максимум картинок на сообщение (по дизайну ≤10). */
+export const MAX_IMAGES = 10;
 
-/** Максимум размера одного `data:image/...` URL (по дизайну ~6MB). */
-export const MAX_IMAGE_DATA_URL_BYTES = 6 * 1024 * 1024;
+/** Максимум размера одного `data:image/...` URL: файл до 50 МБ после base64 (≈4/3) + заголовок. */
+export const MAX_IMAGE_DATA_URL_BYTES = 70 * 1024 * 1024;
 
 /** Бросается из readBody при превышении капа (маппится в HTTP 413). */
 export class BodyTooLargeError extends Error {

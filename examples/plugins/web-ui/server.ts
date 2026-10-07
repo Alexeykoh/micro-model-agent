@@ -26,8 +26,8 @@ export interface WebUiAssets {
   js: string;
 }
 
-/** Max bytes accepted for a POST body (32KB text or 3×~6MB images + JSON overhead). */
-const MAX_BODY_BYTES = 24 * 1024 * 1024;
+/** Max bytes accepted for a POST body (32KB text or 10×50MB images + base64/JSON overhead). */
+const MAX_BODY_BYTES = 768 * 1024 * 1024;
 
 function isLoopback(host: string): boolean {
   return host === "127.0.0.1" || host === "localhost" || host === "::1";
