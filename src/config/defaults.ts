@@ -129,6 +129,12 @@ export const DEFAULTS: AppConfig = {
     respectGitignore: true,
     mapTokenBudget: 1500,
   },
+  // Ретенция изображений тулов (browser screenshot / attach_image) на сессию:
+  // последние 30 картинок или до 100 МБ, что наступит раньше.
+  images: {
+    maxCount: 30,
+    maxBytes: 104_857_600,
+  },
   browser: {
     enabled: true,
     headless: true,

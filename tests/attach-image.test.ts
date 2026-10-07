@@ -123,8 +123,11 @@ describe("attach_image tool", () => {
     expect(result.success).toBe(true);
     expect(result.output).toContain("attached");
 
-    // Verify the image was queued on the context manager
-    expect(ctx.contextManager!.hasPendingImages()).toBe(true);
+    // Единый путь: картинка возвращается в result.images — очередь контекста и
+    // персист заполняет tool-batch (queueToolImages), а не сам тул.
+    expect(result.images).toHaveLength(1);
+    expect(result.images![0].image_url.url.startsWith("data:image/")).toBe(true);
+    expect(ctx.contextManager!.hasPendingImages()).toBe(false);
   });
 
   it("should load a JPEG file", async () => {

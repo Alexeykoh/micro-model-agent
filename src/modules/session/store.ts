@@ -55,6 +55,8 @@ export interface SessionLogEntry {
   args?: Record<string, unknown>;
   content?: string;
   diff?: string;
+  /** Ref'ы сохранённых изображений тулов (для web replay). */
+  images?: import("./image-store").ToolImageRef[];
   success?: boolean;
   duration?: number;
   iteration?: number;

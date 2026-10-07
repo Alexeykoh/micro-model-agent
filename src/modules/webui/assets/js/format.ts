@@ -27,7 +27,6 @@ export const FILE_TOOLS = ["read_file", "write_file", "edit_file", "list_dir", "
 // Tools whose `path` argument points at a readable file the viewer can open.
 // `list_dir` is a directory, `delete_file`/`move_file` leave the file gone.
 export const OPENABLE_TOOLS = ["read_file", "write_file", "edit_file", "file_info"];
-export const IMAGE_TOOLS = ["attach_image", "browser"];
 export const LINK_TOOLS = ["web_fetch", "download_file"];
 
 export function categoryOf(name: string): string {

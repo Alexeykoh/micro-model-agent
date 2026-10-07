@@ -7,6 +7,11 @@ import type { Logger } from "../logger/app-logger";
 import { setAuditSessionDir } from "../modules/security/audit-log";
 import { sanitizeLogMessageTargeted } from "../modules/security/data-sanitizer";
 import { redactContextSecrets } from "./agent/context-log";
+import {
+  saveToolImage,
+  type ToolImageAsset,
+  type ToolImageRef,
+} from "../modules/session/image-store";
 
 /**
  * Тонкая обёртка над SessionManager: убирает повторяющиеся
@@ -188,13 +193,14 @@ export class SessionLogger {
   /**
    * Пишет результат тула (успех, вывод, diff, длительность).
    * @param call вызов; @param result результат; @param duration длительность, мс;
-   * @param iteration номер итерации.
+   * @param iteration номер итерации; @param imageRefs ref'ы сохранённых картинок.
    */
   logToolResult(
     call: ToolCall,
     result: { success: boolean; output: string; diff?: string },
     duration: number,
     iteration: number,
+    imageRefs?: ToolImageRef[],
   ): void {
     const caller = this.getCaller?.();
     this.session?.appendMessage({
@@ -213,11 +219,52 @@ export class SessionLogger {
       success: result.success,
       content: sanitizeLogMessageTargeted(result.output.slice(0, 1000)),
       diff: result.diff,
+      ...(imageRefs?.length ? { images: imageRefs } : {}),
       duration,
       iteration,
       provider: caller?.provider,
       model: caller?.model,
     });
+  }
+
+  /**
+   * Сохраняет полноразмерные ассеты тулов в `<sessionDir>/images/` с ротацией.
+   *
+   * Приватность: при включённом шифровании сессии на диск ничего не пишется —
+   * веб получает картинку inline (data URL), история — пометку «недоступно».
+   * Fail-open: ошибка записи одного ассета не роняет остальные и ход.
+   */
+  persistToolImages(
+    assets: ToolImageAsset[] | undefined,
+    limits: { maxCount: number; maxBytes: number } = { maxCount: 30, maxBytes: 104_857_600 },
+  ): ToolImageRef[] {
+    const dir = this.toolImageDir();
+    if (!dir || !assets?.length) return [];
+    return assets.flatMap((asset) => this.saveToolImageSafe(dir, asset, limits));
+  }
+
+  /** Каталог картинок активной сессии; null — нет сессии или включено шифрование. */
+  private toolImageDir(): string | null {
+    const session = this.session;
+    const meta = session?.getActiveMeta();
+    if (!session || !meta || session.isEncryptionEnabled?.()) return null;
+    return session.getSessionDirectory(meta.id);
+  }
+
+  /** Запись одного ассета; ошибка — warn и пустой результат (fail-open). */
+  private saveToolImageSafe(
+    dir: string,
+    asset: ToolImageAsset,
+    limits: { maxCount: number; maxBytes: number },
+  ): ToolImageRef[] {
+    try {
+      return [saveToolImage(dir, asset, limits)];
+    } catch (err) {
+      this.logger?.warn(
+        `failed to persist tool image (${asset.mime}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    }
   }
 
   /**

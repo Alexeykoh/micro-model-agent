@@ -396,18 +396,44 @@ body.light .codeblock { border: 1px solid var(--border); }
   margin-left: 26px; max-width: 360px; border-radius: 4px; overflow: hidden;
   background: var(--surface); border: 1px solid var(--border-2);
 }
-.imgcard .ph {
-  height: 150px; display: flex; align-items: center; justify-content: center;
-  color: var(--dim-c); font-size: 12px;
-  background:
-    linear-gradient(45deg, var(--checker-a) 25%, transparent 25%) -8px 0/16px 16px,
-    linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%) -8px 0/16px 16px,
-    linear-gradient(45deg, transparent 75%, var(--checker-a) 75%) -8px 0/16px 16px,
-    linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%) -8px 0/16px 16px,
-    var(--checker-base);
+.imgcard .imgthumb {
+  display: block; width: 100%; height: auto; min-height: 60px;
+  cursor: zoom-in; background: var(--surface);
 }
-body.light .imgcard .ph { background: var(--ph-light); }
 .imgcard .cap { padding: 6px 10px; color: var(--dim-a); font-size: 12px; }
+/* Файл вытеснен ротацией / чисткой: честная пометка вместо битой картинки. */
+.imgcard-missing {
+  margin-left: 26px; max-width: 360px; border-radius: 4px;
+  border: 1px dashed var(--border-2); background: var(--surface);
+  padding: 14px 10px; color: var(--dim-c); font-size: 12px;
+}
+.imgcard-missing .cap { padding: 4px 0 0; color: var(--dim-a); font-size: 12px; }
+
+/* Лайтбокс: картинка тула на весь экран; Esc/фон/✕ — закрыть. */
+.lightbox {
+  position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; padding: 24px;
+  background: rgba(8, 10, 14, 0.78); backdrop-filter: blur(2px);
+}
+.lightbox[hidden] { display: none; }
+.lightbox .lb-figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.lightbox .lb-img {
+  max-width: min(96vw, 1400px); max-height: 74vh; border-radius: 4px;
+  background: var(--surface); box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+.lightbox .lb-cap { color: var(--muted); font-size: 12px; text-align: center; }
+.lightbox .lb-close {
+  position: absolute; top: 14px; right: 18px; padding: 4px 10px;
+  background: none; border: 1px solid var(--border-2); border-radius: 4px;
+  color: var(--muted); font-size: 15px; cursor: pointer; line-height: 1.4;
+}
+.lightbox .lb-close:hover { color: var(--fg, inherit); border-color: var(--dim-a); }
+.lightbox .lb-actions { display: flex; gap: 18px; font-size: 13px; }
+.lightbox .lb-actions a, .lightbox .lb-actions button {
+  background: none; border: none; padding: 0; color: var(--dim-a);
+  font: inherit; cursor: pointer; text-decoration: none;
+}
+.lightbox .lb-actions a:hover, .lightbox .lb-actions button:hover { color: var(--fg, inherit); }
 .filerow { margin-left: 26px; display: flex; gap: 8px; align-items: baseline; min-width: 0; font-size: 12.5px; line-height: 1.35; color: var(--muted); }
 /* Compact tool lists: consecutive action/file rows sit tight (~4px visual),
 // while turns keep the airy 11px feed gap. Negative margin compensates the
@@ -649,7 +675,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 
 /* new rows rise in softly (a bulk history render animates once as a whole —
    one shared fade, still cheap: opacity/transform only) */
-.feed > :is(.u, .md, .act, .think, .q, .filerow, .planblock, .imgcard, .linkline,
+.feed > :is(.u, .md, .act, .think, .q, .filerow, .planblock, .imgcard, .imgcard-missing, .linkline,
   .toolout, .metric, .detail, .metaln, .warnline, .errline, .cmdout, .sysline,
   .startbanner, .grouped, .msg-actions, .busy) {
   animation: rise .18s ease-out;

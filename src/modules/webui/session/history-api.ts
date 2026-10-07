@@ -44,14 +44,29 @@ export interface HistoryEntry {
   args?: Record<string, unknown>;
   success?: boolean;
   duration?: number;
+  /** URL сохранённых картинок тула (`/api/sessions/:id/images/:name`). */
+  images?: string[];
 }
 
 function scrub(text: string | undefined): string | undefined {
   return text ? stripAnsi(redactContextSecrets(text)) : undefined;
 }
 
+/** URL сохранённой картинки тула; без sessionId/refs — undefined. */
+function imagesOf(e: { images?: Array<{ file: string }> }, sessionId?: string): string[] | undefined {
+  if (!sessionId || !e.images?.length) return undefined;
+  const urls = e.images.map((r) => `/api/sessions/${encodeURIComponent(sessionId)}/images/${encodeURIComponent(r.file)}`);
+  return urls.length ? urls : undefined;
+}
+
+/** Изображения тула в wire-форме (может не быть — тогда поле опущено). */
+function imagesField(e: SessionLogEntry, sessionId?: string): Pick<HistoryEntry, "images"> {
+  const images = imagesOf(e, sessionId);
+  return images ? { images } : {};
+}
+
 /** Маппит одну сырую запись лога в wire-форму; `null` — внутренним типам. */
-function mapLogEntry(e: SessionLogEntry): HistoryEntry | null {
+function mapLogEntry(e: SessionLogEntry, sessionId?: string): HistoryEntry | null {
   switch (e.type) {
     case "user":
       return { ts: e.ts, kind: "user", text: scrub(e.content) };
@@ -75,6 +90,7 @@ function mapLogEntry(e: SessionLogEntry): HistoryEntry | null {
         tool: e.tool,
         success: e.success ?? false,
         duration: e.duration,
+        ...imagesField(e, sessionId),
       };
     case "plan":
       return { ts: e.ts, kind: "plan", text: scrub(e.content) };
@@ -122,10 +138,11 @@ export function normalizeHistory(
   entries: SessionLogEntry[],
   tail: number,
   fallback: SessionMessage[] = [],
+  sessionId?: string,
 ): HistoryEntry[] {
   const out: HistoryEntry[] = [];
   for (const e of entries) {
-    const mapped = mapLogEntry(e);
+    const mapped = mapLogEntry(e, sessionId);
     if (mapped) out.push(mapped);
   }
   const source = out.length > 0 ? out : fromMessages(fallback);
@@ -153,5 +170,5 @@ export function handleSessionHistory(res: ServerResponse, id: string, s: Session
     log = [];
     messages = [];
   }
-  sendJson(res, 200, { id, history: normalizeHistory(log, s.historyTail, messages) });
+  sendJson(res, 200, { id, history: normalizeHistory(log, s.historyTail, messages, id) });
 }

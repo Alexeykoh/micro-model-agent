@@ -4,6 +4,30 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.28.0] - 2026-10-07
+
+Tool-produced images (browser screenshots, `attach_image`) are now visible in the
+`mma web` feed — a thumbnail with a full-screen lightbox — and survive reload via
+per-session persistence with rotation. The old static placeholder card that never
+filled is gone.
+
+### Added
+
+- **Tool images in the web feed** (`src/modules/webui/assets/js/lightbox.ts`, `feed/image-card.ts`, `feed/turn.ts`, `feed/history.ts`): `browser` screenshots and `attach_image` render as lazy thumbnails; click opens a lightbox (Esc/backdrop close, "open in a new tab", "copy link"). Shown in every verbosity, including quiet.
+- **Persistence + replay** (`src/modules/session/image-store.ts`, `src/core/session-logger.ts`): full-size assets are written to `<sessionDir>/images/` and served via `GET /api/sessions/:id/images/:name`; history replay renders the same thumbnails. When a file was evicted by rotation, the card shows a muted "image removed (rotation)".
+- **Rotation** (`images.maxCount` default 30, `images.maxBytes` default 100 MB in `src/config/registry-extra.ts`): oldest images are evicted first; both keys in `/config` and Web UI settings (UI → Tool images). Labels `config.key.images.*` (en+ru).
+- **Delivery contract** (`src/tools/types.ts`, `src/core/types.ts`): `ToolResult.imageFiles`/`imageRefs`, `ToolEvent.imageRefs`/`images`, and `tool_result.images` in `session.jsonl`.
+
+### Changed
+
+- **`attach_image`** (`src/tools/attach-image.ts`): returns the image via `result.images` (unified path with the browser tool) instead of queueing it directly on the context manager.
+- **SSE `tool_end`** (`src/modules/webui/session/forward.ts`): carries an `images` URL list; for an encrypted session (no disk write) it falls back to inline data URLs for live view.
+- **Browser screenshots for text-only models** (`src/tools/browser.ts`): the screenshot is always produced and delivered to the web feed; a non-vision model still receives the text note.
+
+### Removed
+
+- **Static screenshot placeholder** (`src/modules/webui/assets/js/feed/turn.ts`): the misleading "screenshot" card that was created on every `browser`/`attach_image` call and never filled.
+
 ## [2.27.0] - 2026-10-07
 
 MoE is now usable out of the box: `moe.enabled: true` starts on the active

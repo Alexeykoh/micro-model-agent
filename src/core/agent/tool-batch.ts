@@ -323,6 +323,32 @@ function detectScriptWorkaround(state: LoopState, call: ToolCall, result: ToolRe
   return false;
 }
 
+/**
+ * Персистит полноразмерные ассеты тула (web replay) и проставляет `imageRefs`.
+ * Шифрованная сессия / нет сессии → refs пусты (forwarder сделает inline-фолбэк).
+ */
+function persistResultImages(
+  slog: SessionLogger | undefined,
+  result: ToolResult,
+  config: AppConfig,
+): void {
+  if (!slog || !result.imageFiles?.length) return;
+  const refs = slog.persistToolImages(result.imageFiles, {
+    maxCount: config.images?.maxCount ?? 30,
+    maxBytes: config.images?.maxBytes ?? 104_857_600,
+  });
+  if (refs.length) result.imageRefs = refs;
+}
+
+/** Поля изображений для `ToolEvent.end`: refs, иначе inline-фолбэк, иначе ничего. */
+function imageEventFields(
+  result: ToolResult,
+): Pick<ToolEvent, "imageRefs" | "images"> {
+  if (result.imageRefs?.length) return { imageRefs: result.imageRefs };
+  if (result.images?.length) return { images: result.images };
+  return {};
+}
+
 export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDeps) {}
 
   /**
@@ -483,6 +509,11 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       // в конце этого же batch'а. В role:"tool" строку base64 не пишем.
       queueToolImages(contextManager, result.images);
 
+      // Персист полноразмерных ассетов для web-ленты/истории: refs уходят в
+      // событие (live) и в session.jsonl (replay). Шифрованная сессия → refs
+      // пусты, forwarder позаботится о inline-фолбэке.
+      persistResultImages(slog, result, config);
+
       const tokensAfterTool = contextManager.getEstimatedTokens();
       const costAfterTool = this.deps.costTracker.total;
       onTool?.({
@@ -492,6 +523,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         duration,
         error: !result.success,
         output: typeof result.output === "string" ? result.output : undefined,
+        ...imageEventFields(result),
         ctxDelta: tokensAfterTool - tokensBeforeTool,
         costUsd:
           costBeforeTool !== undefined && costAfterTool !== undefined
@@ -510,7 +542,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       }
 
       if (config.session.autoSave) {
-        slog?.logToolResult(call, result, duration, iteration);
+        slog?.logToolResult(call, result, duration, iteration, result.imageRefs);
       }
       this.deps.compactionService.compactAfterTool(state);
       recordRepeatedToolFailure(state, call, result, this.deps, logger);

@@ -929,6 +929,42 @@ read-only петля без стопа, рассинхрон провайдер�
   `tests/webui-index-watcher.test.ts`; обновлены `tests/webui-file.test.ts`,
   `tests/webui-assets.test.ts`.
 
+### Web Tool Images (2.28.0)
+
+Спека: [docs/specs/2026-10-07-web-tool-images-design.md](./docs/specs/2026-10-07-web-tool-images-design.md);
+план: [docs/plans/2026-10-07-web-tool-images.md](./docs/plans/2026-10-07-web-tool-images.md).
+Показ реальных изображений тулов (`browser` screenshot, `attach_image`) в ленте `mma web`
+вместо статичной заглушки, которая никогда не заполнялась.
+
+- **Доставка** (`src/tools/types.ts`, `src/core/types.ts`): тулы кладут полноразмерные байты в
+  `ToolResult.imageFiles` (модель по-прежнему получает `ToolResult.images` — ресайзнутый data URL).
+  `tool-batch` персистит ассеты (`SessionLogger.persistToolImages`) → `result.imageRefs` →
+  `ToolEvent.imageRefs` → SSE `tool_end.images` + `tool_result.images` в `session.jsonl`.
+  Шифрованная сессия (`sessionEncryption.enabled`) на диск не пишет: live — inline data URL
+  (фолбэк в `forward.ts`), история — «недоступно».
+- **Хранилище** (`src/modules/session/image-store.ts`): `<sessionDir>/images/<ts>-<rand>.<ext>`,
+  ротация FIFO по `images.maxCount` (30) / `images.maxBytes` (100 МБ). Удаление сессии уносит
+  каталог. `isSafeImageName` — джейл от traversal.
+- **Эндпоинт** (`src/modules/webui/session/images-api.ts`): `GET /api/sessions/:id/images/:name`
+  отдаёт байты с `Cache-Control: private, max-age=31536000, immutable`; 404 для чужой сессии,
+  отсутствующего файла и небезопасного имени.
+- **Фронтенд** (`assets/js/lightbox.ts`, `assets/js/feed/image-card.ts`): миниатюра
+  `<img loading=lazy>` рисуется в `onToolEnd` по `data.images` (в любом verbosity, включая quiet);
+  клик — лайтбокс (Esc/фон/✕, «открыть в новой вкладке», «копировать ссылку»). `onerror` (файл
+  вытеснен ротацией) → `.imgcard-missing` «снимок удалён (ротация)». `feed/history.ts` реплеит те же
+  миниатюры из `tool_result.images`.
+- **`attach_image`** (`src/tools/attach-image.ts`): единый путь — возвращает картинку в
+  `result.images` (очередь контекста заполняет `queueToolImages` в tool-batch), больше не зовёт
+  `addPendingImage` сам.
+- **Тулы**: `browser` при `action:"screenshot"` всегда производит PNG (даже для невидящей модели —
+  модели уходит текстовая пометка, вебу картинка).
+- **Конфиг** `images.maxCount` / `images.maxBytes` (домен `ui`, Settings → UI → Tool images),
+  i18n `config.key.images.*` (en+ru); `web.card.image_removed`, `web.lightbox.*`.
+- **Тесты**: `tests/session/image-store.test.ts`, `tests/core/session-logger-images.test.ts`,
+  `tests/core/tool-batch-images.test.ts`, `tests/webui-session-images.test.ts`,
+  `tests/webui-tool-image-events.test.ts`, `tests/webui-tool-images-dom.test.ts` (happy-dom,
+  `tests/helpers/happy-dom.ts`).
+
 ### Event-Sourced Web State (2.24.0)
 
 Спека: [docs/specs/2026-10-07-web-event-sourced-state-design.md](./docs/specs/2026-10-07-web-event-sourced-state-design.md);
@@ -1001,7 +1037,7 @@ read-only петля без стопа, рассинхрон провайдер�
   6 → 70 МБ (base64 ≈4/3 файла + заголовок), `MAX_BODY_BYTES` (`webui/limits.ts`) 24 → 768 МБ
   (вмещает 10 × 50 МБ в base64). i18n `web.attach.too_large` обновлён (en+ru).
 
-### Current Version: 2.27.0
+### Current Version: 2.28.0
 
 ### Changelog
 

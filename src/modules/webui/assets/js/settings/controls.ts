@@ -216,6 +216,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   ],
   ui: [
     { id: "ui.chat", titleKey: "web.settings.sec.ui.chat", descKey: "web.settings.sec.ui.chat.desc", keys: ["ui.fontSize", "ui.activityRail", "ui.spinner", "ui.showContextStats", "ui.showCompaction"] },
+    { id: "ui.images", titleKey: "web.settings.sec.ui.images", descKey: "web.settings.sec.ui.images.desc", keys: ["images.maxCount", "images.maxBytes"] },
   ],
   security: [
     { id: "security.switches", titleKey: "web.settings.sec.security.switches", descKey: "web.settings.sec.security.switches.desc", keys: ["security.enabled", "security.bash.enabled", "security.bash.blockDangerousFlags", "security.paths.enabled", "security.contentScan.enabled", "security.network.enabled", "security.sessionEncryption.enabled"] },

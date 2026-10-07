@@ -759,4 +759,15 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       c.lsp ??= structuredClone(DEFAULT_LSP_CONFIG);
       c.lsp.offline = v as boolean;
     }),
+
+  int("images.maxCount", "images", 1, 1000, 1, false,
+    (c) => c.images?.maxCount ?? DEFAULTS.images!.maxCount,
+    (c, v) => {
+      c.images = { ...(c.images ?? DEFAULTS.images!), maxCount: v as number };
+    }),
+  int("images.maxBytes", "images", 1_048_576, 10_737_418_240, 1_048_576, false,
+    (c) => c.images?.maxBytes ?? DEFAULTS.images!.maxBytes,
+    (c, v) => {
+      c.images = { ...(c.images ?? DEFAULTS.images!), maxBytes: v as number };
+    }),
 ];

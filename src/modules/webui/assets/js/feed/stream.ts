@@ -157,8 +157,9 @@ export function onPhase(phase: string, sid?: string): void {
 }
 
 // Global `.think-h` toggle (depends on the wrap > [head, body] structure
-// built by `buildThinkBlock`).
-msgs.addEventListener("click", (e) => {
+// built by `buildThinkBlock`). `?.` — как в feed/core: в тестовом процессе
+// модульный кэш общий и `#msgs` может отсутствовать на момент оценки.
+msgs?.addEventListener("click", (e) => {
   const target = e.target as HTMLElement;
   const head = target.closest(".think-h");
   if (!head) return;
