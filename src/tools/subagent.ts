@@ -165,7 +165,13 @@ export const subagentTool: ToolDefinition = {
 
     // Модель эксперта (если задан expert_tag) исполняется на выделенном
     // провайдере поверх активного; иначе — общий провайдер родителя.
-    const provider = resolveExpertProvider(ctx.config, expertModel, ctx.llmProvider, ctx.logger);
+    const provider = resolveExpertProvider(
+      ctx.config,
+      expertModel,
+      ctx.llmProvider,
+      ctx.logger,
+      () => ctx.sessionId,
+    );
 
     // Оборонительный гард: запрошенные tool_tags ни с чем не мэтчатся — у
     // субагента ноль тулов, и он галлюцинирует вместо действий. Предупредить
