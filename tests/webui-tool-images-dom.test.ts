@@ -3,21 +3,9 @@
 // `bun test` не применяет vitest-докблок окружения — happy-dom вручную,
 // как в webui-files-dom.test.ts.
 import { describe, it, expect, beforeAll } from "vitest";
-import { Window } from "happy-dom";
+import { setupHappyDom } from "./helpers/happy-dom";
 
-const win = new Window({ url: "http://localhost/" });
-const g = globalThis as Record<string, unknown>;
-g.window = win;
-g.document = win.document;
-g.location = win.location;
-g.localStorage = win.localStorage;
-g.HTMLElement = win.HTMLElement;
-g.Node = win.Node;
-g.Event = win.Event;
-g.KeyboardEvent = win.KeyboardEvent;
-g.navigator = win.navigator;
-
-win.document.body.innerHTML = `<div id="msgs" class="msgs"></div>`;
+const win = setupHappyDom(`<div id="msgs" class="msgs"></div>`);
 const newFeed = (): HTMLElement => {
   const f = win.document.createElement("div");
   f.className = "feed";
@@ -138,7 +126,7 @@ describe("history replay of tool images", () => {
         { ts: "2026-10-07T10:00:03.000Z", kind: "tool_result", toolCallId: "c2", tool: "browser", success: true, duration: 5 },
       ],
     };
-    g.fetch = async () =>
+    (globalThis as Record<string, unknown>).fetch = async () =>
       new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } });
 
     const tab = { id: "ses-hist", feed };
