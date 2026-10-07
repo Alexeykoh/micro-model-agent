@@ -56,6 +56,7 @@ silently missing.
 
 ### Known limits (documented, not fixed)
 
+- **Draft approval does not cross processes.** The approval is a marker file, the loaded code lives in process memory: `mma plugins drafts revoke` from a terminal unloads the drafts in *that* process, and a running `mma web` only notices on restart or `POST /api/reload/plugins` (same in the other direction). Inside one process (the `define_capability` tool, the Plugins tab) it is live. Verified in a live run.
 - Disabling a plugin stops its hooks and tool contributions but does **not** undo the module import that already ran, and `permissions` is a declaration shown to the user rather than enforcement. Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
 - Approving a draft is still a decision, not a boundary: the code runs in the agent process with the harness's own reach (fs, network, `bash`). Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
 
