@@ -3,39 +3,13 @@ import { ToolBatchExecutor } from "../../src/core/agent/tool-batch";
 import { createLoopState } from "../../src/core/agent/loop-state";
 import type { MetaKind } from "../../src/core/types";
 
+import { makeToolBatchDeps } from "../helpers/tool-batch-deps";
+
 // ToolBatch marks display/output/diff/failure-gist onMeta calls with
 // kind="tool" so quiet chat renderers can hide model-facing bodies while
 // genuine status (context/compaction/warnings) stays visible.
 function stubDeps(executeImpl: (call: { name: string }) => unknown) {
-  return {
-    config: { session: { autoSave: false } },
-    toolExecutor: {
-      execute: async (call: { name: string }) => executeImpl(call),
-      getRegistry: () => ({ get: () => undefined }),
-    },
-    pluginManager: {
-      runOnToolCall: () => {},
-      runOnToolStart: () => {},
-      runOnToolEnd: () => {},
-      runOnMeta: (_ctx: unknown, chunk: string) => chunk,
-    },
-    contextManager: {
-      addMessage: () => {},
-      getEstimatedTokens: () => 0,
-      getBudget: () => ({ history: 100_000 }),
-    },
-    hallucinationDetector: {
-      getConsistencyCheck: () => ({ trackCreatedFile: () => {}, trackDeletedFile: () => {} }),
-    },
-    compactionService: { compactAfterTool: () => {} },
-    logger: { debug: () => {}, diagnostic: () => {} },
-    memoryStore: undefined,
-    costTracker: { total: 0 },
-    planSummary: () => null,
-    getAbortSignal: () => undefined,
-    isShutdownRequested: () => false,
-    setScope: () => {},
-  } as any;
+  return makeToolBatchDeps({ execute: (call) => executeImpl(call) as never });
 }
 
 describe("ToolBatchExecutor meta kinds", () => {

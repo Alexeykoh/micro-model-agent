@@ -34,6 +34,9 @@ export const subagentTool: ToolDefinition = {
   description:
     "Spawn an isolated sub-agent to work on a task independently. The sub-agent has its own context and executes autonomously. Use for parallel work or complex sub-tasks.",
   tags: ["code"],
+  // Несколько subagent-вызовов одного хода выполняются конкурентно
+  // (ToolBatchExecutor запускает их через fork'и, см. tool-batch.ts).
+  parallelizable: true,
   timeoutMs: (ctx) => ctx.config?.subagent?.timeoutMs ?? 180000,
   parameters: {
     type: "object",

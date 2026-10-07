@@ -4,6 +4,26 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.25.0] - 2026-10-07
+
+Multiple subagent calls emitted in one assistant turn now actually run in
+parallel, instead of strictly one after another. The batch executor gains a
+generic "parallelizable tool" capability; every hook, UI event and `role:"tool"`
+message stays serial and ordered.
+
+### Added
+
+- **Parallelizable tool capability** (`src/tools/types.ts`): `ToolDefinition.parallelizable` opts a tool into concurrent batch execution. `subagent` sets it.
+- **`ToolExecutor.fork()`** (`src/tools/executor.ts`): isolated executor for one concurrent call — clones the `ToolContext` by descriptors (live getters preserved), gives it its own `scope`/`recursionDepth`/`cleanup`/`activeCallId`, and shares the memo/registry/plugin manager so a subagent's mutation still invalidates the parent's cached reads.
+- **Parallel run in `ToolBatchExecutor`** (`src/core/agent/tool-batch.ts`): consecutive `parallelizable` calls (≥2) are prepared serially, executed concurrently — each on `toolExecutor.fork()`, capped by `security.rateLimits.maxParallelTasks` (default 5) — then finalized serially in original call order. The per-call lifecycle is split into `prepareCall`/`executeCall`/`finalizeCall` so the serial and parallel paths share all bookkeeping.
+- **Plugin-hook serialization** (`src/tools/executor.ts`): `onBeforeTool`/`onAfterTool` dispatch runs under a shared FIFO lock (one per root executor, inherited by forks), so stateful plugins (execution stuck-detector, lint-on-write, LSP) never run concurrently across sibling forks; the tool handler itself stays concurrent.
+
+### Changed
+
+- **`subagent` runs in parallel** (`src/tools/subagent.ts`): sibling subagents no longer clobber each other's workspace scope or recursion depth (each runs on its own fork).
+- **MoE subtasks get isolated executors** (`src/modules/execution/moe-executor.ts`): each subtask runs against its own `fork()`, removing the scope/recursion-depth race between concurrent wave tasks.
+- **Live session footgun closed**: the tool description's "use for parallel work" is now true; the harness no longer implies concurrency it does not provide.
+
 ## [2.24.0] - 2026-10-07
 
 The `mma web` sidebar is now event-sourced: the SSE `state` event carries the full

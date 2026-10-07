@@ -1,5 +1,5 @@
 /** Исполнитель тулов: allowlist, плагины, таймауты, мемо read-only. */
-import type { ToolContext, ToolCall, ToolResult, PluginManager } from "./types";
+import type { ToolContext, ToolCall, ToolResult, PluginManager, PluginHook } from "./types";
 import type { ToolRegistry } from "./registry";
 import { killByCallId } from "../modules/processes/runner";
 import { t } from "../i18n/index";
@@ -22,11 +22,33 @@ function stableArgsKey(value: unknown): unknown {
   return value;
 }
 
+/**
+ * FIFO-мьютекс для диспатча плагин-хуков. Плагины (execution stuck-detector,
+ * lint-on-write, lsp) несут общее мутабельное состояние и не
+ * конкурентно-безопасны. Параллельные форки (subagent-сиблинги / MoE-волны)
+ * делят один экземпляр — хуки сериализуются, а тело тула бежит конкурентно.
+ */
+class AsyncLock {
+  private tail: Promise<unknown> = Promise.resolve();
+
+  run<T>(fn: () => T | Promise<T>): Promise<T> {
+    const run = this.tail.then(fn, fn);
+    // Хвост всегда settle-resolved: упавший хук не должен ломать очередь.
+    this.tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+}
+
 /** Исполнитель: реестр, контекст, плагины, сессионное мемо. */
 export class ToolExecutor {
   private registry: ToolRegistry;
   private ctx: ToolContext;
   private pluginManager: PluginManager;
+  /** Сериализатор плагин-хуков, общий для родителя и его форков. */
+  private hookLock: AsyncLock;
   /**
    * Сессионное мемо детерминированных read-only результатов
    * (`ToolDefinition.cacheable` + ручные записи `manualMemo`-тулов вроде bash).
@@ -34,10 +56,55 @@ export class ToolExecutor {
    */
   private memo = new Map<string, { result: ToolResult; at: number }>();
 
-  constructor(registry: ToolRegistry, ctx: ToolContext, pluginManager: PluginManager) {
+  constructor(
+    registry: ToolRegistry,
+    ctx: ToolContext,
+    pluginManager: PluginManager,
+    /**
+     * Общий с родителем мемо. `fork()` передаёт сюда родительскую Map, чтобы
+     * мутация в субагенте (write/bash) инвалидировала кеш чтений всего прогона
+     * — иначе параллельный субагент мог бы оставить родителю устаревший
+     * `read_file`. Обычные исполнители создают свой мемо.
+     */
+    memo: Map<string, { result: ToolResult; at: number }> = new Map(),
+    /** Общий с родителем сериализатор плагин-хуков (см. AsyncLock). */
+    hookLock: AsyncLock = new AsyncLock(),
+  ) {
     this.registry = registry;
     this.ctx = ctx;
     this.pluginManager = pluginManager;
+    this.memo = memo;
+    this.hookLock = hookLock;
+  }
+
+  /**
+   * Изолированная копия исполнителя для КОНКУРЕНТНОГО вызова одного тула.
+   * Клонирует ToolContext по дескрипторам (сохраняя живые геттеры config/
+   * sessionId/capabilities), даёт собственные scope/recursionDepth/cleanup/
+   * activeCallId, но РАЗДЕЛЯЕТ мемо, реестр и менеджер плагинов. Нужен, потому
+   * что один инстанс `ToolExecutor` не конкурентно-безопасен: последовательный
+   * путь так и держать, параллельный — через fork на каждый вызов.
+   */
+  fork(): ToolExecutor {
+    const clone = Object.create(
+      Object.getPrototypeOf(this.ctx),
+      Object.getOwnPropertyDescriptors(this.ctx),
+    ) as ToolContext;
+    // Собственное мутабельное состояние вызова — иначе сиблинги перетрут
+    // друг другу scope/cleanup/activeCallId.
+    clone.cleanup = undefined;
+    clone.activeCallId = undefined;
+    const fork = new ToolExecutor(
+      this.registry,
+      clone,
+      this.pluginManager,
+      this.memo,
+      this.hookLock,
+    );
+    // subagent читает ctx.toolExecutor и передаёт его дочернему агенту: он
+    // обязан видеть именно форк, а не родительский инстанс.
+    clone.toolExecutor = fork;
+    return fork;
   }
 
   /**
@@ -135,28 +202,16 @@ export class ToolExecutor {
       };
     }
 
-    for (const plugin of this.pluginManager.getAllPlugins()) {
-      if (plugin.onBeforeTool) {
-        try {
-          const proceed = await plugin.onBeforeTool(this.ctx, call);
-          if (proceed === false || typeof proceed === "string") {
-            const pluginName =
-              (plugin as { name?: string }).name || plugin.constructor?.name || "unknown";
-            const reason = typeof proceed === "string" ? proceed : undefined;
-            return {
-              success: false,
-              blocked: true,
-              output: reason
-                ? t("tool.blocked_reason", { plugin: pluginName, reason })
-                : t("tool.blocked", { plugin: pluginName }),
-              toolCallId: call.id,
-            };
-          }
-        } catch (e: any) {
-          this.ctx.logger.warn(`Plugin onBeforeTool error: ${e.message}`);
-        }
-      }
-    }
+    // Плагин-хуки сериализованы общим hookLock: параллельные форки-сиблинги
+    // не гоняют общее состояние плагинов (stuck-detector, lint, lsp) конкурентно.
+    // Лок берём ТОЛЬКО при наличии хука — иначе лишний await сдвигал бы старт
+    // хендлера на микрозадачу (ломало синхронный старт, напр. fake-timer тесты).
+    const plugins = this.pluginManager.getAllPlugins();
+    const beforePlugins = plugins.some((p) => p.onBeforeTool);
+    const blocked = beforePlugins
+      ? await this.hookLock.run(() => this.runBeforeToolPlugins(call, plugins))
+      : null;
+    if (blocked) return blocked;
 
     let result: ToolResult;
     // Мемоизированный повтор детерминированного чтения (cacheable): хендлер
@@ -259,19 +314,11 @@ export class ToolExecutor {
     // рендера/логирования), поэтому медленные post-плагины (LSP, lint, tsc)
     // пропускаются целиком. Аборт посреди плагина виден ему через signal
     // в контексте хука — плагин убьёт свои дочерние процессы.
+    const afterPlugins = plugins.some((p) => p.onAfterTool);
     if (signal?.aborted) {
       this.ctx.logger.debug(`Tool ${call.name}: abort, skipping onAfterTool plugins`);
-    } else {
-      const pluginCtx = signal ? { ...this.ctx, signal } : this.ctx;
-      for (const plugin of this.pluginManager.getAllPlugins()) {
-        if (plugin.onAfterTool) {
-          try {
-            await plugin.onAfterTool(pluginCtx, call, result);
-          } catch (e: any) {
-            this.ctx.logger.warn(`Plugin onAfterTool error: ${e.message}`);
-          }
-        }
-      }
+    } else if (afterPlugins) {
+      await this.hookLock.run(() => this.runAfterToolPlugins(call, result, signal, plugins));
     }
 
     this.ctx.logger.logToolCall(
@@ -282,6 +329,56 @@ export class ToolExecutor {
     this.ctx.logger.logToolOutput(call.name, result.output ?? "", result.success ? 0 : 1);
     this.ctx.logger.debug(`Tool ${call.name}: ${result.success ? "OK" : "FAIL"}`);
     return result;
+  }
+
+  /**
+   * Прогон `onBeforeTool` по всем плагинам (под hookLock). Возвращает
+   * blocked-результат, если плагин отклонил вызов, иначе `null`.
+   */
+  private async runBeforeToolPlugins(
+    call: ToolCall,
+    plugins: PluginHook[],
+  ): Promise<ToolResult | null> {
+    for (const plugin of plugins) {
+      if (!plugin.onBeforeTool) continue;
+      try {
+        const proceed = await plugin.onBeforeTool(this.ctx, call);
+        if (proceed === false || typeof proceed === "string") {
+          const pluginName =
+            (plugin as { name?: string }).name || plugin.constructor?.name || "unknown";
+          const reason = typeof proceed === "string" ? proceed : undefined;
+          return {
+            success: false,
+            blocked: true,
+            output: reason
+              ? t("tool.blocked_reason", { plugin: pluginName, reason })
+              : t("tool.blocked", { plugin: pluginName }),
+            toolCallId: call.id,
+          };
+        }
+      } catch (e: any) {
+        this.ctx.logger.warn(`Plugin onBeforeTool error: ${e.message}`);
+      }
+    }
+    return null;
+  }
+
+  /** Прогон `onAfterTool` по всем плагинам (под hookLock; `signal` в ctx хука). */
+  private async runAfterToolPlugins(
+    call: ToolCall,
+    result: ToolResult,
+    signal: AbortSignal | undefined,
+    plugins: PluginHook[],
+  ): Promise<void> {
+    const pluginCtx = signal ? { ...this.ctx, signal } : this.ctx;
+    for (const plugin of plugins) {
+      if (!plugin.onAfterTool) continue;
+      try {
+        await plugin.onAfterTool(pluginCtx, call, result);
+      } catch (e: any) {
+        this.ctx.logger.warn(`Plugin onAfterTool error: ${e.message}`);
+      }
+    }
   }
 
   /** Определения тулов с учётом allowlist (для схемы LLM). */
