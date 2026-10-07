@@ -6,6 +6,7 @@ import { handleRequest, startServer, stopServer } from "../src/modules/webui/ser
 import {
   BodyTooLargeError,
   MAX_IMAGE_DATA_URL_BYTES,
+  MAX_IMAGES,
   parseMessageBody,
   readBody,
 } from "../src/modules/webui/util";
@@ -571,15 +572,15 @@ describe("webui server", () => {
 describe("webui message body validation", () => {
   const img = (n = 16) => `data:image/png;base64,${"A".repeat(n)}`;
 
-  it("accepts up to 3 data-url images", () => {
-    const body = parseMessageBody(JSON.stringify({ text: "hi", images: [img(), img(), img()] }));
-    expect(body).toEqual({ text: "hi", images: [img(), img(), img()] });
+  it("accepts up to MAX_IMAGES data-url images", () => {
+    const images = Array.from({ length: MAX_IMAGES }, () => img());
+    const body = parseMessageBody(JSON.stringify({ text: "hi", images }));
+    expect(body).toEqual({ text: "hi", images });
   });
 
-  it("rejects more than 3 images", () => {
-    const body = parseMessageBody(
-      JSON.stringify({ text: "hi", images: [img(), img(), img(), img()] }),
-    );
+  it("rejects more than MAX_IMAGES images", () => {
+    const images = Array.from({ length: MAX_IMAGES + 1 }, () => img());
+    const body = parseMessageBody(JSON.stringify({ text: "hi", images }));
     expect(body).toEqual({ error: "too many images" });
   });
 

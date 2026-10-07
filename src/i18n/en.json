@@ -1540,7 +1540,7 @@
   "web.attach.remove": "remove",
   "web.attach.only_images": "only images can be attached",
   "web.attach.too_many": "too many images (max {max})",
-  "web.attach.too_large": "image too large (max 6 MB)",
+  "web.attach.too_large": "image too large (max 50 MB)",
   "web.attach.invalid": "invalid image",
   "web.attach.read_failed": "could not read image",
   "web.sessions.active": "active",

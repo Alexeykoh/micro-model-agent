@@ -63,7 +63,7 @@ export interface WebUiState {
 export const HOST = process.env.MMA_WEBUI_HOST || "127.0.0.1";
 export const MAX_CLIENTS = Math.max(1, Number(process.env.MMA_WEBUI_MAX_CLIENTS) || 5);
 export const MAX_MESSAGE_CHARS = 32_000;
-export const MAX_IMAGES = 3;
+export const MAX_IMAGES = 10;
 
 const G = globalThis as unknown as Record<symbol, WebUiState>;
 const KEY = Symbol.for("mma.web-ui");

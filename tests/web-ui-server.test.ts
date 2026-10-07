@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { startServer, stopServer, type WebUiAssets } from "../examples/plugins/web-ui/server.ts";
-import { createStateForTests } from "../examples/plugins/web-ui/state.ts";
+import { createStateForTests, MAX_IMAGES } from "../examples/plugins/web-ui/state.ts";
 import type { WebUiState } from "../examples/plugins/web-ui/state.ts";
 
 const ASSETS: WebUiAssets = {
@@ -226,7 +226,7 @@ describe("web-ui server", () => {
           method: "POST",
           body: JSON.stringify({
             text: "x",
-            images: ["data:image/png;base64,A", "data:image/png;base64,A", "data:image/png;base64,A", "data:image/png;base64,A"],
+            images: Array.from({ length: MAX_IMAGES + 1 }, () => "data:image/png;base64,A"),
           }),
         });
         expect(res.status).toBe(400);
