@@ -1039,9 +1039,9 @@ read-only петля без стопа, рассинхрон провайдер�
 
 ### Plugin Registry: метаданные, вкл/выкл, вкладка Plugins (2.29.0)
 
-Спека: [docs/specs/2026-10-07-plugin-registry-design.md](./docs/specs/2026-10-07-plugin-registry-design.md).
-Реализованы фазы 1–3 (метаданные + реестр, живой вкл/выкл, веб). Фазы 4–6 (reload с `onUnload`,
-тулы от плагинов, черновики + `define_capability`) — в спеке, не начаты.
+Спека: [docs/specs/2026-10-07-plugin-registry-design.md](./docs/specs/2026-10-07-plugin-registry-design.md)
+(со статусом фаз). Реализованы **фазы 1–4**; не начаты **фаза 5** (тулы от плагинов,
+`AgentPlugin.getToolDefinitions`) и **фаза 6** (черновики + тул `define_capability`).
 
 - **Метаданные** (`src/modules/types.ts`, `plugins/records.ts`): `description`, `author`, `homepage`,
   `permissions`, `provides` — все опциональны; жёсткая валидация только на `name`
@@ -1064,14 +1064,34 @@ read-only петля без стопа, рассинхрон провайдер�
   Plugins · MCP и секция `plugins.registry`.
 - **SDK:** `AgentPlugin`, `HostBridge`, `TurnSummary`, `PluginRecord`, `PLUGIN_PERMISSIONS`
   экспортируются из `src/index.ts` (внешним плагинам больше не нужно дублировать контракт).
+- **Живой reload (фаза 4):** `AgentPlugin.onUnload?(ctx)` — освободить ресурсы при выгрузке
+  (без него перезагрузка течёт сокетами: `examples/plugins/web-ui` поднимает HTTP-сервер в
+  `onSessionStart`). Порядок `reloadFromDir`: **выгрузка → сброс кэша модулей → чтение**
+  (иначе старый и новый экземпляр живут вместе, а дедуп по имени выкидывает новый).
+  `PluginManager` владеет своими каталогами (`setSourceDirs` на bootstrap) — CLI, REPL и веф
+  зовут `reload()` и не знают про пути. Поверхности: `mma plugins reload`, `/plugins reload`,
+  `POST /api/reload/plugins` (отдельное пространство действий: `reload` — допустимое имя
+  плагина, и exact-first сделал бы его невыключаемым), кнопка в Settings → Plugins.
+- **`require`-кэш проверен экспериментом:** сброс работает под Bun для `.ts` и `.js`, под Node
+  только для `.js` (transpile кэшируется отдельно). Поэтому `ReloadReport.staleTs` — число
+  `.ts`-плагинов со старым кодом, и UI/CLI **говорят об этом явно**, а не рапортуют об успехе.
+- **Навыки:** `SkillsModule.reloadSources()` мутирует инстанс **на месте** — `load_skill` замкнул
+  модуль при построении реестра, per-session раннеры держат тот же объект. Навык, написанный
+  агентом, виден без рестарта.
+- **Разбиение модуля:** диспатчер хуков вынесен в `plugins/dispatch.ts` (`manager.ts` уже был
+  316 строк). Регистр → `records.ts` / `tools.ts` / `reload.ts`.
+- **UI:** иконки вкладок заменены на читаемые в 17px (`layout-grid`/`code`/`plug` вместо
+  плотных `map`/`stethoscope`/`puzzle`); автор плагина — акцентным цветом, версия dim; ховер
+  строки. **Попутно исправлен общий баг:** `body.light .toggle` перебивал `.toggle.on` по
+  специфичности — в светлой теме все тумблеры выглядели выключенными (включая настройки).
 - **Честные ограничения (зафиксированы в доках и UI):** disable ≠ sandbox (модуль уже
   `require`-нут, код верхнего уровня уже выполнился); `permissions` — декларация для показа, а не
   enforcement. Настоящая изоляция/доверие — открытый P1 в
   `docs/specs/2026-09-28-production-readiness-design.md`.
 - **Тесты:** `tests/plugin-records.test.ts`, `tests/plugin-enabled.test.ts`,
-  `tests/plugin-loader.test.ts` (путь/отчёт/отказы), `tests/webui-plugins-api.test.ts` (11),
-  `tests/webui-plugins-dom.test.ts` (16), guard в `tests/webui-assets.test.ts`, e2e
-  `tests/e2e/web-plugins.e2e-test.ts`.
+  `tests/plugin-reload.test.ts`, `tests/skills-reload.test.ts`, `tests/plugin-loader.test.ts`,
+  `tests/webui-plugins-api.test.ts`, `tests/webui-plugins-dom.test.ts`, guard в
+  `tests/webui-assets.test.ts`, e2e `tests/e2e/web-plugins.e2e-test.ts`.
 - **Побочно:** `subdialog.ts` теперь резолвит узлы оверлея лениво, а не на уровне модуля
   (захват на импорте молча no-op'ился, если оверлея ещё нет в DOM).
 

@@ -1,10 +1,47 @@
 # Plugin Registry: метаданные, вкл/выкл, вкладка Plugins в сайдбаре — Design
 
 Дата: 2026-10-07
-Статус: draft (brainstorming применён)
-Ветка: `docs/plugin-registry-design` → реализация в `feat/plugin-registry`
+Статус: **фазы 1–4 реализованы** (фазы 5–6 не начаты)
+Ветка: `feat/plugin-registry`
 Тип релиза: MINOR (аддитивные поля, новые хуки, новые REST-роуты, новая вкладка; ломающих
 изменений публичного plugin API нет)
+
+## Статус фаз
+
+| Фаза | Что | Состояние |
+|------|-----|-----------|
+| 1 | Метаданные и `PluginRecord` | ✅ `dd8e1db` |
+| 2 | Живой вкл/выкл | ✅ `dd8e1db` |
+| 3 | Web: REST + вкладка Plugins | ✅ `6618e0f` |
+| 4 | Живой reload (`onUnload`, сброс кэша, `/reload`) | ✅ `6b74721` |
+| 5 | Тулы от плагинов (`getToolDefinitions`) | ⬜ не начата |
+| 6 | Черновики + `define_capability` | ⬜ не начата |
+
+Фазы 1–4 смержились независимо и покрыты тестами (`bun test` 3385 pass, `bun run quality`
+exit 0). Проверено вживую на запущенном `mma web`: правка файла плагина + перезагрузка
+подхватывает новый код **без перезапуска процесса**.
+
+### Что учитывать при продолжении (фазы 5–6)
+
+1. **`require`-кэш проверен экспериментом, не предположением.** `delete require.cache[…]` под
+   Bun работает и для `.ts`, и для `.js`; под Node — только для `.js` (transpile кэшируется
+   отдельно). Отсюда счётчик `staleTs` в `ReloadReport`: под Node `.ts`-плагины после reload
+   сохраняют старый код, и UI/CLI об этом говорят явно. Это ограничение Node, а не дыра в
+   реализации — не «чините» его допущением, проверка уже выполнена.
+2. **Порядок reload обязателен:** выгрузка (с `onUnload`) → сброс кэша → чтение. Иначе старый и
+   новый экземпляр живут одновременно, а дедуп по имени выкидывает новый.
+3. **Менеджер владеет своими каталогами** (`setSourceDirs` на bootstrap) — CLI, REPL и веф
+   зовут `PluginManager.reload()` и не знают про пути. Не заводите вторую копию правды о путях.
+4. **`manager.ts` уже на пределе:** диспатчер хуков вынесен в `plugins/dispatch.ts`. Новое
+   по регистру — в `records.ts` / `tools.ts` / `reload.ts`, не в менеджер.
+5. **Фаза 5 упирается в клоны реестра:** per-session web-раннеры строят свою копию
+   (`buildRunnerRegistry`, `session-runner-scope.ts`), поэтому тул, зарегистрированный на
+   главном агенте, в вкладку не доедет. Нужен общий владелец набора реестров с удалением
+   остановленных раннеров, иначе получите утечку.
+6. **Добавление тула ломает префикс промпта** (`agent.ts:958`) → сброс prompt-cache на
+   следующем ходе плюс двойная плата (schema в `body.tools` и оценка бюджета каждый запрос).
+   Предупреждение пользователя — часть дизайна, а не деталь.
+7. **Не выдавайте `permissions` за защиту.** Код плагина исполняется в процессе агента; см. §8.1.
 
 ## 0. Цель и метод
 
@@ -490,7 +527,7 @@ export interface WebPluginManager {
 Каждая фаза — отдельный коммит, `bun test` + `tsc --noEmit` + `bun run quality` зелёные.
 Фазы 1–3 — сам запрос; 4–6 — путь к самоавторству, каждая мержится независимо.
 
-### Фаза 1 — Метаданные и реестр (`PluginRecord`)
+### Фаза 1 — Метаданные и реестр (`PluginRecord`) ✅ выполнено (`dd8e1db`)
 - `modules/types.ts`: `PluginPermission`, `PluginProvides`, поля в `AgentPlugin`.
 - новый `plugins/records.ts`: типы, `validatePluginMeta`, `detectHooks`, `buildRecord`.
 - `manager.ts`: кэш записей, `getRecords()`, `getFailures()`, `warnings` в `RegisterResult`.
@@ -504,7 +541,7 @@ export interface WebPluginManager {
   `tests/plugin-manager.test.ts` (`getRecords`, warnings, failures), `tests/plugin-loader.test.ts`
   (path, форма возврата, разбор падения в failures).
 
-### Фаза 2 — Включение/выключение
+### Фаза 2 — Включение/выключение ✅ выполнено (`dd8e1db`)
 - `config/types.ts` + `defaults.ts` + `domains.ts` + `registry-extra.ts`.
 - `applyPluginConfigEffects` в `registry.ts` рядом с `applyProviderModelMemory`.
 - `manager.ts`: `disabled`/`active()`/`setEnabled`/`isEnabled`; все диспатчеры на `active()`.
@@ -516,7 +553,7 @@ export interface WebPluginManager {
   фильтрует; повторный enable идемпотентен), `tests/config-plugins.test.ts`
   (`setConfigValue("plugins.disabled", …)` → эффект; `reset`), `tests/plugin-cli.test.ts`.
 
-### Фаза 3 — Web: REST + вкладка Plugins
+### Фаза 3 — Web: REST + вкладка Plugins ✅ выполнено (`6618e0f`)
 - `settings-api.ts`: расширенный `GET /api/plugins` (+`failures`), `POST /api/plugins/:name`,
   SSE `plugins`.
 - `state.ts`: `WebPluginManager` на `PluginRecord`.
@@ -529,7 +566,7 @@ export interface WebPluginManager {
   обновление `tests/webui-settings.test.ts` (форма ответа), `tests/webui-assets.test.ts`
   (guard: `sidebarPluginsState(` импортирован из баррела), e2e `web-plugins`.
 
-### Фаза 4 — Живой reload
+### Фаза 4 — Живой reload ✅ выполнено (`6b74721`)
 - `AgentPlugin.onUnload?(ctx)`; `manager.ts` `unregister` + вызов `onUnload` через `safeInvoke`.
 - `loader.reload()`: очистка `require.cache` для точечных entry-файлов, дифф по `path`,
   пере-регистрация, `onUnload` исчезнувших/заменённых.
@@ -545,7 +582,7 @@ export interface WebPluginManager {
 - Тесты: `tests/plugin-reload.test.ts` (правка файла → новый код; удаление файла → unload;
   `onUnload` вызван), `tests/skills-reload.test.ts`, обновление `tests/cli/repl-*` для `/reload`.
 
-### Фаза 5 — Тулы от плагинов (фундамент «агент пишет себе capability»)
+### Фаза 5 — Тулы от плагинов (фундамент «агент пишет себе capability») ⬜ не начата
 - `AgentPlugin.getToolDefinitions?(): ToolDefinition[]` (зеркалит `AgentModule.getToolDefinitions`,
   `modules/types.ts:9-14`).
 - `tools/registry.ts`: `upsert(name, def)`, `unregister(name)`; `register` продолжает кидать.
@@ -562,7 +599,7 @@ export interface WebPluginManager {
 - Тесты: `tests/plugin-tools.test.ts` (регистрация, конфликт имён, disable снимает тул, reload
   перерегистрирует, sync в runner-клон), `tests/tools/registry-upsert.test.ts`.
 
-### Фаза 6 — Черновики и тул `define_capability`
+### Фаза 6 — Черновики и тул `define_capability` ⬜ не начата
 - Каталог `.mma/plugins/drafts/`; `PluginRecord.draft` становится вычисляемым из пути
   (`path` под `.mma/plugins/drafts/`), а не новым значением `source` — union `source` остаётся
   из трёх значений, ничего не расширяется и не ломается.
