@@ -13,7 +13,7 @@ import { broadcast, type SessionStore, type RuntimeState, type HttpTransport, ty
 interface SessionMetaLite {
   id: string;
   name?: string;
-  updatedAt?: number;
+  updatedAt?: string;
   model?: string;
   messageCount?: number;
 }

@@ -423,8 +423,8 @@ async function boot(): Promise<void> {
     // without SSE no streamed answers, tools or loaders reach the page.
     console.error("initial refresh failed", err);
   }
-  // Restore the session from the URL AFTER the first refresh: `renderState`
-  // may auto-open the server's active session, and the requested one must win.
+  // Restore the session from the URL AFTER the first refresh: `refresh` may
+  // auto-open the server's active session, and the requested one must win.
   if (initialSession) {
     const meta = session.sessions.find((s) => s.id === initialSession);
     if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
