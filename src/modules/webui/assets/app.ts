@@ -2,6 +2,7 @@ import { msgs, inp, connStatus, setIcon, icon } from "./js/dom.js";
 import { api, token } from "./js/api.js";
 import { I18N, t, loadI18n } from "./js/i18n.js";
 import { tabs as tabState, session, settings, hooks } from "./js/store.js";
+import { routeState, mergeUsage, storeSnapshot, applyCounters } from "./js/state-sync.js";
 import type { Dict } from "./js/core/store/types.js";
 import {
   onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
@@ -76,69 +77,107 @@ if (sidebarBtn) {
 // the Files tab re-read its expanded directories.
 let lastFilesRevision = -1;
 
-function renderState(snapshot: Dict, busy: unknown, extra?: Dict): void {
-  session.host = snapshot || {};
-  session.busy = !!busy;
-  session.runningSessionId = (extra && extra.runningSessionId) || null;
-  session.runningSessionIds = (extra && extra.runningSessionIds) ||
-    (session.runningSessionId ? [session.runningSessionId] : []);
-  session.queued = (extra && extra.queued) || {};
-  reflectBusy();
-  reconcileTabStatuses();
-  const sessionId = session.host.sessionId || null;
-  session.activeSessionId = sessionId;
-  if (sessionId && !tabState.tabs.some((x) => x.id === sessionId)) {
-    openTab(sessionId, session.host.sessionName || String(sessionId), "session", false);
-  }
-  if (sessionId) updateTabName(sessionId, session.host.sessionName);
+// Renders the active tab's stored snapshot into the sidebar chrome. `session.host`
+// mirrors it for the render helpers (plan/usage/env/…), which read it directly.
+function renderActiveState(): void {
+  const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId) || null;
+  const host = (tab && tab.state) || {};
+  session.host = host;
+  const sid = host.sessionId || (tab && tab.id) || null;
+  session.activeSessionId = sid;
   if (!tabState.tabs.length) showEmptyFeed();
-  renderPlan(session.host.plan);
-  railPlan(busy && snapshot ? snapshot.plan : null);
-  renderUsage(session.host);
+  renderPlan(host.plan);
+  railPlan(session.busy && host ? host.plan : null);
+  renderUsage(host);
   // Late provider auto-detect may change the effective window after boot —
   // the snapshot carries it so the topbar follows without a config re-fetch.
-  if (snapshot && typeof snapshot.contextWindow === "number" && settings.config &&
-      settings.config.contextWindow !== snapshot.contextWindow) {
-    settings.config.contextWindow = snapshot.contextWindow;
+  if (typeof host.contextWindow === "number" && settings.config &&
+      settings.config.contextWindow !== host.contextWindow) {
+    settings.config.contextWindow = host.contextWindow;
     renderSelectors();
   }
-  renderEnvironment(session.host);
-  sidebarMapState(session.host);
-  sidebarMapIndicator(session.host);
+  renderEnvironment(host);
+  sidebarMapState(host);
+  sidebarMapIndicator(host);
   sidebarLspState();
-  sidebarFilesState(session.host);
-  const rev = snapshot && typeof snapshot.filesRevision === "number" ? snapshot.filesRevision : undefined;
+  sidebarFilesState(host);
+  const rev = typeof host.filesRevision === "number" ? host.filesRevision : undefined;
   if (rev !== undefined && rev !== lastFilesRevision) {
     const first = lastFilesRevision === -1;
     lastFilesRevision = rev;
     if (!first && rev > 0) sidebarFilesChanged();
   }
-  sidebarSessionChanged(sessionId);
-  renderWorkspace(session.host);
+  sidebarSessionChanged(sid);
+  renderWorkspace(host);
   renderSessionsDropdown();
   setSessionLoading(false);
-  setStaleBar(!!(snapshot && snapshot.i18nStale));
+  setStaleBar(!!host.i18nStale);
 }
 
-async function refresh(): Promise<void> {
-  // Scope the snapshot to the client's active tab: the sidebar must show the
-  // session it is actually viewing, not the server's active one.
-  const sid = tabState.activeTabId;
-  const url = sid ? "/api/state?session=" + encodeURIComponent(sid) : "/api/state";
+// Applies an SSE `state` payload to the per-tab store; re-renders when it
+// targets the active tab (or is global). Counters always refresh tab badges.
+function applyState(d: Dict): void {
+  const renderActive = routeState(d);
+  reflectBusy();
+  reconcileTabStatuses();
+  if (d.state && typeof d.state.sessionId === "string") {
+    updateTabName(d.state.sessionId, d.state.sessionName);
+  }
+  if (renderActive) renderActiveState();
+}
+
+async function fetchState(sessionId: string | null): Promise<Dict | null> {
+  const url = sessionId ? "/api/state?session=" + encodeURIComponent(sessionId) : "/api/state";
   const r = await api<{ state?: Dict; busy?: unknown }>(url);
-  if (!r.ok || !r.data) return;
+  return r.ok && r.data ? r.data : null;
+}
+
+// Renders a tab from its cached snapshot; fetches once when it has none.
+async function ensureTabState(id: string): Promise<void> {
+  const tab = tabState.tabs.find((x) => x.id === id);
+  if (!tab) return;
+  if (tab.state) {
+    if (tabState.activeTabId === id) renderActiveState();
+    return;
+  }
+  const data = await fetchState(id);
+  if (!data) return;
+  storeSnapshot(data.state);
+  if (tabState.activeTabId !== id) return;
+  applyCounters(data);
+  renderActiveState();
+}
+
+// Boot/reconnect: refresh the active tab (auto-opening the server-active
+// session on first load). Steady-state updates arrive via SSE `state`.
+async function refresh(): Promise<void> {
+  const sid = tabState.activeTabId;
+  const data = await fetchState(sid);
+  if (!data) return;
   // Guard: a switch during the fetch must not clobber the new tab.
   if (tabState.activeTabId !== sid) return;
-  renderState(r.data.state || {}, r.data.busy, r.data);
+  const snapshot = data.state;
+  if (!sid && snapshot && snapshot.sessionId &&
+      !tabState.tabs.some((x) => x.id === snapshot.sessionId)) {
+    openTab(snapshot.sessionId, snapshot.sessionName || String(snapshot.sessionId), "session", false);
+  }
+  storeSnapshot(snapshot);
+  applyCounters(data);
+  renderActiveState();
 }
 
-// Cross-module hooks (registered once app boot wires the renderers). Lets
-// `tabs.js` trigger a full state refresh on switch without importing app.
-hooks.applyState = renderState;
-hooks.refreshState = refresh;
+// Lets `tabs.js` render a switched-to tab (cached snapshot or one REST fetch)
+// without importing app.
+hooks.ensureTabState = ensureTabState;
 
 function resyncAfterReconnect(): void {
+  for (const tab of tabState.tabs) {
+    if (tab.kind !== "session") continue;
+    tab.state = null;
+    void ensureTabState(tab.id);
+  }
   void refresh();
+  void loadSessions();
   const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   if (tab && tab.kind === "session" && !feedHasContent(tab.feed)) {
     tab.historyLoaded = false;
@@ -243,35 +282,24 @@ es.addEventListener("command", (e) => {
 });
 es.addEventListener("state", (e) => {
   const d = parse(e);
-  if (d) {
-    session.busy = !!d.busy;
-    session.runningSessionId = d.runningSessionId || null;
-    session.runningSessionIds = d.runningSessionIds ||
-      (session.runningSessionId ? [session.runningSessionId] : []);
-    session.queued = d.queued || {};
-    reflectBusy();
-    reconcileTabStatuses();
-    sidebarBusy(!!d.busy);
-    void refresh();
-    // Usage чужого хода в свой сайдбар не мержим: смотрим вкладку своей
-    // (серверно-активной) сессии. Legacy-события без владельца — мержим,
-    // как раньше. Промах по активной (гонка activate) закроет 2с-полл.
-    if (d.usage && typeof d.usage === "object" &&
-        (d.usageSessionId == null || d.usageSessionId === session.activeSessionId)) {
-      session.host = Object.assign({}, session.host, d.usage);
-      renderUsage(session.host);
-    }
+  if (!d) return;
+  sidebarBusy(!!d.busy);
+  applyState(d);
+});
+es.addEventListener("sessions", (e) => {
+  const d = parse(e);
+  if (d && Array.isArray(d.sessions)) {
+    session.sessions = d.sessions;
+    renderSessionsDropdown();
   }
 });
 // Live context metrics while a turn runs (server broadcasts `usage` every
-// ~800ms): merge into the owning tab's sidebar without a state re-fetch.
+// ~800ms): merge into the owning tab's snapshot without a state re-fetch.
 es.addEventListener("usage", (e) => {
   const d = parse(e);
-  if (d && d.usage && typeof d.usage === "object" &&
-      (d.usageSessionId == null || d.usageSessionId === session.activeSessionId)) {
-    session.host = Object.assign({}, session.host, d.usage);
-    renderUsage(session.host);
-  }
+  if (!d || !d.usage || typeof d.usage !== "object") return;
+  const owner = d.usageSessionId || d.sessionId || null;
+  if (mergeUsage(owner, d.usage)) renderUsage(session.host);
 });
   es.addEventListener("error", (e) => {
     if (!(e as MessageEvent).data) return;
@@ -402,10 +430,6 @@ async function boot(): Promise<void> {
     if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
   }
   connectSSE();
-  setInterval(() => {
-    void refresh().catch((err) => console.error("refresh failed", err));
-  }, 2000);
-  setInterval(() => void loadSessions(), 15000);
 }
 
 hooks.applyStaticI18n = applyStaticI18n;

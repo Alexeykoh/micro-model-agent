@@ -162,7 +162,7 @@ export function updateTabName(id: string, name: string): void {
     renderTabstrip();
   }
   // Patch the session list too, otherwise the dropdown keeps the stale name
-  // until the next `loadSessions()` poll (15s).
+  // until the next `sessions` event.
   const sess = session.sessions.find((s) => s.id === id);
   if (sess && sess.name !== name) {
     sess.name = name;
@@ -199,6 +199,8 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
   if ((kind || "session") === "session") {
     session.activeSessionId = id;
     sidebarSessionChanged(id);
+    // Render the tab's cached snapshot instantly (or fetch it once from REST).
+    hooks.ensureTabState?.(id);
   }
   msgs.replaceChildren(tab.feed);
   restoreComposer(tab);
@@ -233,7 +235,6 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
         return;
       }
       void loadSessions();
-      if (tabState.activeTabId === id) hooks.refreshState?.();
     });
     loadHistory(tab).then((st) => {
       if (st && st.gone) markTabDead(tab.id);
@@ -276,9 +277,8 @@ async function newChatTab(): Promise<void> {
     const meta = r.data.session;
     openTab(meta.id, meta.name || String(meta.id), "session", false);
     await loadSessions();
-    // Новая сессия — без плана: полный снапшот под ?session=<id> чистит сайдбар.
+    // Новая сессия — без плана: снапшот под ?session=<id> чистит сайдбар.
     setSessionLoading(true);
-    if (tabState.activeTabId === meta.id) hooks.refreshState?.();
     return;
   }
   // Server-side creation failed (no manager / offline): keep a local-only tab
@@ -291,10 +291,10 @@ async function newChatTab(): Promise<void> {
 document.getElementById("newChat")?.addEventListener("click", () => void newChatTab());
 
 /**
- * Сверяет бейджи вкладок с серверным per-session статусом (2с-полл `/api/state`
- * и SSE `state`): бегущая → working, в очереди → queued, прочие working/queued
- * → idle. `waiting` (висит question) и `failed` не трогаем — их снимают только
- * события хода (ответ/turn_end) или новый send, иначе полл затёр бы «ждёт вас».
+ * Сверяет бейджи вкладок с серверным per-session статусом (SSE `state`):
+ * бегущая → working, в очереди → queued, прочие working/queued → idle.
+ * `waiting` (висит question) и `failed` не трогаем — их снимают только
+ * события хода (ответ/turn_end) или новый send.
  */
 export function reconcileTabStatuses(): void {
   const running = session.runningSessionIds || [];
