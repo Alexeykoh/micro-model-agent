@@ -20,6 +20,10 @@ gone.
 
 - **Client no longer polls** (`src/modules/webui/assets/app.ts`): the `state` event applies the snapshot via `applyState`, `ensureTabState` renders a tab from cache or one REST fetch, and the `2s /api/state` + `15s /api/sessions` intervals are removed; reconnect re-fetches every open session tab.
 
+### Fixed
+
+- **Auto-advance blocked by timestamp skew** (`src/modules/execution/module.ts`): `provablyStale` compares a step file's mtime against the plan's `createdAt`; the filesystem can record a file written right after plan creation a fraction of a millisecond *earlier* than `createdAt`, which falsely marked the file "pre-existing" and silently suppressed step auto-advance. A small tolerance now absorbs the skew (real stale files stay stale).
+
 ## [2.23.0] - 2026-10-07
 
 A new **Files** sidebar tab in `mma web`: browse the workspace as a lazy tree,
