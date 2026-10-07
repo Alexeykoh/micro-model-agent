@@ -7,6 +7,7 @@ import { semverGt } from "../updater/checker";
 import { Logger } from "../../logger/app-logger";
 import { PluginDispatcher } from "./dispatch";
 import { PluginLoader, invalidateModuleCache } from "./loader";
+import { syncPluginTools, detachPluginTools, type PluginToolSyncResult } from "./tools";
 import {
   buildRecord,
   firstLine,
@@ -14,9 +15,27 @@ import {
   type PluginLoadFailure,
   type PluginRecord,
 } from "./records";
+import type { ToolRegistry } from "../../tools/registry";
 import { isInsideDir } from "../../tools/path-utils";
 
 const logger = new Logger("warn", "plugins");
+
+/**
+ * Общий deny-list. Живёт объектом, а не полем, чтобы per-session менеджеры веба
+ * могли поделить **ссылку** с главным (`shareGateWith`): тогда тумблер в UI
+ * выключает плагин во всех живых реестрах без веера вызовов, а `version`
+ * инвалидирует кэш записей у всех менеджеров разом.
+ */
+interface PluginGate {
+  names: Set<string>;
+  version: number;
+  /**
+   * Менеджеры, делящие этот гейт (главный + живые раннеры веба). Нужен, чтобы
+   * изменение из одного менеджера починило вклад тулов во **всех** реестрах:
+   * тумблер в вебе выключает плагин и в главном агенте, и в клонах сессий.
+   */
+  peers: Set<PluginManager>;
+}
 
 /**
  * Итог регистрации: `registered` (встал/заменил), `skipped_older` (дедуп по
@@ -106,16 +125,128 @@ export function unloadPluginsForReboot(
 /** Реестр плагинов: дедуп, вкл/выкл, записи, диспетчер. */
 export class PluginManager {
   private plugins: AgentPlugin[] = [];
-  private disabled = new Set<string>();
+  private gate: PluginGate = { names: new Set(), version: 0, peers: new Set([this]) };
   private loadedAt = new Map<string, number>();
   private failures: PluginLoadFailure[] = [];
   /** Кэш плоских записей; инвалидируется на любое изменение реестра. */
   private recordsCache: PluginRecord[] | null = null;
+  private recordsVersion = -1;
+  /** Реестры, в которые вносятся тулы плагинов (главный + живые раннеры). */
+  private toolRegistries = new Set<ToolRegistry>();
+  /** Разошёл ли мы гейт другому менеджеру: тогда инстансы получаем от него. */
+  private followsGate = false;
+  /** Конфликты последней синхронизации тулов — для `mma plugins show` и тестов. */
+  private toolConflicts: PluginToolSyncResult["conflicts"] = [];
   private dispatcher = new PluginDispatcher(() => this.active());
   /** Каталоги для `reload()`; ставит bootstrap. */
   private dirs?: PluginDirs;
   /** Версия MMA для гейта `minMmaVersion` при перезагрузке. */
   private mmaVersion?: string;
+
+  /**
+   * Поделить deny-list с другим менеджером (runner-клон в вебе). Сами плагины
+   * при этом остаются инстансами каждого менеджера: у раннера свой
+   * execution-плагин, привязанный к его трекеру.
+   *
+   * Вызвавший становится **источником** гейта: только он рассылает изменения
+   * инстансов (см. `adoptPlugin`). Иначе регистрация execution-плагина раннера
+   * растащила бы его по главному менеджеру и всем вкладкам.
+   */
+  shareGateWith(other: PluginManager): void {
+    this.gate.peers.delete(this);
+    this.gate = other.gate;
+    this.gate.peers.add(this);
+    this.followsGate = true;
+  }
+
+  /**
+   * Подключить реестр тулов к вкладу плагинов и сразу синхронизировать: реестр
+   * мог быть собран до последней перезагрузки плагинов.
+   */
+  attachToolRegistry(registry: ToolRegistry): PluginToolSyncResult {
+    this.toolRegistries.add(registry);
+    return this.syncTools();
+  }
+
+  /**
+   * Отключить реестр и снять с него вклад плагинов. Вызывается при остановке
+   * раннера: иначе менеджер держал бы реестр выключенной сессии и пытался бы
+   * вносить в него тулы после reload.
+   */
+  detachToolRegistry(registry: ToolRegistry): void {
+    if (!this.toolRegistries.delete(registry)) return;
+    detachPluginTools(registry);
+  }
+
+  /** Синхронизировать все подключённые реестры с текущим набором плагинов. */
+  private syncTools(): PluginToolSyncResult {
+    const result: PluginToolSyncResult = { added: [], removed: [], kept: [], conflicts: [] };
+    for (const registry of this.toolRegistries) {
+      const one = syncPluginTools(this.active(), registry);
+      result.added.push(...one.added);
+      result.removed.push(...one.removed);
+      result.kept.push(...one.kept);
+      result.conflicts.push(...one.conflicts);
+    }
+    this.toolConflicts = result.conflicts;
+    return result;
+  }
+
+  /**
+   * Починить вклад тулов у всех менеджеров, делящих гейт. Реестры у каждого
+   * свои (клон сессии ≠ главный), а выключатель у них общий — иначе тумблер в
+   * вебе погасил бы плагин только в главном агенте.
+   */
+  private syncGatePeers(): void {
+    for (const peer of [...this.gate.peers]) {
+      if (peer !== this) peer.syncTools();
+    }
+  }
+
+  /**
+   * Принять новый инстанс плагина из источника гейта (главного менеджера).
+   *
+   * Живой прогон вскрыл дыру: `reload` перечитывает плагин в главном
+   * менеджере, а уже спавненная сессия веба держала **старый** инстанс — и его
+   * хуки, и его тулы (правка `handler` в файле плагина не доезжала минуя рестарт).
+   */
+  adoptPlugin(plugin: AgentPlugin): void {
+    const existing = this.plugins.find((p) => p.name === plugin.name);
+    if (existing) {
+      this.plugins[this.plugins.indexOf(existing)] = plugin;
+      this.invalidateRecords();
+      this.syncTools();
+      return;
+    }
+    this.plugins.push(plugin);
+    this.touch(plugin);
+  }
+
+  /** Забыть плагин, выгруженный источником гейта (его файл исчез при reload). */
+  forgetPlugin(name: string): void {
+    this.unregister(name);
+  }
+
+  /** Разослать новый инстанс тем, кто делит наш гейт (runner-кланы сессий). */
+  private broadcastPlugin(plugin: AgentPlugin): void {
+    if (this.followsGate) return;
+    for (const peer of [...this.gate.peers]) {
+      if (peer !== this) peer.adoptPlugin(plugin);
+    }
+  }
+
+  /** Сообщить подписчикам гейта, что плагин ушёл (выгрузка/удаление файла). */
+  private broadcastRemoval(name: string): void {
+    if (this.followsGate) return;
+    for (const peer of [...this.gate.peers]) {
+      if (peer !== this) peer.forgetPlugin(name);
+    }
+  }
+
+  /** Конфликты имён тулов последней синхронизации (пусто, если всё внеслось). */
+  getToolConflicts(): PluginToolSyncResult["conflicts"] {
+    return this.toolConflicts.map((c) => ({ ...c }));
+  }
 
   /**
    * Сообщить менеджеру, откуда он читает внешние плагины — чтобы `reload()`
@@ -157,12 +288,14 @@ export class PluginManager {
     if (existing) {
       if (semverGt(plugin.version || "0.0.0", existing.version || "0.0.0")) {
         this.replace(existing, plugin);
+        this.broadcastPlugin(plugin);
         return { status: "registered", warnings: meta.warnings };
       }
       return { status: "skipped_older", existing };
     }
     this.plugins.push(plugin);
     this.touch(plugin);
+    this.broadcastPlugin(plugin);
     return { status: "registered", warnings: meta.warnings };
   }
 
@@ -176,7 +309,9 @@ export class PluginManager {
   private touch(plugin: AgentPlugin): void {
     this.loadedAt.set(plugin.name, Date.now());
     this.sort();
-    this.recordsCache = null;
+    this.invalidateRecords();
+    this.syncTools();
+    this.syncGatePeers();
   }
 
   private sort(): void {
@@ -189,7 +324,10 @@ export class PluginManager {
     if (index < 0) return false;
     this.plugins.splice(index, 1);
     this.loadedAt.delete(name);
-    this.recordsCache = null;
+    this.invalidateRecords();
+    this.syncTools();
+    this.syncGatePeers();
+    this.broadcastRemoval(name);
     return true;
   }
 
@@ -223,9 +361,9 @@ export class PluginManager {
    */
   setEnabled(name: string, on: boolean): boolean {
     const loaded = this.plugins.some((p) => p.name === name);
-    if (on) this.disabled.delete(name);
-    else this.disabled.add(name);
-    this.recordsCache = null;
+    if (on) this.gate.names.delete(name);
+    else this.gate.names.add(name);
+    this.bumpGate();
     return loaded;
   }
 
@@ -233,25 +371,42 @@ export class PluginManager {
    * Заменить deny-list целиком (путь конфига). Выключает перечисленные,
    * включает всё остальное. Неизвестные имена сохраняются — иначе запись
    * потерялась бы при первом же сохранении конфига без плагина на диске.
+   *
+   * Множество правится **на месте**: на нём может висеть общий gate раннеров
+   * веба, и подмена объекта тихо оставила бы их со старым deny-list.
    */
   setDisabledAll(names: string[]): void {
-    this.disabled = new Set(names.filter(Boolean));
+    this.gate.names.clear();
+    for (const name of names) if (name) this.gate.names.add(name);
+    this.bumpGate();
+  }
+
+  /** Гейт изменился: сбросить кэш записей и пересобрать вклад тулов. */
+  private bumpGate(): void {
+    this.gate.version++;
+    this.invalidateRecords();
+    this.syncTools();
+    this.syncGatePeers();
+  }
+
+  /** Кэш записей невалиден (изменился набор плагинов или deny-list). */
+  private invalidateRecords(): void {
     this.recordsCache = null;
   }
 
   isEnabled(name: string): boolean {
-    return this.plugins.some((p) => p.name === name) && !this.disabled.has(name);
+    return this.plugins.some((p) => p.name === name) && !this.gate.names.has(name);
   }
 
   /** Имена выключенных плагинов (для `/config plugins.disabled` и UI). */
   getDisabled(): string[] {
-    return [...this.disabled].sort();
+    return [...this.gate.names].sort();
   }
 
   /** Заметить непрогрузившийся плагин (сейчас он просто исчезал из списков). */
   noteFailure(entry: string, path: string, message: string): void {
     this.failures.push({ entry, path, message: firstLine(message), at: Date.now() });
-    this.recordsCache = null;
+    this.invalidateRecords();
   }
 
   /** Отказы загрузки (`entry`, путь, причина) для UI и `mma plugins list`. */
@@ -262,7 +417,7 @@ export class PluginManager {
   /** Сбросить накопленные отказы — перезагрузка пересобирает список заново. */
   clearFailures(): void {
     this.failures = [];
-    this.recordsCache = null;
+    this.invalidateRecords();
   }
 
   /**
@@ -271,8 +426,8 @@ export class PluginManager {
    * плагина не требует правок в 15 хуках.
    */
   private active(): AgentPlugin[] {
-    if (this.disabled.size === 0) return [...this.plugins];
-    return this.plugins.filter((p) => !this.disabled.has(p.name));
+    if (this.gate.names.size === 0) return [...this.plugins];
+    return this.plugins.filter((p) => !this.gate.names.has(p.name));
   }
 
   /** Все зарегистрированные плагины (копия, по приоритету). */
@@ -285,13 +440,16 @@ export class PluginManager {
    * инвалидируются на любое изменение реестра — вызывающие просто читают.
    */
   getRecords(): PluginRecord[] {
-    if (!this.recordsCache) {
+    // `gate.version` общий у мениджеров, делящих deny-list: смена выключателя
+    // из веба должна чистить кэш и у раннеров тоже.
+    if (!this.recordsCache || this.recordsVersion !== this.gate.version) {
       this.recordsCache = this.plugins.map((plugin) =>
         buildRecord(plugin, {
-          enabled: !this.disabled.has(plugin.name),
+          enabled: !this.gate.names.has(plugin.name),
           ...(this.loadedAt.has(plugin.name) ? { loadedAt: this.loadedAt.get(plugin.name) } : {}),
         }),
       );
+      this.recordsVersion = this.gate.version;
     }
     return this.recordsCache.map((r) => ({ ...r }));
   }

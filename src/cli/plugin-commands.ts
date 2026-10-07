@@ -56,7 +56,11 @@ export function createPluginCommand(program: Command): void {
         channel.writeLine(t("cli.plugins.not_found", { name }));
         return;
       }
-      for (const line of formatPluginDetails(record, pluginManager.getFailures())) {
+      for (const line of formatPluginDetails(
+        record,
+        pluginManager.getFailures(),
+        pluginManager.getToolConflicts(),
+      )) {
         channel.writeLine(line);
       }
     });

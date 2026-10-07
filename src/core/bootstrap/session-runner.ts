@@ -59,6 +59,13 @@ export interface SessionRunner {
   pluginManager: PluginManager;
   registry: ToolRegistry;
   contextLogger: ContextLogger | undefined;
+  /**
+   * Отпустить ресурсы раннера (сейчас — снять его реестр с вклада тулов
+   * плагинов). Вызывается пулом при удалении сессии и при остановке сервера:
+   * иначе менеджер плагинов держал бы реестр выключенной вкладки и вносил бы
+   * в него тулы после перезагрузки.
+   */
+  dispose?(): void;
 }
 
 /**
@@ -203,6 +210,9 @@ export function createSessionRunnerFactory(
     // определения тулов и ctx-чистые инстансы плагинов).
     const registry = buildRunnerRegistry(toolRegistry, runnerExec);
     const runnerPlugins = buildRunnerPlugins(pluginManager, runnerExec);
+    // Тулы плагинов в клон реестра: `buildRunnerRegistry` копирует определения
+    // на момент спавна, а плагин мог подгрузиться или быть выключен позже.
+    runnerPlugins.attachToolRegistry(registry);
     const { toolCtx, runnerTags } = buildRunnerToolCtx({
       configRef,
       logger,
@@ -277,6 +287,7 @@ export function createSessionRunnerFactory(
       pluginManager: runnerPlugins,
       registry,
       contextLogger,
+      dispose: () => runnerPlugins.detachToolRegistry(registry),
     };
   };
 }

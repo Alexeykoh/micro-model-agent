@@ -50,6 +50,7 @@ i18n.I18N.dicts = {
     "web.plugins.no_description": "no description",
     "web.plugins.permissions_none": "none declared",
     "web.plugins.permissions_hint": "declaration, not enforcement",
+    "web.plugins.cache_note": "prompt cache resets",
     "web.plugins.warnings": "warnings",
     "web.plugins.copy_path": "copy",
     "web.plugins.copied": "copied",
@@ -272,6 +273,8 @@ describe("plugins tab DOM", () => {
     expect(text).toContain("onToolEnd");
     expect(text).toContain("/p/.mma/plugins/my-plugin/plugin.ts");
     expect(text).toContain("declaration, not enforcement");
+    // Плагин с тулами меняет набор тулов между итерациями — об этом говорим.
+    expect(text).toContain("prompt cache resets");
     const link = host.querySelector("a.plg-link") as HTMLAnchorElement;
     expect(link.href).toBe("https://example.com/p");
     expect(link.rel).toBe("noopener noreferrer");

@@ -1040,8 +1040,8 @@ read-only петля без стопа, рассинхрон провайдер�
 ### Plugin Registry: метаданные, вкл/выкл, вкладка Plugins (2.29.0)
 
 Спека: [docs/specs/2026-10-07-plugin-registry-design.md](./docs/specs/2026-10-07-plugin-registry-design.md)
-(со статусом фаз). Реализованы **фазы 1–4**; не начаты **фаза 5** (тулы от плагинов,
-`AgentPlugin.getToolDefinitions`) и **фаза 6** (черновики + тул `define_capability`).
+(со статусом фаз). Реализованы **фазы 1–5**; не начата **фаза 6** (черновики + тул
+`define_capability`).
 
 - **Метаданные** (`src/modules/types.ts`, `plugins/records.ts`): `description`, `author`, `homepage`,
   `permissions`, `provides` — все опциональны; жёсткая валидация только на `name`
@@ -1072,6 +1072,25 @@ read-only петля без стопа, рассинхрон провайдер�
   зовут `reload()` и не знают про пути. Поверхности: `mma plugins reload`, `/plugins reload`,
   `POST /api/reload/plugins` (отдельное пространство действий: `reload` — допустимое имя
   плагина, и exact-first сделал бы его невыключаемым), кнопка в Settings → Plugins.
+- **Тули от плагинов (фаза 5):** `AgentPlugin.getToolDefinitions?()`; `plugins/tools.ts` — санитизация
+  имени в `plugin__<плагин>__<тул>` (как `mcp__<server>__<tool>`), авто-тег `plugin:<name>`,
+  `alwaysOn: true` по умолчанию, заполнение `provides.tools`; конфликт имени с ядром/другим
+  плагином, мусор в определении, дубль после санитизации или throw в методе **отбрасывают весь
+  вклад** плагина (ворн в лог + `getToolConflicts()` → `mma plugins show`), хуки остаются живы.
+  `ToolRegistry.upsert/unregister` (`register` по-прежнему кидает).
+- **Клоны реестра (фаза 5):** набор реестров держит `PluginManager`
+  (`attachToolRegistry`/`detachToolRegistry`; главный — `modules-phase.ts`, раннер — сразу после
+  `buildRunnerRegistry`), per-session менеджеры делят **объект-гейт** deny-list с главным
+  (`shareGateWith`): мутация на месте + `gate.version` (кэш записей) + `syncGatePeers` (одна
+  смена чинит все реестры гейта). Остановка раннера зовёт `runner.dispose()` →
+  `detachToolRegistry`, иначе менеджер держит мёртвый реестр. Владелец тула берётся **из тега**
+  `plugin:<name>` в определении (клоны `buildRunnerRegistry` приходят без записи о владельце —
+  иначе вклад плагина отбраковывался как коллизия с ядром, а reload не обновлял тул).
+  Перезагрузка доезжает до живых вкладок: главный (`followsGate === false`) рассылает
+  `adoptPlugin`/`forgetPlugin` менеджерам своего гейта.
+- **Контракт результата тула плагина** (`wrapPluginHandler`): отсутствие `success` = успех,
+  нестроковый `output` приводится к строке, определение без `handler` отклоняется при регистрации
+  с внятным ворном (иначе падение в рантайме `tool.handler is not a function`).
 - **`require`-кэш проверен экспериментом:** сброс работает под Bun для `.ts` и `.js`, под Node
   только для `.js` (transpile кэшируется отдельно). Поэтому `ReloadReport.staleTs` — число
   `.ts`-плагинов со старым кодом, и UI/CLI **говорят об этом явно**, а не рапортуют об успехе.
@@ -1089,7 +1108,8 @@ read-only петля без стопа, рассинхрон провайдер�
   enforcement. Настоящая изоляция/доверие — открытый P1 в
   `docs/specs/2026-09-28-production-readiness-design.md`.
 - **Тесты:** `tests/plugin-records.test.ts`, `tests/plugin-enabled.test.ts`,
-  `tests/plugin-reload.test.ts`, `tests/skills-reload.test.ts`, `tests/plugin-loader.test.ts`,
+  `tests/plugin-reload.test.ts`, `tests/plugin-tools.test.ts`, `tests/skills-reload.test.ts`,
+  `tests/plugin-loader.test.ts`, `tests/tools/registry-upsert.test.ts`,
   `tests/webui-plugins-api.test.ts`, `tests/webui-plugins-dom.test.ts`, guard в
   `tests/webui-assets.test.ts`, e2e `tests/e2e/web-plugins.e2e-test.ts`.
 - **Побочно:** `subdialog.ts` теперь резолвит узлы оверлея лениво, а не на уровне модуля

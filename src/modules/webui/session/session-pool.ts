@@ -172,13 +172,24 @@ export class RunPool {
 
   /** Сброс слота сессии: раннер + очередь (сессия удалена, слот простаивает). */
   drop(id: string): void {
-    this.runners.delete(id);
+    this.disposeRunner(id);
     this.slots.delete(id);
   }
 
   /** Полный сброс (стоп сервера): раннеры, слоты, очереди. */
   clear(): void {
-    this.runners.clear();
+    for (const id of [...this.runners.keys()]) this.disposeRunner(id);
     this.slots.clear();
+  }
+
+  /** Отпустить раннер (вклад тулов плагинов снимается, реестр больше не нужен). */
+  private disposeRunner(id: string): void {
+    const runner = this.runners.get(id);
+    this.runners.delete(id);
+    try {
+      runner?.dispose?.();
+    } catch {
+      /* раннер уже разобран — тихо */
+    }
   }
 }

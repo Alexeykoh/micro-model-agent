@@ -206,6 +206,10 @@ function registerModuleToolsAndPlugins(
     source: "project",
     mmaVersion,
   });
+
+  // Вклад плагинов в тулы: после регистрации всех (в т.ч. внешних), иначе
+  // раннеры и перезагрузка смотрели бы на устаревший набор.
+  pluginManager.attachToolRegistry(toolRegistry);
 }
 
 /**

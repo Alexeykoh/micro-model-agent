@@ -53,12 +53,17 @@ export function buildRunnerRegistry(
 /**
  * Менеджер плагинов раннера: общие инстансы кроме закрытых над shared-жизнью
  * плюс execution-плагин своего трекера.
+ *
+ * Deny-list **общий** с главным менеджером (`shareGateWith`): иначе тумблер в
+ * вебе выключал бы плагин только в главном агенте, а живая вкладка веба
+ * продолжала бы звать его хуки и видеть его тулы.
  */
 export function buildRunnerPlugins(
   mainPlugins: PluginManager,
   runnerExec: ExecutionModule,
 ): PluginManager {
   const runnerPlugins = new PluginManager();
+  runnerPlugins.shareGateWith(mainPlugins);
   for (const plugin of mainPlugins.getAllPlugins()) {
     if (RUNNER_EXCLUDED_PLUGINS.has(plugin.name)) continue;
     runnerPlugins.register(plugin);

@@ -4,6 +4,7 @@
 import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
 import type { PluginLoadFailure, PluginRecord } from "./records";
+import type { PluginToolConflict } from "./tools";
 
 /** Опции листинга. */
 export interface PluginListOptions {
@@ -57,8 +58,31 @@ function formatFailure(failure: PluginLoadFailure): string[] {
   ];
 }
 
+/**
+ * Замечания, по которым плагин «не такой, как обещал»: мягкие предупреждения
+ * метаданных и тулы, которые ядро не внесло (коллизия имён, мусор в
+ * определении). Пользователь видит, почему вклад плагина не доехал.
+ */
+function noticeLines(record: PluginRecord, toolConflicts: PluginToolConflict[]): string[] {
+  const lines: string[] = [];
+  for (const warning of record.warnings) {
+    lines.push("  " + pc.yellow(t("plugin.meta_warning", { name: record.name, problem: warning })));
+  }
+  for (const conflict of toolConflicts) {
+    if (conflict.plugin !== record.name) continue;
+    lines.push(
+      "  " + pc.yellow(t("plugin.tool_conflict", { tool: conflict.tool, detail: conflict.detail })),
+    );
+  }
+  return lines;
+}
+
 /** Подробности плагина для `mma plugins show` и поп-апа веба (текстовый вид). */
-export function formatPluginDetails(record: PluginRecord, failures: PluginLoadFailure[]): string[] {
+export function formatPluginDetails(
+  record: PluginRecord,
+  failures: PluginLoadFailure[],
+  toolConflicts: PluginToolConflict[] = [],
+): string[] {
   const lines: string[] = [];
   lines.push(`${record.name}  ${record.version ? `v${record.version}` : ""}`.trim());
   lines.push(
@@ -86,9 +110,7 @@ export function formatPluginDetails(record: PluginRecord, failures: PluginLoadFa
   if (record.provides.hooks.length > 0) {
     lines.push(`  ${t("cli.plugins.hooks_label")}: ${record.provides.hooks.join(", ")}`);
   }
-  for (const warning of record.warnings) {
-    lines.push("  " + pc.yellow(t("plugin.meta_warning", { name: record.name, problem: warning })));
-  }
+  lines.push(...noticeLines(record, toolConflicts));
   const failure = failures.find((f) => f.path === record.path);
   if (failure) lines.push("  " + pc.red(failure.message));
   return lines;

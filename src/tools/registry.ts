@@ -12,6 +12,21 @@ export class ToolRegistry {
   }
 
   /**
+   * Зарегистрировать или заменить по имени. `register` остаётся строгим: дубль
+   * в ядре — это баг, который должен упасть на старте. `upsert` нужен там, где
+   * набор тулов принадлежит внешнему источнику и меняется по ходу работы —
+   * плагины (см. `modules/plugins/tools.ts`).
+   */
+  upsert(tool: ToolDefinition): void {
+    this.tools.set(tool.name, tool);
+  }
+
+  /** Снять тул с регистрации (выключение/выгрузка плагина). */
+  unregister(name: string): boolean {
+    return this.tools.delete(name);
+  }
+
+  /**
    * Поверхностная копия реестра (те же определения, новая Map).
    * Параллельным раннерам: свои plan/set_thinking поверх общих хендлеров —
    * хендлеры `(ctx, args)`-чисты, состояние несут ctx/executor, а не реестр.

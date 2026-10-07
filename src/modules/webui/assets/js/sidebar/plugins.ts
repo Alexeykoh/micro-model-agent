@@ -244,6 +244,11 @@ function drawPluginInfo(box: HTMLElement, row: PluginRow): void {
   const hooksChips = chipRow(t("web.plugins.hooks"), provides.hooks || []);
   if (toolsChips) box.appendChild(toolsChips);
   if (hooksChips) box.appendChild(hooksChips);
+  // Переключение плагина с тулами меняет набор тулов между итерациями — префикс
+  // промпта рвётся и кеш провайдера сбрасывается. Говорим об этом прямо.
+  if ((provides.tools || []).length > 0) {
+    box.appendChild(el("div", "plg-hint", t("web.plugins.cache_note")));
+  }
 
   const permissions = (row.permissions as string[] | undefined) || [];
   box.appendChild(

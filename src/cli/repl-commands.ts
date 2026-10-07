@@ -1091,7 +1091,7 @@ function showPlugin(ctx: ReplContext, manager: PluginManager, name: string | und
     ctx.output.writeLine(t("cli.plugins.not_found", { name: name || "" }));
     return;
   }
-  for (const line of formatPluginDetails(record, manager.getFailures())) {
+  for (const line of formatPluginDetails(record, manager.getFailures(), manager.getToolConflicts())) {
     ctx.output.writeLine(line);
   }
 }

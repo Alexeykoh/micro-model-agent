@@ -14,12 +14,17 @@ silently missing.
 
 ### Added
 
-- **Live plugin reload** (`src/modules/plugins/reload.ts`, `manager.ts`, `loader.ts`): edits to a plugin file are picked up without restarting the process — unload (`onUnload`), drop the `require` cache, read again. Available as `mma plugins reload`, `/plugins reload`, `POST /api/reload/plugins`, and a "reload plugins" button in Settings > Plugins. Skills reload the same way, so a skill written at runtime is loadable in the same turn.
+- **Plugin tools** (`src/modules/plugins/tools.ts`, `AgentPlugin.getToolDefinitions()`): a plugin can add its own tools to the harness. Definitions enter the registry under `plugin__<plugin>__<tool>` (same convention as `mcp__<server>__<tool>`), get a `plugin:<name>` tag and `alwaysOn: true` by default so `enable_tools` cannot hide them; the core fills `provides.tools`, which the sidebar popup, `mma plugins list` and `mma plugins show` already read. Toggling a plugin with tools resets the provider prompt cache - the details popup says so instead of hiding it.
+- **Live plugin reload** (`src/modules/plugins/reload.ts`, `manager.ts`, `loader.ts`): edits to a plugin file are picked up without restarting the process - unload (`onUnload`), drop the `require` cache, read again. Available as `mma plugins reload`, `/plugins reload`, `POST /api/reload/plugins`, and a "reload plugins" button in Settings > Plugins. Skills reload the same way, so a skill written at runtime is loadable in the same turn.
 - **`onUnload` hook** on `AgentPlugin`: release servers, timers and sockets when a plugin goes away. Without it a reload leaks - `examples/plugins/web-ui` starts an HTTP server in `onSessionStart`, and copies used to accumulate across `/reload`.
 - **`PluginManager` owns its source catalogs** (`setSourceDirs`, set at bootstrap): CLI, REPL and the web all call `reload()` and none of them knows the paths. `/reload` unloads the old plugins and clears the cache before rebuilding bootstrap, so nothing outlives it.
+- **`ToolRegistry.upsert` / `ToolRegistry.unregister`** (`src/tools/registry.ts`): for tool sets owned by an external source and changed at runtime. `register` still throws on a duplicate - a core duplicate is a startup bug.
 
 ### Fixed
 
+- **Plugin reload never reached an already-running web session**: `reload` replaced the plugin in the main manager only, so a session runner kept the old instance - its hooks and its tools stayed on the pre-edit code until the process restarted. The main manager now broadcasts the new instance (and removals) to managers sharing its gate; a manager that adopted someone else's gate never broadcasts, so a runner's own execution plugin cannot leak into the main agent.
+- **A cloned registry looked like a name collision**: `buildRunnerRegistry` copies definitions into a session registry, and the copy carried no ownership record, so the plugin's contribution was rejected as "name already taken by the harness" - the stale copy kept serving calls and reload could not update it. Ownership is now read from the `plugin:<name>` tag, which survives cloning; it also lets a disabled plugin's tools be cleaned out of a session registry.
+- **A plugin tool without `success` looked failed**: `ToolResult.success` is required, and plugins are usually plain JS, so `{output}` produced an apparently failed tool card and no `success` in the log. The plugin handler result is normalized (missing `success` means success, non-string `output` is stringified), and a definition without `handler` is rejected at registration with a readable warning instead of failing at call time with `tool.handler is not a function`.
 - **Light theme rendered every toggle as off**: `body.light .toggle` outranked `.toggle.on` on specificity, so enabled toggles showed the disabled colour app-wide (settings included).
 - **Plugin code edits were ignored until a process restart**: `/reload` rebuilt bootstrap but nothing invalidated the `require` cache. Verified experimentally before fixing: cache invalidation works under Bun for `.ts` and `.js`, but under Node only for `.js` (Node caches transpiled `.ts` separately). Such files are counted in `ReloadReport.staleTs` and the UI/CLI say a restart is needed rather than reporting a reload that did not change anything.
 - **A deleted plugin file left the plugin registered**: reloading a catalog now drops plugins whose file disappeared.
@@ -40,6 +45,8 @@ silently missing.
 - **Sidebar tab icons**: `map`/`stethoscope`/`puzzle` were too dense to read at 17px and are replaced with `layout-grid`/`code`/`plug`.
 - **`POST /api/reload/plugins`** is a separate action namespace, not `POST /api/plugins/reload` - `reload` is a legal plugin name, and exact-first matching would have made such a plugin impossible to toggle.
 - **Internals**: `PluginManager` was over the 300-line rule at 316; hook dispatching moved to `src/modules/plugins/dispatch.ts`.
+- **Plugin tool contribution and per-session registry clones** (`attachToolRegistry` / `detachToolRegistry` / `shareGateWith`): the manager owns the set of tool registries it feeds (main plus one per live web session), and per-session plugin managers share the **deny-list object** with the main one. Before this, a web toggle only affected the main agent - hooks and (now) tools of a disabled plugin kept running in session runners. The deny-list is mutated in place (replacing the object would leave runners on the old set), `getRecords()` is validated against the shared `gate.version`, and stopping a runner calls `dispose()` so the manager does not keep a dead registry and keep writing tools into it.
+- **A plugin tool set is all-or-nothing**: a name already taken by the harness or another plugin, a malformed definition, a duplicate name after sanitization, or a `getToolDefinitions()` that throws rejects the plugin's **whole** contribution (logged as a warning, shown by `mma plugins show <name>` / `/plugins show`). A half-installed tool set is worse than none - the model would see one of three tools and could not tell why the others were missing. Hooks stay live.
 
 ### Removed
 
@@ -48,7 +55,7 @@ silently missing.
 ### Known limits (documented, not fixed)
 
 - Disabling a plugin stops its hooks and tool contributions but does **not** undo the module import that already ran, and `permissions` is a declaration shown to the user rather than enforcement. Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
-- A plugin that cannot add tools is still a hooks-only plugin: `getToolDefinitions` on `AgentPlugin` is not implemented yet (spec phase 5), and neither is agent-authored draft plugins (phase 6).
+- Agent-authored draft plugins (`.mma/plugins/drafts/`, the `define_capability` tool and the consent prompt) are still not implemented - spec phase 6.
 
 ## [2.28.0] - 2026-10-07
 
