@@ -199,6 +199,14 @@ export interface IndexerConfig {
   mapTokenBudget: number;
 }
 
+/** Ретенция изображений тулов на сессию (`<sessionDir>/images`). */
+export interface ImagesConfig {
+  /** Максимум хранимых картинок на сессию; старейшие вытесняются первыми. */
+  maxCount: number;
+  /** Максимальный суммарный размер картинок сессии в байтах. */
+  maxBytes: number;
+}
+
 export interface ModelLoadConfig {
   autoLoad: boolean;
   flashAttention?: boolean;
@@ -556,6 +564,7 @@ export interface AppConfig {
   session: SessionConfig;
   contextLog: ContextLogConfig;
   indexer: IndexerConfig;
+  images?: ImagesConfig;
   browser: BrowserToolConfig;
   webSearch?: WebSearchConfig;
   errorWebSearch?: ErrorWebSearchConfig;
