@@ -24,6 +24,8 @@ describe("UserProfile", () => {
     expect(info.os).toBeDefined();
   });
 
+  // `collect()` reads os facts (hostname/homedir) and `save()` writes disk;
+  // both starve past the 5s default when the whole suite runs in parallel.
   it("should persist to disk", () => {
     profile.collect();
     profile.save();
@@ -31,7 +33,7 @@ describe("UserProfile", () => {
     expect(existsSync(savedPath)).toBe(true);
     const data = JSON.parse(readFileSync(savedPath, "utf-8"));
     expect(data.platform).toBeDefined();
-  });
+  }, 15_000);
 
   it("should load from disk", () => {
     profile.collect();
@@ -40,7 +42,7 @@ describe("UserProfile", () => {
     const profile2 = new UserProfile(tmpDir);
     profile2.load();
     expect(profile2.getInfo()!.platform).toBeDefined();
-  });
+  }, 15_000);
 
   it("should compress to ~500 tokens", () => {
     profile.collect();

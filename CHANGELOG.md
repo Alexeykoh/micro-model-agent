@@ -4,6 +4,27 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.24.0] - 2026-10-07
+
+The `mma web` sidebar is now event-sourced: the SSE `state` event carries the full
+session snapshot, each tab owns its snapshot, and the client-side poll timers are
+gone.
+
+### Added
+
+- **Full snapshot in the `state` event** (`src/modules/webui/session/session-status.ts`): the new `pushState(s, sessionId?)` helper broadcasts the `HostStateSnapshot` (built from the existing `Host.getState`) with the owning `sessionId`; every state change (turn start/end, queue, plan, reconfigure, re-index) goes through it.
+- **`sessions` SSE event** (`src/modules/webui/session/sessions-api.ts`): create/activate/delete broadcast the sessions list; the client renders it directly.
+- **Per-tab snapshot store** (`src/modules/webui/assets/js/state-sync.ts`): pure routing of `state`/`usage` payloads into `tab.state` (active-only render, `sessionId` guard, usage merge); the switched-to tab renders instantly from memory.
+
+### Changed
+
+- **Client no longer polls** (`src/modules/webui/assets/app.ts`): the `state` event applies the snapshot via `applyState`, `ensureTabState` renders a tab from cache or one REST fetch, and the `2s /api/state` + `15s /api/sessions` intervals are removed; reconnect re-fetches every open session tab.
+- **Accent toggles** (`src/modules/webui/assets/styles.css`): on/off switches now fill with the theme accent color instead of a muted gray, in both dark and light themes.
+
+### Fixed
+
+- **Auto-advance blocked by timestamp skew** (`src/modules/execution/module.ts`): `provablyStale` compares a step file's mtime against the plan's `createdAt`; the filesystem can record a file written right after plan creation a fraction of a millisecond *earlier* than `createdAt`, which falsely marked the file "pre-existing" and silently suppressed step auto-advance. A small tolerance now absorbs the skew (real stale files stay stale).
+
 ## [2.23.0] - 2026-10-07
 
 A new **Files** sidebar tab in `mma web`: browse the workspace as a lazy tree,

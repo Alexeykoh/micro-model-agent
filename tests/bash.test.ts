@@ -180,11 +180,16 @@ describe("bash", () => {
     const base = mkdtempSync(join(tmpdir(), "mma-npmexec-"));
     const pkg = join(base, "pkg");
     const app = join(base, "app");
+    // A registry-unique name: `npx <name>` falls back to the npm registry when
+    // the local package is not resolved as installed, so a name that exists
+    // there (e.g. the old "no-bin-pkg") ran successfully and broke the hint
+    // assertion under load. This name is local-only.
+    const pkgName = "mma-no-bin-fixture";
     mkdirSync(pkg, { recursive: true });
     mkdirSync(app, { recursive: true });
     writeFileSync(
       join(pkg, "package.json"),
-      JSON.stringify({ name: "no-bin-pkg", version: "1.0.0" }),
+      JSON.stringify({ name: pkgName, version: "1.0.0" }),
       "utf-8",
     );
     writeFileSync(join(pkg, "index.js"), "module.exports = 1;\n", "utf-8");
@@ -200,10 +205,10 @@ describe("bash", () => {
       });
       expect(install.success).toBe(true);
 
-      // no-bin-pkg is installed but declares no bin → npx must fail with
+      // no-bin fixture is installed but declares no bin → npx must fail with
       // "could not determine executable to run", and the tool appends the hint.
       const npxRun = await bashTool.handler(makeCtx({ baseDir: app }), {
-        command: "npx no-bin-pkg",
+        command: `npx ${pkgName}`,
       });
       expect(npxRun.success).toBe(false);
       expect(npxRun.output).toContain("could not determine executable to run");

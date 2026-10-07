@@ -915,12 +915,37 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Live**: `IndexerModule.watch(onSettled?)` зовёт колбэк после дебаунс-пересборки;
   web (`attachIndexWatcher(indexer, onChange)`) бампит `HostStateSnapshot.filesRevision` и шлёт
   SSE `files {phase:"changed"}` → вкладка перечитывает раскрытые папки и открытый файл
-  (фолбэк — 2с-полл по `filesRevision`).
+  (фолбэк — `filesRevision` в снапшоте, событие `state`).
 - **Тесты**: `tests/modules/webui/files-api.test.ts`, `tests/webui-files-dom.test.ts`,
   `tests/webui-index-watcher.test.ts`; обновлены `tests/webui-file.test.ts`,
   `tests/webui-assets.test.ts`.
 
-### Current Version: 2.23.0
+### Event-Sourced Web State (2.24.0)
+
+Спека: [docs/specs/2026-10-07-web-event-sourced-state-design.md](./docs/specs/2026-10-07-web-event-sourced-state-design.md);
+план: [docs/plans/2026-10-07-web-event-sourced-state.md](./docs/plans/2026-10-07-web-event-sourced-state.md).
+Убран двойной контур синхронизации сайдбара (SSE-счётчики + 2с-полл `/api/state`).
+
+- **Снапшот в событии** (`src/modules/webui/session/session-status.ts`): `pushState(s, sessionId?)`
+  шлёт полный `HostStateSnapshot` (через существующий `Host.getState`) с `sessionId` владельца.
+  Заменяет все прежние `broadcast({type:"state", ...sessionStatus})` — в `turns.ts` (очередь/старт/
+  ошибка/finishTurn), `run-agent.ts` (конец хода, usage уже записан), `module.ts` (re-index),
+  `reconfigure.ts`. Поля `usage`/`usageSessionId` из события убраны (usage внутри снапшота);
+  `usage`-событие (800мс во время хода) остаётся отдельным.
+- **Событие `sessions`** (`sessions-api.ts`): create/activate/delete рассылают список; клиент
+  рендерит его напрямую — 15с-полл `loadSessions` удалён (остаётся для boot/reconnect).
+- **Per-tab снапшот** (`assets/js/state-sync.ts`, чистый, тестируемый): `routeState` пишет
+  `tab.state` владельца, `mergeUsage` — live-usage владельца, `storeSnapshot` — REST-загрузку;
+  guard по `sessionId` (поздний ответ/чужое событие не перетирают вкладку).
+- **Клиент без таймеров** (`assets/app.ts`): SSE `state` → `applyState` (счётчики + `session.host`
+  активной вкладки + рендер); `ensureTabState(id)` — из памяти или один REST; `refresh()` — только
+  boot/reconnect; reconnect перечитывает все открытые session-вкладки (`resyncAfterReconnect`).
+  `hooks.ensureTabState` заменяет `refreshState`; `setInterval(refresh,2000)`/`setInterval(loadSessions,15000)`
+  удалены. `GET /api/state?session=` сохранён (boot/reconnect/ensure) — контракт не менялся.
+- **Тесты**: `tests/webui-push-state.test.ts`, `tests/webui-state-sync.test.ts`; обновлён
+  `tests/webui-assets.test.ts` (guard «нет клиентских поллов»).
+
+### Current Version: 2.24.0
 
 ### Changelog
 

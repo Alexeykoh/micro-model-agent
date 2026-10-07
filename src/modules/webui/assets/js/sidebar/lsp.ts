@@ -275,7 +275,7 @@ async function runLspDoctor(): Promise<void> {
 
 /**
  * Ленивая загрузка вкладки LSP: срабатывает только когда вкладка активна.
- * Зовётся из `renderState` (2с-полл) и при переключении вкладки.
+ * Зовётся из `renderActiveState` (SSE `state`) и при переключении вкладки.
  */
 export function sidebarLspState(): void {
   if (sb.active !== "lsp" || sb.lspUnavailable) return;

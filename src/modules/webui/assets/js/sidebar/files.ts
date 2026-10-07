@@ -46,7 +46,7 @@ function markDirty(): void {
   dirty = true;
 }
 
-/** Called from `renderState` with the host snapshot. */
+/** Called from `renderActiveState` with the host snapshot. */
 export function sidebarFilesState(host: Dict): void {
   const ws = (host && host.workspace) || "";
   if (ws !== workspace) {

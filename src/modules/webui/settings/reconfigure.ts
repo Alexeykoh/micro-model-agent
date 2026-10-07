@@ -1,7 +1,7 @@
 // Вебовый хук `reconfigure` — вынесен из `module.ts` (правило #1).
 import type { AppConfig } from "../../../config/types";
-import { broadcast, type RuntimeState, type SessionStore, type SseTransport } from "../state";
-import { sessionStatus } from "../session/session-status";
+import type { RuntimeState, SessionStore, SseTransport } from "../state";
+import { pushState } from "../session/session-status";
 
 /**
  * Поверхность агента для веб-хука reconfigure. Узкая, чтобы тесты стабили
@@ -50,6 +50,6 @@ export function makeReconfigure(
         /* результат reconfigure сохраняем, даже если рефреш моделей упал */
       }
     }
-    broadcast({ type: "state", ts: Date.now(), ...sessionStatus(state), usage: state.usage }, state);
+    pushState(state);
   };
 }

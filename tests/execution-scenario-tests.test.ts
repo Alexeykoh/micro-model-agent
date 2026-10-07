@@ -4,7 +4,7 @@ import { PlanCreator } from "../src/modules/execution/planner";
 import { PlanTracker } from "../src/modules/execution/tracker";
 import { ExecutionModule } from "../src/modules/execution/module";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "fs";
-import { resolve, join } from "path";
+import { join } from "path";
 import { tmpdir } from "os";
 
 function mockCtx(): any {
@@ -178,7 +178,7 @@ describe("Scenario: Progressive plan enforcement", () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = resolve(tmpdir(), `mma-test-${Date.now()}`);
+    tempDir = mkdtempSync(join(tmpdir(), "mma-test-"));
     mkdirSync(tempDir, { recursive: true });
     execModule = new ExecutionModule(tempDir, 8);
   });
@@ -312,7 +312,7 @@ describe("Scenario: Step Gate verification", () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = resolve(tmpdir(), `mma-gate-${Date.now()}`);
+    tempDir = mkdtempSync(join(tmpdir(), "mma-gate-"));
     mkdirSync(tempDir, { recursive: true });
   });
 

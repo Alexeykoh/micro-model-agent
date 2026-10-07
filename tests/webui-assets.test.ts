@@ -283,18 +283,28 @@ describe("webui assets", () => {
     expect(a.css).toContain('body[data-font="large"]');
   });
 
-  it("scopes /api/state to the active tab and refreshes fully on switch", () => {
+  it("scopes /api/state to the active tab and renders from per-tab snapshots", () => {
     const a = loadAssets();
     const tabs = a.jsModules?.["js/session/tabs.js"] || "";
     expect(a.js).toContain("/api/state?session=");
-    expect(a.js).toContain("hooks.applyState = renderState");
-    expect(a.js).toContain("hooks.refreshState = refresh");
+    expect(a.js).toContain("hooks.ensureTabState = ensureTabState");
     // Switch sets the client-active session immediately and resets Trace.
     expect(tabs).toContain("session.activeSessionId = id");
     expect(tabs).toContain("sidebarSessionChanged(id)");
-    expect(tabs).toContain("hooks.refreshState?.()");
+    expect(tabs).toContain("hooks.ensureTabState?.(id)");
     // Guard against a stale response clobbering a newer tab.
     expect(a.js).toMatch(/tabState\.activeTabId !== sid\)\s*return;/);
+  });
+
+  it("updates the sidebar from SSE events, with no client polling timers", () => {
+    const a = loadAssets();
+    const src = js(a);
+    // The state event carries the full snapshot; sessions arrive as their own event.
+    expect(src).toContain("applyState(d)");
+    expect(src).toContain('es.addEventListener("sessions"');
+    // The old 2s /api/state and 15s sessions polls are gone.
+    expect(src).not.toMatch(/setInterval\([^)]*refresh/);
+    expect(src).not.toContain("setInterval(() => void loadSessions()");
   });
 
   it("uses one shared EventSource so all tabs stream live (no per-session reconnect)", () => {

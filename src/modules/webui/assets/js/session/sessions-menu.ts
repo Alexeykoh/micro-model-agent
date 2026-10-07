@@ -33,10 +33,10 @@ export function initSessionsMenu(d: Partial<SessionsMenuDeps>): void {
 // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
 let sessionsErrTimer: any = null;
 
-// Live filter text of the sessions dropdown. Module-level so the 2s
-// `renderState` poll and the 15s `loadSessions` poll (both re-render the lists)
-// never wipe an in-progress query: the `<input id="sessSearch">` itself lives
-// statically in `index.html` and only the row lists are redrawn.
+// Live filter text of the sessions dropdown. Module-level so `sessions`-event
+// and state re-renders never wipe an in-progress query: the
+// `<input id="sessSearch">` itself lives statically in `index.html` and only
+// the row lists are redrawn.
 let sessQuery = "";
 let sessSearchWired = false;
 

@@ -36,7 +36,7 @@ import {
   type WebSkillsModule,
   type WebUiState,
 } from "./state";
-import { sessionStatus } from "./session/session-status";
+import { pushState } from "./session/session-status";
 
 // Чистые снапшот-хелперы живут в `./host-state`; реэкспорт, чтобы существующие
 // импортёры (`webui-usage`, `webui-plan` тесты) не чинить.
@@ -169,7 +169,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         }
         const stats = state.projectMapStats?.() ?? null;
         broadcast({ type: "index", ts: Date.now(), phase: "done", stats }, state);
-        broadcast({ type: "state", ts: Date.now(), ...sessionStatus(state), usage: state.usage }, state);
+        pushState(state);
       };
     }
   }
