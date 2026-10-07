@@ -41,7 +41,6 @@
   --ans: #a5adb6;
   --toggle-off: #2e2e2e;
   --toggle-knob: #a3a3a3;
-  --toggle-knob-on: #fff;
   --scroll-thumb: #2e2e2e;
   --scroll-thumb-hover: #737373;
   --stab-thumb: #2e2e2e;
@@ -117,7 +116,6 @@ body.light {
   --ans: #424a53;
   --toggle-off: #d0d7de;
   --toggle-knob: #6e7781;
-  --toggle-knob-on: #ffffff;
   --scroll-thumb: #d0d7de;
   --scroll-thumb-hover: #afb8c1;
   --stab-thumb: #d0d7de;
@@ -1139,8 +1137,8 @@ body.light .toggle { background: var(--toggle-off); }
   content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
   border-radius: 50%; background: var(--toggle-knob); transition: .15s;
 }
-.toggle.on { background: var(--green-fill); }
-.toggle.on::after { left: 18px; background: var(--toggle-knob-on); }
+.toggle.on { background: var(--accent); }
+.toggle.on::after { left: 18px; background: var(--bg); }
 .seg { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .seg button {
   font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;

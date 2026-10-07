@@ -19,6 +19,7 @@ gone.
 ### Changed
 
 - **Client no longer polls** (`src/modules/webui/assets/app.ts`): the `state` event applies the snapshot via `applyState`, `ensureTabState` renders a tab from cache or one REST fetch, and the `2s /api/state` + `15s /api/sessions` intervals are removed; reconnect re-fetches every open session tab.
+- **Accent toggles** (`src/modules/webui/assets/styles.css`): on/off switches now fill with the theme accent color instead of a muted gray, in both dark and light themes.
 
 ### Fixed
 
