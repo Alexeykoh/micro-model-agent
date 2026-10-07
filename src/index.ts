@@ -14,6 +14,20 @@ export type {
   HallucinationResult,
 } from "./core/types";
 export type { AgentModule } from "./modules/types";
+// SDK плагинов: без этих типов внешний плагин вынужден дублировать контракт
+// у себя (так делали оба примера в `examples/plugins`). Узкий `PluginManager`
+// из `./tools/types` ниже остаётся — это роль, которую видит экзекутор.
+export type {
+  AgentPlugin,
+  HostBridge,
+  HostBridgeSubmitOptions,
+  PluginPermission,
+  PluginProvides,
+  TurnSummary,
+} from "./modules/types";
+export { PLUGIN_PERMISSIONS } from "./modules/plugins/records";
+export type { PluginLoadFailure, PluginRecord } from "./modules/plugins/records";
+export type { RegisterResult } from "./modules/plugins/manager";
 export { OpenAICompatProvider, TokenCounter, parseChunks, OrchestratorClient } from "./llm/index";
 export type { LLMProvider, Message, Chunk, OpenAICompatConfig, ParsedResponse } from "./llm/index";
 export {

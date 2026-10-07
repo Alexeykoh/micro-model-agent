@@ -15,10 +15,8 @@ export interface SessionIsolationConfig {
    * - security-оверрайды
    */
   enabled: boolean;
-  /** Базовый каталог данных сессии. Дефолт: ~/.mma/sessions/<session-id> */
+  /** Базовый каталог для изолированных сессий. По умолчанию: ~/.mma/sessions/<session-id> */
   baseDir?: string;
-  /** Изолировать плагины на сессию */
-  isolatePlugins: boolean;
   /** Изолировать временные файлы на сессию */
   isolateTempFiles: boolean;
 }
@@ -26,7 +24,6 @@ export interface SessionIsolationConfig {
 /** Дефолтный конфиг изоляции сессий (выключена). */
 export const DEFAULT_SESSION_ISOLATION: SessionIsolationConfig = {
   enabled: false,
-  isolatePlugins: true,
   isolateTempFiles: true,
 };
 

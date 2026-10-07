@@ -151,4 +151,54 @@ describe("PluginLoader", () => {
       rmSync(other, { recursive: true });
     }
   });
+  it("stamps the absolute entry path on the plugin", () => {
+    const file = join(tmpDir, "stats.ts");
+    writeFileSync(file, pluginFile("stats"));
+    loader.loadFromDir(tmpDir, pm);
+    expect(pm.getRecords()[0].path).toBe(file);
+  });
+
+  it("returns a zeroed report for a missing directory", () => {
+    expect(loader.loadFromDir(join(tmpDir, "nope"), pm)).toEqual({
+      loaded: 0,
+      skipped: 0,
+      failed: 0,
+    });
+  });
+
+  it("keeps a broken plugin visible as a failure instead of silently dropping it", () => {
+    writeFileSync(join(tmpDir, "broken.ts"), "const x = ((");
+    loader.loadFromDir(tmpDir, pm);
+    expect(pm.getRecords()).toHaveLength(0);
+    const failures = pm.getFailures();
+    expect(failures).toHaveLength(1);
+    expect(failures[0].entry).toBe("broken.ts");
+    expect(failures[0].message.length).toBeGreaterThan(0);
+    expect(failures[0].message).not.toContain("\n");
+  });
+
+  it("notes a plugin rejected by metadata validation as a failure", () => {
+    writeFileSync(join(tmpDir, "bad.ts"), pluginFile("Bad Name"));
+    loader.loadFromDir(tmpDir, pm);
+    expect(pm.getRecords()).toHaveLength(0);
+    expect(pm.getFailures()[0].entry).toBe("bad.ts");
+  });
+
+  it("carries metadata through to the record", () => {
+    writeFileSync(
+      join(tmpDir, "meta.ts"),
+      pluginFile("meta", `, version: "1.0.0", author: "alexe", description: "d", permissions: ["fs:read"]`),
+    );
+    loader.loadFromDir(tmpDir, pm);
+    const record = pm.getRecords()[0];
+    expect(record).toMatchObject({ name: "meta", version: "1.0.0", author: "alexe", description: "d" });
+    expect(record.permissions).toEqual(["fs:read"]);
+    expect(record.warnings).toEqual([]);
+  });
+
+  it("surfaces metadata warnings in the record", () => {
+    writeFileSync(join(tmpDir, "warn.ts"), pluginFile("warn", `, homepage: "not-a-url"`));
+    loader.loadFromDir(tmpDir, pm);
+    expect(pm.getRecords()[0].warnings.length).toBe(1);
+  });
 });

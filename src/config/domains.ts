@@ -41,6 +41,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
   mcp: ["mcpServers"],
   lsp: ["lsp"],
   skills: ["skills"],
+  plugins: ["plugins"],
   updater: ["updater"],
 };
 

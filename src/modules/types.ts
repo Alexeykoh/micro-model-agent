@@ -50,6 +50,27 @@ export interface TurnSummary {
   interrupted?: boolean;
 }
 
+/**
+ * Права, которые плагин **декларирует** для показа пользователю. Это описание
+ * намерений, а не enforcement: код плагина исполняется в процессе агента и
+ * де факто имеет те же возможности, что и харнесс (см. `docs/plugins.md`).
+ */
+export type PluginPermission =
+  | "config:read"
+  | "fs:read"
+  | "fs:write"
+  | "process"
+  | "network"
+  | "session:write";
+
+/** Что плагин добавляет в харнесс (для UI и `mma plugins list`). */
+export interface PluginProvides {
+  /** Имена тулов, которые плагин отдал через `getToolDefinitions()`. */
+  tools?: string[];
+  /** Имена реализованных хуков; вычисляется ядром при регистрации. */
+  hooks?: string[];
+}
+
 export interface AgentPlugin {
   name: string;
   priority?: number;
@@ -60,6 +81,18 @@ export interface AgentPlugin {
   minMmaVersion?: string;
   /** Откуда плагин: "builtin" | "global" | "project". Проставляет загрузчик/регистрация. */
   source?: "builtin" | "global" | "project";
+  /** Человеческое описание (1–2 строки) — показывается в UI и листингах. */
+  description?: string;
+  /** Автор или организация. */
+  author?: string;
+  /** Домашняя страница/репозиторий. Только http(s), иначе отбрасывается. */
+  homepage?: string;
+  /** Права, которые плагин запрашивает (только декларация и показ). */
+  permissions?: PluginPermission[];
+  /** Что добавляет. `tools` заполняется ядром, `hooks` вычисляется при регистрации. */
+  provides?: PluginProvides;
+  /** Абсолютный путь к файлу плагина; проставляет загрузчик. */
+  path?: string;
   /** Добавить блок в системный промпт (выполняется один раз при построении). */
   onBuildPrompt?(): string | null;
   /**

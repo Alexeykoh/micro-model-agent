@@ -14,6 +14,7 @@ import { IndexerModule } from "../../modules/indexer/index";
 import { SkillsLoader, SkillsModule } from "../../modules/skills/index";
 import { ToolRegistry, registerAllTools } from "../../tools/index";
 import { PluginManager } from "../../modules/plugins/manager";
+import { setPluginGateApplier } from "../../config/registry";
 import { estimateTokens } from "../../llm/token-counter";
 import type { UserProfile } from "../../modules/user-profile/profile";
 import { t } from "../../i18n/index";
@@ -132,6 +133,11 @@ export async function setupWorkspacePhase(
   });
 
   const pluginManager = new PluginManager();
+  // Живой вкл/выкл: `setConfigValue("plugins.disabled", …)` (REPL, CLI, веб) сам
+  // дёргает менеджер через этот шов — иначе поверхности разъезжаются.
+  setPluginGateApplier((names) => pluginManager.setDisabledAll(names));
+  // Стартовый deny-list — до загрузки плагинов, иначе он не к чему примениться.
+  pluginManager.setDisabledAll(config.plugins?.disabled ?? []);
 
   // SystemInfo собирается здесь из готового профиля (в исходнике — сразу
   // после создания pluginManager; сайд-эффектов чтения профиля тут уже нет).

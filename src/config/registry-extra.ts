@@ -356,12 +356,6 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       c.sessionIsolation ??= structuredClone(DEFAULTS.sessionIsolation!);
       c.sessionIsolation.enabled = v as boolean;
     }),
-  bool("sessionIsolation.isolatePlugins", "session", false,
-    (c) => c.sessionIsolation?.isolatePlugins ?? DEFAULTS.sessionIsolation!.isolatePlugins,
-    (c, v) => {
-      c.sessionIsolation ??= structuredClone(DEFAULTS.sessionIsolation!);
-      c.sessionIsolation.isolatePlugins = v as boolean;
-    }),
   bool("sessionIsolation.isolateTempFiles", "session", false,
     (c) => c.sessionIsolation?.isolateTempFiles ?? DEFAULTS.sessionIsolation!.isolateTempFiles,
     (c, v) => {
@@ -424,6 +418,19 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
   share("skills.budget", "agent", false,
     (c) => c.skills.budget,
     (c, v) => { c.skills.budget = v as number; }),
+
+  // Deny-list выключенных плагинов. `reconfigure: false` — эффект применяется
+  // не пересборкой агента, а `applyConfigEffects` (см. registry.ts: setConfigValue),
+  // поэтому и REPL `/config`, и CLI, и веб-тумблер получают его одним путём.
+  list("plugins.disabled", "agent",
+    (c) => c.plugins?.disabled ?? DEFAULTS.plugins!.disabled,
+    (c, v) => {
+      c.plugins ??= structuredClone(DEFAULTS.plugins);
+      (c.plugins as NonNullable<AppConfig["plugins"]>).disabled = (v as string[])
+        .map((n) => n.trim())
+        .filter(Boolean);
+    },
+    { kind: "tags", placeholder: "my-plugin" }),
 
   bool("hallucination.judge.enabled", "agent", true,
     (c) => c.hallucination?.judge.enabled ?? DEFAULTS.hallucination!.judge.enabled,

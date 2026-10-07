@@ -49,7 +49,6 @@ describe("Session Isolation", () => {
     it("should create a session context with custom isolation config", () => {
       const isolationConfig: SessionIsolationConfig = {
         enabled: true,
-        isolatePlugins: false,
         isolateTempFiles: true,
       };
 
@@ -226,7 +225,6 @@ describe("Session Isolation", () => {
   describe("DEFAULT_SESSION_ISOLATION", () => {
     it("should have sensible defaults", () => {
       expect(DEFAULT_SESSION_ISOLATION.enabled).toBe(false);
-      expect(DEFAULT_SESSION_ISOLATION.isolatePlugins).toBe(true);
       expect(DEFAULT_SESSION_ISOLATION.isolateTempFiles).toBe(true);
     });
   });

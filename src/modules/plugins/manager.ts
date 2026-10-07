@@ -1,9 +1,17 @@
-// Менеджер плагинов: регистрация с дедупом по версии и диспатч хуков с изоляцией ошибок.
+// Менеджер плагинов: регистрация с дедупом по версии, вкл/выкл и диспатч хуков
+// с изоляцией ошибок.
 import type { AgentPlugin, HostBridge, TurnSummary } from "../types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { AgentPhase, LLMResponse } from "../../core/types";
 import { semverGt } from "../updater/checker";
 import { Logger } from "../../logger/app-logger";
+import {
+  buildRecord,
+  firstLine,
+  validatePluginMeta,
+  type PluginLoadFailure,
+  type PluginRecord,
+} from "./records";
 
 const logger = new Logger("warn", "plugins");
 
@@ -30,10 +38,15 @@ function safeInvoke(plugin: AgentPlugin, hookName: string, fn: () => unknown): u
   }
 }
 
-/** Итог регистрации: `registered` (встал/заменил), `skipped_older`, `duplicate`. */
+/**
+ * Итог регистрации: `registered` (встал/заменил), `skipped_older` (дедуп по
+ * версии), `invalid` (метаданные не прошли проверку), `duplicate` (не
+ * возвращается — оставлен для совместимости потребителей типа).
+ */
 export type RegisterResult =
-  | { status: "registered" }
+  | { status: "registered"; warnings?: string[] }
   | { status: "skipped_older"; existing: AgentPlugin }
+  | { status: "invalid"; errors: string[] }
   | { status: "duplicate" };
 
 /** Плагин с источником загрузки (для показа в REPL/CLI). */
@@ -42,10 +55,15 @@ export interface PluginInfo {
   source?: "builtin" | "global" | "project";
 }
 
-/** Менеджер плагинов: реестр, сортировка по приоритету, диспатч хуков. */
+/** Менеджер плагинов: реестр, сортировка по приоритету, вкл/выкл, диспатч хуков. */
 export class PluginManager {
   private plugins: AgentPlugin[] = [];
   private hostBridge: HostBridge | null = null;
+  private disabled = new Set<string>();
+  private loadedAt = new Map<string, number>();
+  private failures: PluginLoadFailure[] = [];
+  /** Кэш плоских записей; инвалидируется на любое изменение реестра. */
+  private recordsCache: PluginRecord[] | null = null;
 
   /**
    * Регистрирует host-мост (ставит REPL один раз). Подмешивается в каждый
@@ -68,31 +86,119 @@ export class PluginManager {
    * Регистрирует плагин. Одноимённые дедупятся — побеждает старшая `version`
    * (безверсейные считаются "0.0.0"). Проигравший отбрасывается; `skipped_older`
    * даёт вызывающему предупредить о выкинутой копии.
+   *
+   * Метаданные проверяются здесь: невалидное имя не регистрируется вовсе
+   * (`errors`), мягкие замечания возвращаются в `warnings`, чтобы вызывающий
+   * показал их один раз (в лог и в UI), а не на каждый ход.
    */
   register(plugin: AgentPlugin, source?: "builtin" | "global" | "project"): RegisterResult {
+    const meta = validatePluginMeta(plugin);
+    if (meta.errors.length > 0) {
+      return { status: "invalid", errors: meta.errors };
+    }
     if (source) plugin.source = source;
     const existing = this.plugins.find((p) => p.name === plugin.name);
     if (existing) {
       if (semverGt(plugin.version || "0.0.0", existing.version || "0.0.0")) {
         this.plugins = this.plugins.filter((p) => p.name !== plugin.name);
         this.plugins.push(plugin);
+        this.loadedAt.set(plugin.name, Date.now());
         this.sort();
-        return { status: "registered" };
+        this.recordsCache = null;
+        return { status: "registered", warnings: meta.warnings };
       }
       return { status: "skipped_older", existing };
     }
     this.plugins.push(plugin);
+    this.loadedAt.set(plugin.name, Date.now());
     this.sort();
-    return { status: "registered" };
+    this.recordsCache = null;
+    return { status: "registered", warnings: meta.warnings };
+  }
+
+  /**
+   * Включает/выключает плагин без перезагрузки. Выключенный не участвует в
+   * диспатчерах, но остаётся видимым в списках — иначе непонятно, что включать
+   * обратно.
+   *
+   * Имя из deny-list можно выключить и до загрузки: плагин, который придёт
+   * позже, сразу окажется выключенным (значение читается на каждой рассылке).
+   * Возвращает `false`, если плагина сейчас нет в реестре.
+   *
+   * Честное ограничение: модуль уже `require`-нут, код верхнего уровня уже
+   * выполнился. Disable останавливает поведение, а не исполнение импорта.
+   */
+  setEnabled(name: string, on: boolean): boolean {
+    const loaded = this.plugins.some((p) => p.name === name);
+    if (on) this.disabled.delete(name);
+    else this.disabled.add(name);
+    this.recordsCache = null;
+    return loaded;
+  }
+
+  /**
+   * Заменить deny-list целиком (путь конфига). Выключает перечисленные,
+   * включает всё остальное. Неизвестные имена сохраняются — иначе запись
+   * потерялась бы при первом же сохранении конфига без плагина на диске.
+   */
+  setDisabledAll(names: string[]): void {
+    this.disabled = new Set(names.filter(Boolean));
+    this.recordsCache = null;
+  }
+
+  isEnabled(name: string): boolean {
+    return this.plugins.some((p) => p.name === name) && !this.disabled.has(name);
+  }
+
+  /** Имена выключенных плагинов (для `/config plugins.disabled` и UI). */
+  getDisabled(): string[] {
+    return [...this.disabled].sort();
+  }
+
+  /** Заметить непрогрузившийся плагин (сейчас он просто исчезал из списков). */
+  noteFailure(entry: string, path: string, message: string): void {
+    this.failures.push({ entry, path, message: firstLine(message), at: Date.now() });
+    this.recordsCache = null;
+  }
+
+  /** Отказы загрузки (`entry`, путь, причина) для UI и `mma plugins list`. */
+  getFailures(): PluginLoadFailure[] {
+    return this.failures.map((f) => ({ ...f }));
   }
 
   private sort(): void {
     this.plugins.sort((a, b) => (b.priority || 0) - (a.priority || 0));
   }
 
+  /**
+   * Активные плагины в порядке приоритета — единственная точка фильтрации.
+   * Все диспатчеры и `getAllPlugins` идут через неё, поэтому выключение
+   * одного плагина не требует правок в 15 хуках.
+   */
+  private active(): AgentPlugin[] {
+    if (this.disabled.size === 0) return [...this.plugins];
+    return this.plugins.filter((p) => !this.disabled.has(p.name));
+  }
+
   /** Все зарегистрированные плагины (копия, по приоритету). */
   getAllPlugins(): AgentPlugin[] {
-    return [...this.plugins];
+    return this.active();
+  }
+
+  /**
+   * Плоские записи плагинов для всех поверхностей (CLI/REPL/веб). Кэшируются и
+   * инвалидируются на любое изменение реестра — вызывающие просто читают.
+   */
+  getRecords(): PluginRecord[] {
+    if (!this.recordsCache) {
+      this.recordsCache = this.plugins.map((plugin) =>
+        buildRecord(plugin, {
+          enabled: !this.disabled.has(plugin.name),
+          ...(this.loadedAt.has(plugin.name) ? { loadedAt: this.loadedAt.get(plugin.name) } : {}),
+        }),
+      );
+    }
+    return this.recordsCache.map((r) => ({ ...r }));
   }
 
   /** Детальный список (имя, версия, источник) для показа в REPL/CLI. */
@@ -105,9 +211,20 @@ export class PluginManager {
     return this.plugins.find((p) => p.name === name) ?? null;
   }
 
+  /**
+   * Рассылка простого хука всем активным плагинам. Изоляция ошибок — `safeInvoke`,
+   * поэтому девять однотипных циклов сводятся к одной строке на хук.
+   */
+  private fanout(rawCtx: any, hook: string, invoke: (plugin: AgentPlugin, ctx: any) => void): void {
+    const ctx = this.withHost(rawCtx);
+    for (const plugin of this.active()) {
+      safeInvoke(plugin, hook, () => invoke(plugin, ctx));
+    }
+  }
+
   /** Гоняет хук сборки промпта по всем плагинам; собирает вклады. */
   runOnBuildPrompt(): (string | null)[] {
-    return this.plugins.map(
+    return this.active().map(
       (p) => (safeInvoke(p, "onBuildPrompt", () => p.onBuildPrompt?.() ?? null) as string | null) ?? null,
     );
   }
@@ -118,7 +235,7 @@ export class PluginManager {
    */
   async runOnBeforeTool(rawCtx: any, call: ToolCall): Promise<boolean> {
     const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
+    for (const plugin of this.active()) {
       if (plugin.onBeforeTool) {
         try {
           const result = await plugin.onBeforeTool(ctx, call);
@@ -137,7 +254,7 @@ export class PluginManager {
   /** Хук после тула: отдаёт вызов и результат всем плагинам. */
   async runOnAfterTool(rawCtx: any, call: ToolCall, result: ToolResult): Promise<void> {
     const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
+    for (const plugin of this.active()) {
       if (plugin.onAfterTool) {
         try {
           await plugin.onAfterTool(ctx, call, result);
@@ -151,7 +268,7 @@ export class PluginManager {
   /** Хук ошибки агента: рассылает ошибку всем плагинам. */
   async runOnError(rawCtx: any, error: Error): Promise<void> {
     const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
+    for (const plugin of this.active()) {
       if (plugin.onError) {
         try {
           await plugin.onError(ctx, error);
@@ -164,115 +281,72 @@ export class PluginManager {
 
   /** Хук старта сессии. */
   runOnSessionStart(rawCtx: any): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
-      if (plugin.onSessionStart) {
-        safeInvoke(plugin, "onSessionStart", () => plugin.onSessionStart!(ctx));
-      }
-    }
+    this.fanout(rawCtx, "onSessionStart", (p, ctx) => p.onSessionStart?.(ctx));
   }
 
   /** Хук перед обдумыванием (THINK). */
   runOnBeforeThink(rawCtx: any): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
-      if (plugin.onBeforeThink) {
-        safeInvoke(plugin, "onBeforeThink", () => plugin.onBeforeThink!(ctx));
-      }
-    }
+    this.fanout(rawCtx, "onBeforeThink", (p, ctx) => p.onBeforeThink?.(ctx));
   }
 
   /** Хук после ответа LLM. */
   runOnAfterThink(rawCtx: any, response: LLMResponse | null): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
-      if (plugin.onAfterThink) {
-        safeInvoke(plugin, "onAfterThink", () => plugin.onAfterThink!(ctx, response));
-      }
-    }
+    this.fanout(rawCtx, "onAfterThink", (p, ctx) => p.onAfterThink?.(ctx, response));
   }
 
   /** Хук конца сессии. */
   runOnSessionEnd(rawCtx: any): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
-      if (plugin.onSessionEnd) {
-        safeInvoke(plugin, "onSessionEnd", () => plugin.onSessionEnd!(ctx));
-      }
-    }
+    this.fanout(rawCtx, "onSessionEnd", (p, ctx) => p.onSessionEnd?.(ctx));
   }
 
   /** Хук вызова тула (факт вызова, без результата). */
   runOnToolCall(rawCtx: any): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
-      if (plugin.onToolCall) {
-        safeInvoke(plugin, "onToolCall", () => plugin.onToolCall!(ctx));
-      }
-    }
+    this.fanout(rawCtx, "onToolCall", (p, ctx) => p.onToolCall?.(ctx));
   }
 
   /** Хук смены фазы агента. */
   runOnPhase(rawCtx: any, phase: AgentPhase): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
-      if (plugin.onPhase) {
-        safeInvoke(plugin, "onPhase", () => plugin.onPhase!(ctx, phase));
-      }
-    }
+    this.fanout(rawCtx, "onPhase", (p, ctx) => p.onPhase?.(ctx, phase));
   }
 
   /** Хук старта тул-вызова. */
   runOnToolStart(rawCtx: any, call: ToolCall): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
-      if (plugin.onToolStart) {
-        safeInvoke(plugin, "onToolStart", () => plugin.onToolStart!(ctx, call));
-      }
-    }
+    this.fanout(rawCtx, "onToolStart", (p, ctx) => p.onToolStart?.(ctx, call));
   }
 
   /** Хук конца тул-вызова (вызов, результат, длительность). */
   runOnToolEnd(rawCtx: any, call: ToolCall, result: ToolResult, durationMs: number): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
-      if (plugin.onToolEnd) {
-        safeInvoke(plugin, "onToolEnd", () => plugin.onToolEnd!(ctx, call, result, durationMs));
-      }
-    }
+    this.fanout(rawCtx, "onToolEnd", (p, ctx) => p.onToolEnd?.(ctx, call, result, durationMs));
   }
 
   /** Прогоняет текстовый чанк через трансформы плагинов; возвращает (возможно заменённый) чанк. */
   runOnText(rawCtx: any, chunk: string): string {
+    let out = chunk;
     const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
+    for (const plugin of this.active()) {
       if (plugin.onText) {
-        const out = safeInvoke(plugin, "onText", () => plugin.onText!(ctx, chunk));
-        if (typeof out === "string") chunk = out;
+        const next = safeInvoke(plugin, "onText", () => plugin.onText!(ctx, out));
+        if (typeof next === "string") out = next;
       }
     }
-    return chunk;
+    return out;
   }
 
   /** Прогоняет мета-чанк через трансформы плагинов; возвращает (возможно заменённый) чанк. */
   runOnMeta(rawCtx: any, chunk: string): string {
+    let out = chunk;
     const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
+    for (const plugin of this.active()) {
       if (plugin.onMeta) {
-        const out = safeInvoke(plugin, "onMeta", () => plugin.onMeta!(ctx, chunk));
-        if (typeof out === "string") chunk = out;
+        const next = safeInvoke(plugin, "onMeta", () => plugin.onMeta!(ctx, out));
+        if (typeof next === "string") out = next;
       }
     }
-    return chunk;
+    return out;
   }
 
   /** Рассылает сводку завершённого прогона всем плагинам (раз за Agent.run()). */
   runOnTurnEnd(rawCtx: any, summary: TurnSummary): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.plugins) {
-      if (plugin.onTurnEnd) {
-        safeInvoke(plugin, "onTurnEnd", () => plugin.onTurnEnd!(ctx, summary));
-      }
-    }
+    this.fanout(rawCtx, "onTurnEnd", (p, ctx) => p.onTurnEnd?.(ctx, summary));
   }
 }

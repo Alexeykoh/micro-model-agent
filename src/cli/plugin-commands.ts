@@ -1,10 +1,32 @@
 import type { Command } from "commander";
+import { join } from "path";
 import { bootstrap } from "../core/bootstrap";
 import { readMmaVersion } from "../core/version";
 import { t } from "../i18n/index";
 import { getDefaultChannel } from "../output";
+import { setConfigValue } from "../config/registry";
+import { saveConfig } from "../config/config";
+import { formatPluginDetails, formatPluginList } from "../modules/plugins/format";
+import type { PluginManager } from "../modules/plugins/manager";
 
-// CLI-группа `mma plugins`: список плагинов.
+// CLI-группа `mma plugins`: список, подробности, вкл/выкл.
+
+/** Печатает список через общий формат (тот же, что у `/plugins` в REPL). */
+function printList(manager: PluginManager, all: boolean): void {
+  const records = manager.getRecords();
+  const failures = manager.getFailures();
+  const visible = all ? records : records.filter((r) => !r.builtin);
+  const lines = formatPluginList(records, failures, {
+    showBuiltin: all,
+    mmaVersion: readMmaVersion(),
+  });
+  if (visible.length === 0 && failures.length === 0) {
+    getDefaultChannel().writeLine(t("cli.plugins.none"));
+    return;
+  }
+  for (const line of lines) getDefaultChannel().writeLine(line);
+  if (!all && visible.length > 0) getDefaultChannel().writeLine(t("cli.plugins.only_external"));
+}
 
 /**
  * Создаёт группу субкоманд `mma plugins`.
@@ -18,27 +40,53 @@ export function createPluginCommand(program: Command): void {
     .option("-a, --all", t("cli.plugins.all"))
     .action(async (cmdOpts: { all?: boolean }) => {
       const { pluginManager } = await bootstrap();
-      const all = cmdOpts.all === true;
-      let infos = pluginManager.getPluginInfos();
-      if (!all) {
-        infos = infos.filter(({ plugin }) => !plugin.isBuiltin);
-      }
-      if (infos.length === 0) {
-        getDefaultChannel().writeLine(t("cli.plugins.none"));
+      printList(pluginManager, cmdOpts.all === true);
+    });
+
+  pluginsCmd
+    .command("show")
+    .description(t("cli.plugins.show"))
+    .argument("<name>", t("cli.plugins.show"))
+    .action(async (name: string) => {
+      const { pluginManager } = await bootstrap();
+      const record = pluginManager.getRecords().find((r) => r.name === name);
+      const channel = getDefaultChannel();
+      if (!record) {
+        channel.writeLine(t("cli.plugins.not_found", { name }));
         return;
       }
-      const mmaVersion = readMmaVersion();
-      getDefaultChannel().writeLine(
-        t("cli.plugins.header", { count: String(infos.length), mma: mmaVersion }),
-      );
-      for (const { plugin, source } of infos) {
-        const version = plugin.version || "-";
-        const origin = source || "builtin";
-        const builtin = plugin.isBuiltin ? t("cli.plugins.builtin_mark") : " ";
-        getDefaultChannel().writeLine(`  ${builtin} ${plugin.name}  v${version}  [${origin}]`);
-      }
-      if (!all) {
-        getDefaultChannel().writeLine(t("cli.plugins.only_external"));
+      for (const line of formatPluginDetails(record, pluginManager.getFailures())) {
+        channel.writeLine(line);
       }
     });
+
+  for (const [name, on, key] of [
+    ["enable", true, "cli.plugins.enable"],
+    ["disable", false, "cli.plugins.disable"],
+  ] as const) {
+    pluginsCmd
+      .command(name)
+      .description(t(key))
+      .argument("<name>", t(key))
+      .action(async (pluginName: string) => {
+        const { pluginManager, config, configDir } = await bootstrap();
+        const channel = getDefaultChannel();
+        if (!pluginManager.getPlugin(pluginName)) {
+          channel.writeLine(t("cli.plugins.not_found", { name: pluginName }), "stderr");
+          return;
+        }
+        // Единый путь записи: setConfigValue сам применит deny-list к живому
+        // реестру (шов в registry.ts) — и CLI, и REPL, и веб идут через него.
+        const current = new Set(config.plugins?.disabled ?? []);
+        if (on) current.delete(pluginName);
+        else current.add(pluginName);
+        const result = setConfigValue(config, "plugins.disabled", [...current].join(","));
+        if (!result.ok) {
+          channel.writeLine(t("config.invalid_value", { key: "plugins.disabled" }), "stderr");
+          return;
+        }
+        saveConfig(config, join(configDir, "config.json"), configDir);
+        channel.writeLine(`${pluginName}  ${on ? t("cli.plugins.on") : t("cli.plugins.off")}`);
+      });
+  }
 }

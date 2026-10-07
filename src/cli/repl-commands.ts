@@ -38,6 +38,7 @@ import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
+import { formatPluginDetails, formatPluginList } from "../modules/plugins/format";
 import type { IndexerModule } from "../modules/indexer/module";
 import { runMapAction } from "../modules/indexer/map-command";
 import { registerOnboardingCommands } from "./onboarding-commands";
@@ -1029,41 +1030,77 @@ function registerAgentCommands(ctx: ReplContext): void {
     name: "plugins",
     description: t("repl.plugins"),
     usage: t("repl.plugins_usage"),
-    action: (args: string[]) => {
-      if (!ctx.pluginManager) {
-        ctx.output.writeLine(t("cli.plugins.none"));
-        return;
-      }
-      const showAll = args.includes("--all");
-      const infos = ctx.pluginManager.getPluginInfos();
-      const filtered = showAll ? infos : infos.filter(({ plugin }) => !plugin.isBuiltin);
-      if (filtered.length === 0) {
-        ctx.output.writeLine(t("cli.plugins.none"));
-        return;
-      }
-      const mmaVersion = version;
-      ctx.output.writeLine(
-        t("cli.plugins.header", {
-          count: String(filtered.length),
-          mma: mmaVersion,
-        }),
-      );
-      for (const { plugin, source } of filtered) {
-        const v = plugin.version || "-";
-        const origin = source || "builtin";
-        const mark = plugin.isBuiltin ? t("cli.plugins.builtin_mark") : " ";
-        ctx.output.writeLine(`  ${mark} ${plugin.name}  v${v}  [${origin}]`);
-      }
-      if (!showAll) {
-        const builtinCount = infos.filter(({ plugin }) => plugin.isBuiltin).length;
-        if (builtinCount > 0) {
-          ctx.output.writeLine(
-            pc.dim(`  ${t("repl.plugins_hidden", { count: String(builtinCount) })}`),
-          );
-        }
-      }
-    },
+    action: (args: string[]) => runPluginsCommand(ctx, args, version),
   });
+}
+
+/** `/plugins [--all] | show <name> | enable <name> | disable <name>`. */
+async function runPluginsCommand(ctx: ReplContext, args: string[], mmaVersion: string): Promise<void> {
+  const manager = ctx.pluginManager;
+  if (!manager) {
+    ctx.output.writeLine(t("cli.plugins.none"));
+    return;
+  }
+  const [sub, name] = args.filter((a) => a !== "--all");
+  if (sub === "show") return showPlugin(ctx, manager, name);
+  if (sub === "enable" || sub === "disable") return togglePlugin(ctx, name, sub === "disable");
+  listPlugins(ctx, manager, args.includes("--all"), mmaVersion);
+}
+
+/** `/plugins enable|disable <name>` — тот же единый путь записи, что и
+ * `/config plugins.disabled`: setConfigValue применяет deny-list к живому
+ * реестру через шов в registry.ts, здесь только считаем новый список. */
+async function togglePlugin(ctx: ReplContext, name: string | undefined, off: boolean): Promise<void> {
+  if (!name) {
+    ctx.output.writeLine(t("cli.plugins.not_found", { name: "" }), "stderr");
+    return;
+  }
+  const current = new Set(ctx.config.plugins?.disabled ?? []);
+  if (off) current.add(name);
+  else current.delete(name);
+  const result = await mutateConfig(ctx, "plugins.disabled", [...current].join(","));
+  if (!result.ok) {
+    ctx.output.writeLine(
+      pc.yellow(t("config.invalid_value", { key: "plugins.disabled" })),
+      "stderr",
+    );
+    return;
+  }
+  reportSaved(ctx, result);
+}
+
+/** `/plugins show <name>` — те же подробности, что в поп-апе веб-вкладки. */
+function showPlugin(ctx: ReplContext, manager: PluginManager, name: string | undefined): void {
+  const record = manager.getRecords().find((r) => r.name === name);
+  if (!record) {
+    ctx.output.writeLine(t("cli.plugins.not_found", { name: name || "" }));
+    return;
+  }
+  for (const line of formatPluginDetails(record, manager.getFailures())) {
+    ctx.output.writeLine(line);
+  }
+}
+
+/** `/plugins [--all]` — общий формат листинга (тот же, что у `mma plugins list`). */
+function listPlugins(ctx: ReplContext, manager: PluginManager, showAll: boolean, mmaVersion: string): void {
+  const records = manager.getRecords();
+  const failures = manager.getFailures();
+  const builtinCount = records.filter((r) => r.builtin).length;
+  const visible = showAll ? records : records.filter((r) => !r.builtin);
+  if (visible.length === 0 && failures.length === 0) {
+    ctx.output.writeLine(t("cli.plugins.none"));
+    return;
+  }
+  const lines = formatPluginList(records, failures, {
+    showBuiltin: showAll,
+    mmaVersion,
+    hiddenHint: showAll ? 0 : builtinCount,
+  });
+  for (const line of lines) ctx.output.writeLine(line);
+  const unknown = (ctx.config.plugins?.disabled ?? []).filter((n) => !manager.isEnabled(n));
+  if (unknown.length > 0) {
+    ctx.output.writeLine(pc.dim(t("cli.plugins.unknown_names", { names: unknown.join(", ") })));
+  }
 }
 
 

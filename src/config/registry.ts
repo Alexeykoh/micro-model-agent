@@ -5,6 +5,9 @@ import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { setBudgetShare, type BudgetShareKey } from "./budget";
 import { readMmaVersion } from "../core/version";
 import { EXTRA_DEFS } from "./registry-extra";
+import { Logger } from "../logger/app-logger";
+
+const logger = new Logger("warn", "config");
 
 /**
  * Центральный реестр пользовательских ключей конфига для `/config` и сахарных
@@ -659,6 +662,31 @@ function applyProviderModelMemory(config: AppConfig, key: string, value: unknown
   }
 }
 
+/**
+ * Кто применяет deny-list плагинов к живому реестру. Ставится из bootstrap сразу
+ * после создания `PluginManager` (и переставляется на новый после `/reload`).
+ *
+ * Смысл шва: эффект вкл/выкл должен жить в `setConfigValue`, а не в каждой
+ * поверхности отдельно — иначе `/config`, `mma plugins enable` и веб-тумблер
+ * разъедутся. Конфиг при этом не знает про `modules/plugins` (нет цикла слоёв).
+ */
+let pluginGateApplier: ((names: string[]) => void) | null = null;
+
+export function setPluginGateApplier(fn: ((names: string[]) => void) | null): void {
+  pluginGateApplier = fn;
+}
+
+function applyConfigEffects(config: AppConfig, key: string, value: unknown): void {
+  applyProviderModelMemory(config, key, value);
+  if (key !== "plugins.disabled" || !pluginGateApplier) return;
+  const names = Array.isArray(value) ? value.map((v) => String(v)) : [];
+  try {
+    pluginGateApplier(names);
+  } catch (e) {
+    logger.warn(`plugins.disabled not applied: ${String(e)}`);
+  }
+}
+
 /** Пишет ключ: резолв → парсинг → валидация → set + память моделей провайдера. */
 export function setConfigValue(config: AppConfig, name: string, raw: string): ConfigSetResult {
   const def = resolveConfigKey(name);
@@ -672,7 +700,7 @@ export function setConfigValue(config: AppConfig, name: string, raw: string): Co
   if (extra) return { ok: false, reason: extra, input: name, key: def.key, def };
 
   def.set!(config, parsed.value);
-  applyProviderModelMemory(config, def.key, parsed.value);
+  applyConfigEffects(config, def.key, parsed.value);
   return {
     ok: true,
     key: def.key,

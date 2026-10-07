@@ -427,7 +427,6 @@ export interface SubagentConfig {
 
 export interface SessionIsolationConfig {
   enabled: boolean;
-  isolatePlugins: boolean;
   isolateTempFiles: boolean;
 }
 
@@ -528,6 +527,15 @@ export interface CriticConfig {
   timeoutMs: number;
 }
 
+export interface PluginsConfig {
+  /**
+   * Имена выключенных плагинов (deny-list). Выключение живое: хуки плагина
+   * перестают вызываться, без перезапуска. Модуль при этом уже загружен —
+   * disable останавливает поведение, а не исполнение кода (см. `docs/plugins.md`).
+   */
+  disabled?: string[];
+}
+
 export interface AppConfig {
   version: string;
   model: string;
@@ -574,6 +582,8 @@ export interface AppConfig {
   security?: SecurityConfig;
   sessionIsolation?: SessionIsolationConfig;
   skills: SkillsConfig;
+  /** Реестр плагинов: deny-list выключенных. Опциональное гнездо (ленивая инициализация). */
+  plugins?: PluginsConfig;
   subagent: SubagentConfig;
   hallucination?: HallucinationConfig;
   lsp?: LspConfig;
