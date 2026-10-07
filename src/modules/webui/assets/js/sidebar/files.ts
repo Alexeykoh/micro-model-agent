@@ -55,7 +55,6 @@ export function sidebarFilesState(host: Dict): void {
     sb.files.expanded.clear();
     sb.files.selectedPath = null;
     if (sb.files.detailEl) sb.files.detailEl.hidden = true;
-    sb.el?.classList.remove("sb-expanded");
     markDirty();
   }
   if (sb.active === "files") renderFilesTree();
@@ -188,7 +187,6 @@ export async function openFile(path: string): Promise<void> {
     sb.files.detailTitleEl.textContent = path;
     sb.files.detailTitleEl.title = path;
   }
-  sb.el?.classList.add("sb-expanded");
   if (detail) detail.hidden = false;
   const body = sb.files.detailBodyEl;
   if (body) {
@@ -219,7 +217,6 @@ export async function openFile(path: string): Promise<void> {
 export function closeFile(): void {
   sb.files.selectedPath = null;
   if (sb.files.detailEl) sb.files.detailEl.hidden = true;
-  sb.el?.classList.remove("sb-expanded");
   markDirty();
   renderFilesTree();
 }

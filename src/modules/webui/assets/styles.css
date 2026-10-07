@@ -782,7 +782,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 /* Sidebar never scrolls horizontally, in any tab: long paths / model names /
    ids wrap or ellipsize inside their rows, never widening the pane. */
 .sb {
-  width: 340px; min-width: 340px; display: flex; flex-direction: column;
+  width: 679px; min-width: 679px; display: flex; flex-direction: column;
   border-left: 1px solid var(--border); background: var(--sb-bg); min-height: 0;
   overflow-x: hidden;
 }
@@ -844,11 +844,10 @@ body.light .sel > button { border: 1px solid var(--border); }
   #pane-session { transition: opacity .15s ease; }
 }
 
-/* master-detail expansion */
-.sb { transition: width .22s ease, min-width .22s ease; }
-.sb.sb-expanded { width: 680px; min-width: 680px; }
-#pane-trace { flex-direction: row; }
-.sb-expanded #pane-trace { position: relative; }
+/* master-detail: sidebar has a fixed width, so opening a detail never
+   resizes it (that spontaneous jump is what we removed). The detail always
+   sits on the LEFT of the list/tree, i.e. toward the chat area. */
+#pane-trace { flex-direction: row-reverse; position: relative; }
 .trace-list { flex: 1; min-width: 0; min-height: 0; max-width: 100%; overflow-y: auto; overflow-x: hidden; padding: 6px 10px 12px; display: flex; flex-direction: column; gap: 1px; }
 /* Строки трассировки не сжимаются: иначе flex-column втискивает сотни
    событий в видимую высоту, скролл не появляется, а текст сплющивается
@@ -866,7 +865,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 .trc .t { color: var(--dim-b); margin-left: auto; flex: 0 0 auto; }
 .trc.warn .g, .trc.warn .lab { color: var(--yellow); }
 .trc.phase .lab { color: var(--think); }
-.trc-detail { display: flex; flex-direction: column; flex: 0 0 340px; min-width: 0; min-height: 0; max-width: 100%; overflow-x: hidden; border-left: 1px solid var(--border); }
+.trc-detail { display: flex; flex-direction: column; flex: 0 0 340px; min-width: 0; min-height: 0; max-width: 100%; overflow-x: hidden; border-right: 1px solid var(--border); }
 .trc-detail[hidden] { display: none; }
 .detail-h { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--fg); font-size: 12.5px; flex-shrink: 0; min-width: 0; max-width: 100%; overflow: hidden; }
 .detail-h .g { color: var(--accent); }
@@ -877,15 +876,18 @@ body.light .sel > button { border: 1px solid var(--border); }
 .detail-b h5 { margin: 0 0 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--sec-h); font-weight: 600; }
 
 /* ---- sidebar Files tab: lazy tree + read-only viewer ---- */
-#pane-files { flex-direction: row; }
-.sb-expanded #pane-files { position: relative; }
+#pane-files { flex-direction: row; position: relative; }
 .files-tree {
   flex: 1; min-width: 0; min-height: 0; max-width: 100%;
   overflow-y: auto; overflow-x: hidden; padding: 6px 6px 12px;
   display: flex; flex-direction: column; gap: 1px;
 }
 .files-tree > * { flex-shrink: 0; }
-.sb-expanded .files-tree { flex: 0 0 320px; }
+/* An open file takes the whole fixed sidebar width (679px) so its content is
+   readable; the tree steps aside. Visibility is driven purely by the viewer's
+   own [hidden] flag (open/close triggered inside the sidebar). */
+#pane-files:has(.files-detail:not([hidden])) .files-tree { display: none; }
+#pane-files:has(.files-detail:not([hidden])) .files-detail { flex: 1 1 auto; }
 .frow {
   display: flex; gap: 6px; align-items: center; padding: 3px 6px;
   font-size: 12.5px; color: var(--muted); border-radius: 4px; cursor: pointer;
@@ -908,7 +910,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 .frow .fattach .svg-icon { width: 13px; height: 13px; }
 .files-detail {
   display: flex; flex-direction: column; flex: 0 0 360px; min-width: 0; min-height: 0;
-  max-width: 100%; overflow-x: hidden; border-left: 1px solid var(--border);
+  max-width: 100%; overflow-x: hidden;
 }
 .files-detail[hidden] { display: none; }
 .files-detail .detail-h .x { margin-left: 0; }
@@ -916,11 +918,12 @@ body.light .sel > button { border: 1px solid var(--border); }
 .files-detail .detail-h .x:hover { color: var(--accent); }
 .fdim { color: var(--dim-c); font-size: 12px; padding: 4px 8px; overflow-wrap: anywhere; }
 .fdim.wn { color: var(--yellow); }
-.fpre { margin: 0; max-width: 100%; overflow: auto; }
+.fpre { margin: 0; max-width: 100%; overflow-x: hidden; }
 .fpre .fcode {
   display: block; font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
   font-size: 11.5px; line-height: 1.5;
-  white-space: pre; color: var(--fg); padding: 8px 10px; background: var(--surface); border-radius: 6px;
+  white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
+  color: var(--fg); padding: 8px 10px; background: var(--surface); border-radius: 6px;
 }
 .fmd { font-size: 12.5px; line-height: 1.55; min-width: 0; overflow-wrap: anywhere; }
 .fimg { max-width: 100%; height: auto; border-radius: 6px; }
