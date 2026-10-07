@@ -59,6 +59,12 @@ function imagesOf(e: { images?: Array<{ file: string }> }, sessionId?: string): 
   return urls.length ? urls : undefined;
 }
 
+/** Изображения тула в wire-форме (может не быть — тогда поле опущено). */
+function imagesField(e: SessionLogEntry, sessionId?: string): Pick<HistoryEntry, "images"> {
+  const images = imagesOf(e, sessionId);
+  return images ? { images } : {};
+}
+
 /** Маппит одну сырую запись лога в wire-форму; `null` — внутренним типам. */
 function mapLogEntry(e: SessionLogEntry, sessionId?: string): HistoryEntry | null {
   switch (e.type) {
@@ -76,8 +82,7 @@ function mapLogEntry(e: SessionLogEntry, sessionId?: string): HistoryEntry | nul
         name: e.tool,
         args: scrubToolArgs(e.args ?? {}),
       };
-    case "tool_result": {
-      const images = imagesOf(e, sessionId);
+    case "tool_result":
       return {
         ts: e.ts,
         kind: "tool_result",
@@ -85,9 +90,8 @@ function mapLogEntry(e: SessionLogEntry, sessionId?: string): HistoryEntry | nul
         tool: e.tool,
         success: e.success ?? false,
         duration: e.duration,
-        ...(images ? { images } : {}),
+        ...imagesField(e, sessionId),
       };
-    }
     case "plan":
       return { ts: e.ts, kind: "plan", text: scrub(e.content) };
     case "error":
