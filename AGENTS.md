@@ -1132,7 +1132,7 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Побочно:** `subdialog.ts` теперь резолвит узлы оверлея лениво, а не на уровне модуля
   (захват на импорте молча no-op'ился, если оверлея ещё нет в DOM).
 
-### Plugin Draft Quality (2.30.0)
+### Plugin Draft Quality (2.29.1)
 
 Спека: [docs/specs/2026-10-07-plugin-draft-quality-design.md](./docs/specs/2026-10-07-plugin-draft-quality-design.md);
 план: [docs/plans/2026-10-07-plugin-draft-quality.md](./docs/plans/2026-10-07-plugin-draft-quality.md).
@@ -1158,7 +1158,7 @@ quality-gate и выглядят аккуратно.
 - **Тесты**: `tests/plugin-drafts.test.ts` (синтаксис, нормализация, откат при
   провале загрузки).
 
-### Current Version: 2.30.0
+### Current Version: 2.29.1
 
 ### Changelog
 

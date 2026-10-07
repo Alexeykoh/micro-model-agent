@@ -4,7 +4,7 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.30.0] - 2026-10-07
+## [2.29.1] - 2026-10-07
 
 Agent-written capability drafts (`define_capability`) are now quality-gated and
 tidy: the handler body is syntax-checked before it is written, a load failure is
