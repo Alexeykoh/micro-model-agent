@@ -1,7 +1,7 @@
 // Per-session статус слотов пула: счётчики, busy-агрегаты, резервы.
 // Вынесено из `state.ts` (правило #1: ≤300 строк/файл). Сам `WebUiState`
 // (типы, создание, broadcast) остаётся в `state.ts`.
-import type { RuntimeState } from "../state";
+import { broadcast, type RuntimeState, type SseTransport } from "../state";
 
 /** Счётчики очереди по сессиям (для бейджей вкладок; legacy-слот мимо). */
 export function queuedCounts(s: RuntimeState): Record<string, number> {
@@ -39,6 +39,24 @@ export function sessionStatus(s: RuntimeState): {
 export function syncBusy(s: RuntimeState): void {
   s.busy = s.pool.anyBusy();
   s.agentRunning = s.busy;
+}
+
+/**
+ * Рассылает полный снапшот сессии SSE-событием `state` — единственная форма
+ * апдейта сайдбара. `sessionId` штампуется, чтобы клиент положил снапшот во
+ * вкладку-владельца (без него — активная/глобальная проекция).
+ */
+export function pushState(s: RuntimeState & SseTransport, sessionId?: string | null): void {
+  broadcast(
+    {
+      type: "state",
+      ts: Date.now(),
+      ...sessionStatus(s),
+      ...(sessionId ? { sessionId } : {}),
+      state: s.bridge?.getState?.(sessionId ?? undefined) ?? null,
+    },
+    s,
+  );
 }
 
 /**

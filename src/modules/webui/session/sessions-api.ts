@@ -7,7 +7,33 @@ import { handleSessionLog } from "./log-api";
 import { readBody, readBodyError, sendJson } from "../util";
 import { parseJsonBody, readJsonBody } from "../http/body";
 import { isSessionBusy } from "./session-status";
-import type { SessionStore, RuntimeState, HttpTransport, SseTransport } from "../state";
+import { broadcast, type SessionStore, type RuntimeState, type HttpTransport, type SseTransport } from "../state";
+
+/** Проекция меты сессии для списка (`GET /api/sessions` и SSE `sessions`). */
+interface SessionMetaLite {
+  id: string;
+  name?: string;
+  updatedAt?: number;
+  model?: string;
+  messageCount?: number;
+}
+
+/** Список сессий в форме, общей для REST и SSE. */
+function sessionList(s: SessionStore): SessionMetaLite[] {
+  if (!s.sessionManager) return [];
+  return s.sessionManager.list().map((meta) => ({
+    id: meta.id,
+    name: meta.name,
+    updatedAt: meta.updatedAt,
+    model: meta.model,
+    messageCount: meta.messageCount,
+  }));
+}
+
+/** Рассылает список сессий событием `sessions` (замена 15с-поллу клиента). */
+function emitSessions(s: SessionStore & SseTransport): void {
+  broadcast({ type: "sessions", ts: Date.now(), sessions: sessionList(s) }, s);
+}
 
 /** `GET /api/sessions` — список сессий (id/имя/обновление/модель/счёт). */
 export function handleSessionsGet(res: ServerResponse, s: SessionStore & RuntimeState & HttpTransport & SseTransport): void {
@@ -15,14 +41,7 @@ export function handleSessionsGet(res: ServerResponse, s: SessionStore & Runtime
     sendJson(res, 503, { error: "sessions_unavailable" });
     return;
   }
-  const sessions = s.sessionManager.list().map((meta) => ({
-    id: meta.id,
-    name: meta.name,
-    updatedAt: meta.updatedAt,
-    model: meta.model,
-    messageCount: meta.messageCount,
-  }));
-  sendJson(res, 200, { sessions });
+  sendJson(res, 200, { sessions: sessionList(s) });
 }
 
 /**
@@ -62,6 +81,7 @@ export function handleSessionCreate(
         } catch {
           // fail-open: сессия создана, план остался как был
         }
+        emitSessions(s);
         sendJson(res, 201, {
           ok: true,
           session: {
@@ -117,6 +137,7 @@ export function handleSessionActivate(
       } catch {
         // fail-open: сессия переключена, план остался как был
       }
+      emitSessions(s);
       sendJson(res, 200, { ok: true });
     })
     .catch((err: unknown) => {
@@ -168,6 +189,7 @@ export function handleSessionDelete(res: ServerResponse, id: string, s: SessionS
   } catch {
     /* best-effort */
   }
+  emitSessions(s);
   sendJson(res, 200, { ok: true });
 }
 
