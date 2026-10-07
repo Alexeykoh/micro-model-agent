@@ -151,17 +151,24 @@ export function createBrowserTool(): ToolDefinition {
       const result = await serialize(() => s.execute(action, args));
 
       if (result.screenshot) {
-        // vision берётся из резолвера возможностей активной модели
-        // (пресет + native-probe + конфиг), а не из эвристики по имени.
-        // Без vision отдаём текстовый snapshot — base64 в контекст не льём.
+        // Веб-ленте и истории нужен ПОЛНОРАЗМЕРНЫЙ PNG независимо от vision
+        // (показ для человека не зависит от возможностей модели) — кладём в
+        // `imageFiles`. Модели (только vision-модели) по-прежнему уходит
+        // ресайзнутый data URL из `images`; без vision — текстовая пометка.
+        const imageFiles = [{ bytes: result.screenshot, mime: "image/png" }];
         if (ctx.capabilities?.vision) {
           return {
             success: result.success,
             output: result.output,
             images: [await screenshotToImagePart(result.screenshot)],
+            imageFiles,
           };
         }
-        return { success: result.success, output: formatScreenshotForTextModel(result.output) };
+        return {
+          success: result.success,
+          output: formatScreenshotForTextModel(result.output),
+          imageFiles,
+        };
       }
 
       return { success: result.success, output: result.output };

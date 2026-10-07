@@ -97,6 +97,21 @@ export interface Forwarder {
   flushNow(): void;
 }
 
+/**
+ * URL'ы картинок тула для события `tool_end`: сохранённые refs →
+ * `/api/sessions/:id/images/:name` (кэш + replay), без персиста (шифрованная
+ * сессия) — inline data URL, live-only. Пусто — событие уходит без картинок.
+ */
+function imageUrlList(owner: string | null, result: ToolResult): string[] {
+  if (result.imageRefs?.length && owner) {
+    return result.imageRefs.map((r) => `/api/sessions/${owner}/images/${r.file}`);
+  }
+  if (result.images?.length) {
+    return result.images.map((p) => p.image_url.url);
+  }
+  return [];
+}
+
 /** Строит форвардер на состояние и синк (дефолт — broadcast всем клиентам). */
 export function makeForwarder(
   s: RuntimeState & SseTransport,
@@ -181,6 +196,7 @@ export function makeForwarder(
     },
     onToolEnd(call, result, durationMs) {
       flush();
+      const images = imageUrlList(opts.ownerRef?.current ?? null, result);
       sink({
         type: "tool_end",
         ts: Date.now(),
@@ -189,6 +205,7 @@ export function makeForwarder(
         success: result.success,
         durationMs,
         output: stripAnsi(redactContextSecrets(clipToolOutput(call.name, result.output || ""))),
+        ...(images.length ? { images } : {}),
       });
     },
     onPlan(plan) {

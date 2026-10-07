@@ -5,6 +5,7 @@ import { t } from "../i18n.js";
 import { categoryOf, labelOf, argText, formatMs } from "../format.js";
 import { renderMarkdown } from "../../md.js";
 import { api } from "../api.js";
+import { imageCard } from "./image-card.js";
 import type { Dict } from "../core/store/types.js";
 import {
   feedHasContent, clearEmpty, scrollToBottom, activeFeed, liveFeed,
@@ -55,13 +56,21 @@ function renderHistoryResult(
     status.textContent = mark;
     if (!entry.success) status.classList.add("fail");
     statusNodes.delete(entry.toolCallId);
-    return;
+  } else {
+    const line = el("div", "act " + categoryOf(entry.tool));
+    line.appendChild(el("span", "g", "↳"));
+    line.appendChild(el("span", "lab", labelOf(entry.tool)));
+    line.appendChild(el("span", "ok" + (entry.success ? "" : " fail"), mark));
+    feed.appendChild(line);
   }
-  const line = el("div", "act " + categoryOf(entry.tool));
-  line.appendChild(el("span", "g", "↳"));
-  line.appendChild(el("span", "lab", labelOf(entry.tool)));
-  line.appendChild(el("span", "ok" + (entry.success ? "" : " fail"), mark));
-  feed.appendChild(line);
+  // Replay сохранённых картинок тула (файл уже может быть вытеснен ротацией —
+  // imageCard сам рисует приглушённую пометку по `onerror`).
+  if (entry.success && Array.isArray(entry.images) && entry.images.length) {
+    for (const url of entry.images) {
+      const card = imageCard(String(entry.tool || ""), String(url));
+      if (card) feed.appendChild(card);
+    }
+  }
 }
 
 function renderHistory(feed: HTMLElement, entries: Dict[]): void {

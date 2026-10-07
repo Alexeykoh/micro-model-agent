@@ -86,6 +86,8 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
   const resultFor = (ev: ToolEvent): ToolResult => ({
     success: !ev.error,
     output: ev.output ?? "",
+    ...(ev.imageRefs?.length ? { imageRefs: ev.imageRefs } : {}),
+    ...(ev.images?.length ? { images: ev.images } : {}),
   });
 
   // `AgentResult` не несёт поля `interrupted`, а ход-раннер останавливают

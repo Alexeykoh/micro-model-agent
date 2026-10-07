@@ -5,10 +5,11 @@ import { t, pluralCount } from "../i18n.js";
 import { feed as feedState, tabs as tabState, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import {
-  FILE_TOOLS, OPENABLE_TOOLS, IMAGE_TOOLS, LINK_TOOLS,
+  FILE_TOOLS, OPENABLE_TOOLS, LINK_TOOLS,
   categoryOf, labelOf, argText, formatMs, verbosity, firstOutputLine,
 } from "../format.js";
 import { copyText } from "../../md.js";
+import { imageCard } from "./image-card.js";
 import {
   activeFeed, liveFeed, feedForEvent, clearBusy, clearEmpty,
   appendTo, insertAfter, appendActionsRow, flushRun,
@@ -160,17 +161,31 @@ function cardFor(name: string, args: Dict, sid: string | undefined, ok: boolean)
     appendTo(feed, line);
     return line;
   }
-  if (IMAGE_TOOLS.indexOf(name) !== -1) {
-    const card = el("div", "imgcard");
-    card.appendChild(el("div", "ph", "◧ " + t("web.card.screenshot")));
-    card.appendChild(el("div", "cap", name === "attach_image" ? t("web.card.attached_image") : t("web.card.browser_viewport")));
-    appendTo(feed, card);
-    return card;
-  }
+  // Картинки тулов (browser/attach_image) рисуются в `onToolEnd` по данным
+  // `tool_end.images` — здесь, на старте, никаких заглушек-обещаний.
   return null;
 }
 
+// Реальные картинки тулов приходят в `tool_end.images` (URL дискового файла
+// либо inline data URL, когда персист выключен — шифрование сессии). Рисуем
+// миниатюры после тела тула; вызывается для всех режимов, включая quiet:
+// картинка — контент результата, а не тело тула.
+function appendImageCards(data: Dict): void {
+  if (!data.success || !Array.isArray(data.images) || !data.images.length) return;
+  const feed = feedForEvent(data.sessionId);
+  if (!feed) return;
+  for (const url of data.images) {
+    const card = imageCard(String(data.name || ""), String(url));
+    if (card) appendTo(feed, card);
+  }
+}
+
 export function onToolEnd(data: Dict): void {
+  finishToolEnd(data);
+  appendImageCards(data);
+}
+
+function finishToolEnd(data: Dict): void {
   const node = feedState.toolNodes.get(data.toolCallId);
   const line = node ? node.line : null;
   if (node) {

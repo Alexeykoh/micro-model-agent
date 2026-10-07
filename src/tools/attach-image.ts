@@ -104,7 +104,9 @@ export const attachImageTool: ToolDefinition = {
         dataUrl = result.dataUrl;
       }
 
-      // Картинка — pending content part на менеджере контекста.
+      // Картинка идёт в `result.images`: очередь контекста заполняет единообразно
+      // `queueToolImages` в tool-batch (там же параллельно персистится для
+      // веб-ленты/истории — как browser screenshot).
       if (!ctx.contextManager) {
         return {
           success: false,
@@ -112,15 +114,11 @@ export const attachImageTool: ToolDefinition = {
         };
       }
 
-      ctx.contextManager.addPendingImage({
-        type: "image_url",
-        image_url: { url: dataUrl },
-      });
-
       const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
       return {
         success: true,
         output: t("image.attached", { source, size: `${sizeKb} KB` }),
+        images: [{ type: "image_url", image_url: { url: dataUrl } }],
       };
     } catch (err: any) {
       return {

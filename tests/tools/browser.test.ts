@@ -102,6 +102,20 @@ describe("browser screenshot delivery by capability", () => {
       expect(result.output).not.toContain("data:image");
     });
   });
+
+  it("always returns full-size imageFiles for the web feed, regardless of vision", async () => {
+    await withSession({ vision: false }, (result) => {
+      expect(result.imageFiles).toHaveLength(1);
+      expect(result.imageFiles[0].mime).toBe("image/png");
+      expect(result.imageFiles[0].bytes.length).toBe(Buffer.from("fake-png-data").length);
+    });
+    await withSession({ vision: true }, (result) => {
+      // Модель получает ресайзнутый data URL, веб — полноразмерные байты.
+      expect(result.images).toHaveLength(1);
+      expect(result.imageFiles).toHaveLength(1);
+      expect(result.imageFiles[0].mime).toBe("image/png");
+    });
+  });
 });
 
 describe("browser action serialization (MoE parallel waves)", () => {

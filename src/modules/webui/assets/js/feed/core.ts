@@ -232,7 +232,10 @@ function hideToLatest(): void {
   msgs.classList.remove("unfollowed");
 }
 
-msgs.addEventListener("scroll", () => {
+// `?.` — модульный кэш в тестовом процессе общий: DOM-модуль может
+// оцениться раньше, чем в документе появился `#msgs`. В живой странице
+// элемент есть всегда.
+msgs?.addEventListener("scroll", () => {
   const nb = nearBottom();
   follow = nb;
   msgs.classList.toggle("scrolled", msgs.scrollTop > 24);
