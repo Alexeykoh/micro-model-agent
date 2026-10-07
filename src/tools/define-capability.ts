@@ -73,7 +73,11 @@ export const defineCapabilityTool: ToolDefinition = {
     "(you will be asked with the full code shown). Use only when an existing tool cannot do " +
     "the job.",
   tags: ["meta"],
-  alwaysOn: false,
+  // Always-on по той же причине, что и тулы плагинов: блок промпта сообщает
+  // модели, что capability можно написать, — и инструмент должен быть в наборе.
+  // Иначе при on-demand фильтре модель читала бы про `define_capability` и не
+  // видела его в схеме (а сама `enable_tools meta` не вызвала бы).
+  alwaysOn: true,
   parameters: {
     type: "object",
     properties: {

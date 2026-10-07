@@ -40,7 +40,7 @@ export function pluginCapabilitiesBlock(input: PluginCapabilitiesInput): PromptB
       ? `Tools added by installed plugins (use them instead of reinventing):\n${capabilities}`
       : "No plugin tools installed yet.",
     "",
-    `You can add a tool of your own with ${DEFINE_TOOL}: it writes a draft capability`,
+    "You can add a tool of your own with " + DEFINE_TOOL + ": it writes a draft capability",
     "into .mma/plugins/drafts/ and asks the user to approve running that code. Drafts",
     "never run without approval, so say plainly what the tool is for and declare its",
     "permissions. Do not write a capability when an existing tool already does the job.",
