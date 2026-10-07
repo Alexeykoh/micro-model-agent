@@ -54,7 +54,18 @@ parallelism lives in the MoE executor (`moe-executor.ts:496`) and inside
 - Parallelizing the tool-hook / context bookkeeping. Only the *handler* runs
   concurrently; every hook, UI event and `role:"tool"` message stays serial and
   ordered.
-- Touching the MoE path (it already has its own wave scheduler).
+
+## Plugin-hook isolation
+
+Sibling forks share the plugin manager (execution stuck-detector, lint-on-write,
+LSP), so concurrent `onBeforeTool`/`onAfterTool` dispatch would race on shared
+plugin state. `ToolExecutor` therefore owns a FIFO `AsyncLock`; forks inherit the
+same instance, and both hook phases run under it while the handler stays
+concurrent. The lock is taken only when a plugin actually implements the hook, so
+the no-plugin hot path does not shift the handler start by a microtask. MoE
+subtasks likewise run each on their own `fork()` (waves were racing on
+scope/recursion-depth) — `fork` is optional, so minimal/test executors are
+unaffected.
 
 ## Design
 
@@ -152,10 +163,8 @@ system-summary → next LLM iteration
   concurrent calls overlap by design; documented as approximate at the per-call
   UI level).
 - **Plugins with shared state** (execution stuck-detector, lint-on-write):
-  sibling child agents' inner tool calls can hit the shared `pluginManager`
-  concurrently. This pre-exists in the MoE path (shared executor across wave
-  tasks); mutations are single-threaded and non-corrupting. Documented, not
-  fixed here.
+  serialized by the shared `AsyncLock` (see "Plugin-hook isolation"); handler
+  execution stays concurrent.
 
 ## Testing
 
@@ -169,7 +178,10 @@ system-summary → next LLM iteration
 - `tests/tools/executor-fork.test.ts`:
   - `fork()` isolates `scope`/`recursionDepth`/`cleanup`/`activeCallId`;
   - live getters (`config`, `sessionId`) stay live;
-  - memo is shared (write in a fork clears the parent's cached read).
+  - memo is shared (write in a fork clears the parent's cached read);
+  - plugin hooks never overlap across sibling forks.
+- `tests/core/subagent-parallel-e2e.test.ts`: real registry → batch → fork →
+  real `subagent` handler (child stubbed via the `agentFactory` seam) overlaps.
 - Existing `subagent-tool.test.ts` continues to pass (handler unchanged).
 - Existing `tool-batch-*` tests continue to pass (default serial path).
 
