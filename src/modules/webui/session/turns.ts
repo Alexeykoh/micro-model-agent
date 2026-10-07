@@ -8,7 +8,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { SessionStore, RuntimeState, ConfigStore, HttpTransport, SseTransport, WorkspaceStore, SseEvent } from "../state";
 import { broadcast } from "../state";
-import { releaseBusy, reserveBusy, sessionStatus, syncBusy } from "./session-status";
+import { pushState, releaseBusy, reserveBusy, syncBusy } from "./session-status";
 import { makeForwarder } from "./forward";
 import { makeRunAgent } from "./run-agent";
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
@@ -70,7 +70,7 @@ function startTurn(
     runner = s.pool.getOrCreateRunner(sessionId);
   } catch (err) {
     releaseBusy(s, token, target);
-    broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
+    pushState(s, target);
     throw err;
   }
   runRunnerTurn(s, runner, text, images, sessionId, token);
@@ -111,13 +111,13 @@ function runRunnerTurn(
     contextWindow: s.config?.contextWindow,
     contextManager: runner.contextManager,
   });
-  broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
+  pushState(s, sessionId);
   runAgent.run(text).catch((err: unknown) => {
     // Тот же контракт владения, что у legacy: turn_end уже сбросил слот —
     // второй error не шлём, репортим только незапустившийся сабмит.
     if (releaseBusy(s, token, sessionId)) {
       broadcast({ type: "error", ts: Date.now(), sessionId, error: scrubError(err) }, s);
-      broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
+      pushState(s, sessionId);
     }
   });
 }
@@ -130,7 +130,7 @@ function runRunnerTurn(
 export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore, id: string | null): boolean {
   s.pool.forceRelease(id);
   syncBusy(s);
-  broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
+  pushState(s, id);
   const next = s.pool.shift(id);
   if (!next) return false;
   if (next.sessionId && s.sessionManager && !s.sessionManager.get(next.sessionId)) {
@@ -138,7 +138,7 @@ export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTr
     return false;
   }
   const token = reserveBusy(s, id);
-  broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
+  pushState(s, id);
   try {
     startTurn(s, id, next.text, next.images, token);
   } catch {
@@ -207,17 +207,16 @@ function dispatchPost(
       sendJson(res, 429, { error: "queue_full" });
       return;
     }
-    broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
+    pushState(s, target);
     sendJson(res, 202, {
       ok: true,
-      queued: s.pool.totalQueued(),
-      sessionId: target,
+      queued: s.pool.totalQueued(),      sessionId: target,
       queuedForSession: s.pool.queueLen(target),
     });
     return;
   }
   const token = reserveBusy(s, target);
-  broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);
+  pushState(s, target);
   try {
     startTurn(s, target, text, images, token);
   } catch {

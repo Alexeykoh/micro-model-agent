@@ -131,6 +131,9 @@ describe("webui usage metrics", () => {
   it("makeReconfigure refreshes the sidebar context limit after a resize", async () => {
     const s = createWebUiState();
     s.usage = { contextUsed: 1000, contextLimit: 24576, costUsd: 0.1 };
+    s.bridge = {
+      getState: () => buildHostState({ config: structuredClone(DEFAULTS), usage: s.usage }, false),
+    } as never;
     const writes: string[] = [];
     s.clients.add({
       write: (payload: string) => {

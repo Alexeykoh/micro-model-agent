@@ -5,7 +5,7 @@ import type { AgentResult, ToolEvent } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import type { ExecutionModule } from "../../execution/module";
 import { broadcast, type UsageSnapshot, type SessionStore, type RuntimeState, type SseTransport } from "../state";
-import { sessionStatus } from "./session-status";
+import { pushState } from "./session-status";
 import { captureUsage, liveContextUsage, planEventFor, type LiveContextSource } from "../host-state";
 import { saveSessionUsage } from "./session-usage";
 import type { Forwarder } from "./forward";
@@ -147,19 +147,15 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
         (phase) => forwarder.onPhase(phase),
         (reasoning) => forwarder.onReasoning(reasoning),
       );
-      // Usage забираем ДО `onTurnEnd`, чтобы бродкаст `state` сразу после хода
-      // уже нёс свежие метрики сайдбара (клиент и так поллит `/api/state`,
-      // так что это оптимизация, а не единственный путь).
-      const usage = recordTurnUsage(state, result, deps.contextWindow, owner);
+      // Usage забираем ДО `pushState`, чтобы снапшот сразу после хода
+      // нёс свежие метрики сайдбара.
+      recordTurnUsage(state, result, deps.contextWindow, owner);
       forwarder.onTurnEnd({
         success: result.success,
         durationMs: result.durationMs,
         toolCalls,
       });
-      broadcast(
-        { type: "state", ts: Date.now(), ...sessionStatus(state), usage, usageSessionId: owner },
-        state,
-      );
+      pushState(state, owner);
       return result;
     } catch (err) {
       forwarder.onTurnEnd({ success: false });
