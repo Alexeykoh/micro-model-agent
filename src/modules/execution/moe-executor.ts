@@ -11,6 +11,7 @@ import { t } from "../../i18n/index";
 import { ArtifactStore } from "../artifacts/store";
 import { buildInputSection } from "./input-from";
 import { parseScopeRequest } from "../../tools/scope-request";
+import { resolveExpertProvider } from "./expert-provider";
 import { isTransientError } from "./transient-error";
 import { sleep } from "../../utils/sleep";
 import { backoffDelay } from "../../utils/retry";
@@ -159,6 +160,14 @@ async function executeSubtask(
   }
 
   const maxAttempts = expertConfig.max_attempts || 3;
+  // Модель эксперта: отличается от активной → выделенный провайдер на активном
+  // провайдере; совпадает/пусто → общий провайдер (без лишней сборки).
+  const expertProvider = resolveExpertProvider(
+    deps.config,
+    expertConfig.model,
+    deps.llmProvider,
+    deps.logger,
+  );
   let lastError = "";
   const stuckDetector = new StuckDetector(maxAttempts * 2, maxAttempts);
 
@@ -206,7 +215,7 @@ async function executeSubtask(
           config: deps.config,
           baseDir: deps.baseDir,
           logger: deps.logger,
-          llmProvider: deps.llmProvider,
+          llmProvider: expertProvider,
           toolExecutor: subtaskExecutor,
           sessionId: deps.sessionId || "moe",
         },

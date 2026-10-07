@@ -5,6 +5,7 @@ import type { ToolExecutor } from "../tools/executor";
 import type { Logger } from "../logger/app-logger";
 import type { ToolEvent, AgentPhase, AgentResult, OnMeta } from "./types";
 import { OrchestratorClient } from "../llm/orchestrator";
+import { resolveProviderRef } from "../modules/providers/resolve-ref";
 import { validatePlan, applyAutoFixes } from "../modules/execution/plan-validator";
 import { MoEExecutor } from "../modules/execution/moe-executor";
 import { StepVerifier } from "../modules/execution/verifier";
@@ -114,7 +115,11 @@ export async function runWithMoE(
     orchestrator = new OrchestratorClient(
       {
         model: config.orchestrator.model,
-        provider: config.orchestrator.provider,
+        provider: resolveProviderRef(config, config.orchestrator.provider),
+        // Включённый MoE без orchestrator.model стартует на активной модели
+        // агента, а не откатывается в одиночный режим молча.
+        fallbackModel: config.model,
+        fallbackProvider: config.provider,
         contextWindow: config.orchestrator.contextWindow,
         retry: config.retry,
         rateLimits: config.security?.rateLimits,

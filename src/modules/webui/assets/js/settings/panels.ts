@@ -55,6 +55,19 @@ export function descFor(key: string): string {
   return d === k ? "" : d;
 }
 
+// Names of configured providers, for `select` editors on provider-reference
+// keys (`critic.provider`, `orchestrator.provider`). Prefers the `/api/providers`
+// view; falls back to the live config's `provider.entries`.
+function providerNameOptions(): string[] {
+  const view: Dict = settings.providers || {};
+  const cfgProvider: Dict = (settings.config && settings.config.provider) || {};
+  const entries: Dict[] = Array.isArray(view.entries) && view.entries.length ? view.entries : Array.isArray(cfgProvider.entries) ? cfgProvider.entries : [];
+  const names = entries.map((e) => e.label || e.type).filter((n): n is string => !!n);
+  const active = view.active || cfgProvider.active;
+  if (active && names.indexOf(active) === -1) names.unshift(active);
+  return names;
+}
+
 // Generic per-type control (`settings/controls.js`): bool toggle, enum
 // select, int/share/list/json inputs. `post` funnels through `postConfig`.
 function configControl(def: Dict, key: string): HTMLElement {
@@ -70,6 +83,8 @@ function configControl(def: Dict, key: string): HTMLElement {
     label: configLabel(def),
     enumLabel,
     emptyLabel: t("config.enum.none"),
+    modelOptions: settings.models,
+    providerOptions: providerNameOptions(),
     fieldLabel: (k: string) => {
       const kk = "config.field." + k;
       const tr = t(kk);

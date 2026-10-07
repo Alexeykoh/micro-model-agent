@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { OrchestratorClient, buildPlanSystemPrompt } from "../src/llm/orchestrator";
+import type { LLMProvider } from "../src/llm/provider";
 
 describe("buildPlanSystemPrompt", () => {
   it("falls back to the legacy hardcoded prompt without experts", () => {
@@ -127,5 +128,30 @@ describe("OrchestratorClient", () => {
     });
     const provider = (client as any).provider as any;
     expect(provider.retryConfig).toEqual(retry);
+  });
+});
+
+describe("OrchestratorClient default-model fallback (MoE out of the box)", () => {
+  it("enables MoE on the active model when orchestrator.model is unset", () => {
+    const defaultProvider = { chat: vi.fn(), countTokens: vi.fn() } as unknown as LLMProvider;
+    const client = new OrchestratorClient({ fallbackModel: "active-model" }, defaultProvider);
+    expect(client.isEnabled()).toBe(true);
+    // Reuses the active provider object (no dedicated planner provider needed).
+    expect((client as any).provider).toBe(defaultProvider);
+  });
+
+  it("builds a dedicated provider when orchestrator.model differs from the active model", () => {
+    const client = new OrchestratorClient({
+      model: "planner",
+      fallbackModel: "active",
+      fallbackProvider: { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
+    });
+    expect(client.isEnabled()).toBe(true);
+    const provider = (client as any).provider as any;
+    expect(provider.model).toBe("planner");
+  });
+
+  it("stays disabled when there is no model, no provider and no active provider", () => {
+    expect(new OrchestratorClient({}).isEnabled()).toBe(false);
   });
 });

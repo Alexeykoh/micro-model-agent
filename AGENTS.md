@@ -164,12 +164,20 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 Путь: `runWithMoE` (`src/core/agent-moe.ts`) → OrchestratorClient (план) → MoEExecutor → StepVerifier → verifyAndMerge.
 
+- **Планировщик и модель по умолчанию:** `moe.enabled: true` без `orchestrator.model` **не выключает MoE** — оркестратор стартует на активной модели агента (`fallbackModel`/`fallbackProvider` в `OrchestratorClient`, `src/llm/orchestrator.ts`). `orchestrator.model` без `orchestrator.provider` строит провайдер на активном провайдере с другой моделью. Ключи `orchestrator.model` / `orchestrator.provider` / `orchestrator.contextWindow` заведены в реестр (домен `provider`), доступны в `/config` и web-settings (Agent → Mixture of experts).
+- **provider-ссылки:** `critic.provider` / `orchestrator.provider` — строка-имя записи `provider.entries[]` (резолв — `resolveProviderRef`, `src/modules/providers/resolve-ref.ts`) либо полный объект (legacy/ручная правка). UI показывает выпадающий список имён.
+- **Выпадающие списки:** редактор `editor.kind: "select"` (`optionsSource: "models" | "providers"`) в `controls.ts`/`editors.ts` — `critic.model`, `orchestrator.model`, колонка `experts[*].model`; источник — живые `settings.models` / `provider.entries`, фолбэк — text-input.
 - **Re-plan цикл:** `moe.maxReplanCycles` (default 3); каждый re-plan ревалидируется (`plan-validator`);
   битый re-plan → честный partial failure; knownTags — из реестра тулов.
 - **Эксперты:** `config.experts` рендерится в PLAN_SYSTEM_PROMPT (`ExpertConfig.description`,
-  фолбэк — tool_tags). OrchestratorClient строит provider через ProviderManager
-  (entries → per-entry contextWindow/retry/rateLimits, legacy `{type,baseUrl,apiKey}` работает,
-  `orchestrator.contextWindow` — глобальный фолбэк).
+  фолбэк — tool_tags). Провайдер строится общим `buildManagedProvider`
+  (`src/modules/providers/managed.ts`; per-entry contextWindow/retry/rateLimits, legacy
+  `{type,baseUrl,apiKey}`, `orchestrator.contextWindow` — глобальный фолбэк).
+- **Пер-экспертная модель:** `experts[tag].model`, отличная от активной, исполняется на
+  выделенном провайдере поверх активного провайдера (`resolveExpertProvider`,
+  `src/modules/execution/expert-provider.ts`; совпадение/пусто → общий провайдер, ошибка сборки →
+  fail-open). Раньше поле было мёртвым — все эксперты шли на активной модели.
+- **Критик:** `buildCriticProvider` использует тот же `buildManagedProvider`.
 - **input_from:** результаты зависимых сабтасков инжектятся в промпт (`src/modules/execution/input-from.ts`).
 - **scope_request:** rejeceted/approved Router'ом (`src/tools/scope-request.ts`), лимит 2 цикла, default reject.
 - **Selective re-plan:** `executePlan(plan, {skipIds, carriedResults})` — успешные сабтаски
@@ -993,7 +1001,7 @@ read-only петля без стопа, рассинхрон провайдер�
   6 → 70 МБ (base64 ≈4/3 файла + заголовок), `MAX_BODY_BYTES` (`webui/limits.ts`) 24 → 768 МБ
   (вмещает 10 × 50 МБ в base64). i18n `web.attach.too_large` обновлён (en+ru).
 
-### Current Version: 2.26.0
+### Current Version: 2.27.0
 
 ### Changelog
 

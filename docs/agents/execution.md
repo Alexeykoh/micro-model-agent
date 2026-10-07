@@ -83,7 +83,7 @@ ERROR   → retry or escalate
 
 ## Orchestrator (optional)
 
-If `orchestrator.model` configured: larger model handles planning, conflict resolution, audit. Worker (9B) executes steps. If not set — everything runs on one model.
+`moe.enabled: true` runs the planner on the active model by default. Set `orchestrator.model` (and optionally `orchestrator.provider`) to hand planning, conflict resolution and merging to a larger model; `orchestrator.model` alone reuses the active provider with a different model. All three keys (`orchestrator.model` / `.provider` / `.contextWindow`) are editable from `/config` and Web UI settings (Agent → Mixture of experts).
 
 ## RLM-Inspired Features (pass-by-reference + chunked queries)
 

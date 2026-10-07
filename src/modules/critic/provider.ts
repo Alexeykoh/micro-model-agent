@@ -2,8 +2,8 @@
 import type { LLMProvider } from "../../llm/provider";
 import type { AppConfig, CriticConfig } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
-import { ProviderManager } from "../providers/manager";
-import { FallbackProvider } from "../providers/fallback";
+import { buildManagedProvider } from "../providers/managed";
+import { resolveProviderRef } from "../providers/resolve-ref";
 
 const DEFAULT_CRITIC_BASE_URL = "http://localhost:1234/v1";
 
@@ -33,40 +33,33 @@ export function buildCriticProvider(
   deps?: CriticProviderDeps,
 ): LLMProvider {
   const model = critic?.model?.trim();
+  // `provider` может быть объектом ProviderConfig или именем записи
+  // `provider.entries[]` (UI отдаёт выпадающим списком).
+  const hasProviderRef =
+    typeof critic?.provider === "string"
+      ? critic.provider.trim().length > 0
+      : !!critic?.provider && Object.keys(critic.provider).length > 0;
   if (!model) {
     // Немая опция: провайдер без модели ни на что не влияет (поведение v1) —
     // предупреждаем, иначе настройка выглядит рабочей, а эффекта ноль.
-    if (critic?.provider && Object.keys(critic.provider).length > 0) {
+    if (hasProviderRef) {
       deps?.logger?.warn("critic.provider is set without critic.model — provider ignored, using active provider");
     }
     return defaultProvider;
   }
   try {
-    const providerCfg = critic?.provider ?? {
+    const providerCfg = resolveProviderRef(config, critic?.provider) ?? {
       type: "openai-compat",
       baseUrl: DEFAULT_CRITIC_BASE_URL,
     };
-    const manager = new ProviderManager(
-      { ...providerCfg, baseUrl: providerCfg.baseUrl || DEFAULT_CRITIC_BASE_URL },
-      {
-        contextWindow: config.contextWindow ?? DEFAULT_CRITIC_CONTEXT_WINDOW,
-        retry: config.retry,
-        rateLimits: config.security?.rateLimits,
-        getSessionId: deps?.getSessionId,
-        logger: deps?.logger,
-      },
-    );
-    manager.setModel(model);
-
-    let provider: LLMProvider = manager.active;
-    if (providerCfg.fallback && manager.listNames().length > 1) {
-      provider = new FallbackProvider(manager, (from, to, error) => {
-        deps?.logger?.warn(
-          `critic provider failover: ${from} -> ${to} (${error.message.slice(0, 120)})`,
-        );
-      });
-    }
-    return provider;
+    return buildManagedProvider(providerCfg, model, {
+      contextWindow: config.contextWindow ?? DEFAULT_CRITIC_CONTEXT_WINDOW,
+      retry: config.retry,
+      rateLimits: config.security?.rateLimits,
+      getSessionId: deps?.getSessionId,
+      logger: deps?.logger,
+      label: "critic",
+    });
   } catch (err) {
     deps?.logger?.warn(
       `critic provider override failed, using active provider: ${String((err as Error)?.message ?? err).slice(0, 160)}`,

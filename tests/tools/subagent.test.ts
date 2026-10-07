@@ -337,6 +337,43 @@ describe("subagentTool", () => {
     expect(deps.promptBlocks[0].content).toContain("subagent");
     expect(deps.promptBlocks[0].content).toMatch(/verify/i);
   });
+
+  it("runs an expert_tag's model on a dedicated provider", async () => {
+    mockAgent.mockClear();
+    mockAgentRun.mockClear();
+    mockAgentRun.mockResolvedValue({ success: true, text: "done", iterationCount: 1 });
+    const activeProvider = { chat: async () => {}, countTokens: () => 1 } as any;
+    await subagentTool.handler(
+      withAgentFactory({
+        config: {
+          model: "active-model",
+          provider: { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
+          contextWindow: 32768,
+          contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
+          experts: { code: { model: "expert-model", tool_tags: ["file"] } },
+        },
+        baseDir: "/tmp",
+        logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+        llmProvider: activeProvider,
+        toolExecutor: {
+          execute: () => ({}),
+          getToolDefinitions: (tags?: string[]) =>
+            (tags || []).map((tag: string) => ({ name: "write_file", description: "d", parameters: {}, tags: [tag] })),
+          getRegistry: () => ({
+            getAll: () => [],
+            get: () => undefined,
+            getByTags: (tags: string[]) =>
+              (tags || []).map((tag) => ({ name: "write_file", description: "d", parameters: {}, tags: [tag] })),
+          }),
+          setScope: () => {},
+        },
+      }) as any,
+      { task: "do task", expert_tag: "code" },
+    );
+    const deps = mockAgent.mock.calls.at(-1)![0];
+    expect(deps.llmProvider).not.toBe(activeProvider);
+    expect((deps.llmProvider as any).model).toBe("expert-model");
+  });
 });
 
 describe("subagent scope restore", () => {
