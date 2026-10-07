@@ -4,6 +4,19 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.26.0] - 2026-10-07
+
+Web UI polish: the sidebar now has a fixed width with the detail panel on the
+left, and message attachments can be up to 50 MB each (up to 10 per message).
+
+### Added
+
+- **Up to 10 attachments of 50 MB each** (`src/modules/webui`): `MAX_IMAGE_BYTES` 6 MB → 50 MB (client per file), `MAX_IMAGE_DATA_URL_BYTES` 6 MB → 70 MB (server, base64 of a 50 MB file + header), `MAX_IMAGES` 3 → 10 (client, server and the `web-ui` example plugin), `MAX_BODY_BYTES` 24 MB → 768 MB so ten base64 images fit in a single request. i18n `web.attach.too_large` updated.
+
+### Changed
+
+- **Fixed-width sidebar, detail on the left** (`src/modules/webui/assets`): `.sb` is a constant 679 px and the auto-expanding `.sb-expanded` width transition is gone, so the sidebar no longer resizes itself on external events. The Trace detail opens to the left of the list (`flex-direction: row-reverse`); the Files viewer takes the full sidebar width with wrapped lines. The now-unused `sb-expanded` class was removed from CSS/JS.
+
 ## [2.25.0] - 2026-10-07
 
 Multiple subagent calls emitted in one assistant turn now actually run in
