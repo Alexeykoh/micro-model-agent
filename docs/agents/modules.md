@@ -177,11 +177,45 @@ Agent output flows through `src/ui/renderer.ts` (`Renderer`), chosen automatical
 ### Versioning & dedup
 
 - `AgentPlugin` supports optional `version` (semver) and `minMmaVersion` (minimum MMA version, semver).
-- **Dedup by name** in `PluginManager.register(plugin, source?)`: the higher `version` wins (unversioned = "0.0.0"); the loser is dropped and the caller is notified via the `RegisterResult` (`registered` / `skipped_older` / `duplicate`). Applies across global + project dirs.
+- **Dedup by name** in `PluginManager.register(plugin, source?)`: the higher `version` wins (unversioned = "0.0.0"); the loser is dropped and the caller is notified via the `RegisterResult` (`registered` / `skipped_older` / `invalid`). Applies across global + project dirs.
 - **Compatibility gate** in `PluginLoader`: when `minMmaVersion` > current MMA version the plugin is skipped with a `plugin.incompatible` warning (reuses the existing `plugin.skipped` machinery). Bootstrap passes `mmaVersion` (from `readMmaVersion()` in `src/core/version.ts`) and `source` (`global` / `project`).
-- **Source tracking**: `PluginInfo { plugin, source }` via `PluginManager.getPluginInfos()`. `getAllPlugins()` stays backward-compatible.
-- **CLI:** `mma plugins list` (external plugins only; `--all` includes builtins) and `mma plugins list --all`; REPL `/plugins` shows version + `[source]` per non-builtin plugin.
+- **Source tracking**: `PluginInfo { plugin, source }` via `PluginManager.getPluginInfos()`; `getAllPlugins()` stays backward-compatible.
 - `lint-on-write` and `notify` are marked `isBuiltin = true`.
+
+### Metadata & the plugin registry (2.29.0)
+
+- **Read-модель `PluginRecord`** (`src/modules/plugins/records.ts`) — единственный источник для
+  CLI, REPL и веба: `name`/`version`/`author`/`description`/`homepage`/`source`/`builtin`/
+  `draft`/`enabled`/`path`/`provides {tools,hooks}`/`permissions`/`warnings`/`error`.
+  `PluginManager.getRecords()` кэширует и инвалидирует на любое изменение реестра;
+  `getFailures()` отдаёт `PluginLoadFailure[]` — **непрогрузившийся плагин больше не исчезает**
+  бесследно (раньше отличить «нет такого» от «есть, но падает» было нельзя).
+- **Метаданные опциональны**: `description`/`author`/`homepage`/`permissions`/`provides`
+  (все поля `?`). Валидация (`validatePluginMeta`): жёсткая ошибка только на невалидном `name`
+  (`^[a-z0-9][a-z0-9._-]{0,63}$`), остальное — мягкие warnings (пустой автор, длинное описание,
+  не-http homepage, неизвестное право). Поэтому плагин из 8 строк и оба примера работают как
+  раньше. `register()` возвращает `{status:"invalid", errors}` — загрузчик пишет это в лог и в
+  `failures`. `loader.ts` проставляет `plugin.path` и возвращает `LoadReport {loaded,skipped,failed}`.
+- **Живой вкл/выкл** (`2.29.0`): `config.plugins.disabled` — deny-list имён (новый домен
+  `plugins.json`). Единственный путь записи — `setConfigValue("plugins.disabled", …)`, который
+  через шов `setConfigGateApplier`/`setDisabledAll` применяет deny-list к живому реестру; шов
+  ставится в bootstrap (`workspace-phase.ts`), поэтому `/config`, CLI и веб физически не могут
+  разойтись. `PluginManager.active()` — единственная точка фильтрации: все 15 диспатчеров и
+  `getAllPlugins()` идут через неё. Имя из deny-list можно выключить **до** загрузки — плагин,
+  пришедший позже, сразу окажется выключен. `disable` не трогает уже выполненный код верхнего
+  уровня: это переключатель поведения, **не песочница** (`permissions` — декларация для показа).
+- **Поверхности:** `mma plugins list [--all] | show <name> | enable|disable <name>` и
+  `/plugins [--all] | show <name> | enable|disable <name>` делят один формат
+  (`src/modules/plugins/format.ts`); в вебе — `GET /api/plugins` (`{plugins, failures, mcp}`,
+  `enabled` больше не хардкод `true`), `POST /api/plugins/:name {enabled}` (без `restartRequired`)
+  и SSE `plugins`; вкладка **Plugins** в сайдбаре (`Alt+6`, `sidebar/plugins.ts`) с тумблером
+  в строке и поп-апом подробностей через существующий `#subOverlay`. Панель настроек
+  `Plugins · MCP` получила те же тумблеры, секция `plugins.registry` — ключ `plugins.disabled`.
+- **SDK:** `AgentPlugin`, `HostBridge`, `TurnSummary`, `PluginRecord`, `PLUGIN_PERMISSIONS`
+  экспортируются из `src/index.ts` — внешнему плагину больше не нужно дублировать контракт
+  (оба примера в `examples/plugins` duck-типали его из-за отсутствия экспорта).
+- **Дизайн:** `docs/specs/2026-10-07-plugin-registry-design.md` (фазы 4–6: живой reload с
+  `onUnload`, тулы от плагинов, черновики + тул `define_capability`).
 
 ### Example plugin: `trace-server` (live browser trace)
 

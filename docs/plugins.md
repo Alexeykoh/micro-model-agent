@@ -49,24 +49,103 @@ export default {
 ```ts
 interface AgentPlugin {
   name: string
+  version?: string           // semver: дедуп (выигрывает старшая) + показ в UI
+  minMmaVersion?: string     // несовместимые пропускаются загрузчиком
+  description?: string       // человеческое описание, 1–2 строки
+  author?: string            // автор или организация
+  homepage?: string          // только http(s)
+  permissions?: PluginPermission[]  // декларация прав (см. «Права — не защита»)
+  provides?: { tools?: string[]; hooks?: string[] }
   priority?: number          // больше = раньше (по умолчанию 0)
   isBuiltin?: boolean
   onBuildPrompt?(): string | null
   onBeforeThink?(ctx): void
   onAfterThink?(ctx, response: LLMResponse | null): void
   onBeforeTool?(ctx, call: ToolCall): boolean | Promise<boolean>
-  onAfterTool?(ctx, call: ToolCall, result: ToolResult): void | Promise<void>
+  onAfterTool?(ctx, call, result: ToolResult): void | Promise<void>
   onToolCall?(ctx): void
   onError?(ctx, error: Error): void
   onSessionStart?(ctx): void
   onSessionEnd?(ctx): void
   onPhase?(ctx, phase: 'thinking' | 'done'): void
   onToolStart?(ctx, call: ToolCall): void
-  onToolEnd?(ctx, call: ToolCall, result: ToolResult, durationMs: number): void
+  onToolEnd?(ctx, call, result, durationMs: number): void
   onText?(ctx, chunk: string): string | void
   onMeta?(ctx, chunk: string): string | void
+  onTurnEnd?(ctx, summary: TurnSummary): void
 }
 ```
+
+Типы (`AgentPlugin`, `HostBridge`, `TurnSummary`, `PluginRecord`, `PLUGIN_PERMISSIONS`)
+экспортируются из корня пакета — можно импортировать и не дублировать контракт:
+
+```ts
+import type { AgentPlugin } from "micro-models-agent";
+```
+
+### Метаданные
+
+`description`, `author`, `homepage`, `permissions` — **необязательные**. Их отсутствие даёт
+предупреждение в логе и в UI, но не мешает регистрации: плагин из 8 строк и оба примера в
+`examples/plugins/` работают как раньше. Единственное жёсткое требование — валидное `name`
+(`^[a-z0-9][a-z0-9._-]{0,63}$`).
+
+`provides.hooks` ядро вычисляет само; `provides.tools` заполняется, когда плагин отдаёт тулы.
+
+Плагин с необязательными метаданными (описание для пользователя):
+
+```ts
+// ~/.mma/plugins/lint-on-commit.ts
+import type { AgentPlugin } from "micro-models-agent";
+
+export default {
+  name: "lint-on-commit",
+  version: "1.0.0",
+  description: "Гоняет линтер после каждой записи файла.",
+  author: "alexe",
+  homepage: "https://github.com/alexe/mma-lint-on-commit",
+  permissions: ["process", "fs:read"],
+  onAfterTool(ctx, call, result) {
+    if (call.name !== "write_file") return;
+    ctx.logger.info("lint skipped — подключите линтер");
+  },
+} satisfies AgentPlugin;
+```
+
+## Включение и выключение
+
+Плагин включается/выключается **живо**, без перезапуска. Три поверхности, один путь записи
+(`setConfigValue("plugins.disabled", …)`):
+
+```bash
+mma plugins list              # реестр: имя, версия, автор, описание, права
+mma plugins list --all        # + встроенные
+mma plugins show my-plugin    # подробности одного плагина
+mma plugins disable my-plugin
+mma plugins enable my-plugin
+```
+
+```
+/plugins                      # тот же список
+/plugins --all
+/plugins show my-plugin
+/plugins disable my-plugin
+```
+
+В `mma web` — вкладка **Plugins** в сайдбаре (`Alt+6`): тумблер в строке и подробности
+(описание, автор, версия, путь, что добавляет, права) в поп-апе. В панели настроек
+`Plugins · MCP` — те же тумблеры. Конфиг-ключ: `plugins.disabled`
+(домен `plugins.json`, deny-list имён).
+
+> **Disable ≠ sandbox.** Модуль уже `require`-нут, код верхнего уровня уже выполнился.
+> Выключение останавливает хуки и поведение, а не исполнение импорта. `permissions` — это
+> декларация для показа пользователю, а не enforcement: плагин исполняется в процессе агента
+> и де факто имеет те же возможности (включая `bash`, сеть и доступ к конфигу с ключами
+> провайдера). Настоящая изоляция и доверие к коду — открытая работа
+> (`docs/specs/2026-09-28-production-readiness-design.md`, §P1).
+
+Плагин, который не загрузился, не исчезает: он виден как отказ с причиной в одну строку
+(`mma plugins list`, вкладка Plugins, `GET /api/plugins` → `failures`).
 
 ## Жизненный цикл
 
@@ -201,3 +280,6 @@ export default {
 - Встроенные плагины: `src/modules/plugins/builtin/lint-on-write.ts`, `notify.ts`
 - Загрузчик: `src/modules/plugins/loader.ts`
 - Диспетчер: `src/modules/plugins/manager.ts`
+- Метаданные и валидация: `src/modules/plugins/records.ts`
+- Общий формат листинга (CLI + REPL): `src/modules/plugins/format.ts`
+- Дизайн: `docs/specs/2026-10-07-plugin-registry-design.md`

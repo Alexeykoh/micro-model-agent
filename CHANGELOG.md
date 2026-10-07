@@ -4,6 +4,44 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.29.0] - 2026-10-07
+
+The plugin system stops being "an anonymous object in an array": a plugin is now a
+registered entity with author, version, description, declared permissions and a
+visible on/off switch. `mma web` gets a **Plugins** sidebar tab with live toggles
+and a details popup; a plugin that fails to load is now visible instead of
+silently missing.
+
+### Added
+
+- **Plugin metadata** (`src/modules/types.ts`, `src/modules/plugins/records.ts`): optional `description`, `author`, `homepage`, `permissions`, `provides` on `AgentPlugin`. All optional on purpose - missing metadata is a warning, never a load error, so the 8-line plugin and both `examples/plugins` keep working. Hard validation only on `name`.
+- **`PluginRecord` read model** (`records.ts`): the single source for CLI, REPL and web. `PluginManager.getRecords()` (cached, invalidated on any change) plus `getFailures()` returning `PluginLoadFailure[]` - a plugin that throws on import was previously indistinguishable from a missing one.
+- **Live enable/disable** (`config.plugins.disabled`, new `plugins.json` domain): `mma plugins enable|disable <name>`, `/plugins enable|disable <name>`, `POST /api/plugins/:name {enabled}`, and a toggle per row in the new sidebar tab and in the settings panel. No restart, no `reconfigure`. All paths write through `setConfigValue`, so they cannot drift.
+- **Plugins sidebar tab** (`assets/js/sidebar/plugins.ts`, `Alt+6`): row list with glyph/name/version/author, a live toggle, one dim description line, and load failures as their own rows. Details open in the existing nested `#subOverlay` (same pattern as the LSP info dialog) - description, author, version, homepage, absolute path with copy, provided tools/hooks as chips, declared permissions with an explicit "declaration, not enforcement" note, and metadata warnings.
+- **Plugin SDK exports** (`src/index.ts`): `AgentPlugin`, `HostBridge`, `HostBridgeSubmitOptions`, `TurnSummary`, `PluginRecord`, `PLUGIN_PERMISSIONS` are now exported from the package root; third-party plugins no longer have to duck-type the contract.
+- **`mma plugins show <name>` / `/plugins show <name>`**: per-plugin details in the terminal, same content as the web popup.
+- **CLI/REPL listing rewrite**: both share one formatter (`src/modules/plugins/format.ts`) and now show author, permissions, description and load failures.
+
+### Changed
+
+- **`GET /api/plugins`** (`webui/settings/settings-api.ts`): returns `{plugins: PluginRecord[], failures, mcp}`. `enabled` is the real flag instead of a hardcoded `true`; every other field is additive.
+- **`WebPluginManager`** (`webui/state.ts`): widened to `getRecords`/`getFailures`/`setEnabled`; `PluginManager` satisfies it structurally. The redundant narrow `WebPluginInfo` view is gone.
+- **`PluginLoader.loadFromDir`** returns `LoadReport {loaded, skipped, failed}` instead of `void` (needed to diff on reload) and stamps `plugin.path` on each plugin.
+- **`subdialog.ts`** resolves its overlay nodes lazily instead of at import time; an import-time capture silently no-ops when the overlay is not in the DOM yet.
+
+### Removed
+
+- **`sessionIsolation.isolatePlugins`**: declared in the config type, defaults and `/config` registry, but read nowhere in `src/`. Dead switch removed so the registry has one enable/disable mechanism. No behaviour change.
+
+### Fixed
+
+- A plugin whose module throws at import no longer disappears from every listing - the entry, path and one-line reason are kept in `PluginManager.getFailures()` and surfaced in `mma plugins list`, the sidebar tab and `GET /api/plugins`.
+- The Settings > Plugins panel showed `enabled: true` for everything because the server hardcoded it; it now renders the real state and has working toggles.
+
+### Known limits (documented, not fixed)
+
+- Disabling a plugin stops its hooks and tool contributions but does **not** undo the module import that already ran, and `permissions` is a declaration shown to the user rather than enforcement. Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
+
 ## [2.28.0] - 2026-10-07
 
 Tool-produced images (browser screenshots, `attach_image`) are now visible in the

@@ -1037,7 +1037,45 @@ read-only петля без стопа, рассинхрон провайдер�
   6 → 70 МБ (base64 ≈4/3 файла + заголовок), `MAX_BODY_BYTES` (`webui/limits.ts`) 24 → 768 МБ
   (вмещает 10 × 50 МБ в base64). i18n `web.attach.too_large` обновлён (en+ru).
 
-### Current Version: 2.28.0
+### Plugin Registry: метаданные, вкл/выкл, вкладка Plugins (2.29.0)
+
+Спека: [docs/specs/2026-10-07-plugin-registry-design.md](./docs/specs/2026-10-07-plugin-registry-design.md).
+Реализованы фазы 1–3 (метаданные + реестр, живой вкл/выкл, веб). Фазы 4–6 (reload с `onUnload`,
+тулы от плагинов, черновики + `define_capability`) — в спеке, не начаты.
+
+- **Метаданные** (`src/modules/types.ts`, `plugins/records.ts`): `description`, `author`, `homepage`,
+  `permissions`, `provides` — все опциональны; жёсткая валидация только на `name`
+  (`^[a-z0-9][a-z0-9._-]{0,63}$`), остальное — warnings (`validatePluginMeta`). Плагин из 8 строк
+  и оба примера не сломаны.
+- **`PluginRecord`** — единственная read-модель для CLI/REPL/веба (`PluginManager.getRecords()`,
+  кэш + инвалидация). `getFailures()` → `PluginLoadFailure[]`: непрогрузившийся плагин виден,
+  а не исчезает. `loader.ts` ставит `plugin.path` и возвращает `LoadReport`.
+- **Живой вкл/выкл**: `config.plugins.disabled` (deny-list, домен `plugins.json`). Единый путь
+  записи — `setConfigValue`; эффект применяется через шов `setPluginGateApplier` →
+  `PluginManager.setDisabledAll` (шов ставит `workspace-phase.ts`), поэтому `/config`, CLI и веб
+  не могут разойтись. `PluginManager.active()` — единственная точка фильтрации для всех
+  диспатчеров. Выключать можно до загрузки — пришедший позже плагин сразу off.
+- **Поверхности:** `mma plugins list|show|enable|disable`, `/plugins …` (общий формат
+  `plugins/format.ts`), `GET /api/plugins` (`{plugins, failures, mcp}`, `enabled` настоящий),
+  `POST /api/plugins/:name {enabled}` (без `restartRequired`), SSE `plugins`.
+- **Вкладка Plugins в сайдбаре** (`assets/js/sidebar/plugins.ts`, `Alt+6`, Lucide `puzzle`):
+  строки с тумблером + dim-описание, отказы загрузки отдельными строками, подробности в
+  существующем `#subOverlay` (`openSubDialog`, как у LSP), плюс тумблеры в Settings →
+  Plugins · MCP и секция `plugins.registry`.
+- **SDK:** `AgentPlugin`, `HostBridge`, `TurnSummary`, `PluginRecord`, `PLUGIN_PERMISSIONS`
+  экспортируются из `src/index.ts` (внешним плагинам больше не нужно дублировать контракт).
+- **Честные ограничения (зафиксированы в доках и UI):** disable ≠ sandbox (модуль уже
+  `require`-нут, код верхнего уровня уже выполнился); `permissions` — декларация для показа, а не
+  enforcement. Настоящая изоляция/доверие — открытый P1 в
+  `docs/specs/2026-09-28-production-readiness-design.md`.
+- **Тесты:** `tests/plugin-records.test.ts`, `tests/plugin-enabled.test.ts`,
+  `tests/plugin-loader.test.ts` (путь/отчёт/отказы), `tests/webui-plugins-api.test.ts` (11),
+  `tests/webui-plugins-dom.test.ts` (16), guard в `tests/webui-assets.test.ts`, e2e
+  `tests/e2e/web-plugins.e2e-test.ts`.
+- **Побочно:** `subdialog.ts` теперь резолвит узлы оверлея лениво, а не на уровне модуля
+  (захват на импорте молча no-op'ился, если оверлея ещё нет в DOM).
+
+### Current Version: 2.29.0
 
 ### Changelog
 
