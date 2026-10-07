@@ -1,42 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { ToolBatchExecutor } from "../../src/core/agent/tool-batch";
 import { createLoopState } from "../../src/core/agent/loop-state";
+import { makeToolBatchDeps } from "../helpers/tool-batch-deps";
 
 // Honest-stop for retry loops (ses_mul5pepu_9mdq90): consecutive fully-failed
 // batches (incl. tool-level [SECURITY BLOCKED]) must trigger a stop-and-answer
 // directive, then a hard stop — instead of endless variant retrying.
 function stubDeps(executeImpl: (call: { name: string }) => unknown, added: string[]) {
-  return {
-    config: { session: { autoSave: false } },
-    toolExecutor: {
-      execute: async (call: { name: string }) => executeImpl(call),
-      getRegistry: () => ({ get: () => undefined }),
-    },
-    pluginManager: {
-      runOnToolCall: () => {},
-      runOnToolStart: () => {},
-      runOnToolEnd: () => {},
-      runOnMeta: (_ctx: unknown, chunk: string) => chunk,
-    },
-    contextManager: {
-      addMessage: (m: { content: string }) => {
-        added.push(typeof m.content === "string" ? m.content : "");
-      },
-      getEstimatedTokens: () => 0,
-      getBudget: () => ({ history: 100_000 }),
-    },
-    hallucinationDetector: {
-      getConsistencyCheck: () => ({ trackCreatedFile: () => {}, trackDeletedFile: () => {} }),
-    },
-    compactionService: { compactAfterTool: () => {} },
-    logger: { debug: () => {}, diagnostic: () => {} },
-    memoryStore: undefined,
-    costTracker: { total: 0 },
-    planSummary: () => null,
-    getAbortSignal: () => undefined,
-    isShutdownRequested: () => false,
-    setScope: () => {},
-  } as any;
+  return makeToolBatchDeps({ execute: (call) => executeImpl(call) as never, added });
 }
 
 const fail = { success: false, output: "[SECURITY BLOCKED] Command is not allowed" };

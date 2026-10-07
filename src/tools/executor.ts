@@ -34,10 +34,46 @@ export class ToolExecutor {
    */
   private memo = new Map<string, { result: ToolResult; at: number }>();
 
-  constructor(registry: ToolRegistry, ctx: ToolContext, pluginManager: PluginManager) {
+  constructor(
+    registry: ToolRegistry,
+    ctx: ToolContext,
+    pluginManager: PluginManager,
+    /**
+     * Общий с родителем мемо. `fork()` передаёт сюда родительскую Map, чтобы
+     * мутация в субагенте (write/bash) инвалидировала кеш чтений всего прогона
+     * — иначе параллельный субагент мог бы оставить родителю устаревший
+     * `read_file`. Обычные исполнители создают свой мемо.
+     */
+    memo: Map<string, { result: ToolResult; at: number }> = new Map(),
+  ) {
     this.registry = registry;
     this.ctx = ctx;
     this.pluginManager = pluginManager;
+    this.memo = memo;
+  }
+
+  /**
+   * Изолированная копия исполнителя для КОНКУРЕНТНОГО вызова одного тула.
+   * Клонирует ToolContext по дескрипторам (сохраняя живые геттеры config/
+   * sessionId/capabilities), даёт собственные scope/recursionDepth/cleanup/
+   * activeCallId, но РАЗДЕЛЯЕТ мемо, реестр и менеджер плагинов. Нужен, потому
+   * что один инстанс `ToolExecutor` не конкурентно-безопасен: последовательный
+   * путь так и держать, параллельный — через fork на каждый вызов.
+   */
+  fork(): ToolExecutor {
+    const clone = Object.create(
+      Object.getPrototypeOf(this.ctx),
+      Object.getOwnPropertyDescriptors(this.ctx),
+    ) as ToolContext;
+    // Собственное мутабельное состояние вызова — иначе сиблинги перетрут
+    // друг другу scope/cleanup/activeCallId.
+    clone.cleanup = undefined;
+    clone.activeCallId = undefined;
+    const fork = new ToolExecutor(this.registry, clone, this.pluginManager, this.memo);
+    // subagent читает ctx.toolExecutor и передаёт его дочернему агенту: он
+    // обязан видеть именно форк, а не родительский инстанс.
+    clone.toolExecutor = fork;
+    return fork;
   }
 
   /**

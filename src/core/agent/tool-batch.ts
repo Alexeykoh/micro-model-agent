@@ -46,6 +46,34 @@ function isNonProgressBatch(toolCalls: Array<{ name: string }>): boolean {
 /** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
 const TRANSIENT_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
 
+/** Дефолтный кап конкурентных тулов одного batch'а (см. security.rateLimits). */
+const DEFAULT_MAX_PARALLEL_TOOLS = 5;
+
+/**
+ * Прогоняет `fn` по `items` с лимитом одновременных запусков, сохраняя порядок
+ * результатов (results[i] соответствует items[i]). Пул воркеров, а не
+ * `Promise.all` пачками — ровный кап без простоя. `fn` наружу release-хуков не
+ * требует; если он бросит, промис отклонится (как serial `await`).
+ */
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  const effective = Math.max(1, Math.min(limit, items.length));
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const idx = next++;
+      if (idx >= items.length) return;
+      results[idx] = await fn(items[idx]);
+    }
+  };
+  await Promise.all(Array.from({ length: effective }, () => worker()));
+  return results;
+}
+
 /** Зависимости исполнителя пакетов: конфиг, тулы, контекст, логгеры, хуки. */
 export interface ToolBatchDeps {
   config: AppConfig;
@@ -146,6 +174,155 @@ export function diagnoseRepeatedFailures(
   return { skip: false, cause: genericCause, solution: genericSolution };
 }
 
+/** Информационные read-only тулы, чей "фейл" — ожидаемое поведение. */
+const INFO_TOOLS = new Set(["file_info"]);
+
+/**
+ * Досылает `role:"tool"`-заглушки для вызовов, не получивших результат
+ * (прерывание/abort): OpenAI-совместимые Jinja-шаблоны отклоняют историю, где
+ * assistant(tool_calls) не завершён на каждый call id.
+ */
+function emitSynthesizedToolResults(
+  contextManager: ContextManager,
+  toolCalls: ToolCall[],
+  answered: Set<string>,
+  logger: Logger,
+): void {
+  for (const call of toolCalls) {
+    if (answered.has(call.id)) continue;
+    logger.debug(
+      `Interrupted before tool ${call.name} (${call.id}) returned a result — synthesizing tool message`,
+    );
+    contextManager.addMessage({
+      role: "tool",
+      content: "[interrupted]",
+      name: call.name,
+      tool_call_id: call.id,
+      success: false,
+      arguments: call.arguments,
+    });
+  }
+}
+
+/**
+ * Учёт общих неудач тула (не только подряд идущих): правило в память при
+ * накоплении. Транзиентные сетевые и информационные тулы исключены — их фейлы
+ * не системная поломка (404/TLS, `file_info` "Not found" после delete).
+ */
+function recordRepeatedToolFailure(
+  state: LoopState,
+  call: ToolCall,
+  result: ToolResult,
+  deps: ToolBatchDeps,
+  logger: Logger,
+): void {
+  if (
+    result.success ||
+    result.blocked ||
+    INFO_TOOLS.has(call.name) ||
+    TRANSIENT_TOOLS.has(call.name)
+  ) {
+    return;
+  }
+  const key = call.name;
+  const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
+  prev.count++;
+  const errText = String(result.output ?? "");
+  prev.error = errText.slice(0, 200);
+  const headline = errText.split("\n")[0].slice(0, 160).trim();
+  if (headline && !prev.samples.includes(headline) && prev.samples.length < 3) {
+    prev.samples.push(headline);
+  }
+  state.toolFailureCounts.set(key, prev);
+  if (prev.count < MIN_REPEATED_TOOL_FAILURES || state.memoryRuleRecorded.has(key)) return;
+  state.memoryRuleRecorded.add(key);
+  const diagnosis = diagnoseRepeatedFailures(key, prev.samples);
+  const memStore = deps.memoryStore;
+  if (memStore && !diagnosis.skip) {
+    memStore.appendRule(
+      "errors",
+      `Tool ${key} failed ${prev.count}x (${prev.samples.join(" | ") || prev.error})`,
+      diagnosis.cause,
+      diagnosis.solution,
+    );
+    logger.diagnostic("warn", `Recorded repeated ${key} failures to memory (${prev.count}x)`);
+  }
+}
+
+/**
+ * Рендер model-facing тела/диффа тула в чат. kind="tool" — quiet-чаты скрывают
+ * тела тулов; статусные меты остаются видимы. display имеет приоритет, иначе
+ * прогон через onMeta; упавший тул показывает спокойную суть, не директивы.
+ */
+function renderToolResultMeta(
+  deps: ToolBatchDeps,
+  iteration: number,
+  result: ToolResult,
+  onMeta: OnMeta | undefined,
+): void {
+  const { pluginManager, contextManager, logger } = deps;
+  const TOOL_META: MetaKind = "tool";
+  const hookCtx = { iteration, logger, contextManager };
+  if (result.display !== undefined) {
+    if (result.display.length > 0) onMeta?.(`\n${result.display}\n`, TOOL_META);
+  } else if (result.success) {
+    const metaOut = pluginManager.runOnMeta(hookCtx, result.output);
+    onMeta?.(`\n${pc.dim(metaOut)}\n`, TOOL_META);
+  } else {
+    const failure = toolFailureSummary(result.output);
+    const metaOut = failure.text ? pluginManager.runOnMeta(hookCtx, failure.text) : "";
+    if (metaOut) {
+      const color = failure.severity === "warn" ? pc.yellow : pc.red;
+      const glyph = failure.severity === "warn" ? "⚠" : "✗";
+      onMeta?.(`\n${color(`${glyph} ${metaOut}`)}\n`, TOOL_META);
+    }
+  }
+  if (result.diff) onMeta?.(`\n${result.diff}\n`, TOOL_META);
+}
+
+/** Побочные эффекты успешного тула: план create/re-plan и трекинг файлов. */
+function trackToolResultSideEffects(
+  deps: ToolBatchDeps,
+  state: LoopState,
+  call: ToolCall,
+  result: ToolResult,
+): void {
+  if (!result.success) return;
+  if (call.name === "plan") {
+    const action = String(call.arguments.action ?? "");
+    if (action === "create" || action === "re-plan") state.iterPlanCreated = true;
+  }
+  if (!call.arguments.path) return;
+  const filePath = String(call.arguments.path);
+  if (call.name === "write_file" || call.name === "edit_file") {
+    deps.hallucinationDetector.getConsistencyCheck().trackCreatedFile(filePath);
+  } else if (call.name === "delete_file") {
+    deps.hallucinationDetector.getConsistencyCheck().trackDeletedFile(filePath);
+  }
+}
+
+/**
+ * Запоминает `[SECURITY BLOCKED]` и сообщает, нужно ли добавить nudge против
+ * записи shell-скрипта-обхода (после блока запись .bat/.cmd/.sh/.ps1 — почти
+ * всегда попытка обойти заблокированный оператор; один раз, обобщённо).
+ */
+function detectScriptWorkaround(state: LoopState, call: ToolCall, result: ToolResult): boolean {
+  if (typeof result.output === "string" && result.output.includes("[SECURITY BLOCKED]")) {
+    state.sawSecurityBlock = true;
+  }
+  if (
+    state.sawSecurityBlock &&
+    !state.scriptWorkaroundNudged &&
+    call.name === "write_file" &&
+    typeof call.arguments.path === "string" &&
+    isExecutableScriptPath(call.arguments.path)
+  ) {
+    state.scriptWorkaroundNudged = true;
+    return true;
+  }
+  return false;
+}
+
 export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDeps) {}
 
   /**
@@ -189,36 +366,21 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     // любую историю, где assistant(tool_calls) не завершён role:"tool"
     // результатами для каждого call id — прерывание на середине пакета не
     // должно оставлять висящую пару.
-    const synthesizePendingToolResults = (): void => {
-      for (const call of toolCalls) {
-        if (answeredToolCallIds.has(call.id)) continue;
-        logger.debug(
-          `Interrupted before tool ${call.name} (${call.id}) returned a result — synthesizing tool message`,
-        );
-        contextManager.addMessage({
-          role: "tool",
-          content: "[interrupted]",
-          name: call.name,
-          tool_call_id: call.id,
-          success: false,
-          arguments: call.arguments,
-        });
-      }
-    };
+    const synthesizePendingToolResults = (): void =>
+      emitSynthesizedToolResults(contextManager, toolCalls, answeredToolCallIds, logger);
 
     const summaries: string[] = [];
     let anyToolFailed = false;
     let batchHasSuccess = false;
-    // Информационные read-only тулы, чей "фейл" — ожидаемое поведение
-    // (file_info "Not found" после delete_file) — исключены из учёта неудач.
-    const infoTools = new Set(["file_info"]);
     // Флаг блока безопасности действует в пределах текущего пакета вызовов:
     // иначе старый блок влиял бы на nudge через десятки итераций.
     state.sawSecurityBlock = false;
 
-    for (const call of toolCalls) {
+    // ── Общие шаги жизненного цикла вызова: serial и parallel путь делят их. ──
+
+    /** До выполнения: сброс scope, hook-и вызова, UI-старт, запись вызова. */
+    const prepareCall = (call: ToolCall): void => {
       this.deps.setScope();
-      const startTime = Date.now();
       pluginManager.runOnToolCall({
         toolName: call.name,
         args: call.arguments,
@@ -230,14 +392,31 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       const toolIcon = this.deps.toolExecutor.getRegistry().get(call.name)?.icon;
       onTool?.({ type: "start", tool: call.name, args: call.arguments, icon: toolIcon });
       slog?.logToolCall(call, iteration);
+    };
 
+    /**
+     * Выполнение хендлера (allowlist/плагины/таймаут — внутри executor'а).
+     * `shutdown: true` — итерация прервана (Esc/Ctrl+C): вызывающий выходит,
+     * не рендеря результат.
+     */
+    const executeCall = async (
+      call: ToolCall,
+      executor: ToolExecutor,
+    ): Promise<{
+      result: ToolResult;
+      duration: number;
+      tokensBeforeTool: number;
+      costBeforeTool: number | undefined;
+      shutdown: boolean;
+    }> => {
+      const startTime = Date.now();
       const tokensBeforeTool = contextManager.getEstimatedTokens();
       // Снимок стоимости ДО тула: рендеру нужна стоимость именно этого вызова
       // (subagent/mcp/pipeline тратят токены), а не накопленная за сессию.
       const costBeforeTool = this.deps.costTracker.total;
       let result: ToolResult;
       try {
-        result = await this.deps.toolExecutor.execute(call, this.deps.getAbortSignal());
+        result = await executor.execute(call, this.deps.getAbortSignal());
       } catch (err) {
         // Abort во время тула должен распространяться, чтобы сессия завершилась
         // чисто. Любой ДРУГОЙ throw (баг тула/плагина, сбежавший из executor)
@@ -253,73 +432,39 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
           toolCallId: call.id,
         };
       }
-      // Прерывание во время тула: сессия уже завершается, останавливаемся
-      // сразу — без рендера, логов и обновления контекста для результата,
-      // который никто не увидит.
-      if (this.deps.isShutdownRequested()) break;
-      const duration = Date.now() - startTime;
-      if (!result.success && !result.blocked && !infoTools.has(call.name)) anyToolFailed = true;
+      return {
+        result,
+        duration: Date.now() - startTime,
+        tokensBeforeTool,
+        costBeforeTool,
+        shutdown: this.deps.isShutdownRequested(),
+      };
+    };
+
+    /** После выполнения: плагины/UI/контекст/учёт. Всегда serial, в порядке вызовов. */
+    const finalizeCall = (
+      call: ToolCall,
+      result: ToolResult,
+      duration: number,
+      tokensBeforeTool: number,
+      costBeforeTool: number | undefined,
+    ): void => {
+      if (!result.success && !result.blocked && !INFO_TOOLS.has(call.name)) anyToolFailed = true;
       if (result.success) batchHasSuccess = true;
 
-      if (result.success && call.name === "plan") {
-        const action = String(call.arguments.action ?? "");
-        if (action === "create" || action === "re-plan") state.iterPlanCreated = true;
-      }
-      if (result.success && call.arguments.path) {
-        const filePath = String(call.arguments.path);
-        if (call.name === "write_file" || call.name === "edit_file") {
-          this.deps.hallucinationDetector.getConsistencyCheck().trackCreatedFile(filePath);
-        } else if (call.name === "delete_file") {
-          this.deps.hallucinationDetector.getConsistencyCheck().trackDeletedFile(filePath);
-        }
-      }
-
+      trackToolResultSideEffects(this.deps, state, call, result);
       pluginManager.runOnToolEnd(
         { iteration, logger, contextManager },
         { id: call.id, name: call.name, arguments: call.arguments },
         result,
         duration,
       );
-      // Проверка наличия, а не истинности: read_file возвращает display ""
-      // на полном чтении (заголовок уже показывает путь) — фолбэк на пустую
-      // строку вывалил бы всё содержимое файла в REPL.
-      // kind="tool": тела тулов model-facing, в quiet-чатах скрываются
-      // (статусы контекста/компакции идут с kind по умолчанию и всегда видны).
-      const TOOL_META: MetaKind = "tool";
-      if (result.display !== undefined) {
-        if (result.display.length > 0) {
-          onMeta?.(`\n${result.display}\n`, TOOL_META);
-        }
-      } else if (result.success) {
-        const metaOut = pluginManager.runOnMeta(
-          { iteration, logger, contextManager },
-          result.output,
-        );
-        onMeta?.(`\n${pc.dim(metaOut)}\n`, TOOL_META);
-      } else {
-        // Упавший тул: `output` — model-facing (хинты, recovery-директивы,
-        // «Do NOT …»). Пользователю нужна спокойная суть — первая строка,
-        // а не инструкции для агента. Мягкие гарды — варнинги, не ошибки.
-        const failure = toolFailureSummary(result.output);
-        const metaOut = failure.text
-          ? pluginManager.runOnMeta({ iteration, logger, contextManager }, failure.text)
-          : "";
-        if (metaOut) {
-          const color = failure.severity === "warn" ? pc.yellow : pc.red;
-          const glyph = failure.severity === "warn" ? "⚠" : "✗";
-          onMeta?.(`\n${color(`${glyph} ${metaOut}`)}\n`, TOOL_META);
-        }
-      }
-      if (result.diff) {
-        onMeta?.(`\n${result.diff}\n`, TOOL_META);
-      }
+      renderToolResultMeta(this.deps, iteration, result, onMeta);
 
-      const currentTokens = contextManager.getEstimatedTokens();
-      const budget = contextManager.getBudget();
       const truncatedOutput = truncateToolOutput(
         result.output,
-        budget,
-        currentTokens,
+        contextManager.getBudget(),
+        contextManager.getEstimatedTokens(),
         boundedToolNames.has(call.name),
       );
       contextManager.addMessage({
@@ -358,21 +503,9 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         `[Tool: ${call.name}${summarizeToolArgs(call.arguments)} → ${truncatedOutput.slice(0, 200)}]`,
       );
 
-      // Видели блок безопасности? Запоминаем для эвристики скрипта-обёртки.
-      if (typeof result.output === "string" && result.output.includes("[SECURITY BLOCKED]")) {
-        state.sawSecurityBlock = true;
-      }
-      // Скрипт-обход: после блока безопасности запись shell-скрипта
-      // (.bat/.cmd/.sh/.ps1) почти всегда — попытка обойти заблокированный
-      // оператор; nudge один раз, обобщённо (без привязки к тулу/языку).
-      if (
-        state.sawSecurityBlock &&
-        !state.scriptWorkaroundNudged &&
-        call.name === "write_file" &&
-        typeof call.arguments.path === "string" &&
-        isExecutableScriptPath(call.arguments.path)
-      ) {
-        state.scriptWorkaroundNudged = true;
+      // Скрипт-обход: после блока безопасности запись shell-скрипта-обёртки —
+      // nudge один раз, обобщённо (без привязки к тулу/языку).
+      if (detectScriptWorkaround(state, call, result)) {
         summaries.push(t("exec.script_workaround_nudge"));
       }
 
@@ -380,42 +513,55 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         slog?.logToolResult(call, result, duration, iteration);
       }
       this.deps.compactionService.compactAfterTool(state);
+      recordRepeatedToolFailure(state, call, result, this.deps, logger);
+    };
 
-    // Учёт общих неудач (НЕ только подряд идущих): тул, который стабильно
-    // падает между успехами других тулов, всё равно учится (наблюдалось:
-    // LSP spawn npx ENOENT упал 8x за сессию, ни разу подряд — и не дошёл
-    // до памяти по пути "5 подряд неудач"). Транзиентные сетевые тулы
-    // (web_fetch/web_search) исключены: смена сайта/лимит — не системная
-    // поломка, а запись в память засоряла errors.md мусором (404/TLS/сертификат).
-    if (!result.success && !result.blocked && !infoTools.has(call.name) && !TRANSIENT_TOOLS.has(call.name)) {
-        const key = call.name;
-        const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
-        prev.count++;
-        const errText = String(result.output ?? "");
-        prev.error = errText.slice(0, 200);
-        const headline = errText.split("\n")[0].slice(0, 160).trim();
-        if (headline && !prev.samples.includes(headline) && prev.samples.length < 3) {
-          prev.samples.push(headline);
-        }
-        state.toolFailureCounts.set(key, prev);
-        if (prev.count >= MIN_REPEATED_TOOL_FAILURES && !state.memoryRuleRecorded.has(key)) {
-          state.memoryRuleRecorded.add(key);
-          const memStore = this.deps.memoryStore;
-          const diagnosis = diagnoseRepeatedFailures(key, prev.samples);
-          if (memStore && !diagnosis.skip) {
-            memStore.appendRule(
-              "errors",
-              `Tool ${key} failed ${prev.count}x (${prev.samples.join(" | ") || prev.error})`,
-              diagnosis.cause,
-              diagnosis.solution,
-            );
-            logger.diagnostic(
-              "warn",
-              `Recorded repeated ${key} failures to memory (${prev.count}x)`,
-            );
+    // ── Планировщик: подряд идущие parallelizable-вызовы (≥2) идут конкурентно. ──
+
+    const isParallelizable = (call: ToolCall): boolean =>
+      this.deps.toolExecutor.getRegistry().get(call.name)?.parallelizable === true;
+    const maxParallel =
+      this.deps.config.security?.rateLimits?.maxParallelTasks ?? DEFAULT_MAX_PARALLEL_TOOLS;
+
+    let index = 0;
+    while (index < toolCalls.length) {
+      const first = toolCalls[index];
+      if (isParallelizable(first)) {
+        let end = index;
+        while (end < toolCalls.length && isParallelizable(toolCalls[end])) end++;
+        const group = toolCalls.slice(index, end);
+        if (group.length >= 2) {
+          // 1. Подготовка serial, в порядке — hook-и не гоняются конкурентно.
+          for (const call of group) prepareCall(call);
+          // 2. Конкурентное выполнение: свой fork на вызов (изоляция scope/
+          //    recursionDepth/cleanup), общий кап из rateLimits.
+          const execs = await runWithConcurrency(group, maxParallel, (call) =>
+            executeCall(call, this.deps.toolExecutor.fork()),
+          );
+          // 3. Прерывание посреди волны: работу не рендерим, добиваем
+          //    unanswered-результаты и выходим (как serial shutdown-путь).
+          if (this.deps.isShutdownRequested()) {
+            synthesizePendingToolResults();
+            return { interrupted: true };
           }
+          // 4. Финализация serial, в порядке — детерминированный порядок
+          //    role:"tool" сообщений и UI-событий.
+          for (let k = 0; k < group.length; k++) {
+            const e = execs[k];
+            finalizeCall(group[k], e.result, e.duration, e.tokensBeforeTool, e.costBeforeTool);
+          }
+          index = end;
+          continue;
         }
       }
+      prepareCall(first);
+      const exec = await executeCall(first, this.deps.toolExecutor);
+      // Прерывание во время тула: сессия уже завершается, останавливаемся
+      // сразу — без рендера, логов и обновления контекста для результата,
+      // который никто не увидит.
+      if (exec.shutdown) break;
+      finalizeCall(first, exec.result, exec.duration, exec.tokensBeforeTool, exec.costBeforeTool);
+      index++;
     }
 
     if (this.deps.isShutdownRequested()) {

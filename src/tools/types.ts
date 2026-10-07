@@ -42,6 +42,14 @@ export interface ToolDefinition {
    * пропускает — инвалидация на самом туле.
    */
   manualMemo?: boolean;
+  /**
+   * Тул можно выполнять конкурентно с соседями по batch'у (один ход модели).
+   * `ToolBatchExecutor` группирует подряд идущие такие вызовы (≥2) и запускает
+   * их через `Promise.all` на изолированных `ToolExecutor.fork()`. Помечать
+   * только тулы без общего мутабельного состояния (subagent — свой контекст и
+   * scope на форке). Остальные остаются строго последовательными.
+   */
+  parallelizable?: boolean;
   handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult>;
 }
 

@@ -945,7 +945,28 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Тесты**: `tests/webui-push-state.test.ts`, `tests/webui-state-sync.test.ts`; обновлён
   `tests/webui-assets.test.ts` (guard «нет клиентских поллов»).
 
-### Current Version: 2.24.0
+### Parallel Subagents in a Tool Batch (2.25.0)
+
+Спека: [docs/specs/2026-10-07-parallel-subagents-design.md](./docs/specs/2026-10-07-parallel-subagents-design.md).
+Разбор живой сессии `ses_muxqw12h_6uk4cq`: два `subagent`-вызова одного хода шли строго
+последовательно (сумма длительностей), хотя описание тула обещало «parallel work».
+
+- **`ToolDefinition.parallelizable`** (`src/tools/types.ts`): тул можно гонять конкурентно с
+  соседями по batch'у. Помечен только `subagent`.
+- **`ToolExecutor.fork()`** (`src/tools/executor.ts`): изолированный исполнитель на один
+  вызов — клон `ToolContext` по дескрипторам (живые геттеры `config`/`sessionId`/`capabilities`
+  сохранены), свои `scope`/`recursionDepth`/`cleanup`/`activeCallId`; **общий** мемо/реестр/плагины,
+  поэтому мутация субагента инвалидирует кэш чтений родителя.
+- **`ToolBatchExecutor`** (`src/core/agent/tool-batch.ts`): жизненный цикл вызова разрезан на
+  `prepareCall`/`executeCall`/`finalizeCall`. Подряд идущие `parallelizable`-вызовы (≥2): подготовка
+  serial → конкурентное исполнение через `fork()` с капом `security.rateLimits.maxParallelTasks`
+  (default 5) → финализация serial в исходном порядке. Одиночные и не-параллелизуемые — прежний
+  serial-путь. Порядок `role:"tool"`-сообщений и UI-событий детерминирован.
+- **Тесты**: `tests/core/tool-batch-parallel.test.ts` (перекрытие, порядок, кап, serial не-параллельных),
+  `tests/tools/executor-fork.test.ts` (изоляция, живые геттеры, общий мемо). Пре-существующая
+  конкуренция плагин-хуков в MoE-операциях — известное ограничение, не чинилось здесь.
+
+### Current Version: 2.25.0
 
 ### Changelog
 
