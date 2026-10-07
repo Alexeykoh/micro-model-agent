@@ -83,7 +83,6 @@ function renderRow(entry: TraceEntry): HTMLElement {
     sb.selected = entry.id;
     row.classList.add("sel");
     renderDetail(entry);
-    if (sb.el) sb.el.classList.add("sb-expanded");
   });
   return row;
 }
@@ -494,7 +493,6 @@ async function loadTextProvenance(entry: TraceEntry): Promise<void> {
 
 export function collapseDetail(): void {
   sb.selected = null;
-  if (sb.el) sb.el.classList.remove("sb-expanded");
   if (sb.detailEl) sb.detailEl.hidden = true;
   if (sb.listEl) sb.listEl.querySelectorAll(".trc.sel").forEach((n) => n.classList.remove("sel"));
 }

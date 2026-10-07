@@ -556,7 +556,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Trace** — живой per-session буфер (cap 500, DOM ограничен, одна строка на вызов тула,
   текстовый стрим сворачивается в одну обновляемую строку, полный текст — в деталях,
   cap 20K); master-detail
-  (`.sb.sb-expanded` → 680px + панель `.trc-detail` с метаданными/аргументами/выводом).
+  (сайдбар фиксирован `679px`, панель `.trc-detail` с метаданными/аргументами/выводом встаёт слева от списка).
   Живые строки: tool/phase/plan/question/text/error + status (SSE `meta`), log (SSE `log`,
   кроме info-diagnostic), retract, index (SSE `index` start/done/error из `refreshIndex`).
   Диагностика без новых продюсеров: `GET /api/sessions/:id/log` (`log-api.ts`, фильтр
@@ -904,9 +904,10 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Дерево** (`assets/js/sidebar/files.ts`, пятая вкладка `Alt+5`, Lucide `folder-tree`):
   lazy — папка фетчится при раскрытии (`expanded`/`listings` в `sb.files`), кэш инвалидируется
   событием. Стиль — строки + глифы (STYLE.md), без рамок.
-- **Просмотр**: master-detail (`.sb.sb-expanded`, как Trace). Текст — `fetch /api/file` +
+- **Просмотр**: master-detail (viewer занимает всю ширину `679px`-сайдбара, дерево скрывается).
+  Текст — `fetch /api/file` +
   highlight.js (без `innerHTML`, через `DOMParser`); markdown — общий `renderMarkdown`;
-  картинки/PDF/медиа — нативные элементы; бинарь/лимит — локализованная ошибка (`web.file.error.*`).
+  картинки/PDF/медиа — нативные элементы; код переносится по строкам; бинарь/лимит — локализованная ошибка (`web.file.error.*`).
   Никаких write-операций.
 - **Attach = вставка пути**: иконка на строке + кнопка в шапке просмотрщика зовут
   `composer.insertIntoDraft` (DI через `initFiles`), вставляя `` `relpath` `` в черновик.
@@ -972,6 +973,18 @@ read-only петля без стопа, рассинхрон провайдер�
   `tests/tools/executor-fork.test.ts` (изоляция, живые геттеры, общий мемо, сериализация хуков),
   `tests/core/subagent-parallel-e2e.test.ts` (реальный путь: registry→batch→fork→subagent handler с
   `agentFactory`-швом, без живой модели).
+
+### Sidebar Fixed Width & Detail-on-Left (unreleased)
+
+- **Фиксированная ширина** (`src/modules/webui/assets/styles.css`): `.sb` — `679px` постоянно; убраны
+  `transition` и `.sb-expanded { width: 680px }`, поэтому сайдбар больше **не расширяется самопроизвольно**
+  при внешних событиях (замечено в секции с контекстом). Класс `sb-expanded` удалён из CSS и JS
+  (`sidebar/trace.ts`, `sidebar/files.ts`); открытие/закрытие доп. секции — только по клику внутри сайдбара.
+- **Деталь слева** (`#pane-trace`): `flex-direction: row-reverse` — панель деталей Trace встаёт слева от
+  списка (ближе к чату), граница — `border-right`.
+- **Просмотр файлов** (`#pane-files`): при открытом файле дерево скрывается, вьюер занимает всю ширину
+  сайдбара (`:has(.files-detail:not([hidden]))`), код переносится по строкам
+  (`white-space: pre-wrap; overflow-wrap: anywhere`), чтобы длинные строки были читаемы.
 
 ### Current Version: 2.25.0
 
