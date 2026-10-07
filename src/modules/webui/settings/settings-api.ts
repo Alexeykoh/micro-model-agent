@@ -6,6 +6,8 @@ import { redactContextSecrets } from "../../../core/agent/context-log";
 import { readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";
+import { broadcast } from "../state";
+import { setConfigValue } from "../../../config/registry";
 import type { AppConfig, MCPServerConfigEntry } from "../../../config/types";
 import { DEFAULT_LSP_CONFIG } from "../../lsp/config";
 
@@ -164,24 +166,128 @@ function mcpList(s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport)
   }));
 }
 
-/** `GET /api/plugins` — зарегистрированные плагины + настроенные MCP-серверы. */
+/**
+ * `GET /api/plugins` — плагины (полные записи) + отказы загрузки + MCP-серверы.
+ *
+ * Ответ аддитивно расширен: `plugins` теперь `PluginRecord[]` вместо узкого
+ * вида с захардкоженным `enabled: true`, плюс `failures` — сломанный плагин
+ * раньше просто исчезал из всех списков.
+ */
 export function handlePluginsGet(res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
   if (!s.plugins) {
     sendJson(res, 503, { error: "plugins_unavailable" });
     return;
   }
-  const plugins = s.plugins.getPluginInfos().map(({ plugin, source }) => {
-    const info: Record<string, unknown> = {
-      name: plugin.name,
-      enabled: true,
-      builtin: plugin.isBuiltin === true,
-    };
-    if (plugin.version) info.version = plugin.version;
-    const src = source || plugin.source;
-    if (src) info.source = src;
-    return info;
+  sendJson(res, 200, {
+    plugins: s.plugins.getRecords(),
+    failures: s.plugins.getFailures(),
+    mcp: mcpList(s),
   });
-  sendJson(res, 200, { plugins, mcp: mcpList(s) });
+}
+
+/**
+ * `POST /api/plugins/:name {enabled}` — живой тумблер плагина (без рестарта).
+ *
+ * Пишет ТОЛЬКО через `setConfigValue("plugins.disabled", …)`: эффект
+ * (`PluginManager.setDisabledAll`) применяется внутри `setConfigValue` через
+ * шов в `config/registry`, поэтому этот путь и `/config plugins.disabled`, и
+ * `mma plugins disable` не могут разойтись.
+ */
+type PluginToggleStore = ConfigStore & WorkspaceStore & HttpTransport & SseTransport;
+
+/** Ошибка запроса тумблера: код + машиночитаемое имя (null — всё в порядке). */
+type ToggleError = { status: number; error: string } | null;
+
+/** Валидация тела `POST /api/plugins/:name`. */
+function pluginToggleError(
+  plugins: NonNullable<PluginToggleStore["plugins"]>,
+  name: string,
+  enabled: unknown,
+): ToggleError {
+  if (typeof enabled !== "boolean") return { status: 400, error: "invalid-enabled" };
+  if (!plugins.getRecords().some((p) => p.name === name)) return { status: 404, error: "not_found" };
+  return null;
+}
+
+/** Запись deny-list через единый путь + персист; null — запись отвергнута. */
+function persistPluginDenyList(
+  config: NonNullable<PluginToggleStore["config"]>,
+  save: PluginToggleStore["saveConfig"],
+  name: string,
+  enable: boolean,
+): ToggleError | { persisted: boolean } {
+  const denied = new Set(config.plugins?.disabled ?? []);
+  if (enable) denied.delete(name);
+  else denied.add(name);
+  const result = setConfigValue(config, "plugins.disabled", [...denied].join(","));
+  if (!result.ok) return { status: 400, error: "invalid-value" };
+  let persisted = true;
+  try {
+    save?.(config);
+  } catch {
+    // Не записалось — сообщаем `persisted: false`, но запуск не роняем:
+    // поведение уже применено к живому реестру.
+    persisted = false;
+  }
+  return { persisted };
+}
+
+/** Тело тумблера: валидация → запись через `setConfigValue` → ответ. */
+function applyPluginToggle(
+  res: ServerResponse,
+  name: string,
+  enabled: unknown,
+  s: PluginToggleStore,
+): void {
+  const plugins = s.plugins;
+  const config = s.config;
+  if (!plugins || !config) return; // 503 уже отправлен вызывающим
+  const enable = enabled === true;
+  const bad = pluginToggleError(plugins, name, enabled);
+  const written = bad ? bad : persistPluginDenyList(config, s.saveConfig, name, enable);
+  if (bad) {
+    sendJson(res, bad.status, { ok: false, error: bad.error });
+    return;
+  }
+  if (!written || "status" in written) {
+    sendJson(res, 400, { ok: false, error: "invalid-value" });
+    return;
+  }
+  // Шов `setConfigValue → pluginGateApplier` ставит bootstrap и применяет
+  // deny-list к реестру. Повторяем toggle напрямую, чтобы хендлер не зависел
+  // от установки шва: ответ всегда показывает фактическое состояние.
+  plugins.setEnabled(name, enable);
+  // Ответ несёт свежие записи: панель и вкладка перерисовываются без GET.
+  sendJson(res, 200, {
+    ok: true,
+    persisted: written.persisted,
+    plugins: plugins.getRecords(),
+    failures: plugins.getFailures(),
+  });
+  broadcast({ type: "plugins", ts: Date.now() }, s);
+}
+
+export function handlePluginToggle(
+  req: IncomingMessage,
+  res: ServerResponse,
+  name: string,
+  s: PluginToggleStore,
+): void {
+  if (!s.plugins || !s.config) {
+    sendJson(res, 503, { error: s.plugins ? "config_unavailable" : "plugins_unavailable" });
+    return;
+  }
+  readJsonBody(req, s.maxBodyBytes)
+    .then((rec) => {
+      if (!rec) {
+        sendJson(res, 400, { ok: false, error: "invalid JSON" });
+        return;
+      }
+      applyPluginToggle(res, name, rec.enabled, s);
+    })
+    .catch((err: unknown) => {
+      readBodyError(req, res, err);
+    });
 }
 
 /**
@@ -659,6 +765,11 @@ const SETTINGS_PREFIX: Array<{ method: string; prefix: string; handle: SettingsH
     method: "DELETE",
     prefix: "/api/mcp/",
     handle: (_req, res, param, s) => handleMcpDelete(res, decodeURIComponent(param), s),
+  },
+  {
+    method: "POST",
+    prefix: "/api/plugins/",
+    handle: (req, res, param, s) => handlePluginToggle(req, res, decodeURIComponent(param), s),
   },
   {
     method: "PUT",

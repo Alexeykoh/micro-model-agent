@@ -405,6 +405,23 @@ function renderSkillsPanel(): void {
 }
 
 // --- Plugins / MCP / LSP panel -------------------------------------------
+/** Живой тумблер плагина: POST + перечитывание (истина — ответ сервера). */
+async function togglePlugin(name: string, on: boolean): Promise<void> {
+  const res = await api<Dict>("/api/plugins/" + encodeURIComponent(name), {
+    method: "POST",
+    body: { enabled: on },
+  });
+  if (!res.ok || !res.data || res.data.ok !== true) {
+    setIndicator(t("web.plugins.toggle_failed"), true);
+    return;
+  }
+  settings.pluginsData = {
+    plugins: (res.data.plugins as Dict[]) || [],
+    mcp: (settings.pluginsData && settings.pluginsData.mcp) || [],
+  };
+  renderPluginsPanel();
+}
+
 function renderPluginsPanel(): void {
   const container = document.querySelector<HTMLElement>('[data-panel="plugins"]');
   if (!container) return;
@@ -423,7 +440,7 @@ function renderPluginsPanel(): void {
   }
   (data.plugins || []).forEach((p: Dict) => {
     const line = el("div", "list-line");
-    line.appendChild(el("span", "g", "✓"));
+    line.appendChild(el("span", "g", p.enabled === false ? "–" : "✓"));
     const nameEl = el("span", "name", p.name);
     nameEl.title = p.name;
     line.appendChild(nameEl);
@@ -434,7 +451,13 @@ function renderPluginsPanel(): void {
       line.appendChild(src);
     }
     if (p.builtin) line.appendChild(el("span", "src", t("web.settings.builtin")));
-    line.appendChild(el("span", "st", p.enabled === false ? t("web.settings.disabled") : t("web.settings.enabled")));
+    // Живой тумблер вместо статуса: тот же контракт, что у строки MCP ниже.
+    // `onFlip` ничего не возвращает — состояние перерисовывается из ответа.
+    line.appendChild(
+      makeToggle(p.enabled !== false, () => {
+        void togglePlugin(p.name, p.enabled === false);
+      }),
+    );
     list.appendChild(line);
   });
   const pnote = el("div", "settings-note");

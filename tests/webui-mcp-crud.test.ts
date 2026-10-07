@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULTS } from "../src/config/defaults";
 import { createWebUiState } from "../src/modules/webui/state";
 import { withServer, postJson, doFetch } from "./helpers/webui-server";
+import { stubPlugins } from "./helpers/webui-plugins";
 
 describe("mcp crud", () => {
   it("validates create input", async () => {
@@ -19,7 +20,7 @@ describe("mcp crud", () => {
     s.config = structuredClone(DEFAULTS);
     s.config.mcpServers = {};
     s.saveConfig = () => {};
-    s.plugins = { getPluginInfos: () => [] };
+    s.plugins = stubPlugins([]);
     await withServer(s, async (base) => {
       const created = await postJson(base, "/api/mcp", {
         name: "srv",

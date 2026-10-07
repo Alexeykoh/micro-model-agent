@@ -6,6 +6,7 @@ import { createWebUiState, } from "../src/modules/webui/state";
 import { MemoryStore } from "../src/modules/memory/store";
 import { DEFAULTS } from "../src/config/defaults";
 import { withServer, postJson, doFetch, } from "./helpers/webui-server";
+import { stubPlugins } from "./helpers/webui-plugins";
 
 
 
@@ -116,22 +117,30 @@ describe("webui settings REST", () => {
       context7: { name: "context7", url: "https://x", enabled: true },
       off: { name: "off", url: "https://y", enabled: false },
     };
-    s.plugins = {
-      getPluginInfos: () => [
-        { plugin: { name: "builtin-a", version: "1.2.3", isBuiltin: true }, source: "builtin" },
-        { plugin: { name: "third-party" }, source: "global" },
-      ],
-    };
+    s.plugins = stubPlugins([
+      {
+        name: "builtin-a",
+        version: "1.2.3",
+        source: "builtin",
+        builtin: true,
+        enabled: true,
+      },
+      { name: "third-party", source: "global", builtin: false, enabled: false },
+    ]);
     await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/plugins`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         plugins: Array<{ name: string; version?: string; source?: string; enabled?: boolean }>;
+        failures: unknown[];
         mcp: Array<{ name: string; status: string }>;
       };
       expect(body.plugins.map((p) => p.name)).toEqual(["builtin-a", "third-party"]);
       expect(body.plugins[0].version).toBe("1.2.3");
       expect(body.plugins[0].source).toBe("builtin");
+      // enabled больше не захардкожен `true` — приходит из реестра.
+      expect(body.plugins.map((p) => p.enabled)).toEqual([true, false]);
+      expect(body.failures).toEqual([]);
       const mcp = new Map(body.mcp.map((m) => [m.name, m.status]));
       expect(mcp.get("context7")).toBe("enabled");
       expect(mcp.get("off")).toBe("disabled");

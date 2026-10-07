@@ -4,13 +4,14 @@
 import type { Dict } from "../core/store/types.js";
 
 export const TAB_KEY = "mma-sidebar-tab";
-export const TABS = ["session", "map", "trace", "lsp", "files"];
+export const TABS = ["session", "map", "trace", "lsp", "files", "plugins"];
 export const ICON_NAME: Record<string, string> = {
   session: "list-checks",
   map: "map",
   trace: "activity",
   lsp: "stethoscope",
   files: "folder-tree",
+  plugins: "puzzle",
 };
 export const TRACE_CAP = 500;
 export const MAX_OUTPUT_CHARS = 20000;
@@ -39,6 +40,17 @@ export interface FilesView {
   listings: Map<string, FileEntry[]>;
   /** Открытый в просмотрщике файл (relative path) или null. */
   selectedPath: string | null;
+}
+
+/** Состояние вкладки Plugins: DOM-узел, записи реестра, отказы загрузки. */
+export interface PluginsView {
+  bodyEl: HTMLElement | null;
+  /** Плоские записи `PluginRecord[]` из `GET /api/plugins`. */
+  records: Array<Record<string, any>>;
+  /** Не загрузившиеся плагины (раньше просто исчезали). */
+  failures: Array<Record<string, any>>;
+  loaded: boolean;
+  unavailable: boolean;
 }
 
 export interface SidebarState {
@@ -73,6 +85,7 @@ export interface SidebarState {
   postResolved: boolean;
   reindexError: boolean;
   files: FilesView;
+  plugins: PluginsView;
 }
 
 export const sb: SidebarState = {
@@ -116,6 +129,13 @@ export const sb: SidebarState = {
     expanded: new Set(), // "" (root) is expanded implicitly in render
     listings: new Map(),
     selectedPath: null,
+  },
+  plugins: {
+    bodyEl: null,
+    records: [],
+    failures: [],
+    loaded: false,
+    unavailable: false,
   },
 };
 

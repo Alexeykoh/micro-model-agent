@@ -5,6 +5,7 @@ import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
 import type { ContextBreakdown } from "../../core/types";
 import type { AppConfig } from "../../config/types";
+import type { PluginLoadFailure, PluginRecord } from "../plugins/records";
 import type { SessionMeta, SessionMessage } from "../session/types";
 import type { SessionLogEntry } from "../session/store";
 import { RunPool } from "./session/session-pool";
@@ -83,17 +84,19 @@ export interface WebSkillsModule {
   getLoaded(): WebSkillInfo[];
 }
 
-/** Плагин для REST настроек (имя, версия, источник). */
-export interface WebPluginInfo {
-  name: string;
-  version?: string;
-  isBuiltin?: boolean;
-  source?: string;
-}
-
-/** Подмножество менеджера плагинов для страницы настроек. */
+/**
+ * Подмножество менеджера плагинов для REST и вкладки Plugins.
+ *
+ * Раньше здесь жил свой бедный `WebPluginInfo` (имя/версия/источник), а ответ
+ * собирался полями вручную — из-за чего `enabled` был захардкожен в `true`.
+ * Теперь вид приходит один, из ядра: `PluginManager` удовлетворяет роли
+ * структурно, дублировать типы не нужно.
+ */
 export interface WebPluginManager {
-  getPluginInfos(): Array<{ plugin: WebPluginInfo; source?: string }>;
+  getRecords(): PluginRecord[];
+  getFailures(): PluginLoadFailure[];
+  /** Живой тумблер; false — плагина нет (в ответе уже будет 404). */
+  setEnabled(name: string, on: boolean): boolean;
 }
 
 /**

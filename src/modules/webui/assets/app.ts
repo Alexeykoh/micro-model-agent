@@ -29,6 +29,7 @@ import {
   sidebarLspState, sidebarLspEvent,
   applySidebarI18n,
   initFiles, sidebarFilesState, sidebarFilesChanged,
+  sidebarPluginsState, sidebarPluginsEvent,
 } from "./js/sidebar.js";
 import { insertIntoDraft } from "./js/session/composer.js";
 
@@ -101,6 +102,7 @@ function renderActiveState(): void {
   sidebarMapIndicator(host);
   sidebarLspState();
   sidebarFilesState(host);
+  sidebarPluginsState();
   const rev = typeof host.filesRevision === "number" ? host.filesRevision : undefined;
   if (rev !== undefined && rev !== lastFilesRevision) {
     const first = lastFilesRevision === -1;
@@ -275,7 +277,8 @@ es.addEventListener("text", (e) => { const d = parse(e); if (d && sidebarOwns(d)
 // LSP tab: server emits `lsp {phase}` around an on-demand diagnosis.
 es.addEventListener("lsp", (e) => { const d = parse(e); if (d) sidebarLspEvent(d); });
 // Files tab: workspace watcher fired — re-read the expanded directories.
-es.addEventListener("files", () => sidebarFilesChanged());
+  es.addEventListener("files", () => sidebarFilesChanged());
+  es.addEventListener("plugins", () => sidebarPluginsEvent());
 es.addEventListener("command", (e) => {
   const d = parse(e);
   if (d && typeof d.text === "string") onCommandOutput(d.text, d.sessionId);

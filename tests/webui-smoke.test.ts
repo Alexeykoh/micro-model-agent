@@ -6,6 +6,7 @@ import { chromium, type Browser } from "playwright";
 import { startServer, stopServer } from "../src/modules/webui/server";
 import { loadAssets } from "../src/modules/webui/assets";
 import { createWebUiState, type WebUiState } from "../src/modules/webui/state";
+import { stubPlugins } from "./helpers/webui-plugins";
 import { DEFAULTS } from "../src/config/defaults";
 import { MemoryStore } from "../src/modules/memory/store";
 import type { Host } from "../src/core/host";
@@ -53,7 +54,7 @@ function makeState(): { state: WebUiState; dir: string } {
   state.knownModels = () => [];
   state.memory = new MemoryStore(dir);
   state.skills = { getAvailable: () => [], getLoaded: () => [] };
-  state.plugins = { getPluginInfos: () => [] };
+  state.plugins = stubPlugins([]);
   state.sessionManager = {
     list: () => [],
     get: () => null,

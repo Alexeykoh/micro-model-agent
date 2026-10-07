@@ -8,6 +8,7 @@ import { collapseDetail, renderList, renderDetail } from "./trace.js";
 import { sidebarMapState, sidebarMapIndicator } from "./map.js";
 import { renderLsp, sidebarLspState } from "./lsp.js";
 import { renderFilesTree, refreshFilesTree } from "./files.js";
+import { renderPlugins, sidebarPluginsState } from "./plugins.js";
 
 export function setSidebarTab(id: string, persist = true): void {
   if (!TABS.includes(id)) id = "session";
@@ -30,6 +31,7 @@ export function setSidebarTab(id: string, persist = true): void {
   if (nic) { nic.textContent = ""; nic.appendChild(icon(ICON_NAME[effective])); }
   if (effective === "lsp") sidebarLspState();
   if (effective === "files") renderFilesTree();
+  if (effective === "plugins") sidebarPluginsState();
 }
 
 export function sidebarBusy(on: unknown): void {
@@ -52,6 +54,7 @@ export function applySidebarI18n(): void {
   sidebarMapState(session.host);
   renderLsp();
   refreshFilesTree();
+  renderPlugins();
 }
 
 export function initSidebar(): void {
@@ -63,6 +66,7 @@ export function initSidebar(): void {
   sb.nameTextEl = document.getElementById("sbNameText");
   sb.mapEl = document.getElementById("mapBody");
   sb.lspEl = document.getElementById("lspBody");
+  sb.plugins.bodyEl = document.getElementById("pluginsBody");
   sb.listEl = document.getElementById("traceList");
   sb.detailEl = document.getElementById("traceDetail");
   sb.detailGlyph = document.getElementById("detailGlyph");
@@ -91,7 +95,7 @@ export function initSidebar(): void {
   });
 
   document.addEventListener("keydown", (e) => {
-    if (!e.altKey || !["1", "2", "3", "4", "5"].includes(e.key)) return;
+    if (!e.altKey || !["1", "2", "3", "4", "5", "6"].includes(e.key)) return;
     const tag = document.activeElement ? String(document.activeElement.tagName) : "";
     if (tag === "INPUT" || tag === "TEXTAREA") return;
     e.preventDefault();

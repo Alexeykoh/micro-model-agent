@@ -368,6 +368,28 @@ describe("webui assets", () => {
     expect(a.css).toContain(".trace-list > *");
   });
 
+  it("wires the Plugins sidebar tab (toggles + details popup)", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('data-tab="plugins"');
+    expect(a.html).toContain('id="pane-plugins"');
+    expect(a.html).toContain('id="pluginsBody"');
+    const sidebar = sidebarSources(a);
+    // Live toggle goes through the single write path (setConfigValue behind
+    // POST /api/plugins/:name), not through /api/config.
+    expect(sidebar).toContain('"/api/plugins/"');
+    expect(sidebar).toContain("makeToggle");
+    // Details live in the existing nested overlay — no new modal chrome.
+    expect(sidebar).toContain("openSubDialog");
+    expect(sidebar).toContain("sidebarPluginsState(");
+    expect(sidebar).toContain("sidebarPluginsEvent(");
+    // Imports of the tab come through the barrel only (see DAG guard).
+    expect(a.js).toContain("sidebarPluginsState,");
+    expect(a.css).toContain(".plg-row");
+    expect(a.css).toContain(".plg-tag");
+    // Alt+6 reaches the sixth tab.
+    expect(sidebar).toContain('"6"');
+  });
+
   it("imports every sidebar helper it calls (no undefined render crash)", () => {
     const a = loadAssets();
     const src = a.js;

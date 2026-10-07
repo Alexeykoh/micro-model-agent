@@ -981,6 +981,31 @@ body.light .sel > button { border: 1px solid var(--border); }
 .lsp-copy { display: inline-flex; align-items: center; color: var(--dim-b); }
 .lsp-copy .svg-icon { width: 13px; height: 13px; }
 .lsp-copy:hover { color: var(--accent); }
+
+/* Plugins tab: row list + nested #subOverlay popup (STYLE.md — строки и глифы,
+   без рамок; сайдбар фиксирован 679px, поэтому не master-detail как у Trace). */
+.plg-summary { color: var(--dim-c); font-size: 11.5px; line-height: 1.4; margin: 2px 0 6px; }
+.plg-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; }
+.plg-row:hover .plg-name { color: var(--fg); }
+.plg-g { flex: 0 0 auto; width: 12px; text-align: center; }
+.plg-g.ok { color: var(--green); }
+.plg-g.fail { color: var(--red); }
+.plg-g.dim { color: var(--dim-c); }
+.plg-g.warn { color: var(--yellow); }
+.plg-name { color: var(--fg); font-size: 12.5px; overflow-wrap: anywhere; }
+.plg-meta { color: var(--dim-c); font-size: 11.5px; overflow-wrap: anywhere; flex: 1 1 auto; }
+.plg-badges { color: var(--dim-b); font-size: 11px; }
+.plg-desc { color: var(--dim-b); font-size: 11.5px; line-height: 1.4; padding: 0 0 4px 18px; overflow-wrap: anywhere; }
+.plg-broken { cursor: default; }
+.plg-broken .plg-meta { color: var(--red); }
+.plg-info { padding: 2px 0; }
+.plg-desc-block { color: var(--fg); font-size: 12.5px; line-height: 1.5; margin: 6px 0; overflow-wrap: anywhere; }
+.plg-chips { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; margin: 4px 0; }
+.plg-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border-2); border-radius: 4px; padding: 0 5px; }
+.plg-hint { color: var(--dim-c); font-size: 11px; line-height: 1.45; margin: 3px 0; overflow-wrap: anywhere; }
+.plg-hint.warn { color: var(--yellow); }
+.plg-warn-title { color: var(--dim-b); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin: 10px 0 3px; }
+.plg-link { color: var(--accent); font-size: 11.5px; overflow-wrap: anywhere; }
 .kv.wn b { color: var(--yellow); }
 
 ::-webkit-scrollbar { width: 8px; }
