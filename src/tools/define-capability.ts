@@ -69,9 +69,13 @@ export const defineCapabilityTool: ToolDefinition = {
   description:
     "Define a new tool for yourself: write it as a draft capability in .mma/plugins/drafts/. " +
     "Requires name, description, a JSON schema of arguments (parameters), the handler body " +
-    "(code) and declared permissions. The draft does NOT run until the user approves it " +
-    "(you will be asked with the full code shown). Use only when an existing tool cannot do " +
-    "the job.",
+    "(code) and declared permissions. " +
+    "The handler body is plain statements ending with `return { output: string, success?: boolean }`; " +
+    "inside you can use `ctx` (logger, baseDir, config, toolExecutor) and `args` (parsed arguments). " +
+    "No imports or top-level code — only the body. The body is syntax-checked; a broken one is rejected. " +
+    "The draft does NOT run until the user approves it (you will be asked with the full code shown); " +
+    "if it fails to load after approval, you get the error back and the file is discarded. " +
+    "Use only when an existing tool cannot do the job.",
   tags: ["meta"],
   // Always-on по той же причине, что и тулы плагинов: блок промпта сообщает
   // модели, что capability можно написать, — и инструмент должен быть в наборе.
@@ -132,6 +136,21 @@ export const defineCapabilityTool: ToolDefinition = {
     }
     // Согласие есть — подхватываем живым reload (кэш модулей сбрасывается).
     const report = host.reloadDrafts();
+    if (report.failed > 0) {
+      // Не оставляем заведомо битый одобренный черновик: забираем причину у
+      // загрузчика, откатываем файл и отдаём модели текст ошибки для починки.
+      const error = host.lastError(spec.name) ?? "unknown load error";
+      host.remove(spec.name);
+      return {
+        success: false,
+        output: t("draft.capability_load_failed", { name: spec.name, error }),
+        errorMeta: {
+          code: "draft_load_failed",
+          retryable: true,
+          hint: "Fix the handler body and call define_capability again with the same name.",
+        },
+      };
+    }
     return {
       success: true,
       output: t("draft.capability_created", {

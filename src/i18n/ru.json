@@ -170,6 +170,7 @@
   "draft.consent_new": "Разрешить выполнение capability «{name}» в процессе агента?",
   "draft.capability_draft_only": "Capability «{name}» записан черновиком в {path} и НЕ загружен — пользователь отказался. Остаётся инертным до явного разрешения.",
   "draft.capability_created": "Capability «{name}» разрешена и зарегистрирована (загружено {loaded}, ошибок {failed}). Её тул: plugin__{name}__{name}.",
+  "draft.capability_load_failed": "Capability «{name}» не загрузилась и отброшена: {error}. Исправь тело хендлера и вызови define_capability снова с тем же именем.",
   "draft.captain.allow_hint": "Выполнить этот черновик в процессе агента (сначала прочитайте код выше).",
   "draft.captain.deny_hint": "Оставить черновик инертным; он останется на диске до явного разрешения.",
   "tool.question.progress": "Вопрос {current}/{total}",

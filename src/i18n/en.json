@@ -174,6 +174,7 @@
   "draft.consent_new": "Allow draft capability \"{name}\" to run in the agent process?",
   "draft.capability_draft_only": "Capability \"{name}\" written as a draft to {path} and NOT loaded — the user declined to run it. It stays inert until approved.",
   "draft.capability_created": "Capability \"{name}\" approved and registered (loaded {loaded}, failed {failed}). Its tool is plugin__{name}__{name}.",
+  "draft.capability_load_failed": "Capability \"{name}\" failed to load and was discarded: {error}. Fix the handler body and call define_capability again with the same name.",
   "draft.captain.allow_hint": "Run this draft code in the agent process (review the code above first).",
   "draft.captain.deny_hint": "Keep the draft inert; it stays on disk until approved explicitly.",
   "tool.question.progress": "Question {current}/{total}",

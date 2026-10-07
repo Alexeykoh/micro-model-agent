@@ -4,6 +4,24 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.30.0] - 2026-10-07
+
+Agent-written capability drafts (`define_capability`) are now quality-gated and
+tidy: the handler body is syntax-checked before it is written, a load failure is
+reported back to the model with the real error (and the broken file is discarded),
+and the generated file is normalized instead of dumped verbatim.
+
+### Added
+
+- **Draft syntax check** (`src/modules/plugins/drafts.ts`): `validateDraftCode` parses the handler body via `Bun.Transpiler` (no execution; skipped outside Bun); `validateDraftSpec` rejects a broken body before anything is written to disk.
+- **Load-failure feedback** (`src/tools/define-capability.ts`, `src/modules/plugins/draft-host.ts`): after approval, if the draft fails to load, the tool returns `success:false` with the loader's error message (`draft.capability_load_failed`), discards the broken file, and hints the model to fix and retry. `DraftHost.lastError(name)` exposes the reason.
+- **Cleaner generated files** (`normalizeDraftCode`, `renderDraft`): CRLF→LF, common-indent removal, blank-line collapse, trailing-whitespace trim, final newline, and 2-space indenting of the handler body.
+- **Richer tool contract** (`define_capability` description): the handler returns `{ output, success? }`; `ctx`/`args` fields; no imports or top-level code; syntax-check and load-rollback behavior.
+
+### Changed
+
+- **`mma plugins drafts approve`** (`src/cli/plugin-commands.ts`): on load failures prints each reason, not just the count.
+
 ## [2.29.0] - 2026-10-07
 
 The plugin system stops being "an anonymous object in an array": a plugin is now a

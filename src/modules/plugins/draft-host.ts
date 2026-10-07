@@ -4,6 +4,7 @@
 // (легко тестируется), здесь — единственное место, где черновик превращается в
 // зарегистрированный плагин. Ошибки загрузки не поднимаются вверх: битый черновик
 // обязан остаться битым в UI (`getFailures`), а не уронить ход агента.
+import { join } from "path";
 import type { PluginManager, ReloadReport } from "./manager";
 import { PluginLoader } from "./loader";
 import {
@@ -100,6 +101,12 @@ export function createDraftHost(deps: DraftHostDeps): DraftHostWithLoad {
       return reloadDrafts();
     },
     reloadDrafts,
+    lastError(name: string): string | null {
+      const dir = asProjectDir(baseDir);
+      const wanted = [join(dir, `${name}.ts`), join(dir, `${name}.js`)];
+      const hit = pluginManager.getFailures().find((f) => wanted.includes(f.path));
+      return hit ? hit.message : null;
+    },
   };
 }
 
