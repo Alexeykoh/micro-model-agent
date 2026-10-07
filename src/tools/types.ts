@@ -176,6 +176,17 @@ export interface ToolResult {
    */
   images?: import("../llm/provider").ImageUrlPart[];
   /**
+   * Полноразмерные ассеты для персиста и показа (диск/веб-лента). Модель
+   * получает `images` (может быть ресайзнут); вебу и истории нужны оригинальные
+   * байты. Заполняется тулом, спаривается ядром в `imageRefs` после записи.
+   */
+  imageFiles?: import("../modules/session/image-store").ToolImageAsset[];
+  /**
+   * Ref'ы сохранённых картинок — заполняет ядро после персиста
+   * (`SessionLogger.persistToolImages`); читают forwarder и session.jsonl.
+   */
+  imageRefs?: import("../modules/session/image-store").ToolImageRef[];
+  /**
    * True, если `onBeforeTool` плагина отклонил вызов до запуска тула.
    * Это `success:false`, но НЕ признак сломанного действия — плагин может
    * ограждать порядок/скоуп/безопасность. Такие вызовы исключать из учёта

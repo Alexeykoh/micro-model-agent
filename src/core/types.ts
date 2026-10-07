@@ -50,6 +50,16 @@ export interface ToolEvent {
   ctxDelta?: number;
   /** Сырое тело результата на `end`; рендереры режут/чистят перед показом. */
   output?: string;
+  /**
+   * Ref'ы сохранённых изображений тулов (session `<id>/images/`) — веб рисует
+   * их как URL, история сохраняет для replay.
+   */
+  imageRefs?: import("../modules/session/image-store").ToolImageRef[];
+  /**
+   * Model data-URL'ы из `ToolResult.images` — фолбэк live-показа без персиста
+   * (шифрованная сессия: картинки не пишутся на диск).
+   */
+  images?: import("../llm/provider").ImageUrlPart[];
   /** Накопленная стоимость сессии в USD на момент конца тула (если цена известна). */
   costUsd?: number;
   /** Провайдер вызова тула (мультипровайдерный режим). */
