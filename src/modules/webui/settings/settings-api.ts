@@ -186,6 +186,35 @@ export function handlePluginsGet(res: ServerResponse, s: ConfigStore & Workspace
 }
 
 /**
+ * `POST /api/plugins/reload` — перечитать каталоги плагинов и навыков с диска.
+ *
+ * Живая перезагрузка без пересборки агента: выгрузка с `onUnload` → сброс
+ * кэса модулей → чтение заново. Ответ несёт `reload.staleTs` — сколько `.ts`
+ * плагинов под Node сохранили старый код (кэш transpile не сбрасывается),
+ * чтобы UI не врёл об успехе.
+ */
+export function handlePluginsReload(res: ServerResponse, s: PluginToggleStore): void {
+  const plugins = s.plugins;
+  if (!plugins) {
+    sendJson(res, 503, { error: "plugins_unavailable" });
+    return;
+  }
+  try {
+    const report = plugins.reload();
+    const skills = s.skills?.reloadSources?.();
+    sendJson(res, 200, {
+      ok: true,
+      plugins: plugins.getRecords(),
+      failures: plugins.getFailures(),
+      reload: { plugins: report, skills: skills ?? { added: 0, removed: 0 } },
+    });
+    broadcast({ type: "plugins", ts: Date.now() }, s);
+  } catch (e) {
+    sendJson(res, 500, { ok: false, error: String(e) });
+  }
+}
+
+/**
  * `POST /api/plugins/:name {enabled}` — живой тумблер плагина (без рестарта).
  *
  * Пишет ТОЛЬКО через `setConfigValue("plugins.disabled", …)`: эффект
@@ -734,6 +763,9 @@ const SETTINGS_EXACT: Record<string, SettingsHandler> = {
   "POST /api/memory": (req, res, _param, s) => handleMemoryPost(req, res, s),
   "GET /api/skills": (_req, res, _param, s) => handleSkillsGet(res, s),
   "GET /api/plugins": (_req, res, _param, s) => handlePluginsGet(res, s),
+  // Отдельное пространство действий, а не `/api/plugins/reload`: `reload` —
+  // допустимое имя плагина, и exact-first сделал бы его невыключаемым.
+  "POST /api/reload/plugins": (_req, res, _param, s) => handlePluginsReload(res, s),
 };
 
 /** Префиксные роуты настроек с одним параметром пути (правило #17). */

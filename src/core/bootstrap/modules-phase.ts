@@ -195,6 +195,9 @@ function registerModuleToolsAndPlugins(
   const globalPluginsDir = resolveGlobalPluginsDir();
   const projectPluginsDir = join(projectMmaDir(baseDir), "plugins");
   const mmaVersion = readMmaVersion();
+  // Каталоги нужны менеджеру для `reload()`: CLI, REPL и веб перезагружают
+  // одни и те же каталоги и не должны знать про пути сами.
+  pluginManager.setSourceDirs({ globalPluginsDir, projectPluginsDir }, mmaVersion);
   pluginLoader.loadFromDir(globalPluginsDir, pluginManager, logger, {
     source: "global",
     mmaVersion,

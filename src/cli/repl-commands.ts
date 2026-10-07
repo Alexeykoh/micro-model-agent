@@ -39,6 +39,7 @@ import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
 import { formatPluginDetails, formatPluginList } from "../modules/plugins/format";
+import { reloadSummaryLines } from "../modules/plugins/reload";
 import type { IndexerModule } from "../modules/indexer/module";
 import { runMapAction } from "../modules/indexer/map-command";
 import { registerOnboardingCommands } from "./onboarding-commands";
@@ -1042,9 +1043,23 @@ async function runPluginsCommand(ctx: ReplContext, args: string[], mmaVersion: s
     return;
   }
   const [sub, name] = args.filter((a) => a !== "--all");
+  if (sub === "reload") return reloadPluginsCmd(ctx);
   if (sub === "show") return showPlugin(ctx, manager, name);
   if (sub === "enable" || sub === "disable") return togglePlugin(ctx, name, sub === "disable");
   listPlugins(ctx, manager, args.includes("--all"), mmaVersion);
+}
+
+/** `/plugins reload` — перечитать каталоги с диска, без пересборки агента. */
+function reloadPluginsCmd(ctx: ReplContext): void {
+  const manager = ctx.pluginManager;
+  if (!manager) {
+    ctx.output.writeLine(t("cli.plugins.none"));
+    return;
+  }
+  const plugins = manager.reload();
+  const skills = ctx.skillsModule?.reloadSources() ?? { added: 0, removed: 0 };
+  for (const line of reloadSummaryLines(plugins, skills)) ctx.output.writeLine(line);
+  listPlugins(ctx, manager, true, version);
 }
 
 /** `/plugins enable|disable <name>` — тот же единый путь записи, что и

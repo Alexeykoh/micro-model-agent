@@ -31,7 +31,7 @@ import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
 import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
-import type { PluginManager } from "../modules/plugins/manager";
+import { unloadPluginsForReboot, type PluginManager } from "../modules/plugins/manager";
 import { createHostBridge } from "../core/host";
 import type { Host, HostStateSnapshot } from "../core/host";
 import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
@@ -64,7 +64,7 @@ import {
 } from "../output";
 import { createPromptIO, type PromptIO } from "../tools/prompt-io";
 import type { ContextProbeResult } from "../llm/model-loader";
-import { MMA_DIR_NAME, projectMmaDir } from "../config/paths";
+import { MMA_DIR_NAME, projectMmaDir, globalPluginsDir } from "../config/paths";
 import { MMA_ENV, readEnv } from "../config/env";
 
 /** Рендерит бар использования контекста с компакциями и качеством. */
@@ -326,8 +326,23 @@ export class Repl implements ReplContext, Host {
   public async reload(): Promise<void> {
     const { loadConfig } = await import("../config/config");
     const { bootstrap } = await import("../core/bootstrap");
+    
 
     this.agent.shutdown();
+
+    // Старые плагины выгружаются с `onUnload` (иначе их серверы переживут
+    // пересборку), а кэш модулей сбрасывается — иначе новый bootstrap получил
+    // бы прежние версии файлов из `require`.
+    if (this.pluginManager) {
+      unloadPluginsForReboot(
+        this.pluginManager,
+        {
+          globalPluginsDir: globalPluginsDir(),
+          projectPluginsDir: join(projectMmaDir(this.baseDir), "plugins"),
+        },
+        this.logger,
+      );
+    }
 
     const projectConfigPath = join(this.baseDir, ".mmrc");
     const { config: freshConfig } = loadConfig({

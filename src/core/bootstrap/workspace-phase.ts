@@ -125,7 +125,11 @@ export async function setupWorkspacePhase(
   const availableSkills = skillsLoader.loadFromAllSources(builtinDir, globalDir, projectSkillsDir);
 
   const skillsBudget = Math.floor(config.contextWindow * config.skills.budget);
-  const skillsModule = new SkillsModule(availableSkills, skillsBudget);
+  const skillsModule = new SkillsModule(availableSkills, skillsBudget, {
+    builtinDir,
+    globalDir,
+    projectDir: projectSkillsDir,
+  });
 
   const toolRegistry = new ToolRegistry();
   registerAllTools(toolRegistry, skillsModule, {

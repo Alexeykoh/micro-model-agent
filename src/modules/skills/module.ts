@@ -1,7 +1,7 @@
 // Модуль скиллов: ленивая загрузка в бюджет токенов и блок системного промпта.
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
-import type { SkillMeta } from "./loader";
+import { SkillsLoader, type SkillMeta } from "./loader";
 import { t } from "../../i18n/index";
 import { estimateTokens } from "../../llm/token-counter";
 
@@ -12,6 +12,13 @@ export interface LoadResult {
   skill?: SkillMeta;
 }
 
+/** Каталоги-источники скиллов в порядке приоритета (builtin → global → project). */
+export interface SkillSources {
+  builtinDir: string;
+  globalDir: string;
+  projectDir: string;
+}
+
 /** Модуль скиллов: каталог доступных, загрузка в бюджет, промпт-блок. */
 export class SkillsModule implements AgentModule {
   name = "skills";
@@ -20,10 +27,61 @@ export class SkillsModule implements AgentModule {
   private loadedSkills: Map<string, SkillMeta> = new Map();
   private budget: number;
   private currentTokens = 0;
+  /** Каталоги для `reload()`; без них пересканировать навыки нечем. */
+  private sources?: SkillSources;
 
-  constructor(availableSkills: SkillMeta[], budget: number) {
+  constructor(availableSkills: SkillMeta[], budget: number, sources?: SkillSources) {
     this.availableSkills = availableSkills;
     this.budget = budget;
+    this.sources = sources;
+  }
+
+  /**
+   * Пересканировать каталоги навыков на живом инстансе.
+   *
+   * Именно мутация на месте, а не пересоздание: `createLoadSkillTool` замкнул
+   * модуль при построении реестра тулов, и per-session раннеры держат тот же
+   * инстанс из `BootstrapResult`. Загруженные скиллы, чьих файлов больше нет,
+   * выгружаются; `currentTokens` пересчитывается по тем, что остались.
+   *
+   * Нужен, чтобы навык, написанный агентом в `.mma/skills/`, был виден без
+   * рестарта процесса.
+   */
+  reload(rescan: () => SkillMeta[]): { added: number; removed: number } {
+    const next = rescan();
+    const before = new Set(this.availableSkills.map((s) => s.name));
+    const after = new Set(next.map((s) => s.name));
+    // Загруженные скиллы, которых больше нет на диске, уходят из бюджета.
+    for (const name of [...this.loadedSkills.keys()]) {
+      if (!after.has(name)) this.unload(name);
+    }
+    this.availableSkills = next;
+    this.currentTokens = 0;
+    for (const skill of this.loadedSkills.values()) {
+      this.currentTokens += this.estimateTokens(skill.content);
+    }
+    return {
+      added: [...after].filter((n) => !before.has(n)).length,
+      removed: [...before].filter((n) => !after.has(n)).length,
+    };
+  }
+
+  /** Пересканировать каталоги навыков на живом инстансе (для `reload()`). */
+reloadSources(): { added: number; removed: number } {
+    if (!this.sources) return { added: 0, removed: 0 };
+    const loader = new SkillsLoader();
+    return this.reload(() =>
+      loader.loadFromAllSources(
+        this.sources!.builtinDir,
+        this.sources!.globalDir,
+        this.sources!.projectDir,
+      ),
+    );
+  }
+
+  /** Каталоги-источники (для пересканирования). */
+  getSources(): SkillSources | undefined {
+    return this.sources;
   }
 
   /** Загружает скилл по имени с проверкой бюджета токенов. */

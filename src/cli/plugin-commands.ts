@@ -7,6 +7,7 @@ import { getDefaultChannel } from "../output";
 import { setConfigValue } from "../config/registry";
 import { saveConfig } from "../config/config";
 import { formatPluginDetails, formatPluginList } from "../modules/plugins/format";
+import { reloadSummaryLines } from "../modules/plugins/reload";
 import type { PluginManager } from "../modules/plugins/manager";
 
 // CLI-группа `mma plugins`: список, подробности, вкл/выкл.
@@ -58,6 +59,17 @@ export function createPluginCommand(program: Command): void {
       for (const line of formatPluginDetails(record, pluginManager.getFailures())) {
         channel.writeLine(line);
       }
+    });
+
+  pluginsCmd
+    .command("reload")
+    .description(t("plugin.reload"))
+    .action(async () => {
+      const { pluginManager, skillsModule } = await bootstrap();
+      const channel = getDefaultChannel();
+      const plugins = pluginManager.reload();
+      const skills = skillsModule?.reloadSources() ?? { added: 0, removed: 0 };
+      for (const line of reloadSummaryLines(plugins, skills)) channel.writeLine(line);
     });
 
   for (const [name, on, key] of [

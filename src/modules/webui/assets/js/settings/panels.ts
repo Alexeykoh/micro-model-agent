@@ -405,6 +405,38 @@ function renderSkillsPanel(): void {
 }
 
 // --- Plugins / MCP / LSP panel -------------------------------------------
+/** Перечитать каталоги с диска: выгрузка → сброс кэша → чтение заново. */
+async function reloadPlugins(): Promise<void> {
+  setIndicator(t("web.plugins.reloading"), false);
+  const res = await api<Dict>("/api/reload/plugins", { method: "POST" });
+  if (!res.ok || !res.data || res.data.ok !== true) {
+    setIndicator(t("web.plugins.reload_failed"), true);
+    return;
+  }
+  const report = ((res.data.reload as Dict) || {}) as { plugins?: Dict; skills?: Dict };
+  const plugins = (report.plugins || {}) as Dict;
+  const skills = (report.skills || {}) as Dict;
+  const parts = [
+    t("web.plugins.reload_done", {
+      loaded: String(plugins.loaded ?? 0),
+      unloaded: String(plugins.unloaded ?? 0),
+      failed: String(plugins.failed ?? 0),
+    }),
+  ];
+  if (Number(skills.added) > 0 || Number(skills.removed) > 0) {
+    parts.push(t("web.plugins.reload_skills", {
+      added: String(skills.added ?? 0),
+      removed: String(skills.removed ?? 0),
+    }));
+  }
+  setIndicator(parts.join(" · "), Number(plugins.failed) > 0);
+  // `.ts` под Node остаётся старым — говорим прямо, а не радуемся зря.
+  if (Number(plugins.staleTs) > 0) {
+    setIndicator(t("web.plugins.reload_stale", { count: String(plugins.staleTs) }), true);
+  }
+  await loadPlugins();
+}
+
 /** Живой тумблер плагина: POST + перечитывание (истина — ответ сервера). */
 async function togglePlugin(name: string, on: boolean): Promise<void> {
   const res = await api<Dict>("/api/plugins/" + encodeURIComponent(name), {
@@ -463,6 +495,12 @@ function renderPluginsPanel(): void {
   const pnote = el("div", "settings-note");
   pnote.textContent = t("web.settings.plugins_note");
   list.appendChild(pnote);
+  const reloadBtn = el("button", "sec-add");
+  reloadBtn.type = "button";
+  reloadBtn.appendChild(icon("refresh"));
+  reloadBtn.appendChild(el("span", "", t("web.plugins.reload")));
+  reloadBtn.addEventListener("click", () => void reloadPlugins());
+  list.appendChild(reloadBtn);
 
   list.appendChild(groupHeader(t("web.settings.mcp_servers"), (data.mcp || []).length));
   const mcpAdd = el("button", "sec-add");

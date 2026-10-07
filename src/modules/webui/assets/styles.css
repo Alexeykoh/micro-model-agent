@@ -985,19 +985,29 @@ body.light .sel > button { border: 1px solid var(--border); }
 /* Plugins tab: row list + nested #subOverlay popup (STYLE.md — строки и глифы,
    без рамок; сайдбар фиксирован 679px, поэтому не master-detail как у Trace). */
 .plg-summary { color: var(--dim-c); font-size: 11.5px; line-height: 1.4; margin: 2px 0 6px; }
-.plg-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; }
-.plg-row:hover .plg-name { color: var(--fg); }
+.plg-row {
+  display: flex; align-items: center; gap: 6px; padding: 4px 6px; margin: 0 -6px;
+  border-radius: 6px; cursor: pointer; transition: background .12s ease, color .12s ease;
+}
+.plg-row:hover { background: var(--hover-bg); }
+.plg-row:hover .plg-name { color: var(--accent); }
+.plg-row:hover .plg-badges { color: var(--dim-c); }
 .plg-g { flex: 0 0 auto; width: 12px; text-align: center; }
 .plg-g.ok { color: var(--green); }
 .plg-g.fail { color: var(--red); }
 .plg-g.dim { color: var(--dim-c); }
 .plg-g.warn { color: var(--yellow); }
 .plg-name { color: var(--fg); font-size: 12.5px; overflow-wrap: anywhere; }
-.plg-meta { color: var(--dim-c); font-size: 11.5px; overflow-wrap: anywhere; flex: 1 1 auto; }
+.plg-ver { color: var(--dim-c); font-size: 11.5px; }
+.plg-author { color: var(--accent); font-size: 11.5px; }
 .plg-badges { color: var(--dim-b); font-size: 11px; }
-.plg-desc { color: var(--dim-b); font-size: 11.5px; line-height: 1.4; padding: 0 0 4px 18px; overflow-wrap: anywhere; }
+/* Прижат вправо только тумблер: бейдж источника остаётся в потоке рядом с
+   именем, иначе `project`/`builtin` улетают к краю панели. */
+.plg-row .toggle { margin-left: auto; }
+.plg-desc { color: var(--dim-b); font-size: 11.5px; line-height: 1.4; padding: 0 0 4px 24px; overflow-wrap: anywhere; }
+.plg-row:hover + .plg-desc { color: var(--dim-c); }
 .plg-broken { cursor: default; }
-.plg-broken .plg-meta { color: var(--red); }
+.plg-broken .plg-name { color: var(--red); }
 .plg-info { padding: 2px 0; }
 .plg-desc-block { color: var(--fg); font-size: 12.5px; line-height: 1.5; margin: 6px 0; overflow-wrap: anywhere; }
 .plg-chips { display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap; margin: 4px 0; }
@@ -1186,12 +1196,14 @@ body.light .row .val.accent { color: var(--purple); }
   width: 34px; height: 18px; border-radius: 9px; background: var(--toggle-off);
   position: relative; cursor: pointer; flex: 0 0 auto;
 }
-body.light .toggle { background: var(--toggle-off); }
+/* `.toggle.on` перебивается по специфичности, если не исключить включённое:
+   в светлой теме тумблер выглядел выключенным при реально включённом плагине. */
+body.light .toggle:not(.on) { background: var(--toggle-off); }
+.toggle.on, body.light .toggle.on { background: var(--accent); }
 .toggle::after {
   content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
   border-radius: 50%; background: var(--toggle-knob); transition: .15s;
 }
-.toggle.on { background: var(--accent); }
 .toggle.on::after { left: 18px; background: var(--bg); }
 .seg { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .seg button {

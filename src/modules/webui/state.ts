@@ -82,6 +82,8 @@ export interface WebSkillInfo {
 export interface WebSkillsModule {
   getAvailable(): WebSkillInfo[];
   getLoaded(): WebSkillInfo[];
+  /** Пересканировать каталоги навыков (reload); undefined — не умеет. */
+  reloadSources?(): { added: number; removed: number };
 }
 
 /**
@@ -97,6 +99,8 @@ export interface WebPluginManager {
   getFailures(): PluginLoadFailure[];
   /** Живой тумблер; false — плагина нет (в ответе уже будет 404). */
   setEnabled(name: string, on: boolean): boolean;
+  /** Перечитать каталоги с диска (выгрузка + сброс кэша модулей + чтение). */
+  reload(): { unloaded: number; loaded: number; failed: number; staleTs: number };
 }
 
 /**

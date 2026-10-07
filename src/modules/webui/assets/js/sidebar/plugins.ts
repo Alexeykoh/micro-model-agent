@@ -29,12 +29,15 @@ function pluginGlyph(row: PluginRow): [string, string] {
   return ["✓", "ok"];
 }
 
-/** Правая часть заголовка строки: `v1.2.3 · автор`. */
-function rowMeta(row: PluginRow): string {
-  const parts: string[] = [];
-  if (row.version) parts.push("v" + row.version);
-  if (row.author) parts.push(String(row.author));
-  return parts.join(" · ");
+/** Версия и автор — разными спанами: версия dim, автор акцентом. */
+function rowMeta(row: PluginRow): DocumentFragment {
+  const frag = document.createDocumentFragment();
+  if (row.version) frag.appendChild(el("span", "plg-ver", "v" + String(row.version)));
+  if (row.author) {
+    if (row.version) frag.appendChild(document.createTextNode(" · "));
+    frag.appendChild(el("span", "plg-author", String(row.author)));
+  }
+  return frag;
 }
 
 /** Строка плагина: глиф, имя, мета, описание, тумблер. */
@@ -43,9 +46,8 @@ function pluginRow(row: PluginRow): HTMLElement {
   const [glyph, cls] = pluginGlyph(row);
   node.appendChild(el("span", "plg-g " + cls, glyph));
   node.appendChild(el("span", "plg-name", row.name));
-  const meta = rowMeta(row);
-  if (meta) node.appendChild(el("span", "plg-meta", meta));
-  node.appendChild(el("span", "plg-badges", badges(row)));
+  node.appendChild(rowMeta(row));
+  if (badges(row)) node.appendChild(el("span", "plg-badges", badges(row)));
 
   const toggle = makeToggle(!!row.enabled, (next) => {
     void togglePlugin(row.name, next);

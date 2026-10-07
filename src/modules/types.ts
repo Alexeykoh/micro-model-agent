@@ -123,4 +123,12 @@ export interface AgentPlugin {
   onMeta?(ctx: any, chunk: string): string | undefined;
   /** Вызывается один раз по завершении `run()` агента (финальный ответ, ошибка или прерывание). */
   onTurnEnd?(ctx: any, summary: TurnSummary): void;
+  /**
+   * Вызывается при выгрузке плагина (перезагрузка каталога, `/reload`) —
+   * освободить ресурсы: закрыть серверы, снять таймеры.
+   *
+   * Без этого хука перезагрузка течёт: `examples/plugins/web-ui` поднимает
+   * HTTP-сервер в `onSessionStart`, и копии накапливаются.
+   */
+  onUnload?(ctx?: any): void | Promise<void>;
 }

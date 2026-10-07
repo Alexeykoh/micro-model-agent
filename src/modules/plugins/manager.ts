@@ -1,10 +1,12 @@
-// Менеджер плагинов: регистрация с дедупом по версии, вкл/выкл и диспатч хуков
-// с изоляцией ошибок.
+// Реестр плагинов: регистрация с дедупом по версии, вкл/выкл и плоские записи.
+// Диспатчер хуков живёт отдельно (`dispatch.ts`) — здесь только состояние.
 import type { AgentPlugin, HostBridge, TurnSummary } from "../types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { AgentPhase, LLMResponse } from "../../core/types";
 import { semverGt } from "../updater/checker";
 import { Logger } from "../../logger/app-logger";
+import { PluginDispatcher } from "./dispatch";
+import { PluginLoader, invalidateModuleCache } from "./loader";
 import {
   buildRecord,
   firstLine,
@@ -12,31 +14,9 @@ import {
   type PluginLoadFailure,
   type PluginRecord,
 } from "./records";
+import { isInsideDir } from "../../tools/path-utils";
 
 const logger = new Logger("warn", "plugins");
-
-/**
- * Гоняет (возможно асинхронный) хук плагина с изоляцией ошибок. Синхронные
- * броски и асинхронные реджекты логгируются и глотаются — один битый плагин
- * не должен ронять агента и остальные плагины.
- */
-function safeInvoke(plugin: AgentPlugin, hookName: string, fn: () => unknown): unknown {
-  try {
-    const out = fn();
-    if (out instanceof Promise) {
-      // Промис реджектится УЖЕ ПОСЛЕ выхода из этого try/catch — вешаем catch
-      // сразу, иначе изоляцию ломает необработанный unhandledRejection.
-      out.catch((e: unknown) => {
-        logger.warn(`plugin "${plugin.name}" ${hookName} rejected`, { error: String(e) });
-      });
-      return undefined;
-    }
-    return out;
-  } catch (e) {
-    logger.warn(`plugin "${plugin.name}" ${hookName} threw`, { error: String(e) });
-    return undefined;
-  }
-}
 
 /**
  * Итог регистрации: `registered` (встал/заменил), `skipped_older` (дедуп по
@@ -55,31 +35,109 @@ export interface PluginInfo {
   source?: "builtin" | "global" | "project";
 }
 
-/** Менеджер плагинов: реестр, сортировка по приоритету, вкл/выкл, диспатч хуков. */
+/** Итог перезагрузки каталога плагинов. */
+export interface ReloadReport {
+  /** Выгружено плагинов (ушли из реестра, ресурсы освобождены). */
+  unloaded: number;
+  /** Загружено заново. */
+  loaded: number;
+  /** Не удалось перечитать (ошибка импорта или несовместимость). */
+  failed: number;
+  /** Файлы `.ts` под Node: кэш модуля не сбрасывается, нужен рестарт. */
+  staleTs: number;
+}
+
+/** Каталоги, из которых менеджер читает внешние плагины. */
+export interface PluginDirs {
+  globalPluginsDir: string;
+  projectPluginsDir: string;
+}
+
+/**
+ * Перезагрузить оба каталога: выгрузить внешние плагины (с `onUnload`), сбросить
+ * кэш модулей, прочитать заново.
+ *
+ * Живёт здесь, а не в отдельном сервисе, потому что каталоги известны только
+ * bootstrap'у, а перезагружать должны все три поверхности (CLI, REPL, веб) —
+ * иначе каждая завела бы свою копию этого кода.
+ */
+export function reloadPluginDirs(
+  pluginManager: PluginManager,
+  dirs: PluginDirs,
+  options?: { mmaVersion?: string },
+  logger?: { warn: (msg: string) => void },
+): ReloadReport {
+  const loader = new PluginLoader();
+  const loaded = (dir: string, source: "global" | "project") =>
+    loader.reloadFromDir(dir, pluginManager, logger, { source, mmaVersion: options?.mmaVersion });
+  const global = loaded(dirs.globalPluginsDir, "global");
+  const project = loaded(dirs.projectPluginsDir, "project");
+  return {
+    unloaded: global.unloaded + project.unloaded,
+    loaded: global.loaded + project.loaded,
+    failed: global.failed + project.failed,
+    staleTs: global.staleTs + project.staleTs,
+  };
+}
+
+/**
+ * Выгрузить внешние плагины и сбросить кэш модулей **без** чтения заново.
+ *
+ * Нужно перед полной пересборкой bootstrap (`/reload` в REPL): bootstrap создаёт
+ * новый `PluginManager`, и старые плагины без `onUnload` тихо пережили бы
+ * пересборку вместе со своими серверами. Заодно сбрасываем кэш — иначе новый
+ * bootstrap получил бы прежние версии файлов из `require`.
+ */
+export function unloadPluginsForReboot(
+  pluginManager: PluginManager,
+  dirs: PluginDirs,
+  logger?: { warn: (msg: string) => void },
+): string[] {
+  const loader = new PluginLoader();
+  const unloaded: string[] = [];
+  for (const dir of [dirs.globalPluginsDir, dirs.projectPluginsDir]) {
+    for (const { path } of loader.entryFiles(dir, logger)) invalidateModuleCache(path, logger);
+    unloaded.push(...pluginManager.unloadByDir(dir));
+  }
+  pluginManager.clearFailures();
+  return unloaded;
+}
+
+/** Реестр плагинов: дедуп, вкл/выкл, записи, диспетчер. */
 export class PluginManager {
   private plugins: AgentPlugin[] = [];
-  private hostBridge: HostBridge | null = null;
   private disabled = new Set<string>();
   private loadedAt = new Map<string, number>();
   private failures: PluginLoadFailure[] = [];
   /** Кэш плоских записей; инвалидируется на любое изменение реестра. */
   private recordsCache: PluginRecord[] | null = null;
+  private dispatcher = new PluginDispatcher(() => this.active());
+  /** Каталоги для `reload()`; ставит bootstrap. */
+  private dirs?: PluginDirs;
+  /** Версия MMA для гейта `minMmaVersion` при перезагрузке. */
+  private mmaVersion?: string;
+
+  /**
+   * Сообщить менеджеру, откуда он читает внешние плагины — чтобы `reload()`
+   * не зависел от вызывающего (у CLI, REPL и веба каталоги одинаковые).
+   */
+  setSourceDirs(dirs: PluginDirs, mmaVersion?: string): void {
+    this.dirs = dirs;
+    this.mmaVersion = mmaVersion;
+  }
+
+  /** Перечитать оба каталога (см. `reloadPluginDirs`). */
+  reload(): ReloadReport {
+    if (!this.dirs) return { unloaded: 0, loaded: 0, failed: 0, staleTs: 0 };
+    return reloadPluginDirs(this, this.dirs, { mmaVersion: this.mmaVersion });
+  }
 
   /**
    * Регистрирует host-мост (ставит REPL один раз). Подмешивается в каждый
    * хук-контекст как `ctx.hostBridge`, если вызывающий не дал свой.
    */
   setHostBridge(bridge: HostBridge): void {
-    this.hostBridge = bridge;
-  }
-
-  /** Подмешивает host-мост в хук-контекст (значение вызывающего побеждает). */
-  private withHost<T>(ctx: T): T {
-    if (!ctx || typeof ctx !== "object") return ctx;
-    if (!this.hostBridge || (ctx as Record<string, unknown>).hostBridge !== undefined) {
-      return ctx;
-    }
-    return { ...(ctx as object), hostBridge: this.hostBridge } as T;
+    this.dispatcher.setHostBridge(bridge);
   }
 
   /**
@@ -93,27 +151,62 @@ export class PluginManager {
    */
   register(plugin: AgentPlugin, source?: "builtin" | "global" | "project"): RegisterResult {
     const meta = validatePluginMeta(plugin);
-    if (meta.errors.length > 0) {
-      return { status: "invalid", errors: meta.errors };
-    }
+    if (meta.errors.length > 0) return { status: "invalid", errors: meta.errors };
     if (source) plugin.source = source;
     const existing = this.plugins.find((p) => p.name === plugin.name);
     if (existing) {
       if (semverGt(plugin.version || "0.0.0", existing.version || "0.0.0")) {
-        this.plugins = this.plugins.filter((p) => p.name !== plugin.name);
-        this.plugins.push(plugin);
-        this.loadedAt.set(plugin.name, Date.now());
-        this.sort();
-        this.recordsCache = null;
+        this.replace(existing, plugin);
         return { status: "registered", warnings: meta.warnings };
       }
       return { status: "skipped_older", existing };
     }
     this.plugins.push(plugin);
+    this.touch(plugin);
+    return { status: "registered", warnings: meta.warnings };
+  }
+
+  /** Заменить плагин на новую версию, сохранив позицию по приоритету. */
+  private replace(existing: AgentPlugin, next: AgentPlugin): void {
+    const index = this.plugins.indexOf(existing);
+    this.plugins[index] = next;
+    this.touch(next);
+  }
+
+  private touch(plugin: AgentPlugin): void {
     this.loadedAt.set(plugin.name, Date.now());
     this.sort();
     this.recordsCache = null;
-    return { status: "registered", warnings: meta.warnings };
+  }
+
+  private sort(): void {
+    this.plugins.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  }
+
+  /** Снять плагина с регистрации (вызывающий сам решает про `onUnload`). */
+  unregister(name: string): boolean {
+    const index = this.plugins.findIndex((p) => p.name === name);
+    if (index < 0) return false;
+    this.plugins.splice(index, 1);
+    this.loadedAt.delete(name);
+    this.recordsCache = null;
+    return true;
+  }
+
+  /**
+   * Выгрузить внешние плагины, лежащие внутри каталога, и вызвать у них
+   * `onUnload` — без него перезагрузка течёт сокетами (встроенные плагины из
+   * реестра не трогаем: их код не перечитывается).
+   */
+  unloadByDir(dir: string, ctx?: unknown): string[] {
+    const names: string[] = [];
+    for (const plugin of [...this.plugins]) {
+      if (!plugin.path || !isInsideDir(plugin.path, dir)) continue;
+      safeUnload(plugin, ctx);
+      this.unregister(plugin.name);
+      names.push(plugin.name);
+    }
+    return names;
   }
 
   /**
@@ -166,14 +259,16 @@ export class PluginManager {
     return this.failures.map((f) => ({ ...f }));
   }
 
-  private sort(): void {
-    this.plugins.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  /** Сбросить накопленные отказы — перезагрузка пересобирает список заново. */
+  clearFailures(): void {
+    this.failures = [];
+    this.recordsCache = null;
   }
 
   /**
    * Активные плагины в порядке приоритета — единственная точка фильтрации.
-   * Все диспатчеры и `getAllPlugins` идут через неё, поэтому выключение
-   * одного плагина не требует правок в 15 хуках.
+   * От неё зависят все диспатчеры и `getAllPlugins`, поэтому выключение одного
+   * плагина не требует правок в 15 хуках.
    */
   private active(): AgentPlugin[] {
     if (this.disabled.size === 0) return [...this.plugins];
@@ -211,142 +306,78 @@ export class PluginManager {
     return this.plugins.find((p) => p.name === name) ?? null;
   }
 
-  /**
-   * Рассылка простого хука всем активным плагинам. Изоляция ошибок — `safeInvoke`,
-   * поэтому девять однотипных циклов сводятся к одной строке на хук.
-   */
-  private fanout(rawCtx: any, hook: string, invoke: (plugin: AgentPlugin, ctx: any) => void): void {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.active()) {
-      safeInvoke(plugin, hook, () => invoke(plugin, ctx));
-    }
-  }
-
-  /** Гоняет хук сборки промпта по всем плагинам; собирает вклады. */
   runOnBuildPrompt(): (string | null)[] {
-    return this.active().map(
-      (p) => (safeInvoke(p, "onBuildPrompt", () => p.onBuildPrompt?.() ?? null) as string | null) ?? null,
-    );
+    return this.dispatcher.runOnBuildPrompt();
   }
 
-  /**
-   * Хук перед тулом. False (любой плагин против) — не выполнять.
-   * Возвращает false при блокировке, true при разрешении.
-   */
-  async runOnBeforeTool(rawCtx: any, call: ToolCall): Promise<boolean> {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.active()) {
-      if (plugin.onBeforeTool) {
-        try {
-          const result = await plugin.onBeforeTool(ctx, call);
-          // Контракт плагина разрешает блокировать `false` ИЛИ строкой-причиной
-          // (экзекутор тулов понимает оба). Проигнорировать строку здесь —
-          // молча не заблокировать, если путь когда-нибудь задействуют.
-          if (result === false || typeof result === "string") return false;
-        } catch (e) {
-          logger.warn(`plugin "${plugin.name}" onBeforeTool failed`, { error: String(e) });
-        }
-      }
-    }
-    return true;
+  runOnBeforeTool(rawCtx: any, call: ToolCall): Promise<boolean> {
+    return this.dispatcher.runOnBeforeTool(rawCtx, call);
   }
 
-  /** Хук после тула: отдаёт вызов и результат всем плагинам. */
-  async runOnAfterTool(rawCtx: any, call: ToolCall, result: ToolResult): Promise<void> {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.active()) {
-      if (plugin.onAfterTool) {
-        try {
-          await plugin.onAfterTool(ctx, call, result);
-        } catch (e) {
-          logger.warn(`plugin "${plugin.name}" onAfterTool failed`, { error: String(e) });
-        }
-      }
-    }
+  runOnAfterTool(rawCtx: any, call: ToolCall, result: ToolResult): Promise<void> {
+    return this.dispatcher.runOnAfterTool(rawCtx, call, result);
   }
 
-  /** Хук ошибки агента: рассылает ошибку всем плагинам. */
-  async runOnError(rawCtx: any, error: Error): Promise<void> {
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.active()) {
-      if (plugin.onError) {
-        try {
-          await plugin.onError(ctx, error);
-        } catch (e) {
-          logger.warn(`plugin "${plugin.name}" onError failed`, { error: String(e) });
-        }
-      }
-    }
+  runOnError(rawCtx: any, error: Error): Promise<void> {
+    return this.dispatcher.runOnError(rawCtx, error);
   }
 
-  /** Хук старта сессии. */
   runOnSessionStart(rawCtx: any): void {
-    this.fanout(rawCtx, "onSessionStart", (p, ctx) => p.onSessionStart?.(ctx));
+    this.dispatcher.runOnSessionStart(rawCtx);
   }
 
-  /** Хук перед обдумыванием (THINK). */
   runOnBeforeThink(rawCtx: any): void {
-    this.fanout(rawCtx, "onBeforeThink", (p, ctx) => p.onBeforeThink?.(ctx));
+    this.dispatcher.runOnBeforeThink(rawCtx);
   }
 
-  /** Хук после ответа LLM. */
   runOnAfterThink(rawCtx: any, response: LLMResponse | null): void {
-    this.fanout(rawCtx, "onAfterThink", (p, ctx) => p.onAfterThink?.(ctx, response));
+    this.dispatcher.runOnAfterThink(rawCtx, response);
   }
 
-  /** Хук конца сессии. */
   runOnSessionEnd(rawCtx: any): void {
-    this.fanout(rawCtx, "onSessionEnd", (p, ctx) => p.onSessionEnd?.(ctx));
+    this.dispatcher.runOnSessionEnd(rawCtx);
   }
 
-  /** Хук вызова тула (факт вызова, без результата). */
   runOnToolCall(rawCtx: any): void {
-    this.fanout(rawCtx, "onToolCall", (p, ctx) => p.onToolCall?.(ctx));
+    this.dispatcher.runOnToolCall(rawCtx);
   }
 
-  /** Хук смены фазы агента. */
   runOnPhase(rawCtx: any, phase: AgentPhase): void {
-    this.fanout(rawCtx, "onPhase", (p, ctx) => p.onPhase?.(ctx, phase));
+    this.dispatcher.runOnPhase(rawCtx, phase);
   }
 
-  /** Хук старта тул-вызова. */
   runOnToolStart(rawCtx: any, call: ToolCall): void {
-    this.fanout(rawCtx, "onToolStart", (p, ctx) => p.onToolStart?.(ctx, call));
+    this.dispatcher.runOnToolStart(rawCtx, call);
   }
 
-  /** Хук конца тул-вызова (вызов, результат, длительность). */
   runOnToolEnd(rawCtx: any, call: ToolCall, result: ToolResult, durationMs: number): void {
-    this.fanout(rawCtx, "onToolEnd", (p, ctx) => p.onToolEnd?.(ctx, call, result, durationMs));
+    this.dispatcher.runOnToolEnd(rawCtx, call, result, durationMs);
   }
 
-  /** Прогоняет текстовый чанк через трансформы плагинов; возвращает (возможно заменённый) чанк. */
   runOnText(rawCtx: any, chunk: string): string {
-    let out = chunk;
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.active()) {
-      if (plugin.onText) {
-        const next = safeInvoke(plugin, "onText", () => plugin.onText!(ctx, out));
-        if (typeof next === "string") out = next;
-      }
-    }
-    return out;
+    return this.dispatcher.runOnText(rawCtx, chunk);
   }
 
-  /** Прогоняет мета-чанк через трансформы плагинов; возвращает (возможно заменённый) чанк. */
   runOnMeta(rawCtx: any, chunk: string): string {
-    let out = chunk;
-    const ctx = this.withHost(rawCtx);
-    for (const plugin of this.active()) {
-      if (plugin.onMeta) {
-        const next = safeInvoke(plugin, "onMeta", () => plugin.onMeta!(ctx, out));
-        if (typeof next === "string") out = next;
-      }
-    }
-    return out;
+    return this.dispatcher.runOnMeta(rawCtx, chunk);
   }
 
-  /** Рассылает сводку завершённого прогона всем плагинам (раз за Agent.run()). */
   runOnTurnEnd(rawCtx: any, summary: TurnSummary): void {
-    this.fanout(rawCtx, "onTurnEnd", (p, ctx) => p.onTurnEnd?.(ctx, summary));
+    this.dispatcher.runOnTurnEnd(rawCtx, summary);
+  }
+}
+
+/** Вызов `onUnload` с той же изоляцией ошибок, что и у остальных хуков. */
+function safeUnload(plugin: AgentPlugin, ctx?: unknown): void {
+  if (!plugin.onUnload) return;
+  try {
+    const out = plugin.onUnload(ctx);
+    if (out instanceof Promise) {
+      out.catch((e: unknown) => {
+        logger.warn(`plugin "${plugin.name}" onUnload rejected`, { error: String(e) });
+      });
+    }
+  } catch (e) {
+    logger.warn(`plugin "${plugin.name}" onUnload threw`, { error: String(e) });
   }
 }

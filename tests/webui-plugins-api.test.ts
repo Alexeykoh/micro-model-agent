@@ -194,6 +194,43 @@ describe("webui plugins REST", () => {
       expect(s.config.plugins?.disabled).toEqual(["my.plugin-2"]);
     });
   });
+
+  it("POST /api/reload/plugins returns the reload counts and broadcasts", async () => {
+    const s = createWebUiState();
+    s.config = structuredClone(DEFAULTS);
+    s.plugins = stubPlugins([{ name: "a" }, { name: "b" }]);
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/reload/plugins");
+      expect(res.status).toBe(200);
+      expect(res.json.ok).toBe(true);
+      const reload = res.json.reload as { plugins: { loaded: number }; skills: unknown };
+      expect(reload.plugins.loaded).toBe(2);
+      expect(res.json.plugins).toHaveLength(2);
+    });
+  });
+
+  it("POST /api/reload/plugins answers 503 without a plugin manager", async () => {
+    const s = createWebUiState();
+    s.config = structuredClone(DEFAULTS);
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/reload/plugins");
+      expect(res.status).toBe(503);
+      expect(res.json.error).toBe("plugins_unavailable");
+    });
+  });
+
+  it("a plugin named 'reload' stays toggleable (action namespace is separate)", async () => {
+    const s = createWebUiState();
+    s.config = structuredClone(DEFAULTS);
+    s.plugins = stubPlugins([{ name: "reload" }]);
+    s.saveConfig = () => {};
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/plugins/reload", { enabled: false });
+      expect(res.status).toBe(200);
+      expect(res.json.ok).toBe(true);
+      expect(s.config.plugins?.disabled).toEqual(["reload"]);
+    });
+  });
 });
 
 declare module "../src/modules/webui/state" {
