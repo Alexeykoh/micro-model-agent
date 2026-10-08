@@ -43,6 +43,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
   skills: ["skills"],
   plugins: ["plugins"],
   updater: ["updater"],
+  service: ["service"],
 };
 
 /** Вырезает подмножество ключей домена из полного AppConfig. */

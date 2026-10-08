@@ -7,6 +7,7 @@ import { resolveVerbosity } from "../ui/theme";
 import { printRunResult } from "./run-result";
 import { runSetup } from "./setup";
 import { runWeb, parsePort } from "./web-command";
+import { runServe, parseServePort } from "./service-command";
 import { applyAnswersToConfig } from "./setup-order";
 import { relaunchCli } from "./relaunch";
 import { defaultOutputBus, getDefaultChannel, JsonOutputSink, writeMachineJson } from "../output";
@@ -162,6 +163,30 @@ async function main(): Promise<void> {
       host: webOpts.host,
       token: webOpts.token,
       noOpen: webOpts.open === false,
+      projectDir,
+      noAgentsMd,
+    });
+    process.exit(0);
+  }
+
+  // `serve` долгоживущий: стартует здесь, после parse, вне one-shot exit-хука.
+  if (program.args[0] === "serve") {
+    const serveOpts = (program.commands.find((c) => c.name() === "serve")?.opts() ?? {}) as {
+      port?: string;
+      host?: string;
+      token?: string;
+    };
+    let port: number | undefined;
+    try {
+      port = parseServePort(serveOpts.port);
+    } catch (err) {
+      getDefaultChannel().writeLine(pc.red(`  ${errMsg(err)}`), "stderr");
+      process.exit(2);
+    }
+    await runServe({
+      port,
+      host: serveOpts.host,
+      token: serveOpts.token,
       projectDir,
       noAgentsMd,
     });

@@ -794,4 +794,38 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
     (c, v) => {
       c.images = { ...(c.images ?? DEFAULTS.images!), maxBytes: v as number };
     }),
+
+  int("service.port", "service", 1, 65535, 1, false,
+    (c) => c.service.port,
+    (c, v) => { c.service.port = v as number; }),
+  str("service.host", "service",
+    (c) => c.service.host,
+    (c, v) => { c.service.host = String(v).trim() || DEFAULTS.service.host; }),
+  { ...strOpt("service.token", "service",
+    (c) => c.service.token ?? "",
+    (c, v) => {
+      const s = String(v ?? "").trim();
+      c.service.token = s === "" ? undefined : s;
+    }), allowEmpty: true },
+  int("service.resultRetentionDays", "service", 1, 365, 1, false,
+    (c) => c.service.resultRetentionDays,
+    (c, v) => { c.service.resultRetentionDays = v as number; }),
+  int("service.idempotencyTtlHours", "service", 1, 720, 1, false,
+    (c) => c.service.idempotencyTtlHours,
+    (c, v) => { c.service.idempotencyTtlHours = v as number; }),
+  int("service.syncWaitMs", "service", 0, 120_000, 1000, false,
+    (c) => c.service.syncWaitMs,
+    (c, v) => { c.service.syncWaitMs = v as number; }),
+  int("service.maxQueueLength", "service", 1, 100, 1, false,
+    (c) => c.service.maxQueueLength,
+    (c, v) => { c.service.maxQueueLength = v as number; }),
+  int("service.callbackTimeoutMs", "service", 1000, 120_000, 1000, false,
+    (c) => c.service.callbackTimeoutMs,
+    (c, v) => { c.service.callbackTimeoutMs = v as number; }),
+  { ...strOpt("service.webhookSecret", "service",
+    (c) => c.service.webhookSecret ?? "",
+    (c, v) => {
+      const s = String(v ?? "").trim();
+      c.service.webhookSecret = s === "" ? undefined : s;
+    }), allowEmpty: true },
 ];

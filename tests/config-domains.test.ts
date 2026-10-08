@@ -40,8 +40,8 @@ describe("domains.ts — CONFIG_DOMAINS mapping", () => {
     expect(dupes).toEqual([]);
   });
 
-  it("has 15 domains", () => {
-    expect(Object.keys(CONFIG_DOMAINS)).toHaveLength(15);
+  it("has 16 domains", () => {
+    expect(Object.keys(CONFIG_DOMAINS)).toHaveLength(16);
   });
 });
 
@@ -123,7 +123,7 @@ describe("domains.ts — saveDomainFiles + loadDomainFiles round-trip", () => {
     const configDir = join(tmpDir, "config");
     expect(existsSync(configDir)).toBe(true);
     const files = readdirSync(configDir).filter((f) => f.endsWith(".json"));
-    expect(files).toHaveLength(15);
+    expect(files).toHaveLength(16);
     expect(files).toContain("core.json");
     expect(files).toContain("security.json");
     expect(files).toContain("provider.json");

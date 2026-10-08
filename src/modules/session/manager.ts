@@ -61,8 +61,12 @@ export class SessionManager {
     this.options.encryption = config;
   }
 
-  /** Создать сессию (имя/оверрайды опциональны), сделать активной. */
-  create(name?: string, securityOverrides?: SessionMeta["securityOverrides"]): SessionMeta {
+  /** Создать сессию (имя/оверрайды/внешний ключ опциональны), сделать активной. */
+  create(
+    name?: string,
+    securityOverrides?: SessionMeta["securityOverrides"],
+    externalRef?: string,
+  ): SessionMeta {
     const now = new Date().toISOString();
     const id = `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     const sessionName = name || t("session.default_name", { date: now.slice(0, 10) });
@@ -77,6 +81,7 @@ export class SessionManager {
       contextWindow: this.options.contextWindow,
       projectDir: this.options.projectDir,
       securityOverrides,
+      ...(externalRef ? { externalRef } : {}),
     };
     this.store.saveMeta(id, meta);
     this.activeId = id;

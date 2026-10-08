@@ -4,6 +4,29 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.35.0] - 2026-10-08
+
+Agent Service API v1: MMA can run as a long-lived HTTP service (`mma serve`)
+that accepts tasks from external systems (bots, backends, cron) over a stable,
+versioned contract, without touching the agent loop, REPL or `mma web`.
+
+### Added
+
+- **`mma serve`** (`src/cli/service-command.ts`, `src/cli/commands.ts`, `src/cli/main.ts`): boots `bootstrap()` + `RunPool` + per-session runners and serves the Agent Service API on `service.port`/`service.host`, with a bearer token (`service.token`, mandatory for non-loopback), `GET /v1/health` and `GET /v1/ready`.
+- **`src/modules/service/`** runtime: separate public API layer over the shared primitives (`RunPool`, `spawnSessionRunner`, `Agent`, `SessionManager`); process-per-tenant (silo) isolation.
+- **Sessions API** (`/v1/sessions` CRUD) with optional `SessionMeta.externalRef` (backward compatible) for integrator keys.
+- **Tasks API** (`POST /v1/sessions/:id/tasks`, `GET /v1/tasks/:jobId`, `POST /v1/tasks/:jobId/cancel`, `POST /v1/tasks/:jobId/answer`): task = a turn over a session; `job`/`interactive` modes; 202/Location/Retry-After, FIFO queue per session, `wait:true` bounded by `service.syncWaitMs`, `Idempotency-Key` dedup, cooperative cancel and timeout.
+- **SSE event stream** (`GET /v1/sessions/:id/events`): versioned envelope (`v`, per-session monotonic `seq`), keep-alive pings, `Last-Event-ID`/`?since=` resume, `X-Accel-Buffering: no`, abort propagation for interactive tasks.
+- **Structured output** (`output:{format:"json",schema}`): JSON-Schema instruction, runtime validation (strict subset), one retry, then `output_invalid`.
+- **Webhook push** (`callbackUrl`): HMAC-SHA256 signature over `timestamp.body`, `X-Mma-Timestamp`/`X-Mma-Event-Id`/`X-Mma-Signature`, bounded retries with backoff+jitter; pull stays the source of truth.
+- **Errors**: RFC 9457 `application/problem+json` with stable `type` URIs (`is_retriable`, `retry_after_ms`, `suggestions`).
+- **Config domain `service.*`** (`port`, `host`, `token`, `resultRetentionDays`, `idempotencyTtlHours`, `syncWaitMs`, `maxQueueLength`, `callbackTimeoutMs`, `webhookSecret`) in `config/service.json`, `/config`, and web Settings → Network; env `MMA_SERVICE_*`.
+- **Docs**: `docs/agents/service-api.md` (API reference); design spec `docs/specs/2026-10-08-agent-service-api-design.md`; plan `docs/plans/2026-10-08-agent-service-api.md`.
+
+### Changed
+
+- **`RunPool`** (`src/modules/webui/session/session-pool.ts`): optional `maxQueue` constructor parameter (defaults to the previous `MAX_QUEUE_LENGTH`); no behavior change for `mma web`.
+
 ## [2.34.1] - 2026-10-08
 
 Test-infrastructure health (no product behaviour change): the e2e and
