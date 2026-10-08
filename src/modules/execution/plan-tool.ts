@@ -14,6 +14,10 @@ export interface PlanToolDeps {
   trackerRef: { current: PlanTracker | null };
   preserveActive(): void;
   setPlan(plan: Plan): void;
+  /** Персистит мутацию плана: глобальный active.json И слот активной сессии.
+   *  Прямой `store.saveActive` оставлял слот сессии протухшим (после reload
+   *  сайдбар показывал старые статусы шагов). */
+  persistPlan(plan: Plan): void;
   /** Запоминает завершённый план, чтобы финальный аудит проверил его после
    *  очистки трекера авто-архивом. */
   recordCompleted(plan: Plan): void;
@@ -203,7 +207,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
             existing.push({ id: nextId++, text: item, done: false });
           }
           currentStep.subtasks = existing;
-          deps.store.saveActive(tracker.getPlan());
+          deps.persistPlan(tracker.getPlan());
           const display = tracker.toPromptBlock();
           const addedIds = existing.slice(-items.length).map((s) => s.id);
           const addedOutput =
@@ -233,7 +237,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
           }
           const marked = done.marked;
           currentStep.subtasks = subs;
-          deps.store.saveActive(tracker.getPlan());
+          deps.persistPlan(tracker.getPlan());
           const doneCount = subs.filter((s) => s.done).length;
           const display = tracker.toPromptBlock();
           // Отметка подзадачи done НЕ должна автозавершать шаг плана: шаг done,

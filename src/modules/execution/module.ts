@@ -281,26 +281,41 @@ export class ExecutionModule implements AgentModule {
     this._auditSkipsRemaining = 0; // план явно создан — взводим audit-gate
   }
 
+  /** Персистит мутацию существующего плана (статус шага, todo, kind-switch):
+   *  глобальный active.json плюс слот активной сессии. `setPlan` покрывает
+   *  создание/переключение, но прямые `store.saveActive` из план-тулов слот не
+   *  зеркалили — после reload сайдбар показывал устаревшие статусы шагов. */
+  persistPlan(plan: Plan): void {
+    this.store.saveActive(plan);
+    if (!this.sessionId) return;
+    try {
+      this.store.saveSessionActive(this.sessionId, plan);
+    } catch {
+      // fail-open: слот не должен ронять мутацию плана
+    }
+  }
+
   /** Переключает трекер на план другой сессии. Персистит текущий трекер
-   *  в слот старой сессии (пустота тоже запоминается через clear, чтобы
-   *  возврат не воскрешал чужой план), загружает план новой сессии.
-   *  Завершённый на диске план — в архив, как в restorePlan. */
+   *  в слот старой сессии, загружает план новой сессии. Завершённый на диске
+   *  план — в архив, как в restorePlan. */
   switchSession(id: string | null): void {
     const prev = this.sessionId;
     if (prev === id) return;
     // Персист уходящей стороны. Стартовый трекер без sessionId (restorePlan
     // до известной сессии) усыновляется новой сессией, а не теряется.
+    //
+    // Уходящий слот НЕ чистим, когда своего трекера нет: отсутствие плана в
+    // ЭТОМ инстансе не значит, что у сессии нет плана — в web план сессии
+    // принадлежит её per-session раннеру, а общий модуль UI лишь читает слот.
+    // Старый `clear` на пустом трекере стирал чужой живой слот (репорт:
+    // «план не появляется в сайдбаре» после переключения/создания сессии).
+    // Опустение слота владелец фиксирует сам — `flushSessionPlan` при
+    // обнулении трекера (abort/архив), а не сторонним наблюдателем.
     if (this.tracker) {
       try {
         this.store.saveSessionActive(prev ?? id ?? "", this.tracker.getPlan());
       } catch {
         // fail-open: битый id слота / ФС — трекер в памяти остаётся
-      }
-    } else if (prev) {
-      try {
-        this.store.clearSessionActive(prev);
-      } catch {
-        /* best-effort */
       }
     }
     this.sessionId = id;
@@ -684,6 +699,7 @@ export class ExecutionModule implements AgentModule {
       trackerRef: this.trackerRef,
       preserveActive: () => this.preserveActive(),
       setPlan: (p) => this.setPlan(p),
+      persistPlan: (p) => this.persistPlan(p),
       recordCompleted: (p) => this.recordCompleted(p),
       clearCompleted: () => this.clearCompleted(),
       hasStepDeliverables: (s) => this.hasStepDeliverables(s),

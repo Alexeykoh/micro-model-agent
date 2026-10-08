@@ -4,6 +4,20 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.33.1] - 2026-10-08
+
+Post-mortem of a live `mma web` session (`ses_muzbb045_9v1r4t`): the sidebar
+plan vanished, the feed had no first message, and the session name never
+reached the open tab. All three were harness defects around per-session state,
+not model behaviour.
+
+### Fixed
+
+- **`ExecutionModule.switchSession` wiped another session's plan slot** (`src/modules/execution/module.ts`): the shared web UI module (no in-memory tracker) cleared the outgoing session slot on every switch/create, destroying a plan owned by that session's per-session runner — the sidebar then showed no plan after switching tabs or reloading. The outgoing slot is no longer cleared when this instance has no owned plan; the owner clears it itself via `flushSessionPlan` (abort/archive).
+- **Plan step/todo mutations only wrote the global `active.json`** (`src/modules/execution/{plan-actions,plan-tool,module}.ts`): `plan_step`, `plan update`, `todo add/done` and kind-switch persisted to the shared library but not to the owning session slot, so a reload showed stale step statuses. New `persistPlan` dependency mirrors every plan mutation into the session slot.
+- **Web auto-opened an existing session as "live" without its transcript** (`src/modules/webui/assets/app.ts`, `state-sync.ts`): on boot the server-active session opened with `historyLoaded=true` and no fetch, so a reload mid-turn showed only the live SSE tail — no first message, no earlier turns. It now hydrates the transcript when the session already has messages (new pure helper `shouldHydrateAutoOpen`).
+- **Session renames never reached the open tab/dropdown** (`src/modules/session/manager.ts`, `src/modules/webui/module.ts`): the deterministic auto-name and the async LLM title changed `meta.json` only; the tab kept the stale name until an unrelated state push, and the LLM title never appeared. `SessionManager.onRename` (shared with pinned runner siblings) now broadcasts `sessions` + `state`, so the live tab and list update without a reload.
+
 ## [2.33.0] - 2026-10-08
 
 A MoE turn on a local LM Studio backend died without a word: every subtask

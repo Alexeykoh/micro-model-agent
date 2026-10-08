@@ -279,7 +279,7 @@ function autoResolveStepKind(
           ? missing.every((f) => deps.wasFileDeleted!(f))
           : false;
         if (wasDeleted) {
-          switchStepToDelete(tracker.getPlan(), target, (p) => deps.store.saveActive(p));
+          switchStepToDelete(tracker.getPlan(), target, (p) => deps.persistPlan(p));
         }
       }
     }
@@ -289,7 +289,7 @@ function autoResolveStepKind(
   if (leftovers.length === 0 && deps.wasFileDeleted) {
     const tokens = deps.missingStepDeliverables(target);
     if (tokens.length > 0 && tokens.every((f) => !deps.wasFileDeleted!(f))) {
-      switchStepToCreate(tracker.getPlan(), target, (p) => deps.store.saveActive(p));
+      switchStepToCreate(tracker.getPlan(), target, (p) => deps.persistPlan(p));
       return {
         success: false,
         output: t("plan.deliverables_missing", {
@@ -560,7 +560,7 @@ export async function updatePlanStep(deps: PlanToolDeps, ctx: ToolContext, args:
   tracker.updateStepStatus(stepId, status as StepUpdateStatus);
   if (args.note) tracker.addNote(Number(args.step), String(args.note));
   tracker.syncCurrentStep();
-  deps.store.saveActive(tracker.getPlan());
+  deps.persistPlan(tracker.getPlan());
   // Шаги без файловых токенов нормальны в некодовых задачах (research, советы,
   // сравнения) — не гоним модель материализовывать файлы ради deliverables.
   // Заметка срабатывает только в планах с хоть одним файловым шагом и просит

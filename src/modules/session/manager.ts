@@ -32,6 +32,13 @@ export class SessionManager {
   private options: SessionManagerOptions;
   /** Контексты сессий (для изоляции) по id */
   private sessionContexts: Map<string, SessionContext> = new Map();
+  /**
+   * Слушатели переименования. Массив ОБЩИЙ с pinned-сиблингами (`forkPinned`),
+   * потому что авто-имя пишет раннер через свой sibling: без общей ссылки
+   * подписка на главный менеджер не увидела бы смену имени. Использует web,
+   * чтобы живая вкладка/список обновлялись без reload.
+   */
+  private renameListeners: Array<(meta: SessionMeta) => void> = [];
 
   constructor(store: SessionStore, options: SessionManagerOptions) {
     this.store = store;
@@ -122,6 +129,23 @@ export class SessionManager {
     meta.name = name;
     meta.nameSource = source;
     this.store.saveMeta(id, meta);
+    for (const cb of this.renameListeners) {
+      try {
+        cb(meta);
+      } catch {
+        // fail-open: подписчик (UI-бродкаст) не должен ронять переименование
+      }
+    }
+  }
+
+  /** Подписка на переименование любой сессии (в т.ч. через pinned-сиблинг).
+   *  Возвращает функцию отписки. */
+  onRename(cb: (meta: SessionMeta) => void): () => void {
+    this.renameListeners.push(cb);
+    return () => {
+      const i = this.renameListeners.indexOf(cb);
+      if (i >= 0) this.renameListeners.splice(i, 1);
+    };
   }
 
   /**
@@ -218,6 +242,7 @@ export class SessionManager {
     }
     const sibling = new SessionManager(this.store, this.options);
     sibling.activeId = id;
+    sibling.renameListeners = this.renameListeners;
     return sibling;
   }
 

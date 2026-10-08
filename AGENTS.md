@@ -1306,7 +1306,30 @@ quality-gate и выглядят аккуратно.
 - **NotifyPlugin**: одна строка `debug` с id сессии вместо `info` без id
   (14 одинаковых строк `Session ended` на один ход).
 
-### Current Version: 2.33.0
+### Session UI Hydration (2.33.1)
+
+Разбор живой сессии `ses_muzbb045_9v1r4t` (`mma web`): план не появлялся в сайдбаре,
+в ленте не было первого сообщения, имя сессии не доезжало до открытой вкладки. Три
+дефекта харнесса вокруг per-session состояния.
+
+- **Слот плана больше не стирается чужим переключением** (`ExecutionModule.switchSession`,
+  `src/modules/execution/module.ts`): общий web-модуль UI (трекер null) на каждом
+  `switchSession`/create чистил слот уходящей сессии — а план этой сессии принадлежал её
+  per-session раннеру. Возврат/перезагрузка → сайдбар пуст. Теперь уходящий слот чистится
+  только когда у инстанса есть свой трекер; опустение фиксирует владелец через `flushSessionPlan`.
+- **Мутации плана персистятся и в слот сессии** (`persistPlan`, `plan-actions.ts`,
+  `plan-tool.ts`): `plan_step`/`plan update`/`todo` и kind-switch писали только глобальный
+  `active.json`; после reload сайдбар показывал устаревшие статусы. `PlanToolDeps.persistPlan`
+  зеркалит мутацию в слот.
+- **Авто-открытая сессия гидрирует транскрипт** (`assets/app.ts`, `assets/js/state-sync.ts`):
+  активная сессия открывалась как «live» (`historyLoaded=true`), история не тянулась — после
+  reload посреди хода в ленте только SSE-хвост, без первого сообщения. `shouldHydrateAutoOpen`
+  (чистая) — сессия с сообщениями грузит историю, новая остаётся live.
+- **Переименование доезжает до UI** (`SessionManager.onRename`, `webui/module.ts`): авто-имя и
+  LLM-заголовок меняли только `meta.json`; вкладка держала старое имя, а LLM-заголовок не
+  показывался вообще. Слушатель (общий с pinned-сиблингами раннеров) шлёт `sessions` + `state`.
+
+### Current Version: 2.33.1
 
 ### Changelog
 

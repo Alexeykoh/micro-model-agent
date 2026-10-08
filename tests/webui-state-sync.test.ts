@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { tabs, session } from "../src/modules/webui/assets/js/core/store/index.js";
-import { routeState, storeSnapshot, mergeUsage } from "../src/modules/webui/assets/js/state-sync.js";
+import { routeState, storeSnapshot, mergeUsage, shouldHydrateAutoOpen } from "../src/modules/webui/assets/js/state-sync.js";
 
 beforeEach(() => {
   tabs.tabs = [
@@ -44,5 +44,20 @@ describe("state-sync", () => {
   it("storeSnapshot writes to the matching tab", () => {
     expect(storeSnapshot({ sessionId: "B", contextUsed: 3 })).toBe("B");
     expect(tabs.tabs[1].state).toMatchObject({ contextUsed: 3 });
+  });
+
+  it("hydrates an auto-opened session only when it already has messages", () => {
+    const sessions = [
+      { id: "A", messageCount: 16 },
+      { id: "B", messageCount: 0 },
+      { id: "C" },
+    ];
+    expect(shouldHydrateAutoOpen(sessions, "A")).toBe(true);
+    expect(shouldHydrateAutoOpen(sessions, "B")).toBe(false);
+    // Unknown count / unknown session / no session → stay live (no fetch).
+    expect(shouldHydrateAutoOpen(sessions, "C")).toBe(false);
+    expect(shouldHydrateAutoOpen(sessions, "ghost")).toBe(false);
+    expect(shouldHydrateAutoOpen(sessions, null)).toBe(false);
+    expect(shouldHydrateAutoOpen(undefined, "A")).toBe(false);
   });
 });
