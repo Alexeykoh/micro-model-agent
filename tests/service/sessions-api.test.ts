@@ -1,24 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { startAgentService } from "../../src/modules/service/module";
+import { startAgentService, type ServiceHandle } from "../../src/modules/service/module";
 import { httpJson } from "./http-client";
 import { cleanupServiceDir, makeServiceDeps, tempServiceDir } from "./harness";
 
 let dir: string;
-let stop: (() => void) | undefined;
+let handle: ServiceHandle | undefined;
 
 beforeEach(() => {
   dir = tempServiceDir();
 });
 afterEach(() => {
-  stop?.();
-  stop = undefined;
+  handle?.stop();
+  handle = undefined;
   cleanupServiceDir(dir);
 });
 
 async function boot(): Promise<string> {
-  const svc = startAgentService(makeServiceDeps({ dir }));
-  stop = svc.stop;
-  return await svc.url;
+  handle = startAgentService(makeServiceDeps({ dir }));
+  return await handle.url;
 }
 
 describe("sessions api", () => {
@@ -65,5 +64,24 @@ describe("sessions api", () => {
     const url = await boot();
     const res = await httpJson(`${url}/v1/sessions/ses_missing`);
     expect(res.status).toBe(404);
+  });
+
+  it("filters the list by status", async () => {
+    const url = await boot();
+    await httpJson(`${url}/v1/sessions`, { method: "POST", json: {} });
+    const idle = await httpJson(`${url}/v1/sessions?status=idle`);
+    expect((idle.json.sessions as unknown[]).length).toBeGreaterThan(0);
+    const working = await httpJson(`${url}/v1/sessions?status=working`);
+    expect(working.json.sessions).toEqual([]);
+  });
+
+  it("409s deleting a busy session", async () => {
+    const url = await boot();
+    const created = await httpJson(`${url}/v1/sessions`, { method: "POST", json: {} });
+    const id = created.json.id as string;
+    handle!.state.pool.reserve(id);
+    const del = await httpJson(`${url}/v1/sessions/${id}`, { method: "DELETE" });
+    expect(del.status).toBe(409);
+    handle!.state.pool.forceRelease(id);
   });
 });

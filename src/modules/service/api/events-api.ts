@@ -8,6 +8,7 @@
  * продолжается (pull — источник правды).
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { abortInteractiveTask } from "./tasks-api";
 import { sendProblem } from "../http/respond";
 import { problem } from "../runtime/problem";
 import { formatFrame } from "../runtime/emit";
@@ -61,7 +62,7 @@ export function handleEventsApi(
   req.on("close", () => {
     clearInterval(ping);
     s.clients.delete(client);
-    abortInteractive(s, sessionId);
+    abortInteractiveTask(s, sessionId);
   });
   return true;
 }
@@ -72,19 +73,6 @@ function parseSince(req: IncomingMessage, reqUrl: URL): number {
   const raw = typeof header === "string" && header.trim() ? header : reqUrl.searchParams.get("since");
   const n = raw ? Number(raw) : 0;
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-}
-
-/** Закрытие SSE отменяет только интерактивную задачу сессии (job продолжается). */
-function abortInteractive(s: AgentServiceState, sessionId: string): void {
-  const running = s.tasks
-    .listForSession(sessionId)
-    .find((t) => t.mode === "interactive" && (t.status === "running" || t.status === "waiting_input"));
-  if (!running) return;
-  try {
-    s.pool.getRunner(sessionId)?.agent.shutdown(sessionId);
-  } catch {
-    /* cooperative cancel best-effort */
-  }
 }
 
 function safeWrite(res: ServerResponse, frame: string): void {

@@ -233,6 +233,21 @@ bun run mma web --port 8080 --host 127.0.0.1 --no-open
 - Settings panel: models/providers, context, reasoning, memory, skills, plugins/MCP, security. Slash commands (`/help`, `/status`, `/config`, `/model`, `/provider`, `/memory`, …) work in the browser too.
 - Env: `MMA_WEBUI_PORT`, `MMA_WEBUI_HOST`, `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
 
+### Service mode (`mma serve`)
+
+Run MMA as a headless HTTP service (Agent Service API v1) for external systems — bots, backends, cron. Same agent/sessions/tools as the CLI, but a stable, versioned contract (HTTP + SSE) instead of a TTY.
+
+```bash
+bun run mma serve                                  # 127.0.0.1:7331
+bun run mma serve --port 8080 --host 0.0.0.0 --token "$SECRET"
+```
+
+- **1 process = 1 tenant** (silo): its own `MMA_CONFIG_DIR`, workspace, memory. A control plane maps tenants to processes; the runtime does not know about neighbours.
+- **Auth:** `Authorization: Bearer <token>` for the internal control-plane call (`service.token`, mandatory for non-loopback). The runtime is **not** meant to be exposed to the internet directly.
+- Endpoints: `/v1/sessions` CRUD, `/v1/sessions/:id/tasks` (jobs), `/v1/tasks/:jobId` (+`/cancel`, `/answer`), `/v1/sessions/:id/events` (SSE), `/v1/health`, `/v1/ready`.
+- Config: `service.port`, `service.host`, `service.token`, `service.resultRetentionDays`, `service.idempotencyTtlHours`, `service.syncWaitMs`, `service.maxQueueLength`, `service.callbackTimeoutMs`, `service.webhookSecret`. Env: `MMA_SERVICE_PORT`, `MMA_SERVICE_HOST`, `MMA_SERVICE_TOKEN`.
+- Full reference: [docs/agents/service-api.md](./docs/agents/service-api.md) · guide: [docs/serve-mode.md](./docs/serve-mode.md) · design: [docs/specs/2026-10-08-agent-service-api-design.md](./docs/specs/2026-10-08-agent-service-api-design.md).
+
 ### Development
 
 ```bash

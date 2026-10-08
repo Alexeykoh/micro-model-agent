@@ -3,6 +3,7 @@ import type { AgentResult, ToolEvent } from "../../src/core/types";
 import type { AppConfig } from "../../src/config/types";
 import { startAgentService } from "../../src/modules/service/module";
 import type { ServiceDeps } from "../../src/modules/service/state";
+import { signature } from "../../src/modules/service/runtime/webhook";
 import { httpJson } from "./http-client";
 import { cleanupServiceDir, firstSessionId, makeServiceDeps, tempServiceDir } from "./harness";
 
@@ -42,6 +43,24 @@ function schemaAgent(alwaysInvalid: boolean) {
       },
       setPromptIO() {},
       shutdown() {},
+    },
+  };
+}
+
+/** Агент, чей `run` висит до `shutdown` (эмуляция кооперативного обрыва). */
+function abortableAgent() {
+  let rejectRun: ((err: unknown) => void) | undefined;
+  return {
+    agent: {
+      run(): Promise<AgentResult> {
+        return new Promise<AgentResult>((_resolve, reject) => {
+          rejectRun = reject;
+        });
+      },
+      setPromptIO() {},
+      shutdown() {
+        rejectRun?.(new Error("AbortError"));
+      },
     },
   };
 }
@@ -213,6 +232,97 @@ describe("tasks api", () => {
     });
     expect(res.json.status).toBe("failed");
     expect(String((res.json.error as { type: string }).type)).toContain("output-invalid");
+  });
+
+  it("validates the submit body", async () => {
+    const url = await boot(makeDeps(fastAgent("x")));
+    const sid = await firstSessionId(url);
+    expect((await submit(url, sid, { input: "   " })).status).toBe(400);
+    expect((await submit(url, sid, { input: "x", output: { format: "xml" } })).status).toBe(422);
+    expect((await submit(url, sid, { input: "x", toolAllowlist: [1] })).status).toBe(400);
+    expect((await submit(url, sid, { input: "x", timeoutMs: "soon" })).status).toBe(400);
+  });
+
+  it("supports output.format=text", async () => {
+    const url = await boot(makeDeps(fastAgent("plain")));
+    const sid = await firstSessionId(url);
+    const res = await submit(url, sid, { input: "x", wait: true, output: { format: "text" } });
+    expect(res.json.status).toBe("succeeded");
+    expect((res.json.result as { text: string }).text).toBe("plain");
+  });
+
+  it("times out a hanging task", async () => {
+    const ab = abortableAgent();
+    const url = await boot(makeDeps(ab.agent));
+    const sid = await firstSessionId(url);
+    const res = await submit(url, sid, { input: "hang", mode: "job", wait: true, timeoutMs: 60 });
+    expect(res.status).toBe(200);
+    expect(res.json.status).toBe("timeout");
+    expect(String((res.json.error as { type: string }).type)).toContain("timeout");
+  });
+
+  it("cancels a running task cooperatively", async () => {
+    const ab = abortableAgent();
+    const url = await boot(makeDeps(ab.agent));
+    const sid = await firstSessionId(url);
+    const submitted = await submit(url, sid, { input: "run", mode: "job" });
+    const jobId = submitted.json.jobId as string;
+    await waitStatus(url, jobId, "running");
+    const cancel = await httpJson(`${url}/v1/tasks/${jobId}/cancel`, { method: "POST" });
+    expect(cancel.status).toBe(202);
+    await waitStatus(url, jobId, "cancelled");
+  });
+
+  it("404s cancel for an unknown task and 200s a terminal one", async () => {
+    const url = await boot(makeDeps(fastAgent("ok")));
+    expect((await httpJson(`${url}/v1/tasks/job_x/cancel`, { method: "POST" })).status).toBe(404);
+    const sid = await firstSessionId(url);
+    const done = await submit(url, sid, { input: "x", mode: "job", wait: true });
+    const again = await httpJson(`${url}/v1/tasks/${done.json.jobId}/cancel`, { method: "POST" });
+    expect(again.status).toBe(200);
+    expect(again.json.status).toBe("succeeded");
+  });
+
+  it("404s answer for an unknown task", async () => {
+    const url = await boot(makeDeps(fastAgent("x")));
+    const res = await httpJson(`${url}/v1/tasks/job_x/answer`, { method: "POST", json: { id: "q1" } });
+    expect(res.status).toBe(404);
+  });
+
+  it("pushes a signed webhook on completion", async () => {
+    const calls: Array<{ headers: Record<string, string>; body: string }> = [];
+    const webhookFetch = (async (_u: string | URL, init?: RequestInit) => {
+      calls.push({
+        headers: (init?.headers ?? {}) as Record<string, string>,
+        body: String(init?.body ?? ""),
+      });
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof fetch;
+    const url = await boot(
+      makeServiceDeps({
+        dir,
+        agent: fastAgent("hook"),
+        webhookFetch,
+        patch: (c) => {
+          c.service.webhookSecret = "s3";
+        },
+      }),
+    );
+    const sid = await firstSessionId(url);
+    const res = await submit(url, sid, {
+      input: "x",
+      mode: "job",
+      wait: true,
+      callbackUrl: "http://callback.test/hook",
+    });
+    expect(res.json.status).toBe("succeeded");
+    for (let i = 0; i < 100 && calls.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(calls[0].body) as { status: string; jobId: string };
+    expect(body.status).toBe("succeeded");
+    expect(calls[0].headers["X-Mma-Signature"]).toBe(
+      signature("s3", calls[0].headers["X-Mma-Timestamp"], calls[0].body),
+    );
   });
 
   it("404s an unknown task", async () => {

@@ -15,7 +15,7 @@ import { sendJson, sendProblem } from "../http/respond";
 import { problem, type ProblemDetails } from "../runtime/problem";
 import { emitEvent } from "../runtime/emit";
 import { makeServiceForwarder } from "../runtime/event-bridge";
-import { installServicePromptIO, resolveAnswer } from "../runtime/prompt-io";
+import { cancelTaskQuestions, installServicePromptIO, resolveAnswer } from "../runtime/prompt-io";
 import { runTask, type RunTaskResult } from "../runtime/run-task";
 import { deliverWebhook } from "../runtime/webhook";
 import { newEventId } from "../runtime/ids";
@@ -403,6 +403,7 @@ function sendWebhook(s: AgentServiceState, task: TaskRecord): void {
     eventId: newEventId(),
     body: JSON.stringify(toJobObject(rec)),
     timeoutMs: s.config.service.callbackTimeoutMs,
+    ...(s.deps.webhookFetch ? { fetchImpl: s.deps.webhookFetch } : {}),
   }).catch(() => {
     /* pull доступен и при недоставке push */
   });
@@ -430,19 +431,34 @@ function cancel(res: ServerResponse, s: AgentServiceState, jobId: string): boole
     sendJson(res, 200, { jobId, status: rec.status });
     return true;
   }
-  const wasRunning = rec.status === "running";
-  s.tasks.finish(jobId, { status: "cancelled" });
-  emitEvent(s, rec, "task.cancelled", {});
-  sendWebhook(s, rec);
-  if (wasRunning) {
-    try {
-      s.pool.getRunner(rec.sessionId)?.agent.shutdown(rec.sessionId);
-    } catch {
-      /* cooperative cancel best-effort */
-    }
-  }
+  cancelTask(s, rec);
   sendJson(res, 202, { jobId, status: "cancelled" });
   return true;
+}
+
+/**
+ * Кооперативная отмена задачи: терминальный `cancelled`, сброс висящих вопросов,
+ * `agent.shutdown` (если ход бежит/ждёт ввод). Идемпотентна к позднему `settleTask`
+ * (статус уже терминален — `startTask` это увидит и не перезапишет).
+ */
+function cancelTask(s: AgentServiceState, task: TaskRecord): void {
+  s.tasks.finish(task.jobId, { status: "cancelled" });
+  emitEvent(s, task, "task.cancelled", {});
+  sendWebhook(s, task);
+  cancelTaskQuestions(s, task.jobId);
+  try {
+    s.pool.getRunner(task.sessionId)?.agent.shutdown(task.sessionId);
+  } catch {
+    /* cooperative cancel best-effort */
+  }
+}
+
+/** Закрытие SSE отменяет только интерактивную задачу сессии (job продолжается). */
+export function abortInteractiveTask(s: AgentServiceState, sessionId: string): void {
+  const task = s.tasks
+    .listForSession(sessionId)
+    .find((t) => t.mode === "interactive" && (t.status === "running" || t.status === "waiting_input"));
+  if (task) cancelTask(s, task);
 }
 
 /** `POST /v1/tasks/:jobId/answer` — ответ на `question` интерактивной задачи. */

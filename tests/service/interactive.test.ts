@@ -140,4 +140,59 @@ describe("interactive mode", () => {
     });
     expect(res.status).toBe(409);
   });
+
+  it("requires an id and rejects an unknown question id", async () => {
+    const svc = startAgentService(makeServiceDeps({ dir, agent: interactiveAgent() }));
+    stop = svc.stop;
+    const url = await svc.url;
+    const sid = await firstSessionId(url);
+
+    const sse = openSse(`${url}/v1/sessions/${sid}/events`);
+    try {
+      const submitted = await httpJson(`${url}/v1/sessions/${sid}/tasks`, {
+        method: "POST",
+        json: { input: "hi", mode: "interactive" },
+      });
+      const jobId = submitted.json.jobId as string;
+      await waitFor(() => parseEvent(sse.text(), "question"), "question");
+
+      const noId = await httpJson(`${url}/v1/tasks/${jobId}/answer`, {
+        method: "POST",
+        json: { answer: "x" },
+      });
+      expect(noId.status).toBe(400);
+
+      const badId = await httpJson(`${url}/v1/tasks/${jobId}/answer`, {
+        method: "POST",
+        json: { id: "q-nope", answer: "x" },
+      });
+      expect(badId.status).toBe(404);
+    } finally {
+      sse.close();
+    }
+  });
+
+  it("aborts an interactive task when the event stream closes", async () => {
+    const svc = startAgentService(makeServiceDeps({ dir, agent: interactiveAgent() }));
+    stop = svc.stop;
+    const url = await svc.url;
+    const sid = await firstSessionId(url);
+
+    const sse = openSse(`${url}/v1/sessions/${sid}/events`);
+    const submitted = await httpJson(`${url}/v1/sessions/${sid}/tasks`, {
+      method: "POST",
+      json: { input: "hi", mode: "interactive" },
+    });
+    const jobId = submitted.json.jobId as string;
+    await waitFor(() => parseEvent(sse.text(), "question"), "question");
+    sse.close();
+
+    let status = "";
+    for (let i = 0; i < 100 && status !== "cancelled"; i++) {
+      const body = await httpJson(`${url}/v1/tasks/${jobId}`);
+      status = body.json.status as string;
+      if (status !== "cancelled") await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(status).toBe("cancelled");
+  });
 });

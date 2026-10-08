@@ -19,7 +19,7 @@ export async function handleReady(
   s: AgentServiceState,
 ): Promise<void> {
   try {
-    const r = await preflightFromConfig({ config: s.config });
+    const r = s.deps.preflight ? await s.deps.preflight() : await preflightFromConfig({ config: s.config });
     if (r.ok) {
       sendJson(res, 200, { status: "ready" });
       return;

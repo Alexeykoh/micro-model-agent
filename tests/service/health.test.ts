@@ -57,6 +57,29 @@ describe("service health routes", () => {
     expect(String(res.headers["content-type"])).toContain("application/problem+json");
   });
 
+  it("reports ready when the provider probe succeeds", async () => {
+    const deps = makeDeps();
+    deps.preflight = async () => ({ ok: true, reason: "ok" });
+    const svc = startAgentService(deps);
+    stop = svc.stop;
+    const url = await svc.url;
+    const res = await httpJson(`${url}/v1/ready`);
+    expect(res.status).toBe(200);
+    expect(res.json.status).toBe("ready");
+  });
+
+  it("accepts a correct bearer token and rejects a missing one", async () => {
+    const svc = startAgentService(makeDeps({ token: "secret" }));
+    stop = svc.stop;
+    const url = await svc.url;
+    const authed = await httpJson(`${url}/v1/tasks/job_x`, {
+      headers: { Authorization: "Bearer secret" },
+    });
+    expect(authed.status).toBe(404); // auth passed, task unknown
+    const denied = await httpJson(`${url}/v1/tasks/job_x`);
+    expect(denied.status).toBe(401);
+  });
+
   it("refuses a non-loopback bind without a token", async () => {
     const svc = startAgentService(makeDeps({ host: "0.0.0.0" }));
     stop = svc.stop;

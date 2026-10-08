@@ -32,6 +32,10 @@ export interface ServiceDeps {
   port?: number;
   /** Оверрайд bearer-токена (иначе env `MMA_SERVICE_TOKEN`, затем `service.token`). */
   token?: string;
+  /** Тестовый шов: fetch для webhook-доставки (дефолт — глобальный `fetch`). */
+  webhookFetch?: typeof fetch;
+  /** Тестовый шов: readiness-проба провайдера (дефолт — `preflightFromConfig`). */
+  preflight?: () => Promise<{ ok: boolean; reason: string }>;
 }
 
 /**

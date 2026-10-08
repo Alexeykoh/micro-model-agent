@@ -41,6 +41,10 @@ export interface ServiceDepsOptions {
   /** Агент — тогда депы несут `spawnRunner`; без него (sessions API) раннер не нужен. */
   agent?: unknown;
   patch?: (c: AppConfig) => void;
+  /** Тестовый шов: fetch для webhook-доставки. */
+  webhookFetch?: typeof fetch;
+  /** Тестовый шов: readiness-проба провайдера. */
+  preflight?: () => Promise<{ ok: boolean; reason: string }>;
 }
 
 /** Депы сервиса: конфиг из DEFAULTS, SessionManager с одной тестовой сессией. */
@@ -63,6 +67,8 @@ export function makeServiceDeps(opts: ServiceDepsOptions): ServiceDeps {
     baseDir: opts.dir,
   };
   if (opts.agent !== undefined) deps.spawnRunner = (id) => stubRunner(id, opts.agent);
+  if (opts.webhookFetch) deps.webhookFetch = opts.webhookFetch;
+  if (opts.preflight) deps.preflight = opts.preflight;
   return deps;
 }
 

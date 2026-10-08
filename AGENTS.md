@@ -1354,7 +1354,8 @@ quality-gate и выглядят аккуратно.
 версионируемый контракт для внешних систем поверх ядра. Не трогает петлю/REPL/
 `mma web`. Спека: [docs/specs/2026-10-08-agent-service-api-design.md](./docs/specs/2026-10-08-agent-service-api-design.md);
 план: [docs/plans/2026-10-08-agent-service-api.md](./docs/plans/2026-10-08-agent-service-api.md);
-reference: [docs/agents/service-api.md](./docs/agents/service-api.md).
+reference: [docs/agents/service-api.md](./docs/agents/service-api.md);
+user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mode (`mma serve`)»).
 
 - **Изоляция = процесс (silo):** `1 тенант = 1 процесс` со своим `MMA_CONFIG_DIR`
   и workspace; внутрипроцессные синглтоны → per-tenant без рефактора ядра.

@@ -98,6 +98,22 @@ export function installServicePromptIO(
   return io;
 }
 
+/**
+ * Резолвит все висящие вопросы задачи через `undefined` (тул прочтёт пусто/`[]`).
+ * Звать при отмене/abort задачи, иначе `agent.run` навсегда ждёт `PromptIO` и
+ * слот сессии не освобождается.
+ */
+export function cancelTaskQuestions(s: AgentServiceState, taskId: string): void {
+  const pending: Array<(value: unknown) => void> = [];
+  for (const [id, q] of s.pendingQuestions) {
+    if (q.taskId === taskId) {
+      pending.push(q.resolve);
+      s.pendingQuestions.delete(id);
+    }
+  }
+  for (const resolve of pending) resolve(undefined);
+}
+
 /** Закрывает висящий вопрос ответом; `false` — id неизвестен. */
 export function resolveAnswer(s: AgentServiceState, id: string, value: unknown): boolean {
   const pending = s.pendingQuestions.get(id);
