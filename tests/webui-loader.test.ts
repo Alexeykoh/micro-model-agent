@@ -1,13 +1,17 @@
 // Loader faces: pure state mapping + DOM builder. `bun test` doesn't apply
 // vitest's environment docblock, so happy-dom is wired manually.
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
-import { loaderStateFor, toolState, createFace, setFaceState } from "../src/modules/webui/assets/js/loader.js";
+import {
+  loaderStateFor, toolState, createFace, setFaceState, setGreetResolver,
+  MMART_NAME, initCursor,
+} from "../src/modules/webui/assets/js/loader.js";
 import type { FaceState } from "../src/modules/webui/assets/js/loader.js";
 
+let win: Window;
 beforeAll(() => {
-  const win = new Window();
+  win = new Window();
   Object.assign(globalThis, { document: win.document, window: win });
 });
 
@@ -27,10 +31,36 @@ describe("loaderStateFor", () => {
     expect(loaderStateFor({ type: "turn_end", success: true })).toBe("done");
     expect(loaderStateFor({ type: "turn_end", success: false })).toBe("error");
     expect(loaderStateFor({ type: "error" })).toBe("error");
+    expect(loaderStateFor({ type: "retract" })).toBe("error");
     expect(loaderStateFor({ type: "question" })).toBe("ask");
     expect(loaderStateFor({ type: "text" })).toBe("type");
     expect(loaderStateFor({ type: "tool_start", name: "edit_file" })).toBe("edit");
     expect(loaderStateFor({ type: "phase", phase: "thinking" })).toBe("think");
+  });
+
+  it("covers every core tool with a behavioural state", () => {
+    // user interaction
+    expect(toolState("approve")).toBe("ask");
+    expect(toolState("question")).toBe("ask");
+    // web browsing
+    expect(toolState("web_browse")).toBe("web");
+    // memory / knowledge / introspection
+    expect(toolState("load_skill")).toBe("read");
+    expect(toolState("session_info")).toBe("read");
+    expect(toolState("search_history")).toBe("find");
+    expect(toolState("remember")).toBe("create");
+    expect(toolState("define_capability")).toBe("create");
+    expect(toolState("set_thinking")).toBe("think");
+    // onboarding sentinel
+    expect(toolState("meet_done")).toBe("done");
+  });
+
+  it("reacts to agent-facing SSE and ignores background broadcasts", () => {
+    expect(loaderStateFor({ type: "index" })).toBe("find");
+    expect(loaderStateFor({ type: "setup_done" })).toBe("done");
+    for (const bg of ["usage", "state", "config", "files", "sessions", "plugins", "log"] as const) {
+      expect(loaderStateFor({ type: bg })).toBe("idle");
+    }
   });
 });
 
@@ -73,5 +103,47 @@ describe("boot splash asset", () => {
     const css = readFileSync("src/modules/webui/assets/styles.css", "utf8");
     expect(css).toContain(".mdl.st-read");
     expect(css).toContain("#bootSplash");
+  });
+});
+
+describe("MMART greeting", () => {
+  beforeAll(() => {
+    // One-shot wiring of the window listeners; must run before dispatching.
+    initCursor();
+  });
+
+  it("carries a tip element in every face", () => {
+    const tip = createFace("idle", "lg").querySelector<HTMLElement>(".mdl-tip");
+    expect(tip).not.toBeNull();
+    expect(MMART_NAME).toBe("MMART");
+  });
+
+  it("localizes the greeting through the injected resolver", () => {
+    const face = createFace("idle", "lg");
+    document.body.appendChild(face);
+    setGreetResolver(() => "Hola MMART");
+    face.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    expect(face.querySelector(".mdl-tip")?.textContent).toBe("Hola MMART");
+    expect(face.classList.contains("show-tip")).toBe(true);
+  });
+
+  it("only greets when the click lands on the face itself", () => {
+    const face = createFace("idle", "lg");
+    document.body.appendChild(face);
+    document.body.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    expect(face.classList.contains("show-tip")).toBe(false);
+    face.querySelector(".eyes")?.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    expect(face.classList.contains("show-tip")).toBe(true);
+  });
+
+  it("does not greet a working face (idle-only `.poke`)", () => {
+    const face = createFace("run", "lg");
+    document.body.appendChild(face);
+    face.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    expect(face.classList.contains("show-tip")).toBe(false);
+  });
+
+  afterAll(() => {
+    setGreetResolver(() => `Привет! Я ${MMART_NAME}`);
   });
 });

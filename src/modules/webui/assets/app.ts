@@ -32,7 +32,7 @@ import {
   sidebarPluginsState, sidebarPluginsEvent, initSidebarDrawer,
 } from "./js/sidebar.js";
 import { insertIntoDraft } from "./js/session/composer.js";
-import { initCursor, createFace, setFaceState, loaderStateFor } from "./js/loader.js";
+import { initCursor, createFace, setFaceState, loaderStateFor, setGreetResolver } from "./js/loader.js";
 import type { FaceState } from "./js/loader.js";
 
 declare global {
@@ -284,6 +284,13 @@ es.addEventListener("turn_end", (e) => {
   const token = composerToken;
   window.setTimeout(() => { if (token === composerToken) setFaceState(composerFace, "idle"); }, 1500);
 });
+// Remaining agent-facing SSE: a retracted draft reads as an error, re-indexing
+// as workspace search, first-run completion as done. Background broadcasts
+// (`usage`/`state`/`config`/`files`/`sessions`/`plugins`/`log`) deliberately
+// carry no `faceEvent` — they are not agent activity and must not move MMART.
+es.addEventListener("retract", () => faceEvent("error"));
+es.addEventListener("index", () => faceEvent("find"));
+es.addEventListener("setup_done", () => faceEvent("done"));
 // Per-tab status dots: its own listeners — feed handlers stay untouched
 // (source-level guards pin the handler table above). Working streams mark the
 // owner tab, `question` marks waiting-for-you, `turn_end`/`error` settle it.
@@ -372,6 +379,12 @@ function applyStaticI18n(): void {
   setText("hintEsc", t("web.input.esc"));
   setText("hintAttach", t("web.input.attach"));
   setText("bootCap", t("web.loader.boot"));
+  // MMART's click bubble: bound lazily (not at import) so `loader.ts` stays
+  // import-safe under `bun test`, and re-bound here after a locale switch.
+  setGreetResolver(() => t("web.loader.greet"));
+  // A bubble already open must restate the greeting in the new locale.
+  const greetTip = composerFace?.querySelector<HTMLElement>(".mdl-tip");
+  if (greetTip) greetTip.textContent = t("web.loader.greet");
 
   // Chrome controls: Lucide icon + label, plus matching title/aria-label.
   const controls: Record<string, [string, string]> = {
