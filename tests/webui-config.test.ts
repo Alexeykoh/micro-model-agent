@@ -247,6 +247,119 @@ describe("webui config/session/model REST", () => {
     });
   });
 
+  // --- contextAuto: авто-детект окна у провайдера -------------------------
+
+  /**
+   * Перехватывает глобальный fetch так, чтобы context-probe увидел ответ
+   * «LM Studio: загруженный инстанс отдаёт 65536» (или молчание бэкенда).
+   * HTTP-утверждения идут через `doFetch` (свой fetch рантайма) — им stub не мешает.
+   */
+  function stubProviderFetch(opts: { silent?: boolean } = {}): () => void {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown) => {
+      if (opts.silent || !String(url).endsWith("/api/v1/models")) {
+        return { ok: false, status: 404, json: async () => ({}) } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          models: [
+            {
+              key: "stub-model",
+              max_context_length: 131072,
+              loaded_instances: [{ config: { context_length: 65536 } }],
+            },
+          ],
+        }),
+      } as Response;
+    }) as typeof fetch;
+    return () => {
+      globalThis.fetch = original;
+    };
+  }
+
+  function autoConfig(): AppConfig {
+    const config = testConfig();
+    config.provider = {
+      type: "lmstudio",
+      baseUrl: "http://127.0.0.1:9/v1",
+      apiKey: "not-needed",
+    };
+    config.model = "stub-model";
+    config.contextWindow = 32768;
+    config.contextAuto = false;
+    return config;
+  }
+
+  it("POST /api/config {contextAuto:true} probes the provider and applies its window", async () => {
+    const s = createWebUiState();
+    s.config = autoConfig();
+    const saved: AppConfig[] = [];
+    let reconfigured = 0;
+    s.saveConfig = (cfg) => saved.push(cfg);
+    s.reconfigure = () => {
+      reconfigured++;
+    };
+    const restore = stubProviderFetch();
+    try {
+      await withServer(s, async (base) => {
+        const res = await postJson(base, "/api/config", { key: "contextAuto", value: true });
+        expect(res.status).toBe(200);
+        expect(res.json.ok).toBe(true);
+        expect(res.json.value).toBe(true);
+        expect(res.json.probed).toBe(true);
+        expect(res.json.contextWindow).toBe(65536);
+        expect(s.config?.contextAuto).toBe(true);
+        expect(s.config?.contextWindow).toBe(65536);
+        // Персист и reconfigure видят уже ПРОБНУТОЕ окно (бюджеты сразу верные).
+        expect(saved).toHaveLength(1);
+        expect(saved[0].contextWindow).toBe(65536);
+        expect(reconfigured).toBe(1);
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it("POST /api/config {contextAuto:true} fail-opens when the provider is silent", async () => {
+    const s = createWebUiState();
+    s.config = autoConfig();
+    let saved = 0;
+    s.saveConfig = () => {
+      saved++;
+    };
+    s.reconfigure = () => {};
+    const restore = stubProviderFetch({ silent: true });
+    try {
+      await withServer(s, async (base) => {
+        const res = await postJson(base, "/api/config", { key: "contextAuto", value: true });
+        expect(res.status).toBe(200);
+        expect(res.json.ok).toBe(true);
+        expect(res.json.probed).toBe(false);
+        expect(res.json.contextWindow).toBe(32768);
+        expect(s.config?.contextAuto).toBe(true);
+        expect(s.config?.contextWindow).toBe(32768);
+        expect(saved).toBe(1);
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it("POST /api/config {contextWindow} pins the window and turns auto off", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    s.config.contextAuto = true;
+    s.saveConfig = () => {};
+    s.reconfigure = () => {};
+
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/config", { key: "contextWindow", value: 65536 });
+      expect(res.status).toBe(200);
+      expect(s.config?.contextWindow).toBe(65536);
+      expect(s.config?.contextAuto).toBe(false);
+    });
+  });
   it("GET /api/sessions lists sessions; activate + delete hit the manager", async () => {
     const s = createWebUiState();
     s.sessionManager = fakeSessions(

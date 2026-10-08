@@ -364,6 +364,19 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   вручную или ход уже был (`currentIteration !== 0`). Ручной `mma context <N>` / `/config contextWindow <N>`
   после этого действует до конца сессии. Диагностика пробника — только `logSilent` (контракт
   `tests/core/bootstrap.test.ts`: в консоль/шину не попадает).
+- **Режим auto vs ручное окно (`contextAuto`, unreleased):** ключ `contextAuto` (bool, default `true`,
+  домен `budget`, `src/config/registry-extra.ts`) решает, перетирает ли проба выбранное значение.
+  Auto (дефолт = прежнее поведение) — проба применяется на старте (`provider-phase.ts`) и при смене
+  модели/провайдера (`Agent.reprobeActiveProvider`, при ручном режиме сеть не гоняется вовсе).
+  Ручной режим — любая запись конкретного `contextWindow` (`setConfigValue`, `src/config/registry.ts`)
+  выставляет `contextAuto:false`, и проба больше не трогает окно; флаг переживает рестарт (домен `core`).
+  Поверхности: пункт `auto` в контекстном селекторе веба (кнопка `context: auto`, разрешённое число —
+  в sub-строке пункта) шлёт `POST /api/config {contextAuto:true}`; хендлер (`settings/config-api.ts`)
+  до персиста/reconfigure гоняет пробу через `applyAutoContext` (`settings/context-auto.ts`, общий
+  `probeProviderContext`, deadline 4s) и отвечает `{contextWindow, probed}` — молчание провайдера
+  озвучивается тостом `web.selectors.auto_failed` (fail-open). `/config contextAuto` и тумблер
+  Settings → Context идут тем же путём. Тесты: `tests/config/context-auto.test.ts`,
+  `tests/webui-config.test.ts`, guard в `tests/webui-assets.test.ts`.
 - **Живой топбар:** `HostStateSnapshot.contextWindow` (`src/core/host.ts`, `webui/host-state.ts`) +
   `renderState` в `assets/app.ts` подтягивает селектор при расхождении — иначе топбар навсегда показывал
   стартовые 32K.

@@ -585,6 +585,14 @@ export interface AppConfig {
   modelCapabilities?: Record<string, ModelCapabilities>;
   tools: ToolsConfig;
   contextWindow: number;
+  /**
+   * Авто-детект окна контекста у провайдера для активной модели (default true):
+   * проба на старте и при смене модели/провайдера применяется поверх значения.
+   * Запись конкретного `contextWindow` (веб-селектор, `/context`, `mma context`)
+   * выключает флаг — ручной выбор побеждает пробу. Опциональное поле: старые
+   * конфиги без него читаются как auto.
+   */
+  contextAuto?: boolean;
   contextBudget: ContextBudget;
   instructions: InstructionsConfig;
   modelLoad: ModelLoadConfig;

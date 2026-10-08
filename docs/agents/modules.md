@@ -294,6 +294,8 @@ At startup MMA asks LM Studio's native API (`/api/v1/models`) for the context le
 
 Non-LM-Studio providers degrade silently (probe returns null).
 
+The **effective window** follows the provider as well (`probeProviderContext`, `src/llm/provider-context.ts`): on start and on every model/provider switch the active backend is asked for the window it actually serves and `config.contextWindow` is updated in memory. Whether the probe may overwrite the configured value is decided by **`contextAuto`** (default `true`, `core.json`): writing a concrete `contextWindow` — `/context <N>`, `mma context <N>`, `mma config set contextWindow <N>` or the web context selector — pins the value (`contextAuto: false`) and the probe stops touching it, including across restarts. The web selector's `auto` item and `/config contextAuto true` turn the mode back on and re-probe immediately (`applyAutoContext`, `src/modules/webui/settings/context-auto.ts`, fail-open when the provider stays silent).
+
 ## Cost Tracking (pricing / budget display)
 
 > **Source:** `src/modules/pricing/` (`prices.ts` — builtin price table + cost math; `index.ts` — `CostTracker`).

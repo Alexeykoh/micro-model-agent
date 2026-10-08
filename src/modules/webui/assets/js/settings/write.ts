@@ -142,12 +142,31 @@ export function renderSelectors(): void {
     provMenu.appendChild(menuItem(name, entry.type || "", name === (provider.active || provider.type), () => void postConfig("provider.active", name, true)));
   });
 
-  setSelButton(document.getElementById("selContextBtn"), t("web.selectors.context"), contextLabel());
+  // auto — первый пункт: окно берётся у провайдера для активной модели
+  // (`POST /api/config {contextAuto:true}` пробует бэкенд сразу). Пока auto
+  // включён, фиксированные размеры не помечаются «current» — иначе в меню
+  // горели бы два активных пункта. Boot (config === null): режим ещё не
+  // известен — кнопка честно показывает «—», пункт auto неактивен.
+  const auto = !!settings.config && cfg.contextAuto !== false;
+  setSelButton(
+    document.getElementById("selContextBtn"),
+    t("web.selectors.context"),
+    auto ? t("web.selectors.auto") : contextLabel(),
+  );
   const ctxMenu = document.getElementById("selContextMenu") as HTMLElement;
   ctxMenu.textContent = "";
+  // Sub-строка auto — разрешённое окно: кнопка показывает только «auto»,
+  // число живёт здесь и в сайдбаре.
+  ctxMenu.appendChild(
+    menuItem(t("web.selectors.auto"), auto ? contextLabel() : "", auto, () =>
+      void postConfig("contextAuto", true, false),
+    ),
+  );
+  ctxMenu.appendChild(el("div", "sep"));
   const sizes = [8192, 16384, 32768, 65536, 131072];
   sizes.forEach((n) => {
-    ctxMenu.appendChild(menuItem(Math.round(n / 1024) + "K", n === cfg.contextWindow ? t("web.selectors.current") : "", n === cfg.contextWindow, () => void postConfig("contextWindow", n, false)));
+    const active = !auto && n === cfg.contextWindow;
+    ctxMenu.appendChild(menuItem(Math.round(n / 1024) + "K", active ? t("web.selectors.current") : "", active, () => void postConfig("contextWindow", n, false)));
   });
   ctxMenu.appendChild(el("div", "sep"));
   // Inline custom size (no native `window.prompt`): the menu stays open while
@@ -266,10 +285,10 @@ document.querySelectorAll<HTMLElement>("[data-sel]").forEach((sel) => {
   });
 });
 
-// Selector keys (`provider/model/context/reasoning`) share the switch treatment:
+// Selector keys (`provider/model/context/contextAuto/reasoning`) share the switch treatment:
 // pending paint + single-flight + parallel re-reads. Settings-panel writes
 // bypass it (plain POST + save toast).
-const SELECTOR_KEYS = ["provider.active", "model", "contextWindow", "reasoning.mode"];
+const SELECTOR_KEYS = ["provider.active", "model", "contextWindow", "contextAuto", "reasoning.mode"];
 
 // Monotonic id for selector switches: a slow A→B→A pair must not let the
 // stale reply repaint over the fresh one.
@@ -336,8 +355,19 @@ export async function postConfig(key: string, value: unknown, refreshSettings?: 
       return false;
     }
     const persisted = r.data.persisted !== false;
-    setIndicator(persisted ? t("web.settings.saved") : (r.data.warning || "not persisted"), !persisted);
+    // auto включён, но провайдер промолчал — говорим об этом явно, а не
+    // рисуем «saved» рядом с числом, которое так и не изменилось.
+    if (key === "contextAuto" && r.data.probed === false) {
+      setIndicator(t("web.selectors.auto_failed"), true);
+    } else {
+      setIndicator(persisted ? t("web.settings.saved") : (r.data.warning || "not persisted"), !persisted);
+    }
     if (settings.config && r.data.value !== undefined) setPath(settings.config, key, r.data.value);
+    // Итог пробы едет в ответе — подложим в локальную копию сразу, не дожидаясь
+    // GET (сбой реконфига не должен оставить меню с устаревшим окном).
+    if (key === "contextAuto" && settings.config && typeof r.data.contextWindow === "number") {
+      setPath(settings.config, "contextWindow", r.data.contextWindow);
+    }
     if (key === "ui.activityRail") setLayout(String(r.data.value));
     if (key === "ui.fontSize") applyFontSize(String(r.data.value));
     if (key === "locale") {

@@ -638,6 +638,23 @@ describe("webui assets", () => {
     expect(a.css).toContain(".model-menu-list");
   });
 
+  it("offers auto as the first context-menu item and pins sizes through contextWindow", () => {
+    const a = loadAssets();
+    const src = js(a);
+    // auto = окно у провайдера для активной модели: первый пункт меню,
+    // та же переключательная ветка (pending/single-flight), что и размеры.
+    expect(src).toContain('postConfig("contextAuto", true, false)');
+    expect(src).toContain('"contextAuto"');
+    expect(src).toContain("web.selectors.auto");
+    // Fail-open проговаривается: провайдер промолчал — тост, а не «saved».
+    expect(src).toContain("web.selectors.auto_failed");
+    // Фиксированный размер пишет contextWindow и гасит auto (см. registry).
+    expect(src).toContain('postConfig("contextWindow", n, false)');
+    // Пока auto включён, «current» не светится на двух пунктах сразу; boot без
+    // конфига остаётся честным «—».
+    expect(src).toContain("const auto = !!settings.config && cfg.contextAuto !== false");
+  });
+
   it("filters the sessions dropdown by name and id through a static search field", () => {
     const a = loadAssets();
     const src = js(a);

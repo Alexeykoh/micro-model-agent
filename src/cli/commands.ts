@@ -352,6 +352,8 @@ function buildContextCommand(program: Command): void {
         return;
       }
       config.contextWindow = contextWindow;
+      // Явное окно = ручной режим: проба провайдера его больше не перетирает.
+      config.contextAuto = false;
       saveConfig(config, configPath, dirname(configPath));
       getDefaultChannel().writeLine(t("cli.context_set", { size: contextWindow }));
     });

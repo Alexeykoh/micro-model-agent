@@ -198,6 +198,9 @@ const DEFINITIONS: ConfigKeyDef[] = [
     get: (c) => c.contextWindow,
     set: (c, v) => {
       c.contextWindow = v as number;
+      // Ручное окно = осознанный выбор: проба провайдера больше не перетирает
+      // его (boot / смена модели). Обратно — только явный `/config contextAuto true`.
+      c.contextAuto = false;
     },
   },
   shareField("system", "contextBudget.systemPrompt"),

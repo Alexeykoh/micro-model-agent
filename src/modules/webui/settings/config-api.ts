@@ -9,6 +9,7 @@ import type { AppConfig } from "../../../config/types";
 import { readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
+import { applyAutoContext, type AutoContextResult } from "./context-auto";
 import { buildReasoningView } from "./reasoning-view";
 import type { ConfigStore, RuntimeState, HttpTransport, SseTransport, WorkspaceStore } from "../state";
 import { broadcast } from "../state";
@@ -141,6 +142,14 @@ export function handleConfigPost(
         s.lspDoctor = undefined;
       }
 
+      // Включение auto у контекста спрашивает провайдера ДО персиста/reconfigure:
+      // иначе юзер увидел бы «auto» со старым числом, а бюджеты пересчитались бы
+      // только на ближайшем старте. Fail-open — при молчащем бэкенде окно прежнее.
+      let autoProbe: AutoContextResult | undefined;
+      if (key === "contextAuto" && result.value === true) {
+        autoProbe = await applyAutoContext(config);
+      }
+
       // Сначала персист, затем reconfigure — но только когда реестр требует
       // реконфига для ключа; иначе shared шаг зря дёргал бы провайдеров/модели
       // на каждое нажатие.
@@ -163,6 +172,12 @@ export function handleConfigPost(
         persisted,
       };
       if (warning) body.warning = warning;
+      // Итог пробы — чтобы UI честно сказал «провайдер не сообщил окно»,
+      // когда auto включён, но бэкенд промолчал (fail-open).
+      if (autoProbe) {
+        body.contextWindow = autoProbe.contextWindow;
+        body.probed = autoProbe.probed;
+      }
       // Все вкладки/окна держат собственную копию конфига; после записи шлём
       // событие, чтобы клиенты перечитали `/api/config` и настроечные панели
       // не показывали устаревшее значение (тот же контракт, что у plugins/MCP).
