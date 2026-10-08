@@ -551,9 +551,13 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 ### Web Sidebar Tabs (2.13.0)
 
 - **Tab bar** (`src/modules/webui/assets/js/sidebar.ts`, `index.html`, `styles.css`):
-  квадратные Lucide-иконочные вкладки **Session / Map / Trace** сверху сайдбара; имя активной
+  квадратные Lucide-иконочные вкладки **Session / Files / LSP / Trace / Plugins / Map** сверху сайдбара
+  (порядок из `TABS`, `sidebar/state.ts`; он же порядок `Alt+1..6` и `←/→`); имя активной
   вкладки показано строкой ниже вкладок. Дефолт — Session; последняя вкладка помнится в
-  `localStorage["mma-sidebar-tab"]`; хоткеи `Alt+1/2/3`; вкладка и панель Trace скрыты на ≤760px.
+  `localStorage["mma-sidebar-tab"]`; вкладка и панель Trace скрыты на ≤760px.
+  Логика порядка (2.32.0): сначала то, куда смотрят во время хода (Files), затем диагностика
+  (LSP, Trace), затем Plugins, а проектная карта Map — в хвосте: её открывают осознанно.
+  Guard: `tests/webui-assets.test.ts` сверяет порядок `TABS` с порядком кнопок в `index.html`.
 - **Session** — существующие секции plan / session·usage / environment без изменений.
 - **Map** (`ProjectMapInfo`: status, `updatedAt`, watcher, files/symbols/tokens, root, top-8 языков)
   рендерится `assets/js/sidebar.ts`; кнопка **Re-index** шлёт `POST /api/index`
@@ -1047,6 +1051,44 @@ read-only петля без стопа, рассинхрон провайдер�
   `tests/core/subagent-parallel-e2e.test.ts` (реальный путь: registry→batch→fork→subagent handler с
   `agentFactory`-швом, без живой модели).
 
+### Sidebar Responsive Drawer (2.32.0)
+
+Правило: у сайдбара **два разных брейкпоинта**, потому что сайдбар и телефонный
+хром отвечают на разные ограничения.
+
+- **≤1024px — drawer** (`styles.css` + `js/sidebar/drawer.ts`): колонка `679px` не влезает рядом с
+  чатом, поэтому сайдбар становится оверлеем поверх него. Именно drawer, а не «уже колонка»:
+  master-detail панели (detail Trace 340px, дерево Files до 480px) в узкой колонке нечитаемы.
+  Полный модальный контракт: backdrop (`#sbBackdrop`, `--sb-backdrop`, показывается **только** под
+  `body.sb-open` — безусловный `display:block` перекрывал топбар (44 > 40) и съедал клик по самой
+  кнопке), закрытие по клику вне и `Esc`, `role="dialog"`/`aria-modal` только пока
+  открыт, Tab-ловушка (общий `trapTab` из `dialog.ts`), возврат фокуса на кнопку по закрытию.
+  Scroll-lock не нужен и его нет: шелл уже `body { overflow: hidden }`, скроллится только `#msgs`.
+  Открытый `.overlay` (settings/confirm) забирает `Esc` себе — он верхняя поверхность.
+- **Измеряемый отступ вместо магического числа:** drawer уезжает под бары на их реальную высоту
+  (`--sb-inset`, `applyInset()` на open/resize). Раньше был `top: 41px`, из-за чего на телефоне
+  drawer уезжал под `.bar-sub` (38px), который появляется на том же брейкпоинте.
+- **Синхронизация с вьюпортом:** `matchMedia(NARROW_MQ).addEventListener("change", syncToViewport)` —
+  при выходе за 1024px колонка возвращается, а `body.sb-open` снимается. Без этого поворот
+  планшета оставлял «открытый» drawer поверх раскладки без drawer'а, и он воскресал при сужении.
+- **Стек master-detail в drawer'е:** `#pane-trace` → `column-reverse` (деталь сверху), `#pane-files` →
+  `column` (дерево над просмотром), `.files-splitter` скрыт (вертикальный drag бессмыслен),
+  `#pane-files.f-full .files-detail` на всю высоту. Ширина дерева теперь CSS-переменная
+  `--files-tree-w` на `#pane-files` (не инлайновый `width`), поэтому drawer может её игнорировать.
+- **Константы брейкпоинтов** (`js/sidebar/state.ts`): `NARROW_MQ = "(max-width: 1024px)"`,
+  `PHONE_MQ = "(max-width: 760px)"`; `mqNarrow()`/`mqMobile()`. Телефонный хром (`.bar-sub`,
+  узкие паддинги, скрытие Trace-таба) остался на ≤760px.
+- **Осиротевшая панель Trace** (`sidebar/core.ts`): мобильный coercion `trace → session` срабатывал
+  только по клику на вкладке, поэтому 900px → 390px (поворот/ресайз) оставлял панель Trace на экране
+  без видимой вкладки. Теперь `matchMedia(PHONE_MQ)` с ре-вызовом `setSidebarTab(sb.active, false)`.
+- **Тесты:** `tests/webui-sidebar-drawer-dom.test.ts` (8 кейсов: toggle, inset, dialog-семантика,
+  Esc/backdrop, overlay-приоритет, sync по брейкпоинту, осиротевшая панель Trace); guard'ы в
+  `tests/webui-assets.test.ts` (в т.ч. запрет `top: 41px` и безусловного `display:block` у backdrop);
+  вьюпорты `tests/webui-smoke.test.ts` расширены до
+  `[1440, 1024, 1000, 820, 768, 390]` + отдельный кейс на геометрию drawer'а.
+  Внимание: этот suite исполняется только под Node-vitest с браузером; под `bun test` он skip,
+  а под Node без `dist/assets` падает на `Bun.Transpiler` в `loadAssets()` (известное ограничение).
+
 ### Sidebar Fixed Width & Detail-on-Left (2.26.0)
 
 - **Фиксированная ширина** (`src/modules/webui/assets/styles.css`): `.sb` — `679px` постоянно; убраны
@@ -1216,7 +1258,7 @@ quality-gate и выглядят аккуратно.
   фолбэке/планировании/аборте), `tests/webui-workspace-footer.test.ts` (чип),
   `tests/webui-usage.test.ts` (`moeActive` в снапшоте).
 
-### Current Version: 2.31.0
+### Current Version: 2.32.0
 
 ### Changelog
 

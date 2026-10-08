@@ -84,7 +84,9 @@ export function initSplit(d: Partial<SplitNodes>): void {
 /** Pushes width/visibility into the DOM. Idempotent. */
 export function applySplit(): void {
   if (nodes.side) {
-    nodes.side.style.width = `${width}px`;
+    // Custom property, not an inline `width`: the ≤1024px drawer stacks the
+    // tree above the viewer and must be able to ignore the dragged width.
+    nodes.pane?.style.setProperty("--files-tree-w", `${width}px`);
     nodes.side.hidden = full;
   }
   if (nodes.pane) nodes.pane.classList.toggle("f-full", full);

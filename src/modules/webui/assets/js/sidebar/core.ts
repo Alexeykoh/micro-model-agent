@@ -3,8 +3,9 @@
 import { icon } from "../dom.js";
 import { session } from "../store.js";
 import { t } from "../i18n.js";
-import { sb, TABS, ICON_NAME, paneEl, mqMobile, readStored, storeTab, type TraceEntry } from "./state.js";
+import { sb, TABS, ICON_NAME, paneEl, mqMobile, PHONE_MQ, readStored, storeTab, type TraceEntry } from "./state.js";
 import { collapseDetail, renderList, renderDetail } from "./trace.js";
+import { sidebarDrawerOpen } from "./drawer.js";
 import { sidebarMapState, sidebarMapIndicator } from "./map.js";
 import { renderLsp, sidebarLspState } from "./lsp.js";
 import { renderFilesTree, refreshFilesTree } from "./files.js";
@@ -103,8 +104,23 @@ export function initSidebar(): void {
   });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && sb.selected) collapseDetail();
+    // One Esc, one action: while the drawer is open it is the modal surface and
+    // owns Escape (see sidebar/drawer.ts).
+    if (e.key === "Escape" && sb.selected && !sidebarDrawerOpen()) collapseDetail();
   });
+
+  // Trace has no tab below 760px. Crossing into phone width with `trace` active
+  // left its pane on screen behind a hidden tab button — no visible way back —
+  // because the coercion in `setSidebarTab` only ran on a tab click. Re-apply it
+  // when the viewport changes instead.
+  if (typeof window.matchMedia === "function") {
+    const phone = window.matchMedia(PHONE_MQ);
+    if (typeof phone.addEventListener === "function") {
+      phone.addEventListener("change", (e) => {
+        if ((e as MediaQueryListEvent).matches) setSidebarTab(sb.active, false);
+      });
+    }
+  }
 
   const stored = readStored();
   setSidebarTab(stored && TABS.includes(stored) ? stored : "session");

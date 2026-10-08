@@ -104,24 +104,24 @@
         <span class="sb-ico" data-icon="session" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
-      <button class="sb-tab" type="button" role="tab" data-tab="map" aria-selected="false" aria-controls="pane-map" title="Map">
-        <span class="sb-ico" data-icon="map" aria-hidden="true"></span>
-        <span class="sb-dot" aria-hidden="true"></span>
-      </button>
-      <button class="sb-tab" type="button" role="tab" data-tab="trace" aria-selected="false" aria-controls="pane-trace" title="Trace">
-        <span class="sb-ico" data-icon="trace" aria-hidden="true"></span>
+      <button class="sb-tab" type="button" role="tab" data-tab="files" aria-selected="false" aria-controls="pane-files" title="Files">
+        <span class="sb-ico" data-icon="files" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
       <button class="sb-tab" type="button" role="tab" data-tab="lsp" aria-selected="false" aria-controls="pane-lsp" title="LSP">
         <span class="sb-ico" data-icon="lsp" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
-      <button class="sb-tab" type="button" role="tab" data-tab="files" aria-selected="false" aria-controls="pane-files" title="Files">
-        <span class="sb-ico" data-icon="files" aria-hidden="true"></span>
+      <button class="sb-tab" type="button" role="tab" data-tab="trace" aria-selected="false" aria-controls="pane-trace" title="Trace">
+        <span class="sb-ico" data-icon="trace" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
       <button class="sb-tab" type="button" role="tab" data-tab="plugins" aria-selected="false" aria-controls="pane-plugins" title="Plugins">
         <span class="sb-ico" data-icon="plugins" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="map" aria-selected="false" aria-controls="pane-map" title="Map">
+        <span class="sb-ico" data-icon="map" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
     </div>
@@ -194,6 +194,10 @@
     </div>
   </div>
 </div>
+
+<!-- Drawer backdrop for ≤1024px, where the sidebar overlays the chat
+     (visible only under body.sb-open, see styles.css + sidebar/drawer.ts). -->
+<div class="sb-backdrop" id="sbBackdrop"></div>
 
 <div class="overlay" id="overlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">

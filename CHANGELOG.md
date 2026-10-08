@@ -4,6 +4,30 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.32.0] - 2026-10-08
+
+The web sidebar had exactly one responsive shape. On anything wider than 760px
+it was a constant 679px column - so on a 768px tablet it left the chat ~90px -
+and below that it became a bare panel pinned at a hardcoded `top: 41px`. It is
+now a real drawer on every viewport that cannot fit the column beside the chat.
+
+### Added
+
+- **Modal drawer below 1024px** (`assets/js/sidebar/drawer.ts`, `index.html`, `styles.css`): the sidebar overlays the chat instead of squeezing it, with a dimming backdrop, close on backdrop click / `Escape`, `role="dialog"` + `aria-modal` while open, a Tab focus trap and focus returned to the toggle on close. An open overlay (settings, confirm) keeps `Escape` - it is the topmost surface.
+- **Measured drawer inset**: the drawer slides under the bars by their real height (`--sb-inset`, re-measured on open and resize) instead of a hardcoded `top: 41px`, which ignored the phone session sub-bar appearing at the same breakpoint.
+- **Viewport sync**: growing past the breakpoint restores the column and clears the drawer state. A rotated tablet used to keep a stale `body.sb-open` over a layout that no longer had a drawer, which then re-armed itself on the way back.
+
+### Changed
+
+- **Sidebar tab order**: Session / Files / LSP / Trace / Plugins / Map (was Session / Map / Trace / LSP / Files / Plugins). What you look at while a turn runs comes first (Files), then diagnostics (LSP, Trace), then Plugins; the project map moves to the end, being the one tab you open deliberately. `Alt+1..6` follow the visible order - they index the same array. The remembered tab (`mma-sidebar-tab`) is unaffected, only positions shift.
+
+### Fixed
+
+- **Master-detail panes were unusable in the drawer**: the 340px Trace detail and the up-to-480px Files tree overflowed a 360px panel and were silently clipped by `overflow-x: hidden`. Below 1024px both panes now stack (detail above the list, tree above the viewer) and the Files tree width is a CSS custom property, so the drawer ignores the drag-resized column.
+- **The Trace pane could be orphaned**: with `trace` active and the viewport shrinking below 760px (rotation, browser resize), the Trace tab button was hidden but its pane stayed on screen with no visible tab to switch away from. The mobile coercion now re-runs on the breakpoint change, not only on a tab click.
+- The tree width no longer overrides the drawer layout (inline `width` -> `--files-tree-w`).
+- Horizontal-overflow smoke coverage now includes 1024/820/768/390px viewports; nothing below 820px was exercised before.
+
 ## [2.31.0] - 2026-10-08
 
 Opening and closing files in the `mma web` Files tab used to fight you: an open
