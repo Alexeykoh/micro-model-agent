@@ -4,6 +4,23 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.34.0] - 2026-10-08
+
+Web final answers read as a dense, occasionally broken wall compared to other
+agent UIs. Two causes: cramped typography and GFM that the strict CommonMark
+parser (`smd.js`) left as raw text.
+
+### Fixed
+
+- **GFM not parsed by `smd.js` renders as raw text** (`src/modules/webui/assets/js/md-normalize.ts`, `md.ts`): tables without outer pipes (`A | B` / `---|---`), `1)` ordered lists and `##X` headings (no space) are now normalized before parsing. `MdNormalizer` is streaming-aware (one-line lookahead for the table delimiter) so live answers and history share the exact same output; fenced code is never touched.
+- **Soft line breaks were preserved as hard newlines** (`src/modules/webui/assets/styles.css`): `.md p` dropped `white-space: pre-wrap`, so prose flows as spaces per CommonMark instead of a ragged block of short lines.
+
+### Changed
+
+- **Answer typography gets breathing room** (`styles.css`): `.md` `line-height: 1.62`; paragraph margin `4 → 9px`; heading scale `1.5 / 1.28 / 1.12em` with `18px` top margin; list `li 3px`, indent `24px`; table cell padding and a header rule; `hr`/`blockquote`/code-block spacing. First/last child margins are trimmed so the answer block hugs its rail.
+
+Tests: `tests/webui-md-normalize.test.ts` (normalizer + streaming splits), `tests/webui-md-render.test.ts` (happy-dom structure), guard in `tests/webui-assets.test.ts`.
+
 ## [2.33.0] - 2026-10-08
 
 A MoE turn on a local LM Studio backend died without a word: every subtask

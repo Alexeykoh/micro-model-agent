@@ -201,6 +201,17 @@ describe("webui assets", () => {
     expect(js(a)).toContain("appendActionsRow");
   });
 
+  it("answer typography has breathing room and normal soft breaks", () => {
+    const a = loadAssets();
+    expect(a.mdJs).toContain('from "./js/md-normalize.js"');
+    expect(a.jsModules["js/md-normalize.js"]).toContain("MdNormalizer");
+    expect(a.css).toContain(".md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.62; }");
+    expect(a.css).toContain(".md p { margin: 9px 0; }");
+    expect(a.css).toContain(".md ul, .md ol { margin: 8px 0; padding-left: 24px; }");
+    // Soft breaks must flow as spaces (CommonMark), not preserved as hard newlines.
+    expect(a.css).not.toMatch(/\.md p \{[^}]*white-space: pre-wrap/);
+  });
+
   it("loads hljs and the module app, and styles code blocks + copy actions", () => {
     const a = loadAssets();
     expect(a.html).toContain('src="/hljs.js"');

@@ -11,6 +11,7 @@
 // no `innerHTML`. Link/image URLs are restricted to http(s)/mailto/data-image.
 
 import * as smd from "./smd.js";
+import { MdNormalizer } from "./js/md-normalize.js";
 import type { Dict } from "./js/core/store/types.js";
 
 // Vendored `smd.js` ships its own inferred renderer-data type; our token bag is
@@ -288,12 +289,17 @@ export function mountMarkdown(parent: HTMLElement, opts?: Dict): MdHandle {
     add_text: addText,
     set_attr: setAttr,
   });
+  // Строки нормализуются по мере поступления (GFM, который smd не парсит:
+  // таблицы без внешних `|`, `1)`, `##X`); последняя недописанная строка
+  // уходит в `flush` на `end`.
+  const normalizer = new MdNormalizer();
   return {
     root,
     write(chunk) {
-      smd.parser_write(parser, String(chunk == null ? "" : chunk));
+      smd.parser_write(parser, normalizer.push(String(chunk == null ? "" : chunk)));
     },
     end() {
+      smd.parser_write(parser, normalizer.flush());
       smd.parser_end(parser);
       if (data.code) {
         finalizeCode(data);

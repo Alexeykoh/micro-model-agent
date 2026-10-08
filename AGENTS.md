@@ -1306,7 +1306,25 @@ quality-gate и выглядят аккуратно.
 - **NotifyPlugin**: одна строка `debug` с id сессии вместо `info` без id
   (14 одинаковых строк `Session ended` на один ход).
 
-### Current Version: 2.33.0
+### Web Answer Typography (2.34.0)
+
+Финальный ответ в web читался как плотная «каша» и местами сырым текстом. Две причины,
+обе в рендере ответа.
+
+- **GFM, который не парсит `smd.js`** (`src/modules/webui/assets/js/md-normalize.ts`, `md.ts`):
+  таблицы без крайних `|`, списки `1)`, заголовки `##X` без пробела теперь нормализуются
+  до парсинга. `MdNormalizer` потоковый (одна строка lookahead под delimiter таблицы), поэтому
+  живой стрим и история дают идентичный результат; код-фенсы не трогаются.
+- **Мягкие переносы** (`styles.css`): `.md p` без `white-space: pre-wrap` — проза течёт
+  пробелами по CommonMark, а не рагу из коротких строк.
+- **Типографика** (`styles.css`): `.md` line-height 1.62; абзац `4→9px`; шкала заголовков
+  `1.5/1.28/1.12em` с верхним отступом 18px; списки `li 3px`, отступ 24px; паддинг ячеек
+  таблицы + линия под шапкой; отступы `hr`/`blockquote`/код-блоков. Первый/последний
+  дочерний без внешних отступов.
+- Тесты: `tests/webui-md-normalize.test.ts`, `tests/webui-md-render.test.ts`, guard в
+  `tests/webui-assets.test.ts`.
+
+### Current Version: 2.34.0
 
 ### Changelog
 
