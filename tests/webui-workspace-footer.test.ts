@@ -1,7 +1,7 @@
-// DOM coverage for the footer line under the composer: workspace path + agent
-// version. The renderer is a leaf module taking its element as an argument, so
-// the test needs no `dom.js` (whose element handles are captured once per
-// process and would leak between test files).
+// DOM coverage for the footer line under the composer: workspace path, MoE mode
+// chip and agent version. The renderer is a leaf module taking its element as an
+// argument, so the test needs no `dom.js` (whose element handles are captured
+// once per process and would leak between test files).
 // `bun test` doesn't apply vitest's environment docblock, so happy-dom is wired
 // manually (tests/helpers/happy-dom.ts).
 import { describe, it, expect, beforeEach } from "vitest";
@@ -25,12 +25,12 @@ beforeEach(() => {
   win.document.body.appendChild(line);
 });
 
-const draw = (ws: string, version: string) =>
-  renderFooter(line, ws, version, "dir", make);
+const draw = (input: Partial<Parameters<typeof renderFooter>[1]> = {}) =>
+  renderFooter(line, { dirLabel: "dir", ...input }, make);
 
 describe("workspace footer line", () => {
   it("renders dir + path and the version", () => {
-    draw("E:\\projects\\demo", "2.29.1");
+    draw({ workspace: "E:\\projects\\demo", version: "2.29.1" });
     expect(line.hidden).toBe(false);
     expect(line.querySelector(".ws-k")?.textContent).toBe("dir");
     expect(line.querySelector(".ws-v")?.textContent).toBe("E:\\projects\\demo");
@@ -41,26 +41,45 @@ describe("workspace footer line", () => {
   });
 
   it("shows the version even without a workspace path", () => {
-    draw("", "2.29.0");
+    draw({ version: "2.29.0" });
     expect(line.hidden).toBe(false);
     expect(line.querySelector(".ws-k")).toBeNull();
     expect(line.querySelector(".ws-ver")?.textContent).toBe("mma 2.29.0");
   });
 
-  it("hides the line when neither path nor version is known", () => {
-    draw("", "");
+  it("hides the line when there is nothing to show", () => {
+    draw({});
     expect(line.hidden).toBe(true);
     expect(line.children.length).toBe(0);
   });
 
   it("rebuilds when the version changes but not on an identical snapshot", () => {
-    draw("E:\\p", "2.29.1");
-    draw("E:\\p", "2.29.1");
+    draw({ workspace: "E:\\p", version: "2.29.1" });
+    draw({ workspace: "E:\\p", version: "2.29.1" });
     const first = line.querySelector(".ws-ver");
     expect(line.children.length).toBe(3);
 
-    draw("E:\\p", "2.30.0");
+    draw({ workspace: "E:\\p", version: "2.30.0" });
     expect(line.querySelector(".ws-ver")).not.toBe(first);
     expect(line.querySelector(".ws-ver")?.textContent).toBe("mma 2.30.0");
+  });
+
+  it("lights the MoE chip only while MoE runs the turn", () => {
+    draw({ workspace: "E:\\p", version: "2.29.1" });
+    expect(line.querySelector(".ws-moe")).toBeNull();
+
+    draw({ workspace: "E:\\p", version: "2.29.1", moeActive: true });
+    expect(line.hidden).toBe(false);
+    expect(line.querySelector(".ws-moe")?.textContent).toBe("MoE");
+
+    // Плановый снимок без флага гасит чип: MoE отдал ход одиночному циклу.
+    draw({ workspace: "E:\\p", version: "2.29.1" });
+    expect(line.querySelector(".ws-moe")).toBeNull();
+  });
+
+  it("keeps the chip visible without a version", () => {
+    draw({ moeActive: true });
+    expect(line.hidden).toBe(false);
+    expect(line.querySelector(".ws-moe")?.textContent).toBe("MoE");
   });
 });

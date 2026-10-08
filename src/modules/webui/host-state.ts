@@ -31,6 +31,8 @@ export interface HostStateInput {
   filesRevision?: number;
   /** Конкретная сессия (веб-вкладка); без неё — активная. */
   sessionId?: string;
+  /** Факт «этим ходом руководит MoE» для чипа режима в футере. */
+  moeActive?: boolean;
 }
 
 /** Структурное подмножество индексер-модуля для сайдбара (без жёсткой зависимости). */
@@ -150,6 +152,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     contextProbe: deps.contextProbe,
     workspace: deps.workspace,
     version: readMmaVersion(),
+    moeActive: deps.moeActive,
     instructions: deps.instructions,
     projectMap: deps.projectMap ?? undefined,
     filesRevision: deps.filesRevision,

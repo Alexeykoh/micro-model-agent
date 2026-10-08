@@ -625,6 +625,8 @@ body.light .sel > button { border: 1px solid var(--border); }
 .ws-line .ws-k { color: var(--dim-b); margin-right: 6px; flex: none; }
 .ws-line .ws-v { color: var(--dim-a); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: anywhere; }
 .ws-line .ws-ver { color: var(--dim-b); margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
+.ws-line .ws-moe { color: var(--accent, var(--dim-b)); margin-left: auto; flex: none; font-weight: 600; letter-spacing: .02em; }
+.ws-line .ws-moe + .ws-ver { margin-left: 10px; }
 
 /* slash-command autocomplete popup (above the composer) */
 .cmdk {

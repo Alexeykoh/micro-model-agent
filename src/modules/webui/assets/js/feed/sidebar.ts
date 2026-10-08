@@ -180,9 +180,18 @@ export function renderUsage(h: Dict): void {
   usageEl.appendChild(usageRow(t("web.usage.probe"), probeText, probeCls));
 }
 
-// Workspace path + agent version under the composer (dim, own line).
+// Workspace path, MoE mode chip and agent version under the composer.
 export function renderWorkspace(h: Dict): void {
-  renderFooter(wsLine, h.workspace || "", h.version || "", t("web.env.dir"), el);
+  renderFooter(
+    wsLine,
+    {
+      workspace: h.workspace,
+      version: h.version,
+      moeActive: h.moeActive === true,
+      dirLabel: t("web.env.dir"),
+    },
+    el,
+  );
 }
 
 // Environment (sidebar): stacked name/value items — AGENTS.md sources, map size.

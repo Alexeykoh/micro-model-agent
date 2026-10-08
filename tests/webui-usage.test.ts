@@ -104,6 +104,17 @@ describe("webui usage metrics", () => {
     expect(snapshot.version).not.toBe("");
   });
 
+  it("buildHostState reports moeActive only while MoE runs the turn", () => {
+    const off = buildHostState({ config: structuredClone(DEFAULTS) }, false);
+    expect(off.moeActive).toBeUndefined();
+
+    const on = buildHostState(
+      { config: structuredClone(DEFAULTS), moeActive: true },
+      true,
+    );
+    expect(on.moeActive).toBe(true);
+  });
+
   it("buildHostState surfaces captured usage in the snapshot", () => {
     const config = structuredClone(DEFAULTS);
     const snapshot: HostStateSnapshot = buildHostState(
