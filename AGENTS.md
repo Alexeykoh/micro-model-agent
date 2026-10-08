@@ -1517,7 +1517,10 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
   `openTab(id, name, kind, server, activate)` с `activate=false` создаёт фоновую
   вкладку без подмены активной.
 
-### Current Version: 2.35.2
+### Current Version: 2.36.0
+
+MMART — the web mascot (see the section above): named loader face, click-to-greet
+bubble, complete `TOOL_STATE`/`loaderStateFor` coverage.
 
 ### Changelog
 
