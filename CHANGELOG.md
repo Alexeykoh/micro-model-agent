@@ -4,20 +4,21 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.36.0] - 2026-10-08
+
+`mma web` fixes from a live two-tab session (a background session's stream
+leaked into the active tab, Settings showed a stale value after slash-command
+config writes, an interrupted turn reported success, the context probe compared
+against the history budget instead of the window, open tabs were lost on
+reload), a context selector that can take the window from the provider
+(`contextAuto`, default on), and the agent's mascot: the loader face is now
+named **MMART** (MMA + art), greets on click, and maps every tool and
+agent-facing SSE event to a distinct face state.
 
 ### Added
 
 - **Context selector: `auto`** (`assets/js/settings/write.ts`, `config/registry-extra.ts`, `modules/webui/settings/context-auto.ts`, `core/agent.ts`, `core/bootstrap/provider-phase.ts`): the composer context dropdown gains an `auto` item (button reads `context: auto`) that takes the window from the provider for the active model. It is backed by the new `contextAuto` config key — default **on**, so the existing probe behaviour is unchanged; enabling it probes the provider immediately and applies the result (fail-open, the provider staying silent is announced with `web.selectors.auto_failed` instead of a plain "saved"). Writing a concrete `contextWindow` (selector, `/context`, `mma context`) pins the value: the probe no longer overrides it on start or on model/provider switch. Toggled from the selector menu, `/config contextAuto` or Settings → Context. Tests: `tests/config/context-auto.test.ts`, `tests/webui-config.test.ts`, guard in `tests/webui-assets.test.ts`.
-
-## [2.35.2] - 2026-10-08
-
-Parallel-turn and settings-consistency fixes for `mma web`, found in a live
-session: a background session's stream leaked into the active tab's feed, the
-Settings panel showed a stale value after config changes made via slash
-commands, an interrupted turn reported success, the context probe compared
-against the history budget instead of the window, and open tabs were lost on
-reload.
+- **MMART — the mascot** (`src/modules/webui/assets/js/loader.ts`, `assets/app.ts`, `assets/styles.css`, `src/i18n/{en,ru}.json`): the loader face gets a name (**MMART** = MMA + art). Clicking the face itself pops a localized greeting bubble (`web.loader.greet`) for 2.2s — a click anywhere else still only blinks it, so the greeting is not a page-wide easter egg; repeated clicks restart the timer. The bubble's font is floored (`max(12px, …)`), because scaling it by the face size produced unreadable ~4.6px text on the 22px face. The greeting text is injected via `setGreetResolver` from `app.ts` (so `loader.ts` stays import-safe under `bun test`) and is re-bound on locale switch. `TOOL_STATE` now gives every core tool a behavioural state instead of the generic `run`: `approve`/`question` → `ask`, `web_browse` → `web`, `load_skill`/`session_info` → `read`, `search_history` → `find`, `define_capability`/`remember` → `create`, `set_thinking` → `think`, `enable_tools` → `run`, `meet_done` → `done`. `loaderStateFor` covers the remaining agent-facing SSE (`retract` → error, `index` → find, `setup_done` → done); background broadcasts (`usage`/`state`/`config`/`files`/`sessions`/`plugins`/`log`) map to `idle` and are deliberately not wired to `faceEvent`, as they are not agent activity. Tests in `tests/webui-loader.test.ts`.
 
 ### Fixed
 
