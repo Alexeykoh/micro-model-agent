@@ -32,11 +32,15 @@ function jsImports(src: string): string[] {
   return [...found];
 }
 
+// A served asset is a stub only when it is the `loadAssets` fallback text —
+// a short body is NOT a stub (barrels like `js/store.js` transpile to ~39 bytes).
+const STUB_BODY_RE = /^\s*$|^\/\/\s*missing\b|assets missing/i;
+
 async function getOk(baseUrl: string, path: string): Promise<string> {
   const res = await fetch(`${baseUrl}${path}`);
   if (res.status !== 200) throw new Error(`GET ${path} answered ${res.status}`);
   const body = await res.text();
-  if (body.length < 100) throw new Error(`GET ${path} answered 200 with a stub body`);
+  if (STUB_BODY_RE.test(body)) throw new Error(`GET ${path} answered 200 with a stub body`);
   return body;
 }
 

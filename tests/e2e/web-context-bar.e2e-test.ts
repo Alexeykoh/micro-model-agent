@@ -29,9 +29,9 @@ describe("web e2e: context breakdown bar", () => {
     async () => {
       const dir = artifactsDirFor("context-bar");
       await withE2E(dir, async (_srv, { page, errors }: Launched) => {
-        await waitForLiveTab(page);
-
-        // Inject breakdown into the state poll (sidebar refreshes every 2s).
+        // Inject breakdown into `GET /api/state`. State is event-sourced since
+        // 2.24.0 (no 2s poll), so the injected snapshot must be served to a real
+        // fetch: reload after installing the route — boot's `refresh()` reads it.
         await page.route("**/api/state*", async (route) => {
           const res = await route.fetch();
           const json = (await res.json()) as { state?: Record<string, unknown> };
@@ -43,6 +43,9 @@ describe("web e2e: context breakdown bar", () => {
           };
           await route.fulfill({ response: res, json });
         });
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.waitForSelector(".bar-top", { timeout: 15_000 });
+        await waitForLiveTab(page);
 
         // Five categories land in both the bar and the legend.
         await expect

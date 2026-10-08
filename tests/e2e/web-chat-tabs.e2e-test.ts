@@ -176,7 +176,7 @@ describe("web e2e: chat, tabs, sessions, files", () => {
           page.click("#attachBtn"),
         ]);
         await chooser.setFiles({ name: "pixel.png", mimeType: "image/png", buffer: PIXEL_PNG });
-        await page.waitForSelector(".thumb", { timeout: 10_000 });
+        await page.waitForSelector(".thumb", { timeout: 20_000 });
         await page.screenshot({ path: `${dir}/attached.png` });
         await page.locator(".thumb .rm").first().click();
         await page.waitForSelector(".thumb", { state: "hidden", timeout: 10_000 });

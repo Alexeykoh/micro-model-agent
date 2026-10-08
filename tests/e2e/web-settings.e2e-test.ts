@@ -142,18 +142,26 @@ describe("web e2e: settings", () => {
           .poll(() => configValue(baseUrl, "security.enabled"), { timeout: 10_000 })
           .toBe(wasOn);
 
-        // Context window write + revert through the number input.
+        // Context window write + revert through the number input. A write
+        // re-renders the panel, so `fill`+Tab can act on a detached input and
+        // silently revert nothing. Commit atomically: set the value and dispatch
+        // `change` on the current node in a single evaluate.
         await page.click('#setMenu [data-p="context"]');
         const origCtx = Number(await configValue(baseUrl, "contextWindow"));
         const probe = origCtx === 32768 ? 65536 : 32768;
-        const input = page.locator('[data-panel="context"] input[type="number"]').first();
-        await input.fill(String(probe));
-        await input.press("Tab");
+        const setCtx = (v: number): Promise<void> =>
+          page
+            .locator('[data-panel="context"] input[type="number"]')
+            .first()
+            .evaluate((el, value) => {
+              (el as HTMLInputElement).value = String(value);
+              el.dispatchEvent(new Event("change", { bubbles: true }));
+            }, v);
+        await setCtx(probe);
         await expect
           .poll(() => configValue(baseUrl, "contextWindow"), { timeout: 10_000 })
           .toBe(probe);
-        await input.fill(String(origCtx));
-        await input.press("Tab");
+        await setCtx(origCtx);
         await expect
           .poll(() => configValue(baseUrl, "contextWindow"), { timeout: 10_000 })
           .toBe(origCtx);
@@ -223,9 +231,15 @@ describe("web e2e: settings", () => {
           .poll(() => page.locator('[data-panel="model"]').innerText(), { timeout: 15_000 })
           .not.toHaveLength(0);
 
-        // MCP toggle flips the persisted flag; flip back afterwards.
+        // MCP toggle flips the persisted flag; flip back afterwards. The
+        // plugins panel renders plugin rows as `.list-line` too, so target the
+        // seeded MCP row by name, not the first `.list-line .toggle`.
         await page.click('#setMenu [data-p="plugins"]');
-        const mcpToggle = page.locator(".list-line .toggle").first();
+        const mcpRow = page
+          .locator('[data-panel="plugins"] .list-line')
+          .filter({ hasText: "e2e-toggle" })
+          .first();
+        const mcpToggle = mcpRow.locator(".toggle");
         await mcpToggle.waitFor({ timeout: 10_000 });
         const wasOn = await mcpToggle.evaluate((el) => el.classList.contains("on"));
         const mcpStatus = async (): Promise<string> => {
@@ -234,9 +248,14 @@ describe("web e2e: settings", () => {
           };
           return body.mcp?.[0]?.status ?? "";
         };
-        await mcpToggle.click();
+        await mcpToggle.dispatchEvent("click");
         await expect.poll(mcpStatus, { timeout: 15_000 }).toBe(wasOn ? "disabled" : "enabled");
-        await page.locator(".list-line .toggle").first().click();
+        // Wait for the panel to re-render the toggle to the new state before
+        // reverting; clicking a stale node would recompute the old `next` and
+        // re-issue the same flip.
+        const mcpOn = () => mcpRow.locator(".toggle").evaluate((el) => el.classList.contains("on"));
+        await expect.poll(mcpOn, { timeout: 10_000 }).toBe(!wasOn);
+        await mcpRow.locator(".toggle").dispatchEvent("click");
         await expect.poll(mcpStatus, { timeout: 15_000 }).toBe(wasOn ? "enabled" : "disabled");
 
         // Skills panel renders something (list or placeholder), never blank.
