@@ -185,6 +185,12 @@ export interface WebUiState {
    */
   sessionUsage: Record<string, UsageSnapshot>;
   /**
+   * Сессии, чей текущий ход ведёт MoE (чип режима в футере). Per-session —
+   * вкладки идут параллельно, и в соседней может идти обычный одиночный ход.
+   * Ставится `onMoEState` раннера и гасится в его `finally`.
+   */
+  moeSessions: Record<string, boolean>;
+  /**
    * Id сессии-владельца текущего/последнего хода. Штампуется на каждое
    * SSE-событие, чтобы браузер клал стрим во вкладку исходной сессии,
    * а не в случайно активную.
@@ -308,7 +314,7 @@ export type RuntimeState = Pick<
 /** Роль: сессии (менеджер, план-трекер, usage). */
 export type SessionStore = Pick<
   WebUiState,
-  "sessionManager" | "execModule" | "sessionUsage" | "usage" | "activeSessionId"
+  "sessionManager" | "execModule" | "sessionUsage" | "usage" | "activeSessionId" | "moeSessions"
 >;
 
 /** Роль: конфиг (живой объект, запись, reconfigure, список моделей). */
@@ -365,6 +371,7 @@ export function createWebUiState(): WebUiState {
     pendingQuestions: new Map(),
     setupRequired: false,
     sessionUsage: {},
+    moeSessions: {},
     filesRevision: 0,
   };
 }
@@ -399,6 +406,16 @@ export function activeUsage(s: SessionStore, sessionId?: string): UsageSnapshot 
     /* fail-open: нет метрик */
   }
   return undefined;
+}
+
+/**
+ * Ведёт ли текущий ход указанной сессии MoE. Фолбэк на single-agent даёт
+ * `undefined`/`false` — чип режима не должен гореть, когда оркестрации не было.
+ */
+export function activeMoe(s: SessionStore, sessionId?: string): boolean | undefined {
+  const active =
+    sessionId ?? s.sessionManager?.getActive?.() ?? s.activeSessionId ?? null;
+  return active ? s.moeSessions[active] || undefined : undefined;
 }
 
 /** SSE-событие: тип, время, произвольный пейлоад. */

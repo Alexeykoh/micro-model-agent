@@ -4,6 +4,28 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.30.0] - 2026-10-08
+
+MoE orchestration is now visible. A turn led by Mixture-of-Experts says so — one
+line when the plan is ready, one when the turn ends — and `mma web` shows a
+`MoE` chip in the composer footer while the orchestration is actually running.
+
+### Added
+
+- **MoE progress lines** (`src/core/agent-moe.ts`, `moe.started`/`moe.finished`): `◇ MoE · plan of N steps` on a validated plan and `✓ MoE · D/T done` at the end, printed regardless of `ui.verbose`. The start line is announced once per turn (re-plan cycles stay silent), and the finish line reports a partial result or a broken merge instead of a success tally.
+- **MoE mode chip** (`mma web`): `HostStateSnapshot.moeActive` + per-session `state.moeSessions` + `assets/js/footer.ts`. `Agent.setMoEStateListener` lets the web host subscribe a spawned runner; the flag rides the existing state snapshot (`pushState`) rather than a new SSE type. Lights up only while MoE leads the turn — a fallback to single-agent never lights it.
+- **`Agent.setMoEStateListener(fn)`** (`src/core/agent.ts`): subscribes/unsubscribes the "MoE leads this turn" observer (`AgentDeps.onMoEState`).
+
+### Changed
+
+- **Progress is not verbose-only anymore**: `moe.executing` and `moe.planning` are gone (planning is covered by the thinking spinner, the start line replaces the "executing" line); re-plan, auto-fix and scope decisions remain behind `/verbose`.
+- **`moe.*` strings follow STYLE.md**: emoji (`🤖 ⚙️ 🔄 🔧 ✅ ⛔ 🔓 ⚠️`) replaced with `◇ ✓ ⚠ ↻ ↳`; new keys in en + ru.
+
+### Fixed
+
+- **Expert sub-agents keep the session header**: `resolveExpertProvider` builds the dedicated expert provider without `getSessionId`, so OpenCode Go/Zen answered every expert call with `400 MissingSessionID` and a whole MoE plan collapsed. Both call sites (`src/tools/subagent.ts`, `src/modules/execution/moe-executor.ts`) now forward the session id.
+- **`mma web` footer**: long workspace paths no longer stretch the line (ellipsis), and the agent version is pinned to the right.
+
 ## [2.29.1] - 2026-10-07
 
 Agent-written capability drafts (`define_capability`) are now quality-gated and

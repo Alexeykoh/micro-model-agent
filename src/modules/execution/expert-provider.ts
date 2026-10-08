@@ -12,12 +12,17 @@ import { buildManagedProvider } from "../providers/managed";
  * - модель пустая или совпадает с активной → общий `activeProvider`;
  * - иначе — управляемый провайдер на активном провайдере с моделью эксперта;
  * - ошибка сборки → warn + активный провайдер (fail-open, как у критика).
+ *
+ * `getSessionId` обязателен по сути: без него выделенный провайдер не шлёт
+ * `x-opencode-session`, а OpenCode Go/Zen отвечают 400 MissingSessionID на каждый
+ * запрос эксперта (MoE-сабтаски и субагенты с `expert_tag` умирали целиком).
  */
 export function resolveExpertProvider(
   config: AppConfig,
   expertModel: string | undefined,
   activeProvider: LLMProvider,
   logger?: Logger,
+  getSessionId?: () => string | undefined,
 ): LLMProvider {
   const model = expertModel?.trim();
   if (!model || model === config.model) return activeProvider;
@@ -26,6 +31,7 @@ export function resolveExpertProvider(
       contextWindow: config.contextWindow,
       retry: config.retry,
       rateLimits: config.security?.rateLimits,
+      getSessionId,
       logger,
       label: "expert",
     });

@@ -11,6 +11,7 @@ import type { AgentResult } from "../src/core/types";
 import type { Host, HostStateSnapshot } from "../src/core/host";
 import { createWebUiState } from "../src/modules/webui/state";
 import { doFetch, withServer } from "./helpers/webui-server";
+import { readMmaVersion } from "../src/core/version";
 
 
 
@@ -95,6 +96,23 @@ describe("webui usage metrics", () => {
     );
     expect(snapshot.sessionId).toBe("other");
     expect(snapshot.sessionName).toBe("Other");
+  });
+
+  it("buildHostState carries the installed package version (not the config schema version)", () => {
+    const snapshot = buildHostState({ config: structuredClone(DEFAULTS) }, false);
+    expect(snapshot.version).toBe(readMmaVersion());
+    expect(snapshot.version).not.toBe("");
+  });
+
+  it("buildHostState reports moeActive only while MoE runs the turn", () => {
+    const off = buildHostState({ config: structuredClone(DEFAULTS) }, false);
+    expect(off.moeActive).toBeUndefined();
+
+    const on = buildHostState(
+      { config: structuredClone(DEFAULTS), moeActive: true },
+      true,
+    );
+    expect(on.moeActive).toBe(true);
   });
 
   it("buildHostState surfaces captured usage in the snapshot", () => {

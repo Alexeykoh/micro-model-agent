@@ -167,6 +167,7 @@ async function executeSubtask(
     expertConfig.model,
     deps.llmProvider,
     deps.logger,
+    () => deps.sessionId,
   );
   let lastError = "";
   const stuckDetector = new StuckDetector(maxAttempts * 2, maxAttempts);

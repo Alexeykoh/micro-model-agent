@@ -4,6 +4,7 @@ import { usageEl, envEl, wsLine, el, icon, attachTooltip } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
 import { feed, settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
+import { renderFooter } from "../footer.js";
 import { fmtTokens } from "../format.js";
 import { copyText } from "../../md.js";
 
@@ -179,18 +180,18 @@ export function renderUsage(h: Dict): void {
   usageEl.appendChild(usageRow(t("web.usage.probe"), probeText, probeCls));
 }
 
-// Workspace path under the composer (dim, own line).
+// Workspace path, MoE mode chip and agent version under the composer.
 export function renderWorkspace(h: Dict): void {
-  const ws = h.workspace || "";
-  if (wsLine.dataset.ws === ws) return;
-  wsLine.dataset.ws = ws;
-  wsLine.textContent = "";
-  wsLine.hidden = !ws;
-  if (!ws) return;
-  wsLine.appendChild(el("span", "ws-k", t("web.env.dir")));
-  const v = el("span", "ws-v", ws);
-  v.title = ws;
-  wsLine.appendChild(v);
+  renderFooter(
+    wsLine,
+    {
+      workspace: h.workspace,
+      version: h.version,
+      moeActive: h.moeActive === true,
+      dirLabel: t("web.env.dir"),
+    },
+    el,
+  );
 }
 
 // Environment (sidebar): stacked name/value items — AGENTS.md sources, map size.

@@ -1158,7 +1158,36 @@ quality-gate и выглядят аккуратно.
 - **Тесты**: `tests/plugin-drafts.test.ts` (синтаксис, нормализация, откат при
   провале загрузки).
 
-### Current Version: 2.29.1
+### MoE Indicator (2.30.0)
+
+Спека: [docs/specs/2026-10-08-moe-indicator-design.md](./docs/specs/2026-10-08-moe-indicator-design.md).
+Пользователь видит, что ход ведёт оркестрация: одна строка в чате на ход + чип
+режима в футере `mma web`.
+
+- **Строки чата** (`src/core/agent-moe.ts`): `moe.started` (`◇ MoE · plan of N
+  steps`) печатается **один раз за ход** после валидного плана (re-plan циклы
+  молчат), `moe.finished` / `moe.finished_partial` / `moe.finished_error` — на
+  выходе (`verifyResult.type === "final"`, `partialFailure`, обрыв слияния).
+  Вперёд идут **не через `status()`**, а напрямую в `onMeta` — то есть ungate
+  от `ui.verbose`; `replan`/`plan_autofixed`/`scope_*` остались verbose-only.
+  `moe.executing` и `moe.planning` удалены (планирование покрывает спиннер
+  thinking), emoji в `moe.*` заменены на глифы STYLE.md.
+- **Флаг «MoE ведёт ход»**: опция `runWithMoE({ onMoEState })` + деп
+  `AgentDeps.onMoEState` и сеттер `Agent.setMoEStateListener` (веб подписывает
+  уже собранного раннера). `true` — после валидного плана, `false` — в
+  `finally` обёртки `runWithMoE` (тело вынесено в `runMoECycles`), поэтому
+  фолбэк, ошибка и Esc гасят флаг. Это **факт, а не `moe.enabled`**.
+- **Бейдж веба**: `HostStateSnapshot.moeActive` ← `state.moeSessions[sid]`
+  (`activeMoe(state, sessionId)`, чистится при удалении сессии), едет в
+  `pushState` — нового SSE-типа нет (правило event-sourced state). Футер —
+  листовой `assets/js/footer.ts` (`renderFooter(el, input, make)`): путь с
+  ellipsis, чип `MoE`, версия справа. Терминал бейджа не имеет — там строка чата.
+- **Тесты:** `tests/core/moe-indicator.test.ts` (9 кейсов: ungate, один
+  announce на цикл, verbose-only шум, частичный/оборванный итог, сброс флага на
+  фолбэке/планировании/аборте), `tests/webui-workspace-footer.test.ts` (чип),
+  `tests/webui-usage.test.ts` (`moeActive` в снапшоте).
+
+### Current Version: 2.30.0
 
 ### Changelog
 

@@ -48,4 +48,22 @@ describe("resolveExpertProvider", () => {
     expect(resolveExpertProvider(c, "expert-model", active, logger)).toBe(active);
     expect(logger.warn).toHaveBeenCalled();
   });
+
+  // OpenCode Go/Zen отвечают 400 MissingSessionID без `x-opencode-session`:
+  // заголовок шлётся только когда у провайдера есть getSessionId.
+  it("forwards getSessionId to the dedicated provider", () => {
+    const provider = resolveExpertProvider(
+      cfg(),
+      "expert-model",
+      activeProvider(),
+      undefined,
+      () => "ses_expert",
+    );
+    expect((provider as any).getSessionId?.()).toBe("ses_expert");
+  });
+
+  it("builds the dedicated provider without a session getter when none is given", () => {
+    const provider = resolveExpertProvider(cfg(), "expert-model", activeProvider());
+    expect((provider as any).getSessionId?.()).toBeUndefined();
+  });
 });

@@ -77,6 +77,10 @@ export interface MoEDeps {
  * верификация, с re-plan циклом по решению verifyAndMerge оркестратора.
  * Возвращает сигнал фолбэка, когда MoE не может продолжить: вызывающий
  * откатывается в одиночный цикл агента.
+ *
+ * `onMoEState` — факт «MoE ведёт этот ход» (не `moe.enabled`): веб рисует по
+ * нему чип режима. Ставится после успешного плана и гасится в `finally`,
+ * поэтому фолбэк, ошибка и Esc не оставляют чип гореть.
  */
 export async function runWithMoE(
   deps: MoEDeps,
@@ -92,7 +96,37 @@ export async function runWithMoE(
     onEvent?: (event: MoEEvent) => void;
     /** Реальный id сессии, прокидывается субагентам для аудита/артефактов. */
     sessionId?: string;
+    /** Факт «MoE ведёт ход»: true после успешного плана, false в `finally`. */
+    onMoEState?: (active: boolean) => void;
   } = {},
+): Promise<AgentResult> {
+  let active = false;
+  const setActive = (next: boolean): void => {
+    if (active === next) return;
+    active = next;
+    opts.onMoEState?.(next);
+  };
+  try {
+    return await runMoECycles(deps, input, fallback, opts, setActive);
+  } finally {
+    setActive(false);
+  }
+}
+
+/** Тело MoE-цикла. `setActive(true)` — только после валидного плана. */
+async function runMoECycles(
+  deps: MoEDeps,
+  input: string,
+  fallback: () => Promise<AgentResult>,
+  opts: {
+    onMeta?: OnMeta;
+    onTool?: (ev: ToolEvent) => void;
+    onPhase?: (phase: AgentPhase) => void;
+    signal?: AbortSignal;
+    onEvent?: (event: MoEEvent) => void;
+    sessionId?: string;
+  },
+  setActive: (active: boolean) => void,
 ): Promise<AgentResult> {
   const { config, llmProvider, logger, toolExecutor, baseDir } = deps;
   const { onMeta, onPhase, onTool, signal, onEvent, sessionId } = opts;
@@ -102,10 +136,26 @@ export async function runWithMoE(
     if (signal?.aborted) throw newAbortError();
   };
   // Однострочники оркестрации — machine-facing: в чат только при
-  // включённом verbose UI (config.ui.verbose).
+  // включённом verbose UI (config.ui.verbose). Пользовательские строки
+  // прогресса (старт/финал хода) идут мимо `status` — см. `announce`.
   const verbose = config.ui?.verbose === true;
   const status = (message: string) => {
     if (verbose) onMeta?.(message);
+  };
+
+  let announced = false;
+  /** Финальная строка хода: успех, частичный результат или обрыв. */
+  const finish = (kind: "ok" | "partial" | "error") => {
+    if (!announced) return;
+    const done = [...mergedResults.values()].filter((r) => r.success).length;
+    const total = mergedResults.size;
+    if (kind === "ok") {
+      onMeta?.(t("moe.finished", { done: String(done), total: String(total) }));
+    } else if (kind === "partial") {
+      onMeta?.(t("moe.finished_partial", { done: String(done), total: String(total) }));
+    } else {
+      onMeta?.(t("moe.finished_error"));
+    }
   };
 
   ensureNotAborted();
@@ -138,7 +188,8 @@ export async function runWithMoE(
     return fallback();
   }
 
-  status(t("moe.planning"));
+  // Планирование отдельной строкой не печатается: его покрывает спиннер
+  // thinking (`onPhase`), а пользователю нужна одна строка на ход.
   onPhase?.("thinking");
   const planResult = await orchestrator.plan(input, undefined, signal);
   onPhase?.("done");
@@ -185,12 +236,22 @@ export async function runWithMoE(
           status(t("moe.plan_fallback"));
           return fallback();
         }
+        finish("partial");
         return partialFailure(mergedResults, retry.errors.join("; "));
       }
       currentPlan = applied;
       if (validation.autoFixes.length > 0) {
         status(t("moe.plan_autofixed", { count: String(validation.autoFixes.length) }));
       }
+    }
+
+    // Валидация прошла — MoE реально ведёт ход: одна строка в чат (на весь
+    // ход, не на цикл) и факт «режим включён» для индикатора. Re-plan циклы
+    // молчат: пользователь уже видит, что оркестрация идёт.
+    if (!announced) {
+      announced = true;
+      setActive(true);
+      onMeta?.(t("moe.started", { count: String(currentPlan.subtasks.length) }));
     }
 
     const executor: MoEExecutorLike =
@@ -221,9 +282,7 @@ export async function runWithMoE(
         },
       });
 
-    status(
-      `${t("moe.executing", { count: String(currentPlan.subtasks.length), cycle: String(cycle) })}\n`,
-    );
+    // Старт хода уже отдан строкой выше — промежуточный «executing» не печатаем.
 
     // Селективный re-plan (Plan 5.1): успешные сабтаски прошлого цикла
     // переносятся — переисполняются только упавшие/новые.
@@ -261,10 +320,8 @@ export async function runWithMoE(
     for (const r of planResults.results) {
       mergedResults.set(r.subtaskId, r);
     }
-    const succeeded = [...mergedResults.values()].filter((r) => r.success).length;
-    status(
-      `✅ ${t("moe.execution_complete", { succeeded: String(succeeded), total: String(mergedResults.size) })}\n`,
-    );
+    // Итог печатает финальная строка хода (`finish`) — здесь считать рано:
+    // verifyAndMerge может вернуть re-plan, и ход ещё не закончен.
 
     const verifier: MoEVerifierLike =
       deps.verifierOverride ??
@@ -292,6 +349,7 @@ export async function runWithMoE(
       onPhase?.("done");
       if (err?.name === "AbortError") throw err;
       emit("moe_verify", { status: "error", error: err.message });
+      finish("error");
       return {
         success: false,
         text: `MoE verifyAndMerge crashed: ${err.message}`,
@@ -307,11 +365,13 @@ export async function runWithMoE(
     });
 
     if (verifyResult.type === "final") {
+      finish("ok");
       return buildFinalResult(mergedResults, verification.success, verifyResult);
     }
 
     if (!verifyResult.plan || !Array.isArray(verifyResult.plan.subtasks)) {
       // Верификатор просил re-plan, но годного не дал — останавливаемся честно.
+      finish("partial");
       return partialFailure(
         mergedResults,
         verifyResult.explanation || "re-plan requested but no plan returned",
@@ -320,6 +380,7 @@ export async function runWithMoE(
     currentPlan = verifyResult.plan;
   }
 
+  finish("partial");
   return partialFailure(mergedResults, t("moe.cycles_exhausted", { max: String(maxCycles) }));
 }
 
