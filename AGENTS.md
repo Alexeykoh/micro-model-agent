@@ -898,11 +898,12 @@ read-only петля без стопа, рассинхрон провайдер�
   и сайдбар показывал `0%` вместо `—`. `AgentResult.cache.hitRate`/`CacheReport.hitRate` — optional;
   тесты `tests/core/cache-stats.test.ts`, `tests/webui-live-usage.test.ts`.
 
-### WebUI Files Tab (2.23.0)
+### WebUI Files Tab (2.23.0; split/controls — 2.31.0)
 
 Вкладка **Files** в сайдбаре `mma web`: ленивое дерево файлов workspace, read-only просмотр
-в приложении и attach файла в чат вставкой пути. Спека:
-[docs/specs/2026-10-07-webui-files-tab-design.md](./docs/specs/2026-10-07-webui-files-tab-design.md).
+в приложении и attach файла в чат вставкой пути. Спеки:
+[2026-10-07-webui-files-tab-design.md](./docs/specs/2026-10-07-webui-files-tab-design.md),
+[2026-10-08-webui-files-split-design.md](./docs/specs/2026-10-08-webui-files-split-design.md).
 
 - **Листинг** (`src/modules/webui/file/files-api.ts`): новый `GET /api/files?path=<rel>` — JSON
   одной директории (папки сверху, затем файлы; кап `MAX_DIR_ENTRIES`, флаг `truncated`).
@@ -912,11 +913,38 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Дерево** (`assets/js/sidebar/files.ts`, пятая вкладка `Alt+5`, Lucide `folder-tree`):
   lazy — папка фетчится при раскрытии (`expanded`/`listings` в `sb.files`), кэш инвалидируется
   событием. Стиль — строки + глифы (STYLE.md), без рамок.
-- **Просмотр**: master-detail (viewer занимает всю ширину `679px`-сайдбара, дерево скрывается).
-  Текст — `fetch /api/file` +
-  highlight.js (без `innerHTML`, через `DOMParser`); markdown — общий `renderMarkdown`;
-  картинки/PDF/медиа — нативные элементы; код переносится по строкам; бинарь/лимит — локализованная ошибка (`web.file.error.*`).
-  Никаких write-операций.
+- **Сплит вместо перехвата экрана (2.31.0):** `.files-body` = дерево (`#filesSide`) +
+  `.files-splitter` + просмотр. Дерево **никогда не прячется** при открытии файла — раньше это
+  делал CSS-хак `#pane-files:has(.files-detail:not([hidden])) .files-tree{display:none}`, и
+  переключение файла требовало close → заново найти его в дереве → развернуть папки. Ширина
+  дерева тянется мышью и с клавиатуры (`ArrowLeft/Right`, `Home`, dblclick), кламп 200–480px,
+  дефолт 240px, персист в `localStorage["mma-files-tree-w"]` (`sidebar/files/split.ts`).
+  Режим «только просмотр» — переключатель в шапке (`toggleViewerFull`/`setViewerFull`,
+  класс `.f-full`), а не побочный эффект открытия файла; кнопка `disabled` без открытого
+  файла, а закрытие просмотра (`✕`/`Escape`/смена workspace) **всегда возвращает дерево** —
+  иначе «скрытое дерево + закрытый просмотр» даёт пустую вкладку.
+- **История просмотра:** стек `files.history` + `histIndex` (`sidebar/files/history.ts`, cap 50),
+  кнопки `←`/`→` и `Alt+←/→`; повтор текущего пути — no-op, путь «впереди» курсора переиспользует
+  позицию (back/forward-семантика). Закрытие просмотра историю не стирает.
+- **Управление раскрытием** (панель над деревом): «свернуть всё», «развернуть всё»
+  (`EXPAND_DEPTH=4`, `EXPAND_DIR_CAP=200` запросов, батчи по 8, прогрессивная отрисовка; при
+  упоре в кап — строка `web.files.expand_capped`, молчаливого обрыва нет), «обновить»
+  (инвалидация кэша листингов + переоткрытие файла; раньше только по событию вотчера).
+  На клавиатуре `*` раскрывает только предков курсора.
+- **Клавиатура в дереве** (`sidebar/files/keys.ts`): строки — плоский список с `data-depth`,
+  курсор `files.cursor` перерисовывается **на месте** (`paintCursor`: полная перерисовка
+  уничтожила бы фокус). `↑/↓` — курсор, `→` — раскрыть/вниз, `←` — свернуть/к родителю,
+  `Enter`/`Space` — открыть/toggle, `Home/End`, `*`. Слушатель на дереве + `stopPropagation`,
+  чтобы не конфликтовать с глобальными `Alt+1..6`/`Escape`.
+- **Хлебные крошки** (`#filesCrumbs`): каталоги приглушены и кликабельны (клик раскрывает папку
+  в дереве и переводит туда курсор), имя файла яркое; длинный путь сворачивается в `…`.
+- **Кнопки читаемы:** иконки Lucide 24×24 (`.fbtn`) вместо глифов `◧`/`✕` с хардкод-`title`
+  по-английски; все `title`/`aria-label` через `t()`; attach-кнопка в строке — цель во всю
+  высоту строки, на тач-устройствах (`@media (hover: none)`) видна всегда; строки —
+  `role="treeitem"` с `aria-expanded`/`aria-selected`.
+- **Просмотр**: текст — `fetch /api/file` + highlight.js (без `innerHTML`, через `DOMParser`);
+  markdown — общий `renderMarkdown`; картинки/PDF/медиа — нативные элементы; код переносится
+  по строкам; бинарь/лимит — локализованная ошибка (`web.file.error.*`). Никаких write-операций.
 - **Attach = вставка пути**: иконка на строке + кнопка в шапке просмотрщика зовут
   `composer.insertIntoDraft` (DI через `initFiles`), вставляя `` `relpath` `` в черновик.
   Новый канал вложений НЕ вводится — существующий `parseMessageBody` (только `data:image/`)
@@ -925,9 +953,10 @@ read-only петля без стопа, рассинхрон провайдер�
   web (`attachIndexWatcher(indexer, onChange)`) бампит `HostStateSnapshot.filesRevision` и шлёт
   SSE `files {phase:"changed"}` → вкладка перечитывает раскрытые папки и открытый файл
   (фолбэк — `filesRevision` в снапшоте, событие `state`).
-- **Тесты**: `tests/modules/webui/files-api.test.ts`, `tests/webui-files-dom.test.ts`,
-  `tests/webui-index-watcher.test.ts`; обновлены `tests/webui-file.test.ts`,
-  `tests/webui-assets.test.ts`.
+- **Тесты**: `tests/modules/webui/files-api.test.ts`, `tests/webui-files-dom.test.ts`
+  (23 кейса: регрессия «дерено пряталось», кнопки раскрытия, история, крошки, клавиатура,
+  сплиттер, i18n), `tests/webui-index-watcher.test.ts`; guard в `tests/webui-assets.test.ts`
+  (новая разметка + запрет возврата `:has()`-хака); обновлены `tests/webui-file.test.ts`.
 
 ### Web Tool Images (2.28.0)
 
@@ -1187,7 +1216,7 @@ quality-gate и выглядят аккуратно.
   фолбэке/планировании/аборте), `tests/webui-workspace-footer.test.ts` (чип),
   `tests/webui-usage.test.ts` (`moeActive` в снапшоте).
 
-### Current Version: 2.30.0
+### Current Version: 2.31.0
 
 ### Changelog
 
