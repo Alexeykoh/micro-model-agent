@@ -1619,6 +1619,7 @@
   "web.selectors.context_prompt": "контекстное окно (токены)",
   "web.rail.working": "выполняю",
   "web.rail.composing": "пишу",
+  "web.loader.boot": "подключаюсь к провайдеру…",
   "web.rail.no_plan": "без плана",
   "web.rail.step_of": "шаг {cur}/{total}",
   "web.rail.last": "последнее:",

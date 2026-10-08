@@ -4,8 +4,44 @@ import { el } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { labelOf, categoryOf, argText, formatMs } from "../format.js";
+import { createFace, setFaceState, toolState } from "../loader.js";
+import type { FaceState } from "../loader.js";
 import type { Dict } from "../core/store/types.js";
 import { sb, paneEl, TRACE_CAP, MAX_OUTPUT_CHARS, type TraceEntry } from "./state.js";
+
+// Small always-on face at the top of the Trace pane: reflects the live
+// session activity (falls back to the idle, cursor-following face).
+let faceEl: HTMLElement | null = null;
+
+export function initTraceFace(): void {
+  const host = document.querySelector(".trc-face");
+  if (!host) return;
+  faceEl = createFace("idle", "sm");
+  host.replaceChildren(faceEl);
+}
+
+export function setTraceFace(state: FaceState): void {
+  setFaceState(faceEl, state);
+}
+
+function traceFaceFor(kind: string, data: Dict): FaceState {
+  switch (kind) {
+    case "tool_start":
+    case "tool_fail":
+    case "tool":
+      return toolState(typeof data.name === "string" ? data.name : "");
+    case "phase":
+      return data.phase === "composing" ? "type" : data.phase === "tool" ? "run" : "think";
+    case "text": return "type";
+    case "question": return "ask";
+    case "plan": return "plan";
+    case "error":
+    case "retract": return "error";
+    case "compaction": return "compact";
+    case "index": return "run";
+    default: return "think";
+  }
+}
 
 function phaseLabel(phase: unknown): string {
   if (phase === "composing") return t("web.rail.composing");
@@ -210,6 +246,7 @@ export function sidebarTurnEnd(turnSeq: unknown): void {
 
 export function sidebarTraceEvent(kind: string, data: Dict): void {
   if (!data) return;
+  setTraceFace(traceFaceFor(kind, data));
   switch (kind) {
     case "tool_start": {
       const entry = append({ kind: "tool", name: data.name, args: data.args || {}, toolCallId: data.toolCallId });

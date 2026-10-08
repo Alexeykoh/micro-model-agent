@@ -6,6 +6,7 @@ import { t, pluralCount } from "../i18n.js";
 import { feed as feedState, tabs as tabState } from "../store.js";
 import { formatMs, verbosity } from "../format.js";
 import { copyText } from "../../md.js";
+import { createFace } from "../loader.js";
 
 // ---------------------------------------------------------------------------
 // Shared render helpers used by the stream/turn/history clusters. They live
@@ -283,7 +284,7 @@ export function showBusy(feed?: HTMLElement | null): void {
     feedState.busyTimer = null;
   }
   const line = el("div", "busy");
-  line.appendChild(el("span", "spin", "✦"));
+  line.appendChild(createFace("think", "sm"));
   line.appendChild(el("span", "lab", t("web.action.thinking")));
   const time = el("span", "busytime", "· 0s");
   line.appendChild(time);

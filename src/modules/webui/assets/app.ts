@@ -32,11 +32,30 @@ import {
   sidebarPluginsState, sidebarPluginsEvent, initSidebarDrawer,
 } from "./js/sidebar.js";
 import { insertIntoDraft } from "./js/session/composer.js";
+import { initCursor, createFace, setFaceState, loaderStateFor } from "./js/loader.js";
+import type { FaceState } from "./js/loader.js";
 
 declare global {
   interface Window {
     MmaSetup?: { maybeOpen: () => Promise<boolean> };
   }
+}
+
+// Persistent face in the composer's selectors row: always reflects the current
+// agent state, falling back to the idle (cursor-following) face between turns.
+let composerFace: HTMLElement | null = null;
+let composerToken = 0;
+
+function faceEvent(state: FaceState): void {
+  composerToken++;
+  setFaceState(composerFace, state);
+}
+
+function initComposerFace(): void {
+  const host = document.getElementById("composerFace");
+  if (!host) return;
+  composerFace = createFace("idle", "sm");
+  host.replaceChildren(composerFace);
 }
 
 document.querySelectorAll<HTMLElement>("[data-collapse]").forEach((head) => {
@@ -236,6 +255,31 @@ for (const ev of ["tool_start", "tool_end", "text", "plan"]) {
     else railEvent(ev, d.name);
   });
 }
+// Composer face: one persistent mascot that always reflects the live state.
+const faceTypes: Array<[string, "tool_start" | "tool_end" | "text" | "question" | "error"]> = [
+  ["tool_start", "tool_start"], ["tool_end", "tool_end"], ["text", "text"],
+  ["question", "question"], ["error", "error"],
+];
+for (const [ev, type] of faceTypes) {
+  es.addEventListener(ev, (e) => {
+    const d = parse(e);
+    if (!d) return;
+    faceEvent(loaderStateFor({ type, name: typeof d.name === "string" ? d.name : "" }));
+  });
+}
+es.addEventListener("phase", (e) => {
+  const d = parse(e);
+  const phase = d && typeof d.phase === "string" ? d.phase : "";
+  faceEvent(phase === "composing" ? "type" : phase === "tool" ? "run" : "think");
+});
+es.addEventListener("reasoning", () => faceEvent("think"));
+es.addEventListener("plan", () => faceEvent("plan"));
+es.addEventListener("turn_end", (e) => {
+  const d = parse(e);
+  faceEvent(d && d.success === false ? "error" : "done");
+  const token = composerToken;
+  window.setTimeout(() => { if (token === composerToken) setFaceState(composerFace, "idle"); }, 1500);
+});
 // Per-tab status dots: its own listeners — feed handlers stay untouched
 // (source-level guards pin the handler table above). Working streams mark the
 // owner tab, `question` marks waiting-for-you, `turn_end`/`error` settle it.
@@ -320,6 +364,7 @@ function applyStaticI18n(): void {
   setText("hintShift", t("web.input.shift_enter"));
   setText("hintEsc", t("web.input.esc"));
   setText("hintAttach", t("web.input.attach"));
+  setText("bootCap", t("web.loader.boot"));
 
   // Chrome controls: Lucide icon + label, plus matching title/aria-label.
   const controls: Record<string, [string, string]> = {
@@ -377,51 +422,65 @@ function applyStaticI18n(): void {
 }
 
 async function boot(): Promise<void> {
+  initCursor();
   // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
   const initialSession = new URLSearchParams(location.search).get("session");
   // First-run wizard owns the screen when the server reports a virgin config;
   // it reloads the page once setup completes, so skip the chat boot entirely.
   if (window.MmaSetup) {
     try {
-      if (await window.MmaSetup.maybeOpen()) return;
+      if (await window.MmaSetup.maybeOpen()) { hideBootSplash(); return; }
     } catch {
       /* wizard failure must never brick the chat boot */
     }
   }
-  await loadI18n();
-  await loadCommands();
-  applyTheme(currentTheme());
-  applyFontSize();
-  applyStaticI18n();
-  showEmptyFeed();
-  renderSelectors();
-  renderSettings();
-  await loadConfig();
-  initRail(settings.config && settings.config.ui ? settings.config.ui.activityRail : undefined);
-  initSidebar();
-  initSidebarDrawer();
-  applySidebarI18n();
-  initFiles({ insertPath: (p) => insertIntoDraft("`" + p + "` ") });
-  await loadModels();
-  await loadProviders();
-  await loadSessions();
-  await loadMemory();
-  await loadSkills();
-  await loadPlugins();
   try {
-    await refresh();
-  } catch (err) {
-    // A render bug must never kill boot before the SSE stream connects:
-    // without SSE no streamed answers, tools or loaders reach the page.
-    console.error("initial refresh failed", err);
-  }
-  // Restore the session from the URL AFTER the first refresh: `refresh` may
-  // auto-open the server's active session, and the requested one must win.
-  if (initialSession) {
-    const meta = session.sessions.find((s) => s.id === initialSession);
-    if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
+    await loadI18n();
+    await loadCommands();
+    applyTheme(currentTheme());
+    applyFontSize();
+    applyStaticI18n();
+    showEmptyFeed();
+    renderSelectors();
+    renderSettings();
+    await loadConfig();
+    initRail(settings.config && settings.config.ui ? settings.config.ui.activityRail : undefined);
+    initComposerFace();
+    initSidebar();
+    initSidebarDrawer();
+    applySidebarI18n();
+    initFiles({ insertPath: (p) => insertIntoDraft("`" + p + "` ") });
+    await loadModels();
+    await loadProviders();
+    await loadSessions();
+    await loadMemory();
+    await loadSkills();
+    await loadPlugins();
+    try {
+      await refresh();
+    } catch (err) {
+      // A render bug must never kill boot before the SSE stream connects:
+      // without SSE no streamed answers, tools or loaders reach the page.
+      console.error("initial refresh failed", err);
+    }
+    // Restore the session from the URL AFTER the first refresh: `refresh` may
+    // auto-open the server's active session, and the requested one must win.
+    if (initialSession) {
+      const meta = session.sessions.find((s) => s.id === initialSession);
+      if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
+    }
+  } finally {
+    hideBootSplash();
   }
   connectSSE();
+}
+
+// Fade the boot splash out and drop it from the layout. Idempotent.
+function hideBootSplash(): void {
+  const splash = document.getElementById("bootSplash");
+  if (!splash || splash.hidden) return;
+  splash.classList.add("hide");
+  window.setTimeout(() => { splash.hidden = true; }, 500);
 }
 
 hooks.applyStaticI18n = applyStaticI18n;
