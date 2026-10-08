@@ -141,6 +141,7 @@ All detailed documentation lives in `docs/agents/`:
 | [modules.md](./docs/agents/modules.md)           | Session Management, Project Map, UI Rendering, Plugins, Context Budget, Cost Tracking, Auto-Update                      |
 | [execution.md](./docs/agents/execution.md)       | Execution Guarantees, Agent Loop States, Orchestrator, RLM-Inspired Features, Hallucination Detection, Migration Safety |
 | [testing.md](./docs/agents/testing.md)           | Agent Testing from Console, Web UI testing via Playwright, Small Model Observations, Model Certification             |
+| [service-api.md](./docs/agents/service-api.md)   | Agent Service API v1: endpoints, envelope, config, errors, webhook                                                      |
 | [versioning.md](./docs/agents/versioning.md)     | Versioning Rules, Release Process, Version History                                                                      |
 | [changelog](./CHANGELOG.md)                      | Public changelog (included in npm package)                                                                              |
 
@@ -1347,7 +1348,43 @@ quality-gate и выглядят аккуратно.
   LLM-заголовок меняли только `meta.json`; вкладка держала старое имя, а LLM-заголовок не
   показывался вообще. Слушатель (общий с pinned-сиблингами раннеров) шлёт `sessions` + `state`.
 
-### Current Version: 2.34.0
+### Agent Service API v1 (2.35.0)
+
+Долгоживущий HTTP-сервис `mma serve` (`src/modules/service/`) — публичный
+версионируемый контракт для внешних систем поверх ядра. Не трогает петлю/REPL/
+`mma web`. Спека: [docs/specs/2026-10-08-agent-service-api-design.md](./docs/specs/2026-10-08-agent-service-api-design.md);
+план: [docs/plans/2026-10-08-agent-service-api.md](./docs/plans/2026-10-08-agent-service-api.md);
+reference: [docs/agents/service-api.md](./docs/agents/service-api.md);
+user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mode (`mma serve`)»).
+
+- **Изоляция = процесс (silo):** `1 тенант = 1 процесс` со своим `MMA_CONFIG_DIR`
+  и workspace; внутрипроцессные синглтоны → per-tenant без рефактора ядра.
+- **Переиспользование, не рефактор webui:** `bootstrap().spawnSessionRunner`,
+  `RunPool` (`src/modules/webui/session/session-pool.ts`), `SessionManager`,
+  `Agent`. `RunPool` получил аддитивный `maxQueue` (дефолт прежний) — контракт
+  `mma web` не изменился.
+- **Задача = ход над сессией.** `job` (автономная) / `interactive` (вопросы через
+  SSE + `POST /v1/tasks/:jobId/answer`). Реестр задач in-memory (`TaskRegistry`):
+  жизненный цикл, `wait:true`, `Idempotency-Key`, retention, webhook.
+- **Эндпоинты:** `/v1/sessions` CRUD, `/v1/sessions/:id/tasks`, `/v1/tasks/:jobId`
+  (+`/cancel`, `/answer`), `/v1/sessions/:id/events` (SSE), `/v1/health`,
+  `/v1/ready`. Ошибки — RFC 9457 problem+json со стабильными `type`-URI.
+- **SSE envelope** (`runtime/envelope.ts`): `{v:1,seq,ts,type,sessionId,taskId,data}`,
+  монотонный `seq` на сессию, resume `Last-Event-ID`/`?since=` из in-memory
+  буфера, keep-alive `: ping`, `X-Accel-Buffering: no`; закрытие потока отменяет
+  только interactive-задачу.
+- **Structured output** (`runtime/output.ts`): `output.schema`, strict-подмножество
+  JSON Schema, рантайм-валидация, один retry, затем `output-invalid`.
+- **Webhook** (`runtime/webhook.ts`): HMAC-SHA256 по `timestamp.body`, стабильный
+  `X-Mma-Event-Id`, backoff-ретраи; pull — источник правды.
+- **Конфиг `service.*`** (порт/хост/токен/retention/idempotency/syncWait/limits/
+  webhookSecret) → `config/service.json`, `/config`, web Settings → Network;
+  env `MMA_SERVICE_PORT|HOST|TOKEN`.
+- **Сессии:** опц. `SessionMeta.externalRef` (backward compatible).
+- **Тесты:** `tests/service/*` (HTTP-клиент на `node:http`, чтобы не ловить
+  протечку `global.fetch` из других suites).
+
+### Current Version: 2.35.0
 
 ### Changelog
 

@@ -204,6 +204,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   network: [
     { id: "network.web", titleKey: "web.settings.sec.network.web", descKey: "web.settings.sec.network.web.desc", keys: ["webSearch.enabled"] },
     { id: "network.error", titleKey: "web.settings.sec.network.error", descKey: "web.settings.sec.network.error.desc", keys: ["errorWebSearch.enabled", "errorWebSearch.threshold", "errorWebSearch.maxResults", "errorWebSearch.maxQueryChars", "errorWebSearch.maxSearchesPerSession", "errorWebSearch.requestTimeoutMs"] },
+    { id: "network.service", titleKey: "web.settings.sec.network.service", descKey: "web.settings.sec.network.service.desc", keys: ["service.port", "service.host", "service.token", "service.resultRetentionDays", "service.idempotencyTtlHours", "service.syncWaitMs", "service.maxQueueLength", "service.callbackTimeoutMs", "service.webhookSecret"] },
   ],
   browser: [
     { id: "browser.main", titleKey: "web.settings.sec.browser.main", keys: ["browser.enabled", "browser.headless"] },

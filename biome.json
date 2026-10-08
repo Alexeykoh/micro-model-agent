@@ -11,6 +11,7 @@
       "!.opencode",
       "!coverage",
       "!_testing",
+      "!tmp",
       "!certification",
       "!src/modules/webui/assets",
       "!examples",

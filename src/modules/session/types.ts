@@ -15,6 +15,11 @@ export interface SessionMeta {
   projectDir: string;
   /** История заархивирована в <id>.jsonl.gz через rotateOldSessions — живых сообщений нет. */
   rotated?: boolean;
+  /**
+   * Ключ интегратора (`chat_id`/`job key`/`doc_id`) — опц. Agent Service API.
+   * Backward compatible; авторитетный маппинг хранит control plane (спека §5.1, Q5).
+   */
+  externalRef?: string;
   /** Security-оверрайды сессии: перекрывают глобальные настройки. */
   securityOverrides?: {
     maxFileOperations?: number;

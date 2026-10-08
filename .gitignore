@@ -13,3 +13,5 @@ certification/report-*.json
 .superpowers/
 .fallow/
 .playwright-mcp/
+
+tmp/

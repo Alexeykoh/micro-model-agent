@@ -548,6 +548,28 @@ export interface PluginsConfig {
   maxDrafts?: number;
 }
 
+/** Agent Service API v1: HTTP-сервис (`mma serve`) поверх того же ядра. */
+export interface ServiceConfig {
+  /** Порт HTTP-сервиса. CLI `--port` перекрывает. */
+  port: number;
+  /** Адрес привязки. Не-loopback без токена запрещён. */
+  host: string;
+  /** Bearer-токен внутреннего вызова (control plane ↔ runtime). Опц. для loopback. */
+  token?: string;
+  /** Срок хранения терминальных результатов задач (дни). */
+  resultRetentionDays: number;
+  /** TTL Idempotency-Key (часы). */
+  idempotencyTtlHours: number;
+  /** Верхняя граница синхронного ожидания `wait:true` (мс). */
+  syncWaitMs: number;
+  /** Кап FIFO-очереди задач на сессию. */
+  maxQueueLength: number;
+  /** Таймаут доставки webhook-колбэка (мс). */
+  callbackTimeoutMs: number;
+  /** Секрет HMAC-подписи webhook-колбэков. Не задан — подпись не выставляется. */
+  webhookSecret?: string;
+}
+
 export interface AppConfig {
   version: string;
   model: string;
@@ -602,4 +624,5 @@ export interface AppConfig {
   updater: UpdaterConfig;
   reasoning?: ReasoningConfig;
   critic: CriticConfig;
+  service: ServiceConfig;
 }

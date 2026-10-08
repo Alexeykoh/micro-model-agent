@@ -32,9 +32,11 @@ export class RunPool {
   private slots = new Map<string, RunSlot>();
   private runners = new Map<string, SessionRunner>();
   private factory?: RunnerFactory;
+  private maxQueue: number;
 
-  constructor(factory?: RunnerFactory) {
+  constructor(factory?: RunnerFactory, maxQueue: number = MAX_QUEUE_LENGTH) {
     if (factory) this.factory = factory;
+    this.maxQueue = maxQueue;
   }
 
   /** Поздняя привязка фабрики (state создаётся раньше module). */
@@ -107,7 +109,7 @@ export class RunPool {
    */
   enqueue(id: string | null, text: string, images: string[], sessionId: string | null): number | null {
     const slot = this.slotFor(id);
-    if (slot.queue.length >= MAX_QUEUE_LENGTH) return null;
+    if (slot.queue.length >= this.maxQueue) return null;
     slot.queue.push({ text, images, sessionId, ts: Date.now() });
     return slot.queue.length;
   }

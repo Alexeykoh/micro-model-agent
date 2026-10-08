@@ -86,6 +86,19 @@ function buildWebCommand(program: Command): void {
     });
 }
 
+function buildServeCommand(program: Command): void {
+  program
+    .command("serve")
+    .description(t("cli.serve.description"))
+    .option("-p, --port <n>", t("cli.serve.port"))
+    .option("--host <addr>", t("cli.serve.host"))
+    .option("--token <t>", t("cli.serve.token"))
+    .action(() => {
+      /* Диспатчится из main.ts после program.parse(): сервис долгоживущий,
+         хук one-shot выхода его резать не должен. */
+    });
+}
+
 function buildAgentsCommand(program: Command): void {
   const agents = program.command("agents").description(t("cli.agents"));
   agents
@@ -826,6 +839,7 @@ export function createProgram(): Command {
   buildInitCommand(program);
   buildAgentsCommand(program);
   buildWebCommand(program);
+  buildServeCommand(program);
   buildConfigCommands(program);
   buildModelCommands(program);
   buildContextCommand(program);
@@ -870,7 +884,7 @@ export function createProgram(): Command {
   // стартует из main.ts после parse). Хук выхода сработал бы во время
   // program.parse() и убил процесс до ветки. `mma init`/`mma setup` — one-shot
   // визарды, обязаны выйти после прогона.
-  const longRunningCommands = new Set(["meet", "agents", "web"]);
+  const longRunningCommands = new Set(["meet", "agents", "web", "serve"]);
   for (const cmd of program.commands) {
     if (longRunningCommands.has(cmd.name())) continue;
     attachOneShotExit(cmd);
