@@ -154,13 +154,15 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
       recordTurnUsage(state, result, deps.contextWindow, owner);
       forwarder.onTurnEnd({
         success: result.success,
+        interrupted: result.interrupted || undefined,
         durationMs: result.durationMs,
         toolCalls,
       });
       pushState(state, owner);
       return result;
     } catch (err) {
-      forwarder.onTurnEnd({ success: false });
+      const interrupted = err instanceof Error && err.name === "AbortError";
+      forwarder.onTurnEnd({ success: false, interrupted: interrupted || undefined });
       throw err;
     } finally {
       stopLiveUsage();

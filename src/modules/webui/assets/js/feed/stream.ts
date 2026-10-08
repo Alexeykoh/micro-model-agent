@@ -2,7 +2,7 @@
 // Extracted from `feed.js`; `feed.js` re-exports this module's public surface.
 import { msgs, el, setIcon } from "../dom.js";
 import { t } from "../i18n.js";
-import { feed as feedState } from "../store.js";
+import { streamStateFor } from "../store.js";
 import { verbosity } from "../format.js";
 import { mountMarkdown } from "../../md.js";
 import {
@@ -12,45 +12,42 @@ import {
 
 // Text chunks arrive in bursts (several SSE `text` events per frame); writing
 // and scrolling on every one thrashes layout and stacks overlapping `tkIn`
-// fades ("рвано"). Buffer them and flush once per animation frame instead.
-let textBuf = "";
-let textFeed: HTMLElement | null = null;
-let textScheduled = false;
-
-function flushText(): void {
-  textScheduled = false;
-  if (!textBuf || !feedState.curMd) {
-    textBuf = "";
-    textFeed = null;
+// fades ("рвано"). Buffer per feed and flush once per animation frame instead.
+function flushText(feed: HTMLElement): void {
+  const st = streamStateFor(feed);
+  st.textScheduled = false;
+  if (!st.pendingText || !st.curMd) {
+    st.pendingText = "";
     return;
   }
-  const buf = textBuf;
-  const feed = textFeed;
-  textBuf = "";
-  textFeed = null;
-  feedState.curMd.write(buf);
-  if (feed && feed === activeFeed()) scroll();
+  const buf = st.pendingText;
+  st.pendingText = "";
+  st.curMd.write(buf);
+  if (feed === activeFeed()) scroll();
 }
 
-function scheduleText(): void {
-  if (textScheduled) return;
-  textScheduled = true;
+function scheduleText(feed: HTMLElement): void {
+  const st = streamStateFor(feed);
+  if (st.textScheduled) return;
+  st.textScheduled = true;
   if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-    window.requestAnimationFrame(flushText);
+    window.requestAnimationFrame(() => flushText(feed));
   } else {
-    flushText();
+    flushText(feed);
   }
 }
 
-// Close the active Markdown segment (if any) and clear the feed text state.
-export function finishMd(): void {
-  flushText();
-  if (feedState.curMd) {
-    feedState.curMd.root.classList.remove("streaming");
-    feedState.curMd.end();
-    feedState.curMd = null;
+// Close the Markdown segment owned by `feed` (if any) and clear its text state.
+export function finishMd(feed?: HTMLElement | null): void {
+  if (!feed) return;
+  const st = streamStateFor(feed);
+  flushText(feed);
+  if (st.curMd) {
+    st.curMd.root.classList.remove("streaming");
+    st.curMd.end();
+    st.curMd = null;
   }
-  feedState.curText = null;
+  st.curText = null;
 }
 
 export function onText(chunk: string, sid?: string): void {
@@ -58,34 +55,34 @@ export function onText(chunk: string, sid?: string): void {
   clearBusy(feed);
   if (!feed) return;
   clearEmpty(feed);
-  if (feedState.curThink) {
-    finishThink();
+  const st = streamStateFor(feed);
+  if (st.curThink) {
+    finishThink(feed);
   }
-  if (feedState.curText == null) {
-    flushRun();
-    feedState.curText = "";
-    feedState.curMd = mountMarkdown(feed, mdOpts(true));
-    feedState.curMd.root.classList.add("streaming");
-    feedState.turnRoots.push(feedState.curMd.root);
+  if (st.curText == null) {
+    flushRun(feed);
+    st.curText = "";
+    st.curMd = mountMarkdown(feed, mdOpts(true));
+    st.curMd.root.classList.add("streaming");
+    st.turnRoots.push(st.curMd.root);
   }
-  feedState.curText += chunk;
-  feedState.turnMd += chunk;
-  // A second session streaming concurrently must not merge into another feed's buffer.
-  if (textFeed && textFeed !== feed) flushText();
-  textFeed = feed;
-  textBuf += chunk;
-  scheduleText();
+  st.curText += chunk;
+  st.turnMd += chunk;
+  st.pendingText += chunk;
+  scheduleText(feed);
 }
 
-export function finishThink(): void {
-  if (feedState.curThink) {
-    if (feedState.curThink.wrap) feedState.curThink.wrap.classList.remove("live");
-    if (feedState.curThink.startedAt) {
-      const dur = feedState.curThink.head.querySelector(".dur");
-      if (dur) dur.textContent = "· " + ((Date.now() - feedState.curThink.startedAt) / 1000).toFixed(1) + "s";
+export function finishThink(feed?: HTMLElement | null): void {
+  if (!feed) return;
+  const st = streamStateFor(feed);
+  if (st.curThink) {
+    if (st.curThink.wrap) st.curThink.wrap.classList.remove("live");
+    if (st.curThink.startedAt) {
+      const dur = st.curThink.head.querySelector(".dur");
+      if (dur) dur.textContent = "· " + ((Date.now() - st.curThink.startedAt) / 1000).toFixed(1) + "s";
     }
   }
-  feedState.curThink = null;
+  st.curThink = null;
 }
 
 export function onReasoning(chunk: string, sid?: string): void {
@@ -93,14 +90,15 @@ export function onReasoning(chunk: string, sid?: string): void {
   clearBusy(feed);
   if (!feed) return;
   clearEmpty(feed);
-  finishMd();
-  if (!feedState.curThink) {
-    flushRun();
+  finishMd(feed);
+  const st = streamStateFor(feed);
+  if (!st.curThink) {
+    flushRun(feed);
     const { wrap, head, body } = buildThinkBlock(true);
     appendTo(feed, wrap);
-    feedState.curThink = { wrap, head, body, startedAt: Date.now() };
+    st.curThink = { wrap, head, body, startedAt: Date.now() };
   }
-  feedState.curThink.body.textContent += chunk;
+  st.curThink.body.textContent += chunk;
   if (feed === activeFeed()) scroll();
 }
 
@@ -116,7 +114,7 @@ export function onMeta(chunk: string, sid?: string, kind?: string): void {
   const text = (chunk || "").trim();
   if (!feed || !text) return;
   clearEmpty(feed);
-  finishMd();
+  finishMd(feed);
   const warn = text.indexOf("⚠") !== -1 || text.indexOf("✗") !== -1;
   appendTo(feed, el("div", warn ? "metaln warn" : "metaln", text));
   if (feed === activeFeed()) scroll();
@@ -131,17 +129,18 @@ export function onRetract(reason: string, sid?: string): void {
   const feed = feedForEvent(sid);
   if (!feed) return;
   clearBusy(feed);
-  const draftRoot = feedState.curMd ? feedState.curMd.root : null;
-  const hadDraft = !!draftRoot || (feedState.curText != null && feedState.curText !== "");
-  const draftLen = feedState.curText ? feedState.curText.length : 0;
-  finishMd();
-  finishThink();
+  const st = streamStateFor(feed);
+  const draftRoot = st.curMd ? st.curMd.root : null;
+  const hadDraft = !!draftRoot || (st.curText != null && st.curText !== "");
+  const draftLen = st.curText ? st.curText.length : 0;
+  finishMd(feed);
+  finishThink(feed);
   if (draftRoot) {
-    const idx = feedState.turnRoots.indexOf(draftRoot);
-    if (idx !== -1) feedState.turnRoots.splice(idx, 1);
+    const idx = st.turnRoots.indexOf(draftRoot);
+    if (idx !== -1) st.turnRoots.splice(idx, 1);
     draftRoot.remove();
   }
-  if (draftLen > 0) feedState.turnMd = feedState.turnMd.slice(0, Math.max(0, feedState.turnMd.length - draftLen));
+  if (draftLen > 0) st.turnMd = st.turnMd.slice(0, Math.max(0, st.turnMd.length - draftLen));
   if (!hadDraft) return;
   if (reason) appendTo(feed, el("div", "metaln", reason));
   if (feed === activeFeed()) scroll();

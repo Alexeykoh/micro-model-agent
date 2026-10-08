@@ -11,6 +11,8 @@ import { session } from "./session.js";
 import type { Dict } from "./types.js";
 
 export { feed, tabs, settings, session };
+export { streamStateFor } from "./feed.js";
+export type { FeedSlice, FeedStreamState } from "./feed.js";
 
 export const THEME_KEY = "mma-theme";
 export const MAX_IMAGES = 10;

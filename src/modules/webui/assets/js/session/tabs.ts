@@ -33,6 +33,48 @@ export { renderSessionsDropdown } from "./sessions-menu.js";
 // только бейдж.
 const TAB_DOT: Record<string, string> = { working: "●", waiting: "◉", queued: "○", failed: "✗", dead: "✗" };
 
+// Список открытых session-вкладок переживает перезагрузку страницы: без него
+// F5 оставлял только активную сессию, а остальные вкладки терялись.
+const OPEN_TABS_KEY = "mma-open-tabs";
+
+/** Сохранённый набор вкладок для восстановления после перезагрузки. */
+export interface SavedTabs {
+  ids: string[];
+  active: string | null;
+}
+
+function persistTabs(): void {
+  try {
+    const ids = tabState.tabs
+      .filter((x: Dict) => x.kind === "session" && !x.dead)
+      .map((x: Dict) => String(x.id));
+    const active = tabState.tabs.find((x: Dict) => x.id === tabState.activeTabId);
+    const payload: SavedTabs = {
+      ids,
+      active: active && active.kind === "session" && !active.dead ? String(active.id) : null,
+    };
+    localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(payload));
+  } catch {
+    /* storage disabled (private mode) — persistence is best-effort */
+  }
+}
+
+/** Читает сохранённый набор вкладок (пустой при отсутствии/поломке). */
+export function readSavedTabs(): SavedTabs {
+  try {
+    const raw = localStorage.getItem(OPEN_TABS_KEY);
+    if (!raw) return { ids: [], active: null };
+    const parsed = JSON.parse(raw) as Partial<SavedTabs>;
+    const ids = Array.isArray(parsed.ids)
+      ? parsed.ids.filter((x): x is string => typeof x === "string")
+      : [];
+    const active = typeof parsed.active === "string" ? parsed.active : null;
+    return { ids, active };
+  } catch {
+    return { ids: [], active: null };
+  }
+}
+
 function statusTitle(status: unknown): string {
   if (status === "working") return t("web.tab.working");
   if (status === "waiting") return t("web.tab.waiting");
@@ -170,8 +212,8 @@ export function updateTabName(id: string, name: string): void {
   }
 }
 
-export function openTab(id: string, name?: string, kind?: string, server?: boolean): void {
-  saveComposer();
+export function openTab(id: string, name?: string, kind?: string, server?: boolean, activate = true): void {
+  if (activate) saveComposer();
   let tab = tabState.tabs.find((x) => x.id === id);
   if (!tab) {
     tab = {
@@ -191,6 +233,14 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
     tabState.tabs.push(tab);
   } else if (name) {
     tab.name = name;
+  }
+  // Background restore (F5 with several tabs): create the tab but leave the
+  // active one untouched — the remembered active tab is opened separately.
+  if (!activate) {
+    renderTabstrip();
+    renderSessionsDropdown();
+    persistTabs();
+    return;
   }
   tabState.activeTabId = id;
   tabState.liveTabId = id;
@@ -216,6 +266,7 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
     // показана, ретраи бесполезны.
     if (tab.dead) {
       syncUrl();
+      persistTabs();
       return;
     }
     // A tab auto-opened as "live" (server=false) sets historyLoaded=true; when
@@ -241,6 +292,7 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
     });
   }
   syncUrl();
+  persistTabs();
 }
 
 export function closeTab(id: string): void {
@@ -272,6 +324,7 @@ export function closeTab(id: string): void {
   renderTabstrip();
   renderSessionsDropdown();
   syncUrl();
+  persistTabs();
 }
 
 /**
@@ -289,6 +342,7 @@ function resetToEmpty(): void {
   renderAttachments();
   hooks.renderActive?.();
   showEmptyFeed();
+  persistTabs();
   void api("/api/sessions/deactivate", { method: "POST", body: {} });
 }
 

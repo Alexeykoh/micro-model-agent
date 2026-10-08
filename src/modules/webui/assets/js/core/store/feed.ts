@@ -1,17 +1,21 @@
-// Feed slice of the shared frontend state: stream/turn buffers and the
-// read-only run-folding bookkeeping. Owned by `feed/**`; the legacy composed
-// `S` aliases these fields (see `./index.js`).
+// Feed slice of the shared frontend state. The slice itself keeps only the
+// cross-feed dedup signatures (plan/usage/environment rendered by the single
+// sidebar). Stream/turn bookkeeping is **per feed element** (one per open
+// session tab): with parallel turns the two sessions must never share a
+// streaming Markdown cursor, think block, tool map or turn accumulators —
+// otherwise a background session's text bleeds into the active tab.
+// See `streamStateFor(feedEl)`.
 import type { Dict, MdHandle, ThinkState, ToolNode } from "./types.js";
 
-export interface FeedSlice {
+// Per-feed (per-session-tab) streaming/turn state. Created lazily, keyed by the
+// tab's feed element so every SSE handler can scope its bookkeeping to the feed
+// named by the event's `sessionId` (`feedForEvent`).
+export interface FeedStreamState {
   curText: string | null;
   curMd: MdHandle | null;
   turnMd: string;
   turnRoots: HTMLElement[];
   curThink: ThinkState | null;
-  lastPlanSig: string | null;
-  lastUsageSig: string | null;
-  lastEnvSig: string | null;
   runCount: number;
   runFails: number;
   runReconOnly: boolean;
@@ -21,23 +25,52 @@ export interface FeedSlice {
   busyTimer: any;
   pendingArgs: Map<string, Dict>;
   toolNodes: Map<string, ToolNode>;
+  // Buffered streaming text for the next animation frame (per feed).
+  pendingText: string;
+  textScheduled: boolean;
+}
+
+// Cross-feed dedup signatures for the single sidebar projection.
+export interface FeedSlice {
+  lastPlanSig: string | null;
+  lastUsageSig: string | null;
+  lastEnvSig: string | null;
 }
 
 export const feed: FeedSlice = {
-  curText: null,
-  curMd: null,
-  turnMd: "",
-  turnRoots: [],
-  curThink: null,
   lastPlanSig: null,
   lastUsageSig: null,
   lastEnvSig: null,
-  runCount: 0,
-  runFails: 0,
-  runReconOnly: true,
-  runNodes: [],
-  runDuration: 0,
-  busyTimer: null,
-  pendingArgs: new Map(),
-  toolNodes: new Map(),
 };
+
+const states = new WeakMap<HTMLElement, FeedStreamState>();
+
+function createStreamState(): FeedStreamState {
+  return {
+    curText: null,
+    curMd: null,
+    turnMd: "",
+    turnRoots: [],
+    curThink: null,
+    runCount: 0,
+    runFails: 0,
+    runReconOnly: true,
+    runNodes: [],
+    runDuration: 0,
+    busyTimer: null,
+    pendingArgs: new Map(),
+    toolNodes: new Map(),
+    pendingText: "",
+    textScheduled: false,
+  };
+}
+
+// Returns the streaming/turn state owned by `feedEl`, creating it on first use.
+export function streamStateFor(feedEl: HTMLElement): FeedStreamState {
+  let s = states.get(feedEl);
+  if (!s) {
+    s = createStreamState();
+    states.set(feedEl, s);
+  }
+  return s;
+}

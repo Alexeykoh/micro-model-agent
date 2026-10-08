@@ -143,6 +143,12 @@ export interface ContextBreakdown {
 /** Итог прогона: успех, текст, токены, стоимость, качество контекста. */
 export interface AgentResult {
   success: boolean;
+  /**
+   * Ход был прерван пользователем (`shutdown`/AbortError), а не завершён
+   * штатно. `success` при обрыве остаётся `false`, но потребители показывают
+   * «остановлено», а не «ошибку» (веб-лента, CLI).
+   */
+  interrupted?: boolean;
   text: string;
   error?: string;
   iterationCount: number;

@@ -1445,7 +1445,42 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **i18n**: `web.loader.boot` (en+ru). Тест: `tests/webui-loader.test.ts`
   (маппинг + DOM-структура + наличие `#bootSplash`).
 
-### Current Version: 2.35.1
+### Web Parallel-Turn & Settings Consistency (2.35.2)
+
+Разбор живой сессии `mma web` (две вкладки, параллельные ходы) + ревизия: стрим
+фоновой сессии протекал в активную вкладку, настройки показывали устаревшее
+значение после команд, прерванный ход рапортовал `ok`, probe сравнивался не с
+тем окном, открытые вкладки терялись при перезагрузке.
+
+- **Per-feed стрим-состояние** (`assets/js/core/store/feed.ts`, `feed/stream.ts`,
+  `feed/turn.ts`, `feed/core.ts`): `curText`/`curMd`/`curThink`/`turnMd`/`turnRoots`/
+  `run*`/`pendingArgs`/`toolNodes`/`busyTimer` больше не глобальные — переехали в
+  `FeedStreamState`, привязанное к фиду вкладки (`streamStateFor(feed)`), само
+  `feed` (срез) держит только дедуп-сигнатуры сайдбара. `finishMd`/`finishThink`/
+  `flushRun`/`resetTurnText` принимают фид. `pendingArgs`/`toolNodes` — на фид, так
+  что коллизии `toolCallId` (`t1` в каждом раннере) между сессиями не путают узлы.
+  F5-guard: `tests/webui-feed-isolation-dom.test.ts`.
+- **`config` SSE-событие** (`chat/commands-shared.ts`, `settings/config-api.ts`,
+  `assets/app.ts`): успешная запись конфига (команда и REST) шлёт
+  `broadcast({type:"config"})`; клиент на него зовёт `loadConfig()` → панель
+  настроек и селекторы обновляются сразу, а не после перезагрузки. Тест
+  `tests/webui-config-event.test.ts`.
+- **Прерванный ход** (`core/agent.ts`, `core/types.ts`, `session/run-agent.ts`):
+  `AgentResult.interrupted` выставляется при `shutdown`/AbortError и едет в
+  `turn_end`; `success` для оборванного хода — `false`, лента рисует `stopped`,
+  не `turn end · ok`. Тест в `tests/core/agent-turn-end.test.ts`.
+- **Probe-метка** (`assets/js/feed/sidebar.ts`): «configured» берёт
+  `h.contextWindow` (истинное окно), а не `h.contextLimit` (history-бюджет ~75%) —
+  иначе конфиг 1000K читался как «750.0K configured». Guard в
+  `tests/webui-assets.test.ts`.
+- **Персистентность вкладок** (`assets/js/session/tabs.ts`, `assets/app.ts`):
+  список открытых session-вкладок и активная хранятся в `localStorage`
+  (`mma-open-tabs`, `readSavedTabs`/`persistTabs`) и восстанавливаются на boot
+  **до** `refresh()` (`restoreTabs`; `?session=` в URL выигрывает как активная);
+  `openTab(id, name, kind, server, activate)` с `activate=false` создаёт фоновую
+  вкладку без подмены активной.
+
+### Current Version: 2.35.2
 
 ### Changelog
 

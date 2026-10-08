@@ -1545,11 +1545,13 @@ export class Agent {
 
     return {
       success: !(
+        this.shutdownRequested ||
         state.emptyResponseExhausted ||
         state.auditFailed ||
         state.retryLoopStopped ||
         state.readonlyStopped
       ),
+      interrupted: this.shutdownRequested || undefined,
       text: state.lastText,
       error: state.emptyResponseExhausted
         ? t("error.empty_response")

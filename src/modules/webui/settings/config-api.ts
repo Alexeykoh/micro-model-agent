@@ -11,6 +11,7 @@ import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
 import { buildReasoningView } from "./reasoning-view";
 import type { ConfigStore, RuntimeState, HttpTransport, SseTransport, WorkspaceStore } from "../state";
+import { broadcast } from "../state";
 
 /** Запись реестра для UI настроек. */
 export interface ConfigRegistryEntry {
@@ -162,6 +163,10 @@ export function handleConfigPost(
         persisted,
       };
       if (warning) body.warning = warning;
+      // Все вкладки/окна держат собственную копию конфига; после записи шлём
+      // событие, чтобы клиенты перечитали `/api/config` и настроечные панели
+      // не показывали устаревшее значение (тот же контракт, что у plugins/MCP).
+      broadcast({ type: "config", ts: Date.now() }, s);
       sendJson(res, 200, body);
     })
     .catch((err: unknown) => {
