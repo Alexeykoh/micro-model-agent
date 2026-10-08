@@ -15,8 +15,6 @@ import { formatFrame } from "../runtime/emit";
 import type { ServiceClient } from "../state";
 import type { AgentServiceState } from "../state";
 
-const KEEPALIVE_MS = 20_000;
-
 /** Обработчик группы `/v1/sessions/:id/events`; `true` — запрос обработан. */
 export function handleEventsApi(
   req: IncomingMessage,
@@ -56,7 +54,7 @@ export function handleEventsApi(
   };
   s.clients.add(client);
 
-  const ping = setInterval(() => safeWrite(res, ": ping\n\n"), KEEPALIVE_MS);
+  const ping = setInterval(() => safeWrite(res, ": ping\n\n"), s.keepaliveMs);
   (ping as { unref?: () => void }).unref?.();
 
   req.on("close", () => {

@@ -44,6 +44,7 @@ export interface SessionLogEntry {
     | "critic_verdict"
     | "critic_escalation"
     | "claim_retry"
+    | "service_task"
     | `onboarding_${string}`;
   tool?: string;
   tool_call_id?: string;
@@ -149,6 +150,11 @@ export interface SessionLogEntry {
     string,
     { promptTokens: number; completionTokens: number; totalTokens: number; subtasks: number }
   >;
+  // Поля service_task (Agent Service API v1): tenant/run-контекст (спека §10.3).
+  tenantId?: string;
+  principalId?: string;
+  runId?: string;
+  jobId?: string;
 }
 
 /** Файловое хранилище сессий: meta.json, history.jsonl, session.jsonl. */

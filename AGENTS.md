@@ -1366,6 +1366,14 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **Задача = ход над сессией.** `job` (автономная) / `interactive` (вопросы через
   SSE + `POST /v1/tasks/:jobId/answer`). Реестр задач in-memory (`TaskRegistry`):
   жизненный цикл, `wait:true`, `Idempotency-Key`, retention, webhook.
+- **Authz job-режима:** `toolAllowlist` применяется **строго** к
+  `ToolContext.toolAllowlist` на время хода (теги/`alwaysOn` не обходят) и
+  восстанавливается после; попытка интерактивного/вне-allowlist тула = `failed`
+  `…/tool-forbidden` (`runtime/run-task.ts`, `api/tasks-api.ts`). Interactive —
+  без ограничения.
+- **Tenant-контекст** из auth-заголовков `X-Mma-Tenant/Principal/Run/Tier/Scopes`
+  (не из тела) → запись `service_task` в `session.jsonl` (`tenantId/principalId/runId/jobId`);
+  тип добавлен в `SessionLogEntry` и `log-api` ALLOWED_TYPES (§10.2/§11).
 - **Эндпоинты:** `/v1/sessions` CRUD, `/v1/sessions/:id/tasks`, `/v1/tasks/:jobId`
   (+`/cancel`, `/answer`), `/v1/sessions/:id/events` (SSE), `/v1/health`,
   `/v1/ready`. Ошибки — RFC 9457 problem+json со стабильными `type`-URI.

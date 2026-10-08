@@ -13,8 +13,10 @@ import { readEnv } from "../../config/env";
 import type { SessionManager } from "../session/manager";
 import type { ExecutionModule } from "../execution/module";
 import { RunPool } from "../webui/session/session-pool";
-import { TaskRegistry } from "./runtime/task-registry";
+import { TaskRegistry, type TenantContext } from "./runtime/task-registry";
 import { EnvelopeLog } from "./runtime/envelope";
+
+export type { TenantContext } from "./runtime/task-registry";
 
 /** Входы старта сервиса (подмножество bootstrap-выходов; без UI-полей). */
 export interface ServiceDeps {
@@ -36,18 +38,8 @@ export interface ServiceDeps {
   webhookFetch?: typeof fetch;
   /** Тестовый шов: readiness-проба провайдера (дефолт — `preflightFromConfig`). */
   preflight?: () => Promise<{ ok: boolean; reason: string }>;
-}
-
-/**
- * Tenant-контекст «едет с работой» (спека §10.2): резолвится из auth-заголовков
- * control plane'а, никогда — из тела запроса/prompt.
- */
-export interface TenantContext {
-  tenantId?: string;
-  principalId?: string;
-  runId?: string;
-  tier?: string;
-  scopes?: string[];
+  /** Интервал SSE keep-alive `: ping` (мс); тестовый оверрайд. */
+  keepaliveMs?: number;
 }
 
 /** Подключённый SSE-клиент одной сессии. */
@@ -75,6 +67,8 @@ export interface AgentServiceState {
   port: number;
   token?: string;
   tenant?: TenantContext;
+  /** Интервал SSE keep-alive (мс). */
+  keepaliveMs: number;
   startedAt: number;
 }
 
@@ -107,6 +101,7 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     host: deps.host ?? readEnv("SERVICE_HOST") ?? sg.host,
     port: deps.port ?? parseEnvInt(readEnv("SERVICE_PORT")) ?? sg.port,
     token: deps.token ?? readEnv("SERVICE_TOKEN") ?? sg.token,
+    keepaliveMs: deps.keepaliveMs ?? 20_000,
     startedAt: Date.now(),
   };
 }

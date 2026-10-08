@@ -26,8 +26,13 @@ export interface RunTaskResult {
   usage: TaskUsage;
   data?: unknown;
   outputInvalid?: boolean;
+  /** Ход в job-режиме попытался вызвать интерактивный/запрещённый allowlist'ом тул. */
+  forbidden?: boolean;
   error?: string;
 }
+
+/** Интерактивные тулы, запрещённые в job-режиме (спека §5.2). */
+const INTERACTIVE_TOOLS = new Set(["question", "approve"]);
 
 export interface RunTaskOptions {
   runner: SessionRunner;
@@ -63,6 +68,11 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
     ...(ev.images?.length ? { images: ev.images } : {}),
   });
 
+  // Job-режим: попытка интерактивного тула или тула вне allowlist = tool_forbidden.
+  const allowSet =
+    task.mode === "job" && task.toolAllowlist ? new Set(task.toolAllowlist) : null;
+  let forbidden = false;
+
   const callAgent = (text: string): Promise<AgentResult> =>
     runner.agent.run(
       text,
@@ -71,11 +81,17 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
       (ev: ToolEvent) => {
         if (ev.type === "start") {
           forwarder.onToolStart(callFor(ev, startId(ev.tool)));
-        } else {
-          forwarder.onToolEnd(callFor(ev, endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
-          const plan = planEventFor(ev.tool, runner.execModule);
-          if (plan) opts.onPlan?.(plan);
+          return;
         }
+        if (
+          task.mode === "job" &&
+          (INTERACTIVE_TOOLS.has(ev.tool) || (allowSet !== null && !allowSet.has(ev.tool)))
+        ) {
+          forbidden = true;
+        }
+        forwarder.onToolEnd(callFor(ev, endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
+        const plan = planEventFor(ev.tool, runner.execModule);
+        if (plan) opts.onPlan?.(plan);
       },
       (phase) => forwarder.onPhase(phase),
       (reasoning) => forwarder.onReasoning(reasoning),
@@ -86,6 +102,8 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
     completionTokens: result.completionTokens ?? 0,
     costUsd: result.totalCost ?? 0,
   });
+  const finish = (r: Omit<RunTaskResult, "forbidden">): RunTaskResult =>
+    forbidden ? { ...r, forbidden: true } : r;
 
   const wantsJson = task.output?.format === "json" && !!task.output;
   const baseInput = wantsJson
@@ -102,33 +120,33 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
         const retryParsed = parseStructured(result.text, task.output);
         forwarder.flush();
         if (!retryParsed.ok) {
-          return {
+          return finish({
             success: false,
             text: result.text,
             usage: usageOf(result),
             outputInvalid: true,
             error: `output_invalid: ${retryParsed.detail}`,
-          };
+          });
         }
-        return { success: true, text: result.text, data: retryParsed.data, usage: usageOf(result) };
+        return finish({ success: true, text: result.text, data: retryParsed.data, usage: usageOf(result) });
       }
       forwarder.flush();
-      return { success: true, text: result.text, data: parsed.data, usage: usageOf(result) };
+      return finish({ success: true, text: result.text, data: parsed.data, usage: usageOf(result) });
     }
     forwarder.flush();
-    return {
+    return finish({
       success: result.success,
       text: result.text,
       usage: usageOf(result),
       ...(result.error ? { error: result.error } : {}),
-    };
+    });
   } catch (err) {
     forwarder.flush();
-    return {
+    return finish({
       success: false,
       text: "",
       usage: { promptTokens: 0, completionTokens: 0, costUsd: 0 },
       error: errMsg(err),
-    };
+    });
   }
 }

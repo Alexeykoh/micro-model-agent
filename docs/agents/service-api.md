@@ -61,12 +61,21 @@ Idempotency-Key: <uuid>                 // опц.
   "input": "…",
   "mode": "job",                        // interactive | job
   "output": { "format": "json", "schema": { … } },  // опц.
-  "toolAllowlist": ["read_file"],       // опц.
+  "toolAllowlist": ["read_file"],       // опц., только job; строго (теги/alwaysOn не обходят)
   "timeoutMs": 120000,                  // опц.
   "wait": false,                        // опц.
   "callbackUrl": "https://…"            // опц. (HMAC push)
 }
 ```
+
+**Auth-заголовки** control plane (tenant-контекст «едет с работой», §10.2/§11):
+`X-Mma-Tenant`, `X-Mma-Principal`, `X-Mma-Run`, `X-Mma-Tier`, `X-Mma-Scopes`
+(comma-separated). Резолвятся только из auth, не из тела; пишутся в
+`session.jsonl` записью `service_task`.
+
+В `job`-режиме `toolAllowlist` применяется **строго** к набору тулов раннера
+(теги и `alwaysOn` не обходят). Попытка вызвать интерактивный тул или тул вне
+allowlist завершает задачу `failed` с `error.type = …/tool-forbidden`.
 
 Ответ: `202 Accepted` + `Location`/`Retry-After` + `{jobId,status,statusUrl}`
 (терминальная задача или `wait:true`, уложившаяся в `syncWaitMs` → `200` +

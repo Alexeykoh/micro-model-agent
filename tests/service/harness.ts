@@ -24,11 +24,22 @@ export function cleanupServiceDir(dir: string): void {
   rmSync(dir, { recursive: true, force: true });
 }
 
-/** Stub-раннер на заданного агента (без реального bootstrap). */
-export function stubRunner(sessionId: string, agent: unknown): SessionRunner {
+/**
+ * Stub-раннер на заданного агента (без реального bootstrap). С переданным
+ * `sessionManager` несёт pinned-сиблинг, поэтому `appendLog` пишет в журнал
+ * сессии (нужно для проверки tenant-аудита).
+ */
+export function stubRunner(
+  sessionId: string,
+  agent: unknown,
+  sessionManager?: SessionManager,
+): SessionRunner {
   return {
     sessionId,
     agent,
+    sessionManager: sessionManager
+      ? sessionManager.forkPinned(sessionId)
+      : ({} as unknown as SessionManager),
     execModule: { getActivePlan: () => null },
     registry: { has: () => false, register: () => {} },
     toolCtx: { exitOnComplete: false },
@@ -45,6 +56,8 @@ export interface ServiceDepsOptions {
   webhookFetch?: typeof fetch;
   /** Тестовый шов: readiness-проба провайдера. */
   preflight?: () => Promise<{ ok: boolean; reason: string }>;
+  /** Интервал SSE keep-alive (мс). */
+  keepaliveMs?: number;
 }
 
 /** Депы сервиса: конфиг из DEFAULTS, SessionManager с одной тестовой сессией. */
@@ -66,9 +79,12 @@ export function makeServiceDeps(opts: ServiceDepsOptions): ServiceDeps {
     sessionManager,
     baseDir: opts.dir,
   };
-  if (opts.agent !== undefined) deps.spawnRunner = (id) => stubRunner(id, opts.agent);
+  if (opts.agent !== undefined) {
+    deps.spawnRunner = (id) => stubRunner(id, opts.agent, sessionManager);
+  }
   if (opts.webhookFetch) deps.webhookFetch = opts.webhookFetch;
   if (opts.preflight) deps.preflight = opts.preflight;
+  if (opts.keepaliveMs !== undefined) deps.keepaliveMs = opts.keepaliveMs;
   return deps;
 }
 
@@ -76,4 +92,20 @@ export function makeServiceDeps(opts: ServiceDepsOptions): ServiceDeps {
 export async function firstSessionId(url: string): Promise<string> {
   const res = await httpJson(`${url}/v1/sessions`);
   return (res.json.sessions as Array<{ id: string }>)[0].id;
+}
+
+/** Поллит `GET /v1/tasks/:jobId` до статуса (или бросает по таймауту). */
+export async function waitTaskStatus(
+  url: string,
+  jobId: string,
+  status: string,
+  ms = 3000,
+): Promise<Record<string, unknown>> {
+  const start = Date.now();
+  for (;;) {
+    const res = await httpJson(`${url}/v1/tasks/${jobId}`);
+    if (res.json.status === status) return res.json;
+    if (Date.now() - start > ms) throw new Error(`task ${jobId} did not reach ${status}`);
+    await new Promise((r) => setTimeout(r, 10));
+  }
 }
