@@ -17,6 +17,7 @@ import { SessionStore, SessionManager } from "../../src/modules/session/index";
 import { OpenAICompatProvider } from "../../src/llm/openai-compat";
 import { parseChunks } from "../../src/llm/response";
 import type { AppConfig } from "../../src/config/types";
+import { DEFAULTS } from "../../src/config/defaults";
 import type { AgentDeps } from "../../src/core/agent";
 import type { Chunk, Message } from "../../src/llm/provider";
 import { tmpdir } from "os";
@@ -53,6 +54,7 @@ function quietLogger() {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    diagnostic: vi.fn(),
     setSessionDir: vi.fn(),
     initSessionLog: vi.fn(),
     closeSessionLog: vi.fn(),
@@ -1611,7 +1613,9 @@ describe("ContextManager (integration)", () => {
   });
 
   it("detects compaction at interval threshold", () => {
-    const mgr = new ContextManager(32768);
+    // Interval compaction is gated by history load (compactionMinLoad, 2.13.0);
+    // isolate the interval trigger by zeroing the load gate.
+    const mgr = new ContextManager(32768, { ...DEFAULTS.contextBudget, compactionMinLoad: 0 });
     expect(mgr.needsCompaction()).toBe(false);
 
     // Simulate COMPACTION_INTERVAL (15) agent loop iterations

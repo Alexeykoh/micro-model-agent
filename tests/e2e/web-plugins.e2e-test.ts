@@ -15,6 +15,7 @@ import {
   withE2E,
   waitForLiveTab,
   apiGet,
+  apiPost,
   artifactsDirFor,
   writeArtifacts,
   type Launched,
@@ -46,13 +47,22 @@ describe("web e2e: plugins tab", () => {
         await page.click('.sb-tab[data-tab="plugins"]');
         await page.waitForSelector("#pane-plugins .plg-row", { timeout: 10_000 });
         await expect.poll(() => page.locator("#pane-plugins .plg-row").count()).toBeGreaterThan(0);
-        await expect(page.locator("#pane-plugins .plg-summary")).toContainText("active");
+        // vitest `expect` has no Playwright `toContainText`; poll the text.
+        await expect
+          .poll(async () => (await page.locator("#pane-plugins .plg-summary").textContent()) || "")
+          .toContain("active");
 
-        // Flip the first toggle and expect the server to agree.
+        // Flip the first toggle and expect the server to agree. The panel is
+        // re-rendered from the server response/SSE, so stability-gated clicks
+        // can starve and the first row may reorder — re-locate the row by name
+        // for every action and click the (visible) button directly.
         const firstRow = page.locator("#pane-plugins .plg-row").first();
         const name = (await firstRow.locator(".plg-name").textContent())?.trim() || "";
+        expect(name).not.toBe("");
+        const rowToggle = () =>
+          page.locator("#pane-plugins .plg-row").filter({ hasText: name }).first().locator(".toggle");
         const wasOn = (await firstRow.locator(".toggle.on").count()) > 0;
-        await firstRow.locator(".toggle").click();
+        await rowToggle().dispatchEvent("click");
         await expect
           .poll(async () => (await pluginRows(srv.baseUrl)).find((p) => p.name === name)?.enabled, {
             timeout: 10_000,
@@ -61,7 +71,7 @@ describe("web e2e: plugins tab", () => {
         await page.screenshot({ path: `${dir}/plugins-tab.png` });
 
         // Revert the scenario's own write.
-        await firstRow.locator(".toggle").click();
+        await rowToggle().dispatchEvent("click");
         await expect
           .poll(async () => (await pluginRows(srv.baseUrl)).find((p) => p.name === name)?.enabled, {
             timeout: 10_000,
@@ -86,7 +96,9 @@ describe("web e2e: plugins tab", () => {
         await page.locator("#pane-plugins .plg-row").first().click();
         await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
         // Declarations are shown as such — the tab must not imply enforcement.
-        await expect(page.locator("#subHost")).toContainText("not enforcement");
+        await expect
+          .poll(async () => (await page.locator("#subHost").textContent()) || "")
+          .toContain("not enforcement");
         await page.screenshot({ path: `${dir}/plugins-info.png` });
         writeArtifacts(dir, "web-plugins-info", { html: await page.content(), consoleErrors: errors });
         expect(errors).toEqual([]);
