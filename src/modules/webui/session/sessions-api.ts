@@ -7,7 +7,7 @@ import { handleSessionImage } from "./images-api";
 import { handleSessionLog } from "./log-api";
 import { readBody, readBodyError, sendJson } from "../util";
 import { parseJsonBody, readJsonBody } from "../http/body";
-import { isSessionBusy } from "./session-status";
+import { isSessionBusy, pushState } from "./session-status";
 import { broadcast, type SessionStore, type RuntimeState, type HttpTransport, type SseTransport } from "../state";
 
 /** Проекция меты сессии для списка (`GET /api/sessions` и SSE `sessions`). */
@@ -147,6 +147,47 @@ export function handleSessionActivate(
 }
 
 /**
+ * `POST /api/sessions/deactivate` — закрыта последняя вкладка: сброс
+ * серверно-активной сессии, чтобы следующий ход и перезагрузка не ушли в
+ * закрытый контекст. Idle-раннер выгружается (контекст не «висит»); бегущую/
+ * queued сессию не трогаем — её ход может завершаться. Идемпотентно.
+ */
+export function handleSessionDeactivate(
+  res: ServerResponse,
+  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
+): void {
+  if (!s.sessionManager) {
+    sendJson(res, 503, { error: "sessions_unavailable" });
+    return;
+  }
+  let prev: string | null = null;
+  try {
+    prev = s.sessionManager.getActive();
+  } catch {
+    prev = null;
+  }
+  try {
+    s.sessionManager.clearActive?.();
+  } catch {
+    /* best-effort */
+  }
+  // План следует за сессией: вкладок не осталось — трекер пустеет.
+  try {
+    s.execModule?.switchSession(null);
+  } catch {
+    /* fail-open */
+  }
+  // Контекст закрытой сессии больше не нужен: выгружаем только простаивающий
+  // раннер (бегущий/queued оставляем — дренаж завершит ход).
+  if (prev && !isSessionBusy(s, prev)) {
+    s.pool.drop(prev);
+  }
+  emitSessions(s);
+  pushState(s);
+  sendJson(res, 200, { ok: true });
+}
+
+/**
  * `DELETE /api/sessions/:id` — удалить сессию.
  *
  * Гард: АКТИВНУЮ удалять нельзя (409 `active_session`) — иначе агент останется
@@ -196,6 +237,44 @@ export function handleSessionDelete(res: ServerResponse, id: string, s: SessionS
 }
 
 /**
+ * Параметризованные `/api/sessions/:id/<sub>` роуты (GET) и `DELETE /:id`.
+ * Вынесено из `handleSessionsApi`, чтобы диспатч не разрастался по цикломатике
+ * (fallow pre-commit gate).
+ */
+function handleSessionItem(
+  req: IncomingMessage,
+  res: ServerResponse,
+  p: string,
+  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
+): boolean {
+  if (!p.startsWith("/api/sessions/")) return false;
+  if (req.method === "DELETE") {
+    handleSessionDelete(res, decodeURIComponent(p.slice("/api/sessions/".length)), s);
+    return true;
+  }
+  if (req.method !== "GET") return false;
+  if (p.endsWith("/history")) {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/history".length));
+    handleSessionHistory(res, id, s);
+    return true;
+  }
+  if (p.endsWith("/log")) {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/log".length));
+    handleSessionLog(req, res, id, s);
+    return true;
+  }
+  if (p.includes("/images/")) {
+    const rest = p.slice("/api/sessions/".length);
+    const cut = rest.indexOf("/images/");
+    const id = decodeURIComponent(rest.slice(0, cut));
+    const name = decodeURIComponent(rest.slice(cut + "/images/".length));
+    handleSessionImage(res, id, name, s);
+    return true;
+  }
+  return false;
+}
+
+/**
  * Диспатч роутов `/api/sessions*`. Возвращает, обработан ли запрос, чтобы
  * `server.ts` держал плоскую цепочку без дубля парсинга путей.
  */
@@ -218,28 +297,9 @@ export function handleSessionsApi(
     handleSessionActivate(req, res, s);
     return true;
   }
-  if (p.startsWith("/api/sessions/") && p.endsWith("/history") && req.method === "GET") {
-    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/history".length));
-    handleSessionHistory(res, id, s);
+  if (p === "/api/sessions/deactivate" && req.method === "POST") {
+    handleSessionDeactivate(res, s);
     return true;
   }
-  if (p.startsWith("/api/sessions/") && p.endsWith("/log") && req.method === "GET") {
-    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/log".length));
-    handleSessionLog(req, res, id, s);
-    return true;
-  }
-  if (p.startsWith("/api/sessions/") && p.includes("/images/") && req.method === "GET") {
-    const rest = p.slice("/api/sessions/".length);
-    const cut = rest.indexOf("/images/");
-    const id = decodeURIComponent(rest.slice(0, cut));
-    const name = decodeURIComponent(rest.slice(cut + "/images/".length));
-    handleSessionImage(res, id, name, s);
-    return true;
-  }
-  if (p.startsWith("/api/sessions/") && req.method === "DELETE") {
-    const id = decodeURIComponent(p.slice("/api/sessions/".length));
-    handleSessionDelete(res, id, s);
-    return true;
-  }
-  return false;
+  return handleSessionItem(req, res, p, s);
 }

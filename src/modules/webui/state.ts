@@ -29,6 +29,8 @@ export interface WebSessionManager {
   get(id: string): SessionMeta | null;
   getActive(): string | null;
   setActive(id: string): void;
+  /** Сброс активной сессии (закрытие последней вкладки). Опционален для стабов. */
+  clearActive?(): void;
   delete(id: string): void;
   /**
    * Создаёт новую сессию (опционально именованную), возвращает мету. Опционален,

@@ -1348,6 +1348,25 @@ quality-gate и выглядят аккуратно.
   LLM-заголовок меняли только `meta.json`; вкладка держала старое имя, а LLM-заголовок не
   показывался вообще. Слушатель (общий с pinned-сиблингами раннеров) шлёт `sessions` + `state`.
 
+### Closing the Last Tab Resets the Session (unreleased)
+
+Закрытие последней вкладки `mma web` оставляло серверно-активную сессию и её контекст
+«висеть»: клиент сбрасывал только ленту, `session.activeSessionId` и сайдбар держали
+закрытую сессию, следующий ход/перезагрузка уходили в неё, и всё расходилось.
+
+- **Клиент** (`assets/js/session/tabs.ts`): `closeTab` при переключении на соседнюю вкладку
+  синхронит `session.activeSessionId`/сайдбар/`ensureTabState` и шлёт `activate` (раньше
+  переключение не доезжало вовсе); при закрытии **последней** — `resetToEmpty()`: чистка
+  session-слайса + `hooks.renderActive()` (пустой сайдбар/план/usage) + `POST
+  /api/sessions/deactivate`. `hooks.renderActive` регистрирует `app.ts`.
+- **Сервер** (`SessionManager.clearActive()`, `POST /api/sessions/deactivate`,
+  `webui/session/sessions-api.ts`): сброс активной сессии, `execModule.switchSession(null)`,
+  выгрузка **простаивающего** раннера (`pool.drop`, контекст не висит; бегущую/queued не
+  трогаем), `sessions` + `state` бродкаст. Идемпотентно.
+- **Пустой экран = «новый чат»** (`assets/js/session/composer.ts`): `send()` без активной
+  сессионной вкладки сначала поднимает свежую сессию (`await deps.newChatTab()`), иначе ход
+  ушёл бы в закрытую сессию.
+
 ### Agent Service API v1 (2.35.0)
 
 Долгоживущий HTTP-сервис `mma serve` (`src/modules/service/`) — публичный

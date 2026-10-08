@@ -24,6 +24,8 @@ export interface StoreHooks {
   applyStaticI18n: ((...args: any[]) => void) | null;
   /** Renders a session tab's cached snapshot (or fetches it once from REST). */
   ensureTabState?: ((id: string) => void) | null;
+  /** Re-renders the active tab's projection (sidebar chrome + empty feed). */
+  renderActive?: (() => void) | null;
 }
 
 export const hooks: StoreHooks = { applyStaticI18n: null };
