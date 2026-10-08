@@ -1,6 +1,6 @@
 // Turn lifecycle handlers: tool start/end, turn end, command output and log.
 // Extracted from `feed.js`; `feed.js` re-exports this module's public surface.
-import { el, icon, announce } from "../dom.js";
+import { msgs, el, icon, announce } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
 import { feed as feedState, tabs as tabState, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
@@ -12,7 +12,7 @@ import { copyText } from "../../md.js";
 import { imageCard } from "./image-card.js";
 import {
   activeFeed, liveFeed, feedForEvent, clearBusy, clearEmpty,
-  appendTo, insertAfter, appendActionsRow, flushRun,
+  appendTo, insertAfter, appendActionsRow, flushRun, scrollToBottom,
 } from "./core.js";
 import { finishMd, finishThink } from "./stream.js";
 
@@ -298,12 +298,14 @@ export function onErrorEvent(data: Dict): void {
 }
 
 export function onCommandOutput(text: unknown, sid?: string): void {
-  const feed = feedForEvent(sid) || activeFeed();
-  if (!feed) return;
+  // Слэш-команду можно выполнить и без открытой вкладки (пустой экран): тогда
+  // её вывод пишем прямо в контейнер транскрипта, а не теряем в пустоте.
+  const feed = feedForEvent(sid) || msgs;
   clearEmpty(feed);
   String(text)
     .split("\n")
     .forEach((line) => appendTo(feed, el("div", "cmdout", line)));
+  scrollToBottom();
 }
 
 // Server-forwarded `OutputBus` line (system-prompt overflow, context probe,

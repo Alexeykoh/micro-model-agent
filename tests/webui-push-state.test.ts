@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { ServerResponse } from "node:http";
 import { createWebUiState } from "../src/modules/webui/state";
 import { pushState } from "../src/modules/webui/session/session-status";
-import { handleSessionDelete } from "../src/modules/webui/session/sessions-api";
+import { handleSessionDelete, handleSessionDeactivate } from "../src/modules/webui/session/sessions-api";
 
 function capture(): { chunks: string[]; res: ServerResponse } {
   const chunks: string[] = [];
@@ -59,5 +59,55 @@ describe("sessions SSE event", () => {
     handleSessionDelete(res, "B", s);
     expect(chunks.join("")).toContain("event: sessions");
     expect(chunks.join("")).toContain('"id":"B"');
+  });
+});
+
+describe("session deactivate (last tab closed)", () => {
+  it("clears active, resets the plan tracker and drops the idle runner", () => {
+    const s = createWebUiState();
+    const { chunks, res } = capture();
+    s.clients.add(res);
+    s.bridge = { getState: () => null } as never;
+    let active: string | null = "A";
+    s.sessionManager = {
+      list: () => [] as never,
+      get: () => null,
+      getActive: () => active,
+      setActive: () => {},
+      clearActive: () => {
+        active = null;
+      },
+      delete: () => {},
+    };
+    const switchSession = vi.fn();
+    s.execModule = { switchSession, forgetSession: vi.fn() };
+    const drop = vi.spyOn(s.pool, "drop");
+
+    handleSessionDeactivate(res, s);
+
+    expect(active).toBeNull();
+    expect(switchSession).toHaveBeenCalledWith(null);
+    expect(drop).toHaveBeenCalledWith("A");
+    // Full snapshot broadcast (sessionless) so other windows reset too.
+    expect(chunks.join("")).toContain("event: state");
+  });
+
+  it("does not drop a busy runner", () => {
+    const s = createWebUiState();
+    const { res } = capture();
+    s.sessionManager = {
+      list: () => [] as never,
+      get: () => null,
+      getActive: () => "A",
+      setActive: () => {},
+      clearActive: () => {},
+      delete: () => {},
+    };
+    s.pool.reserve("A");
+    const drop = vi.spyOn(s.pool, "drop");
+
+    handleSessionDeactivate(res, s);
+
+    expect(drop).not.toHaveBeenCalled();
   });
 });

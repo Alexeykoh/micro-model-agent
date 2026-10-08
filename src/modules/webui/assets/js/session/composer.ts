@@ -310,6 +310,11 @@ async function send(): Promise<void> {
   const text = inp.value.trim();
   const images = tabState.attachments.slice();
   if (!text && !images.length) return;
+  // Вкладок не осталось (пустой экран = «новый чат»): поднимаем свежую сессию,
+  // иначе ход ушёл бы в закрытую активную сессию, а ответ не нашёл бы вкладку.
+  if (!deps.activeTab() && !text.startsWith("/")) {
+    await deps.newChatTab();
+  }
   const tab = deps.activeTab();
   // Владелец сообщения — активная сессионная вкладка; локальные `new`-табы
   // шлют без sessionId (фолбэк сервера — тогда-активная).

@@ -4,6 +4,19 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.35.1] - 2026-10-08
+
+Closing the last tab in `mma web` now resets the session instead of leaving a
+stale active session and its context hanging (the next turn / reload reused the
+closed session and the sidebar kept showing its context).
+
+### Fixed
+
+- **Last-tab close resets the session** (`src/modules/webui/session/sessions-api.ts`, `src/modules/session/manager.ts`): new `POST /api/sessions/deactivate` clears the server-active session, resets the plan tracker (`switchSession(null)`) and drops the **idle** runner (context freed; a busy/queued session is left alone). Idempotent.
+- **Client projection reset** (`src/modules/webui/assets/js/session/tabs.ts`, `assets/app.ts`): closing the last tab clears `session.activeSessionId`/`host` and re-renders the sidebar chrome (`hooks.renderActive`); switching to a neighbour tab on close now syncs the active session/sidebar and posts `activate`.
+- **Composing on the empty screen starts a fresh chat** (`src/modules/webui/assets/js/session/composer.ts`): `send()` with no session tab creates a new session first, so a message typed after closing all tabs no longer routes into the closed session.
+- **Slash commands render without a tab** (`src/modules/webui/assets/js/feed/turn.ts`): command output falls back to the transcript container instead of being dropped when no tab owns the session.
+
 ## [2.35.0] - 2026-10-08
 
 Agent Service API v1: MMA can run as a long-lived HTTP service (`mma serve`)

@@ -178,6 +178,8 @@ async function refresh(): Promise<void> {
 // Lets `tabs.js` render a switched-to tab (cached snapshot or one REST fetch)
 // without importing app.
 hooks.ensureTabState = ensureTabState;
+// Lets `tabs.js` reset the sidebar chrome when the last tab closes.
+hooks.renderActive = renderActiveState;
 
 function resyncAfterReconnect(): void {
   for (const tab of tabState.tabs) {

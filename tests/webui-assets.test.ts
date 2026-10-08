@@ -307,6 +307,27 @@ describe("webui assets", () => {
     expect(a.js).toMatch(/tabState\.activeTabId !== sid\)\s*return;/);
   });
 
+  it("resets the session when the last tab is closed", () => {
+    const a = loadAssets();
+    const tabs = a.jsModules?.["js/session/tabs.js"] || "";
+    const composer = a.jsModules?.["js/session/composer.js"] || "";
+    // Closing the last tab resets the client session projection and deactivates
+    // the server session (otherwise the next turn / reload reuse the closed
+    // context and the sidebar keeps hanging on it).
+    expect(tabs).toContain("resetToEmpty");
+    expect(tabs).toContain('"/api/sessions/deactivate"');
+    expect(tabs).toContain("hooks.renderActive?.()");
+    expect(a.js).toContain("hooks.renderActive = renderActiveState");
+    // Closing the active tab switches the server active session to the next tab.
+    expect(tabs).toContain("hooks.ensureTabState?.(next.id)");
+    // Composing on the empty screen starts a fresh session.
+    expect(composer).toContain("await deps.newChatTab()");
+    // A slash command has no session to create: its output lands in the
+    // transcript container instead of being dropped.
+    const turn = a.jsModules?.["js/feed/turn.js"] || "";
+    expect(turn).toContain("feedForEvent(sid) || msgs");
+  });
+
   it("updates the sidebar from SSE events, with no client polling timers", () => {
     const a = loadAssets();
     const src = js(a);

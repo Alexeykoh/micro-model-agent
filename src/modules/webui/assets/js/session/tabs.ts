@@ -256,19 +256,40 @@ export function closeTab(id: string): void {
       tabState.liveTabId = next.id;
       msgs.replaceChildren(next.feed);
       restoreComposer(next);
+      // Сервер и сайдбар следуют за новой активной вкладкой. Раньше переключение
+      // при закрытии не доезжало: висел план/контекст закрытой сессии.
+      if (next.kind === "session") {
+        session.activeSessionId = next.id;
+        sidebarSessionChanged(next.id);
+        hooks.ensureTabState?.(next.id);
+        void api("/api/sessions/activate", { method: "POST", body: { id: next.id } });
+      }
       scrollToBottom();
     } else {
-      tabState.activeTabId = null;
-      tabState.liveTabId = null;
-      if (inp) inp.value = "";
-      tabState.attachments = [];
-      renderAttachments();
-      showEmptyFeed();
+      resetToEmpty();
     }
   }
   renderTabstrip();
   renderSessionsDropdown();
   syncUrl();
+}
+
+/**
+ * Вкладок не осталось: сбрасываем клиентскую проекцию сессии и серверно-
+ * активную. Иначе следующий ход и перезагрузка уходили в закрытую сессию, а
+ * сайдбар висел на её контексте («контекст остаётся висеть»).
+ */
+function resetToEmpty(): void {
+  tabState.activeTabId = null;
+  tabState.liveTabId = null;
+  session.activeSessionId = null;
+  session.host = {};
+  if (inp) inp.value = "";
+  tabState.attachments = [];
+  renderAttachments();
+  hooks.renderActive?.();
+  showEmptyFeed();
+  void api("/api/sessions/deactivate", { method: "POST", body: {} });
 }
 
 async function newChatTab(): Promise<void> {
