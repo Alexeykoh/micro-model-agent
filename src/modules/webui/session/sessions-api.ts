@@ -32,7 +32,7 @@ function sessionList(s: SessionStore): SessionMetaLite[] {
 }
 
 /** Рассылает список сессий событием `sessions` (замена 15с-поллу клиента). */
-function emitSessions(s: SessionStore & SseTransport): void {
+export function emitSessions(s: SessionStore & SseTransport): void {
   broadcast({ type: "sessions", ts: Date.now(), sessions: sessionList(s) }, s);
 }
 

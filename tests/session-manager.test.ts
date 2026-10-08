@@ -131,6 +131,24 @@ describe("SessionManager", () => {
     expect(manager.get(meta.id)?.name).toBe("New Name");
   });
 
+  it("onRename fires and is shared with pinned siblings", () => {
+    const meta = manager.create("Original");
+    const seen: string[] = [];
+    const off = manager.onRename((m) => seen.push(m.name));
+
+    manager.rename(meta.id, "Renamed", "auto");
+    expect(seen).toEqual(["Renamed"]);
+
+    // Per-session раннер пишет имя через pinned-сиблинг — слушатель общий.
+    const pinned = manager.forkPinned(meta.id);
+    pinned.rename(meta.id, "Refined", "auto");
+    expect(seen).toEqual(["Renamed", "Refined"]);
+
+    off();
+    manager.rename(meta.id, "After", "manual");
+    expect(seen).toEqual(["Renamed", "Refined"]);
+  });
+
   it("should get session by id", () => {
     const meta = manager.create("Find me");
     const found = manager.get(meta.id);

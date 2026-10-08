@@ -38,6 +38,7 @@ import {
   type WebUiState,
 } from "./state";
 import { pushState } from "./session/session-status";
+import { emitSessions } from "./session/sessions-api";
 
 // Чистые снапшот-хелперы живут в `./host-state`; реэкспорт, чтобы существующие
 // импортёры (`webui-usage`, `webui-plan` тесты) не чинить.
@@ -151,6 +152,13 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.config = deps.config;
   state.sessionManager = deps.sessionManager;
   state.execModule = deps.execModule;
+  // Живое переименование сессии (детерминированное авто-имя и асинхронный
+  // LLM-заголовок) доезжает до вкладки и списка без reload: раннер пишет имя
+  // через pinned-сиблинг, а слушатель общий с главным менеджером.
+  const detachRenameListener = deps.sessionManager?.onRename((meta) => {
+    emitSessions(state);
+    pushState(state, meta.id);
+  });
   state.memory = deps.memory;
   state.skills = deps.skills;
   state.plugins = deps.plugins;
@@ -293,6 +301,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     url,
     stop: () => {
       detachIndexWatcher();
+      detachRenameListener?.();
       cancelPendingQuestions(state);
       stopOutputForwarding();
       state.pool.clear();

@@ -2,7 +2,7 @@ import { msgs, inp, connStatus, setIcon, icon } from "./js/dom.js";
 import { api, token } from "./js/api.js";
 import { I18N, t, loadI18n } from "./js/i18n.js";
 import { tabs as tabState, session, settings, hooks } from "./js/store.js";
-import { routeState, mergeUsage, storeSnapshot, applyCounters } from "./js/state-sync.js";
+import { routeState, mergeUsage, storeSnapshot, applyCounters, shouldHydrateAutoOpen } from "./js/state-sync.js";
 import type { Dict } from "./js/core/store/types.js";
 import {
   onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
@@ -145,7 +145,11 @@ async function refresh(): Promise<void> {
   const snapshot = data.state;
   if (!sid && snapshot && snapshot.sessionId &&
       !tabState.tabs.some((x) => x.id === snapshot.sessionId)) {
-    openTab(snapshot.sessionId, snapshot.sessionName || String(snapshot.sessionId), "session", false);
+    // An existing session (has messages) must hydrate its transcript — opening
+    // it as "live" left the feed empty (no first message / earlier turns) until
+    // new SSE; a brand-new session stays live (nothing to fetch).
+    const hasHistory = shouldHydrateAutoOpen(session.sessions, snapshot.sessionId);
+    openTab(snapshot.sessionId, snapshot.sessionName || String(snapshot.sessionId), "session", hasHistory);
   }
   storeSnapshot(snapshot);
   applyCounters(data);

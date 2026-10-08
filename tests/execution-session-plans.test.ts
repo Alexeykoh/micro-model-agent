@@ -118,4 +118,37 @@ describe("ExecutionModule.switchSession", () => {
     mod.switchSession(null);
     expect(mod.getActivePlan()).toBeNull();
   });
+
+  it("не стирает чужой живой слот при переключении без своего трекера", () => {
+    // Общий web-модуль (наблюдатель) усыновил сессию, когда плана ещё не было:
+    // трекер null, sessionId = ses_a. Раньше его `switchSession(ses_b)` чистил
+    // слот ses_a, хотя план принадлежал per-session раннеру (репорт: план не
+    // появлялся в сайдбаре после переключения/создания сессии).
+    const observer = new ExecutionModule(TEST_DIR);
+    observer.switchSession("ses_a");
+
+    const owner = new ExecutionModule(TEST_DIR);
+    owner.switchSession("ses_a");
+    owner.setPlan(mkPlan("Plan A", ["a1", "a2"]));
+
+    observer.switchSession("ses_b");
+
+    const slot = observer.getStore().loadSessionActive("ses_a");
+    expect(slot).not.toBeNull();
+    expect(slot!.title).toContain("Plan A");
+  });
+
+  it("plan_step персистит мутацию и в per-session слот", async () => {
+    const mod = new ExecutionModule(TEST_DIR);
+    mod.switchSession("ses_a");
+    mod.setPlan(mkPlan("Plan A", ["first generic step", "second generic step"]));
+    const stepTool = mod.getToolDefinitions().find((t) => t.name === "plan_step")!;
+    const res = await stepTool.handler({} as never, { step: 1, status: "done" });
+    expect(res.success).toBe(true);
+    // Глобальный active.json и слот сессии должны сойтись: прямой saveActive
+    // раньше слот не трогал, и после reload сайдбар показывал старые статусы.
+    const slot = mod.getStore().loadSessionActive("ses_a")!;
+    expect(slot.steps[0].status).toBe("done");
+    expect(slot.steps[1].status).toBe("pending");
+  });
 });

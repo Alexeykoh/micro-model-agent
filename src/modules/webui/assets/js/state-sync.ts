@@ -37,6 +37,21 @@ export function storeSnapshot(snapshot: Dict | null | undefined): string | null 
 }
 
 /**
+ * Whether an auto-opened (server-active) session should fetch its transcript.
+ * An existing session with messages must hydrate its history; opening it as a
+ * "live" tab left the feed empty (missing first message and earlier turns) until
+ * new SSE. A brand-new session has nothing to fetch and stays live.
+ */
+export function shouldHydrateAutoOpen(
+  sessions: Dict[] | null | undefined,
+  sessionId: string | null | undefined,
+): boolean {
+  if (!sessionId) return false;
+  const meta = (sessions || []).find((s) => s.id === sessionId);
+  return !!(meta && typeof meta.messageCount === "number" && meta.messageCount > 0);
+}
+
+/**
  * Merges a partial `usage` payload into the owner tab's snapshot. Returns true
  * when the active tab was affected (caller re-renders the usage bar).
  */
