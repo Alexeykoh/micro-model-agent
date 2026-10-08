@@ -729,6 +729,11 @@ export class Agent {
     const emitTurnEnd = (result: AgentResult | null, err?: unknown) => {
       const interrupted =
         (err instanceof Error && err.name === "AbortError") || this.shutdownRequested;
+      // `meta.updatedAt` двигает в основном appendMessage. Ход, который не
+      // добавил сообщений (оборванный MoE-ход: в session.jsonl последняя запись
+      // — `moe_subtask: start`), оставлял мету с временем старта — список
+      // сессий показывал «сессию, которой давно нет».
+      if (sessionManager) sessionManager.touch?.();
       pluginManager.runOnTurnEnd?.(
         {
           logger,

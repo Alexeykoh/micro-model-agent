@@ -520,7 +520,15 @@ export class SessionLogger {
     this.session?.appendLog({
       ts: new Date().toISOString(),
       type: event,
-      content: (data.detail as string) ?? (data.explanation as string) ?? event,
+      // `content` — то, что читает `session show` и веб-транскрипт. Для
+      // упавшего сабтаска это обязательно причина (`error`), а не `summary`
+      // вида «Failed: task-2»: иначе в логе остаётся голый факт без причины.
+      content:
+        (data.detail as string) ??
+        (data.explanation as string) ??
+        (data.error as string) ??
+        (data.summary as string) ??
+        event,
       ...data,
     });
   }

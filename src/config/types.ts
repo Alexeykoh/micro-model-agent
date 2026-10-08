@@ -228,6 +228,12 @@ export interface MoeConfig {
   enabled: boolean;
   /** Макс. циклов план→выполнение→проверка за MoE-прогон (стартовый цикл + N-1 репланов). */
   maxReplanCycles?: number;
+  /**
+   * Явный кап одновременных подзадач MoE. Не задан — берётся по бэкенду:
+   * локальный однодвижковый (LM Studio/Ollama) → 1, иначе
+   * `security.rateLimits.maxParallelTasks`.
+   */
+  parallelSubtasks?: number;
 }
 
 export interface ToolsConfig {

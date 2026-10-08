@@ -4,6 +4,29 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.33.0] - 2026-10-08
+
+A MoE turn on a local LM Studio backend died without a word: every subtask
+failed with `[object Object]`, the orchestrator called it "a technical problem"
+and re-planned the same work, and the session log ended mid-flight with no
+answer and no reason. Post-mortem of `ses_muz7sg1l_0ankgu` traced it to eight
+distinct defects, all in the harness rather than the model.
+
+### Added
+
+- **Expert model validation** (`src/modules/execution/expert-model-check.ts`): `experts[tag].model` is checked against the active provider's model list once per turn. An unknown model falls back to the active one with a `warn` naming the tag, the bad model and the models the provider actually serves - instead of three doomed attempts per subtask. Fail-open when the list is unavailable; the live config is never mutated, so `/config` still shows the user's setting.
+- **MoE parallelism cap** (`src/modules/execution/moe-parallelism.ts`, `moe.parallelSubtasks`): a local single-engine backend (LM Studio, Ollama, loopback) runs one subtask at a time. Concurrent requests for the same model fought over engine load/unload and returned `Engine protocol startup was aborted`. Hosted providers keep the `rateLimits` cap; `0` means auto.
+- **Infrastructure vs content failures** (`transient-error.ts`): `isInfraError` separates backend/transport failures from task failures. When every failed subtask is infrastructure, MoE stops with an honest partial result carrying the real error text instead of re-planning work that would run on the same broken backend. `isTransientError` now also matches mid-stream aborts, engine/model-load failures and stalled streams, so they get a backoff retry instead of failing on the first attempt.
+
+### Fixed
+
+- **Provider error text was destroyed**: `String(parsed.error)` on LM Studio's `{message, type, param}` object produced `[object Object]`, losing the cause in the log, in the retry classifier and in the subtask result. `extractProviderErrorText` (`src/llm/provider-error.ts`) reads `message`, unwraps nested `error`, joins arrays and falls back to compact JSON.
+- **The MoE verifier invented causes**: only `summary` ("Failed: task-2") reached the session log and the verify prompt, so the model wrote a plausible-sounding reason. Failed subtasks now log their `error` and an `infra` flag, `logMoE` uses the reason as `content`, the rendered result shows the cause, and the verifier prompt is told to base explanations only on the errors it was given and to re-plan only for `failedSubtaskIds`.
+- **An interrupted MoE turn left no trace**: `session.jsonl` ended on `moe_subtask: start` with no answer, no reason and no terminal event. An aborted or crashed turn now writes a final `moe_verify` entry with the reason.
+- **Session meta went stale**: a turn that added no messages left `meta.updatedAt` at session creation time, so the session list showed a session that had ended long ago. `SessionManager.touch()` runs at turn end.
+- **Context probe and session meta disagreed**: the probe auto-set 262144 tokens in the live config while `session_start` and `meta.json` kept the pre-probe 65536, with nothing reporting the mismatch. Applying the probed window now syncs the session meta.
+- **14 identical `Session ended` log lines per turn**: `NotifyPlugin` fired at `info` on every `shutdown()` without a session id. It is now a single `debug` line carrying the id.
+
 ## [2.32.0] - 2026-10-08
 
 The web sidebar had exactly one responsive shape. On anything wider than 760px

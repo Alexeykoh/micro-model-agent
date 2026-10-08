@@ -132,6 +132,19 @@ describe("registry keys", () => {
     expect(desc).not.toMatch(/read-only/i);
     expect(desc.length).toBeGreaterThan(0);
   });
+
+  it("reads and writes moe.parallelSubtasks, 0 meaning auto", () => {
+    const cfg = freshCfg();
+    const written = setConfigValue(cfg, "moe.parallelSubtasks", "3");
+    expect(written.ok).toBe(true);
+    expect(cfg.moe.parallelSubtasks).toBe(3);
+
+    const back = setConfigValue(cfg, "moe.parallelSubtasks", "0");
+    expect(back.ok).toBe(true);
+    // 0 = авто: значение не хранится, чтобы неотличимо от дефолта.
+    expect(cfg.moe.parallelSubtasks).toBeUndefined();
+    expect(getConfigValue(cfg, "moe.parallelSubtasks")).toMatchObject({ ok: true, value: 0 });
+  });
 });
 
 describe("registry editor metadata", () => {

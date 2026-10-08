@@ -396,7 +396,15 @@ function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
   void contextProbePromise
     .then(async (probe) => {
       if (!probe) return;
-      const applied = await applyProbedContext(agent, config, probe, logger as SilentLogger);
+      const applied = await applyProbedContext(
+        agent,
+        config,
+        probe,
+        logger as SilentLogger,
+        // Пин на сессию раннера: мета этой сессии должна получить реальное
+        // окно, иначе сайдбар/`session show` показывают стартовое значение.
+        sessionManager,
+      );
       if (applied && envReport.provider) {
         envReport.provider.contextWindow = config.contextWindow;
         envReport.provider.model = config.model;

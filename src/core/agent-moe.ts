@@ -12,7 +12,14 @@ import { StepVerifier } from "../modules/execution/verifier";
 import type { MoEPlan, SubtaskResult, PlanResult } from "../modules/execution/types";
 import type { VerifyInput, OrchestratorResult } from "../llm/types";
 import { newAbortError, type TagUsage } from "../modules/execution/moe-executor";
+import { isInfraError } from "../modules/execution/transient-error";
+import {
+  applyExpertModelCheck,
+  checkExpertModels,
+  describeExpertModelReplacement,
+} from "../modules/execution/expert-model-check";
 import { t } from "../i18n/index";
+import { errMsg } from "../utils";
 
 /** Дефолтный лимит циклов re-plan MoE. */
 export const DEFAULT_MOE_MAX_REPLAN_CYCLES = 3;
@@ -106,8 +113,26 @@ export async function runWithMoE(
     active = next;
     opts.onMoEState?.(next);
   };
+  let moeStarted = false;
+  const markStarted = (): void => {
+    moeStarted = true;
+  };
   try {
-    return await runMoECycles(deps, input, fallback, opts, setActive);
+    return await runMoECycles(deps, input, fallback, opts, setActive, markStarted);
+  } catch (err) {
+    // Ход MoE не дошёл до финала (Esc, краш, обрыв). Без этой записи
+    // session.jsonl обрывается на последнем `moe_subtask: start`, и при
+    // разборе сессии/в web-транскрипте не видно ни ответа, ни причины
+    // (наблюдалось в ses_muz7sg1l_0ankgu).
+    const aborted = err instanceof Error && err.name === "AbortError";
+    if (moeStarted) {
+      const reason = aborted ? t("moe.aborted") : errMsg(err);
+      opts.onEvent?.({
+        type: "moe_verify",
+        data: { decision: aborted ? "aborted" : "error", explanation: reason },
+      });
+    }
+    throw err;
   } finally {
     setActive(false);
   }
@@ -127,6 +152,7 @@ async function runMoECycles(
     sessionId?: string;
   },
   setActive: (active: boolean) => void,
+  markStarted: () => void,
 ): Promise<AgentResult> {
   const { config, llmProvider, logger, toolExecutor, baseDir } = deps;
   const { onMeta, onPhase, onTool, signal, onEvent, sessionId } = opts;
@@ -160,6 +186,37 @@ async function runMoECycles(
 
   ensureNotAborted();
 
+  // Модели экспертов против списка моделей активного провайдера. Проверка
+  // одноразовая на ход и fail-open: неизвестная модель эксперта заменяется на
+  // активную с warn, вместо того чтобы трижды упасть с `Failed to load model`
+  // и утянуть ход в re-plan (наблюдалось в ses_muz7sg1l_0ankgu).
+  let moeConfig: AppConfig = config;
+  let expertModelsChecked = false;
+  const ensureExpertModels = async (): Promise<AppConfig> => {
+    if (expertModelsChecked) return moeConfig;
+    expertModelsChecked = true;
+    let available: string[] | null = null;
+    try {
+      const models = await Promise.race([
+        llmProvider.listModels(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000).unref?.()),
+      ]);
+      if (Array.isArray(models)) available = models;
+    } catch {
+      available = null;
+    }
+    const check = checkExpertModels(config, available);
+    if (Object.keys(check.replaced).length > 0) {
+      logger.warn(
+        describeExpertModelReplacement(check.replaced, config.model, available ?? []),
+      );
+      moeConfig = applyExpertModelCheck(config, check);
+    }
+    return moeConfig;
+  };
+
+  await ensureExpertModels();
+
   let orchestrator: MoEOrchestratorLike | undefined = deps.orchestratorOverride;
   if (!orchestrator) {
     orchestrator = new OrchestratorClient(
@@ -174,7 +231,7 @@ async function runMoECycles(
         retry: config.retry,
         rateLimits: config.security?.rateLimits,
         logger,
-        experts: config.experts,
+        experts: moeConfig.experts,
       },
       llmProvider,
       { getSessionId: () => sessionId },
@@ -226,10 +283,10 @@ async function runMoECycles(
 
     // Валидируем каждый план до исполнения — LLM-плану не доверяем никогда,
     // включая re-plan от verifyAndMerge.
-    const validation = validatePlan(currentPlan, config);
+    const validation = validatePlan(currentPlan, moeConfig);
     if (!validation.valid) {
       const applied = applyAutoFixes(currentPlan, validation.autoFixes);
-      const retry = validatePlan(applied, config);
+      const retry = validatePlan(applied, moeConfig);
       if (!retry.valid) {
         logger.diagnostic("warn", `MoE plan validation failed: ${retry.errors.join("; ")}`);
         if (cycle === 1) {
@@ -251,13 +308,14 @@ async function runMoECycles(
     if (!announced) {
       announced = true;
       setActive(true);
+      markStarted();
       onMeta?.(t("moe.started", { count: String(currentPlan.subtasks.length) }));
     }
 
     const executor: MoEExecutorLike =
       deps.executorOverride ??
       new MoEExecutor({
-        config,
+        config: moeConfig,
         toolRegistry: toolExecutor.getRegistry(),
         toolExecutor,
         llmProvider,
@@ -323,11 +381,33 @@ async function runMoECycles(
     // Итог печатает финальная строка хода (`finish`) — здесь считать рано:
     // verifyAndMerge может вернуть re-plan, и ход ещё не закончен.
 
+    // Инфраструктурный фейл: re-plan не поможет — следующий план уйдёт на тот
+    // же сломанный/перегруженный провайдер (наблюдалось: оба сабтаска упали по
+    // mid-stream обрыву, оркестратор объявил re-plan и повторил то же самое за
+    // 13 секунд). Верификатор не зовём — он бы выдумал причину и вернул
+    // re-plan; вместо этого честный partial с РЕАЛЬНЫМ текстом ошибки.
+    const failedResults = [...mergedResults.values()].filter((r) => !r.success);
+    if (failedResults.length > 0 && failedResults.every((r) => isInfraError(r.error || r.summary))) {
+      const reason = t("moe.infra_failure", {
+        count: String(failedResults.length),
+        error: firstLine(failedResults.map((r) => r.error || r.summary).join(" | ")),
+      });
+      logger.warn(reason);
+      emit("moe_verify", {
+        decision: "infra_failure",
+        explanation: reason,
+        failedSubtaskIds: failedResults.map((r) => r.subtaskId),
+      });
+      const anySuccess = [...mergedResults.values()].some((r) => r.success);
+      finish(anySuccess ? "partial" : "error");
+      return partialFailure(mergedResults, reason);
+    }
+
     const verifier: MoEVerifierLike =
       deps.verifierOverride ??
       new StepVerifier(baseDir);
     const knownTags = collectKnownToolTags(toolExecutor);
-    const verification = await verifier.verifyMoEManifest(currentPlan, config, knownTags);
+    const verification = await verifier.verifyMoEManifest(currentPlan, moeConfig, knownTags);
 
     onPhase?.("thinking");
     ensureNotAborted();
@@ -344,6 +424,9 @@ async function runMoECycles(
         })),
         verifierErrors: verification.errors,
         verifierWarnings: verification.warnings,
+        // Упавшие по контентным причинам сабтаски: только их имеет смысл
+        // перепланировать. Инфраструктурные фейлы выше уже остановлены.
+        failedSubtaskIds: failedResults.map((r) => r.subtaskId),
       }, signal);
     } catch (err: any) {
       onPhase?.("done");
@@ -397,36 +480,52 @@ function buildFinalResult(
   verificationSuccess: boolean,
   verifyResult: { finalAnswer?: string },
 ): AgentResult {
-  const outputLines: string[] = [`## MoE Execution Results\n`];
-  for (const r of mergedResults.values()) {
-    const icon = r.success ? "✅" : "❌";
-    outputLines.push(`${icon} **${r.subtaskId}**: ${r.summary} (${r.durationMs}ms)`);
-  }
-  outputLines.push("");
-  outputLines.push(`**Result:** ${verifyResult.finalAnswer || "Complete"}`);
-
   const failedCount = [...mergedResults.values()].filter((r) => !r.success).length;
   return {
     success: failedCount === 0 && verificationSuccess,
-    text: outputLines.join("\n"),
+    text: renderMoEResults(mergedResults, "Result", verifyResult.finalAnswer || "Complete"),
     iterationCount: mergedResults.size,
     moeHandled: true,
   };
 }
 
 function partialFailure(mergedResults: Map<string, SubtaskResult>, reason: string): AgentResult {
-  const outputLines: string[] = [`## MoE Execution Results\n`];
-  for (const r of mergedResults.values()) {
-    const icon = r.success ? "✅" : "❌";
-    outputLines.push(`${icon} **${r.subtaskId}**: ${r.summary} (${r.durationMs}ms)`);
-  }
-  outputLines.push("");
-  outputLines.push(`**${t("moe.partial_result")}:** ${reason}`);
   return {
     success: false,
-    text: outputLines.join("\n"),
+    text: renderMoEResults(mergedResults, t("moe.partial_result"), reason),
     error: reason,
     iterationCount: mergedResults.size,
     moeHandled: true,
   };
+}
+
+/**
+ * Единый рендер итогов MoE для финала и partial-фейла. Упавший сабтаск
+ * показывается с ПРИЧИНОЙ, а не только с `summary` вида «Failed: task-2»:
+ * иначе пользователь и модель видят факт без причины (и выдумывают её).
+ */
+function renderMoEResults(
+  mergedResults: Map<string, SubtaskResult>,
+  resultLabel: string,
+  reason: string,
+): string {
+  const outputLines: string[] = [`## MoE Execution Results\n`];
+  for (const r of mergedResults.values()) {
+    const icon = r.success ? "✅" : "❌";
+    const detail = r.success ? r.summary : firstLine(r.error || r.summary);
+    outputLines.push(`${icon} **${r.subtaskId}**: ${detail} (${r.durationMs}ms)`);
+  }
+  outputLines.push("");
+  outputLines.push(`**${resultLabel}:** ${reason}`);
+  return outputLines.join("\n");
+}
+
+/** Первая непустая строка текста, обрезанная до разумной длины. */
+function firstLine(text: string): string {
+  const line = text
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+  if (!line) return "";
+  return line.length > 300 ? `${line.slice(0, 300)}…` : line;
 }
