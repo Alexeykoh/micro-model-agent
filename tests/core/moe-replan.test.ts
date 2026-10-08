@@ -1,106 +1,48 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { runWithMoE, type MoEOrchestratorLike } from "../../src/core/agent-moe";
-import type { MoEPlan, SubtaskResult } from "../../src/modules/execution/types";
+import { runWithMoE } from "../../src/core/agent-moe";
+import type { MoEPlan } from "../../src/modules/execution/types";
 import type { AppConfig } from "../../src/config/types";
-import { DEFAULTS } from "../../src/config/defaults";
+import {
+  makeMoEConfig,
+  makeMoEScript,
+  moeDeps,
+  okResult,
+  planOf as plan,
+  type MoeScript,
+} from "../helpers/moe-fixtures";
 
-const h = {
-  planQueue: [] as Array<{ plan?: MoEPlan; raw?: string; error?: string }>,
-  verifyQueue: [] as any[],
-  execPlans: [] as MoEPlan[],
-  execResults: [] as any[],
+const h = makeMoEScript() as MoeScript & {
+  execPlans: MoEPlan[];
+  execResults: unknown[];
 };
-
-function fakeOrchestrator(): MoEOrchestratorLike {
-  return {
-    isEnabled: () => true,
-    async plan() {
-      const next = h.planQueue.shift();
-      if (!next) return { error: "no plan scripted" };
-      return next as any;
-    },
-    async verifyAndMerge() {
-      const next = h.verifyQueue.shift();
-      if (!next) throw new Error("no verify result scripted");
-      return next;
-    },
-  };
-}
+h.execPlans = [];
+h.execResults = [];
 
 const fakeExecutor = {
-  async executePlan(plan: MoEPlan) {
-    h.execPlans.push(plan);
+  async executePlan(p: MoEPlan) {
+    h.execPlans.push(p);
     const next = h.execResults.shift();
     if (!next) throw new Error("no exec result scripted");
-    return next;
-  },
-};
-
-const fakeVerifier = {
-  async verifyMoEManifest() {
-    return { success: true, errors: [], warnings: [] };
+    return next as never;
   },
 };
 
 function makeConfig(maxReplanCycles?: number): AppConfig {
-  const config = JSON.parse(JSON.stringify(DEFAULTS)) as AppConfig;
-  config.moe.enabled = true;
-  if (maxReplanCycles !== undefined) {
-    (config.moe as any).maxReplanCycles = maxReplanCycles;
-  }
-  return config;
-}
-
-function subtask(id: string): MoEPlan["subtasks"][number] {
-  return {
-    id,
-    description: `do ${id}`,
-    expert_tag: "code",
-    allowed_files: [],
-    read_only_files: [],
-    depends_on: [],
-    input_from: [],
-    expected_output: "",
-    success_criteria: [],
-  };
-}
-
-function plan(...ids: string[]): MoEPlan {
-  return {
-    title: "test plan",
-    subtasks: ids.map(subtask),
-    shared_context: { rules: [], refs: [] },
-  };
-}
-
-function okResult(id: string): SubtaskResult {
-  return {
-    subtaskId: id,
-    success: true,
-    summary: `ok ${id}`,
-    result: `${id} output`,
-    durationMs: 1,
-  };
+  return makeMoEConfig({ maxReplanCycles });
 }
 
 function deps(config: AppConfig) {
   return {
-    config,
-    llmProvider: {} as any,
-    toolExecutor: { getRegistry: () => ({ getAll: () => [] }) } as any,
+    ...moeDeps(config, h),
     logger: {
       debug: () => {},
       warn: () => {},
       info: () => {},
       diagnostic: () => {},
-    } as any,
-    baseDir: "/tmp/moe-test",
-    orchestratorOverride: fakeOrchestrator(),
+    },
     executorOverride: fakeExecutor,
-    verifierOverride: fakeVerifier,
   };
 }
-
 describe("runWithMoE re-plan loop", () => {
   beforeEach(() => {
     h.planQueue.length = 0;
