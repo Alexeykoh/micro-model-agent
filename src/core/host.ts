@@ -64,6 +64,11 @@ export interface HostStateSnapshot {
   contextWindow?: number;
   /** Workspace агента (каталог `-d`), абсолютный; нет, если неизвестен. */
   workspace?: string;
+  /**
+   * Версия установленного пакета (`package.json`), а не `config.version` —
+   * та хранит версию схемы конфига. Показывается в футере под композером.
+   */
+  version?: string;
   /** Источники инструкций AGENTS.md (`disabled` — флаг --no-agents-md). */
   instructions?: { files: string[]; disabled: boolean };
   /** Статистика карты проекта; `indexed:false`, пока обход не завершён. */

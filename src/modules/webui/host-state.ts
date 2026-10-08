@@ -10,6 +10,7 @@ import type { LspDiagnosis } from "../lsp/diagnose";
 import type { SessionManager } from "../session/manager";
 import type { ExecutionModule } from "../execution/module";
 import { planSnapshotFromModule, adaptActivePlan } from "../../core/host-plan";
+import { readMmaVersion } from "../../core/version";
 import type { UsageSnapshot } from "./state";
 import { isI18nStale } from "./i18n/i18n-stale";
 
@@ -148,6 +149,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     contextBreakdown: deps.usage?.contextBreakdown,
     contextProbe: deps.contextProbe,
     workspace: deps.workspace,
+    version: readMmaVersion(),
     instructions: deps.instructions,
     projectMap: deps.projectMap ?? undefined,
     filesRevision: deps.filesRevision,
