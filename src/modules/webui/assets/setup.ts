@@ -241,8 +241,20 @@
   function setMsg(box: Element | null, kind: string, text: string): void {
     msg = { kind, text };
     const el = box ? box.querySelector(".setup-msg") : null;
-    if (el) {
-      el.className = "setup-msg " + kind;
+    if (!el) return;
+    el.className = "setup-msg " + kind;
+    el.textContent = "";
+    if (kind === "" && text) {
+      // Loading states (test/scan/test-model) show the agent face.
+      const face = h("span", "mdl sm st-think");
+      face.setAttribute("aria-hidden", "true");
+      face.appendChild(h("span", "eyes"));
+      const eyes = face.firstElementChild as HTMLElement;
+      eyes.appendChild(h("i", "eye left"));
+      eyes.appendChild(h("i", "eye right"));
+      el.appendChild(face);
+      el.appendChild(document.createTextNode(" " + text));
+    } else {
       el.textContent = text;
     }
   }

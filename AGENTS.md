@@ -1392,6 +1392,40 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **Тесты:** `tests/service/*` (HTTP-клиент на `node:http`, чтобы не ловить
   протечку `global.fetch` из других suites).
 
+### Loader Faces in the Web UI (unreleased)
+
+Спека: [docs/specs/2026-10-08-loader-webui-design.md](./docs/specs/2026-10-08-loader-webui-design.md).
+Агент получил «лицо» (squircle + анимированные глаза), одно на все поверхности.
+
+- **Компонент** `src/modules/webui/assets/js/loader.ts`: `createFace(state,size)`,
+  `setFaceState`, чистая `loaderStateFor(signal)` / `toolState(name)`, `initCursor()`
+  (слежение за курсором + наклон тела для `.track`, клик → моргание для `.poke`).
+  Лицо всегда несёт все доп-элементы (`.orb/.keys/.grow/.fly/.dust/.q/.spark/.star`);
+  видимость решает CSS по `.st-*`.
+- **18 состояний** `.st-*` + цвета `.c-*` (recon/mutate/exec/ok/warn/err/active/dim)
+  в `styles.css` (компонент). Классы состояний и цвета берутся из дизайн-демо
+  `tmp/loader/app.html`.
+- **Boot splash** `#bootSplash` в `index.html` — одно лицо состояния `st-load`
+  (пробуждение: глаза закрыты→открываются) + прогресс; `app.ts` скрывает его по
+  завершении `boot()` (и при передаче экрана мастеру setup). `initCursor()`
+  вызывается на старте boot. У `.mdl` мягкая тень (`box-shadow`, отдельная для
+  light-темы).
+- **Лента** — `feed/core.ts showBusy()` строит `.busy` с лицом (`think`) вместо `✦`.
+- **Activity rail** — без лица: возвращён `✦`-лейбл (фаза/счётчики), состояние
+  показывает постоянное лицо в композере.
+- **Композер** — постоянное лицо в строке селекторов (`#composerFace`), всегда
+  отражает текущее состояние; события обновляют его в `app.ts` (`faceEvent`),
+  между ходами возвращается в idle (следит за курсором). Размеры rail/композера —
+  30px, у `.eye` гарантированы `min-width/height` и `gap`.
+- **Setup** — `setup.ts setMsg(kind:"", …)` показывает лицо при test/scan/model-load.
+- **Сайдбар** — `.sb-loadface` в `#pane-session` показывается при `.sb.sb-loading`
+  (`setSessionLoading`), секции при этом приглушены.
+- **Trace** — `.trc-face` в `#pane-trace`: лицо сессии (`initTraceFace`), состояние
+  по событиям (`traceFaceFor` в `sidebarTraceEvent`), возврат в idle по
+  `sidebarBusy(false)`.
+- **i18n**: `web.loader.boot` (en+ru). Тест: `tests/webui-loader.test.ts`
+  (маппинг + DOM-структура + наличие `#bootSplash`).
+
 ### Current Version: 2.35.0
 
 ### Changelog

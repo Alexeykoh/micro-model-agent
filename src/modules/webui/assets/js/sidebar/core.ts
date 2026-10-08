@@ -4,7 +4,7 @@ import { icon } from "../dom.js";
 import { session } from "../store.js";
 import { t } from "../i18n.js";
 import { sb, TABS, ICON_NAME, paneEl, mqMobile, PHONE_MQ, readStored, storeTab, type TraceEntry } from "./state.js";
-import { collapseDetail, renderList, renderDetail } from "./trace.js";
+import { collapseDetail, renderList, renderDetail, initTraceFace, setTraceFace } from "./trace.js";
 import { sidebarDrawerOpen } from "./drawer.js";
 import { sidebarMapState, sidebarMapIndicator } from "./map.js";
 import { renderLsp, sidebarLspState } from "./lsp.js";
@@ -38,6 +38,7 @@ export function setSidebarTab(id: string, persist = true): void {
 export function sidebarBusy(on: unknown): void {
   const tab = sb.el && sb.el.querySelector<HTMLElement>('.sb-tab[data-tab="trace"]');
   if (tab) tab.dataset.indicator = on ? "live" : "";
+  if (!on) setTraceFace("idle");
 }
 
 export function applySidebarI18n(): void {
@@ -69,6 +70,7 @@ export function initSidebar(): void {
   sb.lspEl = document.getElementById("lspBody");
   sb.plugins.bodyEl = document.getElementById("pluginsBody");
   sb.listEl = document.getElementById("traceList");
+  initTraceFace();
   sb.detailEl = document.getElementById("traceDetail");
   sb.detailGlyph = document.getElementById("detailGlyph");
   sb.detailTitle = document.getElementById("detailTitle");
