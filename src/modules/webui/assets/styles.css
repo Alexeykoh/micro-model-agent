@@ -96,6 +96,7 @@ body.light {
   --dim-c: #6e7781;
   --accent: #0969da;
   --accent-bg: #ddf4ff;
+  --setup-btn-fg: #fff;
   --green: #1a7f37;
   --green-fill: #1a7f37;
   --red: #cf222e;
@@ -1841,7 +1842,7 @@ body.setup-active .layout { display: none; }
   padding: 8px 15px; font-size: 13px; font-family: inherit; cursor: pointer;
 }
 .setup-btn:hover { background: var(--hover-bg); }
-.setup-btn.primary { background: var(--green-fill); border-color: var(--green-fill); color: #fff; }
+.setup-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--setup-btn-fg, #1a1420); }
 .setup-btn.primary:hover { filter: brightness(1.08); }
 .setup-btn:disabled { opacity: .5; cursor: default; }
 .setup-btn.link { background: none; border: none; color: var(--accent); padding: 8px 4px; }
@@ -1867,11 +1868,11 @@ body.setup-active .layout { display: none; }
 .setup-adv-label { padding: 7px 0; }
 .setup-detail-btn {
   display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
-  background: transparent; color: var(--dim-a);
+  background: transparent; color: var(--accent);
   border: 1px solid var(--border); border-radius: 7px;
   padding: 5px 9px; font-size: 12px; font-family: inherit; cursor: pointer;
 }
-.setup-detail-btn:hover { background: var(--hover-bg); color: var(--fg); }
+.setup-detail-btn:hover { background: var(--hover-bg); color: var(--accent); }
 .setup-detail-btn .g { color: var(--accent); }
 
 .setup-textarea { resize: vertical; min-height: 84px; font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; line-height: 1.5; }
