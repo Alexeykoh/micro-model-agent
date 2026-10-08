@@ -4,6 +4,12 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Context selector: `auto`** (`assets/js/settings/write.ts`, `config/registry-extra.ts`, `modules/webui/settings/context-auto.ts`, `core/agent.ts`, `core/bootstrap/provider-phase.ts`): the composer context dropdown gains an `auto` item (button reads `context: auto`) that takes the window from the provider for the active model. It is backed by the new `contextAuto` config key — default **on**, so the existing probe behaviour is unchanged; enabling it probes the provider immediately and applies the result (fail-open, the provider staying silent is announced with `web.selectors.auto_failed` instead of a plain "saved"). Writing a concrete `contextWindow` (selector, `/context`, `mma context`) pins the value: the probe no longer overrides it on start or on model/provider switch. Toggled from the selector menu, `/config contextAuto` or Settings → Context. Tests: `tests/config/context-auto.test.ts`, `tests/webui-config.test.ts`, guard in `tests/webui-assets.test.ts`.
+
 ## [2.35.2] - 2026-10-08
 
 Parallel-turn and settings-consistency fixes for `mma web`, found in a live
@@ -527,8 +533,6 @@ background-process leaks. Harness fixes only (no model/task-specific tuning).
 - **Classified failure hints** (`src/modules/lsp/module.ts`): a failed check appends one `hint:` line under `[LSP check failed]` (binary missing / network / offline / spawn / timeout) so the model falls back to the project's own build/test instead of blindly retrying.
 - **`resolve.ts`** — extracted npx→global-binary resolution (`findOnPath`, `resolveNpxLaunch`) shared by the client and the doctor.
 - **Docs**: `docs/agents/tools.md` "LSP in locked-down networks" (PATH binaries, `lsp.servers.<lang>` overrides, registry mirror via `env`, `MMA_LSP_OFFLINE`, classes table).
-
-## [Unreleased]
 
 ## [2.17.2] - 2026-10-04
 

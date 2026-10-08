@@ -78,6 +78,9 @@ export const DEFAULTS: AppConfig = {
   // эта карта — ручной escape hatch, когда оба ошиблись.
   modelCapabilities: {},
   contextWindow: 32768,
+  // Авто-детект окна у провайдера включён: проба на старте/смене модели
+  // уточняет настроенное значение (см. contextAuto в types.ts).
+  contextAuto: true,
   contextBudget: {
     systemPrompt: 0.1,
     responseReserve: 0.15,

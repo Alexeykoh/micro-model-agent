@@ -229,6 +229,12 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       c.moe = { ...(c.moe ?? DEFAULTS.moe), parallelSubtasks: n > 0 ? n : undefined };
     }),
 
+  // Авто-детект окна у провайдера (см. contextAuto в types.ts). Включение
+  // через веб дополнительно спрашивает провайдера — см. `applyAutoContext`.
+  bool("contextAuto", "budget", true,
+    (c) => c.contextAuto !== false,
+    (c, v) => { c.contextAuto = v as boolean; }),
+
   share("contextBudget.compactionThreshold", "budget", false,
     (c) => c.contextBudget.compactionThreshold,
     (c, v) => { c.contextBudget.compactionThreshold = v as number; }),

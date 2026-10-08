@@ -169,6 +169,13 @@ export async function setupProviderPhase(
           "debug",
           `Context probe: model "${detected.model}" serves ${detected.actual} tokens, keeping the explicit contextWindow ${config.contextWindow}`,
         );
+      } else if (config.contextAuto === false) {
+        // Ручной режим (`contextAuto: false`): проба не перетирает выбор юзера —
+        // иначе `/context 32K` на модели с 128K молча возвращал бы 128K.
+        logger.logSilent(
+          "debug",
+          `Context probe: contextAuto is off, keeping the configured contextWindow ${config.contextWindow} (model "${detected.model}" serves ${detected.actual})`,
+        );
       } else {
         logger.logSilent(
           "info",

@@ -1624,6 +1624,7 @@ export class Agent {
    * Provider-first проба контекста активной записи при смене идентичности
    * (модель/baseUrl/active). Общая для `reconfigure` и `setProvider`: без неё
    * hot-swap мимо `reconfigure` оставлял бюджеты на старом окне. Fail-open.
+   * При `contextAuto: false` (ручной выбор) проба пропускается целиком.
    */
   private async reprobeActiveProvider(config: AppConfig): Promise<void> {
     try {
@@ -1634,6 +1635,12 @@ export class Agent {
         prevId.baseUrl !== nextId.baseUrl ||
         prevId.active !== nextId.active;
       if (!identityChanged) return;
+      // Ручной режим (`contextAuto: false`): окно закреплено юзером, пробу не
+      // гоняем вообще — смена модели не должна молча перетирать выбор.
+      if (config.contextAuto === false) {
+        this.lastProbeIdentity = nextId;
+        return;
+      }
       const nextEndpoint = activeProviderEndpoint(config.provider);
       const { probeModel, probeProviderContext } = await import("../llm/model-loader");
       const lmProbe = await probeModel(nextEndpoint.baseUrl, config.model);
