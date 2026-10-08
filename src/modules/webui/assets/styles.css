@@ -65,6 +65,7 @@
   --sec-h-hover: #d4d4d4;
   --stab-fg: #a3a3a3;
   --overlay: rgba(0,0,0,.55);
+  --sb-backdrop: rgba(0,0,0,.42);
   --shadow-menu: 0 8px 24px rgba(0,0,0,.5);
   --shadow-dd: 0 12px 32px rgba(0,0,0,.55);
   --shadow-modal: 0 20px 60px rgba(0,0,0,.6);
@@ -140,6 +141,7 @@ body.light {
   --sec-h-hover: #1f2328;
   --stab-fg: #57606a;
   --overlay: rgba(31,35,40,.35);
+  --sb-backdrop: rgba(31,35,40,.28);
   --shadow-menu: 0 8px 24px rgba(140,149,159,.25);
   --shadow-dd: 0 12px 32px rgba(140,149,159,.25);
   --shadow-modal: 0 20px 60px rgba(140,149,159,.35);
@@ -912,6 +914,9 @@ body.light .sel > button { border: 1px solid var(--border); }
 .files-body { display: flex; flex-direction: row; flex: 1; min-height: 0; min-width: 0; max-width: 100%; overflow-x: hidden; }
 .files-side {
   display: flex; flex-direction: column; flex: 0 0 auto; min-width: 0; min-height: 0;
+  /* Width comes from split.ts as a custom property (not an inline `width`), so
+     the ≤1024px drawer can ignore the drag-resized column and stack instead. */
+  width: var(--files-tree-w, 240px);
   max-width: 100%; overflow: hidden;
 }
 .files-side[hidden] { display: none; }
@@ -1623,7 +1628,68 @@ button.toggle:disabled { opacity: .5; cursor: default; }
   }
 }
 
-/* ---- responsive layout ---- */
+/* ---- responsive layout ----
+   Two separate breakpoints, because the sidebar and the phone chrome answer
+   different constraints:
+   - ≤1024px: the 679px column no longer fits beside the chat, so the sidebar
+     becomes an overlay drawer over it (`body.sb-open`, see sidebar/drawer.ts).
+     A drawer, not a narrower column: the master-detail panes (Trace detail,
+     Files tree) are sized for a wide column and go unusable squeezed.
+   - ≤760px: phone chrome — session sub-bar, tighter paddings, Trace dropped. */
+.sb-backdrop { display: none; }
+
+@media (max-width: 1024px) {
+  /* Sidebar toggle lives next to settings; settings keeps the right edge. */
+  #toggleSidebar { display: inline-flex; }
+  .layout { flex-direction: column; }
+  .chat { min-height: 0; }
+
+  /* The drawer is full-height and inset by the bars' measured height
+     (`--sb-inset`, set in drawer.ts on open/resize) — no hardcoded bar height
+     to drift out of sync when the phone sub-bar appears. */
+  .sb {
+    display: flex; position: fixed; inset: 0 0 0 auto; z-index: 45;
+    width: min(420px, 88vw); min-width: 0; max-width: 100vw;
+    padding-top: var(--sb-inset, 0px);
+    border-left: 1px solid var(--border); box-shadow: var(--shadow-dd);
+    visibility: hidden; transform: translateX(100%);
+    transition: transform .22s ease, visibility 0s linear .22s;
+  }
+  body.sb-open .sb {
+    visibility: visible; transform: none;
+    transition: transform .22s ease, visibility 0s;
+  }
+  /* No scroll lock needed: the app shell is `body { overflow: hidden }` and
+     only `#msgs` scrolls, so nothing behind the drawer can scroll away. */
+  /* Bars stay above the drawer so the toggle remains a close button. */
+  body.sb-open .bar-top { z-index: 46; }
+  body.sb-open .bar-sub { position: relative; z-index: 46; }
+
+  /* Only while open: displayed unconditionally it sat over the whole viewport
+     at z-index 44 — above the topbar (40) — and swallowed every click,
+     including the toggle that was supposed to dismiss it. */
+  body.sb-open .sb-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 44;
+    background: var(--sb-backdrop);
+  }
+
+  /* Master-detail goes vertical in a drawer: a 340px detail beside a list
+     leaves neither readable. Detail on top (column-reverse keeps it toward
+     the top edge), tree above the viewer in Files. */
+  #pane-trace { flex-direction: column-reverse; }
+  .trc-detail {
+    flex: 0 0 auto; width: 100%; max-height: 55%;
+    border-right: none; border-bottom: 1px solid var(--border);
+  }
+  .files-body { flex-direction: column; }
+  .files-side { flex: 1 1 45%; width: auto; }
+  .files-detail { flex: 1 1 55%; }
+  /* Viewer-only mode (the tree is hidden by JS): the viewer takes it all. */
+  #pane-files.f-full .files-detail { flex: 1 1 100%; }
+  /* Vertical drag has no meaning in a stacked pane. */
+  .files-splitter { display: none; }
+}
+
 @media (max-width: 760px) {
   .bar-top { gap: 8px; padding: 8px 10px; }
   .bar-sub {
@@ -1646,20 +1712,9 @@ button.toggle:disabled { opacity: .5; cursor: default; }
   .sess-tools .dd-menu { left: auto; right: 0; }
   #sessClose:hover { color: var(--red-strong); }
   .conn { display: none; }
-  /* Sidebar toggle lives next to settings; settings keeps the right edge. */
-  #toggleSidebar { display: inline-flex; }
   #openSettings { margin-left: 0; }
-  .layout { flex-direction: column; }
-  .chat { min-height: 0; }
-  /* Phones: sidebar hidden, opens as an overlay drawer via body.sb-open. */
-  .sb { display: none; }
+  /* Trace needs a wide list + detail; phones get the other five tabs. */
   .sb-tab[data-tab="trace"], #pane-trace { display: none; }
-  body.sb-open .sb {
-    display: flex; position: fixed; top: 41px; right: 0; bottom: 0; z-index: 45;
-    width: min(360px, 85vw); min-width: 0; max-height: none;
-    border-left: 1px solid var(--border); border-top: none;
-    box-shadow: var(--shadow-dd);
-  }
   .msgs { padding: 0 14px; }
   .feed { padding: 14px 0; }
   .input-area { margin: 10px 14px 12px; }

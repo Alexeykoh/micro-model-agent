@@ -219,7 +219,10 @@ describe("webui smoke", () => {
           throw err;
         }
 
-        for (const width of [1440, 1000, 820]) {
+        // 1024/820/768 sit below the drawer breakpoint and 390 is a phone: the
+        // sidebar is a fixed overlay there, so these widths used to have no
+        // coverage at all — and a broken one only showed up as a shoved chat.
+        for (const width of [1440, 1024, 1000, 820, 768, 390]) {
           const page = await browser.newPage({ viewport: { width, height: 800 } });
           await page.goto(`${url}/`, { waitUntil: "domcontentloaded", timeout: 10_000 });
           await page.waitForSelector("#inp", { timeout: 5_000 });
@@ -371,5 +374,114 @@ describe("webui smoke", () => {
       }
     },
     30_000,
+  );
+
+  // The sidebar is an overlay drawer below 1024px (it used to be a hardcoded
+  // `top: 41px` panel with no backdrop and no breakpoint sync). These are the
+  // claims only a laid-out browser can check: the drawer is on-screen and
+  // readable, the chat keeps the full width behind it, and growing the viewport
+  // past the breakpoint puts the column back and disarms the drawer.
+  smoke(
+    "sidebar becomes a real drawer below the breakpoint and disarms on resize",
+    async (ctx) => {
+      const { state, dir } = makeState();
+      let browser: Browser | null = null;
+      let started = false;
+      try {
+        const url = await startServer(loadAssets(), state);
+        started = true;
+        try {
+          browser = await chromium.launch({
+            headless: true,
+            executablePath: CHROMIUM ?? undefined,
+            timeout: 15_000,
+          });
+        } catch (err) {
+          if (isMissingBrowserError(err)) {
+            ctx.skip();
+            return;
+          }
+          throw err;
+        }
+
+        const page = await browser.newPage({ viewport: { width: 900, height: 800 } });
+        await page.goto(`${url}/`, { waitUntil: "domcontentloaded", timeout: 10_000 });
+        await page.waitForSelector("#toggleSidebar", { timeout: 5_000 });
+
+        const toggle = page.locator("#toggleSidebar");
+        await expect(toggle).toBeVisible();
+
+        // Closed: the sidebar sits off-canvas (transformed out of the viewport)
+        // and the backdrop does not intercept anything — it used to sit over the
+        // whole viewport above the topbar and swallow the toggle's own click.
+        await expect(page.locator(".sb-backdrop")).toBeHidden();
+        const closed = await page.evaluate(() => {
+          const r = document.querySelector(".sb")!.getBoundingClientRect();
+          return { left: r.left, right: r.right, vw: document.documentElement.clientWidth };
+        });
+        expect(closed.left).toBeGreaterThanOrEqual(closed.vw - 1);
+
+        // The chat owns the full width while the drawer is closed.
+        const chat = await page.evaluate(() => {
+          const r = document.querySelector(".chat")!.getBoundingClientRect();
+          return r.width;
+        });
+        expect(chat).toBeGreaterThan(880);
+
+        await toggle.click();
+        await expect(page.locator("body.sb-open")).toHaveCount(1);
+        await expect(page.locator(".sb-backdrop")).toBeVisible();
+        await expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+        // Open: fully inside the viewport, below the top bar, and narrower than
+        // the screen so the chat stays visible behind the backdrop.
+        const open = await page.evaluate(() => {
+          const sb = document.querySelector(".sb")!;
+          const r = sb.getBoundingClientRect();
+          const bar = document.querySelector(".bar-top")!.getBoundingClientRect();
+          return {
+            left: r.left,
+            right: r.right,
+            top: r.top,
+            width: r.width,
+            vw: document.documentElement.clientWidth,
+            barBottom: bar.bottom,
+          };
+        });
+        expect(open.left).toBeGreaterThanOrEqual(0);
+        expect(open.right).toBeLessThanOrEqual(open.vw + 1);
+        expect(open.width).toBeLessThan(open.vw);
+        // The inset is measured, so the drawer never tucks under the bars.
+        expect(open.top).toBeGreaterThanOrEqual(open.barBottom - 1);
+
+        // Click outside closes it.
+        await page.locator(".sb-backdrop").click({ position: { x: 10, y: 400 } });
+        await expect(page.locator("body.sb-open")).toHaveCount(0);
+        await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+        // Escape closes it too.
+        await toggle.click();
+        await expect(page.locator("body.sb-open")).toHaveCount(1);
+        await page.keyboard.press("Escape");
+        await expect(page.locator("body.sb-open")).toHaveCount(0);
+
+        // Growing past the breakpoint restores the column and clears the stale
+        // drawer state (a rotated tablet used to keep `sb-open` forever).
+        await toggle.click();
+        await page.setViewportSize({ width: 1200, height: 800 });
+        await expect(page.locator("body.sb-open")).toHaveCount(0);
+        const wide = await page.evaluate(() => {
+          const r = document.querySelector(".sb")!.getBoundingClientRect();
+          return { width: r.width, inView: r.left < document.documentElement.clientWidth };
+        });
+        expect(wide.width).toBeGreaterThan(600);
+        expect(wide.inView).toBe(true);
+      } finally {
+        if (browser) await browser.close().catch(() => {});
+        if (started) stopServer(state);
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    40_000,
   );
 });

@@ -5,6 +5,7 @@
 // Design: docs/specs/2026-09-30-webui-sidebar-tabs-design.md,
 //         docs/specs/2026-10-02-lsp-doctor-design.md (§12).
 export * from "./sidebar/core.js";
+export * from "./sidebar/drawer.js";
 export * from "./sidebar/trace.js";
 export * from "./sidebar/map.js";
 export * from "./sidebar/lsp.js";

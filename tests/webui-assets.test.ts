@@ -335,7 +335,7 @@ describe("webui assets", () => {
     expect(a.js).toMatch(/if \(sidebarOwns\(d\)\) \{\s*sidebarTurnEnd\(/);
   });
 
-  it("wires the sidebar tabs (session / map / trace) with master-detail", () => {
+  it("wires the sidebar tabs (session / files / lsp / trace) with master-detail", () => {
     const a = loadAssets();
     expect(a.html).toContain('class="sb-tabs"');
     expect(a.html).toContain('data-tab="session"');
@@ -366,6 +366,18 @@ describe("webui assets", () => {
     // Trace rows must not shrink: flex-column otherwise squeezes hundreds
     // of events into the visible height (no scrollbar, dotted-line mush).
     expect(a.css).toContain(".trace-list > *");
+
+    // Tab order has one source of truth: `TABS` drives the visible order, the
+    // `Alt+1..6` hotkeys and `←/→`, so index.html must follow it. Reordering the
+    // buttons alone would silently detach the hotkeys from the visible row.
+    const state = a.jsModules?.["js/sidebar/state.js"] || "";
+    const order = (state.match(/export const TABS = \[([^\]]*)\]/)?.[1] || "")
+      .split(",")
+      .map((s) => s.trim().replace(/"/g, ""))
+      .filter(Boolean);
+    expect(order).toEqual(["session", "files", "lsp", "trace", "plugins", "map"]);
+    const htmlOrder = [...a.html.matchAll(/data-tab="([a-z]+)"/g)].map((m) => m[1]);
+    expect(htmlOrder).toEqual(order);
   });
 
   it("keeps the Files tree beside the viewer (split, resizable, with history)", () => {
@@ -509,6 +521,65 @@ describe("webui assets", () => {
     expect(a.js).toContain("applySidebarI18n(");
     expect(a.js).toContain('sidebarTraceEvent("error"');
     expect(a.js).toContain("sidebarTurnEnd(");
+  });
+
+  // The sidebar used to be one shape: a fixed 679px column down to 760px, then a
+  // drawer with a hardcoded `top: 41px` that ignored the phone sub-bar. Now the
+  // drawer covers everything that cannot fit beside the chat (≤1024px) and owns
+  // a measured inset.
+  it("turns the sidebar into a drawer below 1024px, not 760px", () => {
+    const a = loadAssets();
+    const sidebar = sidebarSources(a);
+    expect(a.html).toContain('id="sbBackdrop"');
+    expect(a.css).toContain("@media (max-width: 1024px)");
+    expect(a.css).toContain("body.sb-open .sb {");
+    expect(a.css).toContain("padding-top: var(--sb-inset, 0px)");
+    // A scroll lock would be dead code: the shell is `body { overflow: hidden }`
+    // already, and only `#msgs` scrolls behind the drawer.
+    expect(a.css).not.toContain("body.sb-open { overflow: hidden; }");
+    expect(a.css).toContain("body.sb-open .bar-top { z-index: 46; }");
+    // No hardcoded bar height: the drawer used to sit at `top: 41px` and tuck
+    // itself under the phone sub-bar that appears below the same breakpoint.
+    expect(a.css).not.toContain("top: 41px");
+    // The backdrop must be shown by `body.sb-open` only. Displayed
+    // unconditionally it sat over the whole viewport above the topbar (44 > 40)
+    // and swallowed every click, including its own toggle.
+    expect(a.css).toContain("body.sb-open .sb-backdrop {");
+    // Anchored at line start: the rule must not apply to `.sb-backdrop` itself,
+    // only under `body.sb-open`.
+    expect(a.css).not.toMatch(/^\s*\.sb-backdrop \{[^}]*display: block;/m);
+    // Master-detail goes vertical in a drawer — 340px of detail beside a list
+    // leaves neither readable.
+    expect(a.css).toContain("#pane-trace { flex-direction: column-reverse;");
+    expect(a.css).toContain(".files-side { flex: 1 1 45%; width: auto; }");
+    expect(a.css).toContain(".files-splitter { display: none; }");
+    // The tree width is a custom property, so the drawer can ignore it.
+    expect(a.css).toContain("width: var(--files-tree-w, 240px);");
+    expect(sidebar).toContain("setProperty(\"--files-tree-w\"");
+    expect(sidebar).not.toContain('nodes.side.style.width');
+  });
+
+  // The drawer is a modal surface: a class toggle alone left no backdrop, no
+  // click-outside, no Escape, and — the real defect — no breakpoint sync, so a
+  // rotated tablet kept `sb-open` over a layout that no longer had a drawer.
+  it("gives the drawer a modal contract and keeps it in sync with the viewport", () => {
+    const a = loadAssets();
+    const src = a.jsModules?.["js/sidebar/drawer.js"] || "";
+    expect(src).toContain("initSidebarDrawer");
+    expect(src).toContain('addEventListener("change", syncToViewport)');
+    expect(src).toContain('setAttribute("role", "dialog")');
+    expect(src).toContain('aria-modal');
+    expect(src).toContain("trapTab(");
+    expect(src).toContain("overlayOpen()");
+    expect(src).toContain("--sb-inset");
+    // The toggle button is wired in the drawer module now, not in app.ts.
+    expect(a.js).toContain("initSidebarDrawer();");
+    expect(a.js).not.toContain('classList.toggle("sb-open")');
+    // One breakpoint constant, shared with the CSS (1024px drawer / 760px phone).
+    expect(src).toContain("NARROW_MQ");
+    const state = a.jsModules?.["js/sidebar/state.js"] || "";
+    expect(state).toContain('export const NARROW_MQ = "(max-width: 1024px)"');
+    expect(state).toContain('export const PHONE_MQ = "(max-width: 760px)"');
   });
 
   it("filters the composer model dropdown through a search field", () => {

@@ -380,12 +380,15 @@ describe("files tab DOM", () => {
   describe("split", () => {
     it("resizes the tree with the keyboard", () => {
       const splitter = btn("filesSplitter");
-      const side = doc("filesSide");
-      const start = side.style.width;
+      // The width is a custom property on the pane (not an inline `width`), so
+      // the ≤1024px drawer can stack the tree and ignore the dragged width.
+      const pane = doc("pane-files");
+      const w = () => pane.style.getPropertyValue("--files-tree-w");
+      const start = w();
       splitter.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-      expect(side.style.width).not.toBe(start);
+      expect(w()).not.toBe(start);
       splitter.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Home", bubbles: true }));
-      expect(side.style.width).toBe("240px");
+      expect(w()).toBe("240px");
     });
 
     it("hides the tree on demand (viewer-only mode) and back", async () => {

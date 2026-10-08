@@ -29,7 +29,7 @@ import {
   sidebarLspState, sidebarLspEvent,
   applySidebarI18n,
   initFiles, sidebarFilesState, sidebarFilesChanged,
-  sidebarPluginsState, sidebarPluginsEvent,
+  sidebarPluginsState, sidebarPluginsEvent, initSidebarDrawer,
 } from "./js/sidebar.js";
 import { insertIntoDraft } from "./js/session/composer.js";
 
@@ -57,22 +57,6 @@ document.querySelectorAll<HTMLElement>("[data-collapse]").forEach((head) => {
     }
   });
 });
-
-// Mobile sidebar: hidden by CSS under 760px, opened as an overlay drawer.
-const sidebarBtn = document.getElementById("toggleSidebar");
-if (sidebarBtn) {
-  sidebarBtn.addEventListener("click", () => {
-    const open = document.body.classList.toggle("sb-open");
-    sidebarBtn.setAttribute("aria-expanded", open ? "true" : "false");
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || !document.body.classList.contains("sb-open")) return;
-    const tag = document.activeElement ? String(document.activeElement.tagName) : "";
-    if (tag === "TEXTAREA" || tag === "INPUT") return;
-    document.body.classList.remove("sb-open");
-    sidebarBtn.setAttribute("aria-expanded", "false");
-  });
-}
 
 // Track the workspace file-change counter: a rise (missed SSE fallback) makes
 // the Files tab re-read its expanded directories.
@@ -411,6 +395,7 @@ async function boot(): Promise<void> {
   await loadConfig();
   initRail(settings.config && settings.config.ui ? settings.config.ui.activityRail : undefined);
   initSidebar();
+  initSidebarDrawer();
   applySidebarI18n();
   initFiles({ insertPath: (p) => insertIntoDraft("`" + p + "` ") });
   await loadModels();

@@ -4,7 +4,11 @@
 import type { Dict } from "../core/store/types.js";
 
 export const TAB_KEY = "mma-sidebar-tab";
-export const TABS = ["session", "map", "trace", "lsp", "files", "plugins"];
+// Display order of the tabs — and, because `Alt+1..6` indexes this array, the
+// order of the hotkeys too. Usage frequency first (what you look at while a
+// turn runs), diagnostics in the middle, the project-wide map last: it is the
+// one tab you open deliberately rather than by reflex.
+export const TABS = ["session", "files", "lsp", "trace", "plugins", "map"];
 // Иконки вкладок подобраны так, чтобы читаться в 17px: плотные lucide-иконки
 // (складная карта, стетоскоп, пазл) на таком размере сливаются в пятно.
 export const ICON_NAME: Record<string, string> = {
@@ -190,10 +194,30 @@ export function paneEl(id: string): HTMLElement | null {
   return document.getElementById("pane-" + id);
 }
 
-export function mqMobile(): boolean {
+/**
+ * Breakpoints, shared with `styles.css`:
+ * - `NARROW` — the sidebar no longer fits beside the chat and becomes an
+ *   overlay drawer (see `sidebar/drawer.ts`).
+ * - `PHONE` — phone chrome; the session sub-bar appears and Trace is dropped
+ *   (its list + 340px detail pane do not fit).
+ */
+export const NARROW_MQ = "(max-width: 1024px)";
+export const PHONE_MQ = "(max-width: 760px)";
+
+function mq(query: string): boolean {
   return typeof window !== "undefined" && window.matchMedia
-    ? window.matchMedia("(max-width: 760px)").matches
+    ? window.matchMedia(query).matches
     : false;
+}
+
+/** True when the sidebar is a drawer rather than a column next to the chat. */
+export function mqNarrow(): boolean {
+  return mq(NARROW_MQ);
+}
+
+/** True on phone-sized viewports (session sub-bar, no Trace tab). */
+export function mqMobile(): boolean {
+  return mq(PHONE_MQ);
 }
 
 export function readStored(): string | null {
