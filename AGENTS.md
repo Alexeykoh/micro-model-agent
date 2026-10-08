@@ -1258,7 +1258,55 @@ quality-gate и выглядят аккуратно.
   фолбэке/планировании/аборте), `tests/webui-workspace-footer.test.ts` (чип),
   `tests/webui-usage.test.ts` (`moeActive` в снапшоте).
 
-### Current Version: 2.32.0
+### Harness Infra-Failure Honesty (2.33.0)
+
+Разбор живой сессии `ses_muz7sg1l_0ankgu` (`mma`, LM Studio, MoE): ход умер
+молча — ни ответа, ни причины. Восемь первопричинных дефектов харнесса (не модели).
+
+- **Текст ошибки провайдера** (`src/llm/provider-error.ts`,
+  `extractProviderErrorText`): LM Studio шлёт `{"error": {message, type, param}}`,
+  и `String(parsed.error)` давал `[object Object]` — причина терялась в логе, в
+  retry-классификации и в результате сабтаска. Разбирает `message`, вложенный
+  `error`, массивы; фолбэк — компактный JSON. Места: mid-stream
+  (`openai-compat.ts`) и non-stream 200-ответ с `error`.
+- **Transient vs infra** (`modules/execution/transient-error.ts`): `isTransientError`
+  теперь ловит mid-stream, `engine protocol`, `failed to load model`, `stream
+  stalled`/`no data for Nms` (раньше не матчил ничего → падение с первой попытки
+  без backoff). Новая `isInfraError` отделяет бэкенд/транспорт от задачи.
+- **Re-plan только по контентным фейлам** (`core/agent-moe.ts`): если ВСЕ
+  упавшие сабтаски инфраструктурные, верификатор не зовётся — честный
+  `partialFailure` с реальной причиной (`moe.infra_failure`), событие
+  `moe_verify {decision:"infra_failure"}`. Контентные фейлы по-прежнему идут в
+  `verifyAndMerge` c `failedSubtaskIds`; `VERIFY_SYSTEM_PROMPT` запрещает
+  выдумывать причину и репланить инфраструктуру.
+- **Модели экспертов** (`modules/execution/expert-model-check.ts`): раз за ход
+  `experts[tag].model` сверяется со списком моделей активного провайдера
+  (`listModels`, 5s-таймаут); неизвестная → фолбэк на активную + `logger.warn`
+  (тег, плохая модель, доступные). Живой конфиг НЕ мутируется — оркестратор,
+  валидатор и исполнитель получают копию (`applyExpertModelCheck`). Кей был:
+  у экспертов `qwen/qwen3.5-9b`, активна `qwen3.8-9b-distill` → 3 попытки ×
+  `Failed to load model` на сабтаск.
+- **Параллелизм по бэкенду** (`modules/execution/moe-parallelism.ts`,
+  `moe.parallelSubtasks` — реестр, `/config`, web Settings → Agent → MoE):
+  локальный однодвижковый (тип `lmstudio`/`ollama` или loopback-хост) → 1
+  подзадача за раз; иначе `security.rateLimits.maxParallelTasks`; явное
+  значение всегда выигрывает, `0` = авто.
+- **Причина в логе** (`moe-executor.ts` → `moe_subtask {error, infra}`;
+  `SessionLogger.logMoE` берёт `detail → explanation → error → summary` в
+  `content`): раньше в `session.jsonl` попадало только `Failed: task-2`, и
+  разборчик/верификатор причину выдумывал. `renderMoEResults` показывает
+  первую строку ошибки и в итоговом тексте хода.
+- **Оборванный ход оставляет след**: `runWithMoE` ловит throw и пишет
+  `moe_verify {decision:"aborted"|"error", explanation}` (только если MoE уже
+  стартовал). Плюс `SessionManager.touch()` в `emitTurnEnd` — `updatedAt`
+  двигает и ход без сообщений.
+- **Probe ↔ meta** (`applyProbedContext` принял `sessionManager`): применение
+  пробного окна синхронизирует `meta.contextWindow`/`model`; иначе 262144 в
+  конфиге и 65536 в `meta.json`/`session_start` (кей сессии).
+- **NotifyPlugin**: одна строка `debug` с id сессии вместо `info` без id
+  (14 одинаковых строк `Session ended` на один ход).
+
+### Current Version: 2.33.0
 
 ### Changelog
 

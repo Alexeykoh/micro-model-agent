@@ -37,6 +37,7 @@ export async function applyProbedContext(
   config: AppConfig,
   probe: ContextProbeResult,
   logger: SilentLogger,
+  sessionManager?: { setEffectiveContext(contextWindow: number, model?: string): void },
 ): Promise<boolean> {
   if (config.contextWindow !== probe.actual) return false;
   if (agent.currentIteration !== 0) {
@@ -48,6 +49,12 @@ export async function applyProbedContext(
   }
   try {
     await agent.reconfigure(config);
+    // Мета сессии фиксирует окно из `SessionManager.create()` (стартовое
+    // значение, ДО пробы). Наблюдалось: проба авто-подставила 262144 в живой
+    // конфиг, а `session_start` и `meta.json` продолжали показывать 65536 —
+    // расхождение не диагностировалось нигде. Синхронизируем явно (идемпотентно)
+    // и проверяем результат.
+    sessionManager?.setEffectiveContext(config.contextWindow, config.model);
     logger.logSilent(
       "info",
       `Context probe: applied provider context ${probe.actual} tokens (model "${probe.model}")`,

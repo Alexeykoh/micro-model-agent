@@ -9,6 +9,7 @@ import { LlmError } from "./llm-errors";
 import { backoffDelay } from "../utils/retry";
 import { StreamState } from "./stream-state";
 import { parseCacheUsage } from "./cache-usage";
+import { extractProviderErrorText } from "./provider-error";
 import {
   LLM_REQUEST_TIMEOUT_MS as REQUEST_TIMEOUT_MS,
   LLM_MAX_RATE_WAIT_MS as MAX_RATE_WAIT_MS,
@@ -539,10 +540,11 @@ export class OpenAICompatProvider implements LLMProvider {
                 this.debug?.("LLM stream usage", { ...st.usage });
               } else if (parsed.error) {
                 // Mid-stream ошибка провайдера (Ollama шлёт {"error": "..."}
-                // голым JSON после старта генерации). Показываем — глотание
-                // даст молча пустой ответ.
+                // голым JSON после старта генерации; LM Studio — объект
+                // `{message, ...}`, где `String()` давал `[object Object]`).
+                // Показываем — глотание даст молча пустой ответ.
                 // Брошено ВНЕ try/catch JSON-парсинга ниже.
-                st.midStreamError = String(parsed.error);
+                st.midStreamError = extractProviderErrorText(parsed.error);
               }
               // NOTE: `continue` тут нет — он пропустил бы throw midStreamError
               // ниже (он вне этого try/catch).
@@ -774,7 +776,7 @@ export class OpenAICompatProvider implements LLMProvider {
       const data = await response.json();
       // Часть бэкендов (напр. Ollama) отдают HTTP 200 с {"error": "..."}.
       if (data.error && !data.choices) {
-        throw new Error(t("error.llm_provider_stream_error", { error: String(data.error).slice(0, 300) }));
+        throw new Error(t("error.llm_provider_stream_error", { error: extractProviderErrorText(data.error) }));
       }
       const choice = data.choices?.[0];
       if (!choice) {

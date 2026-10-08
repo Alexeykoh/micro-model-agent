@@ -114,7 +114,16 @@ Respond with JSON only:
 - If successful: {"type": "final", "finalAnswer": "summary of results", "explanation": "details"}
 - If re-plan needed: {"type": "replan", "plan": {updated MoEPlan}, "explanation": "why re-plan is needed"}
 
-Max 3 re-plan cycles. After 3 cycles, return partial result.`;
+Max 3 re-plan cycles. After 3 cycles, return partial result.
+
+Rules:
+1. Base your explanation ONLY on the error text you were given. Never invent a cause
+   that is not present in a subtask result.
+2. "failedSubtaskIds" lists the subtasks that failed for task-related reasons and are
+   worth re-planning. Re-plan only to fix those.
+3. Infrastructure failures (provider/LLM/network errors) have already been handled
+   outside re-planning: a new plan would run on the same broken backend, so do not
+   re-plan to "fix" them.`;
 
 const SCOPE_DECISION_SYSTEM_PROMPT = `You are the router of a multi-expert agent system. A sub-agent could not finish its task because it lacked access to files outside its assigned scope.
 Decide what to do with its scope request:

@@ -12,13 +12,23 @@ import { ArtifactStore } from "../artifacts/store";
 import { buildInputSection } from "./input-from";
 import { parseScopeRequest } from "../../tools/scope-request";
 import { resolveExpertProvider } from "./expert-provider";
-import { isTransientError } from "./transient-error";
+import { isInfraError, isTransientError } from "./transient-error";
+import { DEFAULT_PARALLEL_SUBTASKS, resolveParallelSubtasks } from "./moe-parallelism";
 import { sleep } from "../../utils/sleep";
 import { backoffDelay } from "../../utils/retry";
 import { errMsg } from "../../utils";
 
 /** Макс. циклов расширения scope на подзадачу. */
 export const MAX_SCOPE_EXPANSION_CYCLES = 2;
+
+/** Сколько символов текста ошибки писать в событие `moe_subtask`. */
+const LOG_ERROR_CHARS = 500;
+
+/** Обрезка текста ошибки для записи в session.jsonl (одна строка, без хвоста). */
+function truncateForLog(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > LOG_ERROR_CHARS ? `${flat.slice(0, LOG_ERROR_CHARS)}…` : flat;
+}
 
 /** Решение роутера по scope-запросу сабагента (см. OrchestratorClient.resolveScopeRequest). */
 export type ScopeDecision =
@@ -443,9 +453,16 @@ export class MoEExecutor {
       const wave = waves[waveIdx];
       const depResults = new Map(results.map((r) => [r.subtaskId, r]));
 
-      // Кап конкурентных подзадач на волну (rateLimits.maxParallelTasks, по умолчанию 5).
-      const maxParallel =
-        this.deps.config?.security?.rateLimits?.maxParallelTasks ?? 5;
+      // Кап конкурентных подзадач на волну: локальный однодвижковый бэкенд
+      // (LM Studio/Ollama) получает 1 — параллельные запросы к одной модели
+      // роняют загрузку движка (`Engine protocol startup was aborted`,
+      // ses_muz7sg1l_0ankgu). Hosted-провайдер — кап rateLimits (5).
+      const maxParallel = resolveParallelSubtasks(this.deps.config);
+      if (maxParallel < (this.deps.config?.security?.rateLimits?.maxParallelTasks ?? DEFAULT_PARALLEL_SUBTASKS)) {
+        this.deps.logger.debug?.(
+          `MoE: running subtasks serially (maxParallel=${maxParallel}) — local single-engine provider`,
+        );
+      }
       let active = 0;
       const waiters: Array<() => void> = [];
       const acquire = () =>
@@ -503,6 +520,15 @@ export class MoEExecutor {
             status: result.success ? "done" : "failed",
             durationMs: result.durationMs,
             summary: result.summary,
+            // Причина фейла в логе сессии: без неё `summary` вида
+            // "Failed: task-2" не говорит ничего, а верификатор (и человек
+            // после разбора session.jsonl) выдумывал причину сам.
+            ...(result.success
+              ? {}
+              : {
+                  error: truncateForLog(result.error || result.summary),
+                  infra: isInfraError(result.error || result.summary),
+                }),
           },
         });
         results.push(result);

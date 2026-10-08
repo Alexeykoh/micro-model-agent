@@ -192,6 +192,69 @@ describe("MoEExecutor executePlan", () => {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true });
   });
 
+  /** Базовые deps исполнителя; `extra` добавляет шов событий/сигнала. */
+  function executorDeps(config: unknown): Record<string, unknown> {
+    return {
+      config,
+      toolRegistry: registry,
+      toolExecutor: mockToolExecutor,
+      llmProvider: {},
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        logLLMRequest: vi.fn(),
+        logLLMResponse: vi.fn(),
+      },
+      baseDir: tmpDir,
+    };
+  }
+
+  /** Исполнитель с мок-логгером; `extra` добавляет шов событий/сигнала. */
+  function makeExecutor(config: unknown, extra?: Record<string, unknown>) {
+    return new MoEExecutor({
+      ...executorDeps(config),
+      ...extra,
+    } as never);
+  }
+
+  /**
+   * Мок-сабагент, который держит ход `delayMs` и считает пик конкурентности.
+   * @returns функция, дающая достигнутый пик.
+   */
+  function trackConcurrency(delayMs: number): () => number {
+    let active = 0;
+    let peak = 0;
+    subagentHandler.mockImplementation(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, delayMs));
+      active--;
+      return { success: true, output: "ok" };
+    });
+    return () => peak;
+  }
+
+  /** Независимые подзадачи одной волны (для тестов параллелизма). */
+  function wavePlan(...ids: string[]): MoEPlan {
+    return {
+      title: "Parallel wave",
+      shared_context: { rules: [], refs: [] },
+      subtasks: ids.map((id) => ({
+        id,
+        description: "independent",
+        expert_tag: "code",
+        allowed_files: [],
+        read_only_files: [],
+        depends_on: [],
+        input_from: [],
+        expected_output: "",
+        success_criteria: [],
+      })),
+    };
+  }
+
   function createPlan(): MoEPlan {
     return {
       title: "MoE Test Plan",
@@ -235,21 +298,7 @@ describe("MoEExecutor executePlan", () => {
   }
 
   it("executes independent subtasks in parallel and dependent after them", async () => {
-    const executor = new MoEExecutor({
-      config: DEFAULTS,
-      toolRegistry: registry,
-      toolExecutor: mockToolExecutor,
-      llmProvider: {} as any,
-      logger: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        logLLMRequest: vi.fn(),
-        logLLMResponse: vi.fn(),
-      } as any,
-      baseDir: tmpDir,
-    });
+    const executor = makeExecutor(DEFAULTS);
 
     const result = await executor.executePlan(createPlan());
 
@@ -266,21 +315,7 @@ describe("MoEExecutor executePlan", () => {
       return { success: callCount !== 2, output: callCount === 2 ? "fail" : "ok" };
     });
 
-    const executor = new MoEExecutor({
-      config: DEFAULTS,
-      toolRegistry: registry,
-      toolExecutor: mockToolExecutor,
-      llmProvider: {} as any,
-      logger: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        logLLMRequest: vi.fn(),
-        logLLMResponse: vi.fn(),
-      } as any,
-      baseDir: tmpDir,
-    });
+    const executor = makeExecutor(DEFAULTS);
 
     const result = await executor.executePlan(createPlan());
 
@@ -319,21 +354,7 @@ describe("MoEExecutor executePlan", () => {
       shared_context: { rules: [], refs: [] },
     };
 
-    const executor = new MoEExecutor({
-      config: DEFAULTS,
-      toolRegistry: registry,
-      toolExecutor: mockToolExecutor,
-      llmProvider: {} as any,
-      logger: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        logLLMRequest: vi.fn(),
-        logLLMResponse: vi.fn(),
-      } as any,
-      baseDir: tmpDir,
-    });
+    const executor = makeExecutor(DEFAULTS);
 
     const result = await executor.executePlan(cyclicPlan);
     expect(result.success).toBe(false);
@@ -341,21 +362,7 @@ describe("MoEExecutor executePlan", () => {
   });
 
   it("passes tool_tags to subagent based on expert config", async () => {
-    const executor = new MoEExecutor({
-      config: DEFAULTS,
-      toolRegistry: registry,
-      toolExecutor: mockToolExecutor,
-      llmProvider: {} as any,
-      logger: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        logLLMRequest: vi.fn(),
-        logLLMResponse: vi.fn(),
-      } as any,
-      baseDir: tmpDir,
-    });
+    const executor = makeExecutor(DEFAULTS);
 
     await executor.executePlan(createPlan());
 
@@ -368,21 +375,7 @@ describe("MoEExecutor executePlan", () => {
   });
 
   it("passes scope to subagent", async () => {
-    const executor = new MoEExecutor({
-      config: DEFAULTS,
-      toolRegistry: registry,
-      toolExecutor: mockToolExecutor,
-      llmProvider: {} as any,
-      logger: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        logLLMRequest: vi.fn(),
-        logLLMResponse: vi.fn(),
-      } as any,
-      baseDir: tmpDir,
-    });
+    const executor = makeExecutor(DEFAULTS);
 
     await executor.executePlan(createPlan());
 
@@ -397,19 +390,9 @@ describe("MoEExecutor executePlan", () => {
   it("returns error when subagent tool is missing from registry", async () => {
     const emptyRegistry = new ToolRegistry();
     const executor = new MoEExecutor({
-      config: DEFAULTS,
+      ...executorDeps(DEFAULTS),
       toolRegistry: emptyRegistry,
       toolExecutor: { ...mockToolExecutor, registry: emptyRegistry },
-      llmProvider: {} as any,
-      logger: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        logLLMRequest: vi.fn(),
-        logLLMResponse: vi.fn(),
-      } as any,
-      baseDir: tmpDir,
     });
 
     const result = await executor.executePlan(createPlan());
@@ -418,56 +401,56 @@ describe("MoEExecutor executePlan", () => {
   });
 
   it("caps concurrent subtasks per wave at maxParallelTasks", async () => {
-    let active = 0;
-    let peak = 0;
-    subagentHandler.mockImplementation(async () => {
-      active++;
-      peak = Math.max(peak, active);
-      await new Promise((r) => setTimeout(r, 20));
-      active--;
-      return { success: true, output: "ok" };
-    });
-
-    const config: any = {
+    const peak = trackConcurrency(20);
+    const config = {
       ...DEFAULTS,
-      security: { ...(DEFAULTS as any).security, rateLimits: { maxRequestsPerMinute: 60, maxParallelTasks: 2 } },
-    };
+      security: { ...DEFAULTS.security, rateLimits: { maxRequestsPerMinute: 60, maxParallelTasks: 2 } },
+    } as never;
 
-    const plan: MoEPlan = {
-      title: "Parallel cap",
-      shared_context: { rules: [], refs: [] },
-      subtasks: Array.from({ length: 8 }, (_, i) => ({
-        id: `task-${i}`,
-        description: "independent",
-        expert_tag: "code",
-        allowed_files: [],
-        read_only_files: [],
-        depends_on: [],
-        input_from: [],
-        expected_output: "",
-        success_criteria: [],
-      })),
-    };
+    const executor = makeExecutor(config);
+    const result = await executor.executePlan(wavePlan(...Array.from({ length: 8 }, (_, i) => `task-${i}`)));
 
-    const executor = new MoEExecutor({
-      config,
-      toolRegistry: registry,
-      toolExecutor: mockToolExecutor,
-      llmProvider: {} as any,
-      logger: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        logLLMRequest: vi.fn(),
-        logLLMResponse: vi.fn(),
-      } as any,
-      baseDir: tmpDir,
-    });
-
-    const result = await executor.executePlan(plan);
     expect(result.success).toBe(true);
     expect(result.results).toHaveLength(8);
-    expect(peak).toBeLessThanOrEqual(2);
+    expect(peak()).toBeLessThanOrEqual(2);
+  });
+
+  it("runs a wave serially on a local single-engine backend", async () => {
+    // ses_muz7sg1l_0ankgu: LM Studio с одним движком роняет параллельные
+    // запросы к одной модели ("Engine protocol startup was aborted").
+    const peak = trackConcurrency(10);
+    const config = {
+      ...DEFAULTS,
+      provider: { ...DEFAULTS.provider, type: "lmstudio", baseUrl: "http://localhost:1234/v1" },
+      security: { ...DEFAULTS.security, rateLimits: { maxRequestsPerMinute: 60, maxParallelTasks: 5 } },
+    } as never;
+
+    const result = await makeExecutor(config).executePlan(wavePlan("a", "b", "c"));
+
+    expect(result.success).toBe(true);
+    expect(peak()).toBe(1);
+  });
+
+  it("puts the failure reason into the moe_subtask event", async () => {
+    subagentHandler.mockResolvedValue({
+      success: false,
+      output: 'Failed to load model "qwen/qwen3.5-9b". Error: Engine protocol startup was aborted.',
+    });
+
+    const events: Array<Record<string, unknown>> = [];
+    const config = {
+      ...DEFAULTS,
+      // Фейл инфраструктурный → транзиентный → эксперт ретраит с backoff.
+      // Один attempt, чтобы тест не ждал реальные паузы.
+      experts: { ...DEFAULTS.experts, code: { ...DEFAULTS.experts.code, max_attempts: 1 } },
+    } as never;
+
+    await makeExecutor(config, {
+      onEvent: (e: { data: Record<string, unknown> }) => events.push(e.data),
+    }).executePlan(createPlan());
+
+    const failed = events.find((e) => e.status === "failed");
+    expect(String(failed?.error)).toContain("Engine protocol startup was aborted");
+    expect(failed?.infra).toBe(true);
   });
 });

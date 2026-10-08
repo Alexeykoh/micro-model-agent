@@ -28,4 +28,10 @@ export interface VerifyInput {
   results: SubtaskResult[];
   verifierErrors: string[];
   verifierWarnings: string[];
+  /**
+   * id сабтасков, упавших по контентным причинам — только их имеет смысл
+   * перепланировать. Инфраструктурные фейлы (провайдер/транспорт) MoE-цикл
+   * останавливает ДО вызова верификатора.
+   */
+  failedSubtaskIds?: string[];
 }

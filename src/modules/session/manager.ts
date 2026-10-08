@@ -140,6 +140,20 @@ export class SessionManager {
     this.store.saveMeta(this.activeId, meta);
   }
 
+  /**
+   * Обновляет `updatedAt` активной сессии без изменения содержимого. Вызывается
+   * в конце хода: `updatedAt` иначе двигает только `appendMessage`, поэтому ход
+   * без сообщений (оборванный/пустой MoE) оставлял мету со временем старта.
+   * Fail-open: нет активной сессии — no-op.
+   */
+  touch(): void {
+    if (!this.activeId) return;
+    const meta = this.store.loadMeta(this.activeId);
+    if (!meta) return;
+    meta.updatedAt = new Date().toISOString();
+    this.store.saveMeta(this.activeId, meta);
+  }
+
   /** Пустая ли сессия (нет user-сообщения с текстом). Fail-open: ошибки чтения — непустая. */
   isEmptySession(id: string): boolean {
     const meta = this.store.loadMeta(id);

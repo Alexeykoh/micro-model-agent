@@ -49,6 +49,23 @@ describe("SessionManager", () => {
     expect(active.model).toBe("prism-ml/bonsai-27b");
   });
 
+  it("touch bumps updatedAt without touching the message count", () => {
+    // Ход, не добавивший сообщений (оборванный MoE), иначе оставлял мету со
+    // временем старта сессии — список сессий показывал «мёртвую» дату.
+    manager.create("S");
+    const before = manager.getActiveMeta()!.updatedAt;
+    manager.touch();
+    const after = manager.getActiveMeta()!;
+    expect(after.messageCount).toBe(0);
+    expect(new Date(after.updatedAt).getTime()).toBeGreaterThanOrEqual(
+      new Date(before).getTime(),
+    );
+  });
+
+  it("touch is a no-op without an active session", () => {
+    expect(() => manager.touch()).not.toThrow();
+  });
+
   it("should list sessions in reverse chronological order", () => {
     const a = manager.create("First");
     manager.appendMessage({ role: "user", content: "m1", timestamp: new Date().toISOString() });

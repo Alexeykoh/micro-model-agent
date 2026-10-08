@@ -221,6 +221,14 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       c.orchestrator = { ...(c.orchestrator ?? DEFAULTS.orchestrator), contextWindow: v as number };
     }),
 
+  // 0 = авто (локальный однодвижковый бэкенд → 1, иначе rateLimits).
+  int("moe.parallelSubtasks", "agent", 0, 16, 1, false,
+    (c) => c.moe?.parallelSubtasks ?? 0,
+    (c, v) => {
+      const n = v as number;
+      c.moe = { ...(c.moe ?? DEFAULTS.moe), parallelSubtasks: n > 0 ? n : undefined };
+    }),
+
   share("contextBudget.compactionThreshold", "budget", false,
     (c) => c.contextBudget.compactionThreshold,
     (c, v) => { c.contextBudget.compactionThreshold = v as number; }),
