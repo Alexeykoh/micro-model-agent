@@ -1445,7 +1445,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **i18n**: `web.loader.boot` (en+ru). Тест: `tests/webui-loader.test.ts`
   (маппинг + DOM-структура + наличие `#bootSplash`).
 
-### Current Version: 2.35.0
+### Current Version: 2.35.1
 
 ### Changelog
 
