@@ -162,9 +162,24 @@ export const ICONS: Record<string, IconSpec> = {
     ],
   ],
   "arrow-up": [["path", { d: "M12 19V5" }], ["path", { d: "m5 12 7-7 7 7" }]],
+  "arrow-left": [["path", { d: "M19 12H5" }], ["path", { d: "m12 19-7-7 7-7" }]],
+  "arrow-right": [["path", { d: "M5 12h14" }], ["path", { d: "m12 5 7 7-7 7" }]],
+  // Collapse/expand-all pair for the Files tree toolbar (mirrored chevrons).
+  "chevrons-down-up": [
+    ["path", { d: "m7 15 5 5 5-5" }],
+    ["path", { d: "m7 9 5-5 5 5" }],
+  ],
+  "chevrons-up-down": [
+    ["path", { d: "m7 9 5-5 5 5" }],
+    ["path", { d: "m7 15 5 5 5-5" }],
+  ],
   panel: [
     ["rect", { width: 18, height: 18, x: 3, y: 3, rx: 2, ry: 2 }],
     ["line", { x1: 15, y1: 3, x2: 15, y2: 21 }],
+  ],
+  "panel-left": [
+    ["rect", { width: 18, height: 18, x: 3, y: 3, rx: 2, ry: 2 }],
+    ["line", { x1: 9, y1: 3, x2: 9, y2: 21 }],
   ],
   square: [["rect", { width: 14, height: 14, x: 5, y: 5, rx: 2 }]],
   copy: [

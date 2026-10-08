@@ -169,15 +169,27 @@
     </div>
 
     <div class="sb-pane" id="pane-files" role="tabpanel" data-pane="files" hidden>
-      <div class="files-tree" id="filesTree"></div>
-      <div class="files-detail" id="filesDetail" hidden>
-        <div class="detail-h">
-          <span class="g" id="filesGlyph" aria-hidden="true">◆</span>
-          <span id="filesTitle"></span>
-          <button class="x linkbtn" type="button" id="filesAttach" title="attach path">◧</button>
-          <button class="x linkbtn" type="button" id="filesClose" title="close">✕</button>
+      <div class="files-body">
+        <div class="files-side" id="filesSide">
+          <div class="files-bar" id="filesBar">
+            <button class="fbtn" type="button" id="filesCollapseAll" aria-label="collapse all"></button>
+            <button class="fbtn" type="button" id="filesExpandAll" aria-label="expand all"></button>
+            <button class="fbtn" type="button" id="filesRefresh" aria-label="refresh"></button>
+          </div>
+          <div class="files-tree" id="filesTree" role="tree" tabindex="0" aria-label="files"></div>
         </div>
-        <div class="detail-b" id="filesBody"></div>
+        <div class="files-splitter" id="filesSplitter" role="separator" aria-orientation="vertical" tabindex="0" title="tree width"></div>
+        <div class="files-detail" id="filesDetail" hidden>
+          <div class="detail-h">
+            <button class="fbtn" type="button" id="filesBack" aria-label="back" disabled></button>
+            <button class="fbtn" type="button" id="filesFwd" aria-label="forward" disabled></button>
+            <span class="fcrumbs" id="filesCrumbs"></span>
+            <button class="fbtn" type="button" id="filesAttach" aria-label="attach path"></button>
+            <button class="fbtn" type="button" id="filesWide" aria-label="hide tree"></button>
+            <button class="fbtn" type="button" id="filesClose" aria-label="close"></button>
+          </div>
+          <div class="detail-b" id="filesBody"></div>
+        </div>
       </div>
     </div>
   </div>

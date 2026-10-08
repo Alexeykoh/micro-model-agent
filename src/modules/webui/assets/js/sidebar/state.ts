@@ -31,17 +31,45 @@ export interface FileEntry {
 
 /** Состояние вкладки Files: DOM-узлы, раскрытые папки, кэш листингов. */
 export interface FilesView {
+  /** Левая колонка: панель управления + дерево. */
+  sideEl: HTMLElement | null;
+  /** Перетаскиваемая граница дерева и просмотра. */
+  splitterEl: HTMLElement | null;
   treeEl: HTMLElement | null;
   detailEl: HTMLElement | null;
-  detailTitleEl: HTMLElement | null;
+  /** Хлебные крошки пути открытого файла. */
+  crumbEl: HTMLElement | null;
+  backEl: HTMLButtonElement | null;
+  fwdEl: HTMLButtonElement | null;
+  wideEl: HTMLButtonElement | null;
+  collapseAllEl: HTMLButtonElement | null;
+  expandAllEl: HTMLButtonElement | null;
+  refreshEl: HTMLButtonElement | null;
   detailBodyEl: HTMLElement | null;
-  detailAttachEl: HTMLElement | null;
+  detailAttachEl: HTMLButtonElement | null;
   /** Раскрытые каталоги (ключ — относительный posix-путь; "" — корень). */
   expanded: Set<string>;
   /** Кэш листинга по относительному пути. */
   listings: Map<string, FileEntry[]>;
+  /** Каталоги, которые сервер ответил усечёнными (строка-предупреждение). */
+  truncated: Set<string>;
+  /** Каталоги, которые не удалось загрузить (строка-ошибка). */
+  errored: Set<string>;
+  /** Путь workspace (`""` — нет). Смена пути сбрасывает дерево и историю. */
+  workspace: string;
   /** Открытый в просмотрщике файл (relative path) или null. */
   selectedPath: string | null;
+  /** Курсор клавиатурной навигации по дереву (relative path) или null. */
+  cursor: string | null;
+  /** История просмотра: стек путей + индекс текущего (back/forward). */
+  history: string[];
+  histIndex: number;
+  /** Идёт ли массовое «развернуть всё» (кнопки блокируются). */
+  expanding: boolean;
+  /** Развёртка упёрлась в кап — показать строку-предупреждение. */
+  expandCapped: boolean;
+  /** Показывать все сегменты пути (крошки свёрнуты в `…` по умолчанию). */
+  crumbsOpen: boolean;
 }
 
 /** Состояние вкладки Plugins: DOM-узел, записи реестра, отказы загрузки. */
@@ -123,14 +151,31 @@ export const sb: SidebarState = {
   postResolved: false, // POST returned; next snapshot clears the spinner
   reindexError: false, // last POST failed
   files: {
+    sideEl: null,
+    splitterEl: null,
     treeEl: null,
     detailEl: null,
-    detailTitleEl: null,
+    crumbEl: null,
+    backEl: null,
+    fwdEl: null,
+    wideEl: null,
+    collapseAllEl: null,
+    expandAllEl: null,
+    refreshEl: null,
     detailBodyEl: null,
     detailAttachEl: null,
     expanded: new Set(), // "" (root) is expanded implicitly in render
     listings: new Map(),
+    truncated: new Set(),
+    errored: new Set(),
+    workspace: "",
     selectedPath: null,
+    cursor: null,
+    history: [],
+    histIndex: -1,
+    expanding: false,
+    expandCapped: false,
+    crumbsOpen: false,
   },
   plugins: {
     bodyEl: null,

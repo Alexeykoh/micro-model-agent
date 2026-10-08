@@ -1,45 +1,102 @@
-// Files tab for `mma web`: lazy project file tree, read-only viewer and
-// "attach path" into the composer draft. Split out of `sidebar.js`; leaf module
-// (imports only dom/i18n/api/state/md), so the frontend DAG stays acyclic.
+// Files tab for `mma web`: lazy project file tree, read-only viewer in a
+// resizable split, viewer history (back/forward) and tree expand/collapse
+// controls. Orchestrator: state transitions and lazy listing fetches live here,
+// rendering/chrome/keyboard live in `./files/*`.
 //
 // Attach semantics: a file is attached by inserting its workspace-relative path
 // (backticked) into the active draft — no new attachment channel; the agent
 // reads the path itself via `read_file`.
-import { el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { renderMarkdown } from "../../md.js";
+import { el } from "../dom.js";
 import type { Dict } from "../core/store/types.js";
 import { sb, type FileEntry } from "./state.js";
+import { initSplit, applySplit, toggleViewerFull, setViewerFull } from "./files/split.js";
+import {
+  createHistory, push as pushHistory, goBack, goForward, resetHistory, type ViewerHistory,
+} from "./files/history.js";
+import { initFilesKeys, focusTreeRow, initGlobalFilesKeys } from "./files/keys.js";
+import {
+  initTreeDeps, renderDir, paintCursor, visibleRows, revealInTree,
+} from "./files/tree.js";
+import { initCrumbDeps, renderCrumbs, clearCrumbs } from "./files/crumbs.js";
+import { syncChrome, localizeChrome, iconize } from "./files/chrome.js";
+import { fetchFile, paintFile, paintLoading } from "./files/view.js";
+import { EXPAND_DEPTH, EXPAND_DIR_CAP, EXPAND_BATCH } from "./files/constants.js";
 
 interface FilesDeps {
   insertPath: (path: string) => void;
 }
 
 let deps: FilesDeps = { insertPath: () => {} };
+let history: ViewerHistory = createHistory();
+let dirty = true;
+const pending = new Map<string, Promise<void>>();
 
 /** Tab hub/app injects the draft-insertion hook; keeps the DAG acyclic. */
 export function initFiles(d: Partial<FilesDeps>): void {
   deps = { ...deps, ...d };
-  sb.files.treeEl = document.getElementById("filesTree");
-  sb.files.detailEl = document.getElementById("filesDetail");
-  sb.files.detailTitleEl = document.getElementById("filesTitle");
-  sb.files.detailBodyEl = document.getElementById("filesBody");
-  sb.files.detailAttachEl = document.getElementById("filesAttach");
-  document.getElementById("filesClose")?.addEventListener("click", closeFile);
-  sb.files.detailAttachEl?.addEventListener("click", () => {
-    if (sb.files.selectedPath) deps.insertPath(sb.files.selectedPath);
+  const f = sb.files;
+  const byId = <T extends HTMLElement>(id: string): T | null =>
+    document.getElementById(id) as T | null;
+  f.sideEl = byId("filesSide");
+  f.splitterEl = byId("filesSplitter");
+  f.treeEl = byId("filesTree");
+  f.detailEl = byId("filesDetail");
+  f.crumbEl = byId("filesCrumbs");
+  f.backEl = byId("filesBack");
+  f.fwdEl = byId("filesFwd");
+  f.wideEl = byId("filesWide");
+  f.collapseAllEl = byId("filesCollapseAll");
+  f.expandAllEl = byId("filesExpandAll");
+  f.refreshEl = byId("filesRefresh");
+  f.detailBodyEl = byId("filesBody");
+  f.detailAttachEl = byId("filesAttach");
+  const close = byId<HTMLButtonElement>("filesClose");
+
+  initTreeDeps({
+    ensureListing, toggleDir, openFile: (p) => void openFile(p),
+    insertPath: deps.insertPath, markDirty, render: renderFilesTree,
   });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && sb.files.selectedPath) closeFile();
+  initCrumbDeps({ reveal: revealInTree });
+
+  localizeChrome();
+  close?.addEventListener("click", () => closeFile());
+  if (f.splitterEl) f.splitterEl.title = t("web.files.tree_width");
+  if (f.treeEl) f.treeEl.setAttribute("aria-label", t("web.sidebar.tab_files"));
+
+  f.detailAttachEl?.addEventListener("click", () => {
+    if (f.selectedPath) deps.insertPath(f.selectedPath);
+  });
+  f.backEl?.addEventListener("click", () => void step(-1));
+  f.fwdEl?.addEventListener("click", () => void step(1));
+  f.wideEl?.addEventListener("click", () => {
+    const full = toggleViewerFull();
+    iconize(f.wideEl, full ? "panel-left" : "panel", full ? "web.files.narrow" : "web.files.wide");
+  });
+  f.collapseAllEl?.addEventListener("click", () => collapseAll());
+  f.expandAllEl?.addEventListener("click", () => void expandAll());
+  f.refreshEl?.addEventListener("click", () => sidebarFilesChanged());
+
+  initSplit({ pane: byId("pane-files"), side: f.sideEl, splitter: f.splitterEl });
+  applySplit();
+  initFilesKeys(f.treeEl, {
+    rows: visibleRows,
+    toggleDir,
+    openFile: (p) => void openFile(p),
+    isExpanded: (p) => f.expanded.has(p),
+    expandToDepth,
+    getCursor: () => f.cursor,
+    setCursor: (p) => { f.cursor = p; },
+    onCursorMove: paintCursor,
+  });
+  initGlobalFilesKeys({
+    step: (delta) => void step(delta),
+    closeViewer: closeFile,
+    isOpen: () => Boolean(f.selectedPath),
   });
 }
 
-let workspace = "";
-let dirty = true;
-const pending = new Map<string, Promise<void>>();
-const errored = new Set<string>();
-const truncated = new Set<string>();
 
 /** Re-render request; DOM is only touched when something actually changed. */
 function markDirty(): void {
@@ -48,13 +105,23 @@ function markDirty(): void {
 
 /** Called from `renderActiveState` with the host snapshot. */
 export function sidebarFilesState(host: Dict): void {
-  const ws = (host && host.workspace) || "";
-  if (ws !== workspace) {
-    workspace = ws;
-    sb.files.listings.clear();
-    sb.files.expanded.clear();
-    sb.files.selectedPath = null;
-    if (sb.files.detailEl) sb.files.detailEl.hidden = true;
+  const f = sb.files;
+  const ws = String((host && host.workspace) || "");
+  if (ws !== f.workspace) {
+    f.workspace = ws;
+    f.listings.clear();
+    f.expanded.clear();
+    f.truncated.clear();
+    f.errored.clear();
+    f.selectedPath = null;
+    f.cursor = null;
+    f.expandCapped = false;
+    f.crumbsOpen = false;
+    resetHistory(history);
+    if (f.detailEl) f.detailEl.hidden = true;
+    setViewerFull(false);
+    clearCrumbs();
+    syncChrome(history);
     markDirty();
   }
   if (sb.active === "files") renderFilesTree();
@@ -62,7 +129,8 @@ export function sidebarFilesState(host: Dict): void {
 
 /** Fetches and caches one directory listing (deduped; no DOM side-effects). */
 function ensureListing(path: string): Promise<void> {
-  if (sb.files.listings.has(path)) return Promise.resolve();
+  const f = sb.files;
+  if (f.listings.has(path)) return Promise.resolve();
   const existing = pending.get(path);
   if (existing) return existing;
   const p = api<{ entries: FileEntry[]; truncated: boolean }>(
@@ -70,11 +138,11 @@ function ensureListing(path: string): Promise<void> {
   )
     .then((r) => {
       if (r.ok && r.data) {
-        sb.files.listings.set(path, r.data.entries || []);
-        if (r.data.truncated) truncated.add(path);
-        errored.delete(path);
+        f.listings.set(path, r.data.entries || []);
+        if (r.data.truncated) f.truncated.add(path);
+        f.errored.delete(path);
       } else {
-        errored.add(path);
+        f.errored.add(path);
       }
       markDirty();
     })
@@ -85,232 +153,159 @@ function ensureListing(path: string): Promise<void> {
 
 /** Forces a re-render (locale switch → localized empty/loading/error labels). */
 export function refreshFilesTree(): void {
+  localizeChrome();
   markDirty();
   renderFilesTree();
 }
 
 /** Renders the tree from cached listings, lazily fetching expanded directories. */
 export function renderFilesTree(): void {
-  const tree = sb.files.treeEl;
+  const f = sb.files;
+  const tree = f.treeEl;
   if (!tree || !dirty) return;
   dirty = false;
   tree.textContent = "";
-  if (!workspace) {
+  if (!f.workspace) {
     tree.appendChild(el("div", "fdim", t("web.files.no_workspace")));
+    syncChrome(history);
     return;
   }
-  if (!sb.files.listings.has("")) {
-    tree.appendChild(el("div", "fdim", errored.has("") ? t("web.files.error") : t("web.files.loading")));
+  if (!f.listings.has("")) {
+    tree.appendChild(el("div", "fdim", f.errored.has("") ? t("web.files.error") : t("web.files.loading")));
+    syncChrome(history);
     void ensureListing("").then(renderFilesTree);
     return;
   }
   renderDir(tree, "", 0);
-}
-
-/** Renders one directory's rows (recurses into expanded subdirectories). */
-function renderDir(parent: HTMLElement, path: string, depth: number): void {
-  const entries = sb.files.listings.get(path) || [];
-  if (entries.length === 0 && depth === 0) {
-    parent.appendChild(el("div", "fdim", t("web.files.empty")));
-    return;
-  }
-  for (const e of entries) {
-    const childPath = path ? `${path}/${e.name}` : e.name;
-    parent.appendChild(fileRow(e, childPath, depth));
-    if (e.type === "dir" && sb.files.expanded.has(childPath)) {
-      if (sb.files.listings.has(childPath)) {
-        renderDir(parent, childPath, depth + 1);
-      } else {
-        const p = el("div", "fdim", errored.has(childPath) ? t("web.files.error") : t("web.files.loading"));
-        p.style.paddingLeft = `${8 + (depth + 1) * 14}px`;
-        parent.appendChild(p);
-        void ensureListing(childPath).then(renderFilesTree);
-      }
-    }
-  }
-  if (truncated.has(path)) {
-    const note = el("div", "fdim", t("web.files.truncated"));
-    note.style.paddingLeft = `${8 + depth * 14}px`;
-    parent.appendChild(note);
-  }
-}
-
-/** Builds one tree row (twisty + icon + name + attach button). */
-function fileRow(e: FileEntry, childPath: string, depth: number): HTMLElement {
-  const isDir = e.type === "dir";
-  const sel = !isDir && sb.files.selectedPath === childPath;
-  const row = el("div", `frow${isDir ? " dir" : ""}${sel ? " sel" : ""}`);
-  row.style.paddingLeft = `${8 + depth * 14}px`;
-  const twisty = el("span", "ftw");
-  if (isDir) twisty.appendChild(icon(sb.files.expanded.has(childPath) ? "chevron-down" : "chevron-right"));
-  row.appendChild(twisty);
-  const ic = el("span", "fic");
-  ic.appendChild(icon(isDir ? "folder" : "file"));
-  row.appendChild(ic);
-  row.appendChild(el("span", "fname", e.name));
-  if (!isDir) {
-    const at = el("button", "fattach");
-    at.type = "button";
-    at.title = t("web.files.attach");
-    at.setAttribute("aria-label", t("web.files.attach"));
-    at.appendChild(icon("paperclip"));
-    at.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      deps.insertPath(childPath);
-    });
-    row.appendChild(at);
-  }
-  row.addEventListener("click", () => {
-    if (isDir) toggleDir(childPath);
-    else void openFile(childPath);
-  });
-  return row;
+  syncChrome(history);
 }
 
 /** Expands/collapses a directory (fetches its listing on first expand). */
 function toggleDir(path: string): void {
-  if (sb.files.expanded.has(path)) {
-    sb.files.expanded.delete(path);
+  const f = sb.files;
+  if (f.expanded.has(path)) {
+    f.expanded.delete(path);
   } else {
-    sb.files.expanded.add(path);
-    if (!sb.files.listings.has(path)) void ensureListing(path).then(renderFilesTree);
+    f.expanded.add(path);
+    if (!f.listings.has(path)) void ensureListing(path).then(renderFilesTree);
   }
   markDirty();
   renderFilesTree();
 }
 
-/** Opens a file in the read-only viewer (master-detail). */
-export async function openFile(path: string): Promise<void> {
-  sb.files.selectedPath = path;
-  const detail = sb.files.detailEl;
-  if (sb.files.detailTitleEl) {
-    sb.files.detailTitleEl.textContent = path;
-    sb.files.detailTitleEl.title = path;
-  }
-  if (detail) detail.hidden = false;
-  const body = sb.files.detailBodyEl;
-  if (body) {
-    body.textContent = "";
-    body.appendChild(el("div", "fdim", t("web.files.loading")));
-  }
+/** Collapses everything back to the workspace root. */
+export function collapseAll(): void {
+  sb.files.expanded.clear();
+  sb.files.expandCapped = false;
   markDirty();
   renderFilesTree();
+}
 
-  let res: Response;
+/** Expands every directory up to `EXPAND_DEPTH`, budgeted per request. */
+export async function expandAll(): Promise<void> {
+  const f = sb.files;
+  if (f.expanding) return;
+  f.expanding = true;
+  markDirty();
+  syncChrome(history);
   try {
-    res = await fetch(fileUrl(path));
-  } catch {
-    showOpenError();
-    return;
+    await expandUpTo(EXPAND_DEPTH);
+  } finally {
+    f.expanding = false;
+    markDirty();
+    renderFilesTree();
+    syncChrome(history);
   }
-  if (!res.ok || !body) {
-    showOpenError();
-    return;
-  }
-  const mime = res.headers.get("content-type") || "";
-  body.textContent = "";
-  if (mime.indexOf("text/plain") === 0) renderText(body, path, await res.text());
-  else renderMedia(body, path, mime);
 }
 
-/** Closes the viewer and clears the selection. */
-export function closeFile(): void {
-  sb.files.selectedPath = null;
-  if (sb.files.detailEl) sb.files.detailEl.hidden = true;
+/** Keyboard `*`: reveal just the cursor's ancestors, then keep focus there. */
+function expandToDepth(): void {
+  const cursor = sb.files.cursor;
+  if (!cursor) return;
+  const dirDepth = cursor.split("/").length - 1;
+  void expandUpTo(dirDepth).then(() => focusTreeRow(sb.files.treeEl, cursor));
+}
+
+/**
+ * Breadth-first expansion to `maxDepth` levels below the root, batched so the
+ * tree unfolds progressively instead of blocking on the whole subtree.
+ */
+async function expandUpTo(maxDepth: number): Promise<void> {
+  const f = sb.files;
+  let budget = EXPAND_DIR_CAP;
+  await ensureListing("");
+  let frontier = dirChildren("");
+  for (let depth = 1; depth <= maxDepth && frontier.length > 0 && budget > 0; depth++) {
+    const batch = frontier.slice(0, Math.min(EXPAND_BATCH, budget));
+    budget -= batch.length;
+    await Promise.all(batch.map(ensureListing));
+    for (const dir of batch) {
+      f.expanded.add(dir);
+      for (const child of dirChildren(dir)) if (!f.expanded.has(child)) frontier.push(child);
+    }
+    frontier = frontier.filter((p) => !f.expanded.has(p));
+    markDirty();
+    renderFilesTree();
+  }
+  f.expandCapped = budget <= 0 && frontier.length > 0;
+}
+
+function dirChildren(path: string): string[] {
+  const entries = sb.files.listings.get(path) || [];
+  return entries
+    .filter((e) => e.type === "dir")
+    .map((e) => (path ? `${path}/${e.name}` : e.name));
+}
+
+/** Opens a file in the read-only viewer and records it in the history. */
+export async function openFile(path: string): Promise<void> {
+  const f = sb.files;
+  f.selectedPath = path;
+  pushHistory(history, path);
+  renderCrumbs(path);
+  if (f.detailEl) f.detailEl.hidden = false;
+  paintLoading(f.detailBodyEl);
+  syncChrome(history);
   markDirty();
   renderFilesTree();
+  paintFile(f.detailBodyEl, path, await fetchFile(path));
+}
+
+/** Closes the viewer and clears the selection (history is kept). */
+export function closeFile(): void {
+  const f = sb.files;
+  f.selectedPath = null;
+  if (f.detailEl) f.detailEl.hidden = true;
+  // The tree must come back: a hidden tree plus a closed viewer is a blank pane.
+  setViewerFull(false);
+  clearCrumbs();
+  localizeChrome();
+  syncChrome(history);
+  markDirty();
+  renderFilesTree();
+}
+
+/** Walks the viewer history by `delta` (-1 back, +1 forward). */
+async function step(delta: number): Promise<void> {
+  const next = delta < 0 ? goBack(history) : goForward(history);
+  if (next) await openFile(next);
 }
 
 /** Invalidates expanded listings and re-reads them (watcher/SSE `files`). */
 export function sidebarFilesChanged(): void {
-  const paths = ["", ...sb.files.expanded];
+  const f = sb.files;
+  const paths = ["", ...f.expanded];
   paths.forEach((p) => {
-    sb.files.listings.delete(p);
-    errored.delete(p);
-    truncated.delete(p);
+    f.listings.delete(p);
+    f.truncated.delete(p);
+    f.errored.delete(p);
   });
   markDirty();
   renderFilesTree();
-  const reload = sb.files.selectedPath ? openFile(sb.files.selectedPath) : Promise.resolve();
-  void Promise.all([...paths.map(ensureListing), reload]).then(renderFilesTree);
+  const reload = f.selectedPath ? openFile(f.selectedPath) : Promise.resolve();
+  void Promise.all([...paths.map(ensureListing), reload]).then(() => {
+    if (f.cursor) focusTreeRow(f.treeEl, f.cursor);
+    renderFilesTree();
+  });
 }
 
-function showOpenError(): void {
-  const body = sb.files.detailBodyEl;
-  if (!body) return;
-  body.textContent = "";
-  body.appendChild(el("div", "fdim wn", t("web.files.open_failed")));
-}
-
-function fileUrl(path: string): string {
-  // Same-origin fetch/<img> authenticates via the HttpOnly `mma_web_auth`
-  // cookie (set by any prior API request), so no token rides in the URL.
-  return "/api/file?path=" + encodeURIComponent(path);
-}
-
-function extOf(path: string): string {
-  const i = path.lastIndexOf(".");
-  return i === -1 ? "" : path.slice(i + 1).toLowerCase();
-}
-
-/** Text files: markdown rendered, everything else in a highlighted <pre>. */
-function renderText(body: HTMLElement, path: string, text: string): void {
-  const ext = extOf(path);
-  if (ext === "md" || ext === "markdown") {
-    const wrap = el("div", "fmd");
-    renderMarkdown(wrap, text);
-    body.appendChild(wrap);
-    return;
-  }
-  const pre = el("pre", "fpre");
-  const code = el("code", "fcode");
-  code.textContent = text;
-  const hl = window.hljs;
-  if (hl) {
-    try {
-      const res2 = hl.getLanguage(ext)
-        ? hl.highlight(text, { language: ext, ignoreIllegals: true })
-        : hl.highlightAuto(text);
-      code.replaceChildren(...nodesFromHtml(res2.value));
-    } catch {
-      /* подсветка best-effort */
-    }
-  }
-  pre.appendChild(code);
-  body.appendChild(pre);
-}
-
-/** Binary-but-viewable files: images/audio/video/PDF via native elements. */
-function renderMedia(body: HTMLElement, path: string, mime: string): void {
-  const src = fileUrl(path);
-  if (mime.indexOf("image/") === 0) {
-    const img = document.createElement("img");
-    img.className = "fimg";
-    img.alt = path;
-    img.src = src;
-    body.appendChild(img);
-    return;
-  }
-  if (mime.indexOf("application/pdf") === 0) {
-    const emb = el("embed", "fembed");
-    emb.setAttribute("src", src);
-    emb.setAttribute("type", "application/pdf");
-    body.appendChild(emb);
-    return;
-  }
-  const tag = mime.indexOf("audio/") === 0 ? "audio" : mime.indexOf("video/") === 0 ? "video" : null;
-  if (tag) {
-    const media = document.createElement(tag);
-    media.controls = true;
-    media.src = src;
-    body.appendChild(media);
-    return;
-  }
-  showOpenError();
-}
-
-/** highlight.js output is trusted HTML; import inertly (no `innerHTML`). */
-function nodesFromHtml(html: string): Node[] {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  return Array.from(doc.body.childNodes).map((n) => document.importNode(n, true));
-}

@@ -4,6 +4,29 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.31.0] - 2026-10-08
+
+Opening and closing files in the `mma web` Files tab used to fight you: an open
+file hid the whole tree, so switching files meant closing the viewer, finding
+the file again and re-expanding folders - and the close/attach controls were
+glyph-sized links. The tree now sits beside the viewer, the viewer remembers
+where you came from, and the tree itself has collapse/expand controls.
+
+### Added
+
+- **Files split** (`assets/js/sidebar/files/*`, `index.html`, `styles.css`): `.files-body` = tree + draggable splitter + viewer. The tree stays visible while a file is open (the old `:has()` rule that hid it is gone, with a guard test). Tree width is draggable and keyboard-resizable (`ArrowLeft/Right`, `Home`, double-click to reset), clamped 200-480px, default 240px, persisted in `localStorage["mma-files-tree-w"]`. A header toggle switches to viewer-only mode.
+- **Viewer history** (`sidebar/files/history.ts`): bounded stack (50) of visited files with back/forward buttons and `Alt+ArrowLeft`/`Alt+ArrowRight`. Re-visiting a path ahead of the cursor moves the cursor instead of stacking duplicates; closing the viewer keeps the history.
+- **Tree expand/collapse controls**: "collapse all", "expand all" (lazy, batched, depth- and budget-capped with an explicit cap note instead of a silent stop) and "refresh" (invalidates cached listings and reloads the open file).
+- **Keyboard navigation in the tree** (`sidebar/files/keys.ts`): `ArrowUp/Down` move a cursor, `ArrowRight` expands or descends, `ArrowLeft` collapses or jumps to the parent, `Enter`/`Space` act, `Home`/`End` jump, `*` expands the cursor's ancestors. The cursor highlight is repainted in place so the DOM focus survives a re-render.
+- **Path breadcrumbs**: dimmed, clickable directory segments (click reveals the folder in the tree and moves the cursor there), bright file name, `…` folding for long paths.
+- **Readable controls**: icon buttons with a 24px hit target (was 11px glyph links) instead of `◧`/`✕`, localized `title`/`aria-label` everywhere, a full-row attach target, `role="treeitem"` rows with `aria-expanded`/`aria-selected`, and always-visible attach buttons on touch devices.
+
+### Fixed
+
+- **The tree no longer disappears when a file is opened** - the original complaint behind this release.
+- **Closing a file left the Files tab blank**: with the tree hidden ("viewer only" mode), closing the viewer via `✕`, `Escape` or a workspace switch kept the tree hidden — neither tree nor file visible, no way back. Closing now always restores the tree, and the "hide tree" button is disabled while no file is open.
+- Hardcoded English `title` attributes on the Files controls (`attach path`, `close`) are now i18n keys; new keys ship in en + ru.
+
 ## [2.30.0] - 2026-10-08
 
 MoE orchestration is now visible. A turn led by Mixture-of-Experts says so — one

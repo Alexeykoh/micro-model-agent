@@ -904,49 +904,104 @@ body.light .sel > button { border: 1px solid var(--border); }
 .detail-b .code { max-width: 100%; }
 .detail-b h5 { margin: 0 0 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--sec-h); font-weight: 600; }
 
-/* ---- sidebar Files tab: lazy tree + read-only viewer ---- */
-#pane-files { flex-direction: row; position: relative; }
+/* ---- sidebar Files tab: lazy tree + read-only viewer, side by side ----
+   The tree stays visible while a file is open (master-detail): switching
+   files is one click, not close → re-navigate → re-expand. Width is resizable
+   inside the fixed 679px sidebar; `f-full` (viewer-only) is a user toggle. */
+#pane-files { position: relative; }
+.files-body { display: flex; flex-direction: row; flex: 1; min-height: 0; min-width: 0; max-width: 100%; overflow-x: hidden; }
+.files-side {
+  display: flex; flex-direction: column; flex: 0 0 auto; min-width: 0; min-height: 0;
+  max-width: 100%; overflow: hidden;
+}
+.files-side[hidden] { display: none; }
+.files-bar { display: flex; gap: 2px; padding: 6px 6px 2px; flex-shrink: 0; align-items: center; }
+/* Иконочные кнопки панели дерева и шапки просмотра: 24px цель, 14px глиф.
+   Мелкие linkbtn-глифы (◧/✕) были нечитаемы и не попадали в клик. */
+.fbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex: 0 0 auto; padding: 0;
+  border: 0; border-radius: 4px; background: transparent;
+  color: var(--dim-b); cursor: pointer; font: inherit;
+}
+.fbtn .svg-icon { width: 14px; height: 14px; }
+.fbtn:hover:not(:disabled) { color: var(--accent); background: var(--hover-bg); }
+.fbtn:disabled { color: var(--dim-c); opacity: .45; cursor: default; }
+.fbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.files-splitter { flex: 0 0 6px; cursor: col-resize; background: transparent; }
+.files-splitter[hidden] { display: none; }
+.files-splitter:hover, .files-splitter:focus-visible { background: var(--border); }
+.files-splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.fcrumbs { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
+.fcrumb {
+  font: inherit; font-size: 12.5px; color: var(--dim-c); background: transparent;
+  border: 0; padding: 1px 3px; border-radius: 4px; cursor: pointer;
+  max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fcrumb:hover { color: var(--fg); background: var(--hover-bg); }
+.fcrumb.cur { color: var(--fg); cursor: default; }
+.fcrumb.cur:hover { background: transparent; }
+.fsep { color: var(--dim-b); font-size: 11px; }
 .files-tree {
-  flex: 1; min-width: 0; min-height: 0; max-width: 100%;
-  overflow-y: auto; overflow-x: hidden; padding: 6px 6px 12px;
+  --files-gutter: 4px; --files-indent: 14px;
+  flex: 1 1 auto; min-width: 0; min-height: 0; max-width: 100%;
+  overflow-y: auto; overflow-x: hidden; padding: 4px 4px 12px;
   display: flex; flex-direction: column; gap: 1px;
 }
+.files-tree:focus-visible { outline: none; }
 .files-tree > * { flex-shrink: 0; }
-/* An open file takes the whole fixed sidebar width (679px) so its content is
-   readable; the tree steps aside. Visibility is driven purely by the viewer's
-   own [hidden] flag (open/close triggered inside the sidebar). */
-#pane-files:has(.files-detail:not([hidden])) .files-tree { display: none; }
-#pane-files:has(.files-detail:not([hidden])) .files-detail { flex: 1 1 auto; }
-.frow {
-  display: flex; gap: 6px; align-items: center; padding: 3px 6px;
-  font-size: 12.5px; color: var(--muted); border-radius: 4px; cursor: pointer;
-  min-width: 0; max-width: 100%; overflow: hidden;
-}
-.frow:hover { background: var(--hover-bg); }
+/* An open file no longer hides the tree; only the explicit "viewer only" mode
+   does (`.f-full`, toggled from the viewer header). */
 .frow.sel { background: var(--accent-bg); }
+/* Курсор клавиатуры — нейтральный фон, как hover в остальном сайдбаре.
+   Акцентная полоса/рамка здесь выглядела бы чужеродно (STYLE.md: выделение —
+   фоном, без декоративных барьеров) и путалась с выбранным файлом. */
+.frow.cursor { background: var(--hover-bg); }
+.frow.sel.cursor { background: var(--accent-bg); }
+.frow:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .frow .ftw { flex: 0 0 12px; display: inline-flex; color: var(--dim-b); }
 .frow .ftw .svg-icon { width: 12px; height: 12px; }
 .frow .fic { flex: 0 0 auto; display: inline-flex; color: var(--dim-b); }
 .frow.dir .fic { color: var(--accent); }
 .frow .fic .svg-icon { width: 14px; height: 14px; }
 .frow .fname { color: var(--fg); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Attach: цель во всю высоту строки (13px-иконка с промахом мимо неё). */
 .frow .fattach {
-  flex: 0 0 auto; display: inline-flex; align-items: center; padding: 1px 2px;
-  background: transparent; border: 0; color: var(--dim-b); cursor: pointer; visibility: hidden;
+  flex: 0 0 auto; align-self: stretch; display: inline-flex; align-items: center;
+  margin: -3px -2px -3px 0; padding: 0 4px; background: transparent; border: 0;
+  color: var(--dim-b); cursor: pointer; visibility: hidden;
 }
 .frow:hover .fattach, .frow:focus-within .fattach { visibility: visible; }
 .frow .fattach:hover { color: var(--accent); }
+.frow .fattach:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .frow .fattach .svg-icon { width: 13px; height: 13px; }
+/* На тач-устройствах hover-ревила нет — кнопка должна быть видна всегда. */
+@media (hover: none) {
+  .frow .fattach { visibility: visible; }
+}
 .files-detail {
-  display: flex; flex-direction: column; flex: 0 0 360px; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0;
   max-width: 100%; overflow-x: hidden;
 }
 .files-detail[hidden] { display: none; }
-.files-detail .detail-h .x { margin-left: 0; }
-.files-detail .detail-h #filesAttach { margin-left: auto; }
-.files-detail .detail-h .x:hover { color: var(--accent); }
-.fdim { color: var(--dim-c); font-size: 12px; padding: 4px 8px; overflow-wrap: anywhere; }
+.files-detail .detail-h { gap: 2px; padding: 6px 8px; }
+.files-detail .detail-b { padding: 10px 14px; }
+.frow {
+  display: flex; gap: 6px; align-items: center; padding: 3px 4px;
+  font-size: 12.5px; color: var(--muted); border-radius: 4px; cursor: pointer;
+  min-width: 0; max-width: 100%; overflow: hidden;
+}
+.frow:hover { background: var(--hover-bg); }
+.fdim { color: var(--dim-c); font-size: 12px; padding: 4px; overflow-wrap: anywhere; }
 .fdim.wn { color: var(--yellow); }
+/* Отступ уровня задаётся узлом через `--indent`, а считается здесь (объявлено
+   после `padding`-шорткатов, иначе они перебивают `padding-left`). Раньше JS
+   писал `padding-left` инлайном поверх `padding: 3px 6px`: левый жёлоб
+   (4+8+12 twisty+6 gap) разъезжался с правым и читался как «странный отступ
+   слева». Один источник правды — CSS. */
+.files-tree > .frow, .files-tree > .fdim {
+  padding-left: calc(var(--files-gutter) + var(--indent, 0) * var(--files-indent));
+}
 .fpre { margin: 0; max-width: 100%; overflow-x: hidden; }
 .fpre .fcode {
   display: block; font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;

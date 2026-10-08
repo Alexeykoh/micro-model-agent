@@ -368,6 +368,43 @@ describe("webui assets", () => {
     expect(a.css).toContain(".trace-list > *");
   });
 
+  it("keeps the Files tree beside the viewer (split, resizable, with history)", () => {
+    const a = loadAssets();
+    const sidebar = sidebarSources(a);
+    expect(a.html).toContain('id="pane-files"');
+    expect(a.html).toContain('class="files-body"');
+    expect(a.html).toContain('id="filesSide"');
+    expect(a.html).toContain('class="files-splitter"');
+    expect(a.html).toContain('id="filesBar"');
+    expect(a.html).toContain('id="filesCrumbs"');
+    expect(a.html).toContain('id="filesBack"');
+    expect(a.html).toContain('id="filesFwd"');
+    expect(a.html).toContain('id="filesExpandAll"');
+    expect(a.html).toContain('id="filesCollapseAll"');
+    // Opening a file used to hide the tree (`:has()` rule) — guard the split.
+    expect(a.css).not.toContain(":has(.files-detail");
+    expect(a.css).toContain(".files-body");
+    expect(a.css).toContain(".files-splitter");
+    // Icon controls are real buttons with a 24px target, not small glyph links.
+    expect(a.css).toContain(".fbtn {");
+    expect(a.html).not.toContain('title="attach path"');
+    expect(a.html).not.toContain('title="close"');
+    // Tree cursor/selection: background only. An accent bar or border here read
+    // as foreign decoration next to the other sidebar tabs (STYLE.md).
+    expect(a.css).not.toMatch(/\.frow\.cursor \{[^}]*box-shadow/);
+    expect(a.css).not.toMatch(/\.frow\.cursor \{[^}]*border/);
+    expect(a.css).toContain(".frow.cursor { background: var(--hover-bg); }");
+    // Tree indentation: one source of truth. An inline `padding-left` from JS
+    // overrode the `padding` shorthand, so the left gutter drifted from the right.
+    expect(a.css).toContain("padding-left: calc(var(--files-gutter) + var(--indent, 0) * var(--files-indent));");
+    const filesTreeSource = a.jsModules?.["js/sidebar/files/tree.js"] || "";
+    expect(filesTreeSource).not.toContain("style.paddingLeft");
+    expect(filesTreeSource).toContain("--indent");
+    expect(sidebar).toContain("web.files.expand_all");
+    expect(sidebar).toContain("goBack");
+    expect(sidebar).toContain("toggleViewerFull");
+  });
+
   it("wires the Plugins sidebar tab (toggles + details popup)", () => {
     const a = loadAssets();
     expect(a.html).toContain('data-tab="plugins"');
