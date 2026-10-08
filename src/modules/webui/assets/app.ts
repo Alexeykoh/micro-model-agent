@@ -13,7 +13,7 @@ import {
 } from "./js/feed.js";
 import {
   openTab, updateTabName, renderSessionsDropdown, reflectBusy, loadSessions,
-  loadCommands, setTabStatus, reconcileTabStatuses,
+  loadCommands, setTabStatus, reconcileTabStatuses, readSavedTabs,
 } from "./js/session/tabs.js";
 import {
   renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
@@ -278,7 +278,9 @@ es.addEventListener("reasoning", () => faceEvent("think"));
 es.addEventListener("plan", () => faceEvent("plan"));
 es.addEventListener("turn_end", (e) => {
   const d = parse(e);
-  faceEvent(d && d.success === false ? "error" : "done");
+  // An interrupted turn (`success:false, interrupted:true`) is a user stop, not
+  // a failure — settle the face to "done", never "error".
+  faceEvent(d && d.success === false && !d.interrupted ? "error" : "done");
   const token = composerToken;
   window.setTimeout(() => { if (token === composerToken) setFaceState(composerFace, "idle"); }, 1500);
 });
@@ -298,7 +300,7 @@ es.addEventListener("question", (e) => {
 });
 es.addEventListener("turn_end", (e) => {
   const d = parse(e);
-  if (d && d.sessionId) setTabStatus(d.sessionId, d.success === false ? "failed" : "idle");
+  if (d && d.sessionId) setTabStatus(d.sessionId, d.success === false && !d.interrupted ? "failed" : "idle");
 });
 // Sidebar Trace: live per-session event log. Feed handlers stay untouched.
 // Tool/text/phase/plan/question/error stream live; status/log/retract/index
@@ -313,6 +315,9 @@ es.addEventListener("lsp", (e) => { const d = parse(e); if (d) sidebarLspEvent(d
 // Files tab: workspace watcher fired — re-read the expanded directories.
   es.addEventListener("files", () => sidebarFilesChanged());
   es.addEventListener("plugins", () => sidebarPluginsEvent());
+// Config changed anywhere (settings write or a slash command) — re-read it so
+// the open Settings panel and the composer selectors never show a stale value.
+es.addEventListener("config", () => { void loadConfig(); });
 es.addEventListener("command", (e) => {
   const d = parse(e);
   if (d && typeof d.text === "string") onCommandOutput(d.text, d.sessionId);
@@ -423,6 +428,32 @@ function applyStaticI18n(): void {
   setStaleBar(undefined, true);
 }
 
+// Restore the session tabs remembered from the previous page (localStorage).
+// The URL `?session=` (deep link) wins as the active tab, then the remembered
+// active, then the first remembered. Opened BEFORE `refresh()` so it does not
+// also auto-open the server-active session as an extra tab.
+function restoreTabs(urlSession: string | null): void {
+  const saved = readSavedTabs();
+  const known = (id: string) => session.sessions.some((s) => s.id === id);
+  const nameOf = (id: string) => {
+    const m = session.sessions.find((s) => s.id === id);
+    return m && m.name ? String(m.name) : id;
+  };
+  const preferred =
+    (urlSession && known(urlSession) ? urlSession
+      : saved.active && known(saved.active) ? saved.active
+        : saved.ids.find(known)) || null;
+  const ids: string[] = [];
+  if (urlSession && known(urlSession)) ids.push(urlSession);
+  if (preferred && !ids.includes(preferred)) ids.push(preferred);
+  for (const id of saved.ids) {
+    if (known(id) && !ids.includes(id)) ids.push(id);
+  }
+  if (!ids.length) return;
+  openTab(ids[0], nameOf(ids[0]), "session", true);
+  for (const id of ids.slice(1)) openTab(id, nameOf(id), "session", false, false);
+}
+
 async function boot(): Promise<void> {
   initCursor();
   // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
@@ -458,18 +489,15 @@ async function boot(): Promise<void> {
     await loadMemory();
     await loadSkills();
     await loadPlugins();
+    // Reopen remembered tabs first; `refresh()` auto-opens the server-active
+    // session only when no tab is active yet, so a restored set is not clobbered.
+    restoreTabs(initialSession);
     try {
       await refresh();
     } catch (err) {
       // A render bug must never kill boot before the SSE stream connects:
       // without SSE no streamed answers, tools or loaders reach the page.
       console.error("initial refresh failed", err);
-    }
-    // Restore the session from the URL AFTER the first refresh: `refresh` may
-    // auto-open the server's active session, and the requested one must win.
-    if (initialSession) {
-      const meta = session.sessions.find((s) => s.id === initialSession);
-      if (meta) openTab(initialSession, meta.name || String(initialSession), "session", true);
     }
   } finally {
     hideBootSplash();

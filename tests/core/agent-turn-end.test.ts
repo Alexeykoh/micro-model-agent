@@ -176,4 +176,22 @@ describe("Agent onTurnEnd", () => {
     const [, summary] = t.pluginManager.runOnTurnEnd.mock.calls[0];
     expect(summary.success).toBe(false);
   });
+
+  it("marks an interrupted run as interrupted (not ok)", async () => {
+    const t = createMockDeps(() =>
+      (async function* () {
+        await new Promise((r) => setTimeout(r, 60));
+        yield { type: "text" as const, content: "partial" };
+        yield { type: "done" as const, finishReason: "stop" as const };
+      })(),
+    );
+    const agent = new Agent(t.deps);
+    const p = agent.run("long");
+    setTimeout(() => agent.shutdown(), 5);
+    const result = await p;
+    expect(result.success).toBe(false);
+    expect(result.interrupted).toBe(true);
+    const [, summary] = t.pluginManager.runOnTurnEnd.mock.calls[0];
+    expect(summary.interrupted).toBe(true);
+  });
 });

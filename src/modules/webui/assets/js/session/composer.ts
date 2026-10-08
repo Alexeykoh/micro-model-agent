@@ -331,9 +331,9 @@ async function send(): Promise<void> {
   // (per-session: `202 {queued: n, sessionId}`) and runs after the current
   // turn, in order.
   clearEmpty(feed);
-  finishMd();
-  resetTurnText();
-  finishThink();
+  finishMd(feed);
+  resetTurnText(feed);
+  finishThink(feed);
   if (text.startsWith("/")) {
     appendTo(feed, el("div", "u", text));
     scrollToBottom();

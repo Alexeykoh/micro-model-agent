@@ -3,7 +3,8 @@
 // import these primitives. `feed.js` re-exports this module's public surface.
 import { msgs, el, setIcon } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
-import { feed as feedState, tabs as tabState } from "../store.js";
+import { streamStateFor, tabs as tabState } from "../store.js";
+import type { FeedStreamState } from "../store.js";
 import { formatMs, verbosity } from "../format.js";
 import { copyText } from "../../md.js";
 import { createFace } from "../loader.js";
@@ -257,12 +258,13 @@ export function clearEmpty(feed: HTMLElement | null): void {
 }
 
 export function clearBusy(feed?: HTMLElement | null): void {
-  if (feedState.busyTimer) {
-    clearInterval(feedState.busyTimer);
-    feedState.busyTimer = null;
-  }
   feed = feed || liveFeed();
   if (!feed) return;
+  const st = streamStateFor(feed);
+  if (st.busyTimer) {
+    clearInterval(st.busyTimer);
+    st.busyTimer = null;
+  }
   const line = feed.querySelector(".busy");
   if (line) line.remove();
 }
@@ -274,14 +276,15 @@ export function clearBusy(feed?: HTMLElement | null): void {
 export function showBusy(feed?: HTMLElement | null): void {
   feed = feed || liveFeed();
   if (!feed) return;
+  const st = streamStateFor(feed);
   // The delayed post-send call must not flash a spinner over a stream that
   // already started (fast first token).
-  if (feedState.curMd || feedState.curThink) return;
+  if (st.curMd || st.curThink) return;
   clearEmpty(feed);
   if (feed.querySelector(".busy")) return;
-  if (feedState.busyTimer) {
-    clearInterval(feedState.busyTimer);
-    feedState.busyTimer = null;
+  if (st.busyTimer) {
+    clearInterval(st.busyTimer);
+    st.busyTimer = null;
   }
   const line = el("div", "busy");
   line.appendChild(createFace("think", "sm"));
@@ -291,46 +294,49 @@ export function showBusy(feed?: HTMLElement | null): void {
   line.appendChild(el("span", "", "· " + t("web.input.esc")));
   appendTo(feed, line);
   const started = Date.now();
-  feedState.busyTimer = setInterval(() => {
+  st.busyTimer = setInterval(() => {
     if (!line.parentNode) {
-      clearInterval(feedState.busyTimer);
-      feedState.busyTimer = null;
+      clearInterval(st.busyTimer);
+      st.busyTimer = null;
       return;
     }
     time.textContent = "· " + Math.round((Date.now() - started) / 1000) + "s";
   }, 1000);
 }
 
-export function flushRun(): void {
-  if (feedState.runCount <= 0) {
-    resetRun();
+export function flushRun(feed?: HTMLElement | null): void {
+  feed = feed || liveFeed();
+  if (!feed) return;
+  const st = streamStateFor(feed);
+  if (st.runCount <= 0) {
+    resetRun(st);
     return;
   }
   // Quiet: a run of successful read-only actions folds into one summary line,
   // replacing the per-action lines (mirrors `Renderer.flushRecon`). `normal`
   // and `verbose` keep the individual action lines and add nothing.
-  if (verbosity() === "quiet" && feedState.runReconOnly && feedState.runFails === 0 && feedState.runCount > 1) {
+  if (verbosity() === "quiet" && st.runReconOnly && st.runFails === 0 && st.runCount > 1) {
     // Fade the folded lines out instead of snapping them away.
-    const folding = feedState.runNodes.slice();
+    const folding = st.runNodes.slice();
     folding.forEach((node) => node.classList.add("fold-out"));
     window.setTimeout(() => folding.forEach((node) => node.remove()), 160);
     const line = el("div", "grouped");
     line.appendChild(el("span", "pipe", "│"));
-    const dur = formatMs(feedState.runDuration);
+    const dur = formatMs(st.runDuration);
     line.appendChild(
       document.createTextNode(
-        " " + pluralCount("web.action.actions", feedState.runCount) + " ✓" + (dur ? " · " + dur : ""),
+        " " + pluralCount("web.action.actions", st.runCount) + " ✓" + (dur ? " · " + dur : ""),
       ),
     );
-    appendTo(liveFeed(), line);
+    appendTo(feed, line);
   }
-  resetRun();
+  resetRun(st);
 }
 
-function resetRun(): void {
-  feedState.runCount = 0;
-  feedState.runFails = 0;
-  feedState.runReconOnly = true;
-  feedState.runNodes = [];
-  feedState.runDuration = 0;
+function resetRun(st: FeedStreamState): void {
+  st.runCount = 0;
+  st.runFails = 0;
+  st.runReconOnly = true;
+  st.runNodes = [];
+  st.runDuration = 0;
 }

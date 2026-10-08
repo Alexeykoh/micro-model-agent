@@ -4,6 +4,23 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.35.2] - 2026-10-08
+
+Parallel-turn and settings-consistency fixes for `mma web`, found in a live
+session: a background session's stream leaked into the active tab's feed, the
+Settings panel showed a stale value after config changes made via slash
+commands, an interrupted turn reported success, the context probe compared
+against the history budget instead of the window, and open tabs were lost on
+reload.
+
+### Fixed
+
+- **Cross-tab stream bleed** (`src/modules/webui/assets/js/core/store/feed.ts`, `feed/stream.ts`, `feed/turn.ts`, `feed/core.ts`): streaming/turn/tool bookkeeping moved from one global cursor to a per-feed state (`streamStateFor(feed)`), keyed by the tab's feed element. With two sessions streaming at once, text, reasoning, the tool map (`pendingArgs`/`toolNodes`, where ids like `t1` collide across runners) and turn accumulators no longer bleed into the active tab. `finishMd`/`finishThink`/`flushRun`/`resetTurnText` are now session-scoped.
+- **Stale Settings after slash-command config writes** (`src/modules/webui/chat/commands-shared.ts`, `settings/config-api.ts`, `assets/app.ts`): config writes now broadcast a `config` SSE event; the client re-reads `/api/config`, so the open Settings panel and composer selectors update immediately (`/verbose`, `/config`, `/reasoning`, …) instead of only after a reload.
+- **Interrupted turn reported as "ok"** (`src/core/agent.ts`, `src/core/types.ts`, `src/modules/webui/session/run-agent.ts`): `AgentResult.interrupted` is set on `shutdown`/AbortError and forwarded in `turn_end`; the feed shows `stopped` (not `turn end · ok`) and success is no longer reported for an aborted turn.
+- **Context probe label** (`src/modules/webui/assets/js/feed/sidebar.ts`): the probe's "configured" value now uses the true configured window (`h.contextWindow`) instead of the history budget (`h.contextLimit`, ~75%), which made a 1000K config read as "750.0K configured".
+- **Tabs lost on reload** (`src/modules/webui/assets/js/session/tabs.ts`, `assets/app.ts`): the set of open session tabs and the active one are persisted to `localStorage` (`mma-open-tabs`) and restored on boot before `refresh()`; the URL `?session=` still wins as the active tab for deep links.
+
 ## [2.35.1] - 2026-10-08
 
 Closing the last tab in `mma web` now resets the session instead of leaving a

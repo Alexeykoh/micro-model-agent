@@ -137,7 +137,7 @@ function usageSessionRow(sessionId: string): HTMLElement {
 export function renderUsage(h: Dict): void {
   const cfg = settings.config || {};
   const sig = JSON.stringify([
-    h.sessionId, h.model, h.contextUsed, h.contextLimit, h.cacheHitRate, h.costUsd,
+    h.sessionId, h.model, h.contextUsed, h.contextLimit, h.contextWindow, h.cacheHitRate, h.costUsd,
     h.compactionCount, h.contextQuality, h.contextProbe, h.contextBreakdown, cfg.model, cfg.contextWindow,
     I18N.locale,
   ]);
@@ -161,14 +161,16 @@ export function renderUsage(h: Dict): void {
   const q = typeof h.contextQuality === "number" ? h.contextQuality : null;
   usageEl.appendChild(usageRow(t("web.usage.quality"), q != null ? Math.round(q) + "%" : "—", q != null ? "" : "dim"));
 
-  // Context probe: real LM Studio loaded context vs configured. Pending/absent
+  // Context probe: real backend loaded context vs the configured window.
+  // `contextLimit` is the history budget (~75%), NOT the window — comparing
+  // against it made a 1000K config read as "750.0K configured". Pending/absent
   // renders a dim dash; loaded < configured warns.
   let probeText = "—";
   let probeCls = "dim";
   const probe = h.contextProbe;
   if (probe && typeof probe.actual === "number") {
     const actual = fmtTokens(probe.actual);
-    const configured = h.contextLimit || cfg.contextWindow || null;
+    const configured = h.contextWindow || cfg.contextWindow || null;
     if (configured && probe.actual < configured) {
       probeText = t("web.usage.probe_low", { actual, configured: fmtTokens(configured) });
       probeCls = "wn";

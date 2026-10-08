@@ -8,7 +8,7 @@
 import type { AppConfig } from "../../../config/types";
 import { setLocale } from "../../../i18n/index";
 import { setConfigValue } from "../../../config/registry";
-import type { SessionStore, ConfigStore, RuntimeState } from "../state";
+import { broadcast, type SessionStore, type ConfigStore, type SseTransport, type RuntimeState } from "../state";
 
 /** Вывод строки в ленту команды. */
 export type Out = (line: string) => void;
@@ -57,7 +57,7 @@ export async function applyConfigWrite(
   name: string,
   value: string,
   out: Out,
-  state: SessionStore & ConfigStore & RuntimeState,
+  state: SessionStore & ConfigStore & RuntimeState & SseTransport,
 ): Promise<void> {
   // Конфиг меняет живой раннер через `reconfigure` (resize контекста, подмена
   // провайдера) — во время хода это гонка. Читающие команды (`/status`,
@@ -88,5 +88,9 @@ export async function applyConfigWrite(
       note = `${note}; reconfigure failed`;
     }
   }
+  // Клиенты держат собственную копию конфига (панель настроек, селекторы);
+  // команда пишет конфиг мгновенно, поэтому шлём событие — иначе настройки
+  // показывали бы устаревшее значение до перезагрузки страницы.
+  broadcast({ type: "config", ts: Date.now() }, state);
   out(`${result.key} = ${result.display} · ${note}`);
 }

@@ -128,13 +128,26 @@ describe("webui assets", () => {
     expect(js(a)).toMatch(/kind === "tool" && verbosity\(\) === "quiet"\)\s*return;/);
   });
 
-  it("persists the active session in the URL and restores it on boot", () => {
+  it("compares the context probe against the configured window, not the history budget", () => {
+    const a = loadAssets();
+    const sidebar = a.jsModules?.["js/feed/sidebar.js"] || "";
+    expect(sidebar).toContain("const configured = h.contextWindow || cfg.contextWindow");
+    expect(sidebar).not.toContain("const configured = h.contextLimit");
+  });
+
+  it("persists open session tabs and restores them on boot", () => {
     const a = loadAssets();
     expect(js(a)).toContain("replaceState");
     expect(js(a)).toContain('searchParams.set("session"');
     expect(js(a)).toContain('searchParams.delete("session")');
     expect(js(a)).toContain('URLSearchParams(location.search).get("session")');
-    expect(js(a)).toMatch(/openTab\(initialSession/);
+    // The set of open tabs survives a reload (localStorage) and is restored
+    // before `refresh()`; the URL `?session=` wins as the active tab.
+    const tabs = a.jsModules?.["js/session/tabs.js"] || "";
+    expect(a.js).toContain("readSavedTabs");
+    expect(a.js).toContain("restoreTabs");
+    expect(tabs).toContain("mma-open-tabs");
+    expect(js(a)).toMatch(/openTab\(ids\[0\]/);
     expect(js(a)).toMatch(/!feedHasContent\(tab\.feed\) \|\| tab\.historyFailed\)\s*tab\.historyLoaded = false;/);
   });
 

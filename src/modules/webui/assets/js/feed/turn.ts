@@ -2,7 +2,7 @@
 // Extracted from `feed.js`; `feed.js` re-exports this module's public surface.
 import { msgs, el, icon, announce } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
-import { feed as feedState, tabs as tabState, session } from "../store.js";
+import { streamStateFor, tabs as tabState, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import {
   FILE_TOOLS, OPENABLE_TOOLS, LINK_TOOLS,
@@ -21,9 +21,10 @@ export function onToolStart(data: Dict): void {
   clearBusy(feed);
   if (!feed) return;
   clearEmpty(feed);
-  finishMd();
-  finishThink();
-  feedState.pendingArgs.set(data.toolCallId, data.args || {});
+  finishMd(feed);
+  finishThink(feed);
+  const st = streamStateFor(feed);
+  st.pendingArgs.set(data.toolCallId, data.args || {});
   const line = el("div", "act " + categoryOf(data.name));
   line.appendChild(el("span", "g", "◇"));
   line.appendChild(el("span", "lab", labelOf(data.name)));
@@ -36,9 +37,9 @@ export function onToolStart(data: Dict): void {
   line.appendChild(status);
   line.classList.add("running");
   appendTo(feed, line);
-  feedState.toolNodes.set(data.toolCallId, { status, line });
-  if (categoryOf(data.name) !== "recon") feedState.runReconOnly = false;
-  feedState.runCount++;
+  st.toolNodes.set(data.toolCallId, { status, line });
+  if (categoryOf(data.name) !== "recon") st.runReconOnly = false;
+  st.runCount++;
 }
 
 function renderToolOutput(line: HTMLElement | null, text: unknown): void {
@@ -186,21 +187,23 @@ export function onToolEnd(data: Dict): void {
 }
 
 function finishToolEnd(data: Dict): void {
-  const node = feedState.toolNodes.get(data.toolCallId);
+  const feed = feedForEvent(data.sessionId);
+  const st = feed ? streamStateFor(feed) : null;
+  const node = st ? st.toolNodes.get(data.toolCallId) : undefined;
   const line = node ? node.line : null;
-  if (node) {
+  if (node && st) {
     node.line.classList.remove("running");
     const dur = formatMs(data.durationMs);
     node.status.textContent = data.success ? " ✓" + (dur ? " " + dur : "") : " ✗" + (dur ? " " + dur : "");
     if (!data.success) {
       node.status.classList.add("fail");
-      feedState.runFails++;
-      feedState.runReconOnly = false;
+      st.runFails++;
+      st.runReconOnly = false;
     }
+    st.toolNodes.delete(data.toolCallId);
   }
-  feedState.toolNodes.delete(data.toolCallId);
-  const args = feedState.pendingArgs.get(data.toolCallId) || {};
-  feedState.pendingArgs.delete(data.toolCallId);
+  const args = (st ? st.pendingArgs.get(data.toolCallId) : undefined) || {};
+  if (st) st.pendingArgs.delete(data.toolCallId);
   // File tools render as a single filerow (viewer link + copy): the `.act`
   // line from `onToolStart` is replaced, otherwise the feed shows the same
   // action twice (act + filerow). Without a path `cardFor` renders nothing,
@@ -211,13 +214,13 @@ function finishToolEnd(data: Dict): void {
     if (verbosity() === "quiet") {
       if (data.success) {
         const card = cardFor(data.name, args, data.sessionId, data.success);
-        if (card) feedState.runNodes.push(card);
-        feedState.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
+        if (card && st) st.runNodes.push(card);
+        if (st) st.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
       } else {
         const card = cardFor(data.name, args, data.sessionId, data.success);
         const cause = firstOutputLine(data.output);
         if (cause) insertAfter(card || line, el("div", "detail", "↳ " + cause));
-        if (card) feedState.runNodes.push(card);
+        if (card && st) st.runNodes.push(card);
       }
       return;
     }
@@ -230,10 +233,10 @@ function finishToolEnd(data: Dict): void {
     // actions can fold at the next segment; a failure keeps its line and adds
     // a single `↳` cause instead of the whole model-facing body.
     if (data.success) {
-      if (line) feedState.runNodes.push(line);
+      if (line && st) st.runNodes.push(line);
       const card = cardFor(data.name, args, data.sessionId, data.success);
-      if (card) feedState.runNodes.push(card);
-      feedState.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
+      if (card && st) st.runNodes.push(card);
+      if (st) st.runDuration += typeof data.durationMs === "number" ? data.durationMs : 0;
     } else {
       const cause = firstOutputLine(data.output);
       if (cause) insertAfter(line, el("div", "detail", "↳ " + cause));
@@ -248,18 +251,21 @@ export function onTurnEnd(data: Dict): void {
   session.busy = false;
   const feed = feedForEvent(data.sessionId);
   clearBusy(feed);
-  finishThink();
-  finishMd();
-  flushRun();
+  finishThink(feed);
+  finishMd(feed);
+  flushRun(feed);
+  const st = feed ? streamStateFor(feed) : null;
   // Interrupted tools never get `tool_end`: drop their pulse so nothing
   // looks alive after the turn is over.
-  feedState.toolNodes.forEach((n) => {
-    if (n && n.line && feed && n.line.parentNode === feed) n.line.classList.remove("running");
-  });
+  if (st) {
+    st.toolNodes.forEach((n) => {
+      if (n && n.line && feed && n.line.parentNode === feed) n.line.classList.remove("running");
+    });
+  }
   const owner = tabState.tabs.find((x) => x.id === data.sessionId);
   if (owner) owner.planCard = null;
-  if (!feed) {
-    resetTurnText();
+  if (!feed || !st) {
+    resetTurnText(feed);
     return;
   }
   if (data.success === false) {
@@ -280,14 +286,16 @@ export function onTurnEnd(data: Dict): void {
     // The visible turn-end banner is redundant noise; keep the screen-reader cue.
     announce(t("web.turn.end", { count: data.toolCalls || 0 }));
   }
-  const plain = feedState.turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
-  appendActionsRow(feed, plain, feedState.turnMd);
-  resetTurnText();
+  const plain = st.turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
+  appendActionsRow(feed, plain, st.turnMd);
+  resetTurnText(feed);
 }
 
-export function resetTurnText(): void {
-  feedState.turnMd = "";
-  feedState.turnRoots = [];
+export function resetTurnText(feed?: HTMLElement | null): void {
+  if (!feed) return;
+  const st = streamStateFor(feed);
+  st.turnMd = "";
+  st.turnRoots = [];
 }
 
 export function onErrorEvent(data: Dict): void {
