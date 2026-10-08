@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentResult, ToolEvent } from "../../src/core/types";
+import type { SessionRunner } from "../../src/core/bootstrap/session-runner";
 import type { AppConfig } from "../../src/config/types";
 import { startAgentService } from "../../src/modules/service/module";
 import type { ServiceDeps } from "../../src/modules/service/state";
@@ -65,6 +68,24 @@ function abortableAgent() {
   };
 }
 
+/** Агент, эмитящий один tool start/end указанного имени. */
+function toolCallingAgent(tool: string) {
+  return {
+    async run(
+      _input: string,
+      _onChunk?: unknown,
+      _onMeta?: unknown,
+      onTool?: (ev: ToolEvent) => void,
+    ): Promise<AgentResult> {
+      onTool?.({ type: "start", tool, args: {} });
+      onTool?.({ type: "end", tool, args: {}, output: "denied", error: true });
+      return { success: true, text: "done", iterationCount: 1 };
+    },
+    setPromptIO() {},
+    shutdown() {},
+  };
+}
+
 /** Медленный агент: держит ход до resolve гейта. */
 function slowAgent() {
   let release!: () => void;
@@ -87,6 +108,18 @@ function slowAgent() {
 
 function makeDeps(agent: unknown, patch: (c: AppConfig) => void = () => {}): ServiceDeps {
   return makeServiceDeps({ dir, agent, patch });
+}
+
+/** Депы, где фабрика раннера отдаёт созданный раннер в колбэк (для инспекции ctx). */
+function depsWithRunner(agent: unknown, onRunner: (r: SessionRunner) => void): ServiceDeps {
+  const deps = makeServiceDeps({ dir, agent });
+  const factory = deps.spawnRunner!;
+  deps.spawnRunner = (id) => {
+    const runner = factory(id);
+    onRunner(runner);
+    return runner;
+  };
+  return deps;
 }
 
 beforeEach(() => {
@@ -323,6 +356,99 @@ describe("tasks api", () => {
     expect(calls[0].headers["X-Mma-Signature"]).toBe(
       signature("s3", calls[0].headers["X-Mma-Timestamp"], calls[0].body),
     );
+  });
+
+  it("applies the job toolAllowlist to the runner and restores it", async () => {
+    let applied: string[] | undefined;
+    const deps = depsWithRunner(fastAgent("ok"), (runner) => {
+      let value: string[] | undefined;
+      Object.defineProperty(runner.toolCtx, "toolAllowlist", {
+        configurable: true,
+        get: () => value,
+        set: (next: string[] | undefined) => {
+          value = next;
+          if (next) applied = next;
+        },
+      });
+    });
+    const url = await boot(deps);
+    const sid = await firstSessionId(url);
+    const res = await submit(url, sid, {
+      input: "x",
+      mode: "job",
+      wait: true,
+      toolAllowlist: ["read_file"],
+    });
+    expect(res.json.status).toBe("succeeded");
+    expect(applied).toEqual(["read_file"]);
+  });
+
+  it("does not restrict tools for interactive tasks", async () => {
+    let applied: string[] | undefined;
+    const deps = depsWithRunner(fastAgent("ok"), (runner) => {
+      let value: string[] | undefined;
+      Object.defineProperty(runner.toolCtx, "toolAllowlist", {
+        configurable: true,
+        get: () => value,
+        set: (next: string[] | undefined) => {
+          value = next;
+          if (next) applied = next;
+        },
+      });
+    });
+    const url = await boot(deps);
+    const sid = await firstSessionId(url);
+    const res = await submit(url, sid, {
+      input: "x",
+      mode: "interactive",
+      wait: true,
+      toolAllowlist: ["read_file"],
+    });
+    expect(res.json.status).toBe("succeeded");
+    expect(applied).toBeUndefined();
+  });
+
+  it("fails a job that calls a tool outside the allowlist", async () => {
+    const url = await boot(makeDeps(toolCallingAgent("bash")));
+    const sid = await firstSessionId(url);
+    const res = await submit(url, sid, {
+      input: "x",
+      mode: "job",
+      wait: true,
+      toolAllowlist: ["read_file"],
+    });
+    expect(res.json.status).toBe("failed");
+    expect(String((res.json.error as { type: string }).type)).toContain("tool-forbidden");
+  });
+
+  it("fails a job that calls an interactive tool", async () => {
+    const url = await boot(makeDeps(toolCallingAgent("question")));
+    const sid = await firstSessionId(url);
+    const res = await submit(url, sid, { input: "x", mode: "job", wait: true });
+    expect(res.json.status).toBe("failed");
+    expect(String((res.json.error as { type: string }).type)).toContain("tool-forbidden");
+  });
+
+  it("logs the tenant/run context to the session log", async () => {
+    const url = await boot(makeDeps(fastAgent("ok")));
+    const sid = await firstSessionId(url);
+    await submit(
+      url,
+      sid,
+      { input: "x", mode: "job", wait: true },
+      { "X-Mma-Tenant": "acme", "X-Mma-Principal": "u1", "X-Mma-Run": "run-7" },
+    );
+    const logPath = join(dir, sid, "session.jsonl");
+    const entries = readFileSync(logPath, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const serviceTask = entries.find((e) => e.type === "service_task");
+    expect(serviceTask).toBeTruthy();
+    expect(serviceTask?.tenantId).toBe("acme");
+    expect(serviceTask?.principalId).toBe("u1");
+    expect(serviceTask?.runId).toBe("run-7");
+    expect(typeof serviceTask?.jobId).toBe("string");
   });
 
   it("404s an unknown task", async () => {

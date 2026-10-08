@@ -73,6 +73,37 @@ describe("webhook delivery", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("omits the signature header when no secret is configured", async () => {
+    const { calls, fetchImpl } = captureFetch([200]);
+    await deliverWebhook({
+      url: "https://example.com/hook",
+      eventId: "evt_1",
+      body: "{}",
+      timeoutMs: 1000,
+      fetchImpl,
+      sleep: noSleep,
+    });
+    expect(calls[0].headers["X-Mma-Signature"]).toBeUndefined();
+  });
+
+  it("gives up after the timeout aborts the request", async () => {
+    const fetchImpl = ((_url: string | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      })) as unknown as typeof fetch;
+    const result = await deliverWebhook({
+      url: "https://example.com/hook",
+      eventId: "evt_1",
+      body: "{}",
+      timeoutMs: 20,
+      maxAttempts: 1,
+      fetchImpl,
+      sleep: noSleep,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.attempts).toBe(1);
+  });
+
   it("retries 429", async () => {
     const { calls, fetchImpl } = captureFetch([429, 200]);
     const result = await deliverWebhook({

@@ -27,6 +27,13 @@ versioned contract, without touching the agent loop, REPL or `mma web`.
 
 - **`RunPool`** (`src/modules/webui/session/session-pool.ts`): optional `maxQueue` constructor parameter (defaults to the previous `MAX_QUEUE_LENGTH`); no behavior change for `mma web`.
 
+### Fixed
+
+- **Job `toolAllowlist` is now enforced** (`src/modules/service/api/tasks-api.ts`): a `job` task's `toolAllowlist` is applied strictly to the runner's `ToolContext` (tags/`alwaysOn` do not bypass it) and restored after the turn; `interactive` is unrestricted.
+- **`tool-forbidden` surfaced** (`src/modules/service/runtime/run-task.ts`): a job that calls an interactive tool or a tool outside its allowlist is failed with `error.type` = `…/errors/tool-forbidden` (was a generic failure).
+- **Interactive cancel no longer hangs** (`src/modules/service/runtime/prompt-io.ts`, `api/tasks-api.ts`, `api/events-api.ts`): `POST /v1/tasks/:jobId/cancel` and closing the SSE stream of an interactive task now resolve its pending `question`, so `agent.run` does not block forever and the session slot is freed.
+- **Tenant/run audit** (`src/modules/service/api/tasks-api.ts`, `src/modules/session/store.ts`, `src/modules/webui/session/log-api.ts`): auth headers `X-Mma-Tenant` / `X-Mma-Principal` / `X-Mma-Run` / `X-Mma-Tier` / `X-Mma-Scopes` are resolved (never from the body) and written to `session.jsonl` as a `service_task` entry.
+
 ## [2.34.1] - 2026-10-08
 
 Test-infrastructure health (no product behaviour change): the e2e and

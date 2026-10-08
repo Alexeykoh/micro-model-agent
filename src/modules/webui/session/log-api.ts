@@ -41,6 +41,7 @@ const ALLOWED_TYPES = new Set<string>([
   "user",
   "error",
   "context",
+  "service_task",
 ]);
 
 const DEFAULT_LIMIT = 100;
@@ -51,7 +52,19 @@ function scrub(text: string | undefined): string | undefined {
 }
 
 /** Строковые поля с именами 1:1 в `SessionLogEntry` и `LogTailEntry`. */
-type StrKey = "status" | "kind" | "provider" | "model" | "tool" | "title" | "subtaskId" | "expertTag";
+type StrKey =
+  | "status"
+  | "kind"
+  | "provider"
+  | "model"
+  | "tool"
+  | "title"
+  | "subtaskId"
+  | "expertTag"
+  | "tenantId"
+  | "principalId"
+  | "runId"
+  | "jobId";
 /** Числовые поля с именами 1:1. */
 type NumKey =
   | "iteration"
@@ -69,6 +82,10 @@ const STR_FIELDS: readonly StrKey[] = [
   "title",
   "subtaskId",
   "expertTag",
+  "tenantId",
+  "principalId",
+  "runId",
+  "jobId",
 ];
 const NUM_FIELDS: readonly NumKey[] = [
   "iteration",
@@ -100,6 +117,10 @@ export interface LogTailEntry {
   subtaskId?: string;
   expertTag?: string;
   cycle?: number;
+  tenantId?: string;
+  principalId?: string;
+  runId?: string;
+  jobId?: string;
 }
 
 function copyStr(out: LogTailEntry, e: SessionLogEntry, f: StrKey): void {

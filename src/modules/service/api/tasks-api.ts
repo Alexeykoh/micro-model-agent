@@ -25,6 +25,7 @@ import {
   type TaskMode,
   type TaskOutputSpec,
   type TaskRecord,
+  type TenantContext,
 } from "../runtime/task-registry";
 import type { JobObject } from "../types";
 import type { AgentServiceState } from "../state";
@@ -96,15 +97,7 @@ async function submit(
   s: AgentServiceState,
   sessionId: string,
 ): Promise<boolean> {
-  const manager = s.deps.sessionManager;
-  if (!manager) {
-    sendProblem(res, problem({ type: "internal", title: "sessions unavailable", status: 503 }));
-    return true;
-  }
-  if (!manager.get(sessionId)) {
-    sendProblem(res, problem({ type: "noSession", title: "session not found", status: 404, detail: sessionId }));
-    return true;
-  }
+  if (!ensureSession(s, res, sessionId)) return true;
 
   const body = await readJson(req);
   const parsed = parseSubmitBody(body);
@@ -113,7 +106,8 @@ async function submit(
     return true;
   }
 
-  const principal = principalOf(req);
+  const tenant = tenantOf(req);
+  const principal = tenant.principalId ?? "anon";
   const idemKey = headerString(req, "idempotency-key");
   const bodyHash = hashBody(body);
 
@@ -124,7 +118,7 @@ async function submit(
   }
   if (early.kind === "hit") return respondSubmit(res, s, early.task);
 
-  const created = createAndDispatch(s, sessionId, parsed.params);
+  const created = createAndDispatch(s, sessionId, parsed.params, tenant);
   if (!created.ok) {
     sendProblem(res, problem({ type: "queueFull", title: "session queue is full", status: 429, retriable: true, retryAfterMs: 1000 }));
     return true;
@@ -133,6 +127,20 @@ async function submit(
   return parsed.params.wait
     ? await respondSubmitWait(res, s, created.task)
     : respondSubmit(res, s, created.task);
+}
+
+/** Проверяет наличие менеджера сессий и самой сессии; пишет Problem при провале. */
+function ensureSession(s: AgentServiceState, res: ServerResponse, sessionId: string): boolean {
+  const manager = s.deps.sessionManager;
+  if (!manager) {
+    sendProblem(res, problem({ type: "internal", title: "sessions unavailable", status: 503 }));
+    return false;
+  }
+  if (!manager.get(sessionId)) {
+    sendProblem(res, problem({ type: "noSession", title: "session not found", status: 404, detail: sessionId }));
+    return false;
+  }
+  return true;
 }
 
 /** Итог проверки Idempotency-Key: нет ключа / hit (готовая задача) / конфликт тела. */
@@ -159,9 +167,10 @@ function createAndDispatch(
   s: AgentServiceState,
   sessionId: string,
   params: SubmitParams,
+  tenant: TenantContext,
 ): { ok: true; task: TaskRecord } | { ok: false } {
   if (queueFull(s, sessionId)) return { ok: false };
-  const task = s.tasks.create(createParams(sessionId, params));
+  const task = s.tasks.create(createParams(sessionId, params, tenant));
   if (s.pool.isBusy(sessionId)) {
     if (!enqueueTask(s, task)) return { ok: false };
   } else {
@@ -219,7 +228,7 @@ function parseTimeout(raw: unknown): { ok: true; value?: number } | { ok: false 
   return value === undefined ? { ok: false } : { ok: true, value };
 }
 
-function createParams(sessionId: string, p: SubmitParams): TaskCreateParams {
+function createParams(sessionId: string, p: SubmitParams, tenant: TenantContext): TaskCreateParams {
   return {
     sessionId,
     mode: p.mode,
@@ -229,6 +238,7 @@ function createParams(sessionId: string, p: SubmitParams): TaskCreateParams {
     ...(p.timeoutMs !== undefined ? { timeoutMs: p.timeoutMs } : {}),
     ...(p.callbackUrl ? { callbackUrl: p.callbackUrl } : {}),
     ...(p.externalRef ? { externalRef: p.externalRef } : {}),
+    ...(Object.keys(tenant).length ? { tenant } : {}),
   };
 }
 
@@ -301,6 +311,8 @@ async function startTask(s: AgentServiceState, task: TaskRecord): Promise<void> 
   }
 
   if (task.mode === "interactive") installServicePromptIO(s, task, runner);
+  logTaskContext(runner, task);
+  const restoreTools = restrictTools(runner, task);
 
   const forwarder = makeServiceForwarder({
     emit: (type, data) => emitEvent(s, task, type, data),
@@ -314,22 +326,89 @@ async function startTask(s: AgentServiceState, task: TaskRecord): Promise<void> 
       forwarder,
       onPlan: (plan) => emitEvent(s, task, "plan", { steps: plan.steps, currentIndex: plan.currentIndex }),
     });
-    if (isCancelled(s, task)) return;
-    if (disarmTimeout()) {
-      finishFailure(s, task, problem({ type: "timeout", title: "task timed out", status: 408, detail: `timeoutMs=${task.timeoutMs ?? 0}` }));
-      return;
-    }
-    settleTask(s, task, result);
+    concludeTask(s, task, result, disarmTimeout());
   } catch (err) {
     if (!isCancelled(s, task)) {
       finishFailure(s, task, problem({ type: "internal", title: "task failed", status: 500, detail: errMsg(err) }));
     }
   } finally {
     disarmTimeout();
+    restoreTools();
     // Слот свободен: терминальный ход завершён; дренируем очередь сессии.
     s.pool.forceRelease(task.sessionId);
     drain(s, task.sessionId);
   }
+}
+
+/**
+ * Job-режим: строгий allowlist тулов (спека §5.2, ось Authz). Строгий — теги и
+ * alwaysOn не обходят (см. `ToolContext.toolAllowlist`). Возвращает функцию
+ * восстановления прежнего значения после хода.
+ */
+function restrictTools(runner: SessionRunner, task: TaskRecord): () => void {
+  if (task.mode !== "job" || !task.toolAllowlist?.length) return () => {};
+  const prior = runner.toolCtx.toolAllowlist;
+  runner.toolCtx.toolAllowlist = task.toolAllowlist;
+  return () => {
+    runner.toolCtx.toolAllowlist = prior;
+  };
+}
+
+/** Терминальный переход по итогу хода: отмена/таймаут/успех/провал. */
+function concludeTask(
+  s: AgentServiceState,
+  task: TaskRecord,
+  result: RunTaskResult,
+  disarmed: boolean,
+): void {
+  if (isCancelled(s, task)) return;
+  if (disarmed) {
+    finishFailure(
+      s,
+      task,
+      problem({ type: "timeout", title: "task timed out", status: 408, detail: `timeoutMs=${task.timeoutMs ?? 0}` }),
+    );
+    return;
+  }
+  settleTask(s, task, result);
+}
+
+/** Пишет tenant/run-контекст задачи в журнал сессии (аудит, спека §10.3). */
+function logTaskContext(runner: SessionRunner, task: TaskRecord): void {
+  const tenant = task.tenant ?? {};
+  const parts = [`task ${task.jobId} (${task.mode})`, ...tenantParts(tenant)];
+  if (task.toolAllowlist?.length) parts.push(`allowlist=${task.toolAllowlist.join(",")}`);
+  try {
+    runner.sessionManager.appendLog({
+      ts: new Date().toISOString(),
+      type: "service_task",
+      content: parts.join(" "),
+      ...tenantFields(tenant),
+      jobId: task.jobId,
+    });
+  } catch {
+    /* журнал best-effort: не роняем ход из-за аудита */
+  }
+}
+
+/** Человекочитаемые tenant-сегменты для `content` журнала. */
+function tenantParts(tenant: TenantContext): string[] {
+  const parts: string[] = [];
+  if (tenant.tenantId) parts.push(`tenant=${tenant.tenantId}`);
+  if (tenant.principalId) parts.push(`principal=${tenant.principalId}`);
+  if (tenant.runId) parts.push(`run=${tenant.runId}`);
+  return parts;
+}
+
+/** Структурные tenant-поля записи журнала. */
+function tenantFields(
+  tenant: TenantContext,
+): Pick<import("../../session/store").SessionLogEntry, "tenantId" | "principalId" | "runId"> {
+  return {
+    ...(tenant.tenantId ? { tenantId: tenant.tenantId } : {}),
+    ...(tenant.principalId ? { principalId: tenant.principalId } : {}),
+    ...(tenant.runId ? { runId: tenant.runId } : {}),
+  };
 }
 
 /** Взводит таймаут задачи; возвращает функцию «снять таймер → сработал ли». */
@@ -352,6 +431,14 @@ function armTimeout(task: TaskRecord, runner: SessionRunner): () => boolean {
 
 /** Терминальная запись задачи по результату хода (успех/структурный провал/сбой). */
 function settleTask(s: AgentServiceState, task: TaskRecord, result: RunTaskResult): void {
+  if (result.forbidden) {
+    finishFailure(
+      s,
+      task,
+      problem({ type: "toolForbidden", title: "interactive tool not allowed in job mode", status: 403 }),
+    );
+    return;
+  }
   if (result.success) {
     const resultObj = { text: result.text, ...(result.data !== undefined ? { data: result.data } : {}) };
     s.tasks.finish(task.jobId, { status: "succeeded", result: resultObj, usage: result.usage });
@@ -502,9 +589,20 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   return (await readJsonBody(req, MAX_JSON_BYTES)) ?? {};
 }
 
-/** Principal из auth-заголовка control plane (иначе `anon`). */
-function principalOf(req: IncomingMessage): string {
-  return headerString(req, "x-mma-principal") ?? "anon";
+/** Tenant/run-контекст из auth-заголовков control plane (никогда из тела, §11). */
+function tenantOf(req: IncomingMessage): TenantContext {
+  const tenantId = headerString(req, "x-mma-tenant");
+  const principalId = headerString(req, "x-mma-principal");
+  const runId = headerString(req, "x-mma-run");
+  const tier = headerString(req, "x-mma-tier");
+  const scopesRaw = headerString(req, "x-mma-scopes");
+  return {
+    ...(tenantId ? { tenantId } : {}),
+    ...(principalId ? { principalId } : {}),
+    ...(runId ? { runId } : {}),
+    ...(tier ? { tier } : {}),
+    ...(scopesRaw ? { scopes: scopesRaw.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
+  };
 }
 
 /** Хеш тела для сравнения Idempotency-Key. */
