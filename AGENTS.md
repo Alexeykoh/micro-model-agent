@@ -1424,10 +1424,11 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **Тесты:** `tests/service/*` (HTTP-клиент на `node:http`, чтобы не ловить
   протечку `global.fetch` из других suites).
 
-### Loader Faces in the Web UI (unreleased)
+### MMART — the Web Mascot (Loader Faces, unreleased)
 
 Спека: [docs/specs/2026-10-08-loader-webui-design.md](./docs/specs/2026-10-08-loader-webui-design.md).
 Агент получил «лицо» (squircle + анимированные глаза), одно на все поверхности.
+**Маскот называется MMART** (MMA + art) — экспорт `MMART_NAME` в `loader.ts`.
 
 - **Компонент** `src/modules/webui/assets/js/loader.ts`: `createFace(state,size)`,
   `setFaceState`, чистая `loaderStateFor(signal)` / `toolState(name)`, `initCursor()`
@@ -1442,6 +1443,28 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
   завершении `boot()` (и при передаче экрана мастеру setup). `initCursor()`
   вызывается на старте boot. У `.mdl` мягкая тень (`box-shadow`, отдельная для
   light-темы).
+- **Приветствие по клику** — клик **непосредственно по лицу** (или его частям,
+  `.closest(".mdl.poke")`) поднимает локализованное облачко `web.loader.greet`
+  («Привет! Я MMART» / «Hi! I'm MMART») на 2.2с; повторный клик перезапускает
+  таймер, а не штабелирует (`WeakMap` таймеров в `loader.ts`). **Любой другой клик
+  по странице только моргает** — приветствие не пасхалка всего документа.
+  Лицо в работе (не `.poke`) не приветствует. Текст инжектится через
+  `setGreetResolver(() => t("web.loader.greet"))` из `app.ts` (в `applyStaticI18n`,
+  поэтому переживает смену локали) — i18n в `loader.ts` не импортируется,
+  иначе ломается импорт-тайм в тестах (i18n → api трогает `location`).
+  Размер шрифта облачка имеет нижний порог (`max(12px, …)`): на маленьком лице
+  (22px) масштаб давал нечитаемые 4.6px.
+- **Полное покрытие тулов** в `TOOL_STATE` — у каждого поведенческого класса свой
+  стейт, а не молчаливый `run`: `approve`/`question` → `ask`, `web_browse` → `web`,
+  `load_skill`/`session_info` → `read`, `search_history` → `find`,
+  `define_capability`/`remember` → `create`, `set_thinking` → `think`,
+  `meet_done` → `done`.
+- **SSE-реакции** (`app.ts`, рядом с `faceEvent`): `retract` → `error` (отозванный
+  черновик = забракованное утверждение), `index` → `find` (переиндексация),
+  `setup_done` → `done`. Фоновые бродкасты (`usage`/`state`/`config`/`files`/
+  `sessions`/`plugins`/`log`) в `loaderStateFor` отображаются в `idle`, но
+  **сознательно не пробрасываются в `faceEvent`** — это не активность агента,
+  лицо не должно дёргаться на них.
 - **Лента** — `feed/core.ts showBusy()` строит `.busy` с лицом (`think`) вместо `✦`.
 - **Activity rail** — без лица: возвращён `✦`-лейбл (фаза/счётчики), состояние
   показывает постоянное лицо в композере.
@@ -1455,8 +1478,9 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **Trace** — `.trc-face` в `#pane-trace`: лицо сессии (`initTraceFace`), состояние
   по событиям (`traceFaceFor` в `sidebarTraceEvent`), возврат в idle по
   `sidebarBusy(false)`.
-- **i18n**: `web.loader.boot` (en+ru). Тест: `tests/webui-loader.test.ts`
-  (маппинг + DOM-структура + наличие `#bootSplash`).
+- **i18n**: `web.loader.boot`, `web.loader.greet` (en+ru). Тест:
+  `tests/webui-loader.test.ts` (маппинг, покрытие тулов, фоновые бродкасты,
+  DOM-структура, `#bootSplash`, приветствие только по клику на лицо).
 
 ### Web Parallel-Turn & Settings Consistency (2.35.2)
 

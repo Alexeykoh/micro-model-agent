@@ -1649,6 +1649,7 @@
   "web.rail.working": "working",
   "web.rail.composing": "composing",
   "web.loader.boot": "connecting to provider…",
+  "web.loader.greet": "Hi! I'm MMART",
   "web.rail.no_plan": "no plan",
   "web.rail.step_of": "step {cur}/{total}",
   "web.rail.last": "last:",

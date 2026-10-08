@@ -1,7 +1,8 @@
 // Loader faces — a small squircle "agent presence": eyes + extra effects,
 // driven entirely by CSS state classes. One component for the boot splash,
 // the in-feed busy line, the activity rail and the first-run wizard.
-// See docs/specs/2026-10-08-loader-webui-design.md.
+// The mascot is called **MMART** (MMA + art): clicking it pops a localized
+// greeting bubble. See docs/specs/2026-10-08-loader-webui-design.md.
 
 export type FaceState =
   | "idle" | "think" | "read" | "find" | "web" | "edit" | "type" | "create"
@@ -34,21 +35,31 @@ const FACE_CLASS: Record<FaceState, string> = {
   load: "c-dim st-load",
 };
 
-// Tool name → loader state (matches STYLE.md tool categories).
+// Tool name → loader state (matches STYLE.md tool categories). Every core
+// tool has a state, so the face never falls back to a generic "run" for a
+// known behavioural category (ask, research, memory, introspection).
 const TOOL_STATE: Record<string, FaceState> = {
   read_file: "read", list_dir: "read", file_info: "read",
+  load_skill: "read", session_info: "read",
   grep: "find", glob: "find", project_map: "find", chunk_query: "find",
-  history: "find", recall: "find",
-  web_search: "web", web_fetch: "web", download_file: "web",
+  history: "find", recall: "find", search_history: "find",
+  web_search: "web", web_fetch: "web", download_file: "web", web_browse: "web",
   write_file: "create", create_dir: "create",
+  define_capability: "create", remember: "create",
   edit_file: "edit", move_file: "edit", delete_file: "edit", attach_image: "edit",
   bash: "run", pipeline_run: "run", process_wait: "run", process_kill: "run",
-  browser: "run", subagent: "run", mcp_call: "run",
+  browser: "run", subagent: "run", mcp_call: "run", enable_tools: "run",
   plan: "plan", todo: "plan", verify: "plan", lsp_check: "plan",
+  set_thinking: "think",
+  approve: "ask", question: "ask",
+  meet_done: "done",
 };
 
 export interface LoaderSignal {
-  type: "phase" | "tool_start" | "tool_end" | "text" | "question" | "turn_end" | "error";
+  type:
+    | "phase" | "tool_start" | "tool_end" | "text" | "question" | "turn_end" | "error"
+    | "retract" | "index" | "setup_done"
+    | "usage" | "state" | "config" | "files" | "sessions" | "plugins" | "log";
   name?: string;
   phase?: string;
   success?: boolean;
@@ -62,13 +73,34 @@ export function toolState(name: string): FaceState {
 export function loaderStateFor(s: LoaderSignal): FaceState {
   switch (s.type) {
     case "turn_end": return s.success === false ? "error" : "done";
-    case "error": return "error";
+    case "error":
+    // A retracted draft is a rejected claim — the face shows the same
+    // "human, fix that" mood as a tool error.
+    case "retract": return "error";
     case "question": return "ask";
     case "text": return "type";
     case "tool_start":
     case "tool_end": return toolState(s.name || "");
+    // Re-indexing is a workspace-wide search.
+    case "index": return "find";
+    case "setup_done": return "done";
+    // Background broadcasts (usage/state/config/files/sessions/plugins/log)
+    // carry no agent activity: the face must NOT move on them, they map to
+    // idle and callers are expected to drop the event instead of animating.
+    case "usage": case "state": case "config": case "files":
+    case "sessions": case "plugins": case "log":
+      return "idle";
     default: return "think";
   }
+}
+
+// ---- MMART: the mascot's identity and its greeting bubble ----
+export const MMART_NAME = "MMART";
+// app.ts injects the localized resolver so this module stays import-time-safe
+// under `bun test` (i18n → api touches `location`, which is undefined there).
+let greetResolver: () => string = () => `Привет! Я ${MMART_NAME}`;
+export function setGreetResolver(fn: () => string): void {
+  greetResolver = fn;
 }
 
 function el(tag: string, cls?: string, text?: string): HTMLElement {
@@ -96,6 +128,7 @@ export function createFace(state: FaceState = "think", size: FaceSize | null = n
   face.append(
     eyes, orb, keys, el("span", "grow"), el("span", "fly"),
     dust, el("span", "q", "?"), el("span", "spark", "✦"), el("span", "star"),
+    el("span", "mdl-tip"),
   );
   setFaceState(face, state);
   return face;
@@ -114,7 +147,28 @@ export function setFaceState(face: HTMLElement | null, state: FaceState): void {
   }
 }
 
-// ---- cursor tracking + click-to-blink for idle faces (`.track` / `.poke`) ----
+// ---- cursor tracking, click-to-blink and the MMART greeting for idle faces
+// (`.track` / `.poke`) ----
+const tipTimers = new WeakMap<HTMLElement, number>();
+
+// Pop the localized greeting above the face. Repeated clicks restart the
+// timer instead of stacking, so the bubble can never stick open.
+function showGreeting(m: HTMLElement): void {
+  const tip = m.querySelector<HTMLElement>(".mdl-tip");
+  if (!tip) return;
+  tip.textContent = greetResolver();
+  m.classList.add("show-tip");
+  const prev = tipTimers.get(m);
+  if (prev !== undefined) window.clearTimeout(prev);
+  tipTimers.set(
+    m,
+    window.setTimeout(() => {
+      m.classList.remove("show-tip");
+      tipTimers.delete(m);
+    }, 2200),
+  );
+}
+
 function trackTargets(sel: string): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(sel));
 }
@@ -145,6 +199,14 @@ function resetLook(): void {
   }
 }
 
+// The click landed on the face itself (its own parts count). Anything else in
+// the document only lets it blink — the greeting is not a page-wide easter egg.
+function clickOnFace(e: MouseEvent): HTMLElement | null {
+  const node = e.target as HTMLElement | null;
+  if (!node || typeof node.closest !== "function") return null;
+  return node.closest<HTMLElement>(".mdl.poke");
+}
+
 let cursorWired = false;
 
 export function initCursor(): void {
@@ -155,18 +217,21 @@ export function initCursor(): void {
   // Click anywhere → idle faces blink. Every click restarts the blink, so fast
   // clicking keeps up (no lock-out guard).
   let pokeTimer: number | null = null;
-  window.addEventListener("click", () => {
+  window.addEventListener("click", (e) => {
     const targets = trackTargets(".mdl.poke");
-    if (!targets.length) return;
-    for (const m of targets) {
-      m.classList.remove("blink-once");
-      void m.offsetWidth; // restart the CSS animation
-      m.classList.add("blink-once");
+    if (targets.length) {
+      for (const m of targets) {
+        m.classList.remove("blink-once");
+        void m.offsetWidth; // restart the CSS animation
+        m.classList.add("blink-once");
+      }
+      if (pokeTimer !== null) window.clearTimeout(pokeTimer);
+      pokeTimer = window.setTimeout(() => {
+        for (const m of targets) m.classList.remove("blink-once");
+        pokeTimer = null;
+      }, 130);
     }
-    if (pokeTimer !== null) window.clearTimeout(pokeTimer);
-    pokeTimer = window.setTimeout(() => {
-      for (const m of targets) m.classList.remove("blink-once");
-      pokeTimer = null;
-    }, 130);
+    const hit = clickOnFace(e);
+    if (hit) showGreeting(hit);
   });
 }
