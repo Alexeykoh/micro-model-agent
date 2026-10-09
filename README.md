@@ -35,7 +35,7 @@ Most agents (Devin, Cursor, Copilot) are glued to cloud models or pricey APIs �
 
 - **6-state agent loop** (`INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR`) — clean, predictable, debuggable
 - **Context budget management** — per-model budgets with sliding-window compaction that preserves facts, decisions, and errors, keeps a `[Tool ledger]` of what was already read, and calibrates its token estimate against the provider's real `prompt_tokens`
-- **Honest-stop guards** — failed tool batches, read-only loops and retry storms stop the loop with a truthful status instead of letting a small model grind (honest stop, read-only budget, `retry_loop_stopped`)
+- **Honest-stop guards** — failed tool batches and duplicate-tool loops stop the loop with a truthful status instead of letting a small model grind (honest stop, duplicate-tool budget, forced tool-less final answer)
 - **Hallucination detection** — fact checks (file paths), consistency checks (decision rollbacks), confidence checks, plus claim verification: "created file X" / "output says Y" / "the price is Z" are checked against real tool output
 - **Execution guarantees** — LLM-driven auto-planning (no keyword heuristics), stuck detection, off-track warnings, automatic plan advancement
 

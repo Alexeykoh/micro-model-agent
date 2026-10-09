@@ -1,4 +1,4 @@
-// Детектор застревания: повторы, фейлы, read-only петли, bash-флейлинг, хинты.
+// Детектор застревания: повторы, фейлы, bash-флейлинг, хинты.
 import { canonicalArgsKey } from "../../core/agent/canonical-args";
 import { t } from "../../i18n/index";
 import { isTransientError } from "./transient-error";
@@ -23,8 +23,7 @@ export type FailureType =
   | "timeout" // no progress across N iterations on the current step
   | "repeat" // identical tool call (same args) repeated
   | "error_loop" // one tool, or consecutive calls, failing repeatedly
-  | "bash_flailing" // rotating failing shell commands
-  | "read_only"; // long read-only exploration loop with no writes
+  | "bash_flailing"; // rotating failing shell commands
 
 /** Классификация фейла: тип, тул, счётчик, итерация (0 — неизвестна). */
 export interface FailureClassification {
@@ -57,39 +56,6 @@ export function classifyError(output: string): ErrorClassification {
   }
   return "systematic";
 }
-
-/**
- * Тулы только чтения: состояние наблюдают, не меняют. Длинная серия только их
- * без write/exec между — модель читает/разведывает, ничего не производя:
- * read-only петля, которую детектор обязан подсветить (было: 50+ read_file
- * итераций с нулём записей после ложноположительного реджекта готового
- * аудита задачи).
- */
-const READ_ONLY_TOOLS = new Set([
-  "read_file",
-  "glob",
-  "grep",
-  "list_dir",
-  "file_info",
-  "browser",
-  "web_search",
-  "web_fetch",
-  "web_browse",
-  "search_history",
-  "recall",
-  "project_map",
-  "chunk_query",
-  "process_list",
-  "process_log",
-  "plan",
-  "plan_step",
-  "todo",
-  "verify",
-  "load_skill",
-]);
-
-/** Подряд read-only вызовов, образующих петлю. */
-const READ_ONLY_LOOP_THRESHOLD = 10;
 
 /**
  * Bash-флейлинг: ≥BASH_FLAIL_THRESHOLD фейлов в последних BASH_FLAIL_WINDOW
@@ -248,7 +214,6 @@ export class StuckDetector {
   private lastBashCommand = "";
   private lastBashOutput = "";
   private emptyBashRunCount = 0;
-  private readOnlyStreak = 0;
   private bashRecent: boolean[] = [];
   private errorSignatureCounts: Map<string, number> = new Map();
   private searchedErrorSignatures: Set<string> = new Set();
@@ -268,29 +233,13 @@ export class StuckDetector {
     }
   }
 
-  /** Отмечает вызов тула (для детекции повторов; write/exec сбрасывают read-only стрик). */
+  /** Отмечает вызов тула (для детекции повторов). */
   recordToolCall(name: string, args: Record<string, unknown>): void {
     const argsKey = canonicalArgsKey(name, args);
     this.recentToolCalls.push({ name, argsKey });
     if (this.recentToolCalls.length > this.maxRecentCalls) {
       this.recentToolCalls.shift();
     }
-    // Трекаем подряд read-only стрик. Пишущий/исполняющий тул сбрасывает;
-    // plan/todo-бухгалтерия считается read-only (не реальный прогресс).
-    if (READ_ONLY_TOOLS.has(name)) {
-      this.readOnlyStreak++;
-    } else {
-      this.readOnlyStreak = 0;
-    }
-  }
-
-  /**
-   * True после длинной серии read-only вызовов без записей между. Модель
-   * исследует/петляет, ничего не производя — инжектим recovery-хинт, чтобы
-   * перестала перечитывать и реально правила файлы.
-   */
-  hasReadOnlyLoop(): boolean {
-    return this.readOnlyStreak >= READ_ONLY_LOOP_THRESHOLD;
   }
 
   /** Отмечает ошибку тула (счётчики + сигнатура для автопоиска). */
@@ -518,8 +467,8 @@ export class StuckDetector {
     }
 
     // State-based буллеты. Recovery-сообщение (getRecoveryMessage) уже репортит
-    // ПЕРВИЧНУЮ причину (приоритет: stuck > tool-errors > consecutive >
-    // repetitive > read-only). Дублировать то же состояние хинтом — задвоить
+    // ПЕРВИЧНУЮ причину (приоритет: stuck > tool-errors > bash-flailing >
+    // consecutive > repetitive). Дублировать то же состояние хинтом — задвоить
     // гайданс в одном cooldown-блоке. Буллет добавляем, только если recovery
     // это состояние НЕ покрывает.
     const primary = this.getPrimaryReason();
@@ -528,9 +477,6 @@ export class StuckDetector {
     }
     if (this.hasConsecutiveFailures() && primary !== "consecutive") {
       hints.push(t("exec.hint_consecutive"));
-    }
-    if (this.hasReadOnlyLoop() && primary !== "read-only") {
-      hints.push(t("exec.hint_read_only"));
     }
     return hints;
   }
@@ -731,7 +677,6 @@ export class StuckDetector {
     if (this.hasBashFlailing()) return "bash-flailing";
     if (this.hasConsecutiveFailures()) return "consecutive";
     if (this.hasRepetitiveToolCalls()) return "repetitive";
-    if (this.hasReadOnlyLoop()) return "read-only";
     return "";
   }
 
@@ -765,11 +710,6 @@ export class StuckDetector {
     // getWarningKey репортил "repetitive", но причина не логгировалась.
     if (this.hasRepetitiveToolCalls()) {
       return this.getRepetitiveToolMessage();
-    }
-    if (this.hasReadOnlyLoop()) {
-      return t("exec.read_only_loop", {
-        count: String(this.readOnlyStreak),
-      });
     }
     return "";
   }
@@ -810,11 +750,6 @@ export class StuckDetector {
     if (reason === "repetitive") {
       return this.getRepetitiveToolMessage();
     }
-    if (reason === "read-only") {
-      return t("exec.read_only_loop_recovery", {
-        count: String(this.readOnlyStreak),
-      });
-    }
     return "";
   }
 
@@ -845,8 +780,6 @@ export class StuckDetector {
         const fails = this.bashRecent.filter((ok) => !ok).length;
         return { type: "bash_flailing", count: fails, iteration };
       }
-      case "read-only":
-        return { type: "read_only", count: this.readOnlyStreak, iteration };
     }
   }
 
@@ -869,14 +802,13 @@ export class StuckDetector {
    * Единый источник правды приоритета recovery-причины. Общий для
    * getRecoveryMessage() и getHints(), чтобы не расходились: bullet состояния,
    * которое getRecoveryMessage уже репортит, хинтом НЕ дублируется
-   * (приоритет: stuck > tool-errors > consecutive > repetitive > read-only).
+   * (приоритет: stuck > tool-errors > bash-flailing > consecutive > repetitive).
    */
   private getPrimaryReason():
     | "stuck"
     | "tool-errors"
     | "consecutive"
     | "repetitive"
-    | "read-only"
     | "bash-flailing"
     | null {
     if (this.isStuck()) return "stuck";
@@ -887,7 +819,6 @@ export class StuckDetector {
     if (this.hasBashFlailing()) return "bash-flailing";
     if (this.hasConsecutiveFailures()) return "consecutive";
     if (this.hasRepetitiveToolCalls()) return "repetitive";
-    if (this.hasReadOnlyLoop()) return "read-only";
     return null;
   }
 
@@ -906,16 +837,14 @@ export class StuckDetector {
     this.lastBashOutput = "";
     this.emptyBashRunCount = 0;
     this.bashRecent = [];
-    this.readOnlyStreak = 0;
     this.errorSignatureCounts.clear();
     this.searchedErrorSignatures.clear();
   }
 
   /**
-   * Сбрасывает только step-прогресс, храня историю вызовов и read-only стрик.
-   * Нужно, когда план готов, но цикл продолжается (напр. audit-gate реджектнул
-   * готовую задачу): step-stuck варнинги глушатся, а петля чтения-без-записи
-   * всё равно детектится.
+   * Сбрасывает только step-прогресс, храня историю вызовов. Нужно, когда план
+   * готов, но цикл продолжается (напр. audit-gate реджектнул готовую задачу):
+   * step-stuck варнинги глушатся, а петли повторов всё равно детектятся.
    */
   resetStepProgress(): void {
     this.currentStepId = null;
@@ -952,7 +881,6 @@ export class StuckDetector {
     this.lastBashOutput = "";
     this.emptyBashRunCount = 0;
     this.bashRecent = [];
-    this.readOnlyStreak = 0;
     this.errorSignatureCounts.clear();
     this.searchedErrorSignatures.clear();
     // escalationCount храним — иначе агент "геймит" детекцию, маркируя шаг

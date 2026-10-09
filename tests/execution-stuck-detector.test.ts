@@ -148,14 +148,18 @@ describe("StuckDetector", () => {
     expect(d.getStuckReason().toLowerCase()).toContain("consecutive");
   });
 
-  it("resetStepProgress preserves the read-only streak (pre-plan loop detection)", () => {
-    const d = new StuckDetector(8, 3);
-    for (let i = 0; i < 10; i++) d.recordToolCall("read_file", { path: `src/f${i}.ts` });
-    expect(d.hasReadOnlyLoop()).toBe(true);
+  it("resetStepProgress preserves call history for repetition detection", () => {
+    const d = new StuckDetector(6, 3, 5);
+    d.recordToolCall("read_file", { path: "a.ts" });
+    d.recordToolCall("read_file", { path: "a.ts" });
+    d.recordToolCall("read_file", { path: "a.ts" });
+    expect(d.hasRepetitiveToolCalls()).toBe(true);
+
     d.resetStepProgress();
-    expect(d.hasReadOnlyLoop()).toBe(true);
+    expect(d.hasRepetitiveToolCalls()).toBe(true); // history preserved
+
     d.reset();
-    expect(d.hasReadOnlyLoop()).toBe(false);
+    expect(d.hasRepetitiveToolCalls()).toBe(false);
   });
 
   it("should track file rewrites", () => {
@@ -321,6 +325,13 @@ describe("StuckDetector", () => {
     expect(detector.getRecoveryMessage()).toContain("process_wait");
     expect(detector.getStuckReason()).toContain("process_wait");
   });
+
+  it("no longer reports a read-only loop (removed in favour of repetition)", () => {
+    const d = new StuckDetector(6, 3, 5);
+    for (let i = 0; i < 20; i++) d.recordToolCall("read_file", { path: `f${i}.ts` });
+    expect(d.getStuckReason()).toBe("");
+    expect(d.classifyFailure(20)).toBeNull();
+  });
 });
 
 describe("StuckDetector hint/recovery dedup (P3)", () => {
@@ -349,18 +360,6 @@ describe("StuckDetector hint/recovery dedup (P3)", () => {
     expect(detector.getRecoveryMessage()).toBeTruthy();
     const hints = detector.getHints();
     expect(hints.some((h) => h.includes("Multiple different tools are failing"))).toBe(false);
-  });
-
-  it("keeps the read-only bullet when stuck is the primary reason", () => {
-    detector.setCurrentStep(1, "fix src/a.ts");
-    for (let i = 0; i < 12; i++) {
-      detector.recordIteration(1);
-      detector.recordToolCall("read_file", { path: `src/file${i}.ts` });
-    }
-    expect(detector.isStuck()).toBe(true);
-    expect(detector.hasReadOnlyLoop()).toBe(true);
-    const hints = detector.getHints();
-    expect(hints.some((h) => h.includes("read-only tool calls"))).toBe(true);
   });
 
   it("keeps step-keyword hints even when recovery covers the state", () => {
@@ -456,53 +455,6 @@ describe("StuckDetector typecheck awareness (R5.2)", () => {
     const hints = detector.getActionableHints();
     expect(hints.some((h) => h.includes("rewritten"))).toBe(true);
     expect(hints.some((h) => h.includes("rewriting the whole file blindly"))).toBe(true);
-  });
-});
-
-describe("StuckDetector read-without-write loop detection", () => {
-  let detector: StuckDetector;
-
-  beforeEach(() => {
-    detector = new StuckDetector(5, 3);
-  });
-
-  it("does not flag a short burst of reads", () => {
-    for (let i = 0; i < 5; i++) {
-      detector.recordToolCall("read_file", { path: `src/${i}.ts` });
-    }
-    expect(detector.hasReadOnlyLoop()).toBe(false);
-  });
-
-  it("flags a long run of read-only tool calls", () => {
-    for (let i = 0; i < 12; i++) {
-      detector.recordToolCall("read_file", { path: `src/file${i}.ts` });
-    }
-    expect(detector.hasReadOnlyLoop()).toBe(true);
-  });
-
-  it("resets the read-only streak when a write tool is called", () => {
-    for (let i = 0; i < 10; i++) {
-      detector.recordToolCall("read_file", { path: `src/${i}.ts` });
-    }
-    expect(detector.hasReadOnlyLoop()).toBe(true);
-    detector.recordToolCall("write_file", { path: "src/out.ts" });
-    expect(detector.hasReadOnlyLoop()).toBe(false);
-  });
-
-  it("treats plan/todo bookkeeping as read-only (does not count as progress)", () => {
-    for (let i = 0; i < 12; i++) {
-      detector.recordToolCall("plan", { action: "show" });
-    }
-    expect(detector.hasReadOnlyLoop()).toBe(true);
-  });
-
-  it("clears the read-only streak on step change", () => {
-    for (let i = 0; i < 12; i++) {
-      detector.recordToolCall("read_file", { path: `src/${i}.ts` });
-    }
-    expect(detector.hasReadOnlyLoop()).toBe(true);
-    detector.setCurrentStep(2, "next step");
-    expect(detector.hasReadOnlyLoop()).toBe(false);
   });
 });
 
@@ -725,13 +677,6 @@ describe("StuckDetector failure classification", () => {
     const c = d.classifyFailure();
     expect(c?.type).toBe("bash_flailing");
     expect(c?.count).toBe(4);
-  });
-
-  it("classifies a long read-only streak as read_only", () => {
-    for (let i = 0; i < 10; i++) d.recordToolCall("read_file", { path: `src/f${i}.ts` });
-    expect(d.hasReadOnlyLoop()).toBe(true);
-    const c = d.classifyFailure();
-    expect(c).toMatchObject({ type: "read_only", count: 10 });
   });
 
   it("returns null and an empty diagnostic when healthy", () => {

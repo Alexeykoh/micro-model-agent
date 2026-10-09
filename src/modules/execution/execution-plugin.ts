@@ -22,8 +22,7 @@ const MAX_PLAN_WARNINGS_BEFORE_BLOCK = 3;
 const FORCE_SKIP_THRESHOLD = 10;
 /** Один и тот же stuck-варнинг перелоггируем не чаще каждых N итераций (новый
  *  ключ — всегда сразу). Не даёт идентичному варнингу флудить каждую итерацию
- *  (было в ses_mt4fn58c: "Tool bash failed N times" после ~30 успешных записей,
- *  "No write/exec" на каждом чтении). */
+ *  (было в ses_mt4fn58c: "Tool bash failed N times" после ~30 успешных записей). */
 export const STUCK_WARN_REPEAT_EVERY = 5;
 /** Сколько файл-мутирующих вызовов (write/edit/bash/download) без активного
  *  плана триггерит nudge создания плана. Evidence-based (правило #10):
@@ -193,9 +192,7 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       if (deps.trackerRef.current?.isComplete()) {
         // Все шаги done/skipped — перестаём считать "no progress" против
         // последнего шага и глушим step-stuck варнинги готового плана, НО
-        // историю вызовов храним, чтобы петля чтения-без-записи ловилась
-        // (было: план готов + ложноположительный аудит → модель 50+ итераций
-        // перечитывала файлы с нулем записей без recovery-хинта).
+        // историю вызовов храним, чтобы петли повторов ловились.
         deps.stuckDetector.resetStepProgress();
         resetPlanState(deps.state);
       } else {
@@ -210,9 +207,9 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           deps.state.mutationsWithoutPlan = 0;
           deps.state.planNudgeSent = false;
         } else {
-          // До-плана: историю цикла (свежие вызовы, read-only стрик) храним,
-          // чтобы петли повторов/read-only ловились и без плана. `reset()`
-          // тёр её каждую итерацию, отключая детекцию.
+          // До-плана: историю цикла (свежие вызовы) храним, чтобы петли
+          // повторов ловились и без плана. `reset()` тёр её каждую итерацию,
+          // отключая детекцию.
           deps.stuckDetector.resetStepProgress();
           resetStepFlags(deps.state, -1);
 
@@ -265,7 +262,6 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       if (
         deps.stuckDetector.isStuck() ||
         deps.stuckDetector.hasRepetitiveToolCalls() ||
-        deps.stuckDetector.hasReadOnlyLoop() ||
         deps.stuckDetector.hasBashFlailing() ||
         deps.stuckDetector.hasConsecutiveFailures()
       ) {

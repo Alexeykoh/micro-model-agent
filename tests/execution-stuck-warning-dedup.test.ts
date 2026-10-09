@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { rmSync } from "fs";
 import { ExecutionModule } from "../src/modules/execution/module";
-import { createTestModule, cleanupTestModule } from "./plan-test-utils";
+import { createTestModule } from "./plan-test-utils";
 
 /**
  * ses_mt4fn58c post-mortem: after bash failed 3 times early in the session,
  * the identical "Tool bash failed N times" stuck-warning was re-logged after
- * ~30 SUCCESSFUL write_file calls, and "No write/exec for N tool calls" was
- * re-logged on every read — flooding the context and forcing compactions.
+ * ~30 SUCCESSFUL write_file calls — flooding the context and forcing
+ * compactions.
  */
 describe("stuck warning anti-spam", () => {
   let tmpDir: string;
@@ -66,7 +66,7 @@ describe("stuck warning anti-spam", () => {
     expect(stuckWarningCount(c)).toBeLessThanOrEqual(2);
   });
 
-  it("does not re-log the read-only-loop warning on every read", async () => {
+  it("does not re-log the repetitive-call warning on every call", async () => {
     await createPlan();
     const plugin: any = mod.getPlugin();
     const c = makeCtx();
