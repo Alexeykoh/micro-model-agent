@@ -4,6 +4,22 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Frontend-seam refactoring so a full-screen TUI can reuse the existing command
+registry and session snapshot. No user-visible behaviour change; the seams that
+previously blocked a third frontend are now frontend-agnostic.
+
+### Changed
+
+- **Host snapshot projection moved to `core`** (`src/core/host-state.ts`): `buildHostState`/`captureUsage`/`liveContextUsage`/`planEventFor`/`UsageSnapshot` lived in `src/modules/webui/host-state.ts`, yet `mma serve` already imported `planEventFor` from there - a structural subset of the web backend acting as a shared contract. `src/modules/webui/host-state.ts` is now a thin web wrapper keeping `WebIndexer`/`WebLsp` and the web-only `i18nStale` probe.
+- **`ReplContext` split into services and IO** (`src/cli/command-context.ts`): the old 20-member interface mixed frontend-agnostic services (config/agent/modules) with single-shot terminal IO (`rl: LineInput`, `output: OutputChannel`), so a TUI that redraws frames could not reuse the command registry. Now `CommandServices` (frontend-agnostic) + `CommandOutput` (2 required methods) + `CommandInput` (3 methods). `ReplContext` is an alias. `/wizard` and `/config reset --all` ask `ctx.input.withInput(...)`/`ctx.input.confirm(...)` instead of touching the terminal; `Spinner` takes only `writeOverlay`.
+- **Declarative slash-command catalog** (`src/core/commands/`): three descriptions drifted silently - the hand-synced `COMMAND_GROUPS` table (29 lines), the REPL registrations, and the web `HELP` list. All 29 commands are now data (`spec.ts`) plus a registry with per-surface availability (`catalog.ts`). Actions are deliberately not unified - terminal prints ANSI, the browser emits plain SSE lines, which is the `CommandOutput` adapter's job. `/help` builds from the catalog; `COMMAND_GROUPS` is deleted. `isAvailable` defaults to terminal + TUI so a future TUI gets the whole registry.
+
+### Added
+
+- **Anti-drift guards**: `tests/core/command-catalog.test.ts` asserts the catalog covers exactly the commands the REPL registers (both directions) and that web-marked commands match the real web dispatcher; `tests/cli/repl-help.test.ts` pins the user-visible `/help` output; `tests/cli/command-context.test.ts` locks the surface a new frontend must implement.
+
 ## [2.37.0] - 2026-10-09
 
 `mma serve` now describes its own API: a live OpenAPI 3.1 document plus a

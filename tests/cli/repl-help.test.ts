@@ -4,6 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { Repl } from "../../src/cli/repl";
 import { makeCaptureChannel, type CaptureChannel } from "./capture-channel";
+import { makeBareRepl } from "./repl-fixtures";
 
 /**
  * `/help` теперь строится по общему каталогу команд (`core/commands/spec`),
@@ -11,32 +12,6 @@ import { makeCaptureChannel, type CaptureChannel } from "./capture-channel";
  * зафиксирован здесь: переезд на каталог не должен изменить ни состав
  * разделов, ни подписи, ни порядок групп.
  */
-
-function makeAgent() {
-  return {
-    run: async () => ({ success: true, text: "ok", provider: "p", model: "m", durationMs: 1 }),
-    shutdown: () => {},
-    getProviderFor: () => undefined,
-    tryToolContext: () => undefined,
-  } as never;
-}
-
-function makeConfig() {
-  return {
-    model: "test",
-    provider: { type: "test", baseUrl: "test", apiKey: "test" },
-    contextWindow: 32768,
-    contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
-    logLevel: "info",
-    locale: "en",
-    maxToolIterations: 25,
-    stuckThreshold: 8,
-    autoPlan: true,
-    showReasoning: false,
-    ui: {},
-    session: { autoSave: false, maxSessions: 50, isolateMemory: false },
-  } as never;
-}
 
 describe("showHelp по каталогу команд", () => {
   let dir: string;
@@ -58,13 +33,7 @@ describe("showHelp по каталогу команд", () => {
   });
 
   function makeRepl(): Repl {
-    const repl = new Repl(
-      makeAgent(),
-      makeConfig(),
-      undefined, undefined, undefined, undefined, undefined, undefined,
-      undefined, undefined, undefined, join(dir, "repl-history"),
-      undefined, undefined, capture.channel,
-    );
+    const repl = makeBareRepl({ channel: capture.channel, historyPath: join(dir, "repl-history") });
     originalRl = repl.rl as unknown as { close?: () => void };
     return repl;
   }

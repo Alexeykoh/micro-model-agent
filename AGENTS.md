@@ -1587,6 +1587,46 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
   `openTab(id, name, kind, server, activate)` с `activate=false` создаёт фоновую
   вкладку без подмены активной.
 
+### Frontend Seams — подготовка к TUI (unreleased, ветка `refactor/frontend-core-seams`)
+
+Разбор для TUI показал: фронтенд-независимого ядра достаточно, но три шва
+упирались в терминал. Все три закрыты; поведение пользователя не менялось.
+Спека TUI — не часть этой ветки (здесь только подготовка).
+
+- **Проекция состояния в core** (`src/core/host-state.ts`): `buildHostState`/
+  `captureUsage`/`liveContextUsage`/`planEventFor`/`UsageSnapshot` лежали в
+  `src/modules/webui/host-state.ts`, хотя `mma serve` уже импортировал
+  `planEventFor` оттуда — структурное подмножество веб-бэкенда как общий
+  контракт. Теперь ядро в `core`; `webui/host-state.ts` — тонкая обвязка
+  (`WebIndexer`/`WebLsp` + web-only проба `i18nStale`, в core флаг опционален).
+- **`ReplContext` разделён** (`src/cli/command-context.ts`): интерфейс на 20
+  членов смешивал фронтендонезависимые сервисы с терминальным вводом-выводом
+  (`rl: LineInput`, `output: OutputChannel`), из-за чего TUI не мог переиспользовать
+  реестр команд. Теперь `CommandServices` (без IO) + `CommandOutput`
+  (`writeLine`/`clearScreen` обязательны; `writeOverlay` и тумблеры verbose —
+  опциональны) + `CommandInput` (`withInput`/`question`/`confirm`).
+  `ReplContext` — алиас. `/wizard` и `/config reset --all` идут через
+  `ctx.input`; эксклюзивность ввода переехала из команды в терминальный адаптер
+  (`createCommandInput(rl, ask, exclusive)`), поведение визарда сохранено
+  (`inputLocked`). `Spinner` принимает `SpinnerSink` (`writeOverlay`), а не канал.
+- **Декларативный каталог команд** (`src/core/commands/{catalog,spec}.ts`):
+  три описания расходились молча — таблица `COMMAND_GROUPS` (29 строк, синхронизировалась
+  вручную), регистрации REPL и список `HELP` в вебе. Теперь 29 команд — данные;
+  `CommandRegistry` приклеивает действия фронтенда через `bind()`; `isAvailable`
+  фильтрует по поверхности, **без `surfaces` доступны terminal + tui** (иначе
+  перечисление `"tui"` 29 раз гарантировало бы тихую потерю команды);
+  `webName` фиксирует единственное расхождение имён (`/sessions` ↔ `/session`).
+  **Действия НЕ унифицированы** намеренно: терминал печатает ANSI, веб — plain
+  в SSE; это работа адаптера `CommandOutput`, каталог отвечает только за «что есть».
+  `/help` строится по каталогу, `COMMAND_GROUPS` удалена.
+- **Сторожи:** `tests/core/command-catalog.test.ts` (каталог ↔ регистрации REPL в
+  обе стороны; web-команды ↔ реальный веб-диспатчер; алиасы не коллизируют),
+  `tests/cli/repl-help.test.ts` (видимый вывод `/help`),
+  `tests/cli/command-context.test.ts` (поверхность для нового фронтенда).
+  Сверка с вебом поймала три неверных записи при разработке.
+- **Не сделано (осознанно):** унификация 29 хендлеров REPL с 14 веб-хендлерами —
+  это переписывание вывода, а не шва; рендер TUI, ввод и компоновка — отдельная задача.
+
 ### Current Version: 2.37.0
 
 Self-describing service contract (see the section above): `mma serve` serves its
