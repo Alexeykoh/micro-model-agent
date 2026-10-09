@@ -1587,11 +1587,15 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
   `openTab(id, name, kind, server, activate)` с `activate=false` создаёт фоновую
   вкладку без подмены активной.
 
-### Frontend Seams — подготовка к TUI (unreleased, ветка `refactor/frontend-core-seams`)
+### Frontend Seams — готовые швы фронтендов (unreleased, `refactor/frontend-core-seams` → master)
 
 Разбор для TUI показал: фронтенд-независимого ядра достаточно, но три шва
 упирались в терминал. Все три закрыты; поведение пользователя не менялось.
-Спека TUI — не часть этой ветки (здесь только подготовка).
+**TUI по итогам разбора отложен** (спека `docs/specs/2026-10-10-tui-frontend-design.md`,
+§0): без постоянной панели он = REPL в альт-экране, что отнимает scrollback
+и не окупается. Но сами швы полезны независимо — `mma serve` импортировал
+проекцию состояния из веб-модуля, и это теперь исправлено. Спека TUI — не
+реализация, а разбор для возможного пересмотра.
 
 - **Проекция состояния в core** (`src/core/host-state.ts`): `buildHostState`/
   `captureUsage`/`liveContextUsage`/`planEventFor`/`UsageSnapshot` лежали в
