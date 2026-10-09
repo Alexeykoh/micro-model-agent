@@ -59,7 +59,7 @@ async function runBatchOf(
 }
 
 function hasDuplicateDirective(added: string[]): boolean {
-  return added.some((m) => m.includes("only been reading") || m.includes("только читаешь"));
+  return added.some((m) => m.includes("repeated the same tool call") || m.includes("повторил один и тот же вызов"));
 }
 
 const sameCall = { id: "1", name: "read_file", arguments: { path: "src/a.ts" } };

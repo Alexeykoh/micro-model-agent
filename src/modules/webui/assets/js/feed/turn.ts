@@ -276,9 +276,10 @@ export function onTurnEnd(data: Dict): void {
     appendTo(feed, el("div", cls, glyph + reason));
     announce(reason);
   } else {
-    if (data.stopReason && data.error) {
-      appendTo(feed, el("div", "warnline", "⚠ " + data.error));
-      announce(data.error);
+    if (data.stopReason) {
+      const reason = t("web.turn.stop_" + data.stopReason);
+      appendTo(feed, el("div", "warnline", "⚠ " + reason));
+      announce(reason);
     }
     const parts: string[] = [];
     if (typeof data.toolCalls === "number" && data.toolCalls > 0) {

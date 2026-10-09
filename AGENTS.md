@@ -655,8 +655,9 @@ retry-петля после блоков (перебор python/python3/bun/pip)
   `consecutiveFailedBatches` — только полностью провальные пакеты (tool-level блоки входят,
   `result.blocked` плагинов нейтрален по контракту, успехи/смешанные пакеты сбрасывают).
   На 4-м (`MAX_CONSECUTIVE_FAILED_BATCHES`) — директива `exec.honest_stop` («остановись, ответь
-  честно, вывод не выдумывай»); на 6-м (`HARD_STOP_FAILED_BATCHES`) — жёсткий стоп с
-  `retryLoopStopped` (success:false, `error.retry_loop_stopped`). Тесты:
+  честно, вывод не выдумывай»); на 6-м (`HARD_STOP_FAILED_BATCHES`) — **принудительный финальный
+  ответ без тулов** (`finalizeWithoutTools`, `stopReason: "failed_batches"`), а не прежний жёсткий
+  `retryLoopStopped` (superseded, см. «Harness Read-only Guard Fix» ниже). Тесты:
   `tests/core/tool-batch-honest-stop.test.ts`.
 - **Проверка заявлений** (`src/modules/hallucination/artifact-claim.ts`,
   `src/core/agent/artifact-resolve.ts`, wiring в `hallucination-gate.ts`/`agent.ts`):
@@ -845,11 +846,9 @@ read-only петля без стопа, рассинхрон провайдер�
   монотонный `seq` сообщения в `WeakMap` (`ContextManager.beginTurn/seqOf`), а не индекс
   массива; переживает удаление истории спереди. Раньше `gatherTurnToolEvents` при компакции
   получал пустой срез и критик не запускался на длинных ходах.
-- **Read-only бюджет** (`src/core/agent/tool-batch.ts`, `constants.ts`): `MAX_READONLY_BATCHES=8`
-  (директива `exec.readonly_directive`) → `HARD_STOP_READONLY_BATCHES=12` (честный стоп
-  `error.readonly_loop_stopped`). Пакет «без рабочей мутации» (по `isWorkMutation`: не write/edit/
-  delete/move/create_dir/bash; browser/web/plan/todo считаются исследованием) — сбрасывается только
-  реальной мутацией. Успешные fetch-и не ловились honest-stop (тот про провалы).
+- **Read-only бюджет — SUPERSEDED** (`src/core/agent/tool-batch.ts`): прежние
+  `MAX_READONLY_BATCHES`/`HARD_STOP_READONLY_BATCHES` (пакет «без рабочей мутации»)
+  заменены дубль-бюджетом по повтору вызовов — см. «Harness Read-only Guard Fix» ниже.
 - **Леджер тулов при компакции** (`src/modules/context/manager.ts`): pin `[Tool ledger]`
   (`tool(args) → digest`, дедуп, cap 12) через компакции; `contextBudget.compactionSummary: off|ledger`
   (default `ledger`). Модель видит, что уже прочитано/fetched, и не повторяет.

@@ -11,7 +11,8 @@ describe("turn_end stop reason", () => {
     const src = readFileSync("src/modules/webui/assets/js/feed/turn.ts", "utf8");
     // new onTurnEnd failure branch: data.error preferred over the generic strings
     expect(src).toMatch(/data\.error \|\| \(data\.interrupted \? t\("web\.turn\.stopped"\)/);
-    // successful forced finalize surfaces the reason too
-    expect(src).toMatch(/data\.stopReason && data\.error/);
+    // successful forced finalize surfaces the reason (no error on success)
+    expect(src).toMatch(/if \(data\.stopReason\)/);
+    expect(src).toMatch(/t\("web\.turn\.stop_" \+ data\.stopReason\)/);
   });
 });

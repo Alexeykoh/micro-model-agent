@@ -205,4 +205,50 @@ describe("Agent.finalizeWithoutTools", () => {
     expect(result.success).toBe(false);
     expect(result.error).toBeTruthy();
   });
+
+  it("failed-batch terminal forces a final answer", async () => {
+    const t = createMockDeps((_h: unknown, tools: unknown[]) =>
+      (async function* () {
+        if (Array.isArray(tools) && tools.length === 0) {
+          yield { type: "text" as const, content: "best effort after failures" };
+          yield { type: "done" as const, finishReason: "stop" as const };
+        } else {
+          yield { type: "tool_call" as const, toolCall: { id: "t1", name: "bash", arguments: JSON.stringify({ command: "x" }) } };
+          yield { type: "done" as const, finishReason: "tool_calls" as const };
+        }
+      })());
+    t.deps.config.maxToolIterations = 20;
+    t.deps.toolExecutor.getToolDefinitions.mockReturnValue([
+      { name: "bash", description: "run a command", parameters: {} },
+    ]);
+    t.deps.toolExecutor.execute = async () => ({ success: false, output: "boom" });
+    const agent = new Agent(t.deps);
+    const result = await agent.run("task");
+    expect(result.stopReason).toBe("failed_batches");
+    expect(result.success).toBe(true);
+    expect(result.text).toContain("best effort");
+  });
+
+  it("max-iterations exhaustion forces a final answer", async () => {
+    let n = 0;
+    const t = createMockDeps((_h: unknown, tools: unknown[]) =>
+      (async function* () {
+        if (Array.isArray(tools) && tools.length === 0) {
+          yield { type: "text" as const, content: "final at iteration cap" };
+          yield { type: "done" as const, finishReason: "stop" as const };
+        } else {
+          yield { type: "tool_call" as const, toolCall: { id: "t" + n, name: "read_file", arguments: JSON.stringify({ path: "f" + n++ + ".ts" }) } };
+          yield { type: "done" as const, finishReason: "tool_calls" as const };
+        }
+      })());
+    t.deps.config.maxToolIterations = 3;
+    t.deps.toolExecutor.getToolDefinitions.mockReturnValue([
+      { name: "read_file", description: "read a file", parameters: {} },
+    ]);
+    const agent = new Agent(t.deps);
+    const result = await agent.run("task");
+    expect(result.stopReason).toBe("max_iters");
+    expect(result.success).toBe(true);
+    expect(result.text).toContain("final at iteration cap");
+  });
 });

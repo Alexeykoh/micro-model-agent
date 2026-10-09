@@ -137,8 +137,11 @@ In `src/tools/grep-tool.ts`: when an external engine fails with a **non-ENOENT**
 message looks like a shell/spawn failure (`is not recognized`, `not found`, `not operable`),
 treat the engine as unavailable (`null`) and fall through to the next engine / JS fallback,
 instead of returning `success: false` via `classifySearchError`. A genuine timeout still
-errors. Additionally prefer a real `rg.exe` over the `.cmd`/`.ps1` shim when resolving the
-binary.
+errors.
+
+*Not applicable:* the "prefer a real `rg.exe` over the `.cmd`/`.ps1` shim" half was dropped —
+on this setup there is no `rg.exe` to prefer, the shim is the only resolution, so the
+JS-fallback on spawn failure is the actual fix.
 
 ### 5. Cleanup
 

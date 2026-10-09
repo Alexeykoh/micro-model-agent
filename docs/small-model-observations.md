@@ -163,7 +163,9 @@
   1. Honest-stop стрика: `consecutiveFailedBatches` (только полностью провальные пакеты;
      успехи/смешанные пакеты сбрасывают, plugin-блоки нейтральны) → директива
      `exec.honest_stop` на 4-м («остановись и ответь честно, вывод не выдумывай») →
-     жёсткий стоп `retryLoopStopped` (success:false) на 6-м.
+     принудительный финальный ответ без тулов (`finalizeWithoutTools`,
+     `stopReason: "failed_batches"`) на 6-м (ранее — жёсткий `retryLoopStopped`,
+     superseded: см. «Harness Read-only Guard Fix»).
   2. Проверка заявлений: `checkXmlWellFormed` (без зависимостей) заведён в
      `preValidateSyntax` (.xml/.drawio/.svg/.xaml/.plist/.iml); `artifact-claim.ts`
      (файл заявлен как создан/валиден, но отсутствует или не парсится) и

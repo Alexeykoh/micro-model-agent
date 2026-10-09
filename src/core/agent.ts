@@ -1579,12 +1579,21 @@ export class Agent {
     const usageTokens = tokenTracker.resolveFinal(state);
     const cacheStats = computeCacheStats(state, this.costTracker.saved);
 
+    const stopError =
+      state.stopReason && !state.finalAnswerAccepted
+        ? state.stopReason === "duplicate"
+          ? t("error.readonly_loop_stopped", { count: state.consecutiveDuplicateBatches })
+          : state.stopReason === "failed_batches"
+            ? t("error.retry_loop_stopped", { count: state.consecutiveFailedBatches })
+            : t("error.max_iters", { max: config.maxToolIterations })
+        : undefined;
+
     if (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted) {
       return {
         success: false,
         text: state.lastText,
-        error: t("error.max_iters", { max: config.maxToolIterations }),
-        stopReason: state.stopReason ?? undefined,
+        error: stopError ?? t("error.max_iters", { max: config.maxToolIterations }),
+        stopReason: state.stopReason ?? "max_iters",
         iterationCount: state.iteration,
         contextUsed: tokensUsed,
         contextLimit: budget.history,
@@ -1599,15 +1608,6 @@ export class Agent {
         contextBreakdown: contextManager.getBreakdown?.(),
       };
     }
-
-    const stopError =
-      state.stopReason && !state.finalAnswerAccepted
-        ? state.stopReason === "duplicate"
-          ? t("error.readonly_loop_stopped", { count: state.consecutiveDuplicateBatches })
-          : state.stopReason === "failed_batches"
-            ? t("error.retry_loop_stopped", { count: state.consecutiveFailedBatches })
-            : t("error.max_iters", { max: config.maxToolIterations })
-        : undefined;
 
     return {
       success: !(
