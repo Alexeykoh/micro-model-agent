@@ -3,7 +3,8 @@
 // истории здесь нет.
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
-import type { ContextBreakdown } from "../../core/types";
+import type { UsageSnapshot } from "../../core/host-state";
+
 import type { AppConfig } from "../../config/types";
 import type { PluginLoadFailure, PluginRecord } from "../plugins/records";
 import type { SessionMeta, SessionMessage } from "../session/types";
@@ -106,19 +107,10 @@ export interface WebPluginManager {
 }
 
 /**
- * Метрики usage последнего хода из `AgentResult` для `HostStateSnapshot`.
- * Все поля опциональны: ход без значения оставляет ячейку сайдбара на `—`.
+ * Метрики usage последнего хода — определены в `core/host-state` вместе с
+ * остальной проекцией снапшота (её читает и `mma serve`), здесь реэкспорт.
  */
-export interface UsageSnapshot {
-  contextUsed?: number;
-  contextLimit?: number;
-  costUsd?: number;
-  compactionCount?: number;
-  cacheHitRate?: number;
-  cacheSaved?: number;
-  contextQuality?: number;
-  contextBreakdown?: ContextBreakdown;
-}
+export type { UsageSnapshot } from "../../core/host-state";
 
 /** Одно входящее сообщение, ждущее конца текущего хода (`POST /api/message` при busy). */
 export interface QueuedMessage {

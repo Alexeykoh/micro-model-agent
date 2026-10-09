@@ -114,7 +114,8 @@ describe("web updater wiring (source contract)", () => {
 
   it("carries updateAvailable in the host snapshot", async () => {
     const { readFileSync } = await import("node:fs");
-    expect(readFileSync("src/modules/webui/host-state.ts", "utf8")).toContain("updateAvailable");
+    // Проекция снапшота живёт в core (фронтендонезависима); web-обвязка её реэкспортирует.
+    expect(readFileSync("src/core/host-state.ts", "utf8")).toContain("updateAvailable");
     expect(readFileSync("src/core/host.ts", "utf8")).toContain("updateAvailable");
   });
 });

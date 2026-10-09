@@ -62,54 +62,89 @@ The model sends a `question` tool call with one or more questions:
 - Headless/one-shot runs (`exitOnComplete`) fail fast instead of prompting; web UI works over SSE + `/api/answer`.
 - Memory pre-check is keyword overlap (a memory line must share ≥2 significant words with question+options), not semantic: paraphrase or cross-language misses fail open (the user is asked normally).
 
-### REPL Input Locking (`withExclusiveInput`)
+### Frontend Input Ownership (`CommandInput.withInput`)
 
-When a slash command needs exclusive access to stdin (e.g., interactive setup wizard, multi-step prompt), use `Repl.withExclusiveInput(fn)` to prevent the REPL's line handler from processing input during the interactive flow:
+> **Status:** refactored (TUI-readiness). Slash commands no longer touch the terminal directly; they call `ctx.input.withInput(fn)`, and the frontend decides how to hand over input.
+
+When a slash command needs to own input for a multi-step interactive flow (the setup wizard), it asks the frontend rather than reaching for `repl.rl`:
 
 ```typescript
 // In any slash command action:
 action: async () => {
-  await repl.withExclusiveInput(async () => {
-    // Interactive readline — no REPL handler interference
-    const answers = await runSetup(repl.rl);
-  });
+  const answers = await ctx.input.withInput((prompt) => runSetup(prompt));
 };
 ```
 
 **How it works:**
 
-- `withExclusiveInput()` sets `inputLocked = true` before running the callback
-- REPL line handler checks `this.agentRunning || this.inputLocked` — skips routing to agent/commands when locked
-- `finally` block guarantees `inputLocked` is cleared on errors
+- The terminal adapter (`createCommandInput`, `src/cli/command-context.ts`) implements `withInput` as `Repl.withExclusiveInput`, which sets `inputLocked = true` so the live prompt frame stops accepting input and channel output writes **directly** instead of via `printAbove`. Without this, the wizard's menus print over the live input line and the user sees bare `: ` prompts.
+- `finally` guarantees `inputLocked` is cleared, including on errors.
+- A TUI implements the same three methods with its own overlay/focus model — the command does not change.
 
-**When to use:**
-
-- Any REPL command that takes over stdin for a multi-step interactive flow
-- Whenever a new `readline.Interface` on `process.stdin` would conflict with the REPL's own readline
-- Interactive tools should accept the REPL's existing readline instead of creating their own (see `runSetup(externalRl?)`)
+`ctx.input.question(prompt)` (single question, e.g. `confirm`) is a separate method: it uses `Repl.askViaEditor`, which suspends and resumes the frame around one question rather than locking the whole flow.
 
 ### REPL Command Architecture
 
-REPL commands are defined in `src/cli/repl-commands.ts` (separate from the REPL loop in `repl.ts`). Commands receive a `ReplContext` interface that grants access to configuration, agent, session manager, skills, plugins, readline, and control methods (`registerCommand`, `withExclusiveInput`, `runAgent`, `showHelp`).
+> **Status:** refactored into two layers (TUI-readiness). Commands used to receive one `ReplContext` with 20 members mixing services (frontend-agnostic) with terminal IO (`rl: LineInput`, `output: OutputChannel`). It is now split.
+
+Commands are defined in `src/cli/repl-commands.ts` (separate from the REPL loop in `repl.ts`). They receive `ReplContext` = `CommandServices` + `CommandIO` (`src/cli/command-context.ts`):
 
 ```typescript
-// src/cli/repl/commands.ts
-export interface ReplContext {
+// src/cli/command-context.ts
+export interface CommandServices {
+  // Frontend-agnostic: identical for REPL, TUI, web, serve
   readonly config: AppConfig;
   readonly agent: Agent;
-  readonly rl: LineInput; // TTY → LineEditor, non-TTY → readline.createInterface
+  readonly toolCtx: ToolContext;
   readonly sessionManager?: SessionManager;
   readonly skillsModule?: SkillsModule;
   readonly pluginManager?: PluginManager;
-  registerCommand(cmd: SlashCommand): void;
+  readonly configDir: string;
+  readonly baseDir: string;
   runAgent(input: string): Promise<void>;
-  withExclusiveInput(fn: () => Promise<void>): Promise<void>;
-  showHelp(): void;
-  setupCompleter(): void;
+  showHelp(command?: string): void;
+  // …config snapshot, known models, reload, stop
 }
+
+export interface CommandOutput {
+  // Required — the whole frontend surface for printing
+  writeLine(text: string, stream?: "stdout" | "stderr"): void;
+  clearScreen(): void;
+  // Optional — a frontend that shows no info logs just ignores these
+  writeOverlay?(text: string): void;
+  setSuppressInfoLogs?(suppress: boolean): void;
+  setShowDiagnostics?(show: boolean): void;
+}
+
+export interface CommandInput {
+  withInput<T>(fn: (prompt: PromptInput) => Promise<T>): Promise<T>;
+  question(prompt: string): Promise<string>;
+  confirm(prompt: string): Promise<boolean>;
+}
+
+export type ReplContext = CommandServices & CommandIO & { registerCommand(...): void };
 ```
 
-**To add a new slash command:** define its action in `repl-commands.ts` — no changes to `repl.ts` needed.
+`OutputChannel` satisfies `CommandOutput` structurally — the terminal passes it through untouched. `Spinner` takes only `SpinnerSink` (`writeOverlay`) rather than the whole channel.
+
+**To add a new slash command:** declare it in the catalog (`src/core/commands/spec.ts`) and define its action in `repl-commands.ts` — no changes to `repl.ts` needed. See below for why both.
+
+### Command Catalog (declarative)
+
+> **Status:** introduced for TUI-readiness. Slash commands had three descriptions that drifted silently: the `COMMAND_GROUPS` table (29 lines, hand-synced), the REPL registrations, and the web `HELP` list.
+
+`src/core/commands/` holds the declarative half of the command registry — *what exists*, not *how it runs*:
+
+- **`catalog.ts`** — `CommandSpec`, `CommandRegistry` (catalog + per-frontend actions via `bind()`), `parseCommandLine` (shared input parsing), `groupCommands`, `isAvailable`.
+- **`spec.ts`** — all 29 commands as data: name, description, aliases, usage, examples, group, and per-surface availability.
+
+**Actions are deliberately not unified.** The terminal prints ANSI through `OutputChannel`; the browser emits plain SSE lines. That difference belongs to the `CommandOutput` adapter, so each frontend keeps its own handlers and binds them to the shared catalog. A new frontend declares *which* commands it can execute; it does not reimplement the catalog.
+
+Surfaces: `"terminal" | "tui" | "web"`. **Omitting `surfaces` means terminal + TUI** — a future TUI then gets the whole registry, while `["terminal", "tui", "web"]` additionally adds the browser and `["web"]` marks a browser-only command. Enumerating `"tui"` 29 times would guarantee a TUI's command set silently omits something.
+
+`webName` records the one real name divergence: `/sessions` in the terminal is `/session` in the browser.
+
+Guarded by `tests/core/command-catalog.test.ts`: the catalog covers exactly the commands the REPL registers (both directions), web-marked commands match the real web dispatcher, and aliases collide with nothing. `tests/cli/repl-help.test.ts` pins the user-visible `/help` output.
 
 ### REPL Line Editor
 

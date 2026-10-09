@@ -75,6 +75,33 @@ mode needs (slash commands, sidebar/topbar snapshot).
   (REST route handlers), `assets.ts`, `util.ts`.
   App creation is separated from `listen()` (rule #13), so tests bind no port.
 
+### Frontend Seams (what a new frontend must implement)
+
+> **Source:** `src/cli/command-context.ts`, `src/core/commands/{catalog,spec}.ts`, `src/core/host-state.ts`.
+
+The seam a **new frontend** (e.g. a full-screen TUI) has to satisfy. Three
+pieces, each frontend-agnostic and shared by REPL / TUI / web / serve:
+
+| Seam | Contract | Notes |
+| --- | --- | --- |
+| Host snapshot | `buildHostState(input, busy)` (`src/core/host-state.ts`) | Was in `webui/host-state.ts`; `serve` already imported it from there. Any host renders the same 22-field `HostStateSnapshot`. |
+| Commands — services | `CommandServices` | Config/agent/modules. Identical everywhere; no IO. |
+| Commands — IO | `CommandOutput` (print), `CommandInput` (ask) | The only frontend-specific surface a command sees. |
+| Commands — catalog | `COMMAND_CATALOG` + `CommandRegistry` | *What* commands exist. Actions stay per-frontend. |
+
+- **Adding a frontend** = implement `CommandOutput` (2 required methods) +
+  `CommandInput` (3 methods), bind handlers onto the shared catalog, and reuse
+  `buildHostState` for the snapshot. No command bodies change.
+- **Actions are not unified on purpose.** Terminal prints ANSI via
+  `OutputChannel`; web emits plain SSE lines. That difference is the
+  `CommandOutput` adapter's job, so the catalog only answers "what exists" and
+  each frontend declares which commands it can execute.
+- **`isAvailable` defaults to terminal + TUI** when a command declares no
+  `surfaces`. Enumerating TUI 29 times would silently drop commands later.
+- **Anti-drift guards:** `tests/core/command-catalog.test.ts` (catalog ↔ REPL
+  registrations, both directions; web-marked commands ↔ real web dispatcher) and
+  `tests/cli/repl-help.test.ts` (user-visible `/help` output).
+
 ### Session Auto-Naming
 
 > **Source:** `src/modules/session/auto-name.ts`, `src/core/agent.ts` (`Agent.run`).
@@ -454,6 +481,8 @@ src/
 │   ├── environment.ts  # Startup env report (OS/runtime/engines/tools/playwright) + requirement warnings
 │   ├── crash-handler.ts # Global uncaughtException/unhandledRejection → ~/.mma/logs/crash.jsonl
 │   ├── host.ts         # Host seam (HostBridge + executeCommand/getState) shared by Repl and WebHost
+│   ├── host-state.ts   # Live state → HostStateSnapshot projection (was in webui/; shared with serve)
+│   ├── commands/       # Declarative slash-command catalog (spec.ts = data, catalog.ts = registry)
 │   └── types.ts        # AgentState, PromptBlock, ToolCall, ToolResult, LLMResponse
 ├── llm/                # LLM communication layer
 │   ├── provider.ts     # LLMProvider interface (chat, countTokens)
