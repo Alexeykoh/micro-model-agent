@@ -266,7 +266,15 @@ for (const [ev, type] of faceTypes) {
   es.addEventListener(ev, (e) => {
     const d = parse(e);
     if (!d) return;
-    faceEvent(loaderStateFor({ type, name: typeof d.name === "string" ? d.name : "" }));
+    faceEvent(
+      loaderStateFor({
+        type,
+        name: typeof d.name === "string" ? d.name : "",
+        success: d.success !== false,
+        // Нужен только для tool_end: по выводу маскот ловит LSP-реакцию.
+        ...(type === "tool_end" && typeof d.output === "string" ? { output: d.output } : {}),
+      }),
+    );
   });
 }
 es.addEventListener("phase", (e) => {

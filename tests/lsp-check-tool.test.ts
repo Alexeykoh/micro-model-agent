@@ -33,7 +33,7 @@ describe("lsp_check tool", () => {
   it("returns clean for a file with no diagnostics", async () => {
     writeFileSync(join(baseDir, "src", "a.ts"), "export const a = 1;", "utf-8");
     const module = new LspModule({ enabled: true });
-    (module as any).client.checkFile = async () => [];
+    (module as any).client.checkFile = async () => ({ diagnostics: [], inconclusive: false });
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/a.ts" });
     expect(res.success).toBe(true);
     expect(res.output).toContain("No errors");
@@ -50,7 +50,7 @@ describe("lsp_check tool", () => {
       message: "Cannot find name 'x'",
     };
     const module = new LspModule({ enabled: true });
-    (module as any).client.checkFile = async () => [diag];
+    (module as any).client.checkFile = async () => ({ diagnostics: [diag], inconclusive: false });
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/a.ts" });
     expect(res.success).toBe(false);
     expect(res.output).toContain("[LSP errors] (1):");
@@ -65,7 +65,7 @@ describe("lsp_check tool", () => {
     const module = new LspModule({ enabled: true });
     (module as any).client.checkFile = async (filePath: string) => {
       checked.push(filePath);
-      return [];
+      return { diagnostics: [], inconclusive: false };
     };
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src" });
     expect(res.success).toBe(true);
@@ -81,7 +81,7 @@ describe("lsp_check tool", () => {
     const module = new LspModule({ enabled: true });
     (module as any).client.checkFile = async (filePath: string) => {
       checked.push(filePath);
-      return [];
+      return { diagnostics: [], inconclusive: false };
     };
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "." });
     expect(res.success).toBe(true);
@@ -92,7 +92,7 @@ describe("lsp_check tool", () => {
     writeFileSync(join(baseDir, "src", "a.ts"), "export const a = 1;", "utf-8");
     writeFileSync(join(baseDir, "src", "b.ts"), "export const b = 1;", "utf-8");
     const module = new LspModule({ enabled: true });
-    (module as any).client.checkFile = async () => [];
+    (module as any).client.checkFile = async () => ({ diagnostics: [], inconclusive: false });
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src" });
     expect(res.success).toBe(true);
     expect(res.output).toContain("Checked 2 file(s):");
@@ -102,7 +102,7 @@ describe("lsp_check tool", () => {
 
   it("fails for a missing path", async () => {
     const module = new LspModule({ enabled: true });
-    (module as any).client.checkFile = async () => [];
+    (module as any).client.checkFile = async () => ({ diagnostics: [], inconclusive: false });
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/nope.ts" });
     expect(res.success).toBe(false);
     expect(res.output).toContain("Path not found");

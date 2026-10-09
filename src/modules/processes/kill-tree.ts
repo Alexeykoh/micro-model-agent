@@ -1,6 +1,12 @@
 // Кроссплатформенный килл дерева процессов, неблокирующий (без stall event loop).
-import { spawn, type ChildProcess } from "child_process";
+import { spawn } from "child_process";
 import { platform } from "os";
+
+/** Минимум, который нужен `killTree` от убиваемого объекта. */
+export interface KillableProcess {
+  pid?: number | undefined;
+  kill(signal?: unknown): boolean;
+}
 
 /** Fire a `taskkill /T /F` and resolve when it exits (never rejects). */
 function taskkillPid(pid: number): Promise<void> {
@@ -29,7 +35,7 @@ function taskkillPid(pid: number): Promise<void> {
  * POSIX: килл группы (`-pid`), при неудаче — `SIGKILL` прямому ребёнку
  * (напр. не-detached процесс).
  */
-export function killTree(child: ChildProcess): void {
+export function killTree(child: KillableProcess): void {
   const pid = child.pid;
   if (!pid) return;
   if (platform() === "win32") {

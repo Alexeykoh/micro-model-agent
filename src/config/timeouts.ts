@@ -67,6 +67,12 @@ export const LSP_STARTUP_CHECK_TIMEOUT_MS = 60_000;
 export const LSP_DOCTOR_TIMEOUT_MS = 20_000;
 /** Общий дедлайн `/lsp doctor` (ограничивает ожидание на битых серверах). */
 export const LSP_DOCTOR_DEADLINE_MS = 45_000;
+/** Сколько тёплое LSP-соединение может простаивать до закрытия (пул). */
+export const LSP_SERVER_IDLE_MS = 300_000;
+/** Интервал проверки простоя LSP-соединений (пул). */
+export const LSP_IDLE_SWEEP_MS = 15_000;
+/** Максимум одновременно живых LSP-соединений (LRU-вытеснение в пуле). */
+export const LSP_MAX_SERVERS = 3;
 
 /* ── browser ─────────────────────────────────────────────────────────── */
 

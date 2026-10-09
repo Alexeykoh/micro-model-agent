@@ -2066,6 +2066,15 @@ body.light .c-dim { --face-c: var(--panel); }
 .mdl.st-tests { animation: mdlTestPulse .7s ease-in-out infinite; }
 .mdl.st-tests .eyes { animation: mdlNeedle .7s ease-in-out infinite; }
 .mdl.st-tests .eye { animation: mdlBlink 1.4s var(--ease) infinite; }
+/* LSP check — осмотр кода: медленный измеряющий пульс, взгляд вбок */
+.mdl.st-check { animation: mdlTestPulse 1.4s ease-in-out infinite; }
+.mdl.st-check .eyes { animation: mdlGlance 2.4s var(--ease) infinite; }
+.mdl.st-check .eye { animation: mdlBlink 3.2s var(--ease) infinite; }
+/* LSP warn — компилятор нашёл ошибки: покачивание + восклицательный знак */
+.mdl.st-warn { animation: mdlSway 2.6s ease-in-out infinite; }
+.mdl.st-warn .eyes { animation: mdlGlance 2.6s var(--ease) infinite; }
+.mdl.st-warn .star { display: block; position: absolute; top: -2%; left: 74%; font-size: calc(var(--s) * .62); line-height: .8; font-weight: 700; color: var(--yellow); text-shadow: 0 0 10px color-mix(in srgb, var(--yellow) 45%, transparent); animation: mdlStar 1.8s ease-out infinite; }
+.mdl.st-warn .star::before { content: "!"; }
 /* compact */
 @keyframes mdlCompact { 0%, 100% { transform: scaleX(1); } 35% { transform: scaleX(.38); } 62% { transform: scaleX(1); } }
 .mdl.st-compact { animation: mdlCompact 2.4s ease-in-out infinite; }

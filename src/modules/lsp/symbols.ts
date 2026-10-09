@@ -6,6 +6,7 @@
  * действие `project_map symbol`, когда индекс не нашёл совпадений.
  */
 import { relative } from "path";
+import { uriToPath } from "./uri";
 
 /** Локация символа из LSP, приведённая к виду карты проекта. */
 export interface LspSymbolLocation {
@@ -49,14 +50,6 @@ const SYMBOL_KINDS: Record<number, string> = {
 /** Человеческое имя LSP SymbolKind (число → строка). */
 export function symbolKindName(kind: number | undefined): string {
   return (kind !== undefined && SYMBOL_KINDS[kind]) || "symbol";
-}
-
-/** `file:///C:/a/b.ts` / `file:///home/a.ts` → путь файловой системы. */
-export function uriToPath(uri: string): string {
-  const withoutScheme = uri.replace(/^file:\/\//, "");
-  const decoded = decodeURIComponent(withoutScheme);
-  // Windows: `file:///C:/x` → `/C:/x` — снимаем ведущий слэш.
-  return /^\/[a-zA-Z]:/.test(decoded) ? decoded.slice(1) : decoded;
 }
 
 /** Нормализует ответ `workspace/symbol` в локации относительно корня проекта. */

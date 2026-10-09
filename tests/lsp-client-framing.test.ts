@@ -1,14 +1,26 @@
 import { describe, it, expect } from "vitest";
-import { LspClient } from "../src/modules/lsp/client";
+import { LspConnection } from "../src/modules/lsp/connection";
 
-describe("LspClient LSP framing (byte-accurate)", () => {
+/**
+ * Byte-accurate framing: `Content-Length` считает БАЙТЫ, поэтому тело с
+ * многобайтным UTF-8, разрезанное между чанками, обязано собираться без
+ * порчи. Транспорт живёт в `LspConnection` (2.39), поэтому тест гоняет его.
+ */
+function connection(): LspConnection & { received: Record<string, unknown>[] } {
+  const conn = new LspConnection("typescript", "/repo", { command: "fake", args: [] });
+  const received: Record<string, unknown>[] = [];
+  // перехватываем разбор на уровне сообщений, как делал прежний тест клиента
+  (conn as unknown as { handleMessage: (m: Record<string, unknown>) => void }).handleMessage = (
+    m,
+  ) => {
+    received.push(m);
+  };
+  return Object.assign(conn, { received });
+}
+
+describe("LspConnection framing (byte-accurate)", () => {
   it("parses frames whose body contains multi-byte UTF-8 split across chunks", () => {
-    const client = new LspClient();
-    const messages: Record<string, unknown>[] = [];
-    (client as any).handleMessage = (msg: Record<string, unknown>) => {
-      messages.push(msg);
-    };
-
+    const conn = connection();
     const diag = {
       jsonrpc: "2.0",
       method: "textDocument/publishDiagnostics",
@@ -29,32 +41,30 @@ describe("LspClient LSP framing (byte-accurate)", () => {
       body,
     ]);
 
-    // Split INSIDE a multi-byte character to prove byte-level framing.
+    // Разрезаем ВНУТРИ многобайтного символа — доказательство байтового фрейминга.
     const cut = Buffer.from("Ти", "utf8").length - 1;
-    (client as any).handleData(frame.subarray(0, cut));
-    (client as any).handleData(frame.subarray(cut));
+    (conn as unknown as { handleData: (b: Buffer) => void }).handleData(frame.subarray(0, cut));
+    (conn as unknown as { handleData: (b: Buffer) => void }).handleData(frame.subarray(cut));
 
-    expect(messages).toHaveLength(1);
-    const params = (messages[0] as any).params;
+    expect(conn.received).toHaveLength(1);
+    const params = (conn.received[0] as { params: { diagnostics: Array<{ message: string }> } })
+      .params;
     expect(params.diagnostics[0].message).toBe(
       "Тип 'string' не присваивается типу 'number'. Привет, мир!",
     );
   });
 
   it("parses two consecutive Cyrillic frames fed in one chunk", () => {
-    const client = new LspClient();
-    const messages: Record<string, unknown>[] = [];
-    (client as any).handleMessage = (msg: Record<string, unknown>) => {
-      messages.push(msg);
-    };
-
+    const conn = connection();
     const mkFrame = (id: number): Buffer => {
       const body = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id, result: "результат" }), "utf8");
       return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, "utf8"), body]);
     };
-    (client as any).handleData(Buffer.concat([mkFrame(1), mkFrame(2)]));
+    (conn as unknown as { handleData: (b: Buffer) => void }).handleData(
+      Buffer.concat([mkFrame(1), mkFrame(2)]),
+    );
 
-    expect(messages.map((m) => (m as any).id)).toEqual([1, 2]);
-    expect(messages[1].result).toBe("результат");
+    expect(conn.received.map((m) => m.id)).toEqual([1, 2]);
+    expect(conn.received[1].result).toBe("результат");
   });
 });

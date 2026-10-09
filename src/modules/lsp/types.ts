@@ -5,10 +5,28 @@ export interface LspDiagnostic {
     start: { line: number; character: number };
     end: { line: number; character: number };
   };
-  severity: number;
+  /**
+   * Severity по спеке **опционален**: отсутствующее значение означает `Error`.
+   * Прежде поле было обязательным, и диагностики без него молча отбрасывались
+   * фильтрами `severity === 1` (clangd сыпет ещё и `severity: 0`).
+   */
+  severity?: number;
   code?: string | number;
   message: string;
   source?: string;
+}
+
+/**
+ * Диагностика уровня error. `undefined`/`0`/нечисло трактуются как ошибка —
+ * ровно так, как требует LSP-спека.
+ */
+export function isErrorDiagnostic(diagnostic: LspDiagnostic): boolean {
+  return diagnostic.severity === undefined || diagnostic.severity === 0 || diagnostic.severity === 1;
+}
+
+/** Диагностика уровня warning (severity === 2). */
+export function isWarningDiagnostic(diagnostic: LspDiagnostic): boolean {
+  return diagnostic.severity === 2;
 }
 
 /** Параметры нотификации publishDiagnostics. */
@@ -45,7 +63,16 @@ export interface LspConfig {
    * бинарники. Env `MMA_LSP_OFFLINE` переопределяет это поле (env сильнее).
    */
   offline?: boolean;
+  /**
+   * Движок для TypeScript/JavaScript: классический `typescript-language-server`
+   * или нативный `tsgo` (`@typescript/native-preview`, ~10× быстрее). Дефолт —
+   * классический, чтобы поведение не менялось без явного выбора.
+   */
+  typescriptEngine?: TypeScriptEngine;
 }
+
+/** Движок TS/JS-сервера. */
+export type TypeScriptEngine = "typescript-language-server" | "tsgo";
 
 /** Severity диагностики: 1 error, 2 warning, 3 info, 4 hint. */
 export type DiagnosticSeverity = 1 | 2 | 3 | 4;

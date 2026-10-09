@@ -77,7 +77,7 @@ describe("angular LSP support", () => {
       serverConfig: { command: string; args?: string[] },
     ) => {
       seenConfig = serverConfig;
-      return [];
+      return { diagnostics: [], inconclusive: false };
     };
 
     const tool = module.getToolDefinitions().find((t) => t.name === "lsp_check")!;
