@@ -163,8 +163,9 @@ patterns), and no batch consisted solely of duplicates:
 - **Grep fix:** a `|` pattern that the broken `rg.cmd` shim rejects is marked engine-
   unavailable and resolved by the JS `RegExp` fallback.
 
-A constructed repeat case (read the same file at the same offset 12×) confirms the terminal
-now yields an answer plus a visible reason instead of an empty abort.
+A constructed repeat case (read the same file at the same offset 13× — the first call
+is new, so the streak reaches 12 on the 13th) confirms the terminal now yields an answer
+plus a visible reason instead of an empty abort.
 
 ## Alternatives rejected
 

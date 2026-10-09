@@ -1631,6 +1631,31 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **Не сделано (осознанно):** унификация 29 хендлеров REPL с 14 веб-хендлерами —
   это переписывание вывода, а не шва; рендер TUI, ввод и компоновка — отдельная задача.
 
+### Harness Read-only Guard Fix (unreleased, branch `fix/readonly-guard-finalize`)
+
+Разбор сессии `ses_mv0pirf5_hnmbxj` (`qwen3.8-9b-distill`, `mma web`): чисто read-only
+аналитическая задача была убита стражем на 24-й итерации, когда модель уже собиралась
+ответить. Спека: [docs/specs/2026-10-09-readonly-guard-finalize-design.md](./docs/specs/2026-10-09-readonly-guard-finalize-design.md);
+план: [docs/plans/2026-10-09-readonly-guard-finalize.md](./docs/plans/2026-10-09-readonly-guard-finalize.md).
+
+- **Прогресс = новое действие, а не мутация** (`src/core/agent/tool-batch.ts`): батч
+  непрогрессивен, только если каждый вызов дословно повторяет уже сделанный за ход.
+  Канон ключа — `canonicalArgsKey` (`src/core/agent/canonical-args.ts`; сортировка ключей +
+  нормализация path-значений), переиспользуется в `stuck-detector`. Пороги
+  `MAX_DUPLICATE_BATCHES` (8, директива) / `HARD_STOP_DUPLICATE_BATCHES` (12, терминал).
+  Широкая разведка новыми файлами/паттернами стрик не питает — ложная остановка read-only
+  задач устранена. Опрос `process_log`/`process_wait` исключён (легитимный повтор).
+- **Форс финального ответа вместо обрыва** (`src/core/agent.ts`, `finalizeWithoutTools`):
+  все терминалы (дубль-бюджет, failed-batch honest-stop, исчерпание `maxToolIterations`)
+  делают один вызов модели с пустым набором тулов; ответ принимается как финальный
+  (гейты critic/audit/claim пропускаются), персистится в историю; `AgentResult.stopReason`
+  (`"duplicate" | "failed_batches" | "max_iters"`). Пустой форс-ответ — по-прежнему фейл.
+- **Причина в веб-чате** (`webui/session/{run-agent,forward}.ts`, `assets/js/feed/turn.ts`):
+  `stopReason`/`error` едут в SSE `turn_end` и рисуются в ленте вместо generic `turn failed`.
+- **grep на Windows** (`src/tools/grep-tool.ts`): ошибка шима `rg.cmd` под Bun
+  (exit 255/9009 / `is not recognized`) → движок помечается недоступным → JS-фолбэк вместо
+  жёсткой ошибки (паттерны с `|` больше не падают).
+
 ### Current Version: 2.37.0
 
 Self-describing service contract (see the section above): `mma serve` serves its

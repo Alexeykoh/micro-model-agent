@@ -20,6 +20,16 @@ previously blocked a third frontend are now frontend-agnostic.
 
 - **Anti-drift guards**: `tests/core/command-catalog.test.ts` asserts the catalog covers exactly the commands the REPL registers (both directions) and that web-marked commands match the real web dispatcher; `tests/cli/repl-help.test.ts` pins the user-visible `/help` output; `tests/cli/command-context.test.ts` locks the surface a new frontend must implement.
 
+### Fixed
+
+- **Read-only tasks are no longer hard-stopped** (`src/core/agent/tool-batch.ts`): the guard treated "no work mutation" as "no progress", so a genuinely read-only turn (analysis) always climbed the streak and was killed at 12 batches before the model could answer (`ses_mv0pirf5_hnmbxj`). Progress is now exact tool-call repetition (new `canonicalArgsKey`, `src/core/agent/canonical-args.ts`), so broad exploration with new files/patterns never trips it.
+- **Web shows why a turn stopped** (`webui/session/{run-agent,forward}.ts`, `assets/js/feed/turn.ts`): the harness reason (`AgentResult.stopReason` / `error`) was dropped on the web path, leaving a generic `turn failed`. It is now forwarded through SSE `turn_end` and rendered.
+- **`grep` with `|` on Windows** (`src/tools/grep-tool.ts`): an npm `.cmd`/`.ps1` `rg` shim runs through `cmd.exe` under Bun, so alternation patterns were read as pipes and the search failed with no JS fallback. Shim/spawn failures (exit 255/9009, shell signature) are now treated as engine-unavailable and fall through to the JS walker.
+
+### Changed
+
+- **Forced final answer instead of a silent kill** (`src/core/agent.ts`, `tool-batch.ts`): every harness terminal (duplicate budget, failed-batch honest-stop, `maxToolIterations` exhaustion) now makes one tool-less LLM call and accepts the text as the final answer (critic/audit/claim gates skipped, answer persisted to history); `AgentResult.stopReason` carries the trigger. An empty forced answer is still a failure.
+
 ## [2.37.0] - 2026-10-09
 
 `mma serve` now describes its own API: a live OpenAPI 3.1 document plus a
