@@ -10,7 +10,10 @@ on:
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    # The suite is Windows-oriented (absolute Windows paths, cmd.exe paths, the
+    # Windows LSP shim, …); those tests are platform assertions, not skips. Run
+    # the gate where the suite is actually green.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
