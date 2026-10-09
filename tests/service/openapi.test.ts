@@ -48,6 +48,13 @@ afterEach(() => {
   stop = undefined;
 });
 
+/** Поднимает сервис (опционально с токеном) и отдаёт его базовый URL. */
+async function serve(token?: string): Promise<string> {
+  const svc = startAgentService(makeDeps(token ? { token } : {}));
+  stop = svc.stop;
+  return svc.url;
+}
+
 describe("openapi document", () => {
   it("is an OpenAPI 3.1 document with bearer security and a bearer scheme", () => {
     const doc = buildOpenApiDocument({ version: "2.37.0", authRequired: true });
@@ -231,9 +238,7 @@ describe("docs page", () => {
 
 describe("discovery routes", () => {
   it("serves the spec without a bearer token", async () => {
-    const svc = startAgentService(makeDeps({ token: "secret" }));
-    stop = svc.stop;
-    const url = await svc.url;
+    const url = await serve("secret");
     const res = await httpJson(`${url}/v1/openapi.json`);
     expect(res.status).toBe(200);
     expect(String(res.headers["content-type"])).toContain("application/json");
@@ -245,9 +250,7 @@ describe("discovery routes", () => {
   });
 
   it("serves the human docs page as self-contained HTML", async () => {
-    const svc = startAgentService(makeDeps());
-    stop = svc.stop;
-    const url = await svc.url;
+    const url = await serve();
     const res = await httpRequest(`${url}/v1/docs`);
     expect(res.status).toBe(200);
     expect(String(res.headers["content-type"])).toContain("text/html");
@@ -256,17 +259,13 @@ describe("discovery routes", () => {
   });
 
   it("still requires the token for tenant data", async () => {
-    const svc = startAgentService(makeDeps({ token: "secret" }));
-    stop = svc.stop;
-    const url = await svc.url;
+    const url = await serve("secret");
     const res = await httpJson(`${url}/v1/sessions`);
     expect(res.status).toBe(401);
   });
 
   it("reflects the runtime version in info.version", async () => {
-    const svc = startAgentService(makeDeps());
-    stop = svc.stop;
-    const url = await svc.url;
+    const url = await serve();
     const res = await httpJson(`${url}/v1/openapi.json`);
     const info = res.json.info as Record<string, unknown>;
     expect(String(info.version)).toMatch(/^1\.0\.0\+mma-\d+\.\d+\.\d+$/);
