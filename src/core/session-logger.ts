@@ -8,6 +8,7 @@ import { setAuditSessionDir } from "../modules/security/audit-log";
 import { sanitizeLogMessageTargeted } from "../modules/security/data-sanitizer";
 import { redactContextSecrets } from "./agent/context-log";
 import {
+  decodeDataUrl,
   saveToolImage,
   type ToolImageAsset,
   type ToolImageRef,
@@ -67,8 +68,9 @@ export class SessionLogger {
   /**
    * Пишет сообщение пользователя (санитизированное).
    * @param content текст пользователя.
+   * @param imageRefs ref'ы приложенных картинок (для web-replay после reload).
    */
-  logUser(content: string): void {
+  logUser(content: string, imageRefs?: ToolImageRef[]): void {
     const sanitized = sanitizeLogMessageTargeted(content);
     this.session?.appendMessage({
       role: "user",
@@ -79,6 +81,7 @@ export class SessionLogger {
       ts: new Date().toISOString(),
       type: "user",
       content: sanitized,
+      ...(imageRefs?.length ? { images: imageRefs } : {}),
     });
   }
 
@@ -240,6 +243,30 @@ export class SessionLogger {
   ): ToolImageRef[] {
     const dir = this.toolImageDir();
     if (!dir || !assets?.length) return [];
+    return assets.flatMap((asset) => this.saveToolImageSafe(dir, asset, limits));
+  }
+
+  /**
+   * Сохраняет картинки пользователя (data URL) в тот же `<sessionDir>/images/`
+   * с общей ротацией, что и ассеты тулов. Не-data URL (http) пропускаются —
+   * декодировать нечего. Шифрование сессии → [] (live остаётся inline,
+   * история — без картинок), как и у тулов. Fail-open.
+   */
+  persistUserImages(
+    dataUrls: string[] | undefined,
+    limits: { maxCount: number; maxBytes: number } = { maxCount: 30, maxBytes: 104_857_600 },
+  ): ToolImageRef[] {
+    const dir = this.toolImageDir();
+    if (!dir || !dataUrls?.length) return [];
+    const assets: ToolImageAsset[] = [];
+    for (const url of dataUrls) {
+      try {
+        const decoded = decodeDataUrl(url);
+        assets.push({ bytes: decoded.bytes, mime: decoded.mime });
+      } catch {
+        /* not a base64 data URL (e.g. http(s)) — skip */
+      }
+    }
     return assets.flatMap((asset) => this.saveToolImageSafe(dir, asset, limits));
   }
 

@@ -9,7 +9,7 @@ import { imageCard } from "./image-card.js";
 import type { Dict } from "../core/store/types.js";
 import {
   feedHasContent, clearEmpty, scrollToBottom, activeFeed, liveFeed,
-  mdOpts, buildThinkBlock, appendActionsRow,
+  mdOpts, buildThinkBlock, appendActionsRow, userBlock,
 } from "./core.js";
 
 function renderAssistantText(feed: HTMLElement, text: unknown): void {
@@ -79,7 +79,7 @@ function renderHistory(feed: HTMLElement, entries: Dict[]): void {
     if (!entry || typeof entry.kind !== "string") return;
     switch (entry.kind) {
       case "user":
-        feed.appendChild(el("div", "u", entry.text || ""));
+        feed.appendChild(userBlock(entry.text || "", entry.images));
         break;
       case "assistant":
         renderAssistantText(feed, entry.text || "");

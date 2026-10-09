@@ -764,8 +764,22 @@ export class Agent {
     if (typeof contextManager.resetUserTurn === "function") {
       contextManager.resetUserTurn();
     }
+    // Пользовательские картинки (web/one-shot) персистим в `<sessionDir>/images/`
+    // до аттача к сообщению, чтобы `/resume`/reload восстановил их в ленте;
+    // живьём веб рисует их из client-state, история — из этих ref'ов.
+    const pendingImages =
+      typeof contextManager.getPendingImages === "function" ? contextManager.getPendingImages() : [];
     contextManager.addMessage({ role: "user", content: input });
-    slog.logUser(input);
+    const userImageRefs = pendingImages.length
+      ? slog.persistUserImages(
+          pendingImages.flatMap((p) => (p.type === "image_url" && p.image_url.url ? [p.image_url.url] : [])),
+          {
+            maxCount: config.images?.maxCount ?? 30,
+            maxBytes: config.images?.maxBytes ?? 104_857_600,
+          },
+        )
+      : undefined;
+    slog.logUser(input, userImageRefs);
 
     if (isFirstMessage && activeMeta && sessionManager) {
       const meta = sessionManager.getActiveMeta();

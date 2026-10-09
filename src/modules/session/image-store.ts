@@ -36,6 +36,9 @@ const EXT: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/webp": "webp",
   "image/gif": "gif",
+  "image/bmp": "bmp",
+  "image/svg+xml": "svg",
+  "image/avif": "avif",
 };
 
 /** Декодирует `data:image/...;base64,...` в байты + mime. */

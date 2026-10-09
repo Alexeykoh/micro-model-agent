@@ -10,7 +10,7 @@ import type { Dict } from "../core/store/types.js";
 import { contextLabel } from "../format.js";
 import {
   clearEmpty, activeFeed, liveFeed, appendTo, scrollToBottom, clearFeed,
-  finishMd, resetTurnText, finishThink, showBusy,
+  finishMd, resetTurnText, finishThink, showBusy, userBlock,
 } from "../feed.js";
 import { setBusy } from "../rail.js";
 import { setSessOpen } from "../core/menus.js";
@@ -131,18 +131,6 @@ async function addFiles(files: File[]): Promise<void> {
   }
   renderAttachments();
   if (err) setAttachError(err);
-}
-
-function userMessageNode(text: string, images: string[] | null | undefined): HTMLElement {
-  const node = el("div", "u", text);
-  (images || []).forEach((src) => {
-    const img = document.createElement("img");
-    img.className = "uimg";
-    img.alt = "";
-    img.src = src;
-    node.appendChild(img);
-  });
-  return node;
 }
 
 export function saveComposer(): void {
@@ -335,7 +323,7 @@ async function send(): Promise<void> {
   resetTurnText(feed);
   finishThink(feed);
   if (text.startsWith("/")) {
-    appendTo(feed, el("div", "u", text));
+    appendTo(feed, userBlock(text));
     scrollToBottom();
     if (tab) {
       tab.draft = "";
@@ -371,7 +359,7 @@ async function send(): Promise<void> {
     banner.appendChild(document.createTextNode(" · " + (session.host.provider || (settings.config && settings.config.provider && settings.config.provider.active) || "—") + " · " + contextLabel() + sessionPart));
     feed.insertBefore(banner, feed.firstChild);
   }
-  appendTo(feed, userMessageNode(text, images));
+  appendTo(feed, userBlock(text, images));
   scrollToBottom();
   if (tab) {
     tab.draft = "";

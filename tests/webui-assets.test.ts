@@ -102,6 +102,40 @@ describe("webui assets", () => {
     const a = loadAssets();
     expect(a.css).toContain(".feed > .md");
     expect(a.css).toContain("border-left: 2px solid var(--accent)");
+    // The answer carries a muted, translucent accent backdrop so the dim
+    // work process (think/tool/meta) stays visually secondary.
+    expect(a.css).toMatch(/\.feed > \.md, \.feed > \.ans \{[^}]*background: var\(--ans-bg\)/);
+  });
+
+  it("anchors the jump-to-latest pill to the composer, not a fixed offset", () => {
+    const a = loadAssets();
+    expect(a.css).toMatch(/\.to-latest \{[^}]*bottom: calc\(100% \+ 10px\)/);
+    expect(a.css).not.toContain("bottom: 148px");
+    expect(js(a)).toContain('document.querySelector(".input-area")');
+    // Centering must survive the entrance animation: plain `pop` ends at
+    // `transform: none`, which wipes `translateX(-50%)` and makes the pill
+    // flash off-center. It uses a centering-preserving keyframe instead.
+    expect(a.css).toMatch(/\.to-latest:not\(\[hidden\]\) \{ animation: popCenter/);
+    expect(a.css).toMatch(/@keyframes popCenter \{[^}]*translateX\(-50%\)[^}]*\}/);
+    expect(a.css).not.toMatch(/\.to-latest:not\(\[hidden\]\) \{ animation: pop /);
+  });
+
+  it("quiets the reasoning block below the answer", () => {
+    const a = loadAssets();
+    expect(a.css).toMatch(/\.think \{[^}]*opacity: \.72/);
+    expect(a.css).toMatch(/\.think-h \{[^}]*color: var\(--dim-b\)/);
+  });
+
+  it("stacks user attachments above the text, prompt marker on the text", () => {
+    const a = loadAssets();
+    const core = a.jsModules["js/feed/core.js"];
+    expect(core).toContain("function userBlock");
+    // Attachments strip must precede the text node (image/file on top).
+    expect(core.indexOf('el("div", "u-attach")')).toBeLessThan(core.indexOf('el("div", "u-text")'));
+    expect(a.css).toContain(".u-text::before");
+    expect(a.css).not.toContain(".u::before");
+    expect(a.css).toContain(".u-attach");
+    expect(a.css).toContain(".u-file");
   });
 
   it("renders reasoning blocks collapsed by default", () => {

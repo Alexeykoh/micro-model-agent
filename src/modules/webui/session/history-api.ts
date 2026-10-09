@@ -69,7 +69,7 @@ function imagesField(e: SessionLogEntry, sessionId?: string): Pick<HistoryEntry,
 function mapLogEntry(e: SessionLogEntry, sessionId?: string): HistoryEntry | null {
   switch (e.type) {
     case "user":
-      return { ts: e.ts, kind: "user", text: scrub(e.content) };
+      return { ts: e.ts, kind: "user", text: scrub(e.content), ...imagesField(e, sessionId) };
     case "assistant":
       return { ts: e.ts, kind: "assistant", text: scrub(e.content) };
     case "reasoning":

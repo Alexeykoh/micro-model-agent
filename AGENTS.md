@@ -1700,6 +1700,39 @@ server: каждый `checkFile` (каждая запись файла, кажд
 - **`killTree` параметризован структурным `KillableProcess`** (`processes/kill-tree.ts`);
   `ChildProcess` его удовлетворяет — вызовы не менялись.
 
+### Web User Attachments — Layout & Persist (unreleased, ветка `feat/webui-answer-panel`)
+
+Живой прогон: вложения пользователя рисовались inline после текста (`> текст [img]`),
+а после reload картинки пропадали — `session.jsonl` их не хранил.
+
+- **Layout** (`assets/js/feed/core.ts` → `userBlock`, `styles.css`): вложения — строкой
+  `.u-attach` НАД текстом (маркер `> ` переехал на `.u-text::before`), картинки
+  (`data:image/*` или путь/URL с image-расширением) — ленивые превью `.uimg`, всё прочее
+  (файл / не-image data URL) — чип `.u-file` с именем. Любое число вложений (`flex-wrap`).
+  Live-отправка (`session/composer.ts`), реплей истории (`feed/history.ts`) и слэш-команды
+  идут через `userBlock` (локальный `userMessageNode` удалён).
+- **Persist** (`SessionLogger.persistUserImages`, `core/agent.ts`): картинки пользователя
+  (data URL) сохраняются в тот же `<sessionDir>/images/` с общей ротацией
+  `images.maxCount/maxBytes`; ref'ы пишутся в `user`-запись `session.jsonl`, `history-api`
+  отдаёт их URL'ами, веб восстанавливает превью после reload. Шифрование сессии → как у
+  тулов (live inline, история без картинок). `image-store` EXT += bmp/svg/avif.
+  i18n `images.*` переписаны с «tool images» на «tools and user».
+- **Тесты:** `tests/core/session-logger-images.test.ts` (persist + refs на user-записи),
+  `tests/webui-history.test.ts` (URL'ы), `tests/webui-user-block-dom.test.ts`
+  (порядок/типы вложений), guard в `tests/webui-assets.test.ts`.
+
+### Web Answer Panel, Quiet Reasoning & Latest-Pill (unreleased, ветка `feat/webui-answer-panel`)
+
+- **Ответ — подложкой** (`styles.css`): `.feed > .md/.ans` получает приглушённый
+  полупрозрачный акцентный фон `--ans-bg` (обе темы) + рейку, зеркаля пользовательский
+  блок; служебные строки (thinking/tool/meta) остаются плоскими и уходят на второй план.
+- **Thinking тише** (`styles.css`): `.think { opacity: .72 }` (`:hover`/`.live` → 1),
+  заголовок `✦ thinking` красится в `--dim-b` вместо яркого `--think`.
+- **Кнопка «↓ latest»** (`styles.css`, `feed/core.ts`): якорится к `.input-area`
+  (`bottom: calc(100% + 10px)`, как `.menu`/`.cmdk`) вместо магического `bottom: 148px`
+  на `.chat`; анимация входа — `popCenter` (сохраняет `translateX(-50%)`, иначе `pop`
+  ронял центрирование и пилюля вспыхивала правее центра).
+
 ### Current Version: 2.39.0
 
 Self-describing service contract (see the section above): `mma serve` serves its
