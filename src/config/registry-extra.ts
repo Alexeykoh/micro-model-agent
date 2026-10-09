@@ -786,6 +786,12 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
       c.lsp ??= structuredClone(DEFAULT_LSP_CONFIG);
       c.lsp.offline = v as boolean;
     }),
+  enumOf("lsp.typescriptEngine", "lsp", ["typescript-language-server", "tsgo"], true,
+    (c) => c.lsp?.typescriptEngine ?? DEFAULT_LSP_CONFIG.typescriptEngine,
+    (c, v) => {
+      c.lsp ??= structuredClone(DEFAULT_LSP_CONFIG);
+      c.lsp.typescriptEngine = v as "typescript-language-server" | "tsgo";
+    }),
 
   int("images.maxCount", "images", 1, 1000, 1, false,
     (c) => c.images?.maxCount ?? DEFAULTS.images!.maxCount,

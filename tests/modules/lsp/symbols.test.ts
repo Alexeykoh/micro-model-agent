@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { mapWorkspaceSymbols, symbolKindName, uriToPath } from "../../../src/modules/lsp/symbols";
-import { getServerForLanguage } from "../../../src/modules/lsp/config";
-import { DEFAULT_LSP_CONFIG } from "../../../src/modules/lsp/config";
+import { mapWorkspaceSymbols, symbolKindName } from "../../../src/modules/lsp/symbols";
+import { uriToPath } from "../../../src/modules/lsp/uri";
+import { getServerForLanguage, DEFAULT_LSP_CONFIG } from "../../../src/modules/lsp/config";
 
 describe("symbolKindName", () => {
   it("maps LSP symbol kinds", () => {

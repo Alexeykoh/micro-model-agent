@@ -1,457 +1,165 @@
-// LSP-клиент: spawn сервера, JSON-RPC поверх stdio, диагностики, tree-kill при shutdown.
-import { spawn, execSync, type ChildProcess, type SpawnOptions } from "child_process";
-import { resolve } from "path";
-import { platform } from "os";
-import type { LspDiagnostic, LspServerConfig, PublishDiagnosticsParams } from "./types";
-import { resolveSpawnCommand, buildWinCommandLine } from "./command";
-import { resolveNpxLaunch, isOfflineLsp } from "./resolve";
-import { killTree } from "../processes/registry";
+// Фасад LSP-клиента: тот же публичный контракт, что и раньше (`checkFile`,
+// `probe`, `workspaceSymbol`, `setLogger`, `setOffline`), но внутри — пул
+// тёплых соединений (`pool.ts`), а не spawn+kill на каждую проверку.
+//
+// Именно здесь исправлен первопричинный дефект: `checkFile` больше не создаёт
+// процесс сервера. Он берёт живое соединение из пула, синкает документ
+// (`didOpen`/`didChange`) и спрашивает диагностику. Индекс language server'а
+// переживает правки — раньше он умирал на каждой.
+import { readFileSync } from "fs";
+import { resolve as resolvePath } from "path";
+import type { LspDiagnostic, LspServerConfig } from "./types";
+import { LspConnection, type ServerProcessFactory, type LaunchPlan } from "./connection";
+import { LspConnectionPool } from "./pool";
+import { languageIdForPath } from "./language";
+import { pathToUri } from "./uri";
 import { mapWorkspaceSymbols, type LspSymbolLocation } from "./symbols";
-import { toForwardSlash } from "../../tools/path-utils";
-import type { Logger } from "../../logger/app-logger";
-import { errMsg } from "../../utils";
-import { LSP_DEFAULT_TIMEOUT_MS as DEFAULT_TIMEOUT } from "../../config/timeouts";
+import type { LspClientLogger } from "./client-logger";
+import { LSP_DEFAULT_TIMEOUT_MS } from "../../config/timeouts";
+
+export { FileOnlyLogger, type LspClientLogger } from "./client-logger";
 
 /**
- * Логгер-адаптер: LSP-диагностику только в app.jsonl, никогда в консоль/терминал.
- * LSP-предупреждения шумные (таймаут на первом запуске, установка npx) и должны
- * диагностироваться из файлов сессии, не мусор в чате пользователя.
+ * Итог проверки файла. `inconclusive` отличает «сервер промолчал» от «сервер
+ * сказал, что чисто»: раньше таймаут возвращал пустой список, и модель делала
+ * вывод, что ошибок нет.
  */
-export class FileOnlyLogger implements LspClientLogger {
-  constructor(private logger: Logger) {}
-  debug(msg: string, meta?: Record<string, unknown>): void {
-    this.logger.logSilent("debug", msg, meta);
-  }
-  info(msg: string, meta?: Record<string, unknown>): void {
-    this.logger.logSilent("info", msg, meta);
-  }
-  warn(msg: string, meta?: Record<string, unknown>): void {
-    this.logger.logSilent("warn", msg, meta);
-  }
-  error(msg: string, meta?: Record<string, unknown>): void {
-    this.logger.logSilent("error", msg, meta);
-  }
+export interface CheckResult {
+  diagnostics: LspDiagnostic[];
+  inconclusive: boolean;
 }
 
-interface PendingRequest {
-  resolve: (value: unknown) => void;
-  reject: (reason: Error) => void;
+/** Зависимости клиента. Единственный способ инъекции (пул, спавн, логгер). */
+export interface LspClientDeps {
+  logger?: LspClientLogger | null;
+  offline?: boolean;
+  /** Готовый пул (тесты); иначе строится из spawn/resolveLaunch. */
+  pool?: LspConnectionPool;
+  /** Фабрика процесса сервера (тесты). */
+  spawn?: ServerProcessFactory;
+  /** Резолв команды запуска (тесты). */
+  resolveLaunch?: (config: LspServerConfig) => LaunchPlan;
 }
 
-/** Логгер клиента (интерфейс). */
-export interface LspClientLogger {
-  debug(msg: string, meta?: Record<string, unknown>): void;
-  info(msg: string, meta?: Record<string, unknown>): void;
-  warn(msg: string, meta?: Record<string, unknown>): void;
-  error(msg: string, meta?: Record<string, unknown>): void;
-}
-
-/** LSP-клиент: checkFile/probe поверх spawn + initialize + shutdown. */
+/** Логгер-совместимый клиент с пулом соединений. */
 export class LspClient {
-  private logger: LspClientLogger | null = null;
+  private deps: LspClientDeps;
+  private poolInstance: LspConnectionPool | null = null;
+
+  constructor(deps: LspClientDeps = {}) {
+    this.deps = deps;
+  }
+
+  /**
+   * Пул создаётся лениво: `setLogger`/`setOffline` вызываются после
+   * конструктора (LspModule делает это сразу), и соединения должны видеть
+   * актуальные зависимости.
+   */
+  private get pool(): LspConnectionPool {
+    if (!this.poolInstance) {
+      this.poolInstance = this.deps.pool ?? new LspConnectionPool(this.deps);
+    }
+    return this.poolInstance;
+  }
 
   /** Назначить логгер (null — молчать). */
   setLogger(logger: LspClientLogger | null): void {
-    this.logger = logger;
+    this.deps = { ...this.deps, logger };
   }
-
-  private offlineFlag: boolean | undefined = undefined;
 
   /**
    * Офлайн-флаг из конфига (`config.lsp.offline`). Env `MMA_LSP_OFFLINE`
    * по-прежнему сильнее (см. `isOfflineLsp`). `undefined` — только env.
    */
   setOffline(offline: boolean | undefined): void {
-    this.offlineFlag = offline;
+    this.deps = { ...this.deps, offline };
   }
 
-  private process: ChildProcess | null = null;
-  private requestId = 0;
-  private pending = new Map<number, PendingRequest>();
-  private buffer: Buffer = Buffer.alloc(0);
-  private contentLength = -1;
-  private diagnostics: LspDiagnostic[] = [];
-  private diagnosticsResolve: ((diags: LspDiagnostic[]) => void) | null = null;
-  private diagnosticsTimer: ReturnType<typeof setTimeout> | null = null;
-  private initialized = false;
+  /** Текущий офлайн-флаг (env поверх него решает `isOfflineLsp`). */
+  getOffline(): boolean | undefined {
+    return this.deps.offline;
+  }
 
-  /** Проверить файл: открыть в сервере, дождаться publishDiagnostics, вернуть их. */
+  /** Статистика пула для `/lsp status`: живые соединения, перезапуски, reap. */
+  stats(): { live: number; restarts: number; reaped: number } {
+    return this.pool.stats();
+  }
+
+  /** Сколько соединений живо прямо сейчас (быстрый запрос для UI). */
+  liveConnections(): number {
+    return this.pool.stats().live;
+  }
+
+  /** Закрыть все соединения (конец сессии, `/lsp restart`). */
+  async close(): Promise<void> {
+    await this.pool.dispose();
+  }
+
+  /**
+   * Проверить файл. Берёт тёплое соединение из пула, синкает содержимое и
+   * возвращает диагностики. Соединение остаётся живым (и документ открытым) —
+   * следующая проверка того же файла не спавнит сервер заново.
+   */
   async checkFile(
     filePath: string,
-    baseDir: string,
+    _baseDir: string,
     config: LspServerConfig,
-    projectRoot: string = baseDir,
-  ): Promise<LspDiagnostic[]> {
-    const timeout = config.timeout ?? DEFAULT_TIMEOUT;
-
-    try {
-      await this.initialize(config, projectRoot, timeout);
-      this.sendNotification("initialized", {});
-
-      const uri = this.pathToUri(resolve(filePath));
-      const fs = await import("fs");
-      const content = fs.readFileSync(filePath, "utf-8");
-
-      const diagPromise = new Promise<LspDiagnostic[]>((resolve) => {
-        this.diagnosticsResolve = resolve;
-        this.diagnostics = [];
-        this.diagnosticsTimer = setTimeout(() => {
-          this.diagnosticsResolve?.([]);
-          this.diagnosticsResolve = null;
-        }, timeout);
-      });
-
-      this.sendNotification("textDocument/didOpen", {
-        textDocument: {
-          uri,
-          languageId: this.languageFromPath(filePath),
-          version: 1,
-          text: content,
-        },
-      });
-
-      return await diagPromise;
-    } catch (e) {
-      // Пробросить наружу, чтобы LspModule показал падение, а не спрятал.
-      throw e instanceof Error ? e : new Error(String(e));
-    } finally {
-      await this.shutdown();
-    }
+    projectRoot: string,
+  ): Promise<CheckResult> {
+    const timeout = config.timeout ?? LSP_DEFAULT_TIMEOUT_MS;
+    const absolute = resolvePath(filePath);
+    const uri = pathToUri(absolute);
+    const connection = await this.pool.acquire(serverKeyFor(config), config, projectRoot);
+    connection.syncUri(uri, languageIdForPath(absolute), readFileOrEmpty(absolute));
+    const diagnostics = await connection.diagnosticsFor(uri, timeout);
+    return { diagnostics: diagnostics ?? [], inconclusive: diagnostics === null };
   }
 
   /**
    * Лёгкая проба «сервер реально стартует»: spawn + initialize + shutdown.
-   * Для баннера REPL — мёртвый сервер (упавшая npx-автоустановка, неверное имя
-   * пакета, нет бинарника) виден заранее, а не таймаутом первого write_file.
+   * Для баннера REPL и `/lsp doctor` — мёртвый сервер виден заранее, а не
+   * таймаутом первой записи. В пулён не попадает намеренно.
    */
   async probe(config: LspServerConfig, projectRoot: string, timeout: number): Promise<void> {
+    const connection = new LspConnection(serverKeyFor(config), projectRoot, config, {
+      logger: this.deps.logger ?? null,
+      offline: this.deps.offline,
+      spawn: this.deps.spawn,
+      resolveLaunch: this.deps.resolveLaunch,
+    });
     try {
-      await this.initialize(config, projectRoot, timeout);
+      await connection.open();
     } finally {
-      await this.shutdown();
+      await connection.shutdown();
     }
   }
 
   /**
-   * Поиск символа по имени через `workspace/symbol` (одноразовый цикл
-   * initialize → запрос → shutdown, как `checkFile`). Пустой/битый ответ
-   * → пустой список; ошибки пробрасываются вызывающему (LspModule гасит).
+   * Поиск символа по имени через `workspace/symbol` (обогащение карты
+   * проекта). Идёт через пул, чтобы TS-сервер оставался тёплым для последующих
+   * проверок. Пустой/битый ответ — пустой список.
    */
   async workspaceSymbol(
     query: string,
     config: LspServerConfig,
     projectRoot: string,
-    timeout: number = config.timeout ?? DEFAULT_TIMEOUT,
+    timeout: number = config.timeout ?? LSP_DEFAULT_TIMEOUT_MS,
   ): Promise<LspSymbolLocation[]> {
-    await this.initialize(config, projectRoot, timeout);
-    this.sendNotification("initialized", {});
-    try {
-      const result = await this.sendRequest("workspace/symbol", { query }, timeout);
-      return mapWorkspaceSymbols(result, projectRoot);
-    } finally {
-      await this.shutdown();
-    }
+    const connection = await this.pool.acquire(serverKeyFor(config), config, projectRoot);
+    const result = await connection.request("workspace/symbol", { query }, timeout);
+    return mapWorkspaceSymbols(result, projectRoot);
   }
+}
 
-  private async initialize(
-    config: LspServerConfig,
-    projectRoot: string,
-    timeout: number,
-  ): Promise<void> {
-    await this.startServer(config, projectRoot);
-
-    const rootUri = this.pathToUri(projectRoot);
-    const initParams = {
-      processId: process.pid,
-      rootUri,
-      workspaceFolders: [{ uri: rootUri, name: "workspace" }],
-      capabilities: {
-        textDocument: { publishDiagnostics: {} },
-        workspace: { symbol: {} },
-      },
-    };
-    try {
-      await this.sendRequest("initialize", initParams, timeout);
-    } catch (e) {
-      const msg = errMsg(e);
-      this.logger?.warn(`LSP initialize failed (attempt 1): ${msg}`, {
-        command: config.command,
-        projectRoot,
-      });
-      // npx-автоустановка может вылететь за таймаут initialize на первом запуске — один ретрай.
-      if (!(e instanceof Error) || !e.message.includes("initialize")) throw e;
-      await this.shutdown();
-      await this.startServer(config, projectRoot);
-      try {
-        await this.sendRequest("initialize", initParams, timeout);
-      } catch (retryErr) {
-        const retryMsg = errMsg(retryErr);
-        this.logger?.error(`LSP initialize failed (attempt 2, giving up): ${retryMsg}`, {
-          command: config.command,
-          projectRoot,
-        });
-        throw retryErr;
-      }
-    }
-    this.initialized = true;
+function readFileOrEmpty(path: string): string {
+  try {
+    return readFileSync(path, "utf-8");
+  } catch {
+    return "";
   }
+}
 
-  /**
-   * Эффективная команда запуска: npx→глобальный бинарник, офлайн-гейт.
-   * Вынесено из `startServer`, чтобы spawn-код оставался плоским.
-   */
-  private resolveLaunch(config: LspServerConfig): { command: string; args: string[] } {
-    const launch = resolveNpxLaunch(config.command, config.args ?? []);
-    if (launch.command !== config.command) {
-      this.logger?.debug(`LSP: using globally installed ${launch.binaryName} (skipped npx)`);
-    } else if (launch.useNpxFallback && launch.binaryName) {
-      this.logger?.debug(`LSP: ${launch.binaryName} not found globally, falling back to npx`);
-    }
-    if (launch.useNpxFallback && isOfflineLsp(undefined, this.offlineFlag)) {
-      throw new Error(
-        `LSP offline mode: ${launch.binaryName ?? "npx"} not found in PATH; ` +
-          "npx auto-install is disabled (MMA_LSP_OFFLINE)",
-      );
-    }
-    return { command: launch.command, args: launch.args };
-  }
-
-  private async startServer(config: LspServerConfig, projectRoot: string): Promise<void> {
-    if (config.autoInstall === false) {
-      try {
-        execSync(`where ${config.command}`, { stdio: "pipe", timeout: 3000 });
-      } catch {
-        throw new Error(`${config.command} not found in PATH`);
-      }
-    }
-
-    const { command: effectiveCommand, args: effectiveArgs } = this.resolveLaunch(config);
-
-    return new Promise((resolve, reject) => {
-      const args = effectiveArgs;
-      const isWin = platform() === "win32";
-      let spawnCommand = resolveSpawnCommand(effectiveCommand);
-      let spawnArgs = args;
-      const spawnOpts: SpawnOptions = {
-        stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, ...config.env },
-        cwd: projectRoot,
-        // POSIX: потомок — лидер группы, чтобы `kill(-pid)` killTree() доставал
-        // всю цепочку (npx → node → tsserver). Без этого групповой kill падает
-        // с ESRCH, а внуки выживают сиротами. Windows — taskkill /T.
-        detached: !isWin,
-      };
-      if (isWin) {
-        // `.cmd`-шим напрямую под Node не спавнится (`spawn npx EINVAL`) — через cmd.exe.
-        spawnCommand = buildWinCommandLine(spawnCommand, args);
-        spawnArgs = [];
-        spawnOpts.shell = true;
-      }
-      const proc = spawn(spawnCommand, spawnArgs, spawnOpts);
-
-      proc.on("error", reject);
-
-      proc.stdout!.on("data", (chunk: Buffer) => {
-        this.handleData(chunk);
-      });
-
-      proc.stderr!.on("data", () => {});
-
-      proc.once("spawn", () => {
-        resolve();
-      });
-
-      this.process = proc;
-
-      setTimeout(() => {
-        if (!this.initialized && this.process) {
-          const msg = "LSP server start timeout";
-          this.logger?.error(msg, { command: config.command, projectRoot, timeout: config.timeout ?? DEFAULT_TIMEOUT });
-          reject(new Error(msg));
-        }
-      }, config.timeout ?? DEFAULT_TIMEOUT);
-    });
-  }
-
-  private handleData(chunk: Buffer): void {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
-    this.parseMessages();
-  }
-
-  private parseMessages(): void {
-    while (true) {
-      if (this.contentLength === -1) {
-        const headerEnd = this.buffer.indexOf("\r\n\r\n");
-        if (headerEnd === -1) return;
-
-        // Заголовки — ASCII: декодим только срез заголовка.
-        const header = this.buffer.subarray(0, headerEnd).toString("utf8");
-        const match = header.match(/Content-Length: (\d+)/i);
-        if (!match) {
-          this.buffer = this.buffer.subarray(headerEnd + 4);
-          continue;
-        }
-
-        this.contentLength = parseInt(match[1], 10);
-        // Защита от злонамеренных/битых серверов с абсурдным Content-Length
-        if (this.contentLength > 10 * 1024 * 1024) {
-          this.buffer = this.buffer.subarray(headerEnd + 4);
-          this.contentLength = -1;
-          continue;
-        }
-        this.buffer = this.buffer.subarray(headerEnd + 4);
-      }
-
-      // Content-Length считает БАЙТЫ, не JS-символы. Нарезка декодированной
-      // строки по числу символов портит фреймы с многобайтным UTF-8
-      // (напр. кириллические диагностики) — остаток держим сырыми байтами.
-      if (this.buffer.length < this.contentLength) return;
-
-      const body = this.buffer.subarray(0, this.contentLength).toString("utf8");
-      this.buffer = this.buffer.subarray(this.contentLength);
-      this.contentLength = -1;
-
-      try {
-        const msg = JSON.parse(body);
-        this.handleMessage(msg);
-      } catch (e) {
-        this.logger?.debug(`LSP JSON parse error: ${errMsg(e)}`);
-      }
-    }
-  }
-
-  private handleMessage(msg: Record<string, unknown>): void {
-    if (msg.method === "textDocument/publishDiagnostics") {
-      const params = msg.params as PublishDiagnosticsParams;
-      if (params?.diagnostics) {
-        this.diagnostics = params.diagnostics;
-        if (this.diagnosticsTimer) {
-          clearTimeout(this.diagnosticsTimer);
-          this.diagnosticsTimer = null;
-        }
-        this.diagnosticsResolve?.(this.diagnostics);
-        this.diagnosticsResolve = null;
-      }
-      return;
-    }
-
-    if (msg.id !== undefined && msg.id !== null) {
-      const pending = this.pending.get(msg.id as number);
-      if (pending) {
-        this.pending.delete(msg.id as number);
-        if (msg.error) {
-          pending.reject(
-            new Error(String((msg.error as Record<string, unknown>).message ?? "LSP error")),
-          );
-        } else {
-          pending.resolve(msg.result);
-        }
-      }
-    }
-  }
-
-  private sendRequest(method: string, params: unknown, timeout: number): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      const id = ++this.requestId;
-      this.pending.set(id, { resolve, reject });
-
-      const message = JSON.stringify({ jsonrpc: "2.0", id, method, params });
-      this.write(message);
-
-      setTimeout(() => {
-        if (this.pending.has(id)) {
-          this.pending.delete(id);
-          const msg = `LSP request timeout: ${method}`;
-          this.logger?.warn(msg, { method, timeout });
-          reject(new Error(msg));
-        }
-      }, timeout);
-    });
-  }
-
-  private sendNotification(method: string, params: unknown): void {
-    const message = JSON.stringify({ jsonrpc: "2.0", method, params });
-    this.write(message);
-  }
-
-  private write(message: string): void {
-    if (!this.process?.stdin?.writable) {
-      this.logger?.debug("LSP write failed: process stdin not writable");
-      return;
-    }
-    const header = `Content-Length: ${Buffer.byteLength(message)}\r\n\r\n`;
-    try {
-      this.process.stdin.write(header + message);
-    } catch (e) {
-      this.logger?.debug(`LSP write error: ${errMsg(e)}`);
-    }
-  }
-
-  private async shutdown(): Promise<void> {
-    try {
-      if (this.process && this.initialized && this.process.stdin?.writable) {
-        // Ответ shutdown ждём (с таймаутом), чтобы сервер успел подтвердить до
-        // exit и kill. Старый код слал shutdown fire-and-forget и тут же убивал —
-        // сервер ответить не успевал, сыпались ложные timeout-предупреждения.
-        try {
-          await this.sendRequest("shutdown", null, 3000);
-        } catch (e) {
-          this.logger?.debug(`LSP shutdown request failed: ${errMsg(e)}`);
-        }
-        this.sendNotification("exit", null);
-        await new Promise((r) => setTimeout(r, 200));
-      }
-    } catch (e) {
-      this.logger?.debug(`LSP shutdown error: ${errMsg(e)}`);
-    } finally {
-      if (this.process) {
-        // Прямой потомок на win32 — cmd.exe-обёртка; её убийство в одиночку
-        // сиротит дерево npx → node → tsserver (наблюдались текущие node после
-        // каждого чека). Tree-kill — умирает вся цепочка.
-        try {
-          killTree(this.process);
-        } catch (e) {
-          this.logger?.debug(`LSP killTree error: ${errMsg(e)}`);
-        }
-        this.process = null;
-      }
-      this.initialized = false;
-      this.buffer = Buffer.alloc(0);
-      this.contentLength = -1;
-      if (this.diagnosticsTimer) {
-        clearTimeout(this.diagnosticsTimer);
-        this.diagnosticsTimer = null;
-      }
-    }
-  }
-
-  private pathToUri(filePath: string): string {
-    const normalized = toForwardSlash(filePath);
-    return /^[a-zA-Z]:/.test(normalized) ? `file:///${normalized}` : `file://${normalized}`;
-  }
-
-  private languageFromPath(filePath: string): string {
-    const ext = filePath.split(".").pop()?.toLowerCase();
-    const map: Record<string, string> = {
-      ts: "typescript",
-      tsx: "typescriptreact",
-      mts: "typescript",
-      cts: "typescript",
-      js: "javascript",
-      jsx: "javascriptreact",
-      mjs: "javascript",
-      cjs: "javascript",
-      py: "python",
-      go: "go",
-      rs: "rust",
-      json: "json",
-      html: "html",
-      css: "css",
-      scss: "scss",
-      md: "markdown",
-      yaml: "yaml",
-      yml: "yaml",
-    };
-    return map[ext ?? ""] ?? "plaintext";
-  }
+/** Стабильная идентичность сервера: команда + аргументы. */
+export function serverKeyFor(server: LspServerConfig): string {
+  return `${server.command}:${(server.args ?? []).join(" ")}`;
 }

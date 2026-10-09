@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
 import {
   loaderStateFor, toolState, createFace, setFaceState, setGreetResolver,
-  MMART_NAME, initCursor,
+  MMART_NAME, initCursor, lspOutputSignal,
 } from "../src/modules/webui/assets/js/loader.js";
 import type { FaceState } from "../src/modules/webui/assets/js/loader.js";
 
@@ -82,6 +82,57 @@ describe("loaderStateFor", () => {
   it("styles the update state", () => {
     const css = readFileSync("src/modules/webui/assets/styles.css", "utf8");
     expect(css).toContain(".mdl.st-update");
+  });
+});
+
+describe("LSP mascot reactions", () => {
+  it("gives lsp_check its own check state", () => {
+    expect(toolState("lsp_check")).toBe("check");
+    expect(loaderStateFor({ type: "tool_start", name: "lsp_check" })).toBe("check");
+    expect(loaderStateFor({ type: "tool_end", name: "lsp_check", success: true })).toBe("check");
+  });
+
+  it("frowns when lsp_check reports errors", () => {
+    // Модуль отвечает success:false именно при найденных ошибках.
+    expect(loaderStateFor({ type: "tool_end", name: "lsp_check", success: false })).toBe("warn");
+  });
+
+  it("reads the LSP verdict out of a write/edit tool output", () => {
+    expect(loaderStateFor({ type: "tool_end", name: "write_file", success: true, output: "ok\n\n[LSP errors]:\n  a.ts(1,2): error: x" })).toBe("warn");
+    expect(loaderStateFor({ type: "tool_end", name: "edit_file", success: true, output: "ok\n\n[LSP warnings]:\n  a.ts(1,2): warning: y" })).toBe("edit");
+    expect(loaderStateFor({ type: "tool_end", name: "write_file", success: true, output: "written" })).toBe("create");
+  });
+
+  it("treats a dead server as an error, not as code errors", () => {
+    expect(loaderStateFor({ type: "tool_end", name: "write_file", success: true, output: "\n\n[LSP check failed]: spawn failed" })).toBe("error");
+    expect(loaderStateFor({ type: "tool_end", name: "write_file", success: true, output: "\n\n[LSP disabled: unavailable]" })).toBe("error");
+  });
+
+  it("does not react to LSP markers on tool_start", () => {
+    expect(loaderStateFor({ type: "tool_start", name: "write_file", output: "[LSP errors]" })).toBe("create");
+  });
+
+  it("parses the markers purely", () => {
+    expect(lspOutputSignal("[LSP errors]:")).toBe("errors");
+    expect(lspOutputSignal("[LSP check failed]: x")).toBe("failed");
+    expect(lspOutputSignal("[LSP disabled: x]")).toBe("failed");
+    expect(lspOutputSignal("[LSP warnings]:")).toBeNull();
+    expect(lspOutputSignal("plain output")).toBeNull();
+    expect(lspOutputSignal(undefined)).toBeNull();
+  });
+
+  it("styles the LSP states", () => {
+    const css = readFileSync("src/modules/webui/assets/styles.css", "utf8");
+    expect(css).toContain(".mdl.st-check");
+    expect(css).toContain(".mdl.st-warn");
+    // Обе реакции должны отличаться от нейтрального run.
+    expect(css).not.toContain(".mdl.st-warn { animation: mdlRun");
+  });
+
+  it("carries the star element the warn state needs", () => {
+    const face = createFace("warn", "lg");
+    expect(face.querySelector(".star")).not.toBeNull();
+    expect(face.dataset.state).toBe("warn");
   });
 });
 

@@ -24,6 +24,16 @@ export const severityLabels: Record<number, string> = {
 };
 
 /**
+ * Подпись severity с дефолтом `error` (спека: отсутствующий severity = ошибка).
+ * Отдельная функция, а не индексация словарём: `severity` теперь опционален.
+ */
+export function severityLabel(diagnostic: LspDiagnostic): string {
+  const severity = diagnostic.severity;
+  if (severity === undefined || severity === 0) return "error";
+  return severityLabels[severity] ?? "unknown";
+}
+
+/**
  * Резолв цели: файл (точечная проверка) или ограниченный список исходников
  * (проверка каталога, кап MAX_LSP_CHECK_FILES). Собираются только файлы с
  * настроенным LSP-сервером — неподдерживаемые расширения молча не проверяются.
@@ -72,7 +82,7 @@ export function formatCheckDiagnostics(
       const rel = toForwardSlash(relative(baseDir, file));
       const line = diag.range.start.line + 1;
       const col = diag.range.start.character + 1;
-      const sev = severityLabels[diag.severity] ?? "unknown";
+      const sev = severityLabel(diag);
       return `  ${rel}(${line},${col}): ${sev}: ${diag.message}`;
     })
     .join("\n");

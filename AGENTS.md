@@ -1661,7 +1661,46 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
   / `isStuck` / серии фейлов + дубль-бюджет tool-batch. Ключи `exec.read_only_loop`,
   `exec.read_only_loop_recovery`, `exec.hint_read_only` удалены (en+ru).
 
-### Current Version: 2.38.0
+### LSP Persistent Client (2.39.0)
+
+Разбор показал, что LSP использовался как **одноразовый линтер**, а не как language
+server: каждый `checkFile` (каждая запись файла, каждый файл `lsp_check`, 5 файлов
+стартового чека) спавнил `npx → node → tsserver` и убивал его после первой публикации
+диагностик. Плюс несоответствия спеке 3.17. Спека:
+[docs/specs/2026-10-09-lsp-persistent-client-design.md](./docs/specs/2026-10-09-lsp-persistent-client-design.md).
+
+- **Тёплые соединения** (`src/modules/lsp/connection.ts`, `pool.ts`): одно соединение =
+  один процесс сервера, ключ `(serverKey, projectRoot)`. Документы синкатся
+  `didOpen`/`didChange`(Full)/`didClose`; диагностики привязаны к версии документа
+  (поздний пуш старой версии игнорируется). Пул: single-flight на ключ, LRU-кап
+  `LSP_MAX_SERVERS` (3), idle-reap `LSP_SERVER_IDLE_MS` (300s, sweep 15s), пересоздание
+  соединения, если сервер умер сам. Константы — `src/config/timeouts.ts`.
+- **`LspClient` — фасад над пулом** (`client.ts`): публичный контракт прежний
+  (`checkFile`/`probe`/`workspaceSymbol`/`setLogger`/`setOffline`) + `close()` для
+  `onSessionEnd`. Инъекции — один `LspClientDeps` (`pool`/`spawn`/`resolveLaunch`).
+- **`CheckResult` вместо `LspDiagnostic[]`**: таймаут даёт `inconclusive: true`, а не
+  пустой список. `lsp_check`/пост-хук пишут `lsp.check_inconclusive`/`lsp.check_silent` —
+  модель не объявляет «ошибок нет», когда сервер молчал.
+- **Спека-фиксы**: `severity` опционален (отсутствующее/`0` = error, `isErrorDiagnostic`);
+  URI-кодирование симметрично (`uri.ts`); фрейминг принимает CRLF и LF (`framing.ts`);
+  отвечает на server→client запросы; capabilities включают `general.positionEncodings`,
+  `versionSupport`, pull `textDocument/diagnostic`, `clientInfo`; единая таблица языков
+  (`language.ts`) вместо дублей `config.ts`/`client.ts`; таймер в `startServer` чистится.
+- **`tsgo`-движок**: `lsp.typescriptEngine: "typescript-language-server" | "tsgo"`
+  (реестр `lsp`, Settings → Plugins · LSP, `/config`); сервер `typescript-native`
+  (`tsgo --lsp --stdio`, `autoInstall: false`). Дефолт — классический.
+- **Реакция MMART** (`assets/js/loader.ts`, `app.ts`, `styles.css`): состояния `check`
+  (`lsp_check` в работе) и `warn` (нашлись ошибки — `lsp_check` с `success:false` или
+  маркер `[LSP errors]` в выводе write/edit); мёртвый сервер (`[LSP check failed]`/
+  `[LSP disabled]`) → `error`. Чистый парсер `lspOutputSignal`.
+- **`/lsp status`** показывает тёплые серверы/закрытые/перезапуски (`poolStats`).
+- **Тесты**: `tests/modules/lsp/{framing,uri,language,connection,pool,client}.test.ts` +
+  `tests/helpers/fake-lsp-server.ts` (фейковый сервер: настоящий фрейминг/корреляция/
+  таймауты без child_process); портирован `tests/lsp-client-framing.test.ts`.
+- **`killTree` параметризован структурным `KillableProcess`** (`processes/kill-tree.ts`);
+  `ChildProcess` его удовлетворяет — вызовы не менялись.
+
+### Current Version: 2.39.0
 
 Self-describing service contract (see the section above): `mma serve` serves its
 own OpenAPI 3.1 document and human docs page from one `OPERATIONS` table.

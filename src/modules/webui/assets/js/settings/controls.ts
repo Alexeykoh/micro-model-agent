@@ -236,7 +236,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   ],
   plugins: [
     { id: "plugins.registry", titleKey: "web.settings.sec.plugins.registry", descKey: "web.settings.sec.plugins.registry.desc", keys: ["plugins.disabled", "plugins.maxDrafts"] },
-    { id: "plugins.lsp", titleKey: "web.settings.sec.plugins.lsp", descKey: "web.settings.sec.plugins.lsp.desc", keys: ["lsp.enabled", "lsp.offline"] },
+    { id: "plugins.lsp", titleKey: "web.settings.sec.plugins.lsp", descKey: "web.settings.sec.plugins.lsp.desc", keys: ["lsp.enabled", "lsp.offline", "lsp.typescriptEngine"] },
   ],
 };
 

@@ -4,7 +4,7 @@ import type { AgentPlugin } from "../types";
 import type { ToolDefinition, ToolContext, ToolCall, ToolResult } from "../../tools/types";
 import { existsSync } from "fs";
 import { relative, resolve } from "path";
-import { LspClient, type LspClientLogger } from "./client";
+import { LspClient, serverKeyFor, type LspClientLogger, type CheckResult } from "./client";
 import { getServerForFile, getServerForLanguage, DEFAULT_LSP_CONFIG } from "./config";
 import type { LspSymbolLocation } from "./symbols";
 import { findProjectRoot } from "./project-root";
@@ -13,8 +13,9 @@ import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 import { toForwardSlash } from "../../tools/path-utils";
 import { safeResolvePath } from "../../tools/path-utils";
 import { t } from "../../i18n/index";
-import type { LspConfig, LspServerConfig, LspDiagnostic } from "./types";
-import { severityLabels, collectCheckFiles, formatCheckDiagnostics } from "./check-tool";
+import type { LspConfig, LspDiagnostic, LspServerConfig } from "./types";
+import { isErrorDiagnostic, isWarningDiagnostic } from "./types";
+import { severityLabel, collectCheckFiles, formatCheckDiagnostics } from "./check-tool";
 import {
   diagnoseLspServers,
   classifyLspError,
@@ -23,6 +24,18 @@ import {
 } from "./diagnose";
 import { errMsg } from "../../utils";
 import { join } from "path";
+
+/** Накопитель результатов `lsp_check` по нескольким файлам. */
+interface CheckAccumulator {
+  baseDir: string;
+  errors: Array<{ file: string; diag: LspDiagnostic }>;
+  warnings: Array<{ file: string; diag: LspDiagnostic }>;
+  notes: string[];
+  checkedFiles: string[];
+  checked: number;
+  inconclusive: number;
+  suppressed: number;
+}
 
 /**
  * Подряд идущих падений LSP до отключения сервера на сессию. Мёртвый сервер
@@ -137,6 +150,24 @@ export class LspModule implements AgentModule {
     this.disabledServers.clear();
   }
 
+  /**
+   * Закрыть все тёплые соединения (конец сессии). Без этого серверы
+   * переживают ход: пул живёт до закрытия процесса.
+   */
+  async close(): Promise<void> {
+    await this.client.close();
+  }
+
+  /** Сколько LSP-серверов сейчас живо в пуле (для `/lsp status`). */
+  liveServers(): number {
+    return this.client.liveConnections();
+  }
+
+  /** Сводка пула: живые соединения, перезапуски, reap. */
+  poolStats(): { live: number; restarts: number; reaped: number } {
+    return this.client.stats();
+  }
+
   /** Список отключённых ключей серверов. */
   getDisabledServers(): string[] {
     return Array.from(this.disabledServers);
@@ -170,83 +201,107 @@ export class LspModule implements AgentModule {
     return this.disabledServers.has(key);
   }
 
-  /** Стабильная идентичность сервера из конфига. */
-  private serverKey(server: LspServerConfig): string {
-    return `${server.command}:${(server.args ?? []).join(" ")}`;
-  }
-
   getPlugin(): AgentPlugin {
     return {
       name: "lsp-check",
       priority: 15,
-      onAfterTool: async (_ctx: ToolContext, call: ToolCall, result: ToolResult) => {
-        if (!this.config.enabled) return;
-        if (call.name !== "write_file" && call.name !== "edit_file") return;
-        if (!result.success) return;
-
-        const filePath = String(call.arguments.path ?? "");
-        if (!filePath) return;
-
-        const fullPath = resolve(_ctx.baseDir, filePath);
-        if (!existsSync(fullPath)) return;
-
-        const serverConfig = getServerForFile(fullPath, this.config);
-        if (!serverConfig) return;
-
-        const key = this.serverKey(serverConfig);
-        if (this.disabledServers.has(key)) return;
-
-        const projectRoot = findProjectRoot(
-          fullPath,
-          _ctx.baseDir,
-          serverConfig.workspaceMarkers ?? [],
-        );
-
-        try {
-          const diagnostics = await this.client.checkFile(
-            fullPath,
-            _ctx.baseDir,
-            serverConfig,
-            projectRoot,
-          );
-          this.failuresByServer.set(key, 0);
-          const errors = diagnostics.filter((d) => d.severity === 1);
-          const warnings = diagnostics.filter((d) => d.severity === 2);
-
-          if (errors.length > 0) {
-            const items = formatDiagnostics(errors, fullPath);
-            result.output += `\n\n[LSP errors]:\n${items}`;
-          }
-          if (warnings.length > 0) {
-            const items = formatDiagnostics(warnings, fullPath);
-            result.output += `\n\n[LSP warnings]:\n${items}`;
-          }
-        } catch (e) {
-          // Падения — наружу, а не молчаливый []: мёртвый LSP раньше давал
-          // НОЛЬ диагностик целыми сессиями, и модель находила ошибки типов
-          // лишь реактивно через `bun run build`.
-          const msg = errMsg(e);
-          const failures = (this.failuresByServer.get(key) ?? 0) + 1;
-          this.failuresByServer.set(key, failures);
-          try {
-            _ctx.logger?.warn(`LSP check failed for ${filePath}: ${msg}`);
-          } catch {
-            // Падающий логгер не должен ломать путь проверки.
-          }
-          if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
-            // Одно громкое actionable-сообщение, дальше — без шума на каждую
-            // запись до конца сессии. Модель не должна учиться игнорить LSP.
-            this.disabledServers.add(key);
-            result.output += `\n\n[LSP disabled: ${t("lsp.unavailable")}]`;
-          } else {
-            result.output += `\n\n[LSP check failed]: ${msg}${failureHint(
-              msg,
-              serverConfig.command === "npx",
-            )}`;
-          }
-        }
+      onSessionEnd: () => {
+        // Мёртвые серверы в конце сессии — утечка процесса (npx → node →
+        // tsserver) на весь срок жизни хоста.
+        void this.client.close();
       },
+      onAfterTool: (_ctx, call, result) => this.checkAfterWrite(_ctx, call, result),
     };
+  }
+
+  /** Пост-проверка после write/edit: только поддержанные файлы, best-effort. */
+  private async checkAfterWrite(
+    ctx: ToolContext,
+    call: ToolCall,
+    result: ToolResult,
+  ): Promise<void> {
+    const target = this.resolveCheckTarget(ctx, call, result);
+    if (!target) return;
+    try {
+      const check = await this.client.checkFile(
+        target.fullPath,
+        ctx.baseDir,
+        target.serverConfig,
+        target.projectRoot,
+      );
+      this.failuresByServer.set(target.key, 0);
+      this.appendDiagnostics(result, check, target.fullPath);
+    } catch (e) {
+      const msg = errMsg(e);
+      this.warnFailure(ctx, target.fullPath, msg);
+      const failure = this.recordFailure(target.key, target.serverConfig, msg);
+      result.output += failure.disabled
+        ? `\n\n[LSP disabled: ${failure.text}]`
+        : `\n\n[LSP check failed]: ${failure.text}`;
+    }
+  }
+
+  /** Файл и сервер для пост-проверки; null — проверять нечего. */
+  private resolveCheckTarget(
+    ctx: ToolContext,
+    call: ToolCall,
+    result: ToolResult,
+  ): { fullPath: string; serverConfig: LspServerConfig; key: string; projectRoot: string } | null {
+    if (!this.config.enabled || !result.success) return null;
+    if (call.name !== "write_file" && call.name !== "edit_file") return null;
+    const filePath = String(call.arguments.path ?? "");
+    if (!filePath) return null;
+    const fullPath = resolve(ctx.baseDir, filePath);
+    if (!existsSync(fullPath)) return null;
+    const serverConfig = getServerForFile(fullPath, this.config);
+    if (!serverConfig) return null;
+    const key = serverKeyFor(serverConfig);
+    if (this.disabledServers.has(key)) return null;
+    const projectRoot = findProjectRoot(fullPath, ctx.baseDir, serverConfig.workspaceMarkers ?? []);
+    return { fullPath, serverConfig, key, projectRoot };
+  }
+
+  /** Дописать диагностики к выводу тула (errors / warnings / inconclusive). */
+  private appendDiagnostics(result: ToolResult, check: CheckResult, fullPath: string): void {
+    const errors = check.diagnostics.filter(isErrorDiagnostic);
+    const warnings = check.diagnostics.filter(isWarningDiagnostic);
+    if (errors.length > 0) {
+      result.output += `\n\n[LSP errors]:\n${formatDiagnostics(errors, fullPath)}`;
+    }
+    if (warnings.length > 0) {
+      result.output += `\n\n[LSP warnings]:\n${formatDiagnostics(warnings, fullPath)}`;
+    }
+    if (check.inconclusive && errors.length === 0 && warnings.length === 0) {
+      result.output += t("lsp.check_inconclusive");
+    }
+  }
+
+  /** Учесть падение сервера. После порога сервер отключается на сессию. */
+  private recordFailure(
+    key: string,
+    serverConfig: LspServerConfig,
+    message: string,
+  ): { disabled: boolean; text: string } {
+    const failures = (this.failuresByServer.get(key) ?? 0) + 1;
+    this.failuresByServer.set(key, failures);
+    if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
+      // Одно громкое actionable-сообщение, дальше — без шума на каждую запись
+      // до конца сессии. Модель не должна учиться игнорить LSP.
+      this.disabledServers.add(key);
+      return { disabled: true, text: t("lsp.unavailable") };
+    }
+    return {
+      disabled: false,
+      text: `${message}${failureHint(message, serverConfig.command === "npx")}`,
+    };
+  }
+
+  private warnFailure(ctx: ToolContext, filePath: string, message: string): void {
+    try {
+      ctx.logger?.warn(`LSP check failed for ${filePath}: ${message}`);
+    } catch {
+      // Падающий логгер не должен ломать путь проверки.
+    }
   }
 
   /**
@@ -306,90 +361,115 @@ export class LspModule implements AgentModule {
     }
 
     const files = await collectCheckFiles(resolved, this.config);
-    const errors: Array<{ file: string; diag: LspDiagnostic }> = [];
-    const warnings: Array<{ file: string; diag: LspDiagnostic }> = [];
-    const notes: string[] = [];
-    const checkedFiles: string[] = [];
-    let checked = 0;
-    let suppressedTypeEnvDiags = 0;
+    const acc = await this.checkFiles(files, ctx);
+    return this.renderCheck(acc);
+  }
 
+  /** Проверить набор файлов, накопив диагностики и заметки о сбоях. */
+  private async checkFiles(files: string[], ctx: ToolContext): Promise<CheckAccumulator> {
+    const acc: CheckAccumulator = {
+      baseDir: ctx.baseDir,
+      errors: [],
+      warnings: [],
+      notes: [],
+      checkedFiles: [],
+      checked: 0,
+      inconclusive: 0,
+      suppressed: 0,
+    };
     for (const file of files) {
       const serverConfig = getServerForFile(file, this.config);
       if (!serverConfig) continue;
-      const key = this.serverKey(serverConfig);
+      const key = serverKeyFor(serverConfig);
       if (this.disabledServers.has(key)) continue;
       const projectRoot = findProjectRoot(file, ctx.baseDir, serverConfig.workspaceMarkers ?? []);
       try {
-        let diags = await this.client.checkFile(file, ctx.baseDir, serverConfig, projectRoot);
+        const result = await this.client.checkFile(file, ctx.baseDir, serverConfig, projectRoot);
         this.failuresByServer.set(key, 0);
-        checked++;
-        checkedFiles.push(toForwardSlash(relative(ctx.baseDir, file)));
-        if (!hasTypeEnvironment(projectRoot)) {
-          const kept = diags.filter((d) => {
-            if (TYPE_ENV_DIAG_PATTERN.test(d.message)) {
-              suppressedTypeEnvDiags++;
-              return false;
-            }
-            return true;
-          });
-          diags = kept;
-        }
-        for (const d of diags) {
-          if (d.severity === 1) errors.push({ file, diag: d });
-          else if (d.severity === 2) warnings.push({ file, diag: d });
-        }
+        this.collectDiagnostics(acc, file, ctx.baseDir, result, projectRoot);
       } catch (e) {
-        const msg = errMsg(e);
-        const failures = (this.failuresByServer.get(key) ?? 0) + 1;
-        this.failuresByServer.set(key, failures);
-        try {
-          ctx.logger?.warn(`LSP check failed for ${file}: ${msg}`);
-        } catch {
-          // Падающий логгер не должен ломать путь проверки.
-        }
-        if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
-          this.disabledServers.add(key);
-          notes.push(`[LSP disabled: ${t("lsp.unavailable")}]`);
-        } else {
-          notes.push(
-            `[LSP check failed for ${file}: ${msg}]${failureHint(
-              msg,
-              serverConfig.command === "npx",
-            )}`,
-          );
-        }
+        this.warnFailure(ctx, file, errMsg(e));
+        acc.notes.push(this.failureNote(key, serverConfig, errMsg(e), file));
       }
     }
+    return acc;
+  }
 
+  /** Сложить диагностики одного файла в аккумулятор (с type-env фильтром). */
+  private collectDiagnostics(
+    acc: CheckAccumulator,
+    file: string,
+    baseDir: string,
+    result: CheckResult,
+    projectRoot: string,
+  ): void {
+    acc.checked++;
+    acc.checkedFiles.push(toForwardSlash(relative(baseDir, file)));
+    let diags = result.diagnostics;
+    if (!hasTypeEnvironment(projectRoot)) {
+      diags = diags.filter((d) => {
+        if (TYPE_ENV_DIAG_PATTERN.test(d.message)) {
+          acc.suppressed++;
+          return false;
+        }
+        return true;
+      });
+    }
+    if (result.inconclusive) acc.inconclusive++;
+    for (const d of diags) {
+      if (isErrorDiagnostic(d)) acc.errors.push({ file, diag: d });
+      else if (isWarningDiagnostic(d)) acc.warnings.push({ file, diag: d });
+    }
+  }
+
+  /** Текст отчёта по аккумулятору. */
+  private renderCheck(acc: CheckAccumulator): ToolResult {
     const lines: string[] = [];
-    if (checked > 0) {
-      lines.push(t("lsp.checked_files", { count: String(checked) }));
-      lines.push(...checkedFiles.map((f) => `  ${f}`));
+    if (acc.checked > 0) {
+      lines.push(t("lsp.checked_files", { count: String(acc.checked) }));
+      lines.push(...acc.checkedFiles.map((f) => `  ${f}`));
     }
-    if (errors.length > 0) {
-      lines.push(`[LSP errors] (${errors.length}):`);
-      lines.push(formatCheckDiagnostics(errors, ctx.baseDir));
+    if (acc.errors.length > 0) {
+      lines.push(`[LSP errors] (${acc.errors.length}):`);
+      lines.push(formatCheckDiagnostics(acc.errors, acc.baseDir));
     }
-    if (warnings.length > 0) {
-      lines.push(`[LSP warnings] (${warnings.length}):`);
-      lines.push(formatCheckDiagnostics(warnings, ctx.baseDir));
+    if (acc.warnings.length > 0) {
+      lines.push(`[LSP warnings] (${acc.warnings.length}):`);
+      lines.push(formatCheckDiagnostics(acc.warnings, acc.baseDir));
     }
-    if (checked > 0 && errors.length === 0 && warnings.length === 0) {
-      lines.push(t("lsp.check_clean", { count: String(checked) }));
+    if (acc.checked > 0 && acc.errors.length === 0 && acc.warnings.length === 0) {
+      lines.push(t("lsp.check_clean", { count: String(acc.checked) }));
     }
-    if (suppressedTypeEnvDiags > 0) {
+    if (acc.suppressed > 0) {
       lines.push(
-        `[lsp_check inconclusive: no tsconfig.json / node_modules near project root — ${suppressedTypeEnvDiags} module-resolution diagnostic(s) suppressed. Initialize the project (package.json + types) for accurate TypeScript checks.]`,
+        `[lsp_check inconclusive: no tsconfig.json / node_modules near project root — ${acc.suppressed} module-resolution diagnostic(s) suppressed. Initialize the project (package.json + types) for accurate TypeScript checks.]`,
       );
     }
-    lines.push(...notes);
-    if (lines.length === 0) {
-      return {
-        success: true,
-        output: t("lsp.check_clean", { count: String(checked) }),
-      };
+    // Сервер молчал хотя бы на одном файле: это НЕ «чисто», и модель не должна
+    // объявлять отсутствие ошибок.
+    if (acc.inconclusive > 0) {
+      lines.push(
+        t("lsp.check_silent", { silent: String(acc.inconclusive), total: String(acc.checked) }),
+      );
     }
-    return { success: errors.length === 0, output: lines.join("\n") };
+    lines.push(...acc.notes);
+    if (lines.length === 0) {
+      return { success: true, output: t("lsp.check_clean", { count: String(acc.checked) }) };
+    }
+    return { success: acc.errors.length === 0, output: lines.join("\n") };
+  }
+
+  /** Заметка о сбое сервера для `lsp_check` (disabled или failed+hint). */
+  private failureNote(
+    key: string,
+    serverConfig: LspServerConfig,
+    message: string,
+    file: string,
+  ): string {
+    const failure = this.recordFailure(key, serverConfig, message);
+    return failure.disabled
+      ? `[LSP disabled: ${failure.text}]`
+      : `[LSP check failed for ${file}: ${failure.text}]`;
   }
 }
 
@@ -400,7 +480,7 @@ function formatDiagnostics(diagnostics: LspDiagnostic[], filePath: string): stri
     .map((d) => {
       const line = d.range.start.line + 1;
       const col = d.range.start.character + 1;
-      const sev = severityLabels[d.severity] ?? "unknown";
+      const sev = severityLabel(d);
       return `  ${filename}(${line},${col}): ${sev}: ${d.message}`;
     })
     .join("\n");

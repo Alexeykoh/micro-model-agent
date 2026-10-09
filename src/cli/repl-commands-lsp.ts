@@ -138,6 +138,11 @@ export function registerLspCommands(ctx: ReplContext): void {
           ctx.output.writeLine(
             `${t("repl.lsp_enabled")} ${config?.enabled ? pc.green(t("repl.yes")) : pc.red(t("repl.no"))}`,
           );
+          // Тёплые соединения пула: до 2.39 сервер умирал после каждой проверки.
+          const pool = lspModule.poolStats();
+          ctx.output.writeLine(
+            pc.dim(`${t("repl.lsp_pool")} ${pool.live} · ${t("repl.lsp_pool_reaped")} ${pool.reaped} · ${t("repl.lsp_pool_restarts")} ${pool.restarts}`),
+          );
 
           if (disabled.length > 0) {
             ctx.output.writeLine(

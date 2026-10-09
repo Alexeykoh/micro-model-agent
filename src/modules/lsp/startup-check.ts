@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import { t } from "../../i18n/index";
 import type { PromptBlock } from "../../core/types";
 import type { LspConfig, LspDiagnostic } from "./types";
+import { isErrorDiagnostic } from "./types";
 import { LspClient } from "./client";
 import { collectCheckFiles } from "./check-tool";
 import { getServerForFile } from "./config";
@@ -96,10 +97,10 @@ async function runCheck(
     if (!serverConfig) continue;
     const fileRoot = findProjectRoot(file, baseDir, serverConfig.workspaceMarkers ?? []);
     try {
-      const diags = await client.checkFile(file, baseDir, serverConfig, fileRoot);
+      const result = await client.checkFile(file, baseDir, serverConfig, fileRoot);
       checked++;
-      for (const d of diags) {
-        if (d.severity === 1) {
+      for (const d of result.diagnostics) {
+        if (isErrorDiagnostic(d)) {
           lines.push(formatStartupError(file, baseDir, d));
         }
       }

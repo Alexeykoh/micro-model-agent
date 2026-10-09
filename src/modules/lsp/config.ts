@@ -2,6 +2,7 @@
 import { existsSync } from "fs";
 import { dirname, join } from "path";
 import type { LspConfig, LspServerConfig } from "./types";
+import { serverKeyForPath } from "./language";
 
 /**
  * Дефолты LSP-серверов.
@@ -12,6 +13,7 @@ import type { LspConfig, LspServerConfig } from "./types";
 export const DEFAULT_LSP_CONFIG: LspConfig = {
   enabled: true,
   timeout: 15000,
+  typescriptEngine: "typescript-language-server",
   servers: {
     typescript: {
       command: "npx",
@@ -26,6 +28,18 @@ export const DEFAULT_LSP_CONFIG: LspConfig = {
       ],
       timeout: 30000,
       autoInstall: true,
+      workspaceMarkers: ["package.json", "tsconfig.json"],
+    },
+    /**
+     * Нативный TS-сервер (`tsgo`, TypeScript 7 preview). Не автоустанавливается:
+     * нет бинарника — молчаливый скип, как у rust-analyzer/gopls. Выбирается
+     * через `lsp.typescriptEngine: "tsgo"`.
+     */
+    "typescript-native": {
+      command: "tsgo",
+      args: ["--lsp", "--stdio"],
+      timeout: 30000,
+      autoInstall: false,
       workspaceMarkers: ["package.json", "tsconfig.json"],
     },
     javascript: {
@@ -127,29 +141,9 @@ export const DEFAULT_LSP_CONFIG: LspConfig = {
   },
 };
 
-const LANGUAGE_MAP: Record<string, string> = {
-  ts: "typescript",
-  tsx: "typescript",
-  mts: "typescript",
-  cts: "typescript",
-  js: "javascript",
-  jsx: "javascript",
-  mjs: "javascript",
-  cjs: "javascript",
-  py: "python",
-  rs: "rust",
-  go: "go",
-  json: "json",
-  html: "html",
-  css: "css",
-  scss: "css",
-};
-
-/** Id языка по расширению файла (через LANGUAGE_MAP), неподдерживаемое — null. */
-export function getLanguageForFile(filePath: string): string | null {
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  if (!ext) return null;
-  return LANGUAGE_MAP[ext] ?? null;
+/** Ключ конфигурации LSP-сервера (язык индексатора), без Angular-логики. */
+function languageServerKey(filePath: string): string | null {
+  return serverKeyForPath(filePath);
 }
 
 const ANGULAR_MARKER = "angular.json";
@@ -176,12 +170,23 @@ function isAngularProject(filePath: string): boolean {
  * везде иначе — на generic `html`.
  */
 export function getServerKeyForFile(filePath: string, config: LspConfig): string | null {
-  const lang = getLanguageForFile(filePath);
+  const lang = languageServerKey(filePath);
   if (!lang) return null;
   if (lang === "html" && config.servers.angular && isAngularProject(filePath)) {
     return "angular";
   }
-  return lang;
+  return engineKey(lang, config);
+}
+
+/**
+ * Замена классического TS-сервера нативный `tsgo`, когда выбран этот движок.
+ * Ключ `typescript`/`javascript` указывает на запись `typescript-native`; если
+ * её нет в конфиге (старый файл), остаётся классический сервер.
+ */
+function engineKey(key: string, config: LspConfig): string {
+  if (config.typescriptEngine !== "tsgo") return key;
+  if (key !== "typescript" && key !== "javascript") return key;
+  return config.servers["typescript-native"] ? "typescript-native" : key;
 }
 
 /** Конфиг LSP-сервера для файла (null — не поддерживается). */
@@ -212,5 +217,5 @@ export function getServerForLanguage(
 ): LspServerConfig | null {
   const key = getServerKeyForLanguage(language, config);
   if (!key) return null;
-  return config.servers[key] ?? null;
+  return config.servers[engineKey(key, config)] ?? null;
 }

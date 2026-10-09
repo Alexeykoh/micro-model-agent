@@ -4,7 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { runStartupHealthCheck, parseTscErrors } from "../../../src/modules/lsp/startup-check";
 import type { LspConfig, LspDiagnostic, LspServerConfig } from "../../../src/modules/lsp/types";
-import type { LspClient } from "../../../src/modules/lsp/client";
+import type { LspClient, CheckResult } from "../../../src/modules/lsp/client";
 
 const DEFAULT_LSP_CONFIG: LspConfig = {
   enabled: true,
@@ -122,18 +122,21 @@ src/a.ts(3,1): error TS2304: Cannot find name 'x'.`;
           _baseDir: string,
           _server: any,
           _root: string,
-        ): Promise<LspDiagnostic[]> => {
-          return [
-            {
-              range: {
-                start: { line: 0, character: 0 },
-                end: { line: 0, character: 10 },
+        ): Promise<CheckResult> => {
+          return {
+            diagnostics: [
+              {
+                range: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: 10 },
+                },
+                severity: 1,
+                message: "LSP error",
+                source: "mock",
               },
-              severity: 1,
-              message: "LSP error",
-              source: "mock",
-            },
-          ];
+            ],
+            inconclusive: false,
+          };
         },
       } as LspClient;
 
@@ -151,8 +154,8 @@ src/a.ts(3,1): error TS2304: Cannot find name 'x'.`;
       writeFileSync(join(tmpDir, "test.ts"), "const x = 1;\n");
       writeFileSync(join(tmpDir, "package.json"), "{}");
       const mockClient = {
-        checkFile: async () =>
-          [
+        checkFile: async () => ({
+          diagnostics: [
             {
               range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } },
               severity: 1,
@@ -166,6 +169,8 @@ src/a.ts(3,1): error TS2304: Cannot find name 'x'.`;
               source: "mock",
             },
           ] as LspDiagnostic[],
+          inconclusive: false,
+        }),
       } as LspClient;
 
       const result = await runStartupHealthCheck(LSP_CONFIG_WITH_SERVER, tmpDir, {

@@ -88,7 +88,7 @@ function decodeLineToUtf8(buf: Buffer): string {
 }
 
 /** Реэкспорт килла дерева для потребителей реестра. */
-export { killTree } from "./kill-tree";
+export { killTree, type KillableProcess } from "./kill-tree";
 
 interface ExitWaiter {
   promise: Promise<void>;

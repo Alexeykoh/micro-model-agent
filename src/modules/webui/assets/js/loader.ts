@@ -7,7 +7,9 @@
 export type FaceState =
   | "idle" | "think" | "read" | "find" | "web" | "edit" | "type" | "create"
   | "run" | "tests" | "compact" | "plan" | "ask" | "done" | "error" | "stop"
-  | "queued" | "boot" | "load" | "update";
+  | "queued" | "boot" | "load" | "update"
+  // LSP: идёт статическая проверка / сервер вернул ошибки.
+  | "check" | "warn";
 
 export type FaceSize = "sm" | "lg" | "xs";
 
@@ -37,6 +39,12 @@ const FACE_CLASS: Record<FaceState, string> = {
   // the mascot should not follow the cursor while advertising something, and
   // a click on it should not pop the greeting over the update chip.
   update: "c-ok st-update happy",
+  // LSP: осмотр кода (измеряющий пульс, взгляд вбок — «смотрю, что скажет
+  // компилятор»). Проверка ничего не пишет, поэтому recon-цвет.
+  check: "c-recon st-check squint",
+  // LSP: компилятор нашёл ошибки. Тревога слабее, чем `error`: это рабочая
+  // обратная связь от сервера, а не сбой харнесса.
+  warn: "c-warn st-warn squint",
 };
 
 // Tool name → loader state (matches STYLE.md tool categories). Every core
@@ -53,7 +61,8 @@ const TOOL_STATE: Record<string, FaceState> = {
   edit_file: "edit", move_file: "edit", delete_file: "edit", attach_image: "edit",
   bash: "run", pipeline_run: "run", process_wait: "run", process_kill: "run",
   browser: "run", subagent: "run", mcp_call: "run", enable_tools: "run",
-  plan: "plan", todo: "plan", verify: "plan", lsp_check: "plan",
+  plan: "plan", todo: "plan", verify: "plan",
+  lsp_check: "check",
   set_thinking: "think",
   approve: "ask", question: "ask",
   meet_done: "done",
@@ -67,6 +76,23 @@ export interface LoaderSignal {
   name?: string;
   phase?: string;
   success?: boolean;
+  /** Вывод тула — нужен, чтобы отличить LSP-ошибки от успешного тула. */
+  output?: string;
+}
+
+/**
+ * Что LSP дописал в вывод тула. Пост- проверка после `write_file`/`edit_file`
+ * и `lsp_check` помечают результат маркерами `[LSP ...]`; по ним маскот
+ * понимает, радоваться или тревожиться.
+ *
+ * - `errors` — сервер вернул error'ы (рабочая обратная связь);
+ * - `failed` — сервер недоступен или отключён (проблема харнесса, не кода).
+ */
+export function lspOutputSignal(output: string | undefined): "errors" | "failed" | null {
+  if (!output) return null;
+  if (output.includes("[LSP check failed") || output.includes("[LSP disabled")) return "failed";
+  if (output.includes("[LSP errors]")) return "errors";
+  return null;
 }
 
 export function toolState(name: string): FaceState {
@@ -84,7 +110,19 @@ export function loaderStateFor(s: LoaderSignal): FaceState {
     case "question": return "ask";
     case "text": return "type";
     case "tool_start":
-    case "tool_end": return toolState(s.name || "");
+    case "tool_end": {
+      const name = s.name || "";
+      // `lsp_check` отвечает success:false именно тогда, когда нашёл ошибки —
+      // это обратная связь, а не сбой.
+      if (name === "lsp_check" && s.type === "tool_end" && s.success === false) return "warn";
+      // Пост- проверка LSP после write/edit живёт в выводе тула.
+      const lsp = lspOutputSignal(s.output);
+      if (s.type === "tool_end") {
+        if (lsp === "errors") return "warn";
+        if (lsp === "failed") return "error";
+      }
+      return toolState(name);
+    }
     // Re-indexing is a workspace-wide search.
     case "index": return "find";
     case "setup_done": return "done";

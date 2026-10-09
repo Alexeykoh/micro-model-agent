@@ -4,6 +4,32 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.39.0] - 2026-10-09
+
+LSP is now a real language-server client instead of a one-shot linter: one warm server
+process per `(server, project root)` with document sync, spec-correct diagnostics and a
+tested JSON-RPC transport. The mascot reacts to LSP, and a native TypeScript engine
+(`tsgo`) is one config key away.
+
+### Added
+
+- **Persistent LSP client** (`src/modules/lsp/{connection,pool,client}.ts`): one server process per `(server, project root)`, kept warm for the session and reused across checks. Documents are synced with `didOpen`/`didChange` (full) / `didClose`; diagnostics are tracked per document version. Before, every `checkFile` (every `write_file`/`edit_file`, every file of `lsp_check`, 5 files of the startup check) spawned `npx -> node -> tsserver` and killed it after one push. The pool is LRU-capped (`LSP_MAX_SERVERS`), reaps idle connections (`LSP_SERVER_IDLE_MS`) and restarts a server that dies on its own; both are internal constants (`src/config/timeouts.ts`).
+- **Spec-correct transport** (`src/modules/lsp/framing.ts`, `uri.ts`, `language.ts`): `Content-Length` framing accepts CRLF **and** LF separators; URIs are percent-encoded/decoded symmetrically (spaces, `#`, `%`, non-ASCII, Windows drives); one language-id table for both the protocol `languageId` and the `lsp.servers` key; client capabilities negotiate `general.positionEncodings`, `publishDiagnostics.versionSupport/relatedInformation`, pull diagnostics (`textDocument/diagnostic`) and `clientInfo`; server->client requests (`workspace/configuration`, `client/registerCapability`) are answered instead of leaving the server hanging.
+- **Native TypeScript engine** (`src/modules/lsp/config.ts`, `src/config/registry-extra.ts`): `lsp.typescriptEngine: "typescript-language-server" | "tsgo"` selects the native TS7 preview (`tsgo --lsp --stdio`, `@typescript/native-preview`) for TS/JS; default stays classic. Surfaced in `/config`, Settings -> Plugins - LSP, and `/lsp status`.
+- **LSP reactions for MMART** (`src/modules/webui/assets/js/loader.ts`, `assets/app.ts`, `styles.css`): new `check` and `warn` face states; `lsp_check` shows `check`, a completed check that found errors (or a `write_file`/`edit_file` with `[LSP errors]`) shows `warn`, and a failed/disabled server shows `error`.
+- **`bun test` coverage for the transport**: `tests/modules/lsp/{framing,uri,language,connection,pool,client}.test.ts` plus `tests/helpers/fake-lsp-server.ts` (an in-memory server: real framing, correlation and timeouts, no child processes).
+
+### Changed
+
+- **`LspClient.checkFile` returns `CheckResult`** (`{ diagnostics, inconclusive }`): a timeout no longer returns an empty list indistinguishable from "clean". `lsp_check` and the post-write hook say so explicitly; the model is not told "no errors" when the server stayed silent.
+- **`LspModule` reports pool status** in `/lsp status` (warm servers / closed / restarts) and closes every server on `onSessionEnd`.
+- **`severity` is optional per spec** (`src/modules/lsp/types.ts`): an absent severity is treated as an error (`isErrorDiagnostic`), so servers that omit it (or emit `0`, like clangd) are no longer silently dropped.
+
+### Fixed
+
+- **Leaked start timer** (`src/modules/lsp/connection.ts`): the per-spawn start-timeout timer is cleared; previously every check left a pending timeout of up to 30 s.
+- **Structural `KillableProcess` type** (`src/modules/processes/kill-tree.ts`): the parameter accepts any `{ pid?, kill() }`, so the connection passes its own process wrapper without an unsafe cast. `ChildProcess` still satisfies it, so all callers are unchanged.
+
 ## [2.38.0] - 2026-10-09
 
 Harness honesty for read-only work: the loop guard no longer treats "no mutation" as
