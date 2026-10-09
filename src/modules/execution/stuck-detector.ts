@@ -395,10 +395,8 @@ export class StuckDetector {
     // Проверка подряд идентичных (исходная логика)
     let consecutiveCount = 1;
     for (let i = this.recentToolCalls.length - 2; i >= 0; i--) {
-      if (
-        this.recentToolCalls[i].name === last.name &&
-        this.recentToolCalls[i].argsKey === last.argsKey
-      ) {
+      // argsKey = `name::canonicalArgs` — имя уже внутри, сравниваем ключ.
+      if (this.recentToolCalls[i].argsKey === last.argsKey) {
         consecutiveCount++;
       } else {
         break;
@@ -409,8 +407,7 @@ export class StuckDetector {
     // тул+args в окне и флагуем при ≥ порога
     const counts = new Map<string, number>();
     for (const call of this.recentToolCalls) {
-      const key = `${call.name}::${call.argsKey}`;
-      counts.set(key, (counts.get(key) || 0) + 1);
+      counts.set(call.argsKey, (counts.get(call.argsKey) || 0) + 1);
     }
     for (const count of counts.values()) {
       if (count >= this.repetitionThreshold) return true;

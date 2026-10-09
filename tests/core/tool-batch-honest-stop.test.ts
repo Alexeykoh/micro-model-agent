@@ -154,7 +154,6 @@ describe("ToolBatchExecutor duplicate budget", () => {
     for (let n = 0; n < 3; n++) await runBatchOf(ex, state, [sameCall]); // 10,11,12
     const thirteenth = await runBatchOf(ex, state, [sameCall]); // 13th identical
     expect(thirteenth.finalize).toBe("duplicate");
-    expect(state.duplicateStopped).toBe(true);
   });
 
   it("a fresh call resets the duplicate streak", async () => {

@@ -577,14 +577,52 @@ export class Agent {
    */
   private async finalizeWithoutTools(
     state: LoopState,
+    tokenTracker: TokenTracker,
     onChunk?: (chunk: string) => void,
     slog?: SessionLogger,
   ): Promise<string> {
-    const { contextManager, logger, llmProvider, pluginManager } = this.deps;
+    const { contextManager } = this.deps;
     contextManager.addMessage({
       role: "user",
       content: `<system-summary>${t("exec.finalize_no_tools")}</system-summary>`,
     });
+    // Форс-вызов тоже тратит токены и время — учитываем его в общих метриках и
+    // стоимости (иначе последний запрос не попадал в usage/cost).
+    const llmStart = Date.now();
+    const baseline = tokenTracker.beginIteration(state, contextManager.getEstimatedTokens());
+    const text = await this.streamFinalAnswer(state, tokenTracker, baseline, onChunk);
+    const durationMs = Date.now() - llmStart;
+    state.totalLlmDuration += durationMs;
+    tokenTracker.addCompletionChars(state, text.length);
+    if (slog) {
+      tokenTracker.logUsage(
+        state,
+        baseline,
+        text,
+        contextManager.getEstimatedTokens(),
+        state.iteration,
+        durationMs,
+        slog,
+      );
+    }
+    if (text.trim()) {
+      state.lastText = text;
+      state.finalAnswerAccepted = true;
+      contextManager.addMessage({ role: "assistant", content: text });
+      if (this.deps.config.session.autoSave) slog?.saveAssistantMessage(text);
+      slog?.logAssistant(text, "", undefined, state.iteration);
+    }
+    return text;
+  }
+
+  /** Стрим tool-less ответа для форс-финала; учитывает API-usage по done-чанкам. */
+  private async streamFinalAnswer(
+    state: LoopState,
+    tokenTracker: TokenTracker,
+    baseline: { promptBefore: number; completionBefore: number },
+    onChunk?: (chunk: string) => void,
+  ): Promise<string> {
+    const { contextManager, logger, llmProvider, pluginManager } = this.deps;
     const history = repairToolCallPairing(contextManager.getActiveHistory());
     let text = "";
     try {
@@ -600,16 +638,12 @@ export class Agent {
           );
           onChunk?.(out);
         }
+        if (chunk.type === "done" && chunk.usage) {
+          tokenTracker.recordApiUsage(state, baseline, chunk.usage);
+        }
       }
     } catch (e) {
       logger.diagnostic("warn", `finalizeWithoutTools failed: ${errMsg(e)}`);
-    }
-    if (text.trim()) {
-      state.lastText = text;
-      state.finalAnswerAccepted = true;
-      contextManager.addMessage({ role: "assistant", content: text });
-      if (this.deps.config.session.autoSave) slog?.saveAssistantMessage(text);
-      slog?.logAssistant(text, "", undefined, state.iteration);
     }
     return text;
   }
@@ -1570,7 +1604,7 @@ export class Agent {
     if (state.finalizeReason || (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted)) {
       const reason = state.finalizeReason ?? "max_iters";
       logger.diagnostic("info", `Forcing final answer without tools (${reason})`);
-      await this.finalizeWithoutTools(state, onChunk, slog);
+      await this.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
       state.stopReason = reason;
     }
 

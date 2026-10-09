@@ -131,6 +131,14 @@ function textThenDone(text: string) {
     })();
 }
 
+/** Minimal TokenTracker surface for the direct-method tests. */
+const tokenTrackerStub = {
+  beginIteration: () => ({ promptBefore: 0, completionBefore: 0 }),
+  recordApiUsage: () => {},
+  addCompletionChars: () => {},
+  logUsage: () => {},
+};
+
 describe("Agent.finalizeWithoutTools", () => {
   it("produces a final answer via a tool-less call and marks success", async () => {
     const t = createMockDeps(textThenDone("Final answer from gathered evidence."));
@@ -138,7 +146,9 @@ describe("Agent.finalizeWithoutTools", () => {
     const state = createLoopState();
     state.iteration = 3;
     const chunks: string[] = [];
-    const text = await (agent as any).finalizeWithoutTools(state, (c: string) => chunks.push(c));
+    const text = await (agent as any).finalizeWithoutTools(state, tokenTrackerStub, (c: string) =>
+      chunks.push(c),
+    );
     expect(text).toContain("Final answer");
     expect(chunks.join("")).toContain("Final answer");
     expect(state.lastText).toContain("Final answer");
@@ -152,9 +162,38 @@ describe("Agent.finalizeWithoutTools", () => {
     const agent = new Agent(t.deps);
     const state = createLoopState();
     state.iteration = 3;
-    await (agent as any).finalizeWithoutTools(state);
+    await (agent as any).finalizeWithoutTools(state, tokenTrackerStub);
     expect(state.finalAnswerAccepted).toBe(false);
     expect(state.lastText).toBe("");
+  });
+
+  it("records usage for the forced call", async () => {
+    const t = createMockDeps(() =>
+      (async function* () {
+        yield { type: "text" as const, content: "partial answer" };
+        yield {
+          type: "done" as const,
+          finishReason: "stop" as const,
+          usage: { promptTokens: 7, completionTokens: 3, totalTokens: 10 },
+        };
+      })(),
+    );
+    const agent = new Agent(t.deps);
+    const state = createLoopState();
+    state.iteration = 3;
+    const calls: string[] = [];
+    const tt = {
+      beginIteration: () => {
+        calls.push("begin");
+        return { promptBefore: 0, completionBefore: 0 };
+      },
+      recordApiUsage: () => calls.push("usage"),
+      addCompletionChars: () => calls.push("chars"),
+      logUsage: () => calls.push("log"),
+    };
+    const slog = { saveAssistantMessage: () => {}, logAssistant: () => {} };
+    await (agent as any).finalizeWithoutTools(state, tt, undefined, slog);
+    expect(calls).toEqual(expect.arrayContaining(["begin", "usage", "chars", "log"]));
   });
 
   it("duplicate terminal yields a final answer with stopReason=duplicate and success", async () => {

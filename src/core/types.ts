@@ -140,6 +140,12 @@ export interface ContextBreakdown {
   window: number;
 }
 
+/**
+ * Причина принудительного завершения хода харнессом: дубль-петля,
+ * серия провальных пакетов или исчерпание итераций.
+ */
+export type StopReason = "duplicate" | "failed_batches" | "max_iters";
+
 /** Итог прогона: успех, текст, токены, стоимость, качество контекста. */
 export interface AgentResult {
   success: boolean;
@@ -153,7 +159,7 @@ export interface AgentResult {
    * Харнесс завершил ход принудительно (дубль-петля / серия провалов /
    * исчерпание итераций). Ответ — лучшее из собранного, без проверки тулами.
    */
-  stopReason?: "duplicate" | "failed_batches" | "max_iters";
+  stopReason?: StopReason;
   text: string;
   error?: string;
   iterationCount: number;

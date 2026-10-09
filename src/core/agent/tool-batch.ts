@@ -11,7 +11,7 @@ import type { CostTracker } from "../../modules/pricing/index";
 import type { ToolExecutor } from "../../tools/executor";
 import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
-import type { MetaKind, OnMeta } from "../types";
+import type { MetaKind, OnMeta, StopReason } from "../types";
 import type { ToolResult } from "../../tools/types";
 import type { LoopState } from "./loop-state";
 import {
@@ -91,7 +91,7 @@ export interface ToolBatchExecution {
   /** Истинно, если итерация прервана по shutdown — цикл должен выйти. */
   interrupted: boolean;
   /** Терминал: цикл должен выйти и форсировать финальный ответ без тулов. */
-  finalize?: "duplicate" | "failed_batches";
+  finalize?: Exclude<StopReason, "max_iters">;
 }
 
 /**
@@ -687,7 +687,6 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       });
     }
     if (state.consecutiveDuplicateBatches >= HARD_STOP_DUPLICATE_BATCHES) {
-      state.duplicateStopped = true;
       logger.diagnostic(
         "warn",
         `Duplicate loop terminated after ${state.consecutiveDuplicateBatches} identical batches — forcing final answer`,

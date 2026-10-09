@@ -3,6 +3,7 @@ import { FORCED_COMPACTION_COOLDOWN } from "./constants";
 import type { PrefixDelta, PromptSnapshot } from "./prefix-monitor";
 import type { CacheUsage } from "../../llm/cache-usage";
 import { createArtifactChurnState, type ArtifactChurnState } from "./artifact-progress";
+import type { StopReason } from "../types";
 
 /**
  * Состояние одного запуска агентного цикла (executeSingleAgentLoop).
@@ -76,14 +77,15 @@ export interface LoopState {
   consecutiveDuplicateBatches: number;
   /** Duplicate-директива уже отправлена для текущего стрика (1 раз). */
   duplicateNudged: boolean;
-  /** Duplicate-петля остановлена жёстко — форс финального ответа. */
-  duplicateStopped: boolean;
   /** Канонические ключи всех вызовов за ход — вход duplicate-предиката. */
   seenToolCalls: Set<string>;
-  /** Причина принудительного завершения без тулов, или null. */
-  finalizeReason: "duplicate" | "failed_batches" | "max_iters" | null;
+  /**
+   * Причина принудительного завершения без тулов, или null. `max_iters` сюда
+   * не попадает: он не приходит от батча, а выводится в цикле по дефолту.
+   */
+  finalizeReason: Exclude<StopReason, "max_iters"> | null;
   /** Машиночитаемая причина остановки для результата/чата (после финала). */
-  stopReason: "duplicate" | "failed_batches" | "max_iters" | null;
+  stopReason: StopReason | null;
   /** Подряд идущие успешные итерации с тулами — вход для reasoning policy. */
   consecutiveToolSuccesses: number;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
@@ -217,7 +219,6 @@ export function createLoopState(): LoopState {
     honestStopNudged: false,
     consecutiveDuplicateBatches: 0,
     duplicateNudged: false,
-    duplicateStopped: false,
     seenToolCalls: new Set<string>(),
     finalizeReason: null,
     stopReason: null,

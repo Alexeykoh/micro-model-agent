@@ -13,7 +13,7 @@ import { broadcast } from "../state";
 import { syncBusy } from "./session-status";
 import { redactContextSecrets } from "../../../core/agent/context-log";
 import { stripAnsi } from "../../../ui/line-math";
-import type { MetaKind } from "../../../core/types";
+import type { MetaKind, StopReason } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import type { HostStateSnapshot } from "../../../core/host";
 import type { TurnSummary } from "../../types";
@@ -83,7 +83,7 @@ export function clipToolOutput(toolName: string, output: string): string {
 export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
   Partial<Pick<TurnSummary, "durationMs" | "toolCalls">> & {
     /** Машиночитаемая причина принудительной остановки, если была. */
-    stopReason?: "duplicate" | "failed_batches" | "max_iters";
+    stopReason?: StopReason;
     /** Локализованный текст причины (печатается в ленте). */
     error?: string;
   };
