@@ -145,6 +145,27 @@ binary.
 Share `canonicalArgsKey` with `stuck-detector.ts` (drop its raw `JSON.stringify`). Full
 unification of the duplicate streak with `hasRepetitiveToolCalls` is out of scope.
 
+## Validation (dry-run on the failing session)
+
+Replayed the `ses_mv0pirf5_hnmbxj` trace against the new predicate. Each of the 24
+iterations made 1–2 calls, all with **distinct** arguments (different files, different grep
+patterns), and no batch consisted solely of duplicates:
+
+- **New predicate:** the duplicate streak stays at **0** for the whole turn — no directive,
+  no terminal. The session runs to its natural answer.
+- **Old predicate (matches the log):** every non-mutating batch fed the streak; the 8th
+  emitted `exec.readonly_directive`, then `bash{git rev-parse…}` at iteration 12 reset it,
+  and iterations 13–24 (12 consecutive) hit `HARD_STOP_READONLY_BATCHES` — exactly the
+  `Read-only loop hard-stopped` line at 08:39:03.
+- **Honest-stop never fired:** `consecutiveFailedBatches` counts only *fully* failed
+  batches, and each failing `grep` shared its batch with a successful call. Under the grep
+  fix these failures disappear entirely.
+- **Grep fix:** a `|` pattern that the broken `rg.cmd` shim rejects is marked engine-
+  unavailable and resolved by the JS `RegExp` fallback.
+
+A constructed repeat case (read the same file at the same offset 12×) confirms the terminal
+now yields an answer plus a visible reason instead of an empty abort.
+
 ## Alternatives rejected
 
 - **Intent classifier** (read-only by keywords) — brittle across languages/tasks, and
