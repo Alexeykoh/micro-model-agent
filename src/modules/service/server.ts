@@ -2,13 +2,17 @@
  * HTTP-транспорт Agent Service API v1 (`node:http`).
  *
  * `GET /v1/health` и `GET /v1/ready` — liveness/readiness без auth (их дёргает
- * оркестратор). Остальные `/v1/*` требуют bearer-токен, если он задан.
- * Non-loopback bind без токена отвергается на старте (спека §11).
+ * оркестратор), плюс discovery (`/v1/openapi.json`, `/v1/docs`) — описание
+ * публичного контракта, а не данные тенанта. Остальные `/v1/*` требуют
+ * bearer-токен, если он задан. Non-loopback bind без токена отвергается на
+ * старте (спека §11).
  */
 import { createServer as createHttpServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { t } from "../../i18n/index";
+import { defaultOutputBus } from "../../output";
+import { errMsg } from "../../utils/error";
 import { bearerOk, isLoopback, sendProblem } from "./http/respond";
 import { handleApi } from "./http/routes";
 import { problem } from "./runtime/problem";
@@ -33,7 +37,15 @@ export async function startServiceServer(s: AgentServiceState): Promise<string> 
   });
 }
 
-/** Диспатч одного запроса: probes без auth → bearer-чек → `/v1/*` → 404. */
+/** Пути без bearer-аутентификации: пробы оркестратора + discovery контракта. */
+const OPEN_PATHS = new Set([
+  "/v1/health",
+  "/v1/ready",
+  "/v1/openapi.json",
+  "/v1/docs",
+]);
+
+/** Диспатч одного запроса: открытый путь → bearer-чек → `/v1/*` → 404. */
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -42,9 +54,8 @@ async function handleRequest(
   const reqUrl = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   res.setHeader("Cache-Control", "no-cache, no-transform");
 
-  const isProbe = reqUrl.pathname === "/v1/health" || reqUrl.pathname === "/v1/ready";
-  if (isProbe) {
-    await handleApi(req, res, reqUrl, s);
+  if (OPEN_PATHS.has(reqUrl.pathname)) {
+    await dispatch(req, res, reqUrl, s);
     return;
   }
   if (!bearerOk(req, s.token)) {
@@ -52,13 +63,37 @@ async function handleRequest(
     return;
   }
   if (reqUrl.pathname.startsWith("/v1/")) {
-    await handleApi(req, res, reqUrl, s);
+    await dispatch(req, res, reqUrl, s);
     return;
   }
   sendProblem(
     res,
     problem({ type: "validation", title: "not found", status: 404, detail: reqUrl.pathname }),
   );
+}
+
+/**
+ * Вызов маршрута под страховкой: любая непойманная ошибка становится
+ * `500 internal` problem+json, а не обрывом сокета и не падением процесса
+ * (сервис живёт неделями, и упасть от кривого запроса нельзя).
+ */
+async function dispatch(
+  req: IncomingMessage,
+  res: ServerResponse,
+  reqUrl: URL,
+  s: AgentServiceState,
+): Promise<void> {
+  try {
+    await handleApi(req, res, reqUrl, s);
+  } catch (err) {
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
+    const detail = errMsg(err);
+    defaultOutputBus.log("warn", "service", `request failed: ${reqUrl.pathname}: ${detail}`);
+    sendProblem(res, problem({ type: "internal", title: "internal error", status: 500, detail }));
+  }
 }
 
 /** Graceful stop: перестать принимать, разбудить ожидающих, сбросить пул/буферы. */

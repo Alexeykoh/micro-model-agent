@@ -15,6 +15,20 @@ Use `mma serve` when a program — not a human — talks to the agent: a chat
 backend, a workflow engine, a scheduler. For a human at a terminal use the REPL;
 for a human in a browser use [`mma web`](./agents/architecture.md).
 
+## Discovering the contract
+
+The service describes itself — no need to read the repo:
+
+```bash
+curl -s localhost:7331/v1/openapi.json   # OpenAPI 3.1 (Swagger UI / Redoc / Postman / client gen)
+open http://localhost:7331/v1/docs      # the same contract, human-readable, offline-safe HTML
+```
+
+Both URLs are printed on startup. They are served without the bearer token (like
+`/v1/health` and `/v1/ready`): they describe the public API and expose no tenant
+data. Everything under sessions/tasks/events still requires the token when one is
+configured.
+
 ## Quick start
 
 ```bash
@@ -115,10 +129,13 @@ with `error.type` = `…/output-invalid`.
 ## Webhooks
 
 Pass `callbackUrl` on submit: on the terminal event the runtime `POST`s the same
-Job object with an **HMAC-SHA256** signature over `timestamp + "." + body`
-(headers `X-Mma-Timestamp`, `X-Mma-Event-Id`, `X-Mma-Signature`). Retries use
-backoff + jitter; deduplicate by `X-Mma-Event-Id` and verify the timestamp. Pull
-stays available even if push is undeliverable.
+Job object with `X-Mma-Timestamp` and `X-Mma-Event-Id` (stable across retries)
+headers. **The `X-Mma-Signature` header is only sent when `service.webhookSecret`
+is configured** — with the secret it is an HMAC-SHA256 over
+`timestamp + "." + body`; without it the callback arrives **unsigned**, so do
+not trust the callback unless you configured a secret (or keep pull as your
+source of truth). Retries use backoff + jitter; deduplicate by `X-Mma-Event-Id`
+and verify the timestamp. Pull stays available even if push is undeliverable.
 
 ## Idempotency, cancel, timeout, retention
 
@@ -136,6 +153,8 @@ stays available even if push is undeliverable.
 |---|---|
 | liveness | `GET /v1/health` |
 | readiness (config loaded, provider reachable) | `GET /v1/ready` |
+| contract (machine) | `GET /v1/openapi.json` |
+| contract (human) | `GET /v1/docs` |
 
 On `SIGINT`/`SIGTERM` the service stops accepting, cancels pending questions and
 drains the pool. If a provider is unreachable, readiness reports `503`

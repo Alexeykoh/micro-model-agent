@@ -88,10 +88,15 @@ export function makeServiceDeps(opts: ServiceDepsOptions): ServiceDeps {
   return deps;
 }
 
-/** Id первой сессии из `GET /v1/sessions`. */
-export async function firstSessionId(url: string): Promise<string> {
-  const res = await httpJson(`${url}/v1/sessions`);
-  return (res.json.sessions as Array<{ id: string }>)[0].id;
+/** Id первой сессии из `GET /v1/sessions` (заголовки — для сервиса с токеном). */
+export async function firstSessionId(
+  url: string,
+  headers?: Record<string, string>,
+): Promise<string> {
+  const res = await httpJson(`${url}/v1/sessions`, { headers });
+  const sessions = res.json.sessions as Array<{ id: string }> | undefined;
+  if (!sessions?.length) throw new Error(`no sessions in ${JSON.stringify(res.json)}`);
+  return sessions[0].id;
 }
 
 /** Поллит `GET /v1/tasks/:jobId` до статуса (или бросает по таймауту). */

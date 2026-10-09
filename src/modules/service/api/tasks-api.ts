@@ -9,9 +9,8 @@
 import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
-import { readJsonBody } from "../../webui/http/body";
 import { errMsg } from "../../../utils/error";
-import { sendJson, sendProblem } from "../http/respond";
+import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
 import { problem, type ProblemDetails } from "../runtime/problem";
 import { emitEvent } from "../runtime/emit";
 import { makeServiceForwarder } from "../runtime/event-bridge";
@@ -99,7 +98,8 @@ async function submit(
 ): Promise<boolean> {
   if (!ensureSession(s, res, sessionId)) return true;
 
-  const body = await readJson(req);
+  const body = await readJson(req, res);
+  if (!body) return true;
   const parsed = parseSubmitBody(body);
   if (!parsed.ok) {
     sendProblem(res, parsed.problem);
@@ -107,26 +107,54 @@ async function submit(
   }
 
   const tenant = tenantOf(req);
-  const principal = tenant.principalId ?? "anon";
   const idemKey = headerString(req, "idempotency-key");
-  const bodyHash = hashBody(body);
 
-  const early = checkIdempotency(s, principal, idemKey, bodyHash);
-  if (early.kind === "conflict") {
-    sendProblem(res, problem({ type: "idempotencyConflict", title: "idempotency key reused with a different body", status: 409 }));
-    return true;
-  }
-  if (early.kind === "hit") return respondSubmit(res, s, early.task);
+  const dedupe = resolveIdempotentSubmit(res, s, body, tenant, idemKey);
+  if (dedupe.handled) return true;
 
   const created = createAndDispatch(s, sessionId, parsed.params, tenant);
   if (!created.ok) {
     sendProblem(res, problem({ type: "queueFull", title: "session queue is full", status: 429, retriable: true, retryAfterMs: 1000 }));
     return true;
   }
-  if (idemKey) s.tasks.recordIdempotency(principal, idemKey, bodyHash, created.task.jobId);
+  if (idemKey) {
+    s.tasks.recordIdempotency(
+      tenant.principalId ?? "anon",
+      idemKey,
+      hashBody(body),
+      created.task.jobId,
+    );
+  }
   return parsed.params.wait
     ? await respondSubmitWait(res, s, created.task)
     : respondSubmit(res, s, created.task);
+}
+
+/**
+ * Идемпотентность сабмита: тот же `Idempotency-Key` с тем же телом отдаёт
+ * готовую задачу, с другим — `409`. Ответы и запись ключа — здесь, чтобы
+ * `submit` не рос в ветвлениях.
+ */
+function resolveIdempotentSubmit(
+  res: ServerResponse,
+  s: AgentServiceState,
+  body: Record<string, unknown>,
+  tenant: TenantContext,
+  idemKey: string | undefined,
+): { handled: boolean } {
+  if (!idemKey) return { handled: false };
+  const principal = tenant.principalId ?? "anon";
+  const bodyHash = hashBody(body);
+  const early = checkIdempotency(s, principal, idemKey, bodyHash);
+  if (early.kind === "conflict") {
+    sendProblem(res, problem({ type: "idempotencyConflict", title: "idempotency key reused with a different body", status: 409 }));
+    return { handled: true };
+  }
+  if (early.kind === "hit") {
+    respondSubmit(res, s, early.task);
+    return { handled: true };
+  }
+  return { handled: false };
 }
 
 /** Проверяет наличие менеджера сессий и самой сессии; пишет Problem при провале. */
@@ -564,7 +592,8 @@ async function answer(
     sendProblem(res, problem({ type: "validation", title: "task is not waiting for input", status: 409, detail: rec.status }));
     return true;
   }
-  const body = (await readJsonBody(req, MAX_JSON_BYTES)) ?? {};
+  const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
+  if (!body) return true;
   const id = typeof body.id === "string" ? body.id : "";
   if (!id) {
     sendProblem(res, problem({ type: "validation", title: "question id required", status: 400 }));
@@ -585,8 +614,11 @@ function statusUrl(jobId: string): string {
 }
 
 /** Тело JSON-запроса как объект (пусто/бито → `{}`). */
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  return (await readJsonBody(req, MAX_JSON_BYTES)) ?? {};
+async function readJson(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<Record<string, unknown> | undefined> {
+  return readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
 }
 
 /** Tenant/run-контекст из auth-заголовков control plane (никогда из тела, §11). */

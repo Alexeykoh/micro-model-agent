@@ -5,6 +5,7 @@
 import { bootstrap } from "../core/bootstrap";
 import { getDefaultChannel } from "../output";
 import { t } from "../i18n/index";
+import pc from "picocolors";
 import { startAgentService } from "../modules/service/module";
 
 /** Опции `mma serve`: порт, хост, токен, проект. */
@@ -60,13 +61,12 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
   });
 
   await svc.url;
-  getDefaultChannel().writeLine(
-    t("cli.serve_started", {
-      host: svc.state.host,
-      port: String(svc.state.port),
-      dir: baseDir,
-    }),
-  );
+  const channel = getDefaultChannel();
+  const where = { host: svc.state.host, port: String(svc.state.port) };
+  channel.writeLine(t("cli.serve_started", { ...where, dir: baseDir }));
+  // Discovery сразу на старте: иначе первый вопрос «как это устроено?» уходит
+  // в поиск по репозиторию вместо одного клика.
+  channel.writeLine(pc.dim(t("cli.serve_docs", where)));
 
   await new Promise<void>((resolve) => {
     const shutdown = (): void => {

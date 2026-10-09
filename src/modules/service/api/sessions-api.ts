@@ -7,8 +7,7 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { SessionMeta } from "../../session/types";
-import { readJsonBody } from "../../webui/http/body";
-import { sendJson, sendProblem } from "../http/respond";
+import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
 import { problem } from "../runtime/problem";
 import type { SessionStatus, SessionSummary } from "../types";
 import type { AgentServiceState } from "../state";
@@ -74,7 +73,8 @@ async function createSession(
   res: ServerResponse,
   s: AgentServiceState,
 ): Promise<boolean> {
-  const body = (await readJsonBody(req, MAX_JSON_BYTES)) ?? {};
+  const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
+  if (!body) return true;
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : undefined;
   const externalRef =
     typeof body.externalRef === "string" && body.externalRef.trim()

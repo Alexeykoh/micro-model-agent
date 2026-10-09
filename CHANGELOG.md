@@ -4,6 +4,31 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.37.0] - 2026-10-09
+
+`mma serve` now describes its own API: a live OpenAPI 3.1 document plus a
+human-readable contract page, so an integrator learns the endpoints from the
+running service instead of from the repository. README refreshed across the
+board — features, tools, modules, CLI/REPL surfaces and config keys had drifted
+behind the code.
+
+### Added
+
+- **Self-describing service contract** (`src/modules/service/openapi/`, `api/docs-api.ts`, `http/routes.ts`, `cli/service-command.ts`): `GET /v1/openapi.json` serves an OpenAPI 3.1 document of Agent Service API v1 (Swagger UI, Redoc, Postman/Insomnia, client generation), and `GET /v1/docs` serves the same contract as a self-contained HTML page — quickstart cURL, endpoint table with response codes, SSE events and error types. Both URLs are printed on `mma serve` startup (`cli.serve_docs`, en+ru) and both are exempt from the bearer check like `/v1/health` and `/v1/ready`: they describe the public API and expose no tenant data. The page is offline-first (no CDN), with an auth header in the quickstart only when a token is actually required. Single source of truth: the `OPERATIONS` table feeds the OpenAPI document, the docs page, and `tests/service/openapi.test.ts`, whose guard fails when a route exists without a description (or vice versa). Root `security: [{bearerAuth: []}]` appears only when a token is configured; `info.version` is `1.0.0+mma-<runtime version>`, so the spec can never drift from the build.
+- **Spec ↔ reality conformance suite** (`tests/service/contract.test.ts`, `tests/service/contract-helpers.ts`): a hand-written spec rots silently, so every response the service returns is now checked against it in both directions — declared status codes (happy, error, queue-full, cancel-terminal, validation), payload shape (no undocumented fields, all required fields present, valid enums), declared response headers (`Location`/`Retry-After` on the `202` submit), content types, the auth matrix per operation (protected routes reject a missing/wrong token and accept the right one; open routes stay open), RFC 9457 error bodies, SSE frames against `EventEnvelope`, and the webhook body against `JobObject`. A guard also scans the runtime sources and fails if an emitted event type is missing from the enum, or a declared type is never emitted.
+
+### Fixed
+
+- **Oversized request bodies no longer kill the service** (`src/modules/service/http/respond.ts`, `api/sessions-api.ts`, `api/tasks-api.ts`): every `mma serve` handler read its JSON body without a guard, so a body over the 1 MiB cap produced an unhandled rejection — the integration got a socket error instead of a status code, and under Node the process could go down on an ordinary bad request. Bodies are now read through `readJsonBodyOrProblem`, which answers `413` (or `400` on a broken stream) as RFC 9457 Problem Details and destroys the socket only after the response is flushed — the same approach `mma web` already used.
+- **Unhandled handler errors return `500 internal`** (`src/modules/service/server.ts`): the request dispatcher now wraps the route table, so any escaping exception becomes a Problem Details response and a warning log instead of a dropped connection. A long-running service must not die from one malformed request.
+- **Webhook signature documented as conditional** (`src/modules/service/openapi/schemas.ts`, `docs/serve-mode.md`, `docs/agents/service-api.md`): `X-Mma-Signature` is sent only when `service.webhookSecret` is configured — an unsigned callback was documented as signed, which would have had integrators trusting unsigned payloads. The docs and the schema description now say so explicitly.
+- **Dead contract entries removed**: the `error` event type was declared in `EventEnvelope.type` but never emitted, and `POST /v1/sessions/:id/tasks` returned `400` on an empty `input` without declaring it. Both are now guarded by tests (see below), and the missing `400`/`413` responses are declared.
+
+### Changed
+
+- **README refreshed** (features, tools table, module/tool counts, CLI subcommands, REPL command table, web mode, config keys, architecture and project structure): removed the phantom `scope_request` tool, added `define_capability` / `process_wait`, `mma serve`, `mma plugins …`, `mma security …`, `/security`, `/lsp doctor`, `contextAuto`, `critic.enabled`, `service.port`, the `service` module, and pointed first-time users at the new `/v1/docs` + `/v1/openapi.json` endpoints.
+- **Docs:** a discovery section in `docs/agents/service-api.md` and `docs/serve-mode.md`; auth column added to the endpoint table.
+
 ## [2.36.0] - 2026-10-08
 
 `mma web` fixes from a live two-tab session (a background session's stream

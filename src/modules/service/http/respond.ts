@@ -4,8 +4,10 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { isLoopback } from "../../webui/util";
+import { isLoopback, BodyTooLargeError } from "../../webui/util";
+import { readJsonBody } from "../../webui/http/body";
 import type { ProblemDetails } from "../runtime/problem";
+import { problem } from "../runtime/problem";
 
 export { isLoopback };
 
@@ -15,10 +17,57 @@ export function sendJson(res: ServerResponse, status: number, body: unknown): vo
   res.end(JSON.stringify(body));
 }
 
-/** Отправляет Problem Details (`application/problem+json`) со статусом из объекта. */
-export function sendProblem(res: ServerResponse, pd: ProblemDetails): void {
+/**
+ * Отправляет Problem Details (`application/problem+json`) со статусом из объекта.
+ * `onSent` выполняется после флаша — им рвутся запросы с непрочитанным телом
+ * (иначе клиент видит socket error вместо 413).
+ */
+export function sendProblem(
+  res: ServerResponse,
+  pd: ProblemDetails,
+  onSent?: () => void,
+): void {
   res.writeHead(pd.status, { "Content-Type": "application/problem+json; charset=utf-8" });
-  res.end(JSON.stringify(pd));
+  res.end(JSON.stringify(pd), onSent);
+}
+
+/**
+ * Читает JSON-тело, превращая провал чтения в Problem Details: переполнение →
+ * `413`, обрыв/ошибка сокета → `400`. Возвращает `undefined`, когда ответ уже
+ * отправлен — вызывающий обязан выйти.
+ *
+ * Без этого реджект из `readBody` улетал бы из хендлера в диспатчер, и
+ * интегратор получал бы обрыв сокета вместо кода ответа (а в Node — ещё и
+ * unhandled rejection, который валит процесс на очереди).
+ */
+export async function readJsonBodyOrProblem(
+  req: IncomingMessage,
+  res: ServerResponse,
+  cap: number,
+): Promise<Record<string, unknown> | undefined> {
+  try {
+    return (await readJsonBody(req, cap)) ?? {};
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) {
+      sendProblem(
+        res,
+        problem({
+          type: "validation",
+          title: "request body too large",
+          status: 413,
+          detail: `limit is ${cap} bytes`,
+        }),
+        () => req.destroy(),
+      );
+      return undefined;
+    }
+    sendProblem(
+      res,
+      problem({ type: "validation", title: "could not read request body", status: 400 }),
+      () => req.destroy(),
+    );
+    return undefined;
+  }
 }
 
 /** Сравнение за константное время (разные длины коротко замыкаются). */
