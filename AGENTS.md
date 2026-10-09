@@ -1733,7 +1733,9 @@ server: каждый `checkFile` (каждая запись файла, кажд
   на `.chat`; анимация входа — `popCenter` (сохраняет `translateX(-50%)`, иначе `pop`
   ронял центрирование и пилюля вспыхивала правее центра).
 
-### Current Version: 2.39.0
+### Current Version: 2.40.0
+
+Web answer panel, quiet reasoning, fixed latest pill, user-attachment persistence (see the section above).
 
 Self-describing service contract (see the section above): `mma serve` serves its
 own OpenAPI 3.1 document and human docs page from one `OPERATIONS` table.
