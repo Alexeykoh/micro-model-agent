@@ -45,14 +45,22 @@ const PROBLEM_TYPES = [
   "https://mma.dev/errors/internal",
 ];
 
-/** Типы событий SSE v1 (additive-only в рамках v1). */
+/**
+ * Типы событий SSE v1 (additive-only в рамках v1).
+ *
+ * Держится вручную, поэтому guard-тест сверяет список с литералами в
+ * `emitEvent(...)`/`opts.emit(...)` по исходникам `src/modules/service`:
+ * неэмитимый тип в enum — мёртвая запись в контракте (интегратор ждёт
+ * событие, которого не будет), а неэмитимый в рантайме тип в enum отсутствует —
+ * интегратор о нём не узнает.
+ */
 const EVENT_TYPES = [
   "task.accepted",
   "task.started",
+  "task.waiting_input",
   "task.finished",
   "task.failed",
   "task.cancelled",
-  "task.waiting_input",
   "text.delta",
   "reasoning.delta",
   "phase",
@@ -60,7 +68,6 @@ const EVENT_TYPES = [
   "tool.end",
   "question",
   "plan",
-  "error",
 ];
 
 /** Все схемы контракта: ключ = имя в `components.schemas`. */
@@ -116,8 +123,12 @@ export const SCHEMAS: Record<string, JsonSchema> = {
   OutputSpec: {
     type: "object",
     description:
-      "Контракт структурированного вывода. Поддерживается strict-подмножество JSON Schema: " +
-      "`type`, `required`, `properties`, `items`, `enum`, `additionalProperties: false`.",
+      "Контракт структурированного вывода. На сабмите проверяется только форма " +
+      "(`format` ∈ text|json, `schema` — объект), иначе `422`. Семантика схемы не " +
+      "проверяется заранее: поддерживается strict-подмножество JSON Schema " +
+      "(`type`, `required`, `properties`, `items`, `enum`, " +
+      "`additionalProperties: false`), и если ответ в него не вписывается — задача " +
+      "падает с `error.type` = `…/output-invalid` после одного retry.",
     required: ["format"],
     properties: {
       format: { type: "string", enum: ["text", "json"] },
@@ -150,7 +161,12 @@ export const SCHEMAS: Record<string, JsonSchema> = {
       callbackUrl: {
         type: "string",
         format: "uri",
-        description: "Webhook на терминальное событие (тело — Job-объект, подпись HMAC).",
+        description:
+          "Webhook на терминальное событие (тело — Job-объект). Заголовки: " +
+          "`X-Mma-Timestamp`, `X-Mma-Event-Id` (стабилен между ретраями) и " +
+          "`X-Mma-Signature` — **только если настроен `service.webhookSecret`** " +
+          "(HMAC-SHA256 по `timestamp + '.' + body`); без секрета колбэк приходит " +
+          "неподписанным. Ретраи с backoff, 4xx (кроме 429) не ретраятся.",
       },
       externalRef: string({ description: "Метка интегратора для задачи (пишется в журнал сессии)." }),
       wait: {

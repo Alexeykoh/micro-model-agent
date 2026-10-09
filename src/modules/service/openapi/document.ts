@@ -72,6 +72,16 @@ function toOperation(op: SpecOperation, authRequired: boolean): Record<string, u
         status,
         {
           description: r.description,
+          ...(r.headers
+            ? {
+                headers: Object.fromEntries(
+                  Object.entries(r.headers).map(([name, description]) => [
+                    name,
+                    { description, required: true },
+                  ]),
+                ),
+              }
+            : {}),
           ...(r.schema
             ? {
                 content: {

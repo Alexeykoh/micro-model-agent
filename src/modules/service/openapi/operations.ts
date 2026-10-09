@@ -33,6 +33,8 @@ export interface SpecResponse {
   schema?: string;
   /** Media type ответа; по умолчанию `application/json`. */
   contentType?: string;
+  /** Заголовки ответа: имя → описание (для клиентов, которые их читают). */
+  headers?: Record<string, string>;
 }
 
 /** Операция контракта. */
@@ -61,6 +63,9 @@ const PROBLEM_RESPONSES = {
   "401": ok("Unauthorized — нет/неверен `Authorization: Bearer`"),
   default: ok("Problem Details (RFC 9457)", "ProblemDetails"),
 };
+
+/** Тело не влезло в кап (1 МиБ) — тело запроса отвергается, сервер продолжает жить. */
+const TOO_LARGE: SpecResponse = ok("Тело запроса больше 1 МиБ", "ProblemDetails");
 
 const SESSION_ID = {
   name: "sessionId",
@@ -165,6 +170,7 @@ export const OPERATIONS: SpecOperation[] = [
     requestBody: { description: "Необязательные имя и внешний ключ", schema: ref("SessionCreateRequest") },
     responses: {
       "201": ok("Сессия создана", "SessionSummary"),
+      "413": TOO_LARGE,
       ...PROBLEM_RESPONSES,
     },
   },
@@ -233,9 +239,19 @@ export const OPERATIONS: SpecOperation[] = [
     },
     responses: {
       "200": ok("Терминальный Job-объект (`wait: true` уложился в бюджет)", "JobObject"),
-      "202": ok("Задача принята", "TaskAccepted"),
+      "202": {
+        description: "Задача принята; статус — по `statusUrl`",
+        schema: "TaskAccepted",
+        headers: {
+          Location: "URL статуса задачи (`statusUrl` тела)",
+          "Retry-After": "Подсказка, через сколько секунд опросить статус",
+        },
+      },
+      "400": ok("Пустой `input` или неверный тип поля", "ProblemDetails"),
       "404": ok("Сессия не найдена", "ProblemDetails"),
       "409": ok("Idempotency-Key с другим телом", "ProblemDetails"),
+      "413": TOO_LARGE,
+      "422": ok("Некорректный `output.schema` (вне поддерживаемого подмножества)", "ProblemDetails"),
       "429": ok("Очередь сессии полна", "ProblemDetails"),
       ...PROBLEM_RESPONSES,
     },
@@ -288,8 +304,10 @@ export const OPERATIONS: SpecOperation[] = [
     },
     responses: {
       "202": ok("Ответ принят, задача снова `running`", "TaskAck"),
+      "400": ok("Не указан `id` вопроса", "ProblemDetails"),
       "404": ok("Задача или вопрос не найдены", "ProblemDetails"),
       "409": ok("Задача не ждёт ввода", "ProblemDetails"),
+      "413": TOO_LARGE,
       ...PROBLEM_RESPONSES,
     },
   },

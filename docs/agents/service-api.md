@@ -157,10 +157,11 @@ retry, затем `failed` с `error.type = …/output-invalid`.
 ## Webhook
 
 На терминальном событии рантайм `POST`-ит Job-объект на `callbackUrl` с
-подписью **HMAC-SHA256** по `timestamp + "." + body`, заголовки
-`X-Mma-Timestamp` (RFC 3339), `X-Mma-Event-Id` (стабилен между ретраями),
-`X-Mma-Signature`. Ретраи — exponential backoff + jitter; 4xx (кроме 429) не
-ретраятся. Pull доступен и при недоставке push.
+заголовками `X-Mma-Timestamp` (RFC 3339) и `X-Mma-Event-Id` (стабилен между
+ретраями). `X-Mma-Signature` (HMAC-SHA256 по `timestamp + "." + body`)
+отправляется **только если настроен `service.webhookSecret`** — без секрета
+колбэк приходит неподписанным, и доверять ему нельзя (pull остаётся источником
+правды). Ретраи — exponential backoff + jitter; 4xx (кроме 429) не ретраятся.
 
 ## Наблюдаемость и изоляция
 

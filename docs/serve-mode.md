@@ -129,10 +129,13 @@ with `error.type` = `…/output-invalid`.
 ## Webhooks
 
 Pass `callbackUrl` on submit: on the terminal event the runtime `POST`s the same
-Job object with an **HMAC-SHA256** signature over `timestamp + "." + body`
-(headers `X-Mma-Timestamp`, `X-Mma-Event-Id`, `X-Mma-Signature`). Retries use
-backoff + jitter; deduplicate by `X-Mma-Event-Id` and verify the timestamp. Pull
-stays available even if push is undeliverable.
+Job object with `X-Mma-Timestamp` and `X-Mma-Event-Id` (stable across retries)
+headers. **The `X-Mma-Signature` header is only sent when `service.webhookSecret`
+is configured** — with the secret it is an HMAC-SHA256 over
+`timestamp + "." + body`; without it the callback arrives **unsigned**, so do
+not trust the callback unless you configured a secret (or keep pull as your
+source of truth). Retries use backoff + jitter; deduplicate by `X-Mma-Event-Id`
+and verify the timestamp. Pull stays available even if push is undeliverable.
 
 ## Idempotency, cancel, timeout, retention
 

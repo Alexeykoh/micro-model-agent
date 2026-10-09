@@ -11,6 +11,8 @@ import { createServer as createHttpServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { t } from "../../i18n/index";
+import { defaultOutputBus } from "../../output";
+import { errMsg } from "../../utils/error";
 import { bearerOk, isLoopback, sendProblem } from "./http/respond";
 import { handleApi } from "./http/routes";
 import { problem } from "./runtime/problem";
@@ -53,7 +55,7 @@ async function handleRequest(
   res.setHeader("Cache-Control", "no-cache, no-transform");
 
   if (OPEN_PATHS.has(reqUrl.pathname)) {
-    await handleApi(req, res, reqUrl, s);
+    await dispatch(req, res, reqUrl, s);
     return;
   }
   if (!bearerOk(req, s.token)) {
@@ -61,13 +63,37 @@ async function handleRequest(
     return;
   }
   if (reqUrl.pathname.startsWith("/v1/")) {
-    await handleApi(req, res, reqUrl, s);
+    await dispatch(req, res, reqUrl, s);
     return;
   }
   sendProblem(
     res,
     problem({ type: "validation", title: "not found", status: 404, detail: reqUrl.pathname }),
   );
+}
+
+/**
+ * Вызов маршрута под страховкой: любая непойманная ошибка становится
+ * `500 internal` problem+json, а не обрывом сокета и не падением процесса
+ * (сервис живёт неделями, и упасть от кривого запроса нельзя).
+ */
+async function dispatch(
+  req: IncomingMessage,
+  res: ServerResponse,
+  reqUrl: URL,
+  s: AgentServiceState,
+): Promise<void> {
+  try {
+    await handleApi(req, res, reqUrl, s);
+  } catch (err) {
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
+    const detail = errMsg(err);
+    defaultOutputBus.log("warn", "service", `request failed: ${reqUrl.pathname}: ${detail}`);
+    sendProblem(res, problem({ type: "internal", title: "internal error", status: 500, detail }));
+  }
 }
 
 /** Graceful stop: перестать принимать, разбудить ожидающих, сбросить пул/буферы. */
