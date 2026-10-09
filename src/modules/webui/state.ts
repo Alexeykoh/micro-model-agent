@@ -235,6 +235,12 @@ export interface WebUiState {
    * перечитывает раскрытые папки при росте (фолбэк к SSE `files`).
    */
   filesRevision: number;
+  /**
+   * Доступный апдейт: текущая и свежая версии. Живёт в снапшоте (а не только в
+   * SSE `update`), чтобы чип в футере пережил реконнект и был виден вновь
+   * открытой вкладке. `undefined` — апдейта нет либо он уже поставлен.
+   */
+  updateAvailable?: { current: string; latest: string };
   /** Ручной пересбор индекса карты проекта (`POST /api/index`). */
   refreshIndex?: () => Promise<void>;
   /** Диагностика LSP по требованию (вкладка LSP, `POST /api/lsp/doctor`). */

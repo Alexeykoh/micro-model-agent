@@ -631,6 +631,12 @@ body.light .sel > button { border: 1px solid var(--border); }
 .ws-line .ws-ver { color: var(--dim-b); margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
 .ws-line .ws-moe { color: var(--accent, var(--dim-b)); margin-left: auto; flex: none; font-weight: 600; letter-spacing: .02em; }
 .ws-line .ws-moe + .ws-ver { margin-left: 10px; }
+/* Available update chip — green, sits right before the installed version so
+   `↑ 2.37.0  mma 2.36.0` reads as "newer is available, this is what you run".
+   Without the MoE chip in the row the chip itself takes the auto margin. */
+.ws-line .ws-upd { color: var(--green); margin-left: auto; flex: none; font-weight: 600; font-variant-numeric: tabular-nums; cursor: help; }
+.ws-line .ws-moe + .ws-upd { margin-left: 10px; }
+.ws-line .ws-upd + .ws-ver { margin-left: 10px; }
 
 /* slash-command autocomplete popup (above the composer) */
 .cmdk {
@@ -2077,6 +2083,13 @@ body.light .c-dim { --face-c: var(--panel); }
 .mdl.st-done { animation: mdlDone 2.6s ease-in-out infinite; }
 .mdl.st-done .spark { display: block; position: absolute; top: -16%; right: -10%; font-size: calc(var(--s) * .34); color: var(--green); animation: mdlSpark 2.6s ease-out infinite; }
 @keyframes mdlSpark { 0% { opacity: 0; transform: scale(.3) rotate(0); } 30% { opacity: 1; transform: scale(1) rotate(20deg); } 60% { opacity: 0; transform: scale(.4) rotate(45deg); } 100% { opacity: 0; } }
+/* update — MMART perks up: an available version is good news. Slower and
+   airier than `done` so a long-lived chip reads as an invitation, not a flash.
+   `.spark` carries the announcement (green ✦), `.happy` the smile. */
+@keyframes mdlUpdate { 0%, 100% { transform: translateY(0) scale(1); } 40% { transform: translateY(-9%) scale(1.04); } 70% { transform: translateY(0) scale(1); } }
+@keyframes mdlUpdateSpark { 0% { opacity: 0; transform: scale(.3) rotate(0deg) translateY(0); } 35% { opacity: 1; transform: scale(1.15) rotate(25deg) translateY(calc(var(--s) * -.14)); } 70% { opacity: .5; transform: scale(.6) rotate(60deg) translateY(calc(var(--s) * -.24)); } 100% { opacity: 0; transform: scale(.3) rotate(90deg) translateY(calc(var(--s) * -.1)); } }
+.mdl.st-update { animation: mdlUpdate 3.2s ease-in-out infinite; }
+.mdl.st-update .spark { display: block; position: absolute; top: -18%; right: -12%; font-size: calc(var(--s) * .38); color: var(--green); animation: mdlUpdateSpark 3.2s ease-out infinite; }
 .mdl.blink-once .eye { animation: mdlBlinkOnce .12s ease-in-out !important; }
 @keyframes mdlBlinkOnce { 0% { transform: scaleY(1); } 45% { transform: scaleY(.06); } 100% { transform: scaleY(1); } }
 /* error */

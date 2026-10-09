@@ -10,8 +10,12 @@ export interface FooterInput {
   version?: string;
   /** MoE реально ведёт ход (не `moe.enabled`) — горит чип режима. */
   moeActive?: boolean;
+  /** Доступный апдейт (`current` → `latest`); чип с подсказкой-командой. */
+  updateAvailable?: { current: string; latest: string };
   /** Локализованная подпись «dir». */
   dirLabel: string;
+  /** Локализованный title чипа апдейта. */
+  updateTitle?: string;
 }
 
 /**
@@ -26,14 +30,21 @@ export function renderFooter(
   input: FooterInput,
   make: (cls: string, text: string) => HTMLElement,
 ): void {
-  const { workspace = "", version = "", moeActive = false, dirLabel } = input;
-  const key = `${workspace} ${version} ${moeActive}`;
-  // Перестраиваем только на смене входа: `renderState` дёргает рендер на каждый
+  const {
+    workspace = "",
+    version = "",
+    moeActive = false,
+    updateAvailable = undefined,
+    dirLabel,
+    updateTitle = "",
+  } = input;
+  const key = `${workspace} ${version} ${moeActive} ${updateAvailable?.latest ?? ""}`;
+  // Перестраиваем только на смену входа: `renderState` дёргает рендер на каждый
   // снимок состояния (план/usage/фаза), а DOM-трогать там нечего.
   if (el.dataset.key === key) return;
   el.dataset.key = key;
   el.textContent = "";
-  el.hidden = !workspace && !version && !moeActive;
+  el.hidden = !workspace && !version && !moeActive && !updateAvailable;
   if (workspace) {
     el.appendChild(make("ws-k", dirLabel));
     const v = make("ws-v", workspace);
@@ -43,6 +54,14 @@ export function renderFooter(
   if (moeActive) {
     const chip = make("ws-moe", "MoE");
     chip.title = "MoE is orchestrating this turn";
+    el.appendChild(chip);
+  }
+  // Available update: `↑ 2.37.0` next to the installed `mma 2.36.0`. The arrow
+  // reads as "newer available" at a glance, the title carries the command —
+  // `autoInstall` defaults to off, so the user installs it themselves.
+  if (updateAvailable) {
+    const chip = make("ws-upd", `↑ ${updateAvailable.latest}`);
+    chip.title = updateTitle;
     el.appendChild(chip);
   }
   if (version) {

@@ -42,7 +42,7 @@ function createDeps(overrides?: Record<string, unknown>) {
     locale: "en",
     session: { autoSave: true, maxSessions: 50, isolateMemory: false },
     tools: { defaultTags: ["file", "code"], enableOnDemand: true },
-    updater: { enabled: false, checkOnStart: false, autoInstall: false, intervalMs: 0 },
+    updater: { enabled: false, autoInstall: false, intervalMs: 0 },
     reasoning: { mode: "auto", min: "low", max: "max", overrideCooldown: 5 },
   };
 

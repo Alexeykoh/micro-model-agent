@@ -102,4 +102,27 @@ describe("web config registry extras", () => {
       .filter((k) => !seen.has(k) && !bespoke.has(k));
     expect(unplaced).toEqual([]);
   });
+
+  it("offers only updater keys that actually do something", async () => {
+    // Every `updater.*` toggle in this panel was dead while `mma web` skipped the
+    // updater, and `checkOnStart` was dead everywhere. A toggle the UI shows but
+    // nothing reads is worse than no toggle.
+    const { readFileSync } = await import("node:fs");
+    const controls = readFileSync(
+      new URL("../src/modules/webui/assets/js/settings/controls.ts", import.meta.url),
+      "utf-8",
+    );
+    expect(controls).not.toContain("updater.checkOnStart");
+    const updaterKeys = buildConfigRegistry().map((e) => e.key).filter((k) => k.startsWith("updater."));
+    expect(updaterKeys.sort()).toEqual(["updater.autoInstall", "updater.enabled", "updater.intervalMs"]);
+    for (const key of updaterKeys) expect(controls).toContain(key);
+  });
+
+  it("keeps no orphan i18n labels for the retired updater flag", async () => {
+    const { readFileSync } = await import("node:fs");
+    for (const loc of ["en", "ru"]) {
+      const dict = readFileSync(new URL(`../src/i18n/${loc}.json`, import.meta.url), "utf-8");
+      expect(dict).not.toContain("updater.checkOnStart");
+    }
+  });
 });

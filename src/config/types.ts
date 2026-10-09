@@ -468,8 +468,6 @@ import type { LspConfig, } from "../modules/lsp/types";
 
 export interface UpdaterConfig {
   enabled: boolean;
-  /** Проверка обновлений асинхронно на старте (не блокирует). */
-  checkOnStart: boolean;
   /** Автозапуск `npm install -g` при найденной новой версии. */
   autoInstall: boolean;
   /** Мс между фоновыми проверками. 0 = одна проверка на старте. */

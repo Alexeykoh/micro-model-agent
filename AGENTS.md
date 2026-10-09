@@ -1243,6 +1243,55 @@ quality-gate и выглядят аккуратно.
 - **Тесты**: `tests/plugin-drafts.test.ts` (синтаксис, нормализация, откат при
   провале загрузки).
 
+#### Web Auto-Update & MMART Reaction (unreleased, ветка `feat/updater-web-mascot`)
+
+Разбор: «перестало работать автообновление». Два независимых дефекта. Первый — не баг:
+локальный `package.json` был `2.37.0`, npm `latest` — `2.36.0`, поэтому `semverGt()`
+честно возвращал «апдейта нет» (система не предлагает обновление назад). Второй —
+настоящий: в вебе автообновление **никогда не работало**, а панель настроек это
+скрывала. Спека: [docs/specs/2026-10-09-updater-web-design.md](./docs/specs/2026-10-09-updater-web-design.md).
+
+- **Причина мёртвого веба:** `runWeb` идёт с `exitOnComplete=true`
+  (`web-command.ts:65`), а `main.ts:280` читал `exitOnComplete ? undefined :
+  startAutoUpdate(config)` — модуль не создавался. При этом все четыре `updater.*`
+  тумблера рендерились в панели (Advanced → Service) и не делали **ничего**.
+  Флаг `exitOnComplete` решает, кому принадлежит stdin; апдейтер в stdin не лезет
+  (`fetch` + `execFile`) — связь была ложной. Убрана; `mma serve` выигрывает тем же.
+- **Одна точка сборки:** `createUpdater({config, entryPath, logger, onNotice})`
+  (`src/modules/updater/factory.ts`) — dev-гард `isDevEntryPath`, чтение версии и
+  проброс событий одинаковы для терминала и веба. `cli/main.ts` → `busLogger()`,
+  `cli/web-command.ts` → `startWebUpdater()` (гасится `updater?.stop()` на shutdown).
+- **SSE `update`:** `{type:"update", ts, phase: available|installed|failed, current,
+  latest?, error?}` — глобальное событие без `sessionId` (как `index`/`files`).
+  Только фазы апдейта; недоступный реестр — лог, не новость для пользователя.
+- **Постоянная половина — в снапшоте:** `WebUiState.updateAvailable` →
+  `HostStateSnapshot.updateAvailable` (`core/host.ts`, `webui/host-state.ts`) → чип
+  `↑ <latest>` в `footer.ts` рядом с `mma <version>`. По правилу event-sourced state:
+  постоянный факт едет в `state` (переживает реконнект и новую вкладку), а SSE
+  `update` нужен маскоту для реакции в момент обнаружения.
+- **Реакция MMART:** новое состояние лица `update` (`c-ok st-update happy`) — медленный
+  подъём с зелёной искрой. Без `track`/`poke`: маскот не гонится за курсором и не
+  здоровается поверх чипа. `loaderStateFor` **не** относит `update` к фоновым
+  broadcast'ам (`usage`/`state`/`config`/`files`/`sessions`/`plugins`/`log` → `idle`).
+  `app.ts` ловит `update` → `faceEvent("update")` → возврат в `idle` через 4 с;
+  `phase:"failed"` → `error`.
+- **Удалён `updater.checkOnStart`** — единственный флаг без читателя (21 упоминание,
+  0 чтений). `enabled:false` = не проверять, `intervalMs:0` = одна проверка; оба
+  состояния, которые он мог выразить, уже написаны иначе. Вычищен из `types`,
+  `defaults`, `registry-extra`, `main.ts`, `controls.ts`, обоих i18n и 3 фикстур;
+  гварды в `tests/webui-config-extra.test.ts` не дают ему вернуться. Старый ключ в
+  `~/.mma/updater.json` остаётся, но игнорируется. Попутно исправлены доки
+  (`modules.md`, `versioning.md`, `mma-features-overview.md`), где он и `autoInstall`
+  были описаны как `default true`.
+- **`autoInstall` остался `false`** + новый ключ `updater.auto_install_hint`
+  (en+ru): сообщение «доступно обновление» теперь подсказывает
+  `/config updater.autoInstall true`, а не выглядит тупиком.
+- **Тесты:** `tests/updater-web-notify.test.ts` (фабрика: dev-гард, реестр, тишина на
+  офлайне; контракт веб-обвязки), `tests/updater-module.test.ts` (+наблюдатель фаз и
+  подсказка), `tests/webui-workspace-footer.test.ts` (чип, coexistence с MoE, снятие),
+  `tests/webui-loader.test.ts` (состояние `update` не фоновый broadcast), гвард в
+  `tests/webui-config-extra.test.ts`.
+
 ### MoE Indicator (2.30.0)
 
 Спека: [docs/specs/2026-10-08-moe-indicator-design.md](./docs/specs/2026-10-08-moe-indicator-design.md).

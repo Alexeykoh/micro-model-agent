@@ -353,9 +353,21 @@ Self-update is a fire-and-forget background check — it never blocks startup.
 
 - **Check:** `Updater.check()` fetches `https://registry.npmjs.org/micro-models-agent` (5s timeout); the current version comes from `package.json` (`readVersion()` in `main.ts`).
 - **Install:** when a newer version exists and `autoInstall: true`, runs `npm install -g micro-models-agent@<latest>` in the background (`Updater.install()`, injectable runner for tests). The running process keeps working on the old version; the update applies on next launch.
-- **Config** (`updater` in `~/.mma/config.json`):
-  - `enabled` (default `true`) — master switch
-  - `checkOnStart` (default `true`) — check at startup
-  - `autoInstall` (default `true`) — auto-run `npm install -g`; `false` → only notify
+- **Config** (`updater` in `~/.mma/updater.json`):
+  - `enabled` (default `true`) — master switch; `false` = no check at all
+  - `autoInstall` (default `false`) — auto-run `npm install -g`; `false` → only notify, with the command in the message
   - `intervalMs` (default `0`) — `0` = single check per launch; `>0` = permanent background re-check loop
-- **Source:** `src/modules/updater/` (`checker.ts`, `module.ts`). Fired from `main.ts` via `startAutoUpdate()`; all errors are swallowed (best-effort). Notifications go through i18n keys `updater.*`.
+
+  `checkOnStart` was removed: it was read nowhere, and its two neighbours already
+  cover both states it could express.
+- **Source:** `src/modules/updater/` (`checker.ts`, `module.ts`, `factory.ts`). `createUpdater()`
+  (`factory.ts`) is the single construction point for both surfaces; all errors are swallowed
+  (best-effort). Notifications go through i18n keys `updater.*`.
+- **Surfaces:** terminal (`main.ts` → `startAutoUpdate()`, printed via `OutputBus`) and
+  `mma web` (`web-command.ts` → `startWebUpdater()`). Web has no stdout, so it reports through
+  SSE `update` (`phase: available|installed|failed`), which makes MMART react; the persistent
+  half is `HostStateSnapshot.updateAvailable` → footer chip `↑ <latest>`. `mma serve` also
+  checks now — `exitOnComplete` no longer disables the updater (that flag only decides who owns
+  stdin, and the updater never touches it).
+- **Dev guard:** `isDevEntryPath()` refuses to self-update when the entry point is a `.ts`
+  source, so a checkout never `npm install -g`s over the user's global install.

@@ -82,4 +82,43 @@ describe("workspace footer line", () => {
     expect(line.hidden).toBe(false);
     expect(line.querySelector(".ws-moe")?.textContent).toBe("MoE");
   });
+
+  it("shows an update chip with the new version and the install hint", () => {
+    draw({
+      workspace: "E:\\p",
+      version: "2.36.0",
+      updateAvailable: { current: "2.36.0", latest: "2.37.0" },
+      updateTitle: "npm install -g micro-models-agent@2.37.0",
+    });
+    expect(line.hidden).toBe(false);
+    const chip = line.querySelector(".ws-upd");
+    expect(chip?.textContent).toBe("↑ 2.37.0");
+    expect(chip?.getAttribute("title")).toBe("npm install -g micro-models-agent@2.37.0");
+    // Installed version stays next to it: "newer is available / this is yours".
+    expect(line.querySelector(".ws-ver")?.textContent).toBe("mma 2.36.0");
+  });
+
+  it("keeps the update chip visible without a workspace path", () => {
+    draw({ updateAvailable: { current: "2.36.0", latest: "2.37.0" } });
+    expect(line.hidden).toBe(false);
+    expect(line.querySelector(".ws-upd")?.textContent).toBe("↑ 2.37.0");
+  });
+
+  it("drops the update chip once the notice is gone", () => {
+    draw({ version: "2.37.0", updateAvailable: { current: "2.36.0", latest: "2.37.0" } });
+    expect(line.querySelector(".ws-upd")).not.toBeNull();
+
+    draw({ version: "2.37.0" });
+    expect(line.querySelector(".ws-upd")).toBeNull();
+  });
+
+  it("coexists with the MoE chip", () => {
+    draw({
+      version: "2.36.0",
+      moeActive: true,
+      updateAvailable: { current: "2.36.0", latest: "2.37.0" },
+    });
+    expect(line.querySelector(".ws-moe")?.textContent).toBe("MoE");
+    expect(line.querySelector(".ws-upd")?.textContent).toBe("↑ 2.37.0");
+  });
 });

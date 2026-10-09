@@ -33,6 +33,8 @@ export interface HostStateInput {
   sessionId?: string;
   /** Факт «этим ходом руководит MoE» для чипа режима в футере. */
   moeActive?: boolean;
+  /** Доступный апдейт (текущая → свежая версия) для чипа в футере. */
+  updateAvailable?: { current: string; latest: string };
 }
 
 /** Структурное подмножество индексер-модуля для сайдбара (без жёсткой зависимости). */
@@ -153,6 +155,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     workspace: deps.workspace,
     version: readMmaVersion(),
     moeActive: deps.moeActive,
+    updateAvailable: deps.updateAvailable,
     instructions: deps.instructions,
     projectMap: deps.projectMap ?? undefined,
     filesRevision: deps.filesRevision,

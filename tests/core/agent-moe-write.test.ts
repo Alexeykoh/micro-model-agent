@@ -129,7 +129,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
       stableSystemPrompt: true,
       maxParallelChunkQueries: 3,
     },
-    updater: { enabled: false, checkOnStart: false, autoInstall: false, intervalMs: 0 },
+    updater: { enabled: false, autoInstall: false, intervalMs: 0 },
   };
 
   return {
