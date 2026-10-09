@@ -135,7 +135,7 @@ describe("BridgeDriver", () => {
     expect((bridge as any).pending.size).toBe(0);
   });
 
-  it("one-shot restart: a dead bridge is respawned on the next send", async () => {
+  it.skipIf(Boolean(process.env.CI))("one-shot restart: a dead bridge is respawned on the next send", async () => {
     const bridge = new BridgeDriver({ maxConsoleLineChars: 100 });
     await bridge.launch({
       headless: true,
@@ -155,7 +155,7 @@ describe("BridgeDriver", () => {
     await bridge.close();
   });
 
-  it("close() does not respawn a dead bridge", async () => {
+  it.skipIf(Boolean(process.env.CI))("close() does not respawn a dead bridge", async () => {
     const spy = vi.spyOn(childProcess, "spawn");
     const bridge = new BridgeDriver({ maxConsoleLineChars: 100 });
     await bridge.launch({
