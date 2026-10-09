@@ -157,6 +157,8 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
         interrupted: result.interrupted || undefined,
         durationMs: result.durationMs,
         toolCalls,
+        stopReason: result.stopReason,
+        error: result.error,
       });
       pushState(state, owner);
       return result;

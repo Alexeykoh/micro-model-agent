@@ -269,14 +269,17 @@ export function onTurnEnd(data: Dict): void {
     return;
   }
   if (data.success === false) {
-    if (data.interrupted) {
-      appendTo(feed, el("div", "warnline", "⚠ " + t("web.turn.stopped")));
-      announce(t("web.turn.stopped"));
-    } else {
-      appendTo(feed, el("div", "errline", "✗ " + t("web.turn.failed")));
-      announce(t("web.turn.failed"));
-    }
+    const reason =
+      data.error || (data.interrupted ? t("web.turn.stopped") : t("web.turn.failed"));
+    const cls = data.interrupted ? "warnline" : "errline";
+    const glyph = data.interrupted ? "⚠ " : "✗ ";
+    appendTo(feed, el("div", cls, glyph + reason));
+    announce(reason);
   } else {
+    if (data.stopReason && data.error) {
+      appendTo(feed, el("div", "warnline", "⚠ " + data.error));
+      announce(data.error);
+    }
     const parts: string[] = [];
     if (typeof data.toolCalls === "number" && data.toolCalls > 0) {
       parts.push(t("web.turn.tools", { count: data.toolCalls }));

@@ -81,7 +81,12 @@ export function clipToolOutput(toolName: string, output: string): string {
  * частичные сводки (напр. прерванных прогонов) были валидны.
  */
 export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
-  Partial<Pick<TurnSummary, "durationMs" | "toolCalls">>;
+  Partial<Pick<TurnSummary, "durationMs" | "toolCalls">> & {
+    /** Машиночитаемая причина принудительной остановки, если была. */
+    stopReason?: "duplicate" | "failed_batches" | "max_iters";
+    /** Локализованный текст причины (печатается в ленте). */
+    error?: string;
+  };
 
 /** Форвардер чанков петли в SSE-синк с буферизацией и сбросом busy. */
 export interface Forwarder {
