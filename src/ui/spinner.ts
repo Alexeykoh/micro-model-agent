@@ -2,14 +2,22 @@
 import { pc } from "./colors";
 import stringWidth from "string-width";
 import { getTerminalWidth } from "./table";
-import type { OutputChannel } from "../output";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/**
+ * Минимум канала, который нужен спиннеру: перезаписываемая оверлей-строка.
+ * Уже, чем `OutputChannel`, поэтому в него попадает и узкий `CommandOutput`
+ * фронтенда (TUI перерисовывает оверлей в своей строке статуса).
+ */
+export interface SpinnerSink {
+  writeOverlay(text: string): void;
+}
 
 /** Опции спиннера: вкл/выкл, канал, интервал, ширина. */
 export interface SpinnerOptions {
   enabled?: boolean;
-  channel?: OutputChannel;
+  channel?: SpinnerSink;
   intervalMs?: number;
   width?: number;
 }
@@ -29,7 +37,7 @@ export class Spinner {
   private frame = 0;
   private message = "";
   private enabled: boolean;
-  private channel?: OutputChannel;
+  private channel?: SpinnerSink;
   private stream: NodeJS.WritableStream;
   private intervalMs: number;
   private width: number;

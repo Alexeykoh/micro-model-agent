@@ -32,19 +32,14 @@ import {
 import { getMessageText } from "../llm/provider";
 import { join, dirname } from "path";
 import { existsSync, writeFileSync, mkdirSync } from "fs";
-import type { LineInput } from "../ui/line-editor";
-import type { Agent } from "../core/agent";
-import type { AppConfig } from "../config/types";
-import type { SessionManager } from "../modules/session/manager";
-import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
+import type { CommandContext } from "./command-context";
 import { formatPluginDetails, formatPluginList } from "../modules/plugins/format";
 import { reloadSummaryLines } from "../modules/plugins/reload";
 import type { IndexerModule } from "../modules/indexer/module";
 import { runMapAction } from "../modules/indexer/map-command";
 import { registerOnboardingCommands } from "./onboarding-commands";
 import { errMsg } from "../utils";
-import type { OutputChannel } from "../output";
 import { globalExportsDir } from "../config/paths";
 import { registerLspCommands } from "./repl-commands-lsp";
 import { registerSkillCommands } from "./repl-commands-skills";
@@ -62,37 +57,17 @@ export interface SlashCommand {
   action(args: string[]): void | Promise<void>;
 }
 
-/** Контекст REPL, пробрасываемый командам: агент, конфиг, сессии, вывод. */
-export interface ReplContext {
-  readonly config: AppConfig;
-  readonly agent: Agent;
-  /** Общий контекст тулов: несёт состояние скоупа режима (allowlist, онбординг). */
-  readonly toolCtx: import("../tools/types").ToolContext;
-  readonly rl: LineInput;
-  readonly sessionManager?: SessionManager;
-  readonly skillsModule?: SkillsModule;
-  readonly pluginManager?: PluginManager;
-  readonly configDir: string;
-  readonly baseDir: string;
-  /** Единый писатель терминала: команды в console/stdout напрямую не пишут. */
-  readonly output: OutputChannel;
-  registerCommand(cmd: SlashCommand): void;
-  runAgent(input: string): Promise<void>;
-  withExclusiveInput(fn: () => Promise<void>): Promise<void>;
-  showHelp(command?: string): void;
-  /** Перестройка реестра команд + комплитера (после смены локали). */
-  reregisterCommands(): void;
-  /** Boot-снапшот управляемых ключей для `/config reset`. */
-  getConfigSnapshot(): ReadonlyMap<string, unknown>;
-  /** Кешированные id моделей активного провайдера (пусто, если офлайн). */
-  knownModels(): string[];
-  setupCompleter(): void;
-  refreshModelCache(): void;
-  attachHostBridge(pluginManager?: PluginManager): void;
-  /** Перезагрузка агента и модулей (команда /reload). */
-  reload(): Promise<void>;
-  stop(): void;
-}
+/**
+ * Контекст REPL, пробрасываемый командам: сервисы + ввод/вывод.
+ *
+ * Исторически здесь был интерфейс на 20 членов, смешивавший сервисы
+ * (config/agent/модули) и терминальный ввод-вывод (`rl: LineInput`,
+ * `output: OutputChannel`). Разделено в `command-context.ts`:
+ * {@link CommandServices} (фронтендонезависимо), {@link CommandOutput}
+ * (3 метода вместо всего канала) и {@link CommandInput} — чтобы TUI
+ * подключил тот же реестр, реализовав две маленькие поверхности.
+ */
+export type ReplContext = CommandContext;
 
 /** Группы команд для `/help` (general/agent/session/skill). */
 export const COMMAND_GROUPS: Record<string, string> = {
@@ -347,8 +322,10 @@ function applyConfigSideEffects(
     // Зеркало стартового правила (`main.ts`): структурные info-логи и диагностика
     // петли видимы в чате только в verbose.
     const verbose = (result.value as string) === "verbose";
-    ctx.output.setSuppressInfoLogs(!verbose);
-    ctx.output.setShowDiagnostics(verbose);
+    // Методы опциональны: терминал ими управляет, фронтенд без info-логов (TUI
+    // рисует логи в панели) просто игнорирует.
+    ctx.output.setSuppressInfoLogs?.(!verbose);
+    ctx.output.setShowDiagnostics?.(verbose);
   } else if (result.key === "reasoning.mode") {
     ctx.agent.setReasoningLevel(result.value as "auto" | "default" | "none" | "low" | "medium" | "high" | "max");
   } else if (result.key === "locale") {
@@ -423,17 +400,12 @@ function printConfigTable(ctx: ReplContext, defs?: ConfigKeyDef[]): void {
   ctx.output.writeLine(pc.dim(t("config.usage_hint")));
 }
 
+/**
+ * Подтверждение через фронтендовый ввод (`ctx.input.confirm`). Терминал
+ * спрашивает построчно, TUI — оверлеем; команда знает только контракт.
+ */
 function confirm(ctx: ReplContext, prompt: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    void ctx.withExclusiveInput(async () => {
-      await new Promise<void>((done) => {
-        ctx.rl.question(prompt, (answer) => {
-          resolve(/^y(es)?$/i.test(answer.trim()));
-          done();
-        });
-      });
-    });
-  });
+  return ctx.input.confirm(prompt);
 }
 
 async function runConfigReset(ctx: ReplContext, rest: string[]): Promise<void> {
@@ -657,14 +629,15 @@ function registerConfigCommands(ctx: ReplContext): void {
     usage: t("repl.wizard_usage"),
     action: async () => {
       ctx.output.writeLine(pc.yellow(t("repl.wizard_running")));
-      await ctx.withExclusiveInput(async () => {
-        const answers = await runSetup(ctx.rl);
-        const configPath = join(ctx.configDir, "config.json");
-        applyAnswersToConfig(ctx.config, answers);
-        saveConfig(ctx.config, configPath, dirname(configPath));
-        await ctx.agent.reconfigure(ctx.config);
-        ctx.output.writeLine(pc.green(t("cli.config_saved")));
-      });
+      // Визард владеет терминалом целиком (`withInput`): его меню печатаются
+      // напрямую, а не поверх живой строки ввода — терминальная деталь,
+      // спрятанная за фронтендовым контрактом ввода.
+      const answers = await ctx.input.withInput((prompt) => runSetup(prompt));
+      const configPath = join(ctx.configDir, "config.json");
+      applyAnswersToConfig(ctx.config, answers);
+      saveConfig(ctx.config, configPath, dirname(configPath));
+      await ctx.agent.reconfigure(ctx.config);
+      ctx.output.writeLine(pc.green(t("cli.config_saved")));
     },
   });
   ctx.registerCommand({
@@ -858,7 +831,12 @@ function registerProviderCommands(ctx: ReplContext): void {
     });
 
     const { Spinner } = await import("../ui/spinner");
-    const s = new Spinner({ channel: ctx.output });
+    // Оверлей опционален у фронтенда; без него спиннер пишет в stderr сам
+    // (см. `Spinner.tick`), поэтому узкий канал тут просто не передаём.
+    const overlay = ctx.output.writeOverlay;
+    const s = new Spinner(
+      overlay ? { channel: { writeOverlay: (text: string) => overlay.call(ctx.output, text) } } : {},
+    );
     s.start(t("cli.fetching_models"));
     try {
       const models = await provider.listModels();

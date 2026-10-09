@@ -2,6 +2,7 @@
 import * as readline from "readline";
 import { pc } from "../ui/colors";
 import { LineEditor, type LineInput } from "../ui/line-editor";
+import { createCommandInput, type CommandInput } from "./command-context";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
@@ -154,6 +155,12 @@ export class Repl implements ReplContext, Host {
    * удовлетворило бы публичному свойству интерфейса.
    */
   public readonly output: OutputChannel;
+  /**
+   * Фронтендовый ввод для команд (`ctx.input`): терминальный адаптер над
+   * `askViaEditor` и построчным `rl`. Отдельный интерфейс (`CommandInput`),
+   * чтобы команды не зависели от `LineInput` — TUI реализует свой ввод.
+   */
+  public readonly input: CommandInput;
   /** Мост, дающий каналу рисовать поверх живого кадра ввода. */
   private promptSink: PromptSink;
   /** PromptIO с осознанием терминала, ставится на экзекутор тулов агента. */
@@ -231,6 +238,14 @@ export class Repl implements ReplContext, Host {
     }
 
     this.output = output ?? getDefaultChannel();
+    // Фронтендовый ввод для команд: `askViaEditor` одалживает терминал под
+    // вопрос (снимает кадр промпта, включает ввод, по завершении возвращает
+    // стрим агента), `rl` — построчный адаптер для визарда `/wizard`.
+    this.input = createCommandInput(
+      this.rl,
+      (prompt) => this.askViaEditor(prompt),
+      (fn) => this.withExclusiveInput(fn),
+    );
     this.promptSink = {
       isActive: () =>
         this.rl instanceof LineEditor &&
@@ -948,15 +963,16 @@ export class Repl implements ReplContext, Host {
     }
   }
 
-  /** Эксклюзивный ввод: визард владеет терминалом через свои `rl.question()`. */
-  public async withExclusiveInput(fn: () => Promise<void>): Promise<void> {
+  /** Эксклюзивный ввод: визард владеет терминалом через свои `rl.question()`.
+   *  Обобщён, чтобы служить адаптером `CommandInput.withInput` для команд. */
+  public async withExclusiveInput<T>(fn: () => Promise<T>): Promise<T> {
     // Между вопросами активного кадра нет, так что меню/результаты скана пишутся
     // напрямую: обёртка beginModal/endModal сложила бы ВЕСЬ транскрипт в очередь,
     // и юзер видел бы голые `: ` промпты до конца. `inputLocked` гасит
     // `promptSink.isActive()`, пуская записи напрямую.
     this.inputLocked = true;
     try {
-      await fn();
+      return await fn();
     } finally {
       this.inputLocked = false;
     }
