@@ -11,7 +11,8 @@
     "dist/**",
     "certification/**",
     "_testing/**",
-    "src/modules/webui/assets/**"
+    "src/modules/webui/assets/**",
+    "gh-pages/**"
   ],
   "duplicates": {
     "minOccurrences": 3

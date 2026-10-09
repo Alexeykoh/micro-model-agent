@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MMA — Micro Models Agent</title>
+  <meta name="description" content="A harness-agent that keeps local 32K–64K models on task.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <script>
+    (function () {
+      try {
+        var th = localStorage.getItem("mma-lp-theme");
+        if (th === "light") document.documentElement.classList.add("light");
+        var lang = localStorage.getItem("mma-lp-lang") || (navigator.language || "en").slice(0, 2);
+        document.documentElement.lang = (lang === "ru") ? "ru" : "en";
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="mascot.css">
+</head>
+<body>
+  <script>window.MMA_VERSION = "0.1.0";</script>
+
+  <!-- Nav -->
+  <header class="nav wrap">
+    <a class="brand" href="#top">
+      <span class="mdl sm c-recon track" id="navFace" aria-hidden="true"></span>MMA
+    </a>
+    <nav class="links">
+      <a href="#why" data-i18n="nav.why"></a>
+      <a href="#start" data-i18n="nav.start"></a>
+      <a href="#features" data-i18n="nav.features"></a>
+      <a href="#frontends" data-i18n="nav.frontends"></a>
+      <a href="#serve" data-i18n="nav.serve"></a>
+    </nav>
+    <span class="spacer"></span>
+    <div class="ctl">
+      <button id="langBtn" class="iconbtn" type="button">RU</button>
+      <button id="themeBtn" class="iconbtn" type="button" aria-label="Toggle theme" aria-pressed="false">☾</button>
+      <a class="gh" href="https://github.com/Alexeykoh/micro-model-agent">GitHub</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section id="top" class="hero wrap">
+      <div class="hero-txt">
+        <h1 data-i18n="hero.headline"></h1>
+        <p data-i18n="hero.sub"></p>
+        <div class="cta">
+          <a class="btn" href="#start" data-i18n="hero.install"></a>
+          <a class="btn ghost" href="https://github.com/Alexeykoh/micro-model-agent#readme" data-i18n="hero.docs"></a>
+        </div>
+      </div>
+      <div class="hero-face">
+        <span class="mdl lg c-recon track" id="heroFace" aria-hidden="true"></span>
+      </div>
+    </section>
+
+    <!-- Why -->
+    <section id="why" class="sect wrap">
+      <h2 data-i18n="why.title"></h2>
+      <ul class="why-list">
+        <li data-i18n="why.b1"></li>
+        <li data-i18n="why.b2"></li>
+        <li data-i18n="why.b3"></li>
+      </ul>
+    </section>
+
+    <!-- Quick start -->
+    <section id="start" class="sect wrap">
+      <h2 data-i18n="start.title"></h2>
+      <p class="lead" data-i18n="start.lead"></p>
+      <div class="codebox">
+        <code id="installCmd">curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash</code>
+        <button id="copyBtn" type="button" data-i18n="start.copy"></button>
+      </div>
+      <p class="start-alt"><span data-i18n="start.win"></span> <code>irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.ps1 | iex</code></p>
+      <p class="start-try"><span data-i18n="start.try"></span> <code>mma "hello"</code></p>
+    </section>
+
+    <!-- Capabilities -->
+    <section id="features" class="sect wrap">
+      <h2 data-i18n="cap.title"></h2>
+      <p class="lead" data-i18n="cap.lead"></p>
+      <div class="cards">
+        <article class="card" data-state="read"><h3 data-i18n="cap.tools"></h3><p data-i18n="cap.tools.d"></p></article>
+        <article class="card" data-state="think"><h3 data-i18n="cap.context"></h3><p data-i18n="cap.context.d"></p></article>
+        <article class="card" data-state="edit"><h3 data-i18n="cap.plan"></h3><p data-i18n="cap.plan.d"></p></article>
+        <article class="card" data-state="think"><h3 data-i18n="cap.moe"></h3><p data-i18n="cap.moe.d"></p></article>
+        <article class="card" data-state="find"><h3 data-i18n="cap.memory"></h3><p data-i18n="cap.memory.d"></p></article>
+        <article class="card" data-state="run"><h3 data-i18n="cap.safety"></h3><p data-i18n="cap.safety.d"></p></article>
+        <article class="card" data-state="web"><h3 data-i18n="cap.web"></h3><p data-i18n="cap.web.d"></p></article>
+      </div>
+    </section>
+
+    <!-- Frontends -->
+    <section id="frontends" class="sect wrap">
+      <h2 data-i18n="frontends.title"></h2>
+      <p class="lead" data-i18n="frontends.lead"></p>
+      <div class="two">
+        <div class="pane">
+          <h3 data-i18n="frontends.term"></h3>
+          <pre class="mini"><span data-i18n="term.t1"></span>
+<span data-i18n="term.t2"></span>
+<span data-i18n="term.t3"></span>
+<span data-i18n="term.t4"></span>
+<span data-i18n="term.t5"></span>
+<span data-i18n="term.t6"></span></pre>
+        </div>
+        <div class="pane">
+          <h3 data-i18n="frontends.web"></h3>
+          <pre class="mini"><span data-i18n="web.w1"></span>
+<span data-i18n="web.w2"></span>
+<span data-i18n="web.w3"></span>
+<span data-i18n="web.w4"></span></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Service -->
+    <section id="serve" class="sect wrap">
+      <h2 data-i18n="serve.title"></h2>
+      <p class="lead" data-i18n="serve.body"></p>
+      <div class="codeblock">
+        <span class="lbl" data-i18n="serve.req"></span>
+        <pre>curl -s -X POST http://localhost:7331/v1/sessions/$ID/tasks \
+  -H <span class="s">"Authorization: Bearer $TOKEN"</span> \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d <span class="s">'{ "input": "summarize the changelog" }'</span></pre>
+      </div>
+    </section>
+
+    <!-- Philosophy -->
+    <section id="phil" class="sect wrap">
+      <h2 data-i18n="phil.title"></h2>
+      <div class="phil">
+        <span class="mdl c-recon track" aria-hidden="true" data-face="idle"></span>
+        <div class="body">
+          <p data-i18n="phil.body"></p>
+          <p class="lead" data-i18n="phil.quiet"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="foot">
+    <div class="wrap">
+      <div class="grid">
+        <div class="tag">
+          <p><strong>MMA</strong> — <span data-i18n="footer.tagline"></span></p>
+          <p style="margin-top:8px"><span class="v" id="verChip">v0.1.0</span> · <span data-i18n="footer.license"></span></p>
+        </div>
+        <div class="cols">
+          <div class="col">
+            <h4>Project</h4>
+            <a href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="footer.repo"></a>
+            <a href="https://github.com/Alexeykoh/micro-model-agent/releases" data-i18n="footer.releases"></a>
+            <a href="https://github.com/Alexeykoh/micro-model-agent/issues" data-i18n="footer.issues"></a>
+          </div>
+          <div class="col">
+            <h4 data-i18n="nav.docs">Docs</h4>
+            <a href="https://github.com/Alexeykoh/micro-model-agent#readme">README</a>
+            <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/AGENTS.md">AGENTS.md</a>
+            <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/docs/mma-features-overview.md">Features</a>
+          </div>
+        </div>
+      </div>
+      <div class="base">
+        <span>© 2026 MMA</span>
+        <span data-i18n="footer.license"></span>
+        <span>MMART</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scroll companion -->
+  <div class="companion" aria-hidden="true">
+    <span class="mdl sm c-recon track" id="compFace"></span>
+  </div>
+
+  <script defer src="i18n.js"></script>
+  <script defer src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+/* ============================================================
+   MMART — the MMA mascot face (vendored subset)
+   Source: src/modules/webui/assets/styles.css (the `.mdl` component
+   and its `.c-*` / `.st-*` rules). Copied 2026-10-10.
+   Subset for the landing page: track, think, read, find, run, edit,
+   web, done, error. Keep in sync manually if the source changes.
+   ============================================================ */
+.mdl {
+  --s: 64px;
+  --eye-w: calc(var(--s) * .14);
+  --eye-h: calc(var(--s) * .34);
+  --eye-gap: calc(var(--s) * .18);
+  --face-c: var(--surface);
+  --eye-c: var(--fg);
+  width: var(--s); height: var(--s); border-radius: 32%; background: var(--face-c);
+  border: 1px solid transparent;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  position: relative;
+  rotate: var(--tilt, 0deg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .4), 0 10px 22px rgba(0, 0, 0, .28);
+  transition: background .55s var(--ease), transform .35s var(--ease-back), rotate .3s var(--ease), box-shadow .3s var(--ease);
+  animation: mdlBreathe 4.2s ease-in-out infinite;
+}
+html.light .mdl { box-shadow: 0 2px 6px rgba(31, 35, 40, .16), 0 10px 22px rgba(31, 35, 40, .12); }
+.mdl.lg { --s: 76px; } .mdl.sm { --s: 22px; } .mdl.xs { --s: 15px; border-radius: 30%; }
+.mdl .eyes {
+  display: flex; align-items: center; justify-content: center; gap: max(3px, var(--eye-gap));
+  position: relative; top: calc(var(--s) * -.06 + var(--ey, 0px)); left: var(--ex, 0px);
+}
+.mdl.track .eyes { transition: left .1s ease-out, top .1s ease-out; }
+.mdl .eye {
+  display: block; width: max(3px, var(--eye-w)); height: max(6px, var(--eye-h)); background: var(--eye-c);
+  border-radius: 999px; transform-origin: center;
+  transition: height .2s var(--ease), width .2s var(--ease), border-radius .2s var(--ease), background .45s var(--ease);
+}
+.mdl .orb, .mdl .keys, .mdl .grow, .mdl .fly, .mdl .dust, .mdl .q, .mdl .spark, .mdl .star { display: none; }
+
+/* state colors (eyes stay contrasty against the fill) */
+.c-active { --face-c: var(--accent); --eye-c: var(--accent-bg); }
+.c-recon { --face-c: var(--recon); --eye-c: #08222f; }
+.c-mutate { --face-c: var(--mutate); --eye-c: #2e0b24; }
+.c-exec { --face-c: var(--exec); --eye-c: #0a1730; }
+.c-ok { --face-c: var(--green); --eye-c: #04221a; }
+.c-warn { --face-c: var(--yellow); --eye-c: #2a1e05; }
+.c-err { --face-c: var(--red); --eye-c: #2a0d0d; }
+.c-dim { --face-c: var(--surface); --eye-c: var(--dim-a); border-color: var(--border-2); }
+html.light .c-recon { --eye-c: #eaf6ff; } html.light .c-mutate { --eye-c: #fff0fa; }
+html.light .c-exec { --eye-c: #eaf1ff; } html.light .c-ok { --eye-c: #eafff6; }
+html.light .c-warn { --eye-c: #fff8e6; } html.light .c-err { --eye-c: #ffecec; }
+html.light .c-dim { --face-c: var(--panel); }
+
+@keyframes mdlBreathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.012); } }
+@keyframes mdlBlink { 0%, 90%, 100% { transform: scaleY(1); } 94% { transform: scaleY(.08); } 97% { transform: scaleY(1); } }
+.mdl.blink .eye { animation: mdlBlink 3.8s var(--ease) infinite; }
+
+/* one-shot blink on click */
+.mdl.blink-once .eye { animation: mdlBlinkOnce .16s ease-in-out !important; }
+@keyframes mdlBlinkOnce { 0% { transform: scaleY(1); } 45% { transform: scaleY(.06); } 100% { transform: scaleY(1); } }
+
+/* think */
+@keyframes mdlThink { 0%, 100% { transform: translate(0, 0); } 22% { transform: translate(calc(var(--s) * -.05), calc(var(--s) * -.06)); } 45% { transform: translate(0, calc(var(--s) * -.08)); } 70% { transform: translate(calc(var(--s) * .05), calc(var(--s) * -.06)); } }
+.mdl.st-think .eyes { animation: mdlThink 3.6s ease-in-out infinite; }
+/* read */
+@keyframes mdlRead { 0% { transform: translate(calc(var(--s) * -.07), calc(var(--s) * -.055)); } 15% { transform: translate(calc(var(--s) * .07), calc(var(--s) * -.055)); } 20% { transform: translate(calc(var(--s) * -.07), 0); } 35% { transform: translate(calc(var(--s) * .07), 0); } 40% { transform: translate(calc(var(--s) * -.07), calc(var(--s) * .05)); } 55% { transform: translate(calc(var(--s) * .07), calc(var(--s) * .05)); } 62%, 100% { transform: translate(0, 0); } }
+.mdl.st-read .eyes { animation: mdlRead 5.2s var(--ease) infinite; }
+/* find */
+@keyframes mdlFind { 0% { transform: translate(calc(var(--s) * -.07), calc(var(--s) * -.05)); } 12% { transform: translate(calc(var(--s) * .07), calc(var(--s) * .05)); } 20% { transform: translate(calc(var(--s) * .07), calc(var(--s) * -.05)); } 32% { transform: translate(calc(var(--s) * -.07), calc(var(--s) * .05)); } 40% { transform: translate(calc(var(--s) * -.07), calc(var(--s) * -.05)); } 52%, 100% { transform: translate(0, 0); } }
+@keyframes mdlPing { 0%, 38%, 100% { transform: scale(1); } 42% { transform: scale(1.035); } 46% { transform: scale(1); } }
+.mdl.st-find { animation: mdlPing 2.6s ease-in-out infinite; }
+.mdl.st-find .eyes { animation: mdlFind 2.6s ease-in-out infinite; }
+/* web: eyes look right at a pulsing "@" */
+.mdl.st-web .eyes { transform: translate(calc(var(--s) * .08), calc(var(--s) * .04)); }
+.mdl.st-web .orb { display: block; position: absolute; top: 60%; right: -24%; animation: mdlAt 1.4s ease-in-out infinite; pointer-events: none; }
+.mdl.st-web .orb i { font-style: normal; font-weight: 700; line-height: 1; font-size: calc(var(--s) * .46); color: var(--yellow); }
+.mdl.st-web .orb i::before { content: "@"; }
+@keyframes mdlAt { 0%, 100% { transform: scale(.85); opacity: .55; } 50% { transform: scale(1.2); opacity: 1; } }
+/* edit */
+@keyframes mdlEdit { 0%, 100% { transform: translate(0, 0); } 6% { transform: translate(calc(var(--s) * .05), calc(var(--s) * .02)); } 12% { transform: translate(calc(var(--s) * -.03), 0); } 18% { transform: translate(calc(var(--s) * .06), calc(var(--s) * -.02)); } 24% { transform: translate(calc(var(--s) * .01), calc(var(--s) * .025)); } 30% { transform: translate(calc(var(--s) * -.05), 0); } 36%, 52% { transform: translate(0, 0); } 60% { transform: translate(calc(var(--s) * .055), calc(var(--s) * -.02)); } 68% { transform: translate(calc(var(--s) * -.04), calc(var(--s) * .02)); } 76% { transform: translate(calc(var(--s) * .03), 0); } 84% { transform: translate(0, 0); } }
+.mdl.st-edit .eyes { animation: mdlEdit 3.4s cubic-bezier(.3, .9, .4, 1) infinite; }
+@keyframes mdlEditBlink { 0%, 80%, 100% { transform: scaleY(1); } 84%, 88% { transform: scaleY(.1); } 92% { transform: scaleY(1); } }
+.mdl.st-edit .eye { animation: mdlEditBlink 3.4s var(--ease) infinite; }
+/* run */
+@keyframes mdlRun { 0% { transform: translateY(0) scale(1); } 9% { transform: translateY(7%) scale(1.12, .84); } 16% { transform: translateY(0) scale(.94, 1.08); } 28% { transform: translateY(-13%) scale(1.06, .92); } 40% { transform: translateY(0) scale(1); } 54% { transform: translateY(-5%) translateX(-3%) rotate(-4deg); } 66% { transform: translateY(-2%) translateX(2%) rotate(3deg); } 80%, 100% { transform: translateY(0) rotate(0) scale(1); } }
+.mdl.st-run { animation: mdlRun 1.5s cubic-bezier(.3, 1.3, .45, 1) infinite; }
+.mdl.st-run .eyes { animation: mdlBlink 2.2s var(--ease) infinite; }
+.mdl.st-run .dust { display: flex; position: absolute; left: 10%; right: 10%; bottom: -8%; justify-content: space-between; animation: mdlDust 1.5s ease-out infinite; }
+.mdl .dust i { width: max(2px, calc(var(--s) * .03)); height: calc(var(--s) * .18); border-radius: 3px; background: var(--eye-c); opacity: 0; }
+@keyframes mdlDust { 0%, 7% { opacity: 0; } 13% { opacity: .85; } 28% { opacity: 0; } 100% { opacity: 0; } }
+/* done */
+@keyframes mdlDone { 0%, 100% { transform: scale(1) translateY(0); } 30% { transform: scale(1.05) translateY(-7%); } 55% { transform: scale(.99) translateY(0); } }
+.mdl.st-done { animation: mdlDone 2.6s ease-in-out infinite; }
+.mdl.st-done .spark { display: block; position: absolute; top: -16%; right: -10%; font-size: calc(var(--s) * .34); color: var(--green); animation: mdlSpark 2.6s ease-out infinite; }
+.mdl.st-done .spark::before { content: "✦"; }
+@keyframes mdlSpark { 0% { opacity: 0; transform: scale(.3) rotate(0); } 30% { opacity: 1; transform: scale(1) rotate(20deg); } 60% { opacity: 0; transform: scale(.4) rotate(45deg); } 100% { opacity: 0; } }
+/* error */
+@keyframes mdlSag { 0%, 100% { transform: translateY(5%) scaleY(.96); } 50% { transform: translateY(6%) scaleY(.95); } }
+@keyframes mdlNo { 0%, 60% { rotate: 0deg; } 70% { rotate: -5deg; } 80% { rotate: 5deg; } 90% { rotate: -3deg; } 100% { rotate: 0deg; } }
+.mdl.st-error { animation: mdlSag 3.4s ease-in-out infinite, mdlNo 3.4s ease-in-out infinite; }
+.mdl.st-error .star { display: block; position: absolute; top: -2%; left: 74%; font-size: calc(var(--s) * .62); line-height: .8; font-weight: 700; color: var(--yellow); animation: mdlStar 1.5s ease-out infinite; }
+.mdl.st-error .star::before { content: "*"; }
+@keyframes mdlStar { 0% { opacity: 0; transform: scale(.2) rotate(0); } 25% { opacity: 1; transform: scale(1.15) rotate(35deg); } 55% { opacity: .95; transform: scale(.9) rotate(90deg); } 85% { opacity: 0; transform: scale(.4) rotate(150deg); } 100% { opacity: 0; transform: scale(.2) rotate(190deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mdl, .mdl * { animation: none !important; }
+}
