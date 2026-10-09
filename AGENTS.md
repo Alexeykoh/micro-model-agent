@@ -1424,6 +1424,27 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **Тесты:** `tests/service/*` (HTTP-клиент на `node:http`, чтобы не ловить
   протечку `global.fetch` из других suites).
 
+### Self-describing service contract (2.37.0)
+
+Контракт `mma serve` объявляет себя сам: `GET /v1/openapi.json` (OpenAPI 3.1) и
+`GET /v1/docs` (человеческая HTML-страница). Оба печатаются при старте
+(`cli.serve_docs`) и лежат в exempt-списке `OPEN_PATHS` (`service/server.ts`)
+рядом с `/v1/health` и `/v1/ready` — описание публичного API, не данные тенанта.
+
+- **Единый источник правды** — таблица `OPERATIONS`
+  (`src/modules/service/openapi/operations.ts`): из неё собираются и OpenAPI
+  документ (`openapi/document.ts`, `schemas.ts` → `components.schemas`), и
+  страница (`openapi/docs-page.ts`, самодостаточный HTML без CDN — агент часто
+  офлайн, Swagger UI из сети не годится). Guard-тест
+  `tests/service/openapi.test.ts` сверяет таблицу с реальными маршрутами: новый
+  эндпоинт без строки в `OPERATIONS` ломает тест.
+- **Auth в спеке:** корень `security: [{bearerAuth: []}]` при заданном токене,
+  открытые маршруты снимают его явным `security: []`; без токена корень пуст.
+- **Хендлеры:** `api/docs-api.ts` (тонкие: сборка + отправка), маршруты — в
+  `http/routes.ts` `API_ROUTES` (правило #17).
+- **Версия:** `info.version = 1.0.0+mma-<runtime version>` — спека не может
+  разойтись с рантаймом, `x-runtime` несёт `authRequired` и схему изоляции.
+
 ### MMART — the Web Mascot (Loader Faces, unreleased)
 
 Спека: [docs/specs/2026-10-08-loader-webui-design.md](./docs/specs/2026-10-08-loader-webui-design.md).
@@ -1517,10 +1538,10 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
   `openTab(id, name, kind, server, activate)` с `activate=false` создаёт фоновую
   вкладку без подмены активной.
 
-### Current Version: 2.36.0
+### Current Version: 2.37.0
 
-MMART — the web mascot (see the section above): named loader face, click-to-greet
-bubble, complete `TOOL_STATE`/`loaderStateFor` coverage.
+Self-describing service contract (see the section above): `mma serve` serves its
+own OpenAPI 3.1 document and human docs page from one `OPERATIONS` table.
 
 ### Changelog
 

@@ -7,6 +7,27 @@
 Design spec: [../specs/2026-10-08-agent-service-api-design.md](../specs/2026-10-08-agent-service-api-design.md).
 Реализация: [../plans/2026-10-08-agent-service-api.md](../plans/2026-10-08-agent-service-api.md).
 
+## Discovery: спека и страница
+
+Контракт **объявляет себя сам** — искать его по репозиторию не нужно:
+
+| Путь | Что отдаёт | Auth |
+|---|---|---|
+| `GET /v1/openapi.json` | OpenAPI 3.1 документ (Swagger UI / Redoc / Postman / Insomnia, генерация клиента) | без токена |
+| `GET /v1/docs` | та же выжимка как HTML: quickstart cURL, таблица эндпоинтов, коды ответов | без токена |
+
+Обе выводятся при старте (`cli.serve_docs`) и лежат в exempt-списке
+`OPEN_PATHS` (`src/modules/service/server.ts`) рядом с `/v1/health` и
+`/v1/ready`: это описание публичного API, а не данные тенанта. Tenant-маршруты
+по-прежнему требуют bearer.
+
+Источник правды — одна таблица операций
+`src/modules/service/openapi/operations.ts`: из неё собираются и OpenAPI
+документ (`openapi/document.ts`), и страница (`openapi/docs-page.ts`), и
+guard-тест `tests/service/openapi.test.ts`, который падает, если маршрут
+появился/исчез без записи в таблице. Новый эндпоинт = строка в `OPERATIONS`,
+дальше спека, страница и тест следуют сами.
+
 ## Модель
 
 - **1 процесс = 1 тенант** (silo): свой `MMA_CONFIG_DIR`, workspace, память.
@@ -37,20 +58,25 @@ Env: `MMA_SERVICE_PORT`, `MMA_SERVICE_HOST`, `MMA_SERVICE_TOKEN` (важнее
 ## Endpoints
 
 База `/v1`; тела — JSON; ошибки — `application/problem+json`.
-`GET /v1/health` и `GET /v1/ready` — без auth (liveness/readiness оркестратора);
-остальное требует bearer-токен, если задан.
+`GET /v1/health`, `GET /v1/ready` и discovery (`/v1/openapi.json`, `/v1/docs`) —
+без auth (liveness/readiness оркестратора и описание контракта); остальное
+требует bearer-токен, если задан.
 
-| Метод | Путь | Назначение |
-|---|---|---|
-| `POST` | `/v1/sessions` | создать сессию (`{name?, externalRef?}`) |
-| `GET` | `/v1/sessions` | список (`?externalRef=&status=`) |
-| `GET` | `/v1/sessions/:id` | метаданные + статус |
-| `DELETE` | `/v1/sessions/:id` | удалить (204); занятая → 409 |
-| `POST` | `/v1/sessions/:id/tasks` | сабмит задачи |
-| `GET` | `/v1/tasks/:jobId` | статус/результат (Job-объект) |
-| `POST` | `/v1/tasks/:jobId/cancel` | кооперативная отмена |
-| `POST` | `/v1/tasks/:jobId/answer` | ответ на `question` (interactive) |
-| `GET` | `/v1/sessions/:id/events` | поток событий (SSE) |
+| Метод | Путь | Назначение | Auth |
+|---|---|---|---|
+| `GET` | `/v1/health` | liveness | — |
+| `GET` | `/v1/ready` | readiness (проба провайдера) | — |
+| `GET` | `/v1/openapi.json` | спецификация контракта (OpenAPI 3.1) | — |
+| `GET` | `/v1/docs` | человеческая страница контракта | — |
+| `POST` | `/v1/sessions` | создать сессию (`{name?, externalRef?}`) | bearer |
+| `GET` | `/v1/sessions` | список (`?externalRef=&status=`) | bearer |
+| `GET` | `/v1/sessions/:id` | метаданные + статус | bearer |
+| `DELETE` | `/v1/sessions/:id` | удалить (204); занятая → 409 | bearer |
+| `POST` | `/v1/sessions/:id/tasks` | сабмит задачи | bearer |
+| `GET` | `/v1/tasks/:jobId` | статус/результат (Job-объект) | bearer |
+| `POST` | `/v1/tasks/:jobId/cancel` | кооперативная отмена | bearer |
+| `POST` | `/v1/tasks/:jobId/answer` | ответ на `question` (interactive) | bearer |
+| `GET` | `/v1/sessions/:id/events` | поток событий (SSE) | bearer |
 
 ### Сабмит
 

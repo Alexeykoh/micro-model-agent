@@ -4,6 +4,23 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.37.0] - 2026-10-09
+
+`mma serve` now describes its own API: a live OpenAPI 3.1 document plus a
+human-readable contract page, so an integrator learns the endpoints from the
+running service instead of from the repository. README refreshed across the
+board — features, tools, modules, CLI/REPL surfaces and config keys had drifted
+behind the code.
+
+### Added
+
+- **Self-describing service contract** (`src/modules/service/openapi/`, `api/docs-api.ts`, `http/routes.ts`, `cli/service-command.ts`): `GET /v1/openapi.json` serves an OpenAPI 3.1 document of Agent Service API v1 (Swagger UI, Redoc, Postman/Insomnia, client generation), and `GET /v1/docs` serves the same contract as a self-contained HTML page — quickstart cURL, endpoint table with response codes, SSE events and error types. Both URLs are printed on `mma serve` startup (`cli.serve_docs`, en+ru) and both are exempt from the bearer check like `/v1/health` and `/v1/ready`: they describe the public API and expose no tenant data. The page is offline-first (no CDN), with an auth header in the quickstart only when a token is actually required. Single source of truth: the `OPERATIONS` table feeds the OpenAPI document, the docs page, and `tests/service/openapi.test.ts`, whose guard fails when a route exists without a description (or vice versa). Root `security: [{bearerAuth: []}]` appears only when a token is configured; `info.version` is `1.0.0+mma-<runtime version>`, so the spec can never drift from the build.
+
+### Changed
+
+- **README refreshed** (features, tools table, module/tool counts, CLI subcommands, REPL command table, web mode, config keys, architecture and project structure): removed the phantom `scope_request` tool, added `define_capability` / `process_wait`, `mma serve`, `mma plugins …`, `mma security …`, `/security`, `/lsp doctor`, `contextAuto`, `critic.enabled`, `service.port`, the `service` module, and pointed first-time users at the new `/v1/docs` + `/v1/openapi.json` endpoints.
+- **Docs:** a discovery section in `docs/agents/service-api.md` and `docs/serve-mode.md`; auth column added to the endpoint table.
+
 ## [2.36.0] - 2026-10-08
 
 `mma web` fixes from a live two-tab session (a background session's stream

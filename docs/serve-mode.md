@@ -15,6 +15,20 @@ Use `mma serve` when a program — not a human — talks to the agent: a chat
 backend, a workflow engine, a scheduler. For a human at a terminal use the REPL;
 for a human in a browser use [`mma web`](./agents/architecture.md).
 
+## Discovering the contract
+
+The service describes itself — no need to read the repo:
+
+```bash
+curl -s localhost:7331/v1/openapi.json   # OpenAPI 3.1 (Swagger UI / Redoc / Postman / client gen)
+open http://localhost:7331/v1/docs      # the same contract, human-readable, offline-safe HTML
+```
+
+Both URLs are printed on startup. They are served without the bearer token (like
+`/v1/health` and `/v1/ready`): they describe the public API and expose no tenant
+data. Everything under sessions/tasks/events still requires the token when one is
+configured.
+
 ## Quick start
 
 ```bash
@@ -136,6 +150,8 @@ stays available even if push is undeliverable.
 |---|---|
 | liveness | `GET /v1/health` |
 | readiness (config loaded, provider reachable) | `GET /v1/ready` |
+| contract (machine) | `GET /v1/openapi.json` |
+| contract (human) | `GET /v1/docs` |
 
 On `SIGINT`/`SIGTERM` the service stops accepting, cancels pending questions and
 drains the pool. If a provider is unreachable, readiness reports `503`

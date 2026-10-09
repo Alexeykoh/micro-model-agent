@@ -497,6 +497,7 @@
   "cli.serve.host": "bind address (default: 127.0.0.1)",
   "cli.serve.token": "require this bearer token (mandatory for non-loopback)",
   "cli.serve_started": "agent service → http://{host}:{port}/v1 (directory: {dir})",
+  "cli.serve_docs": "↳ docs: http://{host}:{port}/v1/docs · OpenAPI 3.1: http://{host}:{port}/v1/openapi.json",
   "cli.serve_invalid_port": "invalid --port \"{port}\": expected an integer between 1 and 65535",
   "service.ready_ok": "ready",
   "service.not_ready": "not ready: {reason}",

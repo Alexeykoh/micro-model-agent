@@ -6,6 +6,7 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { handleHealth, handleReady } from "../api/health";
+import { handleApiDocs, handleOpenApiDocument } from "../api/docs-api";
 import { handleEventsApi } from "../api/events-api";
 import { handleSessionsApi } from "../api/sessions-api";
 import { handleTasksApi } from "../api/tasks-api";
@@ -32,6 +33,8 @@ export type RouteGroup = (
 const API_ROUTES: Record<string, RouteHandler> = {
   "GET /v1/health": (req, res) => handleHealth(req, res),
   "GET /v1/ready": (req, res, _reqUrl, s) => handleReady(req, res, s),
+  "GET /v1/openapi.json": (req, res, url, s) => handleOpenApiDocument(req, res, url, s),
+  "GET /v1/docs": (req, res, url, s) => handleApiDocs(req, res, url, s),
 };
 
 const API_GROUPS: RouteGroup[] = [handleSessionsApi, handleTasksApi, handleEventsApi];

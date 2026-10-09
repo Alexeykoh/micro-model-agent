@@ -492,6 +492,7 @@
   "cli.serve.host": "адрес привязки (по умолчанию 127.0.0.1)",
   "cli.serve.token": "требовать этот bearer-токен (обязателен для не-loopback)",
   "cli.serve_started": "agent-сервис → http://{host}:{port}/v1 (директория: {dir})",
+  "cli.serve_docs": "↳ документация: http://{host}:{port}/v1/docs · OpenAPI 3.1: http://{host}:{port}/v1/openapi.json",
   "cli.serve_invalid_port": "некорректный --port «{port}»: нужно целое число от 1 до 65535",
   "service.ready_ok": "готов",
   "service.not_ready": "не готов: {reason}",
