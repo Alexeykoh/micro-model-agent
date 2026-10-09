@@ -160,15 +160,15 @@
                 <button class="bwin" type="button" data-win="64">64K</button>
                 <button class="bwin" type="button" data-win="128">128K</button>
               </div>
-              <div class="budget-bar">
-                <span class="bseg system"><b>3K</b></span>
-                <span class="bseg reserve"><b>5K</b></span>
-                <span class="bseg history"><b>24K</b></span>
+              <div class="segbar" id="budgetBar" aria-hidden="true">
+                <i class="seg-system"></i>
+                <i class="seg-history"></i>
+                <i class="seg-reserve"></i>
               </div>
-              <div class="budget-legend">
-                <span><i class="dot system"></i><span data-i18n="ctx.th.system"></span><b>3K</b></span>
-                <span><i class="dot reserve"></i><span data-i18n="ctx.th.reserve"></span><b>5K</b></span>
-                <span><i class="dot history"></i><span data-i18n="ctx.th.history"></span><b>24K</b></span>
+              <div class="seglegend">
+                <span class="segl-item"><i class="segl-dot seg-system"></i><span data-i18n="ctx.th.system"></span><b id="bSystem">3K</b></span>
+                <span class="segl-item"><i class="segl-dot seg-history"></i><span data-i18n="ctx.th.history"></span><b id="bHistory">24K</b></span>
+                <span class="segl-item"><i class="segl-dot seg-reserve"></i><span data-i18n="ctx.th.reserve"></span><b id="bReserve">5K</b></span>
               </div>
             </div>
             <p class="note" data-i18n="ctx.note"></p>

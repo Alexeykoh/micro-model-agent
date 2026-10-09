@@ -198,16 +198,14 @@
   function initBudget() {
     var root = document.getElementById("budget");
     if (!root) return;
-    var WINDOWS = { "32": [3, 5, 24], "64": [6, 10, 48], "128": [13, 19, 96] };
-    var segs = root.querySelectorAll(".bseg");
-    var legend = root.querySelectorAll(".budget-legend b");
+    // order: system, history, reserve (matches the web UI's segment order)
+    var WINDOWS = { "32": [3, 24, 5], "64": [6, 48, 10], "128": [13, 96, 19] };
+    var segs = root.querySelectorAll(".segbar i");
+    var legend = root.querySelectorAll(".seglegend b");
     function apply(win) {
       var vals = WINDOWS[win];
-      segs.forEach(function (s, i) {
-        s.style.flex = String(vals[i]);
-        s.querySelector("b").textContent = vals[i] + "K";
-        if (legend[i]) legend[i].textContent = vals[i] + "K";
-      });
+      segs.forEach(function (s, i) { s.style.flexGrow = String(vals[i]); });
+      legend.forEach(function (b, i) { b.textContent = vals[i] + "K"; });
     }
     root.querySelectorAll(".bwin").forEach(function (b) {
       b.addEventListener("click", function () {
