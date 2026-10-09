@@ -5,7 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MMA — a harness for small local models</title>
   <meta name="description" content="An agent harness that keeps local 32K–64K models on task.">
+  <link rel="canonical" href="https://alexeykoh.github.io/micro-model-agent/">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#0f1013" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="MMA — a harness for small local models">
+  <meta property="og:description" content="An agent harness that keeps local 32K–64K models on task: context budget, structural compaction, real execution guarantees.">
+  <meta property="og:url" content="https://alexeykoh.github.io/micro-model-agent/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MMA — a harness for small local models">
+  <meta name="twitter:description" content="An agent harness that keeps local 32K–64K models on task.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "MMA — Micro Models Agent",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Windows, macOS, Linux",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://github.com/Alexeykoh/micro-model-agent",
+    "description": "An open-source agent harness that keeps local 32K–64K language models on task."
+  }
+  </script>
   <script>
     (function () {
       try {
@@ -21,6 +44,9 @@
 </head>
 <body>
   <script>window.MMA_VERSION = "0.1.0";</script>
+
+  <a class="skip" href="#top" data-i18n="a11y.skip"></a>
+  <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
 
   <header class="nav">
     <div class="wrap nav-in">
@@ -62,6 +88,7 @@
           <p class="hero-note" data-i18n="hero.note"></p>
         </div>
         <div class="hero-face">
+          <span class="greet" id="greet" role="status"></span>
           <span class="mdl c-recon track" id="heroFace" aria-hidden="true"></span>
         </div>
       </div>
@@ -126,17 +153,24 @@
         <p class="sec-lead" data-i18n="context.lead"></p>
         <div class="split">
           <div class="col">
-            <table class="tbl">
-              <thead><tr>
-                <th data-i18n="ctx.th.window"></th><th data-i18n="ctx.th.system"></th>
-                <th data-i18n="ctx.th.reserve"></th><th data-i18n="ctx.th.history"></th>
-              </tr></thead>
-              <tbody>
-                <tr><td>32K</td><td>3K</td><td>5K</td><td>24K</td></tr>
-                <tr><td>64K</td><td>6K</td><td>10K</td><td>48K</td></tr>
-                <tr><td>128K</td><td>13K</td><td>19K</td><td>96K</td></tr>
-              </tbody>
-            </table>
+            <div class="budget" id="budget">
+              <div class="budget-pick">
+                <span class="budget-label" data-i18n="budget.pick"></span>
+                <button class="bwin on" type="button" data-win="32">32K</button>
+                <button class="bwin" type="button" data-win="64">64K</button>
+                <button class="bwin" type="button" data-win="128">128K</button>
+              </div>
+              <div class="budget-bar">
+                <span class="bseg system"><b>3K</b></span>
+                <span class="bseg reserve"><b>5K</b></span>
+                <span class="bseg history"><b>24K</b></span>
+              </div>
+              <div class="budget-legend">
+                <span><i class="dot system"></i><span data-i18n="ctx.th.system"></span><b>3K</b></span>
+                <span><i class="dot reserve"></i><span data-i18n="ctx.th.reserve"></span><b>5K</b></span>
+                <span><i class="dot history"></i><span data-i18n="ctx.th.history"></span><b>24K</b></span>
+              </div>
+            </div>
             <p class="note" data-i18n="ctx.note"></p>
           </div>
           <div class="col">
@@ -159,12 +193,29 @@
         <header class="sec-h"><span class="sec-n" data-i18n="s4.n"></span><span class="sec-k" data-i18n="s4.k"></span></header>
         <h2 class="sec-t" data-i18n="tools.title"></h2>
         <p class="sec-lead" data-i18n="tools.lead"></p>
-        <div class="tags-row">
-          <span class="tags-label" data-i18n="tools.tags.title"></span>
-          <span class="tag file">file</span><span class="tag code">code</span><span class="tag shell">shell</span>
-          <span class="tag research">research</span><span class="tag browser">browser</span>
-          <span class="tag vision">vision</span><span class="tag image">image</span>
-          <span class="tag memory">memory</span><span class="tag core">core</span>
+        <div class="narrow" id="narrow">
+          <div class="narrow-head">
+            <span class="tags-label" data-i18n="narrow.pick"></span>
+            <button class="narrow-reset" id="narrowReset" type="button" data-i18n="narrow.reset"></button>
+          </div>
+          <div class="tags-row" id="tagsRow">
+            <button type="button" class="tag file on" data-cost="300">file</button>
+            <button type="button" class="tag code on" data-cost="350">code</button>
+            <button type="button" class="tag shell" data-cost="250">shell</button>
+            <button type="button" class="tag research" data-cost="400">research</button>
+            <button type="button" class="tag browser" data-cost="500">browser</button>
+            <button type="button" class="tag vision" data-cost="250">vision</button>
+            <button type="button" class="tag image" data-cost="150">image</button>
+            <button type="button" class="tag memory" data-cost="200">memory</button>
+          </div>
+          <div class="narrow-meter">
+            <div class="narrow-bar"><i id="narrowBar"></i></div>
+            <div class="narrow-read">
+              <b id="narrowCost">1.8K</b>
+              <span data-i18n="narrow.cost"></span>
+              <em id="narrowSaved"></em>
+            </div>
+          </div>
         </div>
         <div class="always">
           <h3 class="sub" data-i18n="tools.always.title"></h3>
