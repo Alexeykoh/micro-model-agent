@@ -1586,7 +1586,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
   `openTab(id, name, kind, server, activate)` с `activate=false` создаёт фоновую
   вкладку без подмены активной.
 
-### Frontend Seams — готовые швы фронтендов (unreleased, `refactor/frontend-core-seams` → master)
+### Frontend Seams — готовые швы фронтендов (2.38.0)
 
 Разбор для TUI показал: фронтенд-независимого ядра достаточно, но три шва
 упирались в терминал. Все три закрыты; поведение пользователя не менялось.
@@ -1630,7 +1630,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **Не сделано (осознанно):** унификация 29 хендлеров REPL с 14 веб-хендлерами —
   это переписывание вывода, а не шва; рендер TUI, ввод и компоновка — отдельная задача.
 
-### Harness Read-only Guard Fix (unreleased, branch `fix/readonly-guard-finalize`)
+### Harness Read-only Guard Fix (2.38.0)
 
 Разбор сессии `ses_mv0pirf5_hnmbxj` (`qwen3.8-9b-distill`, `mma web`): чисто read-only
 аналитическая задача была убита стражем на 24-й итерации, когда модель уже собиралась
@@ -1661,7 +1661,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
   / `isStuck` / серии фейлов + дубль-бюджет tool-batch. Ключи `exec.read_only_loop`,
   `exec.read_only_loop_recovery`, `exec.hint_read_only` удалены (en+ru).
 
-### Current Version: 2.37.0
+### Current Version: 2.38.0
 
 Self-describing service contract (see the section above): `mma serve` serves its
 own OpenAPI 3.1 document and human docs page from one `OPERATIONS` table.

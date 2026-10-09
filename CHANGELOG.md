@@ -4,17 +4,19 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.38.0] - 2026-10-09
 
-Frontend-seam refactoring so a full-screen TUI can reuse the existing command
-registry and session snapshot. No user-visible behaviour change; the seams that
-previously blocked a third frontend are now frontend-agnostic.
+Harness honesty for read-only work: the loop guard no longer treats "no mutation" as
+"no progress", every forced stop now yields a best-effort final answer instead of a silent
+kill, and the web chat shows why a turn stopped. Frontend seams landed so a future TUI can
+reuse the command registry and session snapshot, and `grep` on Windows was hardened.
 
 ### Changed
 
 - **Host snapshot projection moved to `core`** (`src/core/host-state.ts`): `buildHostState`/`captureUsage`/`liveContextUsage`/`planEventFor`/`UsageSnapshot` lived in `src/modules/webui/host-state.ts`, yet `mma serve` already imported `planEventFor` from there - a structural subset of the web backend acting as a shared contract. `src/modules/webui/host-state.ts` is now a thin web wrapper keeping `WebIndexer`/`WebLsp` and the web-only `i18nStale` probe.
 - **`ReplContext` split into services and IO** (`src/cli/command-context.ts`): the old 20-member interface mixed frontend-agnostic services (config/agent/modules) with single-shot terminal IO (`rl: LineInput`, `output: OutputChannel`), so a TUI that redraws frames could not reuse the command registry. Now `CommandServices` (frontend-agnostic) + `CommandOutput` (2 required methods) + `CommandInput` (3 methods). `ReplContext` is an alias. `/wizard` and `/config reset --all` ask `ctx.input.withInput(...)`/`ctx.input.confirm(...)` instead of touching the terminal; `Spinner` takes only `writeOverlay`.
 - **Declarative slash-command catalog** (`src/core/commands/`): three descriptions drifted silently - the hand-synced `COMMAND_GROUPS` table (29 lines), the REPL registrations, and the web `HELP` list. All 29 commands are now data (`spec.ts`) plus a registry with per-surface availability (`catalog.ts`). Actions are deliberately not unified - terminal prints ANSI, the browser emits plain SSE lines, which is the `CommandOutput` adapter's job. `/help` builds from the catalog; `COMMAND_GROUPS` is deleted. `isAvailable` defaults to terminal + TUI so a future TUI gets the whole registry.
+- **Forced final answer instead of a silent kill** (`src/core/agent.ts`, `tool-batch.ts`): every harness terminal (duplicate budget, failed-batch honest-stop, `maxToolIterations` exhaustion) now makes one tool-less LLM call and accepts the text as the final answer (critic/audit/claim gates skipped, answer persisted to history, tokens/cost counted); `AgentResult.stopReason` carries the trigger. An empty forced answer is still a failure.
 
 ### Added
 
@@ -26,10 +28,6 @@ previously blocked a third frontend are now frontend-agnostic.
 - **Web shows why a turn stopped** (`webui/session/{run-agent,forward}.ts`, `assets/js/feed/turn.ts`): the harness reason (`AgentResult.stopReason` / `error`) was dropped on the web path, leaving a generic `turn failed`. It is now forwarded through SSE `turn_end` and rendered.
 - **`grep` with `|` on Windows** (`src/tools/grep-tool.ts`): an npm `.cmd`/`.ps1` `rg` shim runs through `cmd.exe` under Bun, so alternation patterns were read as pipes and the search failed with no JS fallback. Shim/spawn failures (exit 255/9009, shell signature) are now treated as engine-unavailable and fall through to the JS walker.
 - **Stuck-detector read-only nudge removed** (`src/modules/execution/stuck-detector.ts`, `execution-plugin.ts`): the second "no mutation = stuck" heuristic (10 read-only calls → `exec.read_only_loop`, "No write/exec for N tool calls") fired on legitimate read-only analysis. Removed — real loops stay covered by repetition sampling, step iteration, failure streaks and the duplicate-tool budget. Keys `exec.read_only_loop`, `exec.read_only_loop_recovery`, `exec.hint_read_only` dropped (en+ru).
-
-### Changed
-
-- **Forced final answer instead of a silent kill** (`src/core/agent.ts`, `tool-batch.ts`): every harness terminal (duplicate budget, failed-batch honest-stop, `maxToolIterations` exhaustion) now makes one tool-less LLM call and accepts the text as the final answer (critic/audit/claim gates skipped, answer persisted to history); `AgentResult.stopReason` carries the trigger. An empty forced answer is still a failure.
 
 ## [2.37.0] - 2026-10-09
 
