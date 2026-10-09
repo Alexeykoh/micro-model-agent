@@ -24,24 +24,8 @@ import {
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_READONLY_BATCHES, HARD_STOP_READONLY_BATCHES } from "./constants";
-import { isWorkMutation } from "../../modules/critic/evidence";
-
-/**
- * Тулы-тупики, которые НЕ считаются прогрессом для read-only бюджета, хотя и не
- * мутируют ФС: `subagent` может «поработать», но для родительской петли это
- * такой же незавершённый шаг, как лишний fetch. Используется вместе с
- * `isWorkMutation`: пакет питает стрик, если в нём нет ни worker-мутаций, ни
- * subagent. Так `browser`/`web_*`/`plan`/`todo` (не производят артефакт) больше
- * не сбрасывают счётчик — раньше белый список пропускал `browser` и `plan`,
- * из-за чего петля из browser+plan не ловилась.
- */
-const NON_PROGRESS_TOOLS = new Set(["subagent"]);
-
-/** Пакет не продвинул работу: ни рабочей мутации, ни subagent. */
-function isNonProgressBatch(toolCalls: Array<{ name: string }>): boolean {
-  return toolCalls.length > 0 && toolCalls.every((c) => !isWorkMutation(c.name) && !NON_PROGRESS_TOOLS.has(c.name));
-}
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES } from "./constants";
+import { canonicalArgsKey } from "./canonical-args";
 
 /** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
 const TRANSIENT_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
@@ -99,6 +83,8 @@ export interface ToolBatchDeps {
 export interface ToolBatchExecution {
   /** Истинно, если итерация прервана по shutdown — цикл должен выйти. */
   interrupted: boolean;
+  /** Терминал: цикл должен выйти и форсировать финальный ответ без тулов. */
+  finalize?: "duplicate" | "failed_batches";
 }
 
 /**
@@ -660,42 +646,46 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       });
     }
     if (state.consecutiveFailedBatches >= HARD_STOP_FAILED_BATCHES) {
-      state.retryLoopStopped = true;
-      logger.diagnostic(
-        "warn",
-        `Retry loop hard-stopped after ${state.consecutiveFailedBatches} consecutive failed batches`,
-      );
-      return { interrupted: true };
+      logger.diagnostic("warn", `Retry loop terminated after ${state.consecutiveFailedBatches} consecutive failed batches — forcing final answer`);
+      return { interrupted: false, finalize: "failed_batches" };
     }
 
-    // Read-only бюджет: серия пакетов БЕЗ рабочей мутации (read/search/fetch/
-    // browser/plan/todo — всё, что не создаёт и не меняет артефакт). Успешные,
-    // но бесполезные fetch-и не попадают под honest-stop (тот про провалы),
-    // поэтому петля «читаю/ищу и не могу остановиться» гасится отдельно.
-    if (isNonProgressBatch(toolCalls)) {
-      state.consecutiveReadOnlyBatches++;
+    // Duplicate-бюджет: серия пакетов, где КАЖДЫЙ вызов дословно повторяет уже
+    // сделанный за ход (канонический ключ). Широкая разведка новыми файлами и
+    // паттернами прогрессирует — стрик не набирает. Опрос процесса
+    // (process_log/process_wait) — легитимный повтор, стрик не питает.
+    const POLL_TOOLS = new Set(["process_log", "process_wait"]);
+    const isPurePoll = toolCalls.length > 0 && toolCalls.every((c) => POLL_TOOLS.has(c.name));
+    const isDuplicateBatch =
+      !isPurePoll &&
+      toolCalls.length > 0 &&
+      toolCalls.every((c) => state.seenToolCalls.has(canonicalArgsKey(c.name, c.arguments)));
+    for (const c of toolCalls) state.seenToolCalls.add(canonicalArgsKey(c.name, c.arguments));
+
+    if (isDuplicateBatch) {
+      state.consecutiveDuplicateBatches++;
     } else {
-      state.consecutiveReadOnlyBatches = 0;
-      state.readonlyNudged = false;
+      state.consecutiveDuplicateBatches = 0;
+      state.duplicateNudged = false;
     }
-    if (state.consecutiveReadOnlyBatches >= MAX_READONLY_BATCHES && !state.readonlyNudged) {
-      state.readonlyNudged = true;
+    if (state.consecutiveDuplicateBatches >= MAX_DUPLICATE_BATCHES && !state.duplicateNudged) {
+      state.duplicateNudged = true;
       logger.diagnostic(
         "warn",
-        `Read-only exploration streak: ${state.consecutiveReadOnlyBatches} batches — directive`,
+        `Duplicate tool-call streak: ${state.consecutiveDuplicateBatches} batches — directive`,
       );
       contextManager.addMessage({
         role: "user",
-        content: `<system-summary>${t("exec.readonly_directive", { count: state.consecutiveReadOnlyBatches })}</system-summary>`,
+        content: `<system-summary>${t("exec.readonly_directive", { count: state.consecutiveDuplicateBatches })}</system-summary>`,
       });
     }
-    if (state.consecutiveReadOnlyBatches >= HARD_STOP_READONLY_BATCHES) {
-      state.readonlyStopped = true;
+    if (state.consecutiveDuplicateBatches >= HARD_STOP_DUPLICATE_BATCHES) {
+      state.duplicateStopped = true;
       logger.diagnostic(
         "warn",
-        `Read-only loop hard-stopped after ${state.consecutiveReadOnlyBatches} consecutive read-only batches`,
+        `Duplicate loop terminated after ${state.consecutiveDuplicateBatches} identical batches — forcing final answer`,
       );
-      return { interrupted: true };
+      return { interrupted: false, finalize: "duplicate" };
     }
 
     // Статусная строка плана после каждого пакета тулов. Заменяет динамический

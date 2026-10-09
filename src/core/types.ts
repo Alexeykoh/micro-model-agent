@@ -149,6 +149,11 @@ export interface AgentResult {
    * «остановлено», а не «ошибку» (веб-лента, CLI).
    */
   interrupted?: boolean;
+  /**
+   * Харнесс завершил ход принудительно (дубль-петля / серия провалов /
+   * исчерпание итераций). Ответ — лучшее из собранного, без проверки тулами.
+   */
+  stopReason?: "duplicate" | "failed_batches" | "max_iters";
   text: string;
   error?: string;
   iterationCount: number;

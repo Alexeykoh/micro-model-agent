@@ -49,24 +49,20 @@ function hasHonestStop(added: string[]): boolean {
   return added.some((m) => m.includes("STOP retrying") || m.includes("ХВАТИТ"));
 }
 
-async function runReadonlyBatch(
+async function runBatchOf(
   ex: ToolBatchExecutor,
   state: ReturnType<typeof createLoopState>,
+  calls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>,
 ) {
   (ex as any).deps.toolExecutor.execute = async () => ok;
-  return ex.execute(
-    state,
-    [{ id: "1", name: "web_fetch", arguments: { url: "https://example.com" } }],
-    new Set(),
-    "",
-    "",
-    "task",
-  );
+  return ex.execute(state, calls, new Set(), "", "", "task");
 }
 
-function hasReadonlyDirective(added: string[]): boolean {
+function hasDuplicateDirective(added: string[]): boolean {
   return added.some((m) => m.includes("only been reading") || m.includes("только читаешь"));
 }
+
+const sameCall = { id: "1", name: "read_file", arguments: { path: "src/a.ts" } };
 
 function makeCase() {
   const added: string[] = [];
@@ -91,8 +87,7 @@ describe("ToolBatchExecutor honest-stop", () => {
 
     await runBatch(ex, state, [fail]);
     const sixth = await runBatch(ex, state, [fail]);
-    expect(sixth.interrupted).toBe(true);
-    expect(state.retryLoopStopped).toBe(true);
+    expect(sixth.finalize).toBe("failed_batches");
   });
 
   it("resets on success and on mixed batches", async () => {
@@ -129,48 +124,58 @@ describe("ToolBatchExecutor honest-stop", () => {
   });
 });
 
-describe("ToolBatchExecutor read-only budget", () => {
-  it("directive on 8th read-only batch, hard stop on 12th", async () => {
+describe("ToolBatchExecutor duplicate budget", () => {
+  it("varied reads are progress — never fires", async () => {
     const { added, ex, state } = makeCase();
-    for (let n = 0; n < 7; n++) {
-      expect((await runReadonlyBatch(ex, state)).interrupted).toBe(false);
+    for (let n = 0; n < 20; n++) {
+      const r = await runBatchOf(ex, state, [
+        { id: String(n), name: "read_file", arguments: { path: `src/f${n}.ts` } },
+      ]);
+      expect(r.interrupted).toBe(false);
+      expect(r.finalize).toBeUndefined();
     }
-    expect(state.consecutiveReadOnlyBatches).toBe(7);
-    expect(hasReadonlyDirective(added)).toBe(false);
-
-    const eighth = await runReadonlyBatch(ex, state);
-    expect(eighth.interrupted).toBe(false);
-    expect(state.consecutiveReadOnlyBatches).toBe(8);
-    expect(hasReadonlyDirective(added)).toBe(true);
-
-    for (let n = 0; n < 3; n++) await runReadonlyBatch(ex, state);
-    const twelfth = await runReadonlyBatch(ex, state);
-    expect(twelfth.interrupted).toBe(true);
-    expect(state.readonlyStopped).toBe(true);
+    expect(state.consecutiveDuplicateBatches).toBe(0);
+    expect(hasDuplicateDirective(added)).toBe(false);
   });
 
-  it("resets the read-only streak on a mutating batch", async () => {
-    const { ex, state } = makeCase();
-    await runReadonlyBatch(ex, state);
-    await runReadonlyBatch(ex, state);
-    expect(state.consecutiveReadOnlyBatches).toBe(2);
-    (ex as any).deps.toolExecutor.execute = async () => ok;
-    await runSingleBatch(ex, state); // bash — мутирующий
-    expect(state.consecutiveReadOnlyBatches).toBe(0);
-  });
-
-  it("treats browser/plan batches as non-progress, resets on write", async () => {
+  it("directive after 8 duplicate batches, finalize after 12", async () => {
     const { added, ex, state } = makeCase();
-    (ex as any).deps.toolExecutor.execute = async () => ok;
-    const run = (name: string) =>
-      ex.execute(state, [{ id: "1", name, arguments: {} }], new Set(), "", "", "task");
-    for (let i = 0; i < 7; i++) await run("browser");
-    expect(state.consecutiveReadOnlyBatches).toBe(7);
-    await run("plan"); // книга плана — не рабочий артефакт, стрик продолжается
-    expect(state.consecutiveReadOnlyBatches).toBe(8);
-    expect(hasReadonlyDirective(added)).toBe(true);
-    await run("write_file"); // реальная мутация — сброс
-    expect(state.consecutiveReadOnlyBatches).toBe(0);
+    await runBatchOf(ex, state, [sameCall]); // first = new, not a duplicate
+    expect(state.consecutiveDuplicateBatches).toBe(0);
+    for (let n = 0; n < 7; n++) {
+      const r = await runBatchOf(ex, state, [sameCall]);
+      expect(r.finalize).toBeUndefined();
+    }
+    expect(state.consecutiveDuplicateBatches).toBe(7); // 8 identical calls total
+    const ninth = await runBatchOf(ex, state, [sameCall]);
+    expect(ninth.finalize).toBeUndefined();
+    expect(state.consecutiveDuplicateBatches).toBe(8);
+    expect(hasDuplicateDirective(added)).toBe(true);
+    for (let n = 0; n < 3; n++) await runBatchOf(ex, state, [sameCall]); // 10,11,12
+    const thirteenth = await runBatchOf(ex, state, [sameCall]); // 13th identical
+    expect(thirteenth.finalize).toBe("duplicate");
+    expect(state.duplicateStopped).toBe(true);
+  });
+
+  it("a fresh call resets the duplicate streak", async () => {
+    const { ex, state } = makeCase();
+    await runBatchOf(ex, state, [sameCall]); // new
+    await runBatchOf(ex, state, [sameCall]); // dup → 1
+    expect(state.consecutiveDuplicateBatches).toBe(1);
+    await runBatchOf(ex, state, [
+      { id: "9", name: "read_file", arguments: { path: "src/other.ts" } },
+    ]);
+    expect(state.consecutiveDuplicateBatches).toBe(0);
+  });
+
+  it("a pure process_log poll does not feed the streak", async () => {
+    const { ex, state } = makeCase();
+    const poll = { id: "1", name: "process_log", arguments: { id: "p1" } };
+    for (let n = 0; n < 15; n++) {
+      const r = await runBatchOf(ex, state, [poll]);
+      expect(r.finalize).toBeUndefined();
+    }
+    expect(state.consecutiveDuplicateBatches).toBe(0);
   });
 });
 

@@ -1635,6 +1635,7 @@ describe("Agent", () => {
 
   it("does not force a compaction on every single iteration when quality is low", async () => {
     let compactCalls = 0;
+    let call = 0;
     const deps = createMockDeps({
       config: { ...createMockDeps().config, maxToolIterations: 20 },
       llmProvider: {
@@ -1644,7 +1645,11 @@ describe("Agent", () => {
           (async function* () {
             yield {
               type: "tool_call" as const,
-              toolCall: { id: "call_1", name: "write_file", arguments: "{}" },
+              toolCall: {
+                id: "call_1",
+                name: "write_file",
+                arguments: JSON.stringify({ path: `f${call++}.txt` }),
+              },
             };
             yield { type: "done" as const, finishReason: "tool_calls" as const };
           })(),

@@ -68,15 +68,22 @@ export interface LoopState {
   /** Honest-stop директива уже отправлена для текущего стрика (1 раз на стрик). */
   honestStopNudged: boolean;
   /**
-   * Подряд идущие пакеты только из read-only тулов без мутаций. Питает
-   * read-only бюджет: директива «ответь или измени», затем жёсткий стоп.
-   * Успешные, но бесполезные fetch-и не ловятся honest-stop (тот про провалы).
+   * Подряд идущие пакеты, где КАЖДЫЙ вызов дословно повторяет уже сделанный за
+   * ход (канонический ключ). Питает duplicate-бюджет: директива «перестань
+   * повторяться — ответь», затем жёсткий стоп. Широкая разведка новыми
+   * файлами/паттернами прогрессирует — стрик не набирает.
    */
-  consecutiveReadOnlyBatches: number;
-  /** Директива read-only уже отправлена для текущего стрика (1 раз). */
-  readonlyNudged: boolean;
-  /** Read-only петля остановлена жёстко — итоговый результат success:false. */
-  readonlyStopped: boolean;
+  consecutiveDuplicateBatches: number;
+  /** Duplicate-директива уже отправлена для текущего стрика (1 раз). */
+  duplicateNudged: boolean;
+  /** Duplicate-петля остановлена жёстко — форс финального ответа. */
+  duplicateStopped: boolean;
+  /** Канонические ключи всех вызовов за ход — вход duplicate-предиката. */
+  seenToolCalls: Set<string>;
+  /** Причина принудительного завершения без тулов, или null. */
+  finalizeReason: "duplicate" | "failed_batches" | "max_iters" | null;
+  /** Машиночитаемая причина остановки для результата/чата (после финала). */
+  stopReason: "duplicate" | "failed_batches" | "max_iters" | null;
   /** Подряд идущие успешные итерации с тулами — вход для reasoning policy. */
   consecutiveToolSuccesses: number;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
@@ -159,11 +166,6 @@ export interface LoopState {
   emptyResponseRetries: number;
   /** Пустые ответы исчерпаны — итоговый результат success:false. */
   emptyResponseExhausted: boolean;
-  /**
-   * Retry-петля остановлена жёстко после игнорирования honest-stop директивы —
-   * итоговый результат success:false с честной ошибкой.
-   */
-  retryLoopStopped: boolean;
   /** Аудит провален после исчерпания повторов — итоговый результат success:false. */
   auditFailed: boolean;
   /**
@@ -213,9 +215,12 @@ export function createLoopState(): LoopState {
     consecutiveToolFailures: 0,
     consecutiveFailedBatches: 0,
     honestStopNudged: false,
-    consecutiveReadOnlyBatches: 0,
-    readonlyNudged: false,
-    readonlyStopped: false,
+    consecutiveDuplicateBatches: 0,
+    duplicateNudged: false,
+    duplicateStopped: false,
+    seenToolCalls: new Set<string>(),
+    finalizeReason: null,
+    stopReason: null,
     consecutiveToolSuccesses: 0,
     repeatedToolCount: 0,
     toolFailureCounts: new Map(),
@@ -243,7 +248,6 @@ export function createLoopState(): LoopState {
     seenCriticIssues: new Set(),
     emptyResponseRetries: 0,
     emptyResponseExhausted: false,
-    retryLoopStopped: false,
     auditFailed: false,
     finalAnswerAccepted: false,
     suppressRepetitionRetry: false,

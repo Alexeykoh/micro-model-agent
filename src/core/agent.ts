@@ -31,7 +31,7 @@ import type { ReasoningLevel } from "../config/types";
 import type { ReasoningState } from "../tools/set-thinking";
 import { estimateTokens } from "../llm/token-counter";
 import { LlmError } from "../llm/llm-errors";
-import { createLoopState, clearIterationSignals } from "./agent/loop-state";
+import { createLoopState, clearIterationSignals, type LoopState } from "./agent/loop-state";
 import { CompactionService } from "./agent/compaction";
 import { TokenTracker } from "./agent/token-tracker";
 import { buildPromptSnapshot, diffPrompt } from "./agent/prefix-monitor";
@@ -567,6 +567,43 @@ export class Agent {
       phase,
     );
     onPhase?.(phase);
+  }
+
+  /**
+   * Аварийное завершение без тулов: один вызов модели с пустым набором
+   * инструментов. Ответ принимается как финальный; гейты (critic/audit/claim)
+   * пропускаются — мы остановились именно потому, что проверить нечем.
+   * Возвращает текст ответа (пустой — нечего финализировать).
+   */
+  private async finalizeWithoutTools(
+    state: LoopState,
+    onChunk?: (chunk: string) => void,
+  ): Promise<string> {
+    const { contextManager, logger, llmProvider } = this.deps;
+    contextManager.addMessage({
+      role: "user",
+      content: `<system-summary>${t("exec.finalize_no_tools")}</system-summary>`,
+    });
+    const history = repairToolCallPairing(contextManager.getActiveHistory());
+    let text = "";
+    try {
+      for await (const chunk of llmProvider.chat(history, [], this.abortController?.signal, {
+        sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
+      })) {
+        if (this.shutdownRequested) break;
+        if (chunk.type === "text" && chunk.content) {
+          text += chunk.content;
+          onChunk?.(chunk.content);
+        }
+      }
+    } catch (e) {
+      logger.diagnostic("warn", `finalizeWithoutTools failed: ${errMsg(e)}`);
+    }
+    if (text.trim()) {
+      state.lastText = text;
+      state.finalAnswerAccepted = true;
+    }
+    return text;
   }
 
   /**
@@ -1361,6 +1398,10 @@ export class Agent {
           onMeta,
           slog,
         );
+        if (batch.finalize) {
+          state.finalizeReason = batch.finalize;
+          break;
+        }
         if (batch.interrupted) {
           break;
         }
@@ -1518,6 +1559,13 @@ export class Agent {
       }
     }
 
+    if (state.finalizeReason || (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted)) {
+      const reason = state.finalizeReason ?? "max_iters";
+      logger.diagnostic("info", `Forcing final answer without tools (${reason})`);
+      await this.finalizeWithoutTools(state, onChunk);
+      state.stopReason = reason;
+    }
+
     const tokensUsed = contextManager.getEstimatedTokens();
     const budget = contextManager.getBudget();
     const usageTokens = tokenTracker.resolveFinal(state);
@@ -1528,6 +1576,7 @@ export class Agent {
         success: false,
         text: state.lastText,
         error: t("error.max_iters", { max: config.maxToolIterations }),
+        stopReason: state.stopReason ?? undefined,
         iterationCount: state.iteration,
         contextUsed: tokensUsed,
         contextLimit: budget.history,
@@ -1547,21 +1596,16 @@ export class Agent {
       success: !(
         this.shutdownRequested ||
         state.emptyResponseExhausted ||
-        state.auditFailed ||
-        state.retryLoopStopped ||
-        state.readonlyStopped
+        state.auditFailed
       ),
       interrupted: this.shutdownRequested || undefined,
       text: state.lastText,
+      stopReason: state.stopReason ?? undefined,
       error: state.emptyResponseExhausted
         ? t("error.empty_response")
         : state.auditFailed
           ? t("error.audit_failed", { summary: state.lastAuditSummary })
-          : state.retryLoopStopped
-            ? t("error.retry_loop_stopped", { count: state.consecutiveFailedBatches })
-            : state.readonlyStopped
-              ? t("error.readonly_loop_stopped", { count: state.consecutiveReadOnlyBatches })
-              : undefined,
+          : undefined,
       iterationCount: state.iteration,
       contextUsed: tokensUsed,
       contextLimit: budget.history,
