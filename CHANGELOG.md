@@ -4,6 +4,28 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.40.0] - 2026-10-09
+
+The web chat's work process steps back and the finished answer steps forward: answers get a
+quiet translucent backdrop, reasoning stops shouting, the "jump to latest" pill sits where it
+belongs, and user attachments are rendered properly and survive a page reload.
+
+### Added
+
+- **Answer backdrop** (`src/modules/webui/assets/styles.css`): `.feed > .md/.ans` now carry a muted, translucent accent fill (`--ans-bg`, both themes) next to the existing accent rail, so a finished answer reads instantly apart from the dim work process (think/tool/meta rows stay flat).
+- **User attachments render properly** (`assets/js/feed/core.ts`, `assets/js/session/composer.ts`, `assets/js/feed/history.ts`): one shared `userBlock()` builder. Attachments form a `.u-attach` strip **above** the text (the `> ` prompt marker moves onto the text line); images become lazy `.uimg` thumbnails, other sources (file paths, non-image data URLs) become `.u-file` chips. Any number of attachments, live send / history replay / slash commands all use it.
+- **User images persist** (`src/core/session-logger.ts`, `src/core/agent.ts`, `src/modules/webui/session/history-api.ts`): attached images are written into `<sessionDir>/images/` with the shared `images.maxCount`/`images.maxBytes` rotation; refs land on the `user` `session.jsonl` entry and the history API serves them as `/api/sessions/:id/images/:name` URLs, so previews come back after reload. Encrypted sessions behave like tool images (live inline, no history). `image-store` EXT gains `bmp`/`svg`/`avif`.
+
+### Changed
+
+- **Reasoning is quieter** (`assets/styles.css`): `.think` renders at `.72` opacity (hover / live restore full weight) and its header uses `--dim-b` instead of the much brighter `--think`, so "thinking" no longer competes with the answer.
+- **Jump-to-latest pill** (`assets/js/feed/core.ts`, `assets/styles.css`): anchored to `.input-area` (`bottom: calc(100% + 10px)`, same as `.menu`/`.cmdk`) instead of a hardcoded `bottom: 148px` on `.chat`, which drifted as the rail/textarea changed the composer height. Its entrance animation uses a new `popCenter` keyframe that keeps `translateX(-50%)` — plain `pop` ended at `transform: none` and made the pill flash in off-center before snapping to the middle.
+- **`images.*` settings** are no longer tool-only: config labels and the Settings → UI section were reworded from "tool images" to cover tool outputs *and* user attachments (en + ru).
+
+### Fixed
+
+- **User message layout**: attachments used to append inline after the text (`> текст [img]`); they now stack above it.
+
 ## [2.39.0] - 2026-10-09
 
 LSP is now a real language-server client instead of a one-shot linter: one warm server
