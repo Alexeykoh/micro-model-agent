@@ -76,7 +76,10 @@ describe("BridgeDriver", () => {
     vi.restoreAllMocks();
   });
 
-  it("pings the node bridge over stdio", async () => {
+  // Real cross-process node bridge (+ browser). CI runners have no browser
+  // runtime, so the bridge exits and the ping times out — same rationale as
+  // BrowserSession's unconditional skip. Covered on a dev machine.
+  it.skipIf(Boolean(process.env.CI))("pings the node bridge over stdio", async () => {
     const bridge = new BridgeDriver({ maxConsoleLineChars: 100 });
     await bridge.launch({
       headless: true,
