@@ -36,7 +36,8 @@ jobs:
       - name: Unit tests
         run: bun test
 
-      # fallow is distributed on npm; `--fail-on-issues` exits non-zero on any
-      # finding not covered by the baseline.
+      # fallow is distributed on npm. Pin the version: the baseline
+      # (`.fallow-baseline.json`) was saved with 2.88.0, and newer analyzers
+      # report additional findings that the baseline does not cover.
       - name: Dead-code gate
-        run: npx --yes fallow dead-code --baseline .fallow-baseline.json --fail-on-issues
+        run: npx --yes fallow@2.88.0 dead-code --baseline .fallow-baseline.json --fail-on-issues
