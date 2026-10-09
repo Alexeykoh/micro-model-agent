@@ -57,20 +57,34 @@ export function runSearch(
       } else if (code === 0) {
         resolvePromise(out);
       } else {
-        reject(new Error(err || `exit ${code}`));
+        reject(Object.assign(new Error(err || `exit ${code}`), { status: code }));
       }
     });
   });
 }
 
-/** Классифицирует ошибку внешнего поиска в результат или null (ENOENT). */
-function classifySearchError(e: any): ToolResult | null {
-  if (/timed out/.test(e?.message)) {
-    return { success: false, output: t("error.grep_failed", { message: e.message }) };
+/**
+ * Классифицирует ошибку внешнего поиска: результат или null (движок недоступен,
+ * вызывающий пробует следующий / JS-фолбэк).
+ *
+ * `e.status === 1` (нет совпадений) сюда практически не долетает: `runSearch`
+ * сам резолвит пустую строку на exit code 1. Ветку оставляем для вызывающих,
+ * которые могут прийти с готовым процессным статусом.
+ */
+export function classifySearchError(e: any): ToolResult | null {
+  const msg = String(e?.message ?? "");
+  if (/timed out/.test(msg)) {
+    return { success: false, output: t("error.grep_failed", { message: msg }) };
   }
   if (e?.status === 1) return { success: true, output: t("file.no_matches") };
   if (e?.code === "ENOENT") return null;
-  return { success: false, output: t("error.grep_failed", { message: e?.message }) };
+  // Шелл-ошибка шима (npm `.cmd`/`.ps1` под Bun идёт через cmd.exe): внешний
+  // движок фактически недоступен — не роняем поиск, падаем на JS-движок.
+  // `status` 255/9009 — cmd.exe «команда не найдена» через шим, независимо от
+  // локали; текстовая проверка страхует англоязычные сборки/execFileSync.
+  if (e?.status === 255 || e?.status === 9009) return null;
+  if (/is not recognized|command not found/i.test(msg)) return null;
+  return { success: false, output: t("error.grep_failed", { message: msg }) };
 }
 
 /**
