@@ -1,0 +1,91 @@
+name: release
+
+# On a pushed tag `vX.Y.Z`: build a self-contained package per platform
+# (bundled Bun runtime + app + prod deps + assets), attach it to a GitHub
+# Release, then assemble `latest.json` consumed by the install scripts and the
+# in-app updater. Asset names are versionless so
+# `releases/latest/download/<asset>` resolves stably.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            key: win-x64
+          - runner: macos-14
+            key: mac-arm64
+          - runner: macos-13
+            key: mac-x64
+          - runner: ubuntu-latest
+            key: linux-x64
+          - runner: ubuntu-24.04-arm
+            key: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build (bundle + assets)
+        run: bun run build:prod
+
+      - name: Prune to production dependencies
+        shell: bash
+        run: |
+          rm -rf node_modules
+          bun install --frozen-lockfile --production
+
+      - name: Stage and package
+        env:
+          RELEASE_KEY: ${{ matrix.key }}
+        run: bun run scripts/stage-release.ts
+
+      - name: Upload build outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.key }}
+          path: |
+            release/mma-${{ matrix.key }}.tar.gz
+            release/${{ matrix.key }}.json
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all build outputs
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Assemble latest.json
+        run: bun run scripts/build-manifest.ts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/mma-*.tar.gz
+            release/latest.json
+          generate_release_notes: true

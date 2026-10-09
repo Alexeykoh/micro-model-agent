@@ -3,7 +3,7 @@
 // to skip the updater entirely (`exitOnComplete` disabled it), which left the
 // four `updater.*` toggles in the settings panel dead.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { createUpdater, UPDATE_PACKAGE } from "../src/modules/updater/factory";
+import { createUpdater } from "../src/modules/updater/factory";
 import type { UpdateNotice } from "../src/modules/updater/module";
 import type { UpdaterConfig } from "../src/config/types";
 
@@ -20,7 +20,7 @@ const DEV_ENTRY = "/x/src/cli/main.ts";
 function mockRegistry(latest: string): void {
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
-    json: () => Promise.resolve({ "dist-tags": { latest } }),
+    json: () => Promise.resolve({ version: latest, releasedAt: "", artifacts: {} }),
   }) as any;
 }
 
@@ -36,14 +36,14 @@ describe("createUpdater", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("starts a published install against the npm registry", async () => {
+  it("starts a published install against the release manifest", async () => {
     mockRegistry("0.0.1"); // older than this checkout — no notice expected
     const mod = createUpdater({ config: cfg(), entryPath: PUBLISHED });
     expect(mod).not.toBeUndefined();
     expect(mod!.isStarted()).toBe(true);
     await mod!.waitForIdle(2000);
     expect(global.fetch).toHaveBeenCalled();
-    expect(String((global.fetch as any).mock.calls[0][0])).toContain(UPDATE_PACKAGE);
+    expect(String((global.fetch as any).mock.calls[0][0])).toContain("latest.json");
     mod!.stop();
   });
 

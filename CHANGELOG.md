@@ -4,6 +4,30 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.0] - 2026-10-09
+
+First public GitHub release; the npm-era `2.x` line is retired and versioning restarts at `0.1.0`.
+MMA is distributed as a self-contained GitHub release instead of an npm package: a one-line
+installer drops a bundled Bun runtime plus the agent into `~/.mma`, and the in-app updater reads
+GitHub Releases. Open source under MIT.
+
+### Added
+
+- **One-line bootstrap installer** (`scripts/install.sh`, `scripts/install.ps1`): detects OS/arch, downloads `latest.json` + `mma-<os>-<arch>.tar.gz` from GitHub Releases, verifies `sha256`, extracts to `~/.mma/versions/<version>`, flips `~/.mma/current` and puts `mma` on PATH. Idempotent (re-run updates), dry-run via `MMA_INSTALL_DRY_RUN=1`, mirrorable via `MMA_INSTALL_BASE`.
+- **Self-contained release artifacts** (`scripts/stage-release.ts`, `scripts/build-manifest.ts`, `.github/workflows/release.yml`): on a `vX.Y.Z` tag a 5-target matrix (win-x64, mac-arm64, mac-x64, linux-x64, linux-arm64) packs the platform Bun runtime + `dist/` + assets + production `node_modules` into `mma-<os>-<arch>.tar.gz` and publishes `latest.json` (version + sha256 per platform) to GitHub Releases. Versionless asset names keep `releases/latest/download/<asset>` stable.
+- **Release contract** (`src/modules/updater/release.ts`): shared base URL, platform keys and manifest schema used by both the install scripts and the updater (one source of truth).
+- **MIT license** (`LICENSE`) and `.gitattributes` (LF endings for the shell installer).
+
+### Changed
+
+- **Updater reads GitHub Releases, not npm** (`src/modules/updater/{checker,install-release,module,factory}.ts`): `check()` fetches `latest.json`; `install()` downloads the platform artifact, verifies `sha256`, extracts and flips `~/.mma/current`. The old `npm install -g` shell-out is gone. `waitForIdle`/`autoInstall` semantics and the dev-entry guard are unchanged.
+- **CI on GitHub Actions** (`.github/workflows/quality.yml`, `.github/workflows/release.yml`).
+- **Install docs** rewritten around the one-liner and `~/.mma` layout (`README.md`, new `docs/install.md`).
+
+### Removed
+
+- **npm install path** — the package is no longer installed from `registry.npmjs.org`; `npm deprecate`/`unpublish` is a separate follow-up once the first GitHub release is verified.
+
 ## [2.40.0] - 2026-10-09
 
 The web chat's work process steps back and the finished answer steps forward: answers get a

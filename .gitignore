@@ -1,5 +1,6 @@
 node_modules/
 dist/
+release/
 blog_api_test/
 .mma/
 .mimocode/

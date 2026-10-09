@@ -557,9 +557,11 @@ src/
 │   ├── processes/      # Background & foreground process management
 │   │   ├── runner.ts   # Kill-by-call-id registry (executor timeout/abort)
 │   │   ├── registry.ts # Process registry: pid tracking, output buffer, waitForExit, kill/killAll/remove
-│   ├── updater/        # Self-update: async npm check + auto-install
-│   │   ├── checker.ts  # Updater.check() (registry fetch) + install() (npm install -g)
-│   │   └── module.ts   # UpdaterModule — fire-and-forget background loop, autoInstall
+│   ├── updater/        # Self-update: async GitHub-Release check + auto-install
+│   │   ├── release.ts   # Shared base URL, platform keys, manifest schema
+│   │   ├── checker.ts   # Updater.check() (manifest fetch) + install() orchestration
+│   │   ├── install-release.ts # download + sha256 + extract + flip ~/.mma/current
+│   │   └── module.ts    # UpdaterModule — fire-and-forget background loop, autoInstall
 │   ├── user-profile/   # OS/shell/preferences → ~500 token compressed block
 │   ├── webui/          # `mma web` browser mode: state + SSE/REST server + forwarder + module (assets)
 │   └── browser/        # Playwright browser module (session, snapshot, actions, cookies)
