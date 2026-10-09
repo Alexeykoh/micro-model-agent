@@ -148,6 +148,28 @@ JS-fallback on spawn failure is the actual fix.
 Share `canonicalArgsKey` with `stuck-detector.ts` (drop its raw `JSON.stringify`). Full
 unification of the duplicate streak with `hasRepetitiveToolCalls` is out of scope.
 
+### 6. Retire the `StuckDetector` read-only streak
+
+The e2e run (10 sessions on `sindresorhus/is`) showed a second false positive that the
+tool-batch fix does not cover: `StuckDetector.hasReadOnlyLoop()` (`stuck-detector.ts`,
+`READ_ONLY_LOOP_THRESHOLD = 10`) fires on any 10 read-only calls without a mutation and the
+execution plugin injects `exec.read_only_loop` ("No write/exec for N tool calls — the agent
+is only reading/exploring."). For a legitimately read-only task that is the same wrong
+premise ("no mutation = stuck") in a different detector.
+
+Remove it. Real loops remain covered by `hasRepetitiveToolCalls()` (identical calls),
+`isStuck()` (iterations on a step), `hasConsecutiveFailures()` / `hasBashFlailing()`, and the
+tool-batch duplicate budget (now the single owner of "repeating without progress"); broad
+novel exploration is bounded by `maxToolIterations` and the context budget, and every
+terminal now yields a forced final answer (§2).
+
+Concretely: delete `READ_ONLY_TOOLS`, `READ_ONLY_LOOP_THRESHOLD`, the `readOnlyStreak` field,
+`hasReadOnlyLoop()`, and every `read-only` branch (`getHints`, `getWarningKey`,
+`getStuckReason`, `getRecoveryMessage`, `getPrimaryReason`, `classifyFailure`, `reset`,
+`resetStepState`); drop `"read_only"` from the `FailureType` union; drop the
+`hasReadOnlyLoop()` check in `execution-plugin.ts`; remove the now-unused i18n keys
+`exec.read_only_loop`, `exec.read_only_loop_recovery`, `exec.hint_read_only` (en+ru).
+
 ## Validation (dry-run on the failing session)
 
 Replayed the `ses_mv0pirf5_hnmbxj` trace against the new predicate. Each of the 24

@@ -829,6 +829,46 @@ git commit -m "refactor(execution): share canonical tool-call key in stuck detec
 
 ---
 
+### Task 9: Remove the `StuckDetector` read-only streak
+
+**Files:**
+- Modify: `src/modules/execution/stuck-detector.ts`
+- Modify: `src/modules/execution/execution-plugin.ts`
+- Modify: `src/i18n/en.json`, `src/i18n/ru.json`
+- Tests: `tests/execution-stuck-detector.test.ts`, `tests/execution-stuck-warning-dedup.test.ts`
+
+Rationale: spec §6. The e2e run showed `exec.read_only_loop` ("No write/exec for N tool calls") firing on legitimate read-only analysis. Real loops are covered by `hasRepetitiveToolCalls`/`isStuck`/failures + the tool-batch duplicate budget.
+
+- [ ] **Step 1: Update the failing tests first.** In `tests/execution-stuck-detector.test.ts`, delete the read-only cases (the "flags a long run of read-only tool calls", "resets the read-only streak when a write tool is called", "treats plan/todo bookkeeping as read-only", "clears the read-only streak on step change", "classifies a long read-only streak as read_only", the read-only part of "resetStepProgress preserves…", and the read-only-hint assertion). Replace them with a single guard test asserting the streak is gone:
+```ts
+  it("no longer reports a read-only loop (removed in favour of repetition)", () => {
+    const d = new StuckDetector(6, 3, 5);
+    for (let i = 0; i < 20; i++) d.recordToolCall("read_file", { path: `f${i}.ts` });
+    expect(d.hasReadOnlyLoop).toBeUndefined();
+    expect(d.getStuckReason()).toBe("");
+    expect(d.classifyFailure(20)).toBeNull();
+  });
+```
+In `tests/execution-stuck-warning-dedup.test.ts`, remove/replace the "does not re-log the read-only-loop warning" case (the warning no longer exists).
+
+- [ ] **Step 2: Run to verify they fail** — `bun test tests/execution-stuck-detector.test.ts` → FAIL (hasReadOnlyLoop still defined).
+
+- [ ] **Step 3: Remove the read-only streak from `StuckDetector`:**
+  - Delete `READ_ONLY_TOOLS` and `READ_ONLY_LOOP_THRESHOLD`.
+  - Delete the `readOnlyStreak` field and both `this.readOnlyStreak = 0` assignments (`reset`, `resetStepState`).
+  - `recordToolCall`: remove the read-only streak update (keep the `recentToolCalls` push + cap).
+  - Delete `hasReadOnlyLoop()`.
+  - Remove the `read-only` branches in `getHints`, `getWarningKey`, `getStuckReason`, `getRecoveryMessage`, `getPrimaryReason`, `classifyFailure`.
+  - Remove `"read_only"` from the `FailureType` union and any switch arm referencing it.
+
+- [ ] **Step 4: Drop the plugin check** — `src/modules/execution/execution-plugin.ts`: remove `deps.stuckDetector.hasReadOnlyLoop() ||` from the recovery condition (`~:268`).
+
+- [ ] **Step 5: Remove the i18n keys** — `exec.read_only_loop`, `exec.read_only_loop_recovery`, `exec.hint_read_only` from `src/i18n/en.json` and `ru.json`.
+
+- [ ] **Step 6: Verify** — `bun test` full → 0 fail; `bunx tsc --noEmit` → exit 0. `bun test tests/i18n.test.ts` (key parity) → pass.
+
+- [ ] **Step 7: Commit** — `git commit -m "fix(execution): remove stuck-detector read-only nudge"`.
+
 ## Self-Review
 
 **Spec coverage:**
