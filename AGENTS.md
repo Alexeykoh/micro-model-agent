@@ -1654,6 +1654,12 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 - **grep на Windows** (`src/tools/grep-tool.ts`): ошибка шима `rg.cmd` под Bun
   (exit 255/9009 / `is not recognized`) → движок помечается недоступным → JS-фолбэк вместо
   жёсткой ошибки (паттерны с `|` больше не падают).
+- **Убран read-only нудж `stuck-detector`** (`src/modules/execution/stuck-detector.ts`,
+  `execution-plugin.ts`): вторая эвристика «нет мутации = застрял» (порог 10 read-only
+  вызовов, `exec.read_only_loop` «No write/exec for N tool calls») летела на легитимном
+  read-only анализе (подтверждено e2e). Удалена: реальные петли ловят `hasRepetitiveToolCalls`
+  / `isStuck` / серии фейлов + дубль-бюджет tool-batch. Ключи `exec.read_only_loop`,
+  `exec.read_only_loop_recovery`, `exec.hint_read_only` удалены (en+ru).
 
 ### Current Version: 2.37.0
 
