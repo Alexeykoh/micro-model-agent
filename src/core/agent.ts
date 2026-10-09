@@ -578,8 +578,9 @@ export class Agent {
   private async finalizeWithoutTools(
     state: LoopState,
     onChunk?: (chunk: string) => void,
+    slog?: SessionLogger,
   ): Promise<string> {
-    const { contextManager, logger, llmProvider } = this.deps;
+    const { contextManager, logger, llmProvider, pluginManager } = this.deps;
     contextManager.addMessage({
       role: "user",
       content: `<system-summary>${t("exec.finalize_no_tools")}</system-summary>`,
@@ -593,7 +594,11 @@ export class Agent {
         if (this.shutdownRequested) break;
         if (chunk.type === "text" && chunk.content) {
           text += chunk.content;
-          onChunk?.(chunk.content);
+          const out = pluginManager.runOnText(
+            { iteration: state.iteration, logger, contextManager },
+            chunk.content,
+          );
+          onChunk?.(out);
         }
       }
     } catch (e) {
@@ -602,6 +607,9 @@ export class Agent {
     if (text.trim()) {
       state.lastText = text;
       state.finalAnswerAccepted = true;
+      contextManager.addMessage({ role: "assistant", content: text });
+      if (this.deps.config.session.autoSave) slog?.saveAssistantMessage(text);
+      slog?.logAssistant(text, "", undefined, state.iteration);
     }
     return text;
   }
@@ -1562,7 +1570,7 @@ export class Agent {
     if (state.finalizeReason || (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted)) {
       const reason = state.finalizeReason ?? "max_iters";
       logger.diagnostic("info", `Forcing final answer without tools (${reason})`);
-      await this.finalizeWithoutTools(state, onChunk);
+      await this.finalizeWithoutTools(state, onChunk, slog);
       state.stopReason = reason;
     }
 
@@ -1592,20 +1600,32 @@ export class Agent {
       };
     }
 
+    const stopError =
+      state.stopReason && !state.finalAnswerAccepted
+        ? state.stopReason === "duplicate"
+          ? t("error.readonly_loop_stopped", { count: state.consecutiveDuplicateBatches })
+          : state.stopReason === "failed_batches"
+            ? t("error.retry_loop_stopped", { count: state.consecutiveFailedBatches })
+            : t("error.max_iters", { max: config.maxToolIterations })
+        : undefined;
+
     return {
       success: !(
         this.shutdownRequested ||
         state.emptyResponseExhausted ||
-        state.auditFailed
+        state.auditFailed ||
+        !!stopError
       ),
       interrupted: this.shutdownRequested || undefined,
       text: state.lastText,
       stopReason: state.stopReason ?? undefined,
-      error: state.emptyResponseExhausted
-        ? t("error.empty_response")
-        : state.auditFailed
-          ? t("error.audit_failed", { summary: state.lastAuditSummary })
-          : undefined,
+      error: stopError
+        ? stopError
+        : state.emptyResponseExhausted
+          ? t("error.empty_response")
+          : state.auditFailed
+            ? t("error.audit_failed", { summary: state.lastAuditSummary })
+            : undefined,
       iterationCount: state.iteration,
       contextUsed: tokensUsed,
       contextLimit: budget.history,

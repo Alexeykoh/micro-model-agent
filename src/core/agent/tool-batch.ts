@@ -34,6 +34,13 @@ const TRANSIENT_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
 const DEFAULT_MAX_PARALLEL_TOOLS = 5;
 
 /**
+ * Тулы опроса фоновых процессов: повтор с теми же аргументами — легитимное
+ * ожидание (`process_wait` и опрос `process_log`), а не дубль-петля. Пакет
+ * только из них не питает duplicate-стрик.
+ */
+const POLL_TOOLS = new Set(["process_log", "process_wait"]);
+
+/**
  * Прогоняет `fn` по `items` с лимитом одновременных запусков, сохраняя порядок
  * результатов (results[i] соответствует items[i]). Пул воркеров, а не
  * `Promise.all` пачками — ровный кап без простоя. `fn` наружу release-хуков не
@@ -654,13 +661,13 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     // сделанный за ход (канонический ключ). Широкая разведка новыми файлами и
     // паттернами прогрессирует — стрик не набирает. Опрос процесса
     // (process_log/process_wait) — легитимный повтор, стрик не питает.
-    const POLL_TOOLS = new Set(["process_log", "process_wait"]);
     const isPurePoll = toolCalls.length > 0 && toolCalls.every((c) => POLL_TOOLS.has(c.name));
+    const keys = toolCalls.map((c) => canonicalArgsKey(c.name, c.arguments));
     const isDuplicateBatch =
       !isPurePoll &&
       toolCalls.length > 0 &&
-      toolCalls.every((c) => state.seenToolCalls.has(canonicalArgsKey(c.name, c.arguments)));
-    for (const c of toolCalls) state.seenToolCalls.add(canonicalArgsKey(c.name, c.arguments));
+      keys.every((k) => state.seenToolCalls.has(k));
+    for (const k of keys) state.seenToolCalls.add(k);
 
     if (isDuplicateBatch) {
       state.consecutiveDuplicateBatches++;

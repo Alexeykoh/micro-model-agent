@@ -3,7 +3,7 @@ import { Agent } from "../../src/core/agent";
 import type { TurnSummary } from "../../src/modules/types";
 import { createLoopState } from "../../src/core/agent/loop-state";
 
-function createMockDeps(chatImpl?: () => AsyncGenerator<any>) {
+function createMockDeps(chatImpl?: (...args: any[]) => AsyncGenerator<any>) {
   const mockProvider = {
     model: "test-model",
     contextWindow: 4096,
@@ -155,5 +155,54 @@ describe("Agent.finalizeWithoutTools", () => {
     await (agent as any).finalizeWithoutTools(state);
     expect(state.finalAnswerAccepted).toBe(false);
     expect(state.lastText).toBe("");
+  });
+
+  it("duplicate terminal yields a final answer with stopReason=duplicate and success", async () => {
+    const t = createMockDeps((_h: unknown, tools: unknown[]) =>
+      (async function* () {
+        if (Array.isArray(tools) && tools.length === 0) {
+          yield { type: "text" as const, content: "forced final answer" };
+          yield { type: "done" as const, finishReason: "stop" as const };
+        } else {
+          yield {
+            type: "tool_call" as const,
+            toolCall: { id: "t1", name: "read_file", arguments: JSON.stringify({ path: "a.ts" }) },
+          };
+          yield { type: "done" as const, finishReason: "tool_calls" as const };
+        }
+      })());
+    t.deps.config.maxToolIterations = 20;
+    t.deps.toolExecutor.getToolDefinitions.mockReturnValue([
+      { name: "read_file", description: "read a file", parameters: {} },
+    ]);
+    const agent = new Agent(t.deps);
+    const result = await agent.run("task");
+    expect(result.stopReason).toBe("duplicate");
+    expect(result.success).toBe(true);
+    expect(result.text).toContain("forced final answer");
+  });
+
+  it("duplicate terminal with an empty forced answer is a failure", async () => {
+    const t = createMockDeps((_h: unknown, tools: unknown[]) =>
+      (async function* () {
+        if (Array.isArray(tools) && tools.length === 0) {
+          yield { type: "done" as const, finishReason: "stop" as const };
+        } else {
+          yield {
+            type: "tool_call" as const,
+            toolCall: { id: "t1", name: "read_file", arguments: JSON.stringify({ path: "a.ts" }) },
+          };
+          yield { type: "done" as const, finishReason: "tool_calls" as const };
+        }
+      })());
+    t.deps.config.maxToolIterations = 20;
+    t.deps.toolExecutor.getToolDefinitions.mockReturnValue([
+      { name: "read_file", description: "read a file", parameters: {} },
+    ]);
+    const agent = new Agent(t.deps);
+    const result = await agent.run("task");
+    expect(result.stopReason).toBe("duplicate");
+    expect(result.success).toBe(false);
+    expect(result.error).toBeTruthy();
   });
 });
