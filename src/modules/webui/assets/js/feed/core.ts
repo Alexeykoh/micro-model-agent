@@ -1,7 +1,7 @@
 // Feed container + sticky-scroll + read-only run folding for `mma web`.
 // Extracted from `feed.js`; the streaming/turn/history handlers stay there and
 // import these primitives. `feed.js` re-exports this module's public surface.
-import { msgs, el, setIcon } from "../dom.js";
+import { msgs, el, icon, setIcon } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
 import { streamStateFor, tabs as tabState } from "../store.js";
 import type { FeedStreamState } from "../store.js";
@@ -59,6 +59,56 @@ export function buildThinkBlock(withDur: boolean, live?: boolean): ThinkBlock {
   wrap.appendChild(head);
   wrap.appendChild(body);
   return { wrap, head, body };
+}
+
+// Build the user-message block. Attachments form a strip ABOVE the text, so the
+// reading order is "what was attached" → "what was asked"; the `> ` prompt
+// marker stays on the text line (never floats over the strip). Handles zero, one
+// or many attachments; images become thumbnails, anything else a file chip.
+export function userBlock(text: string, attachments?: string[] | null): HTMLElement {
+  const node = el("div", "u");
+  const atts = (attachments || []).filter((s): s is string => typeof s === "string" && s.length > 0);
+  if (atts.length) {
+    const strip = el("div", "u-attach");
+    for (const src of atts) strip.appendChild(attachmentNode(src));
+    node.appendChild(strip);
+  }
+  const body = el("div", "u-text");
+  body.textContent = text || "";
+  node.appendChild(body);
+  return node;
+}
+
+// Image sources render as lazy thumbnails; anything else (a file path or a
+// non-image data URL) renders as a compact chip with its name.
+function attachmentNode(src: string): HTMLElement {
+  if (isImageSrc(src)) {
+    const img = document.createElement("img");
+    img.className = "uimg";
+    img.alt = "";
+    img.loading = "lazy";
+    img.src = src;
+    return img;
+  }
+  const chip = el("div", "u-file");
+  chip.appendChild(icon("file", "u-file-ico"));
+  chip.appendChild(el("span", "u-file-name", attachmentLabel(src)));
+  return chip;
+}
+
+function isImageSrc(src: string): boolean {
+  // data URLs: only `data:image/*` is an image; other data mimes are files.
+  if (/^data:/i.test(src)) return /^data:image\//i.test(src);
+  // everything else (absolute, relative `/api/sessions/.../a.png`, or a path)
+  // is decided by its extension.
+  return /\.(png|jpe?g|gif|webp|bmp|svg|avif|tiff?)(\?|#|$)/i.test(src);
+}
+
+function attachmentLabel(src: string): string {
+  const data = /^data:([^;,]+)/i.exec(src);
+  if (data) return data[1];
+  const clean = src.split(/[?#]/)[0];
+  return clean.split(/[\\/]/).pop() || src;
 }
 
 // Per-message copy action button (whole response as plain text / as Markdown).
@@ -211,13 +261,16 @@ export function syncUrl(): void {
 let toLatestBtn: HTMLButtonElement | null = null;
 function ensureToLatest(): HTMLButtonElement | null {
   if (toLatestBtn) return toLatestBtn;
-  const chat = document.querySelector(".chat");
-  if (!chat) return null;
+  // Anchor to the composer so the pill floats a fixed gap above it; `.input-area`
+  // is `position: relative` (same containing block as `.menu`/`.cmdk`). Fall back
+  // to `.chat` for bare test DOMs without a composer.
+  const host = document.querySelector(".input-area") || document.querySelector(".chat");
+  if (!host) return null;
   toLatestBtn = el("button", "to-latest");
   toLatestBtn.type = "button";
   toLatestBtn.hidden = true;
   toLatestBtn.addEventListener("click", () => scrollToBottom(true));
-  chat.appendChild(toLatestBtn);
+  host.appendChild(toLatestBtn);
   return toLatestBtn;
 }
 

@@ -42,6 +42,18 @@ function fakeSessions(opts: {
   };
 }
 
+/** Мини-хелпер: вытащенный транскрипт сессии из REST. */
+async function historyOf(s: ReturnType<typeof createWebUiState>, id: string): Promise<Array<Record<string, unknown>>> {
+  let out: Array<Record<string, unknown>> = [];
+  await withServer(s, async (base) => {
+    const res = await doFetch(`${base}/api/sessions/${id}/history`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { history: Array<Record<string, unknown>> };
+    out = body.history;
+  });
+  return out;
+}
+
 const SECRET = "sk-abcdefghijklmnop123456";
 
 describe("webui session history REST", () => {
@@ -88,6 +100,25 @@ describe("webui session history REST", () => {
       expect(call.toolCallId).toBe("c1");
       expect((call.args as Record<string, unknown>).apiKey).toBe("sk-[REDACTED]");
       expect(result).toMatchObject({ kind: "tool_result", tool: "read_file", success: true, duration: 12 });
+    });
+  });
+
+  it("exposes persisted user-image refs as image URLs", async () => {
+    const log: SessionLogEntry[] = [
+      {
+        ts: TS,
+        type: "user",
+        content: "что на картинке?",
+        images: [{ file: "a.png", mime: "image/png", bytes: 4 }],
+      },
+      { ts: TS, type: "assistant", content: "ok" },
+    ];
+    const s = createWebUiState();
+    s.sessionManager = fakeSessions({ metas: [meta("s1")], logs: { s1: log } });
+    expect((await historyOf(s, "s1"))[0]).toMatchObject({
+      kind: "user",
+      text: "что на картинке?",
+      images: ["/api/sessions/s1/images/a.png"],
     });
   });
 

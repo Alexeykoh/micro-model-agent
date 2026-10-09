@@ -122,3 +122,66 @@ describe("SessionLogger tool images", () => {
     expect(files.length).toBe(1);
   });
 });
+
+describe("SessionLogger user images", () => {
+  let tmpDir: string;
+
+  const dataUrl = (): string => "data:image/png;base64," + Buffer.from([137, 80, 78, 71]).toString("base64");
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mma-sli-user-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("persists user data-URL images and records refs on the user entry", () => {
+    const manager = makeManager(tmpDir);
+    manager.create("s");
+    const id = manager.getActive()!;
+    const slog = new SessionLogger(manager);
+
+    const refs = slog.persistUserImages([dataUrl()], LIMITS);
+    expect(refs).toHaveLength(1);
+    expect(refs[0].mime).toBe("image/png");
+    expect(existsSync(join(tmpDir, id, "images", refs[0].file))).toBe(true);
+
+    slog.logUser("что на картинке?", refs);
+    const entry = readLogs(tmpDir, id).find((l) => l.type === "user")!;
+    expect(entry.content).toBe("что на картинке?");
+    expect(entry.images).toEqual(refs);
+  });
+
+  it("omits images field when user had no attachments", () => {
+    const manager = makeManager(tmpDir);
+    manager.create("s");
+    const id = manager.getActive()!;
+    const slog = new SessionLogger(manager);
+
+    slog.logUser("plain");
+    const entry = readLogs(tmpDir, id).find((l) => l.type === "user")!;
+    expect(entry.images).toBeUndefined();
+  });
+
+  it("skips non-data URLs and empty input", () => {
+    const manager = makeManager(tmpDir);
+    manager.create("s");
+    const slog = new SessionLogger(manager);
+    expect(slog.persistUserImages(["https://example.com/a.png"], LIMITS)).toEqual([]);
+    expect(slog.persistUserImages([], LIMITS)).toEqual([]);
+    expect(slog.persistUserImages(undefined, LIMITS)).toEqual([]);
+  });
+
+  it("skips persistence when session encryption is enabled", () => {
+    const manager = makeManager(tmpDir, {
+      enabled: true,
+      encryptHistory: true,
+      encryptSessionLog: true,
+      keyPath: join(tmpDir, ".session-key"),
+    });
+    manager.create("s");
+    const slog = new SessionLogger(manager);
+    expect(slog.persistUserImages([dataUrl()], LIMITS)).toEqual([]);
+  });
+});

@@ -39,6 +39,7 @@
   --u-bg: #221c2e;
   --u-border: #c4a8ec;
   --ans: #a5adb6;
+  --ans-bg: rgba(196, 168, 236, 0.06);
   --toggle-off: #2e2e2e;
   --toggle-knob: #a3a3a3;
   --scroll-thumb: #2e2e2e;
@@ -116,6 +117,7 @@ body.light {
   --u-bg: #ddf4ff;
   --u-border: #0969da;
   --ans: #424a53;
+  --ans-bg: rgba(9, 105, 218, 0.055);
   --toggle-off: #d0d7de;
   --toggle-knob: #6e7781;
   --scroll-thumb: #d0d7de;
@@ -267,11 +269,20 @@ body[data-font="large"] { font-size: 17px; }
   padding: 7px 12px; border-radius: 0 4px 4px 0; margin-top: 6px;
   user-select: text; overflow-wrap: anywhere;
 }
-.u::before { content: "> "; color: var(--u-border); }
+/* The `> ` prompt marker belongs to the text line. Attachments (if any) sit in
+   a strip above it — see `.u-attach` — so the marker never floats over them. */
+.u-text { overflow-wrap: anywhere; }
+.u-text::before { content: "> "; color: var(--u-border); }
+.u-attach { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 /* agent text = calmer, dimmer than user block */
 .ans { color: var(--ans); white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
-.think-h { color: var(--think); cursor: pointer; user-select: none; display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
-.think-h .dur, .think-h .tog { color: var(--dim-b); }
+/* reasoning is secondary to the answer: the block sits at reduced opacity and
+   its header uses a dim token (not the brighter `--think`), so "✦ thinking"
+   never competes with the message. Hover / live restore full weight. */
+.think { opacity: .72; transition: opacity .15s ease-out; }
+.think:hover, .think.live { opacity: 1; }
+.think-h { color: var(--dim-b); cursor: pointer; user-select: none; display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
+.think-h .dur, .think-h .tog { color: var(--dim-c); }
 .think-h .tog { display: inline-flex; align-items: center; gap: 4px; }
 .think-h .tog .svg-icon { width: 12px; height: 12px; }
 .think-h .tog:hover { color: var(--dim-a); }
@@ -324,13 +335,16 @@ body.light .code { border: 1px solid var(--border); }
 .toolout .more:hover { color: var(--dim-a); }
 
 /* markdown answers (streamed by md.js) — lines and glyphs, no boxes.
-   Top-level answers carry a quiet accent rail (mirrors the user's `> ` block),
-   so the finished message reads instantly apart from the dim work process
-   (tool/think rows stay plain). Scoped to `.feed >` — code blocks inside keep
-   their own styling. */
+   The finished answer mirrors the user's `> ` block: a quiet accent rail plus a
+   muted, translucent accent backdrop (`--ans-bg`), so it reads instantly apart
+   from the dim work process (tool/think/meta rows stay plain). Scoped to
+   `.feed >` — code blocks inside keep their own styling. No drawn frames: the
+   separation is fill + a single rail, never a card border. */
 .feed > .md, .feed > .ans {
   border-left: 2px solid var(--accent);
-  padding-left: 12px;
+  background: var(--ans-bg);
+  padding: 7px 12px;
+  border-radius: 0 4px 4px 0;
 }
 .md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.62; }
 .md > * { flex-shrink: 0; }
@@ -490,9 +504,10 @@ body.light .codeblock { border: 1px solid var(--border); }
 .progline { color: var(--dim-a); display: flex; gap: 8px; align-items: center; }
 .progline .pb { color: var(--green); letter-spacing: -1px; }
 .sec-rule { color: var(--rule); user-select: none; }
+/* Attachment strip above the user's text: image thumbnails or file chips. */
 .uimg {
-  display: inline-block; width: 72px; height: 52px; border-radius: 3px;
-  vertical-align: middle; margin-left: 8px;
+  display: block; width: 88px; height: 64px; border-radius: 4px;
+  object-fit: cover;
   background:
     linear-gradient(45deg, var(--checker-b) 25%, transparent 25%) -4px 0/8px 8px,
     linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%) -4px 0/8px 8px,
@@ -501,6 +516,14 @@ body.light .codeblock { border: 1px solid var(--border); }
     var(--checker-base);
   border: 1px solid var(--checker-border);
 }
+.u-file {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 260px;
+  padding: 5px 10px; border-radius: 4px;
+  background: var(--surface); border: 1px solid var(--border-2);
+  color: var(--ans); font-size: 12.5px;
+}
+.u-file-ico { width: 14px; height: 14px; color: var(--dim-a); flex: none; }
+.u-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmdout { color: var(--cmdout); padding-left: 26px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sysline { color: var(--dim-c); overflow-wrap: anywhere; }
 .empty {
@@ -508,9 +531,12 @@ body.light .codeblock { border: 1px solid var(--border); }
 }
 .empty .g { color: var(--green); }
 
-/* jump-to-latest pill: only visible when the reader scrolled up */
+/* jump-to-latest pill: only visible when the reader scrolled up. Anchored to
+   the composer (`.input-area`, same as `.menu`/`.cmdk`) so it keeps a fixed gap
+   above it no matter how the rail/textarea change the composer height — the old
+   hardcoded offset on `.chat` drifted and read as "jumping" while scrolling. */
 .to-latest {
-  position: absolute; left: 50%; bottom: 148px; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
   z-index: 20; font: inherit; font-size: 12.5px; cursor: pointer;
   color: var(--accent); background: var(--panel);
   border: 1px solid var(--border-2); border-radius: 999px;
@@ -683,6 +709,10 @@ body.light .sel > button { border: 1px solid var(--border); }
    below. Glyphs stay textual per STYLE.md — motion, not decoration. */
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes pop { from { opacity: 0; transform: scale(.98) translateY(2px); } to { opacity: 1; transform: none; } }
+/* same as `pop`, but keeps the horizontal centering (`translateX(-50%)`) in the
+   animation itself — plain `pop` ends at `transform: none` and would wipe it for
+   the duration, so a centered element snaps in from off-center. */
+@keyframes popCenter { from { opacity: 0; transform: translateX(-50%) scale(.98) translateY(2px); } to { opacity: 1; transform: translateX(-50%); } }
 @keyframes softPulse { 50% { opacity: .45; } }
 @keyframes fadeIn { from { opacity: 0; } }
 
@@ -716,7 +746,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 
 /* menus, autocomplete and dialogs pop instead of snapping */
 .dd.open .dd-menu, .sel.open .menu, .cmdk:not([hidden]) { animation: pop .12s ease-out; }
-.to-latest:not([hidden]) { animation: pop .15s ease-out; }
+.to-latest:not([hidden]) { animation: popCenter .15s ease-out; }
 .overlay.open { animation: fadeIn .15s ease-out; }
 .overlay.open .modal { animation: rise .18s ease-out; }
 
