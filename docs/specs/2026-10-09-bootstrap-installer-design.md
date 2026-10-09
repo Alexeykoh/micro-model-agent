@@ -1,4 +1,4 @@
-# Bootstrap Installer — design
+# GitHub Releases Distribution & Bootstrap Installer — design
 
 Date: 2026-10-09
 Status: proposed (branch `feat/bootstrap-installer`)
@@ -8,180 +8,237 @@ Status: proposed (branch `feat/bootstrap-installer`)
 MMA is distributed only as an npm package (`micro-models-agent`). Installing it requires a
 package manager (`npm`) and, for full features, a Bun runtime: `bin/mma.mjs:24-36` re-executes
 itself under Bun when Bun is on `PATH`, and degrades (no clipboard image paste, Windows LSP via
-`npx.cmd`, on-the-fly TS transpile) when only Node is present. The target user for this task has
-**nothing but an operating system** — no Node, no npm, no Bun. There is currently no way for that
-user to install and run `mma`.
+`npx.cmd`, on-the-fly TS transpile) when only Node is present. The project is going open source on
+GitHub, and the intended user may have **nothing but an operating system** — no Node, no npm, no
+Bun. npm is to be abandoned entirely: not published to, not used at install, not used by the
+in-app updater.
 
-This is a distribution gap, not a runtime gap: the harness itself works under Bun on all three
-platforms. What is missing is a bootstrap that acquires the runtime and the package for the user.
+This is a distribution problem, not a runtime problem: the harness itself works under Bun on all
+three platforms. What is missing is a source of prebuilt, self-contained packages and a bootstrap
+that installs one with a single command.
 
 ## Goals
 
-- A user with a stock Windows / macOS / Linux machine can install `mma` with a single shell
-  one-liner, no pre-installed runtime.
-- Full Bun-backed feature set after install (clipboard paste, LSP, frontend transpile).
-- Re-running the bootstrap updates to the latest published version (idempotent).
-- The in-app updater keeps working for a Bun-only install (no `npm` on the machine).
-- Nothing in the existing `dist`-contract, asset loading, or `bin/mma.mjs` respawn logic changes.
+- A user with a stock Windows / macOS / Linux machine installs `mma` with **one shell one-liner**,
+  no pre-installed runtime.
+- The downloaded package contains **everything** the agent needs (Bun runtime, app bundle,
+  production dependencies, web assets). Full Bun-backed feature set after install.
+- **No npm anywhere** in the install path or in the in-app updater.
+- Re-running the one-liner updates to the latest release (idempotent); the previous version stays
+  on disk for rollback.
+- Primary development is the public GitHub repo; the existing Gitea server is retained only as a
+  historical remote.
 
 ## Non-goals
 
 - **No compiled single-file binary.** `bun build --compile` would require refactoring the
-  web-asset loader (`src/modules/webui/assets.ts:16-23` reads `index.html` / `css` / `js/**`
-  from disk relative to `dist/`) to embedded `import ... with { type: "text" }` imports, plus
-  separate handling for Playwright. Deferred (see Alternatives).
-- **No OS-native installer** (`.msi` / `.pkg` / `.deb`), no code signing, no menu shortcuts,
-  no managed uninstaller. The global package is removed with the runtime's own
-  `bun remove -g micro-models-agent`.
-- **No offline / pinned-version bundle.** The bootstrap fetches the runtime and package from the
-  network each run. A self-contained per-OS release tarball (runtimes + `node_modules`) is the
-  documented successor (see Alternatives) if offline installs are later required.
-- **No Playwright bundling.** `playwright` stays a normal dependency; Chromium is downloaded on
-  first browser-tool use via the existing path (`src/core/environment.ts:210` warns and points
-  at `bunx playwright install chromium`).
+  web-asset loader (`src/modules/webui/assets.ts:16-23` reads `index.html` / `css` / `js/**` from
+  disk relative to `dist/`) into embedded imports, plus separate Playwright handling. The tarball
+  bundles a Bun runtime instead and ships the app as-is. A compiled binary can supersede this
+  later without changing the entry point.
+- **No OS-native installer** (`.msi` / `.pkg` / `.deb`), no menu shortcuts, no managed
+  uninstaller. Removal is deleting `~/.mma`.
+- **No bundled Playwright browser.** `playwright` (package) ships in the tarball; Chromium is
+  downloaded on first browser-tool use via the existing path (`environment.ts:210`).
+- **No code signing** in v1. macOS Gatekeeper / Windows SmartScreen will warn on unsigned
+  binaries; documented as a known limitation, revisited later.
+- **No npm-registry fallback.** Once the first GitHub release is verified working, the npm package
+  is deprecated and unpublished where allowed (a separate, explicit step).
 
 ## Design
 
-### 1. Bootstrap scripts
+### 1. Repository & licensing
 
-Two scripts, committed to the repository and served over HTTP(S):
+- Source of truth: public GitHub `Alexeykoh/micro-model-agent`, default branch `master`.
+- License: **MIT** (`LICENSE` at repo root; reference from `package.json`).
+- The Gitea remote is kept locally as `gitea` (history only); GitHub is `origin`.
+- CI moves from `.gitea/workflows/quality.yml` to `.github/workflows/`.
+
+### 2. Release pipeline (GitHub Actions)
+
+Workflow `.github/workflows/release.yml`, triggered on a pushed tag `vX.Y.Z`:
+
+1. Matrix, one runner per target (Bun binary is platform-specific):
+
+   | target        | runner              |
+   | ------------- | ------------------- |
+   | `win-x64`     | `windows-latest`    |
+   | `mac-arm64`   | `macos-14`          |
+   | `mac-x64`     | `macos-13`          |
+   | `linux-x64`   | `ubuntu-latest`     |
+   | `linux-arm64` | `ubuntu-24.04-arm` (public-repo arm runner) |
+
+2. On each runner: `bun install` → `bun run build:prod` (produces `dist/main.js` + `dist/assets`)
+   → install **production** deps only → assemble the tarball (section 3) including that runner's
+   own `bun`/`bun.exe`.
+3. Upload `mma-<os>-<arch>.tar.gz` as a GitHub Release asset for the tag.
+4. One extra job builds `latest.json` (section 4) from the per-platform `sha256`/`size` and uploads
+   it to the same release.
+
+A second workflow `.github/workflows/quality.yml` runs the existing quality gate (`bun run
+quality`) on push/PR — the same checks the Gitea workflow ran.
+
+Asset names are **versionless** (`mma-win-x64.tar.gz`) so `releases/latest/download/<asset>`
+resolves stably; the version lives in `latest.json` and in the release tag.
+
+### 3. Artifact layout
+
+Tarball contents (root-relative):
+
+```
+runtime/bun(.exe)        # the platform Bun, as built/downloaded on that runner
+app/main.js              # dist/main.js
+app/assets/**            # prebuilt web assets + vendor js/css
+app/node_modules/**      # production dependencies (incl. playwright, external in the bundle)
+VERSION                  # e.g. 2.41.0
+```
+
+Installed layout under `~/.mma`:
+
+```
+~/.mma/
+  versions/<version>/    # extracted tarball
+  current -> versions/<version>   # symlink (junction/dir-copy on Windows)
+  bin/mma(.cmd)          # launcher shim (added to PATH)
+```
+
+Launcher (unix `bin/mma`): `exec "$MMA_HOME/current/runtime/bun" "$MMA_HOME/current/app/main.js" "$@"`.
+Windows `bin/mma.cmd`: `@"%USERPROFILE%\.mma\current\runtime\bun.exe" "%USERPROFILE%\.mma\current\app\main.js" %*`.
+`MMA_HOME` defaults to `~/.mma`.
+
+### 4. Manifest `latest.json`
+
+Single source of truth for both the bootstrap and the updater:
+
+```json
+{
+  "version": "2.41.0",
+  "releasedAt": "2026-10-09T12:00:00Z",
+  "artifacts": {
+    "win-x64":     { "url": "mma-win-x64.tar.gz",     "sha256": "…", "size": 0 },
+    "mac-arm64":   { "url": "mma-mac-arm64.tar.gz",   "sha256": "…", "size": 0 },
+    "mac-x64":     { "url": "mma-mac-x64.tar.gz",     "sha256": "…", "size": 0 },
+    "linux-x64":   { "url": "mma-linux-x64.tar.gz",   "sha256": "…", "size": 0 },
+    "linux-arm64": { "url": "mma-linux-arm64.tar.gz", "sha256": "…", "size": 0 }
+  }
+}
+```
+
+`url` is relative to the manifest's base (the release's `download/` directory). Anonymous, stable
+URL: `https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/latest.json`.
+
+### 5. Bootstrap scripts
+
+Two scripts in the repo, served from `raw.githubusercontent.com`:
 
 - `scripts/install.sh` — macOS / Linux
 - `scripts/install.ps1` — Windows (PowerShell 5.1+)
 
-Canonical one-liners:
+One-liners:
 
 ```powershell
-# Windows (PowerShell)
-irm https://raw.githubusercontent.com/<owner>/<repo>/<branch>/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.ps1 | iex
 ```
 
 ```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/<branch>/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash
 ```
 
-`<owner>/<repo>/<branch>` is the eventual public GitHub location (`microModelsAgent`, default
-branch `master`); until the GitHub migration lands the raw base points at the current Gitea raw
-URL for internal testing. The base is overridable by either script via the `MMA_INSTALL_BASE`
-environment variable so a mirror can be used without editing the scripts.
+Shared behaviour:
 
-Hard rules for both scripts:
+1. Detect OS and arch; map to a manifest key (`win-x64`, `mac-arm64`, …). Unsupported → clear
+   error, exit 1.
+2. Fetch `latest.json` from `$MMA_INSTALL_BASE` (default:
+   `https://github.com/Alexeykoh/micro-model-agent/releases/latest/download`).
+3. Download the artifact for the platform; verify `sha256`; abort on mismatch.
+4. Extract to `~/.mma/versions/<version>`; flip `~/.mma/current` to it.
+5. Ensure `~/.mma/bin` on PATH (Windows: user PATH via registry/`setx`; unix: append to the
+   detected shell rc). Best-effort with a printed instruction if it cannot modify PATH.
+6. Verify `~/.mma/current/bin/mma --version`; print next steps (new terminal → `mma setup` →
+   `mma`).
 
-- **Never read stdin.** They are piped (`curl | bash`, `irm | iex`), so any prompt would consume
-  the script body. All decisions are made from environment/OS detection; failures exit non-zero
-  with a message.
-- **Idempotent.** `bun` is installed only if absent; the package is always (re)installed at
-  `@latest`, which is also the update path.
-- **Dry-run hook.** `MMA_INSTALL_DRY_RUN=1` prints the commands it would run without executing
-  them, so the scripts can be smoke-tested on CI without network or side effects.
-- **Non-destructive to an existing npm install.** If `mma` is already on `PATH` from a different
-  manager, the script prints a warning and continues (the user chose to run it).
+Rules:
 
-### 2. `install.sh` (macOS / Linux)
+- **Never read stdin** (piped scripts) — all decisions from OS/env detection.
+- **Idempotent** — re-running downloads and installs the latest; the previous version directory is
+  kept for rollback.
+- **Dry-run** — `MMA_INSTALL_DRY_RUN=1` prints the resolved URLs/paths/commands without network or
+  writes, for CI smoke tests.
 
-1. Detect OS (`uname -s` → `Darwin`/`Linux`) and arch (`uname -m` → `x86_64`/`arm64`; `aarch64`
-   normalized to `arm64`). Unsupported → clear error, exit 1.
-2. Ensure Bun:
-   - native path `~/.bun/bin/bun`; if missing, run the official installer:
-     `curl -fsSL https://bun.sh/install | bash` (installs to `~/.bun`, appends
-     `BUN_INSTALL`/`PATH` to the user's shell rc).
-   - installer failure (network/offline) → error naming the cause, exit 1.
-3. Install/update the package:
-   `~/.bun/bin/bun add -g micro-models-agent@latest`. Absolute `bun` path is used because the
-   current shell's `PATH` was not reloaded after step 2.
-4. Verify: `~/.bun/bin/mma --version`.
-5. Print next steps: open a new terminal, run `mma setup`, then `mma`.
+### 6. Updater rework (no npm)
 
-### 3. `install.ps1` (Windows)
+`Updater.check()` stops querying `registry.npmjs.org` and instead fetches `<base>/latest.json`,
+comparing `version` with the running version (`semverGt` stays). `Updater.install()` replaces the
+`npm install -g` command with a pure download/extract: fetch the platform artifact, verify
+`sha256`, extract to `~/.mma/versions/<version>`, flip `current`. This removes the `InstallRunner`
+shell-out path (`checker.ts:123-131`) and the Windows `.cmd` wrapping.
 
-1. Detect arch (`$env:PROCESSOR_ARCHITECTURE`: `AMD64`/`ARM64`). Unsupported → error, exit 1.
-2. Ensure Bun: `$bun = "$env:USERPROFILE\.bun\bin\bun.exe"`; if missing run
-   `irm https://bun.sh/install.ps1 | iex` (installs under `%USERPROFILE%\.bun`, updates the user
-   `PATH`). Failure → error, exit 1.
-3. `& $bun add -g micro-models-agent@latest`.
-4. Verify `& "$env:USERPROFILE\.bun\bin\mma.exe" --version` (Bun emits an `mma.exe` / `mma.cmd`
-   shim on Windows; the exact name is checked in the script).
-5. Print next steps (`mma setup`, then `mma`).
+- Fail-open as today (offline/parse/IO errors → no update, logged).
+- The dev-entry guard (`isDevEntryPath`) stays: a checkout never overwrites a real install.
+- `autoInstall` semantics unchanged; the `updater.available` message now points at the one-liner.
 
-The scripts themselves call no `bash`/`sh` helper; each is self-contained so it can be hosted and
-piped individually.
+### 7. Playwright
 
-### 4. Runtime-agnostic updater (the only core change)
+`playwright` stays a production dependency bundled in the tarball. Chromium is downloaded on first
+browser-tool use by the existing environment check / install hint (`environment.ts:210`). The
+bundled Bun can run `playwright install chromium` without npm.
 
-`Updater.buildInstallCommand` (`src/modules/updater/checker.ts:123-131`) hardcodes `npm install -g`.
-For a Bun-only machine there is no `npm`, so auto-install would fail. Make the command depend on
-what is actually on `PATH`:
+### 8. npm removal (after the first working GitHub release)
 
-- `npm` resolvable → `npm install -g <pkg>@<version>` (unchanged; existing npm installs keep
-  working).
-- `npm` absent, `bun` resolvable → `bun add -g <pkg>@<version>`.
-- neither → `install()` returns `{ success: false, error }` as today.
+Separate, explicit step once a release is verified:
 
-Availability is checked with the existing PATH resolver (`findOnPath`, `src/modules/lsp/resolve.ts`)
-rather than by spawning and parsing an error, so the choice is deterministic. The Windows
-`.cmd`/`.bat` wrapper (`cmd.exe /c`, `checker.ts:126-129`) is kept and applies to `bun.cmd` too.
+- `npm deprecate micro-models-agent "Moved to GitHub Releases — see <repo>"`.
+- `npm unpublish` versions still within the 72-hour window; older versions remain but are marked
+  deprecated and can no longer be unpublished.
+- `package.json` keeps only build metadata (`name`, `version`, scripts, deps); the `publishConfig`
+  / npm distribution role is dropped from docs.
 
-The `updater.available` notice currently tells the user to run `npm install -g …`
-(`i18n/{en,ru}.json`, `updater.available`). Because a Bun-only user has no `npm`, the command in
-the message must reflect the resolved manager. The hint becomes manager-aware (new i18n key for
-the Bun spelling; the npm spelling is unchanged).
+### 9. Docs, i18n, release
 
-### 5. What is intentionally untouched
-
-- `bin/mma.mjs` — after a Bun install the generated shim already runs under Bun, so the respawn
-  at `bin/mma.mjs:24-36` is a no-op. No change.
-- Web asset loading, `dist` layout, `build:prod`, the `--packages external` bundle. No change.
-- `session_*` / plugin / service contracts. No change.
-
-### 6. Docs, i18n, release
-
-- `README.md` Installation: add an "Install without a runtime" section with the two one-liners,
-  above the npm section; mention removal via `bun remove -g micro-models-agent`.
-- New `docs/install.md`: requirements, one-liners, what the script does, update (`re-run`),
-  uninstall, troubleshooting (offline, PATH not refreshed, existing npm install).
-- `docs/agents/*` and `AGENTS.md`: a short "Bootstrap Installer" section documenting the scripts,
-  the `MMA_INSTALL_BASE` / `MMA_INSTALL_DRY_RUN` env vars, and the updater manager selection.
-- `CHANGELOG.md` entry; **MINOR** bump (new install surface + updater behavior).
-- `updater.available` i18n stays in en+ru for the new manager-aware command.
+- `README.md`: replace the npm install section with the one-liners and a short "what the script
+  does"; link `docs/install.md`.
+- New `docs/install.md`: requirements, one-liners, layout of `~/.mma`, update, rollback
+  (`current` symlink), uninstall (delete `~/.mma`), troubleshooting (offline, PATH, checksum,
+  Gatekeeper/SmartScreen), env vars.
+- `docs/agents/*` + `AGENTS.md`: "Distribution & Bootstrap" section (scripts, `MMA_INSTALL_BASE`,
+  manifest, updater).
+- `LICENSE` (MIT), `CONTRIBUTING.md` (optional).
+- i18n en+ru: `updater.available` reworded to the one-liner; new install-related strings for the
+  scripts' child messages.
+- `CHANGELOG.md`: MINOR entry (new distribution surface). The npm removal step, when done, is its
+  own changelog entry and may be classified MAJOR if it breaks existing npm-based auto-update for
+  published users.
 
 ## Alternatives rejected
 
-- **Compiled single binary (`bun build --compile`) + bootstrap that downloads it.** Smallest
-  artifact, but requires embedding every web asset (fs-read → embedded imports), reworking
-  Playwright's separate browser download, cross-compiling and signing for three targets. Larger
-  and riskier than this task warrants; can supersede this design later without discarding the
-  bootstrap entry point.
-- **Self-contained release tarball (Bun runtime + `dist/` + prod `node_modules` + assets) per OS,
-  hosted on GitHub Releases.** Pinned versions and offline installs after first download, but
-  means a CI matrix, artifact hosting, and reworking the updater to fetch tarballs. This is the
-  documented successor if offline/version-pinning becomes a requirement.
-- **Skip the runtime and use Node via the OS package manager** (`apt install nodejs`, winget,
-  Homebrew). Reintroduces a per-OS prerequisite, requires admin, and loses the Bun-backed
-  features — the exact problem being solved.
-- **Have the bootstrap install Bun but leave `updater` on `npm install -g`.** Breaks auto-update
-  for exactly the users this task adds; rejected.
+- **Compiled single binary + bootstrap.** Smallest artifact, but requires embedding every web
+  asset and reworking Playwright's browser download; can supersede this later without changing the
+  one-liner entry point.
+- **Public artifact host (R2/S3) instead of GitHub Releases.** Unnecessary now that the repo is
+  public; GitHub Releases already gives anonymous stable URLs, CI, and checksums.
+- **Install Bun via the official installer, then `bun add -g`.** Still depends on the npm registry
+  (Bun resolves packages from it) and does not support pinned/offline installs; the user wants npm
+  gone entirely.
+- **Keep npm as a parallel channel.** Contradicts the goal; deprecated then removed.
 
 ## Open items
 
-- **Hosting:** final `<owner>/<repo>/<branch>` for the default `MMA_INSTALL_BASE` is fixed when the
-  repository moves to public GitHub (separate migration task, including moving
-  `.gitea/workflows/quality.yml` to `.github/workflows/`). Until then the default points at the
-  current Gitea raw URL. The scripts are host-agnostic by construction (env override).
+- **Code signing** (macOS notarization, Windows Authenticode) — deferred; unsigned installs warn.
+- **`linux-arm64` runner availability** for public repos — if `ubuntu-24.04-arm` is unavailable,
+  build it via cross-compilation or a self-hosted runner.
+- **`scripts/install.*` default base** assumes the repo path `Alexeykoh/micro-model-agent` and
+  branch `master`; overridable via `MMA_INSTALL_BASE`.
 
 ## Tests
 
-- **Unit — updater manager selection** (`tests/updater-module.test.ts`, add cases):
-  - npm present → `npm install -g <pkg>@<ver>`.
-  - npm absent, bun present → `bun add -g <pkg>@<ver>`.
-  - neither → `install()` returns `success: false`.
-  - Windows `.cmd` wrapping still applied to the resolved command.
-  - Injected `InstallRunner` keeps the existing tests hermetic.
-- **Scripts — dry-run smoke** (`MMA_INSTALL_DRY_RUN=1`): assert the printed command sequence per
-  platform (OS/arch detection, Bun install, `bun install -g ...@latest`, verify, next steps)
-  without network. One test per script via a thin invocation wrapper.
-- **Docs/guard:** a guard test that the README one-liners and `docs/install.md` reference the same
-  `MMA_INSTALL_BASE` env var and manager command as the updater (prevents drift between docs and
-  behavior).
-- Manual end-to-end on a clean VM per OS before release (real Bun install + `mma setup`).
-- `bun run quality` (typecheck + frontend + lint + fallow) green.
+- **Updater** (`tests/updater-module.test.ts` etc.): `check()` parses `latest.json` and compares
+  versions; `install()` downloads to a temp dir, verifies `sha256`, extracts, flips `current`; bad
+  checksum / offline → fail-open; dev-entry guard still blocks self-update from a checkout.
+- **Manifest**: a guard test that `latest.json` shape matches what `Updater` and both scripts
+  read (same keys), preventing drift.
+- **Scripts**: `MMA_INSTALL_DRY_RUN=1` smoke per platform asserts the resolved manifest URL,
+  artifact name, checksum and target paths without network.
+- **Release workflow**: a dry-run/validation job that builds the artifact locally and checks its
+  layout (`runtime/`, `app/main.js`, `app/assets`, `VERSION`) before publishing.
+- Manual end-to-end on a clean VM per OS before the first release (real download → `mma setup`).
+- `bun run quality` green.
