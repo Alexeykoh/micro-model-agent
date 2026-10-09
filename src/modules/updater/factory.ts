@@ -9,12 +9,13 @@
 import { readMmaVersion } from "../../core/version";
 import { defaultOutputBus } from "../../output";
 import { isDevEntryPath } from "./dev-detect";
+import { Updater, type UpdaterDeps } from "./checker";
 import { UpdaterModule, type UpdaterLogger, type UpdateNotice } from "./module";
 import type { UpdaterConfig } from "../../config/types";
 
 export type { UpdatePhase, UpdateNotice } from "./module";
 
-/** Имя пакета в npm-реестре. */
+/** Имя пакета (для чтения CHANGELOG рядом с установкой). */
 export const UPDATE_PACKAGE = "micro-models-agent";
 
 /** Вход фабрики: конфиг + путь точки входа + хуки поверхности. */
@@ -26,6 +27,8 @@ export interface CreateUpdaterOptions {
   onNotice?: (notice: UpdateNotice) => void;
   /** Логгер терминала; по умолчанию — no-op (веб не печатает в stdout). */
   logger?: UpdaterLogger;
+  /** Инжектируемые зависимости апдейтера (тесты, кастомные окружения). */
+  deps?: UpdaterDeps;
 }
 
 /**
@@ -35,16 +38,15 @@ export interface CreateUpdaterOptions {
  */
 export function createUpdater(opts: CreateUpdaterOptions): UpdaterModule | undefined {
   // Dev-прогон грузит TypeScript-исходники; опубликованный бандл — dist/main.js.
-  // Из чекаута не автоапдейтимся: его package.json вправе отставать от npm, а
-  // global-install поверх юзерской установки деструктивен.
+  // Из чекаута не автоапдейтимся: его package.json вправе отставать от релиза,
+  // а установка поверх юзерской деструктивна.
   if (isDevEntryPath(opts.entryPath)) return undefined;
   try {
+    const updater = new Updater(readMmaVersion(), opts.deps);
     const module = new UpdaterModule(
       opts.config,
-      readMmaVersion(),
-      UPDATE_PACKAGE,
+      updater,
       opts.logger ?? quietLogger(),
-      undefined,
       opts.onNotice,
     );
     module.start();

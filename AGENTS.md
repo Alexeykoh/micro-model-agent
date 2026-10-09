@@ -99,7 +99,7 @@ bun run web:dev
 # E2E web scenarios (isolated MMA_CONFIG_DIR, Playwright; on explicit request only)
 bun run test:e2e
 
-# Build (clean + external-deps bundle + frontend + assets + minify — use this for npm releases)
+# Build (clean + external-deps bundle + frontend + assets + minify — use this for release artifacts)
 bun run build:prod
 
 # Test (component tests)
@@ -143,7 +143,7 @@ All detailed documentation lives in `docs/agents/`:
 | [testing.md](./docs/agents/testing.md)           | Agent Testing from Console, Web UI testing via Playwright, Small Model Observations, Model Certification             |
 | [service-api.md](./docs/agents/service-api.md)   | Agent Service API v1: endpoints, envelope, config, errors, webhook                                                      |
 | [versioning.md](./docs/agents/versioning.md)     | Versioning Rules, Release Process, Version History                                                                      |
-| [changelog](./CHANGELOG.md)                      | Public changelog (included in npm package)                                                                              |
+| [changelog](./CHANGELOG.md)                      | Public changelog                                                                                                        |
 
 ## Quick Reference
 
@@ -1733,9 +1733,44 @@ server: каждый `checkFile` (каждая запись файла, кажд
   на `.chat`; анимация входа — `popCenter` (сохраняет `translateX(-50%)`, иначе `pop`
   ронял центрирование и пилюля вспыхивала правее центра).
 
-### Current Version: 2.40.0
+### Distribution & Bootstrap (0.1.0)
 
-Web answer panel, quiet reasoning, fixed latest pill, user-attachment persistence (see the section above).
+Open source on GitHub (`Alexeykoh/micro-model-agent`); distribution is **GitHub Releases**, not npm.
+
+- **Self-contained release:** on a `vX.Y.Z` tag `.github/workflows/release.yml` runs a 5-target
+  matrix (`win-x64`, `mac-arm64`, `mac-x64`, `linux-x64`, `linux-arm64`), builds via `build:prod`,
+  prunes to production deps, and `scripts/stage-release.ts` packs
+  `runtime/bun(.exe)` + `app/{main.js,assets,node_modules}` + `package.json` + `CHANGELOG.md` +
+  `VERSION` into versionless `mma-<key>.tar.gz`, plus a `release/<key>.json` fragment.
+  `scripts/build-manifest.ts` merges fragments into `latest.json`. Asset names are versionless so
+  `releases/latest/download/<asset>` is stable.
+- **Bootstrap installers** (`scripts/install.sh`, `scripts/install.ps1`): detect OS/arch, read
+  `latest.json`, download + `sha256`-verify the artifact, extract to `~/.mma/versions/<version>`,
+  flip `~/.mma/current` (symlink / Windows junction), write `~/.mma/bin/mma(.cmd)`, add it to PATH,
+  verify `--version`. Idempotent (re-run = update); `MMA_INSTALL_BASE` (mirror), `MMA_HOME`
+  (default `~/.mma`), `MMA_INSTALL_DRY_RUN=1`. Never read stdin (piped `curl|bash` / `irm|iex`).
+- **Release contract** (`src/modules/updater/release.ts`): `MMA_REPO`, `MMA_DEFAULT_RELEASE_BASE`,
+  `releaseBase`/`manifestUrl`, `releasePlatformKey`, `artifactName`, `FetchLike`, and the
+  `ReleaseManifest`/`ReleaseArtifact` types — shared by scripts, updater and tests.
+- **Updater (no npm)**: `Updater.check()` fetches `latest.json` and `semverGt`-compares;
+  `Updater.install()` (`install-release.ts`) downloads the platform artifact, verifies `sha256`,
+  extracts, and flips `current`. `UpdaterModule` gates install behind `updater.autoInstall` and the
+  test hook `setInstallEnabled`; the dev-entry guard (`isDevEntryPath`) still blocks self-update
+  from a checkout. `checker.ts` no longer shells out (`InstallRunner` removed).
+- **Playwright:** the package ships, Chromium downloads on first browser-tool use
+  (`~/.mma/current/runtime/bun x playwright install chromium`).
+- **npm:** deprecated/unpublished as a separate follow-up after the first GitHub release is
+  verified. `bin/mma.mjs` remains for source/dev runs only.
+- **Tests:** `tests/updater-checker.test.ts`, `tests/updater-module.test.ts`,
+  `tests/updater-web-notify.test.ts` (manifest check, download/checksum/extract/flip via injected
+  fetch + extract, fail-open).
+
+### Current Version: 0.1.0
+
+GitHub Releases distribution: one-line bootstrap installer, self-contained per-OS tarballs,
+manifest-driven updater (npm removed from the install path), MIT license (see the section above).
+
+Web answer panel, quiet reasoning, fixed latest pill, user-attachment persistence (2.40.0).
 
 Self-describing service contract (see the section above): `mma serve` serves its
 own OpenAPI 3.1 document and human docs page from one `OPERATIONS` table.
@@ -1746,9 +1781,9 @@ own OpenAPI 3.1 document and human docs page from one `OPERATIONS` table.
 
 **Правило:** при каждом релизе (MINOR/PATCH) — добавляй запись в `CHANGELOG.md` в секцию `## [X.Y.Z] - YYYY-MM-DD`. Группируй по Added/Fixed/Changed/Removed. Пиши на английском, кратко и по существу. Формат ссылок: `**Module**: description`.
 
-При публикации (`npm publish`) changelog автоматически попадает в пакет и виден пользователям при установке (`npm info micro-models-agent`).
-
-**⚠️ npm publish асинхронный:** реестр отвечает `PUT 202 Accepted` («being processed…»), и версия может несколько минут не появляться в `npm view`. `202` + `+ <pkg>@<version>` — уже успешная публикация; **не жди** фактического появления, сразу тегируй/пушь. Детали — [docs/agents/versioning.md](./docs/agents/versioning.md), шаг «Publish».
+При релизе: обнови `CHANGELOG.md` и `package.json` версию, поставь тег `vX.Y.Z` — GitHub Actions
+(`.github/workflows/release.yml`) соберёт артефакты под все платформы и опубликует GitHub Release
+с `latest.json` (см. «Distribution & Bootstrap»). npm больше не используется для раздачи.
 
 ### Versioning Rules
 

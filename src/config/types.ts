@@ -468,7 +468,7 @@ import type { LspConfig, } from "../modules/lsp/types";
 
 export interface UpdaterConfig {
   enabled: boolean;
-  /** Автозапуск `npm install -g` при найденной новой версии. */
+  /** Скачивать и активировать релиз при найденной новой версии. */
   autoInstall: boolean;
   /** Мс между фоновыми проверками. 0 = одна проверка на старте. */
   intervalMs: number;

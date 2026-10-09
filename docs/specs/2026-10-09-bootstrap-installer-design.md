@@ -90,7 +90,7 @@ runtime/bun(.exe)        # the platform Bun, as built/downloaded on that runner
 app/main.js              # dist/main.js
 app/assets/**            # prebuilt web assets + vendor js/css
 app/node_modules/**      # production dependencies (incl. playwright, external in the bundle)
-VERSION                  # e.g. 2.41.0
+VERSION                  # e.g. 0.1.0
 ```
 
 Installed layout under `~/.mma`:
@@ -112,7 +112,7 @@ Single source of truth for both the bootstrap and the updater:
 
 ```json
 {
-  "version": "2.41.0",
+  "version": "0.1.0",
   "releasedAt": "2026-10-09T12:00:00Z",
   "artifacts": {
     "win-x64":     { "url": "mma-win-x64.tar.gz",     "sha256": "…", "size": 0 },

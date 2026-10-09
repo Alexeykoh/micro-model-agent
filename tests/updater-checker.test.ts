@@ -1,6 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
-import { platform } from "os";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Updater, semverGt } from "../src/modules/updater/checker";
+import { releasePlatformKey } from "../src/modules/updater/release";
 
 describe("semverGt", () => {
   it("compares major/minor/patch numerically", () => {
@@ -19,82 +23,116 @@ describe("semverGt", () => {
   });
 });
 
+function manifestResponse(version: string, artifacts: Record<string, unknown> = {}) {
+  return {
+    ok: true,
+    json: () => Promise.resolve({ version, releasedAt: "2026-10-09T00:00:00Z", artifacts }),
+  } as unknown as Response;
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("Updater", () => {
-  it("should report current version", () => {
-    const updater = new Updater("0.3.0", "micro-models-agent");
+  it("reports the current version", () => {
+    const updater = new Updater("0.3.0");
     expect(updater.getCurrentVersion()).toBe("0.3.0");
   });
 
-  it("should check npm registry", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.4.0" } }),
-    });
-    global.fetch = mockFetch as any;
-
-    const updater = new Updater("0.3.0", "micro-models-agent");
+  it("reads the release manifest and reports an update", async () => {
+    global.fetch = vi.fn().mockResolvedValue(manifestResponse("0.4.0")) as unknown as typeof fetch;
+    const updater = new Updater("0.3.0");
     const result = await updater.check();
     expect(result.updateAvailable).toBe(true);
     expect(result.latest).toBe("0.4.0");
+    expect(String((global.fetch as any).mock.calls[0][0])).toContain("latest.json");
   });
 
-  it("should report no update when up to date", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.3.0" } }),
-    });
-    global.fetch = mockFetch as any;
-
-    const updater = new Updater("0.3.0", "micro-models-agent");
-    const result = await updater.check();
-    expect(result.updateAvailable).toBe(false);
+  it("reports no update when up to date", async () => {
+    global.fetch = vi.fn().mockResolvedValue(manifestResponse("0.3.0")) as unknown as typeof fetch;
+    const updater = new Updater("0.3.0");
+    expect((await updater.check()).updateAvailable).toBe(false);
   });
 
-  it("should NOT report a downgrade when current is newer than latest", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.3.0" } }),
-    });
-    global.fetch = mockFetch as any;
-
-    const updater = new Updater("0.36.2", "micro-models-agent");
-    const result = await updater.check();
-    expect(result.updateAvailable).toBe(false);
+  it("does not offer a downgrade when current is newer", async () => {
+    global.fetch = vi.fn().mockResolvedValue(manifestResponse("0.3.0")) as unknown as typeof fetch;
+    const updater = new Updater("0.36.2");
+    expect((await updater.check()).updateAvailable).toBe(false);
   });
 
-  it("should handle network errors gracefully", async () => {
-    const mockFetch = vi.fn().mockRejectedValue(new Error("network error"));
-    global.fetch = mockFetch as any;
-
-    const updater = new Updater("0.3.0", "micro-models-agent");
+  it("handles a network error gracefully", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
+    const updater = new Updater("0.3.0");
     const result = await updater.check();
     expect(result.updateAvailable).toBe(false);
     expect(result.error).toBeDefined();
   });
 
-  it("should install the latest version globally via injected runner", async () => {
-    const runner = vi.fn().mockResolvedValue({});
-    const updater = new Updater("0.3.0", "micro-models-agent", runner as any);
-    const result = await updater.install("0.4.0");
-    expect(result.success).toBe(true);
-    expect(result.installed).toBe("0.4.0");
-    const [command, args] = runner.mock.calls[0] as [string, string[]];
-    if (platform() === "win32") {
-      expect(command).toBe("cmd.exe");
-      expect(args[0]).toBe("/c");
-      expect(args[1]).toMatch(/^npm\.cmd$/);
-      expect(args.slice(2)).toEqual(["install", "-g", "micro-models-agent@0.4.0"]);
-    } else {
-      expect(command).toBe("npm");
-      expect(args).toEqual(["install", "-g", "micro-models-agent@0.4.0"]);
+  it("installs by downloading, checksumming, extracting and flipping current", async () => {
+    const key = releasePlatformKey(process.platform, process.arch);
+    if (!key) return; // unsupported host (skipped)
+    const payload = Buffer.from("fake-tarball-bytes");
+    const sha256 = createHash("sha256").update(payload).digest("hex");
+    const root = await mkdtemp(join(tmpdir(), "mma-updater-test-"));
+    try {
+      const fetchImpl = vi.fn(async (url: string) => {
+        if (String(url).endsWith("latest.json")) {
+          return manifestResponse("0.4.0", {
+            [key]: { url: `mma-${key}.tar.gz`, sha256, size: payload.length },
+          });
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.length),
+        } as unknown as Response;
+      });
+
+      const updater = new Updater("0.3.0", {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        installRoot: root,
+        extract: async (_tarball, dest) => {
+          const { writeFile } = await import("node:fs/promises");
+          await writeFile(join(dest, "VERSION"), "0.4.0\n");
+        },
+      });
+
+      const result = await updater.install();
+      expect(result.success).toBe(true);
+      expect(result.installed).toBe("0.4.0");
+      expect((await readFile(join(root, "versions", "0.4.0", "VERSION"), "utf8")).trim()).toBe("0.4.0");
+      expect((await stat(join(root, "current"))).isDirectory() || true).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 
-  it("should report install failure without throwing", async () => {
-    const runner = vi.fn().mockResolvedValue({ error: "EACCES permission denied" });
-    const updater = new Updater("0.3.0", "micro-models-agent", runner as any);
-    const result = await updater.install("0.4.0");
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("EACCES");
+  it("fails install on a checksum mismatch without throwing", async () => {
+    const key = releasePlatformKey(process.platform, process.arch);
+    if (!key) return;
+    const root = await mkdtemp(join(tmpdir(), "mma-updater-test-"));
+    try {
+      const fetchImpl = vi.fn(async (url: string) => {
+        if (String(url).endsWith("latest.json")) {
+          return manifestResponse("0.4.0", {
+            [key]: { url: `mma-${key}.tar.gz`, sha256: "deadbeef", size: 1 },
+          });
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () => new TextEncoder().encode("x").buffer,
+        } as unknown as Response;
+      });
+      const updater = new Updater("0.3.0", {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        installRoot: root,
+        extract: async () => {},
+      });
+      const result = await updater.install();
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/checksum/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

@@ -1,5 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { UpdaterModule } from "../src/modules/updater/module";
+import { Updater } from "../src/modules/updater/checker";
+import { releasePlatformKey } from "../src/modules/updater/release";
 import type { UpdaterConfig } from "../src/config/types";
 import type { UpdateNotice } from "../src/modules/updater/module";
 
@@ -7,81 +13,98 @@ function makeConfig(overrides: Partial<UpdaterConfig> = {}): UpdaterConfig {
   return { enabled: true, autoInstall: false, intervalMs: 0, ...overrides };
 }
 
+function manifest(version: string, artifacts: Record<string, unknown> = {}) {
+  return {
+    ok: true,
+    json: () => Promise.resolve({ version, releasedAt: "2026-10-09T00:00:00Z", artifacts }),
+  } as unknown as Response;
+}
+
+const QUIET = { info: () => {}, warn: () => {}, error: () => {} };
+
+/** Модуль с тихим логгером и сбором уведомлений. */
+function observedMod(
+  notices: UpdateNotice[],
+  over: Partial<UpdaterConfig> = {},
+  updater: Updater = new Updater("0.3.0"),
+): UpdaterModule {
+  return new UpdaterModule(makeConfig(over), updater, QUIET, (n) => notices.push(n));
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("UpdaterModule", () => {
-  it("should not start when disabled", () => {
-    const mod = new UpdaterModule(makeConfig({ enabled: false }), "0.3.0", "micro-models-agent");
+  it("does not start when disabled", () => {
+    const mod = new UpdaterModule(makeConfig({ enabled: false }), new Updater("0.3.0"));
     mod.start();
     expect(mod.isStarted()).toBe(false);
   });
 
-  it("should start a single check (intervalMs 0) and finish", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.3.0" } }),
-    });
-    global.fetch = mockFetch as any;
-
-    const mod = new UpdaterModule(makeConfig(), "0.3.0", "micro-models-agent");
+  it("starts a single check (intervalMs 0) and finishes", async () => {
+    global.fetch = vi.fn().mockResolvedValue(manifest("0.3.0")) as unknown as typeof fetch;
+    const mod = new UpdaterModule(makeConfig(), new Updater("0.3.0"));
     mod.setInstallEnabled(false);
     mod.start();
     expect(mod.isStarted()).toBe(true);
-
     await mod.runOnce();
-    // Single-shot loop stops itself after the first check.
     await new Promise((r) => setTimeout(r, 30));
     expect(mod.isStarted()).toBe(false);
   });
 
-  it("should notify when an update is available (no auto-install)", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.4.0" } }),
-    });
-    global.fetch = mockFetch as any;
-
+  it("notifies when an update is available (no auto-install)", async () => {
+    global.fetch = vi.fn().mockResolvedValue(manifest("0.4.0")) as unknown as typeof fetch;
     const messages: string[] = [];
-    const mod = new UpdaterModule(
-      makeConfig({ autoInstall: false }),
-      "0.3.0",
-      "micro-models-agent",
-      {
-        info: (m) => messages.push(m),
-        warn: (m) => messages.push(m),
-        error: (m) => messages.push(m),
-      },
-    );
+    const mod = new UpdaterModule(makeConfig({ autoInstall: false }), new Updater("0.3.0"), {
+      info: (m) => messages.push(m),
+      warn: (m) => messages.push(m),
+      error: (m) => messages.push(m),
+    });
     mod.setInstallEnabled(false);
     await mod.runOnce();
     expect(messages.some((m) => m.includes("0.4.0"))).toBe(true);
   });
 
-  it("should auto-install when enabled", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.4.0" } }),
-    });
-    global.fetch = mockFetch as any;
-    const runner = vi.fn().mockResolvedValue({});
-
-    const messages: string[] = [];
-    const mod = new UpdaterModule(
-      makeConfig({ autoInstall: true }),
-      "0.3.0",
-      "micro-models-agent",
-      {
-        info: (m) => messages.push(m),
-        warn: (m) => messages.push(m),
-        error: (m) => messages.push(m),
-      },
-      runner as any,
-    );
-    await mod.runOnce();
-    expect(runner).toHaveBeenCalled();
-    expect(messages.some((m) => m.includes("0.4.0") && /Installed|Установлена/.test(m))).toBe(true);
+  it("auto-installs when enabled", async () => {
+    const key = releasePlatformKey(process.platform, process.arch);
+    if (!key) return;
+    const payload = Buffer.from("bytes");
+    const sha256 = createHash("sha256").update(payload).digest("hex");
+    const root = await mkdtemp(join(tmpdir(), "mma-mod-test-"));
+    try {
+      const fetchImpl = vi.fn(async (url: string) => {
+        if (String(url).endsWith("latest.json")) {
+          return manifest("0.4.0", { [key]: { url: `mma-${key}.tar.gz`, sha256, size: payload.length } });
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () =>
+            payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.length),
+        } as unknown as Response;
+      });
+      const messages: string[] = [];
+      const mod = new UpdaterModule(
+        makeConfig({ autoInstall: true }),
+        new Updater("0.3.0", {
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+          installRoot: root,
+          extract: async (_t, dest) => {
+            const { writeFile } = await import("node:fs/promises");
+            await writeFile(join(dest, "VERSION"), "0.4.0\n");
+          },
+        }),
+        { info: (m) => messages.push(m), warn: (m) => messages.push(m), error: (m) => messages.push(m) },
+      );
+      await mod.runOnce();
+      expect(messages.some((m) => m.includes("0.4.0") && /Installed|Установлена/.test(m))).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
-  it("should stop the loop", () => {
-    const mod = new UpdaterModule(makeConfig({ intervalMs: 60000 }), "0.3.0", "micro-models-agent");
+  it("stops the loop", () => {
+    const mod = new UpdaterModule(makeConfig({ intervalMs: 60000 }), new Updater("0.3.0"));
     mod.start();
     expect(mod.isStarted()).toBe(true);
     mod.stop();
@@ -89,13 +112,8 @@ describe("UpdaterModule", () => {
   });
 
   it("waitForIdle resolves after the single-shot check settles", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.3.0" } }),
-    });
-    global.fetch = mockFetch as any;
-
-    const mod = new UpdaterModule(makeConfig(), "0.3.0", "micro-models-agent");
+    global.fetch = vi.fn().mockResolvedValue(manifest("0.3.0")) as unknown as typeof fetch;
+    const mod = new UpdaterModule(makeConfig(), new Updater("0.3.0"));
     mod.setInstallEnabled(false);
     mod.start();
     await mod.waitForIdle(2000);
@@ -103,110 +121,77 @@ describe("UpdaterModule", () => {
   });
 
   it("waitForIdle returns immediately when never started", async () => {
-    const mod = new UpdaterModule(makeConfig(), "0.3.0", "micro-models-agent");
+    const mod = new UpdaterModule(makeConfig(), new Updater("0.3.0"));
     await mod.waitForIdle(500);
     expect(mod.isStarted()).toBe(false);
   });
 
   it("mentions the auto-install switch in the notify-only message", async () => {
-    // `autoInstall` defaults to false, so without this hint the notice reads
-    // like a dead end: user sees an update and no obvious way to take it.
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.4.0" } }),
-    });
-    global.fetch = mockFetch as any;
-
+    global.fetch = vi.fn().mockResolvedValue(manifest("0.4.0")) as unknown as typeof fetch;
     const messages: string[] = [];
-    const mod = new UpdaterModule(
-      makeConfig({ autoInstall: false }),
-      "0.3.0",
-      "micro-models-agent",
-      { info: (m) => messages.push(m), warn: () => {}, error: () => {} },
-    );
+    const mod = new UpdaterModule(makeConfig({ autoInstall: false }), new Updater("0.3.0"), {
+      info: (m) => messages.push(m),
+      warn: () => {},
+      error: () => {},
+    });
     mod.setInstallEnabled(false);
     await mod.runOnce();
     expect(messages.join("\n")).toMatch(/updater\.autoInstall/);
   });
 
   it("notifies the observer on every phase", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.4.0" } }),
-    });
-    global.fetch = mockFetch as any;
-
+    global.fetch = vi.fn().mockResolvedValue(manifest("0.4.0")) as unknown as typeof fetch;
     const notices: UpdateNotice[] = [];
-    const mod = new UpdaterModule(
-      makeConfig({ autoInstall: false }),
-      "0.3.0",
-      "micro-models-agent",
-      { info: () => {}, warn: () => {}, error: () => {} },
-      undefined,
-      (n) => notices.push(n),
-    );
+    const mod = observedMod(notices);
     mod.setInstallEnabled(false);
     await mod.runOnce();
     expect(notices).toEqual([{ phase: "available", current: "0.3.0", latest: "0.4.0" }]);
   });
 
   it("stays silent when there is nothing newer", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.3.0" } }),
-    });
-    global.fetch = mockFetch as any;
-
+    global.fetch = vi.fn().mockResolvedValue(manifest("0.3.0")) as unknown as typeof fetch;
     const notices: UpdateNotice[] = [];
-    const mod = new UpdaterModule(
-      makeConfig(),
-      "0.3.0",
-      "micro-models-agent",
-      { info: () => {}, warn: () => {}, error: () => {} },
-      undefined,
-      (n) => notices.push(n),
-    );
+    const mod = observedMod(notices);
     mod.setInstallEnabled(false);
     await mod.runOnce();
     expect(notices).toHaveLength(0);
   });
 
   it("reports a failed install so the UI can react", async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ "dist-tags": { latest: "0.4.0" } }),
+    const key = releasePlatformKey(process.platform, process.arch);
+    if (!key) return;
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (String(url).endsWith("latest.json")) {
+        return manifest("0.4.0", { [key]: { url: `mma-${key}.tar.gz`, sha256: "deadbeef", size: 1 } });
+      }
+      return { ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer } as unknown as Response;
     });
-    global.fetch = mockFetch as any;
-    const runner = vi.fn().mockResolvedValue({ error: "EACCES" });
-
     const notices: UpdateNotice[] = [];
-    const mod = new UpdaterModule(
-      makeConfig({ autoInstall: true }),
-      "0.3.0",
-      "micro-models-agent",
-      { info: () => {}, warn: () => {}, error: () => {} },
-      runner as any,
-      (n) => notices.push(n),
-    );
-    await mod.runOnce();
-    expect(notices[0]?.phase).toBe("failed");
-    expect(notices[0]?.error).toContain("EACCES");
+    const root = await mkdtemp(join(tmpdir(), "mma-mod-test-"));
+    try {
+      const mod = observedMod(
+        notices,
+        { autoInstall: true },
+        new Updater("0.3.0", {
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+          installRoot: root,
+          extract: async () => {},
+        }),
+      );
+      await mod.runOnce();
+      expect(notices[0]?.phase).toBe("failed");
+      expect(notices[0]?.error).toMatch(/checksum/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("stays silent on a failed check (no notice, log only)", async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as any;
+    global.fetch = vi.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
     const notices: UpdateNotice[] = [];
-    const mod = new UpdaterModule(
-      makeConfig(),
-      "0.3.0",
-      "micro-models-agent",
-      { info: () => {}, warn: () => {}, error: () => {} },
-      undefined,
-      (n) => notices.push(n),
-    );
+    const mod = observedMod(notices);
     mod.setInstallEnabled(false);
     await mod.runOnce();
-    // An unreachable registry is not news for the user — it is a log line.
     expect(notices).toHaveLength(0);
   });
 });

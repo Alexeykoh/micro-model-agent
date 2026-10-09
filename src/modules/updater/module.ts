@@ -1,6 +1,6 @@
 // Модуль самообновления: фоновая проверка при старте, опциональная автоустановка.
 import type { UpdaterConfig } from "../../config/types";
-import { Updater, type InstallRunner } from "./checker";
+import { Updater } from "./checker";
 import { extractLatestChangelog, readChangelog } from "./changelog-reader";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
@@ -27,8 +27,9 @@ export interface UpdateNotice {
 /**
  * Модуль самообновления. При старте — АСИНХРОННАЯ (неблокирующая) проверка,
  * чтобы агент никогда не ждал сеть. При включённом `autoInstall` свежая версия
- * ставится глобально через `npm install -g` в фоне, пользователь уведомляется;
- * запущенный процесс до следующего старта работает на старой версии.
+ * скачивается из GitHub Releases и активируется (`~/.mma/current`) в фоне,
+ * пользователь уведомляется; запущенный процесс до следующего старта работает
+ * на старой версии.
  */
 export class UpdaterModule {
   readonly name = "updater";
@@ -39,7 +40,7 @@ export class UpdaterModule {
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Промис текущего витка run-loop (резолвится по устаканиванию). */
   private idlePromise: Promise<void> | null = null;
-  /** Тест-хук: отключает реальные npm-установки. */
+  /** Тест-хук: отключает реальные установки. */
   private installEnabled = true;
 
 /**
@@ -51,14 +52,12 @@ export class UpdaterModule {
 
   constructor(
     config: UpdaterConfig,
-    currentVersion: string,
-    packageName: string,
+    updater: Updater,
     logger?: UpdaterLogger,
-    installRunner?: InstallRunner,
     onNotice?: (notice: UpdateNotice) => void,
   ) {
     this.config = config;
-    this.updater = new Updater(currentVersion, packageName, installRunner);
+    this.updater = updater;
     this.onNotice = onNotice;
     this.logger = logger ?? {
       info: () => {},
@@ -104,7 +103,7 @@ export class UpdaterModule {
 
   /**
    * Ждёт устаканивания текущего цикла check/install, но не дольше timeoutMs.
-   * Нужно one-shot CLI-прогонам, чтобы фоновый `npm install -g` не убивался
+   * Нужно one-shot CLI-прогонам, чтобы фоновая установка не убивалась
    * process.exit() до завершения. No-op, если модуль не стартовал.
    */
   async waitForIdle(timeoutMs = 130000): Promise<void> {
@@ -132,65 +131,41 @@ export class UpdaterModule {
       this.logger.info(t("updater.check_error", { error: result.error }));
       return;
     }
-    if (!result.updateAvailable || !result.latest) return;
+    const { current, latest } = result;
+    if (!result.updateAvailable || !latest) return;
+    if (this.config.autoInstall && this.installEnabled) await this.autoInstall(current, latest);
+    else this.notifyAvailable(current, latest);
+  }
 
-    if (this.config.autoInstall && this.installEnabled) {
-      this.logger.info(
-        t("updater.installing", {
-          current: result.current,
-          latest: result.latest,
-        }),
-      );
-      const install = await this.updater.install(result.latest);
-      if (install.success) {
-        const changelog = readChangelog("micro-models-agent");
-        const latestEntry = changelog ? extractLatestChangelog(changelog) : null;
-        const changelogBlock = latestEntry
-          ? pc.cyan(`\n${t("cli.changelog_title", { version: result.latest })}\n`) + latestEntry
-          : "";
-        this.logger.info(
-          t("updater.installed", {
-            current: result.current,
-            latest: result.latest,
-            changelog: changelogBlock,
-          }),
-        );
-        this.onNotice?.({
-          phase: "installed",
-          current: result.current,
-          latest: result.latest,
-        });
-      } else {
-        this.logger.warn(
-          t("updater.install_failed", {
-            current: result.current,
-            latest: result.latest,
-            error: install.error ?? "",
-          }),
-        );
-        this.onNotice?.({
-          phase: "failed",
-          current: result.current,
-          latest: result.latest,
-          error: install.error ?? "",
-        });
-      }
-    } else {
-      // Дефолт `autoInstall: false`, поэтому сообщение без подсказки выглядит
-      // тупиком: пользователь видит апдейт и не знает, чем его взять.
-      this.logger.info(
-        t("updater.available", {
-          current: result.current,
-          latest: result.latest,
-          hint: t("updater.auto_install_hint"),
-        }),
-      );
-      this.onNotice?.({
-        phase: "available",
-        current: result.current,
-        latest: result.latest,
-      });
-    }
+  /** Скачивает и активирует свежую версию, репортит успех/провал. */
+  private async autoInstall(current: string, latest: string): Promise<void> {
+    this.logger.info(t("updater.installing", { current, latest }));
+    const install = await this.updater.install();
+    if (install.success) this.reportInstalled(current, latest);
+    else this.reportFailed(current, latest, install.error ?? "");
+  }
+
+  private reportInstalled(current: string, latest: string): void {
+    const changelog = readChangelog("micro-models-agent");
+    const latestEntry = changelog ? extractLatestChangelog(changelog) : null;
+    const changelogBlock = latestEntry
+      ? pc.cyan(`\n${t("cli.changelog_title", { version: latest })}\n`) + latestEntry
+      : "";
+    this.logger.info(t("updater.installed", { current, latest, changelog: changelogBlock }));
+    this.onNotice?.({ phase: "installed", current, latest });
+  }
+
+  private reportFailed(current: string, latest: string, error: string): void {
+    this.logger.warn(t("updater.install_failed", { current, latest, error }));
+    this.onNotice?.({ phase: "failed", current, latest, error });
+  }
+
+  /** Дефолт `autoInstall: false`: сообщение с подсказкой, как обновиться. */
+  private notifyAvailable(current: string, latest: string): void {
+    this.logger.info(
+      t("updater.available", { current, latest, hint: t("updater.auto_install_hint") }),
+    );
+    this.onNotice?.({ phase: "available", current, latest });
   }
 
   private async checkOnce(): Promise<void> {

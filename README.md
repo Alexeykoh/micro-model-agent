@@ -1,6 +1,5 @@
 # MMA — Micro Models Agent v2
 
-[![npm version](https://img.shields.io/npm/v/micro-models-agent)](https://www.npmjs.com/package/micro-models-agent)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **A universal agent harness built for small local LLMs** — the kind that fit on your laptop
@@ -8,7 +7,11 @@
 dev work, web research, home automation, API glue, personal assistant — bring any task you like.
 
 ```bash
-npm install -g micro-models-agent
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.ps1 | iex
+
 mma "rewrite the auth module to use JWT"
 mma "what's the weather in Berlin? summarize the week"
 ```
@@ -78,33 +81,38 @@ Most agents (Devin, Cursor, Copilot) are glued to cloud models or pricey APIs �
 
 ### Requirements
 
-- **Runtime:** [Bun](https://bun.sh) (recommended) or Node.js ≥ 20
+- **Runtime:** none — the installer downloads a self-contained build (bundled Bun runtime + agent + production dependencies)
 - **LLM backend:** any OpenAI-compatible server (LM Studio, Ollama, vLLM, llama.cpp, Together AI)
 
-### From npm (recommended)
+### One-line installer
 
-```bash
-npm install -g micro-models-agent@latest
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.ps1 | iex
 ```
 
-The `mma` command is then available in your terminal. If `mma` isn't found, reopen your terminal or run:
+**macOS / Linux**:
 
 ```bash
-# PowerShell
-npm uninstall -g micro-models-agent
-npm install -g micro-models-agent@latest
-
-# Verify
-mma --version
+curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash
 ```
+
+Open a new terminal, then run `mma setup` (provider wizard) and `mma`.
+
+The installer detects your OS/architecture, downloads the matching release into
+`~/.mma`, verifies its `sha256`, and puts the `mma` launcher on `PATH`. Re-run the
+same command to update. See [docs/install.md](./docs/install.md) for layout, rollback
+and uninstall.
 
 ### From source
 
 ```bash
-git clone https://github.com/your-org/micro-models-agent
+git clone https://github.com/Alexeykoh/micro-model-agent
 cd micro-models-agent
 bun install
-bun run build:prod
+bun run build:prod      # dist/main.js + dist/assets
+bun run build:release   # optional: local release tarball in ./release
 ```
 
 ---

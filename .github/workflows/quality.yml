@@ -1,0 +1,39 @@
+name: quality
+
+# Runs on every push/PR: typecheck (backend + frontend), lint (Biome), unit
+# tests, and the fallow dead-code gate against the committed regression
+# baseline (`.fallow-baseline.json`) so existing architectural debt does not
+# fail the build, but NEW unused code/cycles do.
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck (backend)
+        run: bun run typecheck
+
+      - name: Typecheck (frontend)
+        run: bun run typecheck:frontend
+
+      - name: Lint (Biome)
+        run: bun run lint
+
+      - name: Unit tests
+        run: bun test
+
+      # fallow is distributed on npm; `--fail-on-issues` exits non-zero on any
+      # finding not covered by the baseline.
+      - name: Dead-code gate
+        run: npx --yes fallow dead-code --baseline .fallow-baseline.json --fail-on-issues

@@ -351,11 +351,11 @@ Agent loops resend the whole context every iteration; providers reuse the KV cac
 
 Self-update is a fire-and-forget background check — it never blocks startup.
 
-- **Check:** `Updater.check()` fetches `https://registry.npmjs.org/micro-models-agent` (5s timeout); the current version comes from `package.json` (`readVersion()` in `main.ts`).
-- **Install:** when a newer version exists and `autoInstall: true`, runs `npm install -g micro-models-agent@<latest>` in the background (`Updater.install()`, injectable runner for tests). The running process keeps working on the old version; the update applies on next launch.
+- **Check:** `Updater.check()` fetches `latest.json` from the release base (GitHub Releases; `MMA_INSTALL_BASE` overrides, 5s timeout); the current version comes from `package.json` (`readMmaVersion()`).
+- **Install:** when a newer version exists and `autoInstall: true`, downloads the platform artifact, verifies `sha256`, extracts to `~/.mma/versions/<version>` and flips `~/.mma/current` (`Updater.install()` in `install-release.ts`, injectable fetch/extract for tests). The running process keeps working on the old version; the update applies on next launch.
 - **Config** (`updater` in `~/.mma/updater.json`):
   - `enabled` (default `true`) — master switch; `false` = no check at all
-  - `autoInstall` (default `false`) — auto-run `npm install -g`; `false` → only notify, with the command in the message
+  - `autoInstall` (default `false`) — auto-download/activate the release; `false` → only notify
   - `intervalMs` (default `0`) — `0` = single check per launch; `>0` = permanent background re-check loop
 
   `checkOnStart` was removed: it was read nowhere, and its two neighbours already
@@ -370,4 +370,4 @@ Self-update is a fire-and-forget background check — it never blocks startup.
   checks now — `exitOnComplete` no longer disables the updater (that flag only decides who owns
   stdin, and the updater never touches it).
 - **Dev guard:** `isDevEntryPath()` refuses to self-update when the entry point is a `.ts`
-  source, so a checkout never `npm install -g`s over the user's global install.
+  source, so a checkout never installs over the user's global install.
