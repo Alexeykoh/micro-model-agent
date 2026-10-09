@@ -69,38 +69,12 @@ export interface SlashCommand {
  */
 export type ReplContext = CommandContext;
 
-/** Группы команд для `/help` (general/agent/session/skill). */
-export const COMMAND_GROUPS: Record<string, string> = {
-  help: "general",
-  exit: "general",
-  clear: "general",
-  run: "general",
-  image: "general",
-  config: "agent",
-  status: "agent",
-  reasoning: "agent",
-  verbose: "agent",
-  provider: "agent",
-  model: "agent",
-  context: "agent",
-  reload: "agent",
-  wizard: "agent",
-  meet: "agent",
-  init: "agent",
-  memory: "agent",
-  sysprompt: "agent",
-  map: "agent",
-  lsp: "agent",
-  security: "agent",
-  sessions: "session",
-  new: "session",
-  resume: "session",
-  rename: "session",
-  delete: "session",
-  export: "session",
-  skill: "skill",
-  plugins: "agent",
-};
+/**
+ * Группы команд для `/help` больше не хранятся здесь: раньше была отдельная
+ * карта на 29 строк, синхронизировавшаяся вручную с регистрациями. Теперь
+ * группа объявляется рядом с описанием команды в общем каталоге
+ * (`src/core/commands/spec.ts`), а `/help` группирует через `groupCommands`.
+ */
 
 /** Регистрирует все команды REPL (builtin + mma + онбординг + сессии + скиллы). */
 export function registerAllCommands(ctx: ReplContext): void {

@@ -41,6 +41,8 @@ import { planSnapshotFromModule, adaptActivePlan } from "../core/host-plan";
 import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
+import { CommandRegistry, groupCommands } from "../core/commands/catalog";
+import { COMMAND_CATALOG } from "../core/commands/spec";
 import { captureConfigSnapshot } from "../config/registry";
 import { activeProviderEndpoint } from "../modules/providers/manager";
 import { probeLspServers } from "../modules/lsp/probe";
@@ -1090,12 +1092,15 @@ export class Repl implements ReplContext, Host {
 
   /** Показ помощи: общая или по команде (`/help <команда>`). */
   public showHelp(command?: string): void {
-    const { COMMAND_GROUPS } = require("./repl-commands") as typeof import("./repl-commands");
+    // Справка строится по общему каталогу (`core/commands`), а не по таблице
+    // групп: команда, не зарегистрированная в REPL, в справке не показывается,
+    // а расхождение «каталог vs регистрация» ловит тест-сторож.
+    const registry = this.commandRegistry();
 
     if (command) {
       const name = command.replace(/^\//, "");
-      const cmd = this.commands.get(name);
-      if (!cmd) {
+      const cmd = registry.resolve(name);
+      if (!cmd || !this.commands.get(name)) {
         this.output.writeLine(pc.red(t("repl.help_unknown", { name })));
         return;
       }
@@ -1112,23 +1117,15 @@ export class Repl implements ReplContext, Host {
       return;
     }
 
-    const order = ["general", "agent", "session", "skill"];
-    const seen = new Set<string>();
+    // Только реально зарегистрированные команды: каталог описывает и то, что
+    // терминал ещё не умеет (например, веб-only имя).
+    const available = registry
+      .list("terminal")
+      .filter((entry) => this.commands.has(entry.name));
 
-    for (const groupKey of order) {
-      const cmds: SlashCommand[] = [];
-      for (const [name, cmd] of this.commands) {
-        if (cmd.aliases?.includes(name)) continue;
-        if (seen.has(cmd.name)) continue;
-        const group = COMMAND_GROUPS[cmd.name] ?? "general";
-        if (group !== groupKey) continue;
-        seen.add(cmd.name);
-        cmds.push(cmd);
-      }
-      if (cmds.length === 0) continue;
-
-      this.output.writeLine(pc.bold(t(`repl.group.${groupKey}`)));
-      for (const cmd of cmds) {
+    for (const { group, entries } of groupCommands(available, "terminal")) {
+      this.output.writeLine(pc.bold(t(`repl.group.${group}`)));
+      for (const cmd of entries) {
         const aliases = cmd.aliases?.length ? ` (${pc.dim(cmd.aliases.join(", "))})` : "";
         this.output.writeLine(`  ${pc.cyan(`/${cmd.name}`)}${aliases}  ${pc.dim(cmd.description)}`);
         if (cmd.usage) {
@@ -1137,6 +1134,19 @@ export class Repl implements ReplContext, Host {
       }
       this.output.writeLine("");
     }
+  }
+
+  /**
+   * Реестр команд REPL: каталог (`core/commands/spec`) + фактический состав
+   * `this.commands`. Пересобирается на каждый вызов, чтобы после смены локали
+   * (`reregisterCommands`) подписи в справке были свежими.
+   */
+  private commandRegistry(): CommandRegistry {
+    const registry = new CommandRegistry(COMMAND_CATALOG);
+    for (const [key, cmd] of this.commands) {
+      registry.bind(key, (args) => cmd.action(args));
+    }
+    return registry;
   }
 
   private lastCompactionShown = 0;
