@@ -74,6 +74,12 @@ export interface HostStateSnapshot {
    * сабтаски. Фолбэк на single-agent чип не зажигает. Рисуется чипом в футере.
    */
   moeActive?: boolean;
+  /**
+   * Доступная новая версия (`current` → `latest`). Заполняется апдейтером:
+   * в вебе единственный способ узнать об апдейте (в stdout никто не смотрит),
+   * поэтому рисуется чипом в футере под композером.
+   */
+  updateAvailable?: { current: string; latest: string };
   /** Источники инструкций AGENTS.md (`disabled` — флаг --no-agents-md). */
   instructions?: { files: string[]; disabled: boolean };
   /** Статистика карты проекта; `indexed:false`, пока обход не завершён. */

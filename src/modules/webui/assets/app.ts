@@ -291,6 +291,19 @@ es.addEventListener("turn_end", (e) => {
 es.addEventListener("retract", () => faceEvent("error"));
 es.addEventListener("index", () => faceEvent("find"));
 es.addEventListener("setup_done", () => faceEvent("done"));
+// An available version is news for the user, so MMART reacts — unlike the
+// background broadcasts above. The face settles back to idle: the persistent
+// half of the notice is the footer chip (snapshot), which needs no animation.
+es.addEventListener("update", (e) => {
+  const d = parse(e);
+  if (d && d.phase === "failed") {
+    faceEvent("error");
+    return;
+  }
+  faceEvent("update");
+  const token = composerToken;
+  window.setTimeout(() => { if (token === composerToken) setFaceState(composerFace, "idle"); }, 4000);
+});
 // Per-tab status dots: its own listeners — feed handlers stay untouched
 // (source-level guards pin the handler table above). Working streams mark the
 // owner tab, `question` marks waiting-for-you, `turn_end`/`error` settle it.

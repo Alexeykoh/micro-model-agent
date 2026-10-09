@@ -18,9 +18,8 @@ import { pc } from "../ui/colors";
 import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { UpdaterModule, isDevEntryPath } from "../modules/updater/index";
+import { UpdaterModule, createUpdater, busLogger } from "../modules/updater/index";
 import { installCrashHandlers } from "../core/crash-handler";
-import { readMmaVersion } from "../core/version";
 import { closestCommand } from "./command-suggest";
 import { errMsg } from "../utils";
 import type { AgentResult } from "../core/types";
@@ -58,24 +57,13 @@ function resolveEarlyLocale(): string | undefined {
 
 /** Fire-and-forget самоапдейт фоном (старт никогда не блокирует). */
 function startAutoUpdate(config: {
-  updater: { enabled: boolean; checkOnStart: boolean; autoInstall: boolean; intervalMs: number };
+  updater: { enabled: boolean; autoInstall: boolean; intervalMs: number };
 }): UpdaterModule | undefined {
-  // Dev-прогоны грузят TypeScript-исходники; опубликованный бандл — dist/main.js.
-  // Из чекаута не автоапдейтимся: его package.json может отставать от npm, а
-  // global-install поверх юзерской установки деструктивен.
-  if (isDevEntryPath(fileURLToPath(import.meta.url))) return undefined;
-  try {
-    const module = new UpdaterModule(config.updater, readMmaVersion(), "micro-models-agent", {
-      info: (m) => defaultOutputBus.log("info", "updater", m),
-      warn: (m) => defaultOutputBus.log("warn", "updater", m),
-      error: (m) => defaultOutputBus.log("error", "updater", m),
-    });
-    module.start();
-    return module;
-  } catch {
-    // Автоапдейт best-effort; ронять старт ему нельзя.
-    return undefined;
-  }
+  return createUpdater({
+    config: config.updater,
+    entryPath: fileURLToPath(import.meta.url),
+    logger: busLogger(),
+  });
 }
 
 async function main(): Promise<void> {

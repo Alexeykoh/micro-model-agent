@@ -7,7 +7,7 @@
 export type FaceState =
   | "idle" | "think" | "read" | "find" | "web" | "edit" | "type" | "create"
   | "run" | "tests" | "compact" | "plan" | "ask" | "done" | "error" | "stop"
-  | "queued" | "boot" | "load";
+  | "queued" | "boot" | "load" | "update";
 
 export type FaceSize = "sm" | "lg" | "xs";
 
@@ -33,6 +33,10 @@ const FACE_CLASS: Record<FaceState, string> = {
   queued: "c-dim st-queued blink",
   boot: "c-dim st-boot",
   load: "c-dim st-load",
+  // An available update is good news: sparkly and awake. No `track`/`poke` —
+  // the mascot should not follow the cursor while advertising something, and
+  // a click on it should not pop the greeting over the update chip.
+  update: "c-ok st-update happy",
 };
 
 // Tool name → loader state (matches STYLE.md tool categories). Every core
@@ -58,7 +62,7 @@ const TOOL_STATE: Record<string, FaceState> = {
 export interface LoaderSignal {
   type:
     | "phase" | "tool_start" | "tool_end" | "text" | "question" | "turn_end" | "error"
-    | "retract" | "index" | "setup_done"
+    | "retract" | "index" | "setup_done" | "update"
     | "usage" | "state" | "config" | "files" | "sessions" | "plugins" | "log";
   name?: string;
   phase?: string;
@@ -84,6 +88,9 @@ export function loaderStateFor(s: LoaderSignal): FaceState {
     // Re-indexing is a workspace-wide search.
     case "index": return "find";
     case "setup_done": return "done";
+    // Unlike the broadcasts below, an update is news for the user — the mascot
+    // celebrates it. The persistent part lives in the footer chip (snapshot).
+    case "update": return "update";
     // Background broadcasts (usage/state/config/files/sessions/plugins/log)
     // carry no agent activity: the face must NOT move on them, they map to
     // idle and callers are expected to drop the event instead of animating.

@@ -13,6 +13,17 @@ export interface UpdaterLogger {
   error(msg: string): void;
 }
 
+/** Фаза, о которой уведомляет модуль: есть апдейт / он поставлен / провал. */
+export type UpdatePhase = "available" | "installed" | "failed";
+
+/** Событие апдейтера для наружных поверхностей (SSE/UI). */
+export interface UpdateNotice {
+  phase: UpdatePhase;
+  current: string;
+  latest?: string;
+  error?: string;
+}
+
 /**
  * Модуль самообновления. При старте — АСИНХРОННАЯ (неблокирующая) проверка,
  * чтобы агент никогда не ждал сеть. При включённом `autoInstall` свежая версия
@@ -31,15 +42,24 @@ export class UpdaterModule {
   /** Тест-хук: отключает реальные npm-установки. */
   private installEnabled = true;
 
+/**
+   * Наблюдатель за результатом проверки/установки. Терминал его не ставит (ему
+   * хватает логгера), веб-режим — ставит, чтобы отдать факт в SSE: там никто не
+   * смотрит в stdout, и без этого апдейт работал бы полностью молча.
+   */
+  private onNotice?: (notice: UpdateNotice) => void;
+
   constructor(
     config: UpdaterConfig,
     currentVersion: string,
     packageName: string,
     logger?: UpdaterLogger,
     installRunner?: InstallRunner,
+    onNotice?: (notice: UpdateNotice) => void,
   ) {
     this.config = config;
     this.updater = new Updater(currentVersion, packageName, installRunner);
+    this.onNotice = onNotice;
     this.logger = logger ?? {
       info: () => {},
       warn: (m) => defaultOutputBus.log("warn", "updater", m),
@@ -135,6 +155,11 @@ export class UpdaterModule {
             changelog: changelogBlock,
           }),
         );
+        this.onNotice?.({
+          phase: "installed",
+          current: result.current,
+          latest: result.latest,
+        });
       } else {
         this.logger.warn(
           t("updater.install_failed", {
@@ -143,9 +168,28 @@ export class UpdaterModule {
             error: install.error ?? "",
           }),
         );
+        this.onNotice?.({
+          phase: "failed",
+          current: result.current,
+          latest: result.latest,
+          error: install.error ?? "",
+        });
       }
     } else {
-      this.logger.info(t("updater.available", { current: result.current, latest: result.latest }));
+      // Дефолт `autoInstall: false`, поэтому сообщение без подсказки выглядит
+      // тупиком: пользователь видит апдейт и не знает, чем его взять.
+      this.logger.info(
+        t("updater.available", {
+          current: result.current,
+          latest: result.latest,
+          hint: t("updater.auto_install_hint"),
+        }),
+      );
+      this.onNotice?.({
+        phase: "available",
+        current: result.current,
+        latest: result.latest,
+      });
     }
   }
 

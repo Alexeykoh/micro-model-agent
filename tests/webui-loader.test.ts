@@ -62,6 +62,27 @@ describe("loaderStateFor", () => {
       expect(loaderStateFor({ type: bg })).toBe("idle");
     }
   });
+
+  it("celebrates an available update instead of ignoring it as background", () => {
+    // `update` is news for the user, so it must NOT collapse to idle the way
+    // the background broadcasts do.
+    expect(loaderStateFor({ type: "update" })).toBe("update");
+  });
+
+  it("update face is sparkly but does not greet or follow the cursor", () => {
+    const face = createFace("update", "lg");
+    expect(face.classList.contains("st-update")).toBe(true);
+    expect(face.classList.contains("happy")).toBe(true);
+    // No `track`/`poke`: the mascot must not chase the mouse or pop its
+    // greeting over the update chip while advertising something.
+    expect(face.classList.contains("track")).toBe(false);
+    expect(face.classList.contains("poke")).toBe(false);
+  });
+
+  it("styles the update state", () => {
+    const css = readFileSync("src/modules/webui/assets/styles.css", "utf8");
+    expect(css).toContain(".mdl.st-update");
+  });
 });
 
 describe("createFace / setFaceState", () => {

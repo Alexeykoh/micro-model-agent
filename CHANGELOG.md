@@ -8,12 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 `mma serve` now describes its own API: a live OpenAPI 3.1 document plus a
 human-readable contract page, so an integrator learns the endpoints from the
-running service instead of from the repository. README refreshed across the
-board — features, tools, modules, CLI/REPL surfaces and config keys had drifted
-behind the code.
+running service instead of from the repository. Auto-update reached `mma web`,
+where it had never run, and the one dead updater flag is gone. README refreshed
+across the board — features, tools, modules, CLI/REPL surfaces and config keys
+had drifted behind the code.
 
 ### Added
 
+- **Auto-update in `mma web`** (`src/modules/updater/factory.ts`, `cli/web-command.ts`, `webui/assets/js/loader.ts`, `js/footer.ts`): the web UI used to skip the updater entirely, so the four `updater.*` toggles in Settings → Advanced were dead. `createUpdater()` is now the single construction point for both surfaces; web starts the same fire-and-forget npm check and reports through a new SSE `update` event (`phase: available|installed|failed`), which makes **MMART react** — a new sparkly `update` face state that settles back to idle after a few seconds. The persistent half is `HostStateSnapshot.updateAvailable`, rendered as a green `↑ <latest>` chip in the footer next to the installed `mma <version>`, so the notice survives a reconnect and a freshly opened tab. The check still never blocks the server bind, and the checkout safety guard (`isDevEntryPath`) still refuses to `npm install -g` from a dev tree.
+- **`exitOnComplete` no longer disables the updater** (`cli/main.ts`): that flag exists to decide who owns stdin, but the updater never touches stdin (a `fetch` and an `execFile`), so gating it on that flag was a false coupling.
 - **Self-describing service contract** (`src/modules/service/openapi/`, `api/docs-api.ts`, `http/routes.ts`, `cli/service-command.ts`): `GET /v1/openapi.json` serves an OpenAPI 3.1 document of Agent Service API v1 (Swagger UI, Redoc, Postman/Insomnia, client generation), and `GET /v1/docs` serves the same contract as a self-contained HTML page — quickstart cURL, endpoint table with response codes, SSE events and error types. Both URLs are printed on `mma serve` startup (`cli.serve_docs`, en+ru) and both are exempt from the bearer check like `/v1/health` and `/v1/ready`: they describe the public API and expose no tenant data. The page is offline-first (no CDN), with an auth header in the quickstart only when a token is actually required. Single source of truth: the `OPERATIONS` table feeds the OpenAPI document, the docs page, and `tests/service/openapi.test.ts`, whose guard fails when a route exists without a description (or vice versa). Root `security: [{bearerAuth: []}]` appears only when a token is configured; `info.version` is `1.0.0+mma-<runtime version>`, so the spec can never drift from the build.
 - **Spec ↔ reality conformance suite** (`tests/service/contract.test.ts`, `tests/service/contract-helpers.ts`): a hand-written spec rots silently, so every response the service returns is now checked against it in both directions — declared status codes (happy, error, queue-full, cancel-terminal, validation), payload shape (no undocumented fields, all required fields present, valid enums), declared response headers (`Location`/`Retry-After` on the `202` submit), content types, the auth matrix per operation (protected routes reject a missing/wrong token and accept the right one; open routes stay open), RFC 9457 error bodies, SSE frames against `EventEnvelope`, and the webhook body against `JobObject`. A guard also scans the runtime sources and fails if an emitted event type is missing from the enum, or a declared type is never emitted.
 
@@ -23,6 +26,15 @@ behind the code.
 - **Unhandled handler errors return `500 internal`** (`src/modules/service/server.ts`): the request dispatcher now wraps the route table, so any escaping exception becomes a Problem Details response and a warning log instead of a dropped connection. A long-running service must not die from one malformed request.
 - **Webhook signature documented as conditional** (`src/modules/service/openapi/schemas.ts`, `docs/serve-mode.md`, `docs/agents/service-api.md`): `X-Mma-Signature` is sent only when `service.webhookSecret` is configured — an unsigned callback was documented as signed, which would have had integrators trusting unsigned payloads. The docs and the schema description now say so explicitly.
 - **Dead contract entries removed**: the `error` event type was declared in `EventEnvelope.type` but never emitted, and `POST /v1/sessions/:id/tasks` returned `400` on an empty `input` without declaring it. Both are now guarded by tests (see below), and the missing `400`/`413` responses are declared.
+
+### Changed
+
+- **`updater.autoInstall` notice now says how to enable it** (`i18n` `updater.auto_install_hint`, en+ru): the default is off, so an "update available" line without a next step read like a dead end. The message now points at `/config updater.autoInstall true` alongside the manual command.
+- **Docs:** the Auto-Update section of `docs/agents/modules.md` described `checkOnStart` and `autoInstall` as defaulting to `true` — both have been `false` since 1.x — and claimed the check only ran in the terminal. Now accurate, including the config file location (`~/.mma/updater.json`), the web surface, and the dev guard.
+
+### Removed
+
+- **`updater.checkOnStart`** (`config/types.ts`, `config/defaults.ts`, `config/registry-extra.ts`, `cli/main.ts`, web settings, both dictionaries): the flag was declared in config, the registry, i18n and the web settings panel, and read nowhere — `runLoop()` checked unconditionally. `enabled: false` already means "never check" and `intervalMs: 0` already means "check once per launch", so both states it could express were already spelled. An existing `~/.mma/updater.json` keeps the field; it is simply ignored. Guards in `tests/webui-config-extra.test.ts` keep the panel and the dictionaries free of it.
 
 ### Changed
 

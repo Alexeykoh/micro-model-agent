@@ -279,6 +279,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           execModule: activeExecModule(state, deps.execModule, sessionId),
           usage: activeUsage(state, sessionId),
           moeActive: activeMoe(state, sessionId),
+          updateAvailable: state.updateAvailable,
           contextProbe: probe,
           workspace: deps.baseDir,
           instructions: deps.agentsMd,

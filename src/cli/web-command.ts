@@ -4,15 +4,20 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { bootstrap } from "../core/bootstrap";
 import { agentsMdPaths } from "../core/bootstrap";
 import { getDefaultChannel } from "../output";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { startWebUi } from "../modules/webui/module";
+import { broadcast, type WebUiState } from "../modules/webui/state";
+import { pushState } from "../modules/webui/session/session-status";
 import { tryOpenBrowser } from "../modules/webui/server";
 import { globalMmaDir } from "../config/paths";
 import { MMA_ENV } from "../config/env";
+import { createUpdater, type UpdaterModule } from "../modules/updater/index";
+import type { AppConfig } from "../config/types";
 
 /** Опции `mma web`: порт, хост, токен, suppress автооткрытия, проект. */
 export interface WebCommandOptions {
@@ -47,6 +52,41 @@ export function webBootstrapArgs(
   opts: WebCommandOptions,
 ): [undefined, string | undefined, boolean | undefined, true] {
   return [undefined, opts.projectDir, opts.noAgentsMd, true];
+}
+
+/**
+ * Стартует апдейтер для веб-режима.
+ *
+ * Раньше веб его не запускал вовсе: `exitOnComplete=true` выключал апдейтер
+ * целиком, и переключатели `updater.*` в панели настроек были мёртвыми. Флаг
+ * существует ради владения stdin, а апдейтер в stdin не лезет (fetch + execFile),
+ * поэтому связь была ложной. Теперь апдейтер работает в обоих режимах, а веб
+ * получает факт апдейта через SSE-событие `update`.
+ *
+ * Проверка fire-and-forget: `createUpdater` возвращается сразу, бинд сервера
+ * не ждёт npm-реестр. `latest` кладём ещё и в снапшот — по правилу
+ * event-sourced state постоянный факт едет в `state`, а не отдельным типом;
+ * событие `update` нужно маскоту для реакции в момент обнаружения.
+ */
+function startWebUpdater(config: AppConfig, state: WebUiState): UpdaterModule | undefined {
+  const note = (current: string, latest?: string): void => {
+    state.updateAvailable = latest ? { current, latest } : undefined;
+    pushState(state);
+  };
+  return createUpdater({
+    config: config.updater,
+    entryPath: fileURLToPath(import.meta.url),
+    onNotice: (notice) => {
+      broadcast({ type: "update", ts: Date.now(), ...notice }, state);
+      if (notice.phase === "available" && notice.latest) {
+        note(notice.current, notice.latest);
+      } else if (notice.phase !== "available") {
+        // Установлено (или провалилось) — чип «доступно обновление» больше
+        // не про то; версия сменится только на следующем старте процесса.
+        note(notice.current);
+      }
+    },
+  });
 }
 
 /** Запуск веб-режима: bootstrap → старт UI → ожидание SIGINT/SIGTERM. */
@@ -111,6 +151,11 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     spawnRunner: spawnSessionRunner,
   });
 
+  // Апдейтер стартует после UI: уведомления идут через `state`, который
+  // `startWebUi` уже создал. Ни одного клиента в момент старта может не быть —
+  // тогда апдейт уедет в снапшот и чип появится у следующего подключения.
+  const updater = startWebUpdater(config, web.state);
+
   const url = await web.url;
   // Всегда показываем резолвленный workspace: shell-нарезка `-d` пути (пробелы,
   // хвостовой бэкслэш) может молча указать не туда, и эта строка — единственное
@@ -122,6 +167,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     const shutdown = (): void => {
       process.off("SIGINT", shutdown);
       process.off("SIGTERM", shutdown);
+      updater?.stop();
       web.stop();
       agent.shutdown();
       resolve();

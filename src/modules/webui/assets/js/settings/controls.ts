@@ -232,7 +232,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   advanced: [
     { id: "advanced.diagnostics", titleKey: "web.settings.sec.advanced.diagnostics", descKey: "web.settings.sec.advanced.diagnostics.desc", keys: ["logLevel", "version"] },
     { id: "advanced.retry", titleKey: "web.settings.sec.advanced.retry", descKey: "web.settings.sec.advanced.retry.desc", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
-    { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "updater.enabled", "updater.checkOnStart", "updater.autoInstall", "updater.intervalMs"] },
+    { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "updater.enabled", "updater.autoInstall", "updater.intervalMs"] },
   ],
   plugins: [
     { id: "plugins.registry", titleKey: "web.settings.sec.plugins.registry", descKey: "web.settings.sec.plugins.registry.desc", keys: ["plugins.disabled", "plugins.maxDrafts"] },
