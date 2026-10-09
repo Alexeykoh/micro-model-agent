@@ -1,4 +1,5 @@
 // Детектор застревания: повторы, фейлы, read-only петли, bash-флейлинг, хинты.
+import { canonicalArgsKey } from "../../core/agent/canonical-args";
 import { t } from "../../i18n/index";
 import { isTransientError } from "./transient-error";
 
@@ -269,7 +270,7 @@ export class StuckDetector {
 
   /** Отмечает вызов тула (для детекции повторов; write/exec сбрасывают read-only стрик). */
   recordToolCall(name: string, args: Record<string, unknown>): void {
-    const argsKey = JSON.stringify(args);
+    const argsKey = canonicalArgsKey(name, args);
     this.recentToolCalls.push({ name, argsKey });
     if (this.recentToolCalls.length > this.maxRecentCalls) {
       this.recentToolCalls.shift();
