@@ -373,18 +373,23 @@ code { font-family: var(--mono); }
 .endpoints .c { color: var(--recon); }
 
 /* install */
+/* The command scrolls, the copy button never does: it is a separate grid cell,
+   not a child of the scroll container (it used to scroll out of view). */
 .code-row {
-  display: flex; align-items: center; gap: 14px;
-  margin-top: 18px; padding: 14px 14px 14px 18px;
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
+  gap: 14px; margin-top: 18px; padding: 14px;
   border: 1px solid var(--border-2); border-radius: 10px; background: var(--panel);
-  overflow-x: auto;
 }
-.code-label { flex: none; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim-b); width: 118px; }
-.code-row code { flex: 1; white-space: nowrap; font-size: 13px; color: var(--fg); }
-.copy {
-  flex: none; font: inherit; font-size: 12px; color: var(--accent);
-  background: var(--accent-bg); border: 1px solid transparent; border-radius: 7px; padding: 6px 13px; cursor: pointer;
+.code-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim-b); white-space: nowrap; }
+.code-row code {
+  min-width: 0; overflow-x: auto; white-space: nowrap;
+  font-size: 13px; color: var(--fg); scrollbar-width: thin;
+  padding-bottom: 2px;
 }
+.code-row code::-webkit-scrollbar { height: 5px; }
+.code-row code::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+.code-row code::-webkit-scrollbar-track { background: transparent; }
+.copy { font: inherit; font-size: 12px; color: var(--accent); background: var(--accent-bg); border: 1px solid transparent; border-radius: 7px; padding: 8px 13px; cursor: pointer; white-space: nowrap; }
 .copy:hover { filter: brightness(1.1); }
 #install .sub { margin-top: 40px; }
 
@@ -470,6 +475,8 @@ code { font-family: var(--mono); }
   .c-col + .c-col { border-left: 0; border-top: 1px solid var(--border-2); }
   .row, .rows.wide .row { grid-template-columns: 1fr; gap: 4px; }
   .case { grid-template-columns: 1fr; gap: 4px; }
+  .code-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; }
+  .code-label { grid-column: 1 / -1; }
   .foot-cols { gap: 36px; }
   .stat { padding: 16px 16px 18px; }
 }
