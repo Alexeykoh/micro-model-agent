@@ -1,6 +1,11 @@
 # MMA — Micro Models Agent v2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)](#)
+
+> ⚠️ **Beta.** MMA is in beta: releases stay in the `0.x.y` range and **`1.0.0` is not
+> released while the project is in beta**. Interfaces, config and behavior may still change
+> between `0.x` releases.
 
 **A universal agent harness built for small local LLMs** — the kind that fit on your laptop
 (9B parameters, 32K–64K context). No cloud API required. And it is *not* a coding-only agent:
