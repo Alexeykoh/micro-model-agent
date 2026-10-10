@@ -1741,7 +1741,7 @@ server: каждый `checkFile` (каждая запись файла, кажд
   на `.chat`; анимация входа — `popCenter` (сохраняет `translateX(-50%)`, иначе `pop`
   ронял центрирование и пилюля вспыхивала правее центра).
 
-### Landing Page (`gh-pages/`) (unreleased)
+### Landing Page (`gh-pages/`) (0.3.2)
 
 Публичная витрина проекта на GitHub Pages. Статика без сборки, без зависимостей,
 без фреймворка; открывается и с диска (`file://`), работает офлайн.
@@ -1882,7 +1882,7 @@ line (path / MoE / version / update) now renders.
   `web-command` from the updater) → `Updater.install()`; `undefined` when no
   updater. Shared fact for the chrome: `assets/js/update-state.ts` (leaf).
 
-### Current Version: 0.3.1 (beta)
+### Current Version: 0.3.2 (beta)
 
 > **В бете:** `1.0.0` не выпускается, пока проект в бете; версии ходят внутри `0.x.y` (см. «Versioning Rules»).
 
