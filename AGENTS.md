@@ -1738,10 +1738,13 @@ server: каждый `checkFile` (каждая запись файла, кажд
 Публичная витрина проекта на GitHub Pages. Статика без сборки, без зависимостей,
 без фреймворка; открывается и с диска (`file://`), работает офлайн.
 
-- **Публикация:** папка `gh-pages/` в корне репозитория; GitHub Pages source =
-  ветка `master`, каталог `/gh-pages` (не `/docs` — там спеки, отдавать нельзя).
-  Деплой — обычная публикация ветки, без workflow и без билда; включается один раз
-  в настройках репозитория (Settings → Pages → Deploy from a branch).
+- **Публикация:** папка `gh-pages/` в корне репозитория; GitHub Pages работает в режиме
+  **GitHub Actions** (`build_type: workflow`). Branch-деплой умеет только `/` или `/docs`,
+  а `/docs` — это дерево спеков, отдавать его нельзя, поэтому сайт публикуется workflow'ом
+  `.github/workflows/pages.yml` (checkout → `configure-pages` → `upload-pages-artifact`
+  с `path: gh-pages` → `deploy-pages`). Триггер — push в `master` при изменениях в
+  `gh-pages/**`. Адрес: https://alexeykoh.github.io/micro-model-agent/. Сборки нет —
+  папка загружается как есть.
 - **Файлы:** `index.html` (разметка + `data-i18n`), `styles.css` (токены тем + лейаут),
   `mascot.css` (вендоренное подмножество webui-компонента `.mdl`), `app.js`
   (тема/язык/маскот/виджеты), `i18n.js` (словари `ru`/`en` + `lpT`), `favicon.svg`.

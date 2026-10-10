@@ -1,0 +1,42 @@
+name: pages
+
+# Publishes the static landing page in `gh-pages/` to GitHub Pages.
+#
+# GitHub Pages' branch deploy only accepts `/` or `/docs` as the folder, and
+# `/docs` holds the specs tree — so the site is shipped as a workflow artifact
+# instead (Pages build type: "workflow"). No build step: the folder is already
+# plain, dependency-free HTML/CSS/JS and is uploaded as-is.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "gh-pages/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: gh-pages
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

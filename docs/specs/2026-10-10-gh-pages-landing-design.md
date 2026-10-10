@@ -118,7 +118,12 @@ gh-pages/
 ## Publication
 
 - Folder `gh-pages/` on branch `master`.
-- GitHub Pages source: **Deploy from a branch → `master` → `/gh-pages`**.
+- GitHub Pages runs in **GitHub Actions** mode (`build_type: workflow`): the branch
+  deploy only accepts `/` or `/docs` as the folder, and `/docs` is the specs tree, so
+  the site is uploaded as a Pages artifact by `.github/workflows/pages.yml`
+  (checkout → `configure-pages` → `upload-pages-artifact` with `path: gh-pages` →
+  `deploy-pages`). Trigger: push to `master` touching `gh-pages/**`.
+- Live URL: https://alexeykoh.github.io/micro-model-agent/
 - Documented in `AGENTS.md` (new "Landing Page" section) and `CHANGELOG.md`
   (MINOR: new deliverable).
 
