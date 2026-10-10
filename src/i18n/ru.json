@@ -1542,6 +1542,7 @@
   "web.settings.mcp_saved": "сохранено · применится при следующем запуске",
   "web.settings.mcp_note": "изменения MCP-серверов сохраняются в конфиг и применяются при следующем запуске.",
   "web.settings.theme": "тема",
+  "web.settings.mode": "режим",
   "web.settings.security_note": "защищённые пути, ограниченный режим и веб-токен настраиваются мастером в терминале.",
   "web.settings.web_token": "веб-токен",
   "web.settings.web_token_none": "не задан",

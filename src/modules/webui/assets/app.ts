@@ -17,7 +17,7 @@ import {
 } from "./js/session/tabs.js";
 import {
   renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
-  loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyFontSize, setConnStatus, setStaleBar,
+  loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyUiTheme, currentUiTheme, applyFontSize, setConnStatus, setStaleBar,
 } from "./js/settings.js";
 import {
   initRail, setPlan as railPlan, railEvent, applyRailI18n,
@@ -505,6 +505,7 @@ async function boot(): Promise<void> {
     await loadI18n();
     await loadCommands();
     applyTheme(currentTheme());
+    applyUiTheme(currentUiTheme());
     applyFontSize();
     applyStaticI18n();
     showEmptyFeed();

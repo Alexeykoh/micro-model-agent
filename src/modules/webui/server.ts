@@ -38,6 +38,7 @@ export { tryOpenBrowser } from "./util";
 const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = {
   "/index.html": { type: "text/html; charset=utf-8", key: "html" },
   "/styles.css": { type: "text/css; charset=utf-8", key: "css" },
+  "/console.css": { type: "text/css; charset=utf-8", key: "cssConsole" },
   "/app.js": { type: "text/javascript; charset=utf-8", key: "js" },
   "/setup.js": { type: "text/javascript; charset=utf-8", key: "setupJs" },
   "/md.js": { type: "text/javascript; charset=utf-8", key: "mdJs" },

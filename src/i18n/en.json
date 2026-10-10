@@ -1568,6 +1568,7 @@
   "web.settings.mcp_saved": "saved · takes effect on the next run",
   "web.settings.mcp_note": "MCP server changes are saved to config and take effect on the next run.",
   "web.settings.theme": "theme",
+  "web.settings.mode": "mode",
   "web.settings.security_note": "protected paths, restricted mode and web token are managed by the terminal wizard.",
   "web.settings.web_token": "web token",
   "web.settings.web_token_none": "not set",
