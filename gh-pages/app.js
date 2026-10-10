@@ -158,9 +158,14 @@
     if (t.indexOf("✓") === 0) return "ok";
     return "meta";
   }
+  // Monotonic run id: every restart cancels the previous typing loop, so the
+  // boot / language-switch / replay calls can never type into the same #termBody
+  // concurrently (that produced duplicated lines and several cursors).
+  var termRun = 0;
   function typeTerminal(animate) {
     var body = document.getElementById("termBody");
     if (!body) return;
+    var run = ++termRun;
     var lines = (body.getAttribute("data-lines") || "").split(",").map(lpT);
     body.innerHTML = "";
     if (!animate) {
@@ -174,6 +179,7 @@
     }
     var i = 0;
     (function nextLine() {
+      if (run !== termRun) return;
       if (i >= lines.length) {
         var c = document.createElement("span");
         c.className = "cursor";
@@ -186,6 +192,7 @@
       body.appendChild(s);
       var n = 0;
       (function typeChar() {
+        if (run !== termRun) return;
         s.textContent = t.slice(0, ++n);
         if (n < t.length) setTimeout(typeChar, 11);
         else setTimeout(nextLine, 240);
@@ -300,12 +307,15 @@
   function initProgress() {
     var bar = document.getElementById("progressBar");
     if (!bar) return;
+    var sc = document.getElementById("scroll-root");
+    var src = sc || window;
     function upd() {
-      var h = document.documentElement.scrollHeight - window.innerHeight;
-      var p = h > 0 ? (window.scrollY / h) * 100 : 0;
+      var h = sc ? sc.scrollHeight - sc.clientHeight : document.documentElement.scrollHeight - window.innerHeight;
+      var y = sc ? sc.scrollTop : window.scrollY;
+      var p = h > 0 ? (y / h) * 100 : 0;
       bar.style.width = Math.min(100, Math.max(0, p)) + "%";
     }
-    addEventListener("scroll", upd, { passive: true });
+    src.addEventListener("scroll", upd, { passive: true });
     addEventListener("resize", upd);
     upd();
   }
@@ -365,12 +375,14 @@
   function initToTop() {
     var btn = document.getElementById("toTop");
     if (!btn) return;
-    function upd() { btn.classList.toggle("show", window.scrollY > 600); }
-    addEventListener("scroll", upd, { passive: true });
+    var sc = document.getElementById("scroll-root");
+    function upd() { btn.classList.toggle("show", (sc ? sc.scrollTop : window.scrollY) > 600); }
+    (sc || window).addEventListener("scroll", upd, { passive: true });
     addEventListener("resize", upd);
     upd();
     btn.addEventListener("click", function () {
-      window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+      var o = { top: 0, behavior: reduce ? "auto" : "smooth" };
+      if (sc) sc.scrollTo(o); else window.scrollTo(o);
       pulseFace("done", 1400);
     });
   }
