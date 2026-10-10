@@ -292,21 +292,52 @@
   }
 
   /* ---- mascot lab ---- */
+  var FACE_COLORS = ["c-active", "c-recon", "c-mutate", "c-exec", "c-ok", "c-warn", "c-err", "c-dim"];
   function initMascot() {
     var big = document.getElementById("mascotBig");
     if (!big) return;
     var nameEl = document.getElementById("mascotName");
-    document.querySelectorAll(".mstate").forEach(function (b) {
+    var strip = document.querySelector(".mascot-strip");
+    var btns = Array.prototype.slice.call(document.querySelectorAll(".mstate"));
+    var more = document.getElementById("mstateMore");
+
+    // show the first nine; the rest live behind "more"
+    var plain = btns.filter(function (b) { return !b.classList.contains("more"); });
+    plain.slice(9).forEach(function (b) { b.classList.add("more-hide"); });
+
+    function paintBig(fromBtn) {
+      var face = fromBtn ? fromBtn.querySelector(".mdl") : null;
+      FACE_COLORS.forEach(function (c) { big.classList.remove(c); });
+      if (face) {
+        face.className.split(/\s+/).forEach(function (c) {
+          if (c.indexOf("c-") === 0) big.classList.add(c);
+        });
+      }
+    }
+
+    plain.forEach(function (b) {
       b.addEventListener("click", function () {
         var st = b.getAttribute("data-state");
-        document.querySelectorAll(".mstate").forEach(function (x) { x.classList.remove("on"); });
+        plain.forEach(function (x) { x.classList.remove("on"); });
         b.classList.add("on");
         STATES.forEach(function (s) { big.classList.remove("st-" + s); });
         if (st === "track") big.classList.add("track");
         else { big.classList.remove("track"); big.classList.add("st-" + st); }
+        paintBig(b);
         if (nameEl) nameEl.textContent = lpT(b.getAttribute("data-label"));
       });
     });
+
+    if (more && strip) {
+      more.addEventListener("click", function () {
+        var open = strip.classList.toggle("open");
+        more.classList.toggle("on", open);
+        more.setAttribute("aria-expanded", String(open));
+        var lbl = document.getElementById("mstateMoreLabel");
+        if (lbl) lbl.textContent = lpT(open ? "mascot.less" : "mascot.more");
+      });
+    }
+    paintBig(document.querySelector(".mstate.on"));
   }
 
   /* ---- boot ---- */

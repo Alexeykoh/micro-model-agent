@@ -418,6 +418,10 @@ code { font-family: var(--mono); }
 .mstate.on { border-color: var(--dim-b); background: var(--panel); }
 .mstate em { font-style: normal; font-size: 10.5px; color: var(--dim-b); letter-spacing: .02em; }
 .mstate.on em { color: var(--fg); }
+.mstate.more-hide { display: none; }
+.mascot-strip.open .mstate.more-hide { display: flex; }
+.mstate.more { border-color: var(--border-2); border-style: dashed; padding: 14px 15px; }
+.mstate.more em { color: var(--accent); }
 
 /* ---------- service use cases ---------- */
 .cases { display: grid; grid-template-columns: 1fr 1fr; gap: 0 44px; margin-top: 28px; }
