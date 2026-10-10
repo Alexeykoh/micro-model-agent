@@ -11,9 +11,10 @@ project's own visual language — terminal editorial, MMART, two languages, two 
 
 ### Added
 
-- **Landing page** (`gh-pages/`, new): a static, build-free showcase served by GitHub Pages
-  from branch `master` → `/gh-pages`. Vanilla HTML/CSS/JS, no framework, no dependencies,
-  works offline and straight from `file://`.
+- **Landing page** (`gh-pages/`, new): a static, build-free showcase published to GitHub
+  Pages by `.github/workflows/pages.yml` (Pages build type `workflow`; the branch deploy
+  only accepts `/` or `/docs`). Vanilla HTML/CSS/JS, no framework, no dependencies, works
+  offline and straight from `file://`.
 - **Eleven numbered sections** telling the story: why (window limits), interfaces (an
   animated MMA turn plus `mma web`), context (anchors that survive compaction), tools
   (narrowed on demand), planning/MoE, memory, safety, service, install, honest limits
