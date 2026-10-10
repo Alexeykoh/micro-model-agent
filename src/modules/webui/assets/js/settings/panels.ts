@@ -164,33 +164,39 @@ export function groupHeader(label: string, count?: number | null): HTMLElement {
   return head;
 }
 
-// --- UI panel (theme, browser-local) -------------------------------------
+// --- UI panel (mode + theme, browser-local) ------------------------------
+const UI_THEME_KEY = "mma-ui-theme";
+
+/** Color mode: dark | light | auto (browser-local). */
 export function currentTheme(): string {
   return localStorage.getItem(THEME_KEY) || "auto";
+}
+
+/** UI theme: flat | console (browser-local; console is the default). */
+export function currentUiTheme(): string {
+  return localStorage.getItem(UI_THEME_KEY) || "console";
 }
 
 function renderUiPanel(): void {
   const container = document.querySelector<HTMLElement>('[data-panel="ui"]');
   if (!container) return;
   container.textContent = "";
-  const seg = el("span", "seg");
-  ["dark", "light", "auto"].forEach((theme) => {
-    const b = el("button", currentTheme() === theme ? "on" : "", theme);
-    b.type = "button";
-    b.setAttribute("aria-pressed", currentTheme() === theme ? "true" : "false");
-    b.addEventListener("click", () => {
-      seg.querySelectorAll<HTMLElement>("button").forEach((x) => {
-        x.classList.remove("on");
-        x.setAttribute("aria-pressed", "false");
-      });
-      b.classList.add("on");
-      b.setAttribute("aria-pressed", "true");
-      applyTheme(theme);
+  const segFor = (values: string[], current: () => string, onPick: (v: string) => void): HTMLElement => {
+    const seg = el("span", "seg");
+    values.forEach((value) => {
+      const b = el("button", current() === value ? "on" : "", value);
+      b.type = "button";
+      b.setAttribute("aria-pressed", current() === value ? "true" : "false");
+      b.addEventListener("click", () => onPick(value));
+      seg.appendChild(b);
     });
-    seg.appendChild(b);
-  });
-  // Theme is a browser-local preference (localStorage), not a config key, so it
-  // gets its own card before the generated sections.
+    return seg;
+  };
+  // Mode (dark/light/auto) and theme (flat/console) are independent axes.
+  const modeSeg = segFor(["dark", "light", "auto"], currentTheme, applyTheme);
+  const themeSeg = segFor(["console", "flat"], currentUiTheme, applyUiTheme);
+  // Both are browser-local preferences (localStorage), not config keys, so they
+  // get their own card before the generated sections.
   const card = el("div", "settings-section");
   const head = el("div", "sec-head");
   head.appendChild(el("span", "sec-title", t("web.settings.sec.ui.theme")));
@@ -198,7 +204,8 @@ function renderUiPanel(): void {
   const desc = t("web.settings.sec.ui.theme.desc");
   if (desc !== "web.settings.sec.ui.theme.desc") card.appendChild(el("div", "sec-desc", desc));
   const body = el("div", "sec-body");
-  body.appendChild(row(t("web.settings.theme"), seg));
+  body.appendChild(row(t("web.settings.mode"), modeSeg));
+  body.appendChild(row(t("web.settings.theme"), themeSeg));
   card.appendChild(body);
   container.appendChild(card);
   renderSections("ui", PANEL_SECTIONS.ui || []);
@@ -208,6 +215,12 @@ export function applyTheme(theme: string): void {
   localStorage.setItem(THEME_KEY, theme);
   const light = theme === "light" || (theme === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
   document.body.classList.toggle("light", !!light);
+  renderUiPanel();
+}
+
+export function applyUiTheme(theme: string): void {
+  localStorage.setItem(UI_THEME_KEY, theme);
+  document.body.classList.toggle("console", theme === "console");
   renderUiPanel();
 }
 

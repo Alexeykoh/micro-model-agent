@@ -1,0 +1,162 @@
+/* Console theme — terminal register for mma web.
+ *
+ * A live, browser-local theme (Settings → UI), toggled by `body.console`
+ * (see `settings/panels.ts` + the pre-paint script in `index.html`). Base
+ * layout/tokens come from `styles.css`; this sheet only re-registers the
+ * design tokens (near-black grounds, monospace voice, one neutral accent)
+ * and flattens the chrome, all scoped under `body.console` so it applies
+ * only while selected. */
+
+body.console {
+  color-scheme: dark;
+
+  --bg: #0a0a0b;
+  --fg: #d0cecc;
+  --panel: #0f0f10;
+  --sb-bg: #0c0c0d;
+  --stab-bg: #0c0c0d;
+  --surface: #121213;
+  --input-surface: #121213;
+  --inp-bg: #0f0f10;
+  --inp-border: #2a2a2b;
+  --inp-focus: #d0cecc;
+  --input-shadow: transparent;
+
+  --border: #1f1f20;
+  --border-2: #262627;
+  --border-3: #1f1f20;
+
+  --muted: #b6b3b0;
+  --dim-a: #8a8686;
+  --dim-b: #6a6666;
+  --dim-c: #6a6666;
+
+  --accent: #d0cecc;
+  --accent-bg: #171718;
+
+  --green: #86d992;
+  --green-fill: #86d992;
+  --red: #f0837a;
+  --err: #f0837a;
+  --red-strong: #f0837a;
+  --yellow: #e8c46a;
+  --purple: #d59cf0;
+  --cyan: #6fd0e6;
+
+  --think: #8a8686;
+  --cmdout: #b6b3b0;
+  --meta: #8a8686;
+  --args: #8a8686;
+
+  --hover-bg: #171718;
+  --hover-bg-2: #141415;
+  --x-hover-bg: #1c1c1d;
+
+  --u-fg: #e9e7e5;
+  --u-bg: #141415;
+  --u-border: #3a3a3b;
+
+  --ans: #b6b3b0;
+  --ans-bg: rgba(255, 255, 255, 0.03);
+
+  --toggle-off: #232324;
+  --toggle-knob: #8a8686;
+  --scroll-thumb: #262627;
+  --scroll-thumb-hover: #4a4a4b;
+  --stab-thumb: #262627;
+  --stab-thumb-hover: #4a4a4b;
+  --pipe: #262627;
+  --rule: #262627;
+
+  --plan-line: #262627;
+  --plan-bar-fg: #8a8686;
+  --sec-h: #8a8686;
+  --sec-h-hover: #d0cecc;
+  --stab-fg: #6a6666;
+
+  --overlay: rgba(0, 0, 0, 0.6);
+  --sb-backdrop: rgba(0, 0, 0, 0.5);
+  --shadow-menu: none;
+  --shadow-dd: none;
+  --shadow-modal: 0 0 0 1px var(--border);
+}
+
+/* Console register, light mode — still flat + monospace. */
+body.console.light {
+  --bg: #f7f7f4;
+  --fg: #1b1b19;
+  --panel: #ffffff;
+  --sb-bg: #f4f4f1;
+  --stab-bg: #f4f4f1;
+  --surface: #f0f0ed;
+  --input-surface: #ffffff;
+  --inp-bg: #ffffff;
+  --inp-border: #d6d6cf;
+  --inp-focus: #1b1b19;
+  --input-shadow: transparent;
+  --border: #dcdcd6;
+  --border-2: #d2d2cb;
+  --border-3: #dcdcd6;
+  --muted: #4a4a46;
+  --dim-a: #6a6a64;
+  --dim-b: #8a8a84;
+  --dim-c: #8a8a84;
+  --accent: #1b1b19;
+  --accent-bg: #ecece7;
+  --green: #1a7f37;
+  --green-fill: #1a7f37;
+  --red: #cf222e;
+  --err: #cf222e;
+  --red-strong: #cf222e;
+  --yellow: #9a6700;
+  --purple: #8250df;
+  --cyan: #116329;
+  --think: #6a6a64;
+  --cmdout: #4a4a46;
+  --meta: #6a6a64;
+  --args: #6a6a64;
+  --hover-bg: #ecece7;
+  --hover-bg-2: #f2f2ee;
+  --x-hover-bg: #e4e4df;
+  --u-fg: #111111;
+  --u-bg: #ecece7;
+  --u-border: #c8c8c0;
+  --ans: #33332f;
+  --ans-bg: rgba(0, 0, 0, 0.03);
+  --toggle-off: #dcdcd6;
+  --toggle-knob: #6a6a64;
+  --scroll-thumb: #cfcfc8;
+  --scroll-thumb-hover: #a8a8a0;
+  --stab-thumb: #cfcfc8;
+  --stab-thumb-hover: #a8a8a0;
+  --pipe: #dcdcd6;
+  --rule: #dcdcd6;
+  --plan-line: #dcdcd6;
+  --plan-bar-fg: #6a6a64;
+  --sec-h: #6a6a64;
+  --sec-h-hover: #1b1b19;
+  --stab-fg: #8a8a84;
+  --overlay: rgba(0, 0, 0, 0.35);
+  --sb-backdrop: rgba(0, 0, 0, 0.25);
+  --shadow-menu: none;
+  --shadow-dd: none;
+  --shadow-modal: 0 0 0 1px var(--border);
+}
+
+/* Console voice: monospace everywhere, sharp corners, no soft shadows. */
+body.console,
+body.console *,
+body.console *::before,
+body.console *::after {
+  font-family: "IBM Plex Mono", ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Prompt motif: the composer reads as a shell prompt. */
+body.console .composer-main::before {
+  content: "\203A";
+  color: var(--dim-b);
+  padding: 0 8px 0 4px;
+  align-self: center;
+}

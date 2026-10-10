@@ -1820,7 +1820,24 @@ Open source on GitHub (`Alexeykoh/micro-model-agent`); distribution is **GitHub 
   `tests/updater-web-notify.test.ts` (manifest check, download/checksum/extract/flip via injected
   fetch + extract, fail-open).
 
-### Current Version: 0.2.0
+### Web Themes: mode × theme (0.3.0)
+
+`mma web` has two independent, browser-local visual axes (both `localStorage`, applied
+live from Settings → UI and before first paint by the inline script in `index.html`):
+
+- **Mode** — `dark | light | auto` (`mma-theme`), toggles `body.light` (`applyTheme`).
+- **Theme** — `flat | console` (`mma-ui-theme`), toggles `body.console` (`applyUiTheme`);
+  **console is the default**.
+
+`console` is a terminal register (`src/modules/webui/assets/console.css`, served at
+`/console.css` via `WebUiAssets.cssConsole`): near-black grounds, monospace voice
+(IBM Plex Mono), one neutral accent, sharp corners, no shadows, `›` prompt motif. It is
+scoped under `body.console` (with a `body.console.light` light variant) so it composes with
+the mode and is a live class toggle, not a stylesheet swap. `styles.css` stays the base
+layout for both themes. Selector: `settings/panels.ts` (`renderUiPanel`, `currentTheme`/
+`currentUiTheme`); boot: `app.ts` (`applyTheme` + `applyUiTheme`).
+
+### Current Version: 0.3.0
 
 GitHub Releases distribution: one-line bootstrap installer, self-contained per-OS tarballs,
 manifest-driven updater (npm removed from the install path), MIT license (see the section above).

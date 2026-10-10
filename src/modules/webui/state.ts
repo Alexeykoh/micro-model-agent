@@ -49,6 +49,11 @@ export interface WebSessionManager {
 export interface WebUiAssets {
   html: string;
   css: string;
+  /**
+   * Альтернативная тема (`/console.css`). Пустая/отсутствует — фронт работает
+   * на базовом `styles.css`. Опциональна ради лёгких тестовых фикстур.
+   */
+  cssConsole?: string;
   js: string;
   /**
    * Скрипт визарда первого запуска (`/setup.js`). Опционален, чтобы лёгкие

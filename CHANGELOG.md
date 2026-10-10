@@ -4,6 +4,30 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-10-10
+
+`mma web` gets a second visual register. The theme axis is now split in two: **mode**
+(dark / light / auto) and **theme** (**flat** / **console**), and the console theme is
+the default — the browser UI reads like the terminal it runs in.
+
+### Added
+
+- **Console theme** (`src/modules/webui/assets/console.css`, new): a terminal register for
+  `mma web` — near-black grounds, monospace voice (IBM Plex Mono), a single neutral accent,
+  sharp corners, no soft shadows, and a `›` prompt motif on the composer. Ships a light
+  variant (`body.console.light`) so it composes with the light mode. Scoped entirely under
+  `body.console`, so it is a live class toggle, not a stylesheet swap.
+- **Two-axis theme selector** (`assets/js/settings/panels.ts`): mode (`dark`/`light`/`auto`)
+  and theme (`console`/`flat`) as independent browser-local preferences (`mma-theme`,
+  `mma-ui-theme`). Applied live from Settings → UI and before first paint (the inline script
+  in `index.html`); `app.ts` boot applies both.
+- **`/console.css` route** (`src/modules/webui/server.ts`, `assets.ts`, `state.ts`):
+  `WebUiAssets.cssConsole` (optional) served for the new sheet.
+
+### Changed
+
+- **Default `mma web` theme is now console** (flat remains one click away in Settings → UI).
+
 ## [0.2.0] - 2026-10-10
 
 Public landing page. The agent finally has a front door: a static GitHub Pages site in the
