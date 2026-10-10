@@ -107,6 +107,22 @@
     STATES.forEach(function (s) { f.classList.remove("st-" + s); });
     f.classList.add("st-" + (state || "track"));
   }
+
+  /* The companion reacts to what you actually do, then returns to whatever the
+     current section says it should be. */
+  var sectionState = "track";
+  var pulseTimer = null;
+  function pulseFace(state, ms) {
+    if (reduce) return;
+    var wrap = document.querySelector(".companion");
+    if (wrap) wrap.classList.add("show");
+    setFaceState(state);
+    clearTimeout(pulseTimer);
+    pulseState = state;
+    pulseTimer = setTimeout(function () { setFaceState(sectionState); }, ms || 1500);
+  }
+  var pulseState = null;
+
   function initCompanion() {
     var wrap = document.querySelector(".companion");
     var face = document.getElementById("compFace");
@@ -117,7 +133,8 @@
       entries.forEach(function (e) {
         if (e.isIntersecting) {
           if (!shown) { shown = true; wrap.classList.add("show"); }
-          setFaceState(SECTION_STATE[e.target.id] || "track");
+          sectionState = SECTION_STATE[e.target.id] || "track";
+          setFaceState(sectionState);
         }
       });
     }, { rootMargin: "-45% 0px -45% 0px" });
@@ -128,9 +145,8 @@
     document.querySelectorAll(".f-node, .tag, .preset").forEach(function (n) {
       n.addEventListener("mouseenter", function () {
         if (!shown) { shown = true; wrap.classList.add("show"); }
-        setFaceState("find");
+        pulseFace("find", 900);
       });
-      n.addEventListener("mouseleave", function () { setFaceState("track"); });
     });
   }
 
@@ -195,6 +211,7 @@
           try { document.execCommand("copy"); } catch (e) {}
           document.body.removeChild(ta); done();
         }
+        pulseFace("done", 1800);
       });
     });
   }
@@ -217,6 +234,7 @@
         root.querySelectorAll(".bwin").forEach(function (x) { x.classList.remove("on"); });
         b.classList.add("on");
         apply(b.getAttribute("data-win"));
+        pulseFace("think", 1300);
       });
     });
     apply("32");
@@ -239,7 +257,7 @@
       if (savedEl) savedEl.textContent = "−" + Math.round((1 - cost / FULL) * 100) + "% " + lpT("narrow.saved");
     }
     tags.forEach(function (t) {
-      t.addEventListener("click", function () { t.classList.toggle("on"); refresh(); });
+      t.addEventListener("click", function () { t.classList.toggle("on"); refresh(); pulseFace("find", 1100); });
     });
     var reset = document.getElementById("narrowReset");
     if (reset) reset.addEventListener("click", function () {
@@ -248,6 +266,7 @@
         t.classList.toggle("on", def);
       });
       refresh();
+      pulseFace("think", 1300);
     });
     window.refreshNarrow = refresh;
     refresh();
@@ -325,6 +344,7 @@
         else { big.classList.remove("track"); big.classList.add("st-" + st); }
         paintBig(b);
         if (nameEl) nameEl.textContent = lpT(b.getAttribute("data-label"));
+        pulseFace(st === "track" ? "find" : st, 1700);
       });
     });
 
@@ -335,6 +355,7 @@
         more.setAttribute("aria-expanded", String(open));
         var lbl = document.getElementById("mstateMoreLabel");
         if (lbl) lbl.textContent = lpT(open ? "mascot.less" : "mascot.more");
+        pulseFace("think", 1200);
       });
     }
     paintBig(document.querySelector(".mstate.on"));
@@ -357,7 +378,7 @@
     initCopy();
 
     var replay = document.getElementById("termReplay");
-    if (replay) replay.addEventListener("click", function () { typeTerminal(!reduce); });
+    if (replay) replay.addEventListener("click", function () { typeTerminal(!reduce); pulseFace("type", 1800); });
 
     var el = document.getElementById("verChip");
     if (el && window.MMA_VERSION) el.textContent = "v" + window.MMA_VERSION;
@@ -365,10 +386,12 @@
     var themeBtn = document.getElementById("themeBtn");
     if (themeBtn) themeBtn.addEventListener("click", function () {
       setTheme(root.classList.contains("light") ? "dark" : "light");
+      pulseFace("compact", 1200);
     });
     var langBtn = document.getElementById("langBtn");
     if (langBtn) langBtn.addEventListener("click", function () {
       setLang(root.lang === "ru" ? "en" : "ru");
+      pulseFace("run", 1200);
     });
   }
 
