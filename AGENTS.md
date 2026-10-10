@@ -1773,6 +1773,17 @@ server: каждый `checkFile` (каждая запись файла, кажд
 - **Доступность и движение:** skip-link, `:focus-visible`, `aria-*` на переключателях;
   вся анимация маскота — только opacity/transform и гасится в `prefers-reduced-motion`
   (терминал рисуется мгновенно, компаньон скрыт).
+- **Мобильные устройства / iOS 26 Safari «Liquid Glass»** (`index.html`, `styles.css`,
+  `app.js`): `viewport-fit=cover` + `color-scheme`; `env(safe-area-inset-*)` на fixed-nav
+  (top), `.wrap` (landscape left/right), `.skip`, `.foot`, `.companion`, `.totop`,
+  `scroll-padding-top`; `100svh` с вычетом safe-area; `text-size-adjust:100%`; тап-таргеты
+  ≥44/48px через `@media (any-pointer: coarse)`.
+  **App-shell:** документ залочен (`html,body{height:100%;overflow:hidden}`), скроллит
+  внутренний `#scroll-root` (`100dvh; overflow-y:auto`) — контент не просвечивает сквозь
+  полупрозрачный хром Safari и не «съезжает» (баг iOS 26 fixed/sticky, в in-app WebView
+  жив). Nav — `position:fixed` вне скроллера; прогресс/`toTop` читают `#scroll-root.scrollTop`.
+  Стекло nav вынесено на `::before` (Safari сэмплит `background-color`/`backdrop-filter`
+  самого fixed/sticky-элемента для тонирования хрома, но игнорирует псевдоэлементы).
 - **Гейт качества:** папка `gh-pages/` исключена из обоих гейтов — в `ignorePatterns`
   файла `.fallowrc.json` (как `webui/assets`) и в `files.includes` файла `biome.json`
   (`!gh-pages`: вёрстка/скрипты витрины давали 59 ошибок линтера). У статики нет графа
