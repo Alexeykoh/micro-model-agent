@@ -4,6 +4,36 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-10-10
+
+Public landing page. The agent finally has a front door: a static GitHub Pages site in the
+project's own visual language — terminal editorial, MMART, two languages, two themes.
+
+### Added
+
+- **Landing page** (`gh-pages/`, new): a static, build-free showcase served by GitHub Pages
+  from branch `master` → `/gh-pages`. Vanilla HTML/CSS/JS, no framework, no dependencies,
+  works offline and straight from `file://`.
+- **Eleven numbered sections** telling the story: why (window limits), interfaces (an
+  animated MMA turn plus `mma web`), context (anchors that survive compaction), tools
+  (narrowed on demand), planning/MoE, memory, safety, service, install, honest limits
+  with a comparison table, philosophy.
+- **MMART everywhere**: a hero face that tracks the cursor and greets on click, a corner
+  companion that changes state per section and reacts to interactions (copy, budget
+  switcher, tool tags, theme/language, terminal replay), and an interactive lab of all
+  18 mascot states (9 in a row plus a "more" toggle).
+- **Interactive widgets**: a context-budget bar (32K/64K/128K) styled exactly like the
+  web UI's segmented bar, and a tool-narrowing token meter with a live "saved %".
+- **Two languages and two themes** (`ru`/`en`, dark/light): auto-detected, switchable,
+  persisted, applied before first paint so there is no flash.
+- **Page meta and accessibility**: Open Graph/Twitter cards, JSON-LD `SoftwareApplication`,
+  canonical URL, `theme-color` per scheme, skip link, `:focus-visible`, `aria-*` on
+  toggles, `prefers-reduced-motion` respected everywhere.
+
+### Changed
+
+- **Docs**: new "Landing Page (`gh-pages/`)" section in `AGENTS.md`.
+
 ## [0.1.0] - 2026-10-09
 
 First public GitHub release; the npm-era `2.x` line is retired and versioning restarts at `0.1.0`.
