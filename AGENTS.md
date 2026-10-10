@@ -1733,7 +1733,47 @@ server: каждый `checkFile` (каждая запись файла, кажд
   на `.chat`; анимация входа — `popCenter` (сохраняет `translateX(-50%)`, иначе `pop`
   ронял центрирование и пилюля вспыхивала правее центра).
 
-### Distribution & Bootstrap (0.1.0)
+### Landing Page (`gh-pages/`) (0.2.0)
+
+Публичная витрина проекта на GitHub Pages. Статика без сборки, без зависимостей,
+без фреймворка; открывается и с диска (`file://`), работает офлайн.
+
+- **Публикация:** папка `gh-pages/` в корне репозитория; GitHub Pages source =
+  ветка `master`, каталог `/gh-pages` (не `/docs` — там спеки, отдавать нельзя).
+  Деплой — обычная публикация ветки, без workflow и без билда; включается один раз
+  в настройках репозитория (Settings → Pages → Deploy from a branch).
+- **Файлы:** `index.html` (разметка + `data-i18n`), `styles.css` (токены тем + лейаут),
+  `mascot.css` (вендоренное подмножество webui-компонента `.mdl`), `app.js`
+  (тема/язык/маскот/виджеты), `i18n.js` (словари `ru`/`en` + `lpT`), `favicon.svg`.
+- **Стиль:** «terminal editorial» — моноширинный шрифт, нумерованные разделы
+  (`01`…`11`), тонкие линейки вместо карточек, зерно и мягкие градиенты.
+  Токены цветов скопированы из `src/modules/webui/assets/styles.css` (тёмная тема
+  по умолчанию + переопределение в `html.light`), чтобы страница совпадала с приложением.
+- **Маскот MMART:** лицо-герой следит за курсором и приветствует по клику; «компаньон»
+  в углу меняет состояние по текущей секции и реагирует на действия (копирование,
+  калькуляторы, теги, тема/язык, повтор терминала); интерактивная лаборатория
+  показывает все 18 состояний (9 в ряд + кнопка «ещё»). Лицо декоративное
+  (`aria-hidden`), доступный статус остаётся в тексте.
+- **Локализация и темы:** `ru`/`en` через `lpT` + `data-i18n`; язык по умолчанию —
+  `navigator.language`, тема — `prefers-color-scheme`; оба сохраняются в `localStorage`.
+  Инлайн-скрипт в `<head>` ставит язык/тему до первой отрисовки (без мигания).
+  **Инвариант:** класс темы висит на `<html>` (`html.light`) — в CSS и в JS; не
+  переносить на `body`, иначе тема не переключится (был такой баг).
+- **Виджеты:** (1) сегментированный бар бюджета контекста — 32K/64K/128K, повторяет
+  стиль webui (`flex-grow`-пилюли с зазором 3px, цвета `--seg-*`, числа только в легенде
+  точками); (2) счётчик сужения набора инструментов — тумблеры тегов с пересчётом
+  токенов и «сэкономлено %».
+- **Скроллбары:** глобальные тонкие полосы в теме (Firefox `scrollbar-*` + WebKit
+  `::-webkit-scrollbar` с тонким ползунком через прозрачную рамку). Кнопка копирования
+  в блоке команды вынесена в отдельную ячейку грида, чтобы не уезжать за пределы
+  `overflow-x` области команды при сжатии экрана.
+- **Доступность и движение:** skip-link, `:focus-visible`, `aria-*` на переключателях;
+  вся анимация маскота — только opacity/transform и гасится в `prefers-reduced-motion`
+  (терминал рисуется мгновенно, компаньон скрыт).
+- **Гейт качества:** папка `gh-pages/` добавлена в `ignorePatterns` файла `.fallowrc.json`
+  (как `webui/assets`) — у статики нет графа импортов, иначе dead-code-гейт (и
+  pre-commit hook) падал бы на «недостижимых» файлах. `bun run quality` эту папку не
+  линтит и не типизирует; контракт с приложением не связан.
 
 Open source on GitHub (`Alexeykoh/micro-model-agent`); distribution is **GitHub Releases**, not npm.
 
@@ -1765,10 +1805,13 @@ Open source on GitHub (`Alexeykoh/micro-model-agent`); distribution is **GitHub 
   `tests/updater-web-notify.test.ts` (manifest check, download/checksum/extract/flip via injected
   fetch + extract, fail-open).
 
-### Current Version: 0.1.0
+### Current Version: 0.2.0
 
 GitHub Releases distribution: one-line bootstrap installer, self-contained per-OS tarballs,
 manifest-driven updater (npm removed from the install path), MIT license (see the section above).
+
+Landing page on GitHub Pages (`gh-pages/`, see the section above): a static, build-free
+showcase with MMART, ru/en and dark/light.
 
 Web answer panel, quiet reasoning, fixed latest pill, user-attachment persistence (2.40.0).
 

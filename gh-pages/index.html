@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MMA — a harness for small local models</title>
+  <meta name="description" content="An agent harness that keeps local 32K–64K models on task.">
+  <link rel="canonical" href="https://alexeykoh.github.io/micro-model-agent/">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#0f1013" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="MMA — a harness for small local models">
+  <meta property="og:description" content="An agent harness that keeps local 32K–64K models on task: context budget, structural compaction, real execution guarantees.">
+  <meta property="og:url" content="https://alexeykoh.github.io/micro-model-agent/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MMA — a harness for small local models">
+  <meta name="twitter:description" content="An agent harness that keeps local 32K–64K models on task.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "MMA — Micro Models Agent",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Windows, macOS, Linux",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://github.com/Alexeykoh/micro-model-agent",
+    "description": "An open-source agent harness that keeps local 32K–64K language models on task."
+  }
+  </script>
+  <script>
+    (function () {
+      try {
+        var th = localStorage.getItem("mma-lp-theme");
+        if (th === "light") document.documentElement.classList.add("light");
+        var lang = localStorage.getItem("mma-lp-lang") || (navigator.language || "en").slice(0, 2);
+        document.documentElement.lang = (lang === "ru") ? "ru" : "en";
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="mascot.css">
+</head>
+<body>
+  <script>window.MMA_VERSION = "0.1.0";</script>
+
+  <a class="skip" href="#top" data-i18n="a11y.skip"></a>
+  <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="brand" href="#top">
+        <span class="mdl sm c-recon track" id="navFace" aria-hidden="true"></span>
+        <span class="brand-txt">MMA</span>
+      </a>
+      <nav class="links">
+        <a href="#why" data-i18n="nav.why"></a>
+        <a href="#terminal" data-i18n="nav.terminal"></a>
+        <a href="#context" data-i18n="nav.context"></a>
+        <a href="#tools" data-i18n="nav.tools"></a>
+        <a href="#moe" data-i18n="nav.moe"></a>
+        <a href="#memory" data-i18n="nav.memory"></a>
+        <a href="#safety" data-i18n="nav.safety"></a>
+        <a href="#service" data-i18n="nav.service"></a>
+        <a href="#limits" data-i18n="nav.limits"></a>
+      </nav>
+      <div class="ctl">
+        <button id="langBtn" class="iconbtn" type="button">RU</button>
+        <button id="themeBtn" class="iconbtn" type="button" aria-label="Toggle theme" aria-pressed="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg></button>
+        <a class="gh" href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="nav.github"></a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="grain" aria-hidden="true"></div>
+      <div class="wrap hero-grid">
+        <div class="hero-txt">
+          <p class="kicker"><span class="dot"></span><span data-i18n="hero.kicker"></span></p>
+          <h1 data-i18n-html="hero.headline" data-i18n="hero.headline"></h1>
+          <p class="hero-lead" data-i18n="hero.lead"></p>
+          <div class="cta">
+            <a class="btn" href="#install" data-i18n="hero.install"></a>
+            <a class="btn ghost" href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="hero.source"></a>
+          </div>
+          <p class="hero-note" data-i18n="hero.note"></p>
+        </div>
+        <div class="hero-face">
+          <span class="greet" id="greet" role="status"></span>
+          <span class="mdl c-recon track" id="heroFace" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="wrap stats">
+        <div class="stat"><b data-i18n="stats.ctx"></b><span data-i18n="stats.ctx.l"></span></div>
+        <div class="stat"><b data-i18n="stats.tools"></b><span data-i18n="stats.tools.l"></span></div>
+        <div class="stat"><b data-i18n="stats.narrow"></b><span data-i18n="stats.narrow.l"></span></div>
+        <div class="stat"><b data-i18n="stats.license"></b><span data-i18n="stats.license.l"></span></div>
+      </div>
+    </section>
+
+    <!-- 01 WHY -->
+    <section id="why" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s1.n"></span><span class="sec-k" data-i18n="s1.k"></span></header>
+        <h2 class="sec-t" data-i18n="why.title"></h2>
+        <div class="split">
+          <div class="col prose">
+            <p data-i18n="why.p1"></p>
+            <p data-i18n="why.p2"></p>
+          </div>
+          <div class="col contrast">
+            <div class="c-col bad">
+              <h4 data-i18n="why.before"></h4>
+              <ul><li data-i18n="why.b1"></li><li data-i18n="why.b2"></li><li data-i18n="why.b3"></li></ul>
+            </div>
+            <div class="c-col good">
+              <h4 data-i18n="why.after"></h4>
+              <ul><li data-i18n="why.a1"></li><li data-i18n="why.a2"></li><li data-i18n="why.a3"></li></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 INTERFACES -->
+    <section id="terminal" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s2.n"></span><span class="sec-k" data-i18n="s2.k"></span></header>
+        <h2 class="sec-t" data-i18n="terminal.title"></h2>
+        <p class="sec-lead" data-i18n="terminal.lead"></p>
+        <div class="term" id="term">
+          <div class="term-bar">
+            <span class="term-cap" data-i18n="terminal.caption"></span>
+            <button class="term-replay" id="termReplay" type="button" data-i18n="terminal.replay"></button>
+          </div>
+          <pre class="term-body" id="termBody"
+               data-lines="term.l1,term.l2,term.l3,term.l4,term.l5,term.l6,term.l7,term.l8,term.l9"></pre>
+        </div>
+        <div class="web-note">
+          <span class="mdl sm c-exec track" id="webFace" aria-hidden="true"></span>
+          <p><b data-i18n="web.caption"></b> <span data-i18n="web.note"></span></p>
+        </div>
+
+        <div class="mascot">
+          <h3 class="sec-t2" data-i18n="mascot.title"></h3>
+          <p class="sec-lead" data-i18n="mascot.lead"></p>
+          <div class="mascot-lab">
+            <div class="mascot-main">
+              <span class="mdl c-recon track" id="mascotBig" aria-hidden="true"></span>
+              <span class="mascot-name" id="mascotName" data-i18n="ms.idle"></span>
+            </div>
+            <div class="mascot-strip">
+              <button class="mstate on" type="button" data-state="track" data-label="ms.idle"><span class="mdl xs c-recon track" aria-hidden="true"></span><em data-i18n="ms.idle"></em></button>
+              <button class="mstate" type="button" data-state="think" data-label="ms.think"><span class="mdl xs c-recon st-think" aria-hidden="true"></span><em data-i18n="ms.think"></em></button>
+              <button class="mstate" type="button" data-state="read" data-label="ms.read"><span class="mdl xs c-recon st-read" aria-hidden="true"></span><em data-i18n="ms.read"></em></button>
+              <button class="mstate" type="button" data-state="find" data-label="ms.find"><span class="mdl xs c-recon st-find" aria-hidden="true"></span><em data-i18n="ms.find"></em></button>
+              <button class="mstate" type="button" data-state="web" data-label="ms.web"><span class="mdl xs c-recon st-web" aria-hidden="true"></span><em data-i18n="ms.web"></em></button>
+              <button class="mstate" type="button" data-state="edit" data-label="ms.edit"><span class="mdl xs c-mutate st-edit" aria-hidden="true"></span><em data-i18n="ms.edit"></em></button>
+              <button class="mstate" type="button" data-state="type" data-label="ms.type"><span class="mdl xs c-exec st-type" aria-hidden="true"></span><em data-i18n="ms.type"></em></button>
+              <button class="mstate" type="button" data-state="create" data-label="ms.create"><span class="mdl xs c-mutate st-create" aria-hidden="true"></span><em data-i18n="ms.create"></em></button>
+              <button class="mstate" type="button" data-state="run" data-label="ms.run"><span class="mdl xs c-exec st-run" aria-hidden="true"></span><em data-i18n="ms.run"></em></button>
+              <button class="mstate" type="button" data-state="tests" data-label="ms.tests"><span class="mdl xs c-exec st-tests" aria-hidden="true"></span><em data-i18n="ms.tests"></em></button>
+              <button class="mstate" type="button" data-state="compact" data-label="ms.compact"><span class="mdl xs c-warn st-compact" aria-hidden="true"></span><em data-i18n="ms.compact"></em></button>
+              <button class="mstate" type="button" data-state="plan" data-label="ms.plan"><span class="mdl xs c-recon st-plan" aria-hidden="true"></span><em data-i18n="ms.plan"></em></button>
+              <button class="mstate" type="button" data-state="ask" data-label="ms.ask"><span class="mdl xs c-warn st-ask" aria-hidden="true"></span><em data-i18n="ms.ask"></em></button>
+              <button class="mstate" type="button" data-state="done" data-label="ms.done"><span class="mdl xs c-ok st-done" aria-hidden="true"></span><em data-i18n="ms.done"></em></button>
+              <button class="mstate" type="button" data-state="error" data-label="ms.error"><span class="mdl xs c-err st-error" aria-hidden="true"></span><em data-i18n="ms.error"></em></button>
+              <button class="mstate" type="button" data-state="stop" data-label="ms.stop"><span class="mdl xs c-dim st-stop" aria-hidden="true"></span><em data-i18n="ms.stop"></em></button>
+              <button class="mstate" type="button" data-state="queued" data-label="ms.queued"><span class="mdl xs c-dim st-queued" aria-hidden="true"></span><em data-i18n="ms.queued"></em></button>
+              <button class="mstate" type="button" data-state="boot" data-label="ms.boot"><span class="mdl xs c-dim st-boot" aria-hidden="true"></span><em data-i18n="ms.boot"></em></button>
+              <button class="mstate more" id="mstateMore" type="button" aria-expanded="false"><em id="mstateMoreLabel" data-i18n="mascot.more"></em></button>
+            </div>
+          </div>
+          <p class="note" data-i18n="mascot.pick"></p>
+          <p class="note" data-i18n="mascot.count"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 CONTEXT -->
+    <section id="context" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s3.n"></span><span class="sec-k" data-i18n="s3.k"></span></header>
+        <h2 class="sec-t" data-i18n="context.title"></h2>
+        <p class="sec-lead" data-i18n="context.lead"></p>
+        <div class="split">
+          <div class="col">
+            <div class="budget" id="budget">
+              <div class="budget-pick">
+                <span class="budget-label" data-i18n="budget.pick"></span>
+                <button class="bwin on" type="button" data-win="32">32K</button>
+                <button class="bwin" type="button" data-win="64">64K</button>
+                <button class="bwin" type="button" data-win="128">128K</button>
+              </div>
+              <div class="segbar" id="budgetBar" aria-hidden="true">
+                <i class="seg-system"></i>
+                <i class="seg-history"></i>
+                <i class="seg-reserve"></i>
+              </div>
+              <div class="seglegend">
+                <span class="segl-item"><i class="segl-dot seg-system"></i><span data-i18n="ctx.th.system"></span><b id="bSystem">3K</b></span>
+                <span class="segl-item"><i class="segl-dot seg-history"></i><span data-i18n="ctx.th.history"></span><b id="bHistory">24K</b></span>
+                <span class="segl-item"><i class="segl-dot seg-reserve"></i><span data-i18n="ctx.th.reserve"></span><b id="bReserve">5K</b></span>
+              </div>
+            </div>
+            <p class="note" data-i18n="ctx.note"></p>
+          </div>
+          <div class="col">
+            <h3 class="sub" data-i18n="ctx.anchor.title"></h3>
+            <ul class="anchors">
+              <li><code>[Task:]</code> <span data-i18n="ctx.a1"></span></li>
+              <li><code>[Plan:]</code> <span data-i18n="ctx.a2"></span></li>
+              <li><code>[Files:]</code> <span data-i18n="ctx.a3"></span></li>
+              <li><code>[Read:]</code> <span data-i18n="ctx.a4"></span></li>
+              <li><code>[Errors:]</code> <span data-i18n="ctx.a5"></span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 TOOLS -->
+    <section id="tools" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s4.n"></span><span class="sec-k" data-i18n="s4.k"></span></header>
+        <h2 class="sec-t" data-i18n="tools.title"></h2>
+        <p class="sec-lead" data-i18n="tools.lead"></p>
+        <div class="narrow" id="narrow">
+          <div class="narrow-head">
+            <span class="tags-label" data-i18n="narrow.pick"></span>
+            <button class="narrow-reset" id="narrowReset" type="button" data-i18n="narrow.reset"></button>
+          </div>
+          <div class="tags-row" id="tagsRow">
+            <button type="button" class="tag file on" data-cost="300">file</button>
+            <button type="button" class="tag code on" data-cost="350">code</button>
+            <button type="button" class="tag shell" data-cost="250">shell</button>
+            <button type="button" class="tag research" data-cost="400">research</button>
+            <button type="button" class="tag browser" data-cost="500">browser</button>
+            <button type="button" class="tag vision" data-cost="250">vision</button>
+            <button type="button" class="tag image" data-cost="150">image</button>
+            <button type="button" class="tag memory" data-cost="200">memory</button>
+          </div>
+          <div class="narrow-meter">
+            <div class="narrow-bar"><i id="narrowBar"></i></div>
+            <div class="narrow-read">
+              <b id="narrowCost">1.8K</b>
+              <span data-i18n="narrow.cost"></span>
+              <em id="narrowSaved"></em>
+            </div>
+          </div>
+        </div>
+        <div class="always">
+          <h3 class="sub" data-i18n="tools.always.title"></h3>
+          <p class="note" data-i18n="tools.always.d"></p>
+        </div>
+        <h3 class="sub" data-i18n="tools.list.title"></h3>
+        <dl class="rows rows-2col">
+          <div class="row"><dt data-i18n="tools.r1.k"></dt><dd data-i18n="tools.r1.v"></dd></div>
+          <div class="row"><dt data-i18n="tools.r2.k"></dt><dd data-i18n="tools.r2.v"></dd></div>
+          <div class="row"><dt data-i18n="tools.r3.k"></dt><dd data-i18n="tools.r3.v"></dd></div>
+          <div class="row"><dt data-i18n="tools.r4.k"></dt><dd data-i18n="tools.r4.v"></dd></div>
+          <div class="row"><dt data-i18n="tools.r5.k"></dt><dd data-i18n="tools.r5.v"></dd></div>
+          <div class="row"><dt data-i18n="tools.r6.k"></dt><dd data-i18n="tools.r6.v"></dd></div>
+          <div class="row"><dt data-i18n="tools.r7.k"></dt><dd data-i18n="tools.r7.v"></dd></div>
+          <div class="row"><dt data-i18n="tools.r8.k"></dt><dd data-i18n="tools.r8.v"></dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- 05 PLANNING + MoE -->
+    <section id="moe" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s5.n"></span><span class="sec-k" data-i18n="s5.k"></span></header>
+        <h2 class="sec-t" data-i18n="plan.title"></h2>
+        <p class="sec-lead" data-i18n="plan.lead"></p>
+        <ul class="feat">
+          <li data-i18n="plan.f1"></li>
+          <li data-i18n="plan.f2"></li>
+          <li data-i18n="plan.f3"></li>
+          <li data-i18n="plan.f4"></li>
+          <li data-i18n="plan.f5"></li>
+        </ul>
+        <h3 class="sec-t2" data-i18n="moe.title"></h3>
+        <p class="sec-lead" data-i18n="moe.lead"></p>
+        <div class="flow" id="moeFlow">
+          <span class="f-node" data-i18n="moe.flow1"></span><i class="f-arrow">→</i>
+          <span class="f-node" data-i18n="moe.flow2"></span><i class="f-arrow">→</i>
+          <span class="f-node" data-i18n="moe.flow3"></span><i class="f-arrow">→</i>
+          <span class="f-node" data-i18n="moe.flow4"></span><i class="f-arrow">→</i>
+          <span class="f-node" data-i18n="moe.flow5"></span>
+        </div>
+        <div class="moe-notes">
+          <p><span class="mk">◆</span><span data-i18n="moe.validate"></span></p>
+          <p><span class="mk">◆</span><span data-i18n="moe.experts"></span></p>
+          <p><span class="mk">◆</span><span data-i18n="moe.replan"></span></p>
+          <p><span class="mk">◆</span><span data-i18n="moe.fallback"></span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 06 MEMORY -->
+    <section id="memory" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s6.n"></span><span class="sec-k" data-i18n="s6.k"></span></header>
+        <h2 class="sec-t" data-i18n="memory.title"></h2>
+        <ol class="axis">
+          <li>
+            <span class="axis-n">i</span>
+            <div><h3 data-i18n="memory.h1.t"></h3><p data-i18n="memory.h1.d"></p></div>
+          </li>
+          <li>
+            <span class="axis-n">ii</span>
+            <div><h3 data-i18n="memory.h2.t"></h3><p data-i18n="memory.h2.d"></p></div>
+          </li>
+          <li>
+            <span class="axis-n">iii</span>
+            <div><h3 data-i18n="memory.h3.t"></h3><p data-i18n="memory.h3.d"></p></div>
+          </li>
+        </ol>
+        <p class="note" data-i18n="memory.note"></p>
+
+        <h3 class="sec-t2" data-i18n="mem.files"></h3>
+        <dl class="rows">
+          <div class="row"><dt><code>history.jsonl</code></dt><dd data-i18n="mem.f1.d"></dd></div>
+          <div class="row"><dt><code>session.jsonl</code></dt><dd data-i18n="mem.f2.d"></dd></div>
+          <div class="row"><dt><code>meta.json</code></dt><dd data-i18n="mem.f3.d"></dd></div>
+          <div class="row"><dt><code>conventions.md</code> · <code>decisions.md</code></dt><dd data-i18n="mem.f4.d"></dd></div>
+          <div class="row"><dt><code>errors.md</code></dt><dd data-i18n="mem.f5.d"></dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- 07 SAFETY -->
+    <section id="safety" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s7.n"></span><span class="sec-k" data-i18n="s7.k"></span></header>
+        <h2 class="sec-t" data-i18n="safety.title"></h2>
+        <p class="sec-lead" data-i18n="safety.lead"></p>
+        <div class="pipe" aria-hidden="true"></div>
+        <p class="pipe-txt" data-i18n="safety.pipe"></p>
+        <dl class="rows wide">
+          <div class="row"><dt data-i18n="safety.v1.t"></dt><dd data-i18n="safety.v1.d"></dd></div>
+          <div class="row"><dt data-i18n="safety.v2.t"></dt><dd data-i18n="safety.v2.d"></dd></div>
+          <div class="row"><dt data-i18n="safety.v3.t"></dt><dd data-i18n="safety.v3.d"></dd></div>
+          <div class="row"><dt data-i18n="safety.v4.t"></dt><dd data-i18n="safety.v4.d"></dd></div>
+        </dl>
+        <div class="presets">
+          <span class="presets-label" data-i18n="safety.presets"></span>
+          <span class="preset" data-i18n="safety.p1"></span>
+          <span class="preset on" data-i18n="safety.p2"></span>
+          <span class="preset" data-i18n="safety.p3"></span>
+        </div>
+        <p class="note" data-i18n="safety.more"></p>
+      </div>
+    </section>
+
+    <!-- 08 SERVICE -->
+    <section id="service" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s8.n"></span><span class="sec-k" data-i18n="s8.k"></span></header>
+        <h2 class="sec-t" data-i18n="service.title"></h2>
+        <p class="sec-lead" data-i18n="service.lead"></p>
+        <div class="split">
+          <div class="col">
+            <h3 class="sub" data-i18n="service.endpoints"></h3>
+            <pre class="endpoints">POST /v1/sessions
+POST /v1/sessions/:id/tasks
+GET  /v1/tasks/:jobId
+GET  /v1/sessions/:id/events   <span class="c">SSE</span>
+GET  /v1/health   GET /v1/ready
+GET  /v1/openapi.json   GET /v1/docs</pre>
+          </div>
+          <div class="col">
+            <ul class="feat">
+              <li data-i18n="service.f1"></li>
+              <li data-i18n="service.f2"></li>
+              <li data-i18n="service.f3"></li>
+              <li data-i18n="service.f4"></li>
+              <li data-i18n="service.f5"></li>
+            </ul>
+            <p class="note" data-i18n="service.docs"></p>
+          </div>
+        </div>
+
+        <h3 class="sec-t2" data-i18n="svc.cases"></h3>
+        <div class="cases">
+          <div class="case"><b data-i18n="svc.c1.t"></b><span data-i18n="svc.c1.d"></span></div>
+          <div class="case"><b data-i18n="svc.c2.t"></b><span data-i18n="svc.c2.d"></span></div>
+          <div class="case"><b data-i18n="svc.c3.t"></b><span data-i18n="svc.c3.d"></span></div>
+          <div class="case"><b data-i18n="svc.c4.t"></b><span data-i18n="svc.c4.d"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 09 INSTALL -->
+    <section id="install" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s9.n"></span><span class="sec-k" data-i18n="s9.k"></span></header>
+        <h2 class="sec-t" data-i18n="install.title"></h2>
+        <p class="sec-lead" data-i18n="install.lead"></p>
+        <div class="code-row">
+          <span class="code-label" data-i18n="install.unix"></span>
+          <code id="cmdUnix">curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash</code>
+          <button class="copy" type="button" data-target="cmdUnix" data-copy="install.copy" data-copied="install.copied"></button>
+        </div>
+        <div class="code-row">
+          <span class="code-label" data-i18n="install.win"></span>
+          <code id="cmdWin">irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.ps1 | iex</code>
+          <button class="copy" type="button" data-target="cmdWin" data-copy="install.copy" data-copied="install.copied"></button>
+        </div>
+        <h3 class="sub" data-i18n="install.then"></h3>
+        <dl class="rows">
+          <div class="row"><dt><code>mma "…"</code></dt><dd data-i18n="install.c1.d"></dd></div>
+          <div class="row"><dt><code>mma</code></dt><dd data-i18n="install.c2.d"></dd></div>
+          <div class="row"><dt><code>mma web</code></dt><dd data-i18n="install.c3.d"></dd></div>
+          <div class="row"><dt><code>mma serve</code></dt><dd data-i18n="install.c4.d"></dd></div>
+        </dl>
+        <p class="note" data-i18n="install.req"></p>
+      </div>
+    </section>
+
+    <!-- 10 LIMITS -->
+    <section id="limits" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s10.n"></span><span class="sec-k" data-i18n="s10.k"></span></header>
+        <h2 class="sec-t" data-i18n="lim.title"></h2>
+        <p class="sec-lead" data-i18n="lim.lead"></p>
+        <ul class="feat">
+          <li data-i18n="lim.l1"></li>
+          <li data-i18n="lim.l2"></li>
+          <li data-i18n="lim.l3"></li>
+          <li data-i18n="lim.l4"></li>
+          <li data-i18n="lim.l5"></li>
+          <li data-i18n="lim.l6"></li>
+        </ul>
+        <h3 class="sec-t2" data-i18n="cmp.title"></h3>
+        <div class="cmp-wrap">
+          <table class="cmp">
+            <thead>
+              <tr><th></th><th data-i18n="cmp.h2"></th><th class="hl" data-i18n="cmp.h3"></th><th data-i18n="cmp.h4"></th></tr>
+            </thead>
+            <tbody>
+              <tr><th data-i18n="cmp.a1"></th><td data-i18n="cmp.b1"></td><td class="hl" data-i18n="cmp.c1"></td><td data-i18n="cmp.d1"></td></tr>
+              <tr><th data-i18n="cmp.a2"></th><td data-i18n="cmp.b2"></td><td class="hl" data-i18n="cmp.c2"></td><td data-i18n="cmp.d2"></td></tr>
+              <tr><th data-i18n="cmp.a3"></th><td data-i18n="cmp.b3"></td><td class="hl" data-i18n="cmp.c3"></td><td data-i18n="cmp.d3"></td></tr>
+              <tr><th data-i18n="cmp.a4"></th><td data-i18n="cmp.b4"></td><td class="hl" data-i18n="cmp.c4"></td><td data-i18n="cmp.d4"></td></tr>
+              <tr><th data-i18n="cmp.a5"></th><td data-i18n="cmp.b5"></td><td class="hl" data-i18n="cmp.c5"></td><td data-i18n="cmp.d5"></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11 PHILOSOPHY -->
+    <section id="phil" class="sec last">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s11.n"></span><span class="sec-k" data-i18n="s11.k"></span></header>
+        <h2 class="sec-t" data-i18n="phil.title"></h2>
+        <p class="sec-lead" data-i18n="phil.p"></p>
+        <ul class="feat inline">
+          <li data-i18n="phil.b1"></li>
+          <li data-i18n="phil.b2"></li>
+          <li data-i18n="phil.b3"></li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-grid">
+      <div class="foot-brand">
+        <span class="mdl sm c-recon track" id="footFace" aria-hidden="true"></span>
+        <p><b>MMA</b> — <span data-i18n="footer.tagline"></span></p>
+        <p class="foot-meta"><span id="verChip">v0.1.0</span> · <span data-i18n="footer.license"></span></p>
+      </div>
+      <div class="foot-cols">
+        <div class="foot-col">
+          <h4 data-i18n="footer.project"></h4>
+          <a href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="footer.repo"></a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/releases" data-i18n="footer.releases"></a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/issues" data-i18n="footer.issues"></a>
+        </div>
+        <div class="foot-col">
+          <h4 data-i18n="footer.docs"></h4>
+          <a href="https://github.com/Alexeykoh/micro-model-agent#readme">README</a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/docs/mma-features-overview.md" data-i18n="footer.features"></a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/AGENTS.md">AGENTS.md</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div class="companion" aria-hidden="true">
+    <span class="mdl sm c-recon track" id="compFace"></span>
+  </div>
+
+  <script defer src="i18n.js"></script>
+  <script defer src="app.js"></script>
+</body>
+</html>
