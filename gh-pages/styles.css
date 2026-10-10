@@ -401,6 +401,44 @@ code { font-family: var(--mono); }
 .companion.show { opacity: 1; transform: translateY(0); }
 .companion .mdl { --s: 46px; }
 
+/* ---------- mascot lab (MMART in the web UI) ---------- */
+.mascot { margin-top: 46px; }
+.mascot-lab { display: flex; gap: 44px; align-items: center; margin-top: 28px; flex-wrap: wrap; }
+.mascot-main { display: flex; flex-direction: column; align-items: center; gap: 14px; flex: none; }
+.mascot-main .mdl { --s: 96px; }
+.mascot-name { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim-b); }
+.mascot-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.mstate {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  background: transparent; border: 1px solid transparent; border-radius: 10px;
+  padding: 10px 9px; cursor: pointer; font: inherit;
+  transition: border-color .16s var(--ease), background .16s var(--ease);
+}
+.mstate:hover { border-color: var(--border-2); }
+.mstate.on { border-color: var(--dim-b); background: var(--panel); }
+.mstate em { font-style: normal; font-size: 10.5px; color: var(--dim-b); letter-spacing: .02em; }
+.mstate.on em { color: var(--fg); }
+
+/* ---------- service use cases ---------- */
+.cases { display: grid; grid-template-columns: 1fr 1fr; gap: 0 44px; margin-top: 28px; }
+.case { display: grid; grid-template-columns: 150px 1fr; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.case b { font-size: 13.5px; color: var(--fg); font-weight: 600; }
+.case span { color: var(--dim-a); font-size: 13.5px; }
+
+/* ---------- comparison table ---------- */
+.cmp-wrap { margin-top: 26px; overflow-x: auto; border: 1px solid var(--border-2); border-radius: 10px; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 660px; }
+.cmp th, .cmp td { text-align: left; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+.cmp thead th {
+  font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--dim-b);
+  border-bottom: 1px solid var(--border-2); font-weight: 600;
+}
+.cmp tbody th { color: var(--dim-b); font-weight: 600; font-size: 12.5px; }
+.cmp td { color: var(--muted); }
+.cmp thead th.hl { color: var(--accent); }
+.cmp td.hl { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--fg); }
+.cmp tbody tr:last-child td, .cmp tbody tr:last-child th { border-bottom: 0; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 1180px) { .links { display: none; } }
 @media (max-width: 980px) {
@@ -412,11 +450,14 @@ code { font-family: var(--mono); }
   .hero-face { order: -1; }
   .hero-face .mdl { --s: 96px; }
   .moe-notes { grid-template-columns: 1fr; }
+  .cases { grid-template-columns: 1fr; }
+  .mascot-lab { gap: 28px; }
 }
 @media (max-width: 700px) {
   .contrast { grid-template-columns: 1fr; }
   .c-col + .c-col { border-left: 0; border-top: 1px solid var(--border-2); }
   .row, .rows.wide .row { grid-template-columns: 1fr; gap: 4px; }
+  .case { grid-template-columns: 1fr; gap: 4px; }
   .foot-cols { gap: 36px; }
   .stat { padding: 16px 16px 18px; }
 }

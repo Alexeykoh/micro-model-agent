@@ -100,6 +100,61 @@ html.light .c-dim { --face-c: var(--panel); }
 .mdl.st-error .star::before { content: "*"; }
 @keyframes mdlStar { 0% { opacity: 0; transform: scale(.2) rotate(0); } 25% { opacity: 1; transform: scale(1.15) rotate(35deg); } 55% { opacity: .95; transform: scale(.9) rotate(90deg); } 85% { opacity: 0; transform: scale(.4) rotate(150deg); } 100% { opacity: 0; transform: scale(.2) rotate(190deg); } }
 
+/* ---- additional states (the remaining 9 of the 18) ---- */
+@keyframes mdlSpin { to { transform: rotate(360deg); } }
+/* type (composing answer) */
+@keyframes mdlType { 0%, 100% { transform: translate(0, calc(var(--s) * .04)); } 10% { transform: translate(calc(var(--s) * -.012), calc(var(--s) * .055)); } 20% { transform: translate(0, calc(var(--s) * .04)); } 30% { transform: translate(calc(var(--s) * .014), calc(var(--s) * .055)); } 40% { transform: translate(0, calc(var(--s) * .04)); } 50% { transform: translate(calc(var(--s) * -.008), calc(var(--s) * .05)); } 60% { transform: translate(0, calc(var(--s) * .04)); } 72% { transform: translate(calc(var(--s) * .016), calc(var(--s) * .055)); } 84% { transform: translate(0, calc(var(--s) * .04)); } }
+@keyframes mdlTypeBody { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.006); } }
+.mdl.st-type { animation: mdlTypeBody .8s ease-in-out infinite; }
+.mdl.st-type .eyes { animation: mdlType .8s ease-in-out infinite; }
+.mdl.st-type .keys { display: flex; position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%); gap: max(2px, calc(var(--s) * .07)); }
+.mdl .keys i { display: block; width: max(2px, calc(var(--s) * .06)); height: max(2px, calc(var(--s) * .06)); border-radius: 50%; background: var(--eye-c); opacity: 0; animation: mdlKeyTap .4s linear infinite; }
+.mdl .keys i:nth-child(2) { animation-delay: .1s; }
+.mdl .keys i:nth-child(3) { animation-delay: .2s; }
+.mdl .keys i:nth-child(4) { animation-delay: .3s; }
+@keyframes mdlKeyTap { 0% { opacity: 0; transform: translateY(0) scale(.4); } 25% { opacity: 1; transform: translateY(-30%) scale(1); } 60% { opacity: .85; } 100% { opacity: 0; transform: translateY(-70%) scale(.4); } }
+/* create (writing a new file) */
+@keyframes mdlDraw { 0%, 100% { transform: translate(calc(var(--s) * -.05), calc(var(--s) * .05)); } 40% { transform: translate(calc(var(--s) * .02), calc(var(--s) * .055)); } 62% { transform: translate(calc(var(--s) * -.03), calc(var(--s) * .05)); } }
+@keyframes mdlNod { 0%, 70% { transform: scale(1); } 82% { transform: scale(1.05) translateY(2%); } 92% { transform: scale(.98); } 100% { transform: scale(1); } }
+@keyframes mdlGrow { 0% { width: 0; opacity: .4; } 60% { width: 56%; opacity: 1; } 80% { width: 60%; opacity: 1; } 90% { width: 60%; opacity: 0; } 100% { width: 0; opacity: 0; } }
+@keyframes mdlFly { 0%, 58% { opacity: 0; transform: translate(-50%, 0) scale(.6); } 64% { opacity: 1; transform: translate(-50%, -8%) scale(1); } 84% { opacity: 0; transform: translate(90%, -150%) scale(.9) rotate(18deg); } 100% { opacity: 0; transform: translate(-50%, 0) scale(.6); } }
+.mdl.st-create { animation: mdlNod 3s ease-in-out infinite; }
+.mdl.st-create .eyes { animation: mdlDraw 3s ease-in-out infinite; }
+.mdl.st-create .grow { display: block; position: absolute; left: 20%; bottom: 16%; height: 8%; width: 0; border-radius: 99px; background: var(--eye-c); animation: mdlGrow 3s ease-in-out infinite; }
+.mdl.st-create .fly { display: block; position: absolute; left: 50%; bottom: 22%; width: calc(var(--s) * .17); height: calc(var(--s) * .21); border-radius: 2px; background: var(--eye-c); transform: translate(-50%, 0); animation: mdlFly 3s ease-in-out infinite; }
+.mdl.st-create .fly::after { content: ""; position: absolute; top: 0; right: 0; border-left: calc(var(--s) * .07) solid transparent; border-top: calc(var(--s) * .07) solid var(--face-c); }
+/* tests */
+@keyframes mdlNeedle { 0%, 100% { transform: translateY(-7%); } 50% { transform: translateY(7%); } }
+@keyframes mdlTestPulse { 0%, 100% { transform: scale(1); } 25%, 75% { transform: scale(1.03); } }
+.mdl.st-tests { animation: mdlTestPulse .7s ease-in-out infinite; }
+.mdl.st-tests .eyes { animation: mdlNeedle .7s ease-in-out infinite; }
+.mdl.st-tests .eye { animation: mdlBlink 1.4s var(--ease) infinite; }
+/* compact */
+@keyframes mdlCompact { 0%, 100% { transform: scaleX(1); } 35% { transform: scaleX(.38); } 62% { transform: scaleX(1); } }
+.mdl.st-compact { animation: mdlCompact 2.4s ease-in-out infinite; }
+/* plan */
+@keyframes mdlPlan { 0% { transform: translate(calc(var(--s) * -.06), calc(var(--s) * -.05)); } 25% { transform: translate(calc(var(--s) * .06), calc(var(--s) * -.05)); } 50% { transform: translate(calc(var(--s) * -.06), calc(var(--s) * .05)); } 75% { transform: translate(calc(var(--s) * .06), calc(var(--s) * .05)); } 100% { transform: translate(calc(var(--s) * -.06), calc(var(--s) * -.05)); } }
+.mdl.st-plan .eyes { animation: mdlPlan 3.6s steps(1, end) infinite; }
+/* ask */
+@keyframes mdlAsk { 0%, 100% { rotate: 0deg; } 14% { rotate: -8deg; } 30% { rotate: 8deg; } 46% { rotate: -6deg; } 62% { rotate: 6deg; } 78% { rotate: -3deg; } }
+@keyframes mdlQ { 0%, 100% { opacity: .9; transform: scale(1) translateY(0); } 50% { opacity: 1; transform: scale(1.18) translateY(calc(var(--s) * -.06)); } }
+.mdl.st-ask { animation: mdlAsk 2.4s ease-in-out infinite, mdlBreathe 4.2s ease-in-out infinite; }
+.mdl.st-ask .eye { animation: mdlBlink 4.4s var(--ease) infinite; }
+.mdl.st-ask .q { display: block; position: absolute; top: -20%; right: -16%; font-size: calc(var(--s) * .5); line-height: 1; font-weight: 700; color: var(--yellow); animation: mdlQ 2.4s ease-in-out infinite; }
+.mdl.st-ask .q::before { content: "?"; }
+/* stop */
+@keyframes mdlDeflate { 0% { transform: scale(1); } 55% { transform: scale(.9) translateY(2%); } 100% { transform: scale(.93) translateY(2%); } }
+.mdl.st-stop { animation: mdlDeflate 1.2s ease-out forwards; }
+/* queued */
+@keyframes mdlSway { 0%, 100% { rotate: 0deg; } 25% { rotate: -3deg; } 75% { rotate: 3deg; } }
+@keyframes mdlGlance { 0%, 58%, 100% { transform: translate(0, 0); } 70%, 86% { transform: translate(calc(var(--s) * -.05), 0); } }
+.mdl.st-queued { animation: mdlSway 4.4s ease-in-out infinite; }
+.mdl.st-queued .eyes { animation: mdlGlance 4.4s ease-in-out infinite; }
+/* boot */
+@keyframes mdlBootBlink { 0%, 84%, 100% { transform: scaleY(1); } 88% { transform: scaleY(.1); } 90% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
+.mdl.st-boot { border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--eye-c) 55%, transparent); animation: mdlSpin 2.8s linear infinite; }
+.mdl.st-boot .eye { border-radius: 50%; animation: mdlBootBlink 3.4s var(--ease) infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   .mdl, .mdl * { animation: none !important; }
 }

@@ -50,6 +50,9 @@
       var el = document.querySelector(pair[0]);
       if (el) el.setAttribute("content", lpT(pair[1]));
     });
+    var onM = document.querySelector(".mstate.on");
+    var nameEl = document.getElementById("mascotName");
+    if (onM && nameEl) nameEl.textContent = lpT(onM.getAttribute("data-label"));
   }
   function setLang(lang) {
     root.lang = lang;
@@ -62,14 +65,16 @@
   }
 
   /* ---- MMART faces ---- */
-  var STATES = ["track", "think", "read", "find", "run", "edit", "web", "done", "error"];
+  var STATES = ["track", "think", "read", "find", "web", "edit", "type", "create", "run",
+              "tests", "compact", "plan", "ask", "done", "error", "stop", "queued", "boot"];
   function mountFace(el) {
     if (el && !el.querySelector(".eyes")) {
       el.innerHTML = '<span class="eyes"><i class="eye left"></i><i class="eye right"></i></span>' +
-        '<span class="orb" aria-hidden="true"><i></i></span>' +
-        '<span class="dust" aria-hidden="true"><i></i><i></i><i></i></span>' +
-        '<span class="spark" aria-hidden="true"></span>' +
-        '<span class="star" aria-hidden="true"></span>';
+        '<span class="orb"><i></i></span>' +
+        '<span class="keys"><i></i><i></i><i></i><i></i></span>' +
+        '<span class="grow"></span><span class="fly"></span>' +
+        '<span class="dust"><i></i><i></i><i></i></span>' +
+        '<span class="q"></span><span class="spark"></span><span class="star"></span>';
     }
   }
   function initHeroFace(el) {
@@ -94,7 +99,7 @@
   var SECTION_STATE = {
     why: "think", terminal: "run", context: "read", tools: "find",
     moe: "edit", memory: "think", safety: "run", service: "run",
-    install: "done", phil: "done"
+    install: "done", limits: "think", phil: "done"
   };
   function setFaceState(state) {
     var f = document.getElementById("compFace");
@@ -286,6 +291,24 @@
     upd();
   }
 
+  /* ---- mascot lab ---- */
+  function initMascot() {
+    var big = document.getElementById("mascotBig");
+    if (!big) return;
+    var nameEl = document.getElementById("mascotName");
+    document.querySelectorAll(".mstate").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var st = b.getAttribute("data-state");
+        document.querySelectorAll(".mstate").forEach(function (x) { x.classList.remove("on"); });
+        b.classList.add("on");
+        STATES.forEach(function (s) { big.classList.remove("st-" + s); });
+        if (st === "track") big.classList.add("track");
+        else { big.classList.remove("track"); big.classList.add("st-" + st); }
+        if (nameEl) nameEl.textContent = lpT(b.getAttribute("data-label"));
+      });
+    });
+  }
+
   /* ---- boot ---- */
   function boot() {
     setTheme(currentTheme());
@@ -294,6 +317,7 @@
     document.querySelectorAll(".mdl").forEach(mountFace);
     initHeroFace(document.getElementById("heroFace"));
     initGreeting();
+    initMascot();
     initBudget();
     initNarrow();
     initCompanion();

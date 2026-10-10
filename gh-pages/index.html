@@ -63,6 +63,7 @@
         <a href="#memory" data-i18n="nav.memory"></a>
         <a href="#safety" data-i18n="nav.safety"></a>
         <a href="#service" data-i18n="nav.service"></a>
+        <a href="#limits" data-i18n="nav.limits"></a>
       </nav>
       <div class="ctl">
         <button id="langBtn" class="iconbtn" type="button">RU</button>
@@ -141,6 +142,39 @@
         <div class="web-note">
           <span class="mdl sm c-exec track" id="webFace" aria-hidden="true"></span>
           <p><b data-i18n="web.caption"></b> <span data-i18n="web.note"></span></p>
+        </div>
+
+        <div class="mascot">
+          <h3 class="sec-t2" data-i18n="mascot.title"></h3>
+          <p class="sec-lead" data-i18n="mascot.lead"></p>
+          <div class="mascot-lab">
+            <div class="mascot-main">
+              <span class="mdl c-recon track" id="mascotBig" aria-hidden="true"></span>
+              <span class="mascot-name" id="mascotName" data-i18n="ms.idle"></span>
+            </div>
+            <div class="mascot-strip">
+              <button class="mstate on" type="button" data-state="track" data-label="ms.idle"><span class="mdl xs c-recon track" aria-hidden="true"></span><em data-i18n="ms.idle"></em></button>
+              <button class="mstate" type="button" data-state="think" data-label="ms.think"><span class="mdl xs c-recon st-think" aria-hidden="true"></span><em data-i18n="ms.think"></em></button>
+              <button class="mstate" type="button" data-state="read" data-label="ms.read"><span class="mdl xs c-recon st-read" aria-hidden="true"></span><em data-i18n="ms.read"></em></button>
+              <button class="mstate" type="button" data-state="find" data-label="ms.find"><span class="mdl xs c-recon st-find" aria-hidden="true"></span><em data-i18n="ms.find"></em></button>
+              <button class="mstate" type="button" data-state="web" data-label="ms.web"><span class="mdl xs c-recon st-web" aria-hidden="true"></span><em data-i18n="ms.web"></em></button>
+              <button class="mstate" type="button" data-state="edit" data-label="ms.edit"><span class="mdl xs c-mutate st-edit" aria-hidden="true"></span><em data-i18n="ms.edit"></em></button>
+              <button class="mstate" type="button" data-state="type" data-label="ms.type"><span class="mdl xs c-exec st-type" aria-hidden="true"></span><em data-i18n="ms.type"></em></button>
+              <button class="mstate" type="button" data-state="create" data-label="ms.create"><span class="mdl xs c-mutate st-create" aria-hidden="true"></span><em data-i18n="ms.create"></em></button>
+              <button class="mstate" type="button" data-state="run" data-label="ms.run"><span class="mdl xs c-exec st-run" aria-hidden="true"></span><em data-i18n="ms.run"></em></button>
+              <button class="mstate" type="button" data-state="tests" data-label="ms.tests"><span class="mdl xs c-exec st-tests" aria-hidden="true"></span><em data-i18n="ms.tests"></em></button>
+              <button class="mstate" type="button" data-state="compact" data-label="ms.compact"><span class="mdl xs c-warn st-compact" aria-hidden="true"></span><em data-i18n="ms.compact"></em></button>
+              <button class="mstate" type="button" data-state="plan" data-label="ms.plan"><span class="mdl xs c-recon st-plan" aria-hidden="true"></span><em data-i18n="ms.plan"></em></button>
+              <button class="mstate" type="button" data-state="ask" data-label="ms.ask"><span class="mdl xs c-warn st-ask" aria-hidden="true"></span><em data-i18n="ms.ask"></em></button>
+              <button class="mstate" type="button" data-state="done" data-label="ms.done"><span class="mdl xs c-ok st-done" aria-hidden="true"></span><em data-i18n="ms.done"></em></button>
+              <button class="mstate" type="button" data-state="error" data-label="ms.error"><span class="mdl xs c-err st-error" aria-hidden="true"></span><em data-i18n="ms.error"></em></button>
+              <button class="mstate" type="button" data-state="stop" data-label="ms.stop"><span class="mdl xs c-dim st-stop" aria-hidden="true"></span><em data-i18n="ms.stop"></em></button>
+              <button class="mstate" type="button" data-state="queued" data-label="ms.queued"><span class="mdl xs c-dim st-queued" aria-hidden="true"></span><em data-i18n="ms.queued"></em></button>
+              <button class="mstate" type="button" data-state="boot" data-label="ms.boot"><span class="mdl xs c-dim st-boot" aria-hidden="true"></span><em data-i18n="ms.boot"></em></button>
+            </div>
+          </div>
+          <p class="note" data-i18n="mascot.pick"></p>
+          <p class="note" data-i18n="mascot.count"></p>
         </div>
       </div>
     </section>
@@ -294,6 +328,15 @@
           </li>
         </ol>
         <p class="note" data-i18n="memory.note"></p>
+
+        <h3 class="sec-t2" data-i18n="mem.files"></h3>
+        <dl class="rows">
+          <div class="row"><dt><code>history.jsonl</code></dt><dd data-i18n="mem.f1.d"></dd></div>
+          <div class="row"><dt><code>session.jsonl</code></dt><dd data-i18n="mem.f2.d"></dd></div>
+          <div class="row"><dt><code>meta.json</code></dt><dd data-i18n="mem.f3.d"></dd></div>
+          <div class="row"><dt><code>conventions.md</code> · <code>decisions.md</code></dt><dd data-i18n="mem.f4.d"></dd></div>
+          <div class="row"><dt><code>errors.md</code></dt><dd data-i18n="mem.f5.d"></dd></div>
+        </dl>
       </div>
     </section>
 
@@ -348,6 +391,14 @@ GET  /v1/openapi.json   GET /v1/docs</pre>
             <p class="note" data-i18n="service.docs"></p>
           </div>
         </div>
+
+        <h3 class="sec-t2" data-i18n="svc.cases"></h3>
+        <div class="cases">
+          <div class="case"><b data-i18n="svc.c1.t"></b><span data-i18n="svc.c1.d"></span></div>
+          <div class="case"><b data-i18n="svc.c2.t"></b><span data-i18n="svc.c2.d"></span></div>
+          <div class="case"><b data-i18n="svc.c3.t"></b><span data-i18n="svc.c3.d"></span></div>
+          <div class="case"><b data-i18n="svc.c4.t"></b><span data-i18n="svc.c4.d"></span></div>
+        </div>
       </div>
     </section>
 
@@ -378,10 +429,42 @@ GET  /v1/openapi.json   GET /v1/docs</pre>
       </div>
     </section>
 
-    <!-- 10 PHILOSOPHY -->
-    <section id="phil" class="sec last">
+    <!-- 10 LIMITS -->
+    <section id="limits" class="sec">
       <div class="wrap">
         <header class="sec-h"><span class="sec-n" data-i18n="s10.n"></span><span class="sec-k" data-i18n="s10.k"></span></header>
+        <h2 class="sec-t" data-i18n="lim.title"></h2>
+        <p class="sec-lead" data-i18n="lim.lead"></p>
+        <ul class="feat">
+          <li data-i18n="lim.l1"></li>
+          <li data-i18n="lim.l2"></li>
+          <li data-i18n="lim.l3"></li>
+          <li data-i18n="lim.l4"></li>
+          <li data-i18n="lim.l5"></li>
+          <li data-i18n="lim.l6"></li>
+        </ul>
+        <h3 class="sec-t2" data-i18n="cmp.title"></h3>
+        <div class="cmp-wrap">
+          <table class="cmp">
+            <thead>
+              <tr><th></th><th data-i18n="cmp.h2"></th><th class="hl" data-i18n="cmp.h3"></th><th data-i18n="cmp.h4"></th></tr>
+            </thead>
+            <tbody>
+              <tr><th data-i18n="cmp.a1"></th><td data-i18n="cmp.b1"></td><td class="hl" data-i18n="cmp.c1"></td><td data-i18n="cmp.d1"></td></tr>
+              <tr><th data-i18n="cmp.a2"></th><td data-i18n="cmp.b2"></td><td class="hl" data-i18n="cmp.c2"></td><td data-i18n="cmp.d2"></td></tr>
+              <tr><th data-i18n="cmp.a3"></th><td data-i18n="cmp.b3"></td><td class="hl" data-i18n="cmp.c3"></td><td data-i18n="cmp.d3"></td></tr>
+              <tr><th data-i18n="cmp.a4"></th><td data-i18n="cmp.b4"></td><td class="hl" data-i18n="cmp.c4"></td><td data-i18n="cmp.d4"></td></tr>
+              <tr><th data-i18n="cmp.a5"></th><td data-i18n="cmp.b5"></td><td class="hl" data-i18n="cmp.c5"></td><td data-i18n="cmp.d5"></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11 PHILOSOPHY -->
+    <section id="phil" class="sec last">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s11.n"></span><span class="sec-k" data-i18n="s11.k"></span></header>
         <h2 class="sec-t" data-i18n="phil.title"></h2>
         <p class="sec-lead" data-i18n="phil.p"></p>
         <ul class="feat inline">
