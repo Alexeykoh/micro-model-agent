@@ -25,6 +25,7 @@ window.LP_I18N = {
     "hero.note": "Runs against LM Studio, Ollama, llama.cpp, vLLM — or any OpenAI-compatible backend. No cloud account required.",
 
     "a11y.skip": "Skip to content",
+    "a11y.top": "Back to top",
     "greet": "Hi! I'm MMART",
     "budget.pick": "Pick a model window",
     "budget.free": "free / other",
@@ -302,6 +303,7 @@ window.LP_I18N = {
     "hero.note": "Работает с LM Studio, Ollama, llama.cpp, vLLM или любым OpenAI-совместимым бэкендом. Облачный аккаунт не нужен.",
 
     "a11y.skip": "К основному содержимому",
+    "a11y.top": "Наверх",
     "greet": "Привет! Я MMART",
     "budget.pick": "Выберите окно модели",
     "budget.free": "свободно / прочее",

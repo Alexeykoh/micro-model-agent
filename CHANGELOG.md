@@ -27,6 +27,9 @@ project's own visual language — terminal editorial, MMART, two languages, two 
   web UI's segmented bar, and a tool-narrowing token meter with a live "saved %".
 - **Two languages and two themes** (`ru`/`en`, dark/light): auto-detected, switchable,
   persisted, applied before first paint so there is no flash.
+- **Full-height hero with an animated background**: the first screen fills the viewport and
+  carries a slowly drifting, iridescent colour field (blurred blobs plus a gentle hue
+  rotation), and a floating "back to top" button appears once you scroll.
 - **Page meta and accessibility**: Open Graph/Twitter cards, JSON-LD `SoftwareApplication`,
   canonical URL, `theme-color` per scheme, skip link, `:focus-visible`, `aria-*` on
   toggles, `prefers-reduced-motion` respected everywhere.
