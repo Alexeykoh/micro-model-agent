@@ -15,7 +15,8 @@
       "!certification",
       "!src/modules/webui/assets",
       "!examples",
-      "!docs"
+      "!docs",
+      "!gh-pages"
     ]
   },
   "formatter": { "enabled": false },

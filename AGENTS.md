@@ -77,7 +77,7 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 - **Runtime:** Bun + TypeScript (ES2022, NodeNext module)
 - **Testing:** vitest (`bun test`)
 - **Linting:** TypeScript strict mode (`tsc --noEmit`) + Biome (`biome.json`; linter only, formatter off — Prettier remains)
-- **Quality gate:** `bun run quality` = `typecheck` + `typecheck:frontend` + `lint` + `fallow` (dead-code vs `.fallow-baseline.json`); CI — `.gitea/workflows/quality.yml`; git pre-commit hook — fallow
+- **Quality gate:** `bun run quality` = `typecheck` + `typecheck:frontend` + `lint` + `fallow` (dead-code vs `.fallow-baseline.json`); CI — `.gitea/workflows/quality.yml` + `.github/workflows/quality.yml`. Локально тот же гейт (плюс `bun test`) гоняет **pre-push hook** (`.githooks/pre-push`, подключается `core.hooksPath=.githooks` через `prepare` → `scripts/install-hooks.ts`) при пуше в `master`/`main`; байпас — `git push --no-verify`.
 - **Dependencies:** commander, js-tiktoken, jsonrepair, picocolors, playwright, string-width, yaml (all kept external in the CLI bundle)
 - **DevDependencies:** @biomejs/biome, @types/bun, @types/node, @vitest/coverage-v8, esbuild, happy-dom, prettier, typescript, vitest
 
@@ -1773,10 +1773,11 @@ server: каждый `checkFile` (каждая запись файла, кажд
 - **Доступность и движение:** skip-link, `:focus-visible`, `aria-*` на переключателях;
   вся анимация маскота — только opacity/transform и гасится в `prefers-reduced-motion`
   (терминал рисуется мгновенно, компаньон скрыт).
-- **Гейт качества:** папка `gh-pages/` добавлена в `ignorePatterns` файла `.fallowrc.json`
-  (как `webui/assets`) — у статики нет графа импортов, иначе dead-code-гейт (и
-  pre-commit hook) падал бы на «недостижимых» файлах. `bun run quality` эту папку не
-  линтит и не типизирует; контракт с приложением не связан.
+- **Гейт качества:** папка `gh-pages/` исключена из обоих гейтов — в `ignorePatterns`
+  файла `.fallowrc.json` (как `webui/assets`) и в `files.includes` файла `biome.json`
+  (`!gh-pages`: вёрстка/скрипты витрины давали 59 ошибок линтера). У статики нет графа
+  импортов, dead-code-гейт падал бы на «недостижимых» файлах, а линтер — на разметке.
+  `bun run quality` эту папку не линтит и не типизирует; контракт с приложением не связан.
 
 Open source on GitHub (`Alexeykoh/micro-model-agent`); distribution is **GitHub Releases**, not npm.
 

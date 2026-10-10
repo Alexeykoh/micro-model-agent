@@ -1,3 +1,6 @@
 # Shell installers must keep LF line endings to run on macOS/Linux.
 *.sh text eol=lf
 scripts/install.sh text eol=lf
+
+# Git hooks are executed by sh; CRLF would break them.
+.githooks/* text eol=lf

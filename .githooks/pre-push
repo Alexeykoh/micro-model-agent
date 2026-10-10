@@ -1,0 +1,41 @@
+#!/bin/sh
+# Local quality gate. Runs the exact checks the CI `quality` job runs
+# (`bun run quality` + `bun test`) before anything is pushed to master/main,
+# so a red gate is caught on your machine instead of in CI.
+#
+# Wired via `core.hooksPath=.githooks` (installed by scripts/install-hooks.ts,
+# triggered from the `prepare` script on `bun install`).
+#
+# Bypass once (use sparingly): git push --no-verify
+
+protected_refs="refs/heads/master refs/heads/main"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "pre-push: 'bun' not found on PATH — cannot run the local quality gate."
+  echo "pre-push: install Bun or bypass with: git push --no-verify"
+  exit 1
+fi
+
+targets=""
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  for ref in $protected_refs; do
+    if [ "$remote_ref" = "$ref" ]; then
+      targets="$targets $remote_ref"
+    fi
+  done
+done
+
+if [ -z "$targets" ]; then
+  exit 0
+fi
+
+echo "pre-push: protected branch push ($targets) — running quality gate…"
+if bun run quality && bun test; then
+  echo "pre-push: quality gate passed."
+  exit 0
+fi
+
+echo ""
+echo "pre-push: quality gate FAILED — push aborted."
+echo "pre-push: fix the issues, or bypass once with: git push --no-verify"
+exit 1

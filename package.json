@@ -20,6 +20,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "prepare": "bun run scripts/install-hooks.ts",
     "mma": "bun run src/cli/main.ts",
     "build": "bun run build:tsc && bun run build:copy-assets",
     "build:tsc": "tsc -p tsconfig.build.json",
