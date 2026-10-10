@@ -128,7 +128,7 @@ export class UpdaterModule {
   async runOnce(): Promise<void> {
     const result = await this.updater.check();
     if (result.error) {
-      this.logger.info(t("updater.check_error", { error: result.error }));
+      this.logger.warn(t("updater.check_error", { error: result.error }));
       return;
     }
     const { current, latest } = result;
@@ -162,7 +162,7 @@ export class UpdaterModule {
 
   /** Дефолт `autoInstall: false`: сообщение с подсказкой, как обновиться. */
   private notifyAvailable(current: string, latest: string): void {
-    this.logger.info(
+    this.logger.warn(
       t("updater.available", { current, latest, hint: t("updater.auto_install_hint") }),
     );
     this.onNotice?.({ phase: "available", current, latest });

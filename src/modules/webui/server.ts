@@ -125,11 +125,28 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "POST /api/command": (req, res, s) => handleCommandPost(req, res, s),
   "POST /api/interrupt": (req, res, s) => handleInterruptPost(req, res, s),
   "POST /api/index": (_req, res, s) => handleIndexPost(res, s),
+  "POST /api/update": (_req, res, s) => handleUpdatePost(res, s),
   "POST /api/mcp": (req, res, s) => handleMcpCreate(req, res, s),
   "GET /api/lsp": (_req, res, s) => handleLspGet(res, s),
   "GET /api/lsp/doctor": (_req, res, s) => handleLspDoctorGet(res, s),
   "POST /api/lsp/doctor": (_req, res, s) => handleLspDoctorPost(res, s),
 };
+
+/**
+ * Установка доступного апдейта по кнопке в web. В dev-режиме апдейтер собран,
+ * но установка заблокирована (`setInstallEnabled(false)`) — тогда `install()`
+ * вернёт `success:false`; здесь это просто пробрасывается в ответ.
+ */
+function handleUpdatePost(res: ServerResponse, s: WebUiState): void {
+  const install = s.updaterInstall;
+  if (!install) {
+    sendJson(res, 200, { ok: false, error: "update install is not available in this mode" });
+    return;
+  }
+  install()
+    .then((r) => sendJson(res, 200, { ok: r.success, installed: r.installed, error: r.error }))
+    .catch((e) => sendJson(res, 500, { ok: false, error: e instanceof Error ? e.message : String(e) }));
+}
 
 /**
  * Префикс-группы диспатча (sessions/settings/providers/file/setup владеют

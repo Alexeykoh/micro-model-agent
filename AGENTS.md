@@ -1837,7 +1837,25 @@ the mode and is a live class toggle, not a stylesheet swap. `styles.css` stays t
 layout for both themes. Selector: `settings/panels.ts` (`renderUiPanel`, `currentTheme`/
 `currentUiTheme`); boot: `app.ts` (`applyTheme` + `applyUiTheme`).
 
-### Current Version: 0.3.0
+### Web Update Surface (0.3.1)
+
+The update notice was invisible: `renderFooter` was built for `make(cls, text)`
+but the app passes `el(tag, cls, text)`, so every footer chip was a zero-size
+node (the `↑ <latest>` chip never showed). Fixed the call signature; the footer
+line (path / MoE / version / update) now renders.
+
+- **Notices are visible**: updater check/available log at `warn` (not the
+  default-hidden `info`); `mma web` passes `busLogger()` so the console prints
+  them at launch. Dev checkouts check + notify but never install
+  (`createUpdater` → `setInstallEnabled(false)` instead of returning `undefined`).
+- **Surfaces**: settings-gear dot (`#openSettings.has-upd`), a feed card with the
+  mascot (`load`) + **Update** button, and an **Updates** section in Settings →
+  General (`updater.enabled/autoInstall/intervalMs` moved from Advanced · Service).
+- **Install**: `POST /api/update` → `WebUiState.updaterInstall` (set in
+  `web-command` from the updater) → `Updater.install()`; `undefined` when no
+  updater. Shared fact for the chrome: `assets/js/update-state.ts` (leaf).
+
+### Current Version: 0.3.1
 
 GitHub Releases distribution: one-line bootstrap installer, self-contained per-OS tarballs,
 manifest-driven updater (npm removed from the install path), MIT license (see the section above).

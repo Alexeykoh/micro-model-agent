@@ -28,7 +28,7 @@ export interface FooterInput {
 export function renderFooter(
   el: HTMLElement,
   input: FooterInput,
-  make: (cls: string, text: string) => HTMLElement,
+  make: (tag: string, cls: string, text: string) => HTMLElement,
 ): void {
   const {
     workspace = "",
@@ -46,13 +46,13 @@ export function renderFooter(
   el.textContent = "";
   el.hidden = !workspace && !version && !moeActive && !updateAvailable;
   if (workspace) {
-    el.appendChild(make("ws-k", dirLabel));
-    const v = make("ws-v", workspace);
+    el.appendChild(make("span", "ws-k", dirLabel));
+    const v = make("span", "ws-v", workspace);
     v.title = workspace;
     el.appendChild(v);
   }
   if (moeActive) {
-    const chip = make("ws-moe", "MoE");
+    const chip = make("span", "ws-moe", "MoE");
     chip.title = "MoE is orchestrating this turn";
     el.appendChild(chip);
   }
@@ -60,12 +60,12 @@ export function renderFooter(
   // reads as "newer available" at a glance, the title carries the command —
   // `autoInstall` defaults to off, so the user installs it themselves.
   if (updateAvailable) {
-    const chip = make("ws-upd", `↑ ${updateAvailable.latest}`);
+    const chip = make("span", "ws-upd", `↑ ${updateAvailable.latest}`);
     chip.title = updateTitle;
     el.appendChild(chip);
   }
   if (version) {
-    const v = make("ws-ver", `mma ${version}`);
+    const v = make("span", "ws-ver", `mma ${version}`);
     v.title = `micro-models-agent ${version}`;
     el.appendChild(v);
   }

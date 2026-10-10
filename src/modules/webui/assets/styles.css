@@ -2173,3 +2173,31 @@ body.light .c-dim { --face-c: var(--panel); }
 #bootSplash .bs-prog { width: 210px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
 #bootSplash .bs-prog i { display: block; height: 100%; width: 40%; border-radius: 2px; background: linear-gradient(90deg, var(--think), var(--accent)); animation: mdlBar 1.4s ease-in-out infinite; }
 @keyframes mdlBar { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+
+/* --- Update availability: gear dot, feed card, settings row --- */
+.icon-btn.has-upd { position: relative; }
+.icon-btn.has-upd::after {
+  content: ""; position: absolute; top: 4px; right: 4px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 0 2px var(--panel);
+}
+.upd-card {
+  display: flex; gap: 12px; align-items: flex-start; text-align: left;
+  margin: 16px auto 0; padding: 12px 14px; max-width: 460px;
+  border: 1px solid var(--border-2); border-radius: 6px; background: var(--panel);
+}
+.upd-card .mdl { flex: 0 0 auto; }
+.upd-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.upd-t { color: var(--fg); font-weight: 600; }
+.upd-s { color: var(--dim-a); font-size: 12.5px; }
+.upd-btn {
+  align-self: flex-start; margin-top: 6px; cursor: pointer;
+  color: var(--accent); background: var(--surface);
+  border: 1px solid var(--border-2); border-radius: 4px; padding: 4px 12px;
+  font: inherit; font-size: 12.5px;
+}
+.upd-btn:hover { background: var(--hover-bg); }
+.upd-btn:disabled { opacity: .6; cursor: default; }
+.upd-row { align-items: center; }
+.upd-right { display: flex; align-items: center; gap: 10px; }
+.upd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }

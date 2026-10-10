@@ -130,8 +130,8 @@ describe("UpdaterModule", () => {
     global.fetch = vi.fn().mockResolvedValue(manifest("0.4.0")) as unknown as typeof fetch;
     const messages: string[] = [];
     const mod = new UpdaterModule(makeConfig({ autoInstall: false }), new Updater("0.3.0"), {
-      info: (m) => messages.push(m),
-      warn: () => {},
+      info: () => {},
+      warn: (m) => messages.push(m),
       error: () => {},
     });
     mod.setInstallEnabled(false);
