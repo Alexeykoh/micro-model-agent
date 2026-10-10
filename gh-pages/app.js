@@ -361,6 +361,20 @@
     paintBig(document.querySelector(".mstate.on"));
   }
 
+  /* ---- back to top ---- */
+  function initToTop() {
+    var btn = document.getElementById("toTop");
+    if (!btn) return;
+    function upd() { btn.classList.toggle("show", window.scrollY > 600); }
+    addEventListener("scroll", upd, { passive: true });
+    addEventListener("resize", upd);
+    upd();
+    btn.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+      pulseFace("done", 1400);
+    });
+  }
+
   /* ---- boot ---- */
   function boot() {
     setTheme(currentTheme());
@@ -375,6 +389,7 @@
     initCompanion();
     initReveal();
     initProgress();
+    initToTop();
     initCopy();
 
     var replay = document.getElementById("termReplay");
