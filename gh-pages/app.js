@@ -387,6 +387,30 @@
     });
   }
 
+  /* ---- hero install widget ---- */
+  function initInstall() {
+    var root = document.getElementById("install");
+    var cmd = document.getElementById("installCmd");
+    if (!root || !cmd) return;
+    var tabs = Array.prototype.slice.call(root.querySelectorAll(".itab"));
+    function setOs(os) {
+      var text = cmd.getAttribute(os === "win" ? "data-win" : "data-unix");
+      if (text) cmd.textContent = text;
+      tabs.forEach(function (t) {
+        var on = t.getAttribute("data-os") === os;
+        t.classList.toggle("on", on);
+        t.setAttribute("aria-selected", String(on));
+      });
+    }
+    tabs.forEach(function (t) {
+      t.addEventListener("click", function () {
+        setOs(t.getAttribute("data-os"));
+        pulseFace("run", 1200);
+      });
+    });
+    setOs("unix");
+  }
+
   /* ---- boot ---- */
   function boot() {
     setTheme(currentTheme());
@@ -403,12 +427,18 @@
     initProgress();
     initToTop();
     initCopy();
+    initInstall();
 
     var replay = document.getElementById("termReplay");
     if (replay) replay.addEventListener("click", function () { typeTerminal(!reduce); pulseFace("type", 1800); });
 
-    var el = document.getElementById("verChip");
-    if (el && window.MMA_VERSION) el.textContent = "v" + window.MMA_VERSION;
+    if (window.MMA_VERSION) {
+      var v = "v" + window.MMA_VERSION;
+      ["verChip", "heroVer"].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) { el.textContent = v; el.hidden = false; }
+      });
+    }
 
     var themeBtn = document.getElementById("themeBtn");
     if (themeBtn) themeBtn.addEventListener("click", function () {

@@ -4,13 +4,16 @@ name: pages
 #
 # GitHub Pages' branch deploy only accepts `/` or `/docs` as the folder, and
 # `/docs` holds the specs tree — so the site is shipped as a workflow artifact
-# instead (Pages build type: "workflow"). No build step: the folder is already
-# plain, dependency-free HTML/CSS/JS and is uploaded as-is.
+# instead (Pages build type: "workflow"). There is no app build: the folder is
+# plain, dependency-free HTML/CSS/JS, but the agent version is injected from
+# `package.json` before the upload so the site cannot drift from the agent.
 on:
   push:
     branches: [master]
     paths:
       - "gh-pages/**"
+      - "package.json"
+      - "scripts/sync-landing-version.ts"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -31,6 +34,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Inject agent version into the landing page
+        run: bun run scripts/sync-landing-version.ts
 
       - uses: actions/configure-pages@v5
 

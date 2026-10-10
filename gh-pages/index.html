@@ -24,6 +24,7 @@
     "name": "MMA — Micro Models Agent",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Windows, macOS, Linux",
+    "softwareVersion": "0.3.1",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "license": "https://opensource.org/licenses/MIT",
     "url": "https://github.com/Alexeykoh/micro-model-agent",
@@ -44,7 +45,7 @@
   <link rel="stylesheet" href="mascot.css">
 </head>
 <body>
-  <script>window.MMA_VERSION = "0.1.0";</script>
+  <script>window.MMA_VERSION = "0.3.1";</script>
 
   <a class="skip" href="#top" data-i18n="a11y.skip"></a>
   <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
@@ -81,13 +82,30 @@
       <div class="grain" aria-hidden="true"></div>
       <div class="wrap hero-grid">
         <div class="hero-txt">
-          <p class="kicker"><span class="dot"></span><span data-i18n="hero.kicker"></span></p>
+          <p class="kicker"><span class="dot"></span><span data-i18n="hero.kicker"></span><span class="ver" id="heroVer" hidden></span><span class="beta" data-i18n="beta"></span></p>
           <h1 data-i18n-html="hero.headline" data-i18n="hero.headline"></h1>
           <p class="hero-lead" data-i18n="hero.lead"></p>
-          <div class="cta">
-            <a class="btn" href="#install" data-i18n="hero.install"></a>
-            <a class="btn ghost" href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="hero.source"></a>
+          <div class="install" id="install">
+            <div class="install-head">
+              <div class="install-tabs" role="tablist" aria-label="Install command">
+                <button type="button" class="itab on" data-os="unix" role="tab" aria-selected="true">Linux / macOS</button>
+                <button type="button" class="itab" data-os="win" role="tab" aria-selected="false">Windows</button>
+              </div>
+              <button type="button" class="copy" data-target="installCmd" data-copy="install.copy" data-copied="install.copied"></button>
+            </div>
+            <div class="install-body">
+              <code id="installCmd" data-unix="curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash" data-win="irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.ps1 | iex">curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash</code>
+            </div>
           </div>
+          <div class="install-alt">
+            <span data-i18n="install.or"></span>
+            <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-win-x64.tar.gz">Windows x64</a>
+            <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-mac-arm64.tar.gz">macOS Apple Silicon</a>
+            <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-mac-x64.tar.gz">macOS Intel</a>
+            <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-linux-x64.tar.gz">Linux x64</a>
+            <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-linux-arm64.tar.gz">Linux arm64</a>
+          </div>
+          <p class="hero-src"><a class="link" href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="hero.source"></a></p>
           <p class="hero-note" data-i18n="hero.note"></p>
         </div>
         <div class="hero-face">
@@ -341,8 +359,15 @@
         <header class="sec-h"><span class="sec-n" data-i18n="s7.n"></span><span class="sec-k" data-i18n="s7.k"></span></header>
         <h2 class="sec-t" data-i18n="safety.title"></h2>
         <p class="sec-lead" data-i18n="safety.lead"></p>
-        <div class="pipe" aria-hidden="true"></div>
-        <p class="pipe-txt" data-i18n="safety.pipe"></p>
+        <div class="pipe" aria-hidden="true">
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step1"></span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step2"></span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node gate" data-i18n="safety.step3"></span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step4"></span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step5"></span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step6"></span></span>
+        </div>
+        <p class="sr-only" data-i18n="safety.pipe"></p>
         <dl class="rows wide">
           <div class="row"><dt data-i18n="safety.v1.t"></dt><dd data-i18n="safety.v1.d"></dd></div>
           <div class="row"><dt data-i18n="safety.v2.t"></dt><dd data-i18n="safety.v2.d"></dd></div>
@@ -397,23 +422,12 @@ GET  /v1/openapi.json   GET /v1/docs</pre>
       </div>
     </section>
 
-    <!-- 09 INSTALL -->
-    <section id="install" class="sec">
+    <!-- 09 FIRST STEPS -->
+    <section id="start" class="sec">
       <div class="wrap">
         <header class="sec-h"><span class="sec-n" data-i18n="s9.n"></span><span class="sec-k" data-i18n="s9.k"></span></header>
         <h2 class="sec-t" data-i18n="install.title"></h2>
         <p class="sec-lead" data-i18n="install.lead"></p>
-        <div class="code-row">
-          <span class="code-label" data-i18n="install.unix"></span>
-          <code id="cmdUnix">curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash</code>
-          <button class="copy" type="button" data-target="cmdUnix" data-copy="install.copy" data-copied="install.copied"></button>
-        </div>
-        <div class="code-row">
-          <span class="code-label" data-i18n="install.win"></span>
-          <code id="cmdWin">irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.ps1 | iex</code>
-          <button class="copy" type="button" data-target="cmdWin" data-copy="install.copy" data-copied="install.copied"></button>
-        </div>
-        <h3 class="sub" data-i18n="install.then"></h3>
         <dl class="rows">
           <div class="row"><dt><code>mma "…"</code></dt><dd data-i18n="install.c1.d"></dd></div>
           <div class="row"><dt><code>mma</code></dt><dd data-i18n="install.c2.d"></dd></div>
@@ -476,11 +490,12 @@ GET  /v1/openapi.json   GET /v1/docs</pre>
       <div class="foot-brand">
         <span class="mdl sm c-recon track" id="footFace" aria-hidden="true"></span>
         <p><b>MMA</b> — <span data-i18n="footer.tagline"></span></p>
-        <p class="foot-meta"><span id="verChip">v0.1.0</span> · <span data-i18n="footer.license"></span></p>
+        <p class="foot-meta"><span id="verChip">v0.3.1</span> · <span class="beta" data-i18n="beta"></span> · <span data-i18n="footer.license"></span></p>
       </div>
       <div class="foot-cols">
         <div class="foot-col">
           <h4 data-i18n="footer.project"></h4>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest" data-i18n="footer.download"></a>
           <a href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="footer.repo"></a>
           <a href="https://github.com/Alexeykoh/micro-model-agent/releases" data-i18n="footer.releases"></a>
           <a href="https://github.com/Alexeykoh/micro-model-agent/issues" data-i18n="footer.issues"></a>

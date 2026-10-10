@@ -239,6 +239,9 @@ code { font-family: var(--mono); }
 }
 .kicker { display: inline-flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--dim-a); text-transform: lowercase; letter-spacing: .06em; }
 .kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 22%, transparent); }
+.kicker .ver { color: var(--dim-b); padding-left: 11px; border-left: 1px solid var(--border-2); letter-spacing: .04em; }
+.kicker .ver[hidden] { display: none; }
+.beta { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent); border-radius: 999px; padding: 2px 8px; }
 .hero h1 { margin: 20px 0 0; font-size: clamp(38px, 7.4vw, 84px); line-height: .98; letter-spacing: -.045em; font-weight: 650; }
 .hero-lead { margin: 24px 0 0; max-width: 52ch; font-size: clamp(15px, 1.6vw, 18px); color: var(--dim-a); }
 .cta { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; }
@@ -431,10 +434,15 @@ code { font-family: var(--mono); }
 .axis h3 { font-size: 16px; }
 .axis p { margin-top: 6px; color: var(--dim-a); font-size: 13.5px; max-width: 74ch; }
 
-/* safety */
-.pipe { margin-top: 30px; height: 41px; border: 1px solid var(--border-2); border-radius: 8px;
-  background-image: repeating-linear-gradient(90deg, var(--border) 0 1px, transparent 1px 14px); }
-.pipe-txt { margin-top: 12px; font-size: 12.5px; color: var(--dim-b); }
+/* safety — the validation flow as a node pipeline */
+.pipe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 6px; margin-top: 32px; }
+.pipe-step { display: inline-flex; align-items: center; gap: 8px; }
+.pipe-node {
+  padding: 9px 15px; border: 1px solid var(--border-2); border-radius: 8px;
+  background: var(--panel); font-size: 13px; color: var(--muted); white-space: nowrap;
+}
+.pipe-node.gate { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-bg); }
+.pipe-arrow { color: var(--dim-c); font-size: 14px; }
 .presets { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 30px; }
 .presets-label { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim-b); margin-right: 8px; }
 .preset { font-size: 12.5px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border-2); color: var(--dim-a); }
@@ -444,22 +452,32 @@ code { font-family: var(--mono); }
 .endpoints { margin: 0; font-size: 12.5px; line-height: 2; color: var(--dim-a); white-space: pre-wrap; }
 .endpoints .c { color: var(--recon); }
 
-/* install */
-/* The command scrolls, the copy button never does: it is a separate grid cell,
-   not a child of the scroll container (it used to scroll out of view). */
-.code-row {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
-  gap: 14px; margin-top: 18px; padding: 14px;
+/* install widget — the one thing a dev looks for first */
+.install {
+  margin-top: 30px; max-width: 580px;
   border: 1px solid var(--border-2); border-radius: 10px; background: var(--panel);
+  overflow: hidden;
 }
-.code-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim-b); white-space: nowrap; }
-.code-row code {
-  min-width: 0; overflow-x: auto; white-space: nowrap;
-  font-size: 13px; color: var(--fg); padding-bottom: 3px;
+.install-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 8px 8px 10px; border-bottom: 1px solid var(--border); }
+.install-tabs { display: flex; gap: 2px; }
+.itab {
+  font: inherit; font-size: 12px; color: var(--dim-a);
+  background: transparent; border: 0; border-radius: 7px; padding: 6px 12px; cursor: pointer;
+  transition: color .15s var(--ease), background .15s var(--ease);
 }
+.itab:hover { color: var(--fg); }
+.itab.on { color: var(--fg); background: var(--surface); }
+.install-body { padding: 14px 16px; overflow-x: auto; }
+.install-body code { font-size: 13px; color: var(--fg); white-space: nowrap; }
 .copy { font: inherit; font-size: 12px; color: var(--accent); background: var(--accent-bg); border: 1px solid transparent; border-radius: 7px; padding: 8px 13px; cursor: pointer; white-space: nowrap; }
 .copy:hover { filter: brightness(1.1); }
-#install .sub { margin-top: 40px; }
+.install-alt { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--dim-b); }
+.install-alt > span { color: var(--dim-c); }
+.install-alt a { color: var(--dim-a); border-bottom: 1px solid transparent; }
+.install-alt a:hover { color: var(--accent); border-bottom-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.hero-src { margin-top: 18px; font-size: 13px; }
+.link { color: var(--accent); }
+.link:hover { text-decoration: underline; color: var(--accent); }
 
 /* ---------- footer ---------- */
 .foot { border-top: 1px solid var(--border); padding: 50px 0 calc(40px + env(safe-area-inset-bottom, 0px)); }
@@ -564,8 +582,7 @@ code { font-family: var(--mono); }
   .c-col + .c-col { border-left: 0; border-top: 1px solid var(--border-2); }
   .row, .rows.wide .row { grid-template-columns: 1fr; gap: 4px; }
   .case { grid-template-columns: 1fr; gap: 4px; }
-  .code-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; }
-  .code-label { grid-column: 1 / -1; }
+  .install-head { flex-wrap: wrap; }
   .foot-cols { gap: 36px; }
   .stat { padding: 16px 16px 18px; }
   .totop {

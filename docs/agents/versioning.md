@@ -2,6 +2,11 @@
 
 ## Versioning Rules (Semantic Versioning)
 
+> **⚠️ BETA POLICY.** MMA is in beta (major = `0`). Releases stay within `0.x.y`; **`1.0.0`
+> must not be released while the project is in beta**, and any *automatic* bump to `1.x.x` is
+> forbidden. Leaving beta is a deliberate, manual decision — only then is `1.0.0` set and this
+> policy (plus the banner in `AGENTS.md`) updated. Guard: `tests/version-beta.test.ts`.
+
 ### Changelog
 
 Все изменения документируются в `CHANGELOG.md` (формат [Keep a Changelog](https://keepachangelog.com/)).
@@ -23,7 +28,7 @@
 1. **Code changes complete** → `bun test` + `bun run quality` must pass
 2. **CHANGELOG** — move the `## [Unreleased]` block under a new
    `## [X.Y.Z] - YYYY-MM-DD` heading (Keep a Changelog groups: Added/Fixed/Changed/Removed)
-3. **Update version** in `package.json`:
+3. **Update version** in `package.json` — **only `patch`/`minor` while in beta**:
 
    ```bash
    # For patch
@@ -31,10 +36,11 @@
 
    # For minor
    npm version minor
-
-   # For major
-   npm version major
    ```
+
+   > ⚠️ **`npm version major` is forbidden while the project is in beta.** Releases stay in
+   > `0.x.y`; `1.0.0` is set only as the explicit act of leaving beta (see «Versioning Rules»
+   > at the top of this file and the banner in `AGENTS.md`).
 
    > `npm version` also updates `package-lock.json` and creates the git tag (`vX.Y.Z`).
 
@@ -98,7 +104,11 @@ Renaming **with a working deprecation alias** is **MINOR**, not MAJOR.
 3. At most one MAJOR per package of breaking changes; do not bump MAJOR without an explicit request.
 4. Versions are **milestones, not per-PR counters** — batch unrelated changes into one release instead of chaining MINOR/MAJOR bumps.
 
-### Current Version: 2.17.2
+### Current Version: 0.3.1 (beta)
+
+> **Beta:** public releases stay in `0.x.y`; `1.0.0` is reserved for the explicit decision to
+> leave beta. The `2.x`/`1.x` numbers in the history below are legacy/internal milestone labels
+> from before the beta reset — the shipped version is the one in `package.json`.
 
 - **2.17.2** = docs refresh (README/AGENTS/`docs/agents/*`) for the TypeScript frontend and optimized build. No code changes.
 

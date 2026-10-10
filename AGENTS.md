@@ -10,6 +10,14 @@ General-purpose AI agent harness for small models (Qwen3.5-9B, 32K-64K context).
 
 > **Этот файл должен периодически обновляться при изменениях в проекте.** При добавлении новых модулей, тулов, команд, изменении архитектуры или конфигурации — обнови соответствующий раздел ниже. AGENTS.md должен всегда отражать актуальное состояние проекта, чтобы агенты и разработчики имели достоверный контекст.
 
+> ## ⚠️ BETA — проект в бете (0.x)
+>
+> MMA в статусе **beta**: публичные версии остаются в диапазоне `0.x.y`. **Выход в `1.0.0`
+> запрещён, пока проект в бете**, и любое **автоматическое повышение до `1.x.x` запрещено** —
+> `1.0.0` зарезервирован под отдельное осознанное решение о выходе из беты (см. «Versioning Rules»).
+> Пометка беты: бейдж `beta` + `(beta)`/`(бета)` на лендинге, `(beta)` в `description`
+> `package.json`, и гвард `tests/version-beta.test.ts` (падает, если version ≥ `1.0.0`).
+
 > ## ✅ P0 Harness Hardening — ВЫПОЛНЕНО (2026-10-05, ветка `fix/harness-hardening`)
 >
 > Разбор живой сессии `ses_muu8kfbw_nyxkre` (`qwen3.5-9b`, `mma web`) выявил
@@ -1733,7 +1741,7 @@ server: каждый `checkFile` (каждая запись файла, кажд
   на `.chat`; анимация входа — `popCenter` (сохраняет `translateX(-50%)`, иначе `pop`
   ронял центрирование и пилюля вспыхивала правее центра).
 
-### Landing Page (`gh-pages/`) (0.2.0)
+### Landing Page (`gh-pages/`) (unreleased)
 
 Публичная витрина проекта на GitHub Pages. Статика без сборки, без зависимостей,
 без фреймворка; открывается и с диска (`file://`), работает офлайн.
@@ -1741,10 +1749,29 @@ server: каждый `checkFile` (каждая запись файла, кажд
 - **Публикация:** папка `gh-pages/` в корне репозитория; GitHub Pages работает в режиме
   **GitHub Actions** (`build_type: workflow`). Branch-деплой умеет только `/` или `/docs`,
   а `/docs` — это дерево спеков, отдавать его нельзя, поэтому сайт публикуется workflow'ом
-  `.github/workflows/pages.yml` (checkout → `configure-pages` → `upload-pages-artifact`
-  с `path: gh-pages` → `deploy-pages`). Триггер — push в `master` при изменениях в
-  `gh-pages/**`. Адрес: https://alexeykoh.github.io/micro-model-agent/. Сборки нет —
-  папка загружается как есть.
+  `.github/workflows/pages.yml` (checkout → setup-bun → `sync-landing-version` →
+  `configure-pages` → `upload-pages-artifact` с `path: gh-pages` → `deploy-pages`).
+  Триггер — push в `master` при изменениях в `gh-pages/**`, `package.json` или самом
+  скрипте синхронизации. Адрес: https://alexeykoh.github.io/micro-model-agent/. App-сборки
+  нет — папка статика, но **версия агента инжектится** перед upload'ом.
+- **Синхронизация версии** (`scripts/sync-landing-version.ts`, `bun run sync:landing`):
+  единственный источник правды — `package.json`; скрипт подставляет версию в `index.html`
+  (`window.MMA_VERSION`, фолбэк `verChip`/`heroVer`, JSON-LD `softwareVersion`). Раньше
+  версия была жёстко зашита (`0.1.0`) и расходилась с агентом. Идемпотентно,
+  `file://`-совместимо (никакого fetch'а манифеста).
+- **Установка в hero (без кнопки Download):** блок установки стоит прямо в hero — команда видна
+  сразу (паттерн dev-tool витрин: Bun/Deno): табы Linux/macOS ↔ Windows с copy-кнопкой
+  (`initInstall` в `app.js`, команды в `data-unix`/`data-win` на `#installCmd`), ниже — строка
+  прямых ссылок на артефакты релиза (`releases/latest/download/mma-<key>.tar.gz`,
+  версионно-нейтральные) и ссылка на исходники. Отдельной кнопки Download/CTA нет.
+  Секция 09 переименована в «Первые шаги» (`id="start"`: `mma`/`mma web`/`mma serve`), команды
+  установки и прямые загрузки переехали в hero.
+- **Пайплайн безопасности (секция 07):** вместо декоративной пустой полосы `.pipe` — узлы
+  `вызов → плагины → валидаторы → действие → плагины → результат` (`safety.step1..6`; узел
+  «валидаторы» акцентирован как шлюз). Плоская строка осталась только для скринридеров
+  (`.sr-only`, ключ `safety.pipe`), визуальный ряд — `aria-hidden`.
+- **Пометка beta:** бейдж `.beta` в кикере hero и в футере (`data-i18n="beta"`), `(beta)`/`(бета)`
+  в `meta.title` (вместе с og/twitter), и фраза «Currently in beta…» в `hero.note`.
 - **Файлы:** `index.html` (разметка + `data-i18n`), `styles.css` (токены тем + лейаут),
   `mascot.css` (вендоренное подмножество webui-компонента `.mdl`), `app.js`
   (тема/язык/маскот/виджеты), `i18n.js` (словари `ru`/`en` + `lpT`), `favicon.svg`.
@@ -1855,7 +1882,9 @@ line (path / MoE / version / update) now renders.
   `web-command` from the updater) → `Updater.install()`; `undefined` when no
   updater. Shared fact for the chrome: `assets/js/update-state.ts` (leaf).
 
-### Current Version: 0.3.1
+### Current Version: 0.3.1 (beta)
+
+> **В бете:** `1.0.0` не выпускается, пока проект в бете; версии ходят внутри `0.x.y` (см. «Versioning Rules»).
 
 GitHub Releases distribution: one-line bootstrap installer, self-contained per-OS tarballs,
 manifest-driven updater (npm removed from the install path), MIT license (see the section above).
@@ -1882,17 +1911,24 @@ own OpenAPI 3.1 document and human docs page from one `OPERATIONS` table.
 
 Версии — **вехи**, а не счётчик PR. Один MAJOR на пакет ломающих изменений, а не на каждую итерацию.
 
-**PATCH** — bug fixes, i18n, docs, tests, performance, non-breaking dependency updates.
+> **🔒 Бета-политика (обязательно).** Пока MMA в бете (major = `0`), релизы идут **только**
+> внутри `0.x.y`, и **`1.0.0` выпускать нельзя**. Любое **автоматическое** повышение версии
+> до `1.x.x` запрещено. Выход из беты — отдельное осознанное решение, которое снимает запрет:
+> только тогда (руками) ставится `1.0.0`, и этот раздел + баннер вверху файла обновляются.
+> Машинный гвард: `tests/version-beta.test.ts` падает, если `package.json` version ≥ `1.0.0`.
 
-**MINOR** — new CLI/REPL commands, new tools, new modules, new config options, new behavior; **renaming with a working deprecation alias**; additive `--json` fields.
+**PATCH** (`0.0.Z`) — bug fixes, i18n, docs, tests, performance, non-breaking dependency updates.
 
-**MAJOR** (редко) — только реальная поломка **без пути совместимости**:
+**MINOR** (`0.Y.0`) — new CLI/REPL commands, new tools, new modules, new config options, new behavior; **renaming with a working deprecation alias**; additive `--json` fields.
+
+**MAJOR** (`X.0.0`) — **в бете запрещён** (зарезервирован под выход из беты). После выхода из беты — только реальная поломка **без пути совместимости**:
 - несовместимая схема конфига / нечитаемые старые сессии;
 - удаление команды/тула/модуля **без алиаса**, выпущенных в опубликованном релизе;
 - ломающее изменение `LLMProvider` / plugin API / `--json` контракта;
 - architecture rewrite, меняющий контракты поведения.
 
 **Правила сдержанности:**
-1. MAJOR требует хотя бы одной записи в `### Removed` / `### Changed (breaking)` CHANGELOG — иначе не MAJOR.
-2. Предпочитать **алиас + MINOR** вместо жёсткого переименования + MAJOR.
-3. Не более одного MAJOR на пакет ломающих изменений; не бампать MAJOR без явного запроса.
+1. В бете MAJOR **не бампается вообще** — ни вручную, ни автоматикой. `1.0.0` = конец беты.
+2. MAJOR требует хотя бы одной записи в `### Removed` / `### Changed (breaking)` CHANGELOG — иначе не MAJOR.
+3. Предпочитать **алиас + MINOR** вместо жёсткого переименования + MAJOR.
+4. Не более одного MAJOR на пакет ломающих изменений; не бампать MAJOR без явного запроса.

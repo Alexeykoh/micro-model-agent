@@ -4,6 +4,50 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+The GitHub Pages landing page drifted from the agent: its version was hardcoded
+(`0.1.0`) while the package was at `0.3.1`, and the install/download links were
+buried in a section far below the fold. The project now states its beta status
+across the docs and the versioning rules.
+
+### Added
+
+- **Install block in the hero** (`gh-pages/index.html`, `styles.css`, `app.js`,
+  `i18n.js`): the install command now sits right under the headline — Linux/macOS
+  ↔ Windows tabs with a copy button (`initInstall`, commands in `data-unix`/
+  `data-win`), a row of direct release-artifact links
+  (`releases/latest/download/mma-<key>.tar.gz`) and a source link. Section 09 was
+  repurposed to "First steps" (`mma` / `mma web` / `mma serve`).
+- **Safety pipeline as nodes** (section 07): the empty decorative bar is replaced
+  by the real flow `call → plugins → validators → action → plugins → result`
+  (`safety.step1..6`, the validators node accented), with the flat string kept as
+  `.sr-only` text for screen readers.
+- **Beta marking**: a `beta` badge in the hero kicker and footer, `(beta)` in
+  `meta.title`/OG/Twitter, and "Currently in beta" in the hero note; a `beta`
+  note/badge in the README, `(beta)` in the `package.json` description, and a
+  `tests/version-beta.test.ts` guard that fails if the version reaches `1.0.0`.
+
+### Changed
+
+- **Versioning policy is beta-aware** (`AGENTS.md`, `docs/agents/versioning.md`):
+  while the project is in beta the version stays in `0.x.y`; **`1.0.0` must not be
+  released** and any automatic bump to `1.x.x` is forbidden. MAJOR is reserved for
+  the explicit decision to leave beta.
+
+### Fixed
+
+- **Landing version drift** (`scripts/sync-landing-version.ts`,
+  `.github/workflows/pages.yml`): the site now takes the agent version from
+  `package.json` at deploy time (`window.MMA_VERSION`, `verChip`/`heroVer`
+  fallbacks, JSON-LD `softwareVersion`). The pages workflow also triggers on
+  `package.json` changes. `bun run sync:landing` does the same locally.
+
+### Removed
+
+- **Download buttons** on the landing page (nav CTA and hero buttons) — the
+  install command and platform links are shown directly in the hero instead.
+
 ## [0.3.1] - 2026-10-10
 
 The update surface was invisible in practice. Root cause: `renderFooter` was
