@@ -32,15 +32,17 @@ export interface CreateUpdaterOptions {
 }
 
 /**
- * Собирает и запускает апдейт. Возвращает `undefined`, когда обновляться нельзя:
- * dev-запуск из чекаута или сборка модуля бросила (автоапдейт best-effort —
- * ронять старт ему нельзя).
+ * Собирает и запускает апдейт. Возвращает `undefined`, только если сборка модуля
+ * бросила (автоапдейт best-effort — ронять старт ему нельзя).
+ *
+ * Dev-прогон (TypeScript-точка входа, чекаут) НИКОГДА не самообновляется:
+ * установка поверх пользовательского глобала из dev-дерева деструктивна. Но
+ * проверку и уведомление не глушим — иначе `bun run mma web` молчит об апдейте
+ * совсем (и разработчик не видит, что вышел релиз). Гейтим только установку
+ * (`setInstallEnabled(false)`), проверка остаётся.
  */
 export function createUpdater(opts: CreateUpdaterOptions): UpdaterModule | undefined {
-  // Dev-прогон грузит TypeScript-исходники; опубликованный бандл — dist/main.js.
-  // Из чекаута не автоапдейтимся: его package.json вправе отставать от релиза,
-  // а установка поверх юзерской деструктивна.
-  if (isDevEntryPath(opts.entryPath)) return undefined;
+  const dev = isDevEntryPath(opts.entryPath);
   try {
     const updater = new Updater(readMmaVersion(), opts.deps);
     const module = new UpdaterModule(
@@ -49,6 +51,7 @@ export function createUpdater(opts: CreateUpdaterOptions): UpdaterModule | undef
       opts.logger ?? quietLogger(),
       opts.onNotice,
     );
+    if (dev) module.setInstallEnabled(false);
     module.start();
     return module;
   } catch {

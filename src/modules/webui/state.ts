@@ -238,6 +238,11 @@ export interface WebUiState {
    * открытой вкладке. `undefined` — апдейта нет либо он уже поставлен.
    */
   updateAvailable?: { current: string; latest: string };
+  /**
+   * Установка доступного апдейта по кнопке в web (`POST /api/update`).
+   * `undefined` — апдейтер в этом режиме не собран (dev или выключен).
+   */
+  updaterInstall?: () => Promise<{ success: boolean; installed?: string; error?: string }>;
   /** Ручной пересбор индекса карты проекта (`POST /api/index`). */
   refreshIndex?: () => Promise<void>;
   /** Диагностика LSP по требованию (вкладка LSP, `POST /api/lsp/doctor`). */

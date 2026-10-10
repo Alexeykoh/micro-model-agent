@@ -34,6 +34,7 @@ import {
 import { insertIntoDraft } from "./js/session/composer.js";
 import { initCursor, createFace, setFaceState, loaderStateFor, setGreetResolver } from "./js/loader.js";
 import type { FaceState } from "./js/loader.js";
+import { setUpdateInfo } from "./js/update-state.js";
 
 declare global {
   interface Window {
@@ -45,6 +46,9 @@ declare global {
 // agent state, falling back to the idle (cursor-following) face between turns.
 let composerFace: HTMLElement | null = null;
 let composerToken = 0;
+// Last seen latest-update version; guards the empty-feed refresh from running
+// on every state tick.
+let lastUpdLatest = "";
 
 function faceEvent(state: FaceState): void {
   composerToken++;
@@ -114,6 +118,19 @@ function renderActiveState(): void {
   }
   sidebarSessionChanged(sid);
   renderWorkspace(host);
+  // Update fact is global (not per-tab): publish it to the chrome readers and
+  // badge the settings gear; refresh an empty feed so the update card appears.
+  const updLatest = host.updateAvailable?.latest ?? "";
+  setUpdateInfo(host.updateAvailable || null);
+  const gear = document.getElementById("openSettings");
+  if (gear) gear.classList.toggle("has-upd", !!host.updateAvailable);
+  if (updLatest !== lastUpdLatest) {
+    lastUpdLatest = updLatest;
+    // Settings render before the first state arrives; refresh so the General
+    // "about" row picks up the dot + update button.
+    renderSettings();
+    if (document.querySelector("#msgs .empty")) showEmptyFeed();
+  }
   renderSessionsDropdown();
   setSessionLoading(false);
   setStaleBar(!!host.i18nStale);

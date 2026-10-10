@@ -4,6 +4,33 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-10-10
+
+The update surface was invisible in practice. Root cause: `renderFooter` was
+built for a `make(cls, text)` callback but the app passes `el(tag, cls, text)`,
+so every footer chip was created as a zero-size element — the update chip never
+showed, and the whole footer line (path / version / MoE) was blank. On top of
+that, update notices were logged at `info`, which the terminal hides by default.
+
+### Fixed
+
+- **Footer line was invisible** (`assets/js/footer.ts`): call `make` with its real
+  `(tag, cls, text)` signature, so the workspace/version/MoE/update chips render
+  at a real size. This is why `mma web` never showed the `↑ <latest>` update chip.
+- **Update notices hidden**: raised the updater's check/available logs from `info`
+  (dropped by default) to `warn`, and `mma web` now logs them to the terminal too
+  (it had a no-op logger, so the console stayed silent on a launch update).
+- **Dev checkouts no longer stay silent**: `createUpdater` no longer returns
+  `undefined` for a TypeScript entry; it checks and notifies but keeps install
+  disabled (`setInstallEnabled(false)`), so a checkout still shows a real release.
+
+### Added
+
+- **Visible update surface in `mma web`**: a settings-gear dot, a feed card with
+  the mascot + **Update** button, and an **Updates** row/section in Settings →
+  General (the `updater.enabled` / `updater.autoInstall` / `updater.intervalMs`
+  keys moved here from Advanced · Service). `POST /api/update` runs the install.
+
 ## [0.3.0] - 2026-10-10
 
 `mma web` gets a second visual register. The theme axis is now split in two: **mode**

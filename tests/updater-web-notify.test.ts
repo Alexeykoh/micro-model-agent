@@ -29,11 +29,22 @@ afterEach(() => {
 });
 
 describe("createUpdater", () => {
-  it("refuses to self-update from a TypeScript entry (checkout safety)", () => {
+  it("checks from a TypeScript entry but never self-installs (checkout safety)", async () => {
     mockRegistry("99.0.0");
-    const mod = createUpdater({ config: cfg(), entryPath: DEV_ENTRY });
-    expect(mod).toBeUndefined();
-    expect(global.fetch).not.toHaveBeenCalled();
+    const notices: UpdateNotice[] = [];
+    // autoInstall on, but a dev entry must still only notify — installing over
+    // the user's global from a checkout is destructive.
+    const mod = createUpdater({
+      config: cfg({ autoInstall: true }),
+      entryPath: DEV_ENTRY,
+      onNotice: (n) => notices.push(n),
+    });
+    expect(mod).not.toBeUndefined();
+    await mod!.waitForIdle(3000);
+    expect(global.fetch).toHaveBeenCalled();
+    expect(notices.some((n) => n.phase === "available")).toBe(true);
+    expect(notices.some((n) => n.phase === "installed" || n.phase === "failed")).toBe(false);
+    mod!.stop();
   });
 
   it("starts a published install against the release manifest", async () => {

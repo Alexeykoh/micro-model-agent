@@ -16,7 +16,7 @@ import { pushState } from "../modules/webui/session/session-status";
 import { tryOpenBrowser } from "../modules/webui/server";
 import { globalMmaDir } from "../config/paths";
 import { MMA_ENV } from "../config/env";
-import { createUpdater, type UpdaterModule } from "../modules/updater/index";
+import { createUpdater, busLogger, type UpdaterModule } from "../modules/updater/index";
 import type { AppConfig } from "../config/types";
 
 /** Опции `mma web`: порт, хост, токен, suppress автооткрытия, проект. */
@@ -76,6 +76,9 @@ function startWebUpdater(config: AppConfig, state: WebUiState): UpdaterModule | 
   return createUpdater({
     config: config.updater,
     entryPath: fileURLToPath(import.meta.url),
+    // Печатаем уведомления и в терминал (а не только в SSE-чип): `mma web`
+    // раньше молчал об апдейте в консоли, где его и ждут.
+    logger: busLogger(),
     onNotice: (notice) => {
       broadcast({ type: "update", ts: Date.now(), ...notice }, state);
       if (notice.phase === "available" && notice.latest) {
@@ -155,6 +158,9 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   // `startWebUi` уже создал. Ни одного клиента в момент старта может не быть —
   // тогда апдейт уедет в снапшот и чип появится у следующего подключения.
   const updater = startWebUpdater(config, web.state);
+  // Кнопка «Update» в web: серверная установка (в dev `install` — no-op из-за
+  // `setInstallEnabled(false)`, поэтому кнопка честно вернёт ошибку).
+  if (updater) web.state.updaterInstall = () => updater.getUpdater().install();
 
   const url = await web.url;
   // Всегда показываем резолвленный workspace: shell-нарезка `-d` пути (пробелы,

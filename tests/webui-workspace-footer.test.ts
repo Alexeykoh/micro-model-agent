@@ -10,8 +10,8 @@ import { setupHappyDom } from "./helpers/happy-dom";
 const win = setupHappyDom("");
 const { renderFooter } = await import("../src/modules/webui/assets/js/footer.js");
 
-const make = (cls: string, text: string): HTMLElement => {
-  const el = win.document.createElement("span");
+const make = (tag: string, cls: string, text: string): HTMLElement => {
+  const el = win.document.createElement(tag);
   el.className = cls;
   el.textContent = text;
   return el;
