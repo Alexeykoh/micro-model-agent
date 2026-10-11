@@ -24,6 +24,7 @@ import { MCPModule } from "../../modules/mcp/index";
 import { MemoryModule } from "../../modules/memory/module";
 import { MemoryStore } from "../../modules/memory/store";
 import { t } from "../../i18n/index";
+import { buildModelBlock } from "../system-prompt";
 import { estimateTokens } from "../../llm/token-counter";
 import type { PromptBlock } from "../types";
 import { readMmaVersion } from "../version";
@@ -316,6 +317,8 @@ function collectDynamicPromptBlocks(
 ): PromptBlock[] {
   const { toolRegistry, activeToolTags, toolCtx, skillsModule, indexerModule } = input;
   const blocks: PromptBlock[] = [];
+  // Идентичность активной модели — динамическая (переживает смену модели).
+  blocks.push(buildModelBlock(input.config.model));
   const skillsBlock = skillsModule.getSystemPromptBlock();
   if (skillsBlock) blocks.push(skillsBlock);
   const sessionBlock = sessionModule.getSystemPromptBlock();

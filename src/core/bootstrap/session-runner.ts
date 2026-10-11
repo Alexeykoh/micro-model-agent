@@ -235,6 +235,7 @@ export function createSessionRunnerFactory(
     // Сессионный модуль для dynamic-блоков — свой (id/имя в системном промпте).
     const runnerSessionModule = new SessionModule(pinned);
     const getDynamicPromptBlocks = buildRunnerDynamicBlocks({
+      config,
       skillsModule,
       sessionModule: runnerSessionModule,
       indexerModule,

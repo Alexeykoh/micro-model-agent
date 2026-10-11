@@ -16,13 +16,22 @@
 
 | # | Cause | Class | Status in this plan |
 |---|-------|-------|---------------------|
-| 1 | Released install is missing `app/modules/browser/bridge-server.mjs` → every `browser` call dies with `Cannot find module` | **Agent (packaging bug)** | Task 1 |
-| 2 | A tool that always fails but is interleaved with successes is never disabled → 17 browser retries | **Agent (loop guard)** | Task 2 |
+| 1 | Released install is missing `app/modules/browser/bridge-server.mjs` → every `browser` call dies with `Cannot find module` | **Agent (packaging bug)** | Task 1 — ✅ shipped |
+| 2 | A tool that always fails but is interleaved with successes is never disabled → 17 browser retries | **Agent (loop guard)** | Task 2 — ✅ shipped |
 | 3 | `download_file`/image path blocked while `web_browse` returns "(empty page)" and browser is dead → model loops on web | **Agent (tool availability)** | Task 1 + Task 2 (unblocks browser) |
-| 4 | System prompt / `context_probe` report a model that isn't the active one (`qwen3.8-9b-distill` vs `mellum2.1-12b`) | **Agent (stale identity)** | Task 3 |
-| 5 | `maxToolIterations` default 1000 — no turn budget | **Agent (default)** | Task 4 (docs/decision) |
-| 6 | Near-duplicate web research (42 `web_search` + 36 `web_fetch`, varied args) doesn't feed the duplicate streak | **Agent (loop guard) + Model** | Task 5 (design note, not coded) |
+| 4 | System prompt / `context_probe` report a model that isn't the active one (`qwen3.8-9b-distill` vs `mellum2.1-12b`) | **Agent (stale identity)** | Task 3 — ✅ shipped |
+| 5 | `maxToolIterations` default 1000 — no turn budget | **Agent (default)** | Task 4 — ⏸ decision only |
+| 6 | Near-duplicate web research (42 `web_search` + 36 `web_fetch`, varied args) doesn't feed the duplicate streak | **Agent (loop guard) + Model** | Task 5 — ⏸ needs own spec |
 | 7 | User asked for a **plan**, model built the site and ran servers; never emitted chat text; ignored "use skills"; never asked; re-planned at 7/8 | **Model (LLM)** | Out of harness scope |
+
+**Shipped:** Task 1 (`fix(release): ship dist runtime dirs…`), Task 2 (`fix(agent): disable a repeatedly-failing tool…`, threshold `MAX_TOOL_FAILURES_PER_TURN = 8` — above the failed-batch terminal so single-tool loops keep their contract), Task 3 (`fix(prompt): live model identity…`). `bun test` 3839 pass / 0 fail; `bun run quality` exit 0.
+
+**Deferred with rationale (deliberate, not skipped):**
+- **Task 4** is a config-default decision (breaking for legitimately long tasks) — record, don't silently change.
+- **Task 5** re-introduces the class of budget the project already reverted once (`MAX_READONLY_BATCHES`); needs its own spec + live validation. Note that Task 1 + Task 2 together remove the two biggest amplifiers of this session's web loop (dead browser tool, endless retry of it).
+
+`context_probe` (Task 3 note): the `context_probe` session entry reflects the model the *provider probe* saw at that instant; with the identity now dynamic in the prompt, the remaining probe/entry question is observability only (not behavior) and is left as a follow-up.
+
 
 ---
 
@@ -85,15 +94,19 @@ But `buildStage` also copies `process.execPath` (bun, ~90MB) — slow. Refactor 
 
 ## Task 3: Live model identity in the system prompt
 
-**Problem:** `buildSystemInfo` bakes `${config.model}` into the static system-info block once at bootstrap; `Agent.reconfigure` (model/provider switch) does not rebuild it → the prompt kept saying `qwen3.8-9b-distill` while the turn ran `mellum2.1-12b`.
+**Problem:** `buildSystemInfo` baked `${config.model}` into the static system-info block once at bootstrap; `Agent.reconfigure` (model/provider switch) does not rebuild it → the prompt kept saying `qwen3.8-9b-distill` while the turn ran `mellum2.1-12b`.
 
-**Files:**
-- Modify: `src/core/bootstrap/workspace-phase.ts` (give the block `kind: "system-info"`; keep the builder function accessible)
-- Modify: `src/core/bootstrap.ts` / `AgentDeps` (expose `rebuildSystemInfoBlock?: () => PromptBlock`)
-- Modify: `src/core/agent.ts` `reconfigure` (swap the `kind: "system-info"` block)
-- Test: `tests/core/reconfigure-prompt-model.test.ts` (new)
+**Fix (chosen approach — dynamic block, no cross-phase plumbing):** the model name is now a *dynamic* prompt block recomputed every `buildSystemPrompt`, so it always reflects the live config. The static header no longer embeds a model name (single source of truth → no divergence).
 
-- [ ] Steps: failing test (prompt contains old model → reconfigure with new model → `buildSystemPrompt()` contains new model, not old) → implement → green → commit.
+**Files (shipped):**
+- `src/core/system-prompt.ts` — new `buildModelBlock(model)`; header drops `(${config.model})`.
+- `src/core/bootstrap/modules-phase.ts` — `collectDynamicPromptBlocks` pushes `buildModelBlock(input.config.model)`.
+- `src/core/bootstrap/session-runner-scope.ts` — `RunnerDynamicBlocksInput.config`; `buildRunnerDynamicBlocks` pushes the block.
+- `src/core/bootstrap/session-runner.ts` — passes `config`.
+- Test: `tests/core/system-prompt-model-block.test.ts`.
+
+- [x] Implemented; `bun test` + `tsc --noEmit` green.
+- [ ] Remaining (follow-up, observability only): the `context_probe` session entry text is provider-probe-time, not live model — clarify/align separately if desired.
 
 ---
 
