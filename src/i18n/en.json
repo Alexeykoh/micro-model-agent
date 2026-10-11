@@ -886,6 +886,7 @@
   "exec.bash_flailing": "bash failed in {fails} of the last {window} attempts.",
   "exec.consecutive_failures": "{count} consecutive tool failures.",
   "exec.honest_stop": "STOP retrying. {count} consecutive tool batches failed or were blocked with no successful call in between — more variants of the same action will not help. Do NOT try another command, flag, or workaround for this. Write your final text answer NOW: state plainly what was done, what could NOT be done or verified, and why. Do NOT paste output you did not actually receive from a tool.",
+  "exec.tool_disabled": "The \"{tool}\" tool failed repeatedly and cannot succeed in this environment — it is now DISABLED for this turn. Do NOT call it again. Use a different tool or answer with what you already have.",
   "exec.readonly_directive": "You have repeated the same tool call {count} times with no new result. Stop repeating: either WRITE your final answer with what you already have, or do something genuinely different.",
   "exec.finalize_no_tools": "Tools are now disabled. Write your final answer from what you have already gathered. Do not request tools or ask to continue; state plainly what you found and, if the task is incomplete, what remains unverified.",
   "exec.plan_warning": "Current plan step {step} is \"{description}\", but {tool} is being called for files outside this step. Complete the current step first, then call plan_step step={step} status=done before moving to the next step.",

@@ -24,7 +24,7 @@ import {
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES } from "./constants";
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_TOOL_FAILURES_PER_TURN, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES } from "./constants";
 import { canonicalArgsKey } from "./canonical-args";
 
 /** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
@@ -227,6 +227,23 @@ function recordRepeatedToolFailure(
     prev.samples.push(headline);
   }
   state.toolFailureCounts.set(key, prev);
+
+  // Отключение мёртвого тула на остаток хода: суммарно провалился больше
+  // MAX_TOOL_FAILURES_PER_TURN раз (не транзиентный — выше отсечён). Директива
+  // один раз; видимый набор тулов цикла исключает его из disabledTools.
+  if (prev.count >= MAX_TOOL_FAILURES_PER_TURN && !state.toolDisabledNudged.has(key)) {
+    state.toolDisabledNudged.add(key);
+    state.disabledTools.add(key);
+    logger.diagnostic(
+      "warn",
+      `Tool ${key} failed ${prev.count}x — disabling it for the rest of the turn`,
+    );
+    deps.contextManager.addMessage({
+      role: "user",
+      content: `<system-summary>${t("exec.tool_disabled", { tool: key })}</system-summary>`,
+    });
+  }
+
   if (prev.count < MIN_REPEATED_TOOL_FAILURES || state.memoryRuleRecorded.has(key)) return;
   state.memoryRuleRecorded.add(key);
   const diagnosis = diagnoseRepeatedFailures(key, prev.samples);
