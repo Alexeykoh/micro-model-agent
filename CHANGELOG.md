@@ -4,6 +4,37 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-10-11
+
+Audit of live session `ses_mv44qabg_s1przq` (`mma web`, single turn: 225 LLM
+calls, 225 tool calls, 15 compactions, no chat output, aborted after ~22 min).
+The model drifted (asked for a plan, built the site) — but three harness defects
+amplified it. All fixes are agent-side, general, and test-covered.
+
+### Fixed
+
+- **Release artifact dropped runtime directories** (`scripts/stage-release.ts`):
+  the tarball shipped only `dist/main.js` + `dist/assets`, so installed releases
+  lacked `app/modules/browser/bridge-server.mjs` (every `browser` call died with
+  `Cannot find module`), `app/skills/builtin` and `app/certification`.
+  `buildStage` now copies `RUNTIME_APP_DIRS` (missing optional dirs are skipped)
+  and is exported/tested.
+- **A tool that always fails was never disabled within a turn**
+  (`src/core/agent/tool-batch.ts`, `loop-state.ts`, `constants.ts`,
+  `src/core/agent.ts`): `browser` failed 17× while `web_search` succeeded in
+  between, so batches never fully failed and honest-stop never fired. After
+  `MAX_TOOL_FAILURES_PER_TURN` (8) total non-transient failures the tool is
+  disabled for the rest of the turn (excluded from the visible tool set, one
+  directive) — threshold kept above the failed-batch terminal so single-tool
+  loops keep their contract.
+- **System prompt named a stale model** (`src/core/system-prompt.ts`,
+  `bootstrap/modules-phase.ts`, `bootstrap/session-runner-scope.ts`,
+  `bootstrap/session-runner.ts`): `config.model` was baked into the static
+  system-info block at bootstrap and never rebuilt on `/model`/`/provider`
+  switch (prompt said `qwen3.8-9b-distill` while the turn ran
+  `mellum2.1-12b`). Model identity is now a dynamic prompt block recomputed
+  every build (main + per-session runner).
+
 ## [0.3.2] - 2026-10-10
 
 The GitHub Pages landing page drifted from the agent: its version was hardcoded
