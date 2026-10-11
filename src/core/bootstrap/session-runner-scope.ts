@@ -14,6 +14,7 @@ import { PluginManager } from "../../modules/plugins/manager";
 import type { ToolContext } from "../../tools/types";
 import type { DraftHost } from "../../modules/plugins/drafts";
 import type { PromptBlock } from "../types";
+import { buildModelBlock } from "../system-prompt";
 import { buildHiddenToolsBlock } from "../../tools/hidden-tools-block";
 import { estimateTokens } from "../../llm/token-counter";
 import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
@@ -179,6 +180,8 @@ export function buildRunnerExecutor(
 
 /** Входы сборки dynamic-блоков раннера. */
 export interface RunnerDynamicBlocksInput {
+  /** Живой конфиг раннера (идентичность активной модели). */
+  config: AppConfig;
   skillsModule: { getSystemPromptBlock(): PromptBlock | null };
   sessionModule: { getSystemPromptBlock(): PromptBlock | null };
   indexerModule: { getSystemPromptBlock(): PromptBlock | null };
@@ -194,6 +197,8 @@ export interface RunnerDynamicBlocksInput {
 export function buildRunnerDynamicBlocks(input: RunnerDynamicBlocksInput): () => PromptBlock[] {
   return (): PromptBlock[] => {
     const blocks: PromptBlock[] = [];
+    // Идентичность активной модели — динамическая (переживает смену модели).
+    blocks.push(buildModelBlock(input.config.model));
     const skillsBlock = input.skillsModule.getSystemPromptBlock();
     if (skillsBlock) blocks.push(skillsBlock);
     const sessionBlock = input.sessionModule.getSystemPromptBlock();

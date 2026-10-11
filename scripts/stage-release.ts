@@ -5,6 +5,9 @@
  *   runtime/bun(.exe)   — рантайм Bun этой платформы
  *   app/main.js         — собранный CLI (dist/main.js)
  *   app/assets/**       — веб-ассеты (готовые)
+ *   app/modules/**      — browser bridge-server.mjs (читается с диска)
+ *   app/skills/builtin/** — встроенные скиллы (читаются с диска)
+ *   app/certification/**  — bundle-манифест сертификаций (читается с диска)
  *   app/node_modules/** — prod-зависимости (external в бандле)
  *   package.json        — имя+версия (для readMmaVersion/readChangelog)
  *   CHANGELOG.md
@@ -14,7 +17,8 @@
  * (sha256/size/url). Финальный `latest.json` собирает build-manifest.ts.
  *
  * Env: RELEASE_KEY (иначе определяется по ОС/arch), RELEASE_SKIP_NODE_MODULES=1
- * (проверка структуры без тяжёлой копии), RELEASE_NODE_MODULES (кастомный путь).
+ * (проверка структуры без тяжёлой копии), RELEASE_NODE_MODULES (кастомный путь),
+ * RELEASE_SKIP_RUNTIME=1 (пропустить копию bun — для тестов структуры).
  */
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -30,6 +34,18 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "release");
+
+/**
+ * Каталоги `dist/`, которые рантайм читает С ДИСКА (не инлайнятся бандлом) и
+ * поэтому обязаны попасть в релиз. `copy-assets.ts` кладёт их в `dist/`;
+ * раскладка внутри архива — `app/<dir>/**`, что совпадает с резолвом рядом с
+ * `main.js` (`import.meta.dirname`).
+ *
+ * - `modules/browser/bridge-server.mjs` — тул `browser` (иначе `Cannot find module`).
+ * - `skills/builtin/**` — встроенные скиллы (`load_skill`).
+ * - `certification/certifications.json` — bundle-манифест (синк в `~/.mma`).
+ */
+export const RUNTIME_APP_DIRS = ["modules", "skills", "certification"] as const;
 
 async function main(): Promise<void> {
   const key = resolveKey();
@@ -69,14 +85,28 @@ async function readVersion(): Promise<string> {
 }
 
 /** Складывает рантайм, приложение и метаданные в staging-каталог. */
-async function buildStage(stage: string, version: string): Promise<void> {
+export async function buildStage(
+  stage: string,
+  version: string,
+  opts: { distDir?: string } = {},
+): Promise<void> {
+  const distDir = opts.distDir ?? join(root, "dist");
   await mkdir(join(stage, "app"), { recursive: true });
   await mkdir(join(stage, "runtime"), { recursive: true });
-  await cp(join(root, "dist", "main.js"), join(stage, "app", "main.js"));
-  await cp(join(root, "dist", "assets"), join(stage, "app", "assets"), { recursive: true });
+  await cp(join(distDir, "main.js"), join(stage, "app", "main.js"));
+  await cp(join(distDir, "assets"), join(stage, "app", "assets"), { recursive: true });
 
-  const bunName = process.platform === "win32" ? "bun.exe" : "bun";
-  await cp(process.execPath, join(stage, "runtime", bunName));
+  // Runtime-read dirs (browser bridge, builtin skills, cert manifest). Missing
+  // dirs are skipped: `certification/` is optional when no manifest exists yet.
+  for (const dir of RUNTIME_APP_DIRS) {
+    const src = join(distDir, dir);
+    if (await exists(src)) await cp(src, join(stage, "app", dir), { recursive: true });
+  }
+
+  if (process.env.RELEASE_SKIP_RUNTIME !== "1") {
+    const bunName = process.platform === "win32" ? "bun.exe" : "bun";
+    await cp(process.execPath, join(stage, "runtime", bunName));
+  }
 
   await copyNodeModules(stage);
   await writeMeta(stage, version);
@@ -141,4 +171,4 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-await main();
+if (import.meta.main) await main();

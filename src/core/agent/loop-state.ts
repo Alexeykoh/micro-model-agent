@@ -77,6 +77,14 @@ export interface LoopState {
   consecutiveDuplicateBatches: number;
   /** Duplicate-директива уже отправлена для текущего стрика (1 раз). */
   duplicateNudged: boolean;
+  /**
+   * Подряд идущие пакеты, целиком состоящие из внешних веб-запросов
+   * (web research). Питает одноразовую директиву «сведи к результату», когда
+   * модель уходит в бесконечный веб-поиск без артефакта.
+   */
+  consecutiveResearchBatches: number;
+  /** Директива «свести поиск к результату» уже отправлена (1 раз на стрик). */
+  researchNudged: boolean;
   /** Канонические ключи всех вызовов за ход — вход duplicate-предиката. */
   seenToolCalls: Set<string>;
   /**
@@ -96,6 +104,14 @@ export interface LoopState {
   toolFailureCounts: Map<string, { count: number; error: string; samples: string[] }>;
   /** Тулы, по которым правило в память уже записано (дедупликация). */
   memoryRuleRecorded: Set<string>;
+  /**
+   * Тулы, отключённые на остаток хода: суммарно провалились больше
+   * `MAX_TOOL_FAILURES_PER_TURN` раз (не транзиентные). Не попадают в видимый
+   * модели набор тулов — иначе слабая модель бесконечно повторяет мёртвый тул.
+   */
+  disabledTools: Set<string>;
+  /** Тулы, по которым директива «отключён» уже отправлена (1 раз на тул). */
+  toolDisabledNudged: Set<string>;
 
   /**
    * Сколько раз за прогон мутировался один и тот же целевой объект
@@ -219,6 +235,8 @@ export function createLoopState(): LoopState {
     honestStopNudged: false,
     consecutiveDuplicateBatches: 0,
     duplicateNudged: false,
+    consecutiveResearchBatches: 0,
+    researchNudged: false,
     seenToolCalls: new Set<string>(),
     finalizeReason: null,
     stopReason: null,
@@ -226,6 +244,8 @@ export function createLoopState(): LoopState {
     repeatedToolCount: 0,
     toolFailureCounts: new Map(),
     memoryRuleRecorded: new Set(),
+    disabledTools: new Set(),
+    toolDisabledNudged: new Set(),
     toolTargetCounts: new Map(),
     cycleNudgedKeys: new Set(),
     artifactChurn: createArtifactChurnState(),

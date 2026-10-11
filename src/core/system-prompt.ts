@@ -13,6 +13,28 @@
  * asks for a file", "ANSWER IN CHAT", "MEMORY PRIVACY", "SECURITY RESTRICTIONS".
  */
 import type { AppConfig } from "../config/types";
+import type { PromptBlock } from "./types";
+import { estimateTokens } from "../llm/token-counter";
+
+/**
+ * Динамический блок идентичности активной модели. Собирается свежим на каждом
+ * билде системного промпта, поэтому переживает `/model use`/`/provider use`:
+ * статичный заголовок `buildSystemInfo` фиксируется на bootstrap, и после смены
+ * модели промпт продолжал называть прежнюю (наблюдалось: заголовок говорил
+ * `qwen3.8-9b-distill`, а ход шёл на `mellum2.1-12b-a2.5b-thinking` — сессия
+ * `ses_mv44qabg_s1przq`). Идентичность модели убрана из статичного заголовка и
+ * отдаётся этому блоку — иначе два источника расходятся.
+ * @param model активная модель из живого конфига.
+ */
+export function buildModelBlock(model: string): PromptBlock {
+  const content = `ACTIVE MODEL: ${model} — this is the model you are running on right now.`;
+  return {
+    content,
+    priority: "low",
+    essential: false,
+    estimatedTokens: estimateTokens(content),
+  };
+}
 
 /**
  * Рендерит системный промпт (чистая функция).
@@ -28,7 +50,7 @@ export function buildSystemInfo(
   const now = new Date().toISOString().replace("T", " ").slice(0, 19);
   const isWin = profileCompressed.toLowerCase().includes("win32");
   const lines: string[] = [
-    `You are MMA v2, an AI agent for small models (${config.model}). Date: ${now}.`,
+    `You are MMA v2, an AI agent for small models. Date: ${now}.`,
     `Workspace: ${baseDir}. ${profileCompressed}.`,
     `Reply in the user's language. Explain briefly if not obvious.`,
     ``,

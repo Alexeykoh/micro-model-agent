@@ -17,7 +17,7 @@ describe("config defaults", () => {
     expect(DEFAULTS.provider.baseUrl).toBe("http://localhost:1234/v1");
     expect(DEFAULTS.provider.apiKey).toBe("not-needed");
     expect(DEFAULTS.contextWindow).toBe(32768);
-    expect(DEFAULTS.maxToolIterations).toBe(1000);
+    expect(DEFAULTS.maxToolIterations).toBe(200);
     expect(DEFAULTS.stuckThreshold).toBe(6);
     expect(DEFAULTS.autoPlan).toBe(true);
     expect(DEFAULTS.logLevel).toBe("info");

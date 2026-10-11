@@ -32,6 +32,7 @@ import type { ReasoningState } from "../tools/set-thinking";
 import { estimateTokens } from "../llm/token-counter";
 import { LlmError } from "../llm/llm-errors";
 import { createLoopState, clearIterationSignals, type LoopState } from "./agent/loop-state";
+import { filterDisabledTools } from "./agent/tool-visibility";
 import { CompactionService } from "./agent/compaction";
 import { TokenTracker } from "./agent/token-tracker";
 import { buildPromptSnapshot, diffPrompt } from "./agent/prefix-monitor";
@@ -1010,7 +1011,10 @@ export class Agent {
     // activeToolTags) мог растить видимый модели набор прямо в прогоне.
     // Привязка к итерации держит оценку бюджета и boundedOutput в синхроне
     // с реально отправляемым.
-    let allToolsForBudget = toolExecutor.getToolDefinitions(this.deps.toolTags);
+    let allToolsForBudget = filterDisabledTools(
+      toolExecutor.getToolDefinitions(this.deps.toolTags),
+      state.disabledTools,
+    );
     let boundedToolNames = new Set(
       allToolsForBudget.filter((t) => t.boundedOutput).map((t) => t.name),
     );
@@ -1026,7 +1030,11 @@ export class Agent {
       contextManager.noteIteration();
 
       // Перечитываем мутабельный набор тегов — вдруг вызывали enable_tools.
-      allToolsForBudget = toolExecutor.getToolDefinitions(this.deps.toolTags);
+      // Отключённые за ход тулы (те, что всегда падают) исключаются из видимого набора.
+      allToolsForBudget = filterDisabledTools(
+        toolExecutor.getToolDefinitions(this.deps.toolTags),
+        state.disabledTools,
+      );
       boundedToolNames = new Set(
         allToolsForBudget.filter((t) => t.boundedOutput).map((t) => t.name),
       );

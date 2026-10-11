@@ -328,7 +328,7 @@ Key options (full list in `src/config/defaults.ts`; view/edit via `/config` in t
 | `autoPlan` | `true` | Auto-create plans for multi-step tasks |
 | `reasoning.mode` | `auto` | `auto` (policy) or fixed `none`…`max` |
 | `reasoning.baseline` | `low` | Starting level in auto (grows on signals) |
-| `maxToolIterations` | `1000` | Max tool calls per run |
+| `maxToolIterations` | `200` | Max tool calls per run |
 | `stuckThreshold` | `6` | Iterations without progress before stuck detection |
 | `moe.enabled` | `false` | Enable Agent-Level MoE (orchestrator falls back to the active model) |
 | `critic.enabled` | `true` | In-loop critic: verifies the final answer before it's accepted |
