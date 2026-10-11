@@ -133,7 +133,7 @@
       apiKey: "",
       model: "",
       contextWindow: 32768,
-      maxToolIterations: 1000,
+      maxToolIterations: 200,
       locale: "en",
       securityBashBlock: false,
       securityFlagsBlock: false,

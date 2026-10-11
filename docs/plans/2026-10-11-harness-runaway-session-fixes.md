@@ -20,17 +20,15 @@
 | 2 | A tool that always fails but is interleaved with successes is never disabled → 17 browser retries | **Agent (loop guard)** | Task 2 — ✅ shipped |
 | 3 | `download_file`/image path blocked while `web_browse` returns "(empty page)" and browser is dead → model loops on web | **Agent (tool availability)** | Task 1 + Task 2 (unblocks browser) |
 | 4 | System prompt / `context_probe` report a model that isn't the active one (`qwen3.8-9b-distill` vs `mellum2.1-12b`) | **Agent (stale identity)** | Task 3 — ✅ shipped |
-| 5 | `maxToolIterations` default 1000 — no turn budget | **Agent (default)** | Task 4 — ⏸ decision only |
-| 6 | Near-duplicate web research (42 `web_search` + 36 `web_fetch`, varied args) doesn't feed the duplicate streak | **Agent (loop guard) + Model** | Task 5 — ⏸ needs own spec |
+| 5 | `maxToolIterations` default 1000 — no turn budget | **Agent (default)** | Task 4 — ✅ shipped |
+| 6 | Near-duplicate web research (42 `web_search` + 36 `web_fetch`, varied args) doesn't feed the duplicate streak | **Agent (loop guard) + Model** | Task 5 — ✅ shipped (soft convergence directive) |
 | 7 | User asked for a **plan**, model built the site and ran servers; never emitted chat text; ignored "use skills"; never asked; re-planned at 7/8 | **Model (LLM)** | Out of harness scope |
 
-**Shipped:** Task 1 (`fix(release): ship dist runtime dirs…`), Task 2 (`fix(agent): disable a repeatedly-failing tool…`, threshold `MAX_TOOL_FAILURES_PER_TURN = 8` — above the failed-batch terminal so single-tool loops keep their contract), Task 3 (`fix(prompt): live model identity…`). `bun test` 3839 pass / 0 fail; `bun run quality` exit 0.
+**Shipped (all 5 harness tasks):** Task 1 (`fix(release): ship dist runtime dirs…`), Task 2 (`fix(agent): disable a repeatedly-failing tool…`, threshold `MAX_TOOL_FAILURES_PER_TURN = 8` — above the failed-batch terminal so single-tool loops keep their contract), Task 3 (`fix(prompt): live model identity…`), Task 4 (`maxToolIterations` default 1000→200), Task 5 (web-research convergence directive, `MAX_RESEARCH_BATCHES = 12`, soft/no-hard-stop). `bun test` 3842 pass / 0 fail; `bun run quality` exit 0.
 
-**Deferred with rationale (deliberate, not skipped):**
-- **Task 4** is a config-default decision (breaking for legitimately long tasks) — record, don't silently change.
-- **Task 5** re-introduces the class of budget the project already reverted once (`MAX_READONLY_BATCHES`); needs its own spec + live validation. Note that Task 1 + Task 2 together remove the two biggest amplifiers of this session's web loop (dead browser tool, endless retry of it).
-
-`context_probe` (Task 3 note): the `context_probe` session entry reflects the model the *provider probe* saw at that instant; with the identity now dynamic in the prompt, the remaining probe/entry question is observability only (not behavior) and is left as a follow-up.
+**Residual (documented, not code):**
+- **`context_probe` entry** (`model=qwen3.8… actual=262144` at 18:01:15) reflects what the *provider probe* saw at that instant, before the user's model switch; the prompt identity is now live, so the entry is observability-only. Align separately if desired.
+- **Task 5 is intentionally soft.** A hard web-research stop was rejected on purpose: the project already reverted a broad read-only budget (`MAX_READONLY_BATCHES`, `docs/specs/2026-10-09-readonly-guard-finalize-design.md`). If live runs show the directive is not enough, the next step needs its own spec + live validation, not a quick threshold change.
 
 
 ---
@@ -110,31 +108,30 @@ But `buildStage` also copies `process.execPath` (bun, ~90MB) — slow. Refactor 
 
 ---
 
-## Task 4: Turn budget default (decision, docs)
+## Task 4: Turn budget default — shipped
 
-**Problem:** `maxToolIterations` default = 1000 (`src/config/defaults.ts`, `src/config/config.ts`). A single turn can burn hundreds of iterations (observed 225).
+**Problem:** `maxToolIterations` default = 1000 did not bound a runaway turn (the audited session reached 225 calls and was aborted by hand).
 
-**Decision to record:** do NOT silently lower the default (breaking for legit long tasks); instead document the interaction with `finalizeWithoutTools` and the loop guards (Task 2 / duplicate budget), and recommend a turn-level safety in a follow-up spec. Update `docs/agents/execution.md` if behavior is clarified.
-
-Status: **plan-only** (no code) unless the user wants the default changed.
+**Fix:** default `1000 → 200` (`src/config/defaults.ts`, `src/modules/setup/answers.ts` `SETUP_DEFAULTS`, `src/modules/webui/assets/setup.ts` fallback, `README.md`; tests `tests/config.test.ts`, `tests/webui-setup.test.ts`). A turn hitting the cap already ends with a best-effort tool-less final answer (`finalizeWithoutTools`, `stopReason: "max_iters"`), and the value stays user-configurable (`/config maxToolIterations <N>`).
 
 ---
 
-## Task 5: Research-convergence guard (design note)
+## Task 5: Research-convergence guard — shipped (soft)
 
-**Problem:** near-duplicate web research (42 `web_search`, 36 `web_fetch`, varied args) never feeds `consecutiveDuplicateBatches`, and the "no progress" stuck-warning is a soft nudge.
+**Problem:** near-duplicate web research (42 `web_search`, 36 `web_fetch`, varied args) never fed `consecutiveDuplicateBatches`, and the "no progress" stuck-warning is a soft nudge that was ignored.
 
-**Constraint:** the repo already removed a broad read-only budget (`MAX_READONLY_BATCHES`) because it killed legitimate read-only analysis (`docs/specs/2026-10-09-readonly-guard-finalize-design.md`). A new web-specific budget must be narrow (only `web_search`/`web_fetch`/`web_browse`/`browser`/`download_file` batches, high threshold) and must reset on any productive action.
+**Fix:** after `MAX_RESEARCH_BATCHES` (12) consecutive batches made up *solely* of external web tools (`web_search`/`web_fetch`/`web_browse`/`browser`/`download_file`), inject a one-time directive to converge. **Directive only, no hard stop** — for the reason below. Resets on any non-web tool.
 
-Status: **plan-only** — needs its own spec + live validation before coding; naive query normalization (token-set) does not catch the observed variation, so it is not a clean win.
+**Files:** `src/core/agent/constants.ts` (`MAX_RESEARCH_BATCHES`), `loop-state.ts` (`consecutiveResearchBatches`/`researchNudged`), `tool-batch.ts` (`RESEARCH_TOOLS` + streak), i18n `exec.research_convergence` (en+ru); test `tests/core/tool-batch-research-convergence.test.ts`.
+
+**Why soft:** the repo already reverted a broad read-only budget (`MAX_READONLY_BATCHES`) because it killed legitimate read-only analysis (`docs/specs/2026-10-09-readonly-guard-finalize-design.md`). A hard web stop risks the same class of false positive (a genuinely large web-research task). The set here is external-web only (local analysis unaffected) and self-resets. If live runs show the directive is insufficient, the hard stop needs its own spec + live validation.
 
 ---
 
 ## Verification
 
-- `bun test tests/scripts/stage-release.test.ts tests/core/tool-batch-tool-disable.test.ts tests/core/reconfigure-prompt-model.test.ts`
-- `tsc --noEmit`
-- `bun run quality` (typecheck + typecheck:frontend + lint + fallow) — update `.fallow-baseline.json` only if fallow flags intentional new exports.
+- `bun test` (full suite) — 3842 pass / 0 fail.
+- `bun run quality` (typecheck + typecheck:frontend + lint + fallow) — exit 0.
 
 ## Out of scope (Model-side, not harness)
 

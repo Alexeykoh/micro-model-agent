@@ -77,6 +77,14 @@ export interface LoopState {
   consecutiveDuplicateBatches: number;
   /** Duplicate-директива уже отправлена для текущего стрика (1 раз). */
   duplicateNudged: boolean;
+  /**
+   * Подряд идущие пакеты, целиком состоящие из внешних веб-запросов
+   * (web research). Питает одноразовую директиву «сведи к результату», когда
+   * модель уходит в бесконечный веб-поиск без артефакта.
+   */
+  consecutiveResearchBatches: number;
+  /** Директива «свести поиск к результату» уже отправлена (1 раз на стрик). */
+  researchNudged: boolean;
   /** Канонические ключи всех вызовов за ход — вход duplicate-предиката. */
   seenToolCalls: Set<string>;
   /**
@@ -227,6 +235,8 @@ export function createLoopState(): LoopState {
     honestStopNudged: false,
     consecutiveDuplicateBatches: 0,
     duplicateNudged: false,
+    consecutiveResearchBatches: 0,
+    researchNudged: false,
     seenToolCalls: new Set<string>(),
     finalizeReason: null,
     stopReason: null,

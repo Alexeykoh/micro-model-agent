@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 Audit of live session `ses_mv44qabg_s1przq` (`mma web`, single turn: 225 LLM
 calls, 225 tool calls, 15 compactions, no chat output, aborted after ~22 min).
-The model drifted (asked for a plan, built the site) — but three harness defects
+The model drifted (asked for a plan, built the site) — but five harness defects
 amplified it. All fixes are agent-side, general, and test-covered.
 
 ### Fixed
@@ -34,6 +34,22 @@ amplified it. All fixes are agent-side, general, and test-covered.
   switch (prompt said `qwen3.8-9b-distill` while the turn ran
   `mellum2.1-12b`). Model identity is now a dynamic prompt block recomputed
   every build (main + per-session runner).
+- **Endless web research without convergence** (`src/core/agent/tool-batch.ts`,
+  `loop-state.ts`, `constants.ts`): a run of `MAX_RESEARCH_BATCHES` (12)
+  consecutive batches made up solely of external web tools
+  (`web_search`/`web_fetch`/`web_browse`/`browser`/`download_file`) now injects a
+  one-time directive to converge (write the answer / create the file, or state
+  exactly what is missing). Directive only — no hard stop; the set is
+  external-web only and resets on any non-web tool, deliberately avoiding the
+  broad read-only budget the project already reverted.
+
+### Changed
+
+- **`maxToolIterations` default `1000` → `200`** (`src/config/defaults.ts`,
+  `modules/setup/answers.ts`, `webui/assets/setup.ts`, `README.md`): the old
+  ceiling did not bound a runaway turn (the audited session reached 225 calls
+  and was aborted by hand). A turn hitting the cap still ends with a best-effort
+  final answer; the value stays user-configurable via `/config maxToolIterations`.
 
 ## [0.3.2] - 2026-10-10
 

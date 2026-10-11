@@ -110,7 +110,7 @@ export const SETUP_LANGUAGES = [
 /** Числовые дефолты шага настроек агента. */
 export const SETUP_DEFAULTS = {
   contextWindow: 32768,
-  maxToolIterations: 1000,
+  maxToolIterations: 200,
 } as const;
 
 /** Провайдер на выбор в визарде (у хостед-пресетов фиксированный URL). */

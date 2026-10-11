@@ -164,7 +164,7 @@ describe("webui setup REST", () => {
       expect(body.providers.some((p) => p.type === "openai-compat")).toBe(true);
       expect(body.providers.find((p) => p.type === "openrouter")?.baseUrl).toContain("openrouter.ai");
       expect(body.defaults.contextWindow).toBe(32768);
-      expect(body.defaults.maxToolIterations).toBe(1000);
+      expect(body.defaults.maxToolIterations).toBe(200);
       expect(body.defaults.security?.paths?.denied).toContain(".env");
     });
   });

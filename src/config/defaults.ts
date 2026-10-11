@@ -108,7 +108,11 @@ export const DEFAULTS: AppConfig = {
     maxStreamRetries: 2,
     noDataTimeoutMs: 180000,
   },
-  maxToolIterations: 1000,
+  // Жёсткий потолок одного хода. 1000 не ограничивал runaway (сессия
+  // ses_mv44qabg_s1przq дошла до 225 вызовов и была прервана вручную): при
+  // исчерпании ход завершается best-effort финальным ответом. Пользователь
+  // может поднять значение через `/config maxToolIterations <N>`.
+  maxToolIterations: 200,
   stuckThreshold: 6,
   autoPlan: true,
   execution: {

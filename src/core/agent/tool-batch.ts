@@ -24,11 +24,25 @@ import {
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_TOOL_FAILURES_PER_TURN, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES } from "./constants";
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_TOOL_FAILURES_PER_TURN, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES } from "./constants";
 import { canonicalArgsKey } from "./canonical-args";
 
 /** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
 const TRANSIENT_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
+
+/**
+ * Внешние веб-тулы: пакет только из них — «веб-разведка». Длинная серия таких
+ * пакетов без единого не-web действия питает одноразовую директиву «сведи к
+ * результату» (`MAX_RESEARCH_BATCHES`). Набор узкий (внешние запросы, не чтение
+ * локального кода), поэтому легитимный локальный анализ не задевает.
+ */
+const RESEARCH_TOOLS = new Set([
+  "web_search",
+  "web_fetch",
+  "web_browse",
+  "browser",
+  "download_file",
+]);
 
 /** Дефолтный кап конкурентных тулов одного batch'а (см. security.rateLimits). */
 const DEFAULT_MAX_PARALLEL_TOOLS = 5;
@@ -709,6 +723,28 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         `Duplicate loop terminated after ${state.consecutiveDuplicateBatches} identical batches — forcing final answer`,
       );
       return { interrupted: false, finalize: "duplicate" };
+    }
+
+    // Веб-разведка без результата: серия пакетов, целиком из внешних веб-тулов.
+    // Только директива (без жёсткого стопа) — «сведи поиск к результату».
+    const isResearchBatch =
+      toolCalls.length > 0 && toolCalls.every((c) => RESEARCH_TOOLS.has(c.name));
+    if (isResearchBatch) {
+      state.consecutiveResearchBatches++;
+    } else {
+      state.consecutiveResearchBatches = 0;
+      state.researchNudged = false;
+    }
+    if (state.consecutiveResearchBatches >= MAX_RESEARCH_BATCHES && !state.researchNudged) {
+      state.researchNudged = true;
+      logger.diagnostic(
+        "warn",
+        `Web-research streak: ${state.consecutiveResearchBatches} batches without a result — directive`,
+      );
+      contextManager.addMessage({
+        role: "user",
+        content: `<system-summary>${t("exec.research_convergence", { count: state.consecutiveResearchBatches })}</system-summary>`,
+      });
     }
 
     // Статусная строка плана после каждого пакета тулов. Заменяет динамический
