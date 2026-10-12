@@ -183,10 +183,10 @@ boot, фазы хода, цепочка enforcement, поток наблюдае
   в `src/` нет `runWithMoE` / `moeHandled`»._
 
 - **`INV-23. Нет файла, который держит состояние и оркестрирует, и собирает зависимости.**
-  `src/core/agent.ts` — ~1880 строк, 23 приватных метода, внутри собирает critic-провайдера,
+  `src/core/agent.ts` — ~1620 строк, 23 приватных метода, внутри собирает critic-провайдера,
   critic tool-loop и evidence-pack. Правило «≤300 строк» теперь проверяется
-  (`tests/arch/file-size.test.ts` + `.arch-allowlist.json`), но разбор на фазы ещё не
-  сделан: `DEBT(agent-turn-coordinator)`.
+  (`tests/arch/file-size.test.ts` + `.arch-allowlist.json`), но раздутые файлы (их 83,
+  флагман — `agent.ts`) ещё не разбиты: `DEBT(split-bloated-files)`.
 
 ---
 

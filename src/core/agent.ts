@@ -10,6 +10,14 @@ import {
   type ProbeIdentity,
   type ProviderPhaseHost,
 } from "./agent/provider-phase";
+import {
+  buildSystemPrompt as phaseBuildSystemPrompt,
+  getSystemPromptInfo as phaseGetSystemPromptInfo,
+  logContextStat as phaseLogContextStat,
+  refreshSystemPrompt as phaseRefreshSystemPrompt,
+  resolvePromptOverflowOnce as phaseResolvePromptOverflowOnce,
+  type PromptPhaseHost,
+} from "./agent/prompt-phase";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -24,9 +32,6 @@ import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
 import { errMsg } from "../utils";
 import { resolveVerbosity } from "../ui/theme";
-import { join } from "path";
-import { projectMmaDir } from "../config/paths";
-import { PromptBuilder } from "./prompt-builder";
 import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
 import type { MemoryStore } from "../modules/memory/store";
@@ -63,11 +68,6 @@ import {
   generateSessionTitle,
   type TitleChat,
 } from "../modules/session/auto-name";
-import {
-  resolvePromptOverflow,
-  overflowHint,
-  HINT_BLOCK_TOKENS,
-} from "./prompt-overflow";
 import type { PromptBlockKind } from "./types";
 import {
   MAX_EMPTY_RESPONSE_RETRIES,
@@ -237,13 +237,16 @@ export class Agent {
   /** Счётчик текущей итерации (для кулдаунов тулов). */
   private _currentIteration = 0;
   /** Kind → блок-замена для instructions/project-map сверх бюджета (резолв раз до первого LLM-вызова). */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается через PromptPhaseHost
   private promptOverrides = new Map<PromptBlockKind, PromptBlock>();
   /** Идентичность, против которой гонялась проба. Сравнение ПО ЗНАЧЕНИЮ: все
    *  write-пути мутят живой конфиг in place и передают ТОТ ЖЕ объект в
    *  `reconfigure` — сравнение объектов изменения бы не увидело. Сидируется
    *  в конструкторе (строки до мутаций). */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается через ProviderPhaseHost
   private lastProbeIdentity: ProbeIdentity;
   /** Малый всегда-включённый блок про сжатые инструкции. */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается/пишется через PromptPhaseHost
   private overflowHintBlock: PromptBlock | null = null;
   /** Гард одноразового асинхронного резолва переполнения в run(). */
   private overflowResolved = false;
@@ -366,176 +369,34 @@ export class Agent {
     return this.deps.toolCtx;
   }
 
-  private buildSystemPrompt(): {
-    prompt: string;
-    excluded: string[];
-    excludedBlocks: PromptBlock[];
-    blocks: Array<{
-      label: string;
-      priority: string;
-      tokens: number;
-      included: boolean;
-    }>;
-  } {
-    const systemBudget = Math.floor(
-      this.deps.config.contextWindow * this.deps.config.contextBudget.systemPrompt,
-    );
-    const builder = new PromptBuilder(systemBudget);
-    // Замены переполнения (сжатые инструкции/карта) приоритетнее исходных
-    // негабаритных блоков.
-    const applyOverrides = (blocks: PromptBlock[]): PromptBlock[] =>
-      blocks.map((b) => (b.kind && this.promptOverrides.has(b.kind) ? this.promptOverrides.get(b.kind)! : b));
-    builder.addBlocks(applyOverrides(this.deps.promptBlocks));
-    const dynamic = this.deps.getDynamicPromptBlocks?.() ?? [];
-    if (dynamic.length > 0) {
-      builder.addBlocks(applyOverrides(dynamic));
-    }
-    const pluginBlocks: PromptBlock[] = (
-      this.deps.pluginManager.runOnBuildPrompt?.() ?? []
-    ).flatMap((content): PromptBlock[] =>
-      content && content.trim() !== ""
-        ? [
-            {
-              source: "plugin",
-              label: "capabilities",
-              content,
-              priority: "low" as const,
-              essential: false,
-              estimatedTokens: this.deps.llmProvider.countTokens(content),
-            },
-          ]
-        : [],
-    );
-    if (pluginBlocks.length > 0) {
-      builder.addBlocks(pluginBlocks);
-    }
-    if (this.overflowHintBlock) {
-      builder.addBlock(this.overflowHintBlock);
-    }
-    const result = builder.build();
-    return {
-      prompt: result.prompt,
-      excluded: result.excluded,
-      excludedBlocks: result.excludedBlocks,
-      blocks: result.blocks,
-    };
+  private buildSystemPrompt(): ReturnType<typeof phaseBuildSystemPrompt> {
+    return phaseBuildSystemPrompt(this as unknown as PromptPhaseHost);
   }
 
   /**
-   * Пишет состояние контекста в лог сессии. Каждую итерацию — полный таймлайн
-   * роста/компакции/состава; `start`-снимок дополнительно несёт разбивку
-   * системных блоков (что, приоритеты, оценки, что срезал бюджет).
+   * Пишет состояние контекста в лог сессии (реализация — `agent/prompt-phase.ts`).
    */
   private logContextStat(
     kind: "start" | "iteration",
     iteration: number,
     slog: SessionLogger,
-    blocks?: Array<{
-      label: string;
-      priority: string;
-      tokens: number;
-      included: boolean;
-    }>,
+    blocks?: Array<{ label: string; priority: string; tokens: number; included: boolean }>,
   ): void {
-    const cm = this.deps.contextManager;
-    if (typeof cm.getSnapshot !== "function") return;
-    const snap = cm.getSnapshot();
-    const diag = typeof cm.getEstimateDiagnostics === "function"
-      ? cm.getEstimateDiagnostics()
-      : undefined;
-    const history = cm.getActiveHistory();
-    const systemMsg = history.find((m) => m.role === "system");
-    slog.logContext({
-      kind,
-      iteration,
-      window: snap.window,
-      systemBudget: snap.budget.systemPrompt,
-      reserveBudget: snap.budget.responseReserve,
-      historyBudget: snap.budget.history,
-      systemTokens:
-        kind === "start" && systemMsg && typeof systemMsg.content === "string"
-          ? this.deps.llmProvider.countTokens(systemMsg.content)
-          : undefined,
-      toolTokens: snap.toolTokens,
-      tokens: snap.tokens,
-      estimatedTokensRaw: diag?.raw,
-      contextTokens: diag?.calibrated,
-      calibrationRatio: diag?.ratio,
-      calibrationState: diag?.state,
-      quality: snap.quality,
-      messageCount: snap.messageCount,
-      compactionCount: snap.compactionCount,
-      iterationsSinceCompaction: snap.iterationsSinceCompaction,
-      blocks,
-    });
+    phaseLogContextStat(this as unknown as PromptPhaseHost, kind, iteration, slog, blocks);
   }
 
-  /**
-   * Текущий системный промпт с подсчётом токенов (для /sysprompt, диагностики).
-   * @returns текст, число токенов, исключённые блоки.
-   */
-  getSystemPromptInfo(): {
-    text: string;
-    tokenCount: number;
-    excluded: string[];
-  } {
-    const { prompt, excluded } = this.buildSystemPrompt();
-    const tokenCount = this.deps.llmProvider.countTokens(prompt);
-    return { text: prompt, tokenCount, excluded };
+  /** Текущий системный промпт с подсчётом токенов (для /sysprompt, диагностики). */
+  getSystemPromptInfo(): { text: string; tokenCount: number; excluded: string[] } {
+    return phaseGetSystemPromptInfo(this as unknown as PromptPhaseHost);
   }
 
-  /**
-   * Одноразовая (первый прогон) обработка instructions/project-map сверх
-   * бюджета: LLM суммаризирует в остаток (диск-кэш) или усекает, а малый
-   * hint-блок говорит модели что случилось и как читать полный источник.
-   */
+  /** Одноразовый резолв переполнения (реализация — `agent/prompt-phase.ts`). */
   private async resolvePromptOverflowOnce(): Promise<void> {
-    const cfg = this.deps.config;
-    const dry = this.buildSystemPrompt();
-    const overflow = dry.excludedBlocks.filter((b) => Boolean(b.kind));
-    if (overflow.length === 0) return;
-
-    const systemBudget = Math.floor(cfg.contextWindow * cfg.contextBudget.systemPrompt);
-    const res = await resolvePromptOverflow({
-      overflow,
-      includedTokens: dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0),
-      systemBudget,
-      provider: cfg.instructions?.summarize === false ? null : this.deps.llmProvider,
-      cacheDir: join(projectMmaDir(this.deps.baseDir), "cache", "prompt-summaries"),
-      logger: this.deps.logger,
-      sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
-    });
-    for (const r of res.replacements) {
-      if (r.kind) this.promptOverrides.set(r.kind, r);
-    }
-    this.overflowHintBlock = res.hintBlock;
-
-    const needed =
-      dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0) +
-      overflow.reduce((s, b) => s + b.estimatedTokens, 0) +
-      HINT_BLOCK_TOKENS;
-    const hint = overflowHint(cfg, this.deps.configDir, needed);
-    for (const w of res.warnings) {
-      this.deps.logger.warn(
-        t("prompt.overflow.exceeded", {
-          label: w.label,
-          original: String(w.originalTokens),
-          needed: String(needed),
-          budget: String(systemBudget),
-          mode: w.mode === "summary" ? "summarized" : "truncated",
-          resolved: String(w.resolvedTokens),
-          hint,
-        }),
-      );
-    }
+    await phaseResolvePromptOverflowOnce(this as unknown as PromptPhaseHost);
   }
 
   private refreshSystemPrompt(): void {
-    const { prompt } = this.buildSystemPrompt();
-    const current = this.deps.contextManager.getActiveHistory().find((m) => m.role === "system");
-    if (!current || current.content !== prompt) {
-      this.deps.contextManager.updateSystemPrompt?.(prompt);
-    }
+    phaseRefreshSystemPrompt(this as unknown as PromptPhaseHost);
   }
 
   private emitPhase(
