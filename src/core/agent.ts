@@ -23,6 +23,7 @@ import {
   finalizeWithoutTools as phaseFinalizeWithoutTools,
   type TurnOutputHost,
 } from "./agent/turn-output";
+import { ensureSessionStart as phaseEnsureSessionStart } from "./agent/session-start";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -481,65 +482,20 @@ export class Agent {
     const activeMeta = sessionManager?.getActiveMeta();
     const isFirstMessage = !!activeMeta && activeMeta.messageCount === 0;
 
-    if (
-      !this.systemPromptAdded &&
-      !contextManager.getActiveHistory().some((m) => m.role === "system")
-    ) {
-      // Стартовую диагностику сессии (окружение, плагины, скиллы) — первой
-      // записью в session.jsonl, чтобы файл был самоописываем для пост-анализа.
-      // LSP-проба логируется отдельно из repl.ts (может завершиться позже).
-      // Дедуп: logSessionStart проверяет существующий session_start от дублей.
-      // Провайдер-срез берём из ЖИВОГО конфига (model/contextWindow), а не из
-      // bootstrap-снимка envReport: фоновая context-probe приземляется позже,
-      // и снимок показывал до-пробное окно (32768 при эффективных 34048).
-      const env = this.deps.envReport;
-      const liveProvider = env?.provider
-        ? {
-            ...env.provider,
-            model: this.deps.config.model,
-            contextWindow: this.deps.config.contextWindow,
-          }
-        : undefined;
-      slog.logSessionStart({
-        environment: {
-          ...((env ?? {}) as Record<string, unknown>),
-          provider: liveProvider,
-        },
-      });
-
-      const lazy = this.deps.lazyPromptBlocks ? await this.deps.lazyPromptBlocks() : [];
-      if (lazy.length > 0) {
-        this.deps.promptBlocks.push(...lazy);
-      }
-      // Одноразовый резолв instructions/project-map сверх бюджета: суммаризация
-      // (кэш) или усечение ДО первой сборки, чтобы модель инструкции получила.
-      if (!this.overflowResolved) {
-        this.overflowResolved = true;
-        try {
-          await this.resolvePromptOverflowOnce();
-        } catch (err: any) {
-          this.deps.logger.warn(
-            t("prompt.overflow.failed", { error: String(err?.message ?? err) }),
-          );
-        }
-      }
-      // B2: ждём фоновую reasoning-пробу рядом с ленивыми блоками, чтобы ПЕРВЫЙ
-      // LLM-вызов уже знал, держит ли бэкенд механизм (bootstrap больше не ждёт).
-      if (this.deps.reasoningProbe) {
-        this.probePassed = await this.deps.reasoningProbe();
-      }
-      const { prompt: systemPrompt, excluded } = this.buildSystemPrompt();
-      contextManager.addMessage({ role: "system", content: systemPrompt });
-      this.systemPromptAdded = true;
-      slog.logSystem(systemPrompt.slice(0, 2000));
-      if (excluded.length > 0) {
-        slog.logSystem(`[Excluded prompt blocks: ${excluded.length}]`);
-      }
-      pluginManager.runOnSessionStart({
-        logger,
-        sessionManager: sessionManager?.getActiveMeta(),
-        contextManager,
-      });
+    const start = await phaseEnsureSessionStart(
+      {
+        deps: this.deps,
+        systemPromptAdded: this.systemPromptAdded,
+        overflowResolved: this.overflowResolved,
+        buildSystemPrompt: () => this.buildSystemPrompt(),
+        resolvePromptOverflowOnce: () => this.resolvePromptOverflowOnce(),
+      },
+      slog,
+    );
+    if (start) {
+      this.systemPromptAdded = start.systemPromptAdded;
+      this.overflowResolved = start.overflowResolved;
+      if (start.probePassed !== undefined) this.probePassed = start.probePassed;
     }
 
     // Новое сообщение — новый интервал компакции: итерации прошлого хода не
