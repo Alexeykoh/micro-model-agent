@@ -27,7 +27,7 @@ import { browserModuleDef } from "../../modules/browser/lifecycle";
 import { MemoryModule } from "../../modules/memory/module";
 import { MemoryStore } from "../../modules/memory/store";
 import { t } from "../../i18n/index";
-import { buildModelBlock } from "../system-prompt";
+import { assembleDynamicPromptBlocks } from "../prompt-assembler";
 import { estimateTokens } from "../../llm/token-counter";
 import type { PromptBlock } from "../types";
 import { readMmaVersion } from "../version";
@@ -328,37 +328,23 @@ function collectDynamicPromptBlocks(
   input: ModulesPhaseInput,
   sessionModule: SessionModule,
 ): PromptBlock[] {
-  const { toolRegistry, activeToolTags, toolCtx, skillsModule, indexerModule } = input;
-  const blocks: PromptBlock[] = [];
-  // Идентичность активной модели — динамическая (переживает смену модели).
-  blocks.push(buildModelBlock(input.config.model));
-  const skillsBlock = skillsModule.getSystemPromptBlock();
-  if (skillsBlock) blocks.push({ source: "skills", ...skillsBlock });
-  const sessionBlock = sessionModule.getSystemPromptBlock();
-  if (sessionBlock) blocks.push({ source: "session", ...sessionBlock });
-  const mapBlock = indexerModule.getSystemPromptBlock();
-  if (mapBlock) blocks.push({ source: "indexer", ...mapBlock });
   const capabilitiesBlock = pluginCapabilitiesBlock({
     pluginManager: input.pluginManager,
     // Суженный набор (онбординг с allowlist'ом) не должен получать блок про
     // плагины: там `define_capability` модели всё равно недоступен.
-    pluginsVisible: !toolCtx.toolAllowlist,
+    pluginsVisible: !input.toolCtx.toolAllowlist,
   });
-  if (capabilitiesBlock) blocks.push({ source: "plugins", ...capabilitiesBlock });
-  const hiddenToolsBlock = toolCtx.toolAllowlist
-    ? null
-    : buildHiddenToolsBlock(toolRegistry.getAll(), activeToolTags);
-  if (hiddenToolsBlock) {
-    blocks.push({
-      source: "core",
-      label: "hidden tools",
-      content: hiddenToolsBlock,
-      priority: "low",
-      essential: false,
-      estimatedTokens: estimateTokens(hiddenToolsBlock),
-    });
-  }
-  return blocks;
+  // Единый сборщик (INV-16): та же структура, что у раннера.
+  return assembleDynamicPromptBlocks({
+    model: input.config.model,
+    skillsModule: input.skillsModule,
+    sessionModule,
+    indexerModule: input.indexerModule,
+    registry: input.toolRegistry,
+    activeTags: input.activeToolTags,
+    toolAllowlist: input.toolCtx.toolAllowlist,
+    capabilitiesBlock: capabilitiesBlock ? { source: "plugins", ...capabilitiesBlock } : null,
+  });
 }
 
 /** Ленивые блоки: фоновая стартовая проверка, мемоизированная первым вызовом. */

@@ -14,9 +14,8 @@ import { PluginManager } from "../../modules/plugins/manager";
 import type { ToolContext } from "../../tools/types";
 import type { DraftHost } from "../../modules/plugins/drafts";
 import type { PromptBlock } from "../types";
-import { buildModelBlock } from "../system-prompt";
-import { buildHiddenToolsBlock } from "../../tools/hidden-tools-block";
-import { estimateTokens } from "../../llm/token-counter";
+import { assembleDynamicPromptBlocks } from "../prompt-assembler";
+import { pluginCapabilitiesBlock } from "../../modules/plugins/capabilities-block";
 import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
 import { resolveModelCapabilities } from "../../modules/providers/capabilities";
 
@@ -188,36 +187,30 @@ export interface RunnerDynamicBlocksInput {
   registry: ToolRegistry;
   runnerTags: string[];
   toolAllowlist?: string[];
+  /** Плагин-менеджер раннера — для блока возможностей (INV-16). */
+  pluginManager: PluginManager;
 }
 
 /**
- * Dynamic-блоки системного промпта раннера (зеркало collectDynamicPromptBlocks,
- * но с сессионным модулем своей сессии — id/имя в промпте её же).
+ * Dynamic-блоки системного промпта раннера. Единый сборщик (INV-16): та же
+ * структура, что у main (включая блок возможностей плагинов — раньше он
+ * отсутствовал, и сборки разошлись).
  */
 export function buildRunnerDynamicBlocks(input: RunnerDynamicBlocksInput): () => PromptBlock[] {
   return (): PromptBlock[] => {
-    const blocks: PromptBlock[] = [];
-    // Идентичность активной модели — динамическая (переживает смену модели).
-    blocks.push(buildModelBlock(input.config.model));
-    const skillsBlock = input.skillsModule.getSystemPromptBlock();
-    if (skillsBlock) blocks.push({ source: "skills", ...skillsBlock });
-    const sessionBlock = input.sessionModule.getSystemPromptBlock();
-    if (sessionBlock) blocks.push({ source: "session", ...sessionBlock });
-    const mapBlock = input.indexerModule.getSystemPromptBlock();
-    if (mapBlock) blocks.push({ source: "indexer", ...mapBlock });
-    const hiddenToolsBlock = input.toolAllowlist
-      ? null
-      : buildHiddenToolsBlock(input.registry.getAll(), input.runnerTags);
-    if (hiddenToolsBlock) {
-      blocks.push({
-        source: "core",
-        label: "hidden tools",
-        content: hiddenToolsBlock,
-        priority: "low",
-        essential: false,
-        estimatedTokens: estimateTokens(hiddenToolsBlock),
-      });
-    }
-    return blocks;
+    const capabilitiesBlock = pluginCapabilitiesBlock({
+      pluginManager: input.pluginManager,
+      pluginsVisible: !input.toolAllowlist,
+    });
+    return assembleDynamicPromptBlocks({
+      model: input.config.model,
+      skillsModule: input.skillsModule,
+      sessionModule: input.sessionModule,
+      indexerModule: input.indexerModule,
+      registry: input.registry,
+      activeTags: input.runnerTags,
+      toolAllowlist: input.toolAllowlist,
+      capabilitiesBlock: capabilitiesBlock ? { source: "plugins", ...capabilitiesBlock } : null,
+    });
   };
 }

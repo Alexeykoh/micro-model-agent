@@ -242,6 +242,7 @@ export function createSessionRunnerFactory(
       registry,
       runnerTags,
       toolAllowlist: toolCtx.toolAllowlist,
+      pluginManager: runnerPlugins,
     });
 
     const contextLogger = createRunnerContextLogger({

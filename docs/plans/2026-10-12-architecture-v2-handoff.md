@@ -183,8 +183,13 @@ overflow-warning называет владельца и блок, а не тол
   `writePathAllowlist`, `attach_image`-manual) остались. 5 тестов, сверявших хендлерную
   блокировку, удалены как покрытые `tests/tools/enforcement-*.test.ts`.
 
+- W1.5 ✅ единый сборщик промпта `assembleDynamicPromptBlocks`
+  (`src/core/prompt-assembler.ts`, INV-16): main и раннер используют его; блок
+  возможностей плагинов теперь и у раннера (раньше сборки разошлись). Тест
+  `tests/core/prompt-assembler.test.ts`.
+
 **Итог W2:** единая точка enforcement достигнута (W2.1–W2.5 ✅). Дальше по порядку —
-`W1.5 PromptAssembler`.
+остальные модули на `ModuleDef` → гейт A → W3 → W4 → W5.
 
 
 **Приоритет при выборе одной волны: W2.** Enforcement даёт немедленный эффект на

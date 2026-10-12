@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Single prompt assembler (W1.5, INV-16)**: dynamic system-prompt blocks
+  (model → skills → session → project map → plugin capabilities → hidden tools)
+  are built by one `assembleDynamicPromptBlocks` (`src/core/prompt-assembler.ts`)
+  used by both the main agent and every session runner. Before, the two copies had
+  already diverged — the runner omitted the plugin-capabilities block. Test:
+  `tests/core/prompt-assembler.test.ts`.
 - **URL (SSRF) enforcement at the tool-execution point (W2.3, INV-10)**:
   `ToolExecutor.execute()` applies `isUrlAllowed` (with session-override) to every
   declared `urlArgs` before the handler — fail-closed with `blocked: true` and a
