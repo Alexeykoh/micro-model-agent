@@ -476,23 +476,27 @@ W1 и W2 дают эффект независимо от W5: после них �
 Инварианты, которые не проверяются автоматически, — это текст, а значит через полгода
 перестанут быть правдой. Поэтому:
 
-- **`scripts/check-arch.ts`** в `bun run quality`:
-  - файл > 300 строк без записи в `.arch-allowlist.json` (allowlist с датой и причиной);
-  - `ToolRegistry.register` вне `ModuleHost`;
-  - `tool.handler(` вне `src/tools/`;
-  - импорт `core/agent/*` из `src/modules/**`;
-  - `setTimeout` в `src/modules/**` без `config/timeouts.ts`;
-  - `console.*` / `process.*.write` (уже есть, `tests/output/no-direct-console.test.ts`).
-- **`tests/arch/*.test.ts`** — инварианты, которым нужен AST или рефлексия:
-  ownership, tool-capabilities, fail-open-logged, import direction.
+- **Гейты живут как тесты** и прогоняются в `bun run quality` шагом `check:arch`
+  (`bun test tests/arch tests/output`) — решение 2026-10-13: отдельный
+  `scripts/check-arch.ts` не нужен, проверки и так используют AST-хелперы
+  (`tests/helpers/import-graph.ts`) и общий allowlist-механизм тестов:
+  - `ToolRegistry.register` вне `ModuleHost` — `tests/arch/tool-registration.test.ts`
+    (INV-2; заодно запрещает `collectToolDefinitions` вне `ModuleRegistry`);
+  - `tool.handler(` вне `src/tools/`, импорт `core/agent/*` из `src/modules/**` —
+    `tests/arch/module-boundaries.test.ts` (INV-3/4);
+  - владелец у каждого тула — `tests/tools/security-decl.test.ts` + типы `RegisteredTool`;
+  - `console.*` / `process.*.write` — `tests/output/no-direct-console.test.ts`;
+  - долг и его пометка — `tests/arch/debt-register.test.ts`.
+- **Не покрыто гейтом (долг):** файл > 300 строк (W5-гейт **D**, `DEBT(arch-gate-d)` —
+  массовый allowlist закрепил бы bloat) и `setTimeout` в `src/modules/**` (проверка формы
+  через `config/timeouts.ts` появится при дроблении `IndexerModule`).
 - **Allowlist — явный и датированный.** Не «список исключений на будущее», а запись вида
   `{ file, lines, reason, decidedAt }`; файл без такой записи — падение.
 
-Правило «≤300 строк» перестаёт быть текстом в AGENTS.md и становится проверкой.
-Исключения, признанные осознанными (`agent.ts` до разбора W5, `repl.ts`,
-`line-editor.ts`, `stuck-detector.ts`, `execution/module.ts`, `registry-extra.ts`,
-`webui/settings-api.ts`, `webui/turns.ts`), фиксируются списком с датой — чтобы W5
-могла их снять явно, а не «когда-нибудь».
+Правило «≤300 строк» станет проверкой вместе с гейтом D. Исключения, признанные
+осознанными (`agent.ts` до разбора W5, `repl.ts`, `line-editor.ts`, `stuck-detector.ts`,
+`execution/module.ts`, `registry-extra.ts`, `webui/settings-api.ts`, `webui/turns.ts`),
+фиксируются списком с датой — чтобы W5 могла их снять явно, а не «когда-нибудь».
 
 ## 7. Открытые решения
 

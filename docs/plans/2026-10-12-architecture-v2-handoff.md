@@ -73,7 +73,7 @@ feature-history (вынесен из AGENTS.md).
 
 ## 3. Где остановились: следующий шаг — **W0 (наблюдаемость)**
 
-Спека стоит на дисциплине до W1 (гейта `scripts/check-arch.ts` ещё нет). W0 —
+Спека стоит на дисциплине до W1. W0 —
 самая дешёвая волна и делает дальнейший разбор автоматизируемым.
 
 **W0.1 сделана** (`feat/w0-output-source`): введён `Source` (`output/types.ts`),
@@ -142,7 +142,7 @@ overflow-warning называет владельца и блок, а не тол
 | Волна | Содержание | Закрывает |
 |---|---|---|
 | **W0** | Наблюдаемость (см. §3) | A, B, C, D, F |
-| **W1** | Владение данными: `ToolDefinition.owner`, единый `ToolRegistry`, `PromptAssembler`, `ModuleHost` (lifecycle) + гейт `scripts/check-arch.ts` | A, E, F, M |
+| **W1** | Владение данными: `ToolDefinition.owner`, единый `ToolRegistry`, `PromptAssembler`, `ModuleHost` (lifecycle) + гейт архитектуры | A, E, F, M |
 | **W2** | Enforcement: `ToolSecurityDecl`, проверки в `ToolExecutor.execute()`, enforcement тегов, `bash` в jail | INV-9…12 (аудит 4.1, 4.4–4.7) |
 | **W3** | `ConfigStore` с эффектами вместо `reconfigure: boolean`, атомарная запись, модульные ключи | INV-18…21 |
 | **W4** | Переезд `modules/context` и `modules/hallucination` в ядро, `core/api/*`, guard направления зависимостей | INV-3, INV-4 |
@@ -230,8 +230,7 @@ W0 — если нужна дешёвая победа и разбор след�
 
 Единый реестр — [docs/agents/debt.md](../agents/debt.md) (правило 9: долг платится один
 раз, у каждого — критерий выхода и триггер). Открыто там: `verify-error`,
-`arch-gate-d`, `check-arch-script`, `per-session-singletons`,
-`agent-module-breaking`.
+`arch-gate-d`, `per-session-singletons`, `agent-module-breaking`.
 
 Историю удаления MoE см. в [feature-history.md](../agents/feature-history.md);
 live-прогон одиночного пути сделан 2026-10-12 (§2). Остальные текстовые долги

@@ -37,9 +37,11 @@ bun run quality       # гейт: typecheck + typecheck:frontend + lint + fallow
 bun run mma "<промпт>"   # прогнать агента вживую
 ```
 
-Часть инвариантов §1 спеки уже под гвардами (`tests/arch/*`, `tests/output/*`,
-`tests/tools/security-decl.test.ts`); единый `scripts/check-arch.ts` и проверки A/D —
-осознанный долг: [docs/agents/debt.md](./docs/agents/debt.md) (правило 9).
+Инварианты §1 спеки под гвардами (`tests/arch/*`, `tests/output/*`,
+`tests/tools/security-decl.test.ts`); они прогоняются в `bun run quality` шагом
+`check:arch` (`bun test tests/arch tests/output`). Не покрыт гейтом пока только размер
+файла > 300 строк (правило 6) — осознанный долг `arch-gate-d`:
+[docs/agents/debt.md](./docs/agents/debt.md) (правило 9).
 
 Прочие: `bun run dev` (watch) · `bun run web:dev` · `bun run build:prod` (релиз) ·
 `bun run test:e2e` (Playwright, **только по явной команде**).
@@ -102,7 +104,8 @@ bun run mma "<промпт>"   # прогнать агента вживую
 ### 5. Инвариант — это проверка, а не текст
 
 Если правило можно нарушить незаметно — оно будет нарушено. Любое новое правило
-архитектуры сразу получает проверку: тест, guard или строка в `scripts/check-arch.ts`.
+архитектуры сразу получает проверку: тест или guard (гейты — `tests/arch/*`,
+`tests/output/*`, прогоняются в `quality` шагом `check:arch`).
 Правило без проверки живёт максимум до следующего большого изменения.
 
 Сейчас проверками являются: `tests/output/no-direct-console.test.ts`,

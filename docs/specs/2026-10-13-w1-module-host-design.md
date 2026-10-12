@@ -31,7 +31,7 @@ W1 вводит контракт и **один гейт**, который его
 **Входит:** `ModuleDef`/`ModuleCtx`/`ModuleHost` (lifecycle), единый путь
 регистрации тулов (`ToolDefinition.owner` + `ToolRegistry` через хост),
 `PromptAssembler` (INV-16), `Logger.child()` из хоста (закрыть W0.2),
-`scripts/check-arch.ts` (гейт).
+гейт архитектуры (тесты в `quality`, см. §5).
 
 **Не входит (другие волны):**
 - enforcement возможностей тула (`caps`/`pathArgs`/`urlArgs`) — **W2**;
@@ -118,7 +118,7 @@ Session-специфичные тулы раннера регистрируют�
 
 ---
 
-## 5. `scripts/check-arch.ts` — гейт (правило 5) `DEBT(check-arch-script)`
+## 5. Гейт архитектуры (правило 5)
 
 Гейт вводится **вместе** с контрактом и растёт инкрементально. Проверки
 (каждая — с явным allowlist и причиной):
@@ -135,9 +135,11 @@ Session-специфичные тулы раннера регистрируют�
 **A** — реализовано отдельным шагом (`tests/arch/tool-registration.test.ts`, единственный
 писатель в `core/module-host.ts`); **D** — когда начнём реально резать файлы (W5).
 
-Формат — как у существующих гвардов (`tests/output/no-direct-console.test.ts`):
-чистый сканер + allowlist + падающий фикстур-тест. Размещение: `scripts/`
-(запуск) + `tests/arch/*.test.ts` (юнит). Гейт добавляется в `bun run quality`.
+**Решение 2026-10-13 (закрывает `check-arch-script`):** отдельный `scripts/check-arch.ts`
+не заводим. Гейты — это тесты, и они прогоняются в `bun run quality` шагом `check:arch`
+(`bun test tests/arch tests/output`): формат — как у существующих гвардов
+(`tests/output/no-direct-console.test.ts`), чистый сканер + allowlist + падающий
+фикстур-тест. Так `quality` держит инварианты без дублирования логики в скрипте.
 
 **Порядок:** гейт A (единый путь тулов) был отложен до перевода первых модулей; теперь
 реализован как единственный писатель в `core/module-host.ts` + строгий AST-гейт.
@@ -151,7 +153,7 @@ Session-специфичные тулы раннера регистрируют�
 | W1.1 | `ModuleHost` + `ModuleDef`/`ModuleCtx` (lifecycle, requires, timeout, critical, dispose, health) **без** миграции модулей | новый `tests/core/module-host.test.ts` |
 | W1.2 | `Logger.child()` в модулях через хост (закрывает W0.2) | тест: `source = module:<name>`; `Logger`-инстансы в модулях — через child |
 | W1.3 | Единый путь тулов: `ToolDefinition.owner` + регистрация через хост | перенос 5 call-site; INV-2 |
-| W1.4 | `check-arch.ts` гейт A–D + `.arch-allowlist.json` + в `quality` | `tests/arch/*` |
+| W1.4 | гейт архитектуры (A–D) + allowlist + в `quality` (`check:arch`) | `tests/arch/*` |
 | W1.5 | `PromptAssembler` — единая сборка блоков (INV-16) | тест: main и runner дают один состав |
 | W1.6 | Миграция `mcp` → `lsp` → `browser` на `ModuleDef` | per-module тесты |
 
