@@ -132,7 +132,7 @@ Session-специфичные тулы раннера регистрируют�
 | B1 | модуль не импортирует агент-петлю (`from ".../core/agent"`) | INV-3/4 | 4: `service/state.ts`, `webui/module.ts`, `webui/session/run-agent.ts`, `webui/settings/model-cache.ts` (allowlist) |
 | B2 | модуль не импортирует `core/agent/*`-утилиты напрямую | INV-3 | 12 файлов (`context-log`, `canonical-args`, `tool-output`, `context-calibration`) + B1 = 16 всего; вынести утилиты в нейтральное место (W4) |
 | C | модуль не вызывает чужой `tool.handler` напрямую | INV-4 | 0 — гейт строгий (пустой allowlist) |
-| D | файл >300 строк — только из `.arch-allowlist.json` | правило 6 | **отложено**: 58 файлов >300 строк — фиксировать массово сейчас значило бы закрепить bloat `DEBT(arch-gate-d)` |
+| D | файл >300 строк — только из `.arch-allowlist.json` | правило 6 | ✅ **реализовано** (W5.1): `tests/arch/file-size.test.ts` + `.arch-allowlist.json` (потолки только уменьшаются) |
 
 **Реализовано в W1.4 (первая версия):** `tests/arch/module-boundaries.test.ts` — B1/B2/C.
 **A** — реализовано отдельным шагом (`tests/arch/tool-registration.test.ts`, единственный

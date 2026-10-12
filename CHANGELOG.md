@@ -47,6 +47,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`bun run quality` runs the architecture gates** via `check:arch`
   (`bun test tests/arch tests/output`); a separate `scripts/check-arch.ts` is not
   introduced (the gates are tests, reused as-is).
+- **File-size gate D (rule 6)**: `tests/arch/file-size.test.ts` +
+  `.arch-allowlist.json` (ceilings may only shrink; an entry is removed once the
+  file drops to ≤300 lines).
 
 ### Removed
 

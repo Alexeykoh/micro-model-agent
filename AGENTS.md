@@ -39,8 +39,8 @@ bun run mma "<промпт>"   # прогнать агента вживую
 
 Инварианты §1 спеки под гвардами (`tests/arch/*`, `tests/output/*`,
 `tests/tools/security-decl.test.ts`); они прогоняются в `bun run quality` шагом
-`check:arch` (`bun test tests/arch tests/output`). Не покрыт гейтом пока только размер
-файла > 300 строк (правило 6) — осознанный долг `arch-gate-d`:
+`check:arch` (`bun test tests/arch tests/output`). Правило «≤300 строк» — гейт
+`tests/arch/file-size.test.ts` + `.arch-allowlist.json` (потолки только уменьшаются).
 [docs/agents/debt.md](./docs/agents/debt.md) (правило 9).
 
 Прочие: `bun run dev` (watch) · `bun run web:dev` · `bun run build:prod` (релиз) ·

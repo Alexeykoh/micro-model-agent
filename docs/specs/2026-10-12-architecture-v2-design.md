@@ -183,11 +183,10 @@ boot, фазы хода, цепочка enforcement, поток наблюдае
   в `src/` нет `runWithMoE` / `moeHandled`»._
 
 - **`INV-23. Нет файла, который держит состояние и оркестрирует, и собирает зависимости.**
-  `src/core/agent.ts` — 1903 строки, 23 приватных метода, внутри собирает critic-провайдера,
-  critic tool-loop и evidence-pack (MoE-часть вырезана — см.
-  [спеку удаления](./2026-10-12-remove-moe-design.md)). Правило «≤300 строк» существует
-  **только** в AGENTS.md — это текст, а не проверка; ни Biome, ни `tsc`, ни `fallow` на
-  размер не смотрят.
+  `src/core/agent.ts` — ~1880 строк, 23 приватных метода, внутри собирает critic-провайдера,
+  critic tool-loop и evidence-pack. Правило «≤300 строк» теперь проверяется
+  (`tests/arch/file-size.test.ts` + `.arch-allowlist.json`), но разбор на фазы ещё не
+  сделан: `DEBT(agent-turn-coordinator)`.
 
 ---
 
@@ -487,9 +486,9 @@ W1 и W2 дают эффект независимо от W5: после них �
   - владелец у каждого тула — `tests/tools/security-decl.test.ts` + типы `RegisteredTool`;
   - `console.*` / `process.*.write` — `tests/output/no-direct-console.test.ts`;
   - долг и его пометка — `tests/arch/debt-register.test.ts`.
-- **Не покрыто гейтом (долг):** файл > 300 строк (W5-гейт **D**, `DEBT(arch-gate-d)` —
-  массовый allowlist закрепил бы bloat) и `setTimeout` в `src/modules/**` (проверка формы
-  через `config/timeouts.ts` появится при дроблении `IndexerModule`).
+- **Правило ≤300 строк — гейт** `tests/arch/file-size.test.ts` + `.arch-allowlist.json`
+  (потолки только уменьшаются; запись снимается при ≤300). `setTimeout` в
+  `src/modules/**` пока не покрыт.
 - **Allowlist — явный и датированный.** Не «список исключений на будущее», а запись вида
   `{ file, lines, reason, decidedAt }`; файл без такой записи — падение.
 
