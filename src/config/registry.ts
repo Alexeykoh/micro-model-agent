@@ -162,7 +162,7 @@ function securityToggle(field: SecurityToggle, canonical: string): ConfigKeyDef 
   };
 }
 
-const DEFINITIONS: ConfigKeyDef[] = [
+export const DEFINITIONS: ConfigKeyDef[] = [
   {
     key: "model",
     aliases: [],
@@ -451,7 +451,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
   ...EXTRA_DEFS,
 ];
 
-const BY_NAME = new Map<string, ConfigKeyDef>();
+export const BY_NAME = new Map<string, ConfigKeyDef>();
 for (const def of DEFINITIONS) {
   BY_NAME.set(def.key, def);
   for (const alias of def.aliases) BY_NAME.set(alias, def);

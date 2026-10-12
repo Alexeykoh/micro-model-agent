@@ -4,8 +4,10 @@
 **Нормативная база:** [architecture v2](./2026-10-12-architecture-v2-design.md) §1.6,
 INV-18…21 · [аудит](../analysis/2026-10-12-harness-module-audit.md) 7.5
 
-**Статус:** W3.1–W3.3 ✅ (INV-18, INV-19); W3.4–W3.5 отложены
-`DEBT(w3-config-remainder)` (снимок/модульные ключи).
+**Статус:** W3.1–W3.3 ✅ (INV-18, INV-19); W3.5 ◐ — механизм
+(`ModuleDef.configKeys()` → `ModuleHost.collectConfigKeys()` → `registerConfigKeys`,
+wired в bootstrap) сделан, перенос реальной группы ключей — вперёд; W3.4 отложен.
+Всё незакрытое — `DEBT(w3-config-remainder)`.
 
 **Причина.** `setConfigValue` (`src/config/registry.ts`) возвращает
 `reconfigure: boolean`, а что именно пересобирать — решает каждая поверхность
@@ -132,7 +134,7 @@ type ConfigEffectApplier = (config: AppConfig, effects: ConfigEffect[]) => Promi
 | W3.2 | `ConfigSetOk.effects`; поверхности применяют через общий апплер | `tests/config*`, REPL/веб-тесты |
 | W3.3 | Вынести provider-память из слоя конфига (INV-19) | тест: `setConfigValue("model", …)` не трогает `provider.entries[]` |
 | W3.4 | Снимок с версией (INV-20) | тест параллельной записи — **отложено** `DEBT(w3-config-remainder)` |
-| W3.5 | `ModuleDef.configKeys()` (INV-21) | тест модульного ключа — **отложено** `DEBT(w3-config-remainder)` |
+| W3.5 | `ModuleDef.configKeys()` (INV-21) | механизм ✅ (`tests/core/module-config-keys.test.ts`); перенос реального ключа — **остаётся** `DEBT(w3-config-remainder)` |
 
 ## 8. Риски
 

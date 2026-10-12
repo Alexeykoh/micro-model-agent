@@ -77,7 +77,6 @@
     "src/modules/webui/assets/js/sidebar/files.ts": 311,
     "src/modules/execution/plan-tool.ts": 310,
     "src/modules/webui/assets/js/settings/editors.ts": 307,
-    "src/core/module-host.ts": 305,
     "src/modules/security/path-validator.ts": 305,
     "src/core/bootstrap/session-phase.ts": 304,
     "src/modules/webui/session/sessions-api.ts": 304,

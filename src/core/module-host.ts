@@ -16,7 +16,12 @@ import type { ToolDefinition } from "../tools/types";
 import type { RegisteredTool } from "../tools/registry";
 import type { AgentPlugin } from "../modules/types";
 import type { PromptBlock } from "./types";
+import type { ConfigKeyDef } from "../config/registry";
+import { registerConfigKeys } from "../config/module-keys";
 import { MODULE_SETUP_TIMEOUT_MS } from "../config/timeouts";
+import { ModuleHostError, topoSort } from "./module-host-order";
+
+export { ModuleHostError } from "./module-host-order";
 
 /** Сводка состояния модуля для баннера и `session.jsonl` (INV-6). */
 export interface ModuleHealth {
@@ -64,51 +69,12 @@ export interface ModuleDef<C = unknown> {
   tools?(): ToolDefinition[];
   promptBlocks?(): PromptBlock[] | null;
   hooks?(): AgentPlugin;
-}
-
-/** Ошибка жизненного цикла: неизвестная зависимость, цикл, падение critical. */
-export class ModuleHostError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ModuleHostError";
-  }
-}
-
-/**
- * Топологическая сортировка по `requires` (Kahn). Бросает на неизвестную
- * зависимость и на цикл — молча неправильный порядок хуже явной ошибки.
- */
-function topoSort(defs: ReadonlyMap<string, ModuleDef>): string[] {
-  const indegree = new Map<string, number>();
-  const dependents = new Map<string, string[]>();
-  for (const name of defs.keys()) {
-    indegree.set(name, 0);
-    dependents.set(name, []);
-  }
-  for (const [name, def] of defs) {
-    for (const req of def.requires ?? []) {
-      if (!defs.has(req)) {
-        throw new ModuleHostError(`module "${name}" requires unknown module "${req}"`);
-      }
-      indegree.set(name, (indegree.get(name) ?? 0) + 1);
-      dependents.get(req)!.push(name);
-    }
-  }
-  const queue = [...indegree.entries()].filter(([, d]) => d === 0).map(([n]) => n);
-  const order: string[] = [];
-  while (queue.length > 0) {
-    const name = queue.shift()!;
-    order.push(name);
-    for (const next of dependents.get(name)!) {
-      const d = (indegree.get(next) ?? 0) - 1;
-      indegree.set(next, d);
-      if (d === 0) queue.push(next);
-    }
-  }
-  if (order.length !== defs.size) {
-    throw new ModuleHostError("module requires form a cycle");
-  }
-  return order;
+  /**
+   * Ключи конфига, объявленные модулем (INV-21). Хост собирает их на boot и
+   * регистрирует в реестре (`registerConfigKeys`), так что модуль-владелец может
+   * добавить настройку, не правя `config/registry-extra.ts` руками.
+   */
+  configKeys?(): ConfigKeyDef[];
 }
 
 /** Хост модулей: регистрация, setup/teardown, health, сбор вклада. */
@@ -168,6 +134,8 @@ export class ModuleHost {
         this.logger.warn(`module "${name}" failed to set up — continuing degraded: ${reason}`);
       }
     }
+    // Ключи, объявленные модулями (INV-21), — после подъёма в едином реестре.
+    registerConfigKeys(this.collectConfigKeys());
   }
 
   /** Гасит модули в обратном порядке инициализации (INV-7). */
@@ -220,6 +188,17 @@ export class ModuleHost {
       if (hook) hooks.push(hook);
     }
     return hooks;
+  }
+
+  /** Вклад модулей: объявленные ключи конфига (INV-21), в порядке инициализации. */
+  collectConfigKeys(): ConfigKeyDef[] {
+    const keys: ConfigKeyDef[] = [];
+    for (const name of this.resolveOrder()) {
+      for (const def of this.defs.get(name)!.configKeys?.() ?? []) {
+        keys.push(def);
+      }
+    }
+    return keys;
   }
 
   private resolveOrder(): string[] {
