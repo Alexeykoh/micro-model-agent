@@ -2,10 +2,11 @@
  * Единая классификация транзиентных (временно сбойных) ошибок.
  *
  * Ранее существовало ДВЕ расходящиеся копии: `TRANSIENT_PATTERNS` в
- * stuck-detector.ts и `TRANSIENT_ERROR_PATTERNS` в moe-executor.ts. Из-за
- * этого одна и та же ошибка по-разному ретраилась в разных подсистемах:
- * moe-executor считал транзиентными 500/504/"network"/"fetch failed",
- * stuck-detector — "killed"/"SIGTERM"/"rate limit" и т.д.
+ * stuck-detector.ts и `TRANSIENT_ERROR_PATTERNS` в удалённом moe-executor.ts
+ * (MoE снят 2026-10-12). Из-за этого одна и та же ошибка по-разному
+ * ретраилась в разных подсистемах: moe-executor считал транзиентными
+ * 500/504/"network"/"fetch failed", stuck-detector — "killed"/"SIGTERM"/
+ * "rate limit" и т.д.
  *
  * Здесь — объединение обеих копий в единый источник истины, чтобы решение
  * "эту ошибку можно ретраить" было одинаковым во всей системе.

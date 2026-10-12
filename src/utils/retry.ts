@@ -1,13 +1,12 @@
 /**
  * Экспоненциальная задержка повтора с опциональным джиттером.
  *
- * Единая реализация вместо четырёх расходящихся копий:
+ * Единая реализация вместо расходящихся копий:
  * - openai-compat (стрим и fetchWithRetry): `min(base*2^attempt, max)` + jitter;
- * - moe-executor: `min(1000*2^(attempt-1), 8000)` без jitter;
  * - audit-notifier: `2^retries * 1000` без потолка.
  *
  * `maxDelay === undefined` — без потолка (копия audit-notifier).
- * `jitterFactor === 0` — без джиттера (копии moe/audit-notifier).
+ * `jitterFactor === 0` — без джиттера (копия audit-notifier).
  */
 export function backoffDelay(
   attempt: number,
