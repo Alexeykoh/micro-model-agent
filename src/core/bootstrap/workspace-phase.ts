@@ -163,6 +163,8 @@ export async function setupWorkspacePhase(
   // после создания pluginManager; сайд-эффектов чтения профиля тут уже нет).
   const systemInfoContent = buildSystemInfo(config, baseDir, profile.compress());
   const systemInfoPrompt: PromptBlock = {
+    source: "core",
+    label: "system",
     content: systemInfoContent,
     priority: "critical",
     essential: true,

@@ -1,13 +1,17 @@
 /** Сборщик системного промпта: блоки по приоритету в бюджет токенов. */
 import type { PromptBlock } from "./types";
 
-/** Диагностика блока: метка, приоритет, токены, вошёл ли в бюджет. */
+/** Диагностика блока: владелец, метка, приоритет, токены, вошёл ли в бюджет. */
 export interface BlockBuildInfo {
+  /** Владелец блока (INV-1/17), напр. `indexer`. */
+  source?: string;
   label: string;
   priority: string;
   essential: boolean;
   tokens: number;
   included: boolean;
+  /** Почему блок не вошёл или работает неполно (INV-17). */
+  reason?: string;
 }
 
 /** Итог сборки: промпт, исключённое, разбивка по блокам для лога. */
@@ -30,9 +34,17 @@ const PRIORITY_ORDER: Record<string, number> = {
   low: 3,
 };
 
-function blockLabel(content: string): string {
-  const firstLine = content.split("\n")[0].trim();
-  return firstLine.length > 70 ? `${firstLine.slice(0, 67)}...` : firstLine;
+/**
+ * Метка блока для лога: `владелец: имя` (`indexer: project map`), а не
+ * обрезанная первая строка контента (INV-17). `label` блока приоритетнее
+ * автовывода из контента.
+ */
+function blockLabel(block: PromptBlock): string {
+  const owner = block.source ? `${block.source}: ` : "";
+  const fallback = block.content.split("\n")[0].trim();
+  const name = block.label?.trim() || fallback;
+  const full = `${owner}${name}`;
+  return full.length > 90 ? `${full.slice(0, 87)}...` : full;
 }
 
 /**
@@ -93,30 +105,36 @@ export class PromptBuilder {
       included.push(block.content);
       usedTokens += block.estimatedTokens;
       blocks.push({
-        label: blockLabel(block.content),
+        source: block.source,
+        label: blockLabel(block),
         priority: block.priority,
         essential: true,
         tokens: block.estimatedTokens,
         included: true,
+        reason: block.degraded?.reason,
       });
     }
 
     for (const block of nonEssential) {
       const tokens = block.estimatedTokens;
       const fits = usedTokens + tokens <= this.budget;
+      let reason = block.degraded?.reason;
       if (fits) {
         included.push(block.content);
         usedTokens += tokens;
       } else {
         excluded.push(block.content);
         excludedBlocks.push(block);
+        reason = `budget: ${tokens} tok did not fit`;
       }
       blocks.push({
-        label: blockLabel(block.content),
+        source: block.source,
+        label: blockLabel(block),
         priority: block.priority,
         essential: false,
         tokens,
         included: fits,
+        reason,
       });
     }
 

@@ -290,6 +290,8 @@ export async function resolvePromptOverflow(opts: {
   const hintBlock: PromptBlock | null =
     replacements.length > 0
       ? {
+          source: "core",
+          label: "overflow note",
           content: [
             `[Instructions note] Some project blocks exceeded the system-prompt budget and were compressed:`,
             ...warnings.map(

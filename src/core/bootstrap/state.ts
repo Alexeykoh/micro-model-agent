@@ -132,6 +132,8 @@ export function loadAgentsMdBlocks(
       const content = readFileSync(p, "utf-8").trim();
       if (content) {
         blocks.push({
+          source: "agents-md",
+          label: "instructions",
           content,
           priority: "high",
           essential: false,

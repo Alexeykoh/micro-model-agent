@@ -23,10 +23,22 @@ export type PromptBlockKind = "instructions" | "project-map";
 /** Блок системного промпта: контент, приоритет, оценка токенов. */
 export interface PromptBlock {
   content: string;
+  /**
+   * Владелец блока (INV-1/17): `core`, имя модуля (`indexer`, `skills`), `plugin`, … .
+   * Лог деградации называет владельца, а не режет первые строки контента.
+   */
+  source?: string;
+  /** Человекочитаемое имя блока для лога («project map», «AGENTS.md», «model»). */
+  label?: string;
   priority: "critical" | "high" | "normal" | "low";
   essential: boolean;
   estimatedTokens: number;
   kind?: PromptBlockKind;
+  /**
+   * Блок работает неполно (INV-6/17): не влез в бюджет, модуль деградировал и т.п.
+   * `reason` — почему, для лога и `/sysprompt`.
+   */
+  degraded?: { reason: string };
 }
 
 /** Статус вызова тула. */

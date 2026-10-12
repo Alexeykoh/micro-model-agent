@@ -405,6 +405,8 @@ export class Agent {
       content && content.trim() !== ""
         ? [
             {
+              source: "plugin",
+              label: "capabilities",
               content,
               priority: "low" as const,
               essential: false,

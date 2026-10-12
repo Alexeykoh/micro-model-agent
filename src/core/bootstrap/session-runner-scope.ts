@@ -200,16 +200,18 @@ export function buildRunnerDynamicBlocks(input: RunnerDynamicBlocksInput): () =>
     // Идентичность активной модели — динамическая (переживает смену модели).
     blocks.push(buildModelBlock(input.config.model));
     const skillsBlock = input.skillsModule.getSystemPromptBlock();
-    if (skillsBlock) blocks.push(skillsBlock);
+    if (skillsBlock) blocks.push({ source: "skills", ...skillsBlock });
     const sessionBlock = input.sessionModule.getSystemPromptBlock();
-    if (sessionBlock) blocks.push(sessionBlock);
+    if (sessionBlock) blocks.push({ source: "session", ...sessionBlock });
     const mapBlock = input.indexerModule.getSystemPromptBlock();
-    if (mapBlock) blocks.push(mapBlock);
+    if (mapBlock) blocks.push({ source: "indexer", ...mapBlock });
     const hiddenToolsBlock = input.toolAllowlist
       ? null
       : buildHiddenToolsBlock(input.registry.getAll(), input.runnerTags);
     if (hiddenToolsBlock) {
       blocks.push({
+        source: "core",
+        label: "hidden tools",
         content: hiddenToolsBlock,
         priority: "low",
         essential: false,

@@ -254,6 +254,8 @@ function buildStaticPromptBlocks(
     // активный план до создания нового (даже на первой итерации, до появления
     // <system-summary>).
     {
+      source: "core",
+      label: "plan reminder",
       content:
         "[Plan Reminder] An active plan may exist for this session. Before creating a new plan, check with `plan show`. If a plan is active, continue it — do NOT create a new plan.",
       priority: "high",
@@ -293,9 +295,13 @@ function dryRunStartupOverflow(input: ModulesPhaseInput, promptBlocks: PromptBlo
   const needed = dry.includedTokens + overflowTokens;
   const hint = overflowHint(config, dir, needed);
   for (const b of dry.overflow) {
+    // INV-17: называем владельца и блок (`indexer: project map`), а не только
+    // класс по `kind`.
+    const owner = b.source ? `${b.source}: ` : "";
+    const name = b.label ?? (b.kind === "instructions" ? "AGENTS.md" : "project map");
     logger.warn(
       t("prompt.overflow.startup", {
-        block: b.kind === "instructions" ? "AGENTS.md" : "project map",
+        block: `${owner}${name}`,
         original: String(b.estimatedTokens),
         needed: String(needed),
         budget: String(systemBudget),
@@ -320,23 +326,25 @@ function collectDynamicPromptBlocks(
   // Идентичность активной модели — динамическая (переживает смену модели).
   blocks.push(buildModelBlock(input.config.model));
   const skillsBlock = skillsModule.getSystemPromptBlock();
-  if (skillsBlock) blocks.push(skillsBlock);
+  if (skillsBlock) blocks.push({ source: "skills", ...skillsBlock });
   const sessionBlock = sessionModule.getSystemPromptBlock();
-  if (sessionBlock) blocks.push(sessionBlock);
+  if (sessionBlock) blocks.push({ source: "session", ...sessionBlock });
   const mapBlock = indexerModule.getSystemPromptBlock();
-  if (mapBlock) blocks.push(mapBlock);
+  if (mapBlock) blocks.push({ source: "indexer", ...mapBlock });
   const capabilitiesBlock = pluginCapabilitiesBlock({
     pluginManager: input.pluginManager,
     // Суженный набор (онбординг с allowlist'ом) не должен получать блок про
     // плагины: там `define_capability` модели всё равно недоступен.
     pluginsVisible: !toolCtx.toolAllowlist,
   });
-  if (capabilitiesBlock) blocks.push(capabilitiesBlock);
+  if (capabilitiesBlock) blocks.push({ source: "plugins", ...capabilitiesBlock });
   const hiddenToolsBlock = toolCtx.toolAllowlist
     ? null
     : buildHiddenToolsBlock(toolRegistry.getAll(), activeToolTags);
   if (hiddenToolsBlock) {
     blocks.push({
+      source: "core",
+      label: "hidden tools",
       content: hiddenToolsBlock,
       priority: "low",
       essential: false,

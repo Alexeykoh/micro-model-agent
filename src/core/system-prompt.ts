@@ -29,6 +29,8 @@ import { estimateTokens } from "../llm/token-counter";
 export function buildModelBlock(model: string): PromptBlock {
   const content = `ACTIVE MODEL: ${model} — this is the model you are running on right now.`;
   return {
+    source: "core",
+    label: "model",
     content,
     priority: "low",
     essential: false,

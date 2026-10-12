@@ -31,6 +31,35 @@ describe("ModuleRegistry", () => {
     expect(blocks[0].content).toBe("test block");
   });
 
+  it("stamps the module name as the block owner (INV-1/17)", () => {
+    const mod: AgentModule = {
+      name: "indexer",
+      getSystemPromptBlock: () => ({
+        content: "map",
+        priority: "normal",
+        essential: false,
+        estimatedTokens: 10,
+      }),
+    };
+    registry.register(mod);
+    expect(registry.collectPromptBlocks()[0].source).toBe("indexer");
+  });
+
+  it("keeps an explicit block owner over the module name", () => {
+    const mod: AgentModule = {
+      name: "indexer",
+      getSystemPromptBlock: () => ({
+        source: "custom",
+        content: "map",
+        priority: "normal",
+        essential: false,
+        estimatedTokens: 10,
+      }),
+    };
+    registry.register(mod);
+    expect(registry.collectPromptBlocks()[0].source).toBe("custom");
+  });
+
   it("should collect tool definitions", () => {
     const mod: AgentModule = {
       name: "test",

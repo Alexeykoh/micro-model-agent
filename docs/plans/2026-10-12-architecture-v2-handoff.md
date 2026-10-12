@@ -105,13 +105,24 @@ feature-history (вынесен из AGENTS.md).
 **Следующий шаг:** W0.5 (`PromptBlock.source` + `degraded`, INV-1/6/17) или
 `verify_error` со спекой на шов `ToolContext`. W0.2 — в W1 (`ModuleHost`).
 
+**W0.5 сделана** (`feat/w0-prompt-block-owner`): `PromptBlock.source` (владелец)
++ `label` (имя блока) + `degraded?: { reason }` (INV-1/6/17). `ModuleRegistry`
+штампует `source = имя модуля`; core/static-блоки получают владельца на месте
+(`core`, `agents-md`, `plugin`, `plugins`). `PromptBuilder` строит метку как
+`владелец: имя` (`indexer: project map`), а не обрезанную первую строку контента;
+выпавший по бюджету блок несёт `reason: "budget: N tok did not fit"`. Стартовый
+overflow-warning называет владельца и блок, а не только класс по `kind`.
+
+**W0 закрыт** (кроме двух точек): `verify_error` (нужен шов `ToolContext`, W1) и
+`W0.2` (`Logger.child()` — при появлении `ModuleHost`).
+
 | Задача | Что сделать | Инвариант |
 |---|---|---|
 | **W0.1** ✅ | `Source = mma \| module:<name> \| tool:<name> \| core` → заполнять `OutputEvent.source` (сейчас **всегда `""`**, `output/channel.ts`) | INV-13 |
 | **W0.2** | `Logger.child()` включать в модулях (сейчас **0 вызовов** по всему `src/`) | INV-13 |
 | **W0.3** ✅ | `SessionLogEntry.module: string` + шаблон `module_${string}` (по образцу `onboarding_${string}`) | INV-13 |
 | **W0.4** ✅ | `logError(message)` → `logError(Diagnostic { source, operation, kind, cause? })`; `cause` обязателен при `kind !== "ok"` | INV-12, INV-14 |
-| **W0.5** | `PromptBlock.source` + `degraded?: { reason }`; при выпадении по бюджету лог говорит «indexer: project map (2400 ток.) не поместился», а не обрезанный текст | INV-1, INV-6, INV-17 |
+| **W0.5** ✅ | `PromptBlock.source` + `degraded?: { reason }`; при выпадении по бюджету лог говорит «indexer: project map (2400 ток.) не поместился», а не обрезанный текст | INV-1, INV-6, INV-17 |
 | **W0.6** ◐ | Отдельные события для fail-open путей: `critic_error` ✅, `tool_attempt` ✅, `verify_error` — отдельный шаг (нужен шов `ToolContext`) | INV-12, INV-15 |
 
 **Стартовые точки для чтения:** `src/output/types.ts` (`OutputEvent`),

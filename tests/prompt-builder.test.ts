@@ -102,4 +102,35 @@ describe("PromptBuilder", () => {
     expect(byLabel["dropped block"].included).toBe(false);
     expect(byLabel["dropped block"].tokens).toBe(100);
   });
+
+  it("labels blocks by owner, not by truncated content (INV-17)", () => {
+    const builder = new PromptBuilder(1000);
+    builder.addBlock({
+      source: "indexer",
+      label: "project map",
+      content: "src/\n  a.ts\n  b.ts",
+      priority: "normal",
+      essential: false,
+      estimatedTokens: 10,
+    });
+    const info = builder.build().blocks[0];
+    expect(info.label).toBe("indexer: project map");
+    expect(info.source).toBe("indexer");
+  });
+
+  it("marks a budget-dropped block with a reason and keeps its owner (INV-17)", () => {
+    const builder = new PromptBuilder(50);
+    builder.addBlock({
+      source: "indexer",
+      label: "project map",
+      content: "src/",
+      priority: "normal",
+      essential: false,
+      estimatedTokens: 2400,
+    });
+    const info = builder.build().blocks[0];
+    expect(info.included).toBe(false);
+    expect(info.label).toBe("indexer: project map");
+    expect(info.reason).toBe("budget: 2400 tok did not fit");
+  });
 });

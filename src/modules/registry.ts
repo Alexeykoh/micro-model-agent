@@ -24,7 +24,9 @@ export class ModuleRegistry {
       if (exclude.includes(name)) continue;
       if (mod.getSystemPromptBlock) {
         const block = mod.getSystemPromptBlock();
-        if (block) blocks.push(block);
+        // Владелец блока — сам модуль (INV-1/17): модуль не обязан знать, как
+        // его звать в логе, реестр проставляет `source` из регистрационного имени.
+        if (block) blocks.push(block.source ? block : { ...block, source: name });
       }
     }
     return blocks;

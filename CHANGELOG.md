@@ -45,6 +45,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   event's `Source` (`module:<name>` → `<name>`) when a module-sourced output event
   is persisted, and the `type` union reserves the `module_<name>` family for
   module-owned records. The web Trace log whitelist gained `module`.
+- **Prompt blocks name their owner and degradation (INV-1/6/17)**
+  (`src/core/types.ts`, `src/core/prompt-builder.ts`, `src/modules/registry.ts`):
+  `PromptBlock` gains `source` (owner), `label` and `degraded?: { reason }`.
+  `ModuleRegistry` stamps `source = <module name>`; core/static blocks set their
+  own owner. The prompt-build log now reads `indexer: project map` and marks a
+  budget-dropped block with `reason: budget: N tok did not fit` instead of
+  showing truncated content.
 
 ### Removed
 
