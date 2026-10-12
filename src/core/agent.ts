@@ -18,6 +18,11 @@ import {
   resolvePromptOverflowOnce as phaseResolvePromptOverflowOnce,
   type PromptPhaseHost,
 } from "./agent/prompt-phase";
+import {
+  emitPhase as phaseEmitPhase,
+  finalizeWithoutTools as phaseFinalizeWithoutTools,
+  type TurnOutputHost,
+} from "./agent/turn-output";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -30,7 +35,6 @@ import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult, OnMeta 
 import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
-import { errMsg } from "../utils";
 import { resolveVerbosity } from "../ui/theme";
 import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
@@ -399,27 +403,26 @@ export class Agent {
     phaseRefreshSystemPrompt(this as unknown as PromptPhaseHost);
   }
 
+  /** Общий вид хоста для фазы вывода (INV-23). */
+  private turnOutputHost(): TurnOutputHost {
+    return {
+      deps: this.deps,
+      abortSignal: this.abortController?.signal,
+      isShutdownRequested: () => this.shutdownRequested,
+    };
+  }
+
   private emitPhase(
     iteration: number,
     phase: AgentPhase,
     onPhase?: (phase: AgentPhase) => void,
   ): void {
-    this.deps.pluginManager.runOnPhase?.(
-      {
-        iteration,
-        logger: this.deps.logger,
-        contextManager: this.deps.contextManager,
-      },
-      phase,
-    );
-    onPhase?.(phase);
+    phaseEmitPhase(this.turnOutputHost(), iteration, phase, onPhase);
   }
 
   /**
-   * Аварийное завершение без тулов: один вызов модели с пустым набором
-   * инструментов. Ответ принимается как финальный; гейты (critic/audit/claim)
-   * пропускаются — мы остановились именно потому, что проверить нечем.
-   * Возвращает текст ответа (пустой — нечего финализировать).
+   * Аварийное завершение без тулов (реализация — `agent/turn-output.ts`):
+   * один вызов модели без инструментов; гейты пропускаются.
    */
   private async finalizeWithoutTools(
     state: LoopState,
@@ -427,71 +430,7 @@ export class Agent {
     onChunk?: (chunk: string) => void,
     slog?: SessionLogger,
   ): Promise<string> {
-    const { contextManager } = this.deps;
-    contextManager.addMessage({
-      role: "user",
-      content: `<system-summary>${t("exec.finalize_no_tools")}</system-summary>`,
-    });
-    // Форс-вызов тоже тратит токены и время — учитываем его в общих метриках и
-    // стоимости (иначе последний запрос не попадал в usage/cost).
-    const llmStart = Date.now();
-    const baseline = tokenTracker.beginIteration(state, contextManager.getEstimatedTokens());
-    const text = await this.streamFinalAnswer(state, tokenTracker, baseline, onChunk);
-    const durationMs = Date.now() - llmStart;
-    state.totalLlmDuration += durationMs;
-    tokenTracker.addCompletionChars(state, text.length);
-    if (slog) {
-      tokenTracker.logUsage(
-        state,
-        baseline,
-        text,
-        contextManager.getEstimatedTokens(),
-        state.iteration,
-        durationMs,
-        slog,
-      );
-    }
-    if (text.trim()) {
-      state.lastText = text;
-      state.finalAnswerAccepted = true;
-      contextManager.addMessage({ role: "assistant", content: text });
-      if (this.deps.config.session.autoSave) slog?.saveAssistantMessage(text);
-      slog?.logAssistant(text, "", undefined, state.iteration);
-    }
-    return text;
-  }
-
-  /** Стрим tool-less ответа для форс-финала; учитывает API-usage по done-чанкам. */
-  private async streamFinalAnswer(
-    state: LoopState,
-    tokenTracker: TokenTracker,
-    baseline: { promptBefore: number; completionBefore: number },
-    onChunk?: (chunk: string) => void,
-  ): Promise<string> {
-    const { contextManager, logger, llmProvider, pluginManager } = this.deps;
-    const history = repairToolCallPairing(contextManager.getActiveHistory());
-    let text = "";
-    try {
-      for await (const chunk of llmProvider.chat(history, [], this.abortController?.signal, {
-        sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
-      })) {
-        if (this.shutdownRequested) break;
-        if (chunk.type === "text" && chunk.content) {
-          text += chunk.content;
-          const out = pluginManager.runOnText(
-            { iteration: state.iteration, logger, contextManager },
-            chunk.content,
-          );
-          onChunk?.(out);
-        }
-        if (chunk.type === "done" && chunk.usage) {
-          tokenTracker.recordApiUsage(state, baseline, chunk.usage);
-        }
-      }
-    } catch (e) {
-      logger.diagnostic("warn", `finalizeWithoutTools failed: ${errMsg(e)}`);
-    }
-    return text;
+    return phaseFinalizeWithoutTools(this.turnOutputHost(), state, tokenTracker, onChunk, slog);
   }
 
   /**
