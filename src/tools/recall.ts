@@ -11,6 +11,7 @@ const CATEGORIES = ["preferences", "conventions", "decisions", "errors", "facts"
 /** Читает/ищет по памяти. Параметры: query (full-text), category (опционально). */
 export const recallTool: ToolDefinition = {
   name: "recall",
+  security: { caps: [{ mem: true }] },
   icon: "💾",
   description:
     "Recall stored information from memory. Search across preferences, facts, conventions, decisions, errors.",

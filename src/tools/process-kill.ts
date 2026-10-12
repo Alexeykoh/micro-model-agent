@@ -7,6 +7,7 @@ import { lookupProcess } from "./process-ids";
 /** Останавливает фоновый процесс по id из bash/process_list. */
 export const processKillTool: ToolDefinition = {
   name: "process_kill",
+  security: { caps: [{ proc: true }] },
   icon: "⛔",
   description:
     "Stop a background process started via bash (dev server, watcher). Kills the whole process tree (children included). Use the id returned by bash or process_list.",

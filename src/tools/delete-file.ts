@@ -12,6 +12,7 @@ import { protectedPathBlock } from "../modules/security/protected-paths";
 /** Удаляет файл; каталоги отклоняет. Возвращает diff удалённого. */
 export const deleteFileTool: ToolDefinition = {
   name: "delete_file",
+  security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
   icon: "🗑️",
   description: "Delete a file from the filesystem.",
   tags: ["file"],

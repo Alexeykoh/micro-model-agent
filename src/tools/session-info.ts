@@ -5,6 +5,7 @@ import type { ToolDefinition } from "./types";
 /** Показывает сессию и загрузку контекстного бюджета. Без активной — пометка. */
 export const sessionInfoTool: ToolDefinition = {
   name: "session_info",
+  security: { caps: [] },
   icon: "ℹ️",
   description:
     "Show metadata about the current session: id, name, model, provider, context window, message count, and how much of the context budget is used. Use when the user asks which session this is or how much context is left.",

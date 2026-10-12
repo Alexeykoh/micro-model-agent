@@ -25,6 +25,7 @@ function searchFile(filePath: string, query: string, maxResults: number, results
 /** Ищет по прошлым взаимодействиям всех сессий. Параметры: query, maxResults, sessionId. */
 export const searchHistoryTool: ToolDefinition = {
   name: "search_history",
+  security: { caps: [] },
   icon: "🕵️",
   description: "Search through session history for past interactions across all sessions.",
   tags: ["research"],

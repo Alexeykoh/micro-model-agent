@@ -31,6 +31,7 @@ function buildSubagentSystemPrompt(context: string, stable: boolean): string {
 /** Спавнит изолированного субагента. Параметры: task, scope-файлы, tool_tags, result_mode. */
 export const subagentTool: ToolDefinition = {
   name: "subagent",
+  security: { caps: [{ subagent: true }] },
   icon: "🤖",
   description:
     "Spawn an isolated sub-agent to work on a task independently. The sub-agent has its own context and executes autonomously. Use for parallel work or complex sub-tasks.",

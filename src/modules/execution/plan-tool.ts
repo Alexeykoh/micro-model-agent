@@ -98,6 +98,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
   return [
     {
       name: "plan",
+      security: { caps: [] },
       icon: "📋",
       alwaysOn: true,
       description:
@@ -147,6 +148,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
     },
     {
       name: "plan_step",
+      security: { caps: [] },
       icon: "📋",
       alwaysOn: true,
       description:
@@ -172,6 +174,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
     },
     {
       name: "todo",
+      security: { caps: [] },
       icon: "☑️",
       alwaysOn: true,
       description:
@@ -270,6 +273,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
     },
     {
       name: "verify",
+      security: { caps: [] },
       icon: "✅",
       alwaysOn: true,
       description:

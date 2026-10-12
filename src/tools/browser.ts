@@ -87,6 +87,7 @@ export async function screenshotToImagePart(screenshot: Buffer): Promise<ImageUr
 export function createBrowserTool(): ToolDefinition {
   return {
     name: "browser",
+    security: { caps: [{ net: true }], urlArgs: ["url"] },
     icon: "🌐",
     tags: ["browser", "vision"],
     description: [

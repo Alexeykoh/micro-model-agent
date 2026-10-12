@@ -94,6 +94,7 @@ function formatResults(results: SearchResult[]): string {
 /** Ищет в вебе (заголовки + сниппеты); поисковики открывать не надо. */
 export const webSearchTool: ToolDefinition = {
   name: "web_search",
+  security: { caps: [{ net: true }] },
   icon: "🌍",
   description:
     "Search the web for information. Returns search results with titles and snippets. Use this for search queries instead of opening search engines (Google/Yandex/Bing) in the browser — they block headless browsers.",

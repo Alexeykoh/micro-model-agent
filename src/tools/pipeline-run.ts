@@ -69,6 +69,7 @@ async function runStep(
 /** Запускает DAG субагентов в порядке зависимостей. Параметры: name, yaml, params. */
 export const pipelineRunTool: ToolDefinition = {
   name: "pipeline_run",
+  security: { caps: [{ subagent: true }] },
   icon: "▶️",
   description:
     "Run a named pipeline with YAML definition. Creates a DAG of sub-agents that execute in dependency order.",

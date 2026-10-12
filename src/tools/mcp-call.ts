@@ -32,6 +32,7 @@ function ensureInitialized(ctx: ToolContext): void {
 /** Вызывает тул на MCP-сервере. Параметры: server, tool, args. */
 export const mcpCallTool: ToolDefinition = {
   name: "mcp_call",
+  security: { caps: [], manual: { reason: "mcp — произвольный сервер, политика у провайдера", reviewedBy: "architecture-v2", date: "2026-10-13" } },
   icon: "🔗",
   description:
     "Call a tool on an MCP (Model Context Protocol) server. MCP servers provide external capabilities like databases, APIs, or specialized tools.",

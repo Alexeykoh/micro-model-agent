@@ -438,6 +438,7 @@ export class IndexerModule implements AgentModule {
   private createProjectMapTool(): ToolDefinition {
     return {
       name: "project_map",
+      security: { caps: [{ fs: "read" }] },
       icon: "🗺️",
       alwaysOn: true,
       description: t("indexer.project_map_desc"),

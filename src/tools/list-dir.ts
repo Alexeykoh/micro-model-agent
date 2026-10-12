@@ -13,6 +13,7 @@ const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", "coverage
 /** Показывает файлы/подкаталоги (каталоги с `/`); мусор скрыт. */
 export const listDirTool: ToolDefinition = {
   name: "list_dir",
+  security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
   icon: "📂",
   description: `List files and directories in a given path. Shows up to ${MAX_PREVIEW_LINES} entries by default.`,
   tags: ["file"],

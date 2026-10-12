@@ -12,6 +12,7 @@ const MAX_TAIL = 300;
 /** Показывает буферизированный вывод фонового процесса (последние N строк). */
 export const processLogTool: ToolDefinition = {
   name: "process_log",
+  security: { caps: [{ proc: true }] },
   icon: "📜",
   description: `Show the buffered output of a background process started via bash. Shows the last ${DEFAULT_TAIL} lines by default. Use after starting a dev server to verify it came up without errors, and while it runs to check its state. For a finite task that should complete, prefer process_wait over polling this tool.`,
   tags: ["shell"],

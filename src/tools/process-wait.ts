@@ -19,6 +19,7 @@ const MAX_TAIL = 100;
 /** Ждёт выхода процесса до timeoutMs; отчитывается кодом и хвостом вывода. */
 export const processWaitTool: ToolDefinition = {
   name: "process_wait",
+  security: { caps: [{ proc: true }] },
   icon: "⏳",
   description:
     "Wait for a background process started via bash to finish, instead of polling process_log or sleeping (ping/timeout/sleep commands). Blocks up to timeoutMs, then reports whether the process exited (with its exit code and recent output) or is still running. For dev servers/watchers that never exit, use process_log to inspect and process_kill to stop them.",

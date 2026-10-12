@@ -48,6 +48,7 @@ export function nearestSkillNames(query: string, names: string[], k = 3): string
 export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition {
   return {
     name: "load_skill",
+    security: { caps: [] },
     icon: "🎯",
     tags: ["core"],
     // Роутинг скиллов — вне сужения (P5): модель использует только видимый скилл.

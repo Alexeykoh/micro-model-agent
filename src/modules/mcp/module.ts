@@ -1,7 +1,7 @@
 // Модуль MCP: ленивый коннект к серверам, discovery тулов, дефиниции, cleanup.
 import type { PromptBlock } from "../../core/types";
 import type { AgentModule, AgentPlugin } from "../types";
-import type { ToolDefinition } from "../../tools/types";
+import type { ToolDefinition, ToolSecurityDecl } from "../../tools/types";
 import type { AppConfig } from "../../config/types";
 import { MCPClient } from "./client";
 import { MCPRegistry, type MCPServerConfig } from "./registry";
@@ -9,6 +9,20 @@ import { Logger } from "../../logger/app-logger";
 import { MCP_DISCOVERY_TIMEOUT_MS as DISCOVERY_TIMEOUT_MS } from "../../config/timeouts";
 
 const logger = new Logger("warn", "mcp");
+
+/**
+ * Политика MCP-тулов (INV-9/10): серверы произвольны и могут ходить в сеть или
+ * запускать процессы, поэтому декларация — `manual` (enforcement внутри вызова,
+ * к провайдеру сервера). Видно в `/tools`.
+ */
+const MCP_TOOL_SECURITY: ToolSecurityDecl = {
+  caps: [],
+  manual: {
+    reason: "mcp — произвольный сервер, политика у провайдера",
+    reviewedBy: "architecture-v2",
+    date: "2026-10-13",
+  },
+};
 
 /** Тул, найденный на MCP-сервере. */
 interface DiscoveredTool {
@@ -256,6 +270,7 @@ export class MCPModule implements AgentModule {
         description: `${d.description} [MCP server: ${d.serverName}]`,
         parameters: convertInputSchema(d.inputSchema),
         tags: ["code", "research"],
+        security: MCP_TOOL_SECURITY,
         handler: async (_ctx, args) => {
           const client = this.connections.get(d.serverName);
           if (!client?.isConnected()) {
@@ -289,6 +304,7 @@ export class MCPModule implements AgentModule {
         description: `Connect to MCP server "${serverName}" and discover its tools`,
         parameters: { type: "object", properties: {} },
         tags: ["code", "research"],
+        security: MCP_TOOL_SECURITY,
         handler: async (_ctx, _args) => {
           const client = await this.ensureConnected(serverName);
           if (!client) {

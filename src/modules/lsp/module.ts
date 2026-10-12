@@ -316,6 +316,7 @@ export class LspModule implements AgentModule {
     return [
       {
         name: "lsp_check",
+        security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
         icon: "🩺",
         description:
           'Run static checks (LSP diagnostics) on a file or directory. For "check for errors" tasks: pass a file to check it, or a directory to check its source files (capped at 15). Returns [LSP errors] / [LSP warnings] for files with a configured LSP server.',

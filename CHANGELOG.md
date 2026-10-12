@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Tool security declarations (W2.1, INV-9/10)**: every `ToolDefinition` now
+  carries a required `security: ToolSecurityDecl` (`caps`, and optionally
+  `pathArgs`/`urlArgs`/`manual`). Declared for all builtin and module tools;
+  `bash` is `[{ proc: true }]` + honest `manual` (shell validation stays in the
+  handler), MCP tools are `manual` (arbitrary provider). Enforcement in
+  `ToolExecutor.execute()` lands next (W2.2–W2.4); this step is the contract.
+  Spec: `docs/specs/2026-10-13-w2-enforcement-design.md`.
 - **Architecture gate: module boundaries (INV-3/INV-4)** (`tests/arch/module-boundaries.test.ts`):
   a module may not import the agent loop or its helpers (`src/core/agent*`) — until the
   public `core/api` facade lands (W4) the 16 known dependencies are an explicit allowlist

@@ -11,6 +11,7 @@ import { protectedPathBlock } from "../modules/security/protected-paths";
 /** Создаёт каталог со всеми промежуточными. */
 export const createDirTool: ToolDefinition = {
   name: "create_dir",
+  security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
   icon: "📁",
   description: "Create a directory (and any intermediate directories).",
   tags: ["file"],

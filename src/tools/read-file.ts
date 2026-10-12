@@ -89,6 +89,7 @@ function readLineSlice(
 /** Читает файл постранично (offset/limit); кешируемый, с cap вывода. */
 export const readFileTool: ToolDefinition = {
   name: "read_file",
+  security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
   icon: "👀",
   description: `Read a file from the filesystem. Reads up to ${DEFAULT_LIMIT} lines at a time by default; use offset to page through large files.`,
   tags: ["file", "code"],

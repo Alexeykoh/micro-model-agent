@@ -29,6 +29,7 @@ export function createSetThinkingTool(
 ): ToolDefinition {
   return {
     name: "set_thinking",
+    security: { caps: [] },
     description:
       "Set reasoning effort level for the next LLM call. Normally managed automatically by the harness. Use only to force deeper thinking for genuinely hard subproblems or shallower for mechanical batches.",
     icon: "🧠",

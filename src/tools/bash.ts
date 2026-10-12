@@ -571,6 +571,7 @@ export function interactivePromptHint(output: string): string {
 
 export const bashTool: ToolDefinition = {
   name: "bash",
+  security: { caps: [{ proc: true }], manual: { reason: "shell — command-validator в хендлере", reviewedBy: "architecture-v2", date: "2026-10-13" } },
   icon: "💻",
   description:
     "Execute a shell command and return its output. Use for running tests, build, git, and shell operations. Commands that are still running after a few seconds are automatically moved to the background and return a process id — manage them with process_list, process_log, process_wait, process_kill. For a finite background task prefer a single process_wait over polling process_log or sleeping (never use ping/timeout/sleep as a delay). Set background=true to return a process id immediately for commands you know are long-running (dev servers, watchers).\n\nWindows notes: the shell is cmd.exe — PowerShell cmdlets (Write-Host, Get-Content, Select-String, Out-File) and bash heredocs (cat << EOF) do NOT work there. Use the read_file/write_file tools instead of cat/echo redirection. Sequential commands: use && (a leading ; is auto-converted to &).",

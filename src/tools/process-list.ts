@@ -6,6 +6,7 @@ import { t } from "../i18n/index";
 /** Показывает фоновые процессы сессии с хинтом управления. */
 export const processListTool: ToolDefinition = {
   name: "process_list",
+  security: { caps: [{ proc: true }] },
   icon: "📊",
   description:
     "List background processes started via the bash tool (dev servers, watchers, long-running commands). Shows id, pid, command, status, and recent output. Use with process_log and process_kill to inspect or stop them.",

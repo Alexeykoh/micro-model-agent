@@ -200,6 +200,7 @@ function checkGrepScope(
 /** Ищет по содержимому через regex (rg → grep → zero-dep JS); кешируемый. */
 export const grepTool: ToolDefinition = {
   name: "grep",
+  security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
   icon: "🔍",
   description: `Search file contents using a regular expression. Shows up to ${MAX_PREVIEW_LINES} matching lines by default. Uses ripgrep (rg) or grep when available, otherwise a built-in JS walker (no external binary needed).`,
   tags: ["file", "code", "research"],

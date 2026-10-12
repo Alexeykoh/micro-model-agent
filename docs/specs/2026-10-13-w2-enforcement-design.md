@@ -51,8 +51,15 @@ export interface ToolSecurityDecl {
 }
 ```
 
-`ToolDefinition` получает эти поля. `caps` **обязателен** (пусть `[]`), иначе
-«неизвестно, что тул умеет»; `pathArgs`/`urlArgs`/`manual` — по потребности.
+`ToolDefinition` получает **одно** обязательное поле:
+
+```ts
+security: ToolSecurityDecl;   // caps обязателен; pathArgs/urlArgs/manual — по потребности
+```
+
+Вложенность (а не четыре поля навыворот) выбрана намеренно: декларация — это
+один объект политики, `execute()` читает `tool.security.*`, и «нет декларации»
+невыразимо по типу.
 
 ## 3. Пайплайн `execute()` (до хендлера)
 
@@ -94,7 +101,7 @@ allowlist → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
 
 | # | Задача | Проверка |
 |---|---|---|
-| W2.1 | Типы `ToolCapability`/`ToolSecurityDecl` + поля в `ToolDefinition`; объявить для всех встроенных и модульных тулов | гейт полноты `tests/arch/tool-declarations.test.ts` |
+| W2.1 | Типы `ToolCapability`/`ToolSecurityDecl` + поле `security` в `ToolDefinition`; объявить для всех встроенных и модульных тулов | гейт формы `tests/tools/security-decl.test.ts` |
 | W2.2 | `pathArgs` в `execute()` (scope + writable + protected) + тесты обхода | `tests/tools/enforcement-path.test.ts` |
 | W2.3 | `urlArgs` в `execute()` (SSRF) + тесты | `tests/tools/enforcement-url.test.ts` |
 | W2.4 | `caps` в `execute()` (`proc`→bash, `net`→network); `bash` `manual` | `tests/tools/enforcement-caps.test.ts` |

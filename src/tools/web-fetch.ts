@@ -19,6 +19,7 @@ const MAX_CHARS = 5000;
 /** Тянет URL в markdown; JS-страницы вернут пустоту — для них тул browser. */
 export const webFetchTool: ToolDefinition = {
   name: "web_fetch",
+  security: { caps: [{ net: true }], urlArgs: ["url"] },
   icon: "⬇️",
   description:
     'Fetch a URL and convert its content to markdown. Use for reading documentation, APIs, web pages. This is a plain HTTP request without a browser engine — it does NOT run JavaScript, so JS-rendered single-page apps (weather sites, dashboards, modern SPAs) return empty or near-empty content; use the "browser" tool for those.',

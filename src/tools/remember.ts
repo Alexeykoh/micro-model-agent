@@ -11,6 +11,7 @@ const CATEGORIES = ["preferences", "conventions", "decisions", "errors", "facts"
 /** Пишет факт/преференс в глобальную память. Параметры: category, key/value или entry. */
 export const rememberTool: ToolDefinition = {
   name: "remember",
+  security: { caps: [{ mem: true }] },
   icon: "🧠",
   description:
     "Remember information across sessions. Use for user preferences, facts, conventions, decisions, or errors.",

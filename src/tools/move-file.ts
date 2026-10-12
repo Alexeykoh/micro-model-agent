@@ -13,6 +13,7 @@ import { protectedPathBlock } from "../modules/security/protected-paths";
 /** Перемещает/переименовывает; обе стороны проверяются по скоупу. */
 export const moveFileTool: ToolDefinition = {
   name: "move_file",
+  security: { caps: [{ fs: "write" }], pathArgs: ["from", "to"] },
   icon: "📦",
   description: "Move or rename a file or directory.",
   tags: ["file"],

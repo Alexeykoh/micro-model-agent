@@ -58,6 +58,7 @@ export function spliceNormalized(
 /** Заменяет точный фрагмент в существующем файле (не regex). */
 export const editFileTool: ToolDefinition = {
   name: "edit_file",
+  security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
   icon: "✏️",
   description: "Find and replace text in an existing file. Uses exact string match (not regex).",
   tags: ["file", "code"],

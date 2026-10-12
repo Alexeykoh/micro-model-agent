@@ -65,6 +65,7 @@ async function ensureConsent(
 /** Тул: описать новую capability и записать её черновиком. */
 export const defineCapabilityTool: ToolDefinition = {
   name: "define_capability",
+  security: { caps: [] },
   icon: "◆",
   description:
     "Define a new tool for yourself: write it as a draft capability in .mma/plugins/drafts/. " +

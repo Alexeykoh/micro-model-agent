@@ -6,6 +6,7 @@ import type { ToolDefinition } from "./types";
 /** Просит подтверждение; reject — success:false (сигнал сбоя для цикла). */
 export const approveTool: ToolDefinition = {
   name: "approve",
+  security: { caps: [{ interactive: true }] },
   icon: "🙋",
   description: "Request user approval for an action. The user picks Yes or No from a menu.",
   tags: ["core"],

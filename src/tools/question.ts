@@ -240,6 +240,7 @@ function resolveSearch(ctx: ToolContext): (spec: QuestionSpec) => string[] {
 /** Тул вопросов: выбор/мультивыбор/free-text, memory pre-check, батч-cap 3. */
 export const questionTool: ToolDefinition = {
   name: "question",
+  security: { caps: [{ interactive: true }] },
   icon: "❓",
   description: DESCRIPTION,
   tags: ["core"],

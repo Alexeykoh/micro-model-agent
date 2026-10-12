@@ -5,6 +5,7 @@ import type { ToolDefinition } from "./types";
 /** Модель зовёт по финальному саммари; вне онбординга — no-op по флагу. */
 export const meetDoneTool: ToolDefinition = {
   name: "meet_done",
+  security: { caps: [] },
   description:
     "Signal that the get-acquainted interview is complete. Call only after the final summary.",
   tags: ["memory"],

@@ -163,6 +163,13 @@ overflow-warning называет владельца и блок, а не тол
 модули на `ModuleDef` → гейт **A** (единственный путь тулов) → W3 → W4 → W5.
 `W1.2` (child-логер в модулях) схлопнут в W1.6 — логер приходит из `ModuleHost.ctx`.
 
+**W2 в работе** (спека [`2026-10-13-w2-enforcement-design.md`](../specs/2026-10-13-w2-enforcement-design.md)):
+- W2.1 ✅ `ToolDefinition.security: ToolSecurityDecl` (`caps` обязателен; `pathArgs`/
+  `urlArgs`/`manual`) — объявлено для всех тулов; `bash` = `[{proc:true}]` + `manual`,
+  MCP-тулы = `manual`. Гейт формы `tests/tools/security-decl.test.ts`.
+- W2.2–W2.5 ⬜ — применение `pathArgs`/`urlArgs`/`caps` в `ToolExecutor.execute()`,
+  затем снятие дублирующих проверок из хендлеров.
+
 
 **Приоритет при выборе одной волны: W2.** Enforcement даёт немедленный эффект на
 самый дорогой класс дефектов (безопасность) и не требует остального каркаса.

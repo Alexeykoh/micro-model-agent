@@ -8,6 +8,7 @@ import { safeResolvePath } from "./path-utils";
 /** Возвращает JSON с размером, типом, датами создания/изменения. */
 export const fileInfoTool: ToolDefinition = {
   name: "file_info",
+  security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
   icon: "ℹ️",
   description: "Get metadata about a file or directory (size, creation date, modification date).",
   tags: ["file"],

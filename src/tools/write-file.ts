@@ -16,6 +16,7 @@ import { protectedPathBlock } from "../modules/security/protected-paths";
 /** Создаёт/перезаписывает файл; parent-dirs, проверки, diff в ответе. */
 export const writeFileTool: ToolDefinition = {
   name: "write_file",
+  security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
   icon: "📝",
   description:
     "Create or overwrite a file with given content. Creates intermediate directories if needed.",
