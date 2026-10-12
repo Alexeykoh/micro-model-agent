@@ -4,6 +4,35 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Architecture v2 spec** (`docs/specs/2026-10-12-architecture-v2-design.md`):
+  normative target architecture - 23 invariants (`INV-1..23`), core-vs-module
+  split by a single criterion (can it be disabled?), `ModuleHost` lifecycle
+  contract, declarative tool capabilities with enforcement moved into
+  `ToolExecutor.execute()`, one observability spine with per-event `source`,
+  `ConfigStore` with effect declarations, and a phase-based turn pipeline
+  (a shared VERIFY stage for MoE and the single-loop path). Migration plan in
+  6 waves; gates listed in §6.
+- **Harness module audit** (`docs/analysis/2026-10-12-harness-module-audit.md`,
+  `docs/plans/2026-10-12-harness-module-audit-fixes.md`): ~90 confirmed defects
+  across 9 modules, plus 13 further findings added by the architecture pass
+  (missing ownership of tools / prompt blocks / log entries, three tool
+  registries, dead `OutputEvent.source`, unused `Logger.child`, diverged prompt
+  assembly, config-layer cross-domain mutation).
+
+### Changed
+
+- **AGENTS.md rewritten** (~1900 -> ~230 lines): the per-feature log moved to
+  `docs/agents/feature-history.md`; the file now holds positioning, working
+  rules, the architecture map and the invariants that are easy to break.
+- **Working rules revised**: spec-before-code for contract changes, one branch
+  per task with a reviewable diff, "is this a symptom or a structure?" check
+  before patching, and "an invariant without a check is text" - every new
+  architectural rule must ship with a test, guard or `check-arch` rule.
+
 ## [0.3.3] - 2026-10-11
 
 Audit of live session `ses_mv44qabg_s1przq` (`mma web`, single turn: 225 LLM
