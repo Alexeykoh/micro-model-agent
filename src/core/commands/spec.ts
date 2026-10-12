@@ -156,6 +156,12 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
     group: "agent",
   },
   {
+    name: "doctor",
+    description: t("repl.doctor"),
+    usage: t("repl.doctor_usage"),
+    group: "agent",
+  },
+  {
     name: "map",
     description: t("repl.map"),
     usage: t("repl.map_usage"),

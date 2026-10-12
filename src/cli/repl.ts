@@ -148,7 +148,7 @@ export class Repl implements ReplContext, Host {
    * Инертен, пока нет SessionManager; перепривязывается через `/reload`.
    */
   private sessionOutput?: SessionOutputSink;
-  private envReport?: EnvironmentReport;
+  public envReport?: EnvironmentReport;
   /** Фоновый пробник реально загруженного контекста модели (bootstrap). */
   private contextProbe?: Promise<ContextProbeResult | null>;
   /**

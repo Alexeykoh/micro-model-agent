@@ -44,6 +44,7 @@ import { errMsg } from "../utils";
 import { globalExportsDir } from "../config/paths";
 import { registerLspCommands } from "./repl-commands-lsp";
 import { registerSkillCommands } from "./repl-commands-skills";
+import { registerDoctorCommands } from "./repl-commands-doctor";
 
 const version = readMmaVersion();
 
@@ -84,6 +85,7 @@ export function registerAllCommands(ctx: ReplContext): void {
   registerOnboardingCommands(ctx);
   registerSessionCommands(ctx);
   registerSkillCommands(ctx);
+  registerDoctorCommands(ctx);
 }
 
 function registerBuiltinCommands(ctx: ReplContext): void {
@@ -1071,7 +1073,6 @@ function listPlugins(ctx: ReplContext, manager: PluginManager, showAll: boolean,
   }
 }
 
-
 function registerMmaCommands(ctx: ReplContext): void {
   registerRunCommands(ctx);
   registerConfigCommands(ctx);
@@ -1379,8 +1380,6 @@ function registerSessionCommands(ctx: ReplContext): void {
     },
   });
 }
-
-
 async function runConfigMigrate(ctx: ReplContext): Promise<void> {
   const { hasDomainFiles } = await import("../config/domains");
   const { loadConfig: loadCfg } = await import("../config/config");

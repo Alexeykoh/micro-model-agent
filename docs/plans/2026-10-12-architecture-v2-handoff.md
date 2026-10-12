@@ -229,7 +229,7 @@ W0 — если нужна дешёвая победа и разбор след�
 
 Единый реестр — [docs/agents/debt.md](../agents/debt.md) (правило 9: долг платится один
 раз, у каждого — критерий выхода и триггер). Открыто там: `per-session-singletons`,
-`doctor-command`, `split-bloated-files`. **W3 закрыт полностью** (W3.1–W3.5: `ConfigStore`
+`split-bloated-files`. **W3 закрыт полностью** (W3.1–W3.5: `ConfigStore`
 с эффектами, доменный персист `persistConfigChange` + `configVersion`, модульные ключи
 `ModuleDef.configKeys()`; см. [W3-спеку](../specs/2026-10-13-w3-config-store-design.md)).
 

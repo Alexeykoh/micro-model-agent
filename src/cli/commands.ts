@@ -18,6 +18,7 @@ import {
 } from "../modules/session/export";
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
+import { createDoctorCommand } from "./doctor-command";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { providerNameTaken } from "../modules/providers/naming";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
@@ -814,11 +815,9 @@ export function createProgram(): Command {
   buildProviderCommands(program);
   buildSessionCommands(program);
 
-  // Подключаем security-команды.
   createSecurityCommand(program);
-
-  // Подключаем plugin-команды.
   createPluginCommand(program);
+  createDoctorCommand(program);
 
   buildChangelogCommand(program);
 

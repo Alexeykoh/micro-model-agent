@@ -24,6 +24,7 @@ import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ToolContext } from "../tools/types";
 import type { OutputStream } from "../output/types";
+import type { EnvironmentReport } from "../core/environment";
 import type { PromptInput } from "./setup-prompt";
 
 /**
@@ -97,6 +98,8 @@ export interface CommandServices {
   readonly pluginManager?: PluginManager;
   readonly configDir: string;
   readonly baseDir: string;
+  /** Отчёт об окружении (bootstrap) — для `/doctor`. */
+  readonly envReport?: EnvironmentReport;
   runAgent(input: string): Promise<void>;
   showHelp(command?: string): void;
   /** Перестройка реестра команд + комплитера (после смены локали). */

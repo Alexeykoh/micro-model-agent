@@ -77,6 +77,7 @@ describe("каталог команд", () => {
       "src/cli/onboarding-commands.ts",
       "src/cli/repl-commands-lsp.ts",
       "src/cli/repl-commands-skills.ts",
+      "src/cli/repl-commands-doctor.ts",
     ].map(readCommandSources);
     const registered = new Set<string>();
     for (const src of sources) {

@@ -77,6 +77,18 @@ export interface ModuleDef<C = unknown> {
   configKeys?(): ConfigKeyDef[];
 }
 
+/**
+ * Один `ModuleHost` на процесс (решение W1 §4.3) — последний поднятый. Нужен
+ * диагностике (`mma doctor` / `/doctor`), чтобы показать health модулей; это
+ * чтение сводки, не владение жизненным циклом.
+ */
+let activeModuleHost: ModuleHost | undefined;
+
+/** Последний поднятый `ModuleHost` (undefined до bootstrap). */
+export function getActiveModuleHost(): ModuleHost | undefined {
+  return activeModuleHost;
+}
+
 /** Хост модулей: регистрация, setup/teardown, health, сбор вклада. */
 export class ModuleHost {
   private readonly defs = new Map<string, ModuleDef>();
@@ -104,9 +116,7 @@ export class ModuleHost {
     return this.resolveOrder();
   }
 
-  /** Сводка здоровья (для баннера/`session.jsonl`). */
-  // DEBT(doctor-command): сводка пока не выводится ни в баннер, ни в session.jsonl,
-  // ни в команду — агрегатор `mma doctor`/`/doctor` закроет пробел INV-5/6.
+  /** Сводка здоровья модулей. Выводится агрегатором `mma doctor`/`/doctor` (INV-5/6). */
   health(): Array<{ name: string; health: ModuleHealth }> {
     return [...this.defs.keys()].map((name) => ({
       name,
@@ -120,6 +130,7 @@ export class ModuleHost {
    * некритичного — degraded, остальные продолжают.
    */
   async setup(): Promise<void> {
+    activeModuleHost = this;
     for (const name of this.resolveOrder()) {
       const def = this.defs.get(name)!;
       try {
