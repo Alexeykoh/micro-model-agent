@@ -14,7 +14,6 @@ import type { ContentPart } from "../../llm/provider";
 import type { Plan, StepKind } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { toForwardSlash } from "../../tools/path-utils";
-import { readFileSync } from "fs";
 import type { NetworkSecurityConfig } from "../../config/types";
 import { performWebSearch, type SearchResult } from "../../tools/web-search";
 import { getSessionSecurityConfig } from "../security/session-isolation";
@@ -27,7 +26,8 @@ import {
   type ExecutionPluginState,
 } from "./execution-plugin";
 import { EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS as ERROR_SEARCH_MIN_INTERVAL_MS } from "../../config/timeouts";
-import { advancePlanIfStepComplete, provablyStale, type StepAdvanceDeps } from "./step-advance";
+import { advancePlanIfStepComplete, type StepAdvanceDeps } from "./step-advance";
+import { runFinalAudit, type FinalAuditHost } from "./final-audit";
 import type { Diagnostic } from "../../output/types";
 
 /** Реэкспорт для потребителей (тесты): реализация — в `step-advance.ts`. */
@@ -541,48 +541,9 @@ export class ExecutionModule implements AgentModule {
    * токен описания резолвится в существующий файл. Шаги без файловых токенов
    * остаются пендинг (верифицировать нечего).
    */
-  private autoCloseEvidenceSteps(plan: Plan): number {
-    let closed = 0;
-    for (const step of plan.steps) {
-      if (step.status === "done" || step.status === "skipped") continue;
-      const tokens = extractFileLikeTokens(stripUrls(step.description));
-      if (tokens.length === 0) continue;
-      const resolved = tokens.map((f) => findExistingFile(this.baseDir, f));
-
-      if (step.kind === "delete") {
-        // Delete-шаг закрыт, только если каждая именованная цель ОТСУТСТВУЕТ.
-        // (Старая existence-проверка маркила done при файлах на месте —
-        // deliverable-gate инвертировался.)
-        if (resolved.some((r) => r !== null)) continue;
-      } else {
-        // create: каждая цель существует И непуста. Пустой плейсхолдер — не
-        // deliverable, а аудитор смотрит только существование — автозакрытие
-        // дало бы ложный "passed".
-        if (resolved.some((r) => r === null)) continue;
-        const empty = resolved.some((r) => {
-          try {
-            return readFileSync(r!, "utf-8").trim().length < 10;
-          } catch {
-            return false; // unreadable — fall back to existence
-          }
-        });
-        if (empty) continue;
-        // Vacuous-truth guard (ses_mup6p61q): как в живом гейте выше —
-        // пендинг-шаг по доказанно старым файлам не закрываем, только по
-        // файлам, тронутым за жизнь плана (или нечитаемым — fail-open).
-        if (provablyStale(resolved, Date.parse(plan.createdAt))) continue;
-      }
-
-      step.status = "done";
-      step.note = `auto-closed by final audit: ${
-        step.kind === "delete" ? "all named files removed" : "all named files exist with content"
-      } (${tokens.join(", ")})`;
-      closed++;
-    }
-    return closed;
-  }
 
   /** Финальный аудит активного/завершённого плана: файлы, тесты, tsc, пендинги. Null — аудитить нечего. */
+  /** Финальный аудит активного/завершённого плана (реализация — `final-audit.ts`). */
   async runFinalAudit(): Promise<{
     passed: boolean;
     done: number;
@@ -591,56 +552,7 @@ export class ExecutionModule implements AgentModule {
     missingFiles: string[];
     summary: string;
   } | null> {
-    // Нет активного трекера: аудитим последний завершённый план вместо bail.
-    // План, закрытый через `plan update`, авто-архивируется и чистит трекер;
-    // без этого финальный аудит (тесты + tsc + файлы) молча скипался и модель
-    // заявляла успех на битых артефактах.
-    if (!this.tracker) {
-      if (!this.completedPlan) return null;
-      const plan = this.completedPlan;
-      const autoClosed = this.autoCloseEvidenceSteps(plan);
-      const audit = await this.auditor.audit(plan);
-      const pendingSteps = plan.steps.flatMap((s) =>
-        s.status !== "done" && s.status !== "skipped" ? [`${s.id}. ${s.description}`] : [],
-      );
-      const done = plan.steps.filter((s) => s.status === "done").length;
-      if (autoClosed > 0) {
-        this.store.saveActive(plan);
-        this.flushSessionPlan();
-      }
-      return {
-        passed: audit.passed && pendingSteps.length === 0,
-        done,
-        total: plan.steps.length,
-        pendingSteps,
-        missingFiles: audit.missingFiles,
-        summary: audit.summary,
-      };
-    }
-    if (this._auditSkipsRemaining > 0) {
-      this._auditSkipsRemaining--;
-      return null;
-    }
-    const plan = this.tracker.getPlan();
-    const autoClosed = this.autoCloseEvidenceSteps(plan);
-    if (autoClosed > 0) {
-      this.store.saveActive(plan);
-      this.flushSessionPlan();
-    }
-    const audit = await this.auditor.audit(plan);
-    const pendingSteps = plan.steps.flatMap((s) =>
-      s.status !== "done" && s.status !== "skipped" ? [`${s.id}. ${s.description}`] : [],
-    );
-    const done = plan.steps.filter((s) => s.status === "done").length;
-    const passed = audit.passed && pendingSteps.length === 0;
-    return {
-      passed,
-      done,
-      total: plan.steps.length,
-      pendingSteps,
-      missingFiles: audit.missingFiles,
-      summary: audit.summary,
-    };
+    return runFinalAudit(this.finalAuditHost());
   }
 
   /** Блок системного промпта с чеклистом плана (null без активного/незавершённого). */
@@ -752,6 +664,22 @@ export class ExecutionModule implements AgentModule {
       setPendingAutoArchive: () => {
         this.pendingAutoArchive = true;
       },
+    };
+  }
+
+  /** Хост финального аудита (INV-23) для `final-audit.ts`. */
+  private finalAuditHost(): FinalAuditHost {
+    return {
+      baseDir: this.baseDir,
+      tracker: this.tracker,
+      completedPlan: this.completedPlan,
+      auditor: this.auditor,
+      store: this.store,
+      auditSkipsRemaining: this._auditSkipsRemaining,
+      setAuditSkipsRemaining: (n) => {
+        this._auditSkipsRemaining = n;
+      },
+      flushSessionPlan: () => this.flushSessionPlan(),
     };
   }
 
