@@ -127,6 +127,11 @@ export interface SessionLogEntry {
   // Поля baseline_typecheck
   passed?: boolean;
   message?: string;
+  // Поля error (диагностика INV-14); `source` общий с llm_usage.
+  operation?: string;
+  errorKind?: string;
+  cause?: string;
+  recoverable?: boolean;
   // Поля reasoning_control; `level` — заодно severity персистентных output-событий
   level?: string;
   strategy?: string;

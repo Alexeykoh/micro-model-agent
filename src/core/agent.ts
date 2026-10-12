@@ -1157,9 +1157,13 @@ export class Agent {
                 "warn",
                 `Invalid JSON in tool_call arguments for "${chunk.toolCall.name}" (${chunk.toolCall.arguments.length} chars) — passing {}`,
               );
-              slog.logError(
-                `tool_args_parse_error: tool="${chunk.toolCall.name}" tool_call_id="${chunk.toolCall.id}" chars=${chunk.toolCall.arguments.length}`,
-              );
+              slog.logError({
+                source: `tool:${chunk.toolCall.name}`,
+                operation: "tool.args_parse",
+                kind: "degraded",
+                cause: `invalid JSON arguments (${chunk.toolCall.arguments.length} chars), passing {}`,
+                detail: { toolCallId: chunk.toolCall.id },
+              });
             }
             toolCalls.push({
               id: chunk.toolCall.id,
@@ -1234,7 +1238,13 @@ export class Agent {
             "warn",
             `Recoverable LLM error, feeding back (${state.llmErrorRetries}/${MAX_LLM_ERROR_RETRIES}): ${err.message}`,
           );
-          slog.logError(err.message);
+          slog.logError({
+            source: "core",
+            operation: "llm.call",
+            kind: "degraded",
+            recoverable: true,
+            cause: err.message,
+          });
           pluginManager.runOnError({ iteration: state.iteration, logger, contextManager }, err);
           contextManager.addMessage({
             role: "user",
@@ -1250,7 +1260,12 @@ export class Agent {
           "agent",
         );
         logger.error(`LLM call failed: ${err.message}`);
-        slog.logError(err.message);
+        slog.logError({
+          source: "core",
+          operation: "llm.call",
+          kind: "failed",
+          cause: err.message,
+        });
         pluginManager.runOnError({ iteration: state.iteration, logger, contextManager }, err);
         return {
           success: false,

@@ -51,6 +51,8 @@ function scrub(text: string | undefined): string | undefined {
 type StrKey =
   | "status"
   | "kind"
+  | "operation"
+  | "errorKind"
   | "provider"
   | "model"
   | "tool"
@@ -72,6 +74,8 @@ type NumKey =
 const STR_FIELDS: readonly StrKey[] = [
   "status",
   "kind",
+  "operation",
+  "errorKind",
   "provider",
   "model",
   "tool",
@@ -100,6 +104,9 @@ export interface LogTailEntry {
   content?: string;
   status?: string;
   kind?: string;
+  operation?: string;
+  errorKind?: string;
+  recoverable?: boolean;
   provider?: string;
   model?: string;
   promptTokens?: number;
@@ -134,6 +141,7 @@ function pick(e: SessionLogEntry): LogTailEntry {
   for (const f of STR_FIELDS) copyStr(out, e, f);
   for (const f of NUM_FIELDS) copyNum(out, e, f);
   if (typeof e.success === "boolean") out.success = e.success;
+  if (typeof e.recoverable === "boolean") out.recoverable = e.recoverable;
   // Единственное поле с разным именем: `tool_call_id` в логе → `toolCallId` на wire.
   if (typeof e.tool_call_id === "string") out.toolCallId = e.tool_call_id;
   const text = scrub(e.content ?? e.summary ?? e.message);

@@ -81,12 +81,19 @@ feature-history (вынесен из AGENTS.md).
 показывает короткую метку (`module:indexer` → `[indexer]`), машинные стоки видят
 канонический `Source`. Гвард `tests/output/source-filled.test.ts`.
 
+**W0.4 сделана** (`feat/w0-diagnostic-log-error`): `logError(diag: Diagnostic)`
+вместо строки. `Diagnostic` — дискриминированный союз (`cause` обязателен при
+`kind !== "ok"`, INV-12) с `source`/`operation`/`kind`/`recoverable`. Пишется в
+`session.jsonl` полями `source`/`operation`/`errorKind`/`cause`/`recoverable`
+(`content` = причина, старые читатели Trace работают); whitelist `log-api`
+расширен `operation`/`errorKind`/`recoverable`. 3 вызова в `agent.ts` переведены.
+
 | Задача | Что сделать | Инвариант |
 |---|---|---|
 | **W0.1** ✅ | `Source = mma \| module:<name> \| tool:<name> \| core` → заполнять `OutputEvent.source` (сейчас **всегда `""`**, `output/channel.ts`) | INV-13 |
 | **W0.2** | `Logger.child()` включать в модулях (сейчас **0 вызовов** по всему `src/`) | INV-13 |
 | **W0.3** | `SessionLogEntry.module: string` + шаблон `module_${string}` (по образцу `onboarding_${string}`) | INV-13 |
-| **W0.4** | `logError(message)` → `logError(Diagnostic { source, operation, kind, cause? })`; `cause` обязателен при `kind !== "ok"` | INV-12, INV-14 |
+| **W0.4** ✅ | `logError(message)` → `logError(Diagnostic { source, operation, kind, cause? })`; `cause` обязателен при `kind !== "ok"` | INV-12, INV-14 |
 | **W0.5** | `PromptBlock.source` + `degraded?: { reason }`; при выпадении по бюджету лог говорит «indexer: project map (2400 ток.) не поместился», а не обрезанный текст | INV-1, INV-6, INV-17 |
 | **W0.6** | Отдельные события для fail-open путей: `critic.error`, `verify.error`, `tool_attempt` — сейчас «сломался» неотличим от «сказал ок» | INV-12, INV-15 |
 

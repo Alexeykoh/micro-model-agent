@@ -11,6 +11,27 @@ export type OutputStream = "stdout" | "stderr";
  */
 export type Source = "mma" | "core" | `module:${string}` | `tool:${string}`;
 
+/** Тяжесть диагностики: `ok` — без причины, остальные обязаны нести `cause` (INV-12). */
+export type DiagnosticKind = "ok" | "degraded" | "failed" | "skipped" | "blocked";
+
+/**
+ * Единый объект ошибки/диагностики (INV-14): не строка, а `source` + `operation`
+ * + `kind` (+ `cause` при `kind !== "ok"`, INV-12) + `recoverable`/`detail`.
+ * Дискриминированный союз делает `cause` обязательным для не-`ok` на уровне типов,
+ * чтобы «сломался» нельзя было записать без причины (иначе он неотличим от успеха).
+ */
+export type Diagnostic = {
+  /** Источник записи (INV-13). */
+  source: Source;
+  /** Операция: `"tool.write_file"`, `"critic.verify"`, `"llm.call"`. */
+  operation: string;
+  recoverable?: boolean;
+  detail?: Record<string, unknown>;
+} & (
+  | { kind: "ok"; cause?: string }
+  | { kind: Exclude<DiagnosticKind, "ok">; cause: string }
+);
+
 /** Событие вывода: продюсеры эмитят, стоки рисуют/сохраняют. */
 export interface OutputEvent {
   /** Порядковый номер в шине. */

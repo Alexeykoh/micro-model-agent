@@ -1,5 +1,6 @@
 /** Логгер сессии: тонкая обёртка над SessionManager для цикла агента. */
 import type { SessionManager } from "../modules/session/manager";
+import type { Diagnostic } from "../output";
 import type { ToolCall } from "./types";
 import type { PrefixDelta } from "./agent/prefix-monitor";
 import type { CacheUsage } from "../llm/cache-usage";
@@ -438,14 +439,22 @@ export class SessionLogger {
   }
 
   /**
-   * Пишет ошибку в лог сессии.
-   * @param message текст ошибки.
+   * Пишет диагностику (INV-14) в лог сессии: `source`/`operation`/`errorKind`/
+   * `cause`/`recoverable`. `content` несёт причину — старые читатели лога
+   * (session show, Trace) продолжают работать без изменений.
+   * @param diag единый объект диагностики; `cause` обязателен при `kind !== "ok"`.
    */
-  logError(message: string): void {
+  logError(diag: Diagnostic): void {
+    const cause = diag.cause ? redactContextSecrets(diag.cause) : undefined;
     this.session?.appendLog({
       ts: new Date().toISOString(),
       type: "error",
-      content: redactContextSecrets(message),
+      content: cause ?? diag.operation,
+      source: diag.source,
+      operation: diag.operation,
+      errorKind: diag.kind,
+      cause,
+      recoverable: diag.recoverable,
     });
   }
 

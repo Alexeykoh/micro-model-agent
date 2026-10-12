@@ -15,6 +15,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   tags. The terminal renders the short owner label (`module:indexer` → `[indexer]`),
   so chat output is unchanged; machine-readable sinks and `session.jsonl` carry the
   canonical value. Guarded by `tests/output/source-filled.test.ts`.
+- **Errors are structured diagnostics (INV-14)** (`src/core/session-logger.ts`):
+  `SessionLogger.logError` now takes a `Diagnostic` object
+  (`source`/`operation`/`kind`/`cause`/`recoverable`) instead of a bare string.
+  The `Diagnostic` type is a discriminated union, so `cause` is required by the
+  compiler whenever `kind !== "ok"` (INV-12) — a failure can no longer be logged
+  without a reason. Entries persist `source`/`operation`/`errorKind`/`cause`/
+  `recoverable` (with `content` = cause for existing readers); the web Trace log
+  whitelist gained `operation`/`errorKind`/`recoverable`.
 
 ### Removed
 

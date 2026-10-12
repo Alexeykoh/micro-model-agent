@@ -190,9 +190,42 @@ describe("session-logger sanitization", () => {
     logger.logSystem(`system ${secret}`);
     logger.logAssistant(`answer ${secret}`, `reasoning ${secret}`);
     logger.saveAssistantMessage(`final ${secret}`);
-    logger.logError(`error ${secret}`);
+    logger.logError({ source: "core", operation: "test.op", kind: "failed", cause: `error ${secret}` });
     const all = JSON.stringify({ logs, messages });
     expect(all).not.toContain(secret);
+  });
+
+  it("logError persists the Diagnostic shape (INV-14)", () => {
+    const { logger, logs } = makeLogger();
+    logger.logError({
+      source: "tool:bash",
+      operation: "tool.args_parse",
+      kind: "degraded",
+      cause: "invalid JSON arguments",
+      recoverable: true,
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      type: "error",
+      source: "tool:bash",
+      operation: "tool.args_parse",
+      errorKind: "degraded",
+      cause: "invalid JSON arguments",
+      recoverable: true,
+      content: "invalid JSON arguments",
+    });
+  });
+
+  it("logError without a cause keeps operation as content (kind: ok)", () => {
+    const { logger, logs } = makeLogger();
+    logger.logError({ source: "core", operation: "probe.context", kind: "ok" });
+    expect(logs[0]).toMatchObject({
+      type: "error",
+      operation: "probe.context",
+      errorKind: "ok",
+      content: "probe.context",
+    });
+    expect(logs[0].cause).toBeUndefined();
   });
 
   it("logToolCall does not throw when sanitizer corrupts the arg JSON", () => {
