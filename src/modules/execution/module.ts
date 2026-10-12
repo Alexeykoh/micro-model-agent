@@ -13,7 +13,6 @@ import { getMessageText } from "../../llm/provider";
 import type { ContentPart } from "../../llm/provider";
 import type { Plan, StepKind } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
-import { toForwardSlash } from "../../tools/path-utils";
 import type { NetworkSecurityConfig } from "../../config/types";
 import { performWebSearch, type SearchResult } from "../../tools/web-search";
 import { getSessionSecurityConfig } from "../security/session-isolation";
@@ -28,6 +27,7 @@ import {
 import { EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS as ERROR_SEARCH_MIN_INTERVAL_MS } from "../../config/timeouts";
 import { advancePlanIfStepComplete, type StepAdvanceDeps } from "./step-advance";
 import { runFinalAudit, type FinalAuditHost } from "./final-audit";
+import { checkPlanAlignment, type PlanAlignmentHost } from "./plan-alignment";
 import type { Diagnostic } from "../../output/types";
 
 /** Реэкспорт для потребителей (тесты): реализация — в `step-advance.ts`. */
@@ -64,50 +64,6 @@ export type WebSearchRunner = (
  * hard-block'нуть легитимную запись на 3-м вызове (было: "3 вызовов подряд вне
  * текущего шага", пока агент писал deliverable текущего же шага).
  */
-const PLAN_ALIGNMENT_EXEMPT_TOOLS = new Set([
-  // structural / execution control
-  "plan",
-  "plan_step",
-  "todo",
-  "verify",
-  "enable_tools",
-  // filesystem reads
-  "list_dir",
-  "read_file",
-  "glob",
-  "grep",
-  "file_info",
-  // read-only diagnostics + code index
-  "lsp_check",
-  "project_map",
-  "chunk_query",
-  // web / memory / session reads
-  "web_search",
-  "web_fetch",
-  "web_browse",
-  "recall",
-  "search_history",
-  "session_info",
-  // process introspection
-  "process_list",
-  "process_log",
-  // interactive prompts (no filesystem mutation)
-  "question",
-  "approve",
-  // skills
-  "load_skill",
-]);
-
-/**
- * Каноническая форма файлового токена для alignment: прямые слэши + lowercase.
- * Вызовы тулов несут абсолютные Windows-пути (`C:\…\test\src\main.ts`), а шаги
- * плана — относительные (`src/main.ts`); сравнение сырых строк делало каждый
- * on-track write off-path (бэкслэш vs прямой слэш не пересекаются).
- * Нормализация обеих сторон чинит overlap через substring/`endsWith` ниже.
- */
-function planPathToken(p: string): string {
-  return toForwardSlash(p).toLowerCase();
-}
 
 
 /** Execution-модуль: план, stuck-детектор, аудитор, гейты выравнивания и автопоиск ошибок. */
@@ -634,7 +590,7 @@ export class ExecutionModule implements AgentModule {
       forbiddenBashFailures: this.forbiddenBashFailures,
       state: this.state,
       store: this.store,
-      checkPlanAlignment: (call) => this.checkPlanAlignment(call),
+      checkPlanAlignment: (call) => checkPlanAlignment(this.planAlignmentHost(), call),
       advancePlanIfStepComplete: (sl) => advancePlanIfStepComplete(this.stepAdvanceDeps(), sl),
       archiveCompletedPlan: () => this.archiveCompletedPlan(),
       maybeSearchError: (ctx, call) => this.maybeSearchError(ctx, call),
@@ -683,82 +639,11 @@ export class ExecutionModule implements AgentModule {
     };
   }
 
-  private checkPlanAlignment(call: any): string | null {
-    if (!this.tracker) return null;
-    const step = this.tracker.getCurrentStep();
-    if (!step) return null;
-
-    if (PLAN_ALIGNMENT_EXEMPT_TOOLS.has(call.name)) return null;
-
-    const stepPaths = extractFileLikeTokens(stripUrls(step.description)).map(planPathToken);
-    if (stepPaths.length === 0) return null;
-
-    // Инспектируем только path-like аргументы. JSON-стринг всего blob'а args
-    // скармливал кодовые токены `content` write_file/edit_file в off-path чек
-    // (напр. `import "./styles.css"` в теле файла) и давал фантомные alignment-
-    // варнинги на on-track записях.
-    const argStr = this.pathArgStrings(call.arguments).join(" ");
-    const callPaths = extractFileLikeTokens(stripUrls(argStr)).map(planPathToken);
-
-    if (callPaths.length === 0) return null;
-
-    // Файлы уже ЗАКРЫТЫХ (done/skipped) шагов — легитимные цели переписи:
-    // агент итерируется по ним, чиня LSP/type-ошибки. Блок здесь остановил бы
-    // нормальный багфикс.
-    const plan = this.tracker.getPlan();
-    const finishedPaths = new Set<string>();
-    for (const s of plan.steps) {
-      if (s.status === "done" || s.status === "skipped") {
-        extractFileLikeTokens(stripUrls(s.description))
-          .map(planPathToken)
-          .forEach((p) => finishedPaths.add(p));
-      }
-    }
-
-    // Двунаправленный overlap path-токенов, общий для ОБЕИХ проверок ниже. Шаг
-    // может звать "main.ts", а тул — "src/main.ts" (или наоборот): односторонний
-    // `s.includes(p)` частый nested/частичный кейс пропускал (было: перепись
-    // src/main.ts закрытого шага флаговалась off-path текущего и помогла
-    // hard-block'нуть третий вызов).
-    const matchesAny = (p: string, tokens: string[]) =>
-      tokens.some((t) => t === p || t.includes(p) || p.includes(t));
-    const finished = [...finishedPaths];
-
-    const offPath = callPaths.some((p) => {
-      if (matchesAny(p, finished)) return false;
-      return !matchesAny(p, stepPaths);
-    });
-    if (!offPath) return null;
-
-    return t("exec.plan_warning", {
-      step: String(step.id),
-      description: step.description,
-      tool: call.name,
-    });
+  /** Хост гейта выравнивания (INV-23) для `plan-alignment.ts`. */
+  private planAlignmentHost(): PlanAlignmentHost {
+    return { tracker: this.tracker };
   }
 
-  /** Строковые значения path-like аргументов вызова. Ограничивает off-path
-   *  чек аргументами, реально именующими файлы (path, file, dir, src, dst,
-   *  source, target, input, output, destination, glob, workdir, cwd, command,
-   *  pattern), полезную нагрузку не сканирует. */
-  private pathArgStrings(args: Record<string, unknown> | undefined): string[] {
-    if (!args) return [];
-    const out: string[] = [];
-    for (const [key, value] of Object.entries(args)) {
-      if (
-        !/path|file|dir|src|dst|source|target|input|output|destination|glob|workdir|cwd|command|pattern|query/i.test(
-          key,
-        )
-      ) {
-        continue;
-      }
-      if (typeof value === "string") out.push(value);
-      else if (Array.isArray(value)) {
-        for (const v of value) if (typeof v === "string") out.push(v);
-      }
-    }
-    return out;
-  }
 
 
   /**
