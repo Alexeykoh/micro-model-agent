@@ -101,7 +101,13 @@ export class CriticGate {
     deps.state.mutationsSinceCritic = 0;
 
     const verdict = await this.verifySafely(deps);
-    if (!verdict || verdict.status === "ok") return "pass";
+    if (!verdict) {
+      // Вердикта нет — но «critic_check» без записи о verdict неотличим от
+      // pass при разборе сессии. Пишем явный отказ.
+      this.logDegraded(deps);
+      return "pass";
+    }
+    if (verdict.status === "ok") return "pass";
 
     // Повтор уже виденной жалобы — считаем ДО takeFreshIssues (он пополняет набор).
     const isRepeat = isRepeatedVerdict(deps.state, verdict.issues);
@@ -173,6 +179,22 @@ export class CriticGate {
       mutations: deps.state.mutationsSinceCritic,
       tools: deps.toolEvents.map((e) => e.tool).slice(0, 8),
     });
+  }
+
+  /**
+   * Отказ вердикта пишется в `session.jsonl` явно (`degraded: true`).
+   * Fail-open остаётся (критик не блокирует агента), но «проверял и не
+   * сказал ничего» больше не выглядит как «проверил и сказал ок».
+   */
+  private logDegraded(deps: CriticGateDeps): void {
+    deps.slog.logCritic("critic_verdict", {
+      status: "none",
+      summary: "no verdict (degraded)",
+      issueCount: 0,
+      degraded: true,
+      iteration: deps.iteration,
+    });
+    deps.logger.diagnostic("warn", "Critic returned no verdict (degraded, fail-open)");
   }
 
   private logVerdict(deps: CriticGateDeps, verdict: CriticVerdict, count: number): void {

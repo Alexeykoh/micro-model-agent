@@ -1,0 +1,183 @@
+import { describe, it, expect } from "vitest";
+import { CriticClient } from "../../../src/modules/critic/client";
+import type { EvidencePack } from "../../../src/modules/critic/types";
+import type { LLMProvider } from "../../../src/llm/provider";
+
+/** Пауза, уважающая отмену: провайдер обязан реагировать на abort, иначе таймаут не проверить. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error("aborted"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    function onAbort() {
+      clearTimeout(timer);
+      reject(new Error("aborted"));
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** Провайдер, отдающий заскриптованные тексты по одному на вызов chat(). */
+function scripted(
+  texts: string[],
+  opts: { delayMs?: number; seenMaxTokens?: number[] } = {},
+): LLMProvider & { calls: { n: number } } {
+  const calls = { n: 0 };
+  return {
+    calls,
+    model: "m",
+    contextWindow: 1000,
+    countTokens: () => 0,
+    listModels: async () => [],
+    async *chat(_m, _t, signal, options) {
+      const i = calls.n++;
+      opts.seenMaxTokens?.push((options?.maxTokens as number) ?? 0);
+      if (opts.delayMs) await sleep(opts.delayMs, signal);
+      yield { type: "text" as const, content: texts[Math.min(i, texts.length - 1)] };
+      yield { type: "done" as const };
+    },
+  };
+}
+
+/** Провайдер, падающий на каждом вызове. */
+function throwing(): LLMProvider {
+  return {
+    model: "m",
+    contextWindow: 1000,
+    countTokens: () => 0,
+    listModels: async () => [],
+    // eslint-disable-next-line require-yield
+    async *chat() {
+      throw new Error("boom");
+    },
+  };
+}
+
+/** Пакет доказательств: 40 вызовов тулов по ~300 символов вывода (реалистичный длинный ход). */
+function bigPack(): EvidencePack {
+  const digest = Array.from(
+    { length: 40 },
+    (_, i) => `web_search[${i}] ${"x".repeat(280)}`,
+  ).join("\n");
+  return {
+    task: "собрать лендинг",
+    changedFiles: [],
+    commands: [],
+    toolDigest: digest,
+  };
+}
+
+const concern =
+  '{"status":"concern","summary":"gap","issues":[{"severity":"concern","claim":"c","problem":"p"}]}';
+const wantCheck =
+  '{"status":"concern","summary":"gap","issues":[],"checks":[{"tool":"read_file","args":{"path":"a.ts"}}]}';
+const finalOk = '{"status":"ok","summary":"verified fine","issues":[]}';
+
+describe("CriticClient degraded observability (§5.8, §1.10)", () => {
+  it("logs critic_degraded instead of silently passing when the verdict is unparseable", async () => {
+    const logs: string[] = [];
+    const client = new CriticClient({
+      provider: scripted(["Looks fine to me, nothing to add."]),
+      onDiagnostic: (m) => logs.push(m),
+    });
+    expect(await client.verify(bigPack())).toBeNull();
+    expect(logs.some((l) => l.includes("critic_degraded"))).toBe(true);
+  });
+
+  it("logs critic_degraded when jsonrepair rescues a truncated verdict into a false ok", async () => {
+    // Обрезанный по maxTokens вердикт не разбирается, а чинится: verdict
+    // получается валидным, но это НЕ то, что модель сказала. Раньше это
+    // проходило как молчаливый pass.
+    const logs: string[] = [];
+    const client = new CriticClient({
+      provider: scripted(['{"status":"ok","summary":"fine","iss']),
+      onDiagnostic: (m) => logs.push(m),
+    });
+    const verdict = await client.verify(bigPack());
+    expect(verdict?.status).toBe("ok");
+    expect(logs.some((l) => l.includes("critic_degraded"))).toBe(true);
+  });
+
+  it("logs critic_degraded when the provider throws", async () => {
+    const logs: string[] = [];
+    const client = new CriticClient({ provider: throwing(), onDiagnostic: (m) => logs.push(m) });
+    expect(await client.verify(bigPack())).toBeNull();
+    expect(logs.some((l) => l.includes("critic_degraded"))).toBe(true);
+  });
+
+  it("logs critic_degraded when a later pass of the check loop breaks", async () => {
+    const logs: string[] = [];
+    const client = new CriticClient({
+      provider: scripted([concern, wantCheck, "garbage!!!"]),
+      onDiagnostic: (m) => logs.push(m),
+    });
+    const verdict = await client.verify(bigPack(), undefined, {
+      runCheck: async () => ({ ok: true, output: "x" }),
+    });
+    // Fail-open к вердикту прохода 1 — но об обрыве обязаны знать.
+    expect(verdict?.status).toBe("concern");
+    expect(logs.some((l) => l.includes("critic_degraded"))).toBe(true);
+  });
+
+  it("does not log degradation when the verdict parses cleanly", async () => {
+    const logs: string[] = [];
+    const client = new CriticClient({
+      provider: scripted(['{"status":"ok","summary":"fine","issues":[]}']),
+      onDiagnostic: (m) => logs.push(m),
+    });
+    expect((await client.verify(bigPack()))?.status).toBe("ok");
+    expect(logs.filter((l) => l.includes("critic_degraded"))).toHaveLength(0);
+  });
+});
+
+describe("CriticClient budget (§5.8)", () => {
+  it("gives each LLM call its own timeout, not one budget for the whole chain", async () => {
+    // Три прохода по 40мс при timeoutMs=60: общий бюджет истёк бы на втором
+    // проходе, per-call — нет.
+    const provider = scripted([concern, wantCheck, finalOk], { delayMs: 40 });
+    const client = new CriticClient({
+      provider,
+      timeoutMs: 60,
+      onDiagnostic: () => {},
+    });
+    const verdict = await client.verify(bigPack(), undefined, {
+      runCheck: async () => ({ ok: true, output: "x" }),
+    });
+    expect(provider.calls.n).toBe(3);
+    expect(verdict?.summary).toBe("verified fine");
+  });
+
+  it("still aborts a single hanging call at timeoutMs", async () => {
+    const provider = scripted([finalOk], { delayMs: 500 });
+    const logs: string[] = [];
+    const client = new CriticClient({
+      provider,
+      timeoutMs: 30,
+      onDiagnostic: (m) => logs.push(m),
+    });
+    expect(await client.verify(bigPack())).toBeNull();
+    expect(logs.some((l) => l.includes("critic_degraded"))).toBe(true);
+  });
+
+  it("defaults maxTokens high enough to hold a verdict with issues", async () => {
+    const seen: number[] = [];
+    const client = new CriticClient({ provider: scripted([finalOk], { seenMaxTokens: seen }) });
+    await client.verify(bigPack());
+    expect(seen[0]).toBeGreaterThanOrEqual(2048);
+  });
+
+  it("honours an explicit maxTokens override", async () => {
+    const seen: number[] = [];
+    const client = new CriticClient({
+      provider: scripted([finalOk], { seenMaxTokens: seen }),
+      maxTokens: 4096,
+    });
+    await client.verify(bigPack());
+    expect(seen[0]).toBe(4096);
+  });
+});

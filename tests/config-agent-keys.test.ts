@@ -13,7 +13,8 @@ describe("registry: critic keys", () => {
     expect(getConfigValue(c, "critic.enabled").value).toBe(true);
     expect(getConfigValue(c, "critic.maxCalls").value).toBe(4);
     expect(getConfigValue(c, "critic.maxRepairCycles").value).toBe(1);
-    expect(getConfigValue(c, "critic.timeoutMs").value).toBe(15000);
+    expect(getConfigValue(c, "critic.timeoutMs").value).toBe(60000);
+    expect(getConfigValue(c, "critic.maxTokens").value).toBe(2048);
   });
 
   it("writes booleans and ints into the nested config", () => {
@@ -26,6 +27,9 @@ describe("registry: critic keys", () => {
 
     expect(setConfigValue(c, "critic.timeoutMs", "30000").ok).toBe(true);
     expect(c.critic.timeoutMs).toBe(30000);
+
+    expect(setConfigValue(c, "critic.maxTokens", "4096").ok).toBe(true);
+    expect(c.critic.maxTokens).toBe(4096);
   });
 
   it("rejects an out-of-range value", () => {

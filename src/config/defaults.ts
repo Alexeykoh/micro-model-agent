@@ -25,7 +25,10 @@ export const DEFAULTS: AppConfig = {
     tools: true,
     maxCalls: 4,
     maxRepairCycles: 1,
-    timeoutMs: 15000,
+    // Таймаут ОДНОГО LLM-вызова (раньше — на всю цепочку из трёх проходов,
+    // из-за чего второй проход на длинном пакете не успевал: §5.8 аудита).
+    timeoutMs: 60000,
+    maxTokens: 2048,
   },
   tools: {
     // Автосужение P5 (2026-09-28): enableOnDemand:true показывает только

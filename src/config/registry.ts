@@ -312,7 +312,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     domain: "agent",
     valueType: "int",
     min: 1000,
-    max: 120000,
+    max: 300000,
     step: 1000,
     reconfigure: true,
     get: (c) => c.critic?.timeoutMs ?? DEFAULTS.critic.timeoutMs,
@@ -373,6 +373,20 @@ const DEFINITIONS: ConfigKeyDef[] = [
       if (entries.length === 0) return null;
       const found = entries.some((e) => (e.label || e.type) === s || e.type === s);
       return found ? null : "invalid";
+    },
+  },
+  {
+    key: "critic.maxTokens",
+    aliases: [],
+    domain: "agent",
+    valueType: "int",
+    min: 256,
+    max: 32768,
+    step: 256,
+    reconfigure: true,
+    get: (c) => c.critic?.maxTokens ?? DEFAULTS.critic.maxTokens,
+    set: (c, v) => {
+      c.critic = { ...(c.critic ?? DEFAULTS.critic), maxTokens: v as number };
     },
   },
   {

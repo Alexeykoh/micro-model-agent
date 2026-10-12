@@ -45,6 +45,25 @@ describe("CriticGate", () => {
     expect(await gate.evaluate(deps())).toBe("pass");
   });
 
+  it("logs a degraded verdict record when the critic returns nothing", async () => {
+    // Fail-open, но «critic_check» без следа о вердикте читается как pass.
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => null, buildPack: (d: any) => d });
+    const d = deps();
+    expect(await gate.evaluate(d)).toBe("pass");
+    const verdictCall = d.slog.logCritic.mock.calls.find((c: any[]) => c[0] === "critic_verdict");
+    expect(verdictCall).toBeDefined();
+    expect(verdictCall?.[1]).toMatchObject({ degraded: true, status: "none" });
+    expect(d.contextManager.addMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not log a degraded record for a real ok verdict", async () => {
+    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
+    const d = deps();
+    await gate.evaluate(d);
+    const verdictCall = d.slog.logCritic.mock.calls.find((c: any[]) => c[0] === "critic_verdict");
+    expect(verdictCall).toBeUndefined();
+  });
+
   it("injects advice without retry on concern", async () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => concern, buildPack: (d: any) => d });
     const d = deps();

@@ -924,7 +924,8 @@ export class Agent {
       tools: config.critic?.tools ?? true,
       maxCalls: config.critic?.maxCalls ?? 4,
       maxRepairCycles: config.critic?.maxRepairCycles ?? 1,
-      timeoutMs: config.critic?.timeoutMs ?? 15000,
+      timeoutMs: config.critic?.timeoutMs ?? 60000,
+      maxTokens: config.critic?.maxTokens ?? 2048,
     };
     // Phase 2: выделенные провайдер/модель, если настроены, иначе активный
     // провайдер (v1). Битый оверрайд — warn + фолбэк, никогда не молча.
@@ -935,6 +936,10 @@ export class Agent {
     const criticClient = new CriticClient({
       provider: criticProvider,
       timeoutMs: criticConfig.timeoutMs,
+      maxTokens: criticConfig.maxTokens,
+      // Деградация критика fail-open по контракту, но обязана быть видна в
+      // verbose-логе: иначе «молча сказал ок» при поломке читается как успех.
+      onDiagnostic: (m) => logger.diagnostic("warn", m),
     });
     const criticGate = new CriticGate({
       enabled: criticConfig.enabled,

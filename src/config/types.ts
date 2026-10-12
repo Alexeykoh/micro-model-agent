@@ -505,7 +505,13 @@ export interface CriticConfig {
   maxCalls: number;
   /** Ограниченное число critical-ремонтных циклов за прогон. */
   maxRepairCycles: number;
+  /**
+   * Таймаут **одного** LLM-вызова критика, мс (не на всю цепочку проходов:
+   * общий бюджет на длинном пакете ронял второй проход в fail-open).
+   */
   timeoutMs: number;
+  /** Лимит токенов на один LLM-вызов критика: режется длинный вердикт с issues. */
+  maxTokens: number;
 }
 
 export interface PluginsConfig {

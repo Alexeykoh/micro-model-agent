@@ -16,12 +16,29 @@ Rules:
 Reply with JSON ONLY:
 {"status":"ok|concern|critical","summary":"one line","issues":[{"severity":"info|concern|critical","claim":"...","problem":"...","suggestion":"...","evidence":"..."}]}`;
 
-/** Опции клиента критика: провайдер, лимит токенов, таймаут. */
+/** Опции клиента критика: провайдер, бюджеты, канал диагностики. */
 export interface CriticClientOptions {
   provider: LLMProvider;
+  /** Лимит токенов на один LLM-вызов критика. */
   maxTokens?: number;
+  /**
+   * Таймаут **одного** LLM-вызова, мс. Раньше это был общий бюджет на всю
+   * цепочку из трёх проходов: на длинном пакете доказательств второй проход
+   * успевал выесть остаток первого и ронял вердикт в fail-open.
+   */
   timeoutMs?: number;
+  /**
+   * Канал диагностики деградации (`critic_degraded: <reason>`). Критик
+   * fail-open по контракту, но молчаливый pass неотличим от успеха —
+   * каждый отказ обязан быть виден в логе (§5.8 аудита).
+   */
+  onDiagnostic?: (message: string) => void;
 }
+
+/** Дефолтный лимит токенов вердикта: хватает на JSON с issues на длинном пакете. */
+const DEFAULT_MAX_TOKENS = 2048;
+/** Дефолтный таймаут одного LLM-вызова критика. */
+const DEFAULT_TIMEOUT_MS = 60000;
 
 /** Раннер одной проверки критика: тул + args → успех и вывод. */
 export interface CriticRunCheck {
@@ -55,25 +72,41 @@ export class CriticClient {
     signal?: AbortSignal,
     opts?: { runCheck?: CriticRunCheck },
   ): Promise<CriticVerdict | null> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs ?? 15000);
-    const onAbort = () => controller.abort();
-    signal?.addEventListener("abort", onAbort);
     try {
       const messages: Message[] = [
         { role: "system", content: CRITIC_SYSTEM_PROMPT },
         { role: "user", content: renderPack(pack) },
       ];
-      const firstRaw = await this.chat(messages, controller.signal);
-      const first = parseVerdict(firstRaw);
+      const firstRaw = await this.chat(messages, signal);
+      const first = this.parseVerdictChecked(firstRaw, "pass-1");
       if (!first || first.status === "ok" || !opts?.runCheck) return first;
-      return await this.verifyWithChecks(messages, firstRaw, first, controller.signal, opts.runCheck);
-    } catch {
+      return await this.verifyWithChecks(messages, firstRaw, first, signal, opts.runCheck);
+    } catch (err) {
+      this.degrade(`llm_error: ${describe(err)}`);
       return null;
-    } finally {
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", onAbort);
     }
+  }
+
+  /**
+   * Разбор вердикта с обязательным отчётом о деградации: нечитаемый ответ —
+   * это `critic_degraded`, а «вердикта нет» молчать не должен.
+   */
+  private parseVerdictChecked(raw: string, stage: string): CriticVerdict | null {
+    const parsed = parseVerdictDetailed(raw);
+    if (!parsed.verdict) {
+      this.degrade(`unparseable_verdict (${stage}): ${truncate(raw, 120)}`);
+      return null;
+    }
+    if (parsed.repaired) {
+      // jsonrepair спас обрезанный по maxTokens вердикт — получен валидный
+      // JSON, но не тот, что сказала модель. Для «ok» это ложный pass.
+      this.degrade(`repaired_verdict (${stage}): ${truncate(raw, 120)}`);
+    }
+    return parsed.verdict;
+  }
+
+  private degrade(reason: string): void {
+    this.opts.onDiagnostic?.(`critic_degraded: ${reason}`);
   }
 
   /**
@@ -86,14 +119,16 @@ export class CriticClient {
     messages: Message[],
     firstRaw: string,
     first: CriticVerdict,
-    signal: AbortSignal,
+    signal: AbortSignal | undefined,
     runCheck: CriticRunCheck,
   ): Promise<CriticVerdict> {
     try {
       messages.push({ role: "assistant", content: firstRaw });
       messages.push({ role: "user", content: CHECK_REQUEST_INSTRUCTION });
       const checksRaw = await this.chat(messages, signal);
-      const checks = parseChecks(parseVerdict(checksRaw));
+      const checksParsed = this.parseVerdictChecked(checksRaw, "checks-request");
+      if (!checksParsed) return first;
+      const checks = parseChecks(checksParsed);
       if (checks.length === 0) return first;
       const results = await runCriticChecks(checks, runCheck);
       if (results.length === 0) return first;
@@ -103,21 +138,38 @@ export class CriticClient {
         role: "user",
         content: `CHECK RESULTS (ground truth):\n${renderCheckResults(results)}\n\n${FINAL_VERDICT_INSTRUCTION}`,
       });
-      return parseVerdict(await this.chat(messages, signal)) ?? first;
-    } catch {
+      const final = this.parseVerdictChecked(await this.chat(messages, signal), "pass-3");
+      return final ?? first;
+    } catch (err) {
+      // Fail-open к вердикту прохода 1 — но обрыв виден в логе.
+      this.degrade(`checks_loop_failed: ${describe(err)}`);
       return first;
     }
   }
 
-  private async chat(messages: Message[], signal: AbortSignal): Promise<string> {
-    let text = "";
-    for await (const chunk of this.opts.provider.chat(messages, undefined, signal, {
-      maxTokens: this.opts.maxTokens ?? 512,
-      reasoningEffort: "none",
-    })) {
-      if (chunk.type === "text" && chunk.content) text += chunk.content;
+  /** Один LLM-вызов под собственным таймаутом + внешней отменой. */
+  private async chat(messages: Message[], signal?: AbortSignal): Promise<string> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const onAbort = () => controller.abort();
+    signal?.addEventListener("abort", onAbort);
+    if (signal?.aborted) controller.abort();
+    try {
+      let text = "";
+      for await (const chunk of this.opts.provider.chat(messages, undefined, controller.signal, {
+        maxTokens: this.opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+        reasoningEffort: "none",
+      })) {
+        if (chunk.type === "text" && chunk.content) text += chunk.content;
+      }
+      if (controller.signal.aborted && !signal?.aborted) {
+        this.degrade(`call_timeout (${this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms)`);
+      }
+      return text;
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
     }
-    return text;
   }
 }
 
@@ -151,33 +203,65 @@ function renderPack(pack: EvidencePack): string {
 
 const SEVERITIES = new Set(["info", "concern", "critical"]);
 
-/** Парсит вердикт критика из сырого текста (строгий JSON → jsonrepair → вырезание блока). Null, если не вердикт. */
+/** Вердикт + признак, что JSON пришлось чинить (обрезан по maxTokens и т.п.). */
+export interface ParsedVerdict {
+  verdict: CriticVerdict | null;
+  repaired: boolean;
+}
+
+/** Парсит вердикт критика из сырого текста. Null, если не вердикт. */
 export function parseVerdict(text: string): CriticVerdict | null {
+  return parseVerdictDetailed(text).verdict;
+}
+
+/**
+ * Парсит вердикт, различая «разобралось само» и «починили jsonrepair».
+ * Второе — не ошибка парсинга, но и не доверие: починенный обрезанный вердикт
+ * может оказаться `ok`, которого модель не говорила.
+ */
+export function parseVerdictDetailed(text: string): ParsedVerdict {
   let parsed: unknown = null;
+  let repaired = false;
   try {
     parsed = JSON.parse(text);
   } catch {
     try {
       parsed = JSON.parse(jsonrepair(text));
+      repaired = true;
     } catch {
       const match = text.match(/\{[\s\S]*\}/);
-      if (!match) return null;
+      if (!match) return { verdict: null, repaired: false };
       try {
         parsed = JSON.parse(jsonrepair(match[0]));
+        repaired = true;
       } catch {
-        return null;
+        return { verdict: null, repaired: false };
       }
     }
   }
-  if (!parsed || typeof parsed !== "object") return null;
+  if (!parsed || typeof parsed !== "object") return { verdict: null, repaired };
   const obj = parsed as Record<string, unknown>;
   const status = obj.status;
-  if (status !== "ok" && status !== "concern" && status !== "critical") return null;
+  if (status !== "ok" && status !== "concern" && status !== "critical") return { verdict: null, repaired };
   const issues = parseIssuesList(obj.issues);
   // Запрошенные проверки верификации (Phase 2): несём сырыми, кап здесь;
   // форма + allowlist enforced в parseChecks, вслепую не доверяем.
   const checks = parseRawChecks(obj.checks);
-  return { status, summary: String(obj.summary ?? ""), issues, ...(checks ? { checks } : {}) };
+  return {
+    verdict: { status, summary: String(obj.summary ?? ""), issues, ...(checks ? { checks } : {}) },
+    repaired,
+  };
+}
+
+/** Текст ошибки/исключения одной строкой. */
+function describe(err: unknown): string {
+  return String((err as Error)?.message ?? err);
+}
+
+/** Обрезка для диагностики — логи не должны расти от сырого ответа модели. */
+function truncate(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
 }
 
 /** Проблемы вердикта с санитизированными severity; записи без claim+problem дропаются. */
