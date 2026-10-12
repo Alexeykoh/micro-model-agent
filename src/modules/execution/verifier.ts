@@ -3,10 +3,7 @@ import { existsSync, readFileSync } from "fs";
 import { resolve, extname, dirname, join } from "path";
 import { spawn } from "child_process";
 import { t } from "../../i18n/index";
-import type { MoEPlan, MoESubtask } from "./types";
 import type { StepKind } from "./planner";
-import type { AppConfig } from "../../config/types";
-import { validateExpertConfig } from "../../config/experts";
 import { findProjectRoot, resolveTscCommand } from "../lsp/project-root";
 import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
 import { findExistingFile } from "./auditor";
@@ -21,7 +18,7 @@ export interface VerificationItem {
 }
 
 /** Результат проверки machine-readable success_criteria одной подзадачи. */
-export interface SubtaskCriteriaResult {
+export interface CriteriaResult {
   errors: string[];
   /** LLM-only критерии (не машиночитаемые) — отдаются варнингами. */
   warnings: string[];
@@ -37,7 +34,7 @@ export interface StepVerificationResult {
 }
 
 /** Результат верификации MoE-манифеста: успех, ошибки, варнинги, детали. */
-export interface MoEVerificationResult {
+export interface ManifestVerificationResult {
   success: boolean;
   errors: string[];
   warnings: string[];
@@ -159,15 +156,15 @@ export class StepVerifier {
    * Остальное — LLM-only критерий: варнинг (не ошибка), чтобы Router всё равно
    * видел его в контексте.
    */
-  async verifySubtaskCriteria(subtask: MoESubtask): Promise<SubtaskCriteriaResult> {
+  async verifyCriteria(owner: { id: string; check?: string }): Promise<CriteriaResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
     const details: VerificationItem[] = [];
 
-    for (const criterion of subtask.success_criteria || []) {
+    for (const criterion of [owner.check].filter((c): c is string => !!c)) {
       const sep = criterion.indexOf(":");
       if (sep <= 0) {
-        warnings.push(`Subtask "${subtask.id}": non-machine criterion "${criterion}" (LLM-only)`);
+        warnings.push(`Step "${owner.id}": non-machine criterion "${criterion}" (LLM-only)`);
         continue;
       }
       const kind = criterion.slice(0, sep);
@@ -176,7 +173,7 @@ export class StepVerifier {
       if (kind === "file-exists") {
         const check = await this.checkFileExists(rest);
         details.push(check);
-        if (!check.passed) errors.push(`[${subtask.id}] ${check.message}`);
+        if (!check.passed) errors.push(`[${owner.id}] ${check.message}`);
         continue;
       }
 
@@ -184,7 +181,7 @@ export class StepVerifier {
         const colon = rest.indexOf(":");
         if (colon <= 0) {
           warnings.push(
-            `Subtask "${subtask.id}": malformed substring-in-file criterion "${criterion}"`,
+            `Step "${owner.id}": malformed substring-in-file criterion "${criterion}"`,
           );
           continue;
         }
@@ -194,13 +191,13 @@ export class StepVerifier {
         if (!existsSync(resolved)) {
           const item = { passed: false, message: t("verify.file_not_found", { path }) };
           details.push(item);
-          errors.push(`[${subtask.id}] ${item.message}`);
+          errors.push(`[${owner.id}] ${item.message}`);
           continue;
         }
         const content = readFileSync(resolved, "utf-8");
         const passed = content.includes(needle);
         details.push({ passed, message: `substring "${needle}" in ${path}: ${passed}` });
-        if (!passed) errors.push(`[${subtask.id}] "${needle}" not found in ${path}`);
+        if (!passed) errors.push(`[${owner.id}] "${needle}" not found in ${path}`);
         continue;
       }
 
@@ -214,66 +211,17 @@ export class StepVerifier {
             message: `command failed: ${rest} (${String(e.message).slice(0, 200)})`,
           };
           details.push(item);
-          errors.push(`[${subtask.id}] ${item.message}`);
+          errors.push(`[${owner.id}] ${item.message}`);
         }
         continue;
       }
 
-      warnings.push(`Subtask "${subtask.id}": unknown criterion kind "${kind}" (LLM-only)`);
+      warnings.push(`Step "${owner.id}": unknown criterion kind "${kind}" (LLM-only)`);
     }
 
     return { errors, warnings, details };
   }
 
-  /** Верифицирует MoE-манифест: эксперты, typecheck, файлы и критерии подзадач. */
-  async verifyMoEManifest(
-    plan: MoEPlan,
-    config: AppConfig,
-    allToolTags: string[],
-  ): Promise<MoEVerificationResult> {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const details: VerificationItem[] = [];
-
-    const expertErrors = validateExpertConfig(config, allToolTags);
-    for (const err of expertErrors) {
-      errors.push(err);
-      details.push({ passed: false, message: err });
-    }
-
-    const existingArtifacts = plan.subtasks
-      .flatMap((s) => s.allowed_files || [])
-      .map((f) => findExistingFile(this.baseDir, f))
-      .filter((f): f is string => !!f);
-    const tscResult = await this.runTypeCheck(existingArtifacts);
-    details.push(tscResult);
-    if (!tscResult.passed) {
-      errors.push(tscResult.message);
-    }
-
-    for (const sub of plan.subtasks) {
-      const fileChecks = await this.verifyArtifactFiles(sub.allowed_files || []);
-      for (const check of fileChecks) {
-        details.push(check);
-        if (!check.passed) {
-          errors.push(check.message);
-        }
-      }
-
-      // Machine-readable success_criteria (Plan 5.1) — проверяются до merge.
-      const criteria = await this.verifySubtaskCriteria(sub);
-      errors.push(...criteria.errors);
-      warnings.push(...criteria.warnings);
-      details.push(...criteria.details);
-    }
-
-    return {
-      success: errors.length === 0,
-      errors,
-      warnings,
-      details,
-    };
-  }
 
   /** Верифицирует шаг: файлы из описания существуют (+синтаксис; delete — наоборот). */
   async verifyStep(stepDescription: string, kind?: StepKind): Promise<StepVerificationResult> {

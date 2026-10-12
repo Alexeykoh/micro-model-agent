@@ -15,8 +15,6 @@ export {
 export type {
   AppConfig,
   ProviderConfig,
-  OrchestratorConfig,
   ContextBudget,
   ExpertConfig,
-  MoeConfig,
 } from "./types";

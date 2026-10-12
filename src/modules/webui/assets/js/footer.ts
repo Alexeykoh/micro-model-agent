@@ -1,4 +1,4 @@
-// Футер под композером: путь workspace, чип режима MoE и версия агента (справа).
+// Футер под композером: путь workspace и версия агента (справа).
 // Листовой модуль без зависимости на `dom.js` — элемент передаётся аргументом,
 // поэтому рендер тестируется в изоляции (tests/webui-workspace-footer.test.ts).
 
@@ -8,8 +8,6 @@ export interface FooterInput {
   workspace?: string;
   /** Версия установленного пакета. */
   version?: string;
-  /** MoE реально ведёт ход (не `moe.enabled`) — горит чип режима. */
-  moeActive?: boolean;
   /** Доступный апдейт (`current` → `latest`); чип с подсказкой-командой. */
   updateAvailable?: { current: string; latest: string };
   /** Локализованная подпись «dir». */
@@ -19,11 +17,10 @@ export interface FooterInput {
 }
 
 /**
- * Собирает футер: `dir <path>` … `MoE` `mma <version>`.
+ * Собирает футер: `dir <path>` … `mma <version>` (+ чип апдейта).
  *
- * Чип MoE — простой факт, а не счётчик сабтасков: прогресс и так виден по
- * строке чата и карточкам `subagent`, а точный `done/total` потребовал бы
- * прокидывать прогресс в снапшот и обновлять его на каждый сабтаск.
+ * Прогресс хода виден по строке чата и карточкам тулов, поэтому отдельного
+ * счётчика в футере нет.
  */
 export function renderFooter(
   el: HTMLElement,
@@ -33,28 +30,22 @@ export function renderFooter(
   const {
     workspace = "",
     version = "",
-    moeActive = false,
     updateAvailable = undefined,
     dirLabel,
     updateTitle = "",
   } = input;
-  const key = `${workspace} ${version} ${moeActive} ${updateAvailable?.latest ?? ""}`;
+  const key = `${workspace} ${version} ${updateAvailable?.latest ?? ""}`;
   // Перестраиваем только на смену входа: `renderState` дёргает рендер на каждый
   // снимок состояния (план/usage/фаза), а DOM-трогать там нечего.
   if (el.dataset.key === key) return;
   el.dataset.key = key;
   el.textContent = "";
-  el.hidden = !workspace && !version && !moeActive && !updateAvailable;
+  el.hidden = !workspace && !version && !updateAvailable;
   if (workspace) {
     el.appendChild(make("span", "ws-k", dirLabel));
     const v = make("span", "ws-v", workspace);
     v.title = workspace;
     el.appendChild(v);
-  }
-  if (moeActive) {
-    const chip = make("span", "ws-moe", "MoE");
-    chip.title = "MoE is orchestrating this turn";
-    el.appendChild(chip);
   }
   // Available update: `↑ 2.37.0` next to the installed `mma 2.36.0`. The arrow
   // reads as "newer available" at a glance, the title carries the command —

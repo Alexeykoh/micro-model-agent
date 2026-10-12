@@ -189,7 +189,6 @@ export function renderWorkspace(h: Dict): void {
     {
       workspace: h.workspace,
       version: h.version,
-      moeActive: h.moeActive === true,
       updateAvailable: h.updateAvailable || undefined,
       dirLabel: t("web.env.dir"),
       updateTitle: t("web.update.chip_title", { latest: h.updateAvailable?.latest ?? "" }),

@@ -7,11 +7,9 @@ function cfg(): AppConfig {
   return JSON.parse(JSON.stringify(DEFAULTS)) as AppConfig;
 }
 
-describe("registry: MoE + critic keys", () => {
+describe("registry: critic keys", () => {
   it("exposes defaults", () => {
     const c = cfg();
-    expect(getConfigValue(c, "moe.enabled").value).toBe(false);
-    expect(getConfigValue(c, "moe.maxReplanCycles").value).toBe(3);
     expect(getConfigValue(c, "critic.enabled").value).toBe(true);
     expect(getConfigValue(c, "critic.maxCalls").value).toBe(4);
     expect(getConfigValue(c, "critic.maxRepairCycles").value).toBe(1);
@@ -20,9 +18,6 @@ describe("registry: MoE + critic keys", () => {
 
   it("writes booleans and ints into the nested config", () => {
     const c = cfg();
-    expect(setConfigValue(c, "moe.enabled", "true").ok).toBe(true);
-    expect(c.moe.enabled).toBe(true);
-
     expect(setConfigValue(c, "critic.enabled", "false").ok).toBe(true);
     expect(c.critic.enabled).toBe(false);
 
@@ -39,41 +34,49 @@ describe("registry: MoE + critic keys", () => {
   });
 
   it("marks the keys as requiring reconfigure", () => {
-    const keys = ["moe.enabled", "moe.maxReplanCycles", "critic.enabled", "critic.maxCalls"];
-    for (const key of keys) {
+    for (const key of ["critic.enabled", "critic.maxCalls"]) {
       const def = configDefs().find((d) => d.key === key);
       expect(def?.reconfigure).toBe(true);
     }
   });
 });
 
-describe("registry: orchestrator keys + provider references", () => {
-  it("exposes the orchestrator planner keys (empty by default)", () => {
+describe("MoE keys are gone", () => {
+  // MoE was a second execution harness that replaced the single-loop path and
+  // bypassed every gate; it is removed (docs/specs/2026-10-12-remove-moe-design.md).
+  // A stale key from an old config must read as unknown, never silently resolve.
+  const removed = [
+    "moe.enabled",
+    "moe.maxReplanCycles",
+    "moe.parallelSubtasks",
+    "orchestrator.model",
+    "orchestrator.provider",
+    "orchestrator.contextWindow",
+  ];
+
+  it("no longer resolves in getConfigValue", () => {
     const c = cfg();
-    expect(getConfigValue(c, "orchestrator.model").value).toBe("");
-    expect(getConfigValue(c, "orchestrator.provider").value).toBe("");
-    expect(getConfigValue(c, "orchestrator.contextWindow").value).toBe(32768);
+    for (const key of removed) {
+      expect(getConfigValue(c, key).ok).toBe(false);
+    }
   });
 
-  it("writes orchestrator.model and clears it on empty (allowEmpty)", () => {
+  it("no longer accepts a write", () => {
     const c = cfg();
-    expect(setConfigValue(c, "orchestrator.model", "big-model").ok).toBe(true);
-    expect(c.orchestrator.model).toBe("big-model");
-    // Empty selection means "use the active model".
-    expect(setConfigValue(c, "orchestrator.model", "").ok).toBe(true);
-    expect(c.orchestrator.model).toBeUndefined();
+    for (const key of removed) {
+      expect(setConfigValue(c, key, "true").ok).toBe(false);
+    }
   });
 
-  it("validates orchestrator.provider against provider.entries", () => {
-    const c = cfg();
-    c.provider.entries = [{ type: "openai-compat", label: "local", baseUrl: "http://x/v1" }];
-    expect(setConfigValue(c, "orchestrator.provider", "local").ok).toBe(true);
-    expect(c.orchestrator.provider).toBe("local");
-    expect(setConfigValue(c, "orchestrator.provider", "missing").ok).toBe(false);
-    expect(setConfigValue(c, "orchestrator.provider", "").ok).toBe(true);
-    expect(c.orchestrator.provider).toBeUndefined();
+  it("is absent from the config definitions", () => {
+    const keys = configDefs().map((d) => d.key);
+    for (const key of removed) {
+      expect(keys).not.toContain(key);
+    }
   });
+});
 
+describe("registry: provider references", () => {
   it("critic.model accepts empty (use active model)", () => {
     const c = cfg();
     expect(setConfigValue(c, "critic.model", "judge").ok).toBe(true);
@@ -88,5 +91,10 @@ describe("registry: orchestrator keys + provider references", () => {
     expect(setConfigValue(c, "critic.provider", "judge").ok).toBe(true);
     expect(c.critic.provider).toBe("judge");
     expect(getConfigValue(c, "critic.provider").value).toBe("judge");
+  });
+
+  it("keeps the experts roster (subagent expert_tag still uses it)", () => {
+    const c = cfg();
+    expect(getConfigValue(c, "experts").ok).toBe(true);
   });
 });

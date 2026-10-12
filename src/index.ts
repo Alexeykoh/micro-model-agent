@@ -3,7 +3,6 @@
  */
 export { DEFAULTS, loadConfig } from "./config/index";
 export type { AppConfig, ProviderConfig, ContextBudget } from "./config/types";
-export type { OrchestratorConfig } from "./config/types";
 export { Logger } from "./logger/index";
 export { PromptBuilder } from "./core/index";
 export type {
@@ -28,7 +27,7 @@ export type {
 export { PLUGIN_PERMISSIONS } from "./modules/plugins/records";
 export type { PluginLoadFailure, PluginRecord } from "./modules/plugins/records";
 export type { RegisterResult } from "./modules/plugins/manager";
-export { OpenAICompatProvider, TokenCounter, parseChunks, OrchestratorClient } from "./llm/index";
+export { OpenAICompatProvider, TokenCounter, parseChunks } from "./llm/index";
 export type { LLMProvider, Message, Chunk, OpenAICompatConfig, ParsedResponse } from "./llm/index";
 export {
   ToolRegistry,

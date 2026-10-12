@@ -29,7 +29,6 @@ import { buildHostState, type WebIndexer, type WebLsp } from "./host-state";
 import { attachIndexWatcher } from "./index-watcher";
 import { cancelPendingQuestions } from "./session/prompt-io";
 import {
-  activeMoe,
   activeUsage,
   broadcast,
   createWebUiState,
@@ -220,14 +219,6 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         toolCtx: runner.toolCtx,
         sessionId: id,
       });
-      // Чип режима в футере: факт «MoE ведёт ход этой сессии». Флаг едет в
-      // снапшоте (не отдельным SSE-типом) — по правилу event-sourced state.
-      runner.agent.setMoEStateListener((active) => {
-        const next = active === true;
-        if ((state.moeSessions[id] === true) === next) return;
-        state.moeSessions[id] = next;
-        pushState(state, id);
-      });
       return runner;
     });
   }
@@ -278,7 +269,6 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           sessionManager: deps.sessionManager,
           execModule: activeExecModule(state, deps.execModule, sessionId),
           usage: activeUsage(state, sessionId),
-          moeActive: activeMoe(state, sessionId),
           updateAvailable: state.updateAvailable,
           contextProbe: probe,
           workspace: deps.baseDir,

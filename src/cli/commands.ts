@@ -632,42 +632,6 @@ function buildSessionCommands(program: Command): void {
       getDefaultChannel().writeLine(`${t("cli.session_field_context")}      ${meta.contextWindow}`);
       getDefaultChannel().writeLine(`${t("cli.session_field_project")}      ${meta.projectDir}`);
 
-      const moeEvents = sessionManager.loadSessionLog(id).filter((e) => e.type.startsWith("moe_"));
-      if (moeEvents.length > 0) {
-        getDefaultChannel().writeLine("");
-        getDefaultChannel().writeLine(pc.cyan(t("cli.session_moe_events")));
-        for (const e of moeEvents) {
-          const ts = e.ts.slice(11, 19);
-          if (e.type === "moe_subtask") {
-            getDefaultChannel().writeLine(
-              `  ${pc.dim(ts)} [subtask] ${e.subtaskId} (${e.expertTag}) ${e.status ?? ""}${
-                e.durationMs !== undefined ? ` ${e.durationMs}ms` : ""
-              }`,
-            );
-          } else if (e.type === "moe_plan") {
-            getDefaultChannel().writeLine(
-              `  ${pc.dim(ts)} [plan] ${e.status === "ok" ? e.subtaskIds?.join(", ") : e.status}`,
-            );
-          } else if (e.type === "moe_replan") {
-            getDefaultChannel().writeLine(
-              `  ${pc.dim(ts)} [replan] cycle ${e.cycle}: ${e.subtaskIds?.join(", ")}`,
-            );
-          } else {
-            const usage = e.usageByTag
-              ? " | usage: " +
-                Object.entries(e.usageByTag)
-                  .map(([tag, u]) => `${tag}=${u.totalTokens}t`)
-                  .join(", ")
-              : "";
-            getDefaultChannel().writeLine(
-              `  ${pc.dim(ts)} [verify] ${e.decision ?? e.status ?? "?"}${
-                e.explanation ? ` — ${e.explanation}` : ""
-              }${usage}`,
-            );
-          }
-        }
-      }
-
       const usageEvents = sessionManager.loadSessionLog(id).filter((e) => e.type === "llm_usage");
       if (usageEvents.length > 0) {
         let prompt = 0;

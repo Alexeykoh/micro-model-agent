@@ -5,5 +5,3 @@ export type { OpenAICompatConfig } from "./openai-compat";
 export { TokenCounter } from "./token-counter";
 export { parseChunks } from "./response";
 export type { ParsedResponse } from "./response";
-export { OrchestratorClient } from "./orchestrator";
-export type { OrchestratorConfig } from "./orchestrator";

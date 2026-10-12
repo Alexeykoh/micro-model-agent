@@ -117,17 +117,6 @@ export interface PricingConfig {
   overrides: Record<string, ModelPrice>;
 }
 
-export interface OrchestratorConfig {
-  model?: string;
-  /**
-   * Провайдер оркестратора: полный конфиг (entries[]/легаси) либо имя записи
-   * `provider.entries[]` (резолвится `resolveProviderRef`). Пусто — активный
-   * провайдер агента.
-   */
-  provider?: ProviderConfig | string;
-  /** Окно контекста модели оркестратора (дефолт 32768; запись перекрывает). */
-  contextWindow?: number;
-}
 
 export interface ContextBudget {
   systemPrompt: number;
@@ -224,23 +213,11 @@ export interface RetryConfig {
   noDataTimeoutMs?: number;
 }
 
-export interface MoeConfig {
-  enabled: boolean;
-  /** Макс. циклов план→выполнение→проверка за MoE-прогон (стартовый цикл + N-1 репланов). */
-  maxReplanCycles?: number;
-  /**
-   * Явный кап одновременных подзадач MoE. Не задан — берётся по бэкенду:
-   * локальный однодвижковый (LM Studio/Ollama) → 1, иначе
-   * `security.rateLimits.maxParallelTasks`.
-   */
-  parallelSubtasks?: number;
-}
-
 export interface ToolsConfig {
   /**
    * Теги тулов, всегда видимые LLM в главном цикле агента. Тулы вне этих тегов
    * (и не `alwaysOn`) скрыты из схемы и включаются по требованию через тул
-   * `enable_tools` либо уходят MoE-экспертам / субагентам.
+   * `enable_tools` либо уходят субагентам.
    */
   defaultTags: string[];
   /**
@@ -572,8 +549,6 @@ export interface AppConfig {
   version: string;
   model: string;
   provider: ProviderConfig;
-  orchestrator: OrchestratorConfig;
-  moe: MoeConfig;
   experts: Record<string, ExpertConfig>;
   /**
    * Переопределения возможностей по моделям (ключ — id модели). Самый приоритетный

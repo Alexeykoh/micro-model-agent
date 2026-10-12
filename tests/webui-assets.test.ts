@@ -217,12 +217,15 @@ describe("webui assets", () => {
     expect(js(a)).toContain("window.MmaSetup");
   });
 
-  it("wires the Agent settings panel (MoE + critic keys) without a critic SSE handler", () => {
+  it("wires the Agent settings panel (experts + critic keys) without a critic SSE handler", () => {
     const a = loadAssets();
     expect(js(a)).not.toContain('["critic"');
     expect(js(a)).not.toContain("onCritic");
     expect(js(a)).toContain("critic.enabled");
-    expect(js(a)).toContain("moe.enabled");
+    expect(js(a)).toContain("experts");
+    // MoE removed 2026-10-12: no MoE keys or chips anywhere in the assets.
+    expect(js(a)).not.toContain("moe.enabled");
+    expect(js(a)).not.toContain("moeActive");
     expect(a.html).toContain('data-p="agent"');
     expect(a.html).toContain('data-panel="agent"');
   });

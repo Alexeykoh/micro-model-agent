@@ -268,31 +268,6 @@ const DEFINITIONS: ConfigKeyDef[] = [
     },
   },
   {
-    key: "moe.enabled",
-    aliases: [],
-    domain: "agent",
-    valueType: "bool",
-    reconfigure: true,
-    get: (c) => c.moe?.enabled ?? DEFAULTS.moe.enabled,
-    set: (c, v) => {
-      c.moe = { ...(c.moe ?? DEFAULTS.moe), enabled: v as boolean };
-    },
-  },
-  {
-    key: "moe.maxReplanCycles",
-    aliases: [],
-    domain: "agent",
-    valueType: "int",
-    min: 0,
-    max: 10,
-    step: 1,
-    reconfigure: true,
-    get: (c) => c.moe?.maxReplanCycles ?? DEFAULTS.moe.maxReplanCycles,
-    set: (c, v) => {
-      c.moe = { ...(c.moe ?? DEFAULTS.moe), maxReplanCycles: v as number };
-    },
-  },
-  {
     key: "critic.enabled",
     aliases: [],
     domain: "agent",

@@ -536,30 +536,6 @@ export class SessionLogger {
     });
   }
 
-  /**
-   * Пишет событие наблюдаемости MoE (moe_plan / moe_subtask / moe_replan /
-   * moe_verify). Эмитят runWithMoE и MoEExecutor (Plan 4.2).
-   */
-  logMoE(
-    event: "moe_plan" | "moe_subtask" | "moe_replan" | "moe_verify",
-    data: Record<string, unknown>,
-  ): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
-      type: event,
-      // `content` — то, что читает `session show` и веб-транскрипт. Для
-      // упавшего сабтаска это обязательно причина (`error`), а не `summary`
-      // вида «Failed: task-2»: иначе в логе остаётся голый факт без причины.
-      content:
-        (data.detail as string) ??
-        (data.explanation as string) ??
-        (data.error as string) ??
-        (data.summary as string) ??
-        event,
-      ...data,
-    });
-  }
-
   /** Пишет событие онбординга (meet/init) для пост-анализа. */
   logOnboarding(event: string, data: Record<string, unknown> = {}): void {
     this.session?.appendLog({

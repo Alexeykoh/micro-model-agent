@@ -225,28 +225,4 @@ describe("session-logger sanitization", () => {
     expect(all).not.toContain("[REDACTED]");
   });
 
-  it("logMoE writes the failure reason as content for a failed subtask", () => {
-    // ses_muz7sg1l_0ankgu: content был "moe_subtask" / summary "Failed: task-2",
-    // и разбор сессии не давал причины — её приходилось выдумывать.
-    const { logger, logs } = makeLogger();
-    logger.logMoE("moe_subtask", {
-      subtaskId: "task-2",
-      status: "failed",
-      summary: "Failed: task-2",
-      error: 'Failed to load model "qwen/qwen3.5-9b". Engine protocol startup was aborted.',
-      infra: true,
-    });
-    const entry = logs.find((l) => l.type === "moe_subtask")!;
-    expect(entry.content).toContain("Engine protocol startup was aborted");
-    expect(entry.infra).toBe(true);
-  });
-
-  it("logMoE prefers explanation over error for verify events", () => {
-    const { logger, logs } = makeLogger();
-    logger.logMoE("moe_verify", {
-      decision: "infra_failure",
-      explanation: "2 subtasks failed because of an infrastructure problem",
-    });
-    expect(logs[0].content).toContain("infrastructure problem");
-  });
 });

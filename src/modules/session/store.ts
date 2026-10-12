@@ -14,7 +14,7 @@ import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
 
-/** Запись session-журнала (инструменты, usage, MoE, critic, пробы и т.д.). */
+/** Запись session-журнала (инструменты, usage, critic, пробы и т.д.). */
 export interface SessionLogEntry {
   ts: string;
   type:
@@ -35,10 +35,6 @@ export interface SessionLogEntry {
     | "baseline_typecheck"
     | "reasoning_control"
     | "context_probe"
-    | "moe_plan"
-    | "moe_subtask"
-    | "moe_replan"
-    | "moe_verify"
     | "output"
     | "critic_check"
     | "critic_verdict"

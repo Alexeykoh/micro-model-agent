@@ -104,15 +104,10 @@ describe("webui usage metrics", () => {
     expect(snapshot.version).not.toBe("");
   });
 
-  it("buildHostState reports moeActive only while MoE runs the turn", () => {
-    const off = buildHostState({ config: structuredClone(DEFAULTS) }, false);
-    expect(off.moeActive).toBeUndefined();
-
-    const on = buildHostState(
-      { config: structuredClone(DEFAULTS), moeActive: true },
-      true,
-    );
-    expect(on.moeActive).toBe(true);
+  it("buildHostState carries no MoE mode flag (single execution path)", () => {
+    // MoE removed 2026-10-12: the snapshot has no orchestration-mode field.
+    const snapshot = buildHostState({ config: structuredClone(DEFAULTS) }, false);
+    expect(snapshot).not.toHaveProperty("moeActive");
   });
 
   it("buildHostState surfaces captured usage in the snapshot", () => {

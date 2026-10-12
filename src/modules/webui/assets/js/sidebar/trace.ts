@@ -67,7 +67,6 @@ function rowLabel(entry: TraceEntry): string {
     case "retract": return t("web.sidebar.trace_retract");
     case "index": return t("web.sidebar.trace_index", { phase: entry.phase || "" });
     case "critic": return t("web.sidebar.trace_critic", { status: entry.status || "" });
-    case "moe": return t("web.sidebar.trace_moe");
     case "compaction": return t("web.sidebar.trace_compaction");
     case "probe": return t("web.sidebar.trace_probe");
     case "usage": return t("web.sidebar.trace_usage");
@@ -88,7 +87,7 @@ function rowArgs(entry: TraceEntry): string {
   }
   if (entry.kind === "question") return entry.text || "";
   // Диагностические строки несут смысл в одной строке (статус/лог/ретракт/
-  // индекс/критик/MoE/компакция/проба/usage/аудит/claim/вывод).
+  // индекс/критик/компакция/проба/usage/аудит/claim/вывод).
   if (entry.text && typeof entry.text === "string" && entry.kind !== "tool" && entry.kind !== "tool_fail") {
     const line = entry.text.split("\n").map((l: string) => l.trim()).find((l: string) => l.length > 0) || "";
     return line.slice(0, 160);
@@ -337,7 +336,7 @@ export function sidebarTraceEvent(kind: string, data: Dict): void {
 }
 
 /**
- * Докачка диагностических событий из session-лога (критик, MoE, компакция,
+ * Докачка диагностических событий из session-лога (критик, компакция,
  * проба контекста, usage, аудит, claim-retry, вывод). Отдельных SSE-продюсеров
  * нет — данные уже лежат в логе с `iteration`; тянем инкремент по курсору на
  * каждый `turn_end`. Живые tool/text-строки не дублируются (другие kinds).
@@ -374,14 +373,6 @@ function appendLogEntry(e: Dict): void {
     case "critic_escalation":
       pushRow(append({ kind: "critic", status: "escalation", text: e.content || "", iteration: e.iteration }));
       break;
-    case "moe_plan":
-    case "moe_subtask":
-    case "moe_replan":
-    case "moe_verify": {
-      const bits = [e.title, e.subtaskId, e.expertTag, e.status].filter((x) => typeof x === "string" && x).join(" · ");
-      pushRow(append({ kind: "moe", subtype: e.type, text: bits, iteration: e.iteration }));
-      break;
-    }
     case "compaction":
       pushRow(append({ kind: "compaction", text: e.content || "", iteration: e.iteration }));
       break;
@@ -479,13 +470,12 @@ export function renderDetail(entry: TraceEntry): void {
     body.appendChild(detailGroup(t("web.sidebar.detail_error"), codeBlock(entry.message || "")));
   } else if (
     entry.kind === "status" || entry.kind === "log" || entry.kind === "retract" ||
-    entry.kind === "index" || entry.kind === "critic" || entry.kind === "moe" ||
+    entry.kind === "index" || entry.kind === "critic" ||
     entry.kind === "compaction" || entry.kind === "probe" || entry.kind === "usage" ||
     entry.kind === "audit" || entry.kind === "claim" || entry.kind === "output"
   ) {
     const title =
-      entry.kind === "moe" && entry.subtype ? entry.subtype
-      : entry.kind === "log" && entry.level ? "log · " + entry.level
+      entry.kind === "log" && entry.level ? "log · " + entry.level
       : entry.kind === "index" && entry.phase ? "index · " + entry.phase
       : entry.kind === "critic" && entry.status ? "critic · " + entry.status
       : entry.kind === "claim" && entry.subkind ? "claim_retry · " + entry.subkind

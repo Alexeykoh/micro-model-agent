@@ -64,23 +64,12 @@ describe("workspace footer line", () => {
     expect(line.querySelector(".ws-ver")?.textContent).toBe("mma 2.30.0");
   });
 
-  it("lights the MoE chip only while MoE runs the turn", () => {
+  it("has no MoE chip (the second execution path was removed)", () => {
+    // MoE removed 2026-10-12: the footer carries path, version and update chip.
     draw({ workspace: "E:\\p", version: "2.29.1" });
     expect(line.querySelector(".ws-moe")).toBeNull();
-
-    draw({ workspace: "E:\\p", version: "2.29.1", moeActive: true });
-    expect(line.hidden).toBe(false);
-    expect(line.querySelector(".ws-moe")?.textContent).toBe("MoE");
-
-    // Плановый снимок без флага гасит чип: MoE отдал ход одиночному циклу.
-    draw({ workspace: "E:\\p", version: "2.29.1" });
-    expect(line.querySelector(".ws-moe")).toBeNull();
-  });
-
-  it("keeps the chip visible without a version", () => {
-    draw({ moeActive: true });
-    expect(line.hidden).toBe(false);
-    expect(line.querySelector(".ws-moe")?.textContent).toBe("MoE");
+    // dir label + workspace path + version, and nothing for a mode chip.
+    expect(line.children.length).toBe(3);
   });
 
   it("shows an update chip with the new version and the install hint", () => {
@@ -112,13 +101,14 @@ describe("workspace footer line", () => {
     expect(line.querySelector(".ws-upd")).toBeNull();
   });
 
-  it("coexists with the MoE chip", () => {
+  it("shows path, update chip and version together", () => {
     draw({
+      workspace: "E:\\p",
       version: "2.36.0",
-      moeActive: true,
       updateAvailable: { current: "2.36.0", latest: "2.37.0" },
     });
-    expect(line.querySelector(".ws-moe")?.textContent).toBe("MoE");
     expect(line.querySelector(".ws-upd")?.textContent).toBe("↑ 2.37.0");
+    expect(line.querySelector(".ws-ver")?.textContent).toBe("mma 2.36.0");
+    expect(line.children.length).toBe(4);
   });
 });

@@ -234,12 +234,10 @@ export const subagentTool: ToolDefinition = {
         estimatedTokens: 150,
       };
 
-      // MoE — TOP-LEVEL режим оркестрации: субагент от тула subagent всегда идёт
-      // plain single-agent циклом. Шаринг родительского конфига заставлял каждого
-      // MoE-субагента реентерить runWithMoE — планировать свои сабтаски и рекурсивно
-      // спавнить вложенных субагентов (лимит — лишь maxRecursionDepth), что вешало
-      // исполнение на минуты без прогресс-событий.
-      const subConfig = { ...ctx.config, moe: { ...ctx.config.moe, enabled: false } };
+      // Сабагент идёт тем же одиночным циклом, что и родитель: рекурсивный Agent
+      // с ограничением maxRecursionDepth. Отдельного «режима оркестрации» больше нет
+      // (MoE удалён), поэтому и гасить нечего — конфиг просто копируется.
+      const subConfig = { ...ctx.config };
 
       const subDeps = {
         config: subConfig,

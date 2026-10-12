@@ -15,14 +15,6 @@ export const DEFAULTS: AppConfig = {
     baseUrl: "http://localhost:1234/v1",
     apiKey: "not-needed",
   },
-  orchestrator: {
-    model: undefined,
-    provider: undefined,
-  },
-  moe: {
-    enabled: false,
-    maxReplanCycles: 3,
-  },
   critic: {
     enabled: true,
     // Phase 2: выделенные provider/model — opt-in; пока не заданы, делит активный

@@ -194,11 +194,6 @@ function applyEnvVars(config: AppConfig): { config: AppConfig; overrides: EnvOve
     record("autoPlan", v);
     result.autoPlan = v;
   }
-  if (env[MMA_ENV.MOE_ENABLED]) {
-    const next = { ...result.moe, enabled: env[MMA_ENV.MOE_ENABLED] === "true" };
-    record("moe", next);
-    result.moe = next;
-  }
   if (env[MMA_ENV.CONTEXT_LOG]) {
     const next = { ...result.contextLog, enabled: env[MMA_ENV.CONTEXT_LOG] !== "false" };
     record("contextLog", next);

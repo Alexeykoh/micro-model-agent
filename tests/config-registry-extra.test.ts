@@ -133,17 +133,12 @@ describe("registry keys", () => {
     expect(desc.length).toBeGreaterThan(0);
   });
 
-  it("reads and writes moe.parallelSubtasks, 0 meaning auto", () => {
+  it("parallel sub-agents are capped by the executor, not by a config key", () => {
+    // MoE removed: the cap lives in ToolBatchExecutor (security.rateLimits.maxParallelTasks),
+    // so there is no registry key to write.
     const cfg = freshCfg();
-    const written = setConfigValue(cfg, "moe.parallelSubtasks", "3");
-    expect(written.ok).toBe(true);
-    expect(cfg.moe.parallelSubtasks).toBe(3);
-
-    const back = setConfigValue(cfg, "moe.parallelSubtasks", "0");
-    expect(back.ok).toBe(true);
-    // 0 = авто: значение не хранится, чтобы неотличимо от дефолта.
-    expect(cfg.moe.parallelSubtasks).toBeUndefined();
-    expect(getConfigValue(cfg, "moe.parallelSubtasks")).toMatchObject({ ok: true, value: 0 });
+    expect(setConfigValue(cfg, "moe.parallelSubtasks", "3").ok).toBe(false);
+    expect(cfg).not.toHaveProperty("moe");
   });
 });
 

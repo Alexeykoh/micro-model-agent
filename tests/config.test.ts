@@ -30,9 +30,10 @@ describe("config defaults", () => {
     expect(DEFAULTS.contextBudget.compactionThreshold).toBe(0.75);
   });
 
-  it("should have orchestrator undefined by default", () => {
-    expect(DEFAULTS.orchestrator.model).toBeUndefined();
-    expect(DEFAULTS.orchestrator.provider).toBeUndefined();
+  it("has no orchestrator/MoE config defaults (removed)", () => {
+    // MoE removed 2026-10-12: no orchestration keys, no second execution path.
+    expect(DEFAULTS).not.toHaveProperty("orchestrator");
+    expect(DEFAULTS).not.toHaveProperty("moe");
   });
 
   it("defaults session.autoName to true", () => {

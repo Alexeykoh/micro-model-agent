@@ -153,7 +153,6 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     contextProbe: deps.contextProbe,
     workspace: deps.workspace,
     version: readMmaVersion(),
-    moeActive: deps.moeActive,
     updateAvailable: deps.updateAvailable,
     instructions: deps.instructions,
     projectMap: deps.projectMap ?? undefined,

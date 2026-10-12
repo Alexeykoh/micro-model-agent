@@ -1,4 +1,4 @@
-/** Агент: одиночный цикл (INIT→…→OUTPUT) и MoE-путь, бюджеты, гейты. */
+/** Агент: одиночный цикл хода (INIT→…→OUTPUT), бюджеты, гейты. */
 import type { LLMProvider, ContentPart } from "../llm/provider";
 import { ProviderManager, activeProviderEndpoint, reasoningStrategyForProvider } from "../modules/providers/manager";
 import { buildActiveProvider } from "../modules/providers/factory";
@@ -22,7 +22,6 @@ import { projectMmaDir } from "../config/paths";
 import { PromptBuilder } from "./prompt-builder";
 import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
-import { runWithMoE } from "./agent-moe";
 import type { MemoryStore } from "../modules/memory/store";
 import { CostTracker } from "../modules/pricing/index";
 import { createPolicyState } from "../modules/reasoning/policy";
@@ -153,14 +152,6 @@ export interface AgentDeps {
    * (дружелюбен KV-кешу). Null, если активного плана нет.
    */
   planSummary?: () => string | null;
-  /** Тестовый шов — подменяет настоящий runWithMoE (моки Bun глобальны на процесс). */
-  runWithMoEOverride?: typeof runWithMoE;
-  /**
-   * Наблюдатель «MoE ведёт текущий ход»: true после валидного плана, false в
-   * `finally` (фолбэк/ошибка/Esc). `mma web` рисует по нему чип режима; в
-   * терминале не задан — там работу видно по строке чата и карточкам тулов.
-   */
-  onMoEState?: (active: boolean) => void;
   /** Тестовый шов — подменяет настоящий verify критика (моки Bun глобальны). */
   criticOverride?: {
     verify: (pack: import("../modules/critic/types").EvidencePack, signal?: AbortSignal) => Promise<import("../modules/critic/types").CriticVerdict | null>;
@@ -681,7 +672,6 @@ export class Agent {
     const {
       config,
       llmProvider,
-      toolExecutor,
       pluginManager,
       contextManager,
       logger,
@@ -1674,15 +1664,6 @@ export class Agent {
   clearContext(): void {
     this.deps.contextManager.clear();
     this.systemPromptAdded = false;
-  }
-
-  /**
-   * Вешает/снимает наблюдателя «MoE ведёт текущий ход» (см.
-   * `AgentDeps.onMoEState`). Хост веба подписывается после спавна per-session
-   * раннера, у которого агент уже собран из bootstrap-шаблона.
-   */
-  setMoEStateListener(fn?: (active: boolean) => void): void {
-    this.deps.onMoEState = fn;
   }
 
   /**

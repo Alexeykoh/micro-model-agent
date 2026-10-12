@@ -3,8 +3,6 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { StepVerifier } from "../src/modules/execution/verifier";
-import { DEFAULTS } from "../src/config/defaults";
-import type { MoEPlan } from "../src/modules/execution/types";
 
 describe("StepVerifier", () => {
   let tmpDir: string;
@@ -44,66 +42,5 @@ describe("StepVerifier", () => {
     expect(results[1].passed).toBe(false);
   });
 
-  it("should verify MoE manifest with file checks", async () => {
-    const plan: MoEPlan = {
-      title: "Test",
-      subtasks: [
-        {
-          id: "t1",
-          description: "Create files",
-          expert_tag: "code",
-          allowed_files: ["test-output.txt"],
-          read_only_files: [],
-          depends_on: [],
-          input_from: [],
-          expected_output: "",
-          success_criteria: [],
-        },
-      ],
-      shared_context: { rules: [], refs: [] },
-    };
 
-    writeFileSync(join(tmpDir, "test-output.txt"), "output");
-    const result = await verifier.verifyMoEManifest(plan, DEFAULTS, [
-      "file",
-      "code",
-      "shell",
-      "research",
-      "browser",
-      "vision",
-      "core",
-    ]);
-    expect(result.success).toBe(true);
-  });
-
-  it("should report missing artifact files", async () => {
-    const plan: MoEPlan = {
-      title: "Test",
-      subtasks: [
-        {
-          id: "t1",
-          description: "Create files",
-          expert_tag: "code",
-          allowed_files: ["nonexistent.txt"],
-          read_only_files: [],
-          depends_on: [],
-          input_from: [],
-          expected_output: "",
-          success_criteria: [],
-        },
-      ],
-      shared_context: { rules: [], refs: [] },
-    };
-
-    const result = await verifier.verifyMoEManifest(plan, DEFAULTS, [
-      "file",
-      "code",
-      "shell",
-      "research",
-      "browser",
-      "vision",
-      "core",
-    ]);
-    expect(result.errors.length).toBeGreaterThan(0);
-  });
 });
