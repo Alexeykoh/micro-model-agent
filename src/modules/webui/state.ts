@@ -205,7 +205,7 @@ export interface WebUiState {
     switchSession(id: string | null): void;
     forgetSession(id: string): void;
   };
-  saveConfig?: (config: AppConfig) => void;
+  saveConfig?: (config: AppConfig, key?: string) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
   /**

@@ -12,11 +12,12 @@ import type { ConfigStore } from "../state";
 export async function persistAndReconfigure(
   s: ConfigStore,
   config: AppConfig,
+  key?: string,
 ): Promise<{ persisted: boolean; warning?: string }> {
   let persisted = true;
   let warning: string | undefined;
   try {
-    s.saveConfig?.(config);
+    s.saveConfig?.(config, key);
   } catch {
     persisted = false;
     warning = "config not persisted";

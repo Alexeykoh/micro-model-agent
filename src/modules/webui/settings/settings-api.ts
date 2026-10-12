@@ -356,7 +356,7 @@ export function handleMcpToggle(
       config.mcpServers[id] = { ...entry, enabled: rec.enabled };
       let persisted = true;
       try {
-        s.saveConfig?.(config);
+        s.saveConfig?.(config, "mcpServers");
       } catch {
         persisted = false;
       }
@@ -617,9 +617,9 @@ export function updateLspServer(
 }
 
 /** Best-effort персист; бросающий `saveConfig` не должен стать 500-й. */
-function persistConfig(s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport, config: AppConfig): boolean {
+function persistConfig(s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport, config: AppConfig, key?: string): boolean {
   try {
-    s.saveConfig?.(config);
+    s.saveConfig?.(config, key);
     return true;
   } catch {
     return false;
@@ -627,7 +627,7 @@ function persistConfig(s: ConfigStore & WorkspaceStore & HttpTransport & SseTran
 }
 
 type ConfigWriteOutcome =
-  | { ok: true }
+  | { ok: true; key?: string }
   | { ok: false; status: number; error: string };
 
 /**
@@ -658,7 +658,7 @@ function handleConfigWrite(
         sendJson(res, outcome.status, { ok: false, error: outcome.error });
         return;
       }
-      const persisted = persistConfig(s, config);
+      const persisted = persistConfig(s, config, outcome.key);
       sendJson(res, 200, { ok: true, persisted, restartRequired: true, ...view(config, s) });
     })
     .catch((err: unknown) => {
@@ -668,7 +668,7 @@ function handleConfigWrite(
 
 /** Маппит чистый `McpWriteResult` на исход конверта (разводка 400/404). */
 function mcpOutcome(result: McpWriteResult): ConfigWriteOutcome {
-  if (result.ok) return { ok: true };
+  if (result.ok) return { ok: true, key: "mcpServers" };
   return { ok: false, status: result.error === "not_found" ? 404 : 400, error: result.error };
 }
 
@@ -717,7 +717,7 @@ export function handleMcpDelete(res: ServerResponse, id: string, s: ConfigStore 
     sendJson(res, 404, { ok: false, error: result.error });
     return;
   }
-  const persisted = persistConfig(s, s.config);
+  const persisted = persistConfig(s, s.config, "mcpServers");
   sendJson(res, 200, { ok: true, persisted, restartRequired: true, mcp: mcpList(s) });
 }
 
@@ -743,7 +743,7 @@ export function handleLspUpdate(
     s,
     (config, rec) => {
       const result = updateLspServer(config, lang, rec);
-      if (result.ok) return { ok: true };
+      if (result.ok) return { ok: true, key: "lsp" };
       return { ok: false, status: result.error === "not_found" ? 404 : 400, error: result.error };
     },
     (config) => ({ servers: listLspServers(config) }),

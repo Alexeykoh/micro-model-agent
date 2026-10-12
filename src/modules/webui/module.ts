@@ -15,7 +15,7 @@ import type { SessionManager } from "../session/manager";
 import type { ExecutionModule } from "../execution/module";
 import type { MemoryStore } from "../memory/store";
 import type { Host } from "../../core/host";
-import { CONFIG_FILE, saveConfig as persistConfig } from "../../config/config";
+import { CONFIG_FILE, persistConfigChange as persistConfig } from "../../config/persist";
 import { buildSetupDisplay } from "../setup/answers";
 import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
@@ -195,7 +195,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     state.filesRevision += 1;
     broadcast({ type: "files", ts: Date.now(), phase: "changed" }, state);
   });
-  state.saveConfig = (config) => persistConfig(config, CONFIG_FILE, deps.configDir);
+  state.saveConfig = (config, key) => persistConfig(config, key, CONFIG_FILE, deps.configDir);
 
   // Веб-онли интерактивные тулы: `question`/`approve` через SSE + `/api/answer`.
   installWebPromptIO({

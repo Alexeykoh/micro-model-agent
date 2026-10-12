@@ -78,7 +78,7 @@ export async function applyConfigWrite(
   if (result.key === "locale") setLocale(cfg.locale);
   let note = "saved";
   try {
-    state.saveConfig?.(cfg);
+    state.saveConfig?.(cfg, result.key);
   } catch {
     note = "not persisted";
   }

@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../../i18n/index";
 import { redactConfigSecrets } from "../../../config/redact";
 import { configDefs, setConfigValue, type ConfigKeyDef } from "../../../config/registry";
+import { configVersion } from "../../../config/persist";
 import { needsRebuild } from "../../../config/effects";
 import type { AppConfig } from "../../../config/types";
 import { readBodyError, sendJson } from "../util";
@@ -79,6 +80,7 @@ export function handleConfigGet(res: ServerResponse, s: ConfigStore & RuntimeSta
   sendJson(res, 200, {
     config: redactConfigSecrets(s.config),
     registry: buildConfigRegistry(s.config),
+    version: configVersion(s.config),
     webToken: maskToken(s.token),
   });
 }
@@ -157,10 +159,10 @@ export function handleConfigPost(
       let persisted = true;
       let warning: string | undefined;
       if (needsRebuild(result.effects)) {
-        ({ persisted, warning } = await persistAndReconfigure(s, config));
+        ({ persisted, warning } = await persistAndReconfigure(s, config, key));
       } else {
         try {
-          s.saveConfig?.(config);
+          s.saveConfig?.(config, key);
         } catch {
           persisted = false;
           warning = "config not persisted";

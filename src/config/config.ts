@@ -212,7 +212,7 @@ const envOverrideMap = new WeakMap<AppConfig, EnvOverride[]>();
  * позднее изменение (setProvider/reconfigure заменил provider, /model use)
  * видно как другой объект/значение и сохраняется как есть.
  */
-function stripEnvOverrides(config: AppConfig): AppConfig {
+export function stripEnvOverrides(config: AppConfig): AppConfig {
   const overrides = envOverrideMap.get(config);
   if (!overrides || overrides.length === 0) return config;
   const result = { ...config };

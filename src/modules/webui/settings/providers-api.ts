@@ -282,7 +282,7 @@ export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s
         sendJson(res, 409, { ok: false, error: "name-conflict" });
         return;
       }
-      const persisted = await persistAndReconfigure(s, config);
+      const persisted = await persistAndReconfigure(s, config, "provider.active");
       sendJson(res, 200, { ok: true, name: result.name, ...buildProviderViews(config), ...persisted });
     })
     .catch((err: unknown) => {
@@ -324,7 +324,7 @@ export function handleProvidersDelete(res: ServerResponse, name: string, s: Conf
     sendJson(res, 404, { ok: false, error: "not_found" });
     return;
   }
-  void persistAndReconfigure(s, config).then(
+  void persistAndReconfigure(s, config, "provider.active").then(
     (result) => {
       sendJson(res, 200, { ok: true, ...buildProviderViews(config), ...result });
     },
