@@ -5,9 +5,15 @@ import {
   getConfigValue,
   resolveConfigKey,
   setConfigValue,
+  setProviderMemoryApplier,
   keysForGroup,
 } from "../../src/config/registry";
+import { syncProviderModelMemory } from "../../src/modules/providers/memory";
 import type { AppConfig } from "../../src/config/types";
+
+// INV-19: память моделей провайдера — домен провайдеров; в проде апплер ставит
+// provider-phase. Тест регистрирует его, как это делает bootstrap.
+setProviderMemoryApplier(syncProviderModelMemory);
 
 function freshConfig(): AppConfig {
   return structuredClone(DEFAULTS);
@@ -136,6 +142,25 @@ describe("config registry", () => {
     // Switching back restores what `a` used last.
     expect(setConfigValue(cfg, "provider.active", "a").ok).toBe(true);
     expect(cfg.model).toBe("model-a");
+  });
+
+  it("does not mutate the provider domain on its own (INV-19)", () => {
+    setProviderMemoryApplier(null);
+    try {
+      const cfg = freshConfig();
+      cfg.provider = {
+        active: "a",
+        entries: [{ type: "openai-compat", label: "a", baseUrl: "http://a/v1" }],
+        type: "openai-compat",
+        baseUrl: "http://a/v1",
+      };
+      expect(setConfigValue(cfg, "model", "m").ok).toBe(true);
+      // Без доменного апплера слой конфига не трогает `provider.models` — память
+      // моделей принадлежит провайдерному домену, не реестру.
+      expect(cfg.provider.models ?? {}).toEqual({});
+    } finally {
+      setProviderMemoryApplier(syncProviderModelMemory);
+    }
   });
 
   it("mirrors legacy flat fields from the active entry on provider switch", () => {

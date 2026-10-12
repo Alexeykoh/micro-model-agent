@@ -11,6 +11,8 @@ import { join as joinDir } from "path";
 import type { ContextProbeResult } from "../../llm/model-loader";
 import { buildActiveProvider } from "../../modules/providers/factory";
 import { activeProviderEndpoint, reasoningStrategyForProvider } from "../../modules/providers/manager";
+import { syncProviderModelMemory } from "../../modules/providers/memory";
+import { setProviderMemoryApplier } from "../../config/registry";
 /** Эндпоинт активной записи (резолв из entries, фолбэк — легаси-плоские поля). */
 export type ProbeEndpoint = ReturnType<typeof activeProviderEndpoint>;
 import type { ProviderManager } from "../../modules/providers/manager";
@@ -102,6 +104,10 @@ export async function setupProviderPhase(
   logger: Logger,
   dir: string,
 ): Promise<ProviderPhase> {
+  // Память моделей провайдера — домен провайдеров (INV-19): слой конфига лишь
+  // вызывает зарегистрированный апплер. Ставим один раз на bootstrap.
+  setProviderMemoryApplier(syncProviderModelMemory);
+
   // Эндпоинт для пробы/автозагрузки: АКТИВНАЯ запись, не легаси-плоские поля
   // (они зеркалят активное на момент последней записи и протухают после
   // `/provider use` — наблюдалось: плоский localhost:1234 при активной записи

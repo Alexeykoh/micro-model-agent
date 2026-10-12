@@ -618,47 +618,6 @@ export interface ConfigSetErrorFail {
 export type ConfigSetResult = ConfigSetOk | ConfigSetErrorFail;
 
 /**
- * Держит `provider.models` (последняя модель каждого провайдера) в синхроне. Запись
- * `model` запоминается под активным провайдером; смена `provider.active`
- * восстанавливает запомненную модель провайдера, чтобы свитч молча не оставлял
- * модель, которую новый бэкенд не обслуживает. Заодно зеркалит легаси-плоские
- * поля (`type`/`baseUrl`/`apiKey`) из активной записи — иначе они протухают
- * после hot-swap, а баннер и внеполосные читатели плоских полей врут.
- */
-/**
- * Зеркалит легаси-плоские поля (`type`/`baseUrl`/`apiKey`) из активной записи:
- * после hot-swap `/provider use` они протухают, а баннер и внеполосные читатели
- * плоских полей врут.
- */
-function mirrorActiveEntryFields(
-  provider: AppConfig["provider"],
-  activeName: string,
-): void {
-  const entry = (provider.entries ?? []).find(
-    (e) => e.label === activeName || e.type === activeName,
-  );
-  if (!entry) return;
-  provider.type = entry.type;
-  provider.baseUrl = entry.baseUrl;
-  provider.apiKey = entry.apiKey;
-}
-
-function applyProviderModelMemory(config: AppConfig, key: string, value: unknown): void {
-  const provider = config.provider;
-  const activeName = provider.active ?? provider.type;
-  if (key === "model") {
-    if (!activeName) return;
-    provider.models = { ...(provider.models ?? {}), [activeName]: String(value) };
-    return;
-  }
-  if (key === "provider.active") {
-    const remembered = provider.models?.[String(value)];
-    if (remembered) config.model = remembered;
-    mirrorActiveEntryFields(provider, String(value));
-  }
-}
-
-/**
  * Кто применяет deny-list плагинов к живому реестру. Ставится из bootstrap сразу
  * после создания `PluginManager` (и переставляется на новый после `/reload`).
  *
@@ -672,8 +631,25 @@ export function setPluginGateApplier(fn: ((names: string[]) => void) | null): vo
   pluginGateApplier = fn;
 }
 
+/**
+ * Кто применяет память моделей провайдера (INV-19). Ставит провайдерная фаза
+ * bootstrap. Слой конфига не знает про `provider.entries[]`/`provider.models` —
+ * он лишь вызывает зарегистрированный апплер, как с `pluginGateApplier`.
+ */
+let providerMemoryApplier: ((config: AppConfig, key: string, value: unknown) => void) | null = null;
+
+export function setProviderMemoryApplier(
+  fn: ((config: AppConfig, key: string, value: unknown) => void) | null,
+): void {
+  providerMemoryApplier = fn;
+}
+
 function applyConfigEffects(config: AppConfig, key: string, value: unknown): void {
-  applyProviderModelMemory(config, key, value);
+  try {
+    providerMemoryApplier?.(config, key, value);
+  } catch (e) {
+    logger.warn(`provider model memory not applied: ${String(e)}`);
+  }
   if (key !== "plugins.disabled" || !pluginGateApplier) return;
   const names = Array.isArray(value) ? value.map((v) => String(v)) : [];
   try {
@@ -683,7 +659,7 @@ function applyConfigEffects(config: AppConfig, key: string, value: unknown): voi
   }
 }
 
-/** Пишет ключ: резолв → парсинг → валидация → set + память моделей провайдера. */
+/** Пишет ключ: резолв → парсинг → валидация → set + эффекты ключа. */
 export function setConfigValue(config: AppConfig, name: string, raw: string): ConfigSetResult {
   const def = resolveConfigKey(name);
   if (!def) return { ok: false, reason: "unknown-key", input: name };
