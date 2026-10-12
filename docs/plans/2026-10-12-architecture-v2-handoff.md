@@ -155,8 +155,8 @@ overflow-warning называет владельца и блок, а не тол
 - W1.1 ✅ `ModuleHost` (lifecycle/requires/critical/timeout/dispose/health/сбор).
 - W1.3 ✅ владелец тула: `RegisteredTool` (`owner` обязателен по типу, INV-1/2).
 - W1.4 ◐ гейт `tests/arch/module-boundaries.test.ts` (INV-3/4, 16 записей allowlist).
-- W1.6 ◐ `mcp` ✅, `lsp` ✅ (единый `ModuleHost`: `setup` до сбора, `dispose` на
-  `agent.shutdown`); `browser` и остальные — далее.
+- W1.6 ◐ `mcp` ✅, `lsp` ✅, `browser` ✅ (единый `ModuleHost`: `setup` до сбора,
+  `dispose` на `agent.shutdown`); остальные модули — далее.
 
 **Порядок (решение 2026-10-13, вариант «сначала безопасность»):**
 `lsp` → `browser` → **W2 (enforcement)** → `W1.5 PromptAssembler` → остальные

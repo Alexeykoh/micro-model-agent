@@ -28,6 +28,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   (audit 8.1 — no leaked pids), not only the `onSessionEnd` plugin hook. A single
   `ModuleHost` now owns both MCP and LSP: `setup()` runs before tool/prompt
   collection, and `dispose()` runs on `agent.shutdown()`.
+- **Browser lifecycle declared (W1.6, INV-5/7)**: `src/modules/browser/lifecycle.ts`
+  declares `critical: false` and `teardown` (closes the browser session/bridge);
+  registered on the shared `ModuleHost` when the browser is enabled. A real
+  `health()` is deferred — there is no cheap Chromium probe yet, and faking "ok"
+  would be worse than none.
 - **Every tool names its owner (W1.3, INV-1/2)**: `ToolDefinition` stays the
   authored form (no owner — the author does not own the tool); the registry
   stores and returns `RegisteredTool = ToolDefinition & { owner: string }`, so a

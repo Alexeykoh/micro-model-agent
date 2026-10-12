@@ -23,6 +23,7 @@ import { runStartupHealthCheck } from "../../modules/lsp/startup-check";
 import { MCPModule } from "../../modules/mcp/index";
 import { mcpModuleDef } from "../../modules/mcp/lifecycle";
 import { lspModuleDef } from "../../modules/lsp/lifecycle";
+import { browserModuleDef } from "../../modules/browser/lifecycle";
 import { MemoryModule } from "../../modules/memory/module";
 import { MemoryStore } from "../../modules/memory/store";
 import { t } from "../../i18n/index";
@@ -55,6 +56,7 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   const startupCheckPromise = languages.startupCheck;
   moduleHost.register(mcpModuleDef(core.mcpModule));
   moduleHost.register(lspModuleDef(languages.lspModule));
+  if (languages.browserModule) moduleHost.register(browserModuleDef());
   await moduleHost.setup();
   registerModuleToolsAndPlugins(input, moduleRegistry, core);
 
@@ -143,11 +145,12 @@ async function registerCoreModules(
 function startLanguageModules(
   input: ModulesPhaseInput,
   moduleRegistry: ModuleRegistry,
-): { lspModule: LspModule; startupCheck: Promise<PromptBlock | null> } {
+): { lspModule: LspModule; startupCheck: Promise<PromptBlock | null>; browserModule?: BrowserModule } {
   const { config, logger, baseDir, exitOnComplete, pluginManager } = input;
 
+  let browserModule: BrowserModule | undefined;
   if (config.browser.enabled) {
-    const browserModule = new BrowserModule();
+    browserModule = new BrowserModule();
     moduleRegistry.register(browserModule);
     registerBuiltinPlugin(pluginManager, browserModule.getPlugin());
   }
@@ -172,7 +175,7 @@ function startLanguageModules(
     !isOneShotMode() && !exitOnComplete && process.env.NODE_ENV !== "test"
       ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger: lspLogger })
       : Promise.resolve(null);
-  return { lspModule, startupCheck };
+  return { lspModule, startupCheck, browserModule };
 }
 
 /** Тулы модулей в реестр + builtin/external плагины в менеджер. */
