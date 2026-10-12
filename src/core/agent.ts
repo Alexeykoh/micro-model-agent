@@ -25,6 +25,7 @@ import {
 } from "./agent/turn-output";
 import { ensureSessionStart as phaseEnsureSessionStart } from "./agent/session-start";
 import { createLoopModules, type LoopSetupHost } from "./agent/loop-setup";
+import { buildLoopResult, type LoopResultHost } from "./agent/loop-result";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -58,7 +59,6 @@ import { repairToolCallPairing } from "./agent/tool-pairing";
 import { ContextRenderer } from "./agent/context-renderer";
 import { resolveArtifactStates } from "./agent/artifact-resolve";
 import { gatherTurnToolEvents } from "./agent/critic-gate";
-import { computeCacheStats } from "./agent/cache-stats";
 import { seedToolTags } from "../tools/auto-tags";
 import { isWorkMutation } from "../modules/critic/evidence";
 import {
@@ -415,6 +415,15 @@ export class Agent {
       isShutdownRequested: () => this.shutdownRequested,
       setScope: () => this.setScope(),
       callerProvenance: () => this.callerProvenance(),
+    };
+  }
+
+  /** Общий вид хоста для сборки результата петли (INV-23). */
+  private loopResultHost(): LoopResultHost {
+    return {
+      deps: this.deps,
+      costTracker: this.costTracker,
+      isShutdownRequested: () => this.shutdownRequested,
     };
   }
 
@@ -1284,72 +1293,12 @@ export class Agent {
       state.stopReason = reason;
     }
 
-    const tokensUsed = contextManager.getEstimatedTokens();
-    const budget = contextManager.getBudget();
-    const usageTokens = tokenTracker.resolveFinal(state);
-    const cacheStats = computeCacheStats(state, this.costTracker.saved);
-
-    const stopError =
-      state.stopReason && !state.finalAnswerAccepted
-        ? state.stopReason === "duplicate"
-          ? t("error.readonly_loop_stopped", { count: state.consecutiveDuplicateBatches })
-          : state.stopReason === "failed_batches"
-            ? t("error.retry_loop_stopped", { count: state.consecutiveFailedBatches })
-            : t("error.max_iters", { max: config.maxToolIterations })
-        : undefined;
-
-    if (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted) {
-      return {
-        success: false,
-        text: state.lastText,
-        error: stopError ?? t("error.max_iters", { max: config.maxToolIterations }),
-        stopReason: state.stopReason ?? "max_iters",
-        iterationCount: state.iteration,
-        contextUsed: tokensUsed,
-        contextLimit: budget.history,
-        promptTokens: usageTokens.prompt,
-        completionTokens: usageTokens.completion,
-        totalTokens: usageTokens.total,
-        totalCost: this.costTracker.total,
-        costBreakdown: this.costTracker.breakdown(),
-        cache: cacheStats,
-        compactionCount: contextManager.getCompactionCount(),
-        contextQuality: contextManager.getQuality(),
-        contextBreakdown: contextManager.getBreakdown?.(),
-      };
-    }
-
-    return {
-      success: !(
-        this.shutdownRequested ||
-        state.emptyResponseExhausted ||
-        state.auditFailed ||
-        !!stopError
-      ),
-      interrupted: this.shutdownRequested || undefined,
-      text: state.lastText,
-      stopReason: state.stopReason ?? undefined,
-      error: stopError
-        ? stopError
-        : state.emptyResponseExhausted
-          ? t("error.empty_response")
-          : state.auditFailed
-            ? t("error.audit_failed", { summary: state.lastAuditSummary })
-            : undefined,
-      iterationCount: state.iteration,
-      contextUsed: tokensUsed,
-      contextLimit: budget.history,
-      promptTokens: usageTokens.prompt,
-      completionTokens: usageTokens.completion,
-      totalTokens: usageTokens.total,
-      totalCost: this.costTracker.total,
-      costBreakdown: this.costTracker.breakdown(),
-      cache: cacheStats,
-      compactionCount: contextManager.getCompactionCount(),
-      contextQuality: contextManager.getQuality(),
-      contextBreakdown: contextManager.getBreakdown?.(),
-      llmDurationMs: state.totalLlmDuration,
-    };
+    return buildLoopResult(
+      this.loopResultHost(),
+      state,
+      tokenTracker,
+      state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted,
+    );
   }
 
   /** Сбрасывает контекст (следующий прогон пересоберёт системный промпт). */
