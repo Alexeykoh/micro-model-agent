@@ -127,21 +127,21 @@ sequenceDiagram
 
 ---
 
-## 3. Ход: фазы и общий VERIFY
+## 3. Ход: фазы, один путь
 
-MoE сегодня **заменяет** петлю целиком и обходит все гейты (аудит 5.1). В `[TARGET]`
-различие только в `Observe`: у MoE «действия» — сабтаски, у одиночного пути — вызовы тулов.
-`Verify` и `Finalize` — общие.
+MoE **удалён** (см. [спеку удаления](./2026-10-12-remove-moe-design.md)) — раньше он
+**заменял** петлю целиком и обходил все гейты (аудит 5.1). Теперь развилки нет:
+`Agent.run` вызывает `executeSingleAgentLoop` ровно один раз.
 
 ```mermaid
 flowchart TB
   IN["Agent.run(input)"] --> BEFORE
 
-  subgraph TURN["TurnCoordinator — фазы хода"]
+  subgraph TURN["executeSingleAgentLoop — фазы хода"]
     BEFORE["BeforeThink<br/>• хуки плагинов<br/>• компакция<br/>• обновление system prompt<br/>• prefix-монитор"]
     THINK["Think<br/>• LLM stream<br/>• usage + калибровка контекста<br/>• reasoning policy"]
-    OBS["Observe<br/>• ToolBatchExecutor<br/>• (MoE: MoEExecutor → сабтаски)<br/>• tool images, memo"]
-    VERIFY["Verify ⚖️ ОБЩИЙ ДЛЯ ОБОИХ ПУТЕЙ<br/>• hallucination gate<br/>• critic gate<br/>• audit gate"]
+    OBS["Observe<br/>• ToolBatchExecutor<br/>• parallelizable-вызовы через fork()<br/>• tool images, memo"]
+    VERIFY["Verify ⚖️<br/>• hallucination gate<br/>• critic gate<br/>• audit gate"]
     FIN["Finalize<br/>• accept | retry | finalizeWithoutTools | stopReason"]
     BEFORE --> THINK --> OBS --> VERIFY --> FIN
   end
@@ -149,20 +149,16 @@ flowchart TB
   FIN -->|"retry"| THINK
   FIN -->|accept| OUT["AgentResult"]
 
-  OBS -.->|только в одиночном пути| TB["ToolExecutor.execute()"]
+  OBS --> TB["ToolExecutor.execute()"]
   TB --> POL["SecurityPolicy"]
 ```
 
-**Контракт между путями:**
+**Параллельные сабагенты — не развилка.** `parallelizable: true` на `subagent`
+запускает форк в той же фазе `Observe`, через тот же `ToolExecutor.execute()`: с
+allowlist, таймаутом, enforcement и плагин-хуками.
 
-| | Одиночный путь | MoE-путь |
-|---|---|---|
-| Observe | `ToolBatchExecutor` → `ToolExecutor.execute()` | `MoEExecutor` → сабтаски |
-| Think | `llmProvider.chat` | оркестратор + сабагенты |
-| **Verify** | **тот же** `HallucinationGate → CriticGate → AuditGate` | **тот же** |
-| **Finalize** | **тот же** | **тот же** |
-
-Инвариант INV-22 проверяется тестом «MoE-ход проходит те же гейты».
+Инвариант INV-22 проверяется тестом «в `Agent.run` ровно один вызов
+`executeSingleAgentLoop`; в `src/` нет `runWithMoE` / `moeHandled`».
 
 ---
 

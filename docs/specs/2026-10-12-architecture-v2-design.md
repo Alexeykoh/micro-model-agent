@@ -173,15 +173,21 @@ boot, фазы хода, цепочка enforcement, поток наблюдае
 
 ### 1.7 Границы петли
 
-- **`INV-22. Один путь выполнения хода.** MoE сегодня **заменяет** одиночную петлю целиком,
-  и `HallucinationGate`/`CriticGate`/`AuditGate`/`finalizeWithoutTools` не вызываются
-  (audit 5.1). Структурно обойти контур невозможно, если он один.
-  _Проверяется: тест «MoE-ход проходит те же гейты»._
+- **`INV-22. Один путь выполнения хода.** MoE-путь **заменял** одиночную петлю целиком,
+  и `HallucinationGate`/`CriticGate`/`AuditGate`/`finalizeWithoutTools` не вызывались
+  (audit 5.1). **MoE удалён** — см.
+  [спеку удаления](./2026-10-12-remove-moe-design.md): путь один, обойти контур
+  структурно невозможно. Параллельные сабагенты остались доступны через `parallelizable`
+  на туле `subagent` — они идут через тот же `ToolExecutor`.
+  _Проверяется: тест «в `Agent.run` ровно один вызов `executeSingleAgentLoop`;
+  в `src/` нет `runWithMoE` / `moeHandled`»._
 
 - **`INV-23. Нет файла, который держит состояние и оркестрирует, и собирает зависимости.**
   `src/core/agent.ts` — 1903 строки, 23 приватных метода, внутри собирает critic-провайдера,
-  critic tool-loop, evidence-pack и MoE. Правило «≤300 строк» существует **только** в
-  AGENTS.md — это текст, а не проверка; ни Biome, ни `tsc`, ни `fallow` на размер не смотрят.
+  critic tool-loop и evidence-pack (MoE-часть вырезана — см.
+  [спеку удаления](./2026-10-12-remove-moe-design.md)). Правило «≤300 строк» существует
+  **только** в AGENTS.md — это текст, а не проверка; ни Biome, ни `tsc`, ни `fallow` на
+  размер не смотрят.
 
 ---
 
@@ -420,19 +426,27 @@ TurnCoordinator
  ├─ BeforeThink   (plugins, compaction, prompt refresh, prefix monitor)
  ├─ Think         (LLM stream, usage, reasoning policy, calibration)
  ├─ Observe       (ToolBatchExecutor, tool images, memo)
- ├─ Verify        (hallucination → critic → audit)   ← общий для MoE и одиночного пути
+ ├─ Verify        (hallucination → critic → audit)
  └─ Finalize      (accept | retry | finalizeWithoutTools | stopReason)
 ```
 
-Это заодно закрывает audit 5.1 структурно: у MoE нет «своего» пути, у него есть
-другой `Observe` (сабтаски вместо тулов) и тот же `Verify`.
+Развилки в петле больше нет: после удаления MoE (см.
+[спеку удаления](./2026-10-12-remove-moe-design.md)) `Agent.run` вызывает
+`executeSingleAgentLoop` ровно один раз, а все гейты стоят **внутри** него. Поэтому
+разбор на фазы — чистая декомпозиция функции, а не согласование двух путей.
+Параллельные сабагенты не создают развилку: `ToolBatchExecutor` выполняет их через
+`fork()` в той же фазе `Observe`.
 
 ---
 
 ## 4. Чего спецификация НЕ меняет
 
 - **Контракты:** `LLMProvider`, SSE/REST веба, `mma serve` v1, plugin API, `--json`,
-  `session.jsonl` (только аддитивные поля), версии конфига, имена тулов.
+  версии конфига, имена тулов.
+- **Исключение — MoE.** Удаление MoE — единственное изменение, которое **меняет
+  контракт** (публичные экспорты `OrchestratorClient`/`OrchestratorConfig`, ключи
+  `moe.*`/`orchestrator.*`, события `moe_*`). Оформлено отдельной спекой
+  [remove-moe](./2026-10-12-remove-moe-design.md) и выполняется в этой же ветке.
 - **Стиль чата** — STYLE.md остаётся каноном.
 - **Поведение пользователя** в этой волне не меняется. Все волны — рефакторинг
   с сохранением поведения; каждая закрывается зелёным `bun test` + `bun run quality`.
@@ -451,7 +465,7 @@ TurnCoordinator
 | **W2** Enforcement | `ToolSecurityDecl`, проверки в `execute()`, enforcement тегов, `bash` в jail | INV-9…12 (audit 4.1, 4.4–4.7) |
 | **W3** Конфиг | `ConfigStore` с эффектами, атомарная запись, модульные ключи | G, H, I (INV-18…21) |
 | **W4** Границы | переезд `context`/`hallucination` в ядро, `core/api/*`, guard направления зависимостей | INV-3, 4 |
-| **W5** Петля | фазы `TurnCoordinator`, общий `Verify` для MoE | INV-22, 23 (audit 5.1) |
+| **W5** Петля | фазы `TurnCoordinator` (MoE уже удалён — развилки нет) | INV-22, 23 |
 
 Каждая волна — отдельная ветка, отдельный коммит на шаг, `bun test` + `bun run quality` зелёные.
 W1 и W2 дают эффект независимо от W5: после них «модуль выключается чисто» и

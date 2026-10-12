@@ -193,7 +193,11 @@ scope/protected-пути, SSRF, rate-limit. Хендлер тула **не** р�
 ```
 INIT → THINK → OBSERVE → VERIFY → OUTPUT → ERROR
 ```
-VERIFY (hallucination → critic → audit) — **общий** для MoE и одиночного пути.
+Развилки нет: `Agent.run` вызывает петлю ровно один раз, все гейты (hallucination →
+critic → audit) стоят внутри. MoE удалён 2026-10-12 — он был вторым путём исполнения
+и обходил гейты ([спека](./docs/specs/2026-10-12-remove-moe-design.md)).
+Параллельные сабагенты — не развилка: `parallelizable` на `subagent` гонит их через
+`ToolExecutor.fork()` в той же фазе Observe.
 
 ---
 
@@ -264,7 +268,7 @@ VERIFY (hallucination → critic → audit) — **общий** для MoE и о�
 - **`disable` плагина ≠ sandbox.** Модуль уже `require`-нут, код верхнего уровня уже
   выполнился. `permissions` — декларация для показа, **не** enforcement.
 - **`vi.mock` в Bun глобален на процесс** — не использовать в тестах агента; есть швы
-  (`AgentDeps.runWithMoEOverride`, `orchestratorOverride`, `ToolContext.agentFactory`).
+  (`ToolContext.agentFactory`, `criticOverride`, `finalAudit`).
 - **`gh-pages/` исключён из гейтов** намеренно (нет графа импортов; вёрстка даёт 59 ошибок).
 - **Три i18n-ключа есть только в `ru.json`** — `cli.config_value`, `cli.show_secrets`,
   `cli.context_size_arg`. Не добавляй новые такие.
@@ -277,6 +281,7 @@ VERIFY (hallucination → critic → audit) — **общий** для MoE и о�
 |---|---|
 | [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) | **Целевая архитектура, инварианты INV-1…23, план миграции** |
 | [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | Схемы boot/ход/enforcement/наблюдаемость/конфиг + матрица контрактов |
+| [remove-moe](./docs/specs/2026-10-12-remove-moe-design.md) | Удаление MoE: что снято, что осталось, порядок шагов |
 | [architecture.md](./docs/agents/architecture.md) | Текущее состояние: Output, Host-seam, Security, контракт `LLMProvider` |
 | [code-style.md](./docs/agents/code-style.md) | Форматирование, типы, async/error, именование, i18n |
 | [tools.md](./docs/agents/tools.md) | Question/Browser, изображения, сужение набора, процессы |

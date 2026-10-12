@@ -845,47 +845,19 @@ export class Agent {
     };
 
     try {
-      const moeEnabled = config.moe?.enabled === true;
-      const moeRunner = this.deps.runWithMoEOverride ?? runWithMoE;
-      const result = moeEnabled
-        ? await moeRunner(
-            {
-              config,
-              llmProvider,
-              toolExecutor,
-              logger,
-              baseDir: this.deps.baseDir,
-            },
-            input,
-            () => this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning),
-            {
-              onMeta,
-              onTool: countTool,
-              onPhase,
-              signal: this.abortController.signal,
-              onEvent: (event) => slog.logMoE(event.type, event.data),
-              onMoEState: this.deps.onMoEState,
-              sessionId: this.deps.sessionManager?.getActiveMeta()?.id,
-            },
-          )
-        : await this.executeSingleAgentLoop(input, slog, onChunk, onMeta, countTool, onPhase, onReasoning);
-
-      // В MoE-режиме одиночный цикл (единственный писатель ходов ассистента)
-      // не бежит — без этого история схлопнется user→user между ходами, а в
-      // session.jsonl не будет ответа. Пишем итог один раз и только когда MoE
-      // реально вёл ход (фолбэк уже записал сам).
-      if (moeEnabled && result.moeHandled) {
-        if (result.text) {
-          contextManager.addMessage({ role: "assistant", content: result.text });
-          if (config.session.autoSave) {
-            slog.saveAssistantMessage(result.text);
-          }
-          slog.logAssistant(result.text, "", undefined, 0);
-        }
-        if (!result.success && result.error) {
-          slog.logError(result.error);
-        }
-      }
+      // Единственный путь выполнения хода. Раньше здесь была ветка MoE-оркестратора,
+      // которая подменяла петлю целиком и обходила гейты (INV-22 в спеке
+      // architecture v2). Параллельные сабагенты остались доступны модели через
+      // `parallelizable` на туле subagent — они идут через тот же ToolExecutor.
+      const result = await this.executeSingleAgentLoop(
+        input,
+        slog,
+        onChunk,
+        onMeta,
+        countTool,
+        onPhase,
+        onReasoning,
+      );
 
       const provenance = this.callerProvenance();
       result.provider = provenance.provider;
