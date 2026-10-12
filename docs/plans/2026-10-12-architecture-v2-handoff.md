@@ -93,6 +93,18 @@ feature-history (вынесен из AGENTS.md).
 персистентности output-событий (`session-sink`) — т.е. `mcp`/`audit`/`security`
 записи получают владельца. Whitelist `log-api` расширен `module`.
 
+**W0.6 (частично)** (`feat/w0-failopen-signals`): cherry-pick `82968f96` из
+`docs/harness-module-audit` (наблюдаемость деградации критика: `critic_degraded`,
+`critic.maxTokens`/`critic.timeoutMs`, `critic_verdict {degraded:true}`) + INV-15:
+`SessionLogger.logDiagnosticEvent(type, diag)` пишет `critic_error` (CriticGate,
+при отказе вердикта, с причиной) и `tool_attempt` (tool-batch, хендлер бросил).
+Инвентарь fail-open путей — `docs/agents/observability.md`. **`verify_error`
+вынесен отдельным шагом**: он требует расширить контракт `ToolContext.sessionLog`
+(иначе верификатор не достаёт до `SessionLogger`) — по правилу 2 нужна спека.
+
+**Следующий шаг:** W0.5 (`PromptBlock.source` + `degraded`, INV-1/6/17) или
+`verify_error` со спекой на шов `ToolContext`. W0.2 — в W1 (`ModuleHost`).
+
 | Задача | Что сделать | Инвариант |
 |---|---|---|
 | **W0.1** ✅ | `Source = mma \| module:<name> \| tool:<name> \| core` → заполнять `OutputEvent.source` (сейчас **всегда `""`**, `output/channel.ts`) | INV-13 |
@@ -100,7 +112,7 @@ feature-history (вынесен из AGENTS.md).
 | **W0.3** ✅ | `SessionLogEntry.module: string` + шаблон `module_${string}` (по образцу `onboarding_${string}`) | INV-13 |
 | **W0.4** ✅ | `logError(message)` → `logError(Diagnostic { source, operation, kind, cause? })`; `cause` обязателен при `kind !== "ok"` | INV-12, INV-14 |
 | **W0.5** | `PromptBlock.source` + `degraded?: { reason }`; при выпадении по бюджету лог говорит «indexer: project map (2400 ток.) не поместился», а не обрезанный текст | INV-1, INV-6, INV-17 |
-| **W0.6** | Отдельные события для fail-open путей: `critic.error`, `verify.error`, `tool_attempt` — сейчас «сломался» неотличим от «сказал ок» | INV-12, INV-15 |
+| **W0.6** ◐ | Отдельные события для fail-open путей: `critic_error` ✅, `tool_attempt` ✅, `verify_error` — отдельный шаг (нужен шов `ToolContext`) | INV-12, INV-15 |
 
 **Стартовые точки для чтения:** `src/output/types.ts` (`OutputEvent`),
 `src/output/channel.ts` (единственный emit с `source: ""`),

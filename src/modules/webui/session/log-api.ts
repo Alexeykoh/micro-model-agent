@@ -26,6 +26,9 @@ export const TRACE_LOG_TYPES = [
   "critic_check",
   "critic_verdict",
   "critic_escalation",
+  "critic_error",
+  "verify_error",
+  "tool_attempt",
   "claim_retry",
 ] as const;
 

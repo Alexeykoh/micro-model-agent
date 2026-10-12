@@ -10,7 +10,7 @@ function deps(overrides: Partial<any> = {}) {
     iteration: 5,
     logger: { warn: vi.fn(), info: vi.fn(), diagnostic: vi.fn() } as any,
     contextManager: { addMessage: vi.fn() } as any,
-    slog: { logCritic: vi.fn() } as any,
+    slog: { logCritic: vi.fn(), logDiagnosticEvent: vi.fn() } as any,
     task: "do it",
     beforeFinish: true,
     toolEvents: [{ tool: "write_file", args: { path: "a" }, ok: true }],
@@ -53,6 +53,15 @@ describe("CriticGate", () => {
     const verdictCall = d.slog.logCritic.mock.calls.find((c: any[]) => c[0] === "critic_verdict");
     expect(verdictCall).toBeDefined();
     expect(verdictCall?.[1]).toMatchObject({ degraded: true, status: "none" });
+    expect(d.slog.logDiagnosticEvent).toHaveBeenCalledWith(
+      "critic_error",
+      expect.objectContaining({
+        source: "core",
+        operation: "critic.verify",
+        kind: "degraded",
+        recoverable: true,
+      }),
+    );
     expect(d.contextManager.addMessage).not.toHaveBeenCalled();
   });
 
@@ -128,6 +137,10 @@ describe("CriticGate", () => {
     const d = deps();
     expect(await gate.evaluate(d)).toBe("pass");
     expect(d.logger.diagnostic).toHaveBeenCalledWith("warn", expect.stringContaining("fail-open"));
+    expect(d.slog.logDiagnosticEvent).toHaveBeenCalledWith(
+      "critic_error",
+      expect.objectContaining({ kind: "degraded", cause: "boom" }),
+    );
   });
 
   it("dedupes identical issues (second identical verdict adds nothing)", async () => {

@@ -476,6 +476,15 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
           throw err;
         }
         logger.diagnostic("warn", `Tool ${call.name} threw: ${errMsg(err)}`);
+        // INV-15: «попытка тула сорвалась» — отдельный сигнал, чтобы исключение
+        // хендлера, проглоченное в failed-результат, было отличимо от обычного
+        // `tool_result success:false` (у того причина — контент, не баг).
+        slog?.logDiagnosticEvent("tool_attempt", {
+          source: `tool:${call.name}`,
+          operation: "tool.execute",
+          kind: "failed",
+          cause: errMsg(err),
+        });
         result = {
           success: false,
           output: `${t("error.prefix")}${errMsg(err)}`,

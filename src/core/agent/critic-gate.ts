@@ -100,11 +100,12 @@ export class CriticGate {
     deps.state.criticCalls++;
     deps.state.mutationsSinceCritic = 0;
 
-    const verdict = await this.verifySafely(deps);
+    const { verdict, error } = await this.verifySafely(deps);
     if (!verdict) {
       // Вердикта нет — но «critic_check» без записи о verdict неотличим от
-      // pass при разборе сессии. Пишем явный отказ.
-      this.logDegraded(deps);
+      // pass при разборе сессии. Пишем явный отказ: critic_verdict degraded
+      // плюс отдельный critic_error (INV-15: «сломался» ≠ «сказал ок»).
+      this.logDegraded(deps, error);
       return "pass";
     }
     if (verdict.status === "ok") return "pass";
@@ -138,14 +139,17 @@ export class CriticGate {
   }
 
   /** Fail-open: битый/перебюджетный критик не блокирует агента. */
-  private async verifySafely(deps: CriticGateDeps): Promise<CriticVerdict | null> {
+  private async verifySafely(
+    deps: CriticGateDeps,
+  ): Promise<{ verdict: CriticVerdict | null; error?: string }> {
     try {
-      return await this.opts.verify(this.opts.buildPack(deps), this.opts.signal);
+      return { verdict: await this.opts.verify(this.opts.buildPack(deps), this.opts.signal) };
     } catch (err) {
       // Одинокий critic_check без вердикта неотличим от pass — фиксируем
       // fail-open диагностикой, чтобы разбор сессии не упирался в "критик завис?".
-      deps.logger.diagnostic("warn", `Critic verify failed (fail-open): ${String((err as Error)?.message ?? err)}`);
-      return null;
+      const cause = String((err as Error)?.message ?? err);
+      deps.logger.diagnostic("warn", `Critic verify failed (fail-open): ${cause}`);
+      return { verdict: null, error: cause };
     }
   }
 
@@ -182,17 +186,26 @@ export class CriticGate {
   }
 
   /**
-   * Отказ вердикта пишется в `session.jsonl` явно (`degraded: true`).
-   * Fail-open остаётся (критик не блокирует агента), но «проверял и не
-   * сказал ничего» больше не выглядит как «проверил и сказал ок».
+   * Отказ вердикта пишется в `session.jsonl` явно (`degraded: true`) плюс
+   * отдельный `critic_error` (INV-15). Fail-open остаётся (критик не блокирует
+   * агента), но «проверял и не сказал ничего» больше не выглядит как
+   * «проверил и сказал ок».
+   * @param cause причина отказа, если verify бросил; иначе — «no verdict returned».
    */
-  private logDegraded(deps: CriticGateDeps): void {
+  private logDegraded(deps: CriticGateDeps, cause?: string): void {
     deps.slog.logCritic("critic_verdict", {
       status: "none",
       summary: "no verdict (degraded)",
       issueCount: 0,
       degraded: true,
       iteration: deps.iteration,
+    });
+    deps.slog.logDiagnosticEvent("critic_error", {
+      source: "core",
+      operation: "critic.verify",
+      kind: "degraded",
+      cause: cause ?? "no verdict returned",
+      recoverable: true,
     });
     deps.logger.diagnostic("warn", "Critic returned no verdict (degraded, fail-open)");
   }

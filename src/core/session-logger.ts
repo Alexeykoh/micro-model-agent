@@ -445,10 +445,31 @@ export class SessionLogger {
    * @param diag единый объект диагностики; `cause` обязателен при `kind !== "ok"`.
    */
   logError(diag: Diagnostic): void {
+    this.appendDiagnostic("error", diag);
+  }
+
+  /**
+   * Пишет сигнал fail-open пути (INV-15): отдельный тип события вместо «тихого ok».
+   * `critic_error` — критик не дал вердикта; `verify_error` — верификатор деградировал;
+   * `tool_attempt` — попытка тула завершилась отказом/исключением.
+   * @param event тип события; @param diag единая диагностика (INV-14).
+   */
+  logDiagnosticEvent(
+    event: "critic_error" | "verify_error" | "tool_attempt",
+    diag: Diagnostic,
+  ): void {
+    this.appendDiagnostic(event, diag);
+  }
+
+  /** Общая запись Diagnostic: `content` = причина (совместимо со старыми читателями). */
+  private appendDiagnostic(
+    type: "error" | "critic_error" | "verify_error" | "tool_attempt",
+    diag: Diagnostic,
+  ): void {
     const cause = diag.cause ? redactContextSecrets(diag.cause) : undefined;
     this.session?.appendLog({
       ts: new Date().toISOString(),
-      type: "error",
+      type,
       content: cause ?? diag.operation,
       source: diag.source,
       operation: diag.operation,

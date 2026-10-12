@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Fail-open signals in the session log (INV-15)** (`src/core/session-logger.ts`,
+  `docs/agents/observability.md`): critic and tool failures that used to surface only
+  as a transient diagnostic now leave distinct `session.jsonl` records — `critic_error`
+  (the critic returned no verdict, with the real cause) and `tool_attempt` (a tool
+  handler threw and was degraded to a failed result). Both are structured `Diagnostic`s
+  and are exposed in the web Trace log. The fail-open inventory lives in
+  `docs/agents/observability.md`; `verify_error` is tracked there as the remaining
+  step (it needs the `ToolContext.sessionLog` contract widened).
+- **Critic degradation observability** (`src/modules/critic/client.ts`,
+  `src/core/agent/critic-gate.ts`): a degraded critic is no longer a silent pass —
+  `CriticClient.onDiagnostic` reports unreadable verdicts, provider failures and
+  broken check cycles, and `CriticGate` writes `critic_verdict { degraded: true }`.
+  New config keys `critic.maxTokens` (default 2048) and `critic.timeoutMs`
+  (per LLM call, default 60s) replace the too-tight 512 / chain-wide 15s.
+
 ### Changed
 
 - **Output events name their source (INV-13)** (`src/output/`): `OutputEvent.source`

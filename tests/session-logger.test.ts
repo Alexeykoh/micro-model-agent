@@ -228,6 +228,31 @@ describe("session-logger sanitization", () => {
     expect(logs[0].cause).toBeUndefined();
   });
 
+  it("logDiagnosticEvent persists fail-open signals (INV-15)", () => {
+    const { logger, logs } = makeLogger();
+    logger.logDiagnosticEvent("tool_attempt", {
+      source: "tool:bash",
+      operation: "tool.execute",
+      kind: "failed",
+      cause: "boom",
+    });
+    logger.logDiagnosticEvent("verify_error", {
+      source: "module:execution",
+      operation: "verify.syntax",
+      kind: "skipped",
+      cause: "tsc not found",
+    });
+    expect(logs.map((l) => l.type)).toEqual(["tool_attempt", "verify_error"]);
+    expect(logs[0]).toMatchObject({
+      source: "tool:bash",
+      operation: "tool.execute",
+      errorKind: "failed",
+      cause: "boom",
+      content: "boom",
+    });
+    expect(logs[1]).toMatchObject({ errorKind: "skipped", cause: "tsc not found" });
+  });
+
   it("logToolCall does not throw when sanitizer corrupts the arg JSON", () => {
     // Санитайзер режет закрывающую кавычку в `password=secret"`, из-за чего
     // JSON.parse падал и запись tool_call терялась. Запись обязана выжить.
