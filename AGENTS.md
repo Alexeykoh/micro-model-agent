@@ -37,9 +37,9 @@ bun run quality       # гейт: typecheck + typecheck:frontend + lint + fallow
 bun run mma "<промпт>"   # прогнать агента вживую
 ```
 
-Гейт `arch` (`scripts/check-arch.ts`, проверки инвариантов из спеки) появится в W1 —
-до него инварианты §1 спеки проверяются лишь частично. Это осознанный долг: перечень
-будущих проверок и allowlist — §6 спеки.
+Часть инвариантов §1 спеки уже под гвардами (`tests/arch/*`, `tests/output/*`,
+`tests/tools/security-decl.test.ts`); единый `scripts/check-arch.ts` и проверки A/D —
+осознанный долг: [docs/agents/debt.md](./docs/agents/debt.md) (правило 9).
 
 Прочие: `bun run dev` (watch) · `bun run web:dev` · `bun run build:prod` (релиз) ·
 `bun run test:e2e` (Playwright, **только по явной команде**).
@@ -107,7 +107,10 @@ bun run mma "<промпт>"   # прогнать агента вживую
 
 Сейчас проверками являются: `tests/output/no-direct-console.test.ts`,
 `tests/webui-boundaries.test.ts`, `tests/webui-frontend-graph.test.ts`,
-`tests/core/command-catalog.test.ts`, `tests/version-beta.test.ts`.
+`tests/core/command-catalog.test.ts`, `tests/version-beta.test.ts`,
+`tests/no-moe-surface.test.ts`, `tests/output/source-filled.test.ts`,
+`tests/arch/module-boundaries.test.ts`, `tests/tools/security-decl.test.ts`,
+`tests/arch/debt-register.test.ts`.
 
 ### 6. Не расширять файл «заодно»
 
@@ -134,6 +137,25 @@ bun run mma "<промпт>"   # прогнать агента вживую
 - **Фоновые процессы — контролируемо:** `Start-Process` фоном, логи в файл, PID сохранён,
   readiness-поллинг, остановка строго по `Stop-Process -Id`. Не убивай пачкой.
 - Пишущие проверки изолируй через `MMA_CONFIG_DIR` — не пиши в реальный `~/.mma`.
+
+### 9. Долг платится один раз (pay-once)
+
+Костыль, временное решение, отложенная правка — **допустимы**, но не **молча**. Долг,
+которого нет в реестре ([`docs/agents/debt.md`](./docs/agents/debt.md)), не существует:
+«оставим на потом» без записи — дефект процесса, а не экономия.
+
+Каждая запись: `id` · что именно · **почему** отложено · **критерий выхода** (что значит
+«заплачено» — обычно проверка из правила 5) · **триггер** (какая задача/волна платит) · дата.
+
+- **Отложить можно один раз.** Когда названный триггер трогает этот код или волна
+  наступила — долг **оплачивается**, а не переносится. Повторный перенос — нарушение;
+  требует явного решения пользователя и причины в реестре.
+- **Заплатить = убрать костыль или добавить проверку.** Для изменения поведения —
+  тест, который падал бы до правки (правило 7).
+- В месте кода/спеки долг помечен `DEBT(<id>)`; гвард `tests/arch/debt-register.test.ts`
+  не даёт осиротеть ни пометке, ни записи.
+- Реестр должен оставаться **коротким**. Растущий реестр — сигнал, что задача нарезана
+  неправильно (правило 3), а не что «долг нормален».
 
 ---
 
@@ -166,16 +188,17 @@ bun run mma "<промпт>"   # прогнать агента вживую
 ### Направление зависимостей
 
 Ядро → модули. **Модуль не импортирует `core/agent/*` и не вызывает чужие `tool.handler`
-напрямую.** Сегодня нарушений 5 (`modules/context/manager.ts`,
-`modules/execution/stuck-detector.ts`, `modules/critic/evidence.ts`,
-`modules/execution/module.ts`, `modules/critic/evidence.ts`) — см. INV-3, INV-4.
+напрямую.** Держит гвард `tests/arch/module-boundaries.test.ts` (INV-3/INV-4): текущие
+зависимости — явный allowlist, который может только сокращаться.
 
 ### Enforcement — одна точка
 
 `ToolExecutor.execute()` — единственное место, где применяются allowlist, теги,
-scope/protected-пути, SSRF, rate-limit. Хендлер тула **не** реализует их сам
-(сегодня реализует — 12 из 51, двое не реализуют ничего: `glob`, `bash`).
-Новый тул объявляет `caps`/`pathArgs`/`urlArgs` — или явно `manual` с причиной.
+scope/protected-пути, SSRF, rate-limit (W2, INV-9/10). Хендлер тула политику **не**
+реализует и не импортирует security-примитивы. Новый тул объявляет
+`security: { caps, pathArgs?, urlArgs?, manual? }` — поле обязательное (без него не
+компилируется); форму стережёт `tests/tools/security-decl.test.ts`, применение —
+`tests/tools/enforcement-*.test.ts`.
 
 ### Наблюдаемость — один позвоночник
 
@@ -244,7 +267,8 @@ critic → audit) стоят внутри. MoE удалён 2026-10-12 — он 
 
 **Новый тул** — `src/tools/<name>.ts` → добавить в массив `registerAllTools`
 (`src/tools/index.ts:93`). В `ToolDefinition`: `tags` (сужение набора), `alwaysOn`,
-`interactive`, `timeoutMs`, `boundedOutput`, **`caps`/`pathArgs`/`urlArgs`** (INV-10).
+`interactive`, `timeoutMs`, `boundedOutput`, **`security: { caps, pathArgs?, urlArgs?,
+manual? }`** (INV-9/10; поле обязательно — enforcement в `ToolExecutor.execute()`).
 
 **Ключ конфига** — деф в `src/config/registry-extra.ts`. Типы:
 `string/int/share/bool/enum/json/list`. `editor` задаёт подсказку UI, не меняя значение.
@@ -282,7 +306,11 @@ critic → audit) стоят внутри. MoE удалён 2026-10-12 — он 
 | [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) | **Целевая архитектура, инварианты INV-1…23, план миграции** |
 | [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | Схемы boot/ход/enforcement/наблюдаемость/конфиг + матрица контрактов |
 | [remove-moe](./docs/specs/2026-10-12-remove-moe-design.md) | Удаление MoE: что снято, что осталось, порядок шагов |
-| [handoff](./docs/plans/2026-10-12-architecture-v2-handoff.md) | **Точка входа для следующей сессии**: статус, W0, открытые решения |
+| [handoff](./docs/plans/2026-10-12-architecture-v2-handoff.md) | **Точка входа для следующей сессии**: статус W0–W2, порядок волн, открытые решения |
+| [debt.md](./docs/agents/debt.md) | **Реестр долгов (pay-once)**: что отложено, критерий выхода, триггер (правило 9) |
+| [observability.md](./docs/agents/observability.md) | Инвентарь fail-open путей и их сигналов (INV-15) |
+| [w1-module-host](./docs/specs/2026-10-13-w1-module-host-design.md) | Контракт `ModuleHost`, миграция модулей, гейт (INV-2/5/7/8/16) |
+| [w2-enforcement](./docs/specs/2026-10-13-w2-enforcement-design.md) | Единая точка enforcement, `ToolSecurityDecl` (INV-9/10) |
 | [architecture.md](./docs/agents/architecture.md) | Текущее состояние: Output, Host-seam, Security, контракт `LLMProvider` |
 | [code-style.md](./docs/agents/code-style.md) | Форматирование, типы, async/error, именование, i18n |
 | [tools.md](./docs/agents/tools.md) | Question/Browser, изображения, сужение набора, процессы |

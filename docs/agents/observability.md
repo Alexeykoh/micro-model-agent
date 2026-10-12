@@ -20,7 +20,7 @@
 |---|---|---|---|
 | `critic_error` | Критик не дал вердикта (verify бросил или вернул `null`) — ход продолжается как `pass` | `src/core/agent/critic-gate.ts` (`logDegraded`) | ✅ реализовано |
 | `tool_attempt` | Хендлер тула бросил исключение; результат деградирован в `success:false`, ход продолжается | `src/core/agent/tool-batch.ts` (`executeCall` catch) | ✅ реализовано |
-| `verify_error` | Верификатор деградировал: `validateSyntax` пропускает проверку синтаксиса, когда `tsc` недоступен; LLM-only/неизвестный критерий | `src/modules/execution/verifier.ts` (`validateSyntax`, `verifyCriteria`) | ⬜ открыто |
+| `verify_error` | Верификатор деградировал: `validateSyntax` пропускает проверку синтаксиса, когда `tsc` недоступен; LLM-only/неизвестный критерий | `src/modules/execution/verifier.ts` (`validateSyntax`, `verifyCriteria`) | ⬜ открыто — `DEBT(verify-error)` |
 
 ### Почему `verify_error` ещё открыт
 

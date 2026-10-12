@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Pay-once debt register (rule 9)** (`docs/agents/debt.md`,
+  `tests/arch/debt-register.test.ts`): every consciously deferred shortcut now goes
+  into one register with an exit criterion and a trigger, anchored by a `DEBT(id)`
+  marker in the code/spec; the guard fails if a marker has no row or a row has no
+  marker. AGENTS.md gains rule 9 and its stale facts are corrected (W2 enforcement
+  shipped, the module-boundary gate exists, the guard list and doc map are current).
 - **Single prompt assembler (W1.5, INV-16)**: dynamic system-prompt blocks
   (model → skills → session → project map → plugin capabilities → hidden tools)
   are built by one `assembleDynamicPromptBlocks` (`src/core/prompt-assembler.ts`)

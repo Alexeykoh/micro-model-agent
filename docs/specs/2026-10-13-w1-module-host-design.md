@@ -37,7 +37,7 @@ W1 вводит контракт и **один гейт**, который его
 - enforcement возможностей тула (`caps`/`pathArgs`/`urlArgs`) — **W2**;
 - `ConfigStore` с эффектами — **W3**;
 - переезд `context`/`hallucination` в ядро, `core/api/*` — **W4**;
-- `verify_error` (шов `ToolContext.sessionLog`) — отдельный шаг (см. handoff §3).
+- `verify_error` (шов `ToolContext.sessionLog`) — отдельный шаг (см. handoff §3). `DEBT(verify-error)`.
 
 `ModuleHost` строится **в ядре** (`src/core/module-host.ts`), но **не** форсирует
 `core/api`-границу (это W4): модули пока получают существующие типы ядра.
@@ -71,11 +71,11 @@ setup (единый владелец, INV-8), проверкой `critical` (INV
 `getToolDefinitions()` / `getPlugin()` остаются как тонкие адаптеры к
 `promptBlocks()` / `tools()` / `hooks()` на время миграции. **`AgentModule`
 сейчас публичный тип** (`src/index.ts:15`) — его замена/сужение это breaking
-change для плагинов и фиксируется в CHANGELOG (`Changed`/`Removed`).
+change для плагинов и фиксируется в CHANGELOG (`Changed`/`Removed`). `DEBT(agent-module-breaking)`.
 
 ---
 
-## 3. Миграция (по одному модулю)
+## 3. Миграция (по одному модулю) `DEBT(modules-to-moduledef)`
 
 | # | Модуль | Что уже есть | Что добавить |
 |---|---|---|---|
@@ -92,7 +92,7 @@ change для плагинов и фиксируется в CHANGELOG (`Changed`
 ### 4.1 Глобальные синглтоны — per-session в W1?
 `processRegistry`, `globalRateLimiter`, `globalSecurityPolicyManager`
 процесс-глобальны по природе. `mma serve` уже даёт изоляцию «1 тенант = 1
-процесс» (§8.2). **Решение:** в W1 синглтоны остаются процесс-глобальными;
+процесс» (§8.2). **Решение:** в W1 синглтоны остаются процесс-глобальными; `DEBT(per-session-singletons)`.
 `ModuleHost` получает их как `ModuleData` (владение — ядро, не модуль), но
 **не** делает per-session. Per-session — отдельная волна, если появится
 многотенантный процесс. Зафиксировать как осознанный долг.
@@ -115,18 +115,18 @@ Session-специфичные тулы раннера регистрируют�
 
 ---
 
-## 5. `scripts/check-arch.ts` — гейт (правило 5)
+## 5. `scripts/check-arch.ts` — гейт (правило 5) `DEBT(check-arch-script)`
 
 Гейт вводится **вместе** с контрактом и растёт инкрементально. Проверки
 (каждая — с явным allowlist и причиной):
 
 | # | Проверка | Инвариант | Стартовое состояние |
 |---|---|---|---|
-| A | `ToolRegistry.register` вызывается только из `ModuleHost` | INV-2 | 6 call-site: `tools/index.ts:142`, `modules-phase.ts:184`, `agent-phase.ts:192`, `session-runner-scope.ts:49,51`, `session-runner.ts:424` (+ `attachToolRegistry`) — **отложено** до миграции (W1.6) |
+| A | `ToolRegistry.register` вызывается только из `ModuleHost` | INV-2 | 6 call-site: `tools/index.ts:142`, `modules-phase.ts:184`, `agent-phase.ts:192`, `session-runner-scope.ts:49,51`, `session-runner.ts:424` (+ `attachToolRegistry`) — **отложено** до миграции (W1.6) `DEBT(arch-gate-a)` |
 | B1 | модуль не импортирует агент-петлю (`from ".../core/agent"`) | INV-3/4 | 4: `service/state.ts`, `webui/module.ts`, `webui/session/run-agent.ts`, `webui/settings/model-cache.ts` (allowlist) |
 | B2 | модуль не импортирует `core/agent/*`-утилиты напрямую | INV-3 | 12 файлов (`context-log`, `canonical-args`, `tool-output`, `context-calibration`) + B1 = 16 всего; вынести утилиты в нейтральное место (W4) |
 | C | модуль не вызывает чужой `tool.handler` напрямую | INV-4 | 0 — гейт строгий (пустой allowlist) |
-| D | файл >300 строк — только из `.arch-allowlist.json` | правило 6 | **отложено**: 58 файлов >300 строк — фиксировать массово сейчас значило бы закрепить bloat |
+| D | файл >300 строк — только из `.arch-allowlist.json` | правило 6 | **отложено**: 58 файлов >300 строк — фиксировать массово сейчас значило бы закрепить bloat `DEBT(arch-gate-d)` |
 
 **Реализовано в W1.4 (первая версия):** `tests/arch/module-boundaries.test.ts` — B1/B2/C.
 **A и D** — отдельными шагами: A после W1.6 (миграция тулов), D — когда начнём реально резать файлы (W5).
