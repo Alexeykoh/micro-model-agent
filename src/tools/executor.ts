@@ -5,6 +5,7 @@ import { killByCallId } from "../modules/processes/runner";
 import { isPathInScope, isPathWritable } from "../modules/security/path-validator";
 import { protectedPathBlock } from "../modules/security/protected-paths";
 import { isUrlAllowed } from "../modules/security/network-validator";
+import { filterToolsByTags } from "./filter-tools";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { t } from "../i18n/index";
@@ -277,6 +278,18 @@ export class ToolExecutor {
       return {
         success: false,
         output: t("tool.unknown", { name: call.name }),
+        toolCallId: call.id,
+      };
+    }
+
+    // Теги ограничивают исполнение, а не только схему (INV-11): вызов тула вне
+    // активного набора тегов блокируется ДО хендлера. Критерий — тот же, что у
+    // `filterToolsByTags` (alwaysOn переживает сужение); пустой набор тегов —
+    // легаси «все тулы».
+    if (filterToolsByTags([tool], this.ctx.activeToolTags ?? []).length === 0) {
+      return {
+        success: false,
+        output: t("tool.tags_blocked", { name: call.name }),
         toolCallId: call.id,
       };
     }

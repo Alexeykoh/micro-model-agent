@@ -104,6 +104,7 @@
   "tool.failed": "Инструмент {name} упал: {error}",
   "tool.unknown": "Неизвестный инструмент: {name}",
   "tool.not_allowed": "Инструмент недоступен в этом режиме: {name}",
+  "tool.tags_blocked": "Инструмент не включён текущими тегами: {name}",
   "tool.path_blocked": "Путь недоступен: {path}{reason}",
   "tool.url_blocked": "URL недоступен: {url}{reason}",
   "tool.blocked": "Заблокировано плагином: {plugin}",

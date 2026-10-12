@@ -105,6 +105,7 @@
   "tool.failed": "Tool {name} failed: {error}",
   "tool.unknown": "Unknown tool: {name}",
   "tool.not_allowed": "Tool not allowed in this mode: {name}",
+  "tool.tags_blocked": "Tool not enabled by current tool tags: {name}",
   "tool.path_blocked": "Path not allowed: {path}{reason}",
   "tool.url_blocked": "URL not allowed: {url}{reason}",
   "tool.blocked": "Blocked by plugin: {plugin}",

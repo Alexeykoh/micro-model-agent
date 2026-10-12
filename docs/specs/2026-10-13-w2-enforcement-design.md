@@ -64,10 +64,22 @@ security: ToolSecurityDecl;   // caps обязателен; pathArgs/urlArgs/man
 ## 3. Пайплайн `execute()` (до хендлера)
 
 ```
-allowlist → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
+allowlist → теги (INV-11) → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
           → [urlArgs: isUrlAllowed]
-          → rate-limit → плагин-хуки (onBeforeTool) → хендлер
+          → плагин-хуки (onBeforeTool) → хендлер
 ```
+
+- **Теги (INV-11).** `execute()` блокирует вызов тула вне активного набора
+  `ctx.activeToolTags` — тем же критерием, что `filterToolsByTags` (`alwaysOn`
+  переживает сужение; пустой набор = легаси «все тулы»). Тег ограничивает
+  исполнение, а не только схему. Реализовано W2.6
+  (`tests/tools/enforcement-tags.test.ts`).
+- **Rate-limit — на уровне батча, а не вызова.** `security.rateLimits.maxParallelTasks`
+  уже применяется в `core/agent/tool-batch.ts` (кап конкурентных тулов одного
+  батча); `maxRequestsPerMinute` — лимит запросов LLM (`openai-compat.ts`).
+  Отдельного пер-вызовного лимитера тулов в конфиге нет — вводить его здесь
+  значило бы изобретать поведение без ключа. Поэтому в `execute()` rate-limit
+  не подключается.
 
 - Проверки **fail-closed**: блокировка возвращает `ToolResult{success:false}` с
   `blocked:true` и локализованной причиной (`tool.path_blocked`/`tool.url_blocked`).
@@ -79,7 +91,6 @@ allowlist → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
   проверки заблокировало бы тул — инверсия смысла). См. правку 2026-10-13 ниже.
 - **Согласованность `caps` ↔ аргументы** (гейт): тул с `pathArgs` обязан иметь
   `fs`-cap, тул с `urlArgs` — `net`-cap; иначе декларация врёт о возможностях.
-- Теги — не здесь: сужение набора тулов уже делает `filterToolsByTags`.
 - `protected-paths` — always-on (не зависит от `security.paths.enabled`).
 
 ## 4. Матрица «тул → декларация» (START; полнота обязательна)
@@ -120,8 +131,9 @@ allowlist → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
 | W2.3 | `urlArgs` в `execute()` (SSRF) + тесты | `tests/tools/enforcement-url.test.ts` ✅ |
 | W2.4 | Согласованность `caps` ↔ `pathArgs`/`urlArgs` (гейт); правка `caps`-мэппинга | `tests/tools/security-decl.test.ts` |
 | W2.5 | Снять дублирующие проверки из хендлеров (оставить доменную валидацию) | существующие security-тесты зелёные ✅ |
+| W2.6 | Enforcement тегов в `execute()` (INV-11); rate-limit — батч-кап (см. §3) | `tests/tools/enforcement-tags.test.ts` ✅ |
 
-Порядок: W2.1 (объявления) → W2.2/W2.3 (точка) → W2.4 (согласованность) → W2.5 (чистка).
+Порядок: W2.1 (объявления) → W2.2/W2.3 (точка) → W2.4 (согласованность) → W2.5 (чистка) → W2.6 (теги).
 
 ## 6. Риски
 
