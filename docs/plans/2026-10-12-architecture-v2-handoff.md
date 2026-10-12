@@ -154,8 +154,10 @@ overflow-warning называет владельца и блок, а не тол
 - W1.1 ✅ `ModuleHost` (lifecycle/requires/critical/timeout/dispose/health/сбор).
 - W1.4 ◐ гейт `tests/arch/module-boundaries.test.ts` (INV-3/4, 16 записей allowlist);
   `check-arch` A (единый путь тулов) и D (размер файла) — отложены.
-- W1.2/W1.3/W1.5/W1.6 ⬜ — child-логер в модулях, единый путь тулов, `PromptAssembler`,
-  миграция `mcp`→`lsp`→`browser` на `ModuleDef`.
+- W1.2/W1.3/W1.5 ⬜ — child-логер в модулях, единый путь тулов, `PromptAssembler`.
+- W1.6 ◐ — `mcp` переведён на `ModuleDef` (`src/modules/mcp/lifecycle.ts`): lifecycle
+  (initialize + таймаут) у хоста, ad-hoc `withTimeout` из bootstrap убран; `lsp` и
+  `browser` — далее. `ModuleHost` получил живого потребителя.
 
 **Приоритет при выборе одной волны: W2.** Enforcement даёт немедленный эффект на
 самый дорогой класс дефектов (безопасность) и не требует остального каркаса.

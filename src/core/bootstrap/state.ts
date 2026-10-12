@@ -80,23 +80,6 @@ export function registerBuiltinPlugin(
   pm.register(plugin);
 }
 
-/** Отклоняет `promise` через `ms`; таймер победителя снимается. */
-export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
-    promise.then(
-      (v) => {
-        clearTimeout(timer);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(timer);
-        reject(e);
-      },
-    );
-  });
-}
-
 const VALID_LOG_LEVELS: readonly string[] = ["debug", "info", "warn", "error"];
 
 /** Нормализует строку из конфига в LogLevel (без `as any`); неизвестное → info. */

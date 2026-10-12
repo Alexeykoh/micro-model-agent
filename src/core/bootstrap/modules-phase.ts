@@ -21,6 +21,7 @@ import { BrowserModule } from "../../modules/browser/index";
 import { LspModule, FileOnlyLogger, DEFAULT_LSP_CONFIG } from "../../modules/lsp/index";
 import { runStartupHealthCheck } from "../../modules/lsp/startup-check";
 import { MCPModule } from "../../modules/mcp/index";
+import { mcpModuleDef } from "../../modules/mcp/lifecycle";
 import { MemoryModule } from "../../modules/memory/module";
 import { MemoryStore } from "../../modules/memory/store";
 import { t } from "../../i18n/index";
@@ -29,7 +30,9 @@ import { estimateTokens } from "../../llm/token-counter";
 import type { PromptBlock } from "../types";
 import { readMmaVersion } from "../version";
 import { dryRunOverflow, overflowHint } from "../prompt-overflow";
-import { isOneShotMode, loadAgentsMdBlocks, registerBuiltinPlugin, withTimeout } from "./state";
+import { isOneShotMode, loadAgentsMdBlocks, registerBuiltinPlugin } from "./state";
+import { ModuleHost } from "../module-host";
+import { defaultOutputBus } from "../../output";
 import { globalPluginsDir as resolveGlobalPluginsDir, projectMmaDir } from "../../config/paths";
 import type { ModulesPhaseInput, ModulesPhase } from "./state";
 
@@ -110,16 +113,13 @@ async function registerCoreModules(
   moduleRegistry.register(input.indexerModule);
 
   const mcpModule = new MCPModule(config);
-  try {
-    // Ограничиваем init MCP, чтобы один медленный/висящий сервер не стопил boot
-    // навсегда (B5): на таймауте — лог-и-дальше, MCP-тулы появятся поздно или
-    // не появятся, вместо stall'а старта.
-    await withTimeout(mcpModule.initialize(), 10_000);
-  } catch (err) {
-    logger.warn(
-      `MCP init failed or timed out (${err instanceof Error ? err.message.slice(0, 120) : String(err)}) — continuing without MCP tools.`,
-    );
-  }
+  // Жизненный цикл MCP — через ModuleHost (INV-5/8): раньше `initialize()` звался
+  // вручную с ad-hoc таймаутом; теперь таймаут и «отказ не фатален» объявлены
+  // контрактом модуля (`mcpModuleDef`), а не живут в bootstrap. MCP остаётся в
+  // ModuleRegistry для сбора тулов/плагинов (единый путь сбора — шаг W1.3).
+  const mcpHost = new ModuleHost(config, logger, defaultOutputBus);
+  mcpHost.register(mcpModuleDef(mcpModule));
+  await mcpHost.setup();
   moduleRegistry.register(mcpModule);
 
   // Общий глобальный стор памяти — один инстанс у модуля памяти и цикла,

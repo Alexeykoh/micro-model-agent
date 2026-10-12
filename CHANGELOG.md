@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   the `critical` policy (critical setup failure aborts boot; others degrade), reverse-order
   `dispose()`, a health summary, and one place that collects each module's tools, prompt
   blocks and hooks. Spec: `docs/specs/2026-10-13-w1-module-host-design.md`.
+- **MCP lifecycle moved to `ModuleHost` (W1.6, INV-5/8)**: `MCPModule` declares its
+  contract (`src/modules/mcp/lifecycle.ts` — non-critical, `setup = initialize()`);
+  the bootstrap ad-hoc `withTimeout(initialize(), 10_000)` is gone and the module
+  timeout is owned by the host. A failing/slow MCP no longer stalls or aborts boot.
 
 - **Fail-open signals in the session log (INV-15)** (`src/core/session-logger.ts`,
   `docs/agents/observability.md`): critic and tool failures that used to surface only
