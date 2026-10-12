@@ -28,6 +28,7 @@ import { createLoopModules, type LoopSetupHost } from "./agent/loop-setup";
 import { buildLoopResult, type LoopResultHost } from "./agent/loop-result";
 import { runIterationPrologue, type IterationPrologueHost } from "./agent/iteration-prologue";
 import { runLlmPhase, type LlmPhaseHost } from "./agent/loop-llm";
+import { runFinalGates } from "./agent/loop-gates";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -40,7 +41,6 @@ import type { ToolEvent, AgentPhase, AgentResult, OnMeta } from "./types";
 import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
-import { resolveVerbosity } from "../ui/theme";
 import { processRegistry } from "../modules/processes";
 import { SessionLogger } from "./session-logger";
 import type { MemoryStore } from "../modules/memory/store";
@@ -53,8 +53,6 @@ import type { LoopState } from "./agent/loop-state";
 import type { TokenTracker } from "./agent/token-tracker";
 import type { ContextLogger } from "./agent/context-log";
 import { ContextRenderer } from "./agent/context-renderer";
-import { resolveArtifactStates } from "./agent/artifact-resolve";
-import { gatherTurnToolEvents } from "./agent/critic-gate";
 import { accumulateToolTargets, applyBatchNudges } from "./agent/loop-nudges";
 import { seedToolTags } from "../tools/auto-tags";
 import {
@@ -63,7 +61,6 @@ import {
   type TitleChat,
 } from "../modules/session/auto-name";
 import type { PromptBlockKind } from "./types";
-import { MAX_EMPTY_RESPONSE_RETRIES } from "./agent/constants";
 
 export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
 
@@ -592,12 +589,7 @@ export class Agent {
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult> {
-    const {
-      config,
-      contextManager,
-      hallucinationDetector,
-      logger,
-    } = this.deps;
+    const { config, contextManager, logger } = this.deps;
 
     this.abortController = new AbortController();
     // Модули цикла (состояние + сервисы) — единый контейнер (INV-23).
@@ -673,123 +665,22 @@ export class Agent {
         continue;
       }
 
-      const verdict = await hallucinationGate.evaluate({
+      const gates = await runFinalGates(this.deps, {
         state,
         textContent,
+        reasoningContent,
         input,
-        exitOnComplete: this.deps.exitOnComplete ?? false,
-        hasFinalAudit: !!this.deps.finalAudit,
-        logger,
-        contextManager,
-        onMeta,
+        slog,
         onChunk,
-        // Строка о неуверенности — диагностика: только verbose-режим.
-        verbose: resolveVerbosity(this.deps.config.ui) === "verbose",
-        // Заземление заявлений на диск (отсутствующие/непарсящиеся файлы,
-        // поданные как созданные/валидные). Резолвится здесь — у гейта нет fs.
-        artifacts: resolveArtifactStates(this.deps.baseDir, textContent),
-        slog,
-      });
-      if (verdict.action === "block") {
-        return {
-          success: false,
-          text: state.lastText,
-          error: t("error.response_blocked", { reason: verdict.reason }),
-          iterationCount: state.iteration,
-        };
-      }
-      if (verdict.action === "retry") {
-        continue;
-      }
-      if (verdict.action === "exit") {
-        // lastText/finalAnswerAccepted уже выставлены вентилем.
-        break;
-      }
-      // warn/accept → принятие ответа
-
-      if (textContent) {
-        contextManager.addMessage({ role: "assistant", content: textContent });
-        if (config.session.autoSave) {
-          slog.saveAssistantMessage(textContent);
-        }
-        slog.logAssistant(textContent, reasoningContent, undefined, state.iteration);
-      }
-
-      state.lastText = textContent;
-
-      {
-        const decisionPatterns = [
-          ...textContent.matchAll(
-            /(?:plan|decided|decision|решено|план|решение):\s*(.+?)(?:\n|$)/gi,
-          ),
-        ];
-        for (const match of decisionPatterns) {
-          hallucinationDetector
-            .getConsistencyCheck()
-            .trackDecision(match[1].trim(), "agent_response");
-        }
-      }
-
-      // Guard: пустой финальный ответ (текста нет, тулов нет — часто только
-      // reasoning после компакции). Подталкиваем к реальному ответу вместо
-      // молчаливого завершения с text: "".
-      if (!textContent?.trim()) {
-        if (state.emptyResponseRetries < MAX_EMPTY_RESPONSE_RETRIES) {
-          state.emptyResponseRetries++;
-          logger.diagnostic(
-            "warn",
-            `Empty response on iteration ${state.iteration} (retry ${state.emptyResponseRetries}/${MAX_EMPTY_RESPONSE_RETRIES})`,
-          );
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-summary>Your previous response was empty. Answer the user's task now with a final text response or call a tool. Do not reply with reasoning only.</system-summary>`,
-          });
-          continue;
-        }
-        state.emptyResponseExhausted = true;
-        logger.diagnostic(
-          "warn",
-          `Empty response retries exhausted after ${MAX_EMPTY_RESPONSE_RETRIES} attempts`,
-        );
-      }
-
-      const criticAction = await criticGate.evaluate({
-        state,
-        iteration: state.iteration,
-        logger,
-        contextManager,
-        slog,
-        task: input,
-        planSummary: this.deps.planSummary?.() ?? undefined,
-        toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
-        beforeFinish: true,
-        // Текст ответа — только для ходов без мутаций (чат-доставка):
-        // при изменённых файлах судья — файлы/команды, проза ему не нужна.
-        answerText: state.mutationsSinceCritic === 0 ? textContent : undefined,
         onMeta,
+        hallucinationGate,
+        criticGate,
+        auditGate,
       });
-      if (criticAction === "retry") {
-        state.suppressRepetitionRetry = true;
-        continue;
-      }
-
-      const auditVerdict = await auditGate.evaluate({
-        state,
-        iteration: state.iteration,
-        maxIterations: config.maxToolIterations,
-        logger,
-        contextManager,
-        slog,
-        onMeta,
-      });
-      if (auditVerdict === null || auditVerdict.action === "pass") {
-        state.finalAnswerAccepted = true;
-        break;
-      }
-      if (auditVerdict.action === "exhausted") {
-        // auditFailed уже выставлен вентилем.
-        break;
-      }
+      if (gates.kind === "continue") continue;
+      if (gates.kind === "break") break;
+      if (gates.kind === "return") return gates.result;
+      // gates.kind === "ok": гейты пройдены, продолжаем цикл.
     }
 
     if (state.finalizeReason || (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted)) {
