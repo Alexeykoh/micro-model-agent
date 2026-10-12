@@ -21,12 +21,12 @@ describe("contextAuto config key", () => {
     expect(getConfigValue(freshConfig(), "contextAuto").value).toBe(true);
   });
 
-  it("is a reconfiguring bool in the budget domain", () => {
+  it("is a rebuilding bool in the budget domain", () => {
     const def = resolveConfigKey("contextAuto");
     expect(def?.key).toBe("contextAuto");
     expect(def?.valueType).toBe("bool");
     expect(def?.domain).toBe("budget");
-    expect(def?.reconfigure).toBe(true);
+    expect(def?.effects.length).toBeGreaterThan(0);
   });
 
   it("pinning a concrete window turns auto off", () => {

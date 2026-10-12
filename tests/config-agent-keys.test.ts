@@ -37,10 +37,10 @@ describe("registry: critic keys", () => {
     expect(setConfigValue(c, "critic.maxCalls", "999").ok).toBe(false);
   });
 
-  it("marks the keys as requiring reconfigure", () => {
+  it("marks the keys as requiring a rebuild", () => {
     for (const key of ["critic.enabled", "critic.maxCalls"]) {
       const def = configDefs().find((d) => d.key === key);
-      expect(def?.reconfigure).toBe(true);
+      expect(def?.effects.length).toBeGreaterThan(0);
     }
   });
 });

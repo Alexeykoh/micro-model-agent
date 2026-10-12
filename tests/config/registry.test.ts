@@ -30,12 +30,12 @@ describe("config registry", () => {
     if (got.ok) expect(got.display).toBe(DEFAULTS.model);
   });
 
-  it("sets a string key and reports reconfigure", () => {
+  it("sets a string key and reports rebuild effects", () => {
     const cfg = freshConfig();
     const res = setConfigValue(cfg, "model", "some/model");
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.reconfigure).toBe(true);
+      expect(res.effects).toContain("provider.rebuild");
       expect(cfg.model).toBe("some/model");
     }
   });
@@ -81,7 +81,7 @@ describe("config registry", () => {
     const cfg = freshConfig();
     const res = setConfigValue(cfg, "reasoning.mode", "high");
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.reasoningChanged).toBe(true);
+    if (res.ok) expect(res.effects).toContain("reasoning.reload");
     expect(cfg.reasoning?.mode).toBe("high");
   });
 

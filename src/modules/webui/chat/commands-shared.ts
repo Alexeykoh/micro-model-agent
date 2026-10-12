@@ -8,6 +8,7 @@
 import type { AppConfig } from "../../../config/types";
 import { setLocale } from "../../../i18n/index";
 import { setConfigValue } from "../../../config/registry";
+import { needsRebuild } from "../../../config/effects";
 import { broadcast, type SessionStore, type ConfigStore, type SseTransport, type RuntimeState } from "../state";
 
 /** Вывод строки в ленту команды. */
@@ -81,7 +82,7 @@ export async function applyConfigWrite(
   } catch {
     note = "not persisted";
   }
-  if (result.reconfigure && state.reconfigure) {
+  if (needsRebuild(result.effects) && state.reconfigure) {
     try {
       await state.reconfigure(cfg);
     } catch {

@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../../i18n/index";
 import { redactConfigSecrets } from "../../../config/redact";
 import { configDefs, setConfigValue, type ConfigKeyDef } from "../../../config/registry";
+import { needsRebuild } from "../../../config/effects";
 import type { AppConfig } from "../../../config/types";
 import { readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
@@ -155,7 +156,7 @@ export function handleConfigPost(
       // на каждое нажатие.
       let persisted = true;
       let warning: string | undefined;
-      if (result.reconfigure) {
+      if (needsRebuild(result.effects)) {
         ({ persisted, warning } = await persistAndReconfigure(s, config));
       } else {
         try {

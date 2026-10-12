@@ -5,6 +5,7 @@ import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { setBudgetShare, type BudgetShareKey } from "./budget";
 import { readMmaVersion } from "../core/version";
 import { EXTRA_DEFS } from "./registry-extra";
+import { REBUILD, type ConfigEffect } from "./effects";
 import { Logger } from "../logger/app-logger";
 
 const logger = new Logger("warn", "config");
@@ -89,7 +90,11 @@ export interface ConfigKeyDef {
   max?: number;
   /** Шаг для числовых UI (напр. токены шагом 1024). */
   step?: number;
-  reconfigure: boolean;
+  /**
+   * Эффекты записи ключа (INV-18): что пересобрать в живом рантайме. Пусто —
+   * значение читается тулами напрямую, менять нечего.
+   */
+  effects: readonly ConfigEffect[];
   readOnly?: boolean;
   /**
    * Разрешает пустое значение для `string` (пустая строка → сброс в undefined
@@ -120,7 +125,7 @@ function shareField(key: BudgetShareKey, canonical: string): ConfigKeyDef {
     min: MIN_SHARE,
     max: MAX_SHARE,
     step: 0.01,
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.contextBudget[field],
     set: (c, v) => setBudgetShare(c, key, v as number),
     extraValidate: (c, v) => {
@@ -143,7 +148,7 @@ function securityToggle(field: SecurityToggle, canonical: string): ConfigKeyDef 
     // Тулы читают `config.security` живьём; пересборка агента не нужна. Шифрование
     // сессии снапшотится в стор на bootstrap, так что полный эффект — только со
     // следующего запуска: reconfigure его всё равно не пересобрал бы.
-    reconfigure: false,
+    effects: [],
     get: (c) => {
       const sec = c.security;
       if (!sec) return false;
@@ -163,7 +168,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     aliases: [],
     domain: "agent",
     valueType: "string",
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.model,
     set: (c, v) => {
       c.model = String(v);
@@ -174,7 +179,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     aliases: [],
     domain: "provider",
     valueType: "string",
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.provider.active ?? c.provider.type,
     set: (c, v) => {
       c.provider.active = String(v);
@@ -194,7 +199,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     valueType: "int",
     min: 1024,
     step: 1024,
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.contextWindow,
     set: (c, v) => {
       c.contextWindow = v as number;
@@ -210,7 +215,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     aliases: ["reasoning.show"],
     domain: "reasoning",
     valueType: "bool",
-    reconfigure: false,
+    effects: [],
     get: (c) => c.showReasoning,
     set: (c, v) => {
       c.showReasoning = v as boolean;
@@ -222,7 +227,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     domain: "reasoning",
     valueType: "enum",
     enumValues: REASONING_LEVELS,
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.reasoning?.mode ?? "auto",
     set: (c, v) => {
       const base = c.reasoning ?? structuredClone(DEFAULTS.reasoning!);
@@ -235,7 +240,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     domain: "ui",
     valueType: "enum",
     enumValues: VERBOSITY_LEVELS,
-    reconfigure: false,
+    effects: [],
     get: (c) => c.ui.verbosity ?? (c.ui.verbose ? "verbose" : "quiet"),
     set: (c, v) => {
       c.ui.verbosity = v as "quiet" | "normal" | "verbose";
@@ -248,7 +253,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     valueType: "int",
     min: 1,
     step: 1,
-    reconfigure: false,
+    effects: [],
     get: (c) => c.maxToolIterations,
     set: (c, v) => {
       c.maxToolIterations = v as number;
@@ -261,7 +266,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     valueType: "int",
     min: 1,
     step: 1,
-    reconfigure: false,
+    effects: [],
     get: (c) => c.stuckThreshold,
     set: (c, v) => {
       c.stuckThreshold = v as number;
@@ -272,7 +277,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     aliases: [],
     domain: "agent",
     valueType: "bool",
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.critic?.enabled ?? DEFAULTS.critic.enabled,
     set: (c, v) => {
       c.critic = { ...(c.critic ?? DEFAULTS.critic), enabled: v as boolean };
@@ -286,7 +291,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     min: 0,
     max: 20,
     step: 1,
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.critic?.maxCalls ?? DEFAULTS.critic.maxCalls,
     set: (c, v) => {
       c.critic = { ...(c.critic ?? DEFAULTS.critic), maxCalls: v as number };
@@ -300,7 +305,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     min: 0,
     max: 5,
     step: 1,
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.critic?.maxRepairCycles ?? DEFAULTS.critic.maxRepairCycles,
     set: (c, v) => {
       c.critic = { ...(c.critic ?? DEFAULTS.critic), maxRepairCycles: v as number };
@@ -314,7 +319,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     min: 1000,
     max: 300000,
     step: 1000,
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.critic?.timeoutMs ?? DEFAULTS.critic.timeoutMs,
     set: (c, v) => {
       c.critic = { ...(c.critic ?? DEFAULTS.critic), timeoutMs: v as number };
@@ -325,7 +330,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     aliases: [],
     domain: "agent",
     valueType: "string",
-    reconfigure: true,
+    effects: REBUILD,
     allowEmpty: true,
     editor: { kind: "select", optionsSource: "models" },
     get: (c) => c.critic?.model ?? "",
@@ -339,7 +344,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     aliases: [],
     domain: "agent",
     valueType: "bool",
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.critic?.tools ?? DEFAULTS.critic.tools,
     set: (c, v) => {
       c.critic = { ...(c.critic ?? DEFAULTS.critic), tools: v as boolean };
@@ -350,7 +355,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     aliases: [],
     domain: "agent",
     valueType: "string",
-    reconfigure: true,
+    effects: REBUILD,
     allowEmpty: true,
     editor: { kind: "select", optionsSource: "providers" },
     get: (c) => {
@@ -383,7 +388,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     min: 256,
     max: 32768,
     step: 256,
-    reconfigure: true,
+    effects: REBUILD,
     get: (c) => c.critic?.maxTokens ?? DEFAULTS.critic.maxTokens,
     set: (c, v) => {
       c.critic = { ...(c.critic ?? DEFAULTS.critic), maxTokens: v as number };
@@ -395,7 +400,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     domain: "agent",
     valueType: "enum",
     enumValues: LOG_LEVELS,
-    reconfigure: false,
+    effects: [],
     get: (c) => c.logLevel,
     set: (c, v) => {
       c.logLevel = String(v);
@@ -407,7 +412,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     domain: "i18n",
     valueType: "enum",
     enumValues: LOCALES,
-    reconfigure: false,
+    effects: ["i18n.reload"],
     get: (c) => c.locale,
     set: (c, v) => {
       c.locale = String(v);
@@ -418,7 +423,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     aliases: [],
     domain: "agent",
     valueType: "string",
-    reconfigure: false,
+    effects: [],
     readOnly: true,
     // Версия *установленного пакета*, а не `config.version` (то — версия схемы
     // конфига для детекта миграций, с релизом не совпадает никогда). Читается
@@ -432,7 +437,7 @@ const DEFINITIONS: ConfigKeyDef[] = [
     aliases: [],
     domain: "security",
     valueType: "bool",
-    reconfigure: false,
+    effects: [],
     get: (c) => c.security?.bash.blockDangerousFlags ?? true,
     set: (c, v) => {
       if (!c.security) c.security = structuredClone(DEFAULT_SECURITY_CONFIG);
@@ -591,16 +596,15 @@ export function getConfigValue(config: AppConfig, name: string): ConfigGetResult
   return { ok: true, key: def.key, def, value, display: formatConfigValue(value) };
 }
 
-/** Успешная запись: ключ, значение, нужен ли reconfigure. */
+/** Успешная запись: ключ, значение, объявленные эффекты (INV-18). */
 export interface ConfigSetOk {
   ok: true;
   key: string;
   def: ConfigKeyDef;
   value: unknown;
   display: string;
-  reconfigure: boolean;
-  /** Key needs an agent-level reasoning side effect after apply. */
-  reasoningChanged: boolean;
+  /** Последствия записи — что пересобрать в живом рантайме. */
+  effects: readonly ConfigEffect[];
 }
 /** Ошибка записи: причина + ввод + опц. ключ/деф. */
 export interface ConfigSetErrorFail {
@@ -699,8 +703,7 @@ export function setConfigValue(config: AppConfig, name: string, raw: string): Co
     def,
     value: parsed.value,
     display: formatConfigValue(parsed.value),
-    reconfigure: def.reconfigure,
-    reasoningChanged: def.key === "reasoning.mode",
+    effects: def.effects,
   };
 }
 

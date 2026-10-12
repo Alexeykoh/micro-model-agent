@@ -1,6 +1,7 @@
 // Доп. дефы реестра (~110 ключей): фабрики bool/int/share/enum/list/str/json + EXTRA_DEFS.
 import type { AppConfig, AuditEventType } from "./types";
 import type { ConfigKeyDef, ConfigRangeReason } from "./registry";
+import { REBUILD } from "./effects";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
@@ -17,7 +18,7 @@ function bool(
   get: (c: AppConfig) => unknown,
   set: (c: AppConfig, v: unknown) => void,
 ): ConfigKeyDef {
-  return { key, aliases: [], domain, valueType: "bool", reconfigure, get, set };
+  return { key, aliases: [], domain, valueType: "bool", effects: reconfigure ? REBUILD : [], get, set };
 }
 
 /** Фабрика int-дефа с min/max/step. */
@@ -31,7 +32,7 @@ function int(
   get: (c: AppConfig) => unknown,
   set: (c: AppConfig, v: unknown) => void,
 ): ConfigKeyDef {
-  return { key, aliases: [], domain, valueType: "int", min, max, step, reconfigure, get, set };
+  return { key, aliases: [], domain, valueType: "int", min, max, step, effects: reconfigure ? REBUILD : [], get, set };
 }
 
 /** Фабрика share-дефа (доля 0.05–0.9). */
@@ -42,7 +43,7 @@ function share(
   get: (c: AppConfig) => unknown,
   set: (c: AppConfig, v: unknown) => void,
 ): ConfigKeyDef {
-  return { key, aliases: [], domain, valueType: "share", min: 0.05, max: 0.9, step: 0.01, reconfigure, get, set };
+  return { key, aliases: [], domain, valueType: "share", min: 0.05, max: 0.9, step: 0.01, effects: reconfigure ? REBUILD : [], get, set };
 }
 
 /** Фабрика enum-дефа. */
@@ -54,7 +55,7 @@ function enumOf(
   get: (c: AppConfig) => unknown,
   set: (c: AppConfig, v: unknown) => void,
 ): ConfigKeyDef {
-  return { key, aliases: [], domain, valueType: "enum", enumValues: values, reconfigure, get, set };
+  return { key, aliases: [], domain, valueType: "enum", enumValues: values, effects: reconfigure ? REBUILD : [], get, set };
 }
 
 /** Фабрика list-дефа (без reconfigure, опц. редактор). */
@@ -65,7 +66,7 @@ function list(
   set: (c: AppConfig, v: unknown) => void,
   editor?: ConfigKeyDef["editor"],
 ): ConfigKeyDef {
-  return { key, aliases: [], domain, valueType: "list", reconfigure: false, editor, get, set };
+  return { key, aliases: [], domain, valueType: "list", effects: [], editor, get, set };
 }
 
 /** Фабрика string-дефа. */
@@ -75,7 +76,7 @@ function str(
   get: (c: AppConfig) => unknown,
   set: (c: AppConfig, v: unknown) => void,
 ): ConfigKeyDef {
-  return { key, aliases: [], domain, valueType: "string", reconfigure: false, get, set };
+  return { key, aliases: [], domain, valueType: "string", effects: [], get, set };
 }
 
 /** Опциональная строка: get отдаёт "" при неустановленной, set чистит в undefined на пустой. */
@@ -102,7 +103,7 @@ function json(
     aliases: [],
     domain,
     valueType: "json",
-    reconfigure: false,
+    effects: [],
     editor,
     get,
     set,
@@ -363,18 +364,24 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
     (c) => c.skills.budget,
     (c, v) => { c.skills.budget = v as number; }),
 
-  // Deny-list выключенных плагинов. `reconfigure: false` — эффект применяется
-  // не пересборкой агента, а `applyConfigEffects` (см. registry.ts: setConfigValue),
+  // Deny-list выключенных плагинов. Эффект `plugins.gate` применяется не
+  // пересборкой агента, а `applyConfigEffects` (см. registry.ts: setConfigValue),
   // поэтому и REPL `/config`, и CLI, и веб-тумблер получают его одним путём.
-  list("plugins.disabled", "agent",
-    (c) => c.plugins?.disabled ?? DEFAULTS.plugins!.disabled,
-    (c, v) => {
-      c.plugins ??= structuredClone(DEFAULTS.plugins);
-      (c.plugins as NonNullable<AppConfig["plugins"]>).disabled = (v as string[])
-        .map((n) => n.trim())
-        .filter(Boolean);
-    },
-    { kind: "tags", placeholder: "my-plugin" }),
+  {
+    ...list(
+      "plugins.disabled",
+      "agent",
+      (c) => c.plugins?.disabled ?? DEFAULTS.plugins!.disabled,
+      (c, v) => {
+        c.plugins ??= structuredClone(DEFAULTS.plugins);
+        (c.plugins as NonNullable<AppConfig["plugins"]>).disabled = (v as string[])
+          .map((n) => n.trim())
+          .filter(Boolean);
+      },
+      { kind: "tags", placeholder: "my-plugin" },
+    ),
+    effects: ["plugins.gate"],
+  },
 
   // Лимит черновиков capabilities на проект (LRU-вытеснение). Ключ видит хост
   // черновиков через живой конфиг, поэтому `reconfigure: false`.

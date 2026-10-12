@@ -11,6 +11,7 @@ import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { providerNameTaken } from "../modules/providers/naming";
 import { activeProviderEndpoint } from "../modules/providers/manager";
 import { budgetBreakdownLines } from "../config/budget";
+import { needsRebuild } from "../config/effects";
 import {
   setConfigValue,
   getConfigValue,
@@ -325,7 +326,7 @@ async function mutateConfig(
   if (!result.ok) return result;
   applyConfigSideEffects(ctx, result);
   persistConfig(ctx);
-  if (result.reconfigure) await ctx.agent.reconfigure(ctx.config);
+  if (needsRebuild(result.effects)) await ctx.agent.reconfigure(ctx.config);
   if (result.key === "locale") ctx.reregisterCommands();
   return result;
 }
@@ -418,7 +419,7 @@ async function runConfigReset(ctx: ReplContext, rest: string[]): Promise<void> {
       const result = setConfigValue(ctx.config, k, rawFromValue(snapshot.get(k)));
       if (result.ok) {
         applyConfigSideEffects(ctx, result);
-        anyReconfig = anyReconfig || result.reconfigure;
+        anyReconfig = anyReconfig || needsRebuild(result.effects);
         localeChanged = localeChanged || result.key === "locale";
       }
     }
