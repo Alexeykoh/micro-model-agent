@@ -104,6 +104,7 @@
   "tool.failed": "Инструмент {name} упал: {error}",
   "tool.unknown": "Неизвестный инструмент: {name}",
   "tool.not_allowed": "Инструмент недоступен в этом режиме: {name}",
+  "tool.path_blocked": "Путь недоступен: {path}{reason}",
   "tool.blocked": "Заблокировано плагином: {plugin}",
   "tool.ui.security_blocked": "Заблокировано политикой безопасности",
   "tool.ui.protected_path": "Защищённый путь — нужно подтверждение",

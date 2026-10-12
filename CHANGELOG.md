@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Path enforcement at the tool-execution point (W2.2, INV-10)**: `ToolExecutor.execute()`
+  now applies scope (`isPathInScope`/`isPathWritable`) and protected paths (write-only,
+  always-on) to every declared `pathArgs` before the handler runs — fail-closed with
+  `blocked: true` and a localized `tool.path_blocked` message. Tools no longer enforce
+  paths themselves (their duplicate checks are removed in W2.5). Guard:
+  `tests/tools/enforcement-path.test.ts` (outside-base, protected, read-only exempt,
+  scope, from/to).
 - **Tool security declarations (W2.1, INV-9/10)**: every `ToolDefinition` now
   carries a required `security: ToolSecurityDecl` (`caps`, and optionally
   `pathArgs`/`urlArgs`/`manual`). Declared for all builtin and module tools;

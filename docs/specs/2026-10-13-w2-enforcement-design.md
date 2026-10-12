@@ -102,7 +102,7 @@ allowlist → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
 | # | Задача | Проверка |
 |---|---|---|
 | W2.1 | Типы `ToolCapability`/`ToolSecurityDecl` + поле `security` в `ToolDefinition`; объявить для всех встроенных и модульных тулов | гейт формы `tests/tools/security-decl.test.ts` |
-| W2.2 | `pathArgs` в `execute()` (scope + writable + protected) + тесты обхода | `tests/tools/enforcement-path.test.ts` |
+| W2.2 | `pathArgs` в `execute()` (scope + writable + protected) + тесты обхода | `tests/tools/enforcement-path.test.ts` ✅ |
 | W2.3 | `urlArgs` в `execute()` (SSRF) + тесты | `tests/tools/enforcement-url.test.ts` |
 | W2.4 | `caps` в `execute()` (`proc`→bash, `net`→network); `bash` `manual` | `tests/tools/enforcement-caps.test.ts` |
 | W2.5 | Снять дублирующие проверки из хендлеров (оставить доменную валидацию) | существующие security-тесты зелёные |

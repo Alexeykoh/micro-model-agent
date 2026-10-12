@@ -1,7 +1,9 @@
 /** Исполнитель тулов: allowlist, плагины, таймауты, мемо read-only. */
 import type { ToolContext, ToolCall, ToolResult, PluginManager, PluginHook } from "./types";
-import type { ToolRegistry } from "./registry";
+import type { ToolRegistry, RegisteredTool } from "./registry";
 import { killByCallId } from "../modules/processes/runner";
+import { isPathInScope, isPathWritable } from "../modules/security/path-validator";
+import { protectedPathBlock } from "../modules/security/protected-paths";
 import { t } from "../i18n/index";
 import {
   TOOL_EXECUTION_TIMEOUT_MS,
@@ -182,6 +184,48 @@ export class ToolExecutor {
     return allow ? new Set(allow) : null;
   }
 
+  /**
+   * Политика путей по объявленным `pathArgs` (INV-10): scope (чтение/запись) и
+   * protected-пути (только для записи, always-on). Fail-closed: блокировка
+   * возвращает `blocked: true` до вызова хендлера.
+   * @returns заблокированный `ToolResult` или `null`, если можно исполнять.
+   */
+  private enforcePathArgs(tool: RegisteredTool, call: ToolCall): ToolResult | null {
+    const pathArgs = tool.security?.pathArgs;
+    if (!pathArgs || pathArgs.length === 0) return null;
+    const writable = (tool.security?.caps ?? []).some(
+      (c) => "fs" in c && (c.fs === "write" || c.fs === "any"),
+    );
+    const { baseDir, scope } = this.ctx;
+    const pathsCfg = this.ctx.config.security?.paths;
+    for (const argName of pathArgs) {
+      const raw = call.arguments[argName];
+      const values = Array.isArray(raw) ? raw : [raw];
+      for (const value of values) {
+        if (typeof value !== "string" || value.trim() === "") continue;
+        if (writable) {
+          const prot = protectedPathBlock(this.ctx, value, value);
+          if (prot) return { ...prot, blocked: true, toolCallId: call.id };
+        }
+        const check = writable
+          ? isPathWritable(baseDir, value, scope, pathsCfg)
+          : isPathInScope(baseDir, value, scope, pathsCfg);
+        if (!check.allowed) {
+          return {
+            success: false,
+            blocked: true,
+            output: t("tool.path_blocked", {
+              path: value,
+              reason: check.reason ? ` — ${check.reason}` : "",
+            }),
+            toolCallId: call.id,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
   /** Выполнить tool call: allowlist → плагины → хендлер → post-хуки. */
   async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
     const allow = this.allowedNames();
@@ -201,6 +245,11 @@ export class ToolExecutor {
         toolCallId: call.id,
       };
     }
+
+    // Enforcement политик тула — ОДНА точка (INV-9/10): scope/protected по
+    // объявленным `pathArgs` ДО хендлера. Хендлер политику не повторяет.
+    const pathBlock = this.enforcePathArgs(tool, call);
+    if (pathBlock) return pathBlock;
 
     // Плагин-хуки сериализованы общим hookLock: параллельные форки-сиблинги
     // не гоняют общее состояние плагинов (stuck-detector, lint, lsp) конкурентно.

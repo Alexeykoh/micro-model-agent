@@ -167,8 +167,10 @@ overflow-warning называет владельца и блок, а не тол
 - W2.1 ✅ `ToolDefinition.security: ToolSecurityDecl` (`caps` обязателен; `pathArgs`/
   `urlArgs`/`manual`) — объявлено для всех тулов; `bash` = `[{proc:true}]` + `manual`,
   MCP-тулы = `manual`. Гейт формы `tests/tools/security-decl.test.ts`.
-- W2.2–W2.5 ⬜ — применение `pathArgs`/`urlArgs`/`caps` в `ToolExecutor.execute()`,
-  затем снятие дублирующих проверок из хендлеров.
+- W2.2 ✅ `pathArgs` в `ToolExecutor.execute()`: scope (`isPathInScope`/`isPathWritable`)
+  + protected-пути (только для записи, always-on) ДО хендлера; блок → `blocked:true` с
+  `tool.path_blocked`. Тест `tests/tools/enforcement-path.test.ts`.
+- W2.3–W2.5 ⬜ — `urlArgs` (SSRF), `caps` (`proc`/`net`), снятие дублей из хендлеров.
 
 
 **Приоритет при выборе одной волны: W2.** Enforcement даёт немедленный эффект на
