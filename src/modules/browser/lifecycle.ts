@@ -17,5 +17,10 @@ export function browserModuleDef(browser: BrowserModule): ModuleDef {
     critical: false,
     teardown: () => closeBrowserSession(),
     tools: () => browser.getToolDefinitions(),
+    promptBlocks: () => {
+      const block = browser.getSystemPromptBlock();
+      return block ? [block] : null;
+    },
+    hooks: () => browser.getPlugin(),
   };
 }

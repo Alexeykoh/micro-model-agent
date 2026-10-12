@@ -13,5 +13,12 @@ export function memoryModuleDef(memory: MemoryModule): ModuleDef {
     name: "memory",
     critical: false,
     tools: () => memory.getToolDefinitions(),
+    // `promptBlocks` есть (преференсы/память), а `hooks` — НЕТ намеренно: у
+    // `MemoryModule.getPlugin().onBuildPrompt` тот же контент, что у блока, и
+    // регистрация обоих задвоила бы память в промпте (как было до миграции).
+    promptBlocks: () => {
+      const block = memory.getSystemPromptBlock();
+      return block ? [block] : null;
+    },
   };
 }

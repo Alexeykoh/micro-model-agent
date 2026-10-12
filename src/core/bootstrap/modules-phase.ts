@@ -63,17 +63,17 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   // регистрации — как в `ModuleRegistry`, чтобы порядок определений и блоков
   // не менялся (KV-кеш, порядок схемы тулов).
   moduleHost.register(executionModuleDef(core.execModule));
-  moduleHost.register(sessionModuleDef());
+  moduleHost.register(sessionModuleDef(core.sessionModule));
   moduleHost.register(indexerModuleDef(input.indexerModule));
   moduleHost.register(mcpModuleDef(core.mcpModule));
   moduleHost.register(memoryModuleDef(core.memoryModule));
   if (languages.browserModule) moduleHost.register(browserModuleDef(languages.browserModule));
   moduleHost.register(lspModuleDef(languages.lspModule));
-  moduleHost.register(skillsModuleDef());
+  moduleHost.register(skillsModuleDef(input.skillsModule));
   await moduleHost.setup();
-  registerModuleToolsAndPlugins(input, moduleHost, core);
+  registerModuleToolsAndPlugins(input, moduleHost);
 
-  const promptBlocks = buildStaticPromptBlocks(input, moduleRegistry, core);
+  const promptBlocks = buildStaticPromptBlocks(input, moduleHost, core);
   dryRunStartupOverflow(input, promptBlocks);
 
   // План-блок удалён: мутирует каждую итерацию (статусы шагов), инвалидируя
@@ -160,19 +160,17 @@ function startLanguageModules(
   input: ModulesPhaseInput,
   moduleRegistry: ModuleRegistry,
 ): { lspModule: LspModule; startupCheck: Promise<PromptBlock | null>; browserModule?: BrowserModule } {
-  const { config, logger, baseDir, exitOnComplete, pluginManager } = input;
+  const { config, logger, baseDir, exitOnComplete } = input;
 
   let browserModule: BrowserModule | undefined;
   if (config.browser.enabled) {
     browserModule = new BrowserModule();
     moduleRegistry.register(browserModule);
-    registerBuiltinPlugin(pluginManager, browserModule.getPlugin());
   }
 
   const lspLogger = new FileOnlyLogger(logger);
   const lspModule = new LspModule(config.lsp, undefined, lspLogger);
   moduleRegistry.register(lspModule);
-  registerBuiltinPlugin(pluginManager, lspModule.getPlugin());
 
   // LSP как внешний источник определений для `project_map symbol`: включается
   // только когда индекс не нашёл совпадений (спавн сервера не на каждый запрос).
@@ -196,9 +194,8 @@ function startLanguageModules(
 function registerModuleToolsAndPlugins(
   input: ModulesPhaseInput,
   moduleHost: ModuleHost,
-  core: CoreModules,
 ): void {
-  const { logger, baseDir, toolRegistry, pluginManager, skillsModule, indexerModule } = input;
+  const { logger, baseDir, toolRegistry, pluginManager } = input;
 
   // Единый источник определений тулов — хост (INV-2): владельца проставляет
   // `collectTools` из имени модуля, запись — через `registerOwnedTools`.
@@ -208,11 +205,12 @@ function registerModuleToolsAndPlugins(
     moduleTools.map((tool) => ({ tool, owner: tool.owner })),
   );
 
-  registerBuiltinPlugin(pluginManager, core.execModule.getPlugin());
-  registerBuiltinPlugin(pluginManager, core.sessionModule.getPlugin());
-  registerBuiltinPlugin(pluginManager, skillsModule.getPlugin());
-  registerBuiltinPlugin(pluginManager, indexerModule.getPlugin());
-  registerBuiltinPlugin(pluginManager, core.mcpModule.getPlugin());
+  // Хуки модулей — тоже из хоста (INV-2/INV-16): один путь сбора, порядок =
+  // порядок инициализации модулей. Плагин памяти в хук не объявлен намеренно
+  // (её `onBuildPrompt` задвоил бы промпт-блок памяти).
+  for (const plugin of moduleHost.collectHooks()) {
+    registerBuiltinPlugin(pluginManager, plugin);
+  }
 
   pluginManager.register(lintOnWritePlugin);
   pluginManager.register(notifyPlugin);
@@ -245,7 +243,7 @@ function registerModuleToolsAndPlugins(
  */
 function buildStaticPromptBlocks(
   input: ModulesPhaseInput,
-  moduleRegistry: ModuleRegistry,
+  moduleHost: ModuleHost,
   core: CoreModules,
 ): PromptBlock[] {
   const { config, baseDir, dir, noAgentsMd, sessionManager, contextManager, systemInfoPrompt } =
@@ -272,7 +270,7 @@ function buildStaticPromptBlocks(
 
   return [
     systemInfoPrompt,
-    ...moduleRegistry.collectPromptBlocks(["indexer", "session"]),
+    ...moduleHost.collectPromptBlocks(["indexer", "session", "skills"]),
     ...agentsMdBlocks,
     // Статичное напоминание о плане: всегда в наличии, чтобы модель проверяла
     // активный план до создания нового (даже на первой итерации, до появления

@@ -14,5 +14,6 @@ export function executionModuleDef(exec: ExecutionModule): ModuleDef {
     name: "execution",
     critical: false,
     tools: () => exec.getToolDefinitions(),
+    hooks: () => exec.getPlugin(),
   };
 }

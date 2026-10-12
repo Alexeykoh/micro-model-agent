@@ -15,5 +15,10 @@ export function mcpModuleDef(mcp: MCPModule): ModuleDef {
     critical: false,
     setup: () => mcp.initialize(),
     tools: () => mcp.getToolDefinitions(),
+    promptBlocks: () => {
+      const block = mcp.getSystemPromptBlock();
+      return block ? [block] : null;
+    },
+    hooks: () => mcp.getPlugin(),
   };
 }

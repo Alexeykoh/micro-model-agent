@@ -3,12 +3,16 @@
  *
  * Не критичен: без сессионного блока агент работает. Своих тулов не имеет, а
  * системный блок сессии собирается динамически (INV-16, `assembleDynamicPromptBlocks`),
- * поэтому вкладом пока не объявлен — `ModuleDef` фиксирует существование и место
- * модуля в жизненном цикле хоста.
+ * поэтому `promptBlocks` не объявлен — иначе блок задвоился бы в статике.
  */
 import type { ModuleDef } from "../../core/module-host";
+import type { SessionModule } from "./module";
 
-/** Определение session-модуля: не критичен, без тулов. */
-export function sessionModuleDef(): ModuleDef {
-  return { name: "session", critical: false };
+/** Определение session-модуля: не критичен, без тулов; хук — плагин сессии. */
+export function sessionModuleDef(session: SessionModule): ModuleDef {
+  return {
+    name: "session",
+    critical: false,
+    hooks: () => session.getPlugin(),
+  };
 }

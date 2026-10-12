@@ -199,9 +199,10 @@ export class ModuleHost {
   }
 
   /** Вклад модулей: промпт-блоки (у каждого проставляется `source = имя модуля`). */
-  collectPromptBlocks(): PromptBlock[] {
+  collectPromptBlocks(exclude: readonly string[] = []): PromptBlock[] {
     const blocks: PromptBlock[] = [];
     for (const name of this.resolveOrder()) {
+      if (exclude.includes(name)) continue;
       for (const block of this.defs.get(name)!.promptBlocks?.() ?? []) {
         // Владелец блока — модуль (INV-1/17), как в `ModuleRegistry`.
         if (!block) continue;

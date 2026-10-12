@@ -8,6 +8,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Single tool-registration path (gate A, INV-2)**: tools enter the registry
+  through exactly one writer — `registerOwnedTools`/`upsertOwnedTool` in
+  `src/core/module-host.ts`; core catalogue, module contributions, runner
+  registries, interactive `question`/`approve` and plugin sync all route through
+  it. Strict AST guard `tests/arch/tool-registration.test.ts` (no allowlist) also
+  forbids `ModuleRegistry.collectToolDefinitions` outside the registry itself.
+- **Every registry module declares a `ModuleDef`; the host is the tool and hook
+  source (W1.6, INV-2/5/7)**: `execution`, `session`, `indexer` (file watcher →
+  `teardown`), `memory`, `skills` join `mcp`/`lsp`/`browser` on the single
+  `ModuleHost`. Tools (`ModuleHost.collectTools`), prompt blocks
+  (`collectPromptBlocks`) and plugin hooks (`collectHooks`) are now collected by
+  the host instead of `ModuleRegistry`.
+- **`verify_error` on verifier fail-open (W0.6, INV-15)**: `StepVerifier.onDegrade`
+  reports skipped syntax/typecheck/test checks; `ExecutionModule.setDiagnosticSink`
+  (wired by `agent-phase` and `session-runner`) writes a `verify_error` record to
+  the session log, so “not checked” is no longer indistinguishable from “valid”.
+- **Tool-tag enforcement at the execution point (W2.6, INV-11)**:
+  `ToolExecutor.execute()` blocks a tool outside `ctx.activeToolTags` (same
+  criterion as `filterToolsByTags`) before the handler. Guard:
+  `tests/tools/enforcement-tags.test.ts`.
+
+### Changed
+
+- **`bun run quality` runs the architecture gates** via `check:arch`
+  (`bun test tests/arch tests/output`); a separate `scripts/check-arch.ts` is not
+  introduced (the gates are tests, reused as-is).
+
+### Fixed
+
+- **`indexer` file watcher is torn down on shutdown**: the new `ModuleDef.teardown`
+  calls `IndexerModule.unwatch()`, closing the watcher and its debounce timer.
+
 - **Pay-once debt register (rule 9)** (`docs/agents/debt.md`,
   `tests/arch/debt-register.test.ts`): every consciously deferred shortcut now goes
   into one register with an exit criterion and a trigger, anchored by a `DEBT(id)`
