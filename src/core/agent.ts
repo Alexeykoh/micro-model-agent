@@ -23,13 +23,13 @@ import {
   finalizeWithoutTools as phaseFinalizeWithoutTools,
   type TurnOutputHost,
 } from "./agent/turn-output";
-import { ensureSessionStart as phaseEnsureSessionStart } from "./agent/session-start";
 import { createLoopModules, type LoopSetupHost } from "./agent/loop-setup";
 import { buildLoopResult, type LoopResultHost } from "./agent/loop-result";
 import { runIterationPrologue, type IterationPrologueHost } from "./agent/iteration-prologue";
 import { runLlmPhase, type LlmPhaseHost } from "./agent/loop-llm";
 import { runFinalGates } from "./agent/loop-gates";
 import { runToolBatchPhase, type BatchHost } from "./agent/loop-batch";
+import { runTurn, type TurnRunHost } from "./agent/turn-run";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -55,12 +55,6 @@ import type { TokenTracker } from "./agent/token-tracker";
 import type { ContextLogger } from "./agent/context-log";
 import { ContextRenderer } from "./agent/context-renderer";
 import { accumulateToolTargets } from "./agent/loop-nudges";
-import { seedToolTags } from "../tools/auto-tags";
-import {
-  deriveSessionName,
-  generateSessionTitle,
-  type TitleChat,
-} from "../modules/session/auto-name";
 import type { PromptBlockKind } from "./types";
 
 export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
@@ -155,6 +149,7 @@ export { mutationTargetKey } from "./agent/loop-nudges";
  */
 export class Agent {
   private deps: AgentDeps;
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: пишется через TurnRunHost
   private systemPromptAdded = false;
   private shutdownRequested = false;
   private abortController: AbortController | null = null;
@@ -182,6 +177,7 @@ export class Agent {
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается/пишется через PromptPhaseHost
   private overflowHintBlock: PromptBlock | null = null;
   /** Гард одноразового асинхронного резолва переполнения в run(). */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: пишется через TurnRunHost
   private overflowResolved = false;
 
   constructor(deps: AgentDeps) {
@@ -324,6 +320,7 @@ export class Agent {
   }
 
   /** Одноразовый резолв переполнения (реализация — `agent/prompt-phase.ts`). */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: вызывается через TurnRunHost
   private async resolvePromptOverflowOnce(): Promise<void> {
     await phaseResolvePromptOverflowOnce(this as unknown as PromptPhaseHost);
   }
@@ -429,167 +426,18 @@ export class Agent {
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult> {
-    // Сброс флага shutdown от прошлого прерывания
-    this.shutdownRequested = false;
-    // Свежий контроллер на ход — он держит Esc для всего прогона
-    // (executeSingleAgentLoop пересоздаёт его же на входе в цикл).
-    this.abortController = new AbortController();
-    this.setScope();
-    // P5 автосужение: детерминированно пред-посеваем теги тулов из сырого
-    // сообщения ДО первого LLM-вызова (системный промпт + схемы тулов).
-    // Только добавление — mid-session гранты enable_tools не снимаются.
-    // Пропуск при выключенном сужении (enableOnDemand: false → все тулы).
-    if (this.deps.config.tools?.enableOnDemand !== false && this.deps.toolTags) {
-      const added = seedToolTags(this.deps.toolTags, input);
-      if (added.length > 0) {
-        this.deps.logger.debug(`Auto-narrowing: pre-seeded tool tags [${added.join(", ")}]`);
-      }
-    }
-    const {
-      config,
-      llmProvider,
-      pluginManager,
-      contextManager,
-      logger,
-      sessionManager,
-    } = this.deps;
-
-    const slog = new SessionLogger(sessionManager, logger, () => this.callerProvenance());
-
-    if (sessionManager && !sessionManager.getActive()) {
-      sessionManager.create();
-      logger.debug(`Session started: ${sessionManager.getActive()}`);
-    }
-
-    const activeMeta = sessionManager?.getActiveMeta();
-    const isFirstMessage = !!activeMeta && activeMeta.messageCount === 0;
-
-    const start = await phaseEnsureSessionStart(
-      {
-        deps: this.deps,
-        systemPromptAdded: this.systemPromptAdded,
-        overflowResolved: this.overflowResolved,
-        buildSystemPrompt: () => this.buildSystemPrompt(),
-        resolvePromptOverflowOnce: () => this.resolvePromptOverflowOnce(),
-      },
-      slog,
+    return runTurn(
+      this as unknown as TurnRunHost,
+      input,
+      onChunk,
+      onMeta,
+      onTool,
+      onPhase,
+      onReasoning,
     );
-    if (start) {
-      this.systemPromptAdded = start.systemPromptAdded;
-      this.overflowResolved = start.overflowResolved;
-      if (start.probePassed !== undefined) this.probePassed = start.probePassed;
-    }
-
-    // Новое сообщение — новый интервал компакции: итерации прошлого хода не
-    // должны триггерить компакцию на итерации 1 этого (наблюдалось: ход 2
-    // скомпактился на итерации 8, снеся только что присланную задачу с 40+ ходами).
-    if (typeof contextManager.resetUserTurn === "function") {
-      contextManager.resetUserTurn();
-    }
-    // Пользовательские картинки (web/one-shot) персистим в `<sessionDir>/images/`
-    // до аттача к сообщению, чтобы `/resume`/reload восстановил их в ленте;
-    // живьём веб рисует их из client-state, история — из этих ref'ов.
-    const pendingImages =
-      typeof contextManager.getPendingImages === "function" ? contextManager.getPendingImages() : [];
-    contextManager.addMessage({ role: "user", content: input });
-    const userImageRefs = pendingImages.length
-      ? slog.persistUserImages(
-          pendingImages.flatMap((p) => (p.type === "image_url" && p.image_url.url ? [p.image_url.url] : [])),
-          {
-            maxCount: config.images?.maxCount ?? 30,
-            maxBytes: config.images?.maxBytes ?? 104_857_600,
-          },
-        )
-      : undefined;
-    slog.logUser(input, userImageRefs);
-
-    if (isFirstMessage && activeMeta && sessionManager) {
-      const meta = sessionManager.getActiveMeta();
-      if (meta && (meta.nameSource ?? "default") !== "manual") {
-        sessionManager.rename(meta.id, deriveSessionName(input), "auto");
-        if (config.session.autoName !== false) {
-          const chat: TitleChat = async (prompt, signal) => {
-            let text = "";
-            for await (const chunk of llmProvider.chat(
-              [{ role: "user", content: prompt }],
-              undefined,
-              signal,
-              { maxTokens: 48, reasoningEffort: "none", sessionId: meta?.id },
-            )) {
-              if (chunk.type === "text" && chunk.content) text += chunk.content;
-            }
-            return text;
-          };
-          void generateSessionTitle(input, chat)
-            .then((title) => {
-              if (!title) return;
-              const cur = sessionManager.getActiveMeta();
-              if (cur && cur.id === meta.id && (cur.nameSource ?? "default") === "auto") {
-                sessionManager.rename(meta.id, title, "auto");
-              }
-            })
-            .catch(() => {});
-        }
-      }
-    }
-
-    // Жизненный цикл хода для плагинов: считаем тул-события вне цикла,
-    // onTurnEnd — ровно один раз (успех, ошибка или прерывание).
-    const startedAt = Date.now();
-    let toolCalls = 0;
-    const countTool = (ev: ToolEvent) => {
-      if (ev.type === "end") toolCalls++;
-      onTool?.(ev);
-    };
-    const emitTurnEnd = (result: AgentResult | null, err?: unknown) => {
-      const interrupted =
-        (err instanceof Error && err.name === "AbortError") || this.shutdownRequested;
-      // `meta.updatedAt` двигает в основном appendMessage. Ход, который не
-      // добавил сообщений (оборван на входе, до первого ответа), оставлял мету
-      // с временем старта — список сессий показывал «сессию, которой давно нет».
-      if (sessionManager) sessionManager.touch?.();
-      pluginManager.runOnTurnEnd?.(
-        {
-          logger,
-          sessionManager: sessionManager?.getActiveMeta(),
-          contextManager,
-        },
-        {
-          success: !!result && result.success !== false && !err,
-          durationMs: Date.now() - startedAt,
-          textLength: (result?.text || "").length,
-          toolCalls,
-          interrupted: interrupted || undefined,
-        },
-      );
-    };
-
-    try {
-      // Единственный путь выполнения хода (INV-22 в спеке architecture v2):
-      // гейты нельзя обойти сменой пути. Параллельные сабагенты доступны модели
-      // через `parallelizable` на туле subagent — они идут через тот же ToolExecutor.
-      const result = await this.executeSingleAgentLoop(
-        input,
-        slog,
-        onChunk,
-        onMeta,
-        countTool,
-        onPhase,
-        onReasoning,
-      );
-
-      const provenance = this.callerProvenance();
-      result.provider = provenance.provider;
-      result.model = provenance.model;
-      result.durationMs = Date.now() - startedAt;
-      emitTurnEnd(result);
-      return result;
-    } catch (err) {
-      emitTurnEnd(null, err);
-      throw err;
-    }
   }
 
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: вызывается через TurnRunHost
   private async executeSingleAgentLoop(
     input: string,
     slog: SessionLogger,
