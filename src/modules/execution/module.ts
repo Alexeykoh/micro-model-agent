@@ -6,7 +6,7 @@ import type { AgentPlugin } from "../types";
 import { t } from "../../i18n/index";
 import { PlanTracker } from "./tracker";
 import { StepVerifier } from "./verifier";
-import { StuckDetector, isSearchableError, buildSearchQuery } from "./stuck-detector";
+import { StuckDetector } from "./stuck-detector";
 import { Auditor, findExistingFile } from "./auditor";
 import { PlanStore } from "./plan-store";
 import { getMessageText } from "../../llm/provider";
@@ -15,7 +15,6 @@ import type { Plan, StepKind } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import type { NetworkSecurityConfig } from "../../config/types";
 import { performWebSearch, type SearchResult } from "../../tools/web-search";
-import { getSessionSecurityConfig } from "../security/session-isolation";
 import { createPlanToolDefinitions } from "./plan-tool";
 import { isValidCheck } from "./plan-checks";
 import {
@@ -28,6 +27,7 @@ import { EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS as ERROR_SEARCH_MIN_INTERVAL_MS 
 import { advancePlanIfStepComplete, type StepAdvanceDeps } from "./step-advance";
 import { runFinalAudit, type FinalAuditHost } from "./final-audit";
 import { checkPlanAlignment, type PlanAlignmentHost } from "./plan-alignment";
+import { maybeSearchError, type ErrorSearchHost } from "./error-search";
 import type { Diagnostic } from "../../output/types";
 
 /** Реэкспорт для потребителей (тесты): реализация — в `step-advance.ts`. */
@@ -428,58 +428,7 @@ export class ExecutionModule implements AgentModule {
    * (размаркировка раз), затем сигнатура считается исканной.
    */
   maybeSearchError(ctx: ToolContext, call: ToolCall): void {
-    if (ctx.config?.webSearch?.enabled === false) return;
-    const cfg = ctx.config?.errorWebSearch;
-    if (!cfg?.enabled) return;
-    const sig = this.stuckDetector.getRepeatedErrorSignature();
-    if (!sig) return;
-    if (this.stuckDetector.hasErrorSearched(sig) && !this.retryWebSearchSignatures.has(sig)) return;
-    if (this.searchesThisSession >= (cfg.maxSearchesPerSession ?? 3)) return;
-    const lastError = this.stuckDetector.getLastErrorOutput();
-    if (!isSearchableError(lastError)) {
-      ctx.logger?.debug(t("exec.error_search_no_query"));
-      return;
-    }
-    const now = Date.now();
-    if (now - this.lastErrorSearchAt < this.errorSearchCooldownMs) return;
-    const stepDesc = this.tracker?.getCurrentStep()?.description ?? "";
-    const query = buildSearchQuery(
-      stepDesc,
-      this.stuckDetector.getLastBashCommand(),
-      lastError,
-      call.name,
-      cfg.maxQueryChars ?? 200,
-    );
-    const count = this.stuckDetector.getErrorSignatureCount(sig);
-    this.stuckDetector.markErrorSearched(sig);
-    this.searchesThisSession++;
-    this.lastErrorSearchAt = now;
-    const networkConfig = getSessionSecurityConfig(ctx.config, ctx.sessionContext).network;
-    this.searchRunner(query, cfg.maxResults ?? 5, networkConfig, cfg.requestTimeoutMs ?? 10000)
-      .then((res) => {
-        if (!res.success || res.results.length === 0) {
-          if (!this.retryWebSearchSignatures.has(sig)) {
-            this.retryWebSearchSignatures.add(sig);
-            this.stuckDetector.unmarkErrorSearched(sig);
-          }
-          ctx.logger?.warn(t("exec.error_search_failed", { query }));
-          ctx.sessionLog?.plan("web-search", `empty/failed: ${query}`);
-          return;
-        }
-        const resultsText = res.results
-          .map((r, i) => `${i + 1}. ${r.title} \u2014 ${r.url}\n   ${r.snippet}`)
-          .join("\n");
-        this.pendingMessages.push({
-          role: "user",
-          content: `<system-summary>${t("exec.error_search_results", {
-            sig,
-            count: String(count),
-            query,
-            results: resultsText,
-          })}</system-summary>`,
-        });
-      })
-      .catch((e) => ctx.logger?.warn(`error web search: ${e.message}`));
+    maybeSearchError(this.errorSearchHost(), ctx, call);
   }
 
   /**
@@ -642,6 +591,26 @@ export class ExecutionModule implements AgentModule {
   /** Хост гейта выравнивания (INV-23) для `plan-alignment.ts`. */
   private planAlignmentHost(): PlanAlignmentHost {
     return { tracker: this.tracker };
+  }
+
+  /** Хост автопоиска ошибок (INV-23) для `error-search.ts`. */
+  private errorSearchHost(): ErrorSearchHost {
+    return {
+      stuckDetector: this.stuckDetector,
+      tracker: this.tracker,
+      pendingMessages: this.pendingMessages,
+      retrySignatures: this.retryWebSearchSignatures,
+      searchRunner: this.searchRunner,
+      errorSearchCooldownMs: this.errorSearchCooldownMs,
+      searchesThisSession: this.searchesThisSession,
+      lastErrorSearchAt: this.lastErrorSearchAt,
+      setSearchesThisSession: (n) => {
+        this.searchesThisSession = n;
+      },
+      setLastErrorSearchAt: (n) => {
+        this.lastErrorSearchAt = n;
+      },
+    };
   }
 
 
