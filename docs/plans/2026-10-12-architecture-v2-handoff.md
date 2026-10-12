@@ -144,7 +144,7 @@ overflow-warning называет владельца и блок, а не тол
 | **W2** | Enforcement: `ToolSecurityDecl`, проверки в `ToolExecutor.execute()`, enforcement тегов, `bash` в jail | INV-9…12 (аудит 4.1, 4.4–4.7) |
 | **W3** | `ConfigStore` с эффектами вместо `reconfigure: boolean`, атомарная запись, модульные ключи | INV-18…21 |
 | **W4** | ✅ Переезд `modules/context` и `modules/hallucination` в ядро, `core/api/*`, пустой allowlist направления зависимостей | INV-3, INV-4 |
-| **W5** | Гейт D ✅; разбор `agent.ts` (~1620) на фазы `TurnCoordinator` + все раздутые файлы — долг `split-bloated-files` | INV-23 |
+| **W5** | Гейт D ✅; разбор `agent.ts` (1882 → ~1390, 6 фазовых модулей) на фазы `TurnCoordinator` + все раздутые файлы — долг `split-bloated-files` | INV-23 |
 
 Порядок выбран по риску, не по удобству. W1 и W2 дают эффект независимо от W5.
 
