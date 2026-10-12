@@ -1,7 +1,7 @@
 # Handoff: переход на Architecture v2
 
 **Дата:** 2026-10-13 · **Ветка:** `docs/architecture-v2` · **База:** `master` (`65ba2f68`)
-**Состояние:** `bun test` 3782 pass / 0 fail · `bun run quality` exit 0 · **18 коммитов не запушены**
+**Состояние:** `bun test` 3799 pass / 0 fail · `bun run quality` exit 0 · **30 коммитов не запушены**
 
 Документ для следующей сессии: что сделано, где остановились, что делать дальше.
 Открытые долги — единым реестром в [debt.md](../agents/debt.md) (правило 9).
@@ -144,7 +144,7 @@ overflow-warning называет владельца и блок, а не тол
 | **W2** | Enforcement: `ToolSecurityDecl`, проверки в `ToolExecutor.execute()`, enforcement тегов, `bash` в jail | INV-9…12 (аудит 4.1, 4.4–4.7) |
 | **W3** | `ConfigStore` с эффектами вместо `reconfigure: boolean`, атомарная запись, модульные ключи | INV-18…21 |
 | **W4** | ✅ Переезд `modules/context` и `modules/hallucination` в ядро, `core/api/*`, пустой allowlist направления зависимостей | INV-3, INV-4 |
-| **W5** | Разбор `agent.ts` (1903 → ~1810 после MoE) на фазы `TurnCoordinator` | INV-23 |
+| **W5** | Гейт D ✅; разбор `agent.ts` (~1880) на фазы `TurnCoordinator` — долг `agent-turn-coordinator` | INV-23 |
 
 Порядок выбран по риску, не по удобству. W1 и W2 дают эффект независимо от W5.
 
