@@ -13,7 +13,7 @@
     "src/cli/commands.ts": 860,
     "src/modules/webui/settings/settings-api.ts": 836,
     "src/tools/bash.ts": 806,
-    "src/core/agent.ts": 787,
+    "src/core/agent.ts": 785,
     "src/config/registry-extra.ts": 780,
     "src/core/agent/tool-batch.ts": 772,
     "src/modules/execution/plan-actions.ts": 736,

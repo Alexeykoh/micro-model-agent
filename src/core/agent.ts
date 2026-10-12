@@ -29,6 +29,7 @@ import { buildLoopResult, type LoopResultHost } from "./agent/loop-result";
 import { runIterationPrologue, type IterationPrologueHost } from "./agent/iteration-prologue";
 import { runLlmPhase, type LlmPhaseHost } from "./agent/loop-llm";
 import { runFinalGates } from "./agent/loop-gates";
+import { runToolBatchPhase, type BatchHost } from "./agent/loop-batch";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -53,7 +54,7 @@ import type { LoopState } from "./agent/loop-state";
 import type { TokenTracker } from "./agent/token-tracker";
 import type { ContextLogger } from "./agent/context-log";
 import { ContextRenderer } from "./agent/context-renderer";
-import { accumulateToolTargets, applyBatchNudges } from "./agent/loop-nudges";
+import { accumulateToolTargets } from "./agent/loop-nudges";
 import { seedToolTags } from "../tools/auto-tags";
 import {
   deriveSessionName,
@@ -385,6 +386,15 @@ export class Agent {
     };
   }
 
+  /** Общий вид хоста для фазы исполнения батча тулов (INV-23). */
+  private batchHost(): BatchHost {
+    return {
+      deps: this.deps,
+      renderContext: (onMeta) =>
+        this.contextRenderer.render(this.deps.config.ui, this.deps.contextManager, onMeta),
+    };
+  }
+
   private emitPhase(
     iteration: number,
     phase: AgentPhase,
@@ -636,7 +646,7 @@ export class Agent {
       const cycleNudges = sawToolCall ? accumulateToolTargets(state, toolCalls) : [];
 
       if (sawToolCall) {
-        const batch = await toolBatch.execute(
+        const outcome = await runToolBatchPhase(this.batchHost(), {
           state,
           toolCalls,
           boundedToolNames,
@@ -646,22 +656,10 @@ export class Agent {
           onTool,
           onMeta,
           slog,
-        );
-        if (batch.finalize) {
-          state.finalizeReason = batch.finalize;
-          break;
-        }
-        if (batch.interrupted) {
-          break;
-        }
-
-        applyBatchNudges(state, cycleNudges, { logger, contextManager });
-
-        this.contextRenderer.render(this.deps.config.ui, contextManager, onMeta);
-
-        // Тулы означают, что модель продолжила работать, а не переотвечает —
-        // послабление на повтор после аудита больше не действует.
-        state.suppressRepetitionRetry = false;
+          cycleNudges,
+          toolBatch,
+        });
+        if (outcome === "break") break;
         continue;
       }
 
