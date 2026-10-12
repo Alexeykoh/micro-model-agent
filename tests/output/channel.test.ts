@@ -1,11 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { OutputBus, defaultOutputBus } from "../../src/output/bus";
-import {
-  OutputChannel,
-  getDefaultChannel,
-  resetDefaultChannel,
-  type PromptSink,
-} from "../../src/output/channel";
+import { OutputChannel, type PromptSink } from "../../src/output/channel";
+import { getDefaultChannel, resetDefaultChannel } from "../../src/output/default-channel";
 
 class S {
   data = "";

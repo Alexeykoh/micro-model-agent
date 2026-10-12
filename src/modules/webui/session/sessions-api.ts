@@ -2,9 +2,7 @@
 // Без менеджера/без `create` — пробел wiring: такие точки отвечают 503, не крашатся.
 // Auth и same-origin — выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { handleSessionHistory } from "./history-api";
-import { handleSessionImage } from "./images-api";
-import { handleSessionLog } from "./log-api";
+import { handleSessionItem } from "./session-item";
 import { readBody, readBodyError, sendJson } from "../util";
 import { parseJsonBody, readJsonBody } from "../http/body";
 import { isSessionBusy, pushState } from "./session-status";
@@ -236,44 +234,6 @@ export function handleSessionDelete(res: ServerResponse, id: string, s: SessionS
 }
 
 /**
- * Параметризованные `/api/sessions/:id/<sub>` роуты (GET) и `DELETE /:id`.
- * Вынесено из `handleSessionsApi`, чтобы диспатч не разрастался по цикломатике
- * (fallow pre-commit gate).
- */
-function handleSessionItem(
-  req: IncomingMessage,
-  res: ServerResponse,
-  p: string,
-  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
-): boolean {
-  if (!p.startsWith("/api/sessions/")) return false;
-  if (req.method === "DELETE") {
-    handleSessionDelete(res, decodeURIComponent(p.slice("/api/sessions/".length)), s);
-    return true;
-  }
-  if (req.method !== "GET") return false;
-  if (p.endsWith("/history")) {
-    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/history".length));
-    handleSessionHistory(res, id, s);
-    return true;
-  }
-  if (p.endsWith("/log")) {
-    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/log".length));
-    handleSessionLog(req, res, id, s);
-    return true;
-  }
-  if (p.includes("/images/")) {
-    const rest = p.slice("/api/sessions/".length);
-    const cut = rest.indexOf("/images/");
-    const id = decodeURIComponent(rest.slice(0, cut));
-    const name = decodeURIComponent(rest.slice(cut + "/images/".length));
-    handleSessionImage(res, id, name, s);
-    return true;
-  }
-  return false;
-}
-
-/**
  * Диспатч роутов `/api/sessions*`. Возвращает, обработан ли запрос, чтобы
  * `server.ts` держал плоскую цепочку без дубля парсинга путей.
  */
@@ -300,5 +260,5 @@ export function handleSessionsApi(
     handleSessionDeactivate(res, s);
     return true;
   }
-  return handleSessionItem(req, res, p, s);
+  return handleSessionItem(req, res, p, s, (id) => handleSessionDelete(res, id, s));
 }

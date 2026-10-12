@@ -27,6 +27,7 @@ import { startServer, stopServer } from "./server";
 import { makeModelCache } from "./settings/model-cache";
 import { buildHostState, type WebIndexer, type WebLsp } from "./host-state";
 import { attachIndexWatcher } from "./index-watcher";
+import { trackContextProbe, type ProbeValue } from "./context-probe";
 import { cancelPendingQuestions } from "./session/prompt-io";
 import {
   activeUsage,
@@ -240,16 +241,10 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
 
   // Context probe: резолвится в фоне; `undefined`, пока не устоялся, чтобы
   // сайдбар рисовал прочерк "pending", не стопая старт.
-  let probe: { model: string; actual: number } | null | undefined;
-  if (deps.contextProbe) {
-    void deps.contextProbe
-      .then((p) => {
-        probe = p;
-      })
-      .catch(() => {
-        probe = null;
-      });
-  }
+  let probe: ProbeValue | null | undefined;
+  trackContextProbe(deps.contextProbe, (p) => {
+    probe = p;
+  });
 
   const host = new WebHost({
     isBusy: () => state.pool.anyBusy(),

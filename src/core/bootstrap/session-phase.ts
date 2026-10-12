@@ -16,9 +16,8 @@ import { ContextManager } from "../../core/context/manager";
 import { TokenCounter } from "../../llm/token-counter";
 import { ToolExecutor } from "../../tools/executor";
 import { HallucinationDetector } from "../../core/hallucination/detector";
+import { createToolContext } from "./tool-context";
 import { SessionStore, SessionManager } from "../../modules/session/index";
-import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
-import { resolveModelCapabilities } from "../../modules/providers/capabilities";
 import { ContextLogger } from "../agent/context-log";
 import { t } from "../../i18n/index";
 import type { ToolRegistry } from "../../tools/index";
@@ -198,89 +197,17 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
   // до-reconfigure security/maxTool.
   const configRef: { current: AppConfig } = { current: config };
 
-  const toolCtx = {
+  const toolCtx = createToolContext({
     baseDir,
     logger,
     exitOnComplete,
     contextManager,
     activeToolTags,
-    recursionDepth: 0,
-    fileOperationsCount: 0,
-    sessionHistory: {
-      append: async (type: string, content: unknown) => {
-        const meta = sessionManager.getActiveMeta();
-        if (!meta) return;
-        sessionManager.appendMessage({
-          role: "tool",
-          content: typeof content === "string" ? content : JSON.stringify(content),
-          name: type,
-          timestamp: new Date().toISOString(),
-        });
-      },
-    },
-    sessionLog: {
-      plan: (event: string, detail: string, iteration?: number) => {
-        sessionManager.appendLog({
-          ts: new Date().toISOString(),
-          type: "plan",
-          tool: event,
-          content: detail,
-          ...(iteration !== undefined ? { iteration } : {}),
-        });
-      },
-    },
-  } as ToolContext;
-
-  // `config` — ЖИВОЙ геттер поверх общего configRef: тулы и валидаторы видят
-  // ТЕКУЩИЕ настройки после reconfigure.
-  Object.defineProperty(toolCtx, "config", {
-    get: () => configRef.current,
-    configurable: true,
+    sessionManager,
+    configRef,
+    capabilitiesRef,
+    draftHost: input.draftHost,
   });
-
-  // `sessionId`/`sessionContext` — ЖИВЫЕ геттеры поверх менеджера сессий, а не
-  // снимок при bootstrap. Снимок пинил сессию старта, и после REPL /new или
-  // /resume записи audit.jsonl новой сессии тегировались id ПРЕДЫДУЩЕЙ
-  // (наблюдалось: записи ses_msyghz8w с id ses_msyg892p_78kqhc), а sessionHistory
-  // читал живую мету. Теперь потребители ctx.sessionId — аудит, реестр
-  // процессов, счётчики файлов — всегда видят реально активную сессию.
-  Object.defineProperty(toolCtx, "sessionId", {
-    get: () => sessionManager.getActiveMeta()?.id,
-    configurable: true,
-  });
-  Object.defineProperty(toolCtx, "sessionContext", {
-    get: () => sessionManager.getSessionContext() ?? undefined,
-    configurable: true,
-  });
-  Object.defineProperty(toolCtx, "sessionManager", {
-    get: () => sessionManager,
-    configurable: true,
-  });
-  // Возможности активной модели — LIVE: пресет провайдера + native-probe +
-  // конфиг-оверрайд пересчитываются при каждом обращении тула, поэтому
-  // инструменты (browser и т.п.) видят актуальный vision/tools после
-  // смены модели или /provider use.
-  Object.defineProperty(toolCtx, "capabilities", {
-    get: () => {
-      const cfg = configRef.current;
-      const spec = BUILTIN_PROVIDERS.find((p) => p.type === cfg.provider.type);
-      return resolveModelCapabilities(
-        spec?.capabilities,
-        capabilitiesRef.probe,
-        cfg.modelCapabilities?.[cfg.model],
-      );
-    },
-    configurable: true,
-  });
-
-  // Хост черновиков capabilities (`define_capability`). Ставится и в main, и в
-  // раннеры: тул может прийти в любой вкладке веба, а черновик — проектный.
-  if (input.draftHost) {
-    Object.defineProperty(toolCtx, "pluginDrafts", {
-      get: () => input.draftHost,
-      configurable: true,
-    });
-  }
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
   toolCtx.llmProvider = llmProvider;

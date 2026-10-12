@@ -7,10 +7,9 @@ export { JsonOutputSink } from "./json-sink";
 export { SessionOutputSink, type SessionLogSink } from "./session-sink";
 export {
   OutputChannel,
-  getDefaultChannel,
-  resetDefaultChannel,
   type PromptSink,
   type OutputChannelOptions,
   type ChannelMode,
 } from "./channel";
+export { getDefaultChannel, resetDefaultChannel } from "./default-channel";
 export { writeMachineJson, writeNonTtyLine } from "./machine";

@@ -7,68 +7,20 @@
  * (новое поле в `JobObject`, забытое в спеке) ломает тест, а не интегратора.
  */
 
-/** Произвольный JSON Schema-фрагмент (структуру не валидируем — это описание). */
-export type JsonSchema = Record<string, unknown>;
+import {
+  ref,
+  string,
+  integer,
+  boolean,
+  SESSION_STATUS,
+  TASK_STATUS,
+  PROBLEM_TYPES,
+  EVENT_TYPES,
+  type JsonSchema,
+} from "./schema-primitives";
 
-/** Ссылка на схему из `components.schemas`. */
-export function ref(name: string): JsonSchema {
-  return { $ref: `#/components/schemas/${name}` };
-}
-
-const string = (extra: JsonSchema = {}): JsonSchema => ({ type: "string", ...extra });
-const integer = (extra: JsonSchema = {}): JsonSchema => ({ type: "integer", ...extra });
-const boolean = (extra: JsonSchema = {}): JsonSchema => ({ type: "boolean", ...extra });
-
-const SESSION_STATUS = ["idle", "working", "queued", "failed", "archived"];
-const TASK_STATUS = [
-  "queued",
-  "running",
-  "succeeded",
-  "failed",
-  "cancelled",
-  "timeout",
-  "waiting_input",
-];
-
-/** Стабильные `type`-URI ошибок v1 (`runtime/problem.ts`) — ветвиться по ним. */
-const PROBLEM_TYPES = [
-  "https://mma.dev/errors/validation",
-  "https://mma.dev/errors/idempotency-conflict",
-  "https://mma.dev/errors/queue-full",
-  "https://mma.dev/errors/rate-limited",
-  "https://mma.dev/errors/no-session",
-  "https://mma.dev/errors/no-task",
-  "https://mma.dev/errors/tool-forbidden",
-  "https://mma.dev/errors/output-invalid",
-  "https://mma.dev/errors/provider-unavailable",
-  "https://mma.dev/errors/timeout",
-  "https://mma.dev/errors/internal",
-];
-
-/**
- * Типы событий SSE v1 (additive-only в рамках v1).
- *
- * Держится вручную, поэтому guard-тест сверяет список с литералами в
- * `emitEvent(...)`/`opts.emit(...)` по исходникам `src/modules/service`:
- * неэмитимый тип в enum — мёртвая запись в контракте (интегратор ждёт
- * событие, которого не будет), а неэмитимый в рантайме тип в enum отсутствует —
- * интегратор о нём не узнает.
- */
-const EVENT_TYPES = [
-  "task.accepted",
-  "task.started",
-  "task.waiting_input",
-  "task.finished",
-  "task.failed",
-  "task.cancelled",
-  "text.delta",
-  "reasoning.delta",
-  "phase",
-  "tool.start",
-  "tool.end",
-  "question",
-  "plan",
-];
+export { ref };
+export type { JsonSchema };
 
 /** Все схемы контракта: ключ = имя в `components.schemas`. */
 export const SCHEMAS: Record<string, JsonSchema> = {
