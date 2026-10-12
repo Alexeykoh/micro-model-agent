@@ -13,6 +13,7 @@ import type { OutputBus } from "../output";
 import type { Logger } from "../logger/app-logger";
 import type { AppConfig } from "../config/types";
 import type { ToolDefinition } from "../tools/types";
+import type { RegisteredTool } from "../tools/registry";
 import type { AgentPlugin } from "../modules/types";
 import type { PromptBlock } from "./types";
 import { MODULE_SETUP_TIMEOUT_MS } from "../config/timeouts";
@@ -185,11 +186,11 @@ export class ModuleHost {
   }
 
   /** Вклад модулей: тулы (в порядке инициализации, с владельцем, INV-1/2). */
-  collectTools(): ToolDefinition[] {
-    const tools: ToolDefinition[] = [];
+  collectTools(): RegisteredTool[] {
+    const tools: RegisteredTool[] = [];
     for (const name of this.resolveOrder()) {
       for (const tool of this.defs.get(name)!.tools?.() ?? []) {
-        tools.push(tool.owner ? tool : { ...tool, owner: name });
+        tools.push({ ...tool, owner: name });
       }
     }
     return tools;

@@ -46,7 +46,7 @@ export function buildRunnerRegistry(
   const registry = new ToolRegistry();
   for (const tool of mainRegistry.getAll()) {
     if (AGENT_BOUND_TOOL_NAMES.has(tool.name)) continue;
-    registry.register(tool);
+    registry.register(tool, tool.owner);
   }
   for (const tool of runnerExec.getToolDefinitions()) registry.register(tool, "execution");
   return registry;

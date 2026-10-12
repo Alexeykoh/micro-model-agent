@@ -1,26 +1,22 @@
 /** Реестр тулов: регистрация и tag-отбор для LLM. */
 import type { ToolDefinition } from "./types";
 
+/**
+ * Тул, лежащий в реестре (INV-1/2): определение плюс **обязательный** владелец.
+ * Авторская форма (`ToolDefinition`) владельца не несёт — его назначает путь
+ * регистрации; реестр отдаёт только `RegisteredTool`, поэтому «тул без
+ * владельца» невыразим по типу, а не проверяется тестом.
+ */
+export type RegisteredTool = ToolDefinition & { readonly owner: string };
+
 export class ToolRegistry {
-  private tools: Map<string, ToolDefinition> = new Map();
+  private tools: Map<string, RegisteredTool> = new Map();
 
-  /**
-   * Владелец тула: из определения, иначе из аргумента (INV-1). Не бросаем на
-   * пустом владельце — вручную собранные тестовые реестры легитимны; полноту
-   * владельцев на продуктовых путях стерегут guard-тесты (`tests/tools/*`).
-   */
-  private withOwner(tool: ToolDefinition, owner?: string): ToolDefinition {
-    const finalOwner = tool.owner ?? owner;
-    if (!finalOwner || tool.owner === finalOwner) return tool;
-    return { ...tool, owner: finalOwner };
-  }
-
-  register(tool: ToolDefinition, owner?: string): void {
-    const withOwner = this.withOwner(tool, owner);
-    if (this.tools.has(withOwner.name)) {
-      throw new Error(`Tool already registered: ${withOwner.name}`);
+  register(tool: ToolDefinition, owner: string): void {
+    if (this.tools.has(tool.name)) {
+      throw new Error(`Tool already registered: ${tool.name}`);
     }
-    this.tools.set(withOwner.name, withOwner);
+    this.tools.set(tool.name, { ...tool, owner });
   }
 
   /**
@@ -29,9 +25,8 @@ export class ToolRegistry {
    * набор тулов принадлежит внешнему источнику и меняется по ходу работы —
    * плагины (см. `modules/plugins/tools.ts`).
    */
-  upsert(tool: ToolDefinition, owner?: string): void {
-    const withOwner = this.withOwner(tool, owner);
-    this.tools.set(withOwner.name, withOwner);
+  upsert(tool: ToolDefinition, owner: string): void {
+    this.tools.set(tool.name, { ...tool, owner });
   }
 
   /** Снять тул с регистрации (выключение/выгрузка плагина). */
@@ -50,7 +45,7 @@ export class ToolRegistry {
     return copy;
   }
 
-  get(name: string): ToolDefinition | undefined {
+  get(name: string): RegisteredTool | undefined {
     return this.tools.get(name);
   }
 
@@ -63,13 +58,13 @@ export class ToolRegistry {
     return Array.from(this.tools.keys()).sort();
   }
 
-  /** Все зарегистрированные определения. */
-  getAll(): ToolDefinition[] {
+  /** Все зарегистрированные определения (с владельцем). */
+  getAll(): RegisteredTool[] {
     return Array.from(this.tools.values());
   }
 
   /** Подмножество с любым из тегов (без alwaysOn). */
-  getByTags(tags: string[]): ToolDefinition[] {
+  getByTags(tags: string[]): RegisteredTool[] {
     return this.getAll().filter((t) => {
       if (!t.tags || t.tags.length === 0) return false;
       return tags.some((tag) => t.tags!.includes(tag));

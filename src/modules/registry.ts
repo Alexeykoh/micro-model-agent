@@ -1,6 +1,6 @@
 import type { AgentModule, AgentPlugin } from "./types";
 import type { PromptBlock } from "../core/types";
-import type { ToolDefinition } from "../tools/types";
+import type { RegisteredTool } from "../tools/registry";
 
 export class ModuleRegistry {
   private modules: Map<string, AgentModule> = new Map();
@@ -32,14 +32,14 @@ export class ModuleRegistry {
     return blocks;
   }
 
-  collectToolDefinitions(): ToolDefinition[] {
-    const tools: ToolDefinition[] = [];
+  collectToolDefinitions(): RegisteredTool[] {
+    const tools: RegisteredTool[] = [];
     for (const [name, mod] of this.modules) {
       if (mod.getToolDefinitions) {
         const defs = mod.getToolDefinitions();
         // Владелец тула — модуль (INV-1/2): модуль не обязан знать, как его
         // звать, реестр проставляет `owner` из регистрационного имени.
-        if (defs) for (const def of defs) tools.push(def.owner ? def : { ...def, owner: name });
+        if (defs) for (const def of defs) tools.push({ ...def, owner: name });
       }
     }
     return tools;

@@ -181,7 +181,7 @@ function registerModuleToolsAndPlugins(
 
   const moduleTools = moduleRegistry.collectToolDefinitions();
   for (const tool of moduleTools) {
-    toolRegistry.register(tool);
+    toolRegistry.register(tool, tool.owner);
   }
 
   registerBuiltinPlugin(pluginManager, core.execModule.getPlugin());

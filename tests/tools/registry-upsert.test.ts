@@ -44,10 +44,4 @@ describe("ToolRegistry.upsert / unregister", () => {
     expect(registry.get("a")?.owner).toBe("core");
     expect(registry.get("b")?.owner).toBe("plugin:x");
   });
-
-  it("keeps an explicit tool owner over the argument", () => {
-    const registry = new ToolRegistry();
-    registry.register({ ...tool("a"), owner: "indexer" }, "core");
-    expect(registry.get("a")?.owner).toBe("indexer");
-  });
 });

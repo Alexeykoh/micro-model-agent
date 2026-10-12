@@ -32,8 +32,8 @@ describe("ToolRegistry", () => {
       parameters: { type: "object", properties: {} },
       handler: async () => ({ success: true, output: "done" }),
     };
-    registry.register(tool);
-    expect(registry.get("test_tool")).toBe(tool);
+    registry.register(tool, "core");
+    expect(registry.get("test_tool")).toMatchObject({ name: "test_tool", owner: "core" });
   });
 
   it("should throw on duplicate registration", () => {
