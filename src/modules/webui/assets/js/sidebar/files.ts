@@ -22,7 +22,12 @@ import {
 import { initCrumbDeps, renderCrumbs, clearCrumbs } from "./files/crumbs.js";
 import { syncChrome, localizeChrome, iconize } from "./files/chrome.js";
 import { fetchFile, paintFile, paintLoading } from "./files/view.js";
-import { EXPAND_DEPTH, EXPAND_DIR_CAP, EXPAND_BATCH } from "./files/constants.js";
+import {
+  initExpandDeps,
+  collapseAll,
+  expandAll,
+  expandToDepth,
+} from "./files/expand.js";
 
 interface FilesDeps {
   insertPath: (path: string) => void;
@@ -59,6 +64,12 @@ export function initFiles(d: Partial<FilesDeps>): void {
     insertPath: deps.insertPath, markDirty, render: renderFilesTree,
   });
   initCrumbDeps({ reveal: revealInTree });
+  initExpandDeps({
+    markDirty,
+    render: renderFilesTree,
+    syncChrome: () => syncChrome(history),
+    ensureListing,
+  });
 
   localizeChrome();
   close?.addEventListener("click", () => closeFile());
@@ -191,70 +202,6 @@ function toggleDir(path: string): void {
   }
   markDirty();
   renderFilesTree();
-}
-
-/** Collapses everything back to the workspace root. */
-export function collapseAll(): void {
-  sb.files.expanded.clear();
-  sb.files.expandCapped = false;
-  markDirty();
-  renderFilesTree();
-}
-
-/** Expands every directory up to `EXPAND_DEPTH`, budgeted per request. */
-export async function expandAll(): Promise<void> {
-  const f = sb.files;
-  if (f.expanding) return;
-  f.expanding = true;
-  markDirty();
-  syncChrome(history);
-  try {
-    await expandUpTo(EXPAND_DEPTH);
-  } finally {
-    f.expanding = false;
-    markDirty();
-    renderFilesTree();
-    syncChrome(history);
-  }
-}
-
-/** Keyboard `*`: reveal just the cursor's ancestors, then keep focus there. */
-function expandToDepth(): void {
-  const cursor = sb.files.cursor;
-  if (!cursor) return;
-  const dirDepth = cursor.split("/").length - 1;
-  void expandUpTo(dirDepth).then(() => focusTreeRow(sb.files.treeEl, cursor));
-}
-
-/**
- * Breadth-first expansion to `maxDepth` levels below the root, batched so the
- * tree unfolds progressively instead of blocking on the whole subtree.
- */
-async function expandUpTo(maxDepth: number): Promise<void> {
-  const f = sb.files;
-  let budget = EXPAND_DIR_CAP;
-  await ensureListing("");
-  let frontier = dirChildren("");
-  for (let depth = 1; depth <= maxDepth && frontier.length > 0 && budget > 0; depth++) {
-    const batch = frontier.slice(0, Math.min(EXPAND_BATCH, budget));
-    budget -= batch.length;
-    await Promise.all(batch.map(ensureListing));
-    for (const dir of batch) {
-      f.expanded.add(dir);
-      for (const child of dirChildren(dir)) if (!f.expanded.has(child)) frontier.push(child);
-    }
-    frontier = frontier.filter((p) => !f.expanded.has(p));
-    markDirty();
-    renderFilesTree();
-  }
-  f.expandCapped = budget <= 0 && frontier.length > 0;
-}
-
-function dirChildren(path: string): string[] {
-  const entries = sb.files.listings.get(path) || [];
-  return entries
-    .filter((e) => e.type === "dir")
-    .map((e) => (path ? `${path}/${e.name}` : e.name));
 }
 
 /** Opens a file in the read-only viewer and records it in the history. */

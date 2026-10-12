@@ -67,10 +67,7 @@
     "src/modules/certification/cli.ts": 342,
     "src/modules/webui/assets/js/feed/turn.ts": 340,
     "src/core/agent/hallucination-gate.ts": 334,
-    "src/modules/lsp/diagnose.ts": 333,
-    "src/tools/subagent.ts": 332,
     "src/modules/webui/server.ts": 314,
-    "src/modules/webui/assets/js/sidebar/files.ts": 311,
     "src/modules/security/path-validator.ts": 305
   }
 }
