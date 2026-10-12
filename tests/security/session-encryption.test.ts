@@ -345,7 +345,7 @@ describe("corruption resilience (audit 2026-08-26)", () => {
 
     const events: Array<{ level: string; source: string; text: string }> = [];
     const unsub = defaultOutputBus.subscribe((ev) => {
-      if (ev.source === "security") events.push(ev);
+      if (ev.source === "module:security") events.push(ev);
     });
     const out = enc.decryptJSONL([corrupted]);
     unsub();

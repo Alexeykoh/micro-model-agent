@@ -102,7 +102,7 @@ export function loadDomainFiles(configDir: string): Partial<AppConfig> | null {
     } catch {
       // Не молчим: показываем битый путь, а не тихо игнорим домен,
       // который пользователь считает активным.
-      defaultOutputBus.log("warn", "config", t("config.parse_failed", { path: filePath }));
+      defaultOutputBus.log("warn", "module:config", t("config.parse_failed", { path: filePath }));
     }
   }
 

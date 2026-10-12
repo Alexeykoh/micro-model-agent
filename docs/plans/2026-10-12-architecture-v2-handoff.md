@@ -75,9 +75,15 @@ feature-history (вынесен из AGENTS.md).
 Спека стоит на дисциплине до W1 (гейта `scripts/check-arch.ts` ещё нет). W0 —
 самая дешёвая волна и делает дальнейший разбор автоматизируемым.
 
+**W0.1 сделана** (`feat/w0-output-source`): введён `Source` (`output/types.ts`),
+эмиттеры заполняют его — `Logger` → `module:<prefix>`/`mma`, `channel.writeLine`
+и прямые `defaultOutputBus.log` → `module:<name>`/`tool:<name>`/`mma`. Терминал
+показывает короткую метку (`module:indexer` → `[indexer]`), машинные стоки видят
+канонический `Source`. Гвард `tests/output/source-filled.test.ts`.
+
 | Задача | Что сделать | Инвариант |
 |---|---|---|
-| **W0.1** | `Source = mma \| module:<name> \| tool:<name> \| core` → заполнять `OutputEvent.source` (сейчас **всегда `""`**, `output/channel.ts`) | INV-13 |
+| **W0.1** ✅ | `Source = mma \| module:<name> \| tool:<name> \| core` → заполнять `OutputEvent.source` (сейчас **всегда `""`**, `output/channel.ts`) | INV-13 |
 | **W0.2** | `Logger.child()` включать в модулях (сейчас **0 вызовов** по всему `src/`) | INV-13 |
 | **W0.3** | `SessionLogEntry.module: string` + шаблон `module_${string}` (по образцу `onboarding_${string}`) | INV-13 |
 | **W0.4** | `logError(message)` → `logError(Diagnostic { source, operation, kind, cause? })`; `cause` обязателен при `kind !== "ok"` | INV-12, INV-14 |

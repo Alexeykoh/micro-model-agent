@@ -5,6 +5,12 @@ export type OutputKind = "log" | "raw" | "block";
 /** Поток вывода события. */
 export type OutputStream = "stdout" | "stderr";
 
+/**
+ * Источник события (INV-13): кто произвёл запись.
+ * `mma` — хост/CLI, `core` — ядро, `module:<name>` — модуль, `tool:<name>` — тул.
+ */
+export type Source = "mma" | "core" | `module:${string}` | `tool:${string}`;
+
 /** Событие вывода: продюсеры эмитят, стоки рисуют/сохраняют. */
 export interface OutputEvent {
   /** Порядковый номер в шине. */
@@ -12,8 +18,8 @@ export interface OutputEvent {
   /** Время создания (мс). */
   ts: number;
   level: OutputLevel;
-  /** Тег продюсера: "mma", "indexer", "probe.context", "tool:bash". */
-  source: string;
+  /** Источник записи (INV-13): `mma`, `core`, `module:<name>` или `tool:<name>`. */
+  source: Source;
   kind: OutputKind;
   /** Текст, готовый для терминала (может содержать ANSI). */
   text: string;

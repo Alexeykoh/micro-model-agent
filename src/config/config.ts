@@ -91,7 +91,7 @@ function loadJSON(path: string): Record<string, unknown> | null {
     ) as Record<string, unknown>;
   } catch {
     // Не молчим: конфиг с опечаткой не должен тихо затирать настройки юзера.
-    defaultOutputBus.log("warn", "config", t("config.parse_failed", { path }));
+    defaultOutputBus.log("warn", "module:config", t("config.parse_failed", { path }));
   }
   return null;
 }
@@ -268,7 +268,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     backup.backupAll();
     backup.backupConfig();
     const summary = backup.getBackupSummary();
-    defaultOutputBus.log("info", "config", t("migration.detected", { summary }));
+    defaultOutputBus.log("info", "module:config", t("migration.detected", { summary }));
     try {
       unlinkSync(globalPath);
     } catch (e) {
@@ -276,7 +276,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
       // leftover v1-файл ретриггерил бы миграцию на каждом старте.
       defaultOutputBus.log(
         "error",
-        "config",
+        "module:config",
         `[config] failed to remove legacy config.json: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
@@ -334,7 +334,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     const providerOverride = overrides.find((o) => o.key === "provider");
     if (providerOverride) providerOverride.envValue = config.provider;
   } catch (e: any) {
-    defaultOutputBus.log("warn", "config", t("config.decryption_warning", { error: e.message }));
+    defaultOutputBus.log("warn", "module:config", t("config.decryption_warning", { error: e.message }));
   }
 
   if (overrides.length > 0) envOverrideMap.set(config, overrides);
@@ -384,7 +384,7 @@ export function saveConfig(config: AppConfig, configPath: string, configDir?: st
     } as unknown as Record<string, unknown>);
     writeFileSync(configPath, JSON.stringify(encryptedConfig, regexReplacer, 2), "utf-8");
   } catch (e: any) {
-    defaultOutputBus.log("warn", "config", t("config.encryption_warning", { error: e.message }));
+    defaultOutputBus.log("warn", "module:config", t("config.encryption_warning", { error: e.message }));
     writeFileSync(configPath, JSON.stringify(toWrite, regexReplacer, 2), "utf-8");
   }
 }

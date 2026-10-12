@@ -61,11 +61,11 @@ describe("Repl Host surface", () => {
     const seen: OutputEvent[] = [];
     const unsub = repl.subscribeOutput((ev) => seen.push(ev));
 
-    defaultOutputBus.log("warn", "probe.context", "before unsubscribe");
+    defaultOutputBus.log("warn", "module:probe.context", "before unsubscribe");
     expect(seen).toHaveLength(1);
 
     unsub();
-    defaultOutputBus.log("error", "mcp", "after unsubscribe");
+    defaultOutputBus.log("error", "module:mcp", "after unsubscribe");
     expect(seen).toHaveLength(1);
   });
 

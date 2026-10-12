@@ -8,12 +8,12 @@ describe("JsonOutputSink", () => {
     const sink = new JsonOutputSink(bus);
 
     bus.log("info", "mma", "starting");
-    bus.log("debug", "indexer", "scan");
-    bus.log("warn", "probe.context", "context smaller than configured");
+    bus.log("debug", "module:indexer", "scan");
+    bus.log("warn", "module:probe.context", "context smaller than configured");
     bus.log("error", "tool:bash", "command failed");
 
     expect(sink.diagnostics()).toEqual([
-      { level: "warn", source: "probe.context", text: "context smaller than configured" },
+      { level: "warn", source: "module:probe.context", text: "context smaller than configured" },
       { level: "error", source: "tool:bash", text: "command failed" },
     ]);
 
@@ -24,10 +24,10 @@ describe("JsonOutputSink", () => {
     const bus = new OutputBus();
     const sink = new JsonOutputSink(bus);
 
-    bus.log("warn", "a", "before");
+    bus.log("warn", "mma", "before");
     sink.dispose();
-    bus.log("error", "b", "after");
+    bus.log("error", "core", "after");
 
-    expect(sink.diagnostics()).toEqual([{ level: "warn", source: "a", text: "before" }]);
+    expect(sink.diagnostics()).toEqual([{ level: "warn", source: "mma", text: "before" }]);
   });
 });

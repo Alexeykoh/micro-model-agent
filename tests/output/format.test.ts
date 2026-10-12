@@ -5,7 +5,7 @@ const base = {
   id: 1,
   ts: Date.UTC(2026, 8, 18, 5, 59, 52),
   level: "warn" as const,
-  source: "probe.context",
+  source: "module:probe.context",
   kind: "log" as const,
   text: "model supports 262144 tokens",
 };
@@ -18,9 +18,12 @@ describe("formatEventLine", () => {
     );
   });
 
-  it("omits the source bracket when empty", () => {
-    expect(formatEventLine({ ...base, source: "", level: "info" }, false)).toBe(
-      "[INFO] 2026-09-18T05:59:52.000Z — model supports 262144 tokens",
+  it("renders the short owner label for module/tool sources", () => {
+    expect(formatEventLine({ ...base, source: "tool:bash", level: "info" }, false)).toBe(
+      "[INFO] [bash] 2026-09-18T05:59:52.000Z — model supports 262144 tokens",
+    );
+    expect(formatEventLine({ ...base, source: "core", level: "info" }, false)).toBe(
+      "[INFO] [core] 2026-09-18T05:59:52.000Z — model supports 262144 tokens",
     );
   });
 

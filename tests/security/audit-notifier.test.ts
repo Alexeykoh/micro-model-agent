@@ -295,7 +295,7 @@ describe("AuditNotifier", () => {
         unsub();
       }
 
-      const ev = events.find((e) => e.source === "audit" && e.level === "error");
+      const ev = events.find((e) => e.source === "module:audit" && e.level === "error");
       expect(ev).toBeDefined();
       expect(ev?.data).toMatchObject({ persist: true });
     });

@@ -29,16 +29,16 @@ describe("webui log forwarding", () => {
   it("broadcasts OutputBus warn events as `log` SSE events", () => {
     const { chunks, bus, off } = setupForwarding();
 
-    bus.log("warn", "probe.context", "system prompt overflow");
+    bus.log("warn", "module:probe.context", "system prompt overflow");
 
     const wire = chunks.join("");
     expect(wire).toContain("event: log");
     expect(wire).toContain('"level":"warn"');
-    expect(wire).toContain('"source":"probe.context"');
+    expect(wire).toContain('"source":"module:probe.context"');
     expect(wire).toContain("system prompt overflow");
 
     off();
-    bus.log("warn", "probe.context", "after unsubscribe");
+    bus.log("warn", "module:probe.context", "after unsubscribe");
     expect(chunks.join("")).not.toContain("after unsubscribe");
   });
 
@@ -63,8 +63,8 @@ describe("webui log forwarding", () => {
   it("carries the diagnostic flag so the client hides it outside verbose", () => {
     const { chunks, bus } = setupForwarding();
 
-    bus.log("info", "agent", "internal retry 1/3", { diagnostic: true });
-    bus.log("warn", "probe.context", "system prompt overflow");
+    bus.log("info", "module:agent", "internal retry 1/3", { diagnostic: true });
+    bus.log("warn", "module:probe.context", "system prompt overflow");
 
     const wire = chunks.join("");
     expect(wire).toContain('"diagnostic":true');
@@ -82,7 +82,7 @@ describe("webui log forwarding", () => {
 
     bus.emit({
       level: "warn",
-      source: "agent",
+      source: "module:agent",
       kind: "log",
       text: "background warning",
       sessionId: "ses_B",

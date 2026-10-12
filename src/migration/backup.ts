@@ -30,7 +30,7 @@ export class BackupManager {
       // «нет бэкапа за этот запуск» не выглядело как потеря данных.
       defaultOutputBus.log(
         "debug",
-        "migration",
+        "module:migration",
         `Backup already exists at ${bakDir}; keeping the previous state (not overwritten).`,
       );
       return;

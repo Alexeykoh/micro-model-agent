@@ -167,7 +167,7 @@ export class OutputChannel {
 
   /** Блочная запись через шину (help, status, вывод команд). */
   writeLine(text: string, stream: OutputStream = "stdout"): void {
-    this.bus.emit({ level: "info", source: "", kind: "block", text, stream });
+    this.bus.emit({ level: "info", source: "mma", kind: "block", text, stream });
   }
 
   /** Очистка экрана через промпт или ANSI. Буферный raw-партиал сбрасывается первым. */

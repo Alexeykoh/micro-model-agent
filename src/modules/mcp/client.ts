@@ -144,7 +144,7 @@ export class MCPClient {
       // реально битый стрим был виден в диагностике.
       defaultOutputBus.log(
         "error",
-        "mcp",
+        "module:mcp",
         `[MCPClient] Unparseable SSE message: ${String(data).slice(0, 120)} ${e instanceof Error ? e.message : String(e)}`,
         { persist: true },
       );

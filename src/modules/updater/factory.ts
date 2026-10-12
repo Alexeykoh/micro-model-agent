@@ -70,8 +70,8 @@ function quietLogger(): UpdaterLogger {
  */
 export function busLogger(): UpdaterLogger {
   return {
-    info: (m) => defaultOutputBus.log("info", "updater", m),
-    warn: (m) => defaultOutputBus.log("warn", "updater", m),
-    error: (m) => defaultOutputBus.log("error", "updater", m),
+    info: (m) => defaultOutputBus.log("info", "module:updater", m),
+    warn: (m) => defaultOutputBus.log("warn", "module:updater", m),
+    error: (m) => defaultOutputBus.log("error", "module:updater", m),
   };
 }

@@ -184,7 +184,7 @@ export function closeBrowserSession(): void {
   // Дожидаемся текущего действия, чтобы не закрыть браузер во время навигации.
   actionChain = actionChain.then(() =>
     s.close().catch((err) => {
-      defaultOutputBus.log("warn", "browser", `Failed to close browser session: ${errMsg(err)}`);
+      defaultOutputBus.log("warn", "tool:browser", `Failed to close browser session: ${errMsg(err)}`);
     }),
   );
 }

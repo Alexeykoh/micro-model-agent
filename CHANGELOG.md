@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **Output events name their source (INV-13)** (`src/output/`): `OutputEvent.source`
+  is now a canonical `Source` (`mma` | `core` | `module:<name>` | `tool:<name>`)
+  instead of a free string that was often `""`. `Logger` emits `module:<prefix>`
+  (root logger → `mma`); the channel and direct bus producers emit module/tool/host
+  tags. The terminal renders the short owner label (`module:indexer` → `[indexer]`),
+  so chat output is unchanged; machine-readable sinks and `session.jsonl` carry the
+  canonical value. Guarded by `tests/output/source-filled.test.ts`.
+
 ### Removed
 
 - **Agent-level MoE (mixture of experts)** (`src/core/agent-moe.ts`,

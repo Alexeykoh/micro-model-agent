@@ -18,7 +18,7 @@ describe("Logger → OutputBus", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
-      source: "indexer",
+      source: "module:indexer",
       level: "warn",
       kind: "log",
       text: "boom",

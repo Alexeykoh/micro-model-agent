@@ -161,7 +161,7 @@ export class AuditNotifier {
       } catch (error) {
         defaultOutputBus.log(
           "warn",
-          "audit",
+          "module:audit",
           `[AuditNotifier] Webhook failed, adding to retry queue: ${error instanceof Error ? error.message : String(error)}`,
           { persist: true },
         );
@@ -212,7 +212,7 @@ export class AuditNotifier {
     } catch (error) {
       defaultOutputBus.log(
         "error",
-        "audit",
+        "module:audit",
         `[AuditNotifier] Failed to write to file: ${error instanceof Error ? error.message : String(error)}`,
         { persist: true },
       );
@@ -267,7 +267,7 @@ export class AuditNotifier {
         if (item.retries >= (this.config.maxRetries ?? 3)) {
           defaultOutputBus.log(
             "error",
-            "audit",
+            "module:audit",
             `[AuditNotifier] Max retries exceeded for notification: ${JSON.stringify(item.entry)}`,
             { persist: true },
           );
@@ -284,7 +284,7 @@ export class AuditNotifier {
           item.retries++;
           defaultOutputBus.log(
             "warn",
-            "audit",
+            "module:audit",
             `[AuditNotifier] Webhook retry ${item.retries} failed: ${
               error instanceof Error ? error.message : String(error)
             }`,
@@ -313,7 +313,7 @@ export class AuditNotifier {
     } catch (error) {
       defaultOutputBus.log(
         "error",
-        "audit",
+        "module:audit",
         `[AuditNotifier] Failed to read notifications: ${error instanceof Error ? error.message : String(error)}`,
         { persist: true },
       );

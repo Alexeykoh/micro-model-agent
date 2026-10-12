@@ -61,8 +61,8 @@ export class UpdaterModule {
     this.onNotice = onNotice;
     this.logger = logger ?? {
       info: () => {},
-      warn: (m) => defaultOutputBus.log("warn", "updater", m),
-      error: (m) => defaultOutputBus.log("error", "updater", m),
+      warn: (m) => defaultOutputBus.log("warn", "module:updater", m),
+      error: (m) => defaultOutputBus.log("error", "module:updater", m),
     };
   }
 

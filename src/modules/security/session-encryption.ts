@@ -99,7 +99,7 @@ export class SessionFileEncryptor {
       } catch (e) {
         defaultOutputBus.log(
           "error",
-          "security",
+          "module:security",
           `[session-encryption] failed to decrypt JSONL line — skipping it: ${
             e instanceof Error ? e.message : String(e)
           }`,

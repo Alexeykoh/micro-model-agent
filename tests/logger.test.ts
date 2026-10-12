@@ -73,7 +73,7 @@ describe("Logger", () => {
     const child = logger.child("tools");
 
     child.info("hello");
-    expect(events[0].source).toBe("tools");
+    expect(events[0].source).toBe("module:tools");
     expect(events[0].text).toBe("hello");
   });
 
@@ -83,7 +83,7 @@ describe("Logger", () => {
     const child = new Logger("info", "root", bus).child("tools");
 
     child.info("hello");
-    expect(events[0].source).toBe("root:tools");
+    expect(events[0].source).toBe("module:root:tools");
   });
 
   it("defaults source to mma when no prefix is set", () => {

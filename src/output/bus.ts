@@ -1,5 +1,5 @@
 // Шина вывода: продюсеры эмитят события, стоки (канал, JSON, сессия) читают.
-import type { OutputEvent, OutputLevel, OutputSink, OutputSubscriber } from "./types";
+import type { OutputEvent, OutputLevel, OutputSink, OutputSubscriber, Source } from "./types";
 
 /** Шина событий вывода. Упавший подписчик шину не роняет. */
 export class OutputBus implements OutputSink {
@@ -28,7 +28,7 @@ export class OutputBus implements OutputSink {
   /** Короткий эмит log-события. */
   log(
     level: OutputLevel,
-    source: string,
+    source: Source,
     text: string,
     data?: Record<string, unknown>,
   ): OutputEvent {

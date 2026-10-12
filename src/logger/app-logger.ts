@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { sanitizeLogMessage } from "../modules/security/data-sanitizer";
 import { FileLogWriter, type FileLogLevel } from "./file-log";
-import { defaultOutputBus, type OutputSink } from "../output";
+import { defaultOutputBus, type OutputSink, moduleSource } from "../output";
 
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
 /** Уровень логирования (чем правее, тем строже фильтр). */
@@ -190,7 +190,8 @@ export class Logger {
     try {
       this.sink.emit({
         level,
-        source: this.prefix || "mma",
+        // INV-13: именованный логер — `module:<prefix>`, корневой (без префикса) — `mma`.
+        source: this.prefix ? moduleSource(this.prefix) : "mma",
         kind: "log",
         text: line,
         sessionId: this.sessionId ?? undefined,

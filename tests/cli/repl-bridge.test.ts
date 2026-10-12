@@ -48,17 +48,17 @@ describe("createHostBridge", () => {
     const seen: OutputEvent[] = [];
     const unsub = bridge.subscribeOutput!((ev) => seen.push(ev));
 
-    defaultOutputBus.log("warn", "probe.context", "small context");
+    defaultOutputBus.log("warn", "module:probe.context", "small context");
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({
       kind: "log",
       level: "warn",
-      source: "probe.context",
+      source: "module:probe.context",
       text: "small context",
     });
 
     unsub();
-    defaultOutputBus.log("error", "mcp", "after unsubscribe");
+    defaultOutputBus.log("error", "module:mcp", "after unsubscribe");
     expect(seen).toHaveLength(1);
   });
 

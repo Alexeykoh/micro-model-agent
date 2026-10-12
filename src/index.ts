@@ -82,6 +82,6 @@ export function checkMigration(configDir?: string): void {
     backup.backupConfig();
     backup.backupAll();
     const summary = backup.getBackupSummary();
-    defaultOutputBus.log("info", "mma", t("migration.summary", { summary }));
+    defaultOutputBus.log("info", "module:mma", t("migration.summary", { summary }));
   }
 }

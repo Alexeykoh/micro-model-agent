@@ -17,9 +17,9 @@ describe("OutputBus", () => {
     const seen: string[] = [];
     const off = bus.subscribe((e) => seen.push(`a:${e.text}`));
     bus.subscribe((e) => seen.push(`b:${e.text}`));
-    bus.log("warn", "indexer", "hello");
+    bus.log("warn", "module:indexer", "hello");
     off();
-    bus.log("info", "s", "bye");
+    bus.log("info", "mma", "bye");
     expect(seen).toEqual(["a:hello", "b:hello", "b:bye"]);
   });
   it("isolates a throwing subscriber", () => {
@@ -29,7 +29,7 @@ describe("OutputBus", () => {
       throw new Error("boom");
     });
     bus.subscribe((e) => seen.push(e.text));
-    expect(() => bus.log("info", "s", "x")).not.toThrow();
+    expect(() => bus.log("info", "mma", "x")).not.toThrow();
     expect(seen).toEqual(["x"]);
   });
   it("resets subscribers and id sequence on the default bus", () => {

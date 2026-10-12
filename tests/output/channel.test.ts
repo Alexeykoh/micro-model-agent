@@ -34,14 +34,14 @@ const flushMicrotasks = () => Promise.resolve();
 describe("OutputChannel", () => {
   it("writes formatted lines to stdout in idle mode", () => {
     const { bus, out } = ch();
-    bus.log("info", "indexer", "hello");
+    bus.log("info", "module:indexer", "hello");
     expect(out.data).toContain("[INFO] [indexer]");
   });
   it("prints above the prompt when idle and prompt is active", async () => {
     const { bus, out, c } = ch();
     const p = prompt(true);
     c.attachPrompt(p.sink);
-    bus.log("warn", "probe.context", "big");
+    bus.log("warn", "module:probe.context", "big");
     await flushMicrotasks();
     expect(p.above).toEqual([expect.stringContaining("big")]);
     expect(out.data).toBe("");
@@ -78,8 +78,8 @@ describe("OutputChannel", () => {
     c.beginStreaming();
     c.writeRaw("partial");
     expect(out.data.startsWith("partial")).toBe(true);
-    bus.log("warn", "s", "note");
-    expect(out.data.startsWith("partial\n[WARN] [s]")).toBe(true);
+    bus.log("warn", "mma", "note");
+    expect(out.data.startsWith("partial\n[WARN] [mma]")).toBe(true);
   });
   it("closes streaming with a newline", () => {
     const { c, out } = ch();
@@ -91,7 +91,7 @@ describe("OutputChannel", () => {
   it("queues during modal and flushes on endModal", () => {
     const { bus, out, c } = ch();
     c.beginModal();
-    bus.log("info", "s", "later");
+    bus.log("info", "mma", "later");
     expect(out.data).toBe("");
     c.endModal();
     expect(out.data).toContain("later");
@@ -109,26 +109,26 @@ describe("OutputChannel", () => {
     c.writeRaw("partial");
     c.beginModal();
     c.endModal();
-    bus.log("warn", "s", "note");
-    expect(out.data.startsWith("partial\n[WARN] [s]")).toBe(true);
+    bus.log("warn", "mma", "note");
+    expect(out.data.startsWith("partial\n[WARN] [mma]")).toBe(true);
   });
   it("drops human output in quiet mode", () => {
     const { bus, out, c } = ch();
     c.setQuiet(true);
-    bus.log("error", "s", "boom");
+    bus.log("error", "mma", "boom");
     c.writeLine("banner");
     expect(out.data).toBe("");
   });
   it("drops diagnostic log events unless setShowDiagnostics is on", () => {
     const { bus, out, c } = ch();
-    bus.log("warn", "agent", "internal retry 1/3", { diagnostic: true });
-    bus.log("warn", "agent", "user-facing notice");
+    bus.log("warn", "module:agent", "internal retry 1/3", { diagnostic: true });
+    bus.log("warn", "module:agent", "user-facing notice");
     expect(out.data).not.toContain("internal retry 1/3");
     expect(out.data).toContain("user-facing notice");
 
     out.data = "";
     c.setShowDiagnostics(true);
-    bus.log("warn", "agent", "internal retry 1/3", { diagnostic: true });
+    bus.log("warn", "module:agent", "internal retry 1/3", { diagnostic: true });
     expect(out.data).toContain("internal retry 1/3");
   });
   it("keeps quiet across streaming transitions and restores idle when lifted", () => {
@@ -136,7 +136,7 @@ describe("OutputChannel", () => {
     c.setQuiet(true);
     c.beginStreaming();
     expect(c.getMode()).toBe("quiet");
-    bus.log("error", "s", "boom");
+    bus.log("error", "mma", "boom");
     c.writeLine("banner");
     expect(out.data).toBe("");
     c.setQuiet(false);
@@ -146,7 +146,7 @@ describe("OutputChannel", () => {
     const { bus, out, err, c } = ch();
     const p = prompt(true);
     c.attachPrompt(p.sink);
-    bus.emit({ level: "warn", source: "s", kind: "log", text: "stderr-note", stream: "stderr" });
+    bus.emit({ level: "warn", source: "mma", kind: "log", text: "stderr-note", stream: "stderr" });
     await flushMicrotasks();
     expect(p.above).toEqual([expect.stringContaining("stderr-note")]);
     expect(err.data).toBe("");
@@ -184,8 +184,8 @@ describe("OutputChannel", () => {
     c.writeRaw("abc");
     p.set(false);
     c.beginStreaming();
-    bus.log("warn", "s", "note");
-    expect(out.data.startsWith("abc\n[WARN] [s]")).toBe(true);
+    bus.log("warn", "mma", "note");
+    expect(out.data.startsWith("abc\n[WARN] [mma]")).toBe(true);
   });
   it("drains pending buffered lines on newlines only", () => {
     const { c } = ch();
@@ -204,14 +204,14 @@ describe("OutputChannel", () => {
   });
   it("routes stderr events to the error stream", () => {
     const { bus, out, err } = ch();
-    bus.emit({ level: "warn", source: "s", kind: "log", text: "x", stream: "stderr" });
+    bus.emit({ level: "warn", source: "mma", kind: "log", text: "x", stream: "stderr" });
     expect(err.data).toContain("x");
     expect(out.data).toBe("");
   });
   it("restores the prior mode when quiet is lifted", () => {
     const { bus, out, c } = ch();
     c.beginModal();
-    bus.log("info", "s", "a");
+    bus.log("info", "mma", "a");
     c.setQuiet(true);
     c.setQuiet(false);
     expect(c.getMode()).toBe("modal");
@@ -228,7 +228,7 @@ describe("OutputChannel", () => {
     c.beginStreaming();
     c.dispose();
     expect(c.getMode()).toBe("idle");
-    bus.log("info", "s", "x");
+    bus.log("info", "mma", "x");
     c.writeLine("after");
     expect(out.data).toBe("");
   });
@@ -237,7 +237,7 @@ describe("OutputChannel", () => {
     const out = new S();
     const err = new S();
     const c = new OutputChannel(bus, { out: out as never, err: err as never, color: true });
-    bus.log("warn", "s", "x");
+    bus.log("warn", "mma", "x");
     expect(out.data).toContain("\x1b[");
     c.dispose();
   });

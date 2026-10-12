@@ -91,7 +91,7 @@ async function dispatch(
       return;
     }
     const detail = errMsg(err);
-    defaultOutputBus.log("warn", "service", `request failed: ${reqUrl.pathname}: ${detail}`);
+    defaultOutputBus.log("warn", "module:service", `request failed: ${reqUrl.pathname}: ${detail}`);
     sendProblem(res, problem({ type: "internal", title: "internal error", status: 500, detail }));
   }
 }

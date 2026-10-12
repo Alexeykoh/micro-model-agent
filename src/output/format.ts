@@ -1,5 +1,6 @@
 // Форматирование событий в строки вида `[LEVEL] [source] ISO — text`.
 import { createColors } from "picocolors";
+import { sourceLabel } from "./source";
 import type { OutputEvent, OutputLevel } from "./types";
 
 const colored = createColors(true);
@@ -13,7 +14,10 @@ const LEVEL_COLORS: Record<OutputLevel, (s: string) => string> = {
 
 /** Форматирует событие как в legacy-логере: `[LEVEL] [source] ISO — text`. */
 export function formatEventLine(ev: OutputEvent, color: boolean): string {
-  const prefix = ev.source ? ` [${ev.source}]` : "";
+  // В терминал — короткая метка владельца (`module:indexer` → `indexer`);
+  // канонический `Source` остаётся в событии для машинных стоков (INV-13).
+  const label = sourceLabel(ev.source);
+  const prefix = label ? ` [${label}]` : "";
   const line = `[${ev.level.toUpperCase()}]${prefix} ${new Date(ev.ts).toISOString()} — ${ev.text}`;
   return color ? LEVEL_COLORS[ev.level](line) : line;
 }
