@@ -1,7 +1,7 @@
 # W2 — Enforcement: одна точка применения политик тула
 
 **Дата:** 2026-10-13 · **Ветка:** `docs/w2-enforcement-spec` (в рамках architecture v2)
-**Статус:** draft
+**Статус:** ✅ реализовано (W2.1–W2.5)
 **Нормативная база:** [architecture v2](./2026-10-12-architecture-v2-design.md) §3.4,
 INV-9…12 · [аудит](../analysis/2026-10-12-harness-module-audit.md) §4.1, 4.4–4.7
 

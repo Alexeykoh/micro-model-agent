@@ -1,7 +1,8 @@
 # Handoff: переход на Architecture v2
 
 **Дата:** 2026-10-13 · **Ветка:** `docs/architecture-v2` · **База:** `master` (`65ba2f68`)
-**Состояние:** `bun test` 3799 pass / 0 fail · `bun run quality` exit 0 · **30 коммитов не запушены**
+**Состояние:** `bun test` 3801 pass / 0 fail · `bun run quality` exit 0 · **W0–W4 закрыты;
+W3 закрыт (INV-18…21)**; из INV-23 открыт только долг `split-bloated-files`.
 
 Документ для следующей сессии: что сделано, где остановились, что делать дальше.
 Открытые долги — единым реестром в [debt.md](../agents/debt.md) (правило 9).
@@ -71,10 +72,9 @@ feature-history (вынесен из AGENTS.md).
 
 ---
 
-## 3. Где остановились: следующий шаг — **W0 (наблюдаемость)**
+## 3. W0 (наблюдаемость) — **закрыт**
 
-Спека стоит на дисциплине до W1. W0 —
-самая дешёвая волна и делает дальнейший разбор автоматизируемым.
+Историческая хроника волны W0 (все задачи ✅): следующий шаг из прошлой сессии.
 
 **W0.1 сделана** (`feat/w0-output-source`): введён `Source` (`output/types.ts`),
 эмиттеры заполняют его — `Logger` → `module:<prefix>`/`mma`, `channel.writeLine`
@@ -137,23 +137,24 @@ overflow-warning называет владельца и блок, а не тол
 
 ## 4. Порядок волн (из спеки §5)
 
-| Волна | Содержание | Закрывает |
-|---|---|---|
-| **W0** | Наблюдаемость (см. §3) | A, B, C, D, F |
-| **W1** | Владение данными: `ToolDefinition.owner`, единый `ToolRegistry`, `PromptAssembler`, `ModuleHost` (lifecycle) + гейт архитектуры | A, E, F, M |
-| **W2** | Enforcement: `ToolSecurityDecl`, проверки в `ToolExecutor.execute()`, enforcement тегов, `bash` в jail | INV-9…12 (аудит 4.1, 4.4–4.7) |
-| **W3** | `ConfigStore` с эффектами вместо `reconfigure: boolean`, атомарная запись, модульные ключи | INV-18…21 |
-| **W4** | ✅ Переезд `modules/context` и `modules/hallucination` в ядро, `core/api/*`, пустой allowlist направления зависимостей | INV-3, INV-4 |
-| **W5** | Гейт D ✅; `agent.ts` (1882 → ~561, 12 фазовых модулей) — тонкий координатор; остаток (оболочка+публичный API) и прочие раздутые файлы — долг `split-bloated-files` | INV-23 |
+| Волна | Содержание | Закрывает | Статус |
+|---|---|---|---|
+| **W0** | Наблюдаемость (см. §3) | A, B, C, D, F | ✅ |
+| **W1** | Владение данными: `ToolDefinition.owner`, единый `ToolRegistry`, `PromptAssembler`, `ModuleHost` (lifecycle) + гейт архитектуры | A, E, F, M | ✅ |
+| **W2** | Enforcement: `ToolSecurityDecl`, проверки в `ToolExecutor.execute()`, enforcement тегов, `bash` в jail | INV-9…12 (аудит 4.1, 4.4–4.7) | ✅ |
+| **W3** | `ConfigStore` с эффектами вместо `reconfigure: boolean`, атомарная запись, модульные ключи | INV-18…21 | ✅ |
+| **W4** | Переезд `modules/context` и `modules/hallucination` в ядро, `core/api/*`, пустой allowlist направления зависимостей | INV-3, INV-4 | ✅ |
+| **W5** | Гейт D ✅; `agent.ts` (1882 → ~561, 12 фазовых модулей) — тонкий координатор; остаток (оболочка+публичный API) и прочие раздутые файлы — долг `split-bloated-files` | INV-23 | ◐ (долг) |
 
 Порядок выбран по риску, не по удобству. W1 и W2 дают эффект независимо от W5.
 
-**W1 в работе** (спека [`2026-10-13-w1-module-host-design.md`](../specs/2026-10-13-w1-module-host-design.md),
+**W1 закрыт** (спека [`2026-10-13-w1-module-host-design.md`](../specs/2026-10-13-w1-module-host-design.md),
 решения §5 зафиксированы там):
 
 - W1.1 ✅ `ModuleHost` (lifecycle/requires/critical/timeout/dispose/health/сбор).
 - W1.3 ✅ владелец тула: `RegisteredTool` (`owner` обязателен по типу, INV-1/2).
-- W1.4 ◐ гейт `tests/arch/module-boundaries.test.ts` (INV-3/4, 16 записей allowlist).
+- W1.4 ✅ гейт `tests/arch/module-boundaries.test.ts` (INV-3/4) — allowlist **пуст**
+  (был 16 записей; схлопнут переездом на `core/api` в W4).
 - W1.6 ✅ все модули на `ModuleDef` через единый `ModuleHost`: `mcp`/`lsp`/`browser`
   (+ `teardown`), `execution`/`indexer` (вотчер → `teardown`)/`memory`/`session`/`skills`;
   тулы собирает хост (`ModuleHost.collectTools`, INV-2), `dispose` на `agent.shutdown`.
@@ -163,7 +164,7 @@ overflow-warning называет владельца и блок, а не тол
 (единственный путь тулов) ✅ → все модули на `ModuleDef` ✅ → W3 → W4 → W5.
 `W1.2` (child-логер в модулях) схлопнут в W1.6 — логер приходит из `ModuleHost.ctx`.
 
-**W2 в работе** (спека [`2026-10-13-w2-enforcement-design.md`](../specs/2026-10-13-w2-enforcement-design.md)):
+**W2 закрыт** (спека [`2026-10-13-w2-enforcement-design.md`](../specs/2026-10-13-w2-enforcement-design.md)):
 - W2.1 ✅ `ToolDefinition.security: ToolSecurityDecl` (`caps` обязателен; `pathArgs`/
   `urlArgs`/`manual`) — объявлено для всех тулов; `bash` = `[{proc:true}]` + `manual`,
   MCP-тулы = `manual`. Гейт формы `tests/tools/security-decl.test.ts`.

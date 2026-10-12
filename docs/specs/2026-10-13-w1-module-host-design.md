@@ -1,7 +1,7 @@
 # W1 — стандарт модулей и взаимодействия с ядром: `ModuleHost`
 
 **Дата:** 2026-10-13 · **Ветка:** `docs/w1-module-host-spec` (в рамках architecture v2)
-**Статус:** draft (нужно подтверждение 3 решений из §4 — handoff §5)
+**Статус:** ✅ реализовано (W1.1–W1.6; решения §4 подтверждены в handoff §5)
 **Нормативная база:** [architecture v2](./2026-10-12-architecture-v2-design.md) §3.3
 (`ModuleHost`), INV-1/2/5/7/8/16 · [handoff](../plans/2026-10-12-architecture-v2-handoff.md) §4–5
 
@@ -137,6 +137,10 @@ Session-специфичные тулы раннера регистрируют�
 **Реализовано в W1.4 (первая версия):** `tests/arch/module-boundaries.test.ts` — B1/B2/C.
 **A** — реализовано отдельным шагом (`tests/arch/tool-registration.test.ts`, единственный
 писатель в `core/module-host.ts`); **D** — когда начнём реально резать файлы (W5).
+
+**Текущее состояние (2026-10-13, после W4):** B1/B2/C — allowlist **пуст** (16 записей
+схлопнуты переездом модулей на `core/api/*`); гейт строгий, без исключений. D —
+`tests/arch/file-size.test.ts` реализован; остаток — долг `split-bloated-files`.
 
 **Решение 2026-10-13 (закрывает `check-arch-script`):** отдельный `scripts/check-arch.ts`
 не заводим. Гейты — это тесты, и они прогоняются в `bun run quality` шагом `check:arch`

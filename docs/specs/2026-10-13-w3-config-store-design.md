@@ -8,7 +8,9 @@ INV-18…21 · [аудит](../analysis/2026-10-12-harness-module-audit.md) 7.5
 (`src/config/persist.ts`, `configVersion` в снимке `GET /api/config`); W3.5 — механизм
 `ModuleDef.configKeys()` → `ModuleHost.collectConfigKeys()` → `registerConfigKeys`, и
 реальный ключ `execution.autoAdvance`, объявленный execution-модулем
-(`src/modules/execution/lifecycle.ts`).
+(`src/modules/execution/lifecycle.ts`). Полный сейв сохранён только в `setup-api`
+(first-run пишет провайдера/модель/окно/локаль/безопасность разом) — осознанно, не
+доменный персист.
 
 **Причина.** `setConfigValue` (`src/config/registry.ts`) возвращает
 `reconfigure: boolean`, а что именно пересобирать — решает каждая поверхность
