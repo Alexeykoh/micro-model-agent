@@ -6,50 +6,27 @@
 // по которой хуки вынесены в `dispatch.ts`: менеджер держит состояние реестра
 // плагинов, а всё, что касается `ToolRegistry`, — это отдельная подсистема.
 import type { AgentPlugin } from "../types";
-import type { ToolDefinition, ToolResult } from "../../tools/types";
+import type { ToolDefinition } from "../../tools/types";
 import type { ToolRegistry } from "../../tools/registry";
 import { Logger } from "../../logger/app-logger";
 import { upsertOwnedTool } from "../../core/module-host";
 import { detectHooks } from "./records";
+import {
+  ownerByTag,
+  pluginToolName,
+  withPluginMeta,
+  definitionProblem,
+  type PreparedTool,
+  type PluginContribution,
+} from "./tool-defs";
+
+// Имена/мета/валидация живут в `./tool-defs`; реэкспорт для импортёров.
+export { pluginToolTag, pluginToolName } from "./tool-defs";
 
 const logger = new Logger("warn", "plugins");
 
 /** Плейсхолдер владельца имени, занятого ядром (в сообщении — «the harness»). */
 const CORE_OWNER = "<harness>";
-
-/** Префикс тега плагина (`plugin:<name>`). */
-const PLUGIN_TAG_PREFIX = "plugin:";
-
-/**
- * Владелец имени по тегу в самом определении.
- *
- * Нужно не только для красоты: `buildRunnerRegistry` **клонирует** определения в
- * реестр сессии, и клон приходит без записи о владельце. Живой прогон показал
- * ровно это: клон виделся «занятым ядром», вклад плагина отбрасывался, а reload
- * не обновлял тул — старая копия продолжала работать. Тег переживает клонирование.
- */
-function ownerByTag(def: ToolDefinition | undefined): string | undefined {
-  for (const tag of def?.tags ?? []) {
-    if (tag.startsWith(PLUGIN_TAG_PREFIX)) return tag.slice(PLUGIN_TAG_PREFIX.length);
-  }
-  return undefined;
-}
-
-/** Тег тула плагина: `plugin:<name>` — по нему тул узнаётся в UI и отчётах. */
-export function pluginToolTag(plugin: string): string {
-  return `${PLUGIN_TAG_PREFIX}${plugin}`;
-}
-
-/**
- * Имя тула в реестре: `plugin__<плагин>__<тул>` — по образцу `mcp__<server>__<tool>`
- * (`src/modules/mcp/module.ts`). Префикс снимает почти все коллизии с ядром
- * и делает происхождение тула видимым прямо в истории сессии.
- */
-export function pluginToolName(plugin: string, tool: string): string {
-  const safePlugin = plugin.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const safeTool = tool.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
-  return `plugin__${safePlugin}__${safeTool}`;
-}
 
 /** Почему тул плагина не попал в реестр. */
 export interface PluginToolConflict {
@@ -68,20 +45,6 @@ export interface PluginToolSyncResult {
   removed: string[];
   /** Тул, который остался, но был перерегистрирован (reload плагина). */
   kept: string[];
-  conflicts: PluginToolConflict[];
-}
-
-interface PreparedTool {
-  /** Имя в реестре (с префиксом плагина). */
-  name: string;
-  /** Плагин-владелец — им же заполняется `provides.tools`. */
-  plugin: string;
-  def: ToolDefinition;
-}
-
-/** Что именно внёс один плагин (или почему ничего). */
-interface PluginContribution {
-  tools: PreparedTool[];
   conflicts: PluginToolConflict[];
 }
 
@@ -104,58 +67,6 @@ function stateOf(registry: ToolRegistry): AppliedState {
     applied.set(registry, state);
   }
   return state;
-}
-
-/** Тег плагина + `alwaysOn` по умолчанию: иначе `enable_tools` спрятал бы тул. */
-function withPluginMeta(plugin: string, name: string, def: ToolDefinition): ToolDefinition {
-  const tag = pluginToolTag(plugin);
-  const tags = [...(def.tags ?? [])];
-  if (!tags.includes(tag)) tags.push(tag);
-  // `name` — с префиксом плагина: в реестре определение лежит под своим ключом.
-  return {
-    ...def,
-    name,
-    tags,
-    alwaysOn: def.alwaysOn ?? true,
-    handler: wrapPluginHandler(def.handler),
-  };
-}
-
-/**
- * Нормализация результата тула плагина.
- *
- * Плагин пишется на JS и часто возвращает `{ output }` без `success` — а поле
- * обязательное, и без него тул честно выглядит упавшим (живой прогон: карточка
- * «ошибка», в логе нет `success`, Trace показывает `success: false`). Считаем
- * отсутствие `success` успехом и приводим `output` к строке — автору не нужно
- * помнить про служебные поля чужого контракта.
- */
-function wrapPluginHandler(handler: ToolDefinition["handler"]): ToolDefinition["handler"] {
-  return async (ctx, args) => {
-    const raw: unknown = await handler(ctx, args);
-    const result = (typeof raw === "string" ? { output: raw } : raw ?? {}) as Partial<ToolResult>;
-    const output =
-      typeof result.output === "string" ? result.output : JSON.stringify(result.output ?? "");
-    return { ...result, success: result.success !== false, output } as ToolResult;
-  };
-}
-
-/** Замечание к одному определению: почему оно не годится. */
-function definitionProblem(def: ToolDefinition | undefined): string | null {
-  if (!def || typeof def !== "object") return "not a tool definition";
-  if (
-    typeof def.name !== "string" ||
-    !def.name.trim() ||
-    typeof def.description !== "string" ||
-    !def.parameters ||
-    typeof def.parameters !== "object"
-  ) {
-    return "needs name, description and parameters";
-  }
-  // Живой прогон: без `handler` тул падал в рантайме с
-  // `tool.handler is not a function` — диагностика приходит из определения.
-  if (typeof def.handler !== "function") return "needs a handler(ctx, args) returning {output}";
-  return null;
 }
 
 /** Прочитать `getToolDefinitions()`: падение метода не должно ронять харнесс. */

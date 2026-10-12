@@ -1,56 +1,21 @@
 // Модуль MCP: ленивый коннект к серверам, discovery тулов, дефиниции, cleanup.
 import type { PromptBlock } from "../../core/types";
 import type { AgentModule, AgentPlugin } from "../types";
-import type { ToolDefinition, ToolSecurityDecl } from "../../tools/types";
+import type { ToolDefinition } from "../../tools/types";
 import type { AppConfig } from "../../config/types";
 import { MCPClient } from "./client";
 import { MCPRegistry, type MCPServerConfig } from "./registry";
 import { Logger } from "../../logger/app-logger";
 import { MCP_DISCOVERY_TIMEOUT_MS as DISCOVERY_TIMEOUT_MS } from "../../config/timeouts";
+import {
+  MCP_TOOL_SECURITY,
+  sanitizeToolName,
+  convertInputSchema,
+  buildMcpPromptBlock,
+  type DiscoveredTool,
+} from "./tool-shape";
 
 const logger = new Logger("warn", "mcp");
-
-/**
- * Политика MCP-тулов (INV-9/10): серверы произвольны и могут ходить в сеть или
- * запускать процессы, поэтому декларация — `manual` (enforcement внутри вызова,
- * к провайдеру сервера). Видно в `/tools`.
- */
-const MCP_TOOL_SECURITY: ToolSecurityDecl = {
-  caps: [],
-  manual: {
-    reason: "mcp — произвольный сервер, политика у провайдера",
-    reviewedBy: "architecture-v2",
-    date: "2026-10-13",
-  },
-};
-
-/** Тул, найденный на MCP-сервере. */
-interface DiscoveredTool {
-  serverName: string;
-  toolName: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
-
-/** Безопасное имя тула: mcp__server__tool. */
-function sanitizeToolName(server: string, tool: string): string {
-  const safeServer = server.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const safeTool = tool.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return `mcp__${safeServer}__${safeTool}`;
-}
-
-/** Привести input-схему MCP к форме дефиниций тулов. */
-function convertInputSchema(schema: Record<string, unknown>): Record<string, unknown> {
-  if (schema && typeof schema === "object" && "properties" in schema) {
-    const required = Array.isArray(schema.required) ? schema.required : [];
-    return {
-      type: "object",
-      properties: schema.properties,
-      required: required.length > 0 ? required : undefined,
-    };
-  }
-  return { type: "object", properties: {} };
-}
 
 /** Модуль MCP: конфиги при init, коннект лениво, тул-дефиниции из найденного. */
 export class MCPModule implements AgentModule {
@@ -204,41 +169,7 @@ export class MCPModule implements AgentModule {
   }
 
   getSystemPromptBlock(): PromptBlock | null {
-    const serverNames = [...this.serverConfigs.keys()];
-    if (serverNames.length === 0) return null;
-
-    const lines: string[] = ["---", "MCP servers available:"];
-
-    const byServer = new Map<string, DiscoveredTool[]>();
-    for (const d of this.discovered) {
-      const list = byServer.get(d.serverName) || [];
-      list.push(d);
-      byServer.set(d.serverName, list);
-    }
-
-    for (const serverName of serverNames) {
-      lines.push(`  [${serverName}]`);
-      const tools = byServer.get(serverName);
-      if (tools && tools.length > 0) {
-        for (const t of tools) {
-          const toolRef = sanitizeToolName(serverName, t.toolName);
-          lines.push(`    - ${toolRef}: ${t.description}`);
-        }
-      } else {
-        lines.push(
-          `    (not yet connected — use ${sanitizeToolName(serverName, "connect")} to discover tools)`,
-        );
-      }
-    }
-
-    lines.push("---");
-
-    return {
-      content: lines.join("\n"),
-      priority: "high",
-      essential: false,
-      estimatedTokens: this.discovered.length * 20 + 20,
-    };
+    return buildMcpPromptBlock([...this.serverConfigs.keys()], this.discovered);
   }
 
   getToolDefinitions(): ToolDefinition[] {

@@ -62,10 +62,6 @@
     "src/cli/completer.ts": 351,
     "src/modules/service/openapi/operations.ts": 348,
     "src/ui/md-formatter.ts": 348,
-    "src/modules/mcp/module.ts": 346,
-    "src/modules/plugins/tools.ts": 346,
-    "src/modules/certification/cli.ts": 342,
-    "src/modules/webui/assets/js/feed/turn.ts": 340,
     "src/modules/webui/server.ts": 314,
     "src/modules/security/path-validator.ts": 305
   }
