@@ -189,7 +189,7 @@ export async function assembleAgent(
       config.reasoning,
       () => agent.currentIteration,
     );
-    toolRegistry.register(setThinkingTool);
+    toolRegistry.register(setThinkingTool, "core");
   }
 
   return agent;

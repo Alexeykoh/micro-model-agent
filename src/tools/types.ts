@@ -3,6 +3,13 @@ export interface ToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  /**
+   * Владелец тула (INV-1/2): `core` для встроенных, имя модуля (`execution`,
+   * `mcp`, …), `plugin:<name>` для вклада плагина. Штампуется на пути
+   * регистрации; реестр отказывает тулу без владельца — у каждого тула один
+   * источник истины.
+   */
+  owner?: string;
   /** Иконка в заголовке тула. Без неё — маркер из `toolMarker()`. */
   icon?: string;
   tags?: string[];

@@ -135,7 +135,7 @@ export interface PromptIOAgent {
 /** Минимальная поверхность реестра (без импорта `ToolRegistry`). */
 export interface PromptIORegistry {
   has(name: string): boolean;
-  register(tool: ToolDefinition): void;
+  register(tool: ToolDefinition, owner?: string): void;
 }
 
 /**
@@ -154,7 +154,7 @@ export function installWebPromptIO(deps: {
 }): PromptIO {
   if (deps.registry) {
     for (const tool of [questionTool, approveTool]) {
-      if (!deps.registry.has(tool.name)) deps.registry.register(tool);
+      if (!deps.registry.has(tool.name)) deps.registry.register(tool, "core");
     }
   }
   if (deps.toolCtx) deps.toolCtx.exitOnComplete = false;

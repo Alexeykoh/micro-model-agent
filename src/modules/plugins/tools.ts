@@ -307,7 +307,7 @@ function applyDesired(
   for (const [name, tool] of desired) {
     const before = state.owner.get(name);
     state.owner.set(name, tool.plugin);
-    registry.upsert(tool.def);
+    registry.upsert(tool.def, `plugin:${tool.plugin}`);
     if (before) kept.push(name);
     else added.push(name);
   }

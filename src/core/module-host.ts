@@ -184,11 +184,13 @@ export class ModuleHost {
     }
   }
 
-  /** Вклад модулей: тулы (в порядке инициализации). */
+  /** Вклад модулей: тулы (в порядке инициализации, с владельцем, INV-1/2). */
   collectTools(): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
     for (const name of this.resolveOrder()) {
-      tools.push(...(this.defs.get(name)!.tools?.() ?? []));
+      for (const tool of this.defs.get(name)!.tools?.() ?? []) {
+        tools.push(tool.owner ? tool : { ...tool, owner: name });
+      }
     }
     return tools;
   }

@@ -78,6 +78,22 @@ describe("ModuleRegistry", () => {
     expect(tools[0].name).toBe("my_tool");
   });
 
+  it("stamps the module name as the tool owner (INV-1/2)", () => {
+    const mod: AgentModule = {
+      name: "execution",
+      getToolDefinitions: () => [
+        {
+          name: "verify",
+          description: "v",
+          parameters: { type: "object", properties: {} },
+          handler: async () => ({ success: true, output: "" }),
+        },
+      ],
+    };
+    registry.register(mod);
+    expect(registry.collectToolDefinitions()[0].owner).toBe("execution");
+  });
+
   it("should collect plugins", () => {
     const plugin = {
       name: "test-plugin",

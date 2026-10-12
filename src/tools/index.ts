@@ -139,6 +139,7 @@ export function registerAllTools(
   }
 
   for (const tool of tools) {
-    registry.register(tool);
+    // Встроенные тулы ядра (INV-1/2): один общий владелец `core`.
+    registry.register(tool, "core");
   }
 }

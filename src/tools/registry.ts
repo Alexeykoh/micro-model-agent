@@ -4,11 +4,23 @@ import type { ToolDefinition } from "./types";
 export class ToolRegistry {
   private tools: Map<string, ToolDefinition> = new Map();
 
-  register(tool: ToolDefinition): void {
-    if (this.tools.has(tool.name)) {
-      throw new Error(`Tool already registered: ${tool.name}`);
+  /**
+   * Владелец тула: из определения, иначе из аргумента (INV-1). Не бросаем на
+   * пустом владельце — вручную собранные тестовые реестры легитимны; полноту
+   * владельцев на продуктовых путях стерегут guard-тесты (`tests/tools/*`).
+   */
+  private withOwner(tool: ToolDefinition, owner?: string): ToolDefinition {
+    const finalOwner = tool.owner ?? owner;
+    if (!finalOwner || tool.owner === finalOwner) return tool;
+    return { ...tool, owner: finalOwner };
+  }
+
+  register(tool: ToolDefinition, owner?: string): void {
+    const withOwner = this.withOwner(tool, owner);
+    if (this.tools.has(withOwner.name)) {
+      throw new Error(`Tool already registered: ${withOwner.name}`);
     }
-    this.tools.set(tool.name, tool);
+    this.tools.set(withOwner.name, withOwner);
   }
 
   /**
@@ -17,8 +29,9 @@ export class ToolRegistry {
    * набор тулов принадлежит внешнему источнику и меняется по ходу работы —
    * плагины (см. `modules/plugins/tools.ts`).
    */
-  upsert(tool: ToolDefinition): void {
-    this.tools.set(tool.name, tool);
+  upsert(tool: ToolDefinition, owner?: string): void {
+    const withOwner = this.withOwner(tool, owner);
+    this.tools.set(withOwner.name, withOwner);
   }
 
   /** Снять тул с регистрации (выключение/выгрузка плагина). */

@@ -421,7 +421,7 @@ function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
       config.reasoning,
       () => agent.currentIteration,
     );
-    registry.register(setThinkingTool);
+    registry.register(setThinkingTool, "core");
   }
   return agent;
 }

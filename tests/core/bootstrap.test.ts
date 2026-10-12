@@ -43,6 +43,23 @@ describe("bootstrap", () => {
     }
   }, 30_000);
 
+  it("gives every registered tool an owner (INV-1/2)", async () => {
+    const dir = tempDir();
+    try {
+      const { toolRegistry } = await bootstrap(dir, dir);
+      const missing = toolRegistry
+        .getAll()
+        .filter((t) => !t.owner)
+        .map((t) => t.name);
+      expect(
+        missing,
+        `Tools without an owner on the bootstrap path (INV-1): ${missing.join(", ")}`,
+      ).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("wires security.sessionEncryption into the session store", async () => {
     // Регрессия: SessionStore создавался без config.security.sessionEncryption,
     // поэтому включённое шифрование сессий молча игнорировалось.

@@ -23,6 +23,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   contract (`src/modules/mcp/lifecycle.ts` — non-critical, `setup = initialize()`);
   the bootstrap ad-hoc `withTimeout(initialize(), 10_000)` is gone and the module
   timeout is owned by the host. A failing/slow MCP no longer stalls or aborts boot.
+- **Every tool names its owner (W1.3, INV-1/2)**: `ToolDefinition.owner` (`core`,
+  module name, `plugin:<name>`) is stamped on each registration path —
+  `registerAllTools` → `core`, `ModuleRegistry.collectToolDefinitions` /
+  `ModuleHost.collectTools` → module name, plugin tools → `plugin:<name>`. The
+  container stays generic (test registries need not know about policy); a
+  bootstrap end-to-end guard requires an owner on every registered tool.
 
 - **Fail-open signals in the session log (INV-15)** (`src/core/session-logger.ts`,
   `docs/agents/observability.md`): critic and tool failures that used to surface only

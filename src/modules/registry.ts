@@ -34,10 +34,12 @@ export class ModuleRegistry {
 
   collectToolDefinitions(): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
-    for (const mod of this.modules.values()) {
+    for (const [name, mod] of this.modules) {
       if (mod.getToolDefinitions) {
         const defs = mod.getToolDefinitions();
-        if (defs) tools.push(...defs);
+        // Владелец тула — модуль (INV-1/2): модуль не обязан знать, как его
+        // звать, реестр проставляет `owner` из регистрационного имени.
+        if (defs) for (const def of defs) tools.push(def.owner ? def : { ...def, owner: name });
       }
     }
     return tools;

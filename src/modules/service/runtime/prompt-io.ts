@@ -91,7 +91,7 @@ export function installServicePromptIO(
   runner: SessionRunner,
 ): PromptIO {
   for (const tool of [questionTool, approveTool]) {
-    if (!runner.registry.has(tool.name)) runner.registry.register(tool);
+    if (!runner.registry.has(tool.name)) runner.registry.register(tool, "core");
   }
   const io = servicePromptIO(s, task);
   runner.agent.setPromptIO(io);

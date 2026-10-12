@@ -10,4 +10,14 @@ describe("registerAllTools interactive set", () => {
     expect(registry.get("question")?.interactive).toBe(true);
     expect(registry.get("approve")?.interactive).toBe(true);
   });
+
+  it("stamps every builtin tool with the core owner (INV-1/2)", () => {
+    const registry = new ToolRegistry();
+    registerAllTools(registry);
+    const missing = registry
+      .getAll()
+      .filter((t) => t.owner !== "core")
+      .map((t) => `${t.name}:${t.owner ?? "none"}`);
+    expect(missing, `Builtin tools without owner=core: ${missing.join(", ")}`).toEqual([]);
+  });
 });
