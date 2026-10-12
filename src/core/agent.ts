@@ -23,19 +23,19 @@ import {
   finalizeWithoutTools as phaseFinalizeWithoutTools,
   type TurnOutputHost,
 } from "./agent/turn-output";
-import { createLoopModules, type LoopSetupHost } from "./agent/loop-setup";
-import { buildLoopResult, type LoopResultHost } from "./agent/loop-result";
-import { runIterationPrologue, type IterationPrologueHost } from "./agent/iteration-prologue";
-import { runLlmPhase, type LlmPhaseHost } from "./agent/loop-llm";
-import { runFinalGates } from "./agent/loop-gates";
-import { runToolBatchPhase, type BatchHost } from "./agent/loop-batch";
+import type { LoopSetupHost } from "./agent/loop-setup";
+import type { LoopResultHost } from "./agent/loop-result";
+import type { IterationPrologueHost } from "./agent/iteration-prologue";
+import type { LlmPhaseHost } from "./agent/loop-llm";
+import type { BatchHost } from "./agent/loop-batch";
 import { runTurn, type TurnRunHost } from "./agent/turn-run";
+import { executeAgentLoop } from "./agent/loop-run";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
 import type { Logger } from "../logger/app-logger";
 import type { AppConfig, ProviderEntry } from "../config/types";
-import type { ToolScope, ToolDefinition, ToolResult } from "../tools/types";
+import type { ToolScope, ToolResult } from "../tools/types";
 import type { PromptBlock } from "./types";
 import type { EnvironmentReport } from "./environment";
 import type { ToolEvent, AgentPhase, AgentResult, OnMeta } from "./types";
@@ -54,7 +54,6 @@ import type { LoopState } from "./agent/loop-state";
 import type { TokenTracker } from "./agent/token-tracker";
 import type { ContextLogger } from "./agent/context-log";
 import { ContextRenderer } from "./agent/context-renderer";
-import { accumulateToolTargets } from "./agent/loop-nudges";
 import type { PromptBlockKind } from "./types";
 
 export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
@@ -447,100 +446,29 @@ export class Agent {
     onPhase?: (phase: AgentPhase) => void,
     onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult> {
-    const { config, contextManager, logger } = this.deps;
-
     this.abortController = new AbortController();
-    // Модули цикла (состояние + сервисы) — единый контейнер (INV-23).
-    const {
-      state,
-      compactionService,
-      tokenTracker,
-      reasoningResolver,
-      toolBatch,
-      hallucinationGate,
-      auditGate,
-      criticGate,
-    } = createLoopModules(this.loopSetupHost(), slog);
-
-    while (state.iteration < config.maxToolIterations && !this.shutdownRequested) {
-      state.iteration++;
-      this._currentIteration = state.iteration;
-      contextManager.noteIteration();
-
-      // Пролог итерации: тулы/бюджет, компакция, история, монитор префикса (INV-23).
-      const { allToolsForBudget, boundedToolNames, history } = runIterationPrologue(
-        this.iterationPrologueHost(),
-        { state, slog, input, onMeta, compactionService },
-      );
-
-      const llm = await runLlmPhase(this.llmPhaseHost(), {
-        state,
-        slog,
-        input,
-        history,
-        allToolsForBudget: allToolsForBudget as ToolDefinition[],
-        tokenTracker,
-        reasoningResolver,
-        onChunk,
-        onMeta,
-        onReasoning,
-        onPhase,
-      });
-      if (llm.kind === "continue") continue;
-      if (llm.kind === "break") break;
-      if (llm.kind === "return") return llm.result;
-      const { textContent, reasoningContent, toolCalls, sawToolCall } = llm;
-
-      const cycleNudges = sawToolCall ? accumulateToolTargets(state, toolCalls) : [];
-
-      if (sawToolCall) {
-        const outcome = await runToolBatchPhase(this.batchHost(), {
-          state,
-          toolCalls,
-          boundedToolNames,
-          textContent,
-          reasoningContent,
-          input,
-          onTool,
-          onMeta,
-          slog,
-          cycleNudges,
-          toolBatch,
-        });
-        if (outcome === "break") break;
-        continue;
-      }
-
-      const gates = await runFinalGates(this.deps, {
-        state,
-        textContent,
-        reasoningContent,
-        input,
-        slog,
-        onChunk,
-        onMeta,
-        hallucinationGate,
-        criticGate,
-        auditGate,
-      });
-      if (gates.kind === "continue") continue;
-      if (gates.kind === "break") break;
-      if (gates.kind === "return") return gates.result;
-      // gates.kind === "ok": гейты пройдены, продолжаем цикл.
-    }
-
-    if (state.finalizeReason || (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted)) {
-      const reason = state.finalizeReason ?? "max_iters";
-      logger.diagnostic("info", `Forcing final answer without tools (${reason})`);
-      await this.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
-      state.stopReason = reason;
-    }
-
-    return buildLoopResult(
-      this.loopResultHost(),
-      state,
-      tokenTracker,
-      state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted,
+    return executeAgentLoop(
+      {
+        deps: this.deps,
+        setIteration: (n) => {
+          this._currentIteration = n;
+        },
+        isShutdownRequested: () => this.shutdownRequested,
+        loopSetupHost: () => this.loopSetupHost(),
+        iterationPrologueHost: () => this.iterationPrologueHost(),
+        llmPhaseHost: () => this.llmPhaseHost(),
+        batchHost: () => this.batchHost(),
+        loopResultHost: () => this.loopResultHost(),
+        finalizeWithoutTools: (state, tt, onChunk, slog) =>
+          this.finalizeWithoutTools(state, tt, onChunk, slog),
+      },
+      input,
+      slog,
+      onChunk,
+      onMeta,
+      onTool,
+      onPhase,
+      onReasoning,
     );
   }
 
