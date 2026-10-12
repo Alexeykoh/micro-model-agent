@@ -8,7 +8,7 @@
  * оба на `turn_end`. Гард хоста смотрит на `agentRunning` (не `busy`), чтобы
  * собственный `submit` владельца не отвергался резервом сервера.
  */
-import type { Agent } from "../../core/agent";
+import type { Agent } from "../../core/api";
 import type { SessionRunner } from "../../core/bootstrap/session-runner";
 import type { AppConfig } from "../../config/types";
 import type { SessionManager } from "../session/manager";

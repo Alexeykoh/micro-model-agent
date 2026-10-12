@@ -8,7 +8,7 @@ import { exec } from "node:child_process";
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { errMsg } from "../../utils/error";
-import { redactContextSecrets } from "../../core/agent/context-log";
+import { redactContextSecrets } from "../../core/api";
 import type { WebUiState } from "./state";
 import { MAX_BODY_BYTES } from "./limits";
 import { readEnv } from "../../config/env";

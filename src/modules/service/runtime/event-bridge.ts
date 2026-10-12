@@ -7,7 +7,7 @@
  * `clipToolOutput`), — но пишет envelope'ы вместо SSE-событий webui.
  */
 import { stripAnsi } from "../../../ui/line-math";
-import { redactContextSecrets } from "../../../core/agent/context-log";
+import { redactContextSecrets } from "../../../core/api";
 import { scrubToolArgs, clipToolOutput } from "../../webui/session/forward";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 

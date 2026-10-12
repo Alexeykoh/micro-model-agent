@@ -4,7 +4,7 @@
  * при старте (best-effort) и на каждый reconfigure — следуя за активным
  * провайдером, а не протухая. Офлайн-провайдер оставляет прежний список, а не падает.
  */
-import type { Agent } from "../../../core/agent";
+import type { Agent } from "../../../core/api";
 import type { AppConfig } from "../../../config/types";
 
 /** Кеш списка моделей: чтение и обновление от активного провайдера. */

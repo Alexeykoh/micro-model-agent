@@ -26,8 +26,11 @@ export interface Message {
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import { DEFAULTS } from "../../config/defaults";
 import type { TokenCounter } from "../../llm/token-counter";
-import { ContextCalibrator, isImplausibleJump } from "../../core/agent/context-calibration";
-import type { CalibrationState } from "../../core/agent/context-calibration";
+import {
+  ContextCalibrator,
+  isImplausibleJump,
+  type CalibrationState,
+} from "../../core/api";
 
 /** Бюджет контекста в токенах: системный промпт, резерв ответа, история. */
 export interface ContextBudget {

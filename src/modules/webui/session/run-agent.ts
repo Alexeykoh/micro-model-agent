@@ -1,6 +1,6 @@
 // Одноходовой раннер агента для `mma web`: матчинг id тул-событий, флаг прерывания, usage.
 // Вынесен из `module.ts` (правило #1: ≤300 строк/файл).
-import type { Agent } from "../../../core/agent";
+import type { Agent } from "../../../core/api";
 import type { AgentResult, ToolEvent } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import type { ExecutionModule } from "../../execution/module";

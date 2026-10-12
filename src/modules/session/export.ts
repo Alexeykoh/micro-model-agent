@@ -2,7 +2,7 @@
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionLogEntry } from "./store";
 import { getMessageText } from "../../llm/provider";
-import { redactContextSecrets } from "../../core/agent/context-log";
+import { redactContextSecrets } from "../../core/api";
 
 /**
  * Чистые форматтеры экспорта для `session export` / `/export`. IO и пути —

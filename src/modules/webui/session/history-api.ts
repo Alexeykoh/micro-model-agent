@@ -15,7 +15,7 @@ import type { ServerResponse } from "node:http";
 import type { SessionLogEntry } from "../../session/store";
 import type { SessionMessage } from "../../session/types";
 import { getMessageText } from "../../../llm/provider";
-import { redactContextSecrets } from "../../../core/agent/context-log";
+import { redactContextSecrets } from "../../../core/api";
 import { stripAnsi } from "../../../ui/line-math";
 import { scrubToolArgs } from "./forward";
 import { sendJson } from "../util";

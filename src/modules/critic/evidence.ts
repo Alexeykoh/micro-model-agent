@@ -3,8 +3,7 @@ import { readFileSync } from "fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "path";
 import type { EvidencePack } from "./types";
-import { summarizeToolArgs } from "../../core/agent/tool-output";
-import { redactContextSecrets } from "../../core/agent/context-log";
+import { summarizeToolArgs, redactContextSecrets } from "../../core/api";
 import { extractAmountClaims, normalizeDigits } from "../hallucination/web-claims";
 
 const MUTATING_TOOLS = new Set(["write_file", "edit_file", "delete_file", "move_file", "create_dir"]);

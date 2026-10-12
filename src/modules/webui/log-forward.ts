@@ -14,7 +14,7 @@
 import type { OutputBus } from "../../output/bus";
 import { defaultOutputBus } from "../../output/bus";
 import type { OutputEvent, OutputLevel } from "../../output/types";
-import { redactContextSecrets } from "../../core/agent/context-log";
+import { redactContextSecrets } from "../../core/api";
 import { broadcast, type SseTransport } from "./state";
 
 const FORWARDED: readonly OutputLevel[] = ["info", "warn", "error"];

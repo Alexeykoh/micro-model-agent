@@ -12,7 +12,7 @@
 import type { AppConfig } from "../../../config/types";
 import { t } from "../../../i18n/index";
 import { canonicalKeys, getConfigValue } from "../../../config/registry";
-import { redactContextSecrets } from "../../../core/agent/context-log";
+import { redactContextSecrets } from "../../../core/api";
 import { errMsg } from "../../../utils/error";
 import { memoryLines } from "./memory-commands";
 import { makeSettingsHandlers } from "../settings/commands-settings";

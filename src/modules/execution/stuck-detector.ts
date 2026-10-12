@@ -1,5 +1,5 @@
 // Детектор застревания: повторы, фейлы, bash-флейлинг, хинты.
-import { canonicalArgsKey } from "../../core/agent/canonical-args";
+import { canonicalArgsKey } from "../../core/api";
 import { t } from "../../i18n/index";
 import { isTransientError } from "./transient-error";
 

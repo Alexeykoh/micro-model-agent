@@ -6,7 +6,7 @@
  * (`RunPool`), реестр задач, буфер envelope'ов и подключённых SSE-клиентов.
  */
 import type { Server } from "node:http";
-import type { Agent } from "../../core/agent";
+import type { Agent } from "../../core/api";
 import type { SessionRunner } from "../../core/bootstrap/session-runner";
 import type { AppConfig } from "../../config/types";
 import { readEnv } from "../../config/env";

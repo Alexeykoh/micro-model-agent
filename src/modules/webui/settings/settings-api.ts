@@ -2,7 +2,7 @@
 // Вынесены из `server.ts`. Без коллаборатора — пробел wiring: такие точки отвечают 503.
 // Auth и same-origin — выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { redactContextSecrets } from "../../../core/agent/context-log";
+import { redactContextSecrets } from "../../../core/api";
 import { readBodyError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";

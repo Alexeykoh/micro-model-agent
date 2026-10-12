@@ -11,7 +11,7 @@
 import type { SseEvent, RuntimeState, SseTransport } from "../state";
 import { broadcast } from "../state";
 import { syncBusy } from "./session-status";
-import { redactContextSecrets } from "../../../core/agent/context-log";
+import { redactContextSecrets } from "../../../core/api";
 import { stripAnsi } from "../../../ui/line-math";
 import type { MetaKind, StopReason } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";

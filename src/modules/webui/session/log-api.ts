@@ -10,7 +10,7 @@
 // Auth и same-origin — выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { SessionLogEntry } from "../../session/store";
-import { redactContextSecrets } from "../../../core/agent/context-log";
+import { redactContextSecrets } from "../../../core/api";
 import { stripAnsi } from "../../../ui/line-math";
 import { sendJson } from "../util";
 import type { SessionStore } from "../state";
