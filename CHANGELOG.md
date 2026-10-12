@@ -79,6 +79,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- **W2 spec corrected (2026-10-13)**: `caps` is a declaration, not a gate; the
+  enforced policies are tied to arguments (`pathArgs` → scope/protected,
+  `urlArgs` → SSRF). The original `proc → security.bash.enabled` / `net →
+  security.network.enabled` mapping is wrong — those keys toggle *validation*,
+  not access — so it was dropped, and W2.4 became a consistency guard
+  (`pathArgs` implies an `fs` cap, `urlArgs` implies a `net` cap).
 - **Output events name their source (INV-13)** (`src/output/`): `OutputEvent.source`
   is now a canonical `Source` (`mma` | `core` | `module:<name>` | `tool:<name>`)
   instead of a free string that was often `""`. `Logger` emits `module:<prefix>`

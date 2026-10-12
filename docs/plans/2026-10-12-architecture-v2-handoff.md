@@ -173,7 +173,11 @@ overflow-warning называет владельца и блок, а не тол
 - W2.3 ✅ `urlArgs` в `ToolExecutor.execute()`: SSRF (`isUrlAllowed` + session-override)
   ДО хендлера, блок → `blocked:true` с `tool.url_blocked`. `attach_image` переведён
   на `manual` (source — путь **или** URL). Тест `tests/tools/enforcement-url.test.ts`.
-- W2.4–W2.5 ⬜ — `caps` (`proc`/`net`), снятие дублей из хендлеров.
+- W2.4 ✅ правка спеки + гейт согласованности: `caps` — декларация, проверяемые
+  политики привязаны к аргументам (`pathArgs`⇒fs-cap, `urlArgs`⇒net-cap).
+  Привязка `proc/net` к `security.bash.enabled`/`security.network.enabled` **убрана
+  как ошибочная** (это выключатели валидации, не доступа).
+- W2.5 ⬜ — снятие дублей из хендлеров.
 
 
 **Приоритет при выборе одной волны: W2.** Enforcement даёт немедленный эффект на

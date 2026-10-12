@@ -66,14 +66,20 @@ security: ToolSecurityDecl;   // caps обязателен; pathArgs/urlArgs/man
 ```
 allowlist → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
           → [urlArgs: isUrlAllowed]
-          → [caps: proc → security.bash.enabled; net → security.network.enabled]
           → rate-limit → плагин-хуки (onBeforeTool) → хендлер
 ```
 
-- Проверки **fail-closed**: блокировка возвращает `ToolResult{success:false}`
-  с локализованной причиной и `source`/`kind:"blocked"` (INV-15).
-- Теги — не здесь: сужение набора тулов уже делает `filterToolsByTags`
-  (набор видимых тулов), `execute()` — второй рубеж только по allowlist.
+- Проверки **fail-closed**: блокировка возвращает `ToolResult{success:false}` с
+  `blocked:true` и локализованной причиной (`tool.path_blocked`/`tool.url_blocked`).
+- **`caps` — декларация, а не отдельный гейт.** Проверяемые политики привязаны к
+  **аргументам**: `pathArgs` (скор + protected) и `urlArgs` (SSRF). `proc`/
+  `interactive`/`mem`/`subagent` пока декларативны (видны в `/tools`); центрального
+  гейта у них нет, и **нельзя** привязывать их к `security.bash.enabled`/
+  `security.network.enabled` — это выключатели **валидации**, не доступа (выключение
+  проверки заблокировало бы тул — инверсия смысла). См. правку 2026-10-13 ниже.
+- **Согласованность `caps` ↔ аргументы** (гейт): тул с `pathArgs` обязан иметь
+  `fs`-cap, тул с `urlArgs` — `net`-cap; иначе декларация врёт о возможностях.
+- Теги — не здесь: сужение набора тулов уже делает `filterToolsByTags`.
 - `protected-paths` — always-on (не зависит от `security.paths.enabled`).
 
 ## 4. Матрица «тул → декларация» (START; полнота обязательна)
@@ -93,9 +99,17 @@ allowlist → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
 
 **`bash` (решение).** `pathArgs` неприменим (команда, не путь). Декларация:
 `caps:[{proc:true}]` + `manual:{reason:"shell — command-validator в хендлере", …}`.
-Тогда `proc`-гейт в `execute()` структурно закрывает shell, когда
-`security.bash.enabled === false` (сейчас блокировка — только в хендлере),
-а тонкая валидация строки остаётся в хендлере и честно помечена.
+Валидация строки остаётся в хендлере и честно помечена. Отдельного
+`proc`-гейта в `execute()` **нет**: `security.bash.enabled` — выключатель
+*валидации*, а не доступа (правка 2026-10-13, см. §3).
+
+**Правка 2026-10-13.** Исходная версия привязывала `proc`/`net` к
+`security.bash.enabled`/`security.network.enabled`. Это ошибка: оба ключа —
+«master switch for … validation / outbound checks» (i18n), то есть при
+`false` они отключают **проверку**, а не сам доступ. Привязка тулов к ним
+заблокировала бы тул при выключенной проверке — инверсия. Центрального
+«фича-выключателя» для сети/шелла в конфиге сейчас нет, поэтому W2.4 сведён к
+**согласованности `caps` ↔ аргументов** (гейт), а не к мнимому гейту.
 
 ## 5. Задачи и порядок
 
@@ -104,10 +118,10 @@ allowlist → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
 | W2.1 | Типы `ToolCapability`/`ToolSecurityDecl` + поле `security` в `ToolDefinition`; объявить для всех встроенных и модульных тулов | гейт формы `tests/tools/security-decl.test.ts` |
 | W2.2 | `pathArgs` в `execute()` (scope + writable + protected) + тесты обхода | `tests/tools/enforcement-path.test.ts` ✅ |
 | W2.3 | `urlArgs` в `execute()` (SSRF) + тесты | `tests/tools/enforcement-url.test.ts` ✅ |
-| W2.4 | `caps` в `execute()` (`proc`→bash, `net`→network); `bash` `manual` | `tests/tools/enforcement-caps.test.ts` |
+| W2.4 | Согласованность `caps` ↔ `pathArgs`/`urlArgs` (гейт); правка `caps`-мэппинга | `tests/tools/security-decl.test.ts` |
 | W2.5 | Снять дублирующие проверки из хендлеров (оставить доменную валидацию) | существующие security-тесты зелёные |
 
-Порядок: W2.1 (объявления) → W2.2/W2.3/W2.4 (точка) → W2.5 (чистка хендлеров).
+Порядок: W2.1 (объявления) → W2.2/W2.3 (точка) → W2.4 (согласованность) → W2.5 (чистка).
 
 ## 6. Риски
 

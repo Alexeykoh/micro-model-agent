@@ -51,4 +51,21 @@ describe("tool security declarations (W2.1)", () => {
       urlArgs: ["url"],
     });
   });
+
+  it("caps agree with the declared argument policies (W2.4)", () => {
+    // Инвариант: политика применяется к аргументам, значит cap обязан совпасть.
+    // pathArgs ⇒ fs-cap; urlArgs ⇒ net-cap. Иначе декларация врёт о возможностях.
+    const registry = new ToolRegistry();
+    registerAllTools(registry);
+    const bad: string[] = [];
+    for (const tool of registry.getAll()) {
+      const s = tool.security;
+      if (!s) continue;
+      const hasFs = s.caps.some((c) => "fs" in c);
+      const hasNet = s.caps.some((c) => "net" in c);
+      if (s.pathArgs?.length && !hasFs) bad.push(`${tool.name}: pathArgs without fs cap`);
+      if (s.urlArgs?.length && !hasNet) bad.push(`${tool.name}: urlArgs without net cap`);
+    }
+    expect(bad, bad.join("\n")).toEqual([]);
+  });
 });
