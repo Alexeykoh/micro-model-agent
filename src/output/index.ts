@@ -1,6 +1,6 @@
 // Публичный фасад вывода: типы, шина, канал, стоки, машинный вывод.
 export * from "./types";
-export { moduleSource, toolSource, sourceLabel } from "./source";
+export { moduleSource, toolSource, sourceLabel, moduleOf } from "./source";
 export { OutputBus, defaultOutputBus } from "./bus";
 export { formatEventLine } from "./format";
 export { JsonOutputSink } from "./json-sink";

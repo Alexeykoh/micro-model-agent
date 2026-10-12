@@ -41,7 +41,13 @@ export interface SessionLogEntry {
     | "critic_escalation"
     | "claim_retry"
     | "service_task"
-    | `onboarding_${string}`;
+    | `onboarding_${string}`
+    | `module_${string}`;
+  /**
+   * Модуль-владелец записи (INV-13), без префикса `module:` — например `mcp`,
+   * `audit`, `security`. Заполняется для записей, чей `source` — `module:<name>`.
+   */
+  module?: string;
   tool?: string;
   tool_call_id?: string;
   tool_calls?: Array<{

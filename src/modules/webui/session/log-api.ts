@@ -53,6 +53,7 @@ type StrKey =
   | "kind"
   | "operation"
   | "errorKind"
+  | "module"
   | "provider"
   | "model"
   | "tool"
@@ -76,6 +77,7 @@ const STR_FIELDS: readonly StrKey[] = [
   "kind",
   "operation",
   "errorKind",
+  "module",
   "provider",
   "model",
   "tool",
@@ -106,6 +108,7 @@ export interface LogTailEntry {
   kind?: string;
   operation?: string;
   errorKind?: string;
+  module?: string;
   recoverable?: boolean;
   provider?: string;
   model?: string;

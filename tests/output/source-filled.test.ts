@@ -4,7 +4,7 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Logger } from "../../src/logger/app-logger";
 import { OutputChannel } from "../../src/output/channel";
-import { OutputBus, type OutputEvent } from "../../src/output";
+import { OutputBus, moduleOf, type OutputEvent } from "../../src/output";
 
 /**
  * INV-13 guard: every output event names its source.
@@ -84,5 +84,13 @@ describe("output events name their source (INV-13)", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ kind: "block", source: "mma" });
+  });
+
+  it("moduleOf extracts the module name only from module:<name>", () => {
+    expect(moduleOf("module:indexer")).toBe("indexer");
+    expect(moduleOf("module:security")).toBe("security");
+    expect(moduleOf("mma")).toBeUndefined();
+    expect(moduleOf("core")).toBeUndefined();
+    expect(moduleOf("tool:bash")).toBeUndefined();
   });
 });

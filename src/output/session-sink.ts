@@ -1,5 +1,6 @@
 import type { OutputBus } from "./bus";
 import type { OutputEvent } from "./types";
+import { moduleOf } from "./source";
 import type { SessionManager } from "../modules/session/manager";
 
 /**
@@ -31,6 +32,7 @@ export class SessionOutputSink {
         type: "output",
         level: ev.level,
         source: ev.source,
+        module: moduleOf(ev.source),
         content: ev.text,
       });
     });

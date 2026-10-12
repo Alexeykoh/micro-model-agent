@@ -18,6 +18,7 @@ describe("SessionOutputSink", () => {
       type: "output",
       level: "warn",
       source: "module:probe.context",
+      module: "probe.context",
       content: "kept",
     });
     expect(typeof logs[0].ts).toBe("string");
@@ -36,5 +37,6 @@ describe("SessionOutputSink", () => {
 
     expect(logs).toHaveLength(1);
     expect(logs[0]).toMatchObject({ source: "mma", content: "before" });
+    expect(logs[0].module).toBeUndefined();
   });
 });

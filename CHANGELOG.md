@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   without a reason. Entries persist `source`/`operation`/`errorKind`/`cause`/
   `recoverable` (with `content` = cause for existing readers); the web Trace log
   whitelist gained `operation`/`errorKind`/`recoverable`.
+- **Session log entries carry their module (INV-13)** (`src/modules/session/store.ts`,
+  `src/output/session-sink.ts`): `SessionLogEntry.module` is populated from the
+  event's `Source` (`module:<name>` → `<name>`) when a module-sourced output event
+  is persisted, and the `type` union reserves the `module_<name>` family for
+  module-owned records. The web Trace log whitelist gained `module`.
 
 ### Removed
 

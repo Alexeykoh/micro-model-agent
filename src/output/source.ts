@@ -13,6 +13,14 @@ export function toolSource(name: string): Source {
 }
 
 /**
+ * Имя модуля из `module:<name>`; для любых других источников — `undefined`.
+ * Используется, чтобы записать модуль-владельца в `SessionLogEntry.module` (INV-13).
+ */
+export function moduleOf(source: Source): string | undefined {
+  return source.startsWith("module:") ? source.slice("module:".length) : undefined;
+}
+
+/**
  * Короткая метка владельца для терминала: снимает префикс `module:`/`tool:`
  * (`module:indexer` → `indexer`, `tool:bash` → `bash`), `mma`/`core` — как есть.
  * Канонический `source` остаётся в событии (машиночитаемые стоки видят его целиком).
