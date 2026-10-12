@@ -14,8 +14,7 @@ import type { ContentPart } from "../../llm/provider";
 import type { Plan, StepKind } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { toForwardSlash } from "../../tools/path-utils";
-import { existsSync, readFileSync, statSync } from "fs";
-import { resolve } from "path";
+import { readFileSync } from "fs";
 import type { NetworkSecurityConfig } from "../../config/types";
 import { performWebSearch, type SearchResult } from "../../tools/web-search";
 import { getSessionSecurityConfig } from "../security/session-isolation";
@@ -28,7 +27,11 @@ import {
   type ExecutionPluginState,
 } from "./execution-plugin";
 import { EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS as ERROR_SEARCH_MIN_INTERVAL_MS } from "../../config/timeouts";
+import { advancePlanIfStepComplete, provablyStale, type StepAdvanceDeps } from "./step-advance";
 import type { Diagnostic } from "../../output/types";
+
+/** Реэкспорт для потребителей (тесты): реализация — в `step-advance.ts`. */
+export { provablyStale } from "./step-advance";
 
 /**
  * Инжектированный раннер поиска. По умолчанию performWebSearch (общий с тулом
@@ -106,39 +109,6 @@ function planPathToken(p: string): string {
   return toForwardSlash(p).toLowerCase();
 }
 
-/**
- * Допуск на дрейф/гранулярность FS-таймстампа при сравнении `mtime` с
- * рождением плана (см. {@link provablyStale}). 2с — с запасом для грубых FS
- * (FAT), при этом реально старые файлы (секунды/дни) остаются «старыми».
- */
-const MTIME_SKEW_TOLERANCE_MS = 2000;
-
-/**
- * Доказанная старость файлов шага (ses_mup6p61q): КАЖДЫЙ резолвленный файл
- * читается и создан/изменён не позже `sinceMs` (рождение плана). Только тогда
- * existence — вакуумная истина («файл лежал с рождения плана, трекер отмечал
- * шаги до строчки кода») и автопродвижение/автозакрытие запрещены.
- * Fail-open в обе стороны: битая дата плана, нечитаемый mtime (Windows
- * AV-лок на только что записанном файле), пропавший между резолвом и статом
- * файл — НЕ старость, гейт пропускает как раньше.
- */
-export function provablyStale(resolved: (string | null)[], sinceMs: number): boolean {
-  if (Number.isNaN(sinceMs)) return false;
-  for (const r of resolved) {
-    if (!r) return false;
-    try {
-      // `mtimeMs` пишется FS и может отставать от `Date.now()` плана на доли
-      // мс (гранулярность/дрейф таймстампа): файл, записанный сразу после
-      // создания плана, получал mtime на ~0.5мс РАНЬШЕ createdAt и ложно
-      // считался «старым» → авто-advance молчал. Допуск поглощает этот дрейф;
-      // реально старые файлы отстают на секунды/дни и остаются «старыми».
-      if (statSync(r).mtimeMs >= sinceMs - MTIME_SKEW_TOLERANCE_MS) return false;
-    } catch {
-      return false;
-    }
-  }
-  return true;
-}
 
 /** Execution-модуль: план, stuck-детектор, аудитор, гейты выравнивания и автопоиск ошибок. */
 export class ExecutionModule implements AgentModule {
@@ -753,7 +723,7 @@ export class ExecutionModule implements AgentModule {
       state: this.state,
       store: this.store,
       checkPlanAlignment: (call) => this.checkPlanAlignment(call),
-      advancePlanIfStepComplete: (sl) => this.advancePlanIfStepComplete(sl),
+      advancePlanIfStepComplete: (sl) => advancePlanIfStepComplete(this.stepAdvanceDeps(), sl),
       archiveCompletedPlan: () => this.archiveCompletedPlan(),
       maybeSearchError: (ctx, call) => this.maybeSearchError(ctx, call),
     });
@@ -767,6 +737,22 @@ export class ExecutionModule implements AgentModule {
     } else {
       this.store.saveDraft(plan);
     }
+  }
+
+  /** Хост шаг-гейта (INV-23): текущее состояние модуля для `step-advance.ts`. */
+  private stepAdvanceDeps(): StepAdvanceDeps {
+    return {
+      baseDir: this.baseDir,
+      tracker: this.tracker,
+      store: this.store,
+      depsGateHints: this.state.depsGateHints,
+      pendingMessages: this.pendingMessages,
+      autoAdvance: this.autoAdvance,
+      flushSessionPlan: () => this.flushSessionPlan(),
+      setPendingAutoArchive: () => {
+        this.pendingAutoArchive = true;
+      },
+    };
   }
 
   private checkPlanAlignment(call: any): string | null {
@@ -846,149 +832,6 @@ export class ExecutionModule implements AgentModule {
     return out;
   }
 
-  private advancePlanIfStepComplete(sessionLog?: {
-    plan(event: string, detail: string, iteration?: number): void;
-  }): void {
-    const step = this.tracker?.getCurrentStep();
-    if (!step) return;
-    const stepText = step.description.toLowerCase();
-    // Общий файловый фильтр (allow-list реальных расширений, сегменты только
-    // из расширения отброшены). Шаг "Удалить .js, оставить .tsx/.ts" НЕ даёт
-    // фантомный токен "tsx/.ts" — его не существует, allGone тривиально true и
-    // автопродвинуло бы delete-шаг при живых файлах на удаление (сырой regex
-    // делал ровно так).
-    const stepPaths = extractFileLikeTokens(stripUrls(step.description)) || [];
-
-    // Гейт шагов: зависимости проверяем при упоминании — ДО путей файлов.
-    // Нужен реальный глагол пакетного менеджера (правило #10 — без голого
-    // keyword-матчинга: один "init" или "setup project" локфайловый хинт НЕ
-    // триггерят, только конкретные install-команды).
-    const isDepsStep =
-      /(?:npm|bun|yarn|pnpm|pip|pip3|pipenv|poetry|composer|deno|go|gem|cargo)\s+(?:install|add|init|i|get)\b|bun\s+(?:add|install)|npm\s+(?:i|install|add)|(?:install|установ\w*)\s+(?:dependencies|зависимост\w*|пакет\w*|packages?)/i.test(
-        stepText,
-      );
-    if (isDepsStep) {
-      const lockFiles = [
-        "package-lock.json",
-        "bun.lockb",
-        "yarn.lock",
-        "pnpm-lock.yaml",
-        "node_modules",
-        "go.sum",
-        "Cargo.lock",
-        "Pipfile.lock",
-        "poetry.lock",
-        "requirements.txt",
-      ];
-      const hasLockFile = lockFiles.some((f) => existsSync(resolve(this.baseDir, f)));
-      if (!hasLockFile) {
-        const hints = this.state.depsGateHints.get(step.id) || 0;
-        this.state.depsGateHints.set(step.id, hints + 1);
-        const force = hints >= 1;
-        const content = force
-          ? t("exec.step_gate_deps_force", { step: String(step.id) })
-          : t("exec.step_gate_deps", {
-              step: String(step.id),
-              description: step.description,
-            });
-        this.pendingMessages.push({
-          role: "user",
-          content: `<system-summary>${content}</system-summary>`,
-        });
-        return;
-      }
-    }
-
-    if (stepPaths.length === 0) return;
-
-    // Токены резолвим ТЕМ ЖЕ обходом поддерева, что deliverable-gate и аудитор
-    // (findExistingFile): вложенный файл ("bicycle-shop/src/bicycles.ts" для
-    // токена "src/bicycles.ts") засчитывается. Старый точный
-    // existsSync(resolve()) вложенные проекты не матчил — автопродвижение
-    // молчало и после записи реального файла.
-    const resolved = stepPaths.map((p) => findExistingFile(this.baseDir, p));
-    const allExist = resolved.every((r) => r !== null);
-    const allGone = resolved.every((r) => r === null);
-    const satisfied = step.kind === "delete" ? allGone && !allExist : allExist;
-    if (!satisfied) return;
-
-    // Vacuous-truth guard (ses_mup6p61q): для НЕ-delete шагов existence давно
-    // лежащих файлов — не done. Delete-шаги проверяют отсутствие файлов,
-    // свежесть mtime к ним неприменима.
-    if (step.kind !== "delete") {
-      const plan = this.tracker?.getPlan();
-      if (plan && provablyStale(resolved, Date.parse(plan.createdAt))) return;
-    }
-
-    // Гейт шагов: файлы проверяем на контент (не пустые)
-    if (step.kind !== "delete") {
-      const emptyFiles: string[] = [];
-      for (const r of resolved) {
-        if (!r) continue;
-        try {
-          const content = readFileSync(r, "utf-8");
-          if (content.trim().length < 10) {
-            emptyFiles.push(r);
-          }
-        } catch {
-          // Нечитаем — откат на existence
-        }
-      }
-
-      if (emptyFiles.length > 0) {
-        this.pendingMessages.push({
-          role: "user",
-          content: `<system-summary>${t("exec.step_gate_empty", { step: String(step.id), files: emptyFiles.join(", ") })}</system-summary>`,
-        });
-        return;
-      }
-    }
-
-    // При выключенном autoAdvance статус ставит модель: подталкиваем её
-    // закрыть шаг явно, не мутируя план молча (step-gate nudge сохраняется).
-    if (!this.autoAdvance) {
-      this.pendingMessages.push({
-        role: "user",
-        content: `<system-summary>${t("exec.step_gate_manual", {
-          step: String(step.id),
-        })}</system-summary>`,
-      });
-      return;
-    }
-
-    // Все проверки прошли — двигаем
-    this.tracker?.updateStepStatus(step.id, "done");
-    const hadNext = this.tracker?.advance() ?? false;
-    if (this.tracker) {
-      this.store.saveActive(this.tracker.getPlan());
-      this.flushSessionPlan();
-      sessionLog?.plan(
-        "auto-advance",
-        `Step ${step.id} auto-completed | ${this.tracker.getProgressString()} | current: step ${this.tracker.getCurrentStepIndex() + 1}`,
-      );
-    }
-
-    const nextStep = hadNext ? this.tracker?.getCurrentStep() : null;
-    const nextMsg = nextStep
-      ? t("exec.step_gate_ok", {
-          step: String(step.id),
-          nextStep: String(nextStep.id),
-          nextDesc: nextStep.description,
-        })
-      : t("exec.step_gate_last", { step: String(step.id) });
-    this.pendingMessages.push({
-      role: "user",
-      content: `<system-summary>${nextMsg}</system-summary>`,
-    });
-
-    // Авто-архив НЕ здесь: план живёт до границы хода (onTurnEnd →
-    // archiveCompletedPlan), чтобы модель не получала «нет активного плана»
-    // посреди работы (петля ses_msxjbnm4). Помечаем — архивируется в конце хода.
-    if (this.tracker?.isComplete()) {
-      this.pendingAutoArchive = true;
-      sessionLog?.plan("auto-advance", `Plan ${this.tracker.getPlan().id} complete — archive at turn end`);
-    }
-  }
 
   /**
    * Файловые токены из описания шага, не резолвящиеся в реальный файл.
