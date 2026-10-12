@@ -1,7 +1,7 @@
 # Handoff: переход на Architecture v2
 
 **Дата:** 2026-10-13 · **Ветка:** `docs/architecture-v2` · **База:** `master` (`65ba2f68`)
-**Состояние:** `bun test` 3776 pass / 0 fail · `bun run quality` exit 0 · **14 коммитов не запушены**
+**Состояние:** `bun test` 3781 pass / 0 fail · `bun run quality` exit 0 · **16 коммитов не запушены**
 
 Документ для следующей сессии: что сделано, где остановились, что делать дальше.
 Открытые долги — единым реестром в [debt.md](../agents/debt.md) (правило 9).
@@ -160,8 +160,8 @@ overflow-warning называет владельца и блок, а не тол
   `dispose` на `agent.shutdown`); остальные модули — далее.
 
 **Порядок (решение 2026-10-13, вариант «сначала безопасность»):**
-`lsp` → `browser` → **W2 (enforcement)** → `W1.5 PromptAssembler` → остальные
-модули на `ModuleDef` → гейт **A** (единственный путь тулов) → W3 → W4 → W5.
+`lsp` → `browser` → **W2 (enforcement)** → `W1.5 PromptAssembler` → гейт **A**
+(единственный путь тулов) ✅ → остальные модули на `ModuleDef` → W3 → W4 → W5.
 `W1.2` (child-логер в модулях) схлопнут в W1.6 — логер приходит из `ModuleHost.ctx`.
 
 **W2 в работе** (спека [`2026-10-13-w2-enforcement-design.md`](../specs/2026-10-13-w2-enforcement-design.md)):
