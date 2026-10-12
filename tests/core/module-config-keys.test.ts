@@ -16,6 +16,8 @@ import {
   __clearRegisteredConfigKeys,
   registerConfigKeys,
 } from "../../src/config/module-keys";
+import { executionModuleDef } from "../../src/modules/execution/lifecycle";
+import type { ExecutionModule } from "../../src/modules/execution/module";
 
 interface ProbeConfig {
   probeFlag?: boolean;
@@ -89,5 +91,10 @@ describe("module-declared config keys (INV-21)", () => {
     registerConfigKeys([probeKey()]);
     registerConfigKeys([probeKey()]);
     expect(configDefs().filter((d) => d.key === "probe.flag")).toHaveLength(1);
+  });
+
+  it("the execution module declares its real key (INV-21 migration)", () => {
+    const keys = executionModuleDef({} as ExecutionModule).configKeys?.() ?? [];
+    expect(keys.map((k) => k.key)).toContain("execution.autoAdvance");
   });
 });
