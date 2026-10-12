@@ -4,6 +4,9 @@ import type { ToolRegistry, RegisteredTool } from "./registry";
 import { killByCallId } from "../modules/processes/runner";
 import { isPathInScope, isPathWritable } from "../modules/security/path-validator";
 import { protectedPathBlock } from "../modules/security/protected-paths";
+import { isUrlAllowed } from "../modules/security/network-validator";
+import { getSessionSecurityConfig } from "../modules/security/session-isolation";
+import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { t } from "../i18n/index";
 import {
   TOOL_EXECUTION_TIMEOUT_MS,
@@ -226,6 +229,38 @@ export class ToolExecutor {
     return null;
   }
 
+  /**
+   * SSRF-политика по объявленным `urlArgs` (INV-10): `isUrlAllowed` с учётом
+   * session-override. Fail-closed; пустой/нестроковый URL пропускается (тул сам
+   * решает, обязателен ли он).
+   * @returns заблокированный `ToolResult` или `null`.
+   */
+  private enforceUrlArgs(tool: RegisteredTool, call: ToolCall): ToolResult | null {
+    const urlArgs = tool.security?.urlArgs;
+    if (!urlArgs || urlArgs.length === 0) return null;
+    const config = (this.ctx.config ?? {}) as import("../config/types").AppConfig;
+    const netCfg = this.ctx.sessionContext
+      ? getSessionSecurityConfig(config, this.ctx.sessionContext).network
+      : config.security?.network || DEFAULT_SECURITY_CONFIG.network;
+    for (const argName of urlArgs) {
+      const raw = call.arguments[argName];
+      if (typeof raw !== "string" || raw.trim() === "") continue;
+      const check = isUrlAllowed(raw, netCfg);
+      if (!check.allowed) {
+        return {
+          success: false,
+          blocked: true,
+          output: t("tool.url_blocked", {
+            url: raw,
+            reason: check.reason ? ` — ${check.reason}` : "",
+          }),
+          toolCallId: call.id,
+        };
+      }
+    }
+    return null;
+  }
+
   /** Выполнить tool call: allowlist → плагины → хендлер → post-хуки. */
   async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
     const allow = this.allowedNames();
@@ -247,9 +282,12 @@ export class ToolExecutor {
     }
 
     // Enforcement политик тула — ОДНА точка (INV-9/10): scope/protected по
-    // объявленным `pathArgs` ДО хендлера. Хендлер политику не повторяет.
+    // объявленным `pathArgs`, SSRF по `urlArgs` — ДО хендлера. Хендлер политику
+    // не повторяет.
     const pathBlock = this.enforcePathArgs(tool, call);
     if (pathBlock) return pathBlock;
+    const urlBlock = this.enforceUrlArgs(tool, call);
+    if (urlBlock) return urlBlock;
 
     // Плагин-хуки сериализованы общим hookLock: параллельные форки-сиблинги
     // не гоняют общее состояние плагинов (stuck-detector, lint, lsp) конкурентно.

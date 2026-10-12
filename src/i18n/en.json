@@ -106,6 +106,7 @@
   "tool.unknown": "Unknown tool: {name}",
   "tool.not_allowed": "Tool not allowed in this mode: {name}",
   "tool.path_blocked": "Path not allowed: {path}{reason}",
+  "tool.url_blocked": "URL not allowed: {url}{reason}",
   "tool.blocked": "Blocked by plugin: {plugin}",
   "tool.ui.security_blocked": "Blocked by security policy",
   "tool.ui.protected_path": "Protected path — confirmation needed",

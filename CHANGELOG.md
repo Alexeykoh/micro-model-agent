@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **URL (SSRF) enforcement at the tool-execution point (W2.3, INV-10)**:
+  `ToolExecutor.execute()` applies `isUrlAllowed` (with session-override) to every
+  declared `urlArgs` before the handler — fail-closed with `blocked: true` and a
+  localized `tool.url_blocked` message. `attach_image` moved to `manual` (its
+  `source` is a path *or* a URL, decided in the handler). Guard:
+  `tests/tools/enforcement-url.test.ts` (private/localhost, scheme, public,
+  disabled policy, optional arg).
 - **Path enforcement at the tool-execution point (W2.2, INV-10)**: `ToolExecutor.execute()`
   now applies scope (`isPathInScope`/`isPathWritable`) and protected paths (write-only,
   always-on) to every declared `pathArgs` before the handler runs — fail-closed with

@@ -14,7 +14,14 @@ import { logSecurityBlock } from "../modules/security/audit-log";
 /** Кладёт картинку в pending-очередь контекста (PNG/JPEG/GIF/WebP). */
 export const attachImageTool: ToolDefinition = {
   name: "attach_image",
-  security: { caps: [{ fs: "read" }], pathArgs: ["source"] },
+  security: {
+    caps: [{ fs: "read" }],
+    manual: {
+      reason: "source — путь или URL, тип определяется в хендлере",
+      reviewedBy: "architecture-v2",
+      date: "2026-10-13",
+    },
+  },
   icon: "🖼️",
   description:
     "Attach an image to the conversation from a file path, URL, or clipboard. The image will be included in the next message sent to the model. Supports PNG, JPEG, GIF, WebP.",
