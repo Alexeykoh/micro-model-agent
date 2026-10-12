@@ -31,6 +31,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- **Config writes declare effects instead of a `reconfigure` flag (W3.1/3.2,
+  INV-18)**: `ConfigKeyDef.effects` and `ConfigSetOk.effects` (`provider.rebuild`,
+  `context.resize`, `reasoning.reload`, `session.meta`, `i18n.reload`,
+  `plugins.gate`, `tools.reload`). Surfaces apply via `needsRebuild(effects)`, so
+  what to rebuild is declared by the key, not guessed by each surface.
+- **Provider model memory left the config layer (W3.3, INV-19)**:
+  `setConfigValue` no longer mutates `provider.models`/flat fields; the logic lives
+  in `modules/providers/memory.ts` and is applied through a registered applier
+  (`setProviderMemoryApplier`), mirroring the existing `pluginGateApplier` seam.
 - **`bun run quality` runs the architecture gates** via `check:arch`
   (`bun test tests/arch tests/output`); a separate `scripts/check-arch.ts` is not
   introduced (the gates are tests, reused as-is).
