@@ -60,6 +60,9 @@ export const MOE_TOKENS = [
   "plan-validator",
   "expert-model-check",
   "input-from",
+  "MOE_",
+  "_MOE",
+  "MoE_",
 ];
 
 /** Removed runtime files — must not come back. */
@@ -142,10 +145,11 @@ describe("no residual MoE surface", () => {
           "config.moe.enabled = true;",
           "interface MoEPlan {}",
           "config.orchestrator.model = 'x';",
+          "const e = 'MMA_MOE_ENABLED';",
         ].join("\n"),
       },
     ]);
-    expect(offenders.length).toBe(5);
+    expect(offenders.length).toBe(6);
   });
 
   it("scanner ignores words that merely contain those letters", () => {
