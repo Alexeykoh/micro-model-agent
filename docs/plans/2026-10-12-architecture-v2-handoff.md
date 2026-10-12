@@ -177,12 +177,13 @@ overflow-warning называет владельца и блок, а не тол
   политики привязаны к аргументам (`pathArgs`⇒fs-cap, `urlArgs`⇒net-cap).
   Привязка `proc/net` к `security.bash.enabled`/`security.network.enabled` **убрана
   как ошибочная** (это выключатели валидации, не доступа).
-- W2.5 ◐ **отложено**: снятие дублей из хендлеров — это удаление **мёртвого в проде**
-  кода (их перехватывает `execute()` раньше), проход по 12 хендлерам с разными
-  блоками. Низкая ценность/высокий churn → отдельным аккуратным проходом, не «на бегу».
-  Оставлено как defense-in-depth.
+- W2.5 ✅ снят дубль из 13 хендлеров (read/write/edit/create/delete/move/list/file-info/
+  grep/chunk/download/web-fetch/web-browse): проверки scope/protected/SSRF убраны —
+  их применяет `execute()`. Резолв пути и доменная валидация (bash, размер download,
+  `writePathAllowlist`, `attach_image`-manual) остались. 5 тестов, сверявших хендлерную
+  блокировку, удалены как покрытые `tests/tools/enforcement-*.test.ts`.
 
-**Итог W2:** единая точка enforcement достигнута (W2.1–W2.4 ✅). Дальше по порядку —
+**Итог W2:** единая точка enforcement достигнута (W2.1–W2.5 ✅). Дальше по порядку —
 `W1.5 PromptAssembler`.
 
 

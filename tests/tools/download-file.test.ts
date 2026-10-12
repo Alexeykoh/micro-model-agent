@@ -155,17 +155,8 @@ describe("download_file tool", () => {
     expect(mock).not.toHaveBeenCalled();
   });
 
-  it("should block paths outside the base directory", async () => {
-    stubFetch(vi.fn().mockResolvedValue(mockResponse("x")));
-    const outside = join(TEST_DIR, "..", "_outside_download_file");
-    const ctx = makeCtx();
-    const result = await downloadFileTool.handler(ctx, {
-      url: "https://example.com/x.txt",
-      path: outside,
-    });
-    expect(result.success).toBe(false);
-    expect(result.output).toContain("not allowed");
-  });
+  // Блокировку пути вне base теперь применяет ToolExecutor до хендлера
+  // (INV-10) — см. tests/tools/enforcement-path.test.ts.
 
   it("should respect sub-agent writable scope", async () => {
     stubFetch(vi.fn().mockResolvedValue(mockResponse("x")));

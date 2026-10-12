@@ -2,12 +2,10 @@
 import { unlinkSync, existsSync, statSync, readFileSync } from "fs";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isPathWritable } from "../modules/security/path-validator";
 import { logFileDelete, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDeleteDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
-import { protectedPathBlock } from "../modules/security/protected-paths";
 
 /** Удаляет файл; каталоги отклоняет. Возвращает diff удалённого. */
 export const deleteFileTool: ToolDefinition = {
@@ -47,21 +45,7 @@ export const deleteFileTool: ToolDefinition = {
       };
     }
 
-    // Проверка прав на путь.
-    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
-    if (!scopeCheck.allowed) {
-      logSecurityBlock(ctx.sessionId, "file_delete", scopeCheck.reason || "Path not allowed", path);
-      return {
-        success: false,
-        output: t("file.path_not_allowed", {
-          path: `${path} — ${scopeCheck.reason}`,
-        }),
-      };
-    }
-
-    // Защищённые пути (.git/, .env, ключи) — спросить юзера.
-    const protectedBlock = protectedPathBlock(ctx, resolved, path, "file_delete");
-    if (protectedBlock) return protectedBlock;
+    // Защищённые пути и скоуп проверяет ToolExecutor (INV-10).
 
     if (!existsSync(resolved)) {
       return { success: false, output: t("file.notfound", { path }) };

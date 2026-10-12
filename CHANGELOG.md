@@ -79,6 +79,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- **Tool handlers no longer enforce security policy (W2.5, INV-10/INV-9)**: the
+  duplicated scope/protected/SSRF checks in 13 tool handlers (`read_file`,
+  `write_file`, `edit_file`, `create_dir`, `delete_file`, `move_file`, `list_dir`,
+  `file_info`, `grep`, `chunk_query`, `download_file`, `web_fetch`, `web_browse`)
+  are removed — `ToolExecutor.execute()` owns enforcement, so tools are pure
+  domain logic again. Path resolution and domain validation stay (bash
+  command-validator, download size cap, onboarding `writePathAllowlist`,
+  `attach_image` manual). Five handler-level denial tests were dropped as covered
+  by `tests/tools/enforcement-{path,url}.test.ts`.
 - **W2 spec corrected (2026-10-13)**: `caps` is a declaration, not a gate; the
   enforced policies are tied to arguments (`pathArgs` → scope/protected,
   `urlArgs` → SSRF). The original `proc → security.bash.enabled` / `net →

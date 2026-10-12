@@ -119,7 +119,7 @@ allowlist → [pathArgs: isPathInScope + isPathWritable + matchProtectedPath]
 | W2.2 | `pathArgs` в `execute()` (scope + writable + protected) + тесты обхода | `tests/tools/enforcement-path.test.ts` ✅ |
 | W2.3 | `urlArgs` в `execute()` (SSRF) + тесты | `tests/tools/enforcement-url.test.ts` ✅ |
 | W2.4 | Согласованность `caps` ↔ `pathArgs`/`urlArgs` (гейт); правка `caps`-мэппинга | `tests/tools/security-decl.test.ts` |
-| W2.5 | Снять дублирующие проверки из хендлеров (оставить доменную валидацию) | существующие security-тесты зелёные |
+| W2.5 | Снять дублирующие проверки из хендлеров (оставить доменную валидацию) | существующие security-тесты зелёные ✅ |
 
 Порядок: W2.1 (объявления) → W2.2/W2.3 (точка) → W2.4 (согласованность) → W2.5 (чистка).
 

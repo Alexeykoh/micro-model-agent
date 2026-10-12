@@ -2,11 +2,9 @@
 import { mkdirSync, existsSync } from "fs";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isPathWritable } from "../modules/security/path-validator";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { safeResolvePath } from "./path-utils";
-import { protectedPathBlock } from "../modules/security/protected-paths";
 
 /** Создаёт каталог со всеми промежуточными. */
 export const createDirTool: ToolDefinition = {
@@ -45,22 +43,6 @@ export const createDirTool: ToolDefinition = {
         output: `[SECURITY BLOCKED] Maximum file operations (${maxFileOps}) exceeded`,
       };
     }
-
-    // Проверка прав на путь.
-    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
-    if (!scopeCheck.allowed) {
-      logSecurityBlock(ctx.sessionId, "file_write", scopeCheck.reason || "Path not allowed", path);
-      return {
-        success: false,
-        output: t("file.path_not_allowed", {
-          path: `${path} — ${scopeCheck.reason}`,
-        }),
-      };
-    }
-
-    // Защищённые пути (.git/, .env-каталоги, …) — спросить юзера.
-    const protectedBlock = protectedPathBlock(ctx, resolved, path);
-    if (protectedBlock) return protectedBlock;
 
     if (!existsSync(resolved)) {
       mkdirSync(resolved, { recursive: true });

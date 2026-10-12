@@ -6,11 +6,8 @@ import type { ToolDefinition } from "./types";
 import {
   BlockedRedirectError,
   fetchValidated,
-  isUrlAllowed,
   sanitizeUrl,
 } from "../modules/security/network-validator";
-import { isPathWritable } from "../modules/security/path-validator";
-import { protectedPathBlock } from "../modules/security/protected-paths";
 import { logNetworkRequest, logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
@@ -50,40 +47,10 @@ export const downloadFileTool: ToolDefinition = {
       return { success: false, output: t("tool.invalid_params") };
     }
 
-    // Сеть: те же правила, что у web_fetch/web_browse.
-    const securityConfig = ctx.sessionContext
-      ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).network
-      : ctx.config.security?.network || DEFAULT_SECURITY_CONFIG.network;
-    const validation = isUrlAllowed(url, securityConfig);
-    if (!validation.allowed) {
-      logSecurityBlock(
-        ctx.sessionId,
-        "network_request",
-        validation.reason || "URL blocked by security policy",
-        sanitizeUrl(url),
-      );
-      return {
-        success: false,
-        output: `[SECURITY BLOCKED] URL is not allowed: ${validation.reason}`,
-      };
-    }
-
-    // Путь: резолв от baseDir + проверка записи.
+    // Сеть (SSRF) и путь (скоуп/защищённые) проверяет ToolExecutor (INV-10).
     const resolved = safeResolvePath(ctx.baseDir, path);
-    const scopeCheck = isPathWritable(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
-    if (!scopeCheck.allowed) {
-      logSecurityBlock(ctx.sessionId, "file_write", scopeCheck.reason || "Path not allowed", path);
-      return {
-        success: false,
-        output: t("file.path_not_allowed", {
-          path: `${path} — ${scopeCheck.reason}`,
-        }),
-      };
-    }
 
-    // Тот же guard записи, что у write/edit: онбординг-allowlist и always-on
-    // проверка защищённых путей (иначе скачиванием перезаписали бы .env/ключи,
-    // которые остальные тулы записи отклоняют).
+    // Онбординг-allowlist записи — отдельный механизм, не enforcement путей.
     if (ctx.writePathAllowlist) {
       const ok = ctx.writePathAllowlist.some(
         (p) => resolve(p).toLowerCase() === resolve(resolved).toLowerCase(),
@@ -97,9 +64,10 @@ export const downloadFileTool: ToolDefinition = {
         };
       }
     }
-    const protectedBlock = protectedPathBlock(ctx, resolved, path);
-    if (protectedBlock) return protectedBlock;
 
+    const securityConfig = ctx.sessionContext
+      ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).network
+      : ctx.config.security?.network || DEFAULT_SECURITY_CONFIG.network;
     const maxBytes = Number(args.max_bytes) > 0 ? Number(args.max_bytes) : MAX_DOWNLOAD_BYTES;
 
     try {

@@ -4,7 +4,6 @@ import type { ToolDefinition } from "./types";
 import {
   BlockedRedirectError,
   fetchValidated,
-  isUrlAllowed,
   sanitizeUrl,
 } from "../modules/security/network-validator";
 import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
@@ -34,21 +33,7 @@ export const webBrowseTool: ToolDefinition = {
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).network
       : ctx.config.security?.network;
-    const validation = isUrlAllowed(url, securityConfig);
-
-    if (!validation.allowed) {
-      logSecurityBlock(
-        ctx.sessionId,
-        "network_request",
-        validation.reason || "URL blocked by security policy",
-        sanitizeUrl(url),
-      );
-      return {
-        success: false,
-        output: `[SECURITY BLOCKED] URL is not allowed: ${validation.reason}`,
-      };
-    }
-
+    // SSRF проверяет ToolExecutor (INV-10); хопы редиректов — fetchValidated.
     try {
       const { response } = await fetchValidated(url, securityConfig, {
         signal: AbortSignal.timeout(securityConfig?.requestTimeout || 15000),

@@ -53,20 +53,6 @@ describe("move_file", () => {
     expect(result.success).toBe(false);
   });
 
-  it("should enforce path safety for source", async () => {
-    const result = await moveFileTool.handler(ctx, {
-      from: "../outside.txt",
-      to: "safe.txt",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("should enforce path safety for destination", async () => {
-    writeFileSync(join(tmpDir, "safe.txt"), "x");
-    const result = await moveFileTool.handler(ctx, {
-      from: "safe.txt",
-      to: "../outside.txt",
-    });
-    expect(result.success).toBe(false);
-  });
+  // Проверку путей (обе стороны) теперь применяет ToolExecutor до хендлера
+  // (INV-10) — см. tests/tools/enforcement-path.test.ts.
 });

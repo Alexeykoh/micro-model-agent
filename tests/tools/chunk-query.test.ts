@@ -37,14 +37,8 @@ describe("chunkQueryTool", () => {
     expect(res.success).toBe(false);
   });
 
-  it("rejects paths outside scope", async () => {
-    const res = await chunkQueryTool.handler(baseCtx("/tmp"), {
-      query: "q",
-      input_path: "/etc/passwd",
-    });
-    expect(res.success).toBe(false);
-    expect(res.output).toContain("SCOPE");
-  });
+  // Проверку пути вне base/скоупа теперь применяет ToolExecutor до хендлера
+  // (INV-10) — см. tests/tools/enforcement-path.test.ts.
 
   it("answers over a large temp file", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mma-cq-"));

@@ -4,7 +4,6 @@ import type { ToolDefinition } from "./types";
 import {
   BlockedRedirectError,
   fetchValidated,
-  isUrlAllowed,
   sanitizeUrl,
 } from "../modules/security/network-validator";
 import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
@@ -38,21 +37,8 @@ export const webFetchTool: ToolDefinition = {
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(config, ctx.sessionContext).network
       : config.security?.network || DEFAULT_SECURITY_CONFIG.network;
-    const validation = isUrlAllowed(url, securityConfig);
-
-    if (!validation.allowed) {
-      logSecurityBlock(
-        ctx.sessionId,
-        "network_request",
-        validation.reason || "URL blocked by security policy",
-        sanitizeUrl(url),
-      );
-      return {
-        success: false,
-        output: `[SECURITY BLOCKED] URL is not allowed: ${validation.reason}`,
-      };
-    }
-
+    // SSRF проверяет ToolExecutor (INV-10) до хендлера; каждый хоп редиректа
+    // перевадидируется внутри fetchValidated.
     try {
       // Каждый хоп редиректа перевадидируется (SSRF); старый код проверял один
       // хоп и ставил redirect:"follow", оставляя остальные без проверки.

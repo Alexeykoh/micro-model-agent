@@ -3,9 +3,6 @@ import { readFileSync, existsSync, statSync, openSync, readSync, closeSync } fro
 import { extname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isPathInScope } from "../modules/security/path-validator";
-import { DEFAULT_SECURITY_CONFIG } from "../config/security";
-import { logSecurityBlock } from "../modules/security/audit-log";
 import { safeResolvePath } from "./path-utils";
 import { errMsg } from "../utils";
 
@@ -113,23 +110,6 @@ export const readFileTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
-    const securityPaths = ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths;
-    const scopeCheck = isPathInScope(ctx.baseDir, resolved, ctx.scope, securityPaths);
-
-    if (!scopeCheck.allowed) {
-      logSecurityBlock(
-        ctx.sessionId || undefined,
-        "file_read",
-        scopeCheck.reason || "Path not allowed",
-        path,
-      );
-      return {
-        success: false,
-        output: t("file.path_not_allowed", {
-          path: `${path} — ${scopeCheck.reason}`,
-        }),
-      };
-    }
     if (!existsSync(resolved)) {
       // Для относительных путей показываем, КУДА резолвилось: голое
       // "not found" не даёт модели отличить baseDir от cwd.

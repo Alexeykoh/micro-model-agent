@@ -3,12 +3,10 @@ import { renameSync, existsSync, mkdirSync } from "fs";
 import { resolve, normalize, dirname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isPathWritable } from "../modules/security/path-validator";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateMoveDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
-import { protectedPathBlock } from "../modules/security/protected-paths";
 
 /** Перемещает/переименовывает; обе стороны проверяются по скоупу. */
 export const moveFileTool: ToolDefinition = {
@@ -52,47 +50,7 @@ export const moveFileTool: ToolDefinition = {
       };
     }
 
-    // Права источника — по РЕЗОЛВЛЕННОМУ пути (по нему же работает renameSync),
-    // никогда по сырому аргументу.
-    const fromCheck = isPathWritable(ctx.baseDir, fromResolved, ctx.scope, ctx.config.security?.paths);
-    if (!fromCheck.allowed) {
-      logSecurityBlock(
-        ctx.sessionId,
-        "file_write",
-        fromCheck.reason || "Source path not allowed",
-        fromPath,
-      );
-      return {
-        success: false,
-        output: t("file.path_not_allowed", {
-          path: `${fromPath} — ${fromCheck.reason}`,
-        }),
-      };
-    }
-
-    // Права приёмника — тоже по резолвленному.
-    const toCheck = isPathWritable(ctx.baseDir, toResolved, ctx.scope, ctx.config.security?.paths);
-    if (!toCheck.allowed) {
-      logSecurityBlock(
-        ctx.sessionId,
-        "file_write",
-        toCheck.reason || "Destination path not allowed",
-        toPath,
-      );
-      return {
-        success: false,
-        output: t("file.path_not_allowed", {
-          path: `${toPath} — ${toCheck.reason}`,
-        }),
-      };
-    }
-
-    // Защищённые пути с любой стороны (.git/, .env, ключи) — спросить юзера.
-    const fromProtected = protectedPathBlock(ctx, fromResolved, fromPath);
-    if (fromProtected) return fromProtected;
-    const toProtected = protectedPathBlock(ctx, toResolved, toPath);
-    if (toProtected) return toProtected;
-
+    // Защищённые пути и скоуп с обеих сторон проверяет ToolExecutor (INV-10).
     if (!existsSync(fromResolved)) {
       return {
         success: false,

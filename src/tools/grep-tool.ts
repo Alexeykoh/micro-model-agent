@@ -3,9 +3,7 @@ import { spawn, } from "child_process";
 import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolResult } from "./types";
-import { logBashCommand, logSecurityBlock } from "../modules/security/audit-log";
-import { isPathInScope } from "../modules/security/path-validator";
-import { DEFAULT_SECURITY_CONFIG } from "../config/security";
+import { logBashCommand } from "../modules/security/audit-log";
 import { MAX_PREVIEW_LINES } from "./preview";
 import { searchWithJs } from "./grep-js";
 
@@ -166,37 +164,6 @@ async function runGrepEngines(
   };
 }
 
-/**
- * Проверяет, что каталог поиска внутри baseDir/скоупа (`path: "../../.."` не
- * должен читать вне песочницы). Возвращает отказ или null, если можно искать.
- */
-function checkGrepScope(
-  ctx: any,
-  args: Record<string, unknown>,
-  searchPath: string,
-): ToolResult | null {
-  const scopeCheck = isPathInScope(
-    ctx.baseDir,
-    searchPath,
-    ctx.scope,
-    ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths,
-  );
-  if (scopeCheck.allowed) return null;
-  logSecurityBlock(
-    ctx.sessionId || undefined,
-    "file_read",
-    scopeCheck.reason || "grep path not allowed",
-    String(args.path ?? ctx.baseDir),
-  );
-  return {
-    success: false,
-    output: t("file.path_not_allowed", {
-      path: `${args.path ?? "."} — ${scopeCheck.reason}`,
-    }),
-    errorMeta: { code: "path_not_allowed", retryable: false, hint: "search inside the project root" },
-  };
-}
-
 /** Ищет по содержимому через regex (rg → grep → zero-dep JS); кешируемый. */
 export const grepTool: ToolDefinition = {
   name: "grep",
@@ -223,8 +190,6 @@ export const grepTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const pattern = String(args.pattern);
     const searchPath = args.path ? resolve(ctx.baseDir, String(args.path)) : ctx.baseDir;
-    const denied = checkGrepScope(ctx, args, searchPath);
-    if (denied) return denied;
     const engine = ctx.config?.tools?.grepEngine ?? "auto";
     return runGrepEngines(
       ctx,

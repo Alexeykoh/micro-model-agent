@@ -3,6 +3,16 @@ import { mkdtempSync, writeFileSync, rmdirSync, existsSync, readFileSync } from 
 import { join } from "path";
 import { tmpdir } from "os";
 import { writeFileTool } from "../src/tools/write-file";
+import { ToolRegistry } from "../src/tools/registry";
+import { ToolExecutor } from "../src/tools/executor";
+
+/** Исполняет write_file через реальный путь (`execute`) — политику путей
+ *  применяет именно он (INV-10), а не хендлер. */
+function executorFor(ctx: unknown): ToolExecutor {
+  const registry = new ToolRegistry();
+  registry.register(writeFileTool, "core");
+  return new ToolExecutor(registry, ctx as never, { getAllPlugins: () => [] });
+}
 
 describe("write_file", () => {
   let tmpDir: string;
@@ -41,27 +51,35 @@ describe("write_file", () => {
     expect(readFileSync(join(tmpDir, "test.txt"), "utf-8")).toBe("new");
   });
 
-  it("should enforce path safety", async () => {
-    const result = await writeFileTool.handler(ctx, { path: "../outside.txt", content: "x" });
-    expect(result.success).toBe(false);
+  it("blocks a path outside the base directory (via execute, INV-10)", async () => {
+    const result = await executorFor(ctx).execute({
+      id: "1",
+      name: "write_file",
+      arguments: { path: "../outside.txt", content: "x" },
+    });
+    expect(result.blocked).toBe(true);
   });
 
-  it("refuses to overwrite a protected file and tells the model to ask", async () => {
+  it("blocks a protected file and leaves it untouched (via execute)", async () => {
     const envPath = join(tmpDir, ".env");
     writeFileSync(envPath, "SECRET=1");
-    const result = await writeFileTool.handler(ctx, { path: envPath, content: "SECRET=2" });
-    expect(result.success).toBe(false);
+    const result = await executorFor(ctx).execute({
+      id: "1",
+      name: "write_file",
+      arguments: { path: envPath, content: "SECRET=2" },
+    });
+    expect(result.blocked).toBe(true);
     expect(result.output).toContain("Protected path");
-    // Содержимое не изменено.
     expect(readFileSync(envPath, "utf-8")).toBe("SECRET=1");
   });
 
-  it("refuses to modify files under .git/", async () => {
-    const result = await writeFileTool.handler(ctx, {
-      path: join(tmpDir, ".git", "config"),
-      content: "x",
+  it("blocks files under .git/ (via execute)", async () => {
+    const result = await executorFor(ctx).execute({
+      id: "1",
+      name: "write_file",
+      arguments: { path: join(tmpDir, ".git", "config"), content: "x" },
     });
-    expect(result.success).toBe(false);
+    expect(result.blocked).toBe(true);
     expect(result.output).toContain(".git/");
   });
 });

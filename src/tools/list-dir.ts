@@ -3,7 +3,6 @@ import { readdirSync, statSync, existsSync } from "fs";
 import { resolve } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
-import { isPathInScope } from "../modules/security/path-validator";
 import { safeResolvePath } from "./path-utils";
 import { MAX_PREVIEW_LINES } from "./preview";
 
@@ -29,16 +28,6 @@ export const listDirTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
-
-    const scopeCheck = isPathInScope(ctx.baseDir, resolved, ctx.scope, ctx.config.security?.paths);
-    if (!scopeCheck.allowed) {
-      return {
-        success: false,
-        output: t("file.path_not_allowed", {
-          path: `${path} — ${scopeCheck.reason}`,
-        }),
-      };
-    }
 
     if (!existsSync(resolved)) {
       return { success: false, output: t("file.dir_notfound", { path }) };

@@ -49,10 +49,8 @@ describe("edit_file", () => {
     expect(result.output).toContain("test.txt");
   });
 
-  it("should enforce path safety", async () => {
-    const result = await editFileTool.handler(ctx, { path: "../outside.txt", old: "x", new: "y" });
-    expect(result.success).toBe(false);
-  });
+  // Блокировку пути вне base/скоупа теперь применяет ToolExecutor до хендлера
+  // (INV-10) — см. tests/tools/enforcement-path.test.ts.
 
   it("treats regex replacement tokens in `new` literally (no $& expansion)", async () => {
     writeFileSync(join(tmpDir, "tpl.txt"), "price is 100");

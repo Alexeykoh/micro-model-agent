@@ -3,8 +3,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
-import { isPathInScope } from "../modules/security/path-validator";
-import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { runChunkQuery } from "../modules/context/chunk-query";
 
 /** Отвечает на вопрос по тексту вне контекстного окна (чанк-параллелизм). */
@@ -72,21 +70,8 @@ export const chunkQueryTool: ToolDefinition = {
 
     let content = text || "";
     if (inputPath) {
-      // Та же политика, что у read_file: глобальные security-пути (.env/ключи)
-      // + скоуп субагента.
+      // Политику пути (security-пути + скоуп) применяет ToolExecutor (INV-10).
       const resolvedInput = resolve(ctx.baseDir, inputPath);
-      const check = isPathInScope(
-        ctx.baseDir,
-        resolvedInput,
-        ctx.scope,
-        ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths,
-      );
-      if (!check.allowed) {
-        return {
-          success: false,
-          output: t("tool.chunk_query_path_not_allowed", { reason: check.reason || "Path not allowed" }),
-        };
-      }
       try {
         content = readFileSync(resolvedInput, "utf8");
       } catch (e: any) {
