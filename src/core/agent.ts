@@ -52,12 +52,11 @@ import { LlmError } from "../llm/llm-errors";
 import { clearIterationSignals, type LoopState } from "./agent/loop-state";
 import type { TokenTracker } from "./agent/token-tracker";
 import type { ContextLogger } from "./agent/context-log";
-import { recordArtifactWrite, testChurnFile } from "./agent/artifact-progress";
 import { ContextRenderer } from "./agent/context-renderer";
 import { resolveArtifactStates } from "./agent/artifact-resolve";
 import { gatherTurnToolEvents } from "./agent/critic-gate";
+import { accumulateToolTargets, applyBatchNudges } from "./agent/loop-nudges";
 import { seedToolTags } from "../tools/auto-tags";
-import { isWorkMutation } from "../modules/critic/evidence";
 import {
   deriveSessionName,
   generateSessionTitle,
@@ -69,7 +68,6 @@ import {
   MAX_LLM_ERROR_RETRIES,
   MAX_REPEATED_TOOL_CALLS,
   MAX_REPEATED_TOOL_CALLS_INTERACTIVE,
-  MUTATION_CYCLE_NUDGE_THRESHOLD,
 } from "./agent/constants";
 
 export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
@@ -169,47 +167,8 @@ export interface AgentDeps {
   getProviderName?: () => string;
 }
 
-/**
- * Ключ целевого объекта мутации для детекции «перфекционизм-цикла».
- * edit_file/write_file → путь файла; bash → нормализованная команда.
- * Остальные тула (read-only, bookkeeping) не считаются мутациями.
- * Внимание: в цикле toolCall.arguments — сырая JSON-строка от провайдера.
- */
-export function mutationTargetKey(
-  name: string,
-  rawArgs: unknown,
-): string | null {
-  let a: Record<string, unknown> | null = null;
-  if (typeof rawArgs === "string") {
-    try {
-      a = JSON.parse(rawArgs) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  } else if (rawArgs && typeof rawArgs === "object") {
-    a = rawArgs as Record<string, unknown>;
-  }
-  if (!a) return null;
-  if ((name === "edit_file" || name === "write_file") && typeof a.path === "string") {
-    return `write:${a.path.replace(/\\/g, "/").toLowerCase()}`;
-  }
-  if (name === "bash" && typeof a.command === "string") {
-    const cmd = a.command.replace(/\s+/g, " ").trim().slice(0, 80).toLowerCase();
-    return cmd ? `bash:${cmd}` : null;
-  }
-  // Bookkeeping-churn: повторы plan/todo над тем же действием с чуть разными
-  // аргументами сожгли 10+ итераций в ses_mthn3c2a после отклонения аудита
-  // (модель «чинила» план вместо работы).
-  if ((name === "plan" || name === "todo") && typeof a.action === "string") {
-    return `book:${name}:${a.action.toLowerCase()}`;
-  }
-  // У plan_step нет action — ключ по status, чтобы повторные апдейты
-  // били в тот же гард подряд-дубликатов.
-  if (name === "plan_step" && typeof a.status === "string") {
-    return `book:${name}:${a.status.toLowerCase()}`;
-  }
-  return null;
-}
+// `mutationTargetKey` переехал в `agent/loop-nudges.ts`; реэкспорт — для совместимости.
+export { mutationTargetKey } from "./agent/loop-nudges";
 
 /**
  * Агент: владеет циклом, конфигом, стоимостью, гейтами. Состояние хода —
@@ -995,37 +954,7 @@ export class Agent {
         state.lastToolSignature = signature;
       }
 
-      // Детекция «перфекционизм-цикла»: многократные правки ОДНОГО файла или
-      // запуски одной команды через не-подряд итерации (edit → build → read →
-      // edit…). Аргументы каждый раз новые, поэтому подряд-детекция дубликатов
-      // выше этот паттерн не видит. Nudge уходит ПОСЛЕ tool-результатов, чтобы
-      // не ломать парность assistant(tool_calls) → tool(results).
-      const cycleNudges: string[] = [];
-      if (sawToolCall) {
-        for (const tc of toolCalls) {
-          // Прогресс тест/спек-артефактов (обобщённо, по пути файла).
-          if (
-            (tc.name === "write_file" || tc.name === "edit_file") &&
-            typeof tc.arguments.path === "string"
-          ) {
-            recordArtifactWrite(state.artifactChurn, tc.arguments.path);
-          }
-          const target = mutationTargetKey(tc.name, tc.arguments);
-          if (!target) continue;
-          const count = (state.toolTargetCounts.get(target) ?? 0) + 1;
-          state.toolTargetCounts.set(target, count);
-          if (
-            count >= MUTATION_CYCLE_NUDGE_THRESHOLD &&
-            !state.cycleNudgedKeys.has(target)
-          ) {
-            state.cycleNudgedKeys.add(target);
-            cycleNudges.push(target);
-          }
-        }
-        for (const tc of toolCalls) {
-          if (isWorkMutation(tc.name)) state.mutationsSinceCritic++;
-        }
-      }
+      const cycleNudges = sawToolCall ? accumulateToolTargets(state, toolCalls) : [];
 
       if (sawToolCall) {
         const batch = await toolBatch.execute(
@@ -1047,31 +976,7 @@ export class Agent {
           break;
         }
 
-        if (cycleNudges.length > 0) {
-          logger.diagnostic(
-            "info",
-            `Perfectionism cycle detected (${cycleNudges.length} target(s) at ${MUTATION_CYCLE_NUDGE_THRESHOLD}+ mutations) — nudging model to finalize`,
-          );
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-summary>You have already modified or re-run the same target many times (e.g. ${cycleNudges[0]}). If the latest output is correct, STOP polishing and answer with a final text response. More identical edits will not change the result.</system-summary>`,
-          });
-        }
-
-        // Тест/спек-churn: серия правок тестов без единой production-правки
-        // (обобщённо — см. artifact-progress.ts).
-        const churnFile = testChurnFile(state.artifactChurn);
-        if (churnFile) {
-          state.artifactChurn.nudged = true;
-          logger.diagnostic(
-            "info",
-            `Test/spec artifact churn: "${churnFile}" repeatedly edited with no production changes — nudging to implement or change approach`,
-          );
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-summary>${t("exec.test_churn_nudge", { file: churnFile })}</system-summary>`,
-          });
-        }
+        applyBatchNudges(state, cycleNudges, { logger, contextManager });
 
         this.contextRenderer.render(this.deps.config.ui, contextManager, onMeta);
 
