@@ -35,6 +35,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   (`bun test tests/arch tests/output`); a separate `scripts/check-arch.ts` is not
   introduced (the gates are tests, reused as-is).
 
+### Removed
+
+- **`AgentModule` is no longer part of the public API** (breaking): the module
+  contract is now `ModuleDef` on `ModuleHost` (lifecycle + `tools`/`promptBlocks`/
+  `hooks`). `AgentModule` stays internal as a thin adapter for `ModuleRegistry`
+  instance lookup until that too is narrowed; external code should use
+  `AgentPlugin` (the plugin SDK) and does not need `AgentModule`.
+
 ### Fixed
 
 - **`indexer` file watcher is torn down on shutdown**: the new `ModuleDef.teardown`

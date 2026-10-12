@@ -516,9 +516,9 @@ src/
 │   ├── load-skill.ts, pipeline-run.ts, mcp-call.ts, search-history.ts
 │   └── ...             # list-dir, create-dir, delete-file, move-file, file-info
 │                       # Module-provided: plan/todo/verify (execution), project_map (indexer), lsp_check (lsp)
-├── modules/            # All modules implement AgentModule interface
-│   ├── registry.ts     # ModuleRegistry: collect blocks/tools/plugins from modules
-│   ├── types.ts        # AgentModule, AgentPlugin interfaces
+├── modules/            # Modules declare a ModuleDef on the ModuleHost (lifecycle + tools/blocks/hooks)
+│   ├── registry.ts     # ModuleRegistry: instance lookup by name (getModule)
+│   ├── types.ts        # AgentModule (internal adapter), AgentPlugin interfaces
 │   ├── pricing/        # Cost tracking + display (budget/tariff)
 │   │   ├── prices.ts   # Builtin Zen/Go price table (USD/1M tokens) + calculateCost/formatCost
 │   │   └── index.ts    # CostTracker — accumulate per-LLM-call cost for a session

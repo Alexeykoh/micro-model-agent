@@ -1,5 +1,5 @@
 export { ModuleRegistry } from "./registry";
-export type { AgentModule, AgentPlugin } from "./types";
+export type { AgentPlugin } from "./types";
 
 export { SkillsLoader, SkillsModule } from "./skills";
 export type { SkillMeta, LoadResult } from "./skills";

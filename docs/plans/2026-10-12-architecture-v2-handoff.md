@@ -228,7 +228,7 @@ W0 — если нужна дешёвая победа и разбор след�
 
 Единый реестр — [docs/agents/debt.md](../agents/debt.md) (правило 9: долг платится один
 раз, у каждого — критерий выхода и триггер). Открыто там: `arch-gate-d`,
-`per-session-singletons`, `agent-module-breaking`, `doctor-command`.
+`per-session-singletons`, `doctor-command`.
 
 Историю удаления MoE см. в [feature-history.md](../agents/feature-history.md);
 live-прогон одиночного пути сделан 2026-10-12 (§2). Остальные текстовые долги

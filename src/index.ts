@@ -12,7 +12,6 @@ export type {
   AgentContext,
   HallucinationResult,
 } from "./core/types";
-export type { AgentModule } from "./modules/types";
 // SDK плагинов: без этих типов внешний плагин вынужден дублировать контракт
 // у себя (так делали оба примера в `examples/plugins`). Узкий `PluginManager`
 // из `./tools/types` ниже остаётся — это роль, которую видит экзекутор.

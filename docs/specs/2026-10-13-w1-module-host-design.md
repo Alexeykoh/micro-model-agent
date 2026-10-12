@@ -69,11 +69,12 @@ setup (единый владелец, INV-8), проверкой `critical` (INV
 `dispose()` в обратном порядке (INV-7), `health()`-сводкой для баннера и
 `session.jsonl`, и **единственным вызовом `ToolRegistry.register`** (INV-2).
 
-**Совместимость с `AgentModule` — инкрементальная.** `getSystemPromptBlock()` /
-`getToolDefinitions()` / `getPlugin()` остаются как тонкие адаптеры к
-`promptBlocks()` / `tools()` / `hooks()` на время миграции. **`AgentModule`
-сейчас публичный тип** (`src/index.ts:15`) — его замена/сужение это breaking
-change для плагинов и фиксируется в CHANGELOG (`Changed`/`Removed`). `DEBT(agent-module-breaking)`.
+**`AgentModule` снят с публичного API (2026-10-13).** `getSystemPromptBlock()` /
+`getToolDefinitions()` / `getPlugin()` остаются как тонкие адаптеры для
+`ModuleRegistry`-lookup (инстансы), но вклад собирает `ModuleHost` через
+`promptBlocks()` / `tools()` / `hooks()`. Тип `AgentModule` больше не экспортируется
+из `src/index.ts` / `src/modules/index.ts` — внешний код использует `AgentPlugin`
+(SDK плагинов). Зафиксировано в CHANGELOG (`Removed`).
 
 ---
 
