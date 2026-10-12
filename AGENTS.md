@@ -153,6 +153,16 @@ All detailed documentation lives in `docs/agents/`:
 | [versioning.md](./docs/agents/versioning.md)     | Versioning Rules, Release Process, Version History                                                                      |
 | [changelog](./CHANGELOG.md)                      | Public changelog                                                                                                        |
 
+> **⚠️ Открытый аудит модулей (0.3.3) — план работ в очереди.**
+> [Аудит](./docs/analysis/2026-10-12-harness-module-audit.md): 125 дефектов по 9 модулям,
+> не закрытых фиксами 0.3.3. [План исправлений](./docs/plans/2026-10-12-harness-module-audit-fixes.md):
+> 77 задач / 385 шагов / 11 волн. Начинать с **W0 (наблюдаемость)** — ~15 текущих
+> правок невидимы, потому что критик, MoE-верификатор и часть гейтов пишут «ок»
+> при поломке. Критический путь к исходной проблеме: `W0.1 → W1.2 → W1.3 → W4.1 → W4.4 → W4.7`
+> (наблюдаемость → директивы переживают компакцию → счётчики устойчивы → инструменты
+> не врут → `browser` работает → `download_file` виден модели).
+> Четыре пункта сознательно не выполняются, причины — в разделе «Отказы» плана.
+
 ## Quick Reference
 
 ### Agent Loop States
