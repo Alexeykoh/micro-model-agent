@@ -139,6 +139,8 @@ export class ModuleHost {
   }
 
   /** Сводка здоровья (для баннера/`session.jsonl`). */
+  // DEBT(doctor-command): сводка пока не выводится ни в баннер, ни в session.jsonl,
+  // ни в команду — агрегатор `mma doctor`/`/doctor` закроет пробел INV-5/6.
   health(): Array<{ name: string; health: ModuleHealth }> {
     return [...this.defs.keys()].map((name) => ({
       name,

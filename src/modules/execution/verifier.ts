@@ -44,9 +44,20 @@ export interface ManifestVerificationResult {
 /** Верификатор шагов плана: файлы, синтаксис, скрипты, tsc, критерии. */
 export class StepVerifier {
   private baseDir: string;
+  /**
+   * Отчёт о fail-open деградации (INV-15): проверка не выполнена, но шаг
+   * считался валидным. Без него «нет tsc» неотличимо от «синтаксис валиден».
+   */
+  private onDegrade?: (operation: string, reason: string) => void;
 
-  constructor(baseDir: string) {
+  constructor(baseDir: string, onDegrade?: (operation: string, reason: string) => void) {
     this.baseDir = baseDir;
+    this.onDegrade = onDegrade;
+  }
+
+  /** Зафиксировать пропущенную (не выполненную) проверку, оставив причину. */
+  private degrade(operation: string, reason: string): void {
+    this.onDegrade?.(operation, reason);
   }
 
   /** Проверяет существование файла (с nested-резолвером findExistingFile). */
@@ -82,10 +93,14 @@ export class StepVerifier {
     const root = findTypecheckRoot(this.baseDir, existingFiles) ?? this.baseDir;
     const tsconfigPath = join(root, "tsconfig.json");
     if (!existsSync(tsconfigPath)) {
+      this.degrade("verify.typecheck", `no tsconfig.json at ${root}; typecheck skipped`);
       return { passed: true, message: t("verify.typecheck_skipped_no_tsconfig") };
     }
     const tsc = resolveTscCommand(root);
-    if (!tsc) return { passed: true, message: t("verify.typecheck_skipped_no_tsc") };
+    if (!tsc) {
+      this.degrade("verify.typecheck", "typescript compiler not found; typecheck skipped");
+      return { passed: true, message: t("verify.typecheck_skipped_no_tsc") };
+    }
     try {
       await this.runAsync(`${tsc} --noEmit`, root, 60_000);
       return { passed: true, message: t("verify.typecheck_passed") };
@@ -109,10 +124,14 @@ export class StepVerifier {
     const projectRoot = findProjectRoot(filePath, this.baseDir, ["tsconfig.json", "package.json"]);
     const tsconfigPath = join(projectRoot, "tsconfig.json");
     if (!existsSync(tsconfigPath)) {
+      this.degrade("verify.typecheck", `no tsconfig.json at ${projectRoot}; typecheck skipped`);
       return { passed: true, message: t("verify.typecheck_skipped_no_tsconfig") };
     }
     const tsc = resolveTscCommand(projectRoot);
-    if (!tsc) return { passed: true, message: t("verify.typecheck_skipped_no_tsc") };
+    if (!tsc) {
+      this.degrade("verify.typecheck", "typescript compiler not found; typecheck skipped");
+      return { passed: true, message: t("verify.typecheck_skipped_no_tsc") };
+    }
     try {
       await this.runAsync(`${tsc} --noEmit --skipLibCheck`, projectRoot, 60_000);
       return { passed: true, message: t("verify.typecheck_passed") };
@@ -129,11 +148,13 @@ export class StepVerifier {
   async runTests(): Promise<VerificationItem> {
     const pkgPath = resolve(this.baseDir, "package.json");
     if (!existsSync(pkgPath)) {
+      this.degrade("verify.tests", "no package.json; tests skipped");
       return { passed: true, message: t("verify.tests_skipped_no_package") };
     }
     try {
       const pkg = JSON.parse(require("fs").readFileSync(pkgPath, "utf-8"));
       if (!pkg.scripts?.test) {
+        this.degrade("verify.tests", "no test script in package.json; tests skipped");
         return { passed: true, message: t("verify.tests_skipped_no_script") };
       }
     } catch {
@@ -282,7 +303,13 @@ export class StepVerifier {
       // висит секундами. Нет tsc — пропускаем проверку (как и раньше «not
       // found → true»), но мгновенно.
       const tsc = resolveTscCommand(dirname(filePath));
-      if (!tsc) return true;
+      if (!tsc) {
+        this.degrade(
+          "verify.syntax",
+          `typescript compiler not found; syntax not checked for ${filePath}`,
+        );
+        return true;
+      }
       try {
         // Путь в кавычках — команды идут через shell и ломаются на пробелах.
         await this.runAsync(`${tsc} --noEmit --skipLibCheck "${filePath}"`, this.baseDir, 20000);
@@ -293,12 +320,20 @@ export class StepVerifier {
           err.message.includes("not found") ||
           err.message.includes("ENOENT")
         ) {
+          this.degrade(
+            "verify.syntax",
+            `syntax check could not run for ${filePath}: ${String(err.message).slice(0, 200)}`,
+          );
           return true;
         }
         const stderr = err.stderr?.toString() || "";
         if (stderr.includes("error TS") && !stderr.includes("Cannot find module")) {
           return false;
         }
+        this.degrade(
+          "verify.syntax",
+          `syntax check inconclusive for ${filePath}: ${stderr.slice(0, 200) || err.message}`,
+        );
         return true;
       }
     }

@@ -20,18 +20,18 @@
 |---|---|---|---|
 | `critic_error` | Критик не дал вердикта (verify бросил или вернул `null`) — ход продолжается как `pass` | `src/core/agent/critic-gate.ts` (`logDegraded`) | ✅ реализовано |
 | `tool_attempt` | Хендлер тула бросил исключение; результат деградирован в `success:false`, ход продолжается | `src/core/agent/tool-batch.ts` (`executeCall` catch) | ✅ реализовано |
-| `verify_error` | Верификатор деградировал: `validateSyntax` пропускает проверку синтаксиса, когда `tsc` недоступен; LLM-only/неизвестный критерий | `src/modules/execution/verifier.ts` (`validateSyntax`, `verifyCriteria`) | ⬜ открыто — `DEBT(verify-error)` |
+| `verify_error` | Верификатор деградировал: `validateSyntax` не проверяет синтаксис (нет `tsc`/проверка неоднозначна); `runTypeCheck`/`runTests` пропущены (нет `tsconfig`/`tsc`/`package.json`/test-скрипта) | `src/modules/execution/verifier.ts` (`StepVerifier.onDegrade`) → `ExecutionModule.reportDegrade` | ✅ реализовано |
 
-### Почему `verify_error` ещё открыт
+### Как подключён `verify_error`
 
-`StepVerifier` не получает `SessionLogger`: он живёт в `ExecutionModule`, а
-`ToolContext` отдаёт модулям только узкий шов `sessionLog: { plan(...) }`
-(`src/tools/types.ts`). Чтобы верификатор писал `verify_error`, нужно расширить
-шов `sessionLog` диагностическим методом и пробросить его через три точки
-сборки контекста (`agent.ts`, `session-phase.ts`, `session-runner-scope.ts`) —
-это **правка контракта** `ToolContext`. По правилу 2 AGENTS.md такая правка
-получает спеку до кода; поэтому она вынесена из W0.6 отдельным шагом, а не
-сделана «заодно».
+`StepVerifier` получает колбэк `onDegrade(operation, reason)` при создании
+(`ExecutionModule` передаёт `reportDegrade`). `ExecutionModule.setDiagnosticSink`
+ставит `agent-phase`/`session-runner` (main и каждый раннер) — sink пишет
+`verify_error` в свою сессию тем же путём, что `sessionLog.plan`
+(`sessionManager.appendLog`). `ToolContext` при этом **не** расширялся: шов
+«Agent/раннер → свой `ExecutionModule`» достаточен и не тянет контракт тулов.
+Subagent не несёт `ExecutionModule`, поэтому его деградации идут в сессию
+родителя через тот же main-модуль.
 
 ## Что это не чинит
 

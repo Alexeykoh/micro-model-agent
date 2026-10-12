@@ -99,12 +99,11 @@ feature-history (вынесен из AGENTS.md).
 `critic.maxTokens`/`critic.timeoutMs`, `critic_verdict {degraded:true}`) + INV-15:
 `SessionLogger.logDiagnosticEvent(type, diag)` пишет `critic_error` (CriticGate,
 при отказе вердикта, с причиной) и `tool_attempt` (tool-batch, хендлер бросил).
-Инвентарь fail-open путей — `docs/agents/observability.md`. **`verify_error`
-вынесен отдельным шагом**: он требует расширить контракт `ToolContext.sessionLog`
-(иначе верификатор не достаёт до `SessionLogger`) — по правилу 2 нужна спека.
+Инвентарь fail-open путей — `docs/agents/observability.md`. **`verify_error`**
+сделан отдельным шагом (2026-10-13, ниже): `StepVerifier.onDegrade` →
+`ExecutionModule.setDiagnosticSink` → запись в сессию (без расширения `ToolContext`).
 
-**Следующий шаг:** W0.5 (`PromptBlock.source` + `degraded`, INV-1/6/17) или
-`verify_error` со спекой на шов `ToolContext`. W0.2 — в W1 (`ModuleHost`).
+**Следующий шаг:** W0.5 (`PromptBlock.source` + `degraded`, INV-1/6/17). W0.2 — в W1 (`ModuleHost`).
 
 **W0.5 сделана** (`feat/w0-prompt-block-owner`): `PromptBlock.source` (владелец)
 + `label` (имя блока) + `degraded?: { reason }` (INV-1/6/17). `ModuleRegistry`
@@ -114,8 +113,7 @@ feature-history (вынесен из AGENTS.md).
 выпавший по бюджету блок несёт `reason: "budget: N tok did not fit"`. Стартовый
 overflow-warning называет владельца и блок, а не только класс по `kind`.
 
-**W0 закрыт** (кроме двух точек): `verify_error` (нужен шов `ToolContext`, W1) и
-`W0.2` (`Logger.child()` — при появлении `ModuleHost`).
+**W0 закрыт:** `verify_error` (2026-10-13) и `W0.2` (`Logger.child()` из `ModuleHost.ctx`).
 
 | Задача | Что сделать | Инвариант |
 |---|---|---|
@@ -124,7 +122,7 @@ overflow-warning называет владельца и блок, а не тол
 | **W0.3** ✅ | `SessionLogEntry.module: string` + шаблон `module_${string}` (по образцу `onboarding_${string}`) | INV-13 |
 | **W0.4** ✅ | `logError(message)` → `logError(Diagnostic { source, operation, kind, cause? })`; `cause` обязателен при `kind !== "ok"` | INV-12, INV-14 |
 | **W0.5** ✅ | `PromptBlock.source` + `degraded?: { reason }`; при выпадении по бюджету лог говорит «indexer: project map (2400 ток.) не поместился», а не обрезанный текст | INV-1, INV-6, INV-17 |
-| **W0.6** ◐ | Отдельные события для fail-open путей: `critic_error` ✅, `tool_attempt` ✅, `verify_error` — отдельный шаг (нужен шов `ToolContext`) | INV-12, INV-15 |
+| **W0.6** ✅ | Отдельные события для fail-open путей: `critic_error` ✅, `tool_attempt` ✅, `verify_error` ✅ (2026-10-13) | INV-12, INV-15 |
 
 **Стартовые точки для чтения:** `src/output/types.ts` (`OutputEvent`),
 `src/output/channel.ts` (единственный emit с `source: ""`),
@@ -229,8 +227,8 @@ W0 — если нужна дешёвая победа и разбор след�
 ## 6. Долги
 
 Единый реестр — [docs/agents/debt.md](../agents/debt.md) (правило 9: долг платится один
-раз, у каждого — критерий выхода и триггер). Открыто там: `verify-error`,
-`arch-gate-d`, `per-session-singletons`, `agent-module-breaking`.
+раз, у каждого — критерий выхода и триггер). Открыто там: `arch-gate-d`,
+`per-session-singletons`, `agent-module-breaking`, `doctor-command`.
 
 Историю удаления MoE см. в [feature-history.md](../agents/feature-history.md);
 live-прогон одиночного пути сделан 2026-10-12 (§2). Остальные текстовые долги

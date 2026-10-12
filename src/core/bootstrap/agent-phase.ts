@@ -128,6 +128,22 @@ export async function assembleAgent(
     contextProbePromise,
   } = input;
 
+  // Fail-open верификатора плана (INV-15/W0.6): `verify_error` пишем в session.jsonl
+  // тем же путём, что и `sessionLog.plan` (SessionLogger создаётся внутри `Agent.run`,
+  // поэтому здесь пишем напрямую через менеджер сессий).
+  execModule.setDiagnosticSink((event, diag) => {
+    sessionManager.appendLog({
+      ts: new Date().toISOString(),
+      type: event,
+      content: diag.cause ?? diag.operation,
+      source: diag.source,
+      operation: diag.operation,
+      errorKind: diag.kind,
+      cause: diag.cause,
+      recoverable: diag.recoverable,
+    });
+  });
+
   const agentDeps: AgentDeps = {
     config,
     configRef,

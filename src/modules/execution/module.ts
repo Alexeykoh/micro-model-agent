@@ -28,6 +28,7 @@ import {
   type ExecutionPluginState,
 } from "./execution-plugin";
 import { EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS as ERROR_SEARCH_MIN_INTERVAL_MS } from "../../config/timeouts";
+import type { Diagnostic } from "../../output/types";
 
 /**
  * Инжектированный раннер поиска. По умолчанию performWebSearch (общий с тулом
@@ -148,6 +149,12 @@ export class ExecutionModule implements AgentModule {
    *  и загружает план новой (см. docs/specs/2026-09-29-session-plan-binding-design.md). */
   private sessionId: string | null = null;
   private verifier: StepVerifier;
+  /**
+   * Диагностический sink (INV-15, W0.6): пишет `verify_error`, когда проверка
+   * шага не выполнена, но признана валидной (нет tsc/tsconfig/тестов). Ставит
+   * Agent после создания `SessionLogger`; без агента (юнит-тесты) — no-op.
+   */
+  private diagnosticSink?: (event: "verify_error", diag: Diagnostic) => void;
   private stuckDetector: StuckDetector;
   private auditor: Auditor;
   private store: PlanStore;
@@ -254,12 +261,30 @@ export class ExecutionModule implements AgentModule {
     errorSearchCooldownMs = ERROR_SEARCH_MIN_INTERVAL_MS,
   ) {
     this.baseDir = baseDir;
-    this.verifier = new StepVerifier(baseDir);
+    this.verifier = new StepVerifier(baseDir, (operation, reason) =>
+      this.reportDegrade(operation, reason),
+    );
     this.stuckDetector = new StuckDetector(stuckThreshold, 3, webSearchThreshold);
     this.auditor = new Auditor(baseDir);
     this.store = new PlanStore(baseDir);
     this.searchRunner = searchRunner;
     this.errorSearchCooldownMs = errorSearchCooldownMs;
+  }
+
+  /** Подключить диагностический sink (INV-15); зовёт Agent после создания SessionLogger. */
+  setDiagnosticSink(sink: (event: "verify_error", diag: Diagnostic) => void): void {
+    this.diagnosticSink = sink;
+  }
+
+  /** Fail-open верификатора: `verify_error` с причиной (INV-12/15), не «тихий ok». */
+  private reportDegrade(operation: string, reason: string): void {
+    this.diagnosticSink?.("verify_error", {
+      source: "module:execution",
+      operation,
+      kind: "skipped",
+      cause: reason,
+      recoverable: true,
+    });
   }
 
   /** Ставит план активным (синхрон указателя, персист, сброс завершённого/скипов). */

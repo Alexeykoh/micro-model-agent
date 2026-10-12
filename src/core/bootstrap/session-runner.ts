@@ -209,6 +209,19 @@ export function createSessionRunnerFactory(
       sessionId,
     });
     runnerExec.setHallucinationDetector(runnerDetector);
+    // INV-15: fail-open верификатора раннера пишет `verify_error` в его сессию.
+    runnerExec.setDiagnosticSink((event, diag) => {
+      pinned.appendLog({
+        ts: new Date().toISOString(),
+        type: event,
+        content: diag.cause ?? diag.operation,
+        source: diag.source,
+        operation: diag.operation,
+        errorKind: diag.kind,
+        cause: diag.cause,
+        recoverable: diag.recoverable,
+      });
+    });
     contextManager.setPlanSummaryProvider(() => runnerExec.getPlanSummary());
 
     // Реестр/плагины/исполнитель — свои (разделяются только stateless

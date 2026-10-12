@@ -36,8 +36,10 @@ W1 вводит контракт и **один гейт**, который его
 **Не входит (другие волны):**
 - enforcement возможностей тула (`caps`/`pathArgs`/`urlArgs`) — **W2**;
 - `ConfigStore` с эффектами — **W3**;
-- переезд `context`/`hallucination` в ядро, `core/api/*` — **W4**;
-- `verify_error` (шов `ToolContext.sessionLog`) — отдельный шаг (см. handoff §3). `DEBT(verify-error)`.
+- переезд `context`/`hallucination` в ядро, `core/api/*` — **W4**.
+
+`verify_error` (INV-15) реализован отдельным шагом: `StepVerifier.onDegrade` →
+`ExecutionModule.setDiagnosticSink` → запись в сессию (см. `docs/agents/observability.md`).
 
 `ModuleHost` строится **в ядре** (`src/core/module-host.ts`), но **не** форсирует
 `core/api`-границу (это W4): модули пока получают существующие типы ядра.

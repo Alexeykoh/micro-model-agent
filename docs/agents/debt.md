@@ -14,7 +14,7 @@
 
 | id | долг | почему отложено | критерий выхода | триггер | дата |
 |---|---|---|---|---|---|
-| `verify-error` | сигнал `verify_error` (INV-15) не пишется при деградации верификатора | `StepVerifier` не достаёт до `SessionLogger`; нужен шов `ToolContext` (смена контракта) | `ToolContext` несёт диагностический sink; `verify_error` пишется на деградации | W1 остаток / W4 `core/api` | 2026-10-13 |
 | `arch-gate-d` | правило ≤300 строк не машиночитаемо (58 файлов >300) | массовый allowlist закрепил бы bloat | `.arch-allowlist.json` + гейт D | W5 / при реальном дроблении файлов | 2026-10-13 |
 | `per-session-singletons` | `processRegistry`/`rateLimiter`/`policyManager` процесс-глобальны | «1 тенант = 1 процесс»; per-session пока не нужен | per-session инстансы **или** явное «навсегда процесс-глобальны» | появление многотенантного процесса | 2026-10-13 |
-| `agent-module-breaking` | публичный `AgentModule` будет снят/сужен | миграция не завершена | модули на `ModuleDef`; CHANGELOG `Removed`/`Changed` | завершение миграции модулей | 2026-10-13 |
+| `agent-module-breaking` | публичный `AgentModule` не сужен: сбор промпт-блоков и хуков идёт через `ModuleRegistry`/адаптеры, а не через `ModuleDef` | тулы уже на `ModuleHost`; осталось перенести блоки/хуки, затем снять `AgentModule` из `src/index.ts` | `ModuleHost` собирает `promptBlocks`/`hooks`; `AgentModule` снят/сужен + CHANGELOG | завершение W1 / при внешнем плагине на `AgentModule` | 2026-10-13 |
+| `doctor-command` | нет сводной проверки загрузки: `ModuleHost.health()` (INV-5/6) не выводится ни в баннер, ни в `session.jsonl`, ни в команду | точечные механизмы (env-отчёт, `provider check`, `plugins`, `/lsp doctor`, `/sysprompt`) уже есть; агрегатор не блокирует волны | `mma doctor` / `/doctor` показывает env + модули (ok/degraded/failed) + плагины + провайдера + LSP + конфиг | по запросу пользователя / после W1 | 2026-10-13 |
