@@ -22,6 +22,7 @@ import { LspModule, FileOnlyLogger, DEFAULT_LSP_CONFIG } from "../../modules/lsp
 import { runStartupHealthCheck } from "../../modules/lsp/startup-check";
 import { MCPModule } from "../../modules/mcp/index";
 import { mcpModuleDef } from "../../modules/mcp/lifecycle";
+import { lspModuleDef } from "../../modules/lsp/lifecycle";
 import { MemoryModule } from "../../modules/memory/module";
 import { MemoryStore } from "../../modules/memory/store";
 import { t } from "../../i18n/index";
@@ -45,10 +46,16 @@ import type { ModulesPhaseInput, ModulesPhase } from "./state";
  */
 export async function setupModulesPhase(input: ModulesPhaseInput): Promise<ModulesPhase> {
   const moduleRegistry = new ModuleRegistry();
+  // Единый владелец жизненного цикла модулей (INV-2/5/7/8): `setup()` — до сбора
+  // тулов/блоков, `dispose()` — на завершении процесса (см. `BootstrapResult`).
+  const moduleHost = new ModuleHost(input.config, input.logger, defaultOutputBus);
 
   const core = await registerCoreModules(input, moduleRegistry);
   const languages = startLanguageModules(input, moduleRegistry);
   const startupCheckPromise = languages.startupCheck;
+  moduleHost.register(mcpModuleDef(core.mcpModule));
+  moduleHost.register(lspModuleDef(languages.lspModule));
+  await moduleHost.setup();
   registerModuleToolsAndPlugins(input, moduleRegistry, core);
 
   const promptBlocks = buildStaticPromptBlocks(input, moduleRegistry, core);
@@ -63,6 +70,7 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
 
   return {
     moduleRegistry,
+    moduleHost,
     execModule: core.execModule,
     sessionModule: core.sessionModule,
     mcpModule: core.mcpModule,
@@ -87,7 +95,7 @@ async function registerCoreModules(
   input: ModulesPhaseInput,
   moduleRegistry: ModuleRegistry,
 ): Promise<CoreModules> {
-  const { config, logger, dir, baseDir, hallucinationDetector } = input;
+  const { config, dir, baseDir, hallucinationDetector } = input;
 
   const execModule = new ExecutionModule(
     baseDir,
@@ -113,13 +121,9 @@ async function registerCoreModules(
   moduleRegistry.register(input.indexerModule);
 
   const mcpModule = new MCPModule(config);
-  // Жизненный цикл MCP — через ModuleHost (INV-5/8): раньше `initialize()` звался
-  // вручную с ad-hoc таймаутом; теперь таймаут и «отказ не фатален» объявлены
-  // контрактом модуля (`mcpModuleDef`), а не живут в bootstrap. MCP остаётся в
-  // ModuleRegistry для сбора тулов/плагинов (единый путь сбора — шаг W1.3).
-  const mcpHost = new ModuleHost(config, logger, defaultOutputBus);
-  mcpHost.register(mcpModuleDef(mcpModule));
-  await mcpHost.setup();
+  // Жизненный цикл MCP — в общем ModuleHost (INV-2/5/8): `initialize()` и таймаут
+  // объявляет контракт (`mcpModuleDef`), а не bootstrap. MCP остаётся в
+  // ModuleRegistry для сбора тулов/плагинов (единый путь сбора — шаг W1.3+).
   moduleRegistry.register(mcpModule);
 
   // Общий глобальный стор памяти — один инстанс у модуля памяти и цикла,

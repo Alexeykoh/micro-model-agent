@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   contract (`src/modules/mcp/lifecycle.ts` — non-critical, `setup = initialize()`);
   the bootstrap ad-hoc `withTimeout(initialize(), 10_000)` is gone and the module
   timeout is owned by the host. A failing/slow MCP no longer stalls or aborts boot.
+- **LSP lifecycle moved to `ModuleHost` (W1.6, INV-5/7)**: `src/modules/lsp/lifecycle.ts`
+  declares `critical: false` and a real `teardown` that closes the server pool
+  (audit 8.1 — no leaked pids), not only the `onSessionEnd` plugin hook. A single
+  `ModuleHost` now owns both MCP and LSP: `setup()` runs before tool/prompt
+  collection, and `dispose()` runs on `agent.shutdown()`.
 - **Every tool names its owner (W1.3, INV-1/2)**: `ToolDefinition` stays the
   authored form (no owner — the author does not own the tool); the registry
   stores and returns `RegisteredTool = ToolDefinition & { owner: string }`, so a

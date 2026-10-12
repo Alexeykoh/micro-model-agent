@@ -68,6 +68,8 @@ export interface AgentPhaseInput {
   memoryStore: MemoryStore;
   /** Реестр модулей. */
   moduleRegistry: ModuleRegistry;
+  /** Владелец жизненного цикла модулей (dispose на завершении). */
+  moduleHost?: import("../module-host").ModuleHost;
   /** Флаг выхода на первом ответе. */
   exitOnComplete: boolean | undefined;
   /** Git-style лог контекста. */
@@ -115,6 +117,7 @@ export async function assembleAgent(
     sessionManager,
     memoryStore,
     moduleRegistry,
+    moduleHost,
     exitOnComplete,
     contextLogger,
     reasoningProbePromise,
@@ -145,6 +148,7 @@ export async function assembleAgent(
     sessionManager,
     memoryStore,
     moduleRegistry,
+    moduleHost,
     exitOnComplete,
     contextLogger,
     reasoningProbe: () => reasoningProbePromise,

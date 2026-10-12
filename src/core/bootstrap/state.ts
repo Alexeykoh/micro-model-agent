@@ -172,6 +172,8 @@ export interface ModulesPhaseInput {
 export interface ModulesPhase {
   /** Реестр модулей (все зарегистрированы). */
   moduleRegistry: ModuleRegistry;
+  /** Владелец жизненного цикла модулей (setup/dispose, INV-5/7/8). */
+  moduleHost: import("../module-host").ModuleHost;
   /** Владелец состояния плана (UI читают активный план отсюда). */
   execModule: ExecutionModule;
   /** Модуль сессий (динамический session-блок). */

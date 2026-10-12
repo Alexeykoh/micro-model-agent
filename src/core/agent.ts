@@ -128,6 +128,8 @@ export interface AgentDeps {
   contextLogger?: ContextLogger;
   memoryStore?: MemoryStore;
   moduleRegistry?: ModuleRegistry;
+  /** Владелец жизненного цикла модулей: `dispose()` (teardown) на завершении. */
+  moduleHost?: import("./module-host").ModuleHost;
   exitOnComplete?: boolean;
   envReport?: EnvironmentReport;
   /**
@@ -1872,5 +1874,8 @@ export class Agent {
       sessionManager: sessionManager?.getActiveMeta(),
       contextManager,
     });
+    // Жизненный цикл модулей: teardown (закрыть процессы/сокеты). Fire-and-forget
+    // — как и `onSessionEnd`; идемпотентность teardown у модулей на совести модуля.
+    void this.deps.moduleHost?.dispose();
   }
 }

@@ -64,6 +64,8 @@ export interface BootstrapResult {
   indexerModule: IndexerModule;
   /** Модуль LSP — веб-режим показывает диагностику во вкладке LSP. */
   lspModule?: import("../modules/lsp/module").LspModule;
+  /** Владелец жизненного цикла модулей (`setup`/`dispose`, INV-5/7/8). */
+  moduleHost: import("./module-host").ModuleHost;
   /**
    * Фабрика per-session раннеров для настоящего параллелизма (`mma web`):
    * `(sessionId) => SessionRunner` (свой агент/контекст/трекер поверх общего
@@ -172,6 +174,7 @@ export async function bootstrap(
       sessionManager: session.sessionManager,
       memoryStore: modules.memoryStore,
       moduleRegistry: modules.moduleRegistry,
+      moduleHost: modules.moduleHost,
       exitOnComplete,
       contextLogger: session.contextLogger,
       reasoningProbePromise: provider.reasoningProbePromise,
@@ -202,6 +205,8 @@ export async function bootstrap(
     memoryStore: modules.memoryStore,
     indexerModule: workspace.indexerModule,
     lspModule: modules.lspModule,
+    /** Владелец жизненного цикла модулей: `dispose()` на завершении процесса. */
+    moduleHost: modules.moduleHost,
     /** Хост черновиков capabilities (`mma plugins drafts`, тул `define_capability`). */
     draftHost: workspace.draftHost,
     spawnSessionRunner: createSessionRunnerFactory({
