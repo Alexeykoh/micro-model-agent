@@ -27,6 +27,7 @@ import { ensureSessionStart as phaseEnsureSessionStart } from "./agent/session-s
 import { createLoopModules, type LoopSetupHost } from "./agent/loop-setup";
 import { buildLoopResult, type LoopResultHost } from "./agent/loop-result";
 import { runIterationPrologue, type IterationPrologueHost } from "./agent/iteration-prologue";
+import { runLlmPhase, type LlmPhaseHost } from "./agent/loop-llm";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -35,7 +36,7 @@ import type { AppConfig, ProviderEntry } from "../config/types";
 import type { ToolScope, ToolDefinition, ToolResult } from "../tools/types";
 import type { PromptBlock } from "./types";
 import type { EnvironmentReport } from "./environment";
-import type { ToolCall, ToolEvent, AgentPhase, LLMResponse, AgentResult, OnMeta } from "./types";
+import type { ToolEvent, AgentPhase, AgentResult, OnMeta } from "./types";
 import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
@@ -48,8 +49,7 @@ import { createPolicyState } from "../modules/reasoning/policy";
 import type { PolicyState } from "../modules/reasoning/policy";
 import type { ReasoningLevel } from "../config/types";
 import type { ReasoningState } from "../tools/set-thinking";
-import { LlmError } from "../llm/llm-errors";
-import { clearIterationSignals, type LoopState } from "./agent/loop-state";
+import type { LoopState } from "./agent/loop-state";
 import type { TokenTracker } from "./agent/token-tracker";
 import type { ContextLogger } from "./agent/context-log";
 import { ContextRenderer } from "./agent/context-renderer";
@@ -63,28 +63,9 @@ import {
   type TitleChat,
 } from "../modules/session/auto-name";
 import type { PromptBlockKind } from "./types";
-import {
-  MAX_EMPTY_RESPONSE_RETRIES,
-  MAX_LLM_ERROR_RETRIES,
-  MAX_REPEATED_TOOL_CALLS,
-  MAX_REPEATED_TOOL_CALLS_INTERACTIVE,
-} from "./agent/constants";
+import { MAX_EMPTY_RESPONSE_RETRIES } from "./agent/constants";
 
 export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
-
-/**
- * Read-only тулты-интроспекции. Повтор одного с теми же аргументами прогресса
- * не даст никогда, поэтому интерактивный цикл жёстко стопает после нескольких
- * повторов (наблюдалось: `session_info` в тугом цикле после готовой задачи).
- * Мутирующие — только nudge, чтобы легитимный edit/build/read-цикл не резать.
- */
-const LOOP_PRONE_STATUS_TOOLS = new Set([
-  "session_info",
-  "process_list",
-  "process_log",
-  "file_info",
-  "project_map",
-]);
 
 /** Зависимости агента: конфиг, провайдер, тулы, контекст, логгеры, швы. */
 export interface AgentDeps {
@@ -394,6 +375,19 @@ export class Agent {
     };
   }
 
+  /** Общий вид хоста для фазы вызова LLM (INV-23). */
+  private llmPhaseHost(): LlmPhaseHost {
+    return {
+      deps: this.deps,
+      policyState: this.policyState,
+      probePassed: this.probePassed,
+      reasoningState: this.reasoningState,
+      isShutdownRequested: () => this.shutdownRequested,
+      getAbortSignal: () => this.abortController?.signal,
+      emitPhase: (iteration, phase, onPhase) => this.emitPhase(iteration, phase, onPhase),
+    };
+  }
+
   private emitPhase(
     iteration: number,
     phase: AgentPhase,
@@ -600,8 +594,6 @@ export class Agent {
   ): Promise<AgentResult> {
     const {
       config,
-      llmProvider,
-      pluginManager,
       contextManager,
       hallucinationDetector,
       logger,
@@ -631,328 +623,23 @@ export class Agent {
         { state, slog, input, onMeta, compactionService },
       );
 
-      let textContent = "";
-      let reasoningContent = "";
-      const toolCalls: ToolCall[] = [];
-      let sawToolCall = false;
-      let sawUsage = false;
-      let emittedReasoning = false;
-      let malformedToolArgs = 0;
-
-      this.emitPhase(state.iteration, "thinking", onPhase);
-      const llmStart = Date.now();
-      // Сырая оценка на момент отправки — вход калибровки по реальному usage.
-      const estimateAtSend = contextManager.getEstimatedTokens();
-      const messageCountAtSend = contextManager.getMessageCount?.() ?? 0;
-      const baseline = tokenTracker.beginIteration(state, estimateAtSend);
-      logger.logLLMRequest(config.model, history.length, input, "agent");
-
-      // Оценка reasoning-effort на итерацию. Сигналы описывают события
-      // ПРЕДЫДУЩЕЙ итерации (выставляются на retry-путях перед continue),
-      // поэтому политика оценивается ДО очистки сигналов — иначе raise-ветка
-      // недостижима.
-      const reasoning = reasoningResolver.resolve({
+      const llm = await runLlmPhase(this.llmPhaseHost(), {
         state,
-        policyState: this.policyState,
-        reasoningConfig: config.reasoning,
-        probePassed: this.probePassed,
-        reasoningStrategy: this.deps.reasoningStrategy,
-        reasoningState: this.reasoningState,
-      });
-
-      // Очистка per-итерационных сигналов после потребления политикой.
-      clearIterationSignals(state);
-
-      if (reasoning.level) {
-        slog.logReasoningControl({
-          iteration: state.iteration,
-          level: reasoning.level,
-          strategy: reasoning.strategy,
-          probePassed: this.probePassed,
-          source: reasoning.source,
-        });
-        contextManager.thinkingLevel = reasoning.level;
-      }
-
-      try {
-        for await (const chunk of llmProvider.chat(
-          history,
-          allToolsForBudget as ToolDefinition[],
-          this.abortController?.signal,
-          reasoning.level ? { reasoningEffort: reasoning.level, reasoningStrategy: reasoning.strategy, sessionId: this.deps.sessionManager?.getActiveMeta()?.id } : { sessionId: this.deps.sessionManager?.getActiveMeta()?.id },
-        )) {
-          if (this.shutdownRequested) break;
-          if (chunk.type === "text" && chunk.content) {
-            if (emittedReasoning && !textContent) {
-              onReasoning?.("\n\n");
-            }
-            textContent += chunk.content;
-            const textOut = pluginManager.runOnText({ iteration: state.iteration, logger, contextManager }, chunk.content);
-            onChunk?.(textOut);
-          }
-          if (chunk.type === "reasoning" && chunk.content) {
-            reasoningContent += chunk.content;
-            if (config.showReasoning) {
-              const metaOut = pluginManager.runOnMeta(
-                { iteration: state.iteration, logger, contextManager },
-                chunk.content,
-              );
-              if (metaOut) {
-                onReasoning?.(metaOut);
-              }
-              emittedReasoning = true;
-            }
-          }
-          if (chunk.type === "tool_call" && chunk.toolCall) {
-            sawToolCall = true;
-            let parsedArgs: Record<string, unknown>;
-            try {
-              parsedArgs = JSON.parse(chunk.toolCall.arguments);
-            } catch {
-              // Битый JSON аргументов раньше молча превращался в `{}` —
-              // модель звала тул с пустыми параметрами и не понимала причины.
-              // Логируем и сообщаем модели, чтобы она повторила вызов.
-              parsedArgs = {};
-              malformedToolArgs++;
-              logger.diagnostic(
-                "warn",
-                `Invalid JSON in tool_call arguments for "${chunk.toolCall.name}" (${chunk.toolCall.arguments.length} chars) — passing {}`,
-              );
-              slog.logError({
-                source: `tool:${chunk.toolCall.name}`,
-                operation: "tool.args_parse",
-                kind: "degraded",
-                cause: `invalid JSON arguments (${chunk.toolCall.arguments.length} chars), passing {}`,
-                detail: { toolCallId: chunk.toolCall.id },
-              });
-            }
-            toolCalls.push({
-              id: chunk.toolCall.id,
-              name: chunk.toolCall.name,
-              arguments: parsedArgs,
-            });
-          }
-          if (chunk.type === "done" && chunk.usage) {
-            // chat() вызывается ОДИН раз за итерацию — каждый `done` здесь
-            // относится к тому же логическому запросу (usage-only чанк +
-            // non-streaming fallback дают два done). ЗАМЕНЯЕМ running-суммы
-            // вместо аккумуляции, иначе один реальный запрос посчитается дважды.
-            tokenTracker.recordApiUsage(state, baseline, chunk.usage);
-            // Реальный prompt-usage — достоверный якорь калибровки оценки.
-            if (chunk.usage.promptTokens > 0) {
-              sawUsage = true;
-              contextManager.calibrate?.(
-                chunk.usage.promptTokens,
-                estimateAtSend,
-                messageCountAtSend,
-              );
-            }
-          }
-          if (chunk.type === "warning" && chunk.content) {
-            // Нефатальное уведомление провайдера (напр., ответ срезан cap'ом).
-            // Рендерим через текстовый стрим, чтобы легло после частичной строки,
-            // не ломая markdown; в контекст/историю ассистента НЕ добавляем.
-            logger.diagnostic("warn", `LLM warning: ${chunk.content}`);
-            onChunk?.(`\n\n> ⚠️ ${chunk.content}\n`);
-          }
-        }
-      } catch (err: any) {
-        if (this.shutdownRequested || err?.name === "AbortError") {
-          logger.diagnostic("info", "LLM call aborted (interrupt)");
-          break;
-        }
-        // Реактивная компакция: провайдер вернул context-length ошибку —
-        // один раз форсированно уплотняем и повторяем (circuit-breaker на ход).
-        if (
-          err instanceof LlmError &&
-          err.recoverable &&
-          err.kind === "context_length" &&
-          !state.reactiveCompactionUsed
-        ) {
-          state.reactiveCompactionUsed = true;
-          state.iterRecoverableLlmError = true;
-          const reactive = contextManager.compactAdaptive?.({
-            toolResultKeep: contextManager.getToolResultKeep?.() ?? 6,
-            minReduction: 0,
-          });
-          this.deps.logger.diagnostic(
-            "warn",
-            `Context-length error — reactive compaction (reduced ${reactive?.reducedBy ?? 0} tokens)`,
-          );
-          if (reactive) {
-            slog.logCompaction({
-              reason: "reactive (context-length)",
-              iteration: state.iteration,
-              ...reactive,
-            });
-          }
-          continue;
-        }
-        // Восстановимые ошибки LLM (например, токен-лимит на середине
-        // tool_call): отдаём локализованную причину обратно в контекст, чтобы
-        // модель адаптировалась (разбить запись на куски) вместо смерти всей
-        // сессии. Ограничено во избежание бесконечного цикла.
-        if (err instanceof LlmError && err.recoverable && state.llmErrorRetries < MAX_LLM_ERROR_RETRIES) {
-          state.iterRecoverableLlmError = true;
-          state.llmErrorRetries++;
-          logger.diagnostic(
-            "warn",
-            `Recoverable LLM error, feeding back (${state.llmErrorRetries}/${MAX_LLM_ERROR_RETRIES}): ${err.message}`,
-          );
-          slog.logError({
-            source: "core",
-            operation: "llm.call",
-            kind: "degraded",
-            recoverable: true,
-            cause: err.message,
-          });
-          pluginManager.runOnError({ iteration: state.iteration, logger, contextManager }, err);
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-summary>${err.message}</system-summary>`,
-          });
-          continue;
-        }
-        logger.logLLMResponse(
-          config.model,
-          textContent.length,
-          Date.now() - llmStart,
-          err.message,
-          "agent",
-        );
-        logger.error(`LLM call failed: ${err.message}`);
-        slog.logError({
-          source: "core",
-          operation: "llm.call",
-          kind: "failed",
-          cause: err.message,
-        });
-        pluginManager.runOnError({ iteration: state.iteration, logger, contextManager }, err);
-        return {
-          success: false,
-          text: state.lastText,
-          error: t("error.llm", { message: err.message }),
-          iterationCount: state.iteration,
-        };
-      } finally {
-        this.emitPhase(state.iteration, "done", onPhase);
-      }
-
-      // Провайдер не отдал usage — калибровка помечается stale (>1 вызова).
-      if (!sawUsage) contextManager.noteMissingUsage?.();
-
-      // Совокупная длина ответа — метрики токенов остаются валидными, даже
-      // когда бэкенд опускает `usage`.
-      tokenTracker.addCompletionChars(state, (textContent || reasoningContent).length);
-
-      logger.logLLMResponse(
-        config.model,
-        (textContent || reasoningContent).length,
-        Date.now() - llmStart,
-        undefined,
-        "agent",
-      );
-      state.totalLlmDuration += Date.now() - llmStart;
-
-      // Per-call лог usage + стоимость. llama.cpp в стриминге часто опускает
-      // `usage` — фолбэк на локальные оценки (контекст + chars/4) с пометкой
-      // источника: лог должен отличать реальные API-цифры от эвристики.
-      tokenTracker.logUsage(
-        state,
-        baseline,
-        textContent || reasoningContent,
-        contextManager.getEstimatedTokens(),
-        state.iteration,
-        Date.now() - llmStart,
         slog,
-      );
-
-      if (this.shutdownRequested) {
-        break;
-      }
-
-      // Сообщаем модели, что её аргументы тула были невалидным JSON: иначе она
-      // видит лишь «пустой» вызов и не знает, что нужно повторить корректно.
-      if (malformedToolArgs > 0) {
-        contextManager.addMessage({
-          role: "user",
-          content: `<system-summary>${malformedToolArgs} tool call(s) in your last response had invalid JSON arguments and were executed with empty parameters. Re-issue them with valid JSON.</system-summary>`,
-        });
-      }
-
-      let llmResponse: LLMResponse | null = null;
-      if (sawToolCall) {
-        llmResponse = { type: "tool_call", calls: toolCalls };
-      } else if (textContent) {
-        llmResponse = { type: "text", content: textContent };
-      } else if (reasoningContent) {
-        llmResponse = { type: "reasoning", content: reasoningContent };
-      }
-      pluginManager.runOnAfterThink({ iteration: state.iteration, logger, contextManager }, llmResponse);
-
-      // Аннотация вывода модели в context-log (reasoning/текст/tool_calls).
-      // НЕ входит в отправляемый контекст — пишется отдельным [OUTPUT]-блоком.
-      if (this.deps.contextLogger && (reasoningContent || textContent || toolCalls.length > 0)) {
-        try {
-          this.deps.contextLogger.recordOutput({
-            iteration: state.iteration,
-            ts: new Date().toISOString(),
-            reasoning: reasoningContent || undefined,
-            text: textContent || undefined,
-            toolCalls: toolCalls.map((tc) => ({ name: tc.name, arguments: tc.arguments })),
-          });
-        } catch {
-          // Логирование контекста не должно ронять агент.
-        }
-      }
-
-      // Детекция повторных одинаковых тулов (структурная, не по ключевым
-      // словам). Сигнал питает reasoning policy для понижения effort на рутине.
-      if (sawToolCall) {
-        const signature = toolCalls
-          .map((tc) => `${tc.name}:${JSON.stringify(tc.arguments)}`)
-          .join("|");
-        if (signature && signature === state.lastToolSignature) {
-          state.iterRepetitive = true;
-          // Nudge во ВСЕХ режимах: идентичный (тул,аргументы) повтор — пустая
-          // итерация (наблюдалось: qwen3.5-9b гонял ту же verify-команду подряд,
-          // когда ответ уже был в результате). Мутирующие в интерактиве —
-          // только nudge (контроль у пользователя); status-тулы, которым повтор
-          // прогресса не даст никогда, — жёсткий стоп после нескольких повторов.
-          logger.diagnostic(
-            "info",
-            `Repeated identical tool call detected (iteration ${state.iteration}) — nudging model to finish or change approach`,
-          );
-          contextManager.addMessage({
-            role: "user",
-            content: `<system-summary>You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.</system-summary>`,
-          });
-          state.repeatedToolCount++;
-          // Жёсткий стоп — только для status-тулов, которые не могут
-          // прогрессировать от повтора. Мутирующие/побочные тулы (например,
-          // bash) остаются nudge-only: пользователь мог явно попросить
-          // выполнить команду несколько раз, и обрыв дал бы пустой ответ.
-          const allStatusTools = toolCalls.every((tc) => LOOP_PRONE_STATUS_TOOLS.has(tc.name));
-          if (this.deps.exitOnComplete) {
-            if (state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS && allStatusTools) {
-              logger.debug("Exit-on-complete: repeated identical status tool call, stopping");
-              break;
-            }
-          } else if (
-            state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS_INTERACTIVE &&
-            allStatusTools
-          ) {
-            logger.diagnostic(
-              "warn",
-              `Repeated identical status tool ${state.repeatedToolCount}× (iteration ${state.iteration}) — stopping to avoid an infinite loop`,
-            );
-            break;
-          }
-        } else {
-          state.repeatedToolCount = 0;
-        }
-        state.lastToolSignature = signature;
-      }
+        input,
+        history,
+        allToolsForBudget: allToolsForBudget as ToolDefinition[],
+        tokenTracker,
+        reasoningResolver,
+        onChunk,
+        onMeta,
+        onReasoning,
+        onPhase,
+      });
+      if (llm.kind === "continue") continue;
+      if (llm.kind === "break") break;
+      if (llm.kind === "return") return llm.result;
+      const { textContent, reasoningContent, toolCalls, sawToolCall } = llm;
 
       const cycleNudges = sawToolCall ? accumulateToolTargets(state, toolCalls) : [];
 
