@@ -1,10 +1,11 @@
 # Handoff: переход на Architecture v2
 
-**Дата:** 2026-10-12 · **Ветка:** `docs/architecture-v2` · **База:** `master` (`65ba2f68`)
-**Состояние:** `bun test` 3710 pass / 0 fail · `bun run quality` exit 0
+**Дата:** 2026-10-13 · **Ветка:** `docs/architecture-v2` · **База:** `master` (`65ba2f68`)
+**Состояние:** `bun test` 3776 pass / 0 fail · `bun run quality` exit 0 · **14 коммитов не запушены**
 
 Документ для следующей сессии: что сделано, где остановились, что делать дальше.
-Правила работы — в [AGENTS.md](../../AGENTS.md) (переписаны, 8 пунктов).
+Открытые долги — единым реестром в [debt.md](../agents/debt.md) (правило 9).
+Правила работы — в [AGENTS.md](../../AGENTS.md) (9 пунктов).
 
 ---
 
@@ -212,29 +213,22 @@ W0 — если нужна дешёвая победа и разбор след�
    безопасный режим? Для `mma serve` (тенант) ответ, вероятно, другой, чем для REPL.
 3. **W1 — `ModuleHost` и раннеры.** Per-session раннеры делят модули с main-агентом
    (`session-runner-scope.ts`). Два инстанса `ModuleHost` или один с фасадом?
-4. **W2 — `bash`.** Он не может быть валидирован по `pathArgs` (команда, не путь).
-   Оставить `manual: { reason }` или закрыть через `command-validator` в enforcement?
+4. **W2 — `bash`.** **Решено:** `caps:[{proc:true}]` + `manual` (валидация строки — в
+   хендлере). `security.bash.enabled`/`security.network.enabled` — выключатели
+   *валидации*, не доступа; привязывать к ним тулы нельзя (см. W2-спеку).
 
 ---
 
-## 6. Долги, зафиксированные осознанно
+## 6. Долги
 
-- **`scripts/check-arch.ts` не существует.** Инварианты §1 спеки держатся на
-  дисциплине до W1. Перечень будущих проверок — §6 спеки.
-- **`.arch-allowlist.json` не создан.** Файлы >300 строк пока перечислены текстом
-  в AGENTS.md (правило 6): `agent.ts`, `repl.ts`, `line-editor.ts`,
-  `stuck-detector.ts`, `execution/module.ts`, `registry-extra.ts`,
-  `settings-api.ts`, `turns.ts`.
-- **`agent.ts` 1903 → ~1810 строк.** Остаётся в allowlist до W5.
-- **Live-прогон удаления MoE — сделан 2026-10-12** (§2). Гвард
-  `tests/no-moe-surface.test.ts` держит поверхность; параллельные сабагенты,
-  plan/criteria, гейты и enforcement подтверждены живым прогоном. Единственное,
-  что не гоняли end-to-end, — abort (покрыт юнит-тестами одиночного пути).
-- **16 удалённых тестовых файлов** проверяли второй путь. Часть сценариев
-  (abort, observability, criteria) не имела аналогов для одиночного пути —
-  при W0/W5 стоит проверить, что покрытие не просело: `git show --stat c3bc9d3e`.
-  Сертификация: три MoE-сценария заменены одним одиночным (`7.2-parallel-subagents`),
-  тег `moe` убран из `CertTag`/`TAGS`.
+Единый реестр — [docs/agents/debt.md](../agents/debt.md) (правило 9: долг платится один
+раз, у каждого — критерий выхода и триггер). Открыто там: `verify-error`, `arch-gate-a`,
+`arch-gate-d`, `check-arch-script`, `modules-to-moduledef`, `per-session-singletons`,
+`agent-module-breaking`.
+
+Историю удаления MoE см. в [feature-history.md](../agents/feature-history.md);
+live-прогон одиночного пути сделан 2026-10-12 (§2). Остальные текстовые долги
+из прежних версий этого раздела переехали в реестр.
 
 ## 7. Что НЕ делать
 
