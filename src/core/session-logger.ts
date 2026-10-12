@@ -463,7 +463,7 @@ export class SessionLogger {
   }
 
   /**
-   * Пишет событие плана MoE/обычного (создание, шаги, re-plan).
+   * Пишет событие плана (создание, шаги, re-plan).
    * @param event имя события; @param detail детали; @param iteration итерация.
    */
   logPlan(event: string, detail: string, iteration?: number): void {

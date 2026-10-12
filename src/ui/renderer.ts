@@ -336,7 +336,7 @@ export class Renderer {
     this.fmt.write(chunk);
   }
 
-  /** Произвольный статус/мета-текст (вывод тула, reasoning, статус MoE). */
+  /** Произвольный статус/мета-текст (вывод тула, reasoning). */
   meta(chunk: string): void {
     this.spinner.stop();
     if (this.thoughtStarted) {

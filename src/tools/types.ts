@@ -202,7 +202,7 @@ export interface ToolResult {
   blocked?: boolean;
   /** Абсолютный путь сохранённого артефакта (subagent result_mode:"file"). */
   artifactPath?: string;
-  /** Токены прогона субагента (атрибуция стоимости MoE по expert_tag). */
+  /** Токены прогона субагента (атрибуция стоимости по expert_tag). */
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
   /**
    * Структурированная ошибка: код, повторяемость, подсказка. Отдельное

@@ -133,7 +133,8 @@ export interface SessionLogEntry {
   probePassed?: boolean;
   /** Класс claim-retry (success | artifact | output | repetition | …). */
   kind?: string;
-  // Поля moe_*-событий (observability)
+  // Поля служебных событий (observability); subtaskId/expertTag/subtaskIds/
+  // usageByTag больше не пишутся, но читаются в старых session.jsonl.
   title?: string;
   subtaskId?: string;
   expertTag?: string;

@@ -101,19 +101,6 @@ export interface HallucinationResult {
   reason?: string;
 }
 
-/** Контекст сабтаска MoE: эксперт, теги тулов, файлы, зависимости. */
-export interface SubtaskContext {
-  expert_tag: string;
-  tool_tags: string[];
-  allowed_files: string[];
-  read_only_files: string[];
-  shared_context?: {
-    rules: string[];
-    refs: string[];
-  };
-  input_from?: string[];
-}
-
 /**
  * Сегментная разбивка контекста по частям (для полосы в UI/сайдбаре).
  * Инвариант: `system + tools + history === used` (system — часть сообщений),

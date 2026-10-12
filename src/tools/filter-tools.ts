@@ -2,8 +2,8 @@
 import type { ToolDefinition } from "./types";
 
 /**
- * Фильтрует тулы по набору тегов, всегда оставляя `alwaysOn`. Для MoE-роутинга
- * экспертов и subagent tool_tags — структурные тулы (plan/todo/verify,
+ * Фильтрует тулы по набору тегов, всегда оставляя `alwaysOn`. Для tool_tags
+ * эксперта и subagent — структурные тулы (plan/todo/verify,
  * project_map, lsp_check, enable_tools) переживают сужение.
  */
 export function filterToolsByTags(tools: ToolDefinition[], toolTags: string[]): ToolDefinition[] {

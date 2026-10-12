@@ -53,7 +53,6 @@ function makeFullCtx(recursionDepth: number) {
     autoPlan: false,
     showReasoning: false,
     session: { autoSave: false },
-    moe: { enabled: false },
     subagent: { resultMode: "text", maxSummaryChars: 2000, artifactsDir: ".mma/artifacts", stableSystemPrompt: true, maxParallelChunkQueries: 3 },
     ui: { showContextStats: false, showCompaction: false },
     security: { maxRecursionDepth: 3 },

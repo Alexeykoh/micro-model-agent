@@ -1,7 +1,7 @@
 // `GET /api/sessions/:id/log` — диагностический хвост `session.jsonl` для Trace.
 //
 // Чат-транскрипт (`history-api.ts`) сознательно дропает служебные типы
-// (usage/probe/compaction/audit/critic/moe/claim_retry/output) — а для разбора
+// (usage/probe/compaction/audit/critic/claim_retry/output) — а для разбора
 // полёта они и нужны. Этот роут отдаёт их сырьём (whitelist полей, скраб
 // секретов/ANSI), с фильтром `?types=a,b`, курсором `?since=<ts>` и капом
 // `?limit=N`. Trace докачивает инкремент на каждый `turn_end` и рисует строки

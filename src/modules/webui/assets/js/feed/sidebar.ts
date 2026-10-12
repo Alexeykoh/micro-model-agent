@@ -182,7 +182,7 @@ export function renderUsage(h: Dict): void {
   usageEl.appendChild(usageRow(t("web.usage.probe"), probeText, probeCls));
 }
 
-// Workspace path, MoE mode chip and agent version under the composer.
+// Workspace path and agent version under the composer.
 export function renderWorkspace(h: Dict): void {
   renderFooter(
     wsLine,

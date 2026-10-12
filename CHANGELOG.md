@@ -25,6 +25,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   Stale `moe.*`/`orchestrator.*` keys in an existing `config.json` are ignored on
   load, and old `moe_*` session entries still parse.
   Spec: `docs/specs/2026-10-12-remove-moe-design.md`.
+- **Residual MoE surface** (`chore/moe-closeout`): the removal above left the dead
+  `moeActive` host-state field, the unused `SubtaskContext` type, a `.ws-moe` footer
+  chip style, the `moe` certification tag with three stale scenarios that still set
+  the removed `moe.enabled` key, MoE leftovers in test fixtures, and ghost comments
+  in ~20 files. All cleaned up, and `tests/no-moe-surface.test.ts` now guards against
+  the surface creeping back.
 
 ### Added
 

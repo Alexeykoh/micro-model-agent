@@ -1,6 +1,6 @@
 // Единый билдер «управляемого» провайдера через ProviderManager: per-entry
-// contextWindow/retry/rateLimits + failover. Используется оркестратором MoE,
-// критиком и пер-экспертными провайдерами MoE (отдельная модель на эксперта).
+// contextWindow/retry/rateLimits + failover. Используется критиком и
+// пер-экспертными провайдерами (отдельная модель на эксперта).
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderConfig, RateLimitConfig, RetryConfig } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";

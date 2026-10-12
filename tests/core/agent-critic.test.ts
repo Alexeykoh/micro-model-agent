@@ -57,8 +57,6 @@ function createMockDeps(overrides: Partial<AgentDeps> = {}) {
       version: "2.0.0",
       model: "test-model",
       provider: { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
-      orchestrator: {},
-      moe: { enabled: false },
       critic: { enabled: true, maxCalls: 4, maxRepairCycles: 1, timeoutMs: 15000 },
       experts: {},
       contextWindow: 4096,

@@ -49,8 +49,6 @@ export interface HostStateInput {
   filesRevision?: number;
   /** Конкретная сессия; без неё — активная. */
   sessionId?: string;
-  /** Факт «этим ходом руководит MoE» для чипа режима. */
-  moeActive?: boolean;
   /** Доступный апдейт (текущая → свежая версия) для чипа в футере. */
   updateAvailable?: { current: string; latest: string };
   /**

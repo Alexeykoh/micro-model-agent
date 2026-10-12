@@ -349,7 +349,7 @@ es.addEventListener("turn_end", (e) => {
 });
 // Sidebar Trace: live per-session event log. Feed handlers stay untouched.
 // Tool/text/phase/plan/question/error stream live; status/log/retract/index
-// ride the same SSE bus; critic/MoE/compaction/probe/usage/audit/claim rows
+// ride the same SSE bus; critic/compaction/probe/usage/audit/claim rows
 // arrive via the session-log supplement Trace pulls on every turn_end.
 for (const ev of ["tool_start", "tool_end", "phase", "plan", "question", "meta", "log", "retract", "index"]) {
   es.addEventListener(ev, (e) => { const d = parse(e); if (d && sidebarOwns(d)) sidebarTraceEvent(ev, d); });

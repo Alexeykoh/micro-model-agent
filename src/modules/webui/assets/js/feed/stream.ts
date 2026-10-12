@@ -102,7 +102,7 @@ export function onReasoning(chunk: string, sid?: string): void {
   if (feed === activeFeed()) scroll();
 }
 
-// Generic agent status (context stats, compaction, MoE status, warnings):
+// Generic agent status (context stats, compaction, warnings):
 // always visible, one dim line per chunk, never collapsed. Tool bodies
 // (`kind: "tool"` — display/output/diff/failure-gist from ToolBatch) are
 // model-facing and hidden in quiet mode, mirroring the terminal renderer

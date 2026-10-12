@@ -93,8 +93,6 @@ function createMockDeps(chatImpl?: (...args: any[]) => AsyncGenerator<any>) {
         version: "2.0.0",
         model: "test-model",
         provider: { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
-        orchestrator: {},
-        moe: { enabled: false },
         experts: {},
         contextWindow: 4096,
         contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },

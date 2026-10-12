@@ -5,7 +5,7 @@
  * `{"error": {"message": "...", "type": "...", "param": "model"}}`, а Ollama —
  * `{"error": "строка"}`. `String(parsed.error)` на объекте даёт `[object Object]`:
  * реальная причина («Engine protocol startup was aborted») терялась, и в лог,
- * и в retry-классификацию (`transient-error.ts`), и в текст ошибки сабтаска MoE.
+ * и в retry-классификацию (`transient-error.ts`), и в текст ошибки сабтаска.
  */
 
 /** Максимальная длина приведённого текста ошибки (обрезается хвост). */

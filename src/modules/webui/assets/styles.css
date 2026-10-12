@@ -655,13 +655,9 @@ body.light .sel > button { border: 1px solid var(--border); }
 .ws-line .ws-k { color: var(--dim-b); margin-right: 6px; flex: none; }
 .ws-line .ws-v { color: var(--dim-a); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: anywhere; }
 .ws-line .ws-ver { color: var(--dim-b); margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
-.ws-line .ws-moe { color: var(--accent, var(--dim-b)); margin-left: auto; flex: none; font-weight: 600; letter-spacing: .02em; }
-.ws-line .ws-moe + .ws-ver { margin-left: 10px; }
 /* Available update chip — green, sits right before the installed version so
-   `↑ 2.37.0  mma 2.36.0` reads as "newer is available, this is what you run".
-   Without the MoE chip in the row the chip itself takes the auto margin. */
+   `↑ 2.37.0  mma 2.36.0` reads as "newer is available, this is what you run". */
 .ws-line .ws-upd { color: var(--green); margin-left: auto; flex: none; font-weight: 600; font-variant-numeric: tabular-nums; cursor: help; }
-.ws-line .ws-moe + .ws-upd { margin-left: 10px; }
 .ws-line .ws-upd + .ws-ver { margin-left: 10px; }
 
 /* slash-command autocomplete popup (above the composer) */

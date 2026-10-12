@@ -2,7 +2,7 @@
 //
 // The in-feed `.busy` line clears on the first `text` event; the rail lives
 // until the turn ends and shows only what we actually know: phase, elapsed,
-// plan progress when a plan exists (MoE), tool/event counters. Without a plan
+// plan progress when a plan exists, tool/event counters. Without a plan
 // the rail is an indeterminate scanner — no invented percentages.
 // Layouts: off | line (default) | meta | full — see docs/specs/2026-09-27-activity-rail-design.md.
 

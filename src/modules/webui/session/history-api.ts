@@ -102,7 +102,7 @@ function mapLogEntry(e: SessionLogEntry, sessionId?: string): HistoryEntry | nul
       // диагностика: в живом SSE-потоке их нет, а в истории после reload
       // они всплывали шумом поверх чата. Смотрятся в Trace (/api/.../log).
       // tool_defs / llm_usage / session_start / baseline_typecheck /
-      // reasoning_control / context_probe / output / compaction / audit / moe_*
+      // reasoning_control / context_probe / output / compaction / audit
       // в чат-транскрипте бесполезны.
       return null;
   }

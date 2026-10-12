@@ -1,4 +1,4 @@
-/** Тул изолированного субагента (свой контекст, скоуп, теги тулов, MoE-off). */
+/** Тул изолированного субагента (свой контекст, скоуп, теги тулов). */
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext, ToolScope } from "./types";
 import { Agent } from "../core/agent";
@@ -190,11 +190,11 @@ export const subagentTool: ToolDefinition = {
 
     // Сейв/рестор shared-скоупа исполнителя, чтобы субагент не мутировал скоуп
     // родителя навсегда. Текущий скоуп — из shared-исполнителя, не `ctx.scope`:
-    // MoE зовёт тул с ad-hoc контекстом без scope — снапшот `ctx.scope` ресторил
-    // бы "unrestricted" и сносил изоляцию всей волне.
+    // тул может быть вызван с ad-hoc контекстом без scope — снапшот `ctx.scope`
+    // ресторил бы "unrestricted" и сносил изоляцию параллельным сабагентам.
     const parentScope = executor?.getScope?.() ?? ctx.scope;
     const appliedScope = scope || { allowed_files: [], read_only_files: [] };
-    // Compare-and-restore: параллельная MoE-волна могла тем временем поставить
+    // Compare-and-restore: параллельный сабагент мог тем временем поставить
     // свой скоуп — чужого свежего владельца не затирать.
     const restoreScope = () => {
       if (ctx.toolExecutor?.getScope?.() === appliedScope) {
@@ -210,7 +210,7 @@ export const subagentTool: ToolDefinition = {
       const subPluginManager = new PluginManager();
       // Детерминированный трекинг scope-отказов: блокировки файловых тулов
       // ребёнка скоуп-гардом всплывают машиночитаемым блоком <scope-request>
-      // в результате (см. MoE executor / Router).
+      // в результате (см. ScopeDenialCollector).
       const scopeCollector = new ScopeDenialCollector();
       subPluginManager.register(scopeCollector.plugin, "builtin");
       const hallucinationDetector = new HallucinationDetector(ctx.baseDir, provider);
@@ -235,8 +235,8 @@ export const subagentTool: ToolDefinition = {
       };
 
       // Сабагент идёт тем же одиночным циклом, что и родитель: рекурсивный Agent
-      // с ограничением maxRecursionDepth. Отдельного «режима оркестрации» больше нет
-      // (MoE удалён), поэтому и гасить нечего — конфиг просто копируется.
+      // с ограничением maxRecursionDepth. Отдельного «режима оркестрации» нет,
+      // поэтому и гасить нечего — конфиг просто копируется.
       const subConfig = { ...ctx.config };
 
       const subDeps = {
@@ -300,7 +300,7 @@ export const subagentTool: ToolDefinition = {
               iterations: String(result.iterationCount),
               summary,
             }),
-            // Структурированный путь, чтобы вызывающие (MoE executor) не парсили
+            // Структурированный путь, чтобы вызывающие не парсили
             // локализованную строку `output`.
             artifactPath: abs,
             usage: pickUsage(),

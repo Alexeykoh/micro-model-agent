@@ -118,10 +118,14 @@
 | 6 | Публичные экспорты `OrchestratorClient`/`OrchestratorConfig` | `bun run typecheck` | ✅ |
 | 7 | Тесты: 16 MoE/оркестраторных файлов удалены, затронутые поправлены | `bun test` | ✅ |
 | 8 | `subagent.ts`: хак «top-level сабтаска гасит `moe.enabled`» убран | `tests/subagent*.test.ts` | ✅ |
-| 9 | Доки: AGENTS.md, feature-history, CHANGELOG | ревью | ⬜ |
+| 9 | Доки: AGENTS.md, feature-history, CHANGELOG | ревью | ✅ |
+| 10 | Зачистка остатков поверхности MoE: dead-поле `moeActive`, тип `SubtaskContext`, `.ws-moe` CSS, cert-тег `moe`, фикстуры тестов, призрачные комментарии; гвард `tests/no-moe-surface.test.ts` | `bun test`, `bun run quality` | ✅ (`chore/moe-closeout`) |
 
 Порядок не произвольный: шаги 2–6 оставляют код **компилируемым и зелёным** после
 каждого коммита, шаг 7 — последний, потому что падающие тесты видят весь срез правок.
+Шаг 10 добавлен после прожарки (grill-me): механизм MoE был снят в `c3bc9d3e`,
+но поверхность (типы/чипы/сертификация/комментарии) оставалась и могла вернуться
+незамеченной — теперь её держит гвард-тест (правило 5).
 
 ## 6. Что НЕ делаем
 

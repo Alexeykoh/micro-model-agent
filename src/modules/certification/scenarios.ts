@@ -1,4 +1,4 @@
-// Встроенные сценарии сертификации по тегам (core/security/image/сеть/браузер/MoE/...).
+// Встроенные сценарии сертификации по тегам (core/security/image/сеть/браузер/shell/research).
 import type { CertScenario } from "./types";
 
 /** Базовый security-конфиг: включает все security-подмодули. */
@@ -541,69 +541,19 @@ const SCENARIO_DEFS: ScenarioDef[] = [
     checks: [{ type: "exitCode", code: 0 }],
   },
 
-  // ─── MoE ─────────────────────────────────────────────────────────────
+  // ─── Subagent fan-out ────────────────────────────────────────────────
   {
-    id: "5.1-moe-basic",
-    title: "MoE routing and parallel execution",
-    tags: ["moe"],
+    id: "7.2-parallel-subagents",
+    title: "Two independent subagents deliver files in parallel",
+    tags: ["core"],
     mode: "run",
     prompt:
-      "Create two files in the working directory root (no subdirectories) in parallel: file-a.txt with content 'alpha' and file-b.txt with content 'beta'. Verify both exist.",
-    config: {
-      moe: { enabled: true },
-      experts: {
-        code: { model: "", tool_tags: ["file", "code"], max_attempts: 3 },
-      },
-    },
+      "Delegate two independent file creations, one per subagent, and run both subagent calls in the same batch (parallel): file-a.txt with content 'alpha' and file-b.txt with content 'beta'. Verify both files exist after the subagents complete.",
     checks: [
       { type: "fileExists", path: "file-a.txt" },
       { type: "fileExists", path: "file-b.txt" },
       { type: "fileContent", path: "file-a.txt", contains: "alpha" },
       { type: "fileContent", path: "file-b.txt", contains: "beta" },
-    ],
-  },
-  {
-    id: "5.2-moe-parallel-waves",
-    title: "MoE parallel waves with distinct deliverables",
-    tags: ["moe"],
-    mode: "run",
-    timeoutMs: 600_000,
-    prompt:
-      "Create three files in the working directory root (no subdirectories). These are independent tasks that must run in parallel: wave-one.txt containing 'w1-done', wave-two.txt containing 'w2-done', and wave-three.txt containing 'w3-done'. After all three exist, report completion.",
-    config: {
-      moe: { enabled: true },
-      experts: {
-        code: { model: "", tool_tags: ["file", "code"], max_attempts: 3 },
-      },
-    },
-    checks: [
-      { type: "fileExists", path: "wave-one.txt" },
-      { type: "fileExists", path: "wave-two.txt" },
-      { type: "fileExists", path: "wave-three.txt" },
-      { type: "fileContent", path: "wave-one.txt", contains: "w1-done" },
-      { type: "fileContent", path: "wave-two.txt", contains: "w2-done" },
-      { type: "fileContent", path: "wave-three.txt", contains: "w3-done" },
-    ],
-  },
-  {
-    id: "5.3-moe-read-after-write",
-    title: "MoE read-after-write via input_from dependency",
-    tags: ["moe"],
-    mode: "run",
-    timeoutMs: 600_000,
-    prompt:
-      "Two sequential steps. Step 1: create data.txt in the working directory root containing the exact token DATA_TOKEN_XYZ. Step 2 (depends on step 1 — it reads data.txt): create summary.txt in the working directory root that contains the exact token DATA_TOKEN_XYZ copied from data.txt. Step 2 must only run after data.txt exists.",
-    config: {
-      moe: { enabled: true },
-      experts: {
-        code: { model: "", tool_tags: ["file", "code"], max_attempts: 3 },
-      },
-    },
-    checks: [
-      { type: "fileExists", path: "data.txt" },
-      { type: "fileExists", path: "summary.txt" },
-      { type: "fileContent", path: "data.txt", contains: "DATA_TOKEN_XYZ" },
-      { type: "fileContent", path: "summary.txt", contains: "DATA_TOKEN_XYZ" },
     ],
   },
 

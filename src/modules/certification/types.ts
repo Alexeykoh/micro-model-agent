@@ -1,5 +1,5 @@
 // Типы сертификации моделей: сценарии, проверки, результаты и манифест.
-export type CertTag = "core" | "security" | "image" | "network" | "browser" | "moe" | "shell" | "research";
+export type CertTag = "core" | "security" | "image" | "network" | "browser" | "shell" | "research";
 
 /** Одна проверка песочницы после прогона сценария. */
 export type CertCheck =

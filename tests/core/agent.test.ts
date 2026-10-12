@@ -101,8 +101,6 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     version: "2.0.0",
     model: "test-model",
     provider: { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
-    orchestrator: {},
-    moe: { enabled: false },
     experts: {},
     contextWindow: 4096,
     contextBudget: {
@@ -1623,10 +1621,8 @@ describe("Agent", () => {
     expect(mockExecutor.getToolDefinitions).toHaveBeenCalledWith(undefined);
   });
 
-  it("delegates to single-agent loop when moe is disabled", async () => {
-    const deps = createMockDeps({
-      config: { ...createMockDeps().config, moe: { enabled: false } },
-    });
+  it("runs the single-agent loop", async () => {
+    const deps = createMockDeps();
     const agent = new Agent(deps as any);
     const result = await agent.run("hello");
     expect(result.text).toBe("Hello from mock LLM");

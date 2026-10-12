@@ -33,7 +33,7 @@ export interface StepVerificationResult {
   noFiles?: boolean;
 }
 
-/** Результат верификации MoE-манифеста: успех, ошибки, варнинги, детали. */
+/** Результат верификации манифеста: успех, ошибки, варнинги, детали. */
 export interface ManifestVerificationResult {
   success: boolean;
   errors: string[];
@@ -41,7 +41,7 @@ export interface ManifestVerificationResult {
   details: VerificationItem[];
 }
 
-/** Верификатор шагов и MoE-планов: файлы, синтаксис, скрипты, tsc, критерии. */
+/** Верификатор шагов плана: файлы, синтаксис, скрипты, tsc, критерии. */
 export class StepVerifier {
   private baseDir: string;
 

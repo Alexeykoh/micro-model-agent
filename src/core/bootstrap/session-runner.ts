@@ -10,7 +10,7 @@
  *
  * Прецедент изоляции — тул `subagent` (свой ContextManager/PluginManager/
  * HallucinationDetector поверх shared executor/provider); параллельные
- * MoE-волны уже гоняют тулы конкурентно через общий исполнитель.
+ * сабагенты уже гоняют тулы конкурентно через общий исполнитель.
  */
 import { join } from "path";
 import { Agent } from "../agent";

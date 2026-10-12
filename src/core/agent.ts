@@ -641,7 +641,7 @@ export class Agent {
   }
 
   /**
-   * Прогоняет ход агента: MoE-путь или одиночный цикл, с автонеймингом сессии.
+   * Прогоняет ход агента (одиночный цикл) с автонеймингом сессии.
    * @param input сообщение пользователя; @param onChunk/onMeta/onTool/onPhase/onReasoning колбэки вывода;
    * @returns итог прогона.
    */
@@ -655,8 +655,8 @@ export class Agent {
   ): Promise<AgentResult> {
     // Сброс флага shutdown от прошлого прерывания
     this.shutdownRequested = false;
-    // Свежий контроллер на ход — MoE-путь полагается на него для Esc
-    // (executeSingleAgentLoop пересоздаёт его же для одиночного пути).
+    // Свежий контроллер на ход — он держит Esc для всего прогона
+    // (executeSingleAgentLoop пересоздаёт его же на входе в цикл).
     this.abortController = new AbortController();
     this.setScope();
     // P5 автосужение: детерминированно пред-посеваем теги тулов из сырого
@@ -814,9 +814,8 @@ export class Agent {
       const interrupted =
         (err instanceof Error && err.name === "AbortError") || this.shutdownRequested;
       // `meta.updatedAt` двигает в основном appendMessage. Ход, который не
-      // добавил сообщений (оборванный MoE-ход: в session.jsonl последняя запись
-      // — `moe_subtask: start`), оставлял мету с временем старта — список
-      // сессий показывал «сессию, которой давно нет».
+      // добавил сообщений (оборван на входе, до первого ответа), оставлял мету
+      // с временем старта — список сессий показывал «сессию, которой давно нет».
       if (sessionManager) sessionManager.touch?.();
       pluginManager.runOnTurnEnd?.(
         {
@@ -835,10 +834,9 @@ export class Agent {
     };
 
     try {
-      // Единственный путь выполнения хода. Раньше здесь была ветка MoE-оркестратора,
-      // которая подменяла петлю целиком и обходила гейты (INV-22 в спеке
-      // architecture v2). Параллельные сабагенты остались доступны модели через
-      // `parallelizable` на туле subagent — они идут через тот же ToolExecutor.
+      // Единственный путь выполнения хода (INV-22 в спеке architecture v2):
+      // гейты нельзя обойти сменой пути. Параллельные сабагенты доступны модели
+      // через `parallelizable` на туле subagent — они идут через тот же ToolExecutor.
       const result = await this.executeSingleAgentLoop(
         input,
         slog,

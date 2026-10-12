@@ -1,6 +1,6 @@
-// Резолв ссылки на провайдера: `critic.provider` / `orchestrator.provider`
-// могут быть как полным объектом ProviderConfig, так и именем записи
-// `provider.entries[]` (лейбл или тип). Имя резолвится в запись, чтобы UI мог
+// Резолв ссылки на провайдера: `critic.provider` может быть как полным
+// объектом ProviderConfig, так и именем записи `provider.entries[]`
+// (лейбл или тип). Имя резолвится в запись, чтобы UI мог
 // показывать провайдера выпадающим списком, не дублируя baseUrl/apiKey.
 import type { AppConfig, ProviderConfig, ProviderEntry } from "../../config/types";
 

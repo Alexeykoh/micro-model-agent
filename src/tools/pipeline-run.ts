@@ -121,7 +121,7 @@ export const pipelineRunTool: ToolDefinition = {
     }
 
     // Свежий движок на вызов: module-level синглтон сбрасывался конкурентными
-    // вызовами (MoE-волны делят исполнитель) и портил состояние шагов.
+    // вызовами (параллельные сабагенты делят исполнитель) и портил состояние шагов.
     const engine = new PipelineEngine();
     executor?.setRecursionDepth?.(currentDepth + 1);
     try {

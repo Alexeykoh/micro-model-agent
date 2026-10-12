@@ -17,7 +17,8 @@ export interface CriticProviderDeps {
 }
 
 /**
- * Резолвит LLM для критика (Phase 2). Зеркалит OrchestratorClient:
+ * Резолвит LLM для критика (Phase 2). Зеркалит резолв пер-экспертного
+ * провайдера (`expert-provider.ts`):
  * управляемый провайдер строится через ProviderManager (per-entry
  * contextWindow/retry/rateLimits, failover) ТОЛЬКО если задан `critic.model`;
  * иначе критик делит активный провайдер (поведение v1). `critic.provider`

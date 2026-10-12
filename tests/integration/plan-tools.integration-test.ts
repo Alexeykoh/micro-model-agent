@@ -31,7 +31,6 @@ function makeConfig(overrides?: Partial<AppConfig>): AppConfig {
     version: "2.0.0",
     model: "test-model",
     provider: { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
-    orchestrator: {},
     contextWindow: 32768,
     contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
     maxToolIterations: 25,

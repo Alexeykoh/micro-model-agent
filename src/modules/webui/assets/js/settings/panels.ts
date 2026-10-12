@@ -57,7 +57,7 @@ export function descFor(key: string): string {
 }
 
 // Names of configured providers, for `select` editors on provider-reference
-// keys (`critic.provider`, `orchestrator.provider`). Prefers the `/api/providers`
+// keys (e.g. `critic.provider`). Prefers the `/api/providers`
 // view; falls back to the live config's `provider.entries`.
 function providerNameOptions(): string[] {
   const view: Dict = settings.providers || {};

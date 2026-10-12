@@ -29,7 +29,7 @@ function ctx(over: Dict = {}): Dict {
 }
 
 const modelDef = {
-  key: "orchestrator.model",
+  key: "critic.model",
   valueType: "string",
   editor: { kind: "select", optionsSource: "models" },
 };

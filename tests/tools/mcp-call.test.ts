@@ -7,8 +7,6 @@ const mockCtx = (): ToolContext => ({
     version: "2.0.0",
     model: "test",
     provider: { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
-    orchestrator: {},
-    moe: { enabled: false },
     experts: {},
     contextWindow: 4096,
     contextBudget: {
