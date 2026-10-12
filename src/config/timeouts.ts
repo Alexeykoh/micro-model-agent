@@ -53,6 +53,11 @@ export const MCP_DISCOVERY_TIMEOUT_MS = 5_000;
 /** Дефолтный таймаут MCP HTTP-запросов (коннект + вызовы тулов). */
 export const MCP_HTTP_TIMEOUT_MS = 10_000;
 
+/* ── module host ─────────────────────────────────────────────────────── */
+
+/** Дефолтный таймаут `ModuleDef.setup()` — единый владелец (INV-8). */
+export const MODULE_SETUP_TIMEOUT_MS = 10_000;
+
 /* ── lsp ─────────────────────────────────────────────────────────────── */
 
 /** Дефолтный таймаут LSP-запроса (был `DEFAULT_TIMEOUT` в client). */
