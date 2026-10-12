@@ -2,21 +2,14 @@
 import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
 import type { HallucinationDetector, HallucinationCheckResult } from "../../core/hallucination/detector";
-import { checkSuccessClaim } from "../../core/hallucination/success-claim";
-import type { ClaimContradiction } from "../../core/hallucination/success-claim";
-import {
-  checkArtifactClaims,
-  checkUnverifiedOutput,
-  type ArtifactState,
-} from "../../core/hallucination/artifact-claim";
-import { checkWebClaims } from "../../core/hallucination/web-claims";
-import { checkClaimedFileCreation } from "../../core/hallucination/file-creation-claim";
+import type { ArtifactState } from "../../core/hallucination/artifact-claim";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../core/context/manager";
 import type { SessionLogger } from "../session-logger";
-import { MAX_CLAIM_CHECK_RETRIES, MAX_HALLUCINATION_RETRIES } from "./constants";
+import { MAX_HALLUCINATION_RETRIES } from "./constants";
 import type { LoopState } from "./loop-state";
 import type { OnMeta } from "../types";
+import { checkClaims, retractDraft } from "./hallucination-claims";
 
 /** Вердикт вентиля: блокировать, предупредить, переспросить, выйти или принять. */
 export type HallucinationVerdict =
@@ -67,30 +60,6 @@ export interface HallucinationGateDeps {
  * Возвращает структурированный вердикт; решение о `break`/`continue`/`return`
  * принимает цикл. Вся мутация состояния живёт здесь — цикл остаётся тонким.
  */
-/**
- * Свежие выводы тулов для проверки заявлений: последние 10 сообщений
- * role:"tool" (текст урезан; чекер режет повторно). Тот же источник
- * getActiveHistory, что у вентиля критика.
- */
-function lastToolEvidence(deps: HallucinationGateDeps): Array<{ name?: string; ok?: boolean; text: string }> {
-  let history: Array<{ role: string; name?: string; content?: unknown; success?: boolean }>;
-  try {
-    history = deps.contextManager.getActiveHistory() ?? [];
-  } catch {
-    return [];
-  }
-  return history
-    .filter((m) => m.role === "tool")
-    .slice(-10)
-    .map((m) => ({
-      name: m.name,
-      ok: m.success,
-      text:
-        typeof m.content === "string" ? m.content : JSON.stringify(m.content) ?? "",
-    }))
-    .filter((m) => m.text.trim().length > 0);
-}
-
 export class HallucinationGate {
   constructor(private readonly detector: HallucinationDetector) {}
 
@@ -121,14 +90,14 @@ export class HallucinationGate {
 
     if (result.status === "retry") {
       // Черновик уже отстримлен — убираем до переответа (иначе дубль в ленте).
-      this.retractDraft(deps, result.kind ?? "retry", result.reason ?? "");
+      retractDraft(deps, result.kind ?? "retry", result.reason ?? "");
       return this.applyRetry(deps, textContent, result);
     }
 
     // Проверка заявлений (ses_muih0ah5): сильное заявление о готовности
     // («done», «published», «готово»), когда свежие результаты тулов — с ошибками.
     // Одна ограниченная перепроверка — затем fail-open (принять как есть), не блок.
-    const claimRetry = this.checkSuccessClaim(deps, textContent);
+    const claimRetry = checkClaims(deps, textContent);
     if (claimRetry) return claimRetry;
 
     return { action: "accept" };
@@ -188,134 +157,6 @@ export class HallucinationGate {
     deps.contextManager.addMessage({
       role: "user",
       content: `<system-summary>[Retry context: ${result.reason}. Original task: "${deps.input}". You must either call a needed tool or provide a substantive response. Empty replies are not allowed.]</system-summary>`,
-    });
-    return { action: "retry" };
-  }
-
-  /**
-   * Детерминированные проверки заявлений против улик (без LLM): исходная
-   * проверка success-claim плюс заземление артефактов (файл отсутствует/
-   * не парсится) и провенанс вывода (вывод подан как исполненный без
-   * исполняющего тула). У каждого класса свой ограниченный бюджет перепроверок
-   * (fail-open): съеденный бюджет одной проверки не должен экранировать другую
-   * ложь в том же ответе (наблюдалось: retry success-claim съел единый бюджет,
-   * и «output written to fizzbuzz_output.txt» прошёл при отсутствующем файле).
-   */
-  /**
-   * Детерминированные проверки заявлений финального ответа (без LLM): каждая —
-   * свой класс с отдельным bounded-бюджетом. Возвращает первый вердикт retry
-   * или null. Разнесено на таблицу классов, чтобы не держать всё в одном
-   * методе (сложность/читаемость).
-   */
-  private checkSuccessClaim(
-    deps: HallucinationGateDeps,
-    textContent: string | undefined,
-  ): HallucinationVerdict | null {
-    const { state } = deps;
-    const text = textContent ?? "";
-    const evidence = lastToolEvidence(deps);
-    const classes: Array<{
-      remaining: number;
-      bump: () => void;
-      detect: () => (ClaimContradiction & { path?: string }) | null;
-      reason: (c: ClaimContradiction & { path?: string }) => string;
-      log: string;
-      kind: string;
-    }> = [
-      {
-        remaining: MAX_CLAIM_CHECK_RETRIES - state.claimCheckRetries,
-        bump: () => state.claimCheckRetries++,
-        detect: () => checkSuccessClaim(text, evidence),
-        reason: (c) => t("hall.claim_contradiction", { tool: c.tool, snippet: c.snippet }),
-        log: "Success-claim contradiction",
-        kind: "success",
-      },
-      {
-        remaining: deps.artifacts?.length
-          ? MAX_CLAIM_CHECK_RETRIES - state.artifactClaimRetries
-          : 0,
-        bump: () => state.artifactClaimRetries++,
-        detect: () => checkArtifactClaims(text, deps.artifacts ?? []),
-        reason: (c) => t("hall.claim_artifact", { path: c.path ?? "", detail: c.snippet }),
-        log: "Artifact-claim contradiction",
-        kind: "artifact",
-      },
-      {
-        remaining: MAX_CLAIM_CHECK_RETRIES - state.outputClaimRetries,
-        bump: () => state.outputClaimRetries++,
-        detect: () => checkUnverifiedOutput(text, evidence),
-        reason: (c) => t("hall.claim_output_unverified", { detail: c.snippet }),
-        log: "Unverified output",
-        kind: "output",
-      },
-      {
-        remaining: MAX_CLAIM_CHECK_RETRIES - state.webClaimRetries,
-        bump: () => state.webClaimRetries++,
-        detect: () => checkWebClaims(text, evidence),
-        reason: (c) => t("hall.claim_web_unverified", { detail: c.snippet }),
-        log: "Unverified web figures",
-        kind: "web",
-      },
-      {
-        remaining: MAX_CLAIM_CHECK_RETRIES - state.fileCreationRetries,
-        bump: () => state.fileCreationRetries++,
-        detect: () => checkClaimedFileCreation(text, evidence, deps.input),
-        reason: (c) => t("hall.claim_file_not_created", { detail: c.snippet }),
-        log: "Claimed file creation without a write",
-        kind: "file",
-      },
-    ];
-    for (const cls of classes) {
-      if (cls.remaining <= 0) continue;
-      const contradiction = cls.detect();
-      if (!contradiction) continue;
-      cls.bump();
-      return this.retryClaim(
-        deps,
-        textContent,
-        cls.reason(contradiction),
-        `${cls.log}: ${contradiction.snippet}`,
-        cls.kind,
-      );
-    }
-    return null;
-  }
-
-  /**
-   * Отклонённый черновик уже отстримлен в ленту: уведомляем потребителей
-   * (`retract`), чтобы убрать его до переответа — иначе финал встанет дублем.
-   * Плюс пишем `claim_retry` в сессию (иначе llm_usage без assistant — дырка).
-   */
-  private retractDraft(deps: HallucinationGateDeps, kind: string, reason: string): void {
-    deps.onMeta?.(t("ui.draft_retracted"), "retract");
-    deps.slog?.logClaimRetry({ kind, reason, iteration: deps.state.iteration });
-  }
-
-  /**
-   * Общий инжект claim-повтора: фиксирует отклонённый ответ, дописывает
-   * причину как `<system-summary>` и просит цикл о следующем ходе.
-   */
-  private retryClaim(
-    deps: HallucinationGateDeps,
-    textContent: string | undefined,
-    reason: string,
-    logLine: string,
-    kind: string,
-  ): HallucinationVerdict {
-    const { state, logger } = deps;
-    state.iterHallucinationRetry = true;
-    // Переответ пересказывает выполненную задачу и естественно повторяется —
-    // бюджет халлюцинаций на его форму не жжём (та же логика, что даунгрейд
-    // в applyRetry после отклонения аудита).
-    state.suppressRepetitionRetry = true;
-    logger.diagnostic("warn", logLine);
-    this.retractDraft(deps, kind, reason);
-    if (textContent) {
-      deps.contextManager.addMessage({ role: "assistant", content: textContent });
-    }
-    deps.contextManager.addMessage({
-      role: "user",
-      content: `<system-summary>${reason} Original task: "${deps.input}".</system-summary>`,
     });
     return { action: "retry" };
   }
