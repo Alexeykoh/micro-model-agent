@@ -26,6 +26,7 @@ import {
 import { ensureSessionStart as phaseEnsureSessionStart } from "./agent/session-start";
 import { createLoopModules, type LoopSetupHost } from "./agent/loop-setup";
 import { buildLoopResult, type LoopResultHost } from "./agent/loop-result";
+import { runIterationPrologue, type IterationPrologueHost } from "./agent/iteration-prologue";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -47,15 +48,11 @@ import { createPolicyState } from "../modules/reasoning/policy";
 import type { PolicyState } from "../modules/reasoning/policy";
 import type { ReasoningLevel } from "../config/types";
 import type { ReasoningState } from "../tools/set-thinking";
-import { estimateTokens } from "../llm/token-counter";
 import { LlmError } from "../llm/llm-errors";
 import { clearIterationSignals, type LoopState } from "./agent/loop-state";
-import { filterDisabledTools } from "./agent/tool-visibility";
 import type { TokenTracker } from "./agent/token-tracker";
-import { buildPromptSnapshot, diffPrompt } from "./agent/prefix-monitor";
 import type { ContextLogger } from "./agent/context-log";
 import { recordArtifactWrite, testChurnFile } from "./agent/artifact-progress";
-import { repairToolCallPairing } from "./agent/tool-pairing";
 import { ContextRenderer } from "./agent/context-renderer";
 import { resolveArtifactStates } from "./agent/artifact-resolve";
 import { gatherTurnToolEvents } from "./agent/critic-gate";
@@ -427,6 +424,17 @@ export class Agent {
     };
   }
 
+  /** Общий вид хоста для пролога итерации (INV-23). */
+  private iterationPrologueHost(): IterationPrologueHost {
+    return {
+      deps: this.deps,
+      buildSystemPrompt: () => this.buildSystemPrompt(),
+      logContextStat: (kind, iteration, slog, blocks) =>
+        this.logContextStat(kind, iteration, slog, blocks),
+      refreshSystemPrompt: () => this.refreshSystemPrompt(),
+    };
+  }
+
   private emitPhase(
     iteration: number,
     phase: AgentPhase,
@@ -634,7 +642,6 @@ export class Agent {
     const {
       config,
       llmProvider,
-      toolExecutor,
       pluginManager,
       contextManager,
       hallucinationDetector,
@@ -654,109 +661,16 @@ export class Agent {
       criticGate,
     } = createLoopModules(this.loopSetupHost(), slog);
 
-    // Определения тулов учитываем в бюджете контекста (идут через body.tools, не messages).
-    // Пересчитываем каждую итерацию, чтобы `enable_tools` (мутит общий
-    // activeToolTags) мог растить видимый модели набор прямо в прогоне.
-    // Привязка к итерации держит оценку бюджета и boundedOutput в синхроне
-    // с реально отправляемым.
-    let allToolsForBudget = filterDisabledTools(
-      toolExecutor.getToolDefinitions(this.deps.toolTags),
-      state.disabledTools,
-    );
-    let boundedToolNames = new Set(
-      allToolsForBudget.filter((t) => t.boundedOutput).map((t) => t.name),
-    );
-    let toolTokenEstimate = allToolsForBudget.reduce(
-      (sum, t) => sum + estimateTokens(t.description + JSON.stringify(t.parameters)),
-      0,
-    );
-    contextManager.setToolTokens(toolTokenEstimate);
-
     while (state.iteration < config.maxToolIterations && !this.shutdownRequested) {
       state.iteration++;
       this._currentIteration = state.iteration;
       contextManager.noteIteration();
 
-      // Перечитываем мутабельный набор тегов — вдруг вызывали enable_tools.
-      // Отключённые за ход тулы (те, что всегда падают) исключаются из видимого набора.
-      allToolsForBudget = filterDisabledTools(
-        toolExecutor.getToolDefinitions(this.deps.toolTags),
-        state.disabledTools,
+      // Пролог итерации: тулы/бюджет, компакция, история, монитор префикса (INV-23).
+      const { allToolsForBudget, boundedToolNames, history } = runIterationPrologue(
+        this.iterationPrologueHost(),
+        { state, slog, input, onMeta, compactionService },
       );
-      boundedToolNames = new Set(
-        allToolsForBudget.filter((t) => t.boundedOutput).map((t) => t.name),
-      );
-      toolTokenEstimate = allToolsForBudget.reduce(
-        (sum, t) => sum + estimateTokens(t.description + JSON.stringify(t.parameters)),
-        0,
-      );
-      contextManager.setToolTokens(toolTokenEstimate);
-
-      pluginManager.runOnBeforeThink({
-        iteration: state.iteration,
-        logger,
-        lastUserMessage: input,
-        contextManager,
-        onMeta,
-        sessionLog: {
-          plan: (event: string, detail: string, iter?: number) => slog.logPlan(event, detail, iter),
-        },
-      });
-
-      // Единая точка компакции: интервал → качество (с cooldown) → переполнение.
-      compactionService.compactIfNeeded(state);
-
-      this.refreshSystemPrompt();
-      // Позиционная нормализация истории перед отправкой: вклинившийся user
-      // (step-gate/auto-advance плана) или осиротевший tool ломает контракт
-      // OpenAI и даёт 400 у строгих провайдеров. Новые прогоны порядок не
-      // портят (pendingMessages), проход лечит уже испорченные resume-истории.
-      const history = repairToolCallPairing(contextManager.getActiveHistory());
-
-      // Монитор стабильности префикса: считаем до запроса, пишем в llm_usage
-      // после. Char-оценка (chars/4) достаточна — важна динамика ratio и
-      // причина расхождения, а не абсолютная точность токенов.
-      const promptSnapshot = buildPromptSnapshot(history, allToolsForBudget);
-      state.prefixDelta = diffPrompt(state.prevPrompt, promptSnapshot, estimateTokens);
-      state.prevPrompt = promptSnapshot;
-
-      // Opt-in git-style context log: snapshot отправляемого контекста.
-      if (this.deps.contextLogger) {
-        try {
-          this.deps.contextLogger.record(history, allToolsForBudget, {
-            iteration: state.iteration,
-            ts: new Date().toISOString(),
-            systemTokens: estimateTokens(promptSnapshot.system),
-            toolTokens: estimateTokens(promptSnapshot.tools),
-            historyTokens: estimateTokens(promptSnapshot.history),
-            totalTokens: contextManager.getEstimatedTokens(),
-            contextWindow: config.contextWindow,
-          });
-        } catch {
-          // Логирование контекста не должно ронять агент.
-        }
-      }
-      if (
-        state.prefixDelta.cause === "system" ||
-        state.prefixDelta.cause === "tools" ||
-        state.prefixDelta.cause === "history" ||
-        state.prefixDelta.cause === "volatile"
-      ) {
-        state.lastPrefixBreak = state.prefixDelta;
-      }
-
-      slog.logToolDefs(
-        allToolsForBudget.length,
-        allToolsForBudget.map((t) => t.name),
-        state.iteration,
-      );
-
-      if (state.iteration === 1) {
-        const { blocks } = this.buildSystemPrompt();
-        this.logContextStat("start", state.iteration, slog, blocks);
-      } else {
-        this.logContextStat("iteration", state.iteration, slog);
-      }
 
       let textContent = "";
       let reasoningContent = "";

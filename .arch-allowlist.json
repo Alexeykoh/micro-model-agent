@@ -3,7 +3,7 @@
   "files": {
     "src/cli/repl.ts": 1501,
     "src/cli/repl-commands.ts": 1412,
-    "src/core/agent.ts": 1390,
+    "src/core/agent.ts": 1304,
     "src/ui/line-editor.ts": 1160,
     "src/modules/execution/module.ts": 1145,
     "src/core/context/manager.ts": 1129,
