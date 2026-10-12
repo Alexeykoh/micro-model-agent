@@ -1,8 +1,15 @@
 /** Агент: одиночный цикл хода (INIT→…→OUTPUT), бюджеты, гейты. */
 import type { LLMProvider, ContentPart } from "../llm/provider";
-import { ProviderManager, activeProviderEndpoint, reasoningStrategyForProvider } from "../modules/providers/manager";
-import { buildActiveProvider } from "../modules/providers/factory";
 import type { ToolExecutor } from "../tools/executor";
+import {
+  getProviderFor as phaseGetProviderFor,
+  listProviders as phaseListProviders,
+  probeIdentityOf,
+  reconfigure as phaseReconfigure,
+  setProvider as phaseSetProvider,
+  type ProbeIdentity,
+  type ProviderPhaseHost,
+} from "./agent/provider-phase";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -165,24 +172,6 @@ export interface AgentDeps {
    * обслужившего провайдера.
    */
   getProviderName?: () => string;
-}
-
-/**
- * Идентичность модели/бэкенда, против которой гонялась context-probe (снимок
- * значений — см. `Agent.lastProbeIdentity`).
- */
-interface ProbeIdentity {
-  model: string;
-  baseUrl: string;
-  active?: string;
-}
-
-function probeIdentityOf(config: AppConfig): ProbeIdentity {
-  return {
-    model: config.model,
-    baseUrl: activeProviderEndpoint(config.provider).baseUrl,
-    active: config.provider?.active,
-  };
 }
 
 /**
@@ -1689,139 +1678,29 @@ export class Agent {
   }
 
   /**
-   * Применяет новый конфиг живьём: provider-first проба контекста, пересборка
-   * провайдера, ресайз бюджетов, обновление стоимости.
-   * @param config новый конфиг приложения.
+   * Применяет новый конфиг живьём (фаза провайдера): context-probe, пересборка
+   * провайдера, ресайз бюджетов, стоимость. Реализация — `agent/provider-phase.ts`.
    */
   async reconfigure(config: AppConfig): Promise<void> {
-    await this.reprobeActiveProvider(config);
-    const built = buildActiveProvider(config, this.deps.logger, {
-      getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
-    });
-    const newProvider = built.provider;
-    this.deps.llmProvider = newProvider;
-    this.deps.getProviderName = () => built.manager.activeName;
-    this.deps.toolExecutor.updateProvider(newProvider);
-    const { TokenCounter } = await import("../llm/token-counter");
-    const newTokenCounter = new TokenCounter(config.model);
-    this.deps.contextManager.resize(config.contextWindow, config.contextBudget, newTokenCounter);
-    this.deps.config = config;
-    if (this.deps.configRef) this.deps.configRef.current = config;
-    this.costTracker.setModel(config.model);
-    this.applyReasoningStrategy(config.provider);
-    // Мета сессии должна отражать РЕАЛЬНОЕ окно/модель, а не снимок на create()
-    // (иначе topbar/session show показывают стартовое значение после смены
-    // провайдера/модели — наблюдалось: meta 262144 при фактических 32768).
-    this.deps.sessionManager?.setEffectiveContext?.(config.contextWindow, config.model);
+    await phaseReconfigure(this as unknown as ProviderPhaseHost, config);
   }
 
   /**
-   * Provider-first проба контекста активной записи при смене идентичности
-   * (модель/baseUrl/active). Общая для `reconfigure` и `setProvider`: без неё
-   * hot-swap мимо `reconfigure` оставлял бюджеты на старом окне. Fail-open.
-   * При `contextAuto: false` (ручной выбор) проба пропускается целиком.
-   */
-  private async reprobeActiveProvider(config: AppConfig): Promise<void> {
-    try {
-      const nextId = probeIdentityOf(config);
-      const prevId = this.lastProbeIdentity;
-      const identityChanged =
-        prevId.model !== nextId.model ||
-        prevId.baseUrl !== nextId.baseUrl ||
-        prevId.active !== nextId.active;
-      if (!identityChanged) return;
-      // Ручной режим (`contextAuto: false`): окно закреплено юзером, пробу не
-      // гоняем вообще — смена модели не должна молча перетирать выбор.
-      if (config.contextAuto === false) {
-        this.lastProbeIdentity = nextId;
-        return;
-      }
-      const nextEndpoint = activeProviderEndpoint(config.provider);
-      const { probeModel, probeProviderContext } = await import("../llm/model-loader");
-      const lmProbe = await probeModel(nextEndpoint.baseUrl, config.model);
-      const detected =
-        (lmProbe ? { model: lmProbe.model, actual: lmProbe.contextLength } : null) ??
-        (await probeProviderContext(nextEndpoint.baseUrl, config.model, {
-          apiKey: nextEndpoint.apiKey,
-          providerType: nextEndpoint.type,
-        }));
-      if (detected && detected.actual !== config.contextWindow) {
-        this.deps.logger?.info(
-          `Context probe: auto-set contextWindow from provider — model "${detected.model}" serves ${detected.actual} tokens (configured was ${config.contextWindow}).`,
-        );
-        config.contextWindow = detected.actual;
-      }
-      this.lastProbeIdentity = nextId;
-    } catch {
-      // Проба — best-effort, переключение модели/провайдера не блокируем никогда.
-    }
-  }
-
-  /**
-   * Пересчитывает стратегию reasoning из АКТИВНОЙ записи провайдера. Без этого
-   * `/provider use` и смена модели оставляли старую стратегию (prompt-tag против
-   * openai-effort) на весь сеанс. При "none" гасит probe-флаг, чтобы auto-режим
-   * не полагался на устаревшую пробу.
-   * @param provider конфиг провайдера (entries/active).
-   */
-  private applyReasoningStrategy(provider: AppConfig["provider"]): void {
-    const strategy = reasoningStrategyForProvider(provider);
-    this.deps.reasoningStrategy = strategy;
-    if (strategy === "none") this.probePassed = false;
-  }
-
-  /**
-   * Переключает активного провайдера (и модель опционально).
-   * Делегирует в `reconfigure`, чтобы hot-swap шёл тем же путём, что и смена
-   * через `/provider use`/`/config`: re-probe контекста активной записи и
-   * resize бюджетов (иначе окно оставалось стартовым — наблюдалось в сессии).
-   * @param name имя записи провайдера; @param model новая модель.
+   * Переключает активного провайдера (и модель) тем же путём, что `/config`:
+   * re-probe контекста и resize бюджетов. Реализация — `agent/provider-phase.ts`.
    */
   async setProvider(name: string, model?: string): Promise<void> {
-    const { manager } = buildActiveProvider(this.deps.config, this.deps.logger, {
-      getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
-    });
-    manager.switch(name, model);
-    this.deps.config.provider = manager.toConfig();
-    if (model !== undefined) this.deps.config.model = model;
-    await this.reconfigure(this.deps.config);
+    await phaseSetProvider(this as unknown as ProviderPhaseHost, name, model);
   }
 
-  /**
-   * Список записей провайдеров с флагом активности.
-   * @returns записи с label и active.
-   */
+  /** Список записей провайдеров с флагом активности. */
   listProviders(): Array<ProviderEntry & { label: string; active: boolean }> {
-    const manager = new ProviderManager(this.deps.config.provider, {
-      contextWindow: this.deps.config.contextWindow,
-      retry: this.deps.config.retry,
-      rateLimits: this.deps.config.security?.rateLimits,
-      getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
-    });
-    const activeName = this.deps.config.provider.active;
-    return manager.list().map((e) => ({
-      ...e,
-      active: e.label === activeName || e.type === activeName,
-    }));
+    return phaseListProviders(this as unknown as ProviderPhaseHost);
   }
 
-  /** Строит (или берёт кэшированный) провайдер именованной записи — health-чеки, роутинг. */
+  /** Строит провайдер именованной записи (health-чеки, роутинг); null при ошибке. */
   getProviderFor(name: string): import("../llm/provider").LLMProvider | undefined {
-    try {
-      const manager = new ProviderManager(this.deps.config.provider, {
-        contextWindow: this.deps.config.contextWindow,
-        retry: this.deps.config.retry,
-        rateLimits: this.deps.config.security?.rateLimits,
-        getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
-        logger: this.deps.logger,
-      });
-      manager.setModel(this.deps.config.model);
-      manager.switch(name);
-      return manager.active;
-    } catch (err) {
-      this.deps.logger.warn(t("error.provider_build", { name, error: errMsg(err) }));
-      return undefined;
-    }
+    return phaseGetProviderFor(this as unknown as ProviderPhaseHost, name);
   }
 
   /**
