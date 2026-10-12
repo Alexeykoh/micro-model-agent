@@ -24,6 +24,7 @@ import {
   type TurnOutputHost,
 } from "./agent/turn-output";
 import { ensureSessionStart as phaseEnsureSessionStart } from "./agent/session-start";
+import { createLoopModules, type LoopSetupHost } from "./agent/loop-setup";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { ContextManager, Message } from "../core/context/manager";
 import type { HallucinationDetector } from "../core/hallucination/detector";
@@ -47,27 +48,19 @@ import type { ReasoningLevel } from "../config/types";
 import type { ReasoningState } from "../tools/set-thinking";
 import { estimateTokens } from "../llm/token-counter";
 import { LlmError } from "../llm/llm-errors";
-import { createLoopState, clearIterationSignals, type LoopState } from "./agent/loop-state";
+import { clearIterationSignals, type LoopState } from "./agent/loop-state";
 import { filterDisabledTools } from "./agent/tool-visibility";
-import { CompactionService } from "./agent/compaction";
-import { TokenTracker } from "./agent/token-tracker";
+import type { TokenTracker } from "./agent/token-tracker";
 import { buildPromptSnapshot, diffPrompt } from "./agent/prefix-monitor";
 import type { ContextLogger } from "./agent/context-log";
 import { recordArtifactWrite, testChurnFile } from "./agent/artifact-progress";
-import { ReasoningEffortResolver } from "./agent/reasoning-resolver";
 import { repairToolCallPairing } from "./agent/tool-pairing";
 import { ContextRenderer } from "./agent/context-renderer";
-import { ToolBatchExecutor } from "./agent/tool-batch";
-import { HallucinationGate } from "./agent/hallucination-gate";
 import { resolveArtifactStates } from "./agent/artifact-resolve";
-import { AuditGate } from "./agent/audit-gate";
-import { CriticGate, gatherTurnToolEvents } from "./agent/critic-gate";
+import { gatherTurnToolEvents } from "./agent/critic-gate";
 import { computeCacheStats } from "./agent/cache-stats";
 import { seedToolTags } from "../tools/auto-tags";
-import { CriticClient } from "../modules/critic/client";
-import { buildCriticProvider } from "../modules/critic/provider";
-import { CRITIC_READONLY_TOOLS } from "../modules/critic/tools";
-import { buildEvidencePack, isWorkMutation } from "../modules/critic/evidence";
+import { isWorkMutation } from "../modules/critic/evidence";
 import {
   deriveSessionName,
   generateSessionTitle,
@@ -413,6 +406,18 @@ export class Agent {
     };
   }
 
+  /** Общий вид хоста для настройки модулей петли (INV-23). */
+  private loopSetupHost(): LoopSetupHost {
+    return {
+      deps: this.deps,
+      costTracker: this.costTracker,
+      getAbortSignal: () => this.abortController?.signal,
+      isShutdownRequested: () => this.shutdownRequested,
+      setScope: () => this.setScope(),
+      callerProvenance: () => this.callerProvenance(),
+    };
+  }
+
   private emitPhase(
     iteration: number,
     phase: AgentPhase,
@@ -628,97 +633,17 @@ export class Agent {
     } = this.deps;
 
     this.abortController = new AbortController();
-    // Единый контейнер состояния цикла — заменяет ~24 разрозненных `let`.
-    const state = createLoopState();
-    // Маркер начала захода для критика: события тулов прошлых вопросов
-    // (прошлых run'ов) в evidence-пакеты этого захода не входят. Штамп seq
-    // монотонный и переживает компакцию посреди хода. Fallback на длину —
-    // для неполных контекст-моков (легаси-совместимость).
-    state.criticHistoryMark =
-      typeof contextManager.beginTurn === "function"
-        ? contextManager.beginTurn()
-        : contextManager.getActiveHistory().length;
-
-    // Модули цикла: каждый инкапсулирует одну ответственность и получает
-    // зависимости через конструктор (никаких глобальных синглтонов).
-    const compactionService = new CompactionService({
-      contextManager,
-      logger,
-      slog,
-      hallucinationDetector,
-    });
-    const tokenTracker = new TokenTracker(this.costTracker, () => this.callerProvenance());
-    const reasoningResolver = new ReasoningEffortResolver();
-    const toolBatch = new ToolBatchExecutor({
-      config,
-      toolExecutor,
-      pluginManager,
-      contextManager,
-      hallucinationDetector,
+    // Модули цикла (состояние + сервисы) — единый контейнер (INV-23).
+    const {
+      state,
       compactionService,
-      logger,
-      memoryStore: this.deps.memoryStore,
-      costTracker: this.costTracker,
-      planSummary: this.deps.planSummary,
-      getAbortSignal: () => this.abortController?.signal,
-      isShutdownRequested: () => this.shutdownRequested,
-      setScope: () => this.setScope(),
-    });
-    const hallucinationGate = new HallucinationGate(hallucinationDetector);
-    const auditGate = new AuditGate(this.deps.finalAudit);
-    // Защита: частичные/легаси конфиги (тесты, старый config.json) могут не иметь
-    // домена `critic` — считаем выключенным, а не роняем цикл.
-    const criticConfig = {
-      enabled: config.critic?.enabled ?? false,
-      tools: config.critic?.tools ?? true,
-      maxCalls: config.critic?.maxCalls ?? 4,
-      maxRepairCycles: config.critic?.maxRepairCycles ?? 1,
-      timeoutMs: config.critic?.timeoutMs ?? 60000,
-      maxTokens: config.critic?.maxTokens ?? 2048,
-    };
-    // Phase 2: выделенные провайдер/модель, если настроены, иначе активный
-    // провайдер (v1). Битый оверрайд — warn + фолбэк, никогда не молча.
-    const criticProvider = buildCriticProvider(config.critic, config, this.deps.llmProvider, {
-      logger,
-      getSessionId: () => this.deps.sessionManager?.getActiveMeta()?.id,
-    });
-    const criticClient = new CriticClient({
-      provider: criticProvider,
-      timeoutMs: criticConfig.timeoutMs,
-      maxTokens: criticConfig.maxTokens,
-      // Деградация критика fail-open по контракту, но обязана быть видна в
-      // verbose-логе: иначе «молча сказал ок» при поломке читается как успех.
-      onDiagnostic: (m) => logger.diagnostic("warn", m),
-    });
-    const criticGate = new CriticGate({
-      enabled: criticConfig.enabled,
-      maxCalls: criticConfig.maxCalls,
-      maxRepairCycles: criticConfig.maxRepairCycles,
-      verify: this.deps.criticOverride?.verify ?? ((pack, signal) =>
-        criticClient.verify(pack, signal, {
-          // Phase 2 read-only цикл: проверки бегут последовательно здесь (гейт
-          // await'ится между пакетами тулов), через общий executor с read-only
-          // allowlist — записи/shell недостижимы.
-          runCheck: criticConfig.tools && this.deps.toolCtx
-            ? async (tool, args) => {
-                const res = await toolExecutor.executeByName(tool, args, {
-                  ...this.deps.toolCtx!,
-                  toolAllowlist: [...CRITIC_READONLY_TOOLS],
-                });
-                return { ok: res.success, output: res.output ?? "" };
-              }
-            : undefined,
-        })),
-      buildPack: (d) =>
-        buildEvidencePack({
-          task: d.task,
-          planSummary: d.planSummary,
-          toolEvents: d.toolEvents,
-          baseDir: this.deps.baseDir,
-          answerText: d.answerText,
-        }),
-      signal: this.abortController?.signal,
-    });
+      tokenTracker,
+      reasoningResolver,
+      toolBatch,
+      hallucinationGate,
+      auditGate,
+      criticGate,
+    } = createLoopModules(this.loopSetupHost(), slog);
 
     // Определения тулов учитываем в бюджете контекста (идут через body.tools, не messages).
     // Пересчитываем каждую итерацию, чтобы `enable_tools` (мутит общий

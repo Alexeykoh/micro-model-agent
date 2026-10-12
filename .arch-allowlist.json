@@ -1,8 +1,8 @@
 {
   "note": "Files over the 300-line rule (AGENTS rule 6). Ceilings may only shrink; remove an entry when the file drops to <=300. Guarded by tests/arch/file-size.test.ts.",
   "files": {
-    "src/core/agent.ts": 1516,
     "src/cli/repl.ts": 1501,
+    "src/core/agent.ts": 1441,
     "src/cli/repl-commands.ts": 1412,
     "src/ui/line-editor.ts": 1160,
     "src/modules/execution/module.ts": 1145,
