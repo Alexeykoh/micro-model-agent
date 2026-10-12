@@ -26,7 +26,14 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 | 64K           | 6K           | 10K           | 48K           |
 | 128K          | 13K          | 19K           | 96K           |
 
-### Agent-Level MoE (moe.enabled)
+### Agent-Level MoE (moe.enabled) — REMOVED 2026-10-12
+
+> **Этот раздел — история.** MoE удалён целиком в `c3bc9d3e`
+> ([спека](../specs/2026-10-12-remove-moe-design.md)): он подменял одиночную петлю и
+> обходил гейты. Ниже — как он был устроен, для истории.
+> Живые аналоги: `parallelizable` на `subagent` + `ToolExecutor.fork()`
+> (параллельные сабагенты), `config.experts` + `subagent { expert_tag }`
+> (пер-экспертная модель), `StepVerifier.verifyStep` (проверка шага).
 
 Путь: `runWithMoE` (`src/core/agent-moe.ts`) → OrchestratorClient (план) → MoEExecutor → StepVerifier → verifyAndMerge.
 

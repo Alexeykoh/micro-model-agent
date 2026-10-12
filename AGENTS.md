@@ -282,6 +282,7 @@ critic → audit) стоят внутри. MoE удалён 2026-10-12 — он 
 | [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) | **Целевая архитектура, инварианты INV-1…23, план миграции** |
 | [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | Схемы boot/ход/enforcement/наблюдаемость/конфиг + матрица контрактов |
 | [remove-moe](./docs/specs/2026-10-12-remove-moe-design.md) | Удаление MoE: что снято, что осталось, порядок шагов |
+| [handoff](./docs/plans/2026-10-12-architecture-v2-handoff.md) | **Точка входа для следующей сессии**: статус, W0, открытые решения |
 | [architecture.md](./docs/agents/architecture.md) | Текущее состояние: Output, Host-seam, Security, контракт `LLMProvider` |
 | [code-style.md](./docs/agents/code-style.md) | Форматирование, типы, async/error, именование, i18n |
 | [tools.md](./docs/agents/tools.md) | Question/Browser, изображения, сужение набора, процессы |

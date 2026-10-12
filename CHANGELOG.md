@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Removed
+
+- **Agent-level MoE (mixture of experts)** (`src/core/agent-moe.ts`,
+  `src/modules/execution/moe-executor.ts`, `src/llm/orchestrator.ts`,
+  `plan-validator.ts`, `input-from.ts`, `expert-model-check.ts`,
+  `moe-parallelism.ts`): a second execution harness that replaced the single-loop
+  path wholesale and bypassed `HallucinationGate` / `CriticGate` / `AuditGate` /
+  `finalizeWithoutTools`. It shipped default-off, and its value (parallel expert
+  sub-agents) is already delivered by `parallelizable` subagents through the same
+  `ToolExecutor`. Removing it makes the run path single, so a loop guard cannot be
+  bypassed. Also removed: the `moe.*` and `orchestrator.*` config keys, the
+  `moe_plan`/`moe_subtask`/`moe_replan`/`moe_verify` session-log events, the web
+  MoE chip and `moeActive` snapshot field, the MoE settings panel (the `experts`
+  roster stays, now under "Experts"), and the public `OrchestratorClient` /
+  `OrchestratorConfig` exports. Machine-readable step checks keep working through
+  `StepVerifier`; per-tag expert models keep working through `subagent.expert_tag`.
+  Stale `moe.*`/`orchestrator.*` keys in an existing `config.json` are ignored on
+  load, and old `moe_*` session entries still parse.
+  Spec: `docs/specs/2026-10-12-remove-moe-design.md`.
+
 ### Added
 
 - **Architecture v2 spec** (`docs/specs/2026-10-12-architecture-v2-design.md`):

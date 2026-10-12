@@ -1,6 +1,6 @@
 # Удаление MoE: один путь исполнения
 
-**Дата:** 2026-10-12 · **Ветка:** `docs/architecture-v2` (в рамках architecture v2) · **Статус:** выполняется
+**Дата:** 2026-10-12 · **Ветка:** `docs/architecture-v2` (в рамках architecture v2) · **Статус:** выполнено (`c3bc9d3e`)
 **Связано:** [architecture v2](./2026-10-12-architecture-v2-design.md) §1 (INV-22),
 §3.8, §5 (волна W5) · [схемы](./2026-10-12-architecture-v2-schematics.md) §3 ·
 [аудит модулей](../analysis/2026-10-12-harness-module-audit.md) §5.1–5.7, 5.14
@@ -111,14 +111,14 @@
 | # | Шаг | Что проверяется | Статус |
 |---|---|---|---|
 | 1 | Удалить 7 файлов; вычистить `agent.ts` (ветка MoE, `AgentDeps.runWithMoEOverride`, `onMoEState`, `setMoEStateListener`) и `AgentResult.moeHandled` | `bun test` | ✅ |
-| 2 | Конфиг: убрать `moe.*`/`orchestrator.*` из `types.ts`, `defaults.ts`, `registry-extra.ts`, `domains.ts`; заменить фолбэк в `providers/managed.ts` | `tests/config*.test.ts` | ⬜ |
-| 3 | Типы/лог: убрать MoE-типы из `execution/types.ts`, `SessionLogger.logMoE`, `moe_*` из `session/store.ts` и `webui/session/log-api.ts` | `tests/session-logger.test.ts`, `tests/webui-log.test.ts` | ⬜ |
-| 4 | Веб: `footer.ts` (чип MoE), `sidebar.ts`, `state.ts` (`moeSessions`, `activeMoe`), `host-state.ts` (`moeActive`), `webui/module.ts` (слушатель), `sessions-api.ts`, секция `agent.moe` в `settings/controls.ts`, строки trace | `tests/webui-*.test.ts` | ⬜ |
-| 5 | i18n: удалить ключи `moe.*` и `web.settings.sec.agent.moe*` из `en.json`/`ru.json` симметрично | `tests/i18n.test.ts` | ⬜ |
-| 6 | Публичные экспорты: `OrchestratorClient`/`OrchestratorConfig` из `src/index.ts` и `src/llm/index.ts` | `bun run typecheck` | ⬜ |
-| 7 | Тесты: удалить ~14 MoE/оркестраторных файлов, поправить затронутые (`config-agent-keys`, `session-logger`, `webui-workspace-footer`, `webui-usage`, `subagent`, `agent-critic`, …) | `bun test` | ⬜ |
-| 8 | `subagent.ts`: убрать хак «top-level сабтаска гасит `moe.enabled»» | `tests/subagent*.test.ts` | ⬜ |
-| 9 | Доки: AGENTS.md (§Архитектура/Петля/Ловушки), `docs/agents/execution.md`, `feature-history.md`, CHANGELOG `### Removed` | ревью | ⬜ |
+| 2 | Конфиг: убрать `moe.*`/`orchestrator.*` из `types.ts`, `defaults.ts`, `registry-extra.ts`, `domains.ts` | `tests/config*.test.ts` | ✅ |
+| 3 | Типы/лог: убрать MoE-типы из `execution/types.ts`, `SessionLogger.logMoE`, `moe_*` из `session/store.ts` и `webui/session/log-api.ts` | `tests/session-logger.test.ts`, `tests/webui-log.test.ts` | ✅ |
+| 4 | Веб: `footer.ts`, `sidebar.ts`, `state.ts`, `host-state.ts`, `webui/module.ts`, `sessions-api.ts`, секция `agent.moe`, строки trace | `tests/webui-*.test.ts` | ✅ |
+| 5 | i18n: удалить `moe.*` / `web.settings.sec.agent.moe*` симметрично | `tests/i18n.test.ts` | ✅ |
+| 6 | Публичные экспорты `OrchestratorClient`/`OrchestratorConfig` | `bun run typecheck` | ✅ |
+| 7 | Тесты: 16 MoE/оркестраторных файлов удалены, затронутые поправлены | `bun test` | ✅ |
+| 8 | `subagent.ts`: хак «top-level сабтаска гасит `moe.enabled`» убран | `tests/subagent*.test.ts` | ✅ |
+| 9 | Доки: AGENTS.md, feature-history, CHANGELOG | ревью | ⬜ |
 
 Порядок не произвольный: шаги 2–6 оставляют код **компилируемым и зелёным** после
 каждого коммита, шаг 7 — последний, потому что падающие тесты видят весь срез правок.
