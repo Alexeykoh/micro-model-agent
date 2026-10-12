@@ -11,12 +11,12 @@ import { Auditor, findExistingFile } from "./auditor";
 import { PlanStore } from "./plan-store";
 import { getMessageText } from "../../llm/provider";
 import type { ContentPart } from "../../llm/provider";
-import type { Plan, StepKind } from "./planner";
+import type { Plan } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import type { NetworkSecurityConfig } from "../../config/types";
 import { performWebSearch, type SearchResult } from "../../tools/web-search";
 import { createPlanToolDefinitions } from "./plan-tool";
-import { isValidCheck } from "./plan-checks";
+import { parseKinds, parseChecks } from "./plan-parse";
 import {
   createExecutionPlugin,
   STUCK_RECOVERY_COOLDOWN,
@@ -517,8 +517,8 @@ export class ExecutionModule implements AgentModule {
       hasStepDeliverables: (s) => this.hasStepDeliverables(s),
       missingStepDeliverables: (s) => this.missingStepDeliverables(s),
       stillExistingDeliverables: (s) => this.stillExistingDeliverables(s),
-      parseKinds: (a, st) => this.parseKinds(a, st),
-      parseChecks: (a, st) => this.parseChecks(a, st),
+      parseKinds: (a, st) => parseKinds(a, st),
+      parseChecks: (a, st) => parseChecks(a, st),
       getTaskText: (c) => this.getTaskText(c),
       noActivePlanMessage: () => this.noActivePlanMessage(),
       typecheckFailures: this.state.typecheckFailures,
@@ -647,88 +647,6 @@ export class ExecutionModule implements AgentModule {
     return extractFileLikeTokens(stripUrls(step.description)).length > 0;
   }
 
-  /**
-   * Валидирует опциональный пер-шаговый аргумент `kinds` для create плана и
-   * update-с-шагами. Возвращает выровненные по длине kinds или i18n-строку
-   * ошибки. Нет kinds → null (вызывающий фолбэчится на all-create). Общий для
-   * ОБЕИХ веток: перестройка через update не дропает kinds молча.
-   */
-  private parseKinds(
-    args: Record<string, unknown>,
-    steps: string[],
-  ): { kinds: StepKind[] | null; error: string | null } {
-    if (args.kinds === undefined) return { kinds: null, error: null };
-    if (!Array.isArray(args.kinds)) {
-      return { kinds: null, error: t("plan.kinds_not_array") };
-    }
-    const kindsRaw = args.kinds.map(String);
-    if (kindsRaw.length !== steps.length) {
-      return { kinds: null, error: t("plan.kinds_mismatch") };
-    }
-    const invalid = kindsRaw.filter((k) => k !== "create" && k !== "delete");
-    if (invalid.length > 0) {
-      return {
-        kinds: null,
-        error: t("plan.kinds_invalid", {
-          kinds: invalid.join(", "),
-        }),
-      };
-    }
-    return { kinds: kindsRaw as StepKind[], error: null };
-  }
-
-  /**
-   * Валидирует пер-шаговый аргумент `checks` для create / re-plan плана.
-   * Checks НЕОБЯЗАТЕЛЬНЫ: если массив не передан, харнесс проставляет
-   * self-certified `manual:<краткая формулировка шага>`. Если длина не совпала —
-   * авто-ремонт (паддинг/обрезка), а не отказ: меньше, чем число шагов,
-   * добивается `manual:`, лишние отбрасываются. Отдельно валидируются
-   * префиксы: file-exists: / command: / manual: (см. plan-checks.ts).
-   */
-  private parseChecks(
-    args: Record<string, unknown>,
-    steps: string[],
-  ): { checks: string[] | null; error: string | null } {
-    if (args.checks === undefined) {
-      // Необязательный контракт: self-certified manual-фолбэк, без hard-гейта.
-      return {
-        checks: steps.map((s) => `manual:${s.trim().slice(0, 60)}`),
-        error: null,
-      };
-    }
-    if (!Array.isArray(args.checks)) {
-      return { checks: null, error: t("plan.checks_not_array") };
-    }
-    const raw = args.checks.map(String);
-    if (raw.length !== steps.length) {
-      // Авто-ремонт вместо отказа: паддинг self-certified `manual:` для шагов
-      // без проверки и обрезка лишних. Отказ на мисматче заставлял слабую
-      // модель бросить планирование целиком (ses_muwinhpk_2e69iq: два
-      // отклонённых create → плана нет). Переданные контракты всё равно
-      // валидируются по префиксу.
-      const repaired = steps.map((s, i) => raw[i] ?? `manual:${s.trim().slice(0, 60)}`);
-      const bad = repaired.filter((c) => !isValidCheck(c));
-      if (bad.length > 0) {
-        return {
-          checks: null,
-          error: t("plan.checks_invalid", {
-            kinds: bad.slice(0, 3).join("; "),
-          }),
-        };
-      }
-      return { checks: repaired, error: null };
-    }
-    const bad = raw.filter((c) => !isValidCheck(c));
-    if (bad.length > 0) {
-      return {
-        checks: null,
-        error: t("plan.checks_invalid", {
-          kinds: bad.slice(0, 3).join("; "),
-        }),
-      };
-    }
-    return { checks: raw.map((c) => c.trim()), error: null };
-  }
 
   /**
    * Модельно-видимое actionable-сообщение «нет активного плана». Содержит
