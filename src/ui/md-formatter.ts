@@ -4,40 +4,7 @@ import stringWidth from "string-width";
 import { t } from "../i18n/index";
 import { formatTable, getTerminalWidth } from "./table";
 import { glyph } from "./theme";
-
-const KW =
-  /\b(import|export|from|const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|class|extends|implements|interface|type|enum|namespace|module|declare|abstract|async|await|yield|throw|try|catch|finally|typeof|instanceof|in|of|as|is|keyof|readonly|static|private|public|protected|get|set|constructor|this|super|void|never|any|unknown|boolean|string|number|symbol|object|true|false|null|undefined|default)\b/g;
-const STRING = /('[^']*'|"[^"]*"|`[^`]*`)/g;
-const COMMENT = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*)/g;
-const NUMBER = /\b(\d+\.?\d*)\b/g;
-const TAG = /<\/?([A-Z][a-zA-Z0-9]*|[a-z][a-zA-Z0-9-]*)/g;
-const ATTR = /\b([a-zA-Z-]+=)"([^"]*)"/g;
-
-function highlight(code: string, lang: string): string {
-  if (lang === "html" || lang === "xml" || lang === "svg") {
-    code = code.replace(COMMENT, (m) => pc.dim(pc.green(m)));
-    code = code.replace(ATTR, (_m, attr, val) => `${pc.yellow(attr)}=${pc.green(`"${val}"`)}`);
-    code = code.replace(TAG, (_m, tag) => `<${pc.cyan(tag)}`);
-  } else if (lang === "css" || lang === "scss" || lang === "less") {
-    code = code.replace(COMMENT, (m) => pc.dim(pc.green(m)));
-    code = code.replace(STRING, (m) => pc.green(m));
-    code = code.replace(NUMBER, (m) => pc.yellow(m));
-  } else if (lang === "bash" || lang === "sh" || lang === "shell" || lang === "zsh") {
-    code = code.replace(COMMENT, (m) => pc.dim(pc.green(m)));
-    code = code.replace(STRING, (m) => pc.green(m));
-  } else if (lang === "json") {
-    code = code.replace(STRING, (m) => pc.green(m));
-    code = code.replace(NUMBER, (m) => pc.yellow(m));
-  } else {
-    // js, ts, jsx, tsx, and fallback
-    code = code.replace(COMMENT, (m) => pc.dim(pc.green(m)));
-    code = code.replace(STRING, (m) => pc.green(m));
-    code = code.replace(KW, (m) => pc.magenta(m));
-    code = code.replace(NUMBER, (m) => pc.yellow(m));
-  }
-
-  return code;
-}
+import { highlight, formatInline } from "./md-inline";
 
 function isTableRow(line: string): boolean {
   const trimmed = line.trim();
@@ -263,7 +230,7 @@ export class FormattingStream {
     const heading = result.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
       const level = heading[1].length;
-      const content = this.formatInline(heading[2]);
+      const content = formatInline(heading[2]);
       if (level === 1) return pc.cyan(pc.bold(pc.underline(content)));
       return pc.cyan(pc.bold(content));
     }
@@ -276,50 +243,27 @@ export class FormattingStream {
     if (quote) {
       const depth = Math.min(quote[1].length, 4);
       const marker = pc.dim("▍".repeat(depth));
-      return `${marker} ${this.formatInline(quote[2])}`;
+      return `${marker} ${formatInline(quote[2])}`;
     }
 
     const checkbox = result.match(/^[-*]\s+\[([ xX])\]\s+(.+)$/);
     if (checkbox) {
       const checked = checkbox[1].toLowerCase() === "x";
       const mark = checked ? pc.green("✓") : pc.dim("☐");
-      return `  ${mark} ${this.formatInline(checkbox[2])}`;
+      return `  ${mark} ${formatInline(checkbox[2])}`;
     }
 
     const ordered = result.match(/^(\d+)[.)]\s+(.+)$/);
     if (ordered) {
-      return ` ${pc.yellow(ordered[1])}. ${this.formatInline(ordered[2])}`;
+      return ` ${pc.yellow(ordered[1])}. ${formatInline(ordered[2])}`;
     }
 
     const bullet = result.match(/^[-*]\s+(.+)$/);
     if (bullet) {
-      return ` ${pc.dim("•")} ${this.formatInline(bullet[1])}`;
+      return ` ${pc.dim("•")} ${formatInline(bullet[1])}`;
     }
 
-    return this.formatInline(result);
-  }
-
-  private formatInline(text: string): string {
-    const codeSpans: string[] = [];
-    let result = text.replace(/`([^`]+)`/g, (_m, c) => {
-      codeSpans.push(pc.yellow(c));
-      return `\u0000${codeSpans.length - 1}\u0000`;
-    });
-
-    // `***text***` (bold+italic) до одиночных `**`/`*`, иначе вложенность
-    // рвётся и во вложении остаётся висящая звёздочка.
-    result = result.replace(/\*\*\*(.+?)\*\*\*/g, (_, s) => pc.bold(pc.italic(s)));
-    result = result.replace(/\*\*(.+?)\*\*/g, (_, s) => pc.bold(s));
-    result = result.replace(/~~(.+?)~~/g, (_, s) => pc.strikethrough(s));
-    result = result.replace(/\*([^*]+)\*/g, (_, s) => pc.italic(s));
-    result = result.replace(/(^|\s)_([^_\n]+)_(?=\s|$)/g, (_m, pre, s) => pre + pc.italic(s));
-    result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-      const short = url.length > 80 ? `${url.slice(0, 77)}…` : url;
-      return `${pc.cyan(label)} ${pc.dim(`(${short})`)}`;
-    });
-
-    result = result.replace(/\u0000(\d+)\u0000/g, (_m, i) => codeSpans[Number(i)]);
-    return result;
+    return formatInline(result);
   }
 }
 

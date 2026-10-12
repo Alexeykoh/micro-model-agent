@@ -61,7 +61,6 @@
     "src/modules/webui/settings/providers-api.ts": 358,
     "src/cli/completer.ts": 351,
     "src/modules/service/openapi/operations.ts": 348,
-    "src/ui/md-formatter.ts": 348,
     "src/modules/webui/server.ts": 314,
     "src/modules/security/path-validator.ts": 305
   }
