@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Architecture gate: module boundaries (INV-3/INV-4)** (`tests/arch/module-boundaries.test.ts`):
+  a module may not import the agent loop or its helpers (`src/core/agent*`) — until the
+  public `core/api` facade lands (W4) the 16 known dependencies are an explicit allowlist
+  that can only shrink — and may not call another module's `tool.handler` directly
+  (currently clean, enforced with an empty allowlist). Realizes the "an invariant is a
+  check, not text" rule for the module↔core contract.
+- **ModuleHost lifecycle contract (INV-2/5/7/8)** (`src/core/module-host.ts`): the module's
+  declared contract with the core — `requires` ordering, a single setup-timeout owner,
+  the `critical` policy (critical setup failure aborts boot; others degrade), reverse-order
+  `dispose()`, a health summary, and one place that collects each module's tools, prompt
+  blocks and hooks. Spec: `docs/specs/2026-10-13-w1-module-host-design.md`.
+
 - **Fail-open signals in the session log (INV-15)** (`src/core/session-logger.ts`,
   `docs/agents/observability.md`): critic and tool failures that used to surface only
   as a transient diagnostic now leave distinct `session.jsonl` records — `critic_error`

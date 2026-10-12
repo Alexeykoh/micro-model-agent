@@ -122,11 +122,14 @@ Session-специфичные тулы раннера регистрируют�
 
 | # | Проверка | Инвариант | Стартовое состояние |
 |---|---|---|---|
-| A | `ToolRegistry.register` вызывается только из `ModuleHost` | INV-2 | 6 call-site: `tools/index.ts:142`, `modules-phase.ts:184`, `agent-phase.ts:192`, `session-runner-scope.ts:49,51`, `session-runner.ts:424` (+ `attachToolRegistry`) |
-| B1 | модуль не импортирует агент-петлю (`core/agent` / тип `Agent`) | INV-3/4 | 2: `service/state.ts:9`, `webui/module.ts:11` (allowlist) |
-| B2 | модуль не импортирует `core/agent/*`-утилиты напрямую | INV-3 | 14 файлов (`context-log`, `canonical-args`, `tool-output`, `context-calibration`) — общие утилиты вынести в нейтральное место (W4) или allowlist |
-| C | модуль не вызывает чужой `tool.handler` напрямую | INV-4 | allowlist |
-| D | файл >300 строк — только из `.arch-allowlist.json` | правило 6 | файла нет — создать |
+| A | `ToolRegistry.register` вызывается только из `ModuleHost` | INV-2 | 6 call-site: `tools/index.ts:142`, `modules-phase.ts:184`, `agent-phase.ts:192`, `session-runner-scope.ts:49,51`, `session-runner.ts:424` (+ `attachToolRegistry`) — **отложено** до миграции (W1.6) |
+| B1 | модуль не импортирует агент-петлю (`from ".../core/agent"`) | INV-3/4 | 4: `service/state.ts`, `webui/module.ts`, `webui/session/run-agent.ts`, `webui/settings/model-cache.ts` (allowlist) |
+| B2 | модуль не импортирует `core/agent/*`-утилиты напрямую | INV-3 | 12 файлов (`context-log`, `canonical-args`, `tool-output`, `context-calibration`) + B1 = 16 всего; вынести утилиты в нейтральное место (W4) |
+| C | модуль не вызывает чужой `tool.handler` напрямую | INV-4 | 0 — гейт строгий (пустой allowlist) |
+| D | файл >300 строк — только из `.arch-allowlist.json` | правило 6 | **отложено**: 58 файлов >300 строк — фиксировать массово сейчас значило бы закрепить bloat |
+
+**Реализовано в W1.4 (первая версия):** `tests/arch/module-boundaries.test.ts` — B1/B2/C.
+**A и D** — отдельными шагами: A после W1.6 (миграция тулов), D — когда начнём реально резать файлы (W5).
 
 Формат — как у существующих гвардов (`tests/output/no-direct-console.test.ts`):
 чистый сканер + allowlist + падающий фикстур-тест. Размещение: `scripts/`
