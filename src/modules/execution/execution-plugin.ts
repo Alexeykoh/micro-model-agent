@@ -7,7 +7,7 @@ import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
 import { detectTestResults } from "../../tools/bash";
 import { forbiddenWindowsCommand } from "./windows-commands";
-import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
+import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { toForwardSlash } from "../../tools/path-utils";
 import { platform } from "os";
 import { switchStepToDelete } from "./plan-steps";

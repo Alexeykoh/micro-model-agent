@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   checkClaimedFileCreation,
   taskExpectsFile,
-} from "../src/modules/hallucination/file-creation-claim";
+} from "../src/core/hallucination/file-creation-claim";
 
 const TASK = "собери информацию в md файл с ценами";
 

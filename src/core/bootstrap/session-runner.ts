@@ -19,12 +19,12 @@ import type { AppConfig, ReasoningStrategy, ModelCapabilities } from "../../conf
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderManager } from "../../modules/providers/manager";
-import { ContextManager } from "../../modules/context/manager";
+import { ContextManager } from "../../core/context/manager";
 import { TokenCounter } from "../../llm/token-counter";
 import type { SessionManager } from "../../modules/session/index";
 import { SessionModule } from "../../modules/session/module";
 import { ExecutionModule } from "../../modules/execution/module";
-import { HallucinationDetector } from "../../modules/hallucination/detector";
+import { HallucinationDetector } from "../../core/hallucination/detector";
 import type { ToolExecutor } from "../../tools/executor";
 import type { ToolRegistry } from "../../tools/registry";
 import type { PluginManager } from "../../modules/plugins/manager";

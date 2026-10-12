@@ -16,7 +16,7 @@
  * веб/foreground-пути: недостающие результаты закрываются стабом
  * `[Result unavailable]`, осиротевшие `tool`-сообщения отбрасываются.
  */
-import type { Message } from "../../modules/context/manager";
+import type { Message } from "../../core/context/manager";
 
 /** Заглушка результата для незавершённого вызова. */
 export const UNRESOLVED_TOOL_RESULT = "[Result unavailable]";

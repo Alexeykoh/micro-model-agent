@@ -13,8 +13,8 @@
 
 import { readFileSync, statSync } from "node:fs";
 import { extname, isAbsolute, relative, resolve } from "node:path";
-import { extractFileLikeTokens } from "../../modules/hallucination/js-identifiers";
-import type { ArtifactState } from "../../modules/hallucination/artifact-claim";
+import { extractFileLikeTokens } from "../../core/hallucination/js-identifiers";
+import type { ArtifactState } from "../../core/hallucination/artifact-claim";
 import { checkXmlWellFormed } from "../../tools/syntax-validator";
 import { findExistingFile } from "../../modules/execution/auditor";
 

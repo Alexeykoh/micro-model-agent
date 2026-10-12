@@ -1,6 +1,6 @@
 // Политика компакции v2: прогресс, cooldown, no-op, safety-clamp, реактивность.
 import { describe, it, expect } from "vitest";
-import { ContextManager } from "../src/modules/context/manager";
+import { ContextManager } from "../src/core/context/manager";
 import { CompactionService, computeMinReduction } from "../src/core/agent/compaction";
 import { createLoopState } from "../src/core/agent/loop-state";
 import { classifyProviderError } from "../src/llm/openai-compat";

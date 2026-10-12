@@ -12,7 +12,7 @@ import { PlanStore } from "./plan-store";
 import { getMessageText } from "../../llm/provider";
 import type { ContentPart } from "../../llm/provider";
 import type { Plan, StepKind } from "./planner";
-import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
+import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { toForwardSlash } from "../../tools/path-utils";
 import { existsSync, readFileSync, statSync } from "fs";
 import { resolve } from "path";

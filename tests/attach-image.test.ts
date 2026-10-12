@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, } from "vitest";
 import { attachImageTool } from "../src/tools/attach-image";
-import { ContextManager } from "../src/modules/context/manager";
+import { ContextManager } from "../src/core/context/manager";
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs";
 import { join } from "path";
 import type { ToolContext } from "../src/tools/types";

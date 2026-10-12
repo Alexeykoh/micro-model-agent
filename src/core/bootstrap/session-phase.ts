@@ -12,10 +12,10 @@
  * конфига) и сам `toolCtx` возвращаются наружу следующим фазам.
  */
 import { join } from "path";
-import { ContextManager } from "../../modules/context/manager";
+import { ContextManager } from "../../core/context/manager";
 import { TokenCounter } from "../../llm/token-counter";
 import { ToolExecutor } from "../../tools/executor";
-import { HallucinationDetector } from "../../modules/hallucination/detector";
+import { HallucinationDetector } from "../../core/hallucination/detector";
 import { SessionStore, SessionManager } from "../../modules/session/index";
 import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
 import { resolveModelCapabilities } from "../../modules/providers/capabilities";

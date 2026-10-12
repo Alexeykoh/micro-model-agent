@@ -5,7 +5,7 @@ import { spawn } from "child_process";
 import { t } from "../../i18n/index";
 import type { StepKind } from "./planner";
 import { findProjectRoot, resolveTscCommand } from "../lsp/project-root";
-import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
+import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { findExistingFile } from "./auditor";
 import { findTypecheckRoot } from "./audit-runners";
 import { killTree } from "../processes/kill-tree";

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, } from "vitest";
-import { ContextManager } from "../src/modules/context/manager";
+import { ContextManager } from "../src/core/context/manager";
 import type { ContentPart } from "../src/llm/provider";
 
 describe("ContextManager — multimodal content", () => {

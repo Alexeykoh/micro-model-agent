@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { HallucinationDetector } from "../src/modules/hallucination/detector";
+import { HallucinationDetector } from "../src/core/hallucination/detector";
 
 describe("HallucinationDetector", () => {
   it("should pass on normal response", async () => {

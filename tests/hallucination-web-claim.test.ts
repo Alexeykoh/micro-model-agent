@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractAmountClaims, checkWebClaims } from "../src/modules/hallucination/web-claims";
+import { extractAmountClaims, checkWebClaims } from "../src/core/hallucination/web-claims";
 import { buildEvidencePack } from "../src/modules/critic/evidence";
 
 describe("extractAmountClaims", () => {

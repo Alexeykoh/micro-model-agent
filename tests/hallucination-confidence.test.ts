@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ConfidenceCheck } from "../src/modules/hallucination/confidence";
+import { ConfidenceCheck } from "../src/core/hallucination/confidence";
 
 describe("ConfidenceCheck", () => {
   it("should retry on empty response", () => {

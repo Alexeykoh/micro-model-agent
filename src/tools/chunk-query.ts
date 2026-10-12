@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
-import { runChunkQuery } from "../modules/context/chunk-query";
+import { runChunkQuery } from "../core/context/chunk-query";
 
 /** Отвечает на вопрос по тексту вне контекстного окна (чанк-параллелизм). */
 export const chunkQueryTool: ToolDefinition = {

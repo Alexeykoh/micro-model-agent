@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ContextManager } from "../src/modules/context/manager";
+import { ContextManager } from "../src/core/context/manager";
 import { DEFAULTS } from "../src/config/defaults";
 
 function seed(mgr: ContextManager) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { repairToolCallPairing, UNRESOLVED_TOOL_RESULT } from "../../src/core/agent/tool-pairing";
-import type { Message } from "../../src/modules/context/manager";
+import type { Message } from "../../src/core/context/manager";
 
 const asst = (ids: string[], content = ""): Message => ({
   role: "assistant",

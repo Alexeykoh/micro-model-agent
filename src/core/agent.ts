@@ -4,8 +4,8 @@ import { ProviderManager, activeProviderEndpoint, reasoningStrategyForProvider }
 import { buildActiveProvider } from "../modules/providers/factory";
 import type { ToolExecutor } from "../tools/executor";
 import type { PluginManager } from "../modules/plugins/manager";
-import type { ContextManager, Message } from "../modules/context/manager";
-import type { HallucinationDetector } from "../modules/hallucination/detector";
+import type { ContextManager, Message } from "../core/context/manager";
+import type { HallucinationDetector } from "../core/hallucination/detector";
 import type { Logger } from "../logger/app-logger";
 import type { AppConfig, ProviderEntry } from "../config/types";
 import type { ToolScope, ToolDefinition, ToolResult } from "../tools/types";

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { ContextManager, extractTriedAndFailed } from "../src/modules/context/manager";
-import type { Message } from "../src/modules/context/manager";
+import { ContextManager, extractTriedAndFailed } from "../src/core/context/manager";
+import type { Message } from "../src/core/context/manager";
 
 describe("ContextManager", () => {
   it("compaction cutoff keeps assistant(tool_calls) with its tool messages", () => {

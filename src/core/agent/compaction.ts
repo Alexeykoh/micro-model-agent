@@ -1,6 +1,6 @@
 /** Компакция контекста: единая точка всех триггеров цикла. */
-import type { ContextManager } from "../../modules/context/manager";
-import type { HallucinationDetector } from "../../modules/hallucination/detector";
+import type { ContextManager } from "../../core/context/manager";
+import type { HallucinationDetector } from "../../core/hallucination/detector";
 import type { Logger } from "../../logger/app-logger";
 import type { SessionLogger } from "../session-logger";
 import type { LoopState } from "./loop-state";

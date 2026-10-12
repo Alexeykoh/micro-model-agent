@@ -40,6 +40,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `setConfigValue` no longer mutates `provider.models`/flat fields; the logic lives
   in `modules/providers/memory.ts` and is applied through a registered applier
   (`setProviderMemoryApplier`), mirroring the existing `pluginGateApplier` seam.
+- **Modules talk to the core via `src/core/api/**`; `context`/`hallucination`
+  moved into the core (W4, INV-3/4)**: the module-boundaries gate allowlist is
+  empty (no `core/agent` imports from modules), and `src/modules/context` /
+  `src/modules/hallucination` became `src/core/context` / `src/core/hallucination`.
 - **`bun run quality` runs the architecture gates** via `check:arch`
   (`bun test tests/arch tests/output`); a separate `scripts/check-arch.ts` is not
   introduced (the gates are tests, reused as-is).

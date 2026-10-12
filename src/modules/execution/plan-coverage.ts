@@ -1,5 +1,5 @@
 // Покрытие плана: упомянутые в задаче файлы обязаны встречаться в шагах.
-import { stripUrls } from "../hallucination/js-identifiers";
+import { stripUrls } from "../../core/hallucination/js-identifiers";
 
 /**
  * Coverage-allow-list расширений. Считаются только реальные типы deliverable-

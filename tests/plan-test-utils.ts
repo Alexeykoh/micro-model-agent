@@ -6,7 +6,7 @@ import { ExecutionModule } from "../src/modules/execution/module";
 import {
   extractFileLikeTokens,
   stripUrls,
-} from "../src/modules/hallucination/js-identifiers";
+} from "../src/core/hallucination/js-identifiers";
 
 /**
  * Shared scaffolding for plan-tool unit tests. Every plan test file used to

@@ -4,7 +4,7 @@ import {
   runChunkQuery,
   DEFAULT_CHUNK_SYSTEM_PROMPT,
   DEFAULT_SYNTHESIS_SYSTEM_PROMPT,
-} from "../src/modules/context/chunk-query";
+} from "../src/core/context/chunk-query";
 import type { Message } from "../src/llm/provider";
 
 function mockProvider(answers: string[], delayMs = 5) {

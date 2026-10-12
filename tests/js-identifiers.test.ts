@@ -3,7 +3,7 @@ import {
   isFilePathLike,
   extractFileLikeTokens,
   stripUrls,
-} from "../src/modules/hallucination/js-identifiers";
+} from "../src/core/hallucination/js-identifiers";
 
 describe("isFilePathLike", () => {
   it("accepts bare files with a known file extension", () => {

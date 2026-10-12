@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { FactualCheck } from "../src/modules/hallucination/factual";
+import { FactualCheck } from "../src/core/hallucination/factual";
 
 describe("FactualCheck", () => {
   let dir: string;

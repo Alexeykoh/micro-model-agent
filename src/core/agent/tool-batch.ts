@@ -2,8 +2,8 @@
 import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
 import type { AppConfig } from "../../config/types";
-import type { ContextManager } from "../../modules/context/manager";
-import type { HallucinationDetector } from "../../modules/hallucination/detector";
+import type { ContextManager } from "../../core/context/manager";
+import type { HallucinationDetector } from "../../core/hallucination/detector";
 import type { Logger } from "../../logger/app-logger";
 import type { MemoryStore } from "../../modules/memory/store";
 import type { PluginManager } from "../../modules/plugins/manager";

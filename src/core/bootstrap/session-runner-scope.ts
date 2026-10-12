@@ -5,7 +5,7 @@
  */
 import type { AppConfig, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
-import type { ContextManager } from "../../modules/context/manager";
+import type { ContextManager } from "../../core/context/manager";
 import type { SessionManager } from "../../modules/session/index";
 import type { ExecutionModule } from "../../modules/execution/module";
 import { ToolExecutor } from "../../tools/executor";

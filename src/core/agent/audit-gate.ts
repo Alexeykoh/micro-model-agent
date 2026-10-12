@@ -1,7 +1,7 @@
 /** Финальный аудит ответа: принят, отклонён или повторы исчерпаны. */
 import { t } from "../../i18n/index";
 import type { Logger } from "../../logger/app-logger";
-import type { ContextManager } from "../../modules/context/manager";
+import type { ContextManager } from "../../core/context/manager";
 import type { SessionLogger } from "../session-logger";
 import type { OnMeta } from "../types";
 import { MAX_AUDIT_RETRIES } from "./constants";

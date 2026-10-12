@@ -6,9 +6,9 @@ import { PipelineEngine } from "../modules/pipelines/engine";
 import { PipelineParser } from "../modules/pipelines/parser";
 import { TemplateEngine } from "../modules/pipelines/template";
 import { Agent } from "../core/agent";
-import { ContextManager } from "../modules/context/manager";
+import { ContextManager } from "../core/context/manager";
 import { PluginManager } from "../modules/plugins/manager";
-import { HallucinationDetector } from "../modules/hallucination/detector";
+import { HallucinationDetector } from "../core/hallucination/detector";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 

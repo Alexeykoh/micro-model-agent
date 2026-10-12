@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "path";
 import type { EvidencePack } from "./types";
 import { summarizeToolArgs, redactContextSecrets } from "../../core/api";
-import { extractAmountClaims, normalizeDigits } from "../hallucination/web-claims";
+import { extractAmountClaims, normalizeDigits } from "../../core/hallucination/web-claims";
 
 const MUTATING_TOOLS = new Set(["write_file", "edit_file", "delete_file", "move_file", "create_dir"]);
 

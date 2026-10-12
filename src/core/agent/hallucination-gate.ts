@@ -1,18 +1,18 @@
 /** Вентиль халлюцинаций: проверка финального ответа перед принятием. */
 import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
-import type { HallucinationDetector, HallucinationCheckResult } from "../../modules/hallucination/detector";
-import { checkSuccessClaim } from "../../modules/hallucination/success-claim";
-import type { ClaimContradiction } from "../../modules/hallucination/success-claim";
+import type { HallucinationDetector, HallucinationCheckResult } from "../../core/hallucination/detector";
+import { checkSuccessClaim } from "../../core/hallucination/success-claim";
+import type { ClaimContradiction } from "../../core/hallucination/success-claim";
 import {
   checkArtifactClaims,
   checkUnverifiedOutput,
   type ArtifactState,
-} from "../../modules/hallucination/artifact-claim";
-import { checkWebClaims } from "../../modules/hallucination/web-claims";
-import { checkClaimedFileCreation } from "../../modules/hallucination/file-creation-claim";
+} from "../../core/hallucination/artifact-claim";
+import { checkWebClaims } from "../../core/hallucination/web-claims";
+import { checkClaimedFileCreation } from "../../core/hallucination/file-creation-claim";
 import type { Logger } from "../../logger/app-logger";
-import type { ContextManager } from "../../modules/context/manager";
+import type { ContextManager } from "../../core/context/manager";
 import type { SessionLogger } from "../session-logger";
 import { MAX_CLAIM_CHECK_RETRIES, MAX_HALLUCINATION_RETRIES } from "./constants";
 import type { LoopState } from "./loop-state";

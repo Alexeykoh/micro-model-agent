@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkSuccessClaim } from "../src/modules/hallucination/success-claim";
+import { checkSuccessClaim } from "../src/core/hallucination/success-claim";
 
 describe("checkSuccessClaim", () => {
   it("flags a publish claim against a 404 + stale latest", () => {

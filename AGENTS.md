@@ -185,8 +185,9 @@ bun run mma "<промпт>"   # прогнать агента вживую
 Нет → ядро. Да → модуль. Границы, проведённые не по этому критерию, — источник
 половины дефектов аудита.
 
-В **ядро** переходят (W4): `modules/context/`, `modules/hallucination/`, гейт `critic`,
-`reasoning/policy`. В **модулях** остаётся всё отключаемое.
+`context/` и `hallucination/` переехали в **ядро** (`src/core/context/`,
+`src/core/hallucination/`, W4). В **модулях** остаётся всё отключаемое; модуль видит
+ядро только через `src/core/api/`.
 
 ### Направление зависимостей
 
@@ -232,7 +233,7 @@ critic → audit) стоят внутри. MoE удалён 2026-10-12 — он 
 | Область | Путь | Что знать перед правкой |
 |---|---|---|
 | Петля агента | `src/core/agent.ts`, `src/core/agent/*` | разбор на фазы — W5 спеки |
-| Контекст/компакция | `src/modules/context/` → переезд в `core/` (W4) | `getContextTokens()` — единственный вход порогов |
+| Контекст/компакция | `src/core/context/` (переехал из `modules/`, W4) | `getContextTokens()` — единственный вход порогов |
 | Провайдеры | `src/modules/providers/` | резолв активной **записи** из `entries[]`, не legacy-полей |
 | Конфиг | `src/config/registry.ts` + `registry-extra.ts` | `registry.ts` grandfathered; новые дефы — в `-extra` |
 | Тулы | `src/tools/` | `ToolExecutor` — единственный путь исполнения |

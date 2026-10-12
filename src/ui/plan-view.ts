@@ -4,7 +4,7 @@ import { join } from "path";
 import { pc } from "./colors";
 import { glyph } from "./theme";
 import type { Plan, PlanStep } from "../modules/execution/planner";
-import { extractFileLikeTokens, stripUrls } from "../modules/hallucination/js-identifiers";
+import { extractFileLikeTokens, stripUrls } from "../core/hallucination/js-identifiers";
 import { t } from "../i18n/index";
 import { projectMmaDir } from "../config/paths";
 

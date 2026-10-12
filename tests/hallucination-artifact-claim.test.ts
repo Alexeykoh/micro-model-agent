@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   checkArtifactClaims,
   checkUnverifiedOutput,
-} from "../src/modules/hallucination/artifact-claim";
+} from "../src/core/hallucination/artifact-claim";
 
 describe("checkArtifactClaims", () => {
   it("contradicts a 'valid' claim about a missing file", () => {

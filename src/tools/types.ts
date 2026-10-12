@@ -96,7 +96,7 @@ export interface ToolContext {
   scope?: ToolScope;
   llmProvider?: import("../llm/provider").LLMProvider;
   toolExecutor?: import("./executor").ToolExecutor;
-  contextManager?: import("../modules/context/manager").ContextManager;
+  contextManager?: import("../core/context/manager").ContextManager;
   /**
    * Возможности АКТИВНОЙ модели (пресет + живой пробник + override конфига).
    * Тулы, зависящие от способностей модели (browser vision, аттачи картинок),

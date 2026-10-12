@@ -1,7 +1,7 @@
 /** Вентиль контр-агента (критика): проверка мутаций перед финалом. */
 import { t } from "../../i18n/index";
 import type { Logger } from "../../logger/app-logger";
-import type { ContextManager } from "../../modules/context/manager";
+import type { ContextManager } from "../../core/context/manager";
 import type { CriticIssue, CriticVerdict, EvidencePack } from "../../modules/critic/types";
 import type { SessionLogger } from "../session-logger";
 import type { OnMeta } from "../types";

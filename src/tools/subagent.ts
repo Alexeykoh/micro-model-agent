@@ -2,8 +2,8 @@
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext, ToolScope } from "./types";
 import { Agent } from "../core/agent";
-import { ContextManager } from "../modules/context/manager";
-import { HallucinationDetector } from "../modules/hallucination/detector";
+import { ContextManager } from "../core/context/manager";
+import { HallucinationDetector } from "../core/hallucination/detector";
 import { PluginManager } from "../modules/plugins/manager";
 import type { PromptBlock } from "../core/types";
 import { logSecurityBlock } from "../modules/security/audit-log";

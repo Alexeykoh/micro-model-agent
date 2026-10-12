@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ConsistencyCheck } from "../src/modules/hallucination/consistency";
+import { ConsistencyCheck } from "../src/core/hallucination/consistency";
 
 describe("ConsistencyCheck", () => {
   it("should track decisions", () => {

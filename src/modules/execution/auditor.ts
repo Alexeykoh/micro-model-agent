@@ -4,7 +4,7 @@ import type { Dirent } from "fs";
 import { resolve, join, basename } from "path";
 import { t } from "../../i18n/index";
 import type { Plan } from "./planner";
-import { extractFileLikeTokens, stripUrls } from "../hallucination/js-identifiers";
+import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { toForwardSlash } from "../../tools/path-utils";
 import {
   SKIP_DIRS,

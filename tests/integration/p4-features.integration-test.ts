@@ -14,8 +14,8 @@ import { Agent } from "../../src/core/agent";
 import { ToolRegistry } from "../../src/tools/registry";
 import { ToolExecutor } from "../../src/tools/executor";
 import { PluginManager } from "../../src/modules/plugins/manager";
-import { ContextManager } from "../../src/modules/context/manager";
-import { HallucinationDetector } from "../../src/modules/hallucination/detector";
+import { ContextManager } from "../../src/core/context/manager";
+import { HallucinationDetector } from "../../src/core/hallucination/detector";
 import { SessionStore, SessionManager } from "../../src/modules/session/index";
 import { OpenAICompatProvider } from "../../src/llm/openai-compat";
 import {
