@@ -156,12 +156,13 @@ overflow-warning называет владельца и блок, а не тол
 - W1.1 ✅ `ModuleHost` (lifecycle/requires/critical/timeout/dispose/health/сбор).
 - W1.3 ✅ владелец тула: `RegisteredTool` (`owner` обязателен по типу, INV-1/2).
 - W1.4 ◐ гейт `tests/arch/module-boundaries.test.ts` (INV-3/4, 16 записей allowlist).
-- W1.6 ◐ `mcp` ✅, `lsp` ✅, `browser` ✅ (единый `ModuleHost`: `setup` до сбора,
-  `dispose` на `agent.shutdown`); остальные модули — далее.
+- W1.6 ✅ все модули на `ModuleDef` через единый `ModuleHost`: `mcp`/`lsp`/`browser`
+  (+ `teardown`), `execution`/`indexer` (вотчер → `teardown`)/`memory`/`session`/`skills`;
+  тулы собирает хост (`ModuleHost.collectTools`, INV-2), `dispose` на `agent.shutdown`.
 
 **Порядок (решение 2026-10-13, вариант «сначала безопасность»):**
 `lsp` → `browser` → **W2 (enforcement)** → `W1.5 PromptAssembler` → гейт **A**
-(единственный путь тулов) ✅ → остальные модули на `ModuleDef` → W3 → W4 → W5.
+(единственный путь тулов) ✅ → все модули на `ModuleDef` ✅ → W3 → W4 → W5.
 `W1.2` (child-логер в модулях) схлопнут в W1.6 — логер приходит из `ModuleHost.ctx`.
 
 **W2 в работе** (спека [`2026-10-13-w2-enforcement-design.md`](../specs/2026-10-13-w2-enforcement-design.md)):
@@ -229,8 +230,8 @@ W0 — если нужна дешёвая победа и разбор след�
 
 Единый реестр — [docs/agents/debt.md](../agents/debt.md) (правило 9: долг платится один
 раз, у каждого — критерий выхода и триггер). Открыто там: `verify-error`,
-`arch-gate-d`, `check-arch-script`, `modules-to-moduledef`,
-`per-session-singletons`, `agent-module-breaking`.
+`arch-gate-d`, `check-arch-script`, `per-session-singletons`,
+`agent-module-breaking`.
 
 Историю удаления MoE см. в [feature-history.md](../agents/feature-history.md);
 live-прогон одиночного пути сделан 2026-10-12 (§2). Остальные текстовые долги

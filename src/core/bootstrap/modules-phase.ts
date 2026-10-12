@@ -24,6 +24,11 @@ import { MCPModule } from "../../modules/mcp/index";
 import { mcpModuleDef } from "../../modules/mcp/lifecycle";
 import { lspModuleDef } from "../../modules/lsp/lifecycle";
 import { browserModuleDef } from "../../modules/browser/lifecycle";
+import { executionModuleDef } from "../../modules/execution/lifecycle";
+import { sessionModuleDef } from "../../modules/session/lifecycle";
+import { indexerModuleDef } from "../../modules/indexer/lifecycle";
+import { memoryModuleDef } from "../../modules/memory/lifecycle";
+import { skillsModuleDef } from "../../modules/skills/lifecycle";
 import { MemoryModule } from "../../modules/memory/module";
 import { MemoryStore } from "../../modules/memory/store";
 import { t } from "../../i18n/index";
@@ -54,11 +59,19 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   const core = await registerCoreModules(input, moduleRegistry);
   const languages = startLanguageModules(input, moduleRegistry);
   const startupCheckPromise = languages.startupCheck;
+  // Единый хост жизненного цикла и сбора тулов (INV-2/5/7/8). Порядок
+  // регистрации — как в `ModuleRegistry`, чтобы порядок определений и блоков
+  // не менялся (KV-кеш, порядок схемы тулов).
+  moduleHost.register(executionModuleDef(core.execModule));
+  moduleHost.register(sessionModuleDef());
+  moduleHost.register(indexerModuleDef(input.indexerModule));
   moduleHost.register(mcpModuleDef(core.mcpModule));
+  moduleHost.register(memoryModuleDef(core.memoryModule));
+  if (languages.browserModule) moduleHost.register(browserModuleDef(languages.browserModule));
   moduleHost.register(lspModuleDef(languages.lspModule));
-  if (languages.browserModule) moduleHost.register(browserModuleDef());
+  moduleHost.register(skillsModuleDef());
   await moduleHost.setup();
-  registerModuleToolsAndPlugins(input, moduleRegistry, core);
+  registerModuleToolsAndPlugins(input, moduleHost, core);
 
   const promptBlocks = buildStaticPromptBlocks(input, moduleRegistry, core);
   dryRunStartupOverflow(input, promptBlocks);
@@ -89,6 +102,7 @@ interface CoreModules {
   execModule: ExecutionModule;
   sessionModule: SessionModule;
   mcpModule: MCPModule;
+  memoryModule: MemoryModule;
   memoryStore: MemoryStore;
 }
 
@@ -134,7 +148,7 @@ async function registerCoreModules(
   const memoryModule = new MemoryModule(memoryStore);
   moduleRegistry.register(memoryModule);
 
-  return { execModule, sessionModule, mcpModule, memoryStore };
+  return { execModule, sessionModule, mcpModule, memoryModule, memoryStore };
 }
 
 /**
@@ -181,12 +195,14 @@ function startLanguageModules(
 /** Тулы модулей в реестр + builtin/external плагины в менеджер. */
 function registerModuleToolsAndPlugins(
   input: ModulesPhaseInput,
-  moduleRegistry: ModuleRegistry,
+  moduleHost: ModuleHost,
   core: CoreModules,
 ): void {
   const { logger, baseDir, toolRegistry, pluginManager, skillsModule, indexerModule } = input;
 
-  const moduleTools = moduleRegistry.collectToolDefinitions();
+  // Единый источник определений тулов — хост (INV-2): владельца проставляет
+  // `collectTools` из имени модуля, запись — через `registerOwnedTools`.
+  const moduleTools = moduleHost.collectTools();
   registerOwnedTools(
     toolRegistry,
     moduleTools.map((tool) => ({ tool, owner: tool.owner })),

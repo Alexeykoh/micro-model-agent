@@ -1,17 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { collectFiles, findToolRegistryWrites, type ScanFile } from "../helpers/import-graph";
+import { collectFiles, findIdentifierRefs, findToolRegistryWrites, type ScanFile } from "../helpers/import-graph";
 
 /**
  * Architecture gate A (INV-2, W1.5): tools enter the system through exactly one
- * writer — `registerOwnedTools`/`upsertOwnedTool` in `src/core/module-host.ts`.
+ * writer — `registerOwnedTools`/`upsertOwnedTool` in `src/core/module-host.ts` —
+ * and their definitions are collected through one source — `ModuleHost.collectTools`.
  *
  * Every other path (core catalogue, module contributions, runner registries,
- * interactive `question`/`approve`, plugin sync) funnels through it. The guard
- * is strict: no allowlist, one designated writer file. Any new direct
- * `ToolRegistry.register`/`upsert` call outside it fails the build — so the
- * "tools come from one place" contract cannot silently rot.
+ * interactive `question`/`approve`, plugin sync) funnels through the writer, and
+ * module definitions come from the host, not `ModuleRegistry`. Both checks are
+ * strict: no allowlist, one designated writer file. Any new direct
+ * `ToolRegistry.register`/`upsert` call or `collectToolDefinitions` use outside
+ * the host fails the build — so the "tools come from one place" contract cannot
+ * silently rot.
  */
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -30,6 +33,20 @@ describe("architecture: single tool-registration path (INV-2)", () => {
       offenders,
       `Tool registered outside ${WRITER_FILE} (INV-2). Route it through ` +
         `registerOwnedTools/upsertOwnedTool:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("module tool definitions are collected by ModuleHost, not ModuleRegistry (INV-2)", () => {
+    const files = collectFiles(SRC_ROOT, REPO_ROOT, [".ts"]);
+    // `collectToolDefinitions` живёт только как метод `ModuleRegistry` (тесты);
+    // bootstrap обязан собирать тулы через `ModuleHost.collectTools`.
+    const offenders = findIdentifierRefs(files, "collectToolDefinitions")
+      .filter((ref) => ref.path !== "src/modules/registry.ts")
+      .map((ref) => `${ref.path}:${ref.line}`);
+    expect(
+      offenders,
+      `Module tools must come from ModuleHost.collectTools (INV-2), not ` +
+        `ModuleRegistry.collectToolDefinitions:\n${offenders.join("\n")}`,
     ).toEqual([]);
   });
 

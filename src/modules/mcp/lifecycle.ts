@@ -14,5 +14,6 @@ export function mcpModuleDef(mcp: MCPModule): ModuleDef {
     name: "mcp",
     critical: false,
     setup: () => mcp.initialize(),
+    tools: () => mcp.getToolDefinitions(),
   };
 }

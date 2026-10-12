@@ -14,5 +14,6 @@ export function lspModuleDef(lsp: LspModule): ModuleDef {
     name: "lsp",
     critical: false,
     teardown: () => lsp.close(),
+    tools: () => lsp.getToolDefinitions(),
   };
 }

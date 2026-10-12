@@ -75,7 +75,7 @@ change для плагинов и фиксируется в CHANGELOG (`Changed`
 
 ---
 
-## 3. Миграция (по одному модулю) `DEBT(modules-to-moduledef)`
+## 3. Миграция на `ModuleDef` (завершена)
 
 | # | Модуль | Что уже есть | Что добавить |
 |---|---|---|---|
@@ -83,7 +83,10 @@ change для плагинов и фиксируется в CHANGELOG (`Changed`
 | 2 | `lsp` | пул, idle-reap, `getPlugin` | `critical:false`, реальный `teardown` (audit 8.1: pid) |
 | 3 | `browser` | условная регистрация | `critical:false`, `health()` (Chromium есть?) |
 
-Остальные модули переводятся после того, как первые три докажут хост.
+**Все модули реестра объявили `ModuleDef` через `ModuleHost`:** `mcp`, `lsp`, `browser`
+(+ `teardown`), `execution`, `indexer` (вотчер → `teardown: unwatch`), `memory`,
+`session`, `skills`. Вклады (промпт-блоки/хуки) пока собирает `ModuleRegistry` через
+адаптеры `AgentModule` (§2); тулы собирает хост (`ModuleHost.collectTools`, INV-2).
 
 ---
 
