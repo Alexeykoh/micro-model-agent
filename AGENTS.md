@@ -276,6 +276,7 @@ VERIFY (hallucination → critic → audit) — **общий** для MoE и о�
 | Документ | О чём |
 |---|---|
 | [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) | **Целевая архитектура, инварианты INV-1…23, план миграции** |
+| [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | Схемы boot/ход/enforcement/наблюдаемость/конфиг + матрица контрактов |
 | [architecture.md](./docs/agents/architecture.md) | Текущее состояние: Output, Host-seam, Security, контракт `LLMProvider` |
 | [code-style.md](./docs/agents/code-style.md) | Форматирование, типы, async/error, именование, i18n |
 | [tools.md](./docs/agents/tools.md) | Question/Browser, изображения, сужение набора, процессы |
