@@ -11,6 +11,7 @@ import type { PromptIO } from "../../../tools/prompt-io";
 import type { AskChoiceOptions, InputOption } from "../../../tools/user-input";
 import { questionTool } from "../../../tools/question";
 import { approveTool } from "../../../tools/approve";
+import { registerOwnedTools } from "../../../core/module-host";
 import type { AgentServiceState } from "../state";
 import { emitEvent } from "./emit";
 import type { TaskRecord } from "./task-registry";
@@ -90,9 +91,12 @@ export function installServicePromptIO(
   task: TaskRecord,
   runner: SessionRunner,
 ): PromptIO {
-  for (const tool of [questionTool, approveTool]) {
-    if (!runner.registry.has(tool.name)) runner.registry.register(tool, "core");
-  }
+  registerOwnedTools(
+    runner.registry,
+    [questionTool, approveTool]
+      .filter((tool) => !runner.registry.has(tool.name))
+      .map((tool) => ({ tool, owner: "core" })),
+  );
   const io = servicePromptIO(s, task);
   runner.agent.setPromptIO(io);
   return io;

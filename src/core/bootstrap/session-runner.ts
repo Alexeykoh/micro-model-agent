@@ -47,6 +47,7 @@ import {
   buildRunnerPlugins,  buildRunnerRegistry,
   buildRunnerToolCtx,
 } from "./session-runner-scope";
+import { registerOwnedTools } from "../module-host";
 
 /** Готовый к ходу раннер одной сессии. */
 export interface SessionRunner {
@@ -422,7 +423,7 @@ function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
       config.reasoning,
       () => agent.currentIteration,
     );
-    registry.register(setThinkingTool, "core");
+    registerOwnedTools(registry, [{ tool: setThinkingTool, owner: "core" }]);
   }
   return agent;
 }

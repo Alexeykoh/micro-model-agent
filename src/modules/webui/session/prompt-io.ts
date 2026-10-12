@@ -11,6 +11,7 @@ import type { InputOption, AskChoiceOptions } from "../../../tools/user-input";
 import type { ToolDefinition } from "../../../tools/types";
 import { questionTool } from "../../../tools/question";
 import { approveTool } from "../../../tools/approve";
+import { registerOwnedTools } from "../../../core/module-host";
 import { broadcast, type RuntimeState, type SseTransport } from "../state";
 
 let questionSeq = 0;
@@ -153,9 +154,13 @@ export function installWebPromptIO(deps: {
   sessionId?: string;
 }): PromptIO {
   if (deps.registry) {
-    for (const tool of [questionTool, approveTool]) {
-      if (!deps.registry.has(tool.name)) deps.registry.register(tool, "core");
-    }
+    const registry = deps.registry;
+    registerOwnedTools(
+      registry,
+      [questionTool, approveTool]
+        .filter((tool) => !registry.has(tool.name))
+        .map((tool) => ({ tool, owner: "core" })),
+    );
   }
   if (deps.toolCtx) deps.toolCtx.exitOnComplete = false;
   const io = createWebPromptIO(deps.state, deps.sessionId);

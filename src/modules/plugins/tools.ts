@@ -9,6 +9,7 @@ import type { AgentPlugin } from "../types";
 import type { ToolDefinition, ToolResult } from "../../tools/types";
 import type { ToolRegistry } from "../../tools/registry";
 import { Logger } from "../../logger/app-logger";
+import { upsertOwnedTool } from "../../core/module-host";
 import { detectHooks } from "./records";
 
 const logger = new Logger("warn", "plugins");
@@ -307,8 +308,7 @@ function applyDesired(
   for (const [name, tool] of desired) {
     const before = state.owner.get(name);
     state.owner.set(name, tool.plugin);
-    registry.upsert(tool.def, `plugin:${tool.plugin}`);
-    if (before) kept.push(name);
+    upsertOwnedTool(registry, tool.def, `plugin:${tool.plugin}`);    if (before) kept.push(name);
     else added.push(name);
   }
   return { added, removed, kept };

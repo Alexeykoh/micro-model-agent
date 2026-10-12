@@ -11,10 +11,11 @@ import type { ExecutionModule } from "../../modules/execution/module";
 import { ToolExecutor } from "../../tools/executor";
 import { ToolRegistry } from "../../tools/registry";
 import { PluginManager } from "../../modules/plugins/manager";
-import type { ToolContext } from "../../tools/types";
+import type { ToolContext, ToolDefinition } from "../../tools/types";
 import type { DraftHost } from "../../modules/plugins/drafts";
 import type { PromptBlock } from "../types";
 import { assembleDynamicPromptBlocks } from "../prompt-assembler";
+import { registerOwnedTools } from "../module-host";
 import { pluginCapabilitiesBlock } from "../../modules/plugins/capabilities-block";
 import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
 import { resolveModelCapabilities } from "../../modules/providers/capabilities";
@@ -43,11 +44,13 @@ export function buildRunnerRegistry(
   runnerExec: ExecutionModule,
 ): ToolRegistry {
   const registry = new ToolRegistry();
+  const entries: Array<{ tool: ToolDefinition; owner: string }> = [];
   for (const tool of mainRegistry.getAll()) {
     if (AGENT_BOUND_TOOL_NAMES.has(tool.name)) continue;
-    registry.register(tool, tool.owner);
+    entries.push({ tool, owner: tool.owner });
   }
-  for (const tool of runnerExec.getToolDefinitions()) registry.register(tool, "execution");
+  for (const tool of runnerExec.getToolDefinitions()) entries.push({ tool, owner: "execution" });
+  registerOwnedTools(registry, entries);
   return registry;
 }
 

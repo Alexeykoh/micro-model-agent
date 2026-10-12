@@ -246,6 +246,41 @@ export class ModuleHost {
   }
 }
 
+/**
+ * Минимальная поверхность реестра тулов для единственной точки записи (INV-2).
+ * Структурная: раннерный/веб-реестр подходит без импорта `ToolRegistry`.
+ */
+export interface ToolRegistrySink {
+  register(tool: ToolDefinition, owner: string): void;
+}
+
+/** Реестр, умеющий заменить тул по имени (вклад плагинов). */
+export interface ToolRegistryUpsertSink {
+  upsert(tool: ToolDefinition, owner: string): void;
+}
+
+/**
+ * Единственная точка записи тулов в систему (INV-2). Любая регистрация —
+ * ядровая, модульная, раннерная, интерактивная — проходит здесь: владелец
+ * приходит извне, а сам вызов `register` существует только в этом файле.
+ * Инвариант стережёт `tests/arch/tool-registration.test.ts` (AST, без allowlist).
+ */
+export function registerOwnedTools(
+  sink: ToolRegistrySink,
+  entries: ReadonlyArray<{ tool: ToolDefinition; owner: string }>,
+): void {
+  for (const { tool, owner } of entries) sink.register(tool, owner);
+}
+
+/** Замена тула по имени через ту же точку записи (выгрузка/перезагрузка плагинов). */
+export function upsertOwnedTool(
+  sink: ToolRegistryUpsertSink,
+  tool: ToolDefinition,
+  owner: string,
+): void {
+  sink.upsert(tool, owner);
+}
+
 /** Ограничивает промис таймаутом с внятной ошибкой (INV-8). */
 function withTimeout<T>(promise: Promise<T>, ms: number, name: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {

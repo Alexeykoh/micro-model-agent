@@ -190,7 +190,13 @@ overflow-warning называет владельца и блок, а не тол
   `tests/core/prompt-assembler.test.ts`.
 
 **Итог W2:** единая точка enforcement достигнута (W2.1–W2.5 ✅). Дальше по порядку —
-остальные модули на `ModuleDef` → гейт A → W3 → W4 → W5.
+остальные модули на `ModuleDef` → W3 → W4 → W5.
+
+**Гейт A (единый путь тулов) сделан** отдельным шагом (до полной миграции модулей):
+единственная точка записи `registerOwnedTools`/`upsertOwnedTool` в
+`src/core/module-host.ts`; ядровые, модульные, раннерные, интерактивные
+(`question`/`approve`) и плагинные тулы идут через неё; гейт
+`tests/arch/tool-registration.test.ts` (AST, **без allowlist**). Долг `arch-gate-a` оплачен.
 
 
 **Приоритет при выборе одной волны: W2.** Enforcement даёт немедленный эффект на
@@ -222,9 +228,9 @@ W0 — если нужна дешёвая победа и разбор след�
 ## 6. Долги
 
 Единый реестр — [docs/agents/debt.md](../agents/debt.md) (правило 9: долг платится один
-раз, у каждого — критерий выхода и триггер). Открыто там: `verify-error`, `arch-gate-a`,
-`arch-gate-d`, `check-arch-script`, `modules-to-moduledef`, `per-session-singletons`,
-`agent-module-breaking`.
+раз, у каждого — критерий выхода и триггер). Открыто там: `verify-error`,
+`arch-gate-d`, `check-arch-script`, `modules-to-moduledef`,
+`per-session-singletons`, `agent-module-breaking`.
 
 Историю удаления MoE см. в [feature-history.md](../agents/feature-history.md);
 live-прогон одиночного пути сделан 2026-10-12 (§2). Остальные текстовые долги

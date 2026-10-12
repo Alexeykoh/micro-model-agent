@@ -33,7 +33,7 @@ import type { PromptBlock } from "../types";
 import { readMmaVersion } from "../version";
 import { dryRunOverflow, overflowHint } from "../prompt-overflow";
 import { isOneShotMode, loadAgentsMdBlocks, registerBuiltinPlugin } from "./state";
-import { ModuleHost } from "../module-host";
+import { ModuleHost, registerOwnedTools } from "../module-host";
 import { defaultOutputBus } from "../../output";
 import { globalPluginsDir as resolveGlobalPluginsDir, projectMmaDir } from "../../config/paths";
 import type { ModulesPhaseInput, ModulesPhase } from "./state";
@@ -187,9 +187,10 @@ function registerModuleToolsAndPlugins(
   const { logger, baseDir, toolRegistry, pluginManager, skillsModule, indexerModule } = input;
 
   const moduleTools = moduleRegistry.collectToolDefinitions();
-  for (const tool of moduleTools) {
-    toolRegistry.register(tool, tool.owner);
-  }
+  registerOwnedTools(
+    toolRegistry,
+    moduleTools.map((tool) => ({ tool, owner: tool.owner })),
+  );
 
   registerBuiltinPlugin(pluginManager, core.execModule.getPlugin());
   registerBuiltinPlugin(pluginManager, core.sessionModule.getPlugin());

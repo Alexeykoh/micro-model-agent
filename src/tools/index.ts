@@ -1,6 +1,7 @@
 /** Точка сборки каталога тулов: импорты, реэкспорты, регистрация. */
 import { ToolRegistry } from "./registry";
 import { ToolExecutor } from "./executor";
+import { registerOwnedTools } from "../core/module-host";
 import type {
   ToolDefinition,
   ToolContext,
@@ -138,8 +139,10 @@ export function registerAllTools(
     tools.push(createLoadSkillTool(skillsModule));
   }
 
-  for (const tool of tools) {
-    // Встроенные тулы ядра (INV-1/2): один общий владелец `core`.
-    registry.register(tool, "core");
-  }
+  // Встроенные тулы ядра (INV-1/2): один общий владелец `core`; запись — через
+  // единственную точку `registerOwnedTools` (ModuleHost).
+  registerOwnedTools(
+    registry,
+    tools.map((tool) => ({ tool, owner: "core" })),
+  );
 }

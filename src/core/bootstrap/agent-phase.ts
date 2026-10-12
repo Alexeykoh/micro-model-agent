@@ -26,6 +26,7 @@ import type { HallucinationDetector } from "../../modules/hallucination/detector
 import type { ContextLogger } from "../agent/context-log";
 import type { EnvironmentReport } from "../environment";
 import { applyProbedContext } from "./provider-phase";
+import { registerOwnedTools } from "../module-host";
 import type { SilentLogger } from "./state";
 
 /** Вход фазы сборки — все ранее собранные части плюс окружение агента. */
@@ -193,7 +194,7 @@ export async function assembleAgent(
       config.reasoning,
       () => agent.currentIteration,
     );
-    toolRegistry.register(setThinkingTool, "core");
+    registerOwnedTools(toolRegistry, [{ tool: setThinkingTool, owner: "core" }]);
   }
 
   return agent;

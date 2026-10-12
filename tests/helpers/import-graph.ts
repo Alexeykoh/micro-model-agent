@@ -220,6 +220,102 @@ export function findIdentifierRefs(files: ScanFile[], name: string): IdentifierR
   return out;
 }
 
+export interface RegistryWrite {
+  /** Repo-relative path, forward slashes. */
+  path: string;
+  /** 1-based line number. */
+  line: number;
+  /** Mutating method name. */
+  method: "register" | "upsert";
+  /** Receiver source text, e.g. `toolRegistry`, `runner.registry`. */
+  receiver: string;
+}
+
+/**
+ * `ToolRegistry.register`/`upsert` call sites (INV-2), found via the TypeScript
+ * AST — comments and strings are ignored.
+ *
+ * A call is attributed to the tool registry when its receiver resolves, in the
+ * same file, to a `ToolRegistry` value: `new ToolRegistry()`, a `: ToolRegistry`
+ * annotation (variable, parameter or property), or a `.toolRegistry`/`.registry`
+ * property access (the only shape a tool registry is reached through — verified
+ * against the current tree). Unrelated registries (`ModuleRegistry`,
+ * `PluginManager`, `ProviderRegistry`, MCP) are not flagged.
+ */
+export function findToolRegistryWrites(files: ScanFile[]): RegistryWrite[] {
+  const out: RegistryWrite[] = [];
+  for (const file of files) {
+    const ext = file.path.slice(file.path.lastIndexOf("."));
+    const kind = KIND_BY_EXT[ext] ?? ts.ScriptKind.TS;
+    const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, false, kind);
+    const toolTyped = collectToolTypedNames(source);
+    const visit = (node: ts.Node): void => {
+      const write = registryWriteOf(node, source, toolTyped);
+      if (write) {
+        out.push({
+          path: file.path,
+          line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+          ...write,
+        });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return out;
+}
+
+/** `X.register(...)` / `X.upsert(...)` where `X` resolves to a tool registry. */
+function registryWriteOf(
+  node: ts.Node,
+  source: ts.SourceFile,
+  toolTyped: ReadonlySet<string>,
+): { method: "register" | "upsert"; receiver: string } | null {
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return null;
+  const method = node.expression.name.text;
+  if (method !== "register" && method !== "upsert") return null;
+  const receiver = node.expression.expression;
+  if (!isToolRegistryReceiver(receiver, toolTyped)) return null;
+  return { method, receiver: receiver.getText(source) };
+}
+
+function isToolRegistryReceiver(receiver: ts.Expression, toolTyped: ReadonlySet<string>): boolean {
+  if (ts.isIdentifier(receiver)) return toolTyped.has(receiver.text);
+  if (ts.isPropertyAccessExpression(receiver)) {
+    const prop = receiver.name.text;
+    // `.toolRegistry` — единственный явный шов; `.registry` встречается только у
+    // тул-реестра (раннеры/сервис) — прочие подсистемы зовут его иначе.
+    return prop === "toolRegistry" || prop === "registry";
+  }
+  return false;
+}
+
+/** Имена переменных/параметров/полей, чей тип в этом файле — `ToolRegistry`. */
+function collectToolTypedNames(source: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+  const hasType = (node: ts.Node): boolean => {
+    const typeNode = (node as { type?: ts.TypeNode }).type;
+    return typeNode !== undefined && /\bToolRegistry\b/.test(typeNode.getText(source));
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      const isNew =
+        node.initializer !== undefined &&
+        ts.isNewExpression(node.initializer) &&
+        ts.isIdentifier(node.initializer.expression) &&
+        node.initializer.expression.text === "ToolRegistry";
+      if (isNew || hasType(node)) names.add(node.name.text);
+    } else if (ts.isParameter(node) && ts.isIdentifier(node.name) && hasType(node)) {
+      names.add(node.name.text);
+    } else if (ts.isPropertyDeclaration(node) && ts.isIdentifier(node.name) && hasType(node)) {
+      names.add(node.name.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return names;
+}
+
 /**
  * All elementary cycles in the graph (each returned once, in DFS discovery order).
  * Type-only edges are ignored by default: `import type` is erased at runtime, so a

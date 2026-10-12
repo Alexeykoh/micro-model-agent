@@ -15,7 +15,6 @@
 | id | долг | почему отложено | критерий выхода | триггер | дата |
 |---|---|---|---|---|---|
 | `verify-error` | сигнал `verify_error` (INV-15) не пишется при деградации верификатора | `StepVerifier` не достаёт до `SessionLogger`; нужен шов `ToolContext` (смена контракта) | `ToolContext` несёт диагностический sink; `verify_error` пишется на деградации | W1 остаток / W4 `core/api` | 2026-10-13 |
-| `arch-gate-a` | регистрация тулов не сведена к `ModuleHost` (INV-2) | до полной миграции модулей есть несколько call-site | регистрирует только `ModuleHost`; гейт `check-arch A` строгий | после миграции модулей на `ModuleDef` | 2026-10-13 |
 | `arch-gate-d` | правило ≤300 строк не машиночитаемо (58 файлов >300) | массовый allowlist закрепил бы bloat | `.arch-allowlist.json` + гейт D | W5 / при реальном дроблении файлов | 2026-10-13 |
 | `check-arch-script` | нет `scripts/check-arch.ts` (единый прогон) | проверки пока живут тестами | скрипт в `quality` **или** решение «тесты и есть гейт» | W1 wrap-up | 2026-10-13 |
 | `modules-to-moduledef` | `execution`/`skills`/`session`/`memory`/`indexer` не на `ModuleDef` | идёт волна миграции | все модули объявляют `ModuleDef` через `ModuleHost` (с `teardown`) | W1.6 (продолжение) | 2026-10-13 |
