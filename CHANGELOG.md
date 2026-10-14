@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Removed
+
+- **Trace tab mascot**: the small always-on face at the top of the Trace pane
+  (`.trc-face`) is gone — the pane now opens straight onto the event list. The
+  composer face (MMART) is unchanged.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added
