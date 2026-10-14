@@ -140,3 +140,26 @@ export function revealInTree(dirPath: string): void {
     focusTreeRow(f.treeEl, dirPath);
   });
 }
+
+/**
+ * Раскрывает дерево до файла `filePath` (все каталоги-предки + листинг
+ * родителя), ставит курсор на файл и фокусирует строку. Используется, когда
+ * файл открывается из чата: без раскрытия предков строки в дереве ещё нет.
+ */
+export async function revealFile(filePath: string): Promise<void> {
+  const f = sb.files;
+  const parts = filePath.split("/").filter(Boolean);
+  if (parts.length === 0) return;
+  await deps.ensureListing("");
+  let dir = "";
+  for (let i = 0; i < parts.length - 1; i++) {
+    dir = dir ? `${dir}/${parts[i]}` : parts[i];
+    f.expanded.add(dir);
+    await deps.ensureListing(dir);
+  }
+  if (!f.listings.has(dir)) await deps.ensureListing(dir);
+  f.cursor = filePath;
+  deps.markDirty();
+  deps.render();
+  focusTreeRow(f.treeEl, filePath);
+}

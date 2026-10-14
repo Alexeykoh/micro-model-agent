@@ -17,7 +17,7 @@ import {
 } from "./files/history.js";
 import { initFilesKeys, focusTreeRow, initGlobalFilesKeys } from "./files/keys.js";
 import {
-  initTreeDeps, renderDir, paintCursor, visibleRows, revealInTree,
+  initTreeDeps, renderDir, paintCursor, visibleRows, revealInTree, revealFile,
 } from "./files/tree.js";
 import { initCrumbDeps, renderCrumbs, clearCrumbs } from "./files/crumbs.js";
 import { syncChrome, localizeChrome, iconize } from "./files/chrome.js";
@@ -216,6 +216,31 @@ export async function openFile(path: string): Promise<void> {
   markDirty();
   renderFilesTree();
   paintFile(f.detailBodyEl, path, await fetchFile(path));
+}
+
+/**
+ * Приводит путь из чата к workspace-относительному posix-пути дерева Files:
+ * срезает префикс workspace (регистронезависимо, для Windows) и ведущий `./`.
+ */
+function normalizePath(raw: string): string {
+  let p = String(raw || "").replace(/\\/g, "/").trim();
+  const ws = sb.files.workspace.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (ws && (p === ws || p.toLowerCase().startsWith(ws.toLowerCase() + "/"))) {
+    p = p === ws ? "" : p.slice(ws.length + 1);
+  }
+  return p.replace(/^\.?\//, "").replace(/\/+$/, "");
+}
+
+/**
+ * Открывает файл из чата в вкладке Files: раскрывает дерево до файла и
+ * показывает его во вьюере. Переключение вкладки/дровера — на вызывающем
+ * (app.js), чтобы `files.js` не тянул `core.js` (цикл импортов).
+ */
+export async function openFileInTree(raw: string): Promise<void> {
+  const rel = normalizePath(raw);
+  if (!rel) return;
+  await revealFile(rel);
+  await openFile(rel);
 }
 
 /** Closes the viewer and clears the selection (history is kept). */

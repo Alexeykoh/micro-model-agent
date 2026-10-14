@@ -30,6 +30,7 @@ import {
   applySidebarI18n,
   initFiles, sidebarFilesState, sidebarFilesChanged,
   sidebarPluginsState, sidebarPluginsEvent, initSidebarDrawer,
+  openFilesTabFor,
 } from "./js/sidebar.js";
 import { insertIntoDraft } from "./js/session/composer.js";
 import { initCursor, createFace, setFaceState, loaderStateFor, setGreetResolver } from "./js/loader.js";
@@ -197,6 +198,9 @@ async function refresh(): Promise<void> {
 hooks.ensureTabState = ensureTabState;
 // Lets `tabs.js` reset the sidebar chrome when the last tab closes.
 hooks.renderActive = renderActiveState;
+// Lets feed file links open the Files tab (tree revealed to the file) without
+// importing the sidebar from the feed handlers.
+hooks.openFileInTree = (p) => { void openFilesTabFor(p); };
 
 function resyncAfterReconnect(): void {
   for (const tab of tabState.tabs) {

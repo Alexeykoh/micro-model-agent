@@ -29,6 +29,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   passes the rust channel through. Diagnosing an Angular 11 / Node 16 project no
   longer suggests a Node 20+ build. The detected toolchain is shown in the LSP
   tab. Spec: `docs/specs/2026-10-02-lsp-doctor-design.md` §13.
+### Changed
+
+- **Chat file links open the Files tab**: clicking a file row in the chat
+  (read/write/edit/file_info) now switches the sidebar to Files, expands the
+  tree down to the file and opens it in the viewer, instead of previewing the raw
+  file in a new browser tab. Modifiers / middle-click keep the raw preview.
 
 ## [0.4.0] - 2026-10-14
 

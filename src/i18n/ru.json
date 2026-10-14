@@ -1693,7 +1693,7 @@
   "web.code.copy_failed": "не скопировано",
   "web.msg.copy": "копировать",
   "web.msg.copy_md": "копировать как markdown",
-  "web.card.open_title": "Предпросмотр во вкладке браузера",
+  "web.card.open_title": "Открыть во вкладке «Файлы»",
   "web.card.copy_title": "Скопировать путь в рабочей папке",
   "web.card.drawio_hint": "Диаграмма draw.io — это XML: предпросмотр покажет код, схему смотри в draw.io / VS Code.",
   "web.card.files_one": "{count} файл",

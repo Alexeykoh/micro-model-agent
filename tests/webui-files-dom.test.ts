@@ -177,6 +177,18 @@ describe("files tab DOM", () => {
     expect(doc("filesBody").textContent).toContain("export const x = 1");
   });
 
+  it("reveals and opens a workspace file from a chat link", async () => {
+    // Chat links call `openFilesTabFor` (via the app hook): the tree must
+    // expand every ancestor and select the file even though nothing was open.
+    await sidebar.openFilesTabFor("src/deep/leaf.ts");
+    await flush();
+    await flush();
+    expect(doc("filesDetail").hidden).toBe(false);
+    expect(crumbs()).toEqual(["src", "deep", "leaf.ts"]);
+    expect(names()).toContain("leaf.ts");
+    expect(rows().find((r) => r.dataset.path === "src/deep/leaf.ts")?.className).toContain("sel");
+  });
+
   // The original complaint: opening a file hid the whole tree (`:has()` CSS
   // rule), so every file switch meant close → re-navigate → re-expand.
   it("keeps the tree visible next to an open file (split, not takeover)", async () => {

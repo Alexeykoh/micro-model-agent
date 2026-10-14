@@ -3,12 +3,12 @@
 import { icon } from "../dom.js";
 import { session } from "../store.js";
 import { t } from "../i18n.js";
-import { sb, TABS, ICON_NAME, paneEl, mqMobile, PHONE_MQ, readStored, storeTab, type TraceEntry } from "./state.js";
+import { sb, TABS, ICON_NAME, paneEl, mqMobile, mqNarrow, PHONE_MQ, readStored, storeTab, type TraceEntry } from "./state.js";
 import { collapseDetail, renderList, renderDetail } from "./trace.js";
-import { sidebarDrawerOpen } from "./drawer.js";
+import { sidebarDrawerOpen, setSidebarDrawer } from "./drawer.js";
 import { sidebarMapState, sidebarMapIndicator } from "./map.js";
 import { renderLsp, sidebarLspState } from "./lsp.js";
-import { renderFilesTree, refreshFilesTree } from "./files.js";
+import { renderFilesTree, refreshFilesTree, openFileInTree } from "./files.js";
 import { renderPlugins, sidebarPluginsState } from "./plugins.js";
 
 export function setSidebarTab(id: string, persist = true): void {
@@ -33,6 +33,17 @@ export function setSidebarTab(id: string, persist = true): void {
   if (effective === "lsp") sidebarLspState();
   if (effective === "files") renderFilesTree();
   if (effective === "plugins") sidebarPluginsState();
+}
+
+/**
+ * Открыть файл из чата во вкладке Files: переключить вкладку (и раскрыть
+ * дровер на узком экране) и раскрыть дерево до файла. Единственная точка входа
+ * для ссылок чата — сам `files.js` не знает про вкладки.
+ */
+export async function openFilesTabFor(raw: string): Promise<void> {
+  setSidebarTab("files");
+  if (mqNarrow() && !sidebarDrawerOpen()) setSidebarDrawer(true);
+  await openFileInTree(raw);
 }
 
 export function sidebarBusy(on: unknown): void {
