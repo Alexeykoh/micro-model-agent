@@ -14,6 +14,7 @@ import {
   type LspServerDiagnosis,
   type ServerContext,
 } from "./diagnose-server";
+import { detectProjectToolchain, type ProjectToolchain } from "./toolchain";
 
 // Классификация/установка/типы сервера живут в `./diagnose-server`; реэкспорт
 // для существующих импортёров (`./module`, `./index`, тесты).
@@ -26,6 +27,8 @@ export interface LspDiagnosis {
   offline: boolean;
   projectRoot: string;
   servers: LspServerDiagnosis[];
+  /** Объявленные версии тулчейна проекта (все языки) — что учтено в подсказках. */
+  toolchain?: ProjectToolchain;
 }
 
 /** Зависимости диагностики (инжекции для тестов). */
@@ -41,6 +44,8 @@ export interface LspDiagnoseDeps {
   findOnPath?: (name: string) => string | null;
   /** Override офлайн-режима (по умолчанию `MMA_LSP_OFFLINE`). */
   offline?: boolean;
+  /** Инжектируемый тулчейн проекта (тесты); по умолчанию читается с диска. */
+  toolchain?: ProjectToolchain;
   logger?: LspClientLogger;
 }
 
@@ -62,6 +67,7 @@ export async function diagnoseLspServers(
     deps.collectFiles ??
     ((dir: string, cfg: LspConfig) => collectCheckFiles(dir, cfg, LSP_DIAGNOSE_SCAN_LIMIT));
   const probePath = deps.findOnPath ?? findOnPath;
+  const toolchain = deps.toolchain ?? detectProjectToolchain(baseDir);
   const entries = Object.entries(config.servers);
 
   if (!config.enabled) {
@@ -69,6 +75,7 @@ export async function diagnoseLspServers(
       enabled: false,
       offline,
       projectRoot: baseDir,
+      toolchain,
       servers: entries.map(([language, server]) =>
         baseDiagnosis(language, server, { enabled: false, applicable: false, reason: "disabled" }),
       ),
@@ -96,11 +103,12 @@ export async function diagnoseLspServers(
     defaultTimeout: config.timeout,
     timeoutCap,
     probePath,
+    toolchain,
   };
   const servers: LspServerDiagnosis[] = [];
   for (const [language, server] of entries) {
     servers.push(await diagnoseServer(language, server, applicable.has(language), ctx));
   }
 
-  return { enabled: true, offline, projectRoot: baseDir, servers };
+  return { enabled: true, offline, projectRoot: baseDir, toolchain, servers };
 }

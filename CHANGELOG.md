@@ -18,6 +18,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `tokens 12000→8000 (−4000), quality 70→88, messages 40→20, turns −18/+6,
   summarize` — in both the row and the detail pane. Critic rows also surface the
   verdict/escalation text and `critic_error` no longer vanishes.
+### Fixed
+
+- **LSP install hints now respect the project's toolchain (all languages)**: a
+  new `detectProjectToolchain` reads declared runtime/package versions from
+  standard manifests (`.nvmrc`, `package.json`, `.python-version`,
+  `pyproject.toml`, `rust-toolchain[.toml]`, `go.mod`, `.ruby-version`,
+  `composer.json`, `global.json`) and the `lsp doctor` install advice pins npm
+  packages to the project's versions (e.g. `typescript@4.1.6` instead of `@5`) and
+  passes the rust channel through. Diagnosing an Angular 11 / Node 16 project no
+  longer suggests a Node 20+ build. The detected toolchain is shown in the LSP
+  tab. Spec: `docs/specs/2026-10-02-lsp-doctor-design.md` §13.
 
 ## [0.4.0] - 2026-10-14
 

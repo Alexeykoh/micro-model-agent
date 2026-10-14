@@ -365,3 +365,39 @@ server_error/deadline).
  2с-поллинг.
 - Без `lspModule` (тесты) — вкладка показывает «недоступно», `GET/POST` → `503`.
 - en/ru паритет.
+
+## 13. Версионный тулчейн проекта (2026-10-14)
+
+**Проблема.** `installCommandFor` советовал установить «последнюю» версию сервера
+(`typescript@5`, `@latest`) независимо от того, на каком рантайме реально
+собирается проект. Кейс: Angular 11 на Node 16 — подсказка была рассчитана на
+Node 20+, установка ломала сборку. Ориентир только на JS неверен: версии нужно
+читать для всех языков.
+
+**Что делаем.**
+
+- Новый чистый модуль `src/modules/lsp/toolchain.ts`:
+  `detectProjectToolchain(baseDir): ProjectToolchain` — читает стандартные
+  манифесты **всех** языков, без запуска процессов:
+  `.nvmrc`/`.node-version`/`package.json#engines`, `typescript` и `@angular/*`
+  из `package.json`; `.python-version`/`runtime.txt`/`pyproject.toml`;
+  `rust-toolchain[.toml]`; `go.mod`; `.ruby-version`; `.java-version`;
+  `composer.json`; `global.json`. Формат:
+  `{ runtimes: [{name, version, source}], packages: {name→version} }`.
+- `installCommandFor(server, reason, npxFallback, toolchain?)`:
+  - npm-пакеты `--package` подставляются версиями из `toolchain.packages`
+    (`typescript@5` → `typescript@4.1.6`, если проект объявляет 4.1.6);
+  - нативные установщики учитывают канал тулчейна
+    (`rustup component add rust-analyzer --toolchain 1.65.0`).
+  Поле `toolchain` опционально — без него поведение 1:1 прежнее.
+- `LspDiagnosis.toolchain?: ProjectToolchain` — аддитивное поле `/api/lsp/doctor`;
+  вкладка LSP показывает строку «тулчейн» (какие версии учтены).
+
+**Non-goals.** Не подбираем «совместимую» версию сервера по таблице
+совместимости (её нет): пиним к тому, что объявил проект, а иначе оставляем
+прежний дефолт. Не запускаем инструменты для определения версий.
+
+**Приёмка.** `tests/modules/lsp/toolchain.test.ts` (js/python/rust/go/ruby/php/
+dotnet); `tests/modules/lsp/diagnose.test.ts` (пин npm-версии, rust channel);
+en/ru ключ `web.sidebar.lsp_toolchain`.
+

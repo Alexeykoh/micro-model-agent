@@ -140,6 +140,20 @@ describe("diagnoseLspServers", () => {
     expect(d.servers[0].installCommand).toBe("npm i -g typescript-language-server typescript@5");
   });
 
+  it("pins the global install command to the project toolchain", async () => {
+    const d = await diagnoseLspServers(config({ typescript: TS_SERVER }), "C:/proj", {
+      collectFiles: async () => [file("a.ts")],
+      findOnPath: () => null,
+      client: { probe: async () => {} } as never,
+      toolchain: {
+        runtimes: [{ name: "node", version: "16.13.0", source: ".nvmrc" }],
+        packages: { typescript: "4.1.6" },
+      },
+    });
+    expect(d.toolchain?.packages.typescript).toBe("4.1.6");
+    expect(d.servers[0].installCommand).toBe("npm i -g typescript-language-server typescript@4.1.6");
+  });
+
   it("suggests the native installer for a missing native server", async () => {
     const rust: LspServerConfig = { command: "rust-analyzer", autoInstall: false };
     const d = await diagnoseLspServers(config({ rust }), "C:/proj", {
@@ -171,6 +185,24 @@ describe("installCommandFor", () => {
     expect(installCommandFor({ command: "gopls" }, "binary-missing", false)).toBe(
       "go install golang.org/x/tools/gopls@latest",
     );
+  });
+
+  it("pins npm packages to the project's declared versions", () => {
+    expect(
+      installCommandFor(TS_SERVER, "network", true, {
+        runtimes: [],
+        packages: { typescript: "4.1.6" },
+      }),
+    ).toBe("npm i -g typescript-language-server typescript@4.1.6");
+  });
+
+  it("adds the project's rust channel to the native installer", () => {
+    expect(
+      installCommandFor({ command: "rust-analyzer" }, "binary-missing", false, {
+        runtimes: [{ name: "rust", version: "1.65.0", source: "rust-toolchain" }],
+        packages: {},
+      }),
+    ).toBe("rustup component add rust-analyzer --toolchain 1.65.0");
   });
 });
 

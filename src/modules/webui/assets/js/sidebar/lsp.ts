@@ -75,6 +75,19 @@ function lspMutedRow(reason: string, list: Dict[]): HTMLElement {
   return row;
 }
 
+/** Распознанные версии тулчейна проекта: рантаймы и пакеты (все языки). */
+function appendToolchain(host: HTMLElement, tc: Dict | undefined): void {
+  if (!tc || typeof tc !== "object") return;
+  const runtimes = Array.isArray(tc.runtimes) ? tc.runtimes : [];
+  const packages = tc.packages && typeof tc.packages === "object" ? tc.packages : {};
+  const parts = [
+    ...runtimes.map((r: Dict) => `${r.name} ${r.version}`),
+    ...Object.entries(packages).map(([name, version]) => `${name} ${version}`),
+  ].filter(Boolean);
+  if (!parts.length) return;
+  host.appendChild(mapKv(t("web.sidebar.lsp_toolchain"), parts.join(" · ")));
+}
+
 export function renderLsp(): void {
   const host = sb.lspEl;
   if (!host) return;
@@ -116,6 +129,7 @@ export function renderLsp(): void {
     }
     flags.appendChild(st);
     host.appendChild(flags);
+    appendToolchain(host, diag.toolchain);
     const servers: Dict[] = Array.isArray(diag.servers) ? diag.servers : [];
     if (servers.length === 0) {
       host.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_none")));

@@ -1182,6 +1182,7 @@
   "web.sidebar.tab_plugins": "Plugins",
   "web.sidebar.lsp_what": "LSP — editor-grade diagnostics",
   "web.sidebar.lsp_status": "status",
+  "web.sidebar.lsp_toolchain": "toolchain",
   "web.sidebar.lsp_enabled": "enabled",
   "web.sidebar.lsp_offline": "offline",
   "web.sidebar.lsp_check": "Run check",

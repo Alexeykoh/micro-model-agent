@@ -4,6 +4,7 @@ import type { LspServerConfig } from "./types";
 import { LspClient } from "./client";
 import { findProjectRoot } from "./project-root";
 import { resolveNpxLaunch } from "./resolve";
+import type { ProjectToolchain } from "./toolchain";
 import { errMsg } from "../../utils";
 
 /**
@@ -67,6 +68,39 @@ const NATIVE_INSTALL: Record<string, string> = {
   gopls: 'go install golang.org/x/tools/gopls@latest',
 };
 
+/** Имя и версия npx-пакета: `typescript@5` → [`typescript`, `5`]. */
+function splitPackage(pkg: string): [name: string, version: string | undefined] {
+  const at = pkg.lastIndexOf("@");
+  return at > 0 ? [pkg.slice(0, at), pkg.slice(at + 1)] : [pkg, undefined];
+}
+
+/**
+ * Подставить версию из тулчейна проекта к npx-пакету. Сервер, идущий через npx,
+ * не должен тянуть «последнюю» версию, несовместимую с рантаймом проекта:
+ * если проект объявляет версию этого пакета — берём её.
+ */
+function pinPackage(pkg: string, toolchain?: ProjectToolchain): string {
+  const [name] = splitPackage(pkg);
+  const declared = toolchain?.packages[name];
+  if (!declared) return pkg;
+  const v = declared.replace(/^[\^~>=<v\s]+/, "").trim();
+  return v ? `${name}@${v}` : pkg;
+}
+
+/** Команда нативной установки с учётом объявленного тулчейна (rust channel). */
+function nativeInstallCommand(
+  server: LspServerConfig,
+  toolchain?: ProjectToolchain,
+): string | null {
+  const cmd = NATIVE_INSTALL[server.command] ?? null;
+  if (!cmd) return null;
+  if (server.command === "rust-analyzer") {
+    const channel = toolchain?.runtimes.find((r) => r.name === "rust")?.version;
+    return channel ? `${cmd} --toolchain ${channel}` : cmd;
+  }
+  return cmd;
+}
+
 /** Пакеты из npx-args (`--package X`), дедуп с сохранением порядка. */
 export function npxPackages(args: string[] | undefined): string[] {
   const list = args ?? [];
@@ -84,19 +118,22 @@ export function npxPackages(args: string[] | undefined): string[] {
 /**
  * Команда ручной глобальной установки сервера. Заполняется только когда это
  * реально помогает: сервер идёт через `npx` (медленный старт) либо глобального
- * бинарника нет. Уже глобальный и работающий сервер — `null`.
+ * бинарника нет. Уже глобальный и работающий сервер — `null`. Версии пакетов и
+ * для нативных серверов берутся из объявленного тулчейна проекта (все языки),
+ * чтобы не советовать сборку под чужой рантайм.
  */
 export function installCommandFor(
   server: LspServerConfig,
   reason: LspFailureReason,
   useNpxFallback: boolean,
+  toolchain?: ProjectToolchain,
 ): string | null {
   const useful =
     useNpxFallback || reason === "binary-missing" || reason === "offline" || reason === "network";
   if (!useful) return null;
   const pkgs = npxPackages(server.args);
-  if (pkgs.length > 0) return `npm i -g ${pkgs.join(" ")}`;
-  return NATIVE_INSTALL[server.command] ?? null;
+  if (pkgs.length > 0) return `npm i -g ${pkgs.map((p) => pinPackage(p, toolchain)).join(" ")}`;
+  return nativeInstallCommand(server, toolchain);
 }
 
 /** Общий контекст диагностики (неизменяемый на прогон). */
@@ -108,6 +145,8 @@ export interface ServerContext {
   defaultTimeout: number;
   timeoutCap: number;
   probePath: (name: string) => string | null;
+  /** Объявленные версии тулчейна проекта (для версионных подсказок установки). */
+  toolchain?: ProjectToolchain;
 }
 
 /** Диагностировать один сервер: гейты (disabled/неприменим/офлайн/дедлайн) + проба. */
@@ -132,10 +171,10 @@ export async function diagnoseServer(
   };
   const skip = skipReason(server, launch, ctx.offline);
   if (skip) {
-    return withCommand({ ...withLaunch, reason: skip }, server, skip, launch.useNpxFallback);
+    return withCommand({ ...withLaunch, reason: skip }, server, skip, launch.useNpxFallback, ctx.toolchain);
   }
   if (Date.now() >= ctx.deadline) {
-    return withCommand({ ...withLaunch, reason: "deadline" }, server, "deadline", launch.useNpxFallback);
+    return withCommand({ ...withLaunch, reason: "deadline" }, server, "deadline", launch.useNpxFallback, ctx.toolchain);
   }
 
   const probe = await probeServer(
@@ -146,7 +185,7 @@ export async function diagnoseServer(
     ctx.timeoutCap,
     launch.useNpxFallback,
   );
-  return withCommand({ ...withLaunch, ...probe }, server, probe.reason, launch.useNpxFallback);
+  return withCommand({ ...withLaunch, ...probe }, server, probe.reason, launch.useNpxFallback, ctx.toolchain);
 }
 
 /** Дополнить диагноз командой установки, если она применима. */
@@ -155,8 +194,9 @@ function withCommand(
   server: LspServerConfig,
   reason: LspFailureReason,
   useNpxFallback: boolean,
+  toolchain?: ProjectToolchain,
 ): LspServerDiagnosis {
-  const installCommand = installCommandFor(server, reason, useNpxFallback);
+  const installCommand = installCommandFor(server, reason, useNpxFallback, toolchain);
   return installCommand ? { ...diag, installCommand } : diag;
 }
 

@@ -1185,6 +1185,7 @@
   "web.sidebar.tab_plugins": "Плагины",
   "web.sidebar.lsp_what": "LSP — диагностика уровня редактора",
   "web.sidebar.lsp_status": "статус",
+  "web.sidebar.lsp_toolchain": "тулчейн",
   "web.sidebar.lsp_enabled": "включён",
   "web.sidebar.lsp_offline": "офлайн",
   "web.sidebar.lsp_check": "Проверить",
