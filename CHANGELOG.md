@@ -41,6 +41,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   labelled “context loaded” and prints the token count the backend actually
   loaded, instead of leading with the model's configured capacity. A low value is
   flagged (and explained on hover) without printing the window.
+### Added
+
+- **Context-quality breakdown**: the web “quality” row now shows a tooltip
+  explaining the score — each factor (context load / compactions / errors /
+  freshness) with its normalized value, weight and point contribution. The
+  breakdown is computed server-side (`ContextManager.getQualityBreakdown()`) and
+  carried through `AgentResult`/`HostStateSnapshot` (`contextQualityBreakdown`),
+  so the number and its explanation cannot drift. Spec:
+  `docs/specs/2026-10-14-context-quality-breakdown-design.md`.
 
 ## [0.4.0] - 2026-10-14
 

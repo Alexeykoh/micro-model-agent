@@ -530,6 +530,31 @@ describe("getQuality", () => {
   });
 });
 
+describe("getQualityBreakdown", () => {
+  it("matches getQuality and exposes four weighted parts", () => {
+    const cm = new ContextManager(32768);
+    cm.addMessage({ role: "system", content: "SYS" });
+    for (let i = 0; i < 6; i++) cm.addMessage({ role: "user", content: "hello ".repeat(30) });
+    cm.noteIteration();
+    const bd = cm.getQualityBreakdown();
+    expect(bd.total).toBe(cm.getQuality());
+    expect(bd.parts.map((p) => p.key)).toEqual(["load", "compaction", "errors", "freshness"]);
+    expect(bd.parts.reduce((s, p) => s + p.weight, 0)).toBeCloseTo(1, 6);
+    for (const p of bd.parts) {
+      expect(p.factor).toBeGreaterThanOrEqual(0);
+      expect(p.factor).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("total equals the weighted sum of the parts", () => {
+    const cm = new ContextManager(2000);
+    for (let i = 0; i < 12; i++) cm.addMessage({ role: "user", content: "x".repeat(120) });
+    const bd = cm.getQualityBreakdown();
+    const weighted = bd.parts.reduce((s, p) => s + p.factor * p.weight, 0);
+    expect(bd.total).toBe(Math.round(Math.min(100, Math.max(0, weighted * 100))));
+  });
+});
+
 describe("ContextManager compaction result", () => {
   it("returns null when there is nothing to compact", () => {
     const cm = new ContextManager(1000);

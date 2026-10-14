@@ -38,6 +38,28 @@ function tipContent(cls: string, labelKey: string, n: number, denom: number): No
   return frag;
 }
 
+// Tooltip body for the quality row: each factor's normalized value, weight and
+// point contribution, so the user sees how the 0..100 score is composed.
+function qualityTip(bd: Dict): Node {
+  const box = el("div", "qtip");
+  const parts = Array.isArray(bd.parts) ? bd.parts : [];
+  for (const p of parts) {
+    const factor = typeof p.factor === "number" ? p.factor : 0;
+    const weight = typeof p.weight === "number" ? p.weight : 0;
+    const row = el("div", "qtip-row");
+    row.appendChild(el("span", "ctip-label", t("web.usage.quality_" + String(p.key || ""))));
+    row.appendChild(
+      el("b", "", t("web.usage.quality_part", {
+        value: Math.round(factor * 100),
+        weight: Math.round(weight * 100),
+        score: Math.round(factor * weight * 100),
+      })),
+    );
+    box.appendChild(row);
+  }
+  return box;
+}
+
 // Previous context-part widths (segment class → tokens), kept across renders so
 // a rebuilt bar can animate from the old width to the new one. `renderUsage`
 // recreates the whole panel each update; without seeding, the fresh segments
@@ -138,7 +160,7 @@ export function renderUsage(h: Dict): void {
   const cfg = settings.config || {};
   const sig = JSON.stringify([
     h.sessionId, h.model, h.contextUsed, h.contextLimit, h.contextWindow, h.cacheHitRate, h.costUsd,
-    h.compactionCount, h.contextQuality, h.contextProbe, h.contextBreakdown, cfg.model, cfg.contextWindow,
+    h.compactionCount, h.contextQuality, h.contextQualityBreakdown, h.contextProbe, h.contextBreakdown, cfg.model, cfg.contextWindow,
     I18N.locale,
   ]);
   if (sig === feed.lastUsageSig) return;
@@ -159,7 +181,11 @@ export function renderUsage(h: Dict): void {
   usageEl.appendChild(usageRow(t("web.usage.cost"), typeof h.costUsd === "number" ? "$" + h.costUsd.toFixed(4) : "—"));
   usageEl.appendChild(usageRow(t("web.usage.compactions"), "⟳ " + (h.compactionCount || 0), h.compactionCount ? "wn" : "dim"));
   const q = typeof h.contextQuality === "number" ? h.contextQuality : null;
-  usageEl.appendChild(usageRow(t("web.usage.quality"), q != null ? Math.round(q) + "%" : "—", q != null ? "" : "dim"));
+  const qualityRow = usageRow(t("web.usage.quality"), q != null ? Math.round(q) + "%" : "—", q != null ? "" : "dim");
+  if (h.contextQualityBreakdown) {
+    attachTooltip(qualityRow, () => qualityTip(h.contextQualityBreakdown));
+  }
+  usageEl.appendChild(qualityRow);
 
   // Context probe: how many tokens the backend actually loaded for the model
   // (LM Studio and friends can load fewer than the configured window). We lead
