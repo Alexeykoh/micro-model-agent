@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { estimateTokens } from "../llm/token-counter";
 import { t } from "../i18n/index";
-import type { ToolResult } from "./types";
+import type { ToolCall, ToolContext, ToolResult } from "./types";
 
 /** Сколько первых строк вывода оставить в превью дескриптора. */
 const PREVIEW_LINES = 12;
@@ -72,4 +72,22 @@ export function admitToolResult(result: ToolResult, opts: AdmitOptions): ToolRes
     preview,
   });
   return { ...result, output: descriptor, artifactPath: artifact };
+}
+
+/**
+ * Admission в точке исполнения (OO-1): берёт порог и спилл-параметры из
+ * `ToolContext`, `source` — из аргумента-пути вызова. Одна точка для всех тулов.
+ */
+export function admitFromContext(
+  result: ToolResult,
+  ctx: ToolContext,
+  call: ToolCall,
+): ToolResult {
+  const path = call.arguments?.path;
+  return admitToolResult(result, {
+    baseDir: ctx.baseDir,
+    sessionId: ctx.sessionId ?? "default",
+    maxTokens: ctx.config?.contextBudget?.admitMaxTokens ?? 3000,
+    source: typeof path === "string" ? path : undefined,
+  });
 }

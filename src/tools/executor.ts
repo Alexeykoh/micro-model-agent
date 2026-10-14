@@ -6,7 +6,8 @@ import { isPathInScope, isPathWritable } from "../modules/security/path-validato
 import { protectedPathBlock } from "../modules/security/protected-paths";
 import { isUrlAllowed } from "../modules/security/network-validator";
 import { filterToolsByTags } from "./filter-tools";
-import { admitToolResult } from "./admission";
+import { admitFromContext } from "./admission";
+import { stableArgsKey } from "./args-key";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { t } from "../i18n/index";
@@ -16,18 +17,6 @@ import {
 } from "../config/timeouts";
 
 const MEMO_MAX_ENTRIES = 100;
-
-/** Стабильная сериализация: сортировка ключей, порядок аргументов на ключ не влияет. */
-function stableArgsKey(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stableArgsKey);
-  if (value && typeof value === "object") {
-    const entries = Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map((k) => [k, stableArgsKey((value as Record<string, unknown>)[k])]);
-    return Object.fromEntries(entries);
-  }
-  return value;
-}
 
 /**
  * FIFO-мьютекс для диспатча плагин-хуков. Плагины (execution stuck-detector,
@@ -402,13 +391,7 @@ export class ToolExecutor {
     // Admission (OO-1/OO-7): результат больше admitMaxTokens не входит в
     // контекст дословно — спилл + дескриптор. Одна точка для всех тулов;
     // хендлер политику не реализует. Мемо ниже сохраняет уже admitted результат.
-    result = admitToolResult(result, {
-      baseDir: this.ctx.baseDir,
-      sessionId: this.ctx.sessionId ?? "default",
-      maxTokens: this.ctx.config?.contextBudget?.admitMaxTokens ?? 3000,
-      source:
-        typeof call.arguments?.path === "string" ? String(call.arguments.path) : undefined,
-    });
+    result = admitFromContext(result, this.ctx, call);
 
     if (!memoHit) {
       // Успешные детерминированные чтения мемоизируются; всё остальное, что
