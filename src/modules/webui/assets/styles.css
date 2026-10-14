@@ -678,10 +678,23 @@ body.light .sel > button { border: 1px solid var(--border); }
 .cmdk-item.on, .cmdk-item:hover { background: var(--hover-bg-2); }
 .cmdk-item.on .cmd { color: var(--accent); }
 
+/* queued messages: a message sent mid-turn waits for the running turn to end.
+   Shown pinned above the composer (not injected into the streaming answer),
+   so it stays readable instead of scrolling away with the chat. */
+.queue-strip {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-bottom: 6px; padding: 4px 8px;
+  background: var(--surface); border: 1px solid var(--border-2); border-radius: 6px;
+}
+.queue-strip[hidden] { display: none; }
+.queue-item { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; min-width: 0; }
+.queue-item .qi-g { color: var(--accent); flex: none; }
+.queue-item .qi-text { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.queue-item .qi-pos { color: var(--dim-b); margin-left: auto; flex: none; }
+
 /* image attachments */
 .attach-strip { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.attach-strip[hidden] { display: none; }
-.thumb {
+.attach-strip[hidden] { display: none; }.thumb {
   position: relative; width: 64px; height: 48px; border-radius: 4px; overflow: hidden;
   border: 1px solid var(--border-2); background: var(--surface);
 }

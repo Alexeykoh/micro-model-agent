@@ -376,6 +376,19 @@ describe("webui assets", () => {
     expect(js(a)).toContain("setBusy(session.busy)");
   });
 
+  it("pins queued messages above the composer instead of into the stream", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('id="queueStrip"');
+    expect(a.css).toContain(".queue-strip");
+    expect(a.css).toContain(".queue-item");
+    const queue = a.jsModules?.["js/session/queue.js"] || "";
+    expect(queue).toContain("renderQueueStrip");
+    expect(queue).toContain("drainQueuedTurn");
+    expect(queue).toContain("enqueuePending");
+    expect(js(a)).toContain("renderQueueStrip(");
+    expect(js(a)).toContain("drainQueuedTurn(d.sessionId)");
+  });
+
   it("wires the ui.fontSize setting to body[data-font]", () => {
     const a = loadAssets();
     expect(js(a)).toContain('"ui.fontSize"');
