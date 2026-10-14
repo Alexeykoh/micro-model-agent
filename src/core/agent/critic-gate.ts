@@ -177,10 +177,8 @@ export class CriticGate {
   }
 
   private logCheck(deps: CriticGateDeps): void {
-    // Субъект проверки — события тулов текущего захода. Без сводки строка
-    // `critic_check` в Trace несла только iteration, и «что критиковали» было
-    // не видно (вердикт при `ok` не пишется вовсе). Сводка перечисляет, что
-    // именно ушло в evidence-пакет.
+    // Сводка субъекта проверки: без неё строка `critic_check` в Trace пуста —
+    // при вердикте `ok` вердикт вообще не пишется.
     const tools = deps.toolEvents.map((e) => e.tool);
     const unique = [...new Set(tools)];
     const summary =
