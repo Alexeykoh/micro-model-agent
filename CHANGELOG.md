@@ -34,6 +34,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Trace critic `check` rows showed nothing**: a `critic_check` entry carried
+  only `iteration`, so the detail pane (and row) were empty — worse when the
+  verdict was `ok`, which is not logged at all. `CriticGate.logCheck` now writes
+  a summary of the evidence it examined (`checked N tool call(s): write_file,
+  edit_file, …`), and the Trace row/detail renders it
+  (`src/core/agent/critic-gate.ts`, `assets/js/sidebar/trace.ts`).
 - **LSP install hints now respect the project's toolchain (all languages)**: a
   new `detectProjectToolchain` reads declared runtime/package versions from
   standard manifests (`.nvmrc`, `package.json`, `.python-version`,

@@ -352,7 +352,7 @@ function appendLogEntry(e: Dict): void {
   if (!e || typeof e.type !== "string") return;
   switch (e.type) {
     case "critic_check":
-      pushRow(append({ kind: "critic", status: "check", text: "", iteration: e.iteration }));
+      pushRow(append({ kind: "critic", status: "check", text: e.content || "", iteration: e.iteration }));
       break;
     case "critic_verdict":
       pushRow(append({ kind: "critic", status: e.status || "", text: e.content || "", iteration: e.iteration }));

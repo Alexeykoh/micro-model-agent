@@ -165,6 +165,11 @@ describe("CriticGate", () => {
     const d = deps();
     await gate.evaluate(d);
     expect(d.slog.logCritic).toHaveBeenCalledWith("critic_check", expect.objectContaining({ beforeFinish: true, mutations: 3 }));
+    // Субъект проверки виден в Trace: без сводки строка `critic_check` пуста.
+    expect(d.slog.logCritic).toHaveBeenCalledWith(
+      "critic_check",
+      expect.objectContaining({ summary: expect.stringContaining("write_file") }),
+    );
   });
 
   it("logs one critic_verdict entry per non-ok verdict and keeps it out of the chat", async () => {
