@@ -48,7 +48,7 @@ describe("config defaults", () => {
       tools: true,
       maxCalls: 4,
       maxRepairCycles: 1,
-      timeoutMs: 60000,
+      timeoutMs: 120000,
       maxTokens: 2048,
     });
   });

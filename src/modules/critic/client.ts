@@ -1,6 +1,7 @@
 // Клиент контр-агента: верификация пакета доказательств с опциональным read-only контуром.
 import { jsonrepair } from "jsonrepair";
 import type { LLMProvider, Message } from "../../llm/provider";
+import { LLM_REQUEST_TIMEOUT_MS } from "../../config/timeouts";
 import type { CriticVerdict, EvidencePack, CriticIssue } from "./types";
 import { parseChecks, runCriticChecks, renderCheckResults, CRITIC_READONLY_TOOLS } from "./tools";
 
@@ -37,8 +38,8 @@ export interface CriticClientOptions {
 
 /** Дефолтный лимит токенов вердикта: хватает на JSON с issues на длинном пакете. */
 const DEFAULT_MAX_TOKENS = 2048;
-/** Дефолтный таймаут одного LLM-вызова критика. */
-const DEFAULT_TIMEOUT_MS = 60000;
+/** Дефолтный таймаут вызова критика: не короче провайдерского request-дедлайна. */
+const DEFAULT_TIMEOUT_MS = LLM_REQUEST_TIMEOUT_MS;
 
 /** Раннер одной проверки критика: тул + args → успех и вывод. */
 export interface CriticRunCheck {
@@ -162,10 +163,14 @@ export class CriticClient {
       })) {
         if (chunk.type === "text" && chunk.content) text += chunk.content;
       }
+      return text;
+    } catch (err) {
+      // Таймер выстрелил: abort роняет for-await, поэтому причину снимаем здесь —
+      // пост-цикловый check был недостижим, и таймаут маскировался под llm_error.
       if (controller.signal.aborted && !signal?.aborted) {
         this.degrade(`call_timeout (${this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms)`);
       }
-      return text;
+      throw err;
     } finally {
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
