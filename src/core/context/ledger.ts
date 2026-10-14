@@ -43,7 +43,14 @@ export class ContextLedger {
       const address = line.slice(0, i).trim();
       const stale = line.includes(STALE_MARK);
       const note = line.slice(i + SEP.length).replace(STALE_MARK, "").trim();
-      if (!this.byAddress.has(address)) {
+      // Last-wins: a later line for the same address supersedes the earlier one,
+      // so note updates (and staleness marks) appended by `record`/`markStale`
+      // are durable across reloads while still deduping to one entry per address.
+      const existing = this.byAddress.get(address);
+      if (existing) {
+        existing.note = note;
+        existing.stale = stale;
+      } else {
         const e: LedgerEntry = { address, note, stale };
         this.entries.push(e);
         this.byAddress.set(address, e);
@@ -61,21 +68,24 @@ export class ContextLedger {
     if (existing) {
       if (existing.note !== note) {
         existing.note = note;
-        this.persistLine(address, note);
+        this.persistLine(address, note, existing.stale);
       }
       return;
     }
     const e: LedgerEntry = { address, note, stale: false };
     this.entries.push(e);
     this.byAddress.set(address, e);
-    this.persistLine(address, note);
+    this.persistLine(address, note, false);
     this.enforceCap();
   }
 
-  /** OO-8: пометить адреса файла stale (сам путь и всё под ним). */
+  /** OO-8: пометить адреса файла stale (сам путь и всё под ним). Персистит метку. */
   markStale(pathPrefix: string): void {
     for (const e of this.entries) {
-      if (e.address === pathPrefix || e.address.startsWith(`${pathPrefix}:`)) e.stale = true;
+      if ((e.address === pathPrefix || e.address.startsWith(`${pathPrefix}:`)) && !e.stale) {
+        e.stale = true;
+        this.persistLine(e.address, e.note, true);
+      }
     }
   }
 
@@ -105,9 +115,9 @@ export class ContextLedger {
     }
   }
 
-  private persistLine(address: string, note: string): void {
+  private persistLine(address: string, note: string, stale: boolean): void {
     mkdirSync(dirname(this.filePath), { recursive: true });
-    appendFileSync(this.filePath, `${address}${SEP}${note}\n`, "utf8");
+    appendFileSync(this.filePath, `${address}${SEP}${note}${stale ? STALE_MARK : ""}\n`, "utf8");
   }
 
   private enforceCap(): void {

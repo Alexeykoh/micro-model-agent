@@ -49,4 +49,25 @@ describe("ContextLedger", () => {
     l.record("x.ts:1", "n");
     expect(l.pointerLine()).toMatch(/^\[Notes: .*NOTES\.md, 1\]$/);
   });
+
+  it("load is last-wins: an updated note supersedes the earlier one", () => {
+    const l = new ContextLedger(path, 200);
+    l.record("a.ts:1", "old");
+    l.record("a.ts:1", "NEW");
+    const reloaded = new ContextLedger(path, 200);
+    reloaded.load();
+    expect(reloaded.size()).toBe(1);
+    expect(reloaded.render()).toContain("NEW");
+    expect(reloaded.render()).not.toContain("old");
+  });
+
+  it("persists staleness marks across reloads", () => {
+    const l = new ContextLedger(path, 200);
+    l.record("b.ts:2", "fact");
+    l.markStale("b.ts");
+    const reloaded = new ContextLedger(path, 200);
+    reloaded.load();
+    expect(reloaded.isStale("b.ts:2")).toBe(true);
+    expect(reloaded.render()).toContain("(stale)");
+  });
 });
