@@ -455,7 +455,7 @@ export class SessionLogger {
    * @param event тип события; @param diag единая диагностика (INV-14).
    */
   logDiagnosticEvent(
-    event: "critic_error" | "verify_error" | "tool_attempt",
+    event: "critic_error" | "verify_error" | "tool_attempt" | "admission_degraded",
     diag: Diagnostic,
   ): void {
     this.appendDiagnostic(event, diag);
@@ -463,7 +463,7 @@ export class SessionLogger {
 
   /** Общая запись Diagnostic: `content` = причина (совместимо со старыми читателями). */
   private appendDiagnostic(
-    type: "error" | "critic_error" | "verify_error" | "tool_attempt",
+    type: "error" | "critic_error" | "verify_error" | "tool_attempt" | "admission_degraded",
     diag: Diagnostic,
   ): void {
     const cause = diag.cause ? redactContextSecrets(diag.cause) : undefined;

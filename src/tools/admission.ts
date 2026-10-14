@@ -112,9 +112,17 @@ export function admitFromContext(
   } catch (e) {
     // Best-effort (OO-1): сбой спилла/пути не должен превращать успешный тул в
     // ошибку — логируем и отдаём сырьё как есть (admission деградирует, тул — нет).
-    ctx.logger.warn(
-      `admission skipped: ${e instanceof Error ? e.message : String(e)}`,
-    );
+    const cause = e instanceof Error ? e.message : String(e);
+    ctx.logger.warn(`admission skipped: ${cause}`);
+    // INV-15: fail-open путь обязан оставить различимый сигнал в session.jsonl,
+    // иначе «сломался» неотличим от «admission не нужен».
+    ctx.onDiagnostic?.({
+      source: "tool:admission",
+      operation: "admit",
+      kind: "degraded",
+      cause,
+      recoverable: true,
+    });
     return result;
   }
 }

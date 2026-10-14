@@ -114,6 +114,12 @@ export interface ToolContext {
     plan(event: string, detail: string, iteration?: number): void;
   };
   /**
+   * Приёмник диагностик fail-open путей тула (INV-15). Ставит
+   * `ToolExecutor.setDiagnosticSink`; admission и подобные best-effort швы
+   * эмитят сюда различимый сигнал для `session.jsonl`.
+   */
+  onDiagnostic?: (diag: import("../output/types").Diagnostic) => void;
+  /**
    * Headless one-shot: интерактивные тулы (question/approve) падают сразу,
    * не блокируясь на stdin; агент завершается на первом финальном ответе.
    */

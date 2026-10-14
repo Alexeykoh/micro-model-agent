@@ -16,7 +16,7 @@ import { ContextManager } from "../../core/context/manager";
 import { TokenCounter } from "../../llm/token-counter";
 import { ToolExecutor } from "../../tools/executor";
 import { HallucinationDetector } from "../../core/hallucination/detector";
-import { createToolContext } from "./tool-context";
+import { createToolContext, admissionDiagnosticSink } from "./tool-context";
 import { SessionStore, SessionManager } from "../../modules/session/index";
 import { ContextLogger } from "../agent/context-log";
 import { t } from "../../i18n/index";
@@ -210,6 +210,9 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
   });
 
   const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
+  // INV-15: fail-open admission (спилл упал → результат не admitted) пишет
+  // `admission_degraded` в сессию этим же путём, что `verify_error`.
+  toolExecutor.setDiagnosticSink(admissionDiagnosticSink(sessionManager));
   toolCtx.llmProvider = llmProvider;
   toolCtx.toolExecutor = toolExecutor;
 

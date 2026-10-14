@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { admitFromContext, admitToolResult } from "../../src/tools/admission";
 import { estimateTokens } from "../../src/llm/token-counter";
 import type { ToolContext } from "../../src/tools/types";
+import type { Diagnostic } from "../../src/output/types";
 
 let dir: string;
 beforeEach(() => {
@@ -173,16 +174,18 @@ describe("admitToolResult", () => {
     expect(slice.length).toBeLessThan(big.length);
   });
 
-  it("admitFromContext is best-effort: raw output kept when spill fails", () => {
+  it("admitFromContext is best-effort: raw output kept, diagnostic emitted", () => {
     // baseDir — обычный файл, поэтому mkdirSync бросает ENOTDIR.
     const notADir = join(dir, "plain-file");
     writeFileSync(notADir, "x");
     const big = "L".repeat(40000);
     const warns: string[] = [];
+    const diags: Diagnostic[] = [];
     const ctx = {
       baseDir: notADir,
       sessionId: "s1",
       logger: { warn: (m: string) => warns.push(m) },
+      onDiagnostic: (d: Diagnostic) => diags.push(d),
     } as unknown as ToolContext;
     const r = admitFromContext({ success: true, output: big }, ctx, {
       id: "1",
@@ -193,5 +196,14 @@ describe("admitToolResult", () => {
     expect(r.artifactPath).toBeUndefined();
     expect(warns).toHaveLength(1);
     expect(warns[0]).toContain("admission skipped");
+    // INV-15: fail-open путь оставляет различимый сигнал.
+    expect(diags).toHaveLength(1);
+    expect(diags[0]).toMatchObject({
+      source: "tool:admission",
+      operation: "admit",
+      kind: "degraded",
+      recoverable: true,
+    });
+    expect(diags[0].cause.length).toBeGreaterThan(0);
   });
 });

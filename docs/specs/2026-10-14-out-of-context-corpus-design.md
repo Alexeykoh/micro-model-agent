@@ -281,6 +281,10 @@ reduce), бюджет — из `history − toolTokens` (§5). REDUCE прекр
   компакциями → диагностика `kind: "degraded"`, `source: "core"` (стоит ноль токенов, ловит
   петлю на ранней стадии).
 - Детектор петли «компакция без прогресса» — из спеки-предшественника §3.4 (не дублируется).
+- **Admission degraded (INV-15):** если admission не смог спиллить результат (fs/путь),
+  best-effort возвращает сырьё, а харнесс пишет `admission_degraded` в `session.jsonl`
+  (`source: "tool:admission"`, `kind: "degraded"`, `recoverable: true`). Иначе «спилл
+  сломался» неотличим от «admission не нужен».
 
 ---
 

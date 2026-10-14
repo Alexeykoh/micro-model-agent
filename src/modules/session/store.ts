@@ -41,7 +41,7 @@ export interface SessionLogEntry {
     | "critic_escalation"
     | "critic_error"
     | "verify_error"
-    | "tool_attempt"
+    | "tool_attempt" | "admission_degraded"
     | "claim_retry"
     | "service_task"
     | `onboarding_${string}`

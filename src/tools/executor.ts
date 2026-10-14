@@ -8,6 +8,7 @@ import { isUrlAllowed } from "../modules/security/network-validator";
 import { filterToolsByTags } from "./filter-tools";
 import { admitFromContext } from "./admission";
 import { stableArgsKey } from "./args-key";
+import { AsyncLock } from "./async-lock";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { t } from "../i18n/index";
@@ -17,26 +18,6 @@ import {
 } from "../config/timeouts";
 
 const MEMO_MAX_ENTRIES = 100;
-
-/**
- * FIFO-мьютекс для диспатча плагин-хуков. Плагины (execution stuck-detector,
- * lint-on-write, lsp) несут общее мутабельное состояние и не
- * конкурентно-безопасны. Параллельные форки (subagent-сиблинги)
- * делят один экземпляр — хуки сериализуются, а тело тула бежит конкурентно.
- */
-class AsyncLock {
-  private tail: Promise<unknown> = Promise.resolve();
-
-  run<T>(fn: () => T | Promise<T>): Promise<T> {
-    const run = this.tail.then(fn, fn);
-    // Хвост всегда settle-resolved: упавший хук не должен ломать очередь.
-    this.tail = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
-  }
-}
 
 /** Исполнитель: реестр, контекст, плагины, сессионное мемо. */
 export class ToolExecutor {
@@ -516,6 +497,11 @@ export class ToolExecutor {
   /** Установить prompt-поверхность для интерактивных тулов. */
   setPromptIO(io?: import("./prompt-io").PromptIO): void {
     this.ctx.promptIO = io;
+  }
+
+  /** Задать приёмник диагностик fail-open путей тула (INV-15). Форки наследуют. */
+  setDiagnosticSink(fn?: (diag: import("../output/types").Diagnostic) => void): void {
+    this.ctx.onDiagnostic = fn;
   }
 
   /** Текущая глубина рекурсии субагентов. */

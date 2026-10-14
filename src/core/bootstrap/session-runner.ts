@@ -242,7 +242,7 @@ export function createSessionRunnerFactory(
       capabilitiesProbeRef,
       draftHost,
     });
-    const toolExecutor = buildRunnerExecutor(registry, toolCtx, runnerPlugins);
+    const toolExecutor = buildRunnerExecutor(registry, toolCtx, runnerPlugins, pinned);
     toolCtx.llmProvider = llmProvider;
     toolCtx.toolExecutor = toolExecutor;
 

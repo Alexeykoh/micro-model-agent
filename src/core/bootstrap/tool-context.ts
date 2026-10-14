@@ -9,6 +9,7 @@ import type { DraftHost } from "../../modules/plugins/drafts";
 import type { AppConfig, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { ToolContext } from "../../tools/types";
+import type { Diagnostic } from "../../output/types";
 
 /** Зависимости сборки ToolContext. */
 export interface ToolContextInput {
@@ -21,6 +22,29 @@ export interface ToolContextInput {
   configRef: { current: AppConfig };
   capabilitiesRef: { probe?: ModelCapabilities };
   draftHost?: DraftHost;
+}
+
+/**
+ * Sink диагностик fail-open прямых путей тула (INV-15): `admission_degraded`
+ * пишется в сессию тем же объектом-записью, что `verify_error`. SessionLogger
+ * на момент сборки исполнителя ещё не создан (`Agent.run`), поэтому пишем
+ * напрямую через менеджер сессий (как fail-open верификатора в `agent-phase`).
+ */
+export function admissionDiagnosticSink(
+  sessionManager: SessionManager,
+): (diag: Diagnostic) => void {
+  return (diag: Diagnostic) => {
+    sessionManager.appendLog({
+      ts: new Date().toISOString(),
+      type: "admission_degraded",
+      content: diag.cause ?? diag.operation,
+      source: diag.source,
+      operation: diag.operation,
+      errorKind: diag.kind,
+      cause: diag.cause,
+      recoverable: diag.recoverable,
+    });
+  };
 }
 
 /**

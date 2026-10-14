@@ -19,6 +19,7 @@ import { registerOwnedTools } from "../module-host";
 import { pluginCapabilitiesBlock } from "../../modules/plugins/capabilities-block";
 import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
 import { resolveModelCapabilities } from "../../modules/providers/capabilities";
+import { admissionDiagnosticSink } from "./tool-context";
 
 /** Тулы ExecutionModule — в раннер-реестре заменяются привязанными к своему трекеру. */
 const EXEC_TOOL_NAMES = new Set(["plan", "plan_step", "todo", "verify"]);
@@ -176,8 +177,12 @@ export function buildRunnerExecutor(
   registry: ToolRegistry,
   toolCtx: ToolContext,
   plugins: PluginManager,
+  sessionManager: SessionManager,
 ): ToolExecutor {
-  return new ToolExecutor(registry, toolCtx, plugins);
+  const executor = new ToolExecutor(registry, toolCtx, plugins);
+  // INV-15: `admission_degraded` — в сессию раннера, как `verify_error`.
+  executor.setDiagnosticSink(admissionDiagnosticSink(sessionManager));
+  return executor;
 }
 
 /** Входы сборки dynamic-блоков раннера. */
