@@ -135,6 +135,37 @@ describe("resolvePromptOverflow", () => {
     expect(res.hintBlock?.content).toContain("AGENTS.md");
   });
 
+  it("forwards the provider reasoning strategy so reasoning is actually disabled", async () => {
+    const captured: Array<{ reasoningEffort?: string; reasoningStrategy?: string }> = [];
+    const provider = {
+      model: "fake",
+      contextWindow: 32768,
+      countTokens: (text: string) => Math.ceil(text.length / 4),
+      listModels: async () => [],
+      // @ts-expect-error — test stub narrows the streaming API
+      chat: async function* (
+        _messages: unknown,
+        _tools: unknown,
+        _signal: unknown,
+        options?: { reasoningEffort?: string; reasoningStrategy?: string },
+      ) {
+        if (options) captured.push(options);
+        yield { type: "text", content: "SUMMARY: rules" } as Chunk;
+      },
+    } as unknown as LLMProvider;
+    await resolvePromptOverflow({
+      overflow: [block({ content: "LONG".repeat(1000), kind: "instructions", estimatedTokens: 3000 })],
+      includedTokens: 1500,
+      systemBudget: 3276,
+      provider,
+      cacheDir,
+      reasoningStrategy: "prompt-tag",
+    });
+    expect(captured).toHaveLength(1);
+    expect(captured[0].reasoningEffort).toBe("none");
+    expect(captured[0].reasoningStrategy).toBe("prompt-tag");
+  });
+
   it("falls back to truncation when the provider fails", async () => {
     const provider = fakeProvider(() => {
       throw new Error("backend down");
