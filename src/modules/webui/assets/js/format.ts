@@ -114,6 +114,13 @@ export function relTime(ts: string | number | null | undefined): string {
 export function fmtTokens(n: number): string {
   return n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n);
 }
+// Human byte size for download progress (`3.1 MB`).
+export function fmtBytes(n: number): string {
+  if (!isFinite(n) || n < 0) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
 // Compact context-window label for selectors and the model panel.
 export function contextLabel(): string {
   const n = (settings.config && settings.config.contextWindow) || 0;

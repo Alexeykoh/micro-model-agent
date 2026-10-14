@@ -34,21 +34,39 @@ export interface InstallReleaseOptions {
   extract?: (tarball: string, dest: string) => Promise<void>;
 }
 
+/** Стадия установки для прогресса в UI/консоли. */
+export interface InstallProgress {
+  phase: "download" | "verify" | "extract" | "activate";
+  /** Скачано байт (только `download`). */
+  received?: number;
+  /** Всего байт, если известен `content-length` (только `download`). */
+  total?: number;
+}
+
+/** Колбэк прогресса установки (best-effort, не влияет на результат). */
+export type InstallProgressFn = (p: InstallProgress) => void;
+
 /** Скачивает релиз, распаковывает и активирует. Возвращает версию. */
-export async function installRelease(opts: InstallReleaseOptions): Promise<string> {
+export async function installRelease(
+  opts: InstallReleaseOptions,
+  onProgress?: InstallProgressFn,
+): Promise<string> {
   const artifact = opts.manifest.artifacts[opts.key];
   if (!artifact) throw new Error(`platform ${opts.key} is not in the manifest`);
 
   const tmp = await mkdtemp(join(tmpdir(), "mma-update-"));
   try {
     const tarball = join(tmp, "mma.tar.gz");
-    await downloadFile(`${opts.base}/${artifact.url}`, tarball, opts.fetchImpl);
+    onProgress?.({ phase: "download" });
+    await downloadFile(`${opts.base}/${artifact.url}`, tarball, opts.fetchImpl, onProgress);
 
+    onProgress?.({ phase: "verify" });
     const actual = await sha256File(tarball);
     if (artifact.sha256 && actual !== artifact.sha256.toLowerCase()) {
       throw new Error(`checksum mismatch (expected ${artifact.sha256}, got ${actual})`);
     }
 
+    onProgress?.({ phase: "extract" });
     const pkg = join(tmp, "pkg");
     await mkdir(pkg, { recursive: true });
     await (opts.extract ?? extractTarGz)(tarball, pkg);
@@ -56,6 +74,7 @@ export async function installRelease(opts: InstallReleaseOptions): Promise<strin
     const version = (await readFile(join(pkg, "VERSION"), "utf8")).trim();
     if (!version) throw new Error("invalid archive: VERSION missing");
 
+    onProgress?.({ phase: "activate" });
     const versionsDir = join(opts.installRoot, "versions");
     await mkdir(versionsDir, { recursive: true });
     const target = join(versionsDir, version);
@@ -69,14 +88,40 @@ export async function installRelease(opts: InstallReleaseOptions): Promise<strin
   }
 }
 
-/** Скачивает файл целиком (релизы — десятки-сотни МБ). */
+/**
+ * Скачивает файл целиком (релизы — десятки-сотни МБ). Читает `res.body`
+ * потоком, чтобы отдавать прогресс по `content-length`; если тела нет
+ * (некоторые моки/окружения) — обычный `arrayBuffer`.
+ */
 export async function downloadFile(
   url: string,
   dest: string,
   fetchImpl: FetchLike,
+  onProgress?: InstallProgressFn,
 ): Promise<void> {
   const res = await fetchImpl(url, { signal: AbortSignal.timeout(300_000) });
   if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
+  const lenHeader = res.headers && typeof res.headers.get === "function"
+    ? res.headers.get("content-length")
+    : null;
+  const total = Number(lenHeader) || undefined;
+  const body = res.body as ReadableStream<Uint8Array> | null | undefined;
+  if (body && typeof body.getReader === "function") {
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        received += value.byteLength;
+        onProgress?.({ phase: "download", received, total });
+      }
+    }
+    await writeFile(dest, Buffer.concat(chunks.map((c) => Buffer.from(c))));
+    return;
+  }
   const buf = Buffer.from(await res.arrayBuffer());
   await writeFile(dest, buf);
 }

@@ -1,6 +1,6 @@
 // Проверка обновлений по манифесту GitHub Releases и установка релиза.
 import { globalMmaDir } from "../../config/paths";
-import { installRelease } from "./install-release";
+import { installRelease, type InstallProgressFn } from "./install-release";
 import {
   manifestUrl,
   releaseBase,
@@ -116,9 +116,10 @@ export class Updater {
 
   /**
    * Скачивает и активирует свежую версию из GitHub Releases.
-   * Возвращает InstallResult (не бросает).
+   * Возвращает InstallResult (не бросает). `onProgress` — best-effort прогресс
+   * (скачивание/проверка/распаковка/активация).
    */
-  async install(): Promise<InstallResult> {
+  async install(onProgress?: InstallProgressFn): Promise<InstallResult> {
     try {
       const key = this.getPlatformKey();
       if (!key) {
@@ -131,14 +132,17 @@ export class Updater {
       if (!res.ok) return { success: false, error: `manifest HTTP ${res.status}` };
       const manifest = (await res.json()) as ReleaseManifest;
 
-      const installed = await installRelease({
-        manifest,
-        key,
-        base: releaseBase(this.env),
-        fetchImpl: this.fetchImpl,
-        installRoot: this.installRoot,
-        extract: this.extract,
-      });
+      const installed = await installRelease(
+        {
+          manifest,
+          key,
+          base: releaseBase(this.env),
+          fetchImpl: this.fetchImpl,
+          installRoot: this.installRoot,
+          extract: this.extract,
+        },
+        onProgress,
+      );
       return { success: true, installed };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
