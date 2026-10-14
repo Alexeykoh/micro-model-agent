@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { existsSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,19 +48,25 @@ describe("admitToolResult", () => {
 
   it("distinct artifact paths for consecutive admissions, both files intact", () => {
     const big = Array.from({ length: 5000 }, (_, i) => `line ${i}`).join("\n");
-    const a = admitToolResult(
-      { success: true, output: big },
-      { baseDir: dir, sessionId: "s1", maxTokens: 3000 },
-    );
-    const b = admitToolResult(
-      { success: true, output: big },
-      { baseDir: dir, sessionId: "s1", maxTokens: 3000 },
-    );
-    expect(a.artifactPath).toBeTruthy();
-    expect(b.artifactPath).toBeTruthy();
-    expect(a.artifactPath).not.toBe(b.artifactPath);
-    expect(readFileSync(a.artifactPath as string, "utf8")).toBe(big);
-    expect(readFileSync(b.artifactPath as string, "utf8")).toBe(big);
+    // Пинаем Date.now: оба вызова в одну «миллисекунду», уникальность даёт UUID-суффикс.
+    const spy = vi.spyOn(Date, "now").mockReturnValue(1234);
+    try {
+      const a = admitToolResult(
+        { success: true, output: big },
+        { baseDir: dir, sessionId: "s1", maxTokens: 3000 },
+      );
+      const b = admitToolResult(
+        { success: true, output: big },
+        { baseDir: dir, sessionId: "s1", maxTokens: 3000 },
+      );
+      expect(a.artifactPath).toBeTruthy();
+      expect(b.artifactPath).toBeTruthy();
+      expect(a.artifactPath).not.toBe(b.artifactPath);
+      expect(readFileSync(a.artifactPath as string, "utf8")).toBe(big);
+      expect(readFileSync(b.artifactPath as string, "utf8")).toBe(big);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("char-bounds preview for a single huge line", () => {
@@ -93,5 +99,26 @@ describe("admitToolResult", () => {
     expect(r.artifactPath).toBeTruthy();
     expect(existsSync(r.artifactPath as string)).toBe(true);
     expect((r.artifactPath as string).startsWith(join(dir, "custom", "dir", "s1"))).toBe(true);
+  });
+
+  it("falls back to default spill dir when spillDir escapes baseDir", () => {
+    const big = Array.from({ length: 5000 }, (_, i) => `line ${i}`).join("\n");
+    const r = admitToolResult(
+      { success: true, output: big },
+      { baseDir: dir, sessionId: "s1", maxTokens: 3000, spillDir: "../../evil" },
+    );
+    expect(r.artifactPath).toBeTruthy();
+    expect((r.artifactPath as string).startsWith(join(dir, ".mma", "context", "s1"))).toBe(true);
+    expect(existsSync(r.artifactPath as string)).toBe(true);
+  });
+
+  it("throws when sessionId escapes baseDir", () => {
+    const big = Array.from({ length: 5000 }, (_, i) => `line ${i}`).join("\n");
+    expect(() =>
+      admitToolResult(
+        { success: true, output: big },
+        { baseDir: dir, sessionId: "../../../evil", maxTokens: 3000 },
+      ),
+    ).toThrow(/escapes baseDir/);
   });
 });
