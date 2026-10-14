@@ -9,14 +9,32 @@ describe("addressesFromToolResult", () => {
     expect(got.some((g) => g.address === "src/a.ts:1810")).toBe(true);
   });
 
-  it("records the path for read_file with its range", () => {
-    const got = addressesFromToolResult("read_file", { path: "corpus/big.txt" }, "── corpus/big.txt (.txt, 4000 lines, lines 1-300)");
-    expect(got[0].address).toContain("corpus/big.txt");
+  it("keeps a Windows path intact in grep findings", () => {
+    const got = addressesFromToolResult("grep", { pattern: "NEEDLE" }, "C:\\proj\\a.ts:1800:NEEDLE");
+    expect(got).toEqual([{ address: "C:\\proj\\a.ts:1800", note: "NEEDLE" }]);
   });
 
-  it("records url for web tools", () => {
-    const got = addressesFromToolResult("web_fetch", { url: "https://x.example/p" }, "body");
-    expect(got[0].address).toBe("https://x.example/p");
+  it("derives the read range from args (offset/limit), not the localized header", () => {
+    const got = addressesFromToolResult(
+      "read_file",
+      { path: "corpus/big.txt", offset: 1, limit: 300 },
+      "── corpus/big.txt (.txt, 4000 lines, lines 1-300)",
+    );
+    expect(got).toEqual([{ address: "corpus/big.txt:1", note: "1-300" }]);
+  });
+
+  it("records only the path when read args carry no range", () => {
+    const got = addressesFromToolResult("read_file", { path: "x.txt" }, "── x.txt");
+    expect(got).toEqual([{ address: "x.txt", note: "" }]);
+  });
+
+  it("records url for web and download tools", () => {
+    expect(addressesFromToolResult("web_fetch", { url: "https://x.example/p" }, "body")).toEqual([
+      { address: "https://x.example/p", note: "" },
+    ]);
+    expect(
+      addressesFromToolResult("download_file", { url: "https://x.example/a.bin" }, "ok"),
+    ).toEqual([{ address: "https://x.example/a.bin", note: "" }]);
   });
 
   it("returns nothing for non-source tools", () => {
