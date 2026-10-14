@@ -609,7 +609,7 @@ export class ContextManager {
     if (significant) {
       this.compactionCount++;
       // INV-15: прогресс-прокси — размер durable-леджера после поглощения адресов.
-      this.compactionProgress.note(this.ledger?.size() ?? 0);
+      this.compactionProgress.note(this.ledger?.totalRecorded() ?? 0);
     }
     const result: CompactResult = {
       removedTurns: ctx.oldTurns.length,
@@ -857,7 +857,7 @@ export class ContextManager {
     this.lastEstimateMessageCount = 0;
     this.compactionCount++;
     // INV-15: hard-drop тоже поглотил адреса — учитываем прогресс.
-    this.compactionProgress.note(this.ledger?.size() ?? 0);
+    this.compactionProgress.note(this.ledger?.totalRecorded() ?? 0);
     const tokensAfter = this.getEstimatedTokens();
     if (this.onCompact) this.onCompact(summary);
     return {

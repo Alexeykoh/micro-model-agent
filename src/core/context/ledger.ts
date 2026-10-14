@@ -39,6 +39,12 @@ export class ContextLedger {
   /** Накопительный индекс свёрнутых файлов (union, а не последняя пачка). */
   private readonly foldedFiles = new Set<string>();
   private indexPath: string | null = null;
+  /**
+   * Монотонный счётчик добавленных адресов. В отличие от `size()`, не
+   * насыщается на `max` (cap сворачивает старейшие): пригоден как прогресс-прокси
+   * «модель узнаёт новое» (см. `CompactionProgressTracker`).
+   */
+  private recordedTotal = 0;
 
   constructor(
     private readonly filePath: string,
@@ -105,6 +111,15 @@ export class ContextLedger {
     return this.entries.length;
   }
 
+  /**
+   * Монотонно растущий счётчик добавленных адресов (не насыщается на cap).
+   * Дедуп/обновление заметки существующего адреса счётчик не двигает — иначе
+   * повторное чтение того же источника выглядело бы как прогресс.
+   */
+  totalRecorded(): number {
+    return this.recordedTotal;
+  }
+
   /** Добавляет адрес (дедуп по адресу; повтор обновляет заметку) и персистит. */
   record(address: string, note: string): void {
     const existing = this.byAddress.get(address);
@@ -118,6 +133,8 @@ export class ContextLedger {
     const e: LedgerEntry = { address, note, stale: false };
     this.entries.push(e);
     this.byAddress.set(address, e);
+    // Новый адрес (не дедуп/не обновление заметки) — прогресс.
+    this.recordedTotal++;
     this.persistLine(address, note, false);
     this.enforceCap();
   }

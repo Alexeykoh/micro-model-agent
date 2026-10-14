@@ -25,6 +25,12 @@ export function containedNotesPath(baseDir: string, notesPath: string): string {
  * INV-15: sink «компакция без прогресса» — пишет `context_degraded` в сессию тем
  * же объектом-записью, что `admission_degraded`/`verify_error` (SessionLogger на
  * момент сборки `ContextManager` ещё не создан, поэтому пишем через менеджер).
+ *
+ * Контракт формы — как у `SessionLogger.appendDiagnostic`: `content` = `cause`,
+ * поля `source`/`operation`/`errorKind`/`cause`/`recoverable`. `cause` здесь
+ * синтезируется из счётчика и не несёт тул-вывод или данные пользователя, поэтому
+ * не требует `redactContextSecrets`; сохраняйте это свойство (иначе сырой текст
+ * пойдёт в `session.jsonl` в обход скраба SessionLogger).
  */
 export function contextDegradedSink(
   sessionManager: SessionManager,

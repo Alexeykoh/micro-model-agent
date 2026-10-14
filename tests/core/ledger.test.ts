@@ -44,6 +44,17 @@ describe("ContextLedger", () => {
     expect(l.render()).toContain("index");
   });
 
+  it("totalRecorded counts only new addresses and does not saturate at the cap", () => {
+    const l = new ContextLedger(path, 1);
+    l.record("a.ts:1", "one");
+    l.record("a.ts:1", "one"); // дедуп — счётчик не двигается
+    l.record("a.ts:1", "updated"); // обновление заметки — тоже
+    l.record("b.ts:2", "two");
+    l.record("c.ts:3", "three");
+    expect(l.size()).toBe(1); // cap
+    expect(l.totalRecorded()).toBe(3);
+  });
+
   it("pointerLine reports the path and count", () => {
     const l = new ContextLedger(path, 200);
     l.record("x.ts:1", "n");
