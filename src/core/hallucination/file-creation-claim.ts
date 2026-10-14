@@ -76,7 +76,9 @@ export function checkClaimedFileCreation(
     if (DOC_CONTEXT_RE.test(window)) continue;
     if (!FILE_CLAIM_RE.test(window)) continue;
     const wrote = tools.some(
-      (t) => t.ok !== false && (t.name === "write_file" || t.name === "edit_file"),
+      (t) =>
+        t.ok !== false &&
+        (t.name === "write_file" || t.name === "edit_file" || t.name === "append_file"),
     );
     if (wrote) return null;
     return {

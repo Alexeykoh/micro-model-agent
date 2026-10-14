@@ -40,8 +40,7 @@ export interface RendererOptions {
 
 /** Тулы, чей аргумент `path` показывается в шапке. */
 const PATH_TOOLS = new Set([
-  "read_file",
-  "write_file",
+  "read_file", "write_file", "append_file",
   "edit_file",
   "delete_file",
   "create_dir",

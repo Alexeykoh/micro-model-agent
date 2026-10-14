@@ -10,7 +10,7 @@ import type { Message } from "./manager";
 const TOOL_LEDGER_MAX_ENTRIES = 12;
 
 /** OO-8: успешные записи/правки этих тулов помечают адреса файла stale. */
-const WRITE_TOOLS = new Set(["write_file", "edit_file"]);
+const WRITE_TOOLS = new Set(["write_file", "append_file", "edit_file"]);
 
 /** Краткая сигнатура аргументов тула (`ключ1, ключ2, ключ3`). */
 export function summarizeArgs(args: unknown): string {

@@ -40,6 +40,26 @@ describe("checkClaimedFileCreation", () => {
     ).toBeNull();
   });
 
+  it("passes when the file was built incrementally with append_file", () => {
+    expect(
+      checkClaimedFileCreation(
+        "Файл сохранён в /workspace/bike3/out.md",
+        [{ name: "append_file", ok: true, text: "Appended 10 chars to out.md" }],
+        TASK,
+      ),
+    ).toBeNull();
+  });
+
+  it("still fires when append_file itself failed (ok:false)", () => {
+    expect(
+      checkClaimedFileCreation(
+        "Файл сохранён в /workspace/bike3/out.md",
+        [{ name: "append_file", ok: false, text: "Could not write out.md" }],
+        TASK,
+      )?.tool,
+    ).toBe("file-creation");
+  });
+
   it("never fires when the task did not ask for a file", () => {
     expect(
       checkClaimedFileCreation(

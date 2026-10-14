@@ -33,7 +33,7 @@ const PLAN_NUDGE_THRESHOLD = 2;
  *  текущего шага для автопродвижения. Read-only осознанно исключены (см. вызов
  *  advance в onAfterTool ниже). */
 const FS_MUTATING_TOOLS = new Set([
-  "write_file",
+  "write_file", "append_file",
   "edit_file",
   "delete_file",
   "move_file",

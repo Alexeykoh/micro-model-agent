@@ -33,6 +33,7 @@ export {
   ToolExecutor,
   readFileTool,
   writeFileTool,
+  appendFileTool,
   editFileTool,
   globTool,
   grepTool,

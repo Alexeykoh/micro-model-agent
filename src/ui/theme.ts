@@ -83,6 +83,7 @@ const CATEGORY_TOOLS: Record<ToolCategory, ReadonlySet<string>> = {
   ]),
   mutate: new Set([
     "write_file",
+    "append_file",
     "edit_file",
     "create_dir",
     "delete_file",

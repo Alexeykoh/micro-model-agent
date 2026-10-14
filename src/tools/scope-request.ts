@@ -11,6 +11,7 @@ export interface ScopeRequest {
 /** Тулы записи (для классификации отказа как write). */
 const WRITE_TOOLS = new Set([
   "write_file",
+  "append_file",
   "edit_file",
   "delete_file",
   "create_dir",
