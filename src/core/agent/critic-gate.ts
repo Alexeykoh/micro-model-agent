@@ -177,11 +177,21 @@ export class CriticGate {
   }
 
   private logCheck(deps: CriticGateDeps): void {
+    // Субъект проверки — события тулов текущего захода. Без сводки строка
+    // `critic_check` в Trace несла только iteration, и «что критиковали» было
+    // не видно (вердикт при `ok` не пишется вовсе). Сводка перечисляет, что
+    // именно ушло в evidence-пакет.
+    const tools = deps.toolEvents.map((e) => e.tool);
+    const unique = [...new Set(tools)];
+    const summary =
+      `checked ${tools.length} tool call(s)` +
+      (unique.length ? `: ${unique.slice(0, 8).join(", ")}` : "");
     deps.slog.logCritic("critic_check", {
       iteration: deps.iteration,
       beforeFinish: deps.beforeFinish,
       mutations: deps.state.mutationsSinceCritic,
-      tools: deps.toolEvents.map((e) => e.tool).slice(0, 8),
+      tools: tools.slice(0, 8),
+      summary,
     });
   }
 

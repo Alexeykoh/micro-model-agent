@@ -54,6 +54,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   snapshot on a plan change, and the sidebar renders the plan from that
   snapshot. `run-agent.ts` now pushes a state snapshot alongside the `plan`
   event when a `plan`/`todo` tool ends (`src/modules/webui/session/run-agent.ts`).
+- **Trace critic `check` rows showed nothing**: a `critic_check` entry carried
+  only `iteration`, so the detail pane (and row) were empty — worse when the
+  verdict was `ok`, which is not logged at all. `CriticGate.logCheck` now writes
+  a summary of the evidence it examined (`checked N tool call(s): write_file,
+  edit_file, …`), and the Trace row/detail renders it
+  (`src/core/agent/critic-gate.ts`, `assets/js/sidebar/trace.ts`).
 - **LSP install hints now respect the project's toolchain (all languages)**: a
   new `detectProjectToolchain` reads declared runtime/package versions from
   standard manifests (`.nvmrc`, `package.json`, `.python-version`,
