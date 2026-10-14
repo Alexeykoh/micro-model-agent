@@ -116,13 +116,14 @@ export class CompactionService {
     const trigger = this.fallbackTrigger(state);
     if (!trigger) return;
     if (trigger.qualityDue) state.lastForcedCompactionIteration = state.iteration;
+    if (trigger.pendingDue) state.lastPendingCompactionIteration = state.iteration;
     this.compactV2(state, trigger.reason);
   }
 
   /** Решает, есть ли fallback-причина компакции, и какова она. */
   private fallbackTrigger(
     state: LoopState,
-  ): { reason: string; qualityDue: boolean } | null {
+  ): { reason: string; qualityDue: boolean; pendingDue?: boolean } | null {
     const { contextManager } = this.deps;
     const pending = state.pendingCompaction;
     state.pendingCompaction = false;
@@ -137,7 +138,7 @@ export class CompactionService {
       return { reason: "interval", qualityDue: false };
     }
     if (this.pendingFallbackDue(state, pending)) {
-      return { reason: "after-tool", qualityDue: false };
+      return { reason: "after-tool", qualityDue: false, pendingDue: true };
     }
     return null;
   }
@@ -161,7 +162,12 @@ export class CompactionService {
     const recentOverflow =
       state.iteration - state.lastOverflowCompactionIteration <
       this.deps.contextManager.getOverflowCooldown();
-    return !recentOverflow;
+    // Свой cooldown: без него, пока токены > порога после «оставить 12», после
+    // каждого tool-результата компакция срабатывала бы почти каждую итерацию.
+    return (
+      !recentOverflow &&
+      state.iteration - state.lastPendingCompactionIteration >= FORCED_COMPACTION_COOLDOWN
+    );
   }
 
   /**
