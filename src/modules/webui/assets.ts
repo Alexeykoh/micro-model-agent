@@ -60,6 +60,19 @@ export function loadAssets(): WebUiAssets {
       }
     };
     walkJs(join(ASSET_DIR, "js"), "js");
+    // Топ-левел `.ts`/`.js` рядом с `app.ts` (напр. split `md-copy.ts`): у них
+    // нет выделенного route, а `md.ts` импортирует их как `./md-copy.js`. Без
+    // этого импорт отдавал бы 404 и весь ESM-граф (а с ним boot чата) падал.
+    // Явные ключи `STATIC_ASSETS` (app/setup/md/smd/hljs) сюда не дублируем.
+    const explicit = new Set(["app.js", "setup.js", "md.js", "smd.js", "hljs.js"]);
+    for (const entry of readdirSync(ASSET_DIR, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const key = entry.name.replace(/\.ts$/, ".js");
+      if (!key.endsWith(".js") || explicit.has(key)) continue;
+      jsModules[key] = entry.name.endsWith(".ts")
+        ? transpiler.transformSync(readFileSync(join(ASSET_DIR, entry.name), "utf8"))
+        : readFileSync(join(ASSET_DIR, entry.name), "utf8");
+    }
   }
   return {
     html: read("index.html", "<!DOCTYPE html><h1>MMA web assets missing</h1>"),
