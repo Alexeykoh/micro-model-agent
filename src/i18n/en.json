@@ -1231,6 +1231,7 @@
   "web.sidebar.trace_empty": "no events yet",
   "web.sidebar.trace_turn": "turn {n}",
   "web.sidebar.trace_text": "composing… {count} chars",
+  "web.sidebar.trace_reasoning": "thinking… {count} chars",
   "web.sidebar.trace_plan": "plan update",
   "web.sidebar.trace_question": "question",
   "web.sidebar.trace_status": "status",

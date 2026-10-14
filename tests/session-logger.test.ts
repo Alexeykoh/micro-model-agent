@@ -195,6 +195,30 @@ describe("session-logger sanitization", () => {
     expect(all).not.toContain(secret);
   });
 
+  it("logCompaction writes a before/after report in content", () => {
+    const { logger, logs } = makeLogger();
+    logger.logCompaction({
+      reason: "overflow",
+      iteration: 7,
+      tokensBefore: 12000,
+      tokensAfter: 8000,
+      qualityBefore: 70,
+      qualityAfter: 88,
+      messagesBefore: 40,
+      messagesAfter: 20,
+      removedTurns: 18,
+      keptTurns: 6,
+      reducedBy: 4000,
+      strategy: "summarize",
+    });
+    expect(logs[0].type).toBe("compaction");
+    expect(logs[0].content).toContain("overflow, iteration 7");
+    expect(logs[0].content).toContain("tokens 12000→8000 (−4000)");
+    expect(logs[0].content).toContain("quality 70→88");
+    expect(logs[0].content).toContain("turns −18/+6");
+    expect(logs[0].content).toContain("summarize");
+  });
+
   it("logError persists the Diagnostic shape (INV-14)", () => {
     const { logger, logs } = makeLogger();
     logger.logError({

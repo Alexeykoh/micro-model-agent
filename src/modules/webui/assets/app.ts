@@ -355,6 +355,7 @@ for (const ev of ["tool_start", "tool_end", "phase", "plan", "question", "meta",
   es.addEventListener(ev, (e) => { const d = parse(e); if (d && sidebarOwns(d)) sidebarTraceEvent(ev, d); });
 }
 es.addEventListener("text", (e) => { const d = parse(e); if (d && sidebarOwns(d)) sidebarTraceEvent("text", d); });
+es.addEventListener("reasoning", (e) => { const d = parse(e); if (d && sidebarOwns(d)) sidebarTraceEvent("reasoning", d); });
 // LSP tab: server emits `lsp {phase}` around an on-demand diagnosis.
 es.addEventListener("lsp", (e) => { const d = parse(e); if (d) sidebarLspEvent(d); });
 // Files tab: workspace watcher fired — re-read the expanded directories.

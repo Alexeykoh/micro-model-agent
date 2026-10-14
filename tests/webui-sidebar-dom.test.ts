@@ -41,6 +41,7 @@ i18n.I18N.dicts = {
     "web.sidebar.trace_empty": "no events yet",
     "web.sidebar.trace_turn": "turn {n}",
     "web.sidebar.trace_text": "composing… {count} chars",
+    "web.sidebar.trace_reasoning": "thinking… {count} chars",
   },
 };
 const sidebar = await import("../src/modules/webui/assets/js/sidebar.js");
@@ -86,5 +87,13 @@ describe("sidebar DOM behaviour", () => {
     sidebar.sidebarTraceEvent("text", { chunk: " world" });
     expect(rows().length).toBe(1);
     expect(rows()[0].textContent).toContain("11");
+  });
+
+  it("streams reasoning into a single row with a char count", () => {
+    sidebar.sidebarSessionChanged("ses_E");
+    sidebar.sidebarTraceEvent("reasoning", { chunk: "deep " });
+    sidebar.sidebarTraceEvent("reasoning", { chunk: "thought" });
+    expect(rows().length).toBe(1);
+    expect(rows()[0].textContent).toContain("12");
   });
 });
