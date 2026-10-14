@@ -6,11 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
-### Removed
-
-- **Trace tab mascot**: the small always-on face at the top of the Trace pane
-  (`.trc-face`) is gone — the pane now opens straight onto the event list. The
-  composer face (MMART) is unchanged.
 ### Added
 
 - **Trace tab detail**: the trace pane now streams the model's reasoning as its
@@ -18,6 +13,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `tokens 12000→8000 (−4000), quality 70→88, messages 40→20, turns −18/+6,
   summarize` — in both the row and the detail pane. Critic rows also surface the
   verdict/escalation text and `critic_error` no longer vanishes.
+- **Context-quality breakdown**: the web “quality” row now shows a tooltip
+  explaining the score — each factor (context load / compactions / errors /
+  freshness) with its normalized value, weight and point contribution. The
+  breakdown is computed server-side (`ContextManager.getQualityBreakdown()`) and
+  carried through `AgentResult`/`HostStateSnapshot` (`contextQualityBreakdown`),
+  so the number and its explanation cannot drift. Spec:
+  `docs/specs/2026-10-14-context-quality-breakdown-design.md`.
+
+### Changed
+
+- **Chat file links open the Files tab**: clicking a file row in the chat
+  (read/write/edit/file_info) now switches the sidebar to Files, expands the
+  tree down to the file and opens it in the viewer, instead of previewing the raw
+  file in a new browser tab. Modifiers / middle-click keep the raw preview.
+- **Usage “probe” row shows the loaded context**: the session panel row is now
+  labelled “context loaded” and prints the token count the backend actually
+  loaded, instead of leading with the model's configured capacity. A low value is
+  flagged (and explained on hover) without printing the window.
+
 ### Fixed
 
 - **LSP install hints now respect the project's toolchain (all languages)**: a
@@ -29,29 +43,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   passes the rust channel through. Diagnosing an Angular 11 / Node 16 project no
   longer suggests a Node 20+ build. The detected toolchain is shown in the LSP
   tab. Spec: `docs/specs/2026-10-02-lsp-doctor-design.md` §13.
-### Changed
-
-- **Chat file links open the Files tab**: clicking a file row in the chat
-  (read/write/edit/file_info) now switches the sidebar to Files, expands the
-  tree down to the file and opens it in the viewer, instead of previewing the raw
-  file in a new browser tab. Modifiers / middle-click keep the raw preview.
-### Changed
-
-- **Usage “probe” row shows the loaded context**: the session panel row is now
-  labelled “context loaded” and prints the token count the backend actually
-  loaded, instead of leading with the model's configured capacity. A low value is
-  flagged (and explained on hover) without printing the window.
-### Added
-
-- **Context-quality breakdown**: the web “quality” row now shows a tooltip
-  explaining the score — each factor (context load / compactions / errors /
-  freshness) with its normalized value, weight and point contribution. The
-  breakdown is computed server-side (`ContextManager.getQualityBreakdown()`) and
-  carried through `AgentResult`/`HostStateSnapshot` (`contextQualityBreakdown`),
-  so the number and its explanation cannot drift. Spec:
-  `docs/specs/2026-10-14-context-quality-breakdown-design.md`.
-### Fixed
-
 - **Web update/install flow**: installing a release from the browser now runs
   through `UpdaterModule.installNow()` — it logs to the `mma web` console and
   streams `update` SSE phases (`installing` with download bytes → `installed`/
@@ -61,14 +52,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   matched a tab feed's nested `.empty` and detached the live feed
   (`#msgs .empty` → `#msgs > .empty`). Spec:
   `docs/specs/2026-10-14-webui-update-flow-design.md`.
-### Fixed
-
 - **`mma web` boot hang (stuck on “connecting…” )**: the split-out `md-copy.ts`
   was imported as `./md-copy.js` by `md.js`, but the server only served explicit
   top-level keys plus `/js/*.js`, so `/md-copy.js` returned 404 and the whole ESM
   graph (and boot) failed. The server now serves any `*.js` from the module map,
   `loadAssets` includes top-level split modules, and a guard test fails if any
   relative import resolves to an unserved path.
+
+### Removed
+
+- **Trace tab mascot**: the small always-on face at the top of the Trace pane
+  (`.trc-face`) is gone — the pane now opens straight onto the event list. The
+  composer face (MMART) is unchanged.
 
 ## [0.4.0] - 2026-10-14
 
