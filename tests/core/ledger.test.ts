@@ -80,4 +80,53 @@ describe("ContextLedger", () => {
     expect(reloaded.render()).toContain("[index]");
     expect(reloaded.pointerLine()).toContain(", 3]");
   });
+
+  it("derives correct file prefixes for Windows paths and URLs", () => {
+    const l = new ContextLedger(path, 1);
+    l.record("C:\\proj\\src\\a.ts:10", "win");
+    l.record("https://example.com/p#sec", "web");
+    l.record("third.ts:3", "third");
+    const rendered = l.render();
+    const index = rendered.split("\n").find((line) => line.startsWith("[index]")) ?? "";
+    expect(index).toContain("C:\\proj\\src\\a.ts");
+    expect(index).toContain("https://example.com/p");
+    expect(index).not.toContain("C,");
+    expect(index).not.toContain("https,");
+  });
+
+  it("keeps a cumulative fold index across multiple folds", () => {
+    const l = new ContextLedger(path, 1);
+    l.record("one.ts:1", "a");
+    l.record("two.ts:2", "b");
+    l.record("three.ts:3", "c");
+    const index = l.render().split("\n").find((line) => line.startsWith("[index]")) ?? "";
+    expect(index).toContain("one.ts");
+    expect(index).toContain("two.ts");
+    expect(index).not.toContain("three.ts");
+  });
+
+  it("double load() is idempotent", () => {
+    const l = new ContextLedger(path, 3);
+    for (let i = 0; i < 6; i++) l.record(`h${i}.ts:${i}`, `n${i}`);
+    const reloaded = new ContextLedger(path, 3);
+    reloaded.load();
+    const sizeBefore = reloaded.size();
+    const renderBefore = reloaded.render();
+    reloaded.load();
+    expect(reloaded.size()).toBe(sizeBefore);
+    expect(reloaded.render()).toBe(renderBefore);
+  });
+
+  it("does not misread an inline (stale) note as a staleness mark", () => {
+    const l = new ContextLedger(path, 200);
+    l.record("c.ts:3", "contains (stale) inline");
+    expect(l.isStale("c.ts:3")).toBe(false);
+    const reloaded = new ContextLedger(path, 200);
+    reloaded.load();
+    expect(reloaded.isStale("c.ts:3")).toBe(false);
+    expect(reloaded.render()).not.toContain("inline (stale)");
+    reloaded.markStale("c.ts");
+    expect(reloaded.isStale("c.ts:3")).toBe(true);
+    expect(reloaded.render()).toContain("inline (stale)");
+  });
 });

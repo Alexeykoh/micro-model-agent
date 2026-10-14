@@ -17,6 +17,12 @@ const STALE_MARK = " (stale)";
 const INDEX_PREFIX = "[index]";
 const SEP = " — ";
 
+/** File-префикс адреса: `path:line|:charN|:§heading` → path; `url#section` → url. */
+function filePrefix(address: string): string {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(address)) return address.split("#")[0];
+  return address.replace(/:(?:\d+|char\d+|§.*)$/, "");
+}
+
 /** Извлекает file-префиксы из строки индекса `f1.ts, f2.ts (folded N)`. */
 function parseIndexFiles(indexLine: string): string[] {
   return indexLine
@@ -30,6 +36,8 @@ function parseIndexFiles(indexLine: string): string[] {
 export class ContextLedger {
   private entries: LedgerEntry[] = [];
   private readonly byAddress = new Map<string, LedgerEntry>();
+  /** Накопительный индекс свёрнутых файлов (union, а не последняя пачка). */
+  private readonly foldedFiles = new Set<string>();
   private indexPath: string | null = null;
 
   constructor(
@@ -40,43 +48,57 @@ export class ContextLedger {
   /** Загружает существующий файл (idempotent). Формат строки: `address — note`. */
   load(): void {
     if (!existsSync(this.filePath)) return;
-    const indexFiles = new Set<string>();
-    for (const raw of readFileSync(this.filePath, "utf8").split("\n")) {
-      const line = raw.trim();
+    let raw: string;
+    try {
+      raw = readFileSync(this.filePath, "utf8");
+    } catch {
+      // FAIL-OPEN (INV-15): нечитаемый леджер не должен ронять ход.
+      return;
+    }
+    // Перечитка состояния из файла: производные структуры восстанавливаются с нуля,
+    // поэтому повторный load() на том же инстансе идемпотентен.
+    this.entries = [];
+    this.byAddress.clear();
+    this.foldedFiles.clear();
+    this.indexPath = null;
+
+    for (const lineRaw of raw.split("\n")) {
+      const line = lineRaw.trim();
       if (!line || line.startsWith("#")) continue;
       if (line.startsWith(INDEX_PREFIX)) {
-        const parsed = line.slice(INDEX_PREFIX.length).trim();
-        this.indexPath = parsed;
-        for (const f of parseIndexFiles(parsed)) indexFiles.add(f);
+        for (const f of parseIndexFiles(line.slice(INDEX_PREFIX.length).trim())) {
+          this.foldedFiles.add(f);
+        }
         continue;
       }
       const i = line.indexOf(SEP);
       if (i < 0) continue;
       const address = line.slice(0, i).trim();
-      const stale = line.includes(STALE_MARK);
-      const note = line.slice(i + SEP.length).replace(STALE_MARK, "").trim();
+      // Метка stale — только суффикс строки; заметка, содержащая `(stale)` внутри,
+      // не должна читаться как помеченная.
+      const marked = line.endsWith(STALE_MARK);
+      const body = marked ? line.slice(0, -STALE_MARK.length) : line;
+      const note = body.slice(i + SEP.length).trim();
       // Last-wins: a later line for the same address supersedes the earlier one,
       // so note updates (and staleness marks) appended by `record`/`markStale`
       // are durable across reloads while still deduping to one entry per address.
       const existing = this.byAddress.get(address);
       if (existing) {
         existing.note = note;
-        existing.stale = stale;
+        existing.stale = marked;
       } else {
-        const e: LedgerEntry = { address, note, stale };
+        const e: LedgerEntry = { address, note, stale: marked };
         this.entries.push(e);
         this.byAddress.set(address, e);
       }
     }
     // The file is append-only and survives across sessions, so re-apply the cap
     // in memory only (no rewrite, no extra `[index]` line): drop the oldest
-    // entries beyond `max` and merge their file prefixes into the parsed index.
+    // entries beyond `max` and merge their file prefixes into the fold index.
     if (this.entries.length > this.max) {
-      const overflow = this.entries.splice(0, this.entries.length - this.max);
-      for (const e of overflow) this.byAddress.delete(e.address);
-      for (const e of overflow) indexFiles.add(e.address.split(":")[0]);
-      this.indexPath = `${[...indexFiles].join(", ")} (folded ${overflow.length})`;
+      this.fold(this.entries.splice(0, this.entries.length - this.max));
     }
+    this.refreshIndex();
   }
 
   size(): number {
@@ -141,13 +163,24 @@ export class ContextLedger {
     appendFileSync(this.filePath, `${address}${SEP}${note}${stale ? STALE_MARK : ""}\n`, "utf8");
   }
 
+  /** Сворачивает вытесненные записи: их file-префиксы копятся в union-индекс. */
+  private fold(overflow: LedgerEntry[]): void {
+    for (const e of overflow) {
+      this.byAddress.delete(e.address);
+      this.foldedFiles.add(filePrefix(e.address));
+    }
+  }
+
+  private refreshIndex(): void {
+    this.indexPath = this.foldedFiles.size ? [...this.foldedFiles].join(", ") : null;
+  }
+
   private enforceCap(): void {
     if (this.entries.length <= this.max) return;
     const overflow = this.entries.splice(0, this.entries.length - this.max);
-    for (const e of overflow) this.byAddress.delete(e.address);
-    const files = [...new Set(overflow.map((e) => e.address.split(":")[0]))];
-    this.indexPath = `${files.join(", ")} (folded ${overflow.length})`;
+    this.fold(overflow);
+    this.refreshIndex();
     mkdirSync(dirname(this.filePath), { recursive: true });
-    appendFileSync(this.filePath, `${INDEX_PREFIX} ${this.indexPath}\n`, "utf8");
+    appendFileSync(this.filePath, `${INDEX_PREFIX} ${this.indexPath ?? ""}\n`, "utf8");
   }
 }
