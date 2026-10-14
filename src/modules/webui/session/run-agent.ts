@@ -141,9 +141,14 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
             toolCalls++;
             forwarder.onToolEnd(callFor(ev, endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
             // Закончивший `plan`/`todo`-тул освежает план-карточку ленты; сайдбар
-            // живёт своей проекцией `/api/state`.
+            // живёт своей проекцией `/api/state`. Без `pushState` здесь снапшот
+            // оставался с планом прошлого хода (или пустым) до конца хода: план
+            // уже виден в ленте, а в сайдбаре — «нет активного плана».
             const plan = planEventFor(ev.tool, deps.execModule);
-            if (plan) forwarder.onPlan(plan);
+            if (plan) {
+              forwarder.onPlan(plan);
+              pushState(state, owner);
+            }
           }
         },
         (phase) => forwarder.onPhase(phase),

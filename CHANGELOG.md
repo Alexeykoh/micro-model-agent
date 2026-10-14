@@ -34,6 +34,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Sidebar plan now syncs with the chat while a turn runs**: the plan card
+  appeared in the feed (SSE `plan`), but the `Session` panel kept showing “нет
+  активного плана” until the turn ended — nothing pushed a `/api/state`
+  snapshot on a plan change, and the sidebar renders the plan from that
+  snapshot. `run-agent.ts` now pushes a state snapshot alongside the `plan`
+  event when a `plan`/`todo` tool ends (`src/modules/webui/session/run-agent.ts`).
 - **LSP install hints now respect the project's toolchain (all languages)**: a
   new `detectProjectToolchain` reads declared runtime/package versions from
   standard manifests (`.nvmrc`, `package.json`, `.python-version`,
