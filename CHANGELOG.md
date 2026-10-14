@@ -43,6 +43,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   (`session/queue.ts`, new; `composer.ts`, `app.ts`; the mobile session
   sub-header moved to `session/sess-bar.ts` to keep `composer.ts` under its
   size ceiling).
+- **Trace detail pane clipped long code/output**: the detail code blocks
+  (arguments, tool output) are flex children of `.detail-b` and defaulted to
+  `min-width: auto` (= min-content), so one long line widened the 340px pane and
+  the text was cut off. They may now shrink (`min-width: 0`) and scroll
+  horizontally inside the pane (`assets/styles.css`).
+- **Sidebar plan now syncs with the chat while a turn runs**: the plan card
+  appeared in the feed (SSE `plan`), but the `Session` panel kept showing “нет
+  активного плана” until the turn ended — nothing pushed a `/api/state`
+  snapshot on a plan change, and the sidebar renders the plan from that
+  snapshot. `run-agent.ts` now pushes a state snapshot alongside the `plan`
+  event when a `plan`/`todo` tool ends (`src/modules/webui/session/run-agent.ts`).
 - **LSP install hints now respect the project's toolchain (all languages)**: a
   new `detectProjectToolchain` reads declared runtime/package versions from
   standard manifests (`.nvmrc`, `package.json`, `.python-version`,

@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
+import type { ServerResponse } from "node:http";
 import { createWebUiState, type SseEvent } from "../src/modules/webui/state";
 import { makeForwarder } from "../src/modules/webui/session/forward";
+import { makeRunAgent } from "../src/modules/webui/session/run-agent";
+import type { Forwarder } from "../src/modules/webui/session/forward";
 import { planEventFor } from "../src/modules/webui/module";
+import type { Agent } from "../src/core/agent";
 import type { Plan } from "../src/modules/execution/planner";
 
 function fakeExec(plan: Plan | null): { getActivePlan(): Plan | null } {
@@ -54,5 +58,36 @@ describe("webui plan event", () => {
       { text: "write landing", status: "in_progress" },
       { text: "build", status: "pending" },
     ]);
+  });
+
+  it("pushes a state snapshot when a plan tool ends, so the sidebar syncs", async () => {
+    const state = createWebUiState();
+    const sse: string[] = [];
+    state.clients.add({
+      write: (chunk: string) => {
+        sse.push(chunk);
+        return true;
+      },
+      end: () => {},
+    } as unknown as ServerResponse);
+
+    const forwarder: Forwarder = makeForwarder(state);
+    const agent = {
+      run: (_text: string, _onText: unknown, _onMeta: unknown, onTool: (ev: unknown) => void) => {
+        onTool({ type: "end", tool: "plan", args: {}, output: "ok", duration: 5 });
+        return Promise.resolve({ success: true, text: "", iterationCount: 1 });
+      },
+    } as unknown as Agent;
+
+    const runner = makeRunAgent({
+      agent, state, forwarder, ownerSessionId: "S", execModule: fakeExec(plan),
+    });
+    await runner.run("plan something");
+
+    const stream = sse.join("");
+    expect(stream).toContain("event: plan");
+    expect(stream).toContain("event: state");
+    // The state snapshot must follow the plan event (same tool end).
+    expect(stream.indexOf("event: state")).toBeGreaterThan(stream.indexOf("event: plan"));
   });
 });
