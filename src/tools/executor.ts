@@ -6,6 +6,7 @@ import { isPathInScope, isPathWritable } from "../modules/security/path-validato
 import { protectedPathBlock } from "../modules/security/protected-paths";
 import { isUrlAllowed } from "../modules/security/network-validator";
 import { filterToolsByTags } from "./filter-tools";
+import { admitToolResult } from "./admission";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { t } from "../i18n/index";
@@ -397,6 +398,17 @@ export class ToolExecutor {
         toolCallId: call.id,
       };
     }
+
+    // Admission (OO-1/OO-7): результат больше admitMaxTokens не входит в
+    // контекст дословно — спилл + дескриптор. Одна точка для всех тулов;
+    // хендлер политику не реализует. Мемо ниже сохраняет уже admitted результат.
+    result = admitToolResult(result, {
+      baseDir: this.ctx.baseDir,
+      sessionId: this.ctx.sessionId ?? "default",
+      maxTokens: this.ctx.config?.contextBudget?.admitMaxTokens ?? 3000,
+      source:
+        typeof call.arguments?.path === "string" ? String(call.arguments.path) : undefined,
+    });
 
     if (!memoHit) {
       // Успешные детерминированные чтения мемоизируются; всё остальное, что
