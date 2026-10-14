@@ -2,7 +2,7 @@
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
 import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
-import type { ContextBreakdown } from "./types";
+import type { ContextBreakdown, ContextQualityBreakdown } from "./types";
 
 /**
  * Статус шага плана для хоста. `skipped` не входит в контракт —
@@ -50,6 +50,8 @@ export interface HostStateSnapshot {
   cacheHitRate?: number;
   /** Оценка качества контекста за последний ход (0..100); нет, если неизвестна. */
   contextQuality?: number;
+  /** Разбор оценки качества: составляющие и веса (для поп-апа в UI). */
+  contextQualityBreakdown?: ContextQualityBreakdown;
   /** Сегментная разбивка контекста (system/tools/history/reserve/free). */
   contextBreakdown?: ContextBreakdown;
   /**

@@ -6,8 +6,10 @@ import { ContextLedger } from "./ledger";
 import { absorbLedgers, observeToolResult } from "./ledger-absorb";
 import { CompactionProgressTracker, type ProgressDiagnostic } from "./compaction-progress";
 import { extractTriedAndFailed, looksLikeErrorPaste } from "./message-analysis";
-import type { ContextBreakdown } from "../../core/types";
+import type { ContextBreakdown, ContextQualityBreakdown, ContextQualityPart } from "../../core/types";
+import { computeQualityScore, QUALITY_WEIGHT, type QualityFactors } from "./quality";
 export type { ContextBreakdown };
+export type { ContextQualityBreakdown, ContextQualityPart };
 export { extractTriedAndFailed };
 
 /** Сообщение истории: роль, контент, tool-метаданные. */
@@ -87,6 +89,8 @@ export interface ContextSnapshot {
   quality: number;
   compactionCount: number;
   iterationsSinceCompaction: number;
+  /** Разбор оценки качества (составляющие + веса). */
+  qualityBreakdown: ContextQualityBreakdown;
   /** Разбивка контекста по частям (сегменты полосы в UI). */
   breakdown: ContextBreakdown;
   /** Сырая оценка (сообщения + тулы) без калибровки. */
@@ -326,8 +330,35 @@ export class ContextManager {
 
   /** Оценка качества контекста 0–100 (нагрузка, компакции, ошибки, свежесть). */
   getQuality(): number {
+    return computeQualityScore(this.qualityFactors());
+  }
+
+  /**
+   * Разбор оценки качества: те же факторы и веса, что в {@link getQuality},
+   * плюс итог. UI показывает состав («почему качество такое»), не пересчитывая
+   * формулу у себя.
+   */
+  getQualityBreakdown(): ContextQualityBreakdown {
+    const factors = this.qualityFactors();
+    return {
+      total: computeQualityScore(factors),
+      parts: [
+        { key: "load", factor: factors.load, weight: QUALITY_WEIGHT.load },
+        { key: "compaction", factor: factors.compaction, weight: QUALITY_WEIGHT.compaction },
+        { key: "errors", factor: factors.errors, weight: QUALITY_WEIGHT.errors },
+        { key: "freshness", factor: factors.freshness, weight: QUALITY_WEIGHT.freshness },
+      ],
+    };
+  }
+
+  /**
+   * Нормированные факторы качества (0..1, больше — лучше): нагрузка контекста,
+   * сохраняемость после компакций, плотность ошибок и свежесть. Единственный
+   * источник правды для числа и разбора.
+   */
+  private qualityFactors(): QualityFactors {
     const usedTokens = this.getContextTokens();
-    const tokenLoad = this.budget.history > 0
+    const load = this.budget.history > 0
       ? Math.max(0, 1 - usedTokens / this.budget.history)
       : 0;
 
@@ -338,15 +369,14 @@ export class ContextManager {
     // плотностью ошибок качество застревало ниже 40 и компакция срабатывала на
     // КАЖДОЙ итерации (было: 56 компакций за 28 минут).
     const COMPACTION_PENALTY_FLOOR = 0.5;
-    const compactionLoss = Math.max(COMPACTION_PENALTY_FLOOR, 1 - this.compactionCount * 0.15);
+    const compaction = Math.max(COMPACTION_PENALTY_FLOOR, 1 - this.compactionCount * 0.15);
 
     const msgCount = this.messages.length || 1;
-    const errorDensity = Math.max(0, 1 - Math.min(1, this.facts.errorCount / msgCount));
+    const errors = Math.max(0, 1 - Math.min(1, this.facts.errorCount / msgCount));
 
     const freshness = Math.max(0, 1 - this.iterationsSinceCompaction / COMPACTION_INTERVAL);
 
-    const score = tokenLoad * 0.4 + compactionLoss * 0.25 + errorDensity * 0.2 + freshness * 0.15;
-    return Math.round(Math.min(100, Math.max(0, score * 100)));
+    return { load, compaction, errors, freshness };
   }
 
   /** Добавляет сообщение в историю (трекает задачу, аттачит pending-картинки, пик токенов). */
@@ -917,6 +947,7 @@ export class ContextManager {
       toolTokens: this.toolTokens,
       messageCount: this.messages.length,
       quality: this.getQuality(),
+      qualityBreakdown: this.getQualityBreakdown(),
       compactionCount: this.compactionCount,
       iterationsSinceCompaction: this.iterationsSinceCompaction,
       breakdown: this.getBreakdown(),

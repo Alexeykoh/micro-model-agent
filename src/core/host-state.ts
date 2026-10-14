@@ -10,7 +10,7 @@
  * Ничего здесь не знает про терминал, SSE или HTTP — только про модули.
  */
 import type { AppConfig } from "../config/types";
-import type { AgentResult, ContextBreakdown } from "./types";
+import type { AgentResult, ContextBreakdown, ContextQualityBreakdown } from "./types";
 import type { HostStateSnapshot, ProjectMapInfo } from "./host";
 import type { SessionManager } from "../modules/session/manager";
 import type { ExecutionModule } from "../modules/execution/module";
@@ -29,6 +29,7 @@ export interface UsageSnapshot {
   cacheHitRate?: number;
   cacheSaved?: number;
   contextQuality?: number;
+  contextQualityBreakdown?: ContextQualityBreakdown;
   contextBreakdown?: ContextBreakdown;
 }
 
@@ -76,6 +77,7 @@ export function captureUsage(result: AgentResult, fallbackLimit?: number): Usage
     if (typeof result.cache.saved === "number") usage.cacheSaved = result.cache.saved;
   }
   if (typeof result.contextQuality === "number") usage.contextQuality = result.contextQuality;
+  if (result.contextQualityBreakdown) usage.contextQualityBreakdown = result.contextQualityBreakdown;
   if (result.contextBreakdown) usage.contextBreakdown = result.contextBreakdown;
   return usage;
 }
@@ -89,6 +91,7 @@ export interface LiveContextSource {
     tokens: number;
     budget: { history: number };
     quality: number;
+    qualityBreakdown: ContextQualityBreakdown;
     compactionCount: number;
     breakdown: ContextBreakdown;
   };
@@ -112,6 +115,7 @@ export function liveContextUsage(
     contextBreakdown: snap.breakdown,
     compactionCount: snap.compactionCount,
     contextQuality: snap.quality,
+    contextQualityBreakdown: snap.qualityBreakdown,
   };
 }
 
@@ -147,6 +151,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     compactionCount: deps.usage?.compactionCount,
     cacheHitRate: deps.usage?.cacheHitRate,
     contextQuality: deps.usage?.contextQuality,
+    contextQualityBreakdown: deps.usage?.contextQualityBreakdown,
     contextBreakdown: deps.usage?.contextBreakdown,
     contextProbe: deps.contextProbe,
     workspace: deps.workspace,

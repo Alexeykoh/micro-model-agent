@@ -140,6 +140,22 @@ export interface ContextBreakdown {
 }
 
 /**
+ * Составляющая оценки качества контекста: нормированный фактор и его вес.
+ * `factor` 0..1 (больше — лучше), `weight` — доля в итоговой оценке.
+ */
+export interface ContextQualityPart {
+  key: "load" | "compaction" | "errors" | "freshness";
+  factor: number;
+  weight: number;
+}
+
+/** Разбор оценки качества контекста: итог 0..100 и его составляющие. */
+export interface ContextQualityBreakdown {
+  total: number;
+  parts: ContextQualityPart[];
+}
+
+/**
  * Причина принудительного завершения хода харнессом: дубль-петля,
  * серия провальных пакетов или исчерпание итераций.
  */
@@ -193,6 +209,8 @@ export interface AgentResult {
   };
   compactionCount?: number;
   contextQuality?: number;
+  /** Разбор оценки качества контекста (составляющие + веса). */
+  contextQualityBreakdown?: ContextQualityBreakdown;
   /** Сегментная разбивка контекста (system/tools/history/reserve/free). */
   contextBreakdown?: ContextBreakdown;
   /** Провайдер этого прогона. */

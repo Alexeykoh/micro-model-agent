@@ -1206,6 +1206,10 @@ body.light .kv .wn { color: var(--yellow); }
 .ctip-label { color: var(--muted); }
 .ctip b { color: var(--fg); font-weight: 600; }
 .ctip-pct { color: var(--dim-b); }
+/* Quality breakdown tooltip: one column row per factor. */
+.qtip { display: flex; flex-direction: column; gap: 3px; }
+.qtip-row { display: flex; align-items: baseline; gap: 8px; }
+.qtip-row .ctip-label { flex: 1 1 auto; }
 
 /* ---- settings modal + nested dialogs (provider, confirm) ---- */
 .overlay {

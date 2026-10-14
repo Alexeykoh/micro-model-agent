@@ -61,6 +61,7 @@ export function buildLoopResult(
       cache: cacheStats,
       compactionCount: contextManager.getCompactionCount(),
       contextQuality: contextManager.getQuality(),
+      contextQualityBreakdown: contextManager.getQualityBreakdown?.(),
       contextBreakdown: contextManager.getBreakdown?.(),
     };
   }
@@ -89,6 +90,7 @@ export function buildLoopResult(
     cache: cacheStats,
     compactionCount: contextManager.getCompactionCount(),
     contextQuality: contextManager.getQuality(),
+    contextQualityBreakdown: contextManager.getQualityBreakdown?.(),
     contextBreakdown: contextManager.getBreakdown?.(),
     llmDurationMs: state.totalLlmDuration,
   };
