@@ -4,3 +4,6 @@ scripts/install.sh text eol=lf
 
 # Git hooks are executed by sh; CRLF would break them.
 .githooks/* text eol=lf
+
+# CHANGELOG entries are additive: union-merge keeps every release note.
+CHANGELOG.md merge=union
