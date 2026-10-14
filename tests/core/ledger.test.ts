@@ -70,4 +70,14 @@ describe("ContextLedger", () => {
     expect(reloaded.isStale("b.ts:2")).toBe(true);
     expect(reloaded.render()).toContain("(stale)");
   });
+
+  it("re-applies the cap on load (in memory, no rewrite)", () => {
+    const l = new ContextLedger(path, 3);
+    for (let i = 0; i < 6; i++) l.record(`g${i}.ts:${i}`, `n${i}`);
+    const reloaded = new ContextLedger(path, 3);
+    reloaded.load();
+    expect(reloaded.size()).toBe(3);
+    expect(reloaded.render()).toContain("[index]");
+    expect(reloaded.pointerLine()).toContain(", 3]");
+  });
 });

@@ -17,6 +17,15 @@ const STALE_MARK = " (stale)";
 const INDEX_PREFIX = "[index]";
 const SEP = " — ";
 
+/** Извлекает file-префиксы из строки индекса `f1.ts, f2.ts (folded N)`. */
+function parseIndexFiles(indexLine: string): string[] {
+  return indexLine
+    .replace(/\(folded \d+\)/, "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 /** Файл-леджер адресов с дедупом, cap-свёрткой и staleness. */
 export class ContextLedger {
   private entries: LedgerEntry[] = [];
@@ -31,11 +40,14 @@ export class ContextLedger {
   /** Загружает существующий файл (idempotent). Формат строки: `address — note`. */
   load(): void {
     if (!existsSync(this.filePath)) return;
+    const indexFiles = new Set<string>();
     for (const raw of readFileSync(this.filePath, "utf8").split("\n")) {
       const line = raw.trim();
       if (!line || line.startsWith("#")) continue;
       if (line.startsWith(INDEX_PREFIX)) {
-        this.indexPath = line.slice(INDEX_PREFIX.length).trim();
+        const parsed = line.slice(INDEX_PREFIX.length).trim();
+        this.indexPath = parsed;
+        for (const f of parseIndexFiles(parsed)) indexFiles.add(f);
         continue;
       }
       const i = line.indexOf(SEP);
@@ -55,6 +67,15 @@ export class ContextLedger {
         this.entries.push(e);
         this.byAddress.set(address, e);
       }
+    }
+    // The file is append-only and survives across sessions, so re-apply the cap
+    // in memory only (no rewrite, no extra `[index]` line): drop the oldest
+    // entries beyond `max` and merge their file prefixes into the parsed index.
+    if (this.entries.length > this.max) {
+      const overflow = this.entries.splice(0, this.entries.length - this.max);
+      for (const e of overflow) this.byAddress.delete(e.address);
+      for (const e of overflow) indexFiles.add(e.address.split(":")[0]);
+      this.indexPath = `${[...indexFiles].join(", ")} (folded ${overflow.length})`;
     }
   }
 
