@@ -28,6 +28,8 @@ async function runStep(
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
+      // Свой контекст шага пайплайна; project-леджер (contextBudget.notesPath)
+      // намеренно НЕ подключается — шаг не делит durable адреса с хост-агентом.
       const subContextManager = new ContextManager(
         ctx.config.contextWindow,
         ctx.config.contextBudget,

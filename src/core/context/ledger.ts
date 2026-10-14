@@ -159,8 +159,14 @@ export class ContextLedger {
   }
 
   private persistLine(address: string, note: string, stale: boolean): void {
-    mkdirSync(dirname(this.filePath), { recursive: true });
-    appendFileSync(this.filePath, `${address}${SEP}${note}${stale ? STALE_MARK : ""}\n`, "utf8");
+    try {
+      mkdirSync(dirname(this.filePath), { recursive: true });
+      appendFileSync(this.filePath, `${address}${SEP}${note}${stale ? STALE_MARK : ""}\n`, "utf8");
+    } catch {
+      // FAIL-OPEN (INV-15). DEBT(ledger-write-diagnostics): провал записи
+      // (read-only/ENOSPC/права) проглатывается — в памяти запись уже есть,
+      // файл просто отстаёт; ход и компакция не должны падать.
+    }
   }
 
   /** Сворачивает вытесненные записи: их file-префиксы копятся в union-индекс. */
@@ -180,7 +186,12 @@ export class ContextLedger {
     const overflow = this.entries.splice(0, this.entries.length - this.max);
     this.fold(overflow);
     this.refreshIndex();
-    mkdirSync(dirname(this.filePath), { recursive: true });
-    appendFileSync(this.filePath, `${INDEX_PREFIX} ${this.indexPath ?? ""}\n`, "utf8");
+    try {
+      mkdirSync(dirname(this.filePath), { recursive: true });
+      appendFileSync(this.filePath, `${INDEX_PREFIX} ${this.indexPath ?? ""}\n`, "utf8");
+    } catch {
+      // FAIL-OPEN (INV-15). DEBT(ledger-write-diagnostics): индекс-свёртка не
+      // записана, но в памяти она уже применена (см. persistLine).
+    }
   }
 }

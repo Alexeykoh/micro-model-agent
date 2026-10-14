@@ -721,15 +721,15 @@ export class ContextManager {
 
     if (this.thinkingLevel) parts.push(`[Thinking: ${this.thinkingLevel}]`);
 
-    // Леджер тулов: что уже сделано/прочитано/найдено. Пинится, чтобы модель
-    // после сжатия не переисследовала те же URL/файлы (питало петлю повторов).
-    // OO-3: при durable леджере адресов блок несёт только указатель — сырые
-    // заметки живут в файле и переживают компакцию без раздувания контекста.
+    // Леджер тулов: что уже сделано/прочитано (анти-повтор). OO-3: при durable
+    // леджере адресов блок несёт указатель `[Notes: …]`, а леджер тулов —
+    // legacy-строки для тулов без адреса (bash, web_search, list_dir).
     if (this.compactionSummaryMode !== "off") {
       if (this.ledger) {
         const pointer = this.ledger.pointerLine();
         if (pointer) parts.push(pointer);
-      } else if (this.toolLedger.length > 0) {
+      }
+      if (this.toolLedger.length > 0) {
         parts.push(`[Tool ledger]\n${this.toolLedger.join("\n")}`);
       }
     }

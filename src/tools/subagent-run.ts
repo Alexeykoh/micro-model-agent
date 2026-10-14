@@ -132,6 +132,8 @@ export async function runSubagent(
   };
 
   try {
+    // Изолированный контекст сабагента; project-леджер (contextBudget.notesPath)
+    // намеренно НЕ подключается — сабагент не делит durable адреса с родителем.
     const subContextManager = new ContextManager(
       ctx.config.contextWindow,
       ctx.config.contextBudget,
