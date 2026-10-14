@@ -15,6 +15,17 @@ export type Source = "mma" | "core" | `module:${string}` | `tool:${string}`;
 export type DiagnosticKind = "ok" | "degraded" | "failed" | "skipped" | "blocked";
 
 /**
+ * Типы событий-диагностик fail-open (INV-15): отдельные записи `SessionLogEntry`
+ * для деградировавших путей. Общая ошибка `"error"` сюда не входит.
+ */
+export type DiagnosticEvent =
+  | "critic_error"
+  | "verify_error"
+  | "tool_attempt"
+  | "admission_degraded"
+  | "context_degraded";
+
+/**
  * Единый объект ошибки/диагностики (INV-14): не строка, а `source` + `operation`
  * + `kind` (+ `cause` при `kind !== "ok"`, INV-12) + `recoverable`/`detail`.
  * Дискриминированный союз делает `cause` обязательным для не-`ok` на уровне типов,

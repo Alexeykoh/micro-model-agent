@@ -190,7 +190,8 @@ export function createSessionRunnerFactory(
     }
     const runnerLogger = logger.forSession(sessionId, runnerSessionDir);
 
-    const contextManager = createContextManager(config, baseDir);
+    // INV-15: `context_degraded` — в свою сессию раннера (запиненный sibling).
+    const contextManager = createContextManager(config, baseDir, pinned);
 
     const runnerExec = new ExecutionModule(
       baseDir,

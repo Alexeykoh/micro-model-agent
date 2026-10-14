@@ -22,6 +22,7 @@
 | `tool_attempt` | Хендлер тула бросил исключение; результат деградирован в `success:false`, ход продолжается | `src/core/agent/tool-batch.ts` (`executeCall` catch) | ✅ реализовано |
 | `verify_error` | Верификатор деградировал: `validateSyntax` не проверяет синтаксис (нет `tsc`/проверка неоднозначна); `runTypeCheck`/`runTests` пропущены (нет `tsconfig`/`tsc`/`package.json`/test-скрипта) | `src/modules/execution/verifier.ts` (`StepVerifier.onDegrade`) → `ExecutionModule.reportDegrade` | ✅ реализовано |
 | `admission_degraded` | Admission результата тула упал (fs/ENOTDIR/path-jail): результат возвращается сырьём, ход продолжается | `src/tools/admission.ts` (`admitFromContext` catch) → `ToolExecutor.setDiagnosticSink` | ✅ реализовано |
+| `context_degraded` | Серия компакций без роста durable-леджера (модель сжимает историю, ничего не узнавая): сигнал вырожденной петли, ход продолжается | `src/core/context/compaction-progress.ts` (`CompactionProgressTracker`) → `ContextManager.setProgressDiagnosticSink` → `context-factory.ts` (`contextDegradedSink`) | ✅ реализовано |
 
 ### Как подключён `verify_error`
 
@@ -34,6 +35,17 @@
 Subagent не несёт `ExecutionModule`, поэтому его деградации идут в сессию
 родителя через тот же main-модуль.
 
+### Как подключён `context_degraded`
+
+`ContextManager` держит `CompactionProgressTracker` (счётчик серии компакций без
+роста durable-леджера). На каждой значимой компакции (`compact`/`compactAdaptive`
+через `finalizeCompact`, а также `hard-drop`) трекер получает текущий `size()`
+леджера; серия ≥2 без роста эмитит `no-progress`. Sink ставит фабрика
+`createContextManager(config, baseDir, sessionManager)`: обе точки bootstrap
+(`session-phase.ts` — main, `session-runner.ts` — запиненный sibling раннера)
+передают свой `SessionManager`, поэтому запись `context_degraded` попадает в
+сессию владельца хода.
+
 ## Что это не чинит
 
 Сигнал сообщает о деградации, но не меняет поведение fail-open: критик по-прежнему
@@ -44,4 +56,5 @@ Subagent не несёт `ExecutionModule`, поэтому его деграда
 
 - `tests/critic-gate.test.ts` — `critic_error` пишется при отказе критика (throw и null).
 - `tests/session-logger.test.ts` — `logDiagnosticEvent` персистит форму `Diagnostic`.
+- `tests/core/compaction-progress.test.ts` — `context_degraded` при серии компакций без роста леджера.
 - `tests/output/source-filled.test.ts` — источник события непуст (INV-13).

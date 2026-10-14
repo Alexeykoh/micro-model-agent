@@ -1,6 +1,6 @@
 /** Логгер сессии: тонкая обёртка над SessionManager для цикла агента. */
 import type { SessionManager } from "../modules/session/manager";
-import type { Diagnostic } from "../output";
+import type { Diagnostic, DiagnosticEvent } from "../output";
 import type { ToolCall } from "./types";
 import type { PrefixDelta } from "./agent/prefix-monitor";
 import type { CacheUsage } from "../llm/cache-usage";
@@ -455,7 +455,7 @@ export class SessionLogger {
    * @param event тип события; @param diag единая диагностика (INV-14).
    */
   logDiagnosticEvent(
-    event: "critic_error" | "verify_error" | "tool_attempt" | "admission_degraded",
+    event: DiagnosticEvent,
     diag: Diagnostic,
   ): void {
     this.appendDiagnostic(event, diag);
@@ -463,7 +463,7 @@ export class SessionLogger {
 
   /** Общая запись Diagnostic: `content` = причина (совместимо со старыми читателями). */
   private appendDiagnostic(
-    type: "error" | "critic_error" | "verify_error" | "tool_attempt" | "admission_degraded",
+    type: "error" | DiagnosticEvent,
     diag: Diagnostic,
   ): void {
     const cause = diag.cause ? redactContextSecrets(diag.cause) : undefined;

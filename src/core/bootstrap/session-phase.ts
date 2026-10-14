@@ -182,7 +182,7 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
       : []
     : [];
 
-  const contextManager = createContextManager(config, baseDir);
+  const contextManager = createContextManager(config, baseDir, sessionManager);
 
   // Общий бокс ЖИВОГО конфига. `Agent.reconfigure` меняет и deps.config, и
   // этот бокс, чтобы захватившие ссылку при bootstrap — toolCtx.config,

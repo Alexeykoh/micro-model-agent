@@ -12,6 +12,7 @@ import { join } from "path";
 import { gzipSync, gunzipSync } from "zlib";
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionEncryptionConfig } from "../../config/types";
+import type { DiagnosticEvent } from "../../output";
 import { SessionFileEncryptor } from "../security/session-encryption";
 
 /** Запись session-журнала (инструменты, usage, critic, пробы и т.д.). */
@@ -39,9 +40,7 @@ export interface SessionLogEntry {
     | "critic_check"
     | "critic_verdict"
     | "critic_escalation"
-    | "critic_error"
-    | "verify_error"
-    | "tool_attempt" | "admission_degraded"
+    | DiagnosticEvent
     | "claim_retry"
     | "service_task"
     | `onboarding_${string}`

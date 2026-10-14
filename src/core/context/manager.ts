@@ -3,10 +3,12 @@ import type { ContentPart, TextPart } from "../../llm/provider";
 import { getMessageText } from "../../llm/provider";
 import { FactExtractor } from "./fact-extractor";
 import { ContextLedger } from "./ledger";
-import { absorbLedgers, markStaleForWrite, summarizeArgs } from "./ledger-absorb";
-import { truncate } from "../../utils/truncate";
+import { absorbLedgers, markStaleForWrite } from "./ledger-absorb";
+import { CompactionProgressTracker, type ProgressDiagnostic } from "./compaction-progress";
+import { extractTriedAndFailed, looksLikeErrorPaste } from "./message-analysis";
 import type { ContextBreakdown } from "../../core/types";
 export type { ContextBreakdown };
+export { extractTriedAndFailed };
 
 /** Сообщение истории: роль, контент, tool-метаданные. */
 export interface Message {
@@ -105,64 +107,6 @@ export interface ContextEstimateDiagnostics {
   state: CalibrationState;
 }
 
-/** Запись "пробовали и не вышло": тул, args, ошибка, счётчик повторов. */
-export interface TriedAndFailed {
-  tool: string;
-  args: string;
-  error: string;
-  count: number;
-}
-
-function looksLikeErrorPaste(text: string): boolean {
-  // Маркеры ошибок.
-  if (
-    /(?:^|\s)ERROR|Error:|error TS\d+|Transform failed|\[plugin:|SyntaxError|Cannot find|Uncaught|exception/i.test(
-      text,
-    )
-  ) {
-    return true;
-  }
-  // Структурные сигналы вставленного вывода компилятора/рантайма: фреймы
-  // исходников ("270|  }_s(...)"), ссылки path:line:col и строки стектрейсов.
-  if (/(?:^|\n)\s*\d+\s*\|/.test(text)) return true;
-  if (/[\w./\\-]+\.[a-z]{1,6}:\d+:\d+/.test(text)) return true;
-  if (/(?:^|\n)\s*at\s+\S+/.test(text)) return true;
-  return false;
-}
-
-/** Извлекает повторы "пробовали и не вышло" (≥2 фейлов одного тула+args). */
-export function extractTriedAndFailed(messages: Message[]): TriedAndFailed[] {
-  const failures: Map<string, TriedAndFailed> = new Map();
-
-  for (const msg of messages) {
-    if (msg.role === "tool" && msg.name && msg.success === false) {
-      // Заблокированные плагином вызовы — решения гардов, не попытки: транзиентный
-      // гард (или его баг) нельзя запоминать как "пробовали и не вышло — НЕ повторять"
-      // (было: ложный plan-alignment блок заставил модель отказываться переписывать
-      // файл собственного шага).
-      if (msg.blocked) continue;
-      const key = `${msg.name}:${summarizeArgs(msg.arguments)}`;
-      const existing = failures.get(key);
-      const errorText = truncate(
-        typeof msg.content === "string" ? msg.content : getMessageText(msg.content),
-        100,
-      );
-      if (existing) {
-        existing.count++;
-      } else {
-        failures.set(key, {
-          tool: msg.name,
-          args: summarizeArgs(msg.arguments),
-          error: errorText,
-          count: 1,
-        });
-      }
-    }
-  }
-
-  return Array.from(failures.values()).filter((f) => f.count >= 2);
-}
-
 /** Менеджер контекста: история, бюджеты, компакция, трекинг задачи/миссии сессии. */
 export class ContextManager {
   private contextWindow: number;
@@ -200,6 +144,11 @@ export class ContextManager {
    * задан, блок компакции несёт только указатель, а не сырые заметки.
    */
   private ledger: ContextLedger | null = null;
+  /**
+   * INV-15: детектор серии компакций без роста durable-леджера. Состояние и
+   * эмит живут в helper'е (manager.ts на потолке ≤300-строк правила 6).
+   */
+  private compactionProgress = new CompactionProgressTracker();
   private facts = new FactExtractor();
   /** Последняя реальная инструкция юзера (мимо <system-summary>). */
   private lastUserTask = "";
@@ -262,6 +211,14 @@ export class ContextManager {
   configureLedger(filePath: string, max: number): void {
     this.ledger = new ContextLedger(filePath, max);
     this.ledger.load();
+  }
+
+  /**
+   * INV-15: sink диагностики «компакция без прогресса» — bootstrap пишет
+   * `context_degraded` в сессию тем же путём, что `admission_degraded`.
+   */
+  setProgressDiagnosticSink(fn: ((d: ProgressDiagnostic) => void) | null): void {
+    this.compactionProgress.setSink(fn);
   }
 
   /** Внутренний блок последней компакции (`[Compressed: …]`) — для тестов/наблюдаемости. */
@@ -649,7 +606,11 @@ export class ContextManager {
     // Значимое сокращение: только тогда инкрементим счётчик и зовём onCompact.
     // No-op (reducedBy <= minReduction) не логируется и не искажает качество.
     const significant = ctx.opts?.minReduction === undefined || reducedBy > ctx.opts.minReduction;
-    if (significant) this.compactionCount++;
+    if (significant) {
+      this.compactionCount++;
+      // INV-15: прогресс-прокси — размер durable-леджера после поглощения адресов.
+      this.compactionProgress.note(this.ledger?.size() ?? 0);
+    }
     const result: CompactResult = {
       removedTurns: ctx.oldTurns.length,
       keptTurns: ctx.freshRecent.length,
@@ -895,6 +856,8 @@ export class ContextManager {
     this.lastEstimateRaw = 0;
     this.lastEstimateMessageCount = 0;
     this.compactionCount++;
+    // INV-15: hard-drop тоже поглотил адреса — учитываем прогресс.
+    this.compactionProgress.note(this.ledger?.size() ?? 0);
     const tokensAfter = this.getEstimatedTokens();
     if (this.onCompact) this.onCompact(summary);
     return {
@@ -1026,6 +989,7 @@ export class ContextManager {
     this.lastEstimateRaw = 0;
     this.lastEstimateMessageCount = 0;
     this.lastJumpWasImplausible = false;
+    this.compactionProgress.reset();
   }
 
   /** Оценка токенов истории (сообщения + токены тулов). */
