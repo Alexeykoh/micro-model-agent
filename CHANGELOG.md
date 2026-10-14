@@ -34,6 +34,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Queued chat message no longer lands inside the running answer**: a message
+  sent while its session's turn was streaming was appended to the feed right
+  away, so it appeared in the middle of the live answer and then scrolled away.
+  It is now pinned in a strip above the composer (`queued · position N`, with a
+  placeholder for entries this client has no text for) and moved into the
+  transcript at the correct point when its turn actually starts
+  (`session/queue.ts`, new; `composer.ts`, `app.ts`; the mobile session
+  sub-header moved to `session/sess-bar.ts` to keep `composer.ts` under its
+  size ceiling).
 - **LSP install hints now respect the project's toolchain (all languages)**: a
   new `detectProjectToolchain` reads declared runtime/package versions from
   standard manifests (`.nvmrc`, `package.json`, `.python-version`,

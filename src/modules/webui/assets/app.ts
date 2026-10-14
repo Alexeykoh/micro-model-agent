@@ -34,6 +34,7 @@ import {
   openFilesTabFor,
 } from "./js/sidebar.js";
 import { insertIntoDraft } from "./js/session/composer.js";
+import { drainQueuedTurn } from "./js/session/queue.js";
 import { initCursor, createFace, setFaceState, loaderStateFor, setGreetResolver } from "./js/loader.js";
 import type { FaceState } from "./js/loader.js";
 import { setUpdateInfo } from "./js/update-state.js";
@@ -278,7 +279,7 @@ const handlers: Array<[string, (d: Dict) => void]> = [
   ["tool_end", onToolEnd],
   ["plan", onPlan],
   ["question", onQuestion],
-  ["turn_end", (d) => { onTurnEnd(d); if (sidebarOwns(d)) { sidebarTurnEnd(d.turnSeq); sidebarBusy(false); void sidebarPullLog(); } }],
+  ["turn_end", (d) => { onTurnEnd(d); drainQueuedTurn(d.sessionId); if (sidebarOwns(d)) { sidebarTurnEnd(d.turnSeq); sidebarBusy(false); void sidebarPullLog(); } }],
   ["log", onLog],
   ["retract", (d) => onRetract(d.reason || "", d.sessionId)],
 ];

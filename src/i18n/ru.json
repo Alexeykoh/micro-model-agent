@@ -1586,6 +1586,7 @@
   "web.input.send": "отправить",
   "web.input.stop": "остановить",
   "web.input.queued": "в очереди · позиция {n}",
+  "web.queue.unknown": "(сообщение в очереди)",
   "web.input.queue_full": "очередь сообщений полна — дождись конца хода",
   "web.tab.working": "работает",
   "web.tab.waiting": "ждёт вас",

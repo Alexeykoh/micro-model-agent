@@ -1,7 +1,8 @@
 // Composer: per-tab draft/attachments, send/interrupt, busy reflection and the
-// mobile session sub-header. Extracted from `tabs.js`. Tab operations it needs
+// queued-message pin. Extracted from `tabs.js`. Tab operations it needs
 // (activeTab, status mutation, new/close/open) arrive via `initComposer`, so it
-// does not import the tab hub.
+// does not import the tab hub. The mobile session sub-header lives in
+// `sess-bar.ts` (re-exported here for `tabs.ts`).
 import { inp, imgPicker, attachStrip, attachErr, sendBtn, el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
@@ -14,8 +15,11 @@ import {
 } from "../feed.js";
 import { setBusy } from "../rail.js";
 import { setSessOpen } from "../core/menus.js";
-import { openSessionsMenu } from "./sessions-menu.js";
 import { closeCmdk, updateCmdk, cmdkKeydown, initCmdk } from "./cmdk.js";
+import { renderQueueStrip, enqueuePending } from "./queue.js";
+import { initSessBar } from "./sess-bar.js";
+
+export { renderSessBar } from "./sess-bar.js";
 
 interface ComposerDeps {
   activeTab: () => Dict | null;
@@ -40,6 +44,7 @@ let deps: ComposerDeps = {
 /** Tab hub injects its operations; keeps the module DAG acyclic. */
 export function initComposer(d: Partial<ComposerDeps>): void {
   deps = { ...deps, ...d };
+  initSessBar(d);
 }
 
 // Composer supplies autogrow to the autocomplete leaf (function decl hoisted).
@@ -147,73 +152,7 @@ export function restoreComposer(tab: Dict | null): void {
   renderAttachments();
   autogrow();
   closeCmdk();
-}
-
-// --- mobile session sub-header -------------------------------------------
-// Phones show a session control bar under the topbar: prev/next arrows step
-// through the open tabs, ✕ closes the active tab, and the + / list tools
-// relocate here (see placeTopTools) so the topbar keeps room for tabs.
-const sessBar = document.getElementById("sessBar");
-const sessNameBtn = document.getElementById("sessNameBtn") as HTMLButtonElement;
-const sessNameEl = document.getElementById("sessName") as HTMLElement;
-const sessPrevBtn = document.getElementById("sessPrev") as HTMLButtonElement;
-const sessNextBtn = document.getElementById("sessNext") as HTMLButtonElement;
-const sessCloseBtn = document.getElementById("sessClose") as HTMLButtonElement;
-const sessTools = document.getElementById("sessTools");
-const sessDD = document.getElementById("sessDD");
-const barTop = document.querySelector(".bar-top");
-const newChatBtn = document.getElementById("newChat");
-// Anchor remembering the desktop slot of the + / list controls.
-const topToolsAnchor = document.createComment("top-tools");
-if (barTop && newChatBtn) barTop.insertBefore(topToolsAnchor, newChatBtn);
-
-function stepTab(dir: number): void {
-  if (tabState.tabs.length < 2) return;
-  const i = tabState.tabs.findIndex((x) => x.id === tabState.activeTabId);
-  const n = i === -1 ? 0 : (i + dir + tabState.tabs.length) % tabState.tabs.length;
-  const tab = tabState.tabs[n];
-  // Same semantics as clicking the tab in the strip.
-  if (tab) deps.openTab(tab.id, tab.name, tab.kind, true);
-}
-
-export function renderSessBar(): void {
-  if (!sessBar) return;
-  const active = tabState.tabs.find((x) => x.id === tabState.activeTabId);
-  const label = active ? active.name || String(active.id) : "—";
-  sessNameEl.textContent = label;
-  sessNameBtn.title = label + (active && active.status && active.status !== "idle" ? " · " + deps.statusTitle(active.status) : "");
-  const has = tabState.tabs.length > 0;
-  sessPrevBtn.disabled = tabState.tabs.length < 2;
-  sessNextBtn.disabled = tabState.tabs.length < 2;
-  sessCloseBtn.disabled = !has;
-  sessNameBtn.disabled = !has;
-}
-
-// Nodes are relocated (not duplicated), so their listeners and the sessions
-// dropdown anchoring (.dd is position:relative) survive the move.
-function placeTopTools(): void {
-  if (!barTop || !sessTools || !newChatBtn || !sessDD) return;
-  if (window.matchMedia("(max-width: 760px)").matches) {
-    sessTools.append(newChatBtn, sessDD);
-  } else {
-    barTop.insertBefore(newChatBtn, topToolsAnchor);
-    barTop.insertBefore(sessDD, topToolsAnchor);
-  }
-}
-
-if (sessPrevBtn) sessPrevBtn.addEventListener("click", () => stepTab(-1));
-if (sessNextBtn) sessNextBtn.addEventListener("click", () => stepTab(1));
-if (sessCloseBtn) sessCloseBtn.addEventListener("click", () => {
-  if (tabState.activeTabId) deps.closeTab(tabState.activeTabId);
-});
-if (sessNameBtn) sessNameBtn.addEventListener("click", (e) => {
-  e.stopPropagation();
-  openSessionsMenu();
-});
-if (typeof window.matchMedia === "function") {
-  const narrowMq = window.matchMedia("(max-width: 760px)");
-  if (typeof narrowMq.addEventListener === "function") narrowMq.addEventListener("change", placeTopTools);
-  placeTopTools();
+  renderQueueStrip();
 }
 
 // --- attachments input wiring --------------------------------------------
@@ -315,14 +254,13 @@ async function send(): Promise<void> {
     deps.markTabDead(tab.id);
     return;
   }
-  // No client-side busy gate: a message sent mid-turn is queued server-side
-  // (per-session: `202 {queued: n, sessionId}`) and runs after the current
-  // turn, in order.
   clearEmpty(feed);
-  finishMd(feed);
-  resetTurnText(feed);
-  finishThink(feed);
   if (text.startsWith("/")) {
+    // Слэш-команда — не ход: закрываем текущий потоковый блок, чтобы её вывод
+    // не слился с ответом.
+    finishMd(feed);
+    resetTurnText(feed);
+    finishThink(feed);
     appendTo(feed, userBlock(text));
     scrollToBottom();
     if (tab) {
@@ -359,8 +297,19 @@ async function send(): Promise<void> {
     banner.appendChild(document.createTextNode(" · " + (session.host.provider || (settings.config && settings.config.provider && settings.config.provider.active) || "—") + " · " + contextLabel() + sessionPart));
     feed.insertBefore(banner, feed.firstChild);
   }
-  appendTo(feed, userBlock(text, images));
-  scrollToBottom();
+  // No client-side busy gate: a message sent while THIS session's turn runs is
+  // queued server-side (`202 {queued: n, sessionId}`) and runs after it. We do
+  // not append it mid-stream (it landed inside the live answer and scrolled
+  // away); it stays pinned in the queue strip until its turn starts.
+  const ownTurnRunning = !!(
+    tab && tab.kind === "session" && (session.runningSessionIds || []).includes(tab.id)
+  );
+  let postedUser: HTMLElement | null = null;
+  if (!ownTurnRunning) {
+    postedUser = userBlock(text, images);
+    appendTo(feed, postedUser);
+    scrollToBottom();
+  }
   if (tab) {
     tab.draft = "";
     tab.attachments = [];
@@ -368,7 +317,7 @@ async function send(): Promise<void> {
   tabState.attachments = [];
   renderAttachments();
   clearInput();
-  if (sessionId) deps.setTabStatus(sessionId, "working");
+  if (sessionId && !ownTurnRunning) deps.setTabStatus(sessionId, "working");
   const body: Record<string, unknown> = { text };
   if (images.length) body.images = images;
   if (sessionId) body.sessionId = sessionId;
@@ -376,22 +325,45 @@ async function send(): Promise<void> {
   if (!r.ok) {
     const err = (r.data && r.data.error) || r.status;
     const msg = err === "queue_full" ? t("web.input.queue_full") : err;
+    // The message was withheld from the feed (own turn was running) and the
+    // server did not accept it — restore the draft so the text is not lost.
+    if (postedUser === null) {
+      inp.value = text;
+      if (images.length) tabState.attachments = images.slice();
+      renderAttachments();
+      autogrow();
+    }
     appendTo(feed, el("div", "warnline", "⚠ " + msg));
     if (sessionId) deps.setTabStatus(sessionId, "failed");
-  } else if (r.data && r.data.noop) {
-    // Пустой сабмит — сервер вернул no-op с подсказкой, хода нет.
-    if (r.data.notice) appendTo(feed, el("div", "detail", String(r.data.notice)));
-  } else {
-    if (r.data && r.data.queued) {
-      const n = r.data.queuedForSession || r.data.queued;
-      appendTo(feed, el("div", "detail", "↳ " + t("web.input.queued", { n })));
-      if (sessionId) deps.setTabStatus(sessionId, "queued");
-    } else {
-      // Delay the spinner so fast first tokens never flash it: `showBusy`
-      // itself skips when a stream/think block already started.
-      window.setTimeout(() => showBusy(feed), 180);
-    }
+    return;
   }
+  if (r.data && r.data.noop) {
+    // Пустой сабмит — сервер вернул no-op с подсказкой, хода нет.
+    if (postedUser) postedUser.remove();
+    if (r.data.notice) appendTo(feed, el("div", "detail", String(r.data.notice)));
+    return;
+  }
+  if (r.data && r.data.queued) {
+    // Стоит в очереди: убираем блок из ленты и держим в пине, пока его ход не
+    // начнётся — тогда `drainQueuedTurn` вернёт его в правильную точку.
+    if (postedUser) postedUser.remove();
+    enqueuePending(tab, { text, images });
+    renderQueueStrip();
+    if (sessionId) deps.setTabStatus(sessionId, "queued");
+    return;
+  }
+  // Started immediately. If the block was withheld (the slot looked busy but
+  // freed before the POST), render it now, before the stream.
+  if (!postedUser) {
+    finishMd(feed);
+    resetTurnText(feed);
+    finishThink(feed);
+    appendTo(feed, userBlock(text, images));
+    scrollToBottom();
+  }
+  // Delay the spinner so fast first tokens never flash it: `showBusy`
+  // itself skips when a stream/think block already started.
+  window.setTimeout(() => showBusy(feed), 180);
 }
 
 async function interrupt(): Promise<void> {
@@ -454,4 +426,7 @@ export function reflectBusy(): void {
   const escHint = document.getElementById("hintEsc");
   if (escHint) escHint.hidden = !own;
   setBusy(session.busy);
+  // Server queue counters (`state` SSE) drive the pinned strip even for
+  // entries this client has no text for (another tab / reload mid-turn).
+  renderQueueStrip();
 }

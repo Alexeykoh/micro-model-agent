@@ -1610,6 +1610,7 @@
   "web.input.send": "send",
   "web.input.stop": "stop",
   "web.input.queued": "queued · position {n}",
+  "web.queue.unknown": "(queued message)",
   "web.input.queue_full": "message queue is full — wait for the turn to end",
   "web.tab.working": "working",
   "web.tab.waiting": "waiting for you",
