@@ -942,8 +942,8 @@ body.light .sel > button { border: 1px solid var(--border); }
 .detail-h .g { color: var(--accent); }
 .detail-h .x { margin-left: auto; color: var(--dim-b); cursor: pointer; }
 .detail-b { flex: 1; min-height: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; overflow-x: hidden; min-width: 0; max-width: 100%; }
-.detail-b > * { flex-shrink: 0; }
-.detail-b .code { max-width: 100%; }
+.detail-b > * { flex-shrink: 0; min-width: 0; }
+.detail-b .code { min-width: 0; max-width: 100%; }
 .detail-b h5 { margin: 0 0 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--sec-h); font-weight: 600; }
 
 /* ---- sidebar Files tab: lazy tree + read-only viewer, side by side ----

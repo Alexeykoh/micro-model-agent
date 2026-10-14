@@ -376,6 +376,16 @@ describe("webui assets", () => {
     expect(js(a)).toContain("setBusy(session.busy)");
   });
 
+  it("lets the Trace detail code blocks shrink so long lines scroll, not overflow", () => {
+    const a = loadAssets();
+    // Flex children default to `min-width: auto` (= min-content), so a long
+    // code line used to widen the 340px detail pane and get clipped. The
+    // wrapper and the code block must be allowed to shrink (overflow-x: auto
+    // then scrolls inside the pane).
+    expect(a.css).toContain(".detail-b > * { flex-shrink: 0; min-width: 0; }");
+    expect(a.css).toContain(".detail-b .code { min-width: 0; max-width: 100%; }");
+  });
+
   it("wires the ui.fontSize setting to body[data-font]", () => {
     const a = loadAssets();
     expect(js(a)).toContain('"ui.fontSize"');

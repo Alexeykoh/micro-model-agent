@@ -34,6 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Trace detail pane clipped long code/output**: the detail code blocks
+  (arguments, tool output) are flex children of `.detail-b` and defaulted to
+  `min-width: auto` (= min-content), so one long line widened the 340px pane and
+  the text was cut off. They may now shrink (`min-width: 0`) and scroll
+  horizontally inside the pane (`assets/styles.css`).
 - **Sidebar plan now syncs with the chat while a turn runs**: the plan card
   appeared in the feed (SSE `plan`), but the `Session` panel kept showing “нет
   активного плана” until the turn ended — nothing pushed a `/api/state`
