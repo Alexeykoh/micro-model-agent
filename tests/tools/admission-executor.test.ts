@@ -9,7 +9,7 @@ let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "mma-exec-admit-")); });
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
 
-function makeExecutor(output: string) {
+function makeExecutor(output: string, config: unknown = { contextBudget: { admitMaxTokens: 100 } }) {
   const registry = new ToolRegistry();
   registry.register(
     {
@@ -22,7 +22,7 @@ function makeExecutor(output: string) {
     "test",
   );
   const ctx = {
-    config: { contextBudget: { admitMaxTokens: 100 } },
+    config,
     baseDir: dir,
     sessionId: "s1",
     logger: {
@@ -49,5 +49,13 @@ describe("ToolExecutor admission", () => {
     const res = await executor.execute({ id: "2", name: "big_tool", arguments: {} });
     expect(res.output).toBe("tiny");
     expect(res.artifactPath).toBeUndefined();
+  });
+
+  it("falls back to the default threshold when contextBudget is absent", async () => {
+    const big = Array.from({ length: 6000 }, (_, i) => `row ${i}`).join("\n");
+    const executor = makeExecutor(big, {});
+    const res = await executor.execute({ id: "3", name: "big_tool", arguments: {} });
+    expect(res.artifactPath).toBeTruthy();
+    expect(res.output).not.toContain("row 5999");
   });
 });

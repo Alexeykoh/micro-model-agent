@@ -1,4 +1,6 @@
 // Типы конфига AppConfig: провайдеры, бюджет, критик, безопасность, UI.
+import type { ContextBudget } from "./types-budget";
+
 /** Как провайдер предоставляет кеширование промпта. */
 export type CacheMechanism = "auto" | "explicit" | "local" | "none";
 
@@ -116,8 +118,6 @@ export interface PricingConfig {
   /** Пользовательские цены по моделям (id модели -> {input, output}). */
   overrides: Record<string, ModelPrice>;
 }
-
-import type { ContextBudget } from "./types-budget";
 
 export type { ContextBudget };
 
