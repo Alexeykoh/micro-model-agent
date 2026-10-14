@@ -161,25 +161,21 @@ export function renderUsage(h: Dict): void {
   const q = typeof h.contextQuality === "number" ? h.contextQuality : null;
   usageEl.appendChild(usageRow(t("web.usage.quality"), q != null ? Math.round(q) + "%" : "—", q != null ? "" : "dim"));
 
-  // Context probe: real backend loaded context vs the configured window.
-  // `contextLimit` is the history budget (~75%), NOT the window — comparing
-  // against it made a 1000K config read as "750.0K configured". Pending/absent
-  // renders a dim dash; loaded < configured warns.
+  // Context probe: how many tokens the backend actually loaded for the model
+  // (LM Studio and friends can load fewer than the configured window). We lead
+  // with the loaded count — the number the user cares about — and do NOT print
+  // the model's configured capacity; a low value is flagged instead.
   let probeText = "—";
   let probeCls = "dim";
   const probe = h.contextProbe;
   if (probe && typeof probe.actual === "number") {
-    const actual = fmtTokens(probe.actual);
+    probeText = t("web.usage.probe_loaded", { actual: fmtTokens(probe.actual) });
     const configured = h.contextWindow || cfg.contextWindow || null;
-    if (configured && probe.actual < configured) {
-      probeText = t("web.usage.probe_low", { actual, configured: fmtTokens(configured) });
-      probeCls = "wn";
-    } else {
-      probeText = t("web.usage.probe_loaded", { actual });
-      probeCls = "";
-    }
+    probeCls = configured && probe.actual < configured ? "wn" : "";
   }
-  usageEl.appendChild(usageRow(t("web.usage.probe"), probeText, probeCls));
+  const probeRow = usageRow(t("web.usage.probe"), probeText, probeCls);
+  if (probeCls === "wn") probeRow.title = t("web.usage.probe_hint");
+  usageEl.appendChild(probeRow);
 }
 
 // Workspace path and agent version under the composer.

@@ -35,6 +35,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   (read/write/edit/file_info) now switches the sidebar to Files, expands the
   tree down to the file and opens it in the viewer, instead of previewing the raw
   file in a new browser tab. Modifiers / middle-click keep the raw preview.
+### Changed
+
+- **Usage “probe” row shows the loaded context**: the session panel row is now
+  labelled “context loaded” and prints the token count the backend actually
+  loaded, instead of leading with the model's configured capacity. A low value is
+  flagged (and explained on hover) without printing the window.
 
 ## [0.4.0] - 2026-10-14
 
