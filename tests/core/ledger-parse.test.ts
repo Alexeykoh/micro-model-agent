@@ -14,6 +14,14 @@ describe("addressesFromToolResult", () => {
     expect(got).toEqual([{ address: "C:\\proj\\a.ts:1800", note: "NEEDLE" }]);
   });
 
+  it("parses grep findings terminated with CRLF (Windows)", () => {
+    const out = "corpus/hard-a.txt:1800:line 1800: NEEDLE_A_111 marker\r\n";
+    const got = addressesFromToolResult("grep", { pattern: "NEEDLE_A" }, out);
+    expect(got).toEqual([
+      { address: "corpus/hard-a.txt:1800", note: "line 1800: NEEDLE_A_111 marker" },
+    ]);
+  });
+
   it("derives the read range from args (offset/limit), not the localized header", () => {
     const got = addressesFromToolResult(
       "read_file",

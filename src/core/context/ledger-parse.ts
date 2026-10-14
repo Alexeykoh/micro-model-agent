@@ -36,8 +36,11 @@ export function addressesFromToolResult(
 ): AddressNote[] {
   if (SEARCH_TOOLS.has(name)) {
     const out: AddressNote[] = [];
+    // Нормализация переводов строк: на Windows вывод приходит с CRLF, и `\r` в
+    // конце строки ломает `(.*)$` (`.` не матчит `\r`) — находки терялись.
+    const clean = content.replace(/\r/g, "");
     // `grep` уже отдаёт усечённый вывод (~15 строк), поэтому скан дешёвый.
-    for (const line of content.split("\n")) {
+    for (const line of clean.split("\n")) {
       const m = line.match(/^(.+?):(\d+):(.*)$/);
       if (!m) continue;
       out.push({ address: `${m[1]}:${m[2]}`, note: m[3].trim().slice(0, MAX_NOTE) });
