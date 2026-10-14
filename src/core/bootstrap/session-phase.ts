@@ -12,8 +12,8 @@
  * конфига) и сам `toolCtx` возвращаются наружу следующим фазам.
  */
 import { join } from "path";
-import { ContextManager } from "../../core/context/manager";
-import { TokenCounter } from "../../llm/token-counter";
+import { createContextManager } from "./context-factory";
+import type { ContextManager } from "../../core/context/manager";
 import { ToolExecutor } from "../../tools/executor";
 import { HallucinationDetector } from "../../core/hallucination/detector";
 import { createToolContext, admissionDiagnosticSink } from "./tool-context";
@@ -171,8 +171,6 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
     }
   }
 
-  const tokenCounter = new TokenCounter(config.model);
-
   // Мутабельный набор активных тегов тулов — общий у цикла агента и тула
   // `enable_tools`. Цикл перечитывает его каждую итерацию для пересборки
   // видимого модели набора; enable_tools дотолкивает теги внутрь. При выключенном
@@ -184,11 +182,7 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
       : []
     : [];
 
-  const contextManager = new ContextManager(
-    config.contextWindow,
-    config.contextBudget,
-    tokenCounter,
-  );
+  const contextManager = createContextManager(config, baseDir);
 
   // Общий бокс ЖИВОГО конфига. `Agent.reconfigure` меняет и deps.config, и
   // этот бокс, чтобы захватившие ссылку при bootstrap — toolCtx.config,

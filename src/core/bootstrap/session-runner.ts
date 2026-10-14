@@ -19,8 +19,8 @@ import type { AppConfig, ReasoningStrategy, ModelCapabilities } from "../../conf
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderManager } from "../../modules/providers/manager";
-import { ContextManager } from "../../core/context/manager";
-import { TokenCounter } from "../../llm/token-counter";
+import type { ContextManager } from "../../core/context/manager";
+import { createContextManager } from "./context-factory";
 import type { SessionManager } from "../../modules/session/index";
 import { SessionModule } from "../../modules/session/module";
 import { ExecutionModule } from "../../modules/execution/module";
@@ -190,11 +190,7 @@ export function createSessionRunnerFactory(
     }
     const runnerLogger = logger.forSession(sessionId, runnerSessionDir);
 
-    const contextManager = new ContextManager(
-      config.contextWindow,
-      config.contextBudget,
-      new TokenCounter(config.model),
-    );
+    const contextManager = createContextManager(config, baseDir);
 
     const runnerExec = new ExecutionModule(
       baseDir,

@@ -2,6 +2,8 @@
 import type { ContentPart, TextPart } from "../../llm/provider";
 import { getMessageText } from "../../llm/provider";
 import { FactExtractor } from "./fact-extractor";
+import { ContextLedger } from "./ledger";
+import { absorbLedgers, markStaleForWrite, summarizeArgs } from "./ledger-absorb";
 import { truncate } from "../../utils/truncate";
 import type { ContextBreakdown } from "../../core/types";
 export type { ContextBreakdown };
@@ -41,8 +43,6 @@ export interface ContextBudget {
 
 const COMPACTION_INTERVAL = 15;
 const KEEP_LAST_N = 6;
-/** Потолок строк леджера тулов в сводке компакции. */
-const TOOL_LEDGER_MAX_ENTRIES = 12;
 
 /** Результат компакции: счётчики ходов/токенов/качества + внутренняя сводка. */
 export interface CompactResult {
@@ -111,17 +111,6 @@ export interface TriedAndFailed {
   args: string;
   error: string;
   count: number;
-}
-
-function summarizeArgs(args: unknown): string {
-  if (!args) return "";
-  if (typeof args === "string") return args.slice(0, 80);
-  try {
-    const keys = Object.keys(args as Record<string, unknown>);
-    return keys.slice(0, 3).join(", ");
-  } catch {
-    return String(args).slice(0, 80);
-  }
 }
 
 function looksLikeErrorPaste(text: string): boolean {
@@ -206,6 +195,11 @@ export class ContextManager {
    */
   private toolLedger: string[] = [];
   private toolLedgerKeys = new Set<string>();
+  /**
+   * OO-3: durable леджер адресов (файловый), переживает любую компакцию. Когда
+   * задан, блок компакции несёт только указатель, а не сырые заметки.
+   */
+  private ledger: ContextLedger | null = null;
   private facts = new FactExtractor();
   /** Последняя реальная инструкция юзера (мимо <system-summary>). */
   private lastUserTask = "";
@@ -262,6 +256,17 @@ export class ContextManager {
     this.tokenCounter = tokenCounter ?? null;
     this.calibrationOptions = { warmup: tuning.calibrationWarmup, ratioFloor: tuning.ratioFloor };
     this.calibrator = new ContextCalibrator(this.calibrationOptions);
+  }
+
+  /** OO-3: подключить durable леджер адресов (путь из contextBudget.notesPath). */
+  configureLedger(filePath: string, max: number): void {
+    this.ledger = new ContextLedger(filePath, max);
+    this.ledger.load();
+  }
+
+  /** Внутренний блок последней компакции (`[Compressed: …]`) — для тестов/наблюдаемости. */
+  getCompactionBlock(): string | null {
+    return this.compactedBlock;
   }
 
   /** Резолвит тюнинг-параметры бюджета с безопасными дефолтами. */
@@ -421,6 +426,8 @@ export class ContextManager {
       this.pendingImageParts = [];
     }
     this.messages.push(this.stampSeq(msg));
+    // OO-8: успешная запись/правка помечает адреса изменённого файла stale.
+    markStaleForWrite(this.ledger, msg);
     const tokens = this.getEstimatedTokens();
     if (tokens > this.peakTokens) this.peakTokens = tokens;
   }
@@ -588,7 +595,13 @@ export class ContextManager {
     const recentTurns = this.messages.slice(cutoff);
 
     this.facts.extract(oldTurns);
-    this.absorbToolLedger(oldTurns);
+    absorbLedgers(
+      oldTurns,
+      this.ledger,
+      this.compactionSummaryMode !== "off",
+      this.toolLedger,
+      this.toolLedgerKeys,
+    );
 
     this.compactedBlock = this.buildCompactionBlock(oldTurns);
     const summary: Message = this.stampSeq({
@@ -710,8 +723,15 @@ export class ContextManager {
 
     // Леджер тулов: что уже сделано/прочитано/найдено. Пинится, чтобы модель
     // после сжатия не переисследовала те же URL/файлы (питало петлю повторов).
-    if (this.compactionSummaryMode !== "off" && this.toolLedger.length > 0) {
-      parts.push(`[Tool ledger]\n${this.toolLedger.join("\n")}`);
+    // OO-3: при durable леджере адресов блок несёт только указатель — сырые
+    // заметки живут в файле и переживают компакцию без раздувания контекста.
+    if (this.compactionSummaryMode !== "off") {
+      if (this.ledger) {
+        const pointer = this.ledger.pointerLine();
+        if (pointer) parts.push(pointer);
+      } else if (this.toolLedger.length > 0) {
+        parts.push(`[Tool ledger]\n${this.toolLedger.join("\n")}`);
+      }
     }
 
     const triedAndFailed = extractTriedAndFailed(oldTurns);
@@ -723,32 +743,6 @@ export class ContextManager {
     }
 
     return parts.join(" ");
-  }
-
-  /**
-   * Пополняет леджер тулов из удаляемых сообщений: `- tool(args) → первая
-   * строка результата`. Дедуп по `tool+args`, потолок `TOOL_LEDGER_MAX_ENTRIES`
-   * (вытесняются старейшие). Леджер переживает компакции и пинится в сводке.
-   */
-  private absorbToolLedger(messages: Message[]): void {
-    if (this.compactionSummaryMode === "off") return;
-    for (const m of messages) {
-      if (m.role !== "tool" || !m.name) continue;
-      const args = summarizeArgs(m.arguments);
-      const key = `${m.name}:${args}`;
-      if (this.toolLedgerKeys.has(key)) continue;
-      const text = typeof m.content === "string" ? m.content : getMessageText(m.content);
-      const firstLine = text
-        .split("\n")
-        .map((s) => s.trim())
-        .find(Boolean);
-      const digest = firstLine ? ` → ${firstLine.slice(0, 120)}` : "";
-      this.toolLedgerKeys.add(key);
-      this.toolLedger.push(`- ${m.name}(${args})${digest}`);
-    }
-    if (this.toolLedger.length > TOOL_LEDGER_MAX_ENTRIES) {
-      this.toolLedger.splice(0, this.toolLedger.length - TOOL_LEDGER_MAX_ENTRIES);
-    }
   }
 
   /**
@@ -884,7 +878,13 @@ export class ContextManager {
     const head = nonSystem.slice(0, Math.max(0, nonSystem.length - keep * 2));
     const tail = nonSystem.slice(Math.max(0, nonSystem.length - keep * 2));
     this.facts.extract(head);
-    this.absorbToolLedger(head);
+    absorbLedgers(
+      head,
+      this.ledger,
+      this.compactionSummaryMode !== "off",
+      this.toolLedger,
+      this.toolLedgerKeys,
+    );
     const summary: Message = this.stampSeq({
       role: "user",
       content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context]${this.compactedBlock ? ` ${this.compactedBlock}` : ""}</system-summary>`,
