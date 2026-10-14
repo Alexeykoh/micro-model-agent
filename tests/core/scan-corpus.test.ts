@@ -57,4 +57,36 @@ describe("scanCorpus", () => {
     });
     expect(res.findings.map((f) => f.path)).toEqual(["ok.md"]);
   });
+
+  it("keeps MAP concurrency globally bounded across recursion levels (OO-9)", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    // Наблюдаем ОБЩИЙ пик конкурентных chat-вызовов: при старом кодексе
+    // (пул на уровень) он умножался на глубину; теперь должен остаться ≤ 2.
+    const provider = {
+      chat: async function* () {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        try {
+          await new Promise((r) => setTimeout(r, 5));
+          yield { type: "text", content: "SYNTH" };
+        } finally {
+          inFlight--;
+        }
+      },
+    };
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 12; i++) files[`d${i % 3}/f${i}.md`] = `content ${i}`;
+    const res = await scanCorpus(provider as any, {
+      question: "q",
+      files: Object.keys(files),
+      readFile: (p) => files[p],
+      maxFanout: 2,
+      maxParallel: 2,
+    });
+    expect(res.scanned).toBe(12);
+    expect(res.findings.length).toBe(12);
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(res.maxFanoutObserved).toBeLessThanOrEqual(2);
+  });
 });
