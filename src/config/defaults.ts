@@ -85,6 +85,7 @@ export const DEFAULTS: AppConfig = {
     compactionSummary: "ledger",
     overflowCooldown: 3,
     toolResultKeep: 6,
+    admitMaxTokens: 3000,
     calibrationWarmup: 3,
     ratioFloor: 0.5,
   },
