@@ -6,8 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-14
+
 ### Added
 
+- **Out-of-context corpus (OO-1…OO-9)**: oversized tool output no longer enters
+  the root context verbatim — `ToolExecutor.execute()` spills it to
+  `.mma/context/<session>/` and returns a descriptor (`preview` + path); a durable
+  address ledger (`.mma/NOTES.md`) records `path:line`/URL findings at the moment
+  the raw result arrives, survives any number of compactions, marks addresses
+  stale on edits, renders them in the compaction block, and emits `context_degraded`
+  when compactions make no progress (INV-15). Config: `contextBudget.admitMaxTokens`,
+  `contextBudget.notesPath`, `contextBudget.ledgerMax`. Spec:
+  `docs/specs/2026-10-14-out-of-context-corpus-design.md`.
+- **`scan_corpus` tool (OO-4/OO-9)**: answers a question over MANY files —
+  hierarchical, fanout-bounded map over `runChunkQuery` + recursive reduce; child
+  files are scope- and protected-path-filtered and the walk is symlink-safe.
+- **`append_file` tool (OO-5)**: append to a file (creating it) so long outputs are
+  built incrementally in an artifact instead of one response; registered across the
+  FS-write gates/renderers/ledger.
 - **Single tool-registration path (gate A, INV-2)**: tools enter the registry
   through exactly one writer — `registerOwnedTools`/`upsertOwnedTool` in
   `src/core/module-host.ts`; core catalogue, module contributions, runner
@@ -30,6 +47,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `tests/tools/enforcement-tags.test.ts`.
 
 ### Changed
+
+- **Context budget keys (OO-3/OO-8)**: added `contextBudget.admitMaxTokens`,
+  `contextBudget.notesPath` (default `.mma/NOTES.md`), `contextBudget.ledgerMax`.
 
 - **Config writes declare effects instead of a `reconfigure` flag (W3.1/3.2,
   INV-18)**: `ConfigKeyDef.effects` and `ConfigSetOk.effects` (`provider.rebuild`,
@@ -60,6 +80,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `AgentPlugin` (the plugin SDK) and does not need `AgentModule`.
 
 ### Fixed
+
+- **CRLF tool results dropped findings from the ledger (OO-3)**: the `path:line`
+  extractor failed on `\r`-terminated lines (`.` does not match `\r` in JS), so on
+  Windows `grep` findings never reached the durable ledger; line endings are now
+  normalized before parsing.
 
 - **`indexer` file watcher is torn down on shutdown**: the new `ModuleDef.teardown`
   calls `IndexerModule.unwatch()`, closing the watcher and its debounce timer.
