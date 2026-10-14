@@ -1,6 +1,11 @@
 // Оркестратор скана корпуса (OO-4/OO-9): locate → partition → MAP(один файл
 // через runChunkQuery) → рекурсивный REDUCE. Не третий движок: MAP/REDUCE
 // переиспользуют runChunkQuery. Fanout ограничен; при переполнении — иерархия.
+//
+// Конкурентность: единый семафор на весь скан ограничивает число одновременных
+// MAP-веток. Каждая ветка вызывает runChunkQuery с maxParallel=1, поэтому одна
+// ветка == один chat-вызов провайдера в момент времени. Значит гейт ограничивает
+// ИМЕННО конкурентные вызовы провайдера (не cap×чанки).
 import type { LLMProvider } from "../../llm/provider";
 import type { Logger } from "../../logger/app-logger";
 import { errMsg } from "../../utils";
@@ -29,7 +34,8 @@ export interface ScanResult {
   findings: ScanFinding[];
   synthesis: string;
   scanned: number;
-  /** Глобальный пик одновременных MAP-вызовов за весь скан (для тестов/тюнинга). */
+  /** Глобальный пик одновременных MAP-веток == конкурентных вызовов провайдера
+   * (per-file chunk parallelism = 1), за весь скан. Для тестов/тюнинга. */
   maxFanoutObserved: number;
 }
 
@@ -80,12 +86,13 @@ function groupByDir(files: string[]): Map<string, string[]> {
 
 /** MAP одного файла: ответ на вопрос по его содержимому (runChunkQuery).
  * Конкурентность ограничена глобальным гейтом `state.gate`, общим для всех
- * уровней рекурсии, — иначе параллелизм умножался бы на каждом уровне. */
+ * уровней рекурсии, — иначе параллелизм умножался бы на каждом уровне.
+ * `maxParallel: 1` держит одну MAP-ветку == один chat-вызов провайдера, так что
+ * гейт ограничивает реальную конкурентность вызовов провайдера. */
 async function mapFile(
   provider: LLMProvider,
   path: string,
   opts: ScanOptions,
-  maxParallel: number,
   state: ScanState,
 ): Promise<ScanFinding | null> {
   await state.gate.acquire();
@@ -101,7 +108,7 @@ async function mapFile(
     }
     const r = await runChunkQuery(provider, text, opts.question, {
       synthesize: true,
-      maxParallel,
+      maxParallel: 1,
       chunkChars: opts.chunkChars,
       logger: opts.logger,
       sessionId: opts.sessionId,
@@ -144,7 +151,7 @@ async function mapLevel(
   const workers = Array.from({ length: Math.min(maxParallel, files.length) }, async () => {
     while (cursor < files.length) {
       const i = cursor++;
-      const f = await mapFile(provider, files[i], opts, maxParallel, state);
+      const f = await mapFile(provider, files[i], opts, state);
       if (f) out.push(f);
     }
   });
@@ -162,13 +169,16 @@ async function reduce(
   depth: number,
 ): Promise<string> {
   if (findings.length === 0) return "";
-  const text = findings.map((f) => `## ${f.path}\n${f.answer}`).join("\n\n");
   if (findings.length <= fanout || depth <= 0) {
+    const text = findings.map((f) => `## ${f.path}\n${f.answer}`).join("\n\n");
     const r = await runChunkQuery(provider, text, opts.question, {
       synthesize: true,
-      // Тот же кап, что и у MAP: внутренний параллелизм редукции не должен
-      // множиться поверх глобального гейта.
+      // REDUCE идёт последовательно ПОСЛЕ MAP (все ветки MAP уже завершены) и
+      // обходит свои под-группы последовательно, поэтому не складывается с
+      // пиком MAP. Кап здесь ограничивает лишь внутренний параллелизм чанков
+      // одного редукционного вызова.
       maxParallel: Math.max(1, opts.maxParallel ?? fanout),
+      chunkChars: opts.chunkChars,
       logger: opts.logger,
       sessionId: opts.sessionId,
       signal: opts.signal,
