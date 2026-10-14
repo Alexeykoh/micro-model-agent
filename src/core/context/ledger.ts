@@ -167,6 +167,26 @@ export class ContextLedger {
     return lines.join("\n");
   }
 
+  /**
+   * Компактный вид для блока компакции (OO-3): последние `max` строк
+   * `address — note[(stale)]`, хвост `…(+N more in <path>)` для скрытых, затем
+   * указатель `[Notes: <path>, N]`. Только короткие строки-адреса — сырой вывод
+   * тулов сюда не попадает. Пустой леджер → пустая строка.
+   */
+  renderBlock(max = 100): string {
+    const total = this.entries.length;
+    if (total === 0) return "";
+    const shown = total > max ? this.entries.slice(total - max) : this.entries;
+    const lines = shown.map(
+      (e) => `${e.address}${SEP}${e.note}${e.stale ? STALE_MARK : ""}`,
+    );
+    const hidden = total - shown.length;
+    if (hidden > 0) lines.push(`…(+${hidden} more in ${this.shortPath()})`);
+    const pointer = this.pointerLine();
+    if (pointer) lines.push(pointer);
+    return lines.join("\n");
+  }
+
   private shortPath(): string {
     try {
       return relative(process.cwd(), this.filePath) || this.filePath;

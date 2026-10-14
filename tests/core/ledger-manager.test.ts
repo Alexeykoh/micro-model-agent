@@ -37,7 +37,19 @@ function seed(mgr: ContextManager, success: boolean): void {
 }
 
 describe("ContextManager durable ledger", () => {
-  it("persists grep addresses to the ledger file and pins a pointer", () => {
+  it("records grep addresses at addMessage time (before compaction)", () => {
+    const mgr = new ContextManager(32768);
+    const notesPath = join(dir, "NOTES.md");
+    mgr.configureLedger(notesPath, 200);
+
+    seed(mgr, true); // только добавление сообщений, БЕЗ компакции
+
+    // Адрес-находка записан из сырого результата сразу при входе в историю.
+    expect(existsSync(notesPath)).toBe(true);
+    expect(readFileSync(notesPath, "utf8")).toContain("corpus/hard-b.txt:3300");
+  });
+
+  it("renders the address list (not just a pointer) in the compaction block", () => {
     const mgr = new ContextManager(32768);
     const notesPath = join(dir, "NOTES.md");
     mgr.configureLedger(notesPath, 200);
@@ -45,15 +57,32 @@ describe("ContextManager durable ledger", () => {
     seed(mgr, true);
     const result = mgr.compact({ keepLastN: 2 });
     expect(result).toBeTruthy();
-
-    // Адрес-находка durable: файл создан и содержит `path:line`.
-    expect(existsSync(notesPath)).toBe(true);
     expect(readFileSync(notesPath, "utf8")).toContain("corpus/hard-b.txt:3300");
 
-    // Блок компакции несёт указатель, а не contents леджера адресов.
+    // Блок несёт сам адрес-находку (модель видит её без открытия файла) И указатель.
     const block = mgr.getCompactionBlock() ?? result!.summary;
+    expect(block).toContain("corpus/hard-b.txt:3300");
     expect(block).toContain("[Notes:");
-    expect(block).not.toContain("corpus/hard-b.txt:3300 — ");
+  });
+
+  it("does not inline bulk raw tool content in the block", () => {
+    const mgr = new ContextManager(32768);
+    mgr.configureLedger(join(dir, "NOTES.md"), 200);
+    const filler = "FILLER_".repeat(2000); // ~14K символов сырого вывода
+
+    mgr.addMessage({ role: "user", content: "scan" });
+    mgr.addMessage({
+      role: "tool",
+      name: "grep",
+      content: `corpus/hard-c.txt:42:NEEDLE_C\n${filler}`,
+      arguments: {},
+      success: true,
+    });
+    for (let i = 0; i < 20; i++) mgr.addMessage({ role: "assistant", content: `s${i}` });
+
+    const block = mgr.compact({ keepLastN: 2 })!.summary;
+    expect(block).toContain("corpus/hard-c.txt:42"); // адрес есть
+    expect(block).not.toContain("FILLER_FILLER_FILLER_FILLER"); // сырьё — нет
   });
 
   it("renders both the notes pointer and the legacy tool ledger", () => {
@@ -65,6 +94,7 @@ describe("ContextManager durable ledger", () => {
     for (let i = 0; i < 20; i++) mgr.addMessage({ role: "assistant", content: `x${i}` });
 
     const summary = mgr.compact({ keepLastN: 2 })!.summary;
+    expect(summary).toContain("corpus/hard-b.txt:3300");
     expect(summary).toContain("[Notes:");
     expect(summary).toContain("[Tool ledger]");
     expect(summary).toContain("list_dir");

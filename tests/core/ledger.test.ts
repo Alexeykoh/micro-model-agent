@@ -61,6 +61,22 @@ describe("ContextLedger", () => {
     expect(l.pointerLine()).toMatch(/^\[Notes: .*NOTES\.md, 1\]$/);
   });
 
+  it("renderBlock bounds the list, adds a hidden-count tail and the pointer", () => {
+    const l = new ContextLedger(path, 500);
+    for (let i = 0; i < 130; i++) l.record(`f${i}.ts:${i}`, `n${i}`);
+    const block = l.renderBlock(100);
+    const lines = block.split("\n");
+    expect(lines).toHaveLength(102); // 100 записей + хвост + указатель
+    expect(block).toContain("f129.ts:129"); // свежайший сохранён
+    expect(block).not.toContain("f0.ts:0 — "); // старейший свёрнут
+    expect(block).toContain("…(+30 more in");
+    expect(block).toContain("[Notes:");
+  });
+
+  it("renderBlock is empty for an empty ledger", () => {
+    expect(new ContextLedger(path, 200).renderBlock()).toBe("");
+  });
+
   it("load is last-wins: an updated note supersedes the earlier one", () => {
     const l = new ContextLedger(path, 200);
     l.record("a.ts:1", "old");

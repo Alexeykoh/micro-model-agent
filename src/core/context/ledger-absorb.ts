@@ -66,10 +66,21 @@ export function absorbLedgers(
   }
 }
 
-/** OO-8: успешная запись/правка помечает адреса изменённого файла stale. */
-export function markStaleForWrite(ledger: ContextLedger | null, msg: Message): void {
-  if (!ledger || msg.role !== "tool" || msg.success === false) return;
-  if (!msg.name || !WRITE_TOOLS.has(msg.name)) return;
-  const touched = (msg.arguments as Record<string, unknown> | undefined)?.path;
-  if (typeof touched === "string" && touched) ledger.markStale(touched);
+/**
+ * OO-3/OO-8: наблюдает УСПЕШНЫЙ tool-результат в момент входа в историю.
+ * Записывает адреса-находки из СЫРОГО контента (до возможной чистки
+ * `pruneStaleToolResults`, которая обнулила бы `path:line`) и помечает
+ * изменённый записью файл stale. `record` идемпотентен (дедуп по адресу).
+ */
+export function observeToolResult(ledger: ContextLedger | null, msg: Message): void {
+  if (!ledger || msg.role !== "tool" || msg.success === false || !msg.name) return;
+  const text = typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
+  const args = (msg.arguments ?? {}) as Record<string, unknown>;
+  for (const a of addressesFromToolResult(msg.name, args, text)) {
+    ledger.record(a.address, a.note);
+  }
+  if (WRITE_TOOLS.has(msg.name)) {
+    const touched = args.path;
+    if (typeof touched === "string" && touched) ledger.markStale(touched);
+  }
 }

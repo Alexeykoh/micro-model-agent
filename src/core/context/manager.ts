@@ -3,7 +3,7 @@ import type { ContentPart, TextPart } from "../../llm/provider";
 import { getMessageText } from "../../llm/provider";
 import { FactExtractor } from "./fact-extractor";
 import { ContextLedger } from "./ledger";
-import { absorbLedgers, markStaleForWrite } from "./ledger-absorb";
+import { absorbLedgers, observeToolResult } from "./ledger-absorb";
 import { CompactionProgressTracker, type ProgressDiagnostic } from "./compaction-progress";
 import { extractTriedAndFailed, looksLikeErrorPaste } from "./message-analysis";
 import type { ContextBreakdown } from "../../core/types";
@@ -383,8 +383,8 @@ export class ContextManager {
       this.pendingImageParts = [];
     }
     this.messages.push(this.stampSeq(msg));
-    // OO-8: успешная запись/правка помечает адреса изменённого файла stale.
-    markStaleForWrite(this.ledger, msg);
+    // OO-3/OO-8: адреса-находки пишутся сразу (сырой контент), правка — stale.
+    observeToolResult(this.ledger, msg);
     const tokens = this.getEstimatedTokens();
     if (tokens > this.peakTokens) this.peakTokens = tokens;
   }
@@ -682,13 +682,12 @@ export class ContextManager {
 
     if (this.thinkingLevel) parts.push(`[Thinking: ${this.thinkingLevel}]`);
 
-    // Леджер тулов: что уже сделано/прочитано (анти-повтор). OO-3: при durable
-    // леджере адресов блок несёт указатель `[Notes: …]`, а леджер тулов —
-    // legacy-строки для тулов без адреса (bash, web_search, list_dir).
+    // Леджер: при durable леджере — компактный список адресов-находок (не
+    // сырой вывод) + указатель; плюс legacy `[Tool ledger]` для тулов без адреса.
     if (this.compactionSummaryMode !== "off") {
       if (this.ledger) {
-        const pointer = this.ledger.pointerLine();
-        if (pointer) parts.push(pointer);
+        const notes = this.ledger.renderBlock();
+        if (notes) parts.push(notes);
       }
       if (this.toolLedger.length > 0) {
         parts.push(`[Tool ledger]\n${this.toolLedger.join("\n")}`);
