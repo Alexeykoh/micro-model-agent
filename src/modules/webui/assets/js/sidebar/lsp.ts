@@ -9,6 +9,7 @@ import { openSubDialog } from "../subdialog.js";
 import type { Dict } from "../core/store/types.js";
 import { sb } from "./state.js";
 import { mapKv } from "./map.js";
+import { appendToolchain } from "./lsp-toolchain.js";
 
 /** i18n-ключ ярлыка класса причины (`not-applicable` → `..._not_applicable`). */
 function lspReasonKey(reason: unknown): string {
@@ -73,19 +74,6 @@ function lspMutedRow(reason: string, list: Dict[]): HTMLElement {
   st.appendChild(document.createTextNode(" " + t(lspReasonKey(reason))));
   row.appendChild(st);
   return row;
-}
-
-/** Распознанные версии тулчейна проекта: рантаймы и пакеты (все языки). */
-function appendToolchain(host: HTMLElement, tc: Dict | undefined): void {
-  if (!tc || typeof tc !== "object") return;
-  const runtimes = Array.isArray(tc.runtimes) ? tc.runtimes : [];
-  const packages = tc.packages && typeof tc.packages === "object" ? tc.packages : {};
-  const parts = [
-    ...runtimes.map((r: Dict) => `${r.name} ${r.version}`),
-    ...Object.entries(packages).map(([name, version]) => `${name} ${version}`),
-  ].filter(Boolean);
-  if (!parts.length) return;
-  host.appendChild(mapKv(t("web.sidebar.lsp_toolchain"), parts.join(" · ")));
 }
 
 export function renderLsp(): void {
