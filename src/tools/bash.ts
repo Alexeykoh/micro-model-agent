@@ -574,7 +574,7 @@ export const bashTool: ToolDefinition = {
   security: { caps: [{ proc: true }], manual: { reason: "shell — command-validator в хендлере", reviewedBy: "architecture-v2", date: "2026-10-13" } },
   icon: "💻",
   description:
-    "Execute a shell command and return its output. Use for running tests, build, git, and shell operations. Commands that are still running after a few seconds are automatically moved to the background and return a process id — manage them with process_list, process_log, process_wait, process_kill. For a finite background task prefer a single process_wait over polling process_log or sleeping (never use ping/timeout/sleep as a delay). Set background=true to return a process id immediately for commands you know are long-running (dev servers, watchers).\n\nWindows notes: the shell is cmd.exe — PowerShell cmdlets (Write-Host, Get-Content, Select-String, Out-File) and bash heredocs (cat << EOF) do NOT work there. Use the read_file/write_file tools instead of cat/echo redirection. Sequential commands: use && (a leading ; is auto-converted to &).",
+    "Execute a shell command and return its output. Use for running tests, build, git, and shell operations. Commands that are still running after a few seconds are automatically moved to the background and return a process id — manage them with process_list, process_log, process_wait, process_kill. For a finite background task prefer a single process_wait over polling process_log or sleeping (never use ping/timeout/sleep as a delay). Set background=true to return a process id immediately for commands you know are long-running (dev servers, watchers).\n\nWindows notes: the shell is cmd.exe — PowerShell cmdlets (Write-Host, Get-Content, Select-String, Out-File) and bash heredocs (cat << EOF) do NOT work there. Use the read_file/write_file tools instead of cat/echo redirection. Chaining and shell operators (| > >> ; &&) are blocked — run one plain command per tool call.",
   tags: ["shell", "code"],
   parameters: {
     type: "object",
@@ -624,9 +624,8 @@ export const bashTool: ToolDefinition = {
 
     const command = adaptCommandForWindows(originalCommand);
 
-    // Discovery скрытых тулов: при сужении набора process_* невидимы модели,
-    // и прогон их через cmd.exe даёт лишь "is not recognized" (в одной сессии —
-    // три впустую). Указать на enable_tools (k=v-формы ушли редиректом выше).
+    // Discovery скрытых тулов: при сужении набора process_* невидимы модели, и
+    // прогон через cmd.exe даёт лишь "is not recognized" — указать на enable_tools.
     const baseCmd = originalCommand.trim().split(/\s+/)[0];
     if (
       HIDDEN_PROCESS_TOOLS.includes(baseCmd) &&
@@ -687,7 +686,8 @@ export const bashTool: ToolDefinition = {
 
     // Session-specific security config (мастер-выключатель учтён внутри).
     const securityConfig = resolveBashSecurityConfig(ctx);
-    const validation = isCommandAllowed(command, securityConfig);
+    // Валидируем ИСХОДНУЮ: win32 переводит `;`→`&` до проверки, обходя блок «;»-цепочек.
+    const validation = isCommandAllowed(originalCommand, securityConfig);
 
     if (!validation.allowed) {
       logSecurityBlock(

@@ -111,7 +111,7 @@ export function buildSystemInfo(
 
   if (isWin) {
     lines.push(
-      `Windows (PowerShell): use list_dir/read_file/delete_file/create_dir tools instead of dir/type/del/mkdir.`,
+      `Windows (cmd.exe): use list_dir/read_file/delete_file/create_dir tools instead of dir/type/del/mkdir.`,
       `No PowerShell cmdlets (Get-Content, Select-Object, Write-Output), no head/tail/grep/cat.`,
       `Forward slashes in paths. CWD: ${baseDir}`,
     );
