@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import { readFileTool } from "./read-file";
 import { writeFileTool } from "./write-file";
+import { appendFileTool } from "./append-file";
 import { editFileTool } from "./edit-file";
 import { globTool } from "./glob-tool";
 import { grepTool } from "./grep-tool";
@@ -57,6 +58,7 @@ export type { ToolDefinition, ToolContext, ToolResult, ToolCall, PluginHook, Plu
 export {
   readFileTool,
   writeFileTool,
+  appendFileTool,
   editFileTool,
   globTool,
   grepTool,
@@ -101,6 +103,7 @@ export function registerAllTools(
   const tools: ToolDefinition[] = [
     readFileTool,
     writeFileTool,
+    appendFileTool,
     editFileTool,
     globTool,
     grepTool,
