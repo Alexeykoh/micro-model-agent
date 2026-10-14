@@ -1234,6 +1234,7 @@
   "web.sidebar.trace_empty": "событий пока нет",
   "web.sidebar.trace_turn": "ход {n}",
   "web.sidebar.trace_text": "печатает… {count} симв.",
+  "web.sidebar.trace_reasoning": "размышляет… {count} симв.",
   "web.sidebar.trace_plan": "обновление плана",
   "web.sidebar.trace_question": "вопрос",
   "web.sidebar.trace_status": "статус",

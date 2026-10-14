@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Trace tab detail**: the trace pane now streams the model's reasoning as its
+  own row (`thinking… N chars`) and shows a compaction before/after report —
+  `tokens 12000→8000 (−4000), quality 70→88, messages 40→20, turns −18/+6,
+  summarize` — in both the row and the detail pane. Critic rows also surface the
+  verdict/escalation text and `critic_error` no longer vanishes.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added

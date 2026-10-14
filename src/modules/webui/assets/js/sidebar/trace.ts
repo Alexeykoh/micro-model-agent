@@ -53,6 +53,7 @@ function phaseLabel(phase: unknown): string {
 function catClass(kind: string, name: string): string {
   if (kind === "tool" || kind === "tool_fail") return categoryOf(name);
   if (kind === "phase") return "phase";
+  if (kind === "reasoning") return "reasoning";
   return "meta";
 }
 
@@ -62,6 +63,7 @@ function rowLabel(entry: TraceEntry): string {
     case "plan": return t("web.sidebar.trace_plan");
     case "question": return t("web.sidebar.trace_question");
     case "text": return t("web.sidebar.trace_text", { count: entry.chars || 0 });
+    case "reasoning": return t("web.sidebar.trace_reasoning", { count: entry.chars || 0 });
     case "status": return t("web.sidebar.trace_status");
     case "log": return t("web.sidebar.trace_log", { level: entry.level || "" });
     case "retract": return t("web.sidebar.trace_retract");
@@ -78,7 +80,7 @@ function rowLabel(entry: TraceEntry): string {
 }
 
 function rowArgs(entry: TraceEntry): string {
-  if (entry.kind === "text" || entry.kind === "phase") return "";
+  if (entry.kind === "text" || entry.kind === "reasoning" || entry.kind === "phase") return "";
   if (entry.kind === "plan") {
     const idx = typeof entry.currentIndex === "number" ? entry.currentIndex : 0;
     const total = Array.isArray(entry.steps) ? entry.steps.length : 0;
@@ -194,13 +196,21 @@ function replaceRow(entry: TraceEntry): void {
   if (sb.listEl) sb.listEl.scrollTop = sb.listEl.scrollHeight;
 }
 
-function updateTextRow(entry: TraceEntry): void {
+function streamRow(entry: TraceEntry, glyph: string): void {
   const row = sb.nodeById.get(entry.id);
   if (!row) return;
   row.textContent = "";
-  row.appendChild(el("span", "g", "✦"));
+  row.appendChild(el("span", "g", glyph));
   row.appendChild(el("span", "lab", rowLabel(entry)));
   if (sb.listEl) sb.listEl.scrollTop = sb.listEl.scrollHeight;
+}
+
+function updateTextRow(entry: TraceEntry): void {
+  streamRow(entry, "✦");
+}
+
+function updateReasonRow(entry: TraceEntry): void {
+  streamRow(entry, "✻");
 }
 
 // ---- public API ----
@@ -212,6 +222,7 @@ export function sidebarSessionChanged(sid: string | null | undefined): void {
   sb.trace = [];
   sb.callIndex.clear();
   sb.textEntry = null;
+  sb.reasonEntry = null;
   sb.turn = 0;
   sb.seq = 0;
   // Trace живой: старые ходы чужой сессии не докачиваем, только новые события.
@@ -241,6 +252,7 @@ export function sidebarTurnEnd(turnSeq: unknown): void {
   // Серверный номер хода (реконнекты локальный счётчик не сбивают).
   sb.turn = typeof turnSeq === "number" && turnSeq > sb.turn ? turnSeq : sb.turn + 1;
   sb.textEntry = null;
+  sb.reasonEntry = null;
 }
 
 export function sidebarTraceEvent(kind: string, data: Dict): void {
@@ -297,6 +309,18 @@ export function sidebarTraceEvent(kind: string, data: Dict): void {
           "\n… [truncated from " + sb.textEntry.chars + " chars]";
       }
       updateTextRow(sb.textEntry);
+      break;
+    }
+    case "reasoning": {
+      if (!sb.reasonEntry) { sb.reasonEntry = append({ kind: "reasoning", text: "", chars: 0 }); pushRow(sb.reasonEntry); }
+      const chunk = data.chunk || "";
+      sb.reasonEntry.chars += chunk.length;
+      sb.reasonEntry.text += chunk;
+      if (sb.reasonEntry.text.length > MAX_OUTPUT_CHARS) {
+        sb.reasonEntry.text = sb.reasonEntry.text.slice(0, MAX_OUTPUT_CHARS) +
+          "\n… [truncated from " + sb.reasonEntry.chars + " chars]";
+      }
+      updateReasonRow(sb.reasonEntry);
       break;
     }
     case "error":
@@ -372,6 +396,9 @@ function appendLogEntry(e: Dict): void {
       break;
     case "critic_escalation":
       pushRow(append({ kind: "critic", status: "escalation", text: e.content || "", iteration: e.iteration }));
+      break;
+    case "critic_error":
+      pushRow(append({ kind: "critic", status: "error", text: e.content || e.error || "", iteration: e.iteration }));
       break;
     case "compaction":
       pushRow(append({ kind: "compaction", text: e.content || "", iteration: e.iteration }));
@@ -456,6 +483,8 @@ export function renderDetail(entry: TraceEntry): void {
   } else if (entry.kind === "text") {
     body.appendChild(detailGroup(t("web.sidebar.detail_text"), codeBlock(entry.text || "")));
     loadTextProvenance(entry);
+  } else if (entry.kind === "reasoning") {
+    body.appendChild(detailGroup(t("web.sidebar.detail_reasoning"), codeBlock(entry.text || "")));
   } else if (entry.kind === "plan") {
     const list = el("div");
     (entry.steps || []).forEach((s: Dict) => {

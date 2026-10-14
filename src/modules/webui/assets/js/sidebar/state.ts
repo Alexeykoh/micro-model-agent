@@ -110,6 +110,7 @@ export interface SidebarState {
   callIndex: Map<string | number, TraceEntry>;
   headerByTurn: Map<number, HTMLElement>;
   textEntry: TraceEntry | null;
+  reasonEntry: TraceEntry | null;
   lspDiag: Dict | null;
   lspFlags: { enabled: boolean; offline: boolean } | null;
   lspProbing: boolean;
@@ -146,6 +147,7 @@ export const sb: SidebarState = {
   callIndex: new Map(), // toolCallId → entry
   headerByTurn: new Map(), // turn → header node
   textEntry: null, // current text row (updated in place)
+  reasonEntry: null, // current reasoning row (updated in place)
   lspDiag: null, // last LspDiagnosis (web.sidebar LSP tab)
   lspFlags: null, // { enabled, offline } global switches (config.lsp.*)
   lspProbing: false, // a diagnosis is running right now
