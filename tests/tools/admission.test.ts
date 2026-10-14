@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { existsSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admitToolResult } from "../../src/tools/admission";
+import { admitFromContext, admitToolResult } from "../../src/tools/admission";
 import { estimateTokens } from "../../src/llm/token-counter";
+import type { ToolContext } from "../../src/tools/types";
 
 let dir: string;
 beforeEach(() => {
@@ -120,5 +121,77 @@ describe("admitToolResult", () => {
         { baseDir: dir, sessionId: "../../../evil", maxTokens: 3000 },
       ),
     ).toThrow(/escapes baseDir/);
+  });
+
+  it("sets a short tool-name-free display when admitted", () => {
+    const big = Array.from({ length: 5000 }, (_, i) => `line ${i}`).join("\n");
+    const r = admitToolResult(
+      { success: true, output: big },
+      { baseDir: dir, sessionId: "s1", maxTokens: 3000 },
+    );
+    expect(r.display).toBeTruthy();
+    expect(r.display).toContain("5000");
+    // Дескриптор в `output` содержит имена тулов; display — нет (STYLE: чат).
+    expect(r.display).not.toContain("read_file");
+    expect(r.display).not.toContain("chunk_query");
+    expect(r.output).toContain("read_file");
+  });
+
+  it("is terminal: does not re-admit an already-admitted result", () => {
+    const big = Array.from({ length: 5000 }, (_, i) => `line ${i}`).join("\n");
+    const first = admitToolResult(
+      { success: true, output: big },
+      { baseDir: dir, sessionId: "s1", maxTokens: 3000 },
+    );
+    expect(first.artifactPath).toBeTruthy();
+    // Дескриптор сам длиннее 5 токенов — без terminal-гейта получился бы
+    // дескриптор-из-дескриптора.
+    const second = admitToolResult(first, {
+      baseDir: dir,
+      sessionId: "s1",
+      maxTokens: 5,
+    });
+    expect(second).toEqual(first);
+    expect(second.output).toBe(first.output);
+    expect(second.artifactPath).toBe(first.artifactPath);
+  });
+
+  it("spilled artifact supports a bounded re-read slice", () => {
+    const big = Array.from({ length: 5000 }, (_, i) => `line ${i}`).join("\n");
+    const r = admitToolResult(
+      { success: true, output: big },
+      { baseDir: dir, sessionId: "s1", maxTokens: 3000 },
+    );
+    expect(r.artifactPath).toBeTruthy();
+    expect(existsSync(r.artifactPath as string)).toBe(true);
+    // read_file-подобный offset/limit: первые 20 строк — узкий, полный.
+    const slice = (readFileSync(r.artifactPath as string, "utf8"))
+      .split("\n")
+      .slice(0, 20)
+      .join("\n");
+    expect(slice).toBe(Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n"));
+    expect(slice.length).toBeLessThan(big.length);
+  });
+
+  it("admitFromContext is best-effort: raw output kept when spill fails", () => {
+    // baseDir — обычный файл, поэтому mkdirSync бросает ENOTDIR.
+    const notADir = join(dir, "plain-file");
+    writeFileSync(notADir, "x");
+    const big = "L".repeat(40000);
+    const warns: string[] = [];
+    const ctx = {
+      baseDir: notADir,
+      sessionId: "s1",
+      logger: { warn: (m: string) => warns.push(m) },
+    } as unknown as ToolContext;
+    const r = admitFromContext({ success: true, output: big }, ctx, {
+      id: "1",
+      name: "big_tool",
+      arguments: {},
+    });
+    expect(r.output).toBe(big);
+    expect(r.artifactPath).toBeUndefined();
+    expect(warns).toHaveLength(1);
+    expect(warns[0]).toContain("admission skipped");
   });
 });

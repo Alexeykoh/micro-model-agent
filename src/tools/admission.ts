@@ -14,6 +14,7 @@ const PREVIEW_LINES = 12;
 const PREVIEW_MAX_CHARS = 2000;
 /** Каталог спилла относительно baseDir. */
 const DEFAULT_SPILL_DIR = ".mma/context";
+// DEBT(admission-spill-no-gc): спилл не чистится между прогонами (нет retention).
 
 export interface AdmitOptions {
   baseDir: string;
@@ -36,6 +37,9 @@ function isInside(root: string, candidate: string): boolean {
  * @returns исходный либо урезанный до дескриптора результат.
  */
 export function admitToolResult(result: ToolResult, opts: AdmitOptions): ToolResult {
+  // Terminal: дескриптор уже admitted — иначе второй проход дал бы
+  // дескриптор-из-дескриптора. `artifactPath` ставит и subagent result_mode:"file".
+  if (result.artifactPath) return result;
   const output = result.output ?? "";
   if (!result.success || !output) return result;
   const tokens = estimateTokens(output);
@@ -72,7 +76,16 @@ export function admitToolResult(result: ToolResult, opts: AdmitOptions): ToolRes
     source: opts.source ?? "-",
     preview,
   });
-  return { ...result, output: descriptor, artifactPath: artifact };
+  // DEBT(descriptor-fields-deferred): пока строка-дескриптор; handle/digest/bytes — позже.
+  return {
+    ...result,
+    output: descriptor,
+    artifactPath: artifact,
+    display: t("tool.output_admitted_display", {
+      tokens: String(tokens),
+      lines: String(lines),
+    }),
+  };
 }
 
 /**
@@ -85,13 +98,23 @@ export function admitFromContext(
   call: ToolCall,
 ): ToolResult {
   const path = call.arguments?.path;
-  return admitToolResult(result, {
-    baseDir: ctx.baseDir,
-    sessionId: ctx.sessionId ?? "default",
-    maxTokens:
-      ctx.config?.contextBudget?.admitMaxTokens ??
-      DEFAULTS.contextBudget.admitMaxTokens ??
-      3000,
-    source: typeof path === "string" ? path : undefined,
-  });
+  try {
+    return admitToolResult(result, {
+      baseDir: ctx.baseDir,
+      sessionId: ctx.sessionId ?? "default",
+      // DEBT(admit-threshold-unmeasured): 3000 — placeholder до замера (§11).
+      maxTokens:
+        ctx.config?.contextBudget?.admitMaxTokens ??
+        DEFAULTS.contextBudget.admitMaxTokens ??
+        3000,
+      source: typeof path === "string" ? path : undefined,
+    });
+  } catch (e) {
+    // Best-effort (OO-1): сбой спилла/пути не должен превращать успешный тул в
+    // ошибку — логируем и отдаём сырьё как есть (admission деградирует, тул — нет).
+    ctx.logger.warn(
+      `admission skipped: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return result;
+  }
 }

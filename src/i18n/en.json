@@ -153,6 +153,7 @@
   "tool.friendly.meet_done": "Interview complete",
   "tool.truncated": "[Truncated: {tokens} tokens removed]",
   "tool.output_admitted": "[output omitted: {tokens} tokens, {lines} lines — too large for context]\nSaved to: {artifact}\nSource: {source}\nPreview:\n{preview}\nInspect it with read_file (offset/limit) or chunk_query on the saved path.",
+  "tool.output_admitted_display": "large output: {tokens} tokens, {lines} lines — saved to file",
   "critic.repair": "A verifier flagged critical problems; fix them before finishing:\n{issues}\nSummary: {summary}",
   "critic.advice": "A verifier flagged issues worth checking before you finish:\n{issues}",
   "critic.repeat": "The verifier repeats a previously flagged problem — do not produce the same answer again. Change the approach, or finish honestly if the complaint does not apply:\n{issues}",
