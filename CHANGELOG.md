@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **Chat file links open the Files tab**: clicking a file row in the chat
+  (read/write/edit/file_info) now switches the sidebar to Files, expands the
+  tree down to the file and opens it in the viewer, instead of previewing the raw
+  file in a new browser tab. Modifiers / middle-click keep the raw preview.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added

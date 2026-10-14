@@ -28,6 +28,12 @@ export interface StoreHooks {
   ensureTabState?: ((id: string) => void) | null;
   /** Re-renders the active tab's projection (sidebar chrome + empty feed). */
   renderActive?: (() => void) | null;
+  /**
+   * Opens a workspace file in the sidebar Files tab (tree revealed to the file).
+   * Registered by `app.js`; the feed calls it for chat file links without
+   * importing the sidebar, keeping the module DAG acyclic.
+   */
+  openFileInTree?: ((path: string) => void) | null;
 }
 
 export const hooks: StoreHooks = { applyStaticI18n: null };

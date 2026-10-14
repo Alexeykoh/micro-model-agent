@@ -2,7 +2,7 @@
 // image cards — вынесено из `feed/turn.ts` (правило ≤300).
 import { el, icon } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
-import { streamStateFor, session } from "../store.js";
+import { streamStateFor, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import {
   FILE_TOOLS, OPENABLE_TOOLS, LINK_TOOLS,
@@ -82,6 +82,18 @@ function cardFor(name: string, args: Dict, sid: string | undefined, ok: boolean)
       openLink.target = "_blank";
       openLink.rel = "noopener noreferrer";
       openLink.title = t("web.card.open_title") + " · " + String(path);
+      // Left click opens the Files tab with the tree revealed to the file (the
+      // hook is registered by app.js); modifiers / middle-click keep the raw
+      // preview in a new browser tab as a fallback.
+      openLink.addEventListener("click", (ev) => {
+        const open = hooks.openFileInTree;
+        if (!open) return;
+        if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) {
+          return;
+        }
+        ev.preventDefault();
+        open(String(path));
+      });
       row.appendChild(openLink);
     } else {
       const s = el("span", "tail", shown || String(path));
