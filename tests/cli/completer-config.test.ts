@@ -22,6 +22,8 @@ describe("config key/value completion", () => {
       "contextBudget.overflowCooldown",
       "contextBudget.toolResultKeep",
       "contextBudget.admitMaxTokens",
+      "contextBudget.notesPath",
+      "contextBudget.ledgerMax",
       "contextBudget.calibrationWarmup",
       "contextBudget.ratioFloor",
     ]);

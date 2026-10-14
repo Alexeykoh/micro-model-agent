@@ -86,6 +86,8 @@ export const DEFAULTS: AppConfig = {
     overflowCooldown: 3,
     toolResultKeep: 6,
     admitMaxTokens: 3000,
+    notesPath: "NOTES.md",
+    ledgerMax: 200,
     calibrationWarmup: 3,
     ratioFloor: 0.5,
   },
