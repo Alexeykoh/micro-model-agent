@@ -217,9 +217,9 @@ export function handleRequest(
     return;
   }
 
-  // Разделённые фронтенд-модули (`/js/*.js`, относительные ESM-импорты из `/app.js`).
-  // Та же live-reload семантика, что у статики выше.
-  if (reqUrl.pathname.startsWith("/js/") && reqUrl.pathname.endsWith(".js")) {
+  // Разделённые фронтенд-модули: относительные ESM-импорты идут в `/js/*.js`
+  // или топ-левел helper'ы (`/md-copy.js`) — отдаём любой `*.js` из карты.
+  if (reqUrl.pathname.endsWith(".js")) {
     const key = reqUrl.pathname.slice(1);
     const src = s.assetSource ? s.assetSource() : assets;
     const body = src.jsModules?.[key] ?? assets.jsModules?.[key];

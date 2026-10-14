@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **`mma web` boot hang (stuck on “connecting…” )**: the split-out `md-copy.ts`
+  was imported as `./md-copy.js` by `md.js`, but the server only served explicit
+  top-level keys plus `/js/*.js`, so `/md-copy.js` returned 404 and the whole ESM
+  graph (and boot) failed. The server now serves any `*.js` from the module map,
+  `loadAssets` includes top-level split modules, and a guard test fails if any
+  relative import resolves to an unserved path.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added

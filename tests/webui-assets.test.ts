@@ -26,6 +26,47 @@ describe("webui assets", () => {
     expect(js(a)).toContain("EventSource");
   });
 
+  // Regression (split-bloated-files): `md.ts` imports `./md-copy.js`, but the
+  // server only served explicit keys + `/js/*.js`, so `/md-copy.js` 404'd and the
+  // whole ESM graph failed — the boot splash hung on "connecting…". Guard: every
+  // relative import across all served JS resolves to a path the server serves.
+  it("serves every module the browser's relative imports reference", () => {
+    const a = loadAssets();
+    const staticPaths = ["/app.js", "/setup.js", "/md.js", "/smd.js", "/hljs.js"];
+    const servable = new Set<string>(staticPaths);
+    for (const key of Object.keys(a.jsModules ?? {})) servable.add("/" + key);
+    const modules: Array<[string, string]> = [
+      ["/app.js", a.js],
+      ["/setup.js", a.setupJs],
+      ["/md.js", a.mdJs],
+      ["/smd.js", a.smdJs],
+      ["/hljs.js", a.hljsJs],
+      ...Object.entries(a.jsModules ?? {}).map(
+        ([k, v]) => ["/" + k, v] as [string, string],
+      ),
+    ];
+    const specRe = /(?:import|export)[^;]*?from\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']/g;
+    const resolve = (from: string, spec: string): string | null => {
+      if (!spec.startsWith(".")) return null;
+      const base = from.split("/").slice(0, -1);
+      for (const seg of spec.split("/")) {
+        if (seg === "." || seg === "") continue;
+        if (seg === "..") base.pop();
+        else base.push(seg);
+      }
+      return base.join("/");
+    };
+    const missing: string[] = [];
+    for (const [path, code] of modules) {
+      for (const m of code.matchAll(specRe)) {
+        const spec = m[1] || m[2] || m[3];
+        const target = resolve(path, spec);
+        if (target && !servable.has(target)) missing.push(`${path} -> ${target}`);
+      }
+    }
+    expect(missing, `unserved imports:\n${missing.join("\n")}`).toEqual([]);
+  });
+
   // No DOM harness is available in the unit test env, so this is a source-level
   // guard: the feed renders the plan card from a dedicated SSE `plan` event.
   it("wires the plan event to the .planblock feed card", () => {
