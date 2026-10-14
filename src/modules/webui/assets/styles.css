@@ -2197,6 +2197,11 @@ body.light .c-dim { --face-c: var(--panel); }
 }
 .upd-btn:hover { background: var(--hover-bg); }
 .upd-btn:disabled { opacity: .6; cursor: default; }
+.upd-x {
+  flex: 0 0 auto; margin-left: auto; cursor: pointer; line-height: 1;
+  color: var(--dim-a); background: none; border: none; padding: 2px 4px; font: inherit;
+}
+.upd-x:hover { color: var(--fg); }
 .upd-row { align-items: center; }
 .upd-right { display: flex; align-items: center; gap: 10px; }
 .upd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }

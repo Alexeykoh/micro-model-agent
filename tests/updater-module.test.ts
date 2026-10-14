@@ -194,4 +194,54 @@ describe("UpdaterModule", () => {
     await mod.runOnce();
     expect(notices).toHaveLength(0);
   });
+
+  it("installNow logs, streams progress phases and reports installed", async () => {
+    const key = releasePlatformKey(process.platform, process.arch);
+    if (!key) return;
+    const payload = Buffer.from("bytes");
+    const sha256 = createHash("sha256").update(payload).digest("hex");
+    const root = await mkdtemp(join(tmpdir(), "mma-mod-test-"));
+    try {
+      const fetchImpl = vi.fn(async (url: string) => {
+        if (String(url).endsWith("latest.json")) {
+          return manifest("0.4.0", { [key]: { url: `mma-${key}.tar.gz`, sha256, size: payload.length } });
+        }
+        return {
+          ok: true,
+          arrayBuffer: async () =>
+            payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.length),
+        } as unknown as Response;
+      });
+      const messages: string[] = [];
+      const notices: UpdateNotice[] = [];
+      const mod = new UpdaterModule(
+        makeConfig(),
+        new Updater("0.3.0", {
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+          installRoot: root,
+          extract: async (_t, dest) => {
+            const { writeFile } = await import("node:fs/promises");
+            await writeFile(join(dest, "VERSION"), "0.4.0\n");
+          },
+        }),
+        { info: (m) => messages.push(m), warn: (m) => messages.push(m), error: (m) => messages.push(m) },
+        (n) => notices.push(n),
+      );
+      const r = await mod.installNow();
+      expect(r.success).toBe(true);
+      expect(messages.some((m) => /Downloading|Скачивание/.test(m))).toBe(true);
+      expect(notices.some((n) => n.phase === "installing")).toBe(true);
+      expect(notices.some((n) => n.phase === "installed")).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("installNow refuses to install in dev (install disabled)", async () => {
+    const mod = observedMod([]);
+    mod.setInstallEnabled(false);
+    const r = await mod.installNow();
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/not available/i);
+  });
 });

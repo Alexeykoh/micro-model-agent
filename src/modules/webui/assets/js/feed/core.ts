@@ -8,10 +8,8 @@ import type { FeedStreamState } from "../store.js";
 import { formatMs, verbosity } from "../format.js";
 import { copyText } from "../../md.js";
 import { createFace } from "../loader.js";
-import { api } from "../api.js";
-import { setIndicator } from "../dialog.js";
-import { getUpdateInfo } from "../update-state.js";
-import type { UpdateInfo } from "../update-state.js";
+import { getUpdateInfo, isUpdateDismissed } from "../update-state.js";
+import { updateCard } from "./update-card.js";
 
 // ---------------------------------------------------------------------------
 // Shared render helpers used by the stream/turn/history clusters. They live
@@ -157,42 +155,8 @@ function emptyView(): HTMLElement {
   wrap.appendChild(document.createElement("br"));
   wrap.appendChild(el("span", "hint", t("web.empty.hint")));
   const upd = getUpdateInfo();
-  if (upd) wrap.appendChild(updateCard(upd));
+  if (upd && !isUpdateDismissed()) wrap.appendChild(updateCard(upd));
   return wrap;
-}
-
-// Feed card announcing an available update: mascot + version + install button.
-// Lives only in the empty state — an active conversation keeps the footer chip
-// and the settings row instead of pushing a card into the transcript.
-function updateCard(upd: UpdateInfo): HTMLElement {
-  const card = el("div", "upd-card");
-  card.appendChild(createFace("load", "sm"));
-  const body = el("div", "upd-body");
-  body.appendChild(el("div", "upd-t", t("web.update.card_title", { latest: upd.latest })));
-  body.appendChild(el("div", "upd-s", t("web.update.card_sub", { current: upd.current })));
-  const btn = el("button", "upd-btn", t("web.update.install"));
-  btn.type = "button";
-  btn.addEventListener("click", () => void runUpdate(btn));
-  body.appendChild(btn);
-  card.appendChild(body);
-  return card;
-}
-
-// POST the install to the server; report the outcome via the shared toast.
-async function runUpdate(btn: HTMLButtonElement): Promise<void> {
-  btn.disabled = true;
-  btn.textContent = t("web.update.installing");
-  const r = await api<{ ok?: boolean; installed?: string; error?: string }>("/api/update", {
-    method: "POST",
-    body: {},
-  });
-  if (r.ok && r.data && r.data.ok) {
-    setIndicator(t("web.update.installed", { latest: r.data.installed || "" }), false);
-  } else {
-    setIndicator((r.data && r.data.error) || t("web.update.failed"), true);
-    btn.disabled = false;
-    btn.textContent = t("web.update.install");
-  }
 }
 
 export function makeFeed(): HTMLElement {

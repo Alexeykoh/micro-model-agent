@@ -178,7 +178,7 @@ describe("webui assets", () => {
     // The set of open tabs survives a reload (localStorage) and is restored
     // before `refresh()`; the URL `?session=` wins as the active tab.
     const tabs = a.jsModules?.["js/session/tabs.js"] || "";
-    expect(a.js).toContain("readSavedTabs");
+    expect(js(a)).toContain("readSavedTabs");
     expect(a.js).toContain("restoreTabs");
     expect(tabs).toContain("mma-open-tabs");
     expect(js(a)).toMatch(/openTab\(ids\[0\]/);

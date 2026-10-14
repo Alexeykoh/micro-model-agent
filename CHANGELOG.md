@@ -50,6 +50,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   carried through `AgentResult`/`HostStateSnapshot` (`contextQualityBreakdown`),
   so the number and its explanation cannot drift. Spec:
   `docs/specs/2026-10-14-context-quality-breakdown-design.md`.
+### Fixed
+
+- **Web update/install flow**: installing a release from the browser now runs
+  through `UpdaterModule.installNow()` — it logs to the `mma web` console and
+  streams `update` SSE phases (`installing` with download bytes → `installed`/
+  `failed`), so the install button shows live progress on both surfaces. The feed
+  card is dismissible (✕), and both the settings row and the card stay in sync.
+  Fixed the chat freeze while an update card was shown: the empty-feed refresh
+  matched a tab feed's nested `.empty` and detached the live feed
+  (`#msgs .empty` → `#msgs > .empty`). Spec:
+  `docs/specs/2026-10-14-webui-update-flow-design.md`.
 
 ## [0.4.0] - 2026-10-14
 

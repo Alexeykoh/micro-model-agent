@@ -13,8 +13,9 @@ import {
 } from "./js/feed.js";
 import {
   openTab, updateTabName, renderSessionsDropdown, reflectBusy, loadSessions,
-  loadCommands, setTabStatus, reconcileTabStatuses, readSavedTabs,
+  loadCommands, setTabStatus, reconcileTabStatuses,
 } from "./js/session/tabs.js";
+import { restoreTabs } from "./js/session/restore-tabs.js";
 import {
   renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
   loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyUiTheme, currentUiTheme, applyFontSize, setConnStatus, setStaleBar,
@@ -36,6 +37,7 @@ import { insertIntoDraft } from "./js/session/composer.js";
 import { initCursor, createFace, setFaceState, loaderStateFor, setGreetResolver } from "./js/loader.js";
 import type { FaceState } from "./js/loader.js";
 import { setUpdateInfo } from "./js/update-state.js";
+import { applyUpdateEvent } from "./js/update-ui.js";
 
 declare global {
   interface Window {
@@ -62,6 +64,20 @@ function initComposerFace(): void {
   composerFace = createFace("idle", "sm");
   host.replaceChildren(composerFace);
 }
+
+// App-shell hooks for the update chrome (`js/update-ui.ts`): MMART reaction,
+// settle-back-to-idle, and a post-install chrome refresh.
+const updateHooks = {
+  face: (state: FaceState) => faceEvent(state),
+  settleIdle: () => {
+    const token = composerToken;
+    window.setTimeout(() => { if (token === composerToken) setFaceState(composerFace, "idle"); }, 4000);
+  },
+  refreshChrome: () => {
+    renderSettings();
+    if (document.querySelector("#msgs > .empty")) showEmptyFeed();
+  },
+};
 
 document.querySelectorAll<HTMLElement>("[data-collapse]").forEach((head) => {
   const initArrow = head.querySelector(".arrow");
@@ -130,7 +146,10 @@ function renderActiveState(): void {
     // Settings render before the first state arrives; refresh so the General
     // "about" row picks up the dot + update button.
     renderSettings();
-    if (document.querySelector("#msgs .empty")) showEmptyFeed();
+    // Only the TOP-LEVEL empty view (no open tab) may be rebuilt here. A tab's
+    // feed owns its own `.empty`; matching it re-rendered `#msgs` and detached
+    // the live tab feed, which froze the chat while an update card was shown.
+    if (document.querySelector("#msgs > .empty")) showEmptyFeed();
   }
   renderSessionsDropdown();
   setSessionLoading(false);
@@ -325,13 +344,7 @@ es.addEventListener("setup_done", () => faceEvent("done"));
 // half of the notice is the footer chip (snapshot), which needs no animation.
 es.addEventListener("update", (e) => {
   const d = parse(e);
-  if (d && d.phase === "failed") {
-    faceEvent("error");
-    return;
-  }
-  faceEvent("update");
-  const token = composerToken;
-  window.setTimeout(() => { if (token === composerToken) setFaceState(composerFace, "idle"); }, 4000);
+  if (d) applyUpdateEvent(d, updateHooks);
 });
 // Per-tab status dots: its own listeners — feed handlers stay untouched
 // (source-level guards pin the handler table above). Working streams mark the
@@ -482,32 +495,6 @@ function applyStaticI18n(): void {
   if (msgs.querySelector(".empty")) showEmptyFeed();
   if (connStatus && !connStatus.hidden) setConnStatus(true);
   setStaleBar(undefined, true);
-}
-
-// Restore the session tabs remembered from the previous page (localStorage).
-// The URL `?session=` (deep link) wins as the active tab, then the remembered
-// active, then the first remembered. Opened BEFORE `refresh()` so it does not
-// also auto-open the server-active session as an extra tab.
-function restoreTabs(urlSession: string | null): void {
-  const saved = readSavedTabs();
-  const known = (id: string) => session.sessions.some((s) => s.id === id);
-  const nameOf = (id: string) => {
-    const m = session.sessions.find((s) => s.id === id);
-    return m && m.name ? String(m.name) : id;
-  };
-  const preferred =
-    (urlSession && known(urlSession) ? urlSession
-      : saved.active && known(saved.active) ? saved.active
-        : saved.ids.find(known)) || null;
-  const ids: string[] = [];
-  if (urlSession && known(urlSession)) ids.push(urlSession);
-  if (preferred && !ids.includes(preferred)) ids.push(preferred);
-  for (const id of saved.ids) {
-    if (known(id) && !ids.includes(id)) ids.push(id);
-  }
-  if (!ids.length) return;
-  openTab(ids[0], nameOf(ids[0]), "session", true);
-  for (const id of ids.slice(1)) openTab(id, nameOf(id), "session", false, false);
 }
 
 async function boot(): Promise<void> {

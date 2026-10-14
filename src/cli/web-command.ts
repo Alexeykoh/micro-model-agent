@@ -83,11 +83,12 @@ function startWebUpdater(config: AppConfig, state: WebUiState): UpdaterModule | 
       broadcast({ type: "update", ts: Date.now(), ...notice }, state);
       if (notice.phase === "available" && notice.latest) {
         note(notice.current, notice.latest);
-      } else if (notice.phase !== "available") {
-        // Установлено (или провалилось) — чип «доступно обновление» больше
-        // не про то; версия сменится только на следующем старте процесса.
+      } else if (notice.phase === "installed") {
+        // Установлено — чип «доступно обновление» больше не про то; версия
+        // сменится только на следующем старте процесса.
         note(notice.current);
       }
+      // `installing` — чип не трогаем; `failed` — обновление всё ещё доступно.
     },
   });
 }
@@ -160,7 +161,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   const updater = startWebUpdater(config, web.state);
   // Кнопка «Update» в web: серверная установка (в dev `install` — no-op из-за
   // `setInstallEnabled(false)`, поэтому кнопка честно вернёт ошибку).
-  if (updater) web.state.updaterInstall = () => updater.getUpdater().install();
+  if (updater) web.state.updaterInstall = () => updater.installNow();
 
   const url = await web.url;
   // Всегда показываем резолвленный workspace: shell-нарезка `-d` пути (пробелы,

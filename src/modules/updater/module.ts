@@ -1,6 +1,7 @@
 // Модуль самообновления: фоновая проверка при старте, опциональная автоустановка.
 import type { UpdaterConfig } from "../../config/types";
-import { Updater } from "./checker";
+import { Updater, type InstallResult } from "./checker";
+import type { InstallProgress } from "./install-release";
 import { extractLatestChangelog, readChangelog } from "./changelog-reader";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
@@ -13,8 +14,8 @@ export interface UpdaterLogger {
   error(msg: string): void;
 }
 
-/** Фаза, о которой уведомляет модуль: есть апдейт / он поставлен / провал. */
-export type UpdatePhase = "available" | "installed" | "failed";
+/** Фаза, о которой уведомляет модуль: есть апдейт / ставится / поставлен / провал. */
+export type UpdatePhase = "available" | "installing" | "installed" | "failed";
 
 /** Событие апдейтера для наружных поверхностей (SSE/UI). */
 export interface UpdateNotice {
@@ -22,6 +23,8 @@ export interface UpdateNotice {
   current: string;
   latest?: string;
   error?: string;
+  /** Прогресс установки (только `installing`). */
+  progress?: InstallProgress;
 }
 
 /**
@@ -74,6 +77,28 @@ export class UpdaterModule {
   /** Доступ к underlying-апдейтеру (версия, пакет). */
   getUpdater(): Updater {
     return this.updater;
+  }
+
+  /**
+   * Ручная установка (кнопка «Update» в web/CLI): логирует старт и итог, шлёт
+   * прогресс и финальный `notice` наружу. `autoInstall`-путь отличается лишь
+   * триггером; общая точка — `runOnce`. Возвращает результат установки.
+   */
+  async installNow(): Promise<InstallResult> {
+    const current = this.updater.getCurrentVersion();
+    if (!this.installEnabled) {
+      return { success: false, error: "update install is not available in this mode" };
+    }
+    const check = await this.updater.check();
+    const latest = check.latest ?? "";
+    this.logger.info(t("updater.installing", { current, latest: latest || "latest" }));
+    this.onNotice?.({ phase: "installing", current, latest });
+    const result = await this.updater.install((progress) => {
+      this.onNotice?.({ phase: "installing", current, latest, progress });
+    });
+    if (result.success) this.reportInstalled(current, result.installed ?? latest);
+    else this.reportFailed(current, latest, result.error ?? "");
+    return result;
   }
 
   /** True, если фоновая проверка запущена. */
