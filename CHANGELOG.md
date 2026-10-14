@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **Usage “probe” row shows the loaded context**: the session panel row is now
+  labelled “context loaded” and prints the token count the backend actually
+  loaded, instead of leading with the model's configured capacity. A low value is
+  flagged (and explained on hover) without printing the window.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added
