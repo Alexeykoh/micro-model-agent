@@ -6,7 +6,7 @@ import { PromptBuilder } from "./prompt-builder";
 import type { PromptBlock, PromptBlockKind } from "./types";
 import type { LLMProvider } from "../llm/provider";
 import type { Logger } from "../logger/app-logger";
-import type { AppConfig } from "../config/types";
+import type { AppConfig, ReasoningStrategy } from "../config/types";
 import { estimateTokens } from "../llm/token-counter";
 import { t } from "../i18n/index";
 
@@ -111,15 +111,16 @@ async function collectText(
   prompt: string,
   maxTokens: number,
   sessionId?: string,
+  reasoningStrategy?: ReasoningStrategy,
 ): Promise<string> {
   let text = "";
-  // Reasoning выкл: думающая модель сожгла бы cap на <think> до любого
-  // суммаризирующего контента (наблюдалось на qwen3.5-9b).
-  // 2x запас сверх цели: оценки токенов эвристичны, а clamp ниже держит
-  // реальный cap независимо от ответа модели.
+  // Reasoning выкл + стратегия обязательна: без неё "none" не станет /no_think
+  // (prompt-tag) — модель думает, жжёт cap с нулевым текстом, блок уходит в обрезку.
+  // 2x запас: оценки эвристичны, clamp ниже держит реальный cap.
   for await (const chunk of provider.chat([{ role: "user", content: prompt }], undefined, undefined, {
     maxTokens: maxTokens * 2,
     reasoningEffort: "none",
+    reasoningStrategy,
     sessionId,
   })) {
     if (chunk.type === "text" && chunk.content) text += chunk.content;
@@ -143,10 +144,8 @@ function blockLabel(content: string): string {
 }
 
 /**
- * Суммаризирует (или, не вышло, усекает) блоки сверх бюджета, чтобы инструкции
- * проекта/карта всё равно дошли до модели. Суммаризации кэшируются на диске
- * (ключ: kind + контент + бюджет). Порядок — KIND_ORDER; первый забирает весь
- * остаток бюджета, остальным — что останется.
+ * Суммаризирует (или, не вышло, усекает) блоки сверх бюджета. Суммаризации
+ * кэшируются на диске; порядок — KIND_ORDER, первый забирает остаток бюджета.
  */
 export async function resolvePromptOverflow(opts: {
   overflow: PromptBlock[];
@@ -157,8 +156,9 @@ export async function resolvePromptOverflow(opts: {
   logger?: Logger;
   /** Id сессии-владельца: прокидывается в LLM-вызовы для cache/session-заголовков. */
   sessionId?: string;
+  reasoningStrategy?: ReasoningStrategy;
 }): Promise<OverflowResolution> {
-  const { overflow, includedTokens, systemBudget, provider, cacheDir, logger, sessionId } = opts;
+  const { overflow, includedTokens, systemBudget, provider, cacheDir, logger, sessionId, reasoningStrategy } = opts;
 
   const sorted = [...overflow].sort(
     (a, b) => KIND_ORDER.indexOf(a.kind as PromptBlockKind) - KIND_ORDER.indexOf(b.kind as PromptBlockKind),
@@ -215,7 +215,7 @@ export async function resolvePromptOverflow(opts: {
           block.content,
           `--- DOCUMENT END ---`,
         ].join("\n");
-        text = await collectText(provider, prompt, maxTokens, sessionId);
+        text = await collectText(provider, prompt, maxTokens, sessionId, reasoningStrategy);
         // Маленькие модели регулярно игнорируют лимит длины (наблюдалось: 9B
         // выдала ~4700 символов при цели 3170). Один retry самокомпрессии на
         // перелёт — короткий вход резко повышает послушание — затем жёсткий clamp.
@@ -236,6 +236,7 @@ export async function resolvePromptOverflow(opts: {
             ].join("\n"),
             maxTokens,
             sessionId,
+            reasoningStrategy,
           );
         }
       } catch (err: any) {
@@ -314,7 +315,7 @@ export async function resolvePromptOverflow(opts: {
   return { replacements, hintBlock, warnings };
 }
 
-/** Откуда настроено активное окно контекста: глобально или запись провайдера. */
+/** Источник активного окна контекста (запись провайдера или глобал). */
 export interface ContextWindowSource {
   source: "global" | "entry";
   /** Для "entry": метка записи, задающей contextWindow. */
@@ -322,10 +323,7 @@ export interface ContextWindowSource {
   value: number;
 }
 
-/**
- * Резолвит источник активного окна контекста (запись провайдера или глобал).
- * @param config конфиг приложения; @returns источник и значение окна.
- */
+/** Источник активного окна: запись провайдера (entry) или глобальный конфиг. */
 export function resolveContextWindowSource(config: AppConfig): ContextWindowSource {
   const entries = config.provider.entries ?? [];
   const activeLabel = config.provider.active;
@@ -374,9 +372,8 @@ export function requiredSystemFraction(neededTokens: number, contextWindow: numb
 }
 
 /**
- * Локализованный конкретный фикс переполненного системного промпта. Вместо
- * грубого стандартного размера (проект 32K прыгал бы сразу на 131072) даёт
- * сырое требование и оба рычага: больше окно или больше доля текущего окна.
+ * Локализованный конкретный фикс переполнения: сырое требование + оба рычага
+ * (больше окно или больше доля текущего окна), а не грубый стандартный размер.
  */
 export function overflowHint(
   config: AppConfig,
