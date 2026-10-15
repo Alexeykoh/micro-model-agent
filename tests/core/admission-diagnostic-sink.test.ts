@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { admissionDiagnosticSink } from "../../src/core/bootstrap/tool-context";
-import type { SessionManager } from "../../src/modules/session/manager";
+import { SessionManager } from "../../src/modules/session/manager";
 
 /**
  * Gate for the admission fail-open sink (INV-15, W10.4).
@@ -13,17 +13,24 @@ import type { SessionManager } from "../../src/modules/session/manager";
 
 interface LoggedRecord {
   type: string;
+  content?: string;
   source?: string;
   operation?: string;
   errorKind?: string;
   cause?: string;
 }
 
+/**
+ * Собирает менеджер ровно с одной переопределённой функцией: настоящий
+ * `SessionStore`, шифрование и каталог сессий тут не нужны — sink трогает
+ * ровно `appendLog`. Прототип берётся у класса, поэтому подмена остаётся
+ * типизированной, а не кастом.
+ */
 function fakeManager(): { manager: SessionManager; records: LoggedRecord[] } {
   const records: LoggedRecord[] = [];
-  const manager = {
+  const manager: SessionManager = Object.assign(Object.create(SessionManager.prototype), {
     appendLog: (entry: LoggedRecord) => records.push(entry),
-  } as unknown as SessionManager;
+  });
   return { manager, records };
 }
 

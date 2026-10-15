@@ -188,19 +188,23 @@ INV-15-сигнал (строка 24 `observability.md`), и **не встреч
 `tests/arch/module-boundaries.test.ts:97-101` (`scanModules`), `tests/helpers/`.
 
 **Что сделать.**
-- [ ] **W9.1** Расширить `scanModules()` на `src/core/**` (переиспользовать
+- [x] **W9.1** Расширить `scanModules()` на `src/core/**` (переиспользовать
       `findForeignHandlerCalls`, allowlist пуст).
-- [ ] **W9.2** `createMockDeps(): AgentDeps` без `as any`; baseline-гейт на число `as any`/
+- [x] **W9.2** `createMockDeps(): AgentDeps` без `as any`; baseline-гейт на число `as any`/
       `as unknown as` в `tests/core/**` (729 сейчас, в `tests/core` — 192).
-- [ ] **W9.3** Дубль `ContextManager` (14 методов против 43 реальных) — либо `satisfies`, либо
+- [x] **W9.3** Дубль `ContextManager` (14 методов против 43 реальных) — либо `satisfies`, либо
       явный список «осознанно не покрыто» с причиной на каждый из 29 отсутствующих.
-- [ ] **W9.4** Список путей `src/core/agent/*`, недостижимых из-за заглушек
+- [x] **W9.4** Список путей `src/core/agent/*`, недостижимых из-за заглушек
       (`needsCompaction: () => false`, пустые `getToolDefinitions`, `criticOverride`) — это вход
       для W7.
-- [ ] **W9.5** (D8) fail-closed — см. W10.5.
-- [ ] **W9.6** Каждый тест с seam (`criticOverride` — все 4 теста `agent-critic`,
+- [ ] **W9.5** (D8) fail-closed — см. W10.5 → долг `path-validator-fail-open`.
+- [x] **W9.6** Каждый тест с seam (`criticOverride` — все 4 теста `agent-critic`,
       `finalAudit` — 9 в `execution-plan-fixes`, `agentFactory` — 12) получает парный тест на
       реальный путь либо попадает в перечень непокрытых гейтов.
+
+**Отклонение:** baseline кастов — **138**, а не 192 из плана. Плановое число получено
+`git grep -c` (строки, а не вхождения); в этой волне касты сняты (193 → 138), и гейт
+считает именно вхождения.
 
 **Гейт** расширение `tests/arch/module-boundaries.test.ts` (скан `src/core/**` на `.handler(`) + `tests/arch/double-honesty.test.ts` (baseline `as any` в `tests/core/**`, полнота дублей, список непокрытых путей петли).
 **Красная точка сейчас:** `src/core/agent/loop-llm.ts` вызывает `tools/x.handler(...)` (фикстура
@@ -209,6 +213,9 @@ INV-15-сигнал (строка 24 `observability.md`), и **не встреч
 
 **Критерий выхода:** гейт красный на фикстурах; в `tests/core` одна проверка `mockExecutor.execute`
 заменяется набором на реальный путь. **Спека:** нет. **Триггер:** правка `tests/core/**`, новый seam.
+**Фактически:** дубль `ContextManager` покрывает **14 методов против 43** реальных; таблица
+`UNCOVERED_CONTEXT_METHODS` разделяет отсутствующие на «петля зовёт, дубль молчит» (16 —
+самый опасный класс) и «петля не зовёт». Снято 55 кастов, `new Agent(deps as any)` → `new Agent(deps)`.
 
 ### W12. Правила без гвардов
 

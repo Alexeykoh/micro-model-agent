@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Doubles can no longer fake coverage**: a new gate
+  (`tests/arch/double-honesty.test.ts`) fails when the `ContextManager` double in
+  `tests/core/agent.test.ts` silently omits a method the real class has — each
+  omission must be recorded with a reason — and when a seam test
+  (`criticOverride`, `agentFactory`, `createMockDeps`) has no paired test on the
+  real path. The `module-boundaries` gate now scans `src/core/**` for direct
+  tool-handler calls, holding the zero instead of merely asserting it. The
+  unsafe-cast count in `tests/core` dropped from 193 to 138 and is now capped by
+  a baseline that may only shrink. Plan wave W9.
 - **Fail-open signals now leave a trace**: the hallucination judge's fail-open
   (provider down, timeout, unparseable answer) used to degrade to `pass`
   silently — indistinguishable from "the model was consistent". It now records

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { LLMJudge } from "../../src/core/hallucination/llm-judge";
 import { ConsistencyCheck } from "../../src/core/hallucination/consistency";
-import type { LLMProvider } from "../../src/llm/provider";
+import type { Chunk, LLMProvider } from "../../src/llm/provider";
 import type { Diagnostic } from "../../src/output/types";
 
 /**
@@ -20,13 +20,32 @@ function consistencyWithOneDecision(): ConsistencyCheck {
   return check;
 }
 
-/** Провайдер, который падает на первом же чанке. */
+/** Провайдер, который падает на первом же чанке. Интерфейс полный — без каста. */
 function failingProvider(cause: string): LLMProvider {
   return {
-    async *chat() {
+    model: "judge-test",
+    contextWindow: 4096,
+    // eslint-disable-next-line require-yield
+    async *chat(): AsyncIterable<Chunk> {
       throw new Error(cause);
     },
-  } as unknown as LLMProvider;
+    countTokens: () => 1,
+    listModels: async () => [],
+  };
+}
+
+/** Провайдер, отвечающий заданным текстом. */
+function answeringProvider(text: string): LLMProvider {
+  return {
+    model: "judge-test",
+    contextWindow: 4096,
+    // eslint-disable-next-line require-yield
+    async *chat(): AsyncIterable<Chunk> {
+      yield { type: "text", content: text };
+    },
+    countTokens: () => 1,
+    listModels: async () => [],
+  };
 }
 
 describe("LLMJudge fail-open observability (W10.1)", () => {
@@ -52,12 +71,15 @@ describe("LLMJudge fail-open observability (W10.1)", () => {
   it("does not call the provider when there is nothing to check", async () => {
     const diags: Diagnostic[] = [];
     let calls = 0;
-    const provider = {
-      async *chat(): AsyncGenerator<never> {
+    const base = answeringProvider("unused");
+    const provider: LLMProvider = {
+      ...base,
+      // eslint-disable-next-line require-yield
+      async *chat(): AsyncIterable<Chunk> {
         calls++;
         throw new Error("should not be called");
       },
-    } as unknown as LLMProvider;
+    };
     const judge = new LLMJudge(provider, "s1", (d) => diags.push(d));
     const result = await judge.validate("response", new ConsistencyCheck());
     expect(result.status).toBe("pass");
@@ -67,13 +89,9 @@ describe("LLMJudge fail-open observability (W10.1)", () => {
 
   it("emits no diagnostic when the judge answers normally", async () => {
     const diags: Diagnostic[] = [];
-    const provider = {
-      // eslint-disable-next-line require-yield
-      async *chat(): AsyncGenerator<{ type: "text"; content: string }> {
-        yield { type: "text", content: '{"contradicts": false}' };
-      },
-    } as unknown as LLMProvider;
-    const judge = new LLMJudge(provider, "s1", (d) => diags.push(d));
+    const judge = new LLMJudge(answeringProvider('{"contradicts": false}'), "s1", (d) =>
+      diags.push(d),
+    );
     const result = await judge.validate("response", consistencyWithOneDecision());
     expect(result.status).toBe("pass");
     expect(diags).toEqual([]);
