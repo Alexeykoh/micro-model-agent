@@ -77,6 +77,11 @@ export class CompactionService {
   // ── v2 ────────────────────────────────────────────────────────────────────
 
   private compactIfNeededV2(state: LoopState): void {
+    // 0) Общий кулдаун поперёк семейств: ни одной компакции ближе кулдауна,
+    //    независимо от того, какое семейство её просит. Без него overflow и
+    //    quality с независимыми клоками чередовались через итерацию (интервал 1
+    //    при кулдауне 3) — тот же разбег, что у after-tool до C2 (W4).
+    if (state.iteration - state.lastCompactionIteration < FORCED_COMPACTION_COOLDOWN) return;
     // 1) Overflow — канонический порог по истории (калиброванная оценка),
     //    cooldown и safety-clamp от неправдоподобного скачка.
     if (this.tryOverflowV2(state)) return;
@@ -104,6 +109,7 @@ export class CompactionService {
     }
     if (!check.allowed) return false;
     state.lastOverflowCompactionIteration = state.iteration;
+    state.lastCompactionIteration = state.iteration;
     this.compactV2(
       state,
       `overflow (${check.calibrated} > ${contextManager.getBudget().history})`,
@@ -115,6 +121,7 @@ export class CompactionService {
   private tryFallbackV2(state: LoopState): void {
     const trigger = this.fallbackTrigger(state);
     if (!trigger) return;
+    state.lastCompactionIteration = state.iteration;
     if (trigger.qualityDue) state.lastForcedCompactionIteration = state.iteration;
     if (trigger.pendingDue) state.lastPendingCompactionIteration = state.iteration;
     this.compactV2(state, trigger.reason);

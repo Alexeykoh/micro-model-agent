@@ -35,6 +35,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   (preset → live probe → user override), the same path the agent uses, so a provider is
   no longer picked on a capability the model does not actually have. Plan wave W8,
   decision D6.
+- **Compaction has one shared cooldown across trigger families**: the `overflow`,
+  `quality` and `pending` triggers each counted their own cooldown, so they interleaved —
+  overflow at iteration N and quality at N+1 produced a gap of 1 at a cooldown of 3 (the
+  same runaway as after-tool compaction before the C2 fix, but *across* families; it is
+  visible in the W7 fixture as gaps 72→73 and 96→97). A single
+  `LoopState.lastCompactionIteration` now gates every scheduled trigger, and reactive
+  (context-length) compaction moves the same clock, so no two compactions — of any family —
+  fall closer than `FORCED_COMPACTION_COOLDOWN`. The per-family cooldowns stay; the shared
+  one complements them. New gate `tests/compaction-cooldown-invariant.test.ts` drives
+  the predicates over a synthetic always-overflowing loop-state: 20 firings before the fix
+  (ceiling 10, gap 1), 10 firings with gaps of 3 after. Plan wave W4.
 - **Critic timeout now outlives the request it wraps**: the default equalled the
   provider's own request deadline, so the wrapper always lost the race and the
   `call_timeout` diagnostic — the only record that the critic had to be cut off —
