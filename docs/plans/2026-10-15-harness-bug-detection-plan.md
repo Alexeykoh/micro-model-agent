@@ -1,130 +1,483 @@
-# Harness bug detection — чего не хватает гейтам
+# Harness bug detection — план работ
 
-**Дата:** 2026-10-15 · **Статус:** план (к исполнению) · **Источник:** разбор живой сессии
-`ses_mv8h787b_wuu8g1` (qwen3.5-9b, LM Studio, окно 34K) и четыре фикса, уже влитых в `master`:
+**Дата:** 2026-10-15 · **Ревизия:** 5 (после аудита утверждений) · **Статус:** к исполнению,
+открытых вопросов нет (решения D1–D8 в §2).
+
+**Источник:** живая сессия `ses_mv8h787b_wuu8g1` и четыре фикса, уже влитых в `master`:
 `fix/prompt-overflow-reasoning-strategy`, `fix/compaction-pending-cooldown`,
 `fix/critic-timeout-and-diagnostic`, `fix/bash-shell-guidance`.
 
-## Проблема
+**Что закрываем.** Четыре дефекта жили в `master` при зелёных `bun test` (~3900) и
+`bun run quality`. Все четыре — рассогласование контрактов, а не поломка внутри функции:
 
-Четыре дефекта жили в `master`, при этом `bun test` (~3900) и `bun run quality` были зелёными.
-Все они — **рассогласование контрактов**, а не поломка внутри одной функции:
+| Класс | Дефект | Механика отказа | Волна |
+|---|---|---|---|
+| A | суммаризатор не передавал `reasoningStrategy` | модель делает не то, тихо и медленно | W3 |
+| B | текст тула/промпта противоречил enforcement; `;`-цепочки обходили блок | модель упирается в стену, теряет ходы | W1 |
+| C | у after-tool компакции не было cooldown | разбег компакции каждую итерацию | W4 |
+| Crit | дефолт таймаута критика ≤ провайдерского дедлайна | диагностика `call_timeout` недостижима | W2 |
+| H | заглушки в тестах подменяли то, что проверяют | зелёный тест при сломанном коде | W9 |
+| F | fail-open без записи | поломка неотличима от успеха | W10 |
+| P | события лога без источника (86%) | событие нельзя связать с автором | W11 |
+| S | исходящие вызовы мимо сетевой политики | SSRF | W13 |
 
-1. **A1** — суммаризатор промпта не передавал `reasoningStrategy` (reasoning не выключался).
-2. **C2** — у after-tool компакции не было cooldown → разбег «компакция каждую итерацию».
-3. **Crit1/2** — дефолтный таймаут критика короче провайдерского; диагностика таймаута недостижима.
-4. **B1/B2/B3** — описание тула и промпт противоречили реальному enforcement; `;`-цепочки обходили блок.
-
-## Почему гейты их пропустили (диагноз)
-
-| # | Причина | Проявление |
-|---|---|---|
-| 1 | **Верификация через заглушки** | `fakeProvider` в `tests/core/prompt-overflow.test.ts` игнорирует options → A1 непроверяем |
-| 2 | **Проверяются значения, а не инварианты** | тест утверждал `critic.timeoutMs === 60000`, но не «≥ провайдерского дедлайна» |
-| 3 | **Нет сверки декларации и enforcement** | никто не сверяет описание тула / промпт с `dangerousOperators` и платформой |
-| 4 | **Emergent-баги не воспроизводимы юнит-тестом** | нужна комбинация модель+провайдер+окно+ОС+длина сессии |
-| 5 | **Нет моста «живая сессия → падающий тест»** | харнесс всё записал в `session.jsonl`/`app.jsonl`, но это не превращается в проверку |
-
-Правило 5 AGENTS.md это и предсказывает: *инвариант без проверки будет нарушен*. Ниже — проверки,
-которых не хватило.
+Гейты пропустили их по пяти причинам: верификация через заглушки; проверка значений вместо
+инвариантов; отсутствие сверки декларации и enforcement; невоспроизводимость emergent-багов
+юнит-тестом; отсутствие моста «живая сессия → падающий тест».
 
 ---
 
-## W1. Контракт «декларация ↔ enforcement» (дефекты класса B)
+## 1. Правила исполнения (действуют во всех волнах)
 
-**Цель:** текст, который видит модель (описания тулов, блоки промпта), не может советовать то, что
-код запрещает, и не может называть платформу неверно.
-
-**Гейт** `tests/arch/guidance-enforcement.test.ts`:
-- из `DEFAULT_SECURITY_CONFIG.bash` извлечь `dangerousOperators`, `blacklist`, всегда-блокируемые
-  обёртки (`powershell/pwsh/cmd`);
-- просканировать `description` зарегистрированных тулов (`src/tools/index.ts`) и блоки системного
-  промпта (`src/core/system-prompt.ts`) на советы использовать запрещённое (напр. `use &&`,
-  `powershell …`);
-- на `win32`-строках промпта: shell обязан называться `cmd.exe`; `PowerShell` допустим только в
-  негативном контексте («cmdlets do NOT work»).
-
-**Критерий выхода:** тест падал бы на исходных `use &&` (bash.ts) и `Windows (PowerShell)`
-(system-prompt.ts), сейчас — зелёный.
-
-**Триггер:** любой новый tool `description` или платформенный блок промпта.
-
-## W2. Инварианты таймаутов (дефекты класса Crit)
-
-**Цель:** таймаут обёртки не короче внешнего дедлайна, который он оборачивает, и причина таймаута
-различима в логе.
-
-**Гейт** `tests/arch/timeout-relations.test.ts`:
-- `DEFAULTS.critic.timeoutMs >= LLM_REQUEST_TIMEOUT_MS` (`src/config/timeouts.ts`);
-- аналогичные задокументированные отношения для субагента, judge галлюцинаций, browser-моста —
-  таблица «обёртка → внешний дедлайн» в тесте, чтобы новое значение нельзя было ввести молча;
-- тест достижимости `call_timeout` для критика (сейчас — локальный в
-  `tests/modules/critic/client-budget.test.ts`; поднять как общий паттерн).
-
-**Триггер:** правка любого `*timeoutMs` дефолта или регистрации таймаута.
-
-## W3. Честность тест-дублей (дефекты класса A)
-
-**Цель:** заглушка не должна «прощать» отсутствие важной опции.
-
-- Ввести shared-хелпер `tests/helpers/recording-provider.ts`: пишет `ChatOptions` каждого вызова.
-- Гейт `tests/arch/llm-call-options.test.ts`: вспомогательные LLM-пути (суммаризация промпта,
-  компакция, критик, judge) обязаны передавать `reasoningStrategy`, если передают `reasoningEffort`.
-- Опционально runtime-guard в `OpenAICompatProvider.chat()`: `reasoningEffort` без
-  `reasoningStrategy` → видимый `diagnostic` (fail-open, но не молча) — INV-15.
-
-**Триггер:** новый LLM-вызов вне основного цикла.
-
-## W4. Инвариант «нет разбега компакции» (дефекты класса C)
-
-**Цель:** устойчиво переполненный контекст не может компактиться почти каждую итерацию.
-
-- Сценарный тест `tests/core/compaction-runaway.test.ts`: синтетический контекст держится выше
-  порога N итераций → число компакций ограничено cooldown'ами (не ≈N), `no ledger progress`
-  эмитится при перечитывании.
-- Решить явно: должен ли сигнал `no-progress` **менять поведение** (backoff), а не только
-  логироваться. Сейчас он fail-open и наблюдательный — записать это как осознанное решение или
-  как долг.
-
-**Триггер:** изменения в `context/manager.ts` / триггерах `agent/compaction.ts`.
-
-## W5. «Вскрытие сессии» — инструмент поиска
-
-**Цель:** превратить накопленные логи в повторяемые сигнатуры — то, чем заниматься в поисках.
-
-- Скрипт `bun run session:diagnose <sessionId>` (или `mma session diagnose`): парсит
-  `~/.mma/sessions/<id>/` (`session.jsonl`, `app.jsonl`, `audit.jsonl`) и печатает найденные
-  сигнатуры патологий:
-  - обрезка/суммаризация системного промпта;
-  - серия компакций без прогресса леджера;
-  - серия `critic_degraded` одного рода;
-  - повторные падения одного тула (`Recorded repeated … failures`);
-  - `hallucination retry`, пустые/короткие ответы (`claim_retry`);
-  - `SECURITY BLOCKED` одного паттерна ≥N.
-- Регресс-фикстура: обезличенный слепок `ses_mv8h787b_wuu8g1` → скрипт обязан показать ≥5
-  сигнатур.
-
-**Триггер:** после каждого «плохого» прогона — прогонять диагноз перед закрытием задачи.
-
-## W6. Долг и триаж
-
-- Правило 9: каждый fail-open путь получает либо проверку, либо запись в
-  [`docs/agents/debt.md`](../agents/debt.md).
-- Расширить `tests/arch/debt-register.test.ts`: список известных сигнатур из W5 должен иметь либо
-  тест, либо запись долга (иначе «сигнал есть, реакции нет»).
-- Платформенный пробел: часть B-дефектов win32-only, а bash-тесты `skip` вне win32. Нужна явная
-  win32-нога CI (или пометка, что эти тесты win32-only и где они гоняются).
+1. **Одна волна — одна ветка от `master`.** Имя ветки указано в волне. В `master` не коммитим.
+2. **Гейт сначала красный.** Новый тест предъявляется на строке текущего кода, где он падает,
+   **до** появления любых allowlist/baseline-записей.
+3. **Baseline только уменьшается.** Счётчики (`.arch-allowlist.json`, новые baseline-файлы)
+   фиксируют текущее значение как дату; вырасти они не могут.
+4. **Каждое исключение — с причиной.** Запись в allowlist/baseline без обоснования = дефект.
+5. **Спека до кода**, если меняется контракт: путь данных, граница модуля, точка enforcement,
+   формат события, схема конфига. Флаг «спека» стоит в каждой волне.
+6. **Правило 5 AGENTS.md:** новое правило архитектуры сразу получает проверку в
+   `tests/arch/*` либо запись в `docs/agents/debt.md`.
+7. **Каждая волна заканчивается** `bun test` + `bun run quality` зелёными и обновлением
+   перечня гвардов в `AGENTS.md` (сейчас там 10 гвардов).
 
 ---
 
-## Порядок
+## 2. Решения (закрыты, 2026-10-15)
 
-1. **W5** (инструмент) — быстрее всего даёт материал для поисков.
-2. **W1**, **W2** — узкие гейты на уже исправленные классы (низкий риск, высокая отдача).
-3. **W3**, **W4** — требуют хелпера и сценарных тестов.
-4. **W6** — процесс поверх остального.
+| # | Вопрос | Решение | Куда идёт |
+|---|---|---|---|
+| **D1** | Как назначается стратегия reasoning | Трёхслойный резолв: оверрайд для модели → проба/дискавери эндпоинта → пресет. Пресет перестаёт быть единственным источником | W3.1, W3.2 |
+| **D2** | Ординал пробы reasoning | Два независимых ординала и требование согласия: (a) отсутствие `reasoning`-чанков, (b) наблюдаемый признак отключения против офлайн-эталона модели. Расхождение → диагностика и статус «не подтверждено»; `openai-effort` пробуется, а не предполагается | W3.2 |
+| **D3** | Объём обязательного `source` | Обязателен сразу для всего закрытого союза `type`; `module` обязателен для `module:*`; открытые шаблоны `module_${string}`/`onboarding_${string}` → явный список. Baseline-счётчик стартует с 709/824 и только уменьшается | W11 |
+| **D4** | CI и posix | Добавляется лег `quality:posix` (ubuntu-latest) с `tests/arch` + `tests/core` + `tests/tools`; каждый из 30 `skipIf(win32)` несёт причину, список проверяется гейтом. Skip'ы не удаляем — это потеря покрытия | W6 |
+| **D5** | `/v1/tasks` на loopback | Токен на loopback остаётся опциональным, но `callbackUrl` идёт через общую сетевую политику; loopback и приватные диапазоны — **deny по умолчанию**, разрешение только явным флагом конфига | W13 |
+| **D6** | `pickFor` | Не удаляем: переводим на общий `resolveModelCapabilities`, правим ожидания `tests/providers.test.ts:325, 351-355, 367-369` на трёхслойный приоритет | W3.4, W8 |
+| **D7** | Таймаут критика | `CRITIC_TIMEOUT_MS = LLM_REQUEST_TIMEOUT_MS + WRAPPER_OVERHEAD_MS` (запас — именованная константа, 5 000 мс). Границы реестра не меняем: короткий таймаут критика — законный выбор пользователя | W2 |
+| **D8** | Fail-open в `path-validator` | Fail-closed: отсутствие `config.security.paths` больше не значит «разрешено всё». BaseDir-проверка и protected-paths не меняются | W9.5, W10 |
 
-## Definition of done
+Отвергнутые варианты, кратко: прокидывать стратегию по call-site (лечит симптом, повторятся
+новые точки); назначать стратегию по типу провайдера (один эндпоинт обслуживает модели с
+разными механизмами); удалять `pickFor` с тестами (единственное покрытие роутинга);
+ослаблять инвариант таймаута до `>=` (на границе выигрывает внутренний таймаут); оставлять
+`source` опциональным для части типов (дыра остаётся там, где атрибуция нужнее всего).
 
-Каждый Wx: тест/гейт, который **падал бы до фикса** (правило 5/7), строка в `docs/agents/debt.md`
-либо отсутствие долга, и прогон W5 на минимум одном реальном «плохом» логе с ожидаемым выводом.
+---
+
+## 3. Порядок исполнения
+
+Каждая строка — отдельная ветка и отдельный коммит-набор.
+
+| # | Волна | Ветка | Что даёт | Блокирует |
+|---|---|---|---|---|
+| 1 | W13 | `fix/outbound-policy-ssrf` | закрывает SSRF в двух точках | — |
+| 2 | W5 | `feat/session-diagnose` | инструмент поиска патологий по логам | — |
+| 3 | W10 | `test/fail-open-observability` | гейт по `observability.md` + `LLMJudge` перестаёт молчать | — |
+| 4 | W9 | `test/double-honesty` | дубли перестают создавать иллюзию покрытия | — |
+| 5 | W12 | `test/style-rules-inventory` | правила без гвардов (35 `as any`, швы фаз) | — |
+| 6 | W7 | `test/replay-harness` | сценарии на фикстурах W5 | W5, W9.4 |
+| 7 | W1 | `test/guidance-enforcement` | декларация ↔ enforcement | — |
+| 8 | W2 | `test/timeout-relations` | инвариант обёртки над дедлайном | D7 |
+| 9 | W11 | `feat/session-provenance` | `source` обязателен, атрибуция логов | — |
+| 10 | W8 | `test/default-single-source` | дефолты и capabilities — один источник | D6 |
+| 11 | W4 | `test/compaction-cooldown-invariant` | инвариант «нет разбега компакции» | — |
+| 12 | W6 | `test/debt-signature-triage` | долг, триаж, posix-лег CI | D4 |
+| 13 | W3 | `feat/reasoning-strategy-single-source` | стратегия reasoning из capabilities + проба | D1, D2, D6 |
+
+Почему такой порядок: W13 — правка поведения, тянуть нельзя; W10 и W9 — самые дешёвые
+красные результаты и они бьют по корню (пока двой подменяет enforcement, любой гейт уровня
+петли проверяет заглушку); W7 требует фикстур из W5 и списка непокрытых путей из W9.4; W3
+последняя, потому что меняет контракт провайдера.
+
+---
+
+## 4. Волны
+
+### W13. Исходящие вызовы мимо сетевой политики (класс S)
+
+**Файлы.** `src/modules/security/audit-notifier.ts` (fetch на строке 234),
+`src/modules/service/runtime/webhook.ts` (fetch по `opts.url`, строка 63),
+`src/modules/service/api/tasks-api.ts` (`callbackUrl` из тела, строка 240),
+`src/modules/security/network-validator.ts` (`isUrlAllowed` — существующая политика),
+`src/modules/service/server.ts:23` (токен только для non-loopback).
+
+**Что сделать.**
+- [ ] Спека `docs/specs/<дата>-outbound-policy-design.md`: политика исходящих вызовов.
+- [ ] Обе точки проводят URL через `isUrlAllowed`; loopback и приватные диапазоны — deny,
+      разрешение только явным флагом конфига (D5).
+- [ ] Логировать отказ как `Diagnostic` с `source`/`operation`/`cause` (INV-14).
+
+**Гейт** `tests/arch/outbound-policy.test.ts`: ни один `fetch(` в `src/` не принимает URL, не
+прошедший через политику; легитимные исключения (провайдеры, `models.dev`, `native-context`,
+`provider-context` — конструируют URL из конфига) перечислены явно.
+
+**Красная точка сейчас:** `audit-notifier.ts:234`, `webhook.ts:63`.
+**Критерий выхода:** гейт красный до правки; тест, что `/v1/tasks` с `callbackUrl` вида
+`http://127.0.0.1:PORT/` отклоняется. **Спека:** да. **Триггер:** новая исходящая HTTP-команда.
+
+### W5. Вскрытие сессии — инструмент поиска
+
+**Файлы.** `src/modules/session/` (чтение `session.jsonl`, `app.jsonl`, `audit.jsonl`,
+`meta.json`), каталог команд `src/core/commands/catalog.ts`, хендлеры CLI
+(`src/cli/repl-commands*.ts` — через handler-map, правило #17).
+
+**Что сделать.**
+- [ ] Команда `mma session diagnose <sessionId>` с обязательным `--json`.
+- [ ] Сигнатуры: обрезка/суммаризация системного промпта; серия компакций без прогресса
+      леджера; серия `critic_degraded` одного рода; повторные падения одного тула; `claim_retry`
+      и пустые/короткие ответы; `SECURITY BLOCKED` одного паттерна ≥ N.
+- [ ] Каталог сигнатур — в `docs/agents/observability.md` (INV-15), не в `debt.md`.
+- [ ] Обезличенная фикстура сессии `ses_mv8h787b_wuu8g1` в `tests/fixtures/`.
+
+**Гейт** `tests/core/session-diagnose.test.ts`: фикстура обязана дать ≥5 сигнатур; проверяется
+**структура** (`signatures[].kind/count`), а не stdout.
+
+**Критерий выхода:** прогон на реальном «плохом» логе с ожидаемым выводом. **Спека:** да
+(новая команда). **Релиз:** MINOR (`CHANGELOG.md` + `package.json`).
+
+### W10. Fail-open не молчит (класс F)
+
+**Файлы.** `src/core/hallucination/llm-judge.ts:78-79`, `src/core/agent/hallucination-claims.ts:26-27`,
+`src/core/bootstrap/provider-phase.ts:252-253` и `:65,193`, `src/core/agent/loop-nudges.ts:25-26`,
+`src/core/hallucination/factual.ts:222`, `src/core/agent/artifact-resolve.ts:76,83`,
+`src/core/context/ledger-absorb.ts:22`, `src/core/agent/context-log.ts:122`,
+`src/core/environment.ts:136-137`, `src/core/bootstrap/tool-context.ts:36-45,67-75,79-86`,
+`src/output/types.ts:21-26` (`DiagnosticEvent`), `docs/agents/observability.md`.
+
+**Что сделать.**
+- [ ] **W10.1** Внедрить в `LLMJudge` sink диагностик (образец — `ToolContext.onDiagnostic`),
+      эмитить `hallucination_judge_degraded` с `cause`/`operation`; то же для потери claims в
+      `hallucination-claims.ts`.
+- [ ] **W10.2** Гейт «каждая сигнатура `observability.md` подтверждена тестом». Сигнатуры —
+      ровно члены союза `DiagnosticEvent` (5 штук).
+- [ ] **W10.3** Каждый пункт таблицы молчащих `catch` (ниже) — либо диагностика, либо строка
+      в `observability.md`, либо запись в `debt.md`.
+- [ ] **W10.4** Каждый sink `ToolContext` получает тест, который реально его вызывает.
+- [ ] **W10.5** (D8) `path-validator.ts:74,90` — fail-closed вместо `allowed: true`; проверить
+      все production-точки сборки `ToolContext`.
+
+Молчащие `catch` (возврат — на строку ниже указанной): `provider-phase.ts:252→253` (reasoning
+тихо выключен, при этом транзиентный `null` логируется тем же текстом, что и definitive
+`false`), `provider-phase.ts:65,193`, `loop-nudges.ts:25→26`, `factual.ts:222`,
+`artifact-resolve.ts:76,83`, `ledger-absorb.ts:22`, `context-log.ts:122`, `environment.ts:136→137`,
+`ledger.ts:60` (уже помечен `FAIL-OPEN (INV-15)`, учтён долгом `ledger-write-diagnostics`).
+
+**Гейт** `tests/arch/observability-coverage.test.ts` (каждая сигнатура `DiagnosticEvent` подтверждена тестом) + `tests/core/llm-judge-degraded.test.ts` (сбой провайдера → `pass` + диагностика).
+**Красная точка сейчас:** `admission_degraded` реализован в 7 местах `src/`, описан как
+INV-15-сигнал (строка 24 `observability.md`), и **не встречается в тестах ни разу** из 5 сигнатур
+подтверждены 4.
+
+**Критерий выхода:** гейт красный на текущем коде; `llm-judge` при падении провайдера даёт
+`pass` **и** диагностику. **Спека:** да для W10.1 и W10.5. **Триггер:** новый `catch` с
+«безопасным» возвратом, новая сигнатура.
+
+### W9. Дубли не создают иллюзий (класс H)
+
+**Файлы.** `tests/core/agent.test.ts` (`createMockDeps` на строках 12-120, 61× `new Agent(deps as any)`),
+`tests/arch/module-boundaries.test.ts:97-101` (`scanModules`), `tests/helpers/`.
+
+**Что сделать.**
+- [ ] **W9.1** Расширить `scanModules()` на `src/core/**` (переиспользовать
+      `findForeignHandlerCalls`, allowlist пуст).
+- [ ] **W9.2** `createMockDeps(): AgentDeps` без `as any`; baseline-гейт на число `as any`/
+      `as unknown as` в `tests/core/**` (729 сейчас, в `tests/core` — 192).
+- [ ] **W9.3** Дубль `ContextManager` (14 методов против 43 реальных) — либо `satisfies`, либо
+      явный список «осознанно не покрыто» с причиной на каждый из 29 отсутствующих.
+- [ ] **W9.4** Список путей `src/core/agent/*`, недостижимых из-за заглушек
+      (`needsCompaction: () => false`, пустые `getToolDefinitions`, `criticOverride`) — это вход
+      для W7.
+- [ ] **W9.5** (D8) fail-closed — см. W10.5.
+- [ ] **W9.6** Каждый тест с seam (`criticOverride` — все 4 теста `agent-critic`,
+      `finalAudit` — 9 в `execution-plan-fixes`, `agentFactory` — 12) получает парный тест на
+      реальный путь либо попадает в перечень непокрытых гейтов.
+
+**Гейт** расширение `tests/arch/module-boundaries.test.ts` (скан `src/core/**` на `.handler(`) + `tests/arch/double-honesty.test.ts` (baseline `as any` в `tests/core/**`, полнота дублей, список непокрытых путей петли).
+**Красная точка сейчас:** `src/core/agent/loop-llm.ts` вызывает `tools/x.handler(...)` (фикстура
+гейта); `new Agent(deps as any)` сверх baseline. Гейт W9.1 на текущем коде **зелёный** — в
+`src/core` ноль вызовов `.handler(`, — это держит ноль, а не имитация проверки.
+
+**Критерий выхода:** гейт красный на фикстурах; в `tests/core` одна проверка `mockExecutor.execute`
+заменяется набором на реальный путь. **Спека:** нет. **Триггер:** правка `tests/core/**`, новый seam.
+
+### W12. Правила без гвардов
+
+**Файлы.** `src/core/agent.ts` (10 кастов `as unknown as *Host` на строках 301, 313, 318, 324, 328,
+429, 486, 494, 499, 504), `src/config/config.ts:115,220,326,327,384`,
+`src/config/utils.ts:17,19,20`, `src/config/domains.ts:55,124`, `docs/agents/code-style.md`.
+
+**Что сделать.**
+- [ ] `tests/arch/style-rules.test.ts` по образцу `debt-register`: правила из `code-style.md`
+      без гварда ↔ `.arch-style-baseline.json` (только уменьшается).
+- [ ] Запрет `as unknown as *Host` в `src/core/agent.ts`: фаза получает явно собранный
+      объект-литерал, компилятор проверяет каждое поле. Список фаз — константа, чтобы правило
+      нельзя было обойти переименованием.
+- [ ] 23 `.catch(() => {})` — allowlist с причиной либо запись в `observability.md`. Эталон:
+      `llm-judge.ts:101` (единственный сайт с комментарием-обоснованием).
+- [ ] Считать `as any` одним baseline-счётчиком с W9.2, а не двумя.
+
+**Гейт** `tests/arch/style-rules.test.ts` (правила `code-style.md` без гварда ↔ `.arch-style-baseline.json`) + расширение `tests/arch/module-boundaries.test.ts` запретом `as unknown as *Host` в `src/core/agent.ts`.
+**Красная точка сейчас:** 35 `as any`/`as unknown as` в `src/` (10 из них — швы фаз).
+**Критерий выхода:** гейт красный на текущем коде; красный на фикстуре «фаза читает поле,
+которого нет у `Host`». **Спека:** нет (для литералов-хостов — в рамках W3.1).
+
+### W7. Replay-харнесс
+
+**Файлы.** `tests/integration/*.integration-test.ts` (или новый `tests/replay/`),
+`vitest.integration.config.ts`, `package.json` (подключение к гейту),
+`src/modules/certification/scenarios.ts` (образец сценарного набора), `MMA_CONFIG_DIR` для изоляции.
+
+**Что сделать.**
+- [ ] Детерминированный replay обезличенной фикстуры против mock-провайдера.
+- [ ] **Подключить набор к гейту** отдельной задачей: сейчас `test:integration` не вызывается
+      ни в `bun test`, ни в `quality`, ни в CI — тесты там не защищают.
+- [ ] Инварианты: ≤ `ceil(N/cooldown)` компакций на N итераций; ни одного `SECURITY BLOCKED`
+      одного паттерна дважды подряд; ≤ K падений одного тула до срабатывания `stuck-detector`;
+      число LLM-вызовов на итерацию ≤ 1 + (критик/субагент); байты system-prompt не меняются
+      без смены конфига; при `template-kwarg` в теле запроса есть
+      `chat_template_kwargs.enable_thinking=false`.
+
+**Гейт** инварианты поверх replay в `tests/replay/*.test.ts` (или `tests/integration/*.integration-test.ts`) + **подключение набора к гейту** отдельной задачей. Сейчас `test:integration` не вызывается ни в `bun test`, ни в `quality`, ни в CI — тесты там не защищают.
+**Критерий выхода:** каждая фикстура W5, упавшая на сигнатуру, имеет хотя бы один красный
+инвариант. **Спека:** нет. **Триггер:** новая сигнатура без инварианта.
+
+### W1. Декларация ↔ enforcement (класс B)
+
+**Файлы.** `src/modules/security/command-validator.ts` (список на строке 25, применение на 217),
+`src/modules/security/security-policies.ts:93,251,346`, `src/config/security.ts:94`,
+`src/tools/bash.ts:577`, `src/core/system-prompt.ts:112-117,186`.
+
+**Что сделать.**
+- [ ] **W1a** Для каждого оператора из блок-листа проверить `validateCommand()`: команда с ним
+      реально блокируется; и обратно — пример из декларации (`bash.ts:577`,
+      `system-prompt.ts:186`) заблокирован. Это и есть дефект B3.
+- [ ] **W1b** `bash.ts:577` и `system-prompt.ts:112-117` вручную дублируют платформенный факт:
+      обе строки обязаны называть `cmd.exe`, `PowerShell` — только в негативном контексте.
+- [ ] **W1c** Один список операторов: сейчас `security.ts:94` (10 элементов без `&`),
+      `command-validator.ts:25` (те же 10 без `&`), `security-policies.ts:93` (11 с `&`).
+- [ ] Детектор отрицания (`blocked|do NOT|never|not work`) + allowlist декларативных строк —
+      без него скан падает на корректном тексте, где `| > >> ; &&` перечислены как запрещённые.
+
+**Гейт** `tests/arch/guidance-enforcement.test.ts`: три независимые части W1a (декларация ↔ поведение `validateCommand`), W1b (один платформенный факт), W1c (один список операторов).
+**Красная точка сейчас:** фикстуры «`use &&`» (bash.ts) и «`Windows (PowerShell)`»
+(system-prompt.ts), расхождение трёх списков по `&`.
+**Критерий выхода:** гейт зелёный на текущем коде **без** post-factum allowlist. **Спека:** нет.
+
+### W2. Инварианты таймаутов (класс Crit)
+
+**Файлы.** `src/config/timeouts.ts` (реестр), `src/config/defaults.ts:33`,
+`src/modules/critic/client.ts:42`, `src/config/registry.ts:315-327` (границы),
+`tests/modules/critic/client-budget.test.ts:166` (тест достижимости `call_timeout`).
+
+**Что сделать.**
+- [ ] Структурно: дефолт `critic.timeoutMs` **ссылается** на `LLM_REQUEST_TIMEOUT_MS`, а не
+      повторяет число (иначе гейт тавтологичен).
+- [ ] D7: `CRITIC_TIMEOUT_MS = LLM_REQUEST_TIMEOUT_MS + WRAPPER_OVERHEAD_MS` (5 000 мс,
+      именованная константа), обёртка строго длиннее внутреннего дедлайна.
+- [ ] Гейтить и границы реестра: «дефолт в порядке, но `min: 1000` разрешает поломанное
+      значение» — тоже дефект.
+- [ ] Таблица «обёртка одного запроса → внешний дедлайн» (critic, judge галлюцинаций,
+      browser-мост). Походовые бюджеты (`subagent.timeoutMs = 180000`, `defaults.ts:205`) в неё
+      **не** входят: это бюджет хода, для него инвариант не определён.
+- [ ] Поднять тест достижимости `call_timeout` из `client-budget.test.ts` в общий паттерн.
+
+**Гейт** `tests/arch/timeout-relations.test.ts` (структурная ссылка дефолта + запас `WRAPPER_OVERHEAD_MS` + достижимость `call_timeout`).
+**Красная точка сейчас:** равенство дефолта и внутреннего дедлайна (одна константа).
+**Критерий выхода:** красный на `timeoutMs: LLM_REQUEST_TIMEOUT_MS - 1`, на `60000` и на
+подмене дефолта литералом. **Спека:** да (D7). **Триггер:** правка любого `*timeoutMs` дефолта.
+
+### W11. Provenance в `session.jsonl` (класс P)
+
+**Замер на реальной сессии:** 824 записи, **115 с `source` (14%)**, 709 без, `module` — 0.
+Без provenance ровно доминирующие типы: `tool_call` (116), `tool_result` (116), `context` (111),
+`tool_defs` (111), `llm_usage` (111), `assistant` (108), `reasoning` (108).
+
+**Файлы.** `src/modules/session/store.ts` (`SessionLogEntry`, `source?: string`; открытые шаблоны
+на 46-47), `src/core/session-logger.ts` (21 вызов), `src/core/bootstrap/tool-context.ts` (3),
+`src/core/bootstrap/session-runner-scope.ts` (2), `src/output/session-sink.ts` (2),
+`src/core/bootstrap/{agent-phase,context-factory,modules-phase,session-phase,session-runner}.ts`,
+`src/modules/service/api/tasks-api.ts`.
+
+**Что сделать.**
+- [ ] D3: `source` обязателен для всего закрытого союза `type`; `module` обязателен для
+      `module:*`; шаблоны `module_${string}`/`onboarding_${string}` → явный союз (сейчас любая
+      опечатка проходит компиляцию, а префикс `module_` не совпадает с `module:<name>` из `Source`).
+- [ ] Гейт `tests/arch/session-provenance.test.ts`: доля записей без `source` по типам из
+      закрытого союза сверх baseline не растёт; baseline = 709/824, только уменьшается.
+
+**Гейт** `tests/arch/session-provenance.test.ts` (доля записей без `source` сверх baseline не растёт).
+**Красная точка сейчас:** 86% записей без `source`.
+**Критерий выхода:** на фикстуре W5 атрибуция 100%. **Спека:** да (контракт схемы лога).
+**Триггер:** новое событие в `session.jsonl`.
+
+### W8. Единые источники правды
+
+**Файлы.** `src/core/bootstrap/config-phase.ts:33` (`overrideCooldown: 3`),
+`src/config/defaults.ts:217` (`overrideCooldown: 5`), `src/modules/providers/manager.ts:90-113`
+(`pickFor`), `tests/providers.test.ts:325,351-355,367-369`.
+
+**Что сделать.**
+- [ ] Гейт `tests/arch/default-single-source.test.ts`: числовые литералы в
+      `src/core/bootstrap/**` и `src/core/agent/**`, совпадающие со значением из `DEFAULTS`,
+      запрещены — только ссылка.
+- [ ] D6: `pickFor` переводится на общий `resolveModelCapabilities` (сейчас читает
+      `registry.get(type)?.capabilities` напрямую, игнорируя пробу и оверрайд — второй источник
+      правды по capabilities); ожидания в `tests/providers.test.ts` правятся на трёхслойный приоритет.
+
+**Гейт** `tests/arch/default-single-source.test.ts` (литералы, совпадающие с `DEFAULTS`) + правка `tests/providers.test.ts` под трёхслойный приоритет `pickFor`.
+**Красная точка сейчас:** хардкод `overrideCooldown: 3` в `config-phase.ts:33`;
+расхождение приоритетов у `pickFor`. **Критерий выхода:** гейт красный на текущем коде.
+**Спека:** нет. **Триггер:** новый дефолт в `defaults.ts`.
+
+### W4. Нет разбега компакции (класс C)
+
+**Файлы.** `src/core/agent/compaction.ts:96,169` (предикаты), `src/core/agent/constants.ts:34`
+(`FORCED_COMPACTION_COOLDOWN = 3`), `src/config/defaults.ts:89`
+(`contextBudget.overflowCooldown = 3`), `src/core/agent/loop-state.ts` (счётчики итераций).
+
+**Что сделать.**
+- [ ] Тест на **предикатах**, а не сценарий: синтетический loop-state, N итераций с заведомо
+      переполненным контекстом, утверждение «число срабатываний ≤ `ceil(N/cooldown)`».
+      Детерминированно (cooldown — счётчик итераций, не часы), попадает в `bun test`.
+- [ ] Сценарный уровень отдан в W7 — `tests/integration/*` сейчас вне гейта, там тест не защищает.
+- [ ] Решить и записать: должен ли сигнал «no ledger progress» менять поведение (backoff) или
+      остаётся наблюдательным. Если откладываем — запись в `debt.md` с триггером.
+
+**Гейт** `tests/core/compaction-cooldown-invariant.test.ts` (предикаты `compaction.ts:96,169`, синтетический loop-state).
+**Красная точка сейчас:** предикат без cooldown (состояние до фикса C2).
+**Критерий выхода:** красный до фикса, зелёный после. **Спека:** нет.
+**Триггер:** правка `compaction.ts`, `constants.ts`, `context/manager.ts`.
+
+### W6. Долг, триаж и платформы
+
+**Файлы.** `tests/arch/debt-register.test.ts`, `docs/agents/debt.md`,
+`.github/workflows/quality.yml`, `package.json`.
+
+**Что сделать.**
+- [ ] Каждый fail-open путь получает либо проверку, либо запись в `debt.md` (правило 9).
+- [ ] Расширить `debt-register.test.ts`: каждая сигнатура из W5 имеет тест либо запись долга.
+- [ ] D4: лег `quality:posix` (ubuntu-latest) с `tests/arch` + `tests/core` + `tests/tools`;
+      каждый из 30 `skipIf(win32)` несёт причину, список проверяется гейтом. Причина, почему не
+      оставить как есть: релиз собирается под 5 платформ (`release.yml:20-32`), а posix-поведение
+      не проверяет никто.
+- [ ] Каждый новый файл в `tests/arch/` внесён в перечень гвардов `AGENTS.md` (сейчас 10).
+- [ ] Новые общие хелперы используются ≥ 2 местами, иначе `fallow dead-code --fail-on-issues`
+      (шаг CI) завалит сборку.
+
+**Гейт** `tests/arch/debt-register.test.ts` (расширение: сигнатура ↔ тест/долг) + `tests/arch/win-only-manifest.test.ts` (у каждого `skipIf` есть причина); лег `quality:posix` добавляется в `.github/workflows/quality.yml`.
+**Спека:** нет. **Триггер:** новый тест/гейт, изменение CI.
+
+### W3. Стратегия reasoning — одна точка назначения (класс A)
+
+**Файлы.** `src/modules/providers/presets.ts:37,69` (статический `prompt-tag`),
+`src/modules/providers/manager.ts:246` (`reasoningStrategyForProvider`) и `:90-113` (`pickFor`),
+`src/modules/providers/capabilities.ts:33` (`resolveModelCapabilities` — образец трёх слоёв),
+`src/modules/reasoning/probe.ts` (проба: на 46 возвращает `true` до сетевого вызова, ординал на
+49/55/58 — «нет `reasoning`-чанков»), `src/llm/openai-compat.ts:100` (`normalizeReasoningEffort`),
+`src/core/prompt-overflow.ts`, `src/core/context/chunk-query.ts:147,188`,
+`src/tools/chunk-query.ts:101`, `src/modules/critic/client.ts:162`, `src/core/agent/turn-run.ts:123`.
+
+**Что сделать.**
+- [ ] **W3.1** Стратегия приходит в провайдер **один раз при сборке** и применяется ко всем
+      вызовам; call-site её не знает и не может забыть. Не прокидывать по каждому месту.
+- [ ] **W3.2** D1: `reasoningStrategy` резолвится трёхслойно, как `vision`/`tools`: оверрайд
+      модели → проба/дискавери эндпоинта → пресет. `prompt-tag` — только там, где вендор его
+      документирует; для эндпоинтов, документирующих `chat_template_kwargs` или
+      `reasoning_effort: "none"`, фолбэк — `template-kwarg`.
+- [ ] **W3.2** D2: проба получает два независимых ординала (отсутствие `reasoning`-чанков и
+      наблюдаемый признак против офлайн-эталона), расхождение → диагностика и «не подтверждено»;
+      `openai-effort` пробуется, а не предполагается.
+- [ ] **W3.3** Нормализация `"none"` становится стратегии-зависимой (`openai-compat.ts:100`
+      сейчас выкидывает `"none"` глобально).
+- [ ] **W3.4** Shared-хелпер `tests/helpers/recording-provider.ts`: пишет `ChatOptions` всех
+      вызовов по умолчанию; `fakeProvider` в `tests/core/prompt-overflow.test.ts` переводится на
+      него, касты (`as unknown as LLMProvider`, `provider2 as any`) исчезают.
+- [ ] **W3.4** Таблица «сайт → допустимо/почему» для `reasoningEffort` без `reasoningStrategy`
+      (пять существующих мест выше): по умолчанию недопустимо, каждое исключение — с причиной.
+- [ ] **W3.4** D6: `pickFor` — см. W8.
+
+**Красная точка сейчас:** фикстура «пресет назначает стратегию, которую эндпоинт не принимает»;
+новый LLM-вызов без стратегии.
+**Гейт** `tests/arch/llm-call-options.test.ts` (стратегия совпадает с документированным механизмом) + `tests/core/reasoning-strategy-resolve.test.ts` (трёхслойный приоритет).
+**Критерий выхода:** красный на пресете, назначающем стратегию, которую эндпоинт не принимает;
+красный на новом LLM-вызове без стратегии; красный на фикстуре «стратегия не совпадает с
+документированным механизмом для этой модели». **Спека:** да (контракт опций провайдера).
+**Регресс:** `tests/core/prompt-overflow.test.ts:138-167` уже закрывает A1 — не переписывать,
+а перенести проверку на общий хелпер.
+
+**Долг:** `DEBT(reasoning-hard-switch)` — статическая стратегия пресета и глобальная
+нормализация `"none"`; оплачивается этой волной.
+
+---
+
+## 5. Definition of done (на каждую волну)
+
+1. Гейт/тест добавлен, **падал бы до правки** — предъявлена конкретная строка.
+2. Файл нового гейта внесён в перечень гвардов `AGENTS.md`.
+3. `bun test` зелёный, `bun run quality` зелёный (включая `fallow`).
+4. Для изменений поведения — спека в `docs/specs/` (помечено в волне) и запись в
+   `CHANGELOG.md` при релизном уровне MINOR (W5).
+5. Долг либо оплачен, либо занесён в `docs/agents/debt.md` с критерием выхода и триггером.
+6. Общая проверка: `mma session diagnose` прогнан минимум на одном реальном «плохом» логе.
+
+---
+
+## Приложение A. Замеры (как воспроизвести)
+
+Все числа плана получены 2026-10-15 на `master`:
+
+```bash
+bun test                                            # 3906 pass, 8 skip, 442 файла
+bun test --coverage --coverage-reporter=lcov        # покрытие по файлам
+npx --yes fallow@2.88.0 health                      # сложность, CRAP, unit size
+npx --yes fallow@2.88.0 dupes --top 15              # клоны (все — в тестах)
+npx --yes fallow@2.88.0 security                    # кандидаты SSRF/cmd (unverified)
+bun test tests/arch                                  # 14 pass
+bun run quality                                      # exit 0
+```
+
+Точечные замеры:
+
+```powershell
+Get-ChildItem -Recurse src -Filter *.ts | Select-String "fetch\("            # исходящие вызовы
+Get-ChildItem -Recurse src/core -Filter *.ts | Select-String "catch" -Context 0,2  # молчащие fail-open
+Get-ChildItem -Recurse src -Filter *.ts | Select-String "as any|as unknown as"     # 35
+Get-ChildItem -Recurse tests -Filter *.ts | Select-String "new ToolExecutor"       # где реальный исполнитель
+Get-Content "$env:USERPROFILE\.mma\sessions\<id>\session.jsonl" | ConvertFrom-Json |
+  Group-Object { if ($_.source) { "with" } else { "without" } }                      # provenance
+```
+
+**Ключевые цифры для гейтов:** `as any`/`as unknown as` — 35 в `src/`, 729 в тестах (192 в
+`tests/core`); `new Agent(deps as any)` — 61; `.catch(() => {})` — 23; non-null assertions — 128;
+`.handler(` в `src/core` — 0; `admission_degraded` — 0 в тестах при 7 в `src`; сигнатур в
+`observability.md` — 5, подтверждено тестами 4; гвардов в `AGENTS.md` — 10; платформ релиза — 5;
+покрытие `loop-llm.ts` 86.8%, `agent.ts` 90.6%, `bootstrap/tool-context.ts` 61.4%,
+`hallucination/llm-judge.ts` 97.6%; дубль `ContextManager` — 14 методов против 43; `skipIf` — 30.
+
+**Ловушка метода:** 25 файлов ядра не упоминаются в тестах по имени, но покрыты транзитивно
+через `Agent.run()`. Выводы о покрытии делать по lcov, не по grep. Дыры покрытия лежат не в ядре,
+а в webui и CLI: `utils/sleep.ts` 0%, `webui/settings/model-cache.ts` 0%,
+`webui/assets/md-copy.ts` 2.1%, `feed/question.ts` 4.8%, `plugins/format.ts` 4.9%,
+`cli/repl-commands-skills.ts` 5.1%, `settings/editors.ts` 5.1%.
+
+## Приложение B. Аудит утверждений (рев. 5)
+
+Каждое утверждение с `file:line` прогнано против дерева, все числа пересчитаны. Подтверждено
+**38 из 38** утверждений с `file:line`. Исправлено в рев. 4–5 четыре расхождения:
+
+| Было | Факт |
+|---|---|
+| дубль `ContextManager` — 17 против ~35 | **14 против 43** |
+| `pickFor` — «нигде не вызывается» | вызывается из тестов `providers.test.ts:325,351-355,367-369`: правка начинается с тестов |
+| «все 38 `appendLog` идут через `SessionLogger`» | **21 из 38**; 9 файлов пишут напрямую |
+| «петля ни разу не проходит через реальный `ToolExecutor`» | исключение — `tests/core/subagent-parallel-e2e.test.ts:66`, но петля там через seam `agentFactory` |
+| `44 skipIf` | **30** (44 — счётчик `skipIf|describe.skip|win32` вместе) |
+| W2 «строго `>`» без решения | закрыто решением D7 |
+
+## Приложение C. Что не проверено (и потому не в плане)
+
+- `modules/webui` как территория: покрытие измерено, код не разобран — 6 кастов, 30 `skipIf`.
+- Онбординг и `mma setup` — пользовательский слой, тестов меньше всего.
+- Достижимость `/v1/tasks` из браузера (blind SSRF): нужен разбор тела запроса.
+- posix-поведение: CI только windows, локально windows — выводы сделаны чтением конфигурации.
+- Поддержка `reasoning_effort: "none"` конкретными облачными моделями: не сверялась.
