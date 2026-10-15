@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { DEFAULTS } from "../src/config/defaults";
+import { DEFAULTS, WRAPPER_OVERHEAD_MS } from "../src/config/defaults";
+import { LLM_REQUEST_TIMEOUT_MS } from "../src/config/timeouts";
 import { loadConfig, deepMerge, saveConfig } from "../src/config/config";
 import { defaultOutputBus } from "../src/output";
 import { mkdtempSync, writeFileSync, existsSync, rmSync, readFileSync } from "fs";
@@ -48,9 +49,12 @@ describe("config defaults", () => {
       tools: true,
       maxCalls: 4,
       maxRepairCycles: 1,
-      timeoutMs: 120000,
+      // Обёртка строго длиннее провайдерского дедлайна (W2): при равенстве
+      // диагностика `call_timeout` была недостижима по построению.
+      timeoutMs: LLM_REQUEST_TIMEOUT_MS + WRAPPER_OVERHEAD_MS,
       maxTokens: 2048,
     });
+    expect(DEFAULTS.critic.timeoutMs).toBeGreaterThan(LLM_REQUEST_TIMEOUT_MS);
   });
 });
 

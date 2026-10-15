@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Critic timeout now outlives the request it wraps**: the default equalled the
+  provider's own request deadline, so the wrapper always lost the race and the
+  `call_timeout` diagnostic — the only record that the critic had to be cut off —
+  was unreachable by construction. The default is now
+  `LLM_REQUEST_TIMEOUT_MS + WRAPPER_OVERHEAD_MS`, and a new gate
+  (`tests/arch/timeout-relations.test.ts`) enforces the relation structurally: the
+  default must reference the constant rather than repeat the number, otherwise the
+  check would be tautological. The reachability test now runs at the default on fake
+  timers instead of an invented 30 ms. Plan wave W2, decision D7.
 - **Guidance must match enforcement**: a new gate
   (`tests/arch/guidance-enforcement.test.ts`) checks both directions — every
   operator declared dangerous in the bash policy is actually rejected by the
