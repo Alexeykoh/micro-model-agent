@@ -18,6 +18,7 @@ import { ContextManager } from "../../src/core/context/manager";
 import { HallucinationDetector } from "../../src/core/hallucination/detector";
 import { SessionStore, SessionManager } from "../../src/modules/session/index";
 import { OpenAICompatProvider } from "../../src/llm/openai-compat";
+import { probeModel } from "../../src/llm/model-loader";
 import {
   deriveSessionName,
   generateSessionTitle,
@@ -47,6 +48,31 @@ function liveProvider(): OpenAICompatProvider {
     baseUrl: BASE_URL,
     apiKey: API_KEY,
     contextWindow: 32768,
+  });
+}
+
+/**
+ * Провайдер как в проде (bootstrap): сначала native discovery, потом сборка.
+ * Без этого "none" не уходит в провод, thinking съедает 48 токенов заголовка и
+ * generateSessionTitle возвращает null — тест проверял бы путь, которого в
+ * проде нет. На эндпоинтах без native discovery (хостед) дискавери пустое и
+ * поведение честно совпадает с продом — см. DEBT(hosted-reasoning-discovery).
+ */
+async function liveProviderWithDiscovery(): Promise<OpenAICompatProvider> {
+  let caps;
+  try {
+    caps = (await probeModel(BASE_URL, MODEL))?.capabilities;
+  } catch {
+    // fail-open: как в проде без дискавери.
+  }
+  return new OpenAICompatProvider({
+    getSessionId: () => "integration-test",
+    model: MODEL,
+    baseUrl: BASE_URL,
+    apiKey: API_KEY,
+    contextWindow: 32768,
+    reasoningStrategy: caps?.reasoningStrategy,
+    reasoningOff: caps?.reasoningOff,
   });
 }
 
@@ -99,7 +125,7 @@ describe.skipIf(shouldSkip)("P4 live: session auto-naming", () => {
     const prompt = "Помоги мне спланировать поездку в Токио на выходные";
     expect(deriveSessionName(prompt)).toBe("Помоги мне спланировать поездку в Токио на выходные");
 
-    const provider = liveProvider();
+    const provider = await liveProviderWithDiscovery();
     const title = await generateSessionTitle(prompt, chatOnce(provider), 60000);
     expect(title).toBeTruthy();
     expect(title!.includes("\n")).toBe(false);
@@ -113,7 +139,7 @@ describe.skipIf(shouldSkip)("P4 live: session auto-naming", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "mma-p4-autoname-"));
     try {
       const config = makeConfig();
-      const llmProvider = liveProvider();
+      const llmProvider = await liveProviderWithDiscovery();
       const logger = quietLogger();
       const registry = new ToolRegistry();
       const pluginMgr = new PluginManager();
