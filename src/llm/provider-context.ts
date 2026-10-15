@@ -61,6 +61,10 @@ interface LmStudioModelsResponse {
  * `trained_for_tool_use`), если есть — это единый источник правды вместо
  * гадания по имени.
  *
+ * Хостед-эндпоинты (opencode-go и т.п.) native discovery не отдают — там
+ * capabilities пустые. DEBT(hosted-reasoning-discovery): из-за этого
+ * неизвестен off-switch reasoning и `"none"` не уходит (см. debt.md).
+ *
  * Null, если эндпоинт недоступен (не LM Studio), модели нет/снята или запрос
  * упал — вызывающий деградирует молча.
  */

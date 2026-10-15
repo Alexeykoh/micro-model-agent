@@ -535,7 +535,7 @@ describe("Agent (mock-based integration)", () => {
 
   // ── Max iteration limit ───────────────────────────────────────────────
 
-  it("stops when maxToolIterations is reached", async () => {
+  it("stops tool iteration at maxToolIterations, then salvages text without tools", async () => {
     const config = makeConfig({ maxToolIterations: 3 });
     const llmProvider = makeLLMProvider(async function* () {
       yield toolCallChunk("loop_tool", {}, "call-loop");
@@ -571,7 +571,15 @@ describe("Agent (mock-based integration)", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("iterations");
-    expect(llmProvider.chat).toHaveBeenCalledTimes(3);
+    // Цикл встал на лимите: ровно 3 итерации с тулами…
+    expect(result.iterationCount).toBe(3);
+    // …плюс ОДИН salvage-вызов без тулов (`finalizeWithoutTools`): его ответ
+    // ложится в `result.text`, даже когда итог — ошибка. Это намеренный дизайн,
+    // а не лишний вызов: без него max_iters возвращал бы пустой текст.
+    expect(llmProvider.chat).toHaveBeenCalledTimes(4);
+    const calls = (llmProvider.chat as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect((calls[0] as unknown[])[1]).not.toEqual([]);
+    expect((calls[3] as unknown[])[1]).toEqual([]);
     agent.shutdown();
   });
 

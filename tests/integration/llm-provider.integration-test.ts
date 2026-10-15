@@ -23,7 +23,10 @@ describe.skipIf(shouldSkip)("LLM Provider (integration)", () => {
       baseUrl: BASE_URL,
       apiKey: API_KEY,
       contextWindow: 32768,
-      maxCompletionTokens: 200,
+      // Thinking-модели тратят сотни токенов на reasoning до первого чанка
+      // текста (замер: qwen3.5 ~150-200); 200 роняет провайдера truncation-
+      // ошибкой до любого контента. Бюджет — на ответ, а не на пробу скорости.
+      maxCompletionTokens: 1024,
     });
 
     const messages = [
