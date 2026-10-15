@@ -67,15 +67,23 @@ describe("SessionManager", () => {
   });
 
   it("should list sessions in reverse chronological order", () => {
-    const a = manager.create("First");
-    manager.appendMessage({ role: "user", content: "m1", timestamp: new Date().toISOString() });
-    const b = manager.create("Second");
-    manager.appendMessage({ role: "user", content: "m2", timestamp: new Date().toISOString() });
+    // Явные растущие метки вместо wall-clock: три create подряд укладываются в
+    // одну миллисекунду, ничья решается порядком readdir (на ext4 произволен) —
+    // и тест флакает только на CI. Время здесь — вход, а не измерение.
+    const t1 = "2026-10-15T10:00:00.000Z";
+    const t2 = "2026-10-15T10:00:01.000Z";
+    const t3 = "2026-10-15T10:00:02.000Z";
+    manager.create("First");
+    manager.appendMessage({ role: "user", content: "m1", timestamp: t1 });
+    manager.create("Second");
+    manager.appendMessage({ role: "user", content: "m2", timestamp: t2 });
     manager.create("Third");
+    manager.appendMessage({ role: "user", content: "m3", timestamp: t3 });
     const list = manager.list();
     expect(list).toHaveLength(3);
-    expect(list[0].name).toBe("Third");
-    expect([a.id, b.id]).toContain(list[1].id);
+    // Полный порядок детерминирован метками выше — прежнее частичное
+    // `[a.id, b.id]` прятало ничью, а не проверяло сортировку.
+    expect(list.map((s) => s.name)).toEqual(["Third", "Second", "First"]);
   });
 
   it("should set and get active session", () => {

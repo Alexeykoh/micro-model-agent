@@ -192,9 +192,23 @@ describe("bash", () => {
     const pkgName = "mma-no-bin-fixture";
     mkdirSync(pkg, { recursive: true });
     mkdirSync(app, { recursive: true });
+    // Фикстура С bin-шимом, который падает классической фразой npx. Почему не
+    // настоящий no-bin пакет: поведение живого npx зависит от версии —
+    // наблюдено и уход в реестр с 404, и успех с --no-install на CI-npm.
+    // Проверяется наша проводка (упавший npx с фразой → хинт), а не текст
+    // конкретной версии npx; чистая логика покрыта unit-тестами npmExecHint.
     writeFileSync(
       join(pkg, "package.json"),
-      JSON.stringify({ name: pkgName, version: "1.0.0" }),
+      JSON.stringify({
+        name: pkgName,
+        version: "1.0.0",
+        bin: { [pkgName]: "fail.js" },
+      }),
+      "utf-8",
+    );
+    writeFileSync(
+      join(pkg, "fail.js"),
+      '#!/usr/bin/env node\nconsole.error("could not determine executable to run");\nprocess.exit(1);\n',
       "utf-8",
     );
     writeFileSync(join(pkg, "index.js"), "module.exports = 1;\n", "utf-8");
@@ -210,13 +224,10 @@ describe("bash", () => {
       });
       expect(install.success).toBe(true);
 
-      // no-bin fixture is installed but declares no bin → npx must fail with
-      // "could not determine executable to run", and the tool appends the hint.
-      // --no-install: не ходить в реестр (сеть/версия npx дают другой текст
-      // ошибки и роняют тест вне dev-машины); проверяется связка
-      // "реальный npx без bin → наш хинт", а не текст реестра.
+      // Локальный bin найден без сети; шим падает классической фразой npx,
+      // тул обязан приложить хинт.
       const npxRun = await bashTool.handler(makeCtx({ baseDir: app }), {
-        command: `npx --no-install ${pkgName}`,
+        command: `npx ${pkgName}`,
       });
       expect(npxRun.success).toBe(false);
       expect(npxRun.output).toContain("could not determine executable to run");
