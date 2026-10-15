@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { DEFAULTS } from "../src/config/defaults";
 import { configDefs, getConfigValue, setConfigValue } from "../src/config/registry";
 import type { AppConfig } from "../src/config/types";
+import { LLM_REQUEST_TIMEOUT_MS } from "../src/config/timeouts";
 
 function cfg(): AppConfig {
   return JSON.parse(JSON.stringify(DEFAULTS)) as AppConfig;
@@ -13,7 +14,10 @@ describe("registry: critic keys", () => {
     expect(getConfigValue(c, "critic.enabled").value).toBe(true);
     expect(getConfigValue(c, "critic.maxCalls").value).toBe(4);
     expect(getConfigValue(c, "critic.maxRepairCycles").value).toBe(1);
-    expect(getConfigValue(c, "critic.timeoutMs").value).toBe(120000);
+    // Сверяем с дефолтом, а не с числом: утверждение на литерал зафиксировало бы
+// дефект W2 (обёртка == провайдерский дедлайн) как ожидаемое состояние.
+expect(getConfigValue(c, "critic.timeoutMs").value).toBe(DEFAULTS.critic.timeoutMs);
+expect(DEFAULTS.critic.timeoutMs).toBeGreaterThan(LLM_REQUEST_TIMEOUT_MS);
     expect(getConfigValue(c, "critic.maxTokens").value).toBe(2048);
   });
 

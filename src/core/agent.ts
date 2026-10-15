@@ -55,17 +55,17 @@ import type { TokenTracker } from "./agent/token-tracker";
 import type { ContextLogger } from "./agent/context-log";
 import { ContextRenderer } from "./agent/context-renderer";
 import type { PromptBlockKind } from "./types";
+import type { Diagnostic } from "../output/types";
 
+/** Сток диагностик fail-open (INV-15). */
+export type DiagnosticSink = (diag: Diagnostic) => void;
 export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
 
 /** Зависимости агента: конфиг, провайдер, тулы, контекст, логгеры, швы. */
 export interface AgentDeps {
   config: AppConfig;
-  /**
-   * Общий живой бокс конфига. `reconfigure` меняет и `config`, и
-   * `configRef.current`, чтобы захваченные при bootstrap ссылки (toolCtx.config,
-   * валидаторы) видели текущие настройки.
-   */
+  /** Общий живой бокс конфига: `reconfigure` меняет и `config`, и `configRef.current`,
+   * чтобы захваченные при bootstrap ссылки видели текущие настройки. */
   configRef?: { current: AppConfig };
   llmProvider: LLMProvider;
   toolExecutor: ToolExecutor;
@@ -73,6 +73,8 @@ export interface AgentDeps {
   contextManager: ContextManager;
   hallucinationDetector: HallucinationDetector;
   logger: Logger;
+  /** Сток fail-open петли (INV-15); ставится bootstrap-фазой. */
+  onDiagnostic?: DiagnosticSink;
   baseDir: string;
   scope?: ToolScope;
   toolTags?: string[];
@@ -110,11 +112,8 @@ export interface AgentDeps {
    * ждёт перед первым LLM-вызовом.
    */
   reasoningProbePassed?: boolean;
-  /**
-   * Резолвит фоновую reasoning-пробу. Потребляется лениво рядом с
-   * `lazyPromptBlocks`, чтобы bootstrap не блокировался на round-trip пробы;
-   * до резолва механизм считается НЕ прошедшим.
-   */
+  /** Резолвит фоновую reasoning-пробу лениво (рядом с `lazyPromptBlocks`), чтобы
+   * bootstrap не блокировался на round-trip; до резолва механизм НЕ прошедший. */
   reasoningProbe?: () => Promise<boolean>;
   /** Стратегия выражения reasoning effort на этом провайдере. */
   reasoningStrategy?: import("../config/types").ReasoningStrategy;

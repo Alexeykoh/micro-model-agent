@@ -140,6 +140,7 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
         sessionManager.appendLog({
           ts: new Date().toISOString(),
           type: "context_probe",
+          source: "core",
           content: `model=${probe.model} actual=${probe.actual} configured=${config.contextWindow}`,
         });
       } catch {
@@ -212,6 +213,9 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
 
   const hallucinationDetector = new HallucinationDetector(baseDir, llmProvider, {
     judgeEnabled: config.hallucination?.judge?.enabled ?? false,
+    // INV-15: деградация судьи (`pass` вместо вердикта) обязана быть видна в
+    // сессии, иначе «судья молчала» и «противоречий нет» неразличимы.
+    onDiagnostic: admissionDiagnosticSink(sessionManager, "hallucination_judge_degraded"),
   });
 
   return {

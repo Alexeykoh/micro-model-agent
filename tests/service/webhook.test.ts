@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deliverWebhook, signature } from "../../src/modules/service/runtime/webhook";
+import { DEFAULT_SECURITY_CONFIG } from "../../src/config/security";
+import type { Diagnostic } from "../../src/output/types";
 
 interface Call {
   url: string;
@@ -102,6 +104,39 @@ describe("webhook delivery", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.attempts).toBe(1);
+  });
+
+  it("refuses a loopback callback without any network attempt (W13)", async () => {
+    const { calls, fetchImpl } = captureFetch([200]);
+    const diags: Diagnostic[] = [];
+    const result = await deliverWebhook({
+      url: "http://127.0.0.1:9200/hook",
+      eventId: "evt_ssrf",
+      body: "{}",
+      timeoutMs: 1000,
+      networkConfig: DEFAULT_SECURITY_CONFIG.network,
+      onDiagnostic: (d) => diags.push(d),
+      fetchImpl,
+      sleep: noSleep,
+    });
+    expect(result).toMatchObject({ ok: false, attempts: 0, blocked: true });
+    expect(calls).toHaveLength(0);
+    expect(diags[0]).toMatchObject({ kind: "blocked", operation: "service.callback" });
+  });
+
+  it("delivers to a loopback callback only with allowPrivateOutbound", async () => {
+    const { calls, fetchImpl } = captureFetch([200]);
+    const result = await deliverWebhook({
+      url: "http://127.0.0.1:9200/hook",
+      eventId: "evt_local",
+      body: "{}",
+      timeoutMs: 1000,
+      networkConfig: { ...DEFAULT_SECURITY_CONFIG.network, allowPrivateOutbound: true },
+      fetchImpl,
+      sleep: noSleep,
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
   });
 
   it("retries 429", async () => {

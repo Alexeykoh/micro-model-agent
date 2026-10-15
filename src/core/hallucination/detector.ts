@@ -4,6 +4,7 @@ import { ConfidenceCheck } from "./confidence";
 import { FactualCheck } from "./factual";
 import { LLMJudge } from "./llm-judge";
 import type { LLMProvider } from "../../llm/provider";
+import type { Diagnostic } from "../../output/types";
 
 /** Результат проверки: вердикт + опциональные причина и тип сигнала. */
 export interface HallucinationCheckResult {
@@ -24,7 +25,12 @@ export class HallucinationDetector {
   constructor(
     baseDir?: string,
     llmProvider?: LLMProvider,
-    options?: { judgeEnabled?: boolean; sessionId?: string },
+    options?: {
+      judgeEnabled?: boolean;
+      sessionId?: string;
+      /** Сток деградаций судьи (INV-15); без него fail-open остаётся без следа. */
+      onDiagnostic?: (diag: Diagnostic) => void;
+    },
   ) {
     this.consistency = new ConsistencyCheck();
     this.confidence = new ConfidenceCheck();
@@ -34,7 +40,9 @@ export class HallucinationDetector {
     // config.hallucination.judge.enabled).
     const judgeEnabled = options?.judgeEnabled ?? true;
     this.judge =
-      llmProvider && judgeEnabled ? new LLMJudge(llmProvider, options?.sessionId) : null;
+      llmProvider && judgeEnabled
+        ? new LLMJudge(llmProvider, options?.sessionId, options?.onDiagnostic)
+        : null;
   }
 
   /** Доступ к проверке консистентности (решения, созданные/удалённые файлы). */

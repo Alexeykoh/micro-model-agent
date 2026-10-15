@@ -128,6 +128,10 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     requestTimeout: 15000,
     // Максимум размера ответа (байты).
     maxResponseSize: 15000,
+    // Loopback/приватные адреса в исходящих вызовах каркаса — deny (D5):
+    // снимается только явным флагом, иначе callbackUrl из тела /v1/tasks
+    // становится blind SSRF.
+    allowPrivateOutbound: false,
   },
   // Максимум глубины рекурсии субагентов.
   maxRecursionDepth: 3,

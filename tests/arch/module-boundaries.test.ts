@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const MODULES_ROOT = join(REPO_ROOT, "src", "modules");
+const CORE_ROOT = join(REPO_ROOT, "src", "core");
 const FILE_RE = /\.(ts|tsx)$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "coverage"]);
 /** Спецификатор импорта, ведущий внутрь ядра: `core/agent` или `core/agent/*`. */
@@ -100,7 +101,30 @@ function scanModules(): ScanFile[] {
   return files;
 }
 
+/**
+ * Ядро (`src/core/**`) — тоже территория INV-4. Сейчас ноль вызовов `.handler(`,
+ * и гейт держит этот ноль, а не имитирует проверку: ядро обязано идти в тулы
+ * через `ToolExecutor`, иначе минует enforcement (INV-10).
+ */
+function scanCore(): ScanFile[] {
+  const files: ScanFile[] = [];
+  walk(CORE_ROOT, files);
+  return files;
+}
+
 describe("architecture: module boundaries (INV-3/INV-4)", () => {
+  it("the core does not call another module's tool.handler (INV-4)", () => {
+    // Ядро обращается к исполнителям тулов через `ToolExecutor` (единственная
+    // точка enforcement, INV-10). Прямой вызов `tools/x.handler(...)` из ядра
+    // обошёл бы и enforcement, и декларацию `security` у тула.
+    const offenders = findForeignHandlerCalls(scanCore());
+    expect(
+      offenders,
+      `Core reached a tool handler directly (INV-4). Go through ToolExecutor:\n` +
+        offenders.join("\n"),
+    ).toEqual([]);
+  });
+
   it("modules import the core only via the allowlisted set", () => {
     const offenders = findCoreAgentImports(scanModules());
     expect(
@@ -118,6 +142,13 @@ describe("architecture: module boundaries (INV-3/INV-4)", () => {
       `Module called a tool handler directly (INV-4). Go through ToolExecutor:\n` +
         offenders.join("\n"),
     ).toEqual([]);
+  });
+
+  it("scanner flags a handler call in core fixture input", () => {
+    const offenders = findForeignHandlerCalls([
+      { path: "src/core/agent/loop-llm.ts", text: "const r = await tools.bash.handler(args);\n" },
+    ]);
+    expect(offenders).toEqual(["src/core/agent/loop-llm.ts:1: const r = await tools.bash.handler(args);"]);
   });
 
   it("scanner flags a new core/agent import in fixture input", () => {

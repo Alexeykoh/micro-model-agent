@@ -43,6 +43,7 @@
     "lint:fix": "biome check --write .",
     "check:arch": "bun test tests/arch tests/output",
     "quality": "bun run typecheck && bun run typecheck:frontend && bun run check:arch && bun run lint && bun run fallow",
+    "quality:posix": "bun test tests/arch tests/core tests/tools",
     "fallow": "fallow dead-code --baseline .fallow-baseline.json --fail-on-issues",
     "fallow:baseline": "fallow dead-code --save-baseline .fallow-baseline.json",
     "fallow:security": "fallow security",

@@ -7,14 +7,13 @@
  * получает СВОЙ раннер: агент + контекст + запиненный менеджер сессий +
  * трекер плана + исполнитель тулов. Разделяются только stateless/длинноживущее:
  * конфиг, провайдер, реестр-шаблон, инстансы плагинов, память, индекс.
- *
- * Прецедент изоляции — тул `subagent` (свой ContextManager/PluginManager/
- * HallucinationDetector поверх shared executor/provider); параллельные
- * сабагенты уже гоняют тулы конкурентно через общий исполнитель.
+ * Прецедент — тул `subagent` (свой ContextManager/PluginManager/
+ * HallucinationDetector поверх shared executor/provider).
  */
 import { join } from "path";
 import { Agent } from "../agent";
 import type { AgentDeps } from "../agent";
+import { moduleOf } from "../../output";
 import type { AppConfig, ReasoningStrategy, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
@@ -22,6 +21,7 @@ import type { ProviderManager } from "../../modules/providers/manager";
 import type { ContextManager } from "../../core/context/manager";
 import { createContextManager } from "./context-factory";
 import type { SessionManager } from "../../modules/session/index";
+import { admissionDiagnosticSink } from "./tool-context";
 import { SessionModule } from "../../modules/session/module";
 import { ExecutionModule } from "../../modules/execution/module";
 import { HallucinationDetector } from "../../core/hallucination/detector";
@@ -171,8 +171,7 @@ export function createSessionRunnerFactory(
 
     // Живой конфиг — источник правды. Раннер, поднятый ПОСЛЕ смены модели/
     // провайдера, обязан собрать провайдера из него, а не из bootstrap-снимка
-    // (`reconfigure` догоняет лишь уже закешированные раннеры): иначе новая
-    // сессия/вкладка до первого reconfigure ходит старой моделью.
+    // (`reconfigure` догоняет лишь закешированные раннеры).
     const config = configRef.current ?? bootConfig;
     const { manager: providerManager, provider: llmProvider } = buildActiveProvider(
       config,
@@ -204,6 +203,8 @@ export function createSessionRunnerFactory(
     const runnerDetector = new HallucinationDetector(baseDir, llmProvider, {
       judgeEnabled: config.hallucination?.judge?.enabled ?? false,
       sessionId,
+      // INV-15: судья деградировала в `pass` — различать от «противоречий нет».
+      onDiagnostic: admissionDiagnosticSink(pinned),
     });
     runnerExec.setHallucinationDetector(runnerDetector);
     // INV-15: fail-open верификатора раннера пишет `verify_error` в его сессию.
@@ -213,6 +214,7 @@ export function createSessionRunnerFactory(
         type: event,
         content: diag.cause ?? diag.operation,
         source: diag.source,
+        module: moduleOf(diag.source),
         operation: diag.operation,
         errorKind: diag.kind,
         cause: diag.cause,
@@ -400,6 +402,7 @@ function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     reasoningStrategy,
     planSummary: () => runnerExec.getPlanSummary(),
     toolCtx,
+    onDiagnostic: admissionDiagnosticSink(sessionManager),
   };
   const agent = new Agent(agentDeps);
 

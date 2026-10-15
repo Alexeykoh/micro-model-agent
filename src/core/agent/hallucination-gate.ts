@@ -6,6 +6,7 @@ import type { ArtifactState } from "../../core/hallucination/artifact-claim";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../core/context/manager";
 import type { SessionLogger } from "../session-logger";
+import type { Diagnostic } from "../../output/types";
 import { MAX_HALLUCINATION_RETRIES } from "./constants";
 import type { LoopState } from "./loop-state";
 import type { OnMeta } from "../types";
@@ -47,6 +48,8 @@ export interface HallucinationGateDeps {
    * дырка: llm_usage отклонённого черновика без записи assistant).
    */
   slog?: SessionLogger;
+  /** Сток деградаций проверки claim'ов (INV-15); без него отказ молчит. */
+  onDiagnostic?: (diag: Diagnostic) => void;
 }
 
 /**

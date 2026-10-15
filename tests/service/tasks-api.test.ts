@@ -358,6 +358,25 @@ describe("tasks api", () => {
     );
   });
 
+  it("rejects a loopback callbackUrl with 422 and never calls it (W13 SSRF)", async () => {
+    let called = 0;
+    const webhookFetch = (async () => {
+      called++;
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof fetch;
+    const url = await boot(makeServiceDeps({ dir, agent: fastAgent("x"), webhookFetch }));
+    const sid = await firstSessionId(url);
+    const res = await submit(url, sid, {
+      input: "x",
+      mode: "job",
+      wait: true,
+      callbackUrl: "http://127.0.0.1:9200/_search",
+    });
+    expect(res.status).toBe(422);
+    expect(res.json.title).toBe("callbackUrl not allowed");
+    expect(called).toBe(0);
+  });
+
   it("applies the job toolAllowlist to the runner and restores it", async () => {
     let applied: string[] | undefined;
     const deps = depsWithRunner(fastAgent("ok"), (runner) => {

@@ -62,7 +62,13 @@ export async function applyProbedContext(
       `Context probe: applied provider context ${probe.actual} tokens (model "${probe.model}")`,
     );
     return true;
-  } catch {
+  } catch (e) {
+    // INV-15: не удалось применить пробу контекста — конфиг и лог сессии
+    // разойдутся, если это не записать.
+    logger.logSilent(
+      "warn",
+      `Context probe apply FAILED: ${e instanceof Error ? e.message : String(e)}`,
+    );
     return false;
   }
 }
@@ -190,7 +196,13 @@ export async function setupProviderPhase(
         config.contextWindow = detected.actual;
       }
       return detected;
-    } catch {
+    } catch (e) {
+      // INV-15: контекстная проба упала — это не «контекст неизвестен», а
+      // «не смогли проверить»; без записи оба выглядят одинаково.
+      logger.logSilent(
+        "warn",
+        `Context probe FAILED: ${e instanceof Error ? e.message : String(e)} — keeping the configured contextWindow`,
+      );
       return null;
     }
   })();
@@ -212,7 +224,10 @@ export async function setupProviderPhase(
   // OpenCode Go режектит запросы без `x-opencode-session`.
   let sessionSource: (() => SessionManager | undefined) | undefined;
   const getSessionId = (): string | undefined => sessionSource?.()?.getActiveMeta()?.id;
-  const builtProvider = buildActiveProvider(config, logger, { getSessionId });
+  const builtProvider = buildActiveProvider(config, logger, {
+    getSessionId,
+    probeCapabilities: () => capabilitiesRef.probe,
+  });
   const providerManager = builtProvider.manager;
   const llmProvider = builtProvider.provider;
 
@@ -249,7 +264,17 @@ export async function setupProviderPhase(
         );
         // null (транзиентка) — фолбэк «не пройдено» на эту сессию.
         return passed === true;
-      } catch {
+      } catch (e) {
+        // INV-15: проба упала — это не «reasoning не поддерживается», а
+        // «не смогли проверить». Молчаливый `false` здесь означал бы то же
+        // самое, что и реальный отрицательный ответ пробы.
+        logger.logSilent(
+          "warn",
+          t("env.reasoning_probe_failed", {
+            strategy: reasoningStrategy,
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        );
         return false;
       }
     })();

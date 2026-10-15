@@ -23,7 +23,16 @@ export function lastToolEvidence(
   let history: Array<{ role: string; name?: string; content?: unknown; success?: boolean }>;
   try {
     history = deps.contextManager.getActiveHistory() ?? [];
-  } catch {
+  } catch (e) {
+    // INV-15: пустое evidence — это «тул не сработал» (жёсткая проверка), а не
+    // «читать нечего»: без записи claim проверяется мягче, чем проверено.
+    deps.onDiagnostic?.({
+      source: "core",
+      operation: "hallucination.evidence",
+      kind: "degraded",
+      cause: e instanceof Error ? e.message : String(e),
+      recoverable: true,
+    });
     return [];
   }
   return history

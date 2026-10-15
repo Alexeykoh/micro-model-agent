@@ -59,6 +59,9 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     // Заземление заявлений на диск. Резолвится здесь — у гейта нет fs.
     artifacts: resolveArtifactStates(host.baseDir, textContent),
     slog,
+    // INV-15: деградация проверки заявлений обязана дойти до сессии, иначе
+    // «claim проверен» и «проверять было нечем» неразличимы.
+    onDiagnostic: host.onDiagnostic,
   });
   if (verdict.action === "block") {
     return {

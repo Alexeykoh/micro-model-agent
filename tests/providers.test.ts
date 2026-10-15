@@ -352,6 +352,43 @@ describe("providers module", () => {
       expect(m.pickFor({ vision: true })).toBe("vis");
     });
 
+    it("pickFor resolves capabilities via preset → probe → override (D6)", () => {
+      const registry = new ProviderRegistry();
+      const cap = (over: Partial<{ vision: boolean; tools: boolean; listModels: boolean }>) => ({
+        streaming: true, tools: true, vision: false, reasoningStrategy: "none",
+        listModels: false, requiresKey: false, ...over,
+      });
+      registry.register({
+        type: "visionprov", label: "visionprov", baseUrl: "",
+        capabilities: cap({ vision: true }),
+        create: (o) => ({ model: o.model, contextWindow: o.contextWindow } as any),
+      });
+      const config = {
+        active: "vis",
+        entries: [{ type: "visionprov", label: "vis", baseUrl: "http://v/v1" }],
+      };
+      // Пресет заявляет vision — без верхних слоёв провайдер выбирается.
+      const presetOnly = new ProviderManager(config, { ...opts, registry });
+      presetOnly.setModel("m1");
+      expect(presetOnly.pickFor({ vision: true })).toBe("vis");
+      // Конфиг-оверрайд пользователя бьёт пресет: у модели нет vision.
+      const overridden = new ProviderManager(config, {
+        ...opts,
+        registry,
+        modelCapabilities: { m1: { vision: false, tools: true } },
+      });
+      overridden.setModel("m1");
+      expect(overridden.pickFor({ vision: true })).toBeUndefined();
+      // Живая проба бьёт пресет.
+      const probed = new ProviderManager(config, {
+        ...opts,
+        registry,
+        probeCapabilities: () => ({ vision: false, tools: true }),
+      });
+      probed.setModel("m1");
+      expect(probed.pickFor({ vision: true })).toBeUndefined();
+    });
+
     it("pickFor respects minContext against entry or global window", () => {
       const registry = defaultRegistry();
       const m = new ProviderManager(

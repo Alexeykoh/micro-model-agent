@@ -8,6 +8,127 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Session log provenance is now mandatory**: `SessionLogEntry.source` was optional
+  and, on a real session, stood on only 14% of records — an event could not be tied to
+  its author, and "no source" was indistinguishable from "source not written". The field
+  was also overloaded across three meanings (provenance, usage-measurement origin,
+  reasoning-policy origin), which is why `llm_usage` wrote `"api"` into a field typed as
+  `string` and never matched the `Source` union. `source` is now required and typed
+  `Source`; the usage-measurement and reasoning-policy origins moved to a separate
+  `origin?: string` field. Open `type` templates (`module_${string}`,
+  `onboarding_${string}`) are replaced by an explicit `OnboardingEvent` union, so a typo
+  no longer compiles. New gate `tests/arch/session-provenance.test.ts`: it statically
+  scans every `appendLog({...})` in `src/` for `source:`, runs every closed-union event
+  type through `SessionLogger` and asserts 100% attribution (and a `module:<name>`
+  diagnostic carries `module` without the prefix), and checks the fixture anonymiser no
+  longer drops provenance. Plan wave W11, decision D3.
+- **Config sections have one source of truth**: `applyReasoningCliOverride` built the
+  `reasoning` section from literals (`overrideCooldown: 3`, no `baseline`), silently
+  diverging from `DEFAULTS.reasoning` (`overrideCooldown: 5`) whenever `--reasoning` was
+  passed without a config section — so the CLI flag changed the cooldown. It now spreads
+  `DEFAULTS.reasoning` and overrides only `mode`. New gate
+  `tests/arch/default-single-source.test.ts` forbids bootstrap/agent from assembling a
+  config section out of literals (it must spread `DEFAULTS`/the base config); the gate is
+  structural, not value equality, because `DEFAULTS` contains `0/1/2/5/…` and those
+  literals are everywhere. `ProviderManager.pickFor` no longer reads raw provider presets
+  for `vision`/`tools`: it resolves them through the shared `resolveModelCapabilities`
+  (preset → live probe → user override), the same path the agent uses, so a provider is
+  no longer picked on a capability the model does not actually have. Plan wave W8,
+  decision D6.
+- **Compaction has one shared cooldown across trigger families**: the `overflow`,
+  `quality` and `pending` triggers each counted their own cooldown, so they interleaved —
+  overflow at iteration N and quality at N+1 produced a gap of 1 at a cooldown of 3 (the
+  same runaway as after-tool compaction before the C2 fix, but *across* families; it is
+  visible in the W7 fixture as gaps 72→73 and 96→97). A single
+  `LoopState.lastCompactionIteration` now gates every scheduled trigger, and reactive
+  (context-length) compaction moves the same clock, so no two compactions — of any family —
+  fall closer than `FORCED_COMPACTION_COOLDOWN`. The per-family cooldowns stay; the shared
+  one complements them. New gate `tests/compaction-cooldown-invariant.test.ts` drives
+  the predicates over a synthetic always-overflowing loop-state: 20 firings before the fix
+  (ceiling 10, gap 1), 10 firings with gaps of 3 after. Plan wave W4.
+- **Platform-conditional skips are declared, and a POSIX lane guards the rest**: the
+  gated tree skipped tests for CI, symlinks, Chromium and win32 without a single place
+  saying why, and releases ship for five platforms while nothing checked posix behaviour.
+  New gate `tests/arch/platform-skips.test.ts` declares every conditional skip
+  (`skipIf`/`skip`/`it`-or-`it.skip` helpers/inline `platform() !== "win32"` guards) with a
+  reason and fails on an undeclared skip or a stale row — the same pattern as the W9
+  double manifest. The W5 diagnose signatures now each name a direct test in
+  `SIGNATURE_COVERAGE`; `tool_failure_repeat` and `prompt_block_dropped` had none and got
+  real tests. A `quality:posix` lane (`.github/workflows/quality.yml`, ubuntu-latest) runs
+  `bun test tests/arch tests/core tests/tools`. Plan wave W6, decision D4.
+- **Style rules now have a guard or a declared reason**: half of `docs/agents/code-style.md`
+  was unenforced — including its headline rule that `as any`/`as unknown as` are banned,
+  violated 36 times in `src/` with no baseline. New gate
+  `tests/arch/style-rules.test.ts` requires every section of the style doc to be tied to a
+  test or declared with a reason, and adds three counters: an `src/` cast baseline, a
+  per-file budget of silent catches (25, each with a reason — the doc's rule #14), and a
+  declaration of the ten `as unknown as *Host` seams in `src/core/agent.ts`. Those seams
+  are *not* removable: `PromptPhaseHost`/`TurnRunHost`/`ProviderPhaseHost` are live mutable
+  views whose scalar fields the phase writes back into `Agent`, so a literal object would
+  copy the field and silently drop the write — the compiler would check less, not more.
+  They are therefore declared with that reason, and an undeclared one fails the gate.
+  Plan wave W12.
+- **Critic timeout now outlives the request it wraps**: the default equalled the
+  provider's own request deadline, so the wrapper always lost the race and the
+  `call_timeout` diagnostic — the only record that the critic had to be cut off —
+  was unreachable by construction. The default is now
+  `LLM_REQUEST_TIMEOUT_MS + WRAPPER_OVERHEAD_MS`, and a new gate
+  (`tests/arch/timeout-relations.test.ts`) enforces the relation structurally: the
+  default must reference the constant rather than repeat the number, otherwise the
+  check would be tautological. The reachability test now runs at the default on fake
+  timers instead of an invented 30 ms. Plan wave W2, decision D7.
+- **Guidance must match enforcement**: a new gate
+  (`tests/arch/guidance-enforcement.test.ts`) checks both directions — every
+  operator declared dangerous in the bash policy is actually rejected by the
+  validator, and the operator list in the tool description is a subset of what
+  the policy blocks. Divergences between the three policy lists, and entries in
+  the list that a shorter earlier entry always shadows (`2>` behind `>`), must be
+  declared with a reason rather than left as folklore. Plan wave W1.
+- **Replay harness with loop invariants**: `tests/replay/` replays the
+  anonymised session fixture against a scripted provider and asserts loop
+  invariants rather than values — compaction cooldown, no repeated
+  `SECURITY BLOCKED` pattern, repeated tool failures, critic degradation, claim
+  retries, LLM calls per turn. A test asserts that every signature
+  `mma session diagnose` finds on a fixture has an invariant that fires on it,
+  which is the bridge from "a live session went wrong" to "a test fails". The
+  suite is wired into CI as its own step so it cannot silently drop out of the
+  gate. Plan wave W7.
+- **Doubles can no longer fake coverage**: a new gate
+  (`tests/arch/double-honesty.test.ts`) fails when the `ContextManager` double in
+  `tests/core/agent.test.ts` silently omits a method the real class has — each
+  omission must be recorded with a reason — and when a seam test
+  (`criticOverride`, `agentFactory`, `createMockDeps`) has no paired test on the
+  real path. The `module-boundaries` gate now scans `src/core/**` for direct
+  tool-handler calls, holding the zero instead of merely asserting it. The
+  unsafe-cast count in `tests/core` dropped from 193 to 138 and is now capped by
+  a baseline that may only shrink. Plan wave W9.
+- **Fail-open signals now leave a trace**: the hallucination judge's fail-open
+  (provider down, timeout, unparseable answer) used to degrade to `pass`
+  silently — indistinguishable from "the model was consistent". It now records
+  `hallucination_judge_degraded` in `session.jsonl`, as does the loss of tool
+  evidence used for claim checking. The reasoning/context probes in
+  `provider-phase` log their failure with the cause instead of returning
+  `false`/`null` as if the probe had answered. A new architecture gate
+  (`tests/arch/observability-coverage.test.ts`) reads the closed `DiagnosticEvent`
+  union and fails if any signal has no test behind it or is missing from
+  `docs/agents/observability.md`, so a new fail-open cannot be added silently.
+  Plan wave W10.
+- **`mma session diagnose <id> --json`**: reads a session log and reports the
+  failure signatures that caused real fixes — compaction stalls, prompt blocks
+  dropped by the budget, critic degradation, repeated tool failures, repeated
+  `SECURITY BLOCKED` patterns, and claim retries. Read-only by construction, and
+  `--json` is required so the output format stays a contract. The signature
+  catalog lives in `docs/agents/observability.md`. Spec:
+  `docs/specs/2026-10-15-session-diagnose-design.md`, plan wave W5.
+- **Outbound network policy (SSRF)**: calls the harness makes on its own — the
+  audit webhook and the `/v1/tasks` push callback — now go through one policy
+  point (`src/modules/security/outbound-policy.ts`) instead of raw `fetch`. It is
+  fail-closed and independent of `security.network.enabled`: loopback and private
+  ranges are denied unless `security.network.allowPrivateOutbound` is set
+  explicitly. A `callbackUrl` of `http://127.0.0.1:PORT/…` is rejected with 422 at
+  submit time and never retried; refusals are logged as a `Diagnostic`
+  (`kind: "blocked"`, with cause). Spec:
+  `docs/specs/2026-10-15-outbound-policy-design.md`, plan wave W13.
 - **Trace tab detail**: the trace pane now streams the model's reasoning as its
   own row (`thinking… N chars`) and shows a compaction before/after report —
   `tokens 12000→8000 (−4000), quality 70→88, messages 40→20, turns −18/+6,

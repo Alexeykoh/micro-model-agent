@@ -9,6 +9,7 @@ import {
 } from "../../src/modules/security/audit-notifier";
 import type { AuditLogEntry } from "../../src/modules/security/audit-log";
 import { defaultOutputBus, type OutputEvent } from "../../src/output";
+import { DEFAULT_SECURITY_CONFIG } from "../../src/config/security";
 
 const TEST_DIR = join(__dirname, "test-audit-notifier");
 const TEST_FILE = join(TEST_DIR, "audit-notifications.jsonl");
@@ -197,7 +198,13 @@ describe("AuditNotifier", () => {
       }) as typeof fetch;
       vi.useFakeTimers();
       try {
-        notifier.updateConfig({ webhookUrl: "http://localhost:1/hook", maxRetries: 2 });
+        // Адресат должен пройти политику исходящих вызовов (W13); тест проверяет
+        // ретраи, а не SSRF, поэтому берём публичный домен с подменённым fetch.
+        notifier.updateConfig({
+          webhookUrl: "https://example.com/hook",
+          maxRetries: 2,
+          networkConfig: DEFAULT_SECURITY_CONFIG.network,
+        });
         const entry: AuditLogEntry = {
           timestamp: new Date().toISOString(),
           action: "security_block",

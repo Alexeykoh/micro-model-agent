@@ -1,6 +1,6 @@
 // Сборка АКТИВНОГО провайдера из конфига (bootstrap и hot-swap — один путь).
 // src/modules/providers/factory.ts
-import type { AppConfig } from "../../config/types";
+import type { AppConfig, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
 import { ProviderManager } from "./manager";
@@ -24,13 +24,15 @@ export interface BuiltProvider {
 export function buildActiveProvider(
   config: AppConfig,
   logger?: Logger,
-  opts?: { getSessionId?: () => string | undefined },
+  opts?: { getSessionId?: () => string | undefined; probeCapabilities?: () => ModelCapabilities | undefined },
 ): BuiltProvider {
   const manager = new ProviderManager(config.provider, {
     contextWindow: config.contextWindow,
     retry: config.retry,
     rateLimits: config.security?.rateLimits,
     getSessionId: opts?.getSessionId,
+    modelCapabilities: config.modelCapabilities,
+    probeCapabilities: opts?.probeCapabilities,
     logger,
   });
   manager.setModel(config.model);

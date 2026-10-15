@@ -7,6 +7,7 @@
  */
 import { Agent } from "../agent";
 import type { AgentDeps } from "../agent";
+import { moduleOf } from "../../output";
 import type { AppConfig, ReasoningStrategy } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
@@ -16,6 +17,7 @@ import type { PluginManager } from "../../modules/plugins/manager";
 import type { ContextManager } from "../../core/context/manager";
 import type { SessionManager } from "../../modules/session/index";
 import type { ToolContext } from "../../tools/types";
+import { admissionDiagnosticSink } from "./tool-context";
 import type { PromptBlock } from "../types";
 import type { ContextProbeResult } from "../../llm/model-loader";
 import type { MemoryStore } from "../../modules/memory/store";
@@ -137,6 +139,7 @@ export async function assembleAgent(
       type: event,
       content: diag.cause ?? diag.operation,
       source: diag.source,
+      module: moduleOf(diag.source),
       operation: diag.operation,
       errorKind: diag.kind,
       cause: diag.cause,
@@ -172,6 +175,9 @@ export async function assembleAgent(
     reasoningStrategy,
     planSummary: () => execModule.getPlanSummary(),
     toolCtx,
+    // INV-15: деградации проверки заявлений идут в сессию тем же стоком,
+    // что и прочие сигналы петли.
+    onDiagnostic: admissionDiagnosticSink(sessionManager),
   };
 
   const agent = new Agent(agentDeps);

@@ -148,7 +148,7 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     updater: { enabled: false, autoInstall: false, intervalMs: 0 },
   };
 
-  return {
+  const deps: AgentDeps = {
     config,
     llmProvider: mockProvider,
     toolExecutor: mockToolExecutor,
@@ -158,8 +158,19 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     logger: mockLogger,
     baseDir: "/tmp",
     promptBlocks: [],
-    ...overrides,
   };
+
+  return overrides ? { ...deps, ...overrides } : deps;
+}
+
+/**
+ * Мокнутая функция под видом её настоящего типа: даёт доступ к `.mock.calls`,
+ * не отключая проверку аргументов, как это делал `as any`. `vi.mocked` в
+ * Bun-раннере vitest отсутствует, поэтому каст локальный и типизированный,
+ * а не `any` в восьми местах вызова.
+ */
+function mocked<T extends (...args: never[]) => unknown>(fn: T): MockInstance<T> {
+  return fn as unknown as MockInstance<T>;
 }
 
 describe("Agent", () => {
@@ -167,7 +178,7 @@ describe("Agent", () => {
     const deps = createMockDeps({
       moduleRegistry: new ModuleRegistry().register({ name: "lsp", getSystemPromptBlock: () => null }),
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const mod = agent.getModule("lsp");
     expect(mod).toBeDefined();
     expect(agent.getModule("nope")).toBeUndefined();
@@ -175,7 +186,7 @@ describe("Agent", () => {
 
   it("callerProvenance prefers the live provider name (post-failover)", () => {
     const deps = createMockDeps({ getProviderName: () => "live" });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     expect(agent.callerProvenance()).toEqual({ provider: "live", model: "test-model" });
   });
 
@@ -203,7 +214,7 @@ describe("Agent", () => {
         contextManager: { ...base.contextManager, resize },
         sessionManager: { getActiveMeta: () => ({ id: "s1" }), setEffectiveContext },
       });
-      const agent = new Agent(deps as any);
+      const agent = new Agent(deps);
       await agent.setProvider("lm studio");
       expect(resize).toHaveBeenCalled();
       expect(setEffectiveContext).toHaveBeenCalled();
@@ -214,7 +225,7 @@ describe("Agent", () => {
 
   it("returns text response for simple text LLM output", async () => {
     const deps = createMockDeps();
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("hello");
     expect(result.text).toBe("Hello from mock LLM");
     expect(result.success).toBe(true);
@@ -229,13 +240,13 @@ describe("Agent", () => {
     };
     const lazyFn = vi.fn().mockResolvedValue([lazyBlock]);
     const deps = createMockDeps({ lazyPromptBlocks: lazyFn });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
 
     await agent.run("hello");
     await agent.run("again");
 
     expect(lazyFn).toHaveBeenCalledTimes(1);
-    const addMessage = deps.contextManager.addMessage as any;
+    const addMessage = mocked(deps.contextManager.addMessage);
     const systemCall = addMessage.mock.calls.find((c: any[]) => c[0].role === "system");
     expect(systemCall[0].content).toContain("STARTUP-BASELINE");
   });
@@ -243,7 +254,7 @@ describe("Agent", () => {
   it("handles lazyPromptBlocks resolving to an empty array", async () => {
     const lazyFn = vi.fn().mockResolvedValue([]);
     const deps = createMockDeps({ lazyPromptBlocks: lazyFn });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
 
     await agent.run("hello");
 
@@ -264,7 +275,7 @@ describe("Agent", () => {
       countTokens: vi.fn().mockReturnValue(10),
     };
     const deps = createMockDeps({ llmProvider: mockProvider });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("task");
     expect(result.success).toBe(true);
     // prompt falls back to the estimated context size (mock returns 50)
@@ -321,7 +332,7 @@ describe("Agent", () => {
         }),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("run the check");
     // The retry-flagged final response must still be surfaced as the result
     expect(result.success).toBe(true);
@@ -352,14 +363,14 @@ describe("Agent", () => {
       countTokens: vi.fn().mockReturnValue(10),
     };
     const deps = createMockDeps({ llmProvider: mockProvider, exitOnComplete: true });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("do it");
 
     expect(deps.logger.diagnostic).toHaveBeenCalledWith(
       "warn",
       expect.stringContaining("Invalid JSON in tool_call arguments"),
     );
-    const addMessage = deps.contextManager.addMessage as any;
+    const addMessage = mocked(deps.contextManager.addMessage);
     const nudge = addMessage.mock.calls.find(
       (c: any[]) =>
         typeof c[0]?.content === "string" && c[0].content.includes("invalid JSON arguments"),
@@ -427,7 +438,7 @@ describe("Agent", () => {
         }),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("finish the plan");
     // The premature "Done!" must NOT end the run: the model gets another
     // chance and the later substantive answer becomes the result.
@@ -496,7 +507,7 @@ describe("Agent", () => {
         setToolTokens: vi.fn(),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("run twice");
     // The repeated call must NOT have stopped the run — the model got a
     // chance to answer and its final text is preserved.
@@ -545,7 +556,7 @@ describe("Agent", () => {
       exitOnComplete: true,
       config: { ...createMockDeps().config, maxToolIterations: 20 },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("run echo tick 3 times");
     expect(mockProvider.chat).toHaveBeenCalledTimes(4);
     expect(result.text).toBe("ran 3 times");
@@ -605,7 +616,7 @@ describe("Agent", () => {
         setToolTokens: vi.fn(),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("run twice");
     // Without exitOnComplete the run must not be aborted, but the model
     // still gets the nudge so it stops burning iterations on identical calls.
@@ -640,7 +651,7 @@ describe("Agent", () => {
       llmProvider: mockProvider,
       config: { ...createMockDeps().config, maxToolIterations: 20 },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("loop forever");
     // Nudged on each repeat, then hard-stopped at
     // MAX_REPEATED_TOOL_CALLS_INTERACTIVE (5): never a 7th provider call.
@@ -717,7 +728,7 @@ describe("Agent", () => {
         getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
       } as any,
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("build repeatedly");
 
     // 10 tool iterations + final answer — the run is NOT hard-stopped.
@@ -759,7 +770,7 @@ describe("Agent", () => {
       countTokens: vi.fn().mockReturnValue(10),
     };
     const deps = createMockDeps({ llmProvider: mockProvider });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("task");
     expect(mockProvider.chat).toHaveBeenCalledTimes(3);
     expect(result.text).toBe("Final answer");
@@ -779,7 +790,7 @@ describe("Agent", () => {
       countTokens: vi.fn().mockReturnValue(10),
     };
     const deps = createMockDeps({ llmProvider: mockProvider });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("task");
     // 1 initial + 2 retries, then exhausted
     expect(mockProvider.chat).toHaveBeenCalledTimes(3);
@@ -828,7 +839,7 @@ describe("Agent", () => {
       llmProvider: mockProvider as any,
       toolExecutor: mockExecutor as any,
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("do something");
     expect(result.text).toBe("Done after tool");
     expect(mockExecutor.execute).toHaveBeenCalledTimes(1);
@@ -877,7 +888,7 @@ describe("Agent", () => {
       toolExecutor: mockExecutor as any,
       config: { ...createMockDeps().config, maxToolIterations: 2 },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("loop forever");
     expect(result.success).toBe(false);
     expect(result.error).toContain("iteration");
@@ -922,7 +933,7 @@ describe("Agent", () => {
       toolExecutor: mockExecutor as any,
       config: { ...createMockDeps().config, maxToolIterations: 2 },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("do it");
     expect(result.success).toBe(true);
     expect(result.text).toBe("Final answer on last iteration");
@@ -966,10 +977,10 @@ describe("Agent", () => {
       llmProvider: mockProvider as any,
       toolExecutor: mockExecutor as any,
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("write big file");
 
-    const addMessage = deps.contextManager.addMessage as any;
+    const addMessage = mocked(deps.contextManager.addMessage);
     const summaryText = addMessage.mock.calls
       .filter(
         (c: any[]) =>
@@ -1017,7 +1028,7 @@ describe("Agent", () => {
       llmProvider: mockProvider as any,
       toolExecutor: mockExecutor as any,
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("do something");
 
     // The session survives: the thrown tool became a failed result and the
@@ -1026,7 +1037,7 @@ describe("Agent", () => {
     expect(result.success).toBe(true);
     expect(result.text).toBe("recovered after tool throw");
 
-    const toolMsg = (deps.contextManager.addMessage as any).mock.calls.find(
+    const toolMsg = (mocked(deps.contextManager.addMessage)).mock.calls.find(
       (c: any[]) => c[0]?.role === "tool" && c[0]?.tool_call_id === "call-1",
     );
     expect(toolMsg).toBeDefined();
@@ -1065,7 +1076,7 @@ describe("Agent", () => {
       llmProvider: mockProvider as any,
       toolExecutor: mockExecutor as any,
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("two iterations");
     // Two LLM calls with no usage → the prompt estimate must be the SUM of the
     // per-iteration context sizes (50 + 50), not just the last snapshot.
@@ -1104,7 +1115,7 @@ describe("Agent", () => {
       llmProvider: mockProvider as any,
       hallucinationDetector: detector as any,
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("delete everything");
     expect(result.success).toBe(false);
     expect(result.error).toContain("blocked");
@@ -1151,7 +1162,7 @@ describe("Agent", () => {
       hallucinationDetector: detector as any,
       config: { ...createMockDeps().config, exitOnComplete: true },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("task");
     expect(mockProvider.chat).toHaveBeenCalledTimes(2);
     expect(result.success).toBe(true);
@@ -1181,14 +1192,14 @@ describe("Agent", () => {
     };
 
     const deps = createMockDeps({ llmProvider: mockProvider as any });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("task");
 
     expect(mockProvider.chat).toHaveBeenCalledTimes(2);
     expect(result.success).toBe(true);
     expect(result.text).toBe("Recovered answer");
     // The localized error reason is fed back as a system-summary message.
-    const addMessage = deps.contextManager.addMessage as any;
+    const addMessage = mocked(deps.contextManager.addMessage);
     expect(addMessage).toHaveBeenCalled();
     expect(
       addMessage.mock.calls.some(
@@ -1211,7 +1222,7 @@ describe("Agent", () => {
     };
 
     const deps = createMockDeps({ llmProvider: mockProvider as any });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("task");
 
     // 1 initial + 2 retries, then the fatal path.
@@ -1234,7 +1245,7 @@ describe("Agent", () => {
     };
 
     const deps = createMockDeps({ llmProvider: mockProvider as any });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const reasoning: string[] = [];
     const text: string[] = [];
     await agent.run(
@@ -1269,7 +1280,7 @@ describe("Agent", () => {
     };
 
     const deps = createMockDeps({ llmProvider: mockProvider as any });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const text: string[] = [];
     const result = await agent.run("test", (c) => text.push(c));
 
@@ -1312,7 +1323,7 @@ describe("Agent", () => {
       getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
     };
     const deps = createMockDeps({ llmProvider: mockProvider, toolExecutor });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const meta: string[] = [];
     await agent.run("read it", undefined, (m) => meta.push(m));
 
@@ -1348,7 +1359,7 @@ describe("Agent", () => {
       getRegistry: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
     };
     const deps = createMockDeps({ llmProvider: mockProvider, toolExecutor });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const meta: string[] = [];
     await agent.run("run it", undefined, (m) => meta.push(m));
 
@@ -1372,7 +1383,7 @@ describe("Agent", () => {
     const config = createMockDeps().config;
     config.showReasoning = false;
     const deps = createMockDeps({ llmProvider: mockProvider as any, config });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const meta: string[] = [];
     const reasoning: string[] = [];
     await agent.run(
@@ -1402,7 +1413,7 @@ describe("Agent", () => {
     };
 
     const deps = createMockDeps({ llmProvider: mockProvider as any });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const phases: string[] = [];
     await agent.run("test", undefined, undefined, undefined, (p) => phases.push(p));
 
@@ -1422,7 +1433,7 @@ describe("Agent", () => {
     };
 
     const deps = createMockDeps({ llmProvider: mockProvider as any });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const phases: string[] = [];
     const result = await agent.run("test", undefined, undefined, undefined, (p) => phases.push(p));
 
@@ -1432,7 +1443,7 @@ describe("Agent", () => {
 
   it("dispatches onPhase to plugins", async () => {
     const deps = createMockDeps();
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("test");
 
     const calls = (deps.pluginManager.runOnPhase as any).mock.calls;
@@ -1442,7 +1453,7 @@ describe("Agent", () => {
 
   it("dispatches onAfterThink with the parsed response", async () => {
     const deps = createMockDeps();
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("test");
 
     const calls = (deps.pluginManager.runOnAfterThink as any).mock.calls;
@@ -1460,10 +1471,10 @@ describe("Agent", () => {
         runOnBuildPrompt: vi.fn().mockReturnValue(["### Plugin rule: be brief"]),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("test");
 
-    const added = deps.contextManager.addMessage as any;
+    const added = mocked(deps.contextManager.addMessage);
     const systemMessage = added.mock.calls.find((c: any[]) => c[0]?.role === "system");
     expect(systemMessage).toBeDefined();
     expect(systemMessage[0].content).toContain("Plugin rule: be brief");
@@ -1501,7 +1512,7 @@ describe("Agent", () => {
         countTokens: vi.fn().mockReturnValue(10),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("write a file");
 
     expect(result.success).toBe(true);
@@ -1541,7 +1552,7 @@ describe("Agent", () => {
         countTokens: vi.fn().mockReturnValue(10),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const chunks: string[] = [];
     const meta: string[] = [];
     const reasoning: string[] = [];
@@ -1601,7 +1612,7 @@ describe("Agent", () => {
       toolExecutor: mockExecutor as any,
       toolTags: ["file", "code"],
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("hello");
 
     expect(mockExecutor.getToolDefinitions).toHaveBeenCalledWith(["file", "code"]);
@@ -1615,7 +1626,7 @@ describe("Agent", () => {
     };
 
     const deps = createMockDeps({ toolExecutor: mockExecutor as any });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("hello");
 
     expect(mockExecutor.getToolDefinitions).toHaveBeenCalledWith(undefined);
@@ -1623,7 +1634,7 @@ describe("Agent", () => {
 
   it("runs the single-agent loop", async () => {
     const deps = createMockDeps();
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("hello");
     expect(result.text).toBe("Hello from mock LLM");
     expect(result.success).toBe(true);
@@ -1674,7 +1685,7 @@ describe("Agent", () => {
         setToolTokens: vi.fn(),
       } as any,
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("hello");
     // A cooldown of >= 3 iterations means at most ~7 forced compactions in
     // 20 iterations, NOT one per iteration (which was the death spiral).
@@ -1707,7 +1718,7 @@ describe("Agent", () => {
         countTokens: vi.fn().mockReturnValue(10),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("hello");
     expect(result.success).toBe(false);
     expect(result.error).toBeTruthy();
@@ -1743,7 +1754,7 @@ describe("Agent", () => {
         countTokens: vi.fn().mockReturnValue(10),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("hello");
 
     expect(auditCalls).toBe(3);
@@ -1798,7 +1809,7 @@ describe("Agent", () => {
         countTokens: vi.fn().mockReturnValue(10),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("hello");
     // iter 3 compared "gamma" against the actual previous output "beta",
     // not the stale accepted answer "alpha" from the first pass.
@@ -1857,7 +1868,7 @@ describe("Agent", () => {
         countTokens: vi.fn().mockReturnValue(10),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const result = await agent.run("hello");
     // The model reached the audit-retry cap (3) and reported an audit
     // failure — it was NOT cut off early with a response_blocked error.
@@ -1918,7 +1929,7 @@ describe("Agent", () => {
       memoryStore: new MemoryStore(join(tmpBase, "memory")),
       config: { ...createMockDeps().config, maxToolIterations: 6 },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("retry failing tool");
 
     const errorsMd = join(tmpBase, "memory", "errors.md");
@@ -1997,7 +2008,7 @@ describe("Agent", () => {
       memoryStore: new MemoryStore(join(tmpBase, "memory")),
       config: { ...createMockDeps().config, maxToolIterations: 6 },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     await agent.run("delete old.ts and verify");
 
     // file_info failures should NOT trigger a memory rule
@@ -2081,7 +2092,7 @@ describe("Agent", () => {
         setToolTokens: vi.fn(),
       },
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
 
     const toolEvents: string[] = [];
     const runPromise = agent.run("write a file", undefined, undefined, (ev: any) => {
@@ -2192,7 +2203,7 @@ describe("Agent", () => {
       sessionManager: sessionManagerMock as any,
       baseDir: "/tmp",
     });
-    const agent = new Agent(deps as any);
+    const agent = new Agent(deps);
     const addMessage = deps.contextManager.addMessage;
 
     const runPromise = agent.run("do two things");

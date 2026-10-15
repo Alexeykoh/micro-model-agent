@@ -219,8 +219,7 @@ export async function runLlmPhase(
       logger.diagnostic("info", "LLM call aborted (interrupt)");
       return { kind: "break" };
     }
-    // Реактивная компакция: провайдер вернул context-length ошибку — один раз
-    // форсированно уплотняем и повторяем (circuit-breaker на ход).
+    // Реактивная компакция: context-length ошибка — один раз уплотняем и повторяем.
     if (
       err instanceof LlmError &&
       err.recoverable &&
@@ -229,6 +228,7 @@ export async function runLlmPhase(
     ) {
       state.reactiveCompactionUsed = true;
       state.iterRecoverableLlmError = true;
+      state.lastCompactionIteration = state.iteration; // общий клок компакции (W4)
       const reactive = contextManager.compactAdaptive?.({
         toolResultKeep: contextManager.getToolResultKeep?.() ?? 6,
         minReduction: 0,

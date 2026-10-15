@@ -366,9 +366,7 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
     (c) => c.skills.budget,
     (c, v) => { c.skills.budget = v as number; }),
 
-  // Deny-list выключенных плагинов. Эффект `plugins.gate` применяется не
-  // пересборкой агента, а `applyConfigEffects` (см. registry.ts: setConfigValue),
-  // поэтому и REPL `/config`, и CLI, и веб-тумблер получают его одним путём.
+  // Deny-list плагинов: эффект `plugins.gate` идёт через `applyConfigEffects`.
   {
     ...list(
       "plugins.disabled",
@@ -597,7 +595,9 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
   int("security.network.maxResponseSize", "security", 1024, 1000000, 1024, false,
     (c) => c.security?.network.maxResponseSize ?? DEFAULT_SECURITY_CONFIG.network.maxResponseSize,
     (c, v) => { sec(c).network.maxResponseSize = v as number; }),
-
+  bool("security.network.allowPrivateOutbound", "security", false,
+    (c) => c.security?.network.allowPrivateOutbound ?? DEFAULT_SECURITY_CONFIG.network.allowPrivateOutbound,
+    (c, v) => { sec(c).network.allowPrivateOutbound = v as boolean; }),
   jsonShape("security.contentScan.dangerousPatterns", "security",
     (c) => (c.security?.contentScan.dangerousPatterns ?? DEFAULT_SECURITY_CONFIG.contentScan.dangerousPatterns)
       .map((r) => r.source),

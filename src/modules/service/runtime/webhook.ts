@@ -7,6 +7,9 @@
  * не ретраим (получатель отверг навсегда).
  */
 import { createHmac, randomInt } from "node:crypto";
+import type { NetworkSecurityConfig } from "../../../config/types";
+import type { Diagnostic } from "../../../output/types";
+import { checkOutboundUrl } from "../../security/outbound-policy";
 
 /** HMAC-SHA256 hex по `timestamp + "." + body`. */
 export function signature(secret: string, timestamp: string, body: string): string {
@@ -24,12 +27,18 @@ export interface WebhookDeliveryOptions {
   fetchImpl?: typeof fetch;
   /** Тестовый шов: пауза между ретраями (для быстрых тестов). */
   sleep?: (ms: number) => Promise<void>;
+  /** Доменная политика и флаг `allowPrivateOutbound` для проверки адресата (D5). */
+  networkConfig?: NetworkSecurityConfig;
+  /** Куда записать отказ политики (INV-14). */
+  onDiagnostic?: (diag: Diagnostic) => void;
 }
 
 export interface WebhookDeliveryResult {
   ok: boolean;
   attempts: number;
   lastStatus?: number;
+  /** Адресат отклонён политикой исходящих вызовов; попыток не было. */
+  blocked?: boolean;
 }
 
 const DEFAULT_MAX_ATTEMPTS = 4;
@@ -80,6 +89,17 @@ export async function deliverWebhook(opts: WebhookDeliveryOptions): Promise<Webh
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   let lastStatus: number | undefined;
+
+  // Политика исходящих вызовов (W13): адресат приходит из тела /v1/tasks, то
+  // есть из недоверенного источника. Отказ не ретраится — адресат не изменится.
+  const check = checkOutboundUrl(opts.url, "module:service", {
+    networkConfig: opts.networkConfig,
+    operation: "service.callback",
+    ...(opts.onDiagnostic ? { onDiagnostic: opts.onDiagnostic } : {}),
+  });
+  if (!check.allowed) {
+    return { ok: false, attempts: 0, blocked: true };
+  }
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const { action, status } = await attemptDelivery(opts, fetchImpl);

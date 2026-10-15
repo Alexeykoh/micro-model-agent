@@ -12,39 +12,31 @@ import { join } from "path";
 import { gzipSync, gunzipSync } from "zlib";
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionEncryptionConfig } from "../../config/types";
-import type { DiagnosticEvent } from "../../output";
+import type { DiagnosticEvent, Source } from "../../output";
 import { SessionFileEncryptor } from "../security/session-encryption";
+
+/** События онбординга (`meet`/`init`) — явный союз вместо `onboarding_${string}` (W11). */
+export type OnboardingEvent =
+  | "onboarding_meet_start" | "onboarding_meet_done"
+  | "onboarding_init_start" | "onboarding_init_done";
 
 /** Запись session-журнала (инструменты, usage, critic, пробы и т.д.). */
 export interface SessionLogEntry {
   ts: string;
   type:
-    | "tool_call"
-    | "tool_result"
-    | "assistant"
-    | "reasoning"
-    | "user"
-    | "system"
-    | "error"
-    | "compaction"
-    | "tool_defs"
-    | "audit"
-    | "plan"
-    | "context"
-    | "llm_usage"
-    | "session_start"
-    | "baseline_typecheck"
-    | "reasoning_control"
-    | "context_probe"
-    | "output"
-    | "critic_check"
-    | "critic_verdict"
-    | "critic_escalation"
-    | DiagnosticEvent
-    | "claim_retry"
-    | "service_task"
-    | `onboarding_${string}`
-    | `module_${string}`;
+    | "tool_call" | "tool_result" | "assistant" | "reasoning"
+    | "user" | "system" | "error" | "compaction"
+    | "tool_defs" | "audit" | "plan" | "context"
+    | "llm_usage" | "session_start" | "baseline_typecheck"
+    | "reasoning_control" | "context_probe" | "output"
+    | "critic_check" | "critic_verdict" | "critic_escalation"
+    | DiagnosticEvent | "claim_retry" | "service_task"
+    | OnboardingEvent;
+  /**
+   * Источник записи (INV-13), обязателен. `llm_usage` пишет origin измерения
+   * отдельно, а не в это поле: provenance ≠ происхождение числа (W11).
+   */
+  source: Source;
   /**
    * Модуль-владелец записи (INV-13), без префикса `module:` — например `mcp`,
    * `audit`, `security`. Заполняется для записей, чей `source` — `module:<name>`.
@@ -111,7 +103,8 @@ export interface SessionLogEntry {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
-  source?: string;
+  /** Origin измерения/решения (`usage`: api|estimate), НЕ provenance записи. */
+  origin?: string;
   durationMs?: number;
   /** Стабильность префикса промпта (0..1), client-side монитор кеша. */
   cacheStable?: number;
@@ -135,7 +128,7 @@ export interface SessionLogEntry {
   // Поля baseline_typecheck
   passed?: boolean;
   message?: string;
-  // Поля error (диагностика INV-14); `source` общий с llm_usage.
+  // Поля error (диагностика INV-14); provenance — общий `source` (INV-13).
   operation?: string;
   errorKind?: string;
   cause?: string;

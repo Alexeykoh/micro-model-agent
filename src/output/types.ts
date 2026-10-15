@@ -23,7 +23,8 @@ export type DiagnosticEvent =
   | "verify_error"
   | "tool_attempt"
   | "admission_degraded"
-  | "context_degraded";
+  | "context_degraded"
+  | "hallucination_judge_degraded";
 
 /**
  * Единый объект ошибки/диагностики (INV-14): не строка, а `source` + `operation`

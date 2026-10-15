@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { CriticClient } from "../../../src/modules/critic/client";
 import type { EvidencePack } from "../../../src/modules/critic/types";
 import type { LLMProvider } from "../../../src/llm/provider";
+import { DEFAULTS } from "../../../src/config/defaults";
+import { LLM_REQUEST_TIMEOUT_MS } from "../../../src/config/timeouts";
 
 /** Пауза, уважающая отмену: провайдер обязан реагировать на abort, иначе таймаут не проверить. */
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -164,6 +166,32 @@ describe("CriticClient budget (§5.8)", () => {
     expect(logs.some((l) => l.includes("critic_degraded"))).toBe(true);
     // Таймер виден как call_timeout, а не только как невнятный llm_error/abort.
     expect(logs.some((l) => l.includes("call_timeout"))).toBe(true);
+  });
+
+  it("the default timeout reaches call_timeout, not the provider deadline (W2)", async () => {
+    // Предыдущий тест берёт выдуманные 30 мс: он доказывает, что ветка есть,
+    // но не то, что она достижима с ДЕФОЛТА. Пока `critic.timeoutMs` равнялся
+    // `LLM_REQUEST_TIMEOUT_MS`, обёртка всегда проигрывала гонку провайдеру, и
+    // `call_timeout` не мог появиться в бою ни разу — при зелёном тесте.
+    const defaultTimeout = DEFAULTS.critic.timeoutMs;
+    expect(defaultTimeout).toBeGreaterThan(LLM_REQUEST_TIMEOUT_MS);
+    // Фейковые часы: дефолт — это 125 секунд реального ожидания, а лимит
+    // теста — 5. `advanceTimersByTimeAsync` в раннере Bun-vitest отсутствует,
+    // поэтому прокручиваем синхронно и даём промису разобраться через microtask.
+    vi.useFakeTimers();
+    try {
+      const provider = scripted([finalOk], { delayMs: defaultTimeout + 1000 });
+      const logs: string[] = [];
+      const client = new CriticClient({ provider, onDiagnostic: (m) => logs.push(m) });
+      const pending = client.verify(bigPack());
+      await Promise.resolve();
+      vi.advanceTimersByTime(defaultTimeout + 10);
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+      expect(await pending).toBeNull();
+      expect(logs.some((l) => l.includes("call_timeout"))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("defaults maxTokens high enough to hold a verdict with issues", async () => {
