@@ -161,11 +161,12 @@
 - [x] **W10.3** Каждый пункт таблицы молчащих `catch` (ниже) — либо диагностика, либо строка
       в `observability.md`, либо запись в `debt.md`.
 - [x] **W10.4** Каждый sink `ToolContext` получает тест, который реально его вызывает.
-- [ ] **W10.5** (D8) `path-validator.ts:74,90` — fail-closed вместо `allowed: true`; проверить
-      все production-точки сборки `ToolContext`. → **вынесено в долг**
-      `path-validator-fail-open` (`docs/agents/debt.md`): смена затрагивает все точки
-      сборки `ToolContext`, включая тестовые и CLI-пути, и в W10 не проверяема;
-      триггер — W9 (шаг W9.5).
+- [x] **W10.5** (D8) `path-validator.ts:74,90` — fail-closed вместо `allowed: true`: нет
+      конфиг-секции → отказ (`No path security configuration (fail-closed)`), «защита выключена
+      явно» (`enabled: false`) по-прежнему пропускает, скоуп суб-агента действует всегда.
+      `ToolContext` в проде всегда имеет `config.security.paths` (дефолт), поэтому поведение
+      меняется только у сборок без секции. Гейты: `tests/security/path-validator.test.ts`,
+      `tests/tools/scope-check.test.ts`, `tests/tools/enforcement-path.test.ts`.
 
 Молчащие `catch` (возврат — на строку ниже указанной): `provider-phase.ts:252→253` (reasoning
 тихо выключен, при этом транзиентный `null` логируется тем же текстом, что и definitive
@@ -197,7 +198,7 @@ INV-15-сигнал (строка 24 `observability.md`), и **не встреч
 - [x] **W9.4** Список путей `src/core/agent/*`, недостижимых из-за заглушек
       (`needsCompaction: () => false`, пустые `getToolDefinitions`, `criticOverride`) — это вход
       для W7.
-- [ ] **W9.5** (D8) fail-closed — см. W10.5 → долг `path-validator-fail-open`.
+- [x] **W9.5** (D8) fail-closed — см. W10.5: сделано, долг `path-validator-fail-open` оплачен.
 - [x] **W9.6** Каждый тест с seam (`criticOverride` — все 4 теста `agent-critic`,
       `finalAudit` — 9 в `execution-plan-fixes`, `agentFactory` — 12) получает парный тест на
       реальный путь либо попадает в перечень непокрытых гейтов.

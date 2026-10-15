@@ -5,12 +5,15 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
+/** Секция есть, но паттерны выключены явно — не то же самое, что «секции нет» (D8). */
+const DISABLED = { enabled: false, denied: [], allowed: [] };
+
 describe("Path Validator", () => {
   const baseDir = "/home/user/project";
 
   describe("isPathInScope", () => {
     it("should allow paths within baseDir", () => {
-      const result = isPathInScope(baseDir, "src/index.ts", undefined, undefined);
+      const result = isPathInScope(baseDir, "src/index.ts", undefined, DISABLED);
       expect(result.allowed).toBe(true);
     });
 
@@ -100,7 +103,7 @@ describe("Path Validator", () => {
 
   describe("isPathWritable", () => {
     it("should allow writable paths within baseDir", () => {
-      const result = isPathWritable(baseDir, "src/index.ts", undefined, undefined);
+      const result = isPathWritable(baseDir, "src/index.ts", undefined, DISABLED);
       expect(result.allowed).toBe(true);
     });
 
@@ -173,14 +176,14 @@ describe("path-validator symlink containment", () => {
       writeFileSync(join(outside, "secret.txt"), "top secret");
 
       // Existing file reached through the symlink.
-      expect(isPathWritable(base, "link/secret.txt", undefined, undefined).allowed).toBe(false);
-      expect(isPathInScope(base, "link/secret.txt", undefined, undefined).allowed).toBe(false);
+      expect(isPathWritable(base, "link/secret.txt", undefined, DISABLED).allowed).toBe(false);
+      expect(isPathInScope(base, "link/secret.txt", undefined, DISABLED).allowed).toBe(false);
 
       // Not-yet-created file under the symlinked dir must also be blocked.
-      expect(isPathWritable(base, "link/new.txt", undefined, undefined).allowed).toBe(false);
+      expect(isPathWritable(base, "link/new.txt", undefined, DISABLED).allowed).toBe(false);
 
       // A direct child of baseDir is unaffected.
-      expect(isPathWritable(base, "ok.txt", undefined, undefined).allowed).toBe(true);
+      expect(isPathWritable(base, "ok.txt", undefined, DISABLED).allowed).toBe(true);
     } finally {
       rmSync(base, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });

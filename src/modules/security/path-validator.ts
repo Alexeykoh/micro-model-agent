@@ -70,8 +70,7 @@ export function isPathInScope(
     };
   }
 
-  // DEBT(path-validator-fail-open): нет конфиг-секции = «разрешено всё»
-  // (fail-closed затрагивает все точки сборки ToolContext, см. debt.md).
+  // Fail-closed (D8): нет секции — не «разрешено всё»; enabled:false и скоуп — как были.
   if (!securityConfig?.enabled) {
     // Скоуп суб-агента действует всё равно
     if (scope) {
@@ -86,6 +85,7 @@ export function isPathInScope(
         reason: "Path is not within the allowed scope for this sub-agent",
       };
     }
+    if (!securityConfig) return { allowed: false, reason: "No path security configuration (fail-closed)" };
     return { allowed: true };
   }
 
@@ -166,7 +166,7 @@ export function isPathWritable(
     };
   }
 
-  // Выключенная защита пропускает паттерны (DEBT(path-validator-fail-open)).
+  // Fail-closed (D8): нет конфиг-секции = отказ, а не «пропускаем паттерны».
   if (!securityConfig?.enabled) {
     // Скоуп суб-агента действует всё равно
     if (scope) {
@@ -179,6 +179,7 @@ export function isPathWritable(
         reason: "Path is not within the allowed scope for this sub-agent",
       };
     }
+    if (!securityConfig) return { allowed: false, reason: "No path security configuration (fail-closed)" };
     return { allowed: true };
   }
 
