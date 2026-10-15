@@ -22,6 +22,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   type through `SessionLogger` and asserts 100% attribution (and a `module:<name>`
   diagnostic carries `module` without the prefix), and checks the fixture anonymiser no
   longer drops provenance. Plan wave W11, decision D3.
+- **Config sections have one source of truth**: `applyReasoningCliOverride` built the
+  `reasoning` section from literals (`overrideCooldown: 3`, no `baseline`), silently
+  diverging from `DEFAULTS.reasoning` (`overrideCooldown: 5`) whenever `--reasoning` was
+  passed without a config section — so the CLI flag changed the cooldown. It now spreads
+  `DEFAULTS.reasoning` and overrides only `mode`. New gate
+  `tests/arch/default-single-source.test.ts` forbids bootstrap/agent from assembling a
+  config section out of literals (it must spread `DEFAULTS`/the base config); the gate is
+  structural, not value equality, because `DEFAULTS` contains `0/1/2/5/…` and those
+  literals are everywhere. `ProviderManager.pickFor` no longer reads raw provider presets
+  for `vision`/`tools`: it resolves them through the shared `resolveModelCapabilities`
+  (preset → live probe → user override), the same path the agent uses, so a provider is
+  no longer picked on a capability the model does not actually have. Plan wave W8,
+  decision D6.
 - **Critic timeout now outlives the request it wraps**: the default equalled the
   provider's own request deadline, so the wrapper always lost the race and the
   `call_timeout` diagnostic — the only record that the critic had to be cut off —

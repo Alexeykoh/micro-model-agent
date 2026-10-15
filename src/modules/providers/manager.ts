@@ -1,11 +1,12 @@
 // Менеджер провайдеров: активный провайдер + модель в рантайме, hot-swap, кеш сборки.
 // src/modules/providers/manager.ts
 import type { LLMProvider } from "../../llm/provider";
-import type { ProviderConfig, ProviderEntry, ReasoningStrategy } from "../../config/types";
+import type { ProviderConfig, ProviderEntry, ReasoningStrategy, ModelCapabilities } from "../../config/types";
 import type { ProviderRegistry } from "./registry";
 import type { ProviderCapabilities } from "./types";
 import { createProvider, defaultRegistry } from "./create";
 import { resolveCacheCapability } from "./cache";
+import { resolveModelCapabilities } from "./capabilities";
 import { BUILTIN_PROVIDERS } from "./presets";
 
 export interface ProviderManagerOptions {
@@ -15,6 +16,10 @@ export interface ProviderManagerOptions {
   registry?: ProviderRegistry;
   /** Живой id беседы, прокидывается провайдерам (`x-opencode-session`). */
   getSessionId?: () => string | undefined;
+  /** Конфиг-оверрайды возможностей по модели (`config.modelCapabilities`). */
+  modelCapabilities?: Record<string, ModelCapabilities>;
+  /** Живая native-проба возможностей активной модели (уточняет пресет). */
+  probeCapabilities?: () => ModelCapabilities | undefined;
   /** Опциональный логгер диагностики LLM-запросов/ответов. */
   logger?: import("../../logger/app-logger").Logger;
 }
@@ -97,10 +102,16 @@ export class ProviderManager {
     if (!needs.vision && !needs.tools && needs.minContext === undefined) {
       return this.activeProviderName;
     }
+    // Возможности модели — через единый резолвер (preset → probe → override),
+    // а не сырой `registry.get(type).capabilities`: пресет заявляет vision/tools
+    // на уровне провайдера и не знает ни живой пробы, ни конфиг-оверрайда
+    // пользователя — второй источник правды по capabilities (W8, D6).
+    const override = this.opts.modelCapabilities?.[this.model];
+    const probe = this.opts.probeCapabilities?.();
     for (const e of this.list()) {
-      const caps = this.registry.get(e.type)?.capabilities;
-      if (needs.vision && !caps?.vision) continue;
-      if (needs.tools && !caps?.tools) continue;
+      const caps = resolveModelCapabilities(this.registry.get(e.type)?.capabilities, probe, override);
+      if (needs.vision && !caps.vision) continue;
+      if (needs.tools && !caps.tools) continue;
       if (
         needs.minContext !== undefined &&
         (e.contextWindow ?? globalWindow) < needs.minContext

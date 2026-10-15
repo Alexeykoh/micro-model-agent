@@ -224,7 +224,10 @@ export async function setupProviderPhase(
   // OpenCode Go режектит запросы без `x-opencode-session`.
   let sessionSource: (() => SessionManager | undefined) | undefined;
   const getSessionId = (): string | undefined => sessionSource?.()?.getActiveMeta()?.id;
-  const builtProvider = buildActiveProvider(config, logger, { getSessionId });
+  const builtProvider = buildActiveProvider(config, logger, {
+    getSessionId,
+    probeCapabilities: () => capabilitiesRef.probe,
+  });
   const providerManager = builtProvider.manager;
   const llmProvider = builtProvider.provider;
 

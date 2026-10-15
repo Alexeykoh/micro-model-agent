@@ -8,6 +8,7 @@
  */
 import { join } from "path";
 import { loadConfig } from "../../config/config";
+import { DEFAULTS } from "../../config/defaults";
 import { Logger } from "../../logger/app-logger";
 import { setLocale, setMissingKeyReporter } from "../../i18n/index";
 import { globalMmaDir } from "../../config/paths";
@@ -26,12 +27,10 @@ export function applyReasoningCliOverride(
 ): void {
   if (!reasoningLevel || reasoningLevel === "auto") return;
   if (!config.reasoning) {
-    config.reasoning = {
-      mode: reasoningLevel as ReasoningLevel,
-      min: "low",
-      max: "high",
-      overrideCooldown: 3,
-    };
+    // Секция строится из DEFAULTS, а не из литералов: ручная копия молча
+    // расходилась с дефолтом (`overrideCooldown: 3` против 5) и теряла
+    // `baseline`/будущие поля (W8, единый источник правды).
+    config.reasoning = { ...DEFAULTS.reasoning!, mode: reasoningLevel as ReasoningLevel };
   } else {
     config.reasoning.mode = reasoningLevel as ReasoningLevel;
   }
