@@ -232,11 +232,15 @@ code { font-family: var(--mono); }
     radial-gradient(46% 60% at 82% 26%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 72%),
     radial-gradient(40% 50% at 6% 90%, color-mix(in srgb, var(--recon) 12%, transparent), transparent 70%);
 }
+/* `minmax(0, …)` вместо `1fr`: иначе min-content грид-элемента (nowrap-команда
+   установки внутри .install) растягивает колонку шире вьюпорта и весь hero
+   уезжает вбок вместе с шапкой. */
 .hero-grid {
   position: relative; z-index: 1;
-  display: grid; grid-template-columns: 1fr auto; gap: 40px; align-items: center;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 40px; align-items: center;
   padding: 82px 0 56px;
 }
+.hero-txt { min-width: 0; }
 .kicker { display: inline-flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--dim-a); text-transform: lowercase; letter-spacing: .06em; }
 .kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 22%, transparent); }
 .kicker .ver { color: var(--dim-b); padding-left: 11px; border-left: 1px solid var(--border-2); letter-spacing: .04em; }
@@ -569,7 +573,7 @@ code { font-family: var(--mono); }
   .stats { grid-template-columns: 1fr 1fr; }
   .stat { border-bottom: 1px solid var(--border); }
   .stat:nth-child(2n) { border-right: 0; }
-  .hero-grid { grid-template-columns: 1fr; gap: 34px; padding: 60px 0 44px; }
+  .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 34px; padding: 60px 0 44px; }
   .hero-face { order: -1; }
   .hero-face .mdl { --s: 96px; }
   .moe-notes { grid-template-columns: 1fr; }
@@ -583,6 +587,10 @@ code { font-family: var(--mono); }
   .row, .rows.wide .row { grid-template-columns: 1fr; gap: 4px; }
   .case { grid-template-columns: 1fr; gap: 4px; }
   .install-head { flex-wrap: wrap; }
+  /* текст kicker переносится на несколько строк — маркер и версия должны
+     остаться на первой строке, а не всплывать по центру блока */
+  .kicker { align-items: flex-start; }
+  .kicker .dot { margin-top: .38em; }
   .foot-cols { gap: 36px; }
   .stat { padding: 16px 16px 18px; }
   .totop {
