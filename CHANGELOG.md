@@ -46,6 +46,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   one complements them. New gate `tests/compaction-cooldown-invariant.test.ts` drives
   the predicates over a synthetic always-overflowing loop-state: 20 firings before the fix
   (ceiling 10, gap 1), 10 firings with gaps of 3 after. Plan wave W4.
+- **Platform-conditional skips are declared, and a POSIX lane guards the rest**: the
+  gated tree skipped tests for CI, symlinks, Chromium and win32 without a single place
+  saying why, and releases ship for five platforms while nothing checked posix behaviour.
+  New gate `tests/arch/platform-skips.test.ts` declares every conditional skip
+  (`skipIf`/`skip`/`it`-or-`it.skip` helpers/inline `platform() !== "win32"` guards) with a
+  reason and fails on an undeclared skip or a stale row — the same pattern as the W9
+  double manifest. The W5 diagnose signatures now each name a direct test in
+  `SIGNATURE_COVERAGE`; `tool_failure_repeat` and `prompt_block_dropped` had none and got
+  real tests. A `quality:posix` lane (`.github/workflows/quality.yml`, ubuntu-latest) runs
+  `bun test tests/arch tests/core tests/tools`. Plan wave W6, decision D4.
 - **Critic timeout now outlives the request it wraps**: the default equalled the
   provider's own request deadline, so the wrapper always lost the race and the
   `call_timeout` diagnostic — the only record that the critic had to be cut off —

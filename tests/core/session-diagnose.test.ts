@@ -98,4 +98,31 @@ describe("session diagnose (W5)", () => {
     expect(sig).toBeDefined();
     expect(sig?.count).toBe(2);
   });
+
+  it("flags a tool that fails repeatedly (tool_failure_repeat)", () => {
+    const fail = (i: number) => ({
+      ts: `2026-10-15T10:00:0${i}.000Z`,
+      type: "tool_result",
+      tool: "bash",
+      success: false,
+      content: "ENOENT: no such file",
+    });
+    const report = diagnoseSession("ses_toolfail", [fail(1), fail(2), fail(3)]);
+    const sig = report.signatures.find((s) => s.kind === "tool_failure_repeat");
+    expect(sig, "три падения одного тула — это паттерн").toBeDefined();
+    expect(sig?.count).toBe(thresholds.toolFailureRepeat);
+  });
+
+  it("flags a prompt block dropped from the budget (prompt_block_dropped)", () => {
+    const report = diagnoseSession("ses_dropped", [
+      {
+        ts: "2026-10-15T10:00:00.000Z",
+        type: "context",
+        blocks: [{ label: "docs", included: false, tokens: 500 }],
+      },
+    ]);
+    const sig = report.signatures.find((s) => s.kind === "prompt_block_dropped");
+    expect(sig, "выкинутый из бюджета блок обязан быть виден").toBeDefined();
+    expect(sig?.count).toBe(1);
+  });
 });

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SIGNATURE_KINDS } from "../../src/modules/session/diagnose";
 
 /**
  * Гвард правила 9 (pay-once): долг в реестре и его пометка `DEBT(id)` в
@@ -88,5 +89,57 @@ describe("debt register (rule 9, pay-once)", () => {
   it("the scanner flags a dangling reference in fixture input", () => {
     const refs = collectDebtRefs([{ path: "src/x.ts", text: "// DEBT(nope)\n" }]);
     expect([...refs.keys()]).toEqual(["nope"]);
+  });
+});
+
+/**
+ * Каждая сигнатура разбора сессии (W5) обязана иметь ПРЯМОЙ тест, а не только
+ * условную ветку на фикстуре: сигнатура без теста — подпись без проверки.
+ * `reason` объясняет, где именно поведение зафиксировано.
+ */
+export const SIGNATURE_COVERAGE: Record<string, { file: string; reason: string }> = {
+  compaction_stall: {
+    file: "tests/core/session-diagnose.test.ts",
+    reason: "флагман фикстуры: 20 компакций подряд читаются как стадл",
+  },
+  prompt_block_dropped: {
+    file: "tests/core/session-diagnose.test.ts",
+    reason: "синтетический context-блок с included:false даёт сигнатуру",
+  },
+  critic_degraded: {
+    file: "tests/modules/critic/client-budget.test.ts",
+    reason: "деградация критика логируется во всех пяти ветках отказа",
+  },
+  tool_failure_repeat: {
+    file: "tests/core/session-diagnose.test.ts",
+    reason: "три падения одного тула дают сигнатуру с count = порог",
+  },
+  security_block_repeat: {
+    file: "tests/core/session-diagnose.test.ts",
+    reason: "повтор одного паттерна блокировки считается, одиночный — нет",
+  },
+  claim_retry: {
+    file: "tests/core/agent-claim-check.test.ts",
+    reason: "ретрай заявления фиксируется в логе хода",
+  },
+};
+
+describe("diagnose signatures have a direct test (W6)", () => {
+  it("every signature kind is declared with a test that names it", () => {
+    const kinds = [...SIGNATURE_KINDS] as string[];
+    const missing = kinds.filter((k) => !(k in SIGNATURE_COVERAGE));
+    expect(missing, `Сигнатура без прямого теста: ${missing.join(", ")}`).toEqual([]);
+    const extra = Object.keys(SIGNATURE_COVERAGE).filter((k) => !kinds.includes(k));
+    expect(extra, `Таблица объявляет несуществующую сигнатуру: ${extra.join(", ")}`).toEqual([]);
+  });
+
+  it("each declared test exists and actually asserts its signature", () => {
+    for (const [kind, entry] of Object.entries(SIGNATURE_COVERAGE)) {
+      const full = join(REPO_ROOT, entry.file);
+      expect(existsSync(full), `${kind}: нет файла ${entry.file}`).toBe(true);
+      const text = readFileSync(full, "utf-8");
+      expect(text, `${kind}: файл ${entry.file} не упоминает сигнатуру`).toContain(kind);
+      expect(entry.reason.trim().length, `${kind}: причина слишком короткая`).toBeGreaterThan(20);
+    }
   });
 });
