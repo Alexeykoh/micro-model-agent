@@ -59,7 +59,7 @@ function liveProvider(): OpenAICompatProvider {
  * поведение честно совпадает с продом — см. DEBT(hosted-reasoning-discovery).
  */
 async function liveProviderWithDiscovery(): Promise<OpenAICompatProvider> {
-  let caps;
+  let caps: import("../../src/config/types").ModelCapabilities | undefined;
   try {
     caps = (await probeModel(BASE_URL, MODEL))?.capabilities;
   } catch {

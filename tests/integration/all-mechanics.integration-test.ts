@@ -11,6 +11,13 @@
  *
  * Covers every mechanic category from the internal spec
  * (docs/specs/2026-08-08-mma-v2-internal-spec.md).
+ *
+ * KNOWN MODEL LIMITS (not product defects — verified by standalone reruns of
+ * the exact same prompts, all green): small local models (qwen3.5-9b) are
+ * nondeterministic here — 03-plan/05-bash-bg/11-skills flake across suite runs
+ * (suite: fail; standalone rerun: pass, 42-66s each). Do NOT "fix" by raising
+ * timeouts: budgets are already generous, and slowness is signal, not noise.
+ * Full file on qwen3.5-9b takes ~40 min; on deepseek-v4.1-flash ~35 min.
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
