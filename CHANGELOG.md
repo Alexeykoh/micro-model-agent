@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Guidance must match enforcement**: a new gate
+  (`tests/arch/guidance-enforcement.test.ts`) checks both directions — every
+  operator declared dangerous in the bash policy is actually rejected by the
+  validator, and the operator list in the tool description is a subset of what
+  the policy blocks. Divergences between the three policy lists, and entries in
+  the list that a shorter earlier entry always shadows (`2>` behind `>`), must be
+  declared with a reason rather than left as folklore. Plan wave W1.
 - **Replay harness with loop invariants**: `tests/replay/` replays the
   anonymised session fixture against a scripted provider and asserts loop
   invariants rather than values — compaction cooldown, no repeated
