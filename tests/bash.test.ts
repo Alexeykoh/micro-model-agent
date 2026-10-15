@@ -261,6 +261,20 @@ describe("translateSemicolonsForCmd", () => {
   });
 });
 
+describe("bash security: operator chaining", () => {
+  it("blocks a semicolon-chained command like other operators", async () => {
+    const ctx = makeCtx(); // default security: enabled + blockDangerousFlags
+    const result = await bashTool.handler(ctx, { command: "echo a; echo b" });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("SECURITY BLOCKED");
+  });
+
+  it("does not advertise a blocked operator in its description", () => {
+    expect(bashTool.description).not.toContain("use &&");
+    expect(bashTool.description).toMatch(/operators \([^)]*&&[^)]*\) are blocked/i);
+  });
+});
+
 describe("detectToolCallInBash", () => {
   it("should detect a tool call with key=value args", () => {
     const result = detectToolCallInBash("create_dir path=E:\\project\\src");
