@@ -210,7 +210,18 @@ export class ProviderManager {
   private resolveCapabilities(entry: ProviderEntry): Partial<ProviderCapabilities> {
     const spec = this.registry.get(entry.type);
     if (!spec) return { cache: resolveCacheCapability(undefined, entry.cache) };
-    return { ...spec.capabilities, cache: resolveCacheCapability(spec, entry.cache) };
+    // Механизм reasoning — трёхслойно (INV-R2), как vision/tools: оверрайд
+    // модели → живая проба → пресет. Экземпляр получает РЕЗОЛВНУТЫЙ механизм.
+    const caps = resolveModelCapabilities(
+      spec.capabilities,
+      this.opts.probeCapabilities?.(),
+      this.opts.modelCapabilities?.[this.model],
+    );
+    return {
+      ...spec.capabilities,
+      reasoningStrategy: caps.reasoningStrategy ?? spec.capabilities.reasoningStrategy,
+      cache: resolveCacheCapability(spec, entry.cache),
+    };
   }
 
   /** Очистить кеш сборки (при смене конфига). */
@@ -250,13 +261,17 @@ export function activeProviderEndpoint(
 }
 
 /**
- * Стратегия reasoning АКТИВНОЙ записи провайдера (из её пресета). Легаси-плоское
- * `type` протухает после hot-swap `/provider use` и давало чужую стратегию
- * (напр. `prompt-tag` при активном `opencode-go`); неизвестный тип → "none".
+ * Стратегия reasoning АКТИВНОЙ записи провайдера — через ЕДИНЫЙ резолвер
+ * capabilities (INV-R2), трёхслойно: оверрайд модели → проба → пресет.
+ * Легаси-плоское `type` протухает после hot-swap `/provider use` и давало чужую
+ * стратегию; неизвестный тип → "none".
  */
 export function reasoningStrategyForProvider(
   config?: Pick<ProviderConfig, "entries" | "active" | "type" | "baseUrl" | "apiKey">,
+  probe?: ModelCapabilities,
+  override?: ModelCapabilities,
 ): ReasoningStrategy {
   const type = activeProviderEndpoint(config).type;
-  return BUILTIN_PROVIDERS.find((p) => p.type === type)?.capabilities.reasoningStrategy ?? "none";
+  const spec = BUILTIN_PROVIDERS.find((p) => p.type === type);
+  return resolveModelCapabilities(spec?.capabilities, probe, override).reasoningStrategy ?? "none";
 }

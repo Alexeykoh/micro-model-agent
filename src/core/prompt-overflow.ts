@@ -6,7 +6,7 @@ import { PromptBuilder } from "./prompt-builder";
 import type { PromptBlock, PromptBlockKind } from "./types";
 import type { LLMProvider } from "../llm/provider";
 import type { Logger } from "../logger/app-logger";
-import type { AppConfig, ReasoningStrategy } from "../config/types";
+import type { AppConfig } from "../config/types";
 import { estimateTokens } from "../llm/token-counter";
 import { t } from "../i18n/index";
 
@@ -111,16 +111,15 @@ async function collectText(
   prompt: string,
   maxTokens: number,
   sessionId?: string,
-  reasoningStrategy?: ReasoningStrategy,
 ): Promise<string> {
   let text = "";
-  // Reasoning выкл + стратегия обязательна: без неё "none" не станет /no_think
-  // (prompt-tag) — модель думает, жжёт cap с нулевым текстом, блок уходит в обрезку.
+  // Reasoning выкл. Механизм ("none" → /no_think у prompt-tag, reasoning_effort
+  // у openai-effort) выбирает САМ провайдер из своей стратегии (INV-R1) — здесь
+  // её знать не нужно и нельзя забыть.
   // 2x запас: оценки эвристичны, clamp ниже держит реальный cap.
   for await (const chunk of provider.chat([{ role: "user", content: prompt }], undefined, undefined, {
     maxTokens: maxTokens * 2,
     reasoningEffort: "none",
-    reasoningStrategy,
     sessionId,
   })) {
     if (chunk.type === "text" && chunk.content) text += chunk.content;
@@ -156,9 +155,8 @@ export async function resolvePromptOverflow(opts: {
   logger?: Logger;
   /** Id сессии-владельца: прокидывается в LLM-вызовы для cache/session-заголовков. */
   sessionId?: string;
-  reasoningStrategy?: ReasoningStrategy;
 }): Promise<OverflowResolution> {
-  const { overflow, includedTokens, systemBudget, provider, cacheDir, logger, sessionId, reasoningStrategy } = opts;
+  const { overflow, includedTokens, systemBudget, provider, cacheDir, logger, sessionId } = opts;
 
   const sorted = [...overflow].sort(
     (a, b) => KIND_ORDER.indexOf(a.kind as PromptBlockKind) - KIND_ORDER.indexOf(b.kind as PromptBlockKind),
@@ -215,7 +213,7 @@ export async function resolvePromptOverflow(opts: {
           block.content,
           `--- DOCUMENT END ---`,
         ].join("\n");
-        text = await collectText(provider, prompt, maxTokens, sessionId, reasoningStrategy);
+        text = await collectText(provider, prompt, maxTokens, sessionId);
         // Маленькие модели регулярно игнорируют лимит длины (наблюдалось: 9B
         // выдала ~4700 символов при цели 3170). Один retry самокомпрессии на
         // перелёт — короткий вход резко повышает послушание — затем жёсткий clamp.
@@ -236,7 +234,6 @@ export async function resolvePromptOverflow(opts: {
             ].join("\n"),
             maxTokens,
             sessionId,
-            reasoningStrategy,
           );
         }
       } catch (err: any) {

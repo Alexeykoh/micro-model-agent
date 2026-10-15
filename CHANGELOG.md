@@ -68,6 +68,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   copy the field and silently drop the write — the compiler would check less, not more.
   They are therefore declared with that reason, and an undeclared one fails the gate.
   Plan wave W12.
+- **Reasoning strategy is now a property of the provider, not a call option**: the
+  mechanism (`openai-effort` / `template-kwarg` / `prompt-tag` / `none`) used to ride on
+  every `ChatOptions`, and `buildRequestBody` silently defaulted to `openai-effort` when a
+  call-site forgot it — so a local model could be asked to "think" through a mechanism its
+  backend ignores. It is now resolved once when the provider is built and applied to every
+  call; `ChatOptions` carries only the level. New gate
+  `tests/arch/llm-call-options.test.ts` forbids `reasoningStrategy` in `ChatOptions` and
+  any per-call read, and requires the instance to fix the strategy at construction. Spec
+  `docs/specs/2026-10-15-reasoning-strategy-design.md` (INV-R1). Plan wave W3 (W3.1).
+- **Reasoning strategy resolves in three layers, like vision/tools**:
+  `ModelCapabilities` gained `reasoningStrategy`, so `resolveModelCapabilities`
+  (model override → endpoint probe → provider preset) is now the single resolver for both
+  capabilities and the reasoning mechanism; `ProviderManager` injects the resolved value
+  into the provider it builds, and `reasoningStrategyForProvider` no longer reads the
+  preset directly. A local endpoint that documents `chat_template_kwargs` can be
+  overridden with `modelCapabilities[model].reasoningStrategy`. Gate
+  `tests/core/reasoning-strategy-resolve.test.ts`. Plan wave W3 (W3.2/D1, INV-R2).
 - **Critic timeout now outlives the request it wraps**: the default equalled the
   provider's own request deadline, so the wrapper always lost the race and the
   `call_timeout` diagnostic — the only record that the critic had to be cut off —

@@ -110,7 +110,12 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
 
 /** Пересчитывает стратегию reasoning из активной записи; "none" гасит probe-флаг. */
 function applyReasoningStrategy(host: ProviderPhaseHost, provider: AppConfig["provider"]): void {
-  const strategy: ReasoningStrategy = reasoningStrategyForProvider(provider);
+  const cfg = host.deps.config;
+  const strategy: ReasoningStrategy = reasoningStrategyForProvider(
+    provider,
+    undefined,
+    cfg.modelCapabilities?.[cfg.model],
+  );
   host.deps.reasoningStrategy = strategy;
   if (strategy === "none") host.probePassed = false;
 }

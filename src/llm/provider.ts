@@ -1,5 +1,5 @@
 /** Контракт LLM-провайдера: сообщения, чанки, тулы, опции чата. */
-import type { ReasoningLevel, ReasoningStrategy } from "../config/types";
+import type { ReasoningLevel } from "../config/types";
 import type { CacheUsage } from "./cache-usage";
 
 /** Текстовая часть контента сообщения. */
@@ -64,14 +64,12 @@ export interface Chunk {
   };
 }
 
-/** Опции вызова chat: лимит токенов, уровень и стратегия reasoning. */
+/** Опции вызова chat: лимит токенов и уровень reasoning. */
 export interface ChatOptions {
   /** Cap сгенерированных токенов на вызов (перебивает дефолт провайдера). */
   maxTokens?: number;
-  /** Уровень reasoning effort. */
+  /** Уровень reasoning effort. Механизм выражения — свойство провайдера (INV-R1). */
   reasoningEffort?: ReasoningLevel;
-  /** Как провайдер выражает effort в API-запросе. */
-  reasoningStrategy?: ReasoningStrategy;
   /**
    * Id сессии-владельца запроса: перебивает провайдерский `getSessionId`.
    * Нужно параллельным раннерам — иначе заголовок `x-opencode-session` и

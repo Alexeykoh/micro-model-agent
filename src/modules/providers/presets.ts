@@ -22,6 +22,7 @@ function openaiCompat(opts: ProviderOptions) {
     maxCompletionTokens: opts.maxCompletionTokens,
     getSessionId: opts.getSessionId,
     cache: opts.capabilities?.cache,
+    reasoningStrategy: opts.capabilities?.reasoningStrategy,
     logger: opts.logger,
   });
 }

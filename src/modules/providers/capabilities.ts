@@ -1,4 +1,4 @@
-// Возможности модели (vision/tools): резолв пресет → probe → оверрайд.
+// Возможности модели (vision/tools/reasoning) : резолв пресет → probe → оверрайд.
 import type { ModelCapabilities } from "../../config/types";
 
 /**
@@ -16,6 +16,8 @@ export const DEFAULT_MODEL_CAPABILITIES: ModelCapabilities = {
 export interface PresetCapabilities {
   vision: boolean;
   tools: boolean;
+  /** Механизм reasoning, заявленный пресетом провайдера (нижний слой). */
+  reasoningStrategy?: import("../../config/types").ReasoningStrategy;
 }
 
 /**
@@ -36,7 +38,7 @@ export function resolveModelCapabilities(
   override: ModelCapabilities | undefined,
 ): ModelCapabilities {
   const base: ModelCapabilities = preset
-    ? { vision: preset.vision, tools: preset.tools }
+    ? { vision: preset.vision, tools: preset.tools, reasoningStrategy: preset.reasoningStrategy }
     : { ...DEFAULT_MODEL_CAPABILITIES };
   return { ...base, ...(probe ?? {}), ...(override ?? {}) };
 }
