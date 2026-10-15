@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { setLocale } from "../../src/i18n/index";
 import { ToolExecutor } from "../../src/tools/executor";
 import { ToolRegistry } from "../../src/tools/registry";
 import type { ToolContext } from "../../src/tools/types";
@@ -20,6 +21,8 @@ describe("tool allowlist", () => {
   let executor: ToolExecutor;
 
   beforeEach(() => {
+    // Локаль — процессный синглтон (порядок файлов на CI иной): пиним "en".
+    setLocale("en");
     registry = new ToolRegistry();
     registry.register({
       name: "remember", description: "", parameters: { type: "object", properties: {} },

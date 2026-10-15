@@ -1,4 +1,9 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { setLocale } from "../../src/i18n/index";
+
+// Локаль — процессный синглтон: порядок файлов в раннере зависит от ФС
+// (на CI иной), поэтому файлы с английскими строками пинят "en" сами.
+beforeEach(() => setLocale("en"));
 import { processWaitTool } from "../../src/tools/process-wait";
 import { processRegistry } from "../../src/modules/processes";
 

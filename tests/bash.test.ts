@@ -1,4 +1,9 @@
-import { describe, it, expect, afterAll, afterEach } from "vitest";
+import { describe, it, expect, afterAll, afterEach, beforeEach } from "vitest";
+import { setLocale } from "../src/i18n/index";
+
+// Локаль — процессный синглтон: порядок файлов в раннере зависит от ФС
+// (на CI иной), поэтому файлы с английскими строками пинят "en" сами.
+beforeEach(() => setLocale("en"));
 import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -207,8 +212,11 @@ describe("bash", () => {
 
       // no-bin fixture is installed but declares no bin → npx must fail with
       // "could not determine executable to run", and the tool appends the hint.
+      // --no-install: не ходить в реестр (сеть/версия npx дают другой текст
+      // ошибки и роняют тест вне dev-машины); проверяется связка
+      // "реальный npx без bin → наш хинт", а не текст реестра.
       const npxRun = await bashTool.handler(makeCtx({ baseDir: app }), {
-        command: `npx ${pkgName}`,
+        command: `npx --no-install ${pkgName}`,
       });
       expect(npxRun.success).toBe(false);
       expect(npxRun.output).toContain("could not determine executable to run");
