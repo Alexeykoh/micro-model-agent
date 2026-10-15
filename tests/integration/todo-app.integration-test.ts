@@ -172,6 +172,8 @@ describe.skipIf(shouldSkip)("Todo App Build (integration — real LLM)", () => {
 
   function makeProvider() {
     return new OpenAICompatProvider({
+      // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+      getSessionId: () => "integration-test",
       model: MODEL,
       baseUrl: BASE_URL,
       apiKey: API_KEY,

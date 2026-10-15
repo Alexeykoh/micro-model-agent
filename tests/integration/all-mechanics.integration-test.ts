@@ -36,6 +36,18 @@ function entryPoint(): string {
   return join(MMA_ROOT, "dist", "main.js");
 }
 
+/**
+ * Чем запускать entrypoint. `.ts` умеет только bun; `process.execPath` — это
+ * bun лишь когда vitest сам бежит под bun (обычно он под node — тогда спавн
+ * `node main.ts` умирал мгновенно с ошибкой резолва импортов).
+ */
+function runtimeFor(entry: string): string {
+  if (!entry.endsWith(".ts")) return process.execPath;
+  const exec = process.execPath.toLowerCase();
+  if (exec.endsWith("bun") || exec.endsWith("bun.exe")) return process.execPath;
+  return "bun";
+}
+
 interface SpawnResult {
   code: number | null;
   stdout: string;
@@ -65,11 +77,16 @@ function runMma(
     MMA_PROVIDER_BASEURL: BASE_URL,
     MMA_PROVIDER_APIKEY: API_KEY,
     MMA_CONTEXT_WINDOW: CONTEXT_WINDOW,
+    // Тип провайдера определяет entry (пресет capabilities, sessionHeader):
+    // без него URL opencode-go ехал бы через entry lmstudio и получал 400
+    // MissingSessionID. Прокидываем только если задан снаружи.
+    ...(process.env.MMA_PROVIDER_TYPE ? { MMA_PROVIDER_TYPE: process.env.MMA_PROVIDER_TYPE } : {}),
     ...extraEnv,
   };
 
   return new Promise<SpawnResult>((resolvePromise) => {
-    const child = spawn(process.execPath, args, {
+    const cmd = runtimeFor(args[0]);
+    const child = spawn(cmd, args, {
       cwd: MMA_ROOT,
       env,
       windowsHide: true,

@@ -111,6 +111,8 @@ function doneChunk(reason: "stop" | "tool_calls" = "stop"): Chunk {
 describe.skipIf(shouldSkip)("Agent (integration — real LLM)", () => {
   it("streams text response via onChunk callback", async () => {
     const provider = new OpenAICompatProvider({
+      // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+      getSessionId: () => "integration-test",
       model: MODEL,
       baseUrl: BASE_URL,
       apiKey: API_KEY,
@@ -136,6 +138,8 @@ describe.skipIf(shouldSkip)("Agent (integration — real LLM)", () => {
 
   it("model calls a tool when requested", async () => {
     const provider = new OpenAICompatProvider({
+      // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+      getSessionId: () => "integration-test",
       model: MODEL,
       baseUrl: BASE_URL,
       apiKey: API_KEY,
@@ -182,6 +186,8 @@ describe.skipIf(shouldSkip)("Agent (integration — real LLM)", () => {
         provider: { type: "openai-compat", baseUrl: BASE_URL, apiKey: API_KEY },
       });
       const llmProvider = new OpenAICompatProvider({
+        // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+        getSessionId: () => "integration-test",
         model: MODEL,
         baseUrl: BASE_URL,
         apiKey: API_KEY,
@@ -229,6 +235,8 @@ describe.skipIf(shouldSkip)("Agent (integration — real LLM)", () => {
         session: { autoSave: false, maxSessions: 50, isolateMemory: false },
       });
       const llmProvider = new OpenAICompatProvider({
+        // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+        getSessionId: () => "integration-test",
         model: MODEL,
         baseUrl: BASE_URL,
         apiKey: API_KEY,
