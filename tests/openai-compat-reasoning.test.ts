@@ -12,9 +12,11 @@ async function captureBody(
   reasoningEffort: string | undefined,
   reasoningStrategy: ReasoningStrategy,
 ): Promise<Record<string, unknown>> {
+  // Стратегия — свойство ЭКЗЕМПЛЯРА (INV-R1), а не опция вызова.
   const provider = new OpenAICompatProvider({
     model: "deepseek-v4.1-flash",
     baseUrl: "https://opencode.ai/zen/go/v1",
+    reasoningStrategy,
   });
 
   let body: Record<string, unknown> = {};
@@ -36,7 +38,6 @@ async function captureBody(
 
   for await (const _ of provider.chat([{ role: "user", content: "hi" }], undefined, undefined, {
     reasoningEffort,
-    reasoningStrategy,
   })) {
     // consume stream
   }

@@ -139,7 +139,6 @@ export async function runLlmPhase(
       reasoning.level
         ? {
             reasoningEffort: reasoning.level,
-            reasoningStrategy: reasoning.strategy,
             sessionId: deps.sessionManager?.getActiveMeta()?.id,
           }
         : { sessionId: deps.sessionManager?.getActiveMeta()?.id },

@@ -4,7 +4,7 @@ import { TokenCounter } from "./token-counter";
 import { t } from "../i18n/index";
 import { readMmaVersion } from "../core/version";
 import { type RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
-import type { CacheCapability, CacheReportFormat, RateLimitConfig } from "../config/types";
+import type { CacheCapability, CacheReportFormat, RateLimitConfig, ReasoningStrategy } from "../config/types";
 import { LlmError } from "./llm-errors";
 import { backoffDelay } from "../utils/retry";
 import { StreamState } from "./stream-state";
@@ -77,6 +77,8 @@ export interface OpenAICompatConfig {
   cache?: CacheCapability;
   /** Переопределение User-Agent (дефолт `micro-models-agent/<version>`). */
   userAgent?: string;
+  /** Механизм reasoning (INV-R1): резолвится при сборке; отсутствие = `openai-effort`. */
+  reasoningStrategy?: ReasoningStrategy;
   logger?: import("../logger/app-logger").Logger;
 }
 
@@ -87,14 +89,10 @@ interface ToolCallAcc {
 }
 
 /**
- * Нормализует харнессный уровень reasoning под контракт провайдерского поля
- * `reasoning_effort` (strict OpenAI/o-series принимает только
- * low|medium|high). Иначе:
- * - "default"/undefined → не шлём (решает провайдерский дефолт);
- * - "none" → не шлём (strict OpenAI отвечает 400; отсутствие поля = не просим
- *   повышать, а prompt-tag ещё и получает тег /no_think в `chat()`);
- * - "max" → клампим к "high" (наибольшее валидное значение).
- * Без нормализации неизвестное значение роняет ВЕСЬ запрос HTTP 400.
+ * Нормализует харнессный уровень под контракт поля `reasoning_effort`.
+ * "default"/undefined не шлём; "max" → "high" (наибольшее валидное);
+ * "none" не шлём — стратегия выражает выключение своим механизмом
+ * (`chat_template_kwargs` / тег), см. `buildRequestBody`.
  */
 function normalizeReasoningEffort(level: string | undefined): string | undefined {
   if (!level || level === "default" || level === "none") return undefined;
@@ -173,12 +171,14 @@ export class OpenAICompatProvider implements LLMProvider {
   private userAgent: string;
   private cache?: CacheCapability;
   private cacheReport: CacheReportFormat;
+  private reasoningStrategy: ReasoningStrategy;
 
   constructor(config: OpenAICompatConfig) {
     this.config = config;
     this.model = config.model;
     this.contextWindow = config.contextWindow ?? 32768;
     this.cache = config.cache;
+    this.reasoningStrategy = config.reasoningStrategy ?? "openai-effort"; // INV-R1
     // Без capability всё равно читаем OpenAI-совместимые поля: это не меняет
     // запрос и работает для локальных/кастомных серверов.
     this.cacheReport = config.cache?.report ?? "openai";
@@ -237,7 +237,7 @@ export class OpenAICompatProvider implements LLMProvider {
 
     // Prompt-tag стратегия: дописать /no_think в последнее user-сообщение (только исходящая копия)
     let effectiveMessages = messages;
-    if (options?.reasoningStrategy === "prompt-tag" && options?.reasoningEffort === "none") {
+    if (this.reasoningStrategy === "prompt-tag" && options?.reasoningEffort === "none") {
       effectiveMessages = this.applyPromptTag(messages, "/no_think");
     }
 
@@ -374,7 +374,7 @@ export class OpenAICompatProvider implements LLMProvider {
       stream: true,
       maxTokens,
       reasoningEffort: options?.reasoningEffort,
-      reasoningStrategy: options?.reasoningStrategy,
+      reasoningStrategy: this.reasoningStrategy,
       ...this.cacheHints(options?.sessionId),
     });
     this.debug?.("LLM stream request", {
@@ -384,7 +384,7 @@ export class OpenAICompatProvider implements LLMProvider {
       maxTokens,
       toolsCount: tools?.length ?? 0,
       reasoningEffort: options?.reasoningEffort,
-      reasoningStrategy: options?.reasoningStrategy,
+      reasoningStrategy: this.reasoningStrategy,
       messagesCount: messages.length,
     });
     const { headers, abortSignal, cleanup, isTimeout, flagTimeout, controller } =
@@ -744,7 +744,7 @@ export class OpenAICompatProvider implements LLMProvider {
       stream: false,
       maxTokens,
       reasoningEffort: options?.reasoningEffort,
-      reasoningStrategy: options?.reasoningStrategy,
+      reasoningStrategy: this.reasoningStrategy,
       ...this.cacheHints(options?.sessionId),
     });
 

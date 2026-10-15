@@ -135,8 +135,8 @@ describe("resolvePromptOverflow", () => {
     expect(res.hintBlock?.content).toContain("AGENTS.md");
   });
 
-  it("forwards the provider reasoning strategy so reasoning is actually disabled", async () => {
-    const captured: Array<{ reasoningEffort?: string; reasoningStrategy?: string }> = [];
+  it("disables reasoning at the level, leaving the mechanism to the provider (INV-R1)", async () => {
+    const captured: Array<{ reasoningEffort?: string; reasoningStrategy?: unknown }> = [];
     const provider = {
       model: "fake",
       contextWindow: 32768,
@@ -147,7 +147,7 @@ describe("resolvePromptOverflow", () => {
         _messages: unknown,
         _tools: unknown,
         _signal: unknown,
-        options?: { reasoningEffort?: string; reasoningStrategy?: string },
+        options?: { reasoningEffort?: string; reasoningStrategy?: unknown },
       ) {
         if (options) captured.push(options);
         yield { type: "text", content: "SUMMARY: rules" } as Chunk;
@@ -159,11 +159,12 @@ describe("resolvePromptOverflow", () => {
       systemBudget: 3276,
       provider,
       cacheDir,
-      reasoningStrategy: "prompt-tag",
     });
     expect(captured).toHaveLength(1);
     expect(captured[0].reasoningEffort).toBe("none");
-    expect(captured[0].reasoningStrategy).toBe("prompt-tag");
+    // Механизм — свойство экземпляра провайдера; call-site его не знает и не
+    // передаёт, иначе забывчивость молча вернула бы дефолт (INV-R1).
+    expect(captured[0].reasoningStrategy).toBeUndefined();
   });
 
   it("falls back to truncation when the provider fails", async () => {

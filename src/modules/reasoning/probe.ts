@@ -50,7 +50,6 @@ export async function probeReasoningSupport(
     for await (const chunk of provider.chat(PROBE_MESSAGES, undefined, signal, {
       maxTokens: 32,
       reasoningEffort: "none",
-      reasoningStrategy: strategy,
     })) {
       if (chunk.type === "reasoning") hasReasoning = true;
     }

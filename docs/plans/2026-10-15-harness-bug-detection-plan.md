@@ -509,8 +509,9 @@ Chromium). Гейт назван `platform-skips.test.ts` и покрывает 
 `src/core/prompt-overflow.ts`, `src/core/context/chunk-query.ts:147,188`,
 `src/tools/chunk-query.ts:101`, `src/modules/critic/client.ts:162`, `src/core/agent/turn-run.ts:123`.
 
-**Что сделать.**
-- [ ] **W3.1** Стратегия приходит в провайдер **один раз при сборке** и применяется ко всем
+**Спека:** [2026-10-15-reasoning-strategy-design.md](../specs/2026-10-15-reasoning-strategy-design.md)
+(INV-R1…R5). **Что сделать.**
+- [x] **W3.1** Стратегия приходит в провайдер **один раз при сборке** и применяется ко всем
       вызовам; call-site её не знает и не может забыть. Не прокидывать по каждому месту.
 - [ ] **W3.2** D1: `reasoningStrategy` резолвится трёхслойно, как `vision`/`tools`: оверрайд
       модели → проба/дискавери эндпоинта → пресет. `prompt-tag` — только там, где вендор его
@@ -520,7 +521,8 @@ Chromium). Гейт назван `platform-skips.test.ts` и покрывает 
       наблюдаемый признак против офлайн-эталона), расхождение → диагностика и «не подтверждено»;
       `openai-effort` пробуется, а не предполагается.
 - [ ] **W3.3** Нормализация `"none"` становится стратегии-зависимой (`openai-compat.ts:100`
-      сейчас выкидывает `"none"` глобально).
+      сейчас выкидывает `"none"` глобально). Требует различать strict-OpenAI (не принимает
+      `"none"`) и локальные эндпоинты, документирующие выключатель — делается вместе с W3.2/D1.
 - [ ] **W3.4** Shared-хелпер `tests/helpers/recording-provider.ts`: пишет `ChatOptions` всех
       вызовов по умолчанию; `fakeProvider` в `tests/core/prompt-overflow.test.ts` переводится на
       него, касты (`as unknown as LLMProvider`, `provider2 as any`) исчезают.
