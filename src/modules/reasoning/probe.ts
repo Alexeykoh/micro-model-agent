@@ -1,6 +1,6 @@
 // Проба поддержки reasoning: проверяет, уважает ли бэкенд механизм effort, кэш на 24ч.
 import type { LLMProvider, Message } from "../../llm/provider";
-import type { ReasoningStrategy } from "../../config/types";
+import type { ReasoningLevel, ReasoningStrategy } from "../../config/types";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { globalMmaDir } from "../../config/paths";
@@ -27,40 +27,53 @@ function cachePath(): string {
 const memCache = new Map<string, { result: boolean; ts: number }>();
 
 /**
- * Проверяет, уважает ли бэкенд механизм reasoning effort.
- * Шлёт тривиальный запрос с уровнем "none": если reasoning_content всё равно
- * появился — механизм игнорируется.
- * @returns `true` — механизм уважается, `false` — игнорируется,
+ * Проверяет, уважает ли бэкенд механизм reasoning effort, ДВУМЯ независимыми
+ * ординалами (D2): при «выключено» reasoning-чанков быть не должно, при
+ * «высоко» — должны появиться. Расхождение = «не подтверждено»: либо off не
+ * соблюдён, либо механизм инертен («выключено» неотличимо от «модель молчит»).
+ * @returns `true` — подтверждено, `false` — не подтверждено,
  *          `null` — транзиентная ошибка (вызывающий НЕ должен кэшировать).
  */
 export async function probeReasoningSupport(
   provider: LLMProvider,
   strategy: ReasoningStrategy,
+  reasoningOff = false,
   signal?: AbortSignal,
 ): Promise<boolean | null> {
   if (strategy === "none") return false;
-  // "openai-effort" — стандартное поле OpenAI. Sentinel "none", которым проба
-  // измеряет подавление, транспорт вырезает (strict OpenAI на "none" отвечает
-  // 400), поэтому измерить нечем — считаем механизм поддерживаемым. Если
-  // бэкенд поле игнорирует, это безопасно (effort просто не влияет).
-  if (strategy === "openai-effort") return true;
+  // Выключение нечем ВЫРАЗИТЬ (strict-OpenAI без объявленного off): измерять
+  // нечего — считаем механизм поддерживаемым, effort уровням он не вредит.
+  if (strategy === "openai-effort" && !reasoningOff) return true;
 
   try {
-    let hasReasoning = false;
-    for await (const chunk of provider.chat(PROBE_MESSAGES, undefined, signal, {
-      maxTokens: 32,
-      reasoningEffort: "none",
-    })) {
-      if (chunk.type === "reasoning") hasReasoning = true;
-    }
-    // reasoning_content появился вопреки "none" — механизм игнорируется
-    return !hasReasoning;
+    const off = await countReasoningChars(provider, "none", signal);
+    const on = await countReasoningChars(provider, "high", signal);
+    return off === 0 && on > 0;
   } catch {
     // Транзиентная ошибка (сеть/авторизация/стрим) — НЕ сообщаем "не поддерживается".
     // Возврат null запрещает вызывающему кэшировать, чтобы разовый сбой
     // не отключал reasoning-механизм на весь 24ч TTL.
     return null;
   }
+}
+
+/**
+ * Считает символы reasoning-контента на заданном уровне. Через провайдера —
+ * значит механизм выражения выбирает он сам (INV-R1), проба его не знает.
+ */
+async function countReasoningChars(
+  provider: LLMProvider,
+  level: ReasoningLevel,
+  signal?: AbortSignal,
+): Promise<number> {
+  let chars = 0;
+  for await (const chunk of provider.chat(PROBE_MESSAGES, undefined, signal, {
+    maxTokens: 512,
+    reasoningEffort: level,
+  })) {
+    if (chunk.type === "reasoning") chars += chunk.content?.length ?? 1;
+  }
+  return chars;
 }
 
 /** Ключ кэша пробы: baseUrl + модель. */

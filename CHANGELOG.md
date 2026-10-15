@@ -85,6 +85,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   preset directly. A local endpoint that documents `chat_template_kwargs` can be
   overridden with `modelCapabilities[model].reasoningStrategy`. Gate
   `tests/core/reasoning-strategy-resolve.test.ts`. Plan wave W3 (W3.2/D1, INV-R2).
+- **Reasoning can actually be turned off, and the probe no longer assumes**: LM Studio
+  advertises `capabilities.reasoning.allowed_options` including `off`, but the `lmstudio`
+  preset claimed `prompt-tag`, and `normalizeReasoningEffort` dropped `"none"` globally —
+  so thinking was never actually disabled (the `/no_think` tag is a soft switch). The
+  native probe now carries the discovery (`reasoningStrategy: "openai-effort"`,
+  `reasoningOff: true`), overriding the preset; `"none"` is sent only when the endpoint
+  advertises the off-switch, so strict-OpenAI never receives it. The reasoning probe now
+  measures two independent ordinals (off must suppress, high must produce) and the
+  `openai-effort` short-circuit remains only where off cannot be expressed. Verified live
+  against LM Studio/Qwen3: `none` → 0 reasoning chars, `high` → 676, probe `true`.
+  Debt `reasoning-hard-switch` paid and removed. Plan wave W3 (W3.2/D2, W3.3).
 - **Critic timeout now outlives the request it wraps**: the default equalled the
   provider's own request deadline, so the wrapper always lost the race and the
   `call_timeout` diagnostic — the only record that the critic had to be cut off —

@@ -2,7 +2,7 @@
 
 _Дата: 2026-10-15. Ветка: `feat/reasoning-strategy-single-source`._
 _Волна W3 плана [2026-10-15-harness-bug-detection-plan.md](../plans/2026-10-15-harness-bug-detection-plan.md)._
-_Долг `DEBT(reasoning-hard-switch)` (`docs/agents/debt.md`) оплачивается этой спекой._
+_Долг `reasoning-hard-switch` (`docs/agents/debt.md`) оплачен этой волной и снят._
 
 ## 1. Что не так (текущее состояние, с адресами)
 
@@ -109,7 +109,8 @@ _Долг `DEBT(reasoning-hard-switch)` (`docs/agents/debt.md`) оплачива
   стратегия. Инвариант сохраняется без отдельной синхронизации.
 - **Что НЕ меняется.** Форма `ChatOptions` для `maxTokens`/`sessionId`; политика уровня
   (resolver) — она про уровень, а не про механизм; текст `/no_think`.
-- **DEBT(reasoning-hard-switch)** снимается только после W3.1–W3.3 + живой прогон.
+- **Долг `reasoning-hard-switch` снят**: W3.1–W3.3 + живой прогон на LM Studio/Qwen3 (`none` →
+  0 символов reasoning, `high` → 676; проба двух ординалов = `true`).
 
 ## 6. Решения
 

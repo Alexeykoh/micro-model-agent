@@ -42,7 +42,12 @@ interface LmStudioModel {
   name?: string;
   max_context_length?: number;
   loaded_instances?: Array<{ config?: { context_length?: number } }>;
-  capabilities?: { vision?: boolean; trained_for_tool_use?: boolean };
+  capabilities?: {
+    vision?: boolean;
+    trained_for_tool_use?: boolean;
+    /** Нативный вердикт о reasoning: какие опции эндпоинт принимает. */
+    reasoning?: { allowed_options?: string[]; default?: string };
+  };
 }
 interface LmStudioModelsResponse {
   models?: LmStudioModel[];
@@ -87,6 +92,15 @@ export async function probeModel(
       if (typeof raw.trained_for_tool_use === "boolean") {
         capabilities.tools = raw.trained_for_tool_use;
       }
+    }
+    // Discovery механизма reasoning (INV-R2, средний слой): эндпоинт объявил,
+    // что умеет выключать thinking. LM Studio выражает это полем
+    // `reasoning_effort: "none"` (проверено вживую на Qwen3), а не kwarg/тегом —
+    // поэтому стратегия `openai-effort` + флаг `reasoningOff`.
+    if (raw?.reasoning?.allowed_options?.includes("off")) {
+      capabilities ??= {};
+      capabilities.reasoningStrategy = "openai-effort";
+      capabilities.reasoningOff = true;
     }
 
     return { model: found.key ?? found.name ?? model, contextLength, capabilities };

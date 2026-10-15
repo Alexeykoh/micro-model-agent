@@ -29,12 +29,9 @@ export interface RetryConfig {
 /** Cap completion-токенов в max_tokens, если конфиг не задал. */
 const DEFAULT_MAX_COMPLETION_TOKENS = 8192;
 
-/**
- * Консервативный классификатор ошибок провайдера по телу ответа. Возвращает
- * `"context_length"`, только если текст явно про превышение контекста, иначе
- * `undefined` (fail-open: неверная классификация приведёт к агрессивному
- * поведению, чего нельзя).
- */
+/** Классификатор ошибок провайдера по телу: `"context_length"` только при явном
+ *  превышении контекста, иначе `undefined` (fail-open — неверная классификация
+ *  ведёт к агрессивному поведению). */
 export function classifyProviderError(errorText: string): string | undefined {
   if (!errorText) return undefined;
   const re =
@@ -43,10 +40,8 @@ export function classifyProviderError(errorText: string): string | undefined {
 }
 
 /**
- * Client identity-заголовок. OpenCode Go просит клиентов представляться своим
- * user agent (не generic SDK/HTTP-библиотекой), чтобы запросы роутились в
- * coding-agent трафик. `readMmaVersion()` мемоизирован — иначе каждая сборка
- * провайдера перечитывала бы package.json.
+ * OpenCode Go требует, чтобы клиенты представлялись своим user agent (для
+ * роутинга coding-agent трафика). `readMmaVersion()` мемоизирован.
  */
 let cachedUserAgent: string | null = null;
 function defaultUserAgent(): string {
@@ -63,22 +58,16 @@ export interface OpenAICompatConfig {
   maxCompletionTokens?: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
-  /**
-   * Живой геттер текущего id диалога. При значении шлётся как
-   * `x-opencode-session` — требует OpenCode Go (иначе 400 MissingSessionID),
-   * плюс роутинг/аффинити промпт-кеша.
-   */
+  /** Живой id диалога → `x-opencode-session` (требует OpenCode Go) + кеш-аффинити. */
   getSessionId?: () => string | undefined;
-  /**
-   * Cache-возможность провайдера. Когда задана, управляет запросными
-   * подсказками кеша и гейтингом `x-opencode-session`. Когда отсутствует —
-   * сохраняется легаси-поведение (заголовок шлётся при наличии sessionId).
-   */
+  /** Cache-возможность: подсказки кеша и гейтинг `x-opencode-session`; нет = легаси. */
   cache?: CacheCapability;
   /** Переопределение User-Agent (дефолт `micro-models-agent/<version>`). */
   userAgent?: string;
   /** Механизм reasoning (INV-R1): резолвится при сборке; отсутствие = `openai-effort`. */
   reasoningStrategy?: ReasoningStrategy;
+  /** Эндпоинт умеет выключать reasoning (`reasoning_effort: "none"` легитимен). */
+  reasoningOff?: boolean;
   logger?: import("../logger/app-logger").Logger;
 }
 
@@ -88,14 +77,17 @@ interface ToolCallAcc {
   arguments: string;
 }
 
-/**
- * Нормализует харнессный уровень под контракт поля `reasoning_effort`.
- * "default"/undefined не шлём; "max" → "high" (наибольшее валидное);
- * "none" не шлём — стратегия выражает выключение своим механизмом
- * (`chat_template_kwargs` / тег), см. `buildRequestBody`.
- */
-function normalizeReasoningEffort(level: string | undefined): string | undefined {
-  if (!level || level === "default" || level === "none") return undefined;
+/** Уровень под контракт `reasoning_effort`: "default" не шлём, "max"→"high",
+ *  "none" — только при объявленном выключателе и механизме-поле (strict 400). */
+function normalizeReasoningEffort(
+  level: string | undefined,
+  strategy: ReasoningStrategy,
+  reasoningOff: boolean,
+): string | undefined {
+  if (!level || level === "default") return undefined;
+  if (level === "none") {
+    return reasoningOff && strategy === "openai-effort" ? "none" : undefined;
+  }
   if (level === "max") return "high";
   return level;
 }
@@ -107,7 +99,8 @@ function buildRequestBody(opts: {
   stream: boolean;
   maxTokens?: number;
   reasoningEffort?: string;
-  reasoningStrategy?: string;
+  reasoningStrategy?: ReasoningStrategy;
+  reasoningOff?: boolean;
   /** Подсказки кеша (llama.cpp `cache_prompt`). */
   cachePrompt?: boolean;
   /** Ключ кеша для OpenAI (`prompt_cache_key`). */
@@ -131,7 +124,7 @@ function buildRequestBody(opts: {
   // Применяем effort через стратегию провайдера (уровень нормализуется под
   // контракт OpenAI: low|medium|high).
   const strategy = opts.reasoningStrategy ?? "openai-effort";
-  const effort = normalizeReasoningEffort(opts.reasoningEffort);
+  const effort = normalizeReasoningEffort(opts.reasoningEffort, strategy, opts.reasoningOff === true);
 
   if (strategy === "openai-effort") {
     if (effort) body.reasoning_effort = effort;
@@ -172,6 +165,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private cache?: CacheCapability;
   private cacheReport: CacheReportFormat;
   private reasoningStrategy: ReasoningStrategy;
+  private reasoningOff: boolean;
 
   constructor(config: OpenAICompatConfig) {
     this.config = config;
@@ -179,6 +173,7 @@ export class OpenAICompatProvider implements LLMProvider {
     this.contextWindow = config.contextWindow ?? 32768;
     this.cache = config.cache;
     this.reasoningStrategy = config.reasoningStrategy ?? "openai-effort"; // INV-R1
+    this.reasoningOff = config.reasoningOff === true;
     // Без capability всё равно читаем OpenAI-совместимые поля: это не меняет
     // запрос и работает для локальных/кастомных серверов.
     this.cacheReport = config.cache?.report ?? "openai";
@@ -375,6 +370,7 @@ export class OpenAICompatProvider implements LLMProvider {
       maxTokens,
       reasoningEffort: options?.reasoningEffort,
       reasoningStrategy: this.reasoningStrategy,
+      reasoningOff: this.reasoningOff,
       ...this.cacheHints(options?.sessionId),
     });
     this.debug?.("LLM stream request", {
@@ -745,6 +741,7 @@ export class OpenAICompatProvider implements LLMProvider {
       maxTokens,
       reasoningEffort: options?.reasoningEffort,
       reasoningStrategy: this.reasoningStrategy,
+      reasoningOff: this.reasoningOff,
       ...this.cacheHints(options?.sessionId),
     });
 

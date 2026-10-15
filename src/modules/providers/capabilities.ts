@@ -18,6 +18,8 @@ export interface PresetCapabilities {
   tools: boolean;
   /** Механизм reasoning, заявленный пресетом провайдера (нижний слой). */
   reasoningStrategy?: import("../../config/types").ReasoningStrategy;
+  /** Эндпоинт умеет выключать reasoning (нижний слой). */
+  reasoningOff?: boolean;
 }
 
 /**
@@ -38,7 +40,12 @@ export function resolveModelCapabilities(
   override: ModelCapabilities | undefined,
 ): ModelCapabilities {
   const base: ModelCapabilities = preset
-    ? { vision: preset.vision, tools: preset.tools, reasoningStrategy: preset.reasoningStrategy }
+    ? {
+        vision: preset.vision,
+        tools: preset.tools,
+        reasoningStrategy: preset.reasoningStrategy,
+        reasoningOff: preset.reasoningOff,
+      }
     : { ...DEFAULT_MODEL_CAPABILITIES };
   return { ...base, ...(probe ?? {}), ...(override ?? {}) };
 }
