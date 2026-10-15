@@ -233,7 +233,8 @@ export async function setupProviderPhase(
 
   // Стратегия reasoning АКТИВНОЙ записи (легаси-плоское `type` протухает после
   // `/provider use` и давало чужую стратегию — напр. prompt-tag при opencode-go).
-  const reasoningStrategy = reasoningStrategyForProvider(config.provider);
+  const modelOverride = config.modelCapabilities?.[config.model];
+  const reasoningStrategy = reasoningStrategyForProvider(config.provider, capabilitiesRef.probe, modelOverride);
 
   // Reasoning-проба — ФОНОМ (B2). Раньше блокировала bootstrap лишним LLM
   // round-trip на каждый запуск; теперь агент потребляет её лениво перед первым

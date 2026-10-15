@@ -77,6 +77,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `tests/arch/llm-call-options.test.ts` forbids `reasoningStrategy` in `ChatOptions` and
   any per-call read, and requires the instance to fix the strategy at construction. Spec
   `docs/specs/2026-10-15-reasoning-strategy-design.md` (INV-R1). Plan wave W3 (W3.1).
+- **Reasoning strategy resolves in three layers, like vision/tools**:
+  `ModelCapabilities` gained `reasoningStrategy`, so `resolveModelCapabilities`
+  (model override → endpoint probe → provider preset) is now the single resolver for both
+  capabilities and the reasoning mechanism; `ProviderManager` injects the resolved value
+  into the provider it builds, and `reasoningStrategyForProvider` no longer reads the
+  preset directly. A local endpoint that documents `chat_template_kwargs` can be
+  overridden with `modelCapabilities[model].reasoningStrategy`. Gate
+  `tests/core/reasoning-strategy-resolve.test.ts`. Plan wave W3 (W3.2/D1, INV-R2).
 - **Critic timeout now outlives the request it wraps**: the default equalled the
   provider's own request deadline, so the wrapper always lost the race and the
   `call_timeout` diagnostic — the only record that the critic had to be cut off —
