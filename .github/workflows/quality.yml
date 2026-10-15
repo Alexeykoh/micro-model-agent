@@ -36,6 +36,13 @@ jobs:
       - name: Unit tests
         run: bun test
 
+      # Replay-инварианты петли. Отдельным шагом не ради красоты: `bun test`
+      # подхватывает `tests/replay/**` сам, и если конфиг витрины изменится,
+      # набор молча выпадет из защиты — а он единственный ловит класс дефектов,
+      # который юнит-тесты пропускают по построению.
+      - name: Replay invariants
+        run: bun test tests/replay
+
       # fallow is distributed on npm. Pin the version: the baseline
       # (`.fallow-baseline.json`) was saved with 2.88.0, and newer analyzers
       # report additional findings that the baseline does not cover.

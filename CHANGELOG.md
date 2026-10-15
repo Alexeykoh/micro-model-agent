@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Replay harness with loop invariants**: `tests/replay/` replays the
+  anonymised session fixture against a scripted provider and asserts loop
+  invariants rather than values — compaction cooldown, no repeated
+  `SECURITY BLOCKED` pattern, repeated tool failures, critic degradation, claim
+  retries, LLM calls per turn. A test asserts that every signature
+  `mma session diagnose` finds on a fixture has an invariant that fires on it,
+  which is the bridge from "a live session went wrong" to "a test fails". The
+  suite is wired into CI as its own step so it cannot silently drop out of the
+  gate. Plan wave W7.
 - **Doubles can no longer fake coverage**: a new gate
   (`tests/arch/double-honesty.test.ts`) fails when the `ContextManager` double in
   `tests/core/agent.test.ts` silently omits a method the real class has — each
