@@ -6,8 +6,19 @@ import { isPathInScope, isPathWritable } from "../../src/modules/security/path-v
 const BASE = "/workspace";
 
 describe("isPathInScope", () => {
-  it("allows paths within base dir without scope", () => {
+  it("fails closed when no config section is provided (D8)", () => {
     const result = isPathInScope(BASE, "src/file.ts");
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("fail-closed");
+  });
+
+  it("allows within base dir when the section exists but is explicitly disabled", () => {
+    const result = isPathInScope(BASE, "src/file.ts", undefined, { enabled: false, denied: [], allowed: [] });
+    expect(result.allowed).toBe(true);
+  });
+
+  it("still honors a sub-agent scope without a config section", () => {
+    const result = isPathInScope(BASE, "src/file.ts", { allowed_files: ["src"], read_only_files: [] });
     expect(result.allowed).toBe(true);
   });
 
@@ -82,8 +93,14 @@ describe("isPathWritable", () => {
     expect(result.allowed).toBe(false);
   });
 
-  it("allows write without scope", () => {
+  it("fails closed on write when no config section is provided (D8)", () => {
     const result = isPathWritable(BASE, "any/file.ts");
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("fail-closed");
+  });
+
+  it("allows write without scope when the section exists but is disabled", () => {
+    const result = isPathWritable(BASE, "any/file.ts", undefined, { enabled: false, denied: [], allowed: [] });
     expect(result.allowed).toBe(true);
   });
 });

@@ -17,9 +17,12 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
   });
   afterEach(() => rmSync(baseDir, { recursive: true, force: true }));
 
-  function makeExecutor(scope?: ToolContext["scope"]): ToolExecutor {
+  function makeExecutor(
+    scope?: ToolContext["scope"],
+    config: unknown = { security: { paths: { enabled: false, denied: [], allowed: [] } } },
+  ): ToolExecutor {
     const ctx = {
-      config: {} as any,
+      config: config as any,
       baseDir,
       scope,
       logger: {
@@ -61,6 +64,18 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
     const result = await makeExecutor().execute({ id: "1", name: "t", arguments: { path: "inside.txt" } });
     expect(result.success).toBe(true);
     expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when the config has no security section (D8)", async () => {
+    const handler = vi.fn(async () => ({ success: true, output: "ok" }));
+    register({ caps: [{ fs: "write" }], pathArgs: ["path"] }, handler);
+    const result = await makeExecutor(undefined, {}).execute({
+      id: "1",
+      name: "t",
+      arguments: { path: "inside.txt" },
+    });
+    expect(result.blocked).toBe(true);
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("blocks a protected path for writable tools (always-on)", async () => {

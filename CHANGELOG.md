@@ -96,6 +96,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `openai-effort` short-circuit remains only where off cannot be expressed. Verified live
   against LM Studio/Qwen3: `none` → 0 reasoning chars, `high` → 676, probe `true`.
   Debt `reasoning-hard-switch` paid and removed. Plan wave W3 (W3.2/D2, W3.3).
+- **Path validation fails closed without a config section**: a missing
+  `config.security.paths` meant "allow everything", so a `ToolContext` built without the
+  defaults would let any in-baseDir path through. Absence now denies
+  (`No path security configuration (fail-closed)`); an explicit `enabled: false` still
+  allows, and a sub-agent scope still applies. In production the section is always present
+  (defaults), so only config-less builds change. Gates:
+  `tests/security/path-validator.test.ts`, `tests/tools/scope-check.test.ts`,
+  `tests/tools/enforcement-path.test.ts`. Debt `path-validator-fail-open` paid and
+  removed. Plan wave D8 (W9.5, W10.5).
 - **Critic timeout now outlives the request it wraps**: the default equalled the
   provider's own request deadline, so the wrapper always lost the race and the
   `call_timeout` diagnostic — the only record that the critic had to be cut off —
