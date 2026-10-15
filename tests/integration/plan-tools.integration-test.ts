@@ -47,6 +47,7 @@ function makeConfig(overrides?: Partial<AppConfig>): AppConfig {
 function quietLogger() {
   return {
     debug: vi.fn(),
+    diagnostic: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
@@ -77,6 +78,8 @@ describe.skipIf(shouldSkip)("Plan & Todo Tools (integration — real LLM)", () =
     });
 
     const llmProvider = new OpenAICompatProvider({
+      // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+      getSessionId: () => "integration-test",
       model: MODEL,
       baseUrl: BASE_URL,
       apiKey: API_KEY,
@@ -152,6 +155,8 @@ Use the plan tool to create this plan.`;
     });
 
     const llmProvider = new OpenAICompatProvider({
+      // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+      getSessionId: () => "integration-test",
       model: MODEL,
       baseUrl: BASE_URL,
       apiKey: API_KEY,
@@ -224,6 +229,8 @@ Then mark step 1 as done using the plan tool with action=update.`;
     });
 
     const llmProvider = new OpenAICompatProvider({
+      // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+      getSessionId: () => "integration-test",
       model: MODEL,
       baseUrl: BASE_URL,
       apiKey: API_KEY,

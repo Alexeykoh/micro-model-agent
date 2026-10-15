@@ -17,6 +17,8 @@ const shouldSkip = process.env.MMA_RUN_INTEGRATION !== "1";
 describe.skipIf(shouldSkip)("LLM Provider (integration)", () => {
   it("should connect and return a chat response", async () => {
     const provider = new OpenAICompatProvider({
+      // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+      getSessionId: () => "integration-test",
       model: MODEL,
       baseUrl: BASE_URL,
       apiKey: API_KEY,
@@ -50,6 +52,8 @@ describe.skipIf(shouldSkip)("LLM Provider (integration)", () => {
 
   it("should handle tool call requests", async () => {
     const provider = new OpenAICompatProvider({
+      // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+      getSessionId: () => "integration-test",
       model: MODEL,
       baseUrl: BASE_URL,
       apiKey: API_KEY,
@@ -79,6 +83,8 @@ describe.skipIf(shouldSkip)("LLM Provider (integration)", () => {
 
   it("should stream text content", async () => {
     const provider = new OpenAICompatProvider({
+      // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+      getSessionId: () => "integration-test",
       model: MODEL,
       baseUrl: BASE_URL,
       apiKey: API_KEY,

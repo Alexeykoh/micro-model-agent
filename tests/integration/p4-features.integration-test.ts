@@ -41,6 +41,8 @@ const shouldSkip = process.env.MMA_RUN_INTEGRATION !== "1";
 
 function liveProvider(): OpenAICompatProvider {
   return new OpenAICompatProvider({
+    // opencode-go требует x-opencode-session; LM Studio лишний заголовок игнорирует.
+    getSessionId: () => "integration-test",
     model: MODEL,
     baseUrl: BASE_URL,
     apiKey: API_KEY,
@@ -51,6 +53,7 @@ function liveProvider(): OpenAICompatProvider {
 function quietLogger() {
   return {
     debug: () => {},
+    diagnostic: () => {},
     info: () => {},
     warn: () => {},
     error: () => {},
@@ -263,7 +266,7 @@ describe.skipIf(shouldSkip)("P4 live: in-loop critic", () => {
       iteration: 4,
       logger: quietLogger() as never,
       contextManager: { addMessage: (m: { content: string }) => injected.push(String(m.content)) } as never,
-      slog: { logCritic: (e: string) => events.push(e) } as never,
+      slog: { logCritic: (e: string) => events.push(e), logDiagnosticEvent: () => {} } as never,
       task: "Create result.txt containing exactly the text HELLO, then verify by running `bun test`.",
       toolEvents: [
         { tool: "write_file", args: { path: "result.txt", content: "goodbye" }, ok: true },
