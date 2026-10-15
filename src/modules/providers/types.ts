@@ -17,6 +17,8 @@ export interface ProviderCapabilities {
   vision: boolean;
   /** Как провайдер выражает reasoning effort. */
   reasoningStrategy: ReasoningStrategy;
+  /** Эндпоинт умеет выключать reasoning (`reasoning_effort: "none"` легитимен). */
+  reasoningOff?: boolean;
   listModels: boolean;
   requiresKey: boolean;
   auth?: "bearer" | "header";

@@ -153,6 +153,9 @@ export async function setupProviderPhase(
   // резолвит итог при каждом обращении, поэтому смена модели/провайдера
   // через reconfigure видна тулам без пересборки контекста.
   const capabilitiesRef: { probe?: ModelCapabilities } = {};
+  // Native discovery ДО сборки: механизм reasoning нужен экземпляру сразу (INV-R2).
+  const nativeProbe = await probeModel(probeEndpoint.baseUrl, config.model);
+  if (nativeProbe?.capabilities) capabilitiesRef.probe = nativeProbe.capabilities;
 
   // Значение на старте. Проба резолвится фоном — если пользователь успел
   // сменить contextWindow раньше (веб-UI до приземления пробы), побеждает его
@@ -161,8 +164,7 @@ export async function setupProviderPhase(
 
   const contextProbePromise: Promise<ContextProbeResult | null> = (async () => {
     try {
-      const lmProbe = await probeModel(probeEndpoint.baseUrl, config.model);
-      if (lmProbe?.capabilities) capabilitiesRef.probe = lmProbe.capabilities;
+      const lmProbe = nativeProbe;
       const lmContext = lmProbe ? { model: lmProbe.model, actual: lmProbe.contextLength } : null;
       const detected =
         lmContext ??
@@ -252,7 +254,7 @@ export async function setupProviderPhase(
         const passed =
           cached !== undefined
             ? cached
-            : await probeReasoningSupport(llmProvider, reasoningStrategy);
+            : await probeReasoningSupport(llmProvider, reasoningStrategy, capabilitiesRef.probe?.reasoningOff === true);
         // Кэшируем только определённый итог — транзиентная ошибка пробы (null)
         // НЕ должна пинить «reasoning не поддерживается» на 24h TTL.
         if (cached === undefined && passed !== null) setCachedProbeResult(cacheK, passed);

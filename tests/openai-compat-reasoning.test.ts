@@ -11,12 +11,14 @@ afterEach(() => {
 async function captureBody(
   reasoningEffort: string | undefined,
   reasoningStrategy: ReasoningStrategy,
+  reasoningOff = false,
 ): Promise<Record<string, unknown>> {
   // Стратегия — свойство ЭКЗЕМПЛЯРА (INV-R1), а не опция вызова.
   const provider = new OpenAICompatProvider({
     model: "deepseek-v4.1-flash",
     baseUrl: "https://opencode.ai/zen/go/v1",
     reasoningStrategy,
+    reasoningOff,
   });
 
   let body: Record<string, unknown> = {};
@@ -53,6 +55,12 @@ describe("reasoning_effort normalization", () => {
   it("omits the field for 'none' (strict OpenAI rejects it)", async () => {
     const body = await captureBody("none", "openai-effort");
     expect(body.reasoning_effort).toBeUndefined();
+  });
+
+  it("sends reasoning_effort 'none' when the endpoint advertises the off-switch (W3.3)", async () => {
+    // Живой замер: LM Studio/Qwen3 глушит thinking именно `reasoning_effort:"none"`.
+    const body = await captureBody("none", "openai-effort", true);
+    expect(body.reasoning_effort).toBe("none");
   });
 
   it("omits the field for 'default'", async () => {

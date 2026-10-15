@@ -15,6 +15,7 @@ import {
 } from "../../src/core/prompt-overflow";
 import type { PromptBlock } from "../../src/core/types";
 import type { Chunk, LLMProvider } from "../../src/llm/provider";
+import { recordingProvider, type RecordingProvider } from "../helpers/recording-provider";
 import { setLocale } from "../../src/i18n/index";
 
 interface CapturingLogger {
@@ -39,23 +40,8 @@ function block(partial: Partial<PromptBlock> & { content: string }): PromptBlock
   };
 }
 
-function fakeProvider(respond: () => string): LLMProvider & { calls: number } {
-  const state = { calls: 0 };
-  return {
-    model: "fake",
-    contextWindow: 32768,
-    countTokens: (text: string) => Math.ceil(text.length / 4),
-    listModels: async () => [],
-    // @ts-expect-error — test stub narrows the streaming API
-    chat: async function* () {
-      state.calls++;
-      const chunk: Chunk = { type: "text", content: respond() };
-      yield chunk;
-    },
-    get calls() {
-      return state.calls;
-    },
-  } as any;
+function fakeProvider(respond: () => string): RecordingProvider {
+  return recordingProvider(() => respond());
 }
 
 describe("dryRunOverflow", () => {
@@ -290,7 +276,7 @@ describe("resolvePromptOverflow", () => {
     const res2 = await resolvePromptOverflow({ ...opts, provider: provider2 });
     expect(res2.warnings[0].mode).toBe("summary");
     expect(res2.replacements[0].content).toContain("CACHED SUMMARY TEXT");
-    expect((provider2 as any).calls).toBe(0);
+    expect(provider2.calls.length).toBe(0);
   });
 
   it("resolves instructions before project-map and mentions unresolved blocks in the hint", async () => {

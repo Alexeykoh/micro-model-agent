@@ -41,8 +41,7 @@ export interface CacheCapability {
 
 /**
  * Возможности конкретной модели, уточняющие пресет провайдера. Единый
- * источник правды для тулов вместо эвристики по имени. Поля необязательны:
- * слой уточняет только часть; приоритет — `resolveModelCapabilities`.
+ * источник правды для тулов; поля необязательны, приоритет — `resolveModelCapabilities`.
  */
 export interface ModelCapabilities {
   /** Модель принимает изображения (image парты в сообщениях). */
@@ -51,6 +50,8 @@ export interface ModelCapabilities {
   tools?: boolean;
   /** Механизм reasoning (INV-R2): 3 слоя, как vision/tools — оверрайд → проба → пресет. */
   reasoningStrategy?: ReasoningStrategy;
+  /** Эндпоинт умеет выключать reasoning (native `reasoning.allowed_options` ∋ off). */
+  reasoningOff?: boolean;
 }
 
 /** Одна настроенная запись провайдера (из возможных многих). */

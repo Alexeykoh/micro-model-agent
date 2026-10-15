@@ -75,6 +75,51 @@ describe("probeModel", () => {
     expect(probe).toBeNull();
   });
 
+  it("reads the reasoning off-switch from the native API (D2 discovery)", async () => {
+    global.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        models: [
+          {
+            key: "qwen/qwen3.5-9b",
+            loaded_instances: [{ config: { context_length: 34048 } }],
+            capabilities: {
+              vision: true,
+              trained_for_tool_use: true,
+              reasoning: { allowed_options: ["off", "on"], default: "on" },
+            },
+          },
+        ],
+      }),
+    })) as any;
+
+    const probe = await probeModel("http://localhost:1234/v1", "qwen/qwen3.5-9b");
+    expect(probe?.capabilities).toEqual({
+      vision: true,
+      tools: true,
+      reasoningStrategy: "openai-effort",
+      reasoningOff: true,
+    });
+  });
+
+  it("omits the reasoning strategy when the endpoint does not advertise off", async () => {
+    global.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        models: [
+          {
+            key: "on-only",
+            max_context_length: 8192,
+            capabilities: { vision: false, reasoning: { allowed_options: ["on"], default: "on" } },
+          },
+        ],
+      }),
+    })) as any;
+
+    const probe = await probeModel("http://localhost:1234/v1", "on-only");
+    expect(probe?.capabilities).toEqual({ vision: false });
+  });
+
   it("getLoadedContextLength projects probeModel to the legacy shape", async () => {
     global.fetch = (async () => ({
       ok: true,

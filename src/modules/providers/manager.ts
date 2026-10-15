@@ -220,6 +220,7 @@ export class ProviderManager {
     return {
       ...spec.capabilities,
       reasoningStrategy: caps.reasoningStrategy ?? spec.capabilities.reasoningStrategy,
+      reasoningOff: caps.reasoningOff ?? spec.capabilities.reasoningOff,
       cache: resolveCacheCapability(spec, entry.cache),
     };
   }

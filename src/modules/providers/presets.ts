@@ -23,6 +23,7 @@ function openaiCompat(opts: ProviderOptions) {
     getSessionId: opts.getSessionId,
     cache: opts.capabilities?.cache,
     reasoningStrategy: opts.capabilities?.reasoningStrategy,
+    reasoningOff: opts.capabilities?.reasoningOff,
     logger: opts.logger,
   });
 }
