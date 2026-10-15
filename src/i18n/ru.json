@@ -67,6 +67,7 @@
   "env.reasoning_probe": "Проверка reasoning: стратегия={strategy} → {result}",
   "env.reasoning_respected": "механизм соблюдается",
   "env.reasoning_ignored": "механизм ИГНОРИРУЕТСЯ",
+  "env.reasoning_probe_failed": "проба ПРОВАЛИЛАСЬ ({strategy}): {error} — считаем неподдерживаемым на этот запуск",
   "env.indexing": "Индексация файлов проекта…",
   "env.indexed": "Проиндексировано файлов: {files} (карта проекта)",
   "env.indexing_failed": "Ошибка индексации проекта: {error}",

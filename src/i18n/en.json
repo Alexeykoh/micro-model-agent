@@ -68,6 +68,7 @@
   "env.reasoning_probe": "Reasoning probe: strategy={strategy} → {result}",
   "env.reasoning_respected": "mechanism respected",
   "env.reasoning_ignored": "mechanism IGNORED",
+  "env.reasoning_probe_failed": "probe FAILED ({strategy}): {error} — treated as unsupported for this run",
   "env.indexing": "Indexing project files…",
   "env.indexed": "Indexed {files} file(s) for the project map",
   "env.indexing_failed": "Project indexing failed: {error}",

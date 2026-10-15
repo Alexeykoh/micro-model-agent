@@ -3,6 +3,7 @@ import { t } from "../../i18n/index";
 import type { Message } from "../../llm/provider";
 import type { LLMProvider } from "../../llm/provider";
 import type { HallucinationCheckResult } from "./detector";
+import type { Diagnostic } from "../../output/types";
 import type { ConsistencyCheck } from "./consistency";
 import { HALLUCINATION_JUDGE_TIMEOUT_MS as JUDGE_TIMEOUT_MS } from "../../config/timeouts";
 
@@ -27,10 +28,13 @@ interface Verdict {
 export class LLMJudge {
   private provider: LLMProvider;
   private sessionId?: string;
+  /** Сток деградаций (INV-15): без него fail-open `pass` неотличим от успеха. */
+  private onDiagnostic?: (diag: Diagnostic) => void;
 
-  constructor(provider: LLMProvider, sessionId?: string) {
+  constructor(provider: LLMProvider, sessionId?: string, onDiagnostic?: (diag: Diagnostic) => void) {
     this.provider = provider;
     this.sessionId = sessionId;
+    this.onDiagnostic = onDiagnostic;
   }
 
   /** Валидирует ответ против решений: warn при противоречии, иначе pass (сбои — тоже pass). */
@@ -75,7 +79,17 @@ Reply with ONLY valid JSON, no other text:
         };
       }
       return { status: "pass" };
-    } catch {
+    } catch (e) {
+      // INV-15: fail-open `pass` обязан оставить след, иначе «судья молчала» и
+      // «модель не противоречила» — одно и то же в разборе сессии.
+      const cause = e instanceof Error ? e.message : String(e);
+      this.onDiagnostic?.({
+        source: "core",
+        operation: "hallucination.judge",
+        kind: "degraded",
+        cause,
+        recoverable: true,
+      });
       return { status: "pass" };
     }
   }

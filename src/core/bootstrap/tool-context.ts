@@ -25,18 +25,36 @@ export interface ToolContextInput {
 }
 
 /**
- * Sink диагностик fail-open прямых путей тула (INV-15): `admission_degraded`
- * пишется в сессию тем же объектом-записью, что `verify_error`. SessionLogger
- * на момент сборки исполнителя ещё не создан (`Agent.run`), поэтому пишем
- * напрямую через менеджер сессий (как fail-open верификатора в `agent-phase`).
+ * Sink диагностик fail-open (INV-15): пишет в сессию тем же объектом-записью,
+ * что `verify_error`. SessionLogger на момент сборки исполнителя ещё не создан
+ * (`Agent.run`), поэтому пишем напрямую через менеджер сессий (как fail-open
+ * верификатора в `agent-phase`).
+ *
+ * Сигнатура по умолчанию выводится из операции; деградация судьи галлюцинаций
+ * пишется под своим именем, иначе в разборе сессии два разных отказа
+ * выглядели бы как один.
  */
+
+/** Операции проверки заявлений и судьи деградируют под своим именем. */
+const OPERATION_SIGNALS: Record<string, "hallucination_judge_degraded"> = {
+  "hallucination.judge": "hallucination_judge_degraded",
+  "hallucination.evidence": "hallucination_judge_degraded",
+};
+
+function signalForOperation(operation: string): "admission_degraded" | "hallucination_judge_degraded" {
+  return OPERATION_SIGNALS[operation] ?? "admission_degraded";
+}
 export function admissionDiagnosticSink(
   sessionManager: SessionManager,
+  event?: "admission_degraded" | "hallucination_judge_degraded",
 ): (diag: Diagnostic) => void {
   return (diag: Diagnostic) => {
     sessionManager.appendLog({
       ts: new Date().toISOString(),
-      type: "admission_degraded",
+      // Без явного `event` сигнатура выводится из операции: деградация проверки
+      // заявлений — не admission, и записывать её под чужим именем значило бы
+      // слить два разных отказа в один при разборе сессии.
+      type: event ?? signalForOperation(diag.operation),
       content: diag.cause ?? diag.operation,
       source: diag.source,
       operation: diag.operation,

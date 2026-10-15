@@ -153,16 +153,19 @@
 `src/output/types.ts:21-26` (`DiagnosticEvent`), `docs/agents/observability.md`.
 
 **Что сделать.**
-- [ ] **W10.1** Внедрить в `LLMJudge` sink диагностик (образец — `ToolContext.onDiagnostic`),
+- [x] **W10.1** Внедрить в `LLMJudge` sink диагностик (образец — `ToolContext.onDiagnostic`),
       эмитить `hallucination_judge_degraded` с `cause`/`operation`; то же для потери claims в
       `hallucination-claims.ts`.
-- [ ] **W10.2** Гейт «каждая сигнатура `observability.md` подтверждена тестом». Сигнатуры —
+- [x] **W10.2** Гейт «каждая сигнатура `observability.md` подтверждена тестом». Сигнатуры —
       ровно члены союза `DiagnosticEvent` (5 штук).
-- [ ] **W10.3** Каждый пункт таблицы молчащих `catch` (ниже) — либо диагностика, либо строка
+- [x] **W10.3** Каждый пункт таблицы молчащих `catch` (ниже) — либо диагностика, либо строка
       в `observability.md`, либо запись в `debt.md`.
-- [ ] **W10.4** Каждый sink `ToolContext` получает тест, который реально его вызывает.
+- [x] **W10.4** Каждый sink `ToolContext` получает тест, который реально его вызывает.
 - [ ] **W10.5** (D8) `path-validator.ts:74,90` — fail-closed вместо `allowed: true`; проверить
-      все production-точки сборки `ToolContext`.
+      все production-точки сборки `ToolContext`. → **вынесено в долг**
+      `path-validator-fail-open` (`docs/agents/debt.md`): смена затрагивает все точки
+      сборки `ToolContext`, включая тестовые и CLI-пути, и в W10 не проверяема;
+      триггер — W9 (шаг W9.5).
 
 Молчащие `catch` (возврат — на строку ниже указанной): `provider-phase.ts:252→253` (reasoning
 тихо выключен, при этом транзиентный `null` логируется тем же текстом, что и definitive

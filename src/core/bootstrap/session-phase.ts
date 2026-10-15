@@ -212,6 +212,9 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
 
   const hallucinationDetector = new HallucinationDetector(baseDir, llmProvider, {
     judgeEnabled: config.hallucination?.judge?.enabled ?? false,
+    // INV-15: деградация судьи (`pass` вместо вердикта) обязана быть видна в
+    // сессии, иначе «судья молчала» и «противоречий нет» неразличимы.
+    onDiagnostic: admissionDiagnosticSink(sessionManager, "hallucination_judge_degraded"),
   });
 
   return {

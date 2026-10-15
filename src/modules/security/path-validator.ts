@@ -70,13 +70,12 @@ export function isPathInScope(
     };
   }
 
-  // Выключенная защита пропускает паттерны
+  // DEBT(path-validator-fail-open): нет конфиг-секции = «разрешено всё»
+  // (fail-closed затрагивает все точки сборки ToolContext, см. debt.md).
   if (!securityConfig?.enabled) {
     // Скоуп суб-агента действует всё равно
     if (scope) {
-      const isReadScope = scope.read_only_files.some((f: string) =>
-        matchesScopeEntry(targetResolved, resolve(baseDir, f)),
-      );
+      const isReadScope = scope.read_only_files.some((f: string) => matchesScopeEntry(targetResolved, resolve(baseDir, f)));
       const isWriteScope = scope.allowed_files.some((f: string) =>
         matchesScopeEntry(targetResolved, resolve(baseDir, f)),
       );
@@ -167,7 +166,7 @@ export function isPathWritable(
     };
   }
 
-  // Выключенная защита пропускает паттерны
+  // Выключенная защита пропускает паттерны (DEBT(path-validator-fail-open)).
   if (!securityConfig?.enabled) {
     // Скоуп суб-агента действует всё равно
     if (scope) {

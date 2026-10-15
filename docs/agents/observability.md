@@ -23,6 +23,7 @@
 | `verify_error` | Верификатор деградировал: `validateSyntax` не проверяет синтаксис (нет `tsc`/проверка неоднозначна); `runTypeCheck`/`runTests` пропущены (нет `tsconfig`/`tsc`/`package.json`/test-скрипта) | `src/modules/execution/verifier.ts` (`StepVerifier.onDegrade`) → `ExecutionModule.reportDegrade` | ✅ реализовано |
 | `admission_degraded` | Admission результата тула упал (fs/ENOTDIR/path-jail): результат возвращается сырьём, ход продолжается | `src/tools/admission.ts` (`admitFromContext` catch) → `ToolExecutor.setDiagnosticSink` | ✅ реализовано |
 | `context_degraded` | Серия компакций без роста durable-леджера (модель сжимает историю, ничего не узнавая): сигнал вырожденной петли, ход продолжается | `src/core/context/compaction-progress.ts` (`CompactionProgressTracker`) → `ContextManager.setProgressDiagnosticSink` → `context-factory.ts` (`contextDegradedSink`) | ✅ реализовано |
+| `hallucination_judge_degraded` | LLM-судья противоречий не ответила (провайдер упал, таймаут, неразборчивый ответ): вердикт вырождается в `pass`, ход продолжается | `src/core/hallucination/llm-judge.ts` (catch в `validate`) → `LLMJudge.onDiagnostic` → `session-phase.ts` / `session-runner.ts` (`admissionDiagnosticSink`) | ✅ реализовано |
 
 ### Как подключён `verify_error`
 
@@ -45,6 +46,26 @@ Subagent не несёт `ExecutionModule`, поэтому его деграда
 (`session-phase.ts` — main, `session-runner.ts` — запиненный sibling раннера)
 передают свой `SessionManager`, поэтому запись `context_degraded` попадает в
 сессию владельца хода.
+
+## Проверенные молчащие `catch` (W10.3)
+
+Fail-open считается не по факту `catch`, а по контракту: подсистема обязана была
+что-то сделать, отказ сделал вид, что всё в порядке, и подсистема при этом
+**не работает**. Остальные `catch` — разбор недоверенного ввода или
+`best-effort` по построению, их молчание не создаёт «мнимое успех».
+
+| Сайт | Что происходит | Решение |
+|---|---|---|
+| `src/core/bootstrap/provider-phase.ts:65,193,252` | проба контекста / reasoning упала, возвращается `false`/`null` — то же, что и отрицательный результат | ✅ запись добавлена: `logSilent("warn", …)` с причиной в каждом из трёх мест |
+| `src/core/hallucination/llm-judge.ts` (catch в `validate`) | судья не ответила → вердикт `pass` | ✅ `hallucination_judge_degraded` (см. инвентарь) |
+| `src/core/agent/hallucination-claims.ts:26` | `getActiveHistory()` бросил → evidence пуст, проверка claim'ов проходит мягче | ✅ запись `hallucination_judge_degraded` через тот же сток детектора |
+| `src/core/agent/loop-nudges.ts:25` | битый JSON аргументов тула от модели | не fail-open: аргументы и так недоверенный ввод модели, битый JSON — обычный её исход; детекция перфекционизма по нему не обязана срабатывать |
+| `src/core/hallucination/factual.ts:222` | каталог не читается (нет прав/удалён) → индекс неполон | не fail-open: индекс **выборочный** по построению (`MAX_INDEXED_FILES`), неполнота индекса не меняет вердикт |
+| `src/core/agent/artifact-resolve.ts:76,83` | `stat`/`read` артефакта не удались → тул считается существующим | не fail-open: путь приходит из уже исполненного `write_file`; отказ чтения означает «нечем проверить», а не «артефакта нет» |
+| `src/core/context/ledger-absorb.ts:22` | аргументы не сериализуются → в леджер пишется `String(args)` | не fail-open: деградация записи, а не чтения; данные попадают в леджер |
+| `src/core/agent/context-log.ts:122,398,407,447` | битое значение / недоступный лог / нечитаемый существующий лог | не fail-open: лог контекста — диагностический, его потеря не меняет поведение петли |
+| `src/core/environment.ts:136,172,180` | нет `package.json` / битая версия / нет каталога браузеров | не fail-open: окружение **сообщает** отсутствие (`"missing"`, `false`), а не притворяется исправным |
+| `src/core/context/ledger.ts:60` | провал записи durable-леджера | долг `ledger-write-diagnostics` в `debt.md` |
 
 ## Каталог сигнатур (`mma session diagnose`)
 

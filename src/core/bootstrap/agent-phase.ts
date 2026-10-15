@@ -16,6 +16,7 @@ import type { PluginManager } from "../../modules/plugins/manager";
 import type { ContextManager } from "../../core/context/manager";
 import type { SessionManager } from "../../modules/session/index";
 import type { ToolContext } from "../../tools/types";
+import { admissionDiagnosticSink } from "./tool-context";
 import type { PromptBlock } from "../types";
 import type { ContextProbeResult } from "../../llm/model-loader";
 import type { MemoryStore } from "../../modules/memory/store";
@@ -172,6 +173,9 @@ export async function assembleAgent(
     reasoningStrategy,
     planSummary: () => execModule.getPlanSummary(),
     toolCtx,
+    // INV-15: деградации проверки заявлений идут в сессию тем же стоком,
+    // что и прочие сигналы петли.
+    onDiagnostic: admissionDiagnosticSink(sessionManager),
   };
 
   const agent = new Agent(agentDeps);

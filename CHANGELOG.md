@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Fail-open signals now leave a trace**: the hallucination judge's fail-open
+  (provider down, timeout, unparseable answer) used to degrade to `pass`
+  silently — indistinguishable from "the model was consistent". It now records
+  `hallucination_judge_degraded` in `session.jsonl`, as does the loss of tool
+  evidence used for claim checking. The reasoning/context probes in
+  `provider-phase` log their failure with the cause instead of returning
+  `false`/`null` as if the probe had answered. A new architecture gate
+  (`tests/arch/observability-coverage.test.ts`) reads the closed `DiagnosticEvent`
+  union and fails if any signal has no test behind it or is missing from
+  `docs/agents/observability.md`, so a new fail-open cannot be added silently.
+  Plan wave W10.
 - **`mma session diagnose <id> --json`**: reads a session log and reports the
   failure signatures that caused real fixes — compaction stalls, prompt blocks
   dropped by the budget, critic degradation, repeated tool failures, repeated
