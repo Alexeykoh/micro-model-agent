@@ -7,14 +7,13 @@
  * получает СВОЙ раннер: агент + контекст + запиненный менеджер сессий +
  * трекер плана + исполнитель тулов. Разделяются только stateless/длинноживущее:
  * конфиг, провайдер, реестр-шаблон, инстансы плагинов, память, индекс.
- *
- * Прецедент изоляции — тул `subagent` (свой ContextManager/PluginManager/
- * HallucinationDetector поверх shared executor/provider); параллельные
- * сабагенты уже гоняют тулы конкурентно через общий исполнитель.
+ * Прецедент — тул `subagent` (свой ContextManager/PluginManager/
+ * HallucinationDetector поверх shared executor/provider).
  */
 import { join } from "path";
 import { Agent } from "../agent";
 import type { AgentDeps } from "../agent";
+import { moduleOf } from "../../output";
 import type { AppConfig, ReasoningStrategy, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
@@ -215,6 +214,7 @@ export function createSessionRunnerFactory(
         type: event,
         content: diag.cause ?? diag.operation,
         source: diag.source,
+        module: moduleOf(diag.source),
         operation: diag.operation,
         errorKind: diag.kind,
         cause: diag.cause,

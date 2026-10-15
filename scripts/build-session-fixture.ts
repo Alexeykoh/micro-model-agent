@@ -24,6 +24,9 @@ const KEEP = new Set([
   "messagesAfter", "systemTokens", "systemBudget", "window", "quality",
   "messageCount", "compactionCount", "promptTokens", "completionTokens",
   "cachedTokens", "totalTokens", "blocks", "content", "model", "provider",
+  // Provenance (INV-13): не персональные данные — `core`/`module:<name>`/`tool:<name>`.
+  // Без него обезличенную запись нельзя связать с автором события (W11).
+  "source", "module", "origin",
 ]);
 
 /**

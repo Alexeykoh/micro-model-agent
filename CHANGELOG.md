@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Session log provenance is now mandatory**: `SessionLogEntry.source` was optional
+  and, on a real session, stood on only 14% of records — an event could not be tied to
+  its author, and "no source" was indistinguishable from "source not written". The field
+  was also overloaded across three meanings (provenance, usage-measurement origin,
+  reasoning-policy origin), which is why `llm_usage` wrote `"api"` into a field typed as
+  `string` and never matched the `Source` union. `source` is now required and typed
+  `Source`; the usage-measurement and reasoning-policy origins moved to a separate
+  `origin?: string` field. Open `type` templates (`module_${string}`,
+  `onboarding_${string}`) are replaced by an explicit `OnboardingEvent` union, so a typo
+  no longer compiles. New gate `tests/arch/session-provenance.test.ts`: it statically
+  scans every `appendLog({...})` in `src/` for `source:`, runs every closed-union event
+  type through `SessionLogger` and asserts 100% attribution (and a `module:<name>`
+  diagnostic carries `module` without the prefix), and checks the fixture anonymiser no
+  longer drops provenance. Plan wave W11, decision D3.
 - **Critic timeout now outlives the request it wraps**: the default equalled the
   provider's own request deadline, so the wrapper always lost the race and the
   `call_timeout` diagnostic — the only record that the critic had to be cut off —

@@ -10,6 +10,7 @@ import type { AppConfig, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { ToolContext } from "../../tools/types";
 import type { Diagnostic } from "../../output/types";
+import { moduleOf } from "../../output";
 
 /** Зависимости сборки ToolContext. */
 export interface ToolContextInput {
@@ -57,6 +58,7 @@ export function admissionDiagnosticSink(
       type: event ?? signalForOperation(diag.operation),
       content: diag.cause ?? diag.operation,
       source: diag.source,
+      module: moduleOf(diag.source),
       operation: diag.operation,
       errorKind: diag.kind,
       cause: diag.cause,
@@ -98,6 +100,7 @@ export function createToolContext(input: ToolContextInput): ToolContext {
         sessionManager.appendLog({
           ts: new Date().toISOString(),
           type: "plan",
+          source: "core",
           tool: event,
           content: detail,
           ...(iteration !== undefined ? { iteration } : {}),

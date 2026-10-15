@@ -7,6 +7,7 @@
  */
 import { Agent } from "../agent";
 import type { AgentDeps } from "../agent";
+import { moduleOf } from "../../output";
 import type { AppConfig, ReasoningStrategy } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
@@ -138,6 +139,7 @@ export async function assembleAgent(
       type: event,
       content: diag.cause ?? diag.operation,
       source: diag.source,
+      module: moduleOf(diag.source),
       operation: diag.operation,
       errorKind: diag.kind,
       cause: diag.cause,

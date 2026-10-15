@@ -353,6 +353,8 @@ function logTaskContext(runner: SessionRunner, task: TaskRecord): void {
     runner.sessionManager.appendLog({
       ts: new Date().toISOString(),
       type: "service_task",
+      source: "module:service",
+      module: "service",
       content: parts.join(" "),
       ...tenantFields(tenant),
       jobId: task.jobId,

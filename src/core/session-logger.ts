@@ -1,6 +1,7 @@
 /** Логгер сессии: тонкая обёртка над SessionManager для цикла агента. */
 import type { SessionManager } from "../modules/session/manager";
-import type { Diagnostic, DiagnosticEvent } from "../output";
+import type { SessionLogEntry } from "../modules/session/store";
+import { moduleOf, type Diagnostic, type DiagnosticEvent } from "../output";
 import type { ToolCall } from "./types";
 import type { PrefixDelta } from "./agent/prefix-monitor";
 import type { CacheUsage } from "../llm/cache-usage";
@@ -55,12 +56,20 @@ export class SessionLogger {
   }
 
   /**
+   * Единая точка записи событий ЯДРА: `ts` (время) и provenance (INV-13,
+   * `source`) проставляются здесь, методы несут только содержательные поля.
+   * Запись без источника стала невозможной не на словах, а по построению (W11).
+   */
+  private log(entry: Omit<SessionLogEntry, "ts" | "source">): void {
+    this.session?.appendLog({ ts: new Date().toISOString(), source: "core", ...entry });
+  }
+
+  /**
    * Пишет системное сообщение в лог сессии.
    * @param content текст системного сообщения.
    */
   logSystem(content: string): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "system",
       content: redactContextSecrets(content),
     });
@@ -78,8 +87,7 @@ export class SessionLogger {
       content: sanitized,
       timestamp: new Date().toISOString(),
     });
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "user",
       content: sanitized,
       ...(imageRefs?.length ? { images: imageRefs } : {}),
@@ -99,8 +107,7 @@ export class SessionLogger {
   ): void {
     const caller = this.getCaller?.();
     if (reasoning) {
-      this.session?.appendLog({
-        ts: new Date().toISOString(),
+      this.log({
         type: "reasoning",
         content: redactContextSecrets(reasoning),
         iteration,
@@ -108,8 +115,7 @@ export class SessionLogger {
         model: caller?.model,
       });
     }
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "assistant",
       content: redactContextSecrets(content),
       ...(toolCalls
@@ -147,8 +153,7 @@ export class SessionLogger {
    * @param toolCount число тулов; @param toolNames имена; @param iteration итерация.
    */
   logToolDefs(toolCount: number, toolNames: string[], iteration: number): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "tool_defs",
       toolCount,
       toolNames,
@@ -161,8 +166,7 @@ export class SessionLogger {
    * @param call вызов тула; @param iteration номер итерации.
    */
   logToolCall(call: ToolCall, iteration: number): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "tool_call",
       tool: call.name,
       tool_call_id: call.id,
@@ -215,8 +219,7 @@ export class SessionLogger {
       provider: caller?.provider,
       model: caller?.model,
     });
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "tool_result",
       tool: call.name,
       tool_call_id: call.id,
@@ -316,8 +319,7 @@ export class SessionLogger {
     /** Стадия сокращения: summarize|prune-tools|aggressive|hard-drop. */
     strategy?: string;
   }): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "compaction",
       content: compactionSummary(info),
       iteration: info.iteration,
@@ -371,8 +373,7 @@ export class SessionLogger {
       included: boolean;
     }>;
   }): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "context",
       content:
         info.kind === "start"
@@ -419,8 +420,7 @@ export class SessionLogger {
       cache?: CacheUsage;
     },
   ): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "llm_usage",
       iteration,
       provider: usage.provider,
@@ -428,7 +428,7 @@ export class SessionLogger {
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
       totalTokens: usage.totalTokens,
-      source: usage.source,
+      origin: usage.source,
       durationMs: usage.durationMs,
       cacheStable: usage.prefix ? Number(usage.prefix.stableRatio.toFixed(4)) : undefined,
       cacheCause: usage.prefix?.cause,
@@ -472,6 +472,7 @@ export class SessionLogger {
       type,
       content: cause ?? diag.operation,
       source: diag.source,
+      module: moduleOf(diag.source),
       operation: diag.operation,
       errorKind: diag.kind,
       cause,
@@ -484,8 +485,7 @@ export class SessionLogger {
    * @param summary сводка аудита; @param iteration номер итерации.
    */
   logAudit(summary: string, iteration: number): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "audit",
       content: summary,
       iteration,
@@ -497,8 +497,7 @@ export class SessionLogger {
    * @param event имя события; @param detail детали; @param iteration итерация.
    */
   logPlan(event: string, detail: string, iteration?: number): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "plan",
       content: detail,
       tool: event,
@@ -533,8 +532,7 @@ export class SessionLogger {
         // Ошибка чтения — всё равно пишем
       }
     }
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "session_start",
       content: "session started",
       environment: data.environment,
@@ -554,22 +552,23 @@ export class SessionLogger {
     probePassed?: boolean;
     source?: string;
   }): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "reasoning_control",
       content: `reasoning level: ${data.level} (source: ${data.source ?? "policy"})`,
       iteration: data.iteration,
       level: data.level,
       strategy: data.strategy,
       probePassed: data.probePassed,
-      source: data.source,
+      origin: data.source,
     });
   }
 
   /** Пишет событие онбординга (meet/init) для пост-анализа. */
-  logOnboarding(event: string, data: Record<string, unknown> = {}): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+  logOnboarding(
+    event: "meet_start" | "meet_done" | "init_start" | "init_done",
+    data: Record<string, unknown> = {},
+  ): void {
+    this.log({
       type: `onboarding_${event}`,
       content: event,
       ...data,
@@ -582,8 +581,7 @@ export class SessionLogger {
    * дырка (llm_usage без assistant), а в ленте — дубль при переответе.
    */
   logClaimRetry(data: { kind: string; reason: string; iteration: number }): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: "claim_retry",
       content: data.reason,
       kind: data.kind,
@@ -596,8 +594,7 @@ export class SessionLogger {
     event: "critic_check" | "critic_verdict" | "critic_escalation",
     data: Record<string, unknown> = {},
   ): void {
-    this.session?.appendLog({
-      ts: new Date().toISOString(),
+    this.log({
       type: event,
       content: (data.summary as string) ?? event,
       ...data,

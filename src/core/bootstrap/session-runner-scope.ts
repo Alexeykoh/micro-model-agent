@@ -130,6 +130,7 @@ export function buildRunnerToolCtx(input: RunnerToolCtxInput): {
         sessionManager.appendLog({
           ts: new Date().toISOString(),
           type: "plan",
+          source: "core",
           tool: event,
           content: detail,
           ...(iteration !== undefined ? { iteration } : {}),

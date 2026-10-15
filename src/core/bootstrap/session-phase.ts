@@ -140,6 +140,7 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
         sessionManager.appendLog({
           ts: new Date().toISOString(),
           type: "context_probe",
+          source: "core",
           content: `model=${probe.model} actual=${probe.actual} configured=${config.contextWindow}`,
         });
       } catch {
