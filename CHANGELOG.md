@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **`mma session diagnose <id> --json`**: reads a session log and reports the
+  failure signatures that caused real fixes — compaction stalls, prompt blocks
+  dropped by the budget, critic degradation, repeated tool failures, repeated
+  `SECURITY BLOCKED` patterns, and claim retries. Read-only by construction, and
+  `--json` is required so the output format stays a contract. The signature
+  catalog lives in `docs/agents/observability.md`. Spec:
+  `docs/specs/2026-10-15-session-diagnose-design.md`, plan wave W5.
 - **Outbound network policy (SSRF)**: calls the harness makes on its own — the
   audit webhook and the `/v1/tasks` push callback — now go through one policy
   point (`src/modules/security/outbound-policy.ts`) instead of raw `fetch`. It is

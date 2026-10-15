@@ -46,6 +46,29 @@ Subagent не несёт `ExecutionModule`, поэтому его деграда
 передают свой `SessionManager`, поэтому запись `context_degraded` попадает в
 сессию владельца хода.
 
+## Каталог сигнатур (`mma session diagnose`)
+
+Сигнатуры — не события лога, а **патологии**, вычисляемые по нему: разбор
+боевой сессии иначе делается руками и не воспроизводится (спека
+`2026-10-15-session-diagnose-design.md`). Каталог живёт здесь, а не в `debt.md`:
+это сигнатуры, а не долги. Каждая придумана по реальному фиксу.
+
+| kind | Что означает | Источник в `session.jsonl` | Порог |
+|---|---|---|---|
+| `compaction_stall` | серия компакций подряд (без прогресса леджера) | `compaction` в окне 2 мин + `context_degraded` | ≥ 3 |
+| `prompt_block_dropped` | блок промпта не влез в бюджет | `context` → `blocks[].included === false` | любое число, группировка по подписи |
+| `critic_degraded` | критика нет/деградировал, ход ушёл как `pass` | `critic_error` | ≥ 1 |
+| `tool_failure_repeat` | один и тот же тул падает подряд | `tool_result` c `success:false` | ≥ 3 |
+| `security_block_repeat` | модель упирается в одну и ту же стену | `tool_result` c `[SECURITY BLOCKED]`, группировка по паттерну | ≥ 2 |
+| `claim_retry` | ход уходил в ретрай | `claim_retry` по классу `kind` | ≥ 2 |
+
+Пороги живут именованными константами в `src/modules/session/diagnose.ts`
+(`thresholds`), чтобы их правка не выглядела как «случайно поменялось поведение».
+Проверка: `tests/core/session-diagnose.test.ts` на обезличенной фикстуре
+`tests/fixtures/session-diagnose/session.jsonl` (реальная сессия
+`ses_mv8h787b_wuu8g1`, давшая четыре фикса) — фикстура обязана дать ≥ 5 видов
+сигнатур. Фикстура пересобирается `scripts/build-session-fixture.ts`.
+
 ## Что это не чинит
 
 Сигнал сообщает о деградации, но не меняет поведение fail-open: критик по-прежнему

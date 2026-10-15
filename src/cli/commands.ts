@@ -16,6 +16,7 @@ import {
   extensionFor,
   type ExportFormat,
 } from "../modules/session/export";
+import { registerDiagnoseCommand } from "./session-diagnose-command";
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
 import { createDoctorCommand } from "./doctor-command";
@@ -730,6 +731,7 @@ function buildSessionCommands(program: Command): void {
       sessionManager.delete(id);
       getDefaultChannel().writeLine(t("session.deleted", { id }));
     });
+  registerDiagnoseCommand(session, program);
   session
     .command("prune")
     .description(t("cli.prune_sessions"))
@@ -830,14 +832,13 @@ export function createProgram(): Command {
 
   // Экшены субкоманд гонят полный bootstrap() (reasoning-пробник, индексер,
   // плагины…), оставляющий открытые хендлы: без явного exit процесс висит после
-  // печати результата ("config set" напечатал и не вышел). Prompt/REPL-пути
-  // выходят явно в main.ts; каждая СУБКОМАНДА — one-shot: выходим, как резолвнится action.
+  // печати результата. Prompt/REPL-пути выходят явно в main.ts; каждая
+  // СУБКОМАНДА — one-shot: выходим, как резолвнится action.
   //
-  // Хук навешиваем РЕКУРСИВНО на все подкоманды (не только верхнего уровня):
-  // у вложенных (`session show`, `model certify`, `provider use` …) родитель
-  // без action, поэтому postAction родителя не срабатывает, и фоновые хендлы
-  // bootstrap держат процесс — команда «виснет» после вывода. На `program`
-  // хук не вешаем: его action — prompt/REPL, которым управляет main.ts.
+  // Хук навешиваем РЕКУРСИВНО на все подкоманды: у вложенных (`session show`,
+  // `model certify`, `provider use` …) родитель без action, поэтому postAction
+  // родителя не срабатывает и фоновые хендлы держат процесс — «виснет».
+  // На `program` хук не вешаем: его action — prompt/REPL под управлением main.ts.
   const attachOneShotExit = (cmd: Command): void => {
     cmd.hook("postAction", () => {
       process.exit(0);

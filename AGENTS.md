@@ -113,7 +113,8 @@ bun run mma "<промпт>"   # прогнать агента вживую
 `tests/core/command-catalog.test.ts`, `tests/version-beta.test.ts`,
 `tests/no-moe-surface.test.ts`, `tests/output/source-filled.test.ts`,
 `tests/arch/module-boundaries.test.ts`, `tests/tools/security-decl.test.ts`,
-`tests/arch/debt-register.test.ts`, `tests/arch/outbound-policy.test.ts`.
+`tests/arch/debt-register.test.ts`, `tests/arch/outbound-policy.test.ts`,
+`tests/core/session-diagnose.test.ts`.
 
 ### 6. Не расширять файл «заодно»
 
