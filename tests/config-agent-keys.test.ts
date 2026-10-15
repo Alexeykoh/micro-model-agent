@@ -13,7 +13,7 @@ describe("registry: critic keys", () => {
     expect(getConfigValue(c, "critic.enabled").value).toBe(true);
     expect(getConfigValue(c, "critic.maxCalls").value).toBe(4);
     expect(getConfigValue(c, "critic.maxRepairCycles").value).toBe(1);
-    expect(getConfigValue(c, "critic.timeoutMs").value).toBe(60000);
+    expect(getConfigValue(c, "critic.timeoutMs").value).toBe(120000);
     expect(getConfigValue(c, "critic.maxTokens").value).toBe(2048);
   });
 

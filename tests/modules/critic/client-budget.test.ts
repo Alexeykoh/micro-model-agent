@@ -162,6 +162,8 @@ describe("CriticClient budget (§5.8)", () => {
     });
     expect(await client.verify(bigPack())).toBeNull();
     expect(logs.some((l) => l.includes("critic_degraded"))).toBe(true);
+    // Таймер виден как call_timeout, а не только как невнятный llm_error/abort.
+    expect(logs.some((l) => l.includes("call_timeout"))).toBe(true);
   });
 
   it("defaults maxTokens high enough to hold a verdict with issues", async () => {

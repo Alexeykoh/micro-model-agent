@@ -2,6 +2,7 @@
 import type { AppConfig } from "./types";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
+import { LLM_REQUEST_TIMEOUT_MS } from "./timeouts";
 
 /** Дефолтная модель (эксперты наследуют её). */
 const DEFAULT_MODEL = "qwen/qwen3.5-9b";
@@ -27,7 +28,9 @@ export const DEFAULTS: AppConfig = {
     maxRepairCycles: 1,
     // Таймаут ОДНОГО LLM-вызова (раньше — на всю цепочку из трёх проходов,
     // из-за чего второй проход на длинном пакете не успевал: §5.8 аудита).
-    timeoutMs: 60000,
+    // По умолчанию = провайдерский request-дедлайн: критик делит активную
+    // модель, и его таймер не должен убивать вызов раньше провайдера.
+    timeoutMs: LLM_REQUEST_TIMEOUT_MS,
     maxTokens: 2048,
   },
   tools: {
