@@ -56,6 +56,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `SIGNATURE_COVERAGE`; `tool_failure_repeat` and `prompt_block_dropped` had none and got
   real tests. A `quality:posix` lane (`.github/workflows/quality.yml`, ubuntu-latest) runs
   `bun test tests/arch tests/core tests/tools`. Plan wave W6, decision D4.
+- **Style rules now have a guard or a declared reason**: half of `docs/agents/code-style.md`
+  was unenforced — including its headline rule that `as any`/`as unknown as` are banned,
+  violated 36 times in `src/` with no baseline. New gate
+  `tests/arch/style-rules.test.ts` requires every section of the style doc to be tied to a
+  test or declared with a reason, and adds three counters: an `src/` cast baseline, a
+  per-file budget of silent catches (25, each with a reason — the doc's rule #14), and a
+  declaration of the ten `as unknown as *Host` seams in `src/core/agent.ts`. Those seams
+  are *not* removable: `PromptPhaseHost`/`TurnRunHost`/`ProviderPhaseHost` are live mutable
+  views whose scalar fields the phase writes back into `Agent`, so a literal object would
+  copy the field and silently drop the write — the compiler would check less, not more.
+  They are therefore declared with that reason, and an undeclared one fails the gate.
+  Plan wave W12.
 - **Critic timeout now outlives the request it wraps**: the default equalled the
   provider's own request deadline, so the wrapper always lost the race and the
   `call_timeout` diagnostic — the only record that the critic had to be cut off —
