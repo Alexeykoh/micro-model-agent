@@ -1,5 +1,10 @@
 // Phase 3: tool portability — bash redirects, grep engine, process dedup.
-import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, afterEach, beforeAll, afterAll, beforeEach } from "vitest";
+import { setLocale } from "../../src/i18n/index";
+
+// Локаль — процессный синглтон: порядок файлов в раннере зависит от ФС
+// (на CI иной), поэтому файлы с английскими строками пинят "en" сами.
+beforeEach(() => setLocale("en"));
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";

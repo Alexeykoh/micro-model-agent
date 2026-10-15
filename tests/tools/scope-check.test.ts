@@ -1,4 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { setLocale } from "../../src/i18n/index";
+
+// Локаль — процессный синглтон: порядок файлов в раннере зависит от ФС
+// (на CI иной), поэтому файлы с английскими строками пинят "en" сами.
+beforeEach(() => setLocale("en"));
 // Production path scope lives in the security module; `tools/scope-check.ts`
 // was a dead duplicate (only this test imported it) and was removed.
 import { isPathInScope, isPathWritable } from "../../src/modules/security/path-validator";
@@ -59,7 +64,9 @@ describe("isPathInScope", () => {
     expect(result.allowed).toBe(true);
   });
 
-  it("works with Windows-style paths", () => {
+  it.skipIf(process.platform !== "win32")("works with Windows-style paths", () => {
+    // Буква диска и `\` как разделитель — семантика win32; на posix обратный
+    // слэш — легальный символ имени и скоуп "src" такой путь не покрывает.
     const result = isPathInScope("C:\\projects\\app", "src\\file.ts", {
       allowed_files: ["src"],
       read_only_files: [],
@@ -120,13 +127,11 @@ describe("cross-platform scope edge cases", () => {
     expect(result.allowed).toBe(false);
   });
 
-  if (process.platform === "win32") {
-    it("case-insensitive baseDir containment on Windows", () => {
-      const result = isPathInScope("E:\\Proj", "SRC\\file.ts", {
-        allowed_files: ["src"],
-        read_only_files: [],
-      });
-      expect(result.allowed).toBe(true);
+  it.skipIf(process.platform !== "win32")("case-insensitive baseDir containment on Windows", () => {
+    const result = isPathInScope("E:\\Proj", "SRC\\file.ts", {
+      allowed_files: ["src"],
+      read_only_files: [],
     });
-  }
+    expect(result.allowed).toBe(true);
+  });
 });

@@ -1,4 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { setLocale } from "../../src/i18n/index";
+
+// Локаль — процессный синглтон: порядок файлов в раннере зависит от ФС
+// (на CI иной), поэтому файлы с английскими строками пинят "en" сами.
+beforeEach(() => setLocale("en"));
 import { ToolExecutor } from "../../src/tools/executor";
 import { ToolRegistry } from "../../src/tools/registry";
 import type { ToolContext, ToolDefinition, ToolSecurityDecl } from "../../src/tools/types";

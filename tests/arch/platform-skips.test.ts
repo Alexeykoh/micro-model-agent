@@ -59,7 +59,11 @@ export function findSkipSites(source: string, file: string): SkipSite[] {
       continue;
     }
     if (SKIP_CALL_RE.test(line)) {
-      const title = STRING_RE.exec(near)?.[1];
+      // Заголовок — первая quoted-строка ПОСЛЕ `")("`: в `it.skipIf(cond)("title")`
+      // до неё идёт условие ("win32"), а следующая строка уже чужая.
+      const boundary = line.indexOf('")("');
+      const haystack = boundary >= 0 ? line.slice(boundary + 3) : near;
+      const title = STRING_RE.exec(haystack)?.[1];
       if (title) sites.push({ file, key: title, line: i + 1, kind: "conditional-skip" });
       continue;
     }
@@ -146,6 +150,16 @@ export const SKIP_MANIFEST: Array<{ file: string; key: string; reason: string }>
     file: "tests/bash.test.ts",
     key: "hints on the ORIGINAL first word even when it was translated (cat→type)",
     reason: "трансляция `cat`→`type` — платформенный факт win32",
+  },
+  {
+    file: "tests/tools/scope-check.test.ts",
+    key: "works with Windows-style paths",
+    reason: "буква диска и backslash-разделитель — семантика win32; на posix это легальное имя файла",
+  },
+  {
+    file: "tests/tools/scope-check.test.ts",
+    key: "case-insensitive baseDir containment on Windows",
+    reason: "регистронезависимость FS существует только на win32",
   },
   {
     file: "tests/lsp-command.test.ts",

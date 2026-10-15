@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { setLocale } from "../../src/i18n/index";
 import { formatMenu, choicePrompt } from "../../src/tools/user-input";
 
@@ -9,6 +9,8 @@ const options = [
 
 describe("question rendering (STYLE)", () => {
   beforeEach(() => setLocale("en"));
+
+  afterEach(() => setLocale("en")); // не течь "ru" в другие файлы (порядок ФС на CI иной)
 
   it("prefixes the question with the ? glyph", () => {
     const menu = formatMenu("Reply style?", options);
