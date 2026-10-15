@@ -113,6 +113,36 @@ describe("CompactionService v2 overflow cooldown", () => {
   });
 });
 
+describe("CompactionService v2 pending (after-tool) cooldown", () => {
+  it("does not compact again within the cooldown window", () => {
+    const cm = new ContextManager(100000, budget());
+    for (let i = 0; i < 20; i++) cm.addMessage({ role: "user", content: `m${i}` });
+    let calls = 0;
+    (cm as any).compactAdaptive = () => {
+      calls++;
+      return { reducedBy: 10_000_000, strategy: "summarize" } as never;
+    };
+    const logs: string[] = [];
+    const svc = makeService(cm, logs);
+    const state = createLoopState();
+
+    state.iteration = 1;
+    state.pendingCompaction = true;
+    svc.compactIfNeeded(state);
+    expect(calls).toBe(1);
+
+    state.iteration = 2; // внутри cooldown
+    state.pendingCompaction = true;
+    svc.compactIfNeeded(state);
+    expect(calls).toBe(1);
+
+    state.iteration = 5; // cooldown истёк (>= 3)
+    state.pendingCompaction = true;
+    svc.compactIfNeeded(state);
+    expect(calls).toBe(2);
+  });
+});
+
 describe("computeMinReduction", () => {
   it("takes the larger of 2% budget and 3% context", () => {
     expect(computeMinReduction(1000, 1000)).toBe(30); // 3% context wins
