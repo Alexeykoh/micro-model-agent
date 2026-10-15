@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Outbound network policy (SSRF)**: calls the harness makes on its own — the
+  audit webhook and the `/v1/tasks` push callback — now go through one policy
+  point (`src/modules/security/outbound-policy.ts`) instead of raw `fetch`. It is
+  fail-closed and independent of `security.network.enabled`: loopback and private
+  ranges are denied unless `security.network.allowPrivateOutbound` is set
+  explicitly. A `callbackUrl` of `http://127.0.0.1:PORT/…` is rejected with 422 at
+  submit time and never retried; refusals are logged as a `Diagnostic`
+  (`kind: "blocked"`, with cause). Spec:
+  `docs/specs/2026-10-15-outbound-policy-design.md`, plan wave W13.
 - **Trace tab detail**: the trace pane now streams the model's reasoning as its
   own row (`thinking… N chars`) and shows a compaction before/after report —
   `tokens 12000→8000 (−4000), quality 70→88, messages 40→20, turns −18/+6,

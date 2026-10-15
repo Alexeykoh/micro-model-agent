@@ -2,8 +2,10 @@
 import { writeFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import type { AuditLogEntry } from "./audit-log";
-import { backoffDelay } from "../../utils/retry";
 import { defaultOutputBus } from "../../output";
+import { sendWebhook, WebhookRetryQueue } from "./audit-webhook";
+import { OutboundPolicyError } from "./outbound-policy";
+import type { NetworkSecurityConfig } from "../../config/types";
 
 // Глобальный fetch (есть в Bun)
 declare const fetch: (url: string, options?: RequestInit) => Promise<Response>;
@@ -24,6 +26,8 @@ export interface AuditNotifierConfig {
   eventTypes?: AuditEventType[];
   /** Ретраев при падении webhook. Дефолт: 3 */
   maxRetries?: number;
+  /** Сетевая политика для webhook-адресата (W13, D5); без неё — базовые правила. */
+  networkConfig?: NetworkSecurityConfig;
 }
 
 /** Уровни severity аудит-событий. */
@@ -81,8 +85,8 @@ export const DEFAULT_AUDIT_NOTIFIER_CONFIG: AuditNotifierConfig = {
 /** Нотификатор security-событий: файл + webhook с ретраями. */
 export class AuditNotifier {
   private config: AuditNotifierConfig;
-  private retryQueue: Array<{ entry: AuditNotification; retries: number }> = [];
-  private isProcessing: boolean = false;
+  /** Очередь ретраев вынесена в `audit-webhook.ts` (правило 6). */
+  private retries = new WebhookRetryQueue<AuditNotification>();
 
   constructor(config?: Partial<AuditNotifierConfig>) {
     this.config = { ...DEFAULT_AUDIT_NOTIFIER_CONFIG, ...config };
@@ -159,6 +163,17 @@ export class AuditNotifier {
       try {
         await this.sendToWebhook(notification);
       } catch (error) {
+        // Отказ политики исходящих вызовов (W13): адресат не изменится, ретраи
+        // только размножают попытки во внутреннюю сеть.
+        if (error instanceof OutboundPolicyError) {
+          defaultOutputBus.log(
+            "warn",
+            "module:audit",
+            `[AuditNotifier] Webhook blocked by outbound policy: ${error.reason}`,
+            { persist: true, diagnostic: true },
+          );
+          return notification;
+        }
         defaultOutputBus.log(
           "warn",
           "module:audit",
@@ -221,83 +236,17 @@ export class AuditNotifier {
 
   /**
    * Отправить нотификацию в webhook. Падение бросает исключение — политику
-   * ретраев решает вызывающий (notify() кладёт в очередь, processRetryQueue()
-   * считает попытки).
+   * ретраев решает вызывающий (notify() кладёт в очередь ретраев).
    */
-  private async sendToWebhook(notification: AuditNotification): Promise<void> {
-    if (!this.config.webhookUrl) return;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.config.webhookTimeout);
-
-    try {
-      const response = await fetch(this.config.webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(notification),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Webhook returned ${response.status}`);
-      }
-    } finally {
-      clearTimeout(timeoutId);
-    }
+  private sendToWebhook(notification: AuditNotification): Promise<void> {
+    const url = this.config.webhookUrl;
+    if (!url) return Promise.resolve();
+    return sendWebhook(url, notification, this.config.networkConfig, this.config.webhookTimeout ?? 5000);
   }
 
   /** Положить нотификацию в retry-очередь. */
   private addToRetryQueue(notification: AuditNotification): void {
-    this.retryQueue.push({ entry: notification, retries: 0 });
-    if (!this.isProcessing) {
-      this.processRetryQueue();
-    }
-  }
-
-  /** Разобрать retry-очередь (бэкофф, лимит попыток). */
-  private async processRetryQueue(): Promise<void> {
-    if (this.retryQueue.length === 0 || this.isProcessing) return;
-
-    this.isProcessing = true;
-
-    try {
-      while (this.retryQueue.length > 0) {
-        const item = this.retryQueue[0];
-
-        if (item.retries >= (this.config.maxRetries ?? 3)) {
-          defaultOutputBus.log(
-            "error",
-            "module:audit",
-            `[AuditNotifier] Max retries exceeded for notification: ${JSON.stringify(item.entry)}`,
-            { persist: true },
-          );
-          this.retryQueue.shift();
-          continue;
-        }
-
-        try {
-          await this.sendToWebhook(item.entry);
-          this.retryQueue.shift();
-        } catch (error) {
-          // sendToWebhook сам в очередь не кладёт — счётчик ретраев реально
-          // растёт, и maxRetries достижим.
-          item.retries++;
-          defaultOutputBus.log(
-            "warn",
-            "module:audit",
-            `[AuditNotifier] Webhook retry ${item.retries} failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-            { persist: true },
-          );
-          // Экспоненциальный бэкофф перед следующей попыткой того же head-элемента.
-          const delay = backoffDelay(item.retries, 1000);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-      }
-    } finally {
-      this.isProcessing = false;
-    }
+    this.retries.add(notification, (e) => this.sendToWebhook(e), this.config.maxRetries ?? 3);
   }
 
   /** Прочитать нотификации из файла (последние N). */
@@ -326,7 +275,7 @@ export class AuditNotifier {
     if (this.config.filePath) {
       writeFileSync(this.config.filePath, "", "utf8");
     }
-    this.retryQueue = [];
+    this.retries.clear();
   }
 
   /** Статистика нотификаций: всего, по severity, по типам. */

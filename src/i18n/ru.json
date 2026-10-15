@@ -2115,6 +2115,8 @@
   "config.desc.security.network.requestTimeout": "Таймаут одного исходящего запроса тула, в мс (1000-120000).",
   "config.key.security.network.maxResponseSize": "макс. размер ответа",
   "config.desc.security.network.maxResponseSize": "Максимум байт исходящего ответа (1024-1000000).",
+  "config.key.security.network.allowPrivateOutbound": "приватные callback-адреса",
+  "config.desc.security.network.allowPrivateOutbound": "Разрешить loopback/приватные адреса в исходящих вызовах самого агента (webhook аудита, callback задачи). По умолчанию запрещено: адресат приходит из конфига или тела запроса.",
   "config.key.security.contentScan.dangerousPatterns": "опасные паттерны",
   "config.desc.security.contentScan.dangerousPatterns": "Регулярные выражения, которые ищутся в содержимом файлов перед записью.",
   "config.key.security.auditNotifier.enabled": "аудит-уведомитель",

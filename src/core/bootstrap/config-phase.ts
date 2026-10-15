@@ -76,9 +76,12 @@ export async function initConfigPhase(
   try {
     const { globalAuditNotifier } = await import("../../modules/security/audit-notifier");
     if (config.security?.auditNotifier) {
-      globalAuditNotifier.updateConfig(
-        config.security.auditNotifier as Partial<typeof config.security.auditNotifier>,
-      );
+      globalAuditNotifier.updateConfig({
+        ...(config.security.auditNotifier as Partial<typeof config.security.auditNotifier>),
+        // Политика исходящих вызовов каркаса (W13): адресат webhook-нотификации
+        // проверяется по сетевой политике, а не «как получилось».
+        ...(config.security.network ? { networkConfig: config.security.network } : {}),
+      });
     }
   } catch (err) {
     // Logger ещё не создан — запомним и залогируем после его инициализации.

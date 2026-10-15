@@ -9,6 +9,7 @@
 import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
+
 import { errMsg } from "../../../utils/error";
 import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
 import { problem, type ProblemDetails } from "../runtime/problem";
@@ -18,16 +19,16 @@ import { cancelTaskQuestions, installServicePromptIO, resolveAnswer } from "../r
 import { runTask, type RunTaskResult } from "../runtime/run-task";
 import { deliverWebhook } from "../runtime/webhook";
 import { newEventId } from "../runtime/ids";
+import { defaultOutputBus } from "../../../output";
 import {
   isTerminal,
   type TaskCreateParams,
-  type TaskMode,
-  type TaskOutputSpec,
   type TaskRecord,
   type TenantContext,
 } from "../runtime/task-registry";
 import type { JobObject } from "../types";
 import type { AgentServiceState } from "../state";
+import { parseSubmitBody, type SubmitParams } from "./submit-body";
 
 /** Кап тела JSON-запроса сервиса (задачи текстовые, картинок тут нет). */
 const MAX_JSON_BYTES = 1024 * 1024;
@@ -77,18 +78,7 @@ export async function handleTasksApi(
 // ── Submit ────────────────────────────────────────────────────────────────
 
 /** Разобранный сабмит: валидированные параметры задачи. */
-interface SubmitParams {
-  input: string;
-  mode: TaskMode;
-  output?: TaskOutputSpec;
-  toolAllowlist: string[];
-  timeoutMs?: number;
-  callbackUrl?: string;
-  externalRef?: string;
-  wait: boolean;
-}
 
-type SubmitParse = { ok: true; params: SubmitParams } | { ok: false; problem: ProblemDetails };
 
 async function submit(
   req: IncomingMessage,
@@ -100,7 +90,7 @@ async function submit(
 
   const body = await readJson(req, res);
   if (!body) return true;
-  const parsed = parseSubmitBody(body);
+  const parsed = parseSubmitBody(body, s.config.security?.network);
   if (!parsed.ok) {
     sendProblem(res, parsed.problem);
     return true;
@@ -207,54 +197,7 @@ function createAndDispatch(
   return { ok: true, task };
 }
 
-/** Валидирует тело сабмита; ошибка → готовый Problem Details. */
-function parseSubmitBody(body: Record<string, unknown>): SubmitParse {
-  const input = typeof body.input === "string" ? body.input : "";
-  if (!input.trim()) return submitError("input required", 400);
-  const output = parseOutput(body.output);
-  if (!output.ok) return submitError("invalid output spec", 422, output.detail);
-  const toolAllowlist = parseStringArray(body.toolAllowlist);
-  if (toolAllowlist === null) return submitError("invalid toolAllowlist", 400);
-  const timeout = parseTimeout(body.timeoutMs);
-  if (!timeout.ok) return submitError("invalid timeoutMs", 400);
-  return { ok: true, params: buildSubmitParams(body, input, output.output, toolAllowlist, timeout.value) };
-}
 
-function submitError(title: string, status: number, detail?: string): SubmitParse {
-  return { ok: false, problem: validation(title, status, detail) };
-}
-
-function buildSubmitParams(
-  body: Record<string, unknown>,
-  input: string,
-  output: TaskOutputSpec | undefined,
-  toolAllowlist: string[],
-  timeoutMs: number | undefined,
-): SubmitParams {
-  return {
-    input,
-    mode: body.mode === "interactive" ? "interactive" : "job",
-    ...(output ? { output } : {}),
-    toolAllowlist,
-    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-    ...stringParam(body, "callbackUrl"),
-    ...stringParam(body, "externalRef"),
-    wait: body.wait === true,
-  };
-}
-
-/** Струнная опция тела как `{[key]: value}` или пустой объект. */
-function stringParam(body: Record<string, unknown>, key: string): Record<string, string> {
-  const value = body[key];
-  return typeof value === "string" ? { [key]: value } : {};
-}
-
-/** Проверяет необязательный числовой таймаут: absent → ok, битый → не ok. */
-function parseTimeout(raw: unknown): { ok: true; value?: number } | { ok: false } {
-  if (raw === undefined) return { ok: true };
-  const value = parseOptionalInt(raw);
-  return value === undefined ? { ok: false } : { ok: true, value };
-}
 
 function createParams(sessionId: string, p: SubmitParams, tenant: TenantContext): TaskCreateParams {
   return {
@@ -518,6 +461,12 @@ function sendWebhook(s: AgentServiceState, task: TaskRecord): void {
     eventId: newEventId(),
     body: JSON.stringify(toJobObject(rec)),
     timeoutMs: s.config.service.callbackTimeoutMs,
+    networkConfig: s.config.security?.network,
+    onDiagnostic: (diag) => {
+      defaultOutputBus.log("warn", diag.source, `${diag.operation}: ${diag.cause}`, {
+        diagnostic: true,
+      });
+    },
     ...(s.deps.webhookFetch ? { fetchImpl: s.deps.webhookFetch } : {}),
   }).catch(() => {
     /* pull доступен и при недоставке push */
@@ -642,49 +591,9 @@ function hashBody(body: Record<string, unknown>): string {
   return createHash("sha256").update(JSON.stringify(body)).digest("hex");
 }
 
-function validation(title: string, status: number, detail?: string): ProblemDetails {
-  return problem({ type: "validation", title, status, ...(detail ? { detail } : {}) });
-}
-
 function headerString(req: IncomingMessage, name: string): string | undefined {
   const value = req.headers[name];
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-/** True для обычного JSON-объекта (не массив/null). */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
-function isFormat(value: unknown): value is "text" | "json" {
-  return value === "text" || value === "json";
-}
-
-function failOutput(detail: string): { ok: false; detail: string } {
-  return { ok: false, detail };
-}
-
-function parseOutput(
-  raw: unknown,
-): { ok: true; output?: TaskOutputSpec } | { ok: false; detail: string } {
-  if (raw === undefined || raw === null) return { ok: true };
-  if (!isRecord(raw)) return failOutput("output must be an object");
-  const { format, schema } = raw;
-  if (!isFormat(format)) return failOutput("output.format must be 'text' or 'json'");
-  if (format === "json" && schema !== undefined && !isRecord(schema)) {
-    return failOutput("output.schema must be an object");
-  }
-  return { ok: true, output: { format, ...(schema !== undefined ? { schema } : {}) } };
-}
-
-function parseStringArray(raw: unknown): string[] | null {
-  if (raw === undefined || raw === null) return [];
-  if (!Array.isArray(raw) || raw.some((x) => typeof x !== "string")) return null;
-  return raw as string[];
-}
-
-function parseOptionalInt(raw: unknown): number | undefined {
-  if (raw === undefined || raw === null) return undefined;
-  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) return raw;
-  return undefined;
-}

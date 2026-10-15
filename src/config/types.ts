@@ -297,13 +297,11 @@ export interface NetworkSecurityConfig {
   allowedDomains: string[];
   requestTimeout: number;
   maxResponseSize: number;
+  /** Loopback/приватные адреса в вызовах каркаса (W13, D5); deny по умолчанию. */
+  allowPrivateOutbound?: boolean;
 }
 
-/**
- * Мастер-выключатель веб-поиска. При enabled=false тул web_search отвечает
- * "disabled", а автопоиск ошибок (errorWebSearch) не стреляет: фича завязана
- * на этот флаг.
- */
+/** Мастер-выключатель веб-поиска: при false web_search отвечает "disabled". */
 export interface WebSearchConfig {
   enabled: boolean;
 }

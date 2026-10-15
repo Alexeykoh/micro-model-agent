@@ -2112,6 +2112,8 @@
   "config.desc.security.network.requestTimeout": "Timeout per outbound tool request, in ms (1000-120000).",
   "config.key.security.network.maxResponseSize": "max response size",
   "config.desc.security.network.maxResponseSize": "Max bytes kept per outbound response (1024-1000000).",
+  "config.key.security.network.allowPrivateOutbound": "allow private callbacks",
+  "config.desc.security.network.allowPrivateOutbound": "Allow loopback/private addresses in the agent's own outbound calls (audit webhook, task callback). Off by default: the target comes from config or a request body.",
   "config.key.security.contentScan.dangerousPatterns": "dangerous patterns",
   "config.desc.security.contentScan.dangerousPatterns": "Regular expressions searched in file contents before writing.",
   "config.key.security.auditNotifier.enabled": "audit notifier",

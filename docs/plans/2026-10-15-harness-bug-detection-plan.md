@@ -103,10 +103,10 @@
 `src/modules/service/server.ts:23` (токен только для non-loopback).
 
 **Что сделать.**
-- [ ] Спека `docs/specs/<дата>-outbound-policy-design.md`: политика исходящих вызовов.
-- [ ] Обе точки проводят URL через `isUrlAllowed`; loopback и приватные диапазоны — deny,
+- [x] Спека `docs/specs/<дата>-outbound-policy-design.md`: политика исходящих вызовов.
+- [x] Обе точки проводят URL через `isUrlAllowed`; loopback и приватные диапазоны — deny,
       разрешение только явным флагом конфига (D5).
-- [ ] Логировать отказ как `Diagnostic` с `source`/`operation`/`cause` (INV-14).
+- [x] Логировать отказ как `Diagnostic` с `source`/`operation`/`cause` (INV-14).
 
 **Гейт** `tests/arch/outbound-policy.test.ts`: ни один `fetch(` в `src/` не принимает URL, не
 прошедший через политику; легитимные исключения (провайдеры, `models.dev`, `native-context`,
@@ -115,6 +115,10 @@
 **Красная точка сейчас:** `audit-notifier.ts:234`, `webhook.ts:63`.
 **Критерий выхода:** гейт красный до правки; тест, что `/v1/tasks` с `callbackUrl` вида
 `http://127.0.0.1:PORT/` отклоняется. **Спека:** да. **Триггер:** новая исходящая HTTP-команда.
+**Отклонение от плана:** политика вынесена в отдельный модуль `outbound-policy.ts`, а не
+переиспользует `isUrlAllowed` напрямую: она fail-closed и не зависит от
+`security.network.enabled` (D5). Попутно вынесены `audit-webhook.ts` (очередь ретраев) и
+`api/submit-body.ts` (разбор тела) — иначе гейт размера файлов не проходил.
 
 ### W5. Вскрытие сессии — инструмент поиска
 
