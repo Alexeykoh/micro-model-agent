@@ -6,18 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-17
+
 ### Added
 
-- **Documents module (W1)**: new non-critical `documents` module — a single
-  format-agnostic substrate (`DocumentIR`) with format handlers for the text group
-  (csv/tsv, md, json, yaml, xml, html). Two read-only tools, `document_map`
-  (structure map) and `document_read` (slice by `all`/`section:<title>`/`lines:<a>-<b>`),
-  fail-open with a reason (INV-D5) and declaring `security` (INV-D7). On/off is
-  **code-only** (`handlers/index.ts`: `DOCUMENTS_ENABLED`/`ACTIVE_GROUPS`/`HANDLERS`),
-  no config keys (INV-D3). New `document` auto-tag seeds the tools by file extension
-  or intent words. Registered in `src/core/bootstrap/modules-phase.ts`; tools are
-  collected by the module host. i18n keys `documents.*` / `tool.friendly.document_*`
-  added symmetrically to `en`/`ru`.
+- **Documents module**: new non-critical `documents` module — a single format-agnostic
+  substrate (`DocumentIR`) with a handler registry, giving the agent a **map**, a
+  **read-by-slice** and a **corpus index** of working documents (not just code). Every
+  format handler normalises a file to `DocumentIR`; consumers (`map`/`read`/`index`) know
+  no concrete format (INV-D2, gate `tests/arch/documents-boundaries.test.ts`).
+  - **Handlers** — text (`csv`/`tsv`, `md`, `json`, `yaml`, `xml`/`svg`, `html`);
+    spreadsheets (`xlsx`, `ods`); office (`docx`, `odt`, `pptx`); `pdf` (text layer via
+    `pdfjs-dist`, outline from bookmarks/heuristics, scan-like PDFs degrade honestly);
+    raster images (`png`/`jpg`/`gif`/`webp`/`bmp`); geo (`geojson`, `gpx`). OOXML/ODF are
+    read with an in-repo ZIP reader over `node:zlib` + `fast-xml-parser`.
+  - **Tools (4)** — `document_map` (structure map: outline/sheets/pages/tables/figures),
+    `document_read` (slice by `all`/`section:<title>`/`blocks:<a>-<b>`; a raster image is
+    returned to the model as an image when it has vision, else an honest fail-open),
+    `document_index` (build a bounded corpus cache at `<project>/.mma/documents-cache.json`,
+    envelope + signature, add/change/remove reconciled), `document_find` (search the cache,
+    top-N bounded).
+  - **On/off is code-only** (`handlers/index.ts`: `DOCUMENTS_ENABLED` / `ACTIVE_GROUPS` /
+    `HANDLERS`) — no config keys (INV-D3); disabling a group drops its handler and its
+    dependency from the bundle. New `document` auto-tag seeds the tools by extension or
+    intent words. Registered in `src/core/bootstrap/modules-phase.ts`; tools are collected
+    by the module host.
+  - **Guarantees** — bounded output with truncation markers (INV-D4); fail-open only with a
+    `module:documents` diagnostic and a reason, never an empty success (INV-D5); `security`
+    declared on every tool, enforcement stays in `ToolExecutor` (INV-D6); the module imports
+    core only through allowed paths (INV-D7, `module-boundaries`). Spec
+    `docs/specs/2026-10-16-documents-module-design.md`, plans `docs/plans/2026-10-16-documents-*`.
+
+### Changed
+
+- **Release build inlines the document dependencies**: `build:prod` now runs
+  `build:documents`, which inlines `fast-xml-parser` and `pdfjs-dist` into `dist/main.js`
+  (so they ship inside the artifact); `playwright` and every other dependency stay external
+  (`--external`). A post-build check fails the build if a document dependency that `src/`
+  imports is missing from the packaged `main.js`.
 
 ## [0.5.0] - 2026-10-15
 
