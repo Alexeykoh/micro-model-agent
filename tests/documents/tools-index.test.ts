@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { t } from "../../src/i18n/index";
 import { type DocEntry, DocumentsCache } from "../../src/modules/documents/corpus";
 import { buildRegistry } from "../../src/modules/documents/registry";
-import { searchChunks } from "../../src/modules/documents/search";
+import { FIND_LIMIT, searchChunks } from "../../src/modules/documents/search";
+import { documentFindTool } from "../../src/modules/documents/tools/document-find";
 import { documentIndexTool } from "../../src/modules/documents/tools/document-index";
 import type { ToolContext } from "../../src/tools/types";
 
@@ -76,6 +78,67 @@ describe("document_index", () => {
     expect(tool.security.caps).toContainEqual({ fs: "read" });
     expect(tool.security.pathArgs).toContain("dir");
     expect(tool.tags).toContain("document");
+    expect(tool.boundedOutput).toBe(true);
+    expect(tool.cacheable).toBe(false);
+  });
+});
+
+describe("document_find", () => {
+  const dir = mkdtempSync(join(tmpdir(), "doc-find-tool-"));
+  writeFileSync(join(dir, "guide.md"), "# Guide\n\nthe needle is here");
+  writeFileSync(join(dir, "other.md"), "# Other\n\nnothing relevant");
+  const registry = buildRegistry();
+  const ctx = (onDiagnostic?: (d: unknown) => void): ToolContext =>
+    ({ baseDir: dir, logger, onDiagnostic }) as unknown as ToolContext;
+
+  it("индексирует по требованию и находит совпадение", async () => {
+    const res = await documentFindTool(registry, logger).handler(ctx(), { dir: ".", query: "needle" });
+    expect(res.success).toBe(true);
+    expect(String(res.output)).toContain("guide.md");
+    expect(String(res.output)).toContain("needle");
+  });
+
+  it("нет совпадений — честное сообщение", async () => {
+    const res = await documentFindTool(registry, logger).handler(ctx(), { dir: ".", query: "zzzznope" });
+    expect(res.success).toBe(true);
+    expect(String(res.output)).toBe(t("documents.no_matches", { query: "zzzznope" }));
+  });
+
+  it("бюджет top-N: не больше FIND_LIMIT строк", async () => {
+    const many = mkdtempSync(join(tmpdir(), "doc-find-many-"));
+    for (let i = 0; i < 30; i++) writeFileSync(join(many, `f${i}.md`), `# F${i}\n\nneedle`);
+    const res = await documentFindTool(buildRegistry(), logger).handler(
+      { baseDir: many, logger } as unknown as ToolContext,
+      { dir: ".", query: "needle" },
+    );
+    const lines = String(res.output).split("\n").filter((l) => l.startsWith("- "));
+    expect(lines).toHaveLength(FIND_LIMIT);
+  });
+
+  it("пустой каталог — fail-open с причиной и записью (INV-D5)", async () => {
+    const empty = mkdtempSync(join(tmpdir(), "doc-find-empty-"));
+    const onDiagnostic = vi.fn();
+    const res = await documentFindTool(buildRegistry(), logger).handler(
+      { baseDir: empty, logger, onDiagnostic } as unknown as ToolContext,
+      { dir: ".", query: "x" },
+    );
+    expect(res.success).toBe(false);
+    expect(String(res.output)).toBe(t("documents.no_index", { dir: "." }));
+    expect(onDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "module:documents", kind: "failed", operation: "document_find" }),
+    );
+  });
+
+  it("пустой запрос — fail-open с причиной", async () => {
+    const res = await documentFindTool(registry, logger).handler(ctx(), { dir: ".", query: "  " });
+    expect(res.success).toBe(false);
+    expect(String(res.output)).toContain(t("documents.query_required"));
+  });
+
+  it("тул объявляет security fs:read и pathArgs dir (INV-D6)", () => {
+    const tool = documentFindTool(registry, logger);
+    expect(tool.security.caps).toContainEqual({ fs: "read" });
+    expect(tool.security.pathArgs).toContain("dir");
     expect(tool.boundedOutput).toBe(true);
     expect(tool.cacheable).toBe(false);
   });
