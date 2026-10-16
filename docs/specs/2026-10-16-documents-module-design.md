@@ -253,7 +253,16 @@ TS-экстрактор текстового слоя PDF (решение по �
 
 - `fast-xml-parser@5.11.2` (`scripts/documents-bundle-check.ts`): **вшивается**. Собрано
   37 модулей, артефакт **117.75 КБ**; запуск из temp без `node_modules` → `documents deps bundle OK`, exit 0.
-- `pdfjs-dist`: _см. ниже (заполняется спайком W0.2)._
+- `pdfjs-dist@6.4.299` (legacy build, текстовый слой без canvas): **вшивается**. Собрано
+  39 модулей, артефакт **3.50 МБ**; запуск из temp без `node_modules` → извлечён текст
+  `"Hello"`, exit 0. Fake-worker вшит через хук `globalThis.pdfjsWorker = { WorkerMessageHandler }`
+  (иначе pdfjs динамически импортирует `pdf.worker.mjs` рядом с бандлом и падает без него) —
+  это и есть «чистый» способ инлайна worker без отдельного файла. **Фолбэк на чистый TS не нужен.**
+  Побочные warning'и (не фатальны для текстового слоя): отсутствует optional
+  `@napi-rs/canvas`; `standardFontDataUrl` не задан (влияет на рендер глифов, не на извлечение текста).
+
+Вывод спайка: обе зависимости бандлятся в один ESM-артефакт под `--target node` и работают
+без `node_modules`. Механизм вшивания — см. `build:documents` (W0.3).
 
 ### 4.7 Тулы для модели
 
