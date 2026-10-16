@@ -78,4 +78,30 @@ describe("chunkIR: нарезка и капы", () => {
     expect(DEFAULT_MAX_CHUNK_CHARS).toBeGreaterThan(0);
     expect(DEFAULT_MAX_CHUNKS_PER_DOC).toBeGreaterThan(0);
   });
+
+  it("чанки с пустым текстом не эмитятся", () => {
+    const chunks = chunkIR(
+      ir([
+        { kind: "paragraph", text: "" },
+        { kind: "paragraph", text: "real" },
+        { kind: "heading", level: 1, text: "" },
+      ]),
+    );
+    expect(chunks.map((c) => c.text)).toEqual(["real"]);
+  });
+
+  it("заметка об усечении чанков уважает кастомный маленький maxChunkChars", () => {
+    const blocks = Array.from({ length: 20 }, (_, i) => ({ kind: "paragraph" as const, text: `p${i}` }));
+    const chunks = chunkIR(ir(blocks), { maxChunksPerDoc: 5, maxChunkChars: 20 });
+    expect(chunks).toHaveLength(5);
+    for (const c of chunks) expect(c.text.length).toBeLessThanOrEqual(20);
+    expect(chunks[4].text).toContain("truncated");
+  });
+
+  it("при крошечном maxChunkChars режется даже маркер усечения", () => {
+    const long = "x".repeat(50);
+    const chunks = chunkIR(ir([{ kind: "paragraph", text: long }]), { maxChunkChars: 5 });
+    expect(chunks.length).toBeGreaterThan(0);
+    for (const c of chunks) expect(c.text.length).toBeLessThanOrEqual(5);
+  });
 });

@@ -1,28 +1,25 @@
 /**
- * Дисковый кэш корпуса документов (INV-D4/D5) и ограниченный обход каталога.
+ * Обход каталога документов (INV-D4/D5) и поддержание кэша в свежем состоянии.
  *
- * По образцу `src/modules/indexer/cache.ts`, но **изолирован** от индексатора
- * кода: свой файл (`documents-cache.json`), свой envelope и своя валидация.
- * Чужой/битый/старого формата кэш **игнорируется**, а не доверяется. `indexDir`
- * ходит по каталогу, резолвит файл через `buildRegistry`, парсит в `DocumentIR`
- * и чанкирует; неподдержанное/битое — пропуск со счётчиком, без исключения.
+ * `indexDir` ходит по каталогу, резолвит файл через `buildRegistry`, парсит в
+ * `DocumentIR` и чанкирует; неподдержанное/битое — пропуск со счётчиком, без
+ * исключения. Нечитаемый **стартовый** каталог — не «пусто», а честная ошибка
+ * (INV-D5). `refreshStale` пересобирает записи кэша, у которых изменился
+ * `mtimeMs`/`size`, и отбрасывает исчезнувшие файлы.
  */
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { readFileSync, writeFileSync } from "node:fs";
-import type { Dirent } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import { Buffer } from "node:buffer";
 import { join, relative, resolve, sep } from "node:path";
+import { t } from "../../i18n/index";
 import type { Logger } from "../../logger/app-logger";
-import { chunkIR, type DocChunk } from "./chunks";
+import { chunkIR } from "./chunks";
 import { parseCtx, type DocumentRegistry } from "./registry";
 import { fileSource } from "./source";
+import type { DocEntry } from "./cache";
 
-/** Версия схемы кэша: инкремент делает старые кэши протухшими. */
-export const CACHE_VERSION = 1;
-
-/** Имя файла кэша корпуса рядом с `index-cache.json`. */
-export const CACHE_FILE = "documents-cache.json";
+export { CACHE_FILE, CACHE_VERSION, DocumentsCache } from "./cache";
+export type { DocEntry, DocumentsCacheOptions } from "./cache";
 
 /** Потолок числа документов за один обход (INV-D4). */
 export const MAX_DOCUMENTS = 300;
@@ -30,137 +27,11 @@ export const MAX_DOCUMENTS = 300;
 /** Потолок глубины обхода каталога (INV-D4). */
 export const MAX_INDEX_DEPTH = 6;
 
+/** Общий потолок числа чанков корпуса за один обход (INV-D4). */
+export const MAX_TOTAL_CHUNKS = 10_000;
+
 /** Каталоги, в которые обход не заходит. */
 const SKIP_DIRS = new Set([".git", "node_modules", ".mma"]);
-
-/** Запись корпуса: файл + метаданные + оглавление + чанки. */
-export interface DocEntry {
-  /** Абсолютный путь (для чтения/enforcement, не для сообщений модели). */
-  path: string;
-  /** Путь относительно `baseDir` (forward-slash) — для модели и `document_read`. */
-  rel: string;
-  mtimeMs: number;
-  size: number;
-  outline: string[];
-  chunks: DocChunk[];
-}
-
-/** Дисковая обёртка с метаданными валидации вокруг записей корпуса. */
-interface CacheEnvelope {
-  version: number;
-  /** Абсолютный корень проиндексированного каталога. */
-  root: string;
-  signature: string;
-  builtAt?: number;
-  entries: DocEntry[];
-}
-
-/** Опции кэша корпуса. */
-export interface DocumentsCacheOptions {
-  /** Абсолютный корень; кэш под другой root отвергается. */
-  root?: string;
-  /** Текущая сигнатура дерева; при расхождении кэш отвергается. */
-  signature?: () => string;
-}
-
-/** Проверяет форму одного чанка. */
-function isChunk(v: unknown): v is DocChunk {
-  if (typeof v !== "object" || v === null) return false;
-  const c = v as Record<string, unknown>;
-  return typeof c.id === "string" && typeof c.text === "string" && (c.section === undefined || typeof c.section === "string");
-}
-
-/** Проверяет форму одной записи корпуса. */
-function isEntry(v: unknown): v is DocEntry {
-  if (typeof v !== "object" || v === null) return false;
-  const e = v as Record<string, unknown>;
-  return (
-    typeof e.path === "string" &&
-    typeof e.rel === "string" &&
-    typeof e.mtimeMs === "number" &&
-    typeof e.size === "number" &&
-    Array.isArray(e.outline) &&
-    e.outline.every((t) => typeof t === "string") &&
-    Array.isArray(e.chunks) &&
-    e.chunks.every(isChunk)
-  );
-}
-
-/** Дисковый кэш корпуса с валидацией версии/root/сигнатуры/формы. */
-export class DocumentsCache {
-  private readonly cachePath: string;
-  private cache: DocEntry[] | null = null;
-  private readonly root: string | undefined;
-  private readonly signature: (() => string) | undefined;
-
-  constructor(cacheDir: string, opts: DocumentsCacheOptions = {}) {
-    this.cachePath = join(cacheDir, CACHE_FILE);
-    this.root = opts.root;
-    this.signature = opts.signature;
-  }
-
-  /**
-   * Разбирает envelope и проверяет версию/root/форму. Чужой формат, битый JSON
-   * или частично записанный файл — `null` (кэш отвергается, не доверяется).
-   */
-  private readEnvelope(): DocEntry[] | null {
-    if (!existsSync(this.cachePath)) return null;
-    try {
-      const parsed = JSON.parse(readFileSync(this.cachePath, "utf-8")) as Partial<CacheEnvelope>;
-      if (parsed.version !== CACHE_VERSION || !Array.isArray(parsed.entries)) return null;
-      if (!parsed.entries.every(isEntry)) return null;
-      if (this.root !== undefined && parsed.root !== this.root) return null;
-      if (this.signature && this.currentSignature() !== (parsed.signature ?? "")) return null;
-      return parsed.entries;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Загружает записи, только если кэш валиден; иначе `null` (полная пересборка). */
-  load(): DocEntry[] | null {
-    if (this.cache) return this.cache;
-    const entries = this.readEnvelope();
-    if (entries) this.cache = entries;
-    return entries;
-  }
-
-  /** Сохраняет записи в кэш (память + диск). */
-  save(entries: DocEntry[]): void {
-    this.cache = entries;
-    const envelope: CacheEnvelope = {
-      version: CACHE_VERSION,
-      root: this.root ?? "",
-      signature: this.currentSignature(),
-      builtAt: Date.now(),
-      entries,
-    };
-    if (!existsSync(join(this.cachePath, ".."))) mkdirSync(join(this.cachePath, ".."), { recursive: true });
-    writeFileSync(this.cachePath, JSON.stringify(envelope), "utf-8");
-  }
-
-  /** Инвалидирует кэш (память + дисковый файл). */
-  invalidate(): void {
-    this.cache = null;
-    if (existsSync(this.cachePath)) {
-      try {
-        rmSync(this.cachePath);
-      } catch {
-        /* best-effort очистка */
-      }
-    }
-  }
-
-  /** Сигнатура защищённо: нечитаемое дерево даёт строку, не совпадающую с сохранённой. */
-  private currentSignature(): string {
-    if (!this.signature) return "";
-    try {
-      return this.signature();
-    } catch {
-      return "";
-    }
-  }
-}
 
 /** Опции обхода каталога. */
 export interface IndexDirOptions {
@@ -171,15 +42,20 @@ export interface IndexDirOptions {
   logger: Logger;
   maxDocuments?: number;
   maxDepth?: number;
+  maxTotalChunks?: number;
   maxChunkChars?: number;
   maxChunksPerDoc?: number;
 }
 
-/** Итог обхода: записи, число пропусков и факт срабатывания капа. */
+/** Итог обхода: записи, число пропусков и честный признак срабатывания капа. */
 export interface IndexDirResult {
   entries: DocEntry[];
   skipped: number;
   truncated: boolean;
+  /** Какой кап сработал (для честной заметки модели). */
+  truncatedBy?: "documents" | "chunks";
+  /** Дружелюбная причина, если стартовый каталог не читается (INV-D5). */
+  error?: string;
 }
 
 /** Читает первые 8 байт файла для magic-detect (без полного чтения). */
@@ -195,21 +71,37 @@ async function readHead(path: string): Promise<Uint8Array> {
 }
 
 /**
- * Обходит каталог и строит записи корпуса (INV-D4/D5). Ограничен по глубине и
- * числу документов; неподдержанные/битые файлы пропускаются со счётчиком.
- * Ни один битый файл не роняет обход.
+ * Обходит каталог и строит записи корпуса (INV-D4/D5). Ограничен по глубине,
+ * числу документов и общему числу чанков; неподдержанные/битые файлы
+ * пропускаются со счётчиком. Ни один битый файл не роняет обход. `truncated`
+ * выставляется только когда кап реально отсёк индексируемый файл.
  */
 export async function indexDir(opts: IndexDirOptions): Promise<IndexDirResult> {
   const baseDir = resolve(opts.baseDir);
   const start = resolve(baseDir, opts.dir);
   const maxDocs = Math.max(1, opts.maxDocuments ?? MAX_DOCUMENTS);
   const maxDepth = Math.max(0, opts.maxDepth ?? MAX_INDEX_DEPTH);
+  const maxTotal = Math.max(1, opts.maxTotalChunks ?? MAX_TOTAL_CHUNKS);
   const chunkOpts = { maxChunkChars: opts.maxChunkChars, maxChunksPerDoc: opts.maxChunksPerDoc };
   const entries: DocEntry[] = [];
   let skipped = 0;
   let truncated = false;
+  let truncatedBy: "documents" | "chunks" | undefined;
+  let readError: string | undefined;
+  let totalChunks = 0;
 
   const relOf = (abs: string): string => relative(baseDir, abs).split(sep).join("/");
+  const atCap = (): boolean => entries.length >= maxDocs || totalChunks >= maxTotal;
+  const capReason = (): "documents" | "chunks" => (totalChunks >= maxTotal ? "chunks" : "documents");
+
+  /** Поддержан ли файл (без разбора): нужен, чтобы отличить реальный отсев от пропуска. */
+  const isIndexable = async (abs: string): Promise<boolean> => {
+    try {
+      return opts.registry.resolve(abs, await readHead(abs)) !== null;
+    } catch {
+      return false;
+    }
+  };
 
   const handleFile = async (abs: string): Promise<void> => {
     try {
@@ -220,46 +112,120 @@ export async function indexDir(opts: IndexDirOptions): Promise<IndexDirResult> {
       }
       const ir = await opts.registry.parse(parseCtx(opts.logger), fileSource(baseDir, relOf(abs)));
       const st = await stat(abs);
+      let chunks = chunkIR(ir, chunkOpts);
+      const remaining = maxTotal - totalChunks;
+      if (chunks.length > remaining) {
+        chunks = chunks.slice(0, Math.max(0, remaining));
+        truncated = true;
+        truncatedBy = "chunks";
+      }
       entries.push({
         path: abs,
         rel: relOf(abs),
         mtimeMs: st.mtimeMs,
         size: st.size,
         outline: ir.outline.map((n) => n.title),
-        chunks: chunkIR(ir, chunkOpts),
+        chunks,
       });
+      totalChunks += chunks.length;
     } catch {
       skipped += 1;
     }
   };
 
-  const walk = async (absDir: string, depth: number): Promise<void> => {
-    if (entries.length >= maxDocs) {
-      truncated = true;
-      return;
-    }
+  /** Возвращает `true`, если обход нужно немедленно прекратить (кап отсёк файл). */
+  const walk = async (absDir: string, depth: number): Promise<boolean> => {
     let dirents: Dirent[];
     try {
       dirents = await readdir(absDir, { withFileTypes: true });
     } catch {
-      return;
+      // INV-D5: нечитаемый стартовый каталог не должен выглядеть пустым.
+      if (depth === 0) readError = t("documents.dir_unreadable", { path: opts.dir });
+      return false;
     }
     dirents.sort((a, b) => a.name.localeCompare(b.name));
     for (const d of dirents) {
-      if (entries.length >= maxDocs) {
-        truncated = true;
-        return;
-      }
       const abs = join(absDir, d.name);
       if (d.isDirectory()) {
         if (SKIP_DIRS.has(d.name) || depth >= maxDepth) continue;
-        await walk(abs, depth + 1);
+        if (await walk(abs, depth + 1)) return true;
       } else if (d.isFile()) {
+        if (atCap()) {
+          // Кап честен только если отсечённый файл реально был бы проиндексирован.
+          if (await isIndexable(abs)) {
+            truncated = true;
+            truncatedBy = capReason();
+            return true;
+          }
+          continue;
+        }
         await handleFile(abs);
       }
     }
+    return false;
   };
 
   await walk(start, 0);
-  return { entries, skipped, truncated };
+  const result: IndexDirResult = { entries, skipped, truncated };
+  if (truncatedBy) result.truncatedBy = truncatedBy;
+  if (readError) result.error = readError;
+  return result;
+}
+
+/** Опции пересборки протухших записей кэша. */
+export interface RefreshStaleOptions {
+  baseDir: string;
+  registry: DocumentRegistry;
+  logger: Logger;
+  maxChunkChars?: number;
+  maxChunksPerDoc?: number;
+}
+
+/** Итог пересборки: актуальные записи и число изменённых/удалённых. */
+export interface RefreshStaleResult {
+  entries: DocEntry[];
+  changed: number;
+}
+
+/**
+ * Пересобирает записи кэша по факту изменения файлов (INV-D4/D5): `stat` каждой
+ * записи; исчезнувшие отбрасываются, изменившиеся (`mtimeMs`/`size`) заново
+ * парсятся и чанкируются. Возвращает актуальный список и число изменений —
+ * вызывающий сохраняет кэш, только если `changed > 0`.
+ */
+export async function refreshStale(
+  entries: DocEntry[],
+  opts: RefreshStaleOptions,
+): Promise<RefreshStaleResult> {
+  const chunkOpts = { maxChunkChars: opts.maxChunkChars, maxChunksPerDoc: opts.maxChunksPerDoc };
+  const out: DocEntry[] = [];
+  let changed = 0;
+  for (const entry of entries) {
+    let st: Awaited<ReturnType<typeof stat>>;
+    try {
+      st = await stat(entry.path);
+    } catch {
+      changed += 1;
+      continue; // файл исчез — запись уходит
+    }
+    if (st.mtimeMs === entry.mtimeMs && st.size === entry.size) {
+      out.push(entry);
+      continue;
+    }
+    try {
+      const ir = await opts.registry.parse(parseCtx(opts.logger), fileSource(opts.baseDir, entry.rel));
+      out.push({
+        path: entry.path,
+        rel: entry.rel,
+        mtimeMs: st.mtimeMs,
+        size: st.size,
+        outline: ir.outline.map((n) => n.title),
+        chunks: chunkIR(ir, chunkOpts),
+      });
+    } catch {
+      // Стал неподдержанным/битым — запись уходит.
+    }
+    changed += 1;
+  }
+  return { entries: out, changed };
 }

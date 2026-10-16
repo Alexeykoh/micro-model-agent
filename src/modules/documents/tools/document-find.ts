@@ -1,15 +1,17 @@
 /**
  * Тул `document_find`: поиск по индексу документов (W5, INV-D4/D5/D6). Кэш
  * читается для каталога; если его нет — индекс собирается по требованию
- * (ограниченно). Выдача — top-N попаданий с ограниченными сниппетами. Нет
- * документов — fail-open с причиной; нет совпадений — честное сообщение.
+ * (ограниченно). Загруженный кэш сверяется со `stat` файлов (`refreshStale`) и
+ * пересобирается при изменениях. Выдача — top-N попаданий с ограниченными
+ * сниппетами. Нет документов — fail-open с причиной; нет совпадений — честное
+ * сообщение.
  */
 import { join, resolve } from "node:path";
 import { t } from "../../../i18n/index";
 import type { Logger } from "../../../logger/app-logger";
 import type { ToolDefinition, ToolResult } from "../../../tools/types";
 import { boundText, DEFAULT_DOC_LIMITS } from "../bound";
-import { DocumentsCache, indexDir } from "../corpus";
+import { DocumentsCache, indexDir, refreshStale } from "../corpus";
 import type { DocumentRegistry } from "../registry";
 import { FIND_LIMIT, searchChunks, type SearchHit } from "../search";
 import { causeOf, failResult, rejectResult } from "./run";
@@ -21,7 +23,7 @@ function formatHits(hits: SearchHit[]): string {
     .join("\n");
 }
 
-/** Тул `document_find`: поиск по корпусу с ленивой сборкой индекса (INV-D5/D6). */
+/** Тул `document_find`: поиск по корпусу с ленивой сборкой/освежением индекса (INV-D5/D6). */
 export function documentFindTool(registry: DocumentRegistry, logger: Logger): ToolDefinition {
   return {
     name: "document_find",
@@ -47,16 +49,31 @@ export function documentFindTool(registry: DocumentRegistry, logger: Logger): To
         const log = ctx.logger ?? logger;
         const root = resolve(ctx.baseDir, dir);
         const cacheDir = join(ctx.baseDir, ".mma");
-        let entries = new DocumentsCache(cacheDir, { root }).load();
+        const cache = new DocumentsCache(cacheDir, { root });
+        let entries = cache.load();
         if (!entries) {
-          entries = (await indexDir({ baseDir: ctx.baseDir, dir, registry, logger: log })).entries;
-          if (entries.length > 0) new DocumentsCache(cacheDir, { root }).save(entries);
+          const built = await indexDir({ baseDir: ctx.baseDir, dir, registry, logger: log });
+          if (built.error) return rejectResult(ctx, "document_find", built.error, built.error);
+          entries = built.entries;
+          if (entries.length > 0) cache.save(entries);
+        } else {
+          // Свежесть: изменившиеся/исчезнувшие файлы пересобираются из кэша (INV-D4/D5).
+          const refreshed = await refreshStale(entries, { baseDir: ctx.baseDir, registry, logger: log });
+          if (refreshed.changed > 0) cache.save(refreshed.entries);
+          entries = refreshed.entries;
         }
         if (entries.length === 0) {
-          return rejectResult(ctx, "document_find", "no documents indexed", t("documents.no_index", { dir }));
+          return rejectResult(
+            ctx,
+            "document_find",
+            "no documents indexed",
+            boundText(t("documents.no_index", { dir }), DEFAULT_DOC_LIMITS),
+          );
         }
         const hits = searchChunks(entries, query, FIND_LIMIT);
-        if (hits.length === 0) return { success: true, output: t("documents.no_matches", { query }) };
+        if (hits.length === 0) {
+          return { success: true, output: boundText(t("documents.no_matches", { query }), DEFAULT_DOC_LIMITS) };
+        }
         return { success: true, output: boundText(formatHits(hits), DEFAULT_DOC_LIMITS) };
       } catch (err) {
         return failResult(ctx, "document_find", causeOf(err));

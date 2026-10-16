@@ -44,14 +44,31 @@ function snippetOf(text: string, terms: string[]): string {
   return raw.length > SNIPPET_CHARS ? raw.slice(0, SNIPPET_CHARS) : raw;
 }
 
+/** Порядок попаданий: счёт вниз, затем путь/секция/сниппет вверх (стабильно). */
+function compareHits(a: SearchHit, b: SearchHit): number {
+  return (
+    b.score - a.score ||
+    a.rel.localeCompare(b.rel) ||
+    (a.section ?? "").localeCompare(b.section ?? "") ||
+    a.snippet.localeCompare(b.snippet)
+  );
+}
+
 /**
  * Ищет чанки по запросу: case-insensitive TF по тексту + вес секции/пути.
  * Возвращает top-`limit` попаданий (score > 0), отсортированных по счёту.
+ *
+ * Для очень больших корпусов полный массив не строится: накопитель усекается до
+ * top-`limit` по мере роста (INV-D4), поэтому память ограничена, а результат —
+ * точный top-N (отсечённое никогда не вернётся в топ позже).
  */
 export function searchChunks(entries: DocEntry[], query: string, limit = FIND_LIMIT): SearchHit[] {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return [];
-  const hits: SearchHit[] = [];
+  const cap = Math.max(0, limit);
+  if (cap === 0) return [];
+  const pruneAt = cap * 4;
+  let pool: SearchHit[] = [];
   for (const entry of entries) {
     const relLower = entry.rel.toLowerCase();
     for (const chunk of entry.chunks) {
@@ -64,16 +81,14 @@ export function searchChunks(entries: DocEntry[], query: string, limit = FIND_LI
         score += countOccurrences(relLower, term);
       }
       if (score > 0) {
-        hits.push({ rel: entry.rel, section: chunk.section, snippet: snippetOf(chunk.text, terms), score });
+        pool.push({ rel: entry.rel, section: chunk.section, snippet: snippetOf(chunk.text, terms), score });
+        if (pool.length >= pruneAt) {
+          pool.sort(compareHits);
+          pool = pool.slice(0, cap);
+        }
       }
     }
   }
-  hits.sort(
-    (a, b) =>
-      b.score - a.score ||
-      a.rel.localeCompare(b.rel) ||
-      (a.section ?? "").localeCompare(b.section ?? "") ||
-      a.snippet.localeCompare(b.snippet),
-  );
-  return hits.slice(0, Math.max(0, limit));
+  pool.sort(compareHits);
+  return pool.slice(0, cap);
 }

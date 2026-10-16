@@ -8,6 +8,7 @@ import {
   DocumentsCache,
   type DocEntry,
   indexDir,
+  refreshStale,
 } from "../../src/modules/documents/corpus";
 import { buildRegistry, type DocumentRegistry } from "../../src/modules/documents/registry";
 
@@ -56,6 +57,15 @@ describe("DocumentsCache", () => {
 
   it("битый JSON игнорируется", () => {
     writeFileSync(join(dir, "documents-cache.json"), "{not json");
+    expect(new DocumentsCache(dir, { root }).load()).toBeNull();
+  });
+
+  it("частично записанный кэш (обрезанный JSON) отвергается", () => {
+    // Валидный префикс envelope, но запись оборвана на середине JSON.
+    writeFileSync(
+      join(dir, "documents-cache.json"),
+      '{"version":1,"root":"/ws","signature":"","entries":[{"path":"/ws/a.md"',
+    );
     expect(new DocumentsCache(dir, { root }).load()).toBeNull();
   });
 
@@ -123,9 +133,84 @@ describe("indexDir", () => {
     expect(res.skipped).toBeGreaterThanOrEqual(2);
   });
 
-  it("недоступный каталог — пусто, без исключения", async () => {
+  it("нечитаемый стартовый каталог — error, а не «пусто» (INV-D5)", async () => {
     const res = await indexDir({ baseDir: dir, dir: "nowhere", registry: reg, logger });
     expect(res.entries).toEqual([]);
     expect(res.skipped).toBe(0);
+    expect(res.error).toContain("nowhere");
+  });
+
+  it("truncated без ложного срабатывания: ровно по капу — нет, выше — да", async () => {
+    const d = mkdtempSync(join(tmpdir(), "doc-cap-"));
+    writeFileSync(join(d, "a.md"), "# A\n\nx");
+    writeFileSync(join(d, "b.md"), "# B\n\ny");
+    writeFileSync(join(d, "c.xyz"), "unsupported");
+    try {
+      // Ровно на капе, оставшийся файл неподдержан — не «truncated».
+      const at = await indexDir({ baseDir: d, dir: ".", registry: reg, logger, maxDocuments: 2 });
+      expect(at.entries).toHaveLength(2);
+      expect(at.truncated).toBe(false);
+
+      // Один поддержанный файл сверх капа — «truncated» с честной причиной.
+      const over = await indexDir({ baseDir: d, dir: ".", registry: reg, logger, maxDocuments: 1 });
+      expect(over.entries).toHaveLength(1);
+      expect(over.truncated).toBe(true);
+      expect(over.truncatedBy).toBe("documents");
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("общий бюджет чанков ограничивает корпус (честный truncated)", async () => {
+    const d = mkdtempSync(join(tmpdir(), "doc-budget-"));
+    for (let i = 0; i < 5; i++) writeFileSync(join(d, `f${i}.md`), `# F${i}\n\nhello world again`);
+    try {
+      const res = await indexDir({ baseDir: d, dir: ".", registry: reg, logger, maxTotalChunks: 2 });
+      const total = res.entries.reduce((n, e) => n + e.chunks.length, 0);
+      expect(total).toBeLessThanOrEqual(2);
+      expect(res.truncated).toBe(true);
+      expect(res.truncatedBy).toBe("chunks");
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("refreshStale", () => {
+  it("пересобирает изменившийся файл и отбрасывает исчезнувший", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doc-refresh-"));
+    const reg = buildRegistry();
+    writeFileSync(join(dir, "a.md"), "# A\n\nold");
+    writeFileSync(join(dir, "b.md"), "# B\n\nkeep");
+    try {
+      const first = await indexDir({ baseDir: dir, dir: ".", registry: reg, logger });
+      expect(first.entries.map((e) => e.rel).sort()).toEqual(["a.md", "b.md"]);
+
+      // Изменяем содержимое (другая длина ⇒ другой size) и удаляем второй файл.
+      writeFileSync(join(dir, "a.md"), "# A\n\nnew content here");
+      rmSync(join(dir, "b.md"));
+
+      const res = await refreshStale(first.entries, { baseDir: dir, registry: reg, logger });
+      expect(res.changed).toBe(2);
+      expect(res.entries.map((e) => e.rel)).toEqual(["a.md"]);
+      expect(res.entries[0].chunks.map((c) => c.text).join(" ")).toContain("new content here");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("неизменившийся файл не считается изменением", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doc-refresh-same-"));
+    const reg = buildRegistry();
+    writeFileSync(join(dir, "a.md"), "# A\n\nstable");
+    try {
+      const first = await indexDir({ baseDir: dir, dir: ".", registry: reg, logger });
+      const res = await refreshStale(first.entries, { baseDir: dir, registry: reg, logger });
+      expect(res.changed).toBe(0);
+      expect(res.entries.map((e) => e.rel)).toEqual(["a.md"]);
+      expect(res.entries[0].chunks).toEqual(first.entries[0].chunks);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

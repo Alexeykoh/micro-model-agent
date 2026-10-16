@@ -1,15 +1,17 @@
 /**
  * Тул `document_index`: пересобрать индекс каталога документов (W5, INV-D4/D5/D6).
  * Тонкая обёртка над `indexDir` + `DocumentsCache`: обойти, сохранить, вернуть
- * ограниченную сводку. Любая ошибка — fail-open с записью `module:documents`.
+ * ограниченную сводку. Нечитаемый каталог — fail-open с диагностикой `module:documents`
+ * и честным сообщением; прочая ошибка — fail-open с причиной.
  */
 import { join, resolve } from "node:path";
 import { t } from "../../../i18n/index";
 import type { Logger } from "../../../logger/app-logger";
-import type { ToolDefinition } from "../../../tools/types";
-import { DocumentsCache, indexDir, MAX_DOCUMENTS } from "../corpus";
+import type { ToolDefinition, ToolResult } from "../../../tools/types";
+import { boundText, DEFAULT_DOC_LIMITS } from "../bound";
+import { DocumentsCache, indexDir, MAX_DOCUMENTS, MAX_TOTAL_CHUNKS } from "../corpus";
 import type { DocumentRegistry } from "../registry";
-import { failOpen } from "./run";
+import { causeOf, failResult, rejectResult } from "./run";
 
 /** Тул `document_index`: пересборка индекса корпуса в каталоге (INV-D5/D6). */
 export function documentIndexTool(registry: DocumentRegistry, logger: Logger): ToolDefinition {
@@ -26,23 +28,35 @@ export function documentIndexTool(registry: DocumentRegistry, logger: Logger): T
       properties: { dir: { type: "string", description: t("documents.dir_desc") } },
       required: [],
     },
-    handler: (ctx, args) =>
-      failOpen(ctx, "document_index", async () => {
+    handler: async (ctx, args): Promise<ToolResult> => {
+      try {
         const dir = String(args.dir ?? ".").trim() || ".";
         const log = ctx.logger ?? logger;
         const res = await indexDir({ baseDir: ctx.baseDir, dir, registry, logger: log });
+        // INV-D5: нечитаемый каталог — не «пусто», а честная ошибка с диагностикой.
+        if (res.error) return rejectResult(ctx, "document_index", res.error, res.error);
         // Пустой индекс не сохраняем: иначе `document_find` не увидит позже
         // добавленные документы (протухший пустой кэш лучше не писать).
         if (res.entries.length > 0) {
           new DocumentsCache(join(ctx.baseDir, ".mma"), { root: resolve(ctx.baseDir, dir) }).save(res.entries);
         }
         const chunks = res.entries.reduce((n, e) => n + e.chunks.length, 0);
-        const summary = t("documents.index_summary", {
+        let output = t("documents.index_summary", {
           documents: res.entries.length,
           chunks,
           skipped: res.skipped,
         });
-        return res.truncated ? `${summary}\n${t("documents.index_truncated", { max: MAX_DOCUMENTS })}` : summary;
-      }),
+        if (res.truncated) {
+          output +=
+            "\n" +
+            (res.truncatedBy === "chunks"
+              ? t("documents.index_truncated_chunks", { max: MAX_TOTAL_CHUNKS })
+              : t("documents.index_truncated", { max: MAX_DOCUMENTS }));
+        }
+        return { success: true, output: boundText(output, DEFAULT_DOC_LIMITS) };
+      } catch (err) {
+        return failResult(ctx, "document_index", causeOf(err));
+      }
+    },
   };
 }

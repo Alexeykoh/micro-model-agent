@@ -13,7 +13,16 @@ export {
   indexDir,
   MAX_DOCUMENTS,
   MAX_INDEX_DEPTH,
+  MAX_TOTAL_CHUNKS,
+  refreshStale,
 } from "./corpus";
-export type { DocEntry, DocumentsCacheOptions, IndexDirOptions, IndexDirResult } from "./corpus";
+export type {
+  DocEntry,
+  DocumentsCacheOptions,
+  IndexDirOptions,
+  IndexDirResult,
+  RefreshStaleOptions,
+  RefreshStaleResult,
+} from "./corpus";
 export { FIND_LIMIT, SNIPPET_CHARS, searchChunks } from "./search";
 export type { SearchHit } from "./search";

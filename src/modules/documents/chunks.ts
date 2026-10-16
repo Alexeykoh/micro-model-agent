@@ -65,7 +65,9 @@ function splitText(text: string, maxChars: number): string[] {
 /** Финальная страховка: чанк не длиннее maxChars даже с маркером (INV-D4). */
 function clip(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
-  return `${text.slice(0, Math.max(0, maxChars - CLIP_MARKER.length))}${CLIP_MARKER}`;
+  const out = `${text.slice(0, Math.max(0, maxChars - CLIP_MARKER.length))}${CLIP_MARKER}`;
+  // При крошечном maxChunkChars маркер сам по себе длиннее — режем и его.
+  return out.length <= maxChars ? out : CLIP_MARKER.slice(0, maxChars);
 }
 
 /**
@@ -85,8 +87,10 @@ export function chunkIR(ir: DocumentIR, opts: ChunkOptions = {}): DocChunk[] {
     if (block.kind === "heading") section = block.text;
     const sec = section ? { section } : {};
     for (const part of splitText(blockText(block), maxChars)) {
+      const text = clip(part, maxChars);
+      if (!text) continue; // пустой текст не эмитим — он не несёт поисковой ценности (INV-D4)
       if (chunks.length < cap) {
-        chunks.push({ id: `c${chunks.length}`, text: clip(part, maxChars), ...sec });
+        chunks.push({ id: `c${chunks.length}`, text, ...sec });
       } else {
         dropped += 1;
       }
@@ -95,10 +99,11 @@ export function chunkIR(ir: DocumentIR, opts: ChunkOptions = {}): DocChunk[] {
 
   if (dropped > 0) {
     // Последний слот заменяется заметкой — длина остаётся ≤ cap (INV-D4).
+    // Заметка проходит через `clip`, чтобы уважать и кастомный `maxChunkChars`.
     dropped += 1;
     chunks[cap - 1] = {
       id: `c${cap - 1}`,
-      text: `[... truncated: ${dropped} more chunks ...]`,
+      text: clip(`[... truncated: ${dropped} more chunks ...]`, maxChars),
       ...(section ? { section } : {}),
     };
   }

@@ -299,7 +299,7 @@ W0.3): список внешних пакетов выводится из `packa
 | `document_map` | Карта: оглавление/листы/таблицы/фигуры, размеры | `path` | `fs:read`, `pathArgs:["path"]` | W1 |
 | `document_read` | Срез по селектору (страница/лист/секция/блок/диапазон) | `path`, `selector` | `fs:read`, `pathArgs:["path"]` | W1 |
 | `document_index` | Пересборка индекса каталога документов | `dir` | `fs:read`, `pathArgs:["dir"]` | W5 |
-| `document_find` | Поиск по индексу документов | `path\|dir`, `query` | `fs:read`, `pathArgs:["path","dir"]` | W5 |
+| `document_find` | Поиск по индексу документов | `dir`, `query` | `fs:read`, `pathArgs:["dir"]` | W5 |
 
 - Тег `document` (в `KNOWN_TOOL_TAGS`) — сужение набора работает автоматически.
 - `boundedOutput: true`; лимиты строк/токенов; таблицы обрезаются с `truncated`.
