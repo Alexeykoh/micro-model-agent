@@ -33,4 +33,9 @@ describe("DocumentRegistry", () => {
     const ir = await parse(ctx, src("a.csv", "a,b\n1,2"));
     expect(ir.meta.format).toBe("csv");
   });
+  it("ZIP-файл .xlsx резолвится в xlsx при включённой группе spreadsheet (W2)", () => {
+    const reg = buildRegistry();
+    expect(reg.resolve("book.xlsx", new Uint8Array([0x50, 0x4b, 0x03, 0x04]))?.id).toBe("xlsx");
+    expect(reg.active().groups).toContain("spreadsheet");
+  });
 });
