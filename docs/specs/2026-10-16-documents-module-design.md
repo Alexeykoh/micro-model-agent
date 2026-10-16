@@ -270,8 +270,10 @@ W0.3): список внешних пакетов выводится из `packa
 (семантика `build:bundle` для всего остального сохранена; `playwright` не вшивается). Шаг
 вставлен в `build:prod` перед `build:optimize`.
 
-**Отложено по ревью W0 (долг, правило 9):** синхронизация `package-lock.json` с `bun.lock`
-(DEBT(documents-lockfile-drift)) — см. [debt.md](../agents/debt.md).
+**Локи синхронизированы (оплачено 2026-10-16).** `package-lock.json` перегенерирован
+(`npm install --package-lock-only`): содержит документные депы `fast-xml-parser@5.11.2` и
+`pdfjs-dist@6.4.299` — версии совпадают с `bun.lock`; `package.json` не менялся. Долг был
+`documents-lockfile-drift` — см. [debt.md](../agents/debt.md).
 
 **Вшивание проверяется автоматически (оплачено W2).** `scripts/build-documents.ts` пишет
 `--metafile`, а `scripts/inline-check.ts::missingInlined` падает (`exit 1`), если документная
