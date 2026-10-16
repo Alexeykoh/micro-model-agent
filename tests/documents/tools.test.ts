@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { t } from "../../src/i18n/index";
 import { buildRegistry } from "../../src/modules/documents/registry";
+import { MAX_VISION_BYTES } from "../../src/modules/documents/media";
 import { csvHandler } from "../../src/modules/documents/handlers/csv";
 import { imageHandler } from "../../src/modules/documents/handlers/image";
 import { mdHandler } from "../../src/modules/documents/handlers/md";
@@ -17,6 +18,12 @@ writeFileSync(join(dir, "b.md"), "# A\n\nhello\n\n## B\n\nworld");
 writeFileSync(join(dir, "c.xyz"), "unknown-format");
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 writeFileSync(join(dir, "p.png"), PNG);
+/** `.png`-имя, но JPEG-магic: MIME обязан прийти из содержимого. */
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+writeFileSync(join(dir, "j.png"), JPEG);
+/** Растр сверх `MAX_VISION_BYTES`: не уходит в images, а честно отклоняется. */
+const BIG = Buffer.concat([Buffer.from(PNG), Buffer.alloc(MAX_VISION_BYTES)]);
+writeFileSync(join(dir, "big.png"), BIG);
 const reg = buildRegistry({ enabled: true, groups: ["text"], handlers: [csvHandler] });
 const mdReg = buildRegistry({ enabled: true, groups: ["text"], handlers: [mdHandler] });
 const imgReg = buildRegistry({ enabled: true, groups: ["image"], handlers: [imageHandler] });
@@ -89,7 +96,7 @@ describe("document_read: vision-путь растра (W4)", () => {
       { path: "p.png" },
     );
     expect(res.success).toBe(false);
-    expect(String(res.output)).toBe(t("documents.needs_vision"));
+    expect(String(res.output)).toBe(t("documents.needs_vision", { path: "p.png" }));
     expect(res.images).toBeUndefined();
     expect(onDiagnostic).toHaveBeenCalledWith(
       expect.objectContaining({ source: "module:documents", kind: "failed", operation: "document_read" }),
@@ -102,7 +109,7 @@ describe("document_read: vision-путь растра (W4)", () => {
       { path: "p.png" },
     );
     expect(res.success).toBe(false);
-    expect(String(res.output)).toBe(t("documents.needs_vision"));
+    expect(String(res.output)).toBe(t("documents.needs_vision", { path: "p.png" }));
   });
 
   it("vision=true + contextManager — отдаёт images с data:image/png URL", async () => {
@@ -117,6 +124,30 @@ describe("document_read: vision-путь растра (W4)", () => {
     expect(url.startsWith("data:image/png;base64,")).toBe(true);
     // base64 от исходных 12 байт фикстуры.
     expect(url).toBe(`data:image/png;base64,${Buffer.from(PNG).toString("base64")}`);
+  });
+
+  it("MIME data URL берётся из magic: .png с JPEG-байтами → data:image/jpeg", async () => {
+    const res = await documentReadTool(imgReg).handler(
+      visionCtx({ capabilities: { vision: true }, contextManager: {} }),
+      { path: "j.png" },
+    );
+    expect(res.success).toBe(true);
+    const url = res.images?.[0].image_url.url ?? "";
+    expect(url).toBe(`data:image/jpeg;base64,${Buffer.from(JPEG).toString("base64")}`);
+  });
+
+  it("растр сверх MAX_VISION_BYTES — fail-open documents.image_too_large без images", async () => {
+    const onDiagnostic = vi.fn();
+    const res = await documentReadTool(imgReg).handler(
+      visionCtx({ capabilities: { vision: true }, contextManager: {}, onDiagnostic }),
+      { path: "big.png" },
+    );
+    expect(res.success).toBe(false);
+    expect(res.images).toBeUndefined();
+    expect(String(res.output)).toBe(t("documents.image_too_large", { path: "big.png", limit: "5 MiB" }));
+    expect(onDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "module:documents", kind: "failed", operation: "document_read" }),
+    );
   });
 
   it("document_map растра отдаёт метаданные (figure), без картинки", async () => {

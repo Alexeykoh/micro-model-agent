@@ -13,8 +13,11 @@ import { boundLine } from "../bound";
 import type { DocSource, DocumentHandler, ParseContext } from "../handler";
 import { emptyIR } from "../ir";
 
+/** Растровые MIME, которые модуль умеет распознать (INV-D5). */
+export type ImageMime = "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "image/bmp";
+
 /** Расширение → MIME (маленькая локальная карта, INV-D9). */
-const MIME: Record<string, string> = {
+const MIME: Record<string, ImageMime> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -24,7 +27,7 @@ const MIME: Record<string, string> = {
 };
 
 /** MIME по расширению; неизвестное — нейтральный байтовый тип. */
-function mimeFor(ext: string): string {
+function mimeFor(ext: string): ImageMime | "application/octet-stream" {
   return MIME[ext] ?? "application/octet-stream";
 }
 
@@ -38,16 +41,16 @@ function isWebp(b: Uint8Array): boolean {
 }
 
 /** Magic-bytes растровых форматов (INV-D5: контент важнее расширения). */
-function detectRaster(b: Uint8Array): boolean {
+function detectRaster(b: Uint8Array): { mime: ImageMime } | null {
   if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
-    return true; // PNG
+    return { mime: "image/png" };
   }
-  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return true; // JPEG
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { mime: "image/jpeg" };
   if (b.length >= 4 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) {
-    return true; // GIF8
+    return { mime: "image/gif" };
   }
-  if (b.length >= 2 && b[0] === 0x42 && b[1] === 0x4d) return true; // BMP "BM"
-  return isWebp(b);
+  if (b.length >= 2 && b[0] === 0x42 && b[1] === 0x4d) return { mime: "image/bmp" };
+  return isWebp(b) ? { mime: "image/webp" } : null;
 }
 
 /** Обработчик растровых изображений (группа image). */
@@ -56,15 +59,17 @@ export const imageHandler: DocumentHandler = {
   group: "image",
   extensions: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"],
   mediaTypes: ["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp"],
-  detect: detectRaster,
+  detect: (h) => detectRaster(h) !== null,
   async parse(ctx: ParseContext, source: DocSource) {
     const bytes = await source.bytes();
     const fmt = source.ext.replace(".", "") || "image";
     const ir = emptyIR(fmt, bytes.length);
     ir.meta.title = source.display;
+    // MIME — из magic-байтов; расширение лишь фолбэк (INV-D5, контент важнее имени).
+    const mime = detectRaster(bytes)?.mime ?? mimeFor(source.ext);
     ir.blocks.push({
       kind: "figure",
-      ref: { kind: "raster", mime: mimeFor(source.ext), bytes: bytes.length, note: "raster" },
+      ref: { kind: "raster", mime, bytes: bytes.length, note: "raster" },
     });
     ir.outline.push({
       id: "fig:0",

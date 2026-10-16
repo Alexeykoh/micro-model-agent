@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_DOC_LIMITS } from "../../src/modules/documents/bound";
 import { renderDocumentMap } from "../../src/modules/documents/map";
 import type { DocumentIR } from "../../src/modules/documents/ir";
 
@@ -28,5 +29,17 @@ describe("renderDocumentMap", () => {
   it("непустой sheets перечисляет листы", () => {
     const out = renderDocumentMap({ ...ir, meta: { ...ir.meta, sheets: ["S1", "S2"] } });
     expect(out).toContain("sheets: S1, S2");
+  });
+  it("огромный outline усекается по DEFAULT_DOC_LIMITS (INV-D4)", () => {
+    const outline = Array.from({ length: 1000 }, (_, i) => ({
+      id: `n${i}`,
+      level: 1,
+      title: `node ${i}`,
+      kind: "section" as const,
+    }));
+    const out = renderDocumentMap({ ...ir, outline });
+    expect(out).toContain("truncated");
+    expect(out.split("\n").length).toBeLessThanOrEqual(DEFAULT_DOC_LIMITS.maxLines + 2);
+    expect(out.length).toBeLessThanOrEqual(DEFAULT_DOC_LIMITS.maxChars + 64);
   });
 });

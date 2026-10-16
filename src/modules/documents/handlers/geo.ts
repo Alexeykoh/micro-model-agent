@@ -35,9 +35,26 @@ function featureTitle(feature: Record<string, unknown>, index: number): string {
   return named ?? `feature ${index + 1}`;
 }
 
-/** Добавляет bounded-узел outline на каждый узел `key` с заголовком из `<name>`. */
-function pushGeoNodes(root: unknown, key: string, ir: DocumentIR, ctx: ParseContext): void {
-  findAll(root, key).forEach((node, i) => {
+/** Потолок узлов outline geo-документа (INV-D4): FeatureCollection/GPX не раздувают карту. */
+export const GEO_OUTLINE_CAP = 200;
+
+/** Отмечает усечение outline как честную деградацию (INV-D4/D5). */
+function capOutline(ir: DocumentIR, shown: number, total: number, unit: string): void {
+  ir.outline.push({
+    id: "truncated",
+    level: 1,
+    title: `... +${total - shown} ${unit} (outline capped)`,
+    kind: "section",
+  });
+  ir.meta.degraded = { reason: `outline capped at ${shown} of ${total} ${unit}` };
+}
+
+/** Добавляет bounded-узел outline на каждый узел `key` с заголовком из `<name>` (≤ кап). */
+function pushGeoNodes(root: unknown, key: string, ir: DocumentIR, ctx: ParseContext): number {
+  const nodes = findAll(root, key);
+  const room = Math.max(0, GEO_OUTLINE_CAP - ir.outline.length);
+  const shown = nodes.slice(0, room);
+  shown.forEach((node, i) => {
     const name = textOf(child(node, "name")).trim();
     ir.outline.push({
       id: `${key}:${i}`,
@@ -46,6 +63,7 @@ function pushGeoNodes(root: unknown, key: string, ir: DocumentIR, ctx: ParseCont
       kind: "section",
     });
   });
+  return nodes.length - shown.length;
 }
 
 /** GeoJSON → IR: узел outline на фичу FeatureCollection + code-блок JSON. */
@@ -65,7 +83,8 @@ export const geojsonHandler: DocumentHandler = {
       const root = obj(data);
       if (root?.type === "FeatureCollection") {
         const features = Array.isArray(root.features) ? root.features : [];
-        features.forEach((f, i) => {
+        const shown = features.slice(0, GEO_OUTLINE_CAP);
+        shown.forEach((f, i) => {
           const feature = obj(f);
           const title = feature ? featureTitle(feature, i) : `feature ${i + 1}`;
           ir.outline.push({
@@ -75,6 +94,7 @@ export const geojsonHandler: DocumentHandler = {
             kind: "section",
           });
         });
+        if (features.length > shown.length) capOutline(ir, shown.length, features.length, "features");
       }
       ir.blocks.push({
         kind: "code",
@@ -116,14 +136,16 @@ export const gpxHandler: DocumentHandler = {
       root = undefined;
     }
     const gpx = child(root, "gpx");
-    if (!obj(gpx)) {
+    if (gpx === undefined) {
       ir.meta.degraded = { reason: "invalid GPX — нет корня <gpx>" };
       ir.blocks.push({ kind: "code", lang: "xml", text: boundText(text, ctx.limits) });
       return ir;
     }
-    pushGeoNodes(gpx, "wpt", ir, ctx);
-    pushGeoNodes(gpx, "rte", ir, ctx);
-    pushGeoNodes(gpx, "trk", ir, ctx);
+    const omitted =
+      pushGeoNodes(gpx, "wpt", ir, ctx) +
+      pushGeoNodes(gpx, "rte", ir, ctx) +
+      pushGeoNodes(gpx, "trk", ir, ctx);
+    if (omitted > 0) capOutline(ir, ir.outline.length, ir.outline.length + omitted, "nodes");
     ir.blocks.push({ kind: "code", lang: "xml", text: boundText(text, ctx.limits) });
     return ir;
   },

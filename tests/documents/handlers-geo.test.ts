@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DOC_LIMITS } from "../../src/modules/documents/bound";
-import { geojsonHandler, gpxHandler } from "../../src/modules/documents/handlers/geo";
+import { GEO_OUTLINE_CAP, geojsonHandler, gpxHandler } from "../../src/modules/documents/handlers/geo";
 import { buildRegistry } from "../../src/modules/documents/registry";
 import type { Logger } from "../../src/logger/app-logger";
 
@@ -56,6 +56,29 @@ describe("geojsonHandler", () => {
     expect(geojsonHandler.extensions).toContain(".geojson");
     expect(geojsonHandler.extensions).not.toContain(".json");
   });
+
+  it("фича без properties не падает и получает фолбэк-заголовок", async () => {
+    const ir = await geojsonHandler.parse(
+      ctx,
+      src("a.geojson", JSON.stringify({ type: "FeatureCollection", features: [{ type: "Feature" }] })),
+    );
+    expect(ir.outline[0].title).toBe("feature 1");
+  });
+
+  it("огромный FeatureCollection → outline усечён до капа с честной деградацией", async () => {
+    const features = Array.from({ length: GEO_OUTLINE_CAP + 5 }, (_, i) => ({
+      type: "Feature",
+      properties: { name: `F${i}` },
+      geometry: null,
+    }));
+    const ir = await geojsonHandler.parse(
+      ctx,
+      src("big.geojson", JSON.stringify({ type: "FeatureCollection", features })),
+    );
+    expect(ir.outline.length).toBeLessThanOrEqual(GEO_OUTLINE_CAP + 1);
+    expect(ir.outline.at(-1)?.title).toContain("outline capped");
+    expect(ir.meta.degraded?.reason).toContain("capped");
+  });
 });
 
 describe("gpxHandler", () => {
@@ -74,6 +97,13 @@ describe("gpxHandler", () => {
   it("не-xml мусор → meta.degraded", async () => {
     const ir = await gpxHandler.parse(ctx, src("t.gpx", "not xml at all"));
     expect(ir.meta.degraded).toBeTruthy();
+  });
+
+  it("пустой <gpx/> без wpt/rte/trk — пустой outline, без падения и деградации", async () => {
+    const ir = await gpxHandler.parse(ctx, src("e.gpx", "<gpx></gpx>"));
+    expect(ir.outline).toHaveLength(0);
+    expect(ir.meta.degraded).toBeUndefined();
+    expect(ir.blocks.some((b) => b.kind === "code")).toBe(true);
   });
 
   it("не заявляет .xml/.svg (их берёт xml.ts)", () => {

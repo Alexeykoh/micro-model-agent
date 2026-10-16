@@ -126,3 +126,30 @@
   - Из растра не извлекается текст (OCR нет) — только vision-передача.
   - Векторные изображения (`.svg`) остаются в текстовой группе `xml.ts`.
   - `.geojson` не проверяется на схему глубже `type:"FeatureCollection"`/`features`.
+
+---
+
+## Правки ревью (W4)
+
+Ревью нашло три важные проблемы и мелочи; исправлено в ветке `feat/documents-media`:
+
+- **Лимит vision-payload (INV-D4).** `document_read` base64-кодировал полный оригинал без
+  границы. Добавлена константа `MAX_VISION_BYTES` (5 MiB, `media.ts`): байты сверх лимита →
+  fail-open `rejectResult` с `documents.image_too_large` (путь + лимит) и диагностикой
+  `module:documents`, а не гигантский payload. Тест — в `tests/documents/tools.test.ts`.
+  См. `DEBT(documents-vision-image-seam)`: ресайза нет (INV-D7 запрещает `src/llm/*`).
+- **MIME из magic-байтов, а не расширения.** `handlers/image.ts#detectRaster` возвращает
+  `{ mime } | null`; фигура берёт MIME оттуда, расширение — лишь фолбэк. Тест: `.png`-файл с
+  JPEG-байтами → `ref.mime === "image/jpeg"` (и data URL использует его). `it.each` по
+  расширениям заменён.
+- **Границы geo (INV-D4).** `GEO_OUTLINE_CAP = 200` в `handlers/geo.ts` (как `xml.ts` капит
+  на 60): большой FeatureCollection/GPX даёт усечённый outline + честный `meta.degraded`.
+  `map.ts#renderDocumentMap` оборачивает весь вывод в `boundText(..., DEFAULT_DOC_LIMITS)` —
+  `document_map` ограничен независимо от обработчика.
+
+Мелочи: комментарий, что `selector` игнорируется для растра; `documents.needs_vision` и
+`documents.image_too_large` несут `{path}`; W4-строка спеки уточняет, что `.svg` **намеренно**
+уходит в `xml.ts`.
+
+**Известное ограничение (не баг):** модуль не уменьшает изображения — только кап по байтам
+(`MAX_VISION_BYTES`); полноценный ресайз — core-шов, см. `DEBT(documents-vision-image-seam)`.

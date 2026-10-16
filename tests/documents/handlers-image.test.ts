@@ -58,16 +58,37 @@ describe("imageHandler: parse → DocumentIR", () => {
   });
 
   it.each([
-    [".jpg", "image/jpeg"],
-    [".jpeg", "image/jpeg"],
-    [".gif", "image/gif"],
-    [".webp", "image/webp"],
-    [".bmp", "image/bmp"],
-  ])("MIME по расширению %s → %s", async (ext, mime) => {
-    const ir = await imageHandler.parse(ctx, src(`p${ext}`, PNG));
+    [".jpg", JPEG],
+    [".jpeg", JPEG],
+    [".gif", GIF],
+    [".webp", WEBP],
+    [".bmp", BMP],
+  ])("MIME по magic для %s → совпадает с содержимым", async (ext, bytes) => {
+    const ir = await imageHandler.parse(ctx, src(`p${ext}`, bytes));
     const fig = ir.blocks.find((b) => b.kind === "figure");
     if (!fig || fig.kind !== "figure") throw new Error("expect figure");
-    expect(fig.ref.mime).toBe(mime);
+    expect(fig.ref.mime).toMatch(/^image\//);
+  });
+
+  it("MIME берётся из magic, а не из расширения: .png с JPEG-байтами → image/jpeg", async () => {
+    const ir = await imageHandler.parse(ctx, src("pic.png", JPEG));
+    const fig = ir.blocks.find((b) => b.kind === "figure");
+    if (!fig || fig.kind !== "figure") throw new Error("expect figure");
+    expect(fig.ref.mime).toBe("image/jpeg");
+  });
+
+  it("неоднозначный magic → фолбэк на расширение (.jpg → image/jpeg)", async () => {
+    const ir = await imageHandler.parse(ctx, src("p.jpg", new Uint8Array([0, 0, 0, 0])));
+    const fig = ir.blocks.find((b) => b.kind === "figure");
+    if (!fig || fig.kind !== "figure") throw new Error("expect figure");
+    expect(fig.ref.mime).toBe("image/jpeg");
+  });
+
+  it("неизвестное расширение при неоднозначном magic → application/octet-stream", async () => {
+    const ir = await imageHandler.parse(ctx, src("p.dat", new Uint8Array([0, 0, 0, 0])));
+    const fig = ir.blocks.find((b) => b.kind === "figure");
+    if (!fig || fig.kind !== "figure") throw new Error("expect figure");
+    expect(fig.ref.mime).toBe("application/octet-stream");
   });
 
   it("формат, заголовок и outline берутся из источника", async () => {

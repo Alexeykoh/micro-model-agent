@@ -7,6 +7,14 @@ import { Buffer } from "node:buffer";
 import type { DocumentIR } from "./ir";
 
 /**
+ * Потолок байтов растра, отправляемого в vision-контекст (INV-D4).
+ * Модуль не умеет уменьшать изображение (INV-D7 запрещает `src/llm/*`), поэтому
+ * всё, что больше, честно отклоняется (`documents.image_too_large`), а не
+ * заваливает контекст гигантским payload'ом. См. DEBT(documents-vision-image-seam).
+ */
+export const MAX_VISION_BYTES = 5 * 1024 * 1024;
+
+/**
  * MIME растровой фигуры, если `DocumentIR` — одиночное растровое изображение
  * (ровно один `figure`-блок с `ref.kind:"raster"`), иначе `null`.
  */

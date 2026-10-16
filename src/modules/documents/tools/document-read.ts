@@ -9,7 +9,7 @@
  */
 import { t } from "../../../i18n/index";
 import type { ToolDefinition, ToolResult } from "../../../tools/types";
-import { buildDataUrl, rasterMime } from "../media";
+import { buildDataUrl, MAX_VISION_BYTES, rasterMime } from "../media";
 import { parseSelector, renderDocumentRead, type ReadOutcome } from "../read";
 import { parseCtx, type DocumentRegistry } from "../registry";
 import { fileSource } from "../source";
@@ -52,8 +52,19 @@ export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
 
         const mime = rasterMime(ir);
         if (mime) {
+          // Для растровых изображений `selector` не применяется: картинка
+          // передаётся целиком, срезы по разделам/блокам к ней неприменимы.
           if (ctx.capabilities?.vision === true && ctx.contextManager) {
             const bytes = await source.bytes();
+            if (bytes.length > MAX_VISION_BYTES) {
+              const limit = `${Math.round(MAX_VISION_BYTES / (1024 * 1024))} MiB`;
+              return rejectResult(
+                ctx,
+                "document_read",
+                "raster image exceeds vision byte cap",
+                t("documents.image_too_large", { path: source.display, limit }),
+              );
+            }
             return {
               success: true,
               output: t("documents.image_attached"),
@@ -64,7 +75,7 @@ export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
             ctx,
             "document_read",
             "vision unavailable for raster image",
-            t("documents.needs_vision"),
+            t("documents.needs_vision", { path: source.display }),
           );
         }
 
