@@ -28,7 +28,7 @@ import {
   type ParseContext,
 } from "../handler";
 import { emptyIR, type DocTable, type DocumentIR } from "../ir";
-import { asArray, attr, child, collectText, findAll, readOoxml } from "./ooxml";
+import { asArray, attr, child, collectText, findAll, MAX_TABLE_COLS, readOoxml, tableHasContent } from "./ooxml";
 
 /** Уровень заголовка из `w:pStyle`, либо `undefined` (не заголовок). */
 function headingLevel(style: string | undefined): number | undefined {
@@ -66,7 +66,8 @@ function cellText(tc: unknown): string {
 /**
  * Таблица `w:tbl` → заголовок (первая строка) + строки, обрезанные по лимиту.
  * Строки собираются не более `maxTableRows + 1` (заголовок + одна лишняя для
- * детекта `truncated`) — cap во время разбора, а не после материализации (INV-D4).
+ * детекта `truncated`), колонки — до `MAX_TABLE_COLS`: cap во время разбора, а
+ * не после материализации (INV-D4).
  */
 function readTable(tbl: unknown, limits: DocLimits): DocTable {
   const rowCap = limits.maxTableRows + 1; // заголовок + строки данных
@@ -77,7 +78,15 @@ function readTable(tbl: unknown, limits: DocLimits): DocTable {
       truncated = true;
       break;
     }
-    all.push(asArray(child(tr, "w:tc")).map(cellText));
+    const cells: string[] = [];
+    for (const tc of asArray(child(tr, "w:tc"))) {
+      if (cells.length >= MAX_TABLE_COLS) {
+        truncated = true; // колонка за пределом — отбрасываем ячейку
+        break;
+      }
+      cells.push(cellText(tc));
+    }
+    all.push(cells);
   }
   const header = all.shift() ?? [];
   const rows = all.slice(0, limits.maxTableRows);
@@ -152,7 +161,7 @@ export const docxHandler: DocumentHandler = {
         for (const tbl of asArray(value)) {
           flushList();
           const table = readTable(tbl, ctx.limits);
-          if (table.header.length === 0 && table.rows.length === 0) continue;
+          if (!tableHasContent(table)) continue;
           ir.blocks.push({ kind: "table", table: boundTable(table, ctx.limits) });
           emitted++;
         }

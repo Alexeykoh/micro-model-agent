@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DOC_LIMITS } from "../../src/modules/documents/bound";
 import { docxHandler } from "../../src/modules/documents/handlers/docx";
+import { MAX_TABLE_COLS } from "../../src/modules/documents/handlers/ooxml";
 import { odtHandler } from "../../src/modules/documents/handlers/odt";
 import { pptxHandler } from "../../src/modules/documents/handlers/pptx";
 import type { Logger } from "../../src/logger/app-logger";
@@ -102,6 +103,29 @@ describe("docxHandler", () => {
     const ir = await docxHandler.parse(ctx(), src(buildDocx([{ kind: "tbl", rows: [] }]), "d.docx"));
     expect(ir.blocks).toEqual([]);
     expect(ir.meta.degraded?.reason).toBeTruthy();
+  });
+
+  it("w:tbl из одних пустых ячеек пропускается → degraded (единый tableHasContent)", async () => {
+    const ir = await docxHandler.parse(ctx(), src(buildDocx([{ kind: "tbl", rows: [["", ""]] }]), "d.docx"));
+    expect(ir.blocks).toEqual([]);
+    expect(ir.meta.degraded?.reason).toBeTruthy();
+  });
+
+  it("w:tbl с пустой строкой и непустым абзацем: таблица пропущена, абзац остался", async () => {
+    const b = buildDocx([{ kind: "tbl", rows: [["", ""]] }, { kind: "p", text: "text" }]);
+    const ir = await docxHandler.parse(ctx(), src(b, "d.docx"));
+    expect(ir.blocks).toEqual([{ kind: "paragraph", text: "text" }]);
+    expect(ir.meta.degraded).toBeUndefined();
+  });
+
+  it("колонки w:tbl обрезаются до MAX_TABLE_COLS с truncated (INV-D4)", async () => {
+    const wide = Array.from({ length: MAX_TABLE_COLS + 1 }, (_, i) => `c${i}`);
+    const b = buildDocx([{ kind: "tbl", rows: [wide] }]);
+    const ir = await docxHandler.parse(ctx(), src(b, "d.docx"));
+    const table = ir.blocks.find((x) => x.kind === "table");
+    if (!table || table.kind !== "table") throw new Error("expect table");
+    expect(table.table.header).toHaveLength(MAX_TABLE_COLS);
+    expect(table.table.truncated).toBe(true);
   });
 
   it("detect проходит только на ZIP-magic", () => {
