@@ -69,4 +69,14 @@ describe("mdHandler", () => {
     expect(ir.meta.title).toBe("Title");
     expect(ir.outline.map((n) => n.title)).toEqual(["Title", "Sub"]);
   });
+
+  it("огромный заголовок обрезается с маркером в блоке и outline (INV-D4)", async () => {
+    const long = "H".repeat(DEFAULT_DOC_LIMITS.maxChars + 1_000);
+    const ir = await mdHandler.parse(ctx, src("r.md", `# ${long}`));
+    const heading = ir.blocks.find((b) => b.kind === "heading");
+    if (!heading || heading.kind !== "heading") throw new Error("expect heading");
+    expect(heading.text).toContain("[...truncated to");
+    expect(heading.text.length).toBeLessThan(long.length);
+    expect(ir.outline[0].title).toContain("[...truncated to");
+  });
 });

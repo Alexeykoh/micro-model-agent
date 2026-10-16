@@ -103,6 +103,13 @@ export function findFastXmlImporters(files: ScanFile[]): string[] {
   return files.filter((f) => /["']fast-xml-parser["']/.test(stripComments(f.text))).map((f) => f.path);
 }
 
+/** Файлы, в коде которых (без комментариев) импортируется `pdfjs-dist` (или его подпуть). */
+export function findPdfjsImporters(files: ScanFile[]): string[] {
+  return files
+    .filter((f) => /["']pdfjs-dist(?:\/|["'])/.test(stripComments(f.text)))
+    .map((f) => f.path);
+}
+
 describe("architecture: documents dependency isolation (INV-D8)", () => {
   it("fast-xml-parser импортируется только из handlers/ooxml.ts", () => {
     const files = collectFiles(SRC_DIR, REPO_ROOT, [".ts"], { skipTests: true });
@@ -111,6 +118,15 @@ describe("architecture: documents dependency isolation (INV-D8)", () => {
       importers,
       `INV-D8: fast-xml-parser импортируется только из handlers/ooxml.ts:\n${importers.join("\n")}`,
     ).toEqual(["src/modules/documents/handlers/ooxml.ts"]);
+  });
+
+  it("pdfjs-dist импортируется только из handlers/pdf.ts", () => {
+    const files = collectFiles(SRC_DIR, REPO_ROOT, [".ts"], { skipTests: true });
+    const importers = findPdfjsImporters(files);
+    expect(
+      importers,
+      `INV-D8: pdfjs-dist импортируется только из handlers/pdf.ts:\n${importers.join("\n")}`,
+    ).toEqual(["src/modules/documents/handlers/pdf.ts"]);
   });
 
   it("сканер игнорирует упоминание пакета в комментарии", () => {
@@ -125,5 +141,19 @@ describe("architecture: documents dependency isolation (INV-D8)", () => {
       },
     ];
     expect(findFastXmlImporters(fixtures)).toEqual(["src/modules/documents/handlers/ooxml.ts"]);
+  });
+
+  it("pdfjs-сканер игнорирует упоминание пакета в комментарии", () => {
+    const fixtures: ScanFile[] = [
+      {
+        path: "src/modules/documents/handlers/pdf.ts",
+        text: 'import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";\n',
+      },
+      {
+        path: "src/modules/documents/handlers/other.ts",
+        text: '// здесь нельзя тянуть "pdfjs-dist"\n/* import "pdfjs-dist" */\n',
+      },
+    ];
+    expect(findPdfjsImporters(fixtures)).toEqual(["src/modules/documents/handlers/pdf.ts"]);
   });
 });

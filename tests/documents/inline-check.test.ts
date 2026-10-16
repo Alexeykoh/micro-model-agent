@@ -71,10 +71,10 @@ describe("inline-check: скан импортов src", () => {
   });
 
   it("scanImportedDeps возвращает только реально импортируемые документные деп", () => {
-    // src/ в репозитории на момент W2 импортирует fast-xml-parser (ooxml.ts) и не импортирует pdfjs-dist.
+    // src/ импортирует обе документные деп: fast-xml-parser (ooxml.ts) и pdfjs-dist (pdf.ts, W3).
     const srcRoot = fileURLToPath(new URL("../../src", import.meta.url));
     const found = scanImportedDeps(srcRoot, ["fast-xml-parser", "pdfjs-dist"]);
     expect(found).toContain("fast-xml-parser");
-    expect(found).not.toContain("pdfjs-dist");
+    expect(found).toContain("pdfjs-dist");
   });
 });

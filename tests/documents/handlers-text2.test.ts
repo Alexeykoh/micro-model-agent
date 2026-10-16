@@ -31,6 +31,15 @@ describe("json/yaml/xml/html", () => {
     expect(ir.outline.some((n) => n.title === "H")).toBe(true);
   });
 
+  it("огромный html-заголовок обрезается с маркером (INV-D4)", async () => {
+    const long = "H".repeat(DEFAULT_DOC_LIMITS.maxChars + 1_000);
+    const ir = await htmlHandler.parse(ctx, src("p.html", `<h1>${long}</h1>`));
+    const heading = ir.blocks.find((b) => b.kind === "heading");
+    if (!heading || heading.kind !== "heading") throw new Error("expect heading");
+    expect(heading.text).toContain("[...truncated to");
+    expect(ir.outline[0].title).toContain("[...truncated to");
+  });
+
   it("невалидный JSON логирует warn и помечает degraded (INV-D5)", async () => {
     const warn = vi.fn();
     const ir = await jsonHandler.parse({ logger: loggerWith(warn), limits: DEFAULT_DOC_LIMITS }, src("c.json", "{не json"));
