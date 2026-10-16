@@ -4,7 +4,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Поиск по многим документам: рекурсивная индексация каталога (ограниченная),
 кэш на диске рядом с `index-cache.json`, простой TF-поиск по чанкам, два новых тула —
@@ -85,51 +85,51 @@ Envelope `{ version, root, signature, builtAt, entries }`, `CACHE_VERSION = 1`.
 
 ### Task 0: План волны
 
-- [ ] Зафиксировать план W5 (этот файл) и закоммитить первым.
-- [ ] **Коммит** `docs(documents): план W5 — индексация корпуса`.
+- [x] Зафиксировать план W5 (этот файл) и закоммитить первым.
+- [x] **Коммит** `docs(documents): план W5 — индексация корпуса`.
 
 ### Task 1: `chunks.ts` — IR → чанки
 
-- [ ] Падающий тест `tests/documents/chunks.test.ts`: секции, нарезка длинного абзаца,
+- [x] Падающий тест `tests/documents/chunks.test.ts`: секции, нарезка длинного абзаца,
   кап чанков (с заметкой), фигуры-маркеры, таблицы/списки.
-- [ ] Реализовать `chunkIR` + `DocChunk` + константы.
-- [ ] **Коммит** `feat(documents): чанкинг DocumentIR (W5)`.
+- [x] Реализовать `chunkIR` + `DocChunk` + константы.
+- [x] **Коммит** `feat(documents): чанкинг DocumentIR (W5)`.
 
 ### Task 2: `corpus.ts` — кэш + обход каталога
 
-- [ ] Падающий тест `tests/documents/corpus.test.ts`: envelope/version/root/shape
+- [x] Падающий тест `tests/documents/corpus.test.ts`: envelope/version/root/shape
   (чужой кэш не грузится), `indexDir` на временном каталоге (.csv/.md), skip
   неподдержанного, cap документов, битый файл не роняет обход.
-- [ ] Реализовать `DocumentsCache` и `indexDir`.
-- [ ] **Коммит** `feat(documents): дисковый кэш и обход корпуса (W5)`.
+- [x] Реализовать `DocumentsCache` и `indexDir`.
+- [x] **Коммит** `feat(documents): дисковый кэш и обход корпуса (W5)`.
 
 ### Task 3: `search.ts` + тул `document_index`
 
-- [ ] Падающий тест скоринга/бюджета в `tests/documents/tools-index.test.ts`.
-- [ ] Реализовать `search.ts`; реализовать `document_index`.
-- [ ] **Коммит** `feat(documents): тул document_index (W5)`.
+- [x] Падающий тест скоринга/бюджета в `tests/documents/tools-index.test.ts`.
+- [x] Реализовать `search.ts`; реализовать `document_index`.
+- [x] **Коммит** `feat(documents): тул document_index (W5)`.
 
 ### Task 4: тул `document_find`
 
-- [ ] Падающие тесты: попадание по индексу, no-match, бюджет top-N,
+- [x] Падающие тесты: попадание по индексу, no-match, бюджет top-N,
   fail-open без документов.
-- [ ] Реализовать `document_find` (загрузка/сборка кэша по требованию).
-- [ ] **Коммит** `feat(documents): тул document_find (W5)`.
+- [x] Реализовать `document_find` (загрузка/сборка кэша по требованию).
+- [x] **Коммит** `feat(documents): тул document_find (W5)`.
 
 ### Task 5: проводка в модуль + i18n
 
-- [ ] `module.ts`: 4 тула; `index.ts`: экспорт типов W5.
-- [ ] Ключи `documents.*`/`tool.friendly.*` симметрично en/ru.
-- [ ] Обновить спеку при необходимости (формат кэша/лимиты).
-- [ ] **Коммит** `feat(documents): проводка тулов W5 и i18n`.
+- [x] `module.ts`: 4 тула; `index.ts`: экспорт типов W5.
+- [x] Ключи `documents.*`/`tool.friendly.*` симметрично en/ru.
+- [x] Обновить спеку при необходимости (формат кэша/лимиты).
+- [x] **Коммит** `feat(documents): проводка тулов W5 и i18n`.
 
 ### Task 6: гейты
 
-- [ ] `tests/documents/module.test.ts` — ожидание 4 тулов.
-- [ ] `bun test tests/documents tests/arch` → зелёный (реальные числа).
-- [ ] `bun run quality` → exit 0; `bun run build:documents` → exit 0.
-- [ ] `bun test tests/i18n.test.ts` зелёный; файлы ≤300 строк; нет `as any`.
-- [ ] **Коммит** `test(documents): гейты W5 — индексация/поиск`.
+- [x] `tests/documents/module.test.ts` — ожидание 4 тулов.
+- [x] `bun test tests/documents tests/arch` → зелёный (реальные числа).
+- [x] `bun run quality` → exit 0; `bun run build:documents` → exit 0.
+- [x] `bun test tests/i18n.test.ts` зелёный; файлы ≤300 строк; нет `as any`.
+- [x] **Коммит** `test(documents): гейты W5 — индексация/поиск`.
 
 ---
 
