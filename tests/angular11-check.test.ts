@@ -42,9 +42,10 @@ export class AppModule {}
 describe("angular11 check — tool definition", () => {
   it("exposes a read-only, cacheable angular_check tool", () => {
     const tools = angularTools();
-    expect(tools.map((t) => t.name)).toEqual(["angular_check"]);
-    expect(tools[0].security.caps).toEqual([{ fs: "read" }]);
-    expect(tools[0].cacheable).toBe(true);
+    expect(tools.map((t) => t.name)).toEqual(["angular_check", "angular_scaffold"]);
+    const check = tools.find((t) => t.name === "angular_check");
+    expect(check?.security.caps).toEqual([{ fs: "read" }]);
+    expect(check?.cacheable).toBe(true);
   });
 });
 
