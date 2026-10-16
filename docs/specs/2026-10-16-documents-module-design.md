@@ -248,6 +248,13 @@ export const HANDLERS: readonly DocumentHandler[] = [
 спайк бандлинга** до основной работы. Фолбэк при хрупком бандлинге — лёгкий чистый
 TS-экстрактор текстового слоя PDF (решение по результату спайка, не сюрприз в середине).
 
+**Спайк W0 — результаты (факт).** Проверка: `bun build <entry> --target node --format esm`
+→ артефакт копируется в чистую temp-папку **без `node_modules`** → `node <artifact>`.
+
+- `fast-xml-parser@5.11.2` (`scripts/documents-bundle-check.ts`): **вшивается**. Собрано
+  37 модулей, артефакт **117.75 КБ**; запуск из temp без `node_modules` → `documents deps bundle OK`, exit 0.
+- `pdfjs-dist`: _см. ниже (заполняется спайком W0.2)._
+
 ### 4.7 Тулы для модели
 
 Максимум четыре тула (жёсткий бюджет 9B). Все — через `ModuleDef.tools()` →
