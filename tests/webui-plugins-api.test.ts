@@ -8,6 +8,8 @@ import { stubPlugins } from "./helpers/webui-plugins";
 function makeState(overrides?: Partial<ReturnType<typeof stubPlugins>>): WebUiState {
   const s = createWebUiState();
   s.config = structuredClone(DEFAULTS);
+  // Фикстура изолирована от засева `DEFAULTS.plugins.disabled` (там `angular11`).
+  s.config.plugins = { ...s.config.plugins, disabled: [] };
   s.plugins = { ...stubPlugins([]), ...overrides };
   let saved = 0;
   s.saveConfig = () => {
@@ -81,6 +83,7 @@ describe("webui plugins REST", () => {
   it("POST toggles a plugin, writes the deny-list and returns fresh records", async () => {
     const s = createWebUiState();
     s.config = structuredClone(DEFAULTS);
+    s.config.plugins = { ...s.config.plugins, disabled: [] };
     s.plugins = stubPlugins([
       { name: "a", source: "project" },
       { name: "b", source: "project" },
@@ -186,6 +189,7 @@ describe("webui plugins REST", () => {
   it("url-encoded names survive the round trip", async () => {
     const s = createWebUiState();
     s.config = structuredClone(DEFAULTS);
+    s.config.plugins = { ...s.config.plugins, disabled: [] };
     s.plugins = stubPlugins([{ name: "my.plugin-2" }]);
     s.saveConfig = () => {};
     await withServer(s, async (base) => {
@@ -222,6 +226,7 @@ describe("webui plugins REST", () => {
   it("a plugin named 'reload' stays toggleable (action namespace is separate)", async () => {
     const s = createWebUiState();
     s.config = structuredClone(DEFAULTS);
+    s.config.plugins = { ...s.config.plugins, disabled: [] };
     s.plugins = stubPlugins([{ name: "reload" }]);
     s.saveConfig = () => {};
     await withServer(s, async (base) => {
