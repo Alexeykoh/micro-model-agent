@@ -47,4 +47,10 @@ describe("DocumentRegistry", () => {
     expect(reg.resolve("a.pptx", zip)?.id).toBe("pptx");
     expect(reg.active().groups).toContain("office");
   });
+  it(".pdf с %PDF--magic резолвится в pdf при группе pdf (W3)", () => {
+    const reg = buildRegistry();
+    const magic = new TextEncoder().encode("%PDF-");
+    expect(reg.resolve("a.pdf", magic)?.id).toBe("pdf");
+    expect(reg.active().groups).toContain("pdf");
+  });
 });

@@ -11,6 +11,7 @@ import { jsonHandler } from "./json";
 import { mdHandler } from "./md";
 import { odsHandler } from "./ods";
 import { odtHandler } from "./odt";
+import { pdfHandler } from "./pdf";
 import { pptxHandler } from "./pptx";
 import { xlsxHandler } from "./xlsx";
 import { xmlHandler } from "./xml";
@@ -24,7 +25,8 @@ export const ACTIVE_GROUPS: readonly HandlerGroup[] = [
   "text",
   "spreadsheet",
   "office",
-  // "pdf", "image", "geo",  // → W3–W4
+  "pdf",
+  // "image", "geo",  // → W4
 ];
 
 /** Точный список обработчиков (убрал строку — формат выключен). */
@@ -41,6 +43,6 @@ export const HANDLERS: readonly DocumentHandler[] = [
   docxHandler,
   odtHandler,
   pptxHandler,
-  // pdfHandler,                                      // → W3
+  pdfHandler,
   // imageHandler, geoHandler,                        // → W4
 ];
