@@ -5,9 +5,13 @@
  */
 import type { DocumentHandler, HandlerGroup } from "../handler";
 import { csvHandler, tsvHandler } from "./csv";
+import { docxHandler } from "./docx";
 import { htmlHandler } from "./html";
 import { jsonHandler } from "./json";
 import { mdHandler } from "./md";
+import { odsHandler } from "./ods";
+import { odtHandler } from "./odt";
+import { pptxHandler } from "./pptx";
 import { xlsxHandler } from "./xlsx";
 import { xmlHandler } from "./xml";
 import { yamlHandler } from "./yaml";
@@ -19,7 +23,8 @@ export const DOCUMENTS_ENABLED = true;
 export const ACTIVE_GROUPS: readonly HandlerGroup[] = [
   "text",
   "spreadsheet",
-  // "office", "pdf", "image", "geo",  // → W2–W4
+  "office",
+  // "pdf", "image", "geo",  // → W3–W4
 ];
 
 /** Точный список обработчиков (убрал строку — формат выключен). */
@@ -32,7 +37,10 @@ export const HANDLERS: readonly DocumentHandler[] = [
   xmlHandler,
   htmlHandler,
   xlsxHandler,
-  // odsHandler, docxHandler, odtHandler, pptxHandler,  // → W2
+  odsHandler,
+  docxHandler,
+  odtHandler,
+  pptxHandler,
   // pdfHandler,                                      // → W3
   // imageHandler, geoHandler,                        // → W4
 ];

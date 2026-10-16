@@ -38,4 +38,13 @@ describe("DocumentRegistry", () => {
     expect(reg.resolve("book.xlsx", new Uint8Array([0x50, 0x4b, 0x03, 0x04]))?.id).toBe("xlsx");
     expect(reg.active().groups).toContain("spreadsheet");
   });
+  it("ZIP-файлы .ods/.docx/.odt/.pptx резолвятся в свои обработчики при группе office (W2b)", () => {
+    const reg = buildRegistry();
+    const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+    expect(reg.resolve("a.ods", zip)?.id).toBe("ods");
+    expect(reg.resolve("a.docx", zip)?.id).toBe("docx");
+    expect(reg.resolve("a.odt", zip)?.id).toBe("odt");
+    expect(reg.resolve("a.pptx", zip)?.id).toBe("pptx");
+    expect(reg.active().groups).toContain("office");
+  });
 });
