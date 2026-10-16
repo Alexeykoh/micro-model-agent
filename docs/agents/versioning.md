@@ -46,12 +46,17 @@
 
 4. **Build**: `bun run build:prod`
 
-   > The release build **cleans `dist` first**, externalizes dependencies
-   > (`bun build --packages external`) and minifies every `dist/**/*.{js,mjs,css}`
-   > plus JSON with esbuild (`scripts/optimize-dist.ts`, no source maps — light
-   > mangling obfuscation). Result: package ~1.7 MB, `main.js` ~1.1 MB. Note: the
-   > backend `main.js` is minified; for readable stacks debug from a source build
-   > (`bun run build:bundle` without `optimize`).
+   > The release build **cleans `dist` first**, then bundles via
+   > `scripts/build-documents.ts` (`build:documents`): the two documents
+   > dependencies (`fast-xml-parser`, `pdfjs-dist`) are **inlined** into
+   > `dist/main.js`, while `playwright` and every other `dependencies` entry stays
+   > external (`--external <pkg>`, resolved from `node_modules` at runtime). It then
+   > minifies every `dist/**/*.{js,mjs,css}` plus JSON with esbuild
+   > (`scripts/optimize-dist.ts`, no source maps — light mangling obfuscation).
+   > Result: package ~1.7 MB, `main.js` ~1.1 MB. Note: the backend `main.js` is
+   > minified; for readable stacks debug from a source build. `bun run build:bundle`
+   > is the legacy all-external variant (every dependency external, no documents
+   > inlining).
 
 5. **Verify package contents** (optional): `npm pack --dry-run` — ships only
    `dist/`, `bin/`, `CHANGELOG.md`; nothing is fetched at runtime (all deps come

@@ -20,6 +20,7 @@
 export const KNOWN_TOOL_TAGS = [
   "file",
   "code",
+  "document",
   "shell",
   "research",
   "browser",
@@ -47,6 +48,9 @@ const MEMORY_RE =
 const VISION_RE =
   /image|картинк|фото|изображен|скрин|attach|vision|png|\bjpg\b|jpeg|сфотографируй|разбери.*фото/i;
 
+const DOCUMENT_RE =
+  /\.(xlsx|xls|ods|csv|tsv|docx|odt|pptx|pdf|md|markdown|ya?ml|json|xml|html?)\b|таблиц|документ|договор|отчёт|отчет|sheet|spreadsheet|през/i;
+
 const CODE_RE =
   /код|code|typescript|python|javascript|bun|npm|git|коммит|тест|lint|build|сборк|баг|ошибк.*код|файл|file|папк|директори|рефактор|refactor/i;
 
@@ -65,6 +69,7 @@ export function inferExtraToolTags(input: string): KnownToolTag[] {
   }
   if (SHELL_RE.test(input)) extra.add("shell");
   if (MEMORY_RE.test(input)) extra.add("memory");
+  if (DOCUMENT_RE.test(input)) extra.add("document");
   if (VISION_RE.test(input)) {
     extra.add("vision");
     extra.add("image");

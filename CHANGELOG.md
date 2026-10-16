@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Documents module (W1)**: new non-critical `documents` module — a single
+  format-agnostic substrate (`DocumentIR`) with format handlers for the text group
+  (csv/tsv, md, json, yaml, xml, html). Two read-only tools, `document_map`
+  (structure map) and `document_read` (slice by `all`/`section:<title>`/`lines:<a>-<b>`),
+  fail-open with a reason (INV-D5) and declaring `security` (INV-D7). On/off is
+  **code-only** (`handlers/index.ts`: `DOCUMENTS_ENABLED`/`ACTIVE_GROUPS`/`HANDLERS`),
+  no config keys (INV-D3). New `document` auto-tag seeds the tools by file extension
+  or intent words. Registered in `src/core/bootstrap/modules-phase.ts`; tools are
+  collected by the module host. i18n keys `documents.*` / `tool.friendly.document_*`
+  added symmetrically to `en`/`ru`.
+
 ## [0.5.0] - 2026-10-15
 
 ### Added
