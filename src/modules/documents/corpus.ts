@@ -9,6 +9,7 @@
  */
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { readFileSync, writeFileSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import { Buffer } from "node:buffer";
 import { join, relative, resolve, sep } from "node:path";
@@ -237,7 +238,7 @@ export async function indexDir(opts: IndexDirOptions): Promise<IndexDirResult> {
       truncated = true;
       return;
     }
-    let dirents: Awaited<ReturnType<typeof readdir>>;
+    let dirents: Dirent[];
     try {
       dirents = await readdir(absDir, { withFileTypes: true });
     } catch {
