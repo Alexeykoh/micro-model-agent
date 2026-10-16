@@ -489,3 +489,20 @@ Root cause параллельных падений: `vi.mock` в Bun **глоб�
   пути в бэктиках в черновик (нового канала вложений нет), live через `IndexerModule.watch(onSettled)`
   → SSE `files` + `filesRevision`. Тип релиза — MINOR (2.23.0). ✅ Реализовано и запушено
   (`bun test webui` 355 pass, `tsc` + `tsc -p tsconfig.frontend.json` чисто, `bun run quality` exit 0).
+
+## Новое (2026-10-17)
+
+- [ ] **Плагин `angular11` — тест на живой модели и на живом проекте** — ветка
+  `feat/angular11-plugin`, слито в `master` без публикации.
+  Реализованы W1–W4 (блок знания `[ANGULAR 11]`, тул `angular_check`, write-check
+  `onAfterTool`, тул `angular_scaffold`), выключен по умолчанию
+  (`DEFAULTS.plugins.disabled`). Покрытие — только фикстуры
+  (`tests/angular11-*.test.ts`, 28 шт.). **Вживую не проверялось:**
+  - **на живой модели** (qwen3.5-9b) — как модель реально пользуется блоком `[ANGULAR 11]`,
+    тулами `angular_check`/`angular_scaffold` и реагирует на write-check: нет ли ложных
+    срабатываний правил, устранимы ли подсказки, не забивает ли вывод контекст.
+  - **на живом проекте** — реальный Angular 11 на Node 16: точность `angular_check` на
+    настоящем `angular.json`-воркспейсе (false positive/negative по NgModule-дефектам),
+    применимость скаффолда, поведение write-check на настоящих `.ts`/`.html`.
+  Триггер: появится живой Angular 11 проект и/или прогон на qwen3.5-9b.
+  Спека: [docs/specs/2026-10-16-angular11-plugin-design.md](./docs/specs/2026-10-16-angular11-plugin-design.md) §7.
