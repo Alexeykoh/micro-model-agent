@@ -30,6 +30,7 @@ import { sessionModuleDef } from "../../modules/session/lifecycle";
 import { indexerModuleDef } from "../../modules/indexer/lifecycle";
 import { memoryModuleDef } from "../../modules/memory/lifecycle";
 import { skillsModuleDef } from "../../modules/skills/lifecycle";
+import { documentsModuleDef } from "../../modules/documents";
 import { MemoryModule } from "../../modules/memory/module";
 import { MemoryStore } from "../../modules/memory/store";
 import { t } from "../../i18n/index";
@@ -60,9 +61,7 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   const core = await registerCoreModules(input, moduleRegistry);
   const languages = startLanguageModules(input, moduleRegistry);
   const startupCheckPromise = languages.startupCheck;
-  // Единый хост жизненного цикла и сбора тулов (INV-2/5/7/8). Порядок
-  // регистрации — как в `ModuleRegistry`, чтобы порядок определений и блоков
-  // не менялся (KV-кеш, порядок схемы тулов).
+  // Единый хост жизненного цикла и сбора тулов (INV-2/5/7/8); порядок — как в ModuleRegistry.
   moduleHost.register(executionModuleDef(core.execModule));
   moduleHost.register(sessionModuleDef(core.sessionModule));
   moduleHost.register(indexerModuleDef(input.indexerModule));
@@ -71,6 +70,7 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   if (languages.browserModule) moduleHost.register(browserModuleDef(languages.browserModule));
   moduleHost.register(lspModuleDef(languages.lspModule));
   moduleHost.register(skillsModuleDef(input.skillsModule));
+  moduleHost.register(documentsModuleDef());
   await moduleHost.setup();
   registerModuleToolsAndPlugins(input, moduleHost);
 

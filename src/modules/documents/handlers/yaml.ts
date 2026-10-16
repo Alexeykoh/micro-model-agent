@@ -1,0 +1,37 @@
+/**
+ * YAML → `DocumentIR` (текстовая группа).
+ */
+import { parse as parseYaml } from "yaml";
+import { boundLine, boundText } from "../bound";
+import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
+import { emptyIR } from "../ir";
+
+/** YAML → IR: ключи верхнего уровня — в outline, документ — code-блок. */
+export const yamlHandler: DocumentHandler = {
+  id: "yaml",
+  group: "text",
+  extensions: [".yaml", ".yml"],
+  detect: (h) => detectHead(h) === "unknown",
+  async parse(ctx: ParseContext, source: DocSource) {
+    const bytes = await source.bytes();
+    const text = new TextDecoder().decode(bytes);
+    const ir = emptyIR("yaml", bytes.length);
+    try {
+      const data: unknown = parseYaml(text);
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        for (const k of Object.keys(data as Record<string, unknown>)) {
+          ir.outline.push({ id: `k:${k}`, level: 1, title: boundLine(k, ctx.limits), kind: "section" });
+        }
+      }
+    } catch (err) {
+      ctx.logger.warn("documents: невалидный YAML — деградированный разбор", {
+        path: source.path,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      ir.meta.degraded = { reason: "invalid YAML — показан сырой текст" };
+    }
+    ir.blocks.push({ kind: "code", lang: "yaml", text: boundText(text, ctx.limits) });
+    ir.meta.title = source.display;
+    return ir;
+  },
+};
