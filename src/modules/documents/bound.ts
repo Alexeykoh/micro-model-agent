@@ -22,6 +22,12 @@ export function boundText(text: string, limits: DocLimits): string {
   return out;
 }
 
+/** Обрезает однострочный текст (заголовок) до maxChars с маркером (INV-D4). */
+export function boundLine(text: string, limits: DocLimits): string {
+  if (text.length <= limits.maxChars) return text;
+  return `${text.slice(0, limits.maxChars)}[...truncated to ${limits.maxChars} chars...]`;
+}
+
 /** Обрезает таблицу по числу строк, выставляя truncated (INV-D4). */
 export function boundTable(table: DocTable, limits: DocLimits): DocTable {
   if (table.rows.length <= limits.maxTableRows) return table;

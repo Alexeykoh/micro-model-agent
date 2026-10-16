@@ -1,6 +1,7 @@
 /**
  * Markdown → `DocumentIR` (текстовая группа).
  */
+import { boundLine } from "../bound";
 import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
 import { emptyIR } from "../ir";
 
@@ -10,7 +11,7 @@ export const mdHandler: DocumentHandler = {
   group: "text",
   extensions: [".md", ".markdown", ".mdown"],
   detect: (h) => detectHead(h) === "unknown",
-  async parse(_ctx: ParseContext, source: DocSource) {
+  async parse(ctx: ParseContext, source: DocSource) {
     const bytes = await source.bytes();
     const text = new TextDecoder().decode(bytes);
     const ir = emptyIR("md", bytes.length);
@@ -33,8 +34,9 @@ export const mdHandler: DocumentHandler = {
         flushPara();
         const level = m[1].length;
         const title = m[2].trim();
-        ir.blocks.push({ kind: "heading", level, text: title });
-        ir.outline.push({ id: `h${n++}`, level, title, kind: "section" });
+        const bounded = boundLine(title, ctx.limits);
+        ir.blocks.push({ kind: "heading", level, text: bounded });
+        ir.outline.push({ id: `h${n++}`, level, title: bounded, kind: "section" });
         if (level === 1 && !ir.meta.title) ir.meta.title = title;
         continue;
       }

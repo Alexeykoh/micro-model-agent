@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DOC_LIMITS } from "../../src/modules/documents/bound";
-import { pdfHandler } from "../../src/modules/documents/handlers/pdf";
+import { MAX_PAGES, pdfHandler } from "../../src/modules/documents/handlers/pdf";
 import { buildRegistry } from "../../src/modules/documents/registry";
 import type { DocumentIR } from "../../src/modules/documents/ir";
 import type { Logger } from "../../src/logger/app-logger";
-import { helloPdf, multiPagePdf, noTextPdf } from "./fixtures-pdf";
+import { helloPdf, malformedPdf, multiPagePdf, noTextPdf, outlinePdf } from "./fixtures-pdf";
 
 const logger = { debug() {}, info() {}, warn() {}, error() {} } as unknown as Logger;
 const ctx = (limits = DEFAULT_DOC_LIMITS) => ({ logger, limits });
@@ -52,6 +52,30 @@ describe("pdfHandler", () => {
     expect(text).toContain("Two");
     expect(text).toContain("Three");
     expect(ir.outline).toHaveLength(3);
+  });
+
+  it("закладки: outline из getOutline() с уровнями (pushOutline)", async () => {
+    const ir = await pdfHandler.parse(ctx(), src(outlinePdf()));
+    expect(ir.outline.map((n) => [n.title, n.level])).toEqual([
+      ["Chapter One", 1],
+      ["Chapter Two", 1],
+      ["Sub", 2],
+    ]);
+    expect(ir.outline.every((n) => n.kind === "section")).toBe(true);
+  });
+
+  it("страниц > MAX_PAGES → meta.pages истинный, разобраны первые MAX_PAGES (INV-D5)", async () => {
+    const total = MAX_PAGES + 5;
+    const texts = Array.from({ length: total }, (_, i) => `Page ${i + 1}`);
+    const ir = await pdfHandler.parse(ctx(), src(multiPagePdf(texts)));
+    expect(ir.meta.pages).toBe(total);
+    expect(ir.blocks).toHaveLength(MAX_PAGES);
+    expect(ir.outline).toHaveLength(MAX_PAGES);
+    expect(ir.meta.degraded?.reason).toBeTruthy();
+  });
+
+  it("битый PDF → parse бросает (fail-open — задача тула, INV-D5)", async () => {
+    await expect(pdfHandler.parse(ctx(), src(malformedPdf()))).rejects.toThrow();
   });
 
   it("detect проходит по %PDF- magic и не проходит по ZIP", () => {

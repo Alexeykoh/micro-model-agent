@@ -19,7 +19,7 @@
  * порядке. Альтернатива — `preserveOrder` у `fast-xml-parser` (отдельный полный
  * обход с сохранением порядка) — в этой волне осознанно не внедрена.
  */
-import { boundTable } from "../bound";
+import { boundLine, boundTable } from "../bound";
 import {
   detectHead,
   type DocLimits,
@@ -138,8 +138,9 @@ export const docxHandler: DocumentHandler = {
           if (level !== undefined) {
             flushList();
             if (!text) continue;
-            ir.blocks.push({ kind: "heading", level, text });
-            ir.outline.push({ id: `h${sect++}`, level, title: text, kind: "section" });
+            const title = boundLine(text, ctx.limits);
+            ir.blocks.push({ kind: "heading", level, text: title });
+            ir.outline.push({ id: `h${sect++}`, level, title, kind: "section" });
             emitted++;
             if (level === 1 && !titleSet) {
               ir.meta.title = text;

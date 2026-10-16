@@ -8,18 +8,31 @@
  * число страниц, `meta.title` — display. Нет текста ни на одной странице (скан) →
  * `meta.degraded` с причиной, без исключения (INV-D5); малоформированный PDF
  * бросает исключение наружу — это fail-open тула, а не деградация (INV-D5).
- * Политику не реализует (INV-D6). Единственный импортёр `pdfjs-dist` (INV-D8).
+ * Обход страниц ограничен `MAX_PAGES`: если страниц больше, разбираются первые
+ * `MAX_PAGES`, `meta.pages` остаётся истинным, а `meta.degraded` честно сообщает
+ * «показаны первые N страниц» (INV-D5). Заголовки/закладки проходят `boundLine`
+ * (INV-D4). Политику не реализует (INV-D6). Единственный импортёр `pdfjs-dist`
+ * (INV-D8).
+ *
+ * `standardFontDataUrl` не задаётся осознанно: pdfjs логирует нефатальный warning
+ * (стандартные шрифты не подгружаются), это влияет лишь на отрисовку глифов, не
+ * на извлечение текста, поэтому предупреждение принято как безвредное.
  */
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 // @ts-expect-error — у `pdf.worker.mjs` нет .d.mts: модуль воркера поставляется только в рантайме.
 import { WorkerMessageHandler } from "pdfjs-dist/legacy/build/pdf.worker.mjs";
-import { boundText } from "../bound";
-import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
+import { boundLine, boundText } from "../bound";
+import { detectHead, type DocLimits, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
 import { emptyIR, type DocumentIR } from "../ir";
+
+/** Верхняя граница числа обходимых страниц (INV-D5): дальше — честная деградация. */
+export const MAX_PAGES = 200;
 
 // Fake-worker: иначе pdfjs динамически импортирует `pdf.worker.mjs` рядом с
 // бандлом и падает без него. Хук берёт WorkerMessageHandler из уже вшитого
-// модуля (W0-спайк); `Object.assign` — без кастов к `any`.
+// модуля (W0-спайк); `Object.assign` — без кастов к `any`. Хук опирается на то,
+// что pdfjs читает `globalThis.pdfjsWorker` лениво — внутри `getDocument`, уже
+// после этого присваивания.
 Object.assign(globalThis, { pdfjsWorker: { WorkerMessageHandler } });
 
 /** Тип документа pdfjs (выводим из `getDocument`, не импортируя тип напрямую). */
@@ -50,14 +63,20 @@ function pageLines(items: readonly unknown[]): string[] {
     .filter((l) => l !== "");
 }
 
-/** Дерево закладок → outline (`kind:"section"`, уровень из вложенности). */
-function pushOutline(nodes: OutlineItem[], level: number, ir: DocumentIR, counter: { n: number }): void {
+/** Дерево закладок → outline (`kind:"section"`, уровень из вложенности, INV-D4). */
+function pushOutline(
+  nodes: OutlineItem[],
+  level: number,
+  ir: DocumentIR,
+  counter: { n: number },
+  limits: DocLimits,
+): void {
   for (const node of nodes) {
     const raw = typeof node.title === "string" ? node.title : "";
-    const title = raw.trim() || `Section ${counter.n + 1}`;
+    const title = boundLine(raw.trim() || `Section ${counter.n + 1}`, limits);
     ir.outline.push({ id: `outline:${counter.n++}`, level, title, kind: "section" });
     if (Array.isArray(node.items) && node.items.length > 0) {
-      pushOutline(node.items, level + 1, ir, counter);
+      pushOutline(node.items, level + 1, ir, counter, limits);
     }
   }
 }
@@ -82,25 +101,28 @@ export const pdfHandler: DocumentHandler = {
 
       const bookmark = await doc.getOutline();
       const hasOutline = Array.isArray(bookmark) && bookmark.length > 0;
-      if (hasOutline) pushOutline(bookmark, 1, ir, { n: 0 });
+      if (hasOutline) pushOutline(bookmark, 1, ir, { n: 0 }, ctx.limits);
 
-      let total = "";
-      for (let n = 1; n <= doc.numPages; n++) {
+      let hasText = false;
+      const walk = Math.min(doc.numPages, MAX_PAGES); // cap обхода (INV-D5)
+      for (let n = 1; n <= walk; n++) {
         const page = await doc.getPage(n);
         const content = await page.getTextContent();
         const lines = pageLines(content.items);
-        total += `${lines.join("\n")}\n`;
         if (lines.length === 0) continue; // пустая страница не даёт пустых блоков (INV-D5)
+        hasText = true;
         if (hasOutline) {
           ir.blocks.push({ kind: "paragraph", text: boundText(lines.join("\n"), ctx.limits) });
         } else {
-          ir.outline.push({ id: `page:${n}`, level: 1, title: lines[0], kind: "section" });
-          ir.blocks.push({ kind: "heading", level: 1, text: lines[0] });
+          const title = boundLine(lines[0], ctx.limits);
+          ir.outline.push({ id: `page:${n}`, level: 1, title, kind: "section" });
+          ir.blocks.push({ kind: "heading", level: 1, text: title });
           const rest = lines.slice(1).join("\n");
           if (rest) ir.blocks.push({ kind: "paragraph", text: boundText(rest, ctx.limits) });
         }
       }
-      if (total.trim() === "") ir.meta.degraded = { reason: "нет текстового слоя (скан?)" };
+      if (!hasText) ir.meta.degraded = { reason: "нет текстового слоя (скан?)" };
+      else if (doc.numPages > MAX_PAGES) ir.meta.degraded = { reason: `показаны первые ${MAX_PAGES} страниц` };
       return ir;
     } finally {
       await task.destroy();
