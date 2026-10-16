@@ -7,7 +7,9 @@
 //
 // Спека: `docs/specs/2026-10-16-angular11-plugin-design.md`.
 import type { AgentPlugin, PluginPermission } from "../../../types";
+import type { ToolDefinition } from "../../../../tools/types";
 import { ANGULAR11_KNOWLEDGE } from "./knowledge";
+import { angularTools } from "./tools";
 
 /** Плагин Angular 11. Пока (W1) отдаёт только блок знания. */
 export class Angular11Plugin implements AgentPlugin {
@@ -23,6 +25,11 @@ export class Angular11Plugin implements AgentPlugin {
   /** Блок `[ANGULAR 11]` в системный промпт, пока плагин включён (F1). */
   onBuildPrompt(): string | null {
     return ANGULAR11_KNOWLEDGE;
+  }
+
+  /** Тулы плагина (F2 — `angular_check`). */
+  getToolDefinitions(): ToolDefinition[] {
+    return angularTools();
   }
 }
 
