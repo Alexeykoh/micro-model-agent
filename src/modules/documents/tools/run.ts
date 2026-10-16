@@ -11,10 +11,20 @@ export function causeOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Эмитит диагностику и возвращает fail-open результат с готовым текстом (INV-D5). */
+export function rejectResult(
+  ctx: ToolContext,
+  operation: string,
+  cause: string,
+  output: string,
+): ToolResult {
+  ctx.onDiagnostic?.({ source: "module:documents", operation, kind: "failed", cause });
+  return { success: false, output };
+}
+
 /** Эмитит диагностику и возвращает fail-open результат (INV-D5). */
 export function failResult(ctx: ToolContext, operation: string, cause: string): ToolResult {
-  ctx.onDiagnostic?.({ source: "module:documents", operation, kind: "failed", cause });
-  return { success: false, output: t("documents.error", { reason: cause }) };
+  return rejectResult(ctx, operation, cause, t("documents.error", { reason: cause }));
 }
 
 /** Выполняет тело тула; при исключении — fail-open с записью (INV-D5). */

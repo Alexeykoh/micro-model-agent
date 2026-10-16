@@ -164,6 +164,8 @@
   "documents.section_not_found": "Section \"{title}\" not found. Available sections: {available}",
   "documents.section_none": "none",
   "documents.selector_unknown": "Unknown selector \"{selector}\". Use all, section:<title>, or blocks:<from>-<to>.",
+  "documents.needs_vision": "The active model does not support images (no vision); the raster image cannot be passed to the context.",
+  "documents.image_attached": "Image passed to the context.",
   "tool.truncated": "[Truncated: {tokens} tokens removed]",
   "tool.output_admitted": "[output omitted: {tokens} tokens, {lines} lines — too large for context]\nSaved to: {artifact}\nSource: {source}\nPreview:\n{preview}\nInspect it with read_file (offset/limit) or chunk_query on the saved path.",
   "tool.output_admitted_display": "large output: {tokens} tokens, {lines} lines — saved to file",
