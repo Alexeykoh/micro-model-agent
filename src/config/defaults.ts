@@ -198,7 +198,9 @@ export const DEFAULTS: AppConfig = {
     budget: 0.15,
   },
   plugins: {
-    disabled: [],
+    // `angular11` — системный плагин, выключен по умолчанию: включается штатным
+    // контуром (`mma plugins enable angular11`, `/plugins`, тумблер в вебе).
+    disabled: ["angular11"],
     maxDrafts: 10,
   },
   hallucination: {

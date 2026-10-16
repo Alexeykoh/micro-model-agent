@@ -13,6 +13,7 @@ import { buildHiddenToolsBlock } from "../../tools/hidden-tools-block";
 import { ModuleRegistry } from "../../modules/registry";
 import { PluginLoader } from "../../modules/plugins/loader";
 import { pluginCapabilitiesBlock } from "../../modules/plugins/capabilities-block";
+import { plugin as angular11Plugin } from "../../modules/plugins/builtin/angular11";
 import { plugin as lintOnWritePlugin } from "../../modules/plugins/builtin/lint-on-write";
 import { plugin as notifyPlugin } from "../../modules/plugins/builtin/notify";
 import { ExecutionModule } from "../../modules/execution/module";
@@ -212,8 +213,7 @@ function registerModuleToolsAndPlugins(
     registerBuiltinPlugin(pluginManager, plugin);
   }
 
-  pluginManager.register(lintOnWritePlugin);
-  pluginManager.register(notifyPlugin);
+  for (const builtin of [angular11Plugin, lintOnWritePlugin, notifyPlugin]) pluginManager.register(builtin);
 
   const pluginLoader = new PluginLoader();
   const globalPluginsDir = resolveGlobalPluginsDir();
