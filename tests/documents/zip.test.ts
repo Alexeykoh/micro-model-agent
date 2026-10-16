@@ -28,4 +28,12 @@ describe("readZip", () => {
   it("порченый ввод → понятная ошибка", () => {
     expect(() => readZip(new Uint8Array([1, 2, 3, 4]))).toThrow(/ZIP/i);
   });
+
+  it("комментарий архива с magic PK\\x05\\x06 не даёт ложный EOCD", () => {
+    // Magic находится в зоне обратного сканирования (ближе к концу, чем EOCD),
+    // но не согласован с len — принимается только настоящий EOCD.
+    const comment = `PK\x05\x06${"x".repeat(40)}`;
+    const zip = readZip(buildZip([{ name: "a.txt", data: "hello" }], { comment }));
+    expect(readZipText(zip, "a.txt")).toBe("hello");
+  });
 });

@@ -89,15 +89,41 @@ describe("architecture: documents boundaries (INV-D2)", () => {
   });
 });
 
+/**
+ * Удаляет строчные и блочные комментарии перед текстовым поиском: упоминание
+ * пакета в комментарии не должно восприниматься как импорт. Простая эвристика
+ * (не лексер) достаточна — ищется одно и то же имя пакета.
+ */
+export function stripComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n\r]*/g, "$1");
+}
+
+/** Файлы, в коде которых (без комментариев) упомянут `fast-xml-parser`. */
+export function findFastXmlImporters(files: ScanFile[]): string[] {
+  return files.filter((f) => /["']fast-xml-parser["']/.test(stripComments(f.text))).map((f) => f.path);
+}
+
 describe("architecture: documents dependency isolation (INV-D8)", () => {
   it("fast-xml-parser импортируется только из handlers/ooxml.ts", () => {
     const files = collectFiles(SRC_DIR, REPO_ROOT, [".ts"], { skipTests: true });
-    const importers = files
-      .filter((f) => /["']fast-xml-parser["']/.test(f.text))
-      .map((f) => f.path);
+    const importers = findFastXmlImporters(files);
     expect(
       importers,
       `INV-D8: fast-xml-parser импортируется только из handlers/ooxml.ts:\n${importers.join("\n")}`,
     ).toEqual(["src/modules/documents/handlers/ooxml.ts"]);
+  });
+
+  it("сканер игнорирует упоминание пакета в комментарии", () => {
+    const fixtures: ScanFile[] = [
+      {
+        path: "src/modules/documents/handlers/ooxml.ts",
+        text: 'import { XMLParser } from "fast-xml-parser";\n',
+      },
+      {
+        path: "src/modules/documents/handlers/other.ts",
+        text: '// здесь нельзя тянуть "fast-xml-parser"\n/* import "fast-xml-parser" */\n',
+      },
+    ];
+    expect(findFastXmlImporters(fixtures)).toEqual(["src/modules/documents/handlers/ooxml.ts"]);
   });
 });

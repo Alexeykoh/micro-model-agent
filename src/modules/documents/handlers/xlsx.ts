@@ -7,7 +7,13 @@
  * частей → `meta.degraded`, без исключения (INV-D5). Политику не реализует (INV-D6).
  */
 import { boundTable } from "../bound";
-import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
+import {
+  detectHead,
+  type DocLimits,
+  type DocSource,
+  type DocumentHandler,
+  type ParseContext,
+} from "../handler";
 import { emptyIR, type DocumentIR, type DocTable } from "../ir";
 import { asArray, attr, collectText, readOoxml, textOf } from "./ooxml";
 
@@ -17,8 +23,11 @@ function child(node: unknown, key: string): unknown {
   return (node as Record<string, unknown>)[key];
 }
 
+/** Предел материализуемых колонок: блуждающая ячейка в XFD не раздувает сетку (INV-D4). */
+const MAX_COLS = 256;
+
 /** A→0, B→1, …, Z→25, AA→26 (берёт буквенную часть ссылки ячейки). */
-export function colIndex(ref: string): number {
+function colIndex(ref: string): number {
   let n = 0;
   for (const ch of ref) {
     const c = ch.toUpperCase();
@@ -39,10 +48,18 @@ function colName(index: number): string {
   return out;
 }
 
-/** Значение ячейки: shared-string по `t="s"`, inlineStr, иначе текстовый узел `<v>`. */
+/**
+ * Значение ячейки: shared-string по `t="s"`, inlineStr, иначе текстовый узел `<v>`.
+ * Для `t="s"` без валидного числового `<v>` — пусто: `Number("")` дало бы `0` и
+ * молча вернуло shared[0] (ложное значение).
+ */
 function cellValue(cell: unknown, shared: string[]): string {
   const t = attr(cell, "t");
-  if (t === "s") return shared[Number(textOf(child(cell, "v")))] ?? "";
+  if (t === "s") {
+    const raw = textOf(child(cell, "v"));
+    if (!/^\d+$/.test(raw)) return "";
+    return shared[Number(raw)] ?? "";
+  }
   if (t === "inlineStr") return collectText(child(cell, "is"));
   return textOf(child(cell, "v"));
 }
@@ -99,29 +116,49 @@ interface SheetGrid {
   header: string[];
   rows: string[][];
   range?: string;
+  /** Строка или колонка отброшены по лимиту (INV-D4). */
+  truncated?: boolean;
 }
 
-/** Разбирает `<sheetData>` в прямоугольную сетку; пропуски → "". */
-function readSheet(xml: unknown, shared: string[]): SheetGrid {
+/**
+ * Разбирает `<sheetData>` в прямоугольную сетку; пропуски → "". Строки собираются
+ * до `limits.maxTableRows` (+ заголовок), колонки — до `MAX_COLS`: ограничение
+ * применяется во время разбора, а не после (INV-D4). `range` сохраняет реальную
+ * ширину, даже если сетка материализована не полностью.
+ */
+function readSheet(xml: unknown, shared: string[], limits: DocLimits): SheetGrid {
   const rowNodes = asArray(child(child(child(xml, "worksheet"), "sheetData"), "row"));
   const grid: string[][] = [];
-  let maxCol = -1;
+  let maxCol = -1; // материализованная ширина
+  let trueMaxCol = -1; // реальная ширина (для range)
   let maxRow = -1;
-  rowNodes.forEach((rowNode, fallback) => {
+  let truncated = rowNodes.length > limits.maxTableRows + 1;
+  const rowCap = limits.maxTableRows + 1; // заголовок + строки данных
+  for (let idx = 0; idx < rowNodes.length; idx++) {
+    const rowNode = rowNodes[idx];
     const rowAttr = attr(rowNode, "r");
-    const r = rowAttr ? Number(rowAttr) - 1 : fallback;
+    const r = rowAttr ? Number(rowAttr) - 1 : idx;
+    if (r < 0 || r >= rowCap) {
+      truncated = true;
+      continue; // строка вне окна — не материализуем
+    }
     let autoCol = 0;
     const rowArr: string[] = [];
     for (const cell of asArray(child(rowNode, "c"))) {
       const ref = attr(cell, "r");
       const c = ref ? colIndex(ref) : autoCol;
       autoCol = c + 1;
+      if (c > trueMaxCol) trueMaxCol = c;
+      if (c >= MAX_COLS) {
+        truncated = true; // колонка за пределом — отбрасываем ячейку
+        continue;
+      }
       rowArr[c] = cellValue(cell, shared);
       if (c > maxCol) maxCol = c;
     }
     grid[r] = rowArr;
     if (r > maxRow) maxRow = r;
-  });
+  }
   if (maxRow < 0 || maxCol < 0) return { header: [], rows: [] };
   const norm: string[][] = [];
   for (let r = 0; r <= maxRow; r++) {
@@ -133,7 +170,8 @@ function readSheet(xml: unknown, shared: string[]): SheetGrid {
   return {
     header: norm.shift() ?? [],
     rows: norm,
-    range: `A1:${colName(maxCol)}${maxRow + 1}`,
+    range: `A1:${colName(trueMaxCol)}${maxRow + 1}`,
+    truncated,
   };
 }
 
@@ -158,19 +196,31 @@ export const xlsxHandler: DocumentHandler = {
     const shared = readShared(ooxml.xml("xl/sharedStrings.xml"));
 
     let found = 0;
+    let emitted = 0;
     refs.forEach((ref, i) => {
       const xml = ooxml.xml(sheetTarget(ref.rid, rels, i));
       if (xml === undefined) return;
       found++;
-      const grid = readSheet(xml, shared);
+      const grid = readSheet(xml, shared, ctx.limits);
+      const hasContent =
+        grid.header.some((v) => v !== "") || grid.rows.some((row) => row.some((v) => v !== ""));
+      if (!hasContent) return; // пустой лист не даёт пустой таблицы (INV-D5)
+      emitted++;
       ir.outline.push({ id: `sheet:${ref.name}`, level: 1, title: ref.name, kind: "sheet" });
       const table: DocTable = boundTable(
-        { caption: ref.name, header: grid.header, rows: grid.rows, range: grid.range },
+        {
+          caption: ref.name,
+          header: grid.header,
+          rows: grid.rows,
+          range: grid.range,
+          truncated: grid.truncated,
+        },
         ctx.limits,
       );
       ir.blocks.push({ kind: "table", table });
     });
     if (found === 0) ir.meta.degraded = { reason: "в книге нет worksheet-частей" };
+    else if (emitted === 0) ir.meta.degraded = { reason: "все листы пусты" };
     return ir;
   },
 };

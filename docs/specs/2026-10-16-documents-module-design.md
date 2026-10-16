@@ -60,8 +60,10 @@ _Развилка выбрана в брейншторме: подход **A** �
 
 **INV-D2. Потребители зависят только от `DocumentIR`.** `document_map` / `document_read` /
 индексация не знают ни одного конкретного формата. Формат-специфика живёт исключительно в
-обработчике. Проверяется: `tests/arch/documents-boundaries.test.ts` — импорт `handlers/*`
-разрешён только из `registry.ts`.
+обработчике. Внутри `handlers/` обработчики вправе импортировать друг друга и общие слои
+(ZIP/OOXML) — это один слой модуля. Извне `handlers/` конкретный обработчик импортируется
+**только** из `registry.ts` (точка сборки реестра). Проверяется:
+`tests/arch/documents-boundaries.test.ts`.
 
 **INV-D3. Вкл/выкл — в коде, без конфига.** Единственная точка переключения —
 `src/modules/documents/handlers/index.ts` (`ACTIVE_GROUPS` + `HANDLERS`) и глобальная
@@ -329,7 +331,8 @@ export function documentsModuleDef(deps: DocumentsDeps): ModuleDef {
 - **Реестр:** `resolve` по расширению и по magic-bytes; приоритет detect над расширением.
 - **Переключатели (INV-D3):** исключение группы/обработчика снимает его из реестра и из
   `health()`; `DOCUMENTS_ENABLED=false` → тулов нет, boot зелёный.
-- **Границы (INV-D2):** `handlers/*` импортируется только из `registry.ts`.
+- **Границы (INV-D2):** `handlers/*` импортируется извне только из `registry.ts`;
+  внутри `handlers/` импорты между обработчиками/общим слоем свободны.
 - **Fail-open (INV-D5):** битый/пустой/неподдерживаемый документ даёт запись
   `module:documents` в `session.jsonl` — тест, падающий без правки (правило 7).
 - **Лимиты (INV-D4):** большая таблица/документ обрезается с `truncated`.

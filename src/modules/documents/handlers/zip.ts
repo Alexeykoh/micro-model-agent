@@ -15,11 +15,18 @@ const EOCD_MIN = 22;
 /** Максимальная длина zip-комментария — предел обратного сканирования EOCD. */
 const MAX_COMMENT = 0xffff;
 
-/** Находит смещение EOCD, сканируя назад (комментарий архива — переменной длины). */
+/**
+ * Находит смещение EOCD, сканируя назад (комментарий архива — переменной длины).
+ * Кандидат принимается только если он согласован с длиной: `pos + 22 + commentLen === len`.
+ * Без этой проверки magic `PK\x05\x06`, встретившийся внутри комментария, дал бы
+ * ложное срабатывание и пустую карту записей.
+ */
 function findEocd(view: DataView, len: number): number {
   const floor = Math.max(0, len - EOCD_MIN - MAX_COMMENT);
   for (let pos = len - EOCD_MIN; pos >= floor; pos--) {
-    if (view.getUint32(pos, true) === EOCD_SIG) return pos;
+    if (view.getUint32(pos, true) !== EOCD_SIG) continue;
+    const commentLen = view.getUint16(pos + 20, true);
+    if (pos + EOCD_MIN + commentLen === len) return pos;
   }
   throw new Error("не ZIP-архив: не найден end-of-central-directory");
 }

@@ -46,8 +46,14 @@ interface Prepared {
   offset: number;
 }
 
+/** Опции архива целиком (не записи). */
+export interface ZipOptions {
+  /** Комментарий архива (поле EOCD); используется для проверки сканирования EOCD. */
+  comment?: string;
+}
+
 /** Собирает ZIP-архив из записей. Все записи — одиночный диск, без zip64. */
-export function buildZip(entries: ZipEntryInput[]): Uint8Array {
+export function buildZip(entries: ZipEntryInput[], opts: ZipOptions = {}): Uint8Array {
   const out: number[] = [];
   const prepared: Prepared[] = [];
 
@@ -100,6 +106,7 @@ export function buildZip(entries: ZipEntryInput[]): Uint8Array {
     );
   }
   const cdSize = out.length - cdOffset;
+  const commentBytes = [...new TextEncoder().encode(opts.comment ?? "")];
 
   out.push(
     ...u32(0x06054b50), // EOCD signature
@@ -109,7 +116,8 @@ export function buildZip(entries: ZipEntryInput[]): Uint8Array {
     ...u16(prepared.length),
     ...u32(cdSize),
     ...u32(cdOffset),
-    ...u16(0), // comment length
+    ...u16(commentBytes.length), // comment length
+    ...commentBytes,
   );
 
   return new Uint8Array(out);

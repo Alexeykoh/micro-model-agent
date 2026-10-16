@@ -86,6 +86,118 @@ describe("xlsxHandler", () => {
     expect(ir.blocks).toEqual([]);
   });
 
+  it("deflated-книга (метод 8) читается так же, как stored", async () => {
+    const bytes = buildXlsx([{ name: "Sheet1", rows: [["Name", "Age"], ["Alice", 30]] }], {
+      deflate: true,
+    });
+    const ir = await xlsxHandler.parse(ctx(), src(bytes));
+    const block = ir.blocks[0];
+    if (block.kind !== "table") throw new Error("expect table");
+    expect(block.table.header).toEqual(["Name", "Age"]);
+    expect(block.table.rows).toEqual([["Alice", "30"]]);
+    expect(block.table.range).toBe("A1:B2");
+  });
+
+  it("дальняя ячейка (XFD) не раздувает сетку: колонки ограничены, truncated (INV-D4)", async () => {
+    const bytes = buildXlsx([
+      {
+        name: "S",
+        rows: [["h"], ["1"]],
+        extraCells: [{ ref: "XFD2", xml: '<c r="XFD2"><v>7</v></c>' }],
+      },
+    ]);
+    const ir = await xlsxHandler.parse(ctx(), src(bytes));
+    const block = ir.blocks[0];
+    if (block.kind !== "table") throw new Error("expect table");
+    expect(block.table.rows[0]).toEqual(["1"]); // XFD отброшен, сетка не выросла
+    expect(block.table.truncated).toBe(true);
+    expect(block.table.range).toBe("A1:XFD2"); // честный диапазон
+  });
+
+  it("ячейка в колонке за Z (AA) встаёт по colIndex", async () => {
+    const bytes = buildXlsx([
+      {
+        name: "S",
+        rows: [["a"]],
+        extraCells: [{ ref: "AA1", xml: '<c r="AA1"><v>9</v></c>' }],
+      },
+    ]);
+    const ir = await xlsxHandler.parse(ctx(), src(bytes));
+    const block = ir.blocks[0];
+    if (block.kind !== "table") throw new Error("expect table");
+    expect(block.table.header).toHaveLength(27);
+    expect(block.table.header[0]).toBe("a");
+    expect(block.table.header[26]).toBe("9");
+    expect(block.table.range).toBe("A1:AA1");
+  });
+
+  it("t=\"s\" без <v> не подставляет shared[0] (пустая ячейка)", async () => {
+    const bytes = buildXlsx([
+      { name: "S", rows: [["h"]], extraCells: [{ ref: "A2", xml: '<c r="A2" t="s"/>' }] },
+    ]);
+    const ir = await xlsxHandler.parse(ctx(), src(bytes));
+    const block = ir.blocks[0];
+    if (block.kind !== "table") throw new Error("expect table");
+    expect(block.table.rows[0][0]).toBe(""); // было бы "h" при Number("")===0
+  });
+
+  it("t=\"s\" при отсутствующем sharedStrings.xml → пусто, без падения", async () => {
+    const bytes = buildXlsx(
+      [{ name: "S", rows: [[1]], extraCells: [{ ref: "B1", xml: '<c r="B1" t="s"><v>0</v></c>' }] }],
+      { skipSharedStrings: true },
+    );
+    const ir = await xlsxHandler.parse(ctx(), src(bytes));
+    const block = ir.blocks[0];
+    if (block.kind !== "table") throw new Error("expect table");
+    expect(block.table.header).toEqual(["1", ""]);
+  });
+
+  it("лист только с заголовком даёт пустые строки", async () => {
+    const bytes = buildXlsx([{ name: "S", rows: [["Name", "Age"]] }]);
+    const ir = await xlsxHandler.parse(ctx(), src(bytes));
+    const block = ir.blocks[0];
+    if (block.kind !== "table") throw new Error("expect table");
+    expect(block.table.header).toEqual(["Name", "Age"]);
+    expect(block.table.rows).toEqual([]);
+    expect(block.table.range).toBe("A1:B1");
+  });
+
+  it("формульная ячейка t=\"str\" и boolean t=\"b\" читаются из <v>", async () => {
+    const bytes = buildXlsx([
+      {
+        name: "S",
+        rows: [[1]],
+        extraCells: [
+          { ref: "B1", xml: '<c r="B1" t="str"><f>1+1</f><v>2</v></c>' },
+          { ref: "C1", xml: '<c r="C1" t="b"><v>1</v></c>' },
+        ],
+      },
+    ]);
+    const ir = await xlsxHandler.parse(ctx(), src(bytes));
+    const block = ir.blocks[0];
+    if (block.kind !== "table") throw new Error("expect table");
+    expect(block.table.header).toEqual(["1", "2", "1"]);
+  });
+
+  it("пустой лист не даёт пустой таблицы, но не теряется из meta.sheets", async () => {
+    const bytes = buildXlsx([
+      { name: "Data", rows: [["x"], ["1"]] },
+      { name: "Empty", rows: [] },
+    ]);
+    const ir = await xlsxHandler.parse(ctx(), src(bytes));
+    expect(ir.meta.sheets).toEqual(["Data", "Empty"]);
+    expect(ir.outline.map((n) => n.title)).toEqual(["Data"]);
+    expect(ir.blocks).toHaveLength(1);
+    expect(ir.meta.degraded).toBeUndefined();
+  });
+
+  it("все листы пусты → degraded с причиной (INV-D5)", async () => {
+    const bytes = buildXlsx([{ name: "Empty", rows: [] }]);
+    const ir = await xlsxHandler.parse(ctx(), src(bytes));
+    expect(ir.meta.degraded?.reason).toBeTruthy();
+    expect(ir.blocks).toEqual([]);
+  });
+
   it("detect проходит только на ZIP-magic", () => {
     expect(xlsxHandler.detect?.(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))).toBe(true);
     expect(xlsxHandler.detect?.(new Uint8Array([0x25, 0x50, 0x44, 0x46]))).toBe(false);

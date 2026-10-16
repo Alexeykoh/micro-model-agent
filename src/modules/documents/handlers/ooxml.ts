@@ -16,6 +16,8 @@ const parser = new XMLParser({
   attributeNamePrefix: "@_",
   parseAttributeValue: false,
   parseTagValue: false,
+  // trimValues режет крайние пробелы ячеек (теряя `xml:space="preserve"`) — осознанный
+  // выбор для таблиц: в табличном контексте лишние пробелы по краям не значимы.
   trimValues: true,
 });
 
