@@ -1,5 +1,8 @@
 # Модуль документов — W2a: ZIP/OOXML-слой и XLSX
 
+> **Статус:** W2a — сделано (коммиты ниже). **W2b** (ODF/office: ods/docx/odt/pptx) —
+> спецификация волны в самом низу этого файла, § «W2b».
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
@@ -144,3 +147,55 @@ W2 нужны общие модули **внутри** `handlers/` (`ooxml.ts`, 
   перечислены четыре опции; пятая — обоснованное расширение).
 - **Known fallbacks:** rId→target фолбэк на `sheet{N}.xml`; порядок `<si>`-ранов — по
   порядку ключей объекта парсера (смешанный `<t>+<r>` редок); CRC и zip64 не проверяются.
+
+---
+
+# W2b — ODF и остальные офисные форматы (ods/docx/odt/pptx)
+
+**Goal:** Второй набор офисных обработчиков поверх уже готового ZIP/OOXML-слоя W2a:
+ODF (ods/odt) и OOXML Word/PowerPoint (docx/pptx). XML-разбор во всех — через
+`ooxml.ts` (INV-D8); таблицы/текст — через `boundTable`/`boundText` (INV-D4);
+пустой/неразбираемый ввод → `meta.degraded` (INV-D5), без исключения.
+
+**Спека:** та же ([2026-10-16-documents-module-design.md](../specs/2026-10-16-documents-module-design.md)).
+
+## File Structure (W2b)
+
+| Файл | Ответственность |
+|---|---|
+| `src/modules/documents/handlers/odf.ts` | ODF-слой: чтение `content.xml`, `odfBody`, `odfText`/`odfHeadingLevel`/`odfListItems`, `readOdfTable` (повторы строк/колонок, cap) |
+| `src/modules/documents/handlers/ods.ts` | ODS → `DocumentIR`: `table:table` → листы (outline `sheet` + блок-таблица), `meta.sheets` |
+| `src/modules/documents/handlers/docx.ts` | DOCX/DOCM → `DocumentIR`: `w:pStyle` (Heading N) → heading+outline; `w:numPr` → list; `w:tbl` → таблица; первый `Heading1` → `meta.title` |
+| `src/modules/documents/handlers/odt.ts` | ODT/FODT → `DocumentIR`: `text:h`/`text:p`/`text:list`/`table:table` |
+| `src/modules/documents/handlers/pptx.ts` | PPTX → `DocumentIR`: слайды `ppt/slides/slide{N}.xml` → outline `slide` + paragraph, `meta.pages` |
+| `src/modules/documents/handlers/ooxml.ts` | +`child`/`findAll` — общие навигаторы по дереву парсера (modify, W2b) |
+| `src/modules/documents/handlers/index.ts` | Включить группу `"office"` и `odsHandler`/`docxHandler`/`odtHandler`/`pptxHandler` (modify, INV-D3) |
+| `tests/documents/fixtures-odf.ts` | Минимальные пакеты ODS/ODT (`content.xml`) |
+| `tests/documents/fixtures-office.ts` | Минимальные пакеты DOCX (`word/document.xml`) и PPTX (`ppt/slides/slide1.xml`) |
+| `tests/documents/handlers-ods.test.ts` | ODS: заголовок/строки, повторы, truncated, degraded |
+| `tests/documents/handlers-office.test.ts` | DOCX (заголовки/список/таблица/degraded), ODT, PPTX (слайды/degraded) |
+
+## Tasks (W2b)
+
+- **Task W2b.1:** `odf.ts` + общие `child`/`findAll` в `ooxml.ts`.
+- **Task W2b.2:** `ods.ts` (группа spreadsheet).
+- **Task W2b.3:** `docx.ts` (группа office).
+- **Task W2b.4:** `odt.ts` (группа office).
+- **Task W2b.5:** `pptx.ts` (группа office).
+- **Task W2b.6:** вкл/выкл — `"office"` в `ACTIVE_GROUPS`, четыре обработчика в `HANDLERS`;
+  кейс реестра на `.ods/.docx/.odt/.pptx` (ZIP-magic) и `"office"` в списке групп.
+- **Task W2b.7:** фикстуры ODF/Office + тесты обработчиков; degraded-кейс на каждый формат.
+
+## Self-Review (W2b)
+
+- **INV coverage:** INV-D2 (все обработчики — под `handlers/`), INV-D4 (`boundTable`/`boundText`,
+  cap повторов в `readOdfTable`/`readTable`), INV-D5 (degraded на отсутствие части/пустоту),
+  INV-D6 (политику не реализуют), INV-D8 (`odf.ts` и обработчики берут XML только из
+  `ooxml.ts`; `fast-xml-parser` — единственный импортёр `ooxml.ts`), INV-D9 (все файлы ≤300 строк).
+- **Known limitations:**
+  - docx/odt: `ordered:false` — нумерация docx в `numbering.xml`, у ODF списков — стилем;
+    определять «нумерованный/маркированный» по элементу нельзя (осознанно вне объёма).
+  - docx/odt: порядок разных тегов — по первому вхождению ключа парсера (одноимённые
+    группируются); для типовых документов достаточно.
+  - ODF: `table:covered-table-cell` (объединённые ячейки) и `office:annotation` не разворачиваются.
+  - pptx: текст — только `p:sp/p:txBody`; фигуры диаграмм/групп/заметок не читаются.
