@@ -271,9 +271,12 @@ W0.3): список внешних пакетов выводится из `packa
 вставлен в `build:prod` перед `build:optimize`.
 
 **Отложено по ревью W0 (долг, правило 9):** синхронизация `package-lock.json` с `bun.lock`
-(DEBT(documents-lockfile-drift)) и авто-проверка, что документные деп реально вшиты в
-упакованный `dist/main.js` (DEBT(documents-inline-unverified)) — см.
-[debt.md](../agents/debt.md).
+(DEBT(documents-lockfile-drift)) — см. [debt.md](../agents/debt.md).
+
+**Вшивание проверяется автоматически (оплачено W2).** `scripts/build-documents.ts` пишет
+`--metafile`, а `scripts/inline-check.ts::missingInlined` падает (`exit 1`), если документная
+деп, реально импортируемая `src/**`, отсутствует во входах `dist/main.js`. Покрыто
+`tests/documents/inline-check.test.ts` (прежде был долг `documents-inline-unverified`).
 
 ### 4.7 Тулы для модели
 
