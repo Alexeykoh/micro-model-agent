@@ -32,6 +32,17 @@ export function asArray<T>(v: T | T[] | undefined): T[] {
   return Array.isArray(v) ? v : [v];
 }
 
+/** Значение поля дочернего узла или `undefined` (узел не объект — тоже `undefined`). */
+export function child(node: unknown, key: string): unknown {
+  if (node === null || typeof node !== "object") return undefined;
+  return (node as Record<string, unknown>)[key];
+}
+
+/** Дети узла по ключу как массив: отсутствие → `[]`, одиночный узел → `[узел]`. */
+export function findAll(node: unknown, key: string): unknown[] {
+  return asArray(child(node, key));
+}
+
 /** Значение атрибута `@_<name>` узла как строка, либо `undefined`. */
 export function attr(node: unknown, name: string): string | undefined {
   if (node === null || typeof node !== "object") return undefined;
