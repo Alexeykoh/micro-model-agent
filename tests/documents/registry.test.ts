@@ -53,4 +53,16 @@ describe("DocumentRegistry", () => {
     expect(reg.resolve("a.pdf", magic)?.id).toBe("pdf");
     expect(reg.active().groups).toContain("pdf");
   });
+  it(".png с PNG-magic резолвится в image при группе image (W4)", () => {
+    const reg = buildRegistry();
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(reg.resolve("a.png", png)?.id).toBe("image");
+    expect(reg.active().groups).toContain("image");
+  });
+  it(".geojson и .gpx резолвятся под группой geo (W4)", () => {
+    const reg = buildRegistry();
+    expect(reg.resolve("a.geojson", new Uint8Array([0x7b]))?.id).toBe("geojson");
+    expect(reg.resolve("a.gpx", new TextEncoder().encode("<?xml"))?.id).toBe("gpx");
+    expect(reg.active().groups).toContain("geo");
+  });
 });
