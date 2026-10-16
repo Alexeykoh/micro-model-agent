@@ -56,7 +56,7 @@ export function buildRegistry(opts: RegistryOptions = {}): DocumentRegistry {
   const parse = async (ctx: ParseContext, source: DocSource): Promise<DocumentIR> => {
     const head = (await source.bytes()).slice(0, 8);
     const h = resolve(source.path, head);
-    if (!h) throw new Error(`no handler for ${source.path}`);
+    if (!h) throw new Error(`no handler for ${source.display}`);
     return h.parse(ctx, source);
   };
   const activeHealth = (): RegistryHealth => ({
@@ -74,3 +74,8 @@ export function parseCtx(logger: Logger): ParseContext {
 }
 
 export { detectHead };
+/**
+ * Переключатели форматов (INV-D3) пробрасываются наружу через реестр, чтобы
+ * `handlers/*` импортировался **только** из этого файла (гейт INV-D2).
+ */
+export { ACTIVE_GROUPS, DOCUMENTS_ENABLED };

@@ -1,12 +1,13 @@
 /**
- * Тул `document_map`: карта структуры документа (INV-D5 — fail-open с причиной;
- * INV-D7 — декларация `security` обязательна).
+ * Тул `document_map`: карта структуры документа (INV-D5 — fail-open с
+ * причиной; INV-D7 — декларация `security` обязательна).
  */
 import { t } from "../../../i18n/index";
-import type { ToolContext, ToolDefinition, ToolResult } from "../../../tools/types";
+import type { ToolDefinition } from "../../../tools/types";
 import { renderDocumentMap } from "../map";
 import { parseCtx, type DocumentRegistry } from "../registry";
 import { fileSource } from "../source";
+import { failOpen } from "./run";
 
 /** Тул `document_map`: карта структуры документа (INV-D5 — fail-open с причиной). */
 export function documentMapTool(registry: DocumentRegistry): ToolDefinition {
@@ -23,22 +24,11 @@ export function documentMapTool(registry: DocumentRegistry): ToolDefinition {
       properties: { path: { type: "string", description: t("documents.path_desc") } },
       required: ["path"],
     },
-    handler: async (ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> => {
-      const raw = String(args.path ?? "");
-      try {
-        const source = fileSource(ctx.baseDir, raw);
+    handler: (ctx, args) =>
+      failOpen(ctx, "document_map", async () => {
+        const source = fileSource(ctx.baseDir, String(args.path ?? ""));
         const ir = await registry.parse(parseCtx(ctx.logger), source);
-        return { success: true, output: renderDocumentMap(ir) };
-      } catch (err) {
-        const cause = err instanceof Error ? err.message : String(err);
-        ctx.onDiagnostic?.({
-          source: "module:documents",
-          operation: "document_map",
-          kind: "failed",
-          cause,
-        });
-        return { success: false, output: t("documents.error", { reason: cause }) };
-      }
-    },
+        return renderDocumentMap(ir);
+      }),
   };
 }

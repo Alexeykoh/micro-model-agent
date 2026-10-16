@@ -10,7 +10,7 @@ const logger = { debug() {}, info() {}, warn() {}, error() {} } as unknown as Lo
 const ctx = { logger, limits: DEFAULT_DOC_LIMITS };
 const loggerWith = (warn: (...a: unknown[]) => void): Logger =>
   ({ debug() {}, info() {}, warn, error() {} }) as unknown as Logger;
-const src = (path: string, text: string) => ({ path, ext: path.slice(path.lastIndexOf(".")), bytes: async () => new TextEncoder().encode(text) });
+const src = (path: string, text: string) => ({ path, display: path, ext: path.slice(path.lastIndexOf(".")), bytes: async () => new TextEncoder().encode(text) });
 
 describe("json/yaml/xml/html", () => {
   it("json отдаёт code-блок с top-level ключами в outline", async () => {

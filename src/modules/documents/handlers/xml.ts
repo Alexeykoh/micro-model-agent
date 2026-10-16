@@ -28,7 +28,7 @@ export const xmlHandler: DocumentHandler = {
       if (ir.outline.length >= 60) break;
     }
     ir.blocks.push({ kind: "code", lang: "xml", text: boundText(text, ctx.limits) });
-    ir.meta.title = source.path;
+    ir.meta.title = source.display;
     return ir;
   },
 };

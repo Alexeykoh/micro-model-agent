@@ -3,12 +3,24 @@
  * причиной; INV-D7 — декларация `security` обязательна).
  */
 import { t } from "../../../i18n/index";
-import type { ToolContext, ToolDefinition, ToolResult } from "../../../tools/types";
-import { parseSelector, renderDocumentRead } from "../read";
+import type { ToolDefinition } from "../../../tools/types";
+import { parseSelector, renderDocumentRead, type ReadOutcome } from "../read";
 import { parseCtx, type DocumentRegistry } from "../registry";
 import { fileSource } from "../source";
+import { failOpen } from "./run";
 
-/** Тул `document_read`: срез по селектору (section/lines/all). */
+/** Отказ рендера (`section` не найден / неизвестный селектор) → причина для модели. */
+function failureMessage(outcome: Extract<ReadOutcome, { ok: false }>): string {
+  if (outcome.kind === "unknown-selector") {
+    return t("documents.selector_unknown", { selector: outcome.arg });
+  }
+  const available = outcome.available.length
+    ? outcome.available.join(", ")
+    : t("documents.section_none");
+  return t("documents.section_not_found", { title: outcome.arg, available });
+}
+
+/** Тул `document_read`: срез по селектору (all/section/blocks). */
 export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
   return {
     name: "document_read",
@@ -26,23 +38,14 @@ export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
       },
       required: ["path"],
     },
-    handler: async (ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> => {
-      const raw = String(args.path ?? "");
-      const sel = parseSelector(String(args.selector ?? "all"));
-      try {
-        const source = fileSource(ctx.baseDir, raw);
+    handler: (ctx, args) =>
+      failOpen(ctx, "document_read", async () => {
+        const selector = parseSelector(String(args.selector ?? "all"));
+        const source = fileSource(ctx.baseDir, String(args.path ?? ""));
         const ir = await registry.parse(parseCtx(ctx.logger), source);
-        return { success: true, output: renderDocumentRead(ir, sel) };
-      } catch (err) {
-        const cause = err instanceof Error ? err.message : String(err);
-        ctx.onDiagnostic?.({
-          source: "module:documents",
-          operation: "document_read",
-          kind: "failed",
-          cause,
-        });
-        return { success: false, output: t("documents.error", { reason: cause }) };
-      }
-    },
+        const outcome = renderDocumentRead(ir, selector);
+        if (!outcome.ok) throw new Error(failureMessage(outcome));
+        return outcome.text;
+      }),
   };
 }

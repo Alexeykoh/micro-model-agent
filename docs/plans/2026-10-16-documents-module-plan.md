@@ -955,20 +955,35 @@ const ir: DocumentIR = {
 };
 
 describe("read", () => {
-  it("parseSelector разбирает section и lines", () => {
+  it("parseSelector разбирает section и blocks", () => {
     expect(parseSelector("section:B")).toEqual({ kind: "section", arg: "B" });
-    expect(parseSelector("lines:2-3")).toEqual({ kind: "lines", arg: [2, 3] });
+    expect(parseSelector("blocks:2-3")).toEqual({ kind: "blocks", arg: [2, 3] });
     expect(parseSelector("all")).toEqual({ kind: "all" });
+    expect(parseSelector("page:3")).toEqual({ kind: "unknown", arg: "page:3" });
   });
   it("section вырезает блоки до следующего заголовка того же уровня", () => {
     const out = renderDocumentRead(ir, { kind: "section", arg: "A" });
-    expect(out).toContain("hello");
-    expect(out).not.toContain("world");
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.text).toContain("hello");
+      expect(out.text).not.toContain("world");
+    }
   });
-  it("lines нумерует блоки", () => {
-    const out = renderDocumentRead(ir, { kind: "lines", arg: [3, 4] });
-    expect(out).toContain("world");
-    expect(out).not.toContain("hello");
+  it("отсутствующий раздел — явный отказ со списком доступных", () => {
+    expect(renderDocumentRead(ir, { kind: "section", arg: "nope" })).toEqual({
+      ok: false,
+      kind: "section-not-found",
+      arg: "nope",
+      available: ["A", "B"],
+    });
+  });
+  it("blocks нумерует блоки", () => {
+    const out = renderDocumentRead(ir, { kind: "blocks", arg: [3, 4] });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.text).toContain("world");
+      expect(out.text).not.toContain("hello");
+    }
   });
 });
 ```
@@ -979,56 +994,41 @@ describe("read", () => {
 
 ```ts
 // src/modules/documents/read.ts
-import { boundText } from "./bound";
+import { boundText, DEFAULT_DOC_LIMITS } from "./bound";
 import type { DocBlock, DocumentIR } from "./ir";
 
 export type Selector =
   | { kind: "all" }
   | { kind: "section"; arg: string }
-  | { kind: "lines"; arg: [number, number] };
+  | { kind: "blocks"; arg: [number, number] }
+  | { kind: "unknown"; arg: string };
 
-/** Разбор строки-селектора: all | section:<title> | lines:<a>-<b>. */
+/** Результат рендера среза: текст либо явная причина отказа (INV-D5). */
+export type ReadOutcome =
+  | { ok: true; text: string }
+  | { ok: false; kind: "section-not-found"; arg: string; available: string[] }
+  | { ok: false; kind: "unknown-selector"; arg: string };
+
+/** Разбор строки-селектора: all | section:<title> | blocks:<a>-<b>. */
 export function parseSelector(sel: string): Selector {
   const s = (sel || "all").trim();
+  if (s === "" || /^all$/i.test(s)) return { kind: "all" };
   const sec = /^section:(.+)$/i.exec(s);
   if (sec) return { kind: "section", arg: sec[1].trim() };
-  const ln = /^lines:(\d+)-(\d+)$/i.exec(s);
-  if (ln) return { kind: "lines", arg: [Number(ln[1]), Number(ln[2])] };
-  return { kind: "all" };
+  const bl = /^blocks:(\d+)-(\d+)$/i.exec(s);
+  if (bl) return { kind: "blocks", arg: [Number(bl[1]), Number(bl[2])] };
+  return { kind: "unknown", arg: s };
 }
 
-function blockText(b: DocBlock): string {
-  switch (b.kind) {
-    case "heading": return `${"#".repeat(b.level)} ${b.text}`;
-    case "paragraph": return b.text;
-    case "code": return `\`\`\`${b.lang ?? ""}\n${b.text}\n\`\`\``;
-    case "list": return b.items.map((i) => `- ${i}`).join("\n");
-    case "table": return [b.table.header.join(" | "), ...b.table.rows.map((r) => r.join(" | "))].join("\n");
-    case "figure": return `[figure: ${b.ref.kind} ${b.ref.mime}${b.caption ? ` — ${b.caption}` : ""}]`;
-  }
-}
+/** Блок-заголовок раздела с совпадением без учёта регистра; иначе `null`. */
+function findSection(ir: DocumentIR, title: string): { start: number; level: number } | null { /* … */ }
 
-/** Текстовый рендер выбранного среза IR (INV-D4). */
-export function renderDocumentRead(ir: DocumentIR, sel: Selector, maxChars = 24_000): string {
-  let blocks: DocBlock[];
-  if (sel.kind === "section") {
-    const start = ir.blocks.findIndex((b) => b.kind === "heading" && b.text === sel.arg);
-    if (start < 0) blocks = ir.blocks;
-    else {
-      const level = (ir.blocks[start] as { level: number }).level;
-      let end = ir.blocks.length;
-      for (let i = start + 1; i < ir.blocks.length; i++) {
-        const b = ir.blocks[i];
-        if (b.kind === "heading" && b.level <= level) { end = i; break; }
-      }
-      blocks = ir.blocks.slice(start, end);
-    }
-  } else if (sel.kind === "lines") {
-    blocks = ir.blocks.slice(Math.max(0, sel.arg[0] - 1), sel.arg[1]);
-  } else {
-    blocks = ir.blocks;
-  }
-  return boundText(blocks.map(blockText).join("\n\n"), { maxLines: 400, maxChars, maxTableRows: 50 });
+/** Текстовый рендер выбранного среза IR (INV-D4): `blocks:` считает блоки, а не строки. */
+export function renderDocumentRead(ir: DocumentIR, sel: Selector, limits = DEFAULT_DOC_LIMITS): ReadOutcome {
+  // section: нет заголовка → { ok: false, kind: "section-not-found", available: outline titles }
+  // (форматы без heading-блоков — csv/json/yaml/xml — тоже дают явный отказ, не весь документ)
+  // blocks:<a>-<b> → ir.blocks.slice(a-1, b); all → все блоки; unknown → { ok: false, kind: "unknown-selector" }
+  // Успех: { ok: true, text: boundText(...) }
 }
 ```
 
@@ -1082,28 +1082,45 @@ describe("doc tools", () => {
 
 - [ ] **Step 3: Реализовать `source.ts`**
 
+Байты читаются один раз на разбор (промис кэшируется); ошибка `ENOENT`
+отображается в дружелюбное сообщение с **относительным** путём (`display`),
+без утечки абсолютного (INV-D5).
+
 ```ts
 // src/modules/documents/source.ts
 import { readFile } from "node:fs/promises";
-import { resolve, extname } from "node:path";
+import { extname, resolve } from "node:path";
+import { t } from "../../i18n/index";
 import type { DocSource } from "./handler";
 
-/** Источник документа по пути относительно baseDir. */
+/** Источник документа по пути относительно baseDir: bytes кэшируются. */
 export function fileSource(baseDir: string, raw: string): DocSource {
   const path = resolve(baseDir, raw);
-  return { path, ext: extname(path).toLowerCase(), bytes: () => readFile(path) };
+  let cached: Promise<Uint8Array> | undefined;
+  const bytes = (): Promise<Uint8Array> => {
+    cached ??= readFile(path).catch((err: unknown) => {
+      throw new Error(readError(raw, err));
+    });
+    return cached;
+  };
+  return { path, display: raw, ext: extname(path).toLowerCase(), bytes };
 }
 ```
 
 - [ ] **Step 4: Реализовать `tools/document-map.ts`**
 
+Общий fail-open раннер `tools/run.ts` (`failOpen`/`failResult`) держит один путь
+диагностики для обоих тулов (INV-D5): исключение → запись `module:documents` +
+`{success:false}` с причиной.
+
 ```ts
 // src/modules/documents/tools/document-map.ts
 import { t } from "../../../i18n";
-import type { ToolDefinition, ToolContext, ToolResult } from "../../../tools/types";
+import type { ToolDefinition } from "../../../tools/types";
 import { parseCtx, type DocumentRegistry } from "../registry";
 import { renderDocumentMap } from "../map";
 import { fileSource } from "../source";
+import { failOpen } from "./run";
 
 /** Тул `document_map`: карта структуры документа (INV-D5 — fail-open с причиной). */
 export function documentMapTool(registry: DocumentRegistry): ToolDefinition {
@@ -1120,18 +1137,12 @@ export function documentMapTool(registry: DocumentRegistry): ToolDefinition {
       properties: { path: { type: "string", description: t("documents.path_desc") } },
       required: ["path"],
     },
-    handler: async (ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> => {
-      const raw = String(args.path ?? "");
-      try {
-        const source = fileSource(ctx.baseDir, raw);
+    handler: (ctx, args) =>
+      failOpen(ctx, "document_map", async () => {
+        const source = fileSource(ctx.baseDir, String(args.path ?? ""));
         const ir = await registry.parse(parseCtx(ctx.logger), source);
-        return { success: true, output: renderDocumentMap(ir) };
-      } catch (err) {
-        const cause = err instanceof Error ? err.message : String(err);
-        ctx.onDiagnostic?.({ source: "module:documents", operation: "document_map", kind: "failed", cause });
-        return { success: false, output: t("documents.error", { reason: cause }) };
-      }
-    },
+        return renderDocumentMap(ir);
+      }),
   };
 }
 ```
@@ -1141,12 +1152,20 @@ export function documentMapTool(registry: DocumentRegistry): ToolDefinition {
 ```ts
 // src/modules/documents/tools/document-read.ts
 import { t } from "../../../i18n";
-import type { ToolDefinition, ToolContext, ToolResult } from "../../../tools/types";
+import type { ToolDefinition } from "../../../tools/types";
+import { parseSelector, renderDocumentRead, type ReadOutcome } from "../read";
 import { parseCtx, type DocumentRegistry } from "../registry";
-import { parseSelector, renderDocumentRead } from "../read";
 import { fileSource } from "../source";
+import { failOpen } from "./run";
 
-/** Тул `document_read`: срез по селектору (page/sheet/section/lines/all). */
+/** Отказ рендера (`section` не найден / неизвестный селектор) → причина для модели. */
+function failureMessage(outcome: Extract<ReadOutcome, { ok: false }>): string {
+  if (outcome.kind === "unknown-selector") return t("documents.selector_unknown", { selector: outcome.arg });
+  const available = outcome.available.length ? outcome.available.join(", ") : t("documents.section_none");
+  return t("documents.section_not_found", { title: outcome.arg, available });
+}
+
+/** Тул `document_read`: срез по селектору (all/section/blocks). */
 export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
   return {
     name: "document_read",
@@ -1164,19 +1183,15 @@ export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
       },
       required: ["path"],
     },
-    handler: async (ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> => {
-      const raw = String(args.path ?? "");
-      const sel = parseSelector(String(args.selector ?? "all"));
-      try {
-        const source = fileSource(ctx.baseDir, raw);
+    handler: (ctx, args) =>
+      failOpen(ctx, "document_read", async () => {
+        const selector = parseSelector(String(args.selector ?? "all"));
+        const source = fileSource(ctx.baseDir, String(args.path ?? ""));
         const ir = await registry.parse(parseCtx(ctx.logger), source);
-        return { success: true, output: renderDocumentRead(ir, sel) };
-      } catch (err) {
-        const cause = err instanceof Error ? err.message : String(err);
-        ctx.onDiagnostic?.({ source: "module:documents", operation: "document_read", kind: "failed", cause });
-        return { success: false, output: t("documents.error", { reason: cause }) };
-      }
-    },
+        const outcome = renderDocumentRead(ir, selector);
+        if (!outcome.ok) throw new Error(failureMessage(outcome));
+        return outcome.text;
+      }),
   };
 }
 ```

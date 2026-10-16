@@ -39,8 +39,8 @@ function make(id: string, extensions: string[], sep: string): DocumentHandler {
       const rows = parseDelimited(text, sep);
       const header = rows.shift() ?? [];
       ir.blocks.push({ kind: "table", table: boundTable({ header, rows }, ctx.limits) });
-      ir.meta.title = source.path;
-      ir.outline.push({ id: "t0", level: 1, title: source.path, kind: "section" });
+      ir.meta.title = source.display;
+      ir.outline.push({ id: "t0", level: 1, title: source.display, kind: "section" });
       return ir;
     },
   };

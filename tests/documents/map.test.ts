@@ -21,4 +21,12 @@ describe("renderDocumentMap", () => {
     expect(out).toContain("B");
     expect(out).toContain("format: md");
   });
+  it("пустой sheets не даёт строку sheets:", () => {
+    const out = renderDocumentMap({ ...ir, meta: { ...ir.meta, sheets: [] } });
+    expect(out).not.toContain("sheets:");
+  });
+  it("непустой sheets перечисляет листы", () => {
+    const out = renderDocumentMap({ ...ir, meta: { ...ir.meta, sheets: ["S1", "S2"] } });
+    expect(out).toContain("sheets: S1, S2");
+  });
 });

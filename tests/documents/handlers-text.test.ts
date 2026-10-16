@@ -6,7 +6,7 @@ import type { Logger } from "../../src/logger/app-logger";
 
 const logger = { debug() {}, info() {}, warn() {}, error() {} } as unknown as Logger;
 const ctx = { logger, limits: DEFAULT_DOC_LIMITS };
-const src = (path: string, text: string) => ({ path, ext: path.slice(path.lastIndexOf(".")), bytes: async () => new TextEncoder().encode(text) });
+const src = (path: string, text: string) => ({ path, display: path, ext: path.slice(path.lastIndexOf(".")), bytes: async () => new TextEncoder().encode(text) });
 
 describe("csvHandler", () => {
   it("первую строку делает заголовком таблицы", async () => {

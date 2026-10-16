@@ -29,7 +29,7 @@ export const jsonHandler: DocumentHandler = {
       ir.meta.degraded = { reason: "invalid JSON — показан сырой текст" };
       ir.blocks.push({ kind: "code", lang: "json", text: boundText(text, ctx.limits) });
     }
-    ir.meta.title = source.path;
+    ir.meta.title = source.display;
     return ir;
   },
 };

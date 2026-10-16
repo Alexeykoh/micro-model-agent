@@ -31,7 +31,7 @@ export const yamlHandler: DocumentHandler = {
       ir.meta.degraded = { reason: "invalid YAML — показан сырой текст" };
     }
     ir.blocks.push({ kind: "code", lang: "yaml", text: boundText(text, ctx.limits) });
-    ir.meta.title = source.path;
+    ir.meta.title = source.display;
     return ir;
   },
 };

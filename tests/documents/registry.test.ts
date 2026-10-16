@@ -5,7 +5,7 @@ import type { Logger } from "../../src/logger/app-logger";
 
 const logger = { debug() {}, info() {}, warn() {}, error() {} } as unknown as Logger;
 const ctx = { logger, limits: { maxLines: 100, maxChars: 5000, maxTableRows: 10 } };
-const src = (path: string, text: string) => ({ path, ext: path.slice(path.lastIndexOf(".")), bytes: async () => new TextEncoder().encode(text) });
+const src = (path: string, text: string) => ({ path, display: path, ext: path.slice(path.lastIndexOf(".")), bytes: async () => new TextEncoder().encode(text) });
 
 describe("DocumentRegistry", () => {
   it("resolve по расширению", () => {

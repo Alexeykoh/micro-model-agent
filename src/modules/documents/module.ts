@@ -4,8 +4,7 @@
  * (`collectTools`), отдельной регистрации не требуют.
  */
 import type { ModuleDef } from "../../core/module-host";
-import { ACTIVE_GROUPS, DOCUMENTS_ENABLED } from "./handlers/index";
-import { buildRegistry } from "./registry";
+import { buildRegistry, DOCUMENTS_ENABLED } from "./registry";
 import { documentMapTool } from "./tools/document-map";
 import { documentReadTool } from "./tools/document-read";
 
@@ -23,5 +22,3 @@ export function documentsModuleDef(): ModuleDef {
     tools: () => (DOCUMENTS_ENABLED ? [documentMapTool(registry), documentReadTool(registry)] : []),
   };
 }
-
-export { ACTIVE_GROUPS, DOCUMENTS_ENABLED };

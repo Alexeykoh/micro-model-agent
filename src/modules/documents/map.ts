@@ -12,7 +12,7 @@ export function renderDocumentMap(ir: DocumentIR): string {
     `format: ${ir.meta.format}`,
     ir.meta.title ? `title: ${ir.meta.title}` : null,
     ir.meta.pages ? `pages: ${ir.meta.pages}` : null,
-    ir.meta.sheets ? `sheets: ${ir.meta.sheets.join(", ")}` : null,
+    ir.meta.sheets?.length ? `sheets: ${ir.meta.sheets.join(", ")}` : null,
     `blocks: ${ir.blocks.length} · tables: ${tables} · figures: ${figures}`,
     ir.meta.degraded ? `degraded: ${ir.meta.degraded.reason}` : null,
   ].filter(Boolean);

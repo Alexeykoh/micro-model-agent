@@ -17,7 +17,10 @@ export interface DocLimits {
 
 /** Источник документа: путь + ленивое чтение байтов. */
 export interface DocSource {
+  /** Абсолютный путь — для чтения и для enforcement, не для сообщений модели. */
   path: string;
+  /** Путь, как его задал пользователь (относительный) — только для сообщений. */
+  display: string;
   ext: string;
   bytes(): Promise<Uint8Array>;
 }
