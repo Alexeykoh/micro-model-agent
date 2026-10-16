@@ -10,7 +10,8 @@ import { buildZip } from "./fixtures-zip";
 
 export interface XlsxSheetSpec {
   name: string;
-  rows: Array<Array<string | number>>;
+  /** `null` в строке — пропуск ячейки (сдвиг колонки): проверяет выравнивание пропусков. */
+  rows: Array<Array<string | number | null>>;
   /** true → строки как inlineStr (отдельная ветка парсера). */
   inline?: boolean;
 }
@@ -53,6 +54,7 @@ export function buildXlsx(sheets: XlsxSheetSpec[]): Uint8Array {
       .map((cells, r) => {
         const cellsXml = cells
           .map((value, c) => {
+            if (value === null) return ""; // пропуск ячейки — колонка не заполняется
             const ref = `${colName(c)}${r + 1}`;
             if (typeof value === "number") return `<c r="${ref}"><v>${value}</v></c>`;
             const text = escapeXml(String(value));
