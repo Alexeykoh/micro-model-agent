@@ -1,7 +1,7 @@
 /**
  * CSV/TSV → `DocumentIR` (текстовая группа).
  */
-import { boundTable } from "../bound";
+import { boundLine, boundTable } from "../bound";
 import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
 import { emptyIR } from "../ir";
 
@@ -40,7 +40,7 @@ function make(id: string, extensions: string[], sep: string): DocumentHandler {
       const header = rows.shift() ?? [];
       ir.blocks.push({ kind: "table", table: boundTable({ header, rows }, ctx.limits) });
       ir.meta.title = source.display;
-      ir.outline.push({ id: "t0", level: 1, title: source.display, kind: "section" });
+      ir.outline.push({ id: "t0", level: 1, title: boundLine(source.display, ctx.limits), kind: "section" });
       return ir;
     },
   };

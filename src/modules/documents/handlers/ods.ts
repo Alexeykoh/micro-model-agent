@@ -6,7 +6,7 @@
  * (`kind:"sheet"`, имя из `@_table:name`). Нет `content.xml`/таблиц/содержимого →
  * `meta.degraded` (INV-D5), без исключения. Политику не реализует (INV-D6).
  */
-import { boundTable } from "../bound";
+import { boundLine, boundTable } from "../bound";
 import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
 import { emptyIR, type DocumentIR } from "../ir";
 import {
@@ -42,7 +42,7 @@ export const odsHandler: DocumentHandler = {
       const grid = readOdfTable(node, ctx.limits);
       if (!tableHasContent(grid)) return; // пустая таблица не даёт пустого блока (INV-D5)
       emitted++;
-      ir.outline.push({ id: `sheet:${name}`, level: 1, title: name, kind: "sheet" });
+      ir.outline.push({ id: `sheet:${name}`, level: 1, title: boundLine(name, ctx.limits), kind: "sheet" });
       ir.blocks.push({
         kind: "table",
         table: boundTable(
