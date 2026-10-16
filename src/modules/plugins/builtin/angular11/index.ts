@@ -7,11 +7,12 @@
 //
 // Спека: `docs/specs/2026-10-16-angular11-plugin-design.md`.
 import type { AgentPlugin, PluginPermission } from "../../../types";
-import type { ToolDefinition } from "../../../../tools/types";
+import type { ToolCall, ToolContext, ToolDefinition, ToolResult } from "../../../../tools/types";
 import { ANGULAR11_KNOWLEDGE } from "./knowledge";
 import { angularTools } from "./tools";
+import { runWriteCheck } from "./write-check";
 
-/** Плагин Angular 11. Пока (W1) отдаёт только блок знания. */
+/** Плагин Angular 11: блок знания, `angular_check`, write-check, скаффолд. */
 export class Angular11Plugin implements AgentPlugin {
   name = "angular11";
   version = "0.1.0";
@@ -30,6 +31,11 @@ export class Angular11Plugin implements AgentPlugin {
   /** Тулы плагина (F2 — `angular_check`). */
   getToolDefinitions(): ToolDefinition[] {
     return angularTools();
+  }
+
+  /** Проверка идиом Angular 11 после записи `.ts`/`.html` в воркспейсе (F3). */
+  onAfterTool(ctx: ToolContext, call: ToolCall, result: ToolResult): void {
+    runWriteCheck(ctx, call, result);
   }
 }
 
