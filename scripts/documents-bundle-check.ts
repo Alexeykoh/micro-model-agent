@@ -14,7 +14,7 @@ import { WorkerMessageHandler } from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 const parser = new XMLParser();
 const out = parser.parse("<r><a>1</a></r>");
 if (out?.r?.a !== 1 && out?.r?.a !== "1") throw new Error("xml parser bundled incorrectly");
-console.log("fast-xml-parser bundle OK");
+process.stdout.write("fast-xml-parser bundle OK\n");
 
 // --- pdfjs-dist (legacy build, текстовый слой, без canvas) -------------------
 /** Собирает минимальный валидный 1-страничный PDF с текстом «Hello». */
@@ -45,5 +45,5 @@ const page = await doc.getPage(1);
 const content = await page.getTextContent();
 const text = content.items.map((it: unknown) => (it as { str?: string }).str ?? "").join("");
 if (!text.includes("Hello")) throw new Error(`pdf text extraction failed: ${JSON.stringify(text)}`);
-console.log("pdfjs-dist bundle OK:", JSON.stringify(text));
-console.log("documents deps bundle OK");
+process.stdout.write(`pdfjs-dist bundle OK: ${JSON.stringify(text)}\n`);
+process.stdout.write("documents deps bundle OK\n");

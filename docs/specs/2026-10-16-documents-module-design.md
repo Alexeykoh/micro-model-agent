@@ -262,7 +262,11 @@ TS-экстрактор текстового слоя PDF (решение по �
   `@napi-rs/canvas`; `standardFontDataUrl` не задан (влияет на рендер глифов, не на извлечение текста).
 
 Вывод спайка: обе зависимости бандлятся в один ESM-артефакт под `--target node` и работают
-без `node_modules`. Механизм вшивания — см. `build:documents` (W0.3).
+без `node_modules`. Механизм вшивания — `scripts/build-documents.ts` (`build:documents`,
+W0.3): список внешних пакетов выводится из `package.json` `dependencies` **минус**
+`DOCUMENTS_DEPS = [fast-xml-parser, pdfjs-dist]`, каждый прочий пакет получает `--external`
+(семантика `build:bundle` для всего остального сохранена; `playwright` не вшивается). Шаг
+вставлен в `build:prod` перед `build:optimize`.
 
 ### 4.7 Тулы для модели
 
