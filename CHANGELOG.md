@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Builtin plugin `angular11` — Angular 11 knowledge, checks and scaffolding**
+  (off by default). Small models systematically regress Angular 11 (classic
+  NgModule era) toward 14+/16+/17+ APIs, so correctness is delegated to
+  deterministic checks instead of model memory (same principle as
+  `lint-on-write` and the Angular LSP). The plugin:
+  - adds a short `[ANGULAR 11]` block to the system prompt (NgModules, DI, pure
+    vs impure pipes, guards/interceptors, RxJS 6 + unsubscribe, lazy-loading
+    syntax, `OnPush`, AOT/Node 16/TS 4);
+  - exposes `angular_check` — a read-only, cacheable workspace analysis (module
+    declarations, missing `CommonModule` in a feature module, `BrowserModule`
+    in a lazy module, undeclared components/pipes/directives, impure pipes); a
+    non-11 major version is a warning, not a stop;
+  - checks writes (`onAfterTool`) for 14+/16+/17+ idioms in `.ts`/`.html` inside
+    an Angular workspace (`standalone`, `takeUntilDestroyed`, functional
+    providers, signal queries, modern `@angular/core` imports, `@if`/`@for`),
+    plus a subscription-leak warning;
+  - exposes `angular_scaffold` — generates classic boilerplate
+    (component/pipe/module/service/directive/guard), files only; it never wires
+    itself into an NgModule, and refuses to overwrite without `force: true`.
+  Disabled by seeding `angular11` into `DEFAULTS.plugins.disabled`; it is turned
+  on through the existing plugin gate (`mma plugins enable angular11`, `/plugins`,
+  web toggle). Registered next to `lint-on-write`/`notify`.
+  Spec: `docs/specs/2026-10-16-angular11-plugin-design.md`.
+
 ## [0.5.0] - 2026-10-15
 
 ### Added

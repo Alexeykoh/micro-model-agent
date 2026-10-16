@@ -8,7 +8,7 @@
 
 | Каталог | Область | Описание |
 |---------|---------|----------|
-| `src/modules/plugins/builtin/` | встроенные | `lint-on-write`, `notify` — всегда загружены |
+| `src/modules/plugins/builtin/` | встроенные | `lint-on-write`, `notify` — всегда загружены; `angular11` — встроен, выключен по умолчанию (`DEFAULTS.plugins.disabled`) |
 | `~/.mma/plugins/` | глобальные | для всех проектов пользователя |
 | `<project>/.mma/plugins/` | проектные | только для этого проекта |
 
@@ -422,7 +422,7 @@ export default {
 
 ## См. также
 
-- Встроенные плагины: `src/modules/plugins/builtin/lint-on-write.ts`, `notify.ts`
+- Встроенные плагины: `src/modules/plugins/builtin/lint-on-write.ts`, `notify.ts`, `angular11/`
 - Загрузчик: `src/modules/plugins/loader.ts`
 - Диспетчер: `src/modules/plugins/manager.ts`
 - Метаданные и валидация: `src/modules/plugins/records.ts`
