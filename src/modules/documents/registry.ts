@@ -46,22 +46,26 @@ export function buildRegistry(opts: RegistryOptions = {}): DocumentRegistry {
   const byExt = new Map<string, DocumentHandler>();
   for (const h of active) for (const e of h.extensions) byExt.set(e.toLowerCase(), h);
 
-  return {
-    resolve(path, head) {
-      const h = byExt.get(extname(path).toLowerCase());
-      if (h?.detect && !h.detect(head)) return null;
-      return h ?? null;
-    },
-    async parse(ctx, source) {
-      const head = (await source.bytes()).slice(0, 8);
-      const h = this.resolve(source.path, head);
-      if (!h) throw new Error(`no handler for ${source.path}`);
-      return h.parse(ctx, source);
-    },
-    active() {
-      return { status: "ok", groups: [...groups], handlers: active.map((h) => h.id) };
-    },
+  // Локальные функции, а не методы с `this`: реестр можно деструктурировать
+  // (`const { parse } = reg;`) без потери контекста.
+  const resolve = (path: string, head: Uint8Array): DocumentHandler | null => {
+    const h = byExt.get(extname(path).toLowerCase());
+    if (h?.detect && !h.detect(head)) return null;
+    return h ?? null;
   };
+  const parse = async (ctx: ParseContext, source: DocSource): Promise<DocumentIR> => {
+    const head = (await source.bytes()).slice(0, 8);
+    const h = resolve(source.path, head);
+    if (!h) throw new Error(`no handler for ${source.path}`);
+    return h.parse(ctx, source);
+  };
+  const activeHealth = (): RegistryHealth => ({
+    status: "ok",
+    groups: [...groups],
+    handlers: active.map((h) => h.id),
+  });
+
+  return { resolve, parse, active: activeHealth };
 }
 
 /** Контекст разбора из логера и дефолтных лимитов. */

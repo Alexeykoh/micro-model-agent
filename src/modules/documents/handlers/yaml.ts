@@ -13,8 +13,9 @@ export const yamlHandler: DocumentHandler = {
   extensions: [".yaml", ".yml"],
   detect: (h) => detectHead(h) === "unknown",
   async parse(ctx: ParseContext, source: DocSource) {
-    const text = new TextDecoder().decode(await source.bytes());
-    const ir = emptyIR("yaml", text.length);
+    const bytes = await source.bytes();
+    const text = new TextDecoder().decode(bytes);
+    const ir = emptyIR("yaml", bytes.length);
     try {
       const data: unknown = parseYaml(text);
       if (data && typeof data === "object" && !Array.isArray(data)) {
@@ -22,7 +23,11 @@ export const yamlHandler: DocumentHandler = {
           ir.outline.push({ id: `k:${k}`, level: 1, title: k, kind: "section" });
         }
       }
-    } catch {
+    } catch (err) {
+      ctx.logger.warn("documents: невалидный YAML — деградированный разбор", {
+        path: source.path,
+        reason: err instanceof Error ? err.message : String(err),
+      });
       ir.meta.degraded = { reason: "invalid YAML — показан сырой текст" };
     }
     ir.blocks.push({ kind: "code", lang: "yaml", text: boundText(text, ctx.limits) });

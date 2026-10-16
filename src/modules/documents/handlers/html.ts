@@ -12,8 +12,9 @@ export const htmlHandler: DocumentHandler = {
   extensions: [".html", ".htm"],
   detect: (h) => detectHead(h) === "unknown",
   async parse(ctx: ParseContext, source: DocSource) {
-    const text = new TextDecoder().decode(await source.bytes());
-    const ir = emptyIR("html", text.length);
+    const bytes = await source.bytes();
+    const text = new TextDecoder().decode(bytes);
+    const ir = emptyIR("html", bytes.length);
     const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text)?.[1]?.trim();
     if (title) ir.meta.title = title;
     let n = 0;

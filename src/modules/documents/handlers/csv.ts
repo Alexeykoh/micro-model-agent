@@ -33,8 +33,9 @@ function make(id: string, extensions: string[], sep: string): DocumentHandler {
     extensions,
     detect: (h) => detectHead(h) === "unknown",
     async parse(ctx: ParseContext, source: DocSource) {
-      const text = new TextDecoder().decode(await source.bytes());
-      const ir = emptyIR(id, text.length);
+      const bytes = await source.bytes();
+      const text = new TextDecoder().decode(bytes);
+      const ir = emptyIR(id, bytes.length);
       const rows = parseDelimited(text, sep);
       const header = rows.shift() ?? [];
       ir.blocks.push({ kind: "table", table: boundTable({ header, rows }, ctx.limits) });

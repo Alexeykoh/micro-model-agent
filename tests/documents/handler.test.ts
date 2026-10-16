@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectHead, type DocumentHandler } from "../../src/modules/documents/handler";
+import { detectHead } from "../../src/modules/documents/handler";
 
 describe("DocumentHandler", () => {
   it("detectHead распознаёт ZIP и PDF по magic-bytes", () => {

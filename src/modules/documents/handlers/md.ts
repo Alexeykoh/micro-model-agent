@@ -2,7 +2,7 @@
  * Markdown → `DocumentIR` (текстовая группа).
  */
 import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
-import { emptyIR, type DocBlock } from "../ir";
+import { emptyIR } from "../ir";
 
 /** Markdown → IR: заголовки → outline+heading, остальное — абзацы/код. */
 export const mdHandler: DocumentHandler = {
@@ -10,9 +10,10 @@ export const mdHandler: DocumentHandler = {
   group: "text",
   extensions: [".md", ".markdown", ".mdown"],
   detect: (h) => detectHead(h) === "unknown",
-  async parse(ctx: ParseContext, source: DocSource) {
-    const text = new TextDecoder().decode(await source.bytes());
-    const ir = emptyIR("md", text.length);
+  async parse(_ctx: ParseContext, source: DocSource) {
+    const bytes = await source.bytes();
+    const text = new TextDecoder().decode(bytes);
+    const ir = emptyIR("md", bytes.length);
     const lines = text.split(/\r?\n/);
     let para: string[] = [];
     let code: string[] | null = null;
@@ -22,7 +23,7 @@ export const mdHandler: DocumentHandler = {
     };
     for (const line of lines) {
       if (line.startsWith("```")) {
-        if (code) { ir.blocks.push({ kind: "code", text: code.join("\n") } as DocBlock); code = null; }
+        if (code) { ir.blocks.push({ kind: "code", text: code.join("\n") }); code = null; }
         else { flushPara(); code = []; }
         continue;
       }

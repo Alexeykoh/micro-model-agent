@@ -12,10 +12,15 @@ export const xmlHandler: DocumentHandler = {
   extensions: [".xml", ".xsd", ".svg", ".plist", ".drawio"],
   detect: (h) => detectHead(h) === "unknown" || detectHead(h) === "svg",
   async parse(ctx: ParseContext, source: DocSource) {
-    const text = new TextDecoder().decode(await source.bytes());
-    const ir = emptyIR(source.ext.replace(".", "") || "xml", text.length);
+    const bytes = await source.bytes();
+    const text = new TextDecoder().decode(bytes);
+    const ir = emptyIR(source.ext.replace(".", "") || "xml", bytes.length);
+    // Теги внутри комментариев не размечаем; имена атрибутов/их значений не начинаются
+    // с `<`, поэтому как теги не ловятся (известное ограничение: `<` внутри значения
+    // атрибута всё же будет принят за тег).
+    const scan = text.replace(/<!--[\s\S]*?-->/g, "");
     const seen = new Set<string>();
-    for (const m of text.matchAll(/<([A-Za-z_][\w.-]*)\b/g)) {
+    for (const m of scan.matchAll(/<([A-Za-z_][\w.-]*)\b/g)) {
       const tag = m[1];
       if (seen.has(tag)) continue;
       seen.add(tag);
