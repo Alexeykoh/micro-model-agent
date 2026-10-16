@@ -14,7 +14,7 @@ import { detectHead, type DocSource, type DocumentHandler, type ParseContext } f
 import { emptyIR, type DocumentIR } from "../ir";
 import { child, findAll, parseXml, textOf } from "./ooxml";
 
-/** Объект-JSON как словарь, иначе `undefined` (без `as any`, INV-D9). */
+/** Объект-JSON как словарь, иначе `undefined` (только безопасное сужение типа). */
 function obj(v: unknown): Record<string, unknown> | undefined {
   return v !== null && typeof v === "object" && !Array.isArray(v)
     ? (v as Record<string, unknown>)
