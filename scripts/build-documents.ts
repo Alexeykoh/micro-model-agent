@@ -21,6 +21,17 @@ const deps = Object.keys(pkg.dependencies ?? {});
 const externals = deps.filter((name) => !DOCUMENTS_DEPS.includes(name));
 const inlined = deps.filter((name) => DOCUMENTS_DEPS.includes(name));
 
+// Coupling guard: every DOCUMENTS_DEPS name must be a real dependency, otherwise a
+// typo/rename would silently make it external (no `--external`, so "inlined" never
+// happens) instead of failing the build.
+const missing = DOCUMENTS_DEPS.filter((name) => !deps.includes(name));
+if (missing.length > 0) {
+  process.stderr.write(
+    `[build:documents] DOCUMENTS_DEPS missing from package.json dependencies: ${missing.join(", ")}\n`,
+  );
+  process.exit(1);
+}
+
 process.stdout.write(`[build:documents] inline: ${inlined.join(", ") || "(none)"}\n`);
 process.stdout.write(`[build:documents] external: ${externals.join(", ")}\n`);
 

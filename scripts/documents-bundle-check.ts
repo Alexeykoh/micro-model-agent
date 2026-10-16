@@ -1,13 +1,13 @@
-// W0-спайк: проверяет, что документные зависимости вшиваются в бандл и артефакт
-// поднимается БЕЗ `node_modules` (инлайн, а не резолв в рантайме). Запускается как
-// собранный `bun build` артефакт из чистой temp-папки (см. docs/specs/...documents-module-design.md §4.6).
+// W0 spike: verifies the documents deps are inlined into the bundle and the artifact
+// boots WITHOUT `node_modules` (inline, not a runtime resolve). Runs the built
+// `bun build` artifact from a clean temp dir (see docs/specs/...documents-module-design.md §4.6).
 import { XMLParser } from "fast-xml-parser";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { WorkerMessageHandler } from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 
-// Вшиваем fake-worker в артефакт: pdfjs иначе динамически импортирует `pdf.worker.mjs`
-// рядом с бандлом. Хук `globalThis.pdfjsWorker` заставляет брать WorkerMessageHandler
-// из уже вшитого модуля (см. PDFWorker.#mainThreadWorkerMessageHandler).
+// Inline the fake-worker into the artifact: pdfjs otherwise dynamically imports
+// `pdf.worker.mjs` next to the bundle. The `globalThis.pdfjsWorker` hook makes it take
+// WorkerMessageHandler from the already-inlined module (see PDFWorker.#mainThreadWorkerMessageHandler).
 (globalThis as unknown as { pdfjsWorker: unknown }).pdfjsWorker = { WorkerMessageHandler };
 
 // --- fast-xml-parser ---------------------------------------------------------
@@ -16,8 +16,8 @@ const out = parser.parse("<r><a>1</a></r>");
 if (out?.r?.a !== 1 && out?.r?.a !== "1") throw new Error("xml parser bundled incorrectly");
 process.stdout.write("fast-xml-parser bundle OK\n");
 
-// --- pdfjs-dist (legacy build, текстовый слой, без canvas) -------------------
-/** Собирает минимальный валидный 1-страничный PDF с текстом «Hello». */
+// --- pdfjs-dist (legacy build, text layer, no canvas) ------------------------
+/** Builds a minimal valid 1-page PDF with the text "Hello". */
 function helloPdf(): Uint8Array {
   const text = "BT /F1 24 Tf 72 100 Td (Hello) Tj ET";
   const objs = [

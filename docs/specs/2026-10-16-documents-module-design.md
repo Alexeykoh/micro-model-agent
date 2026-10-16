@@ -268,6 +268,11 @@ W0.3): список внешних пакетов выводится из `packa
 (семантика `build:bundle` для всего остального сохранена; `playwright` не вшивается). Шаг
 вставлен в `build:prod` перед `build:optimize`.
 
+**Отложено по ревью W0 (долг, правило 9):** синхронизация `package-lock.json` с `bun.lock`
+(DEBT(documents-lockfile-drift)) и авто-проверка, что документные деп реально вшиты в
+упакованный `dist/main.js` (DEBT(documents-inline-unverified)) — см.
+[debt.md](../agents/debt.md).
+
 ### 4.7 Тулы для модели
 
 Максимум четыре тула (жёсткий бюджет 9B). Все — через `ModuleDef.tools()` →
