@@ -15,16 +15,16 @@ import {
   type ParseContext,
 } from "../handler";
 import { emptyIR, type DocumentIR, type DocTable } from "../ir";
-import { asArray, attr, collectText, readOoxml, textOf } from "./ooxml";
-
-/** Значение поля дочернего узла или `undefined`. */
-function child(node: unknown, key: string): unknown {
-  if (node === null || typeof node !== "object") return undefined;
-  return (node as Record<string, unknown>)[key];
-}
-
-/** Предел материализуемых колонок: блуждающая ячейка в XFD не раздувает сетку (INV-D4). */
-const MAX_COLS = 256;
+import {
+  asArray,
+  attr,
+  child,
+  collectText,
+  MAX_TABLE_COLS,
+  readOoxml,
+  tableHasContent,
+  textOf,
+} from "./ooxml";
 
 /** A→0, B→1, …, Z→25, AA→26 (берёт буквенную часть ссылки ячейки). */
 function colIndex(ref: string): number {
@@ -122,7 +122,7 @@ interface SheetGrid {
 
 /**
  * Разбирает `<sheetData>` в прямоугольную сетку; пропуски → "". Строки собираются
- * до `limits.maxTableRows` (+ заголовок), колонки — до `MAX_COLS`: ограничение
+ * до `limits.maxTableRows` (+ заголовок), колонки — до `MAX_TABLE_COLS`: ограничение
  * применяется во время разбора, а не после (INV-D4). `range` сохраняет реальную
  * ширину, даже если сетка материализована не полностью.
  */
@@ -149,7 +149,7 @@ function readSheet(xml: unknown, shared: string[], limits: DocLimits): SheetGrid
       const c = ref ? colIndex(ref) : autoCol;
       autoCol = c + 1;
       if (c > trueMaxCol) trueMaxCol = c;
-      if (c >= MAX_COLS) {
+      if (c >= MAX_TABLE_COLS) {
         truncated = true; // колонка за пределом — отбрасываем ячейку
         continue;
       }
@@ -202,9 +202,7 @@ export const xlsxHandler: DocumentHandler = {
       if (xml === undefined) return;
       found++;
       const grid = readSheet(xml, shared, ctx.limits);
-      const hasContent =
-        grid.header.some((v) => v !== "") || grid.rows.some((row) => row.some((v) => v !== ""));
-      if (!hasContent) return; // пустой лист не даёт пустой таблицы (INV-D5)
+      if (!tableHasContent(grid)) return; // пустой лист не даёт пустой таблицы (INV-D5)
       emitted++;
       ir.outline.push({ id: `sheet:${ref.name}`, level: 1, title: ref.name, kind: "sheet" });
       const table: DocTable = boundTable(

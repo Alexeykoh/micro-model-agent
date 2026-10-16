@@ -72,6 +72,38 @@ describe("docxHandler", () => {
     expect(ir.blocks).toEqual([]);
   });
 
+  it("HeadingChar и подобные не считаются заголовком (regex заякорен)", async () => {
+    const ir = await docxHandler.parse(ctx(), src(buildDocx([{ kind: "p", text: "X", style: "HeadingChar" }]), "d.docx"));
+    expect(ir.blocks).toEqual([{ kind: "paragraph", text: "X" }]);
+    expect(ir.meta.degraded).toBeUndefined();
+  });
+
+  it("ячейка из нескольких w:p склеивается через \\n", async () => {
+    const b = buildDocx([{ kind: "tbl", rows: [["H1", "H2"], [["line1", "line2"], "b"]] }]);
+    const ir = await docxHandler.parse(ctx(), src(b, "d.docx"));
+    const table = ir.blocks.find((x) => x.kind === "table");
+    if (!table || table.kind !== "table") throw new Error("expect table");
+    expect(table.table.header).toEqual(["H1", "H2"]);
+    expect(table.table.rows).toEqual([["line1\nline2", "b"]]);
+  });
+
+  it("превышение maxTableRows → truncated, cap при разборе (INV-D4)", async () => {
+    const rows: string[][] = [["h"]];
+    for (let i = 0; i < 5; i++) rows.push([String(i)]);
+    const b = buildDocx([{ kind: "tbl", rows }]);
+    const ir = await docxHandler.parse(ctx({ ...DEFAULT_DOC_LIMITS, maxTableRows: 2 }), src(b, "d.docx"));
+    const table = ir.blocks[0];
+    if (table.kind !== "table") throw new Error("expect table");
+    expect(table.table.truncated).toBe(true);
+    expect(table.table.rows).toHaveLength(2);
+  });
+
+  it("пустой w:tbl пропускается → degraded, не пустой успех", async () => {
+    const ir = await docxHandler.parse(ctx(), src(buildDocx([{ kind: "tbl", rows: [] }]), "d.docx"));
+    expect(ir.blocks).toEqual([]);
+    expect(ir.meta.degraded?.reason).toBeTruthy();
+  });
+
   it("detect проходит только на ZIP-magic", () => {
     expect(docxHandler.detect?.(new Uint8Array([0x50, 0x4b, 0x03, 0x04]))).toBe(true);
     expect(docxHandler.detect?.(new Uint8Array([0x25, 0x50, 0x44, 0x46]))).toBe(false);
@@ -110,6 +142,21 @@ describe("odtHandler", () => {
     expect(table.table.caption).toBe("T1");
     expect(table.table.header).toEqual(["H1", "H2"]);
     expect(table.table.rows).toEqual([["a", "b"]]);
+  });
+
+  it("повтор ячеек table:number-columns-repeated разворачивается (ODT)", async () => {
+    const b = buildOdt([
+      {
+        kind: "table",
+        name: "R",
+        rows: [[{ text: "h" }, { text: "x", colsRepeated: 2 }], ["v"]],
+      },
+    ]);
+    const ir = await odtHandler.parse(ctx(), src(b, "doc.odt"));
+    const table = ir.blocks.find((x) => x.kind === "table");
+    if (!table || table.kind !== "table") throw new Error("expect table");
+    expect(table.table.header).toEqual(["h", "x", "x"]);
+    expect(table.table.rows).toEqual([["v"]]);
   });
 
   it("без content.xml → degraded (INV-D5)", async () => {

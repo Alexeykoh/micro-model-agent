@@ -7,11 +7,11 @@
  * одиночный узел и массив одноимённых нормализуются через `findAll`/`asArray`.
  */
 import type { DocLimits } from "../handler";
-import { attr, child, collectText, findAll, parseXml } from "./ooxml";
+import { asArray, attr, child, collectText, findAll, MAX_TABLE_COLS, parseXml } from "./ooxml";
 import { readZip, readZipText } from "./zip";
 
-/** Предел материализуемых колонок (INV-D4): `table:number-columns-repeated` не раздувает сетку. */
-const MAX_COLS = 256;
+/** Обёртки строк ODF: `table:table-row` внутри них тоже строки таблицы. */
+const ROW_WRAPPERS = ["table:table-header-rows", "table:table-rows", "table:table-row-group"];
 
 /** Корень `office:body` из разобранного `content.xml` (терпит flat-ODF `office:document`). */
 export function odfBody(root: unknown): unknown {
@@ -104,15 +104,15 @@ function rowCells(row: unknown, maxCols: number): { cells: string[]; truncated: 
 
 /**
  * Разбирает `table:table` в таблицу: строк до `maxTableRows` (плюс заголовок),
- * колонок до `MAX_COLS`; превышение → `truncated`. Повторы строк/колонок
+ * колонок до `MAX_TABLE_COLS`; превышение → `truncated`. Повторы строк/колонок
  * разворачиваются, но ограничиваются во время разбора (INV-D4), а не после.
  */
 export function readOdfTable(node: unknown, limits: DocLimits): OdfTable {
   const rowCap = limits.maxTableRows + 1; // заголовок + строки данных
   const grid: string[][] = [];
   let truncated = false;
-  for (const row of findAll(node, "table:table-row")) {
-    const { cells, truncated: cellTrunc } = rowCells(row, MAX_COLS);
+  for (const row of collectRows(node)) {
+    const { cells, truncated: cellTrunc } = rowCells(row, MAX_TABLE_COLS);
     if (cellTrunc) truncated = true;
     const repeat = repeatCount(attr(row, "table:number-rows-repeated"));
     for (let r = 0; r < repeat; r++) {
@@ -132,8 +132,21 @@ export function readOdfTable(node: unknown, limits: DocLimits): OdfTable {
   };
 }
 
-/** Строка таблицы содержит хотя бы одну непустую ячейку (иначе пустой лист, INV-D5). */
-export function odfTableHasContent(table: OdfTable): boolean {
-  return table.header.some((v) => v !== "") || table.rows.some((r) => r.some((v) => v !== ""));
+/**
+ * Строки `table:table-row` в порядке документа, включая вложенные в обёртки
+ * `table:table-header-rows`/`table:table-rows`/`table:table-row-group`
+ * (LibreOffice шлёт заголовок в `table:table-header-rows` — без этого строки
+ * молча теряются). Обход рекурсивный; порядок — как у ключей парсера.
+ */
+function collectRows(node: unknown): unknown[] {
+  if (node === null || typeof node !== "object") return [];
+  const rows: unknown[] = [];
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    if (key === "table:table-row") rows.push(...asArray(value));
+    else if (ROW_WRAPPERS.includes(key)) {
+      for (const wrapper of asArray(value)) rows.push(...collectRows(wrapper));
+    }
+  }
+  return rows;
 }
 

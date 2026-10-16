@@ -11,12 +11,11 @@ import { detectHead, type DocSource, type DocumentHandler, type ParseContext } f
 import { emptyIR, type DocumentIR } from "../ir";
 import {
   odfBody,
-  odfTableHasContent,
   odfTableName,
   readOdfContent,
   readOdfTable,
 } from "./odf";
-import { child, findAll } from "./ooxml";
+import { child, findAll, tableHasContent } from "./ooxml";
 
 /** Обработчик ODS (группа spreadsheet). */
 export const odsHandler: DocumentHandler = {
@@ -41,7 +40,7 @@ export const odsHandler: DocumentHandler = {
     tables.forEach((node, i) => {
       const name = names[i];
       const grid = readOdfTable(node, ctx.limits);
-      if (!odfTableHasContent(grid)) return; // пустая таблица не даёт пустого блока (INV-D5)
+      if (!tableHasContent(grid)) return; // пустая таблица не даёт пустого блока (INV-D5)
       emitted++;
       ir.outline.push({ id: `sheet:${name}`, level: 1, title: name, kind: "sheet" });
       ir.blocks.push({

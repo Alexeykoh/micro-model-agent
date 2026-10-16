@@ -34,9 +34,10 @@ export interface DocxBuildOptions {
   skipDocument?: boolean;
 }
 
+export type DocxCell = string | string[];
 export type DocxBlock =
   | { kind: "p"; text?: string; style?: string; list?: boolean }
-  | { kind: "tbl"; rows: string[][] };
+  | { kind: "tbl"; rows: DocxCell[][] };
 
 const pXml = (p: Extract<DocxBlock, { kind: "p" }>): string => {
   const style = p.style ? `<w:pStyle w:val="${escapeXml(p.style)}"/>` : "";
@@ -46,14 +47,16 @@ const pXml = (p: Extract<DocxBlock, { kind: "p" }>): string => {
   return `<w:p>${pPr}${run}</w:p>`;
 };
 
+const cellXml = (cell: DocxCell): string => {
+  const paras = Array.isArray(cell) ? cell : [cell];
+  return `<w:tc>${paras
+    .map((t) => `<w:p><w:r><w:t>${escapeXml(t)}</w:t></w:r></w:p>`)
+    .join("")}</w:tc>`;
+};
+
 const tblXml = (tbl: Extract<DocxBlock, { kind: "tbl" }>): string =>
   `<w:tbl>${tbl.rows
-    .map(
-      (r) =>
-        `<w:tr>${r
-          .map((c) => `<w:tc><w:p><w:r><w:t>${escapeXml(c)}</w:t></w:r></w:p></w:tc>`)
-          .join("")}</w:tr>`,
-    )
+    .map((r) => `<w:tr>${r.map(cellXml).join("")}</w:tr>`)
     .join("")}</w:tbl>`;
 
 /** Собирает DOCX: тело `w:body` из абзацев/таблиц, порядок сохраняется. */

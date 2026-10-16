@@ -84,6 +84,17 @@ export function collectText(node: unknown): string {
   return "";
 }
 
+/**
+ * Предел материализуемых колонок таблицы (INV-D4): `number-columns-repeated`
+ * и блуждающая ячейка в XFD не раздувают сетку. Общий для odf/xlsx/docx.
+ */
+export const MAX_TABLE_COLS = 256;
+
+/** Таблица содержит хотя бы одну непустую ячейку (иначе пустой лист, INV-D5). */
+export function tableHasContent(table: { header: string[]; rows: string[][] }): boolean {
+  return table.header.some((v) => v !== "") || table.rows.some((r) => r.some((v) => v !== ""));
+}
+
 /** OOXML-пакет: ZIP-карта + разбор XML-части по имени (`undefined`, если части нет). */
 export interface Ooxml {
   zip: Map<string, Uint8Array>;

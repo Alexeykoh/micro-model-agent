@@ -12,6 +12,12 @@
  * Таблица `w:tbl` → блок-таблица (строки `w:tr`, ячейки `w:tc`). Первый `Heading1`
  * → `meta.title`. Нет распознанного содержимого → `meta.degraded` (INV-D5).
  * Политику не реализует (INV-D6).
+ *
+ * **Известное ограничение (порядок блоков не сохраняется).** Парсер группирует
+ * одноимённых детей под одним ключом, поэтому блоки выводятся по первому
+ * появлению тега: `w:p w:tbl w:p` читается как `p p tbl`, а не в исходном
+ * порядке. Альтернатива — `preserveOrder` у `fast-xml-parser` (отдельный полный
+ * обход с сохранением порядка) — в этой волне осознанно не внедрена.
  */
 import { boundTable } from "../bound";
 import {
@@ -22,12 +28,13 @@ import {
   type ParseContext,
 } from "../handler";
 import { emptyIR, type DocTable, type DocumentIR } from "../ir";
-import { asArray, attr, child, collectText, readOoxml } from "./ooxml";
+import { asArray, attr, child, collectText, findAll, readOoxml } from "./ooxml";
 
 /** Уровень заголовка из `w:pStyle`, либо `undefined` (не заголовок). */
 function headingLevel(style: string | undefined): number | undefined {
   if (!style) return undefined;
-  const m = /^heading\s*(\d+)?/i.exec(style.trim());
+  // `$` — иначе `HeadingChar`/`HeadingStyle` ложно считались бы заголовком.
+  const m = /^heading\s*(\d+)?$/i.exec(style.trim());
   if (!m) return undefined;
   const n = m[1] ? Number.parseInt(m[1], 10) : 1;
   return Number.isFinite(n) && n > 0 ? n : 1;
@@ -48,17 +55,33 @@ function paragraphText(p: unknown): string {
   return collectText(p).trim();
 }
 
-/** Таблица `w:tbl` → заголовок (первая строка) + строки, обрезанные по лимиту. */
+/** Текст ячейки: абзацы `w:p` через перевод строки (как `cellText` в ODF). */
+function cellText(tc: unknown): string {
+  return findAll(tc, "w:p")
+    .map((p) => collectText(p).trim())
+    .filter((s) => s !== "")
+    .join("\n");
+}
+
+/**
+ * Таблица `w:tbl` → заголовок (первая строка) + строки, обрезанные по лимиту.
+ * Строки собираются не более `maxTableRows + 1` (заголовок + одна лишняя для
+ * детекта `truncated`) — cap во время разбора, а не после материализации (INV-D4).
+ */
 function readTable(tbl: unknown, limits: DocLimits): DocTable {
+  const rowCap = limits.maxTableRows + 1; // заголовок + строки данных
   const all: string[][] = [];
+  let truncated = false;
   for (const tr of asArray(child(tbl, "w:tr"))) {
-    const cells: string[] = [];
-    for (const tc of asArray(child(tr, "w:tc"))) cells.push(collectText(tc).trim());
-    all.push(cells);
+    if (all.length >= rowCap) {
+      truncated = true;
+      break;
+    }
+    all.push(asArray(child(tr, "w:tc")).map(cellText));
   }
   const header = all.shift() ?? [];
   const rows = all.slice(0, limits.maxTableRows);
-  return { header, rows, ...(all.length > limits.maxTableRows ? { truncated: true } : {}) };
+  return { header, rows, ...(truncated ? { truncated: true } : {}) };
 }
 
 /** Обработчик DOCX/DOCM (группа office). */

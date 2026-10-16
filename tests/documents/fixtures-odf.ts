@@ -50,7 +50,13 @@ export interface OdfRow {
 
 export interface OdfTableSpec {
   name?: string;
+  /** Строки внутри `table:table-header-rows` (форма заголовка LibreOffice). */
+  headerRows?: OdfRow[];
   rows: OdfRow[];
+  /** Обернуть строки тела в `table:table-rows`. */
+  wrapBody?: boolean;
+  /** Обернуть всё тело (шапку и строки) в `table:table-row-group`. */
+  wrapAll?: boolean;
 }
 
 const cellXml = (cell: OdfCell): string => {
@@ -69,7 +75,15 @@ export function buildOds(tables: OdfTableSpec[], opts: OdfBuildOptions = {}): Ui
   const tablesXml = tables
     .map((t) => {
       const name = t.name ? ` table:name="${escapeXml(t.name)}"` : "";
-      return `<table:table${name}>${t.rows.map(rowXml).join("")}</table:table>`;
+      const header = t.headerRows?.length
+        ? `<table:table-header-rows>${t.headerRows.map(rowXml).join("")}</table:table-header-rows>`
+        : "";
+      const body = t.rows.map(rowXml).join("");
+      const withBody = t.wrapBody ? `<table:table-rows>${body}</table:table-rows>` : body;
+      const inner = t.wrapAll
+        ? `<table:table-row-group>${header}${withBody}</table:table-row-group>`
+        : header + withBody;
+      return `<table:table${name}>${inner}</table:table>`;
     })
     .join("");
   return buildOdfPackage(
@@ -83,7 +97,7 @@ export type OdtItem =
   | { kind: "h"; level: number; text: string }
   | { kind: "p"; text: string }
   | { kind: "list"; items: string[] }
-  | { kind: "table"; name?: string; rows: string[][] };
+  | { kind: "table"; name?: string; rows: Array<Array<string | OdfCell>> };
 
 const odtItemXml = (item: OdtItem): string => {
   if (item.kind === "h") {
@@ -98,7 +112,12 @@ const odtItemXml = (item: OdtItem): string => {
   }
   const name = item.name ? ` table:name="${escapeXml(item.name)}"` : "";
   const rows = item.rows
-    .map((r) => `<table:table-row>${r.map((c) => cellXml({ text: c })).join("")}</table:table-row>`)
+    .map(
+      (r) =>
+        `<table:table-row>${r
+          .map((c) => cellXml(typeof c === "string" ? { text: c } : c))
+          .join("")}</table:table-row>`,
+    )
     .join("");
   return `<table:table${name}>${rows}</table:table>`;
 };

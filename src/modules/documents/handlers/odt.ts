@@ -7,6 +7,12 @@
  * нумерация ODF-списков задаётся стилем, вне объёма); `table:table` → блок-таблица.
  * Первый `text:h` уровня 1 → `meta.title`. Нет распознанного содержимого →
  * `meta.degraded` (INV-D5). Политику не реализует (INV-D6).
+ *
+ * **Известное ограничение (порядок блоков не сохраняется).** Парсер группирует
+ * одноимённых детей под одним ключом, поэтому блоки выводятся по первому
+ * появлению тега: последовательность `h p h p` читается как `h h p p`, а не в
+ * исходном порядке. Альтернатива — `preserveOrder` у `fast-xml-parser` (отдельный
+ * полный обход с сохранением порядка) — в этой волне осознанно не внедрена.
  */
 import { boundTable } from "../bound";
 import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
@@ -15,13 +21,12 @@ import {
   odfBody,
   odfHeadingLevel,
   odfListItems,
-  odfTableHasContent,
   odfTableName,
   odfText,
   readOdfContent,
   readOdfTable,
 } from "./odf";
-import { asArray, child } from "./ooxml";
+import { asArray, child, tableHasContent } from "./ooxml";
 
 /** Обработчик ODT (группа office). */
 export const odtHandler: DocumentHandler = {
@@ -78,7 +83,7 @@ export const odtHandler: DocumentHandler = {
       } else if (key === "table:table") {
         for (const node of asArray(value)) {
           const grid = readOdfTable(node, ctx.limits);
-          if (!odfTableHasContent(grid)) continue;
+          if (!tableHasContent(grid)) continue;
           ir.blocks.push({
             kind: "table",
             table: boundTable(
