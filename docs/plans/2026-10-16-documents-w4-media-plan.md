@@ -4,7 +4,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Две новые группы обработчиков модуля `documents`:
 
@@ -57,54 +57,54 @@
 
 ### Task 0: План волны
 
-- [ ] Зафиксировать план W4 (этот файл) и закоммитить первым.
-- [ ] **Коммит** `docs(documents): план W4 — растр/vision + geo`.
+- [x] Зафиксировать план W4 (этот файл) и закоммитить первым.
+- [x] **Коммит** `docs(documents): план W4 — растр/vision + geo`.
 
 ### Task 1: Обработчик изображений (`group:"image"`)
 
-- [ ] Падающий тест `tests/documents/handlers-image.test.ts`: PNG/JPEG/GIF/WEBP/BMP magic →
+- [x] Падающий тест `tests/documents/handlers-image.test.ts`: PNG/JPEG/GIF/WEBP/BMP magic →
   `figure`/`ref.kind==="raster"`/mime; `detect` по каждому magic; размер/outline/`meta.title`.
-- [ ] Реализовать `handlers/image.ts`: локальная MIME-карта, magic-detect, `parse`.
-- [ ] **Коммит** `feat(documents): обработчик растровых изображений (W4)`.
+- [x] Реализовать `handlers/image.ts`: локальная MIME-карта, magic-detect, `parse`.
+- [x] **Коммит** `feat(documents): обработчик растровых изображений (W4)`.
 
 ### Task 2: Vision-путь `document_read` + i18n
 
-- [ ] Падающий тест: без vision → `success:false` + `documents.needs_vision` + диагностика;
+- [x] Падающий тест: без vision → `success:false` + `documents.needs_vision` + диагностика;
   vision + `contextManager` → `images` с `data:image/...;base64,`.
-- [ ] `media.ts`: `rasterMime(ir)`, `buildDataUrl(bytes, mime)`.
-- [ ] `run.ts`: `rejectResult`. `document-read.ts`: ветка vision.
-- [ ] Ключи `documents.needs_vision`/`documents.image_attached` в `en.json`/`ru.json`.
-- [ ] **Коммит** `feat(documents): vision-путь document_read (W4)`.
+- [x] `media.ts`: `rasterMime(ir)`, `buildDataUrl(bytes, mime)`.
+- [x] `run.ts`: `rejectResult`. `document-read.ts`: ветка vision.
+- [x] Ключи `documents.needs_vision`/`documents.image_attached` в `en.json`/`ru.json`.
+- [x] **Коммит** `feat(documents): vision-путь document_read (W4)`.
 
 ### Task 3: Обработчик geo (`group:"geo"`)
 
-- [ ] Падающий тест `tests/documents/handlers-geo.test.ts`.
-- [ ] Реализовать `handlers/geo.ts` (GeoJSON + GPX через `parseXml`).
-- [ ] **Коммит** `feat(documents): обработчик geo (GeoJSON/GPX) (W4)`.
+- [x] Падающий тест `tests/documents/handlers-geo.test.ts`.
+- [x] Реализовать `handlers/geo.ts` (GeoJSON + GPX через `parseXml`).
+- [x] **Коммит** `feat(documents): обработчик geo (GeoJSON/GPX) (W4)`.
 
 ### Task 4: Сквозная граница заголовков (INV-D4)
 
-- [ ] `boundLine` на outline-`title` в `json/yaml/xml/csv/xlsx/ods/pptx`.
-- [ ] Тест на кламп огромного заголовка.
-- [ ] **Коммит** `fix(documents): границы outline-заголовков (W4)`.
+- [x] `boundLine` на outline-`title` в `json/yaml/xml/csv/xlsx/ods/pptx`.
+- [x] Тест на кламп огромного заголовка.
+- [x] **Коммит** `fix(documents): границы outline-заголовков (W4)`.
 
 ### Task 5: Переключатели (INV-D3)
 
-- [ ] `handlers/index.ts`: `"image"`,`"geo"` в `ACTIVE_GROUPS`, обработчики в `HANDLERS`,
+- [x] `handlers/index.ts`: `"image"`,`"geo"` в `ACTIVE_GROUPS`, обработчики в `HANDLERS`,
   убрать placeholder `→ W4`.
-- [ ] **Коммит** `feat(documents): включаю группы image/geo (W4)`.
+- [x] **Коммит** `feat(documents): включаю группы image/geo (W4)`.
 
 ### Task 6: Фикстуры, registry/toggles-тесты
 
-- [ ] Кейсы реестра: `.png`/`.geojson`/`.gpx` под своими группами.
-- [ ] **Коммит** `test(documents): реестр image/geo (W4)`.
+- [x] Кейсы реестра: `.png`/`.geojson`/`.gpx` под своими группами.
+- [x] **Коммит** `test(documents): реестр image/geo (W4)`.
 
 ### Task 7: Полная проверка
 
-- [ ] `bun test tests/documents tests/arch` → зелёный (реальные числа).
-- [ ] `bun run quality` → exit 0.
-- [ ] `bun run build:documents` → exit 0 (без новых деп).
-- [ ] Файлы ≤300 строк; нет `as any`; `bun test tests/i18n.test.ts` зелёный.
+- [x] `bun test tests/documents tests/arch` → зелёный (реальные числа).
+- [x] `bun run quality` → exit 0.
+- [x] `bun run build:documents` → exit 0 (без новых деп).
+- [x] Файлы ≤300 строк; нет `as any`; `bun test tests/i18n.test.ts` зелёный.
 
 ---
 
