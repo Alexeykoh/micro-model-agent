@@ -1,6 +1,8 @@
 /**
- * Контракт обработчика формата (INV-D2): потребители знают только `DocumentHandler`,
- * конкретные `handlers/*` импортируются лишь из `registry.ts`.
+ * Контракт обработчика формата (INV-D2): потребители вне `handlers/` знают только
+ * `DocumentHandler`/`DocumentIR`; конкретные `handlers/*` импортируются извне лишь из
+ * `registry.ts`. Обработчики форматов вправе импортировать друг друга и общие слои
+ * **внутри** `handlers/` (ZIP/OOXML) — это один слой, а не выход за границу модуля.
  */
 import type { Logger } from "../../logger/app-logger";
 import type { DocumentIR } from "./ir";
