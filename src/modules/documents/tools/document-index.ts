@@ -38,7 +38,10 @@ export function documentIndexTool(registry: DocumentRegistry, logger: Logger): T
         // Пустой индекс не сохраняем: иначе `document_find` не увидит позже
         // добавленные документы (протухший пустой кэш лучше не писать).
         if (res.entries.length > 0) {
-          new DocumentsCache(join(ctx.baseDir, ".mma"), { root: resolve(ctx.baseDir, dir) }).save(res.entries);
+          new DocumentsCache(join(ctx.baseDir, ".mma"), { root: resolve(ctx.baseDir, dir) }).save(
+            res.entries,
+            res.signature,
+          );
         }
         const chunks = res.entries.reduce((n, e) => n + e.chunks.length, 0);
         let output = t("documents.index_summary", {

@@ -106,13 +106,13 @@ export class DocumentsCache {
     return entries;
   }
 
-  /** Сохраняет записи в кэш (память + диск). */
-  save(entries: DocEntry[]): void {
+  /** Сохраняет записи в кэш (память + диск); `signature` — отпечаток инвентаря. */
+  save(entries: DocEntry[], signature?: string): void {
     this.cache = entries;
     const envelope: CacheEnvelope = {
       version: CACHE_VERSION,
       root: this.root ?? "",
-      signature: this.currentSignature(),
+      signature: signature ?? this.currentSignature(),
       builtAt: Date.now(),
       entries,
     };

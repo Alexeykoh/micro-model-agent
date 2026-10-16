@@ -1,15 +1,17 @@
 /**
  * Обход каталога документов (INV-D4/D5) и поддержание кэша в свежем состоянии.
  *
- * `indexDir` ходит по каталогу, резолвит файл через `buildRegistry`, парсит в
- * `DocumentIR` и чанкирует; неподдержанное/битое — пропуск со счётчиком, без
- * исключения. Нечитаемый **стартовый** каталог — не «пусто», а честная ошибка
- * (INV-D5). `refreshStale` пересобирает записи кэша, у которых изменился
- * `mtimeMs`/`size`, и отбрасывает исчезнувшие файлы.
+ * `inventoryDir` обходит каталог и собирает индексируемые файлы (path/rel/
+ * mtimeMs/size) **без разбора**; `buildEntries` парсит и чанкует их в записи
+ * корпуса. `reconcile` сводит инвентарь с кэшем: неизменившиеся записи
+ * переиспользуются, добавленные/изменённые пересобираются, исчезнувшие
+ * отбрасываются. Нечитаемый **стартовый** каталог — не «пусто», а честная ошибка
+ * (INV-D5).
  */
 import { open, readdir, stat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { join, relative, resolve, sep } from "node:path";
 import { t } from "../../i18n/index";
 import type { Logger } from "../../logger/app-logger";
@@ -33,27 +35,34 @@ export const MAX_TOTAL_CHUNKS = 10_000;
 /** Каталоги, в которые обход не заходит. */
 const SKIP_DIRS = new Set([".git", "node_modules", ".mma"]);
 
-/** Опции обхода каталога. */
-export interface IndexDirOptions {
-  baseDir: string;
-  /** Каталог относительно `baseDir` (по умолчанию задаёт вызывающий). */
-  dir: string;
-  registry: DocumentRegistry;
-  logger: Logger;
-  maxDocuments?: number;
-  maxDepth?: number;
-  maxTotalChunks?: number;
-  maxChunkChars?: number;
-  maxChunksPerDoc?: number;
+/** Элемент инвентаря: индексируемый файл без разбора (INV-D4). */
+export interface InventoryItem {
+  /** Абсолютный путь (для чтения/enforcement, не для сообщений модели). */
+  path: string;
+  /** Путь относительно `baseDir` (forward-slash) — для модели и `document_read`. */
+  rel: string;
+  mtimeMs: number;
+  size: number;
 }
 
-/** Итог обхода: записи, число пропусков и честный признак срабатывания капа. */
-export interface IndexDirResult {
-  entries: DocEntry[];
+/** Общие ограничители обхода. */
+export interface WalkLimits {
+  maxDocuments?: number;
+  maxDepth?: number;
+}
+
+/** Опции инвентаризации каталога. */
+export interface InventoryDirOptions extends WalkLimits {
+  registry: DocumentRegistry;
+  logger: Logger;
+}
+
+/** Итог инвентаризации: файлы, число пропусков и честный признак капа. */
+export interface InventoryDirResult {
+  items: InventoryItem[];
   skipped: number;
   truncated: boolean;
-  /** Какой кап сработал (для честной заметки модели). */
-  truncatedBy?: "documents" | "chunks";
+  truncatedBy?: "documents";
   /** Дружелюбная причина, если стартовый каталог не читается (INV-D5). */
   error?: string;
 }
@@ -71,28 +80,26 @@ async function readHead(path: string): Promise<Uint8Array> {
 }
 
 /**
- * Обходит каталог и строит записи корпуса (INV-D4/D5). Ограничен по глубине,
- * числу документов и общему числу чанков; неподдержанные/битые файлы
+ * Обходит каталог и собирает индексируемые файлы без разбора (INV-D4/D5).
+ * Ограничен по глубине и числу документов; неподдержанные/нечитаемые файлы
  * пропускаются со счётчиком. Ни один битый файл не роняет обход. `truncated`
  * выставляется только когда кап реально отсёк индексируемый файл.
  */
-export async function indexDir(opts: IndexDirOptions): Promise<IndexDirResult> {
-  const baseDir = resolve(opts.baseDir);
-  const start = resolve(baseDir, opts.dir);
+export async function inventoryDir(
+  baseDir: string,
+  dir: string,
+  opts: InventoryDirOptions,
+): Promise<InventoryDirResult> {
+  const base = resolve(baseDir);
+  const start = resolve(base, dir);
   const maxDocs = Math.max(1, opts.maxDocuments ?? MAX_DOCUMENTS);
   const maxDepth = Math.max(0, opts.maxDepth ?? MAX_INDEX_DEPTH);
-  const maxTotal = Math.max(1, opts.maxTotalChunks ?? MAX_TOTAL_CHUNKS);
-  const chunkOpts = { maxChunkChars: opts.maxChunkChars, maxChunksPerDoc: opts.maxChunksPerDoc };
-  const entries: DocEntry[] = [];
+  const items: InventoryItem[] = [];
   let skipped = 0;
   let truncated = false;
-  let truncatedBy: "documents" | "chunks" | undefined;
   let readError: string | undefined;
-  let totalChunks = 0;
 
-  const relOf = (abs: string): string => relative(baseDir, abs).split(sep).join("/");
-  const atCap = (): boolean => entries.length >= maxDocs || totalChunks >= maxTotal;
-  const capReason = (): "documents" | "chunks" => (totalChunks >= maxTotal ? "chunks" : "documents");
+  const relOf = (abs: string): string => relative(base, abs).split(sep).join("/");
 
   /** Поддержан ли файл (без разбора): нужен, чтобы отличить реальный отсев от пропуска. */
   const isIndexable = async (abs: string): Promise<boolean> => {
@@ -105,29 +112,12 @@ export async function indexDir(opts: IndexDirOptions): Promise<IndexDirResult> {
 
   const handleFile = async (abs: string): Promise<void> => {
     try {
-      const head = await readHead(abs);
-      if (!opts.registry.resolve(abs, head)) {
+      if (opts.registry.resolve(abs, await readHead(abs)) === null) {
         skipped += 1;
         return;
       }
-      const ir = await opts.registry.parse(parseCtx(opts.logger), fileSource(baseDir, relOf(abs)));
       const st = await stat(abs);
-      let chunks = chunkIR(ir, chunkOpts);
-      const remaining = maxTotal - totalChunks;
-      if (chunks.length > remaining) {
-        chunks = chunks.slice(0, Math.max(0, remaining));
-        truncated = true;
-        truncatedBy = "chunks";
-      }
-      entries.push({
-        path: abs,
-        rel: relOf(abs),
-        mtimeMs: st.mtimeMs,
-        size: st.size,
-        outline: ir.outline.map((n) => n.title),
-        chunks,
-      });
-      totalChunks += chunks.length;
+      items.push({ path: abs, rel: relOf(abs), mtimeMs: st.mtimeMs, size: st.size });
     } catch {
       skipped += 1;
     }
@@ -140,7 +130,7 @@ export async function indexDir(opts: IndexDirOptions): Promise<IndexDirResult> {
       dirents = await readdir(absDir, { withFileTypes: true });
     } catch {
       // INV-D5: нечитаемый стартовый каталог не должен выглядеть пустым.
-      if (depth === 0) readError = t("documents.dir_unreadable", { path: opts.dir });
+      if (depth === 0) readError = t("documents.dir_unreadable", { path: dir });
       return false;
     }
     dirents.sort((a, b) => a.name.localeCompare(b.name));
@@ -150,11 +140,10 @@ export async function indexDir(opts: IndexDirOptions): Promise<IndexDirResult> {
         if (SKIP_DIRS.has(d.name) || depth >= maxDepth) continue;
         if (await walk(abs, depth + 1)) return true;
       } else if (d.isFile()) {
-        if (atCap()) {
+        if (items.length >= maxDocs) {
           // Кап честен только если отсечённый файл реально был бы проиндексирован.
           if (await isIndexable(abs)) {
             truncated = true;
-            truncatedBy = capReason();
             return true;
           }
           continue;
@@ -166,66 +155,121 @@ export async function indexDir(opts: IndexDirOptions): Promise<IndexDirResult> {
   };
 
   await walk(start, 0);
-  const result: IndexDirResult = { entries, skipped, truncated };
-  if (truncatedBy) result.truncatedBy = truncatedBy;
+  const result: InventoryDirResult = { items, skipped, truncated };
+  if (truncated) result.truncatedBy = "documents";
   if (readError) result.error = readError;
   return result;
 }
 
-/** Опции пересборки протухших записей кэша. */
-export interface RefreshStaleOptions {
+/** Опции сборки записей из инвентаря. */
+export interface BuildEntriesOptions {
   baseDir: string;
   registry: DocumentRegistry;
   logger: Logger;
+  maxTotalChunks?: number;
   maxChunkChars?: number;
   maxChunksPerDoc?: number;
 }
 
-/** Итог пересборки: актуальные записи и число изменённых/удалённых. */
-export interface RefreshStaleResult {
+/** Итог сборки: записи, число пропусков и признак срабатывания бюджета чанков. */
+export interface BuildEntriesResult {
   entries: DocEntry[];
-  changed: number;
+  skipped: number;
+  chunkTruncated: boolean;
 }
 
 /**
- * Пересобирает записи кэша по факту изменения файлов (INV-D4/D5): `stat` каждой
- * записи; исчезнувшие отбрасываются, изменившиеся (`mtimeMs`/`size`) заново
- * парсятся и чанкируются. Возвращает актуальный список и число изменений —
- * вызывающий сохраняет кэш, только если `changed > 0`.
+ * Парсит и чанкует элементы инвентаря в записи корпуса (INV-D4). Общий бюджет
+ * чанков ограничивает суммарное число; лишние чанки отбрасываются с честным
+ * признаком. Битый файл — пропуск со счётчиком, не исключение.
  */
-export async function refreshStale(
-  entries: DocEntry[],
-  opts: RefreshStaleOptions,
-): Promise<RefreshStaleResult> {
+export async function buildEntries(
+  items: InventoryItem[],
+  opts: BuildEntriesOptions,
+): Promise<BuildEntriesResult> {
+  const maxTotal = Math.max(1, opts.maxTotalChunks ?? MAX_TOTAL_CHUNKS);
   const chunkOpts = { maxChunkChars: opts.maxChunkChars, maxChunksPerDoc: opts.maxChunksPerDoc };
-  const out: DocEntry[] = [];
-  let changed = 0;
-  for (const entry of entries) {
-    let st: Awaited<ReturnType<typeof stat>>;
-    try {
-      st = await stat(entry.path);
-    } catch {
-      changed += 1;
-      continue; // файл исчез — запись уходит
-    }
-    if (st.mtimeMs === entry.mtimeMs && st.size === entry.size) {
-      out.push(entry);
-      continue;
+  const entries: DocEntry[] = [];
+  let skipped = 0;
+  let totalChunks = 0;
+  let chunkTruncated = false;
+  for (const it of items) {
+    if (totalChunks >= maxTotal) {
+      chunkTruncated = true;
+      break;
     }
     try {
-      const ir = await opts.registry.parse(parseCtx(opts.logger), fileSource(opts.baseDir, entry.rel));
-      out.push({
-        path: entry.path,
-        rel: entry.rel,
-        mtimeMs: st.mtimeMs,
-        size: st.size,
+      const ir = await opts.registry.parse(parseCtx(opts.logger), fileSource(opts.baseDir, it.rel));
+      let chunks = chunkIR(ir, chunkOpts);
+      const remaining = maxTotal - totalChunks;
+      if (chunks.length > remaining) {
+        chunks = chunks.slice(0, Math.max(0, remaining));
+        chunkTruncated = true;
+      }
+      entries.push({
+        path: it.path,
+        rel: it.rel,
+        mtimeMs: it.mtimeMs,
+        size: it.size,
         outline: ir.outline.map((n) => n.title),
-        chunks: chunkIR(ir, chunkOpts),
+        chunks,
       });
+      totalChunks += chunks.length;
     } catch {
-      // Стал неподдержанным/битым — запись уходит.
+      skipped += 1;
     }
-    changed += 1;
   }
-  return { entries: out, changed };
+  return { entries, skipped, chunkTruncated };
+}
+
+/** Опции обхода каталога. */
+export interface IndexDirOptions extends WalkLimits {
+  baseDir: string;
+  dir: string;
+  registry: DocumentRegistry;
+  logger: Logger;
+  maxTotalChunks?: number;
+  maxChunkChars?: number;
+  maxChunksPerDoc?: number;
+}
+
+/** Итог обхода: записи, число пропусков и честный признак срабатывания капа. */
+export interface IndexDirResult {
+  entries: DocEntry[];
+  skipped: number;
+  truncated: boolean;
+  /** Какой кап сработал (для честной заметки модели). */
+  truncatedBy?: "documents" | "chunks";
+  /** Отпечаток инвентаря — честная сигнатура кэша. */
+  signature: string;
+  /** Дружелюбная причина, если стартовый каталог не читается (INV-D5). */
+  error?: string;
+}
+
+/**
+ * Обходит каталог и строит записи корпуса (INV-D4/D5): `inventoryDir` собирает
+ * индексируемые файлы, `buildEntries` парсит и чанкует их. Ни один битый файл не
+ * роняет обход. `truncated` честен: кап документов или бюджет чанков.
+ */
+export async function indexDir(opts: IndexDirOptions): Promise<IndexDirResult> {
+  const inv = await inventoryDir(opts.baseDir, opts.dir, opts);
+  const built = await buildEntries(inv.items, opts);
+  const truncated = inv.truncated || built.chunkTruncated;
+  const truncatedBy = inv.truncated ? "documents" : built.chunkTruncated ? "chunks" : undefined;
+  const result: IndexDirResult = {
+    entries: built.entries,
+    skipped: inv.skipped + built.skipped,
+    truncated,
+    signature: fingerprint(inv.items),
+  };
+  if (truncatedBy) result.truncatedBy = truncatedBy;
+  if (inv.error) result.error = inv.error;
+  return result;
+}
+
+/** Дешёвый отпечаток инвентаря (`rel:mtime:size`) — честная сигнатура кэша. */
+export function fingerprint(items: InventoryItem[]): string {
+  const hash = createHash("sha1");
+  for (const it of items) hash.update(`${it.rel}:${it.mtimeMs}:${it.size}\n`);
+  return hash.digest("hex");
 }

@@ -179,7 +179,7 @@
   "documents.no_index": "Nothing indexed in \"{dir}\": no supported documents found.",
   "documents.no_matches": "No matches for \"{query}\".",
   "documents.dir_unreadable": "Could not read the directory \"{path}\": it does not exist or is not accessible.",
-  "documents.index_truncated_chunks": "Reached the total chunk budget ({max} chunks); the remaining documents were skipped.",
+  "documents.index_truncated_chunks": "Reached the total chunk budget ({max}); excess chunks were dropped.",
   "tool.truncated": "[Truncated: {tokens} tokens removed]",
   "tool.output_admitted": "[output omitted: {tokens} tokens, {lines} lines — too large for context]\nSaved to: {artifact}\nSource: {source}\nPreview:\n{preview}\nInspect it with read_file (offset/limit) or chunk_query on the saved path.",
   "tool.output_admitted_display": "large output: {tokens} tokens, {lines} lines — saved to file",

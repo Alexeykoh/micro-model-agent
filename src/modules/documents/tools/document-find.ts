@@ -1,17 +1,18 @@
 /**
  * Тул `document_find`: поиск по индексу документов (W5, INV-D4/D5/D6). Кэш
- * читается для каталога; если его нет — индекс собирается по требованию
- * (ограниченно). Загруженный кэш сверяется со `stat` файлов (`refreshStale`) и
- * пересобирается при изменениях. Выдача — top-N попаданий с ограниченными
- * сниппетами. Нет документов — fail-open с причиной; нет совпадений — честное
- * сообщение.
+ * читается для каталога; инвентарь каталога сверяется с кэшем (`reconcile`):
+ * добавленные/изменённые/удалённые документы отражаются автоматически. Нет/пуст
+ * кэш — полная сборка по инвентарю. Нечитаемый каталог — fail-open с диагностикой.
+ * Пустой снимок не сохраняется, иначе каталог выглядел бы пустым навсегда.
  */
 import { join, resolve } from "node:path";
 import { t } from "../../../i18n/index";
 import type { Logger } from "../../../logger/app-logger";
 import type { ToolDefinition, ToolResult } from "../../../tools/types";
 import { boundText, DEFAULT_DOC_LIMITS } from "../bound";
-import { DocumentsCache, indexDir, refreshStale } from "../corpus";
+import { buildEntries, DocumentsCache, fingerprint, inventoryDir } from "../corpus";
+import type { DocEntry } from "../corpus";
+import { reconcile } from "../reconcile";
 import type { DocumentRegistry } from "../registry";
 import { FIND_LIMIT, searchChunks, type SearchHit } from "../search";
 import { causeOf, failResult, rejectResult } from "./run";
@@ -48,19 +49,24 @@ export function documentFindTool(registry: DocumentRegistry, logger: Logger): To
         const dir = String(args.dir ?? ".").trim() || ".";
         const log = ctx.logger ?? logger;
         const root = resolve(ctx.baseDir, dir);
-        const cacheDir = join(ctx.baseDir, ".mma");
-        const cache = new DocumentsCache(cacheDir, { root });
-        let entries = cache.load();
-        if (!entries) {
-          const built = await indexDir({ baseDir: ctx.baseDir, dir, registry, logger: log });
-          if (built.error) return rejectResult(ctx, "document_find", built.error, built.error);
-          entries = built.entries;
-          if (entries.length > 0) cache.save(entries);
+        const cache = new DocumentsCache(join(ctx.baseDir, ".mma"), { root });
+        const cached = cache.load();
+        // Инвентарь каталога: добавленные/изменённые/удалённые видны без разбора.
+        const inv = await inventoryDir(ctx.baseDir, dir, { registry, logger: log });
+        // INV-D5: нечитаемый каталог — не «пусто», а честная ошибка с диагностикой.
+        if (inv.error) return rejectResult(ctx, "document_find", inv.error, inv.error);
+        const signature = fingerprint(inv.items);
+        let entries: DocEntry[];
+        if (!cached || cached.length === 0) {
+          // Нет/пуст кэш — полная сборка по инвентарю (INV-D5).
+          entries = (await buildEntries(inv.items, { baseDir: ctx.baseDir, registry, logger: log })).entries;
+          if (entries.length > 0) cache.save(entries, signature);
         } else {
-          // Свежесть: изменившиеся/исчезнувшие файлы пересобираются из кэша (INV-D4/D5).
-          const refreshed = await refreshStale(entries, { baseDir: ctx.baseDir, registry, logger: log });
-          if (refreshed.changed > 0) cache.save(refreshed.entries);
-          entries = refreshed.entries;
+          // Сверка с инвентарём: переиспользовать/пересобрать/удалить (INV-D4/D5).
+          const rec = await reconcile(cached, inv.items, { baseDir: ctx.baseDir, registry, logger: log });
+          entries = rec.entries;
+          // Пустой снимок не сохраняем: иначе каталог выглядит пустым навсегда.
+          if (rec.changed > 0 && entries.length > 0) cache.save(entries, signature);
         }
         if (entries.length === 0) {
           return rejectResult(

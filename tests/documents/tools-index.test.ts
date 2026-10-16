@@ -190,4 +190,65 @@ describe("document_find", () => {
     expect(tool.boundedOutput).toBe(true);
     expect(tool.cacheable).toBe(false);
   });
+
+  it("добавляет новый файл в уже проиндексированный каталог (add)", async () => {
+    const d = mkdtempSync(join(tmpdir(), "doc-find-add-"));
+    writeFileSync(join(d, "a.md"), "# A\n\noriginal alpha");
+    const c = (): ToolContext => ({ baseDir: d, logger } as unknown as ToolContext);
+    try {
+      const first = await documentFindTool(registry, logger).handler(c(), { dir: ".", query: "alpha" });
+      expect(String(first.output)).toContain("a.md");
+
+      // Новый файл появляется после первичной индексации.
+      writeFileSync(join(d, "b.md"), "# B\n\nfresh beta content");
+
+      const second = await documentFindTool(registry, logger).handler(c(), { dir: ".", query: "beta" });
+      expect(second.success).toBe(true);
+      expect(String(second.output)).toContain("b.md");
+      expect(String(second.output)).toContain("fresh beta content");
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("КРИТИЧНО: удалить все файлы, затем добавить новый — новый находится", async () => {
+    const d = mkdtempSync(join(tmpdir(), "doc-find-readd-"));
+    writeFileSync(join(d, "a.md"), "# A\n\nfirst needle");
+    const c = (): ToolContext => ({ baseDir: d, logger } as unknown as ToolContext);
+    try {
+      // Первичная индексация.
+      const first = await documentFindTool(registry, logger).handler(c(), { dir: ".", query: "needle" });
+      expect(String(first.output)).toContain("a.md");
+
+      // Удаляем ВСЕ проиндексированные файлы и вызываем find — пустой снимок
+      // НЕ должен быть сохранён (иначе каталог «залипнет» пустым).
+      rmSync(join(d, "a.md"));
+      const afterDelete = await documentFindTool(registry, logger).handler(c(), { dir: ".", query: "needle" });
+      expect(afterDelete.success).toBe(false);
+
+      // Добавляем новый файл с новым содержимым — он обязан находиться.
+      writeFileSync(join(d, "b.md"), "# B\n\nsecond needle appears");
+
+      const afterAdd = await documentFindTool(registry, logger).handler(c(), { dir: ".", query: "second" });
+      expect(afterAdd.success).toBe(true);
+      expect(String(afterAdd.output)).toContain("b.md");
+      expect(String(afterAdd.output)).toContain("second needle appears");
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("нечитаемый каталог — fail-open с диагностикой и честным сообщением (INV-D5)", async () => {
+    const onDiagnostic = vi.fn();
+    const res = await documentFindTool(registry, logger).handler(ctx(onDiagnostic), {
+      dir: "nowhere",
+      query: "x",
+    });
+    expect(res.success).toBe(false);
+    expect(String(res.output)).toContain("nowhere");
+    expect(String(res.output)).toContain(t("documents.dir_unreadable", { path: "nowhere" }));
+    expect(onDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "module:documents", kind: "failed", operation: "document_find" }),
+    );
+  });
 });

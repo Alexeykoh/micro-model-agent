@@ -7,9 +7,11 @@ import {
   CACHE_VERSION,
   DocumentsCache,
   type DocEntry,
+  fingerprint,
   indexDir,
-  refreshStale,
+  inventoryDir,
 } from "../../src/modules/documents/corpus";
+import { reconcile } from "../../src/modules/documents/reconcile";
 import { buildRegistry, type DocumentRegistry } from "../../src/modules/documents/registry";
 
 const logger = { debug() {}, info() {}, warn() {}, error() {} } as unknown as Logger;
@@ -176,9 +178,55 @@ describe("indexDir", () => {
   });
 });
 
-describe("refreshStale", () => {
-  it("пересобирает изменившийся файл и отбрасывает исчезнувший", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "doc-refresh-"));
+describe("inventoryDir", () => {
+  it("собирает индексируемые файлы без разбора, считает пропуски", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doc-inv-"));
+    const reg = buildRegistry();
+    writeFileSync(join(dir, "a.md"), "# A\n\nhello");
+    writeFileSync(join(dir, "b.xyz"), "unsupported");
+    try {
+      const inv = await inventoryDir(dir, ".", { registry: reg, logger });
+      expect(inv.items.map((i) => i.rel)).toEqual(["a.md"]);
+      expect(inv.skipped).toBeGreaterThanOrEqual(1);
+      expect(inv.error).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("нечитаемый стартовый каталог — error, а не «пусто» (INV-D5)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doc-inv-err-"));
+    try {
+      const inv = await inventoryDir(dir, "nowhere", { registry: buildRegistry(), logger });
+      expect(inv.items).toEqual([]);
+      expect(inv.error).toContain("nowhere");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("fingerprint", () => {
+  it("отличается при изменении состава инвентаря", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doc-fp-"));
+    const reg = buildRegistry();
+    writeFileSync(join(dir, "a.md"), "# A\n\nx");
+    try {
+      const inv1 = await inventoryDir(dir, ".", { registry: reg, logger });
+      const fp1 = fingerprint(inv1.items);
+      expect(fp1).toMatch(/^[0-9a-f]{40}$/);
+      writeFileSync(join(dir, "b.md"), "# B\n\ny");
+      const inv2 = await inventoryDir(dir, ".", { registry: reg, logger });
+      expect(fingerprint(inv2.items)).not.toBe(fp1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("reconcile", () => {
+  it("пересобирает изменившийся, отбрасывает исчезнувший, переиспользует прочий", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doc-reconcile-"));
     const reg = buildRegistry();
     writeFileSync(join(dir, "a.md"), "# A\n\nold");
     writeFileSync(join(dir, "b.md"), "# B\n\nkeep");
@@ -190,7 +238,8 @@ describe("refreshStale", () => {
       writeFileSync(join(dir, "a.md"), "# A\n\nnew content here");
       rmSync(join(dir, "b.md"));
 
-      const res = await refreshStale(first.entries, { baseDir: dir, registry: reg, logger });
+      const inv = await inventoryDir(dir, ".", { registry: reg, logger });
+      const res = await reconcile(first.entries, inv.items, { baseDir: dir, registry: reg, logger });
       expect(res.changed).toBe(2);
       expect(res.entries.map((e) => e.rel)).toEqual(["a.md"]);
       expect(res.entries[0].chunks.map((c) => c.text).join(" ")).toContain("new content here");
@@ -199,16 +248,54 @@ describe("refreshStale", () => {
     }
   });
 
-  it("неизменившийся файл не считается изменением", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "doc-refresh-same-"));
+  it("подхватывает добавленный файл (важно: add, не только change/remove)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doc-reconcile-add-"));
+    const reg = buildRegistry();
+    writeFileSync(join(dir, "a.md"), "# A\n\nfirst");
+    try {
+      const first = await indexDir({ baseDir: dir, dir: ".", registry: reg, logger });
+      writeFileSync(join(dir, "b.md"), "# B\n\nbrand new document");
+      const inv = await inventoryDir(dir, ".", { registry: reg, logger });
+      const res = await reconcile(first.entries, inv.items, { baseDir: dir, registry: reg, logger });
+      expect(res.changed).toBe(1);
+      expect(res.entries.map((e) => e.rel).sort()).toEqual(["a.md", "b.md"]);
+      const added = res.entries.find((e) => e.rel === "b.md");
+      expect(added?.chunks.map((c) => c.text).join(" ")).toContain("brand new document");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("неизменившийся файл не считается изменением и переиспользуется", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doc-reconcile-same-"));
     const reg = buildRegistry();
     writeFileSync(join(dir, "a.md"), "# A\n\nstable");
     try {
       const first = await indexDir({ baseDir: dir, dir: ".", registry: reg, logger });
-      const res = await refreshStale(first.entries, { baseDir: dir, registry: reg, logger });
+      const inv = await inventoryDir(dir, ".", { registry: reg, logger });
+      const res = await reconcile(first.entries, inv.items, { baseDir: dir, registry: reg, logger });
       expect(res.changed).toBe(0);
       expect(res.entries.map((e) => e.rel)).toEqual(["a.md"]);
-      expect(res.entries[0].chunks).toEqual(first.entries[0].chunks);
+      // Переиспользование: та же ссылка на запись, а не пересборка.
+      expect(res.entries[0]).toBe(first.entries[0]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("все файлы удалены — пустой результат и изменений на число удалённых", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doc-reconcile-all-"));
+    const reg = buildRegistry();
+    writeFileSync(join(dir, "a.md"), "# A\n\nx");
+    writeFileSync(join(dir, "b.md"), "# B\n\ny");
+    try {
+      const first = await indexDir({ baseDir: dir, dir: ".", registry: reg, logger });
+      rmSync(join(dir, "a.md"));
+      rmSync(join(dir, "b.md"));
+      const inv = await inventoryDir(dir, ".", { registry: reg, logger });
+      const res = await reconcile(first.entries, inv.items, { baseDir: dir, registry: reg, logger });
+      expect(res.entries).toEqual([]);
+      expect(res.changed).toBe(2);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
