@@ -1605,6 +1605,32 @@ server: каждый `checkFile` (каждая запись файла, кажд
   на `.chat`; анимация входа — `popCenter` (сохраняет `translateX(-50%)`, иначе `pop`
   ронял центрирование и пилюля вспыхивала правее центра).
 
+### Модуль документов — субстрат W1 (unreleased, ветка `feat/documents-module`)
+
+Единый субстрат чтения документов: обработчики форматов сводят вход к
+`DocumentIR` (`src/modules/documents/ir.ts`, INV-D2), потребители (`map`/`read`)
+видят только его. Вкл/выкл — **в коде** (`handlers/index.ts`: `DOCUMENTS_ENABLED`
++ `ACTIVE_GROUPS` + `HANDLERS`), без настроек (INV-D3); отключённый обработчик
+выпадает из бандла.
+
+- **Текстовая группа (W1):** `csv`/`tsv`, `md`, `json`, `yaml`, `xml`, `html` →
+  `DocumentIR` (заголовки/ключи/теги → `outline`, тело → блоки; таблицы
+  обрезаются с `truncated`). Лимиты вывода — `bound.ts` (INV-D4).
+- **Карта и чтение:** `renderDocumentMap(ir)` (мета + оглавление + счётчики) и
+  `renderDocumentRead(ir, selector)` — селекторы `all` / `section:<title>` /
+  `lines:<a>-<b>` (`map.ts`, `read.ts`).
+- **Тулы:** `document_map` (карта структуры) и `document_read` (срез) — read-only
+  (`security.caps=[{fs:"read"}]`, `pathArgs=["path"]`, INV-D7), fail-open с
+  причиной через `onDiagnostic` (INV-D5), `boundedOutput`/`cacheable`.
+- **Модуль:** `documentsModuleDef()` — `critical: false`, без `configKeys`;
+  регистрируется в `src/core/bootstrap/modules-phase.ts` рядом с core-модулями,
+  тулы подхватываются хостом (`collectTools`). Новый тег `document` в
+  `src/tools/auto-tags.ts` (`DOCUMENT_RE`) сеет `document`-тулы по расширению/словам.
+- **Гейты:** `tests/documents/*` (ir/handler/bound/handlers/toggles/registry/map/
+  read/tools/module/auto-tag), `tests/arch/file-size.test.ts` (потолок
+  `modules-phase.ts` не растёт), i18n-ключи `documents.*`/`tool.friendly.document_*`
+  в `en`/`ru` симметрично.
+
 ### Landing Page (`gh-pages/`) (0.3.2)
 
 Публичная витрина проекта на GitHub Pages. Статика без сборки, без зависимостей,
