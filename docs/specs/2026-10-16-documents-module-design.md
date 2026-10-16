@@ -299,7 +299,7 @@ W0.3): список внешних пакетов выводится из `packa
 | `document_map` | Карта: оглавление/листы/таблицы/фигуры, размеры | `path` | `fs:read`, `pathArgs:["path"]` | W1 |
 | `document_read` | Срез по селектору (страница/лист/секция/блок/диапазон) | `path`, `selector` | `fs:read`, `pathArgs:["path"]` | W1 |
 | `document_index` | Пересборка индекса каталога документов | `dir` | `fs:read`, `pathArgs:["dir"]` | W5 |
-| `document_find` | Поиск по индексу документов | `path\|dir`, `query` | `fs:read`, `pathArgs:["path","dir"]` | W5 |
+| `document_find` | Поиск по индексу документов | `dir`, `query` | `fs:read`, `pathArgs:["dir"]` | W5 |
 
 - Тег `document` (в `KNOWN_TOOL_TAGS`) — сужение набора работает автоматически.
 - `boundedOutput: true`; лимиты строк/токенов; таблицы обрезаются с `truncated`.
@@ -332,8 +332,19 @@ export function documentsModuleDef(deps: DocumentsDeps): ModuleDef {
 - Отказ обращения к конкретному документу — fail-open с причиной и записью (INV-D5),
   отказ загрузки зависимости (например, `pdfjs-dist`) — группа помечается недоступной в
   `health()` и её тулы деградируют с внятным сообщением, boot не падает.
-- Кэш индекса документов — отдельный файл рядом с `index-cache.json`, с envelope+signature
-  (по образцу `IndexCache`), изолирован от индексатора кода.
+- Кэш индекса документов — отдельный файл `documents-cache.json` рядом с `index-cache.json`
+  (каталог `<baseDir>/.mma`), с envelope+signature (по образцу `IndexCache`), изолирован
+  от индексатора кода. **Формат (W5):** `{ version:1, root, signature, builtAt, entries }`,
+  где `root` — абсолютный корень проиндексированного каталога, `entries` —
+  `{ path, rel, mtimeMs, size, outline, chunks }`. `load()` валидирует версию, `root` и
+  форму каждой записи; чужой/битый/старого формата кэш **игнорируется**, а не доверяется.
+- **Лимиты индексации (W5, INV-D4):** обход каталога пропускает `.git`/`node_modules`/`.mma`,
+  глубина ≤ `MAX_INDEX_DEPTH = 6`, файлов ≤ `MAX_DOCUMENTS = 300` (сверх — `truncated`);
+  документ чанкуется блоками `IR`, чанк ≤ `DEFAULT_MAX_CHUNK_CHARS = 1200` символов,
+  чанков на документ ≤ `DEFAULT_MAX_CHUNKS_PER_DOC = 200` (сверх — заметка в последнем
+  чанке, длина строго ≤ капа); `document_find` отдаёт ≤ `FIND_LIMIT = 20` попаданий,
+  сниппет ≤ `SNIPPET_CHARS = 240` символов. Неподдержанный/битый файл — пропуск со
+  счётчиком, обход не роняется.
 - Enforcement — целиком в `ToolExecutor` (INV-D6).
 
 ---
