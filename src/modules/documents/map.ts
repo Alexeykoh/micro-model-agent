@@ -1,7 +1,9 @@
 /**
  * Карта документа: мета + оглавление + счётчики блоков/таблиц/фигур (INV-D4).
- * Формат-агностично — работает с любым `DocumentIR`.
+ * Формат-агностично — работает с любым `DocumentIR`. Итоговая строка ограничена
+ * `boundText` независимо от обработчика (INV-D4): огромный outline не проходит целиком.
  */
+import { boundText, DEFAULT_DOC_LIMITS } from "./bound";
 import type { DocumentIR } from "./ir";
 
 /** Человекочитаемая «карта» документа: мета + оглавление + счётчики (INV-D4). */
@@ -19,5 +21,5 @@ export function renderDocumentMap(ir: DocumentIR): string {
   const outline = ir.outline
     .map((n) => `${"  ".repeat(Math.max(0, n.level - 1))}- ${n.title}`)
     .join("\n");
-  return `${head.join("\n")}\n\n${outline}`.trim();
+  return boundText(`${head.join("\n")}\n\n${outline}`.trim(), DEFAULT_DOC_LIMITS);
 }

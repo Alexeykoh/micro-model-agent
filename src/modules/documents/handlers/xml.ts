@@ -1,7 +1,7 @@
 /**
  * XML/SVG → `DocumentIR` (текстовая группа).
  */
-import { boundText } from "../bound";
+import { boundLine, boundText } from "../bound";
 import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
 import { emptyIR } from "../ir";
 
@@ -24,7 +24,7 @@ export const xmlHandler: DocumentHandler = {
       const tag = m[1];
       if (seen.has(tag)) continue;
       seen.add(tag);
-      ir.outline.push({ id: `t:${tag}`, level: 1, title: tag, kind: "section" });
+      ir.outline.push({ id: `t:${tag}`, level: 1, title: boundLine(tag, ctx.limits), kind: "section" });
       if (ir.outline.length >= 60) break;
     }
     ir.blocks.push({ kind: "code", lang: "xml", text: boundText(text, ctx.limits) });

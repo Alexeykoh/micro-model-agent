@@ -280,6 +280,15 @@ W0.3): список внешних пакетов выводится из `packa
 деп, реально импортируемая `src/**`, отсутствует во входах `dist/main.js`. Покрыто
 `tests/documents/inline-check.test.ts` (прежде был долг `documents-inline-unverified`).
 
+**Честный пробел vision-изображений — `DEBT(documents-vision-image-seam)`.** Vision-путь
+`document_read` (W4) отправляет в `ToolResult.images` полный base64 оригинала и **не
+уменьшает** картинку (в отличие от `attach_image`); всё больше `MAX_VISION_BYTES` честно
+отклоняется (`documents.image_too_large`), а не заваливает контекст. Ресайз модуль выполнить
+не может: INV-D7 запрещает импорт `src/llm/*`, а MIME-карта и `buildDataUrl` в `media.ts`
+дублируют `src/llm/image-utils.ts`. Критерий выхода — core-шов, отдающий ресайз + data-URL
+для `ToolResult.images`; триггер — следующее изменение ядра/vision-пути. Запись — в
+[debt.md](../agents/debt.md).
+
 ### 4.7 Тулы для модели
 
 Максимум четыре тула (жёсткий бюджет 9B). Все — через `ModuleDef.tools()` →
@@ -357,7 +366,7 @@ export function documentsModuleDef(deps: DocumentsDeps): ModuleDef {
 | **W1** | Субстрат (`ir/handler/registry/bound`), `module/lifecycle`, тулы `map`/`read`, текстовая группа (csv/tsv/md/html/json/yaml/xml) | Чтение и карта текстовых документов по-настоящему; гейты зелёные |
 | **W2** | `ooxml`/`odf`, xlsx/ods/docx/odt/pptx | Карта/чтение офисных и табличных файлов |
 | **W3** | PDF (текстовый слой) | Извлечение текста/оглавления PDF; сканы → честный fail-open |
-| **W4** | image→vision, geo (GeoJSON/GPX/SVG-схемы) | Графики/карты: метаданные + vision или явная деградация |
+| **W4** | image→vision, geo (GeoJSON/GPX; `.svg` **намеренно** уходит в `xml.ts` — текстовая группа) | Графики/карты: метаданные + vision или явная деградация |
 | **W5** | Индексация корпуса: `document_index`/`document_find`, стоимость/бюджет | Поиск по многим документам, ограниченная выдача |
 
 W1 — отдельная ветка `feat/documents-substrate` от `master`; W2–W5 — каждая своя ветка.

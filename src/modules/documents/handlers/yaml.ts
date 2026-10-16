@@ -2,7 +2,7 @@
  * YAML → `DocumentIR` (текстовая группа).
  */
 import { parse as parseYaml } from "yaml";
-import { boundText } from "../bound";
+import { boundLine, boundText } from "../bound";
 import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
 import { emptyIR } from "../ir";
 
@@ -20,7 +20,7 @@ export const yamlHandler: DocumentHandler = {
       const data: unknown = parseYaml(text);
       if (data && typeof data === "object" && !Array.isArray(data)) {
         for (const k of Object.keys(data as Record<string, unknown>)) {
-          ir.outline.push({ id: `k:${k}`, level: 1, title: k, kind: "section" });
+          ir.outline.push({ id: `k:${k}`, level: 1, title: boundLine(k, ctx.limits), kind: "section" });
         }
       }
     } catch (err) {

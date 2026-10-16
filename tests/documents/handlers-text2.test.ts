@@ -40,6 +40,13 @@ describe("json/yaml/xml/html", () => {
     expect(ir.outline[0].title).toContain("[...truncated to");
   });
 
+  it("огромный JSON-ключ обрезается с маркером в outline (INV-D4)", async () => {
+    const long = "K".repeat(DEFAULT_DOC_LIMITS.maxChars + 1_000);
+    const ir = await jsonHandler.parse(ctx, src("c.json", `{"${long}":1}`));
+    expect(ir.outline[0].title).toContain("[...truncated to");
+    expect(ir.outline[0].title.length).toBeLessThan(long.length);
+  });
+
   it("невалидный JSON логирует warn и помечает degraded (INV-D5)", async () => {
     const warn = vi.fn();
     const ir = await jsonHandler.parse({ logger: loggerWith(warn), limits: DEFAULT_DOC_LIMITS }, src("c.json", "{не json"));

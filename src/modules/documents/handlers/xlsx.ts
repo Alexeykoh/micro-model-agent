@@ -6,7 +6,7 @@
  * На каждый лист: блок-таблица + узел outline (`kind:"sheet"`). Нет worksheet-
  * частей → `meta.degraded`, без исключения (INV-D5). Политику не реализует (INV-D6).
  */
-import { boundTable } from "../bound";
+import { boundLine, boundTable } from "../bound";
 import {
   detectHead,
   type DocLimits,
@@ -204,7 +204,7 @@ export const xlsxHandler: DocumentHandler = {
       const grid = readSheet(xml, shared, ctx.limits);
       if (!tableHasContent(grid)) return; // пустой лист не даёт пустой таблицы (INV-D5)
       emitted++;
-      ir.outline.push({ id: `sheet:${ref.name}`, level: 1, title: ref.name, kind: "sheet" });
+      ir.outline.push({ id: `sheet:${ref.name}`, level: 1, title: boundLine(ref.name, ctx.limits), kind: "sheet" });
       const table: DocTable = boundTable(
         {
           caption: ref.name,

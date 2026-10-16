@@ -6,7 +6,9 @@
 import type { DocumentHandler, HandlerGroup } from "../handler";
 import { csvHandler, tsvHandler } from "./csv";
 import { docxHandler } from "./docx";
+import { geojsonHandler, gpxHandler } from "./geo";
 import { htmlHandler } from "./html";
+import { imageHandler } from "./image";
 import { jsonHandler } from "./json";
 import { mdHandler } from "./md";
 import { odsHandler } from "./ods";
@@ -26,7 +28,8 @@ export const ACTIVE_GROUPS: readonly HandlerGroup[] = [
   "spreadsheet",
   "office",
   "pdf",
-  // "image", "geo",  // → W4
+  "image",
+  "geo",
 ];
 
 /** Точный список обработчиков (убрал строку — формат выключен). */
@@ -44,5 +47,7 @@ export const HANDLERS: readonly DocumentHandler[] = [
   odtHandler,
   pptxHandler,
   pdfHandler,
-  // imageHandler, geoHandler,                        // → W4
+  imageHandler,
+  geojsonHandler,
+  gpxHandler,
 ];

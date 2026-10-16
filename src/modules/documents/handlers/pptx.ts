@@ -7,7 +7,7 @@
  * `meta.pages` — число слайдов, `meta.title` — display. Нет частей слайдов →
  * `meta.degraded` (INV-D5). Политику не реализует (INV-D6).
  */
-import { boundText } from "../bound";
+import { boundLine, boundText } from "../bound";
 import { detectHead, type DocSource, type DocumentHandler, type ParseContext } from "../handler";
 import { emptyIR, type DocumentIR } from "../ir";
 import { child, findAll, readOoxml, textOf } from "./ooxml";
@@ -65,7 +65,7 @@ export const pptxHandler: DocumentHandler = {
     for (const { name, num } of slides) {
       const text = slideText(ooxml.xml(name));
       const title = text.split("\n").find((line) => line !== "") ?? `Slide ${num}`;
-      ir.outline.push({ id: `slide:${num}`, level: 1, title, kind: "slide" });
+      ir.outline.push({ id: `slide:${num}`, level: 1, title: boundLine(title, ctx.limits), kind: "slide" });
       if (text) {
         ir.blocks.push({ kind: "paragraph", text: boundText(text, ctx.limits) });
         emitted++;
