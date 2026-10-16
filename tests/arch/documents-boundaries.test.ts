@@ -88,3 +88,16 @@ describe("architecture: documents boundaries (INV-D2)", () => {
     ]);
   });
 });
+
+describe("architecture: documents dependency isolation (INV-D8)", () => {
+  it("fast-xml-parser импортируется только из handlers/ooxml.ts", () => {
+    const files = collectFiles(SRC_DIR, REPO_ROOT, [".ts"], { skipTests: true });
+    const importers = files
+      .filter((f) => /["']fast-xml-parser["']/.test(f.text))
+      .map((f) => f.path);
+    expect(
+      importers,
+      `INV-D8: fast-xml-parser импортируется только из handlers/ooxml.ts:\n${importers.join("\n")}`,
+    ).toEqual(["src/modules/documents/handlers/ooxml.ts"]);
+  });
+});
