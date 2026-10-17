@@ -10,6 +10,7 @@ import { basename, join, relative } from "path";
 import { angularMajorVersion, findAngularRoot } from "./detect";
 import { COMMON_TEMPLATE_RE, parseTs, templateOf, walk } from "./parse";
 import { analyzeReferences } from "./references";
+import { analyzeUsage } from "./usage";
 
 /** NgModule и его метаданные в терминах `@NgModule({...})`. */
 export interface NgModuleInfo {
@@ -36,6 +37,10 @@ export interface ClassInfo {
   path: string;
   /** Для пайпов: `pure: false` в `@Pipe`. */
   impure?: boolean;
+  /** Селектор компонента/директивы (`@Component({ selector })`). */
+  selector?: string;
+  /** Имя пайпа (`@Pipe({ name })`). */
+  pipeName?: string;
 }
 
 /** Находка анализа. */
@@ -62,7 +67,9 @@ export function analyzeWorkspace(baseDir: string): Analysis {
   const byPath = new Map<string, string>();
 
   for (const file of files) {
-    if (!file.endsWith(".ts")) continue;
+    const isTs = file.endsWith(".ts");
+    const isHtml = file.endsWith(".html");
+    if (!isTs && !isHtml) continue;
     let content: string;
     try {
       content = readFileSync(file, "utf-8");
@@ -70,7 +77,9 @@ export function analyzeWorkspace(baseDir: string): Analysis {
       continue;
     }
     const rel = relative(root, file).replace(/\\/g, "/");
+    // `.html` нужен слою использования (F6): селекторы компонентов живут в шаблонах.
     byPath.set(rel, content);
+    if (!isTs) continue;
     // Спеки/тесты не задают прод-структуру: их `export class` — часто host-компоненты.
     if (/\.(spec|test)\.ts$/.test(rel)) continue;
     const parsed = parseTs(rel, content);
@@ -140,6 +149,7 @@ export function analyzeWorkspace(baseDir: string): Analysis {
   }
 
   findings.push(...analyzeReferences(byPath, modules));
+  findings.push(...analyzeUsage(classes, modules, byPath));
 
   return { root, major: angularMajorVersion(root), modules, classes, findings };
 }

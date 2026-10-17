@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   - `angular_check` also carries a lightweight reference layer (`references.ts`):
     it flags a dead `@Injectable` service (reachable from no other file — direct
     use, path import, or barrel re-export) and circular NgModule imports;
+  - a usage layer (`usage.ts`) answers "is this still used?" for refactoring:
+    flags a declared but otherwise unreferenced component/directive/pipe by
+    matching its selector inside templates, its pipe `name`, or a class reference
+    outside declaration lists / imports; module `exports` (public API) and
+    `bootstrap` components are never flagged;
   - low-level parsing is factored into `parse.ts` (the ≤300-line rule), with
     `.spec`/`.test` files excluded from the production class graph, files with
     multiple `export class` skipped for safety, and inline barrel arrays
@@ -35,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
     `@if`/`@for`/`@switch`/`@defer`/`@let`), plus a subscription-leak warning;
   - the rule matrix is pinned by a labelled evaluation corpus
     (`tests/angular11-eval.test.ts`): every known defect must be caught, every
-    clean sample must stay silent (recall 30/30, false-positive 0/17);
+    clean sample must stay silent (recall 32/32, false-positive 0/22);
   - exposes `angular_scaffold` — generates classic boilerplate
     (component/pipe/module/service/directive/guard), files only; it never wires
     itself into an NgModule, and refuses to overwrite without `force: true`.

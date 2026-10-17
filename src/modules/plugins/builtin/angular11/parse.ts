@@ -135,14 +135,32 @@ export function parseTs(
     };
   }
   if (content.includes("@Component(")) {
-    return { klass: { name: className, kind: "component", path: relPath } };
+    return {
+      klass: { name: className, kind: "component", path: relPath, selector: selectorOf(content) },
+    };
   }
   if (content.includes("@Directive(")) {
-    return { klass: { name: className, kind: "directive", path: relPath } };
+    return {
+      klass: { name: className, kind: "directive", path: relPath, selector: selectorOf(content) },
+    };
   }
   if (content.includes("@Pipe(")) {
     const impure = /pure\s*:\s*false/.test(content);
-    return { klass: { name: className, kind: "pipe", path: relPath, impure } };
+    return {
+      klass: { name: className, kind: "pipe", path: relPath, impure, pipeName: pipeNameOf(content) },
+    };
   }
   return {};
+}
+
+/** Селектор из `@Component/@Directive({ selector: '...' })`. */
+function selectorOf(content: string): string | undefined {
+  const match = content.match(/selector\s*:\s*['"`]([^'"`]+)['"`]/);
+  return match ? match[1] : undefined;
+}
+
+/** Имя пайпа из `@Pipe({ name: '...' })`. */
+function pipeNameOf(content: string): string | undefined {
+  const match = content.match(/\bname\s*:\s*['"`]([^'"`]+)['"`]/);
+  return match ? match[1] : undefined;
 }

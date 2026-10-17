@@ -46,7 +46,7 @@ interface CheckCase {
   files: Record<string, string>;
 }
 
-const APP_MODULE = `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\n@NgModule({ declarations: [XComponent], imports: [BrowserModule] })\nexport class AppModule {}\n`;
+const APP_MODULE = `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\n@NgModule({ declarations: [XComponent], imports: [BrowserModule], bootstrap: [XComponent] })\nexport class AppModule {}\n`;
 const COMPONENT = `import { Component } from '@angular/core';\n@Component({ selector: 'app-x', template: '' })\nexport class XComponent {}\n`;
 
 // ---- write-check: .ts/.html ----
@@ -133,7 +133,7 @@ const checkCases: CheckCase[] = [
       "src/app/app.module.ts": APP_MODULE,
       "src/app/x.component.ts": COMPONENT,
       "src/app/shared/shared.module.ts": `import { NgModule } from '@angular/core';\nimport { CommonModule } from '@angular/common';\n@NgModule({ imports: [CommonModule], exports: [CommonModule] })\nexport class SharedModule {}\n`,
-      "src/app/f/f.module.ts": `import { NgModule } from '@angular/core';\nimport { SharedModule } from '../shared/shared.module';\nimport { FComponent } from './f.component';\n@NgModule({ declarations: [FComponent], imports: [SharedModule] })\nexport class FModule {}\n`,
+      "src/app/f/f.module.ts": `import { NgModule } from '@angular/core';\nimport { SharedModule } from '../shared/shared.module';\nimport { FComponent } from './f.component';\n@NgModule({ declarations: [FComponent], imports: [SharedModule], exports: [FComponent] })\nexport class FModule {}\n`,
       "src/app/f/f.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-f', template: \`<div *ngIf="a"></div>\` })\nexport class FComponent {}\n`,
     },
   },
@@ -157,7 +157,7 @@ const checkCases: CheckCase[] = [
     id: "clean-barrel-resolved",
     kind: "clean",
     files: {
-      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nconst COMPONENTS = [XComponent];\n@NgModule({ declarations: COMPONENTS, imports: [BrowserModule] })\nexport class AppModule {}\n`,
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nconst COMPONENTS = [XComponent];\n@NgModule({ declarations: COMPONENTS, imports: [BrowserModule], bootstrap: [XComponent] })\nexport class AppModule {}\n`,
       "src/app/x.component.ts": COMPONENT,
     },
   },
@@ -201,7 +201,7 @@ const checkCases: CheckCase[] = [
     id: "clean-barrel-provider-service",
     kind: "clean",
     files: {
-      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nimport { fakeBackendProvider } from './_helpers';\n@NgModule({ declarations: [XComponent], imports: [BrowserModule], providers: [fakeBackendProvider] })\nexport class AppModule {}\n`,
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nimport { fakeBackendProvider } from './_helpers';\n@NgModule({ declarations: [XComponent], imports: [BrowserModule], providers: [fakeBackendProvider], bootstrap: [XComponent] })\nexport class AppModule {}\n`,
       "src/app/x.component.ts": COMPONENT,
       "src/app/_helpers/fake-backend.ts": `import { Injectable } from '@angular/core';\n@Injectable()\nexport class FakeBackendInterceptor {}\nexport const fakeBackendProvider = { useClass: FakeBackendInterceptor };\n`,
       "src/app/_helpers/index.ts": `export * from './fake-backend';\n`,
@@ -225,6 +225,70 @@ const checkCases: CheckCase[] = [
       "src/app/x.component.ts": COMPONENT,
       "src/app/a/a.module.ts": `import { NgModule } from '@angular/core';\nimport { BModule } from '../b/b.module';\n@NgModule({ declarations: [], imports: [BModule] })\nexport class AModule {}\n`,
       "src/app/b/b.module.ts": `import { NgModule } from '@angular/core';\n@NgModule({ declarations: [], imports: [] })\nexport class BModule {}\n`,
+    },
+  },
+  {
+    id: "dead-component",
+    kind: "catch",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nimport { DeadComponent } from './dead.component';\n@NgModule({ declarations: [XComponent, DeadComponent], imports: [BrowserModule], bootstrap: [XComponent] })\nexport class AppModule {}\n`,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/dead.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-dead', template: '' })\nexport class DeadComponent {}\n`,
+    },
+  },
+  {
+    id: "clean-component-used-by-selector",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nimport { UsedComponent } from './used.component';\n@NgModule({ declarations: [XComponent, UsedComponent], imports: [BrowserModule], bootstrap: [XComponent] })\nexport class AppModule {}\n`,
+      "src/app/x.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-x', template: '<app-used></app-used>' })\nexport class XComponent {}\n`,
+      "src/app/used.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-used', template: '' })\nexport class UsedComponent {}\n`,
+    },
+  },
+  {
+    id: "clean-component-used-by-route",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nimport { RoutedComponent } from './routed.component';\n@NgModule({ declarations: [XComponent, RoutedComponent], imports: [BrowserModule], bootstrap: [XComponent] })\nexport class AppModule {}\n`,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/routed.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-routed', template: '' })\nexport class RoutedComponent {}\n`,
+      "src/app/app-routing.module.ts": `import { NgModule } from '@angular/core';\nimport { RouterModule, Routes } from '@angular/router';\nimport { RoutedComponent } from './routed.component';\nconst routes: Routes = [{ path: 'r', component: RoutedComponent }];\n@NgModule({ imports: [RouterModule.forRoot(routes)] })\nexport class AppRoutingModule {}\n`,
+    },
+  },
+  {
+    id: "dead-pipe",
+    kind: "catch",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nimport { DeadPipe } from './dead.pipe';\n@NgModule({ declarations: [XComponent, DeadPipe], imports: [BrowserModule], bootstrap: [XComponent] })\nexport class AppModule {}\n`,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/dead.pipe.ts": `import { Pipe } from '@angular/core';\n@Pipe({ name: 'deadpipe' })\nexport class DeadPipe {}\n`,
+    },
+  },
+  {
+    id: "clean-pipe-used",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nimport { UsedPipe } from './used.pipe';\n@NgModule({ declarations: [XComponent, UsedPipe], imports: [BrowserModule], bootstrap: [XComponent] })\nexport class AppModule {}\n`,
+      "src/app/x.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-x', template: '{{ v | usedpipe }}' })\nexport class XComponent {}\n`,
+      "src/app/used.pipe.ts": `import { Pipe } from '@angular/core';\n@Pipe({ name: 'usedpipe' })\nexport class UsedPipe {}\n`,
+    },
+  },
+  {
+    id: "clean-exported-component",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { SharedModule } from './shared/shared.module';\nimport { XComponent } from './x.component';\n@NgModule({ declarations: [XComponent], imports: [BrowserModule, SharedModule], bootstrap: [XComponent] })\nexport class AppModule {}\n`,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/shared/shared.module.ts": `import { NgModule } from '@angular/core';\nimport { WidgetComponent } from './widget.component';\n@NgModule({ declarations: [WidgetComponent], exports: [WidgetComponent] })\nexport class SharedModule {}\n`,
+      "src/app/shared/widget.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-widget', template: '' })\nexport class WidgetComponent {}\n`,
+    },
+  },
+  {
+    id: "clean-bootstrap-component",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { AppComponent } from './app.component';\n@NgModule({ declarations: [AppComponent], imports: [BrowserModule], bootstrap: [AppComponent] })\nexport class AppModule {}\n`,
+      "src/app/app.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-root', template: '' })\nexport class AppComponent {}\n`,
     },
   },
 ];
