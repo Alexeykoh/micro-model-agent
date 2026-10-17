@@ -31,6 +31,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   on through the existing plugin gate (`mma plugins enable angular11`, `/plugins`,
   web toggle). Registered next to `lint-on-write`/`notify`.
   Spec: `docs/specs/2026-10-16-angular11-plugin-design.md`.
+
+### Fixed
+
+- **`angular11` plugin — false positives found by the live check**
+  (2026-10-17: real Angular 11 workspace + `qwen/qwen3.5-9b`):
+  - `angular_check` no longer warns *"does not import CommonModule"* when a
+    feature module imports a shared module that re-exports `CommonModule`
+    (transitive `exports` closure is now resolved);
+  - `angular_check` suppresses the *"not declared in any NgModule"* finding when
+    `declarations`/`imports` are given as arrays/spreads (`declarations: FOO`,
+    `[...A, B]`) — the member list is unknowable there and the old code produced
+    mass false positives; a genuinely undeclared class is still reported when
+    every module declares inline;
+  - the write-check subscription-leak warning is suppressed for self-completing
+    subscriptions (`.pipe(first())`, `.pipe(take(1))`) — the common HTTP pattern.
+
 ## [0.7.0] - 2026-10-17
 
 ### Added

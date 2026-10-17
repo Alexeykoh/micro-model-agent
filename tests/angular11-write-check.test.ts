@@ -63,6 +63,22 @@ describe("angular11 rules — modern API is flagged", () => {
     expect(checkContent(".ts", component)).toEqual([]);
     expect(checkContent(".html", `<div *ngIf="visible"><span *ngFor="let i of items">{{ i | date }}</span></div>`)).toEqual([]);
   });
+
+  // Регресс живой проверки (2026-10-17): типовой HTTP-паттерн `.pipe(first())`
+  // завершает подписку сам — это не утечка.
+  it("stays silent on self-completing subscriptions (first()/take(1))", () => {
+    const first = `@Component({ selector: 'x', templateUrl: './x.component.html' })\nexport class X {\n  ngOnInit() { this.svc.getAll().pipe(first()).subscribe((d) => this.d = d); }\n}`;
+    expect(checkContent(".ts", first)).toEqual([]);
+    const take = `@Component({ selector: 'x', templateUrl: './x.component.html' })\nexport class X {\n  ngOnInit() { this.svc.getAll().pipe(take(1)).subscribe((d) => this.d = d); }\n}`;
+    expect(checkContent(".ts", take)).toEqual([]);
+  });
+
+  it("still warns about a bare subscription without teardown", () => {
+    const content = `@Component({ selector: 'x', templateUrl: './x.component.html' })\nexport class X {\n  ngOnInit() { this.svc.stream().subscribe((d) => this.d = d); }\n}`;
+    expect(
+      checkContent(".ts", content).some((f) => f.severity === "warn" && /subscription leak/.test(f.message)),
+    ).toBe(true);
+  });
 });
 
 describe("angular11 write-check — onAfterTool", () => {

@@ -154,3 +154,56 @@ export class FeatureModule {}
     expect(text).toMatch(/uses Angular 15/);
   });
 });
+
+// Регрессы живой проверки на реальном Angular 11 (2026-10-17): типовые паттерны
+// не должны давать ложных находок.
+describe("angular11 check — real-world false-positive guards", () => {
+  it("does not warn when a feature module imports a shared module that re-exports CommonModule", () => {
+    const dir = workspace({
+      "src/app/app.module.ts": ROOT_MODULE,
+      "src/app/app.component.ts": "export class AppComponent {}",
+      "src/app/shared/shared.module.ts": `
+import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+@NgModule({ imports: [CommonModule], exports: [CommonModule] })
+export class SharedModule {}
+`,
+      "src/feature/feature.module.ts": `
+import { NgModule } from '@angular/core';
+import { SharedModule } from '../shared/shared.module';
+import { FooComponent } from './foo.component';
+@NgModule({ declarations: [FooComponent], imports: [SharedModule] })
+export class FeatureModule {}
+`,
+      "src/feature/foo.component.ts": `
+import { Component } from '@angular/core';
+@Component({ selector: 'app-foo', templateUrl: './foo.component.html' })
+export class FooComponent {}
+`,
+      "src/feature/foo.component.html": `<div *ngIf="x">hello</div>`,
+    });
+
+    const messages = analyzeWorkspace(dir).findings.map((f) => f.message).join("\n");
+    expect(messages).not.toMatch(/does not import CommonModule/);
+  });
+
+  it("does not flag declarations/imports given as barrel arrays (unresolvable)", () => {
+    const dir = workspace({
+      "src/app/app.module.ts": `
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+const COMPONENTS = [];
+@NgModule({ declarations: COMPONENTS, imports: [BrowserModule] })
+export class AppModule {}
+`,
+      "src/lone/lone.component.ts": `
+import { Component } from '@angular/core';
+@Component({ selector: 'app-lone', template: '' })
+export class LoneComponent {}
+`,
+    });
+
+    const messages = analyzeWorkspace(dir).findings.map((f) => f.message).join("\n");
+    expect(messages).not.toMatch(/LoneComponent/);
+  });
+});

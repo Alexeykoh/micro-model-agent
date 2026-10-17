@@ -27,6 +27,15 @@ export interface NgModuleInfo {
   declarations: string[];
   imports: string[];
   exports: string[];
+  /**
+   * Разобраны ли `declarations` как inline-массив. `false` — значение задано
+   * переменной/спредом (`declarations: COMPONENTS`, `[...A, B]`): тогда список
+   * компонентов неизвестен, и проверку «класс не объявлен» запускать нельзя
+   * (иначе — массовые ложные срабатывания).
+   */
+  declarationsResolved: boolean;
+  /** Разобраны ли `imports` как inline-массив (та же причина, что у declarations). */
+  importsResolved: boolean;
 }
 
 /** Класс-кандидат Angular (компонент/директива/пайп). */
@@ -53,14 +62,21 @@ export interface Analysis {
   findings: Finding[];
 }
 
-/** Список элементов из `key: [a, b, c]` внутри текста. */
-function arrayItems(text: string, key: string): string[] {
+/** Список элементов из `key: [a, b, c]` и признак того, что он разобран. */
+function readArray(text: string, key: string): { items: string[]; resolved: boolean } {
   const match = text.match(new RegExp(`${key}\\s*:\\s*\\[([\\s\\S]*?)\\]`));
-  if (!match) return [];
-  return match[1]
+  if (!match) {
+    // Ключа нет вовсе (нормально) или он задан не inline-массивом (`key: VAR`) — неразрешимо.
+    const hasKey = new RegExp(`\\b${key}\\s*:`).test(text);
+    return { items: [], resolved: !hasKey };
+  }
+  const items = match[1]
     .split(/[\n,]/)
     .map((s) => s.trim())
     .filter(Boolean);
+  // Спред (`...FOO`) означает, что часть элементов нам неизвестна.
+  const resolved = !items.some((item) => item.startsWith("..."));
+  return { items, resolved };
 }
 
 /** Имя экспортируемого класса: `export class Foo`. */
@@ -126,13 +142,18 @@ function parseTs(relPath: string, content: string): { module?: NgModuleInfo; kla
   const className = classExport(content);
   if (!className) return {};
   if (content.includes("@NgModule")) {
+    const declarations = readArray(content, "declarations");
+    const imports = readArray(content, "imports");
+    const exports = readArray(content, "exports");
     return {
       module: {
         path: relPath,
         className,
-        declarations: arrayItems(content, "declarations"),
-        imports: arrayItems(content, "imports"),
-        exports: arrayItems(content, "exports"),
+        declarations: declarations.items,
+        imports: imports.items,
+        exports: exports.items,
+        declarationsResolved: declarations.resolved,
+        importsResolved: imports.resolved,
       },
     };
   }
@@ -178,8 +199,12 @@ export function analyzeWorkspace(baseDir: string): Analysis {
     for (const name of mod.declarations) declared.add(name);
   }
 
+  // Если хоть один модуль задаёт declarations переменной/спредом, список
+  // объявленных классов неполон — проверку «не объявлен» не запускаем вовсе.
+  const declarationsComplete = modules.every((mod) => mod.declarationsResolved);
+
   for (const klass of classes) {
-    if (!declared.has(klass.name)) {
+    if (declarationsComplete && !declared.has(klass.name)) {
       findings.push({
         severity: "error",
         message: `${klass.kind} "${klass.name}" (${klass.path}) is not declared in any NgModule`,
@@ -193,6 +218,10 @@ export function analyzeWorkspace(baseDir: string): Analysis {
     }
   }
 
+  // Модули, которые (транзитивно) реэкспортируют CommonModule: импорт любого из них
+  // даёт общие директивы/пайпы, даже без прямого `imports: [CommonModule]`.
+  const reexportsCommon = modulesReexportingCommon(modules);
+
   for (const mod of modules) {
     const isRoot = basename(mod.path) === "app.module.ts";
     if (mod.imports.includes("BrowserModule") && !isRoot) {
@@ -201,7 +230,13 @@ export function analyzeWorkspace(baseDir: string): Analysis {
         message: `BrowserModule is imported by feature module "${mod.className}" (${mod.path}) — only the root module may import it`,
       });
     }
-    if (mod.imports.includes("BrowserModule") || mod.imports.includes("CommonModule")) continue;
+    // imports заданы переменной — судить о наличии CommonModule нельзя.
+    if (!mod.importsResolved) continue;
+    const hasCommon =
+      mod.imports.includes("BrowserModule") ||
+      mod.imports.includes("CommonModule") ||
+      mod.imports.some((name) => reexportsCommon.has(name));
+    if (hasCommon) continue;
     // Фича использует общие директивы/пайпы в шаблоне, но не импортирует CommonModule.
     for (const name of mod.declarations) {
       const klass = classes.find((k) => k.name === name && k.kind === "component");
@@ -220,4 +255,23 @@ export function analyzeWorkspace(baseDir: string): Analysis {
   }
 
   return { root, major: angularMajorVersion(root), modules, classes, findings };
+}
+
+/** Собрать имена модулей, которые (транзитивно через `exports`) реэкспортируют CommonModule. */
+function modulesReexportingCommon(modules: NgModuleInfo[]): Set<string> {
+  const result = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const mod of modules) {
+      if (result.has(mod.className)) continue;
+      const exportsCommon =
+        mod.exports.includes("CommonModule") || mod.exports.some((name) => result.has(name));
+      if (exportsCommon) {
+        result.add(mod.className);
+        changed = true;
+      }
+    }
+  }
+  return result;
 }

@@ -87,6 +87,9 @@ function hasModernCoreImport(content: string): boolean {
   return false;
 }
 
+/** Операторы, которые сами завершают подписку — отписка/`ngOnDestroy` не нужны. */
+const SELF_COMPLETING_RE = /\b(first|take)\s*\(\s*(1\s*)?\)/;
+
 /**
  * Проверить содержимое записанного файла на идиомы Angular 11.
  * Пусто — файл чист (или расширение не наше).
@@ -99,12 +102,14 @@ export function checkContent(ext: ".ts" | ".html", content: string): Finding[] {
       message: "imports a 14+/17+ API from `@angular/core` (signal/effect/inject/input/output/model) — not available in Angular 11.",
     });
   }
-  // Warn: подписка в компоненте без отписки (нет ngOnDestroy в файле).
+  // Warn: подписка в компоненте без отписки (нет ngOnDestroy) и без само-завершения
+  // (`first()`/`take(1)` завершают поток сами — как в типовых HTTP-запросах).
   if (
     ext === ".ts" &&
     /@Component\(/.test(content) &&
     /\.subscribe\s*\(/.test(content) &&
-    !/ngOnDestroy\s*\(/.test(content)
+    !/ngOnDestroy\s*\(/.test(content) &&
+    !SELF_COMPLETING_RE.test(content)
   ) {
     findings.push({
       severity: "warn",
