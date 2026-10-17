@@ -138,11 +138,93 @@ const checkCases: CheckCase[] = [
     },
   },
   {
-    id: "clean-barrel-declarations",
-    kind: "clean",
+    id: "barrel-empty-undeclared",
+    kind: "catch",
     files: {
       "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nconst COMPONENTS = [];\n@NgModule({ declarations: COMPONENTS, imports: [BrowserModule] })\nexport class AppModule {}\n`,
       "src/app/lone.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-lone', template: '' })\nexport class LoneComponent {}\n`,
+    },
+  },
+  {
+    id: "clean-barrel-unresolvable",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\n@NgModule({ declarations: SHARED_COMPONENTS, imports: [BrowserModule] })\nexport class AppModule {}\n`,
+      "src/app/lone.component.ts": `import { Component } from '@angular/core';\n@Component({ selector: 'app-lone', template: '' })\nexport class LoneComponent {}\n`,
+    },
+  },
+  {
+    id: "clean-barrel-resolved",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nconst COMPONENTS = [XComponent];\n@NgModule({ declarations: COMPONENTS, imports: [BrowserModule] })\nexport class AppModule {}\n`,
+      "src/app/x.component.ts": COMPONENT,
+    },
+  },
+  {
+    id: "clean-spec-not-flagged",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": APP_MODULE,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/x.component.spec.ts": `import { Component } from '@angular/core';\nimport { TestBed } from '@angular/core/testing';\n@Component({ selector: 'app-host', template: '' })\nexport class HostComponent {}\ndescribe('x', () => { it('t', () => TestBed.configureTestingModule({})); });\n`,
+    },
+  },
+  {
+    id: "clean-multi-class",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": APP_MODULE,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/multi.ts": `import { Component, Directive } from '@angular/core';\n@Component({ selector: 'a', template: '' })\nexport class MultiComponent {}\n@Directive({ selector: '[b]' })\nexport class MultiDirective {}\n`,
+    },
+  },
+  {
+    id: "unused-service",
+    kind: "catch",
+    files: {
+      "src/app/app.module.ts": APP_MODULE,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/dead.service.ts": `import { Injectable } from '@angular/core';\n@Injectable({ providedIn: 'root' })\nexport class DeadService {}\n`,
+    },
+  },
+  {
+    id: "clean-used-service",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": APP_MODULE,
+      "src/app/x.component.ts": `import { Component } from '@angular/core';\nimport { UsedService } from './used.service';\n@Component({ selector: 'app-x', template: '' })\nexport class XComponent { constructor(private svc: UsedService) {} }\n`,
+      "src/app/used.service.ts": `import { Injectable } from '@angular/core';\n@Injectable()\nexport class UsedService {}\n`,
+    },
+  },
+  {
+    id: "clean-barrel-provider-service",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": `import { NgModule } from '@angular/core';\nimport { BrowserModule } from '@angular/platform-browser';\nimport { XComponent } from './x.component';\nimport { fakeBackendProvider } from './_helpers';\n@NgModule({ declarations: [XComponent], imports: [BrowserModule], providers: [fakeBackendProvider] })\nexport class AppModule {}\n`,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/_helpers/fake-backend.ts": `import { Injectable } from '@angular/core';\n@Injectable()\nexport class FakeBackendInterceptor {}\nexport const fakeBackendProvider = { useClass: FakeBackendInterceptor };\n`,
+      "src/app/_helpers/index.ts": `export * from './fake-backend';\n`,
+    },
+  },
+  {
+    id: "cyclic-modules",
+    kind: "catch",
+    files: {
+      "src/app/app.module.ts": APP_MODULE,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/a/a.module.ts": `import { NgModule } from '@angular/core';\nimport { BModule } from '../b/b.module';\n@NgModule({ declarations: [], imports: [BModule] })\nexport class AModule {}\n`,
+      "src/app/b/b.module.ts": `import { NgModule } from '@angular/core';\nimport { AModule } from '../a/a.module';\n@NgModule({ declarations: [], imports: [AModule] })\nexport class BModule {}\n`,
+    },
+  },
+  {
+    id: "clean-linear-modules",
+    kind: "clean",
+    files: {
+      "src/app/app.module.ts": APP_MODULE,
+      "src/app/x.component.ts": COMPONENT,
+      "src/app/a/a.module.ts": `import { NgModule } from '@angular/core';\nimport { BModule } from '../b/b.module';\n@NgModule({ declarations: [], imports: [BModule] })\nexport class AModule {}\n`,
+      "src/app/b/b.module.ts": `import { NgModule } from '@angular/core';\n@NgModule({ declarations: [], imports: [] })\nexport class BModule {}\n`,
     },
   },
 ];

@@ -187,7 +187,26 @@ export class FooComponent {}
     expect(messages).not.toMatch(/does not import CommonModule/);
   });
 
-  it("does not flag declarations/imports given as barrel arrays (unresolvable)", () => {
+  it("does not flag declarations given as an unresolvable barrel variable", () => {
+    const dir = workspace({
+      "src/app/app.module.ts": `
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+@NgModule({ declarations: SHARED_COMPONENTS, imports: [BrowserModule] })
+export class AppModule {}
+`,
+      "src/lone/lone.component.ts": `
+import { Component } from '@angular/core';
+@Component({ selector: 'app-lone', template: '' })
+export class LoneComponent {}
+`,
+    });
+
+    const messages = analyzeWorkspace(dir).findings.map((f) => f.message).join("\n");
+    expect(messages).not.toMatch(/LoneComponent/);
+  });
+
+  it("resolves an inline barrel `const X = [...]` and flags a genuinely undeclared class", () => {
     const dir = workspace({
       "src/app/app.module.ts": `
 import { NgModule } from '@angular/core';
@@ -204,6 +223,6 @@ export class LoneComponent {}
     });
 
     const messages = analyzeWorkspace(dir).findings.map((f) => f.message).join("\n");
-    expect(messages).not.toMatch(/LoneComponent/);
+    expect(messages).toMatch(/LoneComponent/);
   });
 });

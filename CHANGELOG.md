@@ -20,6 +20,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
     declarations, missing `CommonModule` in a feature module, `BrowserModule`
     in a lazy module, undeclared components/pipes/directives, impure pipes); a
     non-11 major version is a warning, not a stop;
+  - `angular_check` also carries a lightweight reference layer (`references.ts`):
+    it flags a dead `@Injectable` service (reachable from no other file — direct
+    use, path import, or barrel re-export) and circular NgModule imports;
+  - low-level parsing is factored into `parse.ts` (the ≤300-line rule), with
+    `.spec`/`.test` files excluded from the production class graph, files with
+    multiple `export class` skipped for safety, and inline barrel arrays
+    (`const X = [...]`) resolved;
   - checks writes (`onAfterTool`) for 14+/16+/17+/19+ idioms in `.ts`/`.html`
     inside an Angular workspace (`standalone`, `takeUntilDestroyed`,
     `bootstrapApplication`, functional providers/guards, signal queries,
@@ -28,7 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
     `@if`/`@for`/`@switch`/`@defer`/`@let`), plus a subscription-leak warning;
   - the rule matrix is pinned by a labelled evaluation corpus
     (`tests/angular11-eval.test.ts`): every known defect must be caught, every
-    clean sample must stay silent (recall 22/22, false-positive 0/11);
+    clean sample must stay silent (recall 30/30, false-positive 0/17);
   - exposes `angular_scaffold` — generates classic boilerplate
     (component/pipe/module/service/directive/guard), files only; it never wires
     itself into an NgModule, and refuses to overwrite without `force: true`.
