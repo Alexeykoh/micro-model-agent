@@ -117,3 +117,46 @@ describe("angular11 write-check — onAfterTool", () => {
     expect(result.output).toBe("Written");
   });
 });
+
+// Матрица расширенных правил (2026-10-17): закрыты blind-spot'ы, выявленные
+// оценочным стендом `scripts/angular11-eval.ts`. Таблично — чтобы новые
+// возможности не «ломались обратно» молча.
+describe("angular11 rules — extended modern-API matrix", () => {
+  const mustCatchTs: Array<[string, string]> = [
+    ["bootstrapApplication", `bootstrapApplication(App);`],
+    ["DestroyRef import", `import { DestroyRef } from '@angular/core';`],
+    ["toSignal import", `import { toSignal } from '@angular/core/rxjs-interop';`],
+    ["afterNextRender", `afterNextRender(() => {});`],
+    ["functional guard type", `export const guard: CanActivateFn = () => true;`],
+    ["hostDirectives", `@Component({ hostDirectives: [T] }) export class C {}`],
+    ["NgOptimizedImage", `import { NgOptimizedImage } from '@angular/common';`],
+    ["provideAnimationsAsync", `provideAnimationsAsync();`],
+  ];
+  for (const [name, code] of mustCatchTs) {
+    it(`flags ${name}`, () => {
+      expect(checkContent(".ts", code).length).toBeGreaterThan(0);
+    });
+  }
+
+  const mustCatchHtml: Array<[string, string]> = [
+    ["@defer", `<div>@defer { <x-cmp /> }</div>`],
+    ["@let", `<div>@let n = a; {{ n }}</div>`],
+  ];
+  for (const [name, code] of mustCatchHtml) {
+    it(`flags ${name}`, () => {
+      expect(checkContent(".html", code).length).toBeGreaterThan(0);
+    });
+  }
+
+  // Ловушки на ложные срабатывания: то же слово, но НЕ modern-API.
+  const mustStaySilent: Array<[string, string]> = [
+    ["bootstrapModule (Angular 11 way)", `platformBrowserDynamic().bootstrapModule(AppModule);`],
+    ["a method literally named resource", `export class A { r() { return this.http.resource('x'); } }`],
+    ["the word DestroyRef inside a string", `export class X { d() { return 'DestroyRef is 16+'; } }`],
+  ];
+  for (const [name, code] of mustStaySilent) {
+    it(`stays silent on ${name}`, () => {
+      expect(checkContent(".ts", code)).toEqual([]);
+    });
+  }
+});

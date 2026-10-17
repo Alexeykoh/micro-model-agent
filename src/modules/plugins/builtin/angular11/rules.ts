@@ -25,7 +25,8 @@ const TS_RULES: RegexRule[] = [
     severity: "error",
   },
   {
-    pattern: /\bprovide(Router|HttpClient|Animations|ZoneChangeDetection)\s*\(/,
+    pattern:
+      /\bprovide(Router|HttpClient|Animations|AnimationsAsync|ZoneChangeDetection|ExperimentalZonelessChangeDetection|ClientHydration|ServerRendering)\s*\(/,
     message: "functional providers (`provideRouter`/`provideHttpClient`/…) are 14+. Import the NgModule (`RouterModule.forRoot`, `HttpClientModule`) instead.",
     severity: "error",
   },
@@ -39,11 +40,36 @@ const TS_RULES: RegexRule[] = [
     message: "`@Input({ required: true })` is 16+. Mark the input as required in the type/maintainer docs instead.",
     severity: "error",
   },
+  {
+    pattern: /\bbootstrapApplication\s*\(/,
+    message: "`bootstrapApplication` is 14+. Bootstrap the root NgModule with `platformBrowserDynamic().bootstrapModule(AppModule)`.",
+    severity: "error",
+  },
+  {
+    pattern: /\b(CanActivateFn|CanMatchFn|CanDeactivateFn|CanLoadFn|ResolveFn)\b/,
+    message: "functional guards/resolvers are 14+. Implement `CanActivate`/`CanMatch`/`Resolve` as class-based services with `@Injectable`.",
+    severity: "error",
+  },
+  {
+    pattern: /\bhostDirectives\s*:/,
+    message: "`hostDirectives` is 15+. In Angular 11 use a wrapper component/directive instead.",
+    severity: "error",
+  },
+  {
+    pattern: /\bNgOptimizedImage\b/,
+    message: "`NgOptimizedImage` is 15+. Use a plain `<img>` with `loading=\"lazy\"`.",
+    severity: "error",
+  },
+  {
+    pattern: /\b(afterNextRender|afterRender)\s*\(/,
+    message: "`afterRender`/`afterNextRender` are 16+. Use `ngAfterViewInit`.",
+    severity: "error",
+  },
 ];
 
-/** Импорт из `@angular/core` API 14+/17+ (по именам). */
+/** Импорт из `@angular/core` (и `/rxjs-interop`) API 14+/17+/19+ (по именам). */
 const CORE_IMPORT_RE =
-  /import\s*\{([^}]*)\}\s*from\s*['"]@angular\/core['"]/g;
+  /import\s*\{([^}]*)\}\s*from\s*['"]@angular\/core(?:\/rxjs-interop)?['"]/g;
 const CORE_MODERN_NAMES = new Set([
   "signal",
   "computed",
@@ -53,6 +79,16 @@ const CORE_MODERN_NAMES = new Set([
   "model",
   "inject",
   "takeUntilDestroyed",
+  "DestroyRef",
+  "afterNextRender",
+  "afterRender",
+  "resource",
+  "httpResource",
+  "toSignal",
+  "toObservable",
+  "untracked",
+  "runInInjectionContext",
+  "provideExperimentalZonelessChangeDetection",
 ]);
 
 /** Новый control-flow синтаксис шаблонов (17+). */
@@ -60,6 +96,16 @@ const HTML_RULES: RegexRule[] = [
   {
     pattern: /(^|[^\w])@(if|for|switch)\s*[({]/,
     message: "`@if`/`@for`/`@switch` control flow is 17+. Use `*ngIf`/`*ngFor`/`*ngSwitch` (import `CommonModule`).",
+    severity: "error",
+  },
+  {
+    pattern: /(^|[^\w])@defer\b/,
+    message: "`@defer` is 17+. Use lazy-loaded routes/modules instead.",
+    severity: "error",
+  },
+  {
+    pattern: /(^|[^\w])@let\s+/,
+    message: "`@let` is 18+. Compute the value in the component and bind it (`{{ value }}` / `[prop]`).",
     severity: "error",
   },
 ];

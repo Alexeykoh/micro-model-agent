@@ -20,10 +20,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
     declarations, missing `CommonModule` in a feature module, `BrowserModule`
     in a lazy module, undeclared components/pipes/directives, impure pipes); a
     non-11 major version is a warning, not a stop;
-  - checks writes (`onAfterTool`) for 14+/16+/17+ idioms in `.ts`/`.html` inside
-    an Angular workspace (`standalone`, `takeUntilDestroyed`, functional
-    providers, signal queries, modern `@angular/core` imports, `@if`/`@for`),
-    plus a subscription-leak warning;
+  - checks writes (`onAfterTool`) for 14+/16+/17+/19+ idioms in `.ts`/`.html`
+    inside an Angular workspace (`standalone`, `takeUntilDestroyed`,
+    `bootstrapApplication`, functional providers/guards, signal queries,
+    `DestroyRef`, `toSignal`/`toObservable`, `afterNextRender`, `hostDirectives`,
+    `NgOptimizedImage`, modern `@angular/core`(+`/rxjs-interop`) imports,
+    `@if`/`@for`/`@switch`/`@defer`/`@let`), plus a subscription-leak warning;
+  - the rule matrix is pinned by a labelled evaluation corpus
+    (`tests/angular11-eval.test.ts`): every known defect must be caught, every
+    clean sample must stay silent (recall 22/22, false-positive 0/11);
   - exposes `angular_scaffold` — generates classic boilerplate
     (component/pipe/module/service/directive/guard), files only; it never wires
     itself into an NgModule, and refuses to overwrite without `force: true`.
