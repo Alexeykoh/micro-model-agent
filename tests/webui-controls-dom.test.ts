@@ -91,3 +91,26 @@ describe("settings controlFor: select editor", () => {
     expect(sel.value).toBe("m1");
   });
 });
+
+const tagsDef = {
+  key: "security.contentScan.dangerousPatterns",
+  valueType: "json",
+  editor: { kind: "tags", placeholder: "eval\\(" },
+};
+
+describe("settings controlFor: tags editor", () => {
+  it("renders string chips and drops non-string entries", () => {
+    const node = controlFor(tagsDef, ["eval\\(", {}, "[object Object]"], ctx());
+    const chips = [...node.querySelectorAll(".tag-text")].map((n) => n.textContent);
+    expect(chips).toEqual(["eval\\(", "[object Object]"]);
+  });
+
+  it("posts only the remaining strings as a JSON array", () => {
+    let posted: unknown;
+    const node = controlFor(tagsDef, ["a", {}, "b"], ctx({ post: (v: unknown) => (posted = v) }));
+    const input = node.querySelector(".tags-add input") as HTMLInputElement;
+    input.value = "c";
+    input.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(posted).toBe(JSON.stringify(["a", "b", "c"]));
+  });
+});

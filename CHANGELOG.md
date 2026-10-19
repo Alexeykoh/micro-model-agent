@@ -51,6 +51,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **`GET /api/config` serialized `RegExp` config values as `{}`**, so the web
+  settings panel rendered `[object Object]` instead of the pattern
+  (e.g. `security.contentScan.dangerousPatterns`). The API now converts regular
+  expressions to their `.source` string for the wire while still masking
+  secrets; the in-memory config keeps real `RegExp` instances. Configs already
+  polluted by the old UI (a `[object Object]` pattern saved back) are repaired on
+  load: the restore path treats it as garbage and falls back to the defaults.
 - **`angular11` plugin — false positives found by the live check**
   (2026-10-17: real Angular 11 workspace + `qwen/qwen3.5-9b`):
   - `angular_check` no longer warns *"does not import CommonModule"* when a

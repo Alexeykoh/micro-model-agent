@@ -29,20 +29,17 @@ export const CONFIG_DOMAIN_DIR = join(CONFIG_DIR, "config");
 // ── Внутренние хелперы ────────────────────────────────────────────────────
 
 /**
- * Восстанавливает RegExp в dangerousPatterns, сериализованных как {}
- * (конфиги до 0.8.0) или как {__regex, source, flags} (новый формат).
- * Для записей без настоящего RegExp — фолбэк на дефолтные паттерны.
+ * Восстанавливает RegExp в `dangerousPatterns`; `"[object Object]"` — след
+ * старого wire-бага (`GET /api/config` отдавал `{}`) — считаем мусором.
  */
 function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[] {
   const fallback = (Array.isArray(defaults) ? defaults : []) as RegExp[];
-  if (!Array.isArray(patterns) || patterns.length === 0) {
-    return fallback;
-  }
-  return patterns.map((p, i) => {
-    if (p instanceof RegExp) return p;
+  if (!Array.isArray(patterns) || patterns.length === 0) return fallback;
+  const restored = patterns.map((p) => {
+    if (p instanceof RegExp) return p.source === "[object Object]" ? null : p;
     if (p && typeof p === "object") {
       const { source, flags } = p as { source?: string; flags?: string };
-      if (source && typeof source === "string") {
+      if (source && typeof source === "string" && source !== "[object Object]") {
         try {
           return new RegExp(source, flags || "");
         } catch {
@@ -50,8 +47,11 @@ function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[
         }
       }
     }
-    return fallback[i] || fallback[0] || (p as RegExp);
+    return null;
   });
+  // Весь набор — мусор: вернуть полные дефолты, а не первые N.
+  if (restored.every((p) => p === null)) return fallback;
+  return restored.map((p, i) => p ?? fallback[i] ?? fallback[0]);
 }
 
 /** Legacy npx-`args` LSP-серверов, предшествующие фикс. вызову. */

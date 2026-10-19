@@ -7,7 +7,11 @@ import type { Dict } from "../core/store/types.js";
 
 /** String chips with per-item remove and an inline "add" field. */
 export function tagsEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElement {
-  const items: string[] = Array.isArray(value) ? value.map(String) : [];
+  // Non-string entries (e.g. a `RegExp` leaked as `{}` over JSON) are dropped:
+  // echoing them back would persist `[object Object]` into the config.
+  const items: string[] = Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string")
+    : [];
   const wrap = el("div", "tagsctl ctl-block");
   const list = el("div", "tags-list");
   const commit = () => ctx.post(JSON.stringify(items));

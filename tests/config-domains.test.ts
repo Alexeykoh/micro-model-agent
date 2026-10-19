@@ -306,6 +306,59 @@ describe("loadConfig — domain file integration", () => {
     expect(legacyDetected).toBe(false);
   });
 
+  it("heals dangerousPatterns corrupted to [object Object] by the old wire bug", () => {
+    const tmpDir = makeTempDir();
+    mkdirSync(join(tmpDir, "config"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "config", "security.json"),
+      JSON.stringify({
+        security: {
+          contentScan: {
+            enabled: true,
+            dangerousPatterns: [
+              { __regex: true, source: "[object Object]", flags: "" },
+              { __regex: true, source: "[object Object]", flags: "" },
+            ],
+          },
+        },
+      }),
+    );
+    const { config } = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, ".mmrc"),
+    });
+    const patterns = config.security!.contentScan.dangerousPatterns;
+    expect(patterns).toEqual(DEFAULTS.security!.contentScan.dangerousPatterns);
+    expect(patterns[0].source).toBe("eval\\(");
+  });
+
+  it("keeps valid patterns and only replaces the corrupt ones", () => {
+    const tmpDir = makeTempDir();
+    mkdirSync(join(tmpDir, "config"), { recursive: true });
+    writeFileSync(
+      join(tmpDir, "config", "security.json"),
+      JSON.stringify({
+        security: {
+          contentScan: {
+            enabled: true,
+            dangerousPatterns: [
+              { __regex: true, source: "[object Object]", flags: "" },
+              { __regex: true, source: "my-custom-pattern", flags: "" },
+            ],
+          },
+        },
+      }),
+    );
+    const { config } = loadConfig({
+      configDir: tmpDir,
+      projectConfigPath: join(tmpDir, ".mmrc"),
+    });
+    const patterns = config.security!.contentScan.dangerousPatterns;
+    expect(patterns).toHaveLength(2);
+    expect(patterns[0].source).toBe("eval\\(");
+    expect(patterns[1].source).toBe("my-custom-pattern");
+  });
+
   it("coexistence: config.json + domain files → domain wins", () => {
     const tmpDir = makeTempDir();
     writeFileSync(
