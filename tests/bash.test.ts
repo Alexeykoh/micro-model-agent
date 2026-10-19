@@ -4,7 +4,7 @@ import { setLocale } from "../src/i18n/index";
 // Локаль — процессный синглтон: порядок файлов в раннере зависит от ФС
 // (на CI иной), поэтому файлы с английскими строками пинят "en" сами.
 beforeEach(() => setLocale("en"));
-import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from "fs";
+import { writeFileSync, rmSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -167,80 +167,28 @@ describe("bash", () => {
     expect(result.output).toContain("[process error]");
   });
 
-  it("appends the npm exec hint when npx hits a package with no bin", async () => {
-    // An earlier test leaves the grace window at 200ms; npm needs ~1s to
-    // install, so restore the default or the command gets auto-promoted to
+  it("appends the npm exec hint when a failing command reports npx's no-bin phrase", async () => {
+    // An earlier test leaves the grace window at 200ms; the spawned node needs
+    // a moment to start, so restore the default or the command is promoted to
     // the background and reports success even on failure.
     setBashGraceMs(5000);
 
-    // npm install + npx under parallel test load can exceed vitest's default
-    // 5s timeout — give the real npm a generous window.
-    // Skip when npm is not available — the pure npmExecHint tests above
-    // cover the logic regardless of environment.
-    const npmCheck = await bashTool.handler(makeCtx(), {
-      command: "npm --version",
-    });
-    if (!npmCheck.success) return;
-
-    const base = mkdtempSync(join(tmpdir(), "mma-npmexec-"));
-    const pkg = join(base, "pkg");
-    const app = join(base, "app");
-    // A registry-unique name: `npx <name>` falls back to the npm registry when
-    // the local package is not resolved as installed, so a name that exists
-    // there (e.g. the old "no-bin-pkg") ran successfully and broke the hint
-    // assertion under load. This name is local-only.
-    const pkgName = "mma-no-bin-fixture";
-    mkdirSync(pkg, { recursive: true });
-    mkdirSync(app, { recursive: true });
-    // Фикстура С bin-шимом, который падает классической фразой npx. Почему не
-    // настоящий no-bin пакет: поведение живого npx зависит от версии —
-    // наблюдено и уход в реестр с 404, и успех с --no-install на CI-npm.
-    // Проверяется наша проводка (упавший npx с фразой → хинт), а не текст
-    // конкретной версии npx; чистая логика покрыта unit-тестами npmExecHint.
-    writeFileSync(
-      join(pkg, "package.json"),
-      JSON.stringify({
-        name: pkgName,
-        version: "1.0.0",
-        bin: { [pkgName]: "fail.js" },
-      }),
-      "utf-8",
+    // Deterministic wiring check: the hint is keyed by output, not by whether
+    // a live npx could resolve a package. A real `npx <fake-package>` depends
+    // on npm's version, registry state and local-bin resolution — it has
+    // produced both "no bin" and a registry 404 on CI. The pure logic is
+    // covered by `npmExecHint` tests above.
+    const result = await bashTool.handler(
+      makeCtx({ config: { security: { enabled: false } } }),
+      {
+        command: `node -e "console.error('could not determine executable to run'); process.exit(1)"`,
+      },
     );
-    writeFileSync(
-      join(pkg, "fail.js"),
-      '#!/usr/bin/env node\nconsole.error("could not determine executable to run");\nprocess.exit(1);\n',
-      "utf-8",
-    );
-    writeFileSync(join(pkg, "index.js"), "module.exports = 1;\n", "utf-8");
-    writeFileSync(
-      join(app, "package.json"),
-      JSON.stringify({ name: "app", version: "1.0.0" }),
-      "utf-8",
-    );
-
-    try {
-      const install = await bashTool.handler(makeCtx({ baseDir: app }), {
-        command: `npm install ${pkg} --no-save`,
-      });
-      expect(install.success).toBe(true);
-
-      // Локальный bin найден без сети; шим падает классической фразой npx,
-      // тул обязан приложить хинт.
-      const npxRun = await bashTool.handler(makeCtx({ baseDir: app }), {
-        command: `npx ${pkgName}`,
-      });
-      expect(npxRun.success).toBe(false);
-      expect(npxRun.output).toContain("could not determine executable to run");
-      expect(npxRun.output).toContain("Hint:");
-      expect(npxRun.output).toContain("bunx <pkg>");
-    } finally {
-      try {
-        rmSync(base, { recursive: true, force: true });
-      } catch {
-        /* ignore */
-      }
-    }
-  }, 30_000);
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("could not determine executable to run");
+    expect(result.output).toContain("Hint:");
+    expect(result.output).toContain("bunx <pkg>");
+  });
 });
 
 describe("extractEchoFileWrite", () => {
