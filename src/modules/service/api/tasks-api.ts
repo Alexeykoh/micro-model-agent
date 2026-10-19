@@ -216,8 +216,8 @@ function createParams(sessionId: string, p: SubmitParams, tenant: TenantContext)
 
 /** Кладёт задачу в FIFO сессии; `false` — очередь полна. */
 function enqueueTask(s: AgentServiceState, task: TaskRecord): boolean {
-  const pos = s.pool.enqueue(task.sessionId, task.jobId, [], task.sessionId);
-  if (pos === null) {
+  const queued = s.pool.enqueue(task.sessionId, task.jobId, [], task.sessionId);
+  if (queued === null) {
     s.tasks.finish(task.jobId, {
       status: "failed",
       error: problem({ type: "queueFull", title: "session queue is full", status: 429 }),

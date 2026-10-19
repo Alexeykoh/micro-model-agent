@@ -10,6 +10,7 @@ export function applyCounters(d: Dict): void {
   session.runningSessionIds =
     d.runningSessionIds || (session.runningSessionId ? [session.runningSessionId] : []);
   session.queued = d.queued || {};
+  session.queuedIds = d.queuedIds || {};
 }
 
 /**

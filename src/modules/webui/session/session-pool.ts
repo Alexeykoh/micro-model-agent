@@ -33,6 +33,8 @@ export class RunPool {
   private runners = new Map<string, SessionRunner>();
   private factory?: RunnerFactory;
   private maxQueue: number;
+  /** Монотонный id сообщений очереди (адресат cancel/start). */
+  private nextQueuedId = 1;
 
   constructor(factory?: RunnerFactory, maxQueue: number = MAX_QUEUE_LENGTH) {
     if (factory) this.factory = factory;
@@ -104,14 +106,57 @@ export class RunPool {
   }
 
   /**
-   * Кладёт сообщение в очередь слота. Позиция (1-based) или null, если полна.
+   * Кладёт сообщение в очередь слота. Сообщение с id или null, если полна.
    * Вызывать только когда слот занят (свободный идёт сразу в ход).
    */
-  enqueue(id: string | null, text: string, images: string[], sessionId: string | null): number | null {
+  enqueue(id: string | null, text: string, images: string[], sessionId: string | null): QueuedMessage | null {
     const slot = this.slotFor(id);
     if (slot.queue.length >= this.maxQueue) return null;
-    slot.queue.push({ text, images, sessionId, ts: Date.now() });
-    return slot.queue.length;
+    const message: QueuedMessage = {
+      id: `q${this.nextQueuedId++}`,
+      text,
+      images,
+      sessionId,
+      ts: Date.now(),
+    };
+    slot.queue.push(message);
+    return message;
+  }
+
+  /** Упорядоченные id очереди сессии (для проекции состояния/клиента). */
+  queuedIds(id: string | null): string[] {
+    return this.slotFor(id).queue.map((m) => m.id);
+  }
+
+  /** Id очередей по сессиям (без legacy-слота, как `queuedCounts`). */
+  queuedIdsBySession(): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const [key, slot] of this.slots) {
+      if (key === "" || slot.queue.length === 0) continue;
+      out[key] = slot.queue.map((m) => m.id);
+    }
+    return out;
+  }
+
+  /** Убирает сообщение очереди по id; undefined — такого уже нет. */
+  removeQueued(id: string | null, messageId: string): QueuedMessage | undefined {
+    const queue = this.slotFor(id).queue;
+    const i = queue.findIndex((m) => m.id === messageId);
+    if (i === -1) return undefined;
+    return queue.splice(i, 1)[0];
+  }
+
+  /**
+   * Переносит сообщение в голову очереди, сохраняя порядок остальных.
+   * undefined — такого сообщения нет; голова остаётся головой.
+   */
+  promoteQueued(id: string | null, messageId: string): QueuedMessage | undefined {
+    const queue = this.slotFor(id).queue;
+    const i = queue.findIndex((m) => m.id === messageId);
+    if (i === -1) return undefined;
+    const [message] = queue.splice(i, 1);
+    queue.unshift(message);
+    return message;
   }
 
   /**

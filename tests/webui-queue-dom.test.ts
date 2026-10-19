@@ -37,6 +37,7 @@ beforeEach(() => {
   store.tabs.tabs = [];
   store.tabs.activeTabId = null;
   store.session.queued = {};
+  store.session.queuedIds = {};
   strip().replaceChildren();
   strip().hidden = true;
 });
@@ -79,6 +80,46 @@ describe("pinned input-queue strip", () => {
 
     expect(tab.feed.textContent).toContain("first");
     expect(tab.feed.textContent).not.toContain("second");
+  });
+
+  it("renders run/cancel buttons for rows with a server id", () => {
+    const tab = mountTab("E");
+    store.tabs.activeTabId = "E";
+    queue.enqueuePending(tab, { id: "q1", text: "important", images: [] });
+    store.session.queuedIds = { E: ["q1"] };
+    queue.renderQueueStrip();
+
+    expect(strip().querySelectorAll(".queue-item").length).toBe(1);
+    expect(strip().querySelector(".qi-run")).not.toBeNull();
+    expect(strip().querySelector(".qi-cancel")).not.toBeNull();
+  });
+
+  it("removes and promotes local pending rows by id", () => {
+    const tab = mountTab("F");
+    queue.enqueuePending(tab, { id: "q1", text: "first", images: [] });
+    queue.enqueuePending(tab, { id: "q2", text: "second", images: [] });
+
+    expect(queue.promotePending(tab, "q2")).toBe(true);
+    expect((tab.pendingQueue as Array<{ id: string }>).map((m) => m.id)).toEqual(["q2", "q1"]);
+
+    expect(queue.removePending(tab, "q2")).toBe(true);
+    expect(queue.removePending(tab, "q2")).toBe(false);
+    expect((tab.pendingQueue as Array<{ id: string }>).map((m) => m.id)).toEqual(["q1"]);
+  });
+
+  it("drains the server head id even when the local order is stale", () => {
+    const tab = mountTab("G");
+    store.tabs.activeTabId = null;
+    queue.enqueuePending(tab, { id: "q1", text: "first", images: [] });
+    queue.enqueuePending(tab, { id: "q2", text: "second", images: [] });
+    // The server promoted q2 (force-start) before the turn ended.
+    store.session.queuedIds = { G: ["q2", "q1"] };
+
+    queue.drainQueuedTurn("G");
+
+    expect(tab.feed.textContent).toContain("second");
+    expect(tab.feed.textContent).not.toContain("first");
+    expect((tab.pendingQueue as Array<{ id: string }>).map((m) => m.id)).toEqual(["q1"]);
   });
 
   it("hides the strip when nothing is queued", () => {

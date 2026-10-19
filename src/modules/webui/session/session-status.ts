@@ -24,6 +24,7 @@ export function sessionStatus(s: RuntimeState): {
   runningSessionId: string | null;
   runningSessionIds: string[];
   queued: Record<string, number>;
+  queuedIds: Record<string, string[]>;
 } {
   const running = s.pool.busyIds();
   return {
@@ -32,6 +33,7 @@ export function sessionStatus(s: RuntimeState): {
     runningSessionId: running[0] ?? null,
     runningSessionIds: running,
     queued: s.pool.queuedCounts(),
+    queuedIds: s.pool.queuedIdsBySession(),
   };
 }
 

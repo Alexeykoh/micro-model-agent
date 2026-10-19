@@ -347,7 +347,8 @@ async function send(): Promise<void> {
     // Стоит в очереди: убираем блок из ленты и держим в пине, пока его ход не
     // начнётся — тогда `drainQueuedTurn` вернёт его в правильную точку.
     if (postedUser) postedUser.remove();
-    enqueuePending(tab, { text, images });
+    const id = typeof r.data.id === "string" ? r.data.id : "";
+    enqueuePending(tab, { id, text, images });
     renderQueueStrip();
     if (sessionId) deps.setTabStatus(sessionId, "queued");
     return;

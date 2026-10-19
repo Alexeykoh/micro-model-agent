@@ -11,6 +11,8 @@ export interface SessionSlice {
   runningSessionId: string | null;
   runningSessionIds: string[];
   queued: Record<string, number>;
+  /** Server ids of each session's FIFO, in order (for queue actions). */
+  queuedIds: Record<string, string[]>;
   sessionsError: string | null;
   // biome-ignore lint/suspicious/noExplicitAny: opaque reasoning payload.
   reasoning: any;
@@ -24,6 +26,7 @@ export const session: SessionSlice = {
   runningSessionId: null,
   runningSessionIds: [],
   queued: {},
+  queuedIds: {},
   sessionsError: null,
   reasoning: undefined,
 };

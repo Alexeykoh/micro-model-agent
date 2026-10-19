@@ -115,6 +115,7 @@ describe("webui auth + limits", () => {
         queued: 1,
         sessionId: "A",
         queuedForSession: 1,
+        id: expect.any(String),
       });
     });
   });

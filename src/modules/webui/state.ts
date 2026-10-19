@@ -4,7 +4,6 @@
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
 import type { UsageSnapshot } from "../../core/host-state";
-
 import type { AppConfig } from "../../config/types";
 import type { PluginLoadFailure, PluginRecord } from "../plugins/records";
 import type { SessionMeta, SessionMessage } from "../session/types";
@@ -44,7 +43,6 @@ export interface WebSessionManager {
   /** Каталог сессии (для персиста web-метрик). Опционален — у лёгких стабов нет. */
   getSessionDirectory?(id: string): string;
 }
-
 /** Статические веб-ассеты (снапшот на старт; live-перечитывание — через `assetSource`). */
 export interface WebUiAssets {
   html: string;
@@ -119,6 +117,8 @@ export type { UsageSnapshot } from "../../core/host-state";
 
 /** Одно входящее сообщение, ждущее конца текущего хода (`POST /api/message` при busy). */
 export interface QueuedMessage {
+  /** Стабильный id в пуле: адресат отмены/принудительного старта. */
+  id: string;
   text: string;
   images: string[];
   /**

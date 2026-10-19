@@ -321,7 +321,13 @@ describe("webui server", () => {
       // Mid-turn POST queues under the same session slot.
       const b = await postMsg(base, "second", "A");
       expect(b.status).toBe(202);
-      expect(await b.json()).toEqual({ ok: true, queued: 1, sessionId: "A", queuedForSession: 1 });
+      expect(await b.json()).toEqual({
+        ok: true,
+        queued: 1,
+        sessionId: "A",
+        queuedForSession: 1,
+        id: expect.any(String),
+      });
       expect(stub("A").started).toEqual(["first"]);
       expect(s.pool.queueLen("A")).toBe(1);
 
@@ -344,6 +350,79 @@ describe("webui server", () => {
       expect(c.status).toBe(202);
       expect(await c.json()).toEqual({ ok: true, sessionId: "A" });
       expect(stub("A").started).toEqual(["first", "second", "third"]);
+    });
+  });
+
+  it("cancels a queued message by id without starting it", async () => {
+    const s = createWebUiState();
+    const { stub } = fixture(s, ["A"]);
+
+    await withServer(s, async (base) => {
+      await postMsg(base, "first", "A");
+      const second = await postMsg(base, "second", "A");
+      const secondId = String((await second.json()).id);
+      const third = await postMsg(base, "third", "A");
+
+      const state = await (await doFetch(`${base}/api/state`)).json();
+      expect(state.queuedIds.A).toEqual([secondId, String((await third.json()).id)]);
+
+      const cancel = await postJson(base, "/api/queue/cancel", { sessionId: "A", id: secondId });
+      expect(cancel.status).toBe(200);
+      expect(cancel.json).toEqual({ ok: true });
+      expect(s.pool.queueLen("A")).toBe(1);
+
+      // Cancelling again is a 404: the id already left the queue.
+      const again = await postJson(base, "/api/queue/cancel", { sessionId: "A", id: secondId });
+      expect(again.status).toBe(404);
+      expect(again.json).toEqual({ error: "not_queued" });
+
+      stub("A").resolvers.shift()?.({ success: true });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(stub("A").started).toEqual(["first", "third"]);
+    });
+  });
+
+  it("force-starts a queued message by interrupting the running turn", async () => {
+    const s = createWebUiState();
+    const { stub } = fixture(s, ["A"]);
+
+    await withServer(s, async (base) => {
+      await postMsg(base, "first", "A");
+      const second = await postMsg(base, "second", "A");
+      const secondId = String((await second.json()).id);
+      const third = await postMsg(base, "third", "A");
+      const thirdId = String((await third.json()).id);
+
+      const start = await postJson(base, "/api/queue/start", { sessionId: "A", id: thirdId });
+      expect(start.status).toBe(202);
+      expect(start.json).toEqual({ ok: true, starting: true });
+      expect(stub("A").shutdowns).toBe(1);
+      // The chosen message is now the head; the other keeps its order.
+      expect(s.pool.queuedIds("A")).toEqual([thirdId, secondId]);
+
+      // The aborted turn unwinds, then the forced message starts.
+      stub("A").resolvers.shift()?.({ success: true });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(stub("A").started).toEqual(["first", "third"]);
+
+      stub("A").resolvers.shift()?.({ success: true });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(stub("A").started).toEqual(["first", "third", "second"]);
+    });
+  });
+
+  it("rejects malformed and unknown queue actions", async () => {
+    const s = createWebUiState();
+    fixture(s, ["A"]);
+
+    await withServer(s, async (base) => {
+      const bad = await postJson(base, "/api/queue/cancel", { sessionId: "A" });
+      expect(bad.status).toBe(400);
+      expect(bad.json).toEqual({ error: "bad_request" });
+
+      const missing = await postJson(base, "/api/queue/start", { sessionId: "A", id: "q404" });
+      expect(missing.status).toBe(404);
+      expect(missing.json).toEqual({ error: "not_queued" });
     });
   });
 
@@ -388,6 +467,7 @@ describe("webui server", () => {
           queued: i + 1,
           sessionId: "A",
           queuedForSession: i + 1,
+          id: expect.any(String),
         });
       }
       const full = await postMsg(base, "overflow", "A");
@@ -636,7 +716,13 @@ describe("webui parallel sessions (runner factory)", () => {
       // Второе сообщение в занятую A встаёт в её очередь (B не трогаем).
       const a2 = await postMsg(base, "task-a2", "A");
       expect(a2.status).toBe(202);
-      expect(await a2.json()).toEqual({ ok: true, queued: 1, sessionId: "A", queuedForSession: 1 });
+      expect(await a2.json()).toEqual({
+        ok: true,
+        queued: 1,
+        sessionId: "A",
+        queuedForSession: 1,
+        id: expect.any(String),
+      });
       expect(stub("A").started).toEqual(["task-a"]);
 
       // Конец хода A: turn_end за A, дренаж её очереди, B всё ещё бежит.
