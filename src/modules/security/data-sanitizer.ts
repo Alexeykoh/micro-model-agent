@@ -78,6 +78,9 @@ export function sanitizeLogMessageTargeted(message: string): string {
   return applyPatterns(message, TARGETED_PATTERNS);
 }
 
+/** Целевые паттерны секретов (для детектора data-policy: нужны позиции находок). */
+export const TARGETED_SECRET_PATTERNS = TARGETED_PATTERNS;
+
 /** Вычистить секреты из лог-сообщения (строго: целевые + высокоэнтропийные). */
 export function sanitizeLogMessage(message: string): string {
   return applyPatterns(message, SENSITIVE_PATTERNS);
