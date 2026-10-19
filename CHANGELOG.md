@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-19
+
+### Fixed
+
+- **Web file API ignored `apiHiddenGlobs` when the workspace path was an alias**
+  (Windows 8.3 short name, symlink or junction). `resolveWorkspacePath` returned
+  the canonical `absReal`, but `/api/files` and `/api/file` compared it against
+  the uncanonicalized `base`, so `relative()` produced `../…` and the hidden glob
+  never matched (`secret/` stayed visible). The resolver now also returns
+  `baseReal`, used consistently for listing and `hiddenReason`. Regression test
+  covers a symlink/junction workspace alias.
+
 ## [0.8.0] - 2026-10-19
 
 ### Added

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -54,6 +54,26 @@ describe("E2 web: apiHiddenGlobs (INV-D6)", () => {
       expect(visible.status).toBe(200);
       expect(await visible.text()).toBe("ok");
     });
+  });
+
+  it("канонизирует base: алиас workspace (symlink/junction) не ломает скрытие", async () => {
+    const dir = workspace();
+    const alias = `${dir}-alias`;
+    symlinkSync(dir, alias, process.platform === "win32" ? "junction" : "dir");
+    try {
+      const s = state(alias);
+      await withServer(s, async (base) => {
+        const root = (await (await doFetch(`${base}/api/files?path=.`)).json()) as {
+          entries: Array<{ name: string }>;
+        };
+        expect(root.entries.map((e) => e.name)).toContain("public");
+        expect(root.entries.map((e) => e.name)).not.toContain("secret");
+        expect((await doFetch(`${base}/api/files?path=secret`)).status).toBe(404);
+        expect((await doFetch(`${base}/api/file?path=secret/b.txt`)).status).toBe(404);
+      });
+    } finally {
+      unlinkSync(alias);
+    }
   });
 
   it("kill-switch: при enabled=false скрытых путей нет", async () => {

@@ -154,7 +154,7 @@ async function serveFile(
   }
   const absReal = resolved.absReal;
   // Скрытый путь неотличим от несуществующего (INV-D6), по каноническому пути.
-  if (hiddenReason(absReal, base, hiddenGlobs)) {
+  if (hiddenReason(absReal, resolved.baseReal, hiddenGlobs)) {
     sendTextError(res, 404, "web.file.error.not_found");
     return;
   }

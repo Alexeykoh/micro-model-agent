@@ -143,7 +143,7 @@ async function serveList(
     return;
   }
   // Скрытая директория неотличима от несуществующей (INV-D6).
-  if (hiddenReason(resolved.absReal, base, hiddenGlobs)) {
+  if (hiddenReason(resolved.absReal, resolved.baseReal, hiddenGlobs)) {
     sendJson(res, 404, { error: "not_found" });
     return;
   }
@@ -152,7 +152,7 @@ async function serveList(
       sendJson(res, 404, { error: "not_found" });
       return;
     }
-    const { entries, truncated } = await listDir(base, resolved.absReal, hiddenGlobs);
+    const { entries, truncated } = await listDir(resolved.baseReal, resolved.absReal, hiddenGlobs);
     sendJson(res, 200, { path: raw || "", entries, truncated });
   } catch {
     sendJson(res, 404, { error: "not_found" });

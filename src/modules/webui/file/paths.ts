@@ -18,7 +18,7 @@ export type PathErrorCode = "outside_workspace" | "protected_path" | "not_found"
 
 /** Результат резолва: реальный абсолютный путь либо класс отказа. */
 export type PathResolution =
-  | { ok: true; absReal: string }
+  | { ok: true; absReal: string; baseReal: string }
   | { ok: false; code: PathErrorCode };
 
 /**
@@ -44,5 +44,7 @@ export async function resolveWorkspacePath(
   }
   if (escapes(baseReal, absReal)) return { ok: false, code: "outside_workspace" };
   if (matchProtectedPath(baseReal, absReal)) return { ok: false, code: "protected_path" };
-  return { ok: true, absReal };
+  // `baseReal` нужен вызывающим для сравнения путей: `base` может быть
+  // алиасом (8.3-имя Windows, симлинк), а `absReal` уже канонический.
+  return { ok: true, absReal, baseReal };
 }
