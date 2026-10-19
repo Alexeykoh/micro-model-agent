@@ -180,8 +180,14 @@ code { font-family: var(--mono); }
 .brand { display: inline-flex; align-items: center; gap: 10px; flex: none; }
 .brand-txt { font-weight: 700; letter-spacing: .02em; }
 .links { display: flex; gap: 17px; flex: 0 1 auto; overflow: hidden; }
-.links a { font-size: 12.5px; color: var(--dim-a); white-space: nowrap; }
+.links a { font-size: 12.5px; color: var(--dim-a); white-space: nowrap; position: relative; }
 .links a:hover { color: var(--fg); }
+.links a.active { color: var(--fg); }
+.links a.active::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 1px; background: var(--accent);
+}
+#consoleBtn { padding: 0 10px; }
 .ctl { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
 .iconbtn, .gh {
   height: 34px; box-sizing: border-box;

@@ -24,6 +24,23 @@
     }
   }
 
+  /* ---- console theme (temporary, reversible) ---- */
+  function currentConsole() {
+    var saved = null;
+    try { saved = localStorage.getItem("mma-lp-console"); } catch (e) {}
+    if (saved === "on" || saved === "off") return saved === "on";
+    return true;
+  }
+  function setConsole(on) {
+    root.classList.toggle("console", on);
+    try { localStorage.setItem("mma-lp-console", on ? "on" : "off"); } catch (e) {}
+    var b = document.getElementById("consoleBtn");
+    if (b) {
+      b.setAttribute("aria-pressed", String(on));
+      b.textContent = on ? "console" : "flat";
+    }
+  }
+
   /* ---- language ---- */
   function currentLang() {
     var saved = null;
@@ -148,6 +165,29 @@
         if (!shown) { shown = true; wrap.classList.add("show"); }
         pulseFace("find", 900);
       });
+    });
+  }
+
+  /* ---- nav scroll-spy ---- */
+  function initNavSpy() {
+    var links = Array.prototype.slice.call(document.querySelectorAll(".links a[href^='#']"));
+    if (!links.length || !("IntersectionObserver" in window)) return;
+    var byId = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute("href").slice(1);
+      if (id) byId[id] = a;
+    });
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var current = byId[e.target.id];
+        if (!current) return;
+        links.forEach(function (a) { a.classList.toggle("active", a === current); });
+      });
+    }, { rootMargin: "-45% 0px -45% 0px" });
+    Object.keys(byId).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) io.observe(el);
     });
   }
 
@@ -414,6 +454,7 @@
 
   /* ---- boot ---- */
   function boot() {
+    setConsole(currentConsole());
     setTheme(currentTheme());
     setLang(currentLang());
 
@@ -424,6 +465,7 @@
     initBudget();
     initNarrow();
     initCompanion();
+    initNavSpy();
     initReveal();
     initProgress();
     initToTop();
@@ -445,6 +487,11 @@
     if (themeBtn) themeBtn.addEventListener("click", function () {
       setTheme(root.classList.contains("light") ? "dark" : "light");
       pulseFace("compact", 1200);
+    });
+    var consoleBtn = document.getElementById("consoleBtn");
+    if (consoleBtn) consoleBtn.addEventListener("click", function () {
+      setConsole(!root.classList.contains("console"));
+      pulseFace("compact", 1000);
     });
     var langBtn = document.getElementById("langBtn");
     if (langBtn) langBtn.addEventListener("click", function () {

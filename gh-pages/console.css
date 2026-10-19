@@ -1,0 +1,108 @@
+/* ============================================================
+   Console theme — the landing page in the register of `mma web`.
+   Source of truth: src/modules/webui/assets/console.css.
+
+   This sheet only re-registers the design tokens and flattens the
+   chrome while `html.console` is set. The original flat theme in
+   `styles.css` is untouched: remove the class (or press the
+   `console` chip in the header) to fall back to it.
+   ============================================================ */
+
+html.console {
+  color-scheme: dark;
+
+  --bg: #0a0a0b;
+  --panel: #0f0f10;
+  --surface: #121213;
+  --fg: #d0cecc;
+  --muted: #b6b3b0;
+  --dim-a: #8a8686;
+  --dim-b: #6a6666;
+  --dim-c: #6a6666;
+  --border: #1f1f20;
+  --border-2: #262627;
+
+  --accent: #d0cecc;
+  --accent-bg: #171718;
+
+  --green: #86d992;
+  --red: #f0837a;
+  --yellow: #e8c46a;
+
+  /* the landing needs three more faces than the app's tokens provide */
+  --recon: #6fd0e6;
+  --mutate: #d59cf0;
+  --exec: #9db4d6;
+  --think: #8a8686;
+
+  /* monochrome context breakdown: one neutral accent, green/yellow kept */
+  --seg-system: #8a8686;
+  --seg-tools: #6fd0e6;
+  --seg-history: #86d992;
+  --seg-reserve: #e8c46a;
+  --seg-free: #1f1f20;
+
+  --term-bg: #08080a;
+  --term-fg: #b6b3b0;
+  --grain-op: 0;
+}
+
+/* Console register, light mode — still flat + monospace. */
+html.console.light {
+  color-scheme: light;
+
+  --bg: #f7f7f4;
+  --panel: #ffffff;
+  --surface: #f0f0ed;
+  --fg: #1b1b19;
+  --muted: #4a4a46;
+  --dim-a: #6a6a64;
+  --dim-b: #8a8a84;
+  --dim-c: #8a8a84;
+  --border: #dcdcd6;
+  --border-2: #d2d2cb;
+
+  --accent: #1b1b19;
+  --accent-bg: #ecece7;
+
+  --green: #1a7f37;
+  --red: #cf222e;
+  --yellow: #9a6700;
+
+  --recon: #0c7c86;
+  --mutate: #8250df;
+  --exec: #2563eb;
+  --think: #6a6a64;
+
+  --seg-system: #6a6a64;
+  --seg-tools: #0c7c86;
+  --seg-history: #1a7f37;
+  --seg-reserve: #9a6700;
+  --seg-free: #e4e4df;
+
+  --term-bg: #f2f2ee;
+  --term-fg: #33332f;
+  --grain-op: 0;
+}
+
+/* Console voice: one monospace family, sharp corners, no soft shadows. */
+html.console,
+html.console *,
+html.console *::before,
+html.console *::after {
+  font-family: var(--mono) !important;
+  box-shadow: none !important;
+}
+
+html.console *,
+html.console *::before,
+html.console *::after {
+  border-radius: 0 !important;
+}
+
+/* The mascot is an illustration, not chrome — keep MMART a face. */
+html.console .mdl { border-radius: 32% !important; }
+html.console .mdl .eye { border-radius: 999px !important; }
+html.console .mdl.st-boot,
+html.console .mdl.st-load { border-radius: 50% !important; }
+html.console .kicker .dot { border-radius: 50% !important; }
