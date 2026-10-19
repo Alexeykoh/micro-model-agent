@@ -7,6 +7,13 @@ export * from "./types";
 export type { PolicyContext } from "./context";
 export { classify, dedupe } from "./classify";
 export { createGuard, EgressBlockedError, projectText } from "./guard";
+export {
+  createProviderEgressFactory,
+  isLoopbackHost,
+  isTrustedHost,
+  providerHost,
+} from "./egress-provider";
+export type { ProviderEgressDeps, ProviderEntryRef } from "./egress-provider";
 export { TokenMap, rehydrate, rehydrateArgs } from "./tokens";
 export { enabledClasses, projectDeep } from "./project";
 export {

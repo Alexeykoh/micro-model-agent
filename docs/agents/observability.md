@@ -47,6 +47,24 @@ Subagent не несёт `ExecutionModule`, поэтому его деграда
 передают свой `SessionManager`, поэтому запись `context_degraded` попадает в
 сессию владельца хода.
 
+### DLP egress к провайдеру (E1, W2)
+
+Слой `security.dataPolicy` редактирует исходящий LLM-вызов в
+`SanitizingProvider` (обёртка в `ProviderManager.build()`), поэтому отказ
+классификатора не «молчит», а выбирает явную стратегию:
+
+| Событие | Поведение | Сигнал |
+|---|---|---|
+| Ошибка классификатора при `failClosed: true` (дефолт) | вызов **не уходит**; `chat()` бросает `EgressBlockedError` (`name`, `operation: "egress.sanitize"`, `kind: "egress_blocked"`) | `onDiagnostic` → `outcome: "aborted"` |
+| Ошибка классификатора при `failClosed: false` | вызов уходит без редакции (осознанный fail-open) | `onDiagnostic` → `outcome: "passed"` |
+| Редакция выполнена | вызов уходит с токенами/масками | `onDiagnostic` → `outcome: "redacted"`, `count` (без оригинала) |
+| `security.dataPolicy.enabled: false` | kill-switch: guard не создаётся | — |
+
+Диагностика несёт только метаданные (`module`, `operation`, `kind`, `outcome`,
+`count`) — значений путей/PII в ней нет (INV-D8). Context-log применяет тот же
+guard до snapshot'а, поэтому `context.diff` показывает ровно то, что ушло
+провайдеру (та же карта токенов, INV-D11).
+
 ## Проверенные молчащие `catch` (W10.3)
 
 Fail-open считается не по факту `catch`, а по контракту: подсистема обязана была
