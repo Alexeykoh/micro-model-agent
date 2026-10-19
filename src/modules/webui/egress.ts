@@ -14,15 +14,19 @@ import type { PolicyContext } from "../security/data-policy/context";
 import { DEFAULT_DATA_POLICY } from "../security/data-policy/defaults";
 import { createGuard } from "../security/data-policy/guard";
 import { TokenMap } from "../security/data-policy/tokens";
+import type { AppConfig } from "../../config/types";
 import type { DataPolicyConfig, EgressGuard } from "../security/data-policy/types";
-import type { ConfigStore } from "./state";
 
 /** Режим ответа: JSON/текст (буферизуем) или SSE (по блокам). */
 export type FilterMode = "json" | "sse";
 
 type AnyFn = (...args: unknown[]) => unknown;
 
-/** Карта токенов веб-поверхности (общая для всех соединений процесса). */
+/**
+ * Карта токенов веб-поверхности. Изоляция тенантов — на уровне процесса
+ * (1 тенант = 1 процесс, спека §10.1), поэтому карта общая для всех соединений:
+ * per-request карта сделала бы метки нестабильными между REST и SSE.
+ */
 const tokenMap = new TokenMap();
 
 let cached: {
@@ -31,8 +35,11 @@ let cached: {
   guard: EgressGuard<unknown, unknown>;
 } | null = null;
 
-/** Узкая роль: API-egress нужны только живой конфиг и корень workspace. */
-export type EgressState = ConfigStore & { workspace?: string };
+/** Узкий вход: живой конфиг + корень workspace. Годится web и service. */
+export interface EgressState {
+  config?: AppConfig;
+  workspace?: string;
+}
 
 /** Guard для API-egress; `undefined` — политика выключена (kill-switch). */
 export function apiGuard(s: EgressState): EgressGuard<unknown, unknown> | undefined {

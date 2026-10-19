@@ -18,6 +18,7 @@ import { makeServiceForwarder } from "../runtime/event-bridge";
 import { cancelTaskQuestions, installServicePromptIO, resolveAnswer } from "../runtime/prompt-io";
 import { runTask, type RunTaskResult } from "../runtime/run-task";
 import { deliverWebhook } from "../runtime/webhook";
+import { apiGuard } from "../../webui/egress";
 import { newEventId } from "../runtime/ids";
 import { defaultOutputBus } from "../../../output";
 import {
@@ -462,6 +463,7 @@ function sendWebhook(s: AgentServiceState, task: TaskRecord): void {
     secret: s.config.service.webhookSecret,
     eventId: newEventId(),
     body: JSON.stringify(toJobObject(rec)),
+    egress: apiGuard({ config: s.config, workspace: s.deps.baseDir }),
     timeoutMs: s.config.service.callbackTimeoutMs,
     networkConfig: s.config.security?.network,
     onDiagnostic: (diag) => {

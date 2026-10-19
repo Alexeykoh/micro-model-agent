@@ -5,6 +5,7 @@ import type { AuditLogEntry } from "./audit-log";
 import { defaultOutputBus } from "../../output";
 import { sendWebhook, WebhookRetryQueue } from "./audit-webhook";
 import { OutboundPolicyError } from "./outbound-policy";
+import type { EgressGuard } from "./data-policy/types";
 import type { NetworkSecurityConfig } from "../../config/types";
 
 // Глобальный fetch (есть в Bun)
@@ -81,6 +82,14 @@ export const DEFAULT_AUDIT_NOTIFIER_CONFIG: AuditNotifierConfig = {
   ],
   maxRetries: 3,
 };
+
+/** DLP-проекция webhook-payload (E2); ставит config-phase из dataPolicy. */
+let egressGuard: EgressGuard<unknown, unknown> | undefined;
+
+/** Зарегистрировать guard для webhook-нотификаций (undefined — без редакции). */
+export function setAuditEgressGuard(guard: EgressGuard<unknown, unknown> | undefined): void {
+  egressGuard = guard;
+}
 
 /** Нотификатор security-событий: файл + webhook с ретраями. */
 export class AuditNotifier {
@@ -241,7 +250,9 @@ export class AuditNotifier {
   private sendToWebhook(notification: AuditNotification): Promise<void> {
     const url = this.config.webhookUrl;
     if (!url) return Promise.resolve();
-    return sendWebhook(url, notification, this.config.networkConfig, this.config.webhookTimeout ?? 5000);
+    // Внешний адресат: payload проходит ту же DLP-редакцию, что API-ответы.
+    const payload = egressGuard ? egressGuard.filterClient(notification) : notification;
+    return sendWebhook(url, payload, this.config.networkConfig, this.config.webhookTimeout ?? 5000);
   }
 
   /** Положить нотификацию в retry-очередь. */

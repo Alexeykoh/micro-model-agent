@@ -29,6 +29,12 @@ export interface WebhookDeliveryOptions {
   sleep?: (ms: number) => Promise<void>;
   /** Доменная политика и флаг `allowPrivateOutbound` для проверки адресата (D5). */
   networkConfig?: NetworkSecurityConfig;
+  /**
+   * DLP-проекция тела перед отправкой (E2): webhook — внешний адресат, значит
+   * payload проходит ту же редакцию, что API-ответы. Структурный контракт,
+   * чтобы service не зависел от security-типов.
+   */
+  egress?: { filterClient<P>(payload: P): P };
   /** Куда записать отказ политики (INV-14). */
   onDiagnostic?: (diag: Diagnostic) => void;
 }
@@ -90,19 +96,23 @@ export async function deliverWebhook(opts: WebhookDeliveryOptions): Promise<Webh
   const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   let lastStatus: number | undefined;
 
+  // DLP до политики исходящих вызовов и до подписи: тело и HMAC — по одному
+  // (отредактированному) payload'у, иначе получатель не проверит подпись.
+  const prepared = applyEgress(opts);
+
   // Политика исходящих вызовов (W13): адресат приходит из тела /v1/tasks, то
   // есть из недоверенного источника. Отказ не ретраится — адресат не изменится.
-  const check = checkOutboundUrl(opts.url, "module:service", {
-    networkConfig: opts.networkConfig,
+  const check = checkOutboundUrl(prepared.url, "module:service", {
+    networkConfig: prepared.networkConfig,
     operation: "service.callback",
-    ...(opts.onDiagnostic ? { onDiagnostic: opts.onDiagnostic } : {}),
+    ...(prepared.onDiagnostic ? { onDiagnostic: prepared.onDiagnostic } : {}),
   });
   if (!check.allowed) {
     return { ok: false, attempts: 0, blocked: true };
   }
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const { action, status } = await attemptDelivery(opts, fetchImpl);
+    const { action, status } = await attemptDelivery(prepared, fetchImpl);
     lastStatus = status;
     if (action === "ok") return { ok: true, attempts: attempt, lastStatus };
     if (action === "stop") return { ok: false, attempts: attempt, lastStatus };
@@ -112,4 +122,15 @@ export async function deliverWebhook(opts: WebhookDeliveryOptions): Promise<Webh
     }
   }
   return { ok: false, attempts: maxAttempts, ...(lastStatus !== undefined ? { lastStatus } : {}) };
+}
+
+/** Применить egress-проекцию к JSON-телу; не-JSON/ошибка — оставить как есть. */
+function applyEgress(opts: WebhookDeliveryOptions): WebhookDeliveryOptions {
+  if (!opts.egress) return opts;
+  try {
+    const parsed = JSON.parse(opts.body) as unknown;
+    return { ...opts, body: JSON.stringify(opts.egress.filterClient(parsed)) };
+  } catch {
+    return opts;
+  }
 }
