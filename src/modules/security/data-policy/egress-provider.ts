@@ -12,7 +12,7 @@ import type { PolicyContext } from "./context";
 import { createGuard } from "./guard";
 import { DEFAULT_DATA_POLICY } from "./defaults";
 import { TokenMap } from "./tokens";
-import type { EgressGuard } from "./types";
+import type { EgressGuard, GuardDiagnostic } from "./types";
 
 /** Минимальный вид записи провайдера (security не импортирует providers-типы). */
 export interface ProviderEntryRef {
@@ -62,6 +62,18 @@ export interface ProviderEgressDeps {
 }
 
 /**
+ * Приёмник диагностики guard'а. Живёт отдельно от фабрики, потому что
+ * `SessionManager` создаётся позже провайдерной фазы; session-фаза выставляет
+ * его через `setEgressDiagnosticSink` (INV-15: fail-open не молчит).
+ */
+let diagnosticSink: ((d: GuardDiagnostic) => void) | null = null;
+
+/** Зарегистрировать приёмник диагностики egress (null — отключить). */
+export function setEgressDiagnosticSink(sink: ((d: GuardDiagnostic) => void) | null): void {
+  diagnosticSink = sink;
+}
+
+/**
  * Собрать фабрику guard'ов для записей провайдера. Регистрируется в слое
  * провайдеров через `setEgressGuard` до первой сборки (провайдерная фаза
  * bootstrap) — покрывает и активную, и managed-фабрику (критик/эксперт, R17).
@@ -81,6 +93,7 @@ export function createProviderEgressFactory(
       target: { kind: "provider", trusted, host },
       ctx: deps.ctx,
       map,
+      onDiagnostic: (d) => diagnosticSink?.(d),
     });
   };
 }

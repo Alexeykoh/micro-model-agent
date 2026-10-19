@@ -3,6 +3,7 @@ import type { ChatOptions, Chunk, LLMProvider, Message, ToolDefinition } from ".
 import type { PolicyContext } from "../../src/modules/security/data-policy/context";
 import { createGuard } from "../../src/modules/security/data-policy/guard";
 import { DEFAULT_DATA_POLICY } from "../../src/modules/security/data-policy/defaults";
+import { tagFileContent } from "../../src/modules/security/data-policy/file-content";
 import {
   SanitizingProvider,
   setEgressGuard,
@@ -173,6 +174,21 @@ describe("SanitizingProvider (E1)", () => {
       ]),
     );
     expect(JSON.stringify(inner.seen)).toContain("image_url");
+  });
+
+  it("file-content из-block пути: внешнему [FILE], локальному — оригинал", async () => {
+    const tagged = tagFileContent("TOP SECRET");
+    const remote = new FakeProvider();
+    await collect(new SanitizingProvider(remote, external()).chat([{ role: "tool", content: tagged }]));
+    const remoteJson = JSON.stringify(remote.seen);
+    expect(remoteJson).toContain("[FILE]");
+    expect(remoteJson).not.toContain("TOP SECRET");
+
+    const local = new FakeProvider();
+    await collect(new SanitizingProvider(local, loopback()).chat([{ role: "tool", content: tagged }]));
+    const localJson = JSON.stringify(local.seen);
+    expect(localJson).toContain("TOP SECRET");
+    expect(localJson).not.toContain("mma:file-content");
   });
 
   it("fail-closed: ошибка классификатора — вызов не уходит", async () => {

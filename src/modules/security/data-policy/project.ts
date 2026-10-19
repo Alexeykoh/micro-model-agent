@@ -7,6 +7,7 @@ import { classify } from "./classify";
 import type { PolicyContext } from "./context";
 import type { DataClass, EgressTarget, Finding } from "./types";
 import type { DataPolicyConfig } from "./types";
+import { isTaggedFileContent, untagFileContent } from "./file-content";
 import { TokenMap } from "./tokens";
 
 const MASK: Record<DataClass, string> = {
@@ -61,6 +62,19 @@ export function projectText(text: string, policy: ProjectPolicy): TextProjection
   const { config, target, ctx, map } = policy;
   if (!text || !config.enabled) {
     return { text, changed: false, stats: {}, findings: [] };
+  }
+  // §4.8: содержимое из-block пути режется по пути, а не по PII-паттернам.
+  // Доверенный (локальный) egress получает оригинал без служебного тега.
+  if (isTaggedFileContent(text)) {
+    if (target.trusted || !config.egress.fileContent) {
+      return { text: untagFileContent(text), changed: true, stats: {}, findings: [] };
+    }
+    return {
+      text: MASK["file-content"],
+      changed: true,
+      stats: { "file-content": 1 },
+      findings: [],
+    };
   }
   const classes = enabledClasses(config, target);
   const findings = classify(text, ctx).filter(

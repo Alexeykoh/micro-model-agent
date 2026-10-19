@@ -46,6 +46,8 @@ export interface GuardDiagnostic {
   /** `redacted` — замаскировано; `aborted` — fail-closed; `passed` — чисто. */
   outcome: "redacted" | "aborted" | "passed";
   count?: number;
+  /** Причина отказа классификатора (для `aborted`/`passed`; без значений). */
+  cause?: string;
 }
 
 /** Конфиг политики (`security.dataPolicy.*`). */

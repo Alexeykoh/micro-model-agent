@@ -4,6 +4,7 @@ import type { ToolRegistry, RegisteredTool } from "./registry";
 import { killByCallId } from "../modules/processes/runner";
 import { isPathInScope, isPathWritable } from "../modules/security/path-validator";
 import { protectedPathBlock } from "../modules/security/protected-paths";
+import { tagBlockedFileContent } from "./file-content-tag";
 import { isUrlAllowed } from "../modules/security/network-validator";
 import { filterToolsByTags } from "./filter-tools";
 import { admitFromContext } from "./admission";
@@ -368,6 +369,10 @@ export class ToolExecutor {
         toolCallId: call.id,
       };
     }
+
+    // DLP §4.8: результат по пути из `providerBlockGlobs` тегируется
+    // `file-content`; egress-guard решит, отдавать его (локально) или резать.
+    result = tagBlockedFileContent(tool, call, result, this.ctx);
 
     // Admission (OO-1/OO-7): результат больше admitMaxTokens не входит в
     // контекст дословно — спилл + дескриптор. Одна точка для всех тулов;

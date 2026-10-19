@@ -24,7 +24,9 @@ export type DiagnosticEvent =
   | "tool_attempt"
   | "admission_degraded"
   | "context_degraded"
-  | "hallucination_judge_degraded";
+  | "hallucination_judge_degraded"
+  | "egress_blocked"
+  | "egress_degraded";
 
 /**
  * Единый объект ошибки/диагностики (INV-14): не строка, а `source` + `operation`

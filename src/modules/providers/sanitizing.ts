@@ -7,6 +7,10 @@
  * собирают провайдера через `ProviderManager.build()`, поэтому обёртка в одной
  * точке покрывает оба пути (R17). Слой провайдеров НЕ импортирует security —
  * только структурный контракт guard (INV-3).
+ *
+ * DEBT(streaming-tail-holdback): `openai-compat` отдаёт аргументы тула одним
+ * чанком, поэтому hold-back «хвоста» не нужен; для почанковых провайдеров —
+ * отдельная задача.
  */
 import type { ChatOptions, Chunk, LLMProvider, Message, ToolDefinition } from "../../llm/provider";
 

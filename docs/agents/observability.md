@@ -55,15 +55,18 @@ Subagent не несёт `ExecutionModule`, поэтому его деграда
 
 | Событие | Поведение | Сигнал |
 |---|---|---|
-| Ошибка классификатора при `failClosed: true` (дефолт) | вызов **не уходит**; `chat()` бросает `EgressBlockedError` (`name`, `operation: "egress.sanitize"`, `kind: "egress_blocked"`) | `onDiagnostic` → `outcome: "aborted"` |
-| Ошибка классификатора при `failClosed: false` | вызов уходит без редакции (осознанный fail-open) | `onDiagnostic` → `outcome: "passed"` |
-| Редакция выполнена | вызов уходит с токенами/масками | `onDiagnostic` → `outcome: "redacted"`, `count` (без оригинала) |
+| Ошибка классификатора при `failClosed: true` (дефолт) | вызов **не уходит**; `chat()`/`filterClient()` бросает `EgressBlockedError` (`name`, `operation: "egress.sanitize"`, `kind: "blocked"`) | `onDiagnostic` → `outcome: "aborted"` → `egress_blocked` |
+| Ошибка классификатора при `failClosed: false` | вызов уходит без редакции (осознанный fail-open) | `onDiagnostic` → `outcome: "passed"` → `egress_degraded` |
+| Редакция выполнена | вызов уходит с токенами/масками | `onDiagnostic` → `outcome: "redacted"` (в журнал не пишется) |
 | `security.dataPolicy.enabled: false` | kill-switch: guard не создаётся | — |
 
+Сигналы `egress_blocked`/`egress_degraded` пишутся в лог активной сессии через
+`setEgressDiagnosticSink` (`session-phase.ts` → `egressDiagnosticSink`).
+
 Диагностика несёт только метаданные (`module`, `operation`, `kind`, `outcome`,
-`count`) — значений путей/PII в ней нет (INV-D8). Context-log применяет тот же
-guard до snapshot'а, поэтому `context.diff` показывает ровно то, что ушло
-провайдеру (та же карта токенов, INV-D11).
+`count`, `cause`) — значений путей/PII в ней нет (INV-D8). Context-log применяет
+тот же guard до snapshot'а, поэтому `context.diff` показывает ровно то, что
+ушло провайдеру (та же карта токенов, INV-D11).
 
 ## Проверенные молчащие `catch` (W10.3)
 
