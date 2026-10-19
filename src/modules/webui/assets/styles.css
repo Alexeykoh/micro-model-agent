@@ -690,7 +690,15 @@ body.light .sel > button { border: 1px solid var(--border); }
 .queue-item { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; min-width: 0; }
 .queue-item .qi-g { color: var(--accent); flex: none; }
 .queue-item .qi-text { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.queue-item .qi-pos { color: var(--dim-b); margin-left: auto; flex: none; }
+.queue-item .qi-actions { display: flex; gap: 2px; margin-left: auto; flex: none; }
+.queue-item .qi-btn {
+  padding: 0 3px; border: 1px solid transparent; border-radius: 4px;
+  background: transparent; color: var(--dim-b); font: inherit; line-height: 1.2;
+  cursor: pointer;
+}
+.queue-item .qi-btn:hover { color: var(--fg); border-color: var(--border-2); }
+.queue-item .qi-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.queue-item .qi-pos { color: var(--dim-b); flex: none; }
 
 /* image attachments */
 .attach-strip { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }

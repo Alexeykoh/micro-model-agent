@@ -114,7 +114,7 @@ export function handleInterruptPost(
  * Останавливает ход слота: scoped shutdown раннера (чужие фоновые процессы
  * живы) + scoped cancel висящих вопросов этой сессии.
  */
-function interruptSlot(s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport, sessionId: string): void {
+export function interruptSlot(s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport, sessionId: string): void {
   const runner = s.pool.getRunner(sessionId);
   if (runner) runner.agent.shutdown(sessionId);
   cancelPendingQuestions(s, sessionId);

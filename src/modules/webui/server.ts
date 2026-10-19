@@ -6,7 +6,7 @@
  * для CLI. Транспортные хелперы — в `./util`.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createWebUiState } from "./state";
+import { createWebUiState, type WebUiState, type WebUiAssets } from "./state";
 import { sessionStatus } from "./session/session-status";
 import {
   checkAuth,
@@ -16,6 +16,7 @@ import {
   setAuthCookie,
 } from "./util";
 import { handleMessagePost } from "./session/turns";
+import { handleQueueCancel, handleQueueStart } from "./session/queue-api";
 import { handleCommandPost, handleInterruptPost, handleIndexPost } from "./chat/actions-api";
 import { handleConfigGet, handleConfigPost, handleModelsGet } from "./settings/config-api";
 import { handleI18nGet } from "./i18n/i18n-api";
@@ -30,11 +31,8 @@ import { handleSetupApi } from "./settings/setup-api";
 import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp/lsp-api";
 import { handleUpdatePost } from "./chat/update-api";
 import { apiGuard, filterResponse } from "./egress";
-import type { WebUiState, WebUiAssets } from "./state";
 import { readEnv } from "../../config/env";
-
-/** Реэкспорт открытия браузера для CLI. */
-export { tryOpenBrowser } from "./util";
+export { tryOpenBrowser } from "./util"; // реэкспорт для CLI
 
 /** Статические роуты, отдаваемые как есть (без шаблонной обработки). */
 const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = {
@@ -116,6 +114,8 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
     });
   },
   "POST /api/message": (req, res, s) => handleMessagePost(req, res, s),
+  "POST /api/queue/cancel": (req, res, s) => handleQueueCancel(req, res, s),
+  "POST /api/queue/start": (req, res, s) => handleQueueStart(req, res, s),
   "GET /api/config": (_req, res, s) => handleConfigGet(res, s),
   "POST /api/config": (req, res, s) => handleConfigPost(req, res, s),
   "POST /api/answer": (req, res, s) => handleAnswerPost(req, res, s),
@@ -157,8 +157,6 @@ function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: We
   }
   sendJson(res, 404, { error: "not found" });
 }
-
-/** `POST /api/command|interrupt|index` — действия, вывод стримится по SSE (см. `./actions-api`). */
 
 /**
  * Точка входа запросов: SSE, статика, `/js`-модули, `/api/*`, иначе 404.

@@ -8,7 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- **Builtin plugin `angular11` — Angular 11 knowledge, checks and scaffolding**
+- **Web queue controls: cancel and force-start a queued message.** Each row of
+  the pinned input-queue strip (`mma web`) now has `▶` and `×`: cancel drops the
+  message without running it, start-now promotes it to the head and interrupts
+  the current turn of that session. Queue entries carry a stable server id
+  (`202 {id}`), so actions do not depend on a position that shifts when the head
+  drains; `queuedIds` in `/api/state` keeps placeholder rows (another tab or a
+  reload) controllable. New routes: `POST /api/queue/cancel`,
+  `POST /api/queue/start`.
+
+- **Builtin plugin `angular11` - Angular 11 knowledge, checks and scaffolding**
   (off by default). Small models systematically regress Angular 11 (classic
   NgModule era) toward 14+/16+/17+ APIs, so correctness is delegated to
   deterministic checks instead of model memory (same principle as

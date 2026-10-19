@@ -202,8 +202,8 @@ function dispatchPost(
   const blocked = s.pool.isBusy(target);
   if (blocked) {
     // Слот занят: сообщение встаёт в очередь входящих вместо `409 busy`.
-    const pos = s.pool.enqueue(target, text, images, target);
-    if (pos === null) {
+    const queued = s.pool.enqueue(target, text, images, target);
+    if (queued === null) {
       sendJson(res, 429, { error: "queue_full" });
       return;
     }
@@ -212,6 +212,7 @@ function dispatchPost(
       ok: true,
       queued: s.pool.totalQueued(),      sessionId: target,
       queuedForSession: s.pool.queueLen(target),
+      id: queued.id,
     });
     return;
   }
