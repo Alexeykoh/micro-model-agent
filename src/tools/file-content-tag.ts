@@ -5,6 +5,9 @@
  * пути, независимо от PII-паттернов. Скоуп — только объявленные `pathArgs` (D6).
  *
  * Вынесено из `executor.ts` (правило 6: файл на потолке гейта).
+ *
+ * DEBT(file-content-bypass-non-path-tools): `bash`/MCP/плагины не объявляют
+ * `pathArgs`, поэтому их вывод не тегируется (только regex-редакция).
  */
 import type { ToolContext, ToolCall, ToolResult } from "./types";
 import type { RegisteredTool } from "./registry";

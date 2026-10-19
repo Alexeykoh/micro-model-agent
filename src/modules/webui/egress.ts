@@ -7,6 +7,10 @@
  * структурно (R5: сканируются и тела значений), SSE — по `data:`-блокам.
  * Событие до записи не меняется: редакция идёт над копией для конкретного
  * клиента. Карта токенов наружу не попадает.
+ *
+ * DEBT(api-hidden-globs-text-scope): `apiHiddenGlobs` дают 404 на файловых
+ * эндпоинтах; в произвольном тексте SSE/JSON скрытый сегмент может пережить
+ * prefix-редакцию — нужен field-aware матчинг известных path-полей.
  */
 import type { ServerResponse } from "node:http";
 import { homedir, hostname, userInfo } from "node:os";
