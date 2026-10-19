@@ -561,8 +561,8 @@ localhost→external — тоже; (c) `/api/state` и SSE без abs-путей
 
 ## 14. Открытые вопросы и долг
 
-- **На подтверждение пользователем:** приняты рекомендации D1 (`pathMode:"prefix"`) и
-  D2 (два списка путей); ждут финального «да».
+- **Принято (пользователь, 2026-10-19):** D1 (`pathMode:"prefix"`) и D2 (два списка
+  путей, `apiHiddenGlobs` + `providerBlockGlobs`).
 - **DEBT(at-rest-pii) (D10):** PII в `session.jsonl`/memory-фактах хранится открыто; E2
   скрывает только при чтении. Привязать к `sessionEncryption`. Триггер: политика контура.
 - **DEBT(research-by-checksum):** контрольные суммы **УНП РБ** и **идентификационного
@@ -613,5 +613,5 @@ localhost→external — тоже; (c) `/api/state` и SSE без abs-путей
   основного `llmProvider` → нужна **глобальная регистрация guard** в слое провайдеров
   (прецедент `setProviderMemoryApplier`), иначе два пути остаются незакрытыми (§6.2).
   Индексер LLM не вызывает — карта проекта без сети.
-- **На подтверждение пользователем:** рекомендации D1 (`pathMode:"prefix"`) и D2
-  (`apiHiddenGlobs` + `providerBlockGlobs`).
+- **Согласовано пользователем (2026-10-19):** D1 (`pathMode:"prefix"`) и D2
+  (`apiHiddenGlobs` + `providerBlockGlobs`). Открытых решений нет.
