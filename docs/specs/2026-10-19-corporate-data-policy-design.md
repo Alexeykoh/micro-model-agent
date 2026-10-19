@@ -1,8 +1,8 @@
 # Корпоративный слой безопасности: DLP-политика данных и контроль egress
 
-**Дата:** 2026-10-19 · **Ветка:** `feat/corporate-data-policy` · **Статус:** черновик v6
-(4 раунда прожарки `grill-me` + самопроверка: контракт `EgressGuard`, исправлены
-противоречие §12↔§6.2, дублирование, висячая ссылка, пример токенов — см. §15)
+**Дата:** 2026-10-19 · **Ветка:** `feat/corporate-data-policy` · **Статус:** черновик v7
+(5 раундов `grill-me` + самопроверка; R17 — проверены все источники промпта, включая
+память, и найден второй шов сборки провайдера `buildManagedProvider` — см. §1.6, §6.2, §15)
 
 **Связанные документы:** [architecture v2](./2026-10-12-architecture-v2-design.md) ·
 [w2-enforcement](./2026-10-13-w2-enforcement-design.md) ·
@@ -69,6 +69,37 @@
 compaction, reasoning-probe, fork-сабагенты, …). Точечная правка рядом с одним вызовом
 оставляет 12 путей. По принципу «Enforcement — одна точка» фильтр обязан стоять **в
 единственной точке рождения провайдера**, а не у вызывающих.
+
+### 1.6 Источники формирования промпта (R17)
+
+Проверено перед стартом: **все** источники системного/пользовательского промпта
+сходятся в один канал — `LLMProvider.chat(messages, tools, …)`. Обёртка E1 на `chat`
+накрывает их все, включая память.
+
+| Источник | Где формируется | Что может нести |
+|---|---|---|
+| `buildSystemInfo` | `core/system-prompt.ts:56,116` | **`Workspace: ${baseDir}`, `CWD: ${baseDir}`, env-профиль** (hostname, home) — главный вектор |
+| Статичные блоки | `bootstrap/modules-phase.ts:271-287` | project map (`indexer`), session, skills, `AGENTS.md`, plan-reminder |
+| Динамические блоки | `core/prompt-assembler.ts:38-62` | model-identity, skills, session id/name, project map, plugin-capabilities, hidden-tools |
+| **Память** | `modules/memory/module.ts:29` (`getSystemPromptBlock`), `lifecycle.ts:19` | преференсы `k=v` и хвосты `errors/conventions/decisions/facts.md` |
+| Модульные блоки | `mcp/lifecycle.ts:18`, `browser/lifecycle.ts:20`, `lsp` | описания MCP-тулов, vision, стартовый health-check |
+| Хуки плагинов | `core/agent/prompt-phase.ts:49` (`runOnBuildPrompt`) | произвольный текст плагина |
+| Overflow-сводки | `core/prompt-overflow.ts:120` (`provider.chat`) | сжатые instructions/project-map |
+| Определения тулов | аргумент `tools` | примеры/пути в описаниях тулов |
+
+**LLM-вызовы (все через `chat`):** main-loop (`loop-llm.ts:135`, `turn-output.ts:99`,
+`turn-run.ts:121`), компакция/overflow (`prompt-overflow.ts:120`,
+`context/chunk-query.ts:88`), hallucination-judge (`llm-judge.ts:104`; детектор создан с
+`llmProvider` — `session-phase.ts:214`, `session-runner.ts:203`), критик
+(`critic/client.ts:160`), reasoning-probe (`probe.ts:70`), сабагенты
+(`subagent-run.ts`, `pipeline-run.ts` — оба берут `ctx.llmProvider`).
+
+**Следствие для шва (§6.2):** критик и эксперты строят провайдера **не** из основного
+`llmProvider`, а отдельным `buildManagedProvider` → нужна глобальная регистрация guard
+в слое провайдеров, иначе эти два пути остаются незакрытыми.
+
+**Локальные источники (не egress):** индексер (`modules/indexer/*`) LLM не вызывает —
+карта проекта строится без сети; `countTokens`, `estimateTokens` — локальные.
 
 ---
 
@@ -294,13 +325,26 @@ machine-identity), workspace-относительный остаток сохр�
 регистр, трейлинг-слэш); дефолт — внешний; loopback/allowlist — исключения. Матчинг
 строковым префиксом (`startsWith("http://localhost")`) — **ошибочен**.
 
-### 6.2 Шов E1 (R4)
+### 6.2 Шов E1 (R4, уточнён R17)
 
-**Единственная точка — `ProviderManager.build()`** (`manager.ts:193`): строит провайдера на
-каждую запись и уже имеет `entry.baseUrl`. `buildActiveProvider`/`buildManagedProvider`
-идут через `new ProviderManager`; `FallbackProvider` (`fallback.ts:77`) делегирует в
-`this.source.active` → тот же `build()`. Одна обёртка покрывает main, critic, экспертов и
-failover, а вердикт считается на **фактически обслуживающем** провайдере (снимает Q2–Q4).
+**Точка обёртки — `ProviderManager.build()`** (`manager.ts:193`): строит провайдера на
+каждую запись и уже имеет `entry.baseUrl`. `FallbackProvider` (`fallback.ts:77`)
+делегирует в `this.source.active` → тот же `build()`. Вердикт считается на
+**фактически обслуживающем** провайдере (снимает Q2–Q4).
+
+**`ProviderManager` строится в ДВУХ местах** — обе должны получить guard:
+
+| Фабрика | Потребители |
+|---|---|
+| `buildActiveProvider` (`factory.ts:29`) | main-цикл, `Agent.setProvider`/`reconfigure` (`agent/provider-phase.ts`), session-runner (`session-runner.ts:176`) |
+| `buildManagedProvider` (`managed.ts:39`) | **критик** (`critic/provider.ts:56`), **эксперты** (`expert-provider.ts:30`) |
+
+Критик/эксперт строят провайдера **вне** основного `llmProvider` и не имеют доступа к
+инъекции из bootstrap. Поэтому guard в слое провайдеров регистрируется **глобально** —
+прецедент `setProviderMemoryApplier` (`config/registry.ts:641`, вызов из
+`provider-phase.ts:115`): bootstrap вызывает `setEgressGuard(factory)`, а
+`ProviderManager.build()` берёт guard при сборке. Альтернатива (проброс через options)
+требует правки всех вызывающих `buildManagedProvider` — отвергнута как дрейф.
 
 **Вне шва (классифицируются гейтом как benign):** `cli/commands.ts:211` (`createProvider`)
 и `cli/repl-commands.ts:803` (`new OpenAICompatProvider`) строят провайдера напрямую, но
@@ -458,10 +502,16 @@ interface DataPolicyConfig {
   `updater`, `setup/discovery` → benign; `image-utils` → classify; framework
   (`outbound-policy`/`webhook`/`audit-notifier`) → V7; `web-search` query и
   `mcp/client` → допустимы с явной причиной и как **остаточные векторы**; (b) **шов
-  сборки** (D14): все чат-пути идут через `ProviderManager.build()`; `new
-  OpenAICompatProvider(` вне `presets.ts` допустим только в allowlist-записях с причиной
-  (`cli/commands.ts:211`, `cli/repl-commands.ts:803` — только `listModels()`, §6.2);
-  необъявленный сайт = падение гейта (INV-D2/D3).
+  сборки** (D14, R17): `ProviderManager` строится только в `factory.ts` и `managed.ts`, и
+  **обе** фабрики получают guard (глобальная регистрация `setEgressGuard` из bootstrap,
+  §6.2) — иначе критик/эксперт вне шва; все чат-пути идут через `ProviderManager.build()`;
+  `new OpenAICompatProvider(` вне `presets.ts` допустим только в allowlist-записях с
+  причиной (`cli/commands.ts:211`, `cli/repl-commands.ts:803` — только `listModels()`,
+  §6.2); необъявленный сайт = падение гейта (INV-D2/D3).
+- `tests/providers/prompt-sources.test.ts` (R17) — каждый источник промпта (§1.6) проходит
+  через обёрнутый `chat`: системный промпт с `Workspace`/`CWD`, статичные/динамические
+  блоки, **блок памяти**, `runOnBuildPrompt`, overflow-сводка, `tools`-описания — внешнему
+  не уходят `baseDir`/hostname. Индексер LLM не вызывает (проверка отсутствия `chat`).
 - `tests/security/data-policy.test.ts` — классификатор; PII-каталог (валид/невалид);
   псевдонимизация/ре-гидратация; идемпотентность; неизвестный токен; расщеплённый токен;
   URL не тронут; case/separator-корпус; time-budget; неперебираемость токена и отказ на
@@ -485,7 +535,8 @@ interface DataPolicyConfig {
 **«Падал бы без правки» (R15, правило 7)** — обязательные красные-на-`master` ассерты:
 (a) body запроса к external не содержит `hostname`/`homedir`/abs-пути; (b) failover
 localhost→external — тоже; (c) `/api/state` и SSE без abs-путей; (d) hidden-glob → 404;
-(e) расщеплённый токен ре-гидратируется.
+(e) расщеплённый токен ре-гидратируется; (f) системный промпт с `Workspace: C:\…` и
+блок памяти уходят внешнему без `baseDir`/hostname.
 
 ---
 
@@ -553,5 +604,14 @@ localhost→external — тоже; (c) `/api/state` и SSE без abs-путей
   (`web-search` query, `mcp/client`).
 - **Самокритика раунда 1:** 5.6/10 — есть утверждения без доказательства, слабая
   проверяемость и пропущен сквозной поток; правки внесены в v3.
+- **Раунд 5 (источники промпта, R17):** проверены **все** источники формирования
+  промпта — системный блок (`buildSystemInfo` с `Workspace`/`CWD`/env), статичные и
+  динамические блоки, **память** (`memory/module.ts`, хвосты .md + преференсы), модульные
+  блоки (MCP/browser/LSP), хуки плагинов, overflow-сводка, `tools`-описания (§1.6). Все
+  сходятся в `LLMProvider.chat` → обёртка E1 накрывает их все. **Найдена дыра:** критик и
+  эксперты строят провайдера отдельным `buildManagedProvider` (`managed.ts:39`) вне
+  основного `llmProvider` → нужна **глобальная регистрация guard** в слое провайдеров
+  (прецедент `setProviderMemoryApplier`), иначе два пути остаются незакрытыми (§6.2).
+  Индексер LLM не вызывает — карта проекта без сети.
 - **На подтверждение пользователем:** рекомендации D1 (`pathMode:"prefix"`) и D2
   (`apiHiddenGlobs` + `providerBlockGlobs`).

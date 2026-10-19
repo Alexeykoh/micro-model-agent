@@ -18,6 +18,12 @@
 Ключевые факты, определившие план:
 - вызовов `provider.chat(...)` — **13**, поэтому фильтр только в одной точке
   (`ProviderManager.build()`, `manager.ts:193`);
+- `ProviderManager` строится в **двух** фабриках — `buildActiveProvider` (`factory.ts:29`)
+  и `buildManagedProvider` (`managed.ts:39`, критик/эксперт) → guard нужен **глобальной
+  регистрацией**, иначе два пути вне шва;
+- **все источники промпта** (включая память — `memory/module.ts`, хвосты `.md` +
+  преференсы) сходятся в `LLMProvider.chat`; системный блок несёт `Workspace`/`CWD`
+  (`system-prompt.ts:56,116`) — главный вектор;
 - существующий `redactContextSecrets` **узкий by design** (`context-log.ts:19-25`) —
   расширять его нельзя;
 - `security.pathArgs` (`executor.ts:169`) и `realpath` (`file/paths.ts:40`) уже есть —
@@ -163,10 +169,13 @@ quality` зелёный. **Не подключаем ни к провайдер�
    - fail-closed: ошибка/бюджет классификатора → типизированная ошибка без отправки.
 2. `src/modules/providers/manager.ts` — в `build()` оборачивать провайдера записи, если
    `guard` передан; вердикт по `entry.baseUrl` (host через `new URL`, порт/`[::1]`/регистр).
-3. Bootstrap: `core/bootstrap/provider-phase.ts`, `session-runner.ts`,
-   `core/agent/provider-phase.ts` — построить `EgressGuard` из `data-policy` и передать в
-   `ProviderManager` через `ManagedProviderOptions`/`ProviderManagerOptions` (инъекция,
-   providers не импортирует security).
+3. **Инъекция guard — глобальная регистрация** (R17): в слое провайдеров добавить
+   `setEgressGuard(factory)` (прецедент `setProviderMemoryApplier`); bootstrap
+   (`core/bootstrap/provider-phase.ts`) строит `EgressGuard` из `data-policy` и
+   регистрирует его **до** первой сборки провайдера. `ProviderManager.build()` берёт guard
+   при сборке. Так покрываются **обе** фабрики — `buildActiveProvider` (`factory.ts:29`) и
+   `buildManagedProvider` (`managed.ts:39`, критик/эксперт) — без правки их вызывающих и
+   без импорта security из providers.
 4. Эффекты конфига: `ConfigStore.set` для `security.dataPolicy.*` → `provider.rebuild`.
 5. Порядок с context-log: санитизация до snapshot'а (`core/agent/context-log.ts`).
 6. Обновить `docs/agents/observability.md` (fail-open/abort пути).
@@ -176,9 +185,13 @@ quality` зелёный. **Не подключаем ни к провайдер�
   - перехват сериализованного HTTP body: external ⇒ нет `hostname`/`homedir`/abs-пути;
   - trusted (loopback) ⇒ пути на месте;
   - **failover localhost→external не течёт**;
-  - сохранение семантики стрима (abort/`done`/`usage`/порядок);
-  - critic/эксперт-путь обёрнут (`buildManagedProvider`);
+  - **критик/эксперт (`buildManagedProvider`) тоже обёрнуты** (R17);
+  - сохранение семантики стрима (abort/`done`/`usage`/порядок чанков);
   - image-части вырезаны; fail-closed abort.
+- `tests/providers/prompt-sources.test.ts` (R17): системный промпт с
+  `Workspace`/`CWD`, статичные/динамические блоки, **блок памяти**, `runOnBuildPrompt`,
+  overflow-сводка, `tools`-описания — внешнему без `baseDir`/hostname; индексер `chat`
+  не вызывает.
 - `tests/arch/egress-guard.test.ts`: инвентарь `fetch(` с причинами + шов сборки
   (allowlist для `cli/commands.ts:211`, `cli/repl-commands.ts:803` с причиной).
 - `tests/config/data-policy-effects.test.ts`: ключи → `provider.rebuild`.
@@ -248,7 +261,8 @@ quality` зелёный. **Не подключаем ни к провайдер�
 | `tests/arch/egress-guard.test.ts` | инвентарь `fetch(` + шов сборки | W2 |
 | `tests/security/data-policy.test.ts` | классификатор, токены, path-policy | W1 |
 | `tests/security/pii-rf-by.test.ts` | контрольные суммы РФ/РБ | W1 |
-| `tests/providers/sanitizing-provider.test.ts` | E1 body/стрим/failover | W2 |
+| `tests/providers/sanitizing-provider.test.ts` | E1 body/стрим/failover/критик | W2 |
+| `tests/providers/prompt-sources.test.ts` | все источники промпта через chat (R17) | W2 |
 | `tests/webui/egress-filter.test.ts` | E2 web | W3 |
 | `tests/config/data-policy-effects.test.ts` | эффекты конфига | W2 |
 | `tests/service/*` (расширение) | E2 serve + webhook | W4 |
