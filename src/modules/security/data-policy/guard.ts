@@ -29,6 +29,51 @@ export interface CreateGuardOptions {
   onDiagnostic?: (d: GuardDiagnostic) => void;
 }
 
+/** image_url-часть сообщения: URL/data-URL может нести локальный путь/PII. */
+function isImagePart(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "image_url"
+  );
+}
+
+/**
+ * Вырезать image_url-части (E1, только для внешнего egress без явного
+ * разрешения `allowImagesToExternal`). Массив, от которого остались только
+ * изображения, заменяется текстовой заглушкой — пустой content ломает
+ * OpenAI-совместимых провайдеров.
+ */
+function stripImageParts<T>(value: T): { value: T; removed: boolean } {
+  let removed = false;
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) {
+      const out: unknown[] = [];
+      let localRemoved = false;
+      for (const item of v) {
+        if (isImagePart(item)) {
+          removed = true;
+          localRemoved = true;
+          continue;
+        }
+        out.push(walk(item));
+      }
+      if (localRemoved && out.length === 0 && v.length > 0) {
+        return { type: "text", text: "[image removed]" };
+      }
+      return out;
+    }
+    if (v && typeof v === "object") {
+      const src = v as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(src)) out[k] = walk(val);
+      return out;
+    }
+    return v;
+  };
+  return { value: walk(value) as T, removed };
+}
+
 /** Создать guard для заданной цели. */
 export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unknown> {
   const { config, target, ctx } = opts;
@@ -55,10 +100,16 @@ export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unkn
       if (!config.enabled) return { messages, tools, changed: false, stats: {} };
       try {
         const stats: Partial<Record<DataClass, number>> = {};
-        const msgProj = projectDeep(messages, policy);
+        // Внешнему провайдеру изображения уходят только по явному разрешению
+        // (INV-D2): иначе URL/data-URL изображения — ещё один канал утечки.
+        const stripped =
+          !target.trusted && !config.allowImagesToExternal
+            ? stripImageParts(messages)
+            : { value: messages, removed: false };
+        const msgProj = projectDeep(stripped.value, policy);
         sumStats(stats, msgProj.stats);
         let toolsOut = tools;
-        let changed = msgProj.changed;
+        let changed = msgProj.changed || stripped.removed;
         if (tools) {
           const toolProj = projectDeep(tools, policy);
           toolsOut = toolProj.messages;

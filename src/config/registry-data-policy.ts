@@ -37,7 +37,11 @@ function dpBool(
   };
 }
 
-/** list-деф `security.dataPolicy.<key>` (без пересборки, редактор тегов). */
+/**
+ * list-деф `security.dataPolicy.<key>`. Эффект — пересборка: и allowlist
+ * доверенных хостов, и glob-списки читаются при сборке провайдера, поэтому
+ * правка из UI обязана дойти до живого guard'а, а не ждать рестарта.
+ */
 function dpList(
   key: string,
   pick: (d: DataPolicyConfig) => string[],
@@ -49,7 +53,7 @@ function dpList(
     aliases: [],
     domain: "security",
     valueType: "list",
-    effects: [],
+    effects: REBUILD,
     editor: { kind: "tags", placeholder },
     get: (c) => pick(dp(c)),
     set: (c, v) => put(dp(c), v as string[]),
