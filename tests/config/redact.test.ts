@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { redactConfigSecrets } from "../../src/config/redact";
+import { redactConfigSecrets, serializeConfigForWire } from "../../src/config/redact";
 
 describe("redactConfigSecrets", () => {
   it("redacts provider api keys", () => {
@@ -61,5 +61,23 @@ describe("redactConfigSecrets", () => {
     expect(out.provider).not.toBe((input as any).provider);
     expect(out.provider.entries).not.toBe((input as any).provider.entries);
     expect((input as any).provider.apiKey).toBe("sk-x");
+  });
+});
+
+describe("serializeConfigForWire", () => {
+  it("turns RegExp into its source so JSON keeps the pattern", () => {
+    const input = { security: { contentScan: { dangerousPatterns: [/eval\(/g, /rm -rf/] } } };
+    const out = serializeConfigForWire(input) as any;
+    expect(out.security.contentScan.dangerousPatterns).toEqual(["eval\\(", "rm -rf"]);
+    expect(JSON.parse(JSON.stringify(out)).security.contentScan.dangerousPatterns).toEqual([
+      "eval\\(",
+      "rm -rf",
+    ]);
+    expect(input.security.contentScan.dangerousPatterns[0]).toBeInstanceOf(RegExp);
+  });
+
+  it("still redacts secrets", () => {
+    const input = { provider: { apiKey: "sk-secret" } };
+    expect((serializeConfigForWire(input) as any).provider.apiKey).toBe("***");
   });
 });

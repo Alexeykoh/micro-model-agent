@@ -3,7 +3,7 @@
 // Auth и same-origin проверяются выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../../i18n/index";
-import { redactConfigSecrets } from "../../../config/redact";
+import { serializeConfigForWire } from "../../../config/redact";
 import { configDefs, setConfigValue, type ConfigKeyDef } from "../../../config/registry";
 import { configVersion } from "../../../config/persist";
 import { needsRebuild } from "../../../config/effects";
@@ -78,7 +78,7 @@ export function handleConfigGet(res: ServerResponse, s: ConfigStore & RuntimeSta
     return;
   }
   sendJson(res, 200, {
-    config: redactConfigSecrets(s.config),
+    config: serializeConfigForWire(s.config),
     registry: buildConfigRegistry(s.config),
     version: configVersion(s.config),
     webToken: maskToken(s.token),

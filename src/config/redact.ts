@@ -17,15 +17,16 @@ const SECRET_MAPS = new Set(["headers", "env"]);
 
 const MASK = "***";
 
-function walk(value: unknown, parentKey?: string, depth = 0): unknown {
+function walk(value: unknown, parentKey?: string, depth = 0, regexToSource = false): unknown {
   if (depth > 100) return value;
   if (typeof value === "string") {
     return parentKey && SECRET_KEYS.has(parentKey) ? MASK : value;
   }
+  if (value instanceof RegExp) return regexToSource ? value.source : value;
   if (Array.isArray(value)) {
-    return value.map((v) => walk(v, parentKey, depth + 1));
+    return value.map((v) => walk(v, parentKey, depth + 1, regexToSource));
   }
-  if (value && typeof value === "object" && !(value instanceof RegExp)) {
+  if (value && typeof value === "object") {
     if (parentKey && SECRET_MAPS.has(parentKey)) {
       const masked: Record<string, unknown> = {};
       for (const k of Object.keys(value as Record<string, unknown>)) masked[k] = MASK;
@@ -33,7 +34,7 @@ function walk(value: unknown, parentKey?: string, depth = 0): unknown {
     }
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = walk(v, k, depth + 1);
+      out[k] = walk(v, k, depth + 1, regexToSource);
     }
     return out;
   }
@@ -43,4 +44,13 @@ function walk(value: unknown, parentKey?: string, depth = 0): unknown {
 /** Возвращает глубокую копию `config` с секретами, заменёнными на `***`. */
 export function redactConfigSecrets<T>(config: T): T {
   return walk(config) as T;
+}
+
+/**
+ * Копия конфига для JSON-транспорта (`GET /api/config`): секреты замаскированы,
+ * `RegExp` превращён в `.source` — иначе `JSON.stringify` отдаёт `{}` и UI
+ * рисует `[object Object]` вместо паттерна.
+ */
+export function serializeConfigForWire<T>(config: T): T {
+  return walk(config, undefined, 0, true) as T;
 }

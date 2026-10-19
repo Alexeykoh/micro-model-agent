@@ -83,6 +83,24 @@ describe("webui config/session/model REST", () => {
     });
   });
 
+  it("GET /api/config returns regex config keys as source strings, not objects", async () => {
+    const s = createWebUiState();
+    s.config = testConfig();
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/config`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        config: { security: { contentScan: { dangerousPatterns: unknown[] } } };
+      };
+      // Регрессия: RegExp в JSON превращается в `{}`, и UI рисует `[object Object]`.
+      const patterns = body.config.security.contentScan.dangerousPatterns;
+      expect(Array.isArray(patterns)).toBe(true);
+      expect(patterns.length).toBeGreaterThan(0);
+      expect(patterns.every((p) => typeof p === "string")).toBe(true);
+      expect(patterns).toContain("eval\\(");
+    });
+  });
+
   it("POST /api/config applies a valid key, persists, and reconfigures", async () => {
     const s = createWebUiState();
     s.config = testConfig();
