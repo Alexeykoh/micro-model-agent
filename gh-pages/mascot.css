@@ -155,6 +155,29 @@ html.light .c-dim { --face-c: var(--panel); }
 .mdl.st-boot { border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--eye-c) 55%, transparent); animation: mdlSpin 2.8s linear infinite; }
 .mdl.st-boot .eye { border-radius: 50%; animation: mdlBootBlink 3.4s var(--ease) infinite; }
 
+/* load (fetching / generic waiting): a partial ring */
+@keyframes mdlLoad { to { transform: rotate(360deg); } }
+.mdl.st-load {
+  border-radius: 50%;
+  border: 1px solid transparent;
+  border-top-color: var(--eye-c);
+  border-right-color: color-mix(in srgb, var(--eye-c) 45%, transparent);
+  animation: mdlLoad 1.5s linear infinite;
+}
+.mdl.st-load .eye { border-radius: 50%; opacity: .55; }
+/* check (lsp_check / verification passed) */
+@keyframes mdlCheck { 0% { opacity: 0; transform: scale(.3) rotate(-10deg); } 35% { opacity: 1; transform: scale(1) rotate(0); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.7); } }
+.mdl.st-check .spark { display: block; position: absolute; top: -16%; right: -10%; font-size: calc(var(--s) * .42); line-height: 1; font-weight: 700; color: var(--green); animation: mdlCheck 2.4s ease-in-out infinite; }
+.mdl.st-check .spark::before { content: "✓"; }
+/* warn (lsp errors / a degraded check) */
+.mdl.st-warn .star { display: block; position: absolute; top: -14%; right: -8%; font-size: calc(var(--s) * .5); line-height: 1; font-weight: 700; color: var(--yellow); animation: mdlStar 2.2s ease-out infinite; }
+.mdl.st-warn .star::before { content: "!"; }
+/* update (self-update available) */
+@keyframes mdlUp { 0%, 100% { transform: translateY(0) scale(.9); opacity: .55; } 50% { transform: translateY(-10%) scale(1.15); opacity: 1; } }
+.mdl.st-update .orb { display: block; position: absolute; top: -8%; right: -18%; animation: mdlUp 2s ease-in-out infinite; pointer-events: none; }
+.mdl.st-update .orb i { font-style: normal; font-weight: 700; line-height: 1; font-size: calc(var(--s) * .44); color: var(--green); }
+.mdl.st-update .orb i::before { content: "↑"; }
+
 @media (prefers-reduced-motion: reduce) {
   .mdl, .mdl * { animation: none !important; }
 }

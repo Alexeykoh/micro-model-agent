@@ -33,7 +33,7 @@ Most agents (Devin, Cursor, Copilot) are glued to cloud models or pricey APIs �
 - **Cloud-optional by design** — works fully offline against any OpenAI-compatible backend
 - **Thrives in a tight context** — calibrated compaction (v2 policy) keeps 32K models productive, with a tool ledger so the agent stops re-reading what it already read
 - **Catches hallucinations** — a 3-stage validation pipeline spots the lies small models love to tell, plus artifact/web/file claims and an in-loop critic
-- **Agent-Level MoE** — hierarchical task decomposition lets small models ship big multi-step work
+- **Verified planning** — `plan` / `plan_step` / `todo` carry file-exists and command checks, so a step closes only when its files really changed
 
 ---
 
@@ -41,7 +41,7 @@ Most agents (Devin, Cursor, Copilot) are glued to cloud models or pricey APIs �
 
 **The agent loop**
 
-- **6-state agent loop** (`INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR`) — clean, predictable, debuggable
+- **6-phase agent loop** (`INIT → THINK → OBSERVE → VERIFY → OUTPUT → ERROR`) — one path, predictable, debuggable
 - **Context budget management** — per-model budgets with sliding-window compaction that preserves facts, decisions, and errors, keeps a `[Tool ledger]` of what was already read, and calibrates its token estimate against the provider's real `prompt_tokens`
 - **Honest-stop guards** — failed tool batches and duplicate-tool loops stop the loop with a truthful status instead of letting a small model grind (honest stop, duplicate-tool budget, forced tool-less final answer)
 - **Hallucination detection** — fact checks (file paths), consistency checks (decision rollbacks), confidence checks, plus claim verification: "created file X" / "output says Y" / "the price is Z" are checked against real tool output
@@ -49,7 +49,7 @@ Most agents (Devin, Cursor, Copilot) are glued to cloud models or pricey APIs �
 
 **Orchestration & scale**
 
-- **Agent-Level MoE** — a router plus expert subagents with tool filtering, isolated context, file scoping, topological parallel execution, a re-plan cycle, and machine-readable verification (`success_criteria`)
+- **Parallel subagents** — independent subtasks run in the same Observe phase through `ToolExecutor.fork()`, with isolated context and file scoping
 - **YAML pipelines** — a DAG engine with parallel waves, dependencies, and retries
 - **Project map** — symbol index (definitions, outlines, signatures), PageRank-ranked map under a token budget, gitignore-aware incremental cache, LSP fallback for symbol lookup
 
@@ -330,7 +330,6 @@ Key options (full list in `src/config/defaults.ts`; view/edit via `/config` in t
 | `reasoning.baseline` | `low` | Starting level in auto (grows on signals) |
 | `maxToolIterations` | `200` | Max tool calls per run |
 | `stuckThreshold` | `6` | Iterations without progress before stuck detection |
-| `moe.enabled` | `false` | Enable Agent-Level MoE (orchestrator falls back to the active model) |
 | `critic.enabled` | `true` | In-loop critic: verifies the final answer before it's accepted |
 | `security.enabled` | `true` | Security module (balanced policy by default) |
 | `service.port` | `7331` | Port for `mma serve` |
@@ -338,24 +337,7 @@ Key options (full list in `src/config/defaults.ts`; view/edit via `/config` in t
 | `locale` | `en` | UI language (`en` / `ru`) |
 | `logLevel` | `info` | Logging level |
 
-Everything else — ~110 keys across context budget, reasoning, MoE, critic, plugins, images, service, providers, webui — is reachable through `/config`, `mma config show` and web Settings → … (`config show` redacts secrets unless `--show-secrets`).
-
-### Agent-Level MoE
-
-```json
-{
-  "moe": { "enabled": true },
-  "orchestrator": {
-    "model": "qwen3-70b-414k",
-    "provider": { "baseUrl": "http://localhost:1234/v1" }
-  },
-  "experts": {
-    "code": { "model": "qwen/qwen3.5-9b", "tool_tags": ["file", "code", "shell"], "max_attempts": 3 },
-    "research": { "model": "qwen/qwen3.5-9b", "tool_tags": ["research"], "max_attempts": 3 },
-    "browser": { "model": "qwen/qwen3.5-9b", "tool_tags": ["browser", "vision"], "max_attempts": 3 }
-  }
-}
-```
+Everything else — ~110 keys across context budget, reasoning, critic, plugins, images, service, providers, webui — is reachable through `/config`, `mma config show` and web Settings → … (`config show` redacts secrets unless `--show-secrets`).
 
 ---
 

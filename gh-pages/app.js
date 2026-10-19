@@ -66,7 +66,8 @@
 
   /* ---- MMART faces ---- */
   var STATES = ["track", "think", "read", "find", "web", "edit", "type", "create", "run",
-              "tests", "compact", "plan", "ask", "done", "error", "stop", "queued", "boot"];
+              "tests", "compact", "plan", "ask", "done", "error", "stop", "queued", "boot",
+              "load", "check", "warn", "update"];
   function mountFace(el) {
     if (el && !el.querySelector(".eyes")) {
       el.innerHTML = '<span class="eyes"><i class="eye left"></i><i class="eye right"></i></span>' +
@@ -98,8 +99,8 @@
   /* ---- scroll companion ---- */
   var SECTION_STATE = {
     why: "think", terminal: "run", context: "read", tools: "find",
-    moe: "edit", memory: "think", safety: "run", service: "run",
-    install: "done", limits: "think", phil: "done"
+    planning: "plan", memory: "think", safety: "run", service: "run",
+    ops: "check", start: "done", limits: "think", phil: "done"
   };
   function setFaceState(state) {
     var f = document.getElementById("compFace");

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://alexeykoh.github.io/micro-model-agent/sitemap.xml

@@ -17,6 +17,16 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="MMA — a harness for small local models">
   <meta name="twitter:description" content="An agent harness that keeps local 32K–64K models on task.">
+  <meta name="robots" content="index,follow">
+  <meta property="og:site_name" content="MMA — Micro Models Agent">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ru_RU">
+  <meta property="og:image" content="https://alexeykoh.github.io/micro-model-agent/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="MMA — a harness for small local models">
+  <meta name="twitter:image" content="https://alexeykoh.github.io/micro-model-agent/og.png">
+  <link rel="sitemap" type="application/xml" href="sitemap.xml">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -47,7 +57,7 @@
 <body>
   <script>window.MMA_VERSION = "0.3.3";</script>
 
-  <a class="skip" href="#top" data-i18n="a11y.skip"></a>
+  <a class="skip" href="#top" data-i18n="a11y.skip">Skip to content</a>
   <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
 
   <header class="nav">
@@ -57,20 +67,21 @@
         <span class="brand-txt">MMA</span>
       </a>
       <nav class="links">
-        <a href="#why" data-i18n="nav.why"></a>
-        <a href="#terminal" data-i18n="nav.terminal"></a>
-        <a href="#context" data-i18n="nav.context"></a>
-        <a href="#tools" data-i18n="nav.tools"></a>
-        <a href="#moe" data-i18n="nav.moe"></a>
-        <a href="#memory" data-i18n="nav.memory"></a>
-        <a href="#safety" data-i18n="nav.safety"></a>
-        <a href="#service" data-i18n="nav.service"></a>
-        <a href="#limits" data-i18n="nav.limits"></a>
+        <a href="#why" data-i18n="nav.why">Why</a>
+        <a href="#terminal" data-i18n="nav.terminal">Interfaces</a>
+        <a href="#context" data-i18n="nav.context">Context</a>
+        <a href="#tools" data-i18n="nav.tools">Tools</a>
+        <a href="#planning" data-i18n="nav.planning">Planning</a>
+        <a href="#memory" data-i18n="nav.memory">Memory</a>
+        <a href="#safety" data-i18n="nav.safety">Safety</a>
+        <a href="#service" data-i18n="nav.service">Service</a>
+        <a href="#ops" data-i18n="nav.ops">Operations</a>
+        <a href="#limits" data-i18n="nav.limits">Limits</a>
       </nav>
       <div class="ctl">
         <button id="langBtn" class="iconbtn" type="button">RU</button>
         <button id="themeBtn" class="iconbtn" type="button" aria-label="Toggle theme" aria-pressed="false"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg></button>
-        <a class="gh" href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="nav.github"></a>
+        <a class="gh" href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="nav.github">GitHub</a>
       </div>
     </div>
   </header>
@@ -82,31 +93,31 @@
       <div class="grain" aria-hidden="true"></div>
       <div class="wrap hero-grid">
         <div class="hero-txt">
-          <p class="kicker"><span class="dot"></span><span data-i18n="hero.kicker"></span><span class="ver" id="heroVer" hidden></span><span class="beta" data-i18n="beta"></span></p>
-          <h1 data-i18n-html="hero.headline" data-i18n="hero.headline"></h1>
-          <p class="hero-lead" data-i18n="hero.lead"></p>
+          <p class="kicker"><span class="dot"></span><span data-i18n="hero.kicker">open source · local-first · general purpose</span><span class="ver" id="heroVer" hidden></span><span class="beta" data-i18n="beta">beta</span></p>
+          <h1 data-i18n-html="hero.headline" data-i18n="hero.headline">Small models.<br>Real work.</h1>
+          <p class="hero-lead" data-i18n="hero.lead">MMA is a harness that keeps local 32K–64K models on task — with a context budget, structural compaction, planning that is verified, and safety on by default.</p>
           <div class="install" id="install">
             <div class="install-head">
               <div class="install-tabs" role="tablist" aria-label="Install command">
                 <button type="button" class="itab on" data-os="unix" role="tab" aria-selected="true">Linux / macOS</button>
                 <button type="button" class="itab" data-os="win" role="tab" aria-selected="false">Windows</button>
               </div>
-              <button type="button" class="copy" data-target="installCmd" data-copy="install.copy" data-copied="install.copied"></button>
+              <button type="button" class="copy" data-target="installCmd" data-copy="install.copy" data-copied="install.copied">Copy</button>
             </div>
             <div class="install-body">
               <code id="installCmd" data-unix="curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash" data-win="irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.ps1 | iex">curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash</code>
             </div>
           </div>
           <div class="install-alt">
-            <span data-i18n="install.or"></span>
+            <span data-i18n="install.or">or download a build</span>
             <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-win-x64.tar.gz">Windows x64</a>
             <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-mac-arm64.tar.gz">macOS Apple Silicon</a>
             <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-mac-x64.tar.gz">macOS Intel</a>
             <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-linux-x64.tar.gz">Linux x64</a>
             <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-linux-arm64.tar.gz">Linux arm64</a>
           </div>
-          <p class="hero-src"><a class="link" href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="hero.source"></a></p>
-          <p class="hero-note" data-i18n="hero.note"></p>
+          <p class="hero-src"><a class="link" href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="hero.source">Read the source</a></p>
+          <p class="hero-note" data-i18n="hero.note">Runs locally against LM Studio, Ollama, llama.cpp or vLLM — or against a hosted provider such as OpenRouter, OpenAI, Anthropic or OpenCode Zen. No cloud account required. Currently in beta — the interface and features are still changing.</p>
         </div>
         <div class="hero-face">
           <span class="greet" id="greet" role="status"></span>
@@ -114,31 +125,31 @@
         </div>
       </div>
       <div class="wrap stats">
-        <div class="stat"><b data-i18n="stats.ctx"></b><span data-i18n="stats.ctx.l"></span></div>
-        <div class="stat"><b data-i18n="stats.tools"></b><span data-i18n="stats.tools.l"></span></div>
-        <div class="stat"><b data-i18n="stats.narrow"></b><span data-i18n="stats.narrow.l"></span></div>
-        <div class="stat"><b data-i18n="stats.license"></b><span data-i18n="stats.license.l"></span></div>
+        <div class="stat"><b data-i18n="stats.ctx">32K–64K</b><span data-i18n="stats.ctx.l">target context window</span></div>
+        <div class="stat"><b data-i18n="stats.tools">~3.5K</b><span data-i18n="stats.tools.l">tokens a full toolset costs</span></div>
+        <div class="stat"><b data-i18n="stats.narrow">on demand</b><span data-i18n="stats.narrow.l">tools are narrowed to the task</span></div>
+        <div class="stat"><b data-i18n="stats.license">MIT</b><span data-i18n="stats.license.l">open source, no telemetry</span></div>
       </div>
     </section>
 
     <!-- 01 WHY -->
     <section id="why" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s1.n"></span><span class="sec-k" data-i18n="s1.k"></span></header>
-        <h2 class="sec-t" data-i18n="why.title"></h2>
+        <header class="sec-h"><span class="sec-n" data-i18n="s1.n">01</span><span class="sec-k" data-i18n="s1.k">Why</span></header>
+        <h2 class="sec-t" data-i18n="why.title">The context window is the constraint</h2>
         <div class="split">
           <div class="col prose">
-            <p data-i18n="why.p1"></p>
-            <p data-i18n="why.p2"></p>
+            <p data-i18n="why.p1">A 32K–64K context fills up quickly. Without a strategy for it, an agent can lose track of the task, re-read the same files, and report results before they are verified.</p>
+            <p data-i18n="why.p2">MMA takes that constraint as given. The rule is simple: nothing important should live only in the context.</p>
           </div>
           <div class="col contrast">
             <div class="c-col bad">
-              <h4 data-i18n="why.before"></h4>
-              <ul><li data-i18n="why.b1"></li><li data-i18n="why.b2"></li><li data-i18n="why.b3"></li></ul>
+              <h4 data-i18n="why.before">A plain chat agent</h4>
+              <ul><li data-i18n="why.b1">Task drifts after a couple of compactions</li><li data-i18n="why.b2">The same files are read again and again</li><li data-i18n="why.b3">“Done” with no file and no exit code</li></ul>
             </div>
             <div class="c-col good">
-              <h4 data-i18n="why.after"></h4>
-              <ul><li data-i18n="why.a1"></li><li data-i18n="why.a2"></li><li data-i18n="why.a3"></li></ul>
+              <h4 data-i18n="why.after">MMA</h4>
+              <ul><li data-i18n="why.a1">Task, plan and changed files survive every compaction</li><li data-i18n="why.a2">Irrelevant tool schemas stay out of the context window</li><li data-i18n="why.a3">Claims are checked against real files and command results</li></ul>
             </div>
           </div>
         </div>
@@ -148,54 +159,58 @@
     <!-- 02 INTERFACES -->
     <section id="terminal" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s2.n"></span><span class="sec-k" data-i18n="s2.k"></span></header>
-        <h2 class="sec-t" data-i18n="terminal.title"></h2>
-        <p class="sec-lead" data-i18n="terminal.lead"></p>
+        <header class="sec-h"><span class="sec-n" data-i18n="s2.n">02</span><span class="sec-k" data-i18n="s2.k">Interfaces</span></header>
+        <h2 class="sec-t" data-i18n="terminal.title">Watch it work</h2>
+        <p class="sec-lead" data-i18n="terminal.lead">One core, two interfaces. The terminal and the browser drive the same agent — same sessions, same plugins, same safety.</p>
         <div class="term" id="term">
           <div class="term-bar">
-            <span class="term-cap" data-i18n="terminal.caption"></span>
-            <button class="term-replay" id="termReplay" type="button" data-i18n="terminal.replay"></button>
+            <span class="term-cap" data-i18n="terminal.caption">an MMA turn · quiet mode</span>
+            <button class="term-replay" id="termReplay" type="button" data-i18n="terminal.replay">Replay</button>
           </div>
           <pre class="term-body" id="termBody"
-               data-lines="term.l1,term.l2,term.l3,term.l4,term.l5,term.l6,term.l7,term.l8,term.l9"></pre>
+               data-lines="term.l1,term.l2,term.l3,term.l4,term.l5,term.l6,term.l7,term.l8,term.l9"><span class="ln cmd">$ mma "fix the failing tests"</span><span class="ln meta">qwen3.5-9b · lmstudio · 32K · plugins 2 · mcp 1</span><span class="ln plan">◇ plan · 3 steps</span><span class="ln cmd">◇ reading file · test/core.spec.ts</span><span class="ln cmd">◇ reading file · src/core.ts</span><span class="ln cmd">◇ editing file · src/core.ts  ✓</span><span class="ln cmd">◇ running command · bun test  ✓ 14 passed</span><span class="ln think">✦ thinking · 2.1s</span><span class="ln ok">✓ done · 3/3 steps · 6.2K tok · 18%</span></pre>
         </div>
         <div class="web-note">
           <span class="mdl sm c-exec track" id="webFace" aria-hidden="true"></span>
-          <p><b data-i18n="web.caption"></b> <span data-i18n="web.note"></span></p>
+          <p><b data-i18n="web.caption">mma web · parallel sessions</b> <span data-i18n="web.note">The browser interface is a second host over the same Agent — per-session runners, so several tasks run at once, and six panes: session, files, lsp, trace, plugins and map.</span></p>
         </div>
 
         <div class="mascot">
-          <h3 class="sec-t2" data-i18n="mascot.title"></h3>
-          <p class="sec-lead" data-i18n="mascot.lead"></p>
+          <h3 class="sec-t2" data-i18n="mascot.title">MMART — the face of the agent</h3>
+          <p class="sec-lead" data-i18n="mascot.lead">The browser UI gives the agent one face. It reflects what is actually happening right now — thinking, reading, searching, running, failing — and the same component lives in the boot splash, the feed, the activity rail, the setup wizard and the trace panel.</p>
           <div class="mascot-lab">
             <div class="mascot-main">
               <span class="mdl c-recon track" id="mascotBig" aria-hidden="true"></span>
-              <span class="mascot-name" id="mascotName" data-i18n="ms.idle"></span>
+              <span class="mascot-name" id="mascotName" data-i18n="ms.idle">idle</span>
             </div>
             <div class="mascot-strip">
-              <button class="mstate on" type="button" data-state="track" data-label="ms.idle"><span class="mdl xs c-recon track" aria-hidden="true"></span><em data-i18n="ms.idle"></em></button>
-              <button class="mstate" type="button" data-state="think" data-label="ms.think"><span class="mdl xs c-recon st-think" aria-hidden="true"></span><em data-i18n="ms.think"></em></button>
-              <button class="mstate" type="button" data-state="read" data-label="ms.read"><span class="mdl xs c-recon st-read" aria-hidden="true"></span><em data-i18n="ms.read"></em></button>
-              <button class="mstate" type="button" data-state="find" data-label="ms.find"><span class="mdl xs c-recon st-find" aria-hidden="true"></span><em data-i18n="ms.find"></em></button>
-              <button class="mstate" type="button" data-state="web" data-label="ms.web"><span class="mdl xs c-recon st-web" aria-hidden="true"></span><em data-i18n="ms.web"></em></button>
-              <button class="mstate" type="button" data-state="edit" data-label="ms.edit"><span class="mdl xs c-mutate st-edit" aria-hidden="true"></span><em data-i18n="ms.edit"></em></button>
-              <button class="mstate" type="button" data-state="type" data-label="ms.type"><span class="mdl xs c-exec st-type" aria-hidden="true"></span><em data-i18n="ms.type"></em></button>
-              <button class="mstate" type="button" data-state="create" data-label="ms.create"><span class="mdl xs c-mutate st-create" aria-hidden="true"></span><em data-i18n="ms.create"></em></button>
-              <button class="mstate" type="button" data-state="run" data-label="ms.run"><span class="mdl xs c-exec st-run" aria-hidden="true"></span><em data-i18n="ms.run"></em></button>
-              <button class="mstate" type="button" data-state="tests" data-label="ms.tests"><span class="mdl xs c-exec st-tests" aria-hidden="true"></span><em data-i18n="ms.tests"></em></button>
-              <button class="mstate" type="button" data-state="compact" data-label="ms.compact"><span class="mdl xs c-warn st-compact" aria-hidden="true"></span><em data-i18n="ms.compact"></em></button>
-              <button class="mstate" type="button" data-state="plan" data-label="ms.plan"><span class="mdl xs c-recon st-plan" aria-hidden="true"></span><em data-i18n="ms.plan"></em></button>
-              <button class="mstate" type="button" data-state="ask" data-label="ms.ask"><span class="mdl xs c-warn st-ask" aria-hidden="true"></span><em data-i18n="ms.ask"></em></button>
-              <button class="mstate" type="button" data-state="done" data-label="ms.done"><span class="mdl xs c-ok st-done" aria-hidden="true"></span><em data-i18n="ms.done"></em></button>
-              <button class="mstate" type="button" data-state="error" data-label="ms.error"><span class="mdl xs c-err st-error" aria-hidden="true"></span><em data-i18n="ms.error"></em></button>
-              <button class="mstate" type="button" data-state="stop" data-label="ms.stop"><span class="mdl xs c-dim st-stop" aria-hidden="true"></span><em data-i18n="ms.stop"></em></button>
-              <button class="mstate" type="button" data-state="queued" data-label="ms.queued"><span class="mdl xs c-dim st-queued" aria-hidden="true"></span><em data-i18n="ms.queued"></em></button>
-              <button class="mstate" type="button" data-state="boot" data-label="ms.boot"><span class="mdl xs c-dim st-boot" aria-hidden="true"></span><em data-i18n="ms.boot"></em></button>
-              <button class="mstate more" id="mstateMore" type="button" aria-expanded="false"><em id="mstateMoreLabel" data-i18n="mascot.more"></em></button>
+              <button class="mstate on" type="button" data-state="track" data-label="ms.idle"><span class="mdl xs c-recon track" aria-hidden="true"></span><em data-i18n="ms.idle">idle</em></button>
+              <button class="mstate" type="button" data-state="think" data-label="ms.think"><span class="mdl xs c-recon st-think" aria-hidden="true"></span><em data-i18n="ms.think">thinking</em></button>
+              <button class="mstate" type="button" data-state="read" data-label="ms.read"><span class="mdl xs c-recon st-read" aria-hidden="true"></span><em data-i18n="ms.read">reading</em></button>
+              <button class="mstate" type="button" data-state="find" data-label="ms.find"><span class="mdl xs c-recon st-find" aria-hidden="true"></span><em data-i18n="ms.find">searching</em></button>
+              <button class="mstate" type="button" data-state="web" data-label="ms.web"><span class="mdl xs c-recon st-web" aria-hidden="true"></span><em data-i18n="ms.web">on the web</em></button>
+              <button class="mstate" type="button" data-state="edit" data-label="ms.edit"><span class="mdl xs c-mutate st-edit" aria-hidden="true"></span><em data-i18n="ms.edit">editing</em></button>
+              <button class="mstate" type="button" data-state="type" data-label="ms.type"><span class="mdl xs c-exec st-type" aria-hidden="true"></span><em data-i18n="ms.type">composing</em></button>
+              <button class="mstate" type="button" data-state="create" data-label="ms.create"><span class="mdl xs c-mutate st-create" aria-hidden="true"></span><em data-i18n="ms.create">creating</em></button>
+              <button class="mstate" type="button" data-state="run" data-label="ms.run"><span class="mdl xs c-exec st-run" aria-hidden="true"></span><em data-i18n="ms.run">running</em></button>
+              <button class="mstate" type="button" data-state="tests" data-label="ms.tests"><span class="mdl xs c-exec st-tests" aria-hidden="true"></span><em data-i18n="ms.tests">testing</em></button>
+              <button class="mstate" type="button" data-state="compact" data-label="ms.compact"><span class="mdl xs c-warn st-compact" aria-hidden="true"></span><em data-i18n="ms.compact">compacting</em></button>
+              <button class="mstate" type="button" data-state="plan" data-label="ms.plan"><span class="mdl xs c-recon st-plan" aria-hidden="true"></span><em data-i18n="ms.plan">planning</em></button>
+              <button class="mstate" type="button" data-state="ask" data-label="ms.ask"><span class="mdl xs c-warn st-ask" aria-hidden="true"></span><em data-i18n="ms.ask">asking</em></button>
+              <button class="mstate" type="button" data-state="done" data-label="ms.done"><span class="mdl xs c-ok st-done" aria-hidden="true"></span><em data-i18n="ms.done">done</em></button>
+              <button class="mstate" type="button" data-state="error" data-label="ms.error"><span class="mdl xs c-err st-error" aria-hidden="true"></span><em data-i18n="ms.error">failed</em></button>
+              <button class="mstate" type="button" data-state="stop" data-label="ms.stop"><span class="mdl xs c-dim st-stop" aria-hidden="true"></span><em data-i18n="ms.stop">stopped</em></button>
+              <button class="mstate" type="button" data-state="queued" data-label="ms.queued"><span class="mdl xs c-dim st-queued" aria-hidden="true"></span><em data-i18n="ms.queued">queued</em></button>
+              <button class="mstate" type="button" data-state="boot" data-label="ms.boot"><span class="mdl xs c-dim st-boot" aria-hidden="true"></span><em data-i18n="ms.boot">booting</em></button>
+              <button class="mstate" type="button" data-state="load" data-label="ms.load"><span class="mdl xs c-dim st-load" aria-hidden="true"></span><em data-i18n="ms.load">loading</em></button>
+              <button class="mstate" type="button" data-state="check" data-label="ms.check"><span class="mdl xs c-exec st-check" aria-hidden="true"></span><em data-i18n="ms.check">checking</em></button>
+              <button class="mstate" type="button" data-state="warn" data-label="ms.warn"><span class="mdl xs c-warn st-warn" aria-hidden="true"></span><em data-i18n="ms.warn">warning</em></button>
+              <button class="mstate" type="button" data-state="update" data-label="ms.update"><span class="mdl xs c-ok st-update" aria-hidden="true"></span><em data-i18n="ms.update">updating</em></button>
+              <button class="mstate more" id="mstateMore" type="button" aria-expanded="false"><em id="mstateMoreLabel" data-i18n="mascot.more">more</em></button>
             </div>
           </div>
-          <p class="note" data-i18n="mascot.pick"></p>
-          <p class="note" data-i18n="mascot.count"></p>
+          <p class="note" data-i18n="mascot.pick">Click a state</p>
+          <p class="note" data-i18n="mascot.count">22 states — the same set the web UI ships</p>
         </div>
       </div>
     </section>
@@ -203,14 +218,14 @@
     <!-- 03 CONTEXT -->
     <section id="context" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s3.n"></span><span class="sec-k" data-i18n="s3.k"></span></header>
-        <h2 class="sec-t" data-i18n="context.title"></h2>
-        <p class="sec-lead" data-i18n="context.lead"></p>
+        <header class="sec-h"><span class="sec-n" data-i18n="s3.n">03</span><span class="sec-k" data-i18n="s3.k">Context</span></header>
+        <h2 class="sec-t" data-i18n="context.title">Context that doesn't collapse</h2>
+        <p class="sec-lead" data-i18n="context.lead">Budgets are derived from the model's context window, and compaction is structural: it keeps the task, the plan, the files and the errors — rather than a summary of the conversation.</p>
         <div class="split">
           <div class="col">
             <div class="budget" id="budget">
               <div class="budget-pick">
-                <span class="budget-label" data-i18n="budget.pick"></span>
+                <span class="budget-label" data-i18n="budget.pick">Pick a model's context window</span>
                 <button class="bwin on" type="button" data-win="32">32K</button>
                 <button class="bwin" type="button" data-win="64">64K</button>
                 <button class="bwin" type="button" data-win="128">128K</button>
@@ -221,21 +236,21 @@
                 <i class="seg-reserve"></i>
               </div>
               <div class="seglegend">
-                <span class="segl-item"><i class="segl-dot seg-system"></i><span data-i18n="ctx.th.system"></span><b id="bSystem">3K</b></span>
-                <span class="segl-item"><i class="segl-dot seg-history"></i><span data-i18n="ctx.th.history"></span><b id="bHistory">24K</b></span>
-                <span class="segl-item"><i class="segl-dot seg-reserve"></i><span data-i18n="ctx.th.reserve"></span><b id="bReserve">5K</b></span>
+                <span class="segl-item"><i class="segl-dot seg-system"></i><span data-i18n="ctx.th.system">System</span><b id="bSystem">3K</b></span>
+                <span class="segl-item"><i class="segl-dot seg-history"></i><span data-i18n="ctx.th.history">History</span><b id="bHistory">24K</b></span>
+                <span class="segl-item"><i class="segl-dot seg-reserve"></i><span data-i18n="ctx.th.reserve">Reserve</span><b id="bReserve">5K</b></span>
               </div>
             </div>
-            <p class="note" data-i18n="ctx.note"></p>
+            <p class="note" data-i18n="ctx.note">Compaction fires at 75% of the history budget, and the last six exchanges always stay intact. A quality score with a floor prevents the compaction death-spiral.</p>
           </div>
           <div class="col">
-            <h3 class="sub" data-i18n="ctx.anchor.title"></h3>
+            <h3 class="sub" data-i18n="ctx.anchor.title">Anchors, re-injected after every compaction</h3>
             <ul class="anchors">
-              <li><code>[Task:]</code> <span data-i18n="ctx.a1"></span></li>
-              <li><code>[Plan:]</code> <span data-i18n="ctx.a2"></span></li>
-              <li><code>[Files:]</code> <span data-i18n="ctx.a3"></span></li>
-              <li><code>[Read:]</code> <span data-i18n="ctx.a4"></span></li>
-              <li><code>[Errors:]</code> <span data-i18n="ctx.a5"></span></li>
+              <li><code>[Task:]</code> <span data-i18n="ctx.a1">the original request of the turn</span></li>
+              <li><code>[Plan:]</code> <span data-i18n="ctx.a2">the plan checklist, read back from disk</span></li>
+              <li><code>[Files:]</code> <span data-i18n="ctx.a3">created, changed and deleted files</span></li>
+              <li><code>[Read:]</code> <span data-i18n="ctx.a4">files already read, so they are not read again</span></li>
+              <li><code>[Errors:]</code> <span data-i18n="ctx.a5">repeated errors and what was already tried</span></li>
             </ul>
           </div>
         </div>
@@ -245,13 +260,13 @@
     <!-- 04 TOOLS -->
     <section id="tools" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s4.n"></span><span class="sec-k" data-i18n="s4.k"></span></header>
-        <h2 class="sec-t" data-i18n="tools.title"></h2>
-        <p class="sec-lead" data-i18n="tools.lead"></p>
+        <header class="sec-h"><span class="sec-n" data-i18n="s4.n">04</span><span class="sec-k" data-i18n="s4.k">Tools</span></header>
+        <h2 class="sec-t" data-i18n="tools.title">Tools, narrowed on demand</h2>
+        <p class="sec-lead" data-i18n="tools.lead">A full toolset is roughly 3.5K tokens on every single request — about a ninth of a 32K context window. So only the relevant schemas sit in context; the rest are listed compactly and enabled when asked.</p>
         <div class="narrow" id="narrow">
           <div class="narrow-head">
-            <span class="tags-label" data-i18n="narrow.pick"></span>
-            <button class="narrow-reset" id="narrowReset" type="button" data-i18n="narrow.reset"></button>
+            <span class="tags-label" data-i18n="narrow.pick">Toggle the tags you need</span>
+            <button class="narrow-reset" id="narrowReset" type="button" data-i18n="narrow.reset">Reset</button>
           </div>
           <div class="tags-row" id="tagsRow">
             <button type="button" class="tag file on" data-cost="300">file</button>
@@ -267,56 +282,69 @@
             <div class="narrow-bar"><i id="narrowBar"></i></div>
             <div class="narrow-read">
               <b id="narrowCost">1.8K</b>
-              <span data-i18n="narrow.cost"></span>
+              <span data-i18n="narrow.cost">in context</span>
               <em id="narrowSaved"></em>
             </div>
           </div>
         </div>
         <div class="always">
-          <h3 class="sub" data-i18n="tools.always.title"></h3>
-          <p class="note" data-i18n="tools.always.d"></p>
+          <h3 class="sub" data-i18n="tools.always.title">Always visible</h3>
+          <p class="note" data-i18n="tools.always.d">plan · plan_step · todo · verify · project_map · lsp_check · question · approve · load_skill · enable_tools · set_thinking · session_info · define_capability — structural tools cannot be switched off by accident.</p>
         </div>
-        <h3 class="sub" data-i18n="tools.list.title"></h3>
+        <h3 class="sub" data-i18n="tools.list.title">A slice of the toolset</h3>
         <dl class="rows rows-2col">
-          <div class="row"><dt data-i18n="tools.r1.k"></dt><dd data-i18n="tools.r1.v"></dd></div>
-          <div class="row"><dt data-i18n="tools.r2.k"></dt><dd data-i18n="tools.r2.v"></dd></div>
-          <div class="row"><dt data-i18n="tools.r3.k"></dt><dd data-i18n="tools.r3.v"></dd></div>
-          <div class="row"><dt data-i18n="tools.r4.k"></dt><dd data-i18n="tools.r4.v"></dd></div>
-          <div class="row"><dt data-i18n="tools.r5.k"></dt><dd data-i18n="tools.r5.v"></dd></div>
-          <div class="row"><dt data-i18n="tools.r6.k"></dt><dd data-i18n="tools.r6.v"></dd></div>
-          <div class="row"><dt data-i18n="tools.r7.k"></dt><dd data-i18n="tools.r7.v"></dd></div>
-          <div class="row"><dt data-i18n="tools.r8.k"></dt><dd data-i18n="tools.r8.v"></dd></div>
+          <div class="row"><dt data-i18n="tools.r1.k">Files</dt><dd data-i18n="tools.r1.v">read, write, edit, move, delete, glob, grep</dd></div>
+          <div class="row"><dt data-i18n="tools.r2.k">Shell</dt><dd data-i18n="tools.r2.v">bash with automatic backgrounding for long processes</dd></div>
+          <div class="row"><dt data-i18n="tools.r3.k">Web</dt><dd data-i18n="tools.r3.v">search, fetch, and a real Playwright browser</dd></div>
+          <div class="row"><dt data-i18n="tools.r4.k">Delegation</dt><dd data-i18n="tools.r4.v">subagents with their own file zone</dd></div>
+          <div class="row"><dt data-i18n="tools.r5.k">Memory</dt><dd data-i18n="tools.r5.v">remember, recall, and full-text search over past sessions</dd></div>
+          <div class="row"><dt data-i18n="tools.r6.k">Text</dt><dd data-i18n="tools.r6.v">chunk_query splits a large document and processes it in parallel</dd></div>
+          <div class="row"><dt data-i18n="tools.r7.k">Navigation</dt><dd data-i18n="tools.r7.v">project_map: languages, exports, symbol lookup, file outline</dd></div>
+          <div class="row"><dt data-i18n="tools.r8.k">Diagnostics</dt><dd data-i18n="tools.r8.v">lsp_check verifies code without a full build</dd></div>
+          <div class="row"><dt data-i18n="tools.r9.k">Planning</dt><dd data-i18n="tools.r9.v">plan, plan_step, todo and verify: the checklist lives on disk, and a step closes only when its files really changed</dd></div>
+          <div class="row"><dt data-i18n="tools.r10.k">Interaction</dt><dd data-i18n="tools.r10.v">question, approve, set_thinking and session_info: ask, confirm, or let the user steer the run</dd></div>
+          <div class="row"><dt data-i18n="tools.r11.k">Documents</dt><dd data-i18n="tools.r11.v">document_index, document_map, document_read and document_find: scan a folder, summarize it, and pull out just the relevant part</dd></div>
+          <div class="row"><dt data-i18n="tools.r12.k">Images</dt><dd data-i18n="tools.r12.v">attach_image hands a picture to a vision-capable model</dd></div>
         </dl>
+
+        <h3 class="sec-t2" data-i18n="extend.title">Extend it</h3>
+        <p class="sec-lead" data-i18n="extend.lead">The core stays small; capability arrives as plugins, MCP servers and skills — each switchable per project.</p>
+        <div class="cases">
+          <div class="case"><b data-i18n="extend.c1.t">Plugins</b><span data-i18n="extend.c1.d">built-in lint-on-write, notify and angular11; enable them with mma plugins or a web toggle</span></div>
+          <div class="case"><b data-i18n="extend.c2.t">MCP</b><span data-i18n="extend.c2.d">external tools over the Model Context Protocol, exposed to the agent as mcp_call</span></div>
+          <div class="case"><b data-i18n="extend.c3.t">Skills</b><span data-i18n="extend.c3.d">reusable instruction packs loaded on demand with load_skill</span></div>
+          <div class="case"><b data-i18n="extend.c4.t">Pipelines</b><span data-i18n="extend.c4.d">multi-step scripts (pipeline_run) and corpus scans (scan_corpus) for repeatable jobs</span></div>
+        </div>
       </div>
     </section>
 
-    <!-- 05 PLANNING + MoE -->
-    <section id="moe" class="sec">
+    <!-- 05 PLANNING -->
+    <section id="planning" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s5.n"></span><span class="sec-k" data-i18n="s5.k"></span></header>
-        <h2 class="sec-t" data-i18n="plan.title"></h2>
-        <p class="sec-lead" data-i18n="plan.lead"></p>
+        <header class="sec-h"><span class="sec-n" data-i18n="s5.n">05</span><span class="sec-k" data-i18n="s5.k">Planning</span></header>
+        <h2 class="sec-t" data-i18n="plan.title">Plan, then prove it</h2>
+        <p class="sec-lead" data-i18n="plan.lead">The model decides when a task needs a plan. Each step carries a machine-checkable criterion, and a step cannot be closed until its files really exist on disk.</p>
         <ul class="feat">
-          <li data-i18n="plan.f1"></li>
-          <li data-i18n="plan.f2"></li>
-          <li data-i18n="plan.f3"></li>
-          <li data-i18n="plan.f4"></li>
-          <li data-i18n="plan.f5"></li>
+          <li data-i18n="plan.f1">checklist stored on disk, not in the chat</li>
+          <li data-i18n="plan.f2">criteria: file-exists, command, or an explicit manual mark</li>
+          <li data-i18n="plan.f3">self-certification blocked — a file must change after the step begins</li>
+          <li data-i18n="plan.f4">an audit gate runs before any final answer</li>
+          <li data-i18n="plan.f5">stuck detection: loops, repeated calls, failing command streaks</li>
         </ul>
-        <h3 class="sec-t2" data-i18n="moe.title"></h3>
-        <p class="sec-lead" data-i18n="moe.lead"></p>
-        <div class="flow" id="moeFlow">
-          <span class="f-node" data-i18n="moe.flow1"></span><i class="f-arrow">→</i>
-          <span class="f-node" data-i18n="moe.flow2"></span><i class="f-arrow">→</i>
-          <span class="f-node" data-i18n="moe.flow3"></span><i class="f-arrow">→</i>
-          <span class="f-node" data-i18n="moe.flow4"></span><i class="f-arrow">→</i>
-          <span class="f-node" data-i18n="moe.flow5"></span>
+        <h3 class="sec-t2" data-i18n="verify.title">Three gates before “done”</h3>
+        <p class="sec-lead" data-i18n="verify.lead">A small model will happily call a half-finished turn done. MMA does not take the model's word for it: every claim is checked against the disk, the command output, and a second reviewer.</p>
+        <div class="flow" id="verifyFlow">
+          <span class="f-node" data-i18n="verify.flow1">Claim</span><i class="f-arrow">→</i>
+          <span class="f-node" data-i18n="verify.flow2">Evidence</span><i class="f-arrow">→</i>
+          <span class="f-node" data-i18n="verify.flow3">Critic</span><i class="f-arrow">→</i>
+          <span class="f-node" data-i18n="verify.flow4">Audit</span><i class="f-arrow">→</i>
+          <span class="f-node" data-i18n="verify.flow5">Answer</span>
         </div>
-        <div class="moe-notes">
-          <p><span class="mk">◆</span><span data-i18n="moe.validate"></span></p>
-          <p><span class="mk">◆</span><span data-i18n="moe.experts"></span></p>
-          <p><span class="mk">◆</span><span data-i18n="moe.replan"></span></p>
-          <p><span class="mk">◆</span><span data-i18n="moe.fallback"></span></p>
+        <div class="gate-notes">
+          <p><span class="mk">◆</span><span data-i18n="verify.n1">Claims about a file or a command are checked against the real path and the real exit code, not against the model's memory.</span></p>
+          <p><span class="mk">◆</span><span data-i18n="verify.n2">An in-loop critic reviews the turn before the answer leaves the model; its failure is logged, never silently ignored.</span></p>
+          <p><span class="mk">◆</span><span data-i18n="verify.n3">The audit gate runs before any final answer, and a plan step cannot close until its files have actually changed.</span></p>
+          <p><span class="mk">◆</span><span data-i18n="verify.n4">Stuck loops, repeated calls and failing command streaks are detected and surfaced instead of being retried forever.</span></p>
         </div>
       </div>
     </section>
@@ -324,31 +352,31 @@
     <!-- 06 MEMORY -->
     <section id="memory" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s6.n"></span><span class="sec-k" data-i18n="s6.k"></span></header>
-        <h2 class="sec-t" data-i18n="memory.title"></h2>
+        <header class="sec-h"><span class="sec-n" data-i18n="s6.n">06</span><span class="sec-k" data-i18n="s6.k">Memory</span></header>
+        <h2 class="sec-t" data-i18n="memory.title">Three horizons of memory</h2>
         <ol class="axis">
           <li>
             <span class="axis-n">i</span>
-            <div><h3 data-i18n="memory.h1.t"></h3><p data-i18n="memory.h1.d"></p></div>
+            <div><h3 data-i18n="memory.h1.t">Working context</h3><p data-i18n="memory.h1.d">The model's context window. Short-lived and compacted — but anchored so the task can't fall out of it.</p></div>
           </li>
           <li>
             <span class="axis-n">ii</span>
-            <div><h3 data-i18n="memory.h2.t"></h3><p data-i18n="memory.h2.d"></p></div>
+            <div><h3 data-i18n="memory.h2.t">Session on disk</h3><p data-i18n="memory.h2.d">history.jsonl and session.jsonl: every tool call, its raw result, usage and cache per request, context and compaction events.</p></div>
           </li>
           <li>
             <span class="axis-n">iii</span>
-            <div><h3 data-i18n="memory.h3.t"></h3><p data-i18n="memory.h3.d"></p></div>
+            <div><h3 data-i18n="memory.h3.t">Project memory</h3><p data-i18n="memory.h3.d">conventions.md, decisions.md, errors.md in the home folder — markdown that outlives sessions and is layered into every new one.</p></div>
           </li>
         </ol>
-        <p class="note" data-i18n="memory.note"></p>
+        <p class="note" data-i18n="memory.note">Plus explicit memory: remember / recall, and full-text search across all past sessions.</p>
 
-        <h3 class="sec-t2" data-i18n="mem.files"></h3>
+        <h3 class="sec-t2" data-i18n="mem.files">What actually lands on disk</h3>
         <dl class="rows">
-          <div class="row"><dt><code>history.jsonl</code></dt><dd data-i18n="mem.f1.d"></dd></div>
-          <div class="row"><dt><code>session.jsonl</code></dt><dd data-i18n="mem.f2.d"></dd></div>
-          <div class="row"><dt><code>meta.json</code></dt><dd data-i18n="mem.f3.d"></dd></div>
-          <div class="row"><dt><code>conventions.md</code> · <code>decisions.md</code></dt><dd data-i18n="mem.f4.d"></dd></div>
-          <div class="row"><dt><code>errors.md</code></dt><dd data-i18n="mem.f5.d"></dd></div>
+          <div class="row"><dt><code>history.jsonl</code></dt><dd data-i18n="mem.f1.d">the conversation: your prompts, the answers, tool digests</dd></div>
+          <div class="row"><dt><code>session.jsonl</code></dt><dd data-i18n="mem.f2.d">the full journal: every tool call with its raw result and duration, usage and cache, context and compaction events</dd></div>
+          <div class="row"><dt><code>meta.json</code></dt><dd data-i18n="mem.f3.d">the session passport: name, model, counters, timestamps</dd></div>
+          <div class="row"><dt><code>conventions.md</code> · <code>decisions.md</code></dt><dd data-i18n="mem.f4.d">project conventions and key decisions, layered into every new session</dd></div>
+          <div class="row"><dt><code>errors.md</code></dt><dd data-i18n="mem.f5.d">learned failures — written automatically when the same tool keeps breaking</dd></div>
         </dl>
       </div>
     </section>
@@ -356,130 +384,159 @@
     <!-- 07 SAFETY -->
     <section id="safety" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s7.n"></span><span class="sec-k" data-i18n="s7.k"></span></header>
-        <h2 class="sec-t" data-i18n="safety.title"></h2>
-        <p class="sec-lead" data-i18n="safety.lead"></p>
+        <header class="sec-h"><span class="sec-n" data-i18n="s7.n">07</span><span class="sec-k" data-i18n="s7.k">Safety</span></header>
+        <h2 class="sec-t" data-i18n="safety.title">Safe by default</h2>
+        <p class="sec-lead" data-i18n="safety.lead">Every tool call passes a validation pipeline before it touches the disk or the network. A blocked call never reaches the filesystem, and the block is written to an audit journal.</p>
         <div class="pipe" aria-hidden="true">
-          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step1"></span><i class="pipe-arrow">→</i></span>
-          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step2"></span><i class="pipe-arrow">→</i></span>
-          <span class="pipe-step"><span class="pipe-node gate" data-i18n="safety.step3"></span><i class="pipe-arrow">→</i></span>
-          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step4"></span><i class="pipe-arrow">→</i></span>
-          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step5"></span><i class="pipe-arrow">→</i></span>
-          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step6"></span></span>
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step1">call</span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step2">plugins</span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node gate" data-i18n="safety.step3">validators</span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step4">action</span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step5">plugins</span><i class="pipe-arrow">→</i></span>
+          <span class="pipe-step"><span class="pipe-node" data-i18n="safety.step6">result</span></span>
         </div>
-        <p class="sr-only" data-i18n="safety.pipe"></p>
+        <p class="sr-only" data-i18n="safety.pipe">call → plugins → validators → action → plugins → result</p>
         <dl class="rows wide">
-          <div class="row"><dt data-i18n="safety.v1.t"></dt><dd data-i18n="safety.v1.d"></dd></div>
-          <div class="row"><dt data-i18n="safety.v2.t"></dt><dd data-i18n="safety.v2.d"></dd></div>
-          <div class="row"><dt data-i18n="safety.v3.t"></dt><dd data-i18n="safety.v3.d"></dd></div>
-          <div class="row"><dt data-i18n="safety.v4.t"></dt><dd data-i18n="safety.v4.d"></dd></div>
+          <div class="row"><dt data-i18n="safety.v1.t">Command validator</dt><dd data-i18n="safety.v1.d">command blacklist, dangerous-flag blocking, optional allowlist, interpreter escapes closed</dd></div>
+          <div class="row"><dt data-i18n="safety.v2.t">Path validator</dt><dd data-i18n="safety.v2.d">global bans (.git, .env, keys), containment inside the workspace, subagent file zones</dd></div>
+          <div class="row"><dt data-i18n="safety.v3.t">Network validator</dt><dd data-i18n="safety.v3.d">domain blacklist plus optional allowlist; sensitive query parameters stripped before the request</dd></div>
+          <div class="row"><dt data-i18n="safety.v4.t">Content scan</dt><dd data-i18n="safety.v4.d">patterns such as eval( or child_process.exec( are flagged before a write</dd></div>
         </dl>
         <div class="presets">
-          <span class="presets-label" data-i18n="safety.presets"></span>
-          <span class="preset" data-i18n="safety.p1"></span>
-          <span class="preset on" data-i18n="safety.p2"></span>
-          <span class="preset" data-i18n="safety.p3"></span>
+          <span class="presets-label" data-i18n="safety.presets">Presets</span>
+          <span class="preset" data-i18n="safety.p1">strict</span>
+          <span class="preset on" data-i18n="safety.p2">balanced — default</span>
+          <span class="preset" data-i18n="safety.p3">permissive</span>
         </div>
-        <p class="note" data-i18n="safety.more"></p>
+        <p class="note" data-i18n="safety.more">Session files can be encrypted with AES-256-GCM, logs are scrubbed of secrets, and an audit notifier can ship events to a file or a webhook.</p>
       </div>
     </section>
 
     <!-- 08 SERVICE -->
     <section id="service" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s8.n"></span><span class="sec-k" data-i18n="s8.k"></span></header>
-        <h2 class="sec-t" data-i18n="service.title"></h2>
-        <p class="sec-lead" data-i18n="service.lead"></p>
+        <header class="sec-h"><span class="sec-n" data-i18n="s8.n">08</span><span class="sec-k" data-i18n="s8.k">Service</span></header>
+        <h2 class="sec-t" data-i18n="service.title">Serve it as an API</h2>
+        <p class="sec-lead" data-i18n="service.lead">mma serve exposes a versioned HTTP contract over the same core — for your own systems, not only your terminal. One task is one turn over a session.</p>
         <div class="split">
           <div class="col">
-            <h3 class="sub" data-i18n="service.endpoints"></h3>
+            <h3 class="sub" data-i18n="service.endpoints">Endpoints</h3>
             <pre class="endpoints">POST /v1/sessions
 POST /v1/sessions/:id/tasks
 GET  /v1/tasks/:jobId
 GET  /v1/sessions/:id/events   <span class="c">SSE</span>
 GET  /v1/health   GET /v1/ready
-GET  /v1/openapi.json   GET /v1/docs</pre>
+GET  /v1/openapi.json   GET /v1/docs
+GET  /v1/sessions   GET /v1/sessions/:id   DELETE /v1/sessions/:id
+POST /v1/tasks/:jobId/cancel   POST /v1/tasks/:jobId/answer</pre>
           </div>
           <div class="col">
             <ul class="feat">
-              <li data-i18n="service.f1"></li>
-              <li data-i18n="service.f2"></li>
-              <li data-i18n="service.f3"></li>
-              <li data-i18n="service.f4"></li>
-              <li data-i18n="service.f5"></li>
+              <li data-i18n="service.f1">job and interactive tasks</li>
+              <li data-i18n="service.f2">structured output against a schema</li>
+              <li data-i18n="service.f3">HMAC-signed webhooks</li>
+              <li data-i18n="service.f4">per-tenant process isolation</li>
+              <li data-i18n="service.f5">RFC 9457 problem+json errors</li>
+              <li data-i18n="service.f6">bearer-token auth, idempotency keys and a per-session queue</li>
+              <li data-i18n="service.f7">cancel, interactive answers, and resumable SSE via Last-Event-ID</li>
             </ul>
-            <p class="note" data-i18n="service.docs"></p>
+            <p class="note" data-i18n="service.docs">The service describes itself: OpenAPI 3.1 at /v1/openapi.json and a human page at /v1/docs.</p>
           </div>
         </div>
 
-        <h3 class="sec-t2" data-i18n="svc.cases"></h3>
+        <h3 class="sec-t2" data-i18n="svc.cases">What people build on it</h3>
         <div class="cases">
-          <div class="case"><b data-i18n="svc.c1.t"></b><span data-i18n="svc.c1.d"></span></div>
-          <div class="case"><b data-i18n="svc.c2.t"></b><span data-i18n="svc.c2.d"></span></div>
-          <div class="case"><b data-i18n="svc.c3.t"></b><span data-i18n="svc.c3.d"></span></div>
-          <div class="case"><b data-i18n="svc.c4.t"></b><span data-i18n="svc.c4.d"></span></div>
+          <div class="case"><b data-i18n="svc.c1.t">Issue triage</b><span data-i18n="svc.c1.d">a CI bot that reads new issues, reproduces them and replies</span></div>
+          <div class="case"><b data-i18n="svc.c2.t">Chat bridge</b><span data-i18n="svc.c2.d">route messages from a messenger into a session and get the answer back</span></div>
+          <div class="case"><b data-i18n="svc.c3.t">Scheduled research</b><span data-i18n="svc.c3.d">a nightly job that condenses docs or a changelog into one page</span></div>
+          <div class="case"><b data-i18n="svc.c4.t">Internal tooling</b><span data-i18n="svc.c4.d">your own scripts call the agent over HTTP, one process per tenant</span></div>
         </div>
       </div>
     </section>
 
-    <!-- 09 FIRST STEPS -->
-    <section id="start" class="sec">
+    <!-- 09 OPERATIONS -->
+    <section id="ops" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s9.n"></span><span class="sec-k" data-i18n="s9.k"></span></header>
-        <h2 class="sec-t" data-i18n="install.title"></h2>
-        <p class="sec-lead" data-i18n="install.lead"></p>
+        <header class="sec-h"><span class="sec-n" data-i18n="s9.n">09</span><span class="sec-k" data-i18n="s9.k">Operations</span></header>
+        <h2 class="sec-t" data-i18n="ops.title">Keep it honest after the demo</h2>
+        <p class="sec-lead" data-i18n="ops.lead">The harness is meant to run for months, not for a screenshot. So the boring parts are built in: model checks, cost visibility, updates and diagnostics.</p>
+        <div class="cases">
+          <div class="case"><b data-i18n="ops.c1.t">Certification</b><span data-i18n="ops.c1.d">run a scenario suite and a security suite against a model before you trust it with real work</span></div>
+          <div class="case"><b data-i18n="ops.c2.t">Cost &amp; usage</b><span data-i18n="ops.c2.d">tokens, cache hits and spend per request — visible in the session panel and via mma usage</span></div>
+          <div class="case"><b data-i18n="ops.c3.t">Self-update</b><span data-i18n="ops.c3.d">versionless release assets and latest.json; updates are opt-in, never silent</span></div>
+          <div class="case"><b data-i18n="ops.c4.t">Diagnostics</b><span data-i18n="ops.c4.d">a trace pane, mma doctor and a session log you can replay after a bad turn</span></div>
+        </div>
         <dl class="rows">
-          <div class="row"><dt><code>mma "…"</code></dt><dd data-i18n="install.c1.d"></dd></div>
-          <div class="row"><dt><code>mma</code></dt><dd data-i18n="install.c2.d"></dd></div>
-          <div class="row"><dt><code>mma web</code></dt><dd data-i18n="install.c3.d"></dd></div>
-          <div class="row"><dt><code>mma serve</code></dt><dd data-i18n="install.c4.d"></dd></div>
+          <div class="row"><dt><code>mma model certify</code></dt><dd data-i18n="ops.r1.d">certifies a model against the benchmark and security suites</dd></div>
+          <div class="row"><dt><code>mma usage</code></dt><dd data-i18n="ops.r2.d">shows provider balance and spend for the current period</dd></div>
+          <div class="row"><dt><code>mma doctor</code></dt><dd data-i18n="ops.r3.d">checks config, providers, tools and the environment</dd></div>
+          <div class="row"><dt><code>mma session diagnose</code></dt><dd data-i18n="ops.r4.d">reads a session log and reports what went wrong, with --json for scripts</dd></div>
         </dl>
-        <p class="note" data-i18n="install.req"></p>
       </div>
     </section>
 
-    <!-- 10 LIMITS -->
+    <!-- 10 FIRST STEPS -->
+    <section id="start" class="sec">
+      <div class="wrap">
+        <header class="sec-h"><span class="sec-n" data-i18n="s10.n">10</span><span class="sec-k" data-i18n="s10.k">First steps</span></header>
+        <h2 class="sec-t" data-i18n="install.title">Then run it</h2>
+        <p class="sec-lead" data-i18n="install.lead">The line above installs a self-contained build with a bundled runtime. From there the same binary is your one-shot command, your terminal, your browser chat, and an HTTP service.</p>
+        <dl class="rows">
+          <div class="row"><dt><code>mma "…"</code></dt><dd data-i18n="install.c1.d">one-shot a single request</dd></div>
+          <div class="row"><dt><code>mma</code></dt><dd data-i18n="install.c2.d">the interactive terminal</dd></div>
+          <div class="row"><dt><code>mma web</code></dt><dd data-i18n="install.c3.d">the browser chat</dd></div>
+          <div class="row"><dt><code>mma serve</code></dt><dd data-i18n="install.c4.d">the HTTP service</dd></div>
+          <div class="row"><dt><code>mma setup</code></dt><dd data-i18n="install.c5.d">the first-run provider wizard</dd></div>
+          <div class="row"><dt><code>mma meet</code></dt><dd data-i18n="install.c6.d">an onboarding interview that becomes project memory</dd></div>
+          <div class="row"><dt><code>mma agents init</code></dt><dd data-i18n="install.c7.d">create or improve AGENTS.md for a repository</dd></div>
+          <div class="row"><dt><code>mma session list</code></dt><dd data-i18n="install.c8.d">list, inspect and diagnose past sessions</dd></div>
+        </dl>
+        <p class="note" data-i18n="install.req">Requires a local backend — LM Studio on localhost:1234, or Ollama. A hosted provider works too; no cloud account is required.</p>
+      </div>
+    </section>
+
+    <!-- 11 LIMITS -->
     <section id="limits" class="sec">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s10.n"></span><span class="sec-k" data-i18n="s10.k"></span></header>
-        <h2 class="sec-t" data-i18n="lim.title"></h2>
-        <p class="sec-lead" data-i18n="lim.lead"></p>
+        <header class="sec-h"><span class="sec-n" data-i18n="s11.n">11</span><span class="sec-k" data-i18n="s11.k">Limits</span></header>
+        <h2 class="sec-t" data-i18n="lim.title">Honest limits</h2>
+        <p class="sec-lead" data-i18n="lim.lead">What MMA does not do — so you can decide whether it fits before you invest an afternoon.</p>
         <ul class="feat">
-          <li data-i18n="lim.l1"></li>
-          <li data-i18n="lim.l2"></li>
-          <li data-i18n="lim.l3"></li>
-          <li data-i18n="lim.l4"></li>
-          <li data-i18n="lim.l5"></li>
-          <li data-i18n="lim.l6"></li>
+          <li data-i18n="lim.l1">Disabling a plugin is not a sandbox. The module is already loaded, and its declared permissions are shown, not enforced.</li>
+          <li data-i18n="lim.l2">It helps a small model; it cannot hand a small model a bigger context window. Real ceiling still depends on the model you run.</li>
+          <li data-i18n="lim.l3">A local backend is the bottleneck: one model on one machine. Parallel sessions share the same engine, so they do not make it faster.</li>
+          <li data-i18n="lim.l4">Local-first means you own the compute and the uptime. There is no hosted SLA behind it.</li>
+          <li data-i18n="lim.l5">The context probe is best-effort. A bare /models endpoint reports nothing, so the configured context window simply stands.</li>
+          <li data-i18n="lim.l6">Path and permission quirks of your OS can still surprise you — especially across Windows drive boundaries.</li>
         </ul>
-        <h3 class="sec-t2" data-i18n="cmp.title"></h3>
+        <h3 class="sec-t2" data-i18n="cmp.title">Where it fits</h3>
         <div class="cmp-wrap">
           <table class="cmp">
             <thead>
-              <tr><th></th><th data-i18n="cmp.h2"></th><th class="hl" data-i18n="cmp.h3"></th><th data-i18n="cmp.h4"></th></tr>
+              <tr><th></th><th data-i18n="cmp.h2">plain chat agent</th><th class="hl" data-i18n="cmp.h3">MMA + local model</th><th data-i18n="cmp.h4">hosted frontier</th></tr>
             </thead>
             <tbody>
-              <tr><th data-i18n="cmp.a1"></th><td data-i18n="cmp.b1"></td><td class="hl" data-i18n="cmp.c1"></td><td data-i18n="cmp.d1"></td></tr>
-              <tr><th data-i18n="cmp.a2"></th><td data-i18n="cmp.b2"></td><td class="hl" data-i18n="cmp.c2"></td><td data-i18n="cmp.d2"></td></tr>
-              <tr><th data-i18n="cmp.a3"></th><td data-i18n="cmp.b3"></td><td class="hl" data-i18n="cmp.c3"></td><td data-i18n="cmp.d3"></td></tr>
-              <tr><th data-i18n="cmp.a4"></th><td data-i18n="cmp.b4"></td><td class="hl" data-i18n="cmp.c4"></td><td data-i18n="cmp.d4"></td></tr>
-              <tr><th data-i18n="cmp.a5"></th><td data-i18n="cmp.b5"></td><td class="hl" data-i18n="cmp.c5"></td><td data-i18n="cmp.d5"></td></tr>
+              <tr><th data-i18n="cmp.a1">cost</th><td data-i18n="cmp.b1">subscription</td><td class="hl" data-i18n="cmp.c1">electricity</td><td data-i18n="cmp.d1">per token</td></tr>
+              <tr><th data-i18n="cmp.a2">privacy</th><td data-i18n="cmp.b2">prompts leave your machine</td><td class="hl" data-i18n="cmp.c2">stays local</td><td data-i18n="cmp.d2">prompts leave your machine</td></tr>
+              <tr><th data-i18n="cmp.a3">ceiling</th><td data-i18n="cmp.b3">fixed</td><td class="hl" data-i18n="cmp.c3">your model</td><td data-i18n="cmp.d3">the strongest available</td></tr>
+              <tr><th data-i18n="cmp.a4">control</th><td data-i18n="cmp.b4">a chat window</td><td class="hl" data-i18n="cmp.c4">files, tools, scripts</td><td data-i18n="cmp.d4">an API and nothing else</td></tr>
+              <tr><th data-i18n="cmp.a5">setup</th><td data-i18n="cmp.b5">install</td><td class="hl" data-i18n="cmp.c5">backend + one line</td><td data-i18n="cmp.d5">an API key</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </section>
 
-    <!-- 11 PHILOSOPHY -->
+    <!-- 12 PHILOSOPHY -->
     <section id="phil" class="sec last">
       <div class="wrap">
-        <header class="sec-h"><span class="sec-n" data-i18n="s11.n"></span><span class="sec-k" data-i18n="s11.k"></span></header>
-        <h2 class="sec-t" data-i18n="phil.title"></h2>
-        <p class="sec-lead" data-i18n="phil.p"></p>
+        <header class="sec-h"><span class="sec-n" data-i18n="s12.n">12</span><span class="sec-k" data-i18n="s12.k">Philosophy</span></header>
+        <h2 class="sec-t" data-i18n="phil.title">A universal agent, not just a coding tool</h2>
+        <p class="sec-lead" data-i18n="phil.p">Coding is one use case. Weather, the smart home, APIs, research and personal assistance are others. Prompts, tool descriptions and onboarding are deliberately domain-neutral, so the agent fits whatever you point it at.</p>
         <ul class="feat inline">
-          <li data-i18n="phil.b1"></li>
-          <li data-i18n="phil.b2"></li>
-          <li data-i18n="phil.b3"></li>
+          <li data-i18n="phil.b1">General by design</li>
+          <li data-i18n="phil.b2">Quiet by default: one line per action, detail one keystroke away</li>
+          <li data-i18n="phil.b3">Local-first: your models, your data, your machine</li>
         </ul>
       </div>
     </section>
@@ -489,21 +546,24 @@ GET  /v1/openapi.json   GET /v1/docs</pre>
     <div class="wrap foot-grid">
       <div class="foot-brand">
         <span class="mdl sm c-recon track" id="footFace" aria-hidden="true"></span>
-        <p><b>MMA</b> — <span data-i18n="footer.tagline"></span></p>
-        <p class="foot-meta"><span id="verChip">v0.3.3</span> · <span class="beta" data-i18n="beta"></span> · <span data-i18n="footer.license"></span></p>
+        <p><b>MMA</b> — <span data-i18n="footer.tagline">An open-source harness for small language models.</span></p>
+        <p class="foot-meta"><span id="verChip">v0.3.3</span> · <span class="beta" data-i18n="beta">beta</span> · <span data-i18n="footer.license">MIT License</span></p>
       </div>
       <div class="foot-cols">
         <div class="foot-col">
-          <h4 data-i18n="footer.project"></h4>
-          <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest" data-i18n="footer.download"></a>
-          <a href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="footer.repo"></a>
-          <a href="https://github.com/Alexeykoh/micro-model-agent/releases" data-i18n="footer.releases"></a>
-          <a href="https://github.com/Alexeykoh/micro-model-agent/issues" data-i18n="footer.issues"></a>
+          <h4 data-i18n="footer.project">Project</h4>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest" data-i18n="footer.download">Download latest</a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="footer.repo">Repository</a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/releases" data-i18n="footer.releases">Releases</a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/issues" data-i18n="footer.issues">Issues</a>
         </div>
         <div class="foot-col">
-          <h4 data-i18n="footer.docs"></h4>
+          <h4 data-i18n="footer.docs">Documentation</h4>
           <a href="https://github.com/Alexeykoh/micro-model-agent#readme">README</a>
-          <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/docs/mma-features-overview.md" data-i18n="footer.features"></a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/docs/mma-features-overview.md" data-i18n="footer.features">Feature overview</a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/docs/specs/2026-10-12-architecture-v2-design.md" data-i18n="footer.architecture">Architecture</a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/docs/agents/service-api.md" data-i18n="footer.serviceapi">Service API</a>
+          <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/CHANGELOG.md" data-i18n="footer.changelog">Changelog</a>
           <a href="https://github.com/Alexeykoh/micro-model-agent/blob/master/AGENTS.md">AGENTS.md</a>
         </div>
       </div>
@@ -516,7 +576,7 @@ GET  /v1/openapi.json   GET /v1/docs</pre>
   </div>
 
   <button class="totop" id="toTop" type="button">
-    <span class="sr-only" data-i18n="a11y.top"></span>
+    <span class="sr-only" data-i18n="a11y.top">Back to top</span>
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
   </button>
 
