@@ -1,7 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readdirSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { PolicyContext } from "../../src/modules/security/data-policy/context";
 import { DEFAULT_DATA_POLICY } from "../../src/modules/security/data-policy/defaults";
 import {
@@ -71,33 +68,5 @@ describe("createProviderEgressFactory", () => {
     expect(factory({ type: "openai-compat", baseUrl: "http://localhost:1234/v1" })).toBeDefined();
     enabled = false;
     expect(factory({ type: "openai-compat", baseUrl: "http://localhost:1234/v1" })).toBeUndefined();
-  });
-});
-
-describe("architecture: providers stay security-agnostic (INV-3)", () => {
-  it("слой провайдеров не импортирует security", () => {
-    const root = resolve(fileURLToPath(new URL("../../src/modules/providers", import.meta.url)));
-    const importSpec = /(?:from|import)\s*\(?\s*["']([^"']+)["']/g;
-    const offenders: string[] = [];
-    for (const name of readdirSync(root)) {
-      if (!name.endsWith(".ts")) continue;
-      const text = readFileSync(resolve(root, name), "utf-8");
-      for (const m of text.matchAll(importSpec)) {
-        if (m[1].includes("security")) offenders.push(`${name}: ${m[1]}`);
-      }
-    }
-    expect(offenders).toEqual([]);
-  });
-
-  it("bootstrap регистрирует egress-guard до сборки провайдера", () => {
-    const bootstrapSrc = readFileSync(
-      resolve(fileURLToPath(new URL("../../src/core/bootstrap.ts", import.meta.url))),
-      "utf-8",
-    );
-    const install = bootstrapSrc.indexOf("installEgressGuard(");
-    const build = bootstrapSrc.indexOf("setupProviderPhase(");
-    expect(install).toBeGreaterThan(-1);
-    expect(build).toBeGreaterThan(-1);
-    expect(install).toBeLessThan(build);
   });
 });

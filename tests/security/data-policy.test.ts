@@ -31,6 +31,11 @@ describe("classify", () => {
     expect(paths).toHaveLength(0);
   });
 
+  it("e-mail — это PII, а не исключение (контакты уходят только токеном)", () => {
+    const found = classify("mail user@example.com now", ctx);
+    expect(found.some((f) => f.kind === "email" && f.dataClass === "pii")).toBe(true);
+  });
+
   it("регистр и разделители не влияют (INV-D8)", () => {
     const text = "C:/WORK/PROJ\\SRC\\A.TS";
     const found = classify(text, ctx).filter((f) => f.dataClass === "path");

@@ -33,8 +33,21 @@ const MAIL_RE = /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/gi;
  * (`https://host/a/b` не должно ловиться как `/a/b`). URL вырезаются первыми (Q9).
  */
 export function excludedRanges(text: string): Range[] {
+  return rangesOf(text, [URL_RE, MAIL_RE]);
+}
+
+/**
+ * Только URL-диапазоны: для PII e-mail — сама цель детекции, а не «исключение».
+ * Использовать там, где e-mail не должен глушить находку.
+ */
+export function urlRanges(text: string): Range[] {
+  return rangesOf(text, [URL_RE]);
+}
+
+/** Собрать диапазоны совпадений набора regex по исходному тексту. */
+function rangesOf(text: string, regexes: readonly RegExp[]): Range[] {
   const ranges: Range[] = [];
-  for (const re of [URL_RE, MAIL_RE]) {
+  for (const re of regexes) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {

@@ -282,7 +282,10 @@ describe("webui usage metrics", () => {
       const res = await doFetch(`${base}/api/state`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { state: HostStateSnapshot };
-      expect(body.state.workspace).toBe("E:/proj");
+      // Блок на месте, но абсолютный корень DLP-редактируется (default-on).
+      expect(body.state.workspace).toBeDefined();
+      expect(body.state.workspace).not.toBe("E:/proj");
+      expect(String(body.state.workspace)).toContain("<PATH:");
       expect(body.state.instructions?.disabled).toBe(true);
       expect(body.state.projectMap?.indexed).toBe(false);
     });
