@@ -11,6 +11,7 @@ import type { Logger } from "../../logger/app-logger";
 import type { ToolContext } from "../../tools/types";
 import type { Diagnostic } from "../../output/types";
 import { moduleOf } from "../../output";
+import type { GuardDiagnostic } from "../../modules/security/data-policy/types";
 
 /** Зависимости сборки ToolContext. */
 export interface ToolContextInput {
@@ -63,6 +64,35 @@ export function admissionDiagnosticSink(
       errorKind: diag.kind,
       cause: diag.cause,
       recoverable: diag.recoverable,
+    });
+  };
+}
+
+/**
+ * Сигнал DLP-egress (INV-15): `aborted` — fail-closed прервал вызов,
+ * `degraded` — осознанный fail-open. Пишется в лог активной сессии; `redacted`
+ * (штатная редакция) не засоряет журнал.
+ *
+ * DEBT(egress-diagnostics-parallel): sink процесс-глобальный, в параллельных
+ * сессиях он указывает на последнюю созданную — маршрутизация по sessionId
+ * отложена.
+ */
+export function egressDiagnosticSink(
+  sessionManager: SessionManager,
+): (diag: GuardDiagnostic) => void {
+  return (diag: GuardDiagnostic) => {
+    if (diag.outcome === "redacted") return;
+    const blocked = diag.outcome === "aborted";
+    sessionManager.appendLog({
+      ts: new Date().toISOString(),
+      type: blocked ? "egress_blocked" : "egress_degraded",
+      content: diag.cause ?? diag.operation,
+      source: "module:security.data-policy",
+      module: "security.data-policy",
+      operation: diag.operation,
+      errorKind: blocked ? "blocked" : "degraded",
+      cause: diag.cause,
+      recoverable: !blocked,
     });
   };
 }

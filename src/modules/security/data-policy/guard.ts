@@ -119,11 +119,12 @@ export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unkn
         if (changed) diag({ operation: "sanitizeChat", kind: "egress", outcome: "redacted", count: Object.values(stats).reduce((a, b) => a + b, 0) });
         return { messages: msgProj.messages, tools: toolsOut, changed, stats };
       } catch (e) {
+        const cause = e instanceof Error ? e.message : String(e);
         if (config.failClosed) {
-          diag({ operation: "sanitizeChat", kind: "egress", outcome: "aborted" });
-          throw new EgressBlockedError(e instanceof Error ? e.message : String(e));
+          diag({ operation: "sanitizeChat", kind: "egress", outcome: "aborted", cause });
+          throw new EgressBlockedError(cause);
         }
-        diag({ operation: "sanitizeChat", kind: "egress", outcome: "passed" });
+        diag({ operation: "sanitizeChat", kind: "egress", outcome: "passed", cause });
         return { messages, tools, changed: false, stats: {} };
       }
     },
@@ -135,7 +136,12 @@ export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unkn
       try {
         return projectDeep(payload, policy).messages;
       } catch (e) {
-        if (config.failClosed) throw new EgressBlockedError(e instanceof Error ? e.message : String(e));
+        const cause = e instanceof Error ? e.message : String(e);
+        if (config.failClosed) {
+          diag({ operation: "filterClient", kind: "egress", outcome: "aborted", cause });
+          throw new EgressBlockedError(cause);
+        }
+        diag({ operation: "filterClient", kind: "egress", outcome: "passed", cause });
         return payload;
       }
     },

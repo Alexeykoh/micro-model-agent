@@ -16,8 +16,9 @@ import { createContextManager } from "./context-factory";
 import type { ContextManager } from "../../core/context/manager";
 import { ToolExecutor } from "../../tools/executor";
 import { HallucinationDetector } from "../../core/hallucination/detector";
-import { createToolContext, admissionDiagnosticSink } from "./tool-context";
+import { createToolContext, admissionDiagnosticSink, egressDiagnosticSink } from "./tool-context";
 import { SessionStore, SessionManager } from "../../modules/session/index";
+import { setEgressDiagnosticSink } from "../../modules/security/data-policy/egress-provider";
 import { ContextLogger } from "../agent/context-log";
 import { t } from "../../i18n/index";
 import type { ToolRegistry } from "../../tools/index";
@@ -208,6 +209,8 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
   // INV-15: fail-open admission (спилл упал → результат не admitted) пишет
   // `admission_degraded` в сессию этим же путём, что `verify_error`.
   toolExecutor.setDiagnosticSink(admissionDiagnosticSink(sessionManager));
+  // INV-15: abort/fail-open DLP-egress'а пишется в лог активной сессии.
+  setEgressDiagnosticSink(egressDiagnosticSink(sessionManager));
   toolCtx.llmProvider = llmProvider;
   toolCtx.toolExecutor = toolExecutor;
 
