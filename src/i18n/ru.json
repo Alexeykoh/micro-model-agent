@@ -1385,7 +1385,7 @@
   "config.enum.ledger": "леджер тулов",
   "config.enum.line": "строка",
   "config.enum.meta": "в подсказках",
-  "config.enum.full": "во всю ширину",
+  "config.enum.full": "полный",
   "config.enum.prefix": "префикс",
   "config.enum.compact": "компактный",
   "config.enum.legacy": "legacy",
