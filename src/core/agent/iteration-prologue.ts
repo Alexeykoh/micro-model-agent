@@ -17,6 +17,7 @@ import { filterDisabledTools } from "./tool-visibility";
 import { repairToolCallPairing } from "./tool-pairing";
 import { buildPromptSnapshot, diffPrompt } from "./prefix-monitor";
 import { estimateTokens } from "../../llm/token-counter";
+import { contextLogGuard } from "./context-egress";
 
 /** Мутабельный вид `Agent`, которым владеет пролог. */
 export interface IterationPrologueHost {
@@ -99,15 +100,23 @@ export function runIterationPrologue(
   // Opt-in git-style context log: snapshot отправляемого контекста.
   if (deps.contextLogger) {
     try {
-      deps.contextLogger.record(history, allToolsForBudget, {
-        iteration: state.iteration,
-        ts: new Date().toISOString(),
-        systemTokens: estimateTokens(promptSnapshot.system),
-        toolTokens: estimateTokens(promptSnapshot.tools),
-        historyTokens: estimateTokens(promptSnapshot.history),
-        totalTokens: contextManager.getEstimatedTokens(),
-        contextWindow: config.contextWindow,
-      });
+      // DLP (E1): снимок показывает то, что уйдёт провайдеру (токены вместо
+      // путей/PII). Карта токенов общая с провайдером (INV-D11).
+      const guard = contextLogGuard(config);
+      const projected = guard?.sanitizeChat(history, allToolsForBudget);
+      deps.contextLogger.record(
+        (projected?.messages ?? history) as typeof history,
+        (projected?.tools ?? allToolsForBudget) as typeof allToolsForBudget,
+        {
+          iteration: state.iteration,
+          ts: new Date().toISOString(),
+          systemTokens: estimateTokens(promptSnapshot.system),
+          toolTokens: estimateTokens(promptSnapshot.tools),
+          historyTokens: estimateTokens(promptSnapshot.history),
+          totalTokens: contextManager.getEstimatedTokens(),
+          contextWindow: config.contextWindow,
+        },
+      );
     } catch {
       // Логирование контекста не должно ронять агент.
     }

@@ -28,6 +28,8 @@ import { handleFileApi } from "./file/file-api";
 import { handleFilesApi } from "./file/files-api";
 import { handleSetupApi } from "./settings/setup-api";
 import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp/lsp-api";
+import { handleUpdatePost } from "./chat/update-api";
+import { apiGuard, filterResponse } from "./egress";
 import type { WebUiState, WebUiAssets } from "./state";
 import { readEnv } from "../../config/env";
 
@@ -133,22 +135,6 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
 };
 
 /**
- * Установка доступного апдейта по кнопке в web. В dev-режиме апдейтер собран,
- * но установка заблокирована (`setInstallEnabled(false)`) — тогда `install()`
- * вернёт `success:false`; здесь это просто пробрасывается в ответ.
- */
-function handleUpdatePost(res: ServerResponse, s: WebUiState): void {
-  const install = s.updaterInstall;
-  if (!install) {
-    sendJson(res, 200, { ok: false, error: "update install is not available in this mode" });
-    return;
-  }
-  install()
-    .then((r) => sendJson(res, 200, { ok: r.success, installed: r.installed, error: r.error }))
-    .catch((e) => sendJson(res, 500, { ok: false, error: e instanceof Error ? e.message : String(e) }));
-}
-
-/**
  * Префикс-группы диспатча (sessions/settings/providers/file/setup владеют
  * своими под-путями). После точной таблицы; каждая сообщает, обработала ли.
  */
@@ -202,7 +188,7 @@ export function handleRequest(
       return;
     }
     setAuthCookie(res, s);
-    handleEvents(req, res, s);
+    handleEvents(req, filterResponse(res, apiGuard(s), "sse"), s);
     return;
   }
 
@@ -240,7 +226,7 @@ export function handleRequest(
       return;
     }
     setAuthCookie(res, s);
-    handleApi(req, res, reqUrl, s);
+    handleApi(req, filterResponse(res, apiGuard(s), "json"), reqUrl, s);
     return;
   }
 

@@ -1,0 +1,617 @@
+# Корпоративный слой безопасности: DLP-политика данных и контроль egress
+
+**Дата:** 2026-10-19 · **Ветка:** `feat/corporate-data-policy` · **Статус:** черновик v7
+(5 раундов `grill-me` + самопроверка; R17 — проверены все источники промпта, включая
+память, и найден второй шов сборки провайдера `buildManagedProvider` — см. §1.6, §6.2, §15)
+
+**Связанные документы:** [architecture v2](./2026-10-12-architecture-v2-design.md) ·
+[w2-enforcement](./2026-10-13-w2-enforcement-design.md) ·
+[outbound-policy](./2026-10-15-outbound-policy-design.md) ·
+[service-api](../agents/service-api.md)
+
+---
+
+## 1. Проблема и модель угроз
+
+### 1.1 Цель задачи
+
+Корпоративный слой безопасности, который:
+
+1. **не выпускает машину наружу** — при обращении к внешнему LLM-провайдеру (в первую
+   очередь работающему через интернет) за пределы машины не уходят: абсолютные пути,
+   имя компьютера, имя пользователя, домашний каталог, `cwd`, переменные окружения,
+   содержимое защищённых/скрытых файлов и перс-данные (ПДн);
+2. **скрывает от API** (web и serve) пути, папки и файлы, которые нежелательно
+   показывать клиенту.
+
+### 1.2 Активы (что защищаем)
+
+| Класс | Примеры |
+|---|---|
+| `path` | Абсолютные пути ФС, `workspace`, `cwd`, `home`, пути скиллов/плагинов/MCP/LSP |
+| `machine` | Имя компьютера (hostname), имя пользователя, домен/рабочая группа, `OS`-отпечаток |
+| `env` | Значения переменных окружения (уже частично: секреты) |
+| `secret` | API-ключи, токены, пароли (покрыто `data-sanitizer.ts`) |
+| `pii` | ПДн РФ и РБ (§10) |
+| `file-content` | Содержимое файла, попавшего под hidden-glob |
+
+### 1.3 Нарушители / векторы
+
+| # | Вектор | Сайт (факт из кода) |
+|---|---|---|
+| V1 | **LLM-egress**: промпт уходит провайдеру | `src/llm/openai-compat.ts:391,755` — санитизации нет |
+| V2 | Имя машины/дом/cwd попадают в контекст модели | `src/core/environment.ts:36,39,258`; `src/modules/user-profile/profile.ts:33,34,36` → `compress()` |
+| V3 | Абсолютные пути из тулов и их описаний идут в промпт | результаты `read`/`glob`/`grep`/`bash`, `ToolDefinition.description/parameters` |
+| V4 | **API-egress (web)**: абсолютные пути в ответах | `/api/state` (`workspace`, `instructions.files`), `/api/skills` (`source`), `/api/plugins` (`path`, `failures[].path`); SSE `tool_start.args` / `tool_end.output`; history/log |
+| V5 | **API-egress (service)**: то же через `/v1` | `modules/service/api/*`, `runtime/event-bridge.ts` |
+| V6 | Секреты в ответах | покрыто `redactConfigSecrets` — **только** ключи с секретными именами |
+| V7 | **Egress каркаса (внешний webhook)** | `modules/security/audit-notifier.ts` (`message`/`reason`/`action`), `service/runtime/webhook.ts` — путь-содержащий payload уходит наружу |
+| V8 | Прочий egress к провайдеру | `preflight.probeChat`, `listModels`, health-пробы, models.dev, updater — контентно безопасны, но **инвентаризуются** гейтом |
+
+### 1.4 Поверхности egress: что редактируем, а что нет (R4)
+
+| Поверхность | Наружу? | Политика |
+|---|---|---|
+| Терминал / REPL / локальный TUI | Нет (та же машина) | реальные пути **показываем** |
+| `session.jsonl`, context-log | Нет | текущая политика (узкие секреты); пути/PII не редактируем в хранилище |
+| LLM-провайдер (external) | **Да** | E1 — жёсткая санитизация |
+| LLM-провайдер (доверенный, loopback/allowlist) | Нет | E1 не применяется (кроме `secret`) |
+| `mma web` (localhost-сеть) | **Да** | E2 — фильтр сериализации клиенту |
+| `mma serve` (`/v1`, SSE) | **Да** | E2 — то же |
+| Framework webhook (audit/callback, V7) | **Да** | DLP-фильтр payload'а |
+
+«Оба режима одинаково» (решение пользователя) означает: `mma web` и `mma serve` скрывают
+пути/PII **несмотря на локальность** web. REPL/хранилище — не редактируем.
+
+### 1.5 Почему нельзя «дописать проверку»
+
+Вызовов `provider.chat(...)` в коде **13** (agent loop, critic, hallucination-judge,
+compaction, reasoning-probe, fork-сабагенты, …). Точечная правка рядом с одним вызовом
+оставляет 12 путей. По принципу «Enforcement — одна точка» фильтр обязан стоять **в
+единственной точке рождения провайдера**, а не у вызывающих.
+
+### 1.6 Источники формирования промпта (R17)
+
+Проверено перед стартом: **все** источники системного/пользовательского промпта
+сходятся в один канал — `LLMProvider.chat(messages, tools, …)`. Обёртка E1 на `chat`
+накрывает их все, включая память.
+
+| Источник | Где формируется | Что может нести |
+|---|---|---|
+| `buildSystemInfo` | `core/system-prompt.ts:56,116` | **`Workspace: ${baseDir}`, `CWD: ${baseDir}`, env-профиль** (hostname, home) — главный вектор |
+| Статичные блоки | `bootstrap/modules-phase.ts:271-287` | project map (`indexer`), session, skills, `AGENTS.md`, plan-reminder |
+| Динамические блоки | `core/prompt-assembler.ts:38-62` | model-identity, skills, session id/name, project map, plugin-capabilities, hidden-tools |
+| **Память** | `modules/memory/module.ts:29` (`getSystemPromptBlock`), `lifecycle.ts:19` | преференсы `k=v` и хвосты `errors/conventions/decisions/facts.md` |
+| Модульные блоки | `mcp/lifecycle.ts:18`, `browser/lifecycle.ts:20`, `lsp` | описания MCP-тулов, vision, стартовый health-check |
+| Хуки плагинов | `core/agent/prompt-phase.ts:49` (`runOnBuildPrompt`) | произвольный текст плагина |
+| Overflow-сводки | `core/prompt-overflow.ts:120` (`provider.chat`) | сжатые instructions/project-map |
+| Определения тулов | аргумент `tools` | примеры/пути в описаниях тулов |
+
+**LLM-вызовы (все через `chat`):** main-loop (`loop-llm.ts:135`, `turn-output.ts:99`,
+`turn-run.ts:121`), компакция/overflow (`prompt-overflow.ts:120`,
+`context/chunk-query.ts:88`), hallucination-judge (`llm-judge.ts:104`; детектор создан с
+`llmProvider` — `session-phase.ts:214`, `session-runner.ts:203`), критик
+(`critic/client.ts:160`), reasoning-probe (`probe.ts:70`), сабагенты
+(`subagent-run.ts`, `pipeline-run.ts` — оба берут `ctx.llmProvider`).
+
+**Следствие для шва (§6.2):** критик и эксперты строят провайдера **не** из основного
+`llmProvider`, а отдельным `buildManagedProvider` → нужна глобальная регистрация guard
+в слое провайдеров, иначе эти два пути остаются незакрытыми.
+
+**Локальные источники (не egress):** индексер (`modules/indexer/*`) LLM не вызывает —
+карта проекта строится без сети; `countTokens`, `estimateTokens` — локальные.
+
+---
+
+## 2. Целевые инварианты
+
+| ID | Инвариант | Проверка |
+|---|---|---|
+| **INV-D1** | Наружу не уходит ни один факт класса `path`/`machine`/`env`/`secret`/`pii`/`file-content`, кроме разрешённого политикой. Локально факт доступен и подставляется в инструменты | egress-guard + path/pii unit |
+| **INV-D2** | Пресечение — на уровне **каркаса**, не модели и не промпта | `tests/arch/egress-guard.test.ts` |
+| **INV-D3** | Одна точка на измерение: egress-к-провайдеру — обёртка на рождении провайдера; egress-к-API — фильтр сериализации клиенту. Точечных проверок в хендлерах нет | скан по гейту |
+| **INV-D4** | Fail-closed: при ошибке/таймауте классификатора внешний вызов **прерывается типизированной ошибкой** (recoverable-диагностика), неклассифицированное не отправляется. Для доверенного локального провайдера — fail-open | unit-тесты на ошибки |
+| **INV-D5** | Обратимость: плейсхолдер в `tool_call.arguments` ре-гидратируется в реальный путь **до** исполнения тула; неизвестный плейсхолдер не трогается | тесты ре-гидратации |
+| **INV-D6** | Скрытый путь неотличим от несуществующего: `404`; PII/секрет в теле маскируется | тесты path-hiding |
+| **INV-D7** | Редакция для клиента (E2) применяется **per-subscriber на сериализации**; сохранённое событие/локальный контекст не мутируется | тест event-sourced состояния |
+| **INV-D8** | Регистр и разделители путей не влияют на детекцию (нормализация; Windows case-insensitive) | corpus-тесты |
+| **INV-D9** | Токены **неперебираемы** (крипто-случайный id); ре-гидратация — только по точному попаданию, иначе подстановка чужого значения | unit-тесты токенов |
+| **INV-D10** | Политика путей решается по **каноническому** пути (`realpath`); symlink/junction на скрытое не обходит | тесты symlink |
+| **INV-D11** | Карта токенов — **на сессию, общая для форков**, один писатель | тест форка |
+
+---
+
+## 3. Архитектура
+
+**Один движок политики + две точки enforcement.** Размещение — по критерию
+«можно ли отключить и продолжить работать?»: DLP-политику можно отключить → **модуль**.
+
+```
+                    ┌──────────────────────────────────────────┐
+                    │  modules/security/data-policy            │
+                    │  classify() · pseudonymize() · rehydrate()│
+                    │  path-policy (glob→hidden/404)           │
+                    │  EgressGuard (интерфейс)                 │
+                    └───────────────┬──────────────────────────┘
+              ┌─────────────────────┴─────────────────────┐
+              ▼                                           ▼
+   E1: LLM egress                                E2: API egress
+   обёртка на рождении провайдера записи         webui: фильтр сериализации клиенту
+   (ProviderManager) → FallbackProvider          service: то же + SSE
+   bootstrap инъектит EgressGuard                typed DTO чувствительных endpoint
+```
+
+- **Движок** (`src/modules/security/data-policy/`) — расширение security-модуля рядом с
+  `data-sanitizer.ts` / `protected-paths.ts` / `outbound-policy.ts`. Чистые функции.
+- **E1** — `SanitizingProvider implements LLMProvider` (`providers/sanitizing.ts`),
+  принимает `EgressGuard` **через инъекцию** (providers не импортирует security).
+- **E2** — фильтр в `webui/server.ts` (JSON + SSE) и в `service`.
+- Движок **не зависит** от `security.paths.enabled`/`security.network.enabled`
+  (прецедент — `outbound-policy`, D5): выключение другого флага не должно открывать утечку.
+
+### 3.1 Контракт EgressGuard (зафиксировать до W1)
+
+```ts
+/** Провайдер-независимый шов DLP; инъектится в ProviderManager (E1) и web/service (E2). */
+interface EgressGuard {
+  /** Провайдер/поверхность, на которую смотрит политика. */
+  readonly target: { kind: "provider" | "api"; trusted: boolean; host?: string };
+  /** Санитизировать исходящий LLM-вызов: сообщения + определения тулов. */
+  sanitizeChat(messages: Message[], tools?: ToolDefinition[]): {
+    messages: Message[]; tools?: ToolDefinition[];
+  };
+  /** Ре-гидратировать плейсхолдеры в аргументах тула (INV-D5). */
+  rehydrateArgs(rawArgs: string): string;
+  /** Редактировать произвольный текст/структуру для API-клиента (E2, per-subscriber). */
+  filterClient<T>(payload: T): T;
+  /** Диагностика: только метаданные, без оригинала (§9). */
+  readonly onDiagnostic?: (d: GuardDiagnostic) => void;
+}
+```
+
+Реализацию даёт `modules/security/data-policy`; `providers` и `webui`/`service` видят только
+интерфейс (providers **не** импортирует security).
+
+---
+
+## 4. Классификация данных
+
+```ts
+type DataClass = "path" | "machine" | "env" | "secret" | "pii" | "file-content";
+
+interface Finding {
+  dataClass: DataClass;
+  kind: string;          // для pii: "email" | "phone_by" | "unp_by" | ...
+  start: number; end: number;
+  confidence: number;    // 0..1
+  redact: boolean;       // confidence ≥ порога класса
+}
+```
+
+Детекторы и правила:
+
+1. **Секреты** — регулярки `data-sanitizer.ts` (переносятся в общий реестр; поведение
+   сохраняется).
+2. **Пути** — Windows (`[A-Za-z]:\\…`), UNC (`\\\\…`, `\\?\…`), POSIX
+   (`/(home|Users|root|opt|var|srv|mnt)/…`), плюс **значение-ориентированная** детекция
+   известных корней (`workspace`, `homedir()`, `cwd`) — чтобы ловить пути, набранные из
+   локального провайдера в прошлых ходах (Q7). Нормализация: `~` → home, `\\`↔`/`,
+   регистронезависимо для известных значений (INV-D8).
+3. **URL не трогаем** (Q9): URL-раны вырезаются из входа path-детектора первыми; path
+   обязан быть root-anchored/drive-letter/UNC и не начинаться с `://`. Негативные тесты.
+4. **Машина** — `hostname()`, `homedir()`, `env.USER/username/COMPUTERNAME/…`, отпечаток
+   `platform/type()/release()`.
+5. **PII** — реестр распознавателей РФ+РБ (§10): regex + контрольная сумма + контекст.
+   NER (ФИО, адреса) — вне W1 (§14).
+6. **Ошибки** (Q21) — текст ошибок (`ENOENT: C:\…`, стектрейсы) классифицируется на всех
+   границах egress.
+7. **Безопасность regex** (Q15): только линейные паттерны (без вложенных
+   квантификаторов); кап длины входа на PII-скан; общий time-budget; при превышении —
+   «не разрешено» (fail-closed для внешнего).
+8. **`file-content`** (Q23): содержимое пути под hidden-glob тегируется и для внешнего
+   провайдера вырезается/блокируется **по пути**, независимо от PII-паттернов.
+9. **Скоуп hidden-glob — только по объявленным `pathArgs`** (D6): матчинг glob применяется
+   к аргументам, объявленным `ToolSecurityDecl.pathArgs` (`executor.ts:169`), и к полям API,
+   известным как пути. Иначе `fetch("https://…/hr/x")` ложно попадёт под `**/hr/**`.
+10. **Канонический путь** (D7): решение о скрытии принимается по `realpath` (как в
+    `file/paths.ts:40`), иначе symlink/junction на скрытый файл обходит политику (INV-D10).
+11. **Скоуп value-sweep** (D13): value-based проверка известных значений идёт по границам
+    и нормализации; тест — URL `https://…/home/x` не режется, `C:\Users\x` — режется.
+
+---
+
+## 5. Обратимая псевдонимизация, поток данных и производительность
+
+### 5.1 Сквозной поток (R1)
+
+```
+вход пользователя
+   │  tokenize
+   ├─► канон (реальные значения) ── локальные тулы, реплей, отображение REPL
+   └─► outbound (токены) ─────────► провайдер
+                                        │ модель эхо-повторяет токен
+                                        ▼
+                       rehydrate(tool_call.arguments) ─► тул исполняет реальный путь
+                                        │ результат тула
+                                        ▼
+                                   tokenize ─► outbound ─► провайдер
+```
+
+Ключевые решения:
+
+- **Каноническая история хранит реальное** (иначе локальные тулы и реплей ломаются);
+  outbound-форма **выводится детерминированно** тем же словарём.
+- **Tokenize обязателен на входе пользователя**, иначе модель не получит токен, который
+  сможет повторить, и вся схема не сработает.
+- Замена на токен `<HOST:9c1e>`, `<PATH:7f3c>`, `<PII:email:2ab8>`; id **неперебираем**
+  (INV-D9); одно значение → один токен, стабильный в пределах сессии (между запусками не
+  обещаем, Q13).
+- **Предел политики (R2):** модель, не видевшая корня, вынуждена давать
+  workspace-относительный путь; абсолютные операции без ранее полученного токена для
+  внешнего провайдера невозможны. Это осознанное ограничение, а не дефект.
+- **Компакция (R3):** summary на внешнем провайдере содержит токены (без утечки); при
+  пересказе токен может быть потерян — допустимая деградация (модель не сошлётся), но не
+  утечка.
+
+### 5.2 Производительность, бюджет, жизнь карты
+
+- **Канон не мутируем; outbound — мемоизированная проекция** (D8): на стороне egress,
+  ключ = хэш идентичности сообщения + версия политики; переживает пересоздание сообщений
+  при компакции, не портит реплей. Убирает O(n²) по растущему контексту (Q11).
+  *Открытый инженерный шов:* точное место кэша проекции уточняется в W2.
+- **Бюджет/токены (Q12):** пороги компакции и подсчёт токенов для egress — по
+  **outbound** форме (что реально уйдёт провайдеру).
+- **Ре-гидратация:** к `tool_call.arguments` (INV-D5) и к локальному отображению.
+  Порядок: rehydrate (локальный смысл) → E2 (клиент). Неизвестный токен → без изменений
+  (Q6). Стриминг: короткий hold-back «хвоста» (тест на расщеплённый токен).
+- **Неперебираемость токенов (D3, INV-D9):** id — крипто-случайный, не последовательный;
+  иначе модель может выдать чужой валидный токен и ре-гидратация подставит не тот путь.
+- **Общая карта форков (D4, INV-D11):** карта — на сессию, разделяется `ToolExecutor.fork`,
+  один писатель (mutex); иначе токены main не разрешаются в fork'е.
+- **Жизнь карты (R6):** время жизни привязано к **активному окну контекста сессии** —
+  токен не вытесняется, пока сообщение в окне; очистка — вместе с вытеснением из окна /
+  закрытием сессии.
+- **Карта токенов (Q27) — главный секрет:** хранится отдельно, **никогда** не
+  сериализуется клиенту и не пишется в лог (гейт-тест).
+- **Base64 не сканируем** (R13): image/data-URL пейлоады пропускаются по капу; image-части
+  внешнему вырезаются (§7.3).
+
+### 5.3 Политика путей (Q8 → рекомендация D1)
+
+**Рекомендация:** default `pathMode:"prefix"` — префикс заменяется **всегда** (в нём
+machine-identity), workspace-относительный остаток сохраняется (иначе невозможно править
+код); corpo-папки закрываются `apiHiddenGlobs`/`providerBlockGlobs`; для регулируемого
+контура — `"full"`.
+
+- `machine`-identity — заменять всегда;
+- префикс корня (`C:\Users\X\…`, `/home/x/…`, `\\HOST\share`) — заменить **префикс**,
+  workspace-относительный остаток сохранить (модель видит `src/core/agent.ts`);
+- hidden-glob — заменять путь целиком.
+- **Финальный value-based свип (R7):** после regex-этапа исходящий текст проверяется на
+  известные значения (`homedir`, `hostname`, workspace-корень) в нормализованном виде —
+  ловит не-регексовые вхождения. base64/split-обход остаётся задокументированным риском.
+
+---
+
+## 6. Trust-политика провайдеров
+
+Решение — **всё внешнее + allowlist доверенных адресов** (выбор пользователя).
+
+- Доверенные: loopback (`localhost`, `127.0.0.0/8`, `::1`) — всегда, плюс хосты из
+  `security.dataPolicy.trustedHosts` (точное имя / суффикс `.corp` / IP|CIDR).
+- Внешний хост → **обязательная** санитизация (E1).
+- **Вердикт считается на фактически обслуживающем провайдере** (Q2, Q3, Q4), не при
+  сборке. Практически: обёртка ставится на **рождение провайдера каждой записи**
+  (там известен её `baseUrl`), поверх неё — `FallbackProvider`. Тогда failover
+  localhost→external не утечёт, а hot-swap `setModel`/`setProvider` сохраняет вердикт.
+- `secret` **не** отдаётся даже доверенному — секреты идут только в заголовок
+  авторизации.
+- **Ограничение (Q24):** trust по hostname подделывается DNS; прокси может
+  маршрутизировать доверенное имя наружу. Документируем; рекомендуем IP/CIDR-записи.
+
+### 6.1 Классификация хостов пресетов (R4)
+
+| Пресет | `baseUrl` | Вердикт |
+|---|---|---|
+| `openai-compat` | `""` (пользователь; дефолт `http://localhost:1234/v1`) | по значению |
+| `lmstudio` | `http://localhost:1234/v1` | доверенный (loopback) |
+| `openrouter` | `https://openrouter.ai/api/v1` | внешний |
+| `openai` | `https://api.openai.com/v1` | внешний |
+| `anthropic` | `https://api.anthropic.com` | внешний |
+| `opencode-zen` | `https://opencode.ai/zen/v1` | внешний |
+| `opencode-go` | `https://opencode.ai/zen/go/v1` | внешний |
+
+Плюс произвольные `entries[].baseUrl`. **Вердикт — по распарсенному host** (порт, `[::1]`,
+регистр, трейлинг-слэш); дефолт — внешний; loopback/allowlist — исключения. Матчинг
+строковым префиксом (`startsWith("http://localhost")`) — **ошибочен**.
+
+### 6.2 Шов E1 (R4, уточнён R17)
+
+**Точка обёртки — `ProviderManager.build()`** (`manager.ts:193`): строит провайдера на
+каждую запись и уже имеет `entry.baseUrl`. `FallbackProvider` (`fallback.ts:77`)
+делегирует в `this.source.active` → тот же `build()`. Вердикт считается на
+**фактически обслуживающем** провайдере (снимает Q2–Q4).
+
+**`ProviderManager` строится в ДВУХ местах** — обе должны получить guard:
+
+| Фабрика | Потребители |
+|---|---|
+| `buildActiveProvider` (`factory.ts:29`) | main-цикл, `Agent.setProvider`/`reconfigure` (`agent/provider-phase.ts`), session-runner (`session-runner.ts:176`) |
+| `buildManagedProvider` (`managed.ts:39`) | **критик** (`critic/provider.ts:56`), **эксперты** (`expert-provider.ts:30`) |
+
+Критик/эксперт строят провайдера **вне** основного `llmProvider` и не имеют доступа к
+инъекции из bootstrap. Поэтому guard в слое провайдеров регистрируется **глобально** —
+прецедент `setProviderMemoryApplier` (`config/registry.ts:641`, вызов из
+`provider-phase.ts:115`): bootstrap вызывает `setEgressGuard(factory)`, а
+`ProviderManager.build()` берёт guard при сборке. Альтернатива (проброс через options)
+требует правки всех вызывающих `buildManagedProvider` — отвергнута как дрейф.
+
+**Вне шва (классифицируются гейтом как benign):** `cli/commands.ts:211` (`createProvider`)
+и `cli/repl-commands.ts:803` (`new OpenAICompatProvider`) строят провайдера напрямую, но
+вызывают только `listModels()` — контентных данных не шлют.
+
+---
+
+## 7. E2 — API-egress, скрытие путей, картинки
+
+### 7.1 Фильтр ответов
+
+Единый `applyEgressFilter(body, ctx)` в диспетчере `webui/server.ts` (JSON и SSE) и в
+`service`. **Редакция — per-subscriber при сериализации** (INV-D7): сохранённое
+event-sourced состояние и локальный контекст не мутируются (Q18). Матрица:
+
+| Endpoint | Утечка | Действие |
+|---|---|---|
+| `/api/state` | `workspace`, `instructions.files` | путь → относительный/alias |
+| `/api/skills` | `source` | путь-политика |
+| `/api/plugins` | `path`, `failures[].path` | путь-политика |
+| `/api/config`, `/api/providers` | команды MCP/LSP, path-значения | путь-политика + PII |
+| SSE `tool_start`/`tool_end` | `args`, `output` | paths + pii + hidden-glob |
+| history / log / export | транскрипт | paths + pii |
+| service `/v1/*`, SSE | результат/события | то же |
+| `/api/memory` | факты | pii |
+| любые ошибки | текст с путями | paths |
+| `listModels` / пробы | серверные пути (`/models/…`) | classify как `path` (D12) |
+
+Для чувствительных endpoint — **типизированные DTO** (OWASP API3); фильтр — страховка.
+
+**Содержимое, не только имена полей (R5):** E2 сканирует и **тела** значений (например,
+`/api/file` может вернуть конфиг с абсолютными путями); содержимое hidden-glob-файла не
+отдаётся вовсе (404 по пути). Детекторы те же, что у E1.
+
+### 7.2 Путь-политика (скрытие папок/файлов) — рекомендация D2
+
+Оси **ортогональны** («не показывать API» ≠ «не отправлять внешнему»), поэтому — **два
+списка**, с безопасным дефолтом:
+
+- `apiHiddenGlobs` — не показывать клиенту: запрос `/api/file`, `/api/files` → **404**
+  (INV-D6), исключение из листинга.
+- `providerBlockGlobs` — не отправлять внешнему провайдеру; по умолчанию
+  **= `protected-paths` ∪ `apiHiddenGlobs` ∪ секреты** (супермножество); явно заданный
+  список перекрывает дефолт. Результат тула из-block тегируется `file-content`.
+- Оба расширяют always-on базу `protected-paths.ts`; дефолты — `**/hr/**`,
+  `**/finance/**`, `**/personal/**`, `**/*.pii`.
+- Решение о скрытии — по **каноническому** пути (`realpath`, INV-D10/§4).
+
+### 7.3 Картинки (Q16)
+
+Внешнему провайдеру image-части (`ContentPart.image_url`) **не форвардятся** (вырезаются)
+без явного `allowImagesToExternal`. Скриншоты могут содержать пути/ПДн — молчаливая
+пересылка недопустима для «важнейшего правила».
+
+---
+
+## 8. Конфигурация
+
+```ts
+interface DataPolicyConfig {
+  enabled: boolean;              // default true
+  trustedHosts: string[];        // default []
+  egress: {                      // по классам
+    path: boolean;               // true
+    machine: boolean;            // true
+    env: boolean;                // true
+    secret: boolean;             // true
+    pii: boolean;                // true
+    fileContent: boolean;        // true
+  };
+  /** Режим пути: "prefix" (замена корня, остаток сохранить) | "full" (весь путь). */
+  pathMode: "prefix" | "full";   // default "prefix"
+  allowImagesToExternal: boolean;// default false
+  piiKinds: Record<string, boolean>;
+  thresholds: Partial<Record<DataClass, number>>;
+  /** Не показывать клиенту API (404). */
+  apiHiddenGlobs: string[];      // []
+  /** Не отправлять внешнему провайдеру; по умолчанию — супермножество. */
+  providerBlockGlobs?: string[]; // undefined → protected ∪ apiHidden ∪ secrets
+  /** Диагностика: писать ОРИГИНАЛ в локальный лог (opt-in, default false). */
+  debugLogOriginals: boolean;    // false
+}
+```
+
+Ключи — `security.dataPolicy.*` (дефы в `registry-extra.ts`); i18n `en`/`ru` симметрично.
+Дефолты (Q25): machine/env/PII/hidden = on; `pathMode: "prefix"` → повседневная
+разработка не страдает.
+
+**Эффекты конфига (R8):** `trustedHosts`/`egress.*`/`pathMode`/`apiHiddenGlobs`/
+`providerBlockGlobs` меняют поведение провайдера → `ConfigStore.set` для этих ключей
+обязан возвращать `provider.rebuild` (контракт эффектов); иначе рантайм-тумблер молча не
+сработает. Путь-списки дополнительно инвалидируют кэш листинга файлов web.
+
+**Ложные срабатывания (D9):** per-class disable в `egress`/`piiKinds`; `debugLogOriginals`
+(по умолчанию **false**) — явный opt-in для диагностики, пишет оригинал **только** в
+локальный лог и только по явному решению оператора.
+
+---
+
+## 9. Наблюдаемость и подотчётность
+
+- События несут `source` (`core` | `module:security` | `tool:*`).
+- В лог — **только метаданные**: класс, `kind`, число замен, id токена, кто санитизировал.
+  **Оригинал не пишется** (лог не должен стать вторым каналом утечки).
+- **Подотчётность (Q26):** redaction-события (class/kind/count/token-id) пишутся в лог
+  сессии как аудит-след для 152-ФЗ; retention — по политике.
+- Fail-open классификатора оставляет запись с причиной (INV-15); но при сомнении выбор —
+  безопасный (внешнему не отдавать). Дополнить `docs/agents/observability.md`.
+- **Kill-switch (R9):** fail-closed не должен превращаться в DoS — при повторном
+  срабатывании классификатора выдаётся действенный операторский текст (что включить),
+  ретраев нет, и есть документированный `security.dataPolicy.enabled=false`.
+
+---
+
+## 10. Каталог PII: РФ + РБ (W1 — regex + checksum + контекст)
+
+| `kind` | Формат | Проверка |
+|---|---|---|
+| `email` | RFC-подобный | regex + контекст |
+| `phone_ru` | `+7`/`8` + 10 цифр | длина + контекст |
+| `phone_by` | `+375` + 9 цифр | длина + код оператора + контекст |
+| `snils_ru` | 11 цифр | контрольная сумма |
+| `inn_ru` | 10 / 12 цифр | контрольная сумма |
+| `ogrn_ru` | 13 / 15 цифр | контрольная сумма |
+| `passport_rf` | серия 4 + номер 6 | контекст + диапазоны |
+| `bank_card` | 13–19 цифр | Luhn |
+| `iban` | `RU`/`BY` + BBAN | mod-97 |
+| `unp_by` | 9 цифр | контрольная сумма (**research**) |
+| `id_by` | идентификационный номер, 14 символов | структура + checksum (**research**) |
+| `passport_by` | серия `АВ/ВМ/НВ/КН/МР/МС/КВ/RR/SP/DP` + 7 цифр | справочник + контекст |
+| `fio` / `address` | ФИО / свободный текст | NER — **вне W1** |
+| `birthdate` | ДД.ММ.ГГГГ | regex + диапазон |
+| `ip` / `mac` | IPv4/IPv6, MAC | regex + контекст |
+
+---
+
+## 11. Волны
+
+| Волна | Объём | Проверяемый результат | Затрагивает |
+|---|---|---|---|
+| **W1** | Движок `data-policy`: классификатор + псевдонимизация/ре-гидратация + путь-политика + конфиг | зелёные unit; ключи в реестре; `bun run quality` | `modules/security/data-policy/*`, `config/*`, i18n |
+| **W2** ⭐ | `SanitizingProvider` в `ProviderManager.build()` (§6.2) + инъекция guard из bootstrap + tools + images; закрыть V1/V2/V3/V8 | внешнему не уходит hostname/home/cwd/abs-path/hidden-content; локальному — уходит; ре-гидратация; failover localhost→external не течёт | `modules/providers/*`, `core/bootstrap/*` |
+| **W3** | API-egress web: per-subscriber фильтр + SSE + typed DTO; закрыть V4 | `/api/state`, `/api/skills`, `/api/plugins`, SSE без abs-path/PII | `modules/webui/*` |
+| **W4** | API-egress service + path-hiding 404 + DLP для webhook-egress (V7) | `/v1/*` и SSE очищены; hidden-glob → 404; audit/callback payload без путей | `modules/service/*`, `modules/webui/file/*`, `modules/security/audit-notifier.ts` |
+
+⭐ — «важнейшее правило». Одна волна = одна ветка/контракт (правило 3).
+
+---
+
+## 12. Гейты (правило 5)
+
+- `tests/arch/egress-guard.test.ts` — (a) инвентарь **всех** `fetch(`
+  сайтов `src/**` с причиной из белого списка (как `outbound-policy`), каждый —
+  с обоснованием: chat → обёртка E1; `/api/v1/models*`, `preflight`, `models-dev`,
+  `updater`, `setup/discovery` → benign; `image-utils` → classify; framework
+  (`outbound-policy`/`webhook`/`audit-notifier`) → V7; `web-search` query и
+  `mcp/client` → допустимы с явной причиной и как **остаточные векторы**; (b) **шов
+  сборки** (D14, R17): `ProviderManager` строится только в `factory.ts` и `managed.ts`, и
+  **обе** фабрики получают guard (глобальная регистрация `setEgressGuard` из bootstrap,
+  §6.2) — иначе критик/эксперт вне шва; все чат-пути идут через `ProviderManager.build()`;
+  `new OpenAICompatProvider(` вне `presets.ts` допустим только в allowlist-записях с
+  причиной (`cli/commands.ts:211`, `cli/repl-commands.ts:803` — только `listModels()`,
+  §6.2); необъявленный сайт = падение гейта (INV-D2/D3).
+- `tests/providers/prompt-sources.test.ts` (R17) — каждый источник промпта (§1.6) проходит
+  через обёрнутый `chat`: системный промпт с `Workspace`/`CWD`, статичные/динамические
+  блоки, **блок памяти**, `runOnBuildPrompt`, overflow-сводка, `tools`-описания — внешнему
+  не уходят `baseDir`/hostname. Индексер LLM не вызывает (проверка отсутствия `chat`).
+- `tests/security/data-policy.test.ts` — классификатор; PII-каталог (валид/невалид);
+  псевдонимизация/ре-гидратация; идемпотентность; неизвестный токен; расщеплённый токен;
+  URL не тронут; case/separator-корпус; time-budget; неперебираемость токена и отказ на
+  чужой токен (D3/INV-D9); symlink/junction на скрытое (D7/INV-D10); общая карта форков
+  (D4/INV-D11); путь **внутри описания тула** (D11); hidden-glob не матчит URL (D6/§4 п.9).
+- `tests/security/path-policy.test.ts` — hidden-glob → 404; листинг без скрытого;
+  `file-content` не уходит внешнему.
+- `tests/providers/sanitizing-provider.test.ts` — external vs trusted; failover
+  localhost→external не течёт; **перехват сериализованного HTTP body** (Q29);
+  image-части вырезаны; fail-closed abort; **сохранение семантики стрима** (abort,
+  `done`, `usage`, порядок чанков) (R11); **путь критика/эксперта обёрнут** (R12);
+  value-based свип (R7).
+- `tests/webui/egress-filter.test.ts` / `tests/service/*` — очистка ответов, SSE;
+  per-subscriber (сохранённое событие неизменно, INV-D7); `/api/*` не отдаёт карту токенов;
+  содержимое `/api/file` сканируется (R5).
+- `tests/config/data-policy-effects.test.ts` — `ConfigStore.set` для `trustedHosts`/
+  `egress.*`/`pathMode`/`apiHiddenGlobs`/`providerBlockGlobs` возвращает `provider.rebuild`
+  (R8); без этого рантайм-тумблер молча не работает.
+- Обновить `docs/agents/debt.md` и `docs/agents/observability.md`.
+
+**«Падал бы без правки» (R15, правило 7)** — обязательные красные-на-`master` ассерты:
+(a) body запроса к external не содержит `hostname`/`homedir`/abs-пути; (b) failover
+localhost→external — тоже; (c) `/api/state` и SSE без abs-путей; (d) hidden-glob → 404;
+(e) расщеплённый токен ре-гидратируется; (f) системный промпт с `Workspace: C:\…` и
+блок памяти уходят внешнему без `baseDir`/hostname.
+
+---
+
+## 13. Что не меняется
+
+- `redactContextSecrets` остаётся **узким** (безошибочные секреты); **не расширяем его
+  путями** — иначе ломается context-log и `session.jsonl` (комментарий в
+  `context-log.ts:19-25`) (Q17).
+- `session.jsonl` (локальный) сохраняет текущую политику (секреты); пути/PII не
+  редактируются в хранилище, а фильтруются на клиентской границе.
+- Существующие `scrubToolArgs`/`clipToolOutput`/`redactConfigSecrets` (web/service) →
+  тонкие обёртки над новым движком, **второго пути редакции нет** (Q19).
+- **Порядок и context-log (R10):** E1-санитизация выполняется **до** снятия snapshot'а
+  context-log (он фиксирует буквально «что ушло в LLM»), чтобы лог оставался верным и не
+  стал вторым каналом.
+- `ToolExecutor.execute()` — единственная точка enforcement для модельных вызовов
+  (INV-9/10); DLP **дополняет**, не заменяет.
+- `protected-paths.ts` — always-on база; hidden-globs — расширение поверх.
+- `outbound-policy` (SSRF) не пересекается; DLP дополняет его **контентом** (V7).
+
+---
+
+## 14. Открытые вопросы и долг
+
+- **Принято (пользователь, 2026-10-19):** D1 (`pathMode:"prefix"`) и D2 (два списка
+  путей, `apiHiddenGlobs` + `providerBlockGlobs`).
+- **DEBT(at-rest-pii) (D10):** PII в `session.jsonl`/memory-фактах хранится открыто; E2
+  скрывает только при чтении. Привязать к `sessionEncryption`. Триггер: политика контура.
+- **DEBT(research-by-checksum):** контрольные суммы **УНП РБ** и **идентификационного
+  номера РБ** — с тестами на официальных примерах; до этого `confidence` понижен +
+  контекст. Триггер: W1.
+- **NER (ФИО, адреса):** вне W1; флаг `piiKinds.fio/address`. Триггер: обращение/инцидент.
+- **Multi-tenant serve:** закрепить тестом изоляцию session→map токенов (1 тенант =
+  1 процесс) (Q28).
+- **Офисный профиль:** предустановка (`trustedHosts=[]`, `egress.*=true`, дефолтные
+  `apiHiddenGlobs`/`providerBlockGlobs`, `pathMode:"prefix"`) для быстрого включения «офис/строгий».
+- **DNS-подмена trust (Q24):** задокументировать; IP/CIDR-записи как рекомендация.
+- **Остаточный риск обхода (R7):** base64/split известного значения может обойти regex;
+  value-based свип ловит часть, но не всё — фиксируем как residual risk, а не как гарантию.
+- **Остаточные векторы (R4):** поисковый запрос `tools/web-search.ts:66` и payload
+  `modules/mcp/client.ts` могут нести путь/PII, но остаются вне W1 (иные политики:
+  tool/network, внешняя интеграция). Зафиксировано, не покрыто — отдельная задача.
+
+---
+
+## 15. Журнал прожарки (grill-me)
+
+- **Раунд 1 (30 вопросов):** сняты дефекты v1 — неверная точка enforcement (Q2–Q4),
+  tools (Q5), политика путей (Q8), производительность/бюджет (Q11–Q13), картинки (Q16),
+  логи/SSE (Q17–Q18), webhook (Q20), `file-content` (Q23), карта токенов (Q27).
+- **Раунд 2 (16 вопросов):** добавлены сквозной поток и предел (R1–R3), таблица
+  поверхностей (R4), содержимое в E2 (R5), жизнь карты (R6), остаточный риск обхода (R7),
+  эффекты конфига (R8), kill-switch (R9), порядок context-log (R10), стрим (R11),
+  critic-путь (R12), base64 (R13), «падал бы без правки» (R15), самодиагностика ссылок (R16).
+- **Раунд 3 (14 вопросов, D1–D14):** сняты два открытых решения (D1 `pathMode`, D2 два
+  списка путей); добавлены неперебираемость токенов (D3/INV-D9), общая карта форков
+  (D4/INV-D11), канонический путь/symlink (D7/INV-D10), скоуп glob по `pathArgs` (D6),
+  открытый шов мемоизации проекции (D8), debug-режим и ложные срабатывания (D9),
+  at-rest долг (D10), MCP-описания (D11), `listModels` (D12), value-sweep (D13) и
+  **исправлен дефект гейта** (D14: гейтим шов конструирования, а не вызовы `chat`).
+- **Раунд 4 (по коду, R4):** классифицированы все 7 пресетов по хостам (§6.1), найден
+  точный шов E1 = `ProviderManager.build()` (§6.2), классифицированы 39 сайтов
+  `fetch`/конструирования для инвентаря гейта (§12), выявлены benign-сайты вне шва
+  (`cli/commands.ts:211`, `cli/repl-commands.ts:803`) и остаточные векторы
+  (`web-search` query, `mcp/client`).
+- **Самокритика раунда 1:** 5.6/10 — есть утверждения без доказательства, слабая
+  проверяемость и пропущен сквозной поток; правки внесены в v3.
+- **Раунд 5 (источники промпта, R17):** проверены **все** источники формирования
+  промпта — системный блок (`buildSystemInfo` с `Workspace`/`CWD`/env), статичные и
+  динамические блоки, **память** (`memory/module.ts`, хвосты .md + преференсы), модульные
+  блоки (MCP/browser/LSP), хуки плагинов, overflow-сводка, `tools`-описания (§1.6). Все
+  сходятся в `LLMProvider.chat` → обёртка E1 накрывает их все. **Найдена дыра:** критик и
+  эксперты строят провайдера отдельным `buildManagedProvider` (`managed.ts:39`) вне
+  основного `llmProvider` → нужна **глобальная регистрация guard** в слое провайдеров
+  (прецедент `setProviderMemoryApplier`), иначе два пути остаются незакрытыми (§6.2).
+  Индексер LLM не вызывает — карта проекта без сети.
+- **Согласовано пользователем (2026-10-19):** D1 (`pathMode:"prefix"`) и D2
+  (`apiHiddenGlobs` + `providerBlockGlobs`). Открытых решений нет.

@@ -13,8 +13,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { isIgnoredDirName, isIgnoredFileName } from "../../indexer/walker";
 import { loadIgnoreMatcher } from "../../indexer/gitignore";
 import { matchProtectedPath } from "../../security/protected-paths";
+import { hiddenReason, matchAnyGlob } from "../../security/data-policy/path-policy";
 import { sendJson } from "../util";
-import type { WorkspaceStore } from "../state";
+import { apiHiddenGlobs, type PathPolicyStore } from "./hidden";
 import { resolveWorkspacePath } from "./paths";
 
 /** Кап записей одной директории; при упоре дерево помечается `truncated`. */
@@ -37,7 +38,11 @@ export interface DirListing {
  * Листит одну директорию `dirAbs`, возвращая видимые записи (папки сверху,
  * затем файлы; регистронезависимо по алфавиту). Бросает при ошибке чтения.
  */
-export async function listDir(base: string, dirAbs: string): Promise<DirListing> {
+export async function listDir(
+  base: string,
+  dirAbs: string,
+  hiddenGlobs: readonly string[] = [],
+): Promise<DirListing> {
   const matcher = loadIgnoreMatcher(base, (p) => {
     try {
       return readFileSync(p, "utf8");
@@ -47,7 +52,9 @@ export async function listDir(base: string, dirAbs: string): Promise<DirListing>
   });
   const relDir = toPosix(relative(base, dirAbs)).replace(/^\.$/, "").replace(/^\/+/, "");
   const dirents = await readdir(dirAbs, { withFileTypes: true });
-  const visible = dirents.filter((d) => isVisibleEntry(d, dirAbs, relDir, base, matcher));
+  const visible = dirents.filter((d) =>
+    isVisibleEntry(d, dirAbs, relDir, base, matcher, hiddenGlobs),
+  );
   const capped = visible.slice(0, MAX_DIR_ENTRIES);
   const entries = await Promise.all(
     capped.map((d) => toEntry(dirAbs, d.name, d.isDirectory())),
@@ -63,12 +70,14 @@ function isVisibleEntry(
   relDir: string,
   base: string,
   matcher: ReturnType<typeof loadIgnoreMatcher>,
+  hiddenGlobs: readonly string[],
 ): boolean {
   const isDir = d.isDirectory();
   if (!isDir && !d.isFile()) return false;
   const relChild = relDir ? `${relDir}/${d.name}` : d.name;
   if (isDir ? isIgnoredDirName(d.name) : isIgnoredFileName(d.name)) return false;
   if (matcher.ignores(relChild, isDir)) return false;
+  if (matchAnyGlob(relChild, hiddenGlobs)) return false;
   return !matchProtectedPath(base, join(dirAbs, d.name));
 }
 
@@ -107,7 +116,7 @@ export function handleFilesApi(
   req: IncomingMessage,
   res: ServerResponse,
   reqUrl: URL,
-  s: WorkspaceStore,
+  s: PathPolicyStore,
 ): boolean {
   if (reqUrl.pathname !== "/api/files" || req.method !== "GET") return false;
 
@@ -117,15 +126,25 @@ export function handleFilesApi(
     return true;
   }
   const raw = reqUrl.searchParams.get("path") ?? "";
-  void serveList(res, base, raw);
+  void serveList(res, base, raw, apiHiddenGlobs(s.config));
   return true;
 }
 
 /** Резолвит директорию внутри workspace и отдаёт её листинг как JSON. */
-async function serveList(res: ServerResponse, base: string, raw: string): Promise<void> {
+async function serveList(
+  res: ServerResponse,
+  base: string,
+  raw: string,
+  hiddenGlobs: readonly string[],
+): Promise<void> {
   const resolved = await resolveWorkspacePath(base, raw || ".");
   if (!resolved.ok) {
     sendJson(res, STATUS[resolved.code] ?? 404, { error: resolved.code });
+    return;
+  }
+  // Скрытая директория неотличима от несуществующей (INV-D6).
+  if (hiddenReason(resolved.absReal, base, hiddenGlobs)) {
+    sendJson(res, 404, { error: "not_found" });
     return;
   }
   try {
@@ -133,7 +152,7 @@ async function serveList(res: ServerResponse, base: string, raw: string): Promis
       sendJson(res, 404, { error: "not_found" });
       return;
     }
-    const { entries, truncated } = await listDir(base, resolved.absReal);
+    const { entries, truncated } = await listDir(base, resolved.absReal, hiddenGlobs);
     sendJson(res, 200, { path: raw || "", entries, truncated });
   } catch {
     sendJson(res, 404, { error: "not_found" });

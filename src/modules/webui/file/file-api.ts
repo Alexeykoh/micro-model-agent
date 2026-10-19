@@ -20,7 +20,8 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { t } from "../../../i18n/index";
-import type { WorkspaceStore, SessionStore } from "../state";
+import { hiddenReason } from "../../security/data-policy/path-policy";
+import { apiHiddenGlobs, type PathPolicyStore } from "./hidden";
 import { resolveWorkspacePath } from "./paths";
 
 /** Кап просматриваемого файла; большие отвергаются, а не режутся. */
@@ -112,7 +113,7 @@ export function handleFileApi(
   req: IncomingMessage,
   res: ServerResponse,
   reqUrl: URL,
-  s: WorkspaceStore & SessionStore,
+  s: PathPolicyStore,
 ): boolean {
   if (reqUrl.pathname !== "/api/file" || req.method !== "GET") return false;
 
@@ -128,7 +129,7 @@ export function handleFileApi(
   }
 
   const download = reqUrl.searchParams.get("download") === "1";
-  void serveFile(res, base, raw, download);
+  void serveFile(res, base, raw, download, apiHiddenGlobs(s.config));
   return true;
 }
 
@@ -138,6 +139,7 @@ async function serveFile(
   base: string,
   raw: string,
   download: boolean,
+  hiddenGlobs: readonly string[],
 ): Promise<void> {
   const resolved = await resolveWorkspacePath(base, raw);
   if (!resolved.ok) {
@@ -151,6 +153,11 @@ async function serveFile(
     return;
   }
   const absReal = resolved.absReal;
+  // Скрытый путь неотличим от несуществующего (INV-D6), по каноническому пути.
+  if (hiddenReason(absReal, base, hiddenGlobs)) {
+    sendTextError(res, 404, "web.file.error.not_found");
+    return;
+  }
 
   try {
     const info = await stat(absReal);

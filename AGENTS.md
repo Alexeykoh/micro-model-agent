@@ -113,7 +113,7 @@ bun run mma "<промпт>"   # прогнать агента вживую
 `tests/core/command-catalog.test.ts`, `tests/version-beta.test.ts`,
 `tests/no-moe-surface.test.ts`, `tests/output/source-filled.test.ts`,
 `tests/arch/module-boundaries.test.ts`, `tests/tools/security-decl.test.ts`,
-`tests/arch/debt-register.test.ts`, `tests/arch/outbound-policy.test.ts`,
+`tests/arch/egress-guard.test.ts`, `tests/arch/debt-register.test.ts`, `tests/arch/outbound-policy.test.ts`,
 `tests/core/session-diagnose.test.ts`, `tests/arch/observability-coverage.test.ts`,
 `tests/arch/double-honesty.test.ts`, `tests/replay/invariants.test.ts`, `tests/arch/guidance-enforcement.test.ts`, `tests/arch/timeout-relations.test.ts`, `tests/arch/session-provenance.test.ts`, `tests/arch/default-single-source.test.ts`, `tests/compaction-cooldown-invariant.test.ts`, `tests/arch/platform-skips.test.ts`, `tests/arch/style-rules.test.ts`, `tests/arch/llm-call-options.test.ts`, `tests/core/reasoning-strategy-resolve.test.ts`.
 

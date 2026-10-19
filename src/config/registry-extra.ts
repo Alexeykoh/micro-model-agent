@@ -3,7 +3,7 @@ import type { AppConfig, AuditEventType } from "./types";
 import type { ConfigKeyDef, ConfigRangeReason } from "./registry";
 import { REBUILD } from "./effects";
 import { DEFAULTS } from "./defaults";
-import { DEFAULT_SECURITY_CONFIG } from "./security";
+import { DEFAULT_SECURITY_CONFIG } from "./security"; import { DATA_POLICY_DEFS } from "./registry-data-policy";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 
 type ReasoningBound = "low" | "medium" | "high";
@@ -155,7 +155,7 @@ export const AUDIT_EVENT_TYPES: readonly AuditEventType[] = [
 ];
 
 /** Доп. дефы реестра; мержится в DEFINITIONS конкатом (см. registry.ts). */
-export const EXTRA_DEFS: ConfigKeyDef[] = [
+export const EXTRA_DEFS: ConfigKeyDef[] = [ ...DATA_POLICY_DEFS,
   bool("provider.fallback", "provider", false,
     (c) => c.provider.fallback ?? false,
     (c, v) => { c.provider.fallback = v as boolean; }),

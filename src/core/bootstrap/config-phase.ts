@@ -73,7 +73,9 @@ export async function initConfigPhase(
   // Глобальный audit-нотифаер — по конфигу
   let auditNotifyError: string | undefined;
   try {
-    const { globalAuditNotifier } = await import("../../modules/security/audit-notifier");
+    const { globalAuditNotifier, setAuditEgressGuard } = await import(
+      "../../modules/security/audit-notifier"
+    );
     if (config.security?.auditNotifier) {
       globalAuditNotifier.updateConfig({
         ...(config.security.auditNotifier as Partial<typeof config.security.auditNotifier>),
@@ -82,6 +84,9 @@ export async function initConfigPhase(
         ...(config.security.network ? { networkConfig: config.security.network } : {}),
       });
     }
+    // E2: webhook-нотификации — внешний egress, payload проходит ту же DLP.
+    const { apiGuard } = await import("../../modules/webui/egress");
+    setAuditEgressGuard(apiGuard({ config, workspace: projectDir }));
   } catch (err) {
     // Logger ещё не создан — запомним и залогируем после его инициализации.
     auditNotifyError = errMsg(err);

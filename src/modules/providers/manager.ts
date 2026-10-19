@@ -8,6 +8,7 @@ import { createProvider, defaultRegistry } from "./create";
 import { resolveCacheCapability } from "./cache";
 import { resolveModelCapabilities } from "./capabilities";
 import { BUILTIN_PROVIDERS } from "./presets";
+import { getEgressGuard, SanitizingProvider } from "./sanitizing";
 
 export interface ProviderManagerOptions {
   contextWindow: number;
@@ -190,7 +191,7 @@ export class ProviderManager {
     const key = `${name}|${this.model}`;
     const cached = this.cache.get(key);
     if (cached) return cached;
-    const provider = createProvider(entry.type, {
+    let provider = createProvider(entry.type, {
       model: this.model,
       baseUrl: entry.baseUrl,
       apiKey: entry.apiKey,
@@ -202,6 +203,10 @@ export class ProviderManager {
       capabilities: this.resolveCapabilities(entry),
       logger: this.opts.logger,
     }, this.registry);
+    // E1: единственная точка сборки — обёртка DLP здесь закрывает обе фабрики
+    // (активную и managed) и failover (FallbackProvider читает `manager.active`).
+    const egress = getEgressGuard({ type: entry.type, baseUrl: entry.baseUrl ?? "" });
+    if (egress) provider = new SanitizingProvider(provider, egress);
     this.cache.set(key, provider);
     return provider;
   }

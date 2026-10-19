@@ -1,5 +1,6 @@
 // Дефолты безопасности и мерж с пользовательскими настройками.
 import type { SecurityConfig, } from "./types";
+import { DEFAULT_DATA_POLICY } from "../modules/security/data-policy/defaults";
 
 /**
  * Дефолтный конфиг безопасности MMA.
@@ -176,6 +177,8 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     maxRetries: 3,
     webhookTimeout: 5000,
   },
+  // Корпоративный слой DLP (спека 2026-10-19).
+  dataPolicy: DEFAULT_DATA_POLICY,
 };
 
 /**
@@ -214,6 +217,14 @@ export function mergeSecurityConfig(userConfig?: Partial<SecurityConfig>): Secur
     auditNotifier: {
       ...DEFAULT_SECURITY_CONFIG.auditNotifier,
       ...userConfig?.auditNotifier,
+    },
+    dataPolicy: {
+      ...DEFAULT_DATA_POLICY,
+      ...userConfig?.dataPolicy,
+      egress: {
+        ...DEFAULT_DATA_POLICY.egress,
+        ...userConfig?.dataPolicy?.egress,
+      },
     },
   };
 }

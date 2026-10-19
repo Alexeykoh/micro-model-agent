@@ -16,6 +16,7 @@ import { errMsg } from "../../utils/error";
 import { bearerOk, isLoopback, sendProblem } from "./http/respond";
 import { handleApi } from "./http/routes";
 import { problem } from "./runtime/problem";
+import { apiGuard, filterResponse } from "../webui/egress";
 import type { AgentServiceState } from "./state";
 
 /** Поднимает сервер; резолвит базовый URL после успешного bind. */
@@ -54,20 +55,28 @@ async function handleRequest(
   const reqUrl = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   res.setHeader("Cache-Control", "no-cache, no-transform");
 
+  // E2: единая DLP-редакция REST и SSE (та же, что у web). Событие в логе
+  // остаётся сырым (INV-D7) — фильтруется копия фрейма для клиента.
+  const filtered = filterResponse(
+    res,
+    apiGuard({ config: s.config, workspace: s.deps.baseDir ?? process.cwd() }),
+    reqUrl.pathname.endsWith("/events") ? "sse" : "json",
+  );
+
   if (OPEN_PATHS.has(reqUrl.pathname)) {
-    await dispatch(req, res, reqUrl, s);
+    await dispatch(req, filtered, reqUrl, s);
     return;
   }
   if (!bearerOk(req, s.token)) {
-    sendProblem(res, problem({ type: "validation", title: "unauthorized", status: 401 }));
+    sendProblem(filtered, problem({ type: "validation", title: "unauthorized", status: 401 }));
     return;
   }
   if (reqUrl.pathname.startsWith("/v1/")) {
-    await dispatch(req, res, reqUrl, s);
+    await dispatch(req, filtered, reqUrl, s);
     return;
   }
   sendProblem(
-    res,
+    filtered,
     problem({ type: "validation", title: "not found", status: 404, detail: reqUrl.pathname }),
   );
 }

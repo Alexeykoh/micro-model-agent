@@ -12,6 +12,7 @@ import type { ToolRegistry } from "../tools/index";
 import type { ContextProbeResult } from "../llm/model-loader";
 import { initConfigPhase } from "./bootstrap/config-phase";
 import { setupProviderPhase } from "./bootstrap/provider-phase";
+import { installEgressGuard } from "./bootstrap/egress-guard";
 import { setupWorkspacePhase } from "./bootstrap/workspace-phase";
 import { setupSessionPhase } from "./bootstrap/session-phase";
 import { setupModulesPhase } from "./bootstrap/modules-phase";
@@ -100,6 +101,9 @@ export async function bootstrap(
   );
 
   // Фаза 2: провайдер, автозагрузка модели, фоновые пробы, профиль.
+  // DLP E1 (INV-D10): egress-guard ставим ДО сборки провайдера, иначе он уйдёт
+  // голым; покрывает и активную, и managed-фабрику (критик/эксперт, R17).
+  installEgressGuard(config, dir, projectDir);
   const provider = await setupProviderPhase(config, logger, dir);
 
   // Фаза 3: workspace, окружение, индекс, скиллы, реестр тулов, system-блок.

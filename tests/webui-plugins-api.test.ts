@@ -26,7 +26,7 @@ describe("webui plugins REST", () => {
         {
           name: "my-plugin",
           version: "1.2.3",
-          author: "alexe",
+          author: "plugin-author",
           description: "does a thing",
           homepage: "https://example.com",
           source: "project",
@@ -51,7 +51,7 @@ describe("webui plugins REST", () => {
       expect(p).toMatchObject({
         name: "my-plugin",
         version: "1.2.3",
-        author: "alexe",
+        author: "plugin-author",
         description: "does a thing",
         enabled: false,
         builtin: false,
