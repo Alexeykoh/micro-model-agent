@@ -1382,7 +1382,7 @@
   "config.enum.ledger": "tool ledger",
   "config.enum.line": "line",
   "config.enum.meta": "hints row",
-  "config.enum.full": "full width",
+  "config.enum.full": "full",
   "config.enum.prefix": "prefix",
   "config.enum.compact": "compact",
   "config.enum.legacy": "legacy",
