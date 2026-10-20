@@ -117,7 +117,7 @@ export function egressDiagnosticSink(
 
 /** Вид цели для журнала редакции: хост и доверие (без путей и значений). */
 function egressTargetSuffix(target: GuardDiagnostic["target"]): string {
-  if (!target || target.kind !== "provider") return "";
+  if (target?.kind !== "provider") return "";
   const host = target.host ?? "?";
   return ` (провайдер: ${host}, ${target.trusted ? "доверенный" : "внешний"})`;
 }
