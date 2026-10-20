@@ -7,9 +7,6 @@ import type { SessionLogger } from "../session-logger";
 import type { OnMeta } from "../types";
 import type { LoopState } from "./loop-state";
 
-/** Хвост вывода тула в evidence-событии (ограничен — у критика свой бюджет). */
-const MAX_EVENT_OUTPUT_CHARS = 600;
-
 /** Зависимости вентиля критика: состояние, логгеры, события тулов хода. */
 export interface CriticGateDeps {
   state: LoopState;
@@ -47,15 +44,14 @@ export interface CriticGateOptions {
   signal?: AbortSignal;
 }
 
-function issueSignature(issue: CriticIssue): string {
-  return `${issue.severity}:${issue.claim}`.toLowerCase().replace(/\s+/g, " ").slice(0, 120);
-}
-
 /**
  * Грубая нормализация жалобы для ловли near-identical повторов (регистр,
  * пунктуация, пробелы). Настоящие перефразы («ran weather searches» vs
  * «ignored the task») этим не ловятся — их останавливает advice=pass
  * при исчерпанном repair-бюджете, а не эта эвристика.
+ *
+ * Единственный ключ дедупликации: и повтор-детектор, и набор «уже виденных»
+ * используют его, иначе «повтор» и «свежая жалоба» могут разойтись (INV-C2).
  */
 export function normalizedSignature(issue: CriticIssue): string {
   const body = `${issue.severity}:${issue.claim}`
@@ -65,6 +61,20 @@ export function normalizedSignature(issue: CriticIssue): string {
     .trim()
     .slice(0, 120);
   return `~${body}`;
+}
+
+/**
+ * Issue-заглушка для вердикта без распарсенных `issues`: статус и сводка
+ * модели — достаточное основание для действия. Раньше такой вердикт
+ * исчезал молча («pass» без записи в лог) — INV-C2.
+ */
+function syntheticIssue(verdict: CriticVerdict): CriticIssue {
+  const text = verdict.summary.trim() || `critic reported ${verdict.status}`;
+  return {
+    severity: verdict.status === "critical" ? "critical" : "concern",
+    claim: text,
+    problem: text,
+  };
 }
 
 function renderIssues(issues: CriticIssue[]): string {
@@ -110,12 +120,16 @@ export class CriticGate {
     }
     if (verdict.status === "ok") return "pass";
 
+    // Не-ok вердикт не теряется: `issues` могли не распарситься (чужие имена
+    // полей, пустой список), но status + summary — достаточное основание.
+    const issues = verdict.issues.length > 0 ? verdict.issues : [syntheticIssue(verdict)];
     // Повтор уже виденной жалобы — считаем ДО takeFreshIssues (он пополняет набор).
-    const isRepeat = isRepeatedVerdict(deps.state, verdict.issues);
-    const fresh = this.takeFreshIssues(deps.state, verdict.issues);
+    const isRepeat = isRepeatedVerdict(deps.state, issues);
+    const fresh = this.takeFreshIssues(deps.state, issues);
+    // Логируем НЕ-ok вердикт всегда: «critic_check» без следа о вердикте
+    // читается как «проверил и сказал ок» (INV-C2).
+    this.logVerdict(deps, verdict, issues.length);
     if (fresh.length === 0) return "pass";
-
-    this.logVerdict(deps, verdict, fresh.length);
     if (!this.shouldRepair(deps, verdict, isRepeat)) {
       // Совет/повтор — не retry: иначе advice крутит модель по кругу до
       // maxCalls теми же ответами (наблюдалось: 4 идентичных critical подряд).
@@ -167,10 +181,9 @@ export class CriticGate {
   private takeFreshIssues(state: LoopState, issues: CriticIssue[]): CriticIssue[] {
     const fresh: CriticIssue[] = [];
     for (const issue of issues) {
-      const sig = issueSignature(issue);
+      const sig = normalizedSignature(issue);
       if (state.seenCriticIssues.has(sig)) continue;
       state.seenCriticIssues.add(sig);
-      state.seenCriticIssues.add(normalizedSignature(issue));
       fresh.push(issue);
     }
     return fresh;
@@ -258,42 +271,4 @@ export class CriticGate {
       })}</system-summary>`,
     });
   }
-}
-
-/**
- * Собирает события тулов текущего захода из активной истории (для evidence-пакета критика).
- * @param contextManager менеджер с getActiveHistory;
- * @param fromSeq маркер начала захода (`ContextManager.beginTurn()`): берутся сообщения
- *   со штампом `seq >= fromSeq`. Штамп монотонный и переживает компакцию, поэтому
- *   сжатие истории посреди хода больше не «теряет» улики текущего захода.
- * @returns события role:"tool" начиная с маркера.
- */
-export function gatherTurnToolEvents(
-  contextManager: {
-    getActiveHistory: () => Array<{
-      role: string;
-      name?: string;
-      content?: unknown;
-      success?: boolean;
-      arguments?: Record<string, unknown>;
-      seq?: number;
-    }>;
-    seqOf?: (msg: object) => number;
-  },
-  fromSeq = 0,
-): Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> {
-  const events: Array<{ tool: string; args?: Record<string, unknown>; ok?: boolean; output?: string }> = [];
-  const history = contextManager.getActiveHistory();
-  for (const m of history) {
-    const seq = contextManager.seqOf ? contextManager.seqOf(m) : (m.seq ?? 0);
-    if (seq < fromSeq) continue;
-    if (m.role !== "tool" || !m.name) continue;
-    // Сообщения role:"tool" уже несут аргументы (tool-batch) и обрезанный
-    // вывод — пробрасываем оба, чтобы критик видел ЧТО тронуто и ЧТО вернулось.
-    // Без аргументов пакет слеп (changedFiles/commands пусты) и критик
-    // вынужден вернуть "ok" за отсутствием улик.
-    const output = typeof m.content === "string" ? m.content.slice(-MAX_EVENT_OUTPUT_CHARS) : undefined;
-    events.push({ tool: m.name, args: m.arguments, ok: m.success, output });
-  }
-  return events;
-}
+}

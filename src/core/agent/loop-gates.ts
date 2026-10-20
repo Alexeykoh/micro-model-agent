@@ -12,7 +12,7 @@ import type { SessionLogger } from "../session-logger";
 import type { HallucinationGate } from "./hallucination-gate";
 import type { CriticGate } from "./critic-gate";
 import type { AuditGate } from "./audit-gate";
-import { gatherTurnToolEvents } from "./critic-gate";
+import { gatherTurnToolEvents } from "./critic-events";
 import { resolveArtifactStates } from "./artifact-resolve";
 import { resolveVerbosity } from "../../ui/theme";
 import { MAX_EMPTY_RESPONSE_RETRIES } from "./constants";

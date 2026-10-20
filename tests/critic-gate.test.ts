@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { CriticGate, gatherTurnToolEvents, normalizedSignature } from "../src/core/agent/critic-gate";
+import { CriticGate, normalizedSignature } from "../src/core/agent/critic-gate";
+import { gatherTurnToolEvents } from "../src/core/agent/critic-events";
 import { createLoopState } from "../src/core/agent/loop-state";
 
 function deps(overrides: Partial<any> = {}) {

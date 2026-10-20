@@ -1,9 +1,11 @@
 // Клиент контр-агента: верификация пакета доказательств с опциональным read-only контуром.
-import { jsonrepair } from "jsonrepair";
 import type { LLMProvider, Message } from "../../llm/provider";
 import { LLM_REQUEST_TIMEOUT_MS } from "../../config/timeouts";
-import type { CriticVerdict, EvidencePack, CriticIssue } from "./types";
+import type { CriticVerdict, EvidencePack } from "./types";
 import { parseChecks, runCriticChecks, renderCheckResults, CRITIC_READONLY_TOOLS } from "./tools";
+import { extractChecks, parseVerdictDetailed } from "./verdict";
+
+export { parseVerdict, parseVerdictDetailed, type ParsedVerdict } from "./verdict";
 
 export const CRITIC_SYSTEM_PROMPT = `You are a strict but fair verifier ("counter-agent") reviewing an AI agent's in-progress work.
 Rules:
@@ -127,10 +129,15 @@ export class CriticClient {
       messages.push({ role: "assistant", content: firstRaw });
       messages.push({ role: "user", content: CHECK_REQUEST_INSTRUCTION });
       const checksRaw = await this.chat(messages, signal);
-      const checksParsed = this.parseVerdictChecked(checksRaw, "checks-request");
-      if (!checksParsed) return first;
-      const checks = parseChecks(checksParsed);
-      if (checks.length === 0) return first;
+      // Проверки читаются независимо от `status`: ответ `{"checks":[...]}`
+      // без статуса — валидный запрос, а не «неразбираемый вердикт».
+      const checks = parseChecks(extractChecks(checksRaw));
+      if (checks.length === 0) {
+        // Проверок не запрошено — вердикт прохода 1 остаётся в силе. Это не
+        // деградация: вердикт у нас есть, потерялась только глубина проверки.
+        this.opts.onDiagnostic?.("critic_checks_unparsed: no checks requested in pass-2");
+        return first;
+      }
       const results = await runCriticChecks(checks, runCheck);
       if (results.length === 0) return first;
 
@@ -206,58 +213,6 @@ function renderPack(pack: EvidencePack): string {
     .join("\n");
 }
 
-const SEVERITIES = new Set(["info", "concern", "critical"]);
-
-/** Вердикт + признак, что JSON пришлось чинить (обрезан по maxTokens и т.п.). */
-export interface ParsedVerdict {
-  verdict: CriticVerdict | null;
-  repaired: boolean;
-}
-
-/** Парсит вердикт критика из сырого текста. Null, если не вердикт. */
-export function parseVerdict(text: string): CriticVerdict | null {
-  return parseVerdictDetailed(text).verdict;
-}
-
-/**
- * Парсит вердикт, различая «разобралось само» и «починили jsonrepair».
- * Второе — не ошибка парсинга, но и не доверие: починенный обрезанный вердикт
- * может оказаться `ok`, которого модель не говорила.
- */
-export function parseVerdictDetailed(text: string): ParsedVerdict {
-  let parsed: unknown = null;
-  let repaired = false;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    try {
-      parsed = JSON.parse(jsonrepair(text));
-      repaired = true;
-    } catch {
-      const match = text.match(/\{[\s\S]*\}/);
-      if (!match) return { verdict: null, repaired: false };
-      try {
-        parsed = JSON.parse(jsonrepair(match[0]));
-        repaired = true;
-      } catch {
-        return { verdict: null, repaired: false };
-      }
-    }
-  }
-  if (!parsed || typeof parsed !== "object") return { verdict: null, repaired };
-  const obj = parsed as Record<string, unknown>;
-  const status = obj.status;
-  if (status !== "ok" && status !== "concern" && status !== "critical") return { verdict: null, repaired };
-  const issues = parseIssuesList(obj.issues);
-  // Запрошенные проверки верификации (Phase 2): несём сырыми, кап здесь;
-  // форма + allowlist enforced в parseChecks, вслепую не доверяем.
-  const checks = parseRawChecks(obj.checks);
-  return {
-    verdict: { status, summary: String(obj.summary ?? ""), issues, ...(checks ? { checks } : {}) },
-    repaired,
-  };
-}
-
 /** Текст ошибки/исключения одной строкой. */
 function describe(err: unknown): string {
   return String((err as Error)?.message ?? err);
@@ -267,33 +222,4 @@ function describe(err: unknown): string {
 function truncate(text: string, max: number): string {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > max ? `${flat.slice(0, max)}…` : flat;
-}
-
-/** Проблемы вердикта с санитизированными severity; записи без claim+problem дропаются. */
-function parseIssuesList(raw: unknown): CriticIssue[] {
-  if (!Array.isArray(raw)) return [];
-  return (raw as unknown[])
-    .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
-    .map((i) => ({
-      severity: (SEVERITIES.has(String(i.severity)) ? String(i.severity) : "concern") as CriticIssue["severity"],
-      claim: String(i.claim ?? ""),
-      problem: String(i.problem ?? ""),
-      suggestion: i.suggestion ? String(i.suggestion) : undefined,
-      evidence: i.evidence ? String(i.evidence) : undefined,
-    }))
-    .filter((i) => i.claim || i.problem);
-}
-
-/** Сырые запрошенные проверки (с капом); форма + allowlist enforced в parseChecks. */
-function parseRawChecks(raw: unknown): Array<{ tool: string; args?: Record<string, unknown> }> | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out = (raw as unknown[])
-    .filter(
-      (c): c is { tool: string; args?: unknown } =>
-        !!c &&
-        typeof c === "object" &&
-        typeof (c as { tool?: unknown }).tool === "string",
-    )
-    .map((c) => ({ tool: c.tool, args: c.args as Record<string, unknown> | undefined }));
-  return out.length > 0 ? out : undefined;
 }
