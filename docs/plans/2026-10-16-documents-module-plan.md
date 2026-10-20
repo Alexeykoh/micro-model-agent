@@ -1,8 +1,10 @@
 # Модуль документов — план реализации (W0+W1 детально, W2–W5 дорожной картой)
 
+> **Статус:** исполнено (2026-10-20) — все волны W0–W5 реализованы в master
+> (`src/modules/documents/**`, 27 тестов в `tests/documents/`); чекбоксы проставлены по факту.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Добавить в MMA модуль `documents` — единый субстрат (карта, чтение, индексация)
 с реестром обработчиков форматов, включаемый/выключаемый **в коде**, без настроек.
@@ -58,12 +60,12 @@ W2: `fast-xml-parser`. W3: `pdfjs-dist`.
 - Create: `scripts/documents-bundle-check.ts`
 - Modify: `package.json:35` (добавить `build:documents` при подтверждении)
 
-- [ ] **Step 1: Установить зависимость в dev-окружение**
+- [x] **Step 1: Установить зависимость в dev-окружение**
 
 Run: `bun add fast-xml-parser`
 Expected: пакет в `dependencies`, `bun.lock` обновлён.
 
-- [ ] **Step 2: Написать проверочный скрипт**
+- [x] **Step 2: Написать проверочный скрипт**
 
 ```ts
 // scripts/documents-bundle-check.ts
@@ -74,17 +76,17 @@ if (out?.r?.a !== 1 && out?.r?.a !== "1") throw new Error("xml parser bundled in
 console.log("documents deps bundle OK");
 ```
 
-- [ ] **Step 3: Собрать с инлайном только этого пакета**
+- [x] **Step 3: Собрать с инлайном только этого пакета**
 
 Run: `bun build ./scripts/documents-bundle-check.ts --outfile ./tmp/doc-bundle-check.js --target node --format esm`
 Expected: сборка без ошибок, размер `tmp/doc-bundle-check.js` > 1 КБ (пакет внутри).
 
-- [ ] **Step 4: Запустить артефакт без `node_modules` пакета**
+- [x] **Step 4: Запустить артефакт без `node_modules` пакета**
 
 Run (в отдельной temp-папке без node_modules): `node tmp/doc-bundle-check.js`
 Expected: `documents deps bundle OK`.
 
-- [ ] **Step 5: Зафиксировать результат в спеке и коммит**
+- [x] **Step 5: Зафиксировать результат в спеке и коммит**
 
 Дописать в спеку §4.6 фактический результат (сработало / размер). Затем:
 
@@ -95,18 +97,18 @@ git commit -m "build(documents): спайк бандлинга fast-xml-parser (
 
 ### Task W0.2: Проверить бандлинг `pdfjs-dist`
 
-- [ ] **Step 1:** `bun add pdfjs-dist`
-- [ ] **Step 2:** Расширить `scripts/documents-bundle-check.ts` вызовом legacy text-extraction на минимальном PDF-fixture (1 страница «Hello»).
-- [ ] **Step 3:** `bun build ... --outfile ./tmp/doc-pdf-check.js --target node --format esm`; запустить без node_modules.
-- [ ] **Step 4 (развилка):** если worker/ESM не бандлится — зафиксировать это в спеке §4.6 и выбрать фолбэк (лёгкий чистый TS-экстрактор текстового слоя), завести запись в `docs/agents/debt.md`.
-- [ ] **Step 5:** Коммит `build(documents): спайк бандлинга pdfjs-dist (W0)`.
+- [x] **Step 1:** `bun add pdfjs-dist`
+- [x] **Step 2:** Расширить `scripts/documents-bundle-check.ts` вызовом legacy text-extraction на минимальном PDF-fixture (1 страница «Hello»).
+- [x] **Step 3:** `bun build ... --outfile ./tmp/doc-pdf-check.js --target node --format esm`; запустить без node_modules.
+- [x] **Step 4 (развилка):** если worker/ESM не бандлится — зафиксировать это в спеке §4.6 и выбрать фолбэк (лёгкий чистый TS-экстрактор текстового слоя), завести запись в `docs/agents/debt.md`.
+- [x] **Step 5:** Коммит `build(documents): спайк бандлинга pdfjs-dist (W0)`.
 
 ### Task W0.3: Шаг сборки `build:documents` и подключение в `build:prod`
 
-- [ ] **Step 1:** Добавить в `package.json` скрипт, инлайнящий документные зависимости в `dist/main.js` (не трогая `playwright`).
-- [ ] **Step 2:** Вставить шаг в `build:prod` перед `build:optimize`.
-- [ ] **Step 3:** `bun run build:prod`; проверить, что `dist/main.js` содержит код `fast-xml-parser`.
-- [ ] **Step 4:** Коммит `build(documents): шаг вшивания документных зависимостей (W0)`.
+- [x] **Step 1:** Добавить в `package.json` скрипт, инлайнящий документные зависимости в `dist/main.js` (не трогая `playwright`).
+- [x] **Step 2:** Вставить шаг в `build:prod` перед `build:optimize`.
+- [x] **Step 3:** `bun run build:prod`; проверить, что `dist/main.js` содержит код `fast-xml-parser`.
+- [x] **Step 4:** Коммит `build(documents): шаг вшивания документных зависимостей (W0)`.
 
 ---
 
@@ -121,7 +123,7 @@ git commit -m "build(documents): спайк бандлинга fast-xml-parser (
 - Create: `src/modules/documents/ir.ts`
 - Test: `tests/documents/ir.test.ts`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 ```ts
 // tests/documents/ir.test.ts
@@ -139,12 +141,12 @@ describe("DocumentIR", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть**
+- [x] **Step 2: Запустить — упасть**
 
 Run: `bun test tests/documents/ir.test.ts`
 Expected: FAIL — «Cannot find module .../ir».
 
-- [ ] **Step 3: Реализовать типы**
+- [x] **Step 3: Реализовать типы**
 
 ```ts
 // src/modules/documents/ir.ts
@@ -194,12 +196,12 @@ export function emptyIR(format: string, bytes: number): DocumentIR {
 }
 ```
 
-- [ ] **Step 4: Запустить — пройти**
+- [x] **Step 4: Запустить — пройти**
 
 Run: `bun test tests/documents/ir.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/modules/documents/ir.ts tests/documents/ir.test.ts
@@ -212,7 +214,7 @@ git commit -m "feat(documents): типы DocumentIR (W1)"
 - Create: `src/modules/documents/handler.ts`
 - Test: `tests/documents/handler.test.ts`
 
-- [ ] **Step 1: Падающий тест**
+- [x] **Step 1: Падающий тест**
 
 ```ts
 // tests/documents/handler.test.ts
@@ -229,12 +231,12 @@ describe("DocumentHandler", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть**
+- [x] **Step 2: Запустить — упасть**
 
 Run: `bun test tests/documents/handler.test.ts`
 Expected: FAIL — модуль не найден.
 
-- [ ] **Step 3: Реализовать контракт**
+- [x] **Step 3: Реализовать контракт**
 
 ```ts
 // src/modules/documents/handler.ts
@@ -289,12 +291,12 @@ export function detectHead(head: Uint8Array): "zip" | "pdf" | "svg" | "unknown" 
 }
 ```
 
-- [ ] **Step 4: Запустить — пройти**
+- [x] **Step 4: Запустить — пройти**
 
 Run: `bun test tests/documents/handler.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/modules/documents/handler.ts tests/documents/handler.test.ts
@@ -307,7 +309,7 @@ git commit -m "feat(documents): контракт DocumentHandler (W1)"
 - Create: `src/modules/documents/bound.ts`
 - Test: `tests/documents/bound.test.ts`
 
-- [ ] **Step 1: Падающий тест**
+- [x] **Step 1: Падающий тест**
 
 ```ts
 // tests/documents/bound.test.ts
@@ -328,9 +330,9 @@ describe("bound", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть** — `bun test tests/documents/bound.test.ts` → FAIL.
+- [x] **Step 2: Запустить — упасть** — `bun test tests/documents/bound.test.ts` → FAIL.
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 ```ts
 // src/modules/documents/bound.ts
@@ -361,8 +363,8 @@ export function boundTable(table: DocTable, limits: DocLimits): DocTable {
 }
 ```
 
-- [ ] **Step 4: Запустить — пройти** — `bun test tests/documents/bound.test.ts` → PASS.
-- [ ] **Step 5: Коммит** `feat(documents): ограничители вывода (W1)`.
+- [x] **Step 4: Запустить — пройти** — `bun test tests/documents/bound.test.ts` → PASS.
+- [x] **Step 5: Коммит** `feat(documents): ограничители вывода (W1)`.
 
 ### Task 4: Текстовые обработчики CSV и Markdown
 
@@ -370,7 +372,7 @@ export function boundTable(table: DocTable, limits: DocLimits): DocTable {
 - Create: `src/modules/documents/handlers/csv.ts`, `src/modules/documents/handlers/md.ts`
 - Test: `tests/documents/handlers-text.test.ts`
 
-- [ ] **Step 1: Падающий тест**
+- [x] **Step 1: Падающий тест**
 
 ```ts
 // tests/documents/handlers-text.test.ts
@@ -405,9 +407,9 @@ describe("mdHandler", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть** — `bun test tests/documents/handlers-text.test.ts` → FAIL.
+- [x] **Step 2: Запустить — упасть** — `bun test tests/documents/handlers-text.test.ts` → FAIL.
 
-- [ ] **Step 3: Реализовать CSV**
+- [x] **Step 3: Реализовать CSV**
 
 ```ts
 // src/modules/documents/handlers/csv.ts
@@ -459,7 +461,7 @@ export const csvHandler = make("csv", [".csv"], ",");
 export const tsvHandler = make("tsv", [".tsv", ".tab"], "\t");
 ```
 
-- [ ] **Step 4: Реализовать Markdown**
+- [x] **Step 4: Реализовать Markdown**
 
 ```ts
 // src/modules/documents/handlers/md.ts
@@ -508,8 +510,8 @@ export const mdHandler: DocumentHandler = {
 };
 ```
 
-- [ ] **Step 5: Запустить — пройти** — `bun test tests/documents/handlers-text.test.ts` → PASS.
-- [ ] **Step 6: Коммит** `feat(documents): обработчики csv/tsv/md (W1)`.
+- [x] **Step 5: Запустить — пройти** — `bun test tests/documents/handlers-text.test.ts` → PASS.
+- [x] **Step 6: Коммит** `feat(documents): обработчики csv/tsv/md (W1)`.
 
 ### Task 5: Обработчики JSON, YAML, XML, HTML
 
@@ -517,7 +519,7 @@ export const mdHandler: DocumentHandler = {
 - Create: `src/modules/documents/handlers/json.ts`, `yaml.ts`, `xml.ts`, `html.ts`
 - Test: `tests/documents/handlers-text2.test.ts`
 
-- [ ] **Step 1: Падающий тест** (по одному кейсу на файл)
+- [x] **Step 1: Падающий тест** (по одному кейсу на файл)
 
 ```ts
 // tests/documents/handlers-text2.test.ts
@@ -554,9 +556,9 @@ describe("json/yaml/xml/html", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть** — FAIL.
+- [x] **Step 2: Запустить — упасть** — FAIL.
 
-- [ ] **Step 3: Реализовать `json.ts`**
+- [x] **Step 3: Реализовать `json.ts`**
 
 ```ts
 // src/modules/documents/handlers/json.ts
@@ -589,7 +591,7 @@ export const jsonHandler: DocumentHandler = {
 };
 ```
 
-- [ ] **Step 4: Реализовать `yaml.ts`** (через `parse` из `yaml`)
+- [x] **Step 4: Реализовать `yaml.ts`** (через `parse` из `yaml`)
 
 ```ts
 // src/modules/documents/handlers/yaml.ts
@@ -624,7 +626,7 @@ export const yamlHandler: DocumentHandler = {
 };
 ```
 
-- [ ] **Step 5: Реализовать `xml.ts` и `html.ts`** (regex-извлечение тегов/заголовков; без внешних деп)
+- [x] **Step 5: Реализовать `xml.ts` и `html.ts`** (regex-извлечение тегов/заголовков; без внешних деп)
 
 ```ts
 // src/modules/documents/handlers/xml.ts
@@ -692,8 +694,8 @@ function strip(s: string): string {
 }
 ```
 
-- [ ] **Step 6: Запустить — пройти** — `bun test tests/documents/handlers-text2.test.ts` → PASS.
-- [ ] **Step 7: Коммит** `feat(documents): обработчики json/yaml/xml/html (W1)`.
+- [x] **Step 6: Запустить — пройти** — `bun test tests/documents/handlers-text2.test.ts` → PASS.
+- [x] **Step 7: Коммит** `feat(documents): обработчики json/yaml/xml/html (W1)`.
 
 ### Task 6: Точка вкл/выкл в коде + реестр
 
@@ -701,7 +703,7 @@ function strip(s: string): string {
 - Create: `src/modules/documents/handlers/index.ts`, `src/modules/documents/registry.ts`
 - Test: `tests/documents/toggles.test.ts`, `tests/documents/registry.test.ts`
 
-- [ ] **Step 1: Падающий тест переключателей (INV-D3)**
+- [x] **Step 1: Падающий тест переключателей (INV-D3)**
 
 ```ts
 // tests/documents/toggles.test.ts
@@ -726,9 +728,9 @@ describe("вкл/выкл в коде", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть** — FAIL.
+- [x] **Step 2: Запустить — упасть** — FAIL.
 
-- [ ] **Step 3: Реализовать `handlers/index.ts`**
+- [x] **Step 3: Реализовать `handlers/index.ts`**
 
 ```ts
 // src/modules/documents/handlers/index.ts
@@ -765,7 +767,7 @@ export const HANDLERS: readonly DocumentHandler[] = [
 ];
 ```
 
-- [ ] **Step 4: Реализовать `registry.ts`**
+- [x] **Step 4: Реализовать `registry.ts`**
 
 ```ts
 // src/modules/documents/registry.ts
@@ -838,7 +840,7 @@ export function parseCtx(logger: Logger): ParseContext {
 export { detectHead };
 ```
 
-- [ ] **Step 5: Падающий тест реестра + затем реализация уже готова**
+- [x] **Step 5: Падающий тест реестра + затем реализация уже готова**
 
 ```ts
 // tests/documents/registry.test.ts
@@ -868,8 +870,8 @@ describe("DocumentRegistry", () => {
 });
 ```
 
-- [ ] **Step 6: Запустить оба — пройти** — `bun test tests/documents/toggles.test.ts tests/documents/registry.test.ts` → PASS.
-- [ ] **Step 7: Коммит** `feat(documents): реестр и точка вкл/выкл в коде (W1)`.
+- [x] **Step 6: Запустить оба — пройти** — `bun test tests/documents/toggles.test.ts tests/documents/registry.test.ts` → PASS.
+- [x] **Step 7: Коммит** `feat(documents): реестр и точка вкл/выкл в коде (W1)`.
 
 ### Task 7: Карта документа
 
@@ -877,7 +879,7 @@ describe("DocumentRegistry", () => {
 - Create: `src/modules/documents/map.ts`
 - Test: `tests/documents/map.test.ts`
 
-- [ ] **Step 1: Падающий тест**
+- [x] **Step 1: Падающий тест**
 
 ```ts
 // tests/documents/map.test.ts
@@ -901,9 +903,9 @@ describe("renderDocumentMap", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть** — FAIL.
+- [x] **Step 2: Запустить — упасть** — FAIL.
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 ```ts
 // src/modules/documents/map.ts
@@ -926,8 +928,8 @@ export function renderDocumentMap(ir: DocumentIR): string {
 }
 ```
 
-- [ ] **Step 4: Запустить — пройти** — `bun test tests/documents/map.test.ts` → PASS.
-- [ ] **Step 5: Коммит** `feat(documents): карта документа (W1)`.
+- [x] **Step 4: Запустить — пройти** — `bun test tests/documents/map.test.ts` → PASS.
+- [x] **Step 5: Коммит** `feat(documents): карта документа (W1)`.
 
 ### Task 8: Чтение среза по селектору
 
@@ -935,7 +937,7 @@ export function renderDocumentMap(ir: DocumentIR): string {
 - Create: `src/modules/documents/read.ts`
 - Test: `tests/documents/read.test.ts`
 
-- [ ] **Step 1: Падающий тест**
+- [x] **Step 1: Падающий тест**
 
 ```ts
 // tests/documents/read.test.ts
@@ -988,9 +990,9 @@ describe("read", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть** — FAIL.
+- [x] **Step 2: Запустить — упасть** — FAIL.
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 ```ts
 // src/modules/documents/read.ts
@@ -1032,8 +1034,8 @@ export function renderDocumentRead(ir: DocumentIR, sel: Selector, limits = DEFAU
 }
 ```
 
-- [ ] **Step 4: Запустить — пройти** — `bun test tests/documents/read.test.ts` → PASS.
-- [ ] **Step 5: Коммит** `feat(documents): чтение среза по селектору (W1)`.
+- [x] **Step 4: Запустить — пройти** — `bun test tests/documents/read.test.ts` → PASS.
+- [x] **Step 5: Коммит** `feat(documents): чтение среза по селектору (W1)`.
 
 ### Task 9: Тулы `document_map` и `document_read`
 
@@ -1041,7 +1043,7 @@ export function renderDocumentRead(ir: DocumentIR, sel: Selector, limits = DEFAU
 - Create: `src/modules/documents/tools/document-map.ts`, `src/modules/documents/tools/document-read.ts`, `src/modules/documents/source.ts`
 - Test: `tests/documents/tools.test.ts`
 
-- [ ] **Step 1: Падающий тест**
+- [x] **Step 1: Падающий тест**
 
 ```ts
 // tests/documents/tools.test.ts
@@ -1078,9 +1080,9 @@ describe("doc tools", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть** — FAIL.
+- [x] **Step 2: Запустить — упасть** — FAIL.
 
-- [ ] **Step 3: Реализовать `source.ts`**
+- [x] **Step 3: Реализовать `source.ts`**
 
 Байты читаются один раз на разбор (промис кэшируется); ошибка `ENOENT`
 отображается в дружелюбное сообщение с **относительным** путём (`display`),
@@ -1107,7 +1109,7 @@ export function fileSource(baseDir: string, raw: string): DocSource {
 }
 ```
 
-- [ ] **Step 4: Реализовать `tools/document-map.ts`**
+- [x] **Step 4: Реализовать `tools/document-map.ts`**
 
 Общий fail-open раннер `tools/run.ts` (`failOpen`/`failResult`) держит один путь
 диагностики для обоих тулов (INV-D5): исключение → запись `module:documents` +
@@ -1147,7 +1149,7 @@ export function documentMapTool(registry: DocumentRegistry): ToolDefinition {
 }
 ```
 
-- [ ] **Step 5: Реализовать `tools/document-read.ts`**
+- [x] **Step 5: Реализовать `tools/document-read.ts`**
 
 ```ts
 // src/modules/documents/tools/document-read.ts
@@ -1196,8 +1198,8 @@ export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
 }
 ```
 
-- [ ] **Step 6: Запустить — пройти** — `bun test tests/documents/tools.test.ts` → PASS.
-- [ ] **Step 7: Коммит** `feat(documents): тулы document_map/document_read (W1)`.
+- [x] **Step 6: Запустить — пройти** — `bun test tests/documents/tools.test.ts` → PASS.
+- [x] **Step 7: Коммит** `feat(documents): тулы document_map/document_read (W1)`.
 
 ### Task 10: Регистрация модуля (ModuleDef) и сбор
 
@@ -1206,7 +1208,7 @@ export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
 - Modify: `src/core/bootstrap/modules-phase.ts`
 - Test: `tests/documents/module.test.ts`
 
-- [ ] **Step 1: Падающий тест**
+- [x] **Step 1: Падающий тест**
 
 ```ts
 // tests/documents/module.test.ts
@@ -1224,9 +1226,9 @@ describe("documentsModuleDef", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть** — FAIL.
+- [x] **Step 2: Запустить — упасть** — FAIL.
 
-- [ ] **Step 3: Реализовать `module.ts`**
+- [x] **Step 3: Реализовать `module.ts`**
 
 ```ts
 // src/modules/documents/module.ts
@@ -1251,7 +1253,7 @@ export function documentsModuleDef(): ModuleDef {
 export { ACTIVE_GROUPS, DOCUMENTS_ENABLED };
 ```
 
-- [ ] **Step 4: Реализовать `index.ts`**
+- [x] **Step 4: Реализовать `index.ts`**
 
 ```ts
 // src/modules/documents/index.ts
@@ -1262,7 +1264,7 @@ export type { DocumentIR, DocBlock, DocNode, DocTable } from "./ir";
 export type { DocumentHandler, HandlerGroup } from "./handler";
 ```
 
-- [ ] **Step 5: Зарегистрировать в bootstrap**
+- [x] **Step 5: Зарегистрировать в bootstrap**
 
 В `src/core/bootstrap/modules-phase.ts` рядом с `moduleHost.register(indexerModuleDef(...))` добавить:
 
@@ -1275,12 +1277,12 @@ moduleHost.register(documentsModuleDef());
 (Точная позиция — в блоке регистрации core-модулей до `await moduleHost.setup()`; тулы
 подхватятся через `registerModuleToolsAndPlugins` → `collectTools()`.)
 
-- [ ] **Step 6: Запустить тест модуля**
+- [x] **Step 6: Запустить тест модуля**
 
 Run: `bun test tests/documents/module.test.ts`
 Expected: PASS.
 
-- [ ] **Step 7: Коммит** `feat(documents): ModuleDef и регистрация в bootstrap (W1)`.
+- [x] **Step 7: Коммит** `feat(documents): ModuleDef и регистрация в bootstrap (W1)`.
 
 ### Task 11: Тег `document` в auto-tags
 
@@ -1288,7 +1290,7 @@ Expected: PASS.
 - Modify: `src/tools/auto-tags.ts:20`
 - Test: `tests/documents/auto-tag.test.ts`
 
-- [ ] **Step 1: Падающий тест**
+- [x] **Step 1: Падающий тест**
 
 ```ts
 // tests/documents/auto-tag.test.ts
@@ -1305,16 +1307,16 @@ describe("document tag", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упасть** — FAIL.
+- [x] **Step 2: Запустить — упасть** — FAIL.
 
-- [ ] **Step 3: Обновить `auto-tags.ts`**
+- [x] **Step 3: Обновить `auto-tags.ts`**
 
 Добавить `"document"` в `KNOWN_TOOL_TAGS` (после `"file"`) и в существующий набор эвристик —
 `DOCUMENT_RE = /\.(xlsx|xls|ods|csv|tsv|docx|odt|pptx|pdf|md|markdown|ya?ml|json|xml|html?)\b|таблиц|документ|договор|отчёт|отчет|sheet|spreadsheet|през)/i`,
 добавляющий `document` в extra-набор.
 
-- [ ] **Step 4: Запустить — пройти** — `bun test tests/documents/auto-tag.test.ts` → PASS.
-- [ ] **Step 5: Коммит** `feat(documents): тег document в auto-tags (W1)`.
+- [x] **Step 4: Запустить — пройти** — `bun test tests/documents/auto-tag.test.ts` → PASS.
+- [x] **Step 5: Коммит** `feat(documents): тег document в auto-tags (W1)`.
 
 ### Task 12: i18n и финальные гейты
 
@@ -1322,29 +1324,29 @@ describe("document tag", () => {
 - Modify: `src/i18n/locales/en.json`, `src/i18n/locales/ru.json`
 - Test: `bun test tests/i18n.test.ts`
 
-- [ ] **Step 1: Добавить ключи симметрично (en+ru)**
+- [x] **Step 1: Добавить ключи симметрично (en+ru)**
 
 `documents.map_desc`, `documents.read_desc`, `documents.path_desc`,
 `documents.selector_desc`, `documents.error`, `tool.friendly.document_map`,
 `tool.friendly.document_read`. Тексты — по [STYLE.md](../design/ui/STYLE.md): кратко, без
 системных имён; `documents.error` = «Не удалось прочитать документ: {reason}».
 
-- [ ] **Step 2: Проверить симметрию ключей**
+- [x] **Step 2: Проверить симметрию ключей**
 
 Run: `bun test tests/i18n.test.ts`
 Expected: PASS (en/ru симметричны).
 
-- [ ] **Step 3: Полный гейт**
+- [x] **Step 3: Полный гейт**
 
 Run: `bun test` → expected: 0 fail.
 Run: `bun run quality` → expected: exit 0 (typecheck + typecheck:frontend + check:arch + lint + fallow).
 
-- [ ] **Step 4: Живой прогон (правило 7)**
+- [x] **Step 4: Живой прогон (правило 7)**
 
 Run: `bun run mma "сделай карту файла <sandbox>/a.csv и покажи раздел 1" -d <sandbox> -e`
 Expected: в `session.jsonl` виден вызов `document_map`/`document_read`; вывод содержит карту.
 
-- [ ] **Step 5: Обновить docs (feature-history/CHANGELOG) и коммит**
+- [x] **Step 5: Обновить docs (feature-history/CHANGELOG) и коммит**
 
 ```bash
 git add src/i18n/locales/en.json src/i18n/locales/ru.json docs/agents/feature-history.md CHANGELOG.md

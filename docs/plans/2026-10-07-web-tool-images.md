@@ -1,6 +1,8 @@
 # Web tool images — план реализации
 
-> **Статус:** выполняется inline, по коммиту на задачу. Спека:
+> **Статус:** исполнено (2026-10-20) — image-store, `ToolResult.imageFiles`/`imageRefs`,
+> персист картинок в логе, `images-api`, lightbox и image-card в UI. Чекбоксы проставлены по факту.
+
 > [docs/specs/2026-10-07-web-tool-images-design.md](../specs/2026-10-07-web-tool-images-design.md).
 
 **Goal:** реальные изображения тулов (`browser` screenshot, `attach_image`) в ленте
@@ -21,7 +23,7 @@ SSE `tool_end.images` и в `session.jsonl`.
 - Create: `src/modules/session/image-store.ts`
 - Test: `tests/session/image-store.test.ts`
 
-- [ ] **Step 1: Тест**
+- [x] **Step 1: Тест**
 
 ```ts
 // tests/session/image-store.test.ts
@@ -78,9 +80,9 @@ describe("image-store", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — падает** `bun test tests/session/image-store.test.ts`
+- [x] **Step 2: Запустить — падает** `bun test tests/session/image-store.test.ts`
 
-- [ ] **Step 3: Реализация `src/modules/session/image-store.ts`**
+- [x] **Step 3: Реализация `src/modules/session/image-store.ts`**
 
 ```ts
 /** Хранилище изображений тулов на сессии: запись, чтение, ротация. */
@@ -166,8 +168,8 @@ export function readToolImage(
 }
 ```
 
-- [ ] **Step 4: `bun test tests/session/image-store.test.ts` → PASS**
-- [ ] **Step 5: Commit** `feat(session): image store with rotation for tool images`
+- [x] **Step 4: `bun test tests/session/image-store.test.ts` → PASS**
+- [x] **Step 5: Commit** `feat(session): image store with rotation for tool images`
 
 ---
 
@@ -179,13 +181,13 @@ export function readToolImage(
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Test: `tests/config/images-config.test.ts`
 
-- [ ] **Step 1: Тест** — `/config images.maxCount` читается/пишется, дефолт 30/104857600.
-- [ ] **Step 2: Дефолты** в `DEFAULTS` (`src/config/config.ts` или `registry.ts`, где лежит `DEFAULTS`):
+- [x] **Step 1: Тест** — `/config images.maxCount` читается/пишется, дефолт 30/104857600.
+- [x] **Step 2: Дефолты** в `DEFAULTS` (`src/config/config.ts` или `registry.ts`, где лежит `DEFAULTS`):
   `images: { maxCount: 30, maxBytes: 104857600 }`.
-- [ ] **Step 3: `ConfigKeyDef`** в `registry-extra.ts`: типы `int`, домен `images`.
-- [ ] **Step 4: i18n** ключи `config.key.images.maxCount` / `maxBytes` (en+ru).
-- [ ] **Step 5: Проверить** `bun test tests/config` + `/config images.maxCount` вручную.
-- [ ] **Step 6: Commit** `feat(config): images.maxCount/maxBytes for tool image retention`
+- [x] **Step 3: `ConfigKeyDef`** в `registry-extra.ts`: типы `int`, домен `images`.
+- [x] **Step 4: i18n** ключи `config.key.images.maxCount` / `maxBytes` (en+ru).
+- [x] **Step 5: Проверить** `bun test tests/config` + `/config images.maxCount` вручную.
+- [x] **Step 6: Commit** `feat(config): images.maxCount/maxBytes for tool image retention`
 
 > Точные имена: `DEFAULTS` и формат `ConfigKeyDef` сверить с `src/config/registry.ts`
 > и `registry-extra.ts` перед правкой (единый источник).
@@ -199,7 +201,7 @@ export function readToolImage(
 - Modify: `src/core/types.ts` (`ToolEvent`)
 - Modify: `src/modules/session/store.ts` (`SessionLogEntry.tool_result.images`)
 
-- [ ] **Step 1:** В `src/tools/types.ts` в `ToolResult` добавить:
+- [x] **Step 1:** В `src/tools/types.ts` в `ToolResult` добавить:
 
 ```ts
   /** Полноразмерные ассеты для диска/показа (модель получает `images`). */
@@ -208,12 +210,12 @@ export function readToolImage(
   imageRefs?: import("../modules/session/image-store").ToolImageRef[];
 ```
 
-- [ ] **Step 2:** В `src/core/types.ts` `ToolEvent` (end) добавить
+- [x] **Step 2:** В `src/core/types.ts` `ToolEvent` (end) добавить
   `imageRefs?: import("../modules/session/image-store").ToolImageRef[];`
-- [ ] **Step 3:** В `src/modules/session/store.ts` `SessionLogEntry` добавить
+- [x] **Step 3:** В `src/modules/session/store.ts` `SessionLogEntry` добавить
   `images?: import("./image-store").ToolImageRef[];`
-- [ ] **Step 4:** `tsc --noEmit` зелёный.
-- [ ] **Step 5: Commit** `feat(core): tool image refs/types for persistence`
+- [x] **Step 4:** `tsc --noEmit` зелёный.
+- [x] **Step 5: Commit** `feat(core): tool image refs/types for persistence`
 
 ---
 
@@ -223,10 +225,10 @@ export function readToolImage(
 - Modify: `src/core/session-logger.ts`
 - Test: `tests/core/session-logger-images.test.ts`
 
-- [ ] **Step 1: Тест** — при `result.imageFiles` в `tool_result` появляются `images`,
+- [x] **Step 1: Тест** — при `result.imageFiles` в `tool_result` появляются `images`,
   файлы на диске; при включённом шифровании — `images` нет.
 
-- [ ] **Step 2: Реализация** (добавить методы; `images` в существующий `appendLog`):
+- [x] **Step 2: Реализация** (добавить методы; `images` в существующий `appendLog`):
 
 ```ts
 import { saveToolImage, type ToolImageAsset, type ToolImageRef } from "../modules/session/image-store";
@@ -248,8 +250,8 @@ import { saveToolImage, type ToolImageAsset, type ToolImageRef } from "../module
 
   `imageLimits` — опциональный сеттер из bootstrap (`() => ({maxCount, maxBytes})`).
 
-- [ ] **Step 3: `bun test tests/core/session-logger-images.test.ts` → PASS**
-- [ ] **Step 4: Commit** `feat(session): persist tool images into session log`
+- [x] **Step 3: `bun test tests/core/session-logger-images.test.ts` → PASS**
+- [x] **Step 4: Commit** `feat(session): persist tool images into session log`
 
 ---
 
@@ -259,7 +261,7 @@ import { saveToolImage, type ToolImageAsset, type ToolImageRef } from "../module
 - Modify: `src/core/agent/tool-batch.ts:481-514`
 - Test: `tests/core/tool-batch-images.test.ts`
 
-- [ ] **Step 1:** После `queueToolImages(contextManager, result.images)` (~484):
+- [x] **Step 1:** После `queueToolImages(contextManager, result.images)` (~484):
 
 ```ts
       if (result.imageFiles?.length) {
@@ -268,13 +270,13 @@ import { saveToolImage, type ToolImageAsset, type ToolImageRef } from "../module
       }
 ```
 
-- [ ] **Step 2:** В `onTool?.({ type: "end", ... })` (~488) добавить
+- [x] **Step 2:** В `onTool?.({ type: "end", ... })` (~488) добавить
   `imageRefs: result.imageRefs`.
-- [ ] **Step 3:** В `logToolResult(call, result, duration, iteration)` (~513) передать
+- [x] **Step 3:** В `logToolResult(call, result, duration, iteration)` (~513) передать
   `result.imageRefs` (сигнатура из Task 4).
-- [ ] **Step 4:** Тест: handler с `imageFiles` → result.imageRefs заполнен, событие
+- [x] **Step 4:** Тест: handler с `imageFiles` → result.imageRefs заполнен, событие
   несёт refs, `logToolResult` вызван с refs.
-- [ ] **Step 5: Commit** `feat(core): persist tool images in tool batch`
+- [x] **Step 5: Commit** `feat(core): persist tool images in tool batch`
 
 ---
 
@@ -285,7 +287,7 @@ import { saveToolImage, type ToolImageAsset, type ToolImageRef } from "../module
 - Modify: `src/tools/attach-image.ts:107-124`
 - Test: `tests/tools/browser-images.test.ts`, `tests/tools/attach-image.test.ts`
 
-- [ ] **Step 1:** `browser.ts` — всегда `imageFiles`, `images` только при vision:
+- [x] **Step 1:** `browser.ts` — всегда `imageFiles`, `images` только при vision:
 
 ```ts
       if (result.screenshot) {
@@ -306,7 +308,7 @@ import { saveToolImage, type ToolImageAsset, type ToolImageRef } from "../module
       }
 ```
 
-- [ ] **Step 2:** `attach-image.ts` — убрать `ctx.contextManager.addPendingImage`;
+- [x] **Step 2:** `attach-image.ts` — убрать `ctx.contextManager.addPendingImage`;
   вернуть part в `images`:
 
 ```ts
@@ -318,9 +320,9 @@ import { saveToolImage, type ToolImageAsset, type ToolImageRef } from "../module
       };
 ```
 
-- [ ] **Step 3:** Тесты: невидящая модель → `images` нет, `imageFiles` есть;
+- [x] **Step 3:** Тесты: невидящая модель → `images` нет, `imageFiles` есть;
   attach возвращает `images` и НЕ зовёт `addPendingImage`.
-- [ ] **Step 4: Commit** `feat(tools): always persist browser shots; unify attach_image`
+- [x] **Step 4: Commit** `feat(tools): always persist browser shots; unify attach_image`
 
 ---
 
@@ -331,7 +333,7 @@ import { saveToolImage, type ToolImageAsset, type ToolImageRef } from "../module
 - Modify: `src/modules/webui/session/sessions-api.ts` (роут в `handleSessionsApi`)
 - Test: `tests/modules/webui/session-images-api.test.ts`
 
-- [ ] **Step 1:** `images-api.ts`:
+- [x] **Step 1:** `images-api.ts`:
 
 ```ts
 import type { ServerResponse } from "node:http";
@@ -360,7 +362,7 @@ export function handleSessionImage(res: ServerResponse, id: string, name: string
 }
 ```
 
-- [ ] **Step 2:** Роут в `handleSessionsApi` (до `/log`):
+- [x] **Step 2:** Роут в `handleSessionsApi` (до `/log`):
 
 ```ts
   if (p.startsWith("/api/sessions/") && p.includes("/images/") && req.method === "GET") {
@@ -373,8 +375,8 @@ export function handleSessionImage(res: ServerResponse, id: string, name: string
   }
 ```
 
-- [ ] **Step 3:** Тест: 200 + content-type/cache-control; `../x` → 404; чужая сессия → 404.
-- [ ] **Step 4: Commit** `feat(webui): serve session tool images`
+- [x] **Step 3:** Тест: 200 + content-type/cache-control; `../x` → 404; чужая сессия → 404.
+- [x] **Step 4: Commit** `feat(webui): serve session tool images`
 
 ---
 
@@ -386,9 +388,9 @@ export function handleSessionImage(res: ServerResponse, id: string, name: string
 - Modify: `src/modules/webui/session/history-api.ts`
 - Test: `tests/modules/webui/session-images-events.test.ts`, `tests/modules/webui/history-images.test.ts`
 
-- [ ] **Step 1:** `run-agent.ts` `resultFor(ev)` добавить
+- [x] **Step 1:** `run-agent.ts` `resultFor(ev)` добавить
   `imageRefs: ev.imageRefs, images: ev.images`.
-- [ ] **Step 2:** `forward.ts onToolEnd` — собрать URL:
+- [x] **Step 2:** `forward.ts onToolEnd` — собрать URL:
 
 ```ts
     onToolEnd(call, result, durationMs) {
@@ -407,13 +409,13 @@ export function handleSessionImage(res: ServerResponse, id: string, name: string
   где `imageUrlsFor`: refs → `/api/sessions/<owner>/images/<file>`; если refs нет,
   а `result.images` есть (шифрованная сессия) — inline data URL.
 
-- [ ] **Step 3:** `history-api.ts`: `normalizeHistory(entries, tail, fallback, sessionId)`,
+- [x] **Step 3:** `history-api.ts`: `normalizeHistory(entries, tail, fallback, sessionId)`,
   `mapLogEntry(e, sessionId)` — `tool_result`:
   `images: e.images?.map(r => "/api/sessions/" + sessionId + "/images/" + r.file)`;
   `HistoryEntry.images?: string[]`. Обновить вызов в `handleSessionHistory`.
 
-- [ ] **Step 4:** Тесты: событие несёт URL; history несёт URL.
-- [ ] **Step 5: Commit** `feat(webui): deliver tool image URLs over SSE and history`
+- [x] **Step 4:** Тесты: событие несёт URL; history несёт URL.
+- [x] **Step 5: Commit** `feat(webui): deliver tool image URLs over SSE and history`
 
 ---
 
@@ -429,11 +431,11 @@ export function handleSessionImage(res: ServerResponse, id: string, name: string
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Test: `tests/webui-tool-images-dom.test.ts`
 
-- [ ] **Step 1:** `lightbox.ts` — `openLightbox(src, caption)`, `initLightbox()`:
+- [x] **Step 1:** `lightbox.ts` — `openLightbox(src, caption)`, `initLightbox()`:
   оверлей, `img` через `document.createElement`, Esc/фон — закрыть,
   «открыть в новой вкладке» (`<a target=_blank>`), «копировать» (`copyText`).
   Никакого `innerHTML`.
-- [ ] **Step 2:** `turn.ts` — в `cardFor` удалить ветку `IMAGE_TOOLS`;
+- [x] **Step 2:** `turn.ts` — в `cardFor` удалить ветку `IMAGE_TOOLS`;
   вынести `imageCard(name, url)`; в `onToolEnd` перед `renderToolOutput`:
 
 ```ts
@@ -445,16 +447,16 @@ export function handleSessionImage(res: ServerResponse, id: string, name: string
   }
 ```
 
-- [ ] **Step 3:** `history.ts` — в `tool_result` при `entry.images` рисовать
+- [x] **Step 3:** `history.ts` — в `tool_result` при `entry.images` рисовать
   миниатюры; `img.addEventListener("error", ...)` → `.imgcard-missing`
   (`web.card.image_removed`).
-- [ ] **Step 4:** i18n (en+ru): `web.card.image_removed`, `web.lightbox.close`,
+- [x] **Step 4:** i18n (en+ru): `web.card.image_removed`, `web.lightbox.close`,
   `web.lightbox.open_tab`, `web.lightbox.copy`, `web.lightbox.copied`.
-- [ ] **Step 5:** CSS `.imgcard`, `.imgcard img`, `.imgcard-missing`, `.lightbox`.
-- [ ] **Step 6:** Тесты happy-dom: карточка при `images`, нет без; лайтбокс
+- [x] **Step 5:** CSS `.imgcard`, `.imgcard img`, `.imgcard-missing`, `.lightbox`.
+- [x] **Step 6:** Тесты happy-dom: карточка при `images`, нет без; лайтбокс
   open/close; fallback `onerror`; guard «нет innerHTML».
-- [ ] **Step 7:** Проверка `tsc -p tsconfig.frontend.json` + `bun test`.
-- [ ] **Step 8: Commit** `feat(webui): render tool screenshots with lightbox and replay`
+- [x] **Step 7:** Проверка `tsc -p tsconfig.frontend.json` + `bun test`.
+- [x] **Step 8: Commit** `feat(webui): render tool screenshots with lightbox and replay`
 
 ---
 
@@ -463,10 +465,10 @@ export function handleSessionImage(res: ServerResponse, id: string, name: string
 **Files:**
 - Modify: `AGENTS.md` (новый подраздел), `CHANGELOG.md` (2.28.0)
 
-- [ ] **Step 1:** AGENTS.md — подраздел «Web Tool Images».
-- [ ] **Step 2:** CHANGELOG `## [2.28.0]` (Added/Fixed).
-- [ ] **Step 3:** `bun test` + `tsc --noEmit` + `bun run quality` → зелёные.
-- [ ] **Step 4: Commit** `docs: AGENTS + changelog for web tool images (2.28.0)`
+- [x] **Step 1:** AGENTS.md — подраздел «Web Tool Images».
+- [x] **Step 2:** CHANGELOG `## [2.28.0]` (Added/Fixed).
+- [x] **Step 3:** `bun test` + `tsc --noEmit` + `bun run quality` → зелёные.
+- [x] **Step 4: Commit** `docs: AGENTS + changelog for web tool images (2.28.0)`
 
 ---
 

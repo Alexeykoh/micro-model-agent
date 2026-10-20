@@ -1,6 +1,8 @@
 # WebUI Frontend TypeScript Migration — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: use `subagent-driven-development` (recommended) or `executing-plans` to implement task-by-task. Steps use checkbox (`- [ ]`) syntax. Spec: [docs/specs/2026-10-04-webui-frontend-ts-design.md](../specs/2026-10-04-webui-frontend-ts-design.md).
+> **Статус:** исполнено (2026-10-20) — фронтенд мигрирован на TypeScript полностью
+> (75 `.ts`, 2 вендоренных `.js`), `tsconfig.frontend.json` + `typecheck:frontend` в гейте
+> `quality`. Чекбоксы проставлены по факту.
 
 **Goal:** Перевести браузерный фронтенд `mma web` на TypeScript (`strict: true`) без изменения рантайм-контракта, с живым `web:dev` и без изменения URL/имён файлов.
 
@@ -35,7 +37,7 @@ entry:    app, md, setup
 - Create: `tsconfig.frontend.json`
 - Modify: `tsconfig.json`
 
-- [ ] **Step 1: Exclude assets from the backend project**
+- [x] **Step 1: Exclude assets from the backend project**
 
 `tsconfig.json` — добавить `exclude` (сейчас его нет):
 
@@ -44,7 +46,7 @@ entry:    app, md, setup
   "exclude": ["node_modules", "dist", "src/modules/webui/assets/**"]
 ```
 
-- [ ] **Step 2: Create `tsconfig.frontend.json`**
+- [x] **Step 2: Create `tsconfig.frontend.json`**
 
 ```json
 {
@@ -72,12 +74,12 @@ entry:    app, md, setup
 }
 ```
 
-- [ ] **Step 3: Verify both projects are green on the untouched tree**
+- [x] **Step 3: Verify both projects are green on the untouched tree**
 
 Run: `tsc --noEmit` — Expected: PASS (assets excluded).
 Run: `bunx tsc -p tsconfig.frontend.json` — Expected: PASS (only vendored/JS, not checked).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tsconfig.json tsconfig.frontend.json
@@ -90,7 +92,7 @@ git commit -m "build(webui): add frontend tsconfig, exclude assets from backend 
 - Modify: `src/modules/webui/assets.ts:36-50`
 - Test: `tests/webui-assets.test.ts`
 
-- [ ] **Step 1: Add a source-walker that resolves `.ts` → `.js`**
+- [x] **Step 1: Add a source-walker that resolves `.ts` → `.js`**
 
 Replace the `walkJs` block (lines 36-50) so it accepts both extensions and transpiles `.ts`:
 
@@ -133,11 +135,11 @@ source is `.ts`, they read `.ts` and transpile. Add a helper:
 
 (Use one shared `transpiler` instance for both walker and `read`.)
 
-- [ ] **Step 2: Run the asset tests**
+- [x] **Step 2: Run the asset tests**
 
 Run: `bun test tests/webui-assets.test.ts` — Expected: PASS (still `.js` source, unchanged behavior).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/modules/webui/assets.ts
@@ -150,7 +152,7 @@ git commit -m "build(webui): loadAssets transpiles TS source on the fly"
 - Create: `scripts/build-frontend.ts`
 - Modify: `scripts/copy-assets.ts` (drop the verbatim webui copy), `package.json`
 
-- [ ] **Step 1: Write `scripts/build-frontend.ts`**
+- [x] **Step 1: Write `scripts/build-frontend.ts`**
 
 ```ts
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "fs/promises";
@@ -190,11 +192,11 @@ async function walk(dir: string): Promise<void> {
 await walk(srcDir);
 ```
 
-- [ ] **Step 2: Remove the verbatim webui copy from `copy-assets.ts`**
+- [x] **Step 2: Remove the verbatim webui copy from `copy-assets.ts`**
 
 Delete lines 20-27 (the `webuiSrc`/`webuiDest` block); `build-frontend.ts` owns it now.
 
-- [ ] **Step 3: Wire into `build:prod`**
+- [x] **Step 3: Wire into `build:prod`**
 
 `package.json`:
 
@@ -203,12 +205,12 @@ Delete lines 20-27 (the `webuiSrc`/`webuiDest` block); `build-frontend.ts` owns 
     "build:prod": "bun run 'build:bundle' && bun run 'build:frontend' && bun run 'build:copy-assets'",
 ```
 
-- [ ] **Step 4: Verify the build output**
+- [x] **Step 4: Verify the build output**
 
 Run: `bun run build:prod`
 Expected: `dist/assets/app.js`, `dist/assets/js/**/*.js`, `dist/assets/index.html`, `dist/assets/smd.js`, `dist/assets/hljs.js` exist. `bun test tests/webui-assets.test.ts` still PASS (reads sources).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/build-frontend.ts scripts/copy-assets.ts package.json
@@ -220,26 +222,26 @@ git commit -m "build(webui): transpile frontend TS into dist/assets"
 **Files:**
 - Modify: `package.json` (`quality`), `tests/webui-frontend-graph.test.ts`
 
-- [ ] **Step 1: Add frontend typecheck to `quality`**
+- [x] **Step 1: Add frontend typecheck to `quality`**
 
 ```json
     "typecheck:frontend": "tsc -p tsconfig.frontend.json",
     "quality": "bun run typecheck && bun run typecheck:frontend && bun run lint && bun run fallow",
 ```
 
-- [ ] **Step 2: Teach the graph guard to read `.ts`**
+- [x] **Step 2: Teach the graph guard to read `.ts`**
 
 In `tests/webui-frontend-graph.test.ts`, wherever it enumerates `assets/**` files and parses
 imports, include `.ts` files and resolve a specifier ending in `.js` to the sibling `.ts` if
 one exists. Concretely: collect `**/*.{js,ts}` (excluding vendored), and when building the
 resolved-edge map, `target.replace(/\.js$/, ".ts")` fallback.
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 Run: `bun run typecheck:frontend && bun test tests/webui-frontend-graph.test.ts tests/webui-assets.test.ts`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add package.json tests/webui-frontend-graph.test.ts
@@ -266,12 +268,12 @@ Typing guidance per leaf:
 - `js/core/menus.js` — as needed.
 
 ### Tasks
-- [ ] **Task 1.1:** migrate `js/dom.js`
-- [ ] **Task 1.2:** migrate `js/api.js`
-- [ ] **Task 1.3:** migrate `js/i18n.js`
-- [ ] **Task 1.4:** migrate `js/format.js`
-- [ ] **Task 1.5:** migrate `js/core/menus.js`
-- [ ] **Task 1.6:** migrate `js/core/store/{feed,tabs,settings,session,index}.js` + `js/store.js` (one commit; they form a cycle-free cluster)
+- [x] **Task 1.1:** migrate `js/dom.js`
+- [x] **Task 1.2:** migrate `js/api.js`
+- [x] **Task 1.3:** migrate `js/i18n.js`
+- [x] **Task 1.4:** migrate `js/format.js`
+- [x] **Task 1.5:** migrate `js/core/menus.js`
+- [x] **Task 1.6:** migrate `js/core/store/{feed,tabs,settings,session,index}.js` + `js/store.js` (one commit; they form a cycle-free cluster)
 
 ---
 
@@ -285,10 +287,10 @@ Same recipe. Typing guidance:
 - `js/rail.js` — event payload types.
 
 ### Tasks
-- [ ] **Task 2.1:** `js/dialog.js`, `js/subdialog.js`
-- [ ] **Task 2.2:** `js/feed/{core,stream,turn,history,plan,question,sidebar}.js`, `js/feed.js`
-- [ ] **Task 2.3:** `js/sidebar/{state,map,lsp,trace,core}.js`, `js/sidebar.js`
-- [ ] **Task 2.4:** `js/rail.js`
+- [x] **Task 2.1:** `js/dialog.js`, `js/subdialog.js`
+- [x] **Task 2.2:** `js/feed/{core,stream,turn,history,plan,question,sidebar}.js`, `js/feed.js`
+- [x] **Task 2.3:** `js/sidebar/{state,map,lsp,trace,core}.js`, `js/sidebar.js`
+- [x] **Task 2.4:** `js/rail.js`
 
 ---
 
@@ -296,16 +298,16 @@ Same recipe. Typing guidance:
 
 Same recipe.
 
-- [ ] **Task 3.1:** `js/session/{composer,sessions-menu,cmdk,tabs}.js`
-- [ ] **Task 3.2:** `js/settings/{write,form,providers,controls,editors,subdialog,search,modal,panels}.js`, `js/settings.js`
+- [x] **Task 3.1:** `js/session/{composer,sessions-menu,cmdk,tabs}.js`
+- [x] **Task 3.2:** `js/settings/{write,form,providers,controls,editors,subdialog,search,modal,panels}.js`, `js/settings.js`
 
 ---
 
 ## Phase 4: entry points
 
-- [ ] **Task 4.1:** `app.js` → `app.ts`
-- [ ] **Task 4.2:** `md.js` → `md.ts`
-- [ ] **Task 4.3:** `setup.js` → `setup.ts`
+- [x] **Task 4.1:** `app.js` → `app.ts`
+- [x] **Task 4.2:** `md.js` → `md.ts`
+- [x] **Task 4.3:** `setup.js` → `setup.ts`
 
 After Phase 4 every asset is `.ts` except vendored `smd.js`/`hljs.js`.
 
@@ -319,14 +321,14 @@ After Phase 4 every asset is `.ts` except vendored `smd.js`/`hljs.js`.
 - [x] `tsc -p tsconfig.frontend.json` green.
 
 ### Task 5.2: Docs
-- [ ] Update AGENTS.md «WebUI Modularization» section: frontend is now TS; note the
+- [x] Update AGENTS.md «WebUI Modularization» section: frontend is now TS; note the
   `loadAssets` transpile path and `build:frontend`.
-- [ ] CHANGELOG `[Unreleased]` → Changed: internal TS migration, contracts unchanged.
-- [ ] Commit.
+- [x] CHANGELOG `[Unreleased]` → Changed: internal TS migration, contracts unchanged.
+- [x] Commit.
 
 ### Task 5.3: Final gates
-- [ ] `bun run quality` (typecheck + frontend typecheck + lint + fallow)
-- [ ] `bun test` (full)
-- [ ] `bun run build:prod` — verify `dist/assets` output
-- [ ] `bun build src/modules/webui/assets/app.js --target=browser` — graph resolves
-- [ ] Commit if anything changed.
+- [x] `bun run quality` (typecheck + frontend typecheck + lint + fallow)
+- [x] `bun test` (full)
+- [x] `bun run build:prod` — verify `dist/assets` output
+- [x] `bun build src/modules/webui/assets/app.js --target=browser` — graph resolves
+- [x] Commit if anything changed.

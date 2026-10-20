@@ -1,6 +1,9 @@
 # Web UI decompose + dedup — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено (2026-10-20) — фазы 1–5 выполнены: `API_ROUTES`/`API_GROUPS`,
+> единый `persistAndReconfigure`, `module.ts` ≤300 строк, фронт разбит, дедуп хелперов.
+> Чекбоксы проставлены по факту. Отклонение: `routes.ts`/`body.ts`/`persist.ts` лежат
+> в `src/modules/webui/http/` (переезд при модуляризации) — функционально то же.
 
 **Goal:** Убрать главные нарушения из аудита 2026-09-26 без смены поведения: разбить `assets/app.js` (3462 строки / ~163 функции в одном IIFE) на ES-модули, привести `module.ts` (388), `providers-api.ts` (352), `server.ts` (326) к лимиту ≤300 строк, удалить дубли (`persistAndReconfigure`, `JSON.parse` ×8, глифы плана, toggle, focus-trap).
 

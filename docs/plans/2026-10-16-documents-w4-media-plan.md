@@ -1,6 +1,8 @@
 # Модуль документов — W4: растровые изображения (vision) и geo-форматы
 
-> **Статус:** W4 — этот файл. Ветка `feat/documents-media` от `master`.
+> **Статус:** исполнено (2026-10-20) — W4 (media: изображения/аудио-видео) реализован в master.
+> Известный долг: vision-путь `document_read` не уменьшает растр — см.
+> `DEBT(documents-vision-image-seam)` в [`docs/agents/debt.md`](../agents/debt.md).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use

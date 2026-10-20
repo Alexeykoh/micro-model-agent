@@ -1,7 +1,13 @@
 # LSP Doctor & Locked-Down Networks — Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — `src/modules/lsp/resolve.ts` (резолв бинаря,
+> `MMA_LSP_OFFLINE`), `diagnose.ts` + `diagnose-server.ts` (классификация ошибок),
+> `/lsp doctor` в REPL и web (`GET|POST /api/lsp/doctor`), вкладка LSP в сайдбаре,
+> документация в `docs/agents/tools.md`, релиз 2.17.0. Чекбоксы проставлены по факту.
+> Отличие: иконка-«стетоскоп» из Task 9 не добавлена — используется существующая
+> `activity` (`assets/js/dom.ts:156`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans (inline).
-> Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Сделать причину неисправности LSP видимой: `/lsp doctor` с классом
 причины и подсказкой, классифицированные `[LSP check failed]`-хинты, офлайн-режим
@@ -27,14 +33,14 @@
 - Modify: `src/modules/lsp/client.ts`
 - Test: `tests/modules/lsp/resolve.test.ts`
 
-- [ ] **Step 1: env**
+- [x] **Step 1: env**
 
 В `MMA_ENV` добавить после `BROWSER_CHANNEL`:
 ```ts
   LSP_OFFLINE: "MMA_LSP_OFFLINE",
 ```
 
-- [ ] **Step 2: `resolve.ts`**
+- [x] **Step 2: `resolve.ts`**
 
 ```ts
 // Резолв запуска LSP-сервера: npx→глобальный бинарник, поиск в PATH, офлайн-флаг.
@@ -113,7 +119,7 @@ export function resolveNpxLaunch(
 }
 ```
 
-- [ ] **Step 3: `client.ts` — использовать resolve**
+- [x] **Step 3: `client.ts` — использовать resolve**
 
 Заменить блок в `startServer` (от `// Команда npx — сначала ищем…` до конца
 ветки `if (config.command === "npx" …)`) на:
@@ -138,7 +144,7 @@ export function resolveNpxLaunch(
 `autoInstall === false` — оставить). Добавить импорт:
 `import { resolveNpxLaunch, isOfflineLsp } from "./resolve";`.
 
-- [ ] **Step 4: Тесты `resolve.test.ts`**
+- [x] **Step 4: Тесты `resolve.test.ts`**
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -191,12 +197,12 @@ describe("isOfflineLsp", () => {
 });
 ```
 
-- [ ] **Step 5: Тест + typecheck**
+- [x] **Step 5: Тест + typecheck**
 
 Run: `bun test tests/modules/lsp/resolve.test.ts tests/lsp-client-framing.test.ts tests/lsp-command.test.ts && tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/config/env.ts src/modules/lsp/resolve.ts src/modules/lsp/client.ts tests/modules/lsp/resolve.test.ts
@@ -211,7 +217,7 @@ git commit -m "refactor(lsp): extract npx launch resolution + offline mode"
 - Create: `src/modules/lsp/diagnose.ts`
 - Test: `tests/modules/lsp/diagnose.test.ts`
 
-- [ ] **Step 1: `diagnose.ts`**
+- [x] **Step 1: `diagnose.ts`**
 
 Реализовать типы `LspFailureReason`/`LspServerDiagnosis`/`LspDiagnosis` из
 спеки; `classifyLspError(message, opts)` по правилам §3; `diagnoseLspServers`
@@ -225,7 +231,7 @@ git commit -m "refactor(lsp): extract npx launch resolution + offline mode"
 - `offline = deps.offline ?? isOfflineLsp()`.
 - `binaryOnPath` для не-npx: `(deps.findOnPath ?? findOnPath)(server.command) != null`.
 
-- [ ] **Step 2: Тесты**
+- [x] **Step 2: Тесты**
 
 Инжектировать fake `client` (`{ probe: async () => {} }` / бросающий),
 `collectFiles`, `findOnPath`, `offline`. Кейсы из §9. Пример:
@@ -240,12 +246,12 @@ it("classifies an npx initialize timeout as network", async () => {
 });
 ```
 
-- [ ] **Step 3: Запуск + typecheck**
+- [x] **Step 3: Запуск + typecheck**
 
 Run: `bun test tests/modules/lsp/diagnose.test.ts && tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/modules/lsp/diagnose.ts tests/modules/lsp/diagnose.test.ts
@@ -261,7 +267,7 @@ git commit -m "feat(lsp): structured server diagnosis with failure classificatio
 - Modify: `src/modules/lsp/index.ts`
 - Test: `tests/lsp-module.test.ts`
 
-- [ ] **Step 1: `module.ts`**
+- [x] **Step 1: `module.ts`**
 
 Добавить public-метод:
 ```ts
@@ -286,12 +292,12 @@ result.output += `\n\n[LSP check failed]: ${msg}\n${t(hintKey)}`;
 not-applicable/deadline → общий `lsp.hint_timeout` не нужен — для них хинт не
 добавляется; см. helper). Для `[LSP disabled: …]` хинт не добавляется.
 
-- [ ] **Step 2: `index.ts`**
+- [x] **Step 2: `index.ts`**
 
 Экспортировать `diagnoseLspServers`, `classifyLspError` и типы
 `LspDiagnosis`/`LspServerDiagnosis`/`LspFailureReason`.
 
-- [ ] **Step 3: Тесты**
+- [x] **Step 3: Тесты**
 
 В `tests/lsp-module.test.ts`:
 ```ts
@@ -304,12 +310,12 @@ it("classifies a missing-binary failure with a hint", async () => {
 и тест, что `diagnose(baseDir, {client, collectFiles, findOnPath})` возвращает
 `servers`.
 
-- [ ] **Step 4: Запуск**
+- [x] **Step 4: Запуск**
 
 Run: `bun test tests/lsp-module.test.ts && tsc --noEmit`
 Expected: PASS; существующие кейсы (порог отключения, per-server disable) зелёные.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/lsp/module.ts src/modules/lsp/index.ts tests/lsp-module.test.ts
@@ -324,7 +330,7 @@ git commit -m "feat(lsp): diagnose() facade and classified failure hints"
 - Modify: `src/cli/repl-commands-lsp.ts`
 - Modify: `src/cli/repl.ts`
 
-- [ ] **Step 1: хендлер `doctor`**
+- [x] **Step 1: хендлер `doctor`**
 
 В `handlers` карте добавить:
 ```ts
@@ -342,7 +348,7 @@ offline/project`; по серверу `glyph lang · reason · detail`; `↳ hin
 network/offline/binary-missing/timeout/spawn; общий `t("repl.lsp_doctor_hint")`
 если есть хоть один из этих классов. Глифы: `✓`/`✗`/`–`.
 
-- [ ] **Step 2: completer**
+- [x] **Step 2: completer**
 
 `src/cli/repl.ts` в `SubcommandProvider("lsp", …)`:
 ```ts
@@ -350,12 +356,12 @@ network/offline/binary-missing/timeout/spawn; общий `t("repl.lsp_doctor_hin
 ```
 Обновить `repl.lsp_usage`/`repl.lsp` (§7 спеки).
 
-- [ ] **Step 3: Запуск + typecheck**
+- [x] **Step 3: Запуск + typecheck**
 
 Run: `tsc --noEmit && bun test tests/lsp-command.test.ts`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/cli/repl-commands-lsp.ts src/cli/repl.ts
@@ -369,10 +375,10 @@ git commit -m "feat(cli): /lsp doctor command"
 **Files:**
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 
-- [ ] **Step 1:** добавить все ключи из §7 спеки (рядом с существующими
+- [x] **Step 1:** добавить все ключи из §7 спеки (рядом с существующими
   `repl.lsp_*` и `lsp.*`).
-- [ ] **Step 2:** Run: `bun test tests/i18n.test.ts` → PASS (паритет).
-- [ ] **Step 3:** Commit `feat(i18n): lsp doctor strings (en/ru)`.
+- [x] **Step 2:** Run: `bun test tests/i18n.test.ts` → PASS (паритет).
+- [x] **Step 3:** Commit `feat(i18n): lsp doctor strings (en/ru)`.
 
 ---
 
@@ -381,17 +387,17 @@ git commit -m "feat(cli): /lsp doctor command"
 **Files:**
 - Modify: `docs/agents/tools.md`, `CHANGELOG.md`, `AGENTS.md`, `package.json`
 
-- [ ] **Step 1:** `docs/agents/tools.md` — раздел «LSP in locked-down networks»:
+- [x] **Step 1:** `docs/agents/tools.md` — раздел «LSP in locked-down networks»:
   npx-докачка, `findOnPath` (глобальный бинарник важнее npx), правка
   `lsp.servers.<lang>` (`command`/`args`/`env.npm_config_registry`/`autoInstall`/
   `enabled`), `MMA_LSP_OFFLINE=1`, `/lsp doctor`.
-- [ ] **Step 2:** CHANGELOG `## [2.17.0] - 2026-10-02` (Added: doctor, classification,
+- [x] **Step 2:** CHANGELOG `## [2.17.0] - 2026-10-02` (Added: doctor, classification,
   offline, docs).
-- [ ] **Step 3:** AGENTS.md — строка про `/lsp doctor` / `MMA_LSP_OFFLINE` в
+- [x] **Step 3:** AGENTS.md — строка про `/lsp doctor` / `MMA_LSP_OFFLINE` в
   подходящем разделе.
-- [ ] **Step 4:** `package.json` → `2.17.0`.
-- [ ] **Step 5:** `bun test && bun run quality` — зелёные.
-- [ ] **Step 6:** Commit `docs: lsp doctor changelog, AGENTS and 2.17.0`.
+- [x] **Step 4:** `package.json` → `2.17.0`.
+- [x] **Step 5:** `bun test && bun run quality` — зелёные.
+- [x] **Step 6:** Commit `docs: lsp doctor changelog, AGENTS and 2.17.0`.
 
 ---
 
@@ -402,49 +408,49 @@ git commit -m "feat(cli): /lsp doctor command"
 **Files:** `src/core/bootstrap/modules-phase.ts`, `src/core/bootstrap/state.ts`,
 `src/core/bootstrap.ts`, `src/cli/web-command.ts`
 
-- [ ] `startLanguageModules` возвращает `{ lspModule, startupCheck }`
+- [x] `startLanguageModules` возвращает `{ lspModule, startupCheck }`
   (вместо `Promise<PromptBlock|null>`); `setupModulesPhase` кладёт `lspModule`
   в `ModulesPhase`.
-- [ ] `BootstrapResult.lspModule?: LspModule` (опционально — не ломать тестовые
+- [x] `BootstrapResult.lspModule?: LspModule` (опционально — не ломать тестовые
   литералы), `bootstrap()` возвращает `modules.lspModule`.
-- [ ] `web-command.ts` деструктурирует `lspModule` и передаёт `lsp: lspModule`.
-- [ ] `bun test tests/core/bootstrap.test.ts && tsc --noEmit`.
+- [x] `web-command.ts` деструктурирует `lspModule` и передаёт `lsp: lspModule`.
+- [x] `bun test tests/core/bootstrap.test.ts && tsc --noEmit`.
 
 ### Task 8: Backend API `GET/POST /api/lsp/doctor`
 
 **Files:** Create `src/modules/webui/lsp-api.ts`; modify `state.ts`, `module.ts`,
 `server.ts`; test `tests/webui-lsp-doctor.test.ts`
 
-- [ ] `state.ts`: `lspDiagnose?: () => Promise<LspDiagnosis>`, `lspDoctor?`,
+- [x] `state.ts`: `lspDiagnose?: () => Promise<LspDiagnosis>`, `lspDoctor?`,
   `lspProbing?`.
-- [ ] `module.ts`: `WebUiDeps.lsp?: WebLsp`; в `startWebUi` —
+- [x] `module.ts`: `WebUiDeps.lsp?: WebLsp`; в `startWebUi` —
   `if (deps.lsp) state.lspDiagnose = () => deps.lsp!.diagnose(deps.baseDir ?? process.cwd());`
-- [ ] `lsp-api.ts`: `handleLspDoctorGet`/`handleLspDoctorPost` (SSE `lsp`,
+- [x] `lsp-api.ts`: `handleLspDoctorGet`/`handleLspDoctorPost` (SSE `lsp`,
   single-flight, 503 без модуля).
-- [ ] `server.ts`: роуты `GET /api/lsp/doctor`, `POST /api/lsp/doctor`.
-- [ ] Тесты: GET 503 без модуля; GET отдаёт кэш; POST запускает diagnose,
+- [x] `server.ts`: роуты `GET /api/lsp/doctor`, `POST /api/lsp/doctor`.
+- [x] Тесты: GET 503 без модуля; GET отдаёт кэш; POST запускает diagnose,
   пишет `lspDoctor`, шлёт `lsp`, повторный POST single-flight; POST 503.
-- [ ] `bun test tests/webui-lsp-doctor.test.ts && tsc --noEmit`.
+- [x] `bun test tests/webui-lsp-doctor.test.ts && tsc --noEmit`.
 
 ### Task 9: Frontend tab
 
 **Files:** `assets/index.html`, `assets/js/dom.js`, `assets/js/sidebar.js`,
 `assets/app.js`, `assets/styles.css` (по необходимости)
 
-- [ ] `dom.js`: иконка `stethoscope`.
-- [ ] `index.html`: таб + `#pane-lsp`/`#lspBody`.
-- [ ] `sidebar.js`: `TABS` += `lsp`, refs, `renderLsp`, `sidebarLspState`,
+- [x] `dom.js`: иконка `stethoscope`.
+- [x] `index.html`: таб + `#pane-lsp`/`#lspBody`.
+- [x] `sidebar.js`: `TABS` += `lsp`, refs, `renderLsp`, `sidebarLspState`,
   `sidebarLspEvent`, авто-запуск при открытии вкладки, «Re-check», `Alt+4`.
-- [ ] `app.js`: SSE `lsp` → `sidebarLspEvent`; `renderState` → `sidebarLspState`.
-- [ ] `bun test tests/webui-assets.test.ts`.
+- [x] `app.js`: SSE `lsp` → `sidebarLspEvent`; `renderState` → `sidebarLspState`.
+- [x] `bun test tests/webui-assets.test.ts`.
 
 ### Task 10: i18n, доки, версия
 
-- [ ] `web.sidebar.tab_lsp`, `web.sidebar.lsp_*`, `web.sidebar.lsp_reason_*`
+- [x] `web.sidebar.tab_lsp`, `web.sidebar.lsp_*`, `web.sidebar.lsp_reason_*`
   (en+ru); `tests/i18n.test.ts`.
-- [ ] `docs/agents/modules.md` (Web UI) — абзац про вкладку LSP;
+- [x] `docs/agents/modules.md` (Web UI) — абзац про вкладку LSP;
   `AGENTS.md` — дополнить раздел 2.17.0; CHANGELOG — дополнить запись 2.17.0.
-- [ ] `bun test && bun run quality`.
+- [x] `bun test && bun run quality`.
 
 ## Ручная проверка
 

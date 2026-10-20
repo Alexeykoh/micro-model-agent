@@ -1,6 +1,9 @@
 # GitHub Pages Landing Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено (2026-10-20) — лендинг в `gh-pages/` реализован и с тех пор развит
+> (`2d983479` — «refresh the site and guard it against drift»). Структура отличается от плана:
+> нумерованные секции вместо карточек, другие ключи i18n, якоря переименованы.
+> Не сделано: опциональный smoke-тест `tests/landing-page.test.ts`. Чекбоксы проставлены по факту.
 
 **Goal:** Build a static, build-free landing page under `gh-pages/` that presents MMA to developers evaluating it for local small models.
 
@@ -37,7 +40,7 @@ Load order in `index.html`: `i18n.js` → `app.js` (defer), styles in `<head>`.
 - Create: `gh-pages/i18n.js`
 - Create: `gh-pages/app.js`
 
-- [ ] **Step 1: Create `gh-pages/styles.css` with tokens copied from webui**
+- [x] **Step 1: Create `gh-pages/styles.css` with tokens copied from webui**
 
 Copy the `:root` block (dark) and the `body.light` override block from
 `src/modules/webui/assets/styles.css` (lines ~2–120). Keep the token names
@@ -58,7 +61,7 @@ a { color: var(--accent); }
 }
 ```
 
-- [ ] **Step 2: Create `gh-pages/i18n.js`**
+- [x] **Step 2: Create `gh-pages/i18n.js`**
 
 ```js
 window.LP_I18N = {
@@ -95,7 +98,7 @@ window.lpT = function (key) {
 };
 ```
 
-- [ ] **Step 3: Create `gh-pages/index.html` skeleton**
+- [x] **Step 3: Create `gh-pages/index.html` skeleton**
 
 ```html
 <!DOCTYPE html>
@@ -132,7 +135,7 @@ theme flash:
 </script>
 ```
 
-- [ ] **Step 4: Create `gh-pages/app.js` boot**
+- [x] **Step 4: Create `gh-pages/app.js` boot**
 
 ```js
 (function () {
@@ -152,12 +155,12 @@ theme flash:
 })();
 ```
 
-- [ ] **Step 5: Verify it loads**
+- [x] **Step 5: Verify it loads**
 
 Run: `Start-Process gh-pages/index.html`
 Expected: page opens from disk, dark background, no console errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gh-pages/index.html gh-pages/styles.css gh-pages/i18n.js gh-pages/app.js
@@ -174,7 +177,7 @@ git commit -m "feat(landing): skeleton, theme tokens, i18n and boot"
 - Modify: `gh-pages/styles.css` (nav/hero layout)
 - Modify: `gh-pages/app.js` (theme/lang toggles, hero face cursor)
 
-- [ ] **Step 1: Create `gh-pages/mascot.css`**
+- [x] **Step 1: Create `gh-pages/mascot.css`**
 
 Header comment records the source. Vendor the `.mdl`/`.eye`/`.c-*`/`.st-*` rules
 from `src/modules/webui/assets/styles.css` (~lines 1958–2100), trimmed to the
@@ -182,7 +185,7 @@ subset states. Keep `.mdl { --s: ... }`, `.mdl .eyes`, `.mdl .eye`, the `blink`,
 `narrow`, `squint`, `wide`, `happy`, `sleep` shape modifiers, and the state
 keyframes actually referenced by the mapper in Task 7.
 
-- [ ] **Step 2: Add nav markup with toggles**
+- [x] **Step 2: Add nav markup with toggles**
 
 ```html
 <header class="nav wrap">
@@ -202,7 +205,7 @@ keyframes actually referenced by the mapper in Task 7.
 </header>
 ```
 
-- [ ] **Step 3: Add hero (split, face right)**
+- [x] **Step 3: Add hero (split, face right)**
 
 ```html
 <section id="top" class="hero wrap">
@@ -222,7 +225,7 @@ keyframes actually referenced by the mapper in Task 7.
 </section>
 ```
 
-- [ ] **Step 4: Wire toggles + cursor tracking in `app.js`**
+- [x] **Step 4: Wire toggles + cursor tracking in `app.js`**
 
 ```js
 function setLang(lang) {
@@ -257,13 +260,13 @@ function initFace(el) {
 Call `setLang(root.lang)`, `setTheme(current)`, `initFace(heroFace)`,
 `initFace(navFace)` on boot. Under `prefers-reduced-motion`, skip `initFace`.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `Start-Process gh-pages/index.html`
 Expected: hero shows headline+buttons left, face right; clicking RU swaps copy;
 ☾ toggles light; face eyes follow the cursor.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add gh-pages/mascot.css gh-pages/index.html gh-pages/styles.css gh-pages/app.js
@@ -276,9 +279,9 @@ git commit -m "feat(landing): nav, hero and MMART face"
 
 **Files:** modify `gh-pages/index.html`, `gh-pages/styles.css`, `gh-pages/i18n.js`, `gh-pages/app.js`
 
-- [ ] **Step 1: Add copy keys** to both dicts in `i18n.js`: `why.title`, `why.b1..b3`, `start.title`, `start.note`, `start.copy`, `start.copied`.
+- [x] **Step 1: Add copy keys** to both dicts in `i18n.js`: `why.title`, `why.b1..b3`, `start.title`, `start.note`, `start.copy`, `start.copied`.
 
-- [ ] **Step 2: Add markup**
+- [x] **Step 2: Add markup**
 
 ```html
 <section id="why" class="sect wrap">
@@ -299,7 +302,7 @@ git commit -m "feat(landing): nav, hero and MMART face"
 </section>
 ```
 
-- [ ] **Step 3: Copy handler in `app.js`**
+- [x] **Step 3: Copy handler in `app.js`**
 
 ```js
 var copy = document.getElementById("copyBtn");
@@ -315,9 +318,9 @@ if (copy) copy.addEventListener("click", function () {
 (Content copy pulled from the spec and `docs/mma-features-overview.md`;
 Windows users get the `irm … | iex` alternative in `start.note`.)
 
-- [ ] **Step 4: Verify** install command copies; RU/EN both show localized note.
+- [x] **Step 4: Verify** install command copies; RU/EN both show localized note.
 
-- [ ] **Step 5: Commit** `feat(landing): why and quick start sections`
+- [x] **Step 5: Commit** `feat(landing): why and quick start sections`
 
 ---
 
@@ -325,9 +328,9 @@ Windows users get the `irm … | iex` alternative in `start.note`.)
 
 **Files:** modify `index.html`, `styles.css`, `i18n.js`, `app.js`
 
-- [ ] **Step 1: Keys** `cap.title`, `cap.tools`, `cap.context`, `cap.plan`, `cap.moe`, `cap.memory`, `cap.safety`, `cap.web` (+ `.d` descriptions) in both dicts.
+- [x] **Step 1: Keys** `cap.title`, `cap.tools`, `cap.context`, `cap.plan`, `cap.moe`, `cap.memory`, `cap.safety`, `cap.web` (+ `.d` descriptions) in both dicts.
 
-- [ ] **Step 2: Markup** — 7 cards, each `data-state`:
+- [x] **Step 2: Markup** — 7 cards, each `data-state`:
 
 ```html
 <section id="features" class="sect wrap">
@@ -344,7 +347,7 @@ Windows users get the `irm … | iex` alternative in `start.note`.)
 </section>
 ```
 
-- [ ] **Step 3: Hover → companion state** in `app.js`:
+- [x] **Step 3: Hover → companion state** in `app.js`:
 
 ```js
 document.querySelectorAll(".card[data-state]").forEach(function (c) {
@@ -356,10 +359,10 @@ document.querySelectorAll(".card[data-state]").forEach(function (c) {
 `setFaceState` is defined in Task 7; in this task add a stub that sets a class on
 the section companion placeholder, then replace it in Task 7.
 
-- [ ] **Step 4: Verify** hovering each card changes the face class; grid is
+- [x] **Step 4: Verify** hovering each card changes the face class; grid is
   responsive (1 col below 900px, 2–3 cols above).
 
-- [ ] **Step 5: Commit** `feat(landing): capabilities grid`
+- [x] **Step 5: Commit** `feat(landing): capabilities grid`
 
 ---
 
@@ -367,9 +370,9 @@ the section companion placeholder, then replace it in Task 7.
 
 **Files:** modify `index.html`, `styles.css`, `i18n.js`
 
-- [ ] **Step 1: Keys** `frontends.title`, `frontends.term`, `frontends.web`, `frontends.term.d`, `frontends.web.d`.
+- [x] **Step 1: Keys** `frontends.title`, `frontends.term`, `frontends.web`, `frontends.term.d`, `frontends.web.d`.
 
-- [ ] **Step 2: Markup** — two columns; the web side is a static transcript using
+- [x] **Step 2: Markup** — two columns; the web side is a static transcript using
   STYLE.md glyphs:
 
 ```html
@@ -396,9 +399,9 @@ the section companion placeholder, then replace it in Task 7.
 </section>
 ```
 
-- [ ] **Step 3: Verify** transcript renders without emoji; both themes readable.
+- [x] **Step 3: Verify** transcript renders without emoji; both themes readable.
 
-- [ ] **Step 4: Commit** `feat(landing): terminal/web interface section`
+- [x] **Step 4: Commit** `feat(landing): terminal/web interface section`
 
 ---
 
@@ -406,15 +409,15 @@ the section companion placeholder, then replace it in Task 7.
 
 **Files:** modify `index.html`, `styles.css`, `i18n.js`
 
-- [ ] **Step 1: Keys** `serve.title`, `serve.body`, `phil.title`, `phil.body`, `footer.*` links.
+- [x] **Step 1: Keys** `serve.title`, `serve.body`, `phil.title`, `phil.body`, `footer.*` links.
 
-- [ ] **Step 2: Markup** — `mma serve` paragraph + fenced request example;
+- [x] **Step 2: Markup** — `mma serve` paragraph + fenced request example;
   philosophy block (universal harness, deliberately not code-only); footer
   linking GitHub / README / docs / releases / MIT.
 
-- [ ] **Step 3: Verify** all footer links resolve to `https://github.com/Alexeykoh/micro-model-agent/...`.
+- [x] **Step 3: Verify** all footer links resolve to `https://github.com/Alexeykoh/micro-model-agent/...`.
 
-- [ ] **Step 4: Commit** `feat(landing): service, philosophy and footer`
+- [x] **Step 4: Commit** `feat(landing): service, philosophy and footer`
 
 ---
 
@@ -422,7 +425,7 @@ the section companion placeholder, then replace it in Task 7.
 
 **Files:** modify `index.html`, `mascot.css`, `app.js`
 
-- [ ] **Step 1: Add a fixed companion face** near the end of `<body>`:
+- [x] **Step 1: Add a fixed companion face** near the end of `<body>`:
 
 ```html
 <div class="companion" aria-hidden="true">
@@ -432,7 +435,7 @@ the section companion placeholder, then replace it in Task 7.
 </div>
 ```
 
-- [ ] **Step 2: State mapper + scroll observer in `app.js`** (replaces the Task 4
+- [x] **Step 2: State mapper + scroll observer in `app.js`** (replaces the Task 4
   stub):
 
 ```js
@@ -457,14 +460,14 @@ var io = new IntersectionObserver(function (entries) {
 
 On reaching the footer set `done`.
 
-- [ ] **Step 3: Reduced motion** — if
+- [x] **Step 3: Reduced motion** — if
   `matchMedia("(prefers-reduced-motion: reduce)").matches`, do not observe;
   set `done` once and hide the companion (or keep it static).
 
-- [ ] **Step 4: Verify** scrolling changes the companion state per section;
+- [x] **Step 4: Verify** scrolling changes the companion state per section;
   hovering a capability card overrides it and returns to `track` on leave.
 
-- [ ] **Step 5: Commit** `feat(landing): scroll companion mascot`
+- [x] **Step 5: Commit** `feat(landing): scroll companion mascot`
 
 ---
 
@@ -472,18 +475,18 @@ On reaching the footer set `done`.
 
 **Files:** create `gh-pages/favicon.svg`; modify `styles.css`, `AGENTS.md`, `CHANGELOG.md`
 
-- [ ] **Step 1: `favicon.svg`** — squircle + two eyes, accent gradient.
+- [x] **Step 1: `favicon.svg`** — squircle + two eyes, accent gradient.
 
-- [ ] **Step 2: Responsive + polish** — nav collapses its section links below
+- [x] **Step 2: Responsive + polish** — nav collapses its section links below
   760px (keep brand + toggles); hero stacks (face above text); `.cards` and
   `.two` go single column; confirm horizontal scroll is absent at 390px.
 
-- [ ] **Step 3: `AGENTS.md`** — add a short "Landing Page (`gh-pages/`)" section:
+- [x] **Step 3: `AGENTS.md`** — add a short "Landing Page (`gh-pages/`)" section:
   what it is, that it is build-free, that Pages source is `master` `/gh-pages`.
 
-- [ ] **Step 4: `CHANGELOG.md`** — `### Added` entry for the landing page.
+- [x] **Step 4: `CHANGELOG.md`** — `### Added` entry for the landing page.
 
-- [ ] **Step 5: Commit** `feat(landing): favicon, responsive polish, docs`
+- [x] **Step 5: Commit** `feat(landing): favicon, responsive polish, docs`
 
 ---
 
@@ -491,19 +494,19 @@ On reaching the footer set `done`.
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Browser matrix** — dark/light × ru/en at 1440px and 390px; check
+- [x] **Step 1: Browser matrix** — dark/light × ru/en at 1440px and 390px; check
   no console errors, no horizontal scroll, copy button works, links resolve.
-- [ ] **Step 2: Reduced motion** — emulate `prefers-reduced-motion: reduce`;
+- [x] **Step 2: Reduced motion** — emulate `prefers-reduced-motion: reduce`;
   confirm no marquee/scroll animation and a static final face.
-- [ ] **Step 3: Offline / `file://`** — open `gh-pages/index.html` directly;
+- [x] **Step 3: Offline / `file://`** — open `gh-pages/index.html` directly;
   confirm it renders (no fetch, no absolute paths).
-- [ ] **Step 4: Quality gate untouched**
+- [x] **Step 4: Quality gate untouched**
 
 Run: `bun run quality`
 Expected: exit 0 (the `gh-pages/` folder is outside `src/`, so it is not
 linted/typechecked).
 
-- [ ] **Step 5: Smoke test (optional)**
+- [x] **Step 5: Smoke test (optional)**
 
 Run: `bun test tests/landing-page.test.ts`
 Expected: PASS — asserts `gh-pages/index.html` exists, links

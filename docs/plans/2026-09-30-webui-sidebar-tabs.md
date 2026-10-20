@@ -1,7 +1,12 @@
 # Web UI Sidebar Tabs Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — `ProjectMapInfo` в host-контракте,
+> `IndexerModule.mapInfo()` + `builtAt` в кэше, `POST /api/index`, вкладки сайдбара
+> session/files/lsp/trace/plugins/map, CSS, модуль `assets/js/sidebar/*`, source-guard
+> тесты. Чекбоксы проставлены по факту. Отличие: «сайдбар расширяется вдвое»
+> реализовано detail-панелью `flex: 0 0 340px` внутри `#pane-trace`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans (inline) or
-> superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Превратить сайдбар `mma web` в вкладки Session / Map / Trace: квадратные
 иконки сверху + имя активной вкладки под ними; Map показывает состояние индексации
@@ -26,7 +31,7 @@
 **Files:**
 - Modify: `src/core/host.ts` (тип снапшота, строки 44–45)
 
-- [ ] **Step 1: Расширить `HostStateSnapshot.projectMap`**
+- [x] **Step 1: Расширить `HostStateSnapshot.projectMap`**
 
 Заменить строку 45 и добавить типы выше интерфейса `HostStateSnapshot`:
 
@@ -61,14 +66,14 @@ export interface ProjectMapInfo {
   projectMap?: ProjectMapInfo;
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `tsc --noEmit`
 Expected: PASS (расширение обратно совместимо; старый объект в `module.ts` пока не
 соответствует `indexing`-опциональности — это правится в Task 3, до него ошибок нет,
 т.к. все новые поля опциональны кроме существующих).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/core/host.ts
@@ -84,7 +89,7 @@ git commit -m "feat(webui): add ProjectMapInfo host contract"
 - Modify: `src/modules/indexer/module.ts` (`buildIndex`/`refresh`/`watch`/`mapInfo`/`stats`)
 - Test: `tests/indexer-module.test.ts`, `tests/modules/indexer/cache.test.ts`
 
-- [ ] **Step 1: Написать падающий тест `mapInfo`**
+- [x] **Step 1: Написать падающий тест `mapInfo`**
 
 Добавить в `tests/indexer-module.test.ts` (следуя существующим helper'ам файла для
 создания модуля над temp-деревом — использовать тот же `IndexerModule` + `mkdtemp`):
@@ -107,12 +112,12 @@ it("mapInfo reports counts, languages, builtAt and watcher state", async () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `bun test tests/indexer-module.test.ts -t "mapInfo"`
 Expected: FAIL — `mod.mapInfo is not a function`.
 
-- [ ] **Step 3: `cache.ts` — `builtAt`**
+- [x] **Step 3: `cache.ts` — `builtAt`**
 
 В `CacheEnvelope` добавить `builtAt?: number;`. В классе:
 
@@ -133,7 +138,7 @@ Expected: FAIL — `mod.mapInfo is not a function`.
   }
 ```
 
-- [ ] **Step 4: `module.ts` — поля и методы**
+- [x] **Step 4: `module.ts` — поля и методы**
 
 Заменить поле `statsCache` (строка 32) на:
 
@@ -245,7 +250,7 @@ Expected: FAIL — `mod.mapInfo is not a function`.
   }
 ```
 
-- [ ] **Step 5: Тест кэша `builtAt`**
+- [x] **Step 5: Тест кэша `builtAt`**
 
 В `tests/modules/indexer/cache.test.ts`:
 
@@ -267,12 +272,12 @@ it("returns null builtAt for an envelope without the field", () => {
 });
 ```
 
-- [ ] **Step 6: Запустить тесты**
+- [x] **Step 6: Запустить тесты**
 
 Run: `bun test tests/indexer-module.test.ts tests/modules/indexer/cache.test.ts tests/indexer.test.ts`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/modules/indexer/cache.ts src/modules/indexer/module.ts tests/indexer-module.test.ts tests/modules/indexer/cache.test.ts
@@ -289,7 +294,7 @@ git commit -m "feat(indexer): mapInfo with builtAt, languages and watcher state"
 - Modify: `src/modules/webui/state.ts` (`WebUiState.refreshIndex`)
 - Test: `tests/webui-usage.test.ts`
 
-- [ ] **Step 1: Падающий тест `buildHostState` пробрасывает ProjectMapInfo**
+- [x] **Step 1: Падающий тест `buildHostState` пробрасывает ProjectMapInfo**
 
 Добавить в `tests/webui-usage.test.ts`:
 
@@ -311,12 +316,12 @@ it("passes a full ProjectMapInfo through to the snapshot", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — падает**
+- [x] **Step 2: Запустить — падает**
 
 Run: `bun test tests/webui-usage.test.ts -t "ProjectMapInfo"`
 Expected: FAIL типом (TS) — `projectMap` шире сигнатуры `HostStateInput`.
 
-- [ ] **Step 3: `host-state.ts`**
+- [x] **Step 3: `host-state.ts`**
 
 Импорт: `import type { HostStateSnapshot, ProjectMapInfo } from "../../core/host";`.
 В `HostStateInput` заменить строку 26:
@@ -336,7 +341,7 @@ export interface WebIndexer {
 }
 ```
 
-- [ ] **Step 4: `state.ts` — `refreshIndex`**
+- [x] **Step 4: `state.ts` — `refreshIndex`**
 
 В `WebUiState` (рядом с `projectMapStats`, ~line 175):
 
@@ -345,7 +350,7 @@ export interface WebIndexer {
   refreshIndex?: () => Promise<void>;
 ```
 
-- [ ] **Step 5: `module.ts`**
+- [x] **Step 5: `module.ts`**
 
 В `startWebUi` рядом со строкой 155:
 
@@ -364,12 +369,12 @@ export interface WebIndexer {
           projectMap: deps.indexer?.mapInfo?.() ?? undefined,
 ```
 
-- [ ] **Step 6: Запустить тесты**
+- [x] **Step 6: Запустить тесты**
 
 Run: `bun test tests/webui-usage.test.ts tests/webui-plan.test.ts`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/modules/webui/host-state.ts src/modules/webui/module.ts src/modules/webui/state.ts tests/webui-usage.test.ts
@@ -384,7 +389,7 @@ git commit -m "feat(webui): project the full ProjectMapInfo into host state"
 - Modify: `src/modules/webui/server.ts` (таблица `API_ROUTES`)
 - Test: `tests/webui-server.test.ts`
 
-- [ ] **Step 1: Падающий тест**
+- [x] **Step 1: Падающий тест**
 
 Добавить в `tests/webui-server.test.ts` (используя `withServer` + `postJson` из
 `./helpers/webui-server`):
@@ -410,12 +415,12 @@ it("POST /api/index returns 503 when no indexer is wired", async () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — падает**
+- [x] **Step 2: Запустить — падает**
 
 Run: `bun test tests/webui-server.test.ts -t "/api/index"`
 Expected: FAIL — 404.
 
-- [ ] **Step 3: Реализация в `server.ts`**
+- [x] **Step 3: Реализация в `server.ts`**
 
 В `API_ROUTES` добавить:
 
@@ -437,12 +442,12 @@ function handleIndexPost(res: ServerResponse, s: WebUiState): void {
 }
 ```
 
-- [ ] **Step 4: Запустить тесты**
+- [x] **Step 4: Запустить тесты**
 
 Run: `bun test tests/webui-server.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/webui/server.ts tests/webui-server.test.ts
@@ -457,7 +462,7 @@ git commit -m "feat(webui): POST /api/index re-index route"
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Test: `tests/i18n.test.ts`
 
-- [ ] **Step 1: Добавить ключи** (рядом с `web.sidebar.env`)
+- [x] **Step 1: Добавить ключи** (рядом с `web.sidebar.env`)
 
 en:
 
@@ -549,12 +554,12 @@ ru (те же ключи):
   "web.sidebar.detail_session": "сессия",
 ```
 
-- [ ] **Step 2: Тест паритета**
+- [x] **Step 2: Тест паритета**
 
 Run: `bun test tests/i18n.test.ts`
 Expected: PASS (паритет en/ru соблюдён).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/i18n/en.json src/i18n/ru.json
@@ -567,7 +572,7 @@ git commit -m "feat(i18n): sidebar tabs strings (en/ru)"
 
 **Files:** `src/modules/webui/assets/index.html` (блок `.sb`, строки 98–113)
 
-- [ ] **Step 1: Заменить `.sb`**
+- [x] **Step 1: Заменить `.sb`**
 
 ```html
   <div class="sb">
@@ -620,7 +625,7 @@ git commit -m "feat(i18n): sidebar tabs strings (en/ru)"
 
 Иконки (`data-icon`) заполняются в `sidebar.js` через `icon()`.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add src/modules/webui/assets/index.html
@@ -634,7 +639,7 @@ git commit -m "feat(webui): sidebar tab bar markup"
 **Files:** `src/modules/webui/assets/styles.css` (заменить секцию sidebar ~730–790,
 добавить перед ней новые правила)
 
-- [ ] **Step 1: Добавить правила** (после `.sec.usage-sec`)
+- [x] **Step 1: Добавить правила** (после `.sec.usage-sec`)
 
 ```css
 /* ---- sidebar tabs ---- */
@@ -697,7 +702,7 @@ git commit -m "feat(webui): sidebar tab bar markup"
 .map-reindex:disabled { color: var(--dim-b); cursor: default; }
 ```
 
-- [ ] **Step 2: Скрыть Trace на мобильных**
+- [x] **Step 2: Скрыть Trace на мобильных**
 
 В существующий `@media (max-width: 760px)` блок добавить:
 
@@ -705,7 +710,7 @@ git commit -m "feat(webui): sidebar tab bar markup"
   .sb-tab[data-tab="trace"], #pane-trace { display: none; }
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/modules/webui/assets/styles.css
@@ -718,7 +723,7 @@ git commit -m "feat(webui): sidebar tabs and trace master-detail styles"
 
 **Files:** Create `src/modules/webui/assets/js/sidebar.js`
 
-- [ ] **Step 1: Написать модуль**
+- [x] **Step 1: Написать модуль**
 
 ```js
 // Sidebar tabs (Session / Map / Trace) for `mma web`.
@@ -1186,7 +1191,7 @@ export function initSidebar() {
 
 (Публичный `sidebarBusy`/`sidebarMapIndicator` вызываются из `app.js`.)
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add src/modules/webui/assets/js/sidebar.js
@@ -1199,7 +1204,7 @@ git commit -m "feat(webui): sidebar tabs module (trace + map)"
 
 **Files:** `src/modules/webui/assets/app.js`
 
-- [ ] **Step 1: Импорт**
+- [x] **Step 1: Импорт**
 
 После импорта rail (строки 19–21):
 
@@ -1211,7 +1216,7 @@ import {
 } from "./js/sidebar.js";
 ```
 
-- [ ] **Step 2: `renderState` — Map + сессия + индикаторы**
+- [x] **Step 2: `renderState` — Map + сессия + индикаторы**
 
 В `renderState` (после `renderEnvironment`, строка 79):
 
@@ -1221,7 +1226,7 @@ import {
   sidebarSessionChanged(sessionId);
 ```
 
-- [ ] **Step 3: SSE-подписка Trace**
+- [x] **Step 3: SSE-подписка Trace**
 
 После rail-цикла (строки 143–151):
 
@@ -1247,7 +1252,7 @@ es.addEventListener("text", (e) => { const d = parse(e); if (d) sidebarTraceEven
 В bespoke `error`-хендлере (строки 167–171): внутри `if (d)` добавить
 `sidebarTraceEvent("error", d);`.
 
-- [ ] **Step 4: i18n-хук и boot**
+- [x] **Step 4: i18n-хук и boot**
 
 В `applyStaticI18n()` после `applyRailI18n();` (строка 241) добавить
 `applySidebarI18n();`.
@@ -1258,7 +1263,7 @@ es.addEventListener("text", (e) => { const d = parse(e); if (d) sidebarTraceEven
   initSidebar();
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/webui/assets/app.js
@@ -1271,7 +1276,7 @@ git commit -m "feat(webui): wire sidebar tabs into app boot and SSE"
 
 **Files:** `tests/webui-assets.test.ts`
 
-- [ ] **Step 1: Добавить тест**
+- [x] **Step 1: Добавить тест**
 
 ```ts
 it("wires the sidebar tabs (session / map / trace) with master-detail", () => {
@@ -1296,12 +1301,12 @@ it("wires the sidebar tabs (session / map / trace) with master-detail", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить**
+- [x] **Step 2: Запустить**
 
 Run: `bun test tests/webui-assets.test.ts tests/i18n.test.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/webui-assets.test.ts
@@ -1317,11 +1322,11 @@ git commit -m "test(webui): sidebar tabs source guards"
 - Modify: `CHANGELOG.md`
 - Modify: `AGENTS.md`
 
-- [ ] **Step 1: Версия**
+- [x] **Step 1: Версия**
 
 `package.json`: `"version": "2.13.0"` (MINOR: новая UI-фича + новый роут + config-less).
 
-- [ ] **Step 2: CHANGELOG**
+- [x] **Step 2: CHANGELOG**
 
 Добавить наверху:
 
@@ -1341,17 +1346,17 @@ git commit -m "test(webui): sidebar tabs source guards"
   `web.sidebar.detail_*` (en + ru).
 ```
 
-- [ ] **Step 3: AGENTS.md**
+- [x] **Step 3: AGENTS.md**
 
 Добавить раздел «Web Sidebar Tabs (2.13.0)» с описанием вкладок, `projectMap`
 расширения, `POST /api/index`, `js/sidebar.js` и mobile-скрытия Trace.
 
-- [ ] **Step 4: Полный прогон**
+- [x] **Step 4: Полный прогон**
 
 Run: `bun test && tsc --noEmit && bun run lint`
 Expected: всё зелёное. Затем `bun run quality` (typecheck + lint + fallow).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add package.json CHANGELOG.md AGENTS.md

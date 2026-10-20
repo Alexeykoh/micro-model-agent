@@ -1,6 +1,9 @@
 # MMA Web Mode — Implementation Plan (Phase 1 + 2)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено (2026-10-20) — Phase 1 + 2 реализованы в master: Host-seam
+> (`src/core/host.ts`), модуль `src/modules/webui/` (SSE + REST), `mma web` в CLI.
+> Чекбоксы проставлены по факту. Дальнейшие фазы web описаны в
+> [`docs/plans/`](../../plans/) и в `CHANGELOG.md`.
 
 **Goal:** Extract a reusable Host seam from the REPL and ship a first-class `mma web` mode that serves a chat UI over SSE/REST without a TTY.
 
@@ -43,7 +46,7 @@
 - Create: `src/core/host.ts`
 - Test: `tests/host-types.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/host-types.test.ts
@@ -95,12 +98,12 @@ describe("core/host", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/host-types.test.ts`
 Expected: FAIL — cannot resolve `../src/core/host`.
 
-- [ ] **Step 3: Create `src/core/host.ts`**
+- [x] **Step 3: Create `src/core/host.ts`**
 
 Move the implementation verbatim from `src/cli/repl.ts:89-107` and add the `Host` interface:
 
@@ -162,17 +165,17 @@ export function createHostBridge(opts: CreateHostBridgeOptions): HostBridge {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/host-types.test.ts`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 Run: `tsc --noEmit`
 Expected: PASS (new file compiles; no importers yet).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/core/host.ts tests/host-types.test.ts
@@ -187,7 +190,7 @@ git commit -m "feat(host): add Host interface and shared createHostBridge"
 - Modify: `src/cli/repl.ts:83-107` (delete local `createHostBridge`, import + re-export)
 - Test: `tests/repl-host-bridge.test.ts` (existing behavior guard)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/repl-host-bridge.test.ts
@@ -201,12 +204,12 @@ describe("repl re-export", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/repl-host-bridge.test.ts`
 Expected: PASS currently (function exists). This test guards the move; keep it.
 
-- [ ] **Step 3: Replace the local function with an import + re-export**
+- [x] **Step 3: Replace the local function with an import + re-export**
 
 In `src/cli/repl.ts`, delete the body at lines 83–107 and add near the imports:
 
@@ -217,17 +220,17 @@ export { createHostBridge };
 
 Keep the doc comment above the re-export if desired. Remove now-unused `HostBridge` import only if nothing else in the file uses it (grep first: `rg "HostBridge" src/cli/repl.ts`).
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `bun test`
 Expected: PASS — no behavior change.
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 Run: `tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/cli/repl.ts tests/repl-host-bridge.test.ts
@@ -244,7 +247,7 @@ git commit -m "refactor(repl): use shared createHostBridge from core/host"
 
 The REPL already has a command handler map (`this.commands`, `src/cli/repl.ts:887+`) and an execution module. Expose them through two methods so the web host can reuse them.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/repl-host-methods.test.ts
@@ -279,12 +282,12 @@ describe("host plan snapshot", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/repl-host-methods.test.ts`
 Expected: FAIL — cannot resolve `../src/core/host-plan`.
 
-- [ ] **Step 3: Create `src/core/host-plan.ts`**
+- [x] **Step 3: Create `src/core/host-plan.ts`**
 
 ```ts
 import type { HostStateSnapshot } from "./host";
@@ -306,12 +309,12 @@ export function planSnapshotFromModule(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/repl-host-methods.test.ts`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Add methods to `Repl`**
+- [x] **Step 5: Add methods to `Repl`**
 
 In `src/cli/repl.ts`, add public methods (place after `runAgent`):
 
@@ -344,12 +347,12 @@ Import at top: `import { planSnapshotFromModule } from "../core/host-plan";` and
 
 Replace `this.handleSlashCommand(trimmed)` with the actual existing dispatcher name — grep: `rg "handleSlashCommand|handleCommand|async handle" src/cli/repl.ts`. Use whatever the real method is; if commands are dispatched inline in `start()`, extract that dispatch into a private `dispatchCommand(line)` and call it from both places (no behavior change).
 
-- [ ] **Step 6: Run suite + typecheck**
+- [x] **Step 6: Run suite + typecheck**
 
 Run: `bun test && tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/cli/repl.ts src/core/host-plan.ts tests/repl-host-methods.test.ts
@@ -364,11 +367,11 @@ git commit -m "feat(host): Repl exposes executeCommand + getState"
 - Modify: `src/cli/repl.ts` (class `implements` clause)
 - Test: compile-only
 
-- [ ] **Step 1: Add the interface to the class declaration**
+- [x] **Step 1: Add the interface to the class declaration**
 
 Change `export class Repl implements ReplContext {` to `export class Repl implements ReplContext, Host {`. Add `import type { Host } from "../core/host";`.
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `tsc --noEmit`
 Expected: PASS. If it fails, `Repl` is missing `isBusy`/`submit`/`interrupt`/`subscribeOutput` — add thin methods delegating to the existing bridge (`this.bridge`), or make `Host` extend only what is implemented and keep `HostBridge` separately. Prefer adding delegating methods:
@@ -384,12 +387,12 @@ Expected: PASS. If it fails, `Repl` is missing `isBusy`/`submit`/`interrupt`/`su
   }
 ```
 
-- [ ] **Step 3: Run suite + typecheck**
+- [x] **Step 3: Run suite + typecheck**
 
 Run: `bun test && tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/cli/repl.ts
@@ -406,7 +409,7 @@ git commit -m "feat(host): Repl implements Host"
 - Create: `src/modules/webui/state.ts`, `src/modules/webui/server.ts`
 - Test: `tests/webui-server.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/webui-server.test.ts
@@ -451,12 +454,12 @@ describe("webui server", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/webui-server.test.ts`
 Expected: FAIL — modules not found.
 
-- [ ] **Step 3: Create `src/modules/webui/state.ts`**
+- [x] **Step 3: Create `src/modules/webui/state.ts`**
 
 ```ts
 import type { Server, ServerResponse } from "node:http";
@@ -506,7 +509,7 @@ export function broadcast(ev: SseEvent, s: WebUiState): void {
 
 (Global `state` singleton can be added later; tests use `createWebUiState()`.)
 
-- [ ] **Step 4: Create `src/modules/webui/server.ts`**
+- [x] **Step 4: Create `src/modules/webui/server.ts`**
 
 ```ts
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
@@ -652,12 +655,12 @@ export function tryOpenBrowser(url: string): void {
 
 Note: `stopServer()` with no arg is used by tests for the module-global; export a global state accessor in Step 3 if you prefer — otherwise tests call `stopServer(s)`.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `bun test tests/webui-server.test.ts`
 Expected: PASS (3 tests).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/modules/webui/state.ts src/modules/webui/server.ts tests/webui-server.test.ts
@@ -672,7 +675,7 @@ git commit -m "feat(webui): HTTP/SSE/REST server module (app≠listen)"
 - Create: `src/modules/webui/forward.ts`
 - Test: `tests/webui-forward.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/webui-forward.test.ts
@@ -701,12 +704,12 @@ describe("webui forwarder", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/webui-forward.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Create `src/modules/webui/forward.ts`**
+- [x] **Step 3: Create `src/modules/webui/forward.ts`**
 
 ```ts
 import { broadcast, type SseEvent, type WebUiState } from "./state";
@@ -755,12 +758,12 @@ export function makeForwarder(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/webui-forward.test.ts`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/webui/forward.ts tests/webui-forward.test.ts
@@ -775,7 +778,7 @@ git commit -m "feat(webui): agent-loop → SSE forwarder with coalescing"
 - Create: `src/core/web-host.ts`
 - Test: `tests/web-host.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/web-host.test.ts
@@ -812,12 +815,12 @@ describe("WebHost", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/web-host.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Create `src/core/web-host.ts`**
+- [x] **Step 3: Create `src/core/web-host.ts`**
 
 ```ts
 import type { Host, HostStateSnapshot } from "../core/host";
@@ -862,12 +865,12 @@ export class WebHost implements Host {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/web-host.test.ts`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/core/web-host.ts tests/web-host.test.ts
@@ -883,7 +886,7 @@ git commit -m "feat(web-host): Host implementation for mma web"
 - Create: `src/modules/webui/assets.ts` (read files verbatim)
 - Test: `tests/webui-assets.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/webui-assets.test.ts
@@ -900,12 +903,12 @@ describe("webui assets", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/webui-assets.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Create the assets**
+- [x] **Step 3: Create the assets**
 
 `src/modules/webui/assets/index.html` — minimal chat shell mirroring the mockup topbar + feed + input:
 
@@ -1110,12 +1113,12 @@ export function loadAssets(): WebUiAssets {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/webui-assets.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/webui/assets.ts src/modules/webui/assets tests/webui-assets.test.ts
@@ -1131,7 +1134,7 @@ git commit -m "feat(webui): static chat assets aligned with STYLE.md"
 - Create: `src/cli/web-command.ts`
 - Modify: `src/cli/commands.ts` (register subcommand), `src/cli/main.ts` (dispatch)
 
-- [ ] **Step 1: Create `src/modules/webui/module.ts`**
+- [x] **Step 1: Create `src/modules/webui/module.ts`**
 
 ```ts
 import type { Host } from "../../core/host";
@@ -1165,7 +1168,7 @@ export async function startWebUi(host: Host): Promise<WebUiHandle> {
 export { tryOpenBrowser };
 ```
 
-- [ ] **Step 2: Create `src/cli/web-command.ts`**
+- [x] **Step 2: Create `src/cli/web-command.ts`**
 
 ```ts
 import { bootstrap } from "../core/bootstrap";
@@ -1229,7 +1232,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
 
 Note: single-flight busy tracking is Phase 2.x — the server's own `state.busy` guard already prevents concurrent submits; `isBusy: () => false` is acceptable for the first cut, but prefer wiring `state.busy` back. Adjust `WebHost` deps to `isBusy: () => web.state.busy` once `web` exists (reorder: create host lazily or pass a mutable ref).
 
-- [ ] **Step 3: Register the subcommand in `src/cli/commands.ts`**
+- [x] **Step 3: Register the subcommand in `src/cli/commands.ts`**
 
 Add near other top-level commands (after `session`):
 
@@ -1246,7 +1249,7 @@ Add near other top-level commands (after `session`):
     });
 ```
 
-- [ ] **Step 4: Dispatch in `src/cli/main.ts`**
+- [x] **Step 4: Dispatch in `src/cli/main.ts`**
 
 After `program.parse(process.argv)` and before the one-shot branch, add:
 
@@ -1267,7 +1270,7 @@ After `program.parse(process.argv)` and before the one-shot branch, add:
 
 (Match how existing subcommands detect their name — reuse the same mechanism; the check must run before `program.args.length > 0` handling.)
 
-- [ ] **Step 5: Add i18n keys**
+- [x] **Step 5: Add i18n keys**
 
 `src/i18n/en.json`:
 ```json
@@ -1289,17 +1292,17 @@ After `program.parse(process.argv)` and before the one-shot branch, add:
 "cli.web_started": "web ui → {url}"
 ```
 
-- [ ] **Step 6: Manual smoke**
+- [x] **Step 6: Manual smoke**
 
 Run: `bun run mma web --no-open --port 3799`
 Expected: prints `web ui → http://127.0.0.1:3799`; `curl http://127.0.0.1:3799/` returns the page; Ctrl+C stops it.
 
-- [ ] **Step 7: Typecheck + full suite**
+- [x] **Step 7: Typecheck + full suite**
 
 Run: `bun test && tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/modules/webui/module.ts src/cli/web-command.ts src/cli/commands.ts src/cli/main.ts src/i18n/en.json src/i18n/ru.json
@@ -1313,7 +1316,7 @@ git commit -m "feat(web): mma web subcommand serving browser chat"
 **Files:**
 - Test: `tests/webui-auth.test.ts`
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 ```ts
 // tests/webui-auth.test.ts
@@ -1361,12 +1364,12 @@ describe("webui auth", () => {
 });
 ```
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 Run: `bun test tests/webui-auth.test.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/webui-auth.test.ts
@@ -1380,13 +1383,13 @@ git commit -m "test(webui): auth, CSRF and bridge guards"
 **Files:**
 - Modify: `docs/agents/modules.md`, `docs/agents/architecture.md`, `AGENTS.md`, `CHANGELOG.md`
 
-- [ ] **Step 1: Document the mode**
+- [x] **Step 1: Document the mode**
 
 - `docs/agents/modules.md`: add a "Web mode (`mma web`)" subsection — subcommand flags, env vars (`MMA_WEBUI_PORT/HOST/TOKEN/OPEN/MAX_CLIENTS`), SSE/REST endpoints, relation to the `examples/plugins/web-ui` plugin.
 - `docs/agents/architecture.md`: add the `Host` seam to the module map (Repl and WebHost as two implementations) and reference rule #13 (app≠listen).
 - `AGENTS.md`: add a "Browser mode (`mma web`)" section with the one-line run command and the spec link.
 
-- [ ] **Step 2: Changelog**
+- [x] **Step 2: Changelog**
 
 Add to `CHANGELOG.md` under a new version (MINOR):
 
@@ -1397,7 +1400,7 @@ Add to `CHANGELOG.md` under a new version (MINOR):
 - **host seam**: shared `Host` interface; `Repl` and `WebHost` are two implementations over one agent.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/agents/modules.md docs/agents/architecture.md AGENTS.md CHANGELOG.md
@@ -1408,12 +1411,12 @@ git commit -m "docs: document mma web mode"
 
 ### Task 12: Verify end-to-end
 
-- [ ] **Step 1: Full gates**
+- [x] **Step 1: Full gates**
 
 Run: `bun test && tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 2: Manual cert**
+- [x] **Step 2: Manual cert**
 
 Run: `bun run mma web --port 3799`
 Then in a second shell:
@@ -1424,11 +1427,11 @@ curl -s -N http://127.0.0.1:3799/events   # observe text/tool/phase/turn_end
 ```
 Expected: state JSON, `{ok:true}`, and an SSE stream with the assistant reply.
 
-- [ ] **Step 3: Browser check**
+- [x] **Step 3: Browser check**
 
 Open `http://127.0.0.1:3799/` — send a message, see streaming text, tool lines, plan/session in the sidebar, Enter/Esc behavior. Compare against `mockups/layout-v6.html`.
 
-- [ ] **Step 4: Final commit (if any fixes)**
+- [x] **Step 4: Final commit (if any fixes)**
 
 ```bash
 git add -A && git commit -m "fix(web): end-to-end smoke fixes"

@@ -1,6 +1,8 @@
 # Web Event-Sourced State — Implementation Plan
 
-> **For agentic workers:** use `superpowers:executing-plans` to implement task-by-task. Steps use checkbox (`- [ ]`) syntax.
+> **Статус:** исполнено (2026-10-20) — event-sourced состояние web реализовано в master:
+> `pushState` + SSE-событие `state`/`sessions`, чистый клиентский роутинг
+> (`assets/js/state-sync.ts`). Чекбоксы проставлены по факту.
 
 **Goal:** Снапшот состояния сессии едет внутри SSE-события `state`; клиент хранит снапшот на вкладке, таймеры-поллы удаляются.
 
@@ -35,7 +37,7 @@
 - Modify: `src/modules/webui/session/session-status.ts`
 - Test: `tests/webui-push-state.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -77,9 +79,9 @@ describe("pushState", () => {
 });
 ```
 
-- [ ] **Step 2: Run test, verify fail** — `bun test tests/webui-push-state.test.ts` → `pushState is not a function`.
+- [x] **Step 2: Run test, verify fail** — `bun test tests/webui-push-state.test.ts` → `pushState is not a function`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `session-status.ts` (import `broadcast` + `SseTransport` alclasses from `../state`):
 
@@ -103,8 +105,8 @@ export function pushState(s: RuntimeState & SseTransport, sessionId?: string | n
 }
 ```
 
-- [ ] **Step 4: Run test, verify pass** — `bun test tests/webui-push-state.test.ts`.
-- [ ] **Step 5: Commit** — `git add tests/webui-push-state.test.ts src/modules/webui/session/session-status.ts && git commit -m "feat(webui): pushState sends full session snapshot over SSE"`.
+- [x] **Step 4: Run test, verify pass** — `bun test tests/webui-push-state.test.ts`.
+- [x] **Step 5: Commit** — `git add tests/webui-push-state.test.ts src/modules/webui/session/session-status.ts && git commit -m "feat(webui): pushState sends full session snapshot over SSE"`.
 
 ---
 
@@ -112,7 +114,7 @@ export function pushState(s: RuntimeState & SseTransport, sessionId?: string | n
 
 **Files:** `turns.ts`, `run-agent.ts`, `module.ts`, `reconfigure.ts`; update `tests/webui-usage.test.ts`.
 
-- [ ] **Step 1:** In `session/turns.ts` replace every
+- [x] **Step 1:** In `session/turns.ts` replace every
   `broadcast({ type: "state", ts: Date.now(), ...sessionStatus(s) }, s);` with `pushState(s, <id>)`:
   - line 73 (startTurn catch) → `pushState(s, target)`
   - line 114 (runRunnerTurn start) → `pushState(s, sessionId)`
@@ -123,13 +125,13 @@ export function pushState(s: RuntimeState & SseTransport, sessionId?: string | n
   - line 220 (dispatchPost reserve) → `pushState(s, target)`
   Import `pushState` from `./session-status`; drop now-unused `sessionStatus` import (keep `syncBusy`/`reserveBusy`/`releaseBusy`).
 
-- [ ] **Step 2:** In `session/run-agent.ts` replace the `broadcast({ type: "state", ... usage, usageSessionId: owner }, state)` block (lines ~159-162) with `pushState(state, owner);`. Import `pushState` from `./session-status`; drop `sessionStatus` import; keep `broadcast` (used by live `usage`).
+- [x] **Step 2:** In `session/run-agent.ts` replace the `broadcast({ type: "state", ... usage, usageSessionId: owner }, state)` block (lines ~159-162) with `pushState(state, owner);`. Import `pushState` from `./session-status`; drop `sessionStatus` import; keep `broadcast` (used by live `usage`).
 
-- [ ] **Step 3:** In `module.ts` line 172 replace `broadcast({ type: "state", ...sessionStatus(state), usage: state.usage }, state);` with `pushState(state);`. Import `pushState`; drop `sessionStatus` import.
+- [x] **Step 3:** In `module.ts` line 172 replace `broadcast({ type: "state", ...sessionStatus(state), usage: state.usage }, state);` with `pushState(state);`. Import `pushState`; drop `sessionStatus` import.
 
-- [ ] **Step 4:** In `settings/reconfigure.ts` line 53 replace with `pushState(state);`. Drop `sessionStatus` and `broadcast` imports; import `pushState`.
+- [x] **Step 4:** In `settings/reconfigure.ts` line 53 replace with `pushState(state);`. Drop `sessionStatus` and `broadcast` imports; import `pushState`.
 
-- [ ] **Step 5: Update `tests/webui-usage.test.ts`** `makeReconfigure refreshes the sidebar context limit` (line ~131): give the state a bridge so `pushState` has a snapshot to serialize:
+- [x] **Step 5: Update `tests/webui-usage.test.ts`** `makeReconfigure refreshes the sidebar context limit` (line ~131): give the state a bridge so `pushState` has a snapshot to serialize:
 
 ```ts
 s.bridge = {
@@ -139,9 +141,9 @@ s.bridge = {
 
 (Keep `s.usage` seeding as-is; assertion `writes.join("")).toContain('"contextLimit":86016')` stays.)
 
-- [ ] **Step 6: Run** — `bun test tests/webui-usage.test.ts tests/webui-reconfigure.test.ts tests/webui-sse-routing.test.ts tests/webui-live-usage.test.ts` → PASS.
+- [x] **Step 6: Run** — `bun test tests/webui-usage.test.ts tests/webui-reconfigure.test.ts tests/webui-sse-routing.test.ts tests/webui-live-usage.test.ts` → PASS.
 
-- [ ] **Step 7: Commit** — `git commit -am "refactor(webui): emit full state snapshots from turns/run-agent/module/reconfigure"`.
+- [x] **Step 7: Commit** — `git commit -am "refactor(webui): emit full state snapshots from turns/run-agent/module/reconfigure"`.
 
 ---
 
@@ -149,7 +151,7 @@ s.bridge = {
 
 **Files:** `src/modules/webui/session/sessions-api.ts`; test `tests/webui-push-state.test.ts`.
 
-- [ ] **Step 1: Write failing test** (append):
+- [x] **Step 1: Write failing test** (append):
 
 ```ts
 import { handleSessionCreate, handleSessionDelete } from "../src/modules/webui/session/sessions-api";
@@ -174,7 +176,7 @@ it("emits a sessions event on create and delete", () => {
 
 (Adjust the fake `res` to whatever `sendJson` calls; simplest: reuse a `ServerResponse` shim with `writeHead`, `write`, `end`.)
 
-- [ ] **Step 2: Implement.** In `sessions-api.ts`:
+- [x] **Step 2: Implement.** In `sessions-api.ts`:
 
 ```ts
 import { broadcast, type SseTransport } from "../state";
@@ -196,8 +198,8 @@ function emitSessions(s: SessionStore & SseTransport): void {
 
 Reuse `sessionList` in `handleSessionsGet`. Call `emitSessions(s)` after success in `handleSessionCreate`, `handleSessionActivate`, `handleSessionDelete`.
 
-- [ ] **Step 3: Run** — `bun test tests/webui-push-state.test.ts tests/webui-server.test.ts`.
-- [ ] **Step 4: Commit** — `git commit -am "feat(webui): sessions SSE event on create/activate/delete"`.
+- [x] **Step 3: Run** — `bun test tests/webui-push-state.test.ts tests/webui-server.test.ts`.
+- [x] **Step 4: Commit** — `git commit -am "feat(webui): sessions SSE event on create/activate/delete"`.
 
 ---
 
@@ -205,7 +207,7 @@ Reuse `sessionList` in `handleSessionsGet`. Call `emitSessions(s)` after success
 
 **Files:** Create `src/modules/webui/assets/js/state-sync.ts`; test `tests/webui-state-sync.test.ts`.
 
-- [ ] **Step 1: Write the module**
+- [x] **Step 1: Write the module**
 
 ```ts
 // Pure routing of `state`/`usage` payloads into the per-tab store slices.
@@ -259,7 +261,7 @@ export function mergeUsage(owner: string | null, usage: Dict): boolean {
 }
 ```
 
-- [ ] **Step 2: Write the test** `tests/webui-state-sync.test.ts` (no DOM needed — store slices are plain objects):
+- [x] **Step 2: Write the test** `tests/webui-state-sync.test.ts` (no DOM needed — store slices are plain objects):
 
 ```ts
 import { describe, it, expect, beforeEach } from "vitest";
@@ -309,8 +311,8 @@ describe("state-sync", () => {
 });
 ```
 
-- [ ] **Step 3: Run** — `bun test tests/webui-state-sync.test.ts` → PASS.
-- [ ] **Step 4: Commit** — `git commit -am "feat(webui): pure per-tab state routing (state-sync)"`.
+- [x] **Step 3: Run** — `bun test tests/webui-state-sync.test.ts` → PASS.
+- [x] **Step 4: Commit** — `git commit -am "feat(webui): pure per-tab state routing (state-sync)"`.
 
 ---
 
@@ -318,7 +320,7 @@ describe("state-sync", () => {
 
 **Files:** `assets/app.ts`, `assets/js/session/tabs.ts`, `assets/js/core/store/index.ts`.
 
-- [ ] **Step 1:** `core/store/index.ts` — replace the `applyState` hook with `ensureTabState`:
+- [x] **Step 1:** `core/store/index.ts` — replace the `applyState` hook with `ensureTabState`:
 
 ```ts
 export interface StoreHooks {
@@ -328,7 +330,7 @@ export interface StoreHooks {
 }
 ```
 
-- [ ] **Step 2:** `app.ts`:
+- [x] **Step 2:** `app.ts`:
   - import from `./js/state-sync.js`: `routeState, mergeUsage, storeSnapshot, applyCounters`.
   - Add `fetchState`, `storeSnapshot` use, `ensureTabState`, `renderActiveState`, `applyState` (see spec §3.4). `renderActiveState` body = current `renderState` render part reading `session.host` (set from `activeTab().state`), incl. `updateTabName`.
   - `applyState(d)`: `const render = routeState(d); reflectBusy(); reconcileTabStatuses(); if (d.state?.sessionId) updateTabName(d.state.sessionId, d.state.sessionName); if (render) renderActiveState();`
@@ -339,21 +341,21 @@ export interface StoreHooks {
   - `hooks.ensureTabState = ensureTabState;` (remove `hooks.applyState`/`hooks.refreshState`).
   - **Delete** `setInterval(refresh, 2000)` and `setInterval(loadSessions, 15000)`.
 
-- [ ] **Step 3:** `tabs.ts`: in `openTab`, after `sidebarSessionChanged(id)` add `hooks.ensureTabState?.(id)` for session kind; remove both `hooks.refreshState?.()` calls (lines ~236, ~281) and the stale 15s-comment.
+- [x] **Step 3:** `tabs.ts`: in `openTab`, after `sidebarSessionChanged(id)` add `hooks.ensureTabState?.(id)` for session kind; remove both `hooks.refreshState?.()` calls (lines ~236, ~281) and the stale 15s-comment.
 
-- [ ] **Step 4:** Update `tests/webui-assets.test.ts` guard block (~286) to the new strings (`ensureTabState`, no `setInterval(refresh`, no `setInterval(() => void loadSessions`). Add a guard that `app.js` contains `es.addEventListener("sessions"` and no `setInterval(...refresh`.
+- [x] **Step 4:** Update `tests/webui-assets.test.ts` guard block (~286) to the new strings (`ensureTabState`, no `setInterval(refresh`, no `setInterval(() => void loadSessions`). Add a guard that `app.js` contains `es.addEventListener("sessions"` and no `setInterval(...refresh`.
 
-- [ ] **Step 5: Run** — `bun test tests/webui-assets.test.ts tests/webui-state-sync.test.ts tests/webui-frontend-graph.test.ts`.
-- [ ] **Step 6: Commit** — `git commit -am "refactor(webui): event-sourced sidebar state, drop client polls"`.
+- [x] **Step 5: Run** — `bun test tests/webui-assets.test.ts tests/webui-state-sync.test.ts tests/webui-frontend-graph.test.ts`.
+- [x] **Step 6: Commit** — `git commit -am "refactor(webui): event-sourced sidebar state, drop client polls"`.
 
 ---
 
 ## Task 6: Docs + quality gate
 
-- [ ] **Step 1:** `AGENTS.md` — update the WebUI section: `state`-event carries the snapshot; per-tab `tab.state`; no 2s/15s polls; `sessions` event.
-- [ ] **Step 2:** `CHANGELOG.md` — add an entry under a new version (MINOR).
-- [ ] **Step 3:** Run full gate: `bun test && tsc --noEmit && bun run quality`.
-- [ ] **Step 4: Commit** — `git commit -am "docs: event-sourced web state; test/quality green"`.
+- [x] **Step 1:** `AGENTS.md` — update the WebUI section: `state`-event carries the snapshot; per-tab `tab.state`; no 2s/15s polls; `sessions` event.
+- [x] **Step 2:** `CHANGELOG.md` — add an entry under a new version (MINOR).
+- [x] **Step 3:** Run full gate: `bun test && tsc --noEmit && bun run quality`.
+- [x] **Step 4: Commit** — `git commit -am "docs: event-sourced web state; test/quality green"`.
 
 ---
 

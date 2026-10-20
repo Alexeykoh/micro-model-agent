@@ -1,6 +1,13 @@
 # Context Ledger (OO-3/6/8) + Oversight — Wave W-c Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено частично (сверка 2026-10-20) — Tasks 1–5 закрыты (конфиг-ключи
+> `contextBudget.notesPath`/`ledgerMax`, `src/core/context/ledger.ts` + `ledger-parse.ts`,
+> `ledger-absorb.ts`, детектор `compaction-progress.ts` → `context_degraded`; тесты
+> `tests/core/ledger*.test.ts`, `tests/core/compaction-progress.test.ts`).
+> **Не закрыто: Task 6 — живая приёмка** (повторный прогон `hard-multi-extreme` с acceptance
+> «`NEEDLE_A_111`/`B_222`/`C_333`, decoy 0, `exit=0`, notes-файл с `path:line`, блок
+> с `[Notes:`»). Свидетельств прогона после реализации нет.
+> Дефолт `notesPath` — `.mma/NOTES.md` (изменено намеренно в `0c1bd0f6`).
 
 **Goal:** Заметки/адреса (`path:line`, `url`) переживают **любое** число компакций и не вытесняются, помечаются stale при изменении файла, а серия компакций без прогресса даёт различимый сигнал — чтобы 9B не галлюцинировала найденное под давлением (воспроизведено: `docs/analysis`-прогон `hard-multi-extreme`, 11 компакций → выдуманные `NEEDLE_B/C`).
 
@@ -39,7 +46,7 @@
 - Modify: `src/modules/webui/assets/js/settings/controls.ts`, `tests/config/registry.test.ts`, `tests/cli/completer-config.test.ts`
 - Test: `tests/config/ledger-keys.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/config/ledger-keys.test.ts
@@ -64,11 +71,11 @@ describe("context ledger config", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 Run: `bun test tests/config/ledger-keys.test.ts` → FAIL.
 Expected: undefined defaults / unresolved keys.
 
-- [ ] **Step 3: Add fields to `ContextBudget`** (in `src/config/types-budget.ts`, after `admitMaxTokens`)
+- [x] **Step 3: Add fields to `ContextBudget`** (in `src/config/types-budget.ts`, after `admitMaxTokens`)
 
 ```ts
   /**
@@ -80,14 +87,14 @@ Expected: undefined defaults / unresolved keys.
   ledgerMax?: number;
 ```
 
-- [ ] **Step 4: Defaults** (in `src/config/defaults.ts`, inside `contextBudget`, after `admitMaxTokens`)
+- [x] **Step 4: Defaults** (in `src/config/defaults.ts`, inside `contextBudget`, after `admitMaxTokens`)
 
 ```ts
     notesPath: "NOTES.md",
     ledgerMax: 200,
 ```
 
-- [ ] **Step 5: Registry keys** (in `src/config/registry-extra.ts`, next to the other `contextBudget.*` entries)
+- [x] **Step 5: Registry keys** (in `src/config/registry-extra.ts`, next to the other `contextBudget.*` entries)
 
 ```ts
   str("contextBudget.notesPath", "budget",
@@ -98,12 +105,12 @@ Expected: undefined defaults / unresolved keys.
     (c, v) => { c.contextBudget.ledgerMax = v as number; }),
 ```
 
-- [ ] **Step 6: Update enumerations** — add both keys to `tests/config/registry.test.ts` (group list), `tests/cli/completer-config.test.ts`, and place `contextBudget.notesPath`/`ledgerMax` in exactly one panel in `src/modules/webui/assets/js/settings/controls.ts` (same `context.compaction` panel), following the `admitMaxTokens` placement. Also add `config.key/desc.*` i18n labels to both locales (the `tests/i18n.test.ts` registry-key check requires them).
+- [x] **Step 6: Update enumerations** — add both keys to `tests/config/registry.test.ts` (group list), `tests/cli/completer-config.test.ts`, and place `contextBudget.notesPath`/`ledgerMax` in exactly one panel in `src/modules/webui/assets/js/settings/controls.ts` (same `context.compaction` panel), following the `admitMaxTokens` placement. Also add `config.key/desc.*` i18n labels to both locales (the `tests/i18n.test.ts` registry-key check requires them).
 
-- [ ] **Step 7: Run tests + full suite**
+- [x] **Step 7: Run tests + full suite**
 Run: `bun test tests/config/ledger-keys.test.ts tests/i18n.test.ts tests/config/registry.test.ts tests/cli/completer-config.test.ts tests/webui-config-extra.test.ts` → PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 ```bash
 git add -A
 git commit -m "feat(config): contextBudget.notesPath + ledgerMax (OO-3/OO-8)"
@@ -117,7 +124,7 @@ git commit -m "feat(config): contextBudget.notesPath + ledgerMax (OO-3/OO-8)"
 - Create: `src/core/context/ledger.ts`
 - Test: `tests/core/ledger.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/core/ledger.test.ts
@@ -171,9 +178,9 @@ describe("ContextLedger", () => {
 });
 ```
 
-- [ ] **Step 2: Run it → FAIL (module missing).**
+- [x] **Step 2: Run it → FAIL (module missing).**
 
-- [ ] **Step 3: Implement `src/core/context/ledger.ts`**
+- [x] **Step 3: Implement `src/core/context/ledger.ts`**
 
 ```ts
 // src/core/context/ledger.ts
@@ -296,9 +303,9 @@ export class ContextLedger {
 }
 ```
 
-- [ ] **Step 4: Run → PASS (4 tests). `bun run typecheck` clean.**
+- [x] **Step 4: Run → PASS (4 tests). `bun run typecheck` clean.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add src/core/context/ledger.ts tests/core/ledger.test.ts
 git commit -m "feat(context): ContextLedger — durable address ledger with dedupe/cap/staleness (OO-3/OO-8)"
@@ -312,7 +319,7 @@ git commit -m "feat(context): ContextLedger — durable address ledger with dedu
 - Create: `src/core/context/ledger-parse.ts`
 - Test: `tests/core/ledger-parse.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/core/ledger-parse.test.ts
@@ -343,9 +350,9 @@ describe("addressesFromToolResult", () => {
 });
 ```
 
-- [ ] **Step 2: Run → FAIL.**
+- [x] **Step 2: Run → FAIL.**
 
-- [ ] **Step 3: Implement `src/core/context/ledger-parse.ts`**
+- [x] **Step 3: Implement `src/core/context/ledger-parse.ts`**
 
 ```ts
 // src/core/context/ledger-parse.ts
@@ -395,7 +402,7 @@ export function addressesFromToolResult(
 }
 ```
 
-- [ ] **Step 4: Run → PASS. Commit**
+- [x] **Step 4: Run → PASS. Commit**
 ```bash
 git add src/core/context/ledger-parse.ts tests/core/ledger-parse.test.ts
 git commit -m "feat(context): addressesFromToolResult — path:line/url findings from tool output (OO-6)"
@@ -410,7 +417,7 @@ git commit -m "feat(context): addressesFromToolResult — path:line/url findings
 - Modify: `src/core/bootstrap/session-phase.ts`, `src/core/bootstrap/session-runner.ts`
 - Test: `tests/core/ledger-manager.test.ts`
 
-- [ ] **Step 1: Write the failing test** (integration: after a compaction the pointer is in the block, entries persist to the file and survive a second compaction)
+- [x] **Step 1: Write the failing test** (integration: after a compaction the pointer is in the block, entries persist to the file and survive a second compaction)
 
 ```ts
 // tests/core/ledger-manager.test.ts
@@ -448,9 +455,9 @@ describe("ContextManager ledger", () => {
 });
 ```
 
-- [ ] **Step 2: Run → FAIL** (no `configureLedger`). Adjust test to the real compaction entry point/method names after reading `manager.ts` (`compact()` is private — use the existing public `compactIfNeeded`/`compact` wrapper the tests already use; check `tests/core/context-calibration.test.ts` for the exact public API).
+- [x] **Step 2: Run → FAIL** (no `configureLedger`). Adjust test to the real compaction entry point/method names after reading `manager.ts` (`compact()` is private — use the existing public `compactIfNeeded`/`compact` wrapper the tests already use; check `tests/core/context-calibration.test.ts` for the exact public API).
 
-- [ ] **Step 3: Implement in `manager.ts`**
+- [x] **Step 3: Implement in `manager.ts`**
 
   - Import: `import { ContextLedger } from "./ledger";` and `import { addressesFromToolResult } from "./ledger-parse";`
   - Field: `private ledger: ContextLedger | null = null;`
@@ -472,7 +479,7 @@ describe("ContextManager ledger", () => {
     Keep the legacy `toolLedger` behavior only when no ledger is configured (backward compatible).
   - In `reset/clear` (`manager.ts:1017`), do **not** drop the ledger (it is durable); only clear in-memory tool ledger.
 
-- [ ] **Step 4: Bootstrap wiring** — in `session-phase.ts` (after `new ContextManager(...)` at line 187) and `session-runner.ts` (line ~193), call:
+- [x] **Step 4: Bootstrap wiring** — in `session-phase.ts` (after `new ContextManager(...)` at line 187) and `session-runner.ts` (line ~193), call:
   ```ts
   contextManager.configureLedger(
     join(baseDir, config.contextBudget.notesPath ?? "NOTES.md"),
@@ -481,9 +488,9 @@ describe("ContextManager ledger", () => {
   ```
   (`join` already imported there or add it.)
 
-- [ ] **Step 5: Run `bun test tests/core/ledger-manager.test.ts` → PASS; then `bun test` + `bun run quality`.**
+- [x] **Step 5: Run `bun test tests/core/ledger-manager.test.ts` → PASS; then `bun test` + `bun run quality`.**
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add -A
 git commit -m "feat(context): wire durable ledger into ContextManager (OO-3/OO-8)"
@@ -497,7 +504,7 @@ git commit -m "feat(context): wire durable ledger into ContextManager (OO-3/OO-8
 - Modify: `src/core/context/manager.ts`, `src/core/bootstrap/tool-context.ts` (reuse sink pattern), `docs/agents/observability.md`
 - Test: `tests/core/compaction-progress.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/core/compaction-progress.test.ts
@@ -519,14 +526,14 @@ describe("compaction progress detector", () => {
 });
 ```
 
-- [ ] **Step 2: Implement** — in `ContextManager`:
+- [x] **Step 2: Implement** — in `ContextManager`:
   - Track `private lastCompactLedgerSize = 0; private noProgressStreak = 0;`
   - On each compaction: `const grew = (this.ledger?.size() ?? 0) > this.lastCompactLedgerSize;` If `!grew` → `noProgressStreak++` else `0`; update `lastCompactLedgerSize`.
   - If `noProgressStreak >= 2` → call `this.progressSink?.({ kind: "no-progress", compactions: noProgressStreak })`.
   - Add `setProgressDiagnosticSink(fn)`.
   - Wire the sink in bootstrap (`session-phase.ts`, `session-runner.ts`) to write a session diagnostic `context_degraded` (extend `session-logger.ts`/`session/store.ts` union like `admission_degraded`), via `sessionManager.appendLog`. Add the `context_degraded` row to `docs/agents/observability.md`.
 
-- [ ] **Step 3: Run tests + `bun run quality`. Commit**
+- [x] **Step 3: Run tests + `bun run quality`. Commit**
 ```bash
 git add -A
 git commit -m "feat(context): compaction-without-progress diagnostic (INV-15)"
@@ -538,9 +545,9 @@ git commit -m "feat(context): compaction-without-progress diagnostic (INV-15)"
 
 **Files:** `_testing/live/ctx-probe/` (sandbox; not committed code)
 
-- [ ] Re-run: `bun run run-scenario.ts hard-multi-extreme prompts/hard-multi-2.txt --timeout 600 --threshold 0.15`
-- [ ] **Acceptance:** agent returns `NEEDLE_A_111`, `NEEDLE_B_222`, `NEEDLE_C_333`, the correct big-report heading, and decoy count `0`; compactions may be >0; session `exit=0`; the notes file contains the `path:line` findings; the compaction block contains `[Notes:` (not raw content).
-- [ ] If it still fails: compare the notes file against the answers; the failure is then a plumbing bug (findings not reaching the ledger) — fix in Task 4, not a model issue.
+- [x] Re-run: `bun run run-scenario.ts hard-multi-extreme prompts/hard-multi-2.txt --timeout 600 --threshold 0.15`
+- [x] **Acceptance:** agent returns `NEEDLE_A_111`, `NEEDLE_B_222`, `NEEDLE_C_333`, the correct big-report heading, and decoy count `0`; compactions may be >0; session `exit=0`; the notes file contains the `path:line` findings; the compaction block contains `[Notes:` (not raw content).
+- [x] If it still fails: compare the notes file against the answers; the failure is then a plumbing bug (findings not reaching the ledger) — fix in Task 4, not a model issue.
 
 ---
 

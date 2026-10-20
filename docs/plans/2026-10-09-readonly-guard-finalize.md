@@ -1,6 +1,9 @@
 # Read-only Guard Fix Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено (2026-10-20) — все 9 задач закрыты: `src/core/agent/canonical-args.ts`,
+> предикат дублей в `tool-batch.ts`, `finalizeWithoutTools` + `stopReason`,
+> grep-fallback (`classifySearchError`), `canonicalArgsKey` в StuckDetector.
+> Чекбоксы проставлены по факту.
 
 **Goal:** Stop killing legitimately read-only turns — redefine the read-only streak as *exact tool-call repetition*, end every terminal with a forced tool-less final answer, and surface the stop reason in the web chat.
 
@@ -37,7 +40,7 @@
 - Create: `src/core/agent/canonical-args.ts`
 - Test: `tests/core/canonical-args.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -79,12 +82,12 @@ describe("canonicalArgsKey", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/core/canonical-args.test.ts`
 Expected: FAIL — cannot resolve module `canonical-args`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/core/agent/canonical-args.ts
@@ -124,12 +127,12 @@ export function canonicalArgsKey(name: string, args: unknown): string {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/core/canonical-args.test.ts`
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/core/agent/canonical-args.ts tests/core/canonical-args.test.ts
@@ -144,7 +147,7 @@ git commit -m "feat(agent): canonical tool-call key for duplicate detection"
 - Modify: `src/core/agent/loop-state.ts`
 - Modify: `src/core/agent/constants.ts`
 
-- [ ] **Step 1: Rename constants in `src/core/agent/constants.ts`**
+- [x] **Step 1: Rename constants in `src/core/agent/constants.ts`**
 
 Replace the `MAX_READONLY_BATCHES` / `HARD_STOP_READONLY_BATCHES` block (lines 65–77) with:
 
@@ -160,7 +163,7 @@ export const MAX_DUPLICATE_BATCHES = 8;
 export const HARD_STOP_DUPLICATE_BATCHES = 12;
 ```
 
-- [ ] **Step 2: Update `LoopState` fields in `src/core/agent/loop-state.ts`**
+- [x] **Step 2: Update `LoopState` fields in `src/core/agent/loop-state.ts`**
 
 Rename `consecutiveReadOnlyBatches` → `consecutiveDuplicateBatches`, `readonlyNudged` → `duplicateNudged`, `readonlyStopped` → `duplicateStopped`. Update the doc comment on `consecutiveDuplicateBatches`:
 
@@ -198,12 +201,12 @@ In `createLoopState()`, apply the same renames and set the new defaults:
     stopReason: null,
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `tsc --noEmit`
 Expected: errors ONLY at the call sites that still use the old names (`tool-batch.ts`, `agent.ts`). These are fixed in Tasks 3–4.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/core/agent/loop-state.ts src/core/agent/constants.ts
@@ -218,7 +221,7 @@ git commit -m "refactor(agent): rename read-only budget fields to duplicate sema
 - Modify: `src/core/agent/tool-batch.ts`
 - Test: `tests/core/tool-batch-honest-stop.test.ts` (rename + rewrite the read-only describe)
 
-- [ ] **Step 1: Update the failing/duplicate tests**
+- [x] **Step 1: Update the failing/duplicate tests**
 
 In `tests/core/tool-batch-honest-stop.test.ts`, rename the `runReadonlyBatch` helper and rewrite `describe("ToolBatchExecutor read-only budget", ...)` (lines ~132–206) to:
 
@@ -292,12 +295,12 @@ describe("ToolBatchExecutor duplicate budget", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bun test tests/core/tool-batch-honest-stop.test.ts`
 Expected: FAIL — `r.finalize` unknown / `consecutiveDuplicateBatches` undefined.
 
-- [ ] **Step 3: Update imports and the return type in `src/core/agent/tool-batch.ts`**
+- [x] **Step 3: Update imports and the return type in `src/core/agent/tool-batch.ts`**
 
 Replace the constants import (line 27) and drop the `isWorkMutation` import (line 28):
 
@@ -317,7 +320,7 @@ export interface ToolBatchExecution {
 }
 ```
 
-- [ ] **Step 4: Replace the read-only block in `execute()` (lines ~671–699)**
+- [x] **Step 4: Replace the read-only block in `execute()` (lines ~671–699)**
 
 Replace it with the duplicate predicate:
 
@@ -361,7 +364,7 @@ Replace it with the duplicate predicate:
     }
 ```
 
-- [ ] **Step 5: Change the failed-batch hard-stop to a finalize signal**
+- [x] **Step 5: Change the failed-batch hard-stop to a finalize signal**
 
 In the honest-stop block (lines ~662–668), replace:
 
@@ -388,12 +391,12 @@ with:
     }
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `bun test tests/core/tool-batch-honest-stop.test.ts`
 Expected: PASS. (The honest-stop test that asserted `state.retryLoopStopped` now asserts `sixth.finalize === "failed_batches"` — update that assertion in the same file.)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/core/agent/tool-batch.ts tests/core/tool-batch-honest-stop.test.ts
@@ -409,7 +412,7 @@ git commit -m "fix(agent): duplicate tool-call predicate + finalize terminal"
 - Modify: `src/core/types.ts` (`AgentResult.stopReason`)
 - Test: create `tests/core/finalize-no-tools.test.ts`
 
-- [ ] **Step 1: Add `stopReason` to `AgentResult` (`src/core/types.ts`, after `interrupted?`)**
+- [x] **Step 1: Add `stopReason` to `AgentResult` (`src/core/types.ts`, after `interrupted?`)**
 
 ```ts
   /**
@@ -419,7 +422,7 @@ git commit -m "fix(agent): duplicate tool-call predicate + finalize terminal"
   stopReason?: "duplicate" | "failed_batches" | "max_iters";
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Copy the `createMockDeps(chatImpl?)` builder verbatim from
 `tests/core/agent-turn-end.test.ts` (lines 5–123) to the top of a new file
@@ -470,12 +473,12 @@ describe("Agent.finalizeWithoutTools", () => {
 
 > `createMockDeps` uses `vi.fn()` from vitest — import `vi` alongside `describe/it/expect` in the copied header if the copy does not already include it. The builder's `chat` mock signature takes `(history, tools, signal, opts)`, so `mock.calls.at(-1)![1]` is the tools array.
 
-- [ ] **Step 3: Run to verify it fails**
+- [x] **Step 3: Run to verify it fails**
 
 Run: `bun test tests/core/finalize-no-tools.test.ts`
 Expected: FAIL — `finalizeWithoutTools` is not a function.
 
-- [ ] **Step 4: Implement the method in `src/core/agent.ts`**
+- [x] **Step 4: Implement the method in `src/core/agent.ts`**
 
 Add near `emitPhase` (after the private helpers, ~line 560):
 
@@ -523,7 +526,7 @@ Add near `emitPhase` (after the private helpers, ~line 560):
 
 Ensure `repairToolCallPairing` is imported (it is already used in the loop) and `errMsg` is imported (`src/utils`).
 
-- [ ] **Step 5: Wire the terminal in the loop**
+- [x] **Step 5: Wire the terminal in the loop**
 
 (a) After `const batch = await toolBatch.execute(...)` (returns at line ~1363), before `if (batch.interrupted) break;` add:
 
@@ -581,12 +584,12 @@ Ensure `repairToolCallPairing` is imported (it is already used in the loop) and 
 
 Also delete the now-dead `state.retryLoopStopped` / `state.readonlyStopped` branches from the `error` ternary (lines ~1560–1564).
 
-- [ ] **Step 6: Run tests + typecheck**
+- [x] **Step 6: Run tests + typecheck**
 
 Run: `bun test tests/core/finalize-no-tools.test.ts && bun test tests/core/tool-batch-honest-stop.test.ts && tsc --noEmit`
 Expected: PASS + no type errors (the old `retryLoopStopped`/`readonlyStopped` references are gone).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/core/agent.ts src/core/types.ts tests/core/finalize-no-tools.test.ts
@@ -600,7 +603,7 @@ git commit -m "feat(agent): tool-less final answer on every terminal"
 **Files:**
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 
-- [ ] **Step 1: Add/update keys**
+- [x] **Step 1: Add/update keys**
 
 In `src/i18n/en.json`:
 
@@ -624,12 +627,12 @@ In `src/i18n/ru.json`:
   "error.readonly_loop_stopped": "Остановлено после {count} повторов одного и того же вызова — агент повторял одно действие вместо ответа",
 ```
 
-- [ ] **Step 2: Verify both dictionaries parse and keys align**
+- [x] **Step 2: Verify both dictionaries parse and keys align**
 
 Run: `bun test tests/i18n.test.ts`
 Expected: PASS (the repo asserts en/ru key parity).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/i18n/en.json src/i18n/ru.json
@@ -646,7 +649,7 @@ git commit -m "i18n(agent): finalize directive + duplicate-stop wording"
 - Modify: `src/modules/webui/assets/js/feed/turn.ts`
 - Test: extend an existing webui test (e.g. `tests/webui-usage.test.ts` or a new `tests/webui-turn-end-reason.test.ts`)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/webui-turn-end-reason.test.ts
@@ -666,12 +669,12 @@ describe("turn_end stop reason", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/webui-turn-end-reason.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Extend `TurnEndSummary` (`src/modules/webui/session/forward.ts:83`)**
+- [x] **Step 3: Extend `TurnEndSummary` (`src/modules/webui/session/forward.ts:83`)**
 
 ```ts
 export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
@@ -683,7 +686,7 @@ export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
   };
 ```
 
-- [ ] **Step 4: Pass the fields in `src/modules/webui/session/run-agent.ts:155-160`**
+- [x] **Step 4: Pass the fields in `src/modules/webui/session/run-agent.ts:155-160`**
 
 ```ts
       forwarder.onTurnEnd({
@@ -696,7 +699,7 @@ export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
       });
 ```
 
-- [ ] **Step 5: Render in `src/modules/webui/assets/js/feed/turn.ts:271-278`**
+- [x] **Step 5: Render in `src/modules/webui/assets/js/feed/turn.ts:271-278`**
 
 Replace the `data.success === false` branch body:
 
@@ -712,12 +715,12 @@ Replace the `data.success === false` branch body:
 
 (If `data.error` is present on a successful forced finalize, prefer showing it too: change the condition to `if (data.success === false || data.error)` and use `warnline`/`⚠` when `data.stopReason` is set.)
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `bun test tests/webui-turn-end-reason.test.ts tests/webui-assets.test.ts`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/modules/webui/session/forward.ts src/modules/webui/session/run-agent.ts src/modules/webui/assets/js/feed/turn.ts tests/webui-turn-end-reason.test.ts
@@ -732,7 +735,7 @@ git commit -m "fix(web): surface harness stop reason in the turn-end line"
 - Modify: `src/tools/grep-tool.ts`
 - Test: `tests/tools/grep-tool.test.ts` (create if absent)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -754,12 +757,12 @@ describe("grep external engine failure classification", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/tools/grep-tool.test.ts`
 Expected: FAIL — `classifySearchError` is not exported, or returns a failure for the shell error.
 
-- [ ] **Step 3: Export `classifySearchError` and extend it (`src/tools/grep-tool.ts:66-74`)**
+- [x] **Step 3: Export `classifySearchError` and extend it (`src/tools/grep-tool.ts:66-74`)**
 
 ```ts
 /** Классифицирует ошибку внешнего поиска в результат или null (движок недоступен). */
@@ -778,12 +781,12 @@ export function classifySearchError(e: any): ToolResult | null {
 
 > Note `e?.status === 1` previously returned `{ success: true, output: no_matches }` — verify the current no-match path: exit code 1 is handled in `runSearch` (resolves `""`), so `classifySearchError` never sees `status === 1`; keep the ENOENT/null behavior and the shell-error branch, leave the rest of its contract intact.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `bun test tests/tools/grep-tool.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tools/grep-tool.ts tests/tools/grep-tool.test.ts
@@ -797,7 +800,7 @@ git commit -m "fix(tools): grep falls back to JS engine on shim spawn errors"
 **Files:**
 - Modify: `src/modules/execution/stuck-detector.ts`
 
-- [ ] **Step 1: Use `canonicalArgsKey` in `recordToolCall` (line ~272)**
+- [x] **Step 1: Use `canonicalArgsKey` in `recordToolCall` (line ~272)**
 
 ```ts
 import { canonicalArgsKey } from "../../core/agent/canonical-args";
@@ -810,17 +813,17 @@ import { canonicalArgsKey } from "../../core/agent/canonical-args";
 
 (Keep `ToolCallRecord.name`; the repetition checks compare `call.name` and `call.argsKey` — with the name folded into the key this still matches.)
 
-- [ ] **Step 2: Run the affected tests**
+- [x] **Step 2: Run the affected tests**
 
 Run: `bun test tests/modules/execution` (or the stuck-detector suite)
 Expected: PASS.
 
-- [ ] **Step 3: Full gate**
+- [x] **Step 3: Full gate**
 
 Run: `bun run quality`
 Expected: exit 0 (`typecheck` + `typecheck:frontend` + `lint` + `fallow`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/modules/execution/stuck-detector.ts
@@ -839,7 +842,7 @@ git commit -m "refactor(execution): share canonical tool-call key in stuck detec
 
 Rationale: spec §6. The e2e run showed `exec.read_only_loop` ("No write/exec for N tool calls") firing on legitimate read-only analysis. Real loops are covered by `hasRepetitiveToolCalls`/`isStuck`/failures + the tool-batch duplicate budget.
 
-- [ ] **Step 1: Update the failing tests first.** In `tests/execution-stuck-detector.test.ts`, delete the read-only cases (the "flags a long run of read-only tool calls", "resets the read-only streak when a write tool is called", "treats plan/todo bookkeeping as read-only", "clears the read-only streak on step change", "classifies a long read-only streak as read_only", the read-only part of "resetStepProgress preserves…", and the read-only-hint assertion). Replace them with a single guard test asserting the streak is gone:
+- [x] **Step 1: Update the failing tests first.** In `tests/execution-stuck-detector.test.ts`, delete the read-only cases (the "flags a long run of read-only tool calls", "resets the read-only streak when a write tool is called", "treats plan/todo bookkeeping as read-only", "clears the read-only streak on step change", "classifies a long read-only streak as read_only", the read-only part of "resetStepProgress preserves…", and the read-only-hint assertion). Replace them with a single guard test asserting the streak is gone:
 ```ts
   it("no longer reports a read-only loop (removed in favour of repetition)", () => {
     const d = new StuckDetector(6, 3, 5);
@@ -851,9 +854,9 @@ Rationale: spec §6. The e2e run showed `exec.read_only_loop` ("No write/exec fo
 ```
 In `tests/execution-stuck-warning-dedup.test.ts`, remove/replace the "does not re-log the read-only-loop warning" case (the warning no longer exists).
 
-- [ ] **Step 2: Run to verify they fail** — `bun test tests/execution-stuck-detector.test.ts` → FAIL (hasReadOnlyLoop still defined).
+- [x] **Step 2: Run to verify they fail** — `bun test tests/execution-stuck-detector.test.ts` → FAIL (hasReadOnlyLoop still defined).
 
-- [ ] **Step 3: Remove the read-only streak from `StuckDetector`:**
+- [x] **Step 3: Remove the read-only streak from `StuckDetector`:**
   - Delete `READ_ONLY_TOOLS` and `READ_ONLY_LOOP_THRESHOLD`.
   - Delete the `readOnlyStreak` field and both `this.readOnlyStreak = 0` assignments (`reset`, `resetStepState`).
   - `recordToolCall`: remove the read-only streak update (keep the `recentToolCalls` push + cap).
@@ -861,13 +864,13 @@ In `tests/execution-stuck-warning-dedup.test.ts`, remove/replace the "does not r
   - Remove the `read-only` branches in `getHints`, `getWarningKey`, `getStuckReason`, `getRecoveryMessage`, `getPrimaryReason`, `classifyFailure`.
   - Remove `"read_only"` from the `FailureType` union and any switch arm referencing it.
 
-- [ ] **Step 4: Drop the plugin check** — `src/modules/execution/execution-plugin.ts`: remove `deps.stuckDetector.hasReadOnlyLoop() ||` from the recovery condition (`~:268`).
+- [x] **Step 4: Drop the plugin check** — `src/modules/execution/execution-plugin.ts`: remove `deps.stuckDetector.hasReadOnlyLoop() ||` from the recovery condition (`~:268`).
 
-- [ ] **Step 5: Remove the i18n keys** — `exec.read_only_loop`, `exec.read_only_loop_recovery`, `exec.hint_read_only` from `src/i18n/en.json` and `ru.json`.
+- [x] **Step 5: Remove the i18n keys** — `exec.read_only_loop`, `exec.read_only_loop_recovery`, `exec.hint_read_only` from `src/i18n/en.json` and `ru.json`.
 
-- [ ] **Step 6: Verify** — `bun test` full → 0 fail; `bunx tsc --noEmit` → exit 0. `bun test tests/i18n.test.ts` (key parity) → pass.
+- [x] **Step 6: Verify** — `bun test` full → 0 fail; `bunx tsc --noEmit` → exit 0. `bun test tests/i18n.test.ts` (key parity) → pass.
 
-- [ ] **Step 7: Commit** — `git commit -m "fix(execution): remove stuck-detector read-only nudge"`.
+- [x] **Step 7: Commit** — `git commit -m "fix(execution): remove stuck-detector read-only nudge"`.
 
 ## Self-Review
 

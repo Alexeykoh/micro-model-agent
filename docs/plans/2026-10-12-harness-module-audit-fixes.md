@@ -1,6 +1,45 @@
 # Harness Module Audit — Implementation Plan
 
-> **For agentic workers:** Execute task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено частично (сверка 2026-10-20). Волны W1–W4 из
+> [architecture-v2-handoff](./2026-10-12-architecture-v2-handoff.md) закрыли часть находок
+> другими механизмами; сам план в `master` не слит. **Открытые пункты** (проверено по коду):
+>
+> - **W0.2** — метрика прогресса хода (`novelToolKeys`/`totalBatches`/`progress` в `llm_usage`).
+> - **W1** — директивы, переживающие компакцию (`src/core/agent/directives.ts`,
+>   `standingDirectives`); `lastTurnResetIteration`; `lastRecoveryTurn`;
+>   `MAX_MEMORY_FILE_CHARS` + троттлинг директив; окно `recentOutcomes`; `stopReason="duplicate"`.
+> - **W2** — привязка evidence к ходу (`seqOf`); `overcommitted`; `MIN_TOOL_RESULT_CHARS`;
+>   `imageTokenCost`; `MAX_QUEUED_TOOL_IMAGES`; `skipped_no_reduction`;
+>   `hardDropOldest` по-прежнему берёт `this.compactedBlock`.
+> - **W3** — `validateWorkdir` (bash без jail по workdir); ADS/регистр/TOCTOU
+>   (`matchProtectedPath` не режет basename по `:`); allowlist записи только в `write-file.ts`
+>   (нет в `delete-file`/`move-file`/`create-dir`); `glob-tool.ts` не фильтрует по
+>   scope/protected; `processRegistry.get(id)` без `sessionId`; нет `src/ui/sanitize-output.ts`;
+>   нет `certutil`/`bitsadmin`/`takeown`/`wscript`/`shred` в `security-policies.ts`
+>   и маркера `[APPROVED]`.
+> - **W4** — `web_search` не проверяет HTTP-статус; нет `web-error.ts`/`web-content.ts`.
+> - **W6** — security-заголовки на статику web (`X-Frame-Options` и пр. отсутствуют;
+>   CSP есть только в `service/api/docs-api.ts`); кэпы тела по маршруту; SVG; LRU/GC пула;
+>   инкрементальные логи; таймеры фронта; видимость ошибок slash-команд; XSS-guard-тесты;
+>   гонка активной сессии.
+> - **W7** — атомарная запись конфига (`src/config/config.ts:366` — обычный `writeFileSync`);
+>   `/config reset`; не-деструктивная миграция (частично, `src/config/migrate-legacy.ts`);
+>   busy-гейт веб-настроек; ротация/prune сессий.
+> - **W9** — `writeModal`/меню `question`; i18n-паритет терминального markdown; правка
+>   таблиц/комплитера.
+>
+> Отсутствуют «падающие тесты» плана: `tests/core/agent-status-tool-stop.test.ts`,
+> `tests/core/loop-progress.test.ts`, `tests/core/tool-batch-streak-resilience.test.ts`,
+> `tests/modules/execution/stuck-without-plan.test.ts`,
+> `tests/modules/execution/recovery-cooldown.test.ts`,
+> `tests/context/history-budget-threshold.test.ts`, `tests/context/compaction-hard-drop.test.ts`,
+> `tests/tools/bash-scope.test.ts`, `tests/security/ads-and-case.test.ts`,
+> `tests/tools/write-path-allowlist.test.ts`, `tests/tools/glob-scope.test.ts`,
+> `tests/tools/process-session-scope.test.ts`, `tests/ui/output-sanitize.test.ts`,
+> `tests/security/command-blacklist.test.ts`, `tests/tools/web-search-status.test.ts`.
+> W5 (MoE) неактуальна — MoE удалён (см.
+> [remove-moe-design](../specs/2026-10-12-remove-moe-design.md)).
+
 > TDD: failing test → minimal fix → green. Commit per task.
 
 **Goal:** Закрыть все 125 находок аудита [`docs/analysis/2026-10-12-harness-module-audit.md`](../analysis/2026-10-12-harness-module-audit.md)

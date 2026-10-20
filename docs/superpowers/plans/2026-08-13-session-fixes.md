@@ -1,7 +1,5 @@
 # Session Reliability Fixes Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Fix the 6 defects found in post-mortem analysis of session `ses_msrv83di_0hx6id` (56 forced compactions, LSP silently dead, plan steps marked done out of order / repeatedly without work, audit "finishing anyway", nested `<system-summary>` bloat, and the model repeating forbidden Unix commands in cmd.exe).
 
 **Architecture:** Targeted fixes in 4 layers: (1) `ContextManager.getQuality()` — recoverable compaction penalty so quality can rise above the 40% forced-compaction trigger; (2) agent loop — forced-compaction cooldown + honest audit-gate failure instead of "finishing anyway"; (3) LSP — surface silent failures instead of `catch {}`; (4) execution module + bash — enforce sequential plan-step completion and hard-stop repeated forbidden commands.
@@ -701,6 +699,4 @@ git commit -m "docs: note session-reliability fixes"
 **2. Placeholder scan:** All steps contain concrete code + exact commands. No TODOs.
 
 **3. Type consistency:** `plan.order_blocked`/`plan.step_already_done` used consistently in module.ts and both i18n files; `error.audit_failed` used in agent.ts and both i18n files; `resetBashFailureTracking` exported and referenced in the test.
-
-
 

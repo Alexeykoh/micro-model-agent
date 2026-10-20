@@ -1,6 +1,10 @@
 # Out-Of-Context Corpus — Wave W-a + W-b (Budget & Admission) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено (2026-10-20) — Tasks 1–3 закрыты: `admitMaxTokens`, `src/tools/admission.ts`
+> (спилл в `.mma/context/<session>/` с jail-проверкой), единственная точка применения
+> в `src/tools/executor.ts`. Чекбоксы проставлены по факту. Долги
+> `admission-spill-no-gc` / `descriptor-fields-deferred` / `admit-threshold-unmeasured`
+> зарегистрированы в [`docs/agents/debt.md`](../agents/debt.md).
 
 **Goal:** Крупные результаты тулов перестают попадать в корневой контекст дословно — вместо них дескриптор с превью и путём спилла (OO-1/OO-7 спеки `docs/specs/2026-10-14-out-of-context-corpus-design.md`).
 
@@ -36,7 +40,7 @@
 - Modify: `src/config/registry-extra.ts` (рядом с `contextBudget.toolResultKeep`)
 - Test: `tests/config-admit-tokens.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/config-admit-tokens.test.ts
@@ -61,12 +65,12 @@ describe("contextBudget.admitMaxTokens", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/config-admit-tokens.test.ts`
 Expected: FAIL — `DEFAULT_CONFIG.contextBudget.admitMaxTokens` is `undefined`; `getConfigValue(...).value` is `undefined` / key unresolved.
 
-- [ ] **Step 3: Add the field to `ContextBudget`**
+- [x] **Step 3: Add the field to `ContextBudget`**
 
 In `src/config/types.ts`, inside `interface ContextBudget`, after `compactionThreshold: number;` add:
 
@@ -79,7 +83,7 @@ In `src/config/types.ts`, inside `interface ContextBudget`, after `compactionThr
   admitMaxTokens?: number;
 ```
 
-- [ ] **Step 4: Add the default**
+- [x] **Step 4: Add the default**
 
 In `src/config/defaults.ts`, inside the `contextBudget: { … }` object, after `toolResultKeep: 6,` add:
 
@@ -87,7 +91,7 @@ In `src/config/defaults.ts`, inside the `contextBudget: { … }` object, after `
     admitMaxTokens: 3000,
 ```
 
-- [ ] **Step 5: Declare the registry key**
+- [x] **Step 5: Declare the registry key**
 
 In `src/config/registry-extra.ts`, find the `int("contextBudget.toolResultKeep", …)` entry and add right after it:
 
@@ -99,12 +103,12 @@ In `src/config/registry-extra.ts`, find the `int("contextBudget.toolResultKeep",
 
 (`int` — существующая фабрика в этом файле; `reconfigure = true`, чтобы смена пересобирала контекст, как соседние `contextBudget.*` ключи.)
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 Run: `bun test tests/config-admit-tokens.test.ts`
 Expected: PASS (2 tests).
 
-- [ ] **Step 7: Typecheck and commit**
+- [x] **Step 7: Typecheck and commit**
 
 Run: `bun run typecheck`
 Expected: no new errors.
@@ -123,7 +127,7 @@ git commit -m "feat(config): contextBudget.admitMaxTokens (OO-1 threshold)"
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json` (ключ `tool.output_admitted`)
 - Test: `tests/tools/admission.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/tools/admission.test.ts
@@ -176,12 +180,12 @@ describe("admitToolResult", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/tools/admission.test.ts`
 Expected: FAIL — `Cannot find module "../../src/tools/admission"`.
 
-- [ ] **Step 3: Implement the module**
+- [x] **Step 3: Implement the module**
 
 ```ts
 // src/tools/admission.ts
@@ -240,7 +244,7 @@ export function admitToolResult(result: ToolResult, opts: AdmitOptions): ToolRes
 }
 ```
 
-- [ ] **Step 4: Add i18n keys (both locales, symmetric)**
+- [x] **Step 4: Add i18n keys (both locales, symmetric)**
 
 In `src/i18n/en.json`, under the `tool` object (next to `"tool.truncated"`):
 
@@ -254,12 +258,12 @@ In `src/i18n/ru.json`, under `tool`:
 "tool.output_admitted": "[вывод скрыт: {tokens} токенов, {lines} строк — слишком большой для контекста]\nСохранено: {artifact}\nИсточник: {source}\nПревью:\n{preview}\nСмотри через read_file (offset/limit) или chunk_query по сохранённому пути.",
 ```
 
-- [ ] **Step 5: Run test + i18n parity**
+- [x] **Step 5: Run test + i18n parity**
 
 Run: `bun test tests/tools/admission.test.ts tests/i18n.test.ts`
 Expected: PASS (3 admission tests + parity green).
 
-- [ ] **Step 6: Typecheck and commit**
+- [x] **Step 6: Typecheck and commit**
 
 Run: `bun run typecheck`
 Expected: no new errors.
@@ -277,7 +281,7 @@ git commit -m "feat(tools): admitToolResult — spill oversized output, return d
 - Modify: `src/tools/executor.ts` (импорт + один блок в `execute()`)
 - Test: `tests/tools/admission-executor.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/tools/admission-executor.test.ts
@@ -343,12 +347,12 @@ describe("ToolExecutor admission", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/tools/admission-executor.test.ts`
 Expected: FAIL — `res.artifactPath` is `undefined` (admission ещё не подключён).
 
-- [ ] **Step 3: Import the helper**
+- [x] **Step 3: Import the helper**
 
 In `src/tools/executor.ts`, next to the other local imports at the top (после `import { filterToolsByTags } from "./filter-tools";`) add:
 
@@ -356,7 +360,7 @@ In `src/tools/executor.ts`, next to the other local imports at the top (посл
 import { admitToolResult } from "./admission";
 ```
 
-- [ ] **Step 4: Apply admission in `execute()`**
+- [x] **Step 4: Apply admission in `execute()`**
 
 In `src/tools/executor.ts`, inside `async execute(...)`, immediately after the `try/catch` that produces `result` (the block ending with `result.toolCallId = call.id;` and the `catch` that sets `result = { success: false, … }`), BEFORE the `if (!memoHit) { … }` block, insert:
 
@@ -373,12 +377,12 @@ In `src/tools/executor.ts`, inside `async execute(...)`, immediately after the `
     });
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `bun test tests/tools/admission-executor.test.ts`
 Expected: PASS (2 tests).
 
-- [ ] **Step 6: Full suite + quality gate**
+- [x] **Step 6: Full suite + quality gate**
 
 Run: `bun test`
 Expected: green (нет падений существующих тестов; если падает `read_file`-тест из-за порога 3000 — поднять дефолт `admitMaxTokens` в Task 1 и повторить; это тот самый замер из спеки §11).
@@ -386,7 +390,7 @@ Expected: green (нет падений существующих тестов; е
 Run: `bun run quality`
 Expected: exit 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/tools/executor.ts tests/tools/admission-executor.test.ts

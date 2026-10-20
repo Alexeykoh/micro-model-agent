@@ -1,6 +1,11 @@
 # Onboarding Commands (`meet` / «Познакомимся» & `init`) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено (2026-10-20) — все 16 задач реализованы: `src/modules/onboarding/**`,
+> `meet_done`-тул и выход из meet-режима, `ToolContext.toolAllowlist` + enforcement,
+> `Agent.pushPromptBlock/removePromptBlock`, проба провайдера (`preflight.ts`),
+> `/memory`, `/meet`, `/init`, i18n en/ru, тесты `tests/onboarding/*`.
+> Чекбоксы проставлены по факту. Расхождение: `mma init` — deprecated-алиас визарда,
+> генерация AGENTS.md переехала в `mma agents init` (`99ce2143`).
 
 **Goal:** Add LLM-driven `meet` («Познакомимся», persists user preferences/facts to global memory) and `init` (generates/updates `AGENTS.md` for any workspace), rename the provider wizard to `mma setup`, add `/memory`, align the `question` tool with STYLE.md, and gate `meet` on a provider preflight.
 
@@ -42,7 +47,7 @@
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json` (`tool.not_allowed`)
 - Test: `tests/tools/tool-allowlist.test.ts`
 
-- [ ] **Step 1: Add fields to `ToolContext`** (`src/tools/types.ts`, after `activeToolTags`)
+- [x] **Step 1: Add fields to `ToolContext`** (`src/tools/types.ts`, after `activeToolTags`)
 
 ```ts
   /**
@@ -60,7 +65,7 @@
   onboarding?: { done: boolean; block?: import("../core/types").PromptBlock };
 ```
 
-- [ ] **Step 2: Write the failing test** (`tests/tools/tool-allowlist.test.ts`)
+- [x] **Step 2: Write the failing test** (`tests/tools/tool-allowlist.test.ts`)
 
 ```ts
 import { describe, it, expect, beforeEach } from "vitest";
@@ -126,12 +131,12 @@ describe("tool allowlist", () => {
 });
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `bun test tests/tools/tool-allowlist.test.ts`
 Expected: FAIL (allowlist not enforced; `bash`/`project_map` present).
 
-- [ ] **Step 4: Implement allowlist in the executor**
+- [x] **Step 4: Implement allowlist in the executor**
 
 Replace `getToolDefinitions` (`src/tools/executor.ts:194-201`):
 
@@ -172,17 +177,17 @@ Add at the top of `execute` (`src/tools/executor.ts:53`, before `const tool = ..
     }
 ```
 
-- [ ] **Step 5: Add i18n keys**
+- [x] **Step 5: Add i18n keys**
 
 `src/i18n/en.json`: `"tool.not_allowed": "Tool not allowed in this mode: {name}"`
 `src/i18n/ru.json`: `"tool.not_allowed": "Инструмент недоступен в этом режиме: {name}"`
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `bun test tests/tools/tool-allowlist.test.ts && bun test tests/executor.test.ts`
 Expected: PASS both.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/tools/types.ts src/tools/executor.ts src/i18n/en.json src/i18n/ru.json tests/tools/tool-allowlist.test.ts
@@ -197,7 +202,7 @@ git commit -m "feat(tools): strict tool allowlist on ToolContext (onboarding)"
 - Modify: `src/core/agent.ts` (add methods near `setPromptIO`, `:288`)
 - Test: `tests/onboarding/agent-prompt-block.test.ts`
 
-- [ ] **Step 1: Write the failing test** (`tests/onboarding/agent-prompt-block.test.ts`)
+- [x] **Step 1: Write the failing test** (`tests/onboarding/agent-prompt-block.test.ts`)
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -235,12 +240,12 @@ describe("Agent prompt-block runtime methods", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/onboarding/agent-prompt-block.test.ts`
 Expected: FAIL (`pushPromptBlock` is not a function).
 
-- [ ] **Step 3: Implement the methods** (`src/core/agent.ts`, after `setPromptIO`)
+- [x] **Step 3: Implement the methods** (`src/core/agent.ts`, after `setPromptIO`)
 
 ```ts
   /**
@@ -264,12 +269,12 @@ Expected: FAIL (`pushPromptBlock` is not a function).
   }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/onboarding/agent-prompt-block.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/core/agent.ts tests/onboarding/agent-prompt-block.test.ts
@@ -285,7 +290,7 @@ git commit -m "feat(agent): runtime prompt-block push/remove for onboarding"
 - Modify: `src/cli/setup.ts:119-146` (use the shared probe)
 - Test: `tests/onboarding/preflight.test.ts`
 
-- [ ] **Step 1: Write the failing test** (`tests/onboarding/preflight.test.ts`)
+- [x] **Step 1: Write the failing test** (`tests/onboarding/preflight.test.ts`)
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -321,12 +326,12 @@ describe("preflightProvider", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/onboarding/preflight.test.ts`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** (`src/modules/providers/preflight.ts`)
+- [x] **Step 3: Implement** (`src/modules/providers/preflight.ts`)
 
 ```ts
 import { errMsg } from "../../utils";
@@ -408,7 +413,7 @@ export async function preflightProvider(
 }
 ```
 
-- [ ] **Step 4: Refactor `setup.ts` to use `probeChat`**
+- [x] **Step 4: Refactor `setup.ts` to use `probeChat`**
 
 Replace the body of `testChat` (`src/cli/setup.ts:119-146`) with a call to the shared probe:
 
@@ -428,12 +433,12 @@ Add the import at the top of `setup.ts`:
 import { probeChat } from "../modules/providers/preflight";
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `bun test tests/onboarding/preflight.test.ts && bun test tests/cli 2>/dev/null || true`
 Expected: PASS for preflight.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/modules/providers/preflight.ts src/cli/setup.ts tests/onboarding/preflight.test.ts
@@ -448,7 +453,7 @@ git commit -m "feat(providers): shared preflight (listModels + cheap chat probe)
 - Create: `src/modules/onboarding/prompts.ts`
 - Test: `tests/onboarding/prompts.test.ts`
 
-- [ ] **Step 1: Write the failing test** (`tests/onboarding/prompts.test.ts`)
+- [x] **Step 1: Write the failing test** (`tests/onboarding/prompts.test.ts`)
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -479,12 +484,12 @@ describe("onboarding prompts", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/onboarding/prompts.test.ts`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** (`src/modules/onboarding/prompts.ts`)
+- [x] **Step 3: Implement** (`src/modules/onboarding/prompts.ts`)
 
 ```ts
 /** Tools available during the meet interview (strict allowlist). */
@@ -532,12 +537,12 @@ Rules:
 - Write with write_file or edit_file; do not run shell commands.`;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/onboarding/prompts.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/onboarding/prompts.ts tests/onboarding/prompts.test.ts
@@ -553,7 +558,7 @@ git commit -m "feat(onboarding): meet/init prompts and tool allowlists"
 - Modify: `src/tools/index.ts` (register next to `rememberTool`/`recallTool`)
 - Test: `tests/onboarding/meet-done.test.ts`
 
-- [ ] **Step 1: Write the failing test** (`tests/onboarding/meet-done.test.ts`)
+- [x] **Step 1: Write the failing test** (`tests/onboarding/meet-done.test.ts`)
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -570,12 +575,12 @@ describe("meet_done", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/onboarding/meet-done.test.ts`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** (`src/tools/meet-done.ts`)
+- [x] **Step 3: Implement** (`src/tools/meet-done.ts`)
 
 ```ts
 import type { ToolDefinition } from "./types";
@@ -594,14 +599,14 @@ export const meetDoneTool: ToolDefinition = {
 };
 ```
 
-- [ ] **Step 4: Register the tool** — in `src/tools/index.ts`, import and register `meetDoneTool` alongside `rememberTool` (follow the existing registration pattern; keep the same list/array the registry consumes).
+- [x] **Step 4: Register the tool** — in `src/tools/index.ts`, import and register `meetDoneTool` alongside `rememberTool` (follow the existing registration pattern; keep the same list/array the registry consumes).
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `bun test tests/onboarding/meet-done.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/tools/meet-done.ts src/tools/index.ts tests/onboarding/meet-done.test.ts
@@ -616,7 +621,7 @@ git commit -m "feat(tools): meet_done sentinel for onboarding"
 - Create: `src/modules/onboarding/mode.ts`
 - Test: `tests/onboarding/mode.test.ts`
 
-- [ ] **Step 1: Write the failing test** (`tests/onboarding/mode.test.ts`)
+- [x] **Step 1: Write the failing test** (`tests/onboarding/mode.test.ts`)
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -668,12 +673,12 @@ describe("onboarding mode", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/onboarding/mode.test.ts`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** (`src/modules/onboarding/mode.ts`)
+- [x] **Step 3: Implement** (`src/modules/onboarding/mode.ts`)
 
 ```ts
 import type { ReplContext } from "../../cli/repl-commands";
@@ -713,7 +718,7 @@ export function isMeetDone(ctx: ReplContext): boolean {
 }
 ```
 
-- [ ] **Step 4: Expose `toolCtx` on `ReplContext` (without touching the `Repl` constructor)**
+- [x] **Step 4: Expose `toolCtx` on `ReplContext` (without touching the `Repl` constructor)**
 
 `Repl` is constructed in 7 test files; do NOT add a constructor parameter. Route the shared `ToolContext` through `AgentDeps` instead:
 
@@ -744,12 +749,12 @@ and a getter on `Agent`:
 
 After this step `bunx tsc --noEmit` must stay clean (the interface field is satisfied by the getter).
 
-- [ ] **Step 5: Run tests + typecheck**
+- [x] **Step 5: Run tests + typecheck**
 
 Run: `bun test tests/onboarding/mode.test.ts && tsc --noEmit`
 Expected: PASS both.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/modules/onboarding/mode.ts src/cli/repl-commands.ts src/cli/repl.ts tests/onboarding/mode.test.ts
@@ -764,7 +769,7 @@ git commit -m "feat(onboarding): meet mode (allowlist + guide block)"
 - Create: `src/modules/onboarding/meet.ts`
 - Test: `tests/onboarding/meet.test.ts`
 
-- [ ] **Step 1: Write the failing test** (`tests/onboarding/meet.test.ts`)
+- [x] **Step 1: Write the failing test** (`tests/onboarding/meet.test.ts`)
 
 ```ts
 import { describe, it, expect, vi } from "vitest";
@@ -801,12 +806,12 @@ describe("runMeet", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/onboarding/meet.test.ts`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** (`src/modules/onboarding/meet.ts`)
+- [x] **Step 3: Implement** (`src/modules/onboarding/meet.ts`)
 
 ```ts
 import type { ReplContext } from "../../cli/repl-commands";
@@ -850,7 +855,7 @@ export async function runMeet(ctx: ReplContext, opts: RunMeetOptions = {}): Prom
 }
 ```
 
-- [ ] **Step 4: Add i18n keys** (en+ru)
+- [x] **Step 4: Add i18n keys** (en+ru)
 
 en:
 ```json
@@ -865,12 +870,12 @@ ru:
 "repl.meet_unavailable_hint": "Запусти модель и повтори /meet — ничего не записано."
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `bun test tests/onboarding/meet.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/modules/onboarding/meet.ts src/i18n/en.json src/i18n/ru.json tests/onboarding/meet.test.ts
@@ -885,7 +890,7 @@ git commit -m "feat(onboarding): meet engine with preflight + mode entry"
 - Create: `src/modules/onboarding/init.ts`
 - Test: `tests/onboarding/init.test.ts`
 
-- [ ] **Step 1: Write the failing test** (`tests/onboarding/init.test.ts`)
+- [x] **Step 1: Write the failing test** (`tests/onboarding/init.test.ts`)
 
 ```ts
 import { describe, it, expect, vi } from "vitest";
@@ -925,12 +930,12 @@ describe("runInit", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/onboarding/init.test.ts`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement** (`src/modules/onboarding/init.ts`)
+- [x] **Step 3: Implement** (`src/modules/onboarding/init.ts`)
 
 ```ts
 import { basename, join } from "path";
@@ -988,7 +993,7 @@ export async function runInit(ctx: ReplContext, opts: RunInitOptions = {}): Prom
 }
 ```
 
-- [ ] **Step 4: Add i18n keys** (en+ru)
+- [x] **Step 4: Add i18n keys** (en+ru)
 
 en:
 ```json
@@ -1001,12 +1006,12 @@ ru:
 "repl.init_unavailable": "Не могу запустить init: провайдер не отвечает ({reason})."
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `bun test tests/onboarding/init.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/modules/onboarding/init.ts src/i18n/en.json src/i18n/ru.json tests/onboarding/init.test.ts
@@ -1021,7 +1026,7 @@ git commit -m "feat(onboarding): init engine (AGENTS.md, single run)"
 - Modify: `src/tools/user-input.ts:52-73` (`formatMenu`, `choicePrompt`)
 - Test: `tests/tools/user-input-style.test.ts`
 
-- [ ] **Step 1: Write the failing test** (`tests/tools/user-input-style.test.ts`)
+- [x] **Step 1: Write the failing test** (`tests/tools/user-input-style.test.ts`)
 
 ```ts
 import { describe, it, expect, beforeEach } from "vitest";
@@ -1054,12 +1059,12 @@ describe("question rendering (STYLE)", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun tests/tools/user-input-style.test.ts`
 Expected: FAIL (no `?` prefix).
 
-- [ ] **Step 3: Implement** (`src/tools/user-input.ts`)
+- [x] **Step 3: Implement** (`src/tools/user-input.ts`)
 
 Replace `formatMenu` (`:52-66`):
 
@@ -1098,12 +1103,12 @@ Update `tool.user_input.choice_single` / `choice_multiple` values to start with 
 
 Add `? ` to free-text questions in `askUser` (`:143-147`): prepend `? ` when building `text` (keep the progress header on its own line).
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `bun tests/tools/user-input-style.test.ts && bun tests/tools/user-input.test.ts && bun tests/tools/question.test.ts`
 Expected: PASS (update any existing assertions that expected the old prefix).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tools/user-input.ts src/i18n/en.json src/i18n/ru.json tests/tools/user-input-style.test.ts tests/tools/user-input.test.ts
@@ -1117,7 +1122,7 @@ git commit -m "feat(ui): align question tool rendering with STYLE (? glyph, > pr
 **Files:**
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 
-- [ ] **Step 1: Add all remaining keys** (en then mirrored ru; keep parity)
+- [x] **Step 1: Add all remaining keys** (en then mirrored ru; keep parity)
 
 | Key | en | ru |
 |---|---|---|
@@ -1140,12 +1145,12 @@ git commit -m "feat(ui): align question tool rendering with STYLE (? glyph, > pr
 | `onboarding.provider_down` | `⚠ Provider is not responding — "{cmd}" is unavailable for now.` | `⚠ Провайдер не отвечает — «{cmd}» пока недоступно.` |
 | `onboarding.provider_down_hint` | `↳ Start the model and run /{cmd}. Nothing was saved.` | `↳ Подними модель и вызови /{cmd}. Ничего не записано.` |
 
-- [ ] **Step 2: Verify parity**
+- [x] **Step 2: Verify parity**
 
 Run: `bun tests/i18n-parity.test.ts 2>/dev/null || bun run -e "const en=require('./src/i18n/en.json'),ru=require('./src/i18n/ru.json');const a=Object.keys(en),b=new Set(Object.keys(ru));const m=a.filter(k=>!b.has(k));const n=Object.keys(ru).filter(k=>!(k in en));console.log('missing-in-ru',m,'missing-in-en',n)"`
 Expected: no missing keys (if a parity test exists, it passes).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/i18n/en.json src/i18n/ru.json
@@ -1162,7 +1167,7 @@ git commit -m "feat(i18n): onboarding, memory and setup command strings (en+ru)"
 
 Wiring `logOnboarding` calls into the REPL lifecycle is done in Task 12 (meet) and Task 15 (init), where those lifecycle points are created. This task only adds the method + test.
 
-- [ ] **Step 1: Add `logOnboarding` to `SessionLogger`**
+- [x] **Step 1: Add `logOnboarding` to `SessionLogger`**
 
 `logMoE` (`src/core/session-logger.ts:399`) writes via `this.session?.appendLog({ ts, type, content, ...data })`. Add the same-shaped method:
 
@@ -1178,15 +1183,15 @@ Wiring `logOnboarding` calls into the REPL lifecycle is done in Task 12 (meet) a
   }
 ```
 
-- [ ] **Step 2: Write the test** `tests/onboarding/session-logging.test.ts`
+- [x] **Step 2: Write the test** `tests/onboarding/session-logging.test.ts`
 
 Create a `SessionLogger` with a fake `SessionManager` whose `appendLog` is a `vi.fn()`; assert `logOnboarding("meet_start", { model: "m" })` calls `appendLog` once with `type: "onboarding_meet_start"`, `content: "meet_start"`, `model: "m"`, and a `ts` string. Also assert it does not throw when the session manager is `undefined`.
 
 Model the fake after the existing `SessionManager` usage in `tests/core/session-logger.test.ts` if present (`rg -n "new SessionLogger" tests`).
 
-- [ ] **Step 3: Run** `bun test tests/onboarding/session-logging.test.ts` and `bunx tsc --noEmit`; both pass.
+- [x] **Step 3: Run** `bun test tests/onboarding/session-logging.test.ts` and `bunx tsc --noEmit`; both pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/core/session-logger.ts tests/onboarding/session-logging.test.ts
@@ -1201,11 +1206,11 @@ git commit -m "feat(session): add logOnboarding"
 - Modify: `src/cli/repl.ts` (after each agent turn, check `isMeetDone`)
 - Test: covered by mode/meet tests; manual scenario in Task 16.
 
-- [ ] **Step 1: Confirm `this.toolCtx` is available**
+- [x] **Step 1: Confirm `this.toolCtx` is available**
 
 Task 6 already wired `ReplContext.toolCtx` (via `AgentDeps.toolCtx` + `Agent.toolContext` + a `toolCtx` getter on `Repl`). No new wiring needed here; just use `this.toolCtx`.
 
-- [ ] **Step 2: After each completed turn, exit meet mode if the sentinel fired**
+- [x] **Step 2: After each completed turn, exit meet mode if the sentinel fired**
 
 Locate the REPL turn completion point (where the agent run resolves and the prompt is re-presented, near `src/cli/repl.ts:1207`). Add:
 
@@ -1221,12 +1226,12 @@ Locate the REPL turn completion point (where the agent run resolves and the prom
 
 Add `"repl.meet_done": "Done — preferences saved. See /memory."` / ru `"Готово — предпочтения сохранены. Смотри /memory."`
 
-- [ ] **Step 3: Typecheck + tests**
+- [x] **Step 3: Typecheck + tests**
 
 Run: `tsc --noEmit && bun test tests/onboarding`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/cli/repl.ts src/core/agent.ts src/core/bootstrap.ts src/i18n/en.json src/i18n/ru.json
@@ -1242,7 +1247,7 @@ git commit -m "feat(repl): leave meet mode when the sentinel fires"
 - Modify: `src/cli/repl.ts` (call `registerOnboardingCommands(ctx)`)
 - Test: `tests/cli/memory-command.test.ts`
 
-- [ ] **Step 1: Write the failing test** (`tests/cli/memory-command.test.ts`)
+- [x] **Step 1: Write the failing test** (`tests/cli/memory-command.test.ts`)
 
 ```ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -1271,12 +1276,12 @@ describe("applyMemoryCommand", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/cli/memory-command.test.ts`
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement pure logic** (`src/cli/onboarding-commands.ts`)
+- [x] **Step 3: Implement pure logic** (`src/cli/onboarding-commands.ts`)
 
 ```ts
 import { homedir } from "os";
@@ -1416,7 +1421,7 @@ export function registerOnboardingCommands(ctx: ReplContext): void {
 }
 ```
 
-- [ ] **Step 4: Add `deleteEntry` to `MemoryStore`** — `applyMemoryCommand`'s `forget` case calls `store.deleteEntry(category, n)`, which does not exist yet.
+- [x] **Step 4: Add `deleteEntry` to `MemoryStore`** — `applyMemoryCommand`'s `forget` case calls `store.deleteEntry(category, n)`, which does not exist yet.
 
 In `src/modules/memory/store.ts` add:
 
@@ -1436,7 +1441,7 @@ In `src/modules/memory/store.ts` add:
   }
 ```
 
-- [ ] **Step 5: Register from the REPL** — in `src/cli/repl.ts`, in the same place other command groups are registered (search `registerProviderCommands` / `registerReplCommands`), add:
+- [x] **Step 5: Register from the REPL** — in `src/cli/repl.ts`, in the same place other command groups are registered (search `registerProviderCommands` / `registerReplCommands`), add:
 
 ```ts
     const { registerOnboardingCommands } = await import("./onboarding-commands");
@@ -1445,12 +1450,12 @@ In `src/modules/memory/store.ts` add:
 
 Also add the new command names to the completer (`src/cli/completer.ts`) and to `COMMAND_GROUPS` in `src/cli/repl-commands.ts` (`setup`, `meet`, `init`, `memory` → `"agent"`).
 
-- [ ] **Step 6: Run tests + typecheck**
+- [x] **Step 6: Run tests + typecheck**
 
 Run: `bun test tests/cli/memory-command.test.ts && tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/cli/onboarding-commands.ts src/cli/repl.ts src/cli/completer.ts src/cli/repl-commands.ts src/modules/memory/store.ts tests/cli/memory-command.test.ts
@@ -1465,7 +1470,7 @@ git commit -m "feat(repl): /setup, /meet, /init, /memory commands"
 - Modify: `src/cli/commands.ts:43-55` (rename `buildInitCommand` → `buildSetupCommand`; add `init` + `meet`)
 - Test: manual
 
-- [ ] **Step 1: Rename the wizard command**
+- [x] **Step 1: Rename the wizard command**
 
 In `src/cli/commands.ts`, change the existing `buildInitCommand` to register `"setup"` instead of `"init"`:
 
@@ -1487,7 +1492,7 @@ function buildSetupCommand(program: Command): void {
 
 Rename the call site (`buildInitCommand(program)` → `buildSetupCommand(program)`).
 
-- [ ] **Step 2: Extract the interactive REPL start in `main.ts`**
+- [x] **Step 2: Extract the interactive REPL start in `main.ts`**
 
 The default (no-subcommand) path at `src/cli/main.ts:303-339` builds `bootstrap` + `new Repl(...)` + `repl.start()`. Extract it into an exported function so subcommands can reuse it:
 
@@ -1526,7 +1531,7 @@ export async function startInteractiveRepl(opts: {
 
 Replace the extracted block in the default branch with `await startInteractiveRepl({ projectDir, noAgentsMd, exitOnComplete, reasoningLevel, contextLog, verboseOpt });`.
 
-- [ ] **Step 3: Add `meet` and `init` commands that delegate to the REPL**
+- [x] **Step 3: Add `meet` and `init` commands that delegate to the REPL**
 
 ```ts
 function buildMeetCommand(program: Command): void {
@@ -1554,14 +1559,14 @@ function buildInitCommand(program: Command): void {
 
 `repl.ts` reads `MMA_START_MEET` / `MMA_START_INIT` on startup (Task 15) and invokes the engine once, then clears the flag. This keeps a single stdin owner (the LineEditor) — matching the 1.0.1 first-run guarantee.
 
-- [ ] **Step 4: Register both** — call `buildSetupCommand(program)`, `buildInitCommand(program)`, `buildMeetCommand(program)` where `buildInitCommand(program)` was called.
+- [x] **Step 4: Register both** — call `buildSetupCommand(program)`, `buildInitCommand(program)`, `buildMeetCommand(program)` where `buildInitCommand(program)` was called.
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 Run: `tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/cli/commands.ts src/i18n/en.json src/i18n/ru.json
@@ -1576,7 +1581,7 @@ git commit -m "feat(cli): mma setup (renamed), mma init, mma meet"
 - Modify: `src/cli/repl.ts` (startup, when `process.env.MMA_POST_SETUP === "1"`)
 - Modify: `src/cli/main.ts:288-289` (pass through, unchanged guard)
 
-- [ ] **Step 1: On REPL start, if `MMA_POST_SETUP=1` and TTY and not `--json`, offer**
+- [x] **Step 1: On REPL start, if `MMA_POST_SETUP=1` and TTY and not `--json`, offer**
 
 After the banner is printed and before the first `rl.prompt()` in `src/cli/repl.ts` (near `:1191`), add:
 
@@ -1602,7 +1607,7 @@ After the banner is printed and before the first `rl.prompt()` in `src/cli/repl.
     }
 ```
 
-- [ ] **Step 2: Honor `MMA_START_MEET` / `MMA_START_INIT`** — just before the offer block add:
+- [x] **Step 2: Honor `MMA_START_MEET` / `MMA_START_INIT`** — just before the offer block add:
 
 ```ts
     if (process.env.MMA_START_MEET === "1") {
@@ -1616,11 +1621,11 @@ After the banner is printed and before the first `rl.prompt()` in `src/cli/repl.
     }
 ```
 
-- [ ] **Step 3: Manual check** — run in a sandbox with a reachable provider and confirm the offer appears; with the provider stopped, confirm the calm hint and no offer.
+- [x] **Step 3: Manual check** — run in a sandbox with a reachable provider and confirm the offer appears; with the provider stopped, confirm the calm hint and no offer.
 
 Run: `bun run mma -d _testing/meet "hello"` (start from repo root; see `docs/agents/testing.md`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/cli/repl.ts
@@ -1637,9 +1642,9 @@ git commit -m "feat(repl): post-setup [Y/n] meet offer + env entrypoints"
 - Modify: `AGENTS.md` (commands table, Quick Reference)
 - Modify: `docs/agents/testing.md` (onboarding scenarios)
 
-- [ ] **Step 1: Bump version** in `package.json` to `2.1.0`.
+- [x] **Step 1: Bump version** in `package.json` to `2.1.0`.
 
-- [ ] **Step 2: CHANGELOG** — add:
+- [x] **Step 2: CHANGELOG** — add:
 
 ```markdown
 ## [2.1.0] - 2026-09-23
@@ -1659,16 +1664,16 @@ git commit -m "feat(repl): post-setup [Y/n] meet offer + env entrypoints"
 - **CLI**: `mma init` no longer configures a provider (no alias).
 ```
 
-- [ ] **Step 3: AGENTS.md** — add the three commands to the command lists and a short "Onboarding" section (or point to the spec). Keep it consistent with existing sections.
+- [x] **Step 3: AGENTS.md** — add the three commands to the command lists and a short "Onboarding" section (or point to the spec). Keep it consistent with existing sections.
 
-- [ ] **Step 4: `docs/agents/testing.md`** — add manual scenarios: first-run offer, provider-down path, `/meet` dev + non-dev domains, `/memory` round-trip, `mma init` with and without an existing `AGENTS.md`.
+- [x] **Step 4: `docs/agents/testing.md`** — add manual scenarios: first-run offer, provider-down path, `/meet` dev + non-dev domains, `/memory` round-trip, `mma init` with and without an existing `AGENTS.md`.
 
-- [ ] **Step 5: Full verification**
+- [x] **Step 5: Full verification**
 
 Run: `bun test && tsc --noEmit`
 Expected: all tests pass, no type errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add package.json CHANGELOG.md AGENTS.md docs/agents/testing.md

@@ -1,11 +1,12 @@
 # Модуль документов — W2a: ZIP/OOXML-слой и XLSX
 
-> **Статус:** W2a — сделано (коммиты ниже). **W2b** (ODF/office: ods/docx/odt/pptx) —
+> **Статус:** исполнено (2026-10-20) — W2a (ZIP/OOXML/XLSX) и W2b (ODF/office) реализованы
+> в master; гейт `tests/arch/documents-boundaries.test.ts` зелёный. Чекбоксы проставлены по факту.
+
 > спецификация волны в самом низу этого файла, § «W2b».
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Первый офисный обработчик модуля `documents` — XLSX — на собственном минимальном
 ZIP-читателе (`node:zlib`) и общем OOXML-слое (`fast-xml-parser`). Волна W2a ограничена
@@ -50,8 +51,8 @@ ZIP-читателе (`node:zlib`) и общем OOXML-слое (`fast-xml-parse
 **Files:**
 - Create: `docs/plans/2026-10-16-documents-w2-office-plan.md`
 
-- [ ] **Step 1:** Зафиксировать план W2a (этот файл) и закоммитить первым.
-- [ ] **Step 2: Коммит** `docs(documents): план W2a — ZIP/OOXML и xlsx (W2)`.
+- [x] **Step 1:** Зафиксировать план W2a (этот файл) и закоммитить первым.
+- [x] **Step 2: Коммит** `docs(documents): план W2a — ZIP/OOXML и xlsx (W2)`.
 
 ### Task 1: Гейт границ — импорты внутри `handlers/`
 
@@ -63,24 +64,24 @@ W2 нужны общие модули **внутри** `handlers/` (`ooxml.ts`, 
 лежит под `src/modules/documents/handlers/`, плюс `registry.ts`. Потребители
 (`read.ts`, `tools/*`, `module.ts`, …) по-прежнему не имеют права импортировать обработчики.
 
-- [ ] **Step 1:** Дописать падающий кейс: `handlers/xlsx.ts` импортирует `./ooxml` → не флаг.
-- [ ] **Step 2:** Запустить — упасть: `bun test tests/arch/documents-boundaries.test.ts`.
-- [ ] **Step 3:** Дополнить `findDocumentHandlerImports`: `if (from.startsWith(HANDLERS_PREFIX)) continue;`; обновить doc-комментарий.
-- [ ] **Step 4:** Запустить — пройти.
-- [ ] **Step 5: Коммит** `test(documents): гейт разрешает импорты внутри handlers/ (W2)`.
+- [x] **Step 1:** Дописать падающий кейс: `handlers/xlsx.ts` импортирует `./ooxml` → не флаг.
+- [x] **Step 2:** Запустить — упасть: `bun test tests/arch/documents-boundaries.test.ts`.
+- [x] **Step 3:** Дополнить `findDocumentHandlerImports`: `if (from.startsWith(HANDLERS_PREFIX)) continue;`; обновить doc-комментарий.
+- [x] **Step 4:** Запустить — пройти.
+- [x] **Step 5: Коммит** `test(documents): гейт разрешает импорты внутри handlers/ (W2)`.
 
 ### Task 5: Детерминированные фикстуры ZIP/XLSX
 
 **Files:**
 - Create: `tests/documents/fixtures-zip.ts`, `tests/documents/fixtures-xlsx.ts`
 
-- [ ] **Step 1:** `fixtures-zip.ts` — ZIP-писатель: local header + central directory + EOCD;
+- [x] **Step 1:** `fixtures-zip.ts` — ZIP-писатель: local header + central directory + EOCD;
   метод 0 и 8 (`zlib.deflateRawSync`); локальный `crc32` (значение не читается нашим
   ридером, но writer держим spec-shaped).
-- [ ] **Step 2:** `fixtures-xlsx.ts` — минимальная книга: `[Content_Types].xml`, `_rels/.rels`,
+- [x] **Step 2:** `fixtures-xlsx.ts` — минимальная книга: `[Content_Types].xml`, `_rels/.rels`,
   `xl/workbook.xml`, `xl/_rels/workbook.xml.rels`, `xl/sharedStrings.xml`,
   `xl/worksheets/sheet1.xml`. Малые и детерминированные байты.
-- [ ] **Step 3: Коммит** `test(documents): фикстуры ZIP/XLSX (W2)`.
+- [x] **Step 3: Коммит** `test(documents): фикстуры ZIP/XLSX (W2)`.
 
 ### Task 2: ZIP-читатель
 
@@ -88,23 +89,23 @@ W2 нужны общие модули **внутри** `handlers/` (`ooxml.ts`, 
 - Create: `src/modules/documents/handlers/zip.ts`
 - Test: `tests/documents/zip.test.ts`
 
-- [ ] **Step 1:** Падающий тест: собрать ZIP-фикстуру (stored + deflate), проверить
+- [x] **Step 1:** Падающий тест: собрать ZIP-фикстуру (stored + deflate), проверить
   извлечение записей и `readZipText`.
-- [ ] **Step 2:** Запустить — упасть: `bun test tests/documents/zip.test.ts`.
-- [ ] **Step 3:** Реализовать `readZip`/`readZipText` (EOCD, центральный каталог, local
+- [x] **Step 2:** Запустить — упасть: `bun test tests/documents/zip.test.ts`.
+- [x] **Step 3:** Реализовать `readZip`/`readZipText` (EOCD, центральный каталог, local
   header, методы 0/8, ясная `Error` на битый ввод).
-- [ ] **Step 4:** Запустить — пройти.
-- [ ] **Step 5: Коммит** `feat(documents): ZIP-читатель zip.ts (W2)`.
+- [x] **Step 4:** Запустить — пройти.
+- [x] **Step 5: Коммит** `feat(documents): ZIP-читатель zip.ts (W2)`.
 
 ### Task 3: OOXML-слой
 
 **Files:**
 - Create: `src/modules/documents/handlers/ooxml.ts`
 
-- [ ] **Step 1:** `parseXml` (`ignoreAttributes:false`, `@_`-префикс, значения тегов —
+- [x] **Step 1:** `parseXml` (`ignoreAttributes:false`, `@_`-префикс, значения тегов —
   строки), `asArray`, `attr`, `textOf`, `collectText`, `readOoxml(bytes)`.
   **Единственный** импорт `fast-xml-parser` (INV-D8).
-- [ ] **Step 2: Коммит** `feat(documents): OOXML-хелперы ooxml.ts (W2)`.
+- [x] **Step 2: Коммит** `feat(documents): OOXML-хелперы ooxml.ts (W2)`.
 
 ### Task 4: Обработчик XLSX
 
@@ -112,15 +113,15 @@ W2 нужны общие модули **внутри** `handlers/` (`ooxml.ts`, 
 - Create: `src/modules/documents/handlers/xlsx.ts`
 - Test: `tests/documents/handlers-xlsx.test.ts`
 
-- [ ] **Step 1:** Падающий тест на XLSX-фикстуре: `meta.sheets`, заголовок/строки, `kind:"sheet"`
+- [x] **Step 1:** Падающий тест на XLSX-фикстуре: `meta.sheets`, заголовок/строки, `kind:"sheet"`
   в outline, `truncated` при превышении `maxTableRows`.
-- [ ] **Step 2:** Запустить — упасть: `bun test tests/documents/handlers-xlsx.test.ts`.
-- [ ] **Step 3:** Реализовать: имена/порядок листов из `xl/workbook.xml`, rId→target через
+- [x] **Step 2:** Запустить — упасть: `bun test tests/documents/handlers-xlsx.test.ts`.
+- [x] **Step 3:** Реализовать: имена/порядок листов из `xl/workbook.xml`, rId→target через
   `xl/_rels/workbook.xml.rels` (фолбэк — `sheet{N}.xml`); shared strings; ячейки (`@_r` →
   колонка, `t="s"` → shared-string, `inlineStr`/`str` → литерал); прямоугольные строки.
   Нет worksheet-частей → `meta.degraded` (INV-D5), без исключения.
-- [ ] **Step 4:** Запустить — пройти.
-- [ ] **Step 5: Коммит** `feat(documents): обработчик XLSX (W2)`.
+- [x] **Step 4:** Запустить — пройти.
+- [x] **Step 5: Коммит** `feat(documents): обработчик XLSX (W2)`.
 
 ### Task 6: Вкл/выкл и реестр
 
@@ -128,12 +129,12 @@ W2 нужны общие модули **внутри** `handlers/` (`ooxml.ts`, 
 - Modify: `src/modules/documents/handlers/index.ts`
 - Test: `tests/documents/registry.test.ts` (дополнить)
 
-- [ ] **Step 1:** Падающий кейс: `.xlsx` c ZIP-magic резолвится в `xlsx`.
-- [ ] **Step 2:** Запустить — упасть.
-- [ ] **Step 3:** В `ACTIVE_GROUPS` добавить `"spreadsheet"`, в `HANDLERS` — `xlsxHandler`
+- [x] **Step 1:** Падающий кейс: `.xlsx` c ZIP-magic резолвится в `xlsx`.
+- [x] **Step 2:** Запустить — упасть.
+- [x] **Step 3:** В `ACTIVE_GROUPS` добавить `"spreadsheet"`, в `HANDLERS` — `xlsxHandler`
   (снять только соответствующие placeholder-строки `// → W2`).
-- [ ] **Step 4:** Запустить — пройти: `bun test tests/documents`.
-- [ ] **Step 5: Коммит** `feat(documents): включаю spreadsheet/xlsx в реестре (W2)`.
+- [x] **Step 4:** Запустить — пройти: `bun test tests/documents`.
+- [x] **Step 5: Коммит** `feat(documents): включаю spreadsheet/xlsx в реестре (W2)`.
 
 ---
 

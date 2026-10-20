@@ -1,6 +1,11 @@
 # RLM-Inspired Enhancements — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено (2026-10-20) — фазы A/B/C реализованы в master:
+> `src/modules/artifacts/store.ts` (pass-by-reference для субагента), `result_mode: "file"`
+> в `src/tools/subagent.ts` / `subagent-run.ts`, стабильный системный промпт
+> (`stableSystemPrompt`), `src/core/context/chunk-query.ts` (`chunk_query`).
+> Пункт Task 4 (интеграция с `moe-executor`) неактуален — MoE удалён
+> ([remove-moe-design](./2026-10-12-remove-moe-design.md)). Чекбоксы проставлены по факту.
 
 **Goal:** Port the two core ideas of Recursive Language Models (arXiv:2512.24601) into MMA v2 — *pass-by-reference* for sub-agent results and *programmatic chunked processing* of oversized inputs — so a 9B model with a 32K–64K context stops losing work to context-rot and can handle inputs far beyond its window.
 
@@ -52,7 +57,7 @@ Backward compatibility is a hard constraint: default config keeps today's behavi
 - Create: `src/modules/artifacts/store.ts`
 - Create: `tests/modules/artifacts/store.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/modules/artifacts/store.test.ts
@@ -99,12 +104,12 @@ describe("ArtifactStore", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bun test tests/modules/artifacts/store.test.ts`
 Expected: FAIL, module not found (`Cannot find module "../../src/modules/artifacts/store"`).
 
-- [ ] **Step 3: Implement the minimal module**
+- [x] **Step 3: Implement the minimal module**
 
 ```ts
 // src/modules/artifacts/store.ts
@@ -174,12 +179,12 @@ export class ArtifactStore {
 
 Note: `save()` throws on escape; `read()` returns `null` on escape. This asymmetry is intentional — writes are programmer-controlled, reads are user-controlled.
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `bun test tests/modules/artifacts/store.test.ts`
 Expected: 4 passing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/artifacts/store.ts tests/modules/artifacts/store.test.ts
@@ -196,7 +201,7 @@ git commit -m "feat(artifacts): ArtifactStore for sub-agent pass-by-reference re
 - Modify: `src/config/defaults.ts` (defaults)
 - Modify: `tests/config.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/config.test.ts` (add the `DEFAULT_CONFIG` import to the top of the file if it is not already there — check the existing imports first):
 
@@ -213,12 +218,12 @@ describe("subagent defaults", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bun test tests/config.test.ts`
 Expected: FAIL — `DEFAULT_CONFIG.subagent` is undefined.
 
-- [ ] **Step 3: Define the interface and defaults**
+- [x] **Step 3: Define the interface and defaults**
 
 In `src/config/types.ts`, add this interface (place near the other feature configs, e.g. after `SessionConfig`/`UiConfig` group):
 
@@ -261,12 +266,12 @@ In `src/config/defaults.ts` (next to the other default sections):
   },
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `bun test tests/config.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Typecheck and commit**
+- [x] **Step 5: Typecheck and commit**
 
 Run: `tsc --noEmit`
 Expected: no new errors on `src/config/types.ts` / `src/config/defaults.ts`.
@@ -286,7 +291,7 @@ git commit -m "feat(config): subagent section (resultMode, artifacts, chunk conc
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Modify: `tests/tools/subagent.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/tools/subagent.test.ts` (reuse the existing `mockAgentRun` mock and add `mkdtempSync`/`rmSync` imports if absent):
 
@@ -347,12 +352,12 @@ it("saves result to an artifact and returns a bounded summary when result_mode i
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bun test tests/tools/subagent.test.ts`
 Expected: FAIL — output still contains the full text (no `result_mode` handling yet). No i18n key exists yet either (`t("tool.subagent_artifact")` throws or falls through).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/tools/subagent.ts`:
 
@@ -435,12 +440,12 @@ Check how `t()` interpolates placeholders in this codebase (see existing usages 
 "tool.subagent_artifact": "Суб-агент завершён. Полный результат сохранён в артефакт: {path}\nИтераций: {iterations}\nСводка:\n{summary}"
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `bun test tests/tools/subagent.test.ts tests/i18n.test.ts`
 Expected: PASS — new test green, i18n parity check green (both locales have the key).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tools/subagent.ts src/i18n/en.json src/i18n/ru.json tests/tools/subagent.test.ts
@@ -456,7 +461,7 @@ git commit -m "feat(subagent): result_mode=file — pass-by-reference results vi
 - Modify: `src/modules/execution/moe-executor.ts`
 - Create: `tests/execution-moe-executor.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/execution-moe-executor.test.ts
@@ -536,12 +541,12 @@ describe("MoEExecutor with result_mode=file", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bun test tests/execution-moe-executor.test.ts`
 Expected: FAIL — `config.subagent`/`subagent.resultMode` is not read by `executeSubtask` yet.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/modules/execution/moe-executor.ts`:
 
@@ -600,12 +605,12 @@ import { ArtifactStore } from "../artifacts/store";
 
 Explanation: the Router's `verifyAndMerge` receives `VerifyInput.results` (JSON-serialized), so it needs the *content* — the summary alone is not enough to compose the final answer. The bounded summary is what the non-MoE parent agent gets; the orchestrator gets full content. `store.read()` is scoped to the artifacts root, so a malicious path in the handler output cannot escape.
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `bun test tests/execution-moe-executor.test.ts`
 Expected: PASS. Also run the full suite to confirm no MoE regression: `bun test`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/execution/moe-executor.ts tests/execution-moe-executor.test.ts
@@ -621,7 +626,7 @@ git commit -m "feat(moe): result_mode=file integration — Router receives artif
 - Modify: `src/tools/subagent.ts`
 - Modify: `tests/tools/subagent.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/tools/subagent.test.ts`:
 
@@ -656,12 +661,12 @@ it("keeps the system prompt fixed (KV-cache friendly) and puts context into the 
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bun test tests/tools/subagent.test.ts`
 Expected: FAIL — current system prompt embeds `Context: ${context}`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/tools/subagent.ts`, replace the inline system prompt construction with a module-level template constant and remove `context` from it:
 
@@ -701,12 +706,12 @@ The `fullTask` line already merges task + context into the user message:
       };
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `bun test tests/tools/subagent.test.ts`
 Expected: PASS (all existing + new tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tools/subagent.ts tests/tools/subagent.test.ts
@@ -722,7 +727,7 @@ git commit -m "perf(subagent): fixed system prompt template — KV-cache friendl
 - Modify: `src/tools/subagent.ts`
 - Modify: `tests/tools/subagent.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/tools/subagent.test.ts`:
 
@@ -756,11 +761,11 @@ it("includes the RLM few-shot workflow guidance in the system prompt", async () 
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Expected: FAIL — template is only one sentence.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace the template constant in `src/tools/subagent.ts` (Task 5) with the extended version — the fixed part stays byte-identical for KV cache, only the literal template changes:
 
@@ -774,12 +779,12 @@ Workflow rules:
 - When you finish, return a concise final answer; do not repeat file contents verbatim if you already wrote them to disk.`;
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `bun test tests/tools/subagent.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tools/subagent.ts tests/tools/subagent.test.ts
@@ -795,7 +800,7 @@ git commit -m "feat(subagent): few-shot workflow guidance (RLM-style pass-by-ref
 - Create: `src/modules/context/chunk-query.ts`
 - Create: `tests/chunk-query.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/chunk-query.test.ts
@@ -879,12 +884,12 @@ describe("runChunkQuery", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bun test tests/chunk-query.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // src/modules/context/chunk-query.ts
@@ -1010,12 +1015,12 @@ export async function runChunkQuery(
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `bun test tests/chunk-query.test.ts`
 Expected: PASS (4 tests).
 
-- [ ] **Step 5: Typecheck and commit**
+- [x] **Step 5: Typecheck and commit**
 
 Run: `tsc --noEmit`
 Expected: no new errors.
@@ -1035,7 +1040,7 @@ git commit -m "feat(chunk-query): RLM-style chunked parallel queries with synthe
 - Create: `tests/tools/chunk-query.test.ts`
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/tools/chunk-query.test.ts
@@ -1107,12 +1112,12 @@ describe("chunkQueryTool", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bun test tests/tools/chunk-query.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // src/tools/chunk-query.ts
@@ -1215,12 +1220,12 @@ Add i18n keys:
 "tool.chunk_query_no_input": "chunk_query: укажите input_path или text."
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `bun test tests/tools/chunk-query.test.ts tests/i18n.test.ts`
 Expected: PASS — 4 tool tests + i18n parity.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tools/chunk-query.ts tests/tools/chunk-query.test.ts src/i18n/en.json src/i18n/ru.json
@@ -1235,7 +1240,7 @@ git commit -m "feat(tools): chunk_query — parallel chunked queries over oversi
 
 - Modify: `src/tools/index.ts`
 
-- [ ] **Step 1: Add import and registration**
+- [x] **Step 1: Add import and registration**
 
 In `src/tools/index.ts`:
 
@@ -1253,22 +1258,22 @@ import { chunkQueryTool } from "./chunk-query";
     chunkQueryTool,
 ```
 
-- [ ] **Step 2: Verify with the existing tool tests**
+- [x] **Step 2: Verify with the existing tool tests**
 
 Run: `bun test tests/registry.test.ts tests/tools/filter-tools.test.ts tests/executor.test.ts`
 Expected: PASS — `chunk_query` appears in `registry.list()`, has `research`/`code` tags, and is filtered correctly by `filterToolsByTags`.
 
-- [ ] **Step 3: Full verification**
+- [x] **Step 3: Full verification**
 
 Run: `bun test` and `tsc --noEmit`
 Expected: full suite green, no new errors.
 
-- [ ] **Step 4: Smoke test (manual)**
+- [x] **Step 4: Smoke test (manual)**
 
 Run: `bun run mma "Прочитай docs/specs/2025-07-28-mma-v2-design.md и ответь, какие инструменты имеет MMA. Если файл слишком большой — используй chunk_query." --no-agents-md --exit-on-complete -d _testing/rlm-smoke`
 Expected: agent either uses `read_file` or picks `chunk_query`; exit code 0; check `bun run mma session show <id>` for a clean run.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tools/index.ts

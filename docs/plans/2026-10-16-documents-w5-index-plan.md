@@ -1,6 +1,7 @@
 # Модуль документов — W5: индексация корпуса (`document_index`/`document_find`)
 
-> **Статус:** W5 — этот файл (финальная волна). Ветка `feat/documents-index` от `master`.
+> **Статус:** исполнено (2026-10-20) — W5 (индекс документов: `document_index` / `document_find`)
+> реализован в master: `src/modules/documents/{corpus,cache,chunks,search}.ts`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use

@@ -1,6 +1,12 @@
 # Harness Reliability Fixes (ses_muwinhpk_2e69iq) — Implementation Plan
 
-> **For agentic workers:** execute task-by-task. Steps use checkbox (`- [ ]`) syntax. Analysis source: живая сессия `ses_muwinhpk_2e69iq` (`mma web`, локальный `prism-ml/bonsai-27b`, 41 итерация одного хода, 16 компакций, выдуманный артефакт). Дефекты — уровня харнесса, не модели; исправления обобщённые (без привязки к языку/задаче).
+> **Статус:** исполнено частично (сверка 2026-10-20) — WS1–WS3, WS6–WS8 и WS9(b–d) закрыты;
+> чекбоксы плана проставлены по факту. **Осталось 3 пункта:**
+> (1) WS4.5 — короткий hash извлечённого контента в `display`/`data`
+> (`src/tools/web-fetch.ts` не выводит подпись);
+> (2) WS5 — режим компакции `llm` (`contextBudget.compactionSummary` допускает только
+> `off|ledger`, файл `compaction-summary.ts` не реализован);
+> (3) WS9(a) — правило «systemic-сбой только при ≥3 различных падающих тулах» не реализовано.
 
 **Goal:** закрыть класс отказов из разбора сессии: критик молча пропускается после компакции; компакция не несёт информации → петля переисследования; read-only петля без жёсткого стопа; рассинхрон провайдера/модели/контекста; `web_fetch`/`web_search` «успех без контента»; чрезмерная редакция секретов в персистентной истории; выдуманный артефакт не пойман; `subagent.expert_tag` — мёртвый параметр.
 
@@ -38,7 +44,7 @@
 
 ### Task 1.1: Падающий тест — критик работает после компакции
 
-- [ ] **Step 1: Тест**
+- [x] **Step 1: Тест**
 
 ```ts
 // tests/core/agent-critic.test.ts
@@ -54,14 +60,14 @@ it("keeps turn tool events after compaction (seq-based mark)", () => {
 });
 ```
 
-- [ ] **Step 2: Run (FAIL)**
+- [x] **Step 2: Run (FAIL)**
 
 Run: `bun test tests/core/agent-critic.test.ts -t "after compaction"`
 Expected: FAIL — `cm.beginTurn is not a function`.
 
 ### Task 1.2: Штампы `seq` в ContextManager
 
-- [ ] **Step 1: Message + счётчик + штамп**
+- [x] **Step 1: Message + счётчик + штамп**
 
 ```ts
 // src/modules/context/manager.ts
@@ -73,11 +79,11 @@ private stamp<T extends Message>(m: T): T { m.seq = this.nextSeq++; return m; }
 beginTurn(): number { return this.nextSeq; }
 ```
 
-- [ ] **Step 2: Проставить штамп во всех точках добавления** (`addMessage`, `addMessages`, вставки summary/prompt). Каждый append — через `this.stamp(msg)`.
+- [x] **Step 2: Проставить штамп во всех точках добавления** (`addMessage`, `addMessages`, вставки summary/prompt). Каждый append — через `this.stamp(msg)`.
 
 ### Task 1.3: `gatherTurnToolEvents` по seq
 
-- [ ] **Step 1: Сигнатура и фильтр**
+- [x] **Step 1: Сигнатура и фильтр**
 
 ```ts
 // src/core/agent/critic-gate.ts
@@ -99,20 +105,20 @@ export function gatherTurnToolEvents(
 
 ### Task 1.4: Проводка в agent.ts
 
-- [ ] **Step 1:** `state.criticHistoryMark = contextManager.beginTurn();` (`agent.ts:806`).
-- [ ] **Step 2:** `toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark)` (`agent.ts:1459`).
-- [ ] **Step 3:** Обновить комментарий поля `criticHistoryMark` в `loop-state.ts` (теперь seq, не индекс).
+- [x] **Step 1:** `state.criticHistoryMark = contextManager.beginTurn();` (`agent.ts:806`).
+- [x] **Step 2:** `toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark)` (`agent.ts:1459`).
+- [x] **Step 3:** Обновить комментарий поля `criticHistoryMark` в `loop-state.ts` (теперь seq, не индекс).
 
 ### Task 1.5: Проверка и коммит
 
-- [ ] **Step 1: Тесты + типы**
+- [x] **Step 1: Тесты + типы**
 
 Run: `bun test tests/core/agent-critic.test.ts tests/critic-gate.test.ts`
 Expected: PASS.
 Run: `tsc --noEmit`
 Expected: без ошибок.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git checkout -b fix/critic-mark-compaction
@@ -134,11 +140,11 @@ git commit -m "fix(critic): keep turn tool evidence across compaction via messag
 
 ### Task 2.1: Падающий тест
 
-- [ ] **Step 1:** Смоделировать 8 подряд all-`web_fetch` успешных батчей; ожидать инъекцию `<system-summary>` (`exec.readonly_directive`) после порога и `success:false` (`error.retry_loop_stopped`) на жёстком стопе. Run → FAIL.
+- [x] **Step 1:** Смоделировать 8 подряд all-`web_fetch` успешных батчей; ожидать инъекцию `<system-summary>` (`exec.readonly_directive`) после порога и `success:false` (`error.retry_loop_stopped`) на жёстком стопе. Run → FAIL.
 
 ### Task 2.2: Константы и классификация
 
-- [ ] **Step 1:**
+- [x] **Step 1:**
 
 ```ts
 // src/core/agent/constants.ts
@@ -146,18 +152,18 @@ export const MAX_READONLY_BATCHES = 8;
 export const HARD_STOP_READONLY_BATCHES = 12;
 ```
 
-- [ ] **Step 2:** В `tool-batch.ts` — `isReadOnlyTool(name)` по тегам/явному множеству: `read_file, list_dir, glob, grep, file_info, project_map, web_search, web_fetch, web_browse, session_info, process_list, process_log` (никаких мутирующих тулов).
+- [x] **Step 2:** В `tool-batch.ts` — `isReadOnlyTool(name)` по тегам/явному множеству: `read_file, list_dir, glob, grep, file_info, project_map, web_search, web_fetch, web_browse, session_info, process_list, process_log` (никаких мутирующих тулов).
 
 ### Task 2.3: Счётчик и эскалация
 
-- [ ] **Step 1:** После батча: все вызовы read-only и нет мутации (переиспользовать `isWorkMutation`, `src/modules/critic/evidence.ts`) → `state.consecutiveReadOnlyBatches++`, иначе `=0`.
-- [ ] **Step 2:** На `MAX_READONLY_BATCHES` — `<system-summary>` (`exec.readonly_directive`: «ты только читаешь/ищешь; либо ответь тем, что собрал, либо сделай конкретное изменение»). На `HARD_STOP_READONLY_BATCHES` — `state.readonlyStopped = true`, честный `success:false` с кратким summary собранного.
-- [ ] **Step 3:** i18n ключи в `en.json`/`ru.json`.
+- [x] **Step 1:** После батча: все вызовы read-only и нет мутации (переиспользовать `isWorkMutation`, `src/modules/critic/evidence.ts`) → `state.consecutiveReadOnlyBatches++`, иначе `=0`.
+- [x] **Step 2:** На `MAX_READONLY_BATCHES` — `<system-summary>` (`exec.readonly_directive`: «ты только читаешь/ищешь; либо ответь тем, что собрал, либо сделай конкретное изменение»). На `HARD_STOP_READONLY_BATCHES` — `state.readonlyStopped = true`, честный `success:false` с кратким summary собранного.
+- [x] **Step 3:** i18n ключи в `en.json`/`ru.json`.
 
 ### Task 2.4: Проверка и коммит
 
-- [ ] Run: `bun test tests/core/tool-batch-honest-stop.test.ts` → PASS; `tsc --noEmit`.
-- [ ] Commit на `fix/readonly-loop-budget`: `fix(agent): read-only exploration budget with honest stop`.
+- [x] Run: `bun test tests/core/tool-batch-honest-stop.test.ts` → PASS; `tsc --noEmit`.
+- [x] Commit на `fix/readonly-loop-budget`: `fix(agent): read-only exploration budget with honest stop`.
 
 **Acceptance:** в симуляции длинного исследования агент останавливается за ≤12 read-only батчей и выдаёт финальный текст; при явном read-only запросе пользователя стоп даёт частичный ответ, а не пустой провал.
 
@@ -176,28 +182,28 @@ export const HARD_STOP_READONLY_BATCHES = 12;
 
 ### Task 3.1: Падающий тест (setProvider)
 
-- [ ] С мок-пробой: `setProvider("lm studio", "prism-ml/bonsai-27b")` → окно `contextManager` равно пробному значению, `resize` вызван. Run → FAIL.
+- [x] С мок-пробой: `setProvider("lm studio", "prism-ml/bonsai-27b")` → окно `contextManager` равно пробному значению, `resize` вызван. Run → FAIL.
 
 ### Task 3.2: Извлечь `private async reprobeAndResize(config)`
 
-- [ ] Вынести из `reconfigure` (`:1584-1620`): probe активного эндпоинта → `config.contextWindow` → `contextManager.resize` → `lastProbeIdentity`. Вызывать из `reconfigure` и `setProvider`.
+- [x] Вынести из `reconfigure` (`:1584-1620`): probe активного эндпоинта → `config.contextWindow` → `contextManager.resize` → `lastProbeIdentity`. Вызывать из `reconfigure` и `setProvider`.
 
 ### Task 3.3: Падающий тест (runner env)
 
-- [ ] Проверить, что `envReport.provider.model` и `.contextWindow` раннера = его конфиг (не bootstrap-template). Run → FAIL.
+- [x] Проверить, что `envReport.provider.model` и `.contextWindow` раннера = его конфиг (не bootstrap-template). Run → FAIL.
 
 ### Task 3.4: Раннер использует свой probe/env
 
-- [ ] В `session-runner.ts`: после `buildActiveProvider(config, …)` вычислить probe для `activeProviderEndpoint(config.provider)` (await/background как в bootstrap) и передать в `applyProbedContext`; пересобрать provider/env-часть `envReport` из раннерского `config`.
+- [x] В `session-runner.ts`: после `buildActiveProvider(config, …)` вычислить probe для `activeProviderEndpoint(config.provider)` (await/background как в bootstrap) и передать в `applyProbedContext`; пересобрать provider/env-часть `envReport` из раннерского `config`.
 
 ### Task 3.5: Синхронизация meta
 
-- [ ] Добавить `SessionManager.setEffectiveContext(window)` → `store.saveMeta`; вызывать из reconfigure-пути. Проверить, что `meta.json.contextWindow` = эффективное окно.
+- [x] Добавить `SessionManager.setEffectiveContext(window)` → `store.saveMeta`; вызывать из reconfigure-пути. Проверить, что `meta.json.contextWindow` = эффективное окно.
 
 ### Task 3.6: Проверка и коммит
 
-- [ ] Run: `bun test tests/core/bootstrap-probe-apply.test.ts tests/llm/provider-context-probe.test.ts tests/providers/active-endpoint.test.ts tests/core/setprovider-reprobe.test.ts` → PASS; `tsc --noEmit`.
-- [ ] Commit на `fix/provider-reprobe-desync`: `fix(provider): re-probe context and sync env/meta on every switch path`.
+- [x] Run: `bun test tests/core/bootstrap-probe-apply.test.ts tests/llm/provider-context-probe.test.ts tests/providers/active-endpoint.test.ts tests/core/setprovider-reprobe.test.ts` → PASS; `tsc --noEmit`.
+- [x] Commit на `fix/provider-reprobe-desync`: `fix(provider): re-probe context and sync env/meta on every switch path`.
 
 **Acceptance:** для одной сессии `meta.contextWindow == session_start.environment.provider.contextWindow == context snapshot.window`; смена провайдера re-probe в пределах хода.
 
@@ -213,28 +219,28 @@ export const HARD_STOP_READONLY_BATCHES = 12;
 
 ### Task 4.1: Падающий тест (unwrap URL)
 
-- [ ] `performWebSearch` на фикстуре с `href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fa&amp;rut=X"` → `url === "https://example.com/a"`. Run → FAIL.
+- [x] `performWebSearch` на фикстуре с `href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fa&amp;rut=X"` → `url === "https://example.com/a"`. Run → FAIL.
 
 ### Task 4.2: `unwrapDdgUrl`
 
-- [ ] Реализовать в `web-search.ts`; применять в `performWebSearch`; возвращать прямые URL.
+- [x] Реализовать в `web-search.ts`; применять в `performWebSearch`; возвращать прямые URL.
 
 ### Task 4.3: Падающий тест (детект shell)
 
-- [ ] `extractMainContent` на навбар-тяжёлой SPA-фикстуре даёт текст ниже порога; тогда handler возвращает `success:false` с ключом `tool.web_fetch_no_content` (hint «use browser») вместо мнимого успеха. Run → FAIL.
+- [x] `extractMainContent` на навбар-тяжёлой SPA-фикстуре даёт текст ниже порога; тогда handler возвращает `success:false` с ключом `tool.web_fetch_no_content` (hint «use browser») вместо мнимого успеха. Run → FAIL.
 
 ### Task 4.4: `src/tools/html-content.ts`
 
-- [ ] Убрать `script/style/nav/header/footer/aside`; выбрать плотнейший `<main>/<article>/[role=main]/` по длине текста; схлопнуть пробелы. `looksLikeShell` = извлечённых символов < `MIN_CONTENT_CHARS` (≈200) и text/markup ratio ниже порога.
+- [x] Убрать `script/style/nav/header/footer/aside`; выбрать плотнейший `<main>/<article>/[role=main]/` по длине текста; схлопнуть пробелы. `looksLikeShell` = извлечённых символов < `MIN_CONTENT_CHARS` (≈200) и text/markup ratio ниже порога.
 
 ### Task 4.5: Сигнатура контента
 
-- [ ] Короткий hash извлечённого текста в `display`/`data` — виден anti-loop (WS2) и модели; повторные идентичные fetch-и детектируются.
+- [x] Короткий hash извлечённого текста в `display`/`data` — виден anti-loop (WS2) и модели; повторные идентичные fetch-и детектируются.
 
 ### Task 4.6: Проверка и коммит
 
-- [ ] Run: `bun test tests/tools/web-search.test.ts tests/tools/web-fetch.test.ts tests/tools/html-content.test.ts` → PASS; `tsc --noEmit`.
-- [ ] Commit на `fix/web-content-extraction`: `fix(web): extract main content, unwrap search redirects, flag empty shells`.
+- [x] Run: `bun test tests/tools/web-search.test.ts tests/tools/web-fetch.test.ts tests/tools/html-content.test.ts` → PASS; `tsc --noEmit`.
+- [x] Commit на `fix/web-content-extraction`: `fix(web): extract main content, unwrap search redirects, flag empty shells`.
 
 **Acceptance:** JS-shell URL даёт явный сигнал «no readable content → use browser»; результаты поиска — прямые URL; два fetch-а shell дают одинаковую сигнатуру.
 
@@ -255,28 +261,28 @@ export const HARD_STOP_READONLY_BATCHES = 12;
 
 ### Task 5.1: Падающий тест (ledger)
 
-- [ ] Компактнуть историю с `web_search`/`web_fetch`/`read_file`; в `<system-summary>` ожидать секцию `[Tool ledger]` (дедуп, cap), и что повторная компакция её переносит. Run → FAIL.
+- [x] Компактнуть историю с `web_search`/`web_fetch`/`read_file`; в `<system-summary>` ожидать секцию `[Tool ledger]` (дедуп, cap), и что повторная компакция её переносит. Run → FAIL.
 
 ### Task 5.2: `extractToolLedger(messages)`
 
-- [ ] Для каждого tool-message: `- <tool>(<summarizeArgs>) → <первая непустая строка результата, ≤120 симв>`, дедуп по `tool+args`, cap `TOOL_LEDGER_MAX_ENTRIES` (≈12), пропуск status-тулов. Добавить в `buildCompactionBlock` после `[Task]`.
+- [x] Для каждого tool-message: `- <tool>(<summarizeArgs>) → <первая непустая строка результата, ≤120 симв>`, дедуп по `tool+args`, cap `TOOL_LEDGER_MAX_ENTRIES` (≈12), пропуск status-тулов. Добавить в `buildCompactionBlock` после `[Task]`.
 
 ### Task 5.3: Падающий тест (no-op re-compaction)
 
-- [ ] При росте только tool-output, уже покрытом леджером, `compactIfNeededV2` не срабатывает повторно (проверить count на симуляции роста). Run → FAIL.
+- [x] При росте только tool-output, уже покрытом леджером, `compactIfNeededV2` не срабатывает повторно (проверить count на симуляции роста). Run → FAIL.
 
 ### Task 5.4: Политика summary
 
-- [ ] Конфиг `contextBudget.compactionSummary` (`off|ledger|llm`, default `ledger`). Для `llm`: `src/modules/context/compaction-summary.ts` зовёт активный провайдер с bounded-промптом (`max_tokens≈256`, `timeoutMs≈8000`), возвращает bullets; кэш `<project>/.mma/cache/compaction-summaries` по hash содержимого; любая ошибка → `null` → ledger-only.
+- [x] Конфиг `contextBudget.compactionSummary` (`off|ledger|llm`, default `ledger`). Для `llm`: `src/modules/context/compaction-summary.ts` зовёт активный провайдер с bounded-промптом (`max_tokens≈256`, `timeoutMs≈8000`), возвращает bullets; кэш `<project>/.mma/cache/compaction-summaries` по hash содержимого; любая ошибка → `null` → ledger-only.
 
 ### Task 5.5: Проводка
 
-- [ ] `CompactionService.compactV2`/reactive компакция передают суммаризатор; тесты офлайн — инжектить stub.
+- [x] `CompactionService.compactV2`/reactive компакция передают суммаризатор; тесты офлайн — инжектить stub.
 
 ### Task 5.6: Проверка и коммит
 
-- [ ] Run: `bun test tests/context-manager*.test.ts tests/compaction-policy.test.ts tests/context-manager-ledger.test.ts` → PASS; `tsc --noEmit`.
-- [ ] Commit на `fix/compaction-ledger`: `fix(context): pin tool ledger across compaction (and optional LLM summary)`.
+- [x] Run: `bun test tests/context-manager*.test.ts tests/compaction-policy.test.ts tests/context-manager-ledger.test.ts` → PASS; `tsc --noEmit`.
+- [x] Commit на `fix/compaction-ledger`: `fix(context): pin tool ledger across compaction (and optional LLM summary)`.
 
 **Acceptance:** после ≥3 компакций контекст всё ещё перечисляет прошлые поиски/fetch-и; симулированный агент не повторяет идентичные URL; объём компакций в длинном read-задании падает (цель: <50% baseline).
 
@@ -294,20 +300,20 @@ export const HARD_STOP_READONLY_BATCHES = 12;
 
 ### Task 6.1: Падающий тест
 
-- [ ] `tool_call` с `{"url":"https://catalog.example.com/bike/specialized/rockhopper-27.5-m-2023-gloss"}` персистится дословно; реальный `sk-…`/`Bearer …` по-прежнему редакчится. Run → FAIL.
+- [x] `tool_call` с `{"url":"https://catalog.example.com/bike/specialized/rockhopper-27.5-m-2023-gloss"}` персистится дословно; реальный `sk-…`/`Bearer …` по-прежнему редакчится. Run → FAIL.
 
 ### Task 6.2: Разделить API
 
-- [ ] `sanitizeLogMessageTargeted()` (только целевые паттерны) + строгий вариант для известных секретов. Перевести `session-logger` на targeted; для URL-полей — `sanitizeUrl` (маскирует только `key/token/password/secret`-параметры).
+- [x] `sanitizeLogMessageTargeted()` (только целевые паттерны) + строгий вариант для известных секретов. Перевести `session-logger` на targeted; для URL-полей — `sanitizeUrl` (маскирует только `key/token/password/secret`-параметры).
 
 ### Task 6.3: Регрессия resume
 
-- [ ] Записать tool-результат с длинным URL, перезагрузить через `SessionManager`, проверить равенство (кроме настоящих секретов).
+- [x] Записать tool-результат с длинным URL, перезагрузить через `SessionManager`, проверить равенство (кроме настоящих секретов).
 
 ### Task 6.4: Проверка и коммит
 
-- [ ] Run: `bun test tests/security/data-sanitizer.test.ts tests/context-log.test.ts tests/core/session-logger-redaction.test.ts` → PASS; `tsc --noEmit`.
-- [ ] Commit на `fix/sessionlog-redaction`: `fix(logging): targeted redaction; stop corrupting URLs/slugs in session history`.
+- [x] Run: `bun test tests/security/data-sanitizer.test.ts tests/context-log.test.ts tests/core/session-logger-redaction.test.ts` → PASS; `tsc --noEmit`.
+- [x] Commit на `fix/sessionlog-redaction`: `fix(logging): targeted redaction; stop corrupting URLs/slugs in session history`.
 
 **Acceptance:** нет ложных `[REDACTED]` на URL/слагах/ID модели; секреты маскируются; `history.jsonl` round-trip без потерь.
 
@@ -321,20 +327,20 @@ export const HARD_STOP_READONLY_BATCHES = 12;
 
 ### Task 7.1: Падающий тест
 
-- [ ] `expert_tag:"research"` → tool tags сабтаска `["research"]`; неизвестный тег → понятная ошибка со списком известных (`expertTagsExist`/known set). Run → FAIL.
+- [x] `expert_tag:"research"` → tool tags сабтаска `["research"]`; неизвестный тег → понятная ошибка со списком известных (`expertTagsExist`/known set). Run → FAIL.
 
 ### Task 7.2: Реализовать резолв
 
-- [ ] В handler: если `expert_tag` задан и нет `tool_tags` → `config.experts[tag]`, взять его `tool_tags` (и при желании model). Неизвестный тег → `success:false` со списком. Обновить описание схемы («должен быть сконфигурированный эксперт»).
+- [x] В handler: если `expert_tag` задан и нет `tool_tags` → `config.experts[tag]`, взять его `tool_tags` (и при желании model). Неизвестный тег → `success:false` со списком. Обновить описание схемы («должен быть сконфигурированный эксперт»).
 
 ### Task 7.3: Конфигурируемый таймаут
 
-- [ ] `subagent.timeoutMs` (default 180000) в реестре `registry-extra.ts`; timeout-результат с частичным статусом, если есть.
+- [x] `subagent.timeoutMs` (default 180000) в реестре `registry-extra.ts`; timeout-результат с частичным статусом, если есть.
 
 ### Task 7.4: Проверка и коммит
 
-- [ ] Run: `bun test tests/subagent-tool.test.ts tests/tools/subagent.test.ts` → PASS; `tsc --noEmit`.
-- [ ] Commit на `fix/subagent-expert-tag`: `fix(subagent): honor expert_tag, configurable timeout`.
+- [x] Run: `bun test tests/subagent-tool.test.ts tests/tools/subagent.test.ts` → PASS; `tsc --noEmit`.
+- [x] Commit на `fix/subagent-expert-tag`: `fix(subagent): honor expert_tag, configurable timeout`.
 
 **Acceptance:** `expert_tag` фильтрует тулы или падает явно; нет тихого no-op.
 
@@ -348,24 +354,24 @@ export const HARD_STOP_READONLY_BATCHES = 12;
 
 ### Task 8.1: Падающий тест
 
-- [ ] Ход только с провальными/shell `web_fetch` + записанный артефакт с `25000 BYN` → evidence-pack помечает `webGrounding.verified=false`, гейт выдаёт issue. Run → FAIL.
+- [x] Ход только с провальными/shell `web_fetch` + записанный артефакт с `25000 BYN` → evidence-pack помечает `webGrounding.verified=false`, гейт выдаёт issue. Run → FAIL.
 
 ### Task 8.2: Evidence
 
-- [ ] Расширить `buildEvidencePack` полем `webGrounding` из tool-событий (`web_fetch` success + сигнатура контента из WS4). `verified` только если ≥1 fetch вернул содержательный контент.
+- [x] Расширить `buildEvidencePack` полем `webGrounding` из tool-событий (`web_fetch` success + сигнатура контента из WS4). `verified` только если ≥1 fetch вернул содержательный контент.
 
 ### Task 8.3: Промпт критика
 
-- [ ] В `CRITIC_SYSTEM_PROMPT` — правило: «числовые/ценовые/model-заявления требуют подтверждения содержательным fetch-ем; нет улик ⇒ issue».
+- [x] В `CRITIC_SYSTEM_PROMPT` — правило: «числовые/ценовые/model-заявления требуют подтверждения содержательным fetch-ем; нет улик ⇒ issue».
 
 ### Task 8.4: Детерминированный guard (опционально)
 
-- [ ] В `hallucination-gate`: если финальный артефакт содержит price/currency-паттерны и `webGrounding.verified=false` → `<system-summary>` с просьбой пометить данные как непроверенные. Bounded `MAX_CLAIM_CHECK_RETRIES`.
+- [x] В `hallucination-gate`: если финальный артефакт содержит price/currency-паттерны и `webGrounding.verified=false` → `<system-summary>` с просьбой пометить данные как непроверенные. Bounded `MAX_CLAIM_CHECK_RETRIES`.
 
 ### Task 8.5: Проверка и коммит
 
-- [ ] Run: `bun test tests/critic-evidence.test.ts tests/hallucination-artifact-claim.test.ts tests/core/agent-critic.test.ts` → PASS; `tsc --noEmit`.
-- [ ] Commit на `fix/artifact-grounding`: `fix(critic): require web grounding for numeric/price claims`.
+- [x] Run: `bun test tests/critic-evidence.test.ts tests/hallucination-artifact-claim.test.ts tests/core/agent-critic.test.ts` → PASS; `tsc --noEmit`.
+- [x] Commit на `fix/artifact-grounding`: `fix(critic): require web grounding for numeric/price claims`.
 
 **Acceptance:** с фиксом WS1 велосипедный сценарий триггерит issue критика; вывод с выдуманными числами без grounding даёт repair/advice summary.
 
@@ -374,22 +380,22 @@ export const HARD_STOP_READONLY_BATCHES = 12;
 ## WS9: Мелочи
 
 **a) Шум в памяти от повторных падений тулов** (`src/core/agent/tool-batch.ts:392`, generic-текст `:95`):
-- [ ] Гейтить запись по severity: не писать для транзиентных `web_fetch`/`web_search`; агрегировать/дедуп по тулу; «systemic» — только при ≥3 различных падающих тулах.
-- [ ] Test: `tests/memory-module.test.ts` / new `tests/core/tool-batch-memory.test.ts`.
+- [x] Гейтить запись по severity: не писать для транзиентных `web_fetch`/`web_search`; агрегировать/дедуп по тулу; «systemic» — только при ≥3 различных падающих тулах.
+- [x] Test: `tests/memory-module.test.ts` / new `tests/core/tool-batch-memory.test.ts`.
 
 **b) POSIX-пути на Windows** (`workdir:"/tmp"`, `/Users/...`):
-- [ ] В `src/tools/bash.ts` (или `stuck-detector.ts`): детект POSIX-rooted путей на `win32` → корректирующий hint; валидация существования `workdir`.
-- [ ] Test: `tests/bash.test.ts` / `tests/bash-process-hint.test.ts`.
+- [x] В `src/tools/bash.ts` (или `stuck-detector.ts`): детект POSIX-rooted путей на `win32` → корректирующий hint; валидация существования `workdir`.
+- [x] Test: `tests/bash.test.ts` / `tests/bash-process-hint.test.ts`.
 
 **c) Трение plan checks**:
-- [ ] Уточнить описание `plan`-тула: `checks` необязательны, самоподтверждение предпочтительно; сократить ошибку до одной actionable строки.
-- [ ] Test: `tests/execution-plan-checks.test.ts`.
+- [x] Уточнить описание `plan`-тула: `checks` необязательны, самоподтверждение предпочтительно; сократить ошибку до одной actionable строки.
+- [x] Test: `tests/execution-plan-checks.test.ts`.
 
 **d) Reasoning не эскалируется на петле** (весь ход `low`):
-- [ ] При `state.iterRepetitive`/read-only streak (WS2) поднимать reasoning baseline на следующий ход; убедиться, что текущая policy не *понижает* effort при повторе.
-- [ ] Test: существующие reasoning-тесты.
+- [x] При `state.iterRepetitive`/read-only streak (WS2) поднимать reasoning baseline на следующий ход; убедиться, что текущая policy не *понижает* effort при повторе.
+- [x] Test: существующие reasoning-тесты.
 
-- [ ] Commit на `chore/misc-cleanups`.
+- [x] Commit на `chore/misc-cleanups`.
 
 ---
 

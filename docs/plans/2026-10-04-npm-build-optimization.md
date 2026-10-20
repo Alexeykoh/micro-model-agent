@@ -1,6 +1,7 @@
 # npm Build Optimization (B) — Implementation Plan
 
-> **For agentic workers:** execute task-by-task. Steps use checkbox (`- [ ]`) syntax. Spec: [docs/specs/2026-10-04-npm-build-optimization-design.md](../specs/2026-10-04-npm-build-optimization-design.md).
+> **Статус:** исполнено (2026-10-20) — `js-tiktoken/lite`, `build:clean`, external-пакеты,
+> `build:optimize` (8.17 MB → 1.73 MB). Чекбоксы проставлены по факту.
 
 **Goal:** Сжать npm-пакет (`main.js` + ассеты/CSS/JSON), вынести зависимости, ускорить старт (лёгкий tiktoken), навести порядок в пайплайне — без runtime-сетевых докачек и без смены контрактов.
 
@@ -14,7 +15,7 @@
 
 **Files:** Modify `src/llm/token-counter.ts`; Test `tests/token-counter.test.ts`.
 
-- [ ] **Step 1: Switch imports and encoder**
+- [x] **Step 1: Switch imports and encoder**
 
 Replace the `js-tiktoken` import and `TokenCounter` construction:
 
@@ -42,12 +43,12 @@ export class TokenCounter {
 
 Keep `estimateTokens` and the rest of the class body unchanged.
 
-- [ ] **Step 2: Typecheck + tests**
+- [x] **Step 2: Typecheck + tests**
 
 Run: `bunx tsc --noEmit`
 Run: `bun test tests/token-counter.test.ts` — Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/llm/token-counter.ts
@@ -60,7 +61,7 @@ git commit -m "perf(llm): use js-tiktoken lite + cl100k_base (1.1MB vs 5.6MB)"
 
 **Files:** Create `scripts/clean.ts`; Modify `package.json`.
 
-- [ ] **Step 1: Write `scripts/clean.ts`**
+- [x] **Step 1: Write `scripts/clean.ts`**
 
 ```ts
 import { rm } from "fs/promises";
@@ -71,7 +72,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 await rm(join(root, "dist"), { recursive: true, force: true });
 ```
 
-- [ ] **Step 2: Point `build:clean` at it**
+- [x] **Step 2: Point `build:clean` at it**
 
 `package.json`:
 
@@ -79,11 +80,11 @@ await rm(join(root, "dist"), { recursive: true, force: true });
     "build:clean": "bun run scripts/clean.ts",
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `bun run build:clean` — Expected: `dist` removed (idempotent).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/clean.ts package.json
@@ -96,19 +97,19 @@ git commit -m "build: portable dist clean (drop Windows-only cmd)"
 
 **Files:** Modify `package.json`.
 
-- [ ] **Step 1: Update `build:bundle`**
+- [x] **Step 1: Update `build:bundle`**
 
 ```json
     "build:bundle": "bun build ./src/cli/main.ts --outfile ./dist/main.js --target node --format esm --packages external",
 ```
 
-- [ ] **Step 2: Verify size**
+- [x] **Step 2: Verify size**
 
 Run: `bun run build:clean && bun run build:bundle`
 Expected: `dist/main.js` ≈ 1.7 MB (was 7.68 MB). `bin/mma.mjs` still runs:
 `bun run mma -- --version` from repo root prints the version.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add package.json
@@ -121,7 +122,7 @@ git commit -m "build: externalize deps in the CLI bundle (7.7MB -> 1.7MB)"
 
 **Files:** Modify `scripts/build-frontend.ts`.
 
-- [ ] **Step 1: Drop empty `.ts` outputs**
+- [x] **Step 1: Drop empty `.ts` outputs**
 
 In the `.ts` branch of `walk`, skip writing when the transpiled JS is empty
 (type-only modules such as `core/store/types.ts`):
@@ -135,12 +136,12 @@ In the `.ts` branch of `walk`, skip writing when the transpiled JS is empty
     }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `bun run build:frontend`
 Expected: no `dist/assets/js/core/store/types.js` (0-byte file gone).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/build-frontend.ts
@@ -153,7 +154,7 @@ git commit -m "build(webui): skip empty type-only transpile output"
 
 **Files:** Create `scripts/optimize-dist.ts`; Modify `package.json` (add devDep esbuild, script, wire `build:prod`).
 
-- [ ] **Step 1: Write `scripts/optimize-dist.ts`**
+- [x] **Step 1: Write `scripts/optimize-dist.ts`**
 
 ```ts
 // Minify every JS/CSS/JSON artifact in `dist` in place (esbuild). This also
@@ -195,7 +196,7 @@ async function walk(dir: string): Promise<void> {
 await walk(dist);
 ```
 
-- [ ] **Step 2: Add `esbuild` devDependency + `build:optimize` + reorder `build:prod`**
+- [x] **Step 2: Add `esbuild` devDependency + `build:optimize` + reorder `build:prod`**
 
 `package.json`:
 
@@ -213,13 +214,13 @@ await walk(dist);
   }
 ```
 
-- [ ] **Step 3: Verify end-to-end**
+- [x] **Step 3: Verify end-to-end**
 
 Run: `bun run build:prod`
 Expected: `dist/main.js` ≈ 1.3 MB; total `dist` size ≈ 2.0–2.2 MB; browser assets
 minified; `bun run mma -- --version` works; `bun run mma web --no-open --help` prints help.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/optimize-dist.ts package.json
@@ -232,19 +233,19 @@ git commit -m "build: minify dist (js/css/json) via esbuild; add optimize step"
 
 **Files:** Modify `AGENTS.md`, `CHANGELOG.md`.
 
-- [ ] **Step 1: AGENTS.md** — add a short «npm Build Optimization» subsection under
+- [x] **Step 1: AGENTS.md** — add a short «npm Build Optimization» subsection under
   the WebUI/build notes: external deps, esbuild minify of `dist`, portable clean,
   lite tiktoken, expected sizes.
 
-- [ ] **Step 2: CHANGELOG.md** — `[Unreleased]` → `### Changed`: build optimization entry.
+- [x] **Step 2: CHANGELOG.md** — `[Unreleased]` → `### Changed`: build optimization entry.
 
-- [ ] **Step 3: Gates**
+- [x] **Step 3: Gates**
 
 Run: `bun run quality` (typecheck + frontend typecheck + lint + fallow) — Expected: exit 0.
 Run: `bun test` — Expected: all green (3035+).
 Run: `bun run build:prod` — Expected: sizes above; smoke `bun run mma -- --version`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add AGENTS.md CHANGELOG.md

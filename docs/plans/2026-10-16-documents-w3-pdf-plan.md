@@ -1,10 +1,9 @@
 # Модуль документов — W3: PDF (текстовый слой и оглавление)
 
-> **Статус:** W3 — этот файл. Ветка `feat/documents-pdf` от `master`.
+> **Статус:** исполнено (2026-10-20) — W3 (PDF) реализован в master; чекбоксы проставлены по факту.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Обработчик PDF модуля `documents` на `pdfjs-dist` (legacy build, текстовый слой без
 canvas): текст по страницам + оглавление из закладок (`getOutline`) либо эвристика по первой
@@ -47,20 +46,20 @@ canvas): текст по страницам + оглавление из закл
 **Files:**
 - Create: `docs/plans/2026-10-16-documents-w3-pdf-plan.md`
 
-- [ ] **Step 1:** Зафиксировать план W3 (этот файл) и закоммитить первым.
-- [ ] **Step 2: Коммит** `docs(documents): план W3 — PDF (W3)`.
+- [x] **Step 1:** Зафиксировать план W3 (этот файл) и закоммитить первым.
+- [x] **Step 2: Коммит** `docs(documents): план W3 — PDF (W3)`.
 
 ### Task 1: Детерминированные PDF-фикстуры
 
 **Files:**
 - Create: `tests/documents/fixtures-pdf.ts`
 
-- [ ] **Step 1:** Строитель минимального валидного PDF: `%PDF-1.4`, объекты
+- [x] **Step 1:** Строитель минимального валидного PDF: `%PDF-1.4`, объекты
   (Catalog/Pages/Page/Content/Font), `xref`, `trailer`, `%%EOF`. Расширяемый до N страниц с
   заданным текстом на страницу; пустой content stream → нет текстового слоя.
-- [ ] **Step 2:** Экспорты: `buildPdf(pages)`, `helloPdf()`, `noTextPdf()`,
+- [x] **Step 2:** Экспорты: `buildPdf(pages)`, `helloPdf()`, `noTextPdf()`,
   `multiPagePdf(texts)`.
-- [ ] **Step 3: Коммит** `test(documents): фикстуры PDF (W3)`.
+- [x] **Step 3: Коммит** `test(documents): фикстуры PDF (W3)`.
 
 ### Task 2: Обработчик PDF
 
@@ -68,18 +67,18 @@ canvas): текст по страницам + оглавление из закл
 - Create: `src/modules/documents/handlers/pdf.ts`
 - Test: `tests/documents/handlers-pdf.test.ts`
 
-- [ ] **Step 1:** Падающий тест: `helloPdf` → `meta.format==="pdf"`, `meta.pages===1`, текст
+- [x] **Step 1:** Падающий тест: `helloPdf` → `meta.format==="pdf"`, `meta.pages===1`, текст
   содержит "Hello", outline непуст; no-text → `degraded`; multipage; `detect` по `%PDF-`.
-- [ ] **Step 2:** Запустить — упасть: `bun test tests/documents/handlers-pdf.test.ts`.
-- [ ] **Step 3:** Реализовать `pdfHandler`: fake-worker hook
+- [x] **Step 2:** Запустить — упасть: `bun test tests/documents/handlers-pdf.test.ts`.
+- [x] **Step 3:** Реализовать `pdfHandler`: fake-worker hook
   (`globalThis.pdfjsWorker = { WorkerMessageHandler }`) до первого использования pdfjs;
   `getDocument({data}).promise`; `meta.pages = doc.numPages`; `getOutline()` → outline
   (`kind:"section"`, уровень из вложенности), иначе эвристика «первая непустая строка страницы
   → heading + outline, остаток → paragraph»; нет текста → `degraded`; `task.destroy()` в
   `finally`; текст через `boundText`. Малоформированный PDF — исключение наружу (fail-open
   тула, INV-D5), валидный без текста — `degraded`.
-- [ ] **Step 4:** Запустить — пройти.
-- [ ] **Step 5: Коммит** `feat(documents): обработчик PDF (W3)`.
+- [x] **Step 4:** Запустить — пройти.
+- [x] **Step 5: Коммит** `feat(documents): обработчик PDF (W3)`.
 
 ### Task 3: Гейт изоляции зависимости (INV-D8) + вкл/выкл
 
@@ -88,22 +87,22 @@ canvas): текст по страницам + оглавление из закл
 - Modify: `src/modules/documents/handlers/index.ts`
 - Test: `tests/documents/registry.test.ts` (дополнить)
 
-- [ ] **Step 1:** Расширить INV-D8: `pdfjs-dist` импортируется только из `handlers/pdf.ts`
+- [x] **Step 1:** Расширить INV-D8: `pdfjs-dist` импортируется только из `handlers/pdf.ts`
   (наравне с `fast-xml-parser` в `handlers/ooxml.ts`); добавить юнит-кейс на игнор в
   комментарии.
-- [ ] **Step 2:** В `ACTIVE_GROUPS` добавить `"pdf"`, в `HANDLERS` — `pdfHandler` (снять
+- [x] **Step 2:** В `ACTIVE_GROUPS` добавить `"pdf"`, в `HANDLERS` — `pdfHandler` (снять
   placeholder `// pdfHandler // → W3`; `image/geo` оставить закомментированными).
-- [ ] **Step 3:** Кейс реестра: `.pdf` с `%PDF-`-magic резолвится в `pdf`.
-- [ ] **Step 4:** Запустить — пройти: `bun test tests/documents tests/arch`.
-- [ ] **Step 5: Коммит** `feat(documents): гейт INV-D8 + включаю pdf в реестре (W3)`.
+- [x] **Step 3:** Кейс реестра: `.pdf` с `%PDF-`-magic резолвится в `pdf`.
+- [x] **Step 4:** Запустить — пройти: `bun test tests/documents tests/arch`.
+- [x] **Step 5: Коммит** `feat(documents): гейт INV-D8 + включаю pdf в реестре (W3)`.
 
 ### Task 4: Полная проверка
 
-- [ ] **Step 1:** `bun test tests/documents tests/arch` → зелёный (report real numbers).
-- [ ] **Step 2:** `bun run quality` → exit 0.
-- [ ] **Step 3:** `bun run build:documents` → exit 0; inline-check называет и
+- [x] **Step 1:** `bun test tests/documents tests/arch` → зелёный (report real numbers).
+- [x] **Step 2:** `bun run quality` → exit 0.
+- [x] **Step 3:** `bun run build:documents` → exit 0; inline-check называет и
   `fast-xml-parser`, и `pdfjs-dist`.
-- [ ] **Step 4:** Все файлы `src/` ≤300 строк; нет `as any`/`as unknown as`.
+- [x] **Step 4:** Все файлы `src/` ≤300 строк; нет `as any`/`as unknown as`.
 
 ---
 

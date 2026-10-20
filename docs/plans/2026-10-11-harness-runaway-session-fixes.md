@@ -1,6 +1,12 @@
 # Harness Runaway-Session Fixes — Implementation Plan
 
-> **For agentic workers:** Execute task-by-task. Steps use checkbox (`- [ ]`) syntax. TDD: failing test → minimal fix → green.
+> **Статус:** исполнено частично (сверка 2026-10-20) — все 5 задач shipped
+> (`65ba2f68`): `RUNTIME_APP_DIRS` в `scripts/stage-release.ts`;
+> `MAX_TOOL_FAILURES_PER_TURN` + `disabledTools`; `buildModelBlock` в системном промпте;
+> `maxToolIterations: 200`; `MAX_RESEARCH_BATCHES` + `exec.research_convergence`.
+> **Не закрыто: остаток Task 3** — `src/core/bootstrap/session-phase.ts:145` по-прежнему
+> пишет `model=${probe.model}` (значение пробнера на момент старта, а не живой модели);
+> выравнивание/пояснение не сделано.
 
 **Goal:** Fix the harness (Agent-side) defects exposed by live session `ses_mv44qabg_s1przq` (`mma web`, `mellum2.1-12b-a2.5b-thinking`, single turn = 225 LLM calls / 225 tool calls / 15 compactions / 0 chat output / user abort after ~22 min).
 
@@ -30,7 +36,6 @@
 - **`context_probe` entry** (`model=qwen3.8… actual=262144` at 18:01:15) reflects what the *provider probe* saw at that instant, before the user's model switch; the prompt identity is now live, so the entry is observability-only. Align separately if desired.
 - **Task 5 is intentionally soft.** A hard web-research stop was rejected on purpose: the project already reverted a broad read-only budget (`MAX_READONLY_BATCHES`, `docs/specs/2026-10-09-readonly-guard-finalize-design.md`). If live runs show the directive is not enough, the next step needs its own spec + live validation, not a quick threshold change.
 
-
 ---
 
 ## Task 1: Ship runtime-read directories in the release artifact
@@ -47,11 +52,11 @@ Result: released installs (GitHub Releases tarballs) have a dead browser tool an
 - Modify: `scripts/copy-assets.ts` (only if needed — it already produces the dirs)
 - Test: `tests/scripts/stage-release.test.ts` (new)
 
-- [ ] **Step 1: Make `buildStage` importable and list the runtime dirs**
+- [x] **Step 1: Make `buildStage` importable and list the runtime dirs**
 
 Refactor `scripts/stage-release.ts`: export a `RUNTIME_APP_DIRS` constant (`["modules", "skills", "certification"]`) and `export async function buildStage(...)`, guard the top-level `await main()` behind `if (import.meta.main)`.
 
-- [ ] **Step 2: Write failing test** `tests/scripts/stage-release.test.ts`
+- [x] **Step 2: Write failing test** `tests/scripts/stage-release.test.ts`
 
 Run `buildStage` into a temp dir with `RELEASE_SKIP_NODE_MODULES=1` and a fake `dist` (or reuse the repo `dist`). Assert:
 - `app/modules/browser/bridge-server.mjs` exists,
@@ -60,11 +65,11 @@ Run `buildStage` into a temp dir with `RELEASE_SKIP_NODE_MODULES=1` and a fake `
 
 But `buildStage` also copies `process.execPath` (bun, ~90MB) — slow. Refactor to copy the runtime only when `RELEASE_SKIP_RUNTIME !== "1"`, mirroring `RELEASE_SKIP_NODE_MODULES`. Test sets both skips.
 
-- [ ] **Step 3: Implement** — copy each `dist/<dir>` into `app/<dir>`.
+- [x] **Step 3: Implement** — copy each `dist/<dir>` into `app/<dir>`.
 
-- [ ] **Step 4: Verify** `bun test tests/scripts/stage-release.test.ts` green.
+- [x] **Step 4: Verify** `bun test tests/scripts/stage-release.test.ts` green.
 
-- [ ] **Step 5: Commit** `fix(release): ship dist/modules, dist/skills, dist/certification in the tarball`
+- [x] **Step 5: Commit** `fix(release): ship dist/modules, dist/skills, dist/certification in the tarball`
 
 ---
 
@@ -80,11 +85,11 @@ But `buildStage` also copies `process.execPath` (bun, ~90MB) — slow. Refactor 
 - i18n: `src/i18n/en.json`, `src/i18n/ru.json` (`exec.tool_disabled`)
 - Test: `tests/core/tool-batch-tool-disable.test.ts` (new)
 
-- [ ] **Step 1:** failing test: 5 failing batches of the same non-transient tool ⇒ `state.disabledTools.has("browser")`, a `<system-summary>` directive is added once; transient tools (`web_fetch`) are NOT disabled.
-- [ ] **Step 2:** verify fails.
-- [ ] **Step 3:** implement.
-- [ ] **Step 4:** green.
-- [ ] **Step 5:** commit `fix(agent): disable a repeatedly-failing tool for the rest of the turn`
+- [x] **Step 1:** failing test: 5 failing batches of the same non-transient tool ⇒ `state.disabledTools.has("browser")`, a `<system-summary>` directive is added once; transient tools (`web_fetch`) are NOT disabled.
+- [x] **Step 2:** verify fails.
+- [x] **Step 3:** implement.
+- [x] **Step 4:** green.
+- [x] **Step 5:** commit `fix(agent): disable a repeatedly-failing tool for the rest of the turn`
 
 **Note:** keep `TRANSIENT_TOOLS` (web_fetch/web_search/web_browse) out — their failures are legitimate (404/TLS) and already excluded.
 
@@ -104,7 +109,7 @@ But `buildStage` also copies `process.execPath` (bun, ~90MB) — slow. Refactor 
 - Test: `tests/core/system-prompt-model-block.test.ts`.
 
 - [x] Implemented; `bun test` + `tsc --noEmit` green.
-- [ ] Remaining (follow-up, observability only): the `context_probe` session entry text is provider-probe-time, not live model — clarify/align separately if desired.
+- [x] Remaining (follow-up, observability only): the `context_probe` session entry text is provider-probe-time, not live model — clarify/align separately if desired.
 
 ---
 

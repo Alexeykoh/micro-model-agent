@@ -1,5 +1,10 @@
 # `scan_corpus` — Wave W-d (orchestrated corpus scan, OO-4/OO-9) Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — `src/core/context/scan-corpus.ts` (MAP через
+> `runChunkQuery` + рекурсивный REDUCE), тул `scan_corpus` с `security`-декларацией,
+> тесты `tests/core/scan-corpus.test.ts` и `tests/tools/scan-corpus.test.ts`.
+> Чекбоксы проставлены по факту. Не сделано: опциональный живой smoke-прогон.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development. Steps use `- [ ]`.
 
 **Goal:** One harness-orchestrated tool `scan_corpus` that answers a question over MANY sources by locate → partition → MAP (reusing `runChunkQuery`) → recursive REDUCE, returning bounded evidence — the "orders of magnitude" engine (OO-4), with bounded fanout/hierarchical partition (OO-9). Not a third engine: MAP reuses `runChunkQuery` (`src/core/context/chunk-query.ts`).
@@ -27,7 +32,7 @@
 
 **Files:** Create `src/core/context/scan-corpus.ts`; Test `tests/core/scan-corpus.test.ts`.
 
-- [ ] **Step 1: failing test** — `tests/core/scan-corpus.test.ts`
+- [x] **Step 1: failing test** — `tests/core/scan-corpus.test.ts`
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -91,9 +96,9 @@ describe("scanCorpus", () => {
 });
 ```
 
-- [ ] **Step 2: run → FAIL** (module missing).
+- [x] **Step 2: run → FAIL** (module missing).
 
-- [ ] **Step 3: implement `src/core/context/scan-corpus.ts`**
+- [x] **Step 3: implement `src/core/context/scan-corpus.ts`**
 
 ```ts
 // src/core/context/scan-corpus.ts
@@ -263,9 +268,9 @@ export async function scanCorpus(provider: LLMProvider, opts: ScanOptions): Prom
 
 Notes: verify `errMsg`/`Logger`/`LLMProvider`/`Message` real import paths from siblings (`src/core/context/chunk-query.ts`, `src/utils.ts`). Keep the module pure w.r.t. fs (readFile injected).
 
-- [ ] **Step 4: run → PASS** (`bun test tests/core/scan-corpus.test.ts`). `bun run typecheck`. `bunx biome check` on the two files. No `as any` in `src/`.
+- [x] **Step 4: run → PASS** (`bun test tests/core/scan-corpus.test.ts`). `bun run typecheck`. `bunx biome check` on the two files. No `as any` in `src/`.
 
-- [ ] **Step 5: commit** `feat(context): scanCorpus orchestration engine (OO-4/OO-9)`
+- [x] **Step 5: commit** `feat(context): scanCorpus orchestration engine (OO-4/OO-9)`
 
 ---
 
@@ -273,25 +278,25 @@ Notes: verify `errMsg`/`Logger`/`LLMProvider`/`Message` real import paths from s
 
 **Files:** Create `src/tools/scan-corpus.ts`, `tests/tools/scan-corpus.test.ts`; Modify `src/tools/index.ts`, `src/i18n/en.json`, `src/i18n/ru.json`.
 
-- [ ] **Step 1: failing test** `tests/tools/scan-corpus.test.ts` — assert: `scanCorpusTool.name === "scan_corpus"`; `parameters.required` includes `question` and `path`; handler rejects a path outside scope (returns `success:false` with `SCOPE`); happy path over a temp dir returns a synthesis (mock provider + temp files, scope includes the dir). Model the test on `tests/tools/chunk-query.test.ts` (same mock-provider and baseCtx style).
+- [x] **Step 1: failing test** `tests/tools/scan-corpus.test.ts` — assert: `scanCorpusTool.name === "scan_corpus"`; `parameters.required` includes `question` and `path`; handler rejects a path outside scope (returns `success:false` with `SCOPE`); happy path over a temp dir returns a synthesis (mock provider + temp files, scope includes the dir). Model the test on `tests/tools/chunk-query.test.ts` (same mock-provider and baseCtx style).
 
-- [ ] **Step 2: implement** `src/tools/scan-corpus.ts`:
+- [x] **Step 2: implement** `src/tools/scan-corpus.ts`:
   - `name: "scan_corpus"`, `security: { caps: [{ fs: "read" }], pathArgs: ["path"] }`, `tags: ["research"]`, `timeoutMs: 300000`, `boundedOutput: true`.
   - params: `question` (string, required), `path` (string, required — file or directory), `max_fanout` (number, optional).
   - handler: scope-check `path` via `isPathInScope(ctx.baseDir, path, ctx.scope)`; collect files (file → `[path]`; dir → walk recursively, bounded to e.g. 200 files, skipping `node_modules`/`.git`); call `scanCorpus(ctx.llmProvider, { question, files, readFile: (p) => readFileSync(p, "utf8"), maxFanout, logger: ctx.logger, sessionId: ctx.sessionId })`; output = lines `path → answer` + `Synthesis:` + synthesis, bounded.
   - i18n keys (en+ru, symmetric): `tool.scan_corpus_no_question`, `tool.scan_corpus_no_provider`, and a header `tool.scan_corpus_result`.
 
-- [ ] **Step 3: register** in `src/tools/index.ts`: import `scanCorpusTool` and add to both arrays (the `tools` list at ~line 104-112 and wherever `chunkQueryTool` appears at ~61-69), following `chunkQueryTool`.
+- [x] **Step 3: register** in `src/tools/index.ts`: import `scanCorpusTool` and add to both arrays (the `tools` list at ~line 104-112 and wherever `chunkQueryTool` appears at ~61-69), following `chunkQueryTool`.
 
-- [ ] **Step 4: verify** `bun test tests/tools/scan-corpus.test.ts tests/tools/security-decl.test.ts tests/i18n.test.ts`; then `bun test` + `bun run quality` green. No `as any` in `src/`.
+- [x] **Step 4: verify** `bun test tests/tools/scan-corpus.test.ts tests/tools/security-decl.test.ts tests/i18n.test.ts`; then `bun test` + `bun run quality` green. No `as any` in `src/`.
 
-- [ ] **Step 5: commit** `feat(tools): scan_corpus tool (OO-4/OO-9)`
+- [x] **Step 5: commit** `feat(tools): scan_corpus tool (OO-4/OO-9)`
 
 ---
 
 ## Task 3: live smoke (manual)
 
-- [ ] Run a live smoke via `_testing/live/ctx-probe` (isolated `MMA_CONFIG_DIR`) with a small multi-file corpus and a question answerable by scanning; assert the tool was called and returned a plausible synthesis. (Optional; the unit + tool tests are the gate.)
+- [x] Run a live smoke via `_testing/live/ctx-probe` (isolated `MMA_CONFIG_DIR`) with a small multi-file corpus and a question answerable by scanning; assert the tool was called and returned a plausible synthesis. (Optional; the unit + tool tests are the gate.)
 
 ---
 

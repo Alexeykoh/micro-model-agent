@@ -1,7 +1,11 @@
 # Activity Rail Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — ключ `ui.activityRail` (off|line|meta|full),
+> разметка `#railWrap`, CSS `.rail-wrap`/`.rl-track`/`.rl-scan`, модуль `assets/js/rail.ts`,
+> панель настроек + live-применение, i18n `web.rail.*` (en/ru), source-guard тест.
+> Чекбоксы проставлены по факту.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans (inline) or
-> superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Показывать над строкой ввода в web-UI индикатор занятости агента
 (раскладки `off|line|meta|full`, indeterminate-сканер без плана, честный
@@ -26,7 +30,7 @@ static-разметка в `index.html`, CSS в `styles.css`, wiring в `app.js`
 - Modify: `src/config/registry-extra.ts` (после блока `ui.spinner`, line 254)
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 
-- [ ] `types.ts` — в `UiConfig`:
+- [x] `types.ts` — в `UiConfig`:
 
 ```ts
   /**
@@ -37,13 +41,13 @@ static-разметка в `index.html`, CSS в `styles.css`, wiring в `app.js`
   activityRail: "off" | "line" | "meta" | "full";
 ```
 
-- [ ] `defaults.ts` — в `ui: {`:
+- [x] `defaults.ts` — в `ui: {`:
 
 ```ts
     activityRail: "line",
 ```
 
-- [ ] `registry-extra.ts` — сразу после `bool("ui.spinner", ...)`:
+- [x] `registry-extra.ts` — сразу после `bool("ui.spinner", ...)`:
 
 ```ts
   enumOf("ui.activityRail", "ui", ["off", "line", "meta", "full"] as const, false,
@@ -51,7 +55,7 @@ static-разметка в `index.html`, CSS в `styles.css`, wiring в `app.js`
     (c, v) => { c.ui.activityRail = v as "off" | "line" | "meta" | "full"; }),
 ```
 
-- [ ] i18n (`en.json` рядом с `config.key.ui.spinner`:1510, `ru.json`:1510) —
+- [x] i18n (`en.json` рядом с `config.key.ui.spinner`:1510, `ru.json`:1510) —
   добавить в оба файла (паритет строго проверяется `tests/i18n.test.ts`):
 
 ```json
@@ -76,14 +80,14 @@ ru:
 
 (`config.enum.off` может существовать — не дублировать, проверить `rg '"config.enum.off"' src/i18n/en.json`.)
 
-- [ ] Запуск: `bun test tests/i18n.test.ts tests/config-registry-extra.test.ts tests/config-domains.test.ts`
+- [x] Запуск: `bun test tests/i18n.test.ts tests/config-registry-extra.test.ts tests/config-domains.test.ts`
   Expected: PASS (тест паритета требует `config.key/desc.ui.activityRail` в en и ru).
 
 ### Task 2: Разметка в `index.html`
 
 **Files:** `src/modules/webui/assets/index.html:39` (внутрь `.input-area`, **перед** `.selectors` — как в утверждённом демо)
 
-- [ ] Вставить:
+- [x] Вставить:
 
 ```html
     <div class="input-area">
@@ -114,20 +118,20 @@ ru:
 **Files:** `src/modules/webui/assets/styles.css` — вставка после `.input-area.dragover`
 блока (~line 571), перед секцией sidebar.
 
-- [ ] Скопировать CSS-секцию `№12` из
+- [x] Скопировать CSS-секцию `№12` из
   `docs/design/ui/demo-activity-rail-chat.html` (строки 28–90) с двумя правками:
   - `body.rl-tool` → `.rail-wrap.phase-tool`, `body.rl-compose` → `.rail-wrap.phase-compose`
     (классы живут на корне rail, не на body);
   - `.rail-l2 .last` — цвет `var(--args)` (есть в демо).
   Добавить строку `.rail-wrap[hidden] { display: none; }` (иначе `display:flex`
   перебивает `hidden`).
-- [ ] Проверка: `rg 'rl-track|l-meta' src/modules/webui/assets/styles.css` — блок на месте.
+- [x] Проверка: `rg 'rl-track|l-meta' src/modules/webui/assets/styles.css` — блок на месте.
 
 ### Task 4: Модуль `js/rail.js`
 
 **Files:** Create: `src/modules/webui/assets/js/rail.js`
 
-- [ ] Написать модуль (полный код):
+- [x] Написать модуль (полный код):
 
 ```js
 // Activity rail — the indicator above the composer for the whole `busy` period.
@@ -245,7 +249,7 @@ export function railEvent(kind, name) {
 export function applyRailI18n() { render(); }
 ```
 
-- [ ] Примечания:
+- [x] Примечания:
   - `labelOf` экспортируется из `./format.js:41` (тот же mapping, что в ленте);
   - `t(key, {cur,total})` подставляет `{...}` (`i18n.js:14`); `pluralCount(base,n)`
     использует `_one/_few/_many` с `{count}` (`i18n.js:24`);
@@ -258,21 +262,21 @@ export function applyRailI18n() { render(); }
 - Modify: `src/modules/webui/assets/js/tabs.js:649` (`reflectBusy`)
 - Modify: `src/modules/webui/assets/js/settings.js:155` (`postConfig`)
 
-- [ ] `app.js` — импорт (рядом с другими `./js/*`):
+- [x] `app.js` — импорт (рядом с другими `./js/*`):
 
 ```js
 import { initRail, setBusy as railBusy, setPlan as railPlan, railEvent, applyRailI18n } from "./js/rail.js";
 ```
 
-- [ ] `app.js` `boot()` — после `await loadConfig();` (line ~248):
+- [x] `app.js` `boot()` — после `await loadConfig();` (line ~248):
 
 ```js
   initRail(S.state.config && S.state.config.ui ? S.state.config.ui.activityRail : undefined);
 ```
 
-- [ ] `app.js` `applyStaticI18n()` — в конец функции: `applyRailI18n();`
+- [x] `app.js` `applyStaticI18n()` — в конец функции: `applyRailI18n();`
 
-- [ ] `app.js` `connectSSE()` — после цикла `for (const [event, fn] of handlers)`
+- [x] `app.js` `connectSSE()` — после цикла `for (const [event, fn] of handlers)`
   (line ~137) вставить:
 
 ```js
@@ -287,7 +291,7 @@ import { initRail, setBusy as railBusy, setPlan as railPlan, railEvent, applyRai
   }
 ```
 
-- [ ] `app.js` `renderState(snapshot, busy)` — после `renderPlan(S.state.host.plan);` (line 66):
+- [x] `app.js` `renderState(snapshot, busy)` — после `renderPlan(S.state.host.plan);` (line 66):
 
 ```js
   railPlan(busy && snapshot ? snapshot.plan : null);
@@ -296,14 +300,14 @@ import { initRail, setBusy as railBusy, setPlan as railPlan, railEvent, applyRai
 (`reflectBusy()` в строке 58 уже дёргается → `setBusy` хук в tabs.js ниже;
 busy-переход false→true сбрасывает счётчики, в т.ч. старый plan.)
 
-- [ ] `tabs.js` — импорт + в `reflectBusy()` (конец функции, line 664):
+- [x] `tabs.js` — импорт + в `reflectBusy()` (конец функции, line 664):
 
 ```js
 import { setBusy } from "./rail.js";
   setBusy(S.state.busy);
 ```
 
-- [ ] `settings.js` — импорт + в `postConfig()` после
+- [x] `settings.js` — импорт + в `postConfig()` после
   `if (S.state.config && r.data.value !== undefined) setPath(...)` (line 160):
 
 ```js
@@ -316,7 +320,7 @@ import { setBusy } from "./rail.js";
 
 **Files:** `src/modules/webui/assets/js/settings-controls.js:424`
 
-- [ ] Строка панели `ui.chat` →
+- [x] Строка панели `ui.chat` →
   `keys: ["ui.activityRail", "ui.spinner", "ui.showContextStats", "ui.showCompaction"]`
   (enum-контрол рисуется автоматически по `valueType:"enum"` + подписи
   `config.enum.*` из Task 1).
@@ -325,7 +329,7 @@ import { setBusy } from "./rail.js";
 
 **Files:** `src/i18n/en.json` (около `web.action.thinking`:1346), `src/i18n/ru.json` (около 1322)
 
-- [ ] en:
+- [x] en:
 
 ```json
   "web.rail.working": "working",
@@ -340,7 +344,7 @@ import { setBusy } from "./rail.js";
   "web.rail.events_many": "{count} events"
 ```
 
-- [ ] ru:
+- [x] ru:
 
 ```json
   "web.rail.working": "выполняю",
@@ -357,13 +361,13 @@ import { setBusy } from "./rail.js";
   "web.rail.events_many": "{count} событий"
 ```
 
-- [ ] Запуск: `bun test tests/i18n.test.ts tests/webui-i18n.test.ts` — PASS.
+- [x] Запуск: `bun test tests/i18n.test.ts tests/webui-i18n.test.ts` — PASS.
 
 ### Task 8: Source-guard тест
 
 **Files:** `tests/webui-assets.test.ts` (конец файла, внутри общего `describe`)
 
-- [ ] Добавить:
+- [x] Добавить:
 
 ```ts
   it("wires the activity rail above the composer", () => {
@@ -380,17 +384,17 @@ import { setBusy } from "./rail.js";
   });
 ```
 
-- [ ] Запуск: `bun test tests/webui-assets.test.ts` — PASS.
+- [x] Запуск: `bun test tests/webui-assets.test.ts` — PASS.
 
 ### Task 9: Quality gate
 
-- [ ] `bun run quality` (= typecheck + lint + fallow) — зелёный.
-- [ ] `bun test` — полный прогон зелёный.
-- [ ] Ручная проверка по п.11 спеки (`bun run web:dev`) — **только если пользователь
+- [x] `bun run quality` (= typecheck + lint + fallow) — зелёный.
+- [x] `bun test` — полный прогон зелёный.
+- [x] Ручная проверка по п.11 спеки (`bun run web:dev`) — **только если пользователь
   просит**; Playwright e2e — только по явной команде (AGENTS.md).
-- [ ] Обновить `CHANGELOG.md` (Unreleased/новый PATCH-раздел, `**webui**:` entry)
+- [x] Обновить `CHANGELOG.md` (Unreleased/новый PATCH-раздел, `**webui**:` entry)
   и добавить в `AGENTS.md` короткий пункт в секцию Web UI (расширив раздел 2.x).
-- [ ] Не коммитить без явной просьбы пользователя (рабочее дерево содержит
+- [x] Не коммитить без явной просьбы пользователя (рабочее дерево содержит
   посторонние изменения).
 
 ### Self-review (спека → план)

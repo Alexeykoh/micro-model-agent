@@ -1,8 +1,12 @@
 # WebUI Modularization — Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — фазы 0–7 закрыты (подпапки webui, role-интерфейсы
+> в `state.ts`, фронт разбит, `S` удалён, `KNOWN_INVERSIONS = []`, гварды
+> `tests/webui-boundaries.test.ts` / `tests/webui-frontend-graph.test.ts`).
+> Чекбоксы проставлены по факту.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Второй проход модуляризации webui по трём целям — A (навигация по доменам),
 B (узкие контракты вместо god-object `WebUiState`/`S`), C (разрезать крупные файлы по
@@ -206,7 +210,7 @@ Modify ~35 модулей-потребителей.
       `bun test tests/webui-*` 331 pass/5 skip; полный `bun test` 3022 pass/0 fail;
       `tsc --noEmit`; `bun run quality` exit 0. Обновлён source-guard `tests/webui-i18n.test.ts`
       (section-keys теперь в `settings/panels.js`). e2e — по запросу (не запускался).
-- [ ] Прогон: guard фронт-графа + `node --check` + `bun test` + `bun run test:e2e` +
+- [x] Прогон: guard фронт-графа + `node --check` + `bun test` + `bun run test:e2e` +
       ручной smoke `bun run web:dev` (чат/вкладки/настройки/сайдбар).
 
 **Швы/предупреждения из анализа (не резать «по интуиции»):**
@@ -241,7 +245,7 @@ Modify ~35 модулей-потребителей.
       `tsc --allowJs --checkJs --lib dom` — 0 `Cannot find name`; `bun test tests/webui-*`
       331 pass/5 skip; полный `bun test` 3022 pass/0 fail; `tsc --noEmit`; `bun run quality`
       exit 0.
-- [ ] **Step 3 (решение §9.3) — ОТКЛОНЁН:** перенос `app.js`/`md.js` в `js/` не нужен —
+- [x] **Step 3 (решение §9.3) — ОТКЛОНЁН:** перенос `app.js`/`md.js` в `js/` не нужен —
       текущие пути (`/app.js`, `/md.js`) работают, а перенос дал бы churn в `index.html`/
       `assets.ts`/роутах без выигрыша. `setup.js` не трогаем.
 - [x] **Step 4 (решение §9.4) — ОТКЛОНЁН `// @ts-check`:** пилотный прогон

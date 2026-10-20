@@ -1,5 +1,10 @@
 # `append_file` — Wave W-e (incremental output, OO-5) Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — тул `append_file` (`src/tools/append-file.ts`)
+> с `security`-декларацией, регистрация в `src/tools/index.ts` и в FS-write гейтах,
+> i18n `file.appended` (en/ru), тест `tests/tools/append-file.test.ts`.
+> Чекбоксы проставлены по факту.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development. Steps use `- [ ]`.
 
 **Goal:** OO-5 — длинный вывод собирается **инкрементально** в артефакт, а не одним ответом. Добавить тул `append_file`, который дописывает контент в файл (создавая его), с теми же security-проверками, что у `write_file`, — чтобы модель наращивала вывод куском за куском без переполнения окна.
@@ -14,13 +19,13 @@
 
 **Files:** Create `src/tools/append-file.ts`, `tests/tools/append-file.test.ts`; Modify `src/tools/index.ts`, `src/i18n/en.json`, `src/i18n/ru.json`.
 
-- [ ] **Step 1: failing test** `tests/tools/append-file.test.ts` — modelled on an existing simple write-tool test; assert:
+- [x] **Step 1: failing test** `tests/tools/append-file.test.ts` — modelled on an existing simple write-tool test; assert:
   - `appendFileTool.name === "append_file"`; `parameters.required` includes `path` and `content`.
   - append to an existing file grows it (previous content preserved + new appended).
   - creates the file (and parent dirs) when missing.
   - `ctx.writePathAllowlist` set to a different path → `success:false` (blocked).
 
-- [ ] **Step 2: implement `src/tools/append-file.ts`**
+- [x] **Step 2: implement `src/tools/append-file.ts`**
   - `name: "append_file"`, `security: { caps: [{ fs: "write" }], pathArgs: ["path"] }`, `icon: "➕"`, `tags: ["file", "code"]`, `boundedOutput: true`.
   - `description`: "Append content to a file (creating it and parent directories if needed). Use to build a long output incrementally instead of rewriting the whole file."
   - `parameters`: `path` (string), `content` (string), `required: ["path","content"]`.
@@ -34,13 +39,13 @@
     - output `t("file.appended", { path, chars: String(content.length) })`.
   - no `as any`.
 
-- [ ] **Step 3: i18n** — add `file.appended` to BOTH en and ru (symmetric: `{path}`, `{chars}`); reuse existing `file.write_failed` / `file.path_not_allowed`.
+- [x] **Step 3: i18n** — add `file.appended` to BOTH en and ru (symmetric: `{path}`, `{chars}`); reuse existing `file.write_failed` / `file.path_not_allowed`.
 
-- [ ] **Step 4: register** in `src/tools/index.ts` (import + both arrays, next to `writeFileTool`).
+- [x] **Step 4: register** in `src/tools/index.ts` (import + both arrays, next to `writeFileTool`).
 
-- [ ] **Step 5: verify** `bun test tests/tools/append-file.test.ts tests/tools/security-decl.test.ts tests/i18n.test.ts`; then `bun test` + `bun run quality` exit 0. No `as any` in `src/`.
+- [x] **Step 5: verify** `bun test tests/tools/append-file.test.ts tests/tools/security-decl.test.ts tests/i18n.test.ts`; then `bun test` + `bun run quality` exit 0. No `as any` in `src/`.
 
-- [ ] **Step 6: commit** `feat(tools): append_file — incremental artifact output (OO-5)`
+- [x] **Step 6: commit** `feat(tools): append_file — incremental artifact output (OO-5)`
 
 ---
 

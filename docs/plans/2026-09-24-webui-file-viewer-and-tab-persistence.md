@@ -1,6 +1,10 @@
 # Web UI: file viewer hardening + reasoning channel split + tab persistence — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Статус:** исполнено (2026-10-20) — cookie-аутентификация, anchor на `/api/file`,
+> отдельный reasoning-канал (SSE `reasoning`), свёрнутый блок reasoning, text/plain-ошибки
+> и UTF-16 BOM-декод, персистентность `?session=`. Чекбоксы проставлены по факту.
+> Отличие: класс `.fc-open` переименован в `.path`, левый клик открывает файл во вкладке
+> Files (`1112c2b4`).
 
 **Goal:** Finish the web file-card/viewer work (anchor Open, no token in URL, UTF-16, human-readable errors) and split reasoning from the generic `meta` channel; persist the active session tab in the URL so a page refresh restores the session.
 
@@ -39,12 +43,12 @@
 - Modify: `src/modules/webui/server.ts`
 - Test: `tests/webui-auth.test.ts`
 
-- [ ] **Step 1: Read the existing auth test to match its style**
+- [x] **Step 1: Read the existing auth test to match its style**
 
 Run: `Get-Content tests/webui-auth.test.ts`
 Note the helper that spins up `handleRequest` with an explicit `WebUiState`.
 
-- [ ] **Step 2: Write failing tests for cookie auth**
+- [x] **Step 2: Write failing tests for cookie auth**
 
 Add to `tests/webui-auth.test.ts` (import `checkAuth` from `../src/modules/webui/util` and `type { IncomingMessage } from "node:http"`). A browser-forbidden `Cookie` request header is unreliable via `fetch`, so unit-test `checkAuth` directly and only read `Set-Cookie` over HTTP:
 
@@ -68,12 +72,12 @@ it("sets the auth cookie on an authenticated api response", async () => {
 });
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+- [x] **Step 3: Run to verify it fails**
 
 Run: `bun test tests/webui-auth.test.ts`
 Expected: FAIL (cookie not accepted / no set-cookie).
 
-- [ ] **Step 4: Implement cookie parsing + setter in `util.ts`**
+- [x] **Step 4: Implement cookie parsing + setter in `util.ts`**
 
 Add below `safeEqual`:
 
@@ -121,7 +125,7 @@ export function checkAuth(req: IncomingMessage, reqUrl: URL, s: WebUiState): boo
 }
 ```
 
-- [ ] **Step 5: Set the cookie in `server.ts` after auth passes**
+- [x] **Step 5: Set the cookie in `server.ts` after auth passes**
 
 Import `setAuthCookie`, then in `handleRequest`:
 
@@ -142,12 +146,12 @@ if (reqUrl.pathname.startsWith("/api/")) {
 }
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `bun test tests/webui-auth.test.ts tests/webui-server.test.ts`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/modules/webui/util.ts src/modules/webui/server.ts tests/webui-auth.test.ts
@@ -163,7 +167,7 @@ git commit -m "feat(webui): set/accept SameSite token cookie for GET navigations
 - Modify: `src/modules/webui/assets/styles.css`
 - Test: `tests/webui-assets.test.ts`
 
-- [ ] **Step 1: Write a failing asset guard**
+- [x] **Step 1: Write a failing asset guard**
 
 Replace the existing `wires the file card's Open button` test in `tests/webui-assets.test.ts` with:
 
@@ -177,12 +181,12 @@ it("wires the file card's Open link to /api/file in a new tab", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/webui-assets.test.ts`
 Expected: FAIL (current code uses `window.open` and appends `token`).
 
-- [ ] **Step 3: Replace `openFileViewer` with an anchor and use it in `cardFor`**
+- [x] **Step 3: Replace `openFileViewer` with an anchor and use it in `cardFor`**
 
 In `app.js`, delete `openFileViewer` and in `cardFor` replace the button block:
 
@@ -200,7 +204,7 @@ In `app.js`, delete `openFileViewer` and in `cardFor` replace the button block:
       card.appendChild(bottom);
 ```
 
-- [ ] **Step 4: Style the anchor like the button**
+- [x] **Step 4: Style the anchor like the button**
 
 In `styles.css` replace the `.filecard .fc-open` rules:
 
@@ -214,12 +218,12 @@ In `styles.css` replace the `.filecard .fc-open` rules:
 .filecard .fc-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `bun test tests/webui-assets.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/modules/webui/assets/app.js src/modules/webui/assets/styles.css tests/webui-assets.test.ts
@@ -236,7 +240,7 @@ git commit -m "feat(webui): file card Open is a real new-tab link (no token in U
 - Modify: `src/modules/webui/forward.ts`, `src/modules/webui/module.ts`
 - Test: `tests/webui-forward.test.ts`
 
-- [ ] **Step 1: Write a failing forwarder test**
+- [x] **Step 1: Write a failing forwarder test**
 
 Add to `tests/webui-forward.test.ts`:
 
@@ -253,12 +257,12 @@ it("emits a dedicated reasoning event, not meta", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/webui-forward.test.ts`
 Expected: FAIL (`fwd.onReasoning is not a function`).
 
-- [ ] **Step 3: Add `onReasoning` to the forwarder**
+- [x] **Step 3: Add `onReasoning` to the forwarder**
 
 In `forward.ts`: add to the `Forwarder` interface and buffer it separately.
 
@@ -295,7 +299,7 @@ In the returned object add next to `onMeta`:
     },
 ```
 
-- [ ] **Step 4: Thread `onReasoning` through the agent**
+- [x] **Step 4: Thread `onReasoning` through the agent**
 
 In `src/core/agent.ts`:
 
@@ -352,7 +356,7 @@ Also update the reasoning→text separator (line ~866) so it stays on the reason
             }
 ```
 
-- [ ] **Step 5: Update the existing agent test**
+- [x] **Step 5: Update the existing agent test**
 
 `tests/core/agent.test.ts:1187` asserts reasoning arrives via `onMeta`. Rename it and pass the new callback (6th argument):
 
@@ -376,7 +380,7 @@ Also update the reasoning→text separator (line ~866) so it stays on the reason
   });
 ```
 
-- [ ] **Step 6: Wire REPL and one-shot renderers**
+- [x] **Step 6: Wire REPL and one-shot renderers**
 
 `src/cli/repl.ts` — add the 6th argument after the phase callback:
 
@@ -390,7 +394,7 @@ Also update the reasoning→text separator (line ~866) so it stays on the reason
         (reasoning) => renderer.reasoning(reasoning),
 ```
 
-- [ ] **Step 7: Wire the web module**
+- [x] **Step 7: Wire the web module**
 
 `src/modules/webui/module.ts` — after the phase callback in `deps.agent.run(...)`:
 
@@ -399,12 +403,12 @@ Also update the reasoning→text separator (line ~866) so it stays on the reason
         (reasoning) => forwarder.onReasoning(reasoning),
 ```
 
-- [ ] **Step 8: Run tests**
+- [x] **Step 8: Run tests**
 
 Run: `bun test tests/webui-forward.test.ts tests/webui-server.test.ts tests/core/agent.test.ts`
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/core/agent.ts src/cli/repl.ts src/cli/main.ts src/modules/webui/forward.ts src/modules/webui/module.ts tests/webui-forward.test.ts tests/core/agent.test.ts
@@ -420,7 +424,7 @@ git commit -m "feat(agent): dedicated onReasoning channel (separate from meta)"
 - Modify: `src/modules/webui/assets/styles.css`
 - Test: `tests/webui-assets.test.ts`
 
-- [ ] **Step 1: Write failing asset guards**
+- [x] **Step 1: Write failing asset guards**
 
 Add to `tests/webui-assets.test.ts`:
 
@@ -433,12 +437,12 @@ it("listens for the dedicated reasoning event", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/webui-assets.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Rename the live reasoning block state and add a meta line**
+- [x] **Step 3: Rename the live reasoning block state and add a meta line**
 
 In `app.js`:
 
@@ -500,7 +504,7 @@ In `app.js`:
     });
 ```
 
-- [ ] **Step 4: Add the meta-line style**
+- [x] **Step 4: Add the meta-line style**
 
 In `styles.css` (near the think styles):
 
@@ -512,12 +516,12 @@ In `styles.css` (near the think styles):
 .metaln.warn { color: var(--yellow); }
 ```
 
-- [ ] **Step 5: Run tests + typecheck**
+- [x] **Step 5: Run tests + typecheck**
 
 Run: `bun test tests/webui-assets.test.ts && npx tsc --noEmit`
 Expected: PASS / clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/modules/webui/assets/app.js src/modules/webui/assets/styles.css tests/webui-assets.test.ts
@@ -533,7 +537,7 @@ git commit -m "feat(webui): collapse reasoning, render meta as always-visible li
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Test: `tests/webui-file.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 In `tests/webui-file.test.ts`, change the out-of-workspace / protected / missing assertions to expect a plain-text body, and add UTF-16 + directory cases:
 
@@ -577,12 +581,12 @@ it("answers a readable message for a directory", async () => {
 
 Also update the existing `rejects a path outside the workspace`, `rejects protected paths`, and `answers 404 … 400` tests: replace `await res.json()` assertions with `expect(res.headers.get("content-type")).toContain("text/plain")` and drop the JSON-body equality (the status codes stay the same).
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/webui-file.test.ts`
 Expected: FAIL (JSON bodies / UTF-16 refused as binary).
 
-- [ ] **Step 3: Add i18n keys**
+- [x] **Step 3: Add i18n keys**
 
 `src/i18n/en.json`:
 
@@ -608,7 +612,7 @@ Expected: FAIL (JSON bodies / UTF-16 refused as binary).
   "web.file.error.workspace_unavailable": "Рабочая папка не открыта.",
 ```
 
-- [ ] **Step 4: Rewrite `file-api.ts` responses**
+- [x] **Step 4: Rewrite `file-api.ts` responses**
 
 Replace `sendJson` import usage with a text helper and add UTF-16 detection:
 
@@ -659,12 +663,12 @@ export function decodeText(buf: Buffer): { text: string; binary: boolean } {
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `bun test tests/webui-file.test.ts tests/webui-i18n.test.ts`
 Expected: PASS (i18n parity holds).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/modules/webui/file-api.ts src/i18n/en.json src/i18n/ru.json tests/webui-file.test.ts
@@ -679,7 +683,7 @@ git commit -m "fix(webui): readable /api/file errors + UTF-16 BOM decoding"
 - Modify: `src/modules/webui/assets/app.js`
 - Test: `tests/webui-assets.test.ts`
 
-- [ ] **Step 1: Write a failing asset guard**
+- [x] **Step 1: Write a failing asset guard**
 
 Add to `tests/webui-assets.test.ts`:
 
@@ -692,12 +696,12 @@ it("persists the active session in the URL and restores it on boot", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/webui-assets.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Add `syncUrl` and call it on tab changes**
+- [x] **Step 3: Add `syncUrl` and call it on tab changes**
 
 In `app.js`, add near `openTab`:
 
@@ -715,7 +719,7 @@ In `app.js`, add near `openTab`:
 
 Call `syncUrl();` at the end of `openTab`, `closeTab`, and in `showEmptyFeed` (after clearing), and in `renderState` after the auto-open block.
 
-- [ ] **Step 4: Restore the session on boot**
+- [x] **Step 4: Restore the session on boot**
 
 Capture the requested session **before** any `syncUrl()` can strip it (boot calls `showEmptyFeed()` early), then restore after the session list is loaded. At the top of `boot()` add:
 
@@ -736,16 +740,16 @@ After `await loadSessions();` add:
 
 `openTab(..., true)` already calls `/api/sessions/activate` and `loadHistory`.
 
-- [ ] **Step 5: Run tests + typecheck**
+- [x] **Step 5: Run tests + typecheck**
 
 Run: `bun test tests/webui-assets.test.ts && npx tsc --noEmit`
 Expected: PASS / clean.
 
-- [ ] **Step 6: Manual check**
+- [x] **Step 6: Manual check**
 
 Run: `bun run mma web` from the repo root, open two sessions, reload the page → the active session tab is restored; the URL shows `?session=<id>`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/modules/webui/assets/app.js tests/webui-assets.test.ts
@@ -760,7 +764,7 @@ git commit -m "feat(webui): persist active session in ?session= and restore on r
 - Modify: `AGENTS.md`
 - Modify: `CHANGELOG.md`
 
-- [ ] **Step 1: Update `AGENTS.md`**
+- [x] **Step 1: Update `AGENTS.md`**
 
 In the "Browser Mode" transport line, add the `reasoning` SSE event and note the cookie:
 
@@ -774,7 +778,7 @@ After the transport sentence add:
 Browser GET navigations authenticate via an HttpOnly `SameSite=Strict` `mma_web_auth` cookie (set on any authenticated request) so `/api/file` opens from a plain link without the token in the URL.
 ```
 
-- [ ] **Step 2: Fold into the unreleased `2.5.0` CHANGELOG entry**
+- [x] **Step 2: Fold into the unreleased `2.5.0` CHANGELOG entry**
 
 Move the three new items under the existing `## [2.5.0]` headings and add:
 
@@ -784,7 +788,7 @@ Move the three new items under the existing `## [2.5.0]` headings and add:
 - **web session persistence**: the active session is mirrored into `?session=` (`history.replaceState`) and restored on reload.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add AGENTS.md CHANGELOG.md
@@ -795,17 +799,17 @@ git commit -m "docs: webui file viewer, reasoning channel and session persistenc
 
 ## Task 8: Final verification
 
-- [ ] **Step 1: Typecheck**
+- [x] **Step 1: Typecheck**
 
 Run: `npx tsc --noEmit`
 Expected: no output.
 
-- [ ] **Step 2: Full suite**
+- [x] **Step 2: Full suite**
 
 Run: `bun test`
 Expected: `0 fail`.
 
-- [ ] **Step 3: Manual smoke (optional, if a provider is configured)**
+- [x] **Step 3: Manual smoke (optional, if a provider is configured)**
 
 Run: `bun run mma web`
 Check: file card Open works in a new tab (loopback, with `MMA_WEBUI_TOKEN` set too); reasoning is collapsed; context-stats lines stay visible; reload restores the session.
