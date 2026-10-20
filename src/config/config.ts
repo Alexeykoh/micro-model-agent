@@ -4,7 +4,6 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
-import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { t } from "../i18n/index";
 import type { AppConfig, ProviderEntry } from "./types";
 import { deepMerge, regexReplacer, regexReviver } from "./utils";
@@ -14,6 +13,11 @@ import { BackupManager } from "../migration/backup";
 import { validateExpertConfig } from "./experts";
 import { ConfigEncryptor } from "../modules/security/encryption";
 import { loadDomainFiles, saveDomainFiles } from "./domains";
+import {
+  applyCriticTimeoutMigration,
+  normalizeLspServerArgs,
+  reportShortCriticTimeout,
+} from "./migrate-legacy";
 import { defaultOutputBus } from "../output";
 import { MMA_DIR_NAME } from "./paths";
 import { MMA_ENV } from "./env";
@@ -52,33 +56,6 @@ function restoreDangerousPatterns(patterns: unknown, defaults: unknown): RegExp[
   // Весь набор — мусор: вернуть полные дефолты, а не первые N.
   if (restored.every((p) => p === null)) return fallback;
   return restored.map((p, i) => p ?? fallback[i] ?? fallback[0]);
-}
-
-/** Legacy npx-`args` LSP-серверов, предшествующие фикс. вызову. */
-const LEGACY_LSP_SERVER_ARGS: Record<string, { args: string[]; timeout: number }> = {
-  typescript: { args: ["typescript-language-server", "--stdio"], timeout: 30000 },
-  javascript: { args: ["typescript-language-server", "--stdio"], timeout: 30000 },
-  json: { args: ["vscode-json-languageserver", "--stdio"], timeout: 30000 },
-  html: { args: ["vscode-html-languageserver", "--stdio"], timeout: 60000 },
-  css: { args: ["vscode-css-languageserver", "--stdio"], timeout: 60000 },
-};
-
-/** Заменяет протухшие pre-0.41.1 вызовы LSP-серверов текущими дефолтами. */
-function normalizeLspServerArgs(config: AppConfig): void {
-  const servers = config.lsp?.servers;
-  if (!servers) return;
-  for (const [lang, legacy] of Object.entries(LEGACY_LSP_SERVER_ARGS)) {
-    const server = servers[lang];
-    const def = DEFAULT_LSP_CONFIG.servers[lang];
-    if (server?.command !== "npx" || !def) continue;
-    const storedArgs = Array.isArray(server.args) ? server.args : null;
-    const isLegacy =
-      storedArgs === null || JSON.stringify(storedArgs) === JSON.stringify(legacy.args);
-    if (isLegacy) {
-      server.args = def.args;
-      server.timeout = def.timeout;
-    }
-  }
 }
 
 /** Чтение JSON с восстановлением RegExp. Битый файл — warn с путём, не тишина. */
@@ -290,6 +267,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   // Шаг 2: legacy config.json (фолбэк).
   const globalData = loadJSON(globalPath);
   if (globalData) {
+    applyCriticTimeoutMigration(globalData as Partial<AppConfig>);
     config = deepMerge(config, globalData as Partial<AppConfig>);
     legacyDetected = true;
   }
@@ -297,6 +275,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   // Шаг 3: файлы доменов (поверх legacy).
   const domainConfig = loadDomainFiles(options.configDir);
   if (domainConfig) {
+    applyCriticTimeoutMigration(domainConfig);
     config = deepMerge(config, domainConfig);
     legacyDetected = false;
   }
@@ -304,6 +283,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   // Шаг 4: проектный .mmrc (поверх всего).
   const projectData = loadJSON(options.projectConfigPath);
   if (projectData) {
+    applyCriticTimeoutMigration(projectData as Partial<AppConfig>);
     config = deepMerge(config, projectData as Partial<AppConfig>);
   }
 
@@ -315,6 +295,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     );
   }
   normalizeLspServerArgs(config);
+  reportShortCriticTimeout(config);
 
   // Шаг 6: env-переменные.
   const { config: envConfig, overrides } = applyEnvVars(config);

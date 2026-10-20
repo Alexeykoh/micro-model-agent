@@ -49,7 +49,7 @@
     "src/core/prompt-overflow.ts": 404,
     "src/core/agent/loop-llm.ts": 399,
     "src/modules/execution/verifier.ts": 393,
-    "src/config/config.ts": 390,
+    "src/config/config.ts": 375,
     "src/tools/question.ts": 386,
     "src/modules/security/audit-notifier.ts": 376,
     "src/core/bootstrap/modules-phase.ts": 375,
