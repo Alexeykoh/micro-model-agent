@@ -41,6 +41,10 @@ export const DEFAULTS: AppConfig = {
     // всегда проигрывала гонку, и диагностика `call_timeout` — единственная
     // запись о том, что критик пришлось резать — была недостижима (W2, D7).
     timeoutMs: LLM_REQUEST_TIMEOUT_MS + WRAPPER_OVERHEAD_MS,
+    // МИНИМАЛЬНЫЙ лимит completion-токенов критика. Реальный лимит =
+    // max(это, provider.maxCompletionTokens): критик не режет бюджет
+    // провайдера — у reasoning-моделей токены съедались до ответа, вердикт
+    // приходил пустым, и fail-open не отличить от «всё ок» (INV-C5).
     maxTokens: 2048,
   },
   tools: {

@@ -155,6 +155,8 @@ function buildRequestBody(opts: {
 export class OpenAICompatProvider implements LLMProvider {
   readonly model: string;
   readonly contextWindow: number;
+  /** Эффективный лимит completion-токенов (виден потребителям, шлющим свой лимит). */
+  readonly maxCompletionTokens: number;
   private config: OpenAICompatConfig;
   private tokenCounter: TokenCounter;
   private retryConfig: RetryConfig;
@@ -171,6 +173,7 @@ export class OpenAICompatProvider implements LLMProvider {
     this.config = config;
     this.model = config.model;
     this.contextWindow = config.contextWindow ?? 32768;
+    this.maxCompletionTokens = config.maxCompletionTokens ?? DEFAULT_MAX_COMPLETION_TOKENS;
     this.cache = config.cache;
     this.reasoningStrategy = config.reasoningStrategy ?? "openai-effort"; // INV-R1
     this.reasoningOff = config.reasoningOff === true;

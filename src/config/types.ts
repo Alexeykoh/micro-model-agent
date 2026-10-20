@@ -482,7 +482,7 @@ export interface CriticConfig {
    * общий бюджет на длинном пакете ронял второй проход в fail-open).
    */
   timeoutMs: number;
-  /** Лимит токенов на один LLM-вызов критика: режется длинный вердикт с issues. */
+  /** Мин. лимит токенов критика; реальный = max(это, provider.maxCompletionTokens) — INV-C5. */
   maxTokens: number;
 }
 

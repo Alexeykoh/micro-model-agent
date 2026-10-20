@@ -22,7 +22,12 @@ Reply with JSON ONLY:
 /** Опции клиента критика: провайдер, бюджеты, канал диагностики. */
 export interface CriticClientOptions {
   provider: LLMProvider;
-  /** Лимит токенов на один LLM-вызов критика. */
+  /**
+   * Минимальный лимит токенов на один LLM-вызов критика. Реальный лимит
+   * = max(это значение, `provider.maxCompletionTokens`): критик НЕ режет
+   * бюджет провайдера (INV-C5) — иначе reasoning-токены съедали весь лимит,
+   * `finish_reason: length` давал пустой вердикт и fail-open.
+   */
   maxTokens?: number;
   /**
    * Таймаут **одного** LLM-вызова, мс. Раньше это был общий бюджет на всю
@@ -38,7 +43,10 @@ export interface CriticClientOptions {
   onDiagnostic?: (message: string) => void;
 }
 
-/** Дефолтный лимит токенов вердикта: хватает на JSON с issues на длинном пакете. */
+/**
+ * Минимальный лимит токенов вердикта, если провайдер своего не объявил:
+ * хватает на JSON с issues на длинном пакете.
+ */
 const DEFAULT_MAX_TOKENS = 2048;
 /** Дефолтный таймаут вызова критика: не короче провайдерского request-дедлайна. */
 const DEFAULT_TIMEOUT_MS = LLM_REQUEST_TIMEOUT_MS;
@@ -162,6 +170,21 @@ export class CriticClient {
     }
   }
 
+  /**
+   * Эффективный лимит completion-токенов для вызова критика.
+   *
+   * Правило (INV-C5): критик не перекрывает лимит провайдера вниз. Модель с
+   * reasoning съедает токены ДО ответа, и обрезанный по `max_tokens` вердикт
+   * приходит пустым (finish_reason "length" → LlmError → fail-open). Если у
+   * провайдера лимит не задан — берём свой `maxTokens`.
+   */
+  private effectiveMaxTokens(): number | undefined {
+    const own = this.opts.maxTokens ?? DEFAULT_MAX_TOKENS;
+    const providerCap = this.opts.provider.maxCompletionTokens;
+    if (providerCap === undefined) return own;
+    return Math.max(own, providerCap);
+  }
+
   /** Один LLM-вызов под собственным таймаутом + внешней отменой. */
   private async chat(messages: Message[], signal?: AbortSignal): Promise<string> {
     const controller = new AbortController();
@@ -172,7 +195,7 @@ export class CriticClient {
     try {
       let text = "";
       for await (const chunk of this.opts.provider.chat(messages, undefined, controller.signal, {
-        maxTokens: this.opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+        maxTokens: this.effectiveMaxTokens(),
         reasoningEffort: "none",
       })) {
         if (chunk.type === "text" && chunk.content) text += chunk.content;
