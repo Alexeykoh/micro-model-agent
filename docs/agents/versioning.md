@@ -13,7 +13,7 @@
 
 **Правило:** при каждом релизе (MINOR/PATCH) — добавляй запись в `CHANGELOG.md` в секцию `## [X.Y.Z] - YYYY-MM-DD`. Группируй по Added/Fixed/Changed/Removed. Пиши на английском, кратко и по существу. Формат ссылок: `**Module**: description`.
 
-При публикации (`npm publish`) changelog автоматически попадает в пакет и виден пользователям при установке (`npm info micro-models-agent`).
+Changelog is part of the GitHub Release artifact set and is visible in the repository; MMA is not distributed through npm.
 
 ### When to bump which part
 
@@ -25,24 +25,27 @@
 
 ### Release Process
 
+> **No npm.** MMA is distributed exclusively through GitHub Releases. `npm publish` is not
+> part of the release process and must not be run.
+
 1. **Code changes complete** → `bun test` + `bun run quality` must pass
 2. **CHANGELOG** — move the `## [Unreleased]` block under a new
    `## [X.Y.Z] - YYYY-MM-DD` heading (Keep a Changelog groups: Added/Fixed/Changed/Removed)
 3. **Update version** in `package.json` — **only `patch`/`minor` while in beta**:
 
    ```bash
-   # For patch
-   npm version patch
+   # For patch (updates package.json + lock, without a commit/tag)
+   npm version patch --no-git-tag-version
 
    # For minor
-   npm version minor
+   npm version minor --no-git-tag-version
    ```
 
    > ⚠️ **`npm version major` is forbidden while the project is in beta.** Releases stay in
    > `0.x.y`; `1.0.0` is set only as the explicit act of leaving beta (see «Versioning Rules»
    > at the top of this file and the banner in `AGENTS.md`).
-
-   > `npm version` also updates `package-lock.json` and creates the git tag (`vX.Y.Z`).
+   >
+   > `--no-git-tag-version` keeps the release commit and annotated tag under our control.
 
 4. **Build**: `bun run build:prod`
 
@@ -58,18 +61,23 @@
    > is the legacy all-external variant (every dependency external, no documents
    > inlining).
 
-5. **Verify package contents** (optional): `npm pack --dry-run` — ships only
-   `dist/`, `bin/`, `CHANGELOG.md`; nothing is fetched at runtime (all deps come
-   from `dependencies` via `npm install`).
+5. **Smoke**: `node dist/main.js --version` — must print the new version.
 
-6. **Publish**: `npm publish --access public`
+6. **Commit + tag**: commit `CHANGELOG.md`, `package.json`, `package-lock.json`
+   (`chore(release): X.Y.Z`), then create the annotated tag `vX.Y.Z`.
 
-   > **Note:** npm's registry now processes publishes **asynchronously** — the upload returns `PUT 202 Accepted` and the CLI prints «Your package is being processed and may take a few minutes to become available.» The version may not appear in `npm view` / `registry.npmjs.org` for a while. **Do not wait for it:** a `202` + `+ <pkg>@<version>` output is a successful publish. Proceed to tagging/pushing.
+7. **Deploy (GitHub)**: `git push origin master --follow-tags`
 
-7. **Git tag/push**: `git push --follow-tags origin master`
+   > Push triggers `.github/workflows/release.yml` on tag `v*`: it builds
+   > self-contained artifacts for 5 platforms (win-x64, mac-arm64, mac-x64,
+   > linux-x64, linux-arm64), assembles `latest.json` and publishes a GitHub Release.
+   > The in-app updater and install scripts read `releases/latest/download/latest.json`.
+   > If push fails with a transient auth error, simply retry.
 
-   > **Push может упасть с первого раза** (`Failed to authenticate user`) даже при настроенном `credential.helper=store`/GCM — это транзиентка/auth-гонка, а не отсутствие прав. **Просто повтори команду** — со второго раза обычно проходит (`b781e21..<sha> master -> master` + `[new tag]`).
-8. **Update AGENTS.md** with notable changes.
+8. **Verify** the Actions run and the GitHub Release assets (`mma-<key>.tar.gz` +
+   `latest.json`).
+9. **Update AGENTS.md** with notable changes, if needed.
+
 
 ### Commands that require MINOR bump
 
