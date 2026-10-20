@@ -57,11 +57,17 @@ Subagent не несёт `ExecutionModule`, поэтому его деграда
 |---|---|---|
 | Ошибка классификатора при `failClosed: true` (дефолт) | вызов **не уходит**; `chat()`/`filterClient()` бросает `EgressBlockedError` (`name`, `operation: "egress.sanitize"`, `kind: "blocked"`) | `onDiagnostic` → `outcome: "aborted"` → `egress_blocked` |
 | Ошибка классификатора при `failClosed: false` | вызов уходит без редакции (осознанный fail-open) | `onDiagnostic` → `outcome: "passed"` → `egress_degraded` |
-| Редакция выполнена | вызов уходит с токенами/масками | `onDiagnostic` → `outcome: "redacted"` (в журнал не пишется) |
+| Редакция выполнена | вызов уходит с токенами/масками | `onDiagnostic` → `outcome: "redacted"`; в журнал сессии — `egress_redacted`, **только** если редакция необратима (класс `secret`): метаданные (счётчик, вид цели), без оригиналов и token id (INV-S4) |
 | `security.dataPolicy.enabled: false` | kill-switch: guard не создаётся | — |
 
 Сигналы `egress_blocked`/`egress_degraded` пишутся в лог активной сессии через
 `setEgressDiagnosticSink` (`session-phase.ts` → `egressDiagnosticSink`).
+
+Псевдонимизированные пути/PII в журнал не пишутся: они обратимы (карта токенов
+жива до конца процесса) и дали бы запись на каждый вызов LLM. Их счётчик живёт в
+бейдже webui (`EgressTurnSummary`, INV-DLP-2). След в `session.jsonl` оставляет
+только необратимая редакция — иначе пользователь видит `[SECRET]` в ответе модели
+без объяснения.
 
 Диагностика несёт только метаданные (`module`, `operation`, `kind`, `outcome`,
 `count`, `cause`) — значений путей/PII в ней нет (INV-D8). Context-log применяет
