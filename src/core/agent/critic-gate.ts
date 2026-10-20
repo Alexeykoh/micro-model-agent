@@ -42,6 +42,14 @@ export interface CriticGateOptions {
   verify: (pack: EvidencePack, signal?: AbortSignal) => Promise<CriticVerdict | null>;
   buildPack: (deps: CriticGateDeps) => EvidencePack;
   signal?: AbortSignal;
+  /**
+   * Последняя причина деградации, сообщённая клиентом критика (INV-C4).
+   * Клиент знает причину («call_timeout», «обрезано по maxTokens», «не
+   * разобрали JSON»), гейт — нет: он видит только `null`. Без этого хука
+   * `critic_error` в сессии писал «no verdict returned» — причину отказа
+   * было видно только в app-логе.
+   */
+  degradationReason?: () => string | undefined;
 }
 
 /**
@@ -211,9 +219,11 @@ export class CriticGate {
    * отдельный `critic_error` (INV-15). Fail-open остаётся (критик не блокирует
    * агента), но «проверял и не сказал ничего» больше не выглядит как
    * «проверил и сказал ок».
-   * @param cause причина отказа, если verify бросил; иначе — «no verdict returned».
+   * @param cause причина отказа, если verify бросил; иначе — причина от клиента
+   *   (`degradationReason`), если он её сообщил; иначе «no verdict returned».
    */
   private logDegraded(deps: CriticGateDeps, cause?: string): void {
+    const reason = cause ?? this.opts.degradationReason?.() ?? "no verdict returned";
     deps.slog.logCritic("critic_verdict", {
       status: "none",
       summary: "no verdict (degraded)",
@@ -225,10 +235,10 @@ export class CriticGate {
       source: "core",
       operation: "critic.verify",
       kind: "degraded",
-      cause: cause ?? "no verdict returned",
+      cause: reason,
       recoverable: true,
     });
-    deps.logger.diagnostic("warn", "Critic returned no verdict (degraded, fail-open)");
+    deps.logger.diagnostic("warn", `Critic returned no verdict (degraded, fail-open): ${reason}`);
   }
 
   private logVerdict(deps: CriticGateDeps, verdict: CriticVerdict, count: number): void {

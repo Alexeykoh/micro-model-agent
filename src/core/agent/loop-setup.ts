@@ -15,7 +15,7 @@ import { HallucinationGate } from "./hallucination-gate";
 import { AuditGate } from "./audit-gate";
 import { CriticGate } from "./critic-gate";
 import type { CostTracker } from "../../modules/pricing/index";
-import { CriticClient } from "../../modules/critic/client";
+import { CriticClient, CRITIC_DEGRADED_PREFIX } from "../../modules/critic/client";
 import { buildCriticProvider } from "../../modules/critic/provider";
 import { CRITIC_READONLY_TOOLS } from "../../modules/critic/tools";
 import { buildEvidencePack } from "../../modules/critic/evidence";
@@ -95,18 +95,30 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     logger,
     getSessionId: () => deps.sessionManager?.getActiveMeta()?.id,
   });
+  // Причина деградации живёт в клиенте («call_timeout», «обрезано по
+  // maxTokens»); гейт видит только `null`. Снимаем её здесь, чтобы
+  // `critic_error` в session.jsonl нёс РЕАЛЬНУЮ причину, а не «no verdict
+  // returned» (INV-C4).
+  let lastCriticDegradation: string | undefined;
   const criticClient = new CriticClient({
     provider: criticProvider,
     timeoutMs: criticConfig.timeoutMs,
     maxTokens: criticConfig.maxTokens,
-    onDiagnostic: (m) => logger.diagnostic("warn", m),
+    onDiagnostic: (m) => {
+      logger.diagnostic("warn", m);
+      if (m.startsWith(CRITIC_DEGRADED_PREFIX)) {
+        lastCriticDegradation = m.slice(CRITIC_DEGRADED_PREFIX.length).trim();
+      }
+    },
   });
   const criticGate = new CriticGate({
     enabled: criticConfig.enabled,
     maxCalls: criticConfig.maxCalls,
     maxRepairCycles: criticConfig.maxRepairCycles,
-    verify: deps.criticOverride?.verify ?? ((pack, signal) =>
-      criticClient.verify(pack, signal, {
+    verify: deps.criticOverride?.verify ?? (async (pack, signal) => {
+      // Сброс перед КАЖДЫМ вызовом: причина должна относиться к этой проверке.
+      lastCriticDegradation = undefined;
+      return criticClient.verify(pack, signal, {
         // Read-only цикл: проверки бегут последовательно здесь (гейт await'ится
         // между пакетами тулов), через общий executor с read-only allowlist.
         runCheck: criticConfig.tools && deps.toolCtx
@@ -118,7 +130,9 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
               return { ok: res.success, output: res.output ?? "" };
             }
           : undefined,
-      })),
+      });
+    }),
+    degradationReason: () => lastCriticDegradation,
     buildPack: (d) =>
       buildEvidencePack({
         task: d.task,
