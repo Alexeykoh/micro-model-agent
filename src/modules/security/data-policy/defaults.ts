@@ -41,6 +41,9 @@ export const DEFAULT_DATA_POLICY: DataPolicyConfig = {
     fileContent: true,
   },
   trustedHosts: [],
+  // Локальный браузер оператора — не «внешний API-клиент»: иначе UI показывает
+  // токены вместо путей и ломает ссылки на файлы (спека 2026-10-20).
+  trustLocalClients: true,
   apiHiddenGlobs: [],
   providerBlockGlobs: [],
   allowImagesToExternal: false,

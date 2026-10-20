@@ -15,7 +15,7 @@ export type EgressKind = "provider" | "api";
 /** Вердикт доверия к цели. `provider` — по распарсенному хосту (§6.2). */
 export interface EgressTarget {
   kind: EgressKind;
-  /** Для `provider`: цель доверенная (loopback/allowlist). Для `api` всегда false. */
+  /** Для `provider`: цель доверенная (loopback/allowlist). Для `api`: loopback-клиент webui. */
   trusted: boolean;
   /** Распарсенный host провайдера, если применимо (диагностика/лог). */
   host?: string;
@@ -68,6 +68,11 @@ export interface DataPolicyConfig {
   };
   /** Доверенные хосты провайдера (loopback всегда доверенный). */
   trustedHosts: string[];
+  /**
+   * API-клиент с loopback-адреса видит реальные пути/PII (webui оператора).
+   * `false` — строгий режим для всех клиентов (проброс портов, корпоративная политика).
+   */
+  trustLocalClients: boolean;
   /** Glob-пути, скрытые от API-клиента (→ 404). */
   apiHiddenGlobs: string[];
   /** Glob-пути, не отправляемые внешнему провайдеру (дефолт — супермножество). */

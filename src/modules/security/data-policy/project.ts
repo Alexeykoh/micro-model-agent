@@ -22,7 +22,9 @@ const MASK: Record<DataClass, string> = {
 /** Классы, редактируемые для данной цели (secret — всегда; INV-D4/D2). */
 export function enabledClasses(config: DataPolicyConfig, target: EgressTarget): Set<DataClass> {
   const set = new Set<DataClass>(["secret"]);
-  if (target.kind === "api" || !target.trusted) {
+  // `trusted` покрывает оба вида цели: доверенный провайдер (loopback/allowlist)
+  // и loopback-клиент webui (E2). `kind` сам по себе больше не форсирует редакцию.
+  if (!target.trusted) {
     const e = config.egress;
     if (e.paths) set.add("path");
     if (e.machine) {
