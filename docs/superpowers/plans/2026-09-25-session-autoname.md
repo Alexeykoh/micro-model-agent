@@ -1,5 +1,11 @@
 # Session Auto-Naming — Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — `src/modules/session/auto-name.ts`
+> (`deriveSessionName`/`sanitizeTitle`/`generateSessionTitle`), `nameSource` в `SessionMeta`,
+> конфиг `session.autoName: true`, хук первого сообщения в `Agent.run` (ручной ренейм
+> не перезаписывается), i18n `session.auto_named`, обновление имени вкладки в web,
+> тесты. Чекбоксы проставлены по факту.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Automatically give every session a meaningful name (deterministic first, LLM-refined background), while never overwriting a manual rename.
@@ -31,7 +37,7 @@
 - Modify: `src/modules/session/types.ts:3-26`
 - Test: `tests/session-manager.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/session-manager.test.ts`:
 
@@ -56,12 +62,12 @@ it("rename records the requested source (default manual)", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/session-manager.test.ts`
 Expected: FAIL — property `nameSource` does not exist / `rename` takes 2 args.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/modules/session/types.ts` add to `SessionMeta` after `name`:
 
@@ -97,12 +103,12 @@ Replace `rename`:
   }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/session-manager.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/session/types.ts src/modules/session/manager.ts tests/session-manager.test.ts
@@ -117,7 +123,7 @@ git commit -m "feat(session): track nameSource on session meta"
 - Create: `src/modules/session/auto-name.ts`
 - Test: `tests/session-auto-name.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/session-auto-name.test.ts`:
 
@@ -157,12 +163,12 @@ describe("sanitizeTitle", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/session-auto-name.test.ts`
 Expected: FAIL — cannot resolve `../src/modules/session/auto-name`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `src/modules/session/auto-name.ts`:
 
@@ -239,12 +245,12 @@ export async function generateSessionTitle(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/session-auto-name.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/session/auto-name.ts tests/session-auto-name.test.ts
@@ -260,7 +266,7 @@ git commit -m "feat(session): deterministic name + title sanitizer"
 - Modify: `src/config/defaults.ts:92-96`
 - Test: `tests/config-defaults.test.ts` (or nearest config test)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it("defaults session.autoName to true", () => {
@@ -268,9 +274,9 @@ it("defaults session.autoName to true", () => {
 });
 ```
 
-- [ ] **Step 2: Run test** — `bun test tests/config-defaults.test.ts` → FAIL (`undefined`).
+- [x] **Step 2: Run test** — `bun test tests/config-defaults.test.ts` → FAIL (`undefined`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 export interface SessionConfig {
@@ -291,8 +297,8 @@ export interface SessionConfig {
   },
 ```
 
-- [ ] **Step 4: Run test** → PASS.
-- [ ] **Step 5: Commit** — `feat(config): add session.autoName`.
+- [x] **Step 4: Run test** → PASS.
+- [x] **Step 5: Commit** — `feat(config): add session.autoName`.
 
 ---
 
@@ -302,7 +308,7 @@ export interface SessionConfig {
 - Modify: `src/core/agent.ts:82-149` (AgentDeps), `501-590` (run)
 - Test: `tests/core/agent-autoname.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/core/agent-autoname.test.ts` following the existing Agent test harness (see `tests/core/agent-turn-end.test.ts` for a full mock `AgentDeps`). Core assertions:
 
@@ -324,9 +330,9 @@ it("does not overwrite a manual name", async () => {
 
 Provide a `makeAgent()` in the test file that builds a `SessionManager` over a temp dir and a minimal `AgentDeps` with a stub `LLMProvider` whose `chat` yields one `{type:"text"}` chunk (`"Stub Title"`) then `{type:"done"}`.
 
-- [ ] **Step 2: Run** — `bun test tests/core/agent-autoname.test.ts` → FAIL.
+- [x] **Step 2: Run** — `bun test tests/core/agent-autoname.test.ts` → FAIL.
 
-- [ ] **Step 3: Implement in `Agent.run`**
+- [x] **Step 3: Implement in `Agent.run`**
 
 Right after the `if (sessionManager && !sessionManager.getActive())` block (line ~530) add:
 
@@ -375,8 +381,8 @@ Add imports at the top of `src/core/agent.ts`:
 import { deriveSessionName, generateSessionTitle, type TitleChat } from "../modules/session/auto-name";
 ```
 
-- [ ] **Step 4: Run** — `bun test tests/core/agent-autoname.test.ts` → PASS.
-- [ ] **Step 5: Commit** — `feat(agent): auto-name session on first message`.
+- [x] **Step 4: Run** — `bun test tests/core/agent-autoname.test.ts` → PASS.
+- [x] **Step 5: Commit** — `feat(agent): auto-name session on first message`.
 
 ---
 
@@ -385,23 +391,23 @@ import { deriveSessionName, generateSessionTitle, type TitleChat } from "../modu
 **Files:**
 - Modify: `src/i18n/en.json:90`, `src/i18n/ru.json` (mirror), `src/modules/webui/assets/app.js:1766` area, `CHANGELOG.md`, `AGENTS.md`, `docs/agents/architecture.md`
 
-- [ ] **Step 1:** Add `"session.auto_named": "Session auto-named: {name}"` (en) and `"Сессия названа: {name}"` (ru). Optionally emit in verbose only — do not print by default (STYLE.md quiet).
-- [ ] **Step 2:** Web: in `src/modules/webui/assets/app.js`, refresh the active tab label from `state.host.sessionName` on each `state` event; the existing `openTab` path at line 1766 already reads it. Add a small `updateTabName(sessionId, name)` and call it when the SSE `state` payload's `sessionName` changes.
-- [ ] **Step 3:** Verify web asset test still passes: `bun test tests/webui-server.test.ts`.
-- [ ] **Step 4:** CHANGELOG entry (`### Added`): session auto-naming; AGENTS.md short bullet; architecture.md session section.
-- [ ] **Step 5: Quality gate**
+- [x] **Step 1:** Add `"session.auto_named": "Session auto-named: {name}"` (en) and `"Сессия названа: {name}"` (ru). Optionally emit in verbose only — do not print by default (STYLE.md quiet).
+- [x] **Step 2:** Web: in `src/modules/webui/assets/app.js`, refresh the active tab label from `state.host.sessionName` on each `state` event; the existing `openTab` path at line 1766 already reads it. Add a small `updateTabName(sessionId, name)` and call it when the SSE `state` payload's `sessionName` changes.
+- [x] **Step 3:** Verify web asset test still passes: `bun test tests/webui-server.test.ts`.
+- [x] **Step 4:** CHANGELOG entry (`### Added`): session auto-naming; AGENTS.md short bullet; architecture.md session section.
+- [x] **Step 5: Quality gate**
 
 Run: `bun test && tsc --noEmit && bun run lint`
 Expected: green.
 
-- [ ] **Step 6: Commit** — `docs(session): auto-naming i18n, web refresh, changelog`.
+- [x] **Step 6: Commit** — `docs(session): auto-naming i18n, web refresh, changelog`.
 
 ---
 
 ## Self-Review Checklist
 
-- [ ] `nameSource` written in `create` and `rename`; manual never overwritten (Task 1, 4).
-- [ ] Deterministic name is instant and non-blocking (Task 2, 4).
-- [ ] LLM title fail-open + timeout + stale-session guard (Task 2, 4).
-- [ ] `session.autoName=false` keeps deterministic name only (Task 3, 4).
-- [ ] No stdout/`--json` pollution; name lives in session meta.
+- [x] `nameSource` written in `create` and `rename`; manual never overwritten (Task 1, 4).
+- [x] Deterministic name is instant and non-blocking (Task 2, 4).
+- [x] LLM title fail-open + timeout + stale-session guard (Task 2, 4).
+- [x] `session.autoName=false` keeps deterministic name only (Task 3, 4).
+- [x] No stdout/`--json` pollution; name lives in session meta.

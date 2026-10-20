@@ -1,5 +1,13 @@
 # Web UI Plugin — Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — `HostBridge` + `HostBridgeSubmitOptions`, хук
+> `onTurnEnd` и `TurnSummary`, диспетчеризация в конце хода, мост в REPL, папка плагина
+> `examples/plugins/web-ui/**` (контракт `/events`, `/api/state`, `/api/message`,
+> `/api/interrupt`, auth `MMA_WEBUI_TOKEN`, капы), тест `tests/web-ui-server.test.ts`,
+> доки `docs/plugins.md`, релиз 0.51.0. Чекбоксы проставлены по факту.
+> Функциональность позже продублирована во встроенный модуль `src/modules/webui/`;
+> плагин сохранён и работает.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Двусторонний веб-интерфейс для MMA-агента: чат из браузера (отправка сообщений + картинки), live-стриминг хода выполнения, план, история, interrupt.
@@ -93,7 +101,7 @@ Auth: если задан `MMA_WEBUI_TOKEN` — обязателен загол�
 - Modify: `src/modules/plugins/manager.ts`
 - Test: `tests/modules/plugin-host-bridge.test.ts`
 
-- [ ] **Step 1: failing test**
+- [x] **Step 1: failing test**
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -136,8 +144,8 @@ describe("PluginManager host bridge", () => {
 });
 ```
 
-- [ ] **Step 2:** Run: `bunx vitest run tests/modules/plugin-host-bridge.test.ts` → FAIL (`setHostBridge` не существует)
-- [ ] **Step 3: implement** — `src/modules/types.ts`:
+- [x] **Step 2:** Run: `bunx vitest run tests/modules/plugin-host-bridge.test.ts` → FAIL (`setHostBridge` не существует)
+- [x] **Step 3: implement** — `src/modules/types.ts`:
 
 ```typescript
 export interface HostBridgeSubmitOptions {
@@ -154,14 +162,14 @@ export interface HostBridge {
 ```
 
 `manager.ts`: поле `private hostBridge: HostBridge | null = null`, метод `setHostBridge()`, приватный `withHost(ctx)` (spread + hostBridge, если отсутствует), обёртка `this.withHost(ctx)` в начале всех 13 run*-диспетчеров.
-- [ ] **Step 4:** тот же прогон → PASS
-- [ ] **Step 5:** `git add -A && git commit -m "feat(plugins): HostBridge type + host bridge merge into plugin hook contexts"`
+- [x] **Step 4:** тот же прогон → PASS
+- [x] **Step 5:** `git add -A && git commit -m "feat(plugins): HostBridge type + host bridge merge into plugin hook contexts"`
 
 ### Task 2: TurnSummary + onTurnEnd hook (types + manager)
 
 **Files:** те же + тест расширяется.
 
-- [ ] **Step 1: failing test**
+- [x] **Step 1: failing test**
 
 ```typescript
 it("dispatches onTurnEnd with summary and isolation", () => {
@@ -181,7 +189,7 @@ it("dispatches onTurnEnd with summary and isolation", () => {
 });
 ```
 
-- [ ] **Step 2:** FAIL → **Step 3:** типы:
+- [x] **Step 2:** FAIL → **Step 3:** типы:
 
 ```typescript
 export interface TurnSummary {
@@ -197,7 +205,7 @@ onTurnEnd?(ctx: any, summary: TurnSummary): void;
 ```
 
 и диспетчер `runOnTurnEnd(ctx, summary)` в менеджере (паттерн runOnPhase).
-- [ ] **Step 4:** PASS → **Step 5:** commit `feat(plugins): onTurnEnd lifecycle hook + TurnSummary`
+- [x] **Step 4:** PASS → **Step 5:** commit `feat(plugins): onTurnEnd lifecycle hook + TurnSummary`
 
 ### Task 3: Диспетчеризация onTurnEnd в agent.ts
 
@@ -205,7 +213,7 @@ onTurnEnd?(ctx: any, summary: TurnSummary): void;
 - Modify: `src/core/agent.ts` (run(), ~line 299)
 - Test: `tests/core/agent-turn-end.test.ts`
 
-- [ ] **Step 1: failing test** (гарнест по образцу tests/core/agent.test.ts: mock LLMProvider, отвечающий текстом без tool-calls)
+- [x] **Step 1: failing test** (гарнест по образцу tests/core/agent.test.ts: mock LLMProvider, отвечающий текстом без tool-calls)
 
 ```typescript
 it("fires onTurnEnd once per run with summary (success)", async () => {
@@ -224,7 +232,7 @@ it("fires onTurnEnd with success:false when LLM throws", async () => {
 });
 ```
 
-- [ ] **Step 2:** FAIL → **Step 3: implement** — переработать `Agent.run()`: замер времени, счётчик tool-событий через wrapper над `onTool`, try/catch вокруг обеих веток, диспетчеризация в конце:
+- [x] **Step 2:** FAIL → **Step 3: implement** — переработать `Agent.run()`: замер времени, счётчик tool-событий через wrapper над `onTool`, try/catch вокруг обеих веток, диспетчеризация в конце:
 
 ```typescript
 async run(input, onChunk, onMeta, onTool, onPhase): Promise<AgentResult> {
@@ -254,8 +262,8 @@ async run(input, onChunk, onMeta, onTool, onPhase): Promise<AgentResult> {
 }
 ```
 
-- [ ] **Step 4:** PASS + регресс `bunx vitest run tests/core` → green
-- [ ] **Step 5:** commit `feat(core): dispatch onTurnEnd at end of Agent.run (single + MoE paths)`
+- [x] **Step 4:** PASS + регресс `bunx vitest run tests/core` → green
+- [x] **Step 5:** commit `feat(core): dispatch onTurnEnd at end of Agent.run (single + MoE paths)`
 
 ### Task 4: Мост в Repl (+ картинки)
 
@@ -263,7 +271,7 @@ async run(input, onChunk, onMeta, onTool, onPhase): Promise<AgentResult> {
 - Modify: `src/cli/repl.ts`
 - Test: `tests/cli/repl-bridge.test.ts`
 
-- [ ] **Step 1: failing test** на экспортируемую фабрику (не требуя TTY):
+- [x] **Step 1: failing test** на экспортируемую фабрику (не требуя TTY):
 
 ```typescript
 import { createHostBridge } from "../../src/cli/repl";
@@ -289,7 +297,7 @@ describe("createHostBridge", () => {
 });
 ```
 
-- [ ] **Step 2:** FAIL → **Step 3: implement** в `repl.ts`:
+- [x] **Step 2:** FAIL → **Step 3: implement** в `repl.ts`:
 
 ```typescript
 export function createHostBridge(opts: {
@@ -326,38 +334,38 @@ if (pluginManager) {
 ```
 
 Single-run mode моста не получает (pluginManager без setHostBridge) → POST вернёт 503 no_bridge.
-- [ ] **Step 4:** PASS → **Step 5:** commit `feat(cli): wire HostBridge in REPL (messages + images + interrupt via web)`
+- [x] **Step 4:** PASS → **Step 5:** commit `feat(cli): wire HostBridge in REPL (messages + images + interrupt via web)`
 
 ### Task 5: Каркас плагина (state/util/plugin entry)
 
 **Files:** Create `examples/plugins/web-ui/{state.ts,util.ts,plugin.ts}`
 
-- [ ] **Step 1:** `state.ts` — клиенты SSE, `broadcast(type,data)` (enqueue+flush паттерн trace-server, коалесинг 350ms для text/meta), конфиги env: `HOST=127.0.0.1`, `MAX_CLIENTS=5`, `MAX_MESSAGE_CHARS=32000`, `MAX_IMAGE_BYTES=6_000_000`, `MAX_IMAGES=3`, `state.busy`.
-- [ ] **Step 2:** `util.ts` — порт `clip/safeJson/scrub/summarizeArgs` из `examples/plugins/trace-server/util.ts` (переименование, без изменений логики).
-- [ ] **Step 3:** `plugin.ts` — скелет AgentPlugin: `name:"web-ui"`, `version:"0.1.0"`, `minMmaVersion:"0.51.0"`; `onSessionStart` захватывает ctx (logger/sessionManager/contextManager/hostBridge) и стартует сервер; `onSessionEnd` останавливает. Ассеты читаются verbatim через `import.meta.url` (кандидаты-пути как у trace-server).
-- [ ] **Step 4:** commit `feat(examples): web-ui plugin skeleton (state/util/entry)`
+- [x] **Step 1:** `state.ts` — клиенты SSE, `broadcast(type,data)` (enqueue+flush паттерн trace-server, коалесинг 350ms для text/meta), конфиги env: `HOST=127.0.0.1`, `MAX_CLIENTS=5`, `MAX_MESSAGE_CHARS=32000`, `MAX_IMAGE_BYTES=6_000_000`, `MAX_IMAGES=3`, `state.busy`.
+- [x] **Step 2:** `util.ts` — порт `clip/safeJson/scrub/summarizeArgs` из `examples/plugins/trace-server/util.ts` (переименование, без изменений логики).
+- [x] **Step 3:** `plugin.ts` — скелет AgentPlugin: `name:"web-ui"`, `version:"0.1.0"`, `minMmaVersion:"0.51.0"`; `onSessionStart` захватывает ctx (logger/sessionManager/contextManager/hostBridge) и стартует сервер; `onSessionEnd` останавливает. Ассеты читаются verbatim через `import.meta.url` (кандидаты-пути как у trace-server).
+- [x] **Step 4:** commit `feat(examples): web-ui plugin skeleton (state/util/entry)`
 
 ### Task 6: server.ts — static + SSE
 
 **Files:** Create `server.ts`; Test `tests/web-ui-server.test.ts` (реальный сервер на порту 0 + fetch)
 
-- [ ] **Step 1: failing tests**: `GET /`→200 html; `/app.js`→200 js; неизвестный путь→404; `/events` при cap→503; SSE-коннект получает `event: session`.
-- [ ] **Step 2:** FAIL → **Step 3:** реализация (порт handleRequest/startServer/stopServer из trace-server/server.ts + роуты `/api/*` под auth-миддлеварой `checkAuth(req)`).
-- [ ] **Step 4:** PASS → **Step 5:** commit `feat(examples): web-ui server (static assets + SSE stream)`
+- [x] **Step 1: failing tests**: `GET /`→200 html; `/app.js`→200 js; неизвестный путь→404; `/events` при cap→503; SSE-коннект получает `event: session`.
+- [x] **Step 2:** FAIL → **Step 3:** реализация (порт handleRequest/startServer/stopServer из trace-server/server.ts + роуты `/api/*` под auth-миддлеварой `checkAuth(req)`).
+- [x] **Step 4:** PASS → **Step 5:** commit `feat(examples): web-ui server (static assets + SSE stream)`
 
 ### Task 7: history.ts + GET /api/state
 
 **Files:** Create `history.ts`, `plans-snap.ts`; дополнить `server.ts` и тесты
 
-- [ ] **Step 1: failing tests**: фикстурный временный `history.jsonl` (5 сообщений) → `/api/state.history` содержит последние N, поля `{role,text,ts}`; нет файла → пустой массив; busy-флаг отражается; план читается из `<dir>/.mma/plans/active.json`.
-- [ ] **Step 2:** FAIL → **Step 3:** `history.readHistoryTail(sessionsDir,id,tail=30)`: парсинг JSONL с устойчивостью к битым строкам; путь сессии: `<configDir>/sessions/<id>/history.jsonl` (id из meta). `plans-snap.readPlansSnapshot(projectDir)` — порт plans.ts (read-only, без polling; poll на клиенте).
-- [ ] **Step 4:** PASS → **Step 5:** commit `feat(examples): web-ui /api/state snapshot (session, plan, history tail)`
+- [x] **Step 1: failing tests**: фикстурный временный `history.jsonl` (5 сообщений) → `/api/state.history` содержит последние N, поля `{role,text,ts}`; нет файла → пустой массив; busy-флаг отражается; план читается из `<dir>/.mma/plans/active.json`.
+- [x] **Step 2:** FAIL → **Step 3:** `history.readHistoryTail(sessionsDir,id,tail=30)`: парсинг JSONL с устойчивостью к битым строкам; путь сессии: `<configDir>/sessions/<id>/history.jsonl` (id из meta). `plans-snap.readPlansSnapshot(projectDir)` — порт plans.ts (read-only, без polling; poll на клиенте).
+- [x] **Step 4:** PASS → **Step 5:** commit `feat(examples): web-ui /api/state snapshot (session, plan, history tail)`
 
 ### Task 8: POST /api/message + /api/interrupt
 
 **Files:** `server.ts` (+gateway-логика в plugin.ts/state.ts); дополнить тесты
 
-- [ ] **Step 1: failing tests** матрицей:
+- [x] **Step 1: failing tests** матрицей:
   - idle + валидный `{text:"hi"}` → 202, `bridge.submit` вызван с ("hi", undefined-images)
   - busy → 409; отсутствие bridge → 503; текст >32KB → 413; невалидный JSON/пустой текст → 400
   - images: 4 шт → 400; не-dataURL → 400; >6MB → 413; валидные → переданы в submit
@@ -365,16 +373,16 @@ Single-run mode моста не получает (pluginManager без setHostBr
   - rate-limit: два POST подряд <500ms → 429 (injectable clock)
   - `/api/interrupt` idle → 409, busy → 200 и `bridge.interrupt()` вызван
   - секреты (`sk-…`) в args/output вычищены scrub'ом в SSE-событиях
-- [ ] **Step 2:** FAIL → **Step 3:** implement: body-read с капом, `validateMessageBody()`, fire-and-forget `bridge.submit(...)` c `.then/.catch(broadcast error)`, `state.busy=true` сразу после accept (race-free), очистка в `turn_end`.
-- [ ] **Step 4:** PASS → **Step 5:** commit `feat(examples): web-ui message/interrupt endpoints (auth, caps, rate limit)`
+- [x] **Step 2:** FAIL → **Step 3:** implement: body-read с капом, `validateMessageBody()`, fire-and-forget `bridge.submit(...)` c `.then/.catch(broadcast error)`, `state.busy=true` сразу после accept (race-free), очистка в `turn_end`.
+- [x] **Step 4:** PASS → **Step 5:** commit `feat(examples): web-ui message/interrupt endpoints (auth, caps, rate limit)`
 
 ### Task 9: Фронтенд (page.html/styles.css/app.js)
 
 **Files:** Create три ассета. Тестов нет (статика); проверка smoke'ом + вручную.
 
-- [ ] **Step 1: page.html** — layout: header (session/model/provider/tokens/cost/connection dot), main grid (chat column + right panel: план checklist, контекст-бар), input zone (textarea, кнопки Send/Stop, превью-тумбы картинок, drop-overlay).
-- [ ] **Step 2: styles.css** — тёмная тема в духе trace-server (моноширинный, приглушённые акценты), collapsible tool cards (`details/summary`), user/assistant bubble-less различие маркерами.
-- [ ] **Step 3: app.js** — поведение:
+- [x] **Step 1: page.html** — layout: header (session/model/provider/tokens/cost/connection dot), main grid (chat column + right panel: план checklist, контекст-бар), input zone (textarea, кнопки Send/Stop, превью-тумбы картинок, drop-overlay).
+- [x] **Step 2: styles.css** — тёмная тема в духе trace-server (моноширинный, приглушённые акценты), collapsible tool cards (`details/summary`), user/assistant bubble-less различие маркерами.
+- [x] **Step 3: app.js** — поведение:
   - `EventSource("/events")`; reconnect с backoff; события мапятся в DOM-узлы (tool cards по `toolCallId`)
   - `loadState()` при старте: рендер history-хвоста, плана, session header
   - busy-gating: `turn_end`/409 → enable input; accepted → disable
@@ -383,18 +391,18 @@ Single-run mode моста не получает (pluginManager без setHostBr
   - картинки: input[type=file multiple]+dnd → `downscale(file)` через canvas (max side 800, JPEG 0.6) → data URL в очередь; лимит 3; тумбы с удалением
   - лёгкий inline-markdown: fenced code, inline code, bold, links (escape-first)
   - poll `/api/state` раз в 5s только когда вкладка hidden→visible (обновление плана)
-- [ ] **Step 4:** commit `feat(examples): web-ui chat frontend (streaming, tools, plan, images, stop)`
+- [x] **Step 4:** commit `feat(examples): web-ui chat frontend (streaming, tools, plan, images, stop)`
 
 ### Task 10: Smoke e2e + docs + гейты
 
 **Files:** Create `_testing/web-ui-smoke.ts`; Modify `docs/plugins.md`, `AGENTS.md`
 
-- [ ] **Step 1:** smoke по образцу `_testing/trace-server-smoke.ts`: импорт плагина, мок-ctx (stub hostBridge, temp sessions dir с фикстурой истории, tmp projectDir с active.json), `onSessionStart` → fetch `/api/state` (история+план на месте) → POST message → assert stub-bridge получил текст → SSE получил `turn_end` → `/api/interrupt` 409 в idle → `onSessionEnd` сервер закрыт.
-- [ ] **Step 2:** `bun _testing/web-ui-smoke.ts` → все проверки зелёные.
-- [ ] **Step 3:** `docs/plugins.md`: секции «Host Bridge» (как получить/использовать в своём плагине) и «onTurnEnd» (таблица хуков обновлена).
-- [ ] **Step 4:** AGENTS.md: Plugins section (строки таблицы хуков + упоминание web-ui), черновик записи версии 0.51.0.
-- [ ] **Step 5:** Гейты: `bun test` (полный suite) + `bunx tsc --noEmit` → чисто.
-- [ ] **Step 6:** commit `docs: web-ui plugin guide (HostBridge, onTurnEnd) + AGENTS.md update`
+- [x] **Step 1:** smoke по образцу `_testing/trace-server-smoke.ts`: импорт плагина, мок-ctx (stub hostBridge, temp sessions dir с фикстурой истории, tmp projectDir с active.json), `onSessionStart` → fetch `/api/state` (история+план на месте) → POST message → assert stub-bridge получил текст → SSE получил `turn_end` → `/api/interrupt` 409 в idle → `onSessionEnd` сервер закрыт.
+- [x] **Step 2:** `bun _testing/web-ui-smoke.ts` → все проверки зелёные.
+- [x] **Step 3:** `docs/plugins.md`: секции «Host Bridge» (как получить/использовать в своём плагине) и «onTurnEnd» (таблица хуков обновлена).
+- [x] **Step 4:** AGENTS.md: Plugins section (строки таблицы хуков + упоминание web-ui), черновик записи версии 0.51.0.
+- [x] **Step 5:** Гейты: `bun test` (полный suite) + `bunx tsc --noEmit` → чисто.
+- [x] **Step 6:** commit `docs: web-ui plugin guide (HostBridge, onTurnEnd) + AGENTS.md update`
 
 ## Ручной браузерный чеклист (после Task 10)
 

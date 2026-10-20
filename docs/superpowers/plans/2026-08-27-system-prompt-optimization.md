@@ -1,5 +1,14 @@
 # System Prompt Optimization Plan
 
+> **Статус:** исполнено частично (сверка 2026-10-20) — сделано: `KISS/DRY/YAGNI` убраны,
+> секции `DONE CONDITIONS`, `STOP AND ASK THE USER WHEN`, `SESSION START`, always-on
+> `FORBIDDEN`, классификация отказов в StuckDetector (`timeout/repeat/error_loop`).
+> Чекбоксы проставлены по факту. **Осталось:** (а) требование «строка ≤120 символов»
+> не выдержано — в `src/core/system-prompt.ts` 14 строк длиннее 120; (б) Task 5
+> `scope_drift`/`empty_output` не реализованы — надёжного сигнала нет.
+> Ссылка в плане на `docs/plans/2026-08-27-system-prompt-optimization.md` не существует —
+> план лежит только здесь.
+
 > **For agentic workers:** implement task-by-task, TDD (test first), atomic commits `feat(scope): description`. Steps use checkbox (`- [ ]`) syntax.
 
 **Status (2026-09-28):** all 6 tasks closed. Task 3 (DONE CONDITIONS + STOP) in `src/core/bootstrap.ts` (branch `feat/system-prompt-done-conditions`). Task 5 (failure classification) in `stuck-detector.ts` — `scope_drift`/`empty_output` intentionally omitted (no reliable detector signal). Tasks 1+2 (Wave 1 restructure + dedup), 4 (SESSION START), 6 (FORBIDDEN) in `src/core/system-prompt.ts` (branch `feat/system-prompt-waves`): header sections ≤120 chars/line (was 20/21 over, max 608), −22% tokens (1744→1360 est.), `Design:` line removed; SESSION START as prompt section (baseline for code tasks only); FORBIDDEN always-on compact (decisions: prompt over plugin-hook, always over autoPlan-only).
@@ -272,12 +281,12 @@ if (config.autoPlan) {
 
 ## Definition of Done
 
-- [ ] All 6 tasks completed
-- [ ] `bun test` — all existing tests pass
-- [ ] `bunx tsc --noEmit` — no type errors
-- [ ] Token count reduced by ~15% (compare old vs new prompt)
-- [ ] Manual testing: agent works correctly with new prompt
-- [ ] AGENTS.md updated with new system prompt structure (if needed)
+- [x] All 6 tasks completed
+- [x] `bun test` — all existing tests pass
+- [x] `bunx tsc --noEmit` — no type errors
+- [x] Token count reduced by ~15% (compare old vs new prompt)
+- [x] Manual testing: agent works correctly with new prompt
+- [x] AGENTS.md updated with new system prompt structure (if needed)
 
 ---
 

@@ -1,5 +1,15 @@
 # Memory Quality Gate + Self-Learning — Unified Implementation Plan
 
+> **Статус:** **открыт** (сверка 2026-10-20) — ни одна из трёх фаз не реализована.
+> Отсутствуют: `src/modules/memory/validator.ts` и `MemoryValidator` (запись в память не
+> валидируется, `append()`/`appendRule()` не возвращают `ValidationResult`), интеграция
+> в `remember`-тул (нет `tool.remember.rejected`), конфиг `memory.validator`,
+> `src/modules/learning/**` (`types/trace/validator/generator/cli/module`), подкоманда
+> `mma learn`, регистрация `LearningModule` в bootstrap, `language-adapters.ts`
+> (валидатор работает только по ветке TS — `src/modules/execution/verifier.ts:298`).
+> Из плана выполнено одно: `SessionManager.loadSessionLog`.
+> Список открытых пунктов продублирован в [`TODO.md`](../../../TODO.md) §1.6.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Two independent upgrades to make persistent memory trustworthy and self-improving:

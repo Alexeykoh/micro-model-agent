@@ -1,5 +1,11 @@
 # UI/UX Audit Fixes (#3) — Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — `securityPathsRestrict` в визарде, единый
+> `applyAnswersToConfig`, `cli.first_run_oneshot`, `src/config/redact.ts` + `--show-secrets`,
+> `CompletionItem` с описаниями, `FilePathProvider(root)`, arrow-key cycling.
+> Чекбоксы проставлены по факту. Расхождение: `ConfigKeyProvider` не удалён — но он не
+> мёртвый: `/config <key> <value>` существует (`src/cli/repl-commands.ts:508`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix five UX defects found in the first-run/config audit: inverted security-paths answer, first-run wizard suppression by subcommands/one-shot, `/wizard` dropping security answers and ignoring `provider.entries[]`, `mma config show` leaking secrets, and Tab completion lacking descriptions/navigation/path support.
@@ -33,14 +39,14 @@ This plan is independent of the model-picker work and can branch from `master`. 
 - Modify: `src/cli/setup.ts:9-20` (interface), `:241-253` (block)
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 
-- [ ] **Step 1: Update `SetupAnswers`**
+- [x] **Step 1: Update `SetupAnswers`**
 
 In `src/cli/setup.ts` replace `securityPathsDeny: boolean;` with:
 ```ts
   securityPathsRestrict: boolean;
 ```
 
-- [ ] **Step 2: Fix the question block**
+- [x] **Step 2: Fix the question block**
 
 Replace lines 241-253 (from `// Security settings` through the closing `}` of the `if`) with:
 ```ts
@@ -60,11 +66,11 @@ Replace lines 241-253 (from `// Security settings` through the closing `}` of th
   }
 ```
 
-- [ ] **Step 3: Update the answers object and summary**
+- [x] **Step 3: Update the answers object and summary**
 
 In the `answers` object replace `securityPathsDeny,` with `securityPathsRestrict,`. (No summary line changes.)
 
-- [ ] **Step 4: i18n — replace the key**
+- [x] **Step 4: i18n — replace the key**
 
 In `src/i18n/en.json` remove `"setup.security_paths_deny"` and add:
 ```json
@@ -75,7 +81,7 @@ In `src/i18n/ru.json` remove `"setup.security_paths_deny"` and add:
   "setup.security_paths_restrict": "  Ограничить доступ к .git/, .env, node_modules/? (Y/n)",
 ```
 
-- [ ] **Step 5: Run setup-related tests**
+- [x] **Step 5: Run setup-related tests**
 Run: `bun test tests/cli/main-first-run.test.ts`
 Expected: FAIL to compile (field renamed) — continue to Task 1.2 which updates the consumer, then re-run.
 
@@ -85,7 +91,7 @@ Expected: FAIL to compile (field renamed) — continue to Task 1.2 which updates
 - Modify: `src/cli/setup-order.ts:36-59`
 - Test: `tests/cli/main-first-run.test.ts`
 
-- [ ] **Step 1: Update `applyAnswersToConfig`**
+- [x] **Step 1: Update `applyAnswersToConfig`**
 
 Replace the security block at the end of `applyAnswersToConfig`:
 ```ts
@@ -97,17 +103,17 @@ with:
     if (!a.securityPathsRestrict) config.security.paths.denied = [];
 ```
 
-- [ ] **Step 2: Update existing tests**
+- [x] **Step 2: Update existing tests**
 
 In `tests/cli/main-first-run.test.ts`, replace every `securityPathsDeny: true` with `securityPathsRestrict: true` and `securityPathsDeny: false` with `securityPathsRestrict: false`. Update assertions:
 - where the test asserted `paths.denied` is cleared for `false`, assert `paths.enabled === false`.
 - add a case: `securityPathsRestrict: true` → `paths.enabled === true` and `paths.denied` non-empty.
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 Run: `bun test tests/cli/main-first-run.test.ts`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add src/cli/setup.ts src/cli/setup-order.ts src/i18n/en.json src/i18n/ru.json tests/cli/main-first-run.test.ts
 git commit -m "fix(setup): correct inverted security-paths answer and enable path policy"
@@ -118,7 +124,7 @@ git commit -m "fix(setup): correct inverted security-paths answer and enable pat
 **Files:**
 - Modify: `src/cli/commands.ts:33-79`
 
-- [ ] **Step 1: Replace the inline security block**
+- [x] **Step 1: Replace the inline security block**
 
 Delete the inline `SECURITY_BASH_BLOCKLIST`-equivalent block (the `if (config.security) { … }` region) in `mma init` and instead call the shared applier after setting the provider/model/locale fields is no longer needed either — replace the whole action body from `config.provider.type = answers.provider;` through the end of the security block with:
 ```ts
@@ -132,11 +138,11 @@ import { applyAnswersToConfig } from "./setup-order";
 ```
 (Keep `runSetup()` and the `saveConfig`/message lines unchanged.)
 
-- [ ] **Step 2: Typecheck + tests**
+- [x] **Step 2: Typecheck + tests**
 Run: `bunx tsc --noEmit` and `bun test tests/cli/`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```bash
 git add src/cli/commands.ts
 git commit -m "refactor(cli): mma init reuses applyAnswersToConfig"
@@ -154,7 +160,7 @@ git commit -m "refactor(cli): mma init reuses applyAnswersToConfig"
 - Modify: `src/config/config.ts:304-307`
 - Test: `tests/config-domains.test.ts:259`
 
-- [ ] **Step 1: Update the failing test**
+- [x] **Step 1: Update the failing test**
 
 In `tests/config-domains.test.ts`, change the test at ~line 259:
 ```ts
@@ -166,12 +172,12 @@ to:
 ```
 and change the assertion `expect(hasDomainFiles(tmpDir)).toBe(true);` (the one inside this test, ~line 268) to `expect(hasDomainFiles(tmpDir)).toBe(false);`. Keep the "returns defaults" assertions.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/config-domains.test.ts`
 Expected: FAIL — `hasDomainFiles` is true.
 
-- [ ] **Step 3: Remove the auto-create step**
+- [x] **Step 3: Remove the auto-create step**
 
 In `src/config/config.ts` delete:
 ```ts
@@ -182,12 +188,12 @@ In `src/config/config.ts` delete:
 ```
 and update the subsequent comments/step numbering if needed. If `saveDomainFiles` becomes an unused import in `config.ts`, remove it from the import (verify with `rg -n 'saveDomainFiles' src/config/config.ts`).
 
-- [ ] **Step 4: Run config tests**
+- [x] **Step 4: Run config tests**
 
 Run: `bun test tests/config-domains.test.ts tests/config.test.ts tests/config/`
 Expected: PASS. If another test depended on auto-create, update it to seed files via `saveDomainFiles` explicitly, or assert the new behavior.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add src/config/config.ts tests/config-domains.test.ts
 git commit -m "fix(config): do not persist default config on first load"
@@ -199,7 +205,7 @@ git commit -m "fix(config): do not persist default config on first load"
 - Modify: `src/cli/main.ts:125-155`
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 
-- [ ] **Step 1: Detect first run in the one-shot branch**
+- [x] **Step 1: Detect first run in the one-shot branch**
 
 In `src/cli/main.ts`, inside `if (program.args.length > 0) {` right after `const prompt = program.args.join(" ");` (line 139), add:
 ```ts
@@ -215,7 +221,7 @@ Then, immediately after `if (legacyDetected) { … }` (line 155), add:
 ```
 (Confirm `existsSync`, `join`, `homedir` are already imported in `main.ts`; add imports if missing.)
 
-- [ ] **Step 2: i18n**
+- [x] **Step 2: i18n**
 
 Add to `src/i18n/en.json`:
 ```json
@@ -226,10 +232,10 @@ Add to `src/i18n/en.json`:
   "cli.first_run_oneshot": "Конфигурация не найдена — запуск с настройками по умолчанию. Запустите `mma` без аргументов один раз для настройки.",
 ```
 
-- [ ] **Step 3: Typecheck + JSON + parity**
+- [x] **Step 3: Typecheck + JSON + parity**
 Run: `bunx tsc --noEmit`; validate both JSON; confirm equal key counts.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add src/cli/main.ts src/i18n/en.json src/i18n/ru.json
 git commit -m "fix(cli): warn on first-run one-shot without config"
@@ -237,7 +243,7 @@ git commit -m "fix(cli): warn on first-run one-shot without config"
 
 ### Task 2.3: Verify subcommands no longer suppress the wizard
 
-- [ ] **Step 1: Sandbox check**
+- [x] **Step 1: Sandbox check**
 
 ```powershell
 $env:MMA_CONFIG_DIR="$env:TEMP\mma-virgin"; Remove-Item -Recurse -Force "$env:TEMP\mma-virgin" -ErrorAction SilentlyContinue
@@ -255,7 +261,7 @@ Expected: `False` — no domain files created. Then a subsequent interactive `bu
 **Files:**
 - Modify: `src/cli/repl-commands.ts:315-337`
 
-- [ ] **Step 1: Replace the `/wizard` action body**
+- [x] **Step 1: Replace the `/wizard` action body**
 
 Replace:
 ```ts
@@ -300,11 +306,11 @@ Add the import at the top of `src/cli/repl-commands.ts`:
 import { applyAnswersToConfig } from "./setup-order";
 ```
 
-- [ ] **Step 2: Typecheck + tests**
+- [x] **Step 2: Typecheck + tests**
 Run: `bunx tsc --noEmit`; `bun test tests/cli/`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```bash
 git add src/cli/repl-commands.ts
 git commit -m "fix(repl): /wizard applies security answers and provider entries"
@@ -320,7 +326,7 @@ git commit -m "fix(repl): /wizard applies security answers and provider entries"
 - Create: `src/config/redact.ts`
 - Test: `tests/config/redact.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/config/redact.test.ts`:
 ```ts
@@ -368,12 +374,12 @@ describe("redactConfigSecrets", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/config/redact.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `src/config/redact.ts`:
 ```ts
@@ -422,11 +428,11 @@ export function redactConfigSecrets<T>(config: T): T {
 }
 ```
 
-- [ ] **Step 4: Run**
+- [x] **Step 4: Run**
 Run: `bun test tests/config/redact.test.ts`
 Expected: PASS (6 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add src/config/redact.ts tests/config/redact.test.ts
 git commit -m "feat(config): add redactConfigSecrets helper"
@@ -438,7 +444,7 @@ git commit -m "feat(config): add redactConfigSecrets helper"
 - Modify: `src/cli/commands.ts:109-115`
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 
-- [ ] **Step 1: Add the option and redaction**
+- [x] **Step 1: Add the option and redaction**
 
 Replace the `config show` command with:
 ```ts
@@ -453,7 +459,7 @@ Replace the `config show` command with:
     });
 ```
 
-- [ ] **Step 2: i18n**
+- [x] **Step 2: i18n**
 
 Add to `src/i18n/en.json`:
 ```json
@@ -465,11 +471,11 @@ Add to `src/i18n/en.json`:
 ```
 (The existing `cli.show_config` key is replaced, not duplicated.)
 
-- [ ] **Step 3: Typecheck + tests**
+- [x] **Step 3: Typecheck + tests**
 Run: `bunx tsc --noEmit`; `bun test tests/cli/commands.test.ts`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add src/cli/commands.ts src/i18n/en.json src/i18n/ru.json
 git commit -m "fix(cli): redact secrets in mma config show by default"
@@ -485,7 +491,7 @@ git commit -m "fix(cli): redact secrets in mma config show by default"
 - Modify: `src/cli/completer.ts`
 - Test: `tests/cli/completer.test.ts` (create if absent)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create/extend `tests/cli/completer.test.ts`:
 ```ts
@@ -507,12 +513,12 @@ describe("Completer descriptions", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `bun test tests/cli/completer.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement `CompletionItem`**
+- [x] **Step 3: Implement `CompletionItem`**
 
 In `src/cli/completer.ts` add:
 ```ts
@@ -526,15 +532,15 @@ Change `CompletionProvider.complete` to return `CompletionItem[]` and `Completer
 - `SubcommandProvider` takes `Array<{ name: string; description?: string }>` (or keep `string[]` and map to `{ value }`).
 - `ModelArgProvider`, `ProviderArgProvider`, `SessionNameProvider`, `SkillNameProvider`, `FilePathProvider` return `matches.map((m) => ({ value: m }))`.
 
-- [ ] **Step 4: Update callers**
+- [x] **Step 4: Update callers**
 
 `src/cli/repl.ts` `editorCompleter` currently maps `[matches, partial]` straight through; adapt it to the new item shape (it can pass items through unchanged, since the LineEditor will render them).
 
-- [ ] **Step 5: Run**
+- [x] **Step 5: Run**
 Run: `bun test tests/cli/completer.test.ts tests/cli/completer-provider.test.ts tests/cli/completer-filepath.test.ts`
 Expected: PASS (update assertions in existing tests to the `{ value }` shape as needed).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add src/cli/completer.ts src/cli/repl.ts tests/cli/completer*.test.ts
 git commit -m "feat(cli): completer returns value+description items"
@@ -545,11 +551,11 @@ git commit -m "feat(cli): completer returns value+description items"
 **Files:**
 - Modify: `src/ui/line-editor.ts:13-22` (completer signature), `:829-864` (tabComplete)
 
-- [ ] **Step 1: Widen the completer type**
+- [x] **Step 1: Widen the completer type**
 
 In `LineEditorOptions.completer` and `LineEditor.completer`, change the return type to `[Array<{ value: string; description?: string }>, string]`. (Import the type or declare it inline to avoid a UI→CLI dependency.)
 
-- [ ] **Step 2: Render descriptions**
+- [x] **Step 2: Render descriptions**
 
 Replace the multi-match rendering in `tabComplete`:
 ```ts
@@ -563,15 +569,15 @@ with:
 ```
 (Import `pc` from `./colors` if not already; otherwise use the existing color helper in this file.)
 
-- [ ] **Step 3: Single-match path**
+- [x] **Step 3: Single-match path**
 
 Update the single-match branch to use `matches[0].value` where it previously used `matches[0]`.
 
-- [ ] **Step 4: Typecheck + tests**
+- [x] **Step 4: Typecheck + tests**
 Run: `bunx tsc --noEmit`; `bun test tests/ui/ tests/cli/`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add src/ui/line-editor.ts
 git commit -m "feat(ui): show descriptions in tab-completion list"
@@ -584,11 +590,11 @@ git commit -m "feat(ui): show descriptions in tab-completion list"
 - Modify: `src/cli/completer.ts` (`FilePathProvider` cwd option; delete `ConfigKeyProvider`)
 - Test: `tests/cli/completer-filepath.test.ts`
 
-- [ ] **Step 1: Give `FilePathProvider` an explicit root**
+- [x] **Step 1: Give `FilePathProvider` an explicit root**
 
 Change its constructor to accept `root?: string` and use `root ?? process.cwd()` instead of `process.cwd()`. This makes it testable and lets the REPL pass `baseDir`.
 
-- [ ] **Step 2: Register it in the REPL**
+- [x] **Step 2: Register it in the REPL**
 
 In `src/cli/repl.ts` `setupCompleter`, after the slash/subcommand providers, add:
 ```ts
@@ -596,15 +602,15 @@ In `src/cli/repl.ts` `setupCompleter`, after the slash/subcommand providers, add
 ```
 and add `FilePathProvider` to the import from `./completer`.
 
-- [ ] **Step 3: Remove `ConfigKeyProvider`**
+- [x] **Step 3: Remove `ConfigKeyProvider`**
 
 Delete the `ConfigKeyProvider` class from `src/cli/completer.ts` (it matches a `/config set` command that does not exist). Verify no references: `rg -n 'ConfigKeyProvider' src/ tests/`.
 
-- [ ] **Step 4: Typecheck + tests**
+- [x] **Step 4: Typecheck + tests**
 Run: `bunx tsc --noEmit`; `bun test tests/cli/`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add src/cli/completer.ts src/cli/repl.ts
 git commit -m "feat(cli): register file-path completion, drop dead config-key provider"
@@ -618,7 +624,7 @@ git commit -m "feat(cli): register file-path completion, drop dead config-key pr
 
 **Design:** After `tabComplete` with >1 match, the editor prints the item list once and enters a **buffer-cycling** session: the first candidate is inserted into the input line in place of the partial (cursor after it). While the session is active, `↑`/`↓`/`Tab` cycle through candidates with wrap-around, rewriting the token in the buffer each time; `Enter` accepts the currently inserted candidate (normal submit); `Esc` restores the original partial. Any other key drops the session and is processed normally. The session replaces only the completed token range, so text after the cursor is preserved. This is raw-mode state on the editor; no new dependency.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/ui/line-editor-completion.test.ts` driving `onKey` with synthetic keypresses (mirroring the existing `tests/ui/line-editor*.test.ts` patterns) and asserting: Tab inserts the first candidate and starts the session; `down` cycles to the next; `return` submits the currently inserted candidate; `escape` restores the original partial. Include a mid-line case (cursor inside the line) proving only the token is replaced and trailing text is preserved.
 
@@ -632,19 +638,19 @@ it("cycles a completion with arrow keys", () => {
 });
 ```
 
-- [ ] **Step 2: Implement the completion cycling session**
+- [x] **Step 2: Implement the completion cycling session**
 
 Add the field `private completionSession: { items: CompletionItem[]; index: number; from: number; original: string; inserted: string } | null = null;`, where `from` is the UTF-16 index of the completed token on the current line, `original` the replaced partial, and `inserted` the candidate currently in the buffer. In `tabComplete`, when `matches.length > 1`, print the list, store the session with `index: 0`, and insert `matches[0].value` in place of `partial` (cursor lands after it). Add helpers `applyCompletionCandidate(index)` (replace `inserted` with the chosen value on the current line), `cycleCompletion(delta)` (wrap `(index + delta + n) % n`; guard `n === 0`), and `cancelCompletion()` (restore `original`). In `onKey`, before normal handling, if `completionSession` is set: unmodified `up`/`down` cycle, `tab` cycles forward, `escape` restores; any other key clears the session and falls through to normal handling (host hook included). Clear the session in `insertText` so external `write()` inserts cannot leave stale `from`/`inserted`.
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 Run: `bun test tests/ui/line-editor-completion.test.ts`
 Expected: PASS.
 
-- [ ] **Step 4: Full check**
+- [x] **Step 4: Full check**
 Run: `bunx tsc --noEmit`; `bun test tests/ui/`; `bun test tests/cli/`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add src/ui/line-editor.ts tests/ui/line-editor-completion.test.ts
 git commit -m "feat(ui): arrow-key navigation for tab completion"
@@ -654,10 +660,10 @@ git commit -m "feat(ui): arrow-key navigation for tab completion"
 
 ## Final verification
 
-- [ ] `bunx tsc --noEmit` → PASS.
-- [ ] `bun test` → PASS.
-- [ ] i18n en/ru key sets identical; JSON valid.
-- [ ] Manual: virgin sandbox → `mma config show` creates no files, interactive `mma` still shows the wizard; `mma config show` masks `provider.apiKey`, `--show-secrets` reveals it; `/wizard` in a multi-entry session updates the active entry and applies security choices; Tab on a path completes and shows descriptions.
+- [x] `bunx tsc --noEmit` → PASS.
+- [x] `bun test` → PASS.
+- [x] i18n en/ru key sets identical; JSON valid.
+- [x] Manual: virgin sandbox → `mma config show` creates no files, interactive `mma` still shows the wizard; `mma config show` masks `provider.apiKey`, `--show-secrets` reveals it; `/wizard` in a multi-entry session updates the active entry and applies security choices; Tab on a path completes and shows descriptions.
 
 ## Self-Review
 

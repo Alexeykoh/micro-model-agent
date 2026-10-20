@@ -1,5 +1,11 @@
 # Complexity Refactor Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — `src/modules/execution/audit-runners.ts`,
+> `buildRequestBody` в `openai-compat.ts`, `FactExtractor` (переехал в ядро),
+> дробление `plan-tool.ts`/`execution-plugin.ts`. Чекбоксы проставлены по факту.
+> Пункты вне скоупа (сплит петли `agent.ts`, lazy-hook плагинов, модуляризация
+> security/cert/pipelines) учтены долгом `split-bloated-files`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Reduce the complexity debt flagged in `CODE-REVIEW-COMPLEXITY.md` and by the post-mortem branch reviews, enforcing AGENTS.md rules #1 (no file >300 lines) and #2 (small files, single responsibility) on the hotspots the branch touched.
@@ -22,7 +28,7 @@
 - Create: `src/modules/execution/audit-runners.ts`
 - Modify: `src/modules/execution/auditor.ts`
 
-- [ ] **Step 1: Read the current auditor.ts and identify what to move**
+- [x] **Step 1: Read the current auditor.ts and identify what to move**
 
 Read `src/modules/execution/auditor.ts` fully. Move these to `audit-runners.ts` (verbatim, preserving their exports):
 - `SKIP_DIRS`, `TEST_EXT_RE`, `TEST_STEP_RE` constants
@@ -34,7 +40,7 @@ Read `src/modules/execution/auditor.ts` fully. Move these to `audit-runners.ts` 
 
 Keep in `auditor.ts`: `AuditResult`, `findExistingFile` (module.ts imports it from `"./auditor"` — keep the export), `RESOLVE_MAX_DEPTH`, `MASS_EDIT_THRESHOLD`, the `Auditor` class.
 
-- [ ] **Step 2: Move the code**
+- [x] **Step 2: Move the code**
 
 Create `audit-runners.ts` with the moved items. It needs imports: `processRegistry` from `"../processes"`, `detectTestResults` from `"../../tools/bash"`, `join` from `"path"`, `Dirent`/`readdirSync` from `"fs"`.
 
@@ -46,17 +52,17 @@ In `auditor.ts`:
   export { parseTypecheckErrors } from "./audit-runners";
   ```
 
-- [ ] **Step 3: Verify behavior preserved**
+- [x] **Step 3: Verify behavior preserved**
 
 Run: `bun test tests/execution-auditor.test.ts tests/execution-plan-deliverables.test.ts tests/execution-scenario-tests.test.ts`
 Expected: all pass (the split is pure structure; behavior unchanged).
 
-- [ ] **Step 4: Typecheck + line-count check**
+- [x] **Step 4: Typecheck + line-count check**
 
 Run: `bunx tsc --noEmit` (exit 0).
 Check: `auditor.ts` must be **< 300 lines**, `audit-runners.ts` < 300 lines.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/execution/audit-runners.ts src/modules/execution/auditor.ts
@@ -73,11 +79,11 @@ git commit -m "refactor: split auditor test/typecheck runners into audit-runners
 - Modify: `src/llm/openai-compat.ts`
 - Test: `tests/openai-compat.test.ts`
 
-- [ ] **Step 1: Read the two request-body construction sites**
+- [x] **Step 1: Read the two request-body construction sites**
 
 Read `src/llm/openai-compat.ts` around `doStream` and `doNonStreaming`. Identify the exact `body` objects built in each.
 
-- [ ] **Step 2: Extract `buildRequestBody`**
+- [x] **Step 2: Extract `buildRequestBody`**
 
 Add a module-private helper near the top:
 
@@ -104,12 +110,12 @@ function buildRequestBody(opts: {
 
 Use it in BOTH `doStream` and `doNonStreaming`. **Preserve the exact field semantics of the current code** — read the two sites carefully: they may include different fields (e.g. `stream: false` only in non-streaming, `max_tokens`, `reasoning_effort`). The helper must reproduce each site's exact body. If the two bodies differ (e.g. reasoning_effort only in one), pass the union of fields and let each site set what it needs — do NOT unify behavior.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `bun test tests/openai-compat.test.ts`
 Expected: all pass. Then run the full suite `bun test` — expect exit 0.
 
-- [ ] **Step 4: Typecheck + commit**
+- [x] **Step 4: Typecheck + commit**
 
 ```bash
 bunx tsc --noEmit
@@ -128,7 +134,7 @@ git commit -m "refactor: share buildRequestBody between streaming and non-stream
 - Modify: `src/modules/context/manager.ts`
 - Test: `tests/context-manager.test.ts` (unchanged — it must keep passing)
 
-- [ ] **Step 1: Design the extraction**
+- [x] **Step 1: Design the extraction**
 
 Read `src/modules/context/manager.ts` fully. The fact state is `fileFacts`, `deletedFacts`, `decisionFacts`, `errorFacts`; the logic is `extractFacts(turns)` and the `[Files:]/[Deleted:]/[Decisions:]/[Errors:]` emission at compact. `ContextManager.MAX_FACTS` (20) and the caps (15/10/5/3) are used.
 
@@ -172,7 +178,7 @@ export class FactExtractor {
 
 Move the `extractFacts` body (regex patterns, loop, dedup/last-event-wins logic) into `FactExtractor.extract`. Move the `[Files:]/[Deleted:]/[Decisions:]/[Errors:]` emission from `compact()` into the four `*Line()` methods. Note `extractFacts` currently uses `content.includes("Plan:")` decision extraction and the assistant `decided:`/`decision:` extraction — move those too.
 
-- [ ] **Step 2: Wire into ContextManager**
+- [x] **Step 2: Wire into ContextManager**
 
 In `manager.ts`:
 - Replace the four fact fields (`fileFacts`, `deletedFacts`, `decisionFacts`, `errorFacts`) with `private facts = new FactExtractor();`
@@ -181,12 +187,12 @@ In `manager.ts`:
 - Remove the now-dead `MAX_FACTS` static and `extractFacts` private method.
 - Keep `getQuality()`'s `errorFacts` usage working — check where `this.errorFacts` is read (line ~182 `errorDensity`) and expose it via a getter (`this.facts.errorsList()` or keep a private getter).
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `bun test tests/context-manager.test.ts`
 Expected: ALL pass (the output format must be byte-identical). Also `bun test tests/context-manager-multimodal.test.ts`.
 
-- [ ] **Step 4: Typecheck + line-count + commit**
+- [x] **Step 4: Typecheck + line-count + commit**
 
 ```bash
 bunx tsc --noEmit
@@ -209,14 +215,14 @@ git commit -m "refactor: extract fact extraction from ContextManager into FactEx
 - Modify: `src/modules/execution/module.ts`
 - Test: all `tests/execution-*.test.ts` (must keep passing unchanged)
 
-- [ ] **Step 1: Map the state and seams**
+- [x] **Step 1: Map the state and seams**
 
 Read `src/modules/execution/module.ts` fully. State owned by `ExecutionModule`:
 `tracker`, `verifier`, `stuckDetector`, `auditor`, `store`, `baseDir`, `lastRecoveryIteration`, `consecutivePlanWarnings`, `lastStepId`, `depsGateHints`, `_auditSkipsRemaining`, `stuckNotified`, `pendingMessages`, `forbiddenBashFailures`.
 
 Public surface used by tests/module-registry: `setPlan`, `restorePlan`, `getTracker`, `getStore`, `getStuckDetector`, `runFinalAudit`, `getSystemPromptBlock`, `getToolDefinitions`, `getPlugin`.
 
-- [ ] **Step 2: Extract the plan/todo/verify tool definitions → `plan-tool.ts`**
+- [x] **Step 2: Extract the plan/todo/verify tool definitions → `plan-tool.ts`**
 
 Create `plan-tool.ts` exporting a factory:
 
@@ -258,7 +264,7 @@ Move the `plan` (create/update/show/abort/list/switch/re-plan) + `todo` + `verif
 - The handlers use `_ctx.sessionLog?.plan(...)` — keep (ToolContext).
 - The `plan` handler's `output`/`display`/`t(...)` calls — keep.
 
-- [ ] **Step 3: Extract the plugin hooks → `execution-plugin.ts`**
+- [x] **Step 3: Extract the plugin hooks → `execution-plugin.ts`**
 
 Create `execution-plugin.ts` exporting a factory:
 
@@ -312,7 +318,7 @@ Move `getPlugin()` from `module.ts` verbatim, translating `this.`:
 
 Keep in module.ts: `checkPlanAlignment`, `advancePlanIfStepComplete`, `missingStepDeliverables`, `stillExistingDeliverables`, `parseKinds`, `getTaskText`, `preserveActive`, `setPlan`, `restorePlan`, `runFinalAudit`, `getSystemPromptBlock`.
 
-- [ ] **Step 4: Rewire `ExecutionModule`**
+- [x] **Step 4: Rewire `ExecutionModule`**
 
 `getToolDefinitions()`:
 ```ts
@@ -358,13 +364,13 @@ Add `private trackerRef = { get current() { return this.tracker; }, set current(
 
 **CRITICAL — shared mutable state:** `pendingMessages`, `forbiddenBashFailures`, `depsGateHints`, and `state.*` are mutated by the plugin AND (for `pendingMessages`) by `onBeforeThink`'s flush. The module must own them and the plugin must mutate the SAME objects. Passing the arrays/maps/object by reference achieves that (the plugin pushes to `deps.pendingMessages`, `deps.forbiddenBashFailures.set(...)`, `deps.state.lastRecoveryIteration = ...`). For `state.*` primitives, the module writes back after `getPlugin()`? NO — the plugin mutates `deps.state.lastRecoveryIteration` directly (same object), so the module's `this.lastRecoveryIteration` must be the same. Cleanest: module owns the `state` object and reads `this.state.lastRecoveryIteration` instead of `this.lastRecoveryIteration` in its own methods. **Verify every mutation site and make sure module and plugin share one object.** Alternatively the module keeps its fields and passes getters+setters — but that's verbose. Choose the shared-object approach and update module.ts's own reads (`runFinalAudit`, `getSystemPromptBlock`, `restorePlan` set `_auditSkipsRemaining`) accordingly.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `bun test tests/execution` (expect all execution tests pass — they exercise getToolDefinitions/getPlugin via the public API).
 Also `bun test` full suite — exit 0.
 Also check `src/modules/execution/index.ts` exports still work (it re-exports types + ExecutionModule).
 
-- [ ] **Step 6: Typecheck + line-count + commit**
+- [x] **Step 6: Typecheck + line-count + commit**
 
 ```bash
 bunx tsc --noEmit

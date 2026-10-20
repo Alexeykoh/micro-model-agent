@@ -1,5 +1,10 @@
 # План исправлений агента по пост-мортему двух сессий (qwen + gemma)
 
+> **Статус:** исполнено (2026-10-20) — A: `findTypecheckRoot` для вложенных tsconfig;
+> B: exit-код аудит-раннера; C: bridge-клиент (хвост stderr, `proc.on("error")`,
+> одноразовый рестарт); D: отключение LSP-сервера + retry `initialize`; E: `exec.npm_exec_hint`.
+> Чекбоксы проставлены по факту.
+
 > **Для агентных исполнителей:** ОБЯЗАТЕЛЬНЫЙ SUB-SKILL: superpowers:subagent-driven-development (рекомендуется) или superpowers:executing-plans — выполнять по шагам. Шаги используют синтаксис чекбоксов (`- [ ]`).
 
 **Цель:** Устранить ошибки агента, найденные в двух тестовых сессиях (обе строили веломагазин Vite+React+TS+Tailwind+shadcn):
@@ -26,7 +31,7 @@
 - Modify: `src/modules/execution/auditor.ts` — использовать найденный корень
 - Test: `tests/execution-auditor.test.ts`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 В `tests/execution-auditor.test.ts` добавить кейс: sandbox с проектом во вложенной папке:
 
@@ -40,7 +45,7 @@
 
 Также кейс-регрессия: без tsconfig вообще (ни в baseDir, ни во вложенных) typecheck не запускается → `typecheckError === null` и аудит не блокирует (существующее поведение).
 
-- [ ] **Step 2: Реализовать `findTypecheckRoot(baseDir, existingFiles)`**
+- [x] **Step 2: Реализовать `findTypecheckRoot(baseDir, existingFiles)`**
 
 В `src/modules/execution/audit-runners.ts` добавить и экспортировать:
 
@@ -80,7 +85,7 @@ export function findTypecheckRoot(
 
 ВАЖНО: для файла (например `bicycle-shop/src/broken.ts`) первый кандидат — это его каталог (`bicycle-shop/src`), затем `bicycle-shop` (там tsconfig). Для baseDir — сам baseDir. `existingFiles` передаётся из `audit()` — это уже разрешённые через `findExistingFile()` абсолютные пути (они есть в `existingFiles` после цикла проверок).
 
-- [ ] **Step 3: Подключить в `Auditor.audit()`**
+- [x] **Step 3: Подключить в `Auditor.audit()`**
 
 В `src/modules/execution/auditor.ts` заменить блок:
 
@@ -117,7 +122,7 @@ if (missingFiles.length === 0 && leftoverFiles.length === 0) {
 
 `existingFiles` уже есть в scope `audit()` (массив `existingFiles` накапливается в цикле). Проверить, что он объявлен ДО блока typecheck.
 
-- [ ] **Step 4: Проверка**
+- [x] **Step 4: Проверка**
 
 ```bash
 bun test tests/execution-auditor.test.ts
@@ -127,7 +132,7 @@ bunx tsc --noEmit
 
 Ожидание: новые тесты проходят, старые — не сломаны, exit 0.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/modules/execution/audit-runners.ts src/modules/execution/auditor.ts tests/execution-auditor.test.ts
@@ -145,13 +150,13 @@ git commit -m "fix(audit): resolve nested project root for final typecheck gate"
 - Modify: `src/modules/execution/auditor.ts`
 - Test: `tests/execution-auditor.test.ts`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 В `tests/execution-auditor.test.ts`: план с verify-шагом и существующим тест-файлом, но `runTests` возвращает `failed: -1` (exit != 0, нераспознанный вывод). Ожидание: `testsFailing === true`, аудит `passed === false`.
 
 Практически — замокать `runTests` или вставить в sandbox тест-файл с настоящим фейлом, вывод которого `detectTestResults` НЕ распознаёт (например тест на Python `pytest` без установленного pytest → stdout пустой/ошибка, exit != 0). Надёжнее замокать: в тесте `vi.spyOn(auditRunners, "runTests").mockResolvedValue({ checked: true, passed: false, failed: -1, passedCount: 0, detail: "unknown", command: "bun test" })`.
 
-- [ ] **Step 2: Исправить семантику `failed:-1`**
+- [x] **Step 2: Исправить семантику `failed:-1`**
 
 В `runTests()` нераспознанный случай: раз exit-код != 0, это падение, а не «неизвестно». Вернуть:
 
@@ -170,7 +175,7 @@ return {
 
 Альтернатива с меньшим изменением: в `auditor.ts:189` изменить условие на `testRun !== null && !testRun.passed`. ВЫБРАТЬ ОДИН вариант. Рекомендация: править `auditor.ts` условие — меньше риск сломать другие потребители `TestRunCheck` (например подсказки stuck-detector). Проверить, кто ещё читает `failed`.
 
-- [ ] **Step 3: Проверка**
+- [x] **Step 3: Проверка**
 
 ```bash
 bun test tests/execution-auditor.test.ts
@@ -178,7 +183,7 @@ bun test tests/execution-scenario-tests.test.ts
 bunx tsc --noEmit
 ```
 
-- [ ] **Step 4: Коммит**
+- [x] **Step 4: Коммит**
 
 ```bash
 git add src/modules/execution/audit-runners.ts src/modules/execution/auditor.ts tests/execution-auditor.test.ts
@@ -195,11 +200,11 @@ git commit -m "fix(audit): unrecognized non-zero test run counts as failing"
 - Modify: `src/modules/browser/bridge-client.ts`
 - Test: `tests/browser-bridge.test.ts`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 В `tests/browser-bridge.test.ts`: замокать `spawn` так, чтобы он вернул child, который немедленно эмитит `error` (например `ENOENT`), и вызвать `bridge.launch(...)`. Ожидание: промис отклоняется с сообщением, содержащим текст ошибки spawn (не «Bridge is not running»), и процесс без утечки pending.
 
-- [ ] **Step 2: Обработка `error` + stderr + авто-restart**
+- [x] **Step 2: Обработка `error` + stderr + авто-restart**
 
 В `spawnBridge()`:
 
@@ -253,7 +258,7 @@ private async send(cmd, params = {}, retried = false): Promise<BridgeResponse> {
 
 (рекурсия с флагом `retried` = один повтор, защита от бесконечного цикла при падающем spawn).
 
-- [ ] **Step 3: i18n + поверхностная проверка**
+- [x] **Step 3: i18n + поверхностная проверка**
 
 `browser.error` в `src/i18n/en.json:479` / `ru.json` уже оборачивает message — новых ключей не нужно (сообщение приходит из bridge). Проверить, что `session.ts:173-178` (`catch` → `t("browser.error")`) передаёт полное сообщение. Запустить:
 
@@ -262,7 +267,7 @@ bun test tests/browser-bridge.test.ts tests/browser-session.test.ts
 bunx tsc --noEmit
 ```
 
-- [ ] **Step 4: Коммит**
+- [x] **Step 4: Коммит**
 
 ```bash
 git add src/modules/browser/bridge-client.ts tests/browser-bridge.test.ts
@@ -281,11 +286,11 @@ git commit -m "fix(browser): bridge spawn error diagnostics + one-shot restart"
 - Modify: `src/modules/lsp/client.ts` — один retry на `initialize` при таймауте
 - Test: `tests/lsp-module.test.ts`
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 В `tests/lsp-module.test.ts`: mock `client.checkFile`, который бросает для CSS-файла 3 раза подряд и успешен для TS-файла. Ожидание нового поведения: после 3 фейлов на CSS проверки CSS прекращаются, но проверка TS-файла продолжает работать (`isLspDisabled()` для CSS = true, для TS = false).
 
-- [ ] **Step 2: Per-server disable в `LspModule`**
+- [x] **Step 2: Per-server disable в `LspModule`**
 
 Заменить глобальные `consecutiveFailures` / `lspDisabled` на:
 
@@ -301,7 +306,7 @@ private serverKey(server: LspServerConfig): string {
 
 В `onAfterTool`: `const key = this.serverKey(serverConfig); if (this.disabledServers.has(key)) return;` в начале; при успехе `this.failuresByServer.set(key, 0)`; при ошибке инкремент, при `>= MAX` → `disabledServers.add(key)` + одно сообщение `[LSP disabled ...]`. `isLspDisabled()` оставить (тесты используют) — возвращать `disabledServers.size > 0`, но добавить тест-хук `isServerDisabled(key)`.
 
-- [ ] **Step 3: Retry initialize в `LspClient`**
+- [x] **Step 3: Retry initialize в `LspClient`**
 
 В `checkFile()` (client.ts:46-55) обернуть `sendRequest("initialize", ...)` в маленький retry-цикл — при таймауте (`LSP request timeout: initialize`) повтор один раз, с полным сбросом (shutdown + startServer заново):
 
@@ -319,18 +324,18 @@ try {
 
 Проверить, что после `shutdown()` флаг `this.initialized` сброшен (shutdown уже делает `this.initialized = false` — client.ts:277).
 
-- [ ] **Step 4: Таймаут CSS в конфиге**
+- [x] **Step 4: Таймаут CSS в конфиге**
 
 В `config.ts` css: `timeout: 10000` → `timeout: 20000` (как typescript).
 
-- [ ] **Step 5: Проверка**
+- [x] **Step 5: Проверка**
 
 ```bash
 bun test tests/lsp-module.test.ts tests/lsp-command.test.ts tests/lsp-project-root.test.ts
 bunx tsc --noEmit
 ```
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add src/modules/lsp/config.ts src/modules/lsp/module.ts src/modules/lsp/client.ts tests/lsp-module.test.ts
@@ -348,11 +353,11 @@ git commit -m "fix(lsp): per-server disable + initialize retry + CSS timeout"
 - Modify: `src/i18n/en.json` / `ru.json` — ключ
 - Test: `tests/execution-forbidden-cmd.test.ts` или новый
 
-- [ ] **Step 1: Написать тест**
+- [x] **Step 1: Написать тест**
 
 В `tests/execution-forbidden-cmd.test.ts` (или `tests/execution-scenario-tests.test.ts`): bash-вывод, содержащий `could not determine executable to run`, должен добавлять хинт (например «run the package's script via `npm run <script>` or check that a `bin` is declared in package.json; on Windows prefer `bun run`»).
 
-- [ ] **Step 2: Реализовать**
+- [x] **Step 2: Реализовать**
 
 В `src/tools/bash.ts` в секцию hint/recovery (рядом с `UNIX_TO_WIN_HINTS`, строка ~479-510) добавить распознавание ошибки:
 
@@ -366,14 +371,14 @@ if (NPM_EXEC_HINT.test(output)) {
 
 (без `t()`? — НЕТ, правило #8: через `t("exec.npm_exec_hint")`. Добавить ключ в en.json/ru.json.)
 
-- [ ] **Step 3: Проверка**
+- [x] **Step 3: Проверка**
 
 ```bash
 bun test tests/execution-forbidden-cmd.test.ts tests/execution-scenario-tests.test.ts
 bunx tsc --noEmit
 ```
 
-- [ ] **Step 4: Коммит**
+- [x] **Step 4: Коммит**
 
 ```bash
 git add src/tools/bash.ts src/i18n/en.json src/i18n/ru.json tests/execution-forbidden-cmd.test.ts

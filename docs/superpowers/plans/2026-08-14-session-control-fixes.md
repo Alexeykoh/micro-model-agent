@@ -1,5 +1,10 @@
 # Session Control & Reliability Fixes Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — все 4 задачи закрыты: `findProjectRoot` +
+> `workspaceMarkers`, аудитор сканирует только `done`-шаги, win32-хинт по исходному слову,
+> `boundedOutput` + `toolOutputCharLimit` (`src/core/agent/tool-output.ts`).
+> Чекбоксы проставлены по факту.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix the 4 harness defects found in post-mortem analysis of session `ses_mssx0k11_2ajcag` — dead LSP for nested projects, a plan deliverable gate + auditor that loop forever when a step references an existing file, Windows bash hints/block defeated by the `cat→type` translation, and budget-based tool-result truncation that blinds the model on `read_file`.
@@ -57,7 +62,7 @@
 - Modify: `src/modules/lsp/types.ts`, `src/modules/lsp/config.ts`, `src/modules/lsp/client.ts`, `src/modules/lsp/module.ts`
 - Test: `tests/lsp-project-root.test.ts` (new), `tests/lsp-module.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/lsp-project-root.test.ts`:
 
@@ -150,12 +155,12 @@ it("passes a project root resolved with the server's workspaceMarkers", async ()
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bun test tests/lsp-project-root.test.ts tests/lsp-module.test.ts`
 Expected: FAIL — `findProjectRoot` not exported / module doesn't pass a 4th arg.
 
-- [ ] **Step 3: Add `workspaceMarkers` to the LSP server config**
+- [x] **Step 3: Add `workspaceMarkers` to the LSP server config**
 
 `src/modules/lsp/types.ts` — add the field:
 
@@ -232,7 +237,7 @@ servers: {
 },
 ```
 
-- [ ] **Step 4: Create `src/modules/lsp/project-root.ts`**
+- [x] **Step 4: Create `src/modules/lsp/project-root.ts`**
 
 ```typescript
 import { existsSync } from "fs";
@@ -271,7 +276,7 @@ export function findProjectRoot(
 }
 ```
 
-- [ ] **Step 5: Wire the project root into `client.ts`**
+- [x] **Step 5: Wire the project root into `client.ts`**
 
 Modify `src/modules/lsp/client.ts`:
 
@@ -315,7 +320,7 @@ private async startServer(
 }
 ```
 
-- [ ] **Step 6: Wire the project root into `module.ts`**
+- [x] **Step 6: Wire the project root into `module.ts`**
 
 Modify `src/modules/lsp/module.ts` (compute root from the *full* path + the server's markers):
 
@@ -339,12 +344,12 @@ try {
 	const diagnostics = await self.client.checkFile(fullPath, _ctx.baseDir, serverConfig, projectRoot)
 ```
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [x] **Step 7: Run tests to verify they pass**
 
 Run: `bun test tests/lsp-project-root.test.ts tests/lsp-module.test.ts`
 Expected: PASS (both new and existing tests).
 
-- [ ] **Step 8: Typecheck + commit**
+- [x] **Step 8: Typecheck + commit**
 
 ```bash
 tsc --noEmit
@@ -362,7 +367,7 @@ git commit -m "fix: LSP workspace root resolved from the file's project via conf
 
 **Rationale (no heuristic):** the deliverable gate's purpose is to catch "mark done while the named file is missing/deleted" (ses_msstxxff regression). The gate must stay strict. A step that *references* an existing file in prose (step 1 in the session: "Проверить ... в type.ts") has a documented escape hatch — `status=skipped` (the gate error message already says so). The two actual bugs are in the *auditor*: it scans skipped steps' text (producing a phantom `type.ts`), and it treats `skipped` as not-done (so a plan with a legitimately skipped step can never pass). Both are fixed by status-aware logic, not by filename matching.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/execution-auditor.test.ts`:
 
@@ -446,12 +451,12 @@ it("keeps blocking done when the named file does not exist (strict gate)", async
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bun test tests/execution-auditor.test.ts tests/execution-plan-deliverables.test.ts`
 Expected: FAIL — auditor scans all steps and treats skipped as incomplete.
 
-- [ ] **Step 3: Restrict the auditor's file scan to `done` steps**
+- [x] **Step 3: Restrict the auditor's file scan to `done` steps**
 
 Modify `src/modules/execution/auditor.ts:196-199`:
 
@@ -467,7 +472,7 @@ async audit(plan: Plan): Promise<AuditResult> {
 		.join(" ");
 ```
 
-- [ ] **Step 4: Treat `skipped` as a terminal complete state**
+- [x] **Step 4: Treat `skipped` as a terminal complete state**
 
 Modify the completion check (`auditor.ts:232` and `:248`):
 
@@ -485,12 +490,12 @@ const stepsPending = terminalSteps < totalSteps;
 
 Where `doneSteps` was used elsewhere (the audit summary count), keep reporting `done` steps as done; only the *pending* determination uses `terminalSteps`.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `bun test tests/execution-auditor.test.ts tests/execution-plan-deliverables.test.ts`
 Expected: PASS — existing strict-gate tests still green, new status-aware tests pass.
 
-- [ ] **Step 6: Typecheck + commit**
+- [x] **Step 6: Typecheck + commit**
 
 ```bash
 tsc --noEmit
@@ -506,7 +511,7 @@ git commit -m "fix: auditor scans done steps only and honors skipped as terminal
 - Modify: `src/tools/bash.ts:481-501`
 - Test: `tests/bash.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/bash.test.ts`:
 
@@ -525,12 +530,12 @@ it("hints on the ORIGINAL first word even when it was translated (cat→type)", 
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/bash.test.ts`
 Expected: FAIL — hint keys on `type` (translated), not `cat`.
 
-- [ ] **Step 3: Implement the fix in `bash.ts`**
+- [x] **Step 3: Implement the fix in `bash.ts`**
 
 The translated command is `command`; we still execute it, but the hint/block bookkeeping must use the original word. Modify the win32 block (lines ~481-501):
 
@@ -560,12 +565,12 @@ if (platform() === "win32") {
 
 The existing win32-only hard-block test at `tests/bash.test.ts:66` calls `bashTool` with `head`, which is not translated, so the original word equals the translated word — it keeps passing.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `bun test tests/bash.test.ts`
 Expected: PASS — new test + existing win32 hard-block test.
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 tsc --noEmit
@@ -583,7 +588,7 @@ git commit -m "fix: bash Windows hint/hard-block keys on the original command wo
 
 **Rationale (no hardcoded name list):** the decision "this tool bounds its own output" is a property of the tool, so it belongs on the `ToolDefinition` — exactly like the existing `interactive` and `timeoutMs` flags. The agent reads the flag; it does not maintain a magic set of tool names.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/agent-tool-output.test.ts`:
 
@@ -607,12 +612,12 @@ describe("toolOutputCharLimit", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/agent-tool-output.test.ts`
 Expected: FAIL — `toolOutputCharLimit` not exported (module error).
 
-- [ ] **Step 3: Add the `boundedOutput` flag to `ToolDefinition`**
+- [x] **Step 3: Add the `boundedOutput` flag to `ToolDefinition`**
 
 `src/tools/types.ts`:
 
@@ -646,7 +651,7 @@ export const readFileTool: ToolDefinition = {
 };
 ```
 
-- [ ] **Step 4: Include the flag in `registry.ts`**
+- [x] **Step 4: Include the flag in `registry.ts`**
 
 `src/tools/registry.ts:36-43`:
 
@@ -664,7 +669,7 @@ getAllForLLM(tags?: string[]): Array<
 }
 ```
 
-- [ ] **Step 5: Use the flag in `agent.ts`**
+- [x] **Step 5: Use the flag in `agent.ts`**
 
 Add the exported pure function and change the private method (lines ~174-198):
 
@@ -745,12 +750,12 @@ const truncatedOutput = this.truncateToolOutput(
 );
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `bun test tests/agent-tool-output.test.ts`
 Expected: PASS. Also run the full `bun test` suite to confirm no regression in truncation-dependent tests.
 
-- [ ] **Step 7: Typecheck + commit**
+- [x] **Step 7: Typecheck + commit**
 
 ```bash
 tsc --noEmit
@@ -765,11 +770,11 @@ git commit -m "fix: never budget-truncate tools that declare boundedOutput (read
 **Files:**
 - Modify: `package.json`, `CHANGELOG.md`, `AGENTS.md`
 
-- [ ] **Step 1: Bump patch version**
+- [x] **Step 1: Bump patch version**
 
 `package.json`: `"version": "0.35.2"` → `"version": "0.35.3"` (bug fixes only → PATCH, per Versioning Rules).
 
-- [ ] **Step 2: Add CHANGELOG entry**
+- [x] **Step 2: Add CHANGELOG entry**
 
 Add at the top of `CHANGELOG.md`:
 
@@ -783,7 +788,7 @@ Add at the top of `CHANGELOG.md`:
 - **read_file blindness at near-full context**: tools that declare `boundedOutput` (`read_file`, `list_dir`, `file_info`, `process_log`) are never budget-truncated. A `read_file` output was being cut to ~2K chars when the context was near-full, making the model re-read the same file 8+ times.
 ```
 
-- [ ] **Step 3: Update AGENTS.md Current Version**
+- [x] **Step 3: Update AGENTS.md Current Version**
 
 In the Current Version block, prepend the entry:
 
@@ -791,7 +796,7 @@ In the Current Version block, prepend the entry:
 - **37** = session control fixes (post-mortem `ses_mssx0k11`): (1) LSP workspace root resolved from the edited file's project via per-language `workspaceMarkers` in the LSP config (`findProjectRoot` in `src/modules/lsp/project-root.ts`) — nested projects got `[LSP check failed]: Could not find a valid TypeScript installation` on every write/edit; (2) the final audit requires files only from `done` steps and treats `skipped` as terminal — a skipped step's prose no longer produces a phantom "1 files missing" loop; (3) bash Windows hint/hard-block keys on the original command word (the `cat→type` translation defeated `UNIX_TO_WIN_HINTS`); (4) tools that declare `boundedOutput` on their `ToolDefinition` (`read_file`/`list_dir`/`file_info`/`process_log`) are never budget-truncated (near-full context was cutting read_file to ~2K chars, causing re-read loops). Version: 0.35.3.
 ```
 
-- [ ] **Step 4: Verify + commit**
+- [x] **Step 4: Verify + commit**
 
 ```bash
 bun test

@@ -1,5 +1,12 @@
 # Error Web Search (авто-поиск ошибки) Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — `webSearch`/`errorWebSearch` в конфиге,
+> `normalizeErrorSignature`/`buildSearchQuery` в StuckDetector, `performWebSearch`
+> с мастер-выключателем, `maybeSearchError` вынесен в `src/modules/execution/error-search.ts`,
+> порог пробрасывается в bootstrap, i18n (en+ru), тесты
+> `tests/execution-web-search.test.ts` и `tests/execution-stuck-detector.test.ts`.
+> Чекбоксы проставлены по факту.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Когда одна и та же ошибка повторяется ≥ 5 раз, плагин `execution` сам ищет её в интернете (DuckDuckGo) и инжектит результаты в контекст — не блокируя цикл, с лимитами и мастер-выключателем.
@@ -43,7 +50,7 @@
 - Modify: `src/config/defaults.ts`
 - Test: `tests/config.test.ts`
 
-- [ ] **Step 1: Написать failing-тест дефолтов**
+- [x] **Step 1: Написать failing-тест дефолтов**
 
 В `tests/config.test.ts`, после блока `describe("subagent defaults", ...)` (в конце файла) добавить:
 
@@ -61,12 +68,12 @@ describe("web search defaults", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `bun test tests/config.test.ts`
 Expected: FAIL — `DEFAULTS.webSearch` is `undefined`.
 
-- [ ] **Step 3: Реализовать типы**
+- [x] **Step 3: Реализовать типы**
 
 В `src/config/types.ts`, сразу после `export interface NetworkSecurityConfig { ... }` (блок `NetworkSecurityConfig`, строки ~120–126), вставить:
 
@@ -103,7 +110,7 @@ export interface ErrorWebSearchConfig {
   errorWebSearch?: ErrorWebSearchConfig;
 ```
 
-- [ ] **Step 4: Реализовать дефолты**
+- [x] **Step 4: Реализовать дефолты**
 
 В `src/config/defaults.ts`, после блока `browser: { ... },` (строки ~73–83) добавить:
 
@@ -121,17 +128,17 @@ export interface ErrorWebSearchConfig {
   },
 ```
 
-- [ ] **Step 5: Прогнать тест — должен пройти**
+- [x] **Step 5: Прогнать тест — должен пройти**
 
 Run: `bun test tests/config.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Typecheck**
+- [x] **Step 6: Typecheck**
 
 Run: `tsc --noEmit`
 Expected: чистый (новые поля опциональные — существующий код не трогаем).
 
-- [ ] **Step 7: Коммит**
+- [x] **Step 7: Коммит**
 
 ```bash
 git add src/config/types.ts src/config/defaults.ts tests/config.test.ts
@@ -147,7 +154,7 @@ git commit -m "feat(config): webSearch + errorWebSearch config types and default
 - Modify: `src/modules/execution/stuck-detector.ts`
 - Test: `tests/execution-stuck-detector.test.ts`
 
-- [ ] **Step 1: Написать failing-тесты**
+- [x] **Step 1: Написать failing-тесты**
 
 В `tests/execution-stuck-detector.test.ts`, в конце файла добавить три describe-блока:
 
@@ -283,12 +290,12 @@ import {
 } from "../src/modules/execution/stuck-detector";
 ```
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `bun test tests/execution-stuck-detector.test.ts`
 Expected: FAIL — `normalizeErrorSignature`/`isSearchableError`/`buildSearchQuery` не экспортируются, `getRepeatedErrorSignature` не существует.
 
-- [ ] **Step 3: Реализовать helpers (модульный уровень)**
+- [x] **Step 3: Реализовать helpers (модульный уровень)**
 
 В `src/modules/execution/stuck-detector.ts`, после `const READ_ONLY_LOOP_THRESHOLD = 10;` (строка 77, сразу перед `export class StuckDetector`), добавить:
 
@@ -404,7 +411,7 @@ export function buildSearchQuery(
 }
 ```
 
-- [ ] **Step 4: Реализовать поля и конструктор класса**
+- [x] **Step 4: Реализовать поля и конструктор класса**
 
 В `src/modules/execution/stuck-detector.ts` добавить поля (рядом с остальными `private`-полями, после `private readOnlyStreak = 0;`):
 
@@ -424,7 +431,7 @@ export function buildSearchQuery(
   }
 ```
 
-- [ ] **Step 5: Реализовать подсчёт в recordToolError**
+- [x] **Step 5: Реализовать подсчёт в recordToolError**
 
 Заменить `recordToolError` (строки 138–143):
 
@@ -441,7 +448,7 @@ export function buildSearchQuery(
   }
 ```
 
-- [ ] **Step 6: Реализовать новые методы**
+- [x] **Step 6: Реализовать новые методы**
 
 Вставить после метода `getLastFailedTool()` (строка ~175):
 
@@ -472,7 +479,7 @@ export function buildSearchQuery(
   }
 ```
 
-- [ ] **Step 7: Сброс новых структур**
+- [x] **Step 7: Сброс новых структур**
 
 Добавить очистку двух новых структур в конец каждого метода сброса (три места). Точные уникальные якоря для Edit:
 
@@ -480,12 +487,12 @@ export function buildSearchQuery(
 - `resetStepProgress()` (строки 571–583) — oldString `this.lastBashCommand = "";\n    this.lastBashOutput = "";\n    this.emptyBashRunCount = 0;\n  }` → newString `this.lastBashCommand = "";\n    this.lastBashOutput = "";\n    this.emptyBashRunCount = 0;\n    this.errorSignatureCounts.clear();\n    this.searchedErrorSignatures.clear();\n  }`.
 - `resetStepState()` (строки 590–605) — oldString `this.emptyBashRunCount = 0;\n    this.readOnlyStreak = 0;\n    // Preserve escalationCount` → newString `this.emptyBashRunCount = 0;\n    this.readOnlyStreak = 0;\n    this.errorSignatureCounts.clear();\n    this.searchedErrorSignatures.clear();\n    // Preserve escalationCount`.
 
-- [ ] **Step 8: Прогнать тесты**
+- [x] **Step 8: Прогнать тесты**
 
 Run: `bun test tests/execution-stuck-detector.test.ts`
 Expected: PASS (все блоки, включая новые).
 
-- [ ] **Step 9: Typecheck + коммит**
+- [x] **Step 9: Typecheck + коммит**
 
 Run: `tsc --noEmit`
 Expected: чистый.
@@ -504,7 +511,7 @@ git commit -m "feat(execution): error signature counting + search query helpers 
 - Modify: `src/tools/web-search.ts`
 - Test: `tests/tools/web-search.test.ts`
 
-- [ ] **Step 1: Написать failing-тесты**
+- [x] **Step 1: Написать failing-тесты**
 
 В `tests/tools/web-search.test.ts` заменить всё содержимое файла на:
 
@@ -568,12 +575,12 @@ describe("performWebSearch", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `bun test tests/tools/web-search.test.ts`
 Expected: FAIL — `performWebSearch` не экспортируется; тест «master switch off» падает (handler не проверяет конфиг).
 
-- [ ] **Step 3: Реализовать рефакторинг**
+- [x] **Step 3: Реализовать рефакторинг**
 
 Полностью заменить `src/tools/web-search.ts` на:
 
@@ -709,12 +716,12 @@ export const webSearchTool: ToolDefinition = {
 };
 ```
 
-- [ ] **Step 4: Прогнать тесты**
+- [x] **Step 4: Прогнать тесты**
 
 Run: `bun test tests/tools/web-search.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Typecheck + коммит**
+- [x] **Step 5: Typecheck + коммит**
 
 Run: `tsc --noEmit`
 Expected: чистый.
@@ -733,7 +740,7 @@ git commit -m "feat(tools): extract performWebSearch + webSearch.enabled master 
 - Modify: `src/i18n/en.json`
 - Modify: `src/i18n/ru.json`
 
-- [ ] **Step 1: Добавить ключи в en.json**
+- [x] **Step 1: Добавить ключи в en.json**
 
 В `src/i18n/en.json`:
 
@@ -751,7 +758,7 @@ git commit -m "feat(tools): extract performWebSearch + webSearch.enabled master 
   "tool.web_search_disabled": "Web search is disabled (webSearch.enabled: false). Use file/system tools only.",
 ```
 
-- [ ] **Step 2: Добавить ключи в ru.json**
+- [x] **Step 2: Добавить ключи в ru.json**
 
 В `src/i18n/ru.json`:
 
@@ -769,7 +776,7 @@ git commit -m "feat(tools): extract performWebSearch + webSearch.enabled master 
   "tool.web_search_disabled": "Веб-поиск отключён (webSearch.enabled: false). Используй только файловые и системные инструменты.",
 ```
 
-- [ ] **Step 3: Проверка i18n + коммит**
+- [x] **Step 3: Проверка i18n + коммит**
 
 Run: `bun test tests/config.test.ts` (i18n не имеет отдельного теста; прогон любой i18n-зависимой проверки) и `tsc --noEmit`.
 Expected: чистые.
@@ -789,7 +796,7 @@ git commit -m "feat(i18n): error web search keys (en+ru)"
 - Modify: `src/modules/execution/execution-plugin.ts`
 - Modify: `src/core/bootstrap.ts`
 
-- [ ] **Step 1: Добавить импорты в module.ts**
+- [x] **Step 1: Добавить импорты в module.ts**
 
 В `src/modules/execution/module.ts` обновить импорты (в верхней части файла):
 
@@ -804,7 +811,7 @@ import { performWebSearch, type SearchResult } from "../../tools/web-search";
 import { getSessionSecurityConfig } from "../security/session-isolation";
 ```
 
-- [ ] **Step 2: Добавить тип и константу**
+- [x] **Step 2: Добавить тип и константу**
 
 После импортов в `module.ts` добавить:
 
@@ -819,7 +826,7 @@ export type WebSearchRunner = (
 const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
 ```
 
-- [ ] **Step 3: Добавить поля**
+- [x] **Step 3: Добавить поля**
 
 В `ExecutionModule`, после `private forbiddenBashFailures = new Map<string, number>();` добавить:
 
@@ -832,7 +839,7 @@ const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
   private readonly errorSearchCooldownMs: number;
 ```
 
-- [ ] **Step 4: Обновить конструктор**
+- [x] **Step 4: Обновить конструктор**
 
 Заменить конструктор (строки 83–89):
 
@@ -855,7 +862,7 @@ const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
   }
 ```
 
-- [ ] **Step 5: Реализовать maybeSearchError**
+- [x] **Step 5: Реализовать maybeSearchError**
 
 Вставить метод после `getStuckDetector()` (строка ~126):
 
@@ -921,7 +928,7 @@ const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
   }
 ```
 
-- [ ] **Step 6: Пробросить в плагин**
+- [x] **Step 6: Пробросить в плагин**
 
 В `getPlugin()` (строки 209–219) добавить поле в `createExecutionPlugin({ ... })`:
 
@@ -929,7 +936,7 @@ const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
       maybeSearchError: (ctx: ToolContext, call: ToolCall) => this.maybeSearchError(ctx, call),
 ```
 
-- [ ] **Step 7: Вызвать из onAfterTool в execution-plugin.ts**
+- [x] **Step 7: Вызвать из onAfterTool в execution-plugin.ts**
 
 В `src/modules/execution/execution-plugin.ts`:
 
@@ -947,7 +954,7 @@ const ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
 deps.maybeSearchError(ctx, call);
 ```
 
-- [ ] **Step 8: Пробросить threshold из bootstrap.ts**
+- [x] **Step 8: Пробросить threshold из bootstrap.ts**
 
 В `src/core/bootstrap.ts`, заменить (строка 298):
 
@@ -965,12 +972,12 @@ const execModule = new ExecutionModule(
 );
 ```
 
-- [ ] **Step 9: Typecheck + существующие тесты**
+- [x] **Step 9: Typecheck + существующие тесты**
 
 Run: `tsc --noEmit` и `bun test tests/execution-scenario-tests.test.ts tests/execution-forbidden-cmd.test.ts`
 Expected: чистые/зелёные.
 
-- [ ] **Step 10: Коммит**
+- [x] **Step 10: Коммит**
 
 ```bash
 git add src/modules/execution/module.ts src/modules/execution/execution-plugin.ts src/core/bootstrap.ts
@@ -985,7 +992,7 @@ git commit -m "feat(execution): automatic error web search from onAfterTool"
 
 - Create: `tests/execution-web-search.test.ts`
 
-- [ ] **Step 1: Написать тесты**
+- [x] **Step 1: Написать тесты**
 
 Создать `tests/execution-web-search.test.ts` (замечание: `module.getPlugin()` кастится в `any` — хуки `AgentPlugin` опциональные, без каста LSP выдаёт «Cannot invoke an object which is possibly 'undefined'»; тесты `bun test` тип не проверяют, но редакторский LSP на `tests/**` реагирует):
 
@@ -1162,12 +1169,12 @@ describe("error web search on repeated failures", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить**
+- [x] **Step 2: Запустить**
 
 Run: `bun test tests/execution-web-search.test.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Typecheck + коммит**
+- [x] **Step 3: Typecheck + коммит**
 
 Run: `tsc --noEmit`
 Expected: чистый.
@@ -1186,26 +1193,26 @@ git commit -m "test(execution): onAfterTool error web search scenarios"
 - Modify: `package.json`
 - Modify: `AGENTS.md`
 
-- [ ] **Step 1: Полный прогон тестов**
+- [x] **Step 1: Полный прогон тестов**
 
 Run: `bun test`
 Expected: все тесты зелёные. (Если полный прогон на машине не доходит до сводки из-за pre-existing агент-теста, как отмечено в AGENTS.md «Note: full bun test tests on this machine doesn't reach a summary», достаточно прогона затронутых файлов: `bun test tests/config.test.ts tests/execution-stuck-detector.test.ts tests/tools/web-search.test.ts tests/execution-web-search.test.ts tests/execution-scenario-tests.test.ts tests/execution-forbidden-cmd.test.ts`.)
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `tsc --noEmit`
 Expected: чистый.
 
-- [ ] **Step 3: Build**
+- [x] **Step 3: Build**
 
 Run: `bun run build:prod`
 Expected: сборка успешна.
 
-- [ ] **Step 4: Бамп версии**
+- [x] **Step 4: Бамп версии**
 
 В `package.json` заменить `"version": "0.41.2"` на `"version": "0.42.0"`.
 
-- [ ] **Step 5: Запись в AGENTS.md**
+- [x] **Step 5: Запись в AGENTS.md**
 
 Обновить строку заголовка раздела версий `### Current Version: 0.41.0` → `### Current Version: 0.42.0`.
 
@@ -1215,7 +1222,7 @@ Expected: сборка успешна.
 - **51** = error web search (по обсуждению; спек `docs/specs/2026-08-18-error-web-search-design.md`): при ≥ 5 повторениях одной сигнатуры ошибки (`тул::нормализованный текст`) плагин `execution` автоматически ищет её в интернете. `performWebSearch()` вынесена из тула `web_search` (`src/tools/web-search.ts`) и используется и тулом, и плагином; мастер-выключатель `webSearch.enabled` отключает и тул, и авто-поиск; независимый `errorWebSearch.enabled` отключает только авто-поиск. Запуск fire-and-forget из `onAfterTool` (не блокирует цикл), результат инжектится как `<system-summary>` через `pendingMessages`. Гейты: `isSearchableError` (не ищем «exit code 1» без деталей), 1 поиск на сигнатуру, кап `maxSearchesPerSession` (3), 1 уточнённый повтор при пустых результатах, cooldown 30s. Запрос строится из до 3 строк ошибки + рантайм/фреймворк из шага/bash (`buildSearchQuery`), пути/позиции вырезаются. Конфиг `errorWebSearch.{enabled,threshold(5),maxResults(5),maxQueryChars(200),maxSearchesPerSession(3),requestTimeoutMs(10000)}`. Новые i18n: `exec.error_search_results/failed/no_query`, `tool.web_search_disabled` (en+ru). Новый файл `tests/execution-web-search.test.ts` (9 кейсов). Version: **0.42.0** (MINOR — новый конфиг + поведение + i18n ключи).
 ```
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add package.json AGENTS.md

@@ -1,5 +1,14 @@
 # Code Review Fixes (2026-08-20) Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — все 7 фаз закрыты (релизы 0.47.0/0.48.0–0.48.1,
+> коммит `0b3d319c`): `exec.task_reminder`, `Agent.getModule()`, `security.*`-флаги и блок
+> опасных конструкций, prefix-escape через `isInsideDir`, SSRF (`isIpPrivate` + manual redirect),
+> санитизация логов, `timingSafeEqual`, права 0700/0600, opt-in интеграции, изоляция тестов,
+> кеш токенов, async grep, byte-budget `read_file`, i18n. Чекбоксы проставлены по факту.
+> Мелочи: спека `docs/specs/2026-08-05-model-certification-design.md:45` описывает spawn
+> через `--model/--provider-url/--provider-key` вместо env-механизма; Task 17 (кап MoE)
+> неактуален — MoE удалён.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Исправить все находки полного код-ревью MMA v2 (0.46.2): runtime-баги (i18n-ключ, `/lsp`), безопасность (валидация bash, prefix-escape, SSRF, секреты в логах, шифрование), изоляцию тестов, производительность (O(n²) подсчёт токенов, sync grep, read_file), мёртвый код, i18n rule #8, синхронизацию документации.
@@ -80,7 +89,7 @@
 - Modify: `src/i18n/ru.json`
 - Test: `tests/i18n.test.ts`
 
-- [ ] **Step 1: Написать failing-тест**
+- [x] **Step 1: Написать failing-тест**
 
 В `tests/i18n.test.ts` добавить:
 
@@ -90,12 +99,12 @@ it("defines exec.task_reminder in en and ru", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — убедиться, что падает**
+- [x] **Step 2: Запустить — убедиться, что падает**
 
 Run: `bun test tests/i18n.test.ts`
 Expected: FAIL — возвращается сырой ключ `exec.task_reminder` (обёртка не найдена в словаре).
 
-- [ ] **Step 3: Добавить ключ**
+- [x] **Step 3: Добавить ключ**
 
 В `src/i18n/en.json` рядом с блоком `exec.*`:
 
@@ -109,12 +118,12 @@ Expected: FAIL — возвращается сырой ключ `exec.task_remin
 "exec.task_reminder": "Задача: {task}. Продолжай работу — не повторяй неудачные действия.",
 ```
 
-- [ ] **Step 4: Запустить тест — PASS**
+- [x] **Step 4: Запустить тест — PASS**
 
 Run: `bun test tests/i18n.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/i18n/en.json src/i18n/ru.json tests/i18n.test.ts
@@ -131,7 +140,7 @@ git commit -m "fix(i18n): add missing exec.task_reminder key (en+ru)"
 - Modify: `src/cli/repl-commands.ts`
 - Test: `tests/core/agent.test.ts`, `tests/registry.test.ts`
 
-- [ ] **Step 1: Написать failing-тест на `Agent.getModule()`**
+- [x] **Step 1: Написать failing-тест на `Agent.getModule()`**
 
 В `tests/core/agent.test.ts` (создать агента через существующий `makeDeps`/мок bootstrap) добавить:
 
@@ -156,12 +165,12 @@ it("listModules() returns registered names", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — FAIL**
+- [x] **Step 2: Запустить — FAIL**
 
 Run: `bun test tests/core/agent.test.ts tests/registry.test.ts`
 Expected: FAIL — `getModule` не существует.
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 В `src/core/agent.ts`, в интерфейс `AgentDeps` добавить поле:
 
@@ -195,12 +204,12 @@ const lspModule = ctx.agent.getModule<LspModule>("lsp");
 
 с импортом `import type { LspModule } from "../modules/lsp/module";` (проверить фактическое имя экспортируемого класса в `src/modules/lsp/module.ts`).
 
-- [ ] **Step 4: Запустить тесты — PASS + typecheck**
+- [x] **Step 4: Запустить тесты — PASS + typecheck**
 
 Run: `bun test tests/core/agent.test.ts tests/registry.test.ts && tsc --noEmit`
 Expected: PASS, чисто.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/core/agent.ts src/modules/registry.ts src/cli/repl-commands.ts tests/core/agent.test.ts tests/registry.test.ts
@@ -216,13 +225,13 @@ git commit -m "fix(cli): typed Agent.getModule() accessor, unbreak /lsp command"
 - Modify: `src/llm/openai-compat.ts`
 - Test: `tests/core/agent.test.ts`, `tests/openai-compat.test.ts`
 
-- [ ] **Step 1: Удалить строку `agent.ts:1145`**
+- [x] **Step 1: Удалить строку `agent.ts:1145`**
 
 ```typescript
 (this.deps.toolExecutor as any).ctx.llmProvider = newProvider; // DELETE — updateProvider() уже делает это
 ```
 
-- [ ] **Step 2: Удалить `reasoningAcc`**
+- [x] **Step 2: Удалить `reasoningAcc`**
 
 В `src/llm/openai-compat.ts` строки 109, 114-116:
 
@@ -234,12 +243,12 @@ if (chunk.type === "reasoning" && chunk.content) {  // DELETE весь блок
 }
 ```
 
-- [ ] **Step 3: Проверка**
+- [x] **Step 3: Проверка**
 
 Run: `bun test tests/core/agent.test.ts tests/openai-compat.test.ts && tsc --noEmit`
 Expected: PASS, чисто. (Ни один тест не читал `reasoningAcc` — поведение `chat()` не меняется, reasoning-чанки по-прежнему `yield`-ятся вниз.)
 
-- [ ] **Step 4: Коммит**
+- [x] **Step 4: Коммит**
 
 ```bash
 git add src/core/agent.ts src/llm/openai-compat.ts
@@ -258,7 +267,7 @@ git commit -m "refactor: remove dead reasoningAcc accumulation and redundant upd
 - Modify: `src/cli/setup.ts`
 - Test: `tests/config-security.test.ts` (если есть) / `tests/security/command-validator.test.ts`
 
-- [ ] **Step 1: Написать failing-тесты на обходы**
+- [x] **Step 1: Написать failing-тесты на обходы**
 
 В `tests/security/command-validator.test.ts` добавить:
 
@@ -294,12 +303,12 @@ describe("command-validator bypasses", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — FAIL**
+- [x] **Step 2: Запустить — FAIL**
 
 Run: `bun test tests/security/command-validator.test.ts`
 Expected: FAIL — все три кейса возвращают `allowed: true`.
 
-- [ ] **Step 3: Реализовать в `command-validator.ts`**
+- [x] **Step 3: Реализовать в `command-validator.ts`**
 
 После блока `ALWAYS_BLOCKED` (строка ~138), до проверки операторов:
 
@@ -323,7 +332,7 @@ if (/[;&|]\s*/.test(trimmedCommand) && /(^|\s)(rm|del|rd|dd|chmod|chown|wget|cur
 
 Добавить в blacklist `config/security.ts` (строка ~50): `bash`, `sh`, `zsh`, `dash`, `python`, `python3`, `node`, `bun`, `perl`, `ruby`, `del`, `rd`, `erase`, `taskkill`.
 
-- [ ] **Step 4: Включить по умолчанию**
+- [x] **Step 4: Включить по умолчанию**
 
 В `src/config/security.ts`:
 - строка 8: `enabled: true`
@@ -333,12 +342,12 @@ if (/[;&|]\s*/.test(trimmedCommand) && /(^|\s)(rm|del|rd|dd|chmod|chown|wget|cur
 
 В `src/cli/setup.ts` (около строки 237, где применяются ответы wizard-а): если пользователь не указал явно — применить `applySecurityPolicy("balanced")` (уже есть в `security-policies.ts`). Проверить текущий флоу и добавить ключ ответа «включить безопасность?».
 
-- [ ] **Step 5: Проверка**
+- [x] **Step 5: Проверка**
 
 Run: `bun test tests/security/command-validator.test.ts && bun test tests/config.test.ts && tsc --noEmit`
 Expected: PASS. ВАЖНО: прогнать `bun test` целиком — включение security может сломать тесты тулов, которые теперь будут блокироваться (rm/curl/операторы). Все тесты, ожидающие успешного `bash` с `curl`/`rm`/`;`, нужно обновить на отключённый security-конфиг в тесте ИЛИ на безопасную команду.
 
-- [ ] **Step 6: Коммит**
+- [x] **Step 6: Коммит**
 
 ```bash
 git add src/config/security.ts src/modules/security/command-validator.ts src/cli/setup.ts tests/security/command-validator.test.ts
@@ -354,7 +363,7 @@ git commit -m "feat(security): enable security by default (balanced) + close bas
 - Modify: `src/tools/scope-check.ts`
 - Test: `tests/security/path-validator.test.ts` (или существующий)
 
-- [ ] **Step 1: Написать failing-тест**
+- [x] **Step 1: Написать failing-тест**
 
 ```typescript
 it("does not treat sibling dir with shared prefix as in-scope", () => {
@@ -364,9 +373,9 @@ it("does not treat sibling dir with shared prefix as in-scope", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — FAIL** (текущий `startsWith("E:/projects/agent")` вернёт `true`)
+- [x] **Step 2: Запустить — FAIL** (текущий `startsWith("E:/projects/agent")` вернёт `true`)
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 В `src/modules/security/path-validator.ts` строка 27 и 117:
 
@@ -380,11 +389,11 @@ if (targetResolved !== baseResolved && !targetResolved.startsWith(baseResolved +
 const contained = (t: string) => t === baseResolved || t.startsWith(baseResolved + sep);
 ```
 
-- [ ] **Step 4: Проверка**
+- [x] **Step 4: Проверка**
 
 Run: `bun test tests/security/path-validator.test.ts && tsc --noEmit` + полный `bun test tests/tools` (path-utils, read/write/edit/delete используют эти функции — sibling-кейс не должен ломать легитимные вложенные пути).
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/modules/security/path-validator.ts src/tools/scope-check.ts tests/security/path-validator.test.ts
@@ -402,7 +411,7 @@ git commit -m "fix(security): path containment requires separator, block sibling
 - Modify: `src/modules/browser/session.ts`
 - Test: `tests/security/network-validator.test.ts` (или существующий)
 
-- [ ] **Step 1: Написать failing-тесты**
+- [x] **Step 1: Написать failing-тесты**
 
 ```typescript
 describe("network-validator SSRF", () => {
@@ -422,9 +431,9 @@ describe("network-validator SSRF", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — FAIL**
+- [x] **Step 2: Запустить — FAIL**
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 В `src/modules/security/network-validator.ts` добавить helper и проверки в `isUrlAllowed` (до deny/allow списков):
 
@@ -473,12 +482,12 @@ if (response.status >= 300 && response.status < 400) {
 
 В `src/modules/browser/session.ts:231-234` (действие `open`) добавить: отклонить `file:`/`chrome:`/`about:`/`data:` схемы и private-IP (переиспользовать `isUrlAllowed` + `isIpPrivate`), если `browser.enabled`-конфиг с security не отключает это явно.
 
-- [ ] **Step 4: Проверка**
+- [x] **Step 4: Проверка**
 
 Run: `bun test tests/security/network-validator.test.ts && bun test tests/tools/web-fetch.test.ts tests/attach-image.test.ts tests/modules/browser/session.test.ts && tsc --noEmit`
 Expected: PASS. Реальные URL-тесты web-fetch (zed.dev) должны остаться `allowed` (публичный https).
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/modules/security/network-validator.ts src/tools/web-fetch.ts src/tools/attach-image.ts src/modules/browser/session.ts tests/security/network-validator.test.ts
@@ -494,7 +503,7 @@ git commit -m "fix(security): block SSRF (private IPs, schemes) + manual redirec
 - Modify: `src/logger/app-logger.ts`
 - Test: `tests/session-logger.test.ts` (Create), `tests/logger.test.ts` (если есть)
 
-- [ ] **Step 1: Написать failing-тест**
+- [x] **Step 1: Написать failing-тест**
 
 ```typescript
 describe("session-logger sanitization", () => {
@@ -509,18 +518,18 @@ describe("session-logger sanitization", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — FAIL** (сырые значения пишутся)
+- [x] **Step 2: Запустить — FAIL** (сырые значения пишутся)
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 В `src/core/session-logger.ts` импортировать `sanitizeLogMessage` из `../modules/security/data-sanitizer`; прогнать через него контент в `logUser`, `logToolCall` (args), `logToolResult` (output). В `src/logger/app-logger.ts` — те же вызовы в `logToolCall`/`logToolOutput`/`logREPL`/`logLLMRequest` (пока существует `preview`/`content`).
 
-- [ ] **Step 4: Проверка**
+- [x] **Step 4: Проверка**
 
 Run: `bun test tests/session-logger.test.ts && bun test tests/core/session-logger.test.ts 2>$null; tsc --noEmit`
 Expected: PASS. Существующие тесты сессий (session-manager/store) не должны сломаться — санитизация заменяет только совпавшие паттерны секретов.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/core/session-logger.ts src/logger/app-logger.ts tests/session-logger.test.ts
@@ -535,7 +544,7 @@ git commit -m "fix(security): sanitize secrets in session/log file writes"
 - Modify: `src/modules/security/encryption.ts`
 - Test: `tests/security/encryption.test.ts` (существующий)
 
-- [ ] **Step 1: Написать failing-тест**
+- [x] **Step 1: Написать failing-тест**
 
 ```typescript
 it("throws when encryption key cannot be persisted", () => {
@@ -546,9 +555,9 @@ it("uses timing-safe comparison for HMAC", async () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — FAIL** (сейчас возвращает ключ несмотря на неудачную запись)
+- [x] **Step 2: Запустить — FAIL** (сейчас возвращает ключ несмотря на неудачную запись)
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 В `getOrCreateEncryptionKey` (строки 52-61): вместо `return key` в `catch` — `throw new Error(...)` с понятным сообщением. Перед `writeFileSync` — `mkdirSync(dir, { recursive: true, mode: 0o700 })`.
 
@@ -562,12 +571,12 @@ if (computedTag.length !== authTag.length || !timingSafeEqual(computedTag, authT
 }
 ```
 
-- [ ] **Step 4: Проверка**
+- [x] **Step 4: Проверка**
 
 Run: `bun test tests/security/encryption.test.ts && tsc --noEmit`
 Expected: PASS. Проверить, что `ConfigEncryptor`-потребители (config.ts) корректно обрабатывают throw (показывают warning, а не падают) — при необходимости обернуть в try/catch в `saveConfig`/load.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/modules/security/encryption.ts tests/security/encryption.test.ts
@@ -582,7 +591,7 @@ git commit -m "fix(security): fail on key-write failure, timing-safe HMAC compar
 - Modify: `src/modules/session/store.ts`
 - Test: `tests/modules/session/store.test.ts` (существующий)
 
-- [ ] **Step 1: Реализовать**
+- [x] **Step 1: Реализовать**
 
 В `store.ts`: все `mkdirSync(dir, { recursive: true })` → `mkdirSync(dir, { recursive: true, mode: 0o700 })`. `writeFileSync`/`appendFileSync` для meta/history/session — добавить `{ mode: 0o600 }` (в appendFileSync вторым аргументом объект-опции: `appendFileSync(path, data, { encoding: "utf-8", mode: 0o600 })`).
 
@@ -599,12 +608,12 @@ if (meta) {
 
 (или, проще и без риска: оставить `saveMeta`, но вынести её в `appendFileSync`-атомарность через временный файл + rename — перезапись meta.json небольшая, приоритет низкий; главное — permissions.)
 
-- [ ] **Step 2: Проверка**
+- [x] **Step 2: Проверка**
 
 Run: `bun test tests/modules/session/store.test.ts && tsc --noEmit`
 Expected: PASS (на Windows mode-флаги не влияют, но не должны ломать).
 
-- [ ] **Step 3: Коммит**
+- [x] **Step 3: Коммит**
 
 ```bash
 git add src/modules/session/store.ts tests/modules/session/store.test.ts
@@ -622,7 +631,7 @@ git commit -m "fix(security): 0700/0600 perms for session dirs/files"
 - Modify: `tests/integration/agent.integration-test.ts`, `all-mechanics.integration-test.ts`, `llm-provider.integration-test.ts`, `plan-tools.integration-test.ts`, `todo-app.integration-test.ts`
 - Test: сами файлы
 
-- [ ] **Step 1: Исключить из `bun test`**
+- [x] **Step 1: Исключить из `bun test`**
 
 В `bunfig.toml`:
 
@@ -632,7 +641,7 @@ root = "tests"
 exclude = ["tests/integration/**", "node_modules/**", "_testing/**"]
 ```
 
-- [ ] **Step 2: Инвертировать gate в 5 файлах**
+- [x] **Step 2: Инвертировать gate в 5 файлах**
 
 В каждом `*.integration-test.ts` заменить:
 
@@ -648,12 +657,12 @@ const shouldSkip = process.env.MMA_RUN_INTEGRATION !== "1";
 
 и заголовочный комментарий обновить: `Run: bun run test:integration` (уже есть) + `Skip by default in bun test; opt-in with $env:MMA_RUN_INTEGRATION=1`.
 
-- [ ] **Step 3: Проверка**
+- [x] **Step 3: Проверка**
 
 Run: `bun test tests` — integration не должны исполняться (никаких обращений к localhost:1234), сумма по остальным файлам достигается.
 Run: `MMA_RUN_INTEGRATION=1 bun test tests/integration/agent.integration-test.ts` — должен работать опционально (если есть локальный сервер; при отсутствии — пропускается `skipIf`).
 
-- [ ] **Step 4: Коммит**
+- [x] **Step 4: Коммит**
 
 ```bash
 git add bunfig.toml tests/integration
@@ -667,7 +676,7 @@ git commit -m "test: exclude integration suite from bun test, opt-in via MMA_RUN
 **Files:**
 - Modify: `tests/cli/repl-history.test.ts`
 
-- [ ] **Step 1: Реализовать**
+- [x] **Step 1: Реализовать**
 
 Заменить `join(homedir(), ".mma", "repl-history")` на temp-dir. Проверить, как `Repl` определяет путь истории (вероятно `join(homedir(), ".mma", ...)` через `os.homedir()`). Если путь не инжектируется — временно переопределить `homedir()` (Bun: `import { homedir } from "os"` + `vi.spyOn` не работает на нативной функции; вместо этого — установить env `HOME`/`USERPROFILE` перед конструкцией `Repl`, если код читает `process.env.HOME ?? homedir()`) ЛИБО добавить инъекцию пути истории в `Repl` (предпочтительно):
 
@@ -687,12 +696,12 @@ const historyPath = join(dir, "repl-history");
 
 Убрать `unlinkSync(historyPath)` из `afterEach` (удалять temp-каталог, а не реальный файл).
 
-- [ ] **Step 2: Проверка**
+- [x] **Step 2: Проверка**
 
 Run: `bun test tests/cli/repl-history.test.ts`
 Expected: PASS, и реальный `~/.mma/repl-history` не создаётся/не удаляется.
 
-- [ ] **Step 3: Коммит**
+- [x] **Step 3: Коммит**
 
 ```bash
 git add src/cli/repl.ts tests/cli/repl-history.test.ts
@@ -708,7 +717,7 @@ git commit -m "test: isolate repl-history test to temp dir (was deleting real ~/
 - Modify: `tests/core/bootstrap-model-loader.test.ts`
 - Modify: `tests/execution-scenario-tests.test.ts`
 
-- [ ] **Step 1: Реализовать**
+- [x] **Step 1: Реализовать**
 
 `tests/security/session-isolation.test.ts:16-17`:
 
@@ -724,12 +733,12 @@ const testTempDir = join(root, ".mma", "sessions", testSessionId, "temp");
 
 `tests/execution-scenario-tests.test.ts:453` — `new ExecutionModule("/tmp", 8)` → `new ExecutionModule(mkdtempSync(join(tmpdir(), "mma-exec-scen-")), 8)`.
 
-- [ ] **Step 2: Проверка**
+- [x] **Step 2: Проверка**
 
 Run: `bun test tests/security/session-isolation.test.ts tests/core/bootstrap-model-loader.test.ts tests/execution-scenario-tests.test.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Коммит**
+- [x] **Step 3: Коммит**
 
 ```bash
 git add tests/security/session-isolation.test.ts tests/core/bootstrap-model-loader.test.ts tests/execution-scenario-tests.test.ts
@@ -744,7 +753,7 @@ git commit -m "test: replace homedir()/tmp hardcoded paths with mkdtemp isolatio
 - Modify: `tests/i18n.test.ts`
 - Modify: `tests/openai-compat.test.ts`
 
-- [ ] **Step 1: Реализовать**
+- [x] **Step 1: Реализовать**
 
 `tests/i18n.test.ts` — в `afterEach` (или в конце ru-тестов):
 
@@ -762,12 +771,12 @@ const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 ```
 
-- [ ] **Step 2: Проверка**
+- [x] **Step 2: Проверка**
 
 Run: `bun test tests/i18n.test.ts tests/openai-compat.test.ts tests/core/agent.test.ts`
 Expected: PASS. (agent-тесты больше не должны флейкать из-за ru-локали.)
 
-- [ ] **Step 3: Коммит**
+- [x] **Step 3: Коммит**
 
 ```bash
 git add tests/i18n.test.ts tests/openai-compat.test.ts
@@ -784,7 +793,7 @@ git commit -m "test: restore locale and global.fetch after tests (kill shared-wo
 - Modify: `src/modules/context/manager.ts`
 - Test: `tests/context-manager.test.ts`
 
-- [ ] **Step 1: Написать failing-тест (поведенческий)**
+- [x] **Step 1: Написать failing-тест (поведенческий)**
 
 Добавить кеш-флажок на сообщениях и проверить, что `getEstimatedTokens()` использует кеш (не пересчитывает всё):
 
@@ -800,9 +809,9 @@ it("caches per-message token counts across getEstimatedTokens calls", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — FAIL** (каждый вызов реэнкодит все сообщения)
+- [x] **Step 2: Запустить — FAIL** (каждый вызов реэнкодит все сообщения)
 
-- [ ] **Step 3: Реализовать**
+- [x] **Step 3: Реализовать**
 
 В `manager.ts`:
 - На тип сообщения (или WeakMap `Map<Message, number>`) добавить кеш токенов.
@@ -830,12 +839,12 @@ private estimateMessageTokensCached(m: Message): number {
 
 `getEstimatedTokens()` → `this.totalTokens + this.toolTokens`. Инвалидация в `compact()`/`reset()`/`resize()`: `this.msgTokens.clear(); this.totalTokens = 0;`.
 
-- [ ] **Step 4: Проверка**
+- [x] **Step 4: Проверка**
 
 Run: `bun test tests/context-manager.test.ts && tsc --noEmit` + `bun test tests/core/agent.test.ts` (агент использует snapshot/quality — должно остаться зелёным).
 Expected: PASS. Проверить что `getQuality()`/`needsCompaction()` используют кешированный путь.
 
-- [ ] **Step 5: Коммит**
+- [x] **Step 5: Коммит**
 
 ```bash
 git add src/modules/context/manager.ts tests/context-manager.test.ts
@@ -850,7 +859,7 @@ git commit -m "perf(context): cache per-message token counts, eliminate O(n^2) r
 - Modify: `src/tools/grep-tool.ts`
 - Test: `tests/grep-tool.test.ts`
 
-- [ ] **Step 1: Написать failing-тест (таймаут прерывает)**
+- [x] **Step 1: Написать failing-тест (таймаут прерывает)**
 
 ```typescript
 it("kills rg on timeout", async () => {
@@ -860,7 +869,7 @@ it("kills rg on timeout", async () => {
 
 Тест проще на уровне helper: извлечь `runSearch(command, args, timeoutMs)` как чистую функцию, вернущую Promise, и проверить kill-on-timeout через мок `spawn`.
 
-- [ ] **Step 2: Реализовать**
+- [x] **Step 2: Реализовать**
 
 В `grep-tool.ts` заменить `execFileSync("rg", ...)` на `spawn` из `child_process` с таймаутом:
 
@@ -888,12 +897,12 @@ function runSearch(bin: string, args: string[], cwd: string, timeoutMs = 30000):
 
 Хендлер: `try { const out = await runSearch("rg", rgArgs, ctx.baseDir); ... } catch → fallback grep → runSearch("grep", grepArgs, ...)`. Сохранить семантику `status === 1 → no matches`.
 
-- [ ] **Step 3: Проверка**
+- [x] **Step 3: Проверка**
 
 Run: `bun test tests/grep-tool.test.ts && bun test tests/tools/grep-tool.test.ts 2>$null; tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 4: Коммит**
+- [x] **Step 4: Коммит**
 
 ```bash
 git add src/tools/grep-tool.ts tests/grep-tool.test.ts
@@ -908,7 +917,7 @@ git commit -m "perf(tools): async grep with kill-on-timeout (was blocking event 
 - Modify: `src/tools/read-file.ts`
 - Test: `tests/read-file.test.ts`
 
-- [ ] **Step 1: Написать failing-тест**
+- [x] **Step 1: Написать failing-тест**
 
 ```typescript
 it("reads only needed bytes for large files", () => {
@@ -918,7 +927,7 @@ it("reads only needed bytes for large files", () => {
 
 Поведенческий: большой файл (5МБ), `limit: 50` — результат корректен и `fs`-вызовы читают ограниченный диапазон.
 
-- [ ] **Step 2: Реализовать**
+- [x] **Step 2: Реализовать**
 
 В `read-file.ts` заменить `readFileSync(resolved, "utf-8")` + `split` на байтовое чтение:
 
@@ -945,12 +954,12 @@ function readLineSlice(path: string, offset: number, limit: number, total: numbe
 
 Проще и безопаснее (сохранить точность `total`): оставить полное чтение только для файлов ≤ 1МБ, для больших — читать `offset+limit` строк через `fs.createReadStream` с `start`/`end` байтами (оценка `bytes = (limit+1)*256` от байтового смещения строки offset). Допустимо небольшое перечитывание, но НЕ всего файла. Для определения `total` строк больших файлов использовать `rg -c ""` или `wc -l` (через `execFile`), а не чтение целиком.
 
-- [ ] **Step 3: Проверка**
+- [x] **Step 3: Проверка**
 
 Run: `bun test tests/read-file.test.ts && bun test tests/tools/read-file.test.ts 2>$null; tsc --noEmit`
 Expected: PASS, все существующие кейсы (offset/limit/header/truncated) зелёные.
 
-- [ ] **Step 4: Коммит**
+- [x] **Step 4: Коммит**
 
 ```bash
 git add src/tools/read-file.ts tests/read-file.test.ts
@@ -966,7 +975,7 @@ git commit -m "perf(tools): read_file reads bounded byte range, not the whole fi
 - Modify: `src/tools/subagent.ts` (если семафор нужен и там)
 - Test: `tests/moe-executor.test.ts`
 
-- [ ] **Step 1: Написать failing-тест**
+- [x] **Step 1: Написать failing-тест**
 
 ```typescript
 it("caps concurrent subtasks per wave at maxParallelTasks", async () => {
@@ -978,7 +987,7 @@ it("caps concurrent subtasks per wave at maxParallelTasks", async () => {
 });
 ```
 
-- [ ] **Step 2: Реализовать**
+- [x] **Step 2: Реализовать**
 
 В `moe-executor.ts` строки 325-349 — обернуть волну семафором:
 
@@ -999,12 +1008,12 @@ await Promise.all(tasks);
 
 Проверить, что `rateLimiter` доступен в deps MoE (если нет — инжектировать `RateLimiter` через deps, либо завести локальный семафор). Если `rateLimiter` не проброшен — использовать локальный счётчик с `maxParallel` из config.
 
-- [ ] **Step 3: Проверка**
+- [x] **Step 3: Проверка**
 
 Run: `bun test tests/moe-executor.test.ts && bun test tests/core/agent-moe.test.ts 2>$null; tsc --noEmit`
 Expected: PASS. Обычные одиночные волны (≤5) работают без изменений.
 
-- [ ] **Step 4: Коммит**
+- [x] **Step 4: Коммит**
 
 ```bash
 git add src/modules/execution/moe-executor.ts tests/moe-executor.test.ts
@@ -1023,19 +1032,19 @@ git commit -m "feat(moe): cap concurrent subtasks per wave at maxParallelTasks"
 - Modify: `src/cli/repl-commands.ts:418-419`
 - Modify: `src/modules/plugins/manager.ts:69,83` (решить: удалить ИЛИ задействовать)
 
-- [ ] **Step 1: Реализовать**
+- [x] **Step 1: Реализовать**
 
 - `moe-executor.ts`: удалить `lastResult` (2 присваивания), удалить метод `getChainMaxAttempts()` (grep — 0 вызовов).
 - `subagent.ts:185`: удалить `let scopeRestored = false;` и ветку `if (!scopeRestored) { scopeRestored = true; ... }` — восстановить scope безусловно (проверить по коду, что условие было всегда истинным и поведение не изменится).
 - `repl-commands.ts:418-419`: удалить пустой no-op `if` (автосейв уже обработан выше).
 - `manager.ts:69,83`: `runOnBeforeTool`/`runOnAfterTool` — задействовать их в `executor.ts` (единый диспетчер) ИЛИ удалить из manager. Рекомендация: удалить из manager, оставить диспетчеризацию в executor (единственный реальный путь). Если executor завязан на manager-методы в других местах — наоборот, перевести executor на них.
 
-- [ ] **Step 2: Проверка**
+- [x] **Step 2: Проверка**
 
 Run: `rg -n "getChainMaxAttempts|scopeRestored|lastResult" src tests` → пусто (кроме новых). `bun test tests/modules/execution/moe-executor.test.ts tests/tools/subagent.test.ts tests/modules/plugins/manager.test.ts tests/executor.test.ts && tsc --noEmit`
 Expected: PASS.
 
-- [ ] **Step 3: Коммит**
+- [x] **Step 3: Коммит**
 
 ```bash
 git add src/modules/execution/moe-executor.ts src/tools/subagent.ts src/cli/repl-commands.ts src/modules/plugins/manager.ts
@@ -1051,7 +1060,7 @@ git commit -m "refactor: remove dead code (lastResult, getChainMaxAttempts, scop
 - Modify: `src/cli/main.ts`, `src/cli/commands.ts`, `src/cli/repl-commands.ts`
 - Test: `tests/core/version.test.ts` (если есть) / `tests/cli/commands.test.ts`
 
-- [ ] **Step 1: Реализовать**
+- [x] **Step 1: Реализовать**
 
 В `src/core/version.ts`:
 
@@ -1064,12 +1073,12 @@ export const readVersion = readMmaVersion;
 
 В `openai-compat.ts` — вынести общие helper-блоки (headers, abort-signal) в приватные методы (строки 178-183 vs 377-382, 191-201 vs 390-400).
 
-- [ ] **Step 2: Проверка**
+- [x] **Step 2: Проверка**
 
 Run: `bun test tests/cli/commands.test.ts tests/core/version.test.ts 2>$null; tsc --noEmit && bun run mma --help`
 Expected: версия печатается корректно, typecheck чистый.
 
-- [ ] **Step 3: Коммит**
+- [x] **Step 3: Коммит**
 
 ```bash
 git add src/core/version.ts src/cli/main.ts src/cli/commands.ts src/cli/repl-commands.ts src/llm/openai-compat.ts
@@ -1089,7 +1098,7 @@ git commit -m "refactor: single readVersion() source, dedup openai-compat reques
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Test: `tests/i18n.test.ts` (parity-тест уже есть)
 
-- [ ] **Step 1: Реализовать**
+- [x] **Step 1: Реализовать**
 
 Для каждой строки добавить ключ в оба файла i18n и заменить вызов `t()`. Ключи (en+ru):
 
@@ -1102,12 +1111,12 @@ git commit -m "refactor: single readVersion() source, dedup openai-compat reques
 
 ВАЖНО: эти строки попадают в **контекст модели** (`<system-summary>`), поэтому перевод должен быть точным и не ломать семантику инструкций. Для model-facing строк допустимо оставить английский текст как значение ключа в ru.json (если модель обучена на EN-инструкциях) — но правило #8 требует наличия ключа; решение зафиксировать в коде комментарием.
 
-- [ ] **Step 2: Проверка**
+- [x] **Step 2: Проверка**
 
 Run: `bun test tests/i18n.test.ts && rg -n "\"[A-Z][a-z]+ [a-z]" src/modules/execution src/core src/cli | Select-Object -First 20`
 Expected: parity-тест зелёный; хардкод-строк в обновлённых файлах нет.
 
-- [ ] **Step 3: Коммит**
+- [x] **Step 3: Коммит**
 
 ```bash
 git add src/cli/repl.ts src/core/agent-moe.ts src/modules/execution src/i18n/en.json src/i18n/ru.json
@@ -1123,7 +1132,7 @@ git commit -m "feat(i18n): route remaining hardcoded user/model strings through 
 **Files:**
 - Modify: `README.md`, `AGENTS.md`, `CHANGELOG.md`, `docs/plugins.md`, `docs/specs/2026-08-05-model-certification-design.md`
 
-- [ ] **Step 1: README — фактические дефолты**
+- [x] **Step 1: README — фактические дефолты**
 
 Исправить в `README.md`:
 - таблицу конфига: `maxToolIterations` 25 → **1000**, `stuckThreshold` 8 → **6**, `model` `qwen3.5-9b` → `qwen/qwen3.5-9b`.
@@ -1132,7 +1141,7 @@ git commit -m "feat(i18n): route remaining hardcoded user/model strings through 
 - CLI-секцию: добавить `model certify/cert-status/cert-list/uncertify`, `context`, `provider use`, `security` (8 команд), `plugins list`, флаги `--json/-e/-d/--no-agents-md`.
 - «13 модулей / 20+ инструментов» → «19 модулей / 33 инструмента».
 
-- [ ] **Step 2: AGENTS.md**
+- [x] **Step 2: AGENTS.md**
 
 - «Current Version: 0.46.1» → **0.47.0**.
 - `stuckThreshold` default 8 → **6** (два места).
@@ -1140,25 +1149,25 @@ git commit -m "feat(i18n): route remaining hardcoded user/model strings through 
 - Model Certification: добавить `--provider-key` и `--context-window` в сигнатуру команды.
 - Добавить запись в changelog про этот план (нумерация — следующая свободная, после 56).
 
-- [ ] **Step 3: CHANGELOG.md**
+- [x] **Step 3: CHANGELOG.md**
 
 - Перенести `[Unreleased]`-контент 0.37.0-эры в соответствующие релизы.
 - Добавить записи 0.43.1–0.46.2 (перенести текст из AGENTS.md entries 51-56 + фактический diff git log).
 
-- [ ] **Step 4: docs/plugins.md**
+- [x] **Step 4: docs/plugins.md**
 
 - Обновить интерфейс `AgentPlugin`: добавить `version`, `minMmaVersion`, `source`; `onBeforeTool` → `boolean | string | Promise<boolean | string>`.
 - Добавить раздел «Versioning & dedup» (текст из AGENTS.md Plugins).
 
-- [ ] **Step 5: cert-spec**
+- [x] **Step 5: cert-spec**
 
 - `docs/specs/2026-08-05-model-certification-design.md:45` — заменить описание спавна `--model/--provider-url/--provider-key` на env-механизм `MMA_MODEL`/`MMA_PROVIDER_BASEURL`/`MMA_PROVIDER_APIKEY` (как в AGENTS.md).
 
-- [ ] **Step 6: Проверка**
+- [x] **Step 6: Проверка**
 
 Run: `rg -n "maxToolIterations|stuckThreshold|qwen3.5-9b" README.md` → совпадает с defaults.ts (1000/6/qwen/qwen3.5-9b). Parity-тест i18n зелёный.
 
-- [ ] **Step 7: Коммит**
+- [x] **Step 7: Коммит**
 
 ```bash
 git add README.md AGENTS.md CHANGELOG.md docs/plugins.md docs/specs/2026-08-05-model-certification-design.md
@@ -1174,12 +1183,12 @@ git commit -m "docs: sync README/AGENTS/CHANGELOG/plugins/cert-spec with v0.47.0
 **Files:**
 - Modify: `package.json`
 
-- [ ] **Step 1: Полный прогон перед бампом**
+- [x] **Step 1: Полный прогон перед бампом**
 
 Run: `bun test && tsc --noEmit`
 Expected: всё зелёное (интеграционные исключены).
 
-- [ ] **Step 2: Бамп версии (MINOR — включение security по умолчанию + новые i18n-ключи)**
+- [x] **Step 2: Бамп версии (MINOR — включение security по умолчанию + новые i18n-ключи)**
 
 ```bash
 npm version minor
@@ -1187,13 +1196,13 @@ npm version minor
 
 (поднимет до 0.47.0 и создаст git tag).
 
-- [ ] **Step 3: Сборка**
+- [x] **Step 3: Сборка**
 
 ```bash
 bun run build:prod
 ```
 
-- [ ] **Step 4: Финальный коммит (если npm version не закоммитил всё) и push**
+- [x] **Step 4: Финальный коммит (если npm version не закоммитил всё) и push**
 
 ```bash
 git push --follow-tags

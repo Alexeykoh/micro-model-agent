@@ -1,5 +1,12 @@
 # Session Reliability Fixes Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — все 8 задач закрыты (релиз 0.29.2): штраф за
+> компакцию с полом, пропуск `<system-summary>` в фактах, cooldown принудительной компакции,
+> честный провал аудит-гейта, видимость LSP-ошибки в выводе тула, порядок шагов плана,
+> жёсткий стоп повторяющихся win32-команд. Чекбоксы проставлены по факту.
+> Отклонение: повторный `done` возвращает `success: true` с текстом «Step N is already
+> done» вместо `success: false`; гвард порядка остался `success: false`.
+
 **Goal:** Fix the 6 defects found in post-mortem analysis of session `ses_msrv83di_0hx6id` (56 forced compactions, LSP silently dead, plan steps marked done out of order / repeatedly without work, audit "finishing anyway", nested `<system-summary>` bloat, and the model repeating forbidden Unix commands in cmd.exe).
 
 **Architecture:** Targeted fixes in 4 layers: (1) `ContextManager.getQuality()` — recoverable compaction penalty so quality can rise above the 40% forced-compaction trigger; (2) agent loop — forced-compaction cooldown + honest audit-gate failure instead of "finishing anyway"; (3) LSP — surface silent failures instead of `catch {}`; (4) execution module + bash — enforce sequential plan-step completion and hard-stop repeated forbidden commands.

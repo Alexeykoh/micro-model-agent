@@ -1,5 +1,11 @@
 # Output Architecture Refactor — Implementation Plan (v2)
 
+> **Статус:** исполнено (2026-10-20) — `src/output/{types,bus,channel,format,machine,json-sink,session-sink,source}.ts`,
+> `src/tools/prompt-io.ts`, streaming/modal/quiet в канале, гвард
+> `tests/output/no-direct-console.test.ts`. Чекбоксы проставлены по факту.
+> Отклонения: `src/output/plugin-bridge.ts` удалён намеренно (`a43dfc73`),
+> `subscribeOutput` реализован через `src/core/host.ts`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Заменить четыре независимых пути записи в терминал (Logger→`console.log`, `Renderer`/`Spinner`→stdout/stderr, ручные ANSI-хаки REPL, прямой stdout в CLI/тулах) единой событийной шиной вывода с **единственным владельцем терминала**, который учитывает режим (idle/streaming/modal/quiet), умеет печатать над prompt'ом `LineEditor` и корректно стримить markdown, не ломая поле ввода.
@@ -361,12 +367,12 @@ export interface PromptIO {
 
 **Files:** none (git only).
 
-- [ ] **Step 1: Создать ветку**
+- [x] **Step 1: Создать ветку**
 
 Run: `git checkout -b refactor/output-architecture`
 Expected: `Switched to a new branch`.
 
-- [ ] **Step 2: Baseline**
+- [x] **Step 2: Baseline**
 
 Run: `bun install && bun test && tsc --noEmit`
 Expected: зелёно. Иначе — зафиксировать падающие тесты и согласовать до продолжения.
@@ -377,7 +383,7 @@ Expected: зелёно. Иначе — зафиксировать падающи
 
 **Files:** Create `src/output/types.ts`, `src/output/bus.ts`, `src/output/index.ts`; Test `tests/output/bus.test.ts`.
 
-- [ ] **Step 1: Написать падающий тест** — `tests/output/bus.test.ts` (ids/timestamps, fan-out, unsubscribe, изоляция исключений):
+- [x] **Step 1: Написать падающий тест** — `tests/output/bus.test.ts` (ids/timestamps, fan-out, unsubscribe, изоляция исключений):
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -413,11 +419,11 @@ describe("OutputBus", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить — упадёт** → `bun test tests/output/bus.test.ts`
-- [ ] **Step 3: Создать `types.ts` и `bus.ts`** (код из «Интерфейсы»).
-- [ ] **Step 4: `index.ts`** — экспорт types + bus.
-- [ ] **Step 5: Прогнать** → `bun test tests/output/bus.test.ts && tsc --noEmit`
-- [ ] **Step 6: Commit** — `feat(output): add OutputEvent model and OutputBus`
+- [x] **Step 2: Запустить — упадёт** → `bun test tests/output/bus.test.ts`
+- [x] **Step 3: Создать `types.ts` и `bus.ts`** (код из «Интерфейсы»).
+- [x] **Step 4: `index.ts`** — экспорт types + bus.
+- [x] **Step 5: Прогнать** → `bun test tests/output/bus.test.ts && tsc --noEmit`
+- [x] **Step 6: Commit** — `feat(output): add OutputEvent model and OutputBus`
 
 ---
 
@@ -425,12 +431,12 @@ describe("OutputBus", () => {
 
 **Files:** Create `src/output/format.ts`; Modify `src/output/index.ts`; Test `tests/output/format.test.ts`.
 
-- [ ] **Step 1: Тест** — legacy-формат `[LEVEL] [source] ISO — text`, пустой source без скобок.
-- [ ] **Step 2: Упадёт** → `bun test tests/output/format.test.ts`
-- [ ] **Step 3: Реализовать** `format.ts` (код из «Интерфейсы»; `LEVEL_COLORS` переносятся из старого `app-logger.ts`).
-- [ ] **Step 4: Экспорт** в `index.ts`.
-- [ ] **Step 5: Прогнать** → PASS.
-- [ ] **Step 6: Commit** — `feat(output): add formatEventLine matching legacy logger format`
+- [x] **Step 1: Тест** — legacy-формат `[LEVEL] [source] ISO — text`, пустой source без скобок.
+- [x] **Step 2: Упадёт** → `bun test tests/output/format.test.ts`
+- [x] **Step 3: Реализовать** `format.ts` (код из «Интерфейсы»; `LEVEL_COLORS` переносятся из старого `app-logger.ts`).
+- [x] **Step 4: Экспорт** в `index.ts`.
+- [x] **Step 5: Прогнать** → PASS.
+- [x] **Step 6: Commit** — `feat(output): add formatEventLine matching legacy logger format`
 
 ---
 
@@ -438,7 +444,7 @@ describe("OutputBus", () => {
 
 **Files:** Create `src/output/channel.ts`, `src/output/machine.ts`; Modify `index.ts`; Test `tests/output/channel.test.ts`.
 
-- [ ] **Step 1: Написать тесты** (idle→stdout, idle+prompt→printAbove, streaming passthrough + closePartial перед log, modal queue→flush, quiet drop, writeOverlay no-op при prompt, singleton, dispose):
+- [x] **Step 1: Написать тесты** (idle→stdout, idle+prompt→printAbove, streaming passthrough + closePartial перед log, modal queue→flush, quiet drop, writeOverlay no-op при prompt, singleton, dispose):
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -523,11 +529,11 @@ describe("OutputChannel", () => {
 });
 ```
 
-- [ ] **Step 2: Упадёт** → `bun test tests/output/channel.test.ts`
-- [ ] **Step 3: Реализовать** `channel.ts` + `machine.ts` (код из «Интерфейсы»).
-- [ ] **Step 4: Экспорт** в `index.ts`.
-- [ ] **Step 5: Прогнать** → PASS + `tsc --noEmit`.
-- [ ] **Step 6: Commit** — `feat(output): add OutputChannel with ownership modes and singleton`
+- [x] **Step 2: Упадёт** → `bun test tests/output/channel.test.ts`
+- [x] **Step 3: Реализовать** `channel.ts` + `machine.ts` (код из «Интерфейсы»).
+- [x] **Step 4: Экспорт** в `index.ts`.
+- [x] **Step 5: Прогнать** → PASS + `tsc --noEmit`.
+- [x] **Step 6: Commit** — `feat(output): add OutputChannel with ownership modes and singleton`
 
 ---
 
@@ -535,7 +541,7 @@ describe("OutputChannel", () => {
 
 **Files:** Modify `src/ui/line-editor.ts`; Test `tests/ui/line-editor-interactive.test.ts`, `tests/ui/line-editor.test.ts`.
 
-- [ ] **Step 1: Дописать падающие тесты**
+- [x] **Step 1: Дописать падающие тесты**
 
 ```ts
   it("printAbove erases the frame, prints the block and redraws the prompt", () => {
@@ -580,8 +586,8 @@ describe("OutputChannel", () => {
   });
 ```
 
-- [ ] **Step 2: Упадёт** → `bun test tests/ui/line-editor-interactive.test.ts`
-- [ ] **Step 3: Добавить состояние и методы**
+- [x] **Step 2: Упадёт** → `bun test tests/ui/line-editor-interactive.test.ts`
+- [x] **Step 3: Добавить состояние и методы**
 
 В `LineEditor`:
 ```ts
@@ -640,7 +646,7 @@ describe("OutputChannel", () => {
 ```
 В `render()` первой строкой: `if (this.frameSuspended) return;`.
 
-- [ ] **Step 4: Возврат DSR-якоря с таймаутом и opt-out**
+- [x] **Step 4: Возврат DSR-якоря с таймаутом и opt-out**
 
 Заменить закомментированный блок в конце `render()`; `prevCursorRow = idx` перенести **до** DSR-блока:
 ```ts
@@ -663,12 +669,12 @@ describe("OutputChannel", () => {
 ```
 В `invalidateAnchor()` и `close()` очищать `dsrTimer`.
 
-- [ ] **Step 5: Существующие тесты**
+- [x] **Step 5: Существующие тесты**
 
 `tests/ui/line-editor-interactive.test.ts` и `tests/ui/line-editor.test.ts` ассертят точные ANSI-байты **без** `\x1b[6n`. Выставить `process.env.MMA_DSR = "0"` в `beforeEach` этих файлов (и удалять в `afterEach`), либо обновить ожидания. Тест якоря (`line-editor.test.ts:295-397`) — проверить, что DSR-парсинг по-прежнему работает при явном `\x1b[6n`.
 
-- [ ] **Step 6: Прогнать** → `bun test tests/ui/line-editor.test.ts tests/ui/line-editor-interactive.test.ts && tsc --noEmit`
-- [ ] **Step 7: Commit** — `feat(ui): printAbove, frame suspend, input gating and DSR fallback`
+- [x] **Step 6: Прогнать** → `bun test tests/ui/line-editor.test.ts tests/ui/line-editor-interactive.test.ts && tsc --noEmit`
+- [x] **Step 7: Commit** — `feat(ui): printAbove, frame suspend, input gating and DSR fallback`
 
 ---
 
@@ -676,12 +682,12 @@ describe("OutputChannel", () => {
 
 **Files:** Modify `src/logger/app-logger.ts`; Test `tests/logger.test.ts`, `tests/output/logger-bus.test.ts`.
 
-- [ ] **Step 1: Тест** `tests/output/logger-bus.test.ts` (эмит с source=prefix, фильтр уровня, `logSilent`/`logStructured` не эмитят).
-- [ ] **Step 2: Упадёт**
-- [ ] **Step 3: Реализовать** (из «Интерфейсы»): конструктор `(level, prefix, sink: OutputSink = defaultOutputBus)`, `log()` → `this.sink.emit({level, source: this.prefix||"mma", kind:"log", text})`, `child()` пробрасывает sink, удалить `console.log`/`LEVEL_COLORS`/`isColorEnabled`.
-- [ ] **Step 4: Обновить `tests/logger.test.ts`** — перехват через `OutputBus`, а не `console.log`; проверить `app.jsonl`/`.log` как раньше.
-- [ ] **Step 5: Прогнать** → PASS + typecheck.
-- [ ] **Step 6: Commit** — `refactor(logger): emit OutputEvents instead of console.log`
+- [x] **Step 1: Тест** `tests/output/logger-bus.test.ts` (эмит с source=prefix, фильтр уровня, `logSilent`/`logStructured` не эмитят).
+- [x] **Step 2: Упадёт**
+- [x] **Step 3: Реализовать** (из «Интерфейсы»): конструктор `(level, prefix, sink: OutputSink = defaultOutputBus)`, `log()` → `this.sink.emit({level, source: this.prefix||"mma", kind:"log", text})`, `child()` пробрасывает sink, удалить `console.log`/`LEVEL_COLORS`/`isColorEnabled`.
+- [x] **Step 4: Обновить `tests/logger.test.ts`** — перехват через `OutputBus`, а не `console.log`; проверить `app.jsonl`/`.log` как раньше.
+- [x] **Step 5: Прогнать** → PASS + typecheck.
+- [x] **Step 6: Commit** — `refactor(logger): emit OutputEvents instead of console.log`
 
 ---
 
@@ -689,7 +695,7 @@ describe("OutputChannel", () => {
 
 **Files:** Modify `src/ui/renderer.ts`, `src/ui/spinner.ts`, `src/ui/output.ts`, `src/ui/md-formatter.ts`; Test `tests/ui/renderer.test.ts`, `tests/renderer.test.ts`, `tests/ui/spinner.test.ts`.
 
-- [ ] **Step 1: Spinner — overlay**
+- [x] **Step 1: Spinner — overlay**
 
 Заменить `stream` на `channel`:
 ```ts
@@ -698,7 +704,7 @@ export interface SpinnerOptions { enabled?: boolean; channel?: OutputChannel; in
 ```
 `stop()` → `this.channel?.writeOverlay("\r\x1b[K")`; `tick()` → `this.channel?.writeOverlay("\r" + pc.cyan(frame) + " " + this.message + "\x1b[K")`. Если `channel` нет — писать в `process.stderr` как раньше (тесты/standalone).
 
-- [ ] **Step 2: Renderer — канал**
+- [x] **Step 2: Renderer — канал**
 
 `RendererOptions` — убрать `out`/`err`, добавить `channel?: OutputChannel`; дефолт `getDefaultChannel()`. `new Spinner({..., channel: this.channel})`. `FormattingStream`:
 ```ts
@@ -710,20 +716,20 @@ export interface SpinnerOptions { enabled?: boolean; channel?: OutputChannel; in
 ```
 Заменить все `this.out.write` → `this.channel.writeRaw(...)`, `this.err.write` → `this.channel.writeRaw(..., "stderr")`.
 
-- [ ] **Step 3: md-formatter — flush-guard**
+- [x] **Step 3: md-formatter — flush-guard**
 
 `FormattingStream` держит незакрытую частичную строку и `\x1b[ND` rewind. Канал уже закрывает partial перед `log` в streaming-режиме, но markdown-таблица при `flushTable`/`emitCodeBlock` печатается построчно. Добавить в `FormattingStream` метод `hasPartial(): boolean` и `flushPartialNow()` (эмитит rewind + текущий буфер через `onRawWrite`, сбрасывает `partialWritten`) — Renderer вызовет его перед `toolStart`/`toolEnd`/`error`, чтобы событие не вклинилось в незавершённый markdown-абзац.
 
-- [ ] **Step 4: `src/ui/output.ts` — через шину**
+- [x] **Step 4: `src/ui/output.ts` — через шину**
 
 `writeOutput/writeError/writeSuccess/writeWarning` эмитят `kind:"raw"`/`kind:"log"` в `defaultOutputBus` (deprecated-обёртки сохранить).
 
-- [ ] **Step 5: Обновить тесты**
+- [x] **Step 5: Обновить тесты**
 
 `tests/ui/spinner.test.ts` — fake `OutputChannel` (`writeOverlay` собирает). `tests/ui/renderer.test.ts`/`tests/renderer.test.ts` — передавать `channel` с fake streams; проверить plain-режим, карточки, footer, error-стрим (stderr), отсутствие спиннера для `question`/`approve`, `hasPartial`-guard перед `toolStart`.
 
-- [ ] **Step 6: Прогнать** → `bun test tests/ui/renderer.test.ts tests/renderer.test.ts tests/ui/spinner.test.ts tests/md-formatter.test.ts && tsc --noEmit`
-- [ ] **Step 7: Commit** — `refactor(ui): route Renderer/Spinner/markdown through OutputChannel`
+- [x] **Step 6: Прогнать** → `bun test tests/ui/renderer.test.ts tests/renderer.test.ts tests/ui/spinner.test.ts tests/md-formatter.test.ts && tsc --noEmit`
+- [x] **Step 7: Commit** — `refactor(ui): route Renderer/Spinner/markdown through OutputChannel`
 
 ---
 
@@ -731,7 +737,7 @@ export interface SpinnerOptions { enabled?: boolean; channel?: OutputChannel; in
 
 **Files:** Modify `src/cli/repl.ts`, `src/cli/repl-commands.ts`; Test `tests/cli/*`.
 
-- [ ] **Step 1: Проводка канала/PromptSink**
+- [x] **Step 1: Проводка канала/PromptSink**
 
 ```ts
 import { getDefaultChannel, type OutputChannel, type PromptSink } from "../output";
@@ -749,7 +755,7 @@ import { getDefaultChannel, type OutputChannel, type PromptSink } from "../outpu
     this.output.attachPrompt(this.promptSink);
 ```
 
-- [ ] **Step 2: `runAgent` — явный streaming-lifecycle**
+- [x] **Step 2: `runAgent` — явный streaming-lifecycle**
 
 Заменить (`repl.ts:508-512`):
 ```ts
@@ -770,18 +776,18 @@ import { getDefaultChannel, type OutputChannel, type PromptSink } from "../outpu
 ```
 `Renderer` создавать с `{ spinner, baseDir, channel: this.output }`. Убрать прямые `process.stdout.write` (`:512,:556,:569`) — через `this.output.writeLine`. `renderer.footer` оставить (пишет через канал).
 
-- [ ] **Step 3: Баннеры/справка/контекст/ошибки** — все `console.log/error` и `process.stdout.write` в `repl.ts` (`:420,:445,:466,:472,:564,:569,:611,:618-624,:645-704,:809-822`) → `this.output.writeLine(...)` / `writeLine(..., "stderr")`.
+- [x] **Step 3: Баннеры/справка/контекст/ошибки** — все `console.log/error` и `process.stdout.write` в `repl.ts` (`:420,:445,:466,:472,:564,:569,:611,:618-624,:645-704,:809-822`) → `this.output.writeLine(...)` / `writeLine(..., "stderr")`.
 
-- [ ] **Step 4: Фоновые баннеры (LSP/context/health)**
+- [x] **Step 4: Фоновые баннеры (LSP/context/health)**
 
 `repl.ts:832` → `this.output.writeLine(\`${divider()}\n${line}\`)`; `:885` → то же; `:859` `writeWarning(...)` → `this.output.writeLine(line)`. Канал сам напечатает над prompt, если он активен, и не тронет кадр иначе. `this.rl.prompt()` после них не нужен.
 
-- [ ] **Step 5: `repl-commands.ts`**
+- [x] **Step 5: `repl-commands.ts`**
 
 Добавить `output: OutputChannel` в `ReplContext`; все `console.log` (~90 мест) → `ctx.output.writeLine(...)`. Для «модальных» команд (`/wizard`, `/resume`, `/model` wizard) оборачивать в `beginModal()/endModal()`.
 
-- [ ] **Step 6: Прогнать** → `bun test tests/cli tests/ui && tsc --noEmit`
-- [ ] **Step 7: Commit** — `refactor(repl): explicit terminal ownership via OutputChannel`
+- [x] **Step 6: Прогнать** → `bun test tests/cli tests/ui && tsc --noEmit`
+- [x] **Step 7: Commit** — `refactor(repl): explicit terminal ownership via OutputChannel`
 
 ---
 
@@ -789,7 +795,7 @@ import { getDefaultChannel, type OutputChannel, type PromptSink } from "../outpu
 
 **Files:** Create `src/tools/prompt-io.ts`; Modify `src/tools/{types,question,approve,user-input}.ts`, `src/core/bootstrap.ts`, `src/cli/repl.ts`; Test `tests/tools/prompt-io.test.ts`.
 
-- [ ] **Step 1: Тест** `tests/tools/prompt-io.test.ts`
+- [x] **Step 1: Тест** `tests/tools/prompt-io.test.ts`
 
 ```ts
 import { describe, it, expect, vi } from "vitest";
@@ -818,11 +824,11 @@ describe("createPromptIO", () => {
 });
 ```
 
-- [ ] **Step 2: Упадёт**
-- [ ] **Step 3: Реализовать `prompt-io.ts`**
+- [x] **Step 2: Упадёт**
+- [x] **Step 3: Реализовать `prompt-io.ts`**
 
 `createPromptIO({ ask, print })` возвращает `PromptIO`: `askText` возвращает ответ; `askChoice` печатает меню через `print` и парсит номер/значение (переиспользовать `formatMenu`/`parseSelection` из `user-input.ts`, экспортировать их).
-- [ ] **Step 4: Прокинуть PromptIO в ToolContext**
+- [x] **Step 4: Прокинуть PromptIO в ToolContext**
 
 `src/tools/types.ts` — `promptIO?: PromptIO`. `bootstrap.ts` — `toolCtx.promptIO` формируется как fallback (`createPromptIO` поверх `user-input.ts` + `getDefaultChannel().writeLine`), а `Repl` **перезаписывает** его при старте на `LineEditor`-версию:
 ```ts
@@ -833,9 +839,9 @@ describe("createPromptIO", () => {
     // ToolContext живёт в bootstrap; REPL выставляет promptIO через toolExecutor.
 ```
 В `question.ts`/`approve.ts` вызывать `ctx.promptIO` если он есть и интерактивен, иначе текущий `user-input` fallback. Перед `askChoice` — `output.beginModal()` (через `promptIO` или `ToolContext.output`), после — `endModal()`.
-- [ ] **Step 5: `user-input.ts`** — `console.log` меню → `getDefaultChannel().writeLine`; остаётся fallback для неинтерактивного режима.
-- [ ] **Step 6: Прогнать** → `bun test tests/tools tests/cli && tsc --noEmit`
-- [ ] **Step 7: Commit** — `refactor(tools): interactive prompts via PromptIO, no competing readline`
+- [x] **Step 5: `user-input.ts`** — `console.log` меню → `getDefaultChannel().writeLine`; остаётся fallback для неинтерактивного режима.
+- [x] **Step 6: Прогнать** → `bun test tests/tools tests/cli && tsc --noEmit`
+- [x] **Step 7: Commit** — `refactor(tools): interactive prompts via PromptIO, no competing readline`
 
 ---
 
@@ -843,12 +849,12 @@ describe("createPromptIO", () => {
 
 **Files:** Modify `src/cli/main.ts`; Create `src/cli/setup-order.ts`; Test `tests/cli/main-first-run.test.ts`.
 
-- [ ] **Step 1: Тест** порядка (`setup` → `bootstrap`, и пропуск при наличии конфига) — код из v1-плана, но `order` принимает `runSetup`/`applyAnswers`/`bootstrap`.
-- [ ] **Step 2: `src/cli/setup-order.ts`** — чистая функция упорядочивания.
-- [ ] **Step 3: Переписать first-run в `main.ts`** — как в v1-плане: `loadConfig` → применить ответы → `saveConfig` → `bootstrap` → `Repl` → `start`. `runSetup()` без `repl.rl` (свой readline; reset в `setup.ts:235-248` уже есть).
-- [ ] **Step 4: Прогнать** → `bun test tests/cli/main-first-run.test.ts && tsc --noEmit`
-- [ ] **Step 5: Ручная проверка first-run** (песочница + пустой `MMA_CONFIG_DIR`): паузы > 5с между ответами; пробы не вклиниваются; промпты не дублируются.
-- [ ] **Step 6: Commit** — `refactor(cli): run setup wizard before bootstrap`
+- [x] **Step 1: Тест** порядка (`setup` → `bootstrap`, и пропуск при наличии конфига) — код из v1-плана, но `order` принимает `runSetup`/`applyAnswers`/`bootstrap`.
+- [x] **Step 2: `src/cli/setup-order.ts`** — чистая функция упорядочивания.
+- [x] **Step 3: Переписать first-run в `main.ts`** — как в v1-плане: `loadConfig` → применить ответы → `saveConfig` → `bootstrap` → `Repl` → `start`. `runSetup()` без `repl.rl` (свой readline; reset в `setup.ts:235-248` уже есть).
+- [x] **Step 4: Прогнать** → `bun test tests/cli/main-first-run.test.ts && tsc --noEmit`
+- [x] **Step 5: Ручная проверка first-run** (песочница + пустой `MMA_CONFIG_DIR`): паузы > 5с между ответами; пробы не вклиниваются; промпты не дублируются.
+- [x] **Step 6: Commit** — `refactor(cli): run setup wizard before bootstrap`
 
 ---
 
@@ -856,10 +862,10 @@ describe("createPromptIO", () => {
 
 **Files:** Modify `src/core/bootstrap.ts`; Test `tests/core/*`.
 
-- [ ] **Step 1: `bootstrap.ts`** — context probe (`:327-335`) и reasoning probe (`:379`) → `logger.logSilent("warn"|"info", ...)`. UI-строку рисует только REPL через канал (Task 7 Step 4).
-- [ ] **Step 2: Проверить отсутствие двойного вывода** — `SessionLogger.appendLog` для `context_probe` оставить (машинная запись), но не логировать то же через `logger` (кроме `logSilent`).
-- [ ] **Step 3: Прогнать** → `bun test tests/core tests/llm && tsc --noEmit`
-- [ ] **Step 4: Commit** — `refactor(bootstrap): background probes log silently`
+- [x] **Step 1: `bootstrap.ts`** — context probe (`:327-335`) и reasoning probe (`:379`) → `logger.logSilent("warn"|"info", ...)`. UI-строку рисует только REPL через канал (Task 7 Step 4).
+- [x] **Step 2: Проверить отсутствие двойного вывода** — `SessionLogger.appendLog` для `context_probe` оставить (машинная запись), но не логировать то же через `logger` (кроме `logSilent`).
+- [x] **Step 3: Прогнать** → `bun test tests/core tests/llm && tsc --noEmit`
+- [x] **Step 4: Commit** — `refactor(bootstrap): background probes log silently`
 
 ---
 
@@ -887,9 +893,9 @@ describe("createPromptIO", () => {
 | `src/tools/subagent.ts`, `src/core/agent-moe.ts`, `moe-executor.ts`, `plan-store.ts` | прямых записей нет — проверить guard-тестом |
 | `examples/plugins/*/plugin.ts:120/124/163/167` | `ctx.logger` уже через шину |
 
-- [ ] **Step 1: Провести замены по таблице.**
-- [ ] **Step 2: `tsc --noEmit`** → PASS.
-- [ ] **Step 3: Commit** — `refactor: migrate all direct terminal writes to OutputBus/Channel`
+- [x] **Step 1: Провести замены по таблице.**
+- [x] **Step 2: `tsc --noEmit`** → PASS.
+- [x] **Step 3: Commit** — `refactor: migrate all direct terminal writes to OutputBus/Channel`
 
 ---
 
@@ -897,10 +903,10 @@ describe("createPromptIO", () => {
 
 **Files:** Create `src/output/{json-sink,session-sink,plugin-bridge}.ts`; Modify `src/cli/main.ts`, `src/modules/types.ts`, `src/modules/plugins/manager.ts`, `src/cli/repl.ts`, `examples/plugins/web-ui/*`, `examples/plugins/trace-server/*`; Test `tests/output/json-sink.test.ts`.
 
-- [ ] **Step 1: `json-sink.ts` + тест** — собирает `warn/error` для `--json`.
-- [ ] **Step 2: `main.ts --json`** — `channel.setQuiet(true)` + `new JsonOutputSink(bus)`; в JSON-результат добавить `diagnostics`. Человеческий лог в stdout не попадает (закрывает баг «лог портит JSON»).
-- [ ] **Step 3: `session-sink.ts`** — события с `data.persist === true` пишет в `SessionLogger` (файл), не дублируя существующие `log*`.
-- [ ] **Step 4: Плагинная поверхность — `HostBridge.subscribeOutput`**
+- [x] **Step 1: `json-sink.ts` + тест** — собирает `warn/error` для `--json`.
+- [x] **Step 2: `main.ts --json`** — `channel.setQuiet(true)` + `new JsonOutputSink(bus)`; в JSON-результат добавить `diagnostics`. Человеческий лог в stdout не попадает (закрывает баг «лог портит JSON»).
+- [x] **Step 3: `session-sink.ts`** — события с `data.persist === true` пишет в `SessionLogger` (файл), не дублируя существующие `log*`.
+- [x] **Step 4: Плагинная поверхность — `HostBridge.subscribeOutput`**
 
 `src/modules/types.ts`:
 ```ts
@@ -913,7 +919,7 @@ export interface HostBridge {
 }
 ```
 `createHostBridge` (`repl.ts:70`) реализует через `defaultOutputBus.subscribe`. `PluginManager.withHost` уже мержит `hostBridge` в ctx — плагины получают `ctx.hostBridge.subscribeOutput`.
-- [ ] **Step 5: web-ui**
+- [x] **Step 5: web-ui**
 
 В `examples/plugins/web-ui/plugin.ts` `onSessionStart` подписаться:
 ```ts
@@ -924,9 +930,9 @@ export interface HostBridge {
     });
 ```
 `state.broadcast` (`state.ts:90-104`) уже фан-аутит SSE. Существующие агент-хуки (`onText`/`onToolStart`/…) оставить — они несут структурированные данные; шина добавляет то, что раньше уходило в терминал. Тест `tests/web-ui-server.test.ts` продолжает проходить.
-- [ ] **Step 6: trace-server** — аналогичная подписка в `plugin.ts` (`onSessionStart`), broadcast через `state.ts:103-112`.
-- [ ] **Step 7: Прогнать** → `bun test tests/output tests/web-ui-server.test.ts tests/modules/plugin-host-bridge.test.ts && tsc --noEmit`
-- [ ] **Step 8: Commit** — `feat(output): JSON/session subscribers and plugin output bus`
+- [x] **Step 6: trace-server** — аналогичная подписка в `plugin.ts` (`onSessionStart`), broadcast через `state.ts:103-112`.
+- [x] **Step 7: Прогнать** → `bun test tests/output tests/web-ui-server.test.ts tests/modules/plugin-host-bridge.test.ts && tsc --noEmit`
+- [x] **Step 8: Commit** — `feat(output): JSON/session subscribers and plugin output bus`
 
 ---
 
@@ -934,7 +940,7 @@ export interface HostBridge {
 
 **Files:** Create `tests/output/no-direct-console.test.ts`.
 
-- [ ] **Step 1: Тест** — обход `src/**` и `examples/**`; allowlist:
+- [x] **Step 1: Тест** — обход `src/**` и `examples/**`; allowlist:
 
 ```ts
 const ALLOWLIST = new Set([
@@ -946,8 +952,8 @@ const ALLOWLIST = new Set([
 const FORBIDDEN = /\bconsole\.(log|warn|error|info|debug)\b|process\.(stdout|stderr)\.write\b/;
 ```
 
-- [ ] **Step 2: Прогнать — добить остаток** (`bun test tests/output/no-direct-console.test.ts`), домигрировать, для машинных контрактов — добавить в allowlist с комментарием.
-- [ ] **Step 3: PASS** + Commit — `test(output): guard against direct console/stdout writes`
+- [x] **Step 2: Прогнать — добить остаток** (`bun test tests/output/no-direct-console.test.ts`), домигрировать, для машинных контрактов — добавить в allowlist с комментарием.
+- [x] **Step 3: PASS** + Commit — `test(output): guard against direct console/stdout writes`
 
 ---
 
@@ -955,23 +961,23 @@ const FORBIDDEN = /\bconsole\.(log|warn|error|info|debug)\b|process\.(stdout|std
 
 **Files:** `CHANGELOG.md`, `package.json`, `AGENTS.md`, `docs/agents/architecture.md`.
 
-- [ ] **Step 1: CHANGELOG** `## [1.0.0] - 2026-09-18` (Added/Changed/Removed).
-- [ ] **Step 2: `package.json` → `1.0.0`**.
-- [ ] **Step 3: AGENTS.md** — раздел «Output Architecture» (инварианты владения, режимы, `printAbove`, guard) + «Current Version: 1.0.0». `docs/agents/architecture.md` — модуль `src/output/`.
-- [ ] **Step 4: i18n** — убедиться, что все ключи из аудита сохранены; `tests/i18n.test.ts` зелёный; новых output-ключей не требуется.
-- [ ] **Step 5: Commit** — `docs: output architecture; release 1.0.0`
+- [x] **Step 1: CHANGELOG** `## [1.0.0] - 2026-09-18` (Added/Changed/Removed).
+- [x] **Step 2: `package.json` → `1.0.0`**.
+- [x] **Step 3: AGENTS.md** — раздел «Output Architecture» (инварианты владения, режимы, `printAbove`, guard) + «Current Version: 1.0.0». `docs/agents/architecture.md` — модуль `src/output/`.
+- [x] **Step 4: i18n** — убедиться, что все ключи из аудита сохранены; `tests/i18n.test.ts` зелёный; новых output-ключей не требуется.
+- [x] **Step 5: Commit** — `docs: output architecture; release 1.0.0`
 
 ---
 
 ## Task 15: Финальная верификация
 
-- [ ] **Step 1: Полный прогон** → `bun test && tsc --noEmit && bun run format:check`
-- [ ] **Step 2: Repro исходного бага** — first-run с паузами > 5с: пробы не вклиниваются, промпты не дублируются, контекстная строка один раз.
-- [ ] **Step 3: Стриминг** — в REPL запустить длинный ответ и во время генерации печатать в поле ввода: ввод не рисуется поверх стрима; `question`/`approve` открывают prompt без второго readline; после ответа стрим продолжается.
-- [ ] **Step 4: Лог во время стрима** — спровоцировать `logger.warn` (например, `/provider list` + health probe) mid-stream: строка не разрывает markdown, появляется на новой строке.
-- [ ] **Step 5: `--json`** — валидный JSON, `diagnostics`, без человеческих `[INFO]` в stdout.
-- [ ] **Step 6: Плагины** — web-ui: SSE `output`-события приходят; существующие `/api/*` работают (`tests/web-ui-server.test.ts`).
-- [ ] **Step 7: Итог** — `git status` чистый; PR/merge по решению заказчика.
+- [x] **Step 1: Полный прогон** → `bun test && tsc --noEmit && bun run format:check`
+- [x] **Step 2: Repro исходного бага** — first-run с паузами > 5с: пробы не вклиниваются, промпты не дублируются, контекстная строка один раз.
+- [x] **Step 3: Стриминг** — в REPL запустить длинный ответ и во время генерации печатать в поле ввода: ввод не рисуется поверх стрима; `question`/`approve` открывают prompt без второго readline; после ответа стрим продолжается.
+- [x] **Step 4: Лог во время стрима** — спровоцировать `logger.warn` (например, `/provider list` + health probe) mid-stream: строка не разрывает markdown, появляется на новой строке.
+- [x] **Step 5: `--json`** — валидный JSON, `diagnostics`, без человеческих `[INFO]` в stdout.
+- [x] **Step 6: Плагины** — web-ui: SSE `output`-события приходят; существующие `/api/*` работают (`tests/web-ui-server.test.ts`).
+- [x] **Step 7: Итог** — `git status` чистый; PR/merge по решению заказчика.
 
 ---
 

@@ -1,5 +1,10 @@
 # Counter-Agent (In-Loop Critic) — Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — контр-агент v1 (`src/modules/critic/**`,
+> `src/core/agent/critic-gate.ts`, конфиг `critic.*`, `SessionLogger.logCritic`, i18n) и
+> Phase 2 (выделенный провайдер, ограниченный read-only tool-loop) реализованы; позже
+> доведены волнами critic W1–W5 (`68b83f55`…`48911546`). Чекбоксы проставлены по факту.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add an evidence-grounded, event-triggered LLM critic to the single-agent loop that advises on `concern` and performs a bounded repair on `critical`, failing open.
@@ -36,7 +41,7 @@
 - Create: `src/modules/critic/types.ts`, `src/modules/critic/evidence.ts`
 - Test: `tests/critic-evidence.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -68,9 +73,9 @@ describe("critic evidence", () => {
 });
 ```
 
-- [ ] **Step 2: Run** — `bun test tests/critic-evidence.test.ts` → FAIL (module missing).
+- [x] **Step 2: Run** — `bun test tests/critic-evidence.test.ts` → FAIL (module missing).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `src/modules/critic/types.ts`:
 
@@ -154,8 +159,8 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
 }
 ```
 
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** — `feat(critic): evidence pack builder`.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** — `feat(critic): evidence pack builder`.
 
 ---
 
@@ -165,7 +170,7 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
 - Create: `src/modules/critic/client.ts`
 - Test: `tests/critic-client.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -207,9 +212,9 @@ describe("CriticClient", () => {
 });
 ```
 
-- [ ] **Step 2: Run** → FAIL.
+- [x] **Step 2: Run** → FAIL.
 
-- [ ] **Step 3: Implement `src/modules/critic/client.ts`**
+- [x] **Step 3: Implement `src/modules/critic/client.ts`**
 
 ```ts
 import { jsonrepair } from "jsonrepair";
@@ -318,8 +323,8 @@ export function parseVerdict(text: string): CriticVerdict | null {
 }
 ```
 
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** — `feat(critic): LLM client + JSON verdict parsing`.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** — `feat(critic): LLM client + JSON verdict parsing`.
 
 ---
 
@@ -329,7 +334,7 @@ export function parseVerdict(text: string): CriticVerdict | null {
 - Create: `src/core/agent/critic-gate.ts`
 - Test: `tests/critic-gate.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, it, expect, vi } from "vitest";
@@ -397,9 +402,9 @@ describe("CriticGate", () => {
 });
 ```
 
-- [ ] **Step 2: Run** → FAIL.
+- [x] **Step 2: Run** → FAIL.
 
-- [ ] **Step 3: Implement `src/core/agent/critic-gate.ts`**
+- [x] **Step 3: Implement `src/core/agent/critic-gate.ts`**
 
 ```ts
 import { t } from "../../i18n/index";
@@ -502,8 +507,8 @@ export class CriticGate {
 }
 ```
 
-- [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** — `feat(critic): critic gate (triggers, dedupe, bounded repair)`.
+- [x] **Step 4: Run** → PASS.
+- [x] **Step 5: Commit** — `feat(critic): critic gate (triggers, dedupe, bounded repair)`.
 
 ---
 
@@ -511,7 +516,7 @@ export class CriticGate {
 
 **Files:** `src/config/types.ts`, `src/config/defaults.ts`; Test: `tests/config.test.ts`
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```ts
 it("defaults critic to enabled with bounded loops", () => {
@@ -519,9 +524,9 @@ it("defaults critic to enabled with bounded loops", () => {
 });
 ```
 
-- [ ] **Step 2: Run** → FAIL.
+- [x] **Step 2: Run** → FAIL.
 
-- [ ] **Step 3:** Add to `types.ts`:
+- [x] **Step 3:** Add to `types.ts`:
 
 ```ts
 export interface CriticConfig {
@@ -545,8 +550,8 @@ Add `critic: CriticConfig;` to `AppConfig`. Add to `defaults.ts`:
   },
 ```
 
-- [ ] **Step 4: Run** → PASS (also `bun test tests/config.test.ts`).
-- [ ] **Step 5: Commit** — `feat(config): add critic domain`.
+- [x] **Step 4: Run** → PASS (also `bun test tests/config.test.ts`).
+- [x] **Step 5: Commit** — `feat(config): add critic domain`.
 
 ---
 
@@ -554,7 +559,7 @@ Add `critic: CriticConfig;` to `AppConfig`. Add to `defaults.ts`:
 
 **Files:** `src/core/agent/loop-state.ts`, `src/core/session-logger.ts`, `src/modules/session/store.ts`; Test: `tests/session-logger.test.ts`, `tests/core/agent-critic.test.ts` (later)
 
-- [ ] **Step 1:** Add fields to `LoopState` + init in `createLoopState()`:
+- [x] **Step 1:** Add fields to `LoopState` + init in `createLoopState()`:
 
 ```ts
   /** Critic LLM calls made this run. */
@@ -569,8 +574,8 @@ Add `critic: CriticConfig;` to `AppConfig`. Add to `defaults.ts`:
 
 init: `criticCalls: 0, criticRepairCycles: 0, mutationsSinceCritic: 0, seenCriticIssues: new Set(),`
 
-- [ ] **Step 2:** Add `"critic_check" | "critic_verdict" | "critic_escalation"` to `SessionLogEntry.type` (`src/modules/session/store.ts:18-41`).
-- [ ] **Step 3:** Add to `SessionLogger`:
+- [x] **Step 2:** Add `"critic_check" | "critic_verdict" | "critic_escalation"` to `SessionLogEntry.type` (`src/modules/session/store.ts:18-41`).
+- [x] **Step 3:** Add to `SessionLogger`:
 
 ```ts
   /** Log a critic lifecycle event (counter-agent). */
@@ -587,8 +592,8 @@ init: `criticCalls: 0, criticRepairCycles: 0, mutationsSinceCritic: 0, seenCriti
   }
 ```
 
-- [ ] **Step 4:** `bun test tests/session-logger.test.ts` → PASS; `tsc --noEmit`.
-- [ ] **Step 5: Commit** — `feat(critic): loop counters + session logging`.
+- [x] **Step 4:** `bun test tests/session-logger.test.ts` → PASS; `tsc --noEmit`.
+- [x] **Step 5: Commit** — `feat(critic): loop counters + session logging`.
 
 ---
 
@@ -596,7 +601,7 @@ init: `criticCalls: 0, criticRepairCycles: 0, mutationsSinceCritic: 0, seenCriti
 
 **Files:** `src/core/agent.ts`; Test: `tests/core/agent-critic.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Build a minimal `AgentDeps` with a stub provider that (a) emits a `write_file` tool call then a final text, and (b) scripted critic verdicts via `AgentDeps.criticOverride`. Assert:
 - verdict `critical` → agent injects a `<system-summary>` and makes another LLM call (does not accept on the first final text);
@@ -607,9 +612,9 @@ Build a minimal `AgentDeps` with a stub provider that (a) emits a `write_file` t
 const gate = { verify: async () => criticalVerdict, buildPack: (d: any) => d };
 ```
 
-- [ ] **Step 2: Run** → FAIL.
+- [x] **Step 2: Run** → FAIL.
 
-- [ ] **Step 3: Implement in `src/core/agent.ts`**
+- [x] **Step 3: Implement in `src/core/agent.ts`**
 
 Add to `AgentDeps` (after `runWithMoEOverride`):
 
@@ -690,8 +695,8 @@ export function gatherTurnToolEvents(contextManager: {
 
 (Args are not present on tool history messages; `gatherTurnToolEvents` yields tool names + success only. Changed files are separately derivable — extend later if needed; v1 evidence still names tools/commands via digest without args. Keep the helper in `critic-gate.ts` and unit-test it in Task 3.)
 
-- [ ] **Step 4: Run** → `bun test tests/core/agent-critic.test.ts` PASS.
-- [ ] **Step 5: Commit** — `feat(agent): wire in-loop critic gate`.
+- [x] **Step 4: Run** → `bun test tests/core/agent-critic.test.ts` PASS.
+- [x] **Step 5: Commit** — `feat(agent): wire in-loop critic gate`.
 
 ---
 
@@ -699,7 +704,7 @@ export function gatherTurnToolEvents(contextManager: {
 
 **Files:** `src/i18n/en.json`, `src/i18n/ru.json`, `src/ui/renderer.ts` (only if a quiet line is desired), `docs/agents/architecture.md`, `AGENTS.md`, `CHANGELOG.md`, `TODO.md`.
 
-- [ ] **Step 1:** Add i18n keys:
+- [x] **Step 1:** Add i18n keys:
 
 ```json
 "critic.repair": "A verifier flagged critical problems; fix them before finishing:\n{issues}\nSummary: {summary}",
@@ -707,23 +712,23 @@ export function gatherTurnToolEvents(contextManager: {
 ```
 
 RU mirror. (Injected as `<system-summary>` — model-facing, so keep the same language policy as other exec directives: English model-facing text is acceptable, RU optional.)
-- [ ] **Step 2:** Quiet UI: log only via `session.jsonl` (`critic_*` events). No chat line by default (STYLE.md quiet). Optionally `/verbose` later.
-- [ ] **Step 3:** CHANGELOG `### Added`: counter-agent (in-loop critic). AGENTS.md short bullet. architecture.md section. TODO.md: mark P4 counter-agent progress; add Phase 2 items (dedicated provider, read-only tool-loop).
-- [ ] **Step 4: Full gate**
+- [x] **Step 2:** Quiet UI: log only via `session.jsonl` (`critic_*` events). No chat line by default (STYLE.md quiet). Optionally `/verbose` later.
+- [x] **Step 3:** CHANGELOG `### Added`: counter-agent (in-loop critic). AGENTS.md short bullet. architecture.md section. TODO.md: mark P4 counter-agent progress; add Phase 2 items (dedicated provider, read-only tool-loop).
+- [x] **Step 4: Full gate**
 
 Run: `bun test && tsc --noEmit && bun run lint`
 Expected: green.
 
-- [ ] **Step 5: Commit** — `docs(critic): i18n, changelog, architecture`.
+- [x] **Step 5: Commit** — `docs(critic): i18n, changelog, architecture`.
 
 ---
 
 ## Self-Review Checklist
 
-- [ ] Evidence pack is deterministic and bounded (Task 1).
-- [ ] Critic fails open on error/timeout/bad JSON (Task 2, 3).
-- [ ] Triggers only on work mutations, capped by `maxCalls`, deduped (Task 3).
-- [ ] Critical repair is bounded by `maxRepairCycles`; never infinite (Task 3).
-- [ ] MoE path untouched; AuditGate/HallucinationGate order preserved (Task 6).
-- [ ] Observability in `session.jsonl` (Task 5, 7).
-- [ ] Phase 2 (dedicated provider, read-only tools) explicitly deferred to `TODO.md`.
+- [x] Evidence pack is deterministic and bounded (Task 1).
+- [x] Critic fails open on error/timeout/bad JSON (Task 2, 3).
+- [x] Triggers only on work mutations, capped by `maxCalls`, deduped (Task 3).
+- [x] Critical repair is bounded by `maxRepairCycles`; never infinite (Task 3).
+- [x] MoE path untouched; AuditGate/HallucinationGate order preserved (Task 6).
+- [x] Observability in `session.jsonl` (Task 5, 7).
+- [x] Phase 2 (dedicated provider, read-only tools) explicitly deferred to `TODO.md`.

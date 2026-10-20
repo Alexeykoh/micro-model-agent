@@ -72,6 +72,25 @@
       с `[Notes:`» (план `2026-10-14-context-ledger`, Task 6).
 - [ ] `session-phase.ts:145` пишет `model=${probe.model}` (значение пробнера на момент
       старта, а не живой модели) — остаток Task 3 плана `2026-10-11-harness-runaway-session-fixes`.
+- [ ] `src/core/system-prompt.ts`: 14 строк длиннее 120 символов (канон системного промпта).
+- [ ] StuckDetector: нет классификации `scope_drift`/`empty_output` — надёжного сигнала нет
+      (`src/modules/execution/stuck-detector.ts` знает только `timeout`/`repeat`/`error_loop`).
+- [ ] `src/core/hallucination/factual.ts:124,187`: cooldown-ветка возвращает `false`, не
+      консультируя тёплый кэш (`indexHas`); рескан синхронный на hot path (Task 12 плана
+      `2026-08-26-model-control-fixes`).
+
+### 1.6 Качество памяти и самообучение (план `docs/superpowers/plans/2026-08-12-memory-quality-and-learning.md`)
+
+План **открыт** — ни одна из трёх фаз не реализована. Из плана выполнено одно:
+`SessionManager.loadSessionLog`.
+
+- [ ] **Фаза 1 — валидатор памяти:** `src/modules/memory/validator.ts` + `MemoryValidator`
+      (запись не валидируется: `append()`/`appendRule()` не возвращают `ValidationResult`),
+      интеграция в `remember`-тул (нет `tool.remember.rejected`), конфиг `memory.validator`.
+- [ ] **Фаза 2 — обучение:** `src/modules/learning/**` (`types/trace/validator/generator/cli/module`),
+      подкоманда `mma learn`, регистрация `LearningModule` в bootstrap.
+- [ ] **Фаза 3 — языковые адаптеры:** `language-adapters.ts` — валидатор работает только
+      по ветке TS (`src/modules/execution/verifier.ts:298`).
 
 ---
 
@@ -132,7 +151,7 @@
 - [ ] Подобрать литературу по верификации/критикам (вторая половина пункта
       «контр-агент для проверки работы»; сам контр-агент сделан — `src/modules/critic/`).
 - [ ] Долги из [`docs/agents/debt.md`](./docs/agents/debt.md) — каждый оплачивается
-      по своему триггеру (правило 9). Активных записей: 14.
+      по своему триггеру (правило 9). Активных записей: 15.
 
 ---
 

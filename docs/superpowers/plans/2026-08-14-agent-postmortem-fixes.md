@@ -1,5 +1,11 @@
 # Agent Post-Mortem Fixes Implementation Plan
 
+> **Статус:** исполнено (2026-10-20) — `isFilePathLike` отбрасывает extension-only токены,
+> удалённые файлы помечаются `[Deleted:]`, session mission + `[User feedback:]`,
+> plan-coverage читает реальную задачу, `kind: "create"|"delete"` + инверсия
+> deliverable-гейта, аудитор с `leftoverFiles` и реальным `tsc`, hard-stop запрещённых
+> Windows-команд. Чекбоксы проставлены по факту.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix the agent-loop failures diagnosed from session `ses_mstda6uo` (deletion task spiralled into a typecheck whack-a-mole; task was lost at compaction; plan gate fought the deletion; stale files kept appearing as facts; the model kept calling nonexistent Windows commands).
@@ -24,7 +30,7 @@
 - Modify: `src/modules/hallucination/js-identifiers.ts:229-239` (`isFilePathLike`)
 - Test: `tests/js-identifiers.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/js-identifiers.test.ts` (inside `describe("isFilePathLike")`):
 
@@ -48,12 +54,12 @@ And inside `describe("extractFileLikeTokens")`:
   });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/js-identifiers.test.ts`
 Expected: FAIL — `isFilePathLike("tsx/.ts")` returns `true` (token with separator is accepted unconditionally).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/modules/hallucination/js-identifiers.ts`, replace the tail of `isFilePathLike`:
 
@@ -80,12 +86,12 @@ export function isFilePathLike(s: string): boolean {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/js-identifiers.test.ts`
 Expected: PASS (all cases, including the pre-existing `dist/app.js.map` / `docs/Report.final`).
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 bun test tests/js-identifiers.test.ts
@@ -104,7 +110,7 @@ git commit -m "fix: reject extension-only path tokens (tsx/.ts) in file extracti
 - Modify: `src/modules/context/manager.ts` (field + `extractFacts` + `compact`)
 - Test: `tests/context-manager.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/context-manager.test.ts` (inside `describe("ContextManager fact extraction")`):
 
@@ -139,12 +145,12 @@ Add to `tests/context-manager.test.ts` (inside `describe("ContextManager fact ex
   });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/context-manager.test.ts`
 Expected: FAIL — `[Files: src/a.js]` still contains the deleted file and no `[Deleted:]` block exists.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/modules/context/manager.ts`:
 
@@ -233,12 +239,12 @@ Declare `const newDeleted: string[] = [];` next to `newFiles` (line ~406).
 		}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/context-manager.test.ts`
 Expected: PASS (all existing context-manager tests plus the new one).
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 bun test tests/context-manager.test.ts
@@ -259,7 +265,7 @@ git commit -m "fix: drop deleted files from compaction file facts, report as [De
 - Modify: `src/modules/context/manager.ts`
 - Test: `tests/context-manager.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/context-manager.test.ts`:
 
@@ -290,12 +296,12 @@ E:/projects/mma_tests/bicycle-shop/src/ProductPage.tsx:270:7: ERROR: Multiple ex
   });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/context-manager.test.ts`
 Expected: FAIL — summary contains `[Task: [plugin:vite:esbuild]...` and not the original task.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/modules/context/manager.ts`:
 
@@ -363,12 +369,12 @@ function looksLikeErrorPaste(text: string): boolean {
 	}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/context-manager.test.ts`
 Expected: PASS — including the pre-existing `resetUserTurn clears the task so a new user message wins` and `does not treat system-summary blocks as the user task`.
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 bun test tests/context-manager.test.ts
@@ -387,7 +393,7 @@ git commit -m "fix: keep the session mission when the user pastes an error/log b
 - Modify: `src/modules/execution/module.ts` (`getTaskText`)
 - Test: `tests/execution-plan-coverage.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/execution-plan-coverage.test.ts`:
 
@@ -429,12 +435,12 @@ it("does not treat the compacted <system-summary> as the plan task", async () =>
 
 (Add the imports `mkdtempSync, rmSync` from `fs`, `join` from `path`, `tmpdir` from `os` at the top of the file if not already present — follow the existing imports in `tests/execution-plan-deliverables.test.ts`.)
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/execution-plan-coverage.test.ts`
 Expected: FAIL — `res.output` contains `Plan may be missing required files from the task: bicycle-shop/src/ProductPage.js, ...`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/modules/execution/module.ts`, replace `getTaskText` (lines ~1053-1060):
 
@@ -460,12 +466,12 @@ In `src/modules/execution/module.ts`, replace `getTaskText` (lines ~1053-1060):
 	}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/execution-plan-coverage.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 bun test tests/execution-plan-coverage.test.ts
@@ -486,7 +492,7 @@ git commit -m "fix: plan coverage reads the real task, not the compacted system-
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Test: `tests/execution-plan-deliverables.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/execution-plan-deliverables.test.ts`:
 
@@ -557,12 +563,12 @@ Add to `tests/execution-plan-deliverables.test.ts`:
 	});
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/execution-plan-deliverables.test.ts`
 Expected: FAIL — first test: `done` still blocked after the file is gone; second test: invalid kind accepted; third test: `kinds`/`kind` unknown so `getStep(1)!.kind` is `undefined`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 3a. `src/modules/execution/planner.ts`:
 
@@ -762,12 +768,12 @@ The empty-files content check below it must be skipped for delete steps — wrap
 
 (Keep the existing `plan.deliverables_missing` unchanged.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/execution-plan-deliverables.test.ts tests/i18n.test.ts`
 Expected: PASS (all 3 new tests + existing deliverable-gate tests + i18n en/ru parity).
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 bun test tests/execution-plan-deliverables.test.ts tests/i18n.test.ts
@@ -787,7 +793,7 @@ git commit -m "feat: model-declared plan step kind (create|delete) with deletion
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Test: `tests/execution-auditor.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/execution-auditor.test.ts`:
 
@@ -842,12 +848,12 @@ describe("parseTypecheckErrors", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/execution-auditor.test.ts`
 Expected: FAIL — delete-kind `done` step still reported `missingFiles`; `leftoverFiles`/`typecheckError` are `undefined` (TS error on `result.leftoverFiles`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 3a. Add fields to `AuditResult` (lines ~95-103):
 
@@ -1024,12 +1030,12 @@ async function runTypecheck(baseDir: string): Promise<string | null> {
 
 (`exec.audit_fail_typecheck` already exists in both files — verify and keep.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/execution-auditor.test.ts tests/i18n.test.ts`
 Expected: PASS. (The `does not run a typecheck when there is no tsconfig.json` test confirms no spawn happens in the tmp dir.)
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 bun test tests/execution-auditor.test.ts tests/i18n.test.ts
@@ -1050,7 +1056,7 @@ git commit -m "feat: auditor understands delete-kind steps and runs a real tsc t
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Test: `tests/windows-commands.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/windows-commands.test.ts`:
 
@@ -1077,12 +1083,12 @@ describe("forbiddenWindowsCommand", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/windows-commands.test.ts`
 Expected: FAIL — module not found (`Cannot find module .../windows-commands`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 3a. Create `src/modules/execution/windows-commands.ts`:
 
@@ -1167,12 +1173,12 @@ In `onAfterTool`, inside the `if (!result.success) { ... }` branch, before `this
 "exec.forbidden_cmd": "ПРЕКРАТИ использовать \"{cmd}\" через bash — это не команда Windows cmd.exe, и она уже неоднократно падала в этой сессии. Используй предназначенный тул: grep → тул grep, ls/dir → list_dir, find → glob, rm → delete_file, sed → edit_file. Больше не вызывай bash для этого."
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/windows-commands.test.ts tests/i18n.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 bun test tests/windows-commands.test.ts tests/i18n.test.ts
@@ -1185,7 +1191,7 @@ git commit -m "feat: hard-stop repeated forbidden Windows commands in the bash t
 
 ## Task 8: Full verification + AGENTS.md changelog
 
-- [ ] **Step 1: Run the full suite**
+- [x] **Step 1: Run the full suite**
 
 ```bash
 bun test
@@ -1194,7 +1200,7 @@ tsc --noEmit
 
 Expected: all tests pass, no type errors. If a pre-existing test asserted the old `Task:`-only behavior or the old audit summary and now fails, update that test to the new intended behavior and re-run.
 
-- [ ] **Step 2: Manual smoke check of the gate behavior**
+- [x] **Step 2: Manual smoke check of the gate behavior**
 
 In a scratch dir (`C:\Users\Alexe\AppData\Local\Temp\opencode\mma-kind-check`), create `a.ts` and run a tiny bun script that drives `ExecutionModule`:
 
@@ -1204,7 +1210,7 @@ bun -e "import {ExecutionModule} from './src/modules/execution/module.ts'; const
 
 Expected: `blocked: true Cannot mark step 1 done: the files it names still exist: a.ts`. Then delete `a.ts` and re-run with `rm a.ts` → expect success.
 
-- [ ] **Step 3: Update AGENTS.md**
+- [x] **Step 3: Update AGENTS.md**
 
 Add a changelog entry at the top of the "Current Version" list (the version list is ordered newest-first; the latest entry is `**37** = ... Version: 0.35.3`). Add:
 
@@ -1212,7 +1218,7 @@ Add a changelog entry at the top of the "Current Version" list (the version list
 - **38** = agent-loop post-mortem fixes (from ses_mstda6uo — a "delete js duplicates" task that spiraled into a 150-message typecheck whack-a-mole): (1) plan steps gained model-declared `kind: "create"|"delete"` — the deliverable gate now inverts for delete steps (files must be GONE), and the final audit treats a done delete-step's missing files as satisfied (leftover files fail it); (2) compaction keeps a session `mission` — a pasted error/log block (`[User feedback:]`) no longer overwrites `[Task:]`; (3) deleted files leave the compaction `[Files:]` list and are reported as `[Deleted:]`; (4) plan-coverage reads the real user task, not the injected `<system-summary>`; (5) `isFilePathLike` rejects extension-only path tokens (`tsx/.ts`) so the gate can't demand "create tsx/.ts"; (6) final audit runs a real `tsc --noEmit --skipLibCheck` (tsconfig present, 90s cap, inconclusive non-blocking) and surfaces the first error via `exec.audit_fail_typecheck`; (7) repeated forbidden Windows commands (`grep/sed/ls/find/rm/...`) in bash are hard-stopped after 2 failures (`exec.forbidden_cmd`). New i18n: `plan.kinds_mismatch`, `plan.kinds_invalid`, `plan.deliverables_remain`, `exec.audit_leftovers`, `exec.forbidden_cmd` (en+ru). New files: `src/modules/execution/windows-commands.ts`. New tests: `windows-commands.test.ts` (+ cases in `js-identifiers`, `context-manager`, `execution-plan-deliverables`, `execution-auditor`, `execution-plan-coverage`). Version: **0.36.0** (MINOR — new plan-schema field + new audit behavior).
 ```
 
-- [ ] **Step 4: Version bump (release process)**
+- [x] **Step 4: Version bump (release process)**
 
 Per AGENTS.md release process — MINOR (new `kinds` parameter on the `plan` tool + final-audit typecheck behavior):
 
@@ -1222,7 +1228,7 @@ npm version minor
 
 (Do this only when actually releasing. If releasing later, update `package.json` then. `git tag` is created by `npm version`.)
 
-- [ ] **Step 5: Commit AGENTS.md**
+- [x] **Step 5: Commit AGENTS.md**
 
 ```bash
 git add AGENTS.md package.json

@@ -1,5 +1,11 @@
 # Empty Chats Prune Implementation Plan
 
+> **Статус:** исполнено частично (сверка 2026-10-20) — `isEmptySession`/`pruneEmpty`,
+> CLI `mma session prune [--dry-run]`, REPL `/sessions prune`, i18n (en/ru), edge-тесты —
+> сделано. Чекбоксы проставлены по факту. **Task 2 (авто-прунинг пустых сессий в `create()`)
+> намеренно снят** — в вебе параллельные вкладки держат пустые сессии, авто-удаление уводило
+> их в dead (см. комментарий `src/modules/session/manager.ts:89-91`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Empty sessions (no user message) are auto-deleted on session create, plus a manual `session prune` command.
@@ -27,7 +33,7 @@
 - Modify: `src/modules/session/manager.ts:1-115`
 - Test: `tests/session-manager.test.ts`
 
-- [ ] **Step 1: Write the failing test** — append to `tests/session-manager.test.ts`:
+- [x] **Step 1: Write the failing test** — append to `tests/session-manager.test.ts`:
 
 ```ts
 it("pruneEmpty removes sessions without user messages and keeps the rest", () => {
@@ -46,12 +52,12 @@ it("pruneEmpty removes sessions without user messages and keeps the rest", () =>
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/session-manager.test.ts`
 Expected: FAIL with `manager.pruneEmpty is not a function`
 
-- [ ] **Step 3: Write minimal implementation** — in `src/modules/session/manager.ts`, add import and methods (place after `delete()`):
+- [x] **Step 3: Write minimal implementation** — in `src/modules/session/manager.ts`, add import and methods (place after `delete()`):
 
 ```ts
 import { getMessageText } from "../../llm/provider";
@@ -90,12 +96,12 @@ pruneEmpty(excludeId?: string): string[] {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/session-manager.test.ts`
 Expected: PASS (all tests, including the new one)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/session/manager.ts tests/session-manager.test.ts
@@ -110,7 +116,7 @@ git commit -m "feat(session): pruneEmpty removes chats without user messages"
 - Modify: `src/modules/session/manager.ts:63-93`
 - Test: `tests/session-manager.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it("create auto-prunes older empty sessions but keeps the new one", () => {
@@ -123,12 +129,12 @@ it("create auto-prunes older empty sessions but keeps the new one", () => {
 
 Note: `stale` is empty (no messages), so creating `fresh` must delete it. `fresh` itself is empty but excluded.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/session-manager.test.ts`
 Expected: FAIL — `manager.get(stale.id)` is not null (no auto-prune yet)
 
-- [ ] **Step 3: Write minimal implementation** — in `create()`, after `this.enforceMaxSessions();` add:
+- [x] **Step 3: Write minimal implementation** — in `create()`, after `this.enforceMaxSessions();` add:
 
 ```ts
 try {
@@ -151,12 +157,12 @@ try {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/session-manager.test.ts`
 Expected: PASS. Also run `bun test tests/session-store.test.ts` — PASS (no regressions).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/session/manager.ts tests/session-manager.test.ts
@@ -173,7 +179,7 @@ git commit -m "feat(session): auto-prune empty chats on session create"
 - Modify: `src/i18n/ru.json` (mirror key)
 - Test: manual (`bun run mma session prune --dry-run`)
 
-- [ ] **Step 1: Add i18n keys** — in `src/i18n/en.json` after `"session.deleted"`:
+- [x] **Step 1: Add i18n keys** — in `src/i18n/en.json` after `"session.deleted"`:
 
 ```json
 "session.pruned": "Pruned {n} empty session(s)",
@@ -189,7 +195,7 @@ In `src/i18n/ru.json` after the `"session.deleted"` line:
 "session.prune_empty": "Пустых сессий нет",
 ```
 
-- [ ] **Step 2: Add the CLI subcommand** — in `src/cli/commands.ts` right after the `delete` subcommand block (ends line 730), insert:
+- [x] **Step 2: Add the CLI subcommand** — in `src/cli/commands.ts` right after the `delete` subcommand block (ends line 730), insert:
 
 ```ts
 session
@@ -230,7 +236,7 @@ Also add the two `cli.*` description keys used above to both locale files:
 "cli.prune_dry_run": "Показать кандидатов без удаления",
 ```
 
-- [ ] **Step 3: Verify manually**
+- [x] **Step 3: Verify manually**
 
 Run: `bun run mma session prune --dry-run`
 Expected: exit 0, prints either `No empty sessions to prune` / `Would prune N...` (fails only if bootstrap itself fails — unrelated to this change).
@@ -238,7 +244,7 @@ Expected: exit 0, prints either `No empty sessions to prune` / `Would prune N...
 Run: `tsc --noEmit`
 Expected: clean (new `t()` keys typecheck — if the i18n `t` is strictly typed and unknown keys fail, add the keys to the type source first).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/cli/commands.ts src/i18n/en.json src/i18n/ru.json
@@ -253,7 +259,7 @@ git commit -m "feat(cli): mma session prune with --dry-run"
 - Modify: `src/cli/repl-commands.ts:1039-1072`
 - Test: manual REPL check
 
-- [ ] **Step 1: Extend the `sessions` command** — change `action: () => {` to `action: (args: string[]) => {` and insert the prune branch as the first statement:
+- [x] **Step 1: Extend the `sessions` command** — change `action: () => {` to `action: (args: string[]) => {` and insert the prune branch as the first statement:
 
 ```ts
 action: (args: string[]) => {
@@ -280,12 +286,12 @@ action: (args: string[]) => {
   // ... rest unchanged
 ```
 
-- [ ] **Step 2: Verify** — `tsc --noEmit` clean; REPL `action` signature `(args: string[])` matches other commands (`new`, `delete` already use it).
+- [x] **Step 2: Verify** — `tsc --noEmit` clean; REPL `action` signature `(args: string[])` matches other commands (`new`, `delete` already use it).
 
 Run: `bun test tests/cli/ 2>&1 | tail -5`
 Expected: green (or pre-existing failures only — compare with `git stash` if unsure).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/cli/repl-commands.ts
@@ -299,7 +305,7 @@ git commit -m "feat(repl): /sessions prune shares pruneEmpty"
 **Files:**
 - Test: `tests/session-manager.test.ts` (append)
 
-- [ ] **Step 1: Add edge-case tests**
+- [x] **Step 1: Add edge-case tests**
 
 ```ts
 it("pruneEmpty keeps sessions with user text and drops assistant-only ones", () => {
@@ -324,7 +330,7 @@ it("pruneEmpty never throws on missing history", () => {
 });
 ```
 
-- [ ] **Step 2: Run full gate**
+- [x] **Step 2: Run full gate**
 
 Run: `bun test tests/session-manager.test.ts tests/session-store.test.ts`
 Expected: PASS
@@ -332,7 +338,7 @@ Expected: PASS
 Run: `bun run quality`
 Expected: PASS (typecheck + lint + fallow). If fallow flags new dead code — remove it; if it flags `isEmptySession` as unused, the CLI/REPL wiring in Tasks 3-4 is missing.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/session-manager.test.ts
