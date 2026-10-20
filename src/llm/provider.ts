@@ -82,6 +82,13 @@ export interface ChatOptions {
 export interface LLMProvider {
   readonly model: string;
   readonly contextWindow: number;
+  /**
+   * Эффективный лимит completion-токенов провайдера (max_tokens). `undefined`
+   * — провайдер сам решит. Нужен потребителям, которые шлют СВОЙ лимит и не
+   * должны резать бюджет провайдера (критик: reasoning-токены съедали
+   * 2048 → finish_reason "length" → fail-open вердикта).
+   */
+  readonly maxCompletionTokens?: number;
 
   chat(
     messages: Message[],

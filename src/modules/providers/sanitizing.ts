@@ -92,6 +92,11 @@ export class SanitizingProvider implements LLMProvider {
     return this.inner.contextWindow;
   }
 
+  /** Лимит completion-токенов провайдера пробрасывается 1:1 (INV-C5). */
+  get maxCompletionTokens(): number | undefined {
+    return this.inner.maxCompletionTokens;
+  }
+
   countTokens(text: string): number {
     return this.inner.countTokens(text);
   }

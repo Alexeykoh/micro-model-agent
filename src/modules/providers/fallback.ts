@@ -66,6 +66,11 @@ export class FallbackProvider implements LLMProvider {
     return this.source.active.contextWindow;
   }
 
+  /** Лимит completion-токенов активного провайдера (INV-C5). */
+  get maxCompletionTokens(): number | undefined {
+    return this.source.active.maxCompletionTokens;
+  }
+
   async *chat(
     messages: Message[],
     tools?: ToolDefinition[],
