@@ -16,6 +16,7 @@ import { runIterationPrologue, type IterationPrologueHost } from "./iteration-pr
 import { runLlmPhase, type LlmPhaseHost } from "./loop-llm";
 import { runToolBatchPhase, type BatchHost } from "./loop-batch";
 import { runFinalGates } from "./loop-gates";
+import { gatherTurnToolEvents } from "./critic-events";
 import { buildLoopResult, type LoopResultHost } from "./loop-result";
 import { accumulateToolTargets } from "./loop-nudges";
 
@@ -135,7 +136,26 @@ export async function executeAgentLoop(
   ) {
     const reason = state.finalizeReason ?? "max_iters";
     logger.diagnostic("info", `Forcing final answer without tools (${reason})`);
-    await ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
+    const text = await ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
+    // INV-C7: форс-финал тоже проходит через критика. Иначе самый длинный
+    // (и самый рискованный) ход остаётся единственным непроверенным.
+    const action = await criticGate.evaluate({
+      state,
+      iteration: state.iteration,
+      logger,
+      contextManager,
+      slog,
+      task: input,
+      planSummary: ctx.deps.planSummary?.() ?? undefined,
+      toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
+      beforeFinish: true,
+      answerText: text,
+      onMeta,
+    });
+    if (action === "retry") {
+      // Критик потребовал починки: один форс-вызов с его требованием.
+      await ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
+    }
     state.stopReason = reason;
   }
 

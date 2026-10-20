@@ -1,11 +1,21 @@
-/** Вентиль контр-агента (критика): проверка мутаций перед финалом. */
+/** Вентиль контр-агента (критика): проверка работы перед финалом. */
 import { t } from "../../i18n/index";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../core/context/manager";
 import type { CriticIssue, CriticVerdict, EvidencePack } from "../../modules/critic/types";
+import { normalizedSignature, syntheticIssue } from "../../modules/critic/issue-key";
 import type { SessionLogger } from "../session-logger";
 import type { OnMeta } from "../types";
 import type { LoopState } from "./loop-state";
+
+export { normalizedSignature } from "../../modules/critic/issue-key";
+
+/**
+ * Жёсткий кап СОВЕТНЫХ кругов за ход (не конфиг — такой же внутренний
+ * потолок, как `MAX_CRITIC_CHECKS`). Совет отдельён от ремонта, чтобы
+ * `concern` не крал бюджет `critical` (maxRepairCycles).
+ */
+const MAX_CRITIC_ADVICE_CYCLES = 1;
 
 /** Зависимости вентиля критика: состояние, логгеры, события тулов хода. */
 export interface CriticGateDeps {
@@ -25,8 +35,8 @@ export interface CriticGateDeps {
    */
   answerText?: string;
   /**
-   * Мета-канал для `retract`: repair отклоняет уже отстримленный черновик,
-   * потребители убирают его до переответа (иначе дубль в ленте).
+   * Мета-канал для `retract`: repair/advice отклоняет уже отстримленный
+   * черновик, потребители убирают его до переответа (иначе дубль в ленте).
    */
   onMeta?: OnMeta;
 }
@@ -52,39 +62,6 @@ export interface CriticGateOptions {
   degradationReason?: () => string | undefined;
 }
 
-/**
- * Грубая нормализация жалобы для ловли near-identical повторов (регистр,
- * пунктуация, пробелы). Настоящие перефразы («ran weather searches» vs
- * «ignored the task») этим не ловятся — их останавливает advice=pass
- * при исчерпанном repair-бюджете, а не эта эвристика.
- *
- * Единственный ключ дедупликации: и повтор-детектор, и набор «уже виденных»
- * используют его, иначе «повтор» и «свежая жалоба» могут разойтись (INV-C2).
- */
-export function normalizedSignature(issue: CriticIssue): string {
-  const body = `${issue.severity}:${issue.claim}`
-    .toLowerCase()
-    .replace(/[^a-z0-9а-яё\s]/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 120);
-  return `~${body}`;
-}
-
-/**
- * Issue-заглушка для вердикта без распарсенных `issues`: статус и сводка
- * модели — достаточное основание для действия. Раньше такой вердикт
- * исчезал молча («pass» без записи в лог) — INV-C2.
- */
-function syntheticIssue(verdict: CriticVerdict): CriticIssue {
-  const text = verdict.summary.trim() || `critic reported ${verdict.status}`;
-  return {
-    severity: verdict.status === "critical" ? "critical" : "concern",
-    claim: text,
-    problem: text,
-  };
-}
-
 function renderIssues(issues: CriticIssue[]): string {
   return issues
     .slice(0, 5)
@@ -101,10 +78,14 @@ function isRepeatedVerdict(state: LoopState, issues: CriticIssue[]): boolean {
 }
 
 /**
- * Вентиль критика: триггерит проверку по мутациям, инжектит вердикт в контекст.
- * Fail-open: сломанный/перебюджетный критик никогда не блокирует агента.
+ * Вентиль критика: триггерит проверку по работе хода, инжектит вердикт в
+ * контекст. Fail-open: сломанный/перебюджетный критик никогда не блокирует
+ * агента.
  */
 export class CriticGate {
+  /** Счётчик советных кругов за ход (гейт живёт один ход). */
+  private adviceCycles = 0;
+
   constructor(private readonly opts: CriticGateOptions) {}
 
   /**
@@ -137,17 +118,29 @@ export class CriticGate {
     // Логируем НЕ-ok вердикт всегда: «critic_check» без следа о вердикте
     // читается как «проверил и сказал ок» (INV-C2).
     this.logVerdict(deps, verdict, issues.length);
-    if (fresh.length === 0) return "pass";
-    if (!this.shouldRepair(deps, verdict, isRepeat)) {
-      // Совет/повтор — не retry: иначе advice крутит модель по кругу до
-      // maxCalls теми же ответами (наблюдалось: 4 идентичных critical подряд).
-      // Повтор дополнительно требует сменить подход, repair-бюджет не тратится.
-      this.injectRepeatOrAdvice(deps, fresh, isRepeat);
+
+    // Повтор тех же жалоб: ремонт не тратим, но модель должна услышать, что
+    // прошлая попытка не прошла (иначе повтор уходит в тишину).
+    if (fresh.length === 0) {
+      if (this.canAdvise()) {
+        this.injectAdvice(deps, issues, true);
+        return "retry";
+      }
       return "pass";
     }
 
-    this.injectRepair(deps, verdict, fresh);
-    return "retry";
+    if (this.shouldRepair(deps, verdict, isRepeat)) {
+      this.injectRepair(deps, verdict, fresh);
+      return "retry";
+    }
+    // `concern` (или critical без бюджета ремонта): совет ДОХОДИТ до модели
+    // — иначе инъекция мертва, и вердикт остаётся без последствий (INV-C6).
+    if (verdict.status === "concern" && this.canAdvise()) {
+      this.injectAdvice(deps, fresh, false);
+      return "retry";
+    }
+    this.logExhausted(deps, verdict);
+    return "pass";
   }
 
   /** Починка положена только свежему critical в пределах repair-бюджета. */
@@ -158,6 +151,11 @@ export class CriticGate {
       deps.state.criticRepairCycles < this.opts.maxRepairCycles &&
       !isRepeat
     );
+  }
+
+  /** Остался ли ещё один советный круг. */
+  private canAdvise(): boolean {
+    return this.adviceCycles < MAX_CRITIC_ADVICE_CYCLES;
   }
 
   /** Fail-open: битый/перебюджетный критик не блокирует агента. */
@@ -180,10 +178,11 @@ export class CriticGate {
     if (deps.state.criticCalls >= this.opts.maxCalls) return false;
     // Единственный вызов — перед финалом (beforeFinish, см. agent.ts):
     // mid-turn ветки по mutationsSinceCritic нет, счётчик — только лог-поле.
-    // Чистый чат (нет тул-событий текущего захода) — нечего верифицировать,
-    // pass без LLM-вызова, бюджет не тратится.
     if (!deps.beforeFinish) return false;
-    return deps.toolEvents.length !== 0;
+    // Проверять нечего: ни работы тулами, ни ответа для оценки. Чат-доставка
+    // (ответ без файлов) — тоже предмет проверки (INV-C7).
+    if (deps.toolEvents.length === 0 && !deps.answerText?.trim()) return false;
+    return true;
   }
 
   private takeFreshIssues(state: LoopState, issues: CriticIssue[]): CriticIssue[] {
@@ -250,17 +249,28 @@ export class CriticGate {
     deps.logger.diagnostic("info", `Critic ${verdict.status}: ${verdict.summary} (${count} issue(s))`);
   }
 
-  /** Совет или директива при повторе: инжектит текст, но НЕ ретраит (возврат — pass). */
-  private injectRepeatOrAdvice(
-    deps: CriticGateDeps,
-    fresh: CriticIssue[],
-    isRepeat: boolean,
-  ): void {
+  /** Бюджеты исчерпаны: вердикт залогирован, ответ принимается как есть. */
+  private logExhausted(deps: CriticGateDeps, verdict: CriticVerdict): void {
+    deps.logger.diagnostic(
+      "warn",
+      `Critic ${verdict.status}: ${verdict.summary} - budget exhausted, accepting the answer`,
+    );
+  }
+
+  /**
+   * Совет: инжектит текст и ТРЕБУЕТ нового ответа (retry). Раньше совет
+   * инжектился в уже завершающийся ход — модель его не видела, и вердикт
+   * оставался без последствий (INV-C6).
+   */
+  private injectAdvice(deps: CriticGateDeps, issues: CriticIssue[], isRepeat: boolean): void {
+    this.adviceCycles++;
+    // Черновик уже в ленте — убираем до переответа, иначе дубль.
+    deps.onMeta?.(t("ui.draft_retracted"), "retract");
     deps.contextManager.addMessage({
       role: "user",
       content: `<system-summary>${isRepeat
-        ? t("critic.repeat", { issues: renderIssues(fresh) })
-        : t("critic.advice", { issues: renderIssues(fresh) })}</system-summary>`,
+        ? t("critic.repeat", { issues: renderIssues(issues) })
+        : t("critic.advice", { issues: renderIssues(issues) })}</system-summary>`,
     });
   }
 
@@ -281,4 +291,4 @@ export class CriticGate {
       })}</system-summary>`,
     });
   }
-}
+}

@@ -150,9 +150,11 @@ describe("Agent in-loop critic", () => {
 
     expect(result.success).toBe(true);
     expect(result.text).toBe("final answer");
-    expect(verify).toHaveBeenCalledTimes(2);
-    expect(t.provider.chat).toHaveBeenCalledTimes(3);
-    expect(userSummaries(t.messages).length).toBe(2);
+    // critical → ремонт (1) → повтор той же жалобы → совет «смени подход» (2).
+    // Дальше бюджеты исчерпаны, ответ принимается.
+    expect(verify).toHaveBeenCalledTimes(3);
+    expect(t.provider.chat).toHaveBeenCalledTimes(4);
+    expect(userSummaries(t.messages).length).toBe(3);
   });
 
   it("accepts normally when the critic returns ok", async () => {
