@@ -1,7 +1,7 @@
 // Хардненинг оценки контекста: инвалидация кэша, калибровка, safety-clamp.
 import { describe, it, expect } from "vitest";
 import { ContextManager } from "../src/core/context/manager";
-import { gatherTurnToolEvents } from "../src/core/agent/critic-gate";
+import { gatherTurnToolEvents } from "../src/core/agent/critic-events";
 
 describe("ContextManager estimate hardening", () => {
   it("recomputes a message's estimate when its content is mutated in place", () => {

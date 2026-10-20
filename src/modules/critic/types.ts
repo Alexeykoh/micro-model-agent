@@ -10,6 +10,9 @@ export interface CriticIssue {
   evidence?: string;
 }
 
+/** Сырые запрошенные критиком проверки (форма и allowlist enforced при разборе). */
+export type RawCriticChecks = Array<{ tool: string; args?: Record<string, unknown> }>;
+
 /** Вердикт критика: статус, сводка, замечания, запрошенные read-only проверки. */
 export interface CriticVerdict {
   status: "ok" | "concern" | "critical";
@@ -20,7 +23,7 @@ export interface CriticVerdict {
    * allowlist и кап enforced в `parseChecks` (`src/modules/critic/tools.ts`),
    * вслепую не доверяем.
    */
-  checks?: Array<{ tool: string; args?: Record<string, unknown> }>;
+  checks?: RawCriticChecks;
 }
 
 /** Пакет доказательств: задача, план, изменённые файлы, команды, дайджест тулов. */

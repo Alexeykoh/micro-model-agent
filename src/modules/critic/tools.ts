@@ -1,5 +1,5 @@
 // Ограниченный read-only контур проверок критика (Phase 2, Agent-as-a-Judge).
-import type { CriticVerdict } from "./types";
+import type { CriticVerdict, RawCriticChecks } from "./types";
 
 /**
  * Ограниченный read-only контур верификации (Phase 2, Agent-as-a-Judge).
@@ -41,13 +41,17 @@ export function isAllowedCriticTool(tool: string): boolean {
 
 /**
  * Проверки из вердикта критика (сырой массив `checks`, allowlist + кап).
+ * Принимает и сам вердикт, и «голый» массив проверок: проход 2 читает
+ * проверки независимо от `status` (ответ `{"checks":[...]}` без статуса —
+ * валидный запрос, а не мусор).
  * Чужое — неизвестные тулы, не-объектные args — молча дропается:
  * критик теряет только глубину верификации, не корректность.
  */
-export function parseChecks(verdict: CriticVerdict | null): CriticCheck[] {
-  if (!verdict?.checks || !Array.isArray(verdict.checks)) return [];
+export function parseChecks(source: CriticVerdict | RawCriticChecks | null | undefined): CriticCheck[] {
+  const raw = Array.isArray(source) ? source : source?.checks;
+  if (!raw || !Array.isArray(raw)) return [];
   const out: CriticCheck[] = [];
-  for (const c of verdict.checks) {
+  for (const c of raw) {
     if (out.length >= MAX_CRITIC_CHECKS) break;
     const check = asCriticCheck(c);
     if (check) out.push(check);
