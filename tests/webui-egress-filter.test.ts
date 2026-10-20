@@ -11,10 +11,14 @@ import { doFetch, withServer } from "./helpers/webui-server";
 const WORKSPACE = "C:\\work\\proj";
 const HOST = hostname();
 
-/** Минимальный live-конфиг с включённой политикой (web читает его на запрос). */
+/**
+ * Live-конфиг с включённой политикой (web читает его на запрос).
+ * `trustLocalClients: false` — эти кейсы проверяют внешнего API-клиента;
+ * доверенный loopback-клиент — в `webui-egress-loopback-trust.test.ts`.
+ */
 function config(over: Partial<typeof DEFAULT_DATA_POLICY> = {}): AppConfig {
   return {
-    security: { dataPolicy: { ...DEFAULT_DATA_POLICY, ...over } },
+    security: { dataPolicy: { ...DEFAULT_DATA_POLICY, trustLocalClients: false, ...over } },
   } as unknown as AppConfig;
 }
 

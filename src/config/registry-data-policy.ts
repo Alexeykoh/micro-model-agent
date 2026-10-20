@@ -63,6 +63,7 @@ function dpList(
 /** Дефы слоя DLP. */
 export const DATA_POLICY_DEFS: ConfigKeyDef[] = [
   dpBool("enabled", (d) => d.enabled, (d, v) => { d.enabled = v; }),
+  dpBool("trustLocalClients", (d) => d.trustLocalClients, (d, v) => { d.trustLocalClients = v; }),
   {
     key: "security.dataPolicy.pathMode",
     aliases: [],

@@ -45,21 +45,34 @@ export function labelOf(name: string): string {
   return human.charAt(0).toUpperCase() + human.slice(1);
 }
 
+// DLP-псевдонимы вида `<PATH:abc>` приходят только внешнему API-клиенту.
+const HIDDEN_TOKEN = /<(?:PATH|HOST|ENV|PII|SECRET|FILE):[^>]+>/;
+
+/** True, если строка содержит DLP-псевдоним (внешний клиент). */
+export function isHiddenText(text: unknown): boolean {
+  return typeof text === "string" && HIDDEN_TOKEN.test(text);
+}
+
+/** Заменяет псевдонимы на локализованный маркер — токен не читается как ошибка. */
+export function hiddenText(text: string): string {
+  return text.replace(new RegExp(HIDDEN_TOKEN.source, "g"), t("web.egress.hidden"));
+}
+
 export function argText(args: unknown): string {
   if (!args || typeof args !== "object") return "";
   const rec = args as Record<string, unknown>;
   const keys = ["path", "file", "dir", "command", "query", "url", "pattern", "name", "id", "text", "prompt"];
   for (const key of keys) {
-    if (typeof rec[key] === "string" && rec[key]) return rec[key] as string;
+    if (typeof rec[key] === "string" && rec[key]) return hiddenText(rec[key] as string);
   }
   const keys2 = Object.keys(rec);
   if (!keys2.length) return "";
   const val = rec[keys2[0]];
-  if (typeof val === "string") return val;
+  if (typeof val === "string") return hiddenText(val);
   if (typeof val === "number" || typeof val === "boolean") return String(val);
   try {
     const json = JSON.stringify(args);
-    return json === "{}" ? "" : json.slice(0, 120);
+    return json === "{}" ? "" : hiddenText(json.slice(0, 120));
   } catch {
     return "";
   }

@@ -5,7 +5,7 @@ import { I18N, t, pluralCount } from "../i18n.js";
 import { feed, settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { renderFooter } from "../footer.js";
-import { fmtTokens } from "../format.js";
+import { fmtTokens, hiddenText } from "../format.js";
 import { copyText } from "../../md.js";
 
 function usageRow(label: string, value: string, cls?: string): HTMLElement {
@@ -209,7 +209,7 @@ export function renderWorkspace(h: Dict): void {
   renderFooter(
     wsLine,
     {
-      workspace: h.workspace,
+      workspace: typeof h.workspace === "string" ? hiddenText(h.workspace) : h.workspace,
       version: h.version,
       updateAvailable: h.updateAvailable || undefined,
       dirLabel: t("web.env.dir"),

@@ -20,6 +20,7 @@ import { createGuard } from "../security/data-policy/guard";
 import { TokenMap } from "../security/data-policy/tokens";
 import type { AppConfig } from "../../config/types";
 import type { DataPolicyConfig, EgressGuard } from "../security/data-policy/types";
+import { isLoopbackAddress } from "./util";
 
 /** Режим ответа: JSON/текст (буферизуем) или SSE (по блокам). */
 export type FilterMode = "json" | "sse";
@@ -33,11 +34,14 @@ type AnyFn = (...args: unknown[]) => unknown;
  */
 const tokenMap = new TokenMap();
 
-let cached: {
+interface CachedGuard {
   config: DataPolicyConfig;
   workspace: string;
   guard: EgressGuard<unknown, unknown>;
-} | null = null;
+}
+
+/** Два варианта guard'а: доверенный loopback-клиент и внешний API-клиент. */
+const cache = new Map<boolean, CachedGuard>();
 
 /** Узкий вход: живой конфиг + корень workspace. Годится web и service. */
 export interface EgressState {
@@ -45,19 +49,40 @@ export interface EgressState {
   workspace?: string;
 }
 
-/** Guard для API-egress; `undefined` — политика выключена (kill-switch). */
-export function apiGuard(s: EgressState): EgressGuard<unknown, unknown> | undefined {
+/**
+ * Guard для конкретного запроса: доверие — loopback-адрес peer'а при
+ * включённом `trustLocalClients` (INV-L1). `undefined` — политика выключена.
+ */
+export function apiGuardFor(
+  s: EgressState,
+  remoteAddress: string | undefined,
+): EgressGuard<unknown, unknown> | undefined {
+  const trusted =
+    (s.config?.security?.dataPolicy?.trustLocalClients ?? true) && isLoopbackAddress(remoteAddress);
+  return apiGuard(s, trusted);
+}
+
+/**
+ * Guard для API-egress; `undefined` — политика выключена (kill-switch).
+ * `trusted` — клиент пришёл с loopback (оператор webui): пути/PII видны,
+ * `secret` маскируется всегда (INV-L2).
+ */
+export function apiGuard(
+  s: EgressState,
+  trusted = false,
+): EgressGuard<unknown, unknown> | undefined {
   const config = s.config?.security?.dataPolicy ?? DEFAULT_DATA_POLICY;
   if (!config.enabled) return undefined;
   const workspace = s.workspace ?? process.cwd();
+  const cached = cache.get(trusted);
   if (cached && cached.config === config && cached.workspace === workspace) return cached.guard;
   const guard = createGuard({
     config,
-    target: { kind: "api", trusted: false },
+    target: { kind: "api", trusted },
     ctx: policyContext(workspace),
     map: tokenMap,
   });
-  cached = { config, workspace, guard };
+  cache.set(trusted, { config, workspace, guard });
   return guard;
 }
 

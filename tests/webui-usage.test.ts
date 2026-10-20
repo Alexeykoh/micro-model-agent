@@ -282,10 +282,9 @@ describe("webui usage metrics", () => {
       const res = await doFetch(`${base}/api/state`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { state: HostStateSnapshot };
-      // Блок на месте, но абсолютный корень DLP-редактируется (default-on).
-      expect(body.state.workspace).toBeDefined();
-      expect(body.state.workspace).not.toBe("E:/proj");
-      expect(String(body.state.workspace)).toContain("<PATH:");
+      // Loopback-клиент оператора — доверенный: корень не редактируется
+      // (спека 2026-10-20; внешний клиент по-прежнему получает псевдоним).
+      expect(body.state.workspace).toBe("E:/proj");
       expect(body.state.instructions?.disabled).toBe(true);
       expect(body.state.projectMap?.indexed).toBe(false);
     });

@@ -6,7 +6,7 @@ import { streamStateFor, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import {
   FILE_TOOLS, OPENABLE_TOOLS, LINK_TOOLS,
-  categoryOf, labelOf, formatMs, verbosity, firstOutputLine,
+  categoryOf, labelOf, formatMs, verbosity, firstOutputLine, hiddenText, isHiddenText,
 } from "../format.js";
 import { copyText } from "../../md.js";
 import { imageCard } from "./image-card.js";
@@ -71,17 +71,21 @@ function cardFor(name: string, args: Dict, sid: string | undefined, ok: boolean)
   if (FILE_TOOLS.indexOf(name) !== -1) {
     const path = args.path || args.file || args.dir;
     if (!path) return null;
-    const shown = displayPathFromRoot(path);
+    const rawPath = String(path);
+    // Внешнему клиенту путь приходит псевдонимом: ссылка на файл всё равно
+    // не сработает, поэтому показываем маркер вместо битого URL.
+    const hidden = isHiddenText(rawPath);
+    const shown = hidden ? hiddenText(rawPath) : displayPathFromRoot(path);
     const row = el("div", "filerow " + categoryOf(name));
     row.appendChild(el("span", "g", "◇"));
     row.appendChild(el("span", "lab", labelOf(name)));
     row.appendChild(el("span", "sep", " · "));
-    if (OPENABLE_TOOLS.indexOf(name) !== -1) {
-      const openLink = el("a", "path", shown || String(path));
-      openLink.href = "/api/file?path=" + encodeURIComponent(String(path));
+    if (OPENABLE_TOOLS.indexOf(name) !== -1 && !hidden) {
+      const openLink = el("a", "path", shown || rawPath);
+      openLink.href = "/api/file?path=" + encodeURIComponent(rawPath);
       openLink.target = "_blank";
       openLink.rel = "noopener noreferrer";
-      openLink.title = t("web.card.open_title") + " · " + String(path);
+      openLink.title = t("web.card.open_title") + " · " + rawPath;
       // Left click opens the Files tab with the tree revealed to the file (the
       // hook is registered by app.js); modifiers / middle-click keep the raw
       // preview in a new browser tab as a fallback.
@@ -96,8 +100,8 @@ function cardFor(name: string, args: Dict, sid: string | undefined, ok: boolean)
       });
       row.appendChild(openLink);
     } else {
-      const s = el("span", "tail", shown || String(path));
-      s.title = String(path);
+      const s = el("span", "tail", shown || rawPath);
+      s.title = hidden ? shown : rawPath;
       row.appendChild(s);
     }
     const copyBtn = el("button", "copy-btn");
@@ -106,7 +110,7 @@ function cardFor(name: string, args: Dict, sid: string | undefined, ok: boolean)
     copyBtn.setAttribute("aria-label", t("web.card.copy_title"));
     copyBtn.appendChild(icon("copy"));
     copyBtn.addEventListener("click", () => {
-      copyText(String(path)).then((ok: boolean) => {
+      copyText(rawPath).then((ok: boolean) => {
         copyBtn.replaceChildren(icon(ok ? "check" : "copy"));
         if (!ok) { const st = row.querySelector(".st"); if (st) st.textContent = " ⚠"; }
         window.setTimeout(() => copyBtn.replaceChildren(icon("copy")), 1400);
@@ -115,7 +119,7 @@ function cardFor(name: string, args: Dict, sid: string | undefined, ok: boolean)
     row.appendChild(copyBtn);
     row.appendChild(el("span", "st", ok === false ? " ✗" : ok === true ? " ✓" : ""));
     if (ok === false) row.dataset.fail = "1";
-    if (/\.drawio(\.xml)?$/i.test(String(path)) && verbosity() === "verbose") {
+    if (/\.drawio(\.xml)?$/i.test(rawPath) && verbosity() === "verbose") {
       row.appendChild(el("span", "detail", "↳ " + t("web.card.drawio_hint")));
     }
     appendTo(feed, row);

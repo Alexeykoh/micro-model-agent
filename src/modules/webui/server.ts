@@ -30,7 +30,7 @@ import { handleFilesApi } from "./file/files-api";
 import { handleSetupApi } from "./settings/setup-api";
 import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp/lsp-api";
 import { handleUpdatePost } from "./chat/update-api";
-import { apiGuard, filterResponse } from "./egress";
+import { apiGuardFor, filterResponse } from "./egress";
 import { readEnv } from "../../config/env";
 export { tryOpenBrowser } from "./util"; // реэкспорт для CLI
 
@@ -186,7 +186,7 @@ export function handleRequest(
       return;
     }
     setAuthCookie(res, s);
-    handleEvents(req, filterResponse(res, apiGuard(s), "sse"), s);
+    handleEvents(req, filterResponse(res, apiGuardFor(s, req.socket.remoteAddress), "sse"), s);
     return;
   }
 
@@ -224,7 +224,7 @@ export function handleRequest(
       return;
     }
     setAuthCookie(res, s);
-    handleApi(req, filterResponse(res, apiGuard(s), "json"), reqUrl, s);
+    handleApi(req, filterResponse(res, apiGuardFor(s, req.socket.remoteAddress), "json"), reqUrl, s);
     return;
   }
 
