@@ -1076,6 +1076,8 @@
   "indexer.stack_scripts": "скрипты",
   "tool.friendly.project_map": "Карта проекта",
   "config.decryption_warning": "Предупреждение: не удалось расшифровать конфигурацию: {error}",
+  "config.critic_timeout_migrated": "critic.timeoutMs: устаревший дефолт {from} мс заменён на {to} мс",
+  "config.critic_timeout_short": "critic.timeoutMs ({value} мс) короче провайдерского дедлайна ({provider} мс) — критик оборвётся раньше ответа модели",
   "config.encryption_warning": "Предупреждение: не удалось зашифровать конфигурацию: {error}",
   "config.migrate_start": "Миграция конфига в domain-формат...",
   "config.migrate_done": "Миграция завершена. Создано {count} domain файлов. Legacy сохранён как config.json.bak.",

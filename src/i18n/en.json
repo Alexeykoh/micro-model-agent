@@ -801,6 +801,8 @@
   "repl.export": "Export a session to a file",
   "repl.export_usage": "Usage: /export [<id|name>] [--format md|json|jsonl] [--out <path>] [--no-redact] [--compact]",
   "config.header": "Managed settings",
+  "config.critic_timeout_migrated": "critic.timeoutMs: legacy default {from} ms replaced with {to} ms",
+  "config.critic_timeout_short": "critic.timeoutMs ({value} ms) is shorter than the provider deadline ({provider} ms) - the critic will be cut off before the model answers",
   "config.col_setting": "Setting",
   "config.col_value": "Value",
   "config.col_domain": "Domain",
