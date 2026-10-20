@@ -43,6 +43,13 @@ const DEFAULT_MAX_TOKENS = 2048;
 /** Дефолтный таймаут вызова критика: не короче провайдерского request-дедлайна. */
 const DEFAULT_TIMEOUT_MS = LLM_REQUEST_TIMEOUT_MS;
 
+/**
+ * Префикс диагностики деградации. Потребитель (г��йт) снимает его, чтобы
+ * положить РЕАЛЬНУЮ причину отказа в `critic_error` сессии (INV-C4):
+ * «не дождался» и «ответ упёрся в лимит токенов» — разные вещи.
+ */
+export const CRITIC_DEGRADED_PREFIX = "critic_degraded: ";
+
 /** Раннер одной проверки критика: тул + args → успех и вывод. */
 export interface CriticRunCheck {
   (tool: string, args: Record<string, unknown>): Promise<{ ok: boolean; output: string }>;
@@ -109,7 +116,7 @@ export class CriticClient {
   }
 
   private degrade(reason: string): void {
-    this.opts.onDiagnostic?.(`critic_degraded: ${reason}`);
+    this.opts.onDiagnostic?.(`${CRITIC_DEGRADED_PREFIX}${reason}`);
   }
 
   /**
