@@ -72,7 +72,9 @@ export function admissionDiagnosticSink(
 /**
  * Сигнал DLP-egress (INV-15): `aborted` — fail-closed прервал вызов,
  * `degraded` — осознанный fail-open. Пишется в лог активной сессии; `redacted`
- * (штатная редакция) не засоряет журнал, но попадает в per-session журнал хода.
+ * (штатная редакция) — тоже оставляет след, но только когда редакция
+ * **необратима** (класс `secret`): псевдонимизированные пути/PII восстанавливаются
+ * и дают запись на каждый вызов LLM, их счётчик живёт в бейдже webui (INV-DLP-2).
  *
  * Маршрутизация — по `diag.sessionId`, который штампует фабрика guard'а: sink
  * остаётся процесс-глобальным, а параллельные сессии больше не смешиваются.
@@ -82,7 +84,22 @@ export function egressDiagnosticSink(
 ): (diag: GuardDiagnostic) => void {
   return (diag: GuardDiagnostic) => {
     recordEgressTurn(diag);
-    if (diag.outcome === "redacted") return;
+    if (diag.outcome === "redacted") {
+      // INV-S4: необратимая редакция видна в `session.jsonl` — только метаданные
+      // (счётчик и вид цели), без оригиналов и без token id (INV-DLP-1).
+      const secrets = diag.stats?.secret ?? 0;
+      if (secrets > 0) {
+        sessionManager.appendLog({
+          ts: new Date().toISOString(),
+          type: "egress_redacted",
+          content: `DLP: отредактировано секретов — ${secrets}${egressTargetSuffix(diag.target)}`,
+          source: "module:security.data-policy",
+          module: "security.data-policy",
+          operation: diag.operation,
+        });
+      }
+      return;
+    }
     const blocked = diag.outcome === "aborted";
     sessionManager.appendLog({
       ts: new Date().toISOString(),
@@ -96,6 +113,13 @@ export function egressDiagnosticSink(
       recoverable: !blocked,
     });
   };
+}
+
+/** Вид цели для журнала редакции: хост и доверие (без путей и значений). */
+function egressTargetSuffix(target: GuardDiagnostic["target"]): string {
+  if (target?.kind !== "provider") return "";
+  const host = target.host ?? "?";
+  return ` (провайдер: ${host}, ${target.trusted ? "доверенный" : "внешний"})`;
 }
 
 /**

@@ -80,6 +80,13 @@ export const DATA_POLICY_DEFS: ConfigKeyDef[] = [
   dpBool("egress.env", (d) => d.egress.env, (d, v) => { d.egress.env = v; }),
   dpBool("egress.pii", (d) => d.egress.pii, (d, v) => { d.egress.pii = v; }),
   dpBool("egress.fileContent", (d) => d.egress.fileContent, (d, v) => { d.egress.fileContent = v; }),
+  dpBool(
+    "egress.secrets",
+    (d) => d.egress.secrets ?? DEFAULT_DATA_POLICY.egress.secrets,
+    (d, v) => {
+      d.egress.secrets = v;
+    },
+  ),
   dpBool("allowImagesToExternal", (d) => d.allowImagesToExternal, (d, v) => { d.allowImagesToExternal = v; }),
   dpBool("failClosed", (d) => d.failClosed, (d, v) => { d.failClosed = v; }),
   {

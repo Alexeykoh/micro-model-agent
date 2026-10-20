@@ -95,6 +95,13 @@ export interface DataPolicyConfig {
     env: boolean;
     pii: boolean;
     fileContent: boolean;
+    /**
+     * Маскировать секреты на egress (INV-S5 спеки
+     * `2026-10-20-dlp-secret-masking-precision-design.md`). По умолчанию `true`:
+     * секрет не отдаётся даже доверенной цели (loopback) — §6 спеки 2026-10-19.
+     * Оператор с полностью локальным стеком выключает ключ осознанно.
+     */
+    secrets: boolean;
   };
   /** Доверенные хосты провайдера (loopback всегда доверенный). */
   trustedHosts: string[];

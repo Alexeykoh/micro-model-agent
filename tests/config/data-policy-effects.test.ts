@@ -10,7 +10,7 @@ import { needsRebuild } from "../../src/config/effects";
 describe("security.dataPolicy.* config effects", () => {
   it("содержит все ключи политики", () => {
     const keys = DATA_POLICY_DEFS.map((d) => d.key);
-    expect(keys).toHaveLength(15);
+    expect(keys).toHaveLength(16);
     for (const key of keys) expect(key.startsWith("security.dataPolicy.")).toBe(true);
   });
 

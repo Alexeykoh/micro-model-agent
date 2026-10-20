@@ -39,6 +39,7 @@ export const DEFAULT_DATA_POLICY: DataPolicyConfig = {
     env: true,
     pii: true,
     fileContent: true,
+    secrets: true,
   },
   trustedHosts: [],
   // Локальный браузер оператора — не «внешний API-клиент»: иначе UI показывает

@@ -55,3 +55,49 @@ describe("egress guard diagnostics (INV-15)", () => {
     expect(entries[0].cause).toBe("boom");
   });
 });
+
+/**
+ * INV-S4 (спека `2026-10-20-dlp-secret-masking-precision-design.md`): необратимая
+ * редакция (секреты) оставляет след в журнале сессии — иначе пользователь видит
+ * `[SECRET]` в ответе модели без объяснения. Псевдонимизированные пути/PII
+ * обратимы и дают запись на каждый вызов LLM — их журнал не засоряет.
+ */
+describe("журнал редакции (INV-S4)", () => {
+  const sinkWith = () => {
+    const entries: Array<{ type: string; content?: string }> = [];
+    const fake = {
+      appendLog: (entry: { type: string; content?: string }) => entries.push(entry),
+    } as unknown as SessionManager;
+    return { entries, sink: egressDiagnosticSink(fake) };
+  };
+
+  it("секреты оставляют запись с метаданными", () => {
+    const { entries, sink } = sinkWith();
+    sink({
+      module: "security.data-policy",
+      operation: "sanitizeChat",
+      kind: "egress",
+      outcome: "redacted",
+      stats: { secret: 2 },
+      target: { kind: "provider", trusted: true, host: "localhost" },
+      sessionId: "ses_1",
+    });
+    expect(entries.map((e) => e.type)).toEqual(["egress_redacted"]);
+    expect(entries[0].content).toContain("2");
+    expect(entries[0].content).toContain("localhost");
+  });
+
+  it("псевдонимизированные пути журнал не засоряют", () => {
+    const { entries, sink } = sinkWith();
+    sink({
+      module: "security.data-policy",
+      operation: "sanitizeChat",
+      kind: "egress",
+      outcome: "redacted",
+      stats: { path: 5 },
+      target: { kind: "provider", trusted: false, host: "api.example.com" },
+      sessionId: "ses_1",
+    });
+    expect(entries).toHaveLength(0);
+  });
+});
