@@ -19,9 +19,13 @@ const MASK: Record<DataClass, string> = {
   "file-content": "[FILE]",
 };
 
-/** Классы, редактируемые для данной цели (secret — всегда; INV-D4/D2). */
+/** Классы, редактируемые для данной цели (secret — по флагу; INV-D4/D2). */
 export function enabledClasses(config: DataPolicyConfig, target: EgressTarget): Set<DataClass> {
-  const set = new Set<DataClass>(["secret"]);
+  const set = new Set<DataClass>();
+  // Секреты — по отдельному флагу: политика «не отдаём секреты даже доверенному»
+  // (§6 спеки 2026-10-19) держится дефолтом `true`, но оператор с полностью
+  // локальным стеком может её выключить (INV-S5 спеки 2026-10-20).
+  if (config.egress.secrets) set.add("secret");
   // `trusted` покрывает оба вида цели: доверенный провайдер (loopback/allowlist)
   // и loopback-клиент webui (E2). `kind` сам по себе больше не форсирует редакцию.
   if (!target.trusted) {

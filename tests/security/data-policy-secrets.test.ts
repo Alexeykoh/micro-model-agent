@@ -95,3 +95,21 @@ describe("INV-S6: политика доверенных не меняется", 
     expect(out).not.toContain("sk-abcdefghij0123456789");
   });
 });
+
+describe("INV-S5: маскирование секретов выключается ключом", () => {
+  it("egress.secrets=false — секреты не редактируются", () => {
+    const src = "api_key=sk-abcdefghij0123456789";
+    const out = local(src, { ...cfg, egress: { ...cfg.egress, secrets: false } });
+    expect(out).toBe(src);
+  });
+
+  it("путь и PII при этом всё ещё редактируются для внешней цели", () => {
+    const guard = createGuard({
+      config: { ...cfg, egress: { ...cfg.egress, secrets: false } },
+      target: { kind: "provider", trusted: false, host: "api.example.com" },
+      ctx,
+    });
+    const r = guard.sanitizeChat([{ role: "user", content: "open C:\\work\\proj\\src\\a.ts" }]);
+    expect(JSON.stringify(r.messages)).not.toContain("C:\\work\\proj");
+  });
+});

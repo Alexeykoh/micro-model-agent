@@ -2214,6 +2214,8 @@
   "config.key.security.dataPolicy.egress.pii": "маскировать PII",
   "config.desc.security.dataPolicy.egress.pii": "Маскировать персональные данные (РФ/РБ) перед отправкой провайдеру.",
   "config.key.security.dataPolicy.egress.fileContent": "блокировать содержимое файлов",
+  "config.key.security.dataPolicy.egress.secrets": "маскировать секреты",
+  "config.desc.security.dataPolicy.egress.secrets": "Маскировать секреты (ключи, токены, пароли) перед отправкой провайдеру. По умолчанию включено: секрет не отдаётся даже локальному провайдеру. Выключите, если стек полностью локальный.",
   "config.desc.security.dataPolicy.egress.fileContent": "Блокировать утечку содержимого файлов, совпавших с glob, провайдеру.",
   "config.key.security.dataPolicy.allowImagesToExternal": "изображения наружу",
   "config.desc.security.dataPolicy.allowImagesToExternal": "Разрешить отправку изображений недоверенному провайдеру.",

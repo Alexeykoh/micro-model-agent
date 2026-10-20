@@ -2211,6 +2211,8 @@
   "config.key.security.dataPolicy.egress.pii": "mask PII",
   "config.desc.security.dataPolicy.egress.pii": "Mask personal data (RF/BY) before sending to a provider.",
   "config.key.security.dataPolicy.egress.fileContent": "block file content",
+  "config.key.security.dataPolicy.egress.secrets": "mask secrets",
+  "config.desc.security.dataPolicy.egress.secrets": "Mask secrets (keys, tokens, passwords) before sending to a provider. On by default: a secret is not handed even to a local provider. Turn it off for a fully local stack.",
   "config.desc.security.dataPolicy.egress.fileContent": "Block content of glob-matched files from leaving to a provider.",
   "config.key.security.dataPolicy.allowImagesToExternal": "images to external",
   "config.desc.security.dataPolicy.allowImagesToExternal": "Allow images to be sent to an untrusted provider.",
