@@ -109,8 +109,9 @@ describe("critic gate keeps a non-ok verdict (W2, INV-C2)", () => {
       verify: async () => ({ status: "concern", summary: "numbers are unverified", issues: [] }),
       buildPack: (x: never) => x,
     });
-    const action = await gate.evaluate(d.deps);
-    expect(action).toBe("pass");
+    // Вердикт без issues не теряется: из summary рождается issue-заглушка, и
+    // совет доходит до модели (INV-C2 + INV-C6).
+    expect(await gate.evaluate(d.deps)).toBe("retry");
     expect(d.events).toContain("critic_verdict");
   });
 
@@ -129,9 +130,9 @@ describe("critic gate keeps a non-ok verdict (W2, INV-C2)", () => {
     });
     expect(await gate.evaluate(d.deps)).toBe("retry");
     const messagesAfterFirst = d.messages.length;
-    // Тот же вердикт второй раз: повтор — ремонт не тратим, но вердикт виден.
-    expect(await gate.evaluate(d.deps)).toBe("pass");
-    expect(d.messages.length).toBe(messagesAfterFirst);
+    // Тот же вердикт второй раз: повтор (ремонт не тратим), вердикт виден.
+    expect(await gate.evaluate(d.deps)).toBe("retry");
     expect(d.events.filter((e) => e === "critic_verdict").length).toBe(2);
+    expect(d.messages.length).toBeGreaterThanOrEqual(messagesAfterFirst);
   });
 });

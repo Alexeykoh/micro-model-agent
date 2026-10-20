@@ -74,10 +74,12 @@ describe("CriticGate", () => {
     expect(verdictCall).toBeUndefined();
   });
 
-  it("injects advice without retry on concern", async () => {
+  it("injects advice and demands a new answer on concern", async () => {
+    // Раньше совет инжектился в уже завершающийся ход: модель его не видела,
+    // и вердикт оставался без последствий (INV-C6).
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => concern, buildPack: (d: any) => d });
     const d = deps();
-    expect(await gate.evaluate(d)).toBe("pass");
+    expect(await gate.evaluate(d)).toBe("retry");
     expect(d.contextManager.addMessage).toHaveBeenCalledTimes(1);
     expect(d.state.criticRepairCycles).toBe(0);
   });
@@ -111,7 +113,9 @@ describe("CriticGate", () => {
     d.state.seenCriticIssues.add(
       normalizedSignature({ severity: "critical", claim: "Missing file!", problem: "p" }),
     );
-    expect(await gate.evaluate(d)).toBe("pass");
+    // Повтор не ремонтирует (бюджет ремонта не тратится) — но и не тонет:
+    // модель получает совет «смени подход».
+    expect(await gate.evaluate(d)).toBe("retry");
     expect(d.state.criticRepairCycles).toBe(0);
   });
 
@@ -119,7 +123,10 @@ describe("CriticGate", () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => critical, buildPack: (d: any) => d });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("retry");
-    expect(await gate.evaluate(d)).toBe("pass"); // repair budget spent -> accept
+    // Ремонт потрачен: следующая такая же жалоба — это повтор (совет «смени
+    // подход»), а не второй ремонт.
+    expect(await gate.evaluate(d)).toBe("retry");
+    expect(d.state.criticRepairCycles).toBe(1);
   });
 
   it("emits retract on repair so clients drop the streamed draft", async () => {
@@ -147,8 +154,9 @@ describe("CriticGate", () => {
   it("dedupes identical issues (second identical verdict adds nothing)", async () => {
     const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => concern, buildPack: (d: any) => d });
     const d = deps();
-    expect(await gate.evaluate(d)).toBe("pass");
+    expect(await gate.evaluate(d)).toBe("retry");
     const added = (d.contextManager.addMessage as any).mock.calls.length;
+    // Повтор: бюджет советов исчерпан → pass, и мёртвой инъекции нет.
     expect(await gate.evaluate(d)).toBe("pass");
     expect((d.contextManager.addMessage as any).mock.calls.length).toBe(added);
   });
