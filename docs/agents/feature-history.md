@@ -77,8 +77,9 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
   (чистка слота + сброс трекера, если удаляемая была текущей). `setPlan` пишет и в слот;
   `trackerRef`-сеттер зеркалит слот для план-тулов, пишущих мимо `setPlan`
   (`abort/switch/delete/purge`); `flushSessionPlan` — для внутренних `saveActive`.
-- **Точки вызова:** bootstrap (`restorePlan` → `switchSession(active)` — усыновление legacy
-  `active.json` стартовой сессией), REPL `/new`/`/resume` (+`/delete` → `forgetSession`,
+- **Точки вызова:** bootstrap (`restoreStartupPlanFrom` — сессия грузит СВОЙ слот;
+  legacy `active.json` усыновляется только возобновлённой сессией с историей, свежая
+  стартует пустой), REPL `/new`/`/resume` (+`/delete` → `forgetSession`,
   `/resume` печатает `◇ <план>`-статус), web `POST /api/sessions|/activate` → `switchSession`,
   `DELETE /api/sessions/:id` → `forgetSession` (коллаборатор `WebUiState.execModule`).
   Фронт после activate/create сразу тянет `/api/state` и перерисовывает сайдбар

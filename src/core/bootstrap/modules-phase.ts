@@ -41,6 +41,7 @@ import { readMmaVersion } from "../version";
 import { dryRunOverflow, overflowHint } from "../prompt-overflow";
 import { isOneShotMode, loadAgentsMdBlocks, registerBuiltinPlugin } from "./state";
 import { ModuleHost, registerOwnedTools } from "../module-host";
+import { restoreStartupPlanFrom } from "./startup-plan";
 import { defaultOutputBus } from "../../output";
 import { globalPluginsDir as resolveGlobalPluginsDir, projectMmaDir } from "../../config/paths";
 import type { ModulesPhaseInput, ModulesPhase } from "./state";
@@ -120,15 +121,11 @@ async function registerCoreModules(
     config.errorWebSearch?.threshold ?? 5,
   );
   execModule.setAutoAdvance(config.execution?.autoAdvance ?? true);
-  // План следует за сессией: restorePlan поднимает legacy-глобальный план,
-  // switchSession усыновляет его в слот стартовой сессии (или грузит её свой).
+  // План следует за сессией: стартовая сессия грузит СВОЙ слот. Старый
+  // глобальный active.json поднимается только для возобновлённой сессии с
+  // историей — иначе он просачивался в свежий (автосозданный) чат.
   // REPL рисует чеклист только на plan/todo-событиях — без спроса не печатаем.
-  execModule.restorePlan();
-  try {
-    execModule.switchSession(input.sessionManager.getActive());
-  } catch {
-    // fail-open: без сессии трекер остаётся как поднял restorePlan
-  }
+  restoreStartupPlanFrom(execModule, input.sessionManager);
   moduleRegistry.register(execModule);
   execModule.setHallucinationDetector(hallucinationDetector);
 

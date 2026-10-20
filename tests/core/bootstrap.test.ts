@@ -124,11 +124,11 @@ describe("bootstrap", () => {
     }
   }, 30_000);
 
-  it("restores a disk-resident plan in a fresh session (project state)", async () => {
-    // A plan in .mma/plans/active.json belongs to the PROJECT, not to a
-    // session — bootstrap must restore the tracker so `plan show` works
-    // and the REPL checklist renders on plan/todo tool events. Nothing is
-    // printed unprompted: rendering is event-driven (repl-plan.test.ts).
+  it("does not leak a disk-resident plan into a fresh session", async () => {
+    // Global .mma/plans/active.json is a legacy mirror since plans became
+    // per-session (2026-09-29 spec): bootstrap must load only the active
+    // session's own slot. Adopting the global plan on every start put an old
+    // plan into a brand-new chat (reported: "старый план просачивается").
     const dir = tempDir();
     try {
       mkdirSync(join(dir, ".mma", "plans"), { recursive: true });
@@ -142,7 +142,7 @@ describe("bootstrap", () => {
         }),
       );
       const { execModule } = await bootstrap(dir, dir);
-      expect(execModule.getActivePlan()?.id).toBe("stale-plan");
+      expect(execModule.getActivePlan()).toBeNull();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

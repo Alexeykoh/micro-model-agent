@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { PlanStore } from "../src/modules/execution/plan-store";
 import { PlanCreator } from "../src/modules/execution/planner";
 import { ExecutionModule } from "../src/modules/execution/module";
+import { restoreStartupPlan } from "../src/core/bootstrap/startup-plan";
 import { mkdirSync, rmSync } from "fs";
 import { join } from "path";
 
@@ -150,5 +151,55 @@ describe("ExecutionModule.switchSession", () => {
     const slot = mod.getStore().loadSessionActive("ses_a")!;
     expect(slot.steps[0].status).toBe("done");
     expect(slot.steps[1].status).toBe("pending");
+  });
+});
+
+describe("restoreStartupPlan", () => {
+  beforeEach(() => {
+    mkdirSync(TEST_DIR, { recursive: true });
+  });
+  afterEach(() => {
+    rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  it("свежая сессия не наследует старый глобальный план", () => {
+    const mod = new ExecutionModule(TEST_DIR);
+    mod.getStore().saveActive(mkPlan("Stale plan", ["old step"]));
+
+    restoreStartupPlan(mod, { id: "ses_fresh", messageCount: 0 });
+
+    expect(mod.getActivePlan()).toBeNull();
+    // И не оставляет его в своём слоте: иначе план воскреснет при возврате.
+    expect(mod.getStore().loadSessionActive("ses_fresh")).toBeNull();
+  });
+
+  it("возобновлённая сессия без слота подхватывает legacy-план", () => {
+    const mod = new ExecutionModule(TEST_DIR);
+    mod.getStore().saveActive(mkPlan("Legacy plan", ["l1"]));
+
+    restoreStartupPlan(mod, { id: "ses_resumed", messageCount: 3 });
+
+    expect(mod.getActivePlan()!.title).toContain("Legacy plan");
+    expect(mod.getStore().loadSessionActive("ses_resumed")!.title).toContain("Legacy plan");
+  });
+
+  it("свой слот сессии важнее глобального зеркала", () => {
+    const mod = new ExecutionModule(TEST_DIR);
+    mod.getStore().saveActive(mkPlan("Other session plan", ["o1"]));
+    mod.getStore().saveSessionActive("ses_mine", mkPlan("My plan", ["m1"]));
+
+    restoreStartupPlan(mod, { id: "ses_mine", messageCount: 4 });
+
+    expect(mod.getActivePlan()!.title).toContain("My plan");
+    expect(mod.getStore().loadSessionActive("ses_mine")!.title).toContain("My plan");
+  });
+
+  it("без активной сессии трекер пуст", () => {
+    const mod = new ExecutionModule(TEST_DIR);
+    mod.getStore().saveActive(mkPlan("Stale plan", ["old step"]));
+
+    restoreStartupPlan(mod, { id: null, messageCount: 0 });
+
+    expect(mod.getActivePlan()).toBeNull();
   });
 });

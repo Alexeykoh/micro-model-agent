@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **Старый план просачивался в новую сессию при старте.** Bootstrap безусловно
+  поднимал глобальный `.mma/plans/active.json` и `switchSession` усыновлял его в
+  слот только что созданной (пустой) сессии — план из прошлого чата появлялся в
+  новом и переживал перезапуск. Теперь стартовая сессия грузит только свой
+  per-session слот (`src/core/bootstrap/startup-plan.ts`); legacy `active.json`
+  поднимается лишь для возобновлённой сессии с историей и без своего слота.
+
 ## [0.9.0] - 2026-10-20
 
 ### Added
