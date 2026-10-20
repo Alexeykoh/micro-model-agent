@@ -6,6 +6,7 @@ import { categoryOf, labelOf, argText, formatMs } from "../format.js";
 import { renderMarkdown } from "../../md.js";
 import { api } from "../api.js";
 import { imageCard } from "./image-card.js";
+import { egressBadge } from "./egress.js";
 import type { Dict } from "../core/store/types.js";
 import {
   feedHasContent, clearEmpty, scrollToBottom, activeFeed, liveFeed,
@@ -102,6 +103,11 @@ function renderHistory(feed: HTMLElement, entries: Dict[]): void {
       case "error":
         feed.appendChild(el("div", "errline", "✗ " + (entry.text || "")));
         break;
+      case "egress": {
+        const badge = egressBadge(entry.egress);
+        if (badge) feed.appendChild(badge);
+        break;
+      }
       case "system":
         if (entry.text) feed.appendChild(el("div", "sysline", entry.text));
         break;

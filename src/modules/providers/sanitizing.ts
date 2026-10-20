@@ -29,6 +29,8 @@ export interface ProviderEgressGuard {
 export interface EgressEntryRef {
   type: string;
   baseUrl: string;
+  /** Сессия сборки: журнал DLP маршрутизирует диагностику по ней. */
+  sessionId?: string;
 }
 
 /** Фабрика guard'а: `undefined` — политика выключена (kill-switch). */

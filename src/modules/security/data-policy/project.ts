@@ -5,7 +5,7 @@
  */
 import { classify } from "./classify";
 import type { PolicyContext } from "./context";
-import type { DataClass, EgressTarget, Finding } from "./types";
+import type { DataClass, EgressTarget, EgressTokenRef, Finding } from "./types";
 import type { DataPolicyConfig } from "./types";
 import { isTaggedFileContent, untagFileContent } from "./file-content";
 import { TokenMap } from "./tokens";
@@ -43,6 +43,8 @@ export interface TextProjection {
   changed: boolean;
   stats: Partial<Record<DataClass, number>>;
   findings: Finding[];
+  /** Псевдонимы находок — для дедупликации в журнале хода. */
+  tokens: EgressTokenRef[];
 }
 
 export interface ProjectPolicy {
@@ -63,30 +65,32 @@ function pathEnd(text: string, pos: number): number {
 export function projectText(text: string, policy: ProjectPolicy): TextProjection {
   const { config, target, ctx, map } = policy;
   if (!text || !config.enabled) {
-    return { text, changed: false, stats: {}, findings: [] };
+    return { text, changed: false, stats: {}, findings: [], tokens: [] };
   }
   // §4.8: содержимое из-block пути режется по пути, а не по PII-паттернам.
   // Доверенный (локальный) egress получает оригинал без служебного тега.
   if (isTaggedFileContent(text)) {
     if (target.trusted || !config.egress.fileContent) {
-      return { text: untagFileContent(text), changed: true, stats: {}, findings: [] };
+      return { text: untagFileContent(text), changed: true, stats: {}, findings: [], tokens: [] };
     }
     return {
       text: MASK["file-content"],
       changed: true,
       stats: { "file-content": 1 },
       findings: [],
+      tokens: [{ dataClass: "file-content", kind: "file-content", token: MASK["file-content"] }],
     };
   }
   const classes = enabledClasses(config, target);
   const findings = classify(text, ctx).filter(
     (f) => classes.has(f.dataClass) && f.confidence >= config.minConfidence,
   );
-  if (findings.length === 0) return { text, changed: false, stats: {}, findings };
+  if (findings.length === 0) return { text, changed: false, stats: {}, findings, tokens: [] };
 
   let out = "";
   let cursor = 0;
   const stats: Partial<Record<DataClass, number>> = {};
+  const tokens: EgressTokenRef[] = [];
   for (const f of findings) {
     if (f.start < cursor) continue;
     let end = f.end;
@@ -96,12 +100,14 @@ export function projectText(text: string, policy: ProjectPolicy): TextProjection
       end = pathEnd(text, f.end);
     }
     out += text.slice(cursor, f.start);
-    out += pseudonym ? map.tokenFor(text.slice(f.start, end), f.dataClass) : MASK[f.dataClass];
+    const token = pseudonym ? map.tokenFor(text.slice(f.start, end), f.dataClass) : MASK[f.dataClass];
+    out += token;
+    tokens.push({ dataClass: f.dataClass, kind: f.kind, token });
     cursor = end;
     stats[f.dataClass] = (stats[f.dataClass] ?? 0) + 1;
   }
   out += text.slice(cursor);
-  return { text: out, changed: out !== text, stats, findings };
+  return { text: out, changed: out !== text, stats, findings, tokens };
 }
 
 /** Результат глубокой проекции произвольной структуры. */
@@ -109,11 +115,13 @@ export interface Projected<T> {
   messages: T;
   changed: boolean;
   stats: Partial<Record<DataClass, number>>;
+  tokens: EgressTokenRef[];
 }
 
 /** Рекурсивно спроецировать структуру (строки внутри объектов/массивов). */
 export function projectDeep<T>(value: T, policy: ProjectPolicy): Projected<T> {
   const stats: Partial<Record<DataClass, number>> = {};
+  const tokens: EgressTokenRef[] = [];
   let changed = false;
   const walk = (v: unknown): unknown => {
     if (typeof v === "string") {
@@ -122,6 +130,7 @@ export function projectDeep<T>(value: T, policy: ProjectPolicy): Projected<T> {
       for (const [k, n] of Object.entries(r.stats)) {
         stats[k as DataClass] = (stats[k as DataClass] ?? 0) + (n ?? 0);
       }
+      tokens.push(...r.tokens);
       return r.text;
     }
     if (Array.isArray(v)) return v.map(walk);
@@ -133,5 +142,5 @@ export function projectDeep<T>(value: T, policy: ProjectPolicy): Projected<T> {
     }
     return v;
   };
-  return { messages: walk(value) as T, changed, stats };
+  return { messages: walk(value) as T, changed, stats, tokens };
 }

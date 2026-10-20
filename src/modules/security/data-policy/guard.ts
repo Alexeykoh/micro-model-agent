@@ -80,8 +80,8 @@ export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unkn
   const map = opts.map ?? new TokenMap();
   const policy: ProjectPolicy = { config, target, ctx, map };
 
-  const diag = (d: Omit<GuardDiagnostic, "module">): void => {
-    opts.onDiagnostic?.({ module: "security.data-policy", ...d });
+  const diag = (d: Omit<GuardDiagnostic, "module" | "target">): void => {
+    opts.onDiagnostic?.({ module: "security.data-policy", target, ...d });
   };
 
   const sumStats = (
@@ -108,15 +108,26 @@ export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unkn
             : { value: messages, removed: false };
         const msgProj = projectDeep(stripped.value, policy);
         sumStats(stats, msgProj.stats);
+        const tokens = [...msgProj.tokens];
         let toolsOut = tools;
         let changed = msgProj.changed || stripped.removed;
         if (tools) {
           const toolProj = projectDeep(tools, policy);
           toolsOut = toolProj.messages;
           sumStats(stats, toolProj.stats);
+          tokens.push(...toolProj.tokens);
           changed = changed || toolProj.changed;
         }
-        if (changed) diag({ operation: "sanitizeChat", kind: "egress", outcome: "redacted", count: Object.values(stats).reduce((a, b) => a + b, 0) });
+        if (changed) {
+          diag({
+            operation: "sanitizeChat",
+            kind: "egress",
+            outcome: "redacted",
+            count: Object.values(stats).reduce((a, b) => a + b, 0),
+            stats,
+            tokens,
+          });
+        }
         return { messages: msgProj.messages, tools: toolsOut, changed, stats };
       } catch (e) {
         const cause = e instanceof Error ? e.message : String(e);

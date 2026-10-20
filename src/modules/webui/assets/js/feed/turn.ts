@@ -11,6 +11,7 @@ import {
 } from "./core.js";
 import { finishMd, finishThink } from "./stream.js";
 import { finishToolEnd, appendImageCards } from "./tool-render.js";
+import { egressBadge } from "./egress.js";
 
 export function onToolStart(data: Dict): void {
   const feed = feedForEvent(data.sessionId);
@@ -85,6 +86,10 @@ export function onTurnEnd(data: Dict): void {
     if (parts.length) appendTo(feed, el("div", "metric", "⟡ " + parts.join(" · ")));
     // The visible turn-end banner is redundant noise; keep the screen-reader cue.
     announce(t("web.turn.end", { count: data.toolCalls || 0 }));
+  }
+  if (data.egress) {
+    const badge = egressBadge(data.egress);
+    if (badge) appendTo(feed, badge);
   }
   const plain = st.turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
   appendActionsRow(feed, plain, st.turnMd);
