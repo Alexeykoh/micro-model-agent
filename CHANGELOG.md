@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-20
+
+### Added
+
+- **Web UI: per-turn DLP egress badge.** Every answer now carries a small badge
+  showing what the data-policy guard actually sent to the provider in that turn:
+  the destination host plus counts for paths, hosts, PII, secrets, machine and
+  env values. A click opens a popup with the classes, PII kinds and destination —
+  never the original values or internal token ids. The badge is shown for clean
+  turns too while data policy is enabled, and is persisted as an `egress_turn`
+  session event, so it survives reopening the session from history. Diagnostics
+  from the title-generation call are merged into the same turn aggregate and
+  deduplicated by token id (masked values without an id take the per-class
+  maximum per call). Closes debt `egress-diagnostics-parallel`.
+
+### Fixed
+
+- **Web UI egress filter treated loopback clients as remote.** With
+  `security.dataPolicy.egressFilter` enabled, opening `mma web` on the same
+  machine still redacted paths and tool output as if the browser were a remote
+  tenant. Loopback clients are now trusted by default (real paths, secrets still
+  masked by the data policy); set `security.dataPolicy.trustLocalClients: false`
+  to keep redaction for every client, e.g. when SSH port forwarding makes a
+  remote browser look local.
+
 ## [0.8.1] - 2026-10-19
 
 ### Fixed
