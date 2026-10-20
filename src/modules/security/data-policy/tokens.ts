@@ -19,13 +19,15 @@ const LABEL: Record<string, string> = {
   "file-content": "FILE",
 };
 
-/** Регулярка токенов: `<LABEL:hex>`. */
-const TOKEN_RE = /<([A-Z]+):([0-9a-f]{8,})>/g;
+/** Регулярка токенов: `<LABEL:hex>`. Регистр hex не важен (INV-S3). */
+const TOKEN_RE = /<([A-Za-z]+):([0-9a-f]{8,})>/gi;
 
 /** Карта токенов (значение → токен и обратно). */
 export class TokenMap {
   private valueToToken = new Map<string, string>();
   private tokenToValue = new Map<string, string>();
+  /** Индекс в нижнем регистре: модель может написать hex в верхнем регистре (INV-S3). */
+  private tokenToValueLower = new Map<string, string>();
 
   /** Токен для значения (создаёт при первом обращении, идемпотентно). */
   tokenFor(value: string, dataClass: DataClass): string {
@@ -35,16 +37,19 @@ export class TokenMap {
     const token = `<${label}:${randomBytes(6).toString("hex")}>`;
     this.valueToToken.set(value, token);
     this.tokenToValue.set(token, value);
+    this.tokenToValueLower.set(token.toLowerCase(), value);
     return token;
   }
 
   /** Значение по токену, если он наш (иначе undefined — чужой токен не трогаем). */
   valueFor(token: string): string | undefined {
-    return this.tokenToValue.get(token);
+    const exact = this.tokenToValue.get(token);
+    if (exact !== undefined) return exact;
+    return this.tokenToValueLower.get(token.toLowerCase());
   }
 
   has(token: string): boolean {
-    return this.tokenToValue.has(token);
+    return this.valueFor(token) !== undefined;
   }
 
   get size(): number {

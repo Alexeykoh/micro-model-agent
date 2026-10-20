@@ -113,3 +113,29 @@ describe("INV-S5: маскирование секретов выключаетс
     expect(JSON.stringify(r.messages)).not.toContain("C:\\work\\proj");
   });
 });
+
+describe("INV-S3: токен восстанавливается независимо от регистра", () => {
+  const external = () =>
+    createGuard({
+      config: cfg,
+      target: { kind: "provider", trusted: false, host: "api.example.com" },
+      ctx,
+    });
+
+  it("hex в верхнем регистре — тот же токен", () => {
+    const g = external();
+    const src = "open C:\\work\\proj\\src\\a.ts";
+    const projected = String(
+      (g.sanitizeChat([{ role: "user", content: src }]).messages as Array<{ content: string }>)[0]
+        .content,
+    );
+    const token = projected.match(/<PATH:[0-9a-f]+>/)?.[0] ?? "";
+    expect(token).not.toBe("");
+    expect(g.rehydrateArgs(token.toUpperCase())).toBe("C:\\work\\proj");
+  });
+
+  it("чужая метка не восстанавливается", () => {
+    const g = external();
+    expect(g.rehydrateArgs("<PATH:deadbeefdeadbeef>")).toBe("<PATH:deadbeefdeadbeef>");
+  });
+});
