@@ -12,6 +12,7 @@ import type { ToolContext } from "../../tools/types";
 import type { Diagnostic } from "../../output/types";
 import { moduleOf } from "../../output";
 import type { GuardDiagnostic } from "../../modules/security/data-policy/types";
+import { recordEgressTurn } from "../../modules/security/data-policy/turn-journal";
 
 /** Зависимости сборки ToolContext. */
 export interface ToolContextInput {
@@ -71,16 +72,16 @@ export function admissionDiagnosticSink(
 /**
  * Сигнал DLP-egress (INV-15): `aborted` — fail-closed прервал вызов,
  * `degraded` — осознанный fail-open. Пишется в лог активной сессии; `redacted`
- * (штатная редакция) не засоряет журнал.
+ * (штатная редакция) не засоряет журнал, но попадает в per-session журнал хода.
  *
- * DEBT(egress-diagnostics-parallel): sink процесс-глобальный, в параллельных
- * сессиях он указывает на последнюю созданную — маршрутизация по sessionId
- * отложена.
+ * Маршрутизация — по `diag.sessionId`, который штампует фабрика guard'а: sink
+ * остаётся процесс-глобальным, а параллельные сессии больше не смешиваются.
  */
 export function egressDiagnosticSink(
   sessionManager: SessionManager,
 ): (diag: GuardDiagnostic) => void {
   return (diag: GuardDiagnostic) => {
+    recordEgressTurn(diag);
     if (diag.outcome === "redacted") return;
     const blocked = diag.outcome === "aborted";
     sessionManager.appendLog({

@@ -38,6 +38,13 @@ export interface Finding {
   hidden?: boolean;
 }
 
+/** Псевдоним одной находки: только для дедупликации в журнале хода. */
+export interface EgressTokenRef {
+  dataClass: DataClass;
+  kind: string;
+  token: string;
+}
+
 /** Диагностика (только метаданные, без оригинала) — INV-15/§9. */
 export interface GuardDiagnostic {
   module: "security.data-policy";
@@ -48,6 +55,29 @@ export interface GuardDiagnostic {
   count?: number;
   /** Причина отказа классификатора (для `aborted`/`passed`; без значений). */
   cause?: string;
+  /** Сессия вызова (E1); без неё журнал хода диагностику игнорирует. */
+  sessionId?: string;
+  /** Цель egress: провайдер/API, доверие, хост. */
+  target?: EgressTarget;
+  /** Счётчики по классам за вызов (включая повторы). */
+  stats?: Partial<Record<DataClass, number>>;
+  /** Псевдонимы находок; наружу (SSE/история/лог) не попадают. */
+  tokens?: EgressTokenRef[];
+}
+
+/**
+ * Агрегат DLP-редакции за ход — единственная форма, которая уходит в SSE и
+ * `session.jsonl`. Без оригиналов и token id (INV-DLP-1).
+ */
+export interface EgressTurnSummary {
+  /** Уникальные отредактированные значения. */
+  total: number;
+  /** По классам (уникальные значения; секреты — max per kind). */
+  stats: Partial<Record<DataClass, number>>;
+  /** Виды находок по классам (`email`, `phone`, `windows-abs`, …). */
+  kinds: Partial<Record<DataClass, string[]>>;
+  /** Назначение: внешний/локальный провайдер + хост. */
+  targets: Array<{ kind: "provider"; trusted: boolean; host?: string }>;
 }
 
 /** Конфиг политики (`security.dataPolicy.*`). */

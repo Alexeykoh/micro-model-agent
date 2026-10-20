@@ -14,6 +14,7 @@
 import type { ServerResponse } from "node:http";
 import type { SessionLogEntry } from "../../session/store";
 import type { SessionMessage } from "../../session/types";
+import type { EgressTurnSummary } from "../../security/data-policy/types";
 import { getMessageText } from "../../../llm/provider";
 import { redactContextSecrets } from "../../../core/api";
 import { stripAnsi } from "../../../ui/line-math";
@@ -31,7 +32,8 @@ export type HistoryKind =
   | "system"
   | "plan"
   | "context"
-  | "error";
+  | "error"
+  | "egress";
 
 /** Нормализованная запись для браузера; `kind` выбирает визуальную форму. */
 export interface HistoryEntry {
@@ -46,6 +48,8 @@ export interface HistoryEntry {
   duration?: number;
   /** URL сохранённых картинок тула (`/api/sessions/:id/images/:name`). */
   images?: string[];
+  /** DLP-агрегат хода (`kind: "egress"`). */
+  egress?: EgressTurnSummary;
 }
 
 function scrub(text: string | undefined): string | undefined {
@@ -96,6 +100,8 @@ function mapLogEntry(e: SessionLogEntry, sessionId?: string): HistoryEntry | nul
       return { ts: e.ts, kind: "plan", text: scrub(e.content) };
     case "error":
       return { ts: e.ts, kind: "error", text: scrub(e.content) };
+    case "egress_turn":
+      return e.egress ? { ts: e.ts, kind: "egress", egress: e.egress } : null;
     default:
       // system (текст системного промпта из slog.logSystem) и context
       // (снапшоты "context snapshot at session start") — внутренняя

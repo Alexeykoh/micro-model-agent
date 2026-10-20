@@ -13,6 +13,7 @@ import { gzipSync, gunzipSync } from "zlib";
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionEncryptionConfig } from "../../config/types";
 import type { DiagnosticEvent, Source } from "../../output";
+import type { EgressTurnSummary } from "../security/data-policy/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
 
 /** События онбординга (`meet`/`init`) — явный союз вместо `onboarding_${string}` (W11). */
@@ -30,7 +31,7 @@ export interface SessionLogEntry {
     | "llm_usage" | "session_start" | "baseline_typecheck"
     | "reasoning_control" | "context_probe" | "output"
     | "critic_check" | "critic_verdict" | "critic_escalation"
-    | DiagnosticEvent | "claim_retry" | "service_task"
+    | DiagnosticEvent | "claim_retry" | "service_task" | "egress_turn"
     | OnboardingEvent;
   /**
    * Источник записи (INV-13), обязателен. `llm_usage` пишет origin измерения
@@ -61,6 +62,8 @@ export interface SessionLogEntry {
   contextLimit?: number;
   toolCount?: number;
   toolNames?: string[];
+  /** DLP-агрегат хода (`egress_turn`): классы/PII/назначение, без значений. */
+  egress?: EgressTurnSummary;
   // Поля context-событий (снапшот / статистика итерации)
   window?: number;
   systemBudget?: number;

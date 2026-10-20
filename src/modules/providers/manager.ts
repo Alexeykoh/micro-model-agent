@@ -205,7 +205,11 @@ export class ProviderManager {
     }, this.registry);
     // E1: единственная точка сборки — обёртка DLP здесь закрывает обе фабрики
     // (активную и managed) и failover (FallbackProvider читает `manager.active`).
-    const egress = getEgressGuard({ type: entry.type, baseUrl: entry.baseUrl ?? "" });
+    const egress = getEgressGuard({
+      type: entry.type,
+      baseUrl: entry.baseUrl ?? "",
+      sessionId: this.opts.getSessionId?.(),
+    });
     if (egress) provider = new SanitizingProvider(provider, egress);
     this.cache.set(key, provider);
     return provider;

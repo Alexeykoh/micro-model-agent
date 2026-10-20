@@ -12,12 +12,15 @@ import type { PolicyContext } from "./context";
 import { createGuard } from "./guard";
 import { DEFAULT_DATA_POLICY } from "./defaults";
 import { TokenMap } from "./tokens";
-import type { EgressGuard, GuardDiagnostic } from "./types";
+import type { EgressGuard, EgressTarget, GuardDiagnostic } from "./types";
+import { noteEgressTarget } from "./turn-journal";
 
 /** Минимальный вид записи провайдера (security не импортирует providers-типы). */
 export interface ProviderEntryRef {
   type: string;
   baseUrl: string;
+  /** Сессия, для которой собирается провайдер (маршрутизация журнала DLP). */
+  sessionId?: string;
 }
 
 /** Хост `baseUrl`: пробуем как есть, затем с `http://` (URL без схемы). */
@@ -88,12 +91,15 @@ export function createProviderEgressFactory(
     const host = providerHost(entry.baseUrl);
     // Не смогли распарсить хост — считаем внешним (fail-closed), а не доверенным.
     const trusted = host !== undefined && isTrustedHost(host, config.trustedHosts);
+    const target: EgressTarget = { kind: "provider", trusted, host };
+    // Назначение нужно и чистому ходу (0 редакций) — запоминаем при сборке.
+    noteEgressTarget(entry.sessionId, target);
     return createGuard({
       config,
-      target: { kind: "provider", trusted, host },
+      target,
       ctx: deps.ctx,
       map,
-      onDiagnostic: (d) => diagnosticSink?.(d),
+      onDiagnostic: (d) => diagnosticSink?.(entry.sessionId ? { ...d, sessionId: entry.sessionId } : d),
     });
   };
 }

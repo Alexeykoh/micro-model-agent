@@ -12,6 +12,8 @@ import { pushState, releaseBusy, reserveBusy, syncBusy } from "./session-status"
 import { makeForwarder } from "./forward";
 import { makeRunAgent } from "./run-agent";
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
+import { beginEgressTurn, endEgressTurn } from "../../security/data-policy/turn-journal";
+import { attachEgressTurn } from "./egress-turn";
 import {
   parseMessageBody,
   readBody,
@@ -93,8 +95,11 @@ function runRunnerTurn(
     runner.contextManager.addPendingImage({ type: "image_url", image_url: { url } });
   }
   s.activeSessionId = sessionId;
+  const dlpEnabled = s.config?.security?.dataPolicy?.enabled ?? true;
+  if (dlpEnabled) beginEgressTurn(sessionId);
   const sink = (ev: SseEvent): void => {
-    broadcast({ sessionId, ...ev }, s);
+    const withEgress = attachEgressTurn(runner.sessionManager, sessionId, ev);
+    broadcast({ sessionId, ...withEgress }, s);
   };
   const ownerRef = { current: sessionId as string | null };
   const forwarder = makeForwarder(s, sink, {
@@ -113,6 +118,9 @@ function runRunnerTurn(
   });
   pushState(s, sessionId);
   runAgent.run(text).catch((err: unknown) => {
+    // Ход не дошёл до turn_end — агрегат DLP отбрасываем, чтобы он не попал
+    // в следующий ход этой сессии.
+    if (dlpEnabled) endEgressTurn(sessionId);
     // Тот же контракт владения, что у legacy: turn_end уже сбросил слот —
     // второй error не шлём, репортим только незапустившийся сабмит.
     if (releaseBusy(s, token, sessionId)) {
