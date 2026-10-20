@@ -339,3 +339,4 @@ manual? }`** (INV-9/10; поле обязательно — enforcement в `Tool
 
 Релиз: обновить `CHANGELOG.md` + `package.json` → тег `vX.Y.Z` → GitHub Actions соберёт
 артефакты под 5 платформ и опубликует Release с `latest.json`.
+**npm publish не используется** — раздача только через GitHub Releases.
