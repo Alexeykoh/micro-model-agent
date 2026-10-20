@@ -25,7 +25,8 @@ export function enabledClasses(config: DataPolicyConfig, target: EgressTarget): 
   // Секреты — по отдельному флагу: политика «не отдаём секреты даже доверенному»
   // (§6 спеки 2026-10-19) держится дефолтом `true`, но оператор с полностью
   // локальным стеком может её выключить (INV-S5 спеки 2026-10-20).
-  if (config.egress.secrets) set.add("secret");
+  // `undefined` (конфиг без нового ключа) = прежнее поведение — секреты прячем.
+  if (config.egress.secrets !== false) set.add("secret");
   // `trusted` покрывает оба вида цели: доверенный провайдер (loopback/allowlist)
   // и loopback-клиент webui (E2). `kind` сам по себе больше не форсирует редакцию.
   if (!target.trusted) {

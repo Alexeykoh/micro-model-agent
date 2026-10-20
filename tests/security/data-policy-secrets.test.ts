@@ -112,6 +112,15 @@ describe("INV-S5: маскирование секретов выключаетс
     const r = guard.sanitizeChat([{ role: "user", content: "open C:\\work\\proj\\src\\a.ts" }]);
     expect(JSON.stringify(r.messages)).not.toContain("C:\\work\\proj");
   });
+
+  it("конфиг без нового ключа ведёт себя как раньше (секреты прячем)", () => {
+    const src = "api_key=sk-abcdefghij0123456789";
+    const out = local(src, {
+      ...cfg,
+      egress: { ...cfg.egress, secrets: undefined as unknown as boolean },
+    });
+    expect(out).not.toContain("sk-abcdefghij0123456789");
+  });
 });
 
 describe("INV-S3: токен восстанавливается независимо от регистра", () => {
