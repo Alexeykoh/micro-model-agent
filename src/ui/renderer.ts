@@ -11,7 +11,7 @@ import {
   toolAccent,
   type Verbosity,
 } from "./theme";
-import { recordLastAction } from "./action-log";
+import { recordToolAction } from "./action-log";
 import { sanitizeOutput } from "./sanitize-output";
 
 import { getTerminalWidth } from "./table";
@@ -32,7 +32,7 @@ export interface RendererOptions {
   channel?: OutputChannel;
   /**
    * Корень workspace: абсолютные пути внутри показываются короткими
-   * относительными в шапках тулов (корень агент и так знает).
+   * относительными в шапках тулов.
    */
   baseDir?: string;
   /** Сколько деталей рендерить (см. `docs/design/ui/STYLE.md`). */
@@ -70,8 +70,7 @@ function stripAnsi(text: string): string {
 const SPINNERLESS_TOOLS = new Set(["question", "approve"]);
 
 /**
- * Read-only тулы разведки. В quiet прогон таких сворачивается в одну строку
- * `│ N actions ✓`; мутирующие/исполняющие всегда видимы.
+ * Read-only тулы разведки. В quiet прогон сворачивается в `│ N actions ✓`.
  */
 const RECON_TOOLS = new Set([
   "read_file",
@@ -102,7 +101,6 @@ interface ReconItem {
 /**
  * Ведущий маркер каждого действия. В стиле один маркер (`◇`) на все тулы:
  * категории передаются локализованным ярлыком, а не глифом.
- * Функция ради вызывающих с явным `icon`.
  */
 export function toolMarker(_tool: string): string {
   return glyph.action;
@@ -157,8 +155,8 @@ function truncateArg(text: string, max = 60): string {
 }
 
 /**
- * Человекочитаемая сводка аргументов. Структурные/экшен-тулы несут сырой JSON,
- * который потёк бы в чат, — им короткая локализованная фраза вместо него.
+ * Человекочитаемая сводка аргументов. Структурные тулы несут сырой JSON,
+ * который потёк бы в чат, — им короткая локализованная фраза.
  */
 export function humanArgs(tool: string, args: Record<string, unknown>): string {
   if (tool === "plan") {
@@ -232,9 +230,7 @@ export function humanArgs(tool: string, args: Record<string, unknown>): string {
 
 /**
  * Локализованный человеческий ярлык тула. Системные имена (`read_file`, `bash`, …)
- * НЕ показываются юзеру ни в одной локали — см. `docs/design/ui/STYLE.md`.
- * Сырой идентификатор — лишь ключ поиска; без friendly-перевода откатываемся на
- * общий локализованный ярлык, но не на сам идентификатор.
+ * НЕ показываются юзеру — см. `docs/design/ui/STYLE.md`.
  */
 function friendlyTool(tool: string): string {
   const key = `tool.friendly.${tool}`;
@@ -254,7 +250,7 @@ export class Renderer {
   private spinner: Spinner;
   private fmt: FormattingStream;
   private channel: OutputChannel;
-  private width: number;
+  private termWidth: number;
   private baseDir?: string;
   private verbosity: Verbosity;
   private card: {
@@ -280,10 +276,7 @@ export class Renderer {
   private thinkingLabel = "";
   private textStarted = false;
   private reconBuffer: ReconItem[] = [];
-  /**
-   * Отложенная на шаг строка действия (quiet): даёт идентичному повтору
-   * свернуться в строку `×N`. Всегда сбрасывается до печати чего-то новее.
-   */
+  /** Отложенная на шаг строка действия (quiet): повтор сворачивается в `×N`. */
   private pendingFooter: {
     key: string;
     leadMark: string;
@@ -299,21 +292,33 @@ export class Renderer {
 
   constructor(opts: RendererOptions = {}) {
     this.rich = opts.rich ?? isRichTerminal();
-    this.width = opts.width ?? getTerminalWidth();
+    this.termWidth = opts.width ?? getTerminalWidth();
     this.baseDir = opts.baseDir;
     this.verbosity = opts.verbosity ?? "normal";
     this.channel = opts.channel ?? getDefaultChannel();
     this.spinner = new Spinner({
       enabled: this.rich && (opts.spinner ?? true),
       channel: this.channel,
-      width: this.width,
+      width: this.termWidth,
     });
     this.fmt = new FormattingStream(
       (line) => this.channel.writeRaw(`${line}\n`),
-      this.width,
+      this.termWidth,
       (text) => this.channel.writeRaw(text),
       { reservedCols: 2, streamPartials: this.rich },
     );
+  }
+
+  /** Актуальная ширина терминала (перемеряется при resize). */
+  get width(): number {
+    return this.termWidth;
+  }
+
+  /** Переизмерить ширину терминала (resize/SIGWINCH) — аудит §8.12. */
+  onResize(width: number = getTerminalWidth()): void {
+    this.termWidth = width;
+    this.spinner.setWidth(width);
+    this.fmt.setWidth(width);
   }
 
   /** Спиннер обдумывания на время ожидания ответа LLM. */
@@ -383,8 +388,7 @@ export class Renderer {
 
   /**
    * Открывает блок мысли: `✦ <акцентный ярлык> · ` — ярлык держит акцент
-   * рассуждений, разделитель и тело dim, чтобы глагол статуса не сливался
-   * с собственными словами модели.
+   * рассуждений, разделитель и тело dim.
    */
   private writeThoughtHeader(): void {
     if (!this.thoughtStarted || this.thoughtHeaderPrinted) return;
@@ -633,19 +637,15 @@ export class Renderer {
     error: boolean | undefined,
     duration: number,
   ): void {
-    const firstBody = this.card?.firstBody ?? "";
-    const status: "ok" | "warn" | "error" = !error
-      ? "ok"
-      : firstBody.startsWith("⚠")
-        ? "warn"
-        : "error";
-    recordLastAction({
-      tool: this.card?.tool ?? "",
+    const card = this.card;
+    recordToolAction({
+      tool: card?.tool ?? "",
       label,
-      args: summary,
-      status,
+      summary,
+      error,
       durationMs: duration,
-      body: this.card?.body ?? [],
+      firstBody: card?.firstBody ?? "",
+      body: card?.body ?? [],
     });
   }
 

@@ -6,11 +6,7 @@ import { glyph } from "./theme";
 import { highlight, formatInline } from "./md-inline";
 import { normalizeInlineLine } from "./md-normalize";
 
-/**
- * Строка-строка GFM-таблицы: есть `|` (не экранированный) и строка не является
- * списком/цитатой/фенсом. Внешние `|` не обязательны — GFM допускает
- * `col1 | col2` (аудит §8.13: веб и терминал должны понимать одно и то же).
- */
+/** Строка-строка GFM-таблицы: `|` в строке, но не список/цитата/фенс. */
 function isTableRow(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed.includes("|")) return false;
@@ -59,6 +55,11 @@ export class FormattingStream {
     this.width = width ?? getTerminalWidth();
     this.reservedCols = opts.reservedCols ?? 0;
     this.streamPartials = opts.streamPartials ?? false;
+  }
+
+  /** Обновить ширину терминала (resize): таблицы и линейки считаются по ней. */
+  setWidth(width: number): void {
+    this.width = width;
   }
 
   write(chunk: string): void {

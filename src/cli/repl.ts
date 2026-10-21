@@ -23,8 +23,8 @@ import {
   type CompletionItem,
 } from "./completer";
 import { Renderer } from "../ui/renderer";
-import { resolveVerbosity, glyph, toolAccent } from "../ui/theme";
-import { getLastAction } from "../ui/action-log";
+import { resolveVerbosity, } from "../ui/theme";
+import { printLastAction } from "./repl-last-action";
 import { divider } from "../ui/box";
 import { t } from "../i18n/index";
 import type { Logger } from "../logger/app-logger";
@@ -105,6 +105,8 @@ export class Repl implements ReplContext, Host {
   private configSnapshot: ReadonlyMap<string, unknown> = new Map();
   private running = false;
   private agentRunning = false;
+  /** Активный рендерер прогона: перемеряет ширину при resize терминала. */
+  private activeRenderer: Renderer | null = null;
   private inputLocked = false;
   private historyPath: string;
   private history: string[] = [];
@@ -647,6 +649,15 @@ export class Repl implements ReplContext, Host {
       this.rl.onKeyInput = (str, key) => this.handleSpecialKey(str, key);
     }
 
+    // Resize терминала: ширина перемеряется, иначе таблицы и линейки считаются
+    // по старой ширине (аудит §8.12).
+    const onResize = (): void => {
+      this.activeRenderer?.onResize();
+      if (!this.agentRunning) this.rl.prompt();
+    };
+    process.stdout.on("resize", onResize);
+    process.on("SIGWINCH", onResize);
+
     let forceExitTimer: ReturnType<typeof setTimeout> | null = null;
     // Запас на очистку (сессия, MCP, дочерние процессы) после второго Ctrl+C.
     const FORCE_EXIT_MS = 5000;
@@ -766,23 +777,7 @@ export class Repl implements ReplContext, Host {
 
   /** Ctrl+O — допечатка полных деталей последнего действия. */
   private reprintLastAction(): void {
-    const last = getLastAction();
-    if (!last) {
-      this.output.writeLine(pc.dim(t("repl.last_action_none")));
-      return;
-    }
-    const mark =
-      last.status === "error"
-        ? pc.red(glyph.failure)
-        : last.status === "warn"
-          ? pc.yellow(glyph.warning)
-          : pc.green(glyph.success);
-    const accent = toolAccent(last.tool);
-    const head = `${accent(glyph.action)} ${accent(last.label)}${
-      last.args ? ` ${pc.dim("·")} ${pc.dim(last.args)}` : ""
-    }  ${mark} ${pc.dim(`${last.durationMs}ms`)}`;
-    const lines = [head, ...last.body.map((l) => `  ${l}`)];
-    this.output.writeLine(`\n${lines.join("\n")}`);
+    printLastAction(this.output);
     if (this.rl instanceof LineEditor) {
       this.rl.reset();
       this.rl.prompt();
@@ -865,6 +860,7 @@ export class Repl implements ReplContext, Host {
         channel: this.output,
         verbosity: resolveVerbosity(this.config.ui),
       });
+      this.activeRenderer = renderer;
       renderer.showLoader();
       const result = await this.agent.run(
         input,
@@ -918,6 +914,7 @@ export class Repl implements ReplContext, Host {
       this.output.writeLine(`\n${divider()}`);
     } finally {
       this.agentRunning = false;
+      this.activeRenderer = null;
       this.output.endStreaming();
       if (this.rl instanceof LineEditor) {
         this.rl.setInputEnabled(true);

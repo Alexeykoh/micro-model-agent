@@ -56,6 +56,11 @@ export class Spinner {
     return this.timer !== null;
   }
 
+  /** Обновить ширину терминала (resize): длинные сообщения режутся по ней. */
+  setWidth(width: number): void {
+    this.width = width;
+  }
+
   /** Старт с сообщением (перезапускает, если уже крутится). */
   start(message: string): void {
     if (!this.enabled) return;

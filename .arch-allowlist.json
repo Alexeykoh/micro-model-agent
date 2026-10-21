@@ -1,9 +1,9 @@
 {
   "note": "Files over the 300-line rule (AGENTS rule 6). Ceilings may only shrink; remove an entry when the file drops to <=300. Guarded by tests/arch/file-size.test.ts.",
   "files": {
-    "src/cli/repl.ts": 1501,
+    "src/cli/repl.ts": 1498,
     "src/cli/repl-commands.ts": 1204,
-    "src/ui/line-editor.ts": 1160,
+    "src/ui/line-editor.ts": 1156,
     "src/core/context/manager.ts": 1129,
     "src/llm/openai-compat.ts": 962,
     "src/modules/execution/stuck-detector.ts": 886,

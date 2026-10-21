@@ -1,7 +1,7 @@
 // Строчный редактор: raw-ввод, история, Tab-комплит, DSR-якорь кадра (см. DSR ниже).
 import * as readline from "readline";
 import stringWidth from "string-width";
-import { pc } from "./colors";
+import { renderCompletionRows } from "./completion-view";
 import { readEnv } from "../config/env";
 import {
   buildLayout,
@@ -76,7 +76,7 @@ export class LineEditor implements LineInput {
   private pendingLine = "";
   private historyIndex = -1;
   private stash: { lines: string[]; row: number; col: number } | null = null;
-  private isDone = false;
+  private done = false;
   private isPaste = false;
   /** Вставленное копятся между `paste-start` и `paste-end`.
    *  Вставляется одним батчем на `paste-end`: один рендер вместо рендера на
@@ -214,10 +214,14 @@ export class LineEditor implements LineInput {
     return this.frameSuspended;
   }
 
+  /** Завершён ли редактор (Ctrl+D на пустой строке или явный close). */
+  isDone(): boolean {
+    return this.done;
+  }
   /** Clear the prompt frame (the agent takes over the terminal) and stop
    *  rendering until `resumeFrame()`. */
   suspendFrame(): void {
-    if (!this.input.isTTY || this.isDone) return;
+    if (!this.input.isTTY || this.done) return;
     const out: string[] = [];
     if (this.frameTopAbs !== null) out.push(`\x1b[${this.frameTopAbs};1H`);
     else if (this.prevCursorRow > 0) out.push(`\x1b[${this.prevCursorRow}A`);
@@ -238,7 +242,7 @@ export class LineEditor implements LineInput {
    *  the input buffer. When the frame is suspended the block is printed in
    *  place and the suspension is preserved. */
   printAbove(text: string): void {
-    if (!this.input.isTTY || this.isDone) {
+    if (!this.input.isTTY || this.done) {
       this.output.write(text.endsWith("\n") ? text : `${text}\n`);
       return;
     }
@@ -279,8 +283,8 @@ export class LineEditor implements LineInput {
   }
 
   close(): void {
-    if (this.isDone) return;
-    this.isDone = true;
+    if (this.done) return;
+    this.done = true;
     this.disableTerminalProtocols();
     if (this.dsrDataHandler) this.input.removeListener("data", this.dsrDataHandler);
     if (this.keypressHandler) this.input.removeListener("keypress", this.keypressHandler);
@@ -299,7 +303,7 @@ export class LineEditor implements LineInput {
   // ── Ввод ──
 
   private onData(buf: Buffer): void {
-    if (this.isDone) return;
+    if (this.done) return;
     let text = buf.toString("utf-8");
     text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const parts = text.split("\n");
@@ -316,7 +320,7 @@ export class LineEditor implements LineInput {
   }
 
   private onKey(str: string, key: unknown): void {
-    if (this.isDone) return;
+    if (this.done) return;
     if (!this.inputEnabled) {
       // На стриме уважаются только прерывающие клавиши: Ctrl+C абортит прогон,
       // Esc форвардится, чтобы хост реализовал двойной-Esc аборт.
@@ -585,14 +589,20 @@ export class LineEditor implements LineInput {
    *  Uses the absolute anchor when known — relative moves land short once
    *  a tall frame has scrolled the terminal. */
   private commitFrame(): void {
-    const layout = this.visibleLayout();
-    const lastLen = charLen(stripAnsi(layout[layout.length - 1].text));
+    const full = this.layout();
+    const visible = this.visibleLayout();
+    const lastLen = charLen(stripAnsi(visible[visible.length - 1].text));
     if (this.frameTopAbs !== null) {
-      this.output.write(`\x1b[${this.frameTopAbs + layout.length - 1};${lastLen + 1}H`);
+      this.output.write(`\x1b[${this.frameTopAbs + visible.length - 1};${lastLen + 1}H`);
       return;
     }
-    const idx = layoutIndexFor(layout, this.row, this.col);
-    const rowsDown = layout.length - 1 - idx;
+    // Строка курсора ищется по ПОЛНОМУ layout: обрезанный кадр (видимая
+    // часть) курсора может не содержать, и индекс по нему вёл бы в никуда
+    // (аудит §8.12). Обрезанный layout — только для отрисовки.
+    const idxFull = layoutIndexFor(full, this.row, this.col);
+    const offset = full.length - visible.length;
+    const idx = Math.max(0, Math.min(idxFull - offset, visible.length - 1));
+    const rowsDown = visible.length - 1 - idx;
     const out: string[] = [];
     if (rowsDown > 0) out.push(`\x1b[${rowsDown}B`);
     out.push("\r");
@@ -621,7 +631,10 @@ export class LineEditor implements LineInput {
 
   private ctrlD(): void {
     if (this.lines.length === 1 && this.lines[0] === "") {
-      this.emitClose();
+      // Пустая строка + Ctrl+D = выход из сессии: редактор закрывается целиком
+      // (raw-режим снят, слушатели отключены) — иначе терминал остаётся в raw
+      // и процесс «висит» после выхода (аудит §8.11).
+      this.close();
     } else {
       this.deleteForward();
     }
@@ -950,24 +963,7 @@ export class LineEditor implements LineInput {
       return;
     }
     const width = this.columns();
-    const limit = width - 1;
-    const rows = matches.map((m) => {
-      const plain = m.description ? `  ${m.value}  ${m.description}` : `  ${m.value}`;
-      if (limit <= 0) return "";
-      if (stringWidth(plain) <= limit) {
-        return m.description ? `  ${m.value}  ${pc.dim(m.description)}` : `  ${m.value}`;
-      }
-      // Режем по видимым колонкам (одних кодпоинтов мало для CJK/emoji).
-      let acc = "";
-      let w = 0;
-      for (const ch of plain) {
-        const cw = stringWidth(ch);
-        if (w + cw > limit - 1) break;
-        acc += ch;
-        w += cw;
-      }
-      return `${acc}…`;
-    });
+    const rows = renderCompletionRows(matches, width - 1);
     this.output.write(`\r\n${rows.join("\r\n")}\r\n`);
     // Напечатанный список увёл курсор ниже старого кадра. Сбрасываем абсолютный
     // якорь, чтобы следующий рендер позиционировался ОТНОСИТЕЛЬНО текущего
@@ -1075,7 +1071,7 @@ export class LineEditor implements LineInput {
   }
 
   private render(): void {
-    if (!this.input.isTTY || this.isDone || this.frameSuspended) return;
+    if (!this.input.isTTY || this.done || this.frameSuspended) return;
     const layout = this.visibleLayout();
     const promptWidth = stringWidth(stripAnsi(this.promptStr));
     const idx = layoutIndexFor(layout, this.row, this.col);
