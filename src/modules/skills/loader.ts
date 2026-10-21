@@ -48,22 +48,24 @@ export class SkillsLoader {
   }
 
   private parseSkillFile(content: string, sourcePath: string): SkillMeta | null {
-    // Сначала нормализуем CRLF: у Windows-чекаута/авторского скилла разделитель
-    // `---\r\n`, который LF-паттерн молча не матчил (все bundled-скиллы
-    // отбрасывались без предупреждения).
-    const normalized = content.replace(/\r\n/g, "\n");
+    // BOM режем: файл из Windows-редактора начинается с U+FEFF, и весь
+    // фронтматтер не матчился — скилл молча не грузился.
+    const normalized = content.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
     const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
     if (!match) return null;
 
     const frontmatter = this.parseFrontmatter(match[1]);
     if (!frontmatter.name) return null;
 
-    if (frontmatter.mma_version && String(frontmatter.mma_version) !== "2") {
-      return null;
+    // Версия сравнивается численно: "2.1" не равно "2", но скилл рассчитан
+    // на текущий формат.
+    if (frontmatter.mma_version !== undefined) {
+      const major = parseFloat(String(frontmatter.mma_version));
+      if (!Number.isNaN(major) && major > 2) return null;
     }
 
     return {
-      name: frontmatter.name,
+      name: String(frontmatter.name).trim(),
       description: frontmatter.description || "",
       keywords: frontmatter.keywords || [],
       content: match[2].trim(),
@@ -71,31 +73,55 @@ export class SkillsLoader {
     };
   }
 
+  /**
+   * Фронтматтер: `key: value`, списки `[a, b]` и YAML-блочные скаляры
+   * (`description: >` / `|` / `>-`) с многострочным значением.
+   */
   private parseFrontmatter(yaml: string): Record<string, any> {
     const result: Record<string, any> = {};
-    for (const line of yaml.split("\n")) {
-      const kvMatch = line.match(/^(\w+):\s*(.+)$/);
-      if (kvMatch) {
-        const val = kvMatch[2].trim();
-        if (val.startsWith("[") && val.endsWith("]")) {
-          result[kvMatch[1]] = val
-            .slice(1, -1)
-            .split(",")
-            .map((s: string) => s.trim().replace(/^['"]|['"]$/g, ""));
-        } else {
-          result[kvMatch[1]] = val.replace(/^['"]|['"]$/g, "");
+    const lines = yaml.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const kvMatch = lines[i].match(/^(\w+):\s*(.*)$/);
+      if (!kvMatch) continue;
+      const key = kvMatch[1];
+      const raw = kvMatch[2].trim();
+
+      // Блочный скаляр: значение — следующие строки с отступом.
+      if (/^[>|][-+]?$/.test(raw)) {
+        const block: string[] = [];
+        let j = i + 1;
+        for (; j < lines.length; j++) {
+          if (!/^\s+\S/.test(lines[j])) break;
+          block.push(lines[j].trim());
         }
+        // «|» — литерал (переводы строк сохраняются), «>» — свёртка в пробелы.
+        const joined = raw.startsWith("|") ? block.join("\n") : block.join(" ");
+        result[key] = joined.trim();
+        i = j - 1;
+        continue;
+      }
+
+      if (raw.startsWith("[") && raw.endsWith("]")) {
+        result[key] = raw
+          .slice(1, -1)
+          .split(",")
+          .map((s: string) => s.trim().replace(/^['"]|['"]$/g, ""));
+      } else {
+        result[key] = raw.replace(/^['"]|['"]$/g, "");
       }
     }
     return result;
   }
 
-  /** Грузит скиллы из трёх источников по приоритету: встроенные, глобальные, проектные. */
+  /**
+   * Скиллы из трёх источников с дедупликацией по имени: проектный перекрывает
+   * глобальный, глобальный — встроенный (аудит §2.8).
+   */
   loadFromAllSources(builtinDir: string, globalDir: string, projectDir: string): SkillMeta[] {
-    return [
-      ...this.loadFromDir(builtinDir),
-      ...this.loadFromDir(globalDir),
-      ...this.loadFromDir(projectDir),
-    ];
+    const byName = new Map<string, SkillMeta>();
+    for (const skill of this.loadFromDir(builtinDir)) byName.set(skill.name, skill);
+    for (const skill of this.loadFromDir(globalDir)) byName.set(skill.name, skill);
+    for (const skill of this.loadFromDir(projectDir)) byName.set(skill.name, skill);
+    return [...byName.values()];
   }
 }

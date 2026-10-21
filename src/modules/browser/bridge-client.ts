@@ -8,6 +8,7 @@ import type { ConsoleEntry, NetworkErrorEntry } from "./types";
 import { ConsoleBuffer } from "./console-buffer";
 import type { StoredCookie } from "./cookie-store";
 import { pickExistingPath } from "./bridge-path";
+import { currentRuntime } from "./bridge-runtime";
 import { BROWSER_BRIDGE_REQUEST_TIMEOUT_MS as BRIDGE_REQUEST_TIMEOUT_MS } from "../../config/timeouts";
 
 interface BridgeResponse {
@@ -118,7 +119,13 @@ export class BridgeDriver implements BrowserDriver {
 
   private spawnBridge(): void {
     const script = bridgeScriptPath();
-    const proc = spawn("node", [script], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    // Рантайм: Bun предпочтительно, Node — запасной (bun-only сборка без node).
+    const choice = currentRuntime();
+    if ("error" in choice) {
+      this.failPending(choice.error);
+      return;
+    }
+    const proc = spawn(choice.runtime, [script], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     this.proc = proc;
     this.lastStderr = [];
     proc.stderr.on("data", (chunk: Buffer) => {

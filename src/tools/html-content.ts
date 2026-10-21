@@ -17,7 +17,7 @@ const DROP_ELEMENTS =
   /<(script|style|noscript|svg|template|nav|header|footer|aside|form|iframe)[\s\S]*?<\/\1>/gi;
 
 /** HTML-фрагмент → плоский текст с сохранением границ блоков как переводов строк. */
-function htmlToText(fragment: string): string {
+export function htmlToText(fragment: string): string {
   return fragment
     .replace(DROP_ELEMENTS, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
@@ -42,6 +42,28 @@ function htmlToText(fragment: string): string {
  * наибольшей длине; фолбэк — всё тело документа. Без парсера: regex-грабями.
  */
 export function extractMainContent(html: string): string {
+  return extractReadableContent(html).text;
+}
+
+/** Что удалось извлечь из HTML и откуда. */
+export interface ReadableContent {
+  /** Текст, который стоит показать модели. */
+  text: string;
+  /** Страница выглядит как JS-шелл: контента нет, а разметка есть. */
+  shell: boolean;
+  /** Откуда взят текст: `main` — контентный блок, `body` — всё тело, `none` — пусто. */
+  source: "main" | "body" | "none";
+}
+
+/**
+ * Извлечение читаемого содержимого (аудит §2.9).
+ *
+ * Ключевое отличие от прежнего поведения: если `<main>`/`<article>` ЕСТЬ, но
+ * текста в нём мало, откат на `<body>` НЕ делается — иначе навигация выдавалась
+ * за контент, и признак JS-шелла терялся (ровно тот случай, ради которого
+ * файл написан). Тонкий `<main>` → `shell: true`.
+ */
+export function extractReadableContent(html: string): ReadableContent {
   const candidates: string[] = [];
   const mainRe = /<(main|article)\b[\s\S]*?<\/\1>/gi;
   let m: RegExpExecArray | null;
@@ -49,23 +71,45 @@ export function extractMainContent(html: string): string {
   const roleMain = /<[^>]*\brole\s*=\s*["']main["'][^>]*>[\s\S]*?<\/[^>]+>/i.exec(html);
   if (roleMain) candidates.push(roleMain[0]);
 
-  let best = "";
+  // Текст считаем один раз на кандидата (было пересчитывание в цикле).
+  let bestText = "";
   for (const c of candidates) {
     const text = htmlToText(c);
-    if (text.length > htmlToText(best).length) best = c;
+    if (text.length > bestText.length) bestText = text;
   }
-  if (best && htmlToText(best).length >= MIN_CONTENT_CHARS) return htmlToText(best);
+
+  if (candidates.length > 0) {
+    return {
+      text: bestText,
+      shell: looksLikeShell(html, bestText),
+      source: "main",
+    };
+  }
 
   const bodyM = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html);
   const whole = htmlToText(bodyM ? bodyM[1] : html);
-  // Если main дал хоть что-то осмысленное — он и есть контент; иначе тело.
-  return whole.length > 0 ? whole : htmlToText(best);
+  return {
+    text: whole,
+    shell: looksLikeShell(html, whole),
+    source: whole.length > 0 ? "body" : "none",
+  };
 }
 
+/** Доля текста в разметке, ниже которой страница считается JS-шеллом. */
+export const MIN_TEXT_RATIO = 0.02;
+
 /**
- * JS-шелл: разметки много, текста почти нет. Настоящая маленькая страница
+ * JS-шелл: текста почти нет, а разметка есть. Настоящая маленькая страница
  * имеет и мало разметки, поэтому под эвристику не попадает.
+ *
+ * Два признака: объём разметки (большая страница без текста) ИЛИ доля текста
+ * в разметке (SPA-заглушка: `<div id="root">` и навигация, текста — ноль).
+ * Второй признак ловит случай, который прежняя эвристика пропускала: откат
+ * на `<body>` возвращал навигацию как «контент» (аудит §2.9).
  */
 export function looksLikeShell(rawHtml: string, text: string): boolean {
-  return text.trim().length < MIN_CONTENT_CHARS && rawHtml.length > MIN_HTML_CHARS_FOR_SHELL;
+  const trimmed = text.trim();
+  if (trimmed.length >= MIN_CONTENT_CHARS) return false;
+  if (rawHtml.length > MIN_HTML_CHARS_FOR_SHELL) return true;
+  return trimmed.length / Math.max(rawHtml.length, 1) < MIN_TEXT_RATIO;
 }

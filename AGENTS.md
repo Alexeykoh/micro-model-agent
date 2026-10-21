@@ -125,6 +125,19 @@ bun run mma "<промпт>"   # прогнать агента вживую
 `tests/security/command-blacklist.test.ts` (чёрные списки команд),
 `tests/ui/output-sanitize.test.ts` (control-символы в выводе).
 
+Веб-контур (волна W4) держат: `tests/tools/web-search-status.test.ts` (HTTP-статус),
+`tests/tools/web-browse-parity.test.ts` (паритет web_browse/web_fetch),
+`tests/tools/web-error-urlish.test.ts` (формат ошибок и кап),
+`tests/tools/html-shell-detection.test.ts` (детект JS-шелла),
+`tests/tools/untrusted-content-framing.test.ts` (рамка недоверенного контента),
+`tests/security/dns-guard.test.ts` (DNS-резолв в SSRF-политике),
+`tests/security/attach-image-redirect.test.ts` (редиректы и размер картинки),
+`tests/modules/browser/session-ssrf.test.ts` (приватные адреса в браузере),
+`tests/modules/browser/bridge-runtime.test.ts` (рантайм моста),
+`tests/modules/browser/preflight.test.ts` (Chromium не установлен),
+`tests/modules/skills/prompt-and-loader.test.ts` (скиллы),
+`tests/tools/subagent-max-tokens.test.ts` (кап токенов субагента).
+
 ### 6. Не расширять файл «заодно»
 
 Правило ≤300 строк действует там, где есть чистый шов. Файлы >300 строк —

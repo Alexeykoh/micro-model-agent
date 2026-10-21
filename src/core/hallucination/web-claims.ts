@@ -11,6 +11,7 @@
  */
 
 import type { ClaimContradiction, ClaimToolEvidence } from "./success-claim";
+import { unwrapUntrusted } from "../../tools/web-content";
 
 /** Сетевые тулы, чей успешный вывод считается «прочитанным из веба». */
 const WEB_TOOLS = new Set(["web_fetch", "web_browse", "browser", "web_search"]);
@@ -58,7 +59,8 @@ export function checkWebClaims(
 
   const fetched = tools.filter((t) => t.name && WEB_TOOLS.has(t.name) && t.ok !== false && t.text.trim());
   if (fetched.length === 0) return null; // веб не трогали — не наш класс
-  const corpus = fetched.map((t) => normalizeDigits(t.text)).join("\n");
+  // Рамка недоверенного контента снимается: в corpus нужны сами данные.
+  const corpus = fetched.map((t) => normalizeDigits(unwrapUntrusted(t.text))).join("\n");
 
   const missing = claims.filter((c) => !corpus.includes(c));
   if (missing.length === 0) return null;

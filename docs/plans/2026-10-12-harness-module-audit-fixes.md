@@ -936,6 +936,24 @@ it.each([
 
 # Волна 4 — Web / browser / skills (находки §2)
 
+> **Волна 4 закрыта 2026-10-21** (ветка `fix/harness-audit-w4-web-tools`).
+> Выполнены задачи 4.1–4.9: статус HTTP в web-тулах, единый формат ошибок,
+> `web_browse` перестал быть худшим двойником, SSRF-политика в браузере и
+> `attach_image` (с DNS-резолвом), детект JS-шелла без false-negative,
+> рантайм моста и предполёт Chromium, скиллы (промпт/загрузчик/приоритет),
+> `max_tokens` субагента, фрейминг недоверенного веб-контента.
+> Тесты (красные до правки): `tests/tools/web-search-status.test.ts`,
+> `tests/tools/web-browse-parity.test.ts`, `tests/tools/web-error-urlish.test.ts`,
+> `tests/tools/html-shell-detection.test.ts`, `tests/security/dns-guard.test.ts`,
+> `tests/security/attach-image-redirect.test.ts`, `tests/modules/browser/session-ssrf.test.ts`,
+> `tests/modules/browser/bridge-runtime.test.ts`, `tests/modules/browser/preflight.test.ts`,
+> `tests/modules/skills/prompt-and-loader.test.ts`,
+> `tests/tools/subagent-max-tokens.test.ts`, `tests/tools/untrusted-content-framing.test.ts`.
+>
+> **Отклонение от плана (4.4):** рантайм моста выбирается как «сначала Node,
+> иначе Bun», а не наоборот — под Bun запуск Chromium внутри моста зависает
+> без ответа (проверено вживую), Bun остаётся запасным путём.
+
 ## Task 4.1: `web_search` проверяет HTTP-статус (§2.1)
 
 **Files:**

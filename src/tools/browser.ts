@@ -10,6 +10,7 @@ import { errMsg } from "../utils";
 import { join } from "path";
 import { mkdirSync } from "fs";
 import { projectMmaDir } from "../config/paths";
+import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 
 let session: BrowserSession | null = null;
 
@@ -62,6 +63,8 @@ function getSession(ctx: ToolContext): BrowserSession {
           navigationTimeout: ctx.config.browser?.navigationTimeout ?? 15000,
           viewportWidth: ctx.config.browser?.viewportWidth ?? 1280,
           viewportHeight: ctx.config.browser?.viewportHeight ?? 720,
+          // SSRF-политика браузера: приватные адреса и metadata открывать нельзя.
+          networkSecurity: ctx.config.security?.network ?? DEFAULT_SECURITY_CONFIG.network,
           cookieDir,
         });
   }

@@ -4,6 +4,7 @@ import type { PromptBlock } from "../../core/types";
 import { SkillsLoader, type SkillMeta } from "./loader";
 import { t } from "../../i18n/index";
 import { estimateTokens } from "../../llm/token-counter";
+import { truncateWords } from "../../utils/truncate";
 
 /** Итог загрузки скилла по имени (успех, сообщение, сам скилл). */
 export interface LoadResult {
@@ -34,6 +35,14 @@ export class SkillsModule implements AgentModule {
     this.availableSkills = availableSkills;
     this.budget = budget;
     this.sources = sources;
+  }
+
+  /**
+   * Есть ли вообще скиллы. Если нет — тул `load_skill` не регистрируется
+   * (аудит §2.7): модель не должна видеть инструмент без содержимого.
+   */
+  hasAny(): boolean {
+    return this.availableSkills.length > 0;
   }
 
   /**
@@ -153,8 +162,7 @@ reloadSources(): { added: number; removed: number } {
       lines.push("[Available Skills]");
       lines.push(t("skill.prompt_hint"));
       for (const skill of this.availableSkills) {
-        const desc = skill.description.slice(0, 80);
-        lines.push(`- ${skill.name}: ${desc}`);
+        lines.push(`- ${skill.name}: ${truncateWords(skill.description, 120)}`);
       }
     }
 
@@ -162,7 +170,9 @@ reloadSources(): { added: number; removed: number } {
       lines.push("");
       lines.push("[Loaded Skills]");
       for (const skill of this.loadedSkills.values()) {
-        lines.push(`--- ${skill.name} (${this.estimateTokens(skill.content)} tokens) ---`);
+        // Без счётчика токенов: он меняется от сессии к сессии и ломает
+        // prompt-cache (как метрика в терминале).
+        lines.push(`--- ${skill.name} ---`);
         lines.push(skill.content);
         lines.push("");
       }

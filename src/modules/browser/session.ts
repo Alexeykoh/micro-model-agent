@@ -2,15 +2,15 @@
 import type { BrowserConfig, BrowserState, ActionResult } from "./types";
 import type { BrowserDriver } from "./driver-types";
 import { createBrowserDriver } from "./driver";
-import { extractInteractiveElements, formatSnapshot } from "./snapshot";
+import { captureSnapshot } from "./snapshot-capture";
 import {
   buildClickScript,
   buildTypeScript,
   buildScrollScript,
-  buildIndexInjectionScript,
-  buildTextExtractionScript,
 } from "./actions";
 import { CookieStore, type StoredCookie } from "./cookie-store";
+import { checkBrowserUrl } from "./url-policy";
+import { isChromiumInstalled, BrowserUnavailableError } from "./preflight";
 import { t } from "../../i18n/index";
 
 /** Ловит N одинаковых действий подряд на одном URL и возвращает предупреждение. */
@@ -130,6 +130,9 @@ export class BrowserSession {
 
       return result;
     } catch (err: any) {
+      if (err instanceof BrowserUnavailableError) {
+        return { success: false, output: err.message };
+      }
       return {
         success: false,
         output: t("browser.error", { message: err.message }),
@@ -147,6 +150,12 @@ export class BrowserSession {
   private async launch(): Promise<void> {
     if (this.driver) return;
 
+    // Предполёт: без Chromium сообщение должно называть команду установки,
+    // а не «No page open» (аудит §3.3).
+    if (!(await isChromiumInstalled())) {
+      throw new BrowserUnavailableError();
+    }
+
     this.driver = await createBrowserDriver(this.config);
 
     const savedCookies = await this.cookieStore.load();
@@ -163,53 +172,18 @@ export class BrowserSession {
 
   private async takeSnapshot(): Promise<string> {
     if (!this.driver) return "No page open.";
-
-    await this.driver.evaluate(buildIndexInjectionScript());
-    const html = await this.driver.content();
-    const url = this.driver.url();
-    const title = await this.driver.title();
-
-    let content = "";
-    try {
-      content = String(await this.driver.evaluate(buildTextExtractionScript()));
-    } catch {
-      content = "";
-    }
-
-    const allElements = extractInteractiveElements(html, this.config.maxElements + 5);
-    const truncated = allElements.length > this.config.maxElements;
-    const elements = allElements.slice(0, this.config.maxElements);
-
-    this.state = {
-      isOpen: true,
-      url,
-      title,
-      elementCount: elements.length,
-    };
-
-    return formatSnapshot({
-      url,
-      title,
-      elements,
-      content,
-      console: this.driver.getConsole(),
-      networkErrors: this.driver.getNetworkErrors(),
-      truncated,
-    });
+    const capture = await captureSnapshot(this.driver, this.config);
+    this.state = capture.state;
+    return capture.text;
   }
 
   private async open(url: string): Promise<ActionResult> {
-    if (!url) return { success: false, output: t("browser.url_required") };
-
-    // Блок опасных схем (file:, chrome:, about:, data:) — обход запретов исключён.
-    if (/^(file|chrome|about|data|javascript|view-source):/i.test(url)) {
-      return { success: false, output: `[SECURITY BLOCKED] scheme not allowed: ${url}` };
+    // Схемы, нормализация и SSRF-проверка — в `url-policy.ts`.
+    const policy = await checkBrowserUrl(url, this.config.networkSecurity);
+    if (!policy.ok) {
+      return { success: false, output: `[SECURITY BLOCKED] ${policy.reason}` };
     }
-
-    if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
-      const isLocalhost = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(url);
-      url = isLocalhost ? `http://${url}` : `https://${url}`;
-    }
+    url = policy.url;
 
     await this.launch();
     if (!this.driver) return { success: false, output: t("browser.create_page_failed") };

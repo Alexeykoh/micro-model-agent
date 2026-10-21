@@ -22,7 +22,12 @@ describe("webSearchTool", () => {
 
   it("allows calls when the master switch is absent (default on)", async () => {
     const origFetch = globalThis.fetch;
-    globalThis.fetch = (async () => ({ text: async () => "<html></html>" })) as any;
+    globalThis.fetch = (async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => "<html></html>",
+    })) as any;
     try {
       const ctx: any = { config: {}, sessionContext: undefined };
       const result = await webSearchTool.handler(ctx, { query: "test" });
@@ -50,7 +55,12 @@ describe("performWebSearch", () => {
 
   it("returns empty results for empty HTML", async () => {
     const origFetch = globalThis.fetch;
-    globalThis.fetch = (async () => ({ text: async () => "<html></html>" })) as any;
+    globalThis.fetch = (async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => "<html></html>",
+    })) as any;
     try {
       const outcome = await performWebSearch("nothing", 5, undefined);
       expect(outcome.success).toBe(true);

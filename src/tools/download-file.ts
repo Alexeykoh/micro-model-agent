@@ -12,6 +12,7 @@ import { logNetworkRequest, logFileWrite, logSecurityBlock } from "../modules/se
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { safeResolvePath } from "./path-utils";
+import { httpError, networkError } from "./web-errors";
 
 /** Дефолтный cap скачивания (байты). Чанковые ответы без content-length
  * проверяются после чтения тела. */
@@ -77,13 +78,7 @@ export const downloadFileTool: ToolDefinition = {
       });
       if (!response.ok) {
         logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Status: ${response.status}`);
-        return {
-          success: false,
-          output: t("error.http", {
-            status: response.status,
-            statusText: response.statusText,
-          }),
-        };
+        return httpError(url, response.status, response.statusText);
       }
 
       const contentLength = Number(response.headers.get("content-length") || "0");
@@ -132,10 +127,7 @@ export const downloadFileTool: ToolDefinition = {
         return { success: false, output: `[SECURITY BLOCKED] redirect: ${e.reason}` };
       }
       logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${e.message}`);
-      return {
-        success: false,
-        output: t("error.fetch_failed", { message: e.message }),
-      };
+      return networkError(url, e.message);
     }
   },
 };

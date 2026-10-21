@@ -141,7 +141,9 @@ export function registerAllTools(
     tools.push(enableToolsTool);
   }
 
-  if (skillsModule) {
+  // `load_skill` — только если скиллы вообще есть (аудит §2.7): пустой
+  // каталог не должен оставлять модели инструмент вхолостую.
+  if (skillsModule?.hasAny()) {
     tools.push(createLoadSkillTool(skillsModule));
   }
 

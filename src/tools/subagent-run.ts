@@ -13,6 +13,7 @@ import { ArtifactStore } from "../modules/artifacts/store";
 import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
 import { getExpertConfig } from "../config/experts";
 import { resolveExpertProvider } from "../modules/execution/expert-provider";
+import { withTokenCap } from "../llm/token-cap";
 
 /** Фиксированный системный промпт (KV-cache дружит при stableSystemPrompt). */
 export const SUBAGENT_SYSTEM_PROMPT_TEMPLATE = `You are a sub-agent working on a specific task. You have your own context window and tool set.
@@ -29,12 +30,30 @@ function buildSubagentSystemPrompt(context: string, stable: boolean): string {
   return `You are a sub-agent working on a specific task. ${context ? `Context: ${context}` : ""}`;
 }
 
+/** Минимальный и максимальный кап completion-токенов субагента. */
+export const MAX_TOKENS_MIN = 1;
+export const MAX_TOKENS_MAX = 32000;
+
+/**
+ * Разбирает `max_tokens`: число в диапазоне — кап, `undefined` — без капа,
+ * `"invalid"` — значение задано, но недопустимо.
+ */
+export function parseMaxTokens(
+  raw: unknown,
+): number | undefined | "invalid" {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < MAX_TOKENS_MIN || value > MAX_TOKENS_MAX) {
+    return "invalid";
+  }
+  return Math.floor(value);
+}
+
 /** Спавнит изолированного субагента и возвращает его результат. */
 export async function runSubagent(
   ctx: ToolContext,
   args: Record<string, unknown>,
-): Promise<ToolResult> {
-  const task = String(args.task || "");
+): Promise<ToolResult> {  const task = String(args.task || "");
   const context = String(args.context || "");
 
   if (!task) {
@@ -99,13 +118,26 @@ export async function runSubagent(
 
   // Модель эксперта (если задан expert_tag) исполняется на выделенном
   // провайдере поверх активного; иначе — общий провайдер родителя.
-  const provider = resolveExpertProvider(
+  const baseProvider = resolveExpertProvider(
     ctx.config,
     expertModel,
     ctx.llmProvider,
     ctx.logger,
     () => ctx.sessionId,
   );
+
+  // Кап completion-токенов, заданный вызывающим (`max_tokens`).
+  const cap = parseMaxTokens(args.max_tokens);
+  if (cap === "invalid") {
+    return {
+      success: false,
+      output: t("tool.subagent_max_tokens_invalid", {
+        min: String(MAX_TOKENS_MIN),
+        max: String(MAX_TOKENS_MAX),
+      }),
+    };
+  }
+  const provider = cap ? withTokenCap(baseProvider, cap) : baseProvider;
 
   // Оборонительный гард: запрошенные tool_tags ни с чем не мэтчатся — у
   // субагента ноль тулов, и он галлюцинирует вместо действий.
