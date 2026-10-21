@@ -9,7 +9,7 @@
     "src/modules/execution/stuck-detector.ts": 886,
     "src/modules/webui/assets/js/settings/panels.ts": 880,
     "src/modules/webui/assets/setup.ts": 863,
-    "src/cli/commands.ts": 860,
+    "src/cli/commands.ts": 686,
     "src/modules/webui/settings/settings-api.ts": 738,
     "src/tools/bash.ts": 799,
     "src/config/registry-extra.ts": 780,

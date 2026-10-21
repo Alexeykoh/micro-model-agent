@@ -99,11 +99,10 @@ async function main(): Promise<void> {
   }
   const onboardingStart =
     firstPositional === "meet" ? "meet" : firstPositional === "agents" ? "init" : null;
-  if (
-    firstPositional &&
-    !onboardingStart &&
-    program.commands.some((c) => c.name() === firstPositional)
-  ) {
+  // One-shot для ЛЮБОГО первого позиционного аргумента, который не является
+  // подкомандой: свободный промпт тоже не должен поднимать фоновых детей
+  // (аудит §7.10).
+  if (firstPositional && !onboardingStart) {
     setOneShotMode(true);
   }
 
