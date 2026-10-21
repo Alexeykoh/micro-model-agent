@@ -14,6 +14,7 @@ import {
   sameOrigin,
   sendJson,
   setAuthCookie,
+  SECURITY_HEADERS,
 } from "./util";
 import { handleMessagePost } from "./session/turns";
 import { handleQueueCancel, handleQueueStart } from "./session/queue-api";
@@ -31,21 +32,11 @@ import { handleSetupApi } from "./settings/setup-api";
 import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp/lsp-api";
 import { handleUpdatePost } from "./chat/update-api";
 import { apiGuardFor, filterResponse } from "./egress";
+import { serveStatic } from "./static-assets";
 import { readEnv } from "../../config/env";
 export { tryOpenBrowser } from "./util"; // реэкспорт для CLI
 
 /** Статические роуты, отдаваемые как есть (без шаблонной обработки). */
-const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAssets }> = {
-  "/index.html": { type: "text/html; charset=utf-8", key: "html" },
-  "/styles.css": { type: "text/css; charset=utf-8", key: "css" },
-  "/console.css": { type: "text/css; charset=utf-8", key: "cssConsole" },
-  "/app.js": { type: "text/javascript; charset=utf-8", key: "js" },
-  "/setup.js": { type: "text/javascript; charset=utf-8", key: "setupJs" },
-  "/md.js": { type: "text/javascript; charset=utf-8", key: "mdJs" },
-  "/smd.js": { type: "text/javascript; charset=utf-8", key: "smdJs" },
-  "/hljs.js": { type: "text/javascript; charset=utf-8", key: "hljsJs" },
-};
-
 /**
  * SSE-хендлер: поток `/events` с капом клиентов и heartbeat.
  *
@@ -178,6 +169,11 @@ export function handleRequest(
     return;
   }
 
+  // Security-заголовки на всех ответах (CSP, фрейминг, MIME, referrer).
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    res.setHeader(key, value);
+  }
+
   if (reqUrl.pathname === "/events") {
     // Auth и на SSE-поток: не-loopback бинд с токеном не должен светить события.
     // `?token=` принимаем, т.к. EventSource заголовки ставить не умеет.
@@ -190,28 +186,9 @@ export function handleRequest(
     return;
   }
 
-  const asset = STATIC_ASSETS[reqUrl.pathname === "/" ? "/index.html" : reqUrl.pathname];
-  if (asset) {
-    // Перечитываем с диска, когда можно, чтобы правки ассетов цеплялись без
-    // рестарта; `no-store` не даёт браузеру кешировать протухший UI. Фиксированный
-    // снапшот из `startServer` — фолбэк (тесты, ошибки чтения).
-    const src = s.assetSource ? s.assetSource() : assets;
-    res.writeHead(200, { "Content-Type": asset.type, "Cache-Control": "no-store" });
-    res.end(src[asset.key] ?? assets[asset.key] ?? "");
+  // Статика (документ, стили, скрипты) — под auth и с security-заголовками.
+  if (serveStatic(req, res, reqUrl, assets, s)) {
     return;
-  }
-
-  // Разделённые фронтенд-модули: относительные ESM-импорты идут в `/js/*.js`
-  // или топ-левел helper'ы (`/md-copy.js`) — отдаём любой `*.js` из карты.
-  if (reqUrl.pathname.endsWith(".js")) {
-    const key = reqUrl.pathname.slice(1);
-    const src = s.assetSource ? s.assetSource() : assets;
-    const body = src.jsModules?.[key] ?? assets.jsModules?.[key];
-    if (body !== undefined) {
-      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
-      res.end(body);
-      return;
-    }
   }
 
   if (reqUrl.pathname.startsWith("/api/")) {
