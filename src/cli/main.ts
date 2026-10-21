@@ -18,7 +18,7 @@ import { pc } from "../ui/colors";
 import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { UpdaterModule, createUpdater, busLogger } from "../modules/updater/index";
+import { type UpdaterModule, createUpdater, busLogger } from "../modules/updater/index";
 import { installCrashHandlers } from "../core/crash-handler";
 import { closestCommand } from "./command-suggest";
 import { errMsg } from "../utils";
