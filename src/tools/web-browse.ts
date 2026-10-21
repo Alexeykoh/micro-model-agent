@@ -11,6 +11,7 @@ import { getSessionSecurityConfig } from "../modules/security/session-isolation"
 import { MAX_PREVIEW_LINES } from "./preview";
 import { extractReadableContent, htmlToText } from "./html-content";
 import { httpError, networkError } from "./web-errors";
+import { wrapUntrusted } from "./web-content";
 import type { NetworkSecurityConfig } from "../config/types";
 
 /** Потолок символов до построчной обрезки. */
@@ -94,7 +95,8 @@ export async function performWebBrowse(
 
     return {
       success: true,
-      output: content || t("file.empty_page"),
+      // Рамка недоверенных данных (аудит §2.14).
+      output: content ? wrapUntrusted(url, content) : t("file.empty_page"),
       display: t("tool.web_browse_result", {
         url: sanitizeUrl(url),
         chars: String(fullChars),

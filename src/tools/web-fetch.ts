@@ -12,6 +12,7 @@ import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { MAX_PREVIEW_LINES } from "./preview";
 import { extractReadableContent } from "./html-content";
 import { httpError, networkError } from "./web-errors";
+import { wrapUntrusted } from "./web-content";
 import type { NetworkSecurityConfig } from "../config/types";
 
 /** Максимум символов до обрезки вывода тула. */
@@ -94,7 +95,9 @@ export async function performWebFetch(
 
     return {
       success: true,
-      output: content || t("file.empty_page"),
+      // Содержимое страницы — недоверенные данные: рамка отделяет их от
+      // инструкций (аудит §2.14).
+      output: content ? wrapUntrusted(finalUrl, content) : t("file.empty_page"),
       display: t("tool.web_fetch_result", {
         url: sanitizeUrl(url),
         chars: String(fullChars),

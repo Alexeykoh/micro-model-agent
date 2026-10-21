@@ -6,6 +6,7 @@ import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator
 import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { readMmaVersion } from "../core/version";
+import { wrapUntrusted } from "./web-content";
 
 /** Элемент выдачи: заголовок, URL, сниппет. */
 export interface SearchResult {
@@ -199,10 +200,14 @@ export const webSearchTool: ToolDefinition = {
     }
     return {
       success: true,
-      output: t("tool.search_results", {
-        query,
-        results: formatResults(outcome.results),
-      }),
+      // Сниппеты — тоже недоверенный текст (аудит §2.14).
+      output: wrapUntrusted(
+        url,
+        t("tool.search_results", {
+          query,
+          results: formatResults(outcome.results),
+        }),
+      ),
       display: t("tool.web_search_result", {
         query,
         count: String(outcome.results.length),

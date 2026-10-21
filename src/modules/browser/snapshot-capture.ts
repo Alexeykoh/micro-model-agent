@@ -4,6 +4,7 @@
 // для других драйверов), а сессия держит только состояние.
 import { buildIndexInjectionScript, buildTextExtractionScript } from "./actions";
 import { extractInteractiveElements, formatSnapshot } from "./snapshot";
+import { wrapUntrusted } from "../../tools/web-content";
 import type { BrowserDriver } from "./driver-types";
 import type { BrowserConfig, BrowserState } from "./types";
 
@@ -53,5 +54,6 @@ export async function captureSnapshot(
     networkErrors: driver.getNetworkErrors(),
     truncated,
   });
-  return { text, state };
+  // Содержимое страницы — недоверенные данные (аудит §2.14).
+  return { text: wrapUntrusted(url, text), state };
 }

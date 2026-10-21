@@ -31,8 +31,11 @@ describe("web_browse", () => {
       "</body>";
     const r = await performWebBrowse("https://x/", { fetchImpl: mockFetch(200, html) });
     expect(r.success).toBe(true);
-    expect(r.output.split("\n").length).toBeLessThanOrEqual(MAX_PREVIEW_LINES + 2);
-    expect(r.output.split("\n").length).toBeGreaterThan(10);
+    // Рамка недоверенного контента добавляет две строки (открывающий и
+    // закрывающий теги) — они не входят в лимит содержимого.
+    const lines = r.output.split("\n").length;
+    expect(lines).toBeLessThanOrEqual(MAX_PREVIEW_LINES + 4);
+    expect(lines).toBeGreaterThan(10);
   });
 
   it("keeps a real page readable", async () => {
