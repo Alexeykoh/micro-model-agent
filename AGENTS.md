@@ -138,6 +138,17 @@ bun run mma "<промпт>"   # прогнать агента вживую
 `tests/modules/skills/prompt-and-loader.test.ts` (скиллы),
 `tests/tools/subagent-max-tokens.test.ts` (кап токенов субагента).
 
+Веб-поверхность (волна W6) держат: `tests/webui-security-headers.test.ts`
+(заголовки и auth на статику), `tests/webui-body-limits.test.ts` (капы тела и
+памяти, SSRF проб), `tests/webui-error-propagation.test.ts` (коды ошибок),
+`tests/webui-svg-and-questions.test.ts` (SVG и отмена вопроса),
+`tests/webui-rate-limit.test.ts` (троттл по сессиям),
+`tests/webui-pool-lru.test.ts` (вытеснение раннеров),
+`tests/webui-log-incremental.test.ts` (инкрементальное чтение лога),
+`tests/webui-feed-lifecycle-dom.test.ts` (таймеры и параллельный busy),
+`tests/webui-command-session.test.ts` (вывод slash-команды),
+`tests/webui-xss-guard.test.ts` (HTML-стоки во фронтенде).
+
 ### 6. Не расширять файл «заодно»
 
 Правило ≤300 строк действует там, где есть чистый шов. Файлы >300 строк —

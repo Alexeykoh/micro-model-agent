@@ -1647,6 +1647,27 @@ it("total forced re-answers per turn are capped", async () => {
 
 # Волна 6 — `mma web` (находки §6)
 
+> **Волна 6 закрыта 2026-10-21** (ветка `fix/harness-audit-w6-webui`).
+> Выполнены задачи 6.1–6.9 и 6.8b: security-заголовки и auth на статику,
+> капы тела по маршруту, кап записи памяти, SSRF-защита проб провайдера,
+> честные коды ошибок (413/400/504/500), безопасный SVG, отмена вопроса при
+> закрытии вкладки, троттл по сессиям, LRU/idle-вытеснение раннеров,
+> инкрементальное чтение лога, таймеры/параллельный busy/зависший вопрос,
+> guard против HTML-инъекций, гонка активной сессии.
+> Тесты (красные до правки): `tests/webui-security-headers.test.ts`,
+> `tests/webui-body-limits.test.ts`, `tests/webui-error-propagation.test.ts`,
+> `tests/webui-svg-and-questions.test.ts`, `tests/webui-rate-limit.test.ts`,
+> `tests/webui-pool-lru.test.ts`, `tests/webui-log-incremental.test.ts`,
+> `tests/webui-feed-lifecycle-dom.test.ts`, `tests/webui-command-session.test.ts`,
+> `tests/webui-xss-guard.test.ts`.
+>
+> **Отклонения от плана:** (1) 6.2 — вместо полного запрета приватных адресов
+> в пробах блокируется только metadata/link-local (локальные провайдеры
+> Ollama/LM Studio легальны, для них визард и существует); (2) 6.5 — вместо
+> отдельного глобального лимита по IP троттл сделан по сессии; (3) 6.7 — вместо
+> кольца `.turn`-узлов лента ограничена числом верхнеуровневых узлов (в текущей
+> разметке узлов хода `.turn` нет).
+
 ## Task 6.1: Security-заголовки и auth на статику (§6.1, §6.2)
 
 **Files:**
