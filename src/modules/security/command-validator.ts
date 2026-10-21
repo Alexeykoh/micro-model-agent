@@ -1,6 +1,7 @@
 // Валидация shell-команд: чёрный/белый списки, опасные флаги и операторы, обходы.
 import type { BashSecurityConfig } from "../../config/types";
 import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
+import { detectDangerousShape } from "./command-shapes";
 
 // Резерв, если DEFAULT_SECURITY_CONFIG недоступен
 const FALLBACK_BASH_CONFIG: BashSecurityConfig = {
@@ -274,6 +275,14 @@ export function isCommandAllowed(
         };
       }
     }
+  }
+
+  // Опасные ФОРМЫ команды (аудит §4.10/§4.11). Проверяются всегда при включённой
+  // защите: их цель — выполнить произвольный код или стереть данные, обходя
+  // чёрный список по имени команды.
+  const dangerousShape = detectDangerousShape(unquotedCommand);
+  if (dangerousShape) {
+    return { allowed: false, reason: dangerousShape };
   }
 
   // Команда разрешена
