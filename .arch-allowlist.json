@@ -56,7 +56,7 @@
     "src/modules/indexer/symbols.ts": 375,
     "src/modules/webui/settings/setup-api.ts": 369,
     "src/modules/session/manager.ts": 368,
-    "src/modules/browser/session.ts": 362,
+    "src/modules/browser/session.ts": 358,
     "src/modules/processes/registry.ts": 351
   }
 }

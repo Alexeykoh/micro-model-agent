@@ -35,7 +35,6 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
   "src/llm/model-loader.ts": "ollama load endpoint from config baseUrl",
   "src/llm/models-dev.ts": "hardcoded models.dev registry URL",
   "src/llm/native-context.ts": "native context endpoint from provider config",
-  "src/llm/image-utils.ts": "image URL already validated by the caller (attach-image)",
   "src/modules/providers/preflight.ts": "provider endpoint from config (baseUrl)",
   "src/modules/mcp/client.ts": "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
   "src/modules/updater/checker.ts": "GitHub releases URL, hardcoded",

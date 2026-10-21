@@ -11,6 +11,7 @@ import {
   buildTextExtractionScript,
 } from "./actions";
 import { CookieStore, type StoredCookie } from "./cookie-store";
+import { checkBrowserUrl } from "./url-policy";
 import { t } from "../../i18n/index";
 
 /** Ловит N одинаковых действий подряд на одном URL и возвращает предупреждение. */
@@ -199,17 +200,12 @@ export class BrowserSession {
   }
 
   private async open(url: string): Promise<ActionResult> {
-    if (!url) return { success: false, output: t("browser.url_required") };
-
-    // Блок опасных схем (file:, chrome:, about:, data:) — обход запретов исключён.
-    if (/^(file|chrome|about|data|javascript|view-source):/i.test(url)) {
-      return { success: false, output: `[SECURITY BLOCKED] scheme not allowed: ${url}` };
+    // Схемы, нормализация и SSRF-проверка — в `url-policy.ts`.
+    const policy = await checkBrowserUrl(url, this.config.networkSecurity);
+    if (!policy.ok) {
+      return { success: false, output: `[SECURITY BLOCKED] ${policy.reason}` };
     }
-
-    if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("file://")) {
-      const isLocalhost = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(url);
-      url = isLocalhost ? `http://${url}` : `https://${url}`;
-    }
+    url = policy.url;
 
     await this.launch();
     if (!this.driver) return { success: false, output: t("browser.create_page_failed") };

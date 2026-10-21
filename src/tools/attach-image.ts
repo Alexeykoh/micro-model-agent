@@ -8,6 +8,7 @@ import {
   loadUrlAsDataUrl,
   readClipboardImage,
   bufferToDataUrl,
+  ImageDownloadError,
 } from "../llm/image-utils";
 import { logSecurityBlock } from "../modules/security/audit-log";
 
@@ -75,7 +76,7 @@ export const attachImageTool: ToolDefinition = {
           );
           return { success: false, output: `[SECURITY BLOCKED] ${urlCheck.reason}` };
         }
-        const result = await loadUrlAsDataUrl(source);
+        const result = await loadUrlAsDataUrl(source, { securityConfig: networkConfig });
         dataUrl = result.dataUrl;
       } else {
         const absPath = resolve(ctx.baseDir, source);
@@ -129,9 +130,11 @@ export const attachImageTool: ToolDefinition = {
         images: [{ type: "image_url", image_url: { url: dataUrl } }],
       };
     } catch (err: any) {
+      const code = err instanceof ImageDownloadError ? err.code : undefined;
       return {
         success: false,
         output: t("image.error", { message: err.message }),
+        ...(code ? { errorMeta: { code, retryable: false } } : {}),
       };
     }
   },

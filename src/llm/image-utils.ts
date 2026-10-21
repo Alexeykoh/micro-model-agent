@@ -1,6 +1,8 @@
 /** Картинки: MIME, буфер обмена, загрузка файла/URL в data URL. */
 import { readFileSync } from "fs";
 import { extname } from "path";
+import { fetchValidated } from "../modules/security/network-validator";
+import type { NetworkSecurityConfig } from "../config/types";
 
 const MIME_MAP: Record<string, string> = {
   ".png": "image/png",
@@ -130,16 +132,66 @@ export async function loadFileAsDataUrl(filePath: string): Promise<{ dataUrl: st
   return { dataUrl: `data:${mime};base64,${b64}` };
 }
 
+/** Потолок загрузки картинки по URL (аудит §2.5): больше — ошибка, а не память. */
+export const MAX_IMAGE_DOWNLOAD_BYTES = 20 * 1024 * 1024;
+
+/** Ошибка загрузки картинки: код различает «слишком большое» и прочее. */
+export class ImageDownloadError extends Error {
+  constructor(
+    message: string,
+    public readonly code: "response_too_large" | "http_error" | "network_error",
+  ) {
+    super(message);
+    this.name = "ImageDownloadError";
+  }
+}
+
 /**
  * Грузит картинку по URL, ужимает, отдаёт JPEG data URL.
- * @param url URL картинки; @returns data URL.
+ *
+ * Загрузка идёт через `fetchValidated`: каждый хоп редиректа перепроверяется
+ * против SSRF-политики (раньше обычный `fetch` тянул 302 на 127.0.0.1), есть
+ * таймаут и потолок размера (аудит §2.5).
  */
-export async function loadUrlAsDataUrl(url: string): Promise<{ dataUrl: string }> {
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch image: ${resp.status} ${resp.statusText}`);
+export async function loadUrlAsDataUrl(
+  url: string,
+  opts: {
+    securityConfig?: NetworkSecurityConfig;
+    fetchImpl?: typeof fetch;
+  } = {},
+): Promise<{ dataUrl: string }> {
+  let response: Response;
+  try {
+    const validated = await fetchValidated(
+      url,
+      opts.securityConfig,
+      { signal: AbortSignal.timeout(15000) },
+      opts.fetchImpl,
+    );
+    response = validated.response;
+  } catch (err: any) {
+    throw new ImageDownloadError(err?.message ?? "fetch failed", "network_error");
   }
-  const buf = Buffer.from(await resp.arrayBuffer());
+  if (!response.ok) {
+    throw new ImageDownloadError(
+      `Failed to fetch image: ${response.status} ${response.statusText}`,
+      "http_error",
+    );
+  }
+  const declared = Number(response.headers.get("content-length") ?? "0");
+  if (declared > MAX_IMAGE_DOWNLOAD_BYTES) {
+    throw new ImageDownloadError(
+      `Image too large: ${declared} bytes (limit ${MAX_IMAGE_DOWNLOAD_BYTES})`,
+      "response_too_large",
+    );
+  }
+  const buf = Buffer.from(await response.arrayBuffer());
+  if (buf.byteLength > MAX_IMAGE_DOWNLOAD_BYTES) {
+    throw new ImageDownloadError(
+      `Image too large: ${buf.byteLength} bytes (limit ${MAX_IMAGE_DOWNLOAD_BYTES})`,
+      "response_too_large",
+    );
+  }
 
   const resized = await resizeToJpegDataUrl(buf);
   if (resized) return { dataUrl: resized };

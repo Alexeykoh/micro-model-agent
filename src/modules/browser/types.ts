@@ -58,6 +58,8 @@ export interface BrowserState {
   elementCount: number;
 }
 
+import type { NetworkSecurityConfig } from "../../config/types";
+
 /** Конфиг браузера: headless, лимиты, вьюпорт, куки, таймауты. */
 export interface BrowserConfig {
   headless: boolean;
@@ -70,6 +72,11 @@ export interface BrowserConfig {
   viewportWidth: number;
   viewportHeight: number;
   navigationTimeout: number;
+  /**
+   * Сетевая политика браузера (SSRF): без неё приватные адреса и
+   * metadata-эндпоинты не открываются (аудит §2.3).
+   */
+  networkSecurity?: NetworkSecurityConfig;
 }
 
 /** Результат действия: успех, текстовый вывод, опциональный скриншот. */
