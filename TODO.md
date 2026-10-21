@@ -59,7 +59,12 @@
       видимость ошибок slash-команд; XSS-guard-тесты; гонка активной сессии.
 - [ ] **W7 — конфиг:** атомарная запись (`src/config/config.ts:366` — обычный `writeFileSync`);
       `/config reset`; не-деструктивная миграция; busy-гейт веб-настроек; ротация/prune сессий.
-- [ ] **W4 — web-тулы:** `web_search` не проверяет HTTP-статус; нет `web-error.ts`/`web-content.ts`.
+- [x] **W4 — web-тулы:** сделано 2026-10-21 — `web_search` проверяет HTTP-статус,
+      добавлены `web-errors.ts` (единый формат ошибок) и `web-content.ts`
+      (фрейминг недоверенного контента), `web_browse` проверяет статус и
+      сохраняет структуру строк, SSRF-политика (в т.ч. DNS-резолв) в браузере и
+      `attach_image`, детект JS-шелла, предполёт Chromium, скиллы,
+      `max_tokens` субагента.
 - [ ] **W1/W2 — петля:** директивы, переживающие компакцию; `stopReason="duplicate"`;
       привязка evidence к ходу; `overcommitted`; `imageTokenCost`; `skipped_no_reduction`;
       `hardDropOldest` по `this.compactedBlock`.
