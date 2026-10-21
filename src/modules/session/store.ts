@@ -5,7 +5,6 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  statSync,
   writeFileSync,
   appendFileSync,
 } from "fs";
