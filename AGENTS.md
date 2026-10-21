@@ -146,6 +146,13 @@ bun run mma "<промпт>"   # прогнать агента вживую
 (setup-мастер), `tests/session/rotate-and-prune.test.ts` (ротация лога и prune),
 `tests/cli/background-children.test.ts` (гашение фоновых детей).
 
+LSP и индексатор (волна W8) держат: `tests/modules/lsp/connection-kill.test.ts`
+(pid и tree-kill), `tests/modules/lsp/stderr-drain.test.ts` (чтение stderr),
+`tests/modules/lsp/version-skew.test.ts` (версии диагностик и устаревший exit),
+`tests/modules/lsp/check-honesty.test.ts` (честность `lsp_check`),
+`tests/cli/provider-add-limits.test.ts` (лимиты провайдера),
+`tests/modules/indexer/incremental-rebuild.test.ts` (инкрементальная пересборка).
+
 Веб-поверхность (волна W6) держат: `tests/webui-security-headers.test.ts`
 (заголовки и auth на статику), `tests/webui-body-limits.test.ts` (капы тела и
 памяти, SSRF проб), `tests/webui-error-propagation.test.ts` (коды ошибок),

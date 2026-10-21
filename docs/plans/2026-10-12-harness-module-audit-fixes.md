@@ -2339,6 +2339,16 @@ it("unsubscribing one runner does not detach the main manager's rename listener"
 
 # Волна 8 — LSP и индексатор (находки §8.1–§8.9)
 
+> **Волна 8 закрыта 2026-10-21.** Выполнены задачи 8.1, 8.1b, 8.2, 8.3, 8.4, 8.5:
+> LSP-сервер получает pid и его дерево реально убивается; stderr сервера читается;
+> лимиты провайдера не выдумываются; версии диагностик и устаревший exit;
+> `lsp_check` честен про «не проверено»; индекс пересобирается инкрементально и
+> не гаснет на время сборки, резолв спецификаторов ограничен.
+> Тесты: `tests/modules/lsp/connection-kill.test.ts`,
+> `tests/cli/provider-add-limits.test.ts`, `tests/modules/lsp/stderr-drain.test.ts`,
+> `tests/modules/lsp/version-skew.test.ts`, `tests/modules/lsp/check-honesty.test.ts`,
+> `tests/modules/indexer/incremental-rebuild.test.ts`.
+
 ## Task 8.1: LSP-серверы получают `pid` и реально умирают (§8.1)
 
 **Files:**
