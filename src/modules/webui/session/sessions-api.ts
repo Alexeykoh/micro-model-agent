@@ -6,6 +6,7 @@ import { handleSessionItem } from "./session-item";
 import { readBody, requestError, sendJson } from "../util";
 import { parseJsonBody, readJsonBody } from "../http/body";
 import { isSessionBusy, pushState } from "./session-status";
+import { cancelPendingQuestions } from "./prompt-io";
 import { broadcast, type SessionStore, type RuntimeState, type HttpTransport, type SseTransport } from "../state";
 
 /** Проекция меты сессии для списка (`GET /api/sessions` и SSE `sessions`). */
@@ -180,6 +181,9 @@ export function handleSessionDeactivate(
   if (prev && !isSessionBusy(s, prev)) {
     s.pool.drop(prev);
   }
+  // Вопрос, ждущий ответа, снимаем: вкладка закрыта — спрашивать некому
+  // (аудит §6.8).
+  if (prev) cancelPendingQuestions(s, prev);
   emitSessions(s);
   pushState(s);
   sendJson(res, 200, { ok: true });

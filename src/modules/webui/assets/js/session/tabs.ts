@@ -27,14 +27,11 @@ export { loadCommands } from "./cmdk.js";
 export { renderSessionsDropdown } from "./sessions-menu.js";
 
 // Статусы вкладок: working — идёт ход, waiting — ждёт ответа (question),
-// queued — стоит в per-session очереди, failed — ход упал, dead — сессии нет
-// на сервере (удалена/подчищена: activate и history отвечают 404).
-// Рендерится точкой в табстрипе; завершение в чужой вкладке фокус не крадёт,
-// только бейдж.
+// queued — стоит в per-session очереди, failed — ход упал, dead — сессии нет.
+// Рендерится точкой в табстрипе; завершение в чужой вкладке фокус не крадёт.
 const TAB_DOT: Record<string, string> = { working: "●", waiting: "◉", queued: "○", failed: "✗", dead: "✗" };
 
-// Список открытых session-вкладок переживает перезагрузку страницы: без него
-// F5 оставлял только активную сессию, а остальные вкладки терялись.
+// Открытые session-вкладки переживают перезагрузку страницы (F5 не терял остальные).
 const OPEN_TABS_KEY = "mma-open-tabs";
 
 /** Сохранённый набор вкладок для восстановления после перезагрузки. */
@@ -103,9 +100,7 @@ export function setTabStatus(id: string | null | undefined, status: string): voi
 /**
  * Помечает вкладку мёртвой: сессии нет на сервере (удалена, подчищена
  * pruneEmpty, другая директория) — activate и history отвечают 404.
- * Лента заменяется честной карточкой с кнопкой закрытия; ретраи и очередь
- * больше её не трогают, сайдбар остаётся на последней живой сессии.
- * Идемпотентна (повторные 404 её же вкладки — no-op).
+ * Лента заменяется честной карточкой с кнопкой закрытия; идемпотентна.
  */
 export function markTabDead(id: string): void {
   const tab = tabState.tabs.find((x) => x.id === id);
@@ -298,6 +293,11 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
 export function closeTab(id: string): void {
   const i = tabState.tabs.findIndex((x) => x.id === id);
   if (i === -1) return;
+  // Вкладка уходит, а ход/вопрос — нет: прерываем ход ДО деактивации (§6.8).
+  const closing = tabState.tabs[i];
+  if (closing.kind === "session" && (closing.status === "working" || closing.status === "waiting")) {
+    void api("/api/interrupt", { method: "POST", body: { sessionId: closing.id } });
+  }
   const closingActive = tabState.activeTabId === id;
   if (closingActive) saveComposer();
   tabState.tabs = tabState.tabs.filter((x) => x.id !== id);

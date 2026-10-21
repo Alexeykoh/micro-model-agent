@@ -271,5 +271,5 @@ export function stopServer(s: WebUiState = getDefaultState()): void {
   s.busy = false;
   s.agentRunning = false;
   s.pool.clear();
-  s.lastPostTs = 0;
+  s.lastPostTs.clear();
 }

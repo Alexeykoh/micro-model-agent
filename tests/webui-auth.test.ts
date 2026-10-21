@@ -125,7 +125,7 @@ describe("webui auth + limits", () => {
     s.minPostIntervalMs = 60_000;
     s.bridge = makeBridge();
     withRunner(s, ["A"]);
-    s.lastPostTs = Date.now();
+    s.lastPostTs.set("A", Date.now());
     await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/message`, {
         method: "POST",

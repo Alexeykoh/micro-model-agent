@@ -167,7 +167,8 @@ export interface WebUiState {
    * серверным номером, а не клиентским счётчиком (реконнекты его не сбивают).
    */
   turnSeq: number;
-  lastPostTs: number;
+  /** Троттл POST — по сессии (параллельные вкладки не блокируют друг друга). */
+  lastPostTs: Map<string, number>;
   minPostIntervalMs: number;
   historyTail: number;
   /** Транспортный кап тела POST; переопределяется в тестах ради 413. */
@@ -271,8 +272,7 @@ export interface WebUiState {
   /**
    * Висящие интерактивные вопросы (`question`/`approve`) по id SSE-`question`.
    * Веб-`PromptIO` регистрирует здесь резолвер, `POST /api/answer` его закрывает;
-   * `cancelPendingQuestions` дренирует мапу на interrupt/shutdown, чтобы
-   * заблокированный тул не вешал ход.
+   * `cancelPendingQuestions` дренирует мапу на interrupt/shutdown.
    */
   pendingQuestions: Map<string, import("./session/prompt-io").PendingQuestion>;
   /**
@@ -367,7 +367,7 @@ export function createWebUiState(): WebUiState {
     agentRunning: false,
     pool: new RunPool(),
     turnSeq: 0,
-    lastPostTs: 0,
+    lastPostTs: new Map<string, number>(),
     minPostIntervalMs: 500,
     historyTail: 200,
     maxBodyBytes: MAX_BODY_BYTES,
