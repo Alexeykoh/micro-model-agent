@@ -27,7 +27,7 @@
     "src/core/agent.ts": 561,
     "src/modules/execution/execution-plugin.ts": 561,
     "src/modules/security/security-policies.ts": 492,
-    "src/modules/indexer/module.ts": 549,
+    "src/modules/indexer/module.ts": 499,
     "src/modules/plugins/manager.ts": 541,
     "src/modules/mcp/client.ts": 539,
     "src/tools/executor.ts": 535,

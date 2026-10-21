@@ -29,29 +29,42 @@ function withoutExt(path: string): string {
 
 /** Индекс путей для резолва спецификаторов импорта. */
 class PathIndex {
-  private byNoExt = new Map<string, string>();
+  /** Ключ (путь без расширения) → файлы: коллизии хранятся списком. */
+  private byKey = new Map<string, string[]>();
 
   constructor(files: IndexedFile[]) {
     for (const f of files) {
       const key = norm(f.path);
-      this.byNoExt.set(withoutExt(key), key);
-      this.byNoExt.set(key, key);
+      this.add(withoutExt(key), key);
+      this.add(key, key);
     }
+  }
+
+  /** Добавить файл под ключом (коллизия — список). */
+  private add(key: string, file: string): void {
+    const list = this.byKey.get(key);
+    if (!list) {
+      this.byKey.set(key, [file]);
+      return;
+    }
+    if (!list.includes(file)) list.push(file);
   }
 
   /** Ищет файл по нормализованному кандидату (точное/с суффиксом). */
   lookup(candidate: string): string | null {
     const cand = withoutExt(candidate).replace(/^\.\//, "");
     if (!cand) return null;
-    const exact = this.byNoExt.get(cand);
-    if (exact) return exact;
-    const suffixed = this.byNoExt.get(`${cand}/index`);
-    if (suffixed) return suffixed;
+    const exact = this.byKey.get(cand);
+    if (exact) return exact[0] ?? null;
+    const suffixed = this.byKey.get(`${cand}/index`);
+    if (suffixed) return suffixed[0] ?? null;
     // Хвостовой матч: спецификатор `src/util` ↔ файл `packages/app/src/util.ts`.
-    for (const [key, file] of this.byNoExt) {
-      if (key.endsWith(`/${cand}`)) return file;
+    // Неоднозначный хвост (несколько файлов) — не берём ни один (аудит §8.8).
+    const matches: string[] = [];
+    for (const [key, list] of this.byKey) {
+      if (key.endsWith(`/${cand}`)) matches.push(...list);
     }
-    return null;
+    return matches.length === 1 ? (matches[0] ?? null) : null;
   }
 }
 
@@ -64,6 +77,11 @@ function resolveSpecifier(importer: string, spec: string, index: PathIndex): str
   }
   if (s.startsWith("@/") || s.startsWith("~/")) {
     return index.lookup(s.replace(/^[@~/]+/, ""));
+  }
+  // Голый идентификатор пакета (`react`, `node:fs`) — это НЕ наш файл: не
+  // сканируем всю карту (аудит §8.8).
+  if (!s.includes("/") && !s.startsWith(".") && !s.startsWith("@") && !s.startsWith("~")) {
+    return null;
   }
   // Голый/абсолютный спецификатор — пробуем как хвост пути (локальные пакеты).
   return index.lookup(s);
