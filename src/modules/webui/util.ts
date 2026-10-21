@@ -9,7 +9,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { errMsg } from "../../utils/error";
 import { redactContextSecrets } from "../../core/api";
-import { MAX_BODY_BYTES } from "./limits";
+import { MAX_BODY_BYTES, bodyCapFor } from "./limits";
 import { readEnv } from "../../config/env";
 
 export { MAX_BODY_BYTES } from "./limits";
@@ -152,16 +152,27 @@ export function sendJson(res: ServerResponse, status: number, body: unknown): vo
  * Буферизует тело запроса до `cap`. На переполнении реджектит `BodyTooLargeError`
  * БЕЗ убийства сокета: вызывающий владеет ответом 413 и рвёт запрос только
  * после флаша ответа — иначе клиент получит socket error вместо 413.
+ *
+ * Кап — минимум из переданного и капа маршрута (`bodyCapFor`): маршруты
+ * сообщений принимают большие тела (картинки), остальные — 1 МБ.
  */
 export function readBody(req: IncomingMessage, cap = MAX_BODY_BYTES): Promise<string> {
+  const effectiveCap = Math.min(cap, bodyCapFor(req.method, requestPath(req)));
   return new Promise((resolve, reject) => {
     let size = 0;
     let settled = false;
     const chunks: Buffer[] = [];
+    // Предпроверка Content-Length: не буферизовать тело, которое заведомо
+    // больше капа (аудит §6.4).
+    const declared = Number(req.headers?.["content-length"] ?? "0");
+    if (Number.isFinite(declared) && declared > effectiveCap) {
+      reject(new BodyTooLargeError());
+      return;
+    }
     req.on("data", (chunk: Buffer) => {
       if (settled) return;
       size += chunk.length;
-      if (size > cap) {
+      if (size > effectiveCap) {
         settled = true;
         reject(new BodyTooLargeError());
         return;
@@ -178,6 +189,13 @@ export function readBody(req: IncomingMessage, cap = MAX_BODY_BYTES): Promise<st
       }
     });
   });
+}
+
+/** Путь запроса без query-строки. */
+function requestPath(req: IncomingMessage): string {
+  const raw = req.url || "/";
+  const idx = raw.indexOf("?");
+  return idx >= 0 ? raw.slice(0, idx) : raw;
 }
 
 /** Достаёт `{ text, images }` из распарсенного тела; битый JSON и пусто — разные ошибки. */

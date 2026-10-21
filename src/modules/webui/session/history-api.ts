@@ -132,8 +132,6 @@ function fromMessages(messages: SessionMessage[]): HistoryEntry[] {
         success: true,
       });
     } else if (m.role === "system") {
-      // Системный промпт из history.jsonl — не чат, в транскрипт не идёт.
-      continue;
     }
   }
   return out;
