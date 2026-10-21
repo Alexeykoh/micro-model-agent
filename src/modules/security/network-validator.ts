@@ -209,13 +209,14 @@ export async function fetchValidated(
   url: string,
   securityConfig: NetworkSecurityConfig | undefined,
   init: RequestInit = {},
+  fetchImpl: typeof fetch = fetch,
 ): Promise<ValidatedFetchResult> {
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const check = isUrlAllowed(current, securityConfig);
     if (!check.allowed) throw new BlockedRedirectError(check.reason || "URL not allowed");
 
-    const response = await fetch(current, { ...init, redirect: "manual" });
+    const response = await fetchImpl(current, { ...init, redirect: "manual" });
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
       if (!location) return { response, finalUrl: current };

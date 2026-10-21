@@ -45,6 +45,8 @@
   "error.fetch_failed": "Fetch failed: {message}",
   "error.fetch_url_failed": "Failed to fetch {url}: {message}",
   "error.http": "HTTP {status}: {statusText}",
+  "error.fetch_http": "Fetch failed: {url} — HTTP {status}: {statusText}",
+  "error.fetch_network": "Fetch failed: {url} — {message}",
   "error.llm_api": "LLM API error {status} ({statusText}): {errorText}",
   "error.llm_retries": "LLM request failed after retries",
   "error.llm_429": "Rate limit exceeded (HTTP 429) for {model} on {baseUrl}. The provider is throttling requests — free models are especially strict. Get an API key or switch to a paid/faster model: {baseUrl}",

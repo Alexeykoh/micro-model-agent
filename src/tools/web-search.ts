@@ -5,6 +5,7 @@ import type { NetworkSecurityConfig } from "../config/types";
 import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator";
 import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
+import { readMmaVersion } from "../core/version";
 
 /** Элемент выдачи: заголовок, URL, сниппет. */
 export interface SearchResult {
@@ -20,6 +21,19 @@ export interface WebSearchOutcome {
   error?: string;
   /** true — URL отклонён security-политикой (не I/O-ошибка). */
   blocked?: boolean;
+}
+
+/** Задержка перед единственным ретраем на 429/503. */
+const RETRY_DELAY_MS = 800;
+
+/** User-Agent: поисковики режут запросы без него. */
+function userAgent(): string {
+  return `micro-models-agent/${readMmaVersion()}`;
+}
+
+/** Пауза перед ретраем. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -45,12 +59,16 @@ export function unwrapDdgUrl(url: string): string {
  * (execution-модуль). `networkConfig` — резолвленная сетевая security-конфигурация
  * (undefined при выключенной безопасности); `requestTimeoutMs` переопределяет
  * таймаут, когда у вызывающего свой (автопоиск — errorWebSearch.requestTimeoutMs).
+ *
+ * Статус ответа проверяется: 429/503 — это не «пустая выдача», а ошибка
+ * (аудит §2.1). `fetchImpl` — точка подмены для тестов.
  */
 export async function performWebSearch(
   query: string,
   numResults: number,
   networkConfig: NetworkSecurityConfig | undefined,
   requestTimeoutMs?: number,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<WebSearchOutcome> {
   const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
   const validation = isUrlAllowed(url, networkConfig);
@@ -62,10 +80,28 @@ export async function performWebSearch(
       error: validation.reason || "URL blocked by security policy",
     };
   }
+  const timeoutMs = requestTimeoutMs ?? networkConfig?.requestTimeout ?? 10000;
   try {
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(requestTimeoutMs ?? networkConfig?.requestTimeout ?? 10000),
+    let response = await fetchImpl(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: { "User-Agent": userAgent() },
     });
+    // Один ретрай на 429/503: поисковик часто отвечает «слишком много
+    // запросов», и повтор через 800 мс почти всегда проходит.
+    if (response.status === 429 || response.status === 503) {
+      await sleep(RETRY_DELAY_MS);
+      response = await fetchImpl(url, {
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { "User-Agent": userAgent() },
+      });
+    }
+    if (!response.ok) {
+      return {
+        success: false,
+        results: [],
+        error: `HTTP ${response.status}: ${response.statusText}`,
+      };
+    }
     const html = await response.text();
     const results: SearchResult[] = [];
     const snippetRegex =
@@ -143,9 +179,19 @@ export const webSearchTool: ToolDefinition = {
     );
 
     if (!outcome.success) {
+      const message = String(outcome.error);
+      const status = /^HTTP (\d{3})/.exec(message)?.[1];
       return {
         success: false,
-        output: t("error.search_failed", { message: String(outcome.error) }),
+        output: t("error.search_failed", { message }),
+        ...(status
+          ? {
+              errorMeta: {
+                code: `http_${status}`,
+                retryable: status === "429" || Number(status) >= 500,
+              },
+            }
+          : {}),
       };
     }
     if (outcome.results.length === 0) {
