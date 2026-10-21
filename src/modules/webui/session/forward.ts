@@ -12,7 +12,7 @@ import type { SseEvent, RuntimeState, SseTransport } from "../state";
 import { broadcast } from "../state";
 import { syncBusy } from "./session-status";
 import { redactContextSecrets } from "../../../core/api";
-import { stripAnsi } from "../../../ui/line-math";
+import { sanitizeOutputPlain } from "../../../ui/sanitize-output";
 import type { MetaKind, StopReason } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import type { HostStateSnapshot } from "../../../core/host";
@@ -135,18 +135,18 @@ export function makeForwarder(
     // буквальным мусором `\u001b[2m…`. Режем здесь, в единственной точке, через
     // которую проходит каждый чанк текста/меты/reasoning.
     if (buf.reasoning) {
-      sink({ type: "reasoning", ts: Date.now(), chunk: stripAnsi(buf.reasoning) });
+      sink({ type: "reasoning", ts: Date.now(), chunk: sanitizeOutputPlain(buf.reasoning) });
       buf.reasoning = "";
     }
     if (buf.text) {
-      sink({ type: "text", ts: Date.now(), chunk: stripAnsi(buf.text) });
+      sink({ type: "text", ts: Date.now(), chunk: sanitizeOutputPlain(buf.text) });
       buf.text = "";
     }
     if (buf.meta) {
       sink({
         type: "meta",
         ts: Date.now(),
-        chunk: stripAnsi(buf.meta),
+        chunk: sanitizeOutputPlain(buf.meta),
         ...(buf.metaKind ? { kind: buf.metaKind } : {}),
       });
       buf.meta = "";
@@ -168,7 +168,7 @@ export function makeForwarder(
       // (иначе финал встаёт дублем). В общий meta-буфер не кладём.
       if (kind === "retract") {
         flush();
-        sink({ type: "retract", ts: Date.now(), reason: stripAnsi(chunk) });
+        sink({ type: "retract", ts: Date.now(), reason: sanitizeOutputPlain(chunk) });
         return;
       }
       // Тела тулов и строки статуса не должны делить одно SSE-событие: клиент
@@ -209,7 +209,7 @@ export function makeForwarder(
         name: call.name,
         success: result.success,
         durationMs,
-        output: stripAnsi(redactContextSecrets(clipToolOutput(call.name, result.output || ""))),
+        output: sanitizeOutputPlain(redactContextSecrets(clipToolOutput(call.name, result.output || ""))),
         ...(images.length ? { images } : {}),
       });
     },
