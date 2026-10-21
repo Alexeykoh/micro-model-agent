@@ -21,6 +21,15 @@ function globToRegExp(pattern: string): RegExp {
   return new RegExp(`^${regexPattern}$`, process.platform === "win32" ? "i" : "");
 }
 
+/** Есть ли совпадение хотя бы с одним паттерном списка. */
+export function matchesAnyGlob(
+  targetPath: string,
+  baseDir: string,
+  patterns: readonly string[],
+): boolean {
+  return patterns.some((pattern) => matchesGlobPattern(targetPath, baseDir, pattern));
+}
+
 /**
  * Простой glob-матчинг (поддерживает * и **).
  *

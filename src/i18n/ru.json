@@ -20,6 +20,7 @@
   "file.not_found_short": "Не найдено: {path}",
   "file.empty": "(пусто)",
   "file.no_matches": "Нет совпадений",
+  "file.glob_hidden": "({count} путей скрыто скоупом/безопасностью)",
   "file.truncated": "\n... (обрезано)",
   "file.read_header": "── {path} ({ext}, {total} строк, строки {from}-{to})",
   "file.read_range": "строки {from}-{to} из {total}",

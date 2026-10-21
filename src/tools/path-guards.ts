@@ -1,10 +1,36 @@
 // Общие гварды путей для тулов: workdir `bash` и allowlist записи.
 // Живут в `src/tools/`, потому что это шов тулов, а не политика модуля.
 import { platform } from "os";
+import { resolve } from "path";
 import { t } from "../i18n/index";
 import { validateWorkdir } from "../modules/security/path-validator";
 import { logSecurityBlock } from "../modules/security/audit-log";
+import { safeResolvePath } from "./path-utils";
 import type { ToolContext, ToolResult } from "./types";
+
+/**
+ * Allowlist записи (`ctx.writePathAllowlist`) — единая точка для всех
+ * мутирующих файловых тулов (аудит §4.4). Раньше проверка жила только в
+ * `write_file`/`append_file`/`edit_file`, и `delete_file`/`move_file`/
+ * `create_dir` её обходили.
+ *
+ * @returns заблокированный результат или `undefined`, если запись разрешена.
+ */
+export function assertWritable(path: string, ctx: ToolContext): ToolResult | undefined {
+  if (!ctx.writePathAllowlist) return undefined;
+  const resolved = safeResolvePath(ctx.baseDir, path);
+  const ok = ctx.writePathAllowlist.some(
+    (p) => resolve(p).toLowerCase() === resolved.toLowerCase(),
+  );
+  if (ok) return undefined;
+  return {
+    success: false,
+    output: t("file.path_not_allowed", {
+      path: `${path} — ${t("onboarding.write_restricted")}`,
+      reason: t("onboarding.write_restricted"),
+    }),
+  };
+}
 
 /**
  * POSIX-workdir на Windows: cmd.exe не понимает "/tmp"/"/Users/…" — это

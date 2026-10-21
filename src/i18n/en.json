@@ -21,6 +21,7 @@
   "file.notfound_resolved": "File not found: {path} (resolved to {resolved})\nThe path was joined onto the working directory because it does not exist as given. Run list_dir to find the correct path.",
   "file.empty": "(empty)",
   "file.no_matches": "No matches",
+  "file.glob_hidden": "({count} paths hidden by scope/security)",
   "file.truncated": "\n... (truncated)",
   "file.read_header": "── {path} ({ext}, {total} lines, lines {from}-{to})",
   "file.read_range": "lines {from}-{to} of {total}",

@@ -6,6 +6,7 @@ import { logFileDelete, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDeleteDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
+import { assertWritable } from "./path-guards";
 
 /** Удаляет файл; каталоги отклоняет. Возвращает diff удалённого. */
 export const deleteFileTool: ToolDefinition = {
@@ -24,6 +25,10 @@ export const deleteFileTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
+
+    // Allowlist записи (аудит §4.4): раньше проверка жила только в write_file.
+    const notAllowed = assertWritable(path, ctx);
+    if (notAllowed) return notAllowed;
 
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
