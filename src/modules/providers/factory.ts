@@ -5,6 +5,7 @@ import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
 import { ProviderManager } from "./manager";
 import { FallbackProvider } from "./fallback";
+import { sharedRateLimiter } from "../../llm/shared-rate-limiter";
 
 export interface BuiltProvider {
   manager: ProviderManager;
@@ -30,6 +31,9 @@ export function buildActiveProvider(
     contextWindow: config.contextWindow,
     retry: config.retry,
     rateLimits: config.security?.rateLimits,
+    // Лимитер запросов ОБЩИЙ на процесс: иначе каждый раннер сессии получает
+    // свой, и фактический поток к провайдеру в N раз выше заявленного.
+    sharedLimiter: sharedRateLimiter(config.security?.rateLimits),
     getSessionId: opts?.getSessionId,
     modelCapabilities: config.modelCapabilities,
     probeCapabilities: opts?.probeCapabilities,

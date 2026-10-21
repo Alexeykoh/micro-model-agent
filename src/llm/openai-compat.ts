@@ -58,7 +58,8 @@ export interface OpenAICompatConfig {
   maxCompletionTokens?: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
-  /** Живой id диалога → `x-opencode-session` (требует OpenCode Go) + кеш-аффинити. */
+  /** Общий лимитер запросов на процесс (иначе у каждого экземпляра свой). */
+  rateLimiter?: RateLimiter;  /** Живой id диалога → `x-opencode-session` (требует OpenCode Go) + кеш-аффинити. */
   getSessionId?: () => string | undefined;
   /** Cache-возможность: подсказки кеша и гейтинг `x-opencode-session`; нет = легаси. */
   cache?: CacheCapability;
@@ -188,7 +189,8 @@ export class OpenAICompatProvider implements LLMProvider {
       maxStreamRetries: 2,
       noDataTimeoutMs: 180000,
     };
-    this.rateLimiter = createRateLimiter(config.rateLimits);
+    // Общий лимитер процесса (аудит §7.8): иначе у каждого экземпляра свой.
+    this.rateLimiter = config.rateLimiter ?? createRateLimiter(config.rateLimits);
     this.getSessionId = config.getSessionId;
     this.userAgent = config.userAgent ?? defaultUserAgent();
     this.debug = config.logger ? config.logger.debug.bind(config.logger) : null;
@@ -196,7 +198,6 @@ export class OpenAICompatProvider implements LLMProvider {
 
   /**
    * Тишина между чанками, после которой стрим считается мёртвым.
-   * Единый источник дефолта (дублировался в doStream/chat).
    */
   private get idleTimeoutMs(): number {
     return this.retryConfig.noDataTimeoutMs ?? 180000;
@@ -204,9 +205,6 @@ export class OpenAICompatProvider implements LLMProvider {
 
   /**
    * Стрим чата: rate-limit → стрим → фолбэк non-stream при пустом стриме.
-   * @param messages история; @param tools определения тулов;
-   * @param signal abort; @param options лимит токенов/reasoning.
-   * @returns асинхронный итератор чанков.
    */
   async *chat(
     messages: Message[],

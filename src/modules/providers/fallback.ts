@@ -16,6 +16,12 @@ export interface FallbackSource {
   readonly activeName: string;
   listNames(): string[];
   switch(name: string, model?: string): LLMProvider;
+  /**
+   * Модель, закреплённая за провайдером (из `provider.models`). Failover обязан
+   * переключаться на модель ЦЕЛЕВОГО провайдера: модель прежнего у другого
+   * провайдера обычно не существует (аудит §7.7).
+   */
+  modelFor?(name: string): string | undefined;
   readonly active: LLMProvider;
 }
 
@@ -27,6 +33,9 @@ export function isFailoverError(err: unknown): boolean {
   if (err instanceof Error && err.name === "AbortError") return false;
   // HTTP-статус, прикреплённый openai-compat как типизированный LlmError: только ретраируемые.
   if (err instanceof LlmError && typeof err.llmStatus === "number") {
+    // 404 «model not found» — тоже повод переключиться: у другого провайдера
+    // своя модель (аудит §7.7).
+    if (err.llmStatus === 404) return true;
     return err.llmStatus === 429 || err.llmStatus >= 500;
   }
   // Сетевые падения по errno-коду (Bun: "ConnectionRefused",
@@ -91,7 +100,7 @@ export class FallbackProvider implements LLMProvider {
       const name = names[idx];
       const provider = name === this.source.activeName
         ? this.source.active
-        : this.source.switch(name);
+        : this.source.switch(name, this.source.modelFor?.(name));
       try {
         for await (const chunk of provider.chat(messages, tools, signal, options)) {
           emitted = true;

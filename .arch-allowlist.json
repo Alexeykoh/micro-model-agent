@@ -5,7 +5,7 @@
     "src/cli/repl-commands.ts": 1204,
     "src/ui/line-editor.ts": 1160,
     "src/core/context/manager.ts": 1129,
-    "src/llm/openai-compat.ts": 964,
+    "src/llm/openai-compat.ts": 962,
     "src/modules/execution/stuck-detector.ts": 886,
     "src/modules/webui/assets/js/settings/panels.ts": 880,
     "src/modules/webui/assets/setup.ts": 863,
