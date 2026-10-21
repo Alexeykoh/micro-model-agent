@@ -1,16 +1,25 @@
 // Markdown-форматтер чата: стриминг строк, подсветка кода, таблицы (см. STYLE.md).
 import { pc } from "./colors";
 import stringWidth from "string-width";
-import { t } from "../i18n/index";
-import { formatTable, getTerminalWidth } from "./table";
+import { formatTable, getTerminalWidth, isSeparatorRow } from "./table";
 import { glyph } from "./theme";
 import { highlight, formatInline } from "./md-inline";
+import { normalizeInlineLine } from "./md-normalize";
 
+/**
+ * Строка-строка GFM-таблицы: есть `|` (не экранированный) и строка не является
+ * списком/цитатой/фенсом. Внешние `|` не обязательны — GFM допускает
+ * `col1 | col2` (аудит §8.13: веб и терминал должны понимать одно и то же).
+ */
 function isTableRow(line: string): boolean {
   const trimmed = line.trim();
-  if (!trimmed.startsWith("|")) return false;
-  const pipes = trimmed.match(/\|/g);
-  return (pipes?.length ?? 0) >= 2;
+  if (!trimmed.includes("|")) return false;
+  // Не список, не цитата, не фенс — иначе строка с `|` в prose попадёт в таблицу.
+  if (/^\s*[-*+]\s/.test(trimmed)) return false;
+  if (/^\s*\d+[.)]\s/.test(trimmed)) return false;
+  if (/^\s*>/.test(trimmed)) return false;
+  if (/^\s*(```|~~~)/.test(trimmed)) return false;
+  return true;
 }
 
 function isHorizontalRule(line: string): boolean {
@@ -132,9 +141,6 @@ export class FormattingStream {
   }
 
   flush(): void {
-    if (this.tableBuffer.length > 0) {
-      this.flushTable();
-    }
     if (this.inCodeBlock) {
       if (this.buffer.length > 0) {
         // Закрывающий fence в EOF без trailing newline: считаем закрытием, а не
@@ -153,10 +159,21 @@ export class FormattingStream {
       return;
     }
     if (this.buffer.length > 0) {
+      // Хвост буфера — последняя (возможно неполная) строка. Если это строка
+      // таблицы, она ДОЛЖНА войти в таблицу: иначе последняя строка таблицы
+      // терялась (аудит §8.13).
       const line = this.buffer;
       this.buffer = "";
       this.emitPartialRewind();
-      this.onWrite(this.formatLine(line));
+      if (isTableRow(line)) {
+        this.tableBuffer.push(line);
+      } else {
+        if (this.tableBuffer.length > 0) this.flushTable();
+        this.onWrite(this.formatLine(line));
+      }
+    }
+    if (this.tableBuffer.length > 0) {
+      this.flushTable();
     }
     this.streamedChars = 0;
   }
@@ -196,7 +213,7 @@ export class FormattingStream {
   private flushTable(): void {
     const lines = this.tableBuffer;
     this.tableBuffer = [];
-    const hasSeparator = lines.length >= 2 && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[1].trim());
+    const hasSeparator = lines.length >= 2 && isSeparatorRow(lines[1]);
     if (hasSeparator) {
       for (const l of formatTable(lines, { maxWidth: this.width })) {
         this.onWrite(l);
@@ -225,7 +242,8 @@ export class FormattingStream {
   }
 
   private formatLine(line: string): string {
-    const result = line;
+    // Строчная нормализация (заголовок без пробела, `1)` → `1.`) — как в вебе.
+    const result = normalizeInlineLine(line);
 
     const heading = result.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
@@ -276,17 +294,5 @@ export function formatMarkdown(text: string): string {
   return lines.join("\n");
 }
 
-/** Форматирует ошибку (красный префикс из i18n). */
-export function formatError(text: string): string {
-  return pc.red(pc.bold(t("ui.error_prefix")) + text);
-}
-
-/** Форматирует успех (зелёный префикс из i18n). */
-export function formatSuccess(text: string): string {
-  return pc.green(pc.bold(t("ui.success_prefix")) + text);
-}
-
-/** Форматирует предупреждение (жёлтый префикс из i18n). */
-export function formatWarning(text: string): string {
-  return pc.yellow(pc.bold(t("ui.warning_prefix")) + text);
-}
+/** Форматирует ошибку/успех/предупреждение — в `md-messages.ts`. */
+export { formatError, formatSuccess, formatWarning } from "./md-messages";

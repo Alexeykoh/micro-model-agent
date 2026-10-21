@@ -95,9 +95,18 @@ export class MdNormalizer {
 
   /** Строчные правки без контекста таблицы (заголовок, `1)`). */
   private decideInline(line: string): string {
-    if (HEADING_RE.test(line)) return line.replace(HEADING_RE, "$1 $2");
-    return line.replace(OL_RE, "$1$2.$3$4");
+    return normalizeInlineLine(line);
   }
+}
+
+/**
+ * Строчная нормализация без контекста: `##Title` → `## Title`, `1)` → `1.`.
+ * Двойник `src/ui/md-normalize.ts` (паритет — гвард
+ * `tests/ui/md-terminal-parity.test.ts`).
+ */
+export function normalizeInlineLine(line: string): string {
+  if (HEADING_RE.test(line)) return line.replace(HEADING_RE, "$1 $2");
+  return line.replace(OL_RE, "$1$2.$3$4");
 }
 
 /** Нормализует готовый текст целиком. */

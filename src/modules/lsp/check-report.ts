@@ -45,7 +45,7 @@ export function renderCheckReport(acc: CheckAccumulator): ToolResult {
   }
   if (acc.suppressed > 0) {
     lines.push(
-      `[lsp_check inconclusive: no tsconfig.json / node_modules near project root — ${acc.suppressed} module-resolution diagnostic(s) suppressed. Initialize the project (package.json + types) for accurate TypeScript checks.]`,
+      t("lsp.check_suppressed", { count: String(acc.suppressed) }),
     );
   }
   // Сервер молчал хотя бы на одном файле: это НЕ «чисто», и модель не должна

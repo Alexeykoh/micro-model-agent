@@ -14,6 +14,23 @@ describe("i18n", () => {
     expect(t("unknown.key")).toBe("unknown.key");
   });
 
+  it("en and ru have identical key sets", async () => {
+    const en = (await import("../src/i18n/en.json")).default as Record<string, string>;
+    const ru = (await import("../src/i18n/ru.json")).default as Record<string, string>;
+    expect(Object.keys(en).sort()).toEqual(Object.keys(ru).sort());
+  });
+
+  it("en and ru placeholders match per key", async () => {
+    const en = (await import("../src/i18n/en.json")).default as Record<string, string>;
+    const ru = (await import("../src/i18n/ru.json")).default as Record<string, string>;
+    const placeholders = (text: string): string[] =>
+      [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+    const mismatched = Object.keys(en).filter(
+      (key) => placeholders(en[key] ?? "").join(",") !== placeholders(ru[key] ?? "").join(","),
+    );
+    expect(mismatched, `разные плейсхолдеры: ${mismatched.join(", ")}`).toEqual([]);
+  });
+
   it("should translate simple string", () => {
     const result = t("file.created", { path: "src/index.ts" });
     expect(result).toContain("Created");
