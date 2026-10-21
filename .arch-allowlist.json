@@ -20,7 +20,7 @@
     "src/modules/service/api/tasks-api.ts": 690,
     "src/modules/execution/module.ts": 688,
     "src/core/session-logger.ts": 606,
-    "src/modules/lsp/connection.ts": 543,
+    "src/modules/lsp/connection.ts": 533,
     "src/modules/certification/scenarios.ts": 591,
     "src/config/types.ts": 587,
     "src/modules/webui/assets/app.ts": 570,

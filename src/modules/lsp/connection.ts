@@ -1,13 +1,12 @@
 // Одно LSP-соединение = один процесс сервера.
 //
-// Отличие от прежней реализации (`client.ts` до 2.39): процесс НЕ убивается
-// после каждой проверки. Соединение живёт, документы синкатся
-// (`didOpen`/`didChange`/`didClose`), диагностики считаются актуальными на
-// последнюю версию документа. Убивает соединение только пул (LRU/idle) или
-// явный `shutdown()`.
+// Процесс НЕ убивается после каждой проверки: соединение живёт, документы
+// синкатся (`didOpen`/`didChange`/`didClose`), диагностики считаются
+// актуальными на последнюю версию документа. Убивает соединение только пул
+// (LRU/idle) или явный `shutdown()`.
 //
 // Спавн впрыскивается через `ServerProcessFactory`, поэтому тесты гоняют
-// настоящее фреймирование и корреляцию на фейковом сервере без child_process.
+// настоящее фреймирование на фейковом сервере без child_process.
 import type { LspDiagnostic, LspServerConfig } from "./types";
 import { killTree, type KillableProcess } from "../processes/registry";
 import { findHeaderEnd, isAcceptableFrameLength, parseContentLength } from "./framing";
@@ -17,63 +16,31 @@ import type { LspClientLogger } from "./client-logger";
 import { errMsg } from "../../utils";
 import { LSP_DEFAULT_TIMEOUT_MS } from "../../config/timeouts";
 import { defaultSpawn, resolveLaunchPlan } from "./spawn";
+import { StderrRing } from "./stderr-ring";
+import type {
+  DiagnosticRecord,
+  DocumentDiagnosticReport,
+  DocumentState,
+  LaunchPlan,
+  PublishDiagnosticsParams,
+  ServerProcess,
+  ServerProcessFactory,
+} from "./connection-types";
 
 // Спавн и резолв команды — в `spawn.ts`; реэкспорт для существующих импортёров.
 export { defaultSpawn, resolveLaunchPlan } from "./spawn";
 
-/** Поток stdout процесса сервера в объёме, нужном транспорту. */
-export interface ServerStdout {
-  on(event: "data", cb: (chunk: Buffer) => void): void;
-}
-
-/** Минимум от процесса сервера (удовлетворяется `ChildProcess`). */
-export interface ServerProcess {
-  stdin: { writable: boolean; write(chunk: string): boolean } | null;
-  stdout: ServerStdout | null;
-  /** pid процесса сервера — нужен, чтобы убить ВСЁ дерево (аудит §8.1). */
-  pid?: number;
-  kill(signal?: number | string): boolean;
-  once(event: "exit", cb: () => void): void;
-  on(event: "error", cb: (error: Error) => void): void;
-}
-
-/** Как именно нужно стартовать процесс (после резолва npx/офлайна). */
-export interface LaunchPlan {
-  command: string;
-  args: string[];
-}
-
-/** Фабрика процесса сервера; по умолчанию — реальный spawn с Windows-путём. */
-export type ServerProcessFactory = (plan: LaunchPlan, cwd: string) => Promise<ServerProcess>;
-
-/** Состояние одного синкаемого документа (версия для `didChange`). */
-export interface DocumentState {
-  uri: string;
-  languageId: string;
-  version: number;
-  text: string;
-  open: boolean;
-}
-
-/** Запись диагностик документа: версия, на которой они посчитаны. */
-export interface DiagnosticRecord {
-  version: number;
-  diagnostics: LspDiagnostic[];
-}
-
-/** Тело `textDocument/publishDiagnostics`. */
-export interface PublishDiagnosticsParams {
-  uri: string;
-  diagnostics?: LspDiagnostic[];
-  version?: number;
-}
-
-/** Ответ `textDocument/diagnostic` (pull-модель, LSP 3.17). */
-export interface DocumentDiagnosticReport {
-  kind?: "full" | "unchanged";
-  items?: LspDiagnostic[];
-  resultId?: string;
-}
+// Контракты процесса — в `connection-types.ts`; реэкспорт для импортёров.
+export type {
+  DiagnosticRecord,
+  DocumentDiagnosticReport,
+  DocumentState,
+  LaunchPlan,
+  PublishDiagnosticsParams,
+  ServerProcess,
+  ServerProcessFactory,
+  ServerStdout,
+} from "./connection-types";
 
 /** Что нужно соединению извне: логгер, офлайн-флаг, инъекции для тестов. */
 export interface LspConnectionDeps {
@@ -126,6 +93,23 @@ export class LspConnection {
   /** pid процесса сервера (undefined — сервер не запущен). */
   get processPid(): number | undefined {
     return this.process?.pid;
+  }
+
+  /**
+   * Хвост stderr сервера (последние 4 КБ) — для диагностики.
+   * DEBT(lsp-stderr-in-doctor): в вывод `/lsp doctor` он пока не попадает.
+   */
+  get stderrTail(): string {
+    return this.stderr.tail;
+  }
+
+  /** Кольцо stderr: сервер «болтает» — пайп не должен переполняться. */
+  private readonly stderr = new StderrRing();
+
+  /** Дописать кусок stderr в кольцо и слить в debug-лог. */
+  private appendStderr(chunk: string): void {
+    this.stderr.push(chunk);
+    this.logger?.debug(`LSP stderr: ${chunk.slice(0, 500)}`, { key: this.key });
   }
 
   constructor(
@@ -203,13 +187,20 @@ export class LspConnection {
     this.touch();
   }
 
-  /** Спавн процесса и подписка на его события (exit/error/stdout). */
+  /** Спавн процесса и подписка на его события (exit/error/stdout/stderr). */
   private async spawnAndWire(plan: LaunchPlan): Promise<void> {
     this.process = await this.spawnProcess(plan, this.projectRoot);
     this.process.once("exit", () => this.onServerExit());
     this.process.on("error", (error) => {
       this.logger?.debug(`LSP process error: ${errMsg(error)}`, { key: this.key });
     });
+    if (this.process.stderr) {
+      // stderr сервера ЧИТАЕМ: иначе «болтливый» сервер (npm-предупреждения,
+      // краш-логи) забивает пайп и встаёт (аудит §8.2).
+      this.process.stderr.on("data", (chunk: Buffer) => {
+        this.appendStderr(chunk.toString());
+      });
+    }
     if (this.process.stdout) {
       this.process.stdout.on("data", (chunk) => this.handleData(chunk));
     }
@@ -276,8 +267,7 @@ export class LspConnection {
    * Диагностика документа. Возвращает:
    * - список (в т.ч. пустой) — это ответ сервера;
    * - `null` — сервер молчит (таймаут/нет push) — ответа нет, это не «чисто».
-   */
-  async diagnosticsFor(uri: string, timeoutMs: number): Promise<LspDiagnostic[] | null> {
+   */  async diagnosticsFor(uri: string, timeoutMs: number): Promise<LspDiagnostic[] | null> {
     if (!this.isOpen) return null;
     const doc = this.documents.get(uri);
     const version = doc?.version ?? -1;

@@ -1,6 +1,7 @@
 // Фейковый LSP-сервер для тестов транспорта: настоящее фреймирование
 // (Content-Length + JSON-RPC) в памяти, без child_process.
 import { EventEmitter } from "events";
+import { PassThrough } from "stream";
 
 export interface FakeServerScript {
   /** Ответы на методы запросов: `initialize`, `textDocument/diagnostic`, … */
@@ -16,6 +17,8 @@ export interface FakeServerScript {
 /** Процесс-сервер, который можно читать и писать как stdio LSP. */
 export class FakeLspServer extends EventEmitter {
   readonly written: string[] = [];
+  /** stderr сервера: настоящий поток — буфер растёт, если его не читают. */
+  readonly stderr = new PassThrough();
   private buffer = "";
   private nextId = 100;
 
@@ -127,6 +130,7 @@ export function spawnOf(server: FakeLspServer) {
     ({
       stdin: server.stdin,
       stdout: server,
+      stderr: server.stderr,
       kill: () => true,
       once: (event: "exit", cb: () => void) => {
         server.once(event, cb);

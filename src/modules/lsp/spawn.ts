@@ -64,6 +64,7 @@ export const defaultSpawn: ServerProcessFactory = async (plan, cwd) => {
   const child = spawn(command, args, options) as unknown as {
     stdin: ServerProcess["stdin"];
     stdout: ServerProcess["stdout"];
+    stderr?: ServerProcess["stderr"];
     pid?: number;
     kill(signal?: number | string): boolean;
     once(event: "exit", cb: () => void): unknown;
@@ -73,6 +74,9 @@ export const defaultSpawn: ServerProcessFactory = async (plan, cwd) => {
   return {
     stdin: child.stdin,
     stdout: child.stdout,
+    // stderr читается транспортом: непрочитанный пайп вбивает сервер в
+    // блокировку (аудит §8.2).
+    stderr: child.stderr ?? null,
     // pid сервера: без него teardown убивал только оболочку, а сам сервер
     // оставался жить (аудит §8.1).
     pid: child.pid,
