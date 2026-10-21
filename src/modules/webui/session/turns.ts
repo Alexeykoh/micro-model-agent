@@ -17,7 +17,7 @@ import { attachEgressTurn } from "./egress-turn";
 import {
   parseMessageBody,
   readBody,
-  readBodyError,
+  requestError,
   scrubError,
   sendJson,
 } from "../util";
@@ -252,14 +252,19 @@ export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: 
         sendJson(res, parsed.status, { error: parsed.error });
         return;
       }
-      if (s.minPostIntervalMs > 0 && Date.now() - s.lastPostTs < s.minPostIntervalMs) {
-        sendJson(res, 429, { error: "rate_limited" });
-        return;
+      // Троттл — на сессию, а не на процесс: параллельные вкладки не должны
+      // отвергать друг друга (аудит §6.9).
+      if (s.minPostIntervalMs > 0) {
+        const last = s.lastPostTs.get(parsed.target) ?? 0;
+        if (Date.now() - last < s.minPostIntervalMs) {
+          sendJson(res, 429, { error: "rate_limited" });
+          return;
+        }
+        s.lastPostTs.set(parsed.target, Date.now());
       }
-      s.lastPostTs = Date.now();
       dispatchPost(s, res, parsed);
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }

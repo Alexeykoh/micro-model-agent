@@ -137,3 +137,30 @@ export function isIpLiteral(hostname: string): boolean {
   if (h.includes(":")) return expandIpv6(h) !== null;
   return h.split(".").every((part) => part !== "" && parseIpNumber(part) !== null);
 }
+
+/**
+ * Link-local/metadata-адрес (169.254.0.0/16, а также well-known имена
+ * metadata-сервисов облаков). Отличается от «приватного» адреса: локальные
+ * провайдеры (Ollama на 127.0.0.1) легальны, а вот адрес метаданных облака —
+ * это креды, и пробивать его нельзя.
+ */
+export function isMetadataHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().trim().replace(/^\[|\]$/g, "");
+  if (h === "metadata" || h === "metadata.google.internal" || h === "instance-data") return true;
+  if (h.includes(":")) {
+    const g = expandIpv6(h);
+    if (!g) return false;
+    // fe80::/10 — link-local IPv6.
+    return (g[0] & 0xffc0) === 0xfe80;
+  }
+  const parts = h.split(".");
+  if (parts.length !== 4) return false;
+  const nums = parts.map((p) => parseIpNumber(p));
+  if (nums.some((n) => n === null || n > 255)) return false;
+  const [a = 0, b = 0] = nums;
+  // 169.254/16 — link-local (в т.ч. 169.254.169.254 у облаков).
+  if (a === 169 && b === 254) return true;
+  // 100.100.100.200 — метаданные Alibaba Cloud.
+  if (a === 100 && b === 100 && nums[2] === 100 && nums[3] === 200) return true;
+  return false;
+}

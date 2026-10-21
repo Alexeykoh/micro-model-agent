@@ -33,13 +33,25 @@ describe("pushState", () => {
     expect(out).toContain('"state":{');
   });
 
-  it("sends a sessionless snapshot without a sessionId", () => {
+  it("stamps an unscoped snapshot with the server-active session", () => {
+    const s = createWebUiState();
+    const { chunks, res } = capture();
+    s.clients.add(res);
+    s.bridge = { getState: () => ({}) } as never;
+    s.activeSessionId = "S";
+    pushState(s);
+    // Без явного id ставим серверно-активную сессию: иначе снапшот одной
+    // сессии переписывал состояние чужой вкладки (аудит §6.12).
+    expect(chunks.join("")).toContain('"sessionId":"S"');
+  });
+
+  it("sends a sessionless snapshot when there is no active session", () => {
     const s = createWebUiState();
     const { chunks, res } = capture();
     s.clients.add(res);
     s.bridge = { getState: () => ({}) } as never;
     pushState(s);
-    expect(chunks.join("")).not.toContain('"sessionId":"S"');
+    expect(chunks.join("")).not.toContain('"sessionId"');
   });
 });
 

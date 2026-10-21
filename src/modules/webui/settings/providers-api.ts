@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AppConfig, ProviderEntry } from "../../../config/types";
 import { DEFAULTS } from "../../../config/defaults";
 import { providerEntryName, providerNameTaken } from "../../providers/naming";
-import { readBodyError, sendJson } from "../util";
+import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
 import { buildProviderViews } from "./providers-view";
@@ -151,7 +151,7 @@ export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s
       sendJson(res, 200, { ok: true, name: result.name, ...buildProviderViews(config), ...persisted });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 

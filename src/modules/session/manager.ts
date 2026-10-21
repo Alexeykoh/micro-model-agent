@@ -33,14 +33,11 @@ export class SessionManager {
   /** Контексты сессий (для изоляции) по id */
   private sessionContexts: Map<string, SessionContext> = new Map();
   /**
-   * Слушатели переименования. Массив ОБЩИЙ с pinned-сиблингами (`forkPinned`),
-   * потому что авто-имя пишет раннер через свой sibling: без общей ссылки
-   * подписка на главный менеджер не увидела бы смену имени. Использует web,
-   * чтобы живая вкладка/список обновлялись без reload.
+   * Слушатели переименования. Массив ОБЩИЙ с pinned-сиблингами (`forkPinned`):
+   * авто-имя пишет раннер через свой sibling, и без общей ссылки подписка на
+   * главный менеджер не увидела бы смену имени.
    */
-  private renameListeners: Array<(meta: SessionMeta) => void> = [];
-
-  constructor(store: SessionStore, options: SessionManagerOptions) {
+  private renameListeners: Array<(meta: SessionMeta) => void> = [];  constructor(store: SessionStore, options: SessionManagerOptions) {
     this.store = store;
     this.options = options;
 
@@ -272,10 +269,12 @@ export class SessionManager {
     this.store.appendSessionLog(this.activeId, entry);
   }
 
-  /** Прочитать полный session.jsonl любой сессии (для `session show`). */
-  loadSessionLog(id: string): SessionLogEntry[] {
+  /**
+   * Прочитать session.jsonl сессии (для `session show`); с `since` — только хвост.
+   */
+  loadSessionLog(id: string, opts: { since?: string } = {}): SessionLogEntry[] {
     try {
-      return this.store.loadSessionLog(id);
+      return this.store.loadSessionLog(id, opts);
     } catch {
       return [];
     }

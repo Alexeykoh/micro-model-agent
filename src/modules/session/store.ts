@@ -15,6 +15,7 @@ import type { SessionEncryptionConfig } from "../../config/types";
 import type { DiagnosticEvent, Source } from "../../output";
 import type { EgressTurnSummary } from "../security/data-policy/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
+import { appendLogTail } from "./log-tail";
 
 /** События онбординга (`meet`/`init`) — явный союз вместо `onboarding_${string}` (W11). */
 export type OnboardingEvent =
@@ -35,13 +36,12 @@ export interface SessionLogEntry {
     | "egress_redacted"
     | OnboardingEvent;
   /**
-   * Источник записи (INV-13), обязателен. `llm_usage` пишет origin измерения
-   * отдельно, а не в это поле: provenance ≠ происхождение числа (W11).
+   * Источник записи (INV-13), обязателен. `llm_usage` пишет origin отдельно:
+   * provenance ≠ происхождение числа (W11).
    */
   source: Source;
   /**
-   * Модуль-владелец записи (INV-13), без префикса `module:` — например `mcp`,
-   * `audit`, `security`. Заполняется для записей, чей `source` — `module:<name>`.
+   * Модуль-владелец записи (INV-13), без префикса `module:` — например `mcp`.
    */
   module?: string;
   tool?: string;
@@ -218,6 +218,11 @@ export class SessionStore {
     return join(this.sessionDir(id), "session.jsonl");
   }
 
+  /** Хвост session-лога: последние строки для инкрементального чтения (Trace). */
+  private sessionLogTailPath(id: string): string {
+    return join(this.sessionDir(id), "session.log.tail");
+  }
+
   /** Есть ли сессия (по meta.json). */
   sessionExists(id: string): boolean {
     return existsSync(this.metaPath(id));
@@ -256,8 +261,7 @@ export class SessionStore {
     }
   }
 
-  /** Мета строго с диска, мимо _metaCache — там, где точность счётчика
-   *  важнее скорости чтения (см. appendMessage). */
+  /** Мета строго с диска, мимо _metaCache (там, где важнее точность счётчика). */
   private readMetaFromDisk(id: string): SessionMeta | null {
     const path = this.metaPath(id);
     if (!existsSync(path)) return null;
@@ -329,8 +333,7 @@ export class SessionStore {
   }
 
   /**
-   * История ротированной сессии из `<baseDir>/<id>.jsonl.gz`.
-   * Нет gz или не читается — [].
+   * История ротированной сессии из `<baseDir>/<id>.jsonl.gz`. Нет gz — [].
    */
   loadRotatedHistory(id: string): SessionMessage[] {
     const gzPath = join(this.baseDir, `${id}.jsonl.gz`);
@@ -358,19 +361,19 @@ export class SessionStore {
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const line = JSON.stringify(entry);
-    if (this.encryptor?.isEnabled()) {
-      appendFileSync(this.sessionLogPath(id), `${this.encryptor.encryptFileContent(line)}\n`, {
-        encoding: "utf-8",
-        mode: 0o600,
-      });
-    } else {
-      appendFileSync(this.sessionLogPath(id), `${line}\n`, { encoding: "utf-8", mode: 0o600 });
-    }
+    const payload = this.encryptor?.isEnabled()
+      ? `${this.encryptor.encryptFileContent(line)}\n`
+      : `${line}\n`;
+    appendFileSync(this.sessionLogPath(id), payload, { encoding: "utf-8", mode: 0o600 });
+    // Хвост: последние строки лога отдельно — по нему Trace читает инкрементально
+    // (аудит §6.13).
+    appendLogTail(this.sessionLogTailPath(id), payload);
   }
 
   /** Загрузить session-лог (битые строки пропускаются); нет файла — []. */
-  loadSessionLog(id: string): SessionLogEntry[] {
-    const path = this.sessionLogPath(id);
+  loadSessionLog(id: string, opts: { since?: string } = {}): SessionLogEntry[] {
+    // Инкрементальное чтение: с курсором берём только хвост (аудит §6.13).
+    const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
     if (!existsSync(path)) return [];
     try {
       const raw = readFileSync(path, "utf-8");

@@ -212,7 +212,9 @@ export function handleSessionLog(
   const limit = rawLimit === null || rawLimit.trim() === "" ? undefined : Number(rawLimit);
   let log: SessionLogEntry[] = [];
   try {
-    log = manager.loadSessionLog?.(id) ?? [];
+    // С курсором читаем только хвост лога (инкрементально, аудит §6.13).
+    const since = q.get("since") ?? undefined;
+    log = manager.loadSessionLog?.(id, since ? { since } : {}) ?? [];
   } catch {
     // Нечитаемая сессия: пустой хвост вместо провала всей страницы.
     log = [];

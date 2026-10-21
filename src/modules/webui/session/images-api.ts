@@ -38,6 +38,17 @@ export function handleSessionImage(
     notFound(res);
     return;
   }
+  // SVG — исполняемый формат: отдаём его как обычный текст с вложением, иначе
+  // страница может выполнить скрипт из картинки (аудит §6.7).
+  if (img.mime === "image/svg+xml") {
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${name.replace(/"/g, "")}"`,
+      "Cache-Control": "private, max-age=31536000, immutable",
+    });
+    res.end(img.bytes);
+    return;
+  }
   res.writeHead(200, {
     "Content-Type": img.mime,
     "Cache-Control": "private, max-age=31536000, immutable",

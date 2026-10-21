@@ -305,8 +305,24 @@ msgs?.addEventListener("scroll", () => {
 export function appendTo<T extends Node>(feed: HTMLElement | null, node: T): T {
   if (!feed) return node;
   feed.appendChild(node);
+  trimFeed(feed);
   if (feed === activeFeed()) scroll();
   return node;
+}
+
+/**
+ * Сколько верхнеуровневых узлов держим в ленте. Лента растёт всю сессию, и
+ * без предела DOM пухнет (аудит §6.15): старые узлы уходят, как в кольце.
+ */
+export const FEED_MAX_NODES = 400;
+
+/** Убирает самые старые узлы ленты, пока их больше предела. */
+function trimFeed(feed: HTMLElement): void {
+  while (feed.childElementCount > FEED_MAX_NODES) {
+    const first = feed.firstElementChild;
+    if (!first) return;
+    first.remove();
+  }
 }
 
 export function clearEmpty(feed: HTMLElement | null): void {

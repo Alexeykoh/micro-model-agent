@@ -47,15 +47,23 @@ export function syncBusy(s: RuntimeState): void {
  * Рассылает полный снапшот сессии SSE-событием `state` — единственная форма
  * апдейта сайдбара. `sessionId` штампуется, чтобы клиент положил снапшот во
  * вкладку-владельца (без него — активная/глобальная проекция).
+ *
+ * Без явного id ставим серверно-активную сессию: иначе снапшот одной сессии
+ * переписывал состояние чужой вкладки на клиенте (аудит §6.12, гонка смены
+ * активной сессии).
  */
-export function pushState(s: RuntimeState & SseTransport, sessionId?: string | null): void {
+export function pushState(
+  s: RuntimeState & SseTransport & { activeSessionId?: string },
+  sessionId?: string | null,
+): void {
+  const owner = sessionId ?? s.activeSessionId ?? null;
   broadcast(
     {
       type: "state",
       ts: Date.now(),
       ...sessionStatus(s),
-      ...(sessionId ? { sessionId } : {}),
-      state: s.bridge?.getState?.(sessionId ?? undefined) ?? null,
+      ...(owner ? { sessionId: owner } : {}),
+      state: s.bridge?.getState?.(owner ?? undefined) ?? null,
     },
     s,
   );

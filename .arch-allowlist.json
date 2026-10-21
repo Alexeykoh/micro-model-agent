@@ -10,7 +10,7 @@
     "src/modules/webui/assets/js/settings/panels.ts": 880,
     "src/modules/webui/assets/setup.ts": 863,
     "src/cli/commands.ts": 860,
-    "src/modules/webui/settings/settings-api.ts": 836,
+    "src/modules/webui/settings/settings-api.ts": 738,
     "src/tools/bash.ts": 799,
     "src/config/registry-extra.ts": 780,
     "src/core/agent/tool-batch.ts": 772,
@@ -54,7 +54,6 @@
     "src/modules/security/audit-notifier.ts": 376,
     "src/core/bootstrap/modules-phase.ts": 375,
     "src/modules/indexer/symbols.ts": 375,
-    "src/modules/webui/settings/setup-api.ts": 369,
     "src/modules/session/manager.ts": 368,
     "src/modules/browser/session.ts": 336,
     "src/modules/processes/registry.ts": 351

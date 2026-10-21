@@ -9,8 +9,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { errMsg } from "../../utils/error";
 import { redactContextSecrets } from "../../core/api";
-import type { WebUiState } from "./state";
-import { MAX_BODY_BYTES } from "./limits";
+import { MAX_BODY_BYTES, bodyCapFor } from "./limits";
 import { readEnv } from "../../config/env";
 
 export { MAX_BODY_BYTES } from "./limits";
@@ -77,8 +76,38 @@ function cookieValue(header: string | undefined, name: string): string | null {
   return null;
 }
 
+/**
+ * Заголовки безопасности веб-поверхности (аудит §6.1): фрейминг, MIME-sniffing,
+ * referrer и CSP.
+ *
+ * `script-src` содержит `'unsafe-inline'` — в `index.html` есть инлайновый
+ * bootstrap темы; без него тема мигает при загрузке. Вынос скрипта в файл
+ * позволит сузить политику — это `DEBT(webui-csp-inline-script)`.
+ */
+export const SECURITY_HEADERS: Record<string, string> = {
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "object-src 'none'",
+  ].join("; "),
+  "X-Frame-Options": "DENY",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+};
+
+/** Узкий срез состояния для auth-проверок: только токен. */
+export interface AuthState {
+  token: string | null | undefined;
+}
+
 /** Токен-auth HTTP-поверхностей (заголовок `x-mma-token`, `?token=` или кука); без токена — разрешено. */
-export function checkAuth(req: IncomingMessage, reqUrl: URL, s: WebUiState): boolean {
+export function checkAuth(req: IncomingMessage, reqUrl: URL, s: AuthState): boolean {
   if (!s.token) return true;
   const header = req.headers["x-mma-token"];
   if (typeof header === "string" && safeEqual(header, s.token)) return true;
@@ -94,7 +123,7 @@ export function checkAuth(req: IncomingMessage, reqUrl: URL, s: WebUiState): boo
  * `x-mma-token`) всё равно аутентифицировалась. `SameSite=Strict` — кросс-сайт
  * запрос её никогда не несёт, так что CSRF-поверхности не добавляется.
  */
-export function setAuthCookie(res: ServerResponse, s: WebUiState): void {
+export function setAuthCookie(res: ServerResponse, s: AuthState): void {
   if (!s.token) return;
   res.setHeader(
     "Set-Cookie",
@@ -123,16 +152,27 @@ export function sendJson(res: ServerResponse, status: number, body: unknown): vo
  * Буферизует тело запроса до `cap`. На переполнении реджектит `BodyTooLargeError`
  * БЕЗ убийства сокета: вызывающий владеет ответом 413 и рвёт запрос только
  * после флаша ответа — иначе клиент получит socket error вместо 413.
+ *
+ * Кап — минимум из переданного и капа маршрута (`bodyCapFor`): маршруты
+ * сообщений принимают большие тела (картинки), остальные — 1 МБ.
  */
 export function readBody(req: IncomingMessage, cap = MAX_BODY_BYTES): Promise<string> {
+  const effectiveCap = Math.min(cap, bodyCapFor(req.method, requestPath(req)));
   return new Promise((resolve, reject) => {
     let size = 0;
     let settled = false;
     const chunks: Buffer[] = [];
+    // Предпроверка Content-Length: не буферизовать тело, которое заведомо
+    // больше капа (аудит §6.4).
+    const declared = Number(req.headers?.["content-length"] ?? "0");
+    if (Number.isFinite(declared) && declared > effectiveCap) {
+      reject(new BodyTooLargeError());
+      return;
+    }
     req.on("data", (chunk: Buffer) => {
       if (settled) return;
       size += chunk.length;
-      if (size > cap) {
+      if (size > effectiveCap) {
         settled = true;
         reject(new BodyTooLargeError());
         return;
@@ -149,6 +189,13 @@ export function readBody(req: IncomingMessage, cap = MAX_BODY_BYTES): Promise<st
       }
     });
   });
+}
+
+/** Путь запроса без query-строки. */
+function requestPath(req: IncomingMessage): string {
+  const raw = req.url || "/";
+  const idx = raw.indexOf("?");
+  return idx >= 0 ? raw.slice(0, idx) : raw;
 }
 
 /** Достаёт `{ text, images }` из распарсенного тела; битый JSON и пусто — разные ошибки. */
@@ -189,8 +236,14 @@ export function scrubError(err: unknown): string {
   return redactContextSecrets(errMsg(err));
 }
 
-/** Маппит провал чтения тела в ответ; переполненные получают flush-safe 413. */
-export function readBodyError(req: IncomingMessage, res: ServerResponse, err: unknown): void {
+/**
+ * Маппит ошибку запроса в ответ (аудит §6.6): переполнение тела — 413,
+ * битый JSON — 400, таймаут — 504, всё прочее — 500 с вычищенным текстом.
+ *
+ * Раньше любой провал читался как 400 «bad request», и настоящая ошибка
+ * сервера (провайдер не ответил, ФС отдала сбой) выглядела как ошибка клиента.
+ */
+export function requestError(req: IncomingMessage, res: ServerResponse, err: unknown): void {
   if (err instanceof BodyTooLargeError) {
     res.writeHead(413, { "Content-Type": "application/json; charset=utf-8" });
     // Уничтожаем запрос только после флаша 413; убийство раньше —
@@ -198,7 +251,24 @@ export function readBodyError(req: IncomingMessage, res: ServerResponse, err: un
     res.end(JSON.stringify({ error: "body too large" }), () => req.destroy());
     return;
   }
-  sendJson(res, 400, { error: "bad request" });
+  if (err instanceof SyntaxError) {
+    sendJson(res, 400, { error: "invalid JSON" });
+    return;
+  }
+  if (isTimeoutError(err)) {
+    sendJson(res, 504, { error: "gateway timeout", detail: scrubError(err) });
+    return;
+  }
+  sendJson(res, 500, { error: "internal error", detail: scrubError(err) });
+}
+
+/** Таймаут ли это (AbortError, ETIMEDOUT, «timeout» в имени/сообщении). */
+function isTimeoutError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { name?: string; code?: string; message?: string };
+  if (e.name === "AbortError" || e.name === "TimeoutError") return true;
+  if (e.code === "ETIMEDOUT" || e.code === "UND_ERR_CONNECT_TIMEOUT") return true;
+  return typeof e.message === "string" && /timeout|timed out/i.test(e.message);
 }
 
 /** Best-effort открытие UI в браузере по умолчанию (MMA_WEBUI_OPEN=0 отключает). */

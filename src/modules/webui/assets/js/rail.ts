@@ -100,7 +100,21 @@ export function initRail(cfgLayout?: unknown): void {
   eventsEl = root.querySelector<HTMLElement>(".events");
   lastEl = root.querySelector<HTMLElement>(".last");
   setLayout(cfgLayout);
-  if (!timer) timer = setInterval(render, 250);
+  startTimer();
+}
+
+/** Таймер рендера рельса: только когда рельс включён и ход идёт. */
+function startTimer(): void {
+  if (timer) return;
+  if (layout === "off") return;
+  timer = setInterval(render, 250);
+}
+
+/** Остановить таймер рельса (ход закончен или рельс выключен). */
+function stopTimer(): void {
+  if (!timer) return;
+  clearInterval(timer);
+  timer = null;
 }
 
 export function setLayout(next: unknown): void {
@@ -131,6 +145,10 @@ export function setBusy(on: unknown): void {
     plan = null;
   }
   busy = next;
+  // Таймер живёт только пока идёт ход (и рельс включён) — фоновая висящая
+  // петля шла и после конца хода (аудит §6.14).
+  if (busy) startTimer();
+  else stopTimer();
   render();
 }
 

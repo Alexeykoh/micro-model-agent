@@ -20,13 +20,17 @@ import {
   type SetupAnswers,
   type SetupSecurityDetail,
 } from "../../setup/answers";
-import { fetchProviderModels, scanLocalServers, testProviderChat } from "../../setup/discovery";
-import { probeProviderContext } from "../../../llm/provider-context";
+import { scanLocalServers, } from "../../setup/discovery";
 import { broadcast } from "../state";
 import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";
-import { readBody, readBodyError, sendJson } from "../util";
+import { readBody, requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
+import { handleSetupContext, handleSetupModels, handleSetupTest } from "./setup-probes";
+
+// Пробы провайдера живут в `setup-probes.ts` (у них своя политика:
+// rate-limit + SSRF-проверка baseUrl). Реэкспорт для импортёров.
+export { handleSetupContext, handleSetupModels, handleSetupTest };
 
 function str(rec: Record<string, unknown>, key: string): string {
   const v = rec[key];
@@ -184,85 +188,10 @@ export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: Co
       sendJson(res, 200, { servers });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
-/** `POST /api/setup/models {baseUrl, apiKey}` — id моделей провайдера. */
-export function handleSetupModels(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
-  readJsonBody(req, s.maxBodyBytes)
-    .then(async (rec) => {
-      if (!rec) {
-        sendJson(res, 400, { ok: false, error: "invalid JSON" });
-        return;
-      }
-      const baseUrl = str(rec, "baseUrl");
-      if (!baseUrl) {
-        sendJson(res, 400, { ok: false, error: "invalid-base-url" });
-        return;
-      }
-      const models = await fetchProviderModels(baseUrl, str(rec, "apiKey"));
-      sendJson(res, 200, { models });
-    })
-    .catch((err: unknown) => {
-      readBodyError(req, res, err);
-    });
-}
-
-/** `POST /api/setup/test {baseUrl, apiKey, model}` — дешёвый чат-проб. */
-export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
-  readJsonBody(req, s.maxBodyBytes)
-    .then(async (rec) => {
-      if (!rec) {
-        sendJson(res, 400, { ok: false, error: "invalid JSON" });
-        return;
-      }
-      const baseUrl = str(rec, "baseUrl");
-      const model = str(rec, "model");
-      if (!baseUrl || !model) {
-        sendJson(res, 400, { ok: false, error: "invalid-test-request" });
-        return;
-      }
-      const ok = await testProviderChat(baseUrl, str(rec, "apiKey"), model);
-      sendJson(res, 200, { ok });
-    })
-    .catch((err: unknown) => {
-      readBodyError(req, res, err);
-    });
-}
-
-/** `POST /api/setup/context {baseUrl, apiKey, model, providerType?}` — окно контекста у провайдера. */
-export function handleSetupContext(
-  req: IncomingMessage,
-  res: ServerResponse,
-  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
-): void {
-  readJsonBody(req, s.maxBodyBytes)
-    .then(async (rec) => {
-      if (!rec) {
-        sendJson(res, 400, { ok: false, error: "invalid JSON" });
-        return;
-      }
-      const baseUrl = str(rec, "baseUrl");
-      const model = str(rec, "model");
-      if (!baseUrl || !model) {
-        sendJson(res, 400, { ok: false, error: "invalid-context-request" });
-        return;
-      }
-      const probe = await probeProviderContext(baseUrl, model, {
-        apiKey: str(rec, "apiKey") || undefined,
-        providerType: str(rec, "providerType") || undefined,
-      });
-      if (!probe) {
-        sendJson(res, 200, { ok: false });
-        return;
-      }
-      sendJson(res, 200, { ok: true, contextWindow: probe.actual, model: probe.model });
-    })
-    .catch((err: unknown) => {
-      readBodyError(req, res, err);
-    });
-}
 
 /**
  * `POST /api/setup/locale {locale}` — переключает локаль i18n процесса, чтобы
@@ -285,7 +214,7 @@ export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: 
       sendJson(res, 200, { ok: true, locale, dicts: getFlatDicts() });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -325,7 +254,7 @@ export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: Co
       sendJson(res, 200, body);
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 

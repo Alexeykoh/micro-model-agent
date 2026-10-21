@@ -4,7 +4,7 @@
  * проверяются выше в `server.ts`; здесь оба считаются пройденными.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { readBodyError, sendJson } from "../util";
+import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { resolveAnswer } from "./prompt-io";
 import type { HttpTransport, RuntimeState, SseTransport } from "../state";
@@ -32,6 +32,6 @@ export function handleAnswerPost(req: IncomingMessage, res: ServerResponse, s: H
       sendJson(res, 200, { ok: true });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }

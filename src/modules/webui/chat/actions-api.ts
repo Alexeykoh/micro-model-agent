@@ -5,7 +5,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { parseJsonBody } from "../http/body";
 import { cancelPendingQuestions } from "../session/prompt-io";
 import type { SessionStore, RuntimeState, WorkspaceStore, HttpTransport, SseTransport } from "../state";
-import { readBody, readBodyError, sendJson } from "../util";
+import { broadcast } from "../state";
+import { readBody, requestError, scrubError, sendJson } from "../util";
 
 /** Достаёт `sessionId` вкладки-отправителя из JSON-тела (нет — null). */
 function extractSessionField(raw: string): string | null {
@@ -20,9 +21,14 @@ function extractSessionField(raw: string): string | null {
 /**
  * Переключает серверную активную сессию под команду из вкладки — только пока
  * сервер простаивает (ход владеет активной до turn_end). Fail-open.
+ *
+ * @returns id сессии, под которой выполнится команда (владелец вывода).
  */
-function maybeAdoptSession(s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport, sessionId: string | null): void {
-  if (!sessionId || s.busy || s.bridge?.isBusy() || !s.sessionManager) return;
+function maybeAdoptSession(
+  s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport,
+  sessionId: string | null,
+): string | undefined {
+  if (!sessionId || s.busy || s.bridge?.isBusy() || !s.sessionManager) return sessionId ?? undefined;
   try {
     if (s.sessionManager.get(sessionId)) {
       s.sessionManager.setActive(sessionId);
@@ -36,6 +42,7 @@ function maybeAdoptSession(s: SessionStore & RuntimeState & WorkspaceStore & Htt
   } catch {
     /* fail-open: команда выполнится в тогда-активной */
   }
+  return sessionId ?? undefined;
 }
 
 /** Стопает все бегущие слоты (interrupt без `sessionId`). */
@@ -60,14 +67,20 @@ export function handleCommandPost(
       // Битое тело: диспатчер игнорирует не-слеш строку, так что это безвредный
       // no-op, а не 400.
       const line = typeof rec.line === "string" ? rec.line : "";
-      maybeAdoptSession(s, extractSessionField(raw));
+      const sessionId = maybeAdoptSession(s, extractSessionField(raw));
       // Ошибка хоста не должна стать 5xx: POST лишь подтверждает приём,
-      // вывод стримится по SSE событиями `command`.
-      Promise.resolve(bridge?.executeCommand(line)).catch(() => {});
+      // вывод стримится по SSE событиями `command`. Но ошибка не должна и
+      // пропасть — она уходит в ленту владельца-сессии (аудит §6.17).
+      Promise.resolve(bridge?.executeCommand(line)).catch((err: unknown) => {
+        broadcast(
+          { type: "error", ts: Date.now(), error: scrubError(err), sessionId: sessionId ?? undefined },
+          s,
+        );
+      });
       sendJson(res, 202, { ok: true });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -106,7 +119,7 @@ export function handleInterruptPost(
       sendJson(res, 200, { ok: true });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
