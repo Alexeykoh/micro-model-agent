@@ -15,7 +15,8 @@ import { safeResolvePath } from "../../tools/path-utils";
 import { t } from "../../i18n/index";
 import type { LspConfig, LspDiagnostic, LspServerConfig } from "./types";
 import { isErrorDiagnostic, isWarningDiagnostic } from "./types";
-import { severityLabel, collectCheckFiles, formatCheckDiagnostics } from "./check-tool";
+import { severityLabel, collectCheckFiles, } from "./check-tool";
+import { renderCheckReport, type CheckAccumulator } from "./check-report";
 import {
   diagnoseLspServers,
   classifyLspError,
@@ -24,18 +25,6 @@ import {
 } from "./diagnose";
 import { errMsg } from "../../utils";
 import { join } from "path";
-
-/** Накопитель результатов `lsp_check` по нескольким файлам. */
-interface CheckAccumulator {
-  baseDir: string;
-  errors: Array<{ file: string; diag: LspDiagnostic }>;
-  warnings: Array<{ file: string; diag: LspDiagnostic }>;
-  notes: string[];
-  checkedFiles: string[];
-  checked: number;
-  inconclusive: number;
-  suppressed: number;
-}
 
 /**
  * Подряд идущих падений LSP до отключения сервера на сессию. Мёртвый сервер
@@ -363,7 +352,7 @@ export class LspModule implements AgentModule {
 
     const files = await collectCheckFiles(resolved, this.config);
     const acc = await this.checkFiles(files, ctx);
-    return this.renderCheck(acc);
+    return renderCheckReport(acc);
   }
 
   /** Проверить набор файлов, накопив диагностики и заметки о сбоях. */
@@ -423,42 +412,6 @@ export class LspModule implements AgentModule {
     }
   }
 
-  /** Текст отчёта по аккумулятору. */
-  private renderCheck(acc: CheckAccumulator): ToolResult {
-    const lines: string[] = [];
-    if (acc.checked > 0) {
-      lines.push(t("lsp.checked_files", { count: String(acc.checked) }));
-      lines.push(...acc.checkedFiles.map((f) => `  ${f}`));
-    }
-    if (acc.errors.length > 0) {
-      lines.push(`[LSP errors] (${acc.errors.length}):`);
-      lines.push(formatCheckDiagnostics(acc.errors, acc.baseDir));
-    }
-    if (acc.warnings.length > 0) {
-      lines.push(`[LSP warnings] (${acc.warnings.length}):`);
-      lines.push(formatCheckDiagnostics(acc.warnings, acc.baseDir));
-    }
-    if (acc.checked > 0 && acc.errors.length === 0 && acc.warnings.length === 0) {
-      lines.push(t("lsp.check_clean", { count: String(acc.checked) }));
-    }
-    if (acc.suppressed > 0) {
-      lines.push(
-        `[lsp_check inconclusive: no tsconfig.json / node_modules near project root — ${acc.suppressed} module-resolution diagnostic(s) suppressed. Initialize the project (package.json + types) for accurate TypeScript checks.]`,
-      );
-    }
-    // Сервер молчал хотя бы на одном файле: это НЕ «чисто», и модель не должна
-    // объявлять отсутствие ошибок.
-    if (acc.inconclusive > 0) {
-      lines.push(
-        t("lsp.check_silent", { silent: String(acc.inconclusive), total: String(acc.checked) }),
-      );
-    }
-    lines.push(...acc.notes);
-    if (lines.length === 0) {
-      return { success: true, output: t("lsp.check_clean", { count: String(acc.checked) }) };
-    }
-    return { success: acc.errors.length === 0, output: lines.join("\n") };
-  }
 
   /** Заметка о сбое сервера для `lsp_check` (disabled или failed+hint). */
   private failureNote(
