@@ -38,7 +38,7 @@ export interface WebSessionManager {
    * создания без него отвечает 503.
    */
   create?(name?: string): SessionMeta;
-  loadSessionLog?(id: string): SessionLogEntry[];
+  loadSessionLog?(id: string, opts?: { since?: string }): SessionLogEntry[];
   getHistory?(id: string): SessionMessage[];
   /** Каталог сессии (для персиста web-метрик). Опционален — у лёгких стабов нет. */
   getSessionDirectory?(id: string): string;
