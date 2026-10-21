@@ -45,4 +45,14 @@ describe("фронтенд: жизненный цикл ленты", () => {
     turn.onTurnEnd({ sessionId: "B" });
     expect(store.session.busy).toBe(false);
   });
+
+  it("the feed is trimmed to FEED_MAX_NODES", () => {
+    const feed = mountTab("S2");
+    for (let i = 0; i < core.FEED_MAX_NODES + 40; i++) {
+      const node = win.document.createElement("div");
+      node.className = "act";
+      core.appendTo(feed, node);
+    }
+    expect(feed.childElementCount).toBeLessThanOrEqual(core.FEED_MAX_NODES);
+  });
 });
