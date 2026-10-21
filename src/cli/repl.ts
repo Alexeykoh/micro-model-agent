@@ -273,10 +273,10 @@ export class Repl implements ReplContext, Host {
     // Промпт-поверхность с осознанием терминала для интерактивных тулов (question/approve).
     // stdin владеет REPL и на время прогона он в `streaming`: тулы обязаны одалживать
     // редактор под вопрос, а не открывать конкурирующий readline, который подерётся
-    // с raw-режимом LineEditor.
+    // с raw-режимом LineEditor. Меню вопроса печатается ПОВЕРХ очереди модалки (§8.10).
     this.promptIO = createPromptIO({
       ask: (prompt) => this.askViaEditor(prompt),
-      print: (line) => this.output.writeLine(line),
+      print: (line) => this.output.writeModal(line),
     });
     this.agent.setPromptIO?.(this.promptIO);
 

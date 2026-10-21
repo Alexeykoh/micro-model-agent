@@ -165,6 +165,17 @@ export class OutputChannel {
     (stream === "stderr" ? this.err : this.out).write(text);
   }
 
+  /**
+   * Прямая запись строки в терминал ПОВЕРХ очереди модалки: меню вопроса
+   * должно быть видно сразу, а не после ответа (аудит §8.10).
+   */
+  writeModal(line: string): void {
+    if (this.mode === "quiet") return;
+    this.flushBlocks();
+    if (this.sink?.isActive()) this.sink.printAbove(line);
+    else this.out.write(`${line}\n`);
+  }
+
   /** Блочная запись через шину (help, status, вывод команд). */
   writeLine(text: string, stream: OutputStream = "stdout"): void {
     this.bus.emit({ level: "info", source: "mma", kind: "block", text, stream });
