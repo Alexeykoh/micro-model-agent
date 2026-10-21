@@ -10,7 +10,7 @@ import { tabs as tabState, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import {
   makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent,
-  loadHistory, syncUrl, scrollToBottom,
+  loadHistory, syncUrl, scrollToBottom, clearBusy,
 } from "../feed.js";
 import { setIndicator } from "../dialog.js";
 import { sidebarSessionChanged, setSessionLoading } from "../sidebar.js";
@@ -27,9 +27,12 @@ export { loadCommands } from "./cmdk.js";
 export { renderSessionsDropdown } from "./sessions-menu.js";
 
 // Статусы вкладок: working — идёт ход, waiting — ждёт ответа (question),
-// queued — стоит в per-session очереди, failed — ход упал, dead — сессии нет.
-// Рендерится точкой в табстрипе; завершение в чужой вкладке фокус не крадёт.
-const TAB_DOT: Record<string, string> = { working: "●", waiting: "◉", queued: "○", failed: "✗", dead: "✗" };
+// queued — стоит в очереди, failed — ход упал, dead — сессии нет.
+import {
+  nextTabStatus,
+  statusTitle as statusTitleOf,
+  TAB_DOT,
+} from "./tab-status.js";
 
 // Открытые session-вкладки переживают перезагрузку страницы (F5 не терял остальные).
 const OPEN_TABS_KEY = "mma-open-tabs";
@@ -72,15 +75,6 @@ export function readSavedTabs(): SavedTabs {
   }
 }
 
-function statusTitle(status: unknown): string {
-  if (status === "working") return t("web.tab.working");
-  if (status === "waiting") return t("web.tab.waiting");
-  if (status === "queued") return t("web.tab.queued");
-  if (status === "failed") return t("web.tab.failed");
-  if (status === "dead") return t("web.tab.gone");
-  return "";
-}
-
 // Per-tab composer + status (общепринято: черновик свой у каждой сессии).
 // `draft`/`attachments` живут на табе и переживают переключения (single `#inp`
 // остаётся один на весь браузер, но ощущается как свой за счёт save/restore).
@@ -94,6 +88,9 @@ export function setTabStatus(id: string | null | undefined, status: string): voi
   const tab = tabState.tabs.find((x) => x.id === id);
   if (!tab || tab.status === status || tab.dead) return;
   tab.status = status;
+  // Метка «с какого момента ждём»: по ней зависший вопрос помечается failed.
+  if (status === "waiting") tab.waitingSince = Date.now();
+  else tab.waitingSince = 0;
   renderTabstrip();
 }
 
@@ -136,8 +133,8 @@ function renderTabstrip(): void {
     tab.title = tip;
     if (item.status && item.status !== "idle") {
       const dot = el("span", "dot st-" + item.status, TAB_DOT[item.status] || "●");
-      dot.title = statusTitle(item.status);
-      dot.setAttribute("aria-label", statusTitle(item.status));
+      dot.title = statusTitleOf(item.status);
+      dot.setAttribute("aria-label", statusTitleOf(item.status));
       tab.appendChild(dot);
     }
     const nameEl = el("span", "name", label);
@@ -293,8 +290,11 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
 export function closeTab(id: string): void {
   const i = tabState.tabs.findIndex((x) => x.id === id);
   if (i === -1) return;
-  // Вкладка уходит, а ход/вопрос — нет: прерываем ход ДО деактивации (§6.8).
   const closing = tabState.tabs[i];
+  // Таймеры закрываемой вкладки гасим явно: иначе «раздумка» продолжает
+  // тикать в закрытом feed (аудит §6.14).
+  if (closing.feed) clearBusy(closing.feed as HTMLElement);
+  // Вкладка уходит, а ход/вопрос — нет: прерываем ход ДО деактивации (§6.8).
   if (closing.kind === "session" && (closing.status === "working" || closing.status === "waiting")) {
     void api("/api/interrupt", { method: "POST", body: { sessionId: closing.id } });
   }
@@ -368,21 +368,20 @@ document.getElementById("newChat")?.addEventListener("click", () => void newChat
 /**
  * Сверяет бейджи вкладок с серверным per-session статусом (SSE `state`):
  * бегущая → working, в очереди → queued, прочие working/queued → idle.
- * `waiting` (висит question) и `failed` не трогаем — их снимают только
- * события хода (ответ/turn_end) или новый send.
+ * `waiting` дольше STALE_WAITING_MS без подтверждения — зависший вопрос
+ * (аудит §6.16).
  */
 export function reconcileTabStatuses(): void {
   const running = session.runningSessionIds || [];
   const queued = session.queued || {};
+  const now = Date.now();
   let changed = false;
   tabState.tabs.forEach((tab: Dict) => {
     if (tab.kind !== "session") return;
-    if (tab.status === "waiting" || tab.status === "failed" || tab.status === "dead") return;
-    const next = running.includes(tab.id) ? "working" : queued[tab.id] > 0 ? "queued" : "idle";
-    if (tab.status !== next) {
-      tab.status = next;
-      changed = true;
-    }
+    const next = nextTabStatus(tab, running, queued, now);
+    if (!next) return;
+    tab.status = next;
+    changed = true;
   });
   if (changed) renderTabstrip();
 }
@@ -408,6 +407,6 @@ initComposer({
   markTabDead,
   openTab,
   closeTab,
-  statusTitle,
+  statusTitle: statusTitleOf,
 });
 initSessionsMenu({ openTab, closeTab, loadSessions, newChatTab });

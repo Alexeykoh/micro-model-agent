@@ -45,7 +45,9 @@ export function onToolEnd(data: Dict): void {
 }
 
 export function onTurnEnd(data: Dict): void {
-  session.busy = false;
+  // Параллельные сессии: busy снимается, только когда не бежит НИ ОДНА сессия
+  // (аудит §6.16) — иначе вкладка другой сессии гасла индикатор.
+  session.busy = (session.runningSessionIds || []).length > 0;
   const feed = feedForEvent(data.sessionId);
   clearBusy(feed);
   finishThink(feed);

@@ -26,6 +26,22 @@ describe("webui assets", () => {
     expect(js(a)).toContain("EventSource");
   });
 
+  // Guard (аудит §6.14): таймер, который никогда не гасится, живёт до конца
+  // сессии вкладки. Каждый `setInterval` во фронтенде обязан иметь
+  // `clearInterval` рядом.
+  it("every setInterval in the frontend has a matching clearInterval", () => {
+    const a = loadAssets();
+    const sources = Object.entries(a.jsModules ?? {})
+      .filter(([k]) => k !== "js/smd.js" && k !== "js/hljs.js")
+      .map(([k, v]) => ({ k, v }));
+    const offenders: string[] = [];
+    for (const { k, v } of sources) {
+      if (!v.includes("setInterval")) continue;
+      if (!v.includes("clearInterval")) offenders.push(k);
+    }
+    expect(offenders, `setInterval без clearInterval:\n${offenders.join("\n")}`).toEqual([]);
+  });
+
   // Regression (split-bloated-files): `md.ts` imports `./md-copy.js`, but the
   // server only served explicit keys + `/js/*.js`, so `/md-copy.js` 404'd and the
   // whole ESM graph failed — the boot splash hung on "connecting…". Guard: every
