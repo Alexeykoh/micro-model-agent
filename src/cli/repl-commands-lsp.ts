@@ -164,6 +164,9 @@ export function registerLspCommands(ctx: ReplContext): void {
 
         restart: () => {
           ctx.output.writeLine(pc.yellow(t("repl.lsp_restarting")));
+          // Сначала закрываем пул: иначе старый сервер остаётся жить и новый
+          // старт не занимает его слот (аудит §8.5).
+          lspModule.close?.();
           lspModule.resetDisabledServers();
           ctx.output.writeLine(pc.green(t("repl.lsp_restarted")));
         },

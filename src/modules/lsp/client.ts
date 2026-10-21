@@ -120,12 +120,15 @@ export class LspClient {
    * Для баннера REPL и `/lsp doctor` — мёртвый сервер виден заранее, а не
    * таймаутом первой записи. В пулён не попадает намеренно.
    */
-  async probe(config: LspServerConfig, projectRoot: string, _timeout: number): Promise<void> {
+  async probe(config: LspServerConfig, projectRoot: string, timeout: number): Promise<void> {
     const connection = new LspConnection(serverKeyFor(config), projectRoot, config, {
       logger: this.deps.logger ?? null,
       offline: this.deps.offline,
       spawn: this.deps.spawn,
       resolveLaunch: this.deps.resolveLaunch,
+      // Проба уважает свой таймаут: иначе «мёртвый» сервер висит дольше
+      // отведённого (аудит §8.5).
+      timeout,
     });
     try {
       await connection.open();

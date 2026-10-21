@@ -58,3 +58,19 @@ export interface DocumentDiagnosticReport {
   items?: import("./types").LspDiagnostic[];
   resultId?: string;
 }
+
+/** Что нужно соединению извне: логгер, офлайн-флаг, инъекции для тестов. */
+export interface LspConnectionDeps {
+  logger?: import("./client-logger").LspClientLogger | null;
+  offline?: boolean;
+  spawn?: ServerProcessFactory;
+  /** Резолв команды запуска (тесты). */
+  resolveLaunch?: (config: import("./types").LspServerConfig) => LaunchPlan;
+  /** Таймаут вызова (проба передаёт свой — иначе она висит дольше срока). */
+  timeout?: number;
+  /** Источник времени (пул/тесты). По умолчанию — реальные часы. */
+  now?: () => number;
+}
+
+/** Депы пула: всё, что нужно соединениям, кроме часов (их ведёт пул). */
+export type LspPoolDeps = Omit<LspConnectionDeps, "now">;

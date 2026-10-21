@@ -22,6 +22,7 @@ import type {
   DocumentDiagnosticReport,
   DocumentState,
   LaunchPlan,
+  LspConnectionDeps,
   PublishDiagnosticsParams,
   ServerProcess,
   ServerProcessFactory,
@@ -36,25 +37,13 @@ export type {
   DocumentDiagnosticReport,
   DocumentState,
   LaunchPlan,
+  LspConnectionDeps,
+  LspPoolDeps,
   PublishDiagnosticsParams,
   ServerProcess,
   ServerProcessFactory,
   ServerStdout,
 } from "./connection-types";
-
-/** Что нужно соединению извне: логгер, офлайн-флаг, инъекции для тестов. */
-export interface LspConnectionDeps {
-  logger?: LspClientLogger | null;
-  offline?: boolean;
-  spawn?: ServerProcessFactory;
-  /** Резолв команды запуска (тесты). */
-  resolveLaunch?: (config: LspServerConfig) => LaunchPlan;
-  /** Источник времени (пул/тесты). По умолчанию — реальные часы. */
-  now?: () => number;
-}
-
-/** Депы пула: всё, что нужно соединениям, кроме часов (их ведёт пул). */
-export type LspPoolDeps = Omit<LspConnectionDeps, "now">;
 
 /** Ошибка соединения. `fatal` — соединение мертво, переиспользовать нельзя. */
 export type LspConnectionError = Error & { fatal?: boolean };
@@ -121,7 +110,7 @@ export class LspConnection {
     this.logger = deps.logger ?? null;
     this.offline = deps.offline;
     this.spawnProcess = deps.spawn ?? defaultSpawn;
-    this.timeout = config.timeout ?? LSP_DEFAULT_TIMEOUT_MS;
+    this.timeout = deps.timeout ?? config.timeout ?? LSP_DEFAULT_TIMEOUT_MS;
     this.now = deps.now ?? (() => Date.now());
     this.key = poolKey(serverKey, projectRoot);
     this.lastUsedAt = this.now();
@@ -189,8 +178,9 @@ export class LspConnection {
 
   /** Спавн процесса и подписка на его события (exit/error/stdout/stderr). */
   private async spawnAndWire(plan: LaunchPlan): Promise<void> {
-    this.process = await this.spawnProcess(plan, this.projectRoot);
-    this.process.once("exit", () => this.onServerExit());
+    const proc = await this.spawnProcess(plan, this.projectRoot);
+    this.process = proc;
+    proc.once("exit", () => this.onServerExit(proc));
     this.process.on("error", (error) => {
       this.logger?.debug(`LSP process error: ${errMsg(error)}`, { key: this.key });
     });
@@ -281,10 +271,10 @@ export class LspConnection {
     return this.freshDiagnostics(uri, version) ?? this.waitForPush(uri, version, timeoutMs);
   }
 
-  /** Диагностики актуальной версии без ожидания; null — устаревших/нет. */
+  /** Диагностики запрошенной версии; null — устаревших/нет (аудит §8.3). */
   private freshDiagnostics(uri: string, version: number): LspDiagnostic[] | null {
     const record = this.diagnostics.get(uri);
-    return record && record.version >= version ? record.diagnostics : null;
+    return record && record.version === version ? record.diagnostics : null;
   }
 
   /** Pull-модель: явный `textDocument/diagnostic` (сервер объявил support). */
@@ -314,7 +304,7 @@ export class LspConnection {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const record = this.diagnostics.get(uri);
-      if (record && record.version >= version) return record.diagnostics;
+      if (record && record.version === version) return record.diagnostics;
       const left = deadline - Date.now();
       if (left <= 0) return null;
       await delay(Math.min(left, 25));
@@ -375,7 +365,14 @@ export class LspConnection {
     this.supportsPull = Boolean(capabilities?.diagnosticProvider);
   }
 
-  private onServerExit(): void {
+  private onServerExit(exited?: ServerProcess): void {
+    // Выход СТАРОГО процесса не должен ронять новое соединение: ретрай
+    // open() поднимает новый процесс, а exit предыдущего приходит позже
+    // (аудит §8.4).
+    if (exited && this.process && exited !== this.process) {
+      this.logger?.debug("LSP server exited (stale process)", { key: this.key });
+      return;
+    }
     this.logger?.debug("LSP server exited", { key: this.key });
     this.teardown();
   }
@@ -487,7 +484,10 @@ export class LspConnection {
     if (!doc?.open) return;
     // Пуш от старой версии документа — игнор (антиретро-правки).
     if (params.version !== undefined && params.version < doc.version) return;
-    this.diagnostics.set(uri, { version: doc.version, diagnostics: params.diagnostics });
+    // Сохраняем ВЕРСИЮ, за которую сервер считал: текущая версия документа могла
+    // уехать вперёд, и тогда диагностики помечались бы как свежие (аудит §8.3).
+    const version = params.version ?? doc.version;
+    this.diagnostics.set(uri, { version, diagnostics: params.diagnostics });
     this.touch();
   }
 
