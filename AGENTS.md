@@ -117,6 +117,14 @@ bun run mma "<промпт>"   # прогнать агента вживую
 `tests/core/session-diagnose.test.ts`, `tests/arch/observability-coverage.test.ts`,
 `tests/arch/double-honesty.test.ts`, `tests/replay/invariants.test.ts`, `tests/arch/guidance-enforcement.test.ts`, `tests/arch/timeout-relations.test.ts`, `tests/arch/session-provenance.test.ts`, `tests/arch/default-single-source.test.ts`, `tests/compaction-cooldown-invariant.test.ts`, `tests/arch/platform-skips.test.ts`, `tests/arch/style-rules.test.ts`, `tests/arch/llm-call-options.test.ts`, `tests/core/reasoning-strategy-resolve.test.ts`.
 
+Границы безопасности тулов (аудит harness-модулей, волна W3) держат:
+`tests/tools/bash-scope.test.ts` (workdir-jail), `tests/tools/write-path-allowlist.test.ts`
+(allowlist записи во всех мутирующих тулах), `tests/tools/glob-scope.test.ts`
+(выдача glob по скоупу/protected), `tests/tools/process-session-scope.test.ts`
+(изоляция фоновых процессов), `tests/security/ads-and-case.test.ts` (ADS и регистр),
+`tests/security/command-blacklist.test.ts` (чёрные списки команд),
+`tests/ui/output-sanitize.test.ts` (control-символы в выводе).
+
 ### 6. Не расширять файл «заодно»
 
 Правило ≤300 строк действует там, где есть чистый шов. Файлы >300 строк —

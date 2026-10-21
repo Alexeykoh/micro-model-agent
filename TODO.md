@@ -36,11 +36,16 @@
 Исполнен частично — волны architecture-v2 закрыли часть находок, но сам план в `master`
 не слит. Открытые пункты (список с обоснованием — в шапке плана):
 
-- [ ] **W3 — безопасность путей и вывода:** `validateWorkdir` (bash без jail по workdir);
-      ADS/регистр/TOCTOU в `matchProtectedPath`; allowlist записи в `delete-file`/`move-file`/
-      `create-dir`; `glob-tool.ts` не фильтрует по scope/protected; `processRegistry.get(id)`
-      без `sessionId`; нет `src/ui/sanitize-output.ts`; нет `certutil`/`bitsadmin`/`takeown`/
-      `wscript`/`shred` в `security-policies.ts` и маркера `[APPROVED]`.
+- [ ] **W3 — безопасность путей и вывода:** ~~`validateWorkdir`~~ (сделано 2026-10-21:
+      workdir-jail в `bash`) · ~~ADS/регистр/TOCTOU в `matchProtectedPath`~~ (ADS и
+      регистр — сделано; TOCTOU-двойная проверка `escapesViaSymlink` — осталась) ·
+      ~~allowlist записи в `delete-file`/`move-file`/`create-dir`~~ (сделано) ·
+      ~~`glob-tool.ts` не фильтрует по scope/protected~~ (сделано) ·
+      ~~`processRegistry.get(id)` без `sessionId`~~ (сделано) ·
+      ~~нет `src/ui/sanitize-output.ts`~~ (сделано) ·
+      ~~нет `certutil`/`bitsadmin`/`takeown`/`wscript`/`shred` в
+      `security-policies.ts`~~ (сделано: единый `security-lists.ts`) ·
+      маркера `[APPROVED]` нет — `DEBT(approve-marker-not-authoritative)`.
 - [ ] **W6 — web-сервис:** security-заголовки на статику (`X-Frame-Options` и пр.);
       кэпы тела по маршруту; SVG; LRU/GC пула; инкрементальные логи; таймеры фронта;
       видимость ошибок slash-команд; XSS-guard-тесты; гонка активной сессии.

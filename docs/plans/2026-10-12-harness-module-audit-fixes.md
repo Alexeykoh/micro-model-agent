@@ -651,6 +651,17 @@ it("tool ledger keeps its dedup set bounded and re-admits evicted keys", () => {
 
 # Волна 3 — Безопасность (находки §4)
 
+> **Волна 3 закрыта 2026-10-21** (ветка `fix/harness-audit-w3-security`).
+> Задачи 3.1–3.4 и 3.6–3.8 выполнены, тесты красные до правки:
+> `tests/tools/bash-scope.test.ts`, `tests/security/ads-and-case.test.ts`,
+> `tests/tools/write-path-allowlist.test.ts`, `tests/tools/glob-scope.test.ts`,
+> `tests/tools/process-session-scope.test.ts`, `tests/ui/output-sanitize.test.ts`,
+> `tests/security/command-blacklist.test.ts`.
+> Задача 3.5 закрыта ранее механизмами INV-10/INV-11 (enforcement `pathArgs`
+> и тегов — в `ToolExecutor.execute()`).
+> Открытый хвост: маркер `[APPROVED]` не авторитетен —
+> `DEBT(approve-marker-not-authoritative)` в `docs/agents/debt.md`.
+
 ## Task 3.1: `bash` уважает scope и workdir (§4.1)
 
 **Files:**
