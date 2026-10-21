@@ -43,14 +43,6 @@ export const subagentTool: ToolDefinition = {
         items: { type: "string" },
         description: "Files/directories the sub-agent can read but not write",
       },
-      shared_context: {
-        type: "string",
-        description: "Shared context/rules passed to the sub-agent",
-      },
-      max_tokens: {
-        type: "number",
-        description: "Maximum tokens for the sub-agent response",
-      },
       tool_tags: {
         type: "array",
         items: { type: "string" },
