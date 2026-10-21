@@ -36,7 +36,7 @@
     "src/modules/lsp/module.ts": 488,
     "src/modules/webui/assets/js/settings/providers.ts": 488,
     "src/core/bootstrap/session-runner.ts": 487,
-    "src/modules/session/store.ts": 461,
+    "src/modules/session/store.ts": 431,
     "src/tools/syntax-validator.ts": 461,
     "src/modules/webui/assets/js/settings/write.ts": 458,
     "src/modules/webui/assets/js/session/composer.ts": 457,
@@ -54,7 +54,7 @@
     "src/modules/security/audit-notifier.ts": 376,
     "src/core/bootstrap/modules-phase.ts": 375,
     "src/modules/indexer/symbols.ts": 375,
-    "src/modules/session/manager.ts": 368,
+    "src/modules/session/manager.ts": 356,
     "src/modules/browser/session.ts": 336,
     "src/modules/processes/registry.ts": 351
   }

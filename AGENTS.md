@@ -138,6 +138,14 @@ bun run mma "<промпт>"   # прогнать агента вживую
 `tests/modules/skills/prompt-and-loader.test.ts` (скиллы),
 `tests/tools/subagent-max-tokens.test.ts` (кап токенов субагента).
 
+Конфиг, CLI и сессии (волна W7) держат: `tests/config/migration.test.ts`
+(миграция v1), `tests/config/atomic-save.test.ts` (атомарная запись доменов),
+`tests/cli/config-reset.test.ts` (сброс json/list), `tests/providers/fallback-model.test.ts`
+(failover и общие лимиты), `tests/webui-busy-guard.test.ts` (гейт занятости),
+`tests/cli/exit-codes.test.ts` (коды возврата), `tests/modules/setup/apply.test.ts`
+(setup-мастер), `tests/session/rotate-and-prune.test.ts` (ротация лога и prune),
+`tests/cli/background-children.test.ts` (гашение фоновых детей).
+
 Веб-поверхность (волна W6) держат: `tests/webui-security-headers.test.ts`
 (заголовки и auth на статику), `tests/webui-body-limits.test.ts` (капы тела и
 памяти, SSRF проб), `tests/webui-error-propagation.test.ts` (коды ошибок),

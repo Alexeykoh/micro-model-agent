@@ -2005,6 +2005,18 @@ it("an unscoped state push never overwrites the client-active tab", async () => 
 
 # Волна 7 — Конфиг, сессии, провайдеры, CLI (находки §7)
 
+> **Волна 7 закрыта 2026-10-21** (ветка `fix/harness-audit-w7-config`).
+> Выполнены задачи 7.1–7.8: недеструктивная миграция v1-конфига, атомарная
+> шифрованная запись доменов со слиянием, `/config reset` для json/list, failover
+> с моделью целевого провайдера и общие лимиты запросов, гейт занятости в
+> веб-настройках, реальные коды возврата CLI и one-shot, честный setup-мастер,
+> ротация лога/оборванный хвост/prune с живыми раннерами.
+> Тесты (красные до правки): `tests/config/migration.test.ts`,
+> `tests/config/atomic-save.test.ts`, `tests/cli/config-reset.test.ts`,
+> `tests/providers/fallback-model.test.ts`, `tests/webui-busy-guard.test.ts`,
+> `tests/cli/exit-codes.test.ts`, `tests/modules/setup/apply.test.ts`,
+> `tests/session/rotate-and-prune.test.ts`, `tests/cli/background-children.test.ts`.
+
 ## Task 7.1: Не-деструктивная «миграция» конфига (§7.1)
 
 **Files:**

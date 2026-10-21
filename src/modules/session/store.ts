@@ -15,7 +15,7 @@ import type { SessionEncryptionConfig } from "../../config/types";
 import type { DiagnosticEvent, Source } from "../../output";
 import type { EgressTurnSummary } from "../security/data-policy/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
-import { appendLogTail } from "./log-tail";
+import { appendLogEntry, readLogEntries } from "./log-file";
 
 /** События онбординга (`meet`/`init`) — явный союз вместо `onboarding_${string}` (W11). */
 export type OnboardingEvent =
@@ -360,48 +360,19 @@ export class SessionStore {
   appendSessionLog(id: string, entry: SessionLogEntry): void {
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const line = JSON.stringify(entry);
-    const payload = this.encryptor?.isEnabled()
-      ? `${this.encryptor.encryptFileContent(line)}\n`
-      : `${line}\n`;
-    appendFileSync(this.sessionLogPath(id), payload, { encoding: "utf-8", mode: 0o600 });
-    // Хвост: последние строки лога отдельно — по нему Trace читает инкрементально
-    // (аудит §6.13).
-    appendLogTail(this.sessionLogTailPath(id), payload);
+    appendLogEntry(
+      this.sessionLogPath(id),
+      this.sessionLogTailPath(id),
+      entry,
+      this.encryptor,
+    );
   }
 
   /** Загрузить session-лог (битые строки пропускаются); нет файла — []. */
   loadSessionLog(id: string, opts: { since?: string } = {}): SessionLogEntry[] {
     // Инкрементальное чтение: с курсором берём только хвост (аудит §6.13).
     const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
-    if (!existsSync(path)) return [];
-    try {
-      const raw = readFileSync(path, "utf-8");
-      const lines = raw.split("\n").filter(Boolean);
-      const parseLine = (line: string): SessionLogEntry | null => {
-        try {
-          return JSON.parse(line) as SessionLogEntry;
-        } catch {
-          return null;
-        }
-      };
-      if (this.encryptor?.isEnabled()) {
-        return lines
-          .map((line) => {
-            try {
-              return this.encryptor!.decryptFileContent(line);
-            } catch {
-              return null;
-            }
-          })
-          .filter((l): l is string => l !== null)
-          .map(parseLine)
-          .filter((e): e is SessionLogEntry => e !== null);
-      }
-      return lines.map(parseLine).filter((e): e is SessionLogEntry => e !== null);
-    } catch {
-      return [];
-    }
+    return readLogEntries(path, this.encryptor) ?? [];
   }
 
   /** Список сессий по убыванию updatedAt. */

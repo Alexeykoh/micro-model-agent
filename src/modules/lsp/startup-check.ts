@@ -2,6 +2,7 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import { spawn } from "child_process";
+import { registerBackgroundChild } from "../processes/background-children";
 import { t } from "../../i18n/index";
 import type { PromptBlock } from "../../core/types";
 import type { LspConfig, LspDiagnostic } from "./types";
@@ -126,6 +127,9 @@ async function runTscDefault(projectRoot: string, timeoutMs: number): Promise<st
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    // Фоновый ребёнок: через shell это `cmd.exe → tsc`, и `child.kill()`
+    // убивал только шелла — tsc оставался жить после выхода (аудит §7.10).
+    registerBackgroundChild(child);
     let out = "";
     child.stdout?.on("data", (d: Buffer) => {
       out += d.toString();
