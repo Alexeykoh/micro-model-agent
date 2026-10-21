@@ -66,14 +66,20 @@ export class Completer {
     this.providers = [];
   }
 
-  /** Дополняет строку; возвращает [варианты, partial]. */
-  complete(line: string): [CompletionItem[], string] {
-    const cursor = line.length;
-    const tokens = line.split(/\s+/);
+  /**
+   * Дополняет строку; возвращает [варианты, partial].
+   *
+   * `cursor` — позиция курсора в строке (по умолчанию конец): дополняется токен
+   * ПОД КУРСОРОМ, а не последний в строке (аудит §8.15).
+   */
+  complete(line: string, cursor: number = line.length): [CompletionItem[], string] {
+    const pos = Math.max(0, Math.min(cursor, line.length));
+    const before = line.slice(0, pos);
+    const tokens = before.split(/\s+/);
     const partial = tokens[tokens.length - 1] || "";
     const tokenIndex = tokens.length - 1;
 
-    const ctx: CompletionContext = { line, cursor, tokens, partial, tokenIndex };
+    const ctx: CompletionContext = { line, cursor: pos, tokens, partial, tokenIndex };
 
     for (const provider of this.providers) {
       if (provider.match(ctx)) {

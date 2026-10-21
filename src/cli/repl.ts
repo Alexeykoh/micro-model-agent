@@ -209,8 +209,8 @@ export class Repl implements ReplContext, Host {
     this.historyPath = historyPath ?? join(homedir(), ".mma", "repl-history");
     this.loadHistory();
 
-    const editorCompleter = (line: string): [CompletionItem[], string] => {
-      const [matches, partial] = this.completer.complete(line);
+    const editorCompleter = (line: string, cursor?: number): [CompletionItem[], string] => {
+      const [matches, partial] = this.completer.complete(line, cursor);
       if (matches.length > 0) return [matches, partial];
       return [[], line];
     };

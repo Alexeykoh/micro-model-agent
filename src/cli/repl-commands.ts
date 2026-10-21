@@ -6,6 +6,7 @@ import { renderTable } from "../ui/table";
 import { t, } from "../i18n/index";
 import { runSetup } from "./setup";
 import { applyAnswersToConfig } from "./setup-order";
+import { printConfigTable } from "./repl-config-table";
 import { saveConfig } from "../config/config";
 import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { providerNameTaken } from "../modules/providers/naming";
@@ -14,8 +15,6 @@ import { budgetBreakdownLines } from "../config/budget";
 import {
   getConfigValue,
   keysForGroup,
-  configDefs,
-  formatConfigValue,
   type ConfigKeyDef,
   type ConfigSetResult,
 } from "../config/registry";
@@ -198,20 +197,11 @@ function registerRunCommands(ctx: ReplContext): void {
   });
 }
 
-const SUGAR_HINTS: Record<string, string> = {
-  model: "/model use <name>",
-  "provider.active": "/provider use <name>",
-  contextWindow: "/context <size>",
-  "contextBudget.systemPrompt": "/context system <share>",
-  "contextBudget.responseReserve": "/context reserve <share>",
-  showReasoning: "/reasoning show | hide",
-  "reasoning.mode": "/reasoning level <level>",
-  "ui.verbosity": "/verbose <level>",
-};
-
-function changeHint(def: ConfigKeyDef): string {
-  if (def.readOnly) return t("config.read_only_hint");
-  return SUGAR_HINTS[def.key] ?? `/config ${def.key} <value>`;
+function printReasoningStatus(ctx: ReplContext): void {
+  const display = ctx.config.showReasoning ? t("reasoning.on") : t("reasoning.off");
+  const mode = ctx.config.reasoning?.mode ?? "auto";
+  const auto = mode === "auto" ? t("reasoning.auto_on") : t("reasoning.auto_off");
+  ctx.output.writeLine(t("reasoning.status", { display, level: mode, auto }));
 }
 
 /** Отчёт об успешной записи настройки. */
@@ -219,27 +209,9 @@ function reportSaved(ctx: ReplContext, result: ConfigSetResult & { ok: true }): 
   ctx.output.writeLine(pc.green(t("config.saved", { key: result.key })));
 }
 
-/** Таблица настроек (текущее значение + подсказка по смене). */
-function printConfigTable(ctx: ReplContext, defs?: ConfigKeyDef[]): void {
-  const list = defs ?? configDefs();
-  const rows = list.map((def) => [
-    def.key,
-    formatConfigValue(def.get(ctx.config)),
-    def.domain,
-    changeHint(def),
-  ]);
-  ctx.output.writeLine(pc.bold(t("config.header")));
-  for (const line of renderTable(
-    [
-      t("config.col_setting"),
-      t("config.col_value"),
-      t("config.col_domain"),
-      t("config.col_change"),
-    ],
-    rows,
-  )) {
-    ctx.output.writeLine(line);
-  }
+/** Таблица настроек + строка активной сессии (формат — в `repl-config-table.ts`). */
+function showConfigTable(ctx: ReplContext, defs?: ConfigKeyDef[], page = 1): void {
+  printConfigTable(ctx.output, (def) => def.get(ctx.config), defs, page);
   const meta = ctx.sessionManager?.getActiveMeta();
   if (meta) {
     ctx.output.writeLine(
@@ -253,13 +225,6 @@ function printConfigTable(ctx: ReplContext, defs?: ConfigKeyDef[]): void {
     );
   }
   ctx.output.writeLine(pc.dim(t("config.usage_hint")));
-}
-
-function printReasoningStatus(ctx: ReplContext): void {
-  const display = ctx.config.showReasoning ? t("reasoning.on") : t("reasoning.off");
-  const mode = ctx.config.reasoning?.mode ?? "auto";
-  const auto = mode === "auto" ? t("reasoning.auto_on") : t("reasoning.auto_off");
-  ctx.output.writeLine(t("reasoning.status", { display, level: mode, auto }));
 }
 
 function registerConfigCommands(ctx: ReplContext): void {
@@ -276,7 +241,17 @@ function registerConfigCommands(ctx: ReplContext): void {
         return runConfigMigrate(ctx);
       }
       if (args.length === 0) {
-        printConfigTable(ctx);
+        showConfigTable(ctx);
+        return;
+      }
+      if (args[0] === "page") {
+        // Переход на страницу списка настроек: `/config page 2`.
+        const page = Number(args[1]);
+        if (!Number.isFinite(page) || page < 1) {
+          ctx.output.writeLine(pc.red(t("config.page_bad")));
+          return;
+        }
+        showConfigTable(ctx, undefined, Math.floor(page));
         return;
       }
       if (args[0] === "reset") {
@@ -287,7 +262,7 @@ function registerConfigCommands(ctx: ReplContext): void {
       if (args.length === 1) {
         const group = keysForGroup(name);
         if (group.length > 0) {
-          printConfigTable(ctx, group);
+          showConfigTable(ctx, group);
           return;
         }
         const got = getConfigValue(ctx.config, name);

@@ -39,7 +39,7 @@ export interface LineEditorOptions {
   };
   output: NodeJS.WritableStream & { columns?: number };
   prompt?: string;
-  completer?: (line: string) => [CompletionItem[], string];
+  completer?: (line: string, cursor?: number) => [CompletionItem[], string];
   history?: string[];
   historySize?: number;
   tabSize?: number;
@@ -66,7 +66,7 @@ export class LineEditor implements LineInput {
   private onInterrupt?: () => void;
 
   private promptStr: string;
-  private completer?: (line: string) => [CompletionItem[], string];
+  private completer?: (line: string, cursor?: number) => [CompletionItem[], string];
   private history: string[];
   private historySize: number;
   private lines: string[] = [""];
@@ -632,8 +632,7 @@ export class LineEditor implements LineInput {
   private ctrlD(): void {
     if (this.lines.length === 1 && this.lines[0] === "") {
       // Пустая строка + Ctrl+D = выход из сессии: редактор закрывается целиком
-      // (raw-режим снят, слушатели отключены) — иначе терминал остаётся в raw
-      // и процесс «висит» после выхода (аудит §8.11).
+      // (raw-режим снят) — иначе терминал остаётся в raw и процесс «висит» (§8.11).
       this.close();
     } else {
       this.deleteForward();
@@ -940,7 +939,8 @@ export class LineEditor implements LineInput {
   private tabComplete(): void {
     if (!this.completer) return;
     const line = this.lines[this.row];
-    const [matches, partial] = this.completer(line);
+    // Дополняется токен ПОД КУРСОРОМ, а не последний в строке (§8.15).
+    const [matches, partial] = this.completer(line, this.col);
     if (matches.length === 0) {
       this.output.write("\x07");
       return;

@@ -4,6 +4,8 @@ import type { SkillsModule } from "../modules/skills/module";
 import { readdirSync, statSync } from "fs";
 import { join } from "path";
 import { allConfigNames, canonicalKeys, resolveConfigKey } from "../config/registry";
+import { isIgnoredDirName, isIgnoredFileName } from "../modules/indexer/walker";
+import { capCandidates } from "./completion-cap";
 import { t } from "../i18n/index";
 
 /** Контекст дополнения: строка, курсор, токены, partial, индекс токена. */
@@ -127,18 +129,34 @@ export class FilePathProvider implements CompletionProvider {
       const cwd = this.root ?? process.cwd();
       const partialPath = ctx.partial;
       const lastSlash = Math.max(partialPath.lastIndexOf("/"), partialPath.lastIndexOf("\\"));
-      const dirPath = lastSlash > 0 ? partialPath.slice(0, lastSlash) : ".";
-      const prefix = lastSlash > 0 ? partialPath.slice(0, lastSlash + 1) : "";
+      // Абсолютный путь не склеивается с cwd: `/Us` — это корень, а не
+      // подкаталог рабочего (аудит §8.15).
+      const isAbsolute =
+        partialPath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(partialPath);
+      const prefix = lastSlash >= 0 ? partialPath.slice(0, lastSlash + 1) : "";
+      const dirPath = isAbsolute
+        ? partialPath.slice(0, lastSlash + 1)
+        : lastSlash > 0
+          ? partialPath.slice(0, lastSlash)
+          : ".";
+      const fullPath = isAbsolute ? dirPath : join(cwd, dirPath);
 
-      const fullPath = join(cwd, dirPath);
-      const entries = readdirSync(fullPath);
+      const entries = readdirSync(fullPath).sort();
 
       const matches: string[] = [];
       for (const entry of entries) {
+        // Служебные каталоги (node_modules, .git, …) в списке не нужны.
+        if (isIgnoredDirName(entry) || isIgnoredFileName(entry)) continue;
         const entryPath = join(fullPath, entry);
-        const stat = statSync(entryPath);
-        const completion = prefix + entry + (stat.isDirectory() ? "/" : "");
-
+        // stat по каждой записи: один сбойный symlink не должен ломать весь
+        // список (аудит §8.15).
+        let isDir = false;
+        try {
+          isDir = statSync(entryPath).isDirectory();
+        } catch {
+          continue;
+        }
+        const completion = prefix + entry + (isDir ? "/" : "");
         if (completion.startsWith(ctx.partial)) {
           matches.push(completion);
         }
@@ -189,7 +207,7 @@ export class SessionNameProvider implements CompletionProvider {
     const filtered = !ctx.partial
       ? names
       : names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
-    return filtered.map((n) => ({ value: n }));
+    return capCandidates(filtered, (n) => ({ value: n }));
   }
 }
 
@@ -221,7 +239,7 @@ export class SkillNameProvider implements CompletionProvider {
     const filtered = !ctx.partial
       ? names
       : names.filter((n) => n.toLowerCase().includes(ctx.partial.toLowerCase()));
-    return filtered.map((n) => ({ value: n }));
+    return capCandidates(filtered, (n) => ({ value: n }));
   }
 }
 

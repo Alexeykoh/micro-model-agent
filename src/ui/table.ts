@@ -1,6 +1,7 @@
 // Таблицы чата: парсинг markdown-строк, выравнивание колонок (без рамок, см. STYLE.md).
 import stringWidth from "string-width";
 import { pc } from "./colors";
+import { t } from "../i18n/index";
 
 /** Выравнивание ячейки. */
 export type CellAlign = "left" | "center" | "right";
@@ -68,9 +69,19 @@ export function parseAlignments(separator: string): Record<number, CellAlign> {
   return out;
 }
 
+/** Минимальная ширина колонки (иначе в неё не влезет даже заголовок). */
+const MIN_COL_WIDTH = 3;
+
+/** Сколько колонок показываем по умолчанию (как в вебе). */
+export const DEFAULT_MAX_COLUMNS = 8;
+
 /**
  * Рендерит markdown-блок таблицы в выровненные строки без рамок.
  * `tableLines` включает строку шапки и опц. строку-разделитель.
+ *
+ * Таблица ВСЕГДА влезает в ширину терминала: колонки ужимаются справа налево,
+ * а если не помогает — последняя колонка переносится по словам. Колонки сверх
+ * `maxColumns` отбрасываются с пометкой `… ещё N` (аудит §8.14).
  */
 export function formatTable(tableLines: string[], opts: TableOptions = {}): string[] {
   const align: Record<number, CellAlign> = opts.align ?? {};
@@ -84,13 +95,16 @@ export function formatTable(tableLines: string[], opts: TableOptions = {}): stri
   const dataRows = rows.slice(dataStart);
 
   let columnCount = Math.max(headerRow.length, ...dataRows.map((r) => r.length));
-  if (opts.maxColumns && columnCount > opts.maxColumns) {
-    columnCount = opts.maxColumns;
+  const maxColumns = opts.maxColumns ?? DEFAULT_MAX_COLUMNS;
+  let dropped = 0;
+  if (maxColumns > 0 && columnCount > maxColumns) {
+    dropped = columnCount - maxColumns;
+    columnCount = maxColumns;
   }
 
   const widths: number[] = [];
   for (let c = 0; c < columnCount; c++) {
-    let w = 3;
+    let w = MIN_COL_WIDTH;
     for (const row of rows) {
       const cell = row[c];
       if (cell !== undefined) w = Math.max(w, stringWidth(cell));
@@ -100,43 +114,88 @@ export function formatTable(tableLines: string[], opts: TableOptions = {}): stri
 
   const maxWidth = opts.maxWidth ?? getTerminalWidth();
   const GAP = "  ";
-  const contentWidth = widths.reduce((a, b) => a + b, 0);
-  const totalWidth = contentWidth + GAP.length * Math.max(0, columnCount - 1);
-  if (totalWidth > maxWidth) {
-    const over = totalWidth - maxWidth;
-    let remaining = over;
-    let i = widths.length - 1;
-    while (remaining > 0 && i >= 0) {
-      if (widths[i] > 3) {
-        const cut = Math.min(widths[i] - 3, remaining);
-        widths[i] -= cut;
-        remaining -= cut;
-      }
-      i--;
-    }
+  const gapWidth = GAP.length * Math.max(0, columnCount - 1);
+  let overflow = widths.reduce((a, b) => a + b, 0) + gapWidth - maxWidth;
+  // Итеративно ужимаем колонки справа налево, пока строка не влезет.
+  for (let i = widths.length - 1; i >= 0 && overflow > 0; i--) {
+    if (widths[i] <= MIN_COL_WIDTH) continue;
+    const cut = Math.min(widths[i] - MIN_COL_WIDTH, overflow);
+    widths[i] -= cut;
+    overflow -= cut;
   }
+  // Даже минимальные колонки не влезают: последняя колонка переносится по
+  // словам — вылет за экран хуже переноса.
+  const wrapLast = overflow > 0 && columnCount > 0;
+  const lastWidth = widths[columnCount - 1] ?? MIN_COL_WIDTH;
 
-  const renderRow = (row: string[], isHeader: boolean): string => {
+  const renderCells = (row: string[], isHeader: boolean): string[] => {
     const cells: string[] = [];
     for (let c = 0; c < columnCount; c++) {
       const raw = row[c] ?? "";
       const cell = truncate(raw, widths[c]);
-      const a = isHeader && align[c] === undefined ? "left" : (align[c] ?? "left");
+      const a = align[c] ?? (isHeader ? "center" : "left");
       cells.push(pad(cell, widths[c], a));
     }
-    const content = cells.join(GAP);
-    return isHeader ? pc.bold(content) : content;
+    return cells;
+  };
+
+  // Строка может развернуться в несколько физических строк (перенос последней
+  // колонки по словам).
+  const renderRow = (row: string[], isHeader: boolean): string[] => {
+    const cells = renderCells(row, isHeader);
+    const join = (line: string[]): string =>
+      (isHeader ? pc.bold(line.join(GAP)) : line.join(GAP)).replace(/\s+$/, "");
+    if (!wrapLast) return [join(cells)];
+    const lastRaw = row[columnCount - 1] ?? "";
+    const chunks = wrapByWords(lastRaw, lastWidth);
+    if (chunks.length <= 1) return [join(cells)];
+    const out: string[] = [];
+    chunks.forEach((chunk, i) => {
+      const line = [...cells];
+      line[columnCount - 1] = pad(
+        truncate(chunk, lastWidth),
+        lastWidth,
+        align[columnCount - 1] ?? (isHeader ? "center" : "left"),
+      );
+      if (i > 0) {
+        // Продолжение: колонки слева пустые, чтобы чтение оставалось ровным.
+        for (let c = 0; c < columnCount - 1; c++) line[c] = " ".repeat(widths[c]);
+      }
+      out.push(join(line));
+    });
+    return out;
   };
 
   // Без box-рамок: жирная шапка, dim-линейка, выровненные колонки.
   const out: string[] = [];
-  out.push(renderRow(headerRow, true));
-  const ruleWidth = widths.reduce((a, b) => a + b, 0) + GAP.length * Math.max(0, columnCount - 1);
+  out.push(...renderRow(headerRow, true));
+  const ruleWidth = widths.reduce((a, b) => a + b, 0) + gapWidth;
   out.push(pc.dim("─".repeat(Math.max(3, Math.min(ruleWidth, maxWidth - 1)))));
   for (const row of dataRows) {
-    out.push(renderRow(row, false));
+    out.push(...renderRow(row, false));
+  }
+  if (dropped > 0) {
+    out.push(pc.dim(t("ui.table_more_columns", { count: String(dropped) })));
   }
   return out;
+}
+
+/** Перенос текста по словам под ширину (слова не режутся, если не влезают). */
+function wrapByWords(text: string, width: number): string[] {
+  if (!text) return [""];
+  const out: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && stringWidth(candidate) > width) {
+      out.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) out.push(line);
+  return out.length > 0 ? out : [""];
 }
 
 /** Ширина терминала; вне TTY — 80. */

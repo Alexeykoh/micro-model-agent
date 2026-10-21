@@ -153,6 +153,13 @@ LSP и индексатор (волна W8) держат: `tests/modules/lsp/con
 `tests/cli/provider-add-limits.test.ts` (лимиты провайдера),
 `tests/modules/indexer/incremental-rebuild.test.ts` (инкрементальная пересборка).
 
+Терминал, i18n и комплитер (волна W9) держат: `tests/ui/question-modal.test.ts`
+(меню вопроса видно сразу), `tests/ui/line-editor-lifecycle.test.ts` (Ctrl+D и
+resize), `tests/ui/md-terminal-parity.test.ts` (терминал и веб понимают один
+Markdown), `tests/ui/table-fit.test.ts` (таблицы влезают в терминал),
+`tests/cli/completer-cursor.test.ts` (комплитер по курсору), `tests/i18n.test.ts`
+(паритет ключей и плейсхолдеров).
+
 Веб-поверхность (волна W6) держат: `tests/webui-security-headers.test.ts`
 (заголовки и auth на статику), `tests/webui-body-limits.test.ts` (капы тела и
 памяти, SSRF проб), `tests/webui-error-propagation.test.ts` (коды ошибок),

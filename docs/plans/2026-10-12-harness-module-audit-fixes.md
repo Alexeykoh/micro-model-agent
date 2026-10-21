@@ -2533,6 +2533,19 @@ it("resolving a bare npm specifier does not scan the whole map", () => { /* spy 
 
 # Волна 9 — Терминал, i18n, комплитер (находки §8.10–§8.15)
 
+> **Волна 9 закрыта 2026-10-21** (задачи 9.1–9.4). Сделано: меню вопроса видно
+> сразу (`writeModal`), Ctrl+D завершает сессию чисто, ширина перемеряется при
+> resize, i18n-паритет ключей и плейсхолдеров, терминальный markdown как в вебе
+> (заголовки без пробела, GFM-таблицы без внешних `|`, списки `1)`), таблицы
+> влезают в ширину терминала, комплитер работает по токену под курсором и
+> понимает абсолютные пути, длинные списки ограничены 20 кандидатами.
+> Тесты: `tests/ui/question-modal.test.ts`,
+> `tests/ui/line-editor-lifecycle.test.ts`, `tests/ui/md-terminal-parity.test.ts`,
+> `tests/ui/table-fit.test.ts`, `tests/cli/completer-cursor.test.ts`,
+> `tests/i18n.test.ts`.
+> Не сделано: интерактивный пейджер `/config` с `↑`/`↓` —
+> `DEBT(config-pager-keys)` (постраничный вывод и `/config page N` есть).
+
 ## Task 9.1: Меню `question` видно сразу (§8.10)
 
 **Files:**
