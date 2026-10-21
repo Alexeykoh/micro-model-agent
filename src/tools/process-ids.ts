@@ -23,14 +23,18 @@ export type ProcessLookup =
 /**
  * Общая валидация id + lookup в реестре для process_*-тулов. Возвращает запись
  * либо `{ ok: false, output }` для прямого возврата (нет id — хинт,
- * неизвестный id — not-found).
+ * неизвестный id — not-found). `sessionId` ограничивает поиск своей сессией
+ * (аудит §4.9): процесс чужой сессии для модели не существует.
  */
-export function lookupProcess(args: Record<string, unknown>): ProcessLookup {
+export function lookupProcess(
+  args: Record<string, unknown>,
+  sessionId?: string,
+): ProcessLookup {
   if (args.id === undefined || String(args.id).trim() === "") {
     return { ok: false, output: missingProcessIdHint() };
   }
   const id = String(args.id);
-  const entry = processRegistry.get(id);
+  const entry = processRegistry.get(id, sessionId);
   if (!entry) {
     return { ok: false, output: t("proc.not_found", { id }) };
   }

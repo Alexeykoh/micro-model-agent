@@ -41,8 +41,8 @@ export const processWaitTool: ToolDefinition = {
     },
     required: ["id"],
   },
-  handler: async (_ctx, args) => {
-    const found = lookupProcess(args);
+  handler: async (ctx, args) => {
+    const found = lookupProcess(args, ctx.sessionId);
     if (!found.ok) return { success: false, output: found.output };
     const { id } = found;
     const waitMs = Math.min(
@@ -52,7 +52,7 @@ export const processWaitTool: ToolDefinition = {
     const started = Date.now();
     await processRegistry.waitForExit(id, waitMs);
     const elapsed = Date.now() - started;
-    const entry = processRegistry.get(id);
+    const entry = processRegistry.get(id, ctx.sessionId);
     if (!entry) {
       return { success: false, output: t("proc.not_found", { id }) };
     }
