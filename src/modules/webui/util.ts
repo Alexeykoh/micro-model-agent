@@ -236,8 +236,14 @@ export function scrubError(err: unknown): string {
   return redactContextSecrets(errMsg(err));
 }
 
-/** Маппит провал чтения тела в ответ; переполненные получают flush-safe 413. */
-export function readBodyError(req: IncomingMessage, res: ServerResponse, err: unknown): void {
+/**
+ * Маппит ошибку запроса в ответ (аудит §6.6): переполнение тела — 413,
+ * битый JSON — 400, таймаут — 504, всё прочее — 500 с вычищенным текстом.
+ *
+ * Раньше любой провал читался как 400 «bad request», и настоящая ошибка
+ * сервера (провайдер не ответил, ФС отдала сбой) выглядела как ошибка клиента.
+ */
+export function requestError(req: IncomingMessage, res: ServerResponse, err: unknown): void {
   if (err instanceof BodyTooLargeError) {
     res.writeHead(413, { "Content-Type": "application/json; charset=utf-8" });
     // Уничтожаем запрос только после флаша 413; убийство раньше —
@@ -245,7 +251,24 @@ export function readBodyError(req: IncomingMessage, res: ServerResponse, err: un
     res.end(JSON.stringify({ error: "body too large" }), () => req.destroy());
     return;
   }
-  sendJson(res, 400, { error: "bad request" });
+  if (err instanceof SyntaxError) {
+    sendJson(res, 400, { error: "invalid JSON" });
+    return;
+  }
+  if (isTimeoutError(err)) {
+    sendJson(res, 504, { error: "gateway timeout", detail: scrubError(err) });
+    return;
+  }
+  sendJson(res, 500, { error: "internal error", detail: scrubError(err) });
+}
+
+/** Таймаут ли это (AbortError, ETIMEDOUT, «timeout» в имени/сообщении). */
+function isTimeoutError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { name?: string; code?: string; message?: string };
+  if (e.name === "AbortError" || e.name === "TimeoutError") return true;
+  if (e.code === "ETIMEDOUT" || e.code === "UND_ERR_CONNECT_TIMEOUT") return true;
+  return typeof e.message === "string" && /timeout|timed out/i.test(e.message);
 }
 
 /** Best-effort открытие UI в браузере по умолчанию (MMA_WEBUI_OPEN=0 отключает). */

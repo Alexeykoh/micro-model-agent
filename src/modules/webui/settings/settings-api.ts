@@ -2,7 +2,7 @@
 // Вынесены из `server.ts`. Без коллаборатора — пробел wiring: такие точки отвечают 503.
 // Auth и same-origin — выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { readBodyError, sendJson } from "../util";
+import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";
 import { broadcast } from "../state";
@@ -217,7 +217,7 @@ export function handlePluginToggle(
       applyPluginToggle(res, name, rec.enabled, s);
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -265,7 +265,7 @@ export function handleMcpToggle(
       sendJson(res, 200, { ok: true, persisted, restartRequired: true, mcp: mcpList(s) });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -564,7 +564,7 @@ function handleConfigWrite(
       sendJson(res, 200, { ok: true, persisted, restartRequired: true, ...view(config, s) });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 

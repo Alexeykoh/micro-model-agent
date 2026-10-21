@@ -23,7 +23,7 @@ import {
 import { scanLocalServers, } from "../../setup/discovery";
 import { broadcast } from "../state";
 import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";
-import { readBody, readBodyError, sendJson } from "../util";
+import { readBody, requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
 import { handleSetupContext, handleSetupModels, handleSetupTest } from "./setup-probes";
@@ -188,7 +188,7 @@ export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: Co
       sendJson(res, 200, { servers });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -214,7 +214,7 @@ export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: 
       sendJson(res, 200, { ok: true, locale, dicts: getFlatDicts() });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -254,7 +254,7 @@ export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: Co
       sendJson(res, 200, body);
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 

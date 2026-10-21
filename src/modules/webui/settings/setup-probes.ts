@@ -5,7 +5,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { fetchProviderModels, testProviderChat } from "../../setup/discovery";
 import { probeProviderContext } from "../../../llm/provider-context";
-import { readBodyError, sendJson } from "../util";
+import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { allowSetupProbe, validateProviderBaseUrl } from "./setup-policy";
 import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";
@@ -65,7 +65,7 @@ export function handleSetupModels(req: IncomingMessage, res: ServerResponse, s: 
       sendJson(res, 200, { models });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -88,7 +88,7 @@ export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: Pr
       sendJson(res, 200, { ok });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -118,6 +118,6 @@ export function handleSetupContext(req: IncomingMessage, res: ServerResponse, s:
       sendJson(res, 200, { ok: true, contextWindow: probe.actual, model: probe.model });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }

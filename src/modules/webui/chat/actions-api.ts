@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { parseJsonBody } from "../http/body";
 import { cancelPendingQuestions } from "../session/prompt-io";
 import type { SessionStore, RuntimeState, WorkspaceStore, HttpTransport, SseTransport } from "../state";
-import { readBody, readBodyError, sendJson } from "../util";
+import { readBody, requestError, sendJson } from "../util";
 
 /** Достаёт `sessionId` вкладки-отправителя из JSON-тела (нет — null). */
 function extractSessionField(raw: string): string | null {
@@ -67,7 +67,7 @@ export function handleCommandPost(
       sendJson(res, 202, { ok: true });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -106,7 +106,7 @@ export function handleInterruptPost(
       sendJson(res, 200, { ok: true });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 

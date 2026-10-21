@@ -3,7 +3,7 @@
 // Auth и same-origin — выше в `server.ts`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { handleSessionItem } from "./session-item";
-import { readBody, readBodyError, sendJson } from "../util";
+import { readBody, requestError, sendJson } from "../util";
 import { parseJsonBody, readJsonBody } from "../http/body";
 import { isSessionBusy, pushState } from "./session-status";
 import { broadcast, type SessionStore, type RuntimeState, type HttpTransport, type SseTransport } from "../state";
@@ -97,7 +97,7 @@ export function handleSessionCreate(
       }
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
@@ -140,7 +140,7 @@ export function handleSessionActivate(
       sendJson(res, 200, { ok: true });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 

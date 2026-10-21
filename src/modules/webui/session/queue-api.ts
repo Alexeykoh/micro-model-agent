@@ -5,7 +5,7 @@
 // может стартовать, и индекс уже указывал бы на другое сообщение.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { parseJsonBody } from "../http/body";
-import { readBody, readBodyError, sendJson } from "../util";
+import { readBody, requestError, sendJson } from "../util";
 import type {
   SessionStore,
   RuntimeState,
@@ -65,7 +65,7 @@ function handleAction(
       act(action);
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 

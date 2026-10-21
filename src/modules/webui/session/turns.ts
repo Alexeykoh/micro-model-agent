@@ -17,7 +17,7 @@ import { attachEgressTurn } from "./egress-turn";
 import {
   parseMessageBody,
   readBody,
-  readBodyError,
+  requestError,
   scrubError,
   sendJson,
 } from "../util";
@@ -260,6 +260,6 @@ export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: 
       dispatchPost(s, res, parsed);
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }

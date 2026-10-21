@@ -4,7 +4,7 @@
 // настроек не должен расти из-за неё (правило 6 AGENTS).
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { redactContextSecrets } from "../../../core/api";
-import { readBodyError, sendJson } from "../util";
+import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";
 
@@ -92,7 +92,7 @@ export function handleMemoryPost(
       });
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 

@@ -8,7 +8,7 @@ import { configDefs, setConfigValue, type ConfigKeyDef } from "../../../config/r
 import { configVersion } from "../../../config/persist";
 import { needsRebuild } from "../../../config/effects";
 import type { AppConfig } from "../../../config/types";
-import { readBodyError, sendJson } from "../util";
+import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
 import { applyAutoContext, type AutoContextResult } from "./context-auto";
@@ -188,7 +188,7 @@ export function handleConfigPost(
       sendJson(res, 200, body);
     })
     .catch((err: unknown) => {
-      readBodyError(req, res, err);
+      requestError(req, res, err);
     });
 }
 
