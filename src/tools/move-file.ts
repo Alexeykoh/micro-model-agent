@@ -7,6 +7,7 @@ import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateMoveDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
+import { assertWritable } from "./path-guards";
 
 /** Перемещает/переименовывает; обе стороны проверяются по скоупу. */
 export const moveFileTool: ToolDefinition = {
@@ -29,6 +30,10 @@ export const moveFileTool: ToolDefinition = {
     const baseDir = resolve(ctx.baseDir);
     const fromResolved = safeResolvePath(baseDir, normalize(fromPath));
     const toResolved = safeResolvePath(baseDir, normalize(toPath));
+
+    // Allowlist записи с обеих сторон (аудит §4.4).
+    const notAllowed = assertWritable(fromPath, ctx) ?? assertWritable(toPath, ctx);
+    if (notAllowed) return notAllowed;
 
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)

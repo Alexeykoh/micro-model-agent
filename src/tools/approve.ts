@@ -1,4 +1,10 @@
-/** Тул явного Yes/No-подтверждения действия (интерактивный, alwaysOn). */
+/**
+ * Тул явного Yes/No-подтверждения действия (интерактивный, alwaysOn).
+ *
+ * DEBT(approve-marker-not-authoritative): подтверждение пока не делает
+ * авторитетным запись в защищённый путь — маркера, который исполнитель
+ * принимал бы как разрешение, нет (см. `docs/agents/debt.md`).
+ */
 import { t } from "../i18n/index";
 import { askChoice } from "./user-input";
 import type { ToolDefinition } from "./types";

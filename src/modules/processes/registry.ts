@@ -2,6 +2,7 @@
 import { spawn, spawnSync, type ChildProcess } from "child_process";
 import { platform } from "os";
 import { killTree } from "./kill-tree";
+import { findRunning } from "./dedupe";
 
 /** Статус управляемого процесса. */
 export type ProcessStatus = "running" | "exited" | "killed";
@@ -114,7 +115,7 @@ class ProcessRegistry {
     opts?: { force?: boolean },
   ): ManagedProcess {
     if (!opts?.force) {
-      const existing = this.findRunning(command, cwd, sessionId);
+      const existing = findRunning(this.procs.values(), command, cwd, sessionId);
       if (existing) return existing;
     }
     const id = `proc_${Date.now()}_${++seq}`;
@@ -247,21 +248,6 @@ class ProcessRegistry {
     return entry;
   }
 
-  /** Ищет уже бегущий процесс с той же нормализованной командой и cwd. */
-  private findRunning(command: string, cwd: string, sessionId?: string): ManagedProcess | null {
-    const key = this.dedupeKey(command, cwd, sessionId);
-    for (const p of this.procs.values()) {
-      if (p.status === "running" && this.dedupeKey(p.command, p.cwd, p.sessionId) === key) {
-        return p;
-      }
-    }
-    return null;
-  }
-
-  private dedupeKey(command: string, cwd: string, sessionId?: string): string {
-    return `${sessionId ?? ""}\u0000${cwd}\u0000${command.trim().replace(/\s+/g, " ")}`;
-  }
-
   /** Список процессов, опционально по сессии. */
   list(sessionId?: string): ManagedProcess[] {
     const all = Array.from(this.procs.values());
@@ -269,9 +255,14 @@ class ProcessRegistry {
     return all.filter((p) => p.sessionId === sessionId);
   }
 
-  /** Процесс по id; undefined, если нет. */
-  get(id: string): ManagedProcess | undefined {
-    return this.procs.get(id);
+  /**
+   * Процесс по id; при заданном `sessionId` — только из своей сессии (§4.9).
+   */
+  get(id: string, sessionId?: string): ManagedProcess | undefined {
+    const entry = this.procs.get(id);
+    if (!entry) return undefined;
+    if (sessionId !== undefined && entry.sessionId !== sessionId) return undefined;
+    return entry;
   }
 
   /** Лог процесса целиком или хвостом `tail` строк. */

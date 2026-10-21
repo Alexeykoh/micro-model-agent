@@ -35,6 +35,20 @@ const EXT_PATTERNS = [
 ];
 
 /**
+ * NTFS alternate data stream: `file.env::$DATA` — тот же файл, другой поток.
+ * Имя файла для гарда — часть до двоеточия, иначе `.env::$DATA` проходил мимо
+ * защиты. Стрим есть только у Windows, поэтому на POSIX двоеточие — часть
+ * имени (файл `.env:notes` — легальный), и резать его нельзя.
+ */
+function stripAdsSuffix(base: string, targetPath: string): string {
+  const colon = base.indexOf(":");
+  if (colon <= 0) return base;
+  const winLike = /^[a-zA-Z]:[\\/]/.test(targetPath) || targetPath.startsWith("\\\\");
+  if (!winLike && process.platform !== "win32") return base;
+  return base.slice(0, colon);
+}
+
+/**
  * Совпавший защищённый паттерн для `targetPath` (относительно `baseDir`)
  * или `undefined` для обычного пути. Сравнение регистронезависимо
  * и не зависит от сепаратора (win32-safe).
@@ -50,7 +64,8 @@ export function matchProtectedPath(baseDir: string, targetPath: string): string 
   }
 
   const parts = rel.split("/");
-  const base = parts[parts.length - 1] ?? "";
+  const rawBase = parts[parts.length - 1] ?? "";
+  const base = stripAdsSuffix(rawBase, targetPath);
 
   for (const name of EXACT_BASENAMES) {
     if (base === name) return name;

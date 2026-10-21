@@ -1,6 +1,7 @@
 // Дефолты безопасности и мерж с пользовательскими настройками.
 import type { SecurityConfig, } from "./types";
 import { DEFAULT_DATA_POLICY } from "../modules/security/data-policy/defaults";
+import { DANGEROUS_COMMANDS } from "../modules/security/security-lists";
 
 /**
  * Дефолтный конфиг безопасности MMA.
@@ -67,6 +68,8 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       "rd",
       "erase",
       "taskkill",
+      // Опасные в любой политике (реестр, права, крипто-утилиты, скрипты).
+      ...DANGEROUS_COMMANDS,
     ],
     // Непустой whitelist — разрешены только эти команды.
     whitelist: [],

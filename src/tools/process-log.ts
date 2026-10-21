@@ -28,8 +28,8 @@ export const processLogTool: ToolDefinition = {
     },
     required: ["id"],
   },
-  handler: async (_ctx, args) => {
-    const found = lookupProcess(args);
+  handler: async (ctx, args) => {
+    const found = lookupProcess(args, ctx.sessionId);
     if (!found.ok) return { success: false, output: found.output };
     const { id, entry } = found;
     const status =

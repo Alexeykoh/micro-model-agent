@@ -5,6 +5,7 @@ import type { ToolDefinition } from "./types";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { safeResolvePath } from "./path-utils";
+import { assertWritable } from "./path-guards";
 
 /** Создаёт каталог со всеми промежуточными. */
 export const createDirTool: ToolDefinition = {
@@ -23,6 +24,10 @@ export const createDirTool: ToolDefinition = {
   handler: async (ctx, args) => {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
+
+    // Allowlist записи (аудит §4.4): раньше проверка жила только в write_file.
+    const notAllowed = assertWritable(path, ctx);
+    if (notAllowed) return notAllowed;
 
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)

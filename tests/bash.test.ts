@@ -159,9 +159,11 @@ describe("bash", () => {
 
   it("should fail with a spawn error for an invalid workdir", async () => {
     const ctx = makeCtx();
+    // Workdir-jail (§4.1) отсекает каталоги ВНЕ рабочего — здесь каталог
+    // внутри workspace, но несуществующий: спавн падает, а не jail.
     const result = await bashTool.handler(ctx, {
       command: "echo hi",
-      workdir: "E:\\definitely\\missing\\dir\\xyz",
+      workdir: join(process.cwd(), "definitely-missing-dir-xyz"),
     });
     expect(result.success).toBe(false);
     expect(result.output).toContain("[process error]");

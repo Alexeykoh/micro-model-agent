@@ -15,10 +15,12 @@ export interface WrappedRow {
 }
 
 const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+/** OSC/DCS/APC — не входят в CSI, но тоже управляют терминалом. */
+const ANSI_OSC_RE = /\x1b[\]P^_][\s\S]*?(?:\x07|\x1b\\)/g;
 
 /** Срезает ANSI-последовательности. */
 export function stripAnsi(s: string): string {
-  return s.replace(ANSI_RE, "");
+  return s.replace(ANSI_OSC_RE, "").replace(ANSI_RE, "");
 }
 
 /** Длина в символах (не в байтах/ячейках). */

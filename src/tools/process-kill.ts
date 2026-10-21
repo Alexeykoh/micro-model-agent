@@ -19,10 +19,10 @@ export const processKillTool: ToolDefinition = {
     },
     required: ["id"],
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     // Без id отвечаем использованием: голое "not found: undefined" не
     // подсказывает верный формат.
-    const found = lookupProcess(args);
+    const found = lookupProcess(args, ctx.sessionId);
     if (!found.ok) return { success: false, output: found.output };
     const { id, entry } = found;
     const killed = processRegistry.kill(id);

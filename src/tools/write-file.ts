@@ -1,6 +1,6 @@
 /** Тул записи файла: скоуп, security-скан, валидация синтаксиса, diff. */
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
-import { resolve, dirname } from "path";
+import { dirname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import { scanContent } from "../modules/security/content-scanner";
@@ -8,6 +8,7 @@ import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDiff, generateNewFileDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
+import { assertWritable } from "./path-guards";
 import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
 import { errMsg } from "../utils";
 
@@ -31,20 +32,9 @@ export const writeFileTool: ToolDefinition = {
     const path = String(args.path);
     const resolved = safeResolvePath(ctx.baseDir, path);
 
-    if (ctx.writePathAllowlist) {
-      const ok = ctx.writePathAllowlist.some(
-        (p) => resolve(p).toLowerCase() === resolve(resolved).toLowerCase(),
-      );
-      if (!ok) {
-        return {
-          success: false,
-          output: t("file.path_not_allowed", {
-            path: `${path} — ${t("onboarding.write_restricted")}`,
-            reason: t("onboarding.write_restricted"),
-          }),
-        };
-      }
-    }
+    // Allowlist записи (аудит §4.4) — единая точка для мутирующих тулов.
+    const notAllowed = assertWritable(path, ctx);
+    if (notAllowed) return notAllowed;
 
     // Сессионный security-конфиг.
     const securityConfig = ctx.sessionContext

@@ -12,6 +12,7 @@ import {
   type Verbosity,
 } from "./theme";
 import { recordLastAction } from "./action-log";
+import { sanitizeOutput } from "./sanitize-output";
 
 import { getTerminalWidth } from "./table";
 import { t } from "../i18n/index";
@@ -353,7 +354,7 @@ export class Renderer {
   private writeInlineBody(chunk: string): void {
     for (const line of chunk.split("\n")) {
       if (line.trim() === "") continue;
-      const plain = stripAnsi(line).trim();
+      const plain = sanitizeOutput(stripAnsi(line)).trim();
       if (this.card) {
         if (this.card.body.length < MAX_OUTPUT_LINES) this.card.body.push(plain);
         if (!this.card.firstBody) this.card.firstBody = plain;
@@ -368,7 +369,7 @@ export class Renderer {
         this.outputSuppressed = true;
         continue;
       }
-      this.channel.writeRaw(`${GUTTER}${line}\n`);
+      this.channel.writeRaw(`${GUTTER}${sanitizeOutput(line)}\n`);
     }
   }
 
