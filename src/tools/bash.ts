@@ -3,6 +3,7 @@ import type { ToolDefinition, ToolContext, } from "./types";
 import { isCommandAllowed, sanitizeCommandForLog } from "../modules/security/command-validator";
 import { logBashCommand, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
+import { assertWorkdirAllowed, echoWriteHint, posixWorkdirHint } from "./path-guards";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import type { BashSecurityConfig } from "../config/types";
 import { processRegistry, registerKillable, unregisterKillable } from "../modules/processes";
@@ -660,29 +661,21 @@ export const bashTool: ToolDefinition = {
       };
     }
 
-    // echo/printf-редирект в файл ненадёжен в cmd.exe (одиночные кавычки не
-    // группируют, многострочник рвётся, вложенные двойные кавычки ломают
-    // команду). Вести на write_file — с ним файлы корректны всегда.
-    if (platform() === "win32") {
-      const echoWrite = extractEchoFileWrite(originalCommand);
-      if (echoWrite) {
-        return {
-          success: false,
-          output: t("bash.echo_write_blocked", { path: echoWrite }),
-        };
-      }
-    }
+    // echo/printf-редирект в файл ненадёжен в cmd.exe — вести на write_file.
+    const echoHint = echoWriteHint(platform() === "win32" ? extractEchoFileWrite(originalCommand) : undefined);
+    if (echoHint) return { success: false, output: echoHint };
+
     const workdir = args.workdir ? String(args.workdir) : ctx.baseDir;
 
-    // POSIX-workdir на Windows: cmd.exe не понимает "/tmp"/"/Users/…" — это
-    // почти всегда путаница ОС у модели (наблюдалось: mkdir -p /Users/Alexe/…).
-    // Даём корректирующий хинт вместо непонятной ошибки spawn.
-    if (platform() === "win32" && /^[~/]/.test(workdir)) {
-      return {
-        success: false,
-        output: t("bash.posix_workdir_hint", { workdir, baseDir: ctx.baseDir }),
-      };
-    }
+    // POSIX-workdir на Windows: cmd.exe не понимает "/tmp"/"/Users/…" — даём
+    // корректирующий хинт вместо непонятной ошибки spawn.
+    const posixHint = posixWorkdirHint(workdir, ctx.baseDir);
+    if (posixHint) return { success: false, output: posixHint };
+
+    // Workdir-jail (аудит §4.1): рабочий каталог — внутри baseDir и внутри
+    // скоупа субагента. Иначе модель одной командой уходит за пределы проекта.
+    const workdirBlocked = assertWorkdirAllowed(ctx, workdir);
+    if (workdirBlocked) return workdirBlocked;
 
     // Session-specific security config (мастер-выключатель учтён внутри).
     const securityConfig = resolveBashSecurityConfig(ctx);

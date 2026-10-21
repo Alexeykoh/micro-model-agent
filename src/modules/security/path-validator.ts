@@ -1,7 +1,8 @@
 // Валидация путей: джейл baseDir, симлинки, deny/allow-паттерны, скоуп суб-агента.
 import { resolve, normalize, dirname } from "path";
 import { realpathSync } from "fs";
-import { isInsideDir, matchesScopeEntry, toForwardSlash } from "../../tools/path-utils";
+import { isInsideDir, matchesScopeEntry } from "../../tools/path-utils";
+import { matchesGlobPattern } from "./path-glob";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
 
@@ -139,6 +140,56 @@ export function isPathInScope(
   };
 }
 
+/**
+ * Workdir тула `bash` (аудит §4.1): рабочий каталог обязан лежать внутри
+ * `baseDir` и — для субагента — внутри его скоупа. Без этой проверки модель
+ * одной командой уходила за пределы проекта (`workdir: C:\Users\…`).
+ *
+ * Проверка лексическая + symlink-контеймент: `bash` не умеет работать с
+ * несуществующим каталогом, поэтому «путь не создан» — не повод пропустить.
+ */
+export function validateWorkdir(
+  baseDir: string,
+  workdir: string,
+  scope?: ToolScope,
+): PathValidationResult {
+  const baseResolved = resolve(baseDir);
+  const targetResolved = resolve(baseDir, normalize(workdir));
+
+  if (!isInsideDir(targetResolved, baseResolved)) {
+    return {
+      allowed: false,
+      reason: "Workdir is outside the base working directory",
+    };
+  }
+  if (escapesViaSymlink(baseResolved, targetResolved)) {
+    return {
+      allowed: false,
+      reason: "Workdir resolves outside the base working directory via symlink",
+    };
+  }
+
+  if (!scope) return { allowed: true };
+
+  // Скоуп субагента: `bash` — тул с записью, поэтому корень берём из
+  // `allowed_files`. Read-only-скоуп (`read_only_files`) тулу с записью не
+  // подходит: работать там можно только на чтение, а `bash` этого не умеет.
+  const roots = scope.allowed_files.map((f) => resolve(baseDir, f));
+  if (roots.length === 0) {
+    return {
+      allowed: false,
+      reason: "Sub-agent has no writable scope for bash",
+    };
+  }
+  if (!roots.some((root) => matchesScopeEntry(targetResolved, root))) {
+    return {
+      allowed: false,
+      reason: "Workdir is outside the allowed scope for this sub-agent",
+    };
+  }
+  return { allowed: true };
+}
+
 /** Путь доступен для записи (операции write/delete) или нет. */
 export function isPathWritable(
   baseDir: string,
@@ -227,79 +278,4 @@ export function isPathWritable(
     allowed: false,
     reason: "Path is not within the writable scope for this sub-agent",
   };
-}
-
-/**
- * Простой glob-матчинг (поддерживает * и **).
- * Упрощённая версия для типовых случаев.
- */
-function matchesGlobPattern(targetPath: string, baseDir: string, pattern: string): boolean {
-  const resolvedBaseDir = resolve(baseDir);
-  const resolvedTargetPath = resolve(targetPath);
-
-  // Относительный путь для посегментного матчинга
-  const relPath = resolvedTargetPath.startsWith(resolvedBaseDir)
-    ? resolvedTargetPath.slice(resolvedBaseDir.length).replace(/^\//, "")
-    : resolvedTargetPath;
-
-  // Паттерны с ** (рекурсивный матчинг каталогов)
-  if (pattern.includes("**")) {
-    // Разбить по ** на префикс/суффикс
-    const cleaned = pattern.replace(/\/$/, "");
-    const [rawPrefix, rawSuffix] = cleaned.split("**");
-    const prefix = rawPrefix.replace(/\/$/, "");
-    const suffix = rawSuffix.replace(/^\//, "");
-
-    // Префикс: всё до ** обязано совпасть с началом пути
-    if (prefix) {
-      const prefixParts = prefix.split("/").filter(Boolean);
-      const relParts = relPath.split("/");
-      for (let i = 0; i < prefixParts.length; i++) {
-        if (relParts[i] !== prefixParts[i]) return false;
-      }
-    }
-
-    // ** в конце матчит всё
-    if (!suffix) return true;
-
-    // Суффикс против оставшихся сегментов
-    const suffixParts = suffix.split("/").filter(Boolean);
-    const relParts = relPath.split("/");
-    // Ищем совпадение суффикса в любой позиции оставшегося пути
-    for (let start = (prefix ? prefix.split("/").filter(Boolean).length : 0); start <= relParts.length - suffixParts.length; start++) {
-      let match = true;
-      for (let j = 0; j < suffixParts.length; j++) {
-        if (suffixParts[j] === "*") continue;
-        if (relParts[start + j] !== suffixParts[j]) { match = false; break; }
-      }
-      if (match) return true;
-    }
-    return false;
-  }
-
-  // Паттерны каталогов (с / на конце) без **
-  if (pattern.endsWith("/")) {
-    const dirPattern = pattern.slice(0, -1);
-    const resolvedDirPattern = resolve(baseDir, dirPattern);
-    return isInsideDir(resolvedTargetPath, resolvedDirPattern);
-  }
-
-  // Паттерн * (один уровень) без **
-  if (pattern.includes("*")) {
-    const regexPattern = pattern
-      .replace(/\*/g, "[^/\\\\]*")
-      .replace(/\?/g, ".")
-      .replace(/\./g, "\\.");
-
-    const regex = new RegExp(`^${regexPattern}$`);
-    const relativePath = toForwardSlash(resolvedTargetPath.slice(resolvedBaseDir.length + 1));
-    return regex.test(relativePath);
-  }
-
-  // Точное совпадение (на win32 регистронезависимо — там FS такая)
-  const exactTarget = resolve(baseDir, pattern);
-  if (process.platform === "win32") {
-    return resolvedTargetPath.toLowerCase() === exactTarget.toLowerCase();
-  }
-  return resolvedTargetPath === exactTarget;
 }

@@ -129,6 +129,7 @@
   "bash.echo_write_blocked": "Writing files via echo/printf is unreliable in Windows cmd.exe (quotes and multi-line break). Use the write_file tool instead (target: {path}).",
   "bash.cwd_flag_hint": "--cwd is not a standard flag. Pass the directory via the bash tool's \"workdir\" parameter instead (e.g. workdir=\"{workdir}\").",
   "bash.posix_workdir_hint": "workdir \"{workdir}\" is a POSIX path, but this shell is Windows cmd.exe. Use a Windows path, or omit workdir to use the workspace root ({baseDir}).",
+  "bash.workdir_blocked": "[SECURITY BLOCKED] Working directory is not allowed: {reason}. Use a directory inside {baseDir}.",
   "tool.friendly.load_skill": "Loading skill",
   "tool.friendly.plan": "Planning",
   "tool.friendly.todo": "Updating tasks",

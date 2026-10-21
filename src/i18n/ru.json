@@ -1112,6 +1112,7 @@
   "bash.echo_write_blocked": "Запись файлов через echo/printf ненадёжна в Windows cmd.exe (кавычки и многострочность ломаются). Используй инструмент write_file вместо этого (цель: {path}).",
   "bash.cwd_flag_hint": "--cwd не стандартный флаг. Передай каталог через параметр \"workdir\" тула bash (например, workdir=\"{workdir}\").",
   "bash.posix_workdir_hint": "workdir \"{workdir}\" — POSIX-путь, но это оболочка Windows cmd.exe. Используй Windows-путь или не указывай workdir, чтобы взять корень workspace ({baseDir}).",
+  "bash.workdir_blocked": "[SECURITY BLOCKED] Рабочий каталог запрещён: {reason}. Используй каталог внутри {baseDir}.",
   "updater.check_error": "[updater] Ошибка проверки обновления: {error}",
   "updater.available": "[updater] Доступно обновление: {current} → {latest}. {hint}",
   "updater.auto_install_hint": "Запустите установочный скрипт заново или включите автоустановку: `/config updater.autoInstall true`.",
