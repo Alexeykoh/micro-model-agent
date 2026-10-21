@@ -9,7 +9,7 @@ import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
 import { buildProviderViews } from "./providers-view";
-import type { ConfigStore, HttpTransport, SseTransport } from "../state";
+import type { ConfigStore, HttpTransport, SseTransport, RuntimeState } from "../state";
 
 /** `GET /api/providers` — отредактированные записи + имя активного. */
 export function handleProvidersGet(res: ServerResponse, s: ConfigStore & HttpTransport & SseTransport): void {
@@ -125,9 +125,15 @@ export function upsertProvider(config: AppConfig, input: ProviderInput): UpsertP
 }
 
 /** `POST /api/providers` — add/update, персист, reconfigure. */
-export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s: ConfigStore & HttpTransport & SseTransport): void {
+export function handleProvidersPost(req: IncomingMessage, res: ServerResponse, s: ConfigStore & HttpTransport & SseTransport & RuntimeState): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
+    return;
+  }
+  // Во время хода смена провайдера ломает живой раннер (аудит §7.9) — тот же
+  // 409-гейт, что у /api/config.
+  if (s.busy) {
+    sendJson(res, 409, { ok: false, error: "busy" });
     return;
   }
   const config = s.config;
@@ -204,7 +210,7 @@ export function handleProvidersApi(
   req: IncomingMessage,
   res: ServerResponse,
   reqUrl: URL,
-  s: ConfigStore & HttpTransport & SseTransport,
+  s: ConfigStore & HttpTransport & SseTransport & RuntimeState,
 ): boolean {
   const p = reqUrl.pathname;
   if (p === "/api/providers" && req.method === "GET") {

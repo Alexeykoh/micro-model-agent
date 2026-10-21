@@ -4,7 +4,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../../i18n/index";
 import { serializeConfigForWire } from "../../../config/redact";
-import { configDefs, setConfigValue, type ConfigKeyDef } from "../../../config/registry";
+import { configDefs, resolveConfigKey, setConfigValue, type ConfigKeyDef } from "../../../config/registry";
 import { configVersion } from "../../../config/persist";
 import { needsRebuild } from "../../../config/effects";
 import type { AppConfig } from "../../../config/types";
@@ -12,6 +12,7 @@ import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { persistAndReconfigure } from "../http/persist";
 import { applyAutoContext, type AutoContextResult } from "./context-auto";
+import { rawFromValue } from "../../../cli/config-mutations";
 import { buildReasoningView } from "./reasoning-view";
 import type { ConfigStore, RuntimeState, HttpTransport, SseTransport, WorkspaceStore } from "../state";
 import { broadcast } from "../state";
@@ -92,6 +93,19 @@ function toRawValue(value: unknown): string | null {
   return null;
 }
 
+/** Сырое представление ТЕКУЩЕГО значения ключа (для отката). */
+function previousConfigRaw(config: AppConfig, key: string): string {
+  const def = resolveConfigKey(key);
+  if (!def) return "";
+  return rawFromValue(def.get(config), def.valueType);
+}
+
+/** Возвращает ключу прежнее значение (откат записи). */
+function restoreConfigValue(config: AppConfig, key: string, raw: string): void {
+  if (!raw) return;
+  setConfigValue(config, key, raw);
+}
+
 /** `POST /api/config {key, value}` — валидация, применение, персист, reconfigure. */
 export function handleConfigPost(
   req: IncomingMessage,
@@ -123,12 +137,14 @@ export function handleConfigPost(
         return;
       }
 
+      // Предыдущее значение — для отката, если ход начнётся, пока мы ждём.
+      const previousRaw = previousConfigRaw(config, key);
+
       const result = setConfigValue(config, key, rawValue);
       if (!result.ok) {
         sendJson(res, 400, { ok: false, error: result.reason });
         return;
       }
-
       // У `locale` в реестре `reconfigure: false`, так что больше некому применить
       // его к процесс-глобальному i18n. Делаем здесь, чтобы серверный вывод и
       // перезапрошенный словарь браузера сошлись сразу.
@@ -151,6 +167,13 @@ export function handleConfigPost(
       let autoProbe: AutoContextResult | undefined;
       if (key === "contextAuto" && result.value === true) {
         autoProbe = await applyAutoContext(config);
+        // TOCTOU: пока мы ждали проб, мог начаться ход. Reconfigure живого
+        // раннера опасен — откатываем значение и отвечаем 409 (аудит §7.9).
+        if (s.busy) {
+          restoreConfigValue(config, key, previousRaw);
+          sendJson(res, 409, { ok: false, error: "busy" });
+          return;
+        }
       }
 
       // Сначала персист, затем reconfigure — но только когда реестр требует
