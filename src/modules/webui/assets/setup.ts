@@ -189,7 +189,7 @@
     wrap.appendChild(renderSteps());
     wrap.appendChild(renderBody());
     wrap.appendChild(renderActions());
-    gate.innerHTML = "";
+    gate.replaceChildren();
     gate.appendChild(wrap);
   }
 
@@ -353,7 +353,7 @@
           return;
         }
         setMsg(box, "ok", pluralCount("web.setup.provider.scan_found", servers.length));
-        results.innerHTML = "";
+        results.replaceChildren();
         servers.forEach((srv: Dict) => {
           const b = h("button", "setup-opt");
           b.type = "button";
@@ -417,7 +417,7 @@
         return;
       }
       setMsg(box, "ok", pluralCount("web.setup.model.load_found", models.length));
-      results.innerHTML = "";
+      results.replaceChildren();
       models.slice(0, 20).forEach((m) => {
         const b = h("button", "setup-opt" + (state.answers.model === m ? " on" : ""));
         b.type = "button";
