@@ -13,9 +13,11 @@ export class MigrationDetector {
   }
 
   /**
-   * Нужна ли миграция: есть v1-поля или нет всех обязательных v2-полей.
-   * Битый/вручную правленный конфиг — не повод: loadConfig предупредит
-   * и откатится на дефолты, файл не трогаем.
+   * Нужна ли миграция: конфиг ЯВНО помечен как v1 (`__schema: 1`) или содержит
+   * v1-формы провайдера (плоские `apiBase`/`apiKey` без `provider.entries`).
+   *
+   * Раньше «нет всех обязательных v2-полей» считалось v1 — так помечался
+   * частично подредактированный v2-конфиг, и он УДАЛЯЛСЯ (аудит §7.1).
    */
   needsMigration(): boolean {
     const configPath = join(this.configDir, "config.json");
@@ -23,19 +25,32 @@ export class MigrationDetector {
 
     try {
       const content = readFileSync(configPath, "utf-8");
-      const config = JSON.parse(content);
+      const config = JSON.parse(content) as Record<string, unknown>;
 
-      if (config.version?.startsWith("2.")) return false;
+      // Явный маркер формата.
+      if (config.__schema === 1) return true;
+      if (typeof config.version === "string" && config.version.startsWith("2.")) return false;
 
       for (const field of V1_ONLY_FIELDS) {
         if (field in config) return true;
       }
 
-      const v2Required = ["provider", "contextWindow", "contextBudget"];
-      const hasAllV2Fields = v2Required.every((f) => f in config);
-      if (!hasAllV2Fields) return true;
+      // Плоский провайдер без `entries` и без маркера v2 — v1-форма. Если
+      // `entries` есть, конфиг уже v2, даже если не хватает части ключей.
+      const provider = config.provider as Record<string, unknown> | undefined;
+      if (provider && typeof provider === "object" && Array.isArray(provider.entries)) {
+        return false;
+      }
+      if (provider && typeof provider === "object" && typeof provider.baseUrl === "string") {
+        return true;
+      }
 
-      return false;
+      // Ни маркера версии, ни признаков v2 — конфиг старого формата. Если
+      // какие-то v2-ключи есть (provider, contextWindow, contextBudget), конфиг
+      // подредактированный, а не v1: удалять его нельзя (аудит §7.1).
+      const v2Markers = ["provider", "contextWindow", "contextBudget"];
+      if (v2Markers.some((f) => f in config)) return false;
+      return typeof config.version !== "string";
     } catch {
       // Битый или вручную правленный конфиг — НЕ v1, удалять нельзя.
       // loadConfig предупредит и откатится на дефолты.
