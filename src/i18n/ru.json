@@ -232,6 +232,7 @@
   "tool.scan_corpus_result": "Просканировано файлов: {files}.\n\n{synthesis}",
   "tool.scan_corpus_truncated": "Примечание: скан усечён на {limit} файлах; подходящих файлов может быть больше.",
   "tool.subagent_cannot_run": "Субагент не может запуститься: в контексте нет LLM-провайдера или исполнителя тулов.",
+  "tool.subagent_max_tokens_invalid": "max_tokens должен быть числом от {min} до {max}.",
   "tool.subagent_failed": "Субагент упал: {error}\nЧастичный вывод: {text}",
   "tool.subagent_completed": "Субагент завершил работу:\n{text}\n\nИтераций: {iterations}",
   "tool.subagent_error": "Ошибка субагента: {error}",

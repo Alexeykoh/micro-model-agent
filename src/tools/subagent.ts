@@ -43,6 +43,11 @@ export const subagentTool: ToolDefinition = {
         items: { type: "string" },
         description: "Files/directories the sub-agent can read but not write",
       },
+      max_tokens: {
+        type: "number",
+        description:
+          "Cap for the sub-agent's completion tokens (1..32000). Omit to use the provider default.",
+      },
       tool_tags: {
         type: "array",
         items: { type: "string" },
