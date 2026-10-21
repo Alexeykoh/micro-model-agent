@@ -27,6 +27,13 @@ export const SECURITY_BASH_BLOCKLIST = [
   "reboot",
 ];
 
+/** Итог применения ответов визарда: конфиг и предупреждения. */
+export interface ApplyAnswersResult {
+  config: AppConfig;
+  /** Предупреждения: какие выборы визарда НЕ применены. */
+  warnings: string[];
+}
+
 /**
  * Применить ответы first-run визарда на загруженный конфиг.
  * Провайдер заменяется **новым объектом**, а не мутируется на месте: `loadConfig`
@@ -38,7 +45,11 @@ export const SECURITY_BASH_BLOCKLIST = [
  * персистятся. Активная запись `provider.entries[]` тоже переписывается
  * (type/baseUrl/apiKey и окно контекста), соседи и их тюнинг целы.
  */
-export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppConfig {
+export function applyAnswersToConfigWithWarnings(
+  config: AppConfig,
+  a: SetupAnswers,
+): ApplyAnswersResult {
+  const warnings: string[] = [];
   config.provider = {
     ...config.provider,
     type: a.provider,
@@ -46,7 +57,12 @@ export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppCon
     apiKey: a.apiKey,
   };
   config.model = a.model;
-  config.contextWindow = a.contextWindow;
+  if (config.contextWindow !== a.contextWindow) {
+    config.contextWindow = a.contextWindow;
+    // Явное окно из визарда = ручной режим: авто-проба провайдера его не
+    // перетирает (аудит §7.11).
+    config.contextAuto = false;
+  }
   config.maxToolIterations = a.maxToolIterations;
   config.locale = a.locale;
   // Мультиконфиги резолвят активный провайдер из `entries[]`, так что ответы
@@ -58,24 +74,35 @@ export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppCon
     const activeName =
       config.provider.active || entries[0]?.label || entries[0]?.type;
     const idx = entries.findIndex((e) => e.label === activeName || e.type === activeName);
-    const target = idx >= 0 ? idx : 0;
-    const current = entries[target];
-    const keepLabel = Boolean(current.label && current.label !== current.type);
-    const updated = {
-      ...current,
-      type: a.provider,
-      baseUrl: a.apiBase,
-      apiKey: a.apiKey,
-      contextWindow: a.contextWindow,
-      ...(keepLabel ? {} : { label: a.provider }),
-    };
-    const next = entries.slice();
-    next[target] = updated;
-    config.provider.entries = next;
-    config.provider.active = updated.label || updated.type;
+    if (idx < 0) {
+      // Активная запись не найдена (устарела после правки конфига): писать
+      // ответы в ЧУЖУЮ запись (entries[0]) нельзя — перезаписались бы
+      // настройки другого провайдера (аудит §7.11).
+      warnings.push("provider.active does not match any entry; provider settings not applied");
+    } else {
+      const current = entries[idx];
+      const keepLabel = Boolean(current.label && current.label !== current.type);
+      const updated = {
+        ...current,
+        type: a.provider,
+        baseUrl: a.apiBase,
+        apiKey: a.apiKey,
+        contextWindow: a.contextWindow,
+        ...(keepLabel ? {} : { label: a.provider }),
+      };
+      const next = entries.slice();
+      next[idx] = updated;
+      config.provider.entries = next;
+      config.provider.active = updated.label || updated.type;
+    }
   }
   applySecurityAnswers(config, a);
-  return config;
+  return { config, warnings };
+}
+
+/** Применить ответы визарда (старый контракт — без предупреждений). */
+export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppConfig {
+  return applyAnswersToConfigWithWarnings(config, a).config;
 }
 
 /**
@@ -168,7 +195,8 @@ function writePath(obj: Record<string, unknown>, path: string, value: unknown): 
 function isFieldValue(v: unknown, kind: DetailKind): boolean {
   if (kind === "list") return Array.isArray(v) && v.every((x) => typeof x === "string");
   if (kind === "bool") return typeof v === "boolean";
-  if (kind === "int") return typeof v === "number" && Number.isInteger(v) && v > 0;
+  // Ноль — валидное значение (например, отключение лимита), поэтому >= 0.
+  if (kind === "int") return typeof v === "number" && Number.isInteger(v) && v >= 0;
   return typeof v === "string" && (SEVERITIES as readonly string[]).includes(v);
 }
 

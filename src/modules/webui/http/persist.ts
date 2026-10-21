@@ -6,14 +6,36 @@
  * Одна копия, тот же контракт.
  */
 import type { AppConfig } from "../../../config/types";
-import type { ConfigStore } from "../state";
+import type { ConfigStore, RuntimeState } from "../state";
+
+/** Итог шага «сохранить + переконфигурировать». */
+export interface PersistResult {
+  persisted: boolean;
+  warning?: string;
+  /** true — запись отменена: ход начался, пока операция ждала. */
+  busyConflict?: boolean;
+}
+
+/** Опции шага персиста. */
+export interface PersistOptions {
+  /**
+   * Гейт занятости: если с момента начала операции стартовал ход (`busy`),
+   * запись НЕ выполняется (аудит §7.9) — reconfigure живого раннера опасен.
+   */
+  guardBusy?: boolean;
+}
 
 /** Сначала персист, затем reconfigure; ни один провал не глотается. */
 export async function persistAndReconfigure(
-  s: ConfigStore,
+  s: ConfigStore & Partial<RuntimeState>,
   config: AppConfig,
   key?: string,
-): Promise<{ persisted: boolean; warning?: string }> {
+  opts: PersistOptions = {},
+): Promise<PersistResult> {
+  // TOCTOU: ход мог стартовать, пока мы ждали асинхронный проб.
+  if (opts.guardBusy && s.busy) {
+    return { persisted: false, warning: "busy", busyConflict: true };
+  }
   let persisted = true;
   let warning: string | undefined;
   try {
@@ -29,7 +51,7 @@ export async function persistAndReconfigure(
       warning = warning ? `${warning}; reconfigure failed` : "reconfigure failed";
     }
   }
-  const out: { persisted: boolean; warning?: string } = { persisted };
+  const out: PersistResult = { persisted };
   if (warning) out.warning = warning;
   return out;
 }

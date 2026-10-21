@@ -1,5 +1,5 @@
 // Загрузка/сохранение конфига: DEFAULTS → legacy → домены → .mmrc → env → decrypt.
-import { existsSync, readFileSync, unlinkSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { DEFAULTS } from "./defaults";
@@ -9,7 +9,7 @@ import type { AppConfig, ProviderEntry } from "./types";
 import { deepMerge, regexReplacer, regexReviver } from "./utils";
 export { deepMerge };
 import { MigrationDetector } from "../migration/detect";
-import { BackupManager } from "../migration/backup";
+import { runLegacyMigration } from "./migration-step";
 import { validateExpertConfig } from "./experts";
 import { ConfigEncryptor } from "../modules/security/encryption";
 import { loadDomainFiles, saveDomainFiles } from "./domains";
@@ -238,38 +238,34 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
 
   // Проверка v1 → v2 (читает config.json напрямую, до логики доменов).
   const detector = new MigrationDetector(options.configDir);
-  if (detector.needsMigration()) {
-    const backup = new BackupManager(options.configDir);
-    // Полный бэкап каталога (документированное поведение) + снапшот config.json
-    // до любых касаний.
-    backup.backupAll();
-    backup.backupConfig();
-    const summary = backup.getBackupSummary();
-    defaultOutputBus.log("info", "module:config", t("migration.detected", { summary }));
-    try {
-      unlinkSync(globalPath);
-    } catch (e) {
-      // Best-effort удаление: loadConfig и так откатится на дефолты, но
-      // leftover v1-файл ретриггерил бы миграцию на каждом старте.
-      defaultOutputBus.log(
-        "error",
-        "module:config",
-        `[config] failed to remove legacy config.json: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-  }
+  const migrated = detector.needsMigration()
+    ? runLegacyMigration(options.configDir, globalPath)
+    : null;
 
   // Глубокий клон: DEFAULTS держит синглтон-объекты (security, lsp, tools…),
   // которые рантайм-изменения конфига мутировать не должны.
   let config: AppConfig = structuredClone(DEFAULTS);
   let legacyDetected = false;
 
-  // Шаг 2: legacy config.json (фолбэк).
-  const globalData = loadJSON(globalPath);
+  // Шаг 2: legacy config.json (фолбэк). Если конфиг уже сконвертирован из v1,
+  // сырые v1-поля НЕ мержатся (в них другие имена модели и плоский провайдер).
+  const globalData = migrated ? null : loadJSON(globalPath);
   if (globalData) {
     applyCriticTimeoutMigration(globalData as Partial<AppConfig>);
     config = deepMerge(config, globalData as Partial<AppConfig>);
     legacyDetected = true;
+  }
+  if (migrated) {
+    // Из сконвертированного v1 в рантайм идут провайдер и лимиты контекста.
+    // Имя модели из v1 НЕ переносим: там были другие идентификаторы
+    // (`qwen2.5-7b` против `qwen/qwen3.5-9b`), и подставить его — значит
+    // сломать выбор модели. Полная копия — в `config.json.migrated`.
+    const { provider, contextWindow, contextBudget } = migrated as Record<string, unknown>;
+    config = deepMerge(config, {
+      provider,
+      contextWindow,
+      contextBudget,
+    } as Partial<AppConfig>);
   }
 
   // Шаг 3: файлы доменов (поверх legacy).

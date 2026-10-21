@@ -825,6 +825,7 @@
   "config.reset_none": "В этой сессии настройки не менялись",
   "config.reset_all_confirm": "Сбросить {count} изменённых настроек к значениям на старте сессии? [y/N] ",
   "config.reset_all_done": "Восстановлено настроек: {count} · сохранено",
+  "config.reset_failed": "Не удалось сбросить {key} — значение осталось прежним",
   "config.reset_all_needs_yes": "Отказ от сброса без подтверждения в неинтерактивном режиме; укажите --yes",
   "config.reset_cancelled": "Сброс отменён",
   "config.reset_usage": "Использование: /config reset <ключ> | /config reset --all [--yes]",

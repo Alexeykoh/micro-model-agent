@@ -34,6 +34,12 @@ export interface ProviderOptions {
   contextWindow: number;
   retry?: RetryConfig;
   rateLimits?: RateLimitConfig;
+  /**
+   * Общий лимитер запросов на процесс. Без него каждый экземпляр провайдера
+   * (а значит и каждый раннер сессии) получает свой лимитер — и фактический
+   * поток к провайдеру оказывается в N раз выше заявленного (аудит §7.8).
+   */
+  rateLimiter?: import("../../llm/shared-rate-limiter").RateLimiter;
   /** Per-call кап completion (max_tokens). В openai-compat дефолт 8192. */
   maxCompletionTokens?: number;
   capabilities?: Partial<ProviderCapabilities>;

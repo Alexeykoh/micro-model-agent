@@ -833,6 +833,7 @@
   "config.reset_none": "No settings changed this session",
   "config.reset_all_confirm": "Reset {count} changed setting(s) to session-start values? [y/N] ",
   "config.reset_all_done": "Restored {count} setting(s) · saved",
+  "config.reset_failed": "Could not reset {key} — the value was left as is",
   "config.reset_all_needs_yes": "Refusing to reset without confirmation in non-interactive mode; pass --yes",
   "config.reset_cancelled": "Reset cancelled",
   "config.reset_usage": "Usage: /config reset <key> | /config reset --all [--yes]",

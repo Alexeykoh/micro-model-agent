@@ -67,36 +67,42 @@ export interface SetupAnswers {
  * сериализуется в JSON; UI правит только булев флаг `contentScan.enabled`.
  */
 export function securityDetailFromConfig(s: SecurityConfig): SetupSecurityDetail {
+  const bash = s.bash ?? ({} as SecurityConfig["bash"]);
+  const paths = s.paths ?? ({} as SecurityConfig["paths"]);
+  const network = s.network ?? ({} as SecurityConfig["network"]);
   return {
     bash: {
-      blacklist: [...s.bash.blacklist],
-      whitelist: [...s.bash.whitelist],
-      logCommands: s.bash.logCommands,
+      blacklist: [...(bash.blacklist ?? [])],
+      whitelist: [...(bash.whitelist ?? [])],
+      logCommands: bash.logCommands ?? false,
     },
-    paths: { denied: [...s.paths.denied], allowed: [...s.paths.allowed] },
+    paths: {
+      denied: [...(paths.denied ?? [])],
+      allowed: [...(paths.allowed ?? [])],
+    },
     flags: {
-      dangerousFlags: [...s.bash.dangerousFlags],
-      dangerousOperators: [...s.bash.dangerousOperators],
+      dangerousFlags: [...(bash.dangerousFlags ?? [])],
+      dangerousOperators: [...(bash.dangerousOperators ?? [])],
     },
     network: {
-      enabled: s.network.enabled,
-      deniedDomains: [...s.network.deniedDomains],
-      allowedDomains: [...s.network.allowedDomains],
-      requestTimeout: s.network.requestTimeout,
-      maxResponseSize: s.network.maxResponseSize,
+      enabled: network.enabled ?? false,
+      deniedDomains: [...(network.deniedDomains ?? [])],
+      allowedDomains: [...(network.allowedDomains ?? [])],
+      requestTimeout: network.requestTimeout ?? 0,
+      maxResponseSize: network.maxResponseSize ?? 0,
     },
     advanced: {
-      maxRecursionDepth: s.maxRecursionDepth,
-      maxFileOperations: s.maxFileOperations,
-      maxRequestsPerMinute: s.rateLimits.maxRequestsPerMinute,
-      maxParallelTasks: s.rateLimits.maxParallelTasks,
-      contentScanEnabled: s.contentScan.enabled,
-      sessionEncryptionEnabled: s.sessionEncryption.enabled,
-      auditNotifierEnabled: s.auditNotifier.enabled,
-      auditNotifierMinSeverity: s.auditNotifier.minSeverity ?? "medium",
-      auditNotifierEventTypes: [...(s.auditNotifier.eventTypes ?? [])],
-      auditNotifierMaxRetries: s.auditNotifier.maxRetries ?? 3,
-      auditNotifierWebhookTimeout: s.auditNotifier.webhookTimeout ?? 5000,
+      maxRecursionDepth: s.maxRecursionDepth ?? 0,
+      maxFileOperations: s.maxFileOperations ?? 0,
+      maxRequestsPerMinute: s.rateLimits?.maxRequestsPerMinute ?? 0,
+      maxParallelTasks: s.rateLimits?.maxParallelTasks ?? 0,
+      contentScanEnabled: s.contentScan?.enabled ?? false,
+      sessionEncryptionEnabled: s.sessionEncryption?.enabled ?? false,
+      auditNotifierEnabled: s.auditNotifier?.enabled ?? false,
+      auditNotifierMinSeverity: s.auditNotifier?.minSeverity ?? "medium",
+      auditNotifierEventTypes: [...(s.auditNotifier?.eventTypes ?? [])],
+      auditNotifierMaxRetries: s.auditNotifier?.maxRetries ?? 3,
+      auditNotifierWebhookTimeout: s.auditNotifier?.webhookTimeout ?? 5000,
     },
   };
 }

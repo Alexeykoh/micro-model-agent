@@ -8,15 +8,8 @@ import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { join, dirname } from "path";
 import { homedir } from "os";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import {
-  formatExport,
-  redactExport,
-  sanitizeFileName,
-  extensionFor,
-  type ExportFormat,
-} from "../modules/session/export";
-import { registerDiagnoseCommand } from "./session-diagnose-command";
+import { existsSync, } from "fs";
+import { buildSessionCommands } from "./session-commands";
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
 import { createDoctorCommand } from "./doctor-command";
@@ -37,7 +30,8 @@ import {
 import { getDefaultChannel, writeMachineJson } from "../output";
 import { setConfigValue } from "../config/registry";
 import { redactConfigSecrets } from "../config/redact";
-import { MMA_DIR_NAME, globalConfigFile, globalExportsDir } from "../config/paths";
+import { MMA_DIR_NAME, globalConfigFile } from "../config/paths";
+import { currentExitCode, fail } from "./exit-code";
 
 const version = readMmaVersion();
 
@@ -139,10 +133,7 @@ function buildConfigCommands(program: Command): void {
       }
       const r = setConfigValue(config, key, value);
       if (!r.ok) {
-        getDefaultChannel().writeLine(
-          pc.yellow(t("cli.config_invalid", { key: r.input, reason: r.reason })),
-          "stderr",
-        );
+        fail(t("cli.config_invalid", { key: r.input, reason: r.reason }));
         return;
       }
       saveConfig(config, configPath, dirname(configPath));
@@ -335,7 +326,7 @@ function buildContextCommand(program: Command): void {
         const key = opts.system !== undefined ? "system" : "reserve";
         const value = Number(opts.system ?? opts.reserve);
         if (setBudgetShare(config, key, value) !== null) {
-          getDefaultChannel().writeLine(t("cli.context_invalid_fraction"));
+          fail(t("cli.context_invalid_fraction"));
           return;
         }
         saveConfig(config, configPath, dirname(configPath));
@@ -350,7 +341,7 @@ function buildContextCommand(program: Command): void {
 
       const contextWindow = parseInt(size, 10);
       if (Number.isNaN(contextWindow) || contextWindow < 1024) {
-        getDefaultChannel().writeLine(t("cli.invalid_context_size"));
+        fail(t("cli.invalid_context_size"));
         return;
       }
       config.contextWindow = contextWindow;
@@ -508,7 +499,7 @@ function buildProviderCommands(program: Command): void {
           saveConfig(config, configPath, dirname(configPath));
           getDefaultChannel().writeLine(t("cli.provider_set", { name }));
         } catch (e: any) {
-          getDefaultChannel().writeLine(pc.red(e.message));
+          fail(pc.red(e.message));
         }
         return;
       }
@@ -594,169 +585,6 @@ function buildProviderCommands(program: Command): void {
     );
 }
 
-function buildSessionCommands(program: Command): void {
-  const session = program.command("session").description(t("cli.manage_sessions"));
-  session
-    .command("list")
-    .description(t("cli.list_sessions"))
-    .action(async () => {
-      const { sessionManager } = await bootstrap();
-      const sessions = sessionManager.list();
-      if (sessions.length === 0) {
-        getDefaultChannel().writeLine(t("session.no_sessions"));
-        return;
-      }
-      const active = sessionManager.getActive();
-      for (const s of sessions) {
-        const marker = s.id === active ? "*" : " ";
-        getDefaultChannel().writeLine(
-          ` ${marker} ${s.id.slice(0, 12)}  ${s.name}  ${s.messageCount} ${t("repl.msgs")}  ${s.updatedAt.slice(0, 10)}`,
-        );
-      }
-    });
-  session
-    .command("show")
-    .argument("<id>", t("cli.session_id"))
-    .description(t("cli.show_details"))
-    .action(async (id: string) => {
-      const { sessionManager } = await bootstrap();
-      const meta = sessionManager.get(id);
-      if (!meta) {
-        getDefaultChannel().writeLine(t("session.not_found", { id }));
-        return;
-      }
-      getDefaultChannel().writeLine(`${t("cli.session_field_id")}           ${meta.id}`);
-      getDefaultChannel().writeLine(`${t("cli.session_field_name")}         ${meta.name}`);
-      getDefaultChannel().writeLine(`${t("cli.session_field_created")}      ${meta.createdAt}`);
-      getDefaultChannel().writeLine(`${t("cli.session_field_updated")}      ${meta.updatedAt}`);
-      getDefaultChannel().writeLine(`${t("cli.session_field_messages")}     ${meta.messageCount}`);
-      getDefaultChannel().writeLine(`${t("cli.session_field_model")}        ${meta.model}`);
-      getDefaultChannel().writeLine(`${t("cli.session_field_context")}      ${meta.contextWindow}`);
-      getDefaultChannel().writeLine(`${t("cli.session_field_project")}      ${meta.projectDir}`);
-
-      const usageEvents = sessionManager.loadSessionLog(id).filter((e) => e.type === "llm_usage");
-      if (usageEvents.length > 0) {
-        let prompt = 0;
-        let completion = 0;
-        let cached = 0;
-        for (const e of usageEvents) {
-          prompt += e.promptTokens ?? 0;
-          completion += e.completionTokens ?? 0;
-          cached += e.cachedTokens ?? 0;
-        }
-        getDefaultChannel().writeLine("");
-        getDefaultChannel().writeLine(
-          pc.cyan(
-            t("cli.session_usage", {
-              prompt,
-              completion,
-              total: prompt + completion,
-            }),
-          ),
-        );
-        if (cached > 0 && prompt > 0) {
-          const hit = Math.round((cached / prompt) * 100);
-          getDefaultChannel().writeLine(
-            pc.dim(
-              t("cli.session_cache", {
-                hit,
-                cached,
-                uncached: Math.max(0, prompt - cached),
-              }),
-            ),
-          );
-        }
-      }
-    });
-  session
-    .command("export")
-    .argument("<id>", t("cli.session_id_or_prefix"))
-    .description(t("cli.export_session"))
-    .option("--format <format>", t("cli.export_format"), "md")
-    .option("--out <path>", t("cli.export_out"))
-    .option("--no-redact", t("cli.export_no_redact"))
-    .option("--compact", t("cli.export_compact"))
-    .action(async (id: string, opts: { format: string; out?: string; redact: boolean; compact?: boolean }) => {
-      const { sessionManager } = await bootstrap();
-      const meta =
-        sessionManager.get(id) ??
-        sessionManager.list().find((s) => s.id.startsWith(id)) ??
-        sessionManager.list().find((s) => s.name.toLowerCase().includes(id.toLowerCase()));
-      if (!meta) {
-        getDefaultChannel().writeLine(t("session.not_found", { id }));
-        return;
-      }
-      const format = opts.format as ExportFormat;
-      if (format !== "md" && format !== "json" && format !== "jsonl") {
-        getDefaultChannel().writeLine(t("export.invalid_format", { format }));
-        return;
-      }
-      const messages = sessionManager.getHistory(meta.id);
-      const log = sessionManager.loadSessionLog(meta.id);
-      if (format === "jsonl" ? log.length === 0 : messages.length === 0) {
-        getDefaultChannel().writeLine(t("export.empty"));
-        return;
-      }
-      const text = redactExport(
-        formatExport({ meta, messages, log }, format, { compact: opts.compact }),
-        opts.redact,
-      );
-      if (opts.out === "-") {
-        getDefaultChannel().writeLine(text);
-        return;
-      }
-      const baseDir = opts.out ? dirname(opts.out) : globalExportsDir();
-      const path =
-        opts.out ??
-        join(
-          baseDir,
-          `${sanitizeFileName(meta.name)}-${meta.id.slice(0, 8)}.${extensionFor(format)}`,
-        );
-      try {
-        mkdirSync(baseDir, { recursive: true });
-        writeFileSync(path, text, "utf-8");
-      } catch (e) {
-        getDefaultChannel().writeLine(t("export.write_failed", { error: String(e) }));
-        return;
-      }
-      getDefaultChannel().writeLine(t("export.written", { path }));
-      getDefaultChannel().writeLine(t(opts.redact ? "export.redacted" : "export.raw"));
-    });
-  session
-    .command("delete")
-    .argument("<id>", t("cli.session_id"))
-    .description(t("cli.delete_session"))
-    .action(async (id: string) => {
-      const { sessionManager } = await bootstrap();
-      sessionManager.delete(id);
-      getDefaultChannel().writeLine(t("session.deleted", { id }));
-    });
-  registerDiagnoseCommand(session, program);
-  session
-    .command("prune")
-    .description(t("cli.prune_sessions"))
-    .option("--dry-run", t("cli.prune_dry_run"))
-    .action(async (opts: { dryRun?: boolean }) => {
-      const { sessionManager } = await bootstrap();
-      const active = sessionManager.getActive();
-      const candidates = sessionManager
-        .list()
-        .filter((s) => s.id !== active && sessionManager.isEmptySession(s.id));
-      if (candidates.length === 0) {
-        getDefaultChannel().writeLine(t("session.prune_empty"));
-        return;
-      }
-      if (opts.dryRun) {
-        getDefaultChannel().writeLine(t("session.prune_dry", { n: candidates.length }));
-      } else {
-        const deleted = sessionManager.pruneEmpty(active ?? undefined);
-        getDefaultChannel().writeLine(t("session.pruned", { n: deleted.length }));
-      }
-      for (const s of candidates) {
-        getDefaultChannel().writeLine(`   ${s.id.slice(0, 12)}  ${s.name}`);
-      }
-    });
-}
 
 function buildChangelogCommand(program: Command): void {
   program
@@ -831,9 +659,8 @@ export function createProgram(): Command {
     });
 
   // Экшены субкоманд гонят полный bootstrap() (reasoning-пробник, индексер,
-  // плагины…), оставляющий открытые хендлы: без явного exit процесс висит после
-  // печати результата. Prompt/REPL-пути выходят явно в main.ts; каждая
-  // СУБКОМАНДА — one-shot: выходим, как резолвнится action.
+  // плагины…), оставляющий открытые хендлы: без явного exit процесс висит.
+  // Prompt/REPL-пути выходят явно в main.ts; каждая СУБКОМАНДА — one-shot.
   //
   // Хук навешиваем РЕКУРСИВНО на все подкоманды: у вложенных (`session show`,
   // `model certify`, `provider use` …) родитель без action, поэтому postAction
@@ -841,15 +668,14 @@ export function createProgram(): Command {
   // На `program` хук не вешаем: его action — prompt/REPL под управлением main.ts.
   const attachOneShotExit = (cmd: Command): void => {
     cmd.hook("postAction", () => {
-      process.exit(0);
+      // Код возврата — из fail(): ошибка команды должна быть видна скрипту.
+      process.exit(currentExitCode());
     });
     for (const sub of cmd.commands) attachOneShotExit(sub);
   };
   // `meet`/`agents` — не one-shot: их пустые action лишь маркируют намерение, и
   // main.ts проваливается в интерактивный REPL. `web` долгоживущий (сервер
-  // стартует из main.ts после parse). Хук выхода сработал бы во время
-  // program.parse() и убил процесс до ветки. `mma init`/`mma setup` — one-shot
-  // визарды, обязаны выйти после прогона.
+  // стартует из main.ts после parse). `mma init`/`mma setup` — one-shot визарды.
   const longRunningCommands = new Set(["meet", "agents", "web", "serve"]);
   for (const cmd of program.commands) {
     if (longRunningCommands.has(cmd.name())) continue;

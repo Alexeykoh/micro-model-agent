@@ -2,7 +2,6 @@
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionStore, SessionLogEntry } from "./store";
 import { t } from "../../i18n/index";
-import { getMessageText } from "../../llm/provider";
 import type {
   SessionIsolationConfig,
   SessionContext,
@@ -11,7 +10,9 @@ import {
   createSessionContext,
   DEFAULT_SESSION_ISOLATION,
 } from "../../modules/security/session-isolation";
-import type { SecurityConfig, SessionEncryptionConfig } from "../../config/types";
+import type { SessionEncryptionConfig } from "../../config/types";
+import { normalizeSecurityOverrides } from "./security-overrides";
+import { isEmptySession, pruneEmptySessions } from "./prune";
 
 /** Опции менеджера сессий. */
 export interface SessionManagerOptions {
@@ -33,11 +34,17 @@ export class SessionManager {
   /** Контексты сессий (для изоляции) по id */
   private sessionContexts: Map<string, SessionContext> = new Map();
   /**
-   * Слушатели переименования. Массив ОБЩИЙ с pinned-сиблингами (`forkPinned`):
-   * авто-имя пишет раннер через свой sibling, и без общей ссылки подписка на
-   * главный менеджер не увидела бы смену имени.
+   * Слушатели переименования. У pinned-сиблинга (`forkPinned`) свой список, а
+   * переименование сиблинга дополнительно уведомляет главного менеджера: иначе
+   * отписка одного раннера снимала бы подписку главного (аудит §7.16).
    */
-  private renameListeners: Array<(meta: SessionMeta) => void> = [];  constructor(store: SessionStore, options: SessionManagerOptions) {
+  private renameListeners: Array<(meta: SessionMeta) => void> = [];
+  /** Главный менеджер (для сиблинга) — его подписчиков тоже уведомляем. */
+  private parentManager?: SessionManager;
+  /** Сессии с живыми раннерами — их нельзя вычищать (аудит §7.15). */
+  private busySessions = new Set<string>();
+
+  constructor(store: SessionStore, options: SessionManagerOptions) {
     this.store = store;
     this.options = options;
 
@@ -92,7 +99,7 @@ export class SessionManager {
       id,
       this.options.projectDir,
       this.options.isolation,
-      this.normalizeSecurityOverrides(securityOverrides),
+      normalizeSecurityOverrides(securityOverrides),
     );
     this.sessionContexts.set(id, context);
 
@@ -131,7 +138,9 @@ export class SessionManager {
     meta.name = name;
     meta.nameSource = source;
     this.store.saveMeta(id, meta);
-    for (const cb of this.renameListeners) {
+    // Подписчики сиблинга И главного менеджера: переименование в форке —
+    // тоже событие для интерфейса.
+    for (const cb of [...this.renameListeners, ...(this.parentManager?.renameListeners ?? [])]) {
       try {
         cb(meta);
       } catch {
@@ -182,33 +191,12 @@ export class SessionManager {
 
   /** Пустая ли сессия (нет user-сообщения с текстом). Fail-open: ошибки чтения — непустая. */
   isEmptySession(id: string): boolean {
-    const meta = this.store.loadMeta(id);
-    if (!meta) return false;
-    if ((meta.messageCount ?? 0) === 0) return true;
-    let history: SessionMessage[];
-    try {
-      history = this.getHistory(id);
-    } catch {
-      return false;
-    }
-    return !history.some((m) => m.role === "user" && getMessageText(m.content).trim().length > 0);
+    return isEmptySession(this.store, id, (sid) => this.getHistory(sid));
   }
 
   /** Удалить все пустые сессии, кроме `excludeId`. Вернуть удалённые id. Не бросает. */
   pruneEmpty(excludeId?: string): string[] {
-    const deleted: string[] = [];
-    for (const s of this.store.listSessions()) {
-      if (s.id === excludeId) continue;
-      try {
-        if (this.isEmptySession(s.id)) {
-          this.delete(s.id);
-          deleted.push(s.id);
-        }
-      } catch {
-        // fail-open: нечитаемые пропускаем
-      }
-    }
-    return deleted;
+    return pruneEmptySessions(this.store, excludeId, (id) => this.delete(id));
   }
 
   /** Id активной сессии (null — нет). */
@@ -253,7 +241,11 @@ export class SessionManager {
     }
     const sibling = new SessionManager(this.store, this.options);
     sibling.activeId = id;
-    sibling.renameListeners = this.renameListeners;
+    // Своя копия списка подписчиков: общий массив означал, что отписка
+    // раннера снимала подписку ГЛАВНОГО менеджера (аудит §7.16). Переименование
+    // сиблинга уведомляет и главного менеджера (см. `rename`).
+    sibling.renameListeners = [];
+    sibling.parentManager = this;
     return sibling;
   }
 
@@ -318,7 +310,7 @@ export class SessionManager {
         sessionId,
         meta.projectDir,
         this.options.isolation,
-        this.normalizeSecurityOverrides(meta.securityOverrides),
+        normalizeSecurityOverrides(meta.securityOverrides),
       );
       this.sessionContexts.set(sessionId, context);
     }
@@ -335,22 +327,18 @@ export class SessionManager {
     return this.getIsolationConfig().enabled;
   }
 
-  /** Нормализовать оверрайды под структуру SecurityConfig. */
-  private normalizeSecurityOverrides(
-    overrides?: SessionMeta["securityOverrides"],
-  ): Partial<SecurityConfig> | undefined {
-    if (!overrides) return undefined;
+  /**
+   * Отметить сессию занятой (живой раннер) — такие сессии не вычищаются
+   * лимитом числа сессий (аудит §7.15).
+   */
+  markBusy(id: string, busy: boolean): void {
+    if (busy) this.busySessions.add(id);
+    else this.busySessions.delete(id);
+  }
 
-    return {
-      maxFileOperations: overrides.maxFileOperations,
-      maxRecursionDepth: overrides.maxRecursionDepth,
-      rateLimits: overrides.rateLimits
-        ? {
-            maxRequestsPerMinute: overrides.rateLimits.maxRequestsPerMinute ?? 60,
-            maxParallelTasks: overrides.rateLimits.maxParallelTasks ?? 5,
-          }
-        : undefined,
-    };
+  /** Есть ли у сессии живой раннер. */
+  isBusy(id: string): boolean {
+    return this.busySessions.has(id);
   }
 
   private enforceMaxSessions(): void {
@@ -358,7 +346,8 @@ export class SessionManager {
     if (max <= 0) return;
     const sessions = this.store.listSessions();
     if (sessions.length > max) {
-      const toDelete = sessions.slice(max);
+      // Живые раннеры не трогаем: удаление сессии на ходе рвёт его работу.
+      const toDelete = sessions.slice(max).filter((s) => !this.busySessions.has(s.id));
       for (const s of toDelete) {
         this.delete(s.id);
       }

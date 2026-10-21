@@ -3,7 +3,7 @@ import { pc } from "../ui/colors";
 import { resolveVerbosity } from "../ui/theme";
 import { readMmaVersion } from "../core/version";
 import { renderTable } from "../ui/table";
-import { t, setLocale } from "../i18n/index";
+import { t, } from "../i18n/index";
 import { runSetup } from "./setup";
 import { applyAnswersToConfig } from "./setup-order";
 import { saveConfig } from "../config/config";
@@ -11,12 +11,8 @@ import { HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { providerNameTaken } from "../modules/providers/naming";
 import { activeProviderEndpoint } from "../modules/providers/manager";
 import { budgetBreakdownLines } from "../config/budget";
-import { needsRebuild } from "../config/effects";
 import {
-  setConfigValue,
   getConfigValue,
-  resolveConfigKey,
-  canonicalKeys,
   keysForGroup,
   configDefs,
   formatConfigValue,
@@ -32,6 +28,12 @@ import {
 } from "../modules/session/export";
 import { getMessageText } from "../llm/provider";
 import { join, dirname } from "path";
+import {
+  mutateConfig,
+  persistConfig,
+  renderConfigError,
+} from "./config-mutations";
+import { runConfigReset } from "./config-reset";
 import { existsSync, writeFileSync, mkdirSync } from "fs";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { CommandContext } from "./command-context";
@@ -211,137 +213,12 @@ function changeHint(def: ConfigKeyDef): string {
   return SUGAR_HINTS[def.key] ?? `/config ${def.key} <value>`;
 }
 
-function configValueHint(def?: ConfigKeyDef): string {
-  if (!def) return "";
-  switch (def.valueType) {
-    case "enum":
-      return t("config.hint_enum", { values: (def.enumValues ?? []).join(", ") });
-    case "bool":
-      return t("config.hint_bool");
-    case "share":
-      return t("config.hint_share");
-    case "int":
-      return t("config.hint_int", { min: String(def.min ?? 1) });
-    default:
-      return t("config.hint_string");
-  }
-}
-
-function editDistance(a: string, b: string): number {
-  const dp: number[] = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let prev = dp[0];
-    dp[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = dp[j];
-      dp[j] = Math.min(
-        dp[j] + 1,
-        dp[j - 1] + 1,
-        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      prev = tmp;
-    }
-  }
-  return dp[b.length];
-}
-
-function nearestConfigKey(input: string): string | null {
-  const names = canonicalKeys();
-  let best: { name: string; dist: number } | null = null;
-  for (const name of names) {
-    const d = editDistance(input.toLowerCase(), name.toLowerCase());
-    if (best === null || d < best.dist) best = { name, dist: d };
-  }
-  if (!best) return null;
-  const threshold = Math.max(2, Math.floor(best.name.length / 3));
-  return best.dist <= threshold ? best.name : null;
-}
-
-function renderConfigError(
-  ctx: ReplContext,
-  result: { reason: string; input: string; key?: string; def?: ConfigKeyDef },
-): void {
-  const key = result.key ?? result.input;
-  switch (result.reason) {
-    case "unknown-key": {
-      const suggestion = nearestConfigKey(result.input);
-      const suffix = suggestion
-        ? t("config.suggest", { name: suggestion })
-        : t("config.valid_keys", { keys: canonicalKeys().join(", ") });
-      ctx.output.writeLine(
-        pc.yellow(t("config.unknown_key", { key: result.input, suggestion: suffix })),
-        "stderr",
-      );
-      return;
-    }
-    case "read-only":
-      ctx.output.writeLine(pc.yellow(t("config.read_only", { key })), "stderr");
-      return;
-    case "range":
-      ctx.output.writeLine(pc.yellow(t("config.range", { key })), "stderr");
-      return;
-    case "combined":
-      ctx.output.writeLine(pc.yellow(t("config.combined")), "stderr");
-      return;
-    default:
-      ctx.output.writeLine(
-        pc.yellow(t("config.invalid_value", { key, hint: configValueHint(result.def) })),
-        "stderr",
-      );
-  }
-}
-
-function applyConfigSideEffects(
-  ctx: ReplContext,
-  result: ConfigSetResult & { ok: true },
-): void {
-  if (result.key === "ui.verbosity") {
-    // Зеркало стартового правила (`main.ts`): структурные info-логи и диагностика
-    // петли видимы в чате только в verbose.
-    const verbose = (result.value as string) === "verbose";
-    // Методы опциональны: терминал ими управляет, фронтенд без info-логов (TUI
-    // рисует логи в панели) просто игнорирует.
-    ctx.output.setSuppressInfoLogs?.(!verbose);
-    ctx.output.setShowDiagnostics?.(verbose);
-  } else if (result.key === "reasoning.mode") {
-    ctx.agent.setReasoningLevel(result.value as "auto" | "default" | "none" | "low" | "medium" | "high" | "max");
-  } else if (result.key === "locale") {
-    setLocale(result.value as string);
-  }
-}
-
-function persistConfig(ctx: ReplContext): void {
-  const configPath = join(ctx.configDir, "config.json");
-  saveConfig(ctx.config, configPath, dirname(configPath));
-}
-
-/**
- * Единый путь записи каждой мутации настроек. Сахарные команды тоже идут сюда,
- * чтобы валидация, сайд-эффекты, персист и reconfigure не расходились.
- */
-async function mutateConfig(
-  ctx: ReplContext,
-  key: string,
-  raw: string,
-): Promise<ConfigSetResult> {
-  const result = setConfigValue(ctx.config, key, raw);
-  if (!result.ok) return result;
-  applyConfigSideEffects(ctx, result);
-  persistConfig(ctx);
-  if (needsRebuild(result.effects)) await ctx.agent.reconfigure(ctx.config);
-  if (result.key === "locale") ctx.reregisterCommands();
-  return result;
-}
-
+/** Отчёт об успешной записи настройки. */
 function reportSaved(ctx: ReplContext, result: ConfigSetResult & { ok: true }): void {
   ctx.output.writeLine(pc.green(t("config.saved", { key: result.key })));
 }
 
-function rawFromValue(value: unknown): string {
-  if (typeof value === "boolean") return value ? "on" : "off";
-  return String(value);
-}
-
+/** Таблица настроек (текущее значение + подсказка по смене). */
 function printConfigTable(ctx: ReplContext, defs?: ConfigKeyDef[]): void {
   const list = defs ?? configDefs();
   const rows = list.map((def) => [
@@ -375,90 +252,6 @@ function printConfigTable(ctx: ReplContext, defs?: ConfigKeyDef[]): void {
     );
   }
   ctx.output.writeLine(pc.dim(t("config.usage_hint")));
-}
-
-/**
- * Подтверждение через фронтендовый ввод (`ctx.input.confirm`). Терминал
- * спрашивает построчно, TUI — оверлеем; команда знает только контракт.
- */
-function confirm(ctx: ReplContext, prompt: string): Promise<boolean> {
-  return ctx.input.confirm(prompt);
-}
-
-async function runConfigReset(ctx: ReplContext, rest: string[]): Promise<void> {
-  const snapshot = ctx.getConfigSnapshot();
-  const yes = rest.includes("--yes");
-  const all = rest.includes("--all");
-  const target = rest.find((a) => !a.startsWith("--"));
-
-  if (all) {
-    const changed = canonicalKeys().filter((k) => {
-      const def = resolveConfigKey(k);
-      if (!def || !snapshot.has(k)) return false;
-      return rawFromValue(def.get(ctx.config)) !== rawFromValue(snapshot.get(k));
-    });
-    if (changed.length === 0) {
-      ctx.output.writeLine(t("config.reset_none"));
-      return;
-    }
-    if (!yes) {
-      if (!process.stdin.isTTY) {
-        ctx.output.writeLine(pc.yellow(t("config.reset_all_needs_yes")), "stderr");
-        return;
-      }
-      const ok = await confirm(
-        ctx,
-        t("config.reset_all_confirm", { count: String(changed.length) }),
-      );
-      if (!ok) {
-        ctx.output.writeLine(t("config.reset_cancelled"));
-        return;
-      }
-    }
-    let anyReconfig = false;
-    let localeChanged = false;
-    for (const k of changed) {
-      const result = setConfigValue(ctx.config, k, rawFromValue(snapshot.get(k)));
-      if (result.ok) {
-        applyConfigSideEffects(ctx, result);
-        anyReconfig = anyReconfig || needsRebuild(result.effects);
-        localeChanged = localeChanged || result.key === "locale";
-      }
-    }
-    persistConfig(ctx);
-    if (anyReconfig) await ctx.agent.reconfigure(ctx.config);
-    if (localeChanged) ctx.reregisterCommands();
-    ctx.output.writeLine(
-      pc.green(t("config.reset_all_done", { count: String(changed.length) })),
-    );
-    return;
-  }
-
-  if (!target) {
-    ctx.output.writeLine(t("config.reset_usage"));
-    return;
-  }
-  const def = resolveConfigKey(target);
-  if (!def) {
-    renderConfigError(ctx, { reason: "unknown-key", input: target });
-    return;
-  }
-  if (def.readOnly || !snapshot.has(def.key)) {
-    ctx.output.writeLine(t("config.reset_unchanged", { key: def.key }));
-    return;
-  }
-  if (rawFromValue(def.get(ctx.config)) === rawFromValue(snapshot.get(def.key))) {
-    ctx.output.writeLine(t("config.reset_unchanged", { key: def.key }));
-    return;
-  }
-  const result = await mutateConfig(ctx, def.key, rawFromValue(snapshot.get(def.key)));
-  if (!result.ok) {
-    renderConfigError(ctx, result);
-    return;
-  }
-  ctx.output.writeLine(
-    pc.green(t("config.reset_ok", { key: result.key, value: result.display })),
-  );
 }
 
 function printReasoningStatus(ctx: ReplContext): void {

@@ -23,6 +23,8 @@ export interface ProviderManagerOptions {
   probeCapabilities?: () => ModelCapabilities | undefined;
   /** Опциональный логгер диагностики LLM-запросов/ответов. */
   logger?: import("../../logger/app-logger").Logger;
+  /** Общий лимитер запросов на процесс (аудит §7.8). */
+  sharedLimiter?: import("../../llm/shared-rate-limiter").RateLimiter;
 }
 
 /**
@@ -33,6 +35,7 @@ export interface ProviderManagerOptions {
  */
 export class ProviderManager {
   private entries: ProviderEntry[];
+  private providerConfig: ProviderConfig;
   private lastKnownFallback?: boolean;
   private activeProviderName: string;
   private model: string;
@@ -43,6 +46,7 @@ export class ProviderManager {
   constructor(config: ProviderConfig, opts: ProviderManagerOptions) {
     this.opts = opts;
     this.registry = opts.registry ?? defaultRegistry();
+    this.providerConfig = config;
     this.entries = this.normalizeEntries(config);
     this.activeProviderName = this.resolveActive(config);
     this.lastKnownFallback = config.fallback;
@@ -131,7 +135,15 @@ export class ProviderManager {
     }
     this.activeProviderName = name;
     if (model !== undefined) this.model = model;
+    // Выбор провайдера сохраняем в конфиге: иначе после рестарта вернётся
+    // прежний (аудит §7.7). Конфиг живой — следующий saveConfig его запишет.
+    this.providerConfig.active = name;
     return this.active;
+  }
+
+  /** Модель, закреплённая за провайдером (`provider.models[name]`). */
+  modelFor(name: string): string | undefined {
+    return this.providerConfig.models?.[name];
   }
 
   /** Пересобрать активный провайдер с новой моделью. */
@@ -198,6 +210,7 @@ export class ProviderManager {
       contextWindow: entry.contextWindow ?? this.opts.contextWindow,
       retry: entry.retry ?? this.opts.retry,
       rateLimits: entry.rateLimits ?? this.opts.rateLimits,
+      rateLimiter: this.opts.sharedLimiter,
       maxCompletionTokens: entry.maxCompletionTokens,
       getSessionId: this.opts.getSessionId,
       capabilities: this.resolveCapabilities(entry),

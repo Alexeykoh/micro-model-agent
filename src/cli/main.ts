@@ -18,7 +18,7 @@ import { pc } from "../ui/colors";
 import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { UpdaterModule, createUpdater, busLogger } from "../modules/updater/index";
+import { type UpdaterModule, createUpdater, busLogger } from "../modules/updater/index";
 import { installCrashHandlers } from "../core/crash-handler";
 import { closestCommand } from "./command-suggest";
 import { errMsg } from "../utils";
@@ -99,11 +99,10 @@ async function main(): Promise<void> {
   }
   const onboardingStart =
     firstPositional === "meet" ? "meet" : firstPositional === "agents" ? "init" : null;
-  if (
-    firstPositional &&
-    !onboardingStart &&
-    program.commands.some((c) => c.name() === firstPositional)
-  ) {
+  // One-shot для ЛЮБОГО первого позиционного аргумента, который не является
+  // подкомандой: свободный промпт тоже не должен поднимать фоновых детей
+  // (аудит §7.10).
+  if (firstPositional && !onboardingStart) {
     setOneShotMode(true);
   }
 
