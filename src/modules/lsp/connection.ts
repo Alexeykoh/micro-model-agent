@@ -9,8 +9,6 @@
 // Спавн впрыскивается через `ServerProcessFactory`, поэтому тесты гоняют
 // настоящее фреймирование и корреляцию на фейковом сервере без child_process.
 import type { LspDiagnostic, LspServerConfig } from "./types";
-import { resolveSpawnCommand, buildWinCommandLine } from "./command";
-import { resolveNpxLaunch, isOfflineLsp } from "./resolve";
 import { killTree, type KillableProcess } from "../processes/registry";
 import { findHeaderEnd, isAcceptableFrameLength, parseContentLength } from "./framing";
 import { pathToUri } from "./uri";
@@ -18,6 +16,10 @@ import { languageIdForPath } from "./language";
 import type { LspClientLogger } from "./client-logger";
 import { errMsg } from "../../utils";
 import { LSP_DEFAULT_TIMEOUT_MS } from "../../config/timeouts";
+import { defaultSpawn, resolveLaunchPlan } from "./spawn";
+
+// Спавн и резолв команды — в `spawn.ts`; реэкспорт для существующих импортёров.
+export { defaultSpawn, resolveLaunchPlan } from "./spawn";
 
 /** Поток stdout процесса сервера в объёме, нужном транспорту. */
 export interface ServerStdout {
@@ -28,6 +30,8 @@ export interface ServerStdout {
 export interface ServerProcess {
   stdin: { writable: boolean; write(chunk: string): boolean } | null;
   stdout: ServerStdout | null;
+  /** pid процесса сервера — нужен, чтобы убить ВСЁ дерево (аудит §8.1). */
+  pid?: number;
   kill(signal?: number | string): boolean;
   once(event: "exit", cb: () => void): void;
   on(event: "error", cb: (error: Error) => void): void;
@@ -96,80 +100,6 @@ function fatalError(message: string): LspConnectionError {
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Эффективная команда запуска: npx→глобальный бинарник, офлайн-гейт.
- * Windows-обвязка (.cmd через cmd.exe) живёт в фабрике спавна — резолв команды
- * и способ её запустить это разные concerns.
- */
-export function resolveLaunchPlan(
-  config: LspServerConfig,
-  offline: boolean | undefined,
-  logger?: LspClientLogger | null,
-): LaunchPlan {
-  const launch = resolveNpxLaunch(config.command, config.args ?? []);
-  if (launch.command !== config.command) {
-    logger?.debug(`LSP: using globally installed ${launch.binaryName} (skipped npx)`);
-  } else if (launch.useNpxFallback && launch.binaryName) {
-    logger?.debug(`LSP: ${launch.binaryName} not found globally, falling back to npx`);
-  }
-  if (launch.useNpxFallback && isOfflineLsp(undefined, offline)) {
-    throw new Error(
-      `LSP offline mode: ${launch.binaryName ?? "npx"} not found in PATH; ` +
-        "npx auto-install is disabled (MMA_LSP_OFFLINE)",
-    );
-  }
-  return { command: launch.command, args: launch.args };
-}
-
-/**
- * Дефолтная фабрика: `child_process.spawn`. На Windows `.cmd`/`.bat`-шим
- * (`npx.cmd`, `tsc.cmd`) не стартует напрямую — поэтому команда со аргументами
- * склеиваются и уходят через `shell: true` (`cmd.exe /d /s /c`).
- */
-export const defaultSpawn: ServerProcessFactory = async (plan, cwd) => {
-  const { spawn } = await import("child_process");
-  const isWin = platformIsWindows();
-  let command = resolveSpawnCommand(plan.command);
-  let args = plan.args;
-  const options: Record<string, unknown> = {
-    cwd,
-    stdio: ["pipe", "pipe", "pipe"],
-    env: process.env,
-    windowsHide: true,
-    // POSIX: потомок — лидер группы, чтобы `killTree()` достал всю цепочку
-    // (npx → node → tsserver). Windows — taskkill /T.
-    detached: !isWin,
-  };
-  if (isWin) {
-    command = buildWinCommandLine(command, args);
-    args = [];
-    options.shell = true;
-  }
-  const child = spawn(command, args, options) as unknown as {
-    stdin: ServerProcess["stdin"];
-    stdout: ServerProcess["stdout"];
-    kill(signal?: number | string): boolean;
-    once(event: "exit", cb: () => void): unknown;
-    on(event: "error", cb: (error: Error) => void): unknown;
-    on(event: "data", cb: (chunk: Buffer) => void): unknown;
-  };
-  return {
-    stdin: child.stdin,
-    stdout: child.stdout,
-    kill: (signal) => child.kill(signal),
-    once: (event, cb) => {
-      child.once(event, cb);
-    },
-    on: (event, cb) => {
-      if (event === "error") child.on("error", cb);
-    },
-  };
-};
-
-function platformIsWindows(): boolean {
-  return process.platform === "win32";
-}
-
 /** Один процесс сервера: JSON-RPC, синк документов, реестр диагностик. */
 export class LspConnection {
   private process: ServerProcess | null = null;
@@ -192,6 +122,11 @@ export class LspConnection {
 
   /** Ключ соединения в пуле: `serverKey \0 projectRoot`. */
   readonly key: string;
+
+  /** pid процесса сервера (undefined — сервер не запущен). */
+  get processPid(): number | undefined {
+    return this.process?.pid;
+  }
 
   constructor(
     serverKey: string,
@@ -471,7 +406,9 @@ export class LspConnection {
       try {
         killTree(proc as unknown as KillableProcess);
       } catch (e) {
-        this.logger?.debug(`LSP killTree error: ${errMsg(e)}`);
+        // Провал гашения — это событие, а не шум: сервер может остаться жить
+        // (аудит §8.1).
+        this.logger?.warn(`lsp.kill_failed: ${errMsg(e)}`);
       }
     }
   }

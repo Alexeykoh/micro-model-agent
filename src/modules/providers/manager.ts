@@ -13,7 +13,7 @@ import { getEgressGuard, SanitizingProvider } from "./sanitizing";
 export interface ProviderManagerOptions {
   contextWindow: number;
   retry?: import("../../config/types").RetryConfig;
-  rateLimits?: import("../../config/types").RateLimitConfig;
+  rateLimits?: Partial<import("../../config/types").RateLimitConfig>;
   registry?: ProviderRegistry;
   /** Живой id беседы, прокидывается провайдерам (`x-opencode-session`). */
   getSessionId?: () => string | undefined;

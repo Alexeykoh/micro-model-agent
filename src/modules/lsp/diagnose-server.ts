@@ -1,7 +1,7 @@
 // По-серверная диагностика LSP: классификация ошибок, команда установки,
 // гейты и реальная проба — вынесено из `diagnose.ts` (правило ≤300).
 import type { LspServerConfig } from "./types";
-import { LspClient } from "./client";
+import type { LspClient } from "./client";
 import { findProjectRoot } from "./project-root";
 import { resolveNpxLaunch } from "./resolve";
 import type { ProjectToolchain } from "./toolchain";

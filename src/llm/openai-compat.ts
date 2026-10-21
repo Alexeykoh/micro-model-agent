@@ -57,7 +57,7 @@ export interface OpenAICompatConfig {
   contextWindow?: number;
   maxCompletionTokens?: number;
   retry?: RetryConfig;
-  rateLimits?: RateLimitConfig;
+  rateLimits?: Partial<RateLimitConfig>;
   /** Общий лимитер запросов на процесс (иначе у каждого экземпляра свой). */
   rateLimiter?: RateLimiter;  /** Живой id диалога → `x-opencode-session` (требует OpenCode Go) + кеш-аффинити. */
   getSessionId?: () => string | undefined;

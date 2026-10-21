@@ -32,6 +32,7 @@ import { setConfigValue } from "../config/registry";
 import { redactConfigSecrets } from "../config/redact";
 import { MMA_DIR_NAME, globalConfigFile } from "../config/paths";
 import { currentExitCode, fail } from "./exit-code";
+import { buildProviderEntry } from "./provider-entry";
 
 const version = readMmaVersion();
 
@@ -558,24 +559,22 @@ function buildProviderCommands(program: Command): void {
           getDefaultChannel().writeLine(pc.red(t("cli.provider_name_conflict", { name })));
           return;
         }
-        entries.push({
-          type: name,
-          label: name,
+        // Лимиты задаёт пользователь: молчаливые 60/мин означали бы потолок,
+        // которого никто не просил (аудит §7.13).
+        const built = buildProviderEntry({
+          name,
           baseUrl,
           apiKey: opts.key,
-          ...(opts.priority !== undefined ? { priority: Number(opts.priority) } : {}),
-          ...(opts.contextWindow !== undefined
-            ? { contextWindow: Number(opts.contextWindow) }
-            : {}),
-          ...(opts.rpm !== undefined || opts.parallel !== undefined
-            ? {
-                rateLimits: {
-                  maxRequestsPerMinute: Number(opts.rpm ?? 0) || 60,
-                  maxParallelTasks: Number(opts.parallel ?? 0) || 1,
-                },
-              }
-            : {}),
+          priority: opts.priority,
+          contextWindow: opts.contextWindow,
+          rpm: opts.rpm,
+          parallel: opts.parallel,
         });
+        if (!built.ok) {
+          fail(t("cli.provider_bad_number"));
+          return;
+        }
+        entries.push(built.entry);
         config.provider.entries = entries;
         config.provider.active = config.provider.active || config.provider.type;
         saveConfig(config, configPath, dirname(configPath));

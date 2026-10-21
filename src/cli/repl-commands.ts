@@ -34,6 +34,7 @@ import {
   renderConfigError,
 } from "./config-mutations";
 import { runConfigReset } from "./config-reset";
+import { buildProviderEntry } from "./provider-entry";
 import { existsSync, writeFileSync, mkdirSync } from "fs";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { CommandContext } from "./command-context";
@@ -541,24 +542,22 @@ function registerProviderCommands(ctx: ReplContext): void {
       ctx.output.writeLine(pc.red(t("cli.provider_name_conflict", { name })), "stderr");
       return;
     }
-    entries.push({
-      type: name,
-      label: name,
+    // Лимиты задаёт пользователь: молчаливые 60/мин означали бы потолок,
+    // которого никто не просил (аудит §7.13).
+    const built = buildProviderEntry({
+      name,
       baseUrl,
       apiKey: flags.key,
-      ...(flags.priority !== undefined ? { priority: Number(flags.priority) } : {}),
-      ...(flags["context-window"] !== undefined
-        ? { contextWindow: Number(flags["context-window"]) }
-        : {}),
-      ...(flags.rpm !== undefined || flags.parallel !== undefined
-        ? {
-            rateLimits: {
-              maxRequestsPerMinute: Number(flags.rpm ?? 0) || 60,
-              maxParallelTasks: Number(flags.parallel ?? 0) || 1,
-            },
-          }
-        : {}),
+      priority: flags.priority,
+      contextWindow: flags["context-window"],
+      rpm: flags.rpm,
+      parallel: flags.parallel,
     });
+    if (!built.ok) {
+      ctx.output.writeLine(pc.red(t("cli.provider_bad_number")), "stderr");
+      return;
+    }
+    entries.push(built.entry);
     ctx.config.provider.entries = entries;
     ctx.config.provider.active = ctx.config.provider.active || ctx.config.provider.type;
     persistConfig(ctx);

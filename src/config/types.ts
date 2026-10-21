@@ -64,7 +64,7 @@ export interface ProviderEntry {
   apiKey?: string;
   contextWindow?: number;
   retry?: RetryConfig;
-  rateLimits?: RateLimitConfig;
+  rateLimits?: Partial<RateLimitConfig>;
   /** Потолок completion-токенов, шлётся как max_tokens (дефолт 8192). Подними для
    *  reasoning-моделей, режущих аргументы tool_call. */
   maxCompletionTokens?: number;

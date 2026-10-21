@@ -8,6 +8,17 @@ export interface KillableProcess {
   kill(signal?: unknown): boolean;
 }
 
+/**
+ * Процесс нечем убивать: нет ни pid, ни `kill()`. Вызывающий обязан это
+ * залогировать, а не молчать (аудит §8.1).
+ */
+export class KillTreeUnavailableError extends Error {
+  constructor() {
+    super("killTree: process has neither pid nor kill()");
+    this.name = "KillTreeUnavailableError";
+  }
+}
+
 /** Fire a `taskkill /T /F` and resolve when it exits (never rejects). */
 function taskkillPid(pid: number): Promise<void> {
   return new Promise((resolve) => {
@@ -37,7 +48,15 @@ function taskkillPid(pid: number): Promise<void> {
  */
 export function killTree(child: KillableProcess): void {
   const pid = child.pid;
-  if (!pid) return;
+  if (!pid) {
+    // Без pid дерева нет — бьём хотя бы сам процесс, а если и kill() нет,
+    // сообщаем об этом явно (аудит §8.1).
+    if (typeof child.kill === "function") {
+      child.kill();
+      return;
+    }
+    throw new KillTreeUnavailableError();
+  }
   if (platform() === "win32") {
     void taskkillPid(pid).then(() => {
       setTimeout(() => void taskkillPid(pid), 150);

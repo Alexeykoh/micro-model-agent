@@ -1146,6 +1146,7 @@
   "cli.add_provider": "Добавить провайдера в конфиг",
   "cli.provider_no_url": "Нет базового URL для провайдера \"{name}\". Укажите --url.",
   "cli.provider_name_conflict": "Провайдер \"{name}\" уже существует — выбери другое имя.",
+  "cli.provider_bad_number": "Лимиты провайдера должны быть числами: --rpm и --parallel принимают числовые значения.",
   "cli.provider_added": "Провайдер добавлен: {name}",
   "cli.provider_switch_hint": "Переключитесь на него: mma provider use <имя>",
   "repl.cost": "Итого потрачено: {cost}",

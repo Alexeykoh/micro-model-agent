@@ -33,7 +33,7 @@ export interface ProviderOptions {
   apiKey?: string;
   contextWindow: number;
   retry?: RetryConfig;
-  rateLimits?: RateLimitConfig;
+  rateLimits?: Partial<RateLimitConfig>;
   /**
    * Общий лимитер запросов на процесс. Без него каждый экземпляр провайдера
    * (а значит и каждый раннер сессии) получает свой лимитер — и фактический

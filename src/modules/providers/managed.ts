@@ -18,7 +18,7 @@ export interface ManagedProviderOptions {
   /** Окно контекста (дефолт 32768; запись провайдера перекрывает). */
   contextWindow?: number;
   retry?: RetryConfig;
-  rateLimits?: RateLimitConfig;
+  rateLimits?: Partial<RateLimitConfig>;
   getSessionId?: () => string | undefined;
   logger?: Logger;
   /** Метка для сообщения failover (напр. "orchestrator"/"critic"/"expert"). */
