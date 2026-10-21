@@ -62,7 +62,13 @@ export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise
   const { state } = deps;
   const raw =
     deps.emit ??
-    ((text: string) => broadcast({ type: "command", ts: Date.now(), text }, state));
+    ((text: string) =>
+      // Событие несёт владельца-сессию: команда из фоновой вкладки должна
+      // попасть в её ленту, а не в активную (аудит §6.10).
+      broadcast(
+        { type: "command", ts: Date.now(), text, sessionId: state.activeSessionId ?? undefined },
+        state,
+      ));
   // Каждая эмитимая строка — через точечную редактуру: чтения конфига могут
   // эхом вернуть только что заданный ключ, а лента видна пользователю.
   const out: Out = (text) => raw(redactContextSecrets(text));
