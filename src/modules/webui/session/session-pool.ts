@@ -16,16 +16,27 @@
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 import type { QueuedMessage } from "../state";
 import { MAX_QUEUE_LENGTH } from "../limits";
+import { selectEvictions } from "./runner-gc";
+import { SlotQueue } from "./run-queue";
 
 /** Слот сессии: busy-резерв с токеном владения + FIFO входящих. */
 export interface RunSlot {
   busy: boolean;
   token: object | null;
-  queue: QueuedMessage[];
+  queue: SlotQueue;
 }
 
 /** Фабрика раннеров из bootstrap (нет — legacy-режим без параллелизма). */
 export type RunnerFactory = (sessionId: string) => SessionRunner;
+
+/** Простой раннер без ходов (тесты). */
+export const RUNNER_IDLE_MS = 10 * 60_000;
+
+/** Сколько раннеров держим одновременно (LRU). */
+export const RUNNER_LRU_MAX = 8;
+
+/** Как часто чистим простаивающие раннеры. */
+const SWEEP_INTERVAL_MS = 60_000;
 
 /** Per-session пул: очереди, busy-слоты, кеш раннеров. Чистое состояние — IO в util. */
 export class RunPool {
@@ -35,6 +46,10 @@ export class RunPool {
   private maxQueue: number;
   /** Монотонный id сообщений очереди (адресат cancel/start). */
   private nextQueuedId = 1;
+  /** Последняя активность раннера (для LRU и idle-вытеснения). */
+  private lastActive = new Map<string, number>();
+  /** Таймер периодической чистки (null — не запущен). */
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(factory?: RunnerFactory, maxQueue: number = MAX_QUEUE_LENGTH) {
     if (factory) this.factory = factory;
@@ -60,15 +75,23 @@ export class RunPool {
     const key = RunPool.key(id);
     let slot = this.slots.get(key);
     if (!slot) {
-      slot = { busy: false, token: null, queue: [] };
+      slot = { busy: false, token: null, queue: new SlotQueue() };
       this.slots.set(key, slot);
     }
     return slot;
   }
 
+  /**
+   * Слот БЕЗ создания: читающие операции не должны плодить слоты
+   * (аудит §6.11/§6.12).
+   */
+  private peekSlot(id: string | null): RunSlot | undefined {
+    return this.slots.get(RunPool.key(id));
+  }
+
   /** Занят ли слот (идёт ход). */
   isBusy(id: string | null): boolean {
-    return this.slotFor(id).busy;
+    return this.peekSlot(id)?.busy ?? false;
   }
 
   /** Id занятых сессионных слотов (без legacy — для бейджей вкладок). */
@@ -105,59 +128,6 @@ export class RunPool {
     return n;
   }
 
-  /**
-   * Кладёт сообщение в очередь слота. Сообщение с id или null, если полна.
-   * Вызывать только когда слот занят (свободный идёт сразу в ход).
-   */
-  enqueue(id: string | null, text: string, images: string[], sessionId: string | null): QueuedMessage | null {
-    const slot = this.slotFor(id);
-    if (slot.queue.length >= this.maxQueue) return null;
-    const message: QueuedMessage = {
-      id: `q${this.nextQueuedId++}`,
-      text,
-      images,
-      sessionId,
-      ts: Date.now(),
-    };
-    slot.queue.push(message);
-    return message;
-  }
-
-  /** Упорядоченные id очереди сессии (для проекции состояния/клиента). */
-  queuedIds(id: string | null): string[] {
-    return this.slotFor(id).queue.map((m) => m.id);
-  }
-
-  /** Id очередей по сессиям (без legacy-слота, как `queuedCounts`). */
-  queuedIdsBySession(): Record<string, string[]> {
-    const out: Record<string, string[]> = {};
-    for (const [key, slot] of this.slots) {
-      if (key === "" || slot.queue.length === 0) continue;
-      out[key] = slot.queue.map((m) => m.id);
-    }
-    return out;
-  }
-
-  /** Убирает сообщение очереди по id; undefined — такого уже нет. */
-  removeQueued(id: string | null, messageId: string): QueuedMessage | undefined {
-    const queue = this.slotFor(id).queue;
-    const i = queue.findIndex((m) => m.id === messageId);
-    if (i === -1) return undefined;
-    return queue.splice(i, 1)[0];
-  }
-
-  /**
-   * Переносит сообщение в голову очереди, сохраняя порядок остальных.
-   * undefined — такого сообщения нет; голова остаётся головой.
-   */
-  promoteQueued(id: string | null, messageId: string): QueuedMessage | undefined {
-    const queue = this.slotFor(id).queue;
-    const i = queue.findIndex((m) => m.id === messageId);
-    if (i === -1) return undefined;
-    const [message] = queue.splice(i, 1);
-    queue.unshift(message);
-    return message;
-  }
 
   /**
    * Атомарно резервирует слот, возвращает токен владения.
@@ -182,9 +152,43 @@ export class RunPool {
 
   /** Безусловный сброс слота (форвардерный turn_end — владелец завершённого хода). */
   forceRelease(id: string | null): void {
-    const slot = this.slotFor(id);
+    const slot = this.peekSlot(id);
+    if (!slot) return;
     slot.token = null;
     slot.busy = false;
+  }
+
+  /**
+   * Кладёт сообщение в очередь слота. Сообщение с id или null, если полна.
+   * Вызывать только когда слот занят (свободный идёт сразу в ход).
+   */
+  enqueue(id: string | null, text: string, images: string[], sessionId: string | null): QueuedMessage | null {
+    return this.slotFor(id).queue.enqueue(text, images, sessionId, this.maxQueue);
+  }
+
+  /** Упорядоченные id очереди сессии (для проекций состояния/клиента). */
+  queuedIds(id: string | null): string[] {
+    return this.slotFor(id).queue.ids();
+  }
+
+  /** Id очередей по сессиям (без legacy-слота, как `queuedCounts`). */
+  queuedIdsBySession(): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const [key, slot] of this.slots) {
+      if (key === "" || slot.queue.length === 0) continue;
+      out[key] = slot.queue.ids();
+    }
+    return out;
+  }
+
+  /** Убирает сообщение очереди по id; undefined — такого уже нет. */
+  removeQueued(id: string | null, messageId: string): QueuedMessage | undefined {
+    return this.slotFor(id).queue.remove(messageId);
+  }
+
+  /** Переносит сообщение в голову очереди, сохраняя порядок остальных. */
+  promoteQueued(id: string | null, messageId: string): QueuedMessage | undefined {
+    return this.slotFor(id).queue.promote(messageId);
   }
 
   /** Забирает голову очереди слота (undefined — пусто). */
@@ -199,17 +203,62 @@ export class RunPool {
 
   /** Раннер сессии из кеша (undefined — ещё не спавнился). */
   getRunner(id: string): SessionRunner | undefined {
-    return this.runners.get(id);
+    const runner = this.runners.get(id);
+    if (runner) this.lastActive.set(id, Date.now());
+    return runner;
   }
 
   /** Раннер из кеша или свежий спавн (фабрика обязана — иначе throw). */
   getOrCreateRunner(id: string): SessionRunner {
+    this.maybeSweep();
     const cached = this.runners.get(id);
-    if (cached) return cached;
+    if (cached) {
+      this.lastActive.set(id, Date.now());
+      return cached;
+    }
     if (!this.factory) throw new Error("no runner factory");
     const runner = this.factory(id);
     this.runners.set(id, runner);
+    this.lastActive.set(id, Date.now());
+    this.startSweeper();
     return runner;
+  }
+
+  /** Периодическая чистка простаивающих раннеров (не держит процесс живым). */
+  private startSweeper(): void {
+    if (this.sweepTimer) return;
+    this.sweepTimer = setInterval(() => this.sweep(), SWEEP_INTERVAL_MS);
+    this.sweepTimer.unref?.();
+  }
+
+  /** Чистка, если с прошлой прошло достаточно времени. */
+  private maybeSweep(): void {
+    const now = Date.now();
+    const last = this.lastSweepAt;
+    if (last !== undefined && now - last < SWEEP_INTERVAL_MS) return;
+    this.sweep(now);
+  }
+
+  private lastSweepAt?: number;
+
+  /**
+   * Вытесняет раннеры: простаивающие дольше `RUNNER_IDLE_MS` и лишние по LRU
+   * (свыше `RUNNER_LRU_MAX`). Занятые и с очередью не трогаем (аудит §6.11).
+   *
+   * @returns число вытесненных раннеров.
+   */
+  sweep(now: number = Date.now()): number {
+    this.lastSweepAt = now;
+    const evict = selectEvictions(
+      [...this.runners.keys()],
+      this.lastActive,
+      (id) => this.peekSlot(id)?.busy ?? false,
+      now,
+      RUNNER_IDLE_MS,
+      RUNNER_LRU_MAX,
+    );
+    for (const id of evict) this.disposeRunner(id);
+    return evict.length;
   }
 
   /** Id закешированных раннеров (для reconfigure). */
@@ -225,14 +274,20 @@ export class RunPool {
 
   /** Полный сброс (стоп сервера): раннеры, слоты, очереди. */
   clear(): void {
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = null;
+    }
     for (const id of [...this.runners.keys()]) this.disposeRunner(id);
     this.slots.clear();
+    this.lastActive.clear();
   }
 
   /** Отпустить раннер (вклад тулов плагинов снимается, реестр больше не нужен). */
   private disposeRunner(id: string): void {
     const runner = this.runners.get(id);
     this.runners.delete(id);
+    this.lastActive.delete(id);
     try {
       runner?.dispose?.();
     } catch {

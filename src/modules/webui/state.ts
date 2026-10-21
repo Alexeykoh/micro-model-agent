@@ -141,18 +141,14 @@ export interface WebUiState {
   clients: Set<ServerResponse>;
   bridge: Host | null;
   /**
-   * Агрегат занятости: true, пока бежит ХОТЬ ОДИН ход (владелец — пул:
-   * ставится на резерве слота, сбрасывается форвардерным `turn_end` через
-   * пересчёт, или {@link releaseBusy}, если ход так и не стартовал).
+   * Агрегат занятости: true, пока бежит ХОТЬ ОДИН ход (владелец — пул).
    * Per-session busy — в пуле (`pool.isBusy`), бейджи вкладок — из
    * `sessionStatus().runningSessionIds`.
    */
   busy: boolean;
   /**
    * Реально ли выполняется ход агента. Отдельно от {@link busy}, чтобы резерв
-   * сервера (ставится до вызова `submit`) НЕ триггерил собственный `isBusy()`-гард
-   * `WebHost.submit`. Ставится на старте `runAgent`, сбрасывается форвардерным
-   * `turn_end`.
+   * сервера (до вызова `submit`) НЕ триггерил `isBusy()`-гард `WebHost.submit`.
    */
   agentRunning: boolean;
   /**
@@ -163,8 +159,7 @@ export interface WebUiState {
   pool: RunPool;
   /**
    * Сквозной счётчик завершённых ходов (инкремент — форвардерный `onTurnEnd`).
-   * Едет в SSE `turn_end` как `turnSeq`, чтобы Trace привязывал строки к ходу
-   * серверным номером, а не клиентским счётчиком (реконнекты его не сбивают).
+   * Едет в SSE `turn_end` как `turnSeq`, чтобы Trace привязывал строки к ходу.
    */
   turnSeq: number;
   /** Троттл POST — по сессии (параллельные вкладки не блокируют друг друга). */
@@ -380,11 +375,13 @@ export function createWebUiState(): WebUiState {
   };
 }
 
+/** Сколько снимков usage держим в памяти (LRU по порядку вставки). */
+const SESSION_USAGE_CACHE_MAX = 50;
+
 /**
  * Usage для сайдбара: метрики серверно-активной сессии (или явной `sessionId`
  * веб-вкладки). У сессии без ходов — undefined (сайдбар показывает прочерки),
- * а НЕ чужой last-turn: иначе новая вкладка открывается с цифрами прошлого
- * чата. Снимок лениво поднимается с диска после reload.
+ * а НЕ чужой last-turn. Снимок лениво поднимается с диска после reload.
  */
 export function activeUsage(s: SessionStore, sessionId?: string): UsageSnapshot | undefined {
   try {
@@ -401,6 +398,9 @@ export function activeUsage(s: SessionStore, sessionId?: string): UsageSnapshot 
       if (dir) {
         const persisted = loadSessionUsage(dir);
         if (persisted) {
+          // Кэш usage ограничен: сессий за день открывается много (аудит §6.12).
+          const keys = Object.keys(s.sessionUsage);
+          if (keys.length >= SESSION_USAGE_CACHE_MAX) delete s.sessionUsage[keys[0]];
           s.sessionUsage[active] = persisted;
           return persisted;
         }
