@@ -25,11 +25,19 @@
 
 ### 1.2 Corporate data policy (план `docs/plans/2026-10-19-corporate-data-policy-plan.md`)
 
-- [ ] **W4 — serve + DLP webhook** — E2 для `mma serve`: пути/PII не отдаются через
-      HTTP API, 404 на скрытые пути, вебхук DLP. Гейты: `tests/service/*`.
-- Остаточные векторы вне плана (отдельная задача): payload `tools/web-search.ts:66`,
+- [x] **W1–W4 исполнены** — слиты в `master` 2026-10-19 (`41916e2b`): движок
+      `data-policy` + `EgressGuard`, egress к провайдеру (E1), web/serve-фильтр (E2),
+      404 на скрытые пути, DLP-вебхук. Гейты: `tests/security/data-policy*.test.ts`,
+      `tests/providers/sanitizing-provider.test.ts`, `tests/webui/egress-filter.test.ts`,
+      `tests/service/egress-filter.test.ts`.
+- [ ] **Остаточные векторы вне плана** (отдельная задача, нужен шов/спека):
+      payload `tools/web-search.ts:66` (запрос уходит в DuckDuckGo как есть),
       payload `modules/mcp/client.ts`, обход через base64/split известного значения,
       DNS-подмена trust (документировать IP/CIDR), NER (ФИО/адреса).
+      Долги по теме — в `docs/agents/debt.md` (`at-rest-pii`, `file-content-taint`,
+      `api-hidden-globs-text-scope`, `file-content-bypass-non-path-tools`,
+      `data-policy-projection-lifecycle`, `streaming-tail-holdback`,
+      `research-by-checksum`, `dlp-cli-redaction-notice`).
 
 ### 1.3 Аудит модулей harness (план `docs/plans/2026-10-12-harness-module-audit-fixes.md`)
 
