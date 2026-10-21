@@ -12,10 +12,16 @@ export interface EncryptionConfig {
   algorithm?: string;
 }
 
-const DEFAULT_CONFIG: Required<EncryptionConfig> = {
-  keyPath: join(globalMmaDir(), ".encryption-key"),
-  algorithm: "aes-256-gcm",
-};
+/**
+ * Дефолты конфига шифрования. `keyPath` считается ЛЕНИВО: на импорте модуля
+ * нельзя трогать файловую систему (путь может уехать при смене HOME, а импорт
+ * происходит до конфигурации окружения) — аудит §7.4.
+ */
+
+/** Путь к файлу ключа по умолчанию (вычисляется при первом обращении). */
+function defaultKeyPath(): string {
+  return join(globalMmaDir(), ".encryption-key");
+}
 
 const IV_LENGTH = 16;
 const SALT_LENGTH = 16;
@@ -28,7 +34,7 @@ export function generateEncryptionKey(): Buffer {
 
 /** Взять ключ из файла или создать новый. */
 export function getOrCreateEncryptionKey(config?: EncryptionConfig): Buffer {
-  const { keyPath } = { ...DEFAULT_CONFIG, ...config };
+  const keyPath = config?.keyPath ?? defaultKeyPath();
 
   // Каталог обязан существовать
   const dir = join(keyPath, "..");
