@@ -43,6 +43,12 @@ export class UpdaterModule {
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Промис текущего витка run-loop (резолвится по устаканиванию). */
   private idlePromise: Promise<void> | null = null;
+  /** Резолвер `idlePromise`: `stop()` не оставляет висеть мёртвый таймер. */
+  private idleResolve: (() => void) | null = null;
+  /** Резолвер паузы между проверками (его будит `stop()`). */
+  private wake: (() => void) | null = null;
+  /** Защита от параллельных установок (`POST /api/update` и фон). */
+  private installing = false;
   /** Тест-хук: отключает реальные установки. */
   private installEnabled = true;
 
@@ -89,16 +95,24 @@ export class UpdaterModule {
     if (!this.installEnabled) {
       return { success: false, error: "update install is not available in this mode" };
     }
-    const check = await this.updater.check();
-    const latest = check.latest ?? "";
-    this.logger.info(t("updater.installing", { current, latest: latest || "latest" }));
-    this.onNotice?.({ phase: "installing", current, latest });
-    const result = await this.updater.install((progress) => {
-      this.onNotice?.({ phase: "installing", current, latest, progress });
-    });
-    if (result.success) this.reportInstalled(current, result.installed ?? latest);
-    else this.reportFailed(current, latest, result.error ?? "");
-    return result;
+    if (this.installing) {
+      return { success: false, error: "update install is already in progress" };
+    }
+    this.installing = true;
+    try {
+      const check = await this.updater.check();
+      const latest = check.latest ?? "";
+      this.logger.info(t("updater.installing", { current, latest: latest || "latest" }));
+      this.onNotice?.({ phase: "installing", current, latest });
+      const result = await this.updater.install((progress) => {
+        this.onNotice?.({ phase: "installing", current, latest, progress });
+      });
+      if (result.success) this.reportInstalled(current, result.installed ?? latest);
+      else this.reportFailed(current, latest, result.error ?? "");
+      return result;
+    } finally {
+      this.installing = false;
+    }
   }
 
   /** True, если фоновая проверка запущена. */
@@ -114,27 +128,39 @@ export class UpdaterModule {
   start(): void {
     if (this.started || !this.config.enabled) return;
     this.started = true;
-    this.idlePromise = this.runLoop();
+    this.idlePromise = new Promise<void>((resolve) => {
+      this.idleResolve = resolve;
+    });
+    void this.runLoop().finally(() => this.finishIdle());
   }
 
-  /** Останавливает фоновый цикл и снимает таймер. */
+  /** Останавливает фоновый цикл и снимает таймер; idle резолвится сразу. */
   stop(): void {
     this.started = false;
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
     }
+    this.wake?.();
+    this.finishIdle();
+  }
+
+  /** Резолвит `idlePromise` (идемпотентно): ждать мёртвый таймер больше не нужно. */
+  private finishIdle(): void {
+    this.idleResolve?.();
+    this.idleResolve = null;
   }
 
   /**
    * Ждёт устаканивания текущего цикла check/install, но не дольше timeoutMs.
-   * Нужно one-shot CLI-прогонам, чтобы фоновая установка не убивалась
-   * process.exit() до завершения. No-op, если модуль не стартовал.
+   * `true` — цикл завершён, `false` — истёк таймаут. No-op → `true`, если
+   * модуль не стартовал.
    */
-  async waitForIdle(timeoutMs = 130000): Promise<void> {
+  async waitForIdle(timeoutMs = 130000): Promise<boolean> {
     const idle = this.idlePromise;
-    if (!idle) return;
-    await Promise.race([idle, new Promise((r) => setTimeout(r, timeoutMs))]);
+    if (!idle) return true;
+    const timeout = new Promise<false>((resolve) => setTimeout(() => resolve(false), timeoutMs));
+    return await Promise.race([idle.then(() => true as const), timeout]);
   }
 
   private async runLoop(): Promise<void> {
@@ -142,11 +168,25 @@ export class UpdaterModule {
       await this.checkOnce();
       if (!this.started) return;
       if (this.config.intervalMs > 0) {
-        await new Promise((r) => (this.timer = setTimeout(r, this.config.intervalMs)));
+        await this.pause(this.config.intervalMs);
       } else {
         this.started = false;
       }
     }
+  }
+
+  /** Пауза между проверками; `stop()` будит её через `this.wake`. */
+  private pause(ms: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.wake = () => {
+        this.wake = null;
+        resolve();
+      };
+      this.timer = setTimeout(() => {
+        this.wake = null;
+        resolve();
+      }, ms);
+    });
   }
 
   /** Одна проверка; при доступном апдейте — опциональная установка. */
@@ -164,10 +204,16 @@ export class UpdaterModule {
 
   /** Скачивает и активирует свежую версию, репортит успех/провал. */
   private async autoInstall(current: string, latest: string): Promise<void> {
-    this.logger.info(t("updater.installing", { current, latest }));
-    const install = await this.updater.install();
-    if (install.success) this.reportInstalled(current, latest);
-    else this.reportFailed(current, latest, install.error ?? "");
+    if (this.installing) return;
+    this.installing = true;
+    try {
+      this.logger.info(t("updater.installing", { current, latest }));
+      const install = await this.updater.install();
+      if (install.success) this.reportInstalled(current, latest);
+      else this.reportFailed(current, latest, install.error ?? "");
+    } finally {
+      this.installing = false;
+    }
   }
 
   private reportInstalled(current: string, latest: string): void {

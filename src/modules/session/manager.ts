@@ -2,10 +2,7 @@
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionStore, SessionLogEntry } from "./store";
 import { t } from "../../i18n/index";
-import type {
-  SessionIsolationConfig,
-  SessionContext,
-} from "../../modules/security/session-isolation";
+import type { SessionIsolationConfig, SessionContext } from "../../modules/security/session-isolation";
 import {
   createSessionContext,
   DEFAULT_SESSION_ISOLATION,
@@ -13,6 +10,7 @@ import {
 import type { SessionEncryptionConfig } from "../../config/types";
 import { normalizeSecurityOverrides } from "./security-overrides";
 import { isEmptySession, pruneEmptySessions } from "./prune";
+import { newSessionId } from "./id";
 
 /** Опции менеджера сессий. */
 export interface SessionManagerOptions {
@@ -72,7 +70,7 @@ export class SessionManager {
     externalRef?: string,
   ): SessionMeta {
     const now = new Date().toISOString();
-    const id = `ses_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const id = newSessionId();
     const sessionName = name || t("session.default_name", { date: now.slice(0, 10) });
     const meta: SessionMeta = {
       id,

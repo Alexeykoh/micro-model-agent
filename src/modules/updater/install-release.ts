@@ -1,26 +1,31 @@
 /**
- * Установка релиза из GitHub Releases: скачивание артефакта, проверка sha256,
- * распаковка и переключение `~/.mma/current`.
+ * Установка релиза из GitHub Releases: проверка манифеста, staged-копирование
+ * и переключение `~/.mma/current`.
  *
- * Чистые, инжектируемые функции — тестируются на временных каталогах без сети
- * (fetch и распаковка передаются параметрами).
+ * Целостность обязательна: манифест без `sha256`/`size` не ставится. Живая
+ * версия не удаляется до успешного flip; распаковка проверяет список членов
+ * архива (никаких `..`/абсолютных путей/симлинков).
+ *
+ * Транспорт (скачивание/распаковка) — `./archive.ts`. Чистые, инжектируемые
+ * функции — тестируются на временных каталогах без сети.
  */
-import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
-import {
-  cp,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  symlink,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readlink, rename, rm, stat, symlink, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { FetchLike, ReleaseManifest, ReleasePlatformKey } from "./release";
+import { basename, join } from "node:path";
+import type { FetchLike, ReleaseArtifact, ReleaseManifest, ReleasePlatformKey } from "./release";
+import { downloadCap, downloadFile, extractTarGz, sha256File, type InstallProgressFn } from "./archive";
+
+export {
+  assertSafeTarMembers,
+  downloadFile,
+  extractTarGz,
+  sha256File,
+  type InstallProgress,
+  type InstallProgressFn,
+} from "./archive";
+
+/** Стадия установки (порядок важен: `stage` строго до `flip`). */
+export type InstallStep = "stage" | "flip" | "cleanup-old";
 
 export interface InstallReleaseOptions {
   manifest: ReleaseManifest;
@@ -32,19 +37,9 @@ export interface InstallReleaseOptions {
   installRoot: string;
   /** Распаковка tarball'а (инжект для тестов). */
   extract?: (tarball: string, dest: string) => Promise<void>;
+  /** Наблюдатель шагов установки (порядок stage→flip→cleanup-old). */
+  onStep?: (step: InstallStep) => void;
 }
-
-/** Стадия установки для прогресса в UI/консоли. */
-export interface InstallProgress {
-  phase: "download" | "verify" | "extract" | "activate";
-  /** Скачано байт (только `download`). */
-  received?: number;
-  /** Всего байт, если известен `content-length` (только `download`). */
-  total?: number;
-}
-
-/** Колбэк прогресса установки (best-effort, не влияет на результат). */
-export type InstallProgressFn = (p: InstallProgress) => void;
 
 /** Скачивает релиз, распаковывает и активирует. Возвращает версию. */
 export async function installRelease(
@@ -53,17 +48,29 @@ export async function installRelease(
 ): Promise<string> {
   const artifact = opts.manifest.artifacts[opts.key];
   if (!artifact) throw new Error(`platform ${opts.key} is not in the manifest`);
+  assertArtifact(artifact);
+  assertArtifactName(artifact.url);
 
   const tmp = await mkdtemp(join(tmpdir(), "mma-update-"));
   try {
     const tarball = join(tmp, "mma.tar.gz");
     onProgress?.({ phase: "download" });
-    await downloadFile(`${opts.base}/${artifact.url}`, tarball, opts.fetchImpl, onProgress);
+    await downloadFile(
+      `${opts.base}/${artifact.url}`,
+      tarball,
+      opts.fetchImpl,
+      onProgress,
+      downloadCap(artifact.size),
+    );
 
     onProgress?.({ phase: "verify" });
     const actual = await sha256File(tarball);
-    if (artifact.sha256 && actual !== artifact.sha256.toLowerCase()) {
+    if (actual !== artifact.sha256.toLowerCase()) {
       throw new Error(`checksum mismatch (expected ${artifact.sha256}, got ${actual})`);
+    }
+    const actualSize = (await stat(tarball)).size;
+    if (actualSize !== artifact.size) {
+      throw new Error(`size mismatch (expected ${artifact.size}, got ${actualSize})`);
     }
 
     onProgress?.({ phase: "extract" });
@@ -71,90 +78,130 @@ export async function installRelease(
     await mkdir(pkg, { recursive: true });
     await (opts.extract ?? extractTarGz)(tarball, pkg);
 
-    const version = (await readFile(join(pkg, "VERSION"), "utf8")).trim();
-    if (!version) throw new Error("invalid archive: VERSION missing");
-
+    const version = readVersion(await readFile(join(pkg, "VERSION"), "utf8"));
     onProgress?.({ phase: "activate" });
+
     const versionsDir = join(opts.installRoot, "versions");
     await mkdir(versionsDir, { recursive: true });
     const target = join(versionsDir, version);
-    await rm(target, { recursive: true, force: true });
-    await cp(pkg, target, { recursive: true });
+    await assertNotLive(opts.installRoot, target);
 
-    await flipCurrent(opts.installRoot, target);
+    // Staging рядом с целевым каталогом: rename атомарен в пределах тома.
+    const staging = join(versionsDir, `${version}.tmp`);
+    await rm(staging, { recursive: true, force: true });
+    await cp(pkg, staging, { recursive: true });
+    await rm(target, { recursive: true, force: true });
+    await rename(staging, target);
+    opts.onStep?.("stage");
+
+    const previous = await flipCurrent(opts.installRoot, target);
+    opts.onStep?.("flip");
+
+    if (previous && !samePath(previous, target)) {
+      await rm(previous, { recursive: true, force: true });
+      opts.onStep?.("cleanup-old");
+    }
     return version;
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
 }
 
-/**
- * Скачивает файл целиком (релизы — десятки-сотни МБ). Читает `res.body`
- * потоком, чтобы отдавать прогресс по `content-length`; если тела нет
- * (некоторые моки/окружения) — обычный `arrayBuffer`.
- */
-export async function downloadFile(
-  url: string,
-  dest: string,
-  fetchImpl: FetchLike,
-  onProgress?: InstallProgressFn,
-): Promise<void> {
-  const res = await fetchImpl(url, { signal: AbortSignal.timeout(300_000) });
-  if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
-  const lenHeader = res.headers && typeof res.headers.get === "function"
-    ? res.headers.get("content-length")
-    : null;
-  const total = Number(lenHeader) || undefined;
-  const body = res.body as ReadableStream<Uint8Array> | null | undefined;
-  if (body && typeof body.getReader === "function") {
-    const reader = body.getReader();
-    const chunks: Uint8Array[] = [];
-    let received = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        chunks.push(value);
-        received += value.byteLength;
-        onProgress?.({ phase: "download", received, total });
-      }
-    }
-    await writeFile(dest, Buffer.concat(chunks.map((c) => Buffer.from(c))));
-    return;
+/** Артефакт обязан нести проверяемые `sha256` (64 hex) и `size`. */
+function assertArtifact(artifact: ReleaseArtifact): void {
+  if (typeof artifact.sha256 !== "string" || !/^[0-9a-f]{64}$/i.test(artifact.sha256)) {
+    throw new Error("manifest has no valid checksum (sha256)");
   }
-  const buf = Buffer.from(await res.arrayBuffer());
-  await writeFile(dest, buf);
+  if (!Number.isFinite(artifact.size) || artifact.size <= 0) {
+    throw new Error("manifest has no artifact size");
+  }
 }
 
-/** sha256 файла (hex, нижний регистр). */
-export async function sha256File(path: string): Promise<string> {
-  return createHash("sha256").update(await readFile(path)).digest("hex");
+/**
+ * Имя артефакта в манифесте — относительное, без `..` и без схемы: иначе
+ * `${base}/${artifact.url}` уводит скачивание на чужой хост/абсолютный путь.
+ */
+export function assertArtifactName(name: string): void {
+  const unsafe =
+    !name ||
+    name.startsWith("/") ||
+    name.startsWith("\\") ||
+    /^[a-z]:/i.test(name) ||
+    /^[a-z][a-z0-9+.-]*:/i.test(name) ||
+    name.split(/[\\/]/).includes("..");
+  if (unsafe) throw new Error(`unsafe artifact url: ${name}`);
 }
 
-/** Распаковка `.tar.gz` системным `tar` (есть на Windows 10+, macOS, Linux). */
-export function extractTarGz(tarball: string, dest: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile("tar", ["-xzf", tarball, "-C", dest], { windowsHide: true }, (err) =>
-      err ? reject(err) : resolve(),
-    );
-  });
+/** Версия из архива становится компонентом пути — допускаем только безопасный вид. */
+function readVersion(raw: string): string {
+  const version = raw.trim();
+  if (!/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(version) || version === "." || version === "..") {
+    throw new Error(`invalid archive: unsafe VERSION "${version}"`);
+  }
+  return version;
 }
 
-/** Переключает `~/.mma/current` на распакованную версию. */
-async function flipCurrent(root: string, target: string): Promise<void> {
+/** Не даём «переустановить» версию, на которую сейчас указывает `current`. */
+async function assertNotLive(root: string, target: string): Promise<void> {
+  const live = await currentTarget(join(root, "current"));
+  if (live && samePath(live, target)) throw new Error(`version is already active: ${basename(target)}`);
+}
+
+/** Сравнение путей ссылки и цели (Windows junction отдаёт `\\?\`-префикс). */
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string): string => {
+    const stripped = p.replace(/^\\\\\?\\/, "").replace(/[\\/]+$/, "");
+    return process.platform === "win32" ? stripped.replace(/\\/g, "/").toLowerCase() : stripped;
+  };
+  return norm(a) === norm(b);
+}
+
+/**
+ * Переключает `~/.mma/current` на новую версию: сначала создаётся ссылка
+ * `.current.new`, затем `current` уводится в `.current.old`, новая ссылка
+ * встаёт на место, старая удаляется. Окно без `current` минимально, а сама
+ * целевая версия уже распакована и проверена.
+ * Возвращает предыдущую цель ссылки (её удаляет вызывающий после flip).
+ */
+async function flipCurrent(root: string, target: string): Promise<string | undefined> {
   const current = join(root, "current");
-  await removeCurrent(current);
+  const staged = join(root, ".current.new");
+  const old = join(root, ".current.old");
+  await removePath(staged);
+  await removePath(old);
   const type = process.platform === "win32" ? "junction" : "dir";
-  await symlink(target, current, type);
+  await symlink(target, staged, type);
+
+  const previous = await currentTarget(current);
+  let moved = false;
+  try {
+    await rename(current, old);
+    moved = true;
+  } catch (err) {
+    // Нет current — первый запуск/починка после сбоя; прочие ошибки важны.
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  await rename(staged, current);
+  if (moved) await removePath(old);
+  return previous;
 }
 
-/** Удаляет старый `current` (ссылка/junction), не задевая цель. */
-async function removeCurrent(current: string): Promise<void> {
+/** Куда указывает `current` (undefined — ссылки нет). */
+async function currentTarget(current: string): Promise<string | undefined> {
   try {
-    const st = await lstat(current);
-    if (st.isSymbolicLink()) await unlink(current);
-    else await rm(current, { recursive: true, force: true });
+    return await readlink(current);
   } catch {
-    // Нет current — переключать нечего.
+    return undefined;
+  }
+}
+
+/** Удаляет ссылку или каталог, не задевая цель ссылки. */
+async function removePath(path: string): Promise<void> {
+  try {
+    const st = await lstat(path);
+    if (st.isSymbolicLink()) await unlink(path);
+    else await rm(path, { recursive: true, force: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 }
