@@ -10,6 +10,7 @@ import { recordArtifactWrite, testChurnFile } from "./artifact-progress";
 import { isWorkMutation } from "../../modules/critic/evidence";
 import { MUTATION_CYCLE_NUDGE_THRESHOLD } from "./constants";
 import { t } from "../../i18n/index";
+import { issueDirective } from "./directives";
 
 /**
  * Ключ целевого объекта мутации для детекции «перфекционизм-цикла».
@@ -93,10 +94,11 @@ export function applyBatchNudges(
       "info",
       `Perfectionism cycle detected (${cycleNudges.length} target(s) at ${MUTATION_CYCLE_NUDGE_THRESHOLD}+ mutations) — nudging model to finalize`,
     );
-    contextManager.addMessage({
-      role: "user",
-      content: `<system-summary>You have already modified or re-run the same target many times (e.g. ${cycleNudges[0]}). If the latest output is correct, STOP polishing and answer with a final text response. More identical edits will not change the result.</system-summary>`,
-    });
+    issueDirective(
+      contextManager,
+      "cycle",
+      `You have already modified or re-run the same target many times (e.g. ${cycleNudges[0]}). If the latest output is correct, STOP polishing and answer with a final text response. More identical edits will not change the result.`,
+    );
   }
 
   // Тест/спек-churn: серия правок тестов без единой production-правки.
@@ -107,9 +109,6 @@ export function applyBatchNudges(
       "info",
       `Test/spec artifact churn: "${churnFile}" repeatedly edited with no production changes — nudging to implement or change approach`,
     );
-    contextManager.addMessage({
-      role: "user",
-      content: `<system-summary>${t("exec.test_churn_nudge", { file: churnFile })}</system-summary>`,
-    });
+    issueDirective(contextManager, "artifact_churn", t("exec.test_churn_nudge", { file: churnFile }));
   }
 }

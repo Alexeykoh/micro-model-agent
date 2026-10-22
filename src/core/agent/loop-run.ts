@@ -51,6 +51,11 @@ export async function executeAgentLoop(
 ): Promise<AgentResult> {
   const { config, contextManager, logger } = ctx.deps;
 
+  // Новый ход: условия директив харнесса обнулены (стрики — per-turn), поэтому
+  // стоящие директивы прошлого хода снимаются. Внутри хода они переживают
+  // компакцию (см. `ContextManager.setStandingDirective`).
+  contextManager.clearStandingDirectives?.();
+
   // Модули цикла (состояние + сервисы) — единый контейнер (INV-23).
   const {
     state,

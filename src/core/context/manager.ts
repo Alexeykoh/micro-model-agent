@@ -162,6 +162,12 @@ export class ContextManager {
   private lastUserFeedback = "";
   private tokenCounter: TokenCounter | null;
   private pendingImageParts: ContentPart[] = [];
+  /**
+   * Стоящие директивы харнесса (`id → текст`). Директивы вставляются в контекст
+   * как `<system-summary>`, который компакция вырезает; реестр позволяет вернуть
+   * их после компакции (§1.5 аудита).
+   */
+  private standingDirectives = new Map<string, string>();
   private toolTokens = 0;
   /**
    * Монотонный счётчик штампов сообщений (см. `beginTurn`/`seqOf`). Храним seq
@@ -447,6 +453,47 @@ export class ContextManager {
     this.pendingImageParts = [];
   }
 
+  /** Ставит/обновляет стоящую директиву харнесса (переживает компакцию). */
+  setStandingDirective(id: string, text: string): void {
+    this.standingDirectives.set(id, text);
+  }
+
+  /** Снимает стоящую директиву (условие перестало выполняться). */
+  clearStandingDirective(id: string): void {
+    this.standingDirectives.delete(id);
+  }
+
+  /** Снимает все стоящие директивы (новый ход: условия обнулены). */
+  clearStandingDirectives(): void {
+    this.standingDirectives.clear();
+  }
+
+  /** Тексты стоящих директив (id → текст). */
+  getStandingDirectives(): Record<string, string> {
+    return Object.fromEntries(this.standingDirectives);
+  }
+
+  /**
+   * Возвращает директивы, вырезанные компакцией, одним сообщением. Директивы,
+   * чей текст ещё есть в истории, повторно не добавляются.
+   */
+  private reassertStandingDirectives(): void {
+    if (this.standingDirectives.size === 0) return;
+    const present = this.messages
+      .map((m) => getMessageText(m.content))
+      .join("\n");
+    const missing = [...this.standingDirectives.values()].filter(
+      (text) => text && !present.includes(text),
+    );
+    if (missing.length === 0) return;
+    this.messages.push(
+      this.stampSeq({
+        role: "user",
+        content: `<system-summary>${missing.join("\n")}</system-summary>`,
+      }),
+    );
+  }
+
   /** Число сообщений в истории. */
   getMessageCount(): number {
     return this.messages.length;
@@ -604,6 +651,10 @@ export class ContextManager {
       return !text.startsWith("<system-summary>");
     });
     this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...freshRecent];
+    // Директивы харнесса живут в отдельном реестре: компакция вырезала все
+    // `<system-summary>`, а условие директивы (стрик) осталось активным — модель
+    // теряла указание и больше не получала его (§1.5 аудита).
+    this.reassertStandingDirectives();
     this.iterationsSinceCompaction = 0;
     // Компакция переписала историю — baseline калибровки недействителен.
     this.calibrator.invalidate();

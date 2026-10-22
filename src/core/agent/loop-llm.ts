@@ -25,6 +25,7 @@ import {
   MAX_REPEATED_TOOL_CALLS_INTERACTIVE,
 } from "./constants";
 import { t } from "../../i18n/index";
+import { issueDirective } from "./directives";
 
 /**
  * Read-only тулы-интроспекции. Повтор одного с теми же аргументами прогресса
@@ -365,10 +366,11 @@ export async function runLlmPhase(
         "info",
         `Repeated identical tool call detected (iteration ${state.iteration}) — nudging model to finish or change approach`,
       );
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.</system-summary>`,
-      });
+      issueDirective(
+        contextManager,
+        "repeated_call",
+        "You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.",
+      );
       state.repeatedToolCount++;
       // Жёсткий стоп — только для status-тулов, которые не прогрессируют от
       // повтора. Мутирующие/побочные (напр. bash) остаются nudge-only.

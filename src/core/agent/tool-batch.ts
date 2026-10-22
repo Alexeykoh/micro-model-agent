@@ -25,6 +25,7 @@ import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
 import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_TOOL_FAILURES_PER_TURN, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES, RECOVERY_DIRECTIVE_REFRESH, RECOVERY_MEMORY_RULE_REFRESH } from "./constants";
+import { clearDirective, issueDirective } from "./directives";
 import { canonicalArgsKey } from "./canonical-args";
 
 /** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
@@ -252,10 +253,7 @@ function recordRepeatedToolFailure(
       "warn",
       `Tool ${key} failed ${prev.count}x — disabling it for the rest of the turn`,
     );
-    deps.contextManager.addMessage({
-      role: "user",
-      content: `<system-summary>${t("exec.tool_disabled", { tool: key })}</system-summary>`,
-    });
+    issueDirective(deps.contextManager, "tool_disabled", t("exec.tool_disabled", { tool: key }));
   }
 
   if (prev.count < MIN_REPEATED_TOOL_FAILURES || state.memoryRuleRecorded.has(key)) return;
@@ -641,6 +639,8 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     } else {
       state.consecutiveToolFailures = 0;
       state.consecutiveToolSuccesses++;
+      // Серия фейлов закончилась — директива восстановления больше не нужна.
+      clearDirective(contextManager, "consecutive_failures");
     }
     if (state.consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
       logger.diagnostic("warn", `Consecutive tool failures: ${state.consecutiveToolFailures}`);
@@ -656,10 +656,11 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         });
         const taskSnippet = input.length > 200 ? `${input.slice(0, 200)}...` : input;
         const taskReminder = t("exec.task_reminder", { task: taskSnippet });
-        contextManager.addMessage({
-          role: "user",
-          content: `<system-summary>${recoveryMsg}\n${taskReminder}</system-summary>`,
-        });
+        issueDirective(
+          contextManager,
+          "consecutive_failures",
+          `${recoveryMsg}\n${taskReminder}`,
+        );
       }
 
       const memStore = this.deps.memoryStore;
@@ -688,6 +689,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     } else if (batchHasSuccess) {
       state.consecutiveFailedBatches = 0;
       state.honestStopNudged = false;
+      clearDirective(contextManager, "failed_batches");
     }
     if (
       state.consecutiveFailedBatches >= MAX_CONSECUTIVE_FAILED_BATCHES &&
@@ -698,10 +700,11 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         "warn",
         `Consecutive failed tool batches: ${state.consecutiveFailedBatches} — honest-stop directive`,
       );
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${t("exec.honest_stop", { count: state.consecutiveFailedBatches })}</system-summary>`,
-      });
+      issueDirective(
+        contextManager,
+        "failed_batches",
+        t("exec.honest_stop", { count: state.consecutiveFailedBatches }),
+      );
     }
     if (state.consecutiveFailedBatches >= HARD_STOP_FAILED_BATCHES) {
       logger.diagnostic("warn", `Retry loop terminated after ${state.consecutiveFailedBatches} consecutive failed batches — forcing final answer`);
@@ -725,6 +728,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     } else {
       state.consecutiveDuplicateBatches = 0;
       state.duplicateNudged = false;
+      clearDirective(contextManager, "duplicate");
     }
     if (state.consecutiveDuplicateBatches >= MAX_DUPLICATE_BATCHES && !state.duplicateNudged) {
       state.duplicateNudged = true;
@@ -732,10 +736,11 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         "warn",
         `Duplicate tool-call streak: ${state.consecutiveDuplicateBatches} batches — directive`,
       );
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${t("exec.readonly_directive", { count: state.consecutiveDuplicateBatches })}</system-summary>`,
-      });
+      issueDirective(
+        contextManager,
+        "duplicate",
+        t("exec.readonly_directive", { count: state.consecutiveDuplicateBatches }),
+      );
     }
     if (state.consecutiveDuplicateBatches >= HARD_STOP_DUPLICATE_BATCHES) {
       logger.diagnostic(
@@ -754,6 +759,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     } else {
       state.consecutiveResearchBatches = 0;
       state.researchNudged = false;
+      clearDirective(contextManager, "research");
     }
     if (state.consecutiveResearchBatches >= MAX_RESEARCH_BATCHES && !state.researchNudged) {
       state.researchNudged = true;
@@ -761,10 +767,11 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         "warn",
         `Web-research streak: ${state.consecutiveResearchBatches} batches without a result — directive`,
       );
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${t("exec.research_convergence", { count: state.consecutiveResearchBatches })}</system-summary>`,
-      });
+      issueDirective(
+        contextManager,
+        "research",
+        t("exec.research_convergence", { count: state.consecutiveResearchBatches }),
+      );
     }
 
     // Статусная строка плана после каждого пакета тулов. Заменяет динамический
