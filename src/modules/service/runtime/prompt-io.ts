@@ -18,6 +18,11 @@ import type { TaskRecord } from "./task-registry";
 
 let questionSeq = 0;
 
+/** TTL висящего вопроса: дальше ход получает пустой ответ, а не висит вечно. */
+export const QUESTION_TTL_MS = 30 * 60_000;
+/** Кап одновременно висящих вопросов на процесс (защита от роста памяти). */
+export const MAX_PENDING_QUESTIONS = 100;
+
 /** Монотонный id висящего вопроса без коллизий. */
 function nextQuestionId(): string {
   questionSeq += 1;
@@ -42,6 +47,34 @@ function toText(value: unknown): string {
   return String(value);
 }
 
+/** Снимает висящий вопрос: таймер, карта, промис; `false` — уже снят/чужой. */
+function settleQuestion(s: AgentServiceState, id: string, value: unknown): boolean {
+  const pending = s.pendingQuestions.get(id);
+  if (!pending) return false;
+  s.pendingQuestions.delete(id);
+  if (pending.timer) clearTimeout(pending.timer);
+  pending.resolve(value);
+  resumeTask(s, pending.taskId);
+  return true;
+}
+
+/** Возвращает задачу из `waiting_input` в `running` после ответа/истечения. */
+function resumeTask(s: AgentServiceState, taskId: string | undefined): void {
+  const rec = taskId ? s.tasks.get(taskId) : undefined;
+  if (rec?.status !== "waiting_input") return;
+  s.tasks.update(rec.jobId, { status: "running" });
+  emitEvent(s, rec, "task.started", { resumed: true });
+}
+
+/** Вытесняет самый старый висящий вопрос, если кап превышен. */
+function evictOverflow(s: AgentServiceState): void {
+  while (s.pendingQuestions.size > s.maxPendingQuestions) {
+    const oldest = s.pendingQuestions.keys().next().value;
+    if (oldest === undefined) return;
+    settleQuestion(s, oldest, undefined);
+  }
+}
+
 /** Вешает висящий вопрос, эмитит `question`/`task.waiting_input`, резолвится ответом. */
 function ask<T>(
   s: AgentServiceState,
@@ -51,11 +84,15 @@ function ask<T>(
 ): Promise<T> {
   return new Promise((resolve) => {
     const id = nextQuestionId();
+    const timer = setTimeout(() => settleQuestion(s, id, undefined), s.questionTtlMs);
+    (timer as { unref?: () => void }).unref?.();
     s.pendingQuestions.set(id, {
       resolve: (value) => resolve(coerce(value)),
       sessionId: task.sessionId,
       taskId: task.jobId,
+      timer,
     });
+    evictOverflow(s);
     s.tasks.update(task.jobId, { status: "waiting_input" });
     emitEvent(s, task, "question", { id, ...payload });
     emitEvent(s, task, "task.waiting_input", { id });
@@ -108,26 +145,26 @@ export function installServicePromptIO(
  * слот сессии не освобождается.
  */
 export function cancelTaskQuestions(s: AgentServiceState, taskId: string): void {
-  const pending: Array<(value: unknown) => void> = [];
+  const ids: string[] = [];
   for (const [id, q] of s.pendingQuestions) {
-    if (q.taskId === taskId) {
-      pending.push(q.resolve);
-      s.pendingQuestions.delete(id);
-    }
+    if (q.taskId === taskId) ids.push(id);
   }
-  for (const resolve of pending) resolve(undefined);
+  for (const id of ids) settleQuestion(s, id, undefined);
 }
 
-/** Закрывает висящий вопрос ответом; `false` — id неизвестен. */
-export function resolveAnswer(s: AgentServiceState, id: string, value: unknown): boolean {
+/**
+ * Закрывает висящий вопрос ответом; `false` — id неизвестен **или** вопрос
+ * принадлежит другой задаче/сессии (чужой вопрос не разблокирует чужой ход).
+ */
+export function resolveAnswer(
+  s: AgentServiceState,
+  id: string,
+  value: unknown,
+  owner?: { taskId?: string; sessionId?: string },
+): boolean {
   const pending = s.pendingQuestions.get(id);
   if (!pending) return false;
-  s.pendingQuestions.delete(id);
-  pending.resolve(value);
-  const rec = pending.taskId ? s.tasks.get(pending.taskId) : undefined;
-  if (rec && rec.status === "waiting_input") {
-    s.tasks.update(rec.jobId, { status: "running" });
-    emitEvent(s, rec, "task.started", { resumed: true });
-  }
-  return true;
+  if (owner?.taskId !== undefined && pending.taskId !== owner.taskId) return false;
+  if (owner?.sessionId !== undefined && pending.sessionId !== owner.sessionId) return false;
+  return settleQuestion(s, id, value);
 }

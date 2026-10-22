@@ -29,6 +29,8 @@ describe("sessions api", () => {
     });
     expect(res.status).toBe(201);
     expect(String(res.json.id)).toMatch(/^ses_/);
+    // DLP не должен принять id за PII: иначе клиент получит `<PII:…>` и 404.
+    expect(String(res.json.id)).not.toMatch(/\d{10}/);
     expect(res.json.externalRef).toBe("chat:42");
     expect(res.json.status).toBe("idle");
   });

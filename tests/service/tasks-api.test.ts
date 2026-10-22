@@ -346,7 +346,7 @@ describe("tasks api", () => {
       input: "x",
       mode: "job",
       wait: true,
-      callbackUrl: "http://callback.test/hook",
+      callbackUrl: "https://callback.test/hook",
     });
     expect(res.json.status).toBe("succeeded");
     for (let i = 0; i < 100 && calls.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
@@ -449,7 +449,11 @@ describe("tasks api", () => {
   });
 
   it("logs the tenant/run context to the session log", async () => {
-    const url = await boot(makeDeps(fastAgent("ok")));
+    const url = await boot(
+      makeDeps(fastAgent("ok"), (c) => {
+        c.service.tenant = "acme";
+      }),
+    );
     const sid = await firstSessionId(url);
     await submit(
       url,

@@ -352,7 +352,7 @@ Agent loops resend the whole context every iteration; providers reuse the KV cac
 Self-update is a fire-and-forget background check — it never blocks startup.
 
 - **Check:** `Updater.check()` fetches `latest.json` from the release base (GitHub Releases; `MMA_INSTALL_BASE` overrides, 5s timeout); the current version comes from `package.json` (`readMmaVersion()`).
-- **Install:** when a newer version exists and `autoInstall: true`, downloads the platform artifact, verifies `sha256`, extracts to `~/.mma/versions/<version>` and flips `~/.mma/current` (`Updater.install()` in `install-release.ts`, injectable fetch/extract for tests). The running process keeps working on the old version; the update applies on next launch.
+- **Install:** when a newer version exists and `autoInstall: true`, downloads the platform artifact, requires a valid `sha256`+`size` in the manifest, verifies both, extracts to a staging dir (`~/.mma/versions/<version>.tmp`), renames it to `~/.mma/versions/<version>`, and only then flips `~/.mma/current`; the previously active version is removed **after** a successful flip (`Updater.install()` in `install-release.ts`, injectable fetch/extract for tests). Archive members are listed first: absolute paths, `..` segments and symlinks/hardlinks are rejected; downloads are streamed with a cap (`size × 1.1 + 1 MiB`). The running process keeps working on the old version; the update applies on next launch. `stop()` resolves the idle promise immediately, and a second concurrent install is refused.
 - **Config** (`updater` in `~/.mma/updater.json`):
   - `enabled` (default `true`) — master switch; `false` = no check at all
   - `autoInstall` (default `false`) — auto-download/activate the release; `false` → only notify

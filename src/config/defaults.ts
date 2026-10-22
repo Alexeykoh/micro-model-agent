@@ -239,11 +239,13 @@ export const DEFAULTS: AppConfig = {
     port: 7331,
     host: "127.0.0.1",
     token: undefined,
+    tenant: undefined,
     resultRetentionDays: 7,
     idempotencyTtlHours: 24,
     syncWaitMs: 10_000,
     maxQueueLength: 5,
     callbackTimeoutMs: 10_000,
     webhookSecret: undefined,
+    webhookAllowHttp: false,
   },
 };

@@ -71,6 +71,13 @@ async function handleRequest(
     sendProblem(filtered, problem({ type: "validation", title: "unauthorized", status: 401 }));
     return;
   }
+  if (!tenantOk(req, s)) {
+    sendProblem(
+      filtered,
+      problem({ type: "tenantMismatch", title: "tenant does not match this process", status: 403 }),
+    );
+    return;
+  }
   if (reqUrl.pathname.startsWith("/v1/")) {
     await dispatch(req, filtered, reqUrl, s);
     return;
@@ -79,6 +86,21 @@ async function handleRequest(
     filtered,
     problem({ type: "validation", title: "not found", status: 404, detail: reqUrl.pathname }),
   );
+}
+
+/**
+ * Тенант запроса обязан совпадать с тенантом процесса (silo). Заголовок —
+ * не источник правды: без него работаем под тенантом процесса, с чужим —
+ * отказ, иначе один процесс обслуживал бы несколько тенантов (спека §10).
+ *
+ * DEBT(service-tier-scopes-control-plane): tier/scopes здесь не проверяются —
+ * их выдаёт control plane, а не рантайм (silo: 1 процесс = 1 тенант).
+ */
+function tenantOk(req: IncomingMessage, s: AgentServiceState): boolean {
+  const header = req.headers["x-mma-tenant"];
+  const requested = typeof header === "string" ? header.trim() : "";
+  if (!requested) return true;
+  return requested === s.tenant.tenantId;
 }
 
 /**
@@ -113,9 +135,16 @@ export function stopServiceServer(s: AgentServiceState): void {
     /* сервер уже закрыт */
   }
   s.server = undefined;
-  for (const pending of s.pendingQuestions.values()) pending.resolve(undefined);
+  if (s.pruneTimer) clearInterval(s.pruneTimer);
+  s.pruneTimer = undefined;
+  for (const pending of s.pendingQuestions.values()) {
+    if (pending.timer) clearTimeout(pending.timer);
+    pending.resolve(undefined);
+  }
   s.pendingQuestions.clear();
   s.clients.clear();
+  s.readyRate.clear();
+  s.readyCache = undefined;
   s.pool.clear();
   s.envelopes.clear();
 }

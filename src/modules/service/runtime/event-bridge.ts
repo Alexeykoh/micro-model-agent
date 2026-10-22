@@ -19,11 +19,20 @@ export interface ServiceForwarder {
   onToolStart(call: ToolCall): void;
   onToolEnd(call: ToolCall, result: ToolResult, durationMs: number): void;
   flush(): void;
+  /** Придерживает события (структурный вывод: пока не прошла валидация). */
+  hold(): void;
+  /** Отдаёт придержанные события наружу. */
+  release(): void;
+  /** Выбрасывает придержанные события (первая попытка не увидела свет). */
+  discard(): void;
+  /** Номер попытки, который уходит в конверт (`attempt`). */
+  setAttempt(attempt: number): void;
 }
 
 /** Опции моста: куда эмитить типы и через какой интервал флашить буфер. */
 export interface ServiceForwarderOptions {
-  emit: (type: string, data: unknown) => void;
+  /** `attempt` — номер попытки вывода (для retry структурного ответа). */
+  emit: (type: string, data: unknown, attempt: number) => void;
   flushMs?: number;
 }
 
@@ -34,6 +43,15 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
   const flushMs = opts.flushMs ?? DEFAULT_FLUSH_MS;
   const buf = { text: "", reasoning: "" };
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let attempt = 1;
+  /** Непустой массив — события придержаны до `release`/`discard`. */
+  let held: Array<{ type: string; data: unknown }> | null = null;
+
+  const deliver = (type: string, data: unknown): void => opts.emit(type, data, attempt);
+  const emit = (type: string, data: unknown): void => {
+    if (held) held.push({ type, data });
+    else deliver(type, data);
+  };
 
   const flush = (): void => {
     if (timer) {
@@ -41,11 +59,11 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
       timer = null;
     }
     if (buf.reasoning) {
-      opts.emit("reasoning.delta", { chunk: stripAnsi(buf.reasoning) });
+      emit("reasoning.delta", { chunk: stripAnsi(buf.reasoning) });
       buf.reasoning = "";
     }
     if (buf.text) {
-      opts.emit("text.delta", { chunk: stripAnsi(buf.text) });
+      emit("text.delta", { chunk: stripAnsi(buf.text) });
       buf.text = "";
     }
   };
@@ -64,11 +82,11 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
     },
     onPhase(phase) {
       flush();
-      opts.emit("phase", { phase });
+      emit("phase", { phase });
     },
     onToolStart(call) {
       flush();
-      opts.emit("tool.start", {
+      emit("tool.start", {
         toolCallId: call.id,
         name: call.name,
         args: scrubToolArgs(call.arguments),
@@ -76,7 +94,7 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
     },
     onToolEnd(call, result, durationMs) {
       flush();
-      opts.emit("tool.end", {
+      emit("tool.end", {
         toolCallId: call.id,
         name: call.name,
         success: result.success,
@@ -85,5 +103,27 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
       });
     },
     flush,
+    hold() {
+      if (!held) held = [];
+    },
+    release() {
+      if (!held) return;
+      flush();
+      const pending = held;
+      held = null;
+      for (const event of pending) deliver(event.type, event.data);
+    },
+    discard() {
+      held = null;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      buf.text = "";
+      buf.reasoning = "";
+    },
+    setAttempt(next) {
+      attempt = next;
+    },
   };
 }

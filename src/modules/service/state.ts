@@ -40,12 +40,24 @@ export interface ServiceDeps {
   preflight?: () => Promise<{ ok: boolean; reason: string }>;
   /** Интервал SSE keep-alive `: ping` (мс); тестовый оверрайд. */
   keepaliveMs?: number;
+  /** Кап конкурентных SSE-клиентов (дефолт 32); тестовый оверрайд. */
+  maxSseClients?: number;
+  /** Idle-таймаут SSE без событий (дефолт 120 000 мс); тестовый оверрайд. */
+  sseIdleMs?: number;
+  /** TTL висящего вопроса (дефолт 30 мин); тестовый оверрайд. */
+  questionTtlMs?: number;
+  /** Кап висящих вопросов (дефолт 100); тестовый оверрайд. */
+  maxPendingQuestions?: number;
+  /** Интервал prune реестра задач (дефолт 60 000 мс); тестовый оверрайд. */
+  pruneIntervalMs?: number;
 }
 
 /** Подключённый SSE-клиент одной сессии. */
 export interface ServiceClient {
   sessionId: string;
   lastEventId: number;
+  /** Когда клиенту последний раз уходили данные (событие или ping). */
+  lastEventAt: number;
   send: (frame: string) => void;
 }
 
@@ -60,13 +72,40 @@ export interface AgentServiceState {
   agentRunning: boolean;
   turnSeq: number;
   clients: Set<ServiceClient>;
-  pendingQuestions: Map<string, { resolve: (value: unknown) => void; sessionId?: string; taskId?: string }>;
+  pendingQuestions: Map<
+    string,
+    {
+      resolve: (value: unknown) => void;
+      sessionId?: string;
+      taskId?: string;
+      /** Таймер TTL висящего вопроса (unref); снимается при резолве. */
+      timer?: ReturnType<typeof setTimeout>;
+    }
+  >;
+  /** Периодический prune реестра задач (retention/idempotency TTL). */
+  pruneTimer?: ReturnType<typeof setInterval>;
+  /** Кэш readiness-пробы: живой LLM-запрос не на каждый `/v1/ready`. */
+  readyCache?: { at: number; result: { ok: boolean; reason: string } };
+  /** Rate-limit `/v1/ready` по адресу клиента (6/мин). */
+  readyRate: Map<string, { count: number; resetAt: number }>;
+  /** Кап конкурентных SSE-подписок (тестовый оверрайд — `deps.maxSseClients`). */
+  maxSseClients: number;
+  /** Idle-таймаут SSE без событий (мс). */
+  sseIdleMs: number;
+  /** TTL висящего вопроса (мс). */
+  questionTtlMs: number;
+  /** Кап висящих вопросов на процесс. */
+  maxPendingQuestions: number;
   server?: Server;
   starting?: Promise<string>;
   host: string;
   port: number;
   token?: string;
-  tenant?: TenantContext;
+  /**
+   * Тенант процесса (silo): авторитетный источник для authz. Заголовок
+   * `X-Mma-Tenant` только сверяется с ним (см. `tenantOk` в server).
+   */
+  tenant: TenantContext;
   /** Интервал SSE keep-alive (мс). */
   keepaliveMs: number;
   startedAt: number;
@@ -79,12 +118,24 @@ function parseEnvInt(raw: string | undefined): number | undefined {
   return Number.isInteger(n) ? n : undefined;
 }
 
+/**
+ * Тенант процесса: env `MMA_SERVICE_TENANT` перекрывает `service.tenant`.
+ * Не задан — пустой контекст (один безымянный тенант на процесс).
+ */
+function processTenant(sg: AppConfig["service"]): TenantContext {
+  const tenantId = readEnv("SERVICE_TENANT")?.trim() || sg.tenant;
+  return tenantId ? { tenantId } : {};
+}
+
+/** Интервал фонового prune реестра задач. */
+const PRUNE_INTERVAL_MS = 60_000;
+
 /** Создаёт состояние сервиса и привязывает фабрику раннеров, если дана. */
 export function createServiceState(deps: ServiceDeps): AgentServiceState {
   const sg = deps.config.service;
   const pool = new RunPool(undefined, sg.maxQueueLength);
   if (deps.spawnRunner) pool.setFactory(deps.spawnRunner);
-  return {
+  const state: AgentServiceState = {
     deps,
     config: deps.config,
     pool,
@@ -98,10 +149,23 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     turnSeq: 0,
     clients: new Set(),
     pendingQuestions: new Map(),
+    readyRate: new Map(),
+    maxSseClients: deps.maxSseClients ?? 32,
+    sseIdleMs: deps.sseIdleMs ?? 120_000,
+    questionTtlMs: deps.questionTtlMs ?? 30 * 60_000,
+    maxPendingQuestions: deps.maxPendingQuestions ?? 100,
     host: deps.host ?? readEnv("SERVICE_HOST") ?? sg.host,
     port: deps.port ?? parseEnvInt(readEnv("SERVICE_PORT")) ?? sg.port,
     token: deps.token ?? readEnv("SERVICE_TOKEN") ?? sg.token,
+    tenant: processTenant(sg),
     keepaliveMs: deps.keepaliveMs ?? 20_000,
     startedAt: Date.now(),
   };
+  const pruneTimer = setInterval(
+    () => state.tasks.prune(),
+    deps.pruneIntervalMs ?? PRUNE_INTERVAL_MS,
+  );
+  (pruneTimer as { unref?: () => void }).unref?.();
+  state.pruneTimer = pruneTimer;
+  return state;
 }

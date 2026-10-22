@@ -2690,6 +2690,14 @@ it("completes absolute paths", () => {
 
 # Волна 10 — Service API и updater (находки §9)
 
+> **Исполнено 2026-10-22** (`fix/harness-audit-w10-service`). Отклонения от плана:
+> (1) 10.1 — модель silo: тенант процесса `service.tenant`/`MMA_SERVICE_TENANT`,
+> а не `service.tenants`/`service.tiers`; tier/scopes отложены в
+> `DEBT(service-tier-scopes-control-plane)` и снимаются вместе с ней.
+> (2) 10.6 — id сессий: `crypto.randomBytes` + 16 строчных букв (не hex): hex-суффикс
+> мог содержать `\d{10}`, и DLP-детектор подменял id на `<PII:…>` в ответе
+> `GET /v1/sessions` (см. `DEBT(dlp-iso-timestamp-false-positive)`).
+
 ## Task 10.1: Авторизация по тенанту (§9.1)
 
 **Files:**
@@ -2699,7 +2707,7 @@ it("completes absolute paths", () => {
 - Modify: `src/modules/service/state.ts` (`TaskRecord.tenant`)
 - Test: `tests/service/tenant-authz.test.ts` (new)
 
-- [ ] **Step 1: Падающие тесты:**
+- [x] **Step 1: Падающие тесты:**
 
 ```ts
 it("cannot read another tenant's job", async () => {
@@ -2713,8 +2721,8 @@ it("tier and scopes are enforced", async () => {
 });
 ```
 
-- [ ] **Step 2: Запустить** → FAIL.
-- [ ] **Step 3: Реализовать.**
+- [x] **Step 2: Запустить** → FAIL.
+- [x] **Step 3: Реализовать.**
   1. `TaskRecord` += `tenantId`, `principalId`, `tier`, `scopes` (из заголовков).
   2. `tenantOf(req)` — нормализовать и **не** доверять слепо: `principalId` должен быть
      либо подписан токеном, либо сопоставлен с `tenantId` через конфиг `service.tenants`
@@ -2724,8 +2732,8 @@ it("tier and scopes are enforced", async () => {
      ⇒ `404` при несовпадении (не `403`, чтобы не подтверждать существование).
   4. `tier`/`scopes` — проверка в `run-task.ts` перед запуском: минимальный `tier`
      и требуемые `scopes` из `service.tiers`.
-- [ ] **Step 4: Зелено.** `bun test tests/service/`
-- [ ] **Step 5: Коммит** `fix(service): authorize every lookup by tenant`
+- [x] **Step 4: Зелено.** `bun test tests/service/`
+- [x] **Step 5: Коммит** `fix(service): authorize every lookup by tenant`
 
 ## Task 10.2: Idempotency и вопросы (§9.2, §9.3)
 
@@ -2734,7 +2742,7 @@ it("tier and scopes are enforced", async () => {
 - Modify: `src/modules/service/runtime/prompt-io.ts:118-129`
 - Test: `tests/service/idempotency-tenant.test.ts` (new)
 
-- [ ] **Step 1: Падающие тесты:**
+- [x] **Step 1: Падающие тесты:**
 
 ```ts
 it("an idempotent hit cannot be claimed by spoofing the principal header", async () => {
@@ -2750,16 +2758,16 @@ it("cannot answer another task's question", async () => {
 });
 ```
 
-- [ ] **Step 2: Запустить** → FAIL.
-- [ ] **Step 3: Реализовать.**
+- [x] **Step 2: Запустить** → FAIL.
+- [x] **Step 3: Реализовать.**
   1. Ключ идемпотентности — `(tenantId, key)`, где `tenantId` — **проверенный**
      (Task 10.1), а не заголовок. `resolveIdempotentSubmit` дополнительно сверяет
      хэш тела (`hashBody` — канонический JSON: сортировка ключей, нормализация чисел).
   2. `answer()` — `resolveAnswer(s, id, value, { taskId: jobId, sessionId })`;
      несовпадение ⇒ `404`. `pendingQuestions` получает TTL
      (`QUESTION_TTL_MS = 30 * 60_000`) и кап (100 на процесс).
-- [ ] **Step 4: Зелено.** `bun test tests/service/`
-- [ ] **Step 5: Коммит** `fix(service): bind idempotency and answers to the tenant and task`
+- [x] **Step 4: Зелено.** `bun test tests/service/`
+- [x] **Step 5: Коммит** `fix(service): bind idempotency and answers to the tenant and task`
 
 ## Task 10.3: Утечки реестра задач (§9.4)
 
@@ -2769,7 +2777,7 @@ it("cannot answer another task's question", async () => {
 - Modify: `src/modules/service/api/tasks-api.ts:194-208`, `:292-306`
 - Test: `tests/service/retention.test.ts` (new)
 
-- [ ] **Step 1: Падающие тесты:**
+- [x] **Step 1: Падающие тесты:**
 
 ```ts
 it("prunes expired tasks automatically", async () => {
@@ -2783,8 +2791,8 @@ it("clears wait: timers when the task wins the race", async () => { /* spy clear
 it("notifies a webhook subscriber when enqueue fails", async () => { /* ... */ });
 ```
 
-- [ ] **Step 2: Запустить** → FAIL.
-- [ ] **Step 3: Реализовать.**
+- [x] **Step 2: Запустить** → FAIL.
+- [x] **Step 3: Реализовать.**
   1. `prune()` вызывать из таймера (раз в минуту) **и** при каждом `create`;
      `TaskRecord.expiresAt` из `resultRetentionDays`.
   2. `emit.ts` — кап `TASK_EVENTS_MAX = 2000` с вытеснением старых.
@@ -2792,8 +2800,8 @@ it("notifies a webhook subscriber when enqueue fails", async () => { /* ... */ }
      `rec.waiters` при отправке 202.
   4. `:194-208` — при отказе enqueue вызвать `sendWebhook` со статусом `failed`.
   5. Идемпотентный путь — уважать `wait` и возвращать 200 при кэшированном результате.
-- [ ] **Step 4: Зелено.** `bun test tests/service/`
-- [ ] **Step 5: Коммит** `fix(service): bound and prune the task registry`
+- [x] **Step 4: Зелено.** `bun test tests/service/`
+- [x] **Step 5: Коммит** `fix(service): bound and prune the task registry`
 
 ## Task 10.4: SSRF и подпись webhook (§9.5, §9.6)
 
@@ -2802,7 +2810,7 @@ it("notifies a webhook subscriber when enqueue fails", async () => { /* ... */ }
 - Modify: `src/modules/service/runtime/webhook.ts:12-95`
 - Test: `tests/service/webhook-ssrf.test.ts` (new)
 
-- [ ] **Step 1: Падающие тесты:**
+- [x] **Step 1: Падающие тесты:**
 
 ```ts
 it("refuses a callback URL pointing at a private address", async () => {
@@ -2815,8 +2823,8 @@ it("exposes a timing-safe verification helper and a replay window", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить** → FAIL.
-- [ ] **Step 3: Реализовать.**
+- [x] **Step 2: Запустить** → FAIL.
+- [x] **Step 3: Реализовать.**
   1. `tasks-api.ts:240` — `callbackUrl` через `isUrlAllowed` + схема `https` (http
      только для loopback с явного флага `service.webhook.allowHttp`).
   2. `webhook.ts` — добавить `verifySignature(rawBody, header, secret, windowMs)`
@@ -2827,8 +2835,8 @@ it("exposes a timing-safe verification helper and a replay window", () => {
      общий дедлайн доставки `WEBHOOK_DEADLINE_MS = 120_000`.
   4. `statusAction` — 3xx считать терминальным (не ретраить), либо следовать
      redirect только после повторной валидации URL.
-- [ ] **Step 4: Зелено.** `bun test tests/service/webhook-ssrf.test.ts tests/service/webhook.test.ts`
-- [ ] **Step 5: Коммит** `fix(service): validate webhook URLs and add signature verification`
+- [x] **Step 4: Зелено.** `bun test tests/service/webhook-ssrf.test.ts tests/service/webhook.test.ts`
+- [x] **Step 5: Коммит** `fix(service): validate webhook URLs and add signature verification`
 
 ## Task 10.5: `/v1/ready`, SSE-лимиты, structured output (§9.7, §9.8)
 
@@ -2839,7 +2847,7 @@ it("exposes a timing-safe verification helper and a replay window", () => {
 - Modify: `src/modules/service/runtime/run-task.ts:113-135`
 - Test: `tests/service/output-strict.test.ts` (new), `tests/service/sse-limits.test.ts` (new)
 
-- [ ] **Step 1: Падающие тесты:**
+- [x] **Step 1: Падающие тесты:**
 
 ```ts
 it("rejects a schema with an unknown type instead of silently passing", async () => {
@@ -2852,8 +2860,8 @@ it("caps concurrent SSE connections", async () => { /* 6th → 503 */ });
 it("/v1/ready does not call the provider on every request", async () => { /* cached */ });
 ```
 
-- [ ] **Step 2: Запустить** → FAIL.
-- [ ] **Step 3: Реализовать.**
+- [x] **Step 2: Запустить** → FAIL.
+- [x] **Step 3: Реализовать.**
   1. `health.ts` — кэш `preflight` на `READY_CACHE_MS = 30_000`; на cache-hit
      отдавать `ready` без обращения к провайдеру; rate-limit 6/мин по IP.
   2. `events-api.ts` — `MAX_SSE_CLIENTS` (по умолчанию 32), отказ `503`;
@@ -2865,8 +2873,8 @@ it("/v1/ready does not call the provider on every request", async () => { /* cac
      ⇒ ошибка схемы.
   5. `run-task.ts:113-135` — буферизовать события первой попытки и **не** флашить
      в SSE до успешной валидации; в конверт добавить поле `attempt`.
-- [ ] **Step 4: Зелено.** `bun test tests/service/`
-- [ ] **Step 5: Коммит** `fix(service): strict output schemas, bounded SSE, cached readiness`
+- [x] **Step 4: Зелено.** `bun test tests/service/`
+- [x] **Step 5: Коммит** `fix(service): strict output schemas, bounded SSE, cached readiness`
 
 ## Task 10.6: Установка апдейта (§9.9, §9.10, §9.11)
 
@@ -2876,7 +2884,7 @@ it("/v1/ready does not call the provider on every request", async () => { /* cac
 - Modify: `src/modules/session/manager.ts:71` (идентификаторы)
 - Test: `tests/updater-module.test.ts` (дополнить), `tests/updater-install-atomic.test.ts` (new)
 
-- [ ] **Step 1: Падающие тесты:**
+- [x] **Step 1: Падающие тесты:**
 
 ```ts
 it("refuses to install an artifact without a checksum", async () => {
@@ -2899,8 +2907,8 @@ it("generates unpredictable session ids", () => {
 });
 ```
 
-- [ ] **Step 2: Запустить** → FAIL.
-- [ ] **Step 3: Реализовать.**
+- [x] **Step 2: Запустить** → FAIL.
+- [x] **Step 3: Реализовать.**
   1. `install-release.ts:48` — `if (!artifact.sha256) throw new Error("manifest has no sha256")`;
      при несовпадении — также требовать совпадения `artifact.size`.
   2. Установка — `versions/<v>.tmp` → проверка → `rename` в `versions/<v>` →
@@ -2917,8 +2925,8 @@ it("generates unpredictable session ids", () => {
      а не ждёт мёртвый таймер; `installInProgress` — флаг с отказом на второй запрос.
   8. `session/manager.ts:71` — `ses_<8 hex времени36>_<16 hex crypto.randomBytes>`.
      Старые id остаются валидными (regex допускает оба формата).
-- [ ] **Step 4: Зелено.** `bun test tests/updater-*.test.ts tests/session/`
-- [ ] **Step 5: Коммит** `fix(updater): verify and install atomically`
+- [x] **Step 4: Зелено.** `bun test tests/updater-*.test.ts tests/session/`
+- [x] **Step 5: Коммит** `fix(updater): verify and install atomically`
 
 ---
 

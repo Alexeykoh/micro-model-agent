@@ -58,6 +58,16 @@ export interface ServiceDepsOptions {
   preflight?: () => Promise<{ ok: boolean; reason: string }>;
   /** Интервал SSE keep-alive (мс). */
   keepaliveMs?: number;
+  /** Кап конкурентных SSE-клиентов (тестовый оверрайд). */
+  maxSseClients?: number;
+  /** Idle-таймаут SSE без событий (тестовый оверрайд). */
+  sseIdleMs?: number;
+  /** TTL висящего вопроса (тестовый оверрайд). */
+  questionTtlMs?: number;
+  /** Кап висящих вопросов (тестовый оверрайд). */
+  maxPendingQuestions?: number;
+  /** Интервал prune реестра (тестовый оверрайд). */
+  pruneIntervalMs?: number;
 }
 
 /** Депы сервиса: конфиг из DEFAULTS, SessionManager с одной тестовой сессией. */
@@ -85,6 +95,11 @@ export function makeServiceDeps(opts: ServiceDepsOptions): ServiceDeps {
   if (opts.webhookFetch) deps.webhookFetch = opts.webhookFetch;
   if (opts.preflight) deps.preflight = opts.preflight;
   if (opts.keepaliveMs !== undefined) deps.keepaliveMs = opts.keepaliveMs;
+  if (opts.maxSseClients !== undefined) deps.maxSseClients = opts.maxSseClients;
+  if (opts.sseIdleMs !== undefined) deps.sseIdleMs = opts.sseIdleMs;
+  if (opts.questionTtlMs !== undefined) deps.questionTtlMs = opts.questionTtlMs;
+  if (opts.maxPendingQuestions !== undefined) deps.maxPendingQuestions = opts.maxPendingQuestions;
+  if (opts.pruneIntervalMs !== undefined) deps.pruneIntervalMs = opts.pruneIntervalMs;
   return deps;
 }
 

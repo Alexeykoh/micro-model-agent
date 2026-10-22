@@ -160,6 +160,16 @@ Markdown), `tests/ui/table-fit.test.ts` (таблицы влезают в тер
 `tests/cli/completer-cursor.test.ts` (комплитер по курсору), `tests/i18n.test.ts`
 (паритет ключей и плейсхолдеров).
 
+Service API и updater (волна W10) держат: `tests/service/tenant-authz.test.ts`
+(тенант процесса и 403 на чужой заголовок), `tests/service/idempotency-tenant.test.ts`
+(principal/вопросы), `tests/service/retention.test.ts` (prune/кап событий/waiter),
+`tests/service/webhook-ssrf.test.ts` (https/SSRF, подпись, дедлайн),
+`tests/service/output-strict.test.ts` и `output-attempt.test.ts` (строгая схема,
+первая попытка не в SSE), `tests/service/sse-limits.test.ts` (ready-кэш/троттл,
+кап и idle SSE, отмена последним подписчиком), `tests/updater-install-atomic.test.ts`
+(sha256+size, staged/flip, tar, `stop()`), `tests/session/session-id.test.ts`
+(криптостойкий id без PII-серий).
+
 Живой прогон на 9B (2026-10-22) вскрыл два дефекта, закрытых гвардами:
 `tests/core/system-prompt-freeze.test.ts` (карта проекта — снимок на ход:
 изменение карты рвало KV-кеш префикса, стабильность 51% → 99%) и

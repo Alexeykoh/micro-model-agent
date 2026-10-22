@@ -216,6 +216,9 @@ export const SCHEMAS: Record<string, JsonSchema> = {
       type: { type: "string", enum: EVENT_TYPES },
       sessionId: string(),
       taskId: string(),
+      attempt: integer({
+        description: "Номер попытки вывода при retry структурного ответа (`attempt >= 2`).",
+      }),
       data: { description: "Полезная нагрузка, форма зависит от `type`." },
     },
   },

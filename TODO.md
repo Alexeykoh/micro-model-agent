@@ -1,6 +1,6 @@
 # TODO — Micro Models Agent
 
-> **Актуально на 2026-10-20** (`master` @ 0.9.1).
+> **Актуально на 2026-10-22** (`master` @ 0.9.1).
 >
 > Этот файл — только **открытая** работа. Закрытые пункты здесь не хранятся:
 > история — в `CHANGELOG.md`, `docs/agents/feature-history.md` и коммитах.
@@ -90,6 +90,21 @@
 - [ ] **W1/W2 — петля:** директивы, переживающие компакцию; `stopReason="duplicate"`;
       привязка evidence к ходу; `overcommitted`; `imageTokenCost`; `skipped_no_reduction`;
       `hardDropOldest` по `this.compactedBlock`.
+- [x] **W10 — service API и updater:** сделано 2026-10-22 — тенант — свойство процесса
+      (`service.tenant`, `X-Mma-Tenant` только сверяется), идемпотентность скоупится
+      тенантом и principal'ом (канонический хэш тела), ответ только для вопроса своей
+      задачи (TTL 30 мин, кап 100), retention/prune и кап `task.events`, webhook: https +
+      SSRF до и во время доставки, timing-safe `verifySignature` с окном replay, один
+      timestamp на доставку, 3xx терминален; `/v1/ready` кэшируется и троттлится, SSE
+      капнут/идли-таймаут/backpressure, strict-схема structured output и `attempt` у
+      retry; установка апдейта: обязательные sha256+size, staged->rename->flip, проверка
+      членов tar, кап скачивания, `stop()` резолвит idle, конкурентная установка
+      отклоняется; id сессий — `crypto.randomBytes` без цифровых серий (иначе DLP
+      принимал id за паспорт). Долги: `service-tier-scopes-control-plane`,
+      `dlp-iso-timestamp-false-positive`. Гейты: `tests/service/tenant-authz.test.ts`,
+      `idempotency-tenant.test.ts`, `retention.test.ts`, `webhook-ssrf.test.ts`,
+      `output-strict.test.ts`, `output-attempt.test.ts`, `sse-limits.test.ts`,
+      `tests/updater-install-atomic.test.ts`, `tests/session/session-id.test.ts`.
 - [ ] **W0.2/W9:** метрика прогресса хода в `llm_usage`; `writeModal`/меню `question`;
       i18n-паритет терминального markdown.
 
@@ -191,7 +206,7 @@
 - [ ] Подобрать литературу по верификации/критикам (вторая половина пункта
       «контр-агент для проверки работы»; сам контр-агент сделан — `src/modules/critic/`).
 - [ ] Долги из [`docs/agents/debt.md`](./docs/agents/debt.md) — каждый оплачивается
-      по своему триггеру (правило 9). Активных записей: 15.
+      по своему триггеру (правило 9). Активных записей: 17.
 
 ---
 

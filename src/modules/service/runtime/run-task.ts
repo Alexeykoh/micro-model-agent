@@ -111,28 +111,35 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
     : task.input;
 
   try {
+    // Структурный вывод: события первой попытки не показываем, пока ответ не
+    // прошёл валидацию; провал — попытка не увидела свет вовсе (attempt=2).
+    if (wantsJson) forwarder.hold();
     let result = await callAgent(baseInput);
     if (wantsJson && result.success && task.output) {
       const parsed = parseStructured(result.text, task.output);
-      if (!parsed.ok) {
-        const retryInput = `${baseInput}\n\nPrevious attempt failed validation: ${parsed.detail}. Return ONLY valid JSON.`;
-        result = await callAgent(retryInput);
-        const retryParsed = parseStructured(result.text, task.output);
+      if (parsed.ok) {
+        forwarder.release();
         forwarder.flush();
-        if (!retryParsed.ok) {
-          return finish({
-            success: false,
-            text: result.text,
-            usage: usageOf(result),
-            outputInvalid: true,
-            error: `output_invalid: ${retryParsed.detail}`,
-          });
-        }
-        return finish({ success: true, text: result.text, data: retryParsed.data, usage: usageOf(result) });
+        return finish({ success: true, text: result.text, data: parsed.data, usage: usageOf(result) });
       }
+      forwarder.discard();
+      forwarder.setAttempt(2);
+      const retryInput = `${baseInput}\n\nPrevious attempt failed validation: ${parsed.detail}. Return ONLY valid JSON.`;
+      result = await callAgent(retryInput);
+      const retryParsed = parseStructured(result.text, task.output);
       forwarder.flush();
-      return finish({ success: true, text: result.text, data: parsed.data, usage: usageOf(result) });
+      if (!retryParsed.ok) {
+        return finish({
+          success: false,
+          text: result.text,
+          usage: usageOf(result),
+          outputInvalid: true,
+          error: `output_invalid: ${retryParsed.detail}`,
+        });
+      }
+      return finish({ success: true, text: result.text, data: retryParsed.data, usage: usageOf(result) });
     }
+    forwarder.release();
     forwarder.flush();
     return finish({
       success: result.success,
@@ -141,6 +148,7 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
       ...(result.error ? { error: result.error } : {}),
     });
   } catch (err) {
+    forwarder.discard();
     forwarder.flush();
     return finish({
       success: false,

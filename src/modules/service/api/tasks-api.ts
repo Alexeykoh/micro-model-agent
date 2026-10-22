@@ -6,14 +6,13 @@
  * дедуплицирует повтор; `wait:true` синхронно ждёт до `service.syncWaitMs`.
  * Статус/результат читаются pull'ом; webhook — оптимизация (Фаза 7).
  */
-import { createHash } from "node:crypto";
-import type { IncomingMessage, ServerResponse } from "node:http";
-import type { SessionRunner } from "../../../core/bootstrap/session-runner";
+import type { IncomingMessage, ServerResponse } from "node:http";import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 
 import { errMsg } from "../../../utils/error";
 import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
 import { problem, type ProblemDetails } from "../runtime/problem";
 import { emitEvent } from "../runtime/emit";
+import { hashBody } from "../runtime/body-hash";
 import { makeServiceForwarder } from "../runtime/event-bridge";
 import { cancelTaskQuestions, installServicePromptIO, resolveAnswer } from "../runtime/prompt-io";
 import { runTask, type RunTaskResult } from "../runtime/run-task";
@@ -91,17 +90,29 @@ async function submit(
 
   const body = await readJson(req, res);
   if (!body) return true;
-  const parsed = parseSubmitBody(body, s.config.security?.network);
+  const parsed = parseSubmitBody(body, {
+    networkConfig: s.config.security?.network,
+    allowHttpCallback: s.config.service.webhookAllowHttp ?? false,
+  });
   if (!parsed.ok) {
     sendProblem(res, parsed.problem);
     return true;
   }
 
-  const tenant = tenantOf(req);
+  const tenant = tenantOf(req, s);
   const idemKey = headerString(req, "idempotency-key");
+  const tenantKey = s.tenant.tenantId ?? "";
 
-  const dedupe = resolveIdempotentSubmit(res, s, body, tenant, idemKey);
-  if (dedupe.handled) return true;
+  const dedupe = resolveIdempotentSubmit(s, body, tenant.principalId ?? "anon", tenantKey, idemKey);
+  if (dedupe.kind === "conflict") {
+    sendProblem(res, problem({ type: "idempotencyConflict", title: "idempotency key reused with a different body or principal", status: 409 }));
+    return true;
+  }
+  if (dedupe.kind === "hit") {
+    return parsed.params.wait
+      ? await respondSubmitWait(res, s, dedupe.task)
+      : respondSubmit(res, s, dedupe.task);
+  }
 
   const created = createAndDispatch(s, sessionId, parsed.params, tenant);
   if (!created.ok) {
@@ -110,6 +121,7 @@ async function submit(
   }
   if (idemKey) {
     s.tasks.recordIdempotency(
+      tenantKey,
       tenant.principalId ?? "anon",
       idemKey,
       hashBody(body),
@@ -123,29 +135,23 @@ async function submit(
 
 /**
  * Идемпотентность сабмита: тот же `Idempotency-Key` с тем же телом отдаёт
- * готовую задачу, с другим — `409`. Ответы и запись ключа — здесь, чтобы
- * `submit` не рос в ветвлениях.
+ * готовую задачу, с другим (или под другим principal) — `409`. Ответы — в
+ * `submit`, чтобы `wait:true` одинаково работал для hit и miss.
  */
 function resolveIdempotentSubmit(
-  res: ServerResponse,
   s: AgentServiceState,
   body: Record<string, unknown>,
-  tenant: TenantContext,
+  principal: string,
+  tenantKey: string,
   idemKey: string | undefined,
-): { handled: boolean } {
-  if (!idemKey) return { handled: false };
-  const principal = tenant.principalId ?? "anon";
+): { kind: "none" } | { kind: "conflict" } | { kind: "hit"; task: TaskRecord } {
+  if (!idemKey) return { kind: "none" };
   const bodyHash = hashBody(body);
-  const early = checkIdempotency(s, principal, idemKey, bodyHash);
-  if (early.kind === "conflict") {
-    sendProblem(res, problem({ type: "idempotencyConflict", title: "idempotency key reused with a different body", status: 409 }));
-    return { handled: true };
-  }
-  if (early.kind === "hit") {
-    respondSubmit(res, s, early.task);
-    return { handled: true };
-  }
-  return { handled: false };
+  const lookup = s.tasks.checkIdempotency(tenantKey, principal, idemKey, bodyHash);
+  if (lookup.kind === "conflict") return { kind: "conflict" };
+  if (lookup.kind !== "hit") return { kind: "none" };
+  const task = s.tasks.get(lookup.jobId);
+  return task ? { kind: "hit", task } : { kind: "none" };
 }
 
 /** Проверяет наличие менеджера сессий и самой сессии; пишет Problem при провале. */
@@ -160,25 +166,6 @@ function ensureSession(s: AgentServiceState, res: ServerResponse, sessionId: str
     return false;
   }
   return true;
-}
-
-/** Итог проверки Idempotency-Key: нет ключа / hit (готовая задача) / конфликт тела. */
-type IdemCheck = { kind: "none" } | { kind: "conflict" } | { kind: "hit"; task: TaskRecord };
-
-function checkIdempotency(
-  s: AgentServiceState,
-  principal: string,
-  key: string | undefined,
-  bodyHash: string,
-): IdemCheck {
-  if (!key) return { kind: "none" };
-  const lookup = s.tasks.checkIdempotency(principal, key, bodyHash);
-  if (lookup.kind === "conflict") return { kind: "conflict" };
-  if (lookup.kind === "hit") {
-    const task = s.tasks.get(lookup.jobId);
-    if (task) return { kind: "hit", task };
-  }
-  return { kind: "none" };
 }
 
 /** Создаёт задачу и ставит её в прогон/очередь; `false` — очередь сессии полна. */
@@ -222,6 +209,8 @@ function enqueueTask(s: AgentServiceState, task: TaskRecord): boolean {
       status: "failed",
       error: problem({ type: "queueFull", title: "session queue is full", status: 429 }),
     });
+    // Отказ enqueue — тоже терминальный исход: подписчик на webhook не должен ждать.
+    sendWebhook(s, task);
     return false;
   }
   emitEvent(s, task, "task.accepted", {});
@@ -232,19 +221,22 @@ function queueFull(s: AgentServiceState, sessionId: string): boolean {
   return s.pool.isBusy(sessionId) && s.pool.queueLen(sessionId) >= s.config.service.maxQueueLength;
 }
 
-/** `wait:true` — ждём завершения до `syncWaitMs`, иначе 202. */
+/** `wait:true` — ждём завершения до `syncWaitMs`, иначе 202 (таймер снимается). */
 async function respondSubmitWait(
   res: ServerResponse,
   s: AgentServiceState,
   task: TaskRecord,
 ): Promise<boolean> {
-  const settled = await Promise.race([
-    s.tasks.whenFinished(task.jobId),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), s.config.service.syncWaitMs)),
-  ]);
-  if (settled) {
-    sendJson(res, 200, toJobObject(settled));
-    return true;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), s.config.service.syncWaitMs);
+  try {
+    const settled = await s.tasks.whenFinished(task.jobId, controller.signal);
+    if (settled) {
+      sendJson(res, 200, toJobObject(settled));
+      return true;
+    }
+  } finally {
+    clearTimeout(timer);
   }
   return respondSubmit(res, s, task);
 }
@@ -287,7 +279,7 @@ async function startTask(s: AgentServiceState, task: TaskRecord): Promise<void> 
   const restoreTools = restrictTools(runner, task);
 
   const forwarder = makeServiceForwarder({
-    emit: (type, data) => emitEvent(s, task, type, data),
+    emit: (type, data, attempt) => emitEvent(s, task, type, data, attempt),
   });
   const disarmTimeout = armTimeout(task, runner);
 
@@ -466,6 +458,7 @@ function sendWebhook(s: AgentServiceState, task: TaskRecord): void {
     egress: apiGuard({ config: s.config, workspace: s.deps.baseDir }),
     timeoutMs: s.config.service.callbackTimeoutMs,
     networkConfig: s.config.security?.network,
+    allowHttp: s.config.service.webhookAllowHttp ?? false,
     onDiagnostic: (diag) => {
       defaultOutputBus.log("warn", diag.source, `${diag.operation}: ${diag.cause}`, {
         diagnostic: true,
@@ -479,8 +472,18 @@ function sendWebhook(s: AgentServiceState, task: TaskRecord): void {
 
 // ── Status / Cancel / Answer ──────────────────────────────────────────────
 
-function status(res: ServerResponse, s: AgentServiceState, jobId: string): boolean {
+/**
+ * Задача, принадлежащая тенанту процесса. Чужая/неизвестная → `undefined`
+ * (404: не подтверждаем существование чужой задачи).
+ */
+function ownedTask(s: AgentServiceState, jobId: string): TaskRecord | undefined {
   const rec = s.tasks.get(jobId);
+  if (!rec) return undefined;
+  return (rec.tenant?.tenantId ?? undefined) === (s.tenant.tenantId ?? undefined) ? rec : undefined;
+}
+
+function status(res: ServerResponse, s: AgentServiceState, jobId: string): boolean {
+  const rec = ownedTask(s, jobId);
   if (!rec) {
     sendProblem(res, problem({ type: "noTask", title: "task not found", status: 404, detail: jobId }));
     return true;
@@ -490,7 +493,7 @@ function status(res: ServerResponse, s: AgentServiceState, jobId: string): boole
 }
 
 function cancel(res: ServerResponse, s: AgentServiceState, jobId: string): boolean {
-  const rec = s.tasks.get(jobId);
+  const rec = ownedTask(s, jobId);
   if (!rec) {
     sendProblem(res, problem({ type: "noTask", title: "task not found", status: 404, detail: jobId }));
     return true;
@@ -536,7 +539,7 @@ async function answer(
   s: AgentServiceState,
   jobId: string,
 ): Promise<boolean> {
-  const rec = s.tasks.get(jobId);
+  const rec = ownedTask(s, jobId);
   if (!rec) {
     sendProblem(res, problem({ type: "noTask", title: "task not found", status: 404, detail: jobId }));
     return true;
@@ -552,7 +555,7 @@ async function answer(
     sendProblem(res, problem({ type: "validation", title: "question id required", status: 400 }));
     return true;
   }
-  if (!resolveAnswer(s, id, body.answer)) {
+  if (!resolveAnswer(s, id, body.answer, { taskId: jobId, sessionId: rec.sessionId })) {
     sendProblem(res, problem({ type: "validation", title: "unknown question id", status: 404, detail: id }));
     return true;
   }
@@ -574,25 +577,15 @@ async function readJson(
   return readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
 }
 
-/** Tenant/run-контекст из auth-заголовков control plane (никогда из тела, §11). */
-function tenantOf(req: IncomingMessage): TenantContext {
-  const tenantId = headerString(req, "x-mma-tenant");
+/** Tenant/run-контекст задачи: тенант — из процесса, остальное — audit-метки (§11). */
+function tenantOf(req: IncomingMessage, s: AgentServiceState): TenantContext {
   const principalId = headerString(req, "x-mma-principal");
   const runId = headerString(req, "x-mma-run");
-  const tier = headerString(req, "x-mma-tier");
-  const scopesRaw = headerString(req, "x-mma-scopes");
   return {
-    ...(tenantId ? { tenantId } : {}),
+    ...(s.tenant.tenantId ? { tenantId: s.tenant.tenantId } : {}),
     ...(principalId ? { principalId } : {}),
     ...(runId ? { runId } : {}),
-    ...(tier ? { tier } : {}),
-    ...(scopesRaw ? { scopes: scopesRaw.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
   };
-}
-
-/** Хеш тела для сравнения Idempotency-Key. */
-function hashBody(body: Record<string, unknown>): string {
-  return createHash("sha256").update(JSON.stringify(body)).digest("hex");
 }
 
 function headerString(req: IncomingMessage, name: string): string | undefined {
