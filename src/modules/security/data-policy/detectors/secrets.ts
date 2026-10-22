@@ -126,6 +126,16 @@ export function looksSecret(value: string, quoted: boolean): boolean {
   return value.length >= 8 && /[._\-+/~]/.test(value);
 }
 
+/**
+ * Маскированный отпечаток секрета для UI (`sk-p…a2`): первые 4 и последние 2
+ * символа. Значение целиком не восстанавливается (INV-DLP-6), а сама строка
+ * не матчится детектором повторно (INV-DLP-7).
+ */
+export function secretPreview(value: string): string | undefined {
+  if (value.length < 8) return undefined;
+  return `${value.slice(0, 4)}…${value.slice(-2)}`;
+}
+
 /** Все находки класса `secret` (диапазон — значение, не весь матч). */
 export function detectSecrets(text: string): Finding[] {
   const findings: Finding[] = [];

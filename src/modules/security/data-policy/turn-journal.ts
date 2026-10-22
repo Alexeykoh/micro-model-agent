@@ -16,11 +16,30 @@ import type {
 } from "./types";
 
 interface Bucket {
-  /** Уникальные токенизированные значения: token → класс/вид. */
-  tokens: Map<string, { dataClass: DataClass; kind: string }>;
+  /** Уникальные токенизированные значения: token → класс/вид/отпечаток. */
+  tokens: Map<string, { dataClass: DataClass; kind: string; preview?: string }>;
   /** Маски без id (`[SECRET]`, `[FILE]`): key `class\0kind` → max за вызов. */
   maskedMax: Map<string, number>;
+  /** Маскированные отпечатки секретов: внутренний вид → уникальные значения. */
+  secretPreviews: Map<string, Set<string>>;
   targets: Map<string, EgressTurnSummary["targets"][number]>;
+}
+
+/** Публичные виды секретов: внутренние id паттернов наружу не выходят. */
+const SECRET_KIND_PUBLIC: Record<string, string> = {
+  "secret:key": "key",
+  "secret:bearer": "bearer",
+  "secret:jwt": "jwt",
+  "secret:prefix": "prefix",
+};
+
+/** Кап отпечатков на вид: агрегат не должен расти вместе с ходом (INV-DLP-8). */
+const MAX_SECRET_PREVIEWS = 6;
+
+function publicSecretKind(kind: string): string {
+  const mapped = SECRET_KIND_PUBLIC[kind];
+  if (mapped) return mapped;
+  return kind.startsWith("secret:") ? "other" : kind;
 }
 
 const buckets = new Map<string, Bucket>();
@@ -43,7 +62,12 @@ function addTarget(bucket: Bucket, target: EgressTarget): void {
 }
 
 function freshBucket(sessionId: string): Bucket {
-  const bucket: Bucket = { tokens: new Map(), maskedMax: new Map(), targets: new Map() };
+  const bucket: Bucket = {
+    tokens: new Map(),
+    maskedMax: new Map(),
+    secretPreviews: new Map(),
+    targets: new Map(),
+  };
   const known = knownTargets.get(sessionId);
   if (known) bucket.targets.set(targetKey(known), known);
   return bucket;
@@ -78,12 +102,21 @@ export function recordEgressTurn(diag: GuardDiagnostic): void {
   for (const ref of diag.tokens ?? []) {
     if (isTokenized(ref.token)) {
       if (!bucket.tokens.has(ref.token)) {
-        bucket.tokens.set(ref.token, { dataClass: ref.dataClass, kind: ref.kind });
+        bucket.tokens.set(ref.token, {
+          dataClass: ref.dataClass,
+          kind: ref.kind,
+          ...(ref.preview ? { preview: ref.preview } : {}),
+        });
       }
       continue;
     }
     const key = `${ref.dataClass}\0${ref.kind}`;
     perCall.set(key, (perCall.get(key) ?? 0) + 1);
+    if (ref.dataClass === "secret" && ref.preview) {
+      const previews = bucket.secretPreviews.get(ref.kind) ?? new Set<string>();
+      if (previews.size < MAX_SECRET_PREVIEWS) previews.add(ref.preview);
+      bucket.secretPreviews.set(ref.kind, previews);
+    }
   }
   // max, не сумма: title-gen повторяет те же значения в том же ходу.
   for (const [key, n] of perCall) {
@@ -94,6 +127,7 @@ export function recordEgressTurn(diag: GuardDiagnostic): void {
 function summaryOf(bucket: Bucket): EgressTurnSummary {
   const stats: Partial<Record<DataClass, number>> = {};
   const kinds: Partial<Record<DataClass, Set<string>>> = {};
+  const secretDetails = new Map<string, { count: number; previews: Set<string> }>();
 
   // Наружу не отдаём внутренние id паттернов (`secret:0`): E2-редактор webui
   // принимает их за секрет и переписывает в `[SECRET]` прямо в истории/SSE.
@@ -104,15 +138,31 @@ function summaryOf(bucket: Bucket): EgressTurnSummary {
     set.add(publicKind(dataClass, kind));
     kinds[dataClass] = set;
   };
+  const addSecret = (kind: string, count: number, previews: Iterable<string>): void => {
+    const pub = publicSecretKind(kind);
+    const acc = secretDetails.get(pub) ?? { count: 0, previews: new Set<string>() };
+    acc.count += count;
+    for (const preview of previews) {
+      if (acc.previews.size >= MAX_SECRET_PREVIEWS) break;
+      acc.previews.add(preview);
+    }
+    secretDetails.set(pub, acc);
+  };
 
   for (const ref of bucket.tokens.values()) {
     stats[ref.dataClass] = (stats[ref.dataClass] ?? 0) + 1;
     addKind(ref.dataClass, ref.kind);
+    if (ref.dataClass === "secret") {
+      addSecret(ref.kind, 1, ref.preview ? [ref.preview] : []);
+    }
   }
   for (const [key, n] of bucket.maskedMax) {
     const [dataClass, kind] = key.split("\0") as [DataClass, string];
     stats[dataClass] = (stats[dataClass] ?? 0) + n;
     addKind(dataClass, kind);
+    if (dataClass === "secret") {
+      addSecret(kind, n, bucket.secretPreviews.get(kind) ?? []);
+    }
   }
 
   const kindsOut: Partial<Record<DataClass, string[]>> = {};
@@ -120,10 +170,15 @@ function summaryOf(bucket: Bucket): EgressTurnSummary {
     kindsOut[dataClass] = [...set].sort();
   }
 
+  const secrets = [...secretDetails]
+    .map(([kind, acc]) => ({ kind, count: acc.count, previews: [...acc.previews].sort() }))
+    .sort((a, b) => a.kind.localeCompare(b.kind));
+
   return {
     total: Object.values(stats).reduce((a, b) => a + b, 0),
     stats,
     kinds: kindsOut,
+    ...(secrets.length ? { secrets } : {}),
     targets: [...bucket.targets.values()],
   };
 }

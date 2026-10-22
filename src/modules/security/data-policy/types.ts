@@ -43,6 +43,11 @@ export interface EgressTokenRef {
   dataClass: DataClass;
   kind: string;
   token: string;
+  /**
+   * Маскированный отпечаток значения (`sk-p…a2`): производное, не оригинал.
+   * Заполняется только для `dataClass === "secret"` (INV-DLP-6).
+   */
+  preview?: string;
 }
 
 /** Диагностика (только метаданные, без оригинала) — INV-15/§9. */
@@ -66,6 +71,16 @@ export interface GuardDiagnostic {
 }
 
 /**
+ * Детализация секретов за ход: публичный вид, счётчик и маскированные
+ * отпечатки. Оригиналов и token id здесь нет (INV-DLP-1/6).
+ */
+export interface SecretKindSummary {
+  kind: string;
+  count: number;
+  previews: string[];
+}
+
+/**
  * Агрегат DLP-редакции за ход — единственная форма, которая уходит в SSE и
  * `session.jsonl`. Без оригиналов и token id (INV-DLP-1).
  */
@@ -76,6 +91,8 @@ export interface EgressTurnSummary {
   stats: Partial<Record<DataClass, number>>;
   /** Виды находок по классам (`email`, `phone`, `windows-abs`, …). */
   kinds: Partial<Record<DataClass, string[]>>;
+  /** Детализация секретов: тип + маскированные отпечатки (INV-DLP-6…8). */
+  secrets?: SecretKindSummary[];
   /** Назначение: внешний/локальный провайдер + хост. */
   targets: Array<{ kind: "provider"; trusted: boolean; host?: string }>;
 }

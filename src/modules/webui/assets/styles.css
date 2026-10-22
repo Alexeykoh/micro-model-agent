@@ -306,20 +306,24 @@ body[data-font="large"] { font-size: 17px; }
 .detail { color: var(--dim-a); padding-left: 26px; overflow-wrap: anywhere; }
 .metric { color: var(--dim-a); overflow-wrap: anywhere; }
 .dlp-badge {
-  display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;
-  font: inherit; font-size: 11.5px; line-height: 1.4;
-  color: var(--accent); background: var(--accent-bg);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  border-radius: 999px; padding: 1px 9px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 3px; margin-top: 2px;
+  font: inherit; font-size: 10.5px; line-height: 1.2; letter-spacing: 0.02em;
+  color: var(--yellow); background: transparent; border: 0; padding: 0 2px;
+  cursor: pointer; opacity: 0.9;
 }
-.dlp-badge:hover { filter: brightness(1.08); }
-.dlp-badge.clean { color: var(--dim-a); background: transparent; border-color: var(--line, var(--dim-a)); }
+.dlp-badge:hover { opacity: 1; text-decoration: underline; }
+.dlp-badge.clean { color: var(--dim-a); opacity: 0.7; }
+.dlp-badge.clean:hover { opacity: 1; }
+.dlp-shield { width: 11px; height: 11px; flex: none; }
+.dlp-label { text-transform: uppercase; }
 .dlp-details { display: flex; flex-direction: column; gap: 8px; }
 .dlp-total { font-weight: 600; }
 .dlp-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .dlp-class { color: var(--dim-a); min-width: 120px; }
 .dlp-kinds { color: var(--dim-a); font-size: 12px; }
 .dlp-count { margin-left: auto; }
+.dlp-secret .dlp-class { min-width: 0; padding-left: 20px; }
+.dlp-preview { color: var(--dim-a); font-size: 12px; font-family: var(--mono, monospace); }
 .dlp-host { color: var(--dim-a); }
 .dlp-target { border-top: 1px solid var(--line, transparent); padding-top: 8px; }
 .warnline { color: var(--yellow); overflow-wrap: anywhere; }

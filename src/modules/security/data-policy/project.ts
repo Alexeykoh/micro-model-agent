@@ -8,6 +8,7 @@ import type { PolicyContext } from "./context";
 import type { DataClass, EgressTarget, EgressTokenRef, Finding } from "./types";
 import type { DataPolicyConfig } from "./types";
 import { isTaggedFileContent, untagFileContent } from "./file-content";
+import { secretPreview } from "./detectors/secrets";
 import { TokenMap } from "./tokens";
 
 const MASK: Record<DataClass, string> = {
@@ -107,7 +108,8 @@ export function projectText(text: string, policy: ProjectPolicy): TextProjection
     out += text.slice(cursor, f.start);
     const token = pseudonym ? map.tokenFor(text.slice(f.start, end), f.dataClass) : MASK[f.dataClass];
     out += token;
-    tokens.push({ dataClass: f.dataClass, kind: f.kind, token });
+    const preview = f.dataClass === "secret" ? secretPreview(text.slice(f.start, end)) : undefined;
+    tokens.push({ dataClass: f.dataClass, kind: f.kind, token, ...(preview ? { preview } : {}) });
     cursor = end;
     stats[f.dataClass] = (stats[f.dataClass] ?? 0) + 1;
   }
