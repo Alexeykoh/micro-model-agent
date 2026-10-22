@@ -117,7 +117,7 @@ Renaming **with a working deprecation alias** is **MINOR**, not MAJOR.
 3. At most one MAJOR per package of breaking changes; do not bump MAJOR without an explicit request.
 4. Versions are **milestones, not per-PR counters** — batch unrelated changes into one release instead of chaining MINOR/MAJOR bumps.
 
-### Current Version: 0.7.0 (beta)
+### Current Version: 0.10.0 (beta)
 
 > **Beta:** public releases stay in `0.x.y`; `1.0.0` is reserved for the explicit decision to
 > leave beta. The `2.x`/`1.x` numbers in the history below are legacy/internal milestone labels
