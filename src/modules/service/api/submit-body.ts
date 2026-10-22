@@ -11,7 +11,7 @@
  * живут в разных процессах времени.
  */
 import type { NetworkSecurityConfig } from "../../../config/types";
-import { checkOutboundUrl } from "../../security/outbound-policy";
+import { checkCallbackUrl } from "../runtime/callback-url";
 import type { TaskMode, TaskOutputSpec } from "../runtime/task-registry";
 import { problem, type ProblemDetails } from "../runtime/problem";
 
@@ -28,6 +28,12 @@ export interface SubmitParams {
 
 export type SubmitParse = { ok: true; params: SubmitParams } | { ok: false; problem: ProblemDetails };
 
+/** Опции валидации тела (политика callbackUrl). */
+export interface SubmitBodyPolicy {
+  networkConfig?: NetworkSecurityConfig;
+  allowHttpCallback?: boolean;
+}
+
 function submitError(title: string, status: number, detail?: string): SubmitParse {
   return { ok: false, problem: problem({ type: "validation", title, status, ...(detail ? { detail } : {}) }) };
 }
@@ -35,15 +41,16 @@ function submitError(title: string, status: number, detail?: string): SubmitPars
 /** Валидирует тело сабмита; ошибка → готовый Problem Details. */
 export function parseSubmitBody(
   body: Record<string, unknown>,
-  networkConfig?: NetworkSecurityConfig,
+  policy: SubmitBodyPolicy = {},
 ): SubmitParse {
   const input = typeof body.input === "string" ? body.input : "";
   if (!input.trim()) return submitError("input required", 400);
 
   const callbackUrl = typeof body.callbackUrl === "string" ? body.callbackUrl : undefined;
   if (callbackUrl !== undefined) {
-    const check = checkOutboundUrl(callbackUrl, "module:service", {
-      networkConfig,
+    const check = checkCallbackUrl(callbackUrl, {
+      ...(policy.networkConfig ? { networkConfig: policy.networkConfig } : {}),
+      allowHttp: policy.allowHttpCallback ?? false,
       operation: "service.callback.submit",
     });
     if (!check.allowed) return submitError("callbackUrl not allowed", 422, check.reason);

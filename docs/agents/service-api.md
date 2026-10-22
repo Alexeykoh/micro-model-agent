@@ -52,6 +52,7 @@ guard-тест `tests/service/openapi.test.ts`, который падает, е�
 | `service.maxQueueLength` | `5` | FIFO-очередь задач на сессию |
 | `service.callbackTimeoutMs` | `10000` | таймаут webhook-доставки |
 | `service.webhookSecret` | — | секрет HMAC подписи вебхуков |
+| `service.webhookAllowHttp` | `false` | `http`-callback только для loopback |
 
 Env: `MMA_SERVICE_PORT`, `MMA_SERVICE_HOST`, `MMA_SERVICE_TOKEN`,
 `MMA_SERVICE_TENANT` (важнее конфига). Доступно в `/config` и web Settings →
@@ -178,12 +179,25 @@ retry, затем `failed` с `error.type = …/output-invalid`.
 
 ## Webhook
 
+`callbackUrl` обязан быть `https` (тело несёт результат хода); `http` допустим
+только для loopback и только при `service.webhookAllowHttp: true` (плюс
+`security.network.allowPrivateOutbound`). Приватные адреса отклоняются на сабмите
+(`422`) и повторно перед доставкой.
+
 На терминальном событии рантайм `POST`-ит Job-объект на `callbackUrl` с
-заголовками `X-Mma-Timestamp` (RFC 3339) и `X-Mma-Event-Id` (стабилен между
-ретраями). `X-Mma-Signature` (HMAC-SHA256 по `timestamp + "." + body`)
-отправляется **только если настроен `service.webhookSecret`** — без секрета
-колбэк приходит неподписанным, и доверять ему нельзя (pull остаётся источником
-правды). Ретраи — exponential backoff + jitter; 4xx (кроме 429) не ретраятся.
+заголовками `X-Mma-Timestamp` (RFC 3339, **один на доставку** — подпись стабильна
+между ретраями), `X-Mma-Event-Id` (стабилен между ретраями), `X-Mma-Delivery`
+(номер попытки) и `X-Mma-Signature` (HMAC-SHA256 по `timestamp + "." + body`;
+только если настроен `service.webhookSecret` — без секрета колбэк приходит
+неподписанным, и доверять ему нельзя; pull остаётся источником правды).
+
+Получателю доступна контрпара `verifySignature({secret, body, signature,
+timestamp, windowMs?})`: сравнение за константное время и окно replay (5 минут).
+
+Ретраи — exponential backoff с jitter и потолком 60 с, не больше 6 попыток и
+общего дедлайна 120 с. `2xx` — успех; `3xx`/`4xx` (кроме `429`) — терминальный
+отказ; redirect'ы не преследуются (`redirect: manual`) — иначе конечный адресат
+обошёл бы SSRF-проверку.
 
 ## Наблюдаемость и изоляция
 

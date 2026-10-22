@@ -90,7 +90,10 @@ async function submit(
 
   const body = await readJson(req, res);
   if (!body) return true;
-  const parsed = parseSubmitBody(body, s.config.security?.network);
+  const parsed = parseSubmitBody(body, {
+    networkConfig: s.config.security?.network,
+    allowHttpCallback: s.config.service.webhookAllowHttp ?? false,
+  });
   if (!parsed.ok) {
     sendProblem(res, parsed.problem);
     return true;
@@ -455,6 +458,7 @@ function sendWebhook(s: AgentServiceState, task: TaskRecord): void {
     egress: apiGuard({ config: s.config, workspace: s.deps.baseDir }),
     timeoutMs: s.config.service.callbackTimeoutMs,
     networkConfig: s.config.security?.network,
+    allowHttp: s.config.service.webhookAllowHttp ?? false,
     onDiagnostic: (diag) => {
       defaultOutputBus.log("warn", diag.source, `${diag.operation}: ${diag.cause}`, {
         diagnostic: true,

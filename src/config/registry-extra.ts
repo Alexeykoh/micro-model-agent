@@ -783,4 +783,7 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [ ...DATA_POLICY_DEFS,
       const s = String(v ?? "").trim();
       c.service.webhookSecret = s === "" ? undefined : s;
     }), allowEmpty: true },
+  bool("service.webhookAllowHttp", "service", false,
+    (c) => c.service.webhookAllowHttp ?? false,
+    (c, v) => { c.service.webhookAllowHttp = Boolean(v); }),
 ];

@@ -346,7 +346,7 @@ describe("tasks api", () => {
       input: "x",
       mode: "job",
       wait: true,
-      callbackUrl: "http://callback.test/hook",
+      callbackUrl: "https://callback.test/hook",
     });
     expect(res.json.status).toBe("succeeded");
     for (let i = 0; i < 100 && calls.length === 0; i++) await new Promise((r) => setTimeout(r, 10));

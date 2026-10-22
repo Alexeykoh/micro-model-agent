@@ -527,6 +527,11 @@ export interface ServiceConfig {
   callbackTimeoutMs: number;
   /** Секрет HMAC-подписи webhook-колбэков. Не задан — подпись не выставляется. */
   webhookSecret?: string;
+  /**
+   * Разрешить `http`-callback для loopback (`127.0.0.1`/`localhost`/`::1`).
+   * По умолчанию только `https`: тело webhook'а несёт результат хода.
+   */
+  webhookAllowHttp?: boolean;
 }
 
 export interface AppConfig {

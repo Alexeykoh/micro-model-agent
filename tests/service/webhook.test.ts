@@ -132,6 +132,7 @@ describe("webhook delivery", () => {
       body: "{}",
       timeoutMs: 1000,
       networkConfig: { ...DEFAULT_SECURITY_CONFIG.network, allowPrivateOutbound: true },
+      allowHttp: true,
       fetchImpl,
       sleep: noSleep,
     });

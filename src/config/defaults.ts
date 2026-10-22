@@ -246,5 +246,6 @@ export const DEFAULTS: AppConfig = {
     maxQueueLength: 5,
     callbackTimeoutMs: 10_000,
     webhookSecret: undefined,
+    webhookAllowHttp: false,
   },
 };
