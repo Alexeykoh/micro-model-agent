@@ -68,7 +68,7 @@ function resumeTask(s: AgentServiceState, taskId: string | undefined): void {
 
 /** Вытесняет самый старый висящий вопрос, если кап превышен. */
 function evictOverflow(s: AgentServiceState): void {
-  while (s.pendingQuestions.size > MAX_PENDING_QUESTIONS) {
+  while (s.pendingQuestions.size > s.maxPendingQuestions) {
     const oldest = s.pendingQuestions.keys().next().value;
     if (oldest === undefined) return;
     settleQuestion(s, oldest, undefined);
@@ -84,7 +84,7 @@ function ask<T>(
 ): Promise<T> {
   return new Promise((resolve) => {
     const id = nextQuestionId();
-    const timer = setTimeout(() => settleQuestion(s, id, undefined), QUESTION_TTL_MS);
+    const timer = setTimeout(() => settleQuestion(s, id, undefined), s.questionTtlMs);
     (timer as { unref?: () => void }).unref?.();
     s.pendingQuestions.set(id, {
       resolve: (value) => resolve(coerce(value)),

@@ -2,17 +2,13 @@
  * W10.2: идемпотентность и вопросы привязаны к тенанту/задаче, а не к
  * подконтрольным клиенту заголовкам.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentResult } from "../../src/core/types";
 import type { PromptIO } from "../../src/tools/prompt-io";
 import type { AppConfig } from "../../src/config/types";
 import { startAgentService } from "../../src/modules/service/module";
 import { createServiceState } from "../../src/modules/service/state";
-import {
-  MAX_PENDING_QUESTIONS,
-  QUESTION_TTL_MS,
-  servicePromptIO,
-} from "../../src/modules/service/runtime/prompt-io";
+import { cancelTaskQuestions, servicePromptIO } from "../../src/modules/service/runtime/prompt-io";
 import { httpJson } from "./http-client";
 import { cleanupServiceDir, firstSessionId, makeServiceDeps, tempServiceDir } from "./harness";
 
@@ -52,7 +48,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.useRealTimers();
   stop?.();
   stop = undefined;
   cleanupServiceDir(dir);
@@ -173,27 +168,32 @@ describe("question ownership", () => {
 
 describe("pending question bounds", () => {
   it("expires a question after the TTL and resumes the task", async () => {
-    vi.useFakeTimers();
-    const state = createServiceState(makeServiceDeps({ dir }));
+    const state = createServiceState(makeServiceDeps({ dir, questionTtlMs: 20 }));
     const task = state.tasks.create({ sessionId: "s", mode: "interactive", input: "x" });
     const answer = servicePromptIO(state, task).askText("still there?");
     expect(state.pendingQuestions.size).toBe(1);
     expect(state.tasks.get(task.jobId)?.status).toBe("waiting_input");
 
-    vi.advanceTimersByTime(QUESTION_TTL_MS);
+    // Держим loop живым ref-таймером: TTL-таймер вопроса намеренно unref'd.
+    await new Promise((r) => setTimeout(r, 60));
     await expect(answer).resolves.toBe("");
     expect(state.pendingQuestions.size).toBe(0);
     expect(state.tasks.get(task.jobId)?.status).toBe("running");
+    if (state.pruneTimer) clearInterval(state.pruneTimer);
   });
 
   it("caps pending questions per process, evicting the oldest", async () => {
-    vi.useFakeTimers();
-    const state = createServiceState(makeServiceDeps({ dir }));
+    const state = createServiceState(
+      makeServiceDeps({ dir, maxPendingQuestions: 3, questionTtlMs: 60_000 }),
+    );
     const task = state.tasks.create({ sessionId: "s", mode: "interactive", input: "x" });
     const io = servicePromptIO(state, task);
     const answers: Array<Promise<string>> = [];
-    for (let i = 0; i < MAX_PENDING_QUESTIONS + 1; i++) answers.push(io.askText(`q${i}`));
-    expect(state.pendingQuestions.size).toBe(MAX_PENDING_QUESTIONS);
+    for (let i = 0; i < 4; i++) answers.push(io.askText(`q${i}`));
+    expect(state.pendingQuestions.size).toBe(3);
     await expect(answers[0]).resolves.toBe("");
+    cancelTaskQuestions(state, task.jobId);
+    expect(state.pendingQuestions.size).toBe(0);
+    if (state.pruneTimer) clearInterval(state.pruneTimer);
   });
 });

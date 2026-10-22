@@ -62,6 +62,12 @@ export interface ServiceDepsOptions {
   maxSseClients?: number;
   /** Idle-таймаут SSE без событий (тестовый оверрайд). */
   sseIdleMs?: number;
+  /** TTL висящего вопроса (тестовый оверрайд). */
+  questionTtlMs?: number;
+  /** Кап висящих вопросов (тестовый оверрайд). */
+  maxPendingQuestions?: number;
+  /** Интервал prune реестра (тестовый оверрайд). */
+  pruneIntervalMs?: number;
 }
 
 /** Депы сервиса: конфиг из DEFAULTS, SessionManager с одной тестовой сессией. */
@@ -91,6 +97,9 @@ export function makeServiceDeps(opts: ServiceDepsOptions): ServiceDeps {
   if (opts.keepaliveMs !== undefined) deps.keepaliveMs = opts.keepaliveMs;
   if (opts.maxSseClients !== undefined) deps.maxSseClients = opts.maxSseClients;
   if (opts.sseIdleMs !== undefined) deps.sseIdleMs = opts.sseIdleMs;
+  if (opts.questionTtlMs !== undefined) deps.questionTtlMs = opts.questionTtlMs;
+  if (opts.maxPendingQuestions !== undefined) deps.maxPendingQuestions = opts.maxPendingQuestions;
+  if (opts.pruneIntervalMs !== undefined) deps.pruneIntervalMs = opts.pruneIntervalMs;
   return deps;
 }
 

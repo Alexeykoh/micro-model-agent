@@ -1,7 +1,7 @@
 /**
  * W10.3: реестр задач ограничен и чистится (retention, кап событий, waiter'ы).
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentResult } from "../../src/core/types";
 import type { AppConfig } from "../../src/config/types";
 import { startAgentService } from "../../src/modules/service/module";
@@ -19,7 +19,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.useRealTimers();
   stop?.();
   stop = undefined;
   cleanupServiceDir(dir);
@@ -44,13 +43,14 @@ describe("task retention", () => {
     expect(reg.size()).toBe(1);
   });
 
-  it("prunes from the background timer", () => {
-    vi.useFakeTimers();
+  it("prunes from the background timer", async () => {
     const state = createServiceState(
       makeServiceDeps({
         dir,
+        pruneIntervalMs: 5,
         patch: (c: AppConfig) => {
-          c.service.resultRetentionDays = 0.001;
+          // 0.0000001 дня ≈ 8.6 мс — retention истекает между тиками таймера.
+          c.service.resultRetentionDays = 0.0000001;
         },
       }),
     );
@@ -58,7 +58,10 @@ describe("task retention", () => {
     state.tasks.finish(task.jobId, { status: "succeeded" });
     expect(state.tasks.size()).toBe(1);
 
-    vi.advanceTimersByTime(2 * 60_000);
+    const start = Date.now();
+    while (state.tasks.size() !== 0 && Date.now() - start < 1000) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
     expect(state.tasks.size()).toBe(0);
     if (state.pruneTimer) clearInterval(state.pruneTimer);
   });

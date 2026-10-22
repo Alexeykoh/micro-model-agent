@@ -44,6 +44,12 @@ export interface ServiceDeps {
   maxSseClients?: number;
   /** Idle-таймаут SSE без событий (дефолт 120 000 мс); тестовый оверрайд. */
   sseIdleMs?: number;
+  /** TTL висящего вопроса (дефолт 30 мин); тестовый оверрайд. */
+  questionTtlMs?: number;
+  /** Кап висящих вопросов (дефолт 100); тестовый оверрайд. */
+  maxPendingQuestions?: number;
+  /** Интервал prune реестра задач (дефолт 60 000 мс); тестовый оверрайд. */
+  pruneIntervalMs?: number;
 }
 
 /** Подключённый SSE-клиент одной сессии. */
@@ -86,6 +92,10 @@ export interface AgentServiceState {
   maxSseClients: number;
   /** Idle-таймаут SSE без событий (мс). */
   sseIdleMs: number;
+  /** TTL висящего вопроса (мс). */
+  questionTtlMs: number;
+  /** Кап висящих вопросов на процесс. */
+  maxPendingQuestions: number;
   server?: Server;
   starting?: Promise<string>;
   host: string;
@@ -142,6 +152,8 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     readyRate: new Map(),
     maxSseClients: deps.maxSseClients ?? 32,
     sseIdleMs: deps.sseIdleMs ?? 120_000,
+    questionTtlMs: deps.questionTtlMs ?? 30 * 60_000,
+    maxPendingQuestions: deps.maxPendingQuestions ?? 100,
     host: deps.host ?? readEnv("SERVICE_HOST") ?? sg.host,
     port: deps.port ?? parseEnvInt(readEnv("SERVICE_PORT")) ?? sg.port,
     token: deps.token ?? readEnv("SERVICE_TOKEN") ?? sg.token,
@@ -149,7 +161,10 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     keepaliveMs: deps.keepaliveMs ?? 20_000,
     startedAt: Date.now(),
   };
-  const pruneTimer = setInterval(() => state.tasks.prune(), PRUNE_INTERVAL_MS);
+  const pruneTimer = setInterval(
+    () => state.tasks.prune(),
+    deps.pruneIntervalMs ?? PRUNE_INTERVAL_MS,
+  );
   (pruneTimer as { unref?: () => void }).unref?.();
   state.pruneTimer = pruneTimer;
   return state;
