@@ -14,6 +14,8 @@ export interface Envelope {
   type: string;
   sessionId: string;
   taskId?: string;
+  /** Номер попытки вывода (структурный retry); отсутствует у обычных ходов. */
+  attempt?: number;
   data: unknown;
 }
 

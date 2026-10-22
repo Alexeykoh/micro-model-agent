@@ -52,11 +52,13 @@ function validateEnum(value: unknown, s: Schema, path: string): Validation | nul
     : { ok: false, detail: `${path}: value not in enum` };
 }
 
-/** Проверка обязательных полей объекта. */
+/** Проверка обязательных полей объекта (`null` — «отсутствует», как в JSON Schema). */
 function validateRequired(obj: Record<string, unknown>, s: Schema): Validation | null {
   if (!Array.isArray(s.required)) return null;
   for (const key of s.required as string[]) {
-    if (!(key in obj)) return { ok: false, detail: `field \`${key}\` missing` };
+    if (!(key in obj) || obj[key] === undefined || obj[key] === null) {
+      return { ok: false, detail: `field \`${key}\` missing` };
+    }
   }
   return null;
 }
@@ -99,12 +101,23 @@ function validateArray(value: unknown, s: Schema, path: string): Validation | nu
   return null;
 }
 
-/** Валидирует значение против strict-подмножества схемы; первый сбой — detail. */
+/**
+ * Валидирует значение против strict-подмножества схемы; первый сбой — detail.
+ * Неизвестный `type` и `properties` без `type:"object"` — **ошибка схемы**, а
+ * не молчаливый пропуск: иначе опечатка в схеме принимает любой ответ.
+ */
 export function validateAgainstSchema(value: unknown, schema: unknown, path = "$"): Validation {
   if (!schema || typeof schema !== "object") return { ok: true };
   const s = schema as Schema;
-  if (typeof s.type === "string" && !typeMatches(value, s.type)) {
-    return { ok: false, detail: `${path}: expected ${s.type}` };
+  if (typeof s.type === "string") {
+    const predicate = TYPE_PREDICATES[s.type];
+    if (!predicate) return { ok: false, detail: `${path}: schema error — unknown type "${s.type}"` };
+    if (!predicate(value)) return { ok: false, detail: `${path}: expected ${s.type}` };
+  } else if (s.properties !== undefined || s.required !== undefined) {
+    return {
+      ok: false,
+      detail: `${path}: schema error — properties/required require type:"object"`,
+    };
   }
   const failed = validateEnum(value, s, path) ?? validateObject(value, s, path) ?? validateArray(value, s, path);
   return failed ?? { ok: true };

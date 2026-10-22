@@ -143,6 +143,8 @@ export function stopServiceServer(s: AgentServiceState): void {
   }
   s.pendingQuestions.clear();
   s.clients.clear();
+  s.readyRate.clear();
+  s.readyCache = undefined;
   s.pool.clear();
   s.envelopes.clear();
 }

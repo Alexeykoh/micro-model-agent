@@ -279,7 +279,7 @@ async function startTask(s: AgentServiceState, task: TaskRecord): Promise<void> 
   const restoreTools = restrictTools(runner, task);
 
   const forwarder = makeServiceForwarder({
-    emit: (type, data) => emitEvent(s, task, type, data),
+    emit: (type, data, attempt) => emitEvent(s, task, type, data, attempt),
   });
   const disarmTimeout = armTimeout(task, runner);
 

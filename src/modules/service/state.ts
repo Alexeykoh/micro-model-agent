@@ -40,12 +40,18 @@ export interface ServiceDeps {
   preflight?: () => Promise<{ ok: boolean; reason: string }>;
   /** Интервал SSE keep-alive `: ping` (мс); тестовый оверрайд. */
   keepaliveMs?: number;
+  /** Кап конкурентных SSE-клиентов (дефолт 32); тестовый оверрайд. */
+  maxSseClients?: number;
+  /** Idle-таймаут SSE без событий (дефолт 120 000 мс); тестовый оверрайд. */
+  sseIdleMs?: number;
 }
 
 /** Подключённый SSE-клиент одной сессии. */
 export interface ServiceClient {
   sessionId: string;
   lastEventId: number;
+  /** Когда клиенту последний раз уходили данные (событие или ping). */
+  lastEventAt: number;
   send: (frame: string) => void;
 }
 
@@ -72,6 +78,14 @@ export interface AgentServiceState {
   >;
   /** Периодический prune реестра задач (retention/idempotency TTL). */
   pruneTimer?: ReturnType<typeof setInterval>;
+  /** Кэш readiness-пробы: живой LLM-запрос не на каждый `/v1/ready`. */
+  readyCache?: { at: number; result: { ok: boolean; reason: string } };
+  /** Rate-limit `/v1/ready` по адресу клиента (6/мин). */
+  readyRate: Map<string, { count: number; resetAt: number }>;
+  /** Кап конкурентных SSE-подписок (тестовый оверрайд — `deps.maxSseClients`). */
+  maxSseClients: number;
+  /** Idle-таймаут SSE без событий (мс). */
+  sseIdleMs: number;
   server?: Server;
   starting?: Promise<string>;
   host: string;
@@ -125,6 +139,9 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     turnSeq: 0,
     clients: new Set(),
     pendingQuestions: new Map(),
+    readyRate: new Map(),
+    maxSseClients: deps.maxSseClients ?? 32,
+    sseIdleMs: deps.sseIdleMs ?? 120_000,
     host: deps.host ?? readEnv("SERVICE_HOST") ?? sg.host,
     port: deps.port ?? parseEnvInt(readEnv("SERVICE_PORT")) ?? sg.port,
     token: deps.token ?? readEnv("SERVICE_TOKEN") ?? sg.token,

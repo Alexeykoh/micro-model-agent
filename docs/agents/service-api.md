@@ -63,7 +63,9 @@ Network → Agent Service API.
 База `/v1`; тела — JSON; ошибки — `application/problem+json`.
 `GET /v1/health`, `GET /v1/ready` и discovery (`/v1/openapi.json`, `/v1/docs`) —
 без auth (liveness/readiness оркестратора и описание контракта); остальное
-требует bearer-токен, если задан.
+требует bearer-токен, если задан. `/v1/ready` кэширует пробу провайдера на 30 с
+(живой LLM-запрос не на каждый вызов) и ограничен 6 запросами в минуту на адрес
+клиента (`429` с `retry_after_ms`).
 
 | Метод | Путь | Назначение | Auth |
 |---|---|---|---|
@@ -160,8 +162,10 @@ data: { "v":1, "seq", "ts", "type", "sessionId", "taskId", "data" }
 `Last-Event-ID` или `?since=<seq>` из in-memory буфера (best-effort между
 рестартами; статус всегда доступен pull'ом). Keep-alive `: ping` каждые 20 с;
 `X-Accel-Buffering: no`. Список событий задачи ограничен 2000 (старые
-вытесняются). Закрытие потока отменяет **только** интерактивную
-задачу; `job` продолжается.
+вытесняются). Не больше 32 конкурентных потоков на процесс (иначе `503`),
+backpressure разрывает соединение, поток без событий 120 с закрывается сам.
+Закрытие потока отменяет **только** интерактивную задачу и только если у сессии
+не осталось других подписчиков; `job` продолжается.
 
 ## Ошибки (RFC 9457)
 
@@ -174,8 +178,12 @@ data: { "v":1, "seq", "ts", "type", "sessionId", "taskId", "data" }
 
 `output:{format:"json",schema}`: рантайм добавляет инструкцию, парсит ответ
 (`jsonrepair`), валидирует strict-подмножество JSON Schema (`type`, `required`,
-`properties`, `items`, `enum`, `additionalProperties:false`). Провал → один
-retry, затем `failed` с `error.type = …/output-invalid`.
+`properties`, `items`, `enum`, `additionalProperties:false`). Неизвестный `type`
+и `properties`/`required` без `type:"object"` — ошибка схемы (а не молчаливый
+пропуск); `null` для `required`-поля считается отсутствием. Провал → один
+retry, затем `failed` с `error.type = …/output-invalid`. События первой попытки
+не попадают в SSE (клиент не видит двух ответов на одну задачу), а события
+retry несут в конверте `attempt: 2`.
 
 ## Webhook
 

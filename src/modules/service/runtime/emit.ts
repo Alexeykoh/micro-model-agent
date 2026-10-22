@@ -17,6 +17,7 @@ export function emitEvent(
   task: TaskRecord,
   type: string,
   data: unknown,
+  attempt?: number,
 ): Envelope {
   const env: Envelope = {
     v: 1,
@@ -25,6 +26,7 @@ export function emitEvent(
     type,
     sessionId: task.sessionId,
     taskId: task.jobId,
+    ...(attempt !== undefined ? { attempt } : {}),
     data,
   };
   s.envelopes.append(env);

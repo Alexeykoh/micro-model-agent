@@ -58,6 +58,10 @@ export interface ServiceDepsOptions {
   preflight?: () => Promise<{ ok: boolean; reason: string }>;
   /** Интервал SSE keep-alive (мс). */
   keepaliveMs?: number;
+  /** Кап конкурентных SSE-клиентов (тестовый оверрайд). */
+  maxSseClients?: number;
+  /** Idle-таймаут SSE без событий (тестовый оверрайд). */
+  sseIdleMs?: number;
 }
 
 /** Депы сервиса: конфиг из DEFAULTS, SessionManager с одной тестовой сессией. */
@@ -85,6 +89,8 @@ export function makeServiceDeps(opts: ServiceDepsOptions): ServiceDeps {
   if (opts.webhookFetch) deps.webhookFetch = opts.webhookFetch;
   if (opts.preflight) deps.preflight = opts.preflight;
   if (opts.keepaliveMs !== undefined) deps.keepaliveMs = opts.keepaliveMs;
+  if (opts.maxSseClients !== undefined) deps.maxSseClients = opts.maxSseClients;
+  if (opts.sseIdleMs !== undefined) deps.sseIdleMs = opts.sseIdleMs;
   return deps;
 }
 

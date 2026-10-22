@@ -4,8 +4,11 @@
  * Envelope'ы монотонны по `seq`; `Last-Event-ID`/`?since=` дают resume из
  * in-memory буфера. Keep-alive `: ping` держит idle-соединение живым под
  * прокси; `X-Accel-Buffering: no` отключает буферизацию nginx. Закрытие
- * потока интерактивной задачи кооперативно её отменяет (спека §7.3); `job`-ход
- * продолжается (pull — источник правды).
+ * потока интерактивной задачи кооперативно её отменяет (спека §7.3), но только
+ * если у сессии не осталось других подписчиков; `job`-ход продолжается.
+ *
+ * Потоки ограничены (`maxSseClients`), backpressure разрывает соединение, а
+ * поток без событий дольше `sseIdleMs` закрывается сам.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { abortInteractiveTask } from "./tasks-api";
@@ -33,6 +36,19 @@ export function handleEventsApi(
     sendProblem(res, problem({ type: "noSession", title: "session not found", status: 404, detail: sessionId }));
     return true;
   }
+  if (s.clients.size >= s.maxSseClients) {
+    sendProblem(
+      res,
+      problem({
+        type: "rateLimited",
+        title: "too many event streams",
+        status: 503,
+        retriable: true,
+        retryAfterMs: 1000,
+      }),
+    );
+    return true;
+  }
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -50,19 +66,36 @@ export function handleEventsApi(
   const client: ServiceClient = {
     sessionId,
     lastEventId: 0,
-    send: (frame) => safeWrite(res, frame),
+    lastEventAt: Date.now(),
+    send: (frame) => {
+      client.lastEventAt = Date.now();
+      safeWrite(res, frame);
+    },
   };
   s.clients.add(client);
 
-  const ping = setInterval(() => safeWrite(res, ": ping\n\n"), s.keepaliveMs);
+  const ping = setInterval(() => {
+    if (Date.now() - client.lastEventAt > s.sseIdleMs) {
+      res.end();
+      return;
+    }
+    safeWrite(res, ": ping\n\n");
+  }, s.keepaliveMs);
   (ping as { unref?: () => void }).unref?.();
 
   req.on("close", () => {
     clearInterval(ping);
     s.clients.delete(client);
-    abortInteractiveTask(s, sessionId);
+    // Чужой подписчик не должен терять задачу из-за закрытия этой вкладки.
+    if (!hasSubscribers(s, sessionId)) abortInteractiveTask(s, sessionId);
   });
   return true;
+}
+
+/** Есть ли у сессии хотя бы один живой SSE-подписчик. */
+function hasSubscribers(s: AgentServiceState, sessionId: string): boolean {
+  for (const client of s.clients) if (client.sessionId === sessionId) return true;
+  return false;
 }
 
 /** `Last-Event-ID` (заголовок) важнее `?since=`; нечисловое → 0. */
@@ -73,10 +106,19 @@ function parseSince(req: IncomingMessage, reqUrl: URL): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
-function safeWrite(res: ServerResponse, frame: string): void {
+/**
+ * Пишет фрейм; `false` (буфер переполнен) — рвём соединение: медленный клиент
+ * не должен копить память процесса. Закрытие придёт событием `close`.
+ */
+function safeWrite(res: ServerResponse, frame: string): boolean {
   try {
-    res.write(frame);
+    if (!res.write(frame)) {
+      res.destroy();
+      return false;
+    }
+    return true;
   } catch {
-    /* клиент отвалился — поток закроется событием close */
+    res.destroy();
+    return false;
   }
 }
