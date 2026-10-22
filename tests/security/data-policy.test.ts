@@ -3,7 +3,10 @@ import { classify } from "../../src/modules/security/data-policy/classify";
 import { createGuard } from "../../src/modules/security/data-policy/guard";
 import { DEFAULT_DATA_POLICY } from "../../src/modules/security/data-policy/defaults";
 import type { PolicyContext } from "../../src/modules/security/data-policy/context";
-import type { DataPolicyConfig } from "../../src/modules/security/data-policy/types";
+import type {
+  DataPolicyConfig,
+  GuardDiagnostic,
+} from "../../src/modules/security/data-policy/types";
 
 const ctx: PolicyContext = {
   baseDir: "C:\\work\\proj",
@@ -90,6 +93,23 @@ describe("EgressGuard.sanitizeChat", () => {
     const g = local();
     const r = g.sanitizeChat([{ role: "user", content: "api_key=sk-abcdefghij0123456789" }]);
     expect(JSON.stringify(r.messages)).not.toContain("sk-abcdefghij0123456789");
+  });
+
+  it("секрет несёт маскированный отпечаток, а не оригинал (INV-DLP-6/7)", () => {
+    const diags: GuardDiagnostic[] = [];
+    const g = createGuard({
+      config: cfg,
+      target: { kind: "provider", trusted: false, host: "api.openai.com" },
+      ctx,
+      onDiagnostic: (d) => diags.push(d),
+    });
+    g.sanitizeChat([{ role: "user", content: "api_key=sk-abcdefghij0123456789" }]);
+
+    const secret = diags.flatMap((d) => d.tokens ?? []).find((t) => t.dataClass === "secret");
+    expect(secret?.preview).toBe("sk-a…89");
+    expect(secret?.preview).not.toContain("abcdefghij");
+    // Отпечаток не должен сам детектиться как секрет: иначе E2 перепишет его.
+    expect(classify(secret?.preview ?? "", ctx).some((f) => f.dataClass === "secret")).toBe(false);
   });
 
   it("ре-гидратация возвращает оригинал (INV-D5)", () => {

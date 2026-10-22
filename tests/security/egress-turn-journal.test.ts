@@ -70,6 +70,49 @@ describe("журнал DLP за ход", () => {
     expect(JSON.stringify(summary?.kinds)).not.toContain("secret:");
   });
 
+  it("секреты: публичный тип и маскированные отпечатки без внутренних id", () => {
+    beginEgressTurn("s1");
+    const secret = (kind: string, preview: string) => ({
+      dataClass: "secret" as const,
+      kind,
+      token: "[SECRET]",
+      preview,
+    });
+    recordEgressTurn(
+      redacted("s1", [
+        secret("secret:key", "sk-p…a2"),
+        secret("secret:key", "sk-p…a2"),
+        secret("secret:key", "ghp_…9f"),
+        secret("secret:bearer", "eyJh…3c"),
+      ]),
+    );
+
+    const summary = endEgressTurn("s1");
+    expect(summary?.secrets).toEqual([
+      { kind: "bearer", count: 1, previews: ["eyJh…3c"] },
+      { kind: "key", count: 3, previews: ["ghp_…9f", "sk-p…a2"] },
+    ]);
+    expect(JSON.stringify(summary)).not.toContain("secret:");
+    expect(JSON.stringify(summary)).not.toContain("sk-proj-");
+  });
+
+  it("отпечатки одного вида ограничены капом", () => {
+    beginEgressTurn("s1");
+    recordEgressTurn(
+      redacted(
+        "s1",
+        Array.from({ length: 10 }, (_, i) => ({
+          dataClass: "secret" as const,
+          kind: "secret:key",
+          token: "[SECRET]",
+          preview: `sk-p…${String(i).padStart(2, "0")}`,
+        })),
+      ),
+    );
+
+    expect(endEgressTurn("s1")?.secrets?.[0].previews).toHaveLength(6);
+  });
+
   it("виды одного класса суммируются по max каждого вида", () => {
     beginEgressTurn("s1");
     recordEgressTurn(redacted("s1", [{ dataClass: "secret", kind: "api-key", token: "[SECRET]" }]));
