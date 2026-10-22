@@ -2253,6 +2253,8 @@
   "config.desc.service.host": "Адрес привязки; не-loopback требует токен.",
   "config.key.service.token": "bearer-токен сервиса",
   "config.desc.service.token": "Обязательный токен Authorization: Bearer (control plane → runtime).",
+  "config.key.service.tenant": "тенант сервиса",
+  "config.desc.service.tenant": "Тенант, который обслуживает процесс (silo); X-Mma-Tenant должен совпадать.",
   "config.key.service.resultRetentionDays": "хранение результатов (дни)",
   "config.desc.service.resultRetentionDays": "Сколько терминальные результаты задач хранятся в памяти.",
   "config.key.service.idempotencyTtlHours": "TTL идемпотентности (часы)",
@@ -2265,6 +2267,8 @@
   "config.desc.service.callbackTimeoutMs": "Таймаут доставки webhook-колбэка.",
   "config.key.service.webhookSecret": "секрет HMAC webhook",
   "config.desc.service.webhookSecret": "Секрет подписи webhook-колбэков (HMAC-SHA256).",
+  "config.key.service.webhookAllowHttp": "разрешить http webhook на loopback",
+  "config.desc.service.webhookAllowHttp": "Разрешить http-колбэк только для loopback (в остальных случаях обязателен https).",
   "config.enum.text": "текст",
   "config.enum.file": "файл",
   "config.enum.critical": "критический"
