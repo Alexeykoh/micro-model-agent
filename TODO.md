@@ -87,9 +87,26 @@
       на ход (изменение карты после записи рвало KV-кеш: префикс 51% → 99%),
       холодный старт LSP больше не блокирует запись (30 с → 0.1–4 с: проверка
       только на тёплом соединении, прогрев в фоне, бюджет проверки 4 с).
-- [ ] **W1/W2 — петля:** директивы, переживающие компакцию; `stopReason="duplicate"`;
-      привязка evidence к ходу; `overcommitted`; `imageTokenCost`; `skipped_no_reduction`;
-      `hardDropOldest` по `this.compactedBlock`.
+- [x] **W1/W2 — петля и контекст:** сделано 2026-10-22 (`fix/harness-audit-w1w2-loop`) —
+      жёсткий стоп по повторяющемуся status-тулу даёт `stopReason=duplicate` и
+      форс-ответ (а не успех с пустым текстом); улики фейлов живут в окне
+      `recentOutcomes` (успех чужого тула их не отменяет); директивы харнесса
+      переживают компакцию (реестр `id→текст` в `ContextManager`); сброс
+      per-step состояния и кулдаун recovery/stuck-варнинга — внутри хода
+      (`turnSeq` прокинут в плагины); файлы памяти капнуты (24k), recovery-директива
+      и правило в память троттлятся; evidence галлюцинаций — только текущий ход;
+      `overcommitted` виден в breakdown/терминале/сайдбаре; флор усечения вывода
+      тула (400 символов) + пересчёт бюджета в символы; токены картинки — по
+      пикселям (`imageTokenCost`); очередь картинок капнута (6) с дедупом и
+      обнуляется в `clear()`; несжимаемый overflow → `skipped_no_reduction` без
+      вооружения кулдауна; сводка hard-drop — из выброшенного head. Гейты:
+      `tests/core/loop-duplicate-stop.test.ts`, `tests/core/directive-survives-compaction.test.ts`,
+      `tests/core/tool-batch-recovery-throttle.test.ts`, `tests/core/context-w2.test.ts`,
+      `tests/core/compaction-no-reduction.test.ts`,
+      `tests/modules/execution/stuck-turn-scope.test.ts`, `tests/agent-tool-output.test.ts`.
+      Осталось вне объёма: research-стрик (§1.3–1.4), blocked-батчи в
+      honest-stop и единая подпись вызова (§1.7–1.9), пороги «история против
+      истории» (§3.1), ресайз веб-аттачей, калибровка >2× (§3.8), леджер (§3.9).
 - [x] **W10 — service API и updater:** сделано 2026-10-22 — тенант — свойство процесса
       (`service.tenant`, `X-Mma-Tenant` только сверяется), идемпотентность скоупится
       тенантом и principal'ом (канонический хэш тела), ответ только для вопроса своей
