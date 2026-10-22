@@ -13,27 +13,15 @@ export type { ContextQualityBreakdown, ContextQualityPart };
 export { extractTriedAndFailed };
 
 /** Сообщение истории: роль, контент, tool-метаданные. */
-export interface Message {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string | ContentPart[];
-  name?: string;
-  tool_call_id?: string;
-  success?: boolean;
-  /** Вызов, заблокированный плагином — решение гарда, не реальный фейл. */
-  blocked?: boolean;
-  arguments?: Record<string, unknown>;
-  tool_calls?: Array<{
-    id: string;
-    type: "function";
-    function: { name: string; arguments: string };
-  }>;
-}
+import type { Message } from "./message";
+export type { Message } from "./message";
 
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import { DEFAULTS } from "../../config/defaults";
 import type { TokenCounter } from "../../llm/token-counter";
-import { imageTokensForDataUrl } from "../../llm/image-utils";
-import { MAX_QUEUED_TOOL_IMAGES, imageContentKey } from "../agent/tool-images";
+import { estimateMessageTokens, messageSignature } from "./estimation";
+import { reassertStandingDirectives } from "./standing-directives";
+import { PendingImageQueue } from "./pending-images";
 import {
   ContextCalibrator,
   isImplausibleJump,
@@ -163,13 +151,13 @@ export class ContextManager {
   /** Последнее сообщение юзера, похожее на вставленную ошибку/лог (не задача). */
   private lastUserFeedback = "";
   private tokenCounter: TokenCounter | null;
-  private pendingImageParts: ContentPart[] = [];
+  private pendingImages = new PendingImageQueue();
   /**
    * Стоящие директивы харнесса (`id → текст`). Директивы вставляются в контекст
    * как `<system-summary>`, который компакция вырезает; реестр позволяет вернуть
-   * их после компакции (§1.5 аудита).
+   * их после компакции (§1.5 аудита). Операции — `core/context/standing-directives`.
    */
-  private standingDirectives = new Map<string, string>();
+  readonly standingDirectives = new Map<string, string>();
   private toolTokens = 0;
   /**
    * Монотонный счётчик штампов сообщений (см. `beginTurn`/`seqOf`). Храним seq
@@ -409,16 +397,15 @@ export class ContextManager {
       }
     }
     // Авто-аттач pending-картинок к следующему user-сообщению
-    if (msg.role === "user" && this.pendingImageParts.length > 0) {
+    if (msg.role === "user" && this.pendingImages.has()) {
       const textPart: TextPart = {
         type: "text",
         text: typeof msg.content === "string" ? msg.content : getMessageText(msg.content),
       };
       msg = {
         ...msg,
-        content: [textPart, ...this.pendingImageParts],
+        content: [textPart, ...this.pendingImages.takeAll()],
       };
-      this.pendingImageParts = [];
     }
     this.messages.push(this.stampSeq(msg));
     // OO-3/OO-8: адреса-находки пишутся сразу (сырой контент), правка — stale.
@@ -431,35 +418,28 @@ export class ContextManager {
    * Кладёт картинку в очередь на аттач к следующему user-сообщению.
    */
   addPendingImage(part: ContentPart): void {
-    // Дедуп по содержимому: один и тот же скриншот не должен копиться.
-    const key = imageContentKey(part);
-    if (key && this.pendingImageParts.some((p) => imageContentKey(p) === key)) return;
-    this.pendingImageParts.push(part);
-    // Кап очереди: старые картинки вытесняются (свежие важнее).
-    while (this.pendingImageParts.length > MAX_QUEUED_TOOL_IMAGES) {
-      this.pendingImageParts.shift();
-    }
+    this.pendingImages.add(part);
   }
 
   /**
    * True, если есть картинки, ждущие аттача.
    */
   hasPendingImages(): boolean {
-    return this.pendingImageParts.length > 0;
+    return this.pendingImages.has();
   }
 
   /**
    * Возвращает pending-картинки, не очищая очередь.
    */
   getPendingImages(): ContentPart[] {
-    return [...this.pendingImageParts];
+    return this.pendingImages.list();
   }
 
   /**
    * Очищает pending-картинки (напр., юзер шлёт чисто текстовое сообщение).
    */
   clearPendingImages(): void {
-    this.pendingImageParts = [];
+    this.pendingImages.clear();
   }
 
   /** Ставит/обновляет стоящую директиву харнесса (переживает компакцию). */
@@ -470,37 +450,6 @@ export class ContextManager {
   /** Снимает стоящую директиву (условие перестало выполняться). */
   clearStandingDirective(id: string): void {
     this.standingDirectives.delete(id);
-  }
-
-  /** Снимает все стоящие директивы (новый ход: условия обнулены). */
-  clearStandingDirectives(): void {
-    this.standingDirectives.clear();
-  }
-
-  /** Тексты стоящих директив (id → текст). */
-  getStandingDirectives(): Record<string, string> {
-    return Object.fromEntries(this.standingDirectives);
-  }
-
-  /**
-   * Возвращает директивы, вырезанные компакцией, одним сообщением. Директивы,
-   * чей текст ещё есть в истории, повторно не добавляются.
-   */
-  private reassertStandingDirectives(): void {
-    if (this.standingDirectives.size === 0) return;
-    const present = this.messages
-      .map((m) => getMessageText(m.content))
-      .join("\n");
-    const missing = [...this.standingDirectives.values()].filter(
-      (text) => text && !present.includes(text),
-    );
-    if (missing.length === 0) return;
-    this.messages.push(
-      this.stampSeq({
-        role: "user",
-        content: `<system-summary>${missing.join("\n")}</system-summary>`,
-      }),
-    );
   }
 
   /** Число сообщений в истории. */
@@ -514,20 +463,9 @@ export class ContextManager {
   // Это устраняет класс багов «оценка выросла на +44K, добавлено 2 сообщения».
   private tokenCache = new WeakMap<Message, { sig: string; tokens: number }>();
 
-  /** Дешёвая сигнатура контента сообщения (детект мутации без токенизации). */
+  /** Дешёвая сигнатура содержания сообщения (детект мутации без токенизации). */
   private messageSignature(m: Message): string {
-    const text = typeof m.content === "string" ? m.content : getMessageText(m.content);
-    const parts = Array.isArray(m.content)
-      ? m.content
-          .map((p) =>
-            p.type === "image_url" ? `i:${p.image_url?.url?.length ?? 0}` : "t",
-          )
-          .join(",")
-      : "s";
-    const tc = m.tool_calls
-      ? m.tool_calls.map((t) => `${t.id}:${t.function.name}:${t.function.arguments.length}`).join("|")
-      : "";
-    return `${m.role}\u0001${text.length}\u0001${parts}\u0001${tc}`;
+    return messageSignature(m);
   }
 
   private estimateMessageTokensCached(m: Message): number {
@@ -540,44 +478,7 @@ export class ContextManager {
   }
 
   private estimateMessageTokens(m: Message): number {
-    const text = getMessageText(m.content);
-    if (this.tokenCounter) {
-      let t = this.tokenCounter.count(text);
-      // Токены картинок: по пикселям (тайл 512×512 ≈ 130 токенов).
-      if (Array.isArray(m.content)) {
-        for (const part of m.content) {
-          if (part.type === "image_url" && part.image_url?.url) {
-            t += imageTokensForDataUrl(part.image_url.url);
-          }
-        }
-      }
-      if (m.tool_calls) {
-        for (const tc of m.tool_calls) {
-          t += this.tokenCounter.count(tc.id);
-          t += this.tokenCounter.count(tc.function.name);
-          t += this.tokenCounter.count(tc.function.arguments);
-          t += 4;
-        }
-      }
-      return t;
-    }
-    let t = Math.ceil(text.length / 2);
-    if (Array.isArray(m.content)) {
-      for (const part of m.content) {
-        if (part.type === "image_url" && part.image_url?.url) {
-          t += imageTokensForDataUrl(part.image_url.url);
-        }
-      }
-    }
-    if (m.tool_calls) {
-      for (const tc of m.tool_calls) {
-        t += Math.ceil(tc.id.length / 2);
-        t += Math.ceil(tc.function.name.length / 2);
-        t += Math.ceil(tc.function.arguments.length / 2);
-        t += 4;
-      }
-    }
-    return t;
+    return estimateMessageTokens(m, this.tokenCounter);
   }
 
   /** True, если истории нужна компакция (бюджет превышен или интервал + загрузка). */
@@ -656,7 +557,12 @@ export class ContextManager {
     // Директивы харнесса живут в отдельном реестре: компакция вырезала все
     // `<system-summary>`, а условие директивы (стрик) осталось активным — модель
     // теряла указание и больше не получала его (§1.5 аудита).
-    this.reassertStandingDirectives();
+    const reassert = reassertStandingDirectives(this.standingDirectives, this.messages);
+    if (reassert) {
+      this.messages.push(
+        this.stampSeq({ role: "user", content: `<system-summary>${reassert}</system-summary>` }),
+      );
+    }
     this.iterationsSinceCompaction = 0;
     // Компакция переписала историю — baseline калибровки недействителен.
     this.calibrator.invalidate();
@@ -1066,7 +972,7 @@ export class ContextManager {
     this.messages = [];
     this.compactedBlock = null;
     // Pending-картинки прошлого хода не должны утечь в следующий (§3.5).
-    this.pendingImageParts = [];
+    this.pendingImages.clear();
     this.toolLedger = [];
     this.toolLedgerKeys = new Set();
     this.iterationsSinceCompaction = 0;
@@ -1181,3 +1087,5 @@ export class ContextManager {
     return Math.max(0, this.getContextTokens() - this.systemTokens() - this.toolTokens);
   }
 }
+
+

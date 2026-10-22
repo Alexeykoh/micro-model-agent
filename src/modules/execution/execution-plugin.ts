@@ -8,9 +8,9 @@ import type { PlanStore } from "./plan-store";
 import { detectTestResults } from "../../tools/bash";
 import { forbiddenWindowsCommand } from "./windows-commands";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
-import { toForwardSlash } from "../../tools/path-utils";
 import { platform } from "os";
 import { switchStepToDelete } from "./plan-steps";
+import { buildRecoveryText } from "./execution-recovery";
 
 /**
  * Кулдаун (в итерациях) между инжектами stuck-восстановления. Экспортируется,
@@ -102,45 +102,8 @@ export interface ExecutionPluginDeps {
   maybeSearchError: (ctx: any, call: any) => void;
 }
 
-/** Сломанный компиляцией файл ("" — без привязки к файлу). */
-export interface BrokenFile {
-  file: string;
-  error: string;
-}
-
-function normalizeBrokenPath(p: string): string {
-  return toForwardSlash(p).replace(/^\.\//, "");
-}
-
-/** Парсит строку ошибки tsc / bun build / node --check в путь файла.
- *  Null, если в строке нет привязки к файлу (напр. `error: Could not
- *  resolve "..."`). */
-export function parseBrokenFile(line: string): string | null {
-  const trimmed = line.trim();
-  // tsc: src/index.tsx(17,15): error TS2322: ...
-  const tsc = /^(.+?)\s*\(\d+,\d+\)\s*:\s*error TS\d+/.exec(trimmed);
-  if (tsc) return normalizeBrokenPath(tsc[1]);
-  // bun build / node --check: /abs/file.tsx:1:10: error: ...
-  const bn = /^(.+?):\d+:\d+\s*:\s*(?:error|SyntaxError)/.exec(trimmed);
-  if (bn) return normalizeBrokenPath(bn[1]);
-  return null;
-}
-
-/** Вытаскивает пофайловые compile-фейлы из вывода write/edit. Смотрит только
- *  строки-маркеры (`[Project typecheck failed]: <line>` /
- *  `[Syntax check failed]: <line>`), чтобы тело диффа не давало ложных. */
-export function extractBrokenFiles(output: string): BrokenFile[] {
-  const out: BrokenFile[] = [];
-  for (const line of output.split("\n")) {
-    const marker = /\[(?:Project typecheck failed|Syntax check failed)\]:\s*(.+)$/.exec(line);
-    if (!marker) continue;
-    const errLine = marker[1].trim();
-    out.push({ file: parseBrokenFile(errLine) ?? "", error: errLine.slice(0, 300) });
-  }
-  return out;
-}
-
-/** Сброс пер-шаговых флагов при смене активного шага (или его отсутствии: -1). */
+export { parseBrokenFile, extractBrokenFiles, type BrokenFile } from "./broken-files";
+import { extractBrokenFiles, normalizeBrokenPath } from "./broken-files";
 function resetStepFlags(state: ExecutionPluginState, stepId: number): void {
   state.consecutivePlanWarnings = 0;
   state.lastStepId = stepId;
@@ -294,31 +257,19 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
         if (recoveryReady) {
           const recovery = deps.stuckDetector.getRecoveryMessage();
           if (recovery && ctx.contextManager) {
-            // Прикладываем контекст tsc-ошибки, чтобы модель знала, ПОЧЕМУ застряла.
-            let tscContext = "";
-            if (deps.state.typecheckFailures.size > 0) {
-              const currentStep = deps.trackerRef.current?.getCurrentStep();
-              if (currentStep) {
-                const stepFiles = extractFileLikeTokens(stripUrls(currentStep.description));
-                for (const [file, error] of deps.state.typecheckFailures) {
-                  if (!file || stepFiles.some((f) => file.endsWith(f) || f.endsWith(file))) {
-                    tscContext = `\nLast compile error: ${error}`;
-                    break;
-                  }
-                }
-                if (!tscContext) {
-                  const first = deps.state.typecheckFailures.entries().next().value;
-                  if (first) tscContext = `\nLast compile error: ${first[1]}`;
-                }
-              }
-            }
-
             // Префикс стабильной машиночитаемой классификации: модель видит,
             // ПОЧЕМУ застряла, до локализованного recovery-гайданса.
             const diagnostic = deps.stuckDetector.getStuckDiagnostic(currentIter);
+            const currentStep = deps.trackerRef.current?.getCurrentStep();
+            const text = buildRecoveryText({
+              recovery,
+              ...(diagnostic ? { diagnostic } : {}),
+              typecheckFailures: deps.state.typecheckFailures,
+              ...(currentStep ? { stepDescription: currentStep.description } : {}),
+            });
             ctx.contextManager.addMessage({
               role: "user",
-              content: `<system-summary>${diagnostic ? `${diagnostic}\n` : ""}${recovery}${tscContext}</system-summary>`,
+              content: `<system-summary>${text}</system-summary>`,
             });
           }
           deps.stuckDetector.recordEscalation();
@@ -585,3 +536,4 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
     onTurnEnd: () => deps.archiveCompletedPlan(),
   };
 }
+

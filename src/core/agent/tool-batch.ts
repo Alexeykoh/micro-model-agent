@@ -1,5 +1,4 @@
 /** Исполнитель пакета тулов: жизненный цикл вызовов за итерацию. */
-import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
 import type { AppConfig } from "../../config/types";
 import type { ContextManager } from "../../core/context/manager";
@@ -11,13 +10,12 @@ import type { CostTracker } from "../../modules/pricing/index";
 import type { ToolExecutor } from "../../tools/executor";
 import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
-import type { MetaKind, OnMeta, StopReason } from "../types";
+import type { OnMeta, StopReason } from "../types";
 import type { ToolResult } from "../../tools/types";
 import type { LoopState } from "./loop-state";
 import {
   summarizeToolArgs,
   truncateToolOutput,
-  toolFailureSummary,
   isExecutableScriptPath,
   appendErrorMeta,
 } from "./tool-output";
@@ -276,31 +274,7 @@ function recordRepeatedToolFailure(
  * тела тулов; статусные меты остаются видимы. display имеет приоритет, иначе
  * прогон через onMeta; упавший тул показывает спокойную суть, не директивы.
  */
-function renderToolResultMeta(
-  deps: ToolBatchDeps,
-  iteration: number,
-  result: ToolResult,
-  onMeta: OnMeta | undefined,
-): void {
-  const { pluginManager, contextManager, logger } = deps;
-  const TOOL_META: MetaKind = "tool";
-  const hookCtx = { iteration, logger, contextManager };
-  if (result.display !== undefined) {
-    if (result.display.length > 0) onMeta?.(`\n${result.display}\n`, TOOL_META);
-  } else if (result.success) {
-    const metaOut = pluginManager.runOnMeta(hookCtx, result.output);
-    onMeta?.(`\n${pc.dim(metaOut)}\n`, TOOL_META);
-  } else {
-    const failure = toolFailureSummary(result.output);
-    const metaOut = failure.text ? pluginManager.runOnMeta(hookCtx, failure.text) : "";
-    if (metaOut) {
-      const color = failure.severity === "warn" ? pc.yellow : pc.red;
-      const glyph = failure.severity === "warn" ? "⚠" : "✗";
-      onMeta?.(`\n${color(`${glyph} ${metaOut}`)}\n`, TOOL_META);
-    }
-  }
-  if (result.diff) onMeta?.(`\n${result.diff}\n`, TOOL_META);
-}
+import { imageEventFields, renderToolResultMeta } from "./tool-result-meta";
 
 /** Побочные эффекты успешного тула: план create/re-plan и трекинг файлов. */
 function trackToolResultSideEffects(
@@ -363,13 +337,6 @@ function persistResultImages(
 }
 
 /** Поля изображений для `ToolEvent.end`: refs, иначе inline-фолбэк, иначе ничего. */
-function imageEventFields(
-  result: ToolResult,
-): Pick<ToolEvent, "imageRefs" | "images"> {
-  if (result.imageRefs?.length) return { imageRefs: result.imageRefs };
-  if (result.images?.length) return { images: result.images };
-  return {};
-}
 
 export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDeps) {}
 
@@ -788,3 +755,4 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     return { interrupted: false };
   }
 }
+

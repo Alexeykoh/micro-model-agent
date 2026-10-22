@@ -48,8 +48,8 @@ describe("standing directives", () => {
     const cm = makeContext();
     issueDirective(cm, "research", "Converge the search");
     issueDirective(cm, "cycle", "Stop polishing");
-    expect(Object.keys(cm.getStandingDirectives()).sort()).toEqual(["cycle", "research"]);
-    cm.clearStandingDirectives();
-    expect(cm.getStandingDirectives()).toEqual({});
+    expect([...cm.standingDirectives.keys()].sort()).toEqual(["cycle", "research"]);
+    cm.standingDirectives.clear();
+    expect(cm.standingDirectives.size).toBe(0);
   });
 });

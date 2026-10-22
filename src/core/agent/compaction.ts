@@ -118,7 +118,7 @@ export class CompactionService {
       `overflow (${check.calibrated} > ${contextManager.getBudget().history})`,
     );
     if (!compacted.compacted) {
-      this.deps.logger.diagnostic(
+      this.deps.logger.diagnostic?.(
         "warn",
         "Overflow compaction skipped: no reduction possible (unshrinkable context)",
       );

@@ -19,27 +19,10 @@ import type { SessionLogger } from "../session-logger";
 import type { PolicyState } from "../../modules/reasoning/policy";
 import type { ReasoningState } from "../../tools/set-thinking";
 import { LlmError } from "../../llm/llm-errors";
-import {
-  MAX_LLM_ERROR_RETRIES,
-  MAX_REPEATED_TOOL_CALLS,
-  MAX_REPEATED_TOOL_CALLS_INTERACTIVE,
-} from "./constants";
+import { MAX_LLM_ERROR_RETRIES } from "./constants";
 import { t } from "../../i18n/index";
 import { issueDirective } from "./directives";
-
-/**
- * Read-only тулы-интроспекции. Повтор одного с теми же аргументами прогресса
- * не даст никогда, поэтому интерактивный цикл жёстко стопает после нескольких
- * повторов (наблюдалось: `session_info` в тугом цикле после готовой задачи).
- * Мутирующие — только nudge, чтобы легитимный edit/build/read-цикл не резать.
- */
-const LOOP_PRONE_STATUS_TOOLS = new Set([
-  "session_info",
-  "process_list",
-  "process_log",
-  "file_info",
-  "project_map",
-]);
+import { detectRepeatedToolCall } from "./loop-repeat";
 
 /** Мутабельный вид `Agent`, которым владеет фаза LLM. */
 export interface LlmPhaseHost {
@@ -359,9 +342,8 @@ export async function runLlmPhase(
   // Детекция повторных одинаковых тулов (структурная). Сигнал питает reasoning
   // policy для понижения effort на рутине.
   if (sawToolCall) {
-    const signature = toolCalls.map((tc) => `${tc.name}:${JSON.stringify(tc.arguments)}`).join("|");
-    if (signature && signature === state.lastToolSignature) {
-      state.iterRepetitive = true;
+    const repeat = detectRepeatedToolCall(state, toolCalls, deps.exitOnComplete === true);
+    if (repeat.repeated) {
       logger.diagnostic(
         "info",
         `Repeated identical tool call detected (iteration ${state.iteration}) — nudging model to finish or change approach`,
@@ -371,36 +353,25 @@ export async function runLlmPhase(
         "repeated_call",
         "You just called the same tool with identical arguments. If the task is done, answer with a final text response NOW. If the command failed, try a different approach.",
       );
-      state.repeatedToolCount++;
-      // Жёсткий стоп — только для status-тулов, которые не прогрессируют от
-      // повтора. Мутирующие/побочные (напр. bash) остаются nudge-only.
-      const allStatusTools = toolCalls.every((tc) => LOOP_PRONE_STATUS_TOOLS.has(tc.name));
+    }
+    if (repeat.stop) {
       if (deps.exitOnComplete) {
-        if (state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS && allStatusTools) {
-          logger.debug("Exit-on-complete: repeated identical status tool call, stopping");
-          // Причина остановки фиксируется честно: без неё ход выглядит как
-          // «успех с пустым ответом» (§1.1 аудита).
-          state.stopReason = "duplicate";
-          return { kind: "break" };
-        }
-      } else if (
-        state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS_INTERACTIVE &&
-        allStatusTools
-      ) {
-        logger.diagnostic(
-          "warn",
-          `Repeated identical status tool ${state.repeatedToolCount}× (iteration ${state.iteration}) — stopping to avoid an infinite loop`,
-        );
-        // Жёсткий стоп = тот же путь, что у «duplicate»-батчей: форс-финальный
-        // ответ без тулов. Иначе ход завершается успехом с пустым текстом.
-        state.finalizeReason = "duplicate";
+        logger.debug("Exit-on-complete: repeated identical status tool call, stopping");
+        // Причина остановки фиксируется честно: без неё ход выглядит как
+        // «успех с пустым ответом» (§1.1 аудита).
         state.stopReason = "duplicate";
         return { kind: "break" };
       }
-    } else {
-      state.repeatedToolCount = 0;
+      logger.diagnostic(
+        "warn",
+        `Repeated identical status tool ${state.repeatedToolCount}× (iteration ${state.iteration}) — stopping to avoid an infinite loop`,
+      );
+      // Жёсткий стоп = тот же путь, что у «duplicate»-батчей: форс-финальный
+      // ответ без тулов. Иначе ход завершается успехом с пустым текстом.
+      state.finalizeReason = "duplicate";
+      state.stopReason = "duplicate";
+      return { kind: "break" };
     }
-    state.lastToolSignature = signature;
   }
 
   return { kind: "ok", textContent, reasoningContent, toolCalls, sawToolCall };

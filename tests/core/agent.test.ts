@@ -68,6 +68,8 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     noteIteration: vi.fn(),
     setToolTokens: vi.fn(),
     resize: vi.fn(),
+    setStandingDirective: vi.fn(),
+    clearStandingDirective: vi.fn(),
   };
 
   const mockHallucinationDetector = {
