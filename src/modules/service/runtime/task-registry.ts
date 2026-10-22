@@ -69,6 +69,8 @@ export interface TaskRecord {
   createdAt: string;
   startedAt?: string;
   finishedAt?: string;
+  /** Когда терминальный результат можно выбросить (`resultRetentionDays`). */
+  expiresAt?: string;
   /** События задачи (для resume/наблюдаемости внутри процесса). */
   events: Envelope[];
   /** Резолверы синхронного ожидания завершения (`wait:true`). */
@@ -123,8 +125,9 @@ export class TaskRegistry {
     this.now = opts.now ?? Date.now;
   }
 
-  /** Создаёт задачу в статусе `queued`. */
+  /** Создаёт задачу в статусе `queued`; попутно чистит протухшие записи. */
   create(params: TaskCreateParams): TaskRecord {
+    this.prune();
     const rec: TaskRecord = {
       jobId: newJobId(),
       sessionId: params.sessionId,
@@ -149,6 +152,11 @@ export class TaskRegistry {
     return this.tasks.get(jobId);
   }
 
+  /** Число задач в реестре (наблюдаемость/тесты retention). */
+  size(): number {
+    return this.tasks.size;
+  }
+
   listForSession(sessionId: string): TaskRecord[] {
     return [...this.tasks.values()].filter((t) => t.sessionId === sessionId);
   }
@@ -161,24 +169,46 @@ export class TaskRegistry {
     return rec;
   }
 
-  /** Терминальный переход: проставляет `finishedAt` и будит ожидающих. */
+  /** Терминальный переход: проставляет `finishedAt`/`expiresAt` и будит ожидающих. */
   finish(jobId: string, patch: Partial<TaskRecord>): TaskRecord | undefined {
     const rec = this.tasks.get(jobId);
     if (!rec) return undefined;
     Object.assign(rec, patch);
     if (!rec.finishedAt) rec.finishedAt = new Date(this.now()).toISOString();
+    rec.expiresAt = new Date(
+      Date.parse(rec.finishedAt) + this.opts.retentionDays * 86_400_000,
+    ).toISOString();
     const waiters = rec.waiters.splice(0);
     for (const wake of waiters) wake();
     return rec;
   }
 
-  /** Резолвится немедленно, если задача терминальна, иначе — по завершении. */
-  whenFinished(jobId: string): Promise<TaskRecord | undefined> {
+  /**
+   * Резолвится немедленно, если задача терминальна, иначе — по завершении.
+   * `signal` снимает ожидание (таймаут `wait:true`), не оставляя мёртвый waiter.
+   */
+  whenFinished(jobId: string, signal?: AbortSignal): Promise<TaskRecord | undefined> {
     const rec = this.tasks.get(jobId);
     if (!rec) return Promise.resolve(undefined);
     if (isTerminal(rec.status)) return Promise.resolve(rec);
+    if (signal?.aborted) return Promise.resolve(undefined);
     return new Promise((resolve) => {
-      rec.waiters.push(() => resolve(this.tasks.get(jobId)));
+      let done = false;
+      const wake = (): void => {
+        if (done) return;
+        done = true;
+        signal?.removeEventListener("abort", onAbort);
+        resolve(this.tasks.get(jobId));
+      };
+      const onAbort = (): void => {
+        if (done) return;
+        done = true;
+        const index = rec.waiters.indexOf(wake);
+        if (index >= 0) rec.waiters.splice(index, 1);
+        resolve(undefined);
+      };
+      rec.waiters.push(wake);
+      signal?.addEventListener("abort", onAbort, { once: true });
     });
   }
 
@@ -223,11 +253,13 @@ export class TaskRegistry {
   /** Чистит протухшие idempotency-ключи и старые терминальные результаты. */
   prune(): void {
     const now = this.now();
-    const cutoff = now - this.opts.retentionDays * 86_400_000;
     for (const [id, rec] of this.tasks) {
-      if (isTerminal(rec.status) && Date.parse(rec.finishedAt ?? rec.createdAt) < cutoff) {
-        this.tasks.delete(id);
-      }
+      if (!isTerminal(rec.status)) continue;
+      const expiresAt = rec.expiresAt
+        ? Date.parse(rec.expiresAt)
+        : (rec.finishedAt ? Date.parse(rec.finishedAt) : Date.parse(rec.createdAt)) +
+          this.opts.retentionDays * 86_400_000;
+      if (expiresAt <= now) this.tasks.delete(id);
     }
     for (const [key, entry] of this.idem) {
       if (entry.expiresAt <= now) this.idem.delete(key);

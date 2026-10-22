@@ -70,6 +70,8 @@ export interface AgentServiceState {
       timer?: ReturnType<typeof setTimeout>;
     }
   >;
+  /** Периодический prune реестра задач (retention/idempotency TTL). */
+  pruneTimer?: ReturnType<typeof setInterval>;
   server?: Server;
   starting?: Promise<string>;
   host: string;
@@ -101,12 +103,15 @@ function processTenant(sg: AppConfig["service"]): TenantContext {
   return tenantId ? { tenantId } : {};
 }
 
+/** Интервал фонового prune реестра задач. */
+const PRUNE_INTERVAL_MS = 60_000;
+
 /** Создаёт состояние сервиса и привязывает фабрику раннеров, если дана. */
 export function createServiceState(deps: ServiceDeps): AgentServiceState {
   const sg = deps.config.service;
   const pool = new RunPool(undefined, sg.maxQueueLength);
   if (deps.spawnRunner) pool.setFactory(deps.spawnRunner);
-  return {
+  const state: AgentServiceState = {
     deps,
     config: deps.config,
     pool,
@@ -127,4 +132,8 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     keepaliveMs: deps.keepaliveMs ?? 20_000,
     startedAt: Date.now(),
   };
+  const pruneTimer = setInterval(() => state.tasks.prune(), PRUNE_INTERVAL_MS);
+  (pruneTimer as { unref?: () => void }).unref?.();
+  state.pruneTimer = pruneTimer;
+  return state;
 }

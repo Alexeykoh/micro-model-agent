@@ -8,6 +8,9 @@ export function formatFrame(env: Envelope): string {
   return `id: ${env.seq}\nevent: ${env.type}\ndata: ${JSON.stringify(env)}\n\n`;
 }
 
+/** Кап событий на задачу: реестр не растёт бесконечно на долгом ходе. */
+export const TASK_EVENTS_MAX = 2000;
+
 /** Аллоцирует seq, кладёт в буфер/задачу и рассылает подписчикам сессии. */
 export function emitEvent(
   s: AgentServiceState,
@@ -26,6 +29,9 @@ export function emitEvent(
   };
   s.envelopes.append(env);
   task.events.push(env);
+  if (task.events.length > TASK_EVENTS_MAX) {
+    task.events.splice(0, task.events.length - TASK_EVENTS_MAX);
+  }
   for (const client of s.clients) {
     if (client.sessionId === task.sessionId) client.send(formatFrame(env));
   }

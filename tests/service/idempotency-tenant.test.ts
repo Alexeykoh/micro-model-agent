@@ -120,6 +120,19 @@ describe("idempotency ownership", () => {
     const conflict = await submit(url, sid, { input: "b" }, headers);
     expect(conflict.status).toBe(409);
   });
+
+  it("honours wait:true on an idempotent hit", async () => {
+    const { url } = await boot(fastAgent("cached"), acme);
+    const sid = await firstSessionId(url);
+    const headers = { "Idempotency-Key": "wait" };
+    const body = { input: "x", mode: "job", wait: true };
+    const first = await submit(url, sid, body, headers);
+    expect(first.status).toBe(200);
+    const second = await submit(url, sid, body, headers);
+    expect(second.status).toBe(200);
+    expect(second.json.jobId).toBe(first.json.jobId);
+    expect((second.json.result as { text: string }).text).toBe("cached");
+  });
 });
 
 describe("question ownership", () => {

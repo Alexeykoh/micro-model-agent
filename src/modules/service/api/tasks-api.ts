@@ -100,8 +100,16 @@ async function submit(
   const idemKey = headerString(req, "idempotency-key");
   const tenantKey = s.tenant.tenantId ?? "";
 
-  const dedupe = resolveIdempotentSubmit(res, s, body, tenant.principalId ?? "anon", tenantKey, idemKey);
-  if (dedupe.handled) return true;
+  const dedupe = resolveIdempotentSubmit(s, body, tenant.principalId ?? "anon", tenantKey, idemKey);
+  if (dedupe.kind === "conflict") {
+    sendProblem(res, problem({ type: "idempotencyConflict", title: "idempotency key reused with a different body or principal", status: 409 }));
+    return true;
+  }
+  if (dedupe.kind === "hit") {
+    return parsed.params.wait
+      ? await respondSubmitWait(res, s, dedupe.task)
+      : respondSubmit(res, s, dedupe.task);
+  }
 
   const created = createAndDispatch(s, sessionId, parsed.params, tenant);
   if (!created.ok) {
@@ -124,29 +132,23 @@ async function submit(
 
 /**
  * Идемпотентность сабмита: тот же `Idempotency-Key` с тем же телом отдаёт
- * готовую задачу, с другим — `409`. Ответы и запись ключа — здесь, чтобы
- * `submit` не рос в ветвлениях.
+ * готовую задачу, с другим (или под другим principal) — `409`. Ответы — в
+ * `submit`, чтобы `wait:true` одинаково работал для hit и miss.
  */
 function resolveIdempotentSubmit(
-  res: ServerResponse,
   s: AgentServiceState,
   body: Record<string, unknown>,
   principal: string,
   tenantKey: string,
   idemKey: string | undefined,
-): { handled: boolean } {
-  if (!idemKey) return { handled: false };
+): { kind: "none" } | { kind: "conflict" } | { kind: "hit"; task: TaskRecord } {
+  if (!idemKey) return { kind: "none" };
   const bodyHash = hashBody(body);
-  const early = checkIdempotency(s, tenantKey, principal, idemKey, bodyHash);
-  if (early.kind === "conflict") {
-    sendProblem(res, problem({ type: "idempotencyConflict", title: "idempotency key reused with a different body", status: 409 }));
-    return { handled: true };
-  }
-  if (early.kind === "hit") {
-    respondSubmit(res, s, early.task);
-    return { handled: true };
-  }
-  return { handled: false };
+  const lookup = s.tasks.checkIdempotency(tenantKey, principal, idemKey, bodyHash);
+  if (lookup.kind === "conflict") return { kind: "conflict" };
+  if (lookup.kind !== "hit") return { kind: "none" };
+  const task = s.tasks.get(lookup.jobId);
+  return task ? { kind: "hit", task } : { kind: "none" };
 }
 
 /** Проверяет наличие менеджера сессий и самой сессии; пишет Problem при провале. */
@@ -161,26 +163,6 @@ function ensureSession(s: AgentServiceState, res: ServerResponse, sessionId: str
     return false;
   }
   return true;
-}
-
-/** Итог проверки Idempotency-Key: нет ключа / hit (готовая задача) / конфликт тела. */
-type IdemCheck = { kind: "none" } | { kind: "conflict" } | { kind: "hit"; task: TaskRecord };
-
-function checkIdempotency(
-  s: AgentServiceState,
-  tenantKey: string,
-  principal: string,
-  key: string | undefined,
-  bodyHash: string,
-): IdemCheck {
-  if (!key) return { kind: "none" };
-  const lookup = s.tasks.checkIdempotency(tenantKey, principal, key, bodyHash);
-  if (lookup.kind === "conflict") return { kind: "conflict" };
-  if (lookup.kind === "hit") {
-    const task = s.tasks.get(lookup.jobId);
-    if (task) return { kind: "hit", task };
-  }
-  return { kind: "none" };
 }
 
 /** Создаёт задачу и ставит её в прогон/очередь; `false` — очередь сессии полна. */
@@ -224,6 +206,8 @@ function enqueueTask(s: AgentServiceState, task: TaskRecord): boolean {
       status: "failed",
       error: problem({ type: "queueFull", title: "session queue is full", status: 429 }),
     });
+    // Отказ enqueue — тоже терминальный исход: подписчик на webhook не должен ждать.
+    sendWebhook(s, task);
     return false;
   }
   emitEvent(s, task, "task.accepted", {});
@@ -234,19 +218,22 @@ function queueFull(s: AgentServiceState, sessionId: string): boolean {
   return s.pool.isBusy(sessionId) && s.pool.queueLen(sessionId) >= s.config.service.maxQueueLength;
 }
 
-/** `wait:true` — ждём завершения до `syncWaitMs`, иначе 202. */
+/** `wait:true` — ждём завершения до `syncWaitMs`, иначе 202 (таймер снимается). */
 async function respondSubmitWait(
   res: ServerResponse,
   s: AgentServiceState,
   task: TaskRecord,
 ): Promise<boolean> {
-  const settled = await Promise.race([
-    s.tasks.whenFinished(task.jobId),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), s.config.service.syncWaitMs)),
-  ]);
-  if (settled) {
-    sendJson(res, 200, toJobObject(settled));
-    return true;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), s.config.service.syncWaitMs);
+  try {
+    const settled = await s.tasks.whenFinished(task.jobId, controller.signal);
+    if (settled) {
+      sendJson(res, 200, toJobObject(settled));
+      return true;
+    }
+  } finally {
+    clearTimeout(timer);
   }
   return respondSubmit(res, s, task);
 }
