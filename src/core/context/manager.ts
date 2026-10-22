@@ -353,7 +353,7 @@ export class ContextManager {
    * источник правды для числа и разбора.
    */
   private qualityFactors(): QualityFactors {
-    const usedTokens = this.getContextTokens();
+    const usedTokens = this.historyTokensForThresholds();
     const load = this.budget.history > 0
       ? Math.max(0, 1 - usedTokens / this.budget.history)
       : 0;
@@ -481,20 +481,30 @@ export class ContextManager {
     return estimateMessageTokens(m, this.tokenCounter);
   }
 
+  /**
+   * Токены ИСТОРИИ для порогов: калиброванная оценка минус system и тулы.
+   *
+   * Сравнивать весь контекст (system + tools + history) с бюджетом истории —
+   * двойной счёт: при 30K системных и 30K истории окно 128K «переполнялось» на
+   * 60K против бюджета 96K (§3.1 аудита).
+   */
+  private historyTokensForThresholds(): number {
+    if (this.policy !== "v2") {
+      return this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
+    }
+    return this.getHistoryTokens();
+  }
+
   /** True, если истории нужна компакция (бюджет превышен или интервал + загрузка). */
   needsCompaction(): boolean {
-    // v2: пороги по калиброванной оценке; legacy — по сырой (2.18.2).
-    const totalTokens =
-      this.policy === "v2"
-        ? this.getContextTokens()
-        : this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
-    if (totalTokens > this.budget.history * this.compactionThreshold) return true;
+    const historyTokens = this.historyTokensForThresholds();
+    if (historyTokens > this.budget.history * this.compactionThreshold) return true;
 
     // Интервал итераций уплотняет только значимо загруженную историю.
     // Уплотнять слабозагруженный контекст — терять рабочее состояние без
     // бюджетной причины (см. `compactionMinLoad`).
     if (this.iterationsSinceCompaction < COMPACTION_INTERVAL) return false;
-    const load = this.budget.history > 0 ? totalTokens / this.budget.history : 0;
+    const load = this.budget.history > 0 ? historyTokens / this.budget.history : 0;
     return load >= this.compactionMinLoad;
   }
 
@@ -505,11 +515,8 @@ export class ContextManager {
    */
   needsIntervalCompaction(): boolean {
     if (this.iterationsSinceCompaction < COMPACTION_INTERVAL) return false;
-    const totalTokens =
-      this.policy === "v2"
-        ? this.getContextTokens()
-        : this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
-    const load = this.budget.history > 0 ? totalTokens / this.budget.history : 0;
+    const historyTokens = this.historyTokensForThresholds();
+    const load = this.budget.history > 0 ? historyTokens / this.budget.history : 0;
     return load >= this.compactionMinLoad;
   }
 
@@ -1046,10 +1053,13 @@ export class ContextManager {
     this.lastEstimateMessageCount = messageCount;
     this.lastJumpWasImplausible = implausible;
     const calibrated = this.calibrator.calibrate(raw, messageCount);
+    // С бюджетом истории сравниваем ТОЛЬКО историю: system и тулы имеют свои
+    // бюджеты, иначе переполнение объявляется раньше времени (§3.1 аудита).
+    const historyTokens = Math.max(0, calibrated - this.systemTokens() - this.toolTokens);
     return {
-      allowed: !implausible && calibrated > this.budget.history,
+      allowed: !implausible && historyTokens > this.budget.history,
       raw,
-      calibrated,
+      calibrated: historyTokens,
       implausible,
     };
   }

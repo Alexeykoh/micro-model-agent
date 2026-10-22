@@ -178,7 +178,11 @@ recovery-директивы и кап файлов памяти), `tests/core/co
 (evidence по ходу, токены картинок по пикселям, очередь картинок,
 `overcommitted`), `tests/core/compaction-no-reduction.test.ts`
 (`skipped_no_reduction`), `tests/modules/execution/stuck-turn-scope.test.ts`
-(окно `recentOutcomes`, per-turn сброс и кулдаун recovery).
+(окно `recentOutcomes`, per-turn сброс и кулдаун recovery),
+`tests/core/tool-batch-research-convergence.test.ts` (стойкость research-стрика),
+`tests/core/loop-repeat.test.ts` (каноническая подпись повтора),
+`tests/core/history-budget-threshold.test.ts` (пороги «история против истории»),
+`tests/core/tool-ledger-bounds.test.ts` (границы леджера тулов).
 
 Живой прогон на 9B (2026-10-22) вскрыл два дефекта, закрытых гвардами:
 `tests/core/system-prompt-freeze.test.ts` (карта проекта — снимок на ход:

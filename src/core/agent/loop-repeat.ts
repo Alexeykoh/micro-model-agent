@@ -6,6 +6,7 @@
  */
 import type { ToolCall } from "../../tools/types";
 import type { LoopState } from "./loop-state";
+import { canonicalArgsKey } from "./canonical-args";
 import {
   MAX_REPEATED_TOOL_CALLS,
   MAX_REPEATED_TOOL_CALLS_INTERACTIVE,
@@ -42,8 +43,10 @@ export function detectRepeatedToolCall(
   toolCalls: ToolCall[],
   exitOnComplete: boolean,
 ): RepeatDetection {
+  // Каноническая подпись: порядок ключей и `./a.ts` vs `a.ts` не должны
+  // выглядеть «новым» вызовом (§1.9 аудита — раньше был сырой JSON.stringify).
   const signature = toolCalls
-    .map((tc) => `${tc.name}:${JSON.stringify(tc.arguments)}`)
+    .map((tc) => canonicalArgsKey(tc.name, tc.arguments))
     .join("|");
   if (!signature || signature !== state.lastToolSignature) {
     state.repeatedToolCount = 0;

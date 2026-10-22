@@ -108,19 +108,58 @@ describe("ToolBatchExecutor honest-stop", () => {
     expect(state.consecutiveFailedBatches).toBe(0);
   });
 
-  it("treats plugin-level blocks as neutral", async () => {
-    // Guard-rail refusal before the tool ran is neither streak nor reset
-    // per the ToolResult.blocked contract.
-    const { ex, state } = makeCase();
+  it("counts plugin-level blocks as failures for honest-stop", async () => {
+    // Guard-rail refusal before the tool ran is not a success, but a series of
+    // refusals is still a loop — иначе счётчик замерзал навсегда (§1.7).
+    const blocked = { success: false, blocked: true, output: "refused by plugin" };
+    const added: string[] = [];
+    const ex = new ToolBatchExecutor(stubDeps(() => blocked, added));
+    const state = createLoopState();
     await runBatch(ex, state, [fail]);
     expect(state.consecutiveFailedBatches).toBe(1);
-    (ex as any).deps.toolExecutor.execute = async () => ({
-      success: false,
-      blocked: true,
-      output: "refused by plugin",
-    });
     await runSingleBatch(ex, state);
-    expect(state.consecutiveFailedBatches).toBe(1);
+    expect(state.consecutiveFailedBatches).toBe(2);
+    await runSingleBatch(ex, state);
+    await runSingleBatch(ex, state);
+    expect(state.consecutiveFailedBatches).toBe(4);
+  });
+
+  it("a blocked batch does not count as success and does not reset the streak", async () => {
+    const added: string[] = [];
+    const blocked = { success: false, blocked: true, output: "refused" };
+    const ex = new ToolBatchExecutor(stubDeps(() => blocked, added));
+    const state = createLoopState();
+    await runSingleBatch(ex, state);
+    await runSingleBatch(ex, state);
+    expect(state.consecutiveFailedBatches).toBe(2);
+    await runSingleBatch(ex, state);
+    expect(state.consecutiveFailedBatches).toBe(3);
+  });
+
+  it("keeps the security-block marker across batches (script workaround)", async () => {
+    // §1.8: bash заблокирован в пакете N, обход пишется в пакете N+1. Маркер
+    // раньше сбрасывался в начале каждого пакета и nudge не срабатывал.
+    const added: string[] = [];
+    const blocked = {
+      success: false,
+      output: "[SECURITY BLOCKED] Command is not allowed: reg add",
+    };
+    const blocking = new ToolBatchExecutor(stubDeps(() => blocked, added));
+    const state = createLoopState();
+    await runSingleBatch(blocking, state);
+    expect(state.sawSecurityBlock).toBe(true);
+
+    const writing = new ToolBatchExecutor(stubDeps(() => ({ success: true, output: "written" }), added));
+    await writing.execute(
+      state,
+      [{ id: "2", name: "write_file", arguments: { path: "run.cmd", content: "echo x" } }],
+      new Set(),
+      "",
+      "",
+      "task",
+    );
+    expect(state.scriptWorkaroundNudged).toBe(true);
+    expect(added.some((m) => m.includes("script") || m.includes("скрипт"))).toBe(true);
   });
 });
 

@@ -387,9 +387,9 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     const summaries: string[] = [];
     let anyToolFailed = false;
     let batchHasSuccess = false;
-    // Флаг блока безопасности действует в пределах текущего пакета вызовов:
-    // иначе старый блок влиял бы на nudge через десятки итераций.
-    state.sawSecurityBlock = false;
+    // `sawSecurityBlock` живёт весь ход (LoopState создаётся на ход): сброс на
+    // каждом батче не давал поймать «bash заблокирован → write_file *.sh» в
+    // следующем батче (§1.8 аудита).
 
     // ── Общие шаги жизненного цикла вызова: serial и parallel путь делят их. ──
 
@@ -473,7 +473,10 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       tokensBeforeTool: number,
       costBeforeTool: number | undefined,
     ): void => {
-      if (!result.success && !result.blocked && !INFO_TOOLS.has(call.name)) anyToolFailed = true;
+      // Plugin-level блок считается неудачей для honest-stop: перебор
+      // заблокированных вариантов — та же петля, а «нейтральность» замораживала
+      // счётчик навсегда (§1.7 аудита). Успехом блок при этом не становится.
+      if (!result.success && !INFO_TOOLS.has(call.name)) anyToolFailed = true;
       if (result.success) batchHasSuccess = true;
 
       trackToolResultSideEffects(this.deps, state, call, result);
@@ -649,8 +652,8 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     // ВХОДЯТ в учёт — перебор вариантов заблокированной команды это та же
     // петля). Смешанные пакеты и успехи сбрасывают стрик: связка
     // «упал → поправил → упал» (дебаг) под него не попадает.
-    // Plugin-level блоки (result.blocked, guard-rails) нейтральны по контракту
-    // ToolResult.blocked — не успех и не неудача.
+    // Plugin-level блоки (result.blocked, guard-rails) — не успех, но для
+    // honest-stop это неудача: серия отказов гарда без прогресса тоже петля.
     if (anyToolFailed && !batchHasSuccess) {
       state.consecutiveFailedBatches++;
     } else if (batchHasSuccess) {
@@ -723,10 +726,19 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       toolCalls.length > 0 && toolCalls.every((c) => RESEARCH_TOOLS.has(c.name));
     if (isResearchBatch) {
       state.consecutiveResearchBatches++;
-    } else {
-      state.consecutiveResearchBatches = 0;
-      state.researchNudged = false;
-      clearDirective(contextManager, "research");
+      state.nonResearchBatchesWithResult = 0;
+    } else if (batchHasSuccess) {
+      // Посторонний успешный не-web батч НЕ обнуляет серию сразу: иначе
+      // `web_search → read_file → web_fetch → read_file` не набирает порог и
+      // директива выдаётся заново бесконечно (§1.4 аудита). Снимаем серию
+      // только после двух подряд не-web батчей с результатом — это признак,
+      // что модель действительно ушла от поиска.
+      state.nonResearchBatchesWithResult++;
+      if (state.nonResearchBatchesWithResult >= 2) {
+        state.consecutiveResearchBatches = 0;
+        state.researchNudged = false;
+        clearDirective(contextManager, "research");
+      }
     }
     if (state.consecutiveResearchBatches >= MAX_RESEARCH_BATCHES && !state.researchNudged) {
       state.researchNudged = true;

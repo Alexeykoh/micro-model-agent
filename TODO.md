@@ -104,9 +104,16 @@
       `tests/core/tool-batch-recovery-throttle.test.ts`, `tests/core/context-w2.test.ts`,
       `tests/core/compaction-no-reduction.test.ts`,
       `tests/modules/execution/stuck-turn-scope.test.ts`, `tests/agent-tool-output.test.ts`.
-      Осталось вне объёма: research-стрик (§1.3–1.4), blocked-батчи в
-      honest-stop и единая подпись вызова (§1.7–1.9), пороги «история против
-      истории» (§3.1), ресайз веб-аттачей, калибровка >2× (§3.8), леджер (§3.9).
+      Второй заход той же ветки: research-стрик не сбрасывается одним не-web
+      тулом (§1.4); blocked-батчи входят в honest-stop (§1.7); `sawSecurityBlock`
+      живёт весь ход (§1.8); повторный вызов — по канонической подписи (§1.9);
+      пороги компакции сравнивают историю с бюджетом истории (§3.1); леджер
+      тулов ограничен и освобождает вытесненные ключи (§3.9). Гейты:
+      `tests/core/tool-batch-research-convergence.test.ts`,
+      `tests/core/loop-repeat.test.ts`, `tests/core/history-budget-threshold.test.ts`,
+      `tests/core/tool-ledger-bounds.test.ts`, `tests/core/tool-batch-honest-stop.test.ts`.
+      Осталось вне объёма: ресайз веб-аттачей (§2.4 плана) и калибровка >2×
+      (§3.8 — сознательный отказ).
 - [x] **W10 — service API и updater:** сделано 2026-10-22 — тенант — свойство процесса
       (`service.tenant`, `X-Mma-Tenant` только сверяется), идемпотентность скоупится
       тенантом и principal'ом (канонический хэш тела), ответ только для вопроса своей

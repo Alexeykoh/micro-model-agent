@@ -95,6 +95,11 @@ export interface LoopState {
   consecutiveResearchBatches: number;
   /** Директива «свести поиск к результату» уже отправлена (1 раз на стрик). */
   researchNudged: boolean;
+  /**
+   * Подряд идущие не-web батчи с результатом (после серии веб-поиска). Серия
+   * research сбрасывается только после двух таких батчей (§1.4 аудита).
+   */
+  nonResearchBatchesWithResult: number;
   /** Канонические ключи всех вызовов за ход — вход duplicate-предиката. */
   seenToolCalls: Set<string>;
   /**

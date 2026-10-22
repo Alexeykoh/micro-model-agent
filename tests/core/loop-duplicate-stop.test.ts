@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { runLlmPhase, type LlmPhaseHost } from "../../src/core/agent/loop-llm";
 import { createLoopState } from "../../src/core/agent/loop-state";
+import { canonicalArgsKey } from "../../src/core/agent/canonical-args";
 
 function toolCallChunk(name: string, args: Record<string, unknown>) {
   return {
@@ -61,8 +62,8 @@ describe("repeated status-tool hard stop", () => {
     const { host } = makeHost();
     const state = createLoopState();
     state.iteration = 1;
-    // Подпись предыдущего вызова совпадает ⇒ повтор засчитан.
-    state.lastToolSignature = "session_info:{}";
+    // Подпись предыдущего вызова совпадает ⇒ повтор засчитан (каноническая).
+    state.lastToolSignature = canonicalArgsKey("session_info", {});
     state.repeatedToolCount = 4;
 
     const outcome = await runLlmPhase(host, {
@@ -89,7 +90,7 @@ describe("repeated status-tool hard stop", () => {
     const { host } = makeHost("write_file");
     const state = createLoopState();
     state.iteration = 1;
-    state.lastToolSignature = "write_file:{}";
+    state.lastToolSignature = canonicalArgsKey("write_file", {});
     state.repeatedToolCount = 4;
 
     const outcome = await runLlmPhase(host, {
