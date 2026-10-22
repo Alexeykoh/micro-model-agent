@@ -6,14 +6,13 @@
  * дедуплицирует повтор; `wait:true` синхронно ждёт до `service.syncWaitMs`.
  * Статус/результат читаются pull'ом; webhook — оптимизация (Фаза 7).
  */
-import { createHash } from "node:crypto";
-import type { IncomingMessage, ServerResponse } from "node:http";
-import type { SessionRunner } from "../../../core/bootstrap/session-runner";
+import type { IncomingMessage, ServerResponse } from "node:http";import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 
 import { errMsg } from "../../../utils/error";
 import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
 import { problem, type ProblemDetails } from "../runtime/problem";
 import { emitEvent } from "../runtime/emit";
+import { hashBody } from "../runtime/body-hash";
 import { makeServiceForwarder } from "../runtime/event-bridge";
 import { cancelTaskQuestions, installServicePromptIO, resolveAnswer } from "../runtime/prompt-io";
 import { runTask, type RunTaskResult } from "../runtime/run-task";
@@ -99,8 +98,9 @@ async function submit(
 
   const tenant = tenantOf(req, s);
   const idemKey = headerString(req, "idempotency-key");
+  const tenantKey = s.tenant.tenantId ?? "";
 
-  const dedupe = resolveIdempotentSubmit(res, s, body, tenant, idemKey);
+  const dedupe = resolveIdempotentSubmit(res, s, body, tenant.principalId ?? "anon", tenantKey, idemKey);
   if (dedupe.handled) return true;
 
   const created = createAndDispatch(s, sessionId, parsed.params, tenant);
@@ -110,6 +110,7 @@ async function submit(
   }
   if (idemKey) {
     s.tasks.recordIdempotency(
+      tenantKey,
       tenant.principalId ?? "anon",
       idemKey,
       hashBody(body),
@@ -130,13 +131,13 @@ function resolveIdempotentSubmit(
   res: ServerResponse,
   s: AgentServiceState,
   body: Record<string, unknown>,
-  tenant: TenantContext,
+  principal: string,
+  tenantKey: string,
   idemKey: string | undefined,
 ): { handled: boolean } {
   if (!idemKey) return { handled: false };
-  const principal = tenant.principalId ?? "anon";
   const bodyHash = hashBody(body);
-  const early = checkIdempotency(s, principal, idemKey, bodyHash);
+  const early = checkIdempotency(s, tenantKey, principal, idemKey, bodyHash);
   if (early.kind === "conflict") {
     sendProblem(res, problem({ type: "idempotencyConflict", title: "idempotency key reused with a different body", status: 409 }));
     return { handled: true };
@@ -167,12 +168,13 @@ type IdemCheck = { kind: "none" } | { kind: "conflict" } | { kind: "hit"; task: 
 
 function checkIdempotency(
   s: AgentServiceState,
+  tenantKey: string,
   principal: string,
   key: string | undefined,
   bodyHash: string,
 ): IdemCheck {
   if (!key) return { kind: "none" };
-  const lookup = s.tasks.checkIdempotency(principal, key, bodyHash);
+  const lookup = s.tasks.checkIdempotency(tenantKey, principal, key, bodyHash);
   if (lookup.kind === "conflict") return { kind: "conflict" };
   if (lookup.kind === "hit") {
     const task = s.tasks.get(lookup.jobId);
@@ -562,7 +564,7 @@ async function answer(
     sendProblem(res, problem({ type: "validation", title: "question id required", status: 400 }));
     return true;
   }
-  if (!resolveAnswer(s, id, body.answer)) {
+  if (!resolveAnswer(s, id, body.answer, { taskId: jobId, sessionId: rec.sessionId })) {
     sendProblem(res, problem({ type: "validation", title: "unknown question id", status: 404, detail: id }));
     return true;
   }
@@ -593,11 +595,6 @@ function tenantOf(req: IncomingMessage, s: AgentServiceState): TenantContext {
     ...(principalId ? { principalId } : {}),
     ...(runId ? { runId } : {}),
   };
-}
-
-/** Хеш тела для сравнения Idempotency-Key. */
-function hashBody(body: Record<string, unknown>): string {
-  return createHash("sha256").update(JSON.stringify(body)).digest("hex");
 }
 
 function headerString(req: IncomingMessage, name: string): string | undefined {

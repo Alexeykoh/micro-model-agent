@@ -45,6 +45,7 @@ guard-тест `tests/service/openapi.test.ts`, который падает, е�
 | `service.port` | `7331` | порт (флаг `-p` важнее) |
 | `service.host` | `127.0.0.1` | адрес; не-loopback требует токен |
 | `service.token` | — | `Authorization: Bearer` (control plane → runtime) |
+| `service.tenant` | — | тенант процесса (silo); `X-Mma-Tenant` сверяется с ним |
 | `service.resultRetentionDays` | `7` | хранение терминальных результатов |
 | `service.idempotencyTtlHours` | `24` | TTL `Idempotency-Key` |
 | `service.syncWaitMs` | `10000` | верхняя граница `wait:true` |
@@ -52,8 +53,9 @@ guard-тест `tests/service/openapi.test.ts`, который падает, е�
 | `service.callbackTimeoutMs` | `10000` | таймаут webhook-доставки |
 | `service.webhookSecret` | — | секрет HMAC подписи вебхуков |
 
-Env: `MMA_SERVICE_PORT`, `MMA_SERVICE_HOST`, `MMA_SERVICE_TOKEN` (важнее
-конфига). Доступно в `/config` и web Settings → Network → Agent Service API.
+Env: `MMA_SERVICE_PORT`, `MMA_SERVICE_HOST`, `MMA_SERVICE_TOKEN`,
+`MMA_SERVICE_TENANT` (важнее конфига). Доступно в `/config` и web Settings →
+Network → Agent Service API.
 
 ## Endpoints
 
@@ -77,6 +79,11 @@ Env: `MMA_SERVICE_PORT`, `MMA_SERVICE_HOST`, `MMA_SERVICE_TOKEN` (важнее
 | `POST` | `/v1/tasks/:jobId/cancel` | кооперативная отмена | bearer |
 | `POST` | `/v1/tasks/:jobId/answer` | ответ на `question` (interactive) | bearer |
 | `GET` | `/v1/sessions/:id/events` | поток событий (SSE) | bearer |
+
+Вопрос принимается только для **своей** задачи: id вопроса из чужой задачи →
+`404`, задача остаётся в `waiting_input`. Висящий вопрос живёт `30` минут
+(дальше ход получает пустой ответ), на процесс — не больше `100` висящих
+вопросов (самый старый вытесняется).
 
 ### Сабмит
 
@@ -114,7 +121,10 @@ allowlist завершает задачу `failed` с `error.type = …/tool-for
 Ответ: `202 Accepted` + `Location`/`Retry-After` + `{jobId,status,statusUrl}`
 (терминальная задача или `wait:true`, уложившаяся в `syncWaitMs` → `200` +
 Job-объект). Повтор с тем же `Idempotency-Key` и телом → тот же `jobId`; другое
-тело → `409`.
+тело → `409`. Ключ скоупится **тенантом процесса**, а principal первого
+использования запоминается: повтор под другим `X-Mma-Principal` → `409
+…/idempotency-conflict` без Job-объекта (чужой результат не отдаётся). Тела
+сравниваются канонически (порядок ключей не важен).
 
 ### Job-объект
 

@@ -60,7 +60,16 @@ export interface AgentServiceState {
   agentRunning: boolean;
   turnSeq: number;
   clients: Set<ServiceClient>;
-  pendingQuestions: Map<string, { resolve: (value: unknown) => void; sessionId?: string; taskId?: string }>;
+  pendingQuestions: Map<
+    string,
+    {
+      resolve: (value: unknown) => void;
+      sessionId?: string;
+      taskId?: string;
+      /** Таймер TTL висящего вопроса (unref); снимается при резолве. */
+      timer?: ReturnType<typeof setTimeout>;
+    }
+  >;
   server?: Server;
   starting?: Promise<string>;
   host: string;

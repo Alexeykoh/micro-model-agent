@@ -107,7 +107,14 @@ export function isTerminal(status: TaskStatus): boolean {
 /** In-memory реестр задач; без IO (персистентность/строка — control plane). */
 export class TaskRegistry {
   private tasks = new Map<string, TaskRecord>();
-  private idem = new Map<string, { bodyHash: string; jobId: string; expiresAt: number }>();
+  /**
+   * Ключ идемпотентности скоупится тенантом (silo), но помнит principal первого
+   * использования: hit под другим principal — конфликт, а не чужой JobObject.
+   */
+  private idem = new Map<
+    string,
+    { principal: string; bodyHash: string; jobId: string; expiresAt: number }
+  >();
   private readonly now: () => number;
 
   constructor(
@@ -175,22 +182,38 @@ export class TaskRegistry {
     });
   }
 
-  /** Проверка ключа идемпотентности: hit / conflict / miss (TTL учитывается). */
-  checkIdempotency(principal: string, key: string, bodyHash: string): IdempotencyResult {
-    const mapKey = `${principal}::${key}`;
+  /**
+   * Проверка ключа идемпотентности: hit / conflict / miss (TTL учитывается).
+   * Ключ общий на тенант; чужой principal получает `conflict`, а не результат.
+   */
+  checkIdempotency(
+    tenantId: string,
+    principal: string,
+    key: string,
+    bodyHash: string,
+  ): IdempotencyResult {
+    const mapKey = `${tenantId}::${key}`;
     const entry = this.idem.get(mapKey);
     if (!entry) return { kind: "miss" };
     if (entry.expiresAt <= this.now()) {
       this.idem.delete(mapKey);
       return { kind: "miss" };
     }
+    if (entry.principal !== principal) return { kind: "conflict" };
     if (entry.bodyHash !== bodyHash) return { kind: "conflict" };
     return { kind: "hit", jobId: entry.jobId };
   }
 
-  /** Запоминает ключ идемпотентности с TTL. */
-  recordIdempotency(principal: string, key: string, bodyHash: string, jobId: string): void {
-    this.idem.set(`${principal}::${key}`, {
+  /** Запоминает ключ идемпотентности (тенант + principal + хэш канонического тела). */
+  recordIdempotency(
+    tenantId: string,
+    principal: string,
+    key: string,
+    bodyHash: string,
+    jobId: string,
+  ): void {
+    this.idem.set(`${tenantId}::${key}`, {
+      principal,
       bodyHash,
       jobId,
       expiresAt: this.now() + this.opts.idempotencyTtlHours * 3_600_000,

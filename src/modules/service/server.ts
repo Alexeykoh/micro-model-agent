@@ -135,7 +135,10 @@ export function stopServiceServer(s: AgentServiceState): void {
     /* сервер уже закрыт */
   }
   s.server = undefined;
-  for (const pending of s.pendingQuestions.values()) pending.resolve(undefined);
+  for (const pending of s.pendingQuestions.values()) {
+    if (pending.timer) clearTimeout(pending.timer);
+    pending.resolve(undefined);
+  }
   s.pendingQuestions.clear();
   s.clients.clear();
   s.pool.clear();

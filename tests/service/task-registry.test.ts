@@ -28,14 +28,16 @@ describe("task registry", () => {
     expect((await reg.whenFinished(task.jobId))?.status).toBe("failed");
   });
 
-  it("dedupes idempotency keys with TTL and body-conflict", () => {
+  it("dedupes idempotency keys with TTL, tenant scope and body-conflict", () => {
     let now = 1_000;
     const reg = makeRegistry(() => now);
-    reg.recordIdempotency("p", "k", "hash-a", "job_1");
-    expect(reg.checkIdempotency("p", "k", "hash-a")).toEqual({ kind: "hit", jobId: "job_1" });
-    expect(reg.checkIdempotency("p", "k", "hash-b")).toEqual({ kind: "conflict" });
+    reg.recordIdempotency("t1", "p", "k", "hash-a", "job_1");
+    expect(reg.checkIdempotency("t1", "p", "k", "hash-a")).toEqual({ kind: "hit", jobId: "job_1" });
+    expect(reg.checkIdempotency("t1", "p", "k", "hash-b")).toEqual({ kind: "conflict" });
+    expect(reg.checkIdempotency("t1", "other", "k", "hash-a")).toEqual({ kind: "conflict" });
+    expect(reg.checkIdempotency("t2", "p", "k", "hash-a")).toEqual({ kind: "miss" });
     now += 3_600_001; // TTL 1h expired
-    expect(reg.checkIdempotency("p", "k", "hash-a")).toEqual({ kind: "miss" });
+    expect(reg.checkIdempotency("t1", "p", "k", "hash-a")).toEqual({ kind: "miss" });
   });
 
   it("prunes terminal results past retention", () => {
