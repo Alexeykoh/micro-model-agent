@@ -17,51 +17,19 @@ import type { LspConfig, LspDiagnostic, LspServerConfig } from "./types";
 import { isErrorDiagnostic, isWarningDiagnostic } from "./types";
 import { severityLabel, collectCheckFiles, } from "./check-tool";
 import { renderCheckReport, type CheckAccumulator } from "./check-report";
-import {
-  diagnoseLspServers,
-  classifyLspError,
-  type LspDiagnoseDeps,
-  type LspFailureReason,
-} from "./diagnose";
+import { diagnoseLspServers, type LspDiagnoseDeps } from "./diagnose";
 import { errMsg } from "../../utils";
+import { LspHealth } from "./health";
 import { join } from "path";
-
-/**
- * Подряд идущих падений LSP до отключения сервера на сессию. Мёртвый сервер
- * (не стоит, упала npx-автоустановка, нет пути) иначе спамит `[LSP check failed]`
- * на КАЖДУЮ запись, приучая модель игнорировать сигнал целиком (наблюдалось:
- * ses_mst2r0r5 — LSP мёртв всю сессию, модель не реагировала). После порога —
- * одно громкое сообщение и тишина по этому серверу: таймаут CSS не должен
- * ронять проверки TypeScript.
- */
-const MAX_CONSECUTIVE_LSP_FAILURES = 3;
 
 /**
  * Диагностики резолва модулей, бессмысленные без type-окружения. В голом
  * каталоге (без tsconfig.json / node_modules) TS-сервер рапортует
- * `Cannot find module 'fs'` и `Cannot find name '__dirname'` на валидный
- * Node-код — модель бросает рабочий подход из-за фантомных ошибок (наблюдалось
- * ses_mtho2oab: LSP-"ошибки" столкнули модель с планового .ts на .js и в
- * спираль plan-drift). Душатся с явной пометкой inconclusive, если рядом с
- * корнем проекта нет type-окружения.
+ * `Cannot find module 'fs'` на валидный Node-код — модель бросает рабочий
+ * подход из-за фантомных ошибок. Душатся с пометкой inconclusive.
  */
 const TYPE_ENV_DIAG_PATTERN =
   /Cannot find module ['"][^'"]+['"] or its corresponding type declarations|Cannot find name '(__dirname|__filename|require|process|Buffer|console)'|Do you need to install type definitions/;
-
-/** Ключи actionable-подсказок по классу причины сбоя LSP (одна строка модели). */
-const LSP_HINT_KEYS: Partial<Record<LspFailureReason, string>> = {
-  "binary-missing": "lsp.hint_binary_missing",
-  offline: "lsp.hint_offline",
-  network: "lsp.hint_network",
-  timeout: "lsp.hint_timeout",
-  "spawn-failed": "lsp.hint_spawn",
-};
-
-/** Подсказка под `[LSP check failed]` (пусто, если класса с действием нет). */
-function failureHint(message: string, npxFallback: boolean): string {
-  const key = LSP_HINT_KEYS[classifyLspError(message, { npxFallback })];
-  return key ? `\n${t(key)}` : "";
-}
 
 function hasTypeEnvironment(projectRoot: string): boolean {
   return (
@@ -71,13 +39,20 @@ function hasTypeEnvironment(projectRoot: string): boolean {
   );
 }
 
+/**
+ * Бюджет пост-проверки записи. Проверка best-effort: 30-секундный таймаут
+ * сервера держал `write_file` полминуты, когда файл вне tsconfig проекта
+ * (наблюдалось вживую: write 30.0 с). Тёплый сервер отвечает за миллисекунды.
+ */
+const WRITE_CHECK_TIMEOUT_MS = 4000;
+
 /** Модуль LSP: пост-проверки записи, тул lsp_check, учёт мёртвых серверов. */
 export class LspModule implements AgentModule {
   name = "lsp";
   private config: LspConfig;
   private client: LspClient;
-  private failuresByServer = new Map<string, number>();
-  private disabledServers = new Set<string>();
+  /** Здоровье серверов: падения, отключение после порога, прогрев в фоне. */
+  private health = new LspHealth();
   private logger: LspClientLogger | null = null;
 
   constructor(config?: Partial<LspConfig>, client?: LspClient, logger?: LspClientLogger) {
@@ -135,8 +110,8 @@ export class LspModule implements AgentModule {
 
   /** Сбросить отключённые серверы (напр. после /lsp restart). */
   resetDisabledServers(): void {
-    this.failuresByServer.clear();
-    this.disabledServers.clear();
+    this.health.resetAll();
+    
   }
 
   /**
@@ -159,12 +134,12 @@ export class LspModule implements AgentModule {
 
   /** Список отключённых ключей серверов. */
   getDisabledServers(): string[] {
-    return Array.from(this.disabledServers);
+    return this.health.disabledKeys();
   }
 
   /** Счётчики падений по серверам. */
   getFailureCounts(): Map<string, number> {
-    return new Map(this.failuresByServer);
+    return this.health.counts();
   }
 
   /**
@@ -182,12 +157,12 @@ export class LspModule implements AgentModule {
 
   /** Тест-хук: отключал ли модуль какой-то LSP-сервер на сессии. */
   isLspDisabled(): boolean {
-    return this.disabledServers.size > 0;
+    return this.health.disabledKeys().length > 0;
   }
 
   /** Тест-хук: отключён ли сервер (ключ из конфига). */
   isServerDisabled(key: string): boolean {
-    return this.disabledServers.has(key);
+    return this.health.isDisabled(key);
   }
 
   getPlugin(): AgentPlugin {
@@ -211,23 +186,50 @@ export class LspModule implements AgentModule {
   ): Promise<void> {
     const target = this.resolveCheckTarget(ctx, call, result);
     if (!target) return;
+    // Холодный сервер НЕ должен блокировать запись: npx-докачка language server
+    // занимала 30 с на первую запись (наблюдалось вживую: write 31.5 с).
+    // Прогреваем в фоне, проверяем на тёплом соединении — следующая запись
+    // получит диагностики без задержки (аудит §8.2).
+    if (!this.client.isWarm(target.serverConfig, target.projectRoot)) {
+      this.warmInBackground(target);
+      return;
+    }
     try {
       const check = await this.client.checkFile(
         target.fullPath,
         ctx.baseDir,
         target.serverConfig,
         target.projectRoot,
+        WRITE_CHECK_TIMEOUT_MS,
       );
-      this.failuresByServer.set(target.key, 0);
+      this.health.reset(target.key);
       this.appendDiagnostics(result, check, target.fullPath);
     } catch (e) {
       const msg = errMsg(e);
-      this.warnFailure(ctx, target.fullPath, msg);
-      const failure = this.recordFailure(target.key, target.serverConfig, msg);
+      this.health.warn(this.logger, target.fullPath, msg);
+      const failure = this.health.recordFailure(target.key, target.serverConfig, msg);
       result.output += failure.disabled
         ? `\n\n[LSP disabled: ${failure.text}]`
         : `\n\n[LSP check failed]: ${failure.text}`;
     }
+  }
+
+  /**
+   * Прогрев соединения в фоне (один на сервер+корень). Падения считает
+   * `LspHealth`: после порога сервер отключается на сессию, и повторов npx
+   * больше нет.
+   */
+  private warmInBackground(
+    target: { serverConfig: LspServerConfig; key: string; projectRoot: string; fullPath: string },
+  ): void {
+    this.health.warmInBackground({
+      key: target.key,
+      warm: () => this.client.warmup(target.serverConfig, target.projectRoot),
+      onError: (msg) => {
+        this.health.warn(this.logger, target.fullPath, msg);
+        this.health.recordFailure(target.key, target.serverConfig, msg);
+      },
+    });
   }
 
   /** Файл и сервер для пост-проверки; null — проверять нечего. */
@@ -245,7 +247,7 @@ export class LspModule implements AgentModule {
     const serverConfig = getServerForFile(fullPath, this.config);
     if (!serverConfig) return null;
     const key = serverKeyFor(serverConfig);
-    if (this.disabledServers.has(key)) return null;
+    if (this.health.isDisabled(key)) return null;
     const projectRoot = findProjectRoot(fullPath, ctx.baseDir, serverConfig.workspaceMarkers ?? []);
     return { fullPath, serverConfig, key, projectRoot };
   }
@@ -262,34 +264,6 @@ export class LspModule implements AgentModule {
     }
     if (check.inconclusive && errors.length === 0 && warnings.length === 0) {
       result.output += t("lsp.check_inconclusive");
-    }
-  }
-
-  /** Учесть падение сервера. После порога сервер отключается на сессию. */
-  private recordFailure(
-    key: string,
-    serverConfig: LspServerConfig,
-    message: string,
-  ): { disabled: boolean; text: string } {
-    const failures = (this.failuresByServer.get(key) ?? 0) + 1;
-    this.failuresByServer.set(key, failures);
-    if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
-      // Одно громкое actionable-сообщение, дальше — без шума на каждую запись
-      // до конца сессии. Модель не должна учиться игнорить LSP.
-      this.disabledServers.add(key);
-      return { disabled: true, text: t("lsp.unavailable") };
-    }
-    return {
-      disabled: false,
-      text: `${message}${failureHint(message, serverConfig.command === "npx")}`,
-    };
-  }
-
-  private warnFailure(ctx: ToolContext, filePath: string, message: string): void {
-    try {
-      ctx.logger?.warn(`LSP check failed for ${filePath}: ${message}`);
-    } catch {
-      // Падающий логгер не должен ломать путь проверки.
     }
   }
 
@@ -371,14 +345,14 @@ export class LspModule implements AgentModule {
       const serverConfig = getServerForFile(file, this.config);
       if (!serverConfig) continue;
       const key = serverKeyFor(serverConfig);
-      if (this.disabledServers.has(key)) continue;
+      if (this.health.isDisabled(key)) continue;
       const projectRoot = findProjectRoot(file, ctx.baseDir, serverConfig.workspaceMarkers ?? []);
       try {
         const result = await this.client.checkFile(file, ctx.baseDir, serverConfig, projectRoot);
-        this.failuresByServer.set(key, 0);
+        this.health.reset(key);
         this.collectDiagnostics(acc, file, ctx.baseDir, result, projectRoot);
       } catch (e) {
-        this.warnFailure(ctx, file, errMsg(e));
+        this.health.warn(this.logger, file, errMsg(e));
         acc.notes.push(this.failureNote(key, serverConfig, errMsg(e), file));
       }
     }
@@ -420,7 +394,7 @@ export class LspModule implements AgentModule {
     message: string,
     file: string,
   ): string {
-    const failure = this.recordFailure(key, serverConfig, message);
+    const failure = this.health.recordFailure(key, serverConfig, message);
     return failure.disabled
       ? `[LSP disabled: ${failure.text}]`
       : `[LSP check failed for ${file}: ${failure.text}]`;

@@ -23,6 +23,13 @@ export interface PromptPhaseHost {
   promptOverrides: Map<PromptBlockKind, PromptBlock>;
   /** Малый всегда-включённый hint-блок о сжатии. */
   overflowHintBlock: PromptBlock | null;
+  /**
+   * Снимок карты проекта на текущий ход. Карта меняется после каждой записи
+   * (индексер пересобирается), а в системном промпте это рвёт KV-кеш префикса
+   * на каждой итерации (наблюдалось: стабильность 51%). Внутри хода карта
+   * имутабельна; свежую даёт тул `project_map` (аудит §8.7).
+   */
+  frozenMapBlock: PromptBlock | null;
 }
 
 export interface SystemPromptBuild {
@@ -33,8 +40,7 @@ export interface SystemPromptBuild {
 }
 
 /** Собирает системный промпт из блоков с учётом override-ов переполнения. */
-export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
-  const { deps } = host;
+export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {  const { deps } = host;
   const systemBudget = Math.floor(
     deps.config.contextWindow * deps.config.contextBudget.systemPrompt,
   );
@@ -43,8 +49,9 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
     blocks.map((b) => (b.kind && host.promptOverrides.has(b.kind) ? host.promptOverrides.get(b.kind)! : b));
   builder.addBlocks(applyOverrides(deps.promptBlocks));
   const dynamic = deps.getDynamicPromptBlocks?.() ?? [];
-  if (dynamic.length > 0) {
-    builder.addBlocks(applyOverrides(dynamic));
+  const stableDynamic = freezeProjectMap(host, applyOverrides(dynamic));
+  if (stableDynamic.length > 0) {
+    builder.addBlocks(stableDynamic);
   }
   const pluginBlocks: PromptBlock[] = (deps.pluginManager.runOnBuildPrompt?.() ?? []).flatMap(
     (content): PromptBlock[] =>
@@ -74,6 +81,20 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
     excludedBlocks: result.excludedBlocks,
     blocks: result.blocks,
   };
+}
+
+/**
+ * Держит карту проекта СНИМКОМ на ход: внутри хода системный промпт
+ * имутабелен (KV-кеш не рвётся), между ходами снимок обновляется.
+ */
+function freezeProjectMap(host: PromptPhaseHost, blocks: PromptBlock[]): PromptBlock[] {
+  const idx = blocks.findIndex((b) => b.kind === "project-map");
+  if (idx < 0) return blocks;
+  const current = blocks[idx]!;
+  if (!host.frozenMapBlock) host.frozenMapBlock = current;
+  const next = [...blocks];
+  next[idx] = host.frozenMapBlock;
+  return next;
 }
 
 /**

@@ -43,7 +43,7 @@ import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
 import { processRegistry } from "../modules/processes";
-import { SessionLogger } from "./session-logger";
+import type { SessionLogger } from "./session-logger";
 import type { MemoryStore } from "../modules/memory/store";
 import { CostTracker } from "../modules/pricing/index";
 import { createPolicyState } from "../modules/reasoning/policy";
@@ -171,9 +171,11 @@ export class Agent {
    *  в конструкторе (строки до мутаций). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается через ProviderPhaseHost
   private lastProbeIdentity: ProbeIdentity;
-  /** Малый всегда-включённый блок про сжатые инструкции. */
+  /** Сжатые инструкции; снимок карты проекта на ход (см. PromptPhaseHost). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается/пишется через PromptPhaseHost
   private overflowHintBlock: PromptBlock | null = null;
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается/пишется через PromptPhaseHost
+  private frozenMapBlock: PromptBlock | null = null;
   /** Гард одноразового асинхронного резолва переполнения в run(). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: пишется через TurnRunHost
   private overflowResolved = false;
@@ -219,8 +221,7 @@ export class Agent {
    * @returns {provider, model} реально обслужившие вызов.
    */
   callerProvenance(): { provider: string; model: string } {
-    // Сначала живое имя: sticky failover переключает активную запись
-    // менеджера, не трогая config.provider.active.
+    // Живое имя: sticky failover переключает запись, не трогая provider.active.
     const live = this.deps.getProviderName?.();
     if (live) return { provider: live, model: this.deps.config.model };
 

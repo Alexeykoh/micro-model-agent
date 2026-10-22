@@ -6,7 +6,7 @@
  * Вынесено из `core/agent.ts`; работает над `TurnRunHost` — видом `Agent`.
  */
 import type { AgentDeps } from "../agent";
-import type { AgentPhase, AgentResult, OnMeta, ToolEvent } from "../types";
+import type { AgentPhase, AgentResult, OnMeta, PromptBlock, ToolEvent } from "../types";
 import type { SessionLogger } from "../session-logger";
 import { SessionLogger as SessionLoggerCtor } from "../session-logger";
 import { seedToolTags } from "../../tools/auto-tags";
@@ -21,6 +21,8 @@ export interface TurnRunHost {
   systemPromptAdded: boolean;
   overflowResolved: boolean;
   probePassed: boolean;
+  /** Снимок карты проекта на ход (имутабельный промпт внутри хода). */
+  frozenMapBlock: PromptBlock | null;
   setScope(): void;
   buildSystemPrompt(): SystemPromptBuild;
   resolvePromptOverflowOnce(): Promise<void>;
@@ -50,6 +52,9 @@ export async function runTurn(
   // Сброс флага shutdown от прошлого прерывания; свежий контроллер на ход.
   host.shutdownRequested = false;
   host.abortController = new AbortController();
+  // Снимок карты проекта обновляется НА ГРАНИЦЕ ХОДА: внутри хода системный
+  // промпт имутабелен, иначе KV-кеш рвётся на каждой записи файла (аудит §8.7).
+  host.frozenMapBlock = null;
   host.setScope();
   // P5 автосужение: детерминированно пред-посеваем теги тулов из сырого
   // сообщения ДО первого LLM-вызова. Только добавление — mid-session гранты

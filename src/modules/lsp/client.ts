@@ -96,6 +96,20 @@ export class LspClient {
   }
 
   /**
+   * Тёплое соединение уже есть (без спавна сервера). Пост-проверка записи
+   * смотрит сюда: холодный старт (npx-докачка language server) не должен
+   * блокировать запись на десятки секунд (аудит §8.2).
+   */
+  isWarm(config: LspServerConfig, projectRoot: string): boolean {
+    return this.pool.peek(serverKeyFor(config), projectRoot) !== null;
+  }
+
+  /** Поднять соединение в фоне (прогрев); ошибки обрабатывает вызывающий. */
+  async warmup(config: LspServerConfig, projectRoot: string): Promise<void> {
+    await this.pool.acquire(serverKeyFor(config), config, projectRoot);
+  }
+
+  /**
    * Проверить файл. Берёт тёплое соединение из пула, синкает содержимое и
    * возвращает диагностики. Соединение остаётся живым (и документ открытым) —
    * следующая проверка того же файла не спавнит сервер заново.
@@ -105,8 +119,9 @@ export class LspClient {
     _baseDir: string,
     config: LspServerConfig,
     projectRoot: string,
+    timeoutMs?: number,
   ): Promise<CheckResult> {
-    const timeout = config.timeout ?? LSP_DEFAULT_TIMEOUT_MS;
+    const timeout = timeoutMs ?? config.timeout ?? LSP_DEFAULT_TIMEOUT_MS;
     const absolute = resolvePath(filePath);
     const uri = pathToUri(absolute);
     const connection = await this.pool.acquire(serverKeyFor(config), config, projectRoot);

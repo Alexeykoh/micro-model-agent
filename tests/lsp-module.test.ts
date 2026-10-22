@@ -24,6 +24,9 @@ async function runWrite(
   path: string,
   output = "file written ok",
 ): Promise<{ success: boolean; output: string }> {
+  // Тесты пост-проверки работают на ТЁПЛОМ соединении: холодный старт теперь
+  // прогревается в фоне и проверку пропускает (см. write-check-cold-start).
+  (module as any).client.isWarm = () => true;
   const result = { success: true, output };
   await module.getPlugin().onAfterTool!(ctxOf(baseDir), writeCall(path), result as any);
   return result;

@@ -160,6 +160,12 @@ Markdown), `tests/ui/table-fit.test.ts` (таблицы влезают в тер
 `tests/cli/completer-cursor.test.ts` (комплитер по курсору), `tests/i18n.test.ts`
 (паритет ключей и плейсхолдеров).
 
+Живой прогон на 9B (2026-10-22) вскрыл два дефекта, закрытых гвардами:
+`tests/core/system-prompt-freeze.test.ts` (карта проекта — снимок на ход:
+изменение карты рвало KV-кеш префикса, стабильность 51% → 99%) и
+`tests/modules/lsp/write-check-cold-start.test.ts` (холодный старт LSP не
+блокирует запись: было 30–31 с на write, стало 0.1–4 с).
+
 Веб-поверхность (волна W6) держат: `tests/webui-security-headers.test.ts`
 (заголовки и auth на статику), `tests/webui-body-limits.test.ts` (капы тела и
 памяти, SSRF проб), `tests/webui-error-propagation.test.ts` (коды ошибок),

@@ -33,7 +33,7 @@
     "src/tools/executor.ts": 535,
     "src/modules/webui/assets/js/sidebar/trace.ts": 525,
     "src/core/agent/context-log.ts": 519,
-    "src/modules/lsp/module.ts": 441,
+    "src/modules/lsp/module.ts": 415,
     "src/modules/webui/assets/js/settings/providers.ts": 488,
     "src/core/bootstrap/session-runner.ts": 487,
     "src/modules/session/store.ts": 431,
