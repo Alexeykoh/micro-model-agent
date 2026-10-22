@@ -14,8 +14,16 @@ function makeCase() {
     makeToolBatchDeps({ execute: async () => ({ success: true, output: "out" }), added }),
   );
   const state = createLoopState();
+  let seq = 0;
   const run = (name: string) =>
-    ex.execute(state, [{ id: "1", name, arguments: { q: "x" } }], new Set(), "", "", "task");
+    ex.execute(
+      state,
+      [{ id: String(++seq), name, arguments: { q: `x${seq}` } }],
+      new Set(),
+      "",
+      "",
+      "task",
+    );
   return { added, state, run };
 }
 
@@ -34,13 +42,27 @@ describe("ToolBatchExecutor web-research convergence", () => {
     expect(added.some(isConverge)).toBe(true);
   });
 
-  it("resets the streak on any non-web tool", async () => {
+  it("keeps the streak on a single interleaved local read (§1.4)", async () => {
     const { added, run, state } = makeCase();
-    for (let n = 0; n < MAX_RESEARCH_BATCHES - 1; n++) await run("web_search");
-    await run("read_file"); // local tool — resets
+    for (let n = 0; n < MAX_RESEARCH_BATCHES - 1; n++) {
+      await run("web_search");
+      await run("read_file");
+    }
+    // Чередование web → read не обнуляет серию: иначе директива недостижима.
+    expect(state.consecutiveResearchBatches).toBe(MAX_RESEARCH_BATCHES - 1);
+    await run("web_fetch");
+    expect(added.some(isConverge)).toBe(true);
+  });
+
+  it("resets the streak after two non-web batches with a result", async () => {
+    const { added, run, state } = makeCase();
+    for (let n = 0; n < MAX_RESEARCH_BATCHES; n++) await run("web_search");
+    expect(added.some(isConverge)).toBe(true);
+    await run("read_file");
+    expect(state.consecutiveResearchBatches).toBe(MAX_RESEARCH_BATCHES);
+    await run("write_file");
     expect(state.consecutiveResearchBatches).toBe(0);
-    await run("web_search");
-    expect(added.some(isConverge)).toBe(false);
+    expect(state.researchNudged).toBe(false);
   });
 
   it("emits the directive only once per streak", async () => {

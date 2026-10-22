@@ -12,16 +12,24 @@ const TOOL_LEDGER_MAX_ENTRIES = 12;
 /** OO-8: успешные записи/правки этих тулов помечают адреса файла stale. */
 const WRITE_TOOLS = new Set(["write_file", "append_file", "edit_file"]);
 
-/** Краткая сигнатура аргументов тула (`ключ1, ключ2, ключ3`). */
+/** Краткая сигнатура аргументов тула (`ключ1, ключ2, ключ3` по алфавиту). */
 export function summarizeArgs(args: unknown): string {
   if (!args) return "";
   if (typeof args === "string") return args.slice(0, 80);
   try {
-    const keys = Object.keys(args as Record<string, unknown>);
+    // Алфавитный порядок, а не порядок вставки: иначе `read_file(a,b)` и
+    // `read_file(b,a)` давали разные ключи и дедуп леджера не работал (§3.9).
+    const keys = Object.keys(args as Record<string, unknown>).sort();
     return keys.slice(0, 3).join(", ");
   } catch {
     return String(args).slice(0, 80);
   }
+}
+
+/** Ключ строки леджера (`- name(args) → …`) для снятия при вытеснении. */
+export function ledgerKeyFromLine(line: string): string | null {
+  const m = /^- ([^(]+)\(([^)]*)\)/.exec(line);
+  return m ? `${m[1]}:${m[2]}` : null;
 }
 
 /** Первая непустая строка результата (digest для леджера тулов). */
@@ -62,7 +70,14 @@ export function absorbLedgers(
     toolLedger.push(`- ${m.name}(${args})${line ? ` → ${line.slice(0, 120)}` : ""}`);
   }
   if (toolLedger.length > TOOL_LEDGER_MAX_ENTRIES) {
-    toolLedger.splice(0, toolLedger.length - TOOL_LEDGER_MAX_ENTRIES);
+    // Вытесненная строка должна освобождать свой ключ: иначе `toolLedgerKeys`
+    // растёт за сессию без границы, а вернуть вытесненную запись невозможно
+    // (§3.9 аудита).
+    const removed = toolLedger.splice(0, toolLedger.length - TOOL_LEDGER_MAX_ENTRIES);
+    for (const line of removed) {
+      const key = ledgerKeyFromLine(line);
+      if (key) toolLedgerKeys.delete(key);
+    }
   }
 }
 

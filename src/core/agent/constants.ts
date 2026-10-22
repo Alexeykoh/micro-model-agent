@@ -45,6 +45,14 @@ export const MAX_CLAIM_CHECK_RETRIES = 1;
 /** Порог подряд идущих неудач тулов до сообщения о восстановлении. */
 export const MAX_CONSECUTIVE_TOOL_FAILURES = 5;
 /**
+ * Как часто обновляется recovery-директива при продолжении серии фейлов
+ * (в итерациях). Директива на каждый батч превращалась в ~190 дублей за ход
+ * и рвала prompt-cache (§1.6 аудита).
+ */
+export const RECOVERY_DIRECTIVE_REFRESH = 10;
+/** Как часто пишется правило в память об ошибках (в итерациях). */
+export const RECOVERY_MEMORY_RULE_REFRESH = 10;
+/**
  * Порог подряд идущих ПОЛНОСТЬЮ провальных пакетов тулов (каждый вызов —
  * неудача или tool-level блок вроде `[SECURITY BLOCKED]`) до honest-stop
  * директивы. Ниже, чем MAX_CONSECUTIVE_TOOL_FAILURES: смешанные пакеты

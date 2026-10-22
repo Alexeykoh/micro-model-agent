@@ -1,9 +1,16 @@
 // Хранилище памяти: append-only .md-категории и preferences.json в каталоге.
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, statSync } from "fs";
 import { join } from "path";
 import { MemorySearch } from "./search";
 
 const MEMORY_FILES = ["conventions", "decisions", "errors", "facts"];
+
+/**
+ * Кап файла категории памяти (~4× системного бюджета). Файл растёт append-only,
+ * и без капа длинный ход с ошибками превращает `errors.md` в простыню, которая
+ * потом попадает в системный промпт и сбивает prompt-cache (§1.6 аудита).
+ */
+export const MAX_MEMORY_FILE_CHARS = 24_000;
 
 /** Хранилище памяти: категории-заметки с дописыванием и ключ-значение преференсов. */
 export class MemoryStore {
@@ -52,6 +59,28 @@ export class MemoryStore {
     const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
     const formatted = `- **${timestamp}** — ${entry}\n`;
     appendFileSync(path, formatted, "utf-8");
+    this.trimFile(path);
+  }
+
+  /**
+   * Обрезает файл категории до капа: свежий хвост важнее, заголовок сохраняется.
+   * Обрезка идёт по границе строки, чтобы в файле не осталось огрызков.
+   *
+   * Сначала дешёвая проверка размера (stat), чтение — только когда файл реально
+   * переполнен; обрезка идёт до 80 % капа, иначе каждый следующий append снова
+   * переписывал бы файл (на Windows это ~10 мс на запись).
+   */
+  private trimFile(path: string): void {
+    if (statSync(path).size <= MAX_MEMORY_FILE_CHARS) return;
+    const content = readFileSync(path, "utf-8");
+    if (content.length <= MAX_MEMORY_FILE_CHARS) return;
+    const headerEnd = content.indexOf("\n\n");
+    const header = headerEnd >= 0 ? content.slice(0, headerEnd + 2) : "";
+    const budget = Math.max(0, Math.floor(MAX_MEMORY_FILE_CHARS * 0.8) - header.length);
+    let tail = content.slice(Math.max(0, content.length - budget));
+    const firstBreak = tail.indexOf("\n");
+    if (firstBreak >= 0) tail = tail.slice(firstBreak + 1);
+    writeFileSync(path, `${header}${tail}`, "utf-8");
   }
 
   /** Ищет подстроку по всем файлам памяти. */

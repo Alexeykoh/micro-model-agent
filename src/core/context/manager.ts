@@ -13,25 +13,15 @@ export type { ContextQualityBreakdown, ContextQualityPart };
 export { extractTriedAndFailed };
 
 /** Сообщение истории: роль, контент, tool-метаданные. */
-export interface Message {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string | ContentPart[];
-  name?: string;
-  tool_call_id?: string;
-  success?: boolean;
-  /** Вызов, заблокированный плагином — решение гарда, не реальный фейл. */
-  blocked?: boolean;
-  arguments?: Record<string, unknown>;
-  tool_calls?: Array<{
-    id: string;
-    type: "function";
-    function: { name: string; arguments: string };
-  }>;
-}
+import type { Message } from "./message";
+export type { Message } from "./message";
 
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import { DEFAULTS } from "../../config/defaults";
 import type { TokenCounter } from "../../llm/token-counter";
+import { estimateMessageTokens, messageSignature } from "./estimation";
+import { reassertStandingDirectives } from "./standing-directives";
+import { PendingImageQueue } from "./pending-images";
 import {
   ContextCalibrator,
   isImplausibleJump,
@@ -161,7 +151,13 @@ export class ContextManager {
   /** Последнее сообщение юзера, похожее на вставленную ошибку/лог (не задача). */
   private lastUserFeedback = "";
   private tokenCounter: TokenCounter | null;
-  private pendingImageParts: ContentPart[] = [];
+  private pendingImages = new PendingImageQueue();
+  /**
+   * Стоящие директивы харнесса (`id → текст`). Директивы вставляются в контекст
+   * как `<system-summary>`, который компакция вырезает; реестр позволяет вернуть
+   * их после компакции (§1.5 аудита). Операции — `core/context/standing-directives`.
+   */
+  readonly standingDirectives = new Map<string, string>();
   private toolTokens = 0;
   /**
    * Монотонный счётчик штампов сообщений (см. `beginTurn`/`seqOf`). Храним seq
@@ -357,7 +353,7 @@ export class ContextManager {
    * источник правды для числа и разбора.
    */
   private qualityFactors(): QualityFactors {
-    const usedTokens = this.getContextTokens();
+    const usedTokens = this.historyTokensForThresholds();
     const load = this.budget.history > 0
       ? Math.max(0, 1 - usedTokens / this.budget.history)
       : 0;
@@ -401,16 +397,15 @@ export class ContextManager {
       }
     }
     // Авто-аттач pending-картинок к следующему user-сообщению
-    if (msg.role === "user" && this.pendingImageParts.length > 0) {
+    if (msg.role === "user" && this.pendingImages.has()) {
       const textPart: TextPart = {
         type: "text",
         text: typeof msg.content === "string" ? msg.content : getMessageText(msg.content),
       };
       msg = {
         ...msg,
-        content: [textPart, ...this.pendingImageParts],
+        content: [textPart, ...this.pendingImages.takeAll()],
       };
-      this.pendingImageParts = [];
     }
     this.messages.push(this.stampSeq(msg));
     // OO-3/OO-8: адреса-находки пишутся сразу (сырой контент), правка — stale.
@@ -423,28 +418,38 @@ export class ContextManager {
    * Кладёт картинку в очередь на аттач к следующему user-сообщению.
    */
   addPendingImage(part: ContentPart): void {
-    this.pendingImageParts.push(part);
+    this.pendingImages.add(part);
   }
 
   /**
    * True, если есть картинки, ждущие аттача.
    */
   hasPendingImages(): boolean {
-    return this.pendingImageParts.length > 0;
+    return this.pendingImages.has();
   }
 
   /**
    * Возвращает pending-картинки, не очищая очередь.
    */
   getPendingImages(): ContentPart[] {
-    return [...this.pendingImageParts];
+    return this.pendingImages.list();
   }
 
   /**
    * Очищает pending-картинки (напр., юзер шлёт чисто текстовое сообщение).
    */
   clearPendingImages(): void {
-    this.pendingImageParts = [];
+    this.pendingImages.clear();
+  }
+
+  /** Ставит/обновляет стоящую директиву харнесса (переживает компакцию). */
+  setStandingDirective(id: string, text: string): void {
+    this.standingDirectives.set(id, text);
+  }
+
+  /** Снимает стоящую директиву (условие перестало выполняться). */
+  clearStandingDirective(id: string): void {
+    this.standingDirectives.delete(id);
   }
 
   /** Число сообщений в истории. */
@@ -458,20 +463,9 @@ export class ContextManager {
   // Это устраняет класс багов «оценка выросла на +44K, добавлено 2 сообщения».
   private tokenCache = new WeakMap<Message, { sig: string; tokens: number }>();
 
-  /** Дешёвая сигнатура контента сообщения (детект мутации без токенизации). */
+  /** Дешёвая сигнатура содержания сообщения (детект мутации без токенизации). */
   private messageSignature(m: Message): string {
-    const text = typeof m.content === "string" ? m.content : getMessageText(m.content);
-    const parts = Array.isArray(m.content)
-      ? m.content
-          .map((p) =>
-            p.type === "image_url" ? `i:${p.image_url?.url?.length ?? 0}` : "t",
-          )
-          .join(",")
-      : "s";
-    const tc = m.tool_calls
-      ? m.tool_calls.map((t) => `${t.id}:${t.function.name}:${t.function.arguments.length}`).join("|")
-      : "";
-    return `${m.role}\u0001${text.length}\u0001${parts}\u0001${tc}`;
+    return messageSignature(m);
   }
 
   private estimateMessageTokensCached(m: Message): number {
@@ -484,67 +478,33 @@ export class ContextManager {
   }
 
   private estimateMessageTokens(m: Message): number {
-    const text = getMessageText(m.content);
-    if (this.tokenCounter) {
-      let t = this.tokenCounter.count(text);
-      // Токены картинок: base64 ~130 токенов на тайл 512x512; грубая оценка
-      if (Array.isArray(m.content)) {
-        for (const part of m.content) {
-          if (part.type === "image_url" && part.image_url?.url) {
-            const b64Len = part.image_url.url.includes(",")
-              ? (part.image_url.url.split(",")[1]?.length ?? 0)
-              : part.image_url.url.length;
-            // ~130 токенов на 512 байт base64
-            t += Math.ceil(b64Len / 512) * 130;
-          }
-        }
-      }
-      if (m.tool_calls) {
-        for (const tc of m.tool_calls) {
-          t += this.tokenCounter.count(tc.id);
-          t += this.tokenCounter.count(tc.function.name);
-          t += this.tokenCounter.count(tc.function.arguments);
-          t += 4;
-        }
-      }
-      return t;
+    return estimateMessageTokens(m, this.tokenCounter);
+  }
+
+  /**
+   * Токены ИСТОРИИ для порогов: калиброванная оценка минус system и тулы.
+   *
+   * Сравнивать весь контекст (system + tools + history) с бюджетом истории —
+   * двойной счёт: при 30K системных и 30K истории окно 128K «переполнялось» на
+   * 60K против бюджета 96K (§3.1 аудита).
+   */
+  private historyTokensForThresholds(): number {
+    if (this.policy !== "v2") {
+      return this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
     }
-    let t = Math.ceil(text.length / 2);
-    if (Array.isArray(m.content)) {
-      for (const part of m.content) {
-        if (part.type === "image_url" && part.image_url?.url) {
-          const b64Len = part.image_url.url.includes(",")
-            ? (part.image_url.url.split(",")[1]?.length ?? 0)
-            : part.image_url.url.length;
-          t += Math.ceil(b64Len / 512) * 130;
-        }
-      }
-    }
-    if (m.tool_calls) {
-      for (const tc of m.tool_calls) {
-        t += Math.ceil(tc.id.length / 2);
-        t += Math.ceil(tc.function.name.length / 2);
-        t += Math.ceil(tc.function.arguments.length / 2);
-        t += 4;
-      }
-    }
-    return t;
+    return this.getHistoryTokens();
   }
 
   /** True, если истории нужна компакция (бюджет превышен или интервал + загрузка). */
   needsCompaction(): boolean {
-    // v2: пороги по калиброванной оценке; legacy — по сырой (2.18.2).
-    const totalTokens =
-      this.policy === "v2"
-        ? this.getContextTokens()
-        : this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
-    if (totalTokens > this.budget.history * this.compactionThreshold) return true;
+    const historyTokens = this.historyTokensForThresholds();
+    if (historyTokens > this.budget.history * this.compactionThreshold) return true;
 
     // Интервал итераций уплотняет только значимо загруженную историю.
     // Уплотнять слабозагруженный контекст — терять рабочее состояние без
     // бюджетной причины (см. `compactionMinLoad`).
     if (this.iterationsSinceCompaction < COMPACTION_INTERVAL) return false;
-    const load = this.budget.history > 0 ? totalTokens / this.budget.history : 0;
+    const load = this.budget.history > 0 ? historyTokens / this.budget.history : 0;
     return load >= this.compactionMinLoad;
   }
 
@@ -555,11 +515,8 @@ export class ContextManager {
    */
   needsIntervalCompaction(): boolean {
     if (this.iterationsSinceCompaction < COMPACTION_INTERVAL) return false;
-    const totalTokens =
-      this.policy === "v2"
-        ? this.getContextTokens()
-        : this.messages.reduce((sum, m) => sum + this.estimateMessageTokensCached(m), 0);
-    const load = this.budget.history > 0 ? totalTokens / this.budget.history : 0;
+    const historyTokens = this.historyTokensForThresholds();
+    const load = this.budget.history > 0 ? historyTokens / this.budget.history : 0;
     return load >= this.compactionMinLoad;
   }
 
@@ -604,6 +561,15 @@ export class ContextManager {
       return !text.startsWith("<system-summary>");
     });
     this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...freshRecent];
+    // Директивы харнесса живут в отдельном реестре: компакция вырезала все
+    // `<system-summary>`, а условие директивы (стрик) осталось активным — модель
+    // теряла указание и больше не получала его (§1.5 аудита).
+    const reassert = reassertStandingDirectives(this.standingDirectives, this.messages);
+    if (reassert) {
+      this.messages.push(
+        this.stampSeq({ role: "user", content: `<system-summary>${reassert}</system-summary>` }),
+      );
+    }
     this.iterationsSinceCompaction = 0;
     // Компакция переписала историю — baseline калибровки недействителен.
     this.calibrator.invalidate();
@@ -875,9 +841,13 @@ export class ContextManager {
       this.toolLedger,
       this.toolLedgerKeys,
     );
+    // Сводка hard-drop строится из СВЕЖИХ фактов выброшенного head, а не из
+    // остатка предыдущей компакции: иначе свежие `[Files:]`/`[Errors:]` попадали
+    // в сообщение только при СЛЕДУЮЩЕЙ компакции (§3.6 аудита).
+    const headBlock = this.buildCompactionBlock(head);
     const summary: Message = this.stampSeq({
       role: "user",
-      content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context]${this.compactedBlock ? ` ${this.compactedBlock}` : ""}</system-summary>`,
+      content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context] ${headBlock}</system-summary>`,
     });
     this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...tail];
     this.iterationsSinceCompaction = 0;
@@ -898,7 +868,7 @@ export class ContextManager {
       qualityAfter: this.getQuality(),
       messagesBefore,
       messagesAfter: this.messages.length,
-      summary: (this.compactedBlock ?? ""),
+      summary: headBlock,
       reducedBy: tokensBefore - tokensAfter,
       strategy: "hard-drop",
     };
@@ -935,6 +905,7 @@ export class ContextManager {
       reserve: b.responseReserve,
       free: Math.max(0, this.contextWindow - used - b.responseReserve),
       window: this.contextWindow,
+      overcommitted: used > this.contextWindow,
     };
   }
 
@@ -1007,6 +978,8 @@ export class ContextManager {
   clear(): void {
     this.messages = [];
     this.compactedBlock = null;
+    // Pending-картинки прошлого хода не должны утечь в следующий (§3.5).
+    this.pendingImages.clear();
     this.toolLedger = [];
     this.toolLedgerKeys = new Set();
     this.iterationsSinceCompaction = 0;
@@ -1080,10 +1053,13 @@ export class ContextManager {
     this.lastEstimateMessageCount = messageCount;
     this.lastJumpWasImplausible = implausible;
     const calibrated = this.calibrator.calibrate(raw, messageCount);
+    // С бюджетом истории сравниваем ТОЛЬКО историю: system и тулы имеют свои
+    // бюджеты, иначе переполнение объявляется раньше времени (§3.1 аудита).
+    const historyTokens = Math.max(0, calibrated - this.systemTokens() - this.toolTokens);
     return {
-      allowed: !implausible && calibrated > this.budget.history,
+      allowed: !implausible && historyTokens > this.budget.history,
       raw,
-      calibrated,
+      calibrated: historyTokens,
       implausible,
     };
   }
@@ -1121,3 +1097,5 @@ export class ContextManager {
     return Math.max(0, this.getContextTokens() - this.systemTokens() - this.toolTokens);
   }
 }
+
+

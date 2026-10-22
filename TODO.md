@@ -87,9 +87,33 @@
       на ход (изменение карты после записи рвало KV-кеш: префикс 51% → 99%),
       холодный старт LSP больше не блокирует запись (30 с → 0.1–4 с: проверка
       только на тёплом соединении, прогрев в фоне, бюджет проверки 4 с).
-- [ ] **W1/W2 — петля:** директивы, переживающие компакцию; `stopReason="duplicate"`;
-      привязка evidence к ходу; `overcommitted`; `imageTokenCost`; `skipped_no_reduction`;
-      `hardDropOldest` по `this.compactedBlock`.
+- [x] **W1/W2 — петля и контекст:** сделано 2026-10-22 (`fix/harness-audit-w1w2-loop`) —
+      жёсткий стоп по повторяющемуся status-тулу даёт `stopReason=duplicate` и
+      форс-ответ (а не успех с пустым текстом); улики фейлов живут в окне
+      `recentOutcomes` (успех чужого тула их не отменяет); директивы харнесса
+      переживают компакцию (реестр `id→текст` в `ContextManager`); сброс
+      per-step состояния и кулдаун recovery/stuck-варнинга — внутри хода
+      (`turnSeq` прокинут в плагины); файлы памяти капнуты (24k), recovery-директива
+      и правило в память троттлятся; evidence галлюцинаций — только текущий ход;
+      `overcommitted` виден в breakdown/терминале/сайдбаре; флор усечения вывода
+      тула (400 символов) + пересчёт бюджета в символы; токены картинки — по
+      пикселям (`imageTokenCost`); очередь картинок капнута (6) с дедупом и
+      обнуляется в `clear()`; несжимаемый overflow → `skipped_no_reduction` без
+      вооружения кулдауна; сводка hard-drop — из выброшенного head. Гейты:
+      `tests/core/loop-duplicate-stop.test.ts`, `tests/core/directive-survives-compaction.test.ts`,
+      `tests/core/tool-batch-recovery-throttle.test.ts`, `tests/core/context-w2.test.ts`,
+      `tests/core/compaction-no-reduction.test.ts`,
+      `tests/modules/execution/stuck-turn-scope.test.ts`, `tests/agent-tool-output.test.ts`.
+      Второй заход той же ветки: research-стрик не сбрасывается одним не-web
+      тулом (§1.4); blocked-батчи входят в honest-stop (§1.7); `sawSecurityBlock`
+      живёт весь ход (§1.8); повторный вызов — по канонической подписи (§1.9);
+      пороги компакции сравнивают историю с бюджетом истории (§3.1); леджер
+      тулов ограничен и освобождает вытесненные ключи (§3.9). Гейты:
+      `tests/core/tool-batch-research-convergence.test.ts`,
+      `tests/core/loop-repeat.test.ts`, `tests/core/history-budget-threshold.test.ts`,
+      `tests/core/tool-ledger-bounds.test.ts`, `tests/core/tool-batch-honest-stop.test.ts`.
+      Осталось вне объёма: ресайз веб-аттачей (§2.4 плана) и калибровка >2×
+      (§3.8 — сознательный отказ).
 - [x] **W10 — service API и updater:** сделано 2026-10-22 — тенант — свойство процесса
       (`service.tenant`, `X-Mma-Tenant` только сверяется), идемпотентность скоупится
       тенантом и principal'ом (канонический хэш тела), ответ только для вопроса своей

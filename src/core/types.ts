@@ -137,6 +137,12 @@ export interface ContextBreakdown {
   free: number;
   /** Полное окно контекста. */
   window: number;
+  /**
+   * Контекст не помещается в окно (`used > window`). Клэмп процента в UI прячет
+   * перегрузку, поэтому флаг отдаётся явно: оператор должен видеть, что
+   * compaction не справляется.
+   */
+  overcommitted: boolean;
 }
 
 /**

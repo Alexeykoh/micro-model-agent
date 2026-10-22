@@ -128,6 +128,9 @@ export class ExecutionModule implements AgentModule {
    */
   private state: ExecutionPluginState = {
     lastRecoveryIteration: -STUCK_RECOVERY_COOLDOWN,
+    lastTurnResetIteration: -1,
+    lastRecoveryTurn: -1,
+    lastStuckWarnTurn: -1,
     consecutivePlanWarnings: 0,
     lastStepId: -1,
     stuckNotified: false,
@@ -144,12 +147,9 @@ export class ExecutionModule implements AgentModule {
    * Read/write доступ к трекеру, общий для фабрик plan-tool и execution-plugin.
    * Abort тула `plan` чистит его (current = null) — сеттер держит this.tracker
    * в синхроне. Геттеры литерала биндят `this` на литерал, поэтому инстанс
-   * захвачен замыканием.
-   *
-   * Сеттер зеркалит per-session слот (план следует за сессией): план-тулы
-   * (`abort/switch/delete/purge/...`) пишут через trackerRef напрямую, минуя
-   * setPlan — без хука слот протух бы и воскрешал отменённый план возвратом
-   * в сессию. IO fail-open: слот не должен ронять тулы.
+   * захвачен замыканием. Сеттер зеркалит per-session слот: план-тулы пишут
+   * через trackerRef напрямую, минуя setPlan — без хука слот протух бы и
+   * воскрешал отменённый план возвратом в сессию. IO fail-open.
    */
   private trackerRef: {
     get current(): PlanTracker | null;

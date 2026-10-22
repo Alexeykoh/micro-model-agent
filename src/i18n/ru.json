@@ -1335,6 +1335,8 @@
   "web.usage.copy_id": "скопировать ID сессии",
   "web.usage.model": "модель",
   "web.usage.context": "контекст",
+  "web.usage.context_overcommitted": "контекст больше окна",
+  "ui.context_overcommitted": "контекст больше окна",
   "web.usage.cache": "кеш",
   "web.usage.cost": "стоимость",
   "web.usage.compactions": "сжатия",

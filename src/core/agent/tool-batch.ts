@@ -1,5 +1,4 @@
 /** Исполнитель пакета тулов: жизненный цикл вызовов за итерацию. */
-import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
 import type { AppConfig } from "../../config/types";
 import type { ContextManager } from "../../core/context/manager";
@@ -11,20 +10,20 @@ import type { CostTracker } from "../../modules/pricing/index";
 import type { ToolExecutor } from "../../tools/executor";
 import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
-import type { MetaKind, OnMeta, StopReason } from "../types";
+import type { OnMeta, StopReason } from "../types";
 import type { ToolResult } from "../../tools/types";
 import type { LoopState } from "./loop-state";
 import {
   summarizeToolArgs,
   truncateToolOutput,
-  toolFailureSummary,
   isExecutableScriptPath,
   appendErrorMeta,
 } from "./tool-output";
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_TOOL_FAILURES_PER_TURN, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES } from "./constants";
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_TOOL_FAILURES_PER_TURN, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES, RECOVERY_DIRECTIVE_REFRESH, RECOVERY_MEMORY_RULE_REFRESH } from "./constants";
+import { clearDirective, issueDirective } from "./directives";
 import { canonicalArgsKey } from "./canonical-args";
 
 /** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
@@ -252,10 +251,7 @@ function recordRepeatedToolFailure(
       "warn",
       `Tool ${key} failed ${prev.count}x — disabling it for the rest of the turn`,
     );
-    deps.contextManager.addMessage({
-      role: "user",
-      content: `<system-summary>${t("exec.tool_disabled", { tool: key })}</system-summary>`,
-    });
+    issueDirective(deps.contextManager, "tool_disabled", t("exec.tool_disabled", { tool: key }));
   }
 
   if (prev.count < MIN_REPEATED_TOOL_FAILURES || state.memoryRuleRecorded.has(key)) return;
@@ -278,31 +274,7 @@ function recordRepeatedToolFailure(
  * тела тулов; статусные меты остаются видимы. display имеет приоритет, иначе
  * прогон через onMeta; упавший тул показывает спокойную суть, не директивы.
  */
-function renderToolResultMeta(
-  deps: ToolBatchDeps,
-  iteration: number,
-  result: ToolResult,
-  onMeta: OnMeta | undefined,
-): void {
-  const { pluginManager, contextManager, logger } = deps;
-  const TOOL_META: MetaKind = "tool";
-  const hookCtx = { iteration, logger, contextManager };
-  if (result.display !== undefined) {
-    if (result.display.length > 0) onMeta?.(`\n${result.display}\n`, TOOL_META);
-  } else if (result.success) {
-    const metaOut = pluginManager.runOnMeta(hookCtx, result.output);
-    onMeta?.(`\n${pc.dim(metaOut)}\n`, TOOL_META);
-  } else {
-    const failure = toolFailureSummary(result.output);
-    const metaOut = failure.text ? pluginManager.runOnMeta(hookCtx, failure.text) : "";
-    if (metaOut) {
-      const color = failure.severity === "warn" ? pc.yellow : pc.red;
-      const glyph = failure.severity === "warn" ? "⚠" : "✗";
-      onMeta?.(`\n${color(`${glyph} ${metaOut}`)}\n`, TOOL_META);
-    }
-  }
-  if (result.diff) onMeta?.(`\n${result.diff}\n`, TOOL_META);
-}
+import { imageEventFields, renderToolResultMeta } from "./tool-result-meta";
 
 /** Побочные эффекты успешного тула: план create/re-plan и трекинг файлов. */
 function trackToolResultSideEffects(
@@ -365,13 +337,6 @@ function persistResultImages(
 }
 
 /** Поля изображений для `ToolEvent.end`: refs, иначе inline-фолбэк, иначе ничего. */
-function imageEventFields(
-  result: ToolResult,
-): Pick<ToolEvent, "imageRefs" | "images"> {
-  if (result.imageRefs?.length) return { imageRefs: result.imageRefs };
-  if (result.images?.length) return { images: result.images };
-  return {};
-}
 
 export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDeps) {}
 
@@ -422,9 +387,9 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     const summaries: string[] = [];
     let anyToolFailed = false;
     let batchHasSuccess = false;
-    // Флаг блока безопасности действует в пределах текущего пакета вызовов:
-    // иначе старый блок влиял бы на nudge через десятки итераций.
-    state.sawSecurityBlock = false;
+    // `sawSecurityBlock` живёт весь ход (LoopState создаётся на ход): сброс на
+    // каждом батче не давал поймать «bash заблокирован → write_file *.sh» в
+    // следующем батче (§1.8 аудита).
 
     // ── Общие шаги жизненного цикла вызова: serial и parallel путь делят их. ──
 
@@ -508,7 +473,10 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       tokensBeforeTool: number,
       costBeforeTool: number | undefined,
     ): void => {
-      if (!result.success && !result.blocked && !INFO_TOOLS.has(call.name)) anyToolFailed = true;
+      // Plugin-level блок считается неудачей для honest-stop: перебор
+      // заблокированных вариантов — та же петля, а «нейтральность» замораживала
+      // счётчик навсегда (§1.7 аудита). Успехом блок при этом не становится.
+      if (!result.success && !INFO_TOOLS.has(call.name)) anyToolFailed = true;
       if (result.success) batchHasSuccess = true;
 
       trackToolResultSideEffects(this.deps, state, call, result);
@@ -641,21 +609,35 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     } else {
       state.consecutiveToolFailures = 0;
       state.consecutiveToolSuccesses++;
+      // Серия фейлов закончилась — директива восстановления больше не нужна.
+      clearDirective(contextManager, "consecutive_failures");
     }
     if (state.consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
-      const recoveryMsg = t("exec.consecutive_failures_recovery", {
-        count: state.consecutiveToolFailures,
-      });
       logger.diagnostic("warn", `Consecutive tool failures: ${state.consecutiveToolFailures}`);
-      const taskSnippet = input.length > 200 ? `${input.slice(0, 200)}...` : input;
-      const taskReminder = t("exec.task_reminder", { task: taskSnippet });
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${recoveryMsg}\n${taskReminder}</system-summary>`,
-      });
+      // Директива и правило в память — не на каждый батч: инжект на каждом
+      // пакете с фейлом давал до ~190 дублей директив и правил за ход, и каждая
+      // запись мутировала блок памяти ⇒ рвался prompt-cache (§1.6 аудита).
+      const directiveDue =
+        state.iteration - state.lastRecoveryDirectiveIteration >= RECOVERY_DIRECTIVE_REFRESH;
+      if (directiveDue) {
+        state.lastRecoveryDirectiveIteration = state.iteration;
+        const recoveryMsg = t("exec.consecutive_failures_recovery", {
+          count: state.consecutiveToolFailures,
+        });
+        const taskSnippet = input.length > 200 ? `${input.slice(0, 200)}...` : input;
+        const taskReminder = t("exec.task_reminder", { task: taskSnippet });
+        issueDirective(
+          contextManager,
+          "consecutive_failures",
+          `${recoveryMsg}\n${taskReminder}`,
+        );
+      }
 
       const memStore = this.deps.memoryStore;
-      if (memStore) {
+      const memoryDue =
+        state.iteration - state.lastRecoveryMemoryRuleIteration >= RECOVERY_MEMORY_RULE_REFRESH;
+      if (memStore && memoryDue) {
+        state.lastRecoveryMemoryRuleIteration = state.iteration;
         memStore.appendRule(
           "errors",
           `${state.consecutiveToolFailures} consecutive tool failures`,
@@ -670,13 +652,14 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     // ВХОДЯТ в учёт — перебор вариантов заблокированной команды это та же
     // петля). Смешанные пакеты и успехи сбрасывают стрик: связка
     // «упал → поправил → упал» (дебаг) под него не попадает.
-    // Plugin-level блоки (result.blocked, guard-rails) нейтральны по контракту
-    // ToolResult.blocked — не успех и не неудача.
+    // Plugin-level блоки (result.blocked, guard-rails) — не успех, но для
+    // honest-stop это неудача: серия отказов гарда без прогресса тоже петля.
     if (anyToolFailed && !batchHasSuccess) {
       state.consecutiveFailedBatches++;
     } else if (batchHasSuccess) {
       state.consecutiveFailedBatches = 0;
       state.honestStopNudged = false;
+      clearDirective(contextManager, "failed_batches");
     }
     if (
       state.consecutiveFailedBatches >= MAX_CONSECUTIVE_FAILED_BATCHES &&
@@ -687,10 +670,11 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         "warn",
         `Consecutive failed tool batches: ${state.consecutiveFailedBatches} — honest-stop directive`,
       );
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${t("exec.honest_stop", { count: state.consecutiveFailedBatches })}</system-summary>`,
-      });
+      issueDirective(
+        contextManager,
+        "failed_batches",
+        t("exec.honest_stop", { count: state.consecutiveFailedBatches }),
+      );
     }
     if (state.consecutiveFailedBatches >= HARD_STOP_FAILED_BATCHES) {
       logger.diagnostic("warn", `Retry loop terminated after ${state.consecutiveFailedBatches} consecutive failed batches — forcing final answer`);
@@ -714,6 +698,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     } else {
       state.consecutiveDuplicateBatches = 0;
       state.duplicateNudged = false;
+      clearDirective(contextManager, "duplicate");
     }
     if (state.consecutiveDuplicateBatches >= MAX_DUPLICATE_BATCHES && !state.duplicateNudged) {
       state.duplicateNudged = true;
@@ -721,10 +706,11 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         "warn",
         `Duplicate tool-call streak: ${state.consecutiveDuplicateBatches} batches — directive`,
       );
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${t("exec.readonly_directive", { count: state.consecutiveDuplicateBatches })}</system-summary>`,
-      });
+      issueDirective(
+        contextManager,
+        "duplicate",
+        t("exec.readonly_directive", { count: state.consecutiveDuplicateBatches }),
+      );
     }
     if (state.consecutiveDuplicateBatches >= HARD_STOP_DUPLICATE_BATCHES) {
       logger.diagnostic(
@@ -740,9 +726,19 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       toolCalls.length > 0 && toolCalls.every((c) => RESEARCH_TOOLS.has(c.name));
     if (isResearchBatch) {
       state.consecutiveResearchBatches++;
-    } else {
-      state.consecutiveResearchBatches = 0;
-      state.researchNudged = false;
+      state.nonResearchBatchesWithResult = 0;
+    } else if (batchHasSuccess) {
+      // Посторонний успешный не-web батч НЕ обнуляет серию сразу: иначе
+      // `web_search → read_file → web_fetch → read_file` не набирает порог и
+      // директива выдаётся заново бесконечно (§1.4 аудита). Снимаем серию
+      // только после двух подряд не-web батчей с результатом — это признак,
+      // что модель действительно ушла от поиска.
+      state.nonResearchBatchesWithResult++;
+      if (state.nonResearchBatchesWithResult >= 2) {
+        state.consecutiveResearchBatches = 0;
+        state.researchNudged = false;
+        clearDirective(contextManager, "research");
+      }
     }
     if (state.consecutiveResearchBatches >= MAX_RESEARCH_BATCHES && !state.researchNudged) {
       state.researchNudged = true;
@@ -750,10 +746,11 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         "warn",
         `Web-research streak: ${state.consecutiveResearchBatches} batches without a result — directive`,
       );
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${t("exec.research_convergence", { count: state.consecutiveResearchBatches })}</system-summary>`,
-      });
+      issueDirective(
+        contextManager,
+        "research",
+        t("exec.research_convergence", { count: state.consecutiveResearchBatches }),
+      );
     }
 
     // Статусная строка плана после каждого пакета тулов. Заменяет динамический
@@ -770,3 +767,4 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     return { interrupted: false };
   }
 }
+

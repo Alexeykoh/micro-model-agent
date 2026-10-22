@@ -14,12 +14,19 @@ import { MAX_CLAIM_CHECK_RETRIES } from "./constants";
 import type { HallucinationGateDeps, HallucinationVerdict } from "./hallucination-gate";
 
 /**
- * Свежие выводы тулов для проверки заявлений: последние 10 сообщений
- * role:"tool" (текст урезан; чекер режет повторно).
+ * Свежие выводы тулов для проверки заявлений: сообщения role:"tool" ТЕКУЩЕГО
+ * хода (последние 10; текст урезан — чекер режет повторно).
+ *
+ * Evidence привязано к ходу: `write_file` прошлого хода не должен
+ * «удерживать» заявление о файле в этом ходе, а упавший тул прошлого хода —
+ * триггерить ложный retry (§1.12 аудита).
  */
 export function lastToolEvidence(
   deps: HallucinationGateDeps,
 ): Array<{ name?: string; ok?: boolean; text: string }> {
+  const fromSeq = deps.state?.criticHistoryMark ?? 0;
+  const seqOf = (m: object): number =>
+    (deps.contextManager as { seqOf?: (msg: object) => number }).seqOf?.(m) ?? 0;
   let history: Array<{ role: string; name?: string; content?: unknown; success?: boolean }>;
   try {
     history = deps.contextManager.getActiveHistory() ?? [];
@@ -37,6 +44,8 @@ export function lastToolEvidence(
   }
   return history
     .filter((m) => m.role === "tool")
+    // Только ход, начавшийся после `criticHistoryMark` (маркер из beginTurn).
+    .filter((m) => (fromSeq > 0 ? seqOf(m) >= fromSeq : true))
     .slice(-10)
     .map((m) => ({
       name: m.name,

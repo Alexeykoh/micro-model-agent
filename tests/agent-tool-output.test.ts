@@ -8,11 +8,20 @@ import {
 } from "../src/core/agent/tool-output";
 
 describe("toolOutputCharLimit", () => {
-  it("never truncates a tool that declares boundedOutput regardless of remaining budget", () => {
+  it("keeps a bounded tool well above the raw token remainder", () => {
     // Near-full context (remaining 2245 of 24577): a bounded read tool must
     // NOT be cut to ~2K chars — the model then believes files are truncated
-    // and loops re-reading them (ses_mssx0k11).
-    expect(toolOutputCharLimit(2245, 24577, true)).toBe(Number.MAX_SAFE_INTEGER);
+    // and loops re-reading them (ses_mssx0k11). Бюджет при этом учитывается
+    // (лимит конечен, а не Number.MAX_SAFE_INTEGER).
+    const limit = toolOutputCharLimit(2245, 24577, true);
+    expect(Number.isFinite(limit)).toBe(true);
+    // Лимит считается в символах: остаток бюджета (2245 токенов) ≈ 7857 символов.
+    expect(limit).toBeGreaterThan(2245 * 2);
+    expect(limit).toBeLessThan(24577 * 2 * 3.5);
+  });
+
+  it("never truncates a tool result to an empty string", () => {
+    expect(toolOutputCharLimit(0, 1000, false)).toBeGreaterThanOrEqual(400);
   });
 
   it("still truncates unbounded tools by budget", () => {

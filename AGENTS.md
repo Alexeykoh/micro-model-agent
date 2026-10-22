@@ -170,6 +170,20 @@ Service API и updater (волна W10) держат: `tests/service/tenant-auth
 (sha256+size, staged/flip, tar, `stop()`), `tests/session/session-id.test.ts`
 (криптостойкий id без PII-серий).
 
+Петля и контекст (волна W1/W2) держат: `tests/core/loop-duplicate-stop.test.ts`
+(жёсткий стоп по status-тулу → `stopReason=duplicate` + форс-ответ),
+`tests/core/directive-survives-compaction.test.ts` (директивы переживают
+компакцию), `tests/core/tool-batch-recovery-throttle.test.ts` (троттлинг
+recovery-директивы и кап файлов памяти), `tests/core/context-w2.test.ts`
+(evidence по ходу, токены картинок по пикселям, очередь картинок,
+`overcommitted`), `tests/core/compaction-no-reduction.test.ts`
+(`skipped_no_reduction`), `tests/modules/execution/stuck-turn-scope.test.ts`
+(окно `recentOutcomes`, per-turn сброс и кулдаун recovery),
+`tests/core/tool-batch-research-convergence.test.ts` (стойкость research-стрика),
+`tests/core/loop-repeat.test.ts` (каноническая подпись повтора),
+`tests/core/history-budget-threshold.test.ts` (пороги «история против истории»),
+`tests/core/tool-ledger-bounds.test.ts` (границы леджера тулов).
+
 Живой прогон на 9B (2026-10-22) вскрыл два дефекта, закрытых гвардами:
 `tests/core/system-prompt-freeze.test.ts` (карта проекта — снимок на ход:
 изменение карты рвало KV-кеш префикса, стабильность 51% → 99%) и
