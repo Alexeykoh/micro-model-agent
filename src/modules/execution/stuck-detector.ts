@@ -66,6 +66,8 @@ export function classifyError(output: string): ErrorClassification {
  */
 const BASH_FLAIL_WINDOW = 6;
 const BASH_FLAIL_THRESHOLD = 4;
+/** Окно исходов (ok/fail) для оценки «пошли фейлы» (§1.3 аудита). */
+const RECENT_OUTCOMES_WINDOW = 6;
 
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 /** Пути (абсолютные/относительные) + опционально :line:col. */
@@ -205,6 +207,12 @@ export class StuckDetector {
   private readonly maxRecentCalls = 10;
   private readonly repetitionThreshold = 3;
   private consecutiveFailures = 0;
+  /**
+   * Окно исходов последних вызовов (`ok`/`fail`). Единственный источник правды
+   * для «пошли фейлы»: успех чужого тула не отменяет накопленные ошибки
+   * (§1.3 аудита) — иначе паттерн `bash✗, read✓, bash✗` вечно молчит.
+   */
+  private recentOutcomes: ("ok" | "fail")[] = [];
   private lastFailedTool = "";
   private lastErrorOutput = "";
   private escalationCount = 0;
@@ -246,6 +254,7 @@ export class StuckDetector {
   recordToolError(toolName: string, output?: string): void {
     this.toolErrors.set(toolName, (this.toolErrors.get(toolName) || 0) + 1);
     this.consecutiveFailures++;
+    this.pushOutcome("fail");
     this.lastFailedTool = toolName;
     if (output) this.lastErrorOutput = output;
     const sig = normalizeErrorSignature(toolName, output);
@@ -344,9 +353,8 @@ export class StuckDetector {
   }
 
   /** Отмечает успешный тул: сброс фейлов, затухание per-tool счётчиков и итераций. */
-  recordToolSuccess(): void {
-    this.consecutiveFailures = 0;
-    this.lastFailedTool = "";
+  recordToolSuccess(toolName?: string): void {
+    this.pushOutcome("ok");
     // NOTE: escalationCount осознанно НЕ сбрасываем. Один тривиальный успех
     // (напр. один read_file) раньше его чистил, и shouldEscalate() на флейлящей
     // сессии почти не достигался — в ущерб анти-гейминг свойству, которое
@@ -355,9 +363,15 @@ export class StuckDetector {
     // держит варнинг "Tool X failed N times" вечно (ses_mt4fn58c — bash упал 3x,
     // варнинг перелоггировался после 30 успешных записей). Свежие фейлы счёт
     // набирают заново.
-    for (const [tool, count] of this.toolErrors) {
-      if (count <= 1) this.toolErrors.delete(tool);
-      else this.toolErrors.set(tool, count - 1);
+    // Затухание per-tool счётчиков: снимается одна запись ТОЛЬКО того тула,
+    // который отработал. Раньше успех любого тула гасил счётчик падавшего —
+    // паттерн `bash✗, read✓, bash✗` не достигал порога (§1.3 аудита).
+    if (toolName) {
+      const count = this.toolErrors.get(toolName);
+      if (count !== undefined) {
+        if (count <= 1) this.toolErrors.delete(toolName);
+        else this.toolErrors.set(toolName, count - 1);
+      }
     }
     // Затухание счётчика итераций на продуктивных вызовах: чтение новых файлов,
     // записи, правки — всё прогресс. Защита от ложных stuck-варнингов при
@@ -365,6 +379,19 @@ export class StuckDetector {
     if (this.iterationsOnCurrentStep > 0) {
       this.iterationsOnCurrentStep = Math.max(0, this.iterationsOnCurrentStep - 1);
     }
+  }
+
+  /** Кладёт исход в окно и обрезает его по длине. */
+  private pushOutcome(outcome: "ok" | "fail"): void {
+    this.recentOutcomes.push(outcome);
+    if (this.recentOutcomes.length > RECENT_OUTCOMES_WINDOW) this.recentOutcomes.shift();
+  }
+
+  /** Фейлы в окне последних вызовов (окно, а не счётчик с обнулением). */
+  private failuresInWindow(): number {
+    let failures = 0;
+    for (const outcome of this.recentOutcomes) if (outcome === "fail") failures++;
+    return failures;
   }
 
   /** Ставит текущий шаг (сброс per-step состояния при смене). */
@@ -378,6 +405,11 @@ export class StuckDetector {
   /** True, если итераций на шаге больше порога. */
   isStuck(): boolean {
     return this.iterationsOnCurrentStep > this.threshold;
+  }
+
+  /** Счётчик ошибок конкретного тула (0 — ошибок не было). */
+  getToolErrorCount(toolName: string): number {
+    return this.toolErrors.get(toolName) ?? 0;
   }
 
   /** True, если тул (или любой) ошибался ≥ порога. */
@@ -416,13 +448,14 @@ export class StuckDetector {
   }
 
   /** True при ≥ порога подряд фейлов. */
+  /** True, если в окне последних вызовов хватает фейлов (окно, а не streak). */
   hasConsecutiveFailures(): boolean {
-    return this.consecutiveFailures >= this.errorThreshold;
+    return this.failuresInWindow() >= this.errorThreshold;
   }
 
-  /** Число подряд фейлов. */
+  /** Число фейлов в окне последних вызовов. */
   getConsecutiveFailuresCount(): number {
-    return this.consecutiveFailures;
+    return this.failuresInWindow();
   }
 
   /** Отмечает эскалацию (счётчик для shouldEscalate). */
@@ -825,6 +858,7 @@ export class StuckDetector {
     this.iterationsOnCurrentStep = 0;
     this.toolErrors.clear();
     this.consecutiveFailures = 0;
+    this.recentOutcomes = [];
     this.lastFailedTool = "";
     this.lastErrorOutput = "";
     this.recentToolCalls = [];
@@ -848,6 +882,7 @@ export class StuckDetector {
     this.iterationsOnCurrentStep = 0;
     this.toolErrors.clear();
     this.consecutiveFailures = 0;
+    this.recentOutcomes = [];
     this.lastFailedTool = "";
     this.lastErrorOutput = "";
     this.fileRewriteCount.clear();
@@ -870,6 +905,7 @@ export class StuckDetector {
     this.iterationsOnCurrentStep = 1;
     this.toolErrors.clear();
     this.consecutiveFailures = 0;
+    this.recentOutcomes = [];
     this.lastFailedTool = "";
     this.lastErrorOutput = "";
     this.recentToolCalls = [];

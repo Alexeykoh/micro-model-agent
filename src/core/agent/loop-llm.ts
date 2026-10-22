@@ -376,6 +376,9 @@ export async function runLlmPhase(
       if (deps.exitOnComplete) {
         if (state.repeatedToolCount >= MAX_REPEATED_TOOL_CALLS && allStatusTools) {
           logger.debug("Exit-on-complete: repeated identical status tool call, stopping");
+          // Причина остановки фиксируется честно: без неё ход выглядит как
+          // «успех с пустым ответом» (§1.1 аудита).
+          state.stopReason = "duplicate";
           return { kind: "break" };
         }
       } else if (
@@ -386,6 +389,10 @@ export async function runLlmPhase(
           "warn",
           `Repeated identical status tool ${state.repeatedToolCount}× (iteration ${state.iteration}) — stopping to avoid an infinite loop`,
         );
+        // Жёсткий стоп = тот же путь, что у «duplicate»-батчей: форс-финальный
+        // ответ без тулов. Иначе ход завершается успехом с пустым текстом.
+        state.finalizeReason = "duplicate";
+        state.stopReason = "duplicate";
         return { kind: "break" };
       }
     } else {

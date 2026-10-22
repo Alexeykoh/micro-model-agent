@@ -128,6 +128,9 @@ export class ExecutionModule implements AgentModule {
    */
   private state: ExecutionPluginState = {
     lastRecoveryIteration: -STUCK_RECOVERY_COOLDOWN,
+    lastTurnResetIteration: -1,
+    lastRecoveryTurn: -1,
+    lastStuckWarnTurn: -1,
     consecutivePlanWarnings: 0,
     lastStepId: -1,
     stuckNotified: false,

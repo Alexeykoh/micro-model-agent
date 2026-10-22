@@ -75,6 +75,9 @@ export function runIterationPrologue(
 
   pluginManager.runOnBeforeThink({
     iteration: state.iteration,
+    // Идентификатор хода: монотонный маркер из `ContextManager.beginTurn()`.
+    // Нужен модулям, чтобы сбрасывать per-turn состояние и кулдауны (§1.2/§1.11).
+    turnSeq: state.criticHistoryMark,
     logger,
     lastUserMessage: input,
     contextManager,

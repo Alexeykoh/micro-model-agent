@@ -24,7 +24,7 @@ import {
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_TOOL_FAILURES_PER_TURN, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES } from "./constants";
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MIN_REPEATED_TOOL_FAILURES, MAX_TOOL_FAILURES_PER_TURN, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES, RECOVERY_DIRECTIVE_REFRESH, RECOVERY_MEMORY_RULE_REFRESH } from "./constants";
 import { canonicalArgsKey } from "./canonical-args";
 
 /** Транзиентные сетевые тулы: их фейлы не пишем в глобальную память (не системная поломка). */
@@ -643,19 +643,30 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       state.consecutiveToolSuccesses++;
     }
     if (state.consecutiveToolFailures >= MAX_CONSECUTIVE_TOOL_FAILURES) {
-      const recoveryMsg = t("exec.consecutive_failures_recovery", {
-        count: state.consecutiveToolFailures,
-      });
       logger.diagnostic("warn", `Consecutive tool failures: ${state.consecutiveToolFailures}`);
-      const taskSnippet = input.length > 200 ? `${input.slice(0, 200)}...` : input;
-      const taskReminder = t("exec.task_reminder", { task: taskSnippet });
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${recoveryMsg}\n${taskReminder}</system-summary>`,
-      });
+      // Директива и правило в память — не на каждый батч: инжект на каждом
+      // пакете с фейлом давал до ~190 дублей директив и правил за ход, и каждая
+      // запись мутировала блок памяти ⇒ рвался prompt-cache (§1.6 аудита).
+      const directiveDue =
+        state.iteration - state.lastRecoveryDirectiveIteration >= RECOVERY_DIRECTIVE_REFRESH;
+      if (directiveDue) {
+        state.lastRecoveryDirectiveIteration = state.iteration;
+        const recoveryMsg = t("exec.consecutive_failures_recovery", {
+          count: state.consecutiveToolFailures,
+        });
+        const taskSnippet = input.length > 200 ? `${input.slice(0, 200)}...` : input;
+        const taskReminder = t("exec.task_reminder", { task: taskSnippet });
+        contextManager.addMessage({
+          role: "user",
+          content: `<system-summary>${recoveryMsg}\n${taskReminder}</system-summary>`,
+        });
+      }
 
       const memStore = this.deps.memoryStore;
-      if (memStore) {
+      const memoryDue =
+        state.iteration - state.lastRecoveryMemoryRuleIteration >= RECOVERY_MEMORY_RULE_REFRESH;
+      if (memStore && memoryDue) {
+        state.lastRecoveryMemoryRuleIteration = state.iteration;
         memStore.appendRule(
           "errors",
           `${state.consecutiveToolFailures} consecutive tool failures`,

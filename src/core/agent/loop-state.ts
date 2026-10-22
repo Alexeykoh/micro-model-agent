@@ -1,5 +1,9 @@
 /** Состояние одного запуска агентного цикла: счётчики, бюджеты, сигналы. */
-import { FORCED_COMPACTION_COOLDOWN } from "./constants";
+import {
+  FORCED_COMPACTION_COOLDOWN,
+  RECOVERY_DIRECTIVE_REFRESH,
+  RECOVERY_MEMORY_RULE_REFRESH,
+} from "./constants";
 import type { PrefixDelta, PromptSnapshot } from "./prefix-monitor";
 import type { CacheUsage } from "../../llm/cache-usage";
 import { createArtifactChurnState, type ArtifactChurnState } from "./artifact-progress";
@@ -63,6 +67,14 @@ export interface LoopState {
   lastToolSignature: string;
   /** Подряд идущие итерации, где хотя бы один тул вернул неудачу. */
   consecutiveToolFailures: number;
+  /**
+   * Итерация, на которой recovery-директива обновлялась последний раз.
+   * Директива ставится один раз и обновляется не чаще, чем раз в
+   * `RECOVERY_DIRECTIVE_REFRESH` итераций (иначе — спам на каждый батч).
+   */
+  lastRecoveryDirectiveIteration: number;
+  /** Итерация последней записи правила в память об ошибках (троттлинг). */
+  lastRecoveryMemoryRuleIteration: number;
   /**
    * Подряд идущие ПОЛНОСТЬЮ провальные пакеты тулов (каждый вызов — неудача
    * или tool-level блок; смешанные пакеты и успехи сбрасывают). Питает
@@ -236,6 +248,10 @@ export function createLoopState(): LoopState {
     fileCreationRetries: 0,
     lastToolSignature: "",
     consecutiveToolFailures: 0,
+    /** Итерация последнего обновления recovery-директивы (троттлинг, §1.6). */
+    lastRecoveryDirectiveIteration: -RECOVERY_DIRECTIVE_REFRESH,
+    /** Итерация последней записи правила в память об ошибках (§1.6). */
+    lastRecoveryMemoryRuleIteration: -RECOVERY_MEMORY_RULE_REFRESH,
     consecutiveFailedBatches: 0,
     honestStopNudged: false,
     consecutiveDuplicateBatches: 0,

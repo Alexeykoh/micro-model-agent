@@ -641,10 +641,20 @@ describe("Agent", () => {
         yield infoCall;
         yield { type: "done" as const, finishReason: "tool_calls" as const };
       })();
+    let calls = 0;
     const mockProvider = {
       model: "test-model",
       contextWindow: 4096,
-      chat: vi.fn().mockImplementation(identical),
+      chat: vi.fn().mockImplementation(() => {
+        calls++;
+        // Первые 6 вызовов — тот же status-тул; 7-й — форс-финальный ответ
+        // без тулов (его требует жёсткий стоп).
+        if (calls <= 6) return identical();
+        return (async function* () {
+          yield { type: "text" as const, content: "Checked the session state." };
+          yield { type: "done" as const, finishReason: "stop" as const };
+        })();
+      }),
       countTokens: vi.fn().mockReturnValue(10),
     };
     const deps = createMockDeps({
@@ -652,10 +662,14 @@ describe("Agent", () => {
       config: { ...createMockDeps().config, maxToolIterations: 20 },
     });
     const agent = new Agent(deps);
-    await agent.run("loop forever");
-    // Nudged on each repeat, then hard-stopped at
-    // MAX_REPEATED_TOOL_CALLS_INTERACTIVE (5): never a 7th provider call.
-    expect(mockProvider.chat).toHaveBeenCalledTimes(6);
+    const result = await agent.run("loop forever");
+    // Nudged on each repeat, hard-stopped at MAX_REPEATED_TOOL_CALLS_INTERACTIVE
+    // (5) и форс-финальным вызовом без тулов (7-й вызов провайдера) — ход
+    // обязан закончиться ответом, а не «успехом с пустым текстом» (§1.1).
+    expect(mockProvider.chat).toHaveBeenCalledTimes(7);
+    expect(result.stopReason).toBe("duplicate");
+    expect(result.success).toBe(true);
+    expect(result.text.trim().length).toBeGreaterThan(0);
   });
 
   it("nudges the model when one target is mutated repeatedly (perfectionism cycle)", async () => {
