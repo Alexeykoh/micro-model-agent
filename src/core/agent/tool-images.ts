@@ -2,6 +2,18 @@
 import type { ContentPart, ImageUrlPart } from "../../llm/provider";
 
 /**
+ * Кап pending-очереди изображений. Скриншоты копятся пачками (каждый тул-батч
+ * может вернуть картинку), и без капа очередь съедала окно контекста: картинки
+ * прикрепляются к следующему user-сообщению и уезжают в модель целиком.
+ */
+export const MAX_QUEUED_TOOL_IMAGES = 6;
+
+/** Ключ содержимого картинки (data URL) — основа дедупа очереди. */
+export function imageContentKey(part: ContentPart): string {
+  return part.type === "image_url" ? (part.image_url?.url ?? "") : "";
+}
+
+/**
  * Минимальный контракт менеджера контекста, нужный для доставки изображений
  * из тулов. Не тянем полный ContextManager ради тестируемости.
  */

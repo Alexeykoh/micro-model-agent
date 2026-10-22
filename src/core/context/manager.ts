@@ -32,6 +32,8 @@ export interface Message {
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import { DEFAULTS } from "../../config/defaults";
 import type { TokenCounter } from "../../llm/token-counter";
+import { imageTokensForDataUrl } from "../../llm/image-utils";
+import { MAX_QUEUED_TOOL_IMAGES, imageContentKey } from "../agent/tool-images";
 import {
   ContextCalibrator,
   isImplausibleJump,
@@ -429,7 +431,14 @@ export class ContextManager {
    * Кладёт картинку в очередь на аттач к следующему user-сообщению.
    */
   addPendingImage(part: ContentPart): void {
+    // Дедуп по содержимому: один и тот же скриншот не должен копиться.
+    const key = imageContentKey(part);
+    if (key && this.pendingImageParts.some((p) => imageContentKey(p) === key)) return;
     this.pendingImageParts.push(part);
+    // Кап очереди: старые картинки вытесняются (свежие важнее).
+    while (this.pendingImageParts.length > MAX_QUEUED_TOOL_IMAGES) {
+      this.pendingImageParts.shift();
+    }
   }
 
   /**
@@ -534,15 +543,11 @@ export class ContextManager {
     const text = getMessageText(m.content);
     if (this.tokenCounter) {
       let t = this.tokenCounter.count(text);
-      // Токены картинок: base64 ~130 токенов на тайл 512x512; грубая оценка
+      // Токены картинок: по пикселям (тайл 512×512 ≈ 130 токенов).
       if (Array.isArray(m.content)) {
         for (const part of m.content) {
           if (part.type === "image_url" && part.image_url?.url) {
-            const b64Len = part.image_url.url.includes(",")
-              ? (part.image_url.url.split(",")[1]?.length ?? 0)
-              : part.image_url.url.length;
-            // ~130 токенов на 512 байт base64
-            t += Math.ceil(b64Len / 512) * 130;
+            t += imageTokensForDataUrl(part.image_url.url);
           }
         }
       }
@@ -560,10 +565,7 @@ export class ContextManager {
     if (Array.isArray(m.content)) {
       for (const part of m.content) {
         if (part.type === "image_url" && part.image_url?.url) {
-          const b64Len = part.image_url.url.includes(",")
-            ? (part.image_url.url.split(",")[1]?.length ?? 0)
-            : part.image_url.url.length;
-          t += Math.ceil(b64Len / 512) * 130;
+          t += imageTokensForDataUrl(part.image_url.url);
         }
       }
     }
@@ -926,9 +928,13 @@ export class ContextManager {
       this.toolLedger,
       this.toolLedgerKeys,
     );
+    // Сводка hard-drop строится из СВЕЖИХ фактов выброшенного head, а не из
+    // остатка предыдущей компакции: иначе свежие `[Files:]`/`[Errors:]` попадали
+    // в сообщение только при СЛЕДУЮЩЕЙ компакции (§3.6 аудита).
+    const headBlock = this.buildCompactionBlock(head);
     const summary: Message = this.stampSeq({
       role: "user",
-      content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context]${this.compactedBlock ? ` ${this.compactedBlock}` : ""}</system-summary>`,
+      content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context] ${headBlock}</system-summary>`,
     });
     this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...tail];
     this.iterationsSinceCompaction = 0;
@@ -949,7 +955,7 @@ export class ContextManager {
       qualityAfter: this.getQuality(),
       messagesBefore,
       messagesAfter: this.messages.length,
-      summary: (this.compactedBlock ?? ""),
+      summary: headBlock,
       reducedBy: tokensBefore - tokensAfter,
       strategy: "hard-drop",
     };
@@ -986,6 +992,7 @@ export class ContextManager {
       reserve: b.responseReserve,
       free: Math.max(0, this.contextWindow - used - b.responseReserve),
       window: this.contextWindow,
+      overcommitted: used > this.contextWindow,
     };
   }
 
@@ -1058,6 +1065,8 @@ export class ContextManager {
   clear(): void {
     this.messages = [];
     this.compactedBlock = null;
+    // Pending-картинки прошлого хода не должны утечь в следующий (§3.5).
+    this.pendingImageParts = [];
     this.toolLedger = [];
     this.toolLedgerKeys = new Set();
     this.iterationsSinceCompaction = 0;

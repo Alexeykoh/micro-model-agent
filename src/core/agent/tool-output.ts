@@ -8,21 +8,40 @@ import {
 } from "./constants";
 
 /**
+ * Флор усечения: результат тула никогда не превращается в пустую строку.
+ * Пустой вывод выглядит как «тул отработал вхолостую» — модель читает его как
+ * отсутствие данных и уходит в повтор (§3.3 аудита).
+ */
+export const MIN_TOOL_RESULT_CHARS = 400;
+/** Символов на токен (грубая конвенция оценки контекста). */
+const CHARS_PER_TOKEN = 3.5;
+/** Доля бюджета истории для тулов с `boundedOutput` (свой лимит вывода). */
+const BOUNDED_TOOL_RESULT_RATIO = 2;
+
+/**
  * Макс. число символов результата тула при заданном остатке бюджета и
  * признаке того, что тул сам ограничивает свой вывод.
  *
- * Тулы с `boundedOutput` (например, read_file с лимитом строк) НИКОГДА не
- * усекаются бюджетом — почти полный контекст раньше резал их до ~2K символов,
- * и модель верила, что файлы обрезаны, перечитывая их бесконечно.
+ * Единицы приведены к символам: бюджет приходит в токенах, а резать надо
+ * символы (1 токен ≈ 3.5 символа). Раньше токены сравнивались с символами
+ * напрямую, из-за чего лимит был втрое меньше реального.
+ *
+ * Тулы с `boundedOutput` (например, read_file с лимитом строк) режутся мягче
+ * (`BOUNDED_TOOL_RESULT_RATIO`), но не «бесконечно»: `Number.MAX_SAFE_INTEGER`
+ * отменял бюджет целиком, и результат мог не поместиться в окно.
  */
 export function toolOutputCharLimit(
   remainingBudget: number,
   historyBudget: number,
   bounded: boolean,
 ): number {
-  if (bounded) return Number.MAX_SAFE_INTEGER;
-  const maxCharsByRatio = Math.floor(historyBudget * TOOL_RESULT_MAX_TOKENS_RATIO * 2);
-  return Math.min(remainingBudget, maxCharsByRatio, TOOL_RESULT_ABSOLUTE_MAX_CHARS);
+  const remainingChars = Math.max(0, remainingBudget) * CHARS_PER_TOKEN;
+  const ratio = bounded ? BOUNDED_TOOL_RESULT_RATIO : TOOL_RESULT_MAX_TOKENS_RATIO;
+  const maxCharsByRatio = Math.floor(historyBudget * ratio * CHARS_PER_TOKEN);
+  const limit = bounded
+    ? Math.min(remainingChars, maxCharsByRatio)
+    : Math.min(remainingChars, maxCharsByRatio, TOOL_RESULT_ABSOLUTE_MAX_CHARS);
+  return Math.max(MIN_TOOL_RESULT_CHARS, Math.floor(limit));
 }
 
 /** Усечение вывода тула под бюджет с честной пометкой о потере. */

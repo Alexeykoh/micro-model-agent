@@ -1335,6 +1335,8 @@
   "web.usage.copy_id": "copy session id",
   "web.usage.model": "model",
   "web.usage.context": "context",
+  "web.usage.context_overcommitted": "context exceeds the window",
+  "ui.context_overcommitted": "context exceeds the window",
   "web.usage.cache": "cache",
   "web.usage.cost": "cost",
   "web.usage.compactions": "compactions",

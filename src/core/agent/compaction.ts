@@ -84,37 +84,52 @@ export class CompactionService {
     if (state.iteration - state.lastCompactionIteration < FORCED_COMPACTION_COOLDOWN) return;
     // 1) Overflow — канонический порог по истории (калиброванная оценка),
     //    cooldown и safety-clamp от неправдоподобного скачка.
-    if (this.tryOverflowV2(state)) return;
+    if (this.tryOverflowV2(state) !== "") return;
     // 2) Один из оставшихся триггеров: pending (после тула), качество, интервал.
     this.tryFallbackV2(state);
   }
 
   /**
-   * Overflow-триггер v2 с cooldown и safety-clamp. Возвращает true, если
-   * компакция БЫЛА ПОПЫТАНА (порог превышен, cooldown истёк) — независимо от
-   * того, дала ли она значимое сокращение. Это гарантирует «один триггер на
-   * итерацию»: no-op overflow не открывает дорогу fallback-компакции в том же ходу.
+   * Overflow-триггер v2 с cooldown и safety-clamp.
+   *
+   * Возвращает причину: `""` — триггер не сработал, `"compacted"` — контекст
+   * ужат, `"skipped_no_reduction"` — ужать нечего (несжимаемый хвост).
+   *
+   * Флаг `lastOverflowCompactionIteration` ставится ТОЛЬКО при реальном
+   * сокращении: иначе overflow, который нельзя ужать, повторялся каждые
+   * `cooldown` итераций без прогресса (§3.7 аудита).
    */
-  private tryOverflowV2(state: LoopState): boolean {
+  private tryOverflowV2(state: LoopState): string {
     const { contextManager } = this.deps;
     const cooldown = contextManager.getOverflowCooldown();
-    if (state.iteration - state.lastOverflowCompactionIteration < cooldown) return false;
+    if (state.iteration - state.lastOverflowCompactionIteration < cooldown) return "";
     const check = contextManager.checkOverflowAllowed();
     if (check.implausible) {
       this.deps.logger.diagnostic(
         "warn",
         `Implausible context estimate jump (raw ${check.raw}, calibrated ${check.calibrated}) — overflow compaction skipped`,
       );
-      return false;
+      return "";
     }
-    if (!check.allowed) return false;
-    state.lastOverflowCompactionIteration = state.iteration;
+    if (!check.allowed) return "";
     state.lastCompactionIteration = state.iteration;
-    this.compactV2(
+    const compacted = this.compactV2(
       state,
       `overflow (${check.calibrated} > ${contextManager.getBudget().history})`,
     );
-    return true;
+    if (!compacted.compacted) {
+      this.deps.logger.diagnostic(
+        "warn",
+        "Overflow compaction skipped: no reduction possible (unshrinkable context)",
+      );
+      this.deps.slog.logCompaction({
+        reason: "skipped_no_reduction",
+        iteration: state.iteration,
+      });
+      return "skipped_no_reduction";
+    }
+    state.lastOverflowCompactionIteration = state.iteration;
+    return "compacted";
   }
 
   /** Fallback-триггеры v2: pending/качество/интервал. */
@@ -181,7 +196,7 @@ export class CompactionService {
    * v2-компакция с гарантией прогресса. No-op (reducedBy ≤ порога значимости,
    * см. `computeMinReduction`) не логируется и не инкрементит счётчик.
    */
-  private compactV2(state: LoopState, reason: string): boolean {
+  private compactV2(state: LoopState, reason: string): { compacted: boolean; reducedBy: number } {
     const { contextManager } = this.deps;
     const minReduction = computeMinReduction(
       contextManager.getBudget().history,
@@ -191,11 +206,13 @@ export class CompactionService {
       toolResultKeep: contextManager.getToolResultKeep(),
       minReduction,
     });
-    if (!result || result.reducedBy <= minReduction) return false;
+    if (!result || result.reducedBy <= minReduction) {
+      return { compacted: false, reducedBy: result?.reducedBy ?? 0 };
+    }
     this.deps.logger.debug(`Context compacted (${result.strategy})`);
     this.deps.slog.logCompaction({ reason, iteration: state.iteration, ...result });
     this.deps.hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
-    return true;
+    return { compacted: true, reducedBy: result.reducedBy };
   }
 
   // ── legacy ────────────────────────────────────────────────────────────────

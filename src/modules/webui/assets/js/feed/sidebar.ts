@@ -176,6 +176,10 @@ export function renderUsage(h: Dict): void {
     usageEl.appendChild(contextSegBar(h, used, limit));
     usageEl.appendChild(contextLegend(h));
   }
+  // Перегрузка окна: процент обрезан на 100 %, поэтому показываем явно.
+  if (h.contextBreakdown && h.contextBreakdown.overcommitted) {
+    usageEl.appendChild(usageRow(t("web.usage.context_overcommitted"), "⚠", "wn"));
+  }
   const hit = typeof h.cacheHitRate === "number" ? h.cacheHitRate : null;
   usageEl.appendChild(usageRow(t("web.usage.cache"), hit != null ? Math.round(hit * 100) + "%" : "—", hit != null ? "" : "dim"));
   usageEl.appendChild(usageRow(t("web.usage.cost"), typeof h.costUsd === "number" ? "$" + h.costUsd.toFixed(4) : "—"));

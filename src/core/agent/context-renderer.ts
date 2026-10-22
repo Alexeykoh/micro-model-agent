@@ -1,5 +1,6 @@
 /** Рендер UI-индикаторов контекста (stats-бар, уведомление о компакции). */
 import { pc } from "../../ui/colors";
+import { t } from "../../i18n/index";
 import type { UiConfig } from "../../config/types";
 import type { ContextManager } from "../../core/context/manager";
 import type { OnMeta } from "../types";
@@ -38,8 +39,12 @@ export class ContextRenderer {
     const compCount = contextManager.getCompactionCount();
     const quality = contextManager.getQuality();
     const qualityColor = quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
+    // Перегрузка окна не видна в проценте (клэмп 100 %) — показываем явно.
+    const overcommitted = contextManager.getBreakdown().overcommitted
+      ? `  ${pc.yellow(`⚠ ${t("ui.context_overcommitted")}`)}`
+      : "";
     onMeta?.(
-      `\n  ${ctxBar}  ${pctColor(`${ctxPct}%`)}  ${pc.dim(`ctx: ${ctxTokens}/${ctxBudget.history}`)}  ${pc.dim(`compactions: ${compCount}`)}  ${qualityColor(`quality: ${quality}%`)}\n`,
+      `\n  ${ctxBar}  ${pctColor(`${ctxPct}%`)}  ${pc.dim(`ctx: ${ctxTokens}/${ctxBudget.history}`)}  ${pc.dim(`compactions: ${compCount}`)}  ${qualityColor(`quality: ${quality}%`)}${overcommitted}\n`,
     );
   }
 

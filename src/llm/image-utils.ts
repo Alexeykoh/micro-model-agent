@@ -23,6 +23,77 @@ export function detectMime(filePath: string): string {
   return MIME_MAP[ext] ?? "image/png";
 }
 
+/** Токенов на один тайл 512×512 (конвенция провайдеров vision). */
+const IMAGE_TILE_TOKENS = 130;
+const IMAGE_TILE_PX = 512;
+
+/**
+ * Стоимость картинки в токенах: тайлы 512×512 по 130 токенов.
+ *
+ * Раньше токены картинки считались по длине base64 (`ceil(b64/512) * 130`) —
+ * ошибка на ~3 порядка: 800px-JPEG (≈13 КБ base64) «стоил» ~3400 токенов
+ * вместо ~260 (§3.4 аудита).
+ */
+export function imageTokenCost(width: number, height: number): number {
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  return Math.ceil(w / IMAGE_TILE_PX) * Math.ceil(h / IMAGE_TILE_PX) * IMAGE_TILE_TOKENS;
+}
+
+/** Размеры картинки из заголовка PNG/JPEG (без декодирования пикселей). */
+export function imageDimensionsFromDataUrl(
+  dataUrl: string,
+): { width: number; height: number } | undefined {
+  const comma = dataUrl.indexOf(",");
+  if (comma < 0) return undefined;
+  const header = dataUrl.slice(0, comma);
+  if (!header.startsWith("data:image")) return undefined;
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(dataUrl.slice(comma + 1), "base64");
+  } catch {
+    return undefined;
+  }
+  if (bytes.length < 24) return undefined;
+  // PNG: IHDR на фиксированном смещении.
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) {
+    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+  }
+  // JPEG: ищем маркер SOF (C0–CF, кроме DHT/DAC/RST).
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 9 < bytes.length) {
+      if (bytes[offset] !== 0xff) {
+        offset++;
+        continue;
+      }
+      const marker = bytes[offset + 1];
+      const length = bytes.readUInt16BE(offset + 2);
+      const isSof =
+        marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+      if (isSof) {
+        return { height: bytes.readUInt16BE(offset + 5), width: bytes.readUInt16BE(offset + 7) };
+      }
+      offset += 2 + length;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Оценка токенов картинки по data URL: по пикселям, если размеры известны,
+ * иначе — консервативно по размеру файла (0.75 байта на пиксель).
+ */
+export function imageTokensForDataUrl(dataUrl: string): number {
+  const dims = imageDimensionsFromDataUrl(dataUrl);
+  if (dims) return imageTokenCost(dims.width, dims.height);
+  const comma = dataUrl.indexOf(",");
+  const b64Len = comma >= 0 ? dataUrl.length - comma - 1 : dataUrl.length;
+  const bytes = b64Len * 0.75;
+  const side = Math.max(1, Math.sqrt(bytes / 0.75));
+  return imageTokenCost(side, side);
+}
+
 /** Минимальная поверхность встроенного `Image` Bun (нет в @types/bun). */
 interface BunImage {
   metadata(): Promise<{ width?: number }>;
