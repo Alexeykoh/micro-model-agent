@@ -509,6 +509,12 @@ export interface ServiceConfig {
   host: string;
   /** Bearer-токен внутреннего вызова (control plane ↔ runtime). Опц. для loopback. */
   token?: string;
+  /**
+   * Тенант, которому принадлежит процесс (silo: 1 процесс = 1 тенант). Он
+   * авторитетен для authz: `X-Mma-Tenant` лишь сверяется с ним, а не задаёт
+   * тенанта. Не задан — процесс обслуживает единый безымянный тенант.
+   */
+  tenant?: string;
   /** Срок хранения терминальных результатов задач (дни). */
   resultRetentionDays: number;
   /** TTL Idempotency-Key (часы). */

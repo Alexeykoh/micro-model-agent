@@ -66,7 +66,11 @@ export interface AgentServiceState {
   host: string;
   port: number;
   token?: string;
-  tenant?: TenantContext;
+  /**
+   * Тенант процесса (silo): авторитетный источник для authz. Заголовок
+   * `X-Mma-Tenant` только сверяется с ним (см. `tenantOk` в server).
+   */
+  tenant: TenantContext;
   /** Интервал SSE keep-alive (мс). */
   keepaliveMs: number;
   startedAt: number;
@@ -77,6 +81,15 @@ function parseEnvInt(raw: string | undefined): number | undefined {
   if (raw === undefined || raw.trim() === "") return undefined;
   const n = Number(raw);
   return Number.isInteger(n) ? n : undefined;
+}
+
+/**
+ * Тенант процесса: env `MMA_SERVICE_TENANT` перекрывает `service.tenant`.
+ * Не задан — пустой контекст (один безымянный тенант на процесс).
+ */
+function processTenant(sg: AppConfig["service"]): TenantContext {
+  const tenantId = readEnv("SERVICE_TENANT")?.trim() || sg.tenant;
+  return tenantId ? { tenantId } : {};
 }
 
 /** Создаёт состояние сервиса и привязывает фабрику раннеров, если дана. */
@@ -101,6 +114,7 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     host: deps.host ?? readEnv("SERVICE_HOST") ?? sg.host,
     port: deps.port ?? parseEnvInt(readEnv("SERVICE_PORT")) ?? sg.port,
     token: deps.token ?? readEnv("SERVICE_TOKEN") ?? sg.token,
+    tenant: processTenant(sg),
     keepaliveMs: deps.keepaliveMs ?? 20_000,
     startedAt: Date.now(),
   };

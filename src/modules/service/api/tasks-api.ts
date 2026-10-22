@@ -97,7 +97,7 @@ async function submit(
     return true;
   }
 
-  const tenant = tenantOf(req);
+  const tenant = tenantOf(req, s);
   const idemKey = headerString(req, "idempotency-key");
 
   const dedupe = resolveIdempotentSubmit(res, s, body, tenant, idemKey);
@@ -479,8 +479,18 @@ function sendWebhook(s: AgentServiceState, task: TaskRecord): void {
 
 // ── Status / Cancel / Answer ──────────────────────────────────────────────
 
-function status(res: ServerResponse, s: AgentServiceState, jobId: string): boolean {
+/**
+ * Задача, принадлежащая тенанту процесса. Чужая/неизвестная → `undefined`
+ * (404: не подтверждаем существование чужой задачи).
+ */
+function ownedTask(s: AgentServiceState, jobId: string): TaskRecord | undefined {
   const rec = s.tasks.get(jobId);
+  if (!rec) return undefined;
+  return (rec.tenant?.tenantId ?? undefined) === (s.tenant.tenantId ?? undefined) ? rec : undefined;
+}
+
+function status(res: ServerResponse, s: AgentServiceState, jobId: string): boolean {
+  const rec = ownedTask(s, jobId);
   if (!rec) {
     sendProblem(res, problem({ type: "noTask", title: "task not found", status: 404, detail: jobId }));
     return true;
@@ -490,7 +500,7 @@ function status(res: ServerResponse, s: AgentServiceState, jobId: string): boole
 }
 
 function cancel(res: ServerResponse, s: AgentServiceState, jobId: string): boolean {
-  const rec = s.tasks.get(jobId);
+  const rec = ownedTask(s, jobId);
   if (!rec) {
     sendProblem(res, problem({ type: "noTask", title: "task not found", status: 404, detail: jobId }));
     return true;
@@ -536,7 +546,7 @@ async function answer(
   s: AgentServiceState,
   jobId: string,
 ): Promise<boolean> {
-  const rec = s.tasks.get(jobId);
+  const rec = ownedTask(s, jobId);
   if (!rec) {
     sendProblem(res, problem({ type: "noTask", title: "task not found", status: 404, detail: jobId }));
     return true;
@@ -574,19 +584,14 @@ async function readJson(
   return readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
 }
 
-/** Tenant/run-контекст из auth-заголовков control plane (никогда из тела, §11). */
-function tenantOf(req: IncomingMessage): TenantContext {
-  const tenantId = headerString(req, "x-mma-tenant");
+/** Tenant/run-контекст задачи: тенант — из процесса, остальное — audit-метки (§11). */
+function tenantOf(req: IncomingMessage, s: AgentServiceState): TenantContext {
   const principalId = headerString(req, "x-mma-principal");
   const runId = headerString(req, "x-mma-run");
-  const tier = headerString(req, "x-mma-tier");
-  const scopesRaw = headerString(req, "x-mma-scopes");
   return {
-    ...(tenantId ? { tenantId } : {}),
+    ...(s.tenant.tenantId ? { tenantId: s.tenant.tenantId } : {}),
     ...(principalId ? { principalId } : {}),
     ...(runId ? { runId } : {}),
-    ...(tier ? { tier } : {}),
-    ...(scopesRaw ? { scopes: scopesRaw.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
   };
 }
 

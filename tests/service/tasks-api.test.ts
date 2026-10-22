@@ -449,7 +449,11 @@ describe("tasks api", () => {
   });
 
   it("logs the tenant/run context to the session log", async () => {
-    const url = await boot(makeDeps(fastAgent("ok")));
+    const url = await boot(
+      makeDeps(fastAgent("ok"), (c) => {
+        c.service.tenant = "acme";
+      }),
+    );
     const sid = await firstSessionId(url);
     await submit(
       url,

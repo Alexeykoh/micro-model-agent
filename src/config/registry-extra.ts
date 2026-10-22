@@ -756,6 +756,12 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [ ...DATA_POLICY_DEFS,
       const s = String(v ?? "").trim();
       c.service.token = s === "" ? undefined : s;
     }), allowEmpty: true },
+  { ...strOpt("service.tenant", "service",
+    (c) => c.service.tenant ?? "",
+    (c, v) => {
+      const s = String(v ?? "").trim();
+      c.service.tenant = s === "" ? undefined : s;
+    }), allowEmpty: true },
   int("service.resultRetentionDays", "service", 1, 365, 1, false,
     (c) => c.service.resultRetentionDays,
     (c, v) => { c.service.resultRetentionDays = v as number; }),

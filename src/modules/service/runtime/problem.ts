@@ -13,6 +13,7 @@ export const PROBLEM_TYPES = {
   rateLimited: "https://mma.dev/errors/rate-limited",
   noSession: "https://mma.dev/errors/no-session",
   noTask: "https://mma.dev/errors/no-task",
+  tenantMismatch: "https://mma.dev/errors/tenant-mismatch",
   toolForbidden: "https://mma.dev/errors/tool-forbidden",
   outputInvalid: "https://mma.dev/errors/output-invalid",
   providerUnavailable: "https://mma.dev/errors/provider-unavailable",

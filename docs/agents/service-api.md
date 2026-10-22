@@ -99,6 +99,14 @@ Idempotency-Key: <uuid>                 // опц.
 (comma-separated). Резолвятся только из auth, не из тела; пишутся в
 `session.jsonl` записью `service_task`.
 
+Тенант — свойство **процесса** (silo: 1 процесс = 1 тенант), а не запроса:
+`service.tenant` (env `MMA_SERVICE_TENANT`). Значение `X-Mma-Tenant` только
+сверяется с ним; чужой/неизвестный тенант → `403 …/tenant-mismatch` до
+маршрута, поэтому задачи, сессии и SSE другого тенанта недоступны. Без
+`service.tenant` процесс обслуживает один безымянный тенант. `X-Mma-Principal`
+и `X-Mma-Run` — audit-метки (не повышают прав); `X-Mma-Tier`/`X-Mma-Scopes`
+рантайм не доверяет — они принадлежат control plane.
+
 В `job`-режиме `toolAllowlist` применяется **строго** к набору тулов раннера
 (теги и `alwaysOn` не обходят). Попытка вызвать интерактивный тул или тул вне
 allowlist завершает задачу `failed` с `error.type = …/tool-forbidden`.
@@ -142,10 +150,10 @@ data: { "v":1, "seq", "ts", "type", "sessionId", "taskId", "data" }
 
 ## Ошибки (RFC 9457)
 
-`type`-URI стабильны (клиент ветвится по ним): `validation`, `idempotency-conflict`,
-`queue-full`, `rate-limited`, `no-session`, `no-task`, `tool-forbidden`,
-`output-invalid`, `provider-unavailable`, `timeout`, `internal`. Плюс
-`is_retriable`, `retry_after_ms`, `trace_id`, `suggestions`.
+`type`-URI стабильны (клиент ветвится по ним): `validation`, `tenant-mismatch`,
+`idempotency-conflict`, `queue-full`, `rate-limited`, `no-session`, `no-task`,
+`tool-forbidden`, `output-invalid`, `provider-unavailable`, `timeout`, `internal`.
+Плюс `is_retriable`, `retry_after_ms`, `trace_id`, `suggestions`.
 
 ## Structured output
 
