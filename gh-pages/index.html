@@ -403,6 +403,7 @@
           <div class="row"><dt data-i18n="safety.v2.t">Path validator</dt><dd data-i18n="safety.v2.d">global bans (.git, .env, keys), containment inside the workspace, subagent file zones</dd></div>
           <div class="row"><dt data-i18n="safety.v3.t">Network validator</dt><dd data-i18n="safety.v3.d">domain blacklist plus optional allowlist; sensitive query parameters stripped before the request</dd></div>
           <div class="row"><dt data-i18n="safety.v4.t">Content scan</dt><dd data-i18n="safety.v4.d">patterns such as eval( or child_process.exec( are flagged before a write</dd></div>
+          <div class="row"><dt data-i18n="safety.v5.t">Egress policy (DLP)</dt><dd data-i18n="safety.v5.d">before a call leaves for an external provider, absolute paths, machine and user names, environment values, secrets, PII and the contents of hidden files are replaced with stable tokens; loopback and trusted hosts keep the real values</dd></div>
         </dl>
         <div class="presets">
           <span class="presets-label" data-i18n="safety.presets">Presets</span>
@@ -411,6 +412,7 @@
           <span class="preset" data-i18n="safety.p3">permissive</span>
         </div>
         <p class="note" data-i18n="safety.more">Session files can be encrypted with AES-256-GCM, logs are scrubbed of secrets, and an audit notifier can ship events to a file or a webhook.</p>
+        <p class="note" data-i18n="safety.dlp">In mma web every answer carries an egress badge: what was replaced and where the call went — classes and counts, never the originals. The kill switch is security.dataPolicy.enabled: false.</p>
       </div>
     </section>
 
