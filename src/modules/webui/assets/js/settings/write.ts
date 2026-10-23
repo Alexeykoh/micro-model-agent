@@ -10,6 +10,7 @@ import type { Dict } from "../core/store/types.js";
 import { contextLabel, matchesQuery } from "../format.js";
 import { closeAllMenus, setSessOpen } from "../core/menus.js";
 import { setIndicator } from "../dialog.js";
+import { saveErrorText } from "./save-error.js";
 import { setLayout } from "../rail.js";
 import { reasoningStatus } from "./reasoning-status.js";
 
@@ -345,7 +346,7 @@ export async function postConfig(key: string, value: unknown, refreshSettings?: 
     const r = await api<Dict>("/api/config", { method: "POST", body: { key, value } });
     if (!r.ok || !r.data || !r.data.ok) {
       const err = (r.data && (r.data.error || r.data.reason)) || r.status || t("web.settings.save_failed");
-      setIndicator(String(err), true);
+      setIndicator(saveErrorText(err, key), true);
       return false;
     }
     const persisted = r.data.persisted !== false;
