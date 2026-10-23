@@ -68,6 +68,17 @@ describe("config registry", () => {
     if (!res.ok) expect(res.reason).toBe("invalid-value");
   });
 
+  it("caps maxToolIterations so a typo cannot disable the turn limit", () => {
+    const cfg = freshConfig();
+    const res = setConfigValue(cfg, "maxToolIterations", "999999999");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toBe("invalid-value");
+    expect(cfg.maxToolIterations).toBe(DEFAULTS.maxToolIterations);
+    // Разумное значение и сам потолок по-прежнему принимаются.
+    expect(setConfigValue(cfg, "maxToolIterations", "500").ok).toBe(true);
+    expect(setConfigValue(cfg, "maxToolIterations", "1000").ok).toBe(true);
+  });
+
   it("enforces system + reserve <= 0.95", () => {
     const cfg = freshConfig();
     const res = setConfigValue(cfg, "contextBudget.systemPrompt", "0.9");

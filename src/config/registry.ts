@@ -251,7 +251,7 @@ export const DEFINITIONS: ConfigKeyDef[] = [
     aliases: [],
     domain: "agent",
     valueType: "int",
-    min: 1,
+    min: 1, max: 1000, // потолок: иначе `/config maxToolIterations 999999999` снимает лимит итераций хода
     step: 1,
     effects: [],
     get: (c) => c.maxToolIterations,
