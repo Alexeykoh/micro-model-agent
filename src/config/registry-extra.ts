@@ -424,6 +424,12 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [ ...DATA_POLICY_DEFS,
       c.subagent ??= structuredClone(DEFAULTS.subagent);
       c.subagent.timeoutMs = v as number;
     }),
+  int("subagent.maxDurationMs", "agent", 60000, 7200000, 60000, false,
+    (c) => c.subagent?.maxDurationMs ?? DEFAULTS.subagent.maxDurationMs,
+    (c, v) => {
+      c.subagent ??= structuredClone(DEFAULTS.subagent);
+      c.subagent.maxDurationMs = v as number;
+    }),
   bool("subagent.stableSystemPrompt", "agent", false,
     (c) => c.subagent?.stableSystemPrompt ?? DEFAULTS.subagent.stableSystemPrompt,
     (c, v) => {

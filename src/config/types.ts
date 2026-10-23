@@ -377,8 +377,13 @@ export interface SubagentConfig {
   stableSystemPrompt: boolean;
   /** Дефолтный потолок параллельных chunk-запросов в runChunkQuery. */
   maxParallelChunkQueries: number;
-  /** Таймаут выполнения субагента, мс (дефолт 180000). */
+  /**
+   * Idle-таймаут прогона, мс (дефолт 180000): сколько можно не подавать ни одного
+   * события (текст/рассуждение/тул/фаза), прежде чем прогон будет остановлен.
+   */
   timeoutMs: number;
+  /** Жёсткий потолок одного прогона, мс (дефолт 1800000). */
+  maxDurationMs: number;
 }
 
 export interface SessionIsolationConfig {

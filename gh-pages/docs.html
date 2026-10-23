@@ -320,7 +320,9 @@ max_tokens: 8000</code></pre>
       <li>Глубина рекурсии ограничена <code>security.maxRecursionDepth</code>.</li>
       <li>Результат в режиме <code>file</code> сохраняется в <code>&lt;workspace&gt;/.mma/artifacts/&lt;session&gt;/</code>.</li>
       <li>Остановка: кнопка «■» в шапке прогона в web UI; стоп родительского хода гасит и дочерних.</li>
-      <li>Таймаут — <code>subagent.timeoutMs</code> (по умолчанию 180 с).</li>
+      <li>Таймауты: <code>subagent.timeoutMs</code> — простой без событий (по умолчанию 180 с),
+        <code>subagent.maxDurationMs</code> — жёсткий потолок прогона (по умолчанию 30 мин).
+        На срабатывании субагент останавливается и возвращает причину.</li>
     </ul>
 
     <h2 id="memory">Память, скиллы, AGENTS.md</h2>
@@ -455,6 +457,7 @@ mma security enable-audit</code></pre>
 mma config set model qwen/qwen3.5-9b
 mma config set ui.verbosity verbose
 mma config set subagent.timeoutMs 300000
+mma config set subagent.maxDurationMs 1800000
 mma config migrate          # legacy config.json → домены</code></pre>
     <h3>Частые ключи</h3>
     <table>
@@ -464,7 +467,7 @@ mma config migrate          # legacy config.json → домены</code></pre>
         <tr><td><code>contextWindow</code>, <code>contextBudget.*</code></td><td>окно и доли бюджета</td></tr>
         <tr><td><code>ui.verbosity</code>, <code>ui.activityRail</code></td><td>quiet/verbose, панель активности</td></tr>
         <tr><td><code>session.autoSave</code>, <code>session.maxSessions</code></td><td>история и ротация сессий</td></tr>
-        <tr><td><code>subagent.timeoutMs</code>, <code>resultMode</code></td><td>лимит и формат результата субагентов</td></tr>
+        <tr><td><code>subagent.timeoutMs</code>, <code>subagent.maxDurationMs</code></td><td>idle-лимит и жёсткий потолок прогона субагента</td></tr>
         <tr><td><code>security.policy</code>, <code>security.dataPolicy.*</code></td><td>политика и DLP</td></tr>
         <tr><td><code>service.port</code>, <code>service.token</code></td><td>HTTP-сервис</td></tr>
         <tr><td><code>updater.autoInstall</code></td><td>фоновое обновление</td></tr>

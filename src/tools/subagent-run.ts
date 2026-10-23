@@ -9,17 +9,17 @@ import { PluginManager } from "../modules/plugins/manager";
 import type { PromptBlock } from "../core/types";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
-import { ArtifactStore } from "../modules/artifacts/store";
 import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
 import { getExpertConfig } from "../config/experts";
 import { resolveExpertProvider } from "../modules/execution/expert-provider";
 import { withTokenCap } from "../llm/token-cap";
 import { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limits";
 import { createSubagentObserver, resultStatus, resultUsage } from "./subagent-observer";
+import { createSubagentWatchdog } from "./subagent-watchdog";
+import { finalizeSubagentSuccess } from "./subagent-result";
 
 // Реэкспорт для существующих импортёров/тестов (лимиты переехали в отдельный файл).
 export { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limits";
-
 /** Фиксированный системный промпт (KV-cache дружит при stableSystemPrompt). */
 export const SUBAGENT_SYSTEM_PROMPT_TEMPLATE = `You are a sub-agent working on a specific task. You have your own context window and tool set.
 
@@ -39,13 +39,12 @@ function buildSubagentSystemPrompt(context: string, stable: boolean): string {
 export async function runSubagent(
   ctx: ToolContext,
   args: Record<string, unknown>,
-): Promise<ToolResult> {  const task = String(args.task || "");
+): Promise<ToolResult> {
+  const task = String(args.task || "");
   const context = String(args.context || "");
-
   if (!task) {
     return { success: false, output: t("tool.name_or_task") };
   }
-
   // Сессионный security-конфиг.
   const securityConfig = ctx.sessionContext
     ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
@@ -180,7 +179,6 @@ export async function runSubagent(
 
     // Сабагент идёт тем же одиночным циклом, что и родитель.
     const subConfig = { ...ctx.config };
-
     const subDeps = {
       config: subConfig,
       llmProvider: provider,
@@ -212,6 +210,19 @@ export async function runSubagent(
     parentSignal?.addEventListener("abort", onParentAbort, { once: true });
     ctx.subagentRuns?.registerInterrupt?.(observer.runId, stopSubAgent);
 
+    // Прогресс-вотчдог: пока идут события — живём; молчание дольше idle или
+    // превышение maxDuration останавливает дочернего агента (не только скоуп).
+    const cleanupRun = (): void => {
+      stopSubAgent();
+      restoreScope();
+    };
+    ctx.cleanup = cleanupRun;
+    const watchdog = createSubagentWatchdog({
+      idleMs: ctx.config.subagent?.timeoutMs ?? 180000,
+      maxMs: ctx.config.subagent?.maxDurationMs ?? 1800000,
+      stop: stopSubAgent,
+    });
+
     try {
       if (parentSignal?.aborted) {
         observer.finish("interrupted", 0, undefined, "aborted");
@@ -219,12 +230,38 @@ export async function runSubagent(
       }
       const result = await subAgent.run(
         fullTask,
-        observer.callbacks.onChunk,
-        observer.callbacks.onMeta,
-        observer.callbacks.onTool,
-        observer.callbacks.onPhase,
-        observer.callbacks.onReasoning,
+        (chunk) => {
+          watchdog.touch();
+          observer.callbacks.onChunk(chunk);
+        },
+        (meta, kind) => {
+          watchdog.touch();
+          observer.callbacks.onMeta(meta, kind);
+        },
+        (ev) => {
+          watchdog.touch();
+          observer.callbacks.onTool(ev);
+        },
+        (phase) => {
+          watchdog.touch();
+          observer.callbacks.onPhase(phase);
+        },
+        (reasoning) => {
+          watchdog.touch();
+          observer.callbacks.onReasoning(reasoning);
+        },
       );
+      const timeoutReason = watchdog.message();
+      if (timeoutReason) {
+        observer.finish(
+          "failed",
+          result.iterationCount ?? 0,
+          result.text,
+          timeoutReason,
+          resultUsage(result),
+        );
+        return { success: false, output: timeoutReason };
+      }
       if (!result.success) {
         let output = t("tool.subagent_failed", {
           error: String(result.error),
@@ -242,55 +279,18 @@ export async function runSubagent(
         return { success: false, output };
       }
 
-      const resultMode =
-        (args.result_mode as string) || ctx.config.subagent?.resultMode || "text";
-
-      if (resultMode === "file") {
-        const store = new ArtifactStore({
-          baseDir: ctx.baseDir,
-          sessionId: ctx.sessionId || "default",
-          artifactsDir: ctx.config.subagent?.artifactsDir,
-        });
-        const abs = store.save(
-          (args.artifact_name as string) || `subagent-${Date.now()}`,
-          result.text,
-          "md",
-        );
-        const summary = store.summary(result.text, ctx.config.subagent?.maxSummaryChars ?? 2000);
-        ctx.logger.debug(
-          `subagent result persisted to artifact ${abs} (${result.text.length} chars, ${result.iterationCount} iterations)`,
-        );
-        observer.finish("done", result.iterationCount ?? 0, result.text, undefined, resultUsage(result));
-        return {
-          success: true,
-          output: t("tool.subagent_artifact", {
-            path: abs,
-            iterations: String(result.iterationCount),
-            summary,
-          }),
-          artifactPath: abs,
-          usage: resultUsage(result),
-        };
-      }
-
-      observer.finish("done", result.iterationCount ?? 0, result.text, undefined, resultUsage(result));
-      return {
-        success: true,
-        output: t("tool.subagent_completed", {
-          text: result.text,
-          iterations: String(result.iterationCount),
-        }),
-        usage: resultUsage(result),
-      };
+      return finalizeSubagentSuccess(result, args, ctx, observer);
     } catch (err) {
-      observer.finish("failed", 0, undefined, err instanceof Error ? err.message : String(err));
-      throw err;
+      const error = watchdog.message() ?? (err instanceof Error ? err.message : String(err));
+      observer.finish("failed", 0, undefined, error);
+      throw watchdog.message() ? new Error(error) : err;
     } finally {
+      watchdog.dispose();
       parentSignal?.removeEventListener("abort", onParentAbort);
       ctx.subagentRuns?.releaseInterrupt?.(observer.runId);
       // Рестор точного скоупа родителя (compare-and-restore).
       restoreScope();
-      if (ctx.cleanup === restoreScope) ctx.cleanup = undefined;
+      if (ctx.cleanup === cleanupRun) ctx.cleanup = undefined;
       ctx.recursionDepth = currentDepth;
       executor?.setRecursionDepth?.(currentDepth);
     }

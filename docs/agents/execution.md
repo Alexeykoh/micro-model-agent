@@ -95,7 +95,7 @@ ERROR   → retry or escalate
 
 - `ArtifactStore` (`src/modules/artifacts/store.ts`): persists sub-agent results to `.mma/artifacts/<session>/`. `sanitizeName()` neutralizes traversal (`../../etc/passwd` → `etc_passwd`), `read()` returns `null` outside the root, `summary()` truncates with a marker.
 - `subagent` tool accepts `result_mode: "file"` (+ `artifact_name`): the child's full answer is saved to an artifact and the parent receives a bounded path + summary instead of raw text — kills context-rot/transmission errors for a 9B model.
-- Config: `subagent.resultMode` (`"text"` default, backward compatible), `maxSummaryChars`, `artifactsDir`, `stableSystemPrompt`, `maxParallelChunkQueries` (`src/config/types.ts` `SubagentConfig`).
+- Config: `subagent.resultMode` (`"text"` default, backward compatible), `maxSummaryChars`, `artifactsDir`, `stableSystemPrompt`, `maxParallelChunkQueries`, `timeoutMs` (idle timeout, default 180000), `maxDurationMs` (hard cap, default 1800000) (`src/config/types.ts` `SubagentConfig`). A run is stopped (child agent cancelled) after `timeoutMs` without events or at `maxDurationMs`.
 - MoE executor (`moe-executor.ts`): when `resultMode: "file"`, subtask args get `result_mode`/`artifact_name = subtask.id`, and the Router's `SubtaskResult.result` carries the full artifact content (bounded summary only in the parent's context).
 - Stable system prompt: `SUBAGENT_SYSTEM_PROMPT_TEMPLATE` (`src/tools/subagent.ts`) is byte-identical across calls (KV-cache friendly); variable context goes into the user message, not the system prompt. Few-shot workflow block (write large outputs to files, verify, delegate) is included.
 

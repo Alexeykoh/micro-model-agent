@@ -151,6 +151,91 @@ describe("subagent run events", () => {
     expect(stop).toBeNull(); // released in finally
   });
 
+  it("stops a silent run by the idle timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      let finishRun: ((r: unknown) => void) | null = null;
+      let shutdown = false;
+      const events: SubagentRunEvent[] = [];
+      const ctx = makeCtx((ev) => events.push(ev));
+      ctx.config.subagent = { timeoutMs: 1000, maxDurationMs: 600000 };
+      ctx.agentFactory = () => ({
+        run: () =>
+          new Promise((resolve) => {
+            finishRun = resolve;
+          }),
+        shutdown: () => {
+          shutdown = true;
+          finishRun?.({ success: false, interrupted: true, text: "", iterationCount: 1 });
+        },
+      });
+      const pending = subagentTool.handler(ctx, { task: "slow" });
+      await Promise.resolve();
+      vi.advanceTimersByTime(1100);
+      const result = await pending;
+      expect(shutdown).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("no activity");
+      const end = events.find((e) => e.kind === "end");
+      if (end?.kind !== "end") throw new Error("no end");
+      expect(end.status).toBe("failed");
+      expect(end.error).toContain("no activity");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops a chatty run by the hard max duration", async () => {
+    vi.useFakeTimers();
+    try {
+      let finishRun: ((r: unknown) => void) | null = null;
+      let shutdown = false;
+      const ctx = makeCtx(() => {});
+      ctx.config.subagent = { timeoutMs: 600000, maxDurationMs: 60000 };
+      ctx.agentFactory = () => ({
+        run: () =>
+          new Promise((resolve) => {
+            finishRun = resolve;
+          }),
+        shutdown: () => {
+          shutdown = true;
+          finishRun?.({ success: false, interrupted: true, text: "", iterationCount: 1 });
+        },
+      });
+      const pending = subagentTool.handler(ctx, { task: "long" });
+      await Promise.resolve();
+      vi.advanceTimersByTime(61000);
+      const result = await pending;
+      expect(shutdown).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("maximum");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("executor cleanup cancels the child agent (no orphan after timeout)", async () => {
+    let finishRun: ((r: unknown) => void) | null = null;
+    let shutdown = false;
+    const ctx = makeCtx(() => {});
+    ctx.agentFactory = () => ({
+      run: () =>
+        new Promise((resolve) => {
+          finishRun = resolve;
+        }),
+      shutdown: () => {
+        shutdown = true;
+        finishRun?.({ success: false, interrupted: true, text: "", iterationCount: 1 });
+      },
+    });
+    const pending = subagentTool.handler(ctx, { task: "x" });
+    await Promise.resolve();
+    ctx.cleanup?.();
+    expect(shutdown).toBe(true);
+    const result = await pending;
+    expect(result.success).toBe(false);
+  });
+
   it("parallel runs get distinct run ids", async () => {
     const ids: string[] = [];
     const ctx = (n: number) => makeCtx((ev) => {
@@ -170,3 +255,4 @@ describe("subagent run events", () => {
     expect(result.success).toBe(true);
   });
 });
+

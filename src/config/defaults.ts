@@ -219,6 +219,7 @@ export const DEFAULTS: AppConfig = {
     stableSystemPrompt: true,
     maxParallelChunkQueries: 4,
     timeoutMs: 180000,
+    maxDurationMs: 1800000,
   },
   lsp: DEFAULT_LSP_CONFIG,
   updater: {
