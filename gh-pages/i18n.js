@@ -14,6 +14,7 @@ window.LP_I18N = {
     "nav.service": "Service",
     "nav.ops": "Operations",
     "nav.limits": "Limits",
+    "nav.docs": "Docs",
     "nav.github": "GitHub",
 
     "hero.kicker": "open source · local-first · general purpose",
@@ -318,6 +319,7 @@ window.LP_I18N = {
     "footer.tagline": "An open-source harness for small language models.",
     "footer.project": "Project",
     "footer.docs": "Documentation",
+    "footer.fulldocs": "Full documentation",
     "footer.repo": "Repository",
     "footer.download": "Download latest",
     "footer.releases": "Releases",
@@ -343,6 +345,7 @@ window.LP_I18N = {
     "nav.service": "Сервис",
     "nav.ops": "Эксплуатация",
     "nav.limits": "Ограничения",
+    "nav.docs": "Документация",
     "nav.github": "GitHub",
 
     "hero.kicker": "open source · local-first · универсальный",
@@ -647,6 +650,7 @@ window.LP_I18N = {
     "footer.tagline": "Открытый харнесс для маленьких языковых моделей.",
     "footer.project": "Проект",
     "footer.docs": "Документация",
+    "footer.fulldocs": "Полная документация",
     "footer.repo": "Репозиторий",
     "footer.download": "Скачать последнюю",
     "footer.releases": "Релизы",

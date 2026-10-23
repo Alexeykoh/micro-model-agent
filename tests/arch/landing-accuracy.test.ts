@@ -162,4 +162,16 @@ describe("landing page accuracy", () => {
     expect(empty.map((m) => m[2]), "data-i18n elements must carry an English fallback").toEqual([]);
     expect(HTML).not.toMatch(/a sixth of a 32K/i);
   });
+
+  it("ships a docs page whose sidebar anchors resolve", () => {
+    const docs = readFileSync(join(PAGES, "docs.html"), "utf8");
+    const side = docs.match(/<aside class="side"[\s\S]*?<\/aside>/)?.[0] ?? "";
+    const ids = new Set([...docs.matchAll(/<h2 id="([^"]+)"/g)].map((m) => m[1]));
+    const hrefs = [...side.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]);
+    expect(hrefs.length).toBeGreaterThan(20);
+    expect(hrefs.filter((id) => !ids.has(id))).toEqual([]);
+    expect(docs).toContain('href="index.html"');
+    expect(docs).toContain('id="docsVer"');
+    expect(docs).not.toMatch(REMOVED_WORD_RE);
+  });
 });
