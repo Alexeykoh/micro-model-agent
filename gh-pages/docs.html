@@ -30,12 +30,13 @@
   </script>
   <link rel="stylesheet" href="docs.css">
   <link rel="stylesheet" href="console.css">
+  <link rel="stylesheet" href="mascot.css">
 </head>
 <body>
 
 <header class="top">
   <button class="iconbtn menu-btn" id="menuBtn" aria-label="Разделы документации" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html"><span class="dot">M</span><span>MMA <span class="sub">docs</span></span></a>
+  <a class="brand" href="index.html"><span class="mdl sm c-recon track" id="docsFace" aria-hidden="true"></span><span>MMA <span class="sub">docs</span></span></a>
   <div class="spacer"></div>
   <div class="search">
     <input id="docSearch" type="search" autocomplete="off" spellcheck="false"
@@ -608,6 +609,26 @@ mma config show         # действующий конфиг (секреты с
 (function () {
   "use strict";
   var root = document.documentElement;
+  // MMART in the header — same face markup as the landing page.
+  var docsFace = document.getElementById("docsFace");
+  if (docsFace && !docsFace.querySelector(".eyes")) {
+    docsFace.innerHTML = '<span class="eyes"><i class="eye left"></i><i class="eye right"></i></span>' +
+      '<span class="orb"><i></i></span><span class="keys"><i></i><i></i><i></i><i></i></span>' +
+      '<span class="grow"></span><span class="fly"></span>' +
+      '<span class="dust"><i></i><i></i><i></i></span>' +
+      '<span class="q"></span><span class="spark"></span><span class="star"></span>';
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      addEventListener("mousemove", function (e) {
+        var eyes = docsFace && docsFace.querySelector(".eyes");
+        if (!eyes) return;
+        var r = docsFace.getBoundingClientRect();
+        var ex = Math.max(-1, Math.min(1, (e.clientX - (r.left + r.width / 2)) / 460));
+        var ey = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height / 2)) / 460));
+        eyes.style.left = (ex * 12).toFixed(1) + "%";
+        eyes.style.top = "calc(" + (ey * 12).toFixed(1) + "% + var(--ey, 0px))";
+      }, { passive: true });
+    }
+  }
   var SUN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg>';
   var MOON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13.3A8.5 8.5 0 1 1 10.7 3.5a6.6 6.6 0 0 0 9.8 9.8z"/></svg>';
   var themeBtn = document.getElementById("themeBtn");
