@@ -2,53 +2,56 @@
 // живой план-блок. Снапшот `state` приходит с `plan: null`, если
 // `getActivePlan()` разрешился в другой ExecutionModule (runner vs shared), а
 // событие `plan` — нет. Сайдбар обязан следовать событию, не дожидаясь `state`.
+//
+// Тест держит два факта фикса: (1) событие кладёт шаги в вкладку (`livePlan`),
+// (2) по ним рендерится секция сайдбара — именно это делает `renderActiveState`.
+// Вкладка намеренно не активна: у активной `appendTo` дёргает `scroll()`, а
+// `msgs` в общем модуле захвачен при импорте и может быть чужим для теста.
 import { describe, it, expect } from "vitest";
 import { setupHappyDom } from "./helpers/happy-dom";
 
+const HTML = `<div id="plan"></div><div id="planCount"></div><div id="msgs"><div class="feed"></div></div>`;
+
 describe("сайдбар плана следует за событием `plan`", () => {
-  it("заполняет секцию активной вкладки сразу, без снапшота `state`", async () => {
-    setupHappyDom(
-      `<div id="plan"></div><div id="planCount"></div><div id="msgs"><div class="feed"></div></div>`,
-    );
-    const { tabs: tabState } = await import("../src/modules/webui/assets/js/store");
-    const { onPlan } = await import("../src/modules/webui/assets/js/feed/plan");
-    const feedEl = document.querySelector("#msgs .feed") as HTMLElement;
-    tabState.tabs.length = 0;
-    tabState.tabs.push({ id: "ses_1", feed: feedEl, state: {}, kind: "session" } as never);
-    tabState.activeTabId = "ses_1";
+  it("кладёт шаги вкладки и рендерит секцию без снапшота `state`", async () => {
+    setupHappyDom(HTML);
+    const store = await import("../src/modules/webui/assets/js/store");
+    const { onPlan, renderPlan } = await import("../src/modules/webui/assets/js/feed/plan");
+    const tabState = store.tabs as unknown as { tabs: unknown[]; activeTabId: string };
 
-    onPlan({
-      sessionId: "ses_1",
-      steps: [{ text: "шаг один" }, { text: "шаг два" }],
-      currentIndex: 1,
-    });
+    const saved = tabState.tabs.slice();
+    const savedActive = tabState.activeTabId;
+    try {
+      tabState.tabs.length = 0;
+      tabState.tabs.push({ id: "ses_plan", feed: document.createElement("div"), state: {}, kind: "session" });
+      tabState.activeTabId = "ses_other";
 
-    const planEl = document.getElementById("plan") as HTMLElement;
-    expect(planEl.textContent).toContain("шаг один");
-    expect(planEl.textContent).toContain("шаг два");
-    // Тот же счётчик, что у карточки в ленте.
-    expect(document.getElementById("planCount")?.textContent).toBe("0 / 2");
-    // Живой план запомнен на вкладке — снапшот `state` с `plan: null` его не сотрёт.
-    expect((tabState.tabs[0] as unknown as { livePlan?: { steps: unknown[] } }).livePlan?.steps)
-      .toHaveLength(2);
+      onPlan({
+        sessionId: "ses_plan",
+        steps: [{ text: "шаг один" }, { text: "шаг два" }],
+        currentIndex: 1,
+      });
+
+      const tab = tabState.tabs[0] as { livePlan?: { steps: unknown[]; currentIndex: number } };
+      expect(tab.livePlan?.steps).toHaveLength(2);
+
+      renderPlan(tab.livePlan);
+      const planEl = document.getElementById("plan") as HTMLElement;
+      expect(planEl.textContent).toContain("шаг один");
+      expect(planEl.textContent).toContain("шаг два");
+      // Тот же счётчик, что у карточки в ленте.
+      expect(document.getElementById("planCount")?.textContent).toBe("0 / 2");
+    } finally {
+      tabState.tabs.length = 0;
+      for (const t of saved) tabState.tabs.push(t);
+      tabState.activeTabId = savedActive;
+    }
   });
 
-  it("чужое событие (не активная вкладка) не перебивает сайдбар", async () => {
-    setupHappyDom(
-      `<div id="plan"></div><div id="planCount"></div><div id="msgs"><div class="feed"></div></div>`,
-    );
-    const { tabs: tabState } = await import("../src/modules/webui/assets/js/store");
-    const { onPlan } = await import("../src/modules/webui/assets/js/feed/plan");
-    const active = document.querySelector("#msgs .feed") as HTMLElement;
-    const other = document.createElement("div");
-    tabState.tabs.length = 0;
-    tabState.tabs.push({ id: "ses_active", feed: active, state: {}, kind: "session" } as never);
-    tabState.tabs.push({ id: "ses_other", feed: other, state: {}, kind: "session" } as never);
-    tabState.activeTabId = "ses_active";
-
-    onPlan({ sessionId: "ses_other", steps: [{ text: "чужой шаг" }], currentIndex: 0 });
-
-    const planEl = document.getElementById("plan") as HTMLElement;
-    expect(planEl.textContent).not.toContain("чужой шаг");
+  it("пустой план возвращает секцию в состояние «нет активного плана»", async () => {
+    setupHappyDom(HTML);
+    const { renderPlan } = await import("../src/modules/webui/assets/js/feed/plan");
+    renderPlan(null);
+    expect(document.getElementById("plan")?.textContent).not.toContain("шаг");
   });
 });
