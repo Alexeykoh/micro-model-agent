@@ -34,6 +34,8 @@ export interface StoreHooks {
    * importing the sidebar, keeping the module DAG acyclic.
    */
   openFileInTree?: ((path: string) => void) | null;
+  /** Перед заменой ленты в `#msgs` (закрывает вид субагента, если открыт). */
+  beforeFeedMount?: (() => void) | null;
 }
 
 export const hooks: StoreHooks = { applyStaticI18n: null };

@@ -12,9 +12,9 @@ import { RunPool } from "./session/session-pool";
 import type { MemoryStore } from "../memory/store";
 import type { SetupDisplay } from "../setup/answers";
 import type { LspDiagnosis } from "../lsp/diagnose";
+import { SubagentRunStore } from "./session/subagent-runs";
 import { MAX_BODY_BYTES } from "./limits";
 import { readEnv } from "../../config/env";
-import { loadSessionUsage } from "./session/session-usage";
 
 /**
  * Структурное подмножество `SessionManager` для веб-REST. Узкость даёт реальному
@@ -278,6 +278,12 @@ export interface WebUiState {
   setupRequired: boolean;
   /** Статика визарда (языки/провайдеры/дефолты) для `GET /api/setup`. */
   setup?: SetupDisplay;
+  /**
+   * Прогоны субагентов в памяти процесса: ход дочернего агента для вкладки
+   * «субагент» (`GET /api/sessions/:id/subagents`). События — SSE `subagent`;
+   * раннеры ставят `ToolContext.subagentRuns` на время хода.
+   */
+  subagentRuns: SubagentRunStore;
 }
 
 /**
@@ -313,7 +319,7 @@ export type RuntimeState = Pick<
 /** Роль: сессии (менеджер, план-трекер, usage). */
 export type SessionStore = Pick<
   WebUiState,
-  "sessionManager" | "execModule" | "sessionUsage" | "usage" | "activeSessionId"
+  "sessionManager" | "execModule" | "sessionUsage" | "usage" | "activeSessionId" | "subagentRuns"
 >;
 
 /** Роль: конфиг (живой объект, запись, reconfigure, список моделей). */
@@ -370,47 +376,12 @@ export function createWebUiState(): WebUiState {
     pendingQuestions: new Map(),
     setupRequired: false,
     sessionUsage: {},
-    
+    subagentRuns: new SubagentRunStore(),
     filesRevision: 0,
   };
 }
 
-/** Сколько снимков usage держим в памяти (LRU по порядку вставки). */
-const SESSION_USAGE_CACHE_MAX = 50;
-
-/**
- * Usage для сайдбара: метрики серверно-активной сессии (или явной `sessionId`
- * веб-вкладки). У сессии без ходов — undefined (сайдбар показывает прочерки),
- * а НЕ чужой last-turn. Снимок лениво поднимается с диска после reload.
- */
-export function activeUsage(s: SessionStore, sessionId?: string): UsageSnapshot | undefined {
-  try {
-    const active =
-      sessionId ??
-      s.sessionManager?.getActive?.() ??
-      s.activeSessionId ??
-      null;
-    if (active) {
-      if (s.sessionUsage[active]) return s.sessionUsage[active];
-      // Reload/restart: in-memory карта пуста — поднимаем снимок с диска
-      // (каталог сессии) и кэшируем, чтобы не читать файл на каждый полл.
-      const dir = s.sessionManager?.getSessionDirectory?.(active);
-      if (dir) {
-        const persisted = loadSessionUsage(dir);
-        if (persisted) {
-          // Кэш usage ограничен: сессий за день открывается много (аудит §6.12).
-          const keys = Object.keys(s.sessionUsage);
-          if (keys.length >= SESSION_USAGE_CACHE_MAX) delete s.sessionUsage[keys[0]];
-          s.sessionUsage[active] = persisted;
-          return persisted;
-        }
-      }
-    }
-  } catch {
-    /* fail-open: нет метрик */
-  }
-  return undefined;
-}
+export { activeUsage } from "./session/usage-cache";
 
 /** SSE-событие: тип, время, произвольный пейлоад. */
 export interface SseEvent {

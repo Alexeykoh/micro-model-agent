@@ -137,10 +137,10 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
         (meta, kind) => forwarder.onMeta(meta, kind),
         (ev) => {
           if (ev.type === "start") {
-            forwarder.onToolStart(callFor(ev, startId(ev.tool)));
+            forwarder.onToolStart(callFor(ev, ev.callId ?? startId(ev.tool)));
           } else {
             toolCalls++;
-            forwarder.onToolEnd(callFor(ev, endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
+            forwarder.onToolEnd(callFor(ev, ev.callId ?? endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
             // Закончивший `plan`/`todo`-тул освежает план-карточку ленты; сайдбар
             // живёт своей проекцией `/api/state`. Без `pushState` здесь снапшот
             // оставался с планом прошлого хода (или пустым) до конца хода: план

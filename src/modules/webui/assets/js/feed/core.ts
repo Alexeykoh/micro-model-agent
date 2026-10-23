@@ -3,7 +3,7 @@
 // import these primitives. `feed.js` re-exports this module's public surface.
 import { msgs, el, icon, setIcon } from "../dom.js";
 import { t, pluralCount } from "../i18n.js";
-import { streamStateFor, tabs as tabState } from "../store.js";
+import { streamStateFor, tabs as tabState, hooks } from "../store.js";
 import type { FeedStreamState } from "../store.js";
 import { formatMs, verbosity } from "../format.js";
 import { copyText } from "../../md.js";
@@ -177,6 +177,7 @@ export function makeFeed(): HTMLElement {
 }
 
 export function showEmptyFeed(): void {
+  hooks.beforeFeedMount?.();
   msgs.replaceChildren(emptyView());
   follow = true;
   hideToLatest();
@@ -194,6 +195,9 @@ export function clearFeed(feed: HTMLElement | null): void {
 }
 
 export function activeFeed(): HTMLElement | null {
+  // Пока открыт прогон субагента, лента вкладки смонтирована «за кадром»:
+  // её события обязаны продолжать копиться, но скроллить чужой вид нельзя.
+  if (tabState.subagentRunId) return null;
   const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
   return tab ? tab.feed : null;
 }
@@ -252,6 +256,12 @@ export function scrollToBottom(smooth?: boolean): void {
 
 export function isFollowing(): boolean {
   return follow;
+}
+
+/** Монтирует ленту вкладки в `#msgs`, закрывая открытый вид субагента. */
+export function mountFeed(feed: HTMLElement | null): void {
+  hooks.beforeFeedMount?.();
+  if (feed) msgs.replaceChildren(feed);
 }
 
 export function feedHasContent(feed: HTMLElement): boolean {

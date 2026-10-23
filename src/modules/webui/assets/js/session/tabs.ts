@@ -10,7 +10,7 @@ import { tabs as tabState, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import {
   makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent,
-  loadHistory, syncUrl, scrollToBottom, clearBusy,
+  loadHistory, syncUrl, scrollToBottom, clearBusy, mountFeed,
 } from "../feed.js";
 import { setIndicator } from "../dialog.js";
 import { sidebarSessionChanged, setSessionLoading } from "../sidebar.js";
@@ -244,7 +244,7 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
     // Render the tab's cached snapshot instantly (or fetch it once from REST).
     hooks.ensureTabState?.(id);
   }
-  msgs.replaceChildren(tab.feed);
+  mountFeed(tab.feed);
   restoreComposer(tab);
   renderTabstrip();
   renderSessionsDropdown();
@@ -291,6 +291,8 @@ export function closeTab(id: string): void {
   const i = tabState.tabs.findIndex((x) => x.id === id);
   if (i === -1) return;
   const closing = tabState.tabs[i];
+  const closingActive = tabState.activeTabId === id;
+  if (closingActive) saveComposer();
   // Таймеры закрываемой вкладки гасим явно: иначе «раздумка» продолжает
   // тикать в закрытом feed (аудит §6.14).
   if (closing.feed) clearBusy(closing.feed as HTMLElement);
@@ -298,15 +300,13 @@ export function closeTab(id: string): void {
   if (closing.kind === "session" && (closing.status === "working" || closing.status === "waiting")) {
     void api("/api/interrupt", { method: "POST", body: { sessionId: closing.id } });
   }
-  const closingActive = tabState.activeTabId === id;
-  if (closingActive) saveComposer();
   tabState.tabs = tabState.tabs.filter((x) => x.id !== id);
   if (closingActive) {
     const next = tabState.tabs[Math.min(i, tabState.tabs.length - 1)];
     if (next) {
       tabState.activeTabId = next.id;
       tabState.liveTabId = next.id;
-      msgs.replaceChildren(next.feed);
+      mountFeed(next.feed);
       restoreComposer(next);
       // Сервер и сайдбар следуют за новой активной вкладкой. Раньше переключение
       // при закрытии не доезжало: висел план/контекст закрытой сессии.

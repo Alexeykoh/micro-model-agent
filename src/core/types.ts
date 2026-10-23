@@ -56,6 +56,8 @@ export interface ToolEvent {
   type: "start" | "end";
   tool: string;
   args: Record<string, unknown>;
+  /** id вызова тула (если известен) — для точного спаривания start/end. */
+  callId?: string;
   icon?: string;
   duration?: number;
   error?: boolean;

@@ -405,7 +405,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         { id: call.id, name: call.name, arguments: call.arguments },
       );
       const toolIcon = this.deps.toolExecutor.getRegistry().get(call.name)?.icon;
-      onTool?.({ type: "start", tool: call.name, args: call.arguments, icon: toolIcon });
+      onTool?.({ type: "start", tool: call.name, args: call.arguments, callId: call.id, icon: toolIcon });
       slog?.logToolCall(call, iteration);
     };
 
@@ -521,6 +521,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         type: "end",
         tool: call.name,
         args: call.arguments,
+        callId: call.id,
         duration,
         error: !result.success,
         output: typeof result.output === "string" ? result.output : undefined,
