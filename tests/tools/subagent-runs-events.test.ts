@@ -105,6 +105,52 @@ describe("subagent run events", () => {
     expect(result.output).toContain("final answer");
   });
 
+  it("parent abort stops the sub-agent and closes the run", async () => {
+    const ac = new AbortController();
+    let shutdownCalled = false;
+    let finishRun: ((r: unknown) => void) | null = null;
+    const events: SubagentRunEvent[] = [];
+    const ctx = makeCtx((ev) => events.push(ev));
+    ctx.abortSignal = ac.signal;
+    ctx.agentFactory = () => ({
+      run: () =>
+        new Promise((resolve) => {
+          finishRun = resolve;
+        }),
+      shutdown: () => {
+        shutdownCalled = true;
+        finishRun?.({ success: false, interrupted: true, text: "", iterationCount: 1 });
+      },
+    });
+
+    const pending = subagentTool.handler(ctx, { task: "long" });
+    await new Promise((r) => setTimeout(r, 0));
+    ac.abort();
+    const result = await pending;
+
+    expect(shutdownCalled).toBe(true);
+    expect(result.success).toBe(false);
+    const end = events.find((e) => e.kind === "end");
+    if (end?.kind !== "end") throw new Error("no end");
+    expect(end.status).toBe("interrupted");
+  });
+
+  it("registers an interrupt handle with the observer sink", async () => {
+    let stop: (() => void) | null = null;
+    const ctx = makeCtx(() => {});
+    ctx.subagentRuns = {
+      emit: () => {},
+      registerInterrupt: (_id: string, fn: () => void) => {
+        stop = fn;
+      },
+      releaseInterrupt: () => {
+        stop = null;
+      },
+    };
+    await subagentTool.handler(ctx, { task: "x" });
+    expect(stop).toBeNull(); // released in finally
+  });
+
   it("parallel runs get distinct run ids", async () => {
     const ids: string[] = [];
     const ctx = (n: number) => makeCtx((ev) => {

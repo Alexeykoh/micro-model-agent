@@ -114,6 +114,21 @@ describe("SubagentRunStore", () => {
     s.ingest({ kind: "text", runId: "ghost", chunk: "x" }, send);
     expect(s.list("s1")).toEqual([]);
   });
+
+  it("interrupts a running run by session and releases the handle", () => {
+    const s = new SubagentRunStore();
+    const sink = s.sink(send);
+    sink.emit(start("r1", "s1", "call_a"));
+    let stopped = 0;
+    sink.registerInterrupt?.("r1", () => {
+      stopped++;
+    });
+    expect(s.interrupt("s2", "r1")).toBe("not_found");
+    expect(s.interrupt("s1", "r1")).toBe("ok");
+    expect(stopped).toBe(1);
+    sink.releaseInterrupt?.("r1");
+    expect(s.interrupt("s1", "r1")).toBe("not_running");
+  });
 });
 
 

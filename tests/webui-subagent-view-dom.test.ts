@@ -69,6 +69,10 @@ describe("subagent run view", () => {
 
     row.click();
     expect(win.document.querySelector("#msgs .srun")).toBeTruthy();
+    const head = win.document.querySelector(".srun-head");
+    expect(head?.querySelector(".srun-back")).toBeTruthy();
+    expect(head?.querySelector(".srun-top")).toBeTruthy();
+    expect((win.document.querySelector(".srun-stop") as HTMLElement).hidden).toBe(false);
     expect(core.activeFeed()).toBeNull();
 
     // Родительская лента detached, но живая: события продолжают копиться.
@@ -86,6 +90,7 @@ describe("subagent run view", () => {
     const body = win.document.querySelector(".srun-body");
     expect(body?.textContent).toContain("hello world");
     expect(win.document.querySelector(".srun-state")?.classList.contains("st-done")).toBe(true);
+    expect((win.document.querySelector(".srun-stop") as HTMLElement).hidden).toBe(true);
     expect(win.document.querySelector(".srun-face-top .mdl")?.getAttribute("data-state")).toBe("done");
     expect(row.querySelector(".srun-face .mdl")?.getAttribute("data-state")).toBe("done");
 

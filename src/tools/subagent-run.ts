@@ -204,8 +204,19 @@ export async function runSubagent(
       model: expertModel ?? ctx.config.model,
     });
     observer.start();
+    // Стоп родительского хода и кнопка «остановить» в вебе ведут в один
+    // `subAgent.shutdown()`: у дочернего агента свой abort-контроллер.
+    const stopSubAgent = (): void => subAgent.shutdown?.();
+    const parentSignal = ctx.abortSignal;
+    const onParentAbort = (): void => stopSubAgent();
+    parentSignal?.addEventListener("abort", onParentAbort, { once: true });
+    ctx.subagentRuns?.registerInterrupt?.(observer.runId, stopSubAgent);
 
     try {
+      if (parentSignal?.aborted) {
+        observer.finish("interrupted", 0, undefined, "aborted");
+        return { success: false, output: t("tool.aborted", { name: "subagent" }) };
+      }
       const result = await subAgent.run(
         fullTask,
         observer.callbacks.onChunk,
@@ -275,6 +286,8 @@ export async function runSubagent(
       observer.finish("failed", 0, undefined, err instanceof Error ? err.message : String(err));
       throw err;
     } finally {
+      parentSignal?.removeEventListener("abort", onParentAbort);
+      ctx.subagentRuns?.releaseInterrupt?.(observer.runId);
       // Рестор точного скоупа родителя (compare-and-restore).
       restoreScope();
       if (ctx.cleanup === restoreScope) ctx.cleanup = undefined;

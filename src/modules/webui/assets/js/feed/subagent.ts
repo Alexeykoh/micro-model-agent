@@ -10,15 +10,15 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import { createFace, setFaceState } from "../loader.js";
+import { setFaceState } from "../loader.js";
 import { makeRunRender, renderRunEvent, type RunRender } from "./subagent-render.js";
+import { applyRunHeader, buildRunShell, type RunShell } from "./subagent-view.js";
 import {
   buf,
   mergeEvent,
   mergeSnapshot,
   runFaceState,
   sessionRuns,
-  statusText,
 } from "./subagent-buffer.js";
 import {
   initSubagentGrid,
@@ -27,15 +27,10 @@ import {
   trackRun,
 } from "./subagent-grid.js";
 
-interface View {
+interface View extends RunShell {
   sessionId: string;
   runId: string;
-  root: HTMLElement;
-  body: HTMLElement;
-  title: HTMLElement;
-  state: HTMLElement;
-  chips: HTMLElement;
-  face: HTMLElement;
+  stopping: boolean;
   render: RunRender;
   timer: number | null;
   started: number;
@@ -72,11 +67,8 @@ function renderChips(v: View): void {
 }
 
 function setHeader(v: View, meta: Dict): void {
-  v.title.textContent = String(meta.task || t("web.subagent.title"));
-  v.title.title = String(meta.task || "");
-  v.state.textContent = statusText(meta, v.started);
-  v.state.className = "srun-state st-" + String(meta.status || "running");
-  setFaceState(v.face, runFaceState(buf(v.runId)));
+  if (String(meta.status || "running") !== "running") v.stopping = false;
+  applyRunHeader(v, v.runId, meta, v.started, v.stopping);
 }
 
 function renderAll(v: View): void {
@@ -98,31 +90,16 @@ function stopTimer(v: View): void {
   }
 }
 
-function buildRoot(sessionId: string): Omit<View, "runId" | "render" | "timer" | "started"> {
-  const root = el("div", "srun");
-  const top = el("div", "srun-top");
-  const back = el("button", "srun-back");
-  back.type = "button";
-  back.textContent = "← " + t("web.subagent.back");
-  back.addEventListener("click", () => closeRun());
-  top.appendChild(back);
-  const faceSlot = el("span", "srun-face-top");
-  const face = createFace("think", "sm");
-  faceSlot.appendChild(face);
-  top.appendChild(faceSlot);
-  const title = el("span", "srun-title", t("web.subagent.title"));
-  top.appendChild(title);
-  const state = el("span", "srun-state", t("web.subagent.running"));
-  top.appendChild(state);
-  root.appendChild(top);
-  const chips = el("div", "srun-chips");
-  chips.hidden = true;
-  root.appendChild(chips);
-  const note = el("div", "srun-note", t("web.subagent.readonly"));
-  root.appendChild(note);
-  const body = el("div", "srun-body");
-  root.appendChild(body);
-  return { sessionId, root, body, title, state, chips, face };
+/** Останавливает текущий прогон через API; кнопка ждёт `end`. */
+async function stopRun(sessionId: string): Promise<void> {
+  if (!view || view.sessionId !== sessionId) return;
+  view.stopping = true;
+  view.stop.disabled = true;
+  await api(
+    "/api/sessions/" + encodeURIComponent(sessionId) + "/subagents/" +
+      encodeURIComponent(view.runId) + "/interrupt",
+    { method: "POST" },
+  );
 }
 
 /** Открывает прогон (или переключает текущий вид на другой прогон). */
@@ -135,16 +112,19 @@ export function openRun(sessionId: string, runId: string): void {
   if (!view) {
     tab.srunScroll = msgsEl().scrollTop;
     view = {
-      ...buildRoot(sessionId),
+      ...buildRunShell(() => closeRun(), () => void stopRun(sessionId)),
+      sessionId,
       runId,
       render: makeRunRender(el("div")),
       timer: null,
       started: Number(buf(runId).meta.startedAt || Date.now()),
+      stopping: false,
     };
     msgsEl().replaceChildren(view.root);
     document.querySelector(".chat")?.classList.add("srun-open");
   }
   view.runId = runId;
+  view.stopping = false;
   view.started = Number(buf(runId).meta.startedAt || Date.now());
   tabState.subagentRunId = runId;
   renderAll(view);

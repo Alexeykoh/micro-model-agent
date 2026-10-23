@@ -14,8 +14,7 @@ export function handleSubagentRunsGet(
   res: ServerResponse,
   id: string,
   s: SessionStore,
-): void {
-  if (!s.sessionManager) {
+): void {  if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
     return;
   }
@@ -31,4 +30,31 @@ export function handleSubagentRunsGet(
     /* битый URL — отдаём все прогоны сессии */
   }
   sendJson(res, 200, { runs: s.subagentRuns.list(id, toolCallId) });
+}
+
+/** `POST /api/sessions/:id/subagents/:runId/interrupt` — остановить прогон. */
+export function handleSubagentInterrupt(
+  res: ServerResponse,
+  id: string,
+  runId: string,
+  s: SessionStore,
+): void {
+  if (!s.sessionManager) {
+    sendJson(res, 503, { error: "sessions_unavailable" });
+    return;
+  }
+  if (!id || !s.sessionManager.get(id)) {
+    sendJson(res, 404, { error: "not_found" });
+    return;
+  }
+  const status = s.subagentRuns.interrupt(id, runId);
+  if (status === "not_found") {
+    sendJson(res, 404, { error: "not_found" });
+    return;
+  }
+  if (status === "not_running") {
+    sendJson(res, 409, { error: "not_running" });
+    return;
+  }
+  sendJson(res, 200, { ok: true });
 }

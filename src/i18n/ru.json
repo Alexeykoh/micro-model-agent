@@ -1797,6 +1797,7 @@
   "web.subagent.interrupted": "остановлен",
   "web.subagent.readonly": "только просмотр: субагенту нельзя отправить сообщение",
   "web.subagent.grid": "активные субагенты",
+  "web.subagent.stop": "остановить субагента",
   "web.subagent.iterations": "итераций: {n}",
   "web.subagent.tokens": "{n} ток.",
   "web.code.copy": "копировать",

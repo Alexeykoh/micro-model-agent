@@ -1824,6 +1824,7 @@
   "web.subagent.interrupted": "stopped",
   "web.subagent.readonly": "read-only run: the subagent cannot be prompted",
   "web.subagent.grid": "active subagents",
+  "web.subagent.stop": "stop subagent",
   "web.subagent.iterations": "{n} iterations",
   "web.subagent.tokens": "{n} tok",
   "web.code.copy": "copy",

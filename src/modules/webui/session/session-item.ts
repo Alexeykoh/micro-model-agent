@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { handleSessionHistory } from "./history-api";
 import { handleSessionImage } from "./images-api";
 import { handleSessionLog } from "./log-api";
-import { handleSubagentRunsGet } from "./subagent-api";
+import { handleSubagentRunsGet, handleSubagentInterrupt } from "./subagent-api";
 import type { SessionStore, RuntimeState, HttpTransport, SseTransport } from "../state";
 
 export function handleSessionItem(
@@ -18,6 +18,17 @@ export function handleSessionItem(
   if (!p.startsWith("/api/sessions/")) return false;
   if (req.method === "DELETE") {
     onDelete(decodeURIComponent(p.slice("/api/sessions/".length)));
+    return true;
+  }
+  if (req.method === "POST") {
+    // POST /api/sessions/:id/subagents/:runId/interrupt
+    if (!p.endsWith("/interrupt") || !p.includes("/subagents/")) return false;
+    const rest = p.slice("/api/sessions/".length, -"/interrupt".length);
+    const cut = rest.indexOf("/subagents/");
+    if (cut <= 0) return false;
+    const id = decodeURIComponent(rest.slice(0, cut));
+    const runId = decodeURIComponent(rest.slice(cut + "/subagents/".length));
+    handleSubagentInterrupt(res, id, runId, s);
     return true;
   }
   if (req.method !== "GET") return false;

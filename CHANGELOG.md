@@ -4,6 +4,24 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.1] - 2026-10-23
+
+### Fixed
+
+- **Шапка прогона субагента закреплена сверху.** «← к чату», маскот, статус и
+  чипы других прогонов теперь в sticky-блоке `.srun-head`: при прокрутке
+  длинного транскрипта можно сразу вернуться или переключиться.
+- **Субагента можно остановить.** В шапке прогона — кнопка «■» (POST
+  `/api/sessions/:id/subagents/:runId/interrupt`, ручка остановки регистрируется
+  через `SubagentRunSink.registerInterrupt`). Остановка родительской генерации
+  в чате тоже гасит дочерних субагентов: `ToolExecutor` кладёт abort-сигнал
+  вызова в `ToolContext.abortSignal`, тул `subagent` подписывается на него и
+  зовёт `subAgent.shutdown()`. Цепочка работает и для вложенных субагентов.
+  Гварды: `tests/tools/subagent-runs-events.test.ts` (parent abort + ручка),
+  `tests/webui-subagent-runs-store.test.ts` (interrupt/not_found/not_running),
+  `tests/webui-subagent-api.test.ts` (POST 200/404),
+  обновлён `tests/webui-subagent-view-dom.test.ts` (sticky head, кнопка).
+
 ## [0.11.0] - 2026-10-23
 
 ### Added

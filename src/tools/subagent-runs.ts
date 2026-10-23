@@ -102,6 +102,12 @@ export type SubagentRunEvent =
 /** Приёмник событий прогонов, который ставит поверхность (web-UI). */
 export interface SubagentRunSink {
   emit(event: SubagentRunEvent): void;
+  /**
+   * Опционально: поверхность получает ручку остановки прогона (кнопка
+   * «остановить» в вебе). Core зовёт `releaseInterrupt` в `finally`.
+   */
+  registerInterrupt?(runId: string, interrupt: () => void): void;
+  releaseInterrupt?(runId: string): void;
 }
 
 /** Новый уникальный id прогона в пределах процесса. */
