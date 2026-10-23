@@ -144,7 +144,7 @@ async function configCmd(
   const [key, ...rest] = args;
   if (rest.length === 0) {
     const r = getConfigValue(cfg, key);
-    out(r.ok ? `${r.key} = ${r.display}` : `↳ unknown key: ${key}`);
+    out(r.ok ? `${r.key} = ${r.display}` : t("web.config.unknown_key", { key }));
     return;
   }
   await applyConfigWrite(cfg, key, rest.join(" "), out, state);

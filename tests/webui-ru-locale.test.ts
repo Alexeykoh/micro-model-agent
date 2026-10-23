@@ -55,11 +55,24 @@ describe("ошибка сохранения настроек", () => {
     I18N.dicts = getFlatDicts() as Record<string, Record<string, string>>;
 
     expect(saveErrorText("invalid-value", "ui.fontSize")).toBe(
-      "Недопустимое значение для ui.fontSize",
+      "недопустимое значение для ui.fontSize",
     );
-    expect(saveErrorText("unknown-key", "nope.key")).toBe("Неизвестный ключ: nope.key");
+    expect(saveErrorText("unknown-key", "nope.key")).toBe("неизвестный ключ: nope.key");
     expect(saveErrorText("read-only", "model")).toBe("model только для чтения");
     // Незнакомый код — это уже текст от сервера, его не трогаем.
     expect(saveErrorText("boom", "model")).toBe("boom");
+  });
+
+  it("переводит ошибки `/config` в ленте", async () => {
+    setLocale("ru");
+    const h = makeHarness();
+    await h.run("/config maxToolIterations abc");
+    await h.run("/config nope.key");
+    await h.run("/config model");
+    const text = h.lines.join("\n");
+    expect(text).not.toContain("invalid value for");
+    expect(text).not.toContain("unknown key");
+    expect(text).toContain("недопустимое значение для maxToolIterations");
+    expect(text).toContain("неизвестный ключ: nope.key");
   });
 });
