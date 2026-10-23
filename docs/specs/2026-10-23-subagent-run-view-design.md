@@ -155,13 +155,26 @@ closes the run.
   4. fetch the snapshot, render events by `seq`, then apply any newer live events
      from the client buffer (dedupe by `seq`).
 - Rendering: text via `mountMarkdown` (streaming, escaped), reasoning via the
-  existing collapsible think block, tools as `◇ <label> · args ✓/✗ duration` with
-  the output body (quiet default hides successful bodies, failures show the
+  existing collapsible think block, tools as `◇ <label> · args ✓/✗ duration` with  the output body (quiet default hides successful bodies, failures show the
   first line — same canon as the main feed), `end` as a metric/warn line.
 - While the view is open: composer and rail are hidden (sub-agents cannot be
   prompted), `Escape` closes, and parent-feed appends must not scroll the view
   (`activeFeed()` guard).
 - Switching tabs/closing the tab closes the view and restores that tab's feed.
+
+### MMART per run
+
+Every run owns an MMART instance (`createFace` from `assets/js/loader.ts`):
+the parent `subagent` row shows an `sm` face instead of the generic `◇` glyph,
+the run header shows a 30 px face, and the top-right grid shows one cell per
+known run of the active session. All three are driven by the run's own buffer
+(`runFaceState`: `think` while waiting, `type` on text, `toolState(name)` on tool
+start, `warn` on a failed tool, `done`/`error`/`stop` at `end`). The grid is
+mounted on the chat surface, so it is visible both on the parent screen and in
+the run view; it includes runs seeded from `GET /api/sessions/:id/subagents`
+after a reload (newest 9), keeps finished runs, and clicking a cell opens that
+run. Face states are decorative (`aria-hidden`, set by `createFace`), so the
+grid button carries the task as its `aria-label`.
 
 ## Security
 

@@ -12,6 +12,7 @@ import {
 import { finishMd, finishThink } from "./stream.js";
 import { finishToolEnd, appendImageCards } from "./tool-render.js";
 import { egressBadge } from "./egress.js";
+import { createFace } from "../loader.js";
 
 export function onToolStart(data: Dict): void {
   const feed = feedForEvent(data.sessionId);
@@ -23,9 +24,18 @@ export function onToolStart(data: Dict): void {
   const st = streamStateFor(feed);
   st.pendingArgs.set(data.toolCallId, data.args || {});
   const line = el("div", "act " + categoryOf(data.name));
-  line.appendChild(el("span", "g", "◇"));
+  const isSubagent = data.name === "subagent";
+  if (isSubagent) {
+    // У субагента вместо глифа — собственный MMART: его состояние ведёт
+    // `feed/subagent.ts` по событиям прогона (think/read/create/run/done…).
+    const slot = el("span", "srun-face");
+    slot.appendChild(createFace("think", "sm"));
+    line.appendChild(slot);
+  } else {
+    line.appendChild(el("span", "g", "◇"));
+  }
   line.appendChild(el("span", "lab", labelOf(data.name)));
-  if (data.name === "subagent" && data.toolCallId != null) {
+  if (isSubagent && data.toolCallId != null) {
     // Привязка к прогону появится в SSE `subagent.start`; id нужен и для
     // фолбэка «клик до прихода start» (REST по toolCallId).
     line.dataset.toolCallId = String(data.toolCallId);

@@ -11,6 +11,7 @@ i18n.I18N.dicts = { en: {} };
 
 const store = await import("../src/modules/webui/assets/js/store.js");
 const core = await import("../src/modules/webui/assets/js/feed/core.js");
+const loader = await import("../src/modules/webui/assets/js/loader.js");
 const sub = await import("../src/modules/webui/assets/js/feed/subagent.js");
 
 function mountTab(id: string): { feed: HTMLElement; row: HTMLElement } {
@@ -19,6 +20,11 @@ function mountTab(id: string): { feed: HTMLElement; row: HTMLElement } {
   const row = win.document.createElement("div") as HTMLElement;
   row.className = "act run";
   row.dataset.toolCallId = "call_1";
+  const face = loader.createFace("think", "xs");
+  const slot = win.document.createElement("span") as HTMLElement;
+  slot.className = "srun-face";
+  slot.appendChild(face);
+  row.appendChild(slot);
   feed.appendChild(row);
   win.document.querySelector("#msgs")!.appendChild(feed);
   store.tabs.tabs.push({ id, feed, kind: "session" });
@@ -53,6 +59,13 @@ describe("subagent run view", () => {
     );
     expect(row.dataset.runId).toBe("r1");
     expect(row.classList.contains("srun-link")).toBe(true);
+    expect(row.querySelector(".srun-face .mdl")?.getAttribute("data-state")).toBe("think");
+    expect(win.document.querySelectorAll(".srun-dot").length).toBe(1);
+
+    sub.onSubagentEvent(
+      ev({ kind: "tool_start", seq: 2, callId: "c1", tool: "write_file", args: { path: "x" } }),
+    );
+    expect(row.querySelector(".srun-face .mdl")?.getAttribute("data-state")).toBe("create");
 
     row.click();
     expect(win.document.querySelector("#msgs .srun")).toBeTruthy();
@@ -64,15 +77,17 @@ describe("subagent run view", () => {
     core.appendTo(feed, later);
     expect(feed.contains(later)).toBe(true);
 
-    sub.onSubagentEvent(ev({ kind: "text", seq: 2, chunk: "hello " }));
-    sub.onSubagentEvent(ev({ kind: "text", seq: 3, chunk: "world" }));
+    sub.onSubagentEvent(ev({ kind: "text", seq: 3, chunk: "hello " }));
+    sub.onSubagentEvent(ev({ kind: "text", seq: 4, chunk: "world" }));
 
-    sub.onSubagentEvent(ev({ kind: "end", seq: 4, status: "done", iterations: 2, durationMs: 1500 }));
+    sub.onSubagentEvent(ev({ kind: "end", seq: 5, status: "done", iterations: 2, durationMs: 1500 }));
     // Стриминговый Markdown держит недописанную строку до flush — конец
     // сегмента (end прогона) её отдаёт.
     const body = win.document.querySelector(".srun-body");
     expect(body?.textContent).toContain("hello world");
     expect(win.document.querySelector(".srun-state")?.classList.contains("st-done")).toBe(true);
+    expect(win.document.querySelector(".srun-face-top .mdl")?.getAttribute("data-state")).toBe("done");
+    expect(row.querySelector(".srun-face .mdl")?.getAttribute("data-state")).toBe("done");
 
     win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape" }));
     expect(win.document.querySelector("#msgs .srun")).toBeNull();
@@ -110,6 +125,7 @@ describe("subagent run view", () => {
     );
     row.click();
     expect(win.document.querySelector(".srun-title")?.textContent).toBe("first");
+    expect(win.document.querySelectorAll(".srun-dot").length).toBe(2);
     const chips = win.document.querySelectorAll(".srun-chip");
     expect(chips.length).toBe(2);
     (chips[1] as HTMLElement).click();
@@ -117,3 +133,5 @@ describe("subagent run view", () => {
     expect(win.document.querySelectorAll(".srun").length).toBe(1);
   });
 });
+
+

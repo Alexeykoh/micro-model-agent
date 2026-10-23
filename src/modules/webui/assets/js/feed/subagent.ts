@@ -10,14 +10,22 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
+import { createFace, setFaceState } from "../loader.js";
 import { makeRunRender, renderRunEvent, type RunRender } from "./subagent-render.js";
 import {
   buf,
   mergeEvent,
   mergeSnapshot,
+  runFaceState,
   sessionRuns,
   statusText,
 } from "./subagent-buffer.js";
+import {
+  initSubagentGrid,
+  refreshGrid,
+  registerRun,
+  trackRun,
+} from "./subagent-grid.js";
 
 interface View {
   sessionId: string;
@@ -27,6 +35,7 @@ interface View {
   title: HTMLElement;
   state: HTMLElement;
   chips: HTMLElement;
+  face: HTMLElement;
   render: RunRender;
   timer: number | null;
   started: number;
@@ -67,6 +76,7 @@ function setHeader(v: View, meta: Dict): void {
   v.title.title = String(meta.task || "");
   v.state.textContent = statusText(meta, v.started);
   v.state.className = "srun-state st-" + String(meta.status || "running");
+  setFaceState(v.face, runFaceState(buf(v.runId)));
 }
 
 function renderAll(v: View): void {
@@ -96,6 +106,10 @@ function buildRoot(sessionId: string): Omit<View, "runId" | "render" | "timer" |
   back.textContent = "← " + t("web.subagent.back");
   back.addEventListener("click", () => closeRun());
   top.appendChild(back);
+  const faceSlot = el("span", "srun-face-top");
+  const face = createFace("think", "sm");
+  faceSlot.appendChild(face);
+  top.appendChild(faceSlot);
   const title = el("span", "srun-title", t("web.subagent.title"));
   top.appendChild(title);
   const state = el("span", "srun-state", t("web.subagent.running"));
@@ -108,7 +122,7 @@ function buildRoot(sessionId: string): Omit<View, "runId" | "render" | "timer" |
   root.appendChild(note);
   const body = el("div", "srun-body");
   root.appendChild(body);
-  return { sessionId, root, body, title, state, chips };
+  return { sessionId, root, body, title, state, chips, face };
 }
 
 /** Открывает прогон (или переключает текущий вид на другой прогон). */
@@ -140,7 +154,8 @@ export function openRun(sessionId: string, runId: string): void {
       if (view) setHeader(view, buf(view.runId).meta);
     }, 1000);
   }
-  void seed(sessionId);
+  refreshGrid();
+  void seedSubagentRuns(sessionId);
 }
 
 /** Закрывает вид и возвращает ленту родительской вкладки как была. */
@@ -156,23 +171,38 @@ export function closeRun(restore = true): void {
     msgsEl().scrollTop = Number(tab.srunScroll || 0);
     tab.srunScroll = 0;
   }
+  refreshGrid();
 }
 
 /** Перехватывает SSE `subagent`: буфер, привязка строки, живой рендер. */
 export function onSubagentEvent(d: Dict): void {
   if (!mergeEvent(d)) return;
   const b = buf(d.runId);
+  trackRun(d);
   if (d.kind === "start") {
     markRow(String(d.sessionId || ""), String(d.parentToolCallId || ""), d.runId);
   }
+  updateRowFace(d.runId);
   if (!view || view.runId !== d.runId) return;
   renderRunEvent(view.render, d);
+  setFaceState(view.face, runFaceState(b));
   setHeader(view, b.meta);
   if (d.kind === "end") {
     stopTimer(view);
     renderChips(view);
   }
   if (d.kind === "text" || d.kind === "tool_end") msgsEl().scrollTop = msgsEl().scrollHeight;
+}
+
+/** Обновляет мини-маскот строки субагента в родительской ленте. */
+function updateRowFace(runId: string): void {
+  const meta = buf(runId).meta;
+  const sessionId = String(meta.parentSessionId || "");
+  if (!sessionId) return;
+  const tab = tabState.tabs.find((x) => x.id === sessionId);
+  const row = tab?.feed?.querySelector?.(`[data-run-id="${runId}"]`);
+  const face = row?.querySelector?.(".srun-face .mdl") as HTMLElement | null;
+  if (face) setFaceState(face, runFaceState(buf(runId)));
 }
 
 /** Помечает строку `subagent` кликабельной (runId приходит в SSE `start`). */
@@ -188,8 +218,8 @@ function markRow(sessionId: string, toolCallId: string, runId: string): void {
 }
 
 /** Догружает снимки прогонов сессии (после reload/реконнекта или клика). */
-async function seed(sessionId: string): Promise<void> {
-  if (seeded.has(sessionId)) return;
+export async function seedSubagentRuns(sessionId: string): Promise<void> {
+  if (!sessionId || seeded.has(sessionId)) return;
   seeded.add(sessionId);
   const r = await api<{ runs?: Dict[] }>(
     "/api/sessions/" + encodeURIComponent(sessionId) + "/subagents",
@@ -197,11 +227,14 @@ async function seed(sessionId: string): Promise<void> {
   if (!r.ok || !r.data || !Array.isArray(r.data.runs)) return;
   for (const snap of r.data.runs) {
     const id = mergeSnapshot(snap);
-    if (id && snap.parentToolCallId) {
+    if (!id) continue;
+    registerRun(id, sessionId);
+    if (snap.parentToolCallId) {
       markRow(sessionId, String(snap.parentToolCallId), id);
     }
   }
   if (view && view.sessionId === sessionId) renderAll(view);
+  refreshGrid();
 }
 
 /** Клик по строке без runId: ищем прогон по tool call через REST. */
@@ -216,10 +249,14 @@ async function openByToolCall(sessionId: string, toolCallId: string): Promise<vo
 
 /** Подключает делегированный клик и Esc; звать один раз при старте UI. */
 export function initSubagentView(): void {
+  initSubagentGrid(openRun);
   // Замена ленты вкладки в `#msgs` (open/close/reset) закрывает вид: лента
   // прежней вкладки остаётся своей и не должна переезжать в чужой таб.
   hooks.beforeFeedMount = () => {
     if (view) closeRun(false);
+    refreshGrid();
+    // Сетка показывает и прогоны прошлых ходов: поднимаем снимки сессии.
+    if (tabState.activeTabId) void seedSubagentRuns(String(tabState.activeTabId));
   };
   msgsEl().addEventListener("click", (e) => {
     const target = e.target as HTMLElement | null;

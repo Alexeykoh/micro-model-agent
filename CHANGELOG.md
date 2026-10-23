@@ -18,6 +18,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   на прогон, вывод тула — до 4k), чистятся при удалении сессии.
   События: `ToolContext.subagentRuns` (fail-open), SSE `subagent`,
   `GET /api/sessions/:id/subagents[?toolCallId=]`.
+  **MMART на каждого субагента:** у строки «Задача подагенту» свой мини-маскот
+  с состоянием прогона (`think`/`read`/`create`/`run`/`done`/`error/stop`), в
+  шапке открытого прогона — крупнее, а в правом верхнем углу — сетка маскотов
+  субагентов активной вкладки: видна и в чате, и в прогоне, включает прогоны
+  прошлых ходов после reload (до 9 ячеек), клик по маскоту открывает прогон.
   Спека: `docs/specs/2026-10-23-subagent-run-view-design.md`.
   Гварды: `tests/tools/subagent-runs-events.test.ts`,
   `tests/webui-subagent-runs-store.test.ts`,
