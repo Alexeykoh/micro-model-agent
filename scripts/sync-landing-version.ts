@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const indexPath = join(root, "gh-pages", "index.html");
+const docsPath = join(root, "gh-pages", "docs.html");
 
 /** Replaces the first match of `re` with `value`, or throws if it is missing. */
 function replaceOnce(src: string, re: RegExp, value: string, label: string): string {
@@ -41,6 +42,20 @@ async function main(): Promise<void> {
     `$1"${version}"`,
     "softwareVersion",
   );
+
+  const docsBefore = await readFile(docsPath, "utf8").catch(() => null);
+  if (docsBefore !== null) {
+    const docs = replaceOnce(
+      docsBefore,
+      /(<span id="docsVer">)v[^<]*(<\/span>)/,
+      `$1v${version}$2`,
+      "docsVer",
+    );
+    if (docs !== docsBefore) {
+      await writeFile(docsPath, docs);
+      process.stdout.write(`[docs] injected version ${version} into gh-pages/docs.html\n`);
+    }
+  }
 
   if (html === before) {
     process.stdout.write(`[landing] version already ${version}\n`);

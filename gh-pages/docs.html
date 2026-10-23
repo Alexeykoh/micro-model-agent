@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <title>Документация — MMA (Micro Models Agent)</title>
+  <meta name="description" content="Полное руководство по MMA: установка, настройка провайдеров, CLI и REPL, web UI, субагенты, инструменты, сессии, контекст, безопасность, Service API, разработка и решение проблем.">
+  <link rel="canonical" href="https://alexeykoh.github.io/micro-model-agent/docs.html">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#0f1013" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Документация — MMA">
+  <meta property="og:description" content="Установка, настройка, интерфейсы, инструменты, безопасность, API и разработка.">
+  <meta property="og:url" content="https://alexeykoh.github.io/micro-model-agent/docs.html">
+  <meta property="og:image" content="https://alexeykoh.github.io/micro-model-agent/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <script>
+    (function () {
+      try {
+        var th = localStorage.getItem("mma-lp-theme");
+        if (th === "light" || (th !== "dark" && matchMedia("(prefers-color-scheme: light)").matches)) {
+          document.documentElement.classList.add("light");
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<header class="top">
+  <button class="iconbtn menu-btn" id="menuBtn" aria-label="Разделы документации" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html"><span class="dot">M</span><span>MMA <span class="sub">docs</span></span></a>
+  <div class="spacer"></div>
+  <div class="search">
+    <input id="docSearch" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Поиск по документации…" aria-label="Поиск по документации">
+    <kbd>/</kbd>
+  </div>
+  <button class="iconbtn" id="themeBtn" aria-label="Сменить тему" title="Светлая / тёмная тема">◐</button>
+  <a class="iconbtn" href="index.html">← на сайт</a>
+</header>
+
+<div class="layout">
+  <aside class="side" id="side">
+    <h4>Начало</h4>
+    <a href="#overview">Обзор</a>
+    <a href="#install">Установка</a>
+    <a href="#quickstart">Быстрый старт</a>
+    <a href="#setup">Первый запуск и провайдеры</a>
+    <a href="#update">Обновление и удаление</a>
+
+    <h4>Работа с агентом</h4>
+    <a href="#cli">CLI: однократный запуск</a>
+    <a href="#repl">REPL и slash-команды</a>
+    <a href="#web">Web UI</a>
+    <a href="#sessions">Сессии</a>
+    <a href="#context">Контекст и компакция</a>
+    <a href="#planning">Планирование и гарантии</a>
+    <a href="#subagents">Субагенты</a>
+    <a href="#memory">Память, скиллы, AGENTS.md</a>
+
+    <h4>Возможности</h4>
+    <a href="#tools">Инструменты</a>
+    <a href="#web-tools">Поиск и веб</a>
+    <a href="#browser">Браузер</a>
+    <a href="#mcp">MCP</a>
+    <a href="#plugins">Плагины</a>
+    <a href="#pipelines">Пайплайны</a>
+    <a href="#lsp">LSP</a>
+    <a href="#map">Карта проекта</a>
+    <a href="#certification">Сертификация моделей</a>
+
+    <h4>Безопасность</h4>
+    <a href="#security">Политики и защита</a>
+    <a href="#data-policy">DLP и данные</a>
+
+    <h4>Интеграция</h4>
+    <a href="#service">Service API</a>
+    <a href="#config">Конфигурация</a>
+    <a href="#env">Переменные окружения</a>
+    <a href="#data-layout">Файлы и каталоги</a>
+
+    <h4>Разработка</h4>
+    <a href="#architecture">Архитектура</a>
+    <a href="#code-map">Карта кода</a>
+    <a href="#tests">Тесты и quality</a>
+    <a href="#release">Релиз</a>
+    <a href="#contributing">Участие</a>
+
+    <h4>Помощь</h4>
+    <a href="#doctor">Диагностика</a>
+    <a href="#troubleshooting">Частые проблемы</a>
+    <a href="#faq">FAQ</a>
+    <p class="meta">MMA <span id="docsVer">v0.11.2</span> · beta<br>MIT License</p>
+  </aside>
+
+  <main>
+  <article>
+
+    <h1>Документация MMA</h1>
+    <p class="lead">Micro Models Agent — универсальный harness для небольших языковых моделей (9B, 32K–64K контекста), который держит их на задаче: бюджет контекста, структурная компакция, проверяемое планирование и настоящие гарантии исполнения. Не только код: разработка, веб-исследование, API, умный дом, ассистент.</p>
+    <p class="sub">Это руководство покрывает полный цикл: установка → настройка → повседневная работа → интеграции → безопасность → разработка → эксплуатация.</p>
+
+    <h2 id="overview">Обзор</h2>
+    <p>MMA — это CLI-агент с единым циклом исполнения <code>INIT → THINK → OBSERVE → VERIFY → OUTPUT → ERROR</code>. Один и тот же агент доступен через три поверхности:</p>
+    <div class="cards">
+      <div class="card"><b>Терминал</b><p><code>mma</code> — REPL и однократный запуск, markdown→ANSI, без TUI.</p></div>
+      <div class="card"><b>Браузер</b><p><code>mma web</code> — SSE + REST, вкладки, файлы, Trace, MMART.</p></div>
+      <div class="card"><b>HTTP-сервис</b><p><code>mma serve</code> — Agent Service API v1, задачи, SSE, webhooks.</p></div>
+    </div>
+    <h3>Что важно знать сразу</h3>
+    <ul>
+      <li><b>Провайдер</b> — любой OpenAI-совместимый сервер: LM Studio, Ollama, vLLM, llama.cpp, cloud-провайдеры. Работает офлайн, если модель локальная.</li>
+      <li><b>Контекст</b> — окно задаётся автоматически по провайдеру или вручную; при заполнении включается компакция, а <code>[Tool ledger]</code> не даёт модели перечитывать уже прочитанное.</li>
+      <li><b>Гарантии</b> — шаг плана закрывается только по факту (файл существует, команда прошла), а не по словам модели.</li>
+      <li><b>Beta</b> — версии только <code>0.x.y</code>; <code>1.0.0</code> не выпускается, пока проект в бете.</li>
+    </ul>
+
+    <h2 id="install">Установка</h2>
+    <p>Релиз самодостаточный: внутри Bun runtime, собранный агент, production-зависимости и веб-ассеты. Node.js/npm/Bun ставить не нужно.</p>
+    <h3>Windows (PowerShell 5.1+)</h3>
+<pre><code>irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.ps1 | iex</code></pre>
+    <h3>macOS / Linux</h3>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash</code></pre>
+    <p>Откройте новый терминал и запустите <code>mma setup</code>, затем <code>mma</code>.</p>
+    <h3>Что делает установщик</h3>
+    <ol>
+      <li>Определяет ОС/архитектуру: <code>win-x64</code>, <code>mac-arm64</code>, <code>mac-x64</code>, <code>linux-x64</code>, <code>linux-arm64</code>.</li>
+      <li>Скачивает <code>latest.json</code> и нужный <code>mma-&lt;os&gt;-&lt;arch&gt;.tar.gz</code>, проверяет <code>sha256</code>.</li>
+      <li>Распаковывает в <code>~/.mma/versions/&lt;version&gt;</code> и переключает <code>~/.mma/current</code>.</li>
+      <li>Добавляет <code>~/.mma/bin</code> в <code>PATH</code> и пишет launcher.</li>
+    </ol>
+    <div class="callout"><b>Требования к модели:</b> любой OpenAI-совместимый backend. Проверено на Qwen3.5-9B через LM Studio / Ollama / llama.cpp. Для инструментов нужна поддержка tool-calling.</div>
+
+    <h2 id="quickstart">Быстрый старт</h2>
+<pre><code>mma setup                 # провайдер, модель, контекст, безопасность
+mma                       # интерактивный REPL
+mma "перепиши auth на JWT"  # однократный запуск и выход
+mma web                   # браузерный интерфейс на том же ядре и сессиях</code></pre>
+    <p>Полезные первые команды в REPL:</p>
+<pre><code>/status                  # модель, контекст, сессия
+/help                    # все slash-команды
+/config                  # действующая конфигурация (секреты скрыты)
+/doctor                  # полная диагностика окружения</code></pre>
+
+    <h2 id="setup">Первый запуск и провайдеры</h2>
+    <p><code>mma setup</code> проводит по шагам: провайдер → base URL → API-ключ → модель → контекст → политика безопасности. Конфиг пишется в <code>~/.mma/config/</code> по доменам (провайдер, модель, безопасность, тулы, UI…).</p>
+    <h3>Типичные провайдеры</h3>
+    <table>
+      <thead><tr><th>Backend</th><th>Base URL</th><th>Примечание</th></tr></thead>
+      <tbody>
+        <tr><td>LM Studio</td><td><code>http://localhost:1234/v1</code></td><td>локально, часто без ключа</td></tr>
+        <tr><td>Ollama</td><td><code>http://localhost:11434/v1</code></td><td><code>ollama serve</code>, модель с tools</td></tr>
+        <tr><td>llama.cpp</td><td><code>http://localhost:8080/v1</code></td><td>проверены Jinja-шаблоны</td></tr>
+        <tr><td>OpenAI-совместимый</td><td>endpoint провайдера</td><td>OpenRouter, Together и др.</td></tr>
+      </tbody>
+    </table>
+    <h3>Без мастера</h3>
+<pre><code>mma provider add lmstudio --url http://localhost:1234/v1
+mma provider use lmstudio
+mma model list
+mma model use qwen/qwen3.5-9b
+mma context 32768</code></pre>
+    <p><code>mma provider check</code> делает бесплатный <code>listModels</code>, <code>mma provider list</code> показывает записи и активную. Несколько записей дают failover по приоритету.</p>
+    <h3>Контекст</h3>
+    <p>Окно обычно определяется автоматически. Вручную:</p>
+<pre><code>mma context            # разбивка бюджета
+mma context 65536      # зафиксировать окно
+mma context --system 0.20 --reserve 0.15</code></pre>
+    <h3>Онбординг</h3>
+<pre><code>mma meet          # интервью о вас и задачах → глобальная память
+mma agents init   # создать/обновить AGENTS.md для проекта</code></pre>
+
+    <h2 id="update">Обновление и удаление</h2>
+    <p>Повторный запуск установочной команды обновляет до последнего релиза; предыдущие версии остаются в <code>~/.mma/versions/</code> для отката. Встроенный updater проверяет GitHub Releases; при <code>updater.autoInstall: true</code> скачивает и активирует обновление в фоне (текущий процесс работает до рестарта).</p>
+    <h3>Откат</h3>
+<pre><code># macOS / Linux
+ln -sfn versions/&lt;old-version&gt; ~/.mma/current</code></pre>
+    <h3>Удаление</h3>
+<pre><code># macOS / Linux
+rm -rf ~/.mma
+# Windows: удалить %USERPROFILE%\.mma и убрать его bin из PATH</code></pre>
+
+    <h2 id="cli">CLI: однократный запуск</h2>
+<pre><code>mma [options] [prompt...]
+mma "задача" --json</code></pre>
+    <table>
+      <thead><tr><th>Флаг</th><th>Смысл</th></tr></thead>
+      <tbody>
+        <tr><td><code>-d, --dir &lt;path&gt;</code></td><td>рабочая директория агента</td></tr>
+        <tr><td><code>-j, --json</code></td><td>машиночитаемый итог</td></tr>
+        <tr><td><code>-e, --exit-on-complete</code></td><td>один финальный ответ; интерактивные тулы падают вместо ожидания</td></tr>
+        <tr><td><code>--reasoning &lt;level&gt;</code></td><td><code>auto|none|low|medium|high|max</code></td></tr>
+        <tr><td><code>--verbose</code></td><td>тела тулов и полные списки в выводе</td></tr>
+        <tr><td><code>--context-log</code></td><td>полный контекст LLM в <code>&lt;session&gt;/context.diff</code></td></tr>
+        <tr><td><code>--no-agents-md</code></td><td>не подмешивать AGENTS.md</td></tr>
+      </tbody>
+    </table>
+    <h3>Подкоманды</h3>
+    <table>
+      <thead><tr><th>Команда</th><th>Назначение</th></tr></thead>
+      <tbody>
+        <tr><td><code>mma setup</code></td><td>мастер провайдера/модели/контекста/безопасности</td></tr>
+        <tr><td><code>mma web</code></td><td>браузерный UI (<code>-p</code>, <code>--host</code>, <code>--token</code>, <code>--no-open</code>)</td></tr>
+        <tr><td><code>mma serve</code></td><td>HTTP API v1 (по умолчанию порт <code>7331</code>)</td></tr>
+        <tr><td><code>mma config set|show|migrate</code></td><td>конфигурация (секреты скрыты; <code>--show-secrets</code>)</td></tr>
+        <tr><td><code>mma provider …</code></td><td><code>check</code>, <code>list</code>, <code>use</code>, <code>add</code></td></tr>
+        <tr><td><code>mma model …</code></td><td><code>list</code>, <code>use</code>, сертификация</td></tr>
+        <tr><td><code>mma context [size]</code></td><td>окно и доли бюджета</td></tr>
+        <tr><td><code>mma map [summary|refresh|find]</code></td><td>карта/индекс проекта</td></tr>
+        <tr><td><code>mma session …</code></td><td>list / show / export / delete / diagnose / prune</td></tr>
+        <tr><td><code>mma security …</code></td><td>status, policies, set-policy, encryption, audit</td></tr>
+        <tr><td><code>mma plugins …</code></td><td>list / show / reload / drafts / enable / disable</td></tr>
+        <tr><td><code>mma doctor</code></td><td>полная диагностика</td></tr>
+        <tr><td><code>mma agents init</code></td><td>сгенерировать AGENTS.md</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="repl">REPL и slash-команды</h2>
+    <p>Запуск — просто <code>mma</code>. Ввод отправляется Enter, перенос строки — <code>Shift+Enter</code>/<code>Alt+Enter</code>/<code>Ctrl+J</code>. <code>Esc Esc</code> прерывает текущий ход, <code>Ctrl+C</code> — выход, <code>Ctrl+V</code> вставляет картинку из буфера.</p>
+    <table>
+      <thead><tr><th>Команда</th><th>Назначение</th></tr></thead>
+      <tbody>
+        <tr><td><code>/sessions</code> (<code>/ls</code>)</td><td>список сессий</td></tr>
+        <tr><td><code>/new &lt;name&gt;</code></td><td>новая сессия</td></tr>
+        <tr><td><code>/resume &lt;id|name&gt;</code></td><td>переключиться</td></tr>
+        <tr><td><code>/rename</code> / <code>/delete</code></td><td>переименовать / удалить</td></tr>
+        <tr><td><code>/export</code></td><td>экспорт (<code>md|json|jsonl</code>)</td></tr>
+        <tr><td><code>/model</code>, <code>/provider</code>, <code>/context</code></td><td>быстрые переключатели</td></tr>
+        <tr><td><code>/reasoning</code></td><td>показ/ступень рассуждений</td></tr>
+        <tr><td><code>/config</code></td><td>просмотр/изменение ключей</td></tr>
+        <tr><td><code>/memory</code></td><td>глобальная память</td></tr>
+        <tr><td><code>/skill</code></td><td>скиллы</td></tr>
+        <tr><td><code>/plugins</code></td><td>плагины и черновики</td></tr>
+        <tr><td><code>/lsp</code></td><td>диагностика LSP (<code>doctor</code>)</td></tr>
+        <tr><td><code>/map</code></td><td>карта проекта</td></tr>
+        <tr><td><code>/security</code></td><td>политики и шифрование</td></tr>
+        <tr><td><code>/sysprompt</code></td><td>состав системного промпта</td></tr>
+        <tr><td><code>/status</code>, <code>/doctor</code>, <code>/reload</code></td><td>состояние, диагностика, перезагрузка</td></tr>
+        <tr><td><code>/verbose</code></td><td>quiet / verbose</td></tr>
+        <tr><td><code>/clear</code>, <code>/help</code>, <code>/exit</code></td><td>очистка, помощь, выход</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="web">Web UI</h2>
+<pre><code>mma web                 # случайный порт, браузер откроется сам
+mma web -p 4096 --no-open
+mma web --host 0.0.0.0 --token &lt;secret&gt;</code></pre>
+    <p>Тот же агент, ядро и сессии, но поверх SSE + REST. Первый запуск при пустом конфиге открывает мастер настройки прямо в браузере.</p>
+    <h3>Вкладки сайдбара</h3>
+    <table>
+      <thead><tr><th>Вкладка</th><th>Что внутри</th></tr></thead>
+      <tbody>
+        <tr><td>Session</td><td>план, usage/стоимость, окружение, заполнение контекста</td></tr>
+        <tr><td>Files</td><td>дерево workspace и просмотр файлов</td></tr>
+        <tr><td>LSP</td><td>диагностика и состояние языковых серверов</td></tr>
+        <tr><td>Trace</td><td>живой поток событий сессии, детали тулов, логи</td></tr>
+        <tr><td>Plugins</td><td>плагины, MCP-серверы, черновики capabilities</td></tr>
+        <tr><td>Map</td><td>статистика карты проекта и пересборка индекса</td></tr>
+      </tbody>
+    </table>
+    <h3>Чат</h3>
+    <ul>
+      <li>Параллельные ходы в разных вкладках; в одной сессии — очередь сообщений (<code>Esc</code> останавливает ход).</li>
+      <li><b>MMART</b> — маскот-индикатор: отражает фазу (думает, читает, пишет, выполняет, ошибка).</li>
+      <li><b>Субагенты</b>: строка «Задача подагенту» кликабельна → read-only транскрипт прогона; в шапке — маскот, статус и кнопка «■» остановки; чипы переключают параллельные прогоны; в правом верхнем углу — сетка маскотов субагентов (клик открывает прогон).</li>
+      <li><b>Reasoning</b>: ступень показывается бейджем с лампочкой в шапке блока «думаю».</li>
+      <li>ML: длинный вывод тулов сворачивается, в quiet-режиме тела тулов скрыты; ошибки видны одной строкой.</li>
+    </ul>
+    <div class="callout warn"><b>Безопасность:</b> <code>--host</code> не на loopback требует <code>--token</code>. Не выставляйте UI в интернет без токена и обратного прокси.</div>
+
+    <h2 id="sessions">Сессии</h2>
+    <p>Сессии персистентны: <code>~/.mma/sessions/&lt;id&gt;/</code> хранит <code>meta.json</code>, <code>history.jsonl</code> и подробный <code>session.jsonl</code> (тулы, аргументы, длительность, ошибки).</p>
+<pre><code>mma session list
+mma session show &lt;id&gt;
+mma session export &lt;id&gt; --format md --out report.md
+mma session diagnose &lt;id&gt;    # разбор по сигнатурам сбоев
+mma session prune            # удалить сессии без сообщений пользователя</code></pre>
+    <p>Имя сессии выводится автоматически по первому сообщению, если не задано вручную. <code>/resume</code> поднимает историю; <code>search_history</code> ищет по всем <code>history.jsonl</code>.</p>
+
+    <h2 id="context">Контекст и компакция</h2>
+    <p>Бюджет окна делится на системный промпт, определения тулов, историю и резерв ответа. Приближение к лимиту запускает структурную компакцию: она сохраняет факты, решения и ошибки, а не просто режет историю.</p>
+    <ul>
+      <li><code>[Tool ledger]</code> — список уже прочитанного, чтобы модель не ходила по кругу.</li>
+      <li>Оценка токенов калибруется по реальному <code>prompt_tokens</code> провайдера.</li>
+      <li>При переполнении инструкций/карты — честная деградация с причиной, а не тихое усечение.</li>
+      <li>Настройки: <code>context.*</code>, доли <code>system</code>/<code>reserve</code>; пороги компакции.</li>
+    </ul>
+<pre><code>mma context                  # текущая разбивка
+mma context 65536            # окно вручную
+mma context --system 0.2 --reserve 0.15</code></pre>
+
+    <h2 id="planning">Планирование и гарантии</h2>
+    <p>Планы ведутся тулами <code>plan</code> / <code>plan_step</code> / <code>todo</code>. Шаг закрывается только проверкой: файл существует, содержимое совпало, команда выполнилась. Дополнительно работают:</p>
+    <ul>
+      <li><b>Hallucination detection</b> — проверка путей, противоречий, уверенности и claims («создал файл X»).</li>
+      <li><b>Critic</b> — встроенный ревьюер хода (опционально).</li>
+      <li><b>Stuck detection</b> и honest-stop: повторяющиеся вызовы/серии провалов останавливают петлю с честным статусом.</li>
+      <li><b>Final audit</b> — финальная проверка перед ответом.</li>
+      <li><b>Auto-advance</b> — шаг плана двигается по факту изменения файлов/команд.</li>
+    </ul>
+
+    <h2 id="subagents">Субагенты</h2>
+    <p>Тул <code>subagent</code> запускает изолированного агента со своим контекстом, скоупом файлов и набором тулов. Несколько вызовов в одном сообщении выполняются параллельно (через форки исполнителя).</p>
+<pre><code>task: "напиши тесты для src/auth.ts"
+allowed_files: ["src/auth.ts", "tests/auth.test.ts"]
+tool_tags: ["file", "code"]
+expert_tag: "reviewer"       # опционально: роль из config.experts
+result_mode: "file"          # вернуть путь+сводку вместо полного текста
+max_tokens: 8000</code></pre>
+    <ul>
+      <li>Глубина рекурсии ограничена <code>security.maxRecursionDepth</code>.</li>
+      <li>Результат в режиме <code>file</code> сохраняется в <code>&lt;workspace&gt;/.mma/artifacts/&lt;session&gt;/</code>.</li>
+      <li>Остановка: кнопка «■» в шапке прогона в web UI; стоп родительского хода гасит и дочерних.</li>
+      <li>Таймаут — <code>subagent.timeoutMs</code> (по умолчанию 180 с).</li>
+    </ul>
+
+    <h2 id="memory">Память, скиллы, AGENTS.md</h2>
+    <ul>
+      <li><b>Память</b> (<code>remember</code> / <code>recall</code>, <code>/memory</code>) — глобальные факты и предпочтения, переживают сессии.</li>
+      <li><b>Скиллы</b> (<code>load_skill</code>, <code>/skill</code>) — подключаемые инструкции/процедуры из каталогов навыков.</li>
+      <li><b>AGENTS.md</b> — проектные правила; <code>mma agents init</code> создаёт или улучшает файл, <code>--no-agents-md</code> отключает загрузку.</li>
+      <li><b>Профиль</b> — <code>mma meet</code> записывает предпочтения и домен использования.</li>
+    </ul>
+
+    <h2 id="tools">Инструменты</h2>
+    <p>Ядро поставляет ~37 инструментов. Набор сужается тегами и <code>enable_tools</code>; структурные тулы (<code>plan</code>, <code>todo</code>, <code>verify</code>, <code>project_map</code>, <code>lsp_check</code>) доступны всегда.</p>
+    <table>
+      <thead><tr><th>Категория</th><th>Тулы</th></tr></thead>
+      <tbody>
+        <tr><td>Файлы</td><td><code>read_file</code>, <code>write_file</code>, <code>append_file</code>, <code>edit_file</code>, <code>glob</code>, <code>grep</code>, <code>list_dir</code>, <code>create_dir</code>, <code>delete_file</code>, <code>move_file</code>, <code>file_info</code></td></tr>
+        <tr><td>Исполнение</td><td><code>bash</code>, <code>process_list/log/kill/wait</code>, <code>pipeline_run</code>, <code>browser</code>, <code>subagent</code>, <code>mcp_call</code></td></tr>
+        <tr><td>Веб</td><td><code>web_search</code>, <code>web_fetch</code>, <code>web_browse</code>, <code>download_file</code></td></tr>
+        <tr><td>Контекст/поиск</td><td><code>chunk_query</code>, <code>scan_corpus</code>, <code>search_history</code>, <code>project_map</code></td></tr>
+        <tr><td>Память и профиль</td><td><code>remember</code>, <code>recall</code>, <code>meet_done</code>, <code>load_skill</code></td></tr>
+        <tr><td>Структура</td><td><code>plan</code>, <code>plan_step</code>, <code>todo</code>, <code>verify</code>, <code>lsp_check</code>, <code>set_thinking</code>, <code>enable_tools</code>, <code>define_capability</code></td></tr>
+        <tr><td>Интерактив</td><td><code>question</code>, <code>approve</code>, <code>attach_image</code> (web/REPL)</td></tr>
+      </tbody>
+    </table>
+    <p>Все пути проходят enforcement: скоуп, защищённые пути, SSRF, rate-limit — в одной точке <code>ToolExecutor.execute()</code>.</p>
+
+    <h2 id="web-tools">Поиск и веб</h2>
+    <ul>
+      <li><code>web_search</code> — поиск (провайдер настраивается, по умолчанию DuckDuckGo).</li>
+      <li><code>web_fetch</code> / <code>web_browse</code> — загрузка и чтение страниц; контент помечается как недоверенный.</li>
+      <li><code>download_file</code> — скачивание с проверкой размера/редиректов.</li>
+      <li>SSRF-политика блокирует приватные адреса; DNS-резолв учитывается.</li>
+    </ul>
+
+    <h2 id="browser">Браузер</h2>
+    <p>Тул <code>browser</code> управляет Chromium через Playwright: навигация, снимок DOM, клики, ввод, скриншоты. Браузер скачивается при первом использовании:</p>
+<pre><code>~/.mma/current/runtime/bun x playwright install chromium</code></pre>
+    <p>Если Chromium не установлен, тул возвращает понятную ошибку, а не зависает. Приватные адреса блокируются так же, как в веб-тулах.</p>
+
+    <h2 id="mcp">MCP</h2>
+    <p>Подключение MCP-серверов (stdio или SSE) описано в конфиге <code>mcpServers</code>; вызов — через <code>mcp_call</code>. Серверы и их статус видны в web UI: Plugins → MCP.</p>
+<pre><code>{
+  "mcpServers": {
+    "everything": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-everything"] }
+  }
+}</code></pre>
+
+    <h2 id="plugins">Плагины</h2>
+    <p>Плагин — JS/TS-модуль, который добавляет тулы, хуки жизненного цикла и метаданные. Плагины бывают глобальные и проектные; отключение — живое.</p>
+<pre><code>mma plugins list
+mma plugins show &lt;name&gt;
+mma plugins disable &lt;name&gt;
+mma plugins reload
+mma plugins drafts            # черновики, написанные агентом
+mma plugins drafts approve &lt;id&gt;</code></pre>
+    <div class="callout warn"><b>Важно:</b> <code>disable</code> плагина — не sandbox. Код модуля уже загружен; permissions в манифесте — декларация для показа, не enforcement.</div>
+    <p>Агент может написать собственный плагин через <code>define_capability</code>: файл создаётся, но остаётся инертным, пока вы не разрешите черновик.</p>
+
+    <h2 id="pipelines">Пайплайны</h2>
+    <p><code>pipeline_run</code> исполняет YAML-DAG: шаги, зависимости, параллельные волны, ретраи. Удобно для повторяемых многошаговых сценариев (сборка, проверка, публикация).</p>
+<pre><code>steps:
+  - id: build
+    run: bun run build:prod
+  - id: test
+    run: bun test
+    needs: [build]</code></pre>
+
+    <h2 id="lsp">LSP</h2>
+    <p>Языковые серверы дают диагностику после правок и по запросу <code>lsp_check</code>. Поддерживаются TypeScript, CSS, HTML и другие серверы, установленные в системе.</p>
+<pre><code>/lsp doctor      # почему сервер не работает
+/lsp             # состояние</code></pre>
+    <p>Холодный старт LSP не блокирует запись: правка завершается сразу, проверка приходит следом.</p>
+
+    <h2 id="map">Карта проекта</h2>
+    <p>Индекс символов (определения, сигнатуры, outline) с PageRank-ранжированием под бюджет токенов. Учитывает <code>.gitignore</code>/<code>.mmaignore</code>, обновляется инкрементально.</p>
+<pre><code>mma map summary
+mma map refresh
+mma map find &lt;query&gt;</code></pre>
+
+    <h2 id="certification">Сертификация моделей</h2>
+    <p>Набор сценариев проверяет, тянет ли модель агентский цикл: тулы, планы, файлы, восстановление после ошибок.</p>
+<pre><code>mma model certify &lt;name&gt;
+mma model cert-status &lt;name&gt;
+mma model cert-list</code></pre>
+
+    <h2 id="security">Политики и защита</h2>
+    <p>Безопасность включена по умолчанию (пресет <code>balanced</code>): валидация bash, политика путей, сетевой SSRF-фильтр, сканирование контента, шифрование сессий, аудит.</p>
+<pre><code>mma security status
+mma security policies
+mma security set-policy balanced
+mma security enable-encryption
+mma security enable-audit</code></pre>
+    <h3>Всегда включено</h3>
+    <ul>
+      <li><b>Защищённые пути:</b> <code>.git/</code>, <code>.env*</code>, <code>*.key|pem|p12|crt</code>, <code>.npmrc</code>, <code>.netrc</code> — независимо от настроек.</li>
+      <li><b>Скоуп записи:</b> мутирующие тулы пишут только в разрешённые пути.</li>
+      <li><b>Bash:</b> рабочая директория ограничена, опасные команды блокируются, вывод санитизируется.</li>
+      <li><b>SSRF:</b> приватные адреса и метаданные облака недоступны сетевым тулам.</li>
+    </ul>
+
+    <h2 id="data-policy">DLP и данные</h2>
+    <p>Корпоративная политика данных (<code>security.dataPolicy</code>) фильтрует egress к провайдеру, скрывает пути от API, маскирует секреты и может требовать локального провайдера. При <code>failClosed</code> сомнительный запрос не уходит наружу.</p>
+    <ul>
+      <li><code>apiHiddenGlobs</code> — 404 на скрытые пути в web/serve.</li>
+      <li><code>providerBlockGlobs</code> — что нельзя отправлять модели.</li>
+      <li>Шифрование сессий: <code>mma security enable-encryption</code>; ключ хранится вне сессий.</li>
+      <li>Аудит: события безопасности и уведомления (<code>auditNotifier</code>).</li>
+    </ul>
+
+    <h2 id="service">Service API</h2>
+<pre><code>mma serve --host 127.0.0.1 --port 7331 --token &lt;secret&gt;</code></pre>
+    <p>Agent Service API v1: сессии, задачи, SSE, webhooks. Живой контракт — <code>GET /v1/openapi.json</code>, человеческая страница — <code>GET /v1/docs</code>. Bearer-токен обязателен для всех приватных маршрутов; один тенант = один процесс.</p>
+    <table>
+      <thead><tr><th>Метод</th><th>Путь</th><th>Назначение</th></tr></thead>
+      <tbody>
+        <tr><td>GET</td><td><code>/v1/health</code>, <code>/v1/ready</code></td><td>liveness, readiness (проба провайдера)</td></tr>
+        <tr><td>GET</td><td><code>/v1/openapi.json</code>, <code>/v1/docs</code></td><td>контракт</td></tr>
+        <tr><td>POST/GET</td><td><code>/v1/sessions</code></td><td>создать/список (<code>externalRef</code>, <code>status</code>)</td></tr>
+        <tr><td>GET/DELETE</td><td><code>/v1/sessions/:id</code></td><td>метаданные/удаление (занятая → 409)</td></tr>
+        <tr><td>POST</td><td><code>/v1/sessions/:id/tasks</code></td><td>сабмит задачи</td></tr>
+        <tr><td>GET</td><td><code>/v1/tasks/:jobId</code></td><td>статус/результат</td></tr>
+        <tr><td>POST</td><td><code>/v1/tasks/:jobId/cancel</code></td><td>кооперативная отмена</td></tr>
+        <tr><td>POST</td><td><code>/v1/tasks/:jobId/answer</code></td><td>ответ на <code>question</code></td></tr>
+        <tr><td>GET</td><td><code>/v1/sessions/:id/events</code></td><td>SSE-поток</td></tr>
+      </tbody>
+    </table>
+    <p>Ошибки — RFC 9457 (<code>application/problem+json</code>). Вебхуки подписываются; URL проходит SSRF-проверку. Подробности — <code>docs/agents/service-api.md</code>.</p>
+
+    <h2 id="config">Конфигурация</h2>
+    <p>Конфиг разбит по доменам в <code>~/.mma/config/*.json</code> (provider, security, tools, ui, session, service, …). Единый реестр ключей валидирует значения; <code>mma config show</code> скрывает секреты.</p>
+<pre><code>mma config show
+mma config set model qwen/qwen3.5-9b
+mma config set ui.verbosity verbose
+mma config set subagent.timeoutMs 300000
+mma config migrate          # legacy config.json → домены</code></pre>
+    <h3>Частые ключи</h3>
+    <table>
+      <thead><tr><th>Ключ</th><th>Смысл</th></tr></thead>
+      <tbody>
+        <tr><td><code>model</code>, <code>provider.active</code></td><td>активная модель и запись провайдера</td></tr>
+        <tr><td><code>contextWindow</code>, <code>contextBudget.*</code></td><td>окно и доли бюджета</td></tr>
+        <tr><td><code>ui.verbosity</code>, <code>ui.activityRail</code></td><td>quiet/verbose, панель активности</td></tr>
+        <tr><td><code>session.autoSave</code>, <code>session.maxSessions</code></td><td>история и ротация сессий</td></tr>
+        <tr><td><code>subagent.timeoutMs</code>, <code>resultMode</code></td><td>лимит и формат результата субагентов</td></tr>
+        <tr><td><code>security.policy</code>, <code>security.dataPolicy.*</code></td><td>политика и DLP</td></tr>
+        <tr><td><code>service.port</code>, <code>service.token</code></td><td>HTTP-сервис</td></tr>
+        <tr><td><code>updater.autoInstall</code></td><td>фоновое обновление</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="env">Переменные окружения</h2>
+    <table>
+      <thead><tr><th>Переменная</th><th>Назначение</th></tr></thead>
+      <tbody>
+        <tr><td><code>MMA_CONFIG_DIR</code></td><td>каталог конфига (изоляция прогонов/тестов)</td></tr>
+        <tr><td><code>MMA_MODEL</code></td><td>модель поверх конфига</td></tr>
+        <tr><td><code>MMA_PROVIDER_TYPE</code>, <code>MMA_PROVIDER_BASEURL</code>, <code>MMA_PROVIDER_APIKEY</code></td><td>оверрайд активного провайдера</td></tr>
+        <tr><td><code>MMA_CONTEXT_WINDOW</code></td><td>окно контекста</td></tr>
+        <tr><td><code>MMA_LOG_LEVEL</code>, <code>MMA_LOCALE</code></td><td>логи и язык</td></tr>
+        <tr><td><code>MMA_WEBUI_PORT</code>, <code>MMA_WEBUI_HOST</code>, <code>MMA_WEBUI_TOKEN</code></td><td>web UI</td></tr>
+        <tr><td><code>MMA_SERVICE_PORT</code>, <code>MMA_SERVICE_TOKEN</code></td><td>service API</td></tr>
+        <tr><td><code>MMA_HOME</code></td><td>каталог установки (по умолчанию <code>~/.mma</code>)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="data-layout">Файлы и каталоги</h2>
+<pre><code>~/.mma/
+  versions/&lt;version&gt;/     # распакованный релиз
+  current → versions/&lt;version&gt;
+  bin/mma                # launcher
+  config/                # домены конфигурации
+  sessions/&lt;id&gt;/         # meta.json, history.jsonl, session.jsonl, images/
+  memory/                # глобальная память
+  exports/               # экспорт сессий
+  logs/                  # app.jsonl и сессионные логи</code></pre>
+    <p>В рабочей папке проекта могут появляться <code>.mma/artifacts/&lt;session&gt;/</code> (артефакты субагентов) и <code>AGENTS.md</code>.</p>
+
+    <h2 id="architecture">Архитектура</h2>
+    <p>Слои: поверхности (REPL / web / serve) → ядро (<code>Agent</code>, <code>ToolExecutor</code>, контекст, промпт, наблюдаемость, <code>ModuleHost</code>) → модули (LSP, browser, indexer, skills, MCP, memory, critic, execution, service, …). Критерий границы: модуль можно отключить и продолжить работу; ядро — нельзя.</p>
+    <ul>
+      <li><b>Одна петля</b>: <code>Agent.run</code> вызывает цикл ровно один раз, все гейты внутри.</li>
+      <li><b>Одна точка enforcement</b>: <code>ToolExecutor.execute()</code> — allowlist, теги, scope, protected-пути, SSRF, rate-limit.</li>
+      <li><b>Один позвоночник наблюдаемости</b>: события с <code>source</code>, ошибки объектом, fail-open с записью.</li>
+      <li><b>Один путь записи конфига</b>: <code>ConfigStore.set</code> возвращает эффекты, ключи объявляет модуль.</li>
+      <li><b>Один writer терминала</b>: <code>OutputChannel</code>/<code>OutputBus</code>, без прямого <code>console.*</code>.</li>
+    </ul>
+    <p>Нормативная спека: <code>docs/specs/2026-10-12-architecture-v2-design.md</code>.</p>
+
+    <h2 id="code-map">Карта кода</h2>
+    <table>
+      <thead><tr><th>Область</th><th>Путь</th></tr></thead>
+      <tbody>
+        <tr><td>Петля агента</td><td><code>src/core/agent.ts</code>, <code>src/core/agent/*</code></td></tr>
+        <tr><td>Контекст/компакция</td><td><code>src/core/context/</code></td></tr>
+        <tr><td>Провайдеры</td><td><code>src/modules/providers/</code></td></tr>
+        <tr><td>Конфиг</td><td><code>src/config/registry.ts</code>, <code>registry-extra.ts</code></td></tr>
+        <tr><td>Тулы</td><td><code>src/tools/</code> (реестр — <code>src/tools/index.ts</code>)</td></tr>
+        <tr><td>Модули</td><td><code>src/modules/*</code>, bootstrap — <code>src/core/bootstrap/</code></td></tr>
+        <tr><td>Терминал</td><td><code>src/ui/</code>, <code>src/output/</code></td></tr>
+        <tr><td>Web</td><td><code>src/modules/webui/</code> (SSE + REST)</td></tr>
+        <tr><td>Service</td><td><code>src/modules/service/</code></td></tr>
+        <tr><td>Плагины</td><td><code>src/modules/plugins/</code>, контракт в <code>src/index.ts</code></td></tr>
+        <tr><td>CLI/REPL</td><td><code>src/cli/</code>, каталог команд — <code>src/core/commands/</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tests">Тесты и quality</h2>
+<pre><code>bun install
+bun test                 # все тесты
+bun run quality          # typecheck + frontend + arch + lint + fallow
+bun run dev              # watch
+bun run web:dev          # web UI в dev-режиме
+bun run test:e2e         # Playwright (по явной команде)</code></pre>
+    <ul>
+      <li><b>Правило ≤300 строк</b>: крупные файлы — только в <code>.arch-allowlist.json</code>, потолки не растут.</li>
+      <li><b>Спека до кода</b>, если меняется контракт (путь данных, граница модуля, формат события, схема конфига).</li>
+      <li><b>Инвариант — это тест</b>: гейты <code>tests/arch/*</code>, <code>tests/output/*</code>, профильные guard-тесты.</li>
+      <li>Новый тул объявляет <code>security: { caps, pathArgs?, urlArgs?, manual? }</code> — без этого не компилируется.</li>
+    </ul>
+
+    <h2 id="release">Релиз</h2>
+    <ol>
+      <li>Зелёные <code>bun test</code> и <code>bun run quality</code>.</li>
+      <li>Запись в <code>CHANGELOG.md</code> и версия в <code>package.json</code> (beta: только <code>0.x.y</code>).</li>
+      <li><code>bun run build:prod</code>, smoke <code>node dist/main.js --version</code>.</li>
+      <li>Commit <code>chore(release): X.Y.Z</code>, аннотированный тег <code>vX.Y.Z</code>.</li>
+      <li><code>git push origin master --follow-tags</code> → GitHub Actions собирает 5 платформ и публикует Release + <code>latest.json</code>.</li>
+    </ol>
+    <p>npm-публикации нет: раздача только через GitHub Releases; сайт обновляется workflow <code>pages</code>.</p>
+
+    <h2 id="contributing">Участие</h2>
+    <ul>
+      <li>Ветка от <code>master</code>: <code>feat/</code>, <code>fix/</code>, <code>docs/</code>, <code>refactor/</code>, <code>chore/</code>.</li>
+      <li>Одна задача — одна ветка и один контракт; массовые правки «заодно» не принимаются.</li>
+      <li>Для изменения поведения — тест, который падал бы без правки; для UI — живой прогон.</li>
+      <li>Долг фиксируется в <code>docs/agents/debt.md</code> сразу, а не «потом».</li>
+      <li>PR/merge — после зелёных тестов и quality.</li>
+    </ul>
+
+    <h2 id="doctor">Диагностика</h2>
+<pre><code>mma doctor              # окружение, модули, плагины, провайдер, LSP, конфиг
+mma provider check      # доступность провайдеров (бесплатный listModels)
+mma session diagnose &lt;id&gt;
+/lsp doctor             # в REPL
+mma config show         # действующий конфиг (секреты скрыты)</code></pre>
+    <p>Логи: <code>~/.mma/logs/</code> и <code>&lt;session&gt;/session.log</code>; подробный лог сессии — <code>session.jsonl</code>.</p>
+
+    <h2 id="troubleshooting">Частые проблемы</h2>
+    <h3>Модель «думает», но не вызывает тулы</h3>
+    <p>Проверьте, что backend поддерживает tool-calling и модель не слишком мала. Увеличьте <code>retry.noDataTimeoutMs</code>, если провайдер буферизует SSE. <code>mma model certify</code> покажет, тянет ли модель агентский цикл.</p>
+    <h3>Context overflow / частые компакции</h3>
+    <p>Уменьшите системный промпт и карту проекта, поднимите окно (<code>mma context 65536</code>), проверьте <code>/sysprompt</code> и Trace. Компакция с причиной видна в <code>session.jsonl</code>.</p>
+    <h3>Провайдер недоступен</h3>
+    <p><code>mma provider check</code>, затем <code>mma provider list</code> — активная запись должна указывать на рабочий URL. Для локальных серверов проверьте <code>curl http://localhost:PORT/v1/models</code>.</p>
+    <h3>Браузер не запускается</h3>
+    <p>Установите Chromium: <code>~/.mma/current/runtime/bun x playwright install chromium</code>. В headless-окружении нужен системный Chromium и <code>MMA_BROWSER_EXECUTABLE</code>.</p>
+    <h3>LSP не отвечает</h3>
+    <p><code>/lsp doctor</code> объяснит причину: сервер не установлен, холодный старт, офлайн-режим. Правка файла не блокируется ожиданием LSP.</p>
+    <h3>Веб-интерфейс не открывается</h3>
+    <p><code>mma web --no-open</code> печатает URL; при <code>--host</code> не на loopback обязателен <code>--token</code>. Порт можно задать <code>-p</code>.</p>
+    <h3>Сессия повреждена/не читается</h3>
+    <p><code>mma session diagnose &lt;id&gt;</code> (только чтение), затем <code>mma session export</code>. Не редактируйте <code>session.jsonl</code> вручную.</p>
+
+    <h2 id="faq">FAQ</h2>
+    <h3>Нужен ли интернет?</h3>
+    <p>Нет, если модель и провайдер локальные. Веб-поиск/браузер и облачные провайдеры требуют сеть.</p>
+    <h3>Минимальный контекст?</h3>
+    <p>Комфортно от 32K; 8K работает с агрессивной компакцией. Окно определяется автоматически.</p>
+    <h3>Это только для кода?</h3>
+    <p>Нет. Позиционирование — универсальный агент: разработка, исследование, API, автоматизация, ассистент.</p>
+    <h3>Почему нет TUI?</h3>
+    <p>Осознанно: минимальный CLI + REPL и браузерный UI. TUI остаётся возможной поверхностью, но не целью.</p>
+    <h3>Где хранятся секреты?</h3>
+    <p>В конфиге провайдера; <code>config show</code> их скрывает, сессии и экспорт редактируются, <code>.env*</code>/ключи защищены always-on.</p>
+    <h3>Можно ли выставить web UI наружу?</h3>
+    <p>Да, с <code>--token</code>, обратным прокси и TLS. Без токена не-loopback bind запрещён.</p>
+
+    <div class="hr"></div>
+    <p class="sub">Нашли неточность или не хватает раздела? Откройте issue в <a href="https://github.com/Alexeykoh/micro-model-agent/issues">репозитории</a>. Исходная документация для разработчиков — в каталоге <code>docs/</code> репозитория.</p>
+
+  </article>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var themeBtn = document.getElementById("themeBtn");
+  themeBtn && themeBtn.addEventListener("click", function () {
+    var light = root.classList.toggle("light");
+    try { localStorage.setItem("mma-lp-theme", light ? "light" : "dark"); } catch (e) {}
+  });
+
+  var menuBtn = document.getElementById("menuBtn");
+  menuBtn && menuBtn.addEventListener("click", function () {
+    var open = document.body.classList.toggle("side-open");
+    menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.querySelectorAll(".side a").forEach(function (a) {
+    a.addEventListener("click", function () {
+      if (window.innerWidth <= 980) {
+        document.body.classList.remove("side-open");
+        menuBtn && menuBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+
+  // Copy buttons for code blocks.
+  document.querySelectorAll("pre").forEach(function (pre) {
+    var btn = document.createElement("button");
+    btn.className = "copy";
+    btn.type = "button";
+    btn.textContent = "копировать";
+    btn.addEventListener("click", function () {
+      var code = pre.querySelector("code");
+      var text = code ? code.textContent : pre.textContent;
+      var done = function (ok) {
+        btn.textContent = ok ? "✓ скопировано" : "не удалось";
+        setTimeout(function () { btn.textContent = "копировать"; }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+      } else {
+        try {
+          var ta = document.createElement("textarea");
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          done(document.execCommand("copy")); ta.remove();
+        } catch (e) { done(false); }
+      }
+    });
+    pre.appendChild(btn);
+  });
+
+  // Search filters the section list; Enter jumps to the first match.
+  var search = document.getElementById("docSearch");
+  var links = Array.prototype.slice.call(document.querySelectorAll(".side a[href^='#']"));
+  function filter() {
+    var q = (search.value || "").trim().toLowerCase();
+    links.forEach(function (a) {
+      a.classList.toggle("hidden", !!q && a.textContent.toLowerCase().indexOf(q) === -1);
+    });
+    document.querySelectorAll(".side h4").forEach(function (h) {
+      var any = false, el = h.nextElementSibling;
+      while (el && el.tagName !== "H4") {
+        if (el.tagName === "A" && !el.classList.contains("hidden")) any = true;
+        el = el.nextElementSibling;
+      }
+      h.classList.toggle("hidden", !!q && !any);
+    });
+  }
+  search && search.addEventListener("input", filter);
+  search && search.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      var first = links.find(function (a) { return !a.classList.contains("hidden"); });
+      if (first) { location.hash = first.getAttribute("href"); first.click(); }
+    }
+    if (e.key === "Escape") { search.value = ""; filter(); search.blur(); }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "/" && document.activeElement !== search && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) {
+      e.preventDefault(); search && search.focus();
+    }
+  });
+
+  // Active section in the sidebar (last heading above the reading line).
+  var byId = {};
+  links.forEach(function (a) { byId[a.getAttribute("href").slice(1)] = a; });
+  var heads = Array.prototype.slice.call(document.querySelectorAll("h2[id]"));
+  var ticking = false;
+  function syncActive() {
+    ticking = false;
+    var current = links[0];
+    heads.forEach(function (h) {
+      if (h.getBoundingClientRect().top <= 140) current = byId[h.id] || current;
+    });
+    links.forEach(function (a) { a.classList.toggle("active", a === current); });
+  }
+  window.addEventListener("scroll", function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(syncActive);
+  }, { passive: true });
+  syncActive();
+})();
+</script>
+</body>
+</html>
