@@ -2302,7 +2302,7 @@ body.light .c-dim { --face-c: var(--panel); }
 
 /* MMART per subagent: row glyph, view header, live grid (top-right). */
 .act .srun-face { flex: 0 0 auto; margin-top: 1px; display: inline-flex; align-items: center; }
-.act .srun-face .mdl { --s: 20px; }
+.act .srun-face .mdl { --s: 24px; }
 .srun-top .srun-face-top { flex: 0 0 auto; align-self: center; display: inline-flex; align-items: center; }
 .srun-top .srun-face-top .mdl { --s: 30px; }
 .srun-grid {

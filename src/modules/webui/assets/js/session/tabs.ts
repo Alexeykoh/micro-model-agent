@@ -281,6 +281,7 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
     });
     loadHistory(tab).then((st) => {
       if (st && st.gone) markTabDead(tab.id);
+      hooks.afterHistory?.(tab.id); // история → строки субагентов + MMART
     });
   }
   syncUrl();

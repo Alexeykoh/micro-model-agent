@@ -173,7 +173,10 @@ start, `warn` on a failed tool, `done`/`error`/`stop` at `end`). The grid is
 mounted on the chat surface, so it is visible both on the parent screen and in
 the run view; it includes runs seeded from `GET /api/sessions/:id/subagents`
 after a reload (newest 9), keeps finished runs, and clicking a cell opens that
-run. Face states are decorative (`aria-hidden`, set by `createFace`), so the
+run. The grid has exactly as many columns as cells (up to 3), so two mascots make
+a two-cell capsule rather than leaving an empty slot. Historical rows are linked
+to their runs in the `afterHistory` hook (`linkSubagentRows`), so they show the
+same MMART and stay clickable after a reload. Face states are decorative (`aria-hidden`, set by `createFace`), so the
 grid button carries the task as its `aria-label`.
 
 ## Security

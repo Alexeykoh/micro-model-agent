@@ -3,6 +3,7 @@
 import { el } from "../dom.js";
 import { t } from "../i18n.js";
 import { categoryOf, labelOf, argText, formatMs } from "../format.js";
+import { createFace } from "../loader.js";
 import { renderMarkdown } from "../../md.js";
 import { api } from "../api.js";
 import { imageCard } from "./image-card.js";
@@ -32,7 +33,16 @@ function renderHistoryAct(
   statusNodes: Map<string, HTMLElement>,
 ): void {
   const line = el("div", "act " + categoryOf(entry.name));
-  line.appendChild(el("span", "g", "◇"));
+  if (entry.name === "subagent" && entry.toolCallId) {
+    // История тоже показывает MMART; `seedSubagentRuns` свяжет строку с
+    // прогоном по toolCallId и выставит фактическое состояние.
+    const slot = el("span", "srun-face");
+    slot.appendChild(createFace("think", "sm"));
+    line.appendChild(slot);
+    line.dataset.toolCallId = String(entry.toolCallId);
+  } else {
+    line.appendChild(el("span", "g", "◇"));
+  }
   line.appendChild(el("span", "lab", labelOf(entry.name)));
   const args = argText(entry.args);
   if (args) {

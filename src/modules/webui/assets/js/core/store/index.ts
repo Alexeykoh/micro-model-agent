@@ -34,6 +34,8 @@ export interface StoreHooks {
    * importing the sidebar, keeping the module DAG acyclic.
    */
   openFileInTree?: ((path: string) => void) | null;
+  /** Лента вкладки отрисована: связать исторические строки субагентов с прогонами. */
+  afterHistory?: ((id: string) => void) | null;
   /** Перед заменой ленты в `#msgs` (закрывает вид субагента, если открыт). */
   beforeFeedMount?: (() => void) | null;
 }

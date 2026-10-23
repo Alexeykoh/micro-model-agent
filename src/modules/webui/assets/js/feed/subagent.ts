@@ -215,6 +215,8 @@ function markRow(sessionId: string, toolCallId: string, runId: string): void {
   if (!row) return;
   row.dataset.runId = runId;
   row.classList.add("srun-link");
+  const face = row.querySelector(".srun-face .mdl") as HTMLElement | null;
+  if (face) setFaceState(face, runFaceState(buf(runId)));
 }
 
 /** Догружает снимки прогонов сессии (после reload/реконнекта или клика). */
@@ -235,6 +237,16 @@ export async function seedSubagentRuns(sessionId: string): Promise<void> {
   }
   if (view && view.sessionId === sessionId) renderAll(view);
   refreshGrid();
+  linkSubagentRows(sessionId);
+}
+
+/** Связывает уже отрисованные строки истории с прогонами (MMART + клик). */
+export function linkSubagentRows(sessionId: string): void {
+  for (const meta of sessionRuns(sessionId)) {
+    const runId = String(meta.runId || "");
+    if (!runId) continue;
+    if (meta.parentToolCallId) markRow(sessionId, String(meta.parentToolCallId), runId);
+  }
 }
 
 /** Клик по строке без runId: ищем прогон по tool call через REST. */
@@ -250,6 +262,7 @@ async function openByToolCall(sessionId: string, toolCallId: string): Promise<vo
 /** Подключает делегированный клик и Esc; звать один раз при старте UI. */
 export function initSubagentView(): void {
   initSubagentGrid(openRun);
+  hooks.afterHistory = (id) => linkSubagentRows(id);
   // Замена ленты вкладки в `#msgs` (open/close/reset) закрывает вид: лента
   // прежней вкладки остаётся своей и не должна переезжать в чужой таб.
   hooks.beforeFeedMount = () => {

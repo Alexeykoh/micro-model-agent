@@ -126,6 +126,8 @@ describe("subagent run view", () => {
     row.click();
     expect(win.document.querySelector(".srun-title")?.textContent).toBe("first");
     expect(win.document.querySelectorAll(".srun-dot").length).toBe(2);
+    const grid = win.document.querySelector(".srun-grid") as HTMLElement;
+    expect(grid.style.gridTemplateColumns).toBe("repeat(2, 28px)");
     const chips = win.document.querySelectorAll(".srun-chip");
     expect(chips.length).toBe(2);
     (chips[1] as HTMLElement).click();
