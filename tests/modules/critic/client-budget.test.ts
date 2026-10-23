@@ -168,6 +168,31 @@ describe("CriticClient budget (§5.8)", () => {
     expect(logs.some((l) => l.includes("call_timeout"))).toBe(true);
   });
 
+  it("bounds a call even when the provider ignores the abort signal", async () => {
+    // Живой случай аудита: поток LM Studio не реагирует на signal и отдаёт
+    // «terminated» только через 83–120 с при timeoutMs=15000. Дедлайн обязан
+    // выигрывать гонку сам, не надеясь на провайдера.
+    const logs: string[] = [];
+    const provider: LLMProvider = {
+      model: "m",
+      contextWindow: 1000,
+      countTokens: () => 0,
+      listModels: async () => [],
+      // eslint-disable-next-line require-yield
+      async *chat() {
+        await new Promise(() => {}); // не слушает signal и не завершается
+        yield { type: "done" as const };
+      },
+    };
+    const client = new CriticClient({ provider, timeoutMs: 40, onDiagnostic: (m) => logs.push(m) });
+    const started = Date.now();
+    expect(await client.verify(bigPack())).toBeNull();
+    expect(Date.now() - started).toBeLessThan(1500);
+    // Причина — таймаут, и она не затёрта вторичным llm_error.
+    expect(logs.filter((l) => l.includes("call_timeout")).length).toBe(1);
+    expect(logs.some((l) => l.includes("llm_error"))).toBe(false);
+  });
+
   it("the default timeout reaches call_timeout, not the provider deadline (W2)", async () => {
     // Предыдущий тест берёт выдуманные 30 мс: он доказывает, что ветка есть,
     // но не то, что она достижима с ДЕФОЛТА. Пока `critic.timeoutMs` равнялся

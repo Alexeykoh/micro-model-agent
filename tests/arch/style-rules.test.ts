@@ -81,6 +81,7 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
   "src/core/bootstrap/agent-phase.ts": { count: 1, reason: "best-effort фоновая операция bootstrap" },
   "src/modules/browser/driver.ts": { count: 7, reason: "teardown браузера (page/context/browser.close) — best-effort" },
   "src/modules/indexer/module.ts": { count: 2, reason: "фоновая перестройка индекса, ошибка видна из других сигналов" },
+  "src/modules/critic/client.ts": { count: 3, reason: "гонка дедлайна: гасим вторичные reject проигравших промисов, причина таймаута уже в critic_degraded" },
   "src/core/agent/turn-run.ts": { count: 1, reason: "фоновая запись, не блокирует ход" },
   "src/tools/mcp-call.ts": { count: 1, reason: "disconnect MCP-клиента при уборке — best-effort" },
   "src/modules/mcp/module.ts": { count: 1, reason: "disconnect MCP-клиента при уборке — best-effort" },

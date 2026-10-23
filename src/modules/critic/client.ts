@@ -58,6 +58,18 @@ const DEFAULT_TIMEOUT_MS = LLM_REQUEST_TIMEOUT_MS;
  */
 export const CRITIC_DEGRADED_PREFIX = "critic_degraded: ";
 
+/**
+ * Таймаут одного вызова критика. Отдельный тип нужен, чтобы вызывающий проход
+ * не перекрывал уже записанную причину своим `llm_error`: «не дождался» и
+ * «провайдер упал» — разные вещи (INV-C4).
+ */
+class CriticCallTimeout extends Error {
+  constructor(readonly budgetMs: number) {
+    super(`critic call exceeded ${budgetMs}ms`);
+    this.name = "CriticCallTimeout";
+  }
+}
+
 /** Раннер одной проверки критика: тул + args → успех и вывод. */
 export interface CriticRunCheck {
   (tool: string, args: Record<string, unknown>): Promise<{ ok: boolean; output: string }>;
@@ -100,7 +112,8 @@ export class CriticClient {
       if (!first || first.status === "ok" || !opts?.runCheck) return first;
       return await this.verifyWithChecks(messages, firstRaw, first, signal, opts.runCheck);
     } catch (err) {
-      this.degrade(`llm_error: ${describe(err)}`);
+      // Причину таймаута уже записал `chat`; перекрывать её `llm_error` нельзя.
+      if (!(err instanceof CriticCallTimeout)) this.degrade(`llm_error: ${describe(err)}`);
       return null;
     }
   }
@@ -124,6 +137,7 @@ export class CriticClient {
   }
 
   private degrade(reason: string): void {
+    // DEBT(critic-degrade-not-in-feed): отказ виден в session.jsonl, но не в ленте web.
     this.opts.onDiagnostic?.(`${CRITIC_DEGRADED_PREFIX}${reason}`);
   }
 
@@ -165,7 +179,9 @@ export class CriticClient {
       return final ?? first;
     } catch (err) {
       // Fail-open к вердикту прохода 1 — но обрыв виден в логе.
-      this.degrade(`checks_loop_failed: ${describe(err)}`);
+      if (!(err instanceof CriticCallTimeout)) {
+        this.degrade(`checks_loop_failed: ${describe(err)}`);
+      }
       return first;
     }
   }
@@ -187,30 +203,55 @@ export class CriticClient {
 
   /** Один LLM-вызов под собственным таймаутом + внешней отменой. */
   private async chat(messages: Message[], signal?: AbortSignal): Promise<string> {
+    const budget = this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Дедлайн — отдельный промис, а не только abort: провайдер, который не
+    // слушает signal (живой случай аудита — поток LM Studio «terminated» через
+    // 83–120 с при timeoutMs=15000), иначе удерживает вызов сколько захочет.
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        reject(new CriticCallTimeout(budget));
+      }, budget);
+    });
+    deadline.catch(() => {}); // проигравший гонку reject не должен стать unhandled
     const onAbort = () => controller.abort();
     signal?.addEventListener("abort", onAbort);
     if (signal?.aborted) controller.abort();
-    try {
-      let text = "";
-      for await (const chunk of this.opts.provider.chat(messages, undefined, controller.signal, {
+    const iterator = this.opts
+      .provider.chat(messages, undefined, controller.signal, {
         maxTokens: this.effectiveMaxTokens(),
         reasoningEffort: "none",
-      })) {
+      })
+      [Symbol.asyncIterator]();
+    try {
+      let text = "";
+      for (;;) {
+        const step = iterator.next();
+        step.catch(() => {}); // после таймаута этот промис уже никому не нужен
+        const next = await Promise.race([step, deadline]);
+        if (next.done) break;
+        const chunk = next.value;
         if (chunk.type === "text" && chunk.content) text += chunk.content;
       }
       return text;
     } catch (err) {
-      // Таймер выстрелил: abort роняет for-await, поэтому причину снимаем здесь —
-      // пост-цикловый check был недостижим, и таймаут маскировался под llm_error.
-      if (controller.signal.aborted && !signal?.aborted) {
-        this.degrade(`call_timeout (${this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms)`);
+      // Причину снимаем здесь: abort роняет for-await, а пост-цикловый check
+      // был недостижим, и таймаут маскировался под llm_error.
+      if (timedOut && !signal?.aborted) {
+        this.degrade(`call_timeout (${budget}ms)`);
+        throw err instanceof CriticCallTimeout ? err : new CriticCallTimeout(budget);
       }
       throw err;
     } finally {
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
+      // Погасить поток, оставшийся висеть после таймаута/отмены.
+      const closed = iterator.return?.();
+      if (closed) closed.catch(() => {});
     }
   }
 }
