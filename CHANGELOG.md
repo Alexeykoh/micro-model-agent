@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   шапке открытого прогона — крупнее, а в правом верхнем углу — сетка маскотов
   субагентов активной вкладки: видна и в чате, и в прогоне, включает прогоны
   прошлых ходов после reload (до 9 ячеек), клик по маскоту открывает прогон.
+  Сетка сжимается по числу ячеек (2 маскота = 2 колонки, без пустого слота),
+  а строки истории после reload тоже получают MMART своего прогона.
   Спека: `docs/specs/2026-10-23-subagent-run-view-design.md`.
   Гварды: `tests/tools/subagent-runs-events.test.ts`,
   `tests/webui-subagent-runs-store.test.ts`,

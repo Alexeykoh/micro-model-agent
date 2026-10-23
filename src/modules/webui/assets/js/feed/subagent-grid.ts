@@ -57,6 +57,9 @@ export function renderGrid(): void {
     .slice(-GRID_MAX);
   host.hidden = ids.length === 0;
   if (ids.length === 0) return;
+  // Колонок ровно столько, сколько ячеек (до 3): при двух маскотах капсула
+  // сжимается до двух колонок, а не оставляет пустой третий слот.
+  host.style.gridTemplateColumns = `repeat(${Math.min(ids.length, 3)}, 28px)`;
   for (const runId of ids) {
     const meta = buf(runId).meta;
     const cell = el("button", "srun-dot" + (tabState.subagentRunId === runId ? " on" : ""));
