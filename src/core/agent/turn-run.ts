@@ -10,7 +10,7 @@ import type { AgentResult, OnMeta, OnPhase, PromptBlock, ToolEvent } from "../ty
 import type { SessionLogger } from "../session-logger";
 import { SessionLogger as SessionLoggerCtor } from "../session-logger";
 import { seedToolTags } from "../../tools/auto-tags";
-import { deriveSessionName, generateSessionTitle, type TitleChat } from "../../modules/session/auto-name";
+import { deriveSessionName, generateSessionTitle, TITLE_MAX_TOKENS, type TitleChat } from "../../modules/session/auto-name";
 import { ensureSessionStart } from "./session-start";import type { SystemPromptBuild } from "./prompt-phase";
 
 /** Мутабельный вид `Agent`, которым владеет координатор хода. */
@@ -124,7 +124,7 @@ export async function runTurn(
         const chat: TitleChat = async (prompt, signal) => {
           let text = "";
           for await (const chunk of llmProvider.chat([{ role: "user", content: prompt }], undefined, signal, {
-            maxTokens: 48,
+            maxTokens: TITLE_MAX_TOKENS,
             reasoningEffort: "none",
             sessionId: meta?.id,
           })) {
@@ -132,7 +132,12 @@ export async function runTurn(
           }
           return text;
         };
-        void generateSessionTitle(input, chat)
+        void generateSessionTitle(
+          input,
+          chat,
+          undefined,
+          (reason) => logger.warn(`session title not generated: ${reason}`),
+        )
           .then((title) => {
             if (!title) return;
             const cur = sessionManager.getActiveMeta();
