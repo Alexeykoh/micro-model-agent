@@ -113,12 +113,8 @@ function renderActiveState(): void {
   const sid = host.sessionId || (tab && tab.id) || null;
   session.activeSessionId = sid;
   if (!tabState.tabs.length) showEmptyFeed();
-  // Живой план приходит событием `plan` и кладётся в `tab.livePlan`: снапшот
-  // `state` может нести `plan: null`, если `getActivePlan()` разрешился в другой
-  // ExecutionModule (runner vs shared). Приоритет у события — иначе сайдбар
-  // пуст, пока в ленте висит живой план-блок.
-  renderPlan(tab && tab.livePlan ? tab.livePlan : host.plan);
-  railPlan(session.busy && host ? (tab && tab.livePlan ? tab.livePlan : host.plan) : null);
+  renderPlan(tab?.livePlan ?? host.plan); // живой план (событие plan) важнее снапшота
+  railPlan(session.busy && host ? (tab?.livePlan ?? host.plan) : null);
   renderUsage(host);
   // Late provider auto-detect may change the effective window after boot —
   // the snapshot carries it so the topbar follows without a config re-fetch.

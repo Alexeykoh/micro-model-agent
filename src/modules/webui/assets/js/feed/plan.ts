@@ -1,6 +1,6 @@
 // Plan rendering: the sidebar plan list (`renderPlan`) and the feed plan card
 // (`onPlan`). Extracted from `feed.js`; re-exported there.
-import { planEl, planCountEl, el } from "../dom.js";
+import { el } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
 import { feed, tabs as tabState } from "../store.js";
 import type { Dict } from "../core/store/types.js";
@@ -17,6 +17,12 @@ function planStepMark(step: Dict, isCurrent: boolean): { status: string; glyph: 
 }
 
 export function renderPlan(plan: Dict | null | undefined): void {
+  // Узлы ищем на каждом рендере: сайдбар монтируется вместе с документом, и
+  // захват ссылки при импорте ломается, если разметка пришла позже (тесты,
+  // пересборка панели).
+  const planEl = document.getElementById("plan");
+  const planCountEl = document.getElementById("planCount");
+  if (!planEl || !planCountEl) return;
   // The sidebar polls `/api/state` every 2s; skip a rebuild (and the scroll
   // reset it would cause) when the snapshot is unchanged.
   const sig = JSON.stringify([plan, I18N.locale]);
