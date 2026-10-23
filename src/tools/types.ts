@@ -138,6 +138,11 @@ export interface ToolContext {
    */
   activeCallId?: string;
   /**
+   * Abort-сигнал текущего вызова (ставит `ToolExecutor.execute`). Субагент
+   * подписывается на него, чтобы стоп родительского хода останавливал и его.
+   */
+  abortSignal?: AbortSignal;
+  /**
    * Общий мутабельный массив тегов, включённых on-demand через `enable_tools`.
    * Цикл агента перечитывает его каждую итерацию для пересчёта видимого LLM
    * набора. Пустой при выключенном on-demand — getAllForLLM отдаёт всё (legacy).
@@ -179,6 +184,8 @@ export interface ToolContext {
       onPhase?: (phase: import("../core/types").AgentPhase) => void,
       onReasoning?: (reasoning: string) => void,
     ): Promise<import("../core/types").AgentResult>;
+    /** Остановка прогона (реальный Agent); в тестовых моках опционален. */
+    shutdown?(): void;
   };
   /**
    * Менеджер сессий — метаданные активной сессии для тулов.

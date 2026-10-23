@@ -68,4 +68,24 @@ describe("GET /api/sessions/:id/subagents", () => {
       expect((await getJson(base, "/api/sessions/S1/subagents")).status).toBe(503);
     });
   });
+
+  it("stops a running run via POST interrupt", async () => {
+    const s = withSession();
+    let stopped = 0;
+    s.subagentRuns.sink(() => {}).registerInterrupt?.("r1", () => {
+      stopped++;
+    });
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/sessions/S1/subagents/r1/interrupt`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(stopped).toBe(1);
+      const missing = await doFetch(`${base}/api/sessions/S1/subagents/nope/interrupt`, {
+        method: "POST",
+      });
+      expect(missing.status).toBe(404);
+    });
+  });
 });

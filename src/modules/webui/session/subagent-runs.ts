@@ -5,14 +5,23 @@
 // `ToolContext.subagentRuns` sink; this store scrubs/caps the stream, keeps the
 // last runs per session and broadcasts each event as `subagent` SSE. Parent
 // tool row → run mapping uses `parentToolCallId` from the executor.
-import { redactContextSecrets } from "../../../core/api";
-import { sanitizeOutputPlain } from "../../../ui/sanitize-output";
-import type {
-  SubagentRunEnd,
-  SubagentRunEvent,
-  SubagentRunUsage,
-} from "../../../tools/subagent-runs";
+import type { SubagentRunEnd, SubagentRunEvent } from "../../../tools/subagent-runs";
 import { scrubToolArgs } from "./scrub";
+import {
+  SUBAGENT_RUNS_PER_SESSION,
+  SUBAGENT_RUN_MAX_EVENTS,
+  SUBAGENT_RUN_MAX_TEXT_CHARS,
+  cleanRunText,
+  clipRunOutput,
+  type SubagentRunSnapshot,
+  type SubagentWireEvent,
+} from "./subagent-run-caps";
+export {
+  SUBAGENT_RUNS_PER_SESSION,
+  SUBAGENT_RUN_MAX_EVENTS,
+  SUBAGENT_RUN_MAX_TEXT_CHARS,
+  SUBAGENT_TOOL_OUTPUT_CAP,
+} from "./subagent-run-caps";
 
 /** Исходящее SSE-событие прогона (структурно совпадает с `SseEvent`). */
 export type SubagentWireOut = { type: string; ts: number; [k: string]: unknown };
@@ -20,41 +29,8 @@ export type SubagentWireOut = { type: string; ts: number; [k: string]: unknown }
 /** Куда стор отдаёт готовое SSE-событие (веб-слой передаёт `broadcast`). */
 export type SubagentBroadcast = (event: SubagentWireOut) => void;
 
-/** Сколько прогонов сессии держим в памяти (старые завершённые вытесняются). */
-export const SUBAGENT_RUNS_PER_SESSION = 12;
-/** Потолок событий одного прогона. */
-export const SUBAGENT_RUN_MAX_EVENTS = 1000;
-/** Потолок суммарного текста прогона (текст + рассуждения + note). */
-export const SUBAGENT_RUN_MAX_TEXT_CHARS = 120_000;
-/** Потолок тела одного тула в прогоне. */
-export const SUBAGENT_TOOL_OUTPUT_CAP = 4000;
 /** Окно коалесцирования чанков текста/рассуждений (как у основного forwarder). */
 const COALESCE_MS = 50;
-
-/** Статус прогона на сервере (`running` до `end`). */
-export type StoredRunStatus = "running" | "done" | "failed" | "interrupted";
-
-/** Событие прогона на проводе: исходное событие + серверный `seq`. */
-export type SubagentWireEvent = SubagentRunEvent & { seq: number };
-
-/** Снимок прогона для REST/SSE (без внутренних буферов и таймеров). */
-export interface SubagentRunSnapshot {
-  runId: string;
-  parentSessionId?: string;
-  parentToolCallId?: string;
-  depth: number;
-  task: string;
-  agent?: string;
-  model?: string;
-  startedAt: number;
-  endedAt?: number;
-  status: StoredRunStatus;
-  output?: string;
-  error?: string;
-  iterations?: number;
-  usage?: SubagentRunUsage;
-  events: SubagentWireEvent[];
-}
 
 /** Внутренняя запись прогона. */
 interface StoredRun extends SubagentRunSnapshot {
@@ -65,25 +41,34 @@ interface StoredRun extends SubagentRunSnapshot {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-/** Чистит пользовательский текст/вывод тем же конвейером, что и основной фид. */
-function clean(text: string | undefined): string | undefined {
-  return text === undefined ? undefined : sanitizeOutputPlain(redactContextSecrets(text));
-}
-
-/** Обрезает вывод тула с честным маркером (кап ниже основного фида — прогоны мелкие). */
-function clipOutput(text: string): string {
-  if (text.length <= SUBAGENT_TOOL_OUTPUT_CAP) return text;
-  return `${text.slice(0, SUBAGENT_TOOL_OUTPUT_CAP)}\n… [truncated from ${text.length} chars]`;
-}
-
 /** Хранилище прогонов субагентов в памяти процесса. */
 export class SubagentRunStore {
   private runs = new Map<string, StoredRun>();
   private bySession = new Map<string, string[]>();
+  /** Ручки остановки прогонов (ставит тул `subagent`, зовёт API/кнопка). */
+  private interrupts = new Map<string, () => void>();
 
   /** Приёмник для `ToolContext.subagentRuns` (замыкает broadcast и store). */
   sink(send: SubagentBroadcast) {
-    return { emit: (event: SubagentRunEvent): void => this.ingest(event, send) };
+    return {
+      emit: (event: SubagentRunEvent): void => this.ingest(event, send),
+      registerInterrupt: (runId: string, interrupt: () => void): void => {
+        this.interrupts.set(runId, interrupt);
+      },
+      releaseInterrupt: (runId: string): void => {
+        this.interrupts.delete(runId);
+      },
+    };
+  }
+
+  /** Останавливает прогон кнопкой веба; `not_running` — уже завершён. */
+  interrupt(sessionId: string, runId: string): "ok" | "not_found" | "not_running" {
+    const run = this.runs.get(runId);
+    if (!run || run.parentSessionId !== sessionId) return "not_found";
+    const stop = this.interrupts.get(runId);
+    if (!stop) return "not_running";
+    stop();
+    return "ok";
   }
 
   /** Принимает событие прогона: нормализует, хранит, рассылает. */
@@ -106,7 +91,7 @@ export class SubagentRunStore {
         break;
       case "note":
         this.flush(run, send);
-        this.push(run, { ...event, chunk: clean(event.chunk) ?? "" }, send);
+        this.push(run, { ...event, chunk: cleanRunText(event.chunk) ?? "" }, send);
         break;
       case "tool_start":
         this.flush(run, send);
@@ -114,7 +99,7 @@ export class SubagentRunStore {
         break;
       case "tool_end": {
         this.flush(run, send);
-        const output = event.output === undefined ? undefined : clean(clipOutput(event.output));
+        const output = event.output === undefined ? undefined : cleanRunText(clipRunOutput(event.output));
         this.push(run, { ...event, ...(output !== undefined ? { output } : {}) }, send);
         break;
       }
@@ -159,7 +144,7 @@ export class SubagentRunStore {
       parentSessionId: event.parentSessionId,
       parentToolCallId: event.parentToolCallId,
       depth: typeof event.depth === "number" ? event.depth : 1,
-      task: clean(event.task) ?? "",
+      task: cleanRunText(event.task) ?? "",
       agent: event.agent,
       model: event.model,
       startedAt: typeof event.at === "number" ? event.at : Date.now(),
@@ -186,7 +171,7 @@ export class SubagentRunStore {
     event: Extract<SubagentRunEvent, { kind: "text" | "reasoning" }>,
     send: SubagentBroadcast | undefined,
   ): void {
-    const chunk = clean(event.chunk);
+    const chunk = cleanRunText(event.chunk);
     if (!chunk) return;
     const remaining = SUBAGENT_RUN_MAX_TEXT_CHARS - run.textChars;
     if (remaining <= 0) return;
@@ -222,8 +207,8 @@ export class SubagentRunStore {
     run.status = event.status;
     run.endedAt = Date.now();
     run.iterations = event.iterations;
-    run.output = clean(event.output);
-    run.error = clean(event.error);
+    run.output = cleanRunText(event.output);
+    run.error = cleanRunText(event.error);
     run.usage = event.usage;
     this.push(run, event, send);
   }
@@ -278,6 +263,7 @@ export class SubagentRunStore {
     const run = this.runs.get(runId);
     if (!run) return;
     if (run.timer) clearTimeout(run.timer);
+    this.interrupts.delete(runId);
     this.runs.delete(runId);
     const key = run.parentSessionId ?? "";
     const ids = this.bySession.get(key);
@@ -288,5 +274,7 @@ export class SubagentRunStore {
     }
   }
 }
+
+
 
 

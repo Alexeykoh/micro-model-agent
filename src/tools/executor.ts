@@ -292,6 +292,7 @@ export class ToolExecutor {
     const memoHit = tool.cacheable ? this.memoGet(call.name, call.arguments) : undefined;
     try {
       this.ctx.activeCallId = call.id;
+      this.ctx.abortSignal = signal;
       if (tool.interactive) {
         // Интерактивные тулы ждут ввода — без таймаута.
         result = memoHit ?? (await tool.handler(this.ctx, call.arguments));

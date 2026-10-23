@@ -57,10 +57,20 @@ parent `ToolExecutor`/`SessionLogger` handles. The fix must therefore add a
 subagentRuns?: SubagentRunSink;
 export interface SubagentRunSink {
   emit(event: SubagentRunEvent): void;
+  /** Опционально: ручка остановки прогона (кнопка веба). */
+  registerInterrupt?(runId: string, interrupt: () => void): void;
+  releaseInterrupt?(runId: string): void;
 }
 ```
 
 Hosts that do not set it (CLI, service, tests) are unaffected.
+
+### 1b. `ToolContext.abortSignal` (additive)
+
+`ToolExecutor.execute` puts the current call's `AbortSignal` into the context
+before invoking the handler. `runSubagent` subscribes to it and calls
+`subAgent.shutdown()`, so stopping the parent turn also stops its subagents
+(including nested ones, because each link carries its own signal).
 
 ### 2. `SubagentRunEvent` (new, `src/tools/subagent-runs.ts`)
 
@@ -94,12 +104,17 @@ is a per-run monotonic counter assigned by the server. The client routes by
 `sessionId`, merges by `seq`, and ignores unknown event kinds.
 
 ### 5. `GET /api/sessions/:id/subagents` (new)
-
 - `200 { runs: RunSnapshot[] }` — runs of that session, newest last.
 - `?toolCallId=<id>` — filter used when a row is clicked before the live map is
   filled.
 - `404` for a foreign/unknown session; `503` without a session manager.
 - Same auth/same-origin as every other API route.
+
+### 5b. `POST /api/sessions/:id/subagents/:runId/interrupt` (new)
+
+Stops one run: `200 {ok:true}`, `404` for an unknown/foreign session or run,
+`409 {error:"not_running"}` when the run already finished. The run closes with
+`end.status = "interrupted"` through the normal event stream.
 
 `RunSnapshot` = metadata (`runId`, `parentToolCallId`, `task`, `agent`, `model`,
 `startedAt`, `endedAt`, `status`, `output?`, `error?`, `iterations?`) plus the
@@ -159,7 +174,11 @@ closes the run.
   first line — same canon as the main feed), `end` as a metric/warn line.
 - While the view is open: composer and rail are hidden (sub-agents cannot be
   prompted), `Escape` closes, and parent-feed appends must not scroll the view
-  (`activeFeed()` guard).
+  (`activeFeed()` guard). The header (back link, mascot, status, stop button,
+  chips) lives in a sticky `.srun-head`, so switching or leaving stays one click
+  away at any scroll position.
+- The header's `■` button calls the per-run interrupt route; a run that is
+  stopping stays disabled until its `end` event hides the button.
 - Switching tabs/closing the tab closes the view and restores that tab's feed.
 
 ### MMART per run
