@@ -244,3 +244,24 @@ pre:hover .copy, pre:focus-within .copy { opacity: 1; }
   a { color: #000; }
   pre { white-space: pre-wrap; }
 }
+
+/* Console register (shared with the landing page via console.css):
+   docs.css keeps its own tokens for code/link colours. */
+html.console {
+  --code-bg: #0b0b0c;
+  --panel-2: #131314;
+  --link: #d0cecc;
+  --faint: #6a6666;
+  --warn: #e8c46a;
+  --err: #f0837a;
+}
+html.console.light {
+  --code-bg: #f2f2ee;
+  --panel-2: #ecece7;
+  --link: #1b1b19;
+  --faint: #8a8a84;
+  --warn: #9a6700;
+  --err: #cf222e;
+}
+html.console .brand .dot { background: var(--accent); color: var(--bg); }
+html.console .callout { border-left-width: 3px; }
