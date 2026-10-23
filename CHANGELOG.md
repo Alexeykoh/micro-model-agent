@@ -4,6 +4,38 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-10-23
+
+### Added
+
+- **Прогресс-вотчдог субагентов и отменяемые таймауты.** Медленные, но продуктивные
+  прогоны больше не режутся на 180-й секунде: `subagent.timeoutMs` (default 180000)
+  теперь **idle-таймаут** (нет ни одного события: текст, рассуждение, тул, фаза), а новый
+  `subagent.maxDurationMs` (default 1800000, 30 мин) задаёт жёсткий потолок. На
+  срабатывании вызывается `subAgent.shutdown()`, observer получает `end` со статусом
+  `failed` и локализованной причиной («нет активности N с» / «превышен максимум N мин»),
+  а родитель — actionable-ошибку вместо generic timeout.
+- **Таймаут executor'а гасит ребёнка.** `ctx.cleanup` субагента теперь выполняет
+  `stopSubAgent() + restoreScope()`, поэтому backstop (`maxDurationMs + 60 с`) не
+  оставляет осиротевший прогон, жгущий токены. `subagentTool.timeoutMs` стал этим
+  backstop'ом.
+- Новые ключи конфига в web-settings и i18n: `subagent.maxDurationMs`, обновлённые
+  описания `subagent.timeoutMs`; новые строки `tool.subagent_idle_timeout`,
+  `tool.subagent_max_duration`.
+- Спека: `docs/specs/2026-10-23-subagent-progress-watchdog-design.md`.
+
+### Fixed
+
+- **Расхождение «tool timeout» и статуса прогона.** После таймаута дочерний агент
+  продолжал работать, а в сетке мог выглядеть завершённым. Теперь любой таймаут
+  останавливает ребёнка и закрывает прогон ровно один раз.
+
+### Tests
+
+- `tests/tools/subagent-runs-events.test.ts`: idle-таймаут, жёсткий максимум,
+  отмена ребёнка через `ctx.cleanup`.
+- `tests/subagent-tool.test.ts`: executor-backstop считается от `maxDurationMs`.
+
 ## [0.11.2] - 2026-10-23
 
 ### Fixed

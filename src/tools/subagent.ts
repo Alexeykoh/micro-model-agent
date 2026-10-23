@@ -16,7 +16,8 @@ export const subagentTool: ToolDefinition = {
   // Несколько subagent-вызовов одного хода выполняются конкурентно
   // (ToolBatchExecutor запускает их через fork'и, см. tool-batch.ts).
   parallelizable: true,
-  timeoutMs: (ctx) => ctx.config?.subagent?.timeoutMs ?? 180000,
+  // Executor — только страховка: внутренний watchdog гасит по idle/максимуму.
+  timeoutMs: (ctx) => (ctx.config?.subagent?.maxDurationMs ?? 1800000) + 60000,
   parameters: {
     type: "object",
     properties: {

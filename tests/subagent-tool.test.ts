@@ -114,11 +114,18 @@ describe("subagent tool defensive guard", () => {
     expect(String(result.output)).not.toContain("No tools match");
   });
 
-  it("uses subagent.timeoutMs from config (functional timeout)", () => {
+  it("uses subagent.maxDurationMs as the executor backstop", () => {
     const tm = subagentTool.timeoutMs;
     expect(typeof tm).toBe("function");
-    const resolved = (tm as (ctx: unknown) => number)({ config: { subagent: { timeoutMs: 45000 } } });
-    expect(resolved).toBe(45000);
+    const resolved = (tm as (ctx: unknown) => number)({
+      config: { subagent: { timeoutMs: 45000, maxDurationMs: 600000 } },
+    });
+    expect(resolved).toBe(660000);
+  });
+
+  it("falls back to the default max duration for the executor backstop", () => {
+    const tm = subagentTool.timeoutMs as (ctx: unknown) => number;
+    expect(tm({ config: {} })).toBe(1860000);
   });
 
   it("increments recursion depth while the sub-agent runs and restores it after", async () => {
