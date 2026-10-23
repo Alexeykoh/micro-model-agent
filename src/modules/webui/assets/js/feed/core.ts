@@ -257,7 +257,6 @@ export function scrollToBottom(smooth?: boolean): void {
 export function isFollowing(): boolean {
   return follow;
 }
-
 /** Монтирует ленту вкладки в `#msgs`, закрывая открытый вид субагента. */
 export function mountFeed(feed: HTMLElement | null): void {
   hooks.beforeFeedMount?.();
