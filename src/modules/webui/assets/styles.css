@@ -775,8 +775,10 @@ body.light .sel > button { border: 1px solid var(--border); }
 /* quiet-mode run folding fades instead of snapping away */
 .fold-out { opacity: 0; transition: opacity .15s ease-out; }
 
-/* streaming caret at the tail of live markdown */
-.md.streaming::after {
+/* streaming caret at the tail of live markdown: it rides on the live tail node
+   (`.md-tail`), which sits inside the block smd will extend — so the caret is
+   right after the pending text instead of after `</p>`. */
+.md.streaming .md-tail::after {
   content: "▌"; color: var(--accent); margin-left: 2px;
   animation: blink 1s steps(2, start) infinite;
 }

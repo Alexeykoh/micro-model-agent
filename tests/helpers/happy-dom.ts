@@ -13,6 +13,7 @@ const DOM_GLOBALS = [
   "Event",
   "KeyboardEvent",
   "navigator",
+  "DOMParser",
 ] as const;
 
 /** Points the app globals at a fresh happy-dom Window; returns it for tests. */
