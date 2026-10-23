@@ -285,7 +285,15 @@ body[data-font="large"] { font-size: 17px; }
 .think-h .dur, .think-h .tog { color: var(--dim-c); }
 /* Фактическая ступень reasoning текущей итерации (INV-R9): короткий токен
    рядом с «Думаю», чтобы уровень был виден без раскрытия блока. */
-.think-h .lvl { color: var(--think); font-variant-numeric: tabular-nums; }
+.think-h .lvl {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px 1px 5px; border: 1px solid var(--border-2); border-radius: 999px;
+  background: var(--hover-bg-2);
+  color: var(--think); font-size: 11px; line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.think-h .lvl .lvl-ico { width: 12px; height: 12px; flex: 0 0 auto; }
+.think.live .lvl .lvl-ico { filter: drop-shadow(0 0 3px currentColor); }
 .think-h .tog { display: inline-flex; align-items: center; gap: 4px; }
 .think-h .tog .svg-icon { width: 12px; height: 12px; }
 .think-h .tog:hover { color: var(--dim-a); }

@@ -4,6 +4,15 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.2] - 2026-10-23
+
+### Fixed
+
+- **Ступень рассуждений в шапке think-блока оформлена бейджем.** Голый текст
+  (`low`/`high`…) заменён скруглённым бейджем с иконкой лампочки (SVG `bulb`,
+  подсветка во время live-размышления); `title` по-прежнему показывает источник
+  решения. Гвард: `tests/webui-feed-lifecycle-dom.test.ts` (иконка + текст).
+
 ## [0.11.1] - 2026-10-23
 
 ### Fixed
