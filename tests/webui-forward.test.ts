@@ -84,6 +84,18 @@ describe("webui forwarder", () => {
     expect(seen[0].chunk).toBe("why");
   });
 
+  it("carries the applied reasoning level with the chunk (INV-R9)", () => {
+    vi.useFakeTimers();
+    const s = createWebUiState();
+    const seen: SseEvent[] = [];
+    const fwd = makeForwarder(s, (ev) => seen.push(ev));
+    fwd.onReasoning("thinking", { level: "high", source: "policy" });
+    vi.advanceTimersByTime(350);
+    expect(seen[0].type).toBe("reasoning");
+    expect(seen[0].level).toBe("high");
+    expect(seen[0].source).toBe("policy");
+  });
+
   it("strips ANSI escape codes from streamed meta and text", () => {
     vi.useFakeTimers();
     const s = createWebUiState();

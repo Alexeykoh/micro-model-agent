@@ -7,6 +7,8 @@ import { buildReasoningView } from "../src/modules/webui/settings/reasoning-view
 import {
   setCachedProbeResult,
   resetProbeCache,
+  cacheKey,
+  rememberReasoningMechanism,
 } from "../src/modules/reasoning/probe";
 import { createWebUiState } from "../src/modules/webui/state";
 import { withServer, doFetch } from "./helpers/webui-server";
@@ -62,15 +64,33 @@ describe("buildReasoningView", () => {
     expect(view.strategy).toBe("prompt-tag");
   });
 
-  it("reads the cached probe verdict for the active baseUrl|model", () => {
+  it("reads the cached probe verdict for the active baseUrl|model|mechanism", () => {
     const config = testConfig();
     config.provider.type = "openai";
     config.provider.baseUrl = "https://api.openai.com/v1";
     config.model = "gpt-5-mini";
-    setCachedProbeResult("https://api.openai.com/v1|gpt-5-mini", true);
+    const key = cacheKey("https://api.openai.com/v1", "gpt-5-mini", "openai-effort", false);
+    setCachedProbeResult(key, true);
     expect(buildReasoningView(config).supported).toBe(true);
-    setCachedProbeResult("https://api.openai.com/v1|gpt-5-mini", false);
+    setCachedProbeResult(key, false);
     expect(buildReasoningView(config).supported).toBe(false);
+  });
+
+  it("uses the mechanism the agent actually resolved, not just the preset (INV-R8)", () => {
+    const config = testConfig();
+    config.provider.type = "lmstudio";
+    config.provider.baseUrl = "http://localhost:1234/v1";
+    config.model = "qwen/qwen3.5-9b";
+    const presetOnly = buildReasoningView(config);
+    expect(presetOnly.strategy).toBe("prompt-tag");
+
+    rememberReasoningMechanism("http://localhost:1234/v1", "qwen/qwen3.5-9b", {
+      strategy: "openai-effort",
+      reasoningOff: true,
+    });
+    const withAgent = buildReasoningView(config);
+    expect(withAgent.strategy).toBe("openai-effort");
+    expect(withAgent.reasoningOff).toBe(true);
   });
 
   it("reports the configured reasoning mode", () => {
@@ -96,6 +116,7 @@ describe("GET /api/models reasoning shape", () => {
       expect(body.models).toEqual(["gpt-5-mini"]);
       expect(body.reasoning).toEqual({
         strategy: "openai-effort",
+        reasoningOff: false,
         supported: null,
         mode: "auto",
       });

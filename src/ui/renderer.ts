@@ -398,14 +398,14 @@ export class Renderer {
     this.thoughtHeaderPrinted = true;
   }
 
-  /** Модель грузится/генерирует — фиксируем старт. */
-  thinkingStart(): void {
+  /** Модель грузится/генерирует; `info.level` — фактическая ступень (INV-R9). */
+  thinkingStart(info?: { level?: string; source?: string }): void {
     this.flushRecon();
     this.thoughtStarted = true;
     this.thoughtStartMs = Date.now();
     this.thoughtHeaderPrinted = false;
     this.thinkingLabel = this.nextThinkingLabel();
-    this.spinner.start(t("ui.thinking"));
+    this.spinner.start(info?.level ? `${t("ui.thinking")} · ${info.level}` : t("ui.thinking"));
   }
 
   /**

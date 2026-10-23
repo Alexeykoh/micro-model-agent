@@ -1,14 +1,28 @@
-// Проба поддержки reasoning: проверяет, уважает ли бэкенд механизм effort, кэш на 24ч.
+// Проба поддержки reasoning: проверяет, уважает ли бэкенд механизм effort,
+// кэш привязан к механизму (стратегия+off-switch); плюс — 24ч, минус — 1ч.
 import type { LLMProvider, Message } from "../../llm/provider";
 import type { ReasoningLevel, ReasoningStrategy } from "../../config/types";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { globalMmaDir } from "../../config/paths";
 import { readEnv } from "../../config/env";
-import { REASONING_CACHE_TTL_MS as CACHE_TTL_MS } from "../../config/timeouts";
+import {
+  REASONING_CACHE_TTL_MS as CACHE_TTL_MS,
+  REASONING_NEGATIVE_CACHE_TTL_MS as NEGATIVE_CACHE_TTL_MS,
+} from "../../config/timeouts";
 
+/**
+ * Промпт пробы «включено». Тривиальный `Reply with exactly: ok` не провоцирует
+ * рассуждение: модель вправе ответить сразу, и проба ложно решает, что
+ * механизм инертен (INV-R6). Многошаговый вопрос делает появление
+ * reasoning-чанков ожидаемым у thinking-модели.
+ */
 const PROBE_MESSAGES: Message[] = [
-  { role: "user", content: "Reply with exactly: ok" },
+  {
+    role: "user",
+    content:
+      "Compute 17 * 23 step by step. Show your reasoning, then reply with exactly: ok",
+  },
 ];
 
 /** Запись дискового кэша. */
@@ -25,6 +39,35 @@ function cachePath(): string {
 
 /** In-memory L1-кэш (быстрый путь в пределах процесса). */
 const memCache = new Map<string, { result: boolean; ts: number }>();
+
+/** Механизм, с которым реально работал агент для пары baseUrl|model (INV-R8). */
+export interface RememberedReasoningMechanism {
+  strategy: ReasoningStrategy;
+  reasoningOff: boolean;
+}
+
+const mechanismCache = new Map<string, RememberedReasoningMechanism>();
+
+function mechanismKey(baseUrl: string, model: string): string {
+  return `${baseUrl}|${model}`;
+}
+
+/** Запоминает резолвнутый механизм — UI читает его вместо угадывания по пресету. */
+export function rememberReasoningMechanism(
+  baseUrl: string,
+  model: string,
+  mechanism: RememberedReasoningMechanism,
+): void {
+  mechanismCache.set(mechanismKey(baseUrl, model), mechanism);
+}
+
+/** Механизм, резолвнутый агентом в этом процессе, либо `undefined`. */
+export function getRememberedReasoningMechanism(
+  baseUrl: string,
+  model: string,
+): RememberedReasoningMechanism | undefined {
+  return mechanismCache.get(mechanismKey(baseUrl, model));
+}
 
 /**
  * Проверяет, уважает ли бэкенд механизм reasoning effort, ДВУМЯ независимыми
@@ -76,19 +119,29 @@ async function countReasoningChars(
   return chars;
 }
 
-/** Ключ кэша пробы: baseUrl + модель. */
-export function cacheKey(baseUrl: string, model: string): string {
-  return `${baseUrl}|${model}`;
+/**
+ * Ключ кэша пробы: эндпоинт + модель + механизм. Стратегия и наличие
+ * off-switch — часть механизма (INV-R6): вердикт, снятый для `prompt-tag`,
+ * недействителен для `openai-effort`, даже если пара baseUrl|model та же.
+ */
+export function cacheKey(
+  baseUrl: string,
+  model: string,
+  strategy: ReasoningStrategy = "none",
+  reasoningOff = false,
+): string {
+  return `${baseUrl}|${model}|${strategy}|${reasoningOff ? "off" : "nooff"}`;
 }
 
 /**
  * Читает кэшированный результат пробы. Сначала память, потом диск.
- * Возвращает `undefined` при промахе или протухании (>24ч).
+ * Возвращает `undefined` при промахе или протухании: положительный вердикт
+ * живёт 24 ч, отрицательный — час (INV-R6).
  */
 export function getCachedProbeResult(key: string): boolean | undefined {
   // L1: память
   const mem = memCache.get(key);
-  if (mem && Date.now() - mem.ts < CACHE_TTL_MS) {
+  if (mem && Date.now() - mem.ts < ttlFor(mem.result)) {
     return mem.result;
   }
 
@@ -96,14 +149,26 @@ export function getCachedProbeResult(key: string): boolean | undefined {
   const disk = readDiskCache();
   const entry = disk[key];
   if (entry) {
-    const age = Date.now() - new Date(entry.ts).getTime();
-    if (age < CACHE_TTL_MS) {
-      memCache.set(key, { result: entry.result, ts: Date.now() });
+    // TTL считаем от реальной метки, а не от момента чтения: иначе повторный
+    // старт продлевал бы устаревший вердикт.
+    const ts = new Date(entry.ts).getTime();
+    const age = Date.now() - ts;
+    if (Number.isFinite(ts) && age < ttlFor(entry.result)) {
+      memCache.set(key, { result: entry.result, ts });
       return entry.result;
     }
   }
 
   return undefined;
+}
+
+/** TTL записи: отрицательный вердикт — короткий (INV-R6). */
+export function probeCacheTtlMs(result: boolean): number {
+  return result ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS;
+}
+
+function ttlFor(result: boolean): number {
+  return probeCacheTtlMs(result);
 }
 
 /**
@@ -121,10 +186,35 @@ export function setCachedProbeResult(key: string, result: boolean): void {
 /** Сбрасывает кэш пробы (память + дисковый файл). */
 export function resetProbeCache(): void {
   memCache.clear();
+  mechanismCache.clear();
   const path = cachePath();
   if (existsSync(path)) {
     writeFileSync(path, "{}", "utf-8");
   }
+}
+
+/**
+ * Полный путь пробы для активной пары: запоминает механизм, читает кэш по
+ * ключу механизма, при промахе пробует и кэширует только определённый итог.
+ * Единственная точка, где `baseUrl|model` встречается с `strategy|off`, —
+ * поэтому ключ не может разъехаться между агентом и UI.
+ * @returns `true` подтверждено, `false` не подтверждено, `null` транзиентка.
+ */
+export async function probeReasoningSupportCached(
+  provider: LLMProvider,
+  strategy: ReasoningStrategy,
+  reasoningOff: boolean,
+  baseUrl: string,
+  model: string,
+  signal?: AbortSignal,
+): Promise<boolean | null> {
+  rememberReasoningMechanism(baseUrl, model, { strategy, reasoningOff });
+  const key = cacheKey(baseUrl, model, strategy, reasoningOff);
+  const cached = getCachedProbeResult(key);
+  if (cached !== undefined) return cached;
+  const passed = await probeReasoningSupport(provider, strategy, reasoningOff, signal);
+  if (passed !== null) setCachedProbeResult(key, passed);
+  return passed;
 }
 
 function readDiskCache(): Record<string, CacheEntry> {

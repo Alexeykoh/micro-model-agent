@@ -88,11 +88,19 @@ export type TurnEndSummary = Pick<TurnSummary, "success" | "interrupted"> &
     error?: string;
   };
 
+/** Эффективная ступень reasoning текущей итерации (INV-R9). */
+export interface ReasoningInfo {
+  /** `default`, если механизм не применяется (решает бэкенд). */
+  level: string;
+  /** `policy` | `agent_override` | `fixed` | `none`. */
+  source?: string;
+}
+
 /** Форвардер чанков петли в SSE-синк с буферизацией и сбросом busy. */
 export interface Forwarder {
   onText(chunk: string): void;
   onMeta(chunk: string, kind?: MetaKind): void;
-  onReasoning(chunk: string): void;
+  onReasoning(chunk: string, info?: ReasoningInfo): void;
   onPhase(phase: string): void;
   onToolStart(call: ToolCall): void;
   onToolEnd(call: ToolCall, result: ToolResult, durationMs: number): void;
@@ -124,7 +132,13 @@ export function makeForwarder(
   opts: { flushMs?: number; onQueueDrained?: (owner: string | null) => void; ownerRef?: { current: string | null } } = {},
 ): Forwarder {
   const flushMs = opts.flushMs ?? DEFAULT_FLUSH_MS;
-  const buf = { text: "", meta: "", reasoning: "", metaKind: undefined as MetaKind | undefined };
+  const buf = {
+    text: "",
+    meta: "",
+    reasoning: "",
+    metaKind: undefined as MetaKind | undefined,
+    reasoningInfo: undefined as ReasoningInfo | undefined,
+  };
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const flush = () => {
@@ -135,8 +149,16 @@ export function makeForwarder(
     // буквальным мусором `\u001b[2m…`. Режем здесь, в единственной точке, через
     // которую проходит каждый чанк текста/меты/reasoning.
     if (buf.reasoning) {
-      sink({ type: "reasoning", ts: Date.now(), chunk: sanitizeOutputPlain(buf.reasoning) });
+      sink({
+        type: "reasoning",
+        ts: Date.now(),
+        chunk: sanitizeOutputPlain(buf.reasoning),
+        ...(buf.reasoningInfo
+          ? { level: buf.reasoningInfo.level, source: buf.reasoningInfo.source }
+          : {}),
+      });
       buf.reasoning = "";
+      buf.reasoningInfo = undefined;
     }
     if (buf.text) {
       sink({ type: "text", ts: Date.now(), chunk: sanitizeOutputPlain(buf.text) });
@@ -181,8 +203,11 @@ export function makeForwarder(
       buf.metaKind = kind;
       schedule();
     },
-    onReasoning(chunk) {
+    onReasoning(chunk, info) {
       buf.reasoning += chunk;
+      // Уровень относится к итерации, а не к чанку: держим последний
+      // известный, чтобы флаш нёс актуальную ступень (INV-R9).
+      if (info) buf.reasoningInfo = info;
       schedule();
     },
     onPhase(phase) {

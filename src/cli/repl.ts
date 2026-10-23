@@ -881,9 +881,9 @@ export class Repl implements ReplContext, Host {
             }
           }
         },
-        (phase) => {
+        (phase, info) => {
           if (phase === "thinking") {
-            renderer.thinkingStart();
+            renderer.thinkingStart(info);
           } else {
             renderer.thinkingEnd();
           }

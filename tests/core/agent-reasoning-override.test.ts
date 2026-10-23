@@ -124,10 +124,19 @@ function createDeps(overrides?: Record<string, unknown>) {
   return { deps, capturedOptions };
 }
 
+/** Один безопасный каст на весь файл: двойник deps не экспортируется. */
+function makeAgent(
+  overrides?: Record<string, unknown>,
+  mutate?: (deps: ReturnType<typeof createDeps>["deps"]) => void,
+) {
+  const made = createDeps(overrides);
+  mutate?.(made.deps);
+  return { agent: new Agent(made.deps as any), ...made };
+}
+
 describe("Agent reasoning override", () => {
   it("applies a set_thinking override to the LLM call while active", async () => {
-    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
-    const agent = new Agent(deps as any);
+    const { agent, capturedOptions } = makeAgent({ reasoningProbePassed: true });
     agent.reasoningState.level = "high";
     agent.reasoningState.overrideIteration = 0;
 
@@ -137,8 +146,7 @@ describe("Agent reasoning override", () => {
   });
 
   it("override expires after overrideCooldown iterations", async () => {
-    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
-    const agent = new Agent(deps as any);
+    const { agent, capturedOptions } = makeAgent({ reasoningProbePassed: true });
     // Set at "iteration -10": far outside the cooldown window of 5.
     agent.reasoningState.overrideIteration = -10;
 
@@ -149,8 +157,7 @@ describe("Agent reasoning override", () => {
   });
 
   it("manual override from setReasoningLevel persists (no cooldown)", async () => {
-    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
-    const agent = new Agent(deps as any);
+    const { agent, capturedOptions } = makeAgent({ reasoningProbePassed: true });
     agent.setReasoningLevel("max");
 
     await agent.run("hello");
@@ -159,8 +166,7 @@ describe("Agent reasoning override", () => {
   });
 
   it("setReasoningLevel('auto') clears the manual override", async () => {
-    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
-    const agent = new Agent(deps as any);
+    const { agent, capturedOptions } = makeAgent({ reasoningProbePassed: true });
     agent.setReasoningLevel("max");
     agent.setReasoningLevel("auto");
 
@@ -175,9 +181,9 @@ describe("Agent reasoning override", () => {
       .fn()
       .mockReturnValueOnce({ status: "retry" as const, reason: "empty" })
       .mockReturnValue({ status: "pass" as const });
-    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
-    (deps.hallucinationDetector as any).validate = validate;
-    const agent = new Agent(deps as any);
+    const { agent, capturedOptions } = makeAgent({ reasoningProbePassed: true }, (deps) => {
+      deps.hallucinationDetector.validate = validate;
+    });
 
     await agent.run("hello");
 
@@ -188,9 +194,9 @@ describe("Agent reasoning override", () => {
   });
 
   it("an explicit baseline overrides the `min` fallback", async () => {
-    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
-    (deps.config as AppConfig).reasoning!.baseline = "high";
-    const agent = new Agent(deps as any);
+    const { agent, capturedOptions } = makeAgent({ reasoningProbePassed: true }, (deps) => {
+      (deps.config as AppConfig).reasoning!.baseline = "high";
+    });
 
     await agent.run("hello");
 
@@ -198,13 +204,51 @@ describe("Agent reasoning override", () => {
   });
 
   it("falls back to the configured min when baseline is unset", async () => {
-    const { deps, capturedOptions } = createDeps({ reasoningProbePassed: true });
-    (deps.config as AppConfig).reasoning!.baseline = undefined;
-    (deps.config as AppConfig).reasoning!.min = "none";
-    const agent = new Agent(deps as any);
+    const { agent, capturedOptions } = makeAgent({ reasoningProbePassed: true }, (deps) => {
+      (deps.config as AppConfig).reasoning!.baseline = undefined;
+      (deps.config as AppConfig).reasoning!.min = "none";
+    });
 
     await agent.run("hello");
 
     expect(capturedOptions[0]?.reasoningEffort).toBe("none");
+  });
+
+  it("exposes the applied decision to surfaces (INV-R9)", async () => {
+    const { agent, capturedOptions } = makeAgent({ reasoningProbePassed: true });
+    let info: { level?: string; source?: string } | undefined;
+
+    await agent.run("hello", undefined, undefined, undefined, (_phase, i) => {
+      if (i) info = i;
+    });
+
+    expect(info?.level).toBe(capturedOptions[0]?.reasoningEffort);
+    expect(info?.source).toBe("policy");
+  });
+
+  it("reports `default` (undefined level) when the probe did not pass", async () => {
+    const { agent, capturedOptions } = makeAgent({ reasoningProbePassed: false });
+    let info: { level?: string; source?: string } | undefined;
+
+    await agent.run("hello", undefined, undefined, undefined, (_phase, i) => {
+      if (i) info = i;
+    });
+
+    // Effort не применяется — решает бэкенд; поверхности покажут `default`.
+    expect(capturedOptions[0]?.reasoningEffort).toBeUndefined();
+    expect(info?.level).toBeUndefined();
+  });
+
+  it("surfaces a manual override with its source", async () => {
+    const { agent } = makeAgent({ reasoningProbePassed: true });
+    agent.setReasoningLevel("max");
+    let info: { level?: string; source?: string } | undefined;
+
+    await agent.run("hello", undefined, undefined, undefined, (_phase, i) => {
+      if (i) info = i;
+    });
+
+    expect(info?.level).toBe("max");
+    expect(info?.source).toBe("agent_override");
   });
 });

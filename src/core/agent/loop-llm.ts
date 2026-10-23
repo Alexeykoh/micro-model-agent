@@ -9,7 +9,7 @@
  * `break` — остановить цикл, `return` — завершить ход результатом.
  */
 import type { AgentDeps } from "../agent";
-import type { AgentPhase, AgentResult, LLMResponse, OnMeta } from "../types";
+import type { AgentPhase, AgentResult, LLMResponse, OnMeta, OnPhase, ReasoningPhaseInfo } from "../types";
 import type { ToolCall, ToolDefinition } from "../../tools/types";
 import type { LoopState } from "./loop-state";
 import { clearIterationSignals } from "./loop-state";
@@ -32,7 +32,12 @@ export interface LlmPhaseHost {
   reasoningState: ReasoningState;
   isShutdownRequested(): boolean;
   getAbortSignal(): AbortSignal | undefined;
-  emitPhase(iteration: number, phase: AgentPhase, onPhase?: (p: AgentPhase) => void): void;
+  emitPhase(
+    iteration: number,
+    phase: AgentPhase,
+    onPhase?: OnPhase,
+    info?: ReasoningPhaseInfo,
+  ): void;
 }
 
 /** Входные данные фазы LLM на одной итерации. */
@@ -47,7 +52,7 @@ export interface LlmPhaseInput {
   onChunk?: (chunk: string) => void;
   onMeta?: OnMeta;
   onReasoning?: (reasoning: string) => void;
-  onPhase?: (phase: AgentPhase) => void;
+  onPhase?: OnPhase;
 }
 
 /** Результат фазы: вывод модели либо сигнал управления петлёй. */
@@ -81,7 +86,6 @@ export async function runLlmPhase(
   let emittedReasoning = false;
   let malformedToolArgs = 0;
 
-  host.emitPhase(state.iteration, "thinking", onPhase);
   const llmStart = Date.now();
   // Сырая оценка на момент отправки — вход калибровки по реальному usage.
   const estimateAtSend = contextManager.getEstimatedTokens();
@@ -103,6 +107,9 @@ export async function runLlmPhase(
 
   // Очистка per-итерационных сигналов после потребления политикой.
   clearIterationSignals(state);
+  // Решение доступно поверхностям ДО старта генерации (INV-R9), поэтому фаза
+  // «thinking» эмитится после резолва: индикатор успевает взять уровень.
+  host.emitPhase(state.iteration, "thinking", onPhase, reasoning);
 
   if (reasoning.level) {
     slog.logReasoningControl({

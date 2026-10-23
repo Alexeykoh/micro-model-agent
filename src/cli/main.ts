@@ -312,9 +312,9 @@ async function main(): Promise<void> {
             renderer.toolEnd(ev.tool, ev.duration ?? 0, ev.error, ev.ctxDelta, ev.costUsd);
           }
         },
-        (phase) => {
+        (phase, info) => {
           if (phase === "thinking") {
-            renderer.thinkingStart();
+            renderer.thinkingStart(info);
           } else {
             renderer.thinkingEnd();
           }
