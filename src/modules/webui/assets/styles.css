@@ -2267,6 +2267,8 @@ body.light .c-dim { --face-c: var(--panel); }
 .srun-top {
   display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
   padding: 4px 0 8px; border-bottom: 1px solid var(--border-2);
+  /* Правый верх занят сеткой маскотов: не даём ей закрыть статус. */
+  padding-right: 118px;
 }
 .srun-back {
   font: inherit; font-size: 12.5px; color: var(--accent);
@@ -2281,7 +2283,7 @@ body.light .c-dim { --face-c: var(--panel); }
 .srun-state.st-running { color: var(--accent); }
 .srun-state.st-failed { color: var(--red); }
 .srun-state.st-interrupted { color: var(--yellow, var(--dim-a)); }
-.srun-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.srun-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; padding-right: 118px; }
 .srun-chips[hidden] { display: none; }
 .srun-chip {
   font: inherit; font-size: 11.5px; color: var(--dim-b);
@@ -2297,3 +2299,22 @@ body.light .c-dim { --face-c: var(--panel); }
 .srun-body > .md, .srun-body > .toolout { padding-left: 0; }
 .srun-body > .toolout { padding-left: 22px; }
 .srun-body > .act + .act, .srun-body > .toolout + .act { margin-top: -7px; }
+
+/* MMART per subagent: row glyph, view header, live grid (top-right). */
+.act .srun-face { flex: 0 0 auto; margin-top: 1px; display: inline-flex; align-items: center; }
+.act .srun-face .mdl { --s: 20px; }
+.srun-top .srun-face-top { flex: 0 0 auto; align-self: center; display: inline-flex; align-items: center; }
+.srun-top .srun-face-top .mdl { --s: 30px; }
+.srun-grid {
+  position: absolute; top: 10px; right: 14px; z-index: 4;
+  display: grid; grid-template-columns: repeat(3, 28px); gap: 4px;
+  padding: 6px; border: 1px solid var(--border-2); border-radius: 10px;
+  background: var(--panel);
+}
+.srun-grid[hidden] { display: none; }
+.srun-dot {
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer;
+}
+.srun-dot:hover { background: var(--hover-bg); }
+.srun-dot.on { background: var(--hover-bg); box-shadow: inset 0 0 0 1px var(--accent); }

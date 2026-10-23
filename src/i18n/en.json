@@ -1823,6 +1823,7 @@
   "web.subagent.failed": "failed",
   "web.subagent.interrupted": "stopped",
   "web.subagent.readonly": "read-only run: the subagent cannot be prompted",
+  "web.subagent.grid": "active subagents",
   "web.subagent.iterations": "{n} iterations",
   "web.subagent.tokens": "{n} tok",
   "web.code.copy": "copy",

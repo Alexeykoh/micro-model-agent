@@ -61,7 +61,7 @@ export function hiddenText(text: string): string {
 export function argText(args: unknown): string {
   if (!args || typeof args !== "object") return "";
   const rec = args as Record<string, unknown>;
-  const keys = ["path", "file", "dir", "command", "query", "url", "pattern", "name", "id", "text", "prompt"];
+  const keys = ["path", "file", "dir", "command", "query", "url", "pattern", "name", "id", "text", "prompt", "task"];
   for (const key of keys) {
     if (typeof rec[key] === "string" && rec[key]) return hiddenText(rec[key] as string);
   }

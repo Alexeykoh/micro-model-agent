@@ -4,6 +4,7 @@
 import { t } from "../i18n.js";
 import type { Dict } from "../core/store/types.js";
 import { formatMs } from "../format.js";
+import { toolState, type FaceState } from "../loader.js";
 
 const MAX_RUNS = 40;
 export const MAX_EVENTS = 1000;
@@ -81,8 +82,38 @@ export function sessionRuns(sessionId: string): Dict[] {
   return out.sort((a, b) => Number(a.startedAt || 0) - Number(b.startedAt || 0));
 }
 
-/** Текст статуса в шапке (running показывает секунды от старта). */
-export function statusText(meta: Dict, started: number, now = Date.now()): string {
+/**
+ * Состояние MMART для прогона: статус важнее последнего события, иначе — по
+ * последнему событию (текст → type, тул → его категория, ожидание → think).
+ */
+export function runFaceState(b: RunBuf): FaceState {
+  const status = b.meta.status;
+  if (status === "done") return "done";
+  if (status === "failed") return "error";
+  if (status === "interrupted") return "stop";
+  for (let i = b.events.length - 1; i >= 0; i--) {
+    const ev = b.events[i];
+    switch (ev.kind) {
+      case "text":
+        return "type";
+      case "reasoning":
+      case "note":
+      case "phase":
+        return "think";
+      case "tool_end":
+        return ev.success === false ? "warn" : "think";
+      case "tool_start":
+        return toolState(String(ev.tool || ""));
+      case "start":
+        return "think";
+      default:
+        break;
+    }
+  }
+  return "think";
+}
+
+/** Текст статуса в шапке (running показывает секунды от старта). */export function statusText(meta: Dict, started: number, now = Date.now()): string {
   const status = meta.status || "running";
   if (status === "running") {
     const secs = Math.max(0, Math.round((now - started) / 1000));
