@@ -6,7 +6,7 @@
  * Вынесено из `core/agent.ts`; работает над `TurnRunHost` — видом `Agent`.
  */
 import type { AgentDeps } from "../agent";
-import type { AgentPhase, AgentResult, OnMeta, PromptBlock, ToolEvent } from "../types";
+import type { AgentResult, OnMeta, OnPhase, PromptBlock, ToolEvent } from "../types";
 import type { SessionLogger } from "../session-logger";
 import { SessionLogger as SessionLoggerCtor } from "../session-logger";
 import { seedToolTags } from "../../tools/auto-tags";
@@ -33,7 +33,7 @@ export interface TurnRunHost {
     onChunk?: (chunk: string) => void,
     onMeta?: OnMeta,
     onTool?: (ev: ToolEvent) => void,
-    onPhase?: (phase: AgentPhase) => void,
+    onPhase?: OnPhase,
     onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult>;
 }
@@ -45,7 +45,7 @@ export async function runTurn(
   onChunk?: (chunk: string) => void,
   onMeta?: OnMeta,
   onTool?: (ev: ToolEvent) => void,
-  onPhase?: (phase: AgentPhase) => void,
+  onPhase?: OnPhase,
   onReasoning?: (reasoning: string) => void,
 ): Promise<AgentResult> {
   const { deps } = host;

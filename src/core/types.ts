@@ -83,6 +83,21 @@ export interface ToolEvent {
 /** Фазы жизни агента для рендерера (управление спиннером). */
 export type AgentPhase = "thinking" | "done";
 
+/**
+ * Фактическая ступень reasoning текущей итерации (INV-R9). Едет вместе с
+ * фазой `thinking`, чтобы поверхности показали уровень ДО генерации.
+ * `level === undefined` — механизм не применяется, решает бэкенд (`default`).
+ */
+export interface ReasoningPhaseInfo {
+  level?: string;
+  strategy?: string;
+  /** `policy` | `agent_override` | `fixed` | `none`. */
+  source: string;
+}
+
+/** Колбэк смены фазы: необязательная ступень reasoning. */
+export type OnPhase = (phase: AgentPhase, info?: ReasoningPhaseInfo) => void;
+
 /** Результат тула: успех, вывод, id вызова. */
 export interface ToolResult {
   success: boolean;

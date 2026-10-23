@@ -85,7 +85,11 @@ export function finishThink(feed?: HTMLElement | null): void {
   st.curThink = null;
 }
 
-export function onReasoning(chunk: string, sid?: string): void {
+export function onReasoning(
+  chunk: string,
+  sid?: string,
+  info?: { level?: string; source?: string },
+): void {
   const feed = feedForEvent(sid);
   clearBusy(feed);
   if (!feed) return;
@@ -94,7 +98,7 @@ export function onReasoning(chunk: string, sid?: string): void {
   const st = streamStateFor(feed);
   if (!st.curThink) {
     flushRun(feed);
-    const { wrap, head, body } = buildThinkBlock(true);
+    const { wrap, head, body } = buildThinkBlock(true, undefined, info);
     appendTo(feed, wrap);
     st.curThink = { wrap, head, body, startedAt: Date.now() };
   }

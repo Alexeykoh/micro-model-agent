@@ -7,6 +7,7 @@ import {
   getCachedProbeResult,
   setCachedProbeResult,
   resetProbeCache,
+  probeCacheTtlMs,
 } from "../../../src/modules/reasoning/probe";
 
 /**
@@ -87,5 +88,28 @@ describe("probeReasoningSupport", () => {
     expect(await probeReasoningSupport(provider, "openai-effort", true)).toBe(true);
     // Оба ординала отправлены (off + high).
     expect(provider.calls.length).toBe(2);
+  });
+
+  it("uses a reasoning-inducing prompt instead of the trivial one (INV-R6)", async () => {
+    const provider = makeProvider([{ type: "text", content: "ok" }], [{ type: "reasoning", content: "x" }]);
+    await probeReasoningSupport(provider, "prompt-tag");
+    const prompt = provider.calls[0]?.messages[0]?.content;
+    expect(prompt).not.toBe("Reply with exactly: ok");
+    expect(String(prompt)).toContain("17 * 23");
+  });
+
+  it("scopes the cache to strategy and off-switch, not just baseUrl|model", () => {
+    const tagNoOff = cacheKey("http://x", "m", "prompt-tag", false);
+    const effortOff = cacheKey("http://x", "m", "openai-effort", true);
+    expect(tagNoOff).not.toBe(effortOff);
+
+    setCachedProbeResult(tagNoOff, false);
+    expect(getCachedProbeResult(tagNoOff)).toBe(false);
+    // Вердикт одной механики не течёт в другую.
+    expect(getCachedProbeResult(effortOff)).toBeUndefined();
+  });
+
+  it("keeps a negative verdict on a shorter TTL than a positive one", () => {
+    expect(probeCacheTtlMs(false)).toBeLessThan(probeCacheTtlMs(true));
   });
 });

@@ -273,7 +273,10 @@ function connectSSE(): void {
 const handlers: Array<[string, (d: Dict) => void]> = [
   ["text", (d) => onText(d.chunk || "", d.sessionId)],
   ["meta", (d) => onMeta(d.chunk || "", d.sessionId, d.kind)],
-  ["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId)],
+  ["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId, {
+    level: typeof d.level === "string" ? d.level : undefined,
+    source: typeof d.source === "string" ? d.source : undefined,
+  })],
   ["phase", (d) => onPhase(d.phase, d.sessionId)],
   ["tool_start", onToolStart],
   ["tool_end", onToolEnd],

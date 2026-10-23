@@ -8,7 +8,7 @@ import { broadcast, type UsageSnapshot, type SessionStore, type RuntimeState, ty
 import { pushState } from "./session-status";
 import { captureUsage, liveContextUsage, planEventFor, type LiveContextSource } from "../host-state";
 import { saveSessionUsage } from "./session-usage";
-import type { Forwarder } from "./forward";
+import type { Forwarder, ReasoningInfo } from "./forward";
 
 /**
  * Интервал live-бродкаста контекстных метрик во время хода. Достаточно часто,
@@ -129,6 +129,7 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
     if (deps.ownerRef) deps.ownerRef.current = owner;
     state.activeSessionId = owner;
     const stopLiveUsage = startLiveUsage(owner);
+    let lastReasoningInfo: ReasoningInfo | undefined;
     try {
       const result = await agent.run(
         text,
@@ -151,8 +152,11 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
             }
           }
         },
-        (phase) => forwarder.onPhase(phase),
-        (reasoning) => forwarder.onReasoning(reasoning),
+        (phase, info) => {
+          if (info) lastReasoningInfo = { level: info.level ?? "default", source: info.source };
+          forwarder.onPhase(phase);
+        },
+        (reasoning) => forwarder.onReasoning(reasoning, lastReasoningInfo),
       );
       // Usage забираем ДО `pushState`, чтобы снапшот сразу после хода
       // нёс свежие метрики сайдбара.

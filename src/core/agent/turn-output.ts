@@ -4,7 +4,7 @@
  * когда проверить нечем). Вынесено из `core/agent.ts`.
  */
 import type { AgentDeps } from "../agent";
-import type { AgentPhase } from "../types";
+import type { AgentPhase, OnPhase, ReasoningPhaseInfo } from "../types";
 import type { LoopState } from "./loop-state";
 import type { TokenTracker } from "./token-tracker";
 import type { SessionLogger } from "../session-logger";
@@ -26,7 +26,8 @@ export function emitPhase(
   host: TurnOutputHost,
   iteration: number,
   phase: AgentPhase,
-  onPhase?: (phase: AgentPhase) => void,
+  onPhase?: OnPhase,
+  info?: ReasoningPhaseInfo,
 ): void {
   host.deps.pluginManager.runOnPhase?.(
     {
@@ -36,7 +37,7 @@ export function emitPhase(
     },
     phase,
   );
-  onPhase?.(phase);
+  onPhase?.(phase, info);
 }
 
 /**

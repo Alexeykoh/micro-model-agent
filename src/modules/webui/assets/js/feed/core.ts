@@ -46,13 +46,24 @@ export interface ThinkBlock {
 // Build the collapsible reasoning block. The global `.think-h` click handler
 // depends on this exact structure: wrap > [head, body], body carries `hidden`.
 // `live` marks an in-progress block (pulsing label); history renders static.
-export function buildThinkBlock(withDur: boolean, live?: boolean): ThinkBlock {
+// `info` — фактическая ступень текущей итерации (SSE `reasoning.level`,
+// INV-R9): показываем её прямо в шапке, чтобы не гадать, что применилось.
+export function buildThinkBlock(
+  withDur: boolean,
+  live?: boolean,
+  info?: { level?: string; source?: string },
+): ThinkBlock {
   const wrap = el("div", "think" + (live === false ? "" : " live"));
   const head = el("button", "think-h");
   head.type = "button";
   head.setAttribute("aria-expanded", "false");
   head.appendChild(el("span", "g", "✦"));
   head.appendChild(el("span", "lab", t("web.action.thinking")));
+  if (info?.level) {
+    const lvl = el("span", "lvl", info.level);
+    if (info.source) lvl.title = info.source;
+    head.appendChild(lvl);
+  }
   if (withDur) head.appendChild(el("span", "dur", ""));
   const tog = el("span", "tog");
   setIcon(tog, "chevron-right", t("web.action.show"));

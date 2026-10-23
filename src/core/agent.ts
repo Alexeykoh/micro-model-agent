@@ -38,7 +38,7 @@ import type { AppConfig, ProviderEntry } from "../config/types";
 import type { ToolScope, ToolResult } from "../tools/types";
 import type { PromptBlock } from "./types";
 import type { EnvironmentReport } from "./environment";
-import type { ToolEvent, AgentPhase, AgentResult, OnMeta } from "./types";
+import type { ToolEvent, AgentPhase, AgentResult, OnMeta, OnPhase, ReasoningPhaseInfo } from "./types";
 import type { SessionManager } from "../modules/session/manager";
 import type { ModuleRegistry } from "../modules/registry";
 import { t } from "../i18n/index";
@@ -378,7 +378,7 @@ export class Agent {
       reasoningState: this.reasoningState,
       isShutdownRequested: () => this.shutdownRequested,
       getAbortSignal: () => this.abortController?.signal,
-      emitPhase: (iteration, phase, onPhase) => this.emitPhase(iteration, phase, onPhase),
+      emitPhase: (iteration, phase, onPhase, info) => this.emitPhase(iteration, phase, onPhase, info),
     };
   }
 
@@ -394,9 +394,9 @@ export class Agent {
   private emitPhase(
     iteration: number,
     phase: AgentPhase,
-    onPhase?: (phase: AgentPhase) => void,
+    onPhase?: OnPhase, info?: ReasoningPhaseInfo,
   ): void {
-    phaseEmitPhase(this.turnOutputHost(), iteration, phase, onPhase);
+    phaseEmitPhase(this.turnOutputHost(), iteration, phase, onPhase, info);
   }
 
   /**
@@ -422,7 +422,7 @@ export class Agent {
     onChunk?: (chunk: string) => void,
     onMeta?: OnMeta,
     onTool?: (ev: ToolEvent) => void,
-    onPhase?: (phase: AgentPhase) => void,
+    onPhase?: OnPhase,
     onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult> {
     return runTurn(
@@ -443,7 +443,7 @@ export class Agent {
     onChunk?: (chunk: string) => void,
     onMeta?: OnMeta,
     onTool?: (ev: ToolEvent) => void,
-    onPhase?: (phase: AgentPhase) => void,
+    onPhase?: OnPhase,
     onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult> {
     this.abortController = new AbortController();

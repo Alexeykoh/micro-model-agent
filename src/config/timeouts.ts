@@ -103,6 +103,12 @@ export const HALLUCINATION_JUDGE_TIMEOUT_MS = 15000;
 export const LINT_TYPE_CHECK_DEBOUNCE_MS = 2000;
 /** TTL кэша пробы поддержки reasoning (повторная проба через 24 часа). */
 export const REASONING_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * TTL отрицательного вердикта пробы reasoning: «не подтверждено» — это не
+ * факт о бэкенде, а результат одного замера (модель могла не рассуждать на
+ * промпте). Держим его час, чтобы ложный минус не залипал на сутки.
+ */
+export const REASONING_NEGATIVE_CACHE_TTL_MS = 60 * 60 * 1000;
 /** Минимальный интервал между автопоисками ошибок (execution-модуль). */
 export const EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS = 30000;
 /** Таймаут скана одного локального порта (setup discovery). */

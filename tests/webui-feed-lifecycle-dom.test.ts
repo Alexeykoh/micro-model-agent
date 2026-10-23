@@ -55,4 +55,16 @@ describe("фронтенд: жизненный цикл ленты", () => {
     }
     expect(feed.childElementCount).toBeLessThanOrEqual(core.FEED_MAX_NODES);
   });
+
+  it("thought header carries the applied reasoning level (INV-R9)", () => {
+    const { wrap } = core.buildThinkBlock(true, undefined, { level: "high", source: "policy" });
+    const lvl = wrap.querySelector(".think-h .lvl");
+    expect(lvl?.textContent).toBe("high");
+    expect((lvl as HTMLElement | null)?.title).toBe("policy");
+  });
+
+  it("thought header has no level marker when the decision is unknown", () => {
+    const { wrap } = core.buildThinkBlock(true);
+    expect(wrap.querySelector(".think-h .lvl")).toBeNull();
+  });
 });

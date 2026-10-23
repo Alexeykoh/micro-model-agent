@@ -372,6 +372,21 @@ describe("Renderer", () => {
       renderer.thinkingEnd();
     });
 
+    it("spinner shows the applied reasoning level (INV-R9)", () => {
+      const { renderer, err } = makeRich();
+      renderer.thinkingStart({ level: "low", source: "policy" });
+      expect(err().toLowerCase()).toContain("thinking");
+      expect(err()).toContain("low");
+      renderer.thinkingEnd();
+    });
+
+    it("spinner says `default` when effort is not applied", () => {
+      const { renderer, err } = makeRich();
+      renderer.thinkingStart({ level: "default", source: "policy" });
+      expect(err()).toContain("default");
+      renderer.thinkingEnd();
+    });
+
     it("spins while a tool runs and clears on completion", () => {
       const { renderer, out, err } = makeRich();
       renderer.toolStart("read_file", { path: "src/a.ts" });

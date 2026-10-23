@@ -247,17 +247,14 @@ export async function setupProviderPhase(
   if (config.reasoning && config.reasoning.mode !== "none" && reasoningStrategy !== "none") {
     reasoningProbePromise = (async () => {
       try {
-        const { probeReasoningSupport, getCachedProbeResult, setCachedProbeResult } =
-          await import("../../modules/reasoning/probe");
-        const cacheK = `${probeEndpoint.baseUrl ?? ""}|${config.model}`;
-        const cached = getCachedProbeResult(cacheK);
-        const passed =
-          cached !== undefined
-            ? cached
-            : await probeReasoningSupport(llmProvider, reasoningStrategy, capabilitiesRef.probe?.reasoningOff === true);
-        // Кэшируем только определённый итог — транзиентная ошибка пробы (null)
-        // НЕ должна пинить «reasoning не поддерживается» на 24h TTL.
-        if (cached === undefined && passed !== null) setCachedProbeResult(cacheK, passed);
+        const { probeReasoningSupportCached } = await import("../../modules/reasoning/probe");
+        const passed = await probeReasoningSupportCached(
+          llmProvider,
+          reasoningStrategy,
+          capabilitiesRef.probe?.reasoningOff === true,
+          probeEndpoint.baseUrl ?? "",
+          config.model,
+        );
         logger.logSilent(
           "info",
           t("env.reasoning_probe", {

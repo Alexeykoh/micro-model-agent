@@ -6,7 +6,7 @@
  * Вынесено из `core/agent.ts`; получает хосты фаз через `LoopRunCtx`.
  */
 import type { AgentDeps } from "../agent";
-import type { AgentPhase, AgentResult, OnMeta, ToolEvent } from "../types";
+import type { AgentResult, OnMeta, OnPhase, ToolEvent } from "../types";
 import type { ToolDefinition } from "../../tools/types";
 import type { SessionLogger } from "../session-logger";
 import type { LoopState } from "./loop-state";
@@ -46,7 +46,7 @@ export async function executeAgentLoop(
   onChunk?: (chunk: string) => void,
   onMeta?: OnMeta,
   onTool?: (ev: ToolEvent) => void,
-  onPhase?: (phase: AgentPhase) => void,
+  onPhase?: OnPhase,
   onReasoning?: (reasoning: string) => void,
 ): Promise<AgentResult> {
   const { config, contextManager, logger } = ctx.deps;

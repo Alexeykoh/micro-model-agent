@@ -11,6 +11,7 @@ import { contextLabel, matchesQuery } from "../format.js";
 import { closeAllMenus, setSessOpen } from "../core/menus.js";
 import { setIndicator } from "../dialog.js";
 import { setLayout } from "../rail.js";
+import { reasoningStatus } from "./reasoning-status.js";
 
 function setSelButton(btn: HTMLElement | null, label: string, value: string): void {
   if (!btn) return;
@@ -220,16 +221,11 @@ export function renderSelectors(): void {
   paintSelectorPending();
 }
 
-const REASONING_LEVELS_FULL = ["auto", "default", "none", "low", "medium", "high", "max"];
-// Backends without granularity (prompt-tag, template-kwarg) collapse
-// medium/max into low/high — show the collapsed set, no duplicates.
-const REASONING_LEVELS_COARSE = ["auto", "default", "none", "low", "high"];
-
 // 4th selector row: reasoning effort filtered to what the active
 // provider+model actually supports (`GET /api/models` → `reasoning`).
 // Unknown (boot) or `strategy: "none"` → hidden, never a wrong option list.
-// Probe failed → the row stays with an honest `off` mark and a shortcut to
-// Settings → Reasoning instead of dead levels.
+// Probe not confirmed → the row stays with an honest note and the full level
+// list, because fixed levels may still work (INV-R7).
 function renderReasoningSelector(): void {
   const wrap = document.querySelector<HTMLElement>('[data-sel="reasoning"]');
   const btn = document.getElementById("selReasoningBtn");
@@ -241,23 +237,21 @@ function renderReasoningSelector(): void {
     return;
   }
   wrap.hidden = false;
-  if (info.supported === false) {
-    setSelButton(btn, t("web.selectors.reasoning"), t("web.selectors.reasoning_off"));
-    menu.textContent = "";
-    menu.appendChild(el("div", "mi dim", t("reasoning.probe_failed")));
-    menu.appendChild(el("div", "sep"));
-    menu.appendChild(
-      menuAction(t("web.settings.reasoning"), "settings", () => writeHooks.openSettingsAt?.("reasoning")),
-    );
-    return;
-  }
   const mode = (settings.config && getPath(settings.config, "reasoning.mode")) || info.mode || "auto";
   setSelButton(btn, t("web.selectors.reasoning"), String(mode));
   menu.textContent = "";
-  const levels = info.strategy === "openai-effort" ? REASONING_LEVELS_FULL : REASONING_LEVELS_COARSE;
-  levels.forEach((lvl) => {
+  const status = reasoningStatus(info);
+  if (status.noteKey) {
+    menu.appendChild(el("div", "mi dim", t(status.noteKey)));
+    menu.appendChild(el("div", "sep"));
+  }
+  status.levels.forEach((lvl) => {
     menu.appendChild(menuItem(lvl, lvl === mode ? t("web.selectors.current") : "", lvl === mode, () => void postConfig("reasoning.mode", lvl, false)));
   });
+  menu.appendChild(el("div", "sep"));
+  menu.appendChild(
+    menuAction(t("web.settings.reasoning"), "settings", () => writeHooks.openSettingsAt?.("reasoning")),
+  );
 }
 
 document.querySelectorAll<HTMLElement>("[data-sel]").forEach((sel) => {
