@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { deriveSessionName, sanitizeTitle } from "../src/modules/session/auto-name";
+import {
+  deriveSessionName,
+  generateSessionTitle,
+  sanitizeTitle,
+  TITLE_MAX_TOKENS,
+} from "../src/modules/session/auto-name";
 
 describe("deriveSessionName", () => {
   it("uses the first non-empty line", () => {
@@ -29,5 +34,38 @@ describe("sanitizeTitle", () => {
   });
   it("returns null for empty output", () => {
     expect(sanitizeTitle("  \n ")).toBeNull();
+  });
+});
+
+describe("generateSessionTitle", () => {
+  it("reports the fail-open reason instead of failing silently", async () => {
+    // Ровно боевой случай: бюджет съеден reasoning'ом, `finish_reason=length`,
+    // content пустой → заголовка нет, и об этом обязан быть след (INV-15).
+    const reasons: string[] = [];
+    const title = await generateSessionTitle("Создай файл", async () => "", 1000, (r) =>
+      reasons.push(r),
+    );
+    expect(title).toBeNull();
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toContain("empty title");
+  });
+
+  it("reports a thrown chat error", async () => {
+    const reasons: string[] = [];
+    const title = await generateSessionTitle(
+      "Создай файл",
+      async () => {
+        throw new Error("aborted");
+      },
+      1000,
+      (r) => reasons.push(r),
+    );
+    expect(title).toBeNull();
+    expect(reasons).toEqual(["aborted"]);
+  });
+
+  it("бюджет заголовка переживает reasoning-токены", () => {
+    // 48 не хватало: замер живо — 48 → пусто, 128 → заголовок. Держим запас.
+    expect(TITLE_MAX_TOKENS).toBeGreaterThanOrEqual(256);
   });
 });
