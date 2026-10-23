@@ -52,6 +52,14 @@ export function onPlan(data: Dict): void {
   if (!feed || !data || !Array.isArray(data.steps) || !data.steps.length) return;
   clearEmpty(feed);
   const tab = tabState.tabs.find((x) => x.feed === feed);
+  const plan = {
+    steps: data.steps,
+    currentIndex: typeof data.currentIndex === "number" ? data.currentIndex : -1,
+  };
+  // Один источник для ленты и сайдбара: событие `plan` — то же состояние, что
+  // увидит `state`, но приходит сразу и не зависит от резолва ExecutionModule.
+  if (tab) tab.livePlan = plan;
+  if (feed === activeFeed()) renderPlan(plan);
   let card = tab ? tab.planCard : null;
   if (!card || card.parentNode !== feed) {
     card = el("div", "planblock");
@@ -60,10 +68,9 @@ export function onPlan(data: Dict): void {
   }
   card.textContent = "";
   const total = data.steps.length;
-  const cur = typeof data.currentIndex === "number" ? data.currentIndex : -1;
   card.appendChild(el("div", "ph2", "◇ " + pluralCount("web.plan.heading", total)));
   data.steps.forEach((step: Dict, i: number) => {
-    const { status, glyph } = planStepMark(step, i === cur);
+    const { status, glyph } = planStepMark(step, i === plan.currentIndex);
     card.appendChild(el("div", ("st " + status).trim(), glyph + step.text));
   });
   if (feed === activeFeed()) scroll();

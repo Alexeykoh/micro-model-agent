@@ -77,7 +77,11 @@ export function onTurnEnd(data: Dict): void {
     });
   }
   const owner = tabState.tabs.find((x) => x.id === data.sessionId);
-  if (owner) owner.planCard = null;
+  if (owner) {
+    owner.planCard = null;
+    // Ход закончился: живой план снят, сайдбар снова следует за снапшотом.
+    owner.livePlan = null;
+  }
   if (!feed || !st) {
     resetTurnText(feed);
     return;
