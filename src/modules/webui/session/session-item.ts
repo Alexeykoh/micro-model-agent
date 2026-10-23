@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { handleSessionHistory } from "./history-api";
 import { handleSessionImage } from "./images-api";
 import { handleSessionLog } from "./log-api";
+import { handleSubagentRunsGet } from "./subagent-api";
 import type { SessionStore, RuntimeState, HttpTransport, SseTransport } from "../state";
 
 export function handleSessionItem(
@@ -28,6 +29,11 @@ export function handleSessionItem(
   if (p.endsWith("/log")) {
     const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/log".length));
     handleSessionLog(req, res, id, s);
+    return true;
+  }
+  if (p.endsWith("/subagents")) {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/subagents".length));
+    handleSubagentRunsGet(req, res, id, s);
     return true;
   }
   if (p.includes("/images/")) {

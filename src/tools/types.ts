@@ -171,7 +171,14 @@ export interface ToolContext {
    * на процесс, vi.mock для класса Agent не годится).
    */
   agentFactory?: (deps: unknown) => {
-    run(task: string): Promise<import("../core/types").AgentResult>;
+    run(
+      task: string,
+      onChunk?: (chunk: string) => void,
+      onMeta?: (meta: string, kind?: "tool" | "status" | "retract") => void,
+      onTool?: (ev: import("../core/types").ToolEvent) => void,
+      onPhase?: (phase: import("../core/types").AgentPhase) => void,
+      onReasoning?: (reasoning: string) => void,
+    ): Promise<import("../core/types").AgentResult>;
   };
   /**
    * Менеджер сессий — метаданные активной сессии для тулов.
@@ -200,6 +207,12 @@ export interface ToolContext {
    * недоступен. Узкий интерфейс: контекст тулов не знает про загрузчик плагинов.
    */
   pluginDrafts?: import("../modules/plugins/drafts").DraftHost;
+  /**
+   * Приёмник событий прогонов субагентов (ставит веб-поверхность). Позволяет
+   * показать ход дочернего агента, не превращая его в сессию. Fail-open:
+   * `emit` вызывается через {@link emitSubagentEvent}, ошибки глотаются.
+   */
+  subagentRuns?: import("./subagent-runs").SubagentRunSink;
 }
 
 /** Результат тула: успех, вывод, вложения, артефакты. */

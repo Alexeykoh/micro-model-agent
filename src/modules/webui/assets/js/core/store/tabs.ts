@@ -9,6 +9,8 @@ export interface TabsSlice {
   liveTabId: string | null;
   newSeq: number;
   attachments: string[];
+  /** Открытый прогон субагента (runId) — лента скрыта, композер недоступен. */
+  subagentRunId: string | null;
   // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
   attachErrTimer: any;
 }
@@ -19,5 +21,6 @@ export const tabs: TabsSlice = {
   liveTabId: null,
   newSeq: 0,
   attachments: [],
+  subagentRunId: null,
   attachErrTimer: null,
 };

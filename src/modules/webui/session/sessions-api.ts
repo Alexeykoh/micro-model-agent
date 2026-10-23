@@ -227,6 +227,7 @@ export function handleSessionDelete(res: ServerResponse, id: string, s: SessionS
   // Сюда доходят только полностью idle сессии (бегущие/queued — 409 выше).
   s.pool.drop(id);
   delete s.sessionUsage[id];
+  s.subagentRuns.forgetSession(id);
   // План следует за сессией: слот удалённой сессии не оставляем мусором.
   try {
     s.execModule?.forgetSession(id);

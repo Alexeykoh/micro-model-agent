@@ -14,6 +14,11 @@ import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
 import { getExpertConfig } from "../config/experts";
 import { resolveExpertProvider } from "../modules/execution/expert-provider";
 import { withTokenCap } from "../llm/token-cap";
+import { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limits";
+import { createSubagentObserver, resultStatus, resultUsage } from "./subagent-observer";
+
+// Реэкспорт для существующих импортёров/тестов (лимиты переехали в отдельный файл).
+export { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limits";
 
 /** Фиксированный системный промпт (KV-cache дружит при stableSystemPrompt). */
 export const SUBAGENT_SYSTEM_PROMPT_TEMPLATE = `You are a sub-agent working on a specific task. You have your own context window and tool set.
@@ -28,25 +33,6 @@ Workflow rules:
 function buildSubagentSystemPrompt(context: string, stable: boolean): string {
   if (stable) return SUBAGENT_SYSTEM_PROMPT_TEMPLATE;
   return `You are a sub-agent working on a specific task. ${context ? `Context: ${context}` : ""}`;
-}
-
-/** Минимальный и максимальный кап completion-токенов субагента. */
-export const MAX_TOKENS_MIN = 1;
-export const MAX_TOKENS_MAX = 32000;
-
-/**
- * Разбирает `max_tokens`: число в диапазоне — кап, `undefined` — без капа,
- * `"invalid"` — значение задано, но недопустимо.
- */
-export function parseMaxTokens(
-  raw: unknown,
-): number | undefined | "invalid" {
-  if (raw === undefined || raw === null || raw === "") return undefined;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value < MAX_TOKENS_MIN || value > MAX_TOKENS_MAX) {
-    return "invalid";
-  }
-  return Math.floor(value);
 }
 
 /** Спавнит изолированного субагента и возвращает его результат. */
@@ -211,16 +197,23 @@ export async function runSubagent(
 
     const subAgent = (ctx.agentFactory ?? ((d: unknown) => new Agent(d as never)))(subDeps);
     const fullTask = context ? `${task}\n\nContext: ${context}` : task;
+    const observer = createSubagentObserver(ctx, {
+      task,
+      depth: currentDepth + 1,
+      agent: expertTag,
+      model: expertModel ?? ctx.config.model,
+    });
+    observer.start();
+
     try {
-      const result = await subAgent.run(fullTask);
-      const pickUsage = () =>
-        result.promptTokens !== undefined || result.totalTokens !== undefined
-          ? {
-              promptTokens: result.promptTokens ?? 0,
-              completionTokens: result.completionTokens ?? 0,
-              totalTokens: result.totalTokens ?? 0,
-            }
-          : undefined;
+      const result = await subAgent.run(
+        fullTask,
+        observer.callbacks.onChunk,
+        observer.callbacks.onMeta,
+        observer.callbacks.onTool,
+        observer.callbacks.onPhase,
+        observer.callbacks.onReasoning,
+      );
       if (!result.success) {
         let output = t("tool.subagent_failed", {
           error: String(result.error),
@@ -228,6 +221,13 @@ export async function runSubagent(
         });
         const scopeReq = scopeCollector.toScopeRequest();
         if (scopeReq) output += `\n${formatScopeRequest(scopeReq)}`;
+        observer.finish(
+          resultStatus(result),
+          result.iterationCount ?? 0,
+          result.text,
+          result.error === undefined ? undefined : String(result.error),
+          resultUsage(result),
+        );
         return { success: false, output };
       }
 
@@ -249,6 +249,7 @@ export async function runSubagent(
         ctx.logger.debug(
           `subagent result persisted to artifact ${abs} (${result.text.length} chars, ${result.iterationCount} iterations)`,
         );
+        observer.finish("done", result.iterationCount ?? 0, result.text, undefined, resultUsage(result));
         return {
           success: true,
           output: t("tool.subagent_artifact", {
@@ -257,18 +258,22 @@ export async function runSubagent(
             summary,
           }),
           artifactPath: abs,
-          usage: pickUsage(),
+          usage: resultUsage(result),
         };
       }
 
+      observer.finish("done", result.iterationCount ?? 0, result.text, undefined, resultUsage(result));
       return {
         success: true,
         output: t("tool.subagent_completed", {
           text: result.text,
           iterations: String(result.iterationCount),
         }),
-        usage: pickUsage(),
+        usage: resultUsage(result),
       };
+    } catch (err) {
+      observer.finish("failed", 0, undefined, err instanceof Error ? err.message : String(err));
+      throw err;
     } finally {
       // Рестор точного скоупа родителя (compare-and-restore).
       restoreScope();

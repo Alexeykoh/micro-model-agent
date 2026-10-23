@@ -2247,3 +2247,50 @@ body.light .c-dim { --face-c: var(--panel); }
 .upd-row { align-items: center; }
 .upd-right { display: flex; align-items: center; gap: 10px; }
 .upd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+
+/* ── Subagent run view ───────────────────────────────────────────────────
+   Клик по строке subagent открывает read-only ленту прогона (TODO §1.1).
+   Родительская лента остаётся смонтированной «за кадром»; композер и rail
+   скрыты, потому что субагенту нельзя отправлять сообщения. */
+.chat.srun-open .input-area { display: none; }
+.chat.srun-open .rail-wrap { display: none; }
+
+.act.srun-link { cursor: pointer; }
+.act.srun-link:hover .lab,
+.act.srun-link:focus-visible .lab { text-decoration: underline; }
+
+.srun { display: flex; flex-direction: column; gap: 11px; padding: 18px 0; min-height: 100%; }
+.srun > * { flex-shrink: 0; min-height: fit-content; }
+.srun-top {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  padding: 4px 0 8px; border-bottom: 1px solid var(--border-2);
+}
+.srun-back {
+  font: inherit; font-size: 12.5px; color: var(--accent);
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+.srun-back:hover { text-decoration: underline; }
+.srun-title {
+  font-weight: 600; min-width: 0; max-width: 60%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.srun-state { margin-left: auto; color: var(--dim-a); white-space: nowrap; }
+.srun-state.st-running { color: var(--accent); }
+.srun-state.st-failed { color: var(--red); }
+.srun-state.st-interrupted { color: var(--yellow, var(--dim-a)); }
+.srun-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.srun-chips[hidden] { display: none; }
+.srun-chip {
+  font: inherit; font-size: 11.5px; color: var(--dim-b);
+  background: var(--panel); border: 1px solid var(--border-2); border-radius: 999px;
+  padding: 3px 10px; cursor: pointer; white-space: nowrap; max-width: 240px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.srun-chip:hover { color: var(--fg); }
+.srun-chip.on { color: var(--fg); border-color: var(--accent); }
+.srun-note { color: var(--dim-a); font-size: 11.5px; }
+.srun-body { display: flex; flex-direction: column; gap: 11px; }
+.srun-body > * { flex-shrink: 0; min-height: fit-content; }
+.srun-body > .md, .srun-body > .toolout { padding-left: 0; }
+.srun-body > .toolout { padding-left: 22px; }
+.srun-body > .act + .act, .srun-body > .toolout + .act { margin-top: -7px; }

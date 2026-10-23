@@ -39,6 +39,7 @@ import { initCursor, createFace, setFaceState, loaderStateFor, setGreetResolver 
 import type { FaceState } from "./js/loader.js";
 import { setUpdateInfo } from "./js/update-state.js";
 import { applyUpdateEvent } from "./js/update-ui.js";
+import { initSubagentView, onSubagentEvent } from "./js/feed/subagent.js";
 
 declare global {
   interface Window {
@@ -282,6 +283,7 @@ const handlers: Array<[string, (d: Dict) => void]> = [
   ["turn_end", (d) => { onTurnEnd(d); drainQueuedTurn(d.sessionId); if (sidebarOwns(d)) { sidebarTurnEnd(d.turnSeq); sidebarBusy(false); void sidebarPullLog(); } }],
   ["log", onLog],
   ["retract", (d) => onRetract(d.reason || "", d.sessionId)],
+  ["subagent", onSubagentEvent],
 ];
 for (const [event, fn] of handlers) {
   es.addEventListener(event, (e) => {
@@ -526,6 +528,7 @@ async function boot(): Promise<void> {
     initComposerFace();
     initSidebar();
     initSidebarDrawer();
+    initSubagentView();
     applySidebarI18n();
     initFiles({ insertPath: (p) => insertIntoDraft("`" + p + "` ") });
     await loadModels();

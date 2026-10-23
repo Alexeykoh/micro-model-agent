@@ -25,6 +25,11 @@ export function onToolStart(data: Dict): void {
   const line = el("div", "act " + categoryOf(data.name));
   line.appendChild(el("span", "g", "◇"));
   line.appendChild(el("span", "lab", labelOf(data.name)));
+  if (data.name === "subagent" && data.toolCallId != null) {
+    // Привязка к прогону появится в SSE `subagent.start`; id нужен и для
+    // фолбэка «клик до прихода start» (REST по toolCallId).
+    line.dataset.toolCallId = String(data.toolCallId);
+  }
   const args = argText(data.args);
   if (args) {
     line.appendChild(el("span", "sep", "·"));

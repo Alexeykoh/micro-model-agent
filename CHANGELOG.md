@@ -4,6 +4,26 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-10-23
+
+### Added
+
+- **Просмотр хода субагента в `mma web`.** Строка «Задача подагенту» стала
+  кликабельной: открывается read-only транскрипт именно этого прогона (текст,
+  рассуждения, вызовы тулов, длительность, токены), со списком-чипами для
+  переключения между параллельными субагентами и возвратом в родительский чат
+  без потери его ленты и позиции скролла. Родительский чат продолжает получать
+  SSE «за кадром»; композер в режиме прогона скрыт — субагенту нельзя писать.
+  Прогоны живут в памяти процесса (до 12 на сессию, 1000 событий и 120k текста
+  на прогон, вывод тула — до 4k), чистятся при удалении сессии.
+  События: `ToolContext.subagentRuns` (fail-open), SSE `subagent`,
+  `GET /api/sessions/:id/subagents[?toolCallId=]`.
+  Спека: `docs/specs/2026-10-23-subagent-run-view-design.md`.
+  Гварды: `tests/tools/subagent-runs-events.test.ts`,
+  `tests/webui-subagent-runs-store.test.ts`,
+  `tests/webui-subagent-api.test.ts`,
+  `tests/webui-subagent-view-dom.test.ts`.
+
 ## [0.10.1] - 2026-10-22
 
 ### Fixed

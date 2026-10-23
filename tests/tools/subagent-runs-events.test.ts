@@ -1,0 +1,126 @@
+// События прогона субагента: runId, порядок, fail-open наблюдателя.
+// Наблюдатель — шов веб-UI (см. docs/specs/2026-10-23-subagent-run-view-design.md).
+import { describe, it, expect, vi } from "vitest";
+import { subagentTool } from "../../src/tools/subagent";
+import type { SubagentRunEvent } from "../../src/tools/subagent-runs";
+
+function makeCtx(sink: (ev: SubagentRunEvent) => void, run?: (cb: any) => Promise<any>): any {
+  return {
+    baseDir: "/tmp/ws",
+    config: {
+      model: "test-model",
+      contextWindow: 32768,
+      contextBudget: { systemPrompt: 0.25, responseReserve: 0.12, compactionThreshold: 0.75 },
+    },
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    sessionId: "ses_test",
+    activeCallId: "call_parent",
+    toolExecutor: {
+      setScope() {},
+      getScope: () => undefined,
+      setRecursionDepth() {},
+      getRecursionDepth: () => 0,
+      getRegistry: () => ({ getByTags: () => [] }),
+    },
+    llmProvider: { chat: async () => ({}) },
+    subagentRuns: { emit: sink },
+    agentFactory: () => ({
+      run: async (_task: string, onChunk: any, _onMeta: any, onTool: any, onPhase: any, onReasoning: any) => {
+        onPhase?.("thinking");
+        onReasoning?.("think");
+        onChunk?.("hello");
+        onTool?.({ type: "start", tool: "read_file", args: { path: "a" }, callId: "c1" });
+        onTool?.({ type: "end", tool: "read_file", args: { path: "a" }, callId: "c1", output: "body" });
+        onChunk?.(" world");
+        return run ? run({ onChunk }) : { success: true, text: "final answer", iterationCount: 2, totalTokens: 2 };
+      },
+    }),
+  };
+}
+
+describe("subagent run events", () => {
+  it("emits start/text/tool/end with run identity", async () => {
+    const events: SubagentRunEvent[] = [];
+    const result = await subagentTool.handler(makeCtx((ev) => events.push(ev)), { task: "do it" });
+
+    expect(result.success).toBe(true);
+    const start = events.find((e) => e.kind === "start");
+    expect(start).toBeDefined();
+    if (start?.kind !== "start") throw new Error("no start");
+    expect(start.runId).toMatch(/^srun_/);
+    expect(start.parentSessionId).toBe("ses_test");
+    expect(start.parentToolCallId).toBe("call_parent");
+    expect(start.task).toBe("do it");
+    expect(start.model).toBe("test-model");
+
+    const kinds = events.map((e) => e.kind);
+    expect(kinds[0]).toBe("start");
+    expect(kinds).toContain("text");
+    expect(kinds).toContain("reasoning");
+    expect(kinds).toContain("phase");
+    expect(kinds).toContain("tool_start");
+    expect(kinds).toContain("tool_end");
+    expect(kinds[kinds.length - 1]).toBe("end");
+
+    const toolStart = events.find((e) => e.kind === "tool_start");
+    const toolEnd = events.find((e) => e.kind === "tool_end");
+    if (toolStart?.kind === "tool_start" && toolEnd?.kind === "tool_end") {
+      expect(toolStart.callId).toBe("c1");
+      expect(toolEnd.callId).toBe("c1");
+      expect(toolEnd.output).toBe("body");
+    }
+
+    const end = events[events.length - 1];
+    if (end.kind !== "end") throw new Error("no end");
+    expect(end.status).toBe("done");
+    expect(end.iterations).toBe(2);
+    expect(end.runId).toBe(start.runId);
+    expect(end.usage?.totalTokens).toBe(2);
+    expect(events.filter((e) => e.kind === "end")).toHaveLength(1);
+  });
+
+  it("ends as failed exactly once when the sub-agent throws", async () => {
+    const events: SubagentRunEvent[] = [];
+    const ctx = makeCtx((ev) => events.push(ev));
+    ctx.agentFactory = () => ({
+      run: async () => {
+        throw new Error("boom");
+      },
+    });
+    const result = await subagentTool.handler(ctx, { task: "do it" });
+    expect(result.success).toBe(false);
+    const ends = events.filter((e) => e.kind === "end");
+    expect(ends).toHaveLength(1);
+    if (ends[0].kind !== "end") throw new Error("no end");
+    expect(ends[0].status).toBe("failed");
+    expect(ends[0].error).toContain("boom");
+  });
+
+  it("a throwing observer never changes the tool result", async () => {
+    const ctx = makeCtx(() => {
+      throw new Error("observer down");
+    });
+    const result = await subagentTool.handler(ctx, { task: "do it" });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("final answer");
+  });
+
+  it("parallel runs get distinct run ids", async () => {
+    const ids: string[] = [];
+    const ctx = (n: number) => makeCtx((ev) => {
+      if (ev.kind === "start") ids.push(ev.runId);
+    }, async () => ({ success: true, text: `r${n}`, iterationCount: 1 }));
+    await Promise.all([
+      subagentTool.handler(ctx(1), { task: "one" }),
+      subagentTool.handler(ctx(2), { task: "two" }),
+    ]);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it("emits nothing when no observer is installed", async () => {
+    const ctx = makeCtx(() => {});
+    delete ctx.subagentRuns;
+    const result = await subagentTool.handler(ctx, { task: "x" });
+    expect(result.success).toBe(true);
+  });
+});

@@ -117,6 +117,11 @@ function runRunnerTurn(
     contextManager: runner.contextManager,
   });
   pushState(s, sessionId);
+  // Наблюдатель прогонов субагентов: sink живёт на контексте раннера, форки
+  // его наследуют, поэтому вложенные субагенты тоже попадают в ту же вкладку.
+  if (runner.toolCtx && s.subagentRuns) {
+    runner.toolCtx.subagentRuns = s.subagentRuns.sink((ev) => broadcast(ev, s));
+  }
   runAgent.run(text).catch((err: unknown) => {
     // Ход не дошёл до turn_end — агрегат DLP отбрасываем, чтобы он не попал
     // в следующий ход этой сессии.
