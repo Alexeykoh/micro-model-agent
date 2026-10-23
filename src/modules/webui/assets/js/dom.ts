@@ -208,6 +208,10 @@ export const ICONS: Record<string, IconSpec> = {
   paperclip: [
     ["path", { d: "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" }],
   ],
+  // Лампа — бейдж фактической ступени рассуждений в шапке think-блока.
+  bulb: [
+    ["path",{d:"M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"}], ["path",{d:"M9 18h6"}], ["path",{d:"M10 22h4"}],
+  ],
 };
 
 export function icon(name: string, cls?: string | null): SVGElement {

@@ -61,6 +61,9 @@ describe("фронтенд: жизненный цикл ленты", () => {
     const lvl = wrap.querySelector(".think-h .lvl");
     expect(lvl?.textContent).toBe("high");
     expect((lvl as HTMLElement | null)?.title).toBe("policy");
+    // Ступень оформлена бейджем с иконкой лампочки, а не голым текстом.
+    expect(lvl?.querySelector("svg.lvl-ico")).toBeTruthy();
+    expect(lvl?.querySelector(".lvl-t")?.textContent).toBe("high");
   });
 
   it("thought header has no level marker when the decision is unknown", () => {
