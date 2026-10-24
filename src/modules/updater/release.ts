@@ -24,6 +24,23 @@ export type ReleasePlatformKey =
   | "linux-x64"
   | "linux-arm64";
 
+/** URL каталога установочных скриптов (bootstrap-путь, не меняется от релиза). */
+export const MMA_INSTALL_SCRIPTS_BASE = `https://raw.githubusercontent.com/${MMA_REPO}/master/scripts`;
+
+/**
+ * Готовая команда переустановки для текущей платформы. Нужна там, где
+ * самообновление недоступно или упало: пользователь должен видеть, что именно
+ * запускать, а не абстрактный «установочный скрипт».
+ */
+export function installScriptCommand(platform: string = process.platform): string {
+  return platform === "win32"
+    ? `irm ${MMA_INSTALL_SCRIPTS_BASE}/install.ps1 | iex`
+    : `curl -fsSL ${MMA_INSTALL_SCRIPTS_BASE}/install.sh | bash`;
+}
+
+/** Официальные релизы (ручная установка архива) — для подсказок об ошибке. */
+export const MMA_RELEASES_URL = `https://github.com/${MMA_REPO}/releases/latest`;
+
 const VALID_KEYS: readonly ReleasePlatformKey[] = [
   "win-x64",
   "mac-arm64",

@@ -97,7 +97,7 @@ describe("UpdaterModule", () => {
         { info: (m) => messages.push(m), warn: (m) => messages.push(m), error: (m) => messages.push(m) },
       );
       await mod.runOnce();
-      expect(messages.some((m) => m.includes("0.4.0") && /Installed|Установлена/.test(m))).toBe(true);
+      expect(messages.some((m) => m.includes("0.4.0") && /installed|установлено/i.test(m))).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -181,6 +181,47 @@ describe("UpdaterModule", () => {
       await mod.runOnce();
       expect(notices[0]?.phase).toBe("failed");
       expect(notices[0]?.error).toMatch(/checksum/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("explains a failed install in plain language, with the exact reinstall command", async () => {
+    const key = releasePlatformKey(process.platform, process.arch);
+    if (!key) return;
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (String(url).endsWith("latest.json")) {
+        return manifest("0.4.0", { [key]: { url: `mma-${key}.tar.gz`, sha256: "deadbeef", size: 1 } });
+      }
+      return { ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer } as unknown as Response;
+    });
+    const root = await mkdtemp(join(tmpdir(), "mma-mod-test-"));
+    const warnings: string[] = [];
+    const infos: string[] = [];
+    try {
+      const mod = new UpdaterModule(
+        makeConfig({ autoInstall: true }),
+        new Updater("0.3.0", {
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+          installRoot: root,
+          extract: async () => {},
+        }),
+        {
+          info: (m) => infos.push(m),
+          warn: (m) => warnings.push(m),
+          error: () => {},
+        },
+      );
+      await mod.runOnce();
+      const [what, hint] = warnings.join("\n").split("\n");
+      // STYLE.md: одна строка «что + причина» и одна подсказка «↳ что делать».
+      expect(what).not.toContain("[updater]");
+      expect(what).not.toContain("deadbeef");
+      expect(what).toMatch(/corrupted|повреждено/i);
+      expect(hint).toContain("↳");
+      expect(hint).toMatch(/install\.(ps1|sh)/);
+      // Сырой технический текст остаётся диагностикой, а не текстом ошибки.
+      expect(infos.join("\n")).toContain("checksum");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

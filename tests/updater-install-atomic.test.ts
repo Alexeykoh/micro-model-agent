@@ -13,6 +13,8 @@ import {
   assertSafeTarMembers,
   downloadFile,
   installRelease,
+  pruneStaleVersions,
+  type InstallReleaseOptions,
   type InstallStep,
 } from "../src/modules/updater/install-release";
 import { Updater } from "../src/modules/updater/checker";
@@ -70,6 +72,7 @@ async function install(
   version: string,
   onStep?: (s: InstallStep) => void,
   overrides: Record<string, unknown> = {},
+  extras: Partial<InstallReleaseOptions> = {},
 ): Promise<string> {
   const { fetchImpl, manifest } = installer(version, overrides);
   return await installRelease(
@@ -84,6 +87,7 @@ async function install(
         await writeFile(join(dest, "VERSION"), `${version}\n`);
       },
       ...(onStep ? { onStep } : {}),
+      ...extras,
     },
     undefined,
   );
@@ -169,6 +173,73 @@ describe("atomic install", () => {
     expect((await readFile(join(root, "versions", "0.4.1", "VERSION"), "utf8")).trim()).toBe("0.4.1");
     await expect(stat(join(root, "versions", "0.4.0"))).rejects.toThrow();
     expect(await readlink(join(root, "current"))).toContain("0.4.1");
+  });
+
+  it("keeps the update when the old version is locked (Windows EACCES)", async () => {
+    // Регресс 0.12.2: на Windows каталог работающей версии занят
+    // `runtime/bun.exe`, `rm` падал с EACCES уже ПОСЛЕ flip, и применённое
+    // обновление рапортовалось как «не удалось установить».
+    const root = await newRoot();
+    await install(root, "0.4.0");
+
+    const steps: InstallStep[] = [];
+    const leftover: string[][] = [];
+    const version = await install(root, "0.4.1", (s) => steps.push(s), {}, {
+      removeVersionDir: async () => false,
+      onCleanupDeferred: (names) => leftover.push(names),
+    });
+
+    expect(version).toBe("0.4.1");
+    expect(steps).toContain("flip");
+    expect(steps).not.toContain("cleanup-old");
+    expect(leftover.flat()).toContain("0.4.0");
+    expect(await readlink(join(root, "current"))).toContain("0.4.1");
+    expect((await readFile(join(root, "versions", "0.4.1", "VERSION"), "utf8")).trim()).toBe("0.4.1");
+  });
+
+  it("sweeps version directories left behind by earlier updates", async () => {
+    const root = await newRoot();
+    await install(root, "0.4.0");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(root, "versions", "0.1.0"));
+    await mkdir(join(root, "versions", "0.3.9"));
+
+    await install(root, "0.4.1");
+    for (const stale of ["0.1.0", "0.3.9", "0.4.0"]) {
+      await expect(stat(join(root, "versions", stale)), stale).rejects.toThrow();
+    }
+    expect(await readlink(join(root, "current"))).toContain("0.4.1");
+  });
+});
+
+describe("pruneStaleVersions", () => {
+  it("removes garbage but keeps the active version and the running one", async () => {
+    const root = await newRoot();
+    await install(root, "0.4.0");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(root, "versions", "0.2.0"));
+    await mkdir(join(root, "versions", "0.3.0"));
+    const running = join(root, "versions", "0.3.0");
+
+    const result = await pruneStaleVersions({ root, keep: [running] });
+
+    expect(result.removed).toEqual(expect.arrayContaining(["0.2.0"]));
+    expect(result.deferred).toEqual([]);
+    await expect(stat(join(root, "versions", "0.2.0"))).rejects.toThrow();
+    expect((await stat(join(root, "versions", "0.3.0"))).isDirectory()).toBe(true);
+    expect(await readlink(join(root, "current"))).toContain("0.4.0");
+  });
+
+  it("reports a locked directory as deferred instead of throwing", async () => {
+    const root = await newRoot();
+    await install(root, "0.4.0");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(root, "versions", "0.3.0"));
+
+    const result = await pruneStaleVersions({ root, removeVersionDir: async () => false });
+
+    expect(result.removed).toEqual([]);
+    expect(result.deferred).toEqual(["0.3.0"]);
   });
 });
 

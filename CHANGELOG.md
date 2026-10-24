@@ -4,6 +4,27 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Обновление больше не рапортует «не удалось», если оно фактически установилось.**
+  На Windows каталог работающей версии занят `runtime/bun.exe`: `rm` старого
+  `versions/<old>` падал с `EACCES` уже после `flip` (новая версия была активна),
+  и `Updater.install()` возвращал провал. Уборка старого каталога, `tmp` и
+  отброшенного `current.old` стала best-effort; занятые каталоги попадают в
+  `onCleanupDeferred`, а `pruneStaleVersions` дочищает их на следующем старте
+  (заодно убирая мусор от прошлых обновлений).
+  Гварды: `tests/updater-install-atomic.test.ts`, `tests/updater-prune-on-start.test.ts`,
+  `tests/updater-messages.test.ts`.
+- **Текст отказа установки — по STYLE.md, с рабочей инструкцией.** Убраны
+  `[updater]`, сырой `EACCES: …, rm '…'` и совет «запустите установочный скрипт»
+  без самого скрипта. Теперь: `⚠ Не удалось обновить до X — <причина>` и
+  `↳ … переустанови: <команда под платформу>`; техническая причина уходит в
+  диагностику, а не в чат. Веб-тосты при провале показывают короткий текст, а не
+  стек; многострочный лог в ленте рендерится как предупреждение + dim-подсказка.
+  Гвард: `tests/updater-messages.test.ts`, `tests/updater-module.test.ts`.
+
 ## [0.12.2] - 2026-10-24
 
 ### Fixed

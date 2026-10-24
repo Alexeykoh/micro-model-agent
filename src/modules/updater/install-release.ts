@@ -9,11 +9,20 @@
  * Транспорт (скачивание/распаковка) — `./archive.ts`. Чистые, инжектируемые
  * функции — тестируются на временных каталогах без сети.
  */
-import { cp, lstat, mkdir, mkdtemp, readFile, readlink, rename, rm, stat, symlink, unlink } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rename, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { FetchLike, ReleaseArtifact, ReleaseManifest, ReleasePlatformKey } from "./release";
 import { downloadCap, downloadFile, extractTarGz, sha256File, type InstallProgressFn } from "./archive";
+import {
+  currentTarget,
+  pruneStaleVersions,
+  removePath,
+  removeVersionDirQuietly,
+  samePath,
+  sweepVersions,
+  type RemoveVersionDir,
+} from "./versions";
 
 export {
   assertSafeTarMembers,
@@ -23,6 +32,7 @@ export {
   type InstallProgress,
   type InstallProgressFn,
 } from "./archive";
+export { pruneStaleVersions, type PruneStaleVersionsOptions, type RemoveVersionDir } from "./versions";
 
 /** Стадия установки (порядок важен: `stage` строго до `flip`). */
 export type InstallStep = "stage" | "flip" | "cleanup-old";
@@ -39,6 +49,14 @@ export interface InstallReleaseOptions {
   extract?: (tarball: string, dest: string) => Promise<void>;
   /** Наблюдатель шагов установки (порядок stage→flip→cleanup-old). */
   onStep?: (step: InstallStep) => void;
+  /**
+   * Каталоги прошлых версий, которые не удалось удалить сразу (на Windows
+   * занят запущенный `runtime/bun.exe`). Это не ошибка установки: новая версия
+   * уже активна, мусор подчистит {@link pruneStaleVersions} на следующем старте.
+   */
+  onCleanupDeferred?: (leftover: string[]) => void;
+  /** Удаление каталога версии (инжект для тестов; `true` — удалён). */
+  removeVersionDir?: RemoveVersionDir;
 }
 
 /** Скачивает релиз, распаковывает и активирует. Возвращает версию. */
@@ -97,13 +115,23 @@ export async function installRelease(
     const previous = await flipCurrent(opts.installRoot, target);
     opts.onStep?.("flip");
 
+    const remove = opts.removeVersionDir ?? removeVersionDirQuietly;
+    const leftover: string[] = [];
     if (previous && !samePath(previous, target)) {
-      await rm(previous, { recursive: true, force: true });
-      opts.onStep?.("cleanup-old");
+      if (await remove(previous)) opts.onStep?.("cleanup-old");
+      else leftover.push(basename(previous));
     }
+    // Подметаем всё, что осталось от прошлых обновлений: смысл имеет только
+    // активная версия. Занятые каталоги молча остаются до следующего старта.
+    for (const name of await sweepVersions(versionsDir, target, remove)) {
+      if (!leftover.includes(name)) leftover.push(name);
+    }
+    if (leftover.length > 0) opts.onCleanupDeferred?.(leftover);
     return version;
   } finally {
-    await rm(tmp, { recursive: true, force: true });
+    // Временный каталог — уборка best-effort: сбой `rm` здесь не должен
+    // превращать уже применённое обновление в «не удалось установить».
+    await rm(tmp, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -147,15 +175,6 @@ async function assertNotLive(root: string, target: string): Promise<void> {
   if (live && samePath(live, target)) throw new Error(`version is already active: ${basename(target)}`);
 }
 
-/** Сравнение путей ссылки и цели (Windows junction отдаёт `\\?\`-префикс). */
-function samePath(a: string, b: string): boolean {
-  const norm = (p: string): string => {
-    const stripped = p.replace(/^\\\\\?\\/, "").replace(/[\\/]+$/, "");
-    return process.platform === "win32" ? stripped.replace(/\\/g, "/").toLowerCase() : stripped;
-  };
-  return norm(a) === norm(b);
-}
-
 /**
  * Переключает `~/.mma/current` на новую версию: сначала создаётся ссылка
  * `.current.new`, затем `current` уводится в `.current.old`, новая ссылка
@@ -182,26 +201,8 @@ async function flipCurrent(root: string, target: string): Promise<string | undef
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
   await rename(staged, current);
-  if (moved) await removePath(old);
+  // Уборка отброшенного ярлыка best-effort: flip уже состоялся, и сбой здесь
+  // не должен превращать успешную установку в ошибку.
+  if (moved) await removePath(old).catch(() => {});
   return previous;
-}
-
-/** Куда указывает `current` (undefined — ссылки нет). */
-async function currentTarget(current: string): Promise<string | undefined> {
-  try {
-    return await readlink(current);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Удаляет ссылку или каталог, не задевая цель ссылки. */
-async function removePath(path: string): Promise<void> {
-  try {
-    const st = await lstat(path);
-    if (st.isSymbolicLink()) await unlink(path);
-    else await rm(path, { recursive: true, force: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-  }
 }
