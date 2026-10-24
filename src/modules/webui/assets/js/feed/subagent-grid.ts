@@ -1,10 +1,11 @@
 // Top-right grid of subagent mascots for `mma web`.
 //
 // Each cell is its own MMART instance fed by that run's events (think / type /
-// tool category / done / error). The grid lives on the chat surface (not inside
-// the run view), so it is visible on the parent screen too; clicking a mascot
-// opens that run. Finished runs stay in the grid (done/error/stop) so they can
-// still be inspected; the session's newest runs are shown first (max 9 cells).
+// tool category). The grid lives on the chat surface (not inside the run view),
+// so it is visible on the parent screen too; clicking a mascot opens that run.
+// The grid answers one question — "who is running right now": a finished run
+// leaves it on `end` (done/error/stop), while its transcript stays reachable
+// from the parent feed row. The session's newest runs are shown first (max 9).
 import { el } from "../dom.js";
 import { t } from "../i18n.js";
 import { tabs as tabState } from "../store.js";
@@ -15,10 +16,20 @@ import { buf, runFaceState } from "./subagent-buffer.js";
 /** Сколько ячеек максимум показываем (3 колонки × 3 ряда). */
 const GRID_MAX = 9;
 
-/** runId → сессия-владелец. Живёт, пока известен прогон (включая завершённые). */
+/** runId → сессия-владелец. Только активные прогоны: `end` снимает запись. */
 const known = new Map<string, string>();
 let grid: HTMLElement | null = null;
 let openRun: (sessionId: string, runId: string) => void = () => {};
+
+/**
+ * Активен ли прогон. `status` не выставлен до первого `end` — это running;
+ * терминальные статусы (`done`/`failed`/`interrupted`) в сетку не попадают.
+ */
+function isActive(runId: string): boolean {
+  const meta = buf(runId).meta;
+  if (!meta.runId) return false;
+  return !meta.status || meta.status === "running";
+}
 
 /** Подключает колбэк открытия прогона (зовёт `subagent.ts` при init). */
 export function initSubagentGrid(open: (sessionId: string, runId: string) => void): void {
@@ -37,22 +48,34 @@ function ensureGrid(): HTMLElement | null {
   return grid;
 }
 
-/** Регистрирует прогон для сетки (живое событие или снимок после reload). */
+/** Регистрирует активный прогон для сетки (живое событие или снимок после reload). */
 export function registerRun(runId: string, sessionId: string): void {
   if (!runId || !sessionId) return;
+  if (!isActive(runId)) return;
   if (known.get(runId) === sessionId) return;
   known.set(runId, sessionId);
   renderGrid();
 }
 
-/** Перерисовывает сетку по прогонам активной вкладки (новые последними). */
+/** Убирает прогон из сетки (завершился или сессия закрыта). */
+function unregisterRun(runId: string): void {
+  if (!known.delete(runId)) return;
+  renderGrid();
+}
+
+/** Перерисовывает сетку по активным прогонам активной вкладки (новые последними). */
 export function renderGrid(): void {
   const host = ensureGrid();
   if (!host) return;
   host.textContent = "";
+  // Страховка от потерянного `end` (обрыв SSE): терминальный прогон в сетке
+  // не живёт, даже если событие до клиента не дошло.
+  for (const runId of [...known.keys()]) {
+    if (!isActive(runId)) known.delete(runId);
+  }
   const active = tabState.activeTabId;
   const ids = [...known.entries()]
-    .filter(([runId, sessionId]) => sessionId === active && buf(runId).meta.runId)
+    .filter(([runId, sessionId]) => sessionId === active && isActive(runId))
     .map(([runId]) => runId)
     .slice(-GRID_MAX);
   host.hidden = ids.length === 0;
@@ -85,7 +108,7 @@ function updateGridFace(runId: string): void {
   if (face) setFaceState(face, runFaceState(buf(runId)));
 }
 
-/** Событие прогона: регистрирует/обновляет ячейку. */
+/** Событие прогона: регистрирует/обновляет ячейку; `end` её снимает. */
 export function trackRun(ev: Dict): void {
   const runId = typeof ev.runId === "string" ? ev.runId : "";
   if (!runId) return;
@@ -94,6 +117,10 @@ export function trackRun(ev: Dict): void {
     return;
   }
   if (!known.has(runId)) return;
+  if (ev.kind === "end") {
+    unregisterRun(runId);
+    return;
+  }
   updateGridFace(runId);
 }
 
