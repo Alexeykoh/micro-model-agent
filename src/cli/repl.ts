@@ -42,6 +42,7 @@ import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
 import { CommandRegistry, groupCommands } from "../core/commands/catalog";
+import { LineDispatcher } from "./line-dispatch";
 import { buildCommandCatalog } from "../core/commands/spec";
 import { captureConfigSnapshot } from "../config/registry";
 import { activeProviderEndpoint } from "../modules/providers/manager";
@@ -558,72 +559,17 @@ export class Repl implements ReplContext, Host {
     })();
   }
 
+  /** Строка ввода в историю (с капом): общая для очереди и гейта занятости. */
+  private rememberInput(line: string): void {
+    this.history.push(line);
+    if (this.history.length > this.maxHistory) {
+      this.history = this.history.slice(-this.maxHistory);
+    }
+  }
+
   private setupListeners(): void {
-    let multiLineBuffer = "";
-    let inMultiLine = false;
-
-    this.rl.on("line", async (line: string) => {
-      const trimmed = line.trim();
-
-      if (this.agentRunning || this.inputLocked) {
-        if (trimmed) {
-          this.history.push(trimmed);
-          if (this.history.length > this.maxHistory) {
-            this.history = this.history.slice(-this.maxHistory);
-          }
-        }
-        return;
-      }
-
-      if (trimmed) {
-        this.history.push(trimmed);
-        if (this.history.length > this.maxHistory) {
-          this.history = this.history.slice(-this.maxHistory);
-        }
-      }
-
-      if (inMultiLine) {
-        multiLineBuffer += `\n${line}`;
-        if (!this.isMultiLineInput(multiLineBuffer)) {
-          inMultiLine = false;
-          const fullInput = multiLineBuffer.trim();
-          multiLineBuffer = "";
-          if (fullInput) {
-            if (fullInput.startsWith("/")) {
-              await this.executeCommand(fullInput);
-              this.afterCommand();
-            } else {
-              await this.runAgent(fullInput);
-            }
-          }
-        } else {
-          this.rl.setPrompt(this.inputPrompt(true));
-          this.rl.prompt();
-        }
-        return;
-      }
-
-      if (this.isMultiLineInput(trimmed)) {
-        inMultiLine = true;
-        multiLineBuffer = trimmed;
-        this.rl.setPrompt(this.inputPrompt(true));
-        this.rl.prompt();
-        return;
-      }
-
-      if (!trimmed) {
-        this.rl.setPrompt(this.inputPrompt());
-        this.rl.prompt();
-        return;
-      }
-
-      if (trimmed.startsWith("/")) {
-        await this.executeCommand(trimmed);
-        this.afterCommand();
-      } else {
-        await this.runAgent(trimmed);
-      }
-    });
+    // Порядок строк и мультистрочный буфер — в `LineDispatcher` (правило 6).
+    this.rl.on("line", (line: string) => this.lineDispatcher.onLine(line));
 
     this.rl.on("close", () => {
       this.running = false;
@@ -951,6 +897,33 @@ export class Repl implements ReplContext, Host {
   }
 
   private commands: Map<string, SlashCommand> = new Map();
+
+  /**
+   * Диспетчер строк ввода (очередь + мультистрочный буфер) — вынесен из файла
+   * по правилу 6: `readline` эмитит строки подряд, не дожидаясь async-хендлера.
+   */
+  private readonly lineDispatcher = new LineDispatcher(
+    {
+      isBusy: () => this.agentRunning || this.inputLocked,
+      remember: (line) => this.rememberInput(line),
+      executeCommand: (line) => this.executeCommand(line),
+      afterCommand: () => this.afterCommand(),
+      runAgent: (input) => this.runAgent(input),
+      isMultiLineInput: (text) => this.isMultiLineInput(text),
+      promptContinuation: () => {
+        this.rl.setPrompt(this.inputPrompt(true));
+        this.rl.prompt();
+      },
+      promptIdle: () => {
+        this.rl.setPrompt(this.inputPrompt());
+        this.rl.prompt();
+      },
+    },
+    (err) =>
+      this.logger?.warn(
+        `repl input task failed: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+  );
 
   /** Регистрирует slash-команду (имя + алиасы). */
   public registerCommand(cmd: SlashCommand): void {
