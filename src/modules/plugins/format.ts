@@ -127,6 +127,11 @@ export function formatPluginList(
 ): string[] {
   const shown = options.showBuiltin ? records : records.filter((r) => !r.builtin);
   const lines: string[] = [];
+  if (shown.length === 0 && failures.length === 0 && (options.hiddenHint ?? 0) > 0) {
+    // Встроенные загружены, но по умолчанию скрыты: «плагинов нет» — неправда,
+    // которую видел пользователь рядом с `Plugins [ok] 10 active` в /doctor.
+    lines.push(t("cli.plugins.none_external"));
+  }
   if (shown.length > 0) {
     lines.push(
       t("cli.plugins.header", {

@@ -832,16 +832,15 @@ function listPlugins(ctx: ReplContext, manager: PluginManager, showAll: boolean,
   const records = manager.getRecords();
   const failures = manager.getFailures();
   const builtinCount = records.filter((r) => r.builtin).length;
-  const visible = showAll ? records : records.filter((r) => !r.builtin);
-  if (visible.length === 0 && failures.length === 0) {
-    ctx.output.writeLine(t("cli.plugins.none"));
-    return;
-  }
   const lines = formatPluginList(records, failures, {
     showBuiltin: showAll,
     mmaVersion,
     hiddenHint: showAll ? 0 : builtinCount,
   });
+  if (lines.length === 0) {
+    ctx.output.writeLine(t("cli.plugins.none"));
+    return;
+  }
   for (const line of lines) ctx.output.writeLine(line);
   const unknown = (ctx.config.plugins?.disabled ?? []).filter((n) => !manager.isEnabled(n));
   if (unknown.length > 0) {
