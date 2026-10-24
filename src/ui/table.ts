@@ -116,7 +116,17 @@ export function formatTable(tableLines: string[], opts: TableOptions = {}): stri
   const GAP = "  ";
   const gapWidth = GAP.length * Math.max(0, columnCount - 1);
   let overflow = widths.reduce((a, b) => a + b, 0) + gapWidth - maxWidth;
-  // Итеративно ужимаем колонки справа налево, пока строка не влезет.
+  // Ужимаем справа налево, но не ниже собственной шапки: «Об…»/«Со…» теряют
+  // информацию, пока рядом есть колонка с длинным содержимым (имя сессии).
+  const headerFloor = (c: number): number =>
+    Math.max(MIN_COL_WIDTH, stringWidth(headerRow[c] ?? ""));
+  for (let i = widths.length - 1; i >= 0 && overflow > 0; i--) {
+    if (widths[i] <= headerFloor(i)) continue;
+    const cut = Math.min(widths[i] - headerFloor(i), overflow);
+    widths[i] -= cut;
+    overflow -= cut;
+  }
+  // Не влезло и с целыми шапками — жертвуем шапками, а не экраном.
   for (let i = widths.length - 1; i >= 0 && overflow > 0; i--) {
     if (widths[i] <= MIN_COL_WIDTH) continue;
     const cut = Math.min(widths[i] - MIN_COL_WIDTH, overflow);
