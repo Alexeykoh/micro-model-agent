@@ -13,6 +13,8 @@ const store = await import("../src/modules/webui/assets/js/store.js");
 const core = await import("../src/modules/webui/assets/js/feed/core.js");
 const loader = await import("../src/modules/webui/assets/js/loader.js");
 const sub = await import("../src/modules/webui/assets/js/feed/subagent.js");
+const bufm = await import("../src/modules/webui/assets/js/feed/subagent-buffer.js");
+const gridm = await import("../src/modules/webui/assets/js/feed/subagent-grid.js");
 
 function mountTab(id: string): { feed: HTMLElement; row: HTMLElement } {
   const feed = win.document.createElement("div") as HTMLElement;
@@ -138,6 +140,67 @@ describe("subagent run view", () => {
     (chips[1] as HTMLElement).click();
     expect(win.document.querySelector(".srun-title")?.textContent).toBe("second");
     expect(win.document.querySelectorAll(".srun").length).toBe(1);
+  });
+
+  it("keeps only active runs in the grid", () => {
+    const { feed, row } = mountTab("S3");
+    gridm.renderGrid();
+    expect(win.document.querySelectorAll(".srun-dot").length).toBe(0);
+
+    sub.onSubagentEvent(
+      ev({
+        kind: "start",
+        sessionId: "S3",
+        runId: "g1",
+        seq: 1,
+        parentToolCallId: "call_1",
+        task: "still running",
+        depth: 1,
+        startedAt: 3000,
+      }),
+    );
+    expect(win.document.querySelectorAll(".srun-dot").length).toBe(1);
+    expect(row.dataset.runId).toBe("g1");
+
+    // `end` снимает ячейку: сетка показывает только тех, кто работает сейчас.
+    sub.onSubagentEvent(
+      ev({ kind: "end", sessionId: "S3", runId: "g1", seq: 2, status: "done", iterations: 1 }),
+    );
+    expect(win.document.querySelectorAll(".srun-dot").length).toBe(0);
+    expect((win.document.querySelector(".srun-grid") as HTMLElement).hidden).toBe(true);
+    // Строка в ленте остаётся кликабельной — доступ к завершённому прогону есть.
+    expect(feed.contains(row)).toBe(true);
+    expect(row.classList.contains("srun-link")).toBe(true);
+    expect(row.dataset.runId).toBe("g1");
+
+    // Снимок завершённого прогона после reload в сетку не попадает.
+    const finished = bufm.mergeSnapshot({
+      runId: "g2",
+      parentSessionId: "S3",
+      task: "already done",
+      status: "done",
+      startedAt: 1000,
+      events: [],
+    });
+    gridm.registerRun(finished, "S3");
+    expect(win.document.querySelectorAll(".srun-dot").length).toBe(0);
+
+    // Новый прогон появляется в сетке, хотя прошлый завершился.
+    sub.onSubagentEvent(
+      ev({
+        kind: "start",
+        sessionId: "S3",
+        runId: "g3",
+        seq: 1,
+        parentToolCallId: "call_g3",
+        task: "next wave",
+        depth: 1,
+        startedAt: 4000,
+      }),
+    );
+    const dots = win.document.querySelectorAll(".srun-dot");
+    expect(dots.length).toBe(1);
+    expect((dots[0] as HTMLElement).dataset.runId).toBe("g3");
   });
 });
 

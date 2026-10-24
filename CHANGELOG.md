@@ -4,6 +4,21 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Сетка субагентов показывает только активные прогоны.** По `end` ячейка
+  снимается: сетка отвечает на вопрос «кто работает сейчас», а не хранит
+  историю. Доступ к завершённым не теряется — строка «Задача субагенту» в ленте
+  по-прежнему открывает транскрипт, а чипы в шапке прогона видят все прогоны
+  хода. Снимки после reload берут только `running`; потерянный `end` (обрыв SSE)
+  подстраховывает фильтр в `renderGrid`.
+  Гвард: `tests/webui-subagent-view-dom.test.ts`.
+- **Опечатка «подагент» → «субагент» в текстах тула.** Ключи
+  `tool.friendly.subagent` и `tool.subagent_queued` в `ru.json`; исторические
+  записи CHANGELOG приведены к тому же написанию.
+
 ## [0.12.2] - 2026-10-24
 
 ### Fixed
@@ -147,7 +162,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- **Просмотр хода субагента в `mma web`.** Строка «Задача подагенту» стала
+- **Просмотр хода субагента в `mma web`.** Строка «Задача субагенту» стала
   кликабельной: открывается read-only транскрипт именно этого прогона (текст,
   рассуждения, вызовы тулов, длительность, токены), со списком-чипами для
   переключения между параллельными субагентами и возвратом в родительский чат
@@ -157,7 +172,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   на прогон, вывод тула — до 4k), чистятся при удалении сессии.
   События: `ToolContext.subagentRuns` (fail-open), SSE `subagent`,
   `GET /api/sessions/:id/subagents[?toolCallId=]`.
-  **MMART на каждого субагента:** у строки «Задача подагенту» свой мини-маскот
+  **MMART на каждого субагента:** у строки «Задача субагенту» свой мини-маскот
   с состоянием прогона (`think`/`read`/`create`/`run`/`done`/`error/stop`), в
   шапке открытого прогона — крупнее, а в правом верхнем углу — сетка маскотов
   субагентов активной вкладки: видна и в чате, и в прогоне, включает прогоны
