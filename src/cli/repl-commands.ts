@@ -34,6 +34,7 @@ import {
 } from "./config-mutations";
 import { runConfigReset } from "./config-reset";
 import { buildProviderEntry } from "./provider-entry";
+import { sessionAge } from "./session-age";
 import { existsSync, writeFileSync, mkdirSync } from "fs";
 import type { PluginManager } from "../modules/plugins/manager";
 import type { CommandContext } from "./command-context";
@@ -892,7 +893,7 @@ function registerSessionCommands(ctx: ReplContext): void {
         s.id === active ? pc.green("●") : "",
         s.id.slice(0, 12),
         s.name,
-        s.updatedAt.slice(0, 19).replace("T", " "),
+        sessionAge(s.updatedAt),
         String(s.messageCount),
       ]);
       for (const line of renderTable(
