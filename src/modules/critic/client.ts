@@ -137,7 +137,6 @@ export class CriticClient {
   }
 
   private degrade(reason: string): void {
-    // DEBT(critic-degrade-not-in-feed): отказ виден в session.jsonl, но не в ленте web.
     this.opts.onDiagnostic?.(`${CRITIC_DEGRADED_PREFIX}${reason}`);
   }
 
