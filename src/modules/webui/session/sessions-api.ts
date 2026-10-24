@@ -131,13 +131,16 @@ export function handleSessionActivate(
         return;
       }
       // План следует за сессией: трекер переключается на план этой сессии
-      // (или пустеет). Сайдбар следующего `/api/state` уже покажет его.
+      // (или пустеет). Пуш обязателен: клиент вызывает `ensureTabState` ДО
+      // активации и на кэшированном снапшоте выходит раньше, так что без
+      // события `state` сайдбар остаётся с планом прошлой вкладки.
       try {
         s.execModule?.switchSession(id);
       } catch {
         // fail-open: сессия переключена, план остался как был
       }
       emitSessions(s);
+      pushState(s, id);
       sendJson(res, 200, { ok: true });
     })
     .catch((err: unknown) => {

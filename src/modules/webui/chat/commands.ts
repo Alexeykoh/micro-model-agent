@@ -107,19 +107,23 @@ function status(cfg: AppConfig, state: SessionStore & ConfigStore & WorkspaceSto
   const provider = cfg.provider.active ?? cfg.provider.type;
   const parts = [cfg.model, provider, `${cfg.contextWindow} tok`];
   const meta = activeMeta(state);
-  if (meta) parts.push(`${meta.name} (${meta.messageCount} msgs)`);
+  if (meta) parts.push(`${meta.name} (${t("web.status.msgs", { count: meta.messageCount })})`);
   const verbosity = getConfigValue(cfg, "ui.verbosity");
-  parts.push(verbosity.ok ? verbosity.display : "—");
+  parts.push(verbosity.ok ? verbosity.display : "-");
   out(parts.join(" · "));
-  if (state.workspace) out(`dir: ${state.workspace}`);
+  if (state.workspace) out(t("web.status.dir", { path: state.workspace }));
   if (state.agentsMd) {
-    if (state.agentsMd.disabled) out("AGENTS.md: disabled");
+    if (state.agentsMd.disabled) out(t("web.status.agents_disabled"));
     else if (state.agentsMd.files.length) out(`AGENTS.md: ${state.agentsMd.files.join(", ")}`);
-    else out("AGENTS.md: not found");
+    else out(t("web.status.agents_missing"));
   }
   if (state.projectMapStats) {
     const map = state.projectMapStats();
-    out(map ? `map: ${map.files} file(s) · ${map.symbols} sym · ~${map.tokens} tok` : "map: not indexed");
+    out(
+      map
+        ? t("web.status.map", { files: map.files, symbols: map.symbols, tokens: map.tokens })
+        : t("web.status.map_missing"),
+    );
   }
 }
 
@@ -140,7 +144,7 @@ async function configCmd(
   const [key, ...rest] = args;
   if (rest.length === 0) {
     const r = getConfigValue(cfg, key);
-    out(r.ok ? `${r.key} = ${r.display}` : `↳ unknown key: ${key}`);
+    out(r.ok ? `${r.key} = ${r.display}` : t("web.config.unknown_key", { key }));
     return;
   }
   await applyConfigWrite(cfg, key, rest.join(" "), out, state);

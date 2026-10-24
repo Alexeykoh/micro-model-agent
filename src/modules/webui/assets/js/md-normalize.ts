@@ -48,11 +48,32 @@ export class MdNormalizer {
     while (idx !== -1) {
       const line = this.buf.slice(0, idx);
       this.buf = this.buf.slice(idx + 1);
-      if (this.held !== null) out += this.decide(this.held, line) + "\n";
-      this.held = line;
+      if (this.held !== null) {
+        out += this.decide(this.held, line) + "\n";
+        this.held = null;
+      }
+      // Внутри фенса lookahead не нужен — `decide` возвращает строку как есть.
+      // Отдаём сразу: иначе закрывающий ``` висел бы в живом хвосте внутри
+      // код-блока, пока не придёт следующая строка.
+      if (this.fence || FENCE_RE.test(line)) {
+        out += this.decide(line, null) + "\n";
+      } else {
+        this.held = line;
+      }
       idx = this.buf.indexOf("\n");
     }
     return out;
+  }
+
+  /**
+   * Незакоммиченный хвост — то, что `push` ещё не отдал: удержанная строка
+   * (lookahead таблицы) плюс недописанная строка. Чистый геттер: состояние не
+   * меняется, поэтому `flush()` на `end()` отдаёт ровно это же, без дубля.
+   */
+  pending(): string {
+    if (this.held === null) return this.buf;
+    if (!this.buf) return this.held;
+    return this.held + "\n" + this.buf;
   }
 
   /** Отдаёт удержанную строку и хвост без перевода строки. */

@@ -4,6 +4,16 @@ import { t } from "../../i18n/index";
 const MAX_NAME_LEN = 60;
 const MIN_CUT = 20;
 
+/**
+ * Бюджет completion-токенов для LLM-заголовка. 48 не хватало: у провайдеров,
+ * где reasoning-off не подтверждён (opencode-go/deepseek), «размышления»
+ * съедают весь лимит, `finish_reason=length`, текст пустой → `sanitizeTitle`
+ * → null, и вкладка навсегда остаётся первым промптом. Замер живо: 48 →
+ * пусто, 128 → заголовок (107 токенов), 512 → нормальный заголовок на языке
+ * сообщения (~150 токенов). Один вызов на новую сессию.
+ */
+export const TITLE_MAX_TOKENS = 512;
+
 /** Детерминированное мгновенное имя сессии из первого сообщения пользователя. */
 export function deriveSessionName(input: string, date?: string): string {
   const firstLine = input.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
@@ -59,13 +69,19 @@ export async function generateSessionTitle(
   input: string,
   chat: TitleChat,
   timeoutMs = 8000,
+  onFail?: (reason: string) => void,
 ): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const raw = await chat(buildTitlePrompt(input), controller.signal);
-    return sanitizeTitle(raw);
-  } catch {
+    const title = sanitizeTitle(raw);
+    // Пустой ответ — не «нет заголовка», а состоявшийся отказ (чаще всего
+    // finish_reason=length съел бюджет). Молчать о нём нельзя (INV-15).
+    if (!title) onFail?.(`empty title (${raw.trim().slice(0, 60) || "no text"})`);
+    return title;
+  } catch (err) {
+    onFail?.(err instanceof Error ? err.message : String(err));
     return null;
   } finally {
     clearTimeout(timer);

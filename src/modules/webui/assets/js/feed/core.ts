@@ -190,7 +190,7 @@ export function clearFeed(feed: HTMLElement | null): void {
   follow = true;
   hideToLatest();
   const tab = tabState.tabs.find((x) => x.feed === feed);
-  if (tab) tab.planCard = null;
+  if (tab) { tab.planCard = null; tab.livePlan = null; }
   if (feed === activeFeed()) scroll();
 }
 

@@ -113,8 +113,8 @@ function renderActiveState(): void {
   const sid = host.sessionId || (tab && tab.id) || null;
   session.activeSessionId = sid;
   if (!tabState.tabs.length) showEmptyFeed();
-  renderPlan(host.plan);
-  railPlan(session.busy && host ? host.plan : null);
+  renderPlan(tab?.livePlan ?? host.plan); // живой план (событие plan) важнее снапшота
+  railPlan(session.busy && host ? (tab?.livePlan ?? host.plan) : null);
   renderUsage(host);
   // Late provider auto-detect may change the effective window after boot —
   // the snapshot carries it so the topbar follows without a config re-fetch.

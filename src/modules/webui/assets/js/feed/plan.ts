@@ -1,6 +1,6 @@
 // Plan rendering: the sidebar plan list (`renderPlan`) and the feed plan card
 // (`onPlan`). Extracted from `feed.js`; re-exported there.
-import { planEl, planCountEl, el } from "../dom.js";
+import { el } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
 import { feed, tabs as tabState } from "../store.js";
 import type { Dict } from "../core/store/types.js";
@@ -17,6 +17,12 @@ function planStepMark(step: Dict, isCurrent: boolean): { status: string; glyph: 
 }
 
 export function renderPlan(plan: Dict | null | undefined): void {
+  // Узлы ищем на каждом рендере: сайдбар монтируется вместе с документом, и
+  // захват ссылки при импорте ломается, если разметка пришла позже (тесты,
+  // пересборка панели).
+  const planEl = document.getElementById("plan");
+  const planCountEl = document.getElementById("planCount");
+  if (!planEl || !planCountEl) return;
   // The sidebar polls `/api/state` every 2s; skip a rebuild (and the scroll
   // reset it would cause) when the snapshot is unchanged.
   const sig = JSON.stringify([plan, I18N.locale]);
@@ -52,6 +58,14 @@ export function onPlan(data: Dict): void {
   if (!feed || !data || !Array.isArray(data.steps) || !data.steps.length) return;
   clearEmpty(feed);
   const tab = tabState.tabs.find((x) => x.feed === feed);
+  const plan = {
+    steps: data.steps,
+    currentIndex: typeof data.currentIndex === "number" ? data.currentIndex : -1,
+  };
+  // Один источник для ленты и сайдбара: событие `plan` — то же состояние, что
+  // увидит `state`, но приходит сразу и не зависит от резолва ExecutionModule.
+  if (tab) tab.livePlan = plan;
+  if (feed === activeFeed()) renderPlan(plan);
   let card = tab ? tab.planCard : null;
   if (!card || card.parentNode !== feed) {
     card = el("div", "planblock");
@@ -60,10 +74,9 @@ export function onPlan(data: Dict): void {
   }
   card.textContent = "";
   const total = data.steps.length;
-  const cur = typeof data.currentIndex === "number" ? data.currentIndex : -1;
   card.appendChild(el("div", "ph2", "◇ " + pluralCount("web.plan.heading", total)));
   data.steps.forEach((step: Dict, i: number) => {
-    const { status, glyph } = planStepMark(step, i === cur);
+    const { status, glyph } = planStepMark(step, i === plan.currentIndex);
     card.appendChild(el("div", ("st " + status).trim(), glyph + step.text));
   });
   if (feed === activeFeed()) scroll();

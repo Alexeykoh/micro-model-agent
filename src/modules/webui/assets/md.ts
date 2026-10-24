@@ -171,6 +171,10 @@ export interface MdHandle {
   end(): void;
 }
 
+// Внутрь этих узлов живой хвост вставлять нельзя: smd считает `children.length`
+// у `<table>`, чтобы отличить `<thead>` от `<tbody>`.
+const TABLE_HOSTS = new Set(["TABLE", "THEAD", "TBODY", "TR"]);
+
 /**
  * Mount a streaming Markdown renderer that appends a `.md` container to
  * `parent`. Feed chunks with `write`, finish the segment with `end`.
@@ -199,12 +203,45 @@ export function mountMarkdown(parent: HTMLElement, opts?: Dict): MdHandle {
   // таблицы без внешних `|`, `1)`, `##X`); последняя недописанная строка
   // уходит в `flush` на `end`.
   const normalizer = new MdNormalizer();
+  // Живой хвост. smd придерживает недописанную строку во внутреннем буфере и
+  // показывает её только по `\n`, поэтому без отдельного узла ответ не виден
+  // до `end()`. Хвост живёт в том же контейнере, куда smd допишет следующую
+  // строку (`data.nodes[data.index]`): иначе текст прыгает между блоками.
+  const tail = document.createElement("span");
+  tail.className = "md-tail";
+
+  const placeTail = (): void => {
+    const cur = data.nodes[data.index] as HTMLElement | undefined;
+    const inline = cur !== undefined && cur !== root && !TABLE_HOSTS.has(cur.nodeName);
+    const host = inline ? (cur as HTMLElement) : root;
+    const pending = normalizer.pending();
+    tail.replaceChildren();
+    if (pending) {
+      const lines = pending.split("\n");
+      // Внутри блочного контейнера первая строка хвоста начинается с новой
+      // строки; у `root` границу даёт сам блочный сосед.
+      const brk = inline && host.childNodes.length > 0 && lines[0] !== "";
+      for (let i = 0; i < lines.length; i++) {
+        if (i > 0 || brk) tail.appendChild(document.createElement("br"));
+        if (lines[i]) tail.appendChild(document.createTextNode(lines[i]));
+      }
+    }
+    host.appendChild(tail);
+  };
+
+  placeTail();
   return {
     root,
     write(chunk) {
-      smd.parser_write(parser, normalizer.push(String(chunk == null ? "" : chunk)));
+      // Снять хвост до парсинга: TABLE_ROW считает `children.length`, а
+      // добавленные smd узлы должны вставать после уже закоммиченного текста.
+      tail.remove();
+      const out = normalizer.push(String(chunk == null ? "" : chunk));
+      if (out) smd.parser_write(parser, out);
+      placeTail();
     },
     end() {
+      tail.remove();
       smd.parser_write(parser, normalizer.flush());
       smd.parser_end(parser);
       if (data.code) {

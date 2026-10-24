@@ -6,7 +6,7 @@
  * чтобы между модулями хендлеров не было цикла импортов.
  */
 import type { AppConfig } from "../../../config/types";
-import { setLocale } from "../../../i18n/index";
+import { setLocale, t } from "../../../i18n/index";
 import { setConfigValue } from "../../../config/registry";
 import { needsRebuild } from "../../../config/effects";
 import { broadcast, type SessionStore, type ConfigStore, type SseTransport, type RuntimeState } from "../state";
@@ -23,7 +23,7 @@ export function withConfig(
   fn: (cfg: AppConfig) => void | Promise<void>,
 ): void | Promise<void> {
   if (!state.config) {
-    out("↳ config unavailable");
+    out(t("web.config.unavailable"));
     return;
   }
   return fn(state.config);
@@ -40,15 +40,15 @@ export function configErrorText(reason: string, input: string, key?: string): st
   const target = key ?? input;
   switch (reason) {
     case "unknown-key":
-      return `unknown key: ${input}`;
+      return t("web.config.unknown_key", { key: input });
     case "read-only":
-      return `${target} is read-only`;
+      return t("web.config.read_only", { key: target });
     case "range":
-      return `value out of range for ${target}`;
+      return t("web.config.range", { key: target });
     case "combined":
-      return "shares exceed the combined limit";
+      return t("web.config.combined");
     default:
-      return `invalid value for ${target}`;
+      return t("web.config.invalid_value", { key: target });
   }
 }
 

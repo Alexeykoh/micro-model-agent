@@ -1,7 +1,7 @@
 // Turn lifecycle handlers: tool start/end, turn end, command output and log.
 // Extracted from `feed.js`; `feed.js` re-exports this module's public surface.
 import { msgs, el, announce } from "../dom.js";
-import { t } from "../i18n.js";
+import { t, pluralCount } from "../i18n.js";
 import { streamStateFor, tabs as tabState, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { categoryOf, labelOf, argText, formatMs, verbosity } from "../format.js";
@@ -77,7 +77,11 @@ export function onTurnEnd(data: Dict): void {
     });
   }
   const owner = tabState.tabs.find((x) => x.id === data.sessionId);
-  if (owner) owner.planCard = null;
+  if (owner) {
+    owner.planCard = null;
+    // Ход закончился: живой план снят, сайдбар снова следует за снапшотом.
+    owner.livePlan = null;
+  }
   if (!feed || !st) {
     resetTurnText(feed);
     return;
@@ -97,7 +101,7 @@ export function onTurnEnd(data: Dict): void {
     }
     const parts: string[] = [];
     if (typeof data.toolCalls === "number" && data.toolCalls > 0) {
-      parts.push(t("web.turn.tools", { count: data.toolCalls }));
+      parts.push(pluralCount("web.turn.tools", data.toolCalls));
     }
     if (typeof data.durationMs === "number") parts.push(formatMs(data.durationMs));
     if (parts.length) appendTo(feed, el("div", "metric", "⟡ " + parts.join(" · ")));
