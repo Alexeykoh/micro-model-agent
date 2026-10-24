@@ -413,6 +413,7 @@
   "cli.current_model": "Current model:",
   "cli.model_hint": "(Use /model use <name> to change)",
   "cli.model_fetch_failed": "Failed to fetch models: {error}",
+  "cli.model_provider_unavailable": "No provider for the active entry \"{name}\" — check /provider list.",
   "cli.available_models": "Available models:",
   "cli.cert_label": "supported — certified on this provider",
   "cli.cert_stale_label": "certified on an older MMA version — recommended",

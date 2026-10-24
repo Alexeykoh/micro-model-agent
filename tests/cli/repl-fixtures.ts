@@ -44,10 +44,14 @@ export function stubConfig() {
 export function makeBareRepl(args: {
   channel: ConstructorParameters<typeof Repl>[14];
   historyPath: string;
+  /** Переопределить заглушку агента (например, чтобы проверить вызовы provider). */
+  agent?: Record<string, unknown>;
+  /** Переопределить конфиг (например, мультипровайдерную раскладку entries). */
+  config?: Record<string, unknown>;
 }): Repl {
   return new Repl(
-    stubAgent(),
-    stubConfig(),
+    (args.agent ?? stubAgent()) as never,
+    (args.config ?? stubConfig()) as never,
     undefined, undefined, undefined, undefined, undefined, undefined,
     undefined, undefined, undefined, args.historyPath,
     undefined, undefined, args.channel,

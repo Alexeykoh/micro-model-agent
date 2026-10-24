@@ -408,6 +408,7 @@
   "cli.current_model": "Текущая модель:",
   "cli.model_hint": "(Используйте /model use <имя> для смены)",
   "cli.model_fetch_failed": "Не удалось получить модели: {error}",
+  "cli.model_provider_unavailable": "Нет провайдера для активной записи «{name}» — проверьте /provider list.",
   "cli.available_models": "Доступные модели:",
   "cli.cert_label": "поддерживается — сертифицирована на этом провайдере",
   "cli.cert_stale_label": "сертифицирована на старой версии MMA — рекомендуется",
