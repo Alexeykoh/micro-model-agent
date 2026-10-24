@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { COMMAND_CATALOG } from "../../src/core/commands/spec";
+import { buildCommandCatalog } from "../../src/core/commands/spec";
 import {
   CommandRegistry,
   groupCommands,
   parseCommandLine,
   isAvailable,
 } from "../../src/core/commands/catalog";
+
+const CATALOG = buildCommandCatalog();
 
 /**
  * Каталог команд — декларативная часть реестра. Он заменил две вещи, которые
@@ -18,7 +20,7 @@ import {
  */
 
 function registry(): CommandRegistry {
-  return new CommandRegistry(COMMAND_CATALOG);
+  return new CommandRegistry(CATALOG);
 }
 
 /**
@@ -30,7 +32,7 @@ const CLIENT_SIDE_WEB = new Set(["clear", "new"]);
 
 describe("каталог команд", () => {
   it("объявляет уникальные имена без ведущего слэша", () => {
-    const names = COMMAND_CATALOG.map((c) => c.name);
+    const names = CATALOG.map((c) => c.name);
     for (const name of names) {
       expect(name).not.toMatch(/^\//);
       expect(name).toBe(name.toLowerCase());
@@ -40,7 +42,7 @@ describe("каталог команд", () => {
 
   it("у каждой команды есть описание и группа из известного набора", () => {
     const groups = new Set(["general", "agent", "session", "skill"]);
-    for (const c of COMMAND_CATALOG) {
+    for (const c of CATALOG) {
       expect(c.description.length).toBeGreaterThan(0);
       expect(c.group ?? "general").toBeTruthy();
       if (c.group) expect(groups.has(c.group)).toBe(true);
@@ -48,9 +50,9 @@ describe("каталог команд", () => {
   });
 
   it("алиасы не пересекаются с каноническими именами и уникальны", () => {
-    const names = new Set(COMMAND_CATALOG.map((c) => c.name));
+    const names = new Set(CATALOG.map((c) => c.name));
     const aliases: string[] = [];
-    for (const c of COMMAND_CATALOG) {
+    for (const c of CATALOG) {
       for (const alias of c.aliases ?? []) {
         expect(names.has(alias)).toBe(false);
         aliases.push(alias);
@@ -62,7 +64,7 @@ describe("каталог команд", () => {
   it("команда, помеченная web, не теряется в терминальной справке", () => {
     // `/sessions` в браузере называется `/session` (webName) и остаётся
     // терминальной командой: каталог описывает обе поверхности, а не одну.
-    const sessions = COMMAND_CATALOG.find((c) => c.name === "sessions");
+    const sessions = CATALOG.find((c) => c.name === "sessions");
     expect(sessions?.webName).toBe("session");
     expect(isAvailable(sessions!, "terminal")).toBe(true);
     expect(isAvailable(sessions!, "web")).toBe(true);
@@ -83,7 +85,7 @@ describe("каталог команд", () => {
     for (const src of sources) {
       for (const m of src.matchAll(/\n\s{4}name: "([^"]+)",/g)) registered.add(m[1]);
     }
-    const catalogued = new Set(COMMAND_CATALOG.map((c) => c.name));
+    const catalogued = new Set(CATALOG.map((c) => c.name));
     expect(registered.size).toBeGreaterThan(20);
     expect([...registered].filter((n) => !catalogued.has(n))).toEqual([]);
     expect([...catalogued].filter((n) => !registered.has(n))).toEqual([]);
@@ -95,11 +97,11 @@ describe("каталог команд", () => {
     const webSource =
       readCommandSources("src/modules/webui/chat/commands.ts") +
       readCommandSources("src/modules/webui/settings/commands-settings.ts");
-    const declaredInWeb = (c: (typeof COMMAND_CATALOG)[number]): boolean => {
+    const declaredInWeb = (c: (typeof CATALOG)[number]): boolean => {
       const names = [c.webName ?? c.name, ...(c.aliases ?? [])];
       return names.some((n) => new RegExp(`^\\s{4}${n}:`, "m").test(webSource));
     };
-    for (const c of COMMAND_CATALOG) {
+    for (const c of CATALOG) {
       const expected = declaredInWeb(c) || CLIENT_SIDE_WEB.has(c.name);
       expect(
         isAvailable(c, "web"),
@@ -159,15 +161,15 @@ describe("CommandRegistry", () => {
   });
 
   it("isAvailable: без surfaces команда доступна терминалу и TUI, но не вебу", () => {
-    const spec = COMMAND_CATALOG.find((c) => c.name === "run")!;
+    const spec = CATALOG.find((c) => c.name === "run")!;
     expect(isAvailable(spec, "terminal")).toBe(true);
     expect(isAvailable(spec, "tui")).toBe(true);
     expect(isAvailable(spec, "web")).toBe(false);
   });
 
   it("tui получает терминальный набор целиком — точка подключения будущего TUI", () => {
-    const tui = new CommandRegistry(COMMAND_CATALOG).list("tui").map((c) => c.name);
-    const terminal = new CommandRegistry(COMMAND_CATALOG).list("terminal").map((c) => c.name);
+    const tui = new CommandRegistry(CATALOG).list("tui").map((c) => c.name);
+    const terminal = new CommandRegistry(CATALOG).list("terminal").map((c) => c.name);
     expect(tui).toEqual(terminal);
     expect(tui).toContain("config");
     expect(tui).toContain("status");
