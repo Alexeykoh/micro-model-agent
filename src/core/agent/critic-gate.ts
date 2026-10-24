@@ -6,6 +6,7 @@ import type { CriticIssue, CriticVerdict, EvidencePack } from "../../modules/cri
 import { normalizedSignature, syntheticIssue } from "../../modules/critic/issue-key";
 import type { SessionLogger } from "../session-logger";
 import type { OnMeta } from "../types";
+import { criticDegradeLine } from "./critic-degrade-line";
 import type { LoopState } from "./loop-state";
 
 export { normalizedSignature } from "../../modules/critic/issue-key";
@@ -238,6 +239,10 @@ export class CriticGate {
       recoverable: true,
     });
     deps.logger.diagnostic("warn", `Critic returned no verdict (degraded, fail-open): ${reason}`);
+    // Лента обязана знать, что верификации НЕ было: молчаливый pass неотличим
+    // от «проверил и сказал ок». Техническая причина остаётся выше — в логе
+    // сессии и app-логе; в чат идёт класс причины (STYLE, одна строка).
+    deps.onMeta?.(`\n${criticDegradeLine(reason)}\n`, "status");
   }
 
   private logVerdict(deps: CriticGateDeps, verdict: CriticVerdict, count: number): void {
