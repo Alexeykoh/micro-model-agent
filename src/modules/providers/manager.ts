@@ -1,5 +1,4 @@
 // Менеджер провайдеров: активный провайдер + модель в рантайме, hot-swap, кеш сборки.
-// src/modules/providers/manager.ts
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderConfig, ProviderEntry, ReasoningStrategy, ModelCapabilities } from "../../config/types";
 import type { ProviderRegistry } from "./registry";
@@ -46,10 +45,12 @@ export class ProviderManager {
   constructor(config: ProviderConfig, opts: ProviderManagerOptions) {
     this.opts = opts;
     this.registry = opts.registry ?? defaultRegistry();
-    this.providerConfig = config;
-    this.entries = this.normalizeEntries(config);
-    this.activeProviderName = this.resolveActive(config);
-    this.lastKnownFallback = config.fallback;
+    // Своя копия: `switch()` — рантайм-состояние (probe/failover), а не выбор
+    // пользователя; иначе probe всех entries молча подменяет active и его персистит save.
+    this.providerConfig = { ...config };
+    this.entries = this.normalizeEntries(this.providerConfig);
+    this.activeProviderName = this.resolveActive(this.providerConfig);
+    this.lastKnownFallback = this.providerConfig.fallback;
     this.model = "";
   }
 
@@ -135,8 +136,8 @@ export class ProviderManager {
     }
     this.activeProviderName = name;
     if (model !== undefined) this.model = model;
-    // Выбор провайдера сохраняем в конфиге: иначе после рестарта вернётся
-    // прежний (аудит §7.7). Конфиг живой — следующий saveConfig его запишет.
+    // Только своё состояние: живой `config.provider` не трогаем — иначе probe/
+    // failover подменяет выбор; явный `/provider use` персистит через `toConfig()`.
     this.providerConfig.active = name;
     return this.active;
   }
@@ -149,9 +150,7 @@ export class ProviderManager {
   /** Пересобрать активный провайдер с новой моделью. */
   setModel(model: string): LLMProvider {
     this.model = model;
-    // Кэш ключуется `${name}|${model}`; старые записи под прежнюю модель
-    // бесполезны и копятся. Сбрасываем — провайдер пересоберётся под новый
-    // model при следующем обращении к `active`.
+    // Кэш ключуется `${name}|${model}`: записи под прежнюю модель бесполезны — сбрасываем.
     this.resetCache();
     return this.active;
   }
