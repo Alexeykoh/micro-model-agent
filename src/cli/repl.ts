@@ -42,7 +42,7 @@ import type { EnvironmentReport } from "../core/environment";
 import { registerAllCommands } from "./repl-commands";
 import type { ReplContext, SlashCommand } from "./repl-commands";
 import { CommandRegistry, groupCommands } from "../core/commands/catalog";
-import { COMMAND_CATALOG } from "../core/commands/spec";
+import { buildCommandCatalog } from "../core/commands/spec";
 import { captureConfigSnapshot } from "../config/registry";
 import { activeProviderEndpoint } from "../modules/providers/manager";
 import { probeLspServers } from "../modules/lsp/probe";
@@ -1139,7 +1139,7 @@ export class Repl implements ReplContext, Host {
    * (`reregisterCommands`) подписи в справке были свежими.
    */
   private commandRegistry(): CommandRegistry {
-    const registry = new CommandRegistry(COMMAND_CATALOG);
+    const registry = new CommandRegistry(buildCommandCatalog());
     for (const [key, cmd] of this.commands) {
       registry.bind(key, (args) => cmd.action(args));
     }

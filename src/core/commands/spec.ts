@@ -15,51 +15,58 @@
 import { t } from "../../i18n/index";
 import type { CommandSpec } from "./catalog";
 
+/** Запись каталога с i18n-ключами: строки резолвятся при каждом чтении. */
+type CommandSpecDef = Omit<CommandSpec, "description" | "usage"> & {
+  readonly descriptionKey: string;
+  readonly usageKey?: string;
+};
+
+
 /**
  * Все команды агента. Порядок сохраняется в реестре и определяет вид `/help`
  * внутри группы (сортировка — по имени, группа задаётся полем `group`).
  */
-export const COMMAND_CATALOG: readonly CommandSpec[] = [
+const SPEC_DEFS: readonly CommandSpecDef[] = [
   // ── general ───────────────────────────────────────────────────────────────
   {
     name: "help",
-    description: t("repl.help"),
-    usage: t("repl.help_usage"),
+    descriptionKey: "repl.help",
+    usageKey: "repl.help_usage",
     examples: ["/help", "/help config"],
     group: "general",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "exit",
-    description: t("repl.exit"),
+    descriptionKey: "repl.exit",
     aliases: ["quit", "q"],
-    usage: t("repl.exit_usage"),
+    usageKey: "repl.exit_usage",
     group: "general",
   },
   {
     name: "clear",
-    description: t("repl.clear"),
-    usage: t("repl.clear_usage"),
+    descriptionKey: "repl.clear",
+    usageKey: "repl.clear_usage",
     group: "general",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "run",
-    description: t("repl.run"),
-    usage: t("repl.run_usage"),
+    descriptionKey: "repl.run",
+    usageKey: "repl.run_usage",
     group: "general",
   },
   {
     name: "image",
-    description: t("repl.image"),
+    descriptionKey: "repl.image",
     aliases: ["img"],
-    usage: t("repl.image_usage"),
+    usageKey: "repl.image_usage",
     group: "general",
   },
   {
     name: "new",
-    description: t("repl.new"),
-    usage: t("repl.new_usage"),
+    descriptionKey: "repl.new",
+    usageKey: "repl.new_usage",
     group: "general",
     surfaces: ["terminal", "tui", "web"],
   },
@@ -67,79 +74,79 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
   // ── agent ─────────────────────────────────────────────────────────────────
   {
     name: "config",
-    description: t("repl.config"),
-    usage: t("repl.config_usage"),
+    descriptionKey: "repl.config",
+    usageKey: "repl.config_usage",
     examples: ["/config", "/config model", "/config reasoning.mode high", "/config reset ui.verbosity"],
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "status",
-    description: t("repl.status"),
-    usage: t("repl.status_usage"),
+    descriptionKey: "repl.status",
+    usageKey: "repl.status_usage",
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "reasoning",
-    description: t("repl.reasoning"),
-    usage: t("repl.reasoning_usage"),
+    descriptionKey: "repl.reasoning",
+    usageKey: "repl.reasoning_usage",
     examples: ["/reasoning", "/reasoning show", "/reasoning level high"],
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "verbose",
-    description: t("repl.verbose"),
-    usage: t("repl.verbose_usage"),
+    descriptionKey: "repl.verbose",
+    usageKey: "repl.verbose_usage",
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "model",
-    description: t("repl.model"),
-    usage: t("repl.model_usage"),
+    descriptionKey: "repl.model",
+    usageKey: "repl.model_usage",
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "provider",
-    description: t("repl.provider"),
-    usage: t("repl.provider_usage"),
+    descriptionKey: "repl.provider",
+    usageKey: "repl.provider_usage",
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "context",
-    description: t("repl.context"),
-    usage: t("repl.context_usage"),
+    descriptionKey: "repl.context",
+    usageKey: "repl.context_usage",
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "security",
-    description: t("repl.security"),
+    descriptionKey: "repl.security",
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "export",
-    description: t("repl.export"),
-    usage: t("repl.export_usage"),
+    descriptionKey: "repl.export",
+    usageKey: "repl.export_usage",
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "memory",
-    description: t("repl.memory_usage"),
-    usage: t("repl.memory_usage"),
+    descriptionKey: "repl.memory_usage",
+    usageKey: "repl.memory_usage",
     group: "agent",
     surfaces: ["terminal", "tui", "web"],
   },
   {
     name: "sessions",
-    description: t("repl.sessions"),
-    usage: t("repl.sessions_usage"),
+    descriptionKey: "repl.sessions",
+    usageKey: "repl.sessions_usage",
     group: "agent",
     // Имя в браузере отличается: веб отдаёт `/session list|use` (см.
     // `webui/settings/commands-settings.ts`), терминал — `/sessions` для
@@ -150,86 +157,99 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
   },
   {
     name: "sysprompt",
-    description: t("repl.sysprompt_desc"),
-    usage: t("repl.sysprompt_usage"),
+    descriptionKey: "repl.sysprompt_desc",
+    usageKey: "repl.sysprompt_usage",
     examples: ["/sysprompt", "/sysprompt --full"],
     group: "agent",
   },
   {
     name: "doctor",
-    description: t("repl.doctor"),
-    usage: t("repl.doctor_usage"),
+    descriptionKey: "repl.doctor",
+    usageKey: "repl.doctor_usage",
     group: "agent",
   },
   {
     name: "map",
-    description: t("repl.map"),
-    usage: t("repl.map_usage"),
+    descriptionKey: "repl.map",
+    usageKey: "repl.map_usage",
     group: "agent",
   },
   {
     name: "lsp",
-    description: t("repl.lsp"),
-    usage: t("repl.lsp_usage"),
+    descriptionKey: "repl.lsp",
+    usageKey: "repl.lsp_usage",
     group: "agent",
   },
   {
     name: "skill",
-    description: t("repl.skill"),
-    usage: t("repl.skill_usage"),
+    descriptionKey: "repl.skill",
+    usageKey: "repl.skill_usage",
     group: "skill",
   },
   {
     name: "plugins",
-    description: t("repl.plugins"),
-    usage: t("repl.plugins_usage"),
+    descriptionKey: "repl.plugins",
+    usageKey: "repl.plugins_usage",
     group: "agent",
   },
   {
     name: "reload",
-    description: t("repl.reload"),
-    usage: t("repl.reload_usage"),
+    descriptionKey: "repl.reload",
+    usageKey: "repl.reload_usage",
     group: "agent",
   },
   {
     name: "wizard",
-    description: t("repl.wizard"),
+    descriptionKey: "repl.wizard",
     aliases: ["setup"],
-    usage: t("repl.wizard_usage"),
+    usageKey: "repl.wizard_usage",
     group: "agent",
   },
   {
     name: "meet",
-    description: t("cli.meet"),
+    descriptionKey: "cli.meet",
     aliases: ["познакомимся"],
-    usage: t("repl.meet_usage"),
+    usageKey: "repl.meet_usage",
     group: "agent",
   },
   {
     name: "init",
-    description: t("repl.init"),
-    usage: t("repl.init_usage"),
+    descriptionKey: "repl.init",
+    usageKey: "repl.init_usage",
     group: "agent",
   },
 
   // ── session ───────────────────────────────────────────────────────────────
   {
     name: "resume",
-    description: t("repl.resume"),
+    descriptionKey: "repl.resume",
     aliases: ["use"],
-    usage: t("repl.resume_usage"),
+    usageKey: "repl.resume_usage",
     group: "session",
   },
   {
     name: "rename",
-    description: t("repl.rename"),
-    usage: t("repl.rename_usage"),
+    descriptionKey: "repl.rename",
+    usageKey: "repl.rename_usage",
     group: "session",
   },
   {
     name: "delete",
-    description: t("repl.delete"),
-    usage: t("repl.delete_usage"),
+    descriptionKey: "repl.delete",
+    usageKey: "repl.delete_usage",
     group: "session",
   },
 ];
+
+/**
+ * Каталог на ТЕКУЩЕЙ локали. Строится на каждый вызов: иначе строки замерзают
+ * на языке, активном при импорте модуля (locale ставится в `main()` позже,
+ * чем импортируется `Repl`), и `/help`/комплитер не переводятся.
+ */
+export function buildCommandCatalog(): readonly CommandSpec[] {
+  return SPEC_DEFS.map(({ descriptionKey, usageKey, ...spec }) => ({
+    ...spec,
+    description: t(descriptionKey),
+    ...(usageKey === undefined ? {} : { usage: t(usageKey) }),
+  }));
+}
