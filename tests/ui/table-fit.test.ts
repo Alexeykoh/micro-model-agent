@@ -37,4 +37,26 @@ describe("таблица: вписывается в терминал", () => {
     const out = formatTable([header, sep], { maxWidth: 120 });
     expect(out.join("\n")).toContain("more columns");
   });
+
+  it("keeps header text readable: a long column absorbs the cut, not the headers", () => {
+    // /sessions на 80 колонках: длинное имя сессии сжимало «Обновлено» и
+    // «Сообщений» до «Об…»/«Со…». Шапку ниже её собственного текста не режем,
+    // пока есть колонка с длинным содержимым.
+    const out = formatTable(
+      [
+        "| ID | Имя | Обновлено | Сообщений |",
+        "|---|---|---|---|",
+        "| ses_mvm41s8k | Очень длинное имя сессии из первого промпта пользователя | 2026-10-24 10:55:12 | 3 |",
+      ],
+      { maxWidth: 80 },
+    );
+    const header = out[0];
+    expect(header).toContain("Обновлено");
+    expect(header).toContain("Сообщений");
+    expect(header).toContain("Имя");
+    expect(header).not.toContain("Об…");
+    for (const line of out) {
+      expect(stringWidth(line)).toBeLessThanOrEqual(80);
+    }
+  });
 });
