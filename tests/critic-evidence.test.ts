@@ -5,9 +5,23 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { buildEvidencePack, isWorkMutation } from "../src/modules/critic/evidence";
 
+/**
+ * Env без переменных репозитория. Git экспортирует `GIT_DIR`/`GIT_WORK_TREE`
+ * хукам, и унаследованный `GIT_DIR` уводит `git init/add/commit` из temp-каталога
+ * в НАСТОЯЩИЙ репозиторий (инцидент 2026-10-24: pre-push сделал его bare и
+ * закоммитил пустое дерево в master).
+ */
+function gitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_")) delete env[key];
+  }
+  return env;
+}
+
 function gitAvailable(): boolean {
   try {
-    execFileSync("git", ["--version"], { stdio: "ignore" });
+    execFileSync("git", ["--version"], { stdio: "ignore", env: gitEnv() });
     return true;
   } catch {
     return false;
@@ -125,7 +139,7 @@ describe("critic evidence", () => {
     });
 
     function initRepo(): void {
-      const opts = { cwd: tmpDir, stdio: "ignore" } as const;
+      const opts = { cwd: tmpDir, stdio: "ignore", env: gitEnv() } as const;
       execFileSync("git", ["init"], opts);
       execFileSync("git", ["config", "user.email", "t@t.t"], opts);
       execFileSync("git", ["config", "user.name", "t"], opts);
