@@ -566,13 +566,22 @@ function registerProviderCommands(ctx: ReplContext): void {
   const listModels = async (): Promise<void> => {
     ctx.output.writeLine(`${t("repl.model_current")}  ${ctx.config.model}`);
 
-    const { OpenAICompatProvider } = await import("../llm/openai-compat");
-    const provider = new OpenAICompatProvider({
-      model: ctx.config.model,
-      baseUrl: ctx.config.provider.baseUrl,
-      apiKey: ctx.config.provider.apiKey,
-      contextWindow: ctx.config.contextWindow,
-    });
+    // Истина — активная запись `entries[]`: плоские поля протухают после
+    // `/provider use` и уводили список моделей к чужому эндпоинту (аудит §7.7).
+    const endpoint = activeProviderEndpoint(ctx.config.provider);
+    const activeName =
+      ctx.config.provider.active ??
+      ctx.config.provider.entries?.[0]?.label ??
+      endpoint.type;
+    const provider = ctx.agent.getProviderFor(activeName);
+    if (!provider) {
+      ctx.output.writeLine(
+        t("cli.model_provider_unavailable", { name: activeName }),
+        "stderr",
+      );
+      ctx.output.writeLine(t("cli.model_hint"));
+      return;
+    }
 
     const { Spinner } = await import("../ui/spinner");
     // Оверлей опционален у фронтенда; без него спиннер пишет в stderr сам
@@ -591,7 +600,7 @@ function registerProviderCommands(ctx: ReplContext): void {
         const { getCertMark } = await import("../modules/certification/manifest");
         for (const m of models) {
           const marker = m === ctx.config.model ? pc.green("* ") : "  ";
-          const mark = getCertMark(m, ctx.config.provider.baseUrl, version, process.cwd());
+          const mark = getCertMark(m, endpoint.baseUrl, version, process.cwd());
           const cert =
             mark === "certified" ? pc.green("✔") : mark === "stale" ? pc.yellow("○") : pc.dim("·");
           const label =
