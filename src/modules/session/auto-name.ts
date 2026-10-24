@@ -14,6 +14,14 @@ const MIN_CUT = 20;
  */
 export const TITLE_MAX_TOKENS = 512;
 
+/**
+ * Бюджет времени на LLM-заголовок. 8 с не хватало локальным моделям: первый
+ * токен у них приходит через 30–45 с (docs/small-model-observations.md), вызов
+ * обрывался, и сессия навсегда оставалась первым промптом. Вызов фоновый и не
+ * блокирует ход, поэтому запас дешевле потерянного заголовка.
+ */
+export const TITLE_TIMEOUT_MS = 60_000;
+
 /** Детерминированное мгновенное имя сессии из первого сообщения пользователя. */
 export function deriveSessionName(input: string, date?: string): string {
   const firstLine = input.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
@@ -68,7 +76,7 @@ export function buildTitlePrompt(input: string): string {
 export async function generateSessionTitle(
   input: string,
   chat: TitleChat,
-  timeoutMs = 8000,
+  timeoutMs = TITLE_TIMEOUT_MS,
   onFail?: (reason: string) => void,
 ): Promise<string | null> {
   const controller = new AbortController();

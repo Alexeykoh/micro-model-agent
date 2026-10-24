@@ -4,6 +4,7 @@ import {
   generateSessionTitle,
   sanitizeTitle,
   TITLE_MAX_TOKENS,
+  TITLE_TIMEOUT_MS,
 } from "../src/modules/session/auto-name";
 
 describe("deriveSessionName", () => {
@@ -67,5 +68,11 @@ describe("generateSessionTitle", () => {
   it("бюджет заголовка переживает reasoning-токены", () => {
     // 48 не хватало: замер живо — 48 → пусто, 128 → заголовок. Держим запас.
     expect(TITLE_MAX_TOKENS).toBeGreaterThanOrEqual(256);
+  });
+
+  it("дефолтный таймаут рассчитан на медленную локальную модель", () => {
+    // Ровно боевой случай: локальная 9B отвечает 30–45 с, а старый дефолт 8 с
+    // обрывал заголовок (`session title not generated: The operation was aborted`).
+    expect(TITLE_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
   });
 });

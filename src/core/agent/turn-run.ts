@@ -136,7 +136,10 @@ export async function runTurn(
           input,
           chat,
           undefined,
-          (reason) => logger.warn(`session title not generated: ${reason}`),
+          // Заголовок — косметика (fail-open): отказ обязан оставить след в
+          // логе (INV-15), но не WARN в терминал на каждом старте (STYLE,
+          // «quiet by default»).
+          (reason) => logger.logSilent("info", `session title not generated: ${reason}`),
         )
           .then((title) => {
             if (!title) return;
