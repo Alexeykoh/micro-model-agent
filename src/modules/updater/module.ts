@@ -3,6 +3,8 @@ import type { UpdaterConfig } from "../../config/types";
 import { Updater, type InstallResult } from "./checker";
 import type { InstallProgress } from "./install-release";
 import { extractLatestChangelog, readChangelog } from "./changelog-reader";
+import { installFailureText } from "./messages";
+import { installScriptCommand } from "./release";
 import { t } from "../../i18n/index";
 import { pc } from "../../ui/colors";
 import { defaultOutputBus } from "../../output";
@@ -104,10 +106,14 @@ export class UpdaterModule {
       const latest = check.latest ?? "";
       this.logger.info(t("updater.installing", { current, latest: latest || "latest" }));
       this.onNotice?.({ phase: "installing", current, latest });
-      const result = await this.updater.install((progress) => {
-        this.onNotice?.({ phase: "installing", current, latest, progress });
-      });
-      if (result.success) this.reportInstalled(current, result.installed ?? latest);
+      const leftover: string[] = [];
+      const result = await this.updater.install(
+        (progress) => {
+          this.onNotice?.({ phase: "installing", current, latest, progress });
+        },
+        (names) => leftover.push(...names),
+      );
+      if (result.success) this.reportInstalled(current, result.installed ?? latest, leftover);
       else this.reportFailed(current, latest, result.error ?? "");
       return result;
     } finally {
@@ -208,33 +214,47 @@ export class UpdaterModule {
     this.installing = true;
     try {
       this.logger.info(t("updater.installing", { current, latest }));
-      const install = await this.updater.install();
-      if (install.success) this.reportInstalled(current, latest);
+      const leftover: string[] = [];
+      const install = await this.updater.install(undefined, (names) => leftover.push(...names));
+      if (install.success) this.reportInstalled(current, latest, leftover);
       else this.reportFailed(current, latest, install.error ?? "");
     } finally {
       this.installing = false;
     }
   }
 
-  private reportInstalled(current: string, latest: string): void {
+  private reportInstalled(current: string, latest: string, leftover: string[] = []): void {
     const changelog = readChangelog("micro-models-agent");
     const latestEntry = changelog ? extractLatestChangelog(changelog) : null;
     const changelogBlock = latestEntry
       ? pc.cyan(`\n${t("cli.changelog_title", { version: latest })}\n`) + latestEntry
       : "";
     this.logger.info(t("updater.installed", { current, latest, changelog: changelogBlock }));
+    // Новая версия уже активна; занятый каталог старой — не провал обновления.
+    // Строка идёт уровнем ниже (info → detail), чтобы не спорить с успехом.
+    if (leftover.length > 0) {
+      this.logger.info(t("updater.cleanup_deferred", { versions: leftover.join(", ") }));
+    }
     this.onNotice?.({ phase: "installed", current, latest });
   }
 
   private reportFailed(current: string, latest: string, error: string): void {
-    this.logger.warn(t("updater.install_failed", { current, latest, error }));
+    const root = this.updater.getInstallRoot();
+    // В чат — причина и одна команда; сырой `EACCES: …, rm '…'` остаётся
+    // диагностикой в session-логе (info не виден в терминале по умолчанию).
+    this.logger.warn(installFailureText(latest, error, root));
+    this.logger.info(t("updater.install_failed_detail", { error }));
     this.onNotice?.({ phase: "failed", current, latest, error });
   }
 
   /** Дефолт `autoInstall: false`: сообщение с подсказкой, как обновиться. */
   private notifyAvailable(current: string, latest: string): void {
     this.logger.warn(
-      t("updater.available", { current, latest, hint: t("updater.auto_install_hint") }),
+      t("updater.available", {
+        current,
+        latest,
+        hint: t("updater.auto_install_hint", { cmd: installScriptCommand() }),
+      }),
     );
     this.onNotice?.({ phase: "available", current, latest });
   }

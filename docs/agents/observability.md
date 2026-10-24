@@ -93,6 +93,7 @@ Fail-open считается не по факту `catch`, а по контра�
 | `src/core/agent/context-log.ts:122,398,407,447` | битое значение / недоступный лог / нечитаемый существующий лог | не fail-open: лог контекста — диагностический, его потеря не меняет поведение петли |
 | `src/core/environment.ts:136,172,180` | нет `package.json` / битая версия / нет каталога браузеров | не fail-open: окружение **сообщает** отсутствие (`"missing"`, `false`), а не притворяется исправным |
 | `src/core/context/ledger.ts:60` | провал записи durable-леджера | долг `ledger-write-diagnostics` в `debt.md` |
+| `src/modules/updater/{install-release,versions,factory}.ts` | уборка после `flip` не удалась: каталог старой версии занят (`runtime/bun.exe`), `tmp` или отброшенный ярлык не снялись | не fail-open: обновление **применено** (факт `installed` + SSE), отказ уборки едет списком `onCleanupDeferred` → `updater.cleanup_deferred` (info/detail), а `pruneStaleVersions` дочищает на следующем старте |
 
 ## Каталог сигнатур (`mma session diagnose`)
 

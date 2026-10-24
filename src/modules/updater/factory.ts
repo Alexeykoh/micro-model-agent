@@ -6,10 +6,13 @@
  * настроек были мёртвыми. Здесь одна точка сборки: dev-гард, чтение версии и
  * проброс уведомлений одинаковы для обеих поверхностей.
  */
+import { realpathSync } from "node:fs";
+import { dirname, resolve, sep } from "node:path";
 import { readMmaVersion } from "../../core/version";
 import { defaultOutputBus } from "../../output";
 import { isDevEntryPath } from "./dev-detect";
 import { Updater, type UpdaterDeps } from "./checker";
+import { pruneStaleVersions } from "./versions";
 import { UpdaterModule, type UpdaterLogger, type UpdateNotice } from "./module";
 import type { UpdaterConfig } from "../../config/types";
 
@@ -52,10 +55,42 @@ export function createUpdater(opts: CreateUpdaterOptions): UpdaterModule | undef
       opts.onNotice,
     );
     if (dev) module.setInstallEnabled(false);
+    pruneAfterRestart(updater, opts.entryPath);
     module.start();
     return module;
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Досвистывает каталоги прошлых версий после перезапуска. При обновлении на
+ * Windows каталог работающей версии занят `runtime/bun.exe`, поэтому `rm` там
+ * падает с EACCES и уборка переносится на следующий запуск — здесь.
+ *
+ * Трогаем `~/.mma/versions` только если код запущен из самого install-root:
+ * dev-прогон из репозитория не должен чистить пользовательскую установку.
+ */
+function pruneAfterRestart(updater: Updater, entryPath: string): void {
+  const root = resolve(updater.getInstallRoot());
+  const entry = resolve(entryPath);
+  const norm = (p: string): string =>
+    process.platform === "win32" ? p.toLowerCase() : p;
+  if (!norm(entry).startsWith(`${norm(root)}${sep}`)) return;
+  void pruneStaleVersions({ root, keep: [runningVersionDir(entry)] }).catch(() => {});
+}
+
+/**
+ * Каталог версии, из которой запущен процесс. `current` — ярлык, поэтому
+ * `realpath` обязателен: на POSIX каталог работающей версии удаляем, а
+ * запущенный процесс потеряет лениво подгружаемые файлы.
+ */
+function runningVersionDir(entry: string): string {
+  const appDir = dirname(entry);
+  try {
+    return dirname(realpathSync(appDir));
+  } catch {
+    return dirname(appDir);
   }
 }
 

@@ -90,6 +90,14 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
   "src/modules/webui/assets/js/sidebar/lsp.ts": { count: 1, reason: "UI: запись в clipboard best-effort" },
   "src/modules/lsp/check-tool.ts": { count: 1, reason: "проба существования пути — отсутствие файла нормальный результат" },
   "src/modules/lsp/connection.ts": { count: 1, reason: "best-effort запрос диагностики, сервер может не ответить" },
+  "src/modules/updater/install-release.ts": {
+    count: 2,
+    reason: "teardown после flip (tmp и отброшенный ярлык): установка применена, ошибка уборки не actionable",
+  },
+  "src/modules/updater/factory.ts": {
+    count: 1,
+    reason: "фоновая уборка каталогов прошлых версий на старте — best-effort, не блокирует запуск",
+  },
 };
 
 const CAST_RE = /\bas any\b|\bas unknown as\b/g;

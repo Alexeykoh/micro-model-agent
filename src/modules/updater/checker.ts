@@ -83,6 +83,11 @@ export class Updater {
     return this.currentVersion;
   }
 
+  /** Корень установки (`~/.mma`) — для текстов ошибок и уборки версий. */
+  getInstallRoot(): string {
+    return this.installRoot;
+  }
+
   /** Платформенный ключ релиза, либо null. */
   getPlatformKey(): ReleasePlatformKey | null {
     return releasePlatformKey(this.platform, this.arch);
@@ -117,9 +122,13 @@ export class Updater {
   /**
    * Скачивает и активирует свежую версию из GitHub Releases.
    * Возвращает InstallResult (не бросает). `onProgress` — best-effort прогресс
-   * (скачивание/проверка/распаковка/активация).
+   * (скачивание/проверка/распаковка/активация), `onCleanupDeferred` — каталоги
+   * прошлых версий, которые не удалось снести сразу (заняты на Windows).
    */
-  async install(onProgress?: InstallProgressFn): Promise<InstallResult> {
+  async install(
+    onProgress?: InstallProgressFn,
+    onCleanupDeferred?: (leftover: string[]) => void,
+  ): Promise<InstallResult> {
     try {
       const key = this.getPlatformKey();
       if (!key) {
@@ -140,6 +149,7 @@ export class Updater {
           fetchImpl: this.fetchImpl,
           installRoot: this.installRoot,
           extract: this.extract,
+          ...(onCleanupDeferred ? { onCleanupDeferred } : {}),
         },
         onProgress,
       );

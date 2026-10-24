@@ -155,8 +155,15 @@ export function onLog(data: Dict): void {
   const level = data.level;
   const cls = level === "error" ? "errline" : level === "warn" ? "warnline" : "detail";
   const glyph = level === "error" ? "✗ " : level === "warn" ? "⚠ " : "↳ ";
+  // A bus line may carry a hint on the next line (STYLE.md: "what — cause" plus
+  // one "↳ what to do"). Render the head with the level glyph and the rest as
+  // dim detail, so advice never blurs into the warning itself.
+  const [head, ...rest] = String(data.text).split("\n");
   const line = el("div", cls);
-  line.textContent = glyph + data.text;
+  line.textContent = glyph + head;
   appendTo(feed, line);
-  if (level === "error" || level === "warn") announce(data.text);
+  for (const extra of rest) {
+    appendTo(feed, el("div", "detail", extra));
+  }
+  if (level === "error" || level === "warn") announce(head);
 }

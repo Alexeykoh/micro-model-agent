@@ -42,7 +42,7 @@ async function runUpdate(btn: HTMLButtonElement): Promise<void> {
   if (r.ok && r.data && r.data.ok) {
     setIndicator(t("web.update.installed", { latest: r.data.installed || "" }), false);
   } else {
-    setIndicator((r.data && r.data.error) || t("web.update.failed"), true);
+    setIndicator(t("web.update.failed"), true);
     btn.disabled = false;
     btn.textContent = t("web.update.install");
   }
