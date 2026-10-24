@@ -139,6 +139,18 @@ function parsePorcelainLine(line: string): string | null {
 }
 
 /**
+ * Env без `GIT_*`: унаследованный `GIT_DIR`/`GIT_WORK_TREE` (хуки git, скрипты)
+ * привязывает дочерний `git` к ЧУЖОМУ репозиторию, и `cwd` перестаёт решать.
+ */
+function gitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_")) delete env[key];
+  }
+  return env;
+}
+
+/**
  * Фактически изменённые файлы из git (ses_mup6p61q): правки, внесённые мимо
  * файловых тулов (Bun-скрипты через bash, heredoc, внешние редакторы),
  * невидимы для changedFileOf — критик судил по пустому списку и выдал ложный
@@ -151,6 +163,7 @@ function gitChangedFiles(baseDir: string): string[] {
   try {
     out = execFileSync("git", ["status", "--porcelain"], {
       cwd: resolve(baseDir),
+      env: gitEnv(),
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 10_000,

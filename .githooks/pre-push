@@ -30,6 +30,13 @@ if [ -z "$targets" ]; then
 fi
 
 echo "pre-push: protected branch push ($targets) — running quality gate…"
+# Git exports repository-locating vars (GIT_DIR, GIT_WORK_TREE, ...) to hooks.
+# Tests spawn `git` inside temp dirs; an inherited GIT_DIR makes those commands
+# operate on THIS repository instead (2026-10-24: a critic test re-inited it as
+# bare and committed an empty tree into master). Scrub them so child processes
+# discover repos by their own cwd.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR \
+  GIT_NAMESPACE GIT_PREFIX GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG_COUNT
 if bun run quality && bun test; then
   echo "pre-push: quality gate passed."
   exit 0
