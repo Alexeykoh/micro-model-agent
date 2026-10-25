@@ -526,7 +526,10 @@ export class OpenAICompatProvider implements LLMProvider {
             st.parsedChunks++;
             const choice = parsed.choices?.[0];
             if (!choice) {
-              // Usage приходит в последнем чанке с пустыми choices
+              // Usage приходит в последнем чанке с пустыми choices.
+              // DEBT(cost-estimate-not-usage): OpenCode Go кладёт usage в чанк
+              // с непустым choices — такой usage теряется, стоимость считается
+              // по оценке и без кеша (см. docs/agents/debt.md).
               if (parsed.usage) {
                 st.usage = {
                   promptTokens: parsed.usage.prompt_tokens ?? 0,
