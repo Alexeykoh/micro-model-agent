@@ -4,7 +4,7 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.12.5] - 2026-10-25
 
 ### Fixed
 
@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   не зависит от автозагрузки `Get-FileHash` через чужой `PSModulePath`.
   Гварды: `tests/install-retry.test.ts` (оба PowerShell 5.1/7 и `sh`, реальные
   обрывы/порча по локальному HTTP), `tests/arch/platform-skips.test.ts`.
+
 ## [0.12.4] - 2026-10-24
 
 ### Fixed
