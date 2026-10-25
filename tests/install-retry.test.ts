@@ -156,6 +156,20 @@ function freshHome(): string {
   return home;
 }
 
+/** Имя ассета для текущей платформы: так install.ps1/install.sh кладут архив. */
+const artifactName = isWin
+  ? "mma-win-x64.tar.gz"
+  : `mma-linux-${process.arch === "arm64" ? "arm64" : "x64"}.tar.gz`;
+
+/** Половина архива в кэше загрузки — имитация прерванной (Ctrl+C) загрузки. */
+function seedPartial(home: string): number {
+  const dir = join(home, "download");
+  mkdirSync(dir, { recursive: true });
+  const half = Math.floor(artifact.length / 2);
+  writeFileSync(join(dir, artifactName), artifact.subarray(0, half));
+  return half;
+}
+
 /** env с PATH, в который уже входит bin: установщик не должен править rc/реестр. */
 function envWithPath(values: Record<string, string | undefined>, pathValue: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -213,6 +227,7 @@ async function installWith(
   const values: Record<string, string> = {
     MMA_INSTALL_BASE: harness.base,
     MMA_HOME: home,
+    MMA_DOWNLOAD_DIR: join(home, "download"),
     HOME: join(home, "home"),
     MMA_INSTALL_DRY_RUN: "0",
   };
@@ -295,6 +310,19 @@ function ps1Suite(shell: string): () => void {
       assertInstalled(res.home);
     });
 
+    it("продолжает загрузку, прерванную в прошлый запуск", testTimeout, async () => {
+      const home = freshHome();
+      const half = seedPartial(home);
+      const res = await install("ok", home);
+      expect(res.status, res.stdout).toBe(0);
+      expect(res.stdout).toContain("resuming download at");
+      expect(res.ranges).toBeGreaterThanOrEqual(1);
+      assertInstalled(home);
+      // Успешная установка убирает 78-мегабайтный архив из кэша.
+      expect(statSync(join(home, "download", artifactName), { throwIfNoEntry: false })).toBeUndefined();
+      expect(half).toBeGreaterThan(0);
+    });
+
     it("не удаляет версию, из которой сейчас работает MMA", testTimeout, async () => {
       const first = await install("ok");
       expect(first.status, first.stdout).toBe(0);
@@ -327,8 +355,8 @@ describe.skipIf(!isWin)("install.ps1 (pwsh)", ps1Suite("pwsh"));
 describe.skipIf(!isWin)("install.ps1 (powershell.exe)", ps1Suite("powershell.exe"));
 
 describe.skipIf(isWin)("install.sh", () => {
-  const install = (mode: Mode): Promise<InstallOutcome> =>
-    installWith("sh", [join(root, "scripts", "install.sh")], mode, ":");
+  const install = (mode: Mode, home?: string): Promise<InstallOutcome> =>
+    installWith("sh", [join(root, "scripts", "install.sh")], mode, ":", home);
 
   it("ставит релиз с первого раза", testTimeout, async () => {
     const res = await install("ok");
@@ -353,5 +381,16 @@ describe.skipIf(isWin)("install.sh", () => {
     expect(res.requests).toBeGreaterThanOrEqual(2);
     expect(res.stdout).not.toContain("could not download");
     assertInstalled(res.home);
+  });
+
+  it("продолжает загрузку, прерванную в прошлый запуск", testTimeout, async () => {
+    const home = freshHome();
+    seedPartial(home);
+    const res = await install("ok", home);
+    expect(res.status, res.stdout).toBe(0);
+    expect(res.stdout).toContain("resuming at");
+    expect(res.ranges).toBeGreaterThanOrEqual(1);
+    assertInstalled(home);
+    expect(statSync(join(home, "download", artifactName), { throwIfNoEntry: false })).toBeUndefined();
   });
 });

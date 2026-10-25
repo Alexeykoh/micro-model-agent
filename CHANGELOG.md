@@ -4,6 +4,19 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Установщик показывает прогресс и продолжает загрузку после Ctrl+C.**
+  Молчаливые 78 МБ на медленном канале выглядели как зависание, а прерывание
+  начинало загрузку заново: архив лежал в одноразовом `tmp`. Теперь `curl`
+  рисует прогресс-бар, архив кладётся в стабильный кэш (`%TEMP%\mma-download`,
+  `MMA_DOWNLOAD_DIR`), и повторный запуск продолжает с места обрыва. Зависшая
+  передача (<2 КБ/с за 60 с) обрывается и докачивается, а не висит вечно;
+  после успешной установки архив из кэша удаляется.
+  Гвард: `tests/install-retry.test.ts` (сценарий «прервано в прошлый запуск»).
+
 ## [0.12.5] - 2026-10-25
 
 ### Fixed

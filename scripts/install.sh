@@ -42,12 +42,21 @@ artifact="mma-${key}.tar.gz"
 # --- fetch -----------------------------------------------------------------
 # Одна попытка; если недокачанный файл уже есть, curl продолжит с него.
 # wget докачку с конкретным `-O` не поддерживает — там файл качается заново.
-fetch_once() { # url outfile -> non-zero on failure
+fetch_once() { # url outfile [progress] -> non-zero on failure
+  progress="${3:-}"
   if command -v curl >/dev/null 2>&1; then
-    if [ -f "$2" ]; then
-      curl -fsSL -C - --connect-timeout 30 "$1" -o "$2"
+    if [ "$progress" = "1" ]; then
+      # --progress-bar: молчаливые 78 МБ выглядят как зависание.
+      bar="--progress-bar"
     else
-      curl -fsSL --connect-timeout 30 "$1" -o "$2"
+      bar="-sS"
+    fi
+    if [ -f "$2" ]; then
+      # shellcheck disable=SC2086 # $bar — один флаг
+      curl -fL $bar -C - --connect-timeout 30 --speed-limit 2048 --speed-time 60 "$1" -o "$2"
+    else
+      # shellcheck disable=SC2086
+      curl -fL $bar --connect-timeout 30 --speed-limit 2048 --speed-time 60 "$1" -o "$2"
     fi
   elif command -v wget >/dev/null 2>&1; then
     rm -f "$2"
@@ -59,6 +68,10 @@ fetch_once() { # url outfile -> non-zero on failure
 
 size_of() {
   wc -c < "$1" | tr -d '[:space:]'
+}
+
+mb() {
+  awk -v b="${1:-0}" 'BEGIN { printf "%.1f", b / 1048576 }'
 }
 
 if command -v sha256sum >/dev/null 2>&1; then
@@ -80,17 +93,23 @@ sha256_of() {
 # Скачивание с докачкой и повтором. Недокачанный файл продолжается с места
 # обрыва; побитый (не сошёлся sha256) выбрасывается и качается заново.
 fetch_verified() { # url outfile expected_size expected_sha label
+  if [ -f "$2" ]; then
+    have="$(size_of "$2" 2>/dev/null || printf 0)"
+    if [ "$have" -gt 0 ] && [ "$have" -lt "$3" ]; then
+      say "$5: resuming at $(mb "$have") of $(mb "$3") MB"
+    fi
+  fi
   i=1
   while [ "$i" -le "$ATTEMPTS" ]; do
     if [ "$i" -gt 1 ]; then sleep $((i * 2)); fi
-    if fetch_once "$1" "$2"; then
+    if fetch_once "$1" "$2" 1; then
       have="$(size_of "$2" 2>/dev/null || printf 0)"
       if [ "$have" -gt "$3" ]; then
         rm -f "$2"
         have=0
       fi
       if [ "$have" -ne "$3" ]; then
-        say "$5: incomplete download ($have of $3 bytes), retrying"
+        say "$5: incomplete download ($(mb "$have") of $(mb "$3") MB), retrying"
       else
         if [ -z "$SHA_TOOL" ]; then
           say "warning: no sha256 tool found — skipping checksum"
@@ -106,7 +125,7 @@ fetch_verified() { # url outfile expected_size expected_sha label
     fi
     i=$((i + 1))
   done
-  die "could not download $1 in $ATTEMPTS attempts; check your connection and run the installer again"
+  die "could not download $1 in $ATTEMPTS attempts; rerun the installer to resume, or check your connection"
 }
 
 fetch_manifest() { # url outfile
@@ -136,6 +155,12 @@ fi
 say "fetching manifest ..."
 fetch_manifest "$BASE/latest.json" "$tmp/latest.json"
 
+# Архив живёт в стабильном каталоге, а не в одноразовом `$tmp`: после Ctrl+C
+# повторный запуск продолжает загрузку, а не начинает 78 МБ заново.
+DOWNLOAD_DIR="${MMA_DOWNLOAD_DIR:-${TMPDIR:-/tmp}/mma-download}"
+mkdir -p "$DOWNLOAD_DIR"
+tarball="$DOWNLOAD_DIR/$artifact"
+
 entry_block="$(sed -n "/\"$key\"/,/}/p" "$tmp/latest.json")"
 expected="$(printf '%s\n' "$entry_block" | sed -n 's/.*"sha256": *"\([a-fA-F0-9]\{64\}\)".*/\1/p' | head -n1)"
 expected_size="$(printf '%s\n' "$entry_block" | sed -n 's/.*"size": *\([0-9][0-9]*\).*/\1/p' | head -n1)"
@@ -144,12 +169,13 @@ if [ -z "$expected" ] || [ -z "$expected_size" ]; then
   die "manifest has no checksum/size for $key"
 fi
 
-say "downloading $artifact ..."
-fetch_verified "$BASE/$artifact" "$tmp/mma.tar.gz" "$expected_size" \
+say "downloading $artifact (~$(mb "$expected_size") MB) ..."
+say "interrupting is safe: rerun the same command and the download resumes"
+fetch_verified "$BASE/$artifact" "$tarball" "$expected_size" \
   "$(printf '%s' "$expected" | tr 'A-F' 'a-f')" "$artifact"
 
 mkdir -p "$tmp/pkg"
-tar -xzf "$tmp/mma.tar.gz" -C "$tmp/pkg" || die "extraction failed"
+tar -xzf "$tarball" -C "$tmp/pkg" || die "extraction failed"
 [ -f "$tmp/pkg/VERSION" ] || die "invalid archive: VERSION missing"
 version="$(tr -d '[:space:]' < "$tmp/pkg/VERSION")"
 case "$version" in
@@ -200,6 +226,7 @@ case ":${PATH:-}:" in
 esac
 
 # --- verify ----------------------------------------------------------------
+rm -f "$tarball"
 if "$MMA_HOME/current/runtime/bun" "$MMA_HOME/current/app/main.js" --version >/dev/null 2>&1; then
   say "installed MMA $version"
 else

@@ -79,10 +79,12 @@ function Get-Sha256([string]$path) {
   } finally { $sha.Dispose() }
 }
 
-# Download with resume. An interrupted transfer continues where it stopped; a
-# corrupt one (sha256 mismatch) is discarded and fetched again from scratch,
-# otherwise resuming would glue garbage to an already broken prefix.
+# Download with resume. An interrupted transfer continues where it stopped
+# (including across installer runs: the partial file lives in a stable cache
+# directory); a corrupt one (sha256 mismatch) is discarded and fetched again
+# from scratch, otherwise resuming would glue garbage to a broken prefix.
 function Get-Artifact([string]$uri, [string]$out, [long]$size, [string]$sha) {
+  $mb = 1MB
   for ($i = 1; $i -le $Attempts; $i++) {
     if ($i -gt 1) { Start-Sleep -Seconds (2 * ($i - 1)) }
 
@@ -95,10 +97,21 @@ function Get-Artifact([string]$uri, [string]$out, [long]$size, [string]$sha) {
     }
 
     if ($have -lt $size) {
+      if ($have -gt 0) {
+        Say ("resuming download at {0:N1} of {1:N1} MB" -f ($have / $mb), ($size / $mb))
+      }
       try {
         if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-          if ($have -gt 0) { & curl.exe -fsSL -C - --connect-timeout 30 -o $out $uri }
-          else { & curl.exe -fsSL --connect-timeout 30 -o $out $uri }
+          # --progress-bar: a silent 78 MB download looks frozen. --speed-limit
+          # aborts a stalled transfer so the retry loop resumes instead of
+          # hanging until the user gives up.
+          $curlArgs = @(
+            "-fL", "--progress-bar", "--connect-timeout", "30",
+            "--speed-limit", "2048", "--speed-time", "60", "-o", $out
+          )
+          if ($have -gt 0) { $curlArgs += @("-C", "-") }
+          $curlArgs += $uri
+          & curl.exe @curlArgs
           if ($LASTEXITCODE -ne 0) { throw "curl exited with code $LASTEXITCODE" }
         } else {
           # Windows PowerShell cannot resume with Invoke-WebRequest: start over.
@@ -114,7 +127,7 @@ function Get-Artifact([string]$uri, [string]$out, [long]$size, [string]$sha) {
     $now = 0
     if (Test-Path $out) { $now = (Get-Item $out).Length }
     if ($now -ne $size) {
-      Say "download incomplete ($now of $size bytes), retrying"
+      Say ("download incomplete ({0:N1} of {1:N1} MB), retrying" -f ($now / $mb), ($size / $mb))
       continue
     }
     if ((Get-Sha256 $out) -ne $sha.ToLower()) {
@@ -124,7 +137,7 @@ function Get-Artifact([string]$uri, [string]$out, [long]$size, [string]$sha) {
     }
     return
   }
-  Die "could not download $uri in $Attempts attempts; check your connection and run the installer again"
+  Die "could not download $uri in $Attempts attempts; rerun the installer to resume, or check your connection"
 }
 
 # cmd's rmdir removes a junction/symlink without following it: Remove-Item
@@ -156,8 +169,14 @@ try {
   if ($entry.size) { $size = [long]$entry.size }
   if ($size -le 0) { Die "manifest has no artifact size for $key" }
 
-  $tar = Join-Path $tmp "mma.tar.gz"
-  Say "downloading $artifact ..."
+  # The tarball lives in a stable cache directory, not in the per-run temp dir:
+  # after Ctrl+C a rerun continues the download instead of starting 78 MB over.
+  $downloadDir = if ($env:MMA_DOWNLOAD_DIR) { $env:MMA_DOWNLOAD_DIR } else { Join-Path ([System.IO.Path]::GetTempPath()) "mma-download" }
+  New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
+  $tar = Join-Path $downloadDir $artifact
+  $sizeMb = [math]::Round($size / 1MB, 1)
+  Say ("downloading $artifact ({0} MB) ..." -f $sizeMb)
+  Say "interrupting is safe: rerun the same command and the download resumes"
   Get-Artifact "$Base/$name" $tar $size $sha
 
   $pkg = Join-Path $tmp "pkg"
@@ -232,6 +251,8 @@ try {
     try { & $bun $mainJs --version | Out-Null } catch { }
   }
   Say "installed MMA $version"
+  # The verified tarball is no longer needed; a failed run keeps it for resume.
+  Remove-Item $tar -Force -ErrorAction SilentlyContinue
   Say "open a new terminal, then run: mma setup   (and then: mma)"
 }
 finally {
