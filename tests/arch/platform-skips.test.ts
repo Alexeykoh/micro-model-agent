@@ -162,6 +162,21 @@ export const SKIP_MANIFEST: Array<{ file: string; key: string; reason: string }>
     reason: "регистронезависимость FS существует только на win32",
   },
   {
+    file: "tests/install-retry.test.ts",
+    key: "install.ps1 (pwsh)",
+    reason: "PowerShell-установщик запускается только на Windows-хосте",
+  },
+  {
+    file: "tests/install-retry.test.ts",
+    key: "install.ps1 (powershell.exe)",
+    reason: "Windows PowerShell 5.1 существует только на Windows-хосте",
+  },
+  {
+    file: "tests/install-retry.test.ts",
+    key: "install.sh",
+    reason: "POSIX-установщик требует sh, которого нет на Windows-хосте",
+  },
+  {
     file: "tests/lsp-command.test.ts",
     key: "spawns a .cmd shim through the shell on win32 (no EINVAL)",
     reason: ".cmd-шим и shell-путь spawn существуют только на win32",
