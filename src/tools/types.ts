@@ -161,6 +161,13 @@ export interface ToolContext {
    */
   writePathAllowlist?: string[];
   /**
+   * Повторная проверка пути НЕПОСРЕДСТВЕННО перед файловой операцией (TOCTOU):
+   * между первой проверкой и `write/rename/unlink` симлинк может быть
+   * подменён. Хук ставит `ToolExecutor` из той же политики, что и `pathArgs`;
+   * хендлер политику не реализует (INV-9/10).
+   */
+  pathGuard?: { recheck(path: string): ToolResult | undefined };
+  /**
    * Общее состояние онбординга. Ставит `meet_done`, читает REPL для выхода
    * из meet-режима. Несёт активный guide-блок для снятия при выходе.
    * Undefined вне онбординга.

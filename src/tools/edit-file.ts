@@ -7,7 +7,7 @@ import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
-import { assertWritable } from "./path-guards";
+import { assertWritable, recheckWrite } from "./path-guards";
 import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
 import { errMsg } from "../utils";
 
@@ -112,6 +112,10 @@ export const editFileTool: ToolDefinition = {
     const oldStr = args.old;
     const newStr = args.new;
 
+    // TOCTOU: чтение и запись — две операции, между ними путь мог стать
+    // симлинком наружу. Проверяем перед каждой.
+    const unsafeRead = recheckWrite(resolved, ctx);
+    if (unsafeRead) return unsafeRead;
     let content: string;
     try {
       content = readFileSync(resolved, "utf-8");
@@ -171,6 +175,8 @@ export const editFileTool: ToolDefinition = {
     // Конфликты import/export — только warning.
     const conflicts = detectImportConflicts(updated);
 
+    const unsafeWrite = recheckWrite(resolved, ctx);
+    if (unsafeWrite) return unsafeWrite;
     writeFileSync(resolved, updated, "utf-8");
     const diff = generateDiff(content, updated);
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { ToolExecutor } from "../../src/tools/executor";
@@ -102,6 +102,35 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
     expect(blocked.blocked).toBe(true);
     const allowed = await executor.execute({ id: "2", name: "t", arguments: { path: "ok.txt" } });
     expect(allowed.success).toBe(true);
+  });
+
+  it("recheck blocks a path whose parent symlink was swapped after enforcement", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "mma-outside-"));
+    try {
+      mkdirSync(join(baseDir, "inside"));
+      register({ caps: [{ fs: "write" }], pathArgs: ["path"] }, async (ctx) => {
+        rmSync(join(baseDir, "inside"), { recursive: true, force: true });
+        try {
+          symlinkSync(outside, join(baseDir, "inside"), process.platform === "win32" ? "junction" : "dir");
+        } catch {
+          // Симлинки недоступны (права Windows) — проверять нечего.
+          return { success: true, output: "symlink-unavailable" };
+        }
+        const blocked = ctx.pathGuard?.recheck(join(baseDir, "inside", "new.txt"));
+        return blocked ?? { success: true, output: "not-blocked" };
+      });
+
+      const result = await makeExecutor().execute({
+        id: "1",
+        name: "t",
+        arguments: { path: "inside/ok.txt" },
+      });
+      if (result.output === "symlink-unavailable") return;
+      expect(result.blocked).toBe(true);
+      expect(result.output).toContain("symlink");
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("checks every declared path arg (from/to)", async () => {

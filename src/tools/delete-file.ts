@@ -6,7 +6,7 @@ import { logFileDelete, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDeleteDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
-import { assertWritable } from "./path-guards";
+import { assertWritable, recheckWrite } from "./path-guards";
 
 /** Удаляет файл; каталоги отклоняет. Возвращает diff удалённого. */
 export const deleteFileTool: ToolDefinition = {
@@ -58,7 +58,13 @@ export const deleteFileTool: ToolDefinition = {
     if (statSync(resolved).isDirectory()) {
       return { success: false, output: t("file.is_directory", { path }) };
     }
+    // TOCTOU: читаем и удаляем с повторной проверкой пути — симлинк могли
+    // подменить после enforcement.
+    const unsafeRead = recheckWrite(resolved, ctx);
+    if (unsafeRead) return unsafeRead;
     const content = readFileSync(resolved, "utf-8");
+    const unsafeUnlink = recheckWrite(resolved, ctx);
+    if (unsafeUnlink) return unsafeUnlink;
     unlinkSync(resolved);
     const diff = generateDeleteDiff(content);
 

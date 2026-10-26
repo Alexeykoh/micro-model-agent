@@ -5,7 +5,7 @@ import type { ToolDefinition } from "./types";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { safeResolvePath } from "./path-utils";
-import { assertWritable } from "./path-guards";
+import { assertWritable, recheckWrite } from "./path-guards";
 
 /** Создаёт каталог со всеми промежуточными. */
 export const createDirTool: ToolDefinition = {
@@ -49,6 +49,9 @@ export const createDirTool: ToolDefinition = {
       };
     }
 
+    // TOCTOU: каталог-родитель мог стать симлинком наружу после enforcement.
+    const unsafe = recheckWrite(resolved, ctx);
+    if (unsafe) return unsafe;
     if (!existsSync(resolved)) {
       mkdirSync(resolved, { recursive: true });
     }

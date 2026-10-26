@@ -33,6 +33,18 @@ export function assertWritable(path: string, ctx: ToolContext): ToolResult | und
 }
 
 /**
+ * Повторная проверка пути перед файловой операцией (TOCTOU): симлинк могли
+ * подменить после первичного enforcement. Политику даёт `ToolExecutor` через
+ * `ctx.pathGuard`; хендлер её не реализует.
+ *
+ * @param path абсолютный путь, с которым вот-вот будет операция.
+ * @returns заблокированный результат или `undefined`.
+ */
+export function recheckWrite(path: string, ctx: ToolContext): ToolResult | undefined {
+  return ctx.pathGuard?.recheck(path);
+}
+
+/**
  * POSIX-workdir на Windows: cmd.exe не понимает "/tmp"/"/Users/…" — это
  * почти всегда путаница ОС у модели. Даём корректирующий хинт вместо
  * непонятной ошибки spawn.

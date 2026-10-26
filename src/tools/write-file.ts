@@ -8,7 +8,7 @@ import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateDiff, generateNewFileDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
-import { assertWritable } from "./path-guards";
+import { assertWritable, recheckWrite } from "./path-guards";
 import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
 import { errMsg } from "../utils";
 
@@ -77,6 +77,10 @@ export const writeFileTool: ToolDefinition = {
       }
     }
 
+    // TOCTOU: путь проверен до хендлера, но симлинк могли подменить. Перед
+    // mkdir и записью политику повторяем (INV-9/10, хук исполнителя).
+    const unsafeDir = recheckWrite(resolved, ctx);
+    if (unsafeDir) return unsafeDir;
     const dir = dirname(resolved);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
@@ -94,6 +98,8 @@ export const writeFileTool: ToolDefinition = {
     // Конфликты import/export — только warning (код может быть валиден).
     const conflicts = detectImportConflicts(content);
 
+    const unsafe = recheckWrite(resolved, ctx);
+    if (unsafe) return unsafe;
     const fileExists = existsSync(resolved);
     let oldContent = "";
     try {

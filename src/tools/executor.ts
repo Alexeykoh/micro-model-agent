@@ -2,8 +2,7 @@
 import type { ToolContext, ToolCall, ToolResult, PluginManager, PluginHook } from "./types";
 import type { ToolRegistry, RegisteredTool } from "./registry";
 import { killByCallId } from "../modules/processes/runner";
-import { isPathInScope, isPathWritable } from "../modules/security/path-validator";
-import { protectedPathBlock } from "../modules/security/protected-paths";
+import { checkToolPath } from "./path-enforcement";
 import { tagBlockedFileContent } from "./file-content-tag";
 import { isUrlAllowed } from "../modules/security/network-validator";
 import { filterToolsByTags } from "./filter-tools";
@@ -169,34 +168,13 @@ export class ToolExecutor {
   private enforcePathArgs(tool: RegisteredTool, call: ToolCall): ToolResult | null {
     const pathArgs = tool.security?.pathArgs;
     if (!pathArgs || pathArgs.length === 0) return null;
-    const writable = (tool.security?.caps ?? []).some(
-      (c) => "fs" in c && (c.fs === "write" || c.fs === "any"),
-    );
-    const { baseDir, scope } = this.ctx;
-    const pathsCfg = this.ctx.config.security?.paths;
     for (const argName of pathArgs) {
       const raw = call.arguments[argName];
       const values = Array.isArray(raw) ? raw : [raw];
       for (const value of values) {
         if (typeof value !== "string" || value.trim() === "") continue;
-        if (writable) {
-          const prot = protectedPathBlock(this.ctx, value, value);
-          if (prot) return { ...prot, blocked: true, toolCallId: call.id };
-        }
-        const check = writable
-          ? isPathWritable(baseDir, value, scope, pathsCfg)
-          : isPathInScope(baseDir, value, scope, pathsCfg);
-        if (!check.allowed) {
-          return {
-            success: false,
-            blocked: true,
-            output: t("tool.path_blocked", {
-              path: value,
-              reason: check.reason ? ` — ${check.reason}` : "",
-            }),
-            toolCallId: call.id,
-          };
-        }
+        const blocked = checkToolPath(this.ctx, tool.security, value, call.id);
+        if (blocked) return blocked;
       }
     }
     return null;
@@ -273,6 +251,16 @@ export class ToolExecutor {
     if (pathBlock) return pathBlock;
     const urlBlock = this.enforceUrlArgs(tool, call);
     if (urlBlock) return urlBlock;
+
+    // TOCTOU-хук: мутирующий тул повторяет проверку прямо перед операцией.
+    // Для тулов без путей хук снят, чтобы контекст не нёс чужую политику.
+    this.ctx.pathGuard =
+      tool.security?.pathArgs && tool.security.pathArgs.length > 0
+        ? {
+            recheck: (path) =>
+              checkToolPath(this.ctx, tool.security, path, call.id) ?? undefined,
+          }
+        : undefined;
 
     // Плагин-хуки сериализованы общим hookLock: параллельные форки-сиблинги
     // не гоняют общее состояние плагинов (stuck-detector, lint, lsp) конкурентно.

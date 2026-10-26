@@ -7,7 +7,7 @@ import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { generateMoveDiff } from "../ui/diff";
 import { safeResolvePath } from "./path-utils";
-import { assertWritable } from "./path-guards";
+import { assertWritable, recheckWrite } from "./path-guards";
 
 /** Перемещает/переименовывает; обе стороны проверяются по скоупу. */
 export const moveFileTool: ToolDefinition = {
@@ -62,10 +62,15 @@ export const moveFileTool: ToolDefinition = {
         output: t("file.not_found_short", { path: fromPath }),
       };
     }
+    // TOCTOU: обе стороны могли стать симлинками наружу после enforcement.
+    const unsafeBeforeMkdir = recheckWrite(fromResolved, ctx) ?? recheckWrite(toResolved, ctx);
+    if (unsafeBeforeMkdir) return unsafeBeforeMkdir;
     const toDir = dirname(toResolved);
     if (!existsSync(toDir)) {
       mkdirSync(toDir, { recursive: true });
     }
+    const unsafe = recheckWrite(fromResolved, ctx) ?? recheckWrite(toResolved, ctx);
+    if (unsafe) return unsafe;
     renameSync(fromResolved, toResolved);
     const diff = generateMoveDiff(fromPath, toPath);
 

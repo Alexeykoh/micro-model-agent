@@ -7,7 +7,7 @@ import { scanContent } from "../modules/security/content-scanner";
 import { logFileWrite, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { safeResolvePath } from "./path-utils";
-import { assertWritable } from "./path-guards";
+import { assertWritable, recheckWrite } from "./path-guards";
 import { errMsg } from "../utils";
 
 /** Дописывает контент в файл, создавая его и parent-dirs; для длинного вывода. */
@@ -76,11 +76,16 @@ export const appendFileTool: ToolDefinition = {
       }
     }
 
+    // TOCTOU: перед mkdir/append повторяем политику (см. write_file).
+    const unsafeDir = recheckWrite(resolved, ctx);
+    if (unsafeDir) return unsafeDir;
     const dir = dirname(resolved);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
 
+    const unsafe = recheckWrite(resolved, ctx);
+    if (unsafe) return unsafe;
     try {
       appendFileSync(resolved, content, "utf-8");
     } catch (err) {
