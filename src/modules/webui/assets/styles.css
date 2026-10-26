@@ -973,6 +973,9 @@ body.light .sel > button { border: 1px solid var(--border); }
    resizes it (that spontaneous jump is what we removed). The detail always
    sits on the LEFT of the list/tree, i.e. toward the chat area. */
 #pane-trace { flex-direction: row-reverse; position: relative; }
+.trace-head { display: flex; justify-content: flex-end; padding: 8px 10px 0; flex: 0 0 auto; }
+.trace-head .linkbtn { color: var(--dim-a); font-size: 11.5px; cursor: pointer; }
+.trace-head .linkbtn:hover { color: var(--fg); }
 .trace-list { flex: 1; min-width: 0; min-height: 0; max-width: 100%; overflow-y: auto; overflow-x: hidden; padding: 6px 10px 12px; display: flex; flex-direction: column; gap: 1px; }
 /* Строки трассировки не сжимаются: иначе flex-column втискивает сотни
    событий в видимую высоту, скролл не появляется, а текст сплющивается
@@ -1306,6 +1309,14 @@ body.light .kv .wn { color: var(--yellow); }
 
 /* nested sub-dialog (provider / MCP / LSP edit; opens above settings) */
 .overlay.overlay-nested { z-index: 60; }
+/* System-prompt popup: read-only text + block chips. */
+.modal.modal-prompt { width: min(980px, 94vw); height: min(760px, 90vh); }
+.prompt-body { flex-direction: column; gap: 12px; padding: 14px 18px 18px; overflow-y: auto; }
+.prompt-meta { color: var(--dim-a); font-size: 12px; }
+.prompt-blocks { display: flex; flex-wrap: wrap; gap: 6px; }
+.prompt-block { border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 11px; color: var(--muted); }
+.prompt-block.excluded { border-color: var(--yellow); color: var(--yellow); }
+.prompt-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.45; color: var(--fg); }
 .modal.modal-sub {
   width: min(560px, 92vw); height: auto; max-height: 88vh; border-radius: 8px;
 }

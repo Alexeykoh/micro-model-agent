@@ -6,6 +6,7 @@ import { handleSessionHistory } from "./history-api";
 import { handleSessionImage } from "./images-api";
 import { handleSessionLog } from "./log-api";
 import { handleSubagentRunsGet, handleSubagentInterrupt } from "./subagent-api";
+import { handleSystemPromptGet } from "./system-prompt-api";
 import type { SessionStore, RuntimeState, HttpTransport, SseTransport } from "../state";
 
 export function handleSessionItem(
@@ -45,6 +46,11 @@ export function handleSessionItem(
   if (p.endsWith("/subagents")) {
     const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/subagents".length));
     handleSubagentRunsGet(req, res, id, s);
+    return true;
+  }
+  if (p.endsWith("/system-prompt")) {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/system-prompt".length));
+    handleSystemPromptGet(res, id, s.pool);
     return true;
   }
   if (p.includes("/images/")) {

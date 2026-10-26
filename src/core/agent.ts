@@ -16,7 +16,7 @@ import {
   logContextStat as phaseLogContextStat,
   refreshSystemPrompt as phaseRefreshSystemPrompt,
   resolvePromptOverflowOnce as phaseResolvePromptOverflowOnce,
-  type PromptPhaseHost,
+  type PromptPhaseHost, type SystemPromptInfo,
 } from "./agent/prompt-phase";
 import {
   emitPhase as phaseEmitPhase,
@@ -314,7 +314,7 @@ export class Agent {
   }
 
   /** Текущий системный промпт с подсчётом токенов (для /sysprompt, диагностики). */
-  getSystemPromptInfo(): { text: string; tokenCount: number; excluded: string[] } {
+  getSystemPromptInfo(): SystemPromptInfo {
     return phaseGetSystemPromptInfo(this as unknown as PromptPhaseHost);
   }
 

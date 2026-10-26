@@ -178,6 +178,7 @@
     </div>
 
     <div class="sb-pane" id="pane-trace" role="tabpanel" data-pane="trace" hidden>
+      <div class="trace-head"><button class="linkbtn" type="button" id="tracePromptBtn"></button></div>
       <div class="trace-list" id="traceList"></div>
       <div class="trc-detail" id="traceDetail" hidden>
         <div class="detail-h"><span class="g" id="detailGlyph">◇</span><span id="detailTitle"></span><button class="x linkbtn" type="button" id="detailClose">✕</button></div>
@@ -285,6 +286,17 @@
         <button class="linkbtn confirm-cancel" id="confirmCancel" type="button">cancel</button>
         <button class="linkbtn danger confirm-accept" id="confirmAccept" type="button">delete</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="promptOverlay">
+  <div class="modal modal-prompt" role="dialog" aria-modal="true" aria-labelledby="promptTitle">
+    <div class="modal-top"><span id="promptTitle"></span><button class="x linkbtn" id="promptClose" type="button">✕</button></div>
+    <div class="modal-body prompt-body">
+      <div class="prompt-meta" id="promptMeta"></div>
+      <div class="prompt-blocks" id="promptBlocks"></div>
+      <pre class="prompt-text" id="promptText"></pre>
     </div>
   </div>
 </div>

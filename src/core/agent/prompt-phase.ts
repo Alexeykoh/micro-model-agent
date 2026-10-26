@@ -141,14 +141,17 @@ export function logContextStat(
 }
 
 /** Текущий системный промпт с подсчётом токенов (для /sysprompt, диагностики). */
-export function getSystemPromptInfo(host: PromptPhaseHost): {
+export interface SystemPromptInfo {
   text: string;
   tokenCount: number;
   excluded: string[];
-} {
-  const { prompt, excluded } = buildSystemPrompt(host);
+  blocks: SystemPromptBuild["blocks"];
+}
+
+export function getSystemPromptInfo(host: PromptPhaseHost): SystemPromptInfo {
+  const { prompt, excluded, blocks } = buildSystemPrompt(host);
   const tokenCount = host.deps.llmProvider.countTokens(prompt);
-  return { text: prompt, tokenCount, excluded };
+  return { text: prompt, tokenCount, excluded, blocks };
 }
 
 /**

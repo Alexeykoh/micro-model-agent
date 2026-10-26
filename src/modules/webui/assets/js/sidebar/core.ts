@@ -10,6 +10,7 @@ import { sidebarMapState, sidebarMapIndicator } from "./map.js";
 import { renderLsp, sidebarLspState } from "./lsp.js";
 import { renderFilesTree, refreshFilesTree, openFileInTree } from "./files.js";
 import { renderPlugins, sidebarPluginsState } from "./plugins.js";
+import { applyPromptI18n, initPromptPopup } from "./prompt.js";
 
 export function setSidebarTab(id: string, persist = true): void {
   if (!TABS.includes(id)) id = "session";
@@ -67,6 +68,7 @@ export function applySidebarI18n(): void {
   renderLsp();
   refreshFilesTree();
   renderPlugins();
+  applyPromptI18n();
 }
 
 export function initSidebar(): void {
@@ -86,6 +88,7 @@ export function initSidebar(): void {
   sb.detailBody = document.getElementById("detailBody");
   sb.detailClose = document.getElementById("detailClose");
   if (sb.detailClose) sb.detailClose.addEventListener("click", collapseDetail);
+  initPromptPopup();
 
   root.querySelectorAll<HTMLElement>(".sb-tab .sb-ico").forEach((span) => {
     const id = span.closest<HTMLElement>(".sb-tab")?.dataset.tab || "session";
