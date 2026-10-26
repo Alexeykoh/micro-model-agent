@@ -47,7 +47,9 @@
 
 - [ ] **W3 — безопасность путей и вывода:** ~~`validateWorkdir`~~ (сделано 2026-10-21:
       workdir-jail в `bash`) · ~~ADS/регистр/TOCTOU в `matchProtectedPath`~~ (ADS и
-      регистр — сделано; TOCTOU-двойная проверка `escapesViaSymlink` — осталась) ·
+      регистр — сделано; TOCTOU — сделано 2026-10-26: `pathGuard.recheck` перед
+      операцией во всех мутирующих файловых тулах, гейт
+      `tests/tools/enforcement-path.test.ts`) ·
       ~~allowlist записи в `delete-file`/`move-file`/`create-dir`~~ (сделано) ·
       ~~`glob-tool.ts` не фильтрует по scope/protected~~ (сделано) ·
       ~~`processRegistry.get(id)` без `sessionId`~~ (сделано) ·
