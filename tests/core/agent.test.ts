@@ -680,6 +680,8 @@ describe("Agent", () => {
     // of the same target the cycle guard injects a finalize-nudge.
     const stream = (chunk: object) =>
       (async function* () {
+        // Шаг «говорит»: тест про cycle-nudge, не про молчание (W2).
+        yield { type: "text" as const, content: "прогоняю сборку" };
         yield chunk;
         yield { type: "done" as const, finishReason: "tool_calls" as const };
       })();
@@ -1666,6 +1668,8 @@ describe("Agent", () => {
         contextWindow: 4096,
         chat: vi.fn().mockImplementation(() =>
           (async function* () {
+            // Шаг «говорит»: тест про компакцию, не про молчание (W2).
+            yield { type: "text" as const, content: "пишу файл" };
             yield {
               type: "tool_call" as const,
               toolCall: {

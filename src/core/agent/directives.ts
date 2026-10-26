@@ -20,7 +20,8 @@ export type DirectiveId =
   | "tool_disabled"
   | "cycle"
   | "artifact_churn"
-  | "consecutive_failures";
+  | "consecutive_failures"
+  | "narration";
 
 /**
  * Минимальный контракт приёмника директивы. Опциональные методы — потому, что

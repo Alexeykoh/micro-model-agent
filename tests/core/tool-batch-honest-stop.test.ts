@@ -55,7 +55,8 @@ async function runBatchOf(
   calls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>,
 ) {
   (ex as any).deps.toolExecutor.execute = async () => ok;
-  return ex.execute(state, calls, new Set(), "", "", "task");
+  // Шаг «говорит»: тест про duplicate-бюджет, не про молчание (W2).
+  return ex.execute(state, calls, new Set(), "проверяю дальше", "", "task");
 }
 
 function hasDuplicateDirective(added: string[]): boolean {
