@@ -154,7 +154,9 @@
       с `[Notes:`» (план `2026-10-14-context-ledger`, Task 6).
 - [x] `session-phase.ts` пишет живую модель (`config.model`), а не модель пробника.
       _(Исправлено 2026-10-26.)_
-- [ ] `src/core/system-prompt.ts`: 14 строк длиннее 120 символов (канон системного промпта).
+- [x] `src/core/system-prompt.ts`: директивы уложены в ≤120 символов (склейка `+`
+      сохраняет текст); гейт `tests/core/system-prompt-line-length.test.ts`.
+      _(Исправлено 2026-10-26.)_
 - [ ] StuckDetector: нет классификации `scope_drift`/`empty_output` — надёжного сигнала нет
       (`src/modules/execution/stuck-detector.ts` знает только `timeout`/`repeat`/`error_loop`).
 - [x] `src/core/hallucination/factual.ts`: пункт был устаревшим — тёплый кэш
