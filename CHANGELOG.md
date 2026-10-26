@@ -4,6 +4,22 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.4] - 2026-10-26
+
+### Fixed
+
+- **Аудит больше не требует существования временного артефакта, который план
+  сам убирает.** В `ses_mvpk4zjl` модель вытащила `_sisi.js` из контейнера,
+  прочитала и удалила; аудитор искал файл по описанию done-шага и отклонял
+  готовый диагноз с `[✗] 1 файлов отсутствует`. Теперь scratch-артефакты
+  (`_name`, `/tmp/…`, `*.tmp|log|pid|bak`, `.mma/…`, `node_modules/…`) не
+  считаются поставкой, а файл, названный в done-шаге удаления, снимается с
+  требования (сверка по имени без ведущих `_`/`.`: шаг извлечения говорит
+  `sisi.js`, шаг удаления — `_sisi.js`). Настоящая поставка по-прежнему
+  требуется.
+  Гвард: `tests/execution-auditor.test.ts`.
+  Долг `audit-temp-file-false-negative` оплачен и снят из реестра.
+
 ## [0.13.3] - 2026-10-26
 
 ### Added
