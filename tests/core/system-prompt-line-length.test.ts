@@ -12,7 +12,9 @@ const SOURCE = readFileSync(join(REPO_ROOT, "src", "core", "system-prompt.ts"), 
 describe("system prompt line length", () => {
   it("has no prompt string line longer than 120 characters", () => {
     const long = SOURCE.split("\n")
-      .map((line, index) => ({ line, index: index + 1 }))
+      // CRLF-checkout (core.autocrlf=true на Windows) не должен выглядеть как
+      // превышение: длина директивы считается без терминатора строки.
+      .map((raw, index) => ({ line: raw.replace(/\r$/, ""), index: index + 1 }))
       .filter(({ line }) => line.trimStart().startsWith("`") && line.length > 120)
       .map(({ line, index }) => `${index}: ${line.length} chars`);
     expect(long, `Слишком длинные строки промпта: ${long.join("; ")}`).toEqual([]);

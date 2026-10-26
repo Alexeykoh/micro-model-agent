@@ -103,6 +103,12 @@ export interface LoopState {
   consecutiveSilentBatches: number;
   /** Директива «скажи, что делаешь» уже отправлена для текущей серии. */
   narrationNudged: boolean;
+  /** Последние `STALL_WINDOW` пакетов: был ли в пакете отказ. */
+  recentBatchFailures: boolean[];
+  /** Сколько пакетов с отказом за ход (кумулятивно, не стрик). */
+  failedBatchesTotal: number;
+  /** Директива «смени подход» уже отправлена для текущего окна. */
+  stallNudged: boolean;
   /**
    * Подряд идущие не-web батчи с результатом (после серии веб-поиска). Серия
    * research сбрасывается только после двух таких батчей (§1.4 аудита).

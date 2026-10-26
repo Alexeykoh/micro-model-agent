@@ -21,7 +21,8 @@ export type DirectiveId =
   | "cycle"
   | "artifact_churn"
   | "consecutive_failures"
-  | "narration";
+  | "narration"
+  | "stalled";
 
 /**
  * Минимальный контракт приёмника директивы. Опциональные методы — потому, что

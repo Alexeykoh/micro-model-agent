@@ -45,7 +45,9 @@ export function buildLoopResult(
             ? t("error.silent_loop_stopped", {
                 count: state.consecutiveSilentBatches,
               })
-            : t("error.max_iters", { max: config.maxToolIterations })
+            : state.stopReason === "stalled"
+              ? t("error.stall_loop_stopped", { count: state.failedBatchesTotal })
+              : t("error.max_iters", { max: config.maxToolIterations })
       : undefined;
 
   if (maxItersExhausted) {

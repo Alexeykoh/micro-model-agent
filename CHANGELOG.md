@@ -18,6 +18,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   после пары проб, итог фактами в конце).
   Гвард: `tests/core/step-narration.test.ts`.
 
+- **Чередующиеся отказы считаются топтанием.** `consecutiveFailedBatches` и
+  `consecutiveToolFailures` сбрасываются любым успехом, поэтому в
+  `ses_mvpdchvi` 29 неудачных пакетов из 98 (максимальная серия подряд — 3)
+  прошли без единой эскалации: единственной реакцией было отключение `bash`.
+  Теперь окно из 8 пакетов с 5 отказами выдаёт директиву «смени подход», а 16
+  неудачных пакетов за ход останавливают прогон форс-ответом
+  (`stopReason: "stalled"`). Сигнал `stall_detected` пишется в `session.jsonl`
+  (INV-15).
+  Гвард: `tests/core/stall-window.test.ts`.
+
+### Changed
+
+- **Гейт длины строк системного промпта не зависит от EOL.** На Windows
+  (`core.autocrlf=true`) файл выезжает с CRLF, и проверка «строка ≤120»
+  считала `\r` символом содержимого — гейт падал на неизменённом промпте.
+  `tests/core/system-prompt-line-length.test.ts`.
+
 ### Fixed
 
 - **Кавычки в bash-команде больше не считаются операторами shell.** `wget`
