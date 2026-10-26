@@ -187,6 +187,9 @@ export async function runLlmPhase(
           arguments: parsedArgs,
         });
       }
+      if (chunk.type === "done" && chunk.finishReason) {
+        state.lastFinishReason = chunk.finishReason;
+      }
       if (chunk.type === "done" && chunk.usage) {
         // chat() вызывается ОДИН раз за итерацию — каждый `done` относится к тому
         // же запросу (usage-only + non-streaming fallback дают два done).

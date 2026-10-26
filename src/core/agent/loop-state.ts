@@ -131,6 +131,13 @@ export interface LoopState {
   stopReason: StopReason | null;
   /** Подряд идущие успешные итерации с тулами — вход для reasoning policy. */
   consecutiveToolSuccesses: number;
+  /**
+   * `finish_reason` последнего ответа провайдера ("stop" | "length" |
+   * "tool_calls"). Без него обрыв ответа неотличим от законченной мысли:
+   * в ses_mvpk4zjl финал оборвался на 1374 знаках, и понять, был ли это лимит
+   * токенов или сбой, по журналу нельзя.
+   */
+  lastFinishReason?: string;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
   repeatedToolCount: number;
   /** Общий счётчик неудач по каждому тулу + последняя ошибка и distinct

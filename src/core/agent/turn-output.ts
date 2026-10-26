@@ -80,7 +80,7 @@ export async function finalizeWithoutTools(
     state.finalAnswerAccepted = true;
     contextManager.addMessage({ role: "assistant", content: text });
     if (host.deps.config.session.autoSave) slog?.saveAssistantMessage(text);
-    slog?.logAssistant(text, "", undefined, state.iteration);
+    slog?.logAssistant(text, "", undefined, state.iteration, state.lastFinishReason);
   }
   return text;
 }

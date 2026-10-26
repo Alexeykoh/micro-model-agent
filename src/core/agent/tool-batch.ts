@@ -248,7 +248,13 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     const { config, pluginManager, contextManager, logger } = this.deps;
     const iteration = state.iteration;
 
-    slog?.logAssistant(textContent || "", reasoningContent, toolCalls, iteration);
+    slog?.logAssistant(
+      textContent || "",
+      reasoningContent,
+      toolCalls,
+      iteration,
+      state.lastFinishReason,
+    );
 
     contextManager.addMessage({
       role: "assistant",

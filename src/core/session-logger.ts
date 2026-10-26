@@ -105,6 +105,7 @@ export class SessionLogger {
     reasoning?: string,
     toolCalls?: ToolCall[],
     iteration?: number,
+    finish?: string,
   ): void {
     const caller = this.getCaller?.();
     if (reasoning) {
@@ -131,6 +132,7 @@ export class SessionLogger {
       iteration,
       provider: caller?.provider,
       model: caller?.model,
+      ...(finish ? { finish } : {}),
     });
   }
 

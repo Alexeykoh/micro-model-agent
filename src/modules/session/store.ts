@@ -35,10 +35,7 @@ export interface SessionLogEntry {
     | DiagnosticEvent | "claim_retry" | "service_task" | "egress_turn"
     | "egress_redacted"
     | OnboardingEvent;
-  /**
-   * Источник записи (INV-13), обязателен. `llm_usage` пишет origin отдельно:
-   * provenance ≠ происхождение числа (W11).
-   */
+  /** Источник записи (INV-13); `llm_usage` пишет origin отдельно (W11). */
   source: Source;
   /**
    * Модуль-владелец записи (INV-13), без префикса `module:` — например `mcp`.
@@ -54,6 +51,8 @@ export interface SessionLogEntry {
   args?: Record<string, unknown>;
   content?: string;
   diff?: string;
+  /** Причина окончания генерации: `stop` | `length` | `tool_calls` (ses_mvpk4zjl). */
+  finish?: string;
   /** Ref'ы сохранённых изображений — тулов или пользователя (для web replay). */
   images?: import("./image-store").ToolImageRef[];
   success?: boolean;
