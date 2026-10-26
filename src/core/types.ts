@@ -182,7 +182,7 @@ export interface ContextQualityBreakdown {
  * Причина принудительного завершения хода харнессом: дубль-петля,
  * серия провальных пакетов или исчерпание итераций.
  */
-export type StopReason = "duplicate" | "failed_batches" | "max_iters" | "silent";
+export type StopReason = "duplicate" | "failed_batches" | "max_iters" | "silent" | "stalled";
 
 /** Итог прогона: успех, текст, токены, стоимость, качество контекста. */
 export interface AgentResult {

@@ -22,7 +22,7 @@ import {
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import { MAX_CONSECUTIVE_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES, RECOVERY_DIRECTIVE_REFRESH, RECOVERY_MEMORY_RULE_REFRESH, NARRATION_DIRECTIVE_AFTER_SILENT_BATCHES, HARD_STOP_SILENT_BATCHES, MIN_NARRATION_CHARS } from "./constants";
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES, RECOVERY_DIRECTIVE_REFRESH, RECOVERY_MEMORY_RULE_REFRESH, NARRATION_DIRECTIVE_AFTER_SILENT_BATCHES, HARD_STOP_SILENT_BATCHES, MIN_NARRATION_CHARS, STALL_WINDOW, STALL_FAILURES_IN_WINDOW, MAX_FAILED_BATCHES_PER_TURN } from "./constants";
 import { clearDirective, issueDirective } from "./directives";
 import { canonicalArgsKey } from "./canonical-args";
 import { countDistinctFailingTools, recordRepeatedToolFailure } from "./failure-memory";
@@ -644,6 +644,43 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         "research",
         t("exec.research_convergence", { count: state.consecutiveResearchBatches }),
       );
+    }
+
+    // Окно неудач: чередование «успех + фейл» не набирает ни
+    // consecutiveFailedBatches (сбрасывается успехом), ни
+    // consecutiveToolFailures. В ses_mvpdchvi это дало 29 отказов из 98 пакетов
+    // без единой эскалации — единственной реакцией было отключение bash.
+    state.recentBatchFailures.push(anyToolFailed);
+    if (state.recentBatchFailures.length > STALL_WINDOW) state.recentBatchFailures.shift();
+    if (anyToolFailed) state.failedBatchesTotal++;
+    const failuresInWindow = state.recentBatchFailures.filter(Boolean).length;
+    if (failuresInWindow < STALL_FAILURES_IN_WINDOW) state.stallNudged = false;
+    if (failuresInWindow >= STALL_FAILURES_IN_WINDOW && !state.stallNudged) {
+      state.stallNudged = true;
+      const cause = `${failuresInWindow}/${STALL_WINDOW} failed batches, ${state.failedBatchesTotal} total`;
+      logger.diagnostic("warn", `Stall window: ${cause} — directive`);
+      slog?.logDiagnosticEvent("stall_detected", {
+        source: "core",
+        operation: "tool_batch.stall",
+        kind: "failed",
+        cause,
+      });
+      issueDirective(
+        contextManager,
+        "stalled",
+        t("exec.stall_directive", {
+          count: String(failuresInWindow),
+          window: String(STALL_WINDOW),
+          total: String(state.failedBatchesTotal),
+        }),
+      );
+    }
+    if (state.failedBatchesTotal >= MAX_FAILED_BATCHES_PER_TURN) {
+      logger.diagnostic(
+        "warn",
+        `Stall terminal: ${state.failedBatchesTotal} failed batches in one turn — forcing final answer`,
+      );
+      return { interrupted: false, finalize: "stalled" };
     }
 
     // Нарратив: серия пакетов без единого слова пользователю. Модель, ушедшая
