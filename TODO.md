@@ -132,13 +132,15 @@
       `idempotency-tenant.test.ts`, `retention.test.ts`, `webhook-ssrf.test.ts`,
       `output-strict.test.ts`, `output-attempt.test.ts`, `sse-limits.test.ts`,
       `tests/updater-install-atomic.test.ts`, `tests/session/session-id.test.ts`.
-- [ ] **W0.2/W9:** метрика прогресса хода в `llm_usage`; `writeModal`/меню `question`;
-      i18n-паритет терминального markdown.
+- [ ] **W0.2:** метрика прогресса хода в `llm_usage` (`progress`/`novelToolKeys`/
+      `totalBatches`). `writeModal`/меню `question` и паритет терминального markdown
+      уже сделаны и покрыты `tests/ui/question-modal.test.ts`,
+      `tests/ui/md-terminal-parity.test.ts`.
 
 ### 1.4 Раздутые файлы (долг `split-bloated-files`)
 
-- [ ] Опустить файлы из `.arch-allowlist.json` до ≤300 строк — **59 осталось**
-      (было 84, разрезано 25). Полный список и приоритет:
+- [ ] Опустить файлы из `.arch-allowlist.json` до ≤300 строк — **56 осталось**
+      (было 84; снято 28: разрезано 25, уменьшено без разрезания 3). Полный список и приоритет:
       [`docs/plans/2026-10-13-split-bloated-files-progress.md`](./docs/plans/2026-10-13-split-bloated-files-progress.md).
       По 1–2 файла за задачу; гейт — `tests/arch/file-size.test.ts`.
 
@@ -234,8 +236,9 @@
 
 - [ ] Вернуть `contextWindow 64000` в реальном конфиге (`~/.mma`) — сейчас 32768:
       `/config contextWindow 64000`.
-- [ ] Перезапустить opencode — тогда подхватится Playwright MCP
-      (прописан в `~/.config/opencode/opencode.jsonc`, инструменты появляются после рестарта).
+- [ ] Playwright MCP сейчас **не прописан** в `~/.config/opencode/opencode.jsonc`
+      (там только `$schema`). Если он нужен — сначала добавить сервер, потом
+      перезапускать opencode.
 
 ---
 
