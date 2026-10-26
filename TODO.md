@@ -146,11 +146,15 @@
 
 ### 1.5 Мелкие хвосты исполненных планов
 
-- [ ] `web-fetch`: короткий hash извлечённого контента в `display`/`data` (WS4.5 плана
-      `2026-10-06-harness-reliability-fixes`).
+- [x] `web-fetch`: короткий hash извлечённого контента в `display`/`data`
+      (`contentHash`, 8 hex; одинаковый текст с разных URL даёт один hash).
+      _(2026-10-26, WS4.5; гейт `tests/tools/web-fetch.test.ts`.)_
 - [ ] Режим компакции `llm`: `contextBudget.compactionSummary` допускает только
       `off|ledger`, файл `compaction-summary.ts` не реализован (там же, WS5).
-- [ ] Правило «systemic-сбой только при ≥3 различных падающих тулах» (там же, WS9a).
+- [x] Правило «systemic-сбой только при ≥3 различных падающих тулах»: общий
+      вывод в память гейтится `countDistinctFailingTools`, конкретные причины
+      (`edit_file` anchor) пишутся отдельно. _(2026-10-26, WS9a;
+      `tests/core/tool-batch-honest-stop.test.ts`.)_
 - [ ] Живая приёмка леджера контекста: повторный прогон `hard-multi-extreme` с acceptance
       «`NEEDLE_A_111`/`B_222`/`C_333`, decoy 0, `exit=0`, notes-файл с `path:line`, блок
       с `[Notes:`» (план `2026-10-14-context-ledger`, Task 6).

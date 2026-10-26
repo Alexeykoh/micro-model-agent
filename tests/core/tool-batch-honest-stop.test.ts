@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ToolBatchExecutor } from "../../src/core/agent/tool-batch";
 import { createLoopState } from "../../src/core/agent/loop-state";
 import { makeToolBatchDeps } from "../helpers/tool-batch-deps";
@@ -240,10 +240,26 @@ describe("ToolBatchExecutor failure-memory gating", () => {
     expect(state.memoryRuleRecorded.has("web_fetch")).toBe(false);
   });
 
-  it("records repeated non-transient tool failures", async () => {
+  it("records a per-tool rule for one repeatedly failing tool", async () => {
     const ex = new ToolBatchExecutor(stubDeps(() => fail, []));
     const state = createLoopState();
     await failTool(ex, state, "bash", 4);
     expect(state.memoryRuleRecorded.has("bash")).toBe(true);
+  });
+
+  it("writes the generic systemic rule only when 3 different tools fail", async () => {
+    const ex = new ToolBatchExecutor(stubDeps(() => fail, []));
+    const appendRule = vi.fn();
+    (ex as any).deps.memoryStore = { appendRule };
+    const state = createLoopState();
+    const systemic = () =>
+      appendRule.mock.calls.some((c) => String(c[1]).includes("consecutive tool failures"));
+
+    await failTool(ex, state, "bash", 4);
+    await failTool(ex, state, "grep", 4);
+    expect(systemic()).toBe(false);
+
+    await failTool(ex, state, "read_file", 4);
+    expect(systemic()).toBe(true);
   });
 });
