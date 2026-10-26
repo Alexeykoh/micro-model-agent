@@ -142,7 +142,9 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
           ts: new Date().toISOString(),
           type: "context_probe",
           source: "core",
-          content: `model=${probe.model} actual=${probe.actual} configured=${config.contextWindow}`,
+          // Живая модель из конфига, а не модель пробника: проба могла ходить
+          // на другой endpoint/модель и закрепляла устаревшее имя в логе.
+          content: `model=${config.model} actual=${probe.actual} configured=${config.contextWindow}`,
         });
       } catch {
         // best-effort

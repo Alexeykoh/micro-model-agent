@@ -150,14 +150,14 @@
 - [ ] Живая приёмка леджера контекста: повторный прогон `hard-multi-extreme` с acceptance
       «`NEEDLE_A_111`/`B_222`/`C_333`, decoy 0, `exit=0`, notes-файл с `path:line`, блок
       с `[Notes:`» (план `2026-10-14-context-ledger`, Task 6).
-- [ ] `session-phase.ts:145` пишет `model=${probe.model}` (значение пробнера на момент
-      старта, а не живой модели) — остаток Task 3 плана `2026-10-11-harness-runaway-session-fixes`.
+- [x] `session-phase.ts` пишет живую модель (`config.model`), а не модель пробника.
+      _(Исправлено 2026-10-26.)_
 - [ ] `src/core/system-prompt.ts`: 14 строк длиннее 120 символов (канон системного промпта).
 - [ ] StuckDetector: нет классификации `scope_drift`/`empty_output` — надёжного сигнала нет
       (`src/modules/execution/stuck-detector.ts` знает только `timeout`/`repeat`/`error_loop`).
-- [ ] `src/core/hallucination/factual.ts:124,187`: cooldown-ветка возвращает `false`, не
-      консультируя тёплый кэш (`indexHas`); рескан синхронный на hot path (Task 12 плана
-      `2026-08-26-model-control-fixes`).
+- [x] `src/core/hallucination/factual.ts`: пункт был устаревшим — тёплый кэш
+      (`checkIndex`/`indexHas`) консультируется **до** cooldown-ветки (код с 2026-10-01),
+      рескан остаётся rate-limited. Отдельная правка не нужна. _(Проверено 2026-10-26.)_
 
 ### 1.6 Качество памяти и самообучение (план `docs/superpowers/plans/2026-08-12-memory-quality-and-learning.md`)
 
@@ -283,7 +283,7 @@
 - [ ] Подобрать литературу по верификации/критикам (вторая половина пункта
       «контр-агент для проверки работы»; сам контр-агент сделан — `src/modules/critic/`).
 - [ ] Долги из [`docs/agents/debt.md`](./docs/agents/debt.md) — каждый оплачивается
-      по своему триггеру (правило 9). Активных записей: 17.
+      по своему триггеру (правило 9). Активных записей: 21.
 
 ---
 

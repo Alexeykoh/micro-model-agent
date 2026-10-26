@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { bootstrap, buildSystemInfo, resolveBaseDir } from "../../src/core/bootstrap";
@@ -199,7 +199,10 @@ describe("bootstrap", () => {
           json: async () => ({
             models: [
               {
-                key: "qwen/qwen3.5-9b",
+                // Имя в ответе провайдера не обязано совпадать с config.model:
+                // context_probe должен логировать живую модель из конфига.
+                key: "stale/model-name",
+                name: "qwen/qwen3.5-9b",
                 max_context_length: 131072,
                 loaded_instances: [{ config: { context_length: 65536 } }],
               },
@@ -229,10 +232,24 @@ describe("bootstrap", () => {
     process.env.MMA_REASONING_CACHE = join(dir, "reasoning-cache.json");
     try {
       resetProbeCache();
-      const { contextProbe } = await bootstrap(dir, dir);
+      const { contextProbe, sessionManager } = await bootstrap(dir, dir);
 
       const probe = await contextProbe;
-      expect(probe).toEqual({ model: "qwen/qwen3.5-9b", actual: 65536 });
+      expect(probe).toEqual({ model: "stale/model-name", actual: 65536 });
+
+      // context_probe в session.jsonl называет живую модель из конфига, а не
+      // ту, что вернул пробник (иначе в диагностике закрепляется чужое имя).
+      const sessionId = sessionManager.getActive();
+      expect(sessionId).toBeTruthy();
+      const logPath = join(dir, "sessions", sessionId!, "session.jsonl");
+      await waitFor(
+        () => existsSync(logPath) && readFileSync(logPath, "utf-8").includes('"type":"context_probe"'),
+      );
+      const probeLine = readFileSync(logPath, "utf-8")
+        .split("\n")
+        .find((line) => line.includes('"type":"context_probe"'));
+      expect(probeLine).toContain("model=qwen/qwen3.5-9b");
+      expect(probeLine).not.toContain("stale/model-name");
 
       // The reasoning probe is fire-and-forget (not exposed on the result), so
       // wait until it has logged before asserting and before restoring fetch.
