@@ -4,6 +4,18 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.6] - 2026-10-26
+
+### Fixed
+
+- **Распаковка релиза падала с `tar: Cannot connect to C: resolve failed`, если
+  первым в PATH стоит GNU tar (Git for Windows), а не bsdtar из System32.**
+  GNU tar читает абсолютный `C:\…` как `host:path`; updater передавал архиву
+  полный путь. Теперь архив идёт basename'ом при `cwd` его каталога
+  (`tarPlan()`), что одинаково работает для GNU tar, busybox и bsdtar.
+  Поймано pre-push гейтом на Windows.
+  Гвард: `tests/updater-install-atomic.test.ts`, `tests/install-retry.test.ts`.
+
 ## [0.13.5] - 2026-10-26
 
 ### Added
