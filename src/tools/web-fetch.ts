@@ -1,4 +1,5 @@
 /** Тул чтения URL в markdown (plain HTTP, без JS; SSRF-защита, cap вывода). */
+import { createHash } from "node:crypto";
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolResult } from "./types";
 import {
@@ -72,6 +73,9 @@ export async function performWebFetch(
 
     const fullChars = cleaned.length;
     const fullLines = cleaned.split("\n").length;
+    // Короткая подпись контента: отличает «другой URL, тот же текст» от
+    // реального нового результата и видна в Trace/диагностике.
+    const contentHash = createHash("sha256").update(cleaned).digest("hex").slice(0, 8);
     // Кап — ИНСТРУМЕНТНЫЙ (5000 символов), а не глобальный сетевой: тот
     // обслуживает download_file, где лимит задаёт max_bytes.
     const maxChars = MAX_CHARS;
@@ -103,7 +107,9 @@ export async function performWebFetch(
         chars: String(fullChars),
         lines: String(fullLines),
         truncated,
+        hash: contentHash,
       }),
+      data: { contentHash },
     };
   } catch (e: any) {
     if (e instanceof BlockedRedirectError) {

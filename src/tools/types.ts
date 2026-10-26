@@ -234,7 +234,7 @@ export interface ToolResult {
   success: boolean;
   output: string;
   toolCallId?: string;
-  display?: string;
+  display?: string; data?: Record<string, unknown>; // data: machine-readable result signature
   diff?: string;
   /**
    * Изображения, произведённые тулом (например, browser screenshot или

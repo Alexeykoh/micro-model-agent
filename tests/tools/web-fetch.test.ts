@@ -51,6 +51,16 @@ describe("web_fetch tool", () => {
     expect(result.output).toContain("high-performance multiplayer code editor");
     expect(result.output).not.toContain("<script>");
     expect(result.output).not.toContain("<style>");
+    expect(result.display).toMatch(/#[0-9a-f]{8}/);
+    expect(result.data?.contentHash).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it("gives different URLs with identical content the same short hash", async () => {
+    stubFetch(() => htmlResponse(`<main><p>${MAIN_TEXT}</p></main>`));
+    const a = await webFetchTool.handler({} as any, { url: "https://a.example/" });
+    const b = await webFetchTool.handler({} as any, { url: "https://b.example/" });
+
+    expect(a.data?.contentHash).toBe(b.data?.contentHash);
   });
 
   it("truncates content larger than the response cap with a marker", async () => {

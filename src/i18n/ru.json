@@ -141,7 +141,7 @@
   "tool.friendly.web_browse": "Просмотр страницы",
   "tool.friendly.download_file": "Скачивание файла",
   "tool.friendly.chunk_query": "Запрос чанков",
-  "tool.web_fetch_result": "Загружена страница: {url} — {chars} симв., {lines} строк{truncated}",
+  "tool.web_fetch_result": "Загружена страница: {url} — {chars} симв., {lines} строк{truncated} · #{hash}",
   "tool.web_fetch_no_content": "Нет читаемого содержимого на {url} — страница требует JavaScript или это защита от ботов. Используй тул \"browser\" или другой источник.",
   "tool.web_browse_result": "Просмотрена страница: {url} — {chars} симв., {lines} строк{truncated}",
   "tool.web_search_result": "Результаты поиска \"{query}\" — {count} результатов",
