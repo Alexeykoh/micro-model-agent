@@ -21,19 +21,27 @@ function cache(over: Partial<CacheCapability>): CacheCapability {
   };
 }
 
-/** Стрим с финальным usage-чанком (пустые choices). */
+/** Стрим с usage в отдельном чанке (пустые choices). */
 function mockUsageStream(usage: unknown): void {
+  mockStream([
+    { choices: [{ delta: { content: "ok" } }] },
+    { usage },
+    "[DONE]",
+  ]);
+}
+
+/** Стрим произвольных SSE-объектов (строки передаются как есть). */
+function mockStream(frames: unknown[]): void {
   const encoder = new TextEncoder();
   const mockFetch = vi.fn().mockResolvedValue({
     ok: true,
     headers: new Map(),
     body: new ReadableStream({
       start(controller) {
-        controller.enqueue(
-          encoder.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'),
-        );
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ usage })}\n\n`));
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        for (const frame of frames) {
+          const payload = typeof frame === "string" ? frame : JSON.stringify(frame);
+          controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+        }
         controller.close();
       },
     }),
@@ -100,6 +108,59 @@ describe("cache usage parsing in openai-compat", () => {
 
     const usage = await doneUsage(provider);
     expect(usage?.cache).toBeUndefined();
+  });
+
+  it("reads usage from a chunk that also carries choices (OpenCode Go)", async () => {
+    // Регрессия cost-estimate-not-usage: usage приходил в чанке с finish_reason
+    // "stop", парсер читал его только при `!choice` → стоимость считалась по
+    // оценке и без кеша.
+    mockStream([
+      { choices: [{ delta: { content: "ok" } }] },
+      {
+        choices: [{ delta: {}, finish_reason: "stop" }],
+        usage: {
+          prompt_tokens: 2298,
+          completion_tokens: 6,
+          total_tokens: 2304,
+          prompt_tokens_details: { cached_tokens: 1664 },
+        },
+        opencode: { list_cost: 0.00001414, tokens: { cache_read: 1664 } },
+      },
+      "[DONE]",
+    ]);
+    const provider = new OpenAICompatProvider({
+      model: "m",
+      baseUrl: "http://localhost:1234/v1",
+      cache: cache({}),
+    });
+
+    const usage = await doneUsage(provider);
+    expect(usage?.promptTokens).toBe(2298);
+    expect(usage?.completionTokens).toBe(6);
+    expect(usage?.cache?.cachedTokens).toBe(1664);
+    expect(usage?.costUsd).toBeCloseTo(0.00001414, 12);
+  });
+
+  it("falls back to opencode.tokens.cache_read without prompt_tokens_details", async () => {
+    mockUsageStream({
+      prompt_tokens: 1000,
+      completion_tokens: 5,
+      total_tokens: 1005,
+      opencode: { tokens: { cache_read: 800 } },
+    });
+    const provider = new OpenAICompatProvider({
+      model: "m",
+      baseUrl: "http://localhost:1234/v1",
+      cache: cache({}),
+    });
+
+    const usage = await doneUsage(provider);
+    expect(usage?.cache).toEqual({
+      cachedTokens: 800,
+      cacheWriteTokens: 0,
+      uncachedTokens: 200,
+      source: "api",
+    });
   });
 
   it("populates cache stats on the non-streaming path", async () => {

@@ -64,6 +64,34 @@ export class CostTracker {
     entry.total += result.cost;
   }
 
+  /**
+   * Записывает стоимость, которую сообщил провайдер (авторитетнее оценки по
+   * токенам). `cache` всё равно учитывается для накопленной экономии.
+   */
+  recordActual(cost: number, provider?: string, cache?: CacheCostInput): void {
+    if (!Number.isFinite(cost) || cost < 0) return;
+    const key = provider || "unknown";
+    this._known = true;
+    this._total += cost;
+    if (cache) {
+      const priced = calculateCostDetailed(
+        this.model,
+        cache.cachedTokens ?? 0,
+        0,
+        this.config,
+        cache,
+      );
+      if (priced) this._saved += priced.saved;
+    }
+    let entry = this.byProvider.get(key);
+    if (!entry) {
+      entry = { total: 0, known: false };
+      this.byProvider.set(key, entry);
+    }
+    entry.known = true;
+    entry.total += cost;
+  }
+
   /** Итоговая стоимость в USD; undefined без известной цены модели. */
   get total(): number | undefined {
     return this._known ? this._total : undefined;

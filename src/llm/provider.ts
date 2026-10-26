@@ -61,6 +61,8 @@ export interface Chunk {
     totalTokens: number;
     /** Статистика кеша промпта, если провайдер её сообщил. */
     cache?: CacheUsage;
+    /** Стоимость вызова по данным провайдера (USD); оценка — только fallback. */
+    costUsd?: number;
   };
 }
 

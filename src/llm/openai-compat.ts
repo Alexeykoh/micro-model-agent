@@ -8,7 +8,7 @@ import type { CacheCapability, CacheReportFormat, RateLimitConfig, ReasoningStra
 import { LlmError } from "./llm-errors";
 import { backoffDelay } from "../utils/retry";
 import { StreamState } from "./stream-state";
-import { parseCacheUsage } from "./cache-usage";
+import { parseChunkUsage } from "./usage-parse";
 import { extractProviderErrorText } from "./provider-error";
 import {
   LLM_REQUEST_TIMEOUT_MS as REQUEST_TIMEOUT_MS,
@@ -525,20 +525,15 @@ export class OpenAICompatProvider implements LLMProvider {
             const parsed = JSON.parse(data);
             st.parsedChunks++;
             const choice = parsed.choices?.[0];
+            // Usage читаем независимо от `choices`: часть провайдеров (OpenCode
+            // Go) присылает его в чанке с непустым choices и finish_reason.
+            const parsedUsage = parseChunkUsage(parsed, this.cacheReport);
+            if (parsedUsage) {
+              st.usage = parsedUsage;
+              this.debug?.("LLM stream usage", { ...st.usage });
+            }
             if (!choice) {
-              // Usage приходит в последнем чанке с пустыми choices.
-              // DEBT(cost-estimate-not-usage): OpenCode Go кладёт usage в чанк
-              // с непустым choices — такой usage теряется, стоимость считается
-              // по оценке и без кеша (см. docs/agents/debt.md).
-              if (parsed.usage) {
-                st.usage = {
-                  promptTokens: parsed.usage.prompt_tokens ?? 0,
-                  completionTokens: parsed.usage.completion_tokens ?? 0,
-                  totalTokens: parsed.usage.total_tokens ?? 0,
-                  cache: parseCacheUsage(parsed.usage, this.cacheReport),
-                };
-                this.debug?.("LLM stream usage", { ...st.usage });
-              } else if (parsed.error) {
+              if (!parsed.usage && parsed.error) {
                 // Mid-stream ошибка провайдера (Ollama шлёт {"error": "..."}
                 // голым JSON после старта генерации; LM Studio — объект
                 // `{message, ...}`, где `String()` давал `[object Object]`).
@@ -817,17 +812,8 @@ export class OpenAICompatProvider implements LLMProvider {
       }
 
       // Дописываем usage из ответа API
-      if (data.usage) {
-        chunks.push({
-          type: "done",
-          usage: {
-            promptTokens: data.usage.prompt_tokens ?? 0,
-            completionTokens: data.usage.completion_tokens ?? 0,
-            totalTokens: data.usage.total_tokens ?? 0,
-            cache: parseCacheUsage(data.usage, this.cacheReport),
-          },
-        });
-      }
+      const usage = parseChunkUsage(data, this.cacheReport);
+      if (usage) chunks.push({ type: "done", usage });
 
       return chunks;
     } catch (err: any) {

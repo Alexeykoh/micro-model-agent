@@ -32,4 +32,27 @@ describe("TokenTracker.logUsage provenance", () => {
     );
     expect(record).toHaveBeenCalledWith(100, 20, "live", undefined);
   });
+
+  it("uses provider-reported cost instead of token estimate", () => {
+    const record = vi.fn();
+    const recordActual = vi.fn();
+    const logLlmUsage = vi.fn();
+    const tracker = new TokenTracker({ record, recordActual } as never, () => ({
+      provider: "opencode-go",
+      model: "deepseek-v4.1-flash",
+    }));
+    const state = createLoopState();
+    const baseline = tracker.beginIteration(state, 2000);
+    tracker.recordApiUsage(state, baseline, {
+      promptTokens: 2298,
+      completionTokens: 6,
+      cache: { cachedTokens: 1664, cacheWriteTokens: 0, uncachedTokens: 634, source: "api" },
+      costUsd: 0.00001414,
+    });
+
+    tracker.logUsage(state, baseline, "ok", 2000, 1, 10, { logLlmUsage } as never);
+
+    expect(recordActual).toHaveBeenCalledWith(0.00001414, "opencode-go", state.cacheUsage);
+    expect(record).not.toHaveBeenCalled();
+  });
 });

@@ -152,6 +152,8 @@ export interface LoopState {
   apiCompletionTokens: number;
   /** Совокупные символы ответов — fallback-оценка токенов, когда API не отдаёт usage. */
   apiCompletionChars: number;
+  /** Совокупная стоимость вызовов по данным провайдера (USD). */
+  apiCostUsd: number;
   /** Совокупная оценка prompt-токенов по итерациям — парный fallback к completion-символам. */
   estimatedPromptTokensTotal: number;
   /** Кеш-статистика последнего API-usage (заменяется per-итерацию). */

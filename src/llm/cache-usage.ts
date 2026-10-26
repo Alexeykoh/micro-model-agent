@@ -46,11 +46,17 @@ export function parseCacheUsage(
   switch (format) {
     case "openai": {
       const details = usage.prompt_tokens_details;
-      if (!isRecord(details)) return undefined;
-      const cached = num(details.cached_tokens);
+      // OpenCode Go дублирует кеш в `opencode.tokens.cache_read` даже когда
+      // `prompt_tokens_details` отсутствует.
+      const opencodeTokens = isRecord(usage.opencode) ? usage.opencode.tokens : undefined;
+      const cached = isRecord(details)
+        ? num(details.cached_tokens)
+        : isRecord(opencodeTokens)
+          ? num(opencodeTokens.cache_read)
+          : undefined;
       if (cached === undefined) return undefined;
       const prompt = num(usage.prompt_tokens) ?? cached;
-      const write = num(details.cache_write_tokens) ?? 0;
+      const write = isRecord(details) ? (num(details.cache_write_tokens) ?? 0) : 0;
       return {
         cachedTokens: cached,
         cacheWriteTokens: write,

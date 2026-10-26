@@ -31,7 +31,7 @@ export class TokenTracker {
   beginIteration(
     state: LoopState,
     estimatedPromptTokens: number,
-  ): { promptBefore: number; completionBefore: number } {
+  ): { promptBefore: number; completionBefore: number; costBefore: number } {
     state.estimatedPromptTokensTotal += estimatedPromptTokens;
     // Кеш-данные относятся к одной итерации; сбрасываем, чтобы отсутствие
     // usage в следующем ходе не приписало старые цифры.
@@ -39,6 +39,7 @@ export class TokenTracker {
     return {
       promptBefore: state.apiPromptTokens,
       completionBefore: state.apiCompletionTokens,
+      costBefore: state.apiCostUsd,
     };
   }
 
@@ -48,12 +49,22 @@ export class TokenTracker {
    */
   recordApiUsage(
     state: LoopState,
-    baseline: { promptBefore: number; completionBefore: number },
-    usage: { promptTokens: number; completionTokens: number; cache?: CacheUsage },
+    baseline: { promptBefore: number; completionBefore: number; costBefore?: number },
+    usage: {
+      promptTokens: number;
+      completionTokens: number;
+      cache?: CacheUsage;
+      costUsd?: number;
+    },
   ): void {
     state.apiPromptTokens = baseline.promptBefore + usage.promptTokens;
     state.apiCompletionTokens = baseline.completionBefore + usage.completionTokens;
     state.cacheUsage = usage.cache;
+    // Стоимость от провайдера авторитетнее оценки по токенам; заменяем так же,
+    // как токены (два done-чанка одного запроса не должны двоить сумму).
+    if (usage.costUsd !== undefined) {
+      state.apiCostUsd = (baseline.costBefore ?? 0) + usage.costUsd;
+    }
   }
 
   /** Аккумулирует символы ответа — fallback-оценка completion-токенов. */
@@ -68,7 +79,7 @@ export class TokenTracker {
    */
   logUsage(
     state: LoopState,
-    baseline: { promptBefore: number; completionBefore: number },
+    baseline: { promptBefore: number; completionBefore: number; costBefore?: number },
     textContent: string,
     contextTokens: number,
     iteration: number,
@@ -102,6 +113,13 @@ export class TokenTracker {
       prefix: state.prefixDelta,
       cache: state.cacheUsage,
     });
+    // Стоимость от провайдера (OpenCode list_cost) — авторитетный источник;
+    // оценка по токенам только когда её нет.
+    const costDelta = state.apiCostUsd - (baseline.costBefore ?? 0);
+    if (costDelta > 0) {
+      this.costTracker.recordActual(costDelta, prov.provider, state.cacheUsage);
+      return;
+    }
     // Кеш учитываем только когда цифры пришли от API: оценка chars/4 о кеше
     // ничего не знает и не должна менять тарификацию.
     this.costTracker.record(
