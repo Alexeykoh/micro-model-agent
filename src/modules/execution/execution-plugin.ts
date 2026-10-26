@@ -229,7 +229,7 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
               iter - deps.state.lastStuckWarnIter >= STUCK_WARN_REPEAT_EVERY);
         if (logIt) {
           ctx.logger?.warn(stuckReason);
-          ctx.sessionLog?.plan(
+          ctx.sessionLog?.directive(
             "stuck-warning",
             stuckReason,
             typeof ctx.iteration === "number" ? ctx.iteration : undefined,

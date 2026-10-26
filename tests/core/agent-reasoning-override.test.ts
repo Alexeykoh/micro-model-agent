@@ -74,6 +74,7 @@ function createDeps(overrides?: Record<string, unknown>) {
     },
     contextManager: {
       addMessage: vi.fn(),
+      setHarnessSink: vi.fn(),
       getMessageCount: vi.fn().mockReturnValue(0),
       needsCompaction: vi.fn().mockReturnValue(false),
       compact: vi.fn(),

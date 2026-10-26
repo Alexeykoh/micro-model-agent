@@ -50,7 +50,7 @@ function makePlugin() {
     turnSeq,
     contextManager: { addMessage: (m: { content: string }) => added.push(m.content) },
     logger: { warn: () => {} },
-    sessionLog: { plan: () => {} },
+    sessionLog: { plan: () => {}, directive: () => {} },
   });
   return { added, state, stuckDetector, plugin, ctx };
 }

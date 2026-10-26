@@ -47,6 +47,7 @@ function createMockDeps(chatImpl?: (...args: any[]) => AsyncGenerator<any>) {
 
   const mockContextManager = {
     addMessage: vi.fn(),
+    setHarnessSink: vi.fn(),
     getMessageCount: vi.fn().mockReturnValue(0),
     needsCompaction: vi.fn().mockReturnValue(false),
     compact: vi.fn(),

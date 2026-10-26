@@ -28,7 +28,7 @@ export interface SessionLogEntry {
   type:
     | "tool_call" | "tool_result" | "assistant" | "reasoning"
     | "user" | "system" | "error" | "compaction"
-    | "tool_defs" | "audit" | "plan" | "context"
+    | "tool_defs" | "audit" | "plan" | "directive" | "context"
     | "llm_usage" | "session_start" | "baseline_typecheck"
     | "reasoning_control" | "context_probe" | "output"
     | "critic_check" | "critic_verdict" | "critic_escalation"

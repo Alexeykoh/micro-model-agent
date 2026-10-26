@@ -68,6 +68,15 @@ export async function executeAgentLoop(
     criticGate,
   } = createLoopModules(ctx.loopSetupHost(), slog);
 
+  // Всё, что харнесс вставляет модели в контекст (директивы, recovery-гайданс,
+  // статус плана), пишется в журнал сессии событием `directive`: иначе при
+  // разборе видно только действия агента, но не то, что ему было сказано.
+  // `?.` — тестовые дубли ContextManager не обязаны реализовывать приёмник
+  // журнала (см. tests/arch/double-honesty.test.ts); в проде класс свой.
+  contextManager.setHarnessSink?.((text) =>
+    slog.logDirective("system_summary", text, state.iteration),
+  );
+
   while (state.iteration < config.maxToolIterations && !ctx.isShutdownRequested()) {
     state.iteration++;
     ctx.setIteration(state.iteration);

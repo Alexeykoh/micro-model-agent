@@ -4,6 +4,21 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.1] - 2026-10-26
+
+### Added
+
+- **Журнал сессии показывает, что модели сказали, а не только что она вызвала.**
+  Директивы харнесса (нарратив, recovery-гайданс, статус плана) вставляются в
+  контекст как `<system-summary>` и раньше оседали только в `app.jsonl`:
+  в живом прогоне директива `narration` сработала на итерации 19, но в
+  `session.jsonl` её не было. Теперь `ContextManager.setHarnessSink` отдаёт
+  каждую такую инъекцию в событие `type: "directive"` с точным текстом и
+  номером итерации. Канал `plan` освобождён от предупреждений
+  execution-модуля (`stuck-warning`, `web-search` ушли в `directive`).
+  Гвард: `tests/core/session-log-directive.test.ts`.
+  Spec: `docs/specs/2026-10-26-session-directive-log-design.md`.
+
 ## [0.13.0] - 2026-10-26
 
 ### Added

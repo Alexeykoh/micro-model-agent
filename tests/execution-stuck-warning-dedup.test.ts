@@ -29,7 +29,7 @@ describe("stuck warning anti-spam", () => {
   function makeCtx() {
     return {
       contextManager: { addMessage: vi.fn() },
-      sessionLog: { plan: vi.fn() },
+      sessionLog: { plan: vi.fn(), directive: vi.fn() },
       logger: { warn: vi.fn(), debug: vi.fn() },
       iteration: 0,
     } as any;
@@ -42,7 +42,8 @@ describe("stuck warning anti-spam", () => {
   }
 
   function stuckWarningCount(ctx: ReturnType<typeof makeCtx>): number {
-    return ctx.sessionLog.plan.mock.calls.filter((a: any[]) => a[0] === "stuck-warning").length;
+    // Предупреждение execution-модуля — канал directive, не plan.
+    return ctx.sessionLog.directive.mock.calls.filter((a: any[]) => a[0] === "stuck-warning").length;
   }
 
   it("stops logging stale tool-errors after subsequent successes", async () => {

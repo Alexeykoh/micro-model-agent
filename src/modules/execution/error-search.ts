@@ -63,7 +63,7 @@ export function maybeSearchError(host: ErrorSearchHost, ctx: ToolContext, call: 
           host.stuckDetector.unmarkErrorSearched(sig);
         }
         ctx.logger?.warn(t("exec.error_search_failed", { query }));
-        ctx.sessionLog?.plan("web-search", `empty/failed: ${query}`);
+        ctx.sessionLog?.directive("web-search", `empty/failed: ${query}`);
         return;
       }
       const resultsText = res.results
