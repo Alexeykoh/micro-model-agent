@@ -9,6 +9,7 @@ import type { Logger } from "../logger/app-logger";
 import { setAuditSessionDir } from "../modules/security/audit-log";
 import { sanitizeLogMessageTargeted } from "../modules/security/data-sanitizer";
 import { redactContextSecrets } from "./agent/context-log";
+import { toolChannelEvent } from "./session-log-events";
 import {
   decodeDataUrl,
   saveToolImage,
@@ -495,17 +496,14 @@ export class SessionLogger {
     });
   }
 
-  /**
-   * Пишет событие плана (создание, шаги, re-plan).
-   * @param event имя события; @param detail детали; @param iteration итерация.
-   */
+  /** Событие плана (создание, шаги, re-plan). */
   logPlan(event: string, detail: string, iteration?: number): void {
-    this.log({
-      type: "plan",
-      content: detail,
-      tool: event,
-      ...(iteration !== undefined ? { iteration } : {}),
-    });
+    this.log(toolChannelEvent("plan", event, detail, iteration));
+  }
+
+  /** Инъекция харнесса в контекст модели (не жизненный цикл плана). */
+  logDirective(event: string, detail: string, iteration?: number): void {
+    this.log(toolChannelEvent("directive", event, detail, iteration));
   }
 
   /**

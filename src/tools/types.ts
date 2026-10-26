@@ -106,12 +106,10 @@ export interface ToolContext {
   sessionHistory?: {
     append(type: string, content: unknown): Promise<void>;
   };
-  /**
-   * Добавить структурую запись в лог выполнения сессии (session.jsonl).
-   * Для записи прогресса плана (post-mortem анализ).
-   */
+  /** События плана/директив в session.jsonl (post-mortem анализ). */
   sessionLog?: {
     plan(event: string, detail: string, iteration?: number): void;
+    directive(event: string, detail: string, iteration?: number): void;
   };
   /**
    * Приёмник диагностик fail-open путей тула (INV-15). Ставит

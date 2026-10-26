@@ -152,6 +152,8 @@ export class ContextManager {
   private lastUserFeedback = "";
   private tokenCounter: TokenCounter | null;
   private pendingImages = new PendingImageQueue();
+  /** Приёмник инъекций харнесса для журнала сессии (см. `setHarnessSink`). */
+  private harnessSink: ((text: string) => void) | null = null;
   /**
    * Стоящие директивы харнесса (`id → текст`). Директивы вставляются в контекст
    * как `<system-summary>`, который компакция вырезает; реестр позволяет вернуть
@@ -219,6 +221,17 @@ export class ContextManager {
    */
   setProgressDiagnosticSink(fn: ((d: ProgressDiagnostic) => void) | null): void {
     this.compactionProgress.setSink(fn);
+  }
+
+  /**
+   * Sink инъекций харнесса: каждое сообщение, вставленное в контекст как
+   * `<system-summary>` (директивы, recovery-гайданс, статус плана), отдаётся
+   * наружу — в `session.jsonl` это событие `directive`. Без него журнал
+   * показывает только вызовы агента, но не то, что ему было сказано
+   * (наблюдалось: директива `narration` сработала, а в журнале её нет).
+   */
+  setHarnessSink(fn: ((text: string) => void) | null): void {
+    this.harnessSink = fn;
   }
 
   /** Внутренний блок последней компакции (`[Compressed: …]`) — для тестов/наблюдаемости. */
@@ -384,6 +397,10 @@ export class ContextManager {
     // забывала "удали /bicycles, почини стили" и 40+ итераций бесцельно читала файлы).
     if (msg.role === "user") {
       const text = typeof msg.content === "string" ? msg.content : getMessageText(msg.content);
+      // Инъекция харнесса — в журнал: ровно тот текст, который увидит провайдер.
+      if (text.startsWith("<system-summary>") && this.harnessSink) {
+        this.harnessSink(text);
+      }
       if (text.trim() && !text.startsWith("<system-summary>") && !text.includes("[Compressed:")) {
         if (looksLikeErrorPaste(text) && (this.lastUserTask || this.sessionMission)) {
           this.lastUserFeedback = text.trim().slice(0, 400);

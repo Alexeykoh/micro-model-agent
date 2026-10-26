@@ -151,6 +151,16 @@ export function createToolContext(input: ToolContextInput): ToolContext {
       },
     },
     sessionLog: {
+      directive: (event: string, detail: string, iteration?: number) => {
+        sessionManager.appendLog({
+          ts: new Date().toISOString(),
+          type: "directive",
+          source: "core",
+          tool: event,
+          content: detail,
+          ...(iteration !== undefined ? { iteration } : {}),
+        } as never);
+      },
       plan: (event: string, detail: string, iteration?: number) => {
         sessionManager.appendLog({
           ts: new Date().toISOString(),
