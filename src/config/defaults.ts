@@ -102,6 +102,7 @@ export const DEFAULTS: AppConfig = {
     compactionSummary: "ledger",
     overflowCooldown: 3,
     toolResultKeep: 6,
+    toolDigest: "full",
     admitMaxTokens: 3000,
     notesPath: ".mma/NOTES.md",
     ledgerMax: 200,

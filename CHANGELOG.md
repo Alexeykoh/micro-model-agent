@@ -4,6 +4,20 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.3] - 2026-10-26
+
+### Added
+
+- **`contextBudget.toolDigest`: один канал для вывода тула вместо двух.**
+  В `ses_mvphq4s8` каждый результат приходил в контекст дважды — `role:"tool"`
+  плюс дайджест `[Tool: …]` в `<system-summary>` (50 из 53 директив, ~6,7 тыс.
+  токенов за прогон). Дайджест появился как наполнитель user-сообщения для
+  llama.cpp Jinja-шаблонов, а не как второй канал. Теперь режим настраивается:
+  `full` (дефолт, текущее поведение), `failures` (только упавшие вызовы),
+  `off`. Пустая сводка больше не отправляется.
+  Гвард: `tests/core/tool-digest-policy.test.ts`.
+  Spec: `docs/specs/2026-10-26-tool-digest-channel-design.md`.
+
 ## [0.13.2] - 2026-10-26
 
 ### Fixed

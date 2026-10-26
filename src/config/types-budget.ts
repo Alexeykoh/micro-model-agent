@@ -32,6 +32,12 @@ export interface ContextBudget {
   overflowCooldown?: number;
   /** Сколько последних tool-результатов не чистить при компакции (v2). Дефолт 6. */
   toolResultKeep?: number;
+  /**
+   * Что дублировать в `<system-summary>` после батча тулов: `full` — дайджест
+   * каждого вызова (историческое поведение), `failures` — только упавших,
+   * `off` — ничего. Сам вывод уже лежит в `role:"tool"`.
+   */
+  toolDigest?: "full" | "failures" | "off";
   /** Число вызовов прогрева калибровки (cold/warming). Дефолт 3. */
   calibrationWarmup?: number;
   /** Нижняя граница калибровки как доля raw. Дефолт 0.5. */

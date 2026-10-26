@@ -118,7 +118,7 @@ describe("config registry", () => {
 
   it("groups keys by canonical prefix", () => {
     const keys = keysForGroup("contextBudget").map((d) => d.key);
-    expect(keys).toEqual(["contextBudget.systemPrompt", "contextBudget.responseReserve", "contextBudget.compactionThreshold", "contextBudget.compactionMinLoad", "contextBudget.policy", "contextBudget.compactionSummary", "contextBudget.overflowCooldown", "contextBudget.toolResultKeep", "contextBudget.admitMaxTokens", "contextBudget.notesPath", "contextBudget.ledgerMax", "contextBudget.calibrationWarmup", "contextBudget.ratioFloor"]);
+    expect(keys).toEqual(["contextBudget.systemPrompt", "contextBudget.responseReserve", "contextBudget.compactionThreshold", "contextBudget.compactionMinLoad", "contextBudget.policy", "contextBudget.compactionSummary", "contextBudget.overflowCooldown", "contextBudget.toolResultKeep", "contextBudget.toolDigest", "contextBudget.admitMaxTokens", "contextBudget.notesPath", "contextBudget.ledgerMax", "contextBudget.calibrationWarmup", "contextBudget.ratioFloor"]);
   });
 
   it("captures a boot snapshot", () => {
