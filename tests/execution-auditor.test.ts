@@ -52,6 +52,42 @@ describe("Auditor", () => {
     expect(result.missingFiles.length).toBeGreaterThan(0);
   });
 
+  it("не требует существования временного артефакта, который план сам убирает", async () => {
+    // ses_mvpk4zjl: модель вытащила _sisi.js, прочитала и удалила, а аудитор
+    // потребовал файл на финише — готовый диагноз отклонён.
+    const plan = PlanCreator.createPlan(
+      "test",
+      ["Извлечь sisi.js из контейнера в _sisi.js и прочитать", "Удалить _sisi.js после чтения"],
+      tmpDir,
+    );
+    plan.steps[0].status = "done";
+    plan.steps[1].status = "done";
+    plan.steps[1].kind = "delete";
+
+    const result = await auditor.audit(plan);
+    expect(result.missingFiles).toEqual([]);
+  });
+
+  it("не требует файлов под /tmp/ и *.tmp", async () => {
+    const plan = PlanCreator.createPlan(
+      "test",
+      ["Сохранить ответ в /tmp/probe.json", "Записать вывод в dump.tmp"],
+      tmpDir,
+    );
+    plan.steps.forEach((s) => (s.status = "done"));
+
+    const result = await auditor.audit(plan);
+    expect(result.missingFiles).toEqual([]);
+  });
+
+  it("по-прежнему требует настоящую поставку", async () => {
+    const plan = PlanCreator.createPlan("test", ["Create src/real.ts with content"], tmpDir);
+    plan.steps[0].status = "done";
+
+    const result = await auditor.audit(plan);
+    expect(result.missingFiles).toContain("src/real.ts");
+  });
+
   it("should not treat URL hostnames in step descriptions as missing files", async () => {
     const plan = PlanCreator.createPlan(
       "test",

@@ -36,6 +36,37 @@ const RESOLVE_MAX_DEPTH = 8;
  * матчем точного basename или суффикса пути ("App.tsx" и "src/App.tsx"
  * находят "bicycle-shop/src/App.tsx").
  */
+/** Имя для сверки «создан/удалён»: basename без ведущих `_`/`.`. */
+function artifactName(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/");
+  const base = (normalized.split("/").pop() ?? normalized).toLowerCase();
+  return base.replace(/^[_.]+/, "");
+}
+
+/**
+ * Временный ли это артефакт: scratch-файл, который план уберёт после чтения.
+ * Существовать на финише он не обязан.
+ *
+ * @param token путь/имя файла из описания шага.
+ * @returns true для `_scratch`, `/tmp/…`, `*.tmp`, `.mma/…` и подобных.
+ */
+export function isTransientArtifact(token: string): boolean {
+  const normalized = token.replace(/\\/g, "/").toLowerCase();
+  const base = normalized.split("/").pop() ?? "";
+  if (!base) return false;
+  if (base.startsWith("_") || base.startsWith(".")) return true;
+  if (/^(tmp|temp)[-_.]/.test(base)) return true;
+  if (/\.(tmp|log|pid|bak|orig|swp|dump|out)$/.test(base)) return true;
+  return (
+    normalized.includes("/tmp/") ||
+    normalized.includes("/temp/") ||
+    normalized.startsWith("tmp/") ||
+    normalized.startsWith("temp/") ||
+    normalized.includes(".mma/") ||
+    normalized.includes("node_modules/")
+  );
+}
+
 export function findExistingFile(baseDir: string, filePath: string): string | null {
   const direct = resolve(baseDir, filePath);
   if (existsSync(direct)) return direct;
@@ -111,7 +142,18 @@ export class Auditor {
     // галлюцинаций (js-identifiers.ts). URL вырезаем заранее, чтобы hostname /
     // https://host/repo.git в описании шага не репортился пропавшим файлом
     // (было: git-remote план флаговал `whom-pointing-jewel-maine.trycloudflare.com`).
-    const createFiles = extractFileLikeTokens(stripUrls(createText));
+    // Временный артефакт — не поставка: шаг «извлечь плагин в _sisi.js и
+    // прочитать» заканчивается удалением файла, и требовать его существования
+    // на финише — ложный провал (ses_mvpk4zjl: готовый диагноз отклонён с
+    // «[✗] 1 файлов отсутствует»). Плюс всё, что план сам объявил удалённым.
+    // Сверяем по basename: шаг «извлечь sisi.js в _sisi.js» называет файл без
+    // подчёркивания, а шаг удаления — с ним; это один и тот же артефакт.
+    const deletedNames = new Set(
+      extractFileLikeTokens(stripUrls(deleteText)).map((f) => artifactName(f)),
+    );
+    const createFiles = extractFileLikeTokens(stripUrls(createText)).filter(
+      (f) => !isTransientArtifact(f) && !deletedNames.has(artifactName(f)),
+    );
     const deleteFiles = extractFileLikeTokens(stripUrls(deleteText));
 
     const missingFiles: string[] = [];
