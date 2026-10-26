@@ -132,10 +132,10 @@
       `idempotency-tenant.test.ts`, `retention.test.ts`, `webhook-ssrf.test.ts`,
       `output-strict.test.ts`, `output-attempt.test.ts`, `sse-limits.test.ts`,
       `tests/updater-install-atomic.test.ts`, `tests/session/session-id.test.ts`.
-- [ ] **W0.2:** метрика прогресса хода в `llm_usage` (`progress`/`novelToolKeys`/
-      `totalBatches`). `writeModal`/меню `question` и паритет терминального markdown
-      уже сделаны и покрыты `tests/ui/question-modal.test.ts`,
-      `tests/ui/md-terminal-parity.test.ts`.
+- [x] **W0.2:** метрика прогресса хода в `llm_usage` — `progress` с
+      `totalBatches`/`novelTools`/`duplicateBatches`, кумулятивно без сброса
+      стриками. `writeModal`/меню `question` и паритет терминального markdown
+      уже были сделаны. _(2026-10-26, гейт `tests/core/loop-progress.test.ts`.)_
 
 ### 1.4 Раздутые файлы (долг `split-bloated-files`)
 

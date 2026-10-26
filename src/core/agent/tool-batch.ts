@@ -12,7 +12,7 @@ import type { SessionLogger } from "../session-logger";
 import type { ToolCall, ToolEvent } from "../types";
 import type { OnMeta, StopReason } from "../types";
 import type { ToolResult } from "../../tools/types";
-import type { LoopState } from "./loop-state";
+import { recordBatchProgress, type LoopState } from "./loop-state";
 import {
   summarizeToolArgs,
   truncateToolOutput,
@@ -692,7 +692,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       !isPurePoll &&
       toolCalls.length > 0 &&
       keys.every((k) => state.seenToolCalls.has(k));
-    for (const k of keys) state.seenToolCalls.add(k);
+    recordBatchProgress(state, keys, isDuplicateBatch);
 
     if (isDuplicateBatch) {
       state.consecutiveDuplicateBatches++;

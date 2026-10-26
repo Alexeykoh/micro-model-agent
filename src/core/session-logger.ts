@@ -418,6 +418,8 @@ export class SessionLogger {
       prefix?: PrefixDelta;
       /** Кеш-статистика вызова от провайдера. */
       cache?: CacheUsage;
+      /** Кумулятивный прогресс хода (не стрик). */
+      progress?: { totalBatches: number; novelTools: number; duplicateBatches: number };
     },
   ): void {
     this.log({
@@ -435,6 +437,7 @@ export class SessionLogger {
       cachedTokens: usage.cache?.cachedTokens,
       cacheWriteTokens: usage.cache?.cacheWriteTokens,
       cacheSource: usage.cache?.source,
+      progress: usage.progress,
     });
   }
 

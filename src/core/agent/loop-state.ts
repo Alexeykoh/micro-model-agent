@@ -102,6 +102,12 @@ export interface LoopState {
   nonResearchBatchesWithResult: number;
   /** Канонические ключи всех вызовов за ход — вход duplicate-предиката. */
   seenToolCalls: Set<string>;
+  /** Всего пакетов тулов за ход (кумулятивно, не стрик). */
+  totalBatches: number;
+  /** Пакетов, целиком повторяющих уже сделанные вызовы (кумулятивно). */
+  duplicateBatches: number;
+  /** Уникальные канонические ключи вызовов — кумулятивная метрика новизны. */
+  novelToolKeys: Set<string>;
   /**
    * Причина принудительного завершения без тулов, или null. `max_iters` сюда
    * не попадает: он не приходит от батча, а выводится в цикле по дефолту.
@@ -232,6 +238,23 @@ export interface LoopState {
 
 /** Фабрика начального состояния цикла. */
 export { createLoopState } from "./loop-state-init";
+
+/**
+ * Учитывает один пакет тулов: seen-ключи и кумулятивный прогресс хода.
+ * Стрики (`consecutiveDuplicateBatches`) сбрасываются, эти счётчики — нет.
+ */
+export function recordBatchProgress(
+  state: LoopState,
+  keys: string[],
+  duplicateBatch: boolean,
+): void {
+  for (const key of keys) {
+    state.seenToolCalls.add(key);
+    state.novelToolKeys.add(key);
+  }
+  state.totalBatches++;
+  if (duplicateBatch) state.duplicateBatches++;
+}
 
 /**
  * Сброс per-итерационных сигналов reasoning policy. Вызывается в цикле

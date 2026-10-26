@@ -15,6 +15,9 @@ describe("TokenTracker.logUsage provenance", () => {
     const state = createLoopState();
     state.apiPromptTokens = 100;
     state.apiCompletionTokens = 20;
+    state.totalBatches = 3;
+    state.duplicateBatches = 1;
+    state.novelToolKeys.add("read_file::a.ts");
 
     tracker.logUsage(
       state,
@@ -28,7 +31,11 @@ describe("TokenTracker.logUsage provenance", () => {
 
     expect(logLlmUsage).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ provider: "live", model: "qwen/qwen3.5-9b" }),
+      expect.objectContaining({
+        provider: "live",
+        model: "qwen/qwen3.5-9b",
+        progress: { totalBatches: 3, novelTools: 1, duplicateBatches: 1 },
+      }),
     );
     expect(record).toHaveBeenCalledWith(100, 20, "live", undefined);
   });

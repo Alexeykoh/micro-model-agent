@@ -112,6 +112,11 @@ export class TokenTracker {
       durationMs,
       prefix: state.prefixDelta,
       cache: state.cacheUsage,
+      progress: {
+        totalBatches: state.totalBatches,
+        novelTools: state.novelToolKeys.size,
+        duplicateBatches: state.duplicateBatches,
+      },
     });
     // Стоимость от провайдера (OpenCode list_cost) — авторитетный источник;
     // оценка по токенам только когда её нет.

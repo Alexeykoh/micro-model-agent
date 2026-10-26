@@ -119,7 +119,7 @@ export interface SessionLogEntry {
   /** Записано в кеш (cache write) за вызов. */
   cacheWriteTokens?: number;
   /** Источник кеш-данных: api | derived. */
-  cacheSource?: string;
+  cacheSource?: string; progress?: { totalBatches: number; novelTools: number; duplicateBatches: number };
   // Поля session_start
   environment?: Record<string, unknown>;
   lspProbe?: {
