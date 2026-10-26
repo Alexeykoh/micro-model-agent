@@ -157,9 +157,9 @@ function freshHome(): string {
 }
 
 /** Имя ассета для текущей платформы: так install.ps1/install.sh кладут архив. */
-const artifactName = isWin
-  ? "mma-win-x64.tar.gz"
-  : `mma-linux-${process.arch === "arm64" ? "arm64" : "x64"}.tar.gz`;
+const artifactArch = process.arch === "arm64" ? "arm64" : "x64";
+const artifactOs = isWin ? "win" : process.platform === "darwin" ? "mac" : "linux";
+const artifactName = `mma-${artifactOs}-${artifactArch}.tar.gz`;
 
 /** Половина архива в кэше загрузки — имитация прерванной (Ctrl+C) загрузки. */
 function seedPartial(home: string): number {

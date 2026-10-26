@@ -104,7 +104,12 @@ export const SKIP_MANIFEST: Array<{ file: string; key: string; reason: string }>
   {
     file: "tests/hallucination-factual.test.ts",
     key: "passes when absolute Windows path matches an existing file",
-    reason: "зависит от абсолютного пути хоста — проверяется на dev-машине",
+    reason: "Windows-путь существует только на Windows; на macOS/Linux проверка бессмысленна",
+  },
+  {
+    file: "tests/execution-forbidden-cmd.test.ts",
+    key: "queues the STOP system-summary after two bash failures with the same forbidden command",
+    reason: "hard-stop запрещённых Windows-команд включён только при platform() === 'win32'",
   },
   {
     file: "tests/install-dryrun.test.ts",

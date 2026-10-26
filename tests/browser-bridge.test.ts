@@ -3,6 +3,19 @@ import { EventEmitter } from "events";
 import { PassThrough } from "stream";
 import * as childProcess from "child_process";
 import { BridgeDriver } from "../src/modules/browser/bridge-client";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+
+// Реальный мост поднимает Chromium: без установленного браузера тест не
+// проверяет ничего, кроме текста ошибки playwright.
+const hasChromium = (() => {
+  try {
+    const { chromium } = createRequire(import.meta.url)("playwright");
+    return existsSync(chromium.executablePath());
+  } catch {
+    return false;
+  }
+})();
 
 function fakeChild(): any {
   const child = new EventEmitter() as any;
@@ -79,7 +92,7 @@ describe("BridgeDriver", () => {
   // Real cross-process node bridge (+ browser). CI runners have no browser
   // runtime, so the bridge exits and the ping times out — same rationale as
   // BrowserSession's unconditional skip. Covered on a dev machine.
-  it.skipIf(Boolean(process.env.CI))("pings the node bridge over stdio", async () => {
+  it.skipIf(!hasChromium || Boolean(process.env.CI))("pings the node bridge over stdio", async () => {
     const bridge = new BridgeDriver({ maxConsoleLineChars: 100 });
     await bridge.launch({
       headless: true,
@@ -135,7 +148,7 @@ describe("BridgeDriver", () => {
     expect((bridge as any).pending.size).toBe(0);
   });
 
-  it.skipIf(Boolean(process.env.CI))("one-shot restart: a dead bridge is respawned on the next send", async () => {
+  it.skipIf(!hasChromium || Boolean(process.env.CI))("one-shot restart: a dead bridge is respawned on the next send", async () => {
     const bridge = new BridgeDriver({ maxConsoleLineChars: 100 });
     await bridge.launch({
       headless: true,
@@ -155,7 +168,7 @@ describe("BridgeDriver", () => {
     await bridge.close();
   });
 
-  it.skipIf(Boolean(process.env.CI))("close() does not respawn a dead bridge", async () => {
+  it.skipIf(!hasChromium || Boolean(process.env.CI))("close() does not respawn a dead bridge", async () => {
     const spy = vi.spyOn(childProcess, "spawn");
     const bridge = new BridgeDriver({ maxConsoleLineChars: 100 });
     await bridge.launch({

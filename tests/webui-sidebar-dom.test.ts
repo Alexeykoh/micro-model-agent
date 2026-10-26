@@ -1,7 +1,7 @@
 // Real DOM coverage for the sidebar leaf module (the source-string guards in
 // webui-assets.test.ts can't exercise runtime behaviour). `bun test` doesn't
 // apply vitest's environment docblock, so happy-dom is wired manually.
-import { describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect } from "vitest";
 import { Window } from "happy-dom";
 
 const HTML = `
@@ -36,7 +36,7 @@ g.localStorage = win.localStorage;
 win.document.body.innerHTML = HTML;
 
 const i18n = await import("../src/modules/webui/assets/js/i18n.js");
-i18n.I18N.dicts = {
+const sidebarDicts = {
   en: {
     "web.sidebar.trace_empty": "no events yet",
     "web.sidebar.trace_turn": "turn {n}",
@@ -44,8 +44,33 @@ i18n.I18N.dicts = {
     "web.sidebar.trace_reasoning": "thinking… {count} chars",
   },
 };
+i18n.I18N.dicts = sidebarDicts;
 const sidebar = await import("../src/modules/webui/assets/js/sidebar.js");
-sidebar.initSidebar();
+const { sb } = await import("../src/modules/webui/assets/js/sidebar/state.js");
+
+// Коллекция тестов идёт раньше исполнения: другой DOM-файл успевает подменить
+// `globalThis.document`/словарь i18n. Возвращаем свои глобалы перед прогоном.
+beforeAll(() => {
+  g.window = win;
+  g.document = win.document;
+  g.location = win.location;
+  g.localStorage = win.localStorage;
+  i18n.I18N.dicts = sidebarDicts;
+  i18n.I18N.locale = "en";
+  // initSidebar идемпотентен (`if (sb.el) return`): другой DOM-файл мог уже
+  // привязать состояние к своему документу.
+  sb.el = null;
+  sb.trace = [];
+  sb.selected = null;
+  sb.turn = 0;
+  sb.seq = 0;
+  sb.nodeById.clear();
+  sb.callIndex.clear();
+  sb.headerByTurn.clear();
+  sb.textEntry = null;
+  sb.reasonEntry = null;
+  sidebar.initSidebar();
+});
 
 const rows = () => win.document.getElementById("traceList").querySelectorAll(".trc");
 

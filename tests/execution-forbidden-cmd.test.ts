@@ -17,7 +17,9 @@ describe("forbidden Windows command hard-stop", () => {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("queues the STOP system-summary after two bash failures with the same forbidden command", async () => {
+  // Hard-stop живёт под `platform() === "win32"` в execution-plugin: на macOS/Linux
+  // grep/sed/ls существуют, и фейл по ним — законная причина, а не «нет cmd.exe».
+  it.skipIf(process.platform !== "win32")("queues the STOP system-summary after two bash failures with the same forbidden command", async () => {
     const plugin = execModule.getPlugin();
     const messages: string[] = [];
     const ctx: any = {
@@ -42,6 +44,6 @@ describe("forbidden Windows command hard-stop", () => {
     // Second failure — STOP is queued and flushed into the context.
     plugin.onAfterTool(ctx, call, result);
     plugin.onBeforeThink(ctx);
-    expect(messages.some((m) => m.includes('STOP using "grep"'))).toBe(true);
+      expect(messages.some((m) => m.includes('STOP using "grep"'))).toBe(true);
   });
 });

@@ -4,6 +4,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { FactualCheck } from "../src/core/hallucination/factual";
 
+const isWindowsHost = process.platform === "win32";
+
 describe("FactualCheck", () => {
   let dir: string;
 
@@ -39,11 +41,11 @@ describe("FactualCheck", () => {
   // Depends on the runner temp-path shape (GitHub windows-latest produces a
   // path the file-token extractor does not recognize, so a valid existing path
   // is read as unknown). Env-specific; covered on a dev machine.
-  it.skipIf(Boolean(process.env.CI))("passes when absolute Windows path matches an existing file", () => {
-    const check = new FactualCheck(dir);
-    const win = `${dir.replace(/\//g, "\\")}\\config.json`;
-    const result = check.validate(`Created ${win} and SECURITY.md`);
-    expect(result.status).toBe("pass");
+  it.skipIf(!isWindowsHost || Boolean(process.env.CI))("passes when absolute Windows path matches an existing file", () => {
+      const check = new FactualCheck(dir);
+      const win = `${dir.replace(/\//g, "\\")}\\config.json`;
+      const result = check.validate(`Created ${win} and SECURITY.md`);
+      expect(result.status).toBe("pass");
   });
 
   it("warns for a fake absolute Windows path", () => {

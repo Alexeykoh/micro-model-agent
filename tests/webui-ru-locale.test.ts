@@ -6,6 +6,10 @@ import { setupHappyDom } from "./helpers/happy-dom";
 import { getFlatDicts, setLocale } from "../src/i18n/index";
 import { makeHarness } from "./helpers/webui-commands";
 
+// Локаль — процессный синглтон: любой тест, выставивший ru, обязан вернуть en,
+// иначе следующие файлы получают русский текст (порядок файлов не гарантирован).
+afterEach(() => setLocale("en"));
+
 describe("/status при locale=ru", () => {
   afterEach(() => setLocale("en"));
 
