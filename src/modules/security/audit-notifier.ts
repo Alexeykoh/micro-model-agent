@@ -1,10 +1,11 @@
 // Нотификации о security-событиях: файл + webhook с ретраями и очередью.
-import { writeFileSync, appendFileSync, existsSync, mkdirSync } from "fs";
-import { join, dirname } from "path";
+import { join } from "path";
 import type { AuditLogEntry } from "./audit-log";
 import { defaultOutputBus } from "../../output";
 import { sendWebhook, WebhookRetryQueue } from "./audit-webhook";
 import { OutboundPolicyError } from "./outbound-policy";
+import { AuditNotificationStore } from "./audit-notifier-store";
+import { globalLogsDir } from "../../config/paths";
 import type { EgressGuard } from "./data-policy/types";
 import type { NetworkSecurityConfig } from "../../config/types";
 
@@ -96,10 +97,11 @@ export class AuditNotifier {
   private config: AuditNotifierConfig;
   /** Очередь ретраев вынесена в `audit-webhook.ts` (правило 6). */
   private retries = new WebhookRetryQueue<AuditNotification>();
+  private store: AuditNotificationStore;
 
   constructor(config?: Partial<AuditNotifierConfig>) {
     this.config = { ...DEFAULT_AUDIT_NOTIFIER_CONFIG, ...config };
-    this.ensureLogDirectory();
+    this.store = new AuditNotificationStore(this.config.filePath);
   }
 
   /** Включён ли нотификатор. */
@@ -120,15 +122,7 @@ export class AuditNotifier {
   /** Обновить конфиг. */
   updateConfig(config: Partial<AuditNotifierConfig>): void {
     this.config = { ...this.config, ...config };
-    this.ensureLogDirectory();
-  }
-
-  /** Гарантировать каталог лога. */
-  private ensureLogDirectory(): void {
-    if (this.config.filePath) {
-      const dir = dirname(this.config.filePath);
-      mkdirSync(dir, { recursive: true });
-    }
+    this.store = new AuditNotificationStore(this.config.filePath);
   }
 
   /** Подпадает ли тип события под нотификацию. */
@@ -165,7 +159,7 @@ export class AuditNotifier {
     };
 
     // Пишем в файл
-    this.writeToFile(notification);
+    this.store.write(notification);
 
     // Шлём в webhook, если задан
     if (this.config.webhookUrl) {
@@ -226,23 +220,6 @@ export class AuditNotifier {
     return typeSeverity[entry.action] || "low";
   }
 
-  /** Записать нотификацию в файл. */
-  private writeToFile(notification: AuditNotification): void {
-    if (!this.config.filePath) return;
-
-    try {
-      const line = JSON.stringify(notification);
-      appendFileSync(this.config.filePath, `${line}\n`, "utf8");
-    } catch (error) {
-      defaultOutputBus.log(
-        "error",
-        "module:audit",
-        `[AuditNotifier] Failed to write to file: ${error instanceof Error ? error.message : String(error)}`,
-        { persist: true },
-      );
-    }
-  }
-
   /**
    * Отправить нотификацию в webhook. Падение бросает исключение — политику
    * ретраев решает вызывающий (notify() кладёт в очередь ретраев).
@@ -262,64 +239,18 @@ export class AuditNotifier {
 
   /** Прочитать нотификации из файла (последние N). */
   readNotifications(limit: number = 100): AuditNotification[] {
-    if (!this.config.filePath || !existsSync(this.config.filePath)) {
-      return [];
-    }
-
-    try {
-      const content = readFileSync(this.config.filePath, "utf8");
-      const lines = content.split("\n").filter(Boolean);
-      return lines.slice(-limit).map((line) => JSON.parse(line) as AuditNotification);
-    } catch (error) {
-      defaultOutputBus.log(
-        "error",
-        "module:audit",
-        `[AuditNotifier] Failed to read notifications: ${error instanceof Error ? error.message : String(error)}`,
-        { persist: true },
-      );
-      return [];
-    }
+    return this.store.read(limit);
   }
 
   /** Очистить нотификации (файл + очередь). */
   clearNotifications(): void {
-    if (this.config.filePath) {
-      writeFileSync(this.config.filePath, "", "utf8");
-    }
+    this.store.clear();
     this.retries.clear();
   }
 
   /** Статистика нотификаций: всего, по severity, по типам. */
-  getStats(): {
-    total: number;
-    bySeverity: Record<AuditSeverity, number>;
-    byType: Record<AuditEventType, number>;
-  } {
-    const notifications = this.readNotifications();
-    const bySeverity: Record<AuditSeverity, number> = { low: 0, medium: 0, high: 0, critical: 0 };
-    const byType: Record<AuditEventType, number> = {
-      tool_call: 0,
-      tool_result: 0,
-      bash_command: 0,
-      file_operation: 0,
-      network_request: 0,
-      security_block: 0,
-      authentication: 0,
-      configuration_change: 0,
-      session_start: 0,
-      session_end: 0,
-    };
-
-    for (const n of notifications) {
-      bySeverity[n.severity] = (bySeverity[n.severity] || 0) + 1;
-      byType[n.eventType] = (byType[n.eventType] || 0) + 1;
-    }
-
-    return {
-      total: notifications.length,
-      bySeverity,
-      byType,
-    };
+  getStats(): ReturnType<AuditNotificationStore["stats"]> {
+    return this.store.stats();
   }
 }
 
@@ -331,6 +262,4 @@ export function createAuditNotifier(config?: Partial<AuditNotifierConfig>): Audi
   return new AuditNotifier(config);
 }
 
-// Импорт readFileSync для readNotifications
-import { readFileSync } from "fs";
-import { globalLogsDir } from "../../config/paths";
+

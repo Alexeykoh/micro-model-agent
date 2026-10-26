@@ -10,9 +10,9 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **29** (разрезано 26 + уменьшено 3) |
-| Осталось | **55** |
-| — из них «не крупные» (< 561 стр.) | 32 |
+| Снято из allowlist | **30** (разрезано 27 + уменьшено 3) |
+| Осталось | **54** |
+| — из них «не крупные» (< 561 стр.) | 31 |
 | — из них крупные (≥ 561 стр.) | 23 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
@@ -23,13 +23,12 @@
 Флагманы `agent.ts` (561) и `execution/module.ts` (688) уже частично разрезаны ранее
 (фазы `core/agent/*`, модули `execution/*`); остаток — оболочка/публичный API.
 
-## Осталось «не крупные» (32) — режем сейчас
+## Осталось «не крупные» (31) — режем сейчас
 
 В порядке возрастания размера:
 
 | Файл | Строк | Предполагаемый шов |
 |---|---|---|
-| `src/modules/security/audit-notifier.ts` | 336 | вебхук/фильтр |
 | `src/modules/processes/registry.ts` | 351 | трекинг процессов |
 | `src/modules/session/manager.ts` | 354 | мета/смена сессии |
 | `src/config/config.ts` | 367 | env-оверрайды/домены |
@@ -77,7 +76,7 @@
 `src/modules/certification/scenarios.ts` 591 · `src/config/types.ts` 574 ·
 `src/modules/webui/assets/app.ts` 569 · `src/core/agent.ts` 561.
 
-## Уже разрезано (26, запись снята из allowlist)
+## Уже разрезано (27, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -85,6 +84,7 @@
 | Файл | Вынесено в |
 |---|---|
 | `modules/browser/session.ts` | `modules/browser/action-tracker.ts` |
+| `modules/security/audit-notifier.ts` | `modules/security/audit-notifier-store.ts` |
 | `output/channel.ts` | `output/default-channel.ts` |
 | `core/module-host.ts` | `core/module-host-order.ts` |
 | `modules/webui/module.ts` | `modules/webui/context-probe.ts` |
