@@ -272,6 +272,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       emitSynthesizedToolResults(contextManager, toolCalls, answeredToolCallIds, logger);
 
     const summaries: string[] = [];
+    const digestMode = config.contextBudget?.toolDigest ?? "full";
     let anyToolFailed = false;
     let batchHasSuccess = false;
     // `sawSecurityBlock` живёт весь ход (LoopState создаётся на ход): сброс на
@@ -420,9 +421,14 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
             : undefined,
       });
 
-      summaries.push(
-        `[Tool: ${call.name}${summarizeToolArgs(call.arguments)} → ${truncatedOutput.slice(0, 200)}]`,
-      );
+      // Дублировать вывод в <system-summary>? Сам результат уже ушёл
+      // `role:"tool"`; копия стоит ~13% prompt-токенов (spec
+      // 2026-10-26-tool-digest-channel-design).
+      if (digestMode === "full" || (digestMode === "failures" && !result.success)) {
+        summaries.push(
+          `[Tool: ${call.name}${summarizeToolArgs(call.arguments)} → ${truncatedOutput.slice(0, 200)}]`,
+        );
+      }
 
       // Скрипт-обход: после блока безопасности запись shell-скрипта-обёртки —
       // nudge один раз, обобщённо (без привязки к тулу/языку).
@@ -723,10 +729,13 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
     const planLine = this.deps.planSummary?.();
     if (planLine) summaries.push(planLine);
 
-    contextManager.addMessage({
-      role: "user",
-      content: `<system-summary>${summaries.join("\n")}</system-summary>`,
-    });
+    // Пустая сводка — шум: сообщения без содержания модель не читает.
+    if (summaries.length > 0) {
+      contextManager.addMessage({
+        role: "user",
+        content: `<system-summary>${summaries.join("\n")}</system-summary>`,
+      });
+    }
 
     return { interrupted: false };
   }
