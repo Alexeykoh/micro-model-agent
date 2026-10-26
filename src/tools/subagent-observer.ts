@@ -14,6 +14,7 @@ import {
   type SubagentRunStatus,
   type SubagentRunUsage,
 } from "./subagent-runs";
+import { finishSubagentRun, registerSubagentRun } from "./subagent-registry";
 
 /** Колбэки, которые получает дочерний `Agent.run`. */
 export interface SubagentCallbacks {
@@ -98,6 +99,14 @@ export function createSubagentObserver(
     runId,
     callbacks,
     start(): void {
+      registerSubagentRun({
+        runId,
+        parentSessionId: ctx.sessionId,
+        task: info.task,
+        ...(info.agent ? { agent: info.agent } : {}),
+        ...(info.model ? { model: info.model } : {}),
+        startedAt,
+      });
       emit({
         kind: "start",
         runId,
@@ -113,6 +122,13 @@ export function createSubagentObserver(
     finish(status, iterations, output?, error?, usage?): void {
       if (ended) return;
       ended = true;
+      finishSubagentRun(runId, {
+        status,
+        endedAt: Date.now(),
+        iterations,
+        ...(error !== undefined ? { error } : {}),
+        ...(usage ? { usage } : {}),
+      });
       emit({
         kind: "end",
         runId,

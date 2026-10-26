@@ -1,5 +1,4 @@
-// Исполнение тула `subagent` — вынесено из `subagent.ts` (правило ≤300).
-// Определение тула (схема/теги) остаётся в `subagent.ts`.
+// Исполнение тула `subagent` (определение — в `subagent.ts`; правило ≤300).
 import { t } from "../i18n/index";
 import type { ToolContext, ToolScope, ToolResult } from "./types";
 import { Agent } from "../core/agent";
@@ -15,9 +14,9 @@ import { resolveExpertProvider } from "../modules/execution/expert-provider";
 import { withTokenCap } from "../llm/token-cap";
 import { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limits";
 import { createSubagentObserver, resultStatus, resultUsage } from "./subagent-observer";
+import { setSubagentRunStop } from "./subagent-registry";
 import { createSubagentWatchdog } from "./subagent-watchdog";
 import { finalizeSubagentSuccess } from "./subagent-result";
-
 // Реэкспорт для существующих импортёров/тестов (лимиты переехали в отдельный файл).
 export { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limits";
 /** Фиксированный системный промпт (KV-cache дружит при stableSystemPrompt). */
@@ -205,6 +204,7 @@ export async function runSubagent(
     // Стоп родительского хода и кнопка «остановить» в вебе ведут в один
     // `subAgent.shutdown()`: у дочернего агента свой abort-контроллер.
     const stopSubAgent = (): void => subAgent.shutdown?.();
+    setSubagentRunStop(observer.runId, stopSubAgent);
     const parentSignal = ctx.abortSignal;
     const onParentAbort = (): void => stopSubAgent();
     parentSignal?.addEventListener("abort", onParentAbort, { once: true });

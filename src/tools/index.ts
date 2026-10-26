@@ -27,6 +27,8 @@ import { processLogTool } from "./process-log";
 import { processKillTool } from "./process-kill";
 import { processWaitTool } from "./process-wait";
 import { subagentTool } from "./subagent";
+import { subagentListTool } from "./subagent-list";
+import { subagentStopTool } from "./subagent-stop";
 import { chunkQueryTool } from "./chunk-query";
 import { scanCorpusTool } from "./scan-corpus";
 import { webSearchTool } from "./web-search";
@@ -69,6 +71,8 @@ export {
   fileInfoTool,
   bashTool,
   subagentTool,
+  subagentListTool,
+  subagentStopTool,
   chunkQueryTool,
   scanCorpusTool,
   processListTool,
@@ -114,6 +118,8 @@ export function registerAllTools(
     fileInfoTool,
     bashTool,
     subagentTool,
+    subagentListTool,
+    subagentStopTool,
     chunkQueryTool,
     scanCorpusTool,
     processListTool,
