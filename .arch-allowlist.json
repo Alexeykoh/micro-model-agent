@@ -55,7 +55,6 @@
     "src/core/bootstrap/modules-phase.ts": 375,
     "src/modules/indexer/symbols.ts": 375,
     "src/modules/session/manager.ts": 356,
-    "src/modules/browser/session.ts": 336,
     "src/modules/processes/registry.ts": 351
   }
 }
