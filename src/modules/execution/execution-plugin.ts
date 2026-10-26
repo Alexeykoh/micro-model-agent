@@ -2,6 +2,7 @@
 import type { AgentPlugin } from "../types";
 import type { ToolCall } from "../../tools/types";
 import { t } from "../../i18n/index";
+import { bashMutatesFiles } from "./bash-mutation";
 import type { StuckDetector } from "./stuck-detector";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
@@ -344,15 +345,20 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       if (toolName && args) {
         deps.stuckDetector.recordToolCall(toolName, args);
         // Считаем файл-мутирующие вызовы БЕЗ активного плана — питают
-        // evidence-based nudge создания плана в onBeforeThink.
-        if (
-          !deps.trackerRef.current &&
-          (toolName === "write_file" ||
+        // evidence-based nudge создания плана в onBeforeThink. Для bash судим
+        // по команде: `docker ps`/`ls` — чтение, а не «изменяющие файлы»
+        // (гвард: tests/modules/execution/plan-nudge-mutation.test.ts).
+        if (!deps.trackerRef.current) {
+          const isFileTool =
+            toolName === "write_file" ||
             toolName === "edit_file" ||
-            toolName === "bash" ||
-            toolName === "download_file")
-        ) {
-          deps.state.mutationsWithoutPlan++;
+            toolName === "download_file" ||
+            toolName === "delete_file" ||
+            toolName === "move_file";
+          const isBashWrite =
+            toolName === "bash" &&
+            bashMutatesFiles(typeof args.command === "string" ? args.command : "");
+          if (isFileTool || isBashWrite) deps.state.mutationsWithoutPlan++;
         }
       }
     },

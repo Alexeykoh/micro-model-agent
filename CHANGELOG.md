@@ -4,6 +4,24 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.2] - 2026-10-26
+
+### Fixed
+
+- **Нудж «создай план» больше не срабатывает на read-only диагностику.**
+  `mutationsWithoutPlan` рос на любой `bash`, поэтому в живом прогоне
+  `ses_mvphq4s8` (итерация 6) агент получил «Ты сделал(а) 2 вызова,
+  изменяющих файлы, без плана» после `docker ps` и `ls` — и создал план,
+  которого задача не требовала, потратив полхода на его бухгалтерию.
+  Теперь мутация определяется по команде (`bash-mutation.ts`): редирект вне
+  кавычек, `sed -i`, пишущие глаголы и подкоманды `git`/`docker`/`npm`;
+  `docker ps`, `cat`, `grep`, `sed -n`, `curl` без вывода в файл — чтение.
+  Незнакомая команда по-прежнему считается мутацией (fail-open: обход плана
+  не открывается).
+  Гвард: `tests/modules/execution/bash-mutation.test.ts`,
+  `tests/modules/execution/plan-nudge-mutation.test.ts`.
+  Долг `plan-nudge-counts-readonly-bash` оплачен и снят из реестра.
+
 ## [0.13.1] - 2026-10-26
 
 ### Added

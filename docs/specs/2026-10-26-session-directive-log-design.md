@@ -154,7 +154,7 @@ detail, iteration?)`; сигнатура `plan` не меняется.
    токенов сверх 8,9 тыс. полезных за прогон. `DEBT(tool-output-double-injection)`.
 2. **Нудж «создай план» врёт**: на 6-й итерации — «Ты сделал(а) 2 вызова,
    изменяющих файлы», хотя агент только читал. В счётчик мутаций попадает любой
-   `bash` (`execution-plugin.ts:348-355`). `DEBT(plan-nudge-counts-readonly-bash)`.
+   `bash` (`execution-plugin.ts:348-355`). Оплачено в `fix/plan-nudge-readonly-bash` (гвард `tests/modules/execution/plan-nudge-mutation.test.ts`).
 3. **План превращается в бухгалтерию**: 30 итераций статус «0/6», затем пачка
    `plan_step` в конце. Гард «перфекционизм-цикл» поймал это уже после.
 
