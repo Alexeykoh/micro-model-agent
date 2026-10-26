@@ -22,7 +22,7 @@ import {
 import { queueToolImages } from "./tool-images";
 import { errMsg } from "../../utils";
 import type { CompactionService } from "./compaction";
-import { MAX_CONSECUTIVE_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES, RECOVERY_DIRECTIVE_REFRESH, RECOVERY_MEMORY_RULE_REFRESH } from "./constants";
+import { MAX_CONSECUTIVE_TOOL_FAILURES, MAX_CONSECUTIVE_FAILED_BATCHES, HARD_STOP_FAILED_BATCHES, MAX_DUPLICATE_BATCHES, HARD_STOP_DUPLICATE_BATCHES, MAX_RESEARCH_BATCHES, RECOVERY_DIRECTIVE_REFRESH, RECOVERY_MEMORY_RULE_REFRESH, NARRATION_DIRECTIVE_AFTER_SILENT_BATCHES, HARD_STOP_SILENT_BATCHES, MIN_NARRATION_CHARS } from "./constants";
 import { clearDirective, issueDirective } from "./directives";
 import { canonicalArgsKey } from "./canonical-args";
 import { countDistinctFailingTools, recordRepeatedToolFailure } from "./failure-memory";
@@ -644,6 +644,40 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
         "research",
         t("exec.research_convergence", { count: state.consecutiveResearchBatches }),
       );
+    }
+
+    // Нарратив: серия пакетов без единого слова пользователю. Модель, ушедшая
+    // в молчаливые вызовы, для пользователя неотличима от зависшего процесса:
+    // в ses_mvpdchvi 98 шагов подряд прошли без текста, ход дважды прерван.
+    const said = textContent.trim().length >= MIN_NARRATION_CHARS;
+    if (said) {
+      state.consecutiveSilentBatches = 0;
+      state.narrationNudged = false;
+      clearDirective(contextManager, "narration");
+    } else {
+      state.consecutiveSilentBatches++;
+    }
+    if (
+      state.consecutiveSilentBatches >= NARRATION_DIRECTIVE_AFTER_SILENT_BATCHES &&
+      !state.narrationNudged
+    ) {
+      state.narrationNudged = true;
+      logger.diagnostic(
+        "warn",
+        `Silent tool batches: ${state.consecutiveSilentBatches} without assistant text — narration directive`,
+      );
+      issueDirective(
+        contextManager,
+        "narration",
+        t("exec.narration_directive", { count: String(state.consecutiveSilentBatches) }),
+      );
+    }
+    if (state.consecutiveSilentBatches >= HARD_STOP_SILENT_BATCHES) {
+      logger.diagnostic(
+        "warn",
+        `Silent loop terminated after ${state.consecutiveSilentBatches} batches without text — forcing final answer`,
+      );
+      return { interrupted: false, finalize: "silent" };
     }
 
     // Статусная строка плана после каждого пакета тулов. Заменяет динамический

@@ -41,6 +41,8 @@ export function createLoopState(): LoopState {
     duplicateNudged: false,
     consecutiveResearchBatches: 0,
     researchNudged: false,
+    consecutiveSilentBatches: 0,
+    narrationNudged: false,
     nonResearchBatchesWithResult: 0,
     seenToolCalls: new Set<string>(),
     totalBatches: 0,
