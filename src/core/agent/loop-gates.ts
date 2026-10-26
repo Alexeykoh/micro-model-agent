@@ -81,7 +81,13 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
   if (textContent) {
     contextManager.addMessage({ role: "assistant", content: textContent });
     if (config.session.autoSave) slog.saveAssistantMessage(textContent);
-    slog.logAssistant(textContent, reasoningContent, undefined, state.iteration);
+    slog.logAssistant(
+      textContent,
+      reasoningContent,
+      undefined,
+      state.iteration,
+      state.lastFinishReason,
+    );
   }
   state.lastText = textContent;
 

@@ -58,6 +58,20 @@ describe("SessionLogger provenance", () => {
     expect(usage.totalTokens).toBe(150);
   });
 
+  it("logAssistant carries finish reason (обрыв ответа виден в журнале)", () => {
+    manager.create("s");
+    const id = manager.getActive()!;
+    const slog = new SessionLogger(manager, undefined, () => ({
+      provider: "zen",
+      model: "deepseek-v4.1-flash",
+    }));
+    slog.logAssistant("обрезанный ответ", undefined, undefined, 58, "length");
+
+    const entry = readLogs(id).find((l) => l.type === "assistant")!;
+    expect(entry.content).toBe("обрезанный ответ");
+    expect(entry.finish).toBe("length");
+  });
+
   it("logContext carries provider and model", () => {
     manager.create("s");
     const id = manager.getActive()!;

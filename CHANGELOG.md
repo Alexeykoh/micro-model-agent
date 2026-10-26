@@ -4,6 +4,19 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.5] - 2026-10-26
+
+### Added
+
+- **Причина окончания генерации пишется в журнал (`assistant.finish`).**
+  В `ses_mvpk4zjl` финальный ответ оборвался на 1374 знаках посередине фразы, и
+  по журналу нельзя было понять, откуда обрыв: `completionTokens` = 518 при
+  дефолтном `maxTokens` 2048 — то есть лимит токенов не при чём, а
+  `finish_reason` не сохранялся вовсе. Теперь `finish_reason` провайдера
+  (`stop` | `length` | `tool_calls`) попадает в запись `assistant`, и следующий
+  такой случай диагностируется чтением журнала, а не догадками.
+  Гвард: `tests/session-logger.test.ts`.
+
 ## [0.13.4] - 2026-10-26
 
 ### Fixed
