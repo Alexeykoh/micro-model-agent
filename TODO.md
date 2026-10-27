@@ -241,6 +241,53 @@
       брать `opencode.list_cost` как авторитетную стоимость, добавить тест на фикстуру
       чанка `choices + usage`. Долг — в `docs/agents/debt.md` (`cost-estimate-not-usage`).
 
+### 1.8 Ошибки агента — живая сессия `ses_mvqwky8y_cjcjhgbdigannujp`
+
+Сессия: `~/.mma/sessions/ses_mvqwky8y_cjcjhgbdigannujp` (mma 0.14.0, `lmstudio/qwen3.8-9b-distill`,
+проект `E:\projects\micro-models-agent`, 2026-10-27 16:31–16:41, 5 прогонов субагентов).
+Разбор дефектов агента (не модели) с доказательствами из лога и кодом —
+[`docs/plans/2026-10-27-agent-errors-session-analysis.md`](./docs/plans/2026-10-27-agent-errors-session-analysis.md).
+Порядок — по приоритету; каждый пункт отдельной веткой, с тестом, падающим до правки.
+
+- [ ] **A1 (P0) `allowed_files` с glob-формой закрывает субагенту весь доступ.** `…/**/*`
+      не сопоставляется ни с чем: `matchesScopeEntry` (`src/tools/path-utils.ts:36`) сравнивает
+      префиксы. В сессии 4 субагента не прочитали ни одного файла. Нужна **спека** контракта
+      скоупа (нормализация glob → каталог / отказ с внятной причиной / маркер «весь workspace»),
+      затем ветка `fix/subagent-scope-entries`. Гейты: `tests/security/path-validator.test.ts`,
+      `tests/tools/enforcement-path.test.ts`.
+- [ ] **A2 (P0) `glob` в субагенте врёт «Нет совпадений», скрыв всё скоупом.** 14/14 вызовов
+      детей дали пустую выдачу при 780+ файлах у родителя; `visible === 0` возвращается раньше,
+      чем печатается `file.glob_hidden` (`src/tools/glob-tool.ts:60-62`). Ветка
+      `fix/glob-scope-honest-empty`; гейт `tests/tools/glob-scope.test.ts` («скрытое ≠ пусто»).
+- [ ] **A3 (P1) Пустой `path` обходит enforcement.** `executor.ts:175` пропускает `""`, а
+      `list_dir` резолвит `""` в корень проекта (`safeResolvePath`). Ветка
+      `fix/empty-path-arg`; гейт `tests/tools/enforcement-path.test.ts` — `list_dir("")` в
+      закрытом скоупе → отказ.
+- [ ] **A4 (P1) Журнал прогона субагента без аргументов тулов.** У всех 60 записей
+      `content:"tool"` поля `args` нет — нельзя восстановить, с каким путём упал вызов.
+      Писать `args` с редактированием секретов; гейт `tests/tools/subagent-session-log.test.ts`.
+- [ ] **A5 (P1) Счётчики антифлейлинга общие для родителя и детей.** Дети накрутили
+      «bash упал 14 раз» → 15 → 21 у родителя, у которого было 2 вызова; `stuckDetector`
+      мутируется через общий `pluginManager` форка (`execution-plugin.ts:439/465/472`), а
+      `FAILING_FIRST_WORDS` (`src/tools/bash.ts:516`) вообще на процесс. Состояние — на прогон,
+      варнинг — один раз на изменение счётчика. Ветка `fix/flail-counters-per-run`; гейт
+      `tests/modules/execution/stuck-turn-scope.test.ts`.
+- [ ] **A6 (P1) Критик эскалирует числа без провенанса; его проверки невидимы в журнале.**
+      «заявлен 1487, а на самом деле >4000» (индекс против диска с `node_modules`) дало
+      `critical` и 3 лишние итерации. Требовать evidence (тул + аргументы + скоуп) для числовых
+      утверждений, логировать проверки критика, не эскалировать `critical` без провенанса.
+      Ветка `fix/critic-evidence-provenance`; гейты `tests/modules/critic/*`,
+      `tests/arch/observability-coverage.test.ts`.
+- [ ] **A7 (P1) Результат субагента не несёт здоровья прогона.** 5/5 прогонов `success:true`
+      при 38 падениях из 60 вызовов и 0 чтений у двух. В результат и в `end`-событие:
+      `toolsOk/toolsFailed/filesRead/filesWritten/blocked`; `filesRead === 0` на аналитической
+      задаче → `success:false` с причиной. Ветка `feat/subagent-run-health` (вместе с A4);
+      гейт `tests/tools/subagent-session-log.test.ts` + новый `subagent-empty-run.test.ts`.
+- [ ] **A8 (P2) Заголовок сессии падает на reasoning-модели.** Бюджет 512 тратится на
+      рассуждения, восстановление `f17e8499` живёт только в петле агента. Прогнать title-gen
+      через `truncated_no_content` (повтор с выключенным reasoning и удвоенным бюджетом) или
+      тихий фолбэк без WARN. Ветка `fix/session-title-truncation`.
+
 ---
 
 ## 2. Действия пользователя (не задачи для агента)
