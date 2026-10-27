@@ -47,6 +47,36 @@ describe("failover: модель целевого провайдера", () => {
     expect(calls[0]?.model).toBe("m2");
   });
 
+  it("a 403 region/license refusal is a failover error", () => {
+    // ses_mvoac9q9: RegionError активного провайдера — повод переключиться,
+    // а не умирать ходом.
+    expect(isFailoverError(new LlmError("region", { llmStatus: 403 }))).toBe(true);
+    // Ошибка запроса/ключа — не повод: смена провайдера её не лечит.
+    expect(isFailoverError(new LlmError("auth", { llmStatus: 401 }))).toBe(false);
+    expect(isFailoverError(new LlmError("bad", { llmStatus: 422 }))).toBe(false);
+  });
+
+  it("switches the provider after a 403", async () => {
+    const calls: string[] = [];
+    const source = {
+      activeName: "a",
+      listNames: () => ["a", "b"],
+      modelFor: () => undefined,
+      switch(name: string) {
+        calls.push(name);
+        return stubProvider(name === "b" ? "m2" : "m1");
+      },
+      active: stubProvider("m1", new LlmError("region", { llmStatus: 403 })),
+    };
+
+    const provider = new FallbackProvider(source);
+    const chunks: unknown[] = [];
+    for await (const chunk of provider.chat([{ role: "user", content: "x" }])) chunks.push(chunk);
+
+    expect(calls).toEqual(["b"]);
+    expect(chunks.length).toBeGreaterThan(0);
+  });
+
   it("a 404 model-not-found is a failover error", () => {
     expect(isFailoverError(new LlmError("not found", { llmStatus: 404 }))).toBe(true);
     expect(isFailoverError(new LlmError("rate", { llmStatus: 429 }))).toBe(true);

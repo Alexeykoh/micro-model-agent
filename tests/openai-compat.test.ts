@@ -1018,6 +1018,34 @@ describe("OpenAICompatProvider", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the HTTP status on a refusal so failover can decide", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 0, baseDelay: 5, maxDelay: 10, maxStreamRetries: 0 },
+    });
+    const mockFetch = vi.fn().mockImplementation((_url: string, _init: RequestInit) =>
+      Promise.resolve({
+        ok: false,
+        status: 403,
+        statusText: "Forbidden",
+        headers: new Map(),
+        text: async () =>
+          '{"type":"error","error":{"type":"RegionError","message":"This model is not available in your country"}}',
+      }),
+    );
+    global.fetch = mockFetch as any;
+
+    try {
+      for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+      }
+      expect.unreachable("Should have thrown");
+    } catch (e: any) {
+      expect(e.name).toBe("LlmError");
+      expect(e.llmStatus).toBe(403);
+    }
+  });
+
   it("should name reasoning as the cause when it consumed the whole budget", async () => {
     const provider = new OpenAICompatProvider({
       model: "test-model",

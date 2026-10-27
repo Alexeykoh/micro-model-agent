@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **403 от провайдера теперь переключает модель, а не убивает ход.** Разбор
+  `ses_mvoac9q9` показал: видимость ошибки была (CLI печатает `result.error`,
+  веб рисует `turn_end.success=false`, в `session.jsonl` есть `error`), а failover
+  — нет. `FallbackProvider` решает по `LlmError.llmStatus`, но статус
+  выставлялся только для ретраибельных 429/5xx: на `!response.ok` стрим бросал
+  `LlmError` без статуса, а non-stream — вообще голый `Error`. Поэтому `403`/`404`
+  до политики не доходили. Теперь статус доезжает из обоих путей, а `403`
+  (регион/лицензия модели) переключает на следующую запись наряду с
+  `404/429/5xx`; `400/401/422` по-прежнему не переключают — это ошибка запроса
+  или ключа, смена провайдера её не лечит. Спека:
+  `docs/specs/2026-10-27-provider-failover-design.md`.
+  Гварды: `tests/openai-compat.test.ts`, `tests/providers/fallback-model.test.ts`.
+  Долг `llm-provider-error-invisible-to-user` оплачен.
+
 - **`lsp_check` на холодном сервере больше не висит весь таймаут.** В живой сессии
   `ses_mvoac9q9` вызов вернулся через `30018 мс` с «проверено 1, ошибок нет…
   [неокончателен]» — это не проверка, а ожидание npx-старта language server.
