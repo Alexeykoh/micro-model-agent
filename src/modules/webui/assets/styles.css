@@ -960,6 +960,15 @@ body.light .sel > button { border: 1px solid var(--border); }
   letter-spacing: .03em; border-bottom: 1px solid var(--border);
 }
 .sb-name .sb-ico svg { width: 14px; height: 14px; color: var(--accent); }
+/* Context-aware settings shortcut in the sidebar title row: one affordance for
+   every tab, destination follows the active tab (see SETTINGS_PANEL). */
+.sb-settings {
+  margin-left: auto; padding: 2px; display: inline-flex; align-items: center;
+  color: var(--dim-b); cursor: pointer;
+}
+.sb-settings:hover { color: var(--accent); }
+.sb-settings .svg-icon { width: 15px; height: 15px; }
+.mcp-settings { margin-top: 8px; color: var(--accent); font-size: 11.5px; cursor: pointer; }
 
 .sb-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; max-width: 100%; overflow-x: hidden; }
 .sb-pane[hidden] { display: none; }

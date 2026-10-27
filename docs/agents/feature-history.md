@@ -1593,6 +1593,11 @@ server: каждый `checkFile` (каждая запись файла, кажд
 - **Plugins** (`sidebar/plugins.ts`): тумблер возвращает `true` (мгновенный флип),
   `stopPropagation` не даёт открыть попап, отказ сервера откатывает состояние.
 - **Context** (`feed/sidebar.ts`): знаменатель — полное окно, не history-бюджет.
+- **Быстрый доступ к настройкам** (`sidebar/core.ts`, `settings/modal.ts`,
+  `core/store/index.ts`): одна контекстная шестерёнка в шапке сайдбара открывает
+  нужную панель через `hooks.openSettingsAt` (Session→Sessions, Files/Map→Context,
+  LSP/Plugins/MCP→Plugins, Trace→UI, Subagents→Agent). У MCP дополнительно явная
+  CTA «Настроить MCP-серверы…».
 - **Гварды:** `tests/webui-favicon.test.ts`, `tests/webui-assets.test.ts`,
   `tests/webui-settings.test.ts` (`GET /api/mcp`).
 

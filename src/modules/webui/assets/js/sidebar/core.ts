@@ -1,7 +1,7 @@
 // Sidebar core for `mma web`: tab switching, indicators, i18n and init. Wires
 // the Trace/Map/LSP submodules; `sidebar.js` is the public barrel.
 import { icon } from "../dom.js";
-import { session } from "../store.js";
+import { hooks, session } from "../store.js";
 import { t } from "../i18n.js";
 import { sb, TABS, ICON_NAME, paneEl, mqMobile, mqNarrow, PHONE_MQ, readStored, storeTab, type TraceEntry } from "./state.js";
 import { collapseDetail, renderList, renderDetail } from "./trace.js";
@@ -13,6 +13,34 @@ import { renderPlugins, sidebarPluginsState } from "./plugins.js";
 import { renderSubagents, sidebarSubagentsState } from "./subagents.js";
 import { renderMcp, sidebarMcpState } from "./mcp.js";
 import { applyPromptI18n, initPromptPopup } from "./prompt.js";
+
+/**
+ * Куда ведёт контекстная «шестерёнка» из шапки сайдбара. Одна кнопка вместо
+ * шести дублей: пользователь всегда видит настройки текущей вкладки.
+ */
+const SETTINGS_PANEL: Record<string, string> = {
+  session: "sessions",
+  files: "context",
+  lsp: "plugins",
+  trace: "ui",
+  subagents: "agent",
+  plugins: "plugins",
+  mcp: "plugins",
+  map: "context",
+};
+
+let settingsBtn: HTMLElement | null = null;
+
+/** Подпись кнопки: «открыть настройки · <имя панели>» на языке интерфейса. */
+function syncSettingsShortcut(tab: string): void {
+  if (!settingsBtn) return;
+  const panel = SETTINGS_PANEL[tab] || "general";
+  const key = "web.settings." + panel;
+  const label = t(key);
+  const title = t("web.sidebar.open_settings") + (label !== key ? " · " + label : "");
+  settingsBtn.title = title;
+  settingsBtn.setAttribute("aria-label", title);
+}
 
 export function setSidebarTab(id: string, persist = true): void {
   if (!TABS.includes(id)) id = "session";
@@ -33,6 +61,7 @@ export function setSidebarTab(id: string, persist = true): void {
   if (sb.nameTextEl) sb.nameTextEl.textContent = t("web.sidebar.tab_" + effective);
   const nic = sb.nameEl && sb.nameEl.querySelector<HTMLElement>(".sb-ico");
   if (nic) { nic.textContent = ""; nic.appendChild(icon(ICON_NAME[effective])); }
+  syncSettingsShortcut(effective);
   if (effective === "lsp") sidebarLspState();
   if (effective === "files") renderFilesTree();
   if (effective === "plugins") sidebarPluginsState();
@@ -84,6 +113,13 @@ export function initSidebar(): void {
   const root = sb.el;
   sb.nameEl = document.getElementById("sbName");
   sb.nameTextEl = document.getElementById("sbNameText");
+  settingsBtn = document.getElementById("sbSettings");
+  if (settingsBtn) {
+    settingsBtn.appendChild(icon("settings"));
+    settingsBtn.addEventListener("click", () => {
+      hooks.openSettingsAt?.(SETTINGS_PANEL[sb.active] || "general");
+    });
+  }
   sb.mapEl = document.getElementById("mapBody");
   sb.lspEl = document.getElementById("lspBody");
   sb.plugins.bodyEl = document.getElementById("pluginsBody");

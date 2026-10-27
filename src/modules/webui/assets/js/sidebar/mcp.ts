@@ -7,6 +7,7 @@ import { api } from "../api.js";
 import { el, makeToggle } from "../dom.js";
 import { setIndicator } from "../dialog.js";
 import { t } from "../i18n.js";
+import { hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 
 type McpRow = Dict & { id: string; name: string; status: string };
@@ -30,6 +31,14 @@ function target(row: McpRow): string {
   const command = row.command ? String(row.command) : "";
   const args = Array.isArray(row.args) ? row.args.map(String).join(" ") : "";
   return [command, args].filter(Boolean).join(" ");
+}
+
+/** Явный переход в «Настройки → Плагины · MCP»: добавление/правка — там. */
+function configureButton(): HTMLElement {
+  const button = el("button", "linkbtn mcp-settings", t("web.mcp.open_settings"));
+  button.type = "button";
+  button.addEventListener("click", () => hooks.openSettingsAt?.("plugins"));
+  return button;
 }
 
 function serverRow(row: McpRow): HTMLElement {
@@ -67,6 +76,7 @@ export function renderMcp(): void {
   host.textContent = "";
   if (unavailable) {
     host.appendChild(el("div", "fdim", t("web.mcp.unavailable")));
+    host.appendChild(configureButton());
     return;
   }
   if (!loaded) {
@@ -75,6 +85,7 @@ export function renderMcp(): void {
   }
   if (rows.length === 0) {
     host.appendChild(el("div", "fdim", t("web.mcp.empty")));
+    host.appendChild(configureButton());
     return;
   }
   const active = rows.filter(on).length;
@@ -90,6 +101,7 @@ export function renderMcp(): void {
   );
   for (const row of rows) host.appendChild(serverRow(row));
   host.appendChild(el("div", "plg-hint", t("web.mcp.note")));
+  host.appendChild(configureButton());
 }
 
 function adopt(payload: Dict): void {

@@ -1,7 +1,7 @@
 // Settings shell: the modal overlay, its section tablist, `renderSettings`
 // dispatch and open/close/escape. Extracted from `settings.js`. Also registers
 // the render callbacks the write funnel (`settings/write.js`) calls back into.
-import { settings } from "../store.js";
+import { hooks, settings } from "../store.js";
 import { closeConfirm, confirmOverlay, trapTab } from "../dialog.js";
 import {
   renderPanel, renderUiPanel, renderMemoryPanel, renderSkillsPanel,
@@ -89,6 +89,8 @@ function openSettingsAt(panel: string): void {
   openSettings();
   selectSettingsPanel(panel);
 }
+/** Хук для сайдбара: быстрый переход в нужную панель настроек. */
+hooks.openSettingsAt = openSettingsAt;
 function closeSettings(): void {
   closeSubDialog();
   settings.providerForm = null;

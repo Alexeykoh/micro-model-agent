@@ -666,6 +666,28 @@ describe("webui assets", () => {
     expect(a.html).toContain('<link rel="icon" href="/api/favicon">');
   });
 
+  it("offers one context-aware settings shortcut for every sidebar tab", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('id="sbSettings"');
+    const core = a.jsModules?.["js/sidebar/core.js"] || "";
+    expect(core).toContain("const SETTINGS_PANEL");
+    for (const mapping of [
+      'session: "sessions"',
+      'files: "context"',
+      'mcp: "plugins"',
+      'trace: "ui"',
+      'subagents: "agent"',
+    ]) {
+      expect(core).toContain(mapping);
+    }
+    expect(core).toContain("hooks.openSettingsAt?.");
+    expect(a.css).toContain(".sb-settings");
+    // MCP is the one tab whose primary action (add/edit a server) lives in
+    // settings — give it an explicit CTA, not only the title-row icon.
+    expect(a.jsModules?.["js/sidebar/mcp.js"] || "").toContain("web.mcp.open_settings");
+    expect(a.css).toContain(".mcp-settings");
+  });
+
   it("imports every sidebar helper it calls (no undefined render crash)", () => {
     const a = loadAssets();
     const src = a.js;
