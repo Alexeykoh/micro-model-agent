@@ -3,7 +3,7 @@ import type { AgentModule } from "../types";
 import type { AgentPlugin } from "../types";
 import type { ToolDefinition, ToolContext, ToolCall, ToolResult } from "../../tools/types";
 import { existsSync } from "fs";
-import { relative, resolve } from "path";
+import { resolve } from "path";
 import { LspClient, serverKeyFor, type LspClientLogger, type CheckResult } from "./client";
 import { getServerForFile, getServerForLanguage, DEFAULT_LSP_CONFIG } from "./config";
 import type { LspSymbolLocation } from "./symbols";
@@ -17,27 +17,16 @@ import type { LspConfig, LspDiagnostic, LspServerConfig } from "./types";
 import { isErrorDiagnostic, isWarningDiagnostic } from "./types";
 import { severityLabel, collectCheckFiles, } from "./check-tool";
 import { renderCheckReport, type CheckAccumulator } from "./check-report";
+import { runCheckFiles } from "./check-run";
 import { diagnoseLspServers, type LspDiagnoseDeps } from "./diagnose";
 import { errMsg } from "../../utils";
 import { LspHealth } from "./health";
-import { join } from "path";
-
 /**
  * Диагностики резолва модулей, бессмысленные без type-окружения. В голом
  * каталоге (без tsconfig.json / node_modules) TS-сервер рапортует
  * `Cannot find module 'fs'` на валидный Node-код — модель бросает рабочий
  * подход из-за фантомных ошибок. Душатся с пометкой inconclusive.
  */
-const TYPE_ENV_DIAG_PATTERN =
-  /Cannot find module ['"][^'"]+['"] or its corresponding type declarations|Cannot find name '(__dirname|__filename|require|process|Buffer|console)'|Do you need to install type definitions/;
-
-function hasTypeEnvironment(projectRoot: string): boolean {
-  return (
-    existsSync(join(projectRoot, "tsconfig.json")) ||
-    existsSync(join(projectRoot, "jsconfig.json")) ||
-    existsSync(join(projectRoot, "node_modules"))
-  );
-}
 
 /**
  * Бюджет пост-проверки записи. Проверка best-effort: 30-секундный таймаут
@@ -330,62 +319,18 @@ export class LspModule implements AgentModule {
   }
 
   /** Проверить набор файлов, накопив диагностики и заметки о сбоях. */
+  /** Проверить файлы через вынесенный прогон (см. `check-run.ts`). */
   private async checkFiles(files: string[], ctx: ToolContext): Promise<CheckAccumulator> {
-    const acc: CheckAccumulator = {
+    return runCheckFiles(files, {
       baseDir: ctx.baseDir,
-      errors: [],
-      warnings: [],
-      notes: [],
-      checkedFiles: [],
-      checked: 0,
-      inconclusive: 0,
-      suppressed: 0,
-    };
-    for (const file of files) {
-      const serverConfig = getServerForFile(file, this.config);
-      if (!serverConfig) continue;
-      const key = serverKeyFor(serverConfig);
-      if (this.health.isDisabled(key)) continue;
-      const projectRoot = findProjectRoot(file, ctx.baseDir, serverConfig.workspaceMarkers ?? []);
-      try {
-        const result = await this.client.checkFile(file, ctx.baseDir, serverConfig, projectRoot);
-        this.health.reset(key);
-        this.collectDiagnostics(acc, file, ctx.baseDir, result, projectRoot);
-      } catch (e) {
-        this.health.warn(this.logger, file, errMsg(e));
-        acc.notes.push(this.failureNote(key, serverConfig, errMsg(e), file));
-      }
-    }
-    return acc;
+      config: this.config,
+      client: this.client,
+      health: this.health,
+      logger: this.logger,
+      failureNote: (key, serverConfig, message, file) =>
+        this.failureNote(key, serverConfig, message, file),
+    });
   }
-
-  /** Сложить диагностики одного файла в аккумулятор (с type-env фильтром). */
-  private collectDiagnostics(
-    acc: CheckAccumulator,
-    file: string,
-    baseDir: string,
-    result: CheckResult,
-    projectRoot: string,
-  ): void {
-    acc.checked++;
-    acc.checkedFiles.push(toForwardSlash(relative(baseDir, file)));
-    let diags = result.diagnostics;
-    if (!hasTypeEnvironment(projectRoot)) {
-      diags = diags.filter((d) => {
-        if (TYPE_ENV_DIAG_PATTERN.test(d.message)) {
-          acc.suppressed++;
-          return false;
-        }
-        return true;
-      });
-    }
-    if (result.inconclusive) acc.inconclusive++;
-    for (const d of diags) {
-      if (isErrorDiagnostic(d)) acc.errors.push({ file, diag: d });
-      else if (isWarningDiagnostic(d)) acc.warnings.push({ file, diag: d });
-    }
-  }
-
 
   /** Заметка о сбое сервера для `lsp_check` (disabled или failed+hint). */
   private failureNote(

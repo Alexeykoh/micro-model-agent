@@ -70,6 +70,7 @@ describe("angular LSP support", () => {
 
     const { LspModule } = await import("../src/modules/lsp/module");
     const module = new LspModule({ enabled: true });
+    (module as any).client.isWarm = () => true;
     let seenConfig: { command: string; args?: string[] } | null = null;
     (module as any).client.checkFile = async (
       _f: string,

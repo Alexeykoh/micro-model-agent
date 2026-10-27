@@ -32,7 +32,10 @@ describe("lsp_check tool", () => {
 
   it("returns clean for a file with no diagnostics", async () => {
     writeFileSync(join(baseDir, "src", "a.ts"), "export const a = 1;", "utf-8");
+    // Холодный сервер больше не держит вызов (см. `check-run.ts`): в тестах
+    // проверяем поведение на тёплом соединении, не поднимая реальный сервер.
     const module = new LspModule({ enabled: true });
+    (module as any).client.isWarm = () => true;
     (module as any).client.checkFile = async () => ({ diagnostics: [], inconclusive: false });
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/a.ts" });
     expect(res.success).toBe(true);
@@ -49,7 +52,10 @@ describe("lsp_check tool", () => {
       severity: 1,
       message: "Cannot find name 'x'",
     };
+    // Холодный сервер больше не держит вызов (см. `check-run.ts`): в тестах
+    // проверяем поведение на тёплом соединении, не поднимая реальный сервер.
     const module = new LspModule({ enabled: true });
+    (module as any).client.isWarm = () => true;
     (module as any).client.checkFile = async () => ({ diagnostics: [diag], inconclusive: false });
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/a.ts" });
     expect(res.success).toBe(false);
@@ -62,7 +68,10 @@ describe("lsp_check tool", () => {
     writeFileSync(join(baseDir, "src", "b.ts"), "export const b = 2;", "utf-8");
     writeFileSync(join(baseDir, "README.md"), "# readme", "utf-8");
     const checked: string[] = [];
+    // Холодный сервер больше не держит вызов (см. `check-run.ts`): в тестах
+    // проверяем поведение на тёплом соединении, не поднимая реальный сервер.
     const module = new LspModule({ enabled: true });
+    (module as any).client.isWarm = () => true;
     (module as any).client.checkFile = async (filePath: string) => {
       checked.push(filePath);
       return { diagnostics: [], inconclusive: false };
@@ -78,7 +87,10 @@ describe("lsp_check tool", () => {
     writeFileSync(join(baseDir, "node_modules", "lib.ts"), "boom", "utf-8");
     writeFileSync(join(baseDir, "src", "a.ts"), "export const a = 1;", "utf-8");
     const checked: string[] = [];
+    // Холодный сервер больше не держит вызов (см. `check-run.ts`): в тестах
+    // проверяем поведение на тёплом соединении, не поднимая реальный сервер.
     const module = new LspModule({ enabled: true });
+    (module as any).client.isWarm = () => true;
     (module as any).client.checkFile = async (filePath: string) => {
       checked.push(filePath);
       return { diagnostics: [], inconclusive: false };
@@ -91,7 +103,10 @@ describe("lsp_check tool", () => {
   it("lists the checked files in the output", async () => {
     writeFileSync(join(baseDir, "src", "a.ts"), "export const a = 1;", "utf-8");
     writeFileSync(join(baseDir, "src", "b.ts"), "export const b = 1;", "utf-8");
+    // Холодный сервер больше не держит вызов (см. `check-run.ts`): в тестах
+    // проверяем поведение на тёплом соединении, не поднимая реальный сервер.
     const module = new LspModule({ enabled: true });
+    (module as any).client.isWarm = () => true;
     (module as any).client.checkFile = async () => ({ diagnostics: [], inconclusive: false });
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src" });
     expect(res.success).toBe(true);
@@ -101,7 +116,10 @@ describe("lsp_check tool", () => {
   });
 
   it("fails for a missing path", async () => {
+    // Холодный сервер больше не держит вызов (см. `check-run.ts`): в тестах
+    // проверяем поведение на тёплом соединении, не поднимая реальный сервер.
     const module = new LspModule({ enabled: true });
+    (module as any).client.isWarm = () => true;
     (module as any).client.checkFile = async () => ({ diagnostics: [], inconclusive: false });
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src/nope.ts" });
     expect(res.success).toBe(false);
@@ -112,7 +130,10 @@ describe("lsp_check tool", () => {
     writeFileSync(join(baseDir, "src", "a.ts"), "export const a = 1;", "utf-8");
     writeFileSync(join(baseDir, "src", "b.ts"), "export const b = 1;", "utf-8");
     writeFileSync(join(baseDir, "src", "c.ts"), "export const c = 1;", "utf-8");
+    // Холодный сервер больше не держит вызов (см. `check-run.ts`): в тестах
+    // проверяем поведение на тёплом соединении, не поднимая реальный сервер.
     const module = new LspModule({ enabled: true });
+    (module as any).client.isWarm = () => true;
     (module as any).client.checkFile = async () => {
       throw new Error("typescript-language-server not found");
     };

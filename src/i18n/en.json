@@ -399,6 +399,7 @@
   "lsp.check_inconclusive": "[LSP check inconclusive: the server did not answer in time — absence of errors is NOT confirmed.]",
   "lsp.check_silent": "[lsp_check inconclusive: {silent} of {total} file(s) got no answer from the server — a clean result is NOT confirmed for them. Re-run or raise the timeout.]",
   "lsp.check_suppressed": "[lsp_check inconclusive: no tsconfig.json / node_modules near project root — {count} module-resolution diagnostic(s) suppressed. Initialize the project (package.json + types) for accurate TypeScript checks.]",
+  "lsp.check_cold": "[lsp_check inconclusive: {count} file(s) not checked — the LSP server is still starting. Retry in a few seconds; waiting out a 30s cold start is pointless.]",
   "lsp.checked_files": "Checked {count} file(s):",
   "lsp.startup_header": "[Existing project errors (baseline, checked at session start) — informational. Do NOT fix them unless the current request is about these errors; otherwise ignore them and work only on what the user asked.]:",
   "lsp.hint_binary_missing": "Hint: install the language server or set lsp.servers.<lang>.command to an existing binary.",
