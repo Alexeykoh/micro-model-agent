@@ -12,6 +12,7 @@ import { ToolExecutor } from "../../tools/executor";
 import { ToolRegistry } from "../../tools/registry";
 import { PluginManager } from "../../modules/plugins/manager";
 import type { ToolContext, ToolDefinition } from "../../tools/types";
+import { subagentLogEntry } from "../../tools/subagent-session-log";
 import type { DraftHost } from "../../modules/plugins/drafts";
 import type { PromptBlock } from "../types";
 import { assembleDynamicPromptBlocks } from "../prompt-assembler";
@@ -146,6 +147,10 @@ export function buildRunnerToolCtx(input: RunnerToolCtxInput): {
           ...(iteration !== undefined ? { iteration } : {}),
         });
       },
+    },
+    subagentLog: (event) => {
+      const entry = subagentLogEntry(event);
+      if (entry) sessionManager.appendLog(entry);
     },
   } as ToolContext;
   Object.defineProperty(toolCtx, "config", {

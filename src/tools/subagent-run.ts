@@ -15,6 +15,7 @@ import { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limit
 import { lookupExpertTag } from "./subagent-expert";
 import { createSubagentObserver, resultStatus, resultUsage } from "./subagent-observer";
 import { setSubagentRunStop } from "./subagent-registry";
+import type { SubagentUsageRecord } from "./subagent-runs";
 import { createSubagentWatchdog } from "./subagent-watchdog";
 import { finalizeSubagentSuccess } from "./subagent-result";
 // Реэкспорт для существующих импортёров/тестов (лимиты переехали в отдельный файл).
@@ -172,6 +173,9 @@ export async function runSubagent(
 
     // Сабагент идёт тем же одиночным циклом, что и родитель.
     const subConfig = { ...ctx.config };
+    // Usage подпотока уходит в наблюдатель, а он создаётся ниже: ref замыкается
+    // на него к моменту первого LLM-вызова (спека `2026-10-27-subagent-run-journal-design`).
+    let reportUsage: ((usage: SubagentUsageRecord) => void) | undefined;
     const subDeps = {
       config: subConfig,
       llmProvider: provider,
@@ -184,6 +188,7 @@ export async function runSubagent(
       scope,
       toolTags,
       promptBlocks: [systemPrompt],
+      onUsage: (usage: SubagentUsageRecord) => reportUsage?.(usage),
     };
 
     const subAgent = (ctx.agentFactory ?? ((d: unknown) => new Agent(d as never)))(subDeps);
@@ -195,6 +200,7 @@ export async function runSubagent(
       model: expertModel ?? ctx.config.model,
     });
     observer.start();
+    reportUsage = (usage) => observer.callbacks.onUsage(usage);
     // Стоп родительского хода и кнопка «остановить» в вебе ведут в один
     // `subAgent.shutdown()`: у дочернего агента свой abort-контроллер.
     const stopSubAgent = (): void => subAgent.shutdown?.();

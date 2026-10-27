@@ -13,6 +13,7 @@ import {
   type SubagentRunEvent,
   type SubagentRunStatus,
   type SubagentRunUsage,
+  type SubagentUsageRecord,
 } from "./subagent-runs";
 import { finishSubagentRun, registerSubagentRun } from "./subagent-registry";
 
@@ -23,6 +24,8 @@ export interface SubagentCallbacks {
   onTool: (ev: ToolEvent) => void;
   onPhase: (phase: "thinking" | "done") => void;
   onReasoning: (reasoning: string) => void;
+  /** Usage одного LLM-вызова прогона (пишется в журнал сессии). */
+  onUsage: (usage: SubagentUsageRecord) => void;
 }
 
 /** Идентичность прогона для `start`. */
@@ -93,6 +96,7 @@ export function createSubagentObserver(
     },
     onPhase: (phase) => emit({ kind: "phase", runId, phase }),
     onReasoning: (reasoning) => emit({ kind: "reasoning", runId, chunk: reasoning }),
+    onUsage: (usage) => emit({ kind: "llm_usage", runId, ...usage }),
   };
 
   return {

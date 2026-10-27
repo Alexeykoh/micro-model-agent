@@ -119,7 +119,13 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
 (через `audit.jsonl`). Стоимость прогона, число чтений, длина reasoning и момент
 обрыва восстановить нельзя; «думал 4 минуты» и «прочитал 12 файлов» неотличимы.
 Поверхности получают события через `ctx.subagentRuns` (в памяти), durable-следа нет.
-`DEBT(subagent-run-invisible-in-session-log)`.
+
+**Исправлено** в ветке `feat/subagent-run-journal` (спека
+[`2026-10-27-subagent-run-journal-design`](../specs/2026-10-27-subagent-run-journal-design.md)):
+прогон пишет в `session.jsonl` записи `type: "subagent"` с `subagent: <runId>` —
+`start`/`tool`/`usage` (с `origin`)/`end`. Гейт:
+`tests/tools/subagent-session-log.test.ts`. Долг
+`subagent-run-invisible-in-session-log` оплачен.
 
 ### D5. `expert_tag` не перечислен в схеме тула, а блок не пишется в audit
 
@@ -166,11 +172,15 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
    исправлено. Гейты: `tests/tools/bash-scope.test.ts`,
    `tests/core/llm-truncation-recovery.test.ts`, `tests/openai-compat.test.ts`,
    `tests/tools/subagent-max-tokens.test.ts`.
-2. **D5** — сделано в ветке `fix/subagent-expert-tag-schema`: `registerAllTools`
+2. **D4** — сделано в ветке `feat/subagent-run-journal`: прогон субагента пишет в
+   `session.jsonl` записи `type: "subagent"` (старт, тулы, usage с `origin`, конец).
+   Спека: [`2026-10-27-subagent-run-journal-design`](../specs/2026-10-27-subagent-run-journal-design.md);
+   гейт: `tests/tools/subagent-session-log.test.ts`.
+3. **D5** — сделано в ветке `fix/subagent-expert-tag-schema`: `registerAllTools`
    вписывает `config.experts` в описание тула и в `expert_tag`, отказ на неизвестный
    тег пишется в `audit.jsonl`, текст ошибки объясняет «эксперт ≠ скилл».
    Гейт: `tests/tools/subagent-expert-tag.test.ts`.
-3. **D4, D6** — оплата долгов по их триггерам. Не сделано.
+4. **D6** — не сделано (долг `llm-provider-error-invisible-to-user`).
 
 ## 5. Как повторить разбор
 

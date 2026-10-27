@@ -18,6 +18,25 @@ export interface SubagentRunUsage {
   totalTokens?: number;
 }
 
+/** Один LLM-вызов прогона: те же поля, что в родительском `llm_usage`. */
+export interface SubagentUsageRecord {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  /** `api` — цифры провайдера, `estimate` — локальная оценка. */
+  origin?: string;
+  durationMs?: number;
+  iteration?: number;
+  provider?: string;
+  model?: string;
+}
+
+/** Событие usage одного вызова субагента (пишется в журнал сессии). */
+export interface SubagentRunUsageEvent extends SubagentUsageRecord {
+  kind: "llm_usage";
+  runId: string;
+}
+
 /** Начало прогона: кто и что делегировал. */
 export interface SubagentRunStart {
   kind: "start";
@@ -97,6 +116,7 @@ export type SubagentRunEvent =
   | SubagentRunPhase
   | SubagentRunToolStart
   | SubagentRunToolEnd
+  | SubagentRunUsageEvent
   | SubagentRunEnd;
 
 /** Приёмник событий прогонов, который ставит поверхность (web-UI). */
@@ -116,16 +136,24 @@ export function newSubagentRunId(): string {
 }
 
 /**
- * Отправляет событие приёмнику, если он есть. Fail-open: сломанный или
+ * Отправляет событие приёмникам, если они есть. Fail-open: сломанный или
  * медленный наблюдатель не должен менять результат субагента.
+ *
+ * Два приёмника: `subagentRuns` (веб-UI, SSE) и `subagentLog` (журнал сессии,
+ * `session.jsonl`). Оба независимы — падение одного не мешает другому.
  */
 export function emitSubagentEvent(
-  ctx: { subagentRuns?: SubagentRunSink },
+  ctx: { subagentRuns?: SubagentRunSink; subagentLog?: (event: SubagentRunEvent) => void },
   event: SubagentRunEvent,
 ): void {
   try {
     ctx.subagentRuns?.emit(event);
   } catch {
     /* fail-open: наблюдатель не влияет на прогон */
+  }
+  try {
+    ctx.subagentLog?.(event);
+  } catch {
+    /* fail-open: журнал не влияет на прогон */
   }
 }

@@ -64,8 +64,7 @@ export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
 /** Зависимости агента: конфиг, провайдер, тулы, контекст, логгеры, швы. */
 export interface AgentDeps {
   config: AppConfig;
-  /** Общий живой бокс конфига: `reconfigure` меняет и `config`, и `configRef.current`,
-   * чтобы захваченные при bootstrap ссылки видели текущие настройки. */
+  /** Живой бокс конфига: `reconfigure` меняет и его, и `configRef.current`. */
   configRef?: { current: AppConfig };
   llmProvider: LLMProvider;
   toolExecutor: ToolExecutor;
@@ -75,6 +74,8 @@ export interface AgentDeps {
   logger: Logger;
   /** Сток fail-open петли (INV-15); ставится bootstrap-фазой. */
   onDiagnostic?: DiagnosticSink;
+  /** Per-call usage прогона: субагент отдаёт его в журнал сессии (`subagent`-записи). */
+  onUsage?: (usage: import("../tools/subagent-runs").SubagentUsageRecord) => void;
   baseDir: string;
   scope?: ToolScope;
   toolTags?: string[];
@@ -216,10 +217,7 @@ export class Agent {
     return this._currentIteration;
   }
 
-  /**
-   * Провенанс вызывающего: живой провайдер и модель (для стоимости/логов).
-   * @returns {provider, model} реально обслужившие вызов.
-   */
+  /** Провенанс вызывающего: живой провайдер и модель (для стоимости/логов). */
   callerProvenance(): { provider: string; model: string } {
     // Живое имя: sticky failover переключает запись, не трогая provider.active.
     const live = this.deps.getProviderName?.();

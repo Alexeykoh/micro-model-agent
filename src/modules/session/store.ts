@@ -33,7 +33,7 @@ export interface SessionLogEntry {
     | "reasoning_control" | "context_probe" | "output"
     | "critic_check" | "critic_verdict" | "critic_escalation"
     | DiagnosticEvent | "claim_retry" | "service_task" | "egress_turn"
-    | "egress_redacted"
+    | "egress_redacted" | "subagent"
     | OnboardingEvent;
   /** Источник записи (INV-13); `llm_usage` пишет origin отдельно (W11). */
   source: Source;
@@ -41,6 +41,7 @@ export interface SessionLogEntry {
    * Модуль-владелец записи (INV-13), без префикса `module:` — например `mcp`.
    */
   module?: string;
+  subagent?: string;
   tool?: string;
   tool_call_id?: string;
   tool_calls?: Array<{

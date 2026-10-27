@@ -63,7 +63,11 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     slog,
     hallucinationDetector,
   });
-  const tokenTracker = new TokenTracker(host.costTracker, () => host.callerProvenance());
+  const tokenTracker = new TokenTracker(
+    host.costTracker,
+    () => host.callerProvenance(),
+    deps.onUsage,
+  );
   const reasoningResolver = new ReasoningEffortResolver();
   const toolBatch = new ToolBatchExecutor({
     config,
