@@ -136,7 +136,8 @@ bun run mma "<промпт>"   # прогнать агента вживую
 `tests/modules/browser/bridge-runtime.test.ts` (рантайм моста),
 `tests/modules/browser/preflight.test.ts` (Chromium не установлен),
 `tests/modules/skills/prompt-and-loader.test.ts` (скиллы),
-`tests/tools/subagent-max-tokens.test.ts` (кап токенов субагента).
+`tests/tools/subagent-max-tokens.test.ts` (кап токенов субагента),
+`tests/tools/subagent-expert-tag.test.ts` (список `expert_tag` в схеме и отказ в audit).
 
 Конфиг, CLI и сессии (волна W7) держат: `tests/config/migration.test.ts`
 (миграция v1), `tests/config/atomic-save.test.ts` (атомарная запись доменов),

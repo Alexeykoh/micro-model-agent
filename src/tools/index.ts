@@ -26,7 +26,7 @@ import { processListTool } from "./process-list";
 import { processLogTool } from "./process-log";
 import { processKillTool } from "./process-kill";
 import { processWaitTool } from "./process-wait";
-import { subagentTool } from "./subagent";
+import { subagentTool, subagentToolWithExperts } from "./subagent";
 import { subagentListTool } from "./subagent-list";
 import { subagentStopTool } from "./subagent-stop";
 import { chunkQueryTool } from "./chunk-query";
@@ -102,7 +102,7 @@ export {
 export function registerAllTools(
   registry: ToolRegistry,
   skillsModule?: SkillsModule,
-  opts?: { enableOnDemand?: boolean },
+  opts?: { enableOnDemand?: boolean; expertTags?: string[] },
 ): void {
   const tools: ToolDefinition[] = [
     readFileTool,
@@ -151,6 +151,13 @@ export function registerAllTools(
   // каталог не должен оставлять модели инструмент вхолостую.
   if (skillsModule?.hasAny()) {
     tools.push(createLoadSkillTool(skillsModule));
+  }
+
+  // Список `expert_tag` известен только bootstrap-у (config.experts): без него
+  // схема молчит и модель угадывает тег по имени скилла (дефект D5).
+  if (opts?.expertTags?.length) {
+    const idx = tools.indexOf(subagentTool);
+    tools[idx] = subagentToolWithExperts(opts.expertTags);
   }
 
   // Встроенные тулы ядра (INV-1/2): один общий владелец `core`; запись — через
