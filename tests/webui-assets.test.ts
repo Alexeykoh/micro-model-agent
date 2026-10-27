@@ -530,14 +530,16 @@ describe("webui assets", () => {
     expect(a.css).toContain(".trace-list > *");
 
     // Tab order has one source of truth: `TABS` drives the visible order, the
-    // `Alt+1..6` hotkeys and `←/→`, so index.html must follow it. Reordering the
+    // `Alt+1..8` hotkeys and `←/→`, so index.html must follow it. Reordering the
     // buttons alone would silently detach the hotkeys from the visible row.
     const state = a.jsModules?.["js/sidebar/state.js"] || "";
     const order = (state.match(/export const TABS = \[([^\]]*)\]/)?.[1] || "")
       .split(",")
       .map((s) => s.trim().replace(/"/g, ""))
       .filter(Boolean);
-    expect(order).toEqual(["session", "files", "lsp", "trace", "plugins", "map"]);
+    expect(order).toEqual([
+      "session", "files", "lsp", "trace", "subagents", "plugins", "mcp", "map",
+    ]);
     const htmlOrder = [...a.html.matchAll(/data-tab="([a-z]+)"/g)].map((m) => m[1]);
     expect(htmlOrder).toEqual(order);
   });
@@ -597,8 +599,71 @@ describe("webui assets", () => {
     expect(a.js).toContain("sidebarPluginsState,");
     expect(a.css).toContain(".plg-row");
     expect(a.css).toContain(".plg-tag");
-    // Alt+6 reaches the sixth tab.
-    expect(sidebar).toContain('"6"');
+    // Hotkeys are derived from `TABS`: the last tab is reachable by Alt+8.
+    expect(sidebar).toContain("TABS.length");
+    expect(a.html).toContain('data-tab="mcp"');
+  });
+
+  it("shows the Prompt button above the trace list, not beside it", () => {
+    const a = loadAssets();
+    // The pane is row-reverse (detail left), so head+list must share one column
+    // child; as siblings the head became a third narrow column on the right.
+    expect(a.html).toContain('<div class="trace-main">');
+    expect(a.html).toMatch(/class="trace-main"[\s\S]*id="tracePromptBtn"[\s\S]*id="traceList"/);
+    expect(a.css).toContain(".trace-main { display: flex; flex-direction: column;");
+  });
+
+  it("keeps the activity rail on one compact line", () => {
+    const a = loadAssets();
+    expect(a.css).toContain(".rail-wrap.l-line { flex-wrap: nowrap; }");
+    expect(a.css).toContain(".rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 {");
+    expect(a.css).toContain("flex-wrap: nowrap; white-space: nowrap;");
+    // An empty `last:` must not leave a dangling separator or em dash.
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastSepEl.hidden = !lastTool");
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastEl.hidden = !lastTool");
+  });
+
+  it("toggles a plugin immediately without opening its popup", () => {
+    const sidebar = sidebarSources(loadAssets());
+    // Click on the switch must not bubble to the row (row click opens details).
+    expect(sidebar).toContain("e.stopPropagation()");
+    // The switch flips itself at once; `true` is what makeToggle needs for that.
+    expect(sidebar).toMatch(/row\.enabled = next;[\s\S]{0,180}return true;/);
+    expect(sidebar).toContain("row.enabled = previous;");
+  });
+
+  it("shows context used against the full window, not the history budget", () => {
+    const a = loadAssets();
+    const sidebar = a.jsModules?.["js/feed/sidebar.js"] || "";
+    expect(sidebar).toContain("h.contextBreakdown.window");
+    expect(sidebar).toContain("const limit = bdWindow ??");
+    // The pair must share one basis: `contextUsed` already includes system+tools.
+    expect(sidebar).not.toContain("const limit = typeof h.contextLimit");
+  });
+
+  it("wires the Subagents and MCP sidebar tabs", () => {
+    const a = loadAssets();
+    for (const id of ["subagents", "mcp"]) {
+      expect(a.html).toContain(`data-tab="${id}"`);
+      expect(a.html).toContain(`id="pane-${id}"`);
+      expect(a.html).toContain(`id="${id}Body"`);
+    }
+    const subagents = a.jsModules?.["js/sidebar/subagents.js"] || "";
+    expect(subagents).toContain("/subagents");
+    expect(subagents).toContain("openRun(");
+    expect(subagents).toContain("mergeSnapshot(");
+    const mcp = a.jsModules?.["js/sidebar/mcp.js"] || "";
+    expect(mcp).toContain('"/api/mcp"');
+    expect(mcp).toContain("makeToggle");
+    expect(a.js).toContain("sidebarSubagentEvent,");
+    expect(a.js).toContain("sidebarMcpEvent,");
+    expect(a.css).toContain(".sbrun");
+    expect(a.css).toContain(".mcpsrv");
+  });
+
+  it("serves the project favicon with a mascot fallback", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('<link rel="icon" href="/api/favicon">');
   });
 
   it("imports every sidebar helper it calls (no undefined render crash)", () => {

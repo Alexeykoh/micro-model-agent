@@ -11,4 +11,6 @@ export * from "./sidebar/map.js";
 export * from "./sidebar/lsp.js";
 export * from "./sidebar/files.js";
 export * from "./sidebar/plugins.js";
+export * from "./sidebar/subagents.js";
+export * from "./sidebar/mcp.js";
 export * from "./sidebar/prompt.js";

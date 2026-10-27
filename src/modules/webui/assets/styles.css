@@ -831,12 +831,18 @@ body.light .sel > button { border: 1px solid var(--border); }
 .rail-wrap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .rail-wrap[hidden] { display: none; }
 .rail-wrap.l-line, .rail-wrap.l-meta {
-  flex-direction: row; align-items: center; gap: 6px 10px; margin-bottom: 8px;
+  flex-direction: row; align-items: center; gap: 6px 8px; margin-bottom: 8px;
   flex-wrap: wrap;
 }
+/* Compact one-liner: phase/time/plan and the counters share a single row with
+   the scanner instead of each taking a full flex line (the wrap made the rail
+   twice as tall as its information). */
+.rail-wrap.l-line { flex-wrap: nowrap; }
 .rail-wrap.l-line .rl-track { order: -1; flex: 1 1 120px; min-width: 80px; max-width: 180px; }
 .rail-wrap.l-meta .rl-track { order: -1; flex: 1 1 90px; min-width: 64px; max-width: 110px; }
-.rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 { flex: 1 1 auto; min-width: 0; }
+.rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 {
+  flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; white-space: nowrap;
+}
 .rail-wrap.l-line .rail-l1 .right { display: none; }   /* Esc уже есть в .inp-meta */
 .rail-wrap.l-line .rail-l2::before { content: '·'; color: var(--dim-a); margin-right: -2px; }
 .rail-wrap.l-meta { margin-bottom: 0; }
@@ -973,6 +979,10 @@ body.light .sel > button { border: 1px solid var(--border); }
    resizes it (that spontaneous jump is what we removed). The detail always
    sits on the LEFT of the list/tree, i.e. toward the chat area. */
 #pane-trace { flex-direction: row-reverse; position: relative; }
+/* Head (the system-prompt button) sits ABOVE the list, while the detail pane
+   stays to the left. The pane itself is row-reverse, so the list column is one
+   child and the detail is the other — the head cannot be a third child. */
+.trace-main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
 .trace-head { display: flex; justify-content: flex-end; padding: 8px 10px 0; flex: 0 0 auto; }
 .trace-head .linkbtn { color: var(--dim-a); font-size: 11.5px; cursor: pointer; }
 .trace-head .linkbtn:hover { color: var(--fg); }
@@ -1178,6 +1188,30 @@ body.light .sel > button { border: 1px solid var(--border); }
 .plg-warn-title { color: var(--dim-b); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin: 10px 0 3px; }
 .plg-link { color: var(--accent); font-size: 11.5px; overflow-wrap: anywhere; }
 .kv.wn b { color: var(--yellow); }
+
+/* Subagents tab: every run of the active session, clickable to open its
+   transcript. Same row grammar as Plugins — no boxes, one line per run. */
+.sbrun-summary, .mcpsrv-summary { color: var(--dim-c); font-size: 11.5px; line-height: 1.4; margin: 2px 0 6px; }
+.sbrun, .mcpsrv {
+  display: flex; align-items: center; gap: 8px; padding: 4px 6px; margin: 0 -6px;
+  border-radius: 6px; min-width: 0;
+}
+.sbrun { cursor: pointer; transition: background .12s ease; }
+.sbrun:hover { background: var(--hover-bg); }
+.sbrun:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.sbrun-g { flex: 0 0 auto; width: 12px; text-align: center; }
+.sbrun-g.run { color: var(--accent); }
+.sbrun-g.ok { color: var(--green); }
+.sbrun-g.warn { color: var(--red); }
+.sbrun-g.dim { color: var(--dim-c); }
+.sbrun-main, .mcpsrv-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.sbrun-task { color: var(--fg); font-size: 12.5px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sbrun-meta, .mcpsrv-meta { color: var(--dim-c); font-size: 11.5px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcpsrv-name { color: var(--fg); font-size: 12.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.mcpsrv-st { flex: 0 0 auto; font-size: 11px; }
+.mcpsrv-st.ok { color: var(--green); }
+.mcpsrv-st.dim { color: var(--dim-c); }
+.mcpsrv .toggle { flex: 0 0 auto; }
 
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 4px; }
@@ -1858,7 +1892,9 @@ button.toggle:disabled { opacity: .5; cursor: default; }
   .rail-wrap.l-line .rl-track, .rail-wrap.l-meta .rl-track {
     order: -1; flex: none; width: 100%; max-width: none;
   }
-  .rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 { flex: none; }
+  .rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 {
+    flex: none; flex-wrap: wrap; white-space: normal;
+  }
   .rail-wrap.l-meta { width: 100%; flex-basis: 100%; }
   .selectors { gap: 6px; }
   .composer-main { gap: 4px; }

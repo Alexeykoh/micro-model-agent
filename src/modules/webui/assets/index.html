@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MMA Web</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%E2%97%87%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="/api/favicon">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/console.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -88,7 +88,7 @@
         <div class="rail-l2" aria-hidden="true">
           <span class="tools" id="railTools">0 tools</span>
           <span class="s">·</span><span class="events" id="railEvents">0 events</span>
-          <span class="s">·</span><span class="last" id="railLast">—</span>
+          <span class="s last-sep">·</span><span class="last" id="railLast" hidden></span>
         </div>
       </div>
       <div class="selectors">
@@ -144,8 +144,16 @@
         <span class="sb-ico" data-icon="trace" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="subagents" aria-selected="false" aria-controls="pane-subagents" title="Subagents">
+        <span class="sb-ico" data-icon="subagents" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
       <button class="sb-tab" type="button" role="tab" data-tab="plugins" aria-selected="false" aria-controls="pane-plugins" title="Plugins">
         <span class="sb-ico" data-icon="plugins" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="mcp" aria-selected="false" aria-controls="pane-mcp" title="MCP">
+        <span class="sb-ico" data-icon="mcp" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
       <button class="sb-tab" type="button" role="tab" data-tab="map" aria-selected="false" aria-controls="pane-map" title="Map">
@@ -178,8 +186,10 @@
     </div>
 
     <div class="sb-pane" id="pane-trace" role="tabpanel" data-pane="trace" hidden>
-      <div class="trace-head"><button class="linkbtn" type="button" id="tracePromptBtn"></button></div>
-      <div class="trace-list" id="traceList"></div>
+      <div class="trace-main">
+        <div class="trace-head"><button class="linkbtn" type="button" id="tracePromptBtn"></button></div>
+        <div class="trace-list" id="traceList"></div>
+      </div>
       <div class="trc-detail" id="traceDetail" hidden>
         <div class="detail-h"><span class="g" id="detailGlyph">◇</span><span id="detailTitle"></span><button class="x linkbtn" type="button" id="detailClose">✕</button></div>
         <div class="detail-b" id="detailBody"></div>
@@ -192,9 +202,21 @@
       </div>
     </div>
 
+    <div class="sb-pane" id="pane-subagents" role="tabpanel" data-pane="subagents" hidden>
+      <div class="sec map-sec">
+        <div class="sec-body" id="subagentsBody"></div>
+      </div>
+    </div>
+
     <div class="sb-pane" id="pane-plugins" role="tabpanel" data-pane="plugins" hidden>
       <div class="sec map-sec">
         <div class="sec-body" id="pluginsBody"></div>
+      </div>
+    </div>
+
+    <div class="sb-pane" id="pane-mcp" role="tabpanel" data-pane="mcp" hidden>
+      <div class="sec map-sec">
+        <div class="sec-body" id="mcpBody"></div>
       </div>
     </div>
 

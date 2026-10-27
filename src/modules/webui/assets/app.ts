@@ -31,6 +31,7 @@ import {
   applySidebarI18n,
   initFiles, sidebarFilesState, sidebarFilesChanged,
   sidebarPluginsState, sidebarPluginsEvent, initSidebarDrawer,
+  sidebarSubagentEvent, sidebarMcpEvent,
   openFilesTabFor,
 } from "./js/sidebar.js";
 import { insertIntoDraft } from "./js/session/composer.js";
@@ -286,7 +287,7 @@ const handlers: Array<[string, (d: Dict) => void]> = [
   ["turn_end", (d) => { onTurnEnd(d); drainQueuedTurn(d.sessionId); if (sidebarOwns(d)) { sidebarTurnEnd(d.turnSeq); sidebarBusy(false); void sidebarPullLog(); } }],
   ["log", onLog],
   ["retract", (d) => onRetract(d.reason || "", d.sessionId)],
-  ["subagent", onSubagentEvent],
+  ["subagent", (d) => { onSubagentEvent(d); sidebarSubagentEvent(); }],
 ];
 for (const [event, fn] of handlers) {
   es.addEventListener(event, (e) => {
@@ -383,7 +384,7 @@ es.addEventListener("reasoning", (e) => { const d = parse(e); if (d && sidebarOw
 es.addEventListener("lsp", (e) => { const d = parse(e); if (d) sidebarLspEvent(d); });
 // Files tab: workspace watcher fired — re-read the expanded directories.
   es.addEventListener("files", () => sidebarFilesChanged());
-  es.addEventListener("plugins", () => sidebarPluginsEvent());
+  es.addEventListener("plugins", () => { sidebarPluginsEvent(); sidebarMcpEvent(); });
 // Config changed anywhere (settings write or a slash command) — re-read it so
 // the open Settings panel and the composer selectors never show a stale value.
 es.addEventListener("config", () => { void loadConfig(); });

@@ -23,6 +23,7 @@ let escEl: HTMLElement | null = null;
 let toolsEl: HTMLElement | null = null;
 let eventsEl: HTMLElement | null = null;
 let lastEl: HTMLElement | null = null;
+let lastSepEl: HTMLElement | null = null;
 let layout = "line";
 let busy = false;
 let startedAt = 0;
@@ -74,7 +75,10 @@ function render(): void {
   }
   toolsEl.textContent = pluralCount("web.rail.tools", tools);
   eventsEl.textContent = pluralCount("web.rail.events", events);
-  lastEl.textContent = lastTool ? t("web.rail.last") + " " + lastTool : t("web.rail.none");
+  // Без последнего тула не оставляем висящий разделитель и «—»: строка короче.
+  if (lastSepEl) lastSepEl.hidden = !lastTool;
+  lastEl.hidden = !lastTool;
+  lastEl.textContent = lastTool ? t("web.rail.last") + " " + lastTool : "";
   escEl.textContent = t("web.input.esc");
 }
 
@@ -99,6 +103,7 @@ export function initRail(cfgLayout?: unknown): void {
   toolsEl = root.querySelector<HTMLElement>(".tools");
   eventsEl = root.querySelector<HTMLElement>(".events");
   lastEl = root.querySelector<HTMLElement>(".last");
+  lastSepEl = root.querySelector<HTMLElement>(".last-sep");
   setLayout(cfgLayout);
   startTimer();
 }

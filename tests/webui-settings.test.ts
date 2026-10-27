@@ -158,6 +158,12 @@ describe("webui settings REST", () => {
       saved.push(1);
     };
     await withServer(s, async (base) => {
+      // `GET /api/mcp` feeds the sidebar MCP tab; same view as settings.
+      const list = await doFetch(base + "/api/mcp");
+      expect(list.status).toBe(200);
+      const listBody = (await list.json()) as { mcp: Array<{ id: string; status: string }> };
+      expect(listBody.mcp.map((m) => [m.id, m.status])).toEqual([["context7", "enabled"]]);
+
       const res = await postJson(base, "/api/mcp/context7", { enabled: false });
       expect(res.status).toBe(200);
       const body = res.json as {

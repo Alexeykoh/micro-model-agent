@@ -25,6 +25,7 @@ import { webCommandList } from "./chat/commands";
 import { handleAnswerPost } from "./session/answer-api";
 import { handleSessionsApi } from "./session/sessions-api";
 import { handleLspGet, handleMcpCreate, handleSettingsApi } from "./settings/settings-api";
+import { handleMcpList } from "./settings/mcp-list";
 import { handleProvidersApi } from "./settings/providers-api";
 import { handleFileApi } from "./file/file-api";
 import { handleFilesApi } from "./file/files-api";
@@ -33,6 +34,7 @@ import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp/lsp-api";
 import { handleUpdatePost } from "./chat/update-api";
 import { apiGuardFor, filterResponse } from "./egress";
 import { serveStatic } from "./static-assets";
+import { handleFaviconGet } from "./favicon";
 import { readEnv } from "../../config/env";
 export { tryOpenBrowser } from "./util"; // реэкспорт для CLI
 
@@ -120,6 +122,8 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "POST /api/index": (_req, res, s) => handleIndexPost(res, s),
   "POST /api/update": (_req, res, s) => handleUpdatePost(res, s),
   "POST /api/mcp": (req, res, s) => handleMcpCreate(req, res, s),
+  "GET /api/mcp": (_req, res, s) => handleMcpList(res, s),
+  "GET /api/favicon": (_req, res, s) => handleFaviconGet(res, s),
   "GET /api/lsp": (_req, res, s) => handleLspGet(res, s),
   "GET /api/lsp/doctor": (_req, res, s) => handleLspDoctorGet(res, s),
   "POST /api/lsp/doctor": (_req, res, s) => handleLspDoctorPost(res, s),
