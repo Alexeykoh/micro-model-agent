@@ -4,6 +4,40 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] - 2026-10-27
+
+### Added
+
+- **`GET /api/favicon` — иконка проекта во вкладке браузера.** Источник — `state.workspace`;
+  путь клиента в выборе файла не участвует. Имена `favicon.ico|png|svg|webp|gif`, каталоги —
+  корень, `public/`, `static/`, `assets/`, `img/`, `images/`, `src/`, `app/`, `src/app/`,
+  `docs/`, `gh-pages/`; кап 512 KiB, MIME — по расширению из allowlist. Файла нет — отдаётся
+  встроенный SVG-маскот. Тело отдаётся `Buffer`, а не строкой: egress-обёртка редактирует
+  строки и могла бы изменить длину после расчёта `Content-Length`. В `index.html` —
+  `<link rel="icon" href="/api/favicon">`. Гвард: `tests/webui-favicon.test.ts`.
+- **Вкладки `subagents` и `mcp` в сайдбаре `mma web`.** `TABS` остаётся единственным
+  источником порядка и горячих клавиш (`Alt+1..8`): `session · files · lsp · trace ·
+  subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:id/subagents`
+  (прогоны живут в памяти): задача, агент, модель, длительность/итерации, статус; снимки
+  мержатся в общие буферы, клик открывает тот же read-only транскрипт, что и строка в ленте.
+  MCP читает новый `GET /api/mcp` (тот же `mcpList`, что у настроек) и переключает сервер
+  существующим `POST /api/mcp/:id`, честно сообщая про рестарт для поднятия соединений.
+  Оба списка обновляются по SSE (`subagent` / `plugins`) с троттлингом 250 мс.
+  Гвард: `tests/webui-assets.test.ts`, `tests/webui-settings.test.ts`.
+- **Быстрый доступ к настройкам из вкладок сайдбара.** Шорткат открывает группу настроек,
+  соответствующую активной вкладке, а ссылка на группу работает как deep-link.
+  Гвард: `tests/webui-assets.test.ts`.
+- **Компактный сайдбар.** Кнопка «Промпт» переехала над списком Trace (вместо отдельной
+  колонки справа), Activity rail — одна строка, пара «контекст: used / limit» — на одной базе.
+  Гвард: `tests/webui-assets.test.ts`.
+
+### Fixed
+
+- **Исключённые блоки системного промпта выглядели как предупреждение.** В панели промпта
+  блоки с пометкой «исключён» рисовались жёлтым (warn), будто деградация; теперь приглушены.
+  Исключение блока — нормальная работа бюджета, а не ошибка.
+  Гвард: `tests/webui-assets.test.ts`.
+
 ## [0.14.0] - 2026-10-27
 
 ### Fixed
