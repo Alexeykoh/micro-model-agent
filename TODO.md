@@ -191,12 +191,11 @@
 `C:\Users\Alexe\Desktop\mma_test`, Vite + React + Tailwind). Источник —
 `history.jsonl` (строки 55–59, 82–88, 108–114, 144–170).
 
-- [ ] **Изучить сессию `ses_mvoac9q9_ukjrorvcgjrkhyrv`** _(отложено: сессия лежит на
-      другом устройстве в `~/.mma/sessions`; нужен доступ к логам)_ — разобрать по `session.jsonl` /
-      `history.jsonl` / `audit.jsonl`: цепочку вызовов `subagent`, отказы
-      `[SECURITY BLOCKED]` (неизвестный `expert_tag`), падения по лимиту токенов и
-      реакцию пользователя («позакрывай ненужных субагентов», «вот висит три субагента»).
-      Цель — список дефектов с воспроизведением, а не пересказ диалога.
+- [x] **Изучить сессию `ses_mvoac9q9_ukjrorvcgjrkhyrv`** — разобрана по `session.jsonl` /
+      `history.jsonl` / `audit.jsonl` (сессия оказалась на этой машине, не «на другом
+      устройстве»). Результат — [`docs/plans/2026-10-27-subagent-live-session-analysis.md`](./docs/plans/2026-10-27-subagent-live-session-analysis.md):
+      9 вызовов `subagent` (3 успеха, 2 блока по `expert_tag`, 4 падения по лимиту) и
+      дефекты D1–D7 с воспроизведением. _(2026-10-27.)_
 - [x] **Дать инструмент работы с субагентами.** _(Сделано: `subagent_list` +
       `subagent_stop` поверх процессного реестра `src/tools/subagent-registry.ts`;
       `subagent_list` показывает `expert_tag` из конфига; `process_list` в описании
@@ -209,8 +208,13 @@
       (`src/modules/webui/session/subagent-runs.ts`), и чтобы `process_list` не выглядел
       как список субагентов. Плюс доступные `expert_tag` (`code`, `research`, `browser`,
       `vision`) должны быть видны в описании тула, а не только в тексте ошибки.
-- [ ] **Проверить, почему не завершается работа с субагентами.** _(нужны логи
-      сессии с другого устройства — без них воспроизведения нет; см. первый пункт)_ В сессии 4 падения подряд:
+- [x] **Проверить, почему не завершается работа с субагентами.** _(сделано 2026-10-27 в ветке
+      `fix/subagent-reliability`: спека
+      [`2026-10-27-subagent-reliability-design`](../specs/2026-10-27-subagent-reliability-design.md) —
+      джейл `bash` = `baseDir` (§A), обрыв до ответа восстанавливается одним повтором
+      с выключенным reasoning и удвоенным бюджетом (§B). Гейты:
+      `tests/tools/bash-scope.test.ts`, `tests/core/llm-truncation-recovery.test.ts`,
+      `tests/openai-compat.test.ts`, `tests/tools/subagent-max-tokens.test.ts`.)_ В сессии 4 падения подряд:
       «Субагент упал: Ответ упёрся в лимит токенов генерации (8192 / 3000 / 2500 / 900) и
       был обрезан до какого-либо содержимого», `Частичный вывод:` пуст. Задача каждый раз была
       «прочитай N файлов → верни отчёт». Проверить: (1) почему внутренние чтения съедают
