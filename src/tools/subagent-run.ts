@@ -13,6 +13,7 @@ import { resolveExpertProvider } from "../modules/execution/expert-provider";
 import { withTokenCap } from "../llm/token-cap";
 import { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limits";
 import { lookupExpertTag } from "./subagent-expert";
+import { formatSubagentFailure } from "./subagent-model-error";
 import { createSubagentObserver, resultStatus, resultUsage } from "./subagent-observer";
 import { setSubagentRunStop } from "./subagent-registry";
 import type { SubagentUsageRecord } from "./subagent-runs";
@@ -263,10 +264,7 @@ export async function runSubagent(
         return { success: false, output: timeoutReason };
       }
       if (!result.success) {
-        let output = t("tool.subagent_failed", {
-          error: String(result.error),
-          text: result.text,
-        });
+        let output = formatSubagentFailure(String(result.error), result.text, expertTag, expertModel ?? ctx.config.model);
         const scopeReq = scopeCollector.toScopeRequest();
         if (scopeReq) output += `\n${formatScopeRequest(scopeReq)}`;
         observer.finish(
