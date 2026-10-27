@@ -85,9 +85,25 @@ function openSettings(): void {
 }
 // Open settings straight at a panel (used by the reasoning selector when the
 // backend probe failed: the row links to Settings → Reasoning).
-function openSettingsAt(panel: string): void {
+function openSettingsAt(panel: string, anchor?: string): void {
   openSettings();
   selectSettingsPanel(panel);
+  if (anchor) scrollToAnchor(anchor);
+}
+
+/**
+ * Прокрутка к группе внутри панели. `loadPlugins`/`loadLsp` перерисовывают
+ * содержимое уже после открытия, поэтому якорь может появиться на несколько
+ * кадров позже. Ограниченный rAF-поллинг, без вечного ожидания.
+ */
+function scrollToAnchor(id: string, frames = 120): void {
+  const node = document.getElementById(id);
+  if (node) {
+    node.scrollIntoView({ block: "start" });
+    return;
+  }
+  if (frames <= 0 || typeof requestAnimationFrame !== "function") return;
+  requestAnimationFrame(() => scrollToAnchor(id, frames - 1));
 }
 /** Хук для сайдбара: быстрый переход в нужную панель настроек. */
 hooks.openSettingsAt = openSettingsAt;

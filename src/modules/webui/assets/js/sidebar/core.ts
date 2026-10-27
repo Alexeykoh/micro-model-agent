@@ -29,6 +29,12 @@ const SETTINGS_PANEL: Record<string, string> = {
   map: "context",
 };
 
+/** Якоря внутри панели: LSP и MCP — разные группы одной «Plugins · MCP». */
+const SETTINGS_ANCHOR: Record<string, string> = {
+  lsp: "settings-lsp",
+  mcp: "settings-mcp",
+};
+
 let settingsBtn: HTMLElement | null = null;
 
 /** Подпись кнопки: «открыть настройки · <имя панели>» на языке интерфейса. */
@@ -117,7 +123,10 @@ export function initSidebar(): void {
   if (settingsBtn) {
     settingsBtn.appendChild(icon("settings"));
     settingsBtn.addEventListener("click", () => {
-      hooks.openSettingsAt?.(SETTINGS_PANEL[sb.active] || "general");
+      hooks.openSettingsAt?.(
+        SETTINGS_PANEL[sb.active] || "general",
+        SETTINGS_ANCHOR[sb.active],
+      );
     });
   }
   sb.mapEl = document.getElementById("mapBody");

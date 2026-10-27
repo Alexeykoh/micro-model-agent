@@ -37,7 +37,7 @@ function target(row: McpRow): string {
 function configureButton(): HTMLElement {
   const button = el("button", "linkbtn mcp-settings", t("web.mcp.open_settings"));
   button.type = "button";
-  button.addEventListener("click", () => hooks.openSettingsAt?.("plugins"));
+  button.addEventListener("click", () => hooks.openSettingsAt?.("plugins", "settings-mcp"));
   return button;
 }
 

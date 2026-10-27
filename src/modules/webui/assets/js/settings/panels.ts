@@ -528,7 +528,7 @@ function renderPluginsPanel(): void {
   }
   const data = settings.pluginsData;
   const list = el("div", "settings-list");
-  list.appendChild(groupHeader(t("web.settings.plugins_header"), (data.plugins || []).length));
+  list.appendChild(Object.assign(groupHeader(t("web.settings.plugins_header"), (data.plugins || []).length), { id: "settings-plugins" }));
   if (!(data.plugins || []).length) {
     const empty = el("div", "placeholder");
     empty.textContent = t("web.settings.no_plugins");
@@ -566,7 +566,7 @@ function renderPluginsPanel(): void {
   reloadBtn.addEventListener("click", () => void reloadPlugins());
   list.appendChild(reloadBtn);
 
-  list.appendChild(groupHeader(t("web.settings.mcp_servers"), (data.mcp || []).length));
+  list.appendChild(Object.assign(groupHeader(t("web.settings.mcp_servers"), (data.mcp || []).length), { id: "settings-mcp" }));
   const mcpAdd = el("button", "sec-add");
   mcpAdd.type = "button";
   mcpAdd.appendChild(icon("plus"));
@@ -750,7 +750,7 @@ async function submitMcpForm(f: Dict, mode: string, editing: Dict): Promise<void
 
 function renderLspSection(list: HTMLElement): void {
   const servers = settings.lsp;
-  list.appendChild(groupHeader(t("web.settings.lsp_servers"), Array.isArray(servers) ? servers.length : null));
+  list.appendChild(Object.assign(groupHeader(t("web.settings.lsp_servers"), Array.isArray(servers) ? servers.length : null), { id: "settings-lsp" }));
   if (servers === undefined || servers === null) {
     list.appendChild(placeholderFor(servers, t("web.settings.lsp_unavailable")));
     return;

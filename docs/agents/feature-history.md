@@ -1596,7 +1596,8 @@ server: каждый `checkFile` (каждая запись файла, кажд
 - **Быстрый доступ к настройкам** (`sidebar/core.ts`, `settings/modal.ts`,
   `core/store/index.ts`): одна контекстная шестерёнка в шапке сайдбара открывает
   нужную панель через `hooks.openSettingsAt` (Session→Sessions, Files/Map→Context,
-  LSP/Plugins/MCP→Plugins, Trace→UI, Subagents→Agent). У MCP дополнительно явная
+  LSP/Plugins/MCP→Plugins, Trace→UI, Subagents→Agent). LSP/MCP дополнительно
+  прокручиваются к своей группе (`settings-lsp`/`settings-mcp`), у MCP есть явная
   CTA «Настроить MCP-серверы…».
 - **Гварды:** `tests/webui-favicon.test.ts`, `tests/webui-assets.test.ts`,
   `tests/webui-settings.test.ts` (`GET /api/mcp`).
