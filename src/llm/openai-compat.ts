@@ -419,8 +419,7 @@ export class OpenAICompatProvider implements LLMProvider {
     if (!response.ok) {
       cleanup();
       const errorText = await response.text();
-      // Консервативная классификация: context-length 400 → recoverable, чтобы
-      // агент мог реактивно компактить и повторить, а не умереть.
+      // context-length 400 → recoverable: агент компактит и повторяет.
       const kind = classifyProviderError(errorText);
       throw new LlmError(
         t("error.llm_api", {
@@ -429,8 +428,8 @@ export class OpenAICompatProvider implements LLMProvider {
           errorText,
         }),
         kind === "context_length"
-          ? { terminal: true, recoverable: true, kind }
-          : { terminal: true },
+          ? { terminal: true, recoverable: true, kind, llmStatus: response.status }
+          : { terminal: true, llmStatus: response.status },
       );
     }
 
@@ -756,12 +755,13 @@ export class OpenAICompatProvider implements LLMProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(
+        throw new LlmError(
           t("error.llm_api", {
             status: response.status,
             statusText: response.statusText,
             errorText: errorText.slice(0, 500),
           }),
+          { llmStatus: response.status },
         );
       }
 

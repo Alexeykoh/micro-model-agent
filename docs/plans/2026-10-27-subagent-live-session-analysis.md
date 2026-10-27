@@ -143,7 +143,15 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
 отправил одну и ту же фразу (20:54:30, 20:54:54, 20:55:00) и только после смены
 провайдера получил ответ. `provider.json` не содержит `fallback`, поэтому
 детерминированная ошибка не переключает модель.
-`DEBT(llm-provider-error-invisible-to-user)`.
+
+**Разбор кода**: видимость уже была (CLI печатает `result.error` красным,
+веб рисует `turn_end.success=false`, в `session.jsonl` есть событие `error`) —
+не хватало переключения. Оно было **сломано**: `llmStatus` не выставлялся на
+`!response.ok`, поэтому `403`/`404` до политики failover не доходили, а `403` и
+не считался переключаемым. **Исправлено** в ветке `fix/provider-failover`
+(спека [`2026-10-27-provider-failover-design`](../specs/2026-10-27-provider-failover-design.md)):
+статус доезжает из обоих путей, `403` переключает. Долг
+`llm-provider-error-invisible-to-user` оплачен.
 
 ### D7 (minor). `lsp_check` на холодном старте ждёт полный таймаут
 
@@ -184,7 +192,11 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
    вписывает `config.experts` в описание тула и в `expert_tag`, отказ на неизвестный
    тег пишется в `audit.jsonl`, текст ошибки объясняет «эксперт ≠ скилл».
    Гейт: `tests/tools/subagent-expert-tag.test.ts`.
-4. **D6** — не сделано (долг `llm-provider-error-invisible-to-user`).
+4. **D6** — сделано в ветке `fix/provider-failover`: HTTP-статус доезжает до
+   `LlmError` из стрима и non-stream, `403` (регион/лицензия) считается
+   переключаемым наряду с `404/429/5xx`. Спека:
+   [`2026-10-27-provider-failover-design`](../specs/2026-10-27-provider-failover-design.md);
+   гейты: `tests/openai-compat.test.ts`, `tests/providers/fallback-model.test.ts`.
 5. **D7** — сделано в ветке `fix/lsp-check-cold-start`: бюджет прогрева 4 с, проверка
    файла 8 с, честный отчёт о непроверенных файлах; гейт
    `tests/modules/lsp/check-cold-start.test.ts`.

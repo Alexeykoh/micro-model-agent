@@ -31,11 +31,13 @@ export type FailoverListener = (from: string, to: string, error: Error) => void;
 /** Стоит ли ошибка переключения на другой провайдер. */
 export function isFailoverError(err: unknown): boolean {
   if (err instanceof Error && err.name === "AbortError") return false;
-  // HTTP-статус, прикреплённый openai-compat как типизированный LlmError: только ретраируемые.
+  // HTTP-статус, прикреплённый openai-compat как типизированный LlmError.
   if (err instanceof LlmError && typeof err.llmStatus === "number") {
     // 404 «model not found» — тоже повод переключиться: у другого провайдера
-    // своя модель (аудит §7.7).
-    if (err.llmStatus === 404) return true;
+    // своя модель (аудит §7.7). 403 — отказ модели по региону/лицензии:
+    // детерминирован для активного провайдера, но не для чужого
+    // (`ses_mvoac9q9`: RegionError, ход умирал без переключения).
+    if (err.llmStatus === 404 || err.llmStatus === 403) return true;
     return err.llmStatus === 429 || err.llmStatus >= 500;
   }
   // Сетевые падения по errno-коду (Bun: "ConnectionRefused",
