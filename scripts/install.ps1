@@ -181,7 +181,14 @@ try {
 
   $pkg = Join-Path $tmp "pkg"
   New-Item -ItemType Directory -Path $pkg | Out-Null
-  & tar -xzf $tar -C $pkg
+  # Pass the archive by basename from its directory: GNU tar (Git for Windows in
+  # PATH) reads an absolute "C:\..." as host:path and fails with "Cannot connect to C:".
+  Push-Location $downloadDir
+  try {
+    & tar -xzf $artifact -C $pkg
+  } finally {
+    Pop-Location
+  }
   if ($LASTEXITCODE -ne 0) { Die "extraction failed" }
 
   $versionFile = Join-Path $pkg "VERSION"
