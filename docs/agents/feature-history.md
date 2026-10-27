@@ -1593,6 +1593,11 @@ server: каждый `checkFile` (каждая запись файла, кажд
 - **Plugins** (`sidebar/plugins.ts`): тумблер возвращает `true` (мгновенный флип),
   `stopPropagation` не даёт открыть попап, отказ сервера откатывает состояние.
 - **Context** (`feed/sidebar.ts`): знаменатель — полное окно, не history-бюджет.
+- **Prompt popup** (`sidebar/prompt.ts`, `core/agent/prompt-phase.ts`): жёлтый
+  `excluded` заменён на нейтральный пунктир + `⊘` + слово «исключён»; в шапке
+  `{tokens} / {budget}` и счётчики «в промпте / исключено»; причина исключения —
+  в tooltip. `SystemPromptInfo.budget` добавлен в API; чипы — только из
+  `blocks[]` (без дублей из `excluded[]`).
 - **Быстрый доступ к настройкам** (`sidebar/core.ts`, `settings/modal.ts`,
   `core/store/index.ts`): одна контекстная шестерёнка в шапке сайдбара открывает
   нужную панель через `hooks.openSettingsAt` (Session→Sessions, Files/Map→Context,

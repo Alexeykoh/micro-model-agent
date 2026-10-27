@@ -666,6 +666,24 @@ describe("webui assets", () => {
     expect(a.html).toContain('<link rel="icon" href="/api/favicon">');
   });
 
+  it("shows excluded prompt blocks as muted, not as yellow warnings", () => {
+    const a = loadAssets();
+    const prompt = a.jsModules?.["js/sidebar/prompt.js"] || "";
+    expect(prompt).toContain("web.sidebar.prompt_budget");
+    expect(prompt).toContain("web.sidebar.prompt_included_count");
+    expect(prompt).toContain("web.sidebar.prompt_excluded_count");
+    expect(prompt).toContain("web.sidebar.prompt_excluded_hint");
+    expect(prompt).toContain("web.sidebar.prompt_reason_budget");
+    expect(prompt).toContain("⊘ ");
+    // One source of chips: `blocks[]`; `excluded[]` is content, not labels.
+    expect(prompt).not.toContain("data.excluded");
+    // Yellow is reserved for real warnings; excluded = dashed neutral + label.
+    expect(a.css).not.toContain(".prompt-block.excluded { border-color: var(--yellow)");
+    expect(a.css).toContain("border-style: dashed");
+    expect(a.css).toContain(".prompt-block.excluded { border-style: dashed; border-color: var(--dim-c); color: var(--dim-a); }");
+    expect(a.css).toContain(".prompt-hint");
+  });
+
   it("offers one context-aware settings shortcut for every sidebar tab", () => {
     const a = loadAssets();
     expect(a.html).toContain('id="sbSettings"');
