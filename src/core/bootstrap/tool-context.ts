@@ -9,6 +9,7 @@ import type { DraftHost } from "../../modules/plugins/drafts";
 import type { AppConfig, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { ToolContext } from "../../tools/types";
+import { subagentLogEntry } from "../../tools/subagent-session-log";
 import type { Diagnostic } from "../../output/types";
 import { moduleOf } from "../../output";
 import type { GuardDiagnostic } from "../../modules/security/data-policy/types";
@@ -171,6 +172,13 @@ export function createToolContext(input: ToolContextInput): ToolContext {
           ...(iteration !== undefined ? { iteration } : {}),
         });
       },
+    },
+    // Журнал прогонов субагентов: подпоток пишет только факты (старт/тулы/
+    // usage/конец) — историю хода пишет родитель (спека
+    // `2026-10-27-subagent-run-journal-design`).
+    subagentLog: (event) => {
+      const entry = subagentLogEntry(event);
+      if (entry) sessionManager.appendLog(entry);
     },
   } as ToolContext;
 

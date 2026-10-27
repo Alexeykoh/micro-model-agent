@@ -1,6 +1,7 @@
 /** Учёт токенов и стоимости за запуск цикла (API-цифры + fallback-оценка). */
 import type { CostTracker } from "../../modules/pricing/index";
 import type { SessionLogger } from "../session-logger";
+import type { SubagentUsageRecord } from "../../tools/subagent-runs";
 import { estimateTokens } from "../../llm/token-counter";
 import type { CacheUsage } from "../../llm/cache-usage";
 import type { LoopState } from "./loop-state";
@@ -22,6 +23,8 @@ export class TokenTracker {
   constructor(
     private readonly costTracker: CostTracker,
     private readonly getProvenance: () => { provider: string; model: string },
+    /** Приёмник per-call usage прогона (субагент пишет в журнал сессии). */
+    private readonly onUsage?: (usage: SubagentUsageRecord) => void,
   ) {}
 
   /**
@@ -121,6 +124,16 @@ export class TokenTracker {
     // Стоимость от провайдера (OpenCode list_cost) — авторитетный источник;
     // оценка по токенам только когда её нет.
     const costDelta = state.apiCostUsd - (baseline.costBefore ?? 0);
+    this.onUsage?.({
+      promptTokens: prompt,
+      completionTokens: completion,
+      totalTokens: prompt + completion,
+      origin: source,
+      durationMs,
+      iteration,
+      provider: prov.provider,
+      model: prov.model,
+    });
     if (costDelta > 0) {
       this.costTracker.recordActual(costDelta, prov.provider, state.cacheUsage);
       return;

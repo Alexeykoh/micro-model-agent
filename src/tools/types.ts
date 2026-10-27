@@ -111,6 +111,8 @@ export interface ToolContext {
     plan(event: string, detail: string, iteration?: number): void;
     directive(event: string, detail: string, iteration?: number): void;
   };
+  /** Журнал прогонов субагентов (`type:"subagent"`, см. `subagent-runs.ts`). */
+  subagentLog?: (event: import("./subagent-runs").SubagentRunEvent) => void;
   /**
    * Приёмник диагностик fail-open путей тула (INV-15). Ставит
    * `ToolExecutor.setDiagnosticSink`; admission и подобные best-effort швы

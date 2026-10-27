@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Прогон субагента теперь виден в `session.jsonl`.** В `ses_mvoac9q9` между
+  `subagent` call и result было 283 секунды и **ноль** событий: стоимость, число
+  LLM-вызовов, прочитанные файлы и причину падения восстановить было нельзя.
+  Подпоток пишет диагностику в журнал владельца записями `type: "subagent"` и
+  `subagent: <runId>`: `start` (задача, глубина, эксперт, модель), `tool` (тул,
+  успех, длительность, голова вывода), `usage` (per-call токены с `origin`),
+  `end` (статус, итерации, длительность, ошибка). Историю хода по-прежнему пишет
+  только родитель — подпоток не трогает `user`/`assistant` и `meta`. Спека:
+  `docs/specs/2026-10-27-subagent-run-journal-design.md`.
+  Гвард: `tests/tools/subagent-session-log.test.ts`. Долг
+  `subagent-run-invisible-in-session-log` оплачен.
+
 ### Fixed
 
 - **Субагент не угадывает `expert_tag` и не пропадает из audit.** В `ses_mvoac9q9`
