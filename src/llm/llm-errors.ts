@@ -26,10 +26,18 @@ export class LlmError extends Error {
   llmStatus: number | undefined;
   /** Консервативная классификация причины (напр. "context_length"). */
   kind: string | undefined;
+  /** Эффективный `max_tokens` запроса — бюджет, которого не хватило. */
+  limit: number | undefined;
 
   constructor(
     message: string,
-    options: { terminal?: boolean; recoverable?: boolean; llmStatus?: number; kind?: string } = {},
+    options: {
+      terminal?: boolean;
+      recoverable?: boolean;
+      llmStatus?: number;
+      kind?: string;
+      limit?: number;
+    } = {},
   ) {
     super(message);
     this.name = "LlmError";
@@ -37,6 +45,7 @@ export class LlmError extends Error {
     this.recoverable = options.recoverable ?? false;
     this.llmStatus = options.llmStatus;
     this.kind = options.kind;
+    this.limit = options.limit;
   }
 
   /**

@@ -22,6 +22,7 @@ export type DirectiveId =
   | "artifact_churn"
   | "consecutive_failures"
   | "narration"
+  | "truncated"
   | "stalled";
 
 /**

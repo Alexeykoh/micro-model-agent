@@ -37,7 +37,8 @@ export const subagentTool: ToolDefinition = {
       allowed_files: {
         type: "array",
         items: { type: "string" },
-        description: "Files/directories the sub-agent can read and write",
+        description:
+          "Files/directories the sub-agent can read and write. Restricts file tools (read_file, write_file, grep path) and is the write permission for shell; it does NOT restrict the shell's view — bash/grep see the whole project (see tool_tags to deny shell).",
       },
       read_only_files: {
         type: "array",
@@ -47,7 +48,7 @@ export const subagentTool: ToolDefinition = {
       max_tokens: {
         type: "number",
         description:
-          "Cap for the sub-agent's completion tokens (1..32000). Omit to use the provider default.",
+          "Completion budget of one generation (reasoning + answer), 1..32000. If it runs out before any answer arrives, the harness retries once with a doubled budget. Omit to use the provider default.",
       },
       tool_tags: {
         type: "array",

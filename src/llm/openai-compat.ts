@@ -6,6 +6,7 @@ import { readMmaVersion } from "../core/version";
 import { type RateLimiter, createRateLimiter } from "../modules/security/rate-limiter";
 import type { CacheCapability, CacheReportFormat, RateLimitConfig, ReasoningStrategy } from "../config/types";
 import { LlmError } from "./llm-errors";
+import { truncationError } from "./truncation-error";
 import { backoffDelay } from "../utils/retry";
 import { StreamState } from "./stream-state";
 import { parseChunkUsage } from "./usage-parse";
@@ -561,6 +562,7 @@ export class OpenAICompatProvider implements LLMProvider {
               const reasoningDelta = delta.reasoning_content ?? delta.reasoning;
               if (reasoningDelta) {
                 onEmit();
+                st.sawReasoning = true;
                 yield { type: "reasoning", content: reasoningDelta };
               }
 
@@ -623,19 +625,13 @@ export class OpenAICompatProvider implements LLMProvider {
       // finish_reason "tool_calls") и всплывает пустым ответом → слепые
       // hallucination-ретраи. Показываем настоящую причину.
       if (st.lastFinishReason === "length") {
-        const truncatedToolCall = st.sawToolCallStart && toolCallAccs.size > 0;
-        if (truncatedToolCall || !st.sawText) {
-          // Провайдер в порядке — модель просто превысила completion-лимит.
-          // terminal: стрим не ретраим (он завершился корректно); recoverable:
-          // агентный цикл вернёт причину модели, чтобы она адаптировалась
-          // (разбила вывод) вместо смерти сессии.
-          throw new LlmError(
-            t(truncatedToolCall ? "error.llm_truncated_toolcall" : "error.llm_truncated", {
-              tokens: maxTokens,
-            }),
-            { terminal: true, recoverable: true },
-          );
-        }
+        // Провайдер в порядке — модель превысила completion-лимит. terminal:
+        // стрим не ретраим; recoverable: цикл вернёт причину модели.
+        const err = truncationError(
+          { toolCallStarted: st.sawToolCallStart && toolCallAccs.size > 0, sawText: st.sawText, sawReasoning: st.sawReasoning },
+          maxTokens,
+        );
+        if (err) throw err;
         // Текст уже устримлен и не завершён — не глушим ответ, но и не
         // принимаем обрезок молча: отдаём видимое предупреждение.
         yield {
@@ -809,6 +805,15 @@ export class OpenAICompatProvider implements LLMProvider {
           type: "warning",
           content: t("error.llm_output_truncated", { tokens: maxTokens }),
         });
+      }
+
+      // Non-streaming-путь: тот же обрыв ДО ответа, что и в стриме (см. doStream).
+      if (choice.finish_reason === "length") {
+        const truncation = truncationError(
+          { toolCallStarted: Boolean(msg.tool_calls?.length), sawText: Boolean(msg.content), sawReasoning: Boolean(reasoning) },
+          maxTokens,
+        );
+        if (truncation) throw truncation;
       }
 
       // Дописываем usage из ответа API

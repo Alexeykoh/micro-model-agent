@@ -18,10 +18,8 @@ import type { ReasoningEffortResolver } from "./reasoning-resolver";
 import type { SessionLogger } from "../session-logger";
 import type { PolicyState } from "../../modules/reasoning/policy";
 import type { ReasoningState } from "../../tools/set-thinking";
-import { LlmError } from "../../llm/llm-errors";
-import { MAX_LLM_ERROR_RETRIES } from "./constants";
-import { t } from "../../i18n/index";
-import { issueDirective } from "./directives";
+import { handleLlmError } from "./loop-llm-errors";
+import { issueDirective, clearDirective } from "./directives";
 import { detectRepeatedToolCall } from "./loop-repeat";
 
 /** Мутабельный вид `Agent`, которым владеет фаза LLM. */
@@ -105,6 +103,9 @@ export async function runLlmPhase(
     reasoningState: host.reasoningState,
   });
 
+  // Эскалация бюджета после обрыва до ответа: значение живёт ровно один вызов
+  // и снимается вместе с остальными per-итерационными сигналами.
+  const maxTokensOverride = state.iterMaxTokensOverride;
   // Очистка per-итерационных сигналов после потребления политикой.
   clearIterationSignals(state);
   // Решение доступно поверхностям ДО старта генерации (INV-R9), поэтому фаза
@@ -130,9 +131,13 @@ export async function runLlmPhase(
       reasoning.level
         ? {
             reasoningEffort: reasoning.level,
+            ...(maxTokensOverride !== undefined ? { maxTokens: maxTokensOverride } : {}),
             sessionId: deps.sessionManager?.getActiveMeta()?.id,
           }
-        : { sessionId: deps.sessionManager?.getActiveMeta()?.id },
+        : {
+            ...(maxTokensOverride !== undefined ? { maxTokens: maxTokensOverride } : {}),
+            sessionId: deps.sessionManager?.getActiveMeta()?.id,
+          },
     )) {
       if (host.isShutdownRequested()) break;
       if (chunk.type === "text" && chunk.content) {
@@ -207,89 +212,30 @@ export async function runLlmPhase(
       }
     }
   } catch (err) {
-    const e = err as { name?: string; message?: string };
-    if (host.isShutdownRequested() || e?.name === "AbortError") {
-      logger.diagnostic("info", "LLM call aborted (interrupt)");
-      return { kind: "break" };
-    }
-    // Реактивная компакция: context-length ошибка — один раз уплотняем и повторяем.
-    if (
-      err instanceof LlmError &&
-      err.recoverable &&
-      err.kind === "context_length" &&
-      !state.reactiveCompactionUsed
-    ) {
-      state.reactiveCompactionUsed = true;
-      state.iterRecoverableLlmError = true;
-      state.lastCompactionIteration = state.iteration; // общий клок компакции (W4)
-      const reactive = contextManager.compactAdaptive?.({
-        toolResultKeep: contextManager.getToolResultKeep?.() ?? 6,
-        minReduction: 0,
-      });
-      logger.diagnostic(
-        "warn",
-        `Context-length error — reactive compaction (reduced ${reactive?.reducedBy ?? 0} tokens)`,
-      );
-      if (reactive) {
-        slog.logCompaction({
-          reason: "reactive (context-length)",
-          iteration: state.iteration,
-          ...reactive,
-        });
-      }
-      return { kind: "continue" };
-    }
-    // Восстановимые ошибки LLM (например, токен-лимит на середине tool_call):
-    // отдаём локализованную причину обратно в контекст, чтобы модель
-    // адаптировалась вместо смерти всей сессии. Ограничено во избежание цикла.
-    if (
-      err instanceof LlmError &&
-      err.recoverable &&
-      state.llmErrorRetries < MAX_LLM_ERROR_RETRIES
-    ) {
-      state.iterRecoverableLlmError = true;
-      state.llmErrorRetries++;
-      logger.diagnostic(
-        "warn",
-        `Recoverable LLM error, feeding back (${state.llmErrorRetries}/${MAX_LLM_ERROR_RETRIES}): ${err.message}`,
-      );
-      slog.logError({
-        source: "core",
-        operation: "llm.call",
-        kind: "degraded",
-        recoverable: true,
-        cause: err.message,
-      });
-      pluginManager.runOnError({ iteration: state.iteration, logger, contextManager }, err);
-      contextManager.addMessage({
-        role: "user",
-        content: `<system-summary>${err.message}</system-summary>`,
-      });
-      return { kind: "continue" };
-    }
-    const message = e?.message ?? String(err);
-    logger.logLLMResponse(config.model, textContent.length, Date.now() - llmStart, message, "agent");
-    logger.error(`LLM call failed: ${message}`);
-    slog.logError({ source: "core", operation: "llm.call", kind: "failed", cause: message });
-    pluginManager.runOnError(
-      { iteration: state.iteration, logger, contextManager },
-      err instanceof Error ? err : new Error(message),
-    );
-    return {
-      kind: "return",
-      result: {
-        success: false,
-        text: state.lastText,
-        error: t("error.llm", { message }),
-        iterationCount: state.iteration,
-      },
-    };
+    return handleLlmError({
+      isShutdownRequested: () => host.isShutdownRequested(),
+      err,
+      state,
+      logger,
+      slog,
+      pluginManager,
+      contextManager,
+      model: config.model,
+      textLength: textContent.length,
+      llmStart,
+    });
   } finally {
     host.emitPhase(state.iteration, "done", onPhase);
   }
 
   // Провайдер не отдал usage — калибровка помечается stale (>1 вызова).
   if (!sawUsage) contextManager.noteMissingUsage?.();
+
+  // Ответ пришёл — условие директивы «ответь сразу» больше не выполняется
+  // (иначе она осталась бы стоящей и возвращалась после каждой компакции),
+  // а бюджет повтора снова считается свежим.
+  clearDirective(contextManager, "truncated");
+  state.truncationRetries = 0;
 
   // Совокупная длина ответа — метрики валидны, даже когда бэкенд опускает usage.
   tokenTracker.addCompletionChars(state, (textContent || reasoningContent).length);

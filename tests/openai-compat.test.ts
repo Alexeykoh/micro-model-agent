@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { OpenAICompatProvider } from "../src/llm/openai-compat";
+import { t } from "../src/i18n/index";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -1010,8 +1011,51 @@ describe("OpenAICompatProvider", () => {
       expect.unreachable("Should have thrown");
     } catch (e: any) {
       expect(e.message).toContain("maxCompletionTokens");
+      // Причина названа: бюджета не хватило до ответа, а не «вывод длинный».
+      expect(e.kind).toBe("truncated_no_content");
+      expect(e.limit).toBeGreaterThan(0);
     }
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("should name reasoning as the cause when it consumed the whole budget", async () => {
+    const provider = new OpenAICompatProvider({
+      model: "test-model",
+      baseUrl: "http://localhost:1234/v1",
+      retry: { maxRetries: 1, baseDelay: 5, maxDelay: 50, maxStreamRetries: 2 },
+    });
+    const encoder = new TextEncoder();
+    const mockFetch = vi.fn().mockImplementation((_url: string, _init: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        headers: new Map(),
+        body: new ReadableStream({
+          start(controller) {
+            // Модель успела только подумать и встала в лимит.
+            controller.enqueue(
+              encoder.encode(
+                'data: {"choices":[{"delta":{"reasoning_content":"thinking…"},"finish_reason":null}]}\n\n',
+              ),
+            );
+            controller.enqueue(
+              encoder.encode('data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n'),
+            );
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+      }),
+    );
+    global.fetch = mockFetch as any;
+
+    try {
+      for await (const _ of provider.chat([{ role: "user", content: "hi" }])) {
+      }
+      expect.unreachable("Should have thrown");
+    } catch (e: any) {
+      expect(e.kind).toBe("truncated_no_content");
+      expect(e.message).toBe(t("error.llm_truncated_reasoning", { tokens: String(e.limit) }));
+    }
   });
 
   it("should emit a warning chunk (not throw) when streamed text is cut by the length limit", async () => {

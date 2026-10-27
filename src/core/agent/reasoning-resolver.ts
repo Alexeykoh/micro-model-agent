@@ -52,6 +52,13 @@ export class ReasoningEffortResolver {
     const strategy = deps.reasoningStrategy;
     let source: ReasoningSource = "policy";
 
+    // Обрыв генерации ДО ответа: бюджета не хватило именно на рассуждения.
+    // Повышать effort (как сделала бы политика на recoverableLlmError) — значит
+    // гарантированно повторить обрыв. Здесь приоритет выше override и политики.
+    if (state.iterForceNoReasoning) {
+      return { level: "none", strategy, source: "agent_override" };
+    }
+
     const overrideCooldown = reasoningConfig?.overrideCooldown ?? 0;
     const overrideAge = state.iteration - reasoningState.overrideIteration;
     const overrideActive =
