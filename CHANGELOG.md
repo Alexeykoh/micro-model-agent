@@ -4,6 +4,36 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Субагент с `allowed_files` не мог запускать `bash`.** `validateWorkdir`
+  требовал, чтобы cwd лежал внутри одной из записей скоупа, а скоуп — это список
+  файлов; корень проекта в него не попадал, и любой `bash` внутри субагента
+  блокировался (`Workdir is outside the allowed scope for this sub-agent`).
+  В `ses_mvoac9q9` это дало 10 из 13 `security_block`: прогон, которому нужна
+  была сборка, уходил искать обход (`find C:\`, `cmd.exe /c dir`). Теперь cwd
+  джейлится только в `baseDir` (плюс symlink-контейнмент), а скоуп остаётся
+  правом записи: без `allowed_files` shell субагенту не даётся, файловые тулы
+  по-прежнему ограничены скоупом. Спека:
+  `docs/specs/2026-10-27-subagent-reliability-design.md` §A.
+  Гвард: `tests/tools/bash-scope.test.ts`.
+
+- **Обрыв генерации до первого символа ответа больше не считается «длинным
+  выводом».** `finish_reason=length` при `!sawText` означает, что бюджет съели
+  рассуждения; ошибка говорила «разбейте задачу», петля повторяла тот же запрос,
+  а reasoning-политика на `recoverableLlmError` поднимала уровень до `high` —
+  повтор обрывался снова (в `ses_mvoac9q9` три таких прогона: 284 с, 219 с, 89 с).
+  Теперь ошибка несёт `kind="truncated_no_content"` и `limit`, текст называет
+  настоящую причину, а повтор идёт один раз: reasoning выключается (`"none"`),
+  в контекст ставится директива «ответь сразу», бюджет удваивается
+  (`min(limit×2, 32000)`). `withTokenCap` перестал клампить явный лимит вниз,
+  иначе эскалация не доходила до провайдера. Спека:
+  `docs/specs/2026-10-27-subagent-reliability-design.md` §B.
+  Гварды: `tests/core/llm-truncation-recovery.test.ts`,
+  `tests/openai-compat.test.ts`, `tests/tools/subagent-max-tokens.test.ts`.
+
 ## [0.13.6] - 2026-10-26
 
 ### Fixed

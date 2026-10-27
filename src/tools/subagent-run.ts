@@ -121,7 +121,7 @@ export async function runSubagent(
       }),
     };
   }
-  const provider = cap ? withTokenCap(baseProvider, cap) : baseProvider;
+  const provider = cap ? withTokenCap(baseProvider, cap, { maxExplicit: MAX_TOKENS_MAX }) : baseProvider;
 
   // Оборонительный гард: запрошенные tool_tags ни с чем не мэтчатся — у
   // субагента ноль тулов, и он галлюцинирует вместо действий.

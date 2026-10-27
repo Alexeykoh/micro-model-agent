@@ -34,6 +34,17 @@ export const TOOL_ARG_VALUE_MAX_CHARS = 48;
 export const FORCED_COMPACTION_COOLDOWN = 3;
 /** Макс. повторов при восстановимой ошибке LLM (например, токен-лимит). */
 export const MAX_LLM_ERROR_RETRIES = 2;
+/**
+ * Макс. повторов при обрыве генерации ДО первого символа ответа (бюджет съели
+ * рассуждения). Одна попытка: второй заход идёт с выключенным reasoning и
+ * удвоенным бюджетом; если и он оборвался — причина возвращается честно
+ * (спека `2026-10-27-subagent-reliability-design` §B.2).
+ */
+export const MAX_TRUNCATION_RETRIES = 1;
+/** Во сколько раз поднимается completion-бюджет на повтор после обрыва. */
+export const TRUNCATION_CAP_MULTIPLIER = 2;
+/** Потолок эскалации бюджета на повторе (общий лимит `max_tokens` проекта). */
+export const MAX_ESCALATED_COMPLETION_TOKENS = 32000;
 /** Макс. повторов при вердикте халлюцинации "retry". */
 export const MAX_HALLUCINATION_RETRIES = 3;
 /**

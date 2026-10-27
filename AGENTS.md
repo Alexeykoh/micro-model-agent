@@ -182,7 +182,9 @@ recovery-директивы и кап файлов памяти), `tests/core/co
 `tests/core/tool-batch-research-convergence.test.ts` (стойкость research-стрика),
 `tests/core/loop-repeat.test.ts` (каноническая подпись повтора),
 `tests/core/history-budget-threshold.test.ts` (пороги «история против истории»),
-`tests/core/tool-ledger-bounds.test.ts` (границы леджера тулов).
+`tests/core/tool-ledger-bounds.test.ts` (границы леджера тулов),
+`tests/core/llm-truncation-recovery.test.ts` (обрыв генерации до ответа: повтор
+с выключенным reasoning и удвоенным бюджетом, одна попытка).
 
 Живой прогон на 9B (2026-10-22) вскрыл два дефекта, закрытых гвардами:
 `tests/core/system-prompt-freeze.test.ts` (карта проекта — снимок на ход:

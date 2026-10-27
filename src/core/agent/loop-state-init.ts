@@ -87,10 +87,13 @@ export function createLoopState(): LoopState {
     finalAnswerAccepted: false,
     suppressRepetitionRetry: false,
     llmErrorRetries: 0,
+    truncationRetries: 0,
     iterHallucinationRetry: false,
     iterAuditRejection: false,
     iterRecoverableLlmError: false,
     iterPlanCreated: false,
     iterRepetitive: false,
+    iterForceNoReasoning: false,
+    iterMaxTokensOverride: undefined,
   };
 }

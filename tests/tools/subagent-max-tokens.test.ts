@@ -46,6 +46,24 @@ describe("max_tokens субагента", () => {
     expect(seen[0].maxTokens).toBe(100);
   });
 
+  it("lets an explicit larger limit through for budget escalation", async () => {
+    // Петля один раз поднимает бюджет после обрыва до ответа
+    // (спека `2026-10-27-subagent-reliability-design` §B.3).
+    const { provider, seen } = spyProvider();
+    const capped = withTokenCap(provider, 400, { maxExplicit: 32000 });
+    await drain(capped.chat([{ role: "user", content: "x" }], undefined, undefined, { maxTokens: 800 }));
+    expect(seen[0].maxTokens).toBe(800);
+  });
+
+  it("clamps an explicit limit to the hard ceiling", async () => {
+    const { provider, seen } = spyProvider();
+    const capped = withTokenCap(provider, 400, { maxExplicit: 32000 });
+    await drain(
+      capped.chat([{ role: "user", content: "x" }], undefined, undefined, { maxTokens: 999999 }),
+    );
+    expect(seen[0].maxTokens).toBe(32000);
+  });
+
   it("keeps the provider identity", () => {
     const { provider } = spyProvider();
     const capped = withTokenCap(provider, 400);

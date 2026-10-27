@@ -142,8 +142,15 @@ export function isPathInScope(
 
 /**
  * Workdir тула `bash` (аудит §4.1): рабочий каталог обязан лежать внутри
- * `baseDir` и — для субагента — внутри его скоупа. Без этой проверки модель
- * одной командой уходила за пределы проекта (`workdir: C:\Users\…`).
+ * `baseDir`. Без этой проверки модель одной командой уходила за пределы
+ * проекта (`workdir: C:\Users\…`).
+ *
+ * Скоуп субагента здесь НЕ ограничивает cwd (спека
+ * `2026-10-27-subagent-reliability-design` §A): `allowed_files` — список файлов,
+ * а `bash` работает каталогом, и команда с cwd `src/` всё равно читает
+ * `../package.json`. Граница shell — `baseDir`; настоящий ограничитель — набор
+ * тулов (`bash` живёт под тегом `shell`, которого у ребёнка может не быть).
+ * Скоуп остаётся правом записи: без `allowed_files` shell субагенту не даётся.
  *
  * Проверка лексическая + symlink-контеймент: `bash` не умеет работать с
  * несуществующим каталогом, поэтому «путь не создан» — не повод пропустить.
@@ -171,20 +178,14 @@ export function validateWorkdir(
 
   if (!scope) return { allowed: true };
 
-  // Скоуп субагента: `bash` — тул с записью, поэтому корень берём из
-  // `allowed_files`. Read-only-скоуп (`read_only_files`) тулу с записью не
-  // подходит: работать там можно только на чтение, а `bash` этого не умеет.
-  const roots = scope.allowed_files.map((f) => resolve(baseDir, f));
-  if (roots.length === 0) {
+  // Скоуп субагента: `bash` — тул с записью, поэтому право на него даёт
+  // непустой `allowed_files`. Read-only-скоуп (`read_only_files`) тулу с
+  // записью не подходит: работать там можно только на чтение, а `bash` этого
+  // не умеет. Куда указывает cwd, не проверяем — см. комментарий функции.
+  if (scope.allowed_files.length === 0) {
     return {
       allowed: false,
       reason: "Sub-agent has no writable scope for bash",
-    };
-  }
-  if (!roots.some((root) => matchesScopeEntry(targetResolved, root))) {
-    return {
-      allowed: false,
-      reason: "Workdir is outside the allowed scope for this sub-agent",
     };
   }
   return { allowed: true };

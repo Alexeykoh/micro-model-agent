@@ -243,6 +243,12 @@ export interface LoopState {
   suppressRepetitionRetry: boolean;
   /** Счётчик восстановимых ошибок LLM. */
   llmErrorRetries: number;
+  /** Счётчик повторов после обрыва генерации до первого символа ответа. */
+  truncationRetries: number;
+  /** Прошлая итерация оборвалась до ответа — на этом вызове reasoning выключен. */
+  iterForceNoReasoning: boolean;
+  /** Явный `max_tokens` на этот вызов (эскалация бюджета); undefined — дефолт. */
+  iterMaxTokensOverride: number | undefined;
 
   // Per-итерационные сигналы для reasoning policy. Сбрасываются каждый ход.
   /** Предыдущая итерация завершилась повтором из-за халлюцинации. */
@@ -288,5 +294,7 @@ export function clearIterationSignals(state: LoopState): void {
   state.iterRecoverableLlmError = false;
   state.iterPlanCreated = false;
   state.iterRepetitive = false;
+  state.iterForceNoReasoning = false;
+  state.iterMaxTokensOverride = undefined;
 }
 

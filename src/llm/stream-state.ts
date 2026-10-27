@@ -14,6 +14,8 @@ import type { CacheUsage } from "./cache-usage";
 export class StreamState {
   sawDone = false;
   sawText = false;
+  /** Модель отдала рассуждения — для честной формулировки обрыва. */
+  sawReasoning = false;
   /** tool_call начал накапливаться — сервер закоммитился на ответ. */
   sawToolCallStart = false;
   parsedChunks = 0;
@@ -38,6 +40,7 @@ export class StreamState {
       sawDone: this.sawDone,
       lastFinishReason: this.lastFinishReason ?? null,
       sawText: this.sawText,
+      sawReasoning: this.sawReasoning,
       sawToolCallStart: this.sawToolCallStart,
       parsedChunks: this.parsedChunks,
       nonDataLines: this.nonDataLines,
