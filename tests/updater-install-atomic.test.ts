@@ -17,6 +17,7 @@ import {
   type InstallReleaseOptions,
   type InstallStep,
 } from "../src/modules/updater/install-release";
+import { tarPlan } from "../src/modules/updater/archive";
 import { Updater } from "../src/modules/updater/checker";
 import { UpdaterModule } from "../src/modules/updater/module";
 import type { ReleaseManifest, ReleasePlatformKey } from "../src/modules/updater/release";
@@ -281,5 +282,18 @@ describe("updater lifecycle", () => {  it("stops cleanly and resolves the idle p
     expect(second.error).toMatch(/in progress/i);
     release();
     await expect(first).resolves.toMatchObject({ success: true });
+  });
+});
+
+describe("tar: путь с буквой диска не уходит в аргумент", () => {
+  it("архив передаётся basename при cwd (GNU tar читает C: как host:path)", () => {
+    const plan = tarPlan(String.raw`C:\tmp\mma.tar.gz`, String.raw`C:\tmp\dest`);
+    expect(plan.cwd.replace(/\\/g, "/")).toBe("C:/tmp");
+    expect(plan.list[1]).toBe("mma.tar.gz");
+    expect(plan.extract[1]).toBe("mma.tar.gz");
+    // Именно имя архива GNU tar трактует как `host:path`; `-C` — обычный путь.
+    for (const arg of [...plan.list, ...plan.extract].filter((a) => a.endsWith(".tar.gz"))) {
+      expect(arg, `drive-letter path leaked to tar archive arg: ${arg}`).not.toMatch(/^[A-Za-z]:/);
+    }
   });
 });

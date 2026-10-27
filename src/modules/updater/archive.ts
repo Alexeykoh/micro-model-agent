@@ -5,9 +5,11 @@
  * проверка списка членов архива — транспорт, а не логика установки.
  */
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import type { FetchLike } from "./release";
+import { execTar, tarPlan } from "./tar";
+
+export { tarPlan } from "./tar";
 
 /** Стадия установки для прогресса в UI/консоли. */
 export interface InstallProgress {
@@ -245,12 +247,10 @@ export async function sha256File(path: string): Promise<string> {
 
 /** Распаковка `.tar.gz` системным `tar` с проверкой списка членов архива. */
 export async function extractTarGz(tarball: string, dest: string): Promise<void> {
-  const listing = await execTar(["-tzvf", tarball]);
+  const { cwd, list, extract } = tarPlan(tarball, dest);
+  const listing = await execTar(list, cwd);
   assertSafeTarMembers(listing);
-  const flags = ["-xzf", tarball, "-C", dest];
-  // GNU/busybox понимают флаг, bsdtar на Windows — нет; владелец там не при чём.
-  if (process.platform !== "win32") flags.push("--no-same-owner");
-  await execTar(flags);
+  await execTar(extract, cwd);
 }
 
 /**
@@ -275,13 +275,4 @@ export function assertSafeTarMembers(listing: string): void {
       throw new Error(`refusing unsafe archive member: ${name}`);
     }
   }
-}
-
-/** Запускает `tar` и возвращает stdout (stderr — в текст ошибки). */
-function execTar(args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile("tar", args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) =>
-      err ? reject(new Error(`tar failed: ${stderr || err.message}`)) : resolve(stdout),
-    );
-  });
 }

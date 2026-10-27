@@ -58,7 +58,11 @@ function buildArtifact(): Buffer {
   writeFileSync(join(pkg, "VERSION"), `${version}\n`);
   writeFileSync(join(pkg, "app", "main.js"), "console.log('0.0.1');\n");
   writeFileSync(join(pkg, "padding.bin"), randomBytes(256 * 1024));
-  const tar = spawnSync("tar", ["-czf", out, "-C", pkg, "."], { encoding: "utf8" });
+  // Относительные имена + cwd: абсолютный \`C:\\…\` GNU tar читает как host:path.
+  const tar = spawnSync("tar", ["-czf", "mma.tar.gz", "-C", "package", "."], {
+    cwd: workDir,
+    encoding: "utf8",
+  });
   if (tar.status !== 0) throw new Error(`tar failed: ${tar.stderr}`);
   return readFileSync(out);
 }
