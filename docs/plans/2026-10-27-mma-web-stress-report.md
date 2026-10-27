@@ -85,6 +85,26 @@ Security-заголовки на всех endpoint'ах; XSS-защита фро
 `refresh` / `find` корректны; `prune --dry-run` считает верно (12 пустых в
 песочнице); зрелость plugin manager (`getFailures`, `adoptPlugin`, дедуп semver).
 
+## Волна 2 (продолжение, тот же стенд)
+
+Проверено, проблем нет:
+
+- Делегирование субагенту на `deepseek-v4.1-flash` end-to-end работает:
+  one-shot с требованием делегировать вернул точный список 7 `.tsx` из
+  `src/components` за 2 итерации, ~26.7k токенов, ~$0.0032, cache hitRate 0.23.
+  Путь, которого касается вмерженный хинт `model-unavailable`, на этом провайдере
+  не стреляет.
+- Зонд индекса: создание файла с уникальным токеном → `refresh` → удаление →
+  `refresh`. Финальное состояние консистентно (19 файлов, `filesRevision: 2`,
+  следов зонда нет). Уточнение к методике: `map find` ищет по символу/пути
+  (`module.ts:174 rankFiles`), а не по содержимому — `find MMA_PROBE_123` честно
+  вернул «no matches»; контрольный `find App` → `src/App.tsx`.
+- `POST /api/message` с `{}` → 200 `{ok:true, noop:true}` — осознанный no-op без
+  LLM-вызова (`turns.ts:252-256`), не дыра валидации и не трата токенов.
+- `GET /api/неизвестный` → 404. stderr сервера пуст, `/api/state` здоров
+  (`busy:false`, `projectMap.files:19`, вотчер активен, `contextProbe.actual`
+  для deepseek — 1000000).
+
 ## Отложено (по решению пользователя)
 
 - Пуш мержа в `origin/master` — нет.
