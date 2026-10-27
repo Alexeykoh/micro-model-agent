@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Субагент не угадывает `expert_tag` и не пропадает из audit.** В `ses_mvoac9q9`
+  модель дважды отправила `expert_tag: "code-review"` (имя скилла, не эксперта):
+  список валидных тегов был только в тексте ошибки, отказ не писался в
+  `audit.jsonl`, и после `load_skill` модель повторила тот же вызов. Теперь
+  `registerAllTools` вписывает `Object.keys(config.experts)` в описание тула и его
+  `expert_tag`, отказ вызывает `logSecurityBlock`, а текст подсказывает различие
+  «эксперт vs скилл» и путь `tool_tags`.
+  Гвард: `tests/tools/subagent-expert-tag.test.ts`.
+
 - **Субагент с `allowed_files` не мог запускать `bash`.** `validateWorkdir`
   требовал, чтобы cwd лежал внутри одной из записей скоупа, а скоуп — это список
   файлов; корень проекта в него не попадал, и любой `bash` внутри субагента

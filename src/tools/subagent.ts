@@ -70,3 +70,37 @@ export const subagentTool: ToolDefinition = {
   },
   handler: runSubagent,
 };
+
+/**
+ * Тул `subagent` с перечисленными `expert_tag` из конфига.
+ *
+ * Схема тула собирается один раз при регистрации, а конфиг известен только в
+ * bootstrap — поэтому список тегов вписывается там (спека не нужна: контракт
+ * аргументов не меняется, меняется текст подсказки). Без этого модель угадывает
+ * тег по имени скилла (`code-review`) и повторяет тот же вызов
+ * (`ses_mvoac9q9`, дефект D5).
+ */
+export function subagentToolWithExperts(tags: string[]): ToolDefinition {
+  if (tags.length === 0) return subagentTool;
+  const list = tags.join(", ");
+  const params = subagentTool.parameters as {
+    type: "object";
+    properties: Record<string, { description?: string }>;
+    required?: string[];
+  };
+  const expert = params.properties.expert_tag ?? {};
+  return {
+    ...subagentTool,
+    description: `${subagentTool.description} Configured expert_tag values: ${list}.`,
+    parameters: {
+      ...params,
+      properties: {
+        ...params.properties,
+        expert_tag: {
+          ...expert,
+          description: `${expert.description ?? ""} One of: ${list}. This is a configured expert, NOT a skill name — skills are loaded with load_skill; use tool_tags to pick tools explicitly.`,
+        },
+      },
+    },
+  };
+}

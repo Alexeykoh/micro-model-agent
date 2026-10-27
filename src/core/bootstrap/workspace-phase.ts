@@ -140,6 +140,7 @@ export async function setupWorkspacePhase(
   const toolRegistry = new ToolRegistry();
   registerAllTools(toolRegistry, skillsModule, {
     enableOnDemand: config.tools?.enableOnDemand,
+    expertTags: Object.keys(config.experts ?? {}),
   });
 
   const pluginManager = new PluginManager();

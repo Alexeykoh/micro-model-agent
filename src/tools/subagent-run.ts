@@ -9,10 +9,10 @@ import type { PromptBlock } from "../core/types";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
-import { getExpertConfig } from "../config/experts";
 import { resolveExpertProvider } from "../modules/execution/expert-provider";
 import { withTokenCap } from "../llm/token-cap";
 import { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limits";
+import { lookupExpertTag } from "./subagent-expert";
 import { createSubagentObserver, resultStatus, resultUsage } from "./subagent-observer";
 import { setSubagentRunStop } from "./subagent-registry";
 import { createSubagentWatchdog } from "./subagent-watchdog";
@@ -84,16 +84,10 @@ export async function runSubagent(
   let toolTags = explicitTags;
   let expertModel: string | undefined;
   if (expertTag) {
-    const expert = getExpertConfig(ctx.config, expertTag);
-    if (!expert) {
-      const known = Object.keys(ctx.config.experts ?? {});
-      return {
-        success: false,
-        output: `[SECURITY BLOCKED] Unknown expert_tag "${expertTag}". Known experts: [${known.join(", ") || "none"}]. Pass a configured expert tag or explicit tool_tags.`,
-      };
-    }
-    expertModel = expert.model;
-    if (!toolTags || toolTags.length === 0) toolTags = expert.tool_tags;
+    const lookup = lookupExpertTag(ctx, expertTag);
+    if (lookup.refusal) return { success: false, output: lookup.refusal };
+    expertModel = lookup.expert?.model;
+    if (!toolTags || toolTags.length === 0) toolTags = lookup.expert?.tool_tags;
   }
 
   if (!ctx.llmProvider || !ctx.toolExecutor) {

@@ -166,8 +166,10 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
    исправлено. Гейты: `tests/tools/bash-scope.test.ts`,
    `tests/core/llm-truncation-recovery.test.ts`, `tests/openai-compat.test.ts`,
    `tests/tools/subagent-max-tokens.test.ts`.
-2. **D5** — перечислить конфигурируемые `expert_tag` в описании тула + `logSecurityBlock`
-   в ветке unknown expert; тест на audit-запись. Не сделано.
+2. **D5** — сделано в ветке `fix/subagent-expert-tag-schema`: `registerAllTools`
+   вписывает `config.experts` в описание тула и в `expert_tag`, отказ на неизвестный
+   тег пишется в `audit.jsonl`, текст ошибки объясняет «эксперт ≠ скилл».
+   Гейт: `tests/tools/subagent-expert-tag.test.ts`.
 3. **D4, D6** — оплата долгов по их триггерам. Не сделано.
 
 ## 5. Как повторить разбор
