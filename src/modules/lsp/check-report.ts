@@ -17,6 +17,8 @@ export interface CheckAccumulator {
   checked: number;
   inconclusive: number;
   suppressed: number;
+  /** Файлы, пропущенные из-за холодного старта сервера (ждать 30 с бессмысленно). */
+  cold: number;
 }
 
 /**
@@ -54,6 +56,10 @@ export function renderCheckReport(acc: CheckAccumulator): ToolResult {
     lines.push(
       t("lsp.check_silent", { silent: String(acc.inconclusive), total: String(acc.checked) }),
     );
+  }
+  // Холодный старт: файлы не проверены вовсе — это не «чисто» и не «молчание».
+  if (acc.cold > 0) {
+    lines.push(t("lsp.check_cold", { count: String(acc.cold) }));
   }
   lines.push(...acc.notes);
   if (acc.checked === 0) {
