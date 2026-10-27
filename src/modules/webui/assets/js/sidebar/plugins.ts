@@ -12,33 +12,9 @@ import { setIndicator } from "../dialog.js";
 import { openSubDialog } from "../subdialog.js";
 import type { Dict } from "../core/store/types.js";
 import { sb } from "./state.js";
-
-/**
- * Одна запись плагина из `GET /api/plugins`. Сервер — источник правды, поля
- * расширяются ядром, поэтому здесь намеренно свободная форма (то же, что
- * `Dict` в остальных вкладках).
- */
-type PluginRow = Dict & { name: string; enabled: boolean };
+import { badges, descriptionLine, pluginGlyph, rowMeta, type PluginRow } from "./plugin-meta.js";
 
 let redrawPopup: (() => void) | null = null;
-
-/** Глиф и класс состояния: включён / выключен / не загрузился / с предупреждениями. */
-function pluginGlyph(row: PluginRow): [string, string] {
-  if (!row.enabled) return ["–", "dim"];
-  if ((row.warnings as string[] | undefined)?.length) return ["⚠", "warn"];
-  return ["✓", "ok"];
-}
-
-/** Версия и автор — разными спанами: версия dim, автор акцентом. */
-function rowMeta(row: PluginRow): DocumentFragment {
-  const frag = document.createDocumentFragment();
-  if (row.version) frag.appendChild(el("span", "plg-ver", "v" + String(row.version)));
-  if (row.author) {
-    if (row.version) frag.appendChild(document.createTextNode(" · "));
-    frag.appendChild(el("span", "plg-author", String(row.author)));
-  }
-  return frag;
-}
 
 /** Строка плагина: глиф, имя, мета, описание, тумблер. */
 function pluginRow(row: PluginRow): HTMLElement {
@@ -49,29 +25,30 @@ function pluginRow(row: PluginRow): HTMLElement {
   node.appendChild(rowMeta(row));
   if (badges(row)) node.appendChild(el("span", "plg-badges", badges(row)));
 
-  const toggle = makeToggle(!!row.enabled, (next) => {
-    void togglePlugin(row.name, next);
-    return false; // состояние перерисовывается из ответа сервера
+  const previous = !!row.enabled;
+  const toggle = makeToggle(previous, (next) => {
+    row.enabled = next;
+    void togglePlugin(row.name, next).then((ok) => {
+      if (ok) return;
+      // Сервер отказал — откатываем оптимистичный флип, чтобы UI не врал.
+      row.enabled = previous;
+      renderPlugins();
+      redrawPopup?.();
+    });
+    return true; // тумблер переключается сразу; ответ сервера подтверждает
   });
   toggle.title = t(row.enabled ? "web.plugins.disable" : "web.plugins.enable");
   toggle.setAttribute("aria-label", t(row.enabled ? "web.plugins.disable" : "web.plugins.enable"));
+  // Клик по тумблеру не должен открывать попап строки (row click ниже).
+  toggle.addEventListener("click", (e) => e.stopPropagation());
   node.appendChild(toggle);
 
   node.addEventListener("click", () => openPluginDialog(row));
   return node;
 }
 
-/** Чипсы источника/черновика: `builtin`, `project`, `draft`. */
-function badges(row: PluginRow): string {
-  const out: string[] = [];
-  if (row.draft) out.push(t("web.plugins.badge_draft"));
-  else if (row.builtin) out.push(t("web.plugins.badge_builtin"));
-  else if (row.source) out.push(String(row.source));
-  return out.join(" · ");
-}
-
 /** Тумблер: `POST /api/plugins/:name {enabled}` — живо, без рестарта. */
-async function togglePlugin(name: string, on: boolean): Promise<void> {
+async function togglePlugin(name: string, on: boolean): Promise<boolean> {
   const res = await api<Dict>("/api/plugins/" + encodeURIComponent(name), {
     method: "POST",
     body: { enabled: on },
@@ -79,11 +56,12 @@ async function togglePlugin(name: string, on: boolean): Promise<void> {
   if (!res.ok || !res.data || res.data.ok !== true) {
     const err = (res.data && (res.data.error as string)) || String(res.status);
     setIndicator(err === "not_found" ? t("cli.plugins.not_found", { name }) : t("web.plugins.toggle_failed"), true);
-    return;
+    return false;
   }
   adopt(res.data);
   renderPlugins();
   redrawPopup?.();
+  return true;
 }
 
 /** Принять свежие записи/отказы из ответа (истина — сервер). */
@@ -91,14 +69,6 @@ function adopt(payload: Dict): void {
   const records = (payload.plugins as PluginRow[] | undefined) || [];
   sb.plugins.records = records;
   sb.plugins.failures = (payload.failures as Dict[]) || [];
-}
-
-/** Дима-строка описания под строкой. */
-function descriptionLine(row: PluginRow): HTMLElement | null {
-  const text = String(row.description || "").trim();
-  if (!text) return null;
-  const line = el("div", "plg-desc", text.length > 90 ? text.slice(0, 89) + "…" : text);
-  return line;
 }
 
 function renderSummary(host: HTMLElement): void {
@@ -220,9 +190,16 @@ function drawPluginInfo(box: HTMLElement, row: PluginRow): void {
 
   const toggleRow = el("div", "kv lsp-toggle");
   toggleRow.appendChild(el("span", "dim", t("web.plugins.switch_enabled")));
-  const toggle = makeToggle(!!row.enabled, (next) => {
-    void togglePlugin(row.name, next);
-    return false;
+  const previous = !!row.enabled;
+  const toggle = makeToggle(previous, (next) => {
+    row.enabled = next;
+    void togglePlugin(row.name, next).then((ok) => {
+      if (ok) return;
+      row.enabled = previous;
+      renderPlugins();
+      redrawPopup?.();
+    });
+    return true; // в попапе тумблер тоже обязан реагировать сразу
   });
   toggle.title = t("web.plugins.switch_enabled");
   toggleRow.appendChild(toggle);

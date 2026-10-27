@@ -38,6 +38,12 @@ export interface StoreHooks {
   afterHistory?: ((id: string) => void) | null;
   /** Перед заменой ленты в `#msgs` (закрывает вид субагента, если открыт). */
   beforeFeedMount?: (() => void) | null;
+  /**
+   * Открыть настройки сразу на нужной панели (и, если задан, прокрутить к
+   * якорю внутри неё). Регистрирует `settings/modal.ts`; сайдбар зовёт через
+   * хук, чтобы не тянуть настройки в свой граф.
+   */
+  openSettingsAt?: ((panel: string, anchor?: string) => void) | null;
 }
 
 export const hooks: StoreHooks = { applyStaticI18n: null };

@@ -22,6 +22,7 @@ describe("GET /api/sessions/:id/system-prompt", () => {
           getSystemPromptInfo: () => ({
             text: "SYSTEM",
             tokenCount: 3,
+            budget: 100,
             excluded: ["map"],
             blocks: [{ label: "system", priority: "high", tokens: 3, included: true }],
           }),
@@ -34,6 +35,7 @@ describe("GET /api/sessions/:id/system-prompt", () => {
       available: true,
       text: "SYSTEM",
       tokenCount: 3,
+      budget: 100,
       excluded: ["map"],
       blocks: [{ label: "system", priority: "high", tokens: 3, included: true }],
     });

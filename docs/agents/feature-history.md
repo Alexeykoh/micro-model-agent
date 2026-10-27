@@ -1573,6 +1573,40 @@ server: каждый `checkFile` (каждая запись файла, кажд
 - **`killTree` параметризован структурным `KillableProcess`** (`processes/kill-tree.ts`);
   `ChildProcess` его удовлетворяет — вызовы не менялись.
 
+### Web: favicon, Subagents/MCP tabs, compact rail (unreleased, ветка `feat/webui-sidebar-favicon`)
+
+Спека: [2026-10-27-webui-sidebar-favicon-design.md](../specs/2026-10-27-webui-sidebar-favicon-design.md).
+
+- **Favicon** (`webui/favicon.ts`, `index.html`): `GET /api/favicon` ищет
+  `favicon.{ico,png,svg,webp,gif}` в корне и типовых static-каталогах workspace
+  (кап 512 KiB), иначе отдаёт встроенный SVG-маскот. Тело — `Buffer`: egress
+  редактирует строки и может сломать `Content-Length` бинарной иконки.
+- **Subagents tab** (`assets/js/sidebar/subagents.ts`): `GET /api/sessions/:id/subagents`,
+  снимки мержатся в общие run-буферы, клик → `openRun`; SSE `subagent` перечитывает
+  список с троттлингом. **MCP tab** (`sidebar/mcp.ts`): новый `GET /api/mcp` (общий
+  `mcpList` с настройками) + существующий `POST /api/mcp/:id`. `TABS` вырос до 8,
+  `Alt+1..8` выводится из массива.
+- **Trace** (`index.html`, `styles.css`): head+list — один `.trace-main`, поэтому
+  «Промпт» снова над списком, а detail остаётся слева (`row-reverse`).
+- **Rail** (`styles.css`, `rail.ts`): `l-line` без переноса; пустой `last` скрывает
+  и значение, и разделитель.
+- **Plugins** (`sidebar/plugins.ts`): тумблер возвращает `true` (мгновенный флип),
+  `stopPropagation` не даёт открыть попап, отказ сервера откатывает состояние.
+- **Context** (`feed/sidebar.ts`): знаменатель — полное окно, не history-бюджет.
+- **Prompt popup** (`sidebar/prompt.ts`, `core/agent/prompt-phase.ts`): жёлтый
+  `excluded` заменён на нейтральный пунктир + `⊘` + слово «исключён»; в шапке
+  `{tokens} / {budget}` и счётчики «в промпте / исключено»; причина исключения —
+  в tooltip. `SystemPromptInfo.budget` добавлен в API; чипы — только из
+  `blocks[]` (без дублей из `excluded[]`).
+- **Быстрый доступ к настройкам** (`sidebar/core.ts`, `settings/modal.ts`,
+  `core/store/index.ts`): одна контекстная шестерёнка в шапке сайдбара открывает
+  нужную панель через `hooks.openSettingsAt` (Session→Sessions, Files/Map→Context,
+  LSP/Plugins/MCP→Plugins, Trace→UI, Subagents→Agent). LSP/MCP дополнительно
+  прокручиваются к своей группе (`settings-lsp`/`settings-mcp`), у MCP есть явная
+  CTA «Настроить MCP-серверы…».
+- **Гварды:** `tests/webui-favicon.test.ts`, `tests/webui-assets.test.ts`,
+  `tests/webui-settings.test.ts` (`GET /api/mcp`).
+
 ### Web User Attachments — Layout & Persist (unreleased, ветка `feat/webui-answer-panel`)
 
 Живой прогон: вложения пользователя рисовались inline после текста (`> текст [img]`),

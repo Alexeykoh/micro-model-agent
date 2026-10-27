@@ -6,6 +6,7 @@ import { t } from "../i18n.js";
 import { labelOf, categoryOf, argText, formatMs } from "../format.js";
 import type { Dict } from "../core/store/types.js";
 import { sb, paneEl, TRACE_CAP, MAX_OUTPUT_CHARS, type TraceEntry } from "./state.js";
+import { sidebarSubagentsSessionChanged } from "./subagents.js";
 
 function phaseLabel(phase: unknown): string {
   if (phase === "composing") return t("web.rail.composing");
@@ -194,6 +195,7 @@ export function sidebarSessionChanged(sid: string | null | undefined): void {
   sb.logPulling = false;
   collapseDetail();
   renderList();
+  sidebarSubagentsSessionChanged();
 }
 
 /** Сессия, которой сейчас принадлежит сайдбар (dataset.sid), или null. */

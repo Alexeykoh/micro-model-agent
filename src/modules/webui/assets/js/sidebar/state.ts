@@ -4,11 +4,11 @@
 import type { Dict } from "../core/store/types.js";
 
 export const TAB_KEY = "mma-sidebar-tab";
-// Display order of the tabs — and, because `Alt+1..6` indexes this array, the
+// Display order of the tabs — and, because `Alt+1..8` indexes this array, the
 // order of the hotkeys too. Usage frequency first (what you look at while a
 // turn runs), diagnostics in the middle, the project-wide map last: it is the
 // one tab you open deliberately rather than by reflex.
-export const TABS = ["session", "files", "lsp", "trace", "plugins", "map"];
+export const TABS = ["session", "files", "lsp", "trace", "subagents", "plugins", "mcp", "map"];
 // Иконки вкладок подобраны так, чтобы читаться в 17px: плотные lucide-иконки
 // (складная карта, стетоскоп, пазл) на таком размере сливаются в пятно.
 export const ICON_NAME: Record<string, string> = {
@@ -17,7 +17,9 @@ export const ICON_NAME: Record<string, string> = {
   trace: "activity",
   lsp: "code",
   files: "folder-tree",
+  subagents: "users",
   plugins: "plug",
+  mcp: "server",
 };
 export const TRACE_CAP = 500;
 export const MAX_OUTPUT_CHARS = 20000;

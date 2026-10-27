@@ -170,7 +170,14 @@ export function renderUsage(h: Dict): void {
   usageEl.appendChild(usageSessionRow(sid));
   usageEl.appendChild(usageRow(t("web.usage.model"), h.model || cfg.model || "—"));
   const used = typeof h.contextUsed === "number" ? h.contextUsed : null;
-  const limit = typeof h.contextLimit === "number" ? h.contextLimit : cfg.contextWindow || null;
+  // Оба числа — на одной базе: `contextUsed` включает system + tools, поэтому
+  // знаменатель — полное окно, а не history-бюджет (`contextLimit`, ~75% окна),
+  // иначе пара читалась как «19.6K / 98.3K» при окне 131K.
+  const bdWindow = h.contextBreakdown && typeof h.contextBreakdown.window === "number"
+    ? h.contextBreakdown.window
+    : null;
+  const limit = bdWindow ?? (typeof h.contextWindow === "number" ? h.contextWindow : null) ??
+    (typeof h.contextLimit === "number" ? h.contextLimit : cfg.contextWindow || null);
   usageEl.appendChild(usageRow(t("web.usage.context"), used != null && limit ? fmtTokens(used) + " / " + fmtTokens(limit) : "—"));
   if (used != null && limit) {
     usageEl.appendChild(contextSegBar(h, used, limit));

@@ -56,7 +56,7 @@ function mcpViewOptionals(cfg: MCPServerConfigEntry): Partial<McpServerView> {
   return out;
 }
 
-function mcpList(s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): McpServerView[] {
+export function mcpList(s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): McpServerView[] {
   const servers = s.config?.mcpServers ?? {};
   return Object.entries(servers).map(([key, cfg]) => ({
     id: key,

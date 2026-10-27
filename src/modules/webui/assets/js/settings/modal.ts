@@ -1,7 +1,7 @@
 // Settings shell: the modal overlay, its section tablist, `renderSettings`
 // dispatch and open/close/escape. Extracted from `settings.js`. Also registers
 // the render callbacks the write funnel (`settings/write.js`) calls back into.
-import { settings } from "../store.js";
+import { hooks, settings } from "../store.js";
 import { closeConfirm, confirmOverlay, trapTab } from "../dialog.js";
 import {
   renderPanel, renderUiPanel, renderMemoryPanel, renderSkillsPanel,
@@ -85,10 +85,28 @@ function openSettings(): void {
 }
 // Open settings straight at a panel (used by the reasoning selector when the
 // backend probe failed: the row links to Settings → Reasoning).
-function openSettingsAt(panel: string): void {
+function openSettingsAt(panel: string, anchor?: string): void {
   openSettings();
   selectSettingsPanel(panel);
+  if (anchor) scrollToAnchor(anchor);
 }
+
+/**
+ * Прокрутка к группе внутри панели. `loadPlugins`/`loadLsp` перерисовывают
+ * содержимое уже после открытия, поэтому якорь может появиться на несколько
+ * кадров позже. Ограниченный rAF-поллинг, без вечного ожидания.
+ */
+function scrollToAnchor(id: string, frames = 120): void {
+  const node = document.getElementById(id);
+  if (node) {
+    node.scrollIntoView({ block: "start" });
+    return;
+  }
+  if (frames <= 0 || typeof requestAnimationFrame !== "function") return;
+  requestAnimationFrame(() => scrollToAnchor(id, frames - 1));
+}
+/** Хук для сайдбара: быстрый переход в нужную панель настроек. */
+hooks.openSettingsAt = openSettingsAt;
 function closeSettings(): void {
   closeSubDialog();
   settings.providerForm = null;

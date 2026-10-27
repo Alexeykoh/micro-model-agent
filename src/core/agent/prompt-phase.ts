@@ -144,6 +144,8 @@ export function logContextStat(
 export interface SystemPromptInfo {
   text: string;
   tokenCount: number;
+  /** Бюджет системного промпта (contextWindow × contextBudget.systemPrompt). */
+  budget: number;
   excluded: string[];
   blocks: SystemPromptBuild["blocks"];
 }
@@ -151,7 +153,10 @@ export interface SystemPromptInfo {
 export function getSystemPromptInfo(host: PromptPhaseHost): SystemPromptInfo {
   const { prompt, excluded, blocks } = buildSystemPrompt(host);
   const tokenCount = host.deps.llmProvider.countTokens(prompt);
-  return { text: prompt, tokenCount, excluded, blocks };
+  const budget = Math.floor(
+    host.deps.config.contextWindow * host.deps.config.contextBudget.systemPrompt,
+  );
+  return { text: prompt, tokenCount, budget, excluded, blocks };
 }
 
 /**

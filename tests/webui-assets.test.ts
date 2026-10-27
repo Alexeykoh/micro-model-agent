@@ -530,14 +530,16 @@ describe("webui assets", () => {
     expect(a.css).toContain(".trace-list > *");
 
     // Tab order has one source of truth: `TABS` drives the visible order, the
-    // `Alt+1..6` hotkeys and `←/→`, so index.html must follow it. Reordering the
+    // `Alt+1..8` hotkeys and `←/→`, so index.html must follow it. Reordering the
     // buttons alone would silently detach the hotkeys from the visible row.
     const state = a.jsModules?.["js/sidebar/state.js"] || "";
     const order = (state.match(/export const TABS = \[([^\]]*)\]/)?.[1] || "")
       .split(",")
       .map((s) => s.trim().replace(/"/g, ""))
       .filter(Boolean);
-    expect(order).toEqual(["session", "files", "lsp", "trace", "plugins", "map"]);
+    expect(order).toEqual([
+      "session", "files", "lsp", "trace", "subagents", "plugins", "mcp", "map",
+    ]);
     const htmlOrder = [...a.html.matchAll(/data-tab="([a-z]+)"/g)].map((m) => m[1]);
     expect(htmlOrder).toEqual(order);
   });
@@ -597,8 +599,116 @@ describe("webui assets", () => {
     expect(a.js).toContain("sidebarPluginsState,");
     expect(a.css).toContain(".plg-row");
     expect(a.css).toContain(".plg-tag");
-    // Alt+6 reaches the sixth tab.
-    expect(sidebar).toContain('"6"');
+    // Hotkeys are derived from `TABS`: the last tab is reachable by Alt+8.
+    expect(sidebar).toContain("TABS.length");
+    expect(a.html).toContain('data-tab="mcp"');
+  });
+
+  it("shows the Prompt button above the trace list, not beside it", () => {
+    const a = loadAssets();
+    // The pane is row-reverse (detail left), so head+list must share one column
+    // child; as siblings the head became a third narrow column on the right.
+    expect(a.html).toContain('<div class="trace-main">');
+    expect(a.html).toMatch(/class="trace-main"[\s\S]*id="tracePromptBtn"[\s\S]*id="traceList"/);
+    expect(a.css).toContain(".trace-main { display: flex; flex-direction: column;");
+  });
+
+  it("keeps the activity rail on one compact line", () => {
+    const a = loadAssets();
+    expect(a.css).toContain(".rail-wrap.l-line { flex-wrap: nowrap; }");
+    expect(a.css).toContain(".rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 {");
+    expect(a.css).toContain("flex-wrap: nowrap; white-space: nowrap;");
+    // An empty `last:` must not leave a dangling separator or em dash.
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastSepEl.hidden = !lastTool");
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastEl.hidden = !lastTool");
+  });
+
+  it("toggles a plugin immediately without opening its popup", () => {
+    const sidebar = sidebarSources(loadAssets());
+    // Click on the switch must not bubble to the row (row click opens details).
+    expect(sidebar).toContain("e.stopPropagation()");
+    // The switch flips itself at once; `true` is what makeToggle needs for that.
+    expect(sidebar).toMatch(/row\.enabled = next;[\s\S]{0,180}return true;/);
+    expect(sidebar).toContain("row.enabled = previous;");
+  });
+
+  it("shows context used against the full window, not the history budget", () => {
+    const a = loadAssets();
+    const sidebar = a.jsModules?.["js/feed/sidebar.js"] || "";
+    expect(sidebar).toContain("h.contextBreakdown.window");
+    expect(sidebar).toContain("const limit = bdWindow ??");
+    // The pair must share one basis: `contextUsed` already includes system+tools.
+    expect(sidebar).not.toContain("const limit = typeof h.contextLimit");
+  });
+
+  it("wires the Subagents and MCP sidebar tabs", () => {
+    const a = loadAssets();
+    for (const id of ["subagents", "mcp"]) {
+      expect(a.html).toContain(`data-tab="${id}"`);
+      expect(a.html).toContain(`id="pane-${id}"`);
+      expect(a.html).toContain(`id="${id}Body"`);
+    }
+    const subagents = a.jsModules?.["js/sidebar/subagents.js"] || "";
+    expect(subagents).toContain("/subagents");
+    expect(subagents).toContain("openRun(");
+    expect(subagents).toContain("mergeSnapshot(");
+    const mcp = a.jsModules?.["js/sidebar/mcp.js"] || "";
+    expect(mcp).toContain('"/api/mcp"');
+    expect(mcp).toContain("makeToggle");
+    expect(a.js).toContain("sidebarSubagentEvent,");
+    expect(a.js).toContain("sidebarMcpEvent,");
+    expect(a.css).toContain(".sbrun");
+    expect(a.css).toContain(".mcpsrv");
+  });
+
+  it("serves the project favicon with a mascot fallback", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('<link rel="icon" href="/api/favicon">');
+  });
+
+  it("shows excluded prompt blocks as muted, not as yellow warnings", () => {
+    const a = loadAssets();
+    const prompt = a.jsModules?.["js/sidebar/prompt.js"] || "";
+    expect(prompt).toContain("web.sidebar.prompt_budget");
+    expect(prompt).toContain("web.sidebar.prompt_included_count");
+    expect(prompt).toContain("web.sidebar.prompt_excluded_count");
+    expect(prompt).toContain("web.sidebar.prompt_excluded_hint");
+    expect(prompt).toContain("web.sidebar.prompt_reason_budget");
+    expect(prompt).toContain("⊘ ");
+    // One source of chips: `blocks[]`; `excluded[]` is content, not labels.
+    expect(prompt).not.toContain("data.excluded");
+    // Yellow is reserved for real warnings; excluded = dashed neutral + label.
+    expect(a.css).not.toContain(".prompt-block.excluded { border-color: var(--yellow)");
+    expect(a.css).toContain("border-style: dashed");
+    expect(a.css).toContain(".prompt-block.excluded { border-style: dashed; border-color: var(--dim-c); color: var(--dim-a); }");
+    expect(a.css).toContain(".prompt-hint");
+  });
+
+  it("offers one context-aware settings shortcut for every sidebar tab", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('id="sbSettings"');
+    const core = a.jsModules?.["js/sidebar/core.js"] || "";
+    expect(core).toContain("const SETTINGS_PANEL");
+    for (const mapping of [
+      'session: "sessions"',
+      'files: "context"',
+      'mcp: "plugins"',
+      'trace: "ui"',
+      'subagents: "agent"',
+    ]) {
+      expect(core).toContain(mapping);
+    }
+    expect(core).toContain("hooks.openSettingsAt?.");
+    // LSP/MCP land on their group inside the shared Plugins panel, not at its top.
+    expect(core).toContain('mcp: "settings-mcp"');
+    expect(a.jsModules?.["js/settings/panels.js"] || "").toContain('id: "settings-mcp"');
+    expect(a.css).toContain(".sb-settings");
+    // MCP is the one tab whose primary action (add/edit a server) lives in
+    // settings — give it an explicit CTA, not only the title-row icon.
+    const mcp = a.jsModules?.["js/sidebar/mcp.js"] || "";
+    expect(mcp).toContain("web.mcp.open_settings");
+    expect(mcp).toContain('"settings-mcp"');
+    expect(a.css).toContain(".mcp-settings");
   });
 
   it("imports every sidebar helper it calls (no undefined render crash)", () => {
