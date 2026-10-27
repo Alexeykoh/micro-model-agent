@@ -31,11 +31,32 @@ describe("bash: workdir jail", () => {
     expect(res.output).toContain("[SECURITY BLOCKED]");
   });
 
-  it("blocks a workdir outside the sub-agent scope", async () => {
+  it("allows the project root as workdir for a scoped sub-agent", async () => {
+    // Скоуп — список файлов, а cwd bash работает каталогом: корень проекта
+    // не обязан попадать в `allowed_files` (спека subagent-reliability §A).
     const ctx = makeCtx(project, {
       scope: { allowed_files: ["src"], read_only_files: [] },
     });
-    const res = await bashTool.handler(ctx, { command: "dir", workdir: project });
+    const res = await bashTool.handler(ctx, { command: "echo hello", workdir: project });
+    expect(res.success).toBe(true);
+    expect(res.output).toContain("hello");
+  });
+
+  it("still blocks a workdir outside the base directory for a scoped sub-agent", async () => {
+    const ctx = makeCtx(project, {
+      scope: { allowed_files: ["src"], read_only_files: [] },
+    });
+    const res = await bashTool.handler(ctx, { command: "dir", workdir: dirname(project) });
+    expect(res.success).toBe(false);
+    expect(res.output).toContain("[SECURITY BLOCKED]");
+  });
+
+  it("blocks bash for a read-only sub-agent", async () => {
+    // `read_only_files` не даёт права записи, а bash — тул с записью.
+    const ctx = makeCtx(project, {
+      scope: { allowed_files: [], read_only_files: ["src"] },
+    });
+    const res = await bashTool.handler(ctx, { command: "echo hello", workdir: project });
     expect(res.success).toBe(false);
     expect(res.output).toContain("[SECURITY BLOCKED]");
   });

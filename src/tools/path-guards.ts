@@ -69,9 +69,9 @@ export function echoWriteHint(echoWrite: string | null | undefined): string | un
 }
 
 /**
- * Workdir `bash` (аудит §4.1): рабочий каталог обязан лежать внутри
- * `baseDir` и — для субагента — внутри его скоупа. Без проверки модель одной
- * командой уходила за пределы проекта (`workdir: C:\Users\…`).
+ * Workdir `bash` (аудит §4.1): рабочий каталог обязан лежать внутри `baseDir`.
+ * Скоуп субагента cwd не ограничивает — он даёт/не даёт право записи (см.
+ * `validateWorkdir` и спеку `2026-10-27-subagent-reliability-design` §A).
  *
  * @returns заблокированный результат или `undefined`, если можно исполнять.
  */
