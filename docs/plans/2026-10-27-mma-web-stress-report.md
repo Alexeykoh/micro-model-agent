@@ -10,6 +10,9 @@
 Предыстория в ветке: вмержен `fix/subagent-model-unavailable-hint` (читаемый хинт
 при `model is unavailable` у субагента) в локальный `master`, пуш отложен.
 
+**Сводный реестр всех находок:** [2026-10-27-mma-web-bug-register.md](./2026-10-27-mma-web-bug-register.md)
+(58 пунктов: 4 K, 5 V, 27 M, 22 N + список «проверено, работает»).
+
 ## Критично / высоко
 
 1. **Read-only CLI создаёт сессию → лавина удалений → EFAULT.** `plugins list`
