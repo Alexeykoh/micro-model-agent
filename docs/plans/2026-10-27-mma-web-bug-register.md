@@ -29,6 +29,11 @@
 | A-11 | N | `plugins/drafts.ts:69` — `unlinkSync` под `existsSync` без try/catch (TOCTOU с вебом). | 1 |
 | A-12 | N | `plugins/loader.ts:206` — синхронный `require` пользовательского кода в bootstrap без изоляции. | 1 |
 | A-13 | M | `npx tsc` в проекте с `bun install` не работает: в `node_modules/.bin` только `tsc.bunx`/`tsc.exe`, нет `tsc.cmd`, поэтому npx тянет пакет-заглушку («This is not the tsc command you are looking for»). Харнесс не подсказывает `bun run build`. | 11 |
+| A-14 | M | `mma session export … --format json --out -` пишет WARN-строку в **stdout** (stderr пуст) — JSON не парсится (`Unexpected character 'W'`). Контракт `--out '-'` нарушен. | 17 |
+| A-15 | V | `meta.model` сессии не соответствует реальной модели: сессия на e4b хранит `"model": "deepseek-v4.1-flash"` (при верном `contextWindow`). `SessionManager` создаёт сессии со stale `defaults.model` после смены модели в UI. Корень B-34/B-07. | 17 |
+| A-16 | M | Интерактивные команды в non-TTY (`mma agents init`, `mma meet`) молча выходят с `EXIT=0`, ничего не сделав, и создают сессию: «Вы [auto]: Эта команда требует интерактивного терминала.» | 17 |
+| A-17 | M | `session diagnose` требует `--json`, но `--help` про флаг не сообщает; отказ без флага возвращает `EXIT=0`. | 17 |
+| A-18 | N | `session export` пустой сессии: «экспорт не создан», файла нет, `EXIT=0`. | 17 |
 
 ## B. Веб-UI, чат, панели
 
@@ -142,10 +147,10 @@
 | уровень | штук |
 |---|---|
 | K | 4 |
-| V | 8 |
-| M | 39 |
-| N | 28 |
-| всего | 79 |
+| V | 9 |
+| M | 42 |
+| N | 29 |
+| всего | 84 |
 
 Приоритет для фиксов (предложение, не решение): A-01 (лавина сессий) → B-01
 (молчаливая смерть сервера) → B-04 (потеря файла при записи) → C-01/C-02
