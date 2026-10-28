@@ -431,6 +431,7 @@
   "cli.list_models": "List available models",
   "cli.current_model": "Current model:",
   "cli.model_hint": "(Use /model use <name> to change)",
+  "cli.model_hint_cli": "(To change: mma model use <name>)",
   "cli.model_fetch_failed": "Failed to fetch models: {error}",
   "cli.model_provider_unavailable": "No provider for the active entry \"{name}\" — check /provider list.",
   "cli.available_models": "Available models:",

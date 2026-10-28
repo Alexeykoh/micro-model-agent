@@ -236,7 +236,8 @@ function buildModelCommands(program: Command): void {
         getDefaultChannel().writeLine(t("cli.model_fetch_failed", { error: String(err) }));
       }
 
-      getDefaultChannel().writeLine(t("cli.model_hint"));
+      // CLI-форма команды, а не REPL-форма `/model use` (ключ общий с REPL).
+      getDefaultChannel().writeLine(t("cli.model_hint_cli"));
     });
   model
     .command("use")

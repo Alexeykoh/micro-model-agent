@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **`mma model list` подсказывает CLI-форму смены модели.** Было «(Используйте
+  /model use <имя> для смены)» — такой команды в терминале нет. Теперь
+  «(Сменить: mma model use <имя>)»; подсказка REPL (`/model use`) не изменилась —
+  ключи разведены (`cli.model_hint_cli`). Гвард:
+  `tests/cli/model-hint-surface.test.ts`.
 - **Интерактивные команды в non-TTY возвращают код 1.** `mma meet` и
   `mma agents init` в пайпе печатали «Эта команда требует интерактивного
   терминала», ничего не делали и завершались успешно — скрипт/CI считал
