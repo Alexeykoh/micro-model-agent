@@ -11,7 +11,7 @@
 при `model is unavailable` у субагента) в локальный `master`, пуш отложен.
 
 **Сводный реестр всех находок:** [2026-10-27-mma-web-bug-register.md](./2026-10-27-mma-web-bug-register.md)
-(67 пунктов: 4 K, 6 V, 32 M, 25 N + список «проверено, работает»).
+(73 пункта: 4 K, 8 V, 34 M, 27 N + список «проверено, работает»).
 
 ## Критично / высоко
 
@@ -679,6 +679,84 @@ Security-заголовки на всех endpoint'ах; XSS-защита фро
 тулбара и панелей рисуется как `□` (подстановочный глиф). Это может быть
 отсутствием символьного шрифта в headless-сборке Playwright, а не дефектом
 продукта; в обычном браузере пользователя не перепроверялось.
+
+## Волна 14 — `mma serve` (Service API v1), изолированный конфиг
+
+Стенд: `MMA_CONFIG_DIR=C:\Users\Alexe\AppData\Local\Temp\opencode\mma-serve-test`,
+`bun run src/cli/main.ts serve -p 8091 --host 127.0.0.1`, скопированные
+`~/.mma/config/*.json` (реальный конфиг не менялся). Провайдер `lmstudio`,
+модель `nvidia-nemotron-3.5-bolt-e4b`, окно 131072.
+
+**Высоко:**
+
+- **`/v1/ready` навсегда отдаёт 503 `no-model` при рабочем провайдере.** Пока
+  `/v1/health` = 200, проба готовности отвечает
+  `{"type":"…/provider-unavailable","title":"provider not ready","status":503,
+  "detail":"no-model","is_retriable":true,"retry_after_ms":5000}` — и это не
+  «модель грузится»: сразу после 503 задача
+  `POST /v1/sessions/:id/tasks` выполняется **успешно за 11 с**. Причина в
+  `modules/providers/preflight.ts:100-110`: проба шлёт chat-запрос с
+  `max_tokens: 1` и считает `ok` только при непустом `content`; reasoning-модель
+  на одном токене отдаёт пустой content — `probeChat` возвращает `""` →
+  `reason: "no-model"` навсегда. Для k8s/LB это «сервис мёртв» при живом
+  сервисе.
+- **PII-редактор портит машинные поля в JSON-ответах API.** `curl` (не
+  PowerShell) отдаёт:
+  `"createdAt":"<PII:020cb58fd4ff>T09:12:35.553Z"`, то же для `startedAt`,
+  `finishedAt`, `updatedAt`; при пустом имени
+  `"name":"Session <PII:020cb58fd4ff>"` (`2026-10-28` вырезается как дата
+  рождения). Любой клиент, парсящий ISO-время, ломается; это машинный контракт,
+  а не пользовательский текст.
+
+**Средне:**
+
+- **Проба готовности сама упирается в rate limit.** Четыре вызова
+  `/v1/ready` за ~5 с → `429 {"title":"readiness probe rate limit exceeded",
+  "retry_after_ms":48465}` (~48 с ожидания). Мониторинг с интервалом 1–2 с
+  получит 429 и «сервис недоступен»; `/v1/health` при этом не лимитируется
+  (8 вызовов подряд — все 200).
+- **~20 000 prompt-токенов на односложный запрос.** Задача «Ответь одним
+  словом: ок» на e4b: `promptTokens: 19959`, `completionTokens: 54`, 11.2 с.
+  При окне 131072 это 15 % на каждый сервисный вызов до всякой полезной работы
+  (системный промпт + описания тулов), а для `job`-режима тулы и не нужны.
+
+**Низко:**
+
+- **`POST …/tasks` без поля `input` → 400 без подсказки.**
+  `{"type":"…/errors/validation","title":"input required","status":400}` — не
+  сказано, что схема ждёт `input` (а не `prompt`); первое знакомство с API
+  упирается в пустой 400.
+- **`serve` создаёт сессию на старте, без единого запроса.** При
+  `session.autoSave: true` процесс сразу заводит `ses_…` с
+  `messageCount: 0` — тот же класс, что A-01: служебный процесс плодит сессии,
+  а `maxSessions` участвует в их удалении.
+
+**Проверено, работает корректно:**
+
+- `GET /v1/health` → 200 `{status:ok, version:0.15.0}`; `GET /v1/docs` → 200
+  HTML; `GET /v1/openapi.json` → 11 путей; неизвестный путь → 404
+  `application/problem+json`.
+- `POST /v1/sessions/:id/tasks` → `{jobId, status: "running", statusUrl}`;
+  поллинг `GET /v1/tasks/:jobId` → `succeeded` с `result.text: "ок"` и
+  `usage`.
+- `POST /v1/tasks/:jobId/cancel` → `{status:"cancelled"}`, далее `result.text`
+  пустой, работа не продолжается.
+- `GET /v1/sessions/:id/events` — SSE: `id/event/data`, реплей
+  `task.started`, `phase`, `reasoning.delta`, `Content-Type:
+  text/event-stream`, `X-Accel-Buffering: no`.
+- `GET /v1/sessions` — список с `id/name/model/contextWindow/messageCount`
+  (кроме испорченных временных меток, см. выше).
+- Без `service.token` API открыт на `127.0.0.1` — для локального тенанта это
+  ожидаемо (документировано).
+
+**Замечание по методике (не дефект):** `MMA_CONFIG_DIR` указывает на
+каталог данных (аналог `~/.mma`), файлы конфига лежат в `<dir>/config/`.
+Первый запуск был сделан с `MMA_CONFIG_DIR=...\mma-serve-test\config` — конфиг
+молча ушёл в дефолты (`qwen/qwen3.5-9b`, окно 32768), что видно только по
+строке `Environment:` в логе; предупреждения «в `<dir>/config` нет файлов
+конфига» нет. После перенастройки на `...\mma-serve-test` подхватились
+`core.json`/`provider.json` (e4b, 131072), и проба честно сказала
+«configured was 262144 → serves 131072».
 
 ## Отложено (по решению пользователя)
 
