@@ -3,7 +3,7 @@ import type { ToolResult, ToolContext } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { PlanCreator, getPlanProgress, type PlanStep } from "./planner";
 import type { PlanTracker } from "./tracker";
-import { parseCheck } from "./plan-checks";
+import { checkDoneEvidence, parseCheck } from "./plan-checks";
 import { stepTypecheckGate } from "./execution-plugin";
 import { switchStepToCreate, switchStepToDelete } from "./plan-steps";
 import { checkPlanCoverage } from "./plan-coverage";
@@ -333,7 +333,7 @@ async function verifyCheckContract(
     return { note: "", blocked: null };
   }
   if (parsed) {
-    return { note: `\n${t("plan.check_self_certified", { check: target.check })}`, blocked: null };
+    return (await checkDoneEvidence(parsed, target, stepId)) ?? { note: `\n${t("plan.check_self_certified", { check: target.check })}`, blocked: null };
   }
   return { note: "", blocked: null };
 }

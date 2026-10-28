@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Шаг, меняющий UI/поведение, не закрывается одной сборкой.** `verify` теперь
+  делит доказательства на статические (`file-exists:`, `command:` с
+  build/tsc/lint) и поведенческие (`command:` с тестами/запуском, `http:`,
+  `manual:`): шаг про компонент/страницу/стили с одним `bun run build` не
+  переводится в `done`, а получает подсказку, чем заменить доказательство.
+  Добавлен вид проверки `http:<url>[~маркер]` — GET-проба (2xx + подстрока,
+  таймаут 3 c, тело ≤256 KiB, редиректы не разыменовываются). Спека:
+  `docs/specs/2026-10-28-turn-runtime-gate-design.md` (W1); `manual:` с записью
+  наблюдения — W2, `DEBT(turn-runtime-gate)`. Гварды:
+  `tests/execution/verify-evidence-class.test.ts`,
+  `tests/execution/verify-behavior-step.test.ts`,
+  `tests/execution/http-check.test.ts`.
 - **`/v1/ready` не упирается в собственный rate limit.** Бюджет (6/мин на
   клиента) списывался до проверки кэша, поэтому k8s/LB с интервалом 1–2 с
   получал 429 с `retry_after_ms ≈ 48 с`, хотя проба кэшируется на 30 с и
