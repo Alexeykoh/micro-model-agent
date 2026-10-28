@@ -543,6 +543,7 @@
   "cli.diagnose_session": "Разобрать сессию по сигнатурам сбоев (только чтение)",
   "cli.diagnose_json": "Печатать машиночитаемый отчёт",
   "cli.diagnose_json_required": "session diagnose требует --json (формат отчёта — контракт)",
+  "cli.diagnose_json_help": "Требует глобальный флаг --json: `mma -j session diagnose <id>` (или `mma session diagnose <id> --json`). Без него команда завершается с кодом 1 и ничего не разбирает.",
   "diagnose.header": "сессия {id}: записей {entries}, сигнатур {count}",
   "diagnose.count": "{count}×",
   "diagnose.clean": "В сессии {id} сигнатур сбоев нет",

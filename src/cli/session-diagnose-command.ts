@@ -11,6 +11,7 @@ import { diagnoseSession, type SIGNATURE_KINDS } from "../modules/session/diagno
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { getDefaultChannel } from "../output";
+import { fail } from "./exit-code";
 
 /** Найти сессию по полному id, префиксу или имени — как это делает `export`. */
 function resolveSession(manager: SessionManager, id: string) {
@@ -45,15 +46,18 @@ export function registerDiagnoseCommand(session: Command, program: Command): voi
     .command("diagnose")
     .argument("<id>", t("cli.session_id_or_prefix"))
     .description(t("cli.diagnose_session"))
+    .addHelpText("after", "\n" + t("cli.diagnose_json_help"))
     .action(async (id: string) => {
       if (program.opts<{ json?: boolean }>().json !== true) {
-        getDefaultChannel().writeLine(t("cli.diagnose_json_required"));
+        // Отказ — не успех: иначе скрипт с `mma session diagnose` без --json
+        // считает, что разбор выполнен (формат отчёта — контракт).
+        fail(t("cli.diagnose_json_required"));
         return;
       }
       const { sessionManager } = await bootstrap();
       const meta = resolveSession(sessionManager, id);
       if (!meta) {
-        getDefaultChannel().writeLine(t("session.not_found", { id }));
+        fail(t("session.not_found", { id }));
         return;
       }
       const report = diagnoseSession(meta.id, sessionManager.loadSessionLog(meta.id) as unknown as Record<string, unknown>[]);

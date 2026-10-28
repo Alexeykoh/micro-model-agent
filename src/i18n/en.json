@@ -552,6 +552,7 @@
   "cli.diagnose_session": "Diagnose a session by failure signatures (read-only)",
   "cli.diagnose_json": "Print the machine-readable report",
   "cli.diagnose_json_required": "session diagnose requires --json (the report format is a contract)",
+  "cli.diagnose_json_help": "Requires the global --json flag: `mma -j session diagnose <id>` (or `mma session diagnose <id> --json`). Without it the command exits with code 1 and diagnoses nothing.",
   "diagnose.header": "session {id}: {entries} entries, {count} signatures",
   "diagnose.count": "{count}×",
   "diagnose.clean": "No failure signatures in session {id}",
