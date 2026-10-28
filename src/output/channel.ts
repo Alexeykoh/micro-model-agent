@@ -1,5 +1,5 @@
 // Канал вывода: единственный владелец терминала (режимы idle/stream/modal/quiet).
-import { defaultOutputBus, type OutputBus } from "./bus";
+import { defaultOutputBus, logsToStderrOn, type OutputBus } from "./bus";
 import { formatEventLine } from "./format";
 import type { OutputEvent, OutputStream } from "./types";
 
@@ -236,7 +236,7 @@ export class OutputChannel {
       this.writeRaw(ev.text, ev.stream);
       return;
     }
-    const stream = ev.stream ?? "stdout";
+    const stream = ev.stream ?? (logsToStderrOn() && ev.kind === "log" ? "stderr" : "stdout");
     const line = ev.kind === "block" ? ev.text : formatEventLine(ev, this.color);
     if (this.mode === "idle" && this.sink?.isActive()) {
       this.queueBlockLine(line);

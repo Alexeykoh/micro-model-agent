@@ -33,6 +33,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   «Плагины не загружены» остаётся только для действительно пустого набора.
   Листинг собран в `pluginListLines()`. Гвард:
   `tests/cli/plugins-list-hidden-builtins.test.ts`.
+- **`mma session export --out -` отдаёт в stdout только документ.** WARN стартовой
+  проверки (бюджет системного промпта) шёл в тот же поток, что и JSON, и
+  `| jq` падал на `Unexpected character 'W'`. Теперь для машинного вывода
+  `log`-события маршрутизируются в stderr (`setLogsToStderr` в шине вывода),
+  payload-блоки остаются в stdout. Гвард:
+  `tests/output/logs-to-stderr.test.ts`.
 
 ## [0.15.0] - 2026-10-27
 
