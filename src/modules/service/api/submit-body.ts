@@ -44,7 +44,15 @@ export function parseSubmitBody(
   policy: SubmitBodyPolicy = {},
 ): SubmitParse {
   const input = typeof body.input === "string" ? body.input : "";
-  if (!input.trim()) return submitError("input required", 400);
+  if (!input.trim()) {
+    // Подсказка по полю: без неё клиент, отправивший `prompt` вместо `input`,
+    // получал «input required» и не понимал, что именно поправить.
+    const hint =
+      typeof body.prompt === "string"
+        ? "field 'input' is required (non-empty string); the body had 'prompt' — send the text in 'input'"
+        : "field 'input' is required and must be a non-empty string";
+    return submitError("input required", 400, hint);
+  }
 
   const callbackUrl = typeof body.callbackUrl === "string" ? body.callbackUrl : undefined;
   if (callbackUrl !== undefined) {
