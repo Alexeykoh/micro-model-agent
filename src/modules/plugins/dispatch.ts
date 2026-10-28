@@ -26,13 +26,13 @@ function safeInvoke(plugin: AgentPlugin, hookName: string, fn: () => unknown): u
       // Промис реджектится УЖЕ ПОСЛЕ выхода из этого try/catch — вешаем catch
       // сразу, иначе изоляцию ломает необработанный unhandledRejection.
       out.catch((e: unknown) => {
-        logger.warn(`plugin "${plugin.name}" ${hookName} rejected`, { error: String(e) });
+        logger.diagnostic("warn", `plugin "${plugin.name}" ${hookName} rejected`, { error: String(e) });
       });
       return undefined;
     }
     return out;
   } catch (e) {
-    logger.warn(`plugin "${plugin.name}" ${hookName} threw`, { error: String(e) });
+    logger.diagnostic("warn", `plugin "${plugin.name}" ${hookName} threw`, { error: String(e) });
     return undefined;
   }
 }
@@ -92,7 +92,7 @@ export class PluginDispatcher {
           // молча не заблокировать, если путь когда-нибудь задействуют.
           if (result === false || typeof result === "string") return false;
         } catch (e) {
-          logger.warn(`plugin "${plugin.name}" onBeforeTool failed`, { error: String(e) });
+          logger.diagnostic("warn", `plugin "${plugin.name}" onBeforeTool failed`, { error: String(e) });
         }
       }
     }
@@ -107,7 +107,7 @@ export class PluginDispatcher {
         try {
           await plugin.onAfterTool(ctx, call, result);
         } catch (e) {
-          logger.warn(`plugin "${plugin.name}" onAfterTool failed`, { error: String(e) });
+          logger.diagnostic("warn", `plugin "${plugin.name}" onAfterTool failed`, { error: String(e) });
         }
       }
     }
@@ -121,7 +121,7 @@ export class PluginDispatcher {
         try {
           await plugin.onError(ctx, error);
         } catch (e) {
-          logger.warn(`plugin "${plugin.name}" onError failed`, { error: String(e) });
+          logger.diagnostic("warn", `plugin "${plugin.name}" onError failed`, { error: String(e) });
         }
       }
     }
