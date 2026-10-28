@@ -192,9 +192,12 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   // Общий вотчер карты: в web сессия главного агента не запускается, поэтому
   // плагин индексатора его не поднимает — владельцем становится веб-хост.
   // Колбэк уведомляет вкладку Files: рост `filesRevision` + событие `files`.
+  // И пушит state: панель «Карта» рисуется из `projectMap` снапшота, поэтому
+  // без этого фоновая переиндексация не отражалась до ручной кнопки (B-40).
   const detachIndexWatcher = attachIndexWatcher(deps.indexer, () => {
     state.filesRevision += 1;
     broadcast({ type: "files", ts: Date.now(), phase: "changed" }, state);
+    pushState(state);
   });
   state.saveConfig = (config, key) => persistConfig(config, key, CONFIG_FILE, deps.configDir);
 
