@@ -9,7 +9,11 @@ import type { AgentServiceState } from "../state";
 
 /** Кэш результата readiness: живой LLM-запрос не на каждый запрос оркестратора. */
 const READY_CACHE_MS = 30_000;
-/** `/v1/ready` — открытый путь: ограничиваем амфификацию по адресу клиента. */
+/**
+ * `/v1/ready` — открытый путь: ограничиваем амфификацию по адресу клиента.
+ * Бюджет тратится только на «холодную» пробу (cache miss), иначе мониторинг с
+ * интервалом 1–2 с упирался в 429 при том, что LLM-вызов делался раз в 30 с.
+ */
 const READY_RATE_LIMIT = 6;
 const READY_RATE_WINDOW_MS = 60_000;
 
@@ -26,7 +30,7 @@ export async function handleReady(
   res: ServerResponse,
   s: AgentServiceState,
 ): Promise<void> {
-  const retryAfterMs = consumeReadyBudget(s, req.socket.remoteAddress ?? "unknown");
+  const retryAfterMs = cachedReady(s) ? 0 : consumeReadyBudget(s, req.socket.remoteAddress ?? "unknown");
   if (retryAfterMs > 0) {
     sendProblem(
       res,
@@ -70,6 +74,12 @@ export async function handleReady(
       }),
     );
   }
+}
+
+/** Свежий кэш readiness (или null, если пора спросить провайдера). */
+function cachedReady(s: AgentServiceState): ProbeResult | null {
+  if (!s.readyCache) return null;
+  return Date.now() - s.readyCache.at < READY_CACHE_MS ? s.readyCache.result : null;
 }
 
 /** Провайдер-проба с кэшем на `READY_CACHE_MS` (успех и отказ кэшируются). */

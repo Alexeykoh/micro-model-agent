@@ -92,19 +92,24 @@ describe("readiness", () => {
     expect(calls).toBe(1);
   });
 
-  it("rate-limits readiness probes per client (6/min)", async () => {
+  it("serves readiness from cache without rate-limiting the caller", async () => {
+    // Бюджет `/v1/ready` теперь тратится только на «холодную» пробу (cache
+    // miss): проба кэшируется на 30 с, поэтому частый мониторинг не должен
+    // получать 429 — иначе k8s/LB с интервалом 1–2 с видел «сервис недоступен».
+    let probes = 0;
     const url = await boot(
       makeServiceDeps({
         dir,
         agent: fastAgent(),
-        preflight: async () => ({ ok: true, reason: "ok" }),
+        preflight: async () => {
+          probes += 1;
+          return { ok: true, reason: "ok" };
+        },
       }),
     );
-    for (let i = 0; i < 6; i++) expect((await httpJson(`${url}/v1/ready`)).status).toBe(200);
-    const limited = await httpJson(`${url}/v1/ready`);
-    expect(limited.status).toBe(429);
-    expect(String(limited.json.type)).toContain("rate-limited");
-    expect(Number(limited.json.retry_after_ms)).toBeGreaterThan(0);
+    for (let i = 0; i < 12; i++) expect((await httpJson(`${url}/v1/ready`)).status).toBe(200);
+    // Кэш общий на процесс: LLM-проба выполнена один раз.
+    expect(probes).toBe(1);
   });
 });
 
