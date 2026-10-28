@@ -4,6 +4,18 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Хук `onBeforeThink` снова отдаёт `sessionLog.directive`.** Пролог итерации
+  передавал плагинам только `sessionLog.plan`, а плагин `execution` пишет
+  stuck-предупреждение через `directive` — каждый такой варнинг заканчивался
+  `TypeError: ctx.sessionLog?.directive is not a function`, и запись о
+  застревании не попадала в `session.jsonl`. Контекст хука собран в
+  `buildThinkCtx()` (единственное место), `directive` пишет через
+  `SessionLogger.logDirective`. Гвард: `tests/plugin-think-ctx.test.ts`.
+
 ## [0.15.0] - 2026-10-27
 
 ### Added

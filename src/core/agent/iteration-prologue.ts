@@ -49,6 +49,37 @@ export interface IterationPrologueResult {
   history: ReturnType<typeof repairToolCallPairing>;
 }
 
+/**
+ * Контекст хука `onBeforeThink` для плагинов. Экспортируется ради гварда:
+ * `sessionLog.directive` обязан существовать — иначе плагин `execution` падает
+ * на stuck-предупреждении (`ctx.sessionLog?.directive is not a function`), и в
+ * лог сессии не попадает запись о застревании.
+ */
+export function buildThinkCtx(args: {
+  iteration: number;
+  turnSeq: number;
+  logger: AgentDeps["logger"];
+  lastUserMessage: string;
+  contextManager: AgentDeps["contextManager"];
+  onMeta?: OnMeta;
+  slog: SessionLogger;
+}) {
+  return {
+    iteration: args.iteration,
+    turnSeq: args.turnSeq,
+    logger: args.logger,
+    lastUserMessage: args.lastUserMessage,
+    contextManager: args.contextManager,
+    onMeta: args.onMeta,
+    sessionLog: {
+      plan: (event: string, detail: string, iter?: number) =>
+        args.slog.logPlan(event, detail, iter),
+      directive: (event: string, detail: string, iter?: number) =>
+        args.slog.logDirective(event, detail, iter),
+    },
+  };
+}
+
 /** Выполняет подготовительные шаги итерации до вызова LLM. */
 export function runIterationPrologue(
   host: IterationPrologueHost,
@@ -73,19 +104,19 @@ export function runIterationPrologue(
   );
   contextManager.setToolTokens(toolTokenEstimate);
 
-  pluginManager.runOnBeforeThink({
-    iteration: state.iteration,
-    // Идентификатор хода: монотонный маркер из `ContextManager.beginTurn()`.
-    // Нужен модулям, чтобы сбрасывать per-turn состояние и кулдауны (§1.2/§1.11).
-    turnSeq: state.criticHistoryMark,
-    logger,
-    lastUserMessage: input,
-    contextManager,
-    onMeta,
-    sessionLog: {
-      plan: (event: string, detail: string, iter?: number) => slog.logPlan(event, detail, iter),
-    },
-  });
+  pluginManager.runOnBeforeThink(
+    buildThinkCtx({
+      iteration: state.iteration,
+      // Идентификатор хода: монотонный маркер из `ContextManager.beginTurn()`.
+      // Нужен модулям, чтобы сбрасывать per-turn состояние и кулдауны (§1.2/§1.11).
+      turnSeq: state.criticHistoryMark,
+      logger,
+      lastUserMessage: input,
+      contextManager,
+      onMeta,
+      slog,
+    }),
+  );
 
   // Единая точка компакции: интервал → качество (с cooldown) → переполнение.
   compactionService.compactIfNeeded(state);
