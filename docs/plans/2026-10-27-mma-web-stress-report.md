@@ -11,7 +11,7 @@
 при `model is unavailable` у субагента) в локальный `master`, пуш отложен.
 
 **Сводный реестр всех находок:** [2026-10-27-mma-web-bug-register.md](./2026-10-27-mma-web-bug-register.md)
-(89 пунктов: 4 K, 9 V, 44 M, 32 N + список «проверено, работает»).
+(90 пунктов: 4 K, 9 V, 44 M, 33 N + список «проверено, работает»).
 
 ## Критично / высоко
 
@@ -992,6 +992,35 @@ reload цело), сборка зелёная, но ход занял **17 ми�
 - `config show` — валидный JSON с `apiKey: "***"`; `config set stuckThreshold 7`
   → «Установлено», `config set stuckThreshold abc` → «invalid-value», `EXIT=1`,
   конфиг не изменён.
+
+## Волна 19 — one-shot режим (`mma "<промпт>" -j -e`)
+
+Изолированный конфиг, `-d …\proj`, модель e4b.
+
+**Низко:**
+
+- **В JSON-результате нет ни модели, ни провайдера.** `-j` отдаёт токены, кеш и
+  диагностику, но не то, кто отвечал: `provider`/`model` есть только в
+  `session.jsonl` (`llm_usage`). Для скрипта, который сохраняет результат, нечем
+  подтвердить, какой моделью он получен, — а это важно и при сравнении прогонов,
+  и при разборе A-15, где метаданные сессии расходятся с реальной моделью.
+- **Отсутствие модели нигде не проявляется.** После `mma model use nope/nope`
+  (A-20) прогон с `-j` завершился `success: true`, `iterationCount: 1`, 4.1 с —
+  при том что в `llm_usage` записано `model: "nope/nope"`. LM Studio молча
+  обслужил загруженную модель на неизвестный id, а MMA не сверил ни имя модели,
+  ни ответ провайдера. «Модель не найдена» не возникает ни на одном шаге.
+
+**Проверено, работает корректно:**
+
+- `-j` печатает чистый JSON в stdout (436 байт), stderr пуст, `EXIT=0`, `-e`
+  завершает процесс сразу: `success`, `text`, `error: null`, `iterationCount`,
+  `contextUsed 11154`, `contextLimit 95684`, `promptTokens 11901`,
+  `completionTokens 54`, `totalCost: null`, `costBreakdown`, блок `cache`
+  (`cachedTokens`, `uncachedTokens`, `prefixStable`, `prefixCause`, `source`),
+  `diagnostics`. То есть машинный контракт здесь соблюдён — в отличие от
+  `session export --out -` (A-14).
+- В `session.jsonl` запись `llm_usage` содержит `provider: "lmstudio"`,
+  `model`, `promptTokens/completionTokens`, `origin: "api"`, `durationMs`.
 
 ## Отложено (по решению пользователя)
 
