@@ -1283,6 +1283,8 @@
   "web.sidebar.lsp_offline": "офлайн",
   "web.sidebar.lsp_check": "Проверить",
   "web.sidebar.lsp_checking": "проверяется…",
+  "web.sidebar.lsp_checked_at": "проверено {time} · серверов {ok}/{total} ok",
+  "web.sidebar.lsp_checked_counts": "серверов {ok}/{total} ok",
   "web.sidebar.lsp_not_checked": "ещё не проверялось",
   "web.sidebar.lsp_none": "серверы не настроены",
   "web.sidebar.lsp_unavailable": "LSP недоступен",

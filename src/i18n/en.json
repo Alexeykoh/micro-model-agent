@@ -1283,6 +1283,8 @@
   "web.sidebar.lsp_offline": "offline",
   "web.sidebar.lsp_check": "Run check",
   "web.sidebar.lsp_checking": "checking…",
+  "web.sidebar.lsp_checked_at": "checked {time} · servers {ok}/{total} ok",
+  "web.sidebar.lsp_checked_counts": "servers {ok}/{total} ok",
   "web.sidebar.lsp_not_checked": "not checked yet",
   "web.sidebar.lsp_none": "no configured servers",
   "web.sidebar.lsp_unavailable": "LSP unavailable",

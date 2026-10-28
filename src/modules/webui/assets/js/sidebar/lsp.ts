@@ -10,6 +10,7 @@ import type { Dict } from "../core/store/types.js";
 import { sb } from "./state.js";
 import { mapKv } from "./map.js";
 import { appendToolchain } from "./lsp-toolchain.js";
+import { MUTED_REASONS, appendLspSummary } from "./lsp-summary.js";
 
 /** i18n-ключ ярлыка класса причины (`not-applicable` → `..._not_applicable`). */
 function lspReasonKey(reason: unknown): string {
@@ -22,10 +23,6 @@ function lspGlyph(reason: string | undefined): [string, string] {
   if (reason === "disabled" || reason === "not-applicable" || reason === "deadline") return ["–", "dim"];
   return ["✗", "fail"];
 }
-
-// Причины, которые не заслуживают отдельной строки: сервер либо не применим к
-// проекту, либо выключен. Схлопываем их в одну dim-строку на причину.
-const MUTED_REASONS = new Set(["not-applicable", "disabled"]);
 
 /** Хвост-detail строки сервера (время/способ запуска/бинарник/ошибка). */
 function lspDetail(s: Dict): string {
@@ -134,6 +131,7 @@ export function renderLsp(): void {
       });
       active.forEach((s) => host.appendChild(lspRow(s)));
       muted.forEach((list, reason) => host.appendChild(lspMutedRow(reason, list)));
+      appendLspSummary(host, diag, sb.lspCheckedAt);
     }
   }
   const btn = el(
@@ -296,5 +294,7 @@ export function sidebarLspEvent(d: Dict | null): void {
     renderLsp();
     return;
   }
+  // Проверка закончилась (done/error) — метка времени для итоговой строки.
+  sb.lspCheckedAt = Date.now();
   void loadLspDoctor();
 }

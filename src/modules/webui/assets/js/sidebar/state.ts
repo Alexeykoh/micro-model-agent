@@ -117,6 +117,8 @@ export interface SidebarState {
   lspFlags: { enabled: boolean; offline: boolean } | null;
   lspProbing: boolean;
   lspLoaded: boolean;
+  /** Когда последняя диагностика LSP завершилась (ms) — вкладка показывает «проверено …». */
+  lspCheckedAt: number | null;
   lspUnavailable: boolean;
   reindexing: boolean;
   postResolved: boolean;
@@ -154,6 +156,7 @@ export const sb: SidebarState = {
   lspFlags: null, // { enabled, offline } global switches (config.lsp.*)
   lspProbing: false, // a diagnosis is running right now
   lspLoaded: false, // cache was fetched at least once
+  lspCheckedAt: null, // finished-at timestamp of the last diagnosis
   lspUnavailable: false, // the server has no LSP module wired
   reindexing: false, // client spinner until a fresh snapshot
   postResolved: false, // POST returned; next snapshot clears the spinner
