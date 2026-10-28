@@ -271,7 +271,9 @@ body[data-font="large"] { font-size: 17px; }
 }
 /* The `> ` prompt marker belongs to the text line. Attachments (if any) sit in
    a strip above it — see `.u-attach` — so the marker never floats over them. */
-.u-text { overflow-wrap: anywhere; }
+/* Переносы пользователя сохраняем: сообщение рендерится textContent, и без
+   pre-wrap многострочный промпт схлопывался в одну строку (B-36). */
+.u-text { overflow-wrap: anywhere; white-space: pre-wrap; }
 .u-text::before { content: "> "; color: var(--u-border); }
 .u-attach { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 /* agent text = calmer, dimmer than user block */

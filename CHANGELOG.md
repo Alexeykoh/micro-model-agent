@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Многострочное сообщение пользователя больше не схлопывается в одну строку.**
+  `.u-text` (сообщение в ленте) не имел `white-space: pre-wrap`, хотя текст
+  кладётся через `textContent` с переносами — длинный промпт с markdown читался
+  как одна строка. Живьём: блок из двух строк 19 px → 38 px,
+  `white-space: pre-wrap`. Гвард: `tests/webui-user-block-newlines.test.ts`.
 - **`POST …/tasks` с телом без `input` объясняет, что нужно.** Ответ был
   `{"title":"input required","status":400}` без `detail`; клиент, отправивший
   `prompt` вместо `input`, не понимал ошибку. Теперь `detail` называет поле, а
