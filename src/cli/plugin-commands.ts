@@ -4,6 +4,7 @@ import { bootstrap } from "../core/bootstrap";
 import { readMmaVersion } from "../core/version";
 import { t } from "../i18n/index";
 import { getDefaultChannel } from "../output";
+import { fail } from "./exit-code";
 import { setConfigValue } from "../config/registry";
 import { saveConfig } from "../config/config";
 import { formatPluginDetails, formatPluginList } from "../modules/plugins/format";
@@ -71,7 +72,7 @@ export function createPluginCommand(program: Command): void {
       const record = pluginManager.getRecords().find((r) => r.name === name);
       const channel = getDefaultChannel();
       if (!record) {
-        channel.writeLine(t("cli.plugins.not_found", { name }));
+        fail(t("cli.plugins.not_found", { name }));
         return;
       }
       for (const line of formatPluginDetails(
@@ -153,7 +154,7 @@ for (const draft of state.drafts) {
         const { pluginManager, config, configDir } = await bootstrap();
         const channel = getDefaultChannel();
         if (!pluginManager.getPlugin(pluginName)) {
-          channel.writeLine(t("cli.plugins.not_found", { name: pluginName }), "stderr");
+          fail(t("cli.plugins.not_found", { name: pluginName }));
           return;
         }
         // Единый путь записи: setConfigValue сам применит deny-list к живому
@@ -163,7 +164,7 @@ for (const draft of state.drafts) {
         else current.add(pluginName);
         const result = setConfigValue(config, "plugins.disabled", [...current].join(","));
         if (!result.ok) {
-          channel.writeLine(t("config.invalid_value", { key: "plugins.disabled" }), "stderr");
+          fail(t("config.invalid_value", { key: "plugins.disabled" }));
           return;
         }
         saveConfig(config, join(configDir, "config.json"), configDir);

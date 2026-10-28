@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **`mma plugins show/enable/disable` с неизвестным именем возвращают код 1.**
+  Раньше «Плагин не найден» печаталось, но процесс завершался успешно — в
+  отличие от `provider use` и `session delete`. Тот же класс у неудачной записи
+  `plugins.disabled`: конфиг не менялся, а `EXIT` был 0. Гвард:
+  `tests/cli/plugins-not-found-exit.test.ts`.
 - **`mma session diagnose` без `--json` — это отказ, а не успех.** Команда
   печатала «требует --json», возвращала `EXIT=0` и ничего не разбирала; флаг при
   этом не был виден в `--help` (только `-h`). Теперь отказ и «сессия не найдена»
