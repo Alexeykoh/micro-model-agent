@@ -198,21 +198,34 @@ export function renderUsage(h: Dict): void {
   }
   usageEl.appendChild(qualityRow);
 
-  // Context probe: how many tokens the backend actually loaded for the model
-  // (LM Studio and friends can load fewer than the configured window). We lead
-  // with the loaded count — the number the user cares about — and do NOT print
-  // the model's configured capacity; a low value is flagged instead.
-  let probeText = "—";
-  let probeCls = "dim";
-  const probe = h.contextProbe;
-  if (probe && typeof probe.actual === "number") {
-    probeText = t("web.usage.probe_loaded", { actual: fmtTokens(probe.actual) });
-    const configured = h.contextWindow || cfg.contextWindow || null;
-    probeCls = configured && probe.actual < configured ? "wn" : "";
-  }
-  const probeRow = usageRow(t("web.usage.probe"), probeText, probeCls);
-  if (probeCls === "wn") probeRow.title = t("web.usage.probe_hint");
+  // Context probe: сколько токенов бэкенд реально загрузил для модели. Проба
+  // приходит из bootstrap и НЕ перезапрашивается при смене модели, поэтому чужую
+  // пробу не показываем: иначе панель рисовала лимит прежнего провайдера
+  // (1000.0K при окне 131K).
+  const probeView = probeLoadedText(
+    h.contextProbe,
+    h.model || cfg.model,
+    h.contextWindow || cfg.contextWindow,
+  );
+  const probeRow = usageRow(t("web.usage.probe"), probeView.text, probeView.cls);
+  if (probeView.cls === "wn") probeRow.title = t("web.usage.probe_hint");
   usageEl.appendChild(probeRow);
+}
+
+/** Текст/класс строки «загруженный контекст» с проверкой принадлежности пробы. */
+export function probeLoadedText(
+  probe: Dict | null | undefined,
+  activeModel: string | null | undefined,
+  contextWindow?: number | null,
+): { text: string; cls: string } {
+  if (!probe || typeof probe.actual !== "number") return { text: "—", cls: "dim" };
+  if (probe.model && activeModel && String(probe.model) !== String(activeModel)) {
+    return { text: "—", cls: "dim" };
+  }
+  const text = t("web.usage.probe_loaded", { actual: fmtTokens(probe.actual) });
+  const low =
+    typeof contextWindow === "number" && contextWindow > 0 && probe.actual < contextWindow;
+  return { text, cls: low ? "wn" : "" };
 }
 
 // Workspace path and agent version under the composer.

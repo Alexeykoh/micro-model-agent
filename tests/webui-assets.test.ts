@@ -222,8 +222,15 @@ describe("webui assets", () => {
   it("compares the context probe against the configured window, not the history budget", () => {
     const a = loadAssets();
     const sidebar = a.jsModules?.["js/feed/sidebar.js"] || "";
-    expect(sidebar).toContain("const configured = h.contextWindow || cfg.contextWindow");
-    expect(sidebar).not.toContain("const configured = h.contextLimit");
+    // Проба сверяется с окном (и с активной моделью) через probeLoadedText.
+    expect(sidebar).toContain("probeLoadedText(");
+    expect(sidebar).toContain("h.contextWindow || cfg.contextWindow");
+    // Внутри самой проверки пробы бюджета истории нет — только окно.
+    const start = sidebar.indexOf("function probeLoadedText");
+    const probeFn = sidebar.slice(start, sidebar.indexOf("export function renderWorkspace", start));
+    expect(start).toBeGreaterThan(-1);
+    expect(probeFn).toContain("contextWindow");
+    expect(probeFn).not.toContain("contextLimit");
   });
 
   it("persists open session tabs and restores them on boot", () => {

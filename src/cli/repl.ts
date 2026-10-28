@@ -1185,6 +1185,17 @@ export class Repl implements ReplContext, Host {
   async start(): Promise<void> {
     this.running = true;
 
+    // Интерактивный онбординг без TTY бесполезен, а раньше он гонялся со
+    // stdin-EOF: REPL успевал выйти до печати причины, и код возврата зависел
+    // от гонки. Выходим сразу и детерминированно (A-16).
+    if (
+      process.stdout.isTTY !== true &&
+      (readEnv("START_MEET") === "1" || readEnv("START_INIT") === "1")
+    ) {
+      this.output.writeLine(pc.yellow(t("onboarding.non_interactive")), "stderr");
+      process.exit(1);
+    }
+
     const info: string[] = [];
     const row = (label: string, value: string): void => {
       info.push(` ${pc.yellow(label)} ${value}`);
