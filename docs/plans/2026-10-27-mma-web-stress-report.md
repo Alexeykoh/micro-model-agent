@@ -11,7 +11,7 @@
 при `model is unavailable` у субагента) в локальный `master`, пуш отложен.
 
 **Сводный реестр всех находок:** [2026-10-27-mma-web-bug-register.md](./2026-10-27-mma-web-bug-register.md)
-(84 пункта: 4 K, 9 V, 42 M, 29 N + список «проверено, работает»).
+(89 пунктов: 4 K, 9 V, 44 M, 32 N + список «проверено, работает»).
 
 ## Критично / высоко
 
@@ -918,6 +918,80 @@ reload цело), сборка зелёная, но ход занял **17 ми�
   флаги `-d`, `-e`, `-j`, `--reasoning`, `--context-log`, `--no-agents-md`.
 - `agents init`/`meet` в интерактивном терминале проверить нельзя (нужен TTY);
   проверено только поведение в пайпе.
+
+## Волна 18 — остальные CLI-команды (`plugins`, `model`, `context`, `provider`, `security`, `doctor`)
+
+Тот же изолированный конфиг `…\mma-cli-test`. Все записи шли только в него,
+реальный `~/.mma` не менялся.
+
+**Средне:**
+
+- **`mma plugins list` врёт: «Плагины не загружены» при десяти загруженных.** В том
+  же конфиге `mma doctor` печатает `Plugins [ok] loaded: 10 active / 10 total`, а
+  веб-панель показывает те же 10 встроенных (`lsp-check`, `lint-on-write`,
+  `angular11`, `notify`, `execution`, `session`, `indexer`, `mcp_module`,
+  `browser`, `skills`). Причина в коде: `printList` (`src/cli/plugin-commands.ts:26`)
+  при пустом списке сторонних плагинов печатает `cli.plugins.none` и **не передаёт
+  `hiddenHint`** в `formatPluginList`, хотя `modules/plugins/format.ts:130-134`
+  для этого случая уже содержит готовый ключ `cli.plugins.none_external`
+  («Сторонних плагинов нет.») — и комментарий там прямо описывает этот же дефект,
+  замеченный рядом с `/doctor`. То есть фикс формата есть, а вызов его не
+  использует.
+- **`mma model use <имя>` не проверяет имя.** `model use nope/nope` →
+  `Модель установлена: nope/nope`, `EXIT=0`, значение записано в `core.json`;
+  следующая команда с этой моделью упадёт уже на провайдере. При этом
+  `provider use nope` корректно отдаёт `Unknown provider "nope"` и `EXIT=1`, а
+  `model list` знает список доступных моделей — валидация просто не подключена.
+  Побочный эффект: после установки несуществующей модели `model list` **молча
+  перестаёт печатать строку «Текущая модель: …»** (она выводится только если имя
+  нашлось в списке) — пользователь не видит ни ошибки, ни текущего значения.
+
+**Низко:**
+
+- **`mma plugins disable <несуществующий>` → `EXIT=0`.** Вывод «Плагин не найден:
+  nope-plugin», код успеха — расходится с `provider use` (1) и `session delete`
+  (1) в том же CLI.
+- **i18n-протечки в CLI.** `provider use nope` печатает английское
+  `Unknown provider "nope"` в русской локали; `security policies` выводит
+  английские описания пресетов («Good security with reasonable flexibility»,
+  «Minimal security with maximum flexibility») рядом с русским «Рекомендуется
+  для: …».
+- **Подсказка не той поверхности.** `model list` заканчивается строкой
+  «(Используйте /model use <имя> для смены)» — это slash-команда REPL, тогда как
+  в CLI команда называется `mma model use <имя>`.
+- **`mma changelog` в исходном дереве:** «Changelog не найден для этой
+  установки.», `EXIT=0`, хотя `CHANGELOG.md` лежит в корне репозитория — команда
+  ищет только упакованный файл рядом с `dist`.
+- **Политика вывода JSON неоднородна.** `config show` печатает чистый JSON без
+  предупреждения, а `session export --out -` (A-14) — с WARN в stdout. Один и тот
+  же принцип «машинный вывод не засоряем» реализован в одном месте и забыт в
+  другом.
+
+**Проверено, работает корректно:**
+
+- `plugins list -a` — 10 плагинов с версиями, источником `[builtin]`, правами,
+  тулами и хуками; `plugins show angular11` — автор, homepage, права, тулы, хуки.
+- `plugins enable/disable` работают и персистятся: `disable notify` → «notify
+  выкл» и `"disabled": ["notify"]` в `plugins.json`; обратный `enable` возвращает
+  состояние.
+- `model list` — текущая модель со `*`, список моделей из LM Studio (13), пометки
+  сертификации; `model use` (для существующей) пишет `core.json` и подтверждает.
+- `context` — показ разбивки (система 10 % / резерв 15 % / история 75 %);
+  валидация: `context 100` → «Должно быть число >= 1024», `context abc` → то же,
+  `context --system 1.5` → «Нужно число от 0.05 до 0.9», все с `EXIT=1`;
+  `context --system 0.12` пишется в `core.json` и подтверждается.
+- `provider list` (активный со `*`), `provider check` — `✓ lmstudio 36 ms,
+  13 моделей`, `✓ opencode-go 488 ms, 38 моделей`, `EXIT=0`; `provider use nope`
+  → `EXIT=1`, конфиг не изменён.
+- `security status` (9 пунктов), `security policies` (3 пресета с описаниями).
+- `doctor` — 7 секций `[ok]`, `doctor: OK`, `EXIT=0`, укладывается в минуту;
+  показывает и `Plugins [ok] loaded: 10 active / 10 total`, что и вскрыло
+  расхождение с `plugins list`.
+- `usage` на `lmstudio` честно объясняет, что баланс отдаёт только OpenRouter
+  (а Zen/Go — в веб-дашборде).
+- `config show` — валидный JSON с `apiKey: "***"`; `config set stuckThreshold 7`
+  → «Установлено», `config set stuckThreshold abc` → «invalid-value», `EXIT=1`,
+  конфиг не изменён.
 
 ## Отложено (по решению пользователя)
 
