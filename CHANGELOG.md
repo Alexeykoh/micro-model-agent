@@ -4,6 +4,22 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Внутренняя диагностика харнесса больше не попадает в чат обычного режима.**
+  Застревание шага («нет прогресса», счётчики упавших тулов), падение хука
+  плагина (`plugin "…" onBeforeThink threw …`) и принудительная остановка хода
+  (`web.turn.stop_stalled` / `stop_silent`) — это счётчики петли, а не сообщения
+  для пользователя. Теперь они идут через `logger.diagnostic(...)` (событие шины
+  несёт `data.diagnostic = true`) и рендерятся только при
+  `ui.verbosity = "verbose"`; в обычном режиме лента остаётся чистой. Директивы
+  для модели и записи в `session.jsonl` не изменились. Гварды:
+  `tests/execution-stuck-warning-diagnostic.test.ts`,
+  `tests/modules/plugins/dispatch-diagnostic.test.ts`,
+  `tests/webui-feed-stop-banner-dom.test.ts`.
+
 ## [0.15.0] - 2026-10-27
 
 ### Added

@@ -94,7 +94,10 @@ export function onTurnEnd(data: Dict): void {
     appendTo(feed, el("div", cls, glyph + reason));
     announce(reason);
   } else {
-    if (data.stopReason) {
+    // Причина принудительной остановки (stalled/silent/duplicate) — внутренняя
+    // диагностика петли, а не текст для пользователя: в обычном режиме её не
+    // показываем, только в «подробно» (STYLE.md, quiet by default).
+    if (data.stopReason && verbosity() === "verbose") {
       const reason = t("web.turn.stop_" + data.stopReason);
       appendTo(feed, el("div", "warnline", "⚠ " + reason));
       announce(reason);

@@ -532,10 +532,10 @@ function safeUnload(plugin: AgentPlugin, ctx?: unknown): void {
     const out = plugin.onUnload(ctx);
     if (out instanceof Promise) {
       out.catch((e: unknown) => {
-        logger.warn(`plugin "${plugin.name}" onUnload rejected`, { error: String(e) });
+        logger.diagnostic("warn", `plugin "${plugin.name}" onUnload rejected`, { error: String(e) });
       });
     }
   } catch (e) {
-    logger.warn(`plugin "${plugin.name}" onUnload threw`, { error: String(e) });
+    logger.diagnostic("warn", `plugin "${plugin.name}" onUnload threw`, { error: String(e) });
   }
 }

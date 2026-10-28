@@ -229,7 +229,13 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
             (deps.state.lastStuckWarnTurn !== turnSeq ||
               iter - deps.state.lastStuckWarnIter >= STUCK_WARN_REPEAT_EVERY);
         if (logIt) {
-          ctx.logger?.warn(stuckReason);
+          // Внутренняя диагностика петли (счётчики упавших тулов, шаги плана):
+          // в чате видна только в режиме «подробно» (STYLE.md, quiet by default).
+          if (typeof ctx.logger?.diagnostic === "function") {
+            ctx.logger.diagnostic("warn", stuckReason);
+          } else {
+            ctx.logger?.warn(stuckReason);
+          }
           ctx.sessionLog?.directive(
             "stuck-warning",
             stuckReason,

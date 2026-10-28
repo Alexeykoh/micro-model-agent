@@ -76,7 +76,9 @@ function readToolDefinitions(plugin: AgentPlugin): { list?: unknown[]; problem?:
   try {
     raw = plugin.getToolDefinitions.call(plugin);
   } catch (e) {
-    logger.warn(`plugin "${plugin.name}" getToolDefinitions threw`, { error: String(e) });
+    logger.diagnostic("warn", `plugin "${plugin.name}" getToolDefinitions threw`, {
+      error: String(e),
+    });
     return {};
   }
   if (raw === undefined || raw === null) return {};
