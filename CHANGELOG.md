@@ -26,6 +26,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   застревании не попадала в `session.jsonl`. Контекст хука собран в
   `buildThinkCtx()` (единственное место), `directive` пишет через
   `SessionLogger.logDirective`. Гвард: `tests/plugin-think-ctx.test.ts`.
+- **`mma plugins list` больше не врёт про отсутствие плагинов.** Без `--all`
+  команда печатала «Плагины не загружены», хотя встроенные загружены и видны в
+  `mma doctor` (`Plugins [ok] loaded: 10 active / 10 total`) и в веб-панели.
+  Теперь при скрытых встроенных печатается «Сторонних плагинов нет.», а
+  «Плагины не загружены» остаётся только для действительно пустого набора.
+  Листинг собран в `pluginListLines()`. Гвард:
+  `tests/cli/plugins-list-hidden-builtins.test.ts`.
 
 ## [0.15.0] - 2026-10-27
 
