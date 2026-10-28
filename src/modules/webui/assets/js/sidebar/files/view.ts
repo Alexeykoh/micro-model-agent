@@ -52,6 +52,31 @@ export function paintFile(body: HTMLElement | null, path: string, file: FetchedF
   else paintMedia(body, path, file.mime);
 }
 
+/** Предел для нумерации строк: выше — рендерим без жёлоба, чтобы не тормозить. */
+const LINE_NUMBER_CAP = 20000;
+
+/**
+ * Текст в `<pre>` с жёлобом номеров строк. Жёлоб — отдельная колонка с тем же
+ * шрифтом/интерлиньяжем; код идёт с `white-space: pre` (горизонтальная
+ * прокрутка), поэтому номер совпадает со своей строкой и длинные строки больше
+ * не рвутся посреди атрибута.
+ */
+function paintNumbered(body: HTMLElement, text: string, code: HTMLElement): void {
+  const wrap = el("div", "fv");
+  const lines = text.split("\n").length;
+  if (lines <= LINE_NUMBER_CAP) {
+    const gutter = el("pre", "fv-gutter");
+    // Служебная колонка: не попадает ни в копирование, ни в скринридер.
+    gutter.setAttribute("aria-hidden", "true");
+    gutter.textContent = Array.from({ length: lines }, (_, i) => String(i + 1)).join("\n");
+    wrap.appendChild(gutter);
+  }
+  const pre = el("pre", "fpre");
+  pre.appendChild(code);
+  wrap.appendChild(pre);
+  body.appendChild(wrap);
+}
+
 /** Text files: markdown rendered, everything else in a highlighted <pre>. */
 function paintText(body: HTMLElement, path: string, text: string): void {
   const ext = extOf(path);
@@ -61,7 +86,6 @@ function paintText(body: HTMLElement, path: string, text: string): void {
     body.appendChild(wrap);
     return;
   }
-  const pre = el("pre", "fpre");
   const code = el("code", "fcode");
   code.textContent = text;
   const hl = window.hljs;
@@ -75,8 +99,7 @@ function paintText(body: HTMLElement, path: string, text: string): void {
       /* подсветка best-effort */
     }
   }
-  pre.appendChild(code);
-  body.appendChild(pre);
+  paintNumbered(body, text, code);
 }
 
 /** Binary-but-viewable files: images/audio/video/PDF via native elements. */

@@ -1124,12 +1124,28 @@ body.light .sel > button { border: 1px solid var(--border); }
 .files-tree > .frow, .files-tree > .fdim {
   padding-left: calc(var(--files-gutter) + var(--indent, 0) * var(--files-indent));
 }
-.fpre { margin: 0; max-width: 100%; overflow-x: hidden; }
+/* Просмотр файла: жёлоб номеров строк + код с горизонтальной прокруткой.
+   Шрифт и интерлиньяж у жёлоба и кода обязаны совпадать — на этом держится
+   выравнивание номера со строкой (JS не расставляет номера построчно). */
+.fv {
+  display: flex; align-items: flex-start; max-width: 100%;
+  overflow-x: auto; background: var(--surface); border-radius: 6px;
+}
+.fv-gutter {
+  margin: 0; padding: 8px 6px 8px 10px; text-align: right;
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  font-size: 11.5px; line-height: 1.5; color: var(--dim-b);
+  /* Номера — служебная колонка: копирование не должно их тащить. */
+  user-select: none; -webkit-user-select: none;
+  position: sticky; left: 0; background: var(--surface); z-index: 1;
+}
+.fpre { margin: 0; max-width: 100%; overflow-x: visible; }
 .fpre .fcode {
   display: block; font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
   font-size: 11.5px; line-height: 1.5;
-  white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
-  color: var(--fg); padding: 8px 10px; background: var(--surface); border-radius: 6px;
+  /* pre: строка = ровно одна визуальная строка, иначе номер уезжает от неё. */
+  white-space: pre; overflow-wrap: normal; word-break: normal;
+  color: var(--fg); padding: 8px 10px 8px 4px; background: transparent;
 }
 .fmd { font-size: 12.5px; line-height: 1.55; min-width: 0; overflow-wrap: anywhere; }
 .fimg { max-width: 100%; height: auto; border-radius: 6px; }
