@@ -60,6 +60,14 @@ export function preflightFromConfig(ctx: PreflightContext): Promise<PreflightRes
   });
 }
 
+/**
+ * Ответ провайдера получен, но текст пуст: reasoning-модель на `max_tokens: 1`
+ * отдаёт пустой `content` (и часто без `reasoning_content`). Это не «модели
+ * нет»: незагруженная модель отвечает 4xx, а 200 с `choices[0]` значит, что
+ * запрос принят и генерация состоялась.
+ */
+export const PROBE_ANSWERED = "ok";
+
 /** Минимальная дешёвая chat-проба: подтверждает, что модель загружена. */
 export async function probeChat(
   cfg: PreflightConfig,
@@ -86,8 +94,10 @@ export async function probeChat(
     const data = (await resp.json()) as {
       choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
     };
-    const msg = data.choices?.[0]?.message;
-    return msg?.content || msg?.reasoning_content || "";
+    const choice = data.choices?.[0];
+    if (!choice) return "";
+    const msg = choice.message;
+    return msg?.content || msg?.reasoning_content || PROBE_ANSWERED;
   } finally {
     clearTimeout(timer);
   }

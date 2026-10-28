@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **`/v1/ready` больше не отдаёт 503 `no-model` для reasoning-моделей.** Проба
+  шлёт `max_tokens: 1` и требовала непустой `content`, а reasoning-модель на
+  одном токене отдаёт пустой текст — сервис считал себя неготовым, пока задачи
+  выполнялись. Теперь ответ 200 с `choices[0]` считается достаточным (модели нет
+  → провайдер отвечает 4xx). Живьём на `mma serve` с e4b: `/v1/ready` →
+  `200 {"status":"ready"}`. Гвард: `tests/providers/probe-chat-reasoning.test.ts`.
 - **PII-редактор больше не портит ISO-таймстемпы в ответах API.** Правило
   `birthdate` (`YYYY-MM-DD`) срабатывало на `createdAt`/`updatedAt`/
   `startedAt`/`finishedAt`/`ts`, и ответ сервиса отдавал
