@@ -19,6 +19,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `tests/execution-stuck-warning-diagnostic.test.ts`,
   `tests/modules/plugins/dispatch-diagnostic.test.ts`,
   `tests/webui-feed-stop-banner-dom.test.ts`.
+- **Хук `onBeforeThink` снова отдаёт `sessionLog.directive`.** Пролог итерации
+  передавал плагинам только `sessionLog.plan`, а плагин `execution` пишет
+  stuck-предупреждение через `directive` — каждый такой варнинг заканчивался
+  `TypeError: ctx.sessionLog?.directive is not a function`, и запись о
+  застревании не попадала в `session.jsonl`. Контекст хука собран в
+  `buildThinkCtx()` (единственное место), `directive` пишет через
+  `SessionLogger.logDirective`. Гвард: `tests/plugin-think-ctx.test.ts`.
 
 ## [0.15.0] - 2026-10-27
 
