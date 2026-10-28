@@ -7,6 +7,7 @@ import { getDefaultChannel } from "../output";
 import { setConfigValue } from "../config/registry";
 import { saveConfig } from "../config/config";
 import { formatPluginDetails, formatPluginList } from "../modules/plugins/format";
+import type { PluginLoadFailure, PluginRecord } from "../modules/plugins/records";
 import { reloadSummaryLines } from "../modules/plugins/reload";
 import { draftsDir } from "../modules/plugins/drafts";
 import type { PluginManager } from "../modules/plugins/manager";
@@ -14,21 +15,36 @@ import { pc } from "../ui/colors";
 
 // CLI-группа `mma plugins`: список, подробности, вкл/выкл.
 
+/**
+ * Строки листинга `mma plugins list`. Вынесено из `printList` ради гварда:
+ * «плагинов нет» — неправда, когда загружены встроенные (они скрыты по
+ * умолчанию, но `mma doctor` в том же конфиге печатает `Plugins [ok] 10 active`).
+ */
+export function pluginListLines(
+  records: PluginRecord[],
+  failures: PluginLoadFailure[],
+  all: boolean,
+  mmaVersion: string,
+): string[] {
+  const visible = all ? records : records.filter((r) => !r.builtin);
+  if (visible.length === 0 && failures.length === 0) {
+    const hidden = records.filter((r) => r.builtin).length;
+    return [hidden > 0 && !all ? t("cli.plugins.none_external") : t("cli.plugins.none")];
+  }
+  const lines = formatPluginList(records, failures, { showBuiltin: all, mmaVersion });
+  if (!all && visible.length > 0) lines.push(t("cli.plugins.only_external"));
+  return lines;
+}
+
 /** Печатает список через общий формат (тот же, что у `/plugins` в REPL). */
 function printList(manager: PluginManager, all: boolean): void {
-  const records = manager.getRecords();
-  const failures = manager.getFailures();
-  const visible = all ? records : records.filter((r) => !r.builtin);
-  const lines = formatPluginList(records, failures, {
-    showBuiltin: all,
-    mmaVersion: readMmaVersion(),
-  });
-  if (visible.length === 0 && failures.length === 0) {
-    getDefaultChannel().writeLine(t("cli.plugins.none"));
-    return;
-  }
+  const lines = pluginListLines(
+    manager.getRecords(),
+    manager.getFailures(),
+    all,
+    readMmaVersion(),
+  );
   for (const line of lines) getDefaultChannel().writeLine(line);
-  if (!all && visible.length > 0) getDefaultChannel().writeLine(t("cli.plugins.only_external"));
 }
 
 /**
