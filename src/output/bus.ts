@@ -47,3 +47,18 @@ export class OutputBus implements OutputSink {
 
 /** Шина по умолчанию для всего приложения. */
 export const defaultOutputBus = new OutputBus();
+
+/**
+ * Маршрут `log`-событий в stderr. Нужен командам, чей stdout — машинный
+ * документ (`mma session export --out -`): предупреждение стартовой проверки
+ * не должно ломать пайп `| jq`. Блоки `writeLine` остаются в stdout.
+ */
+let logsToStderr = false;
+
+export function setLogsToStderr(on: boolean): void {
+  logsToStderr = on;
+}
+
+export function logsToStderrOn(): boolean {
+  return logsToStderr;
+}

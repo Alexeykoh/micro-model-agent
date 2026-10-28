@@ -4,6 +4,17 @@ All notable changes to Micro Models Agent (MMA) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`mma session export --out -` отдаёт в stdout только документ.** WARN стартовой
+  проверки (бюджет системного промпта) шёл в тот же поток, что и JSON, и
+  `| jq` падал на `Unexpected character 'W'`. Теперь для машинного вывода
+  `log`-события маршрутизируются в stderr (`setLogsToStderr` в шине вывода),
+  payload-блоки остаются в stdout. Гвард:
+  `tests/output/logs-to-stderr.test.ts`.
+
 ## [0.15.0] - 2026-10-27
 
 ### Added

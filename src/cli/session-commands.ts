@@ -9,7 +9,7 @@ import { dirname, join } from "path";
 import { t } from "../i18n/index";
 import { pc } from "../ui/colors";
 import { bootstrap } from "../core/bootstrap";
-import { getDefaultChannel } from "../output";
+import { getDefaultChannel, setLogsToStderr } from "../output";
 import { globalExportsDir } from "../config/paths";
 import {
   extensionFor,
@@ -117,6 +117,9 @@ export function buildSessionCommands(program: Command): void {
     .option("--no-redact", t("cli.export_no_redact"))
     .option("--compact", t("cli.export_compact"))
     .action(async (id: string, opts: { format: string; out?: string; redact: boolean; compact?: boolean }) => {
+      // `--out -` — машинный документ в stdout: диагностику старта (WARN о
+      // бюджете промпта и т. п.) уводим в stderr, иначе пайп `| jq` ломается.
+      if (opts.out === "-") setLogsToStderr(true);
       const { sessionManager } = await bootstrap();
       const meta = resolveSession(sessionManager, id);
       if (!meta) {
