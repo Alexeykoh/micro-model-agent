@@ -158,12 +158,13 @@ export class SessionManager {
   }
 
   /**
-   * Обновить эффективные окно/модель активной сессии. Вызывается после probe/
-   * reconfigure: `create()` фиксирует стартовый `contextWindow`, и без этого
-   * мета/topbar показывали устаревшее значение после смены провайдера/модели.
-   * Fail-open: нет активной сессии/меты — no-op.
+   * Обновить окно/модель после probe/reconfigure. Пишет мету активной сессии И
+   * дефолты новых (`create()` берёт их из `options`, а не из конфига). Fail-open.
    */
   setEffectiveContext(contextWindow: number, model?: string): void {
+    // Дефолты новых сессий: без этого они записывали стартовую модель.
+    this.options.contextWindow = contextWindow;
+    if (model) this.options.model = model;
     if (!this.activeId) return;
     const meta = this.store.loadMeta(this.activeId);
     if (!meta) return;

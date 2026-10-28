@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Новая сессия записывает действующую модель и окно, а не снимок на старте.**
+  `SessionManager.create()` берёт дефолты из `options`, а `setEffectiveContext()`
+  после смены модели/провайдера обновлял только мету активной сессии — поэтому
+  сессии на e4b хранили `"model": "deepseek-v4.1-flash"` (окно при этом было
+  верным), и чужая модель уезжала в шапку `/export`, `/v1/sessions` и CLI-экспорт.
+  Теперь `setEffectiveContext` синхронизирует и дефолты новых сессий. Гвард:
+  `tests/session/manager-defaults-sync.test.ts`.
 - **`mma changelog` находит `CHANGELOG.md` (и на Windows).** Путь к пакету
   получали вручную из `import.meta.url` (`slice("file://")`), и на Windows
   оставался ведущий слэш `/E:/…` — `existsSync(package.json)` не срабатывал ни
