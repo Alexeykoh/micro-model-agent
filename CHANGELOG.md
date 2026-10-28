@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Интерактивные команды в non-TTY возвращают код 1.** `mma meet` и
+  `mma agents init` в пайпе печатали «Эта команда требует интерактивного
+  терминала», ничего не делали и завершались успешно — скрипт/CI считал
+  знакомство и AGENTS.md выполненными. Теперь причина уходит в stderr, а код
+  возврата — 1 (REPL сообщает код из `setExitCode` через `currentExitCode`).
+  Гвард: `tests/cli/onboarding-non-tty.test.ts`.
 - **`mma plugins show/enable/disable` с неизвестным именем возвращают код 1.**
   Раньше «Плагин не найден» печаталось, но процесс завершался успешно — в
   отличие от `provider use` и `session delete`. Тот же класс у неудачной записи

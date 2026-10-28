@@ -25,6 +25,7 @@ import {
 import { Renderer } from "../ui/renderer";
 import { resolveVerbosity, } from "../ui/theme";
 import { printLastAction } from "./repl-last-action";
+import { currentExitCode, setExitCode } from "./exit-code";
 import { divider } from "../ui/box";
 import { t } from "../i18n/index";
 import type { Logger } from "../logger/app-logger";
@@ -577,7 +578,9 @@ export class Repl implements ReplContext, Host {
       this.agent.shutdown();
       // Закрываем лог сессии на выходе из REPL.
       this.logger?.closeSessionLog();
-      if (this.exitOnClose) process.exit(0);
+      // Код возврата мог задать путь запуска (отказ онбординга в non-TTY):
+      // скрипт обязан увидеть 1, а не молчаливый 0.
+      if (this.exitOnClose) process.exit(currentExitCode());
     });
 
     if (this.exitOnClose && !process.stdin.isTTY) {
@@ -587,7 +590,7 @@ export class Repl implements ReplContext, Host {
         this.agent.shutdown();
         // Закрываем лог сессии на выходе из REPL.
         this.logger?.closeSessionLog();
-        process.exit(0);
+        process.exit(currentExitCode());
       });
     }
 
@@ -1316,10 +1319,14 @@ export class Repl implements ReplContext, Host {
         this.slog.logOnboarding(`${mode}_start`, { model: this.config.model });
         if (mode === "meet") {
           const { runMeet } = await import("../modules/onboarding/meet");
-          await runMeet(this);
+          const started = await runMeet(this);
+          // Отказ в non-TTY — не успех: процесс обязан вернуть ненулевой код,
+          // иначе скрипт/CI считает, что знакомство записано (A-16).
+          if (!started && process.stdout.isTTY !== true) setExitCode(1);
         } else {
           const { runInit } = await import("../modules/onboarding/init");
-          await runInit(this);
+          const started = await runInit(this);
+          if (!started && process.stdout.isTTY !== true) setExitCode(1);
           this.slog.logOnboarding("init_done", { model: this.config.model });
         }
       } else if (readEnv("POST_SETUP") === "1" && process.stdout.isTTY === true) {

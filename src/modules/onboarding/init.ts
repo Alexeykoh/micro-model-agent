@@ -27,7 +27,7 @@ export async function runInit(ctx: ReplContext, opts: RunInitOptions = {}): Prom
   }
 
   if (process.stdout.isTTY !== true) {
-    ctx.output.writeLine(pc.yellow(t("onboarding.non_interactive")));
+    ctx.output.writeLine(pc.yellow(t("onboarding.non_interactive")), "stderr");
     return false;
   }
 

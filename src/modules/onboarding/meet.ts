@@ -25,7 +25,7 @@ export async function runMeet(ctx: ReplContext, opts: RunMeetOptions = {}): Prom
   }
 
   if (process.stdout.isTTY !== true) {
-    ctx.output.writeLine(pc.yellow(t("onboarding.non_interactive")));
+    ctx.output.writeLine(pc.yellow(t("onboarding.non_interactive")), "stderr");
     return false;
   }
 

@@ -72,7 +72,12 @@ describe("runMeet", () => {
     expect(ok).toBe(false);
     expect(ctx.runAgent).not.toHaveBeenCalled();
     expect(ctx.output.writeLine).toHaveBeenCalledOnce();
-    expect(ctx.output.writeLine).toHaveBeenCalledWith(pc.yellow(t("onboarding.non_interactive")));
+    // Причина отказа — в stderr: stdout остаётся человеческим выводом, а скрипт
+    // видит ненулевой код (A-16).
+    expect(ctx.output.writeLine).toHaveBeenCalledWith(
+      pc.yellow(t("onboarding.non_interactive")),
+      "stderr",
+    );
     expect(ctx.toolCtx.onboarding).toBeUndefined();
     expect(ctx.agent.pushPromptBlock).not.toHaveBeenCalled();
   });
