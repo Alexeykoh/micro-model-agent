@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **`mma changelog` находит `CHANGELOG.md` (и на Windows).** Путь к пакету
+  получали вручную из `import.meta.url` (`slice("file://")`), и на Windows
+  оставался ведущий слэш `/E:/…` — `existsSync(package.json)` не срабатывал ни
+  на одном уровне, функция всегда возвращала `null` («Changelog не найден для
+  этой установки»). Теперь `fileURLToPath`; чинит и показ «что нового» в
+  апдейтере. Гвард: `tests/updater/changelog-reader.test.ts`.
 - **`mma model list` подсказывает CLI-форму смены модели.** Было «(Используйте
   /model use <имя> для смены)» — такой команды в терминале нет. Теперь
   «(Сменить: mma model use <имя>)»; подсказка REPL (`/model use`) не изменилась —

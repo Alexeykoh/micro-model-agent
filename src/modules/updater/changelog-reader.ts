@@ -1,6 +1,7 @@
 // Чтение CHANGELOG.md из установленного пакета и вырезка секций версий.
 import { readFileSync, existsSync } from "fs";
 import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 
 /**
  * Читает bundled CHANGELOG.md из установленного npm-пакета.
@@ -9,12 +10,11 @@ import { dirname, join } from "path";
  */
 export function readChangelog(packageName: string): string | null {
   try {
-    // Идём вверх от этого файла в поисках package.json
-    let dir = dirname(import.meta.url);
-    // file:// URL в путь на POSIX, иначе используем путь как есть
-    if (dir.startsWith("file://")) {
-      dir = decodeURIComponent(dir.slice(7));
-    }
+    // Идём вверх от этого файла в поисках package.json. `fileURLToPath`, а не
+    // ручной slice("file://"): на Windows последний оставлял ведущий слэш
+    // (`/E:/…`) и `existsSync` не находил package.json ни на одном уровне —
+    // changelog всегда «не найден».
+    let dir = dirname(fileURLToPath(import.meta.url));
     // Ищем корень пакета (package.json с совпадающим именем)
     for (let i = 0; i < 10; i++) {
       const pkgPath = join(dir, "package.json");
