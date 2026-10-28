@@ -182,7 +182,8 @@ describe("providers module", () => {
         { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
         opts,
       );
-      expect(() => m.switch("nope")).toThrow(/Unknown provider/);
+      // Сообщение локализовано (ru/en), поэтому проверяем имя провайдера.
+      expect(() => m.switch("nope")).toThrow(/nope/);
     });
 
     it("serializes back to config with active + entries + legacy fields", () => {

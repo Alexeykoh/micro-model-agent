@@ -9,6 +9,10 @@ import {
   getSecurityPolicy,
   type SecurityPolicyPreset,
 } from "../modules/security/security-policies";
+import {
+  securityPolicyDescription,
+  securityPolicyName,
+} from "../modules/security/policy-i18n";
 import { globalAuditNotifier } from "../modules/security/audit-notifier";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { t } from "../i18n/index";
@@ -101,8 +105,8 @@ export function createSecurityCommand(program: Command): void {
         if (preset === "custom") continue;
 
         const marker = " ";
-        getDefaultChannel().writeLine(` ${marker}${preset.padEnd(12)}  ${policy.name}`);
-        getDefaultChannel().writeLine(`             ${policy.description}`);
+        getDefaultChannel().writeLine(` ${marker}${preset.padEnd(12)}  ${securityPolicyName(policy)}`);
+        getDefaultChannel().writeLine(`             ${securityPolicyDescription(policy)}`);
         getDefaultChannel().writeLine(
           `             ${t("cli.security.recommended_for")}: ${policy.recommendedFor.join(", ")}`,
         );
@@ -134,9 +138,9 @@ export function createSecurityCommand(program: Command): void {
       appConfig.security = newSecurityConfig;
       saveConfig(appConfig, configPath, dirname(configPath));
 
-      getDefaultChannel().writeLine(t("cli.security.policy_applied", { name: policy.name }));
+      getDefaultChannel().writeLine(t("cli.security.policy_applied", { name: securityPolicyName(policy) }));
       getDefaultChannel().writeLine(
-        t("cli.security.policy_description", { description: policy.description }),
+        t("cli.security.policy_description", { description: securityPolicyDescription(policy) }),
       );
     });
 

@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **`POST …/tasks` с телом без `input` объясняет, что нужно.** Ответ был
+  `{"title":"input required","status":400}` без `detail`; клиент, отправивший
+  `prompt` вместо `input`, не понимал ошибку. Теперь `detail` называет поле, а
+  при наличии `prompt` прямо подсказывает положить текст в `input`. Гвард:
+  `tests/service/submit-input-hint.test.ts`.
+- **CLI-текст политик безопасности и неизвестного провайдера локализован.**
+  `mma security policies` печатал английские имена и описания пресетов рядом с
+  русским «Рекомендуется для», а `provider use` — `Unknown provider "…"`.
+  Подписи берутся из словаря (`security.policy.*`, `provider.unknown`);
+  `security-policies.ts` остался на своём потолке, текст вынесен в
+  `modules/security/policy-i18n.ts`. Гвард: `tests/cli/cli-locale-text.test.ts`.
 - **`/v1/ready` больше не отдаёт 503 `no-model` для reasoning-моделей.** Проба
   шлёт `max_tokens: 1` и требовала непустой `content`, а reasoning-модель на
   одном токене отдаёт пустой текст — сервис считал себя неготовым, пока задачи

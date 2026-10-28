@@ -7,6 +7,7 @@ import { createProvider, defaultRegistry } from "./create";
 import { resolveCacheCapability } from "./cache";
 import { resolveModelCapabilities } from "./capabilities";
 import { BUILTIN_PROVIDERS } from "./presets";
+import { t } from "../../i18n/index";
 import { getEgressGuard, SanitizingProvider } from "./sanitizing";
 
 export interface ProviderManagerOptions {
@@ -132,7 +133,7 @@ export class ProviderManager {
   /** Hot-swap на именованный провайдер; пересобрать активный. */
   switch(name: string, model?: string): LLMProvider {
     if (!this.entryByName(name)) {
-      throw new Error(`Unknown provider "${name}"`);
+      throw new Error(t("provider.unknown", { name }));
     }
     this.activeProviderName = name;
     if (model !== undefined) this.model = model;
@@ -198,7 +199,7 @@ export class ProviderManager {
 
   private build(name: string): LLMProvider {
     const entry = this.entryByName(name);
-    if (!entry) throw new Error(`Unknown provider "${name}"`);
+    if (!entry) throw new Error(t("provider.unknown", { name }));
     const key = `${name}|${this.model}`;
     const cached = this.cache.get(key);
     if (cached) return cached;
