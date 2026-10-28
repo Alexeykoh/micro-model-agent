@@ -14,12 +14,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `manual:`): шаг про компонент/страницу/стили с одним `bun run build` не
   переводится в `done`, а получает подсказку, чем заменить доказательство.
   Добавлен вид проверки `http:<url>[~маркер]` — GET-проба (2xx + подстрока,
-  таймаут 3 c, тело ≤256 KiB, редиректы не разыменовываются). Спека:
-  `docs/specs/2026-10-28-turn-runtime-gate-design.md` (W1); `manual:` с записью
-  наблюдения — W2, `DEBT(turn-runtime-gate)`. Гварды:
+  таймаут 3 c, тело ≤256 KiB, редиректы не разыменовываются). Спекa:
+  `docs/specs/2026-10-28-turn-runtime-gate-design.md`. Гварды:
   `tests/execution/verify-evidence-class.test.ts`,
   `tests/execution/verify-behavior-step.test.ts`,
   `tests/execution/http-check.test.ts`.
+- **`manual:`-проверка UI-шага требует наблюдения.** Закрыть шаг про
+  поведение/интерфейс с «проверил глазами» и без записи больше нельзя: нужен
+  `note`, наблюдение пишется в журнал сессии событием `verify_evidence`, а
+  финальный аудит считает такой шаг незакрытым (`isUnconfirmed`). Для research/
+  доков `manual:` остаётся самоподтверждением — иначе гейт шумит на некодовых
+  планах. Долг `turn-runtime-gate` оплачен (W1–W2). Гвард:
+  `tests/execution/manual-evidence.test.ts`.
 - **`/v1/ready` не упирается в собственный rate limit.** Бюджет (6/мин на
   клиента) списывался до проверки кэша, поэтому k8s/LB с интервалом 1–2 с
   получал 429 с `retry_after_ms ≈ 48 с`, хотя проба кэшируется на 30 с и

@@ -14,7 +14,7 @@
     "src/tools/bash.ts": 799,
     "src/config/registry-extra.ts": 780,
     "src/core/agent/tool-batch.ts": 772,
-    "src/modules/execution/plan-actions.ts": 736,
+    "src/modules/execution/plan-actions.ts": 372,
     "src/config/registry.ts": 707,
     "src/ui/renderer.ts": 693,
     "src/modules/service/api/tasks-api.ts": 690,

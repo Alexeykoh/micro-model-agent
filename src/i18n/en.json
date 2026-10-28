@@ -318,6 +318,7 @@
   "plan.check_failed": "Cannot mark step {step} done: its check failed — {check}. Run the check first (create the file / run the command), then mark done.",
   "plan.check_self_certified": "check self-certified: {check} — confirmed run before done.",
   "plan.check_need_behavior": "Cannot mark step {step} done: the step changes behaviour/UI while '{check}' is static evidence (build/types). Provide behavioural proof: a command that runs tests or the app, `http:<url>[~marker]`, or `manual:<what you see>`.",
+  "plan.manual_needs_note": "Cannot mark step {step} done: '{check}' is a manual check, so it needs a note with the observation (what you opened and what you saw). Without it the step is not confirmed.",
   "plan.http_ok": "http check passed: {check} (HTTP {status}).",
   "plan.http_failed": "Cannot mark step {step} done: http check failed — {check} ({detail}). Start the server / fix the URL and retry.",
   "plan.step_done": "Step {n}/{total}: {description} ✓",

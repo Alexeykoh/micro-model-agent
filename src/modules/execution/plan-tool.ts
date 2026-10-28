@@ -5,7 +5,8 @@ import type { Plan, StepKind } from "./planner";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
 import type { StepVerifier } from "./verifier";
-import { dispatchPlanAction, updatePlanStep } from "./plan-actions";
+import { dispatchPlanAction } from "./plan-actions";
+import { updatePlanStep } from "./step-update";
 import { runTodo } from "./plan-tool-todo";
 
 /** Зависимости тулов плана: стор, верификатор, трекер, гейты, парсеры, baseDir. */

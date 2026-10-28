@@ -6,10 +6,12 @@
 import { readFileSync } from "fs";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { findExistingFile } from "./auditor";
-import { provablyStale } from "./step-advance";import type { Auditor } from "./auditor";
+import { provablyStale } from "./step-advance";
+import type { Auditor } from "./auditor";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
-import type { Plan } from "./planner";
+import type { Plan, PlanStep } from "./planner";
+import { isBehaviorStep, parseCheck } from "./plan-checks";
 
 /** Результат финального аудита. */
 export interface FinalAuditResult {
@@ -74,6 +76,19 @@ export function autoCloseEvidenceSteps(d: FinalAuditHost, plan: Plan): number {
 }
 
 /**
+ * Шаг считается незакрытым, если он не done/skipped ИЛИ закрыт по `manual:`,
+ * но без наблюдения (W2 спеки turn-runtime-gate): «проверил глазами» без
+ * записи не подтверждает пункт.
+ */
+export function isUnconfirmed(s: PlanStep): boolean {
+  if (s.status !== "done" && s.status !== "skipped") return true;
+  if (s.status !== "done") return false;
+  if (!isBehaviorStep(String(s.description || ""))) return false;
+  const parsed = s.check ? parseCheck(s.check) : null;
+  return parsed?.kind === "manual" && !String(s.note || "").trim();
+}
+
+/**
  * Финальный аудит активного/завершённого плана: файлы, тесты, tsc, пендинги.
  * Null — аудитить нечего (нет трекера и завершённого плана).
  */
@@ -85,7 +100,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
     const autoClosed = autoCloseEvidenceSteps(d, plan);
     const audit = await d.auditor.audit(plan);
     const pendingSteps = plan.steps.flatMap((s) =>
-      s.status !== "done" && s.status !== "skipped" ? [`${s.id}. ${s.description}`] : [],
+      isUnconfirmed(s) ? [`${s.id}. ${s.description}`] : [],
     );
     const done = plan.steps.filter((s) => s.status === "done").length;
     if (autoClosed > 0) {
@@ -113,7 +128,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
   }
   const audit = await d.auditor.audit(plan);
   const pendingSteps = plan.steps.flatMap((s) =>
-    s.status !== "done" && s.status !== "skipped" ? [`${s.id}. ${s.description}`] : [],
+    isUnconfirmed(s) ? [`${s.id}. ${s.description}`] : [],
   );
   const done = plan.steps.filter((s) => s.status === "done").length;
   return {

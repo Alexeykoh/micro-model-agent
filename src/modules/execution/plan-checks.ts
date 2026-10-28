@@ -56,25 +56,12 @@ const BUILD_COMMANDS = new Set([
 ]);
 
 /**
- * Признаки шага, меняющего поведение: правка UI/экрана/стилей. Проверка по
- * словам, а не по «умной» эвристике — ложное срабатывание ведёт лишь к просьбе
- * дать поведенческое доказательство.
+ * Признаки шага, меняющего поведение: правка UI/экрана/стилей. Сравнение по
+ * словам, а не по подстроке: `build` содержит «ui», и подстрочный матч ложно
+ * блокировал обычные build-шаги.
  */
-const BEHAVIOR_MARKERS = [
-  "ui",
-  "component",
-  "page",
-  "screen",
-  "layout",
-  "style",
-  "стил",
-  "компонент",
-  "страниц",
-  "экран",
-  "интерфейс",
-  "вёрстк",
-  "верстк",
-];
+const BEHAVIOR_STEMS_EN = ["component", "page", "screen", "layout", "style"];
+const BEHAVIOR_STEMS_RU = ["стил", "компонент", "страниц", "экран", "интерфейс", "вёрстк", "верстк"];
 
 /** Парсит строку check. Null, если префикс неизвестен/нет или цель пуста. */
 export function parseCheck(check: string): ParsedCheck | null {
@@ -128,10 +115,15 @@ export function classifyCheck(parsed: ParsedCheck): EvidenceClass {
   }
 }
 
-/** True, если описание шага говорит о поведении/UI. */
+/** True, если описание шага говорит о поведении/UI (по словам). */
 export function isBehaviorStep(description: string): boolean {
-  const text = description.toLowerCase();
-  return BEHAVIOR_MARKERS.some((m) => text.includes(m));
+  const words = description.toLowerCase().split(/[^a-zа-яё0-9]+/);
+  return words.some(
+    (w) =>
+      w === "ui" ||
+      BEHAVIOR_STEMS_EN.some((s) => w.startsWith(s)) ||
+      BEHAVIOR_STEMS_RU.some((s) => w.startsWith(s)),
+  );
 }
 
 export interface StepEvidenceTarget {
