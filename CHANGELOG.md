@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **PII-редактор больше не портит ISO-таймстемпы в ответах API.** Правило
+  `birthdate` (`YYYY-MM-DD`) срабатывало на `createdAt`/`updatedAt`/
+  `startedAt`/`finishedAt`/`ts`, и ответ сервиса отдавал
+  `"createdAt":"<PII:…>T09:12:35.553Z"` — `Date.parse` у клиента падал. Дата,
+  за которой идёт `T<время>`, больше не считается датой рождения; дата рождения
+  без времени по-прежнему редактируется. Долг
+  `dlp-iso-timestamp-false-positive` оплачен (реестр `debt.md` сокращён).
+  Гвард: `tests/security/pii-iso-timestamps.test.ts`; живьём проверено на
+  `mma serve`: `createdAt` в `/v1/sessions` — валидный ISO.
 - **Панель LSP сообщает итог проверки.** После «Проверить» панель возвращалась к
   тому же виду: ни сколько серверов в порядке, ни времени. Теперь под списком
   серверов идёт строка «проверено HH:MM · серверов N/M ok» (считаются только

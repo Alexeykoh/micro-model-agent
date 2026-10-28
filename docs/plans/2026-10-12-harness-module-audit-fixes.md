@@ -2733,7 +2733,8 @@ it("completes absolute paths", () => {
 > `DEBT(service-tier-scopes-control-plane)` и снимаются вместе с ней.
 > (2) 10.6 — id сессий: `crypto.randomBytes` + 16 строчных букв (не hex): hex-суффикс
 > мог содержать `\d{10}`, и DLP-детектор подменял id на `<PII:…>` в ответе
-> `GET /v1/sessions` (см. `DEBT(dlp-iso-timestamp-false-positive)`).
+> `GET /v1/sessions` (см. долг dlp-iso-timestamp-false-positive — оплачен 2026-10-28:
+> ISO-дата с `T<время>` больше не редактируется).
 
 ## Task 10.1: Авторизация по тенанту (§9.1)
 

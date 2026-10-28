@@ -40,10 +40,12 @@ const RF_RULES: readonly PiiRule[] = [
     validate: (m) => ibanValid(m),
   },
   { kind: "ru-passport", re: /(?<!\d)\d{2}\s?\d{2}\s?\d{6}(?!\d)/g, confidence: 0.5 },
-  // DEBT(dlp-iso-timestamp-false-positive): ISO-дата в известном поле ответа —
-  // это не дата рождения; field-aware исключение появится вместе с typed DTO.
   { kind: "birthdate", re: /(?<!\d)\d{2}[.\-/]\d{2}[.\-/]\d{4}(?!\d)/g, confidence: 0.4 },
-  { kind: "birthdate", re: /(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)/g, confidence: 0.4 },
+  // Машинные поля (`createdAt`, `startedAt`, `finishedAt`, `ts`, `updatedAt`) —
+  // ISO-8601, дата всегда идёт с `T<время>`: её не редактируем, иначе ответ API
+  // перестаёт парситься `Date.parse`. Долг dlp-iso-timestamp-false-positive
+  // оплачен: guard `tests/security/pii-iso-timestamps.test.ts`.
+  { kind: "birthdate", re: /(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)(?!T\d{2}:\d{2})/g, confidence: 0.4 },
 ];
 
 /** Находки PII РФ. */
