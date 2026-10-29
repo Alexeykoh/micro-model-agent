@@ -5,6 +5,7 @@
 import { t } from "../../i18n/index";
 import { formatCheckDiagnostics, severityLabel } from "./check-tool";
 import { toForwardSlash } from "../../tools/path-utils";
+import { relative } from "path";
 import type { LspDiagnostic } from "./types";
 import type { ToolResult } from "../../tools/types";
 
@@ -20,6 +21,8 @@ export interface CheckAccumulator {
   suppressed: number;
   /** Файлы, пропущенные из-за холодного старта сервера (ждать 30 с бессмысленно). */
   cold: number;
+  /** Файлы, для которых сервер LSP не настроен (не «сервер молчит»). */
+  unsupported: string[];
 }
 
 /**
@@ -61,6 +64,13 @@ export function renderCheckReport(acc: CheckAccumulator): ToolResult {
   // Холодный старт: файлы не проверены вовсе — это не «чисто» и не «молчание».
   if (acc.cold > 0) {
     lines.push(t("lsp.check_cold", { count: String(acc.cold) }));
+  }
+  // Формат без настроенного сервера: это НЕ «сервер не ответил». Раньше такие
+  // файлы молча пропускались и отчёт писал «проверка неокончательна», хотя
+  // проверять их нечем в принципе (md/yaml/txt и т.п.).
+  if (acc.unsupported.length > 0) {
+    const list = acc.unsupported.map((f) => toForwardSlash(relative(acc.baseDir, f))).join(", ");
+    lines.push(t("lsp.check_unsupported", { path: list }));
   }
   lines.push(...acc.notes);
   if (acc.checked === 0) {

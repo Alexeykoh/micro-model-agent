@@ -126,7 +126,7 @@ describe("lsp_check tool", () => {
     expect(res.output).toContain("Path not found");
   });
 
-  it("disables a dead server after 3 consecutive failures in one batch", async () => {
+  it("blocks a dead server for a cooldown after 3 consecutive failures in one batch", async () => {
     writeFileSync(join(baseDir, "src", "a.ts"), "export const a = 1;", "utf-8");
     writeFileSync(join(baseDir, "src", "b.ts"), "export const b = 1;", "utf-8");
     writeFileSync(join(baseDir, "src", "c.ts"), "export const c = 1;", "utf-8");
@@ -139,7 +139,7 @@ describe("lsp_check tool", () => {
     };
     const res = await lspTool(module).handler({ ...baseCtx, baseDir }, { path: "src" });
     expect(module.isLspDisabled()).toBe(true);
-    expect(res.output).toContain("LSP disabled");
+    expect(res.output).toContain("cooldown after failures");
   });
 
   it("returns an error when LSP is disabled in config", async () => {

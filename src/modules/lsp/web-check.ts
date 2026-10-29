@@ -44,8 +44,10 @@ export interface WebCheckResult {
   diagnostics: WebDiagnostic[];
   truncated?: boolean;
   ms?: number;
-  /** `outside-workspace` | `not-found` | `disabled` | `lsp-failed`. */
+  /** `outside-workspace` | `not-found` | `disabled` | `unsupported` | `lsp-timeout` | `lsp-failed`. */
   error?: string;
+  /** Человеческая причина отказа (первая заметка прогона) — панель показывает её. */
+  reason?: string;
 }
 
 /** Путь внутри workspace? Тот же jail, что у `/api/file`. */
@@ -68,6 +70,13 @@ function toWebDiagnostic(diag: LspDiagnostic): WebDiagnostic {
     severity: levelOf(diag),
     message: String(diag.message || "").slice(0, MESSAGE_MAX),
   };
+}
+
+/** Первая содержательная причина отказа прогона (без скобок и лишних пробелов). */
+function webFailureReason(acc: { notes: string[] }): string | undefined {
+  const note = acc.notes.find((n) => n.trim().length > 0);
+  if (!note) return undefined;
+  return note.replace(/^\[+|\]+$/g, "").replace(/\s+/g, " ").trim().slice(0, 300);
 }
 
 /** Проверить один файл; ошибки — данными, не исключениями. */
@@ -112,7 +121,15 @@ export async function runWebCheck(
       diagnostics,
       truncated: all.length > diagnostics.length,
       ms: Date.now() - started,
-      error: acc.inconclusive > 0 ? "lsp-timeout" : "lsp-failed",
+      error:
+        acc.inconclusive > 0
+          ? "lsp-timeout"
+          : acc.unsupported.length > 0
+            ? "unsupported"
+            : "lsp-failed",
+      // Панель не должна ограничиваться «сервер не ответил»: причина уже
+      // известна прогону (упал со stderr, офлайн, пауза восстановления).
+      reason: webFailureReason(acc),
     };
   }
   return {

@@ -127,4 +127,39 @@ describe("web LSP: диагностика одного файла", () => {
     expect(budget).toBe(WEB_CHECK_TIMEOUT_MS);
     expect(WEB_CHECK_TIMEOUT_MS).toBeGreaterThan(8000);
   });
+
+  it("отличает «сервер не настроен» от «сервер не ответил»", async () => {
+    writeFileSync(join(dir, "notes.md"), "# hi\n", "utf8");
+
+    const r = await runWebCheck("notes.md", deps());
+
+    // md не обслуживается ни одним сервером: панель не должна врать про таймаут.
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe("unsupported");
+    expect(r.diagnostics).toEqual([]);
+  });
+
+  it("отдаёт причину падения сервера, а не только «не ответил»", async () => {
+    const r = await runWebCheck(
+      "src/a.ts",
+      deps({
+        failureNote: (_key: string, _cfg: unknown, message: string) => `[LSP check failed: ${message}]`,
+        client: {
+          isWarm: () => false,
+          warmup: async () => {
+            throw Object.assign(new Error("LSP server exited"), {
+              stderrTail: "SyntaxError: Unexpected token '?'",
+            });
+          },
+          checkFile: async () => {
+            throw new Error("must not run");
+          },
+        } as never,
+      }),
+    );
+
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe("lsp-failed");
+    expect(r.reason).toContain("SyntaxError");
+  });
 });

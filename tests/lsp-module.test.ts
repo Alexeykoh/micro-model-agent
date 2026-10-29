@@ -102,7 +102,7 @@ describe("LspModule", () => {
     expect(ts?.reason).toBe("offline");
   });
 
-  it("disables LSP for the session after N consecutive failures and says so once", async () => {
+  it("blocks LSP for a cooldown after N consecutive failures and says so once", async () => {
     const baseDir = join(tmp, "proj2");
     mkProject(baseDir, { "src/a.ts": "export const a = 1;" });
 
@@ -116,10 +116,10 @@ describe("LspModule", () => {
       expect((await runWrite(module, baseDir, "src/a.ts")).output).toContain("[LSP check failed]");
     }
 
-    // Third consecutive failure: one clear "unavailable" signal + disable.
+    // Third consecutive failure: one clear "unavailable" signal + cooldown.
     const third = await runWrite(module, baseDir, "src/a.ts");
-    expect(third.output).toContain("LSP disabled");
-    expect(third.output).toContain("unavailable");
+    expect(third.output).toContain("[LSP check failed: static checks are unavailable");
+    expect(third.output).toContain("cooldown after failures");
 
     // Fourth and later: no per-write noise, no repeated signal.
     expect((await runWrite(module, baseDir, "src/a.ts")).output).toBe("file written ok");
@@ -172,7 +172,7 @@ describe("LspModule", () => {
     ).toBe(true);
     expect(module.isLspDisabled()).toBe(true);
 
-    // A 4th CSS write after disable: silenced, output untouched.
+    // A 4th CSS write during cooldown: silenced, output untouched.
     expect((await runWrite(module, baseDir, "src/a.css", "css written ok")).output).toBe(
       "css written ok",
     );

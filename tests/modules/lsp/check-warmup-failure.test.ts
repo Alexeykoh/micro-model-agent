@@ -118,6 +118,37 @@ describe("lsp_check: прогрев упал", () => {
     }
   });
 
+  it("skips a server during its cooldown and says when it will retry", async () => {
+    const dir = project();
+    try {
+      let warmups = 0;
+      const client = {
+        setOffline: () => {},
+        setLogger: () => {},
+        isWarm: () => false,
+        warmup: async () => {
+          warmups++;
+          throw new Error("LSP server exited");
+        },
+        checkFile: () => {
+          throw new Error("checkFile must not run when the server crashed");
+        },
+      } as unknown as LspClient;
+      const module = new LspModule(CONFIG, client);
+      const handler = module.getToolDefinitions()[0].handler;
+      for (let i = 0; i < 3; i++) await handler(ctxFor(dir), { path: "src/a.ts" });
+      expect(module.isLspDisabled()).toBe(true);
+      const attempts = warmups;
+
+      const paused = await handler(ctxFor(dir), { path: "src/a.ts" });
+      expect(warmups).toBe(attempts);
+      expect(paused.output).toContain("cooldown");
+      expect(paused.output).toContain("next attempt");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("keeps the cold-start message for a warmup that is still running", async () => {    const dir = project();
     try {
       const client = {
