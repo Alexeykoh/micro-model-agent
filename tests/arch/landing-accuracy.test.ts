@@ -94,6 +94,15 @@ function serviceEndpointPaths(): string[] {
 const normalizeRoute = (route: string): string =>
   route.replace(/\/$/, "").replace(/[:{][A-Za-z]+}?/g, ":param");
 
+/** GitHub-flavoured heading slug, so a `#anchor` can be checked for real. */
+function slugify(heading: string): string {
+  return heading
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
+    .replace(/\s+/g, "-");
+}
+
 describe("landing page accuracy", () => {
   it("does not advertise a removed feature", () => {
     const offenses: string[] = [];
@@ -135,10 +144,29 @@ describe("landing page accuracy", () => {
   it("links only to documentation that exists in the repository", () => {
     const links = [...COPY.matchAll(/github\.com\/Alexeykoh\/micro-model-agent\/blob\/master\/([^"'\s)]+)/g)];
     expect(links.length).toBeGreaterThan(0);
-    const missing = links
-      .map((m) => m[1])
-      .filter((path) => !existsSync(join(REPO_ROOT, path)));
+    const missing: string[] = [];
+    const badAnchor: string[] = [];
+    for (const match of links) {
+      // Якорь — часть URL, а не пути: `docs/install.md#manual` — это файл
+      // `docs/install.md` + заголовок. Раньше проверка требовала файл с `#…`.
+      const [path, anchor] = match[1].split("#");
+      const file = join(REPO_ROOT, path);
+      if (!existsSync(file)) {
+        missing.push(match[1]);
+        continue;
+      }
+      if (!anchor) continue;
+      // Якорь обязан совпасть с id заголовка (GitHub slug) — иначе ссылка
+      // «существует», но ведёт в пустоту.
+      const text = readFileSync(file, "utf-8");
+      const ids = new Set([
+        ...[...text.matchAll(/^#{1,6}\s+(.+)$/gm)].map((m) => slugify(m[1])),
+        ...[...text.matchAll(/<h[1-6][^>]*\sid="([^"]+)"/g)].map((m) => m[1]),
+      ]);
+      if (!ids.has(anchor)) badAnchor.push(`${path}#${anchor}`);
+    }
     expect(missing, `Landing page links to missing files: ${missing.join(", ")}`).toEqual([]);
+    expect(badAnchor, `Documentation anchors that resolve nowhere: ${badAnchor.join(", ")}`).toEqual([]);
   });
 
   it("has symmetric dictionaries and no orphan keys", () => {
