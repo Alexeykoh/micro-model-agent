@@ -10,13 +10,13 @@ import type { LspSymbolLocation } from "./symbols";
 import { findProjectRoot } from "./project-root";
 import { isPathInScope } from "../security/path-validator";
 import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
-import { toForwardSlash } from "../../tools/path-utils";
 import { safeResolvePath } from "../../tools/path-utils";
 import { t } from "../../i18n/index";
-import type { LspConfig, LspDiagnostic, LspServerConfig } from "./types";
+import type { LspConfig, LspServerConfig } from "./types";
 import { isErrorDiagnostic, isWarningDiagnostic } from "./types";
-import { severityLabel, collectCheckFiles, } from "./check-tool";
-import { renderCheckReport, type CheckAccumulator } from "./check-report";
+import { collectCheckFiles } from "./check-tool";
+import { formatOneFileDiagnostics, renderCheckReport, type CheckAccumulator } from "./check-report";
+import { runWebCheck } from "./web-check";
 import { runCheckFiles } from "./check-run";
 import { diagnoseLspServers, type LspDiagnoseDeps } from "./diagnose";
 import { errMsg } from "../../utils";
@@ -246,10 +246,10 @@ export class LspModule implements AgentModule {
     const errors = check.diagnostics.filter(isErrorDiagnostic);
     const warnings = check.diagnostics.filter(isWarningDiagnostic);
     if (errors.length > 0) {
-      result.output += `\n\n[LSP errors]:\n${formatDiagnostics(errors, fullPath)}`;
+      result.output += `\n\n[LSP errors]:\n${formatOneFileDiagnostics(errors, fullPath)}`;
     }
     if (warnings.length > 0) {
-      result.output += `\n\n[LSP warnings]:\n${formatDiagnostics(warnings, fullPath)}`;
+      result.output += `\n\n[LSP warnings]:\n${formatOneFileDiagnostics(warnings, fullPath)}`;
     }
     if (check.inconclusive && errors.length === 0 && warnings.length === 0) {
       result.output += t("lsp.check_inconclusive");
@@ -344,17 +344,17 @@ export class LspModule implements AgentModule {
       ? `[LSP disabled: ${failure.text}]`
       : `[LSP check failed for ${file}: ${failure.text}]`;
   }
-}
 
-function formatDiagnostics(diagnostics: LspDiagnostic[], filePath: string): string {
-  const filename = toForwardSlash(filePath).split("/").pop() ?? filePath;
-  return diagnostics
-    .slice(0, 5)
-    .map((d) => {
-      const line = d.range.start.line + 1;
-      const col = d.range.start.character + 1;
-      const sev = severityLabel(d);
-      return `  ${filename}(${line},${col}): ${sev}: ${d.message}`;
-    })
-    .join("\n");
+  /** Веб-панель: структурная диагностика одного файла (jail + данные, не текст). */
+  checkFileForWeb(relPath: string, baseDir: string) {
+    return runWebCheck(relPath, {
+      baseDir,
+      config: this.config,
+      client: this.client,
+      health: this.health,
+      logger: this.logger,
+      failureNote: (key, serverConfig, message, file) =>
+        this.failureNote(key, serverConfig, message, file),
+    });
+  }
 }

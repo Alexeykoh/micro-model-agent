@@ -21,6 +21,34 @@ export function handleLspDoctorGet(res: ServerResponse, s: WorkspaceStore & SseT
 }
 
 /**
+ * `POST /api/lsp/check` — диагностика одного файла для панели. Путь приходит из
+ * браузера: jail и отказы — данными (`ok:false` + `error`), не 500.
+ */
+export async function handleLspCheckPost(
+  raw: Record<string, unknown> | null,
+  res: ServerResponse,
+  s: WorkspaceStore & SseTransport,
+): Promise<void> {
+  if (!s.lspCheckFile) {
+    sendJson(res, 503, { ok: false, error: "unavailable" });
+    return;
+  }
+  const body = raw ?? {};
+  const path = typeof body.path === "string" ? body.path : "";
+  const result = await s.lspCheckFile(path);
+  if (!result) {
+    sendJson(res, 503, { ok: false, error: "unavailable" });
+    return;
+  }
+  const status = result.ok
+    ? 200
+    : result.error === "outside-workspace" || result.error === "not-found"
+      ? 400
+      : 503;
+  sendJson(res, status, result);
+}
+
+/**
  * `POST /api/lsp/doctor` — single-flight перезапуск диагностики; результат
  * приходит по SSE `lsp` (`start` → `done`/`error`), HTTP не держим (проба может
  * идти до ~45с).

@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Панель LSP проверяет конкретный файл.** Новая секция «файл»: путь берётся из
+  вкладки «Файлы» или вводится вручную, результат — строки `строка:колонка` с
+  уровнем и текстом, «ошибок нет» либо причина отказа. API:
+  `POST /api/lsp/check {"path": "src/…"} → {ok, diagnostics[], ms}`; путь
+  проверяется тем же jail'ом, что `/api/file` (400 на выход из проекта), LSP
+  выключен/не ответил — 503. Таймаут сервера (`inconclusive`) больше не выдаётся
+  за «ошибок нет»: ответ `ok:false, error:"lsp-timeout"`, панель так и пишет.
+  Живьём в `mma_test`: `../.env` → 400 «путь вне проекта»; проверка файла на этой
+  машине упирается в 8-секундный бюджет (`lsp-timeout`) — честный отказ вместо
+  ложного «чисто». Спека:
+  `docs/specs/2026-10-28-webui-lsp-file-diagnostics-design.md`. Гварды:
+  `tests/modules/lsp/web-check.test.ts`, `tests/webui-lsp-check-api.test.ts`,
+  `tests/webui-lsp-file-section.test.ts`.
+
 ### Fixed
 
 - **Шаг, меняющий UI/поведение, не закрывается одной сборкой.** `verify` теперь

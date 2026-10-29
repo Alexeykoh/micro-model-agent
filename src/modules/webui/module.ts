@@ -184,16 +184,16 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   }
   if (deps.lsp) {
     const lsp = deps.lsp;
-    state.lspDiagnose = () => lsp.diagnose(deps.baseDir ?? process.cwd());
+    const base = deps.baseDir ?? process.cwd();
+    state.lspDiagnose = () => lsp.diagnose(base);
+    state.lspCheckFile = (rel) => lsp.checkFileForWeb?.(rel, base) ?? Promise.resolve(null);
     state.lspSetEnabled = (v) => lsp.setEnabled?.(v);
     state.lspSetOffline = (v) => lsp.setOffline?.(v);
     state.lspFlags = () => lsp.getFlags?.() ?? { enabled: true, offline: false };
   }
   // Общий вотчер карты: в web сессия главного агента не запускается, поэтому
   // плагин индексатора его не поднимает — владельцем становится веб-хост.
-  // Колбэк уведомляет вкладку Files: рост `filesRevision` + событие `files`.
-  // И пушит state: панель «Карта» рисуется из `projectMap` снапшота, поэтому
-  // без этого фоновая переиндексация не отражалась до ручной кнопки (B-40).
+  // Колбэк уведомляет Files (`filesRevision` + `files`) и пушит state (B-40).
   const detachIndexWatcher = attachIndexWatcher(deps.indexer, () => {
     state.filesRevision += 1;
     broadcast({ type: "files", ts: Date.now(), phase: "changed" }, state);

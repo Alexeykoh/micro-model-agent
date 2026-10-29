@@ -1,5 +1,4 @@
-// LSP tab for `mma web`: on-demand language-server diagnosis. Split out of
-// `sidebar.js`. Design: docs/specs/2026-10-02-lsp-doctor-design.md (§12).
+// LSP tab for mma web: server diagnosis + per-file check (docs/specs).
 import { el, icon, makeToggle } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
@@ -11,6 +10,7 @@ import { sb } from "./state.js";
 import { mapKv } from "./map.js";
 import { appendToolchain } from "./lsp-toolchain.js";
 import { MUTED_REASONS, appendLspSummary } from "./lsp-summary.js";
+import { appendLspFileSection } from "./lsp-file.js";
 
 /** i18n-ключ ярлыка класса причины (`not-applicable` → `..._not_applicable`). */
 function lspReasonKey(reason: unknown): string {
@@ -142,7 +142,7 @@ export function renderLsp(): void {
   btn.type = "button";
   btn.disabled = sb.lspProbing || sb.lspUnavailable;
   btn.addEventListener("click", () => void runLspDoctor());
-  host.appendChild(btn);
+  host.appendChild(btn); appendLspFileSection(host);
 }
 
 /** Информационный поп-ап: глобальные тумблеры + команды ручной установки. */

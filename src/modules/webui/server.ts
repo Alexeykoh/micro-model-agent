@@ -30,7 +30,8 @@ import { handleProvidersApi } from "./settings/providers-api";
 import { handleFileApi } from "./file/file-api";
 import { handleFilesApi } from "./file/files-api";
 import { handleSetupApi } from "./settings/setup-api";
-import { handleLspDoctorGet, handleLspDoctorPost } from "./lsp/lsp-api";
+import { handleLspDoctorGet, handleLspCheckPost, handleLspDoctorPost } from "./lsp/lsp-api";
+import { readJsonBody } from "./http/body";
 import { handleUpdatePost } from "./chat/update-api";
 import { apiGuardFor, filterResponse } from "./egress";
 import { serveStatic } from "./static-assets";
@@ -127,6 +128,8 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "GET /api/lsp": (_req, res, s) => handleLspGet(res, s),
   "GET /api/lsp/doctor": (_req, res, s) => handleLspDoctorGet(res, s),
   "POST /api/lsp/doctor": (_req, res, s) => handleLspDoctorPost(res, s),
+  "POST /api/lsp/check": (req, res, s) =>
+    readJsonBody(req, s.maxBodyBytes).then((body) => handleLspCheckPost(body, res, s)),
 };
 
 /**

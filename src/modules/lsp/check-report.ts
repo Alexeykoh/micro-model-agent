@@ -3,7 +3,8 @@
 // Вынесено из `module.ts`: это чистое представление результата, а не логика
 // модуля (правило 6 AGENTS).
 import { t } from "../../i18n/index";
-import { formatCheckDiagnostics } from "./check-tool";
+import { formatCheckDiagnostics, severityLabel } from "./check-tool";
+import { toForwardSlash } from "../../tools/path-utils";
 import type { LspDiagnostic } from "./types";
 import type { ToolResult } from "../../tools/types";
 
@@ -72,4 +73,18 @@ export function renderCheckReport(acc: CheckAccumulator): ToolResult {
     return { success: true, output: t("lsp.check_clean", { count: String(acc.checked) }) };
   }
   return { success: acc.errors.length === 0, output: lines.join("\n") };
+}
+
+/** Диагностики одного файла (до 5 строк) для отчёта lsp_check. */
+export function formatOneFileDiagnostics(diagnostics: LspDiagnostic[], filePath: string): string {
+  const filename = toForwardSlash(filePath).split("/").pop() ?? filePath;
+  return diagnostics
+    .slice(0, 5)
+    .map((d) => {
+      const line = d.range.start.line + 1;
+      const col = d.range.start.character + 1;
+      const sev = severityLabel(d);
+      return `  ${filename}(${line},${col}): ${sev}: ${d.message}`;
+    })
+    .join("\n");
 }
