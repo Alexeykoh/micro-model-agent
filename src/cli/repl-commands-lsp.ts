@@ -5,6 +5,7 @@ import { pc } from "../ui/colors";
 import { glyph } from "../ui/theme";
 import { t } from "../i18n/index";
 import { errMsg } from "../utils";
+import { relative } from "path";
 import type { LspModule } from "../modules/lsp/module";
 import { stderrTailLines } from "../modules/lsp/stderr-lines";
 import type {
@@ -92,6 +93,13 @@ function stderrLines(tail: string | undefined): string[] {
   );
 }
 
+/** Подпись сервера: язык + корень проекта, если он не совпадает с проектом. */
+function serverLabel(s: LspServerDiagnosis, baseDir: string): string {
+  if (!s.projectRoot) return s.language;
+  const rel = relative(baseDir, s.projectRoot);
+  return rel && rel !== "" ? `${s.language} · ${rel}` : s.language;
+}
+
 /** Отрисовать результат `/lsp doctor` строками (без боксов, по STYLE.md). */
 export function formatDoctor(diag: LspDiagnosis): string[] {
   const lines: string[] = [];
@@ -115,7 +123,7 @@ export function formatDoctor(diag: LspDiagnosis): string[] {
     const { g, color } = reasonStyle(s.reason);
     const detail = serverDetail(s);
     const suffix = detail ? pc.dim(` · ${detail}`) : "";
-    lines.push(`  ${color(g)} ${s.language} · ${color(t(REASON_KEY[s.reason]))}${suffix}`);
+    lines.push(`  ${color(g)} ${serverLabel(s, diag.projectRoot)} · ${color(t(REASON_KEY[s.reason]))}${suffix}`);
     const hint = serverHint(s.reason);
     if (hint) {
       lines.push(pc.dim(`      ${glyph.detail} ${hint}`));
@@ -169,6 +177,13 @@ export function registerLspCommands(ctx: ReplContext): void {
             ctx.output.writeLine(
               pc.yellow(`${t("repl.lsp_disabled_servers")} ${disabled.join(", ")}`),
             );
+            // Пауза восстановления, а не «навсегда»: видно, когда сервер снова
+            // попробуют, иначе «отключён» выглядит как поломка LSP.
+            for (const b of lspModule.getBlockedServers()) {
+              ctx.output.writeLine(
+                pc.dim(`  ${b.key} · ${t("repl.lsp_retry_in", { sec: String(Math.ceil(b.retryInMs / 1000)) })}`),
+              );
+            }
           }
 
           if (failures.size > 0) {

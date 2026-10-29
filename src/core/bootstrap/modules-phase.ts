@@ -167,7 +167,7 @@ function startLanguageModules(
   }
 
   const lspLogger = new FileOnlyLogger(logger);
-  const lspModule = new LspModule(config.lsp, undefined, lspLogger);
+  const lspModule = new LspModule(config.lsp, undefined, lspLogger, baseDir);
   moduleRegistry.register(lspModule);
 
   // LSP как внешний источник определений для `project_map symbol`: включается

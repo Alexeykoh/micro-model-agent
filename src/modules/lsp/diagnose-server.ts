@@ -32,6 +32,8 @@ export interface LspServerDiagnosis {
   reason: LspFailureReason;
   error?: string;
   durationMs?: number;
+  /** Корень проекта, с которым шла проба (у проверки файла он может быть другим). */
+  projectRoot?: string;
   /** Хвост stderr упавшего сервера (единственный след краха до `initialize`). */
   stderrTail?: string;
   /**
@@ -60,9 +62,10 @@ export async function diagnoseServer(
   server: LspServerConfig,
   applicable: boolean,
   ctx: ServerContext,
+  projectRoot?: string,
 ): Promise<LspServerDiagnosis> {
   const enabled = server.enabled !== false;
-  const base = baseDiagnosis(language, server, { enabled, applicable });
+  const base = baseDiagnosis(language, server, { enabled, applicable, projectRoot });
   if (!enabled) return { ...base, reason: "disabled" };
   if (!applicable) return { ...base, reason: "not-applicable" };
 
@@ -85,7 +88,7 @@ export async function diagnoseServer(
   const probe = await probeServer(
     ctx.client,
     server,
-    ctx.baseDir,
+    projectRoot ?? ctx.baseDir,
     ctx.defaultTimeout,
     ctx.timeoutCap,
     launch.useNpxFallback,
@@ -139,12 +142,11 @@ function skipReason(
 async function probeServer(
   client: LspClient,
   server: LspServerConfig,
-  baseDir: string,
+  projectRoot: string,
   defaultTimeout: number,
   timeoutCap: number,
   npxFallback: boolean,
 ): Promise<Pick<LspServerDiagnosis, "probed" | "ok" | "reason" | "error" | "durationMs" | "stderrTail">> {
-  const projectRoot = findProjectRoot(baseDir, baseDir, server.workspaceMarkers ?? []);
   const serverTimeout = Math.min(server.timeout ?? defaultTimeout, timeoutCap);
   const started = Date.now();
   try {

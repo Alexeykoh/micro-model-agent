@@ -22,6 +22,10 @@ const LEGACY_LSP_SERVER_ARGS: Record<string, { args: string[]; timeout: number }
   json: { args: ["vscode-json-languageserver", "--stdio"], timeout: 30000 },
   html: { args: ["vscode-html-languageserver", "--stdio"], timeout: 60000 },
   css: { args: ["vscode-css-languageserver", "--stdio"], timeout: 60000 },
+  // `npx pyright --stdio` — CLI пакета, а не LSP-энтрипоинт: сервер выходил
+  // сразу, поэтому `.py` не проверялись никогда. Заменяется на
+  // `pyright-langserver` (дефолт 0.18.0).
+  python: { args: ["pyright", "--stdio"], timeout: 15000 },
 };
 
 /** Заменяет протухшие pre-0.41.1 вызовы LSP-серверов текущими дефолтами. */

@@ -23,17 +23,18 @@ function ctxFor(baseDir: string): ToolContext {
 }
 
 describe("lsp_check: честность отчёта", () => {
-  it("reports inconclusive, not clean, when no file was actually checked", async () => {
+  it("names a missing server instead of claiming the server went silent", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mma-lsp-honest-"));
     try {
       mkdirSync(join(dir, "src"), { recursive: true });
       writeFileSync(join(dir, "src", "a.ts"), "export const a = 1;\n", "utf-8");
-      // Серверов нет → проверить нечего.
+      // Серверов нет → проверить нечем; это «не настроен», а не «не ответил».
       const module = new LspModule({ enabled: true, servers: {} });
       const tool = module.getToolDefinitions()[0];
       const result = await tool.handler(ctxFor(dir), { path: "src/a.ts" });
       expect(result.success).toBe(false);
-      expect(result.output.toLowerCase()).toContain("inconclusive");
+      expect(result.output.toLowerCase()).toContain("no lsp server configured");
+      expect(result.output.toLowerCase()).not.toContain("inconclusive");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

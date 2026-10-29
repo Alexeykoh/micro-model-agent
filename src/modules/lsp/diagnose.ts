@@ -16,6 +16,10 @@ import {
 } from "./diagnose-server";
 import { detectProjectToolchain, type ProjectToolchain } from "./toolchain";
 import { readNodeVersion, type NodeVersion } from "./node-version";
+import { findProjectRoot } from "./project-root";
+
+/** Сколько разных корней на один язык пробуем в doctor (монорепо). */
+export const DIAGNOSE_ROOT_LIMIT = 3;
 
 // Классификация/установка/типы сервера живут в `./diagnose-server`; реэкспорт
 // для существующих импортёров (`./module`, `./index`, тесты).
@@ -91,9 +95,22 @@ export async function diagnoseLspServers(
 
   const files = await collect(baseDir, config);
   const applicable = new Set<string>();
+  // Корни проектов, к которым относятся файлы: проверка идёт с корнем ФАЙЛА
+  // (`my-app`), а не с baseDir. Doctor обязан пробовать тот же корень, иначе
+  // «doctor ок, проверка не работает» — штатное поведение.
+  const rootsByLanguage = new Map<string, string[]>();
   for (const file of files) {
     const key = getServerKeyForFile(file, config);
-    if (key) applicable.add(key);
+    if (!key) continue;
+    applicable.add(key);
+    const server = config.servers[key];
+    if (!server) continue;
+    const root = findProjectRoot(file, baseDir, server.workspaceMarkers ?? []);
+    const known = rootsByLanguage.get(key) ?? [];
+    if (!known.includes(root) && known.length < DIAGNOSE_ROOT_LIMIT) {
+      known.push(root);
+      rootsByLanguage.set(key, known);
+    }
   }
 
   const client = deps.client ?? new LspClient();
@@ -114,7 +131,17 @@ export async function diagnoseLspServers(
   };
   const servers: LspServerDiagnosis[] = [];
   for (const [language, server] of entries) {
-    servers.push(await diagnoseServer(language, server, applicable.has(language), ctx));
+    const roots = rootsByLanguage.get(language) ?? [];
+    if (!applicable.has(language)) {
+      servers.push(await diagnoseServer(language, server, false, ctx));
+      continue;
+    }
+    // Один сервер может обслуживать несколько корней (монорепо): каждый корень
+    // — отдельная строка, потому что `initialize` у них разный.
+    for (const root of roots) {
+      servers.push(await diagnoseServer(language, server, true, ctx, root));
+    }
+    if (roots.length === 0) servers.push(await diagnoseServer(language, server, true, ctx));
   }
 
   return { enabled: true, offline, projectRoot: baseDir, toolchain, nodeVersion: nodeVersion ?? undefined, servers };

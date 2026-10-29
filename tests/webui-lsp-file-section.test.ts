@@ -22,7 +22,8 @@ i18n.I18N.dicts = {
     "web.sidebar.lsp_file_ms": "{secs} с",
     "web.sidebar.lsp_file_failed": "проверка не удалась",
     "web.sidebar.lsp_file_outside_workspace": "путь вне проекта — не проверяю",
-    "web.sidebar.lsp_file_lsp_timeout": "сервер LSP не ответил за {secs} с — попробуй ещё раз",
+    "web.sidebar.lsp_file_lsp_timeout": "сервер LSP не ответил за {secs} с - попробуй ещё раз",
+    "web.sidebar.lsp_file_unsupported": "для этого типа файла нет LSP-сервера",
     "web.sidebar.lsp_file_more": "ещё {count} диагностик(и) не показано",
     "web.sidebar.lsp_file_open_line": "открыть {path} на строке {line}",
     "web.sidebar.lsp_sev_error": "ошибка",
@@ -66,6 +67,13 @@ describe("LSP: секция проверки файла", () => {
     }
   });
 
+  it("отличает «нет сервера для формата» от «проверка не удалась»", () => {
+    const b = box();
+    mod.renderLspFileResult(b, { ok: false, path: "docs/readme.md", error: "unsupported", ms: 3 });
+
+    expect(b.textContent).toContain("нет LSP-сервера");
+    expect(b.textContent).not.toContain("проверка не удалась");
+  });
   it("показывает строку, колонку и текст диагностики", () => {
     const b = box();
     mod.renderLspFileResult(b, {

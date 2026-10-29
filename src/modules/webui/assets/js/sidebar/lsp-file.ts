@@ -134,6 +134,10 @@ export function renderLspFileResult(box: HTMLElement, res: Dict): void {
       hint.appendChild(el("span", "lsp-file-ms", formatSec(ms)));
     }
     box.appendChild(hint);
+    // Причина отказа уже известна серверу: без неё «сервер не ответил»
+    // одинаково описывает упавший сервер, офлайн и паузу восстановления.
+    const reason = typeof res.reason === "string" ? res.reason.trim() : "";
+    if (reason) box.appendChild(el("div", "lsp-file-reason", reason));
     return;
   }
   if (diags.length === 0) {

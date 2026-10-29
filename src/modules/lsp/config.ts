@@ -59,7 +59,10 @@ export const DEFAULT_LSP_CONFIG: LspConfig = {
     },
     python: {
       command: "npx",
-      args: ["pyright", "--stdio"],
+      // `pyright` — CLI; LSP-энтрипоинт пакета называется `pyright-langserver`.
+      // С `npx pyright --stdio` процесс печатает справку и выходит, поэтому
+      // python-файлы никогда не проверялись (живой прогон: «LSP server exited»).
+      args: ["--yes", "--package", "pyright", "pyright-langserver", "--stdio"],
       timeout: 15000,
       autoInstall: true,
       workspaceMarkers: ["pyproject.toml", "setup.py", "requirements.txt"],

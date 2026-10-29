@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import {
   diagnoseLspServers,
   classifyLspError,
@@ -219,6 +222,39 @@ describe("diagnoseLspServers", () => {
       } as never,
     });
     expect(d.servers[0].reason).toBe("node-too-old");
+  });
+
+  it("probes every project root that has matching files", async () => {
+    // Монорепо: `my-app` — отдельный корень со своим package.json. Проверка
+    // файла идёт с корнем файла, поэтому doctor обязан пробовать и его, иначе
+    // «doctor ок» ничего не говорит про проверку.
+    const base = mkdtempSync(join(tmpdir(), "mma-lsp-roots-"));
+    const app = join(base, "my-app");
+    const lib = join(base, "lib");
+    mkdirSync(app, { recursive: true });
+    mkdirSync(lib, { recursive: true });
+    writeFileSync(join(app, "package.json"), "{}", "utf-8");
+    writeFileSync(join(lib, "package.json"), "{}", "utf-8");
+    const files = [join(app, "a.ts"), join(lib, "b.ts")];
+    const probedRoots: string[] = [];
+    try {
+      const d = await diagnoseLspServers(config({ typescript: TS_SERVER }), base, {
+        collectFiles: async () => files,
+        findOnPath: () => "/usr/bin/tls",
+        client: {
+          probe: async (_server: unknown, root: string) => {
+            probedRoots.push(root);
+          },
+        } as never,
+      });
+
+      expect(probedRoots).toHaveLength(2);
+      expect(probedRoots.map((r) => relative(base, r)).sort()).toEqual(["lib", "my-app"]);
+      expect(d.servers.filter((s) => s.reason === "ok")).toHaveLength(2);
+      expect(d.servers.every((s) => typeof s.projectRoot === "string")).toBe(true);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 });
 

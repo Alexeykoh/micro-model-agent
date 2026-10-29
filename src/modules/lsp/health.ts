@@ -1,20 +1,28 @@
-// Здоровье LSP-серверов на сессию: счётчик подряд идущих падений, отключение
-// после порога, прогрев соединения в фоне (без блокировки записи файла).
+// Здоровье LSP-серверов на сессию: счётчик подряд идущих падений, пауза
+// восстановления (backoff), прогрев соединения в фоне (без блокировки записи).
 //
 // Вынесено из `module.ts`: это самостоятельное состояние, а не логика тулов
 // (правило 6 AGENTS).
 import type { LspClientLogger } from "./client-logger";
 import type { LspServerConfig } from "./types";
 import { classifyLspError, type LspFailureReason } from "./diagnose";
+import { LSP_RETRY_BASE_MS, LSP_RETRY_MAX_MS } from "../../config/timeouts";
 import { t } from "../../i18n/index";
 import { errMsg } from "../../utils";
 
 /**
- * Подряд идущих падений LSP до отключения сервера на сессию. Мёртвый сервер
- * (не стоит, упала npx-автоустановка, нет пути) иначе спамит `[LSP check failed]`
- * на КАЖДУЮ запись, приучая модель игнорировать сигнал целиком.
+ * Подряд идущих падений LSP до паузы восстановления. Сервер НЕ отключается
+ * навсегда: после паузы (2 с → 4 с → … → 60 с) он пробуется снова. Мёртвый
+ * сервер иначе либо спамил `[LSP check failed]` на каждую запись, либо (как
+ * было) выключался до конца сессии из-за одного плохого старта.
  */
 export const MAX_CONSECUTIVE_LSP_FAILURES = 3;
+
+/** Пауза перед попыткой N (экспонента с потолком). */
+export function retryDelayMs(failures: number): number {
+  const step = Math.max(0, failures - MAX_CONSECUTIVE_LSP_FAILURES);
+  return Math.min(LSP_RETRY_BASE_MS * 2 ** step, LSP_RETRY_MAX_MS);
+}
 
 /** Ключи actionable-подсказок по классу причины сбоя LSP (одна строка модели). */
 const LSP_HINT_KEYS: Partial<Record<LspFailureReason, string>> = {
@@ -34,8 +42,10 @@ export function failureHint(message: string, npxFallback: boolean): string {
 
 /** Итог учёта падения. */
 export interface FailureOutcome {
-  /** Сервер отключён на сессию (порог падений достигнут). */
-  disabled: boolean;
+  /** Сервер на паузе восстановления (пробовать сейчас бессмысленно). */
+  blocked: boolean;
+  /** Сколько ещё ждать до следующей попытки, мс (0 — можно сразу). */
+  retryInMs: number;
   /** Текст для модели. */
   text: string;
 }
@@ -48,33 +58,50 @@ export interface WarmTarget {
 }
 
 /**
- * Здоровье серверов: падения по ключу, отключённые ключи, прогревы в полёте.
+ * Здоровье серверов: падения по ключу, пауза восстановления, прогревы в полёте.
  * «Подряд идущие» — успешная проверка/прогрев сбрасывает счётчик.
  */
 export class LspHealth {
   private failures = new Map<string, number>();
-  private disabled = new Set<string>();
+  /** До какого времени сервер не пробуем (мс, часы инжектируются для тестов). */
+  private blockedUntil = new Map<string, number>();
   private warming = new Set<string>();
 
-  /** Отключён ли сервер на эту сессию. */
+  constructor(private readonly now: () => number = () => Date.now()) {}
+
+  /** Сервер на паузе восстановления (или отключён до её конца). */
   isDisabled(key: string): boolean {
-    return this.disabled.has(key);
+    return (this.blockedUntil.get(key) ?? 0) > this.now();
   }
 
-  /** Сбросить счётчик падений (успешная проверка/прогрев). */
+  /** Сколько ещё ждать до следующей попытки (0 — можно сейчас). */
+  retryInMs(key: string): number {
+    return Math.max(0, (this.blockedUntil.get(key) ?? 0) - this.now());
+  }
+
+  /** Серверы на паузе: ключ → оставшееся ожидание. Для `/lsp status`. */
+  blocked(): Array<{ key: string; retryInMs: number }> {
+    const now = this.now();
+    return [...this.blockedUntil.entries()]
+      .filter(([, until]) => until > now)
+      .map(([key, until]) => ({ key, retryInMs: until - now }));
+  }
+
+  /** Сбросить счётчик падений и паузу (успешная проверка/прогрев). */
   reset(key: string): void {
     this.failures.set(key, 0);
+    this.blockedUntil.delete(key);
   }
 
   /** Сбросить всё (например, после `/lsp restart`). */
   resetAll(): void {
     this.failures.clear();
-    this.disabled.clear();
+    this.blockedUntil.clear();
   }
 
-  /** Отключённые ключи серверов. */
+  /** Отключённые/стоящие на паузе ключи серверов. */
   disabledKeys(): string[] {
-    return Array.from(this.disabled);
+    return this.blocked().map((b) => b.key);
   }
 
   /** Счётчики падений по серверам. */
@@ -82,18 +109,22 @@ export class LspHealth {
     return new Map(this.failures);
   }
 
-  /** Учесть падение сервера. После порога сервер отключается на сессию. */
+  /** Учесть падение сервера. После порога — пауза восстановления. */
   recordFailure(key: string, serverConfig: LspServerConfig, message: string): FailureOutcome {
     const failures = (this.failures.get(key) ?? 0) + 1;
     this.failures.set(key, failures);
     if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
-      // Одно громкое actionable-сообщение, дальше — без шума на каждую запись
-      // до конца сессии. Модель не должна учиться игнорить LSP.
-      this.disabled.add(key);
-      return { disabled: true, text: t("lsp.unavailable") };
+      // Одно громкое actionable-сообщение, дальше — пауза вместо спама на
+      // каждую запись. По истечении паузы сервер пробуется снова.
+      const delay = retryDelayMs(failures);
+      this.blockedUntil.set(key, this.now() + delay);
+      // Причина сохраняется: «пауза» без причины не отличает несовместимый
+      // Node от сетевого таймаута.
+      return { blocked: true, retryInMs: delay, text: `${t("lsp.unavailable")} ${message}` };
     }
     return {
-      disabled: false,
+      blocked: false,
+      retryInMs: 0,
       text: `${message}${failureHint(message, serverConfig.command === "npx")}`,
     };
   }
@@ -131,5 +162,10 @@ export class LspHealth {
       .finally(() => {
         this.warming.delete(opts.key);
       });
+  }
+
+  /** Идёт ли прогрев этого ключа (для дедупа внешних вызовов). */
+  isWarming(key: string): boolean {
+    return this.warming.has(key);
   }
 }

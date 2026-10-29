@@ -18,11 +18,17 @@ import type { LspHealth } from "./health";
 import type { CheckAccumulator } from "./check-report";
 import type { LspProbeError } from "./connection-types";
 import { stderrTailLines } from "./stderr-lines";
+import { LSP_CHECK_FILE_MS, LSP_CHECK_WARMUP_MS } from "../../config/timeouts";
+import { t } from "../../i18n/index";
 
-/** Сколько ждём холодный старт сервера внутри явной проверки (`lsp_check`, панель). */
-export const CHECK_WARMUP_MS = 15000;
+/**
+ * Сколько ждём холодный старт сервера внутри явной проверки. Единственный
+ * источник — `config/timeouts.ts` (`LSP_CHECK_WARMUP_MS`), чтобы число не
+ * расползалось по модулю и было объяснено там же.
+ */
+export const CHECK_WARMUP_MS = LSP_CHECK_WARMUP_MS;
 /** Бюджет проверки одного файла в `lsp_check` (сервер уже тёплый). */
-export const CHECK_FILE_TIMEOUT_MS = 8000;
+export const CHECK_FILE_TIMEOUT_MS = LSP_CHECK_FILE_MS;
 
 /** Диагностики разреза модулей без tsconfig/node_modules — шум, не ошибки кода. */
 const TYPE_ENV_DIAG_PATTERN =
@@ -67,12 +73,24 @@ export async function runCheckFiles(
     inconclusive: 0,
     suppressed: 0,
     cold: 0,
+    unsupported: [],
   };
   for (const file of files) {
     const serverConfig = getServerForFile(file, deps.config);
-    if (!serverConfig) continue;
+    if (!serverConfig) {
+      acc.unsupported.push(file);
+      continue;
+    }
     const key = serverKeyFor(serverConfig);
-    if (deps.health.isDisabled(key)) continue;
+    if (deps.health.isDisabled(key)) {
+      // Пауза восстановления: не пробуем и честно говорим, сколько ждать.
+      acc.notes.push(
+        t("lsp.check_paused", {
+          sec: String(Math.ceil(deps.health.retryInMs(key) / 1000)),
+        }),
+      );
+      continue;
+    }
     const projectRoot = findProjectRoot(
       file,
       deps.baseDir,
@@ -82,6 +100,12 @@ export async function runCheckFiles(
     if (!warmed.ok) {
       if (!warmed.error) {
         acc.cold++;
+        // Бюджет ожидания истёк, а сервер ещё стартует: это видно в логе,
+        // иначе «lsp_check неокончателен» не отличить от упавшего сервера.
+        deps.logger?.info(
+          `LSP check skipped: ${file} — server still starting after ${CHECK_WARMUP_MS}ms`,
+          { op: "check_cold", server: key, file, root: projectRoot, budgetMs: CHECK_WARMUP_MS },
+        );
         continue;
       }
       // Прогрев отвергся (spawn/initialize): это не «ещё запускается», а
@@ -92,11 +116,19 @@ export async function runCheckFiles(
       // настоящая причина остаётся только в его выводе.
       const failure = warmFailureText(warmed.error, warmed.stderrTail);
       deps.health.warn(deps.logger, file, failure);
+      deps.logger?.info(`LSP check failed: ${file} — ${failure.split("\n")[0]}`, {
+        op: "check_failed",
+        server: key,
+        file,
+        root: projectRoot,
+        error: failure,
+      });
       acc.notes.push(deps.failureNote(key, serverConfig, failure, file));
       continue;
     }
     try {
       const budget = deps.timeoutMs ?? CHECK_FILE_TIMEOUT_MS;
+      const started = Date.now();
       const result = await deps.client.checkFile(
         file,
         deps.baseDir,
@@ -106,6 +138,21 @@ export async function runCheckFiles(
       );
       deps.health.reset(key);
       collectDiagnostics(acc, file, deps.baseDir, result, projectRoot);
+      // След в app.jsonl: что проверяли, сколько заняло, что нашли. Без этого
+      // «lsp_check прошёл» неотличим от «сервер молчал».
+      deps.logger?.info(
+        `LSP check ${file} in ${Date.now() - started}ms ` +
+          `(${result.diagnostics.length} diagnostic(s)${result.inconclusive ? ", inconclusive" : ""})`,
+        {
+          op: "check",
+          server: key,
+          file,
+          root: projectRoot,
+          durMs: Date.now() - started,
+          diagnostics: result.diagnostics.length,
+          inconclusive: result.inconclusive,
+        },
+      );
     } catch (e) {
       deps.health.warn(deps.logger, file, errMsg(e));
       acc.notes.push(deps.failureNote(key, serverConfig, errMsg(e), file));

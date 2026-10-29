@@ -1,11 +1,9 @@
 // Модуль LSP: автопроверка после write/edit, тул lsp_check, отключение мёртвых серверов.
 import type { AgentModule } from "../types";
 import type { AgentPlugin } from "../types";
-import type { ToolDefinition, ToolContext, ToolCall, ToolResult } from "../../tools/types";
-import { existsSync } from "fs";
-import { resolve } from "path";
-import { LspClient, serverKeyFor, type LspClientLogger, type CheckResult } from "./client";
-import { getServerForFile, getServerForLanguage, DEFAULT_LSP_CONFIG } from "./config";
+import type { ToolDefinition, ToolCall, ToolContext, ToolResult } from "../../tools/types";
+import { LspClient, type LspClientLogger } from "./client";
+import { getServerForLanguage, DEFAULT_LSP_CONFIG } from "./config";
 import type { LspSymbolLocation } from "./symbols";
 import { findProjectRoot } from "./project-root";
 import { isPathInScope } from "../security/path-validator";
@@ -13,15 +11,17 @@ import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 import { safeResolvePath } from "../../tools/path-utils";
 import { t } from "../../i18n/index";
 import type { LspConfig, LspServerConfig } from "./types";
-import { isErrorDiagnostic, isWarningDiagnostic } from "./types";
 import { collectCheckFiles } from "./check-tool";
-import { formatOneFileDiagnostics, renderCheckReport, type CheckAccumulator } from "./check-report";
+import { renderCheckReport, type CheckAccumulator } from "./check-report";
 import { runWebCheck, type WebCheckDeps } from "./web-check";
 import { runChangedChecks } from "./changed-check";
 import { runCheckFiles } from "./check-run";
+import { runWriteCheck, type WriteCheckDeps } from "./write-check";
+import { warmProjectServers } from "./warmup";
 import { diagnoseLspServers, type LspDiagnoseDeps } from "./diagnose";
 import { errMsg } from "../../utils";
 import { LspHealth } from "./health";
+import { existsSync } from "fs";
 /**
  * Диагностики резолва модулей, бессмысленные без type-окружения. В голом
  * каталоге (без tsconfig.json / node_modules) TS-сервер рапортует
@@ -29,28 +29,26 @@ import { LspHealth } from "./health";
  * подход из-за фантомных ошибок. Душатся с пометкой inconclusive.
  */
 
-/**
- * Бюджет пост-проверки записи. Проверка best-effort: 30-секундный таймаут
- * сервера держал `write_file` полминуты, когда файл вне tsconfig проекта
- * (наблюдалось вживую: write 30.0 с). Тёплый сервер отвечает за миллисекунды.
- */
-const WRITE_CHECK_TIMEOUT_MS = 4000;
-
-/** Модуль LSP: пост-проверки записи, тул lsp_check, учёт мёртвых серверов. */
+/** Модуль LSP: пост-проверки записи, тул lsp_check, учёт состояния серверов. */
 export class LspModule implements AgentModule {
   name = "lsp";
   private config: LspConfig;
   private client: LspClient;
-  /** Здоровье серверов: падения, отключение после порога, прогрев в фоне. */
+  /** Здоровье серверов: падения, пауза восстановления, прогрев в фоне. */
   private health = new LspHealth();
   private logger: LspClientLogger | null = null;
+  /** Корень проекта для фонового прогрева на старте сессии. */
+  private readonly baseDir: string;
+  /** Прогрев в фоне уже запущен (один на процесс/сессию). */
+  private warmStarted = false;
 
-  constructor(config?: Partial<LspConfig>, client?: LspClient, logger?: LspClientLogger) {
+  constructor(config?: Partial<LspConfig>, client?: LspClient, logger?: LspClientLogger, baseDir?: string) {
     this.config = { ...DEFAULT_LSP_CONFIG, ...config };
     this.client = client ?? new LspClient();
     this.client.setOffline(this.config.offline);
     this.logger = logger ?? null;
     this.client.setLogger(this.logger);
+    this.baseDir = baseDir ?? process.cwd();
   }
 
   setLogger(logger: LspClientLogger | null): void {
@@ -85,15 +83,14 @@ export class LspModule implements AgentModule {
     try {
       return await this.client.workspaceSymbol(query, server, projectRoot, server.timeout);
     } catch (e) {
-      this.logger?.debug(`LSP workspace/symbol failed: ${errMsg(e)}`);
+      this.log(`LSP symbol failed: ${errMsg(e)}`, { op: "symbol", error: errMsg(e) });
       return [];
     }
   }
 
-  /** Сбросить отключённые серверы (напр. после /lsp restart). */
+  /** Сбросить паузы восстановления (напр. после /lsp restart). */
   resetDisabledServers(): void {
     this.health.resetAll();
-    
   }
 
   /**
@@ -114,7 +111,12 @@ export class LspModule implements AgentModule {
     return this.client.stats();
   }
 
-  /** Список отключённых ключей серверов. */
+  /** Серверы на паузе восстановления: ключ и сколько ждать (для `/lsp status`). */
+  getBlockedServers(): Array<{ key: string; retryInMs: number }> {
+    return this.health.blocked();
+  }
+
+  /** Список ключей серверов на паузе (совместимость с `/lsp status`). */
   getDisabledServers(): string[] {
     return this.health.disabledKeys();
   }
@@ -137,113 +139,68 @@ export class LspModule implements AgentModule {
     });
   }
 
-  /** Тест-хук: отключал ли модуль какой-то LSP-сервер на сессии. */
+  /** Тест-хук: есть ли серверы на паузе восстановления. */
   isLspDisabled(): boolean {
     return this.health.disabledKeys().length > 0;
   }
 
-  /** Тест-хук: отключён ли сервер (ключ из конфига). */
+  /** Тест-хук: стоит ли сервер на паузе восстановления. */
   isServerDisabled(key: string): boolean {
     return this.health.isDisabled(key);
+  }
+
+  /** Прогрев применимых серверов проекта в фоне (старт сессии). */
+  warmProject(): void {
+    if (this.warmStarted) return;
+    this.warmStarted = true;
+    void warmProjectServers({
+      config: this.config,
+      baseDir: this.baseDir,
+      client: this.client,
+      health: this.health,
+      logger: this.logger,
+      log: (msg, meta) => this.log(msg, meta),
+      scanTimeoutMs: 5000,
+    });
   }
 
   getPlugin(): AgentPlugin {
     return {
       name: "lsp-check",
       priority: 15,
+      // Серверы поднимаются заранее: первый lsp_check/запись не платит холодный
+      // старт и не упирается в бюджет ожидания.
+      onSessionStart: () => this.warmProject(),
       onSessionEnd: () => {
         void this.client.close();
       },
-      onAfterTool: (_ctx, call, result) => this.checkAfterWrite(_ctx, call, result),
+      onAfterTool: (ctx, call, result) => this.checkAfterWrite(ctx, call, result),
     };
   }
 
-  /** Пост-проверка после write/edit: только поддержанные файлы, best-effort. */
-  private async checkAfterWrite(
-    ctx: ToolContext,
-    call: ToolCall,
-    result: ToolResult,
-  ): Promise<void> {
-    const target = this.resolveCheckTarget(ctx, call, result);
-    if (!target) return;
-    // Холодный сервер НЕ должен блокировать запись: npx-докачка language server
-    // занимала 30 с на первую запись (наблюдалось вживую: write 31.5 с).
-    // Прогреваем в фоне, проверяем на тёплом соединении — следующая запись
-    // получит диагностики без задержки (аудит §8.2).
-    if (!this.client.isWarm(target.serverConfig, target.projectRoot)) {
-      this.warmInBackground(target);
-      return;
-    }
+  /** Пост-проверка записи (вынесена в `write-check.ts`). */
+  private checkAfterWrite(ctx: ToolContext, call: ToolCall, result: ToolResult): Promise<void> {
+    return runWriteCheck(this.writeDeps(), ctx, call, result);
+  }
+
+  private writeDeps(): WriteCheckDeps {
+    return {
+      config: this.config,
+      client: this.client,
+      health: this.health,
+      logger: this.logger,
+      log: (msg, meta) => this.log(msg, meta),
+    };
+  }
+
+  /** Структурная запись в app.jsonl (info): видно, что и сколько длилось. */
+  private log(msg: string, meta?: Record<string, unknown>): void {
+    // DEBT(lsp-session-log-events): события LSP идут в app.jsonl, но не в
+    // session.jsonl (для сессионного журнала нужен отдельный тип события).
     try {
-      const check = await this.client.checkFile(
-        target.fullPath,
-        ctx.baseDir,
-        target.serverConfig,
-        target.projectRoot,
-        WRITE_CHECK_TIMEOUT_MS,
-      );
-      this.health.reset(target.key);
-      this.appendDiagnostics(result, check, target.fullPath);
-    } catch (e) {
-      const msg = errMsg(e);
-      this.health.warn(this.logger, target.fullPath, msg);
-      const failure = this.health.recordFailure(target.key, target.serverConfig, msg);
-      result.output += failure.disabled
-        ? `\n\n[LSP disabled: ${failure.text}]`
-        : `\n\n[LSP check failed]: ${failure.text}`;
-    }
-  }
-
-  /**
-   * Прогрев соединения в фоне (один на сервер+корень). Падения считает
-   * `LspHealth`: после порога сервер отключается на сессию, и повторов npx
-   * больше нет.
-   */
-  private warmInBackground(
-    target: { serverConfig: LspServerConfig; key: string; projectRoot: string; fullPath: string },
-  ): void {
-    this.health.warmInBackground({
-      key: target.key,
-      warm: () => this.client.warmup(target.serverConfig, target.projectRoot),
-      onError: (msg) => {
-        this.health.warn(this.logger, target.fullPath, msg);
-        this.health.recordFailure(target.key, target.serverConfig, msg);
-      },
-    });
-  }
-
-  /** Файл и сервер для пост-проверки; null — проверять нечего. */
-  private resolveCheckTarget(
-    ctx: ToolContext,
-    call: ToolCall,
-    result: ToolResult,
-  ): { fullPath: string; serverConfig: LspServerConfig; key: string; projectRoot: string } | null {
-    if (!this.config.enabled || !result.success) return null;
-    if (call.name !== "write_file" && call.name !== "edit_file") return null;
-    const filePath = String(call.arguments.path ?? "");
-    if (!filePath) return null;
-    const fullPath = resolve(ctx.baseDir, filePath);
-    if (!existsSync(fullPath)) return null;
-    const serverConfig = getServerForFile(fullPath, this.config);
-    if (!serverConfig) return null;
-    const key = serverKeyFor(serverConfig);
-    if (this.health.isDisabled(key)) return null;
-    const projectRoot = findProjectRoot(fullPath, ctx.baseDir, serverConfig.workspaceMarkers ?? []);
-    return { fullPath, serverConfig, key, projectRoot };
-  }
-
-  /** Дописать диагностики к выводу тула (errors / warnings / inconclusive). */
-  private appendDiagnostics(result: ToolResult, check: CheckResult, fullPath: string): void {
-    const errors = check.diagnostics.filter(isErrorDiagnostic);
-    const warnings = check.diagnostics.filter(isWarningDiagnostic);
-    if (errors.length > 0) {
-      result.output += `\n\n[LSP errors]:\n${formatOneFileDiagnostics(errors, fullPath)}`;
-    }
-    if (warnings.length > 0) {
-      result.output += `\n\n[LSP warnings]:\n${formatOneFileDiagnostics(warnings, fullPath)}`;
-    }
-    if (check.inconclusive && errors.length === 0 && warnings.length === 0) {
-      result.output += t("lsp.check_inconclusive");
+      this.logger?.info(msg, meta);
+    } catch {
+      /* логгер — не часть контракта */
     }
   }
 
@@ -306,10 +263,21 @@ export class LspModule implements AgentModule {
 
     const files = await collectCheckFiles(resolved, this.config);
     const acc = await this.checkFiles(files, ctx);
-    return renderCheckReport(acc);
+    const report = renderCheckReport(acc);
+    this.log(`LSP check ${path}: ${acc.checked}/${files.length} file(s), ` +
+      `${acc.errors.length} error(s), ${acc.warnings.length} warning(s), cold ${acc.cold}`, {
+      op: "check",
+      path,
+      files: files.length,
+      checked: acc.checked,
+      errors: acc.errors.length,
+      warnings: acc.warnings.length,
+      cold: acc.cold,
+      inconclusive: acc.inconclusive,
+    });
+    return report;
   }
 
-  /** Проверить набор файлов, накопив диагностики и заметки о сбоях. */
   /** Проверить файлы через вынесенный прогон (см. `check-run.ts`). */
   private async checkFiles(files: string[], ctx: ToolContext): Promise<CheckAccumulator> {
     return runCheckFiles(files, {
@@ -323,7 +291,7 @@ export class LspModule implements AgentModule {
     });
   }
 
-  /** Заметка о сбое сервера для `lsp_check` (disabled или failed+hint). */
+  /** Заметка о сбое сервера для `lsp_check`: сама ошибка + пауза, если включилась. */
   private failureNote(
     key: string,
     serverConfig: LspServerConfig,
@@ -331,9 +299,10 @@ export class LspModule implements AgentModule {
     file: string,
   ): string {
     const failure = this.health.recordFailure(key, serverConfig, message);
-    return failure.disabled
-      ? `[LSP disabled: ${failure.text}]`
-      : `[LSP check failed for ${file}: ${failure.text}]`;
+    const retry = failure.blocked
+      ? `\n${t("lsp.blocked_retry", { sec: String(Math.ceil(failure.retryInMs / 1000)) })}`
+      : "";
+    return `[LSP check failed for ${file}: ${failure.text}${retry}]`;
   }
 
   /** Веб-панель: структурная диагностика одного файла (jail + данные, не текст). */
