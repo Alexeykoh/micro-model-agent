@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.17.3] - 2026-10-29
+
+### Fixed
+
+- **`[LSP check failed]` называет причину.** Пул пробрасывает хвост stderr
+  упавшего сервера (`pool.acquire` → `LspProbeError`), отчёт печатает до 3 строк
+  общим форматом (`stderr-lines.ts`, им же пользуется `doctor`), а подсказка в
+  `health` классифицируется по склейке «сообщение + stderr» — для краха на старом
+  Node она говорит про версию рантайма, а не про сеть. Раньше отчёт ограничивался
+  «connection closed». Долг `lsp-stderr-in-check` оплачен.
+- **Холодный старт в явной проверке ждёт 15 с, а не 4.** `initialize`
+  Next.js-подпроекта в монолите (`my-app/app/page.tsx`) не укладывался в прежний
+  бюджет, и `/lsp check` сообщал «сервер ещё запускается» на каждой попытке.
+  Ожидание не превышает бюджет самого вызова: пакетная проверка изменённых файлов
+  по-прежнему передаёт свои 6 с на файл, а следующий файл уже идёт на тёплом
+  сервере.
+
+Спека: `docs/specs/2026-10-29-lsp-node-version-diagnosis-design.md`. Гварды:
+`tests/modules/lsp/check-warmup-budget.test.ts`, `check-warmup-failure.test.ts`,
+`pool.test.ts`.
+
 ## [0.17.2] - 2026-10-29
 
 ### Fixed
