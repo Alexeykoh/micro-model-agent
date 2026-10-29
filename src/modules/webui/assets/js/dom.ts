@@ -29,6 +29,11 @@ export function announce(text: string): void {
   }, 30);
 }
 
+/** Сбросить прошлое объявление (новый ход не должен наследовать «ход завершён»). */
+export function clearAnnounce(): void {
+  if (liveEl) liveEl.textContent = "";
+}
+
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   cls?: string | null,

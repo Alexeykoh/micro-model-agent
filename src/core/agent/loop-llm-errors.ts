@@ -35,6 +35,32 @@ export interface LlmErrorDeps {
 }
 
 /**
+ * Короткая версия ошибки провайдера для пользователя: если в тексте есть JSON
+ * (`{"error":{"message":"..."}}`), берём message, иначе первую строку и кап.
+ */
+export function friendlyLlmMessage(raw: string): string {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try {
+      const parsed = JSON.parse(text.slice(start, end + 1)) as {
+        error?: { message?: unknown };
+        message?: unknown;
+      };
+      const inner = parsed?.error?.message ?? parsed?.message;
+      if (typeof inner === "string" && inner.trim()) {
+        return `${text.slice(0, start).trim()} ${inner.trim()}`.trim().slice(0, 500);
+      }
+    } catch {
+      /* не JSON — оставляем как есть */
+    }
+  }
+  return text.split(/\r?\n/)[0].slice(0, 500);
+}
+
+/**
  * Разбирает ошибку вызова LLM и говорит петле, что делать дальше.
  * @returns сигнал петли: `continue` (повтор), `break` (стоп) или `return` (итог).
  */
@@ -117,7 +143,9 @@ export function handleLlmError(deps: LlmErrorDeps): LlmPhaseOutcome {
 
   const message = e?.message ?? String(err);
   logger.logLLMResponse(deps.model, deps.textLength, Date.now() - deps.llmStart, message, "agent");
-  logger.error(`LLM call failed: ${message}`);
+  // Диагностика — только в verbose/файле; пользователь получает один короткий
+  // текст через `result.error`, а не сырой JSON дважды (B-25).
+  logger.diagnostic("error", `LLM call failed: ${message}`);
   slog.logError({ source: "core", operation: "llm.call", kind: "failed", cause: message });
   pluginManager.runOnError(
     { iteration: state.iteration, logger, contextManager },
@@ -126,7 +154,7 @@ export function handleLlmError(deps: LlmErrorDeps): LlmPhaseOutcome {
   const result: AgentResult = {
     success: false,
     text: state.lastText,
-    error: t("error.llm", { message }),
+    error: t("error.llm", { message: friendlyLlmMessage(message) }),
     iterationCount: state.iteration,
   };
   return { kind: "return", result };

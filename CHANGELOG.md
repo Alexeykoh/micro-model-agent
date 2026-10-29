@@ -31,6 +31,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Boot-splash больше не держит клики 8–10 секунд.** Это маска, а не гейт:
+  через 2 с она скрывается и снимает `pointer-events`, остальные данные
+  догружаются прогрессивно (best practice: <2 с). Гвард:
+  `tests/webui-boot-splash.test.ts`.
+- **Ошибка провайдера показывается один раз и без сырого JSON.** Полный текст
+  с телом ответа ушёл в `logger.diagnostic` (verbose/файл), а пользователь
+  получает `error.message` из JSON или первую строку, до 500 символов
+  (`friendlyLlmMessage`). Гвард: `tests/llm-error-message.test.ts`.
+- **Новый ход не наследует объявление «ход завершён».** Перед отправкой
+  сообщения live-регион очищается (`clearAnnounce`), поэтому screen-reader и
+  статус не показывают итог прошлого хода во время нового. Гвард:
+  `tests/webui-clear-announce.test.ts`.
 - **Вкладка «Плагины» больше не выдаёт модули харнесса за плагины.** В списке
   были `execution`, `session`, `indexer`, `mcp_module`, `browser`, `skills`,
   `lsp-check` — хуки модулей с тумблерами, хотя их код уже загружен и

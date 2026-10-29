@@ -3,7 +3,7 @@
 // (activeTab, status mutation, new/close/open) arrive via `initComposer`, so it
 // does not import the tab hub. The mobile session sub-header lives in
 // `sess-bar.ts` (re-exported here for `tabs.ts`).
-import { inp, imgPicker, attachStrip, attachErr, sendBtn, el, icon } from "../dom.js";
+import { inp, imgPicker, attachStrip, attachErr, sendBtn, el, icon, clearAnnounce } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, session, settings, MAX_IMAGES, MAX_IMAGE_BYTES } from "../store.js";

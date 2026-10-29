@@ -503,7 +503,6 @@ function applyStaticI18n(): void {
   if (connStatus && !connStatus.hidden) setConnStatus(true);
   setStaleBar(undefined, true);
 }
-
 async function boot(): Promise<void> {
   initCursor();
   // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
@@ -517,6 +516,8 @@ async function boot(): Promise<void> {
       /* wizard failure must never brick the chat boot */
     }
   }
+  // Splash is a mask, not a gate: cap at 2 s; data loads progressively behind it.
+  window.setTimeout(hideBootSplash, 2000);
   try {
     await loadI18n();
     await loadCommands();
@@ -556,7 +557,6 @@ async function boot(): Promise<void> {
   }
   connectSSE();
 }
-
 // Fade the boot splash out and drop it from the layout. Idempotent.
 function hideBootSplash(): void {
   const splash = document.getElementById("bootSplash");
