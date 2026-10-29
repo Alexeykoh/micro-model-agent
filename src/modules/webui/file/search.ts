@@ -1,8 +1,13 @@
-// Ограниченный поиск по содержимому workspace для вкладки Files (C-01).
+// Ограниченный поиск по workspace для вкладки Files (C-01): по имени/пути и по
+// содержимому.
 //
 // Это НЕ индексатор: поиск не должен требовать тёплого индекса и не должен
 // читать весь проект. Обход ограничен результатами, файлами, байтами и
 // временем; при упоре в любой кап ответ помечается `truncated`.
+//
+// Совпадения по имени не требуют чтения файла (видны и большие, и бинарные
+// файлы), но подчиняются тем же игнорам и защите путей. В ответе они идут
+// первыми: запрос-имя не должен тонуть среди текстовых совпадений.
 //
 // Игноры и защита — те же примитивы, что у дерева/индексатора:
 // `IGNORE_DIRS`/`IGNORE_FILE_NAMES`, `.gitignore`/`.mmaignore`, скрытые globs
@@ -33,12 +38,13 @@ export const MAX_MATCH_TEXT = 200;
 /** Сгенерированные артефакты: в поиске по содержимому только шумят. */
 const GENERATED_FILE_SUFFIXES = [".tsbuildinfo"];
 
-/** Одно совпадение: путь, 1-based строка и её обрезанный текст. */
-export interface SearchHit {
-  path: string;
-  line: number;
-  text: string;
-}
+/**
+ * Одно совпадение. `path` — совпадение по имени/пути (файл не читался);
+ * `content` — совпадение в строке (1-based `line` + обрезанный `text`).
+ */
+export type SearchHit =
+  | { kind: "path"; path: string }
+  | { kind: "content"; path: string; line: number; text: string };
 
 /** Результат поиска: строки + признаки упора в кап. */
 export interface SearchResult {
@@ -57,6 +63,8 @@ export interface SearchOptions {
 }
 
 interface WalkState {
+  /** Совпадения по имени/пути — всегда перед `results` в ответе. */
+  pathHits: SearchHit[];
   results: SearchHit[];
   scanned: number;
   bytes: number;
@@ -87,6 +95,7 @@ function collectHits(
   for (let i = 0; i < lines.length; i++) {
     if (!lines[i].toLowerCase().includes(state.needle)) continue;
     state.results.push({
+      kind: "content",
       path: relPath,
       line: i + 1,
       text: lines[i].trim().slice(0, MAX_MATCH_TEXT),
@@ -158,6 +167,14 @@ async function walkDir(
       if (!(await walkDir(base, fullPath, relChild, matcher, hiddenGlobs, state))) return false;
       continue;
     }
+    // Имя проверяем до чтения: файл может быть бинарным или слишком большим.
+    if (pathMatches(relChild, state.needle)) {
+      state.pathHits.push({ kind: "path", path: relChild });
+      if (state.pathHits.length >= state.maxResults) {
+        state.truncated = true;
+        return false;
+      }
+    }
     if (state.scanned >= state.maxFiles) {
       state.truncated = true;
       return false;
@@ -176,9 +193,19 @@ function toPosix(p: string): string {
   return p.replace(/\\/g, "/");
 }
 
+/** Запрос в виде, в котором его сравниваем с posix-путём. */
+function normalizeNeedle(query: string): string {
+  return toPosix(query.trim()).replace(/^\.\//, "").toLowerCase();
+}
+
+/** True, если workspace-относительный путь содержит запрос (без учёта регистра). */
+function pathMatches(relPath: string, needle: string): boolean {
+  return relPath.toLowerCase().includes(needle);
+}
+
 /**
- * Ищет подстроку (без учёта регистра) по текстовым файлам workspace
- * `base`. `hiddenGlobs` — активные `security.dataPolicy.apiHiddenGlobs`.
+ * Ищет подстроку (без учёта регистра) по имени/пути и по тексту файлов
+ * workspace `base`. `hiddenGlobs` — активные `security.dataPolicy.apiHiddenGlobs`.
  */
 export async function searchWorkspace(
   base: string,
@@ -189,17 +216,28 @@ export async function searchWorkspace(
   const started = Date.now();
   const matcher = loadIgnoreMatcher(base, readIgnoreFile);
   const state: WalkState = {
+    pathHits: [],
     results: [],
     scanned: 0,
     bytes: 0,
     truncated: false,
     deadline: started + (opts.maxMs ?? MAX_SEARCH_MS),
-    needle: query.toLowerCase(),
+    needle: normalizeNeedle(query),
     maxResults: opts.maxResults ?? MAX_SEARCH_RESULTS,
     maxFiles: opts.maxFiles ?? MAX_SEARCH_FILES,
     maxBytes: opts.maxBytes ?? MAX_SEARCH_BYTES,
   };
   await walkDir(base, base, "", matcher, hiddenGlobs, state);
-  const results = state.results.map((h) => ({ ...h, path: toPosix(h.path) }));
+  // Имена всегда первыми; общий лимит делится между двумя видами совпадений.
+  const merged = [...state.pathHits, ...state.results];
+  if (merged.length > state.maxResults) {
+    merged.length = state.maxResults;
+    state.truncated = true;
+  }
+  const results = merged.map((h): SearchHit =>
+    h.kind === "path"
+      ? { kind: "path", path: toPosix(h.path) }
+      : { kind: "content", path: toPosix(h.path), line: h.line, text: h.text },
+  );
   return { results, truncated: state.truncated, ms: Date.now() - started, scanned: state.scanned };
 }

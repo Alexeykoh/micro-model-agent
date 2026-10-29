@@ -32,7 +32,7 @@ function searchUrl(base: string, q: string, extra = ""): string {
 }
 
 interface SearchBody {
-  results: { path: string; line: number; text: string }[];
+  results: ({ kind: "path"; path: string } | { kind: "content"; path: string; line: number; text: string })[];
   truncated: boolean;
   ms: number;
   scanned: number;
@@ -51,8 +51,8 @@ describe("webui content search", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as SearchBody;
       expect(body.results).toEqual([
-        { path: "a.txt", line: 2, text: "const needle = 1" },
-        { path: "a.txt", line: 3, text: "LAST NEEDLE here" },
+        { kind: "content", path: "a.txt", line: 2, text: "const needle = 1" },
+        { kind: "content", path: "a.txt", line: 3, text: "LAST NEEDLE here" },
       ]);
       expect(body.truncated).toBe(false);
       expect(body.ms).toBeGreaterThanOrEqual(0);
@@ -66,7 +66,9 @@ describe("webui content search", () => {
     writeFileSync(join(ws, "src", "deep", "b.ts"), "   padded needle   \n");
     await withSearchApi(ws, async (base) => {
       const body = (await (await doFetch(searchUrl(base, "needle"))).json()) as SearchBody;
-      expect(body.results).toEqual([{ path: "src/deep/b.ts", line: 1, text: "padded needle" }]);
+      expect(body.results).toEqual([
+        { kind: "content", path: "src/deep/b.ts", line: 1, text: "padded needle" },
+      ]);
     });
   });
 
@@ -136,6 +138,73 @@ describe("webui content search", () => {
       expect(body.error).toBe("query_too_long");
       expect(body.limit).toBe(MAX_SEARCH_QUERY);
     });
+  });
+
+  it("finds a file by name even when its content does not contain the query", async () => {
+    const ws = makeWorkspace();
+    mkdirSync(join(ws, "src"), { recursive: true });
+    writeFileSync(join(ws, "src", "needle-name.ts"), "export const unrelated = 1;\n");
+    await withSearchApi(ws, async (base) => {
+      const body = (await (await doFetch(searchUrl(base, "needle-name"))).json()) as SearchBody;
+      expect(body.results).toEqual([{ kind: "path", path: "src/needle-name.ts" }]);
+    });
+  });
+
+  it("puts name hits first and matches paths case-insensitively with either separator", async () => {
+    const ws = makeWorkspace();
+    writeFileSync(join(ws, "a.txt"), "needle in body\n");
+    writeFileSync(join(ws, "z-needle.txt"), "nothing here\n");
+    await withSearchApi(ws, async (base) => {
+      const body = (await (await doFetch(searchUrl(base, "NEEDLE"))).json()) as SearchBody;
+      expect(body.results).toEqual([
+        { kind: "path", path: "z-needle.txt" },
+        { kind: "content", path: "a.txt", line: 1, text: "needle in body" },
+      ]);
+      const windows = (await (await doFetch(searchUrl(base, ".\\Z-Needle"))).json()) as SearchBody;
+      expect(windows.results).toEqual([{ kind: "path", path: "z-needle.txt" }]);
+    });
+  });
+
+  it("finds large and binary files by name without reading them", async () => {
+    const ws = makeWorkspace();
+    writeFileSync(join(ws, "needle.big"), Buffer.alloc(MAX_SEARCH_FILE_BYTES + 1, 0x61));
+    writeFileSync(join(ws, "needle.bin"), Buffer.from("needle\u0000binary", "utf8"));
+    writeFileSync(join(ws, "needle.ts"), "needle\n");
+    await withSearchApi(ws, async (base) => {
+      const body = (await (await doFetch(searchUrl(base, "needle"))).json()) as SearchBody;
+      expect(body.results).toEqual([
+        { kind: "path", path: "needle.big" },
+        { kind: "path", path: "needle.bin" },
+        { kind: "path", path: "needle.ts" },
+        { kind: "content", path: "needle.ts", line: 1, text: "needle" },
+      ]);
+    });
+  });
+
+  it("applies ignores and protected paths to name hits too", async () => {
+    const ws = makeWorkspace();
+    for (const dir of ["node_modules", "dist", ".git"]) mkdirSync(join(ws, dir));
+    for (const rel of ["node_modules/vault.js", "dist/vault.txt", ".git/vault", "vault.key", ".env.vault"]) {
+      writeFileSync(join(ws, rel), "hidden");
+    }
+    writeFileSync(join(ws, ".gitignore"), "ignoredfile.txt\n");
+    writeFileSync(join(ws, "ignoredfile.txt"), "hidden");
+    writeFileSync(join(ws, "vault.txt"), "visible");
+    await withSearchApi(ws, async (base) => {
+      const body = (await (await doFetch(searchUrl(base, "vault"))).json()) as SearchBody;
+      expect(body.results).toEqual([{ kind: "path", path: "vault.txt" }]);
+    });
+  });
+
+  it("shares the result cap between name and content hits", async () => {
+    const ws = makeWorkspace();
+    for (let i = 0; i < 5; i++) writeFileSync(join(ws, `hit-${i}.txt`), "hit\n");
+    const result = await searchWorkspace(ws, "hit-", [], { maxResults: 2 });
+    expect(result.results).toEqual([
+      { kind: "path", path: "hit-0.txt" },
+      { kind: "path", path: "hit-1.txt" },
+    ]);
+    expect(result.truncated).toBe(true);
   });
 
   it("answers 503 without a workspace", async () => {

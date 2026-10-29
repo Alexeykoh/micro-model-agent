@@ -86,7 +86,7 @@ i18n.I18N.dicts = {
     "web.files.tree_width": "tree width",
     "web.files.no_workspace": "no workspace",
     "web.files.expand_capped": "expanded up to the limit of {n} folders.",
-    "web.files.search_placeholder": "search contents",
+    "web.files.search_placeholder": "search files or contents",
     "web.files.search_no_results": "no matches",
     "web.files.search_error": "search failed",
     "web.files.search_truncated": "showing the first {n} matches",
@@ -103,9 +103,11 @@ g.fetch = async (url: string): Promise<Response> => {
     if (searchFails) return new Response("{}", { status: 500 });
     const q = new URLSearchParams(url.split("?")[1] || "").get("q") || "";
     const results =
-      q === "needle" || q === "many"
-        ? [{ path: "src/app.ts", line: 2, text: "const needle = 1" }]
-        : [];
+      q === "app.ts"
+        ? [{ kind: "path", path: "src/app.ts" }]
+        : q === "needle" || q === "many"
+          ? [{ kind: "content", path: "src/app.ts", line: 2, text: "const needle = 1" }]
+          : [];
     return new Response(
       JSON.stringify({ results, truncated: q === "many", ms: 1 }),
       { status: 200, headers: { "content-type": "application/json" } },
@@ -168,8 +170,20 @@ describe("files content search DOM", () => {
     expect(resultRows()[0].textContent).toContain("const needle = 1");
   });
 
-  it("opens the file at the matched line in the existing viewer", async () => {
-    await search("needle");
+  it("renders a name hit without a line and opens the file from the top", async () => {
+    await search("app.ts");
+    expect(resultRows().length).toBe(1);
+    expect(resultRows()[0].className).toContain("fsearch-file");
+    expect(resultRows()[0].textContent).toBe("src/app.ts");
+    expect(resultRows()[0].textContent).not.toContain(":2");
+    resultRows()[0].click();
+    await flush();
+    expect(doc("filesDetail").hidden).toBe(false);
+    expect(doc("filesBody").textContent).toContain("line one");
+    expect(doc("filesCrumbs").textContent).toContain("app.ts");
+  });
+
+  it("opens the file at the matched line in the existing viewer", async () => {    await search("needle");
     resultRows()[0].click();
     await flush();
     expect(doc("filesDetail").hidden).toBe(false);
@@ -210,8 +224,8 @@ describe("files content search DOM", () => {
   });
 
   it("localizes the placeholder", () => {
-    expect(input().placeholder).toBe("search contents");
-    expect(input().getAttribute("aria-label")).toBe("search contents");
+    expect(input().placeholder).toBe("search files or contents");
+    expect(input().getAttribute("aria-label")).toBe("search files or contents");
   });
 
   it("alerts truncated result sets", async () => {
