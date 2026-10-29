@@ -65,7 +65,10 @@ export async function handleLspCheckPost(
     ? 200
     : result.error === "outside-workspace" || result.error === "not-found"
       ? 400
-      : 503;
+      : // «сервер запускается» — не ошибка клиента: панель сама повторит запрос.
+        result.error === "starting"
+        ? 200
+        : 503;
   sendJson(res, status, result);
 }
 

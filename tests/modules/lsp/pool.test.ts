@@ -135,4 +135,18 @@ describe("LspConnectionPool", () => {
     expect(pool.keys()).toHaveLength(0);
     await pool.dispose();
   });
+
+  it("reports what is actually warm: server key, project root, age", async () => {
+    const server = new FakeLspServer();
+    const c = clock();
+    const pool = new LspConnectionPool(deps(server), { now: c.now });
+    await pool.acquire("typescript", SERVER, "/repo/app");
+    c.advance(1234);
+
+    expect(pool.keyStates()).toEqual([
+      { key: "typescript", root: "/repo/app", ageMs: 1234 },
+    ]);
+    await pool.dispose();
+    expect(pool.keyStates()).toEqual([]);
+  });
 });

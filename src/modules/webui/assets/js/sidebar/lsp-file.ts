@@ -15,6 +15,8 @@ import { sb } from "./state.js";
 
 /** Сколько диагностик показываем (сервер тоже капит, это второй предохранитель). */
 const SHOW_LIMIT = 50;
+/** Общий лимит авто-повторов, пока сервер стартует (60 с). */
+const STARTING_MAX_MS = 60_000;
 
 let checkedPath = "";
 let lastResult: Dict | null = null;
@@ -190,9 +192,19 @@ export async function checkFile(rawPath?: string): Promise<void> {
   checking = true;
   checkStarted = Date.now();
   if (sb.lspEl) renderLspFileSection(sb.lspEl);
+  const deadline = Date.now() + STARTING_MAX_MS;
   try {
-    const r = await api<Dict>("/api/lsp/check", { method: "POST", body: { path } });
-    lastResult = (r.data as Dict) || { ok: false, path, diagnostics: [], error: "failed" };
+    for (;;) {
+      const r = await api<Dict>("/api/lsp/check", { method: "POST", body: { path } });
+      lastResult = (r.data as Dict) || { ok: false, path, diagnostics: [], error: "failed" };
+      // Большой проект грузит сервер дольше одного запроса: повторяем, пока
+      // файл не сменили или не истёк общий лимит. Пользователь видит счётчик.
+      if (lastResult.error !== "starting") break;
+      if (checkedPath !== path || Date.now() >= deadline) break;
+      const retry = Number(lastResult.retryAfterMs);
+      await new Promise((resolve) => setTimeout(resolve, retry > 0 ? retry : 2000));
+      if (checkedPath !== path) break;
+    }
   } catch {
     lastResult = { ok: false, path, diagnostics: [], error: "failed" };
   } finally {

@@ -97,6 +97,11 @@ export class LspClient {
     return this.pool.stats().live;
   }
 
+  /** Что поднято: сервер, корень проекта и возраст соединения (`/lsp status`). */
+  liveStates(): Array<{ key: string; root: string; ageMs: number }> {
+    return this.pool.keyStates();
+  }
+
   /** Закрыть все соединения (конец сессии, `/lsp restart`). */
   async close(): Promise<void> {
     await this.pool.dispose();

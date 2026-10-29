@@ -172,6 +172,17 @@ export function registerLspCommands(ctx: ReplContext): void {
           ctx.output.writeLine(
             pc.dim(`${t("repl.lsp_pool")} ${pool.live} · ${t("repl.lsp_pool_reaped")} ${pool.reaped} · ${t("repl.lsp_pool_restarts")} ${pool.restarts}`),
           );
+          // Прямой ответ на «сервер поднялся?»: ключ, корень, возраст.
+          for (const s of lspModule.poolStates()) {
+            ctx.output.writeLine(
+              pc.dim(`  ${t("repl.lsp_warm")} ${s.key} · ${s.root} · ${Math.round(s.ageMs / 1000)}s`),
+            );
+          }
+          if (pool.live === 0) {
+            ctx.output.writeLine(
+              pc.dim(`  ${t("repl.lsp_pool_empty")}`),
+            );
+          }
 
           if (disabled.length > 0) {
             ctx.output.writeLine(

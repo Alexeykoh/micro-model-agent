@@ -41,4 +41,22 @@ describe("webui: POST /api/lsp/check", () => {
       expect(res.json.error).toBe("unavailable");
     });
   });
+
+  it("200 на «сервер запускается» — это не ошибка клиента", async () => {
+    const s = createWebUiState();
+    s.lspCheckFile = async (rel) => ({
+      ok: false,
+      path: rel,
+      diagnostics: [],
+      error: "starting",
+      retryAfterMs: 2000,
+    });
+
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/lsp/check", { path: "src/main.ts" });
+      expect(res.status).toBe(200);
+      expect(res.json.error).toBe("starting");
+      expect(res.json.retryAfterMs).toBe(2000);
+    });
+  });
 });

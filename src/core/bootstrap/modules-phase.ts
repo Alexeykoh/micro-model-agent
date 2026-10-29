@@ -176,15 +176,17 @@ function startLanguageModules(
     lspModule.workspaceSymbol(query, baseDir, language),
   );
 
-  // Стартовый health-check: сканируем проект на существующие ошибки, чтобы модель
-  // знала baseline до работы. Пропуск для one-shot и тестов. Старт фоном (без
-  // await), чтобы баннер REPL не ждал `npx tsc` по проекту; Agent дожидается
-  // через `lazyPromptBlocks` перед первым LLM-вызовом (к вводу пользователя
-  // в интерактиве уже резолвнут).
-  const startupCheck =
-    !isOneShotMode() && !exitOnComplete && process.env.NODE_ENV !== "test"
-      ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger: lspLogger })
-      : Promise.resolve(null);
+  // Прогрев LSP в фоне: вкладку LSP и первый файл открывают до первого хода,
+  // иначе каждый старт платит холодный сервер. One-shot и тесты — без прогрева.
+  const interactive = !isOneShotMode() && !exitOnComplete && process.env.NODE_ENV !== "test";
+  if (interactive) lspModule.warmProject();
+
+  // Стартовый health-check: baseline ошибок проекта до работы. Старт фоном (без
+  // await), чтобы баннер REPL не ждал `npx tsc`; Agent дожидается через
+  // `lazyPromptBlocks` перед первым LLM-вызовом.
+  const startupCheck = interactive
+    ? runStartupHealthCheck(config.lsp ?? DEFAULT_LSP_CONFIG, baseDir, { logger: lspLogger })
+    : Promise.resolve(null);
   return { lspModule, startupCheck, browserModule };
 }
 

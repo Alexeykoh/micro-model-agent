@@ -14,6 +14,17 @@ import { runCheckFiles } from "./check-run";
 /** Максимум диагностик в ответе панели. */
 export const WEB_CHECK_LIMIT = 200;
 /**
+ * Сколько панель ждёт холодный старт в одном HTTP-запросе.
+ *
+ * 1.5 с — намеренно мало: большой проект (Angular 11 монорепо) грузит tsserver
+ * 15–60 с, и держать запрос всё это время бессмысленно. Вместо ожидания
+ * возвращается `error: "starting"` + `retryAfterMs`, а панель сама повторяет
+ * запрос, пока сервер не поднимется.
+ */
+export const WEB_WARM_WAIT_MS = 1500;
+/** Пауза между повторными запросами панели, пока сервер стартует. */
+export const WEB_STARTING_RETRY_MS = 2000;
+/**
  * Бюджет проверки файла из панели. Дольше, чем `lsp_check` агента (8 с):
  * пользователь ждёт интерактивно и видит счётчик секунд, а холодная загрузка
  * TS-проекта на этой машине занимает ~9.6 с — короткий бюджет отдавал
@@ -28,6 +39,8 @@ export interface WebCheckDeps {
   client: Pick<LspClient, "isWarm" | "warmup" | "checkFile">;
   health: LspHealth;
   logger: LspClientLogger | null;
+  /** Ожидание холодного старта внутри запроса (тесты); `WEB_WARM_WAIT_MS`. */
+  warmWaitMs?: number;
   failureNote(key: string, serverConfig: LspServerConfig, message: string, file: string): string;
 }
 
@@ -44,10 +57,12 @@ export interface WebCheckResult {
   diagnostics: WebDiagnostic[];
   truncated?: boolean;
   ms?: number;
-  /** `outside-workspace` | `not-found` | `disabled` | `unsupported` | `lsp-timeout` | `lsp-failed`. */
+  /** `outside-workspace` | `not-found` | `disabled` | `unsupported` | `starting` | `lsp-timeout` | `lsp-failed`. */
   error?: string;
   /** Человеческая причина отказа (первая заметка прогона) — панель показывает её. */
   reason?: string;
+  /** Для `starting`: через сколько панели повторить запрос (мс). */
+  retryAfterMs?: number;
 }
 
 /** Путь внутри workspace? Тот же jail, что у `/api/file`. */
@@ -106,6 +121,7 @@ export async function runWebCheck(
     logger: deps.logger,
     failureNote: deps.failureNote,
     timeoutMs,
+    warmupMs: deps.warmWaitMs ?? WEB_WARM_WAIT_MS,
   });
 
   const all = [...acc.errors, ...acc.warnings].map((e) => toWebDiagnostic(e.diag));
@@ -115,18 +131,23 @@ export async function runWebCheck(
   // `inconclusive` тоже инкрементит `checked`: сервер не ответил, и это НЕ
   // «ошибок нет» — панель обязана сказать про таймаут, а не про чистый файл.
   if (acc.checked === 0 || acc.inconclusive > 0) {
+    // Холодный старт большого проекта: не «не ответил», а «ещё запускается».
+    // Панель повторит запрос сама — держать один HTTP-запрос минуту нельзя.
+    const starting = acc.cold > 0 && acc.notes.length === 0;
     return {
       ok: false,
       path,
       diagnostics,
       truncated: all.length > diagnostics.length,
       ms: Date.now() - started,
-      error:
-        acc.inconclusive > 0
+      error: starting
+        ? "starting"
+        : acc.inconclusive > 0
           ? "lsp-timeout"
           : acc.unsupported.length > 0
             ? "unsupported"
             : "lsp-failed",
+      retryAfterMs: starting ? WEB_STARTING_RETRY_MS : undefined,
       // Панель не должна ограничиваться «сервер не ответил»: причина уже
       // известна прогону (упал со stderr, офлайн, пауза восстановления).
       reason: webFailureReason(acc),
