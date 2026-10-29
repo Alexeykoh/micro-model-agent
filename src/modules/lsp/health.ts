@@ -23,6 +23,7 @@ const LSP_HINT_KEYS: Partial<Record<LspFailureReason, string>> = {
   network: "lsp.hint_network",
   timeout: "lsp.hint_timeout",
   "spawn-failed": "lsp.hint_spawn",
+  "node-too-old": "lsp.hint_node_too_old",
 };
 
 /** Подсказка под `[LSP check failed]` (пусто, если класса с действием нет). */

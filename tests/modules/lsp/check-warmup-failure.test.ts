@@ -85,8 +85,40 @@ describe("lsp_check: прогрев упал", () => {
     }
   });
 
-  it("keeps the cold-start message for a warmup that is still running", async () => {
+  it("shows the crashed server's stderr and names the real cause", async () => {
     const dir = project();
+    try {
+      const client = {
+        setOffline: () => {},
+        setLogger: () => {},
+        isWarm: () => false,
+        warmup: async () => {
+          // Так выглядит крах на неподходящем Node: клиент видит «exited»,
+          // причина — только в stderr.
+          throw Object.assign(new Error("LSP server exited"), {
+            stderrTail:
+              "SyntaxError: Unexpected token '?'\n    at wrapSafe\n    at Module._compile\n    at Module._load",
+          });
+        },
+        checkFile: () => {
+          throw new Error("checkFile must not run when the server crashed");
+        },
+      } as unknown as LspClient;
+      const module = new LspModule(CONFIG, client);
+      const result = await module.getToolDefinitions()[0].handler(ctxFor(dir), { path: "src/a.ts" });
+
+      // Хвост stderr в отчёте (до 3 строк) — без него строка бесполезна.
+      expect(result.output).toContain("SyntaxError: Unexpected token '?'");
+      expect(result.output).toContain("at wrapSafe");
+      expect(result.output).not.toContain("at Module._load");
+      // Классификация учитывает stderr: подсказка про версию Node, а не сеть.
+      expect(result.output).toContain("crashes on startup");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the cold-start message for a warmup that is still running", async () => {    const dir = project();
     try {
       const client = {
         setOffline: () => {},

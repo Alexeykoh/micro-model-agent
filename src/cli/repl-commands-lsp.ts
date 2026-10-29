@@ -6,6 +6,7 @@ import { glyph } from "../ui/theme";
 import { t } from "../i18n/index";
 import { errMsg } from "../utils";
 import type { LspModule } from "../modules/lsp/module";
+import { stderrTailLines } from "../modules/lsp/stderr-lines";
 import type {
   LspDiagnosis,
   LspFailureReason,
@@ -81,19 +82,13 @@ function serverHint(reason: LspFailureReason): string | null {
 }
 
 /**
- * Хвост stderr упавшего сервера: до 3 непустых строк по 200 символов.
- * Вывод сервера — единственный след краха до `initialize` (несовместимый
- * Node, битый пакет), поэтому он идёт в отчёт, а не только в debug-лог.
+ * Хвост stderr упавшего сервера: до 3 непустых строк по 200 символов (общий
+ * формат с `[LSP check failed]`). Вывод сервера — единственный след краха до
+ * `initialize` (несовместимый Node, битый пакет).
  */
 function stderrLines(tail: string | undefined): string[] {
-  if (!tail) return [];
-  const lines = tail
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .slice(0, 3);
-  return lines.map((l, i) =>
-    pc.dim(`      ${i === 0 ? `${t("repl.lsp_stderr")}: ` : "  "}${l.slice(0, 200)}`),
+  return stderrTailLines(tail).map((line, i) =>
+    pc.dim(`      ${i === 0 ? `${t("repl.lsp_stderr")}: ` : "  "}${line}`),
   );
 }
 

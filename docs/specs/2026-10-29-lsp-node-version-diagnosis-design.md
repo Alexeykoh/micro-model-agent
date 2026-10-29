@@ -71,10 +71,20 @@ Node 20 с `typescript-language-server@6` (нужен 22.22+) остался б�
 - `ok: true` — есть тёплое соединение, файл проверяется;
 - `ok: false, error` — прогрев отвергся (spawn/initialize); ошибка идёт в
   `health` и в отчёт как `[LSP check failed for <file>: <msg>]`, счётчик
-  подряд идущих падений работает как раньше (3 → сервер отключается на сессию);
+  подряд идущих падений работает как раньше (3 → сервер отключается на сессию).
+  Пул прикладывает к ошибке хвост stderr (`pool.acquire` → `LspProbeError`), и
+  отчёт печатает до 3 строк: упавший сервер сообщает только «connection closed»,
+  а причина (`SyntaxError`) остаётся в его выводе. Классификация подсказки
+  (`health.failureHint`) получает склеенное «сообщение + stderr», поэтому
+  подсказка говорит про версию Node, а не про сеть;
 - `ok: false` без `error` — прогрев ещё идёт: тот же `lsp.check_cold`, что и
   прежде (поведение не меняется, `tests/modules/lsp/check-cold-start.test.ts`
-  остаётся зелёным).
+  остаётся зелёным). Бюджет ожидания — `CHECK_WARMUP_MS` (15 с), но **не больше
+  бюджета самого вызова** (`timeoutMs`) и серверного таймаута. Явная проверка
+  (REPL, панель на один файл) ждёт до 15 с: `initialize` Next.js-подпроекта в
+  монолите (`my-app/app/page.tsx`) в прежние 4 с не укладывался, и «сервер ещё
+  запускается» печаталось на каждой попытке. Пакетная проверка изменённых файлов
+  передаёт свой пер-файловый бюджет (6 с) — там ожидание остаётся коротким.
 
 Позднее падение (после истечения бюджета) съедается обработчиком промиса, чтобы
 не было unhandled rejection; оно будет видно на следующей проверке, потому что
@@ -95,6 +105,8 @@ Node 20 с `typescript-language-server@6` (нужен 22.22+) остался б�
 | Doctor отдаёт `nodeVersion`, `stderrTail` и пин-команду | `tests/modules/lsp/diagnose.test.ts` |
 | `probe` прикладывает stderr упавшего сервера к ошибке | `tests/modules/lsp/probe-stderr.test.ts` |
 | Падение прогрева → `[LSP check failed]`, а не «ещё запускается» | `tests/modules/lsp/check-warmup-failure.test.ts` |
+| Хвост stderr доезжает из пула в отчёт (до 3 строк) | `tests/modules/lsp/pool.test.ts`, `check-warmup-failure.test.ts` |
+| Повторная проверка ждёт идущий прогрев 15 с, а не 4 | `tests/modules/lsp/check-warmup-budget.test.ts` |
 | Отрисовка doctor: версия Node, хвост stderr, пин | `tests/modules/lsp/doctor-render.test.ts` |
 | Чтение/разбор версии Node | `tests/modules/lsp/node-version.test.ts` |
 | Паритет i18n-ключей | `tests/i18n.test.ts` |

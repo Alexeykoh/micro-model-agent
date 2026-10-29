@@ -6,6 +6,7 @@
 // живым, ограничивает их число (LRU), режет простаивающие (idle) и пересоздаёт
 // те, что умерли сами.
 import { LspConnection, poolKey, type LspConnectionDeps, type LspPoolDeps } from "./connection";
+import type { LspProbeError } from "./connection-types";
 import type { LspServerConfig } from "./types";
 import { LSP_MAX_SERVERS, LSP_SERVER_IDLE_MS, LSP_IDLE_SWEEP_MS } from "../../config/timeouts";
 
@@ -104,7 +105,16 @@ export class LspConnectionPool {
 
     const created = (async () => {
       const connection = new LspConnection(serverKey, projectRoot, server, this.connectionDeps());
-      await connection.open();
+      try {
+        await connection.open();
+      } catch (e) {
+        // Причина краха часто есть только в stderr процесса: сервер падает до
+        // `initialize`, а клиент видит «connection closed». Пробрасываем хвост
+        // дальше, чтобы `[LSP check failed]` не был пустым.
+        const failure = e as LspProbeError;
+        if (!failure.stderrTail) failure.stderrTail = connection.stderrTail;
+        throw failure;
+      }
       if (this.disposed) {
         await connection.shutdown();
         throw new Error("LSP pool disposed");
@@ -127,6 +137,7 @@ export class LspConnectionPool {
     const entry = this.entries.get(poolKey(serverKey, projectRoot));
     return entry?.connection.isOpen ? entry.connection : null;
   }
+
 
   /** Закрыть конкретное соединение (смена конфига сервера, `/lsp restart`). */
   async close(serverKey: string, projectRoot: string): Promise<void> {

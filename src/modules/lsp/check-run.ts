@@ -16,9 +16,11 @@ import { existsSync } from "fs";
 import { errMsg } from "../../utils";
 import type { LspHealth } from "./health";
 import type { CheckAccumulator } from "./check-report";
+import type { LspProbeError } from "./connection-types";
+import { stderrTailLines } from "./stderr-lines";
 
-/** Сколько ждём холодный старт сервера внутри `lsp_check`. */
-export const CHECK_WARMUP_MS = 4000;
+/** Сколько ждём холодный старт сервера внутри явной проверки (`lsp_check`, панель). */
+export const CHECK_WARMUP_MS = 15000;
 /** Бюджет проверки одного файла в `lsp_check` (сервер уже тёплый). */
 export const CHECK_FILE_TIMEOUT_MS = 8000;
 
@@ -44,6 +46,8 @@ export interface CheckRunDeps {
   logger: LspClientLogger | null;
   /** Бюджет проверки одного файла; по умолчанию `CHECK_FILE_TIMEOUT_MS`. */
   timeoutMs?: number;
+  /** Бюджет ожидания холодного старта (тесты); `CHECK_WARMUP_MS`. */
+  warmupMs?: number;
   /** Заметка о сбое сервера (модуль форматирует её по своей политике). */
   failureNote(key: string, serverConfig: LspServerConfig, message: string, file: string): string;
 }
@@ -83,10 +87,12 @@ export async function runCheckFiles(
       // Прогрев отвергся (spawn/initialize): это не «ещё запускается», а
       // падение. Ошибка уходит в health и в отчёт — иначе сервер, который
       // никогда не стартует (несовместимый Node), выглядит вечным холодным
-      // стартом, а `/lsp status` пишет «все серверы работают».
-      // DEBT(lsp-stderr-in-check): хвост stderr пул сюда не пробрасывает.
-      deps.health.warn(deps.logger, file, warmed.error);
-      acc.notes.push(deps.failureNote(key, serverConfig, warmed.error, file));
+      // стартом, а `/lsp status` пишет «все серверы работают». Хвост stderr
+      // прикладывает пул: упавший сервер отвечает «connection closed», а
+      // настоящая причина остаётся только в его выводе.
+      const failure = warmFailureText(warmed.error, warmed.stderrTail);
+      deps.health.warn(deps.logger, file, failure);
+      acc.notes.push(deps.failureNote(key, serverConfig, failure, file));
       continue;
     }
     try {
@@ -116,25 +122,34 @@ export async function runCheckFiles(
  * Три исхода различимы: тёплый (`ok`), упавший прогрев (`ok: false` + `error`) и
  * всё ещё идущий (`ok: false` без `error`). Раньше первые два были одним
  * `false`, и крах сервера печатался как «ещё запускается».
+ *
+ * Бюджет ожидания: `CHECK_WARMUP_MS`, но не больше бюджета самого вызова
+ * (`timeoutMs`) и серверного таймаута. Явная проверка (REPL/веб-панель) может
+ * ждать холодный старт до 15 с — `initialize` Next.js-подпроекта в монолите в
+ * прежние 4 с не укладывался, и «сервер ещё запускается» печаталось на каждой
+ * попытке. Пакетная проверка изменённых файлов передаёт свой короткий бюджет
+ * (6 с), поэтому там ожидание остаётся коротким.
  */
 async function warmWithin(
   deps: CheckRunDeps,
   serverConfig: LspServerConfig,
   projectRoot: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; stderrTail?: string }> {
   if (deps.client.isWarm(serverConfig, projectRoot)) return { ok: true };
-  const budget = Math.min(serverConfig.timeout ?? CHECK_WARMUP_MS, CHECK_WARMUP_MS);
+  const cap = deps.warmupMs ?? CHECK_WARMUP_MS;
+  const callerCap = deps.timeoutMs ?? cap;
+  const budget = Math.min(serverConfig.timeout ?? cap, cap, callerCap);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<void>((resolve) => {
     timer = setTimeout(resolve, budget);
   });
-  let failure: string | null = null;
+  const state: { failure?: { message: string; stderrTail?: string } } = {};
   // Отказ прогрева запоминаем, а не бросаем: поздний отказ (после бюджета) не
   // должен стать unhandled rejection.
   const warm = deps.client.warmup(serverConfig, projectRoot).then(
     () => {},
     (e: unknown) => {
-      failure = errMsg(e);
+      state.failure = { message: errMsg(e), stderrTail: (e as LspProbeError).stderrTail };
     },
   );
   try {
@@ -143,7 +158,18 @@ async function warmWithin(
     if (timer) clearTimeout(timer);
   }
   if (deps.client.isWarm(serverConfig, projectRoot)) return { ok: true };
-  return failure ? { ok: false, error: failure } : { ok: false };
+  const failure = state.failure;
+  return failure ? { ok: false, error: failure.message, stderrTail: failure.stderrTail } : { ok: false };
+}
+
+/**
+ * Текст падения прогрева для отчёта: сообщение клиента + до 3 строк stderr.
+ * Упавший сервер сообщает только «connection closed», поэтому без stderr строка
+ * `[LSP check failed]` бесполезна и модели, и человеку.
+ */
+function warmFailureText(error: string, stderrTail: string | undefined): string {
+  const lines = stderrTailLines(stderrTail);
+  return lines.length > 0 ? `${error}\n${lines.join("\n")}` : error;
 }
 
 /** Сложить диагностики одного файла в аккумулятор (с type-env фильтром). */
