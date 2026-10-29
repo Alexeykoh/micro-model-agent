@@ -171,6 +171,55 @@ describe("diagnoseLspServers", () => {
     });
     expect(d.servers[0].installCommand).toBeUndefined();
   });
+
+  it("blames the Node version when the server crashes on startup", async () => {
+    const d = await diagnoseLspServers(config({ typescript: TS_SERVER }), "C:/proj", {
+      collectFiles: async () => [file("a.ts")],
+      findOnPath: () => null,
+      nodeVersion: { raw: "v16.20.2", major: 16 },
+      client: {
+        probe: async () => {
+          const error = new Error("SyntaxError: Unexpected token '?'") as Error & { stderrTail?: string };
+          error.stderrTail = "SyntaxError: Unexpected token '?'\n    at wrapSafe";
+          throw error;
+        },
+      } as never,
+    });
+    const server = d.servers[0];
+    expect(server.reason).toBe("node-too-old");
+    // Причина видна: хвост stderr и версия Node, а не общий server-error.
+    expect(server.stderrTail).toContain("SyntaxError");
+    expect(d.nodeVersion).toEqual({ raw: "v16.20.2", major: 16 });
+    // Совет — совместимый пин, а не повторная установка той же версии.
+    expect(server.installCommand).toBe("npm i -g typescript-language-server@3.3.2 typescript@5");
+  });
+
+  it("does not blame the Node version for a plain server error", async () => {
+    const d = await diagnoseLspServers(config({ typescript: TS_SERVER }), "C:/proj", {
+      collectFiles: async () => [file("a.ts")],
+      findOnPath: () => "/usr/bin/tls",
+      nodeVersion: { raw: "v22.11.0", major: 22 },
+      client: { probe: async () => { throw new Error("unexpected result shape"); } } as never,
+    });
+    expect(d.servers[0].reason).toBe("server-error");
+  });
+
+  it("reads the real cause from stderr when the crash message is generic", async () => {
+    const d = await diagnoseLspServers(config({ typescript: TS_SERVER }), "C:/proj", {
+      collectFiles: async () => [file("a.ts")],
+      findOnPath: () => null,
+      nodeVersion: { raw: "v16.20.2", major: 16 },
+      client: {
+        probe: async () => {
+          // Упавший сервер отдаёт клиенту «connection closed», а не SyntaxError.
+          throw Object.assign(new Error("LSP server exited"), {
+            stderrTail: "SyntaxError: Unexpected token '?'",
+          });
+        },
+      } as never,
+    });
+    expect(d.servers[0].reason).toBe("node-too-old");
+  });
 });
 
 describe("installCommandFor", () => {
@@ -214,5 +263,10 @@ describe("classifyLspError", () => {
     expect(classifyLspError("LSP request timeout: initialize", { npxFallback: true })).toBe("network");
     expect(classifyLspError("LSP request timeout: initialize")).toBe("timeout");
     expect(classifyLspError("something broke")).toBe("server-error");
+  });
+
+  it("separates a Node-runtime crash from a generic server error", () => {
+    expect(classifyLspError("SyntaxError: Unexpected token '?'")).toBe("node-too-old");
+    expect(classifyLspError("ERR_REQUIRE_ESM: require() of ES Module")).toBe("node-too-old");
   });
 });

@@ -87,8 +87,8 @@ export class LspConnection {
   }
 
   /**
-   * Хвост stderr сервера (последние 4 КБ) — для диагностики.
-   * DEBT(lsp-stderr-in-doctor): в вывод `/lsp doctor` он пока не попадает.
+   * Хвост stderr сервера (последние 4 КБ) — для диагностики. Отдаётся в
+   * `/lsp doctor` через `LspClient.probe` (ошибка несёт `stderrTail`).
    */
   get stderrTail(): string {
     return this.stderr.tail;

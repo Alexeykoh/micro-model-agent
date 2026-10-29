@@ -23,6 +23,7 @@ const REASON_KEY: Record<LspFailureReason, string> = {
   network: "repl.lsp_reason_network",
   timeout: "repl.lsp_reason_timeout",
   "spawn-failed": "repl.lsp_reason_spawn_failed",
+  "node-too-old": "repl.lsp_reason_node_too_old",
   "server-error": "repl.lsp_reason_server_error",
   deadline: "repl.lsp_reason_deadline",
 };
@@ -42,6 +43,7 @@ const DETAIL_KIND: Partial<Record<LspFailureReason, "binary" | "error">> = {
   offline: "binary",
   network: "binary",
   "spawn-failed": "error",
+  "node-too-old": "error",
   "server-error": "error",
 };
 
@@ -68,6 +70,7 @@ const HINT_KEY: Partial<Record<LspFailureReason, string>> = {
   offline: "lsp.hint_offline",
   timeout: "lsp.hint_timeout",
   "spawn-failed": "lsp.hint_spawn",
+  "node-too-old": "lsp.hint_node_too_old",
   "server-error": "lsp.hint_spawn",
 };
 
@@ -77,14 +80,35 @@ function serverHint(reason: LspFailureReason): string | null {
   return key ? t(key) : null;
 }
 
+/**
+ * Хвост stderr упавшего сервера: до 3 непустых строк по 200 символов.
+ * Вывод сервера — единственный след краха до `initialize` (несовместимый
+ * Node, битый пакет), поэтому он идёт в отчёт, а не только в debug-лог.
+ */
+function stderrLines(tail: string | undefined): string[] {
+  if (!tail) return [];
+  const lines = tail
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  return lines.map((l, i) =>
+    pc.dim(`      ${i === 0 ? `${t("repl.lsp_stderr")}: ` : "  "}${l.slice(0, 200)}`),
+  );
+}
+
 /** Отрисовать результат `/lsp doctor` строками (без боксов, по STYLE.md). */
-function formatDoctor(diag: LspDiagnosis): string[] {
+export function formatDoctor(diag: LspDiagnosis): string[] {
   const lines: string[] = [];
   const yes = (v: boolean, color: (s: string) => string) =>
     v ? color(t("repl.lsp_doctor_yes")) : pc.dim(t("repl.lsp_doctor_no"));
   lines.push(`  ${t("repl.lsp_doctor_enabled")} · ${yes(diag.enabled, pc.green)}`);
   lines.push(`  ${t("repl.lsp_doctor_offline")} · ${yes(diag.offline, pc.yellow)}`);
   lines.push(`  ${t("repl.lsp_doctor_project")} · ${diag.projectRoot}`);
+  // Версия Node объясняет крах сервера на неподходящем рантайме.
+  if (diag.nodeVersion) {
+    lines.push(`  ${t("repl.lsp_doctor_node")} · ${diag.nodeVersion.raw}`);
+  }
 
   if (diag.servers.length === 0) {
     lines.push(pc.dim(`  ${t("repl.lsp_doctor_none")}`));
@@ -106,6 +130,8 @@ function formatDoctor(diag: LspDiagnosis): string[] {
       lines.push(pc.dim(`      ${glyph.detail} ${t("repl.lsp_install", { command: s.installCommand })}`));
       actionable = true;
     }
+    // Хвост stderr упавшего сервера: без него крах на старте невидим.
+    lines.push(...stderrLines(s.stderrTail));
   }
   if (actionable || diag.offline) {
     lines.push(pc.dim(`  ${glyph.detail} ${t("repl.lsp_doctor_hint")}`));
