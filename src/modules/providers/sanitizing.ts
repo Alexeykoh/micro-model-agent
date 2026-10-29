@@ -79,10 +79,19 @@ function rehydrateToolArguments(rawArgs: string, guard: ProviderEgressGuard): st
  * (порядок чанков, `done`/`usage`/`warning`, abort) сохраняется 1:1.
  */
 export class SanitizingProvider implements LLMProvider {
+  /**
+   * Пробрасываем геттер сессии: OpenCode Go/Zen требуют `x-opencode-session`.
+   * Без него обёртка DLP «теряла» сессию у эксперта/критика (тест
+   * `expert-provider.test.ts` после bootstrap с установленным egress guard).
+   */
+  getSessionId?: () => string | undefined;
+
   constructor(
     private readonly inner: LLMProvider,
     private readonly guard: ProviderEgressGuard,
-  ) {}
+  ) {
+    this.getSessionId = (inner as LLMProvider & { getSessionId?: () => string | undefined }).getSessionId;
+  }
 
   get model(): string {
     return this.inner.model;

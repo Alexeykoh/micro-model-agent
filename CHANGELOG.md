@@ -40,6 +40,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **DLP-обёртка провайдера не теряет `getSessionId`.** `SanitizingProvider`
+  пробрасывает геттер сессии (или не создаёт его, если у inner его нет), поэтому
+  эксперт/критик после bootstrap с включённым egress guard не уходят в OpenCode
+  Go/Zen без `x-opencode-session` (400 MissingSessionID). Гвард:
+  `tests/providers/sanitizing-session.test.ts`.
 - **Boot-splash больше не держит клики 8–10 секунд.** Это маска, а не гейт:
   через 2 с она скрывается и снимает `pointer-events`, остальные данные
   догружаются прогрессивно (best practice: <2 с). Гвард:
