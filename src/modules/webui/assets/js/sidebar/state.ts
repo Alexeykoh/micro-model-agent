@@ -35,12 +35,10 @@ export interface FileEntry {
   size?: number;
 }
 
-/** Одно совпадение поиска по содержимому (ответ `GET /api/search`). */
-export interface SearchHit {
-  path: string;
-  line: number;
-  text: string;
-}
+/** Одно совпадение поиска (ответ `GET /api/search`): имя/путь или строка. */
+export type SearchHit =
+  | { kind: "path"; path: string }
+  | { kind: "content"; path: string; line: number; text: string };
 
 /** Состояние вкладки Files: DOM-узлы, раскрытые папки, кэш листингов. */
 export interface FilesView {
@@ -83,7 +81,7 @@ export interface FilesView {
   expandCapped: boolean;
   /** Показывать все сегменты пути (крошки свёрнуты в `…` по умолчанию). */
   crumbsOpen: boolean;
-  /** Поле поиска по содержимому (C-01). */
+  /** Поле поиска по имени и содержимому (C-01). */
   searchEl: HTMLInputElement | null;
   /** Список совпадений вместо дерева (пока запрос не пуст). */
   searchResultsEl: HTMLElement | null;

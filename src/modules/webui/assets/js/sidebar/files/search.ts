@@ -1,11 +1,12 @@
-// Content search for the Files tab (C-01): bounded `/api/search`, debounced
-// input, results list that opens the existing viewer at a line.
+// Search for the Files tab (C-01): bounded `/api/search` over file names and
+// contents, debounced input, results list that opens the existing viewer.
 //
 // While the query is non-empty the tree is hidden and the results list takes
 // its place; clearing the query brings the tree back untouched (it was never
-// re-rendered). Results carry `path:line` + the matched line (trimmed and
-// already capped by the server) and reuse `openFile(path, line)`, the same
-// navigation path as the LSP panel — no second scroll implementation.
+// re-rendered). Name hits carry only `path`; content hits carry `path:line` and
+// the matched line (trimmed and already capped by the server). Both reuse
+// `openFile(path, line?)`, the same navigation path as the LSP panel — no second
+// scroll implementation.
 import { api } from "../../api.js";
 import { el } from "../../dom.js";
 import { t } from "../../i18n.js";
@@ -134,11 +135,21 @@ export function renderSearch(): void {
   }
 }
 
-/** One clickable result: `path:line` + the matched line. */
+/** One clickable result: `path:line` + line, or just the matched file path. */
 function hitRow(hit: SearchHit): HTMLElement {
   const row = el("button", "fsearch-row");
   row.type = "button";
   row.dataset.path = hit.path;
+  if (hit.kind === "path") {
+    // Name match: open from the top — there is no line to scroll to.
+    row.classList.add("fsearch-file");
+    row.setAttribute("aria-label", hit.path);
+    const path = el("span", "fsearch-path", hit.path);
+    path.title = hit.path;
+    row.appendChild(path);
+    row.addEventListener("click", () => deps.openFile(hit.path));
+    return row;
+  }
   row.dataset.line = String(hit.line);
   const label = `${hit.path}:${hit.line}`;
   row.setAttribute("aria-label", label);
