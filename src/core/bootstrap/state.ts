@@ -55,6 +55,25 @@ export interface BootstrapOptions {
 let oneShotMode = false;
 
 /**
+ * Создавать ли сессию автоматически на bootstrap. Read-only CLI-команды
+ * (`plugins list`, `model list`, `doctor`, `session list` …) сессию не
+ * используют; раньше каждая такая команда плодила пустую сессию, а
+ * `enforceMaxSessions` на следующем создании сносил десятки тысяч каталогов
+ * (A-01). Одноразовый промпт, REPL, `web`, `serve`, `meet`, `agents` — создают.
+ */
+let sessionAutocreate = true;
+
+/** Включает/выключает автосоздание сессии на bootstrap (см. A-01). */
+export function setSessionAutocreate(value: boolean): void {
+  sessionAutocreate = value;
+}
+
+/** Нужна ли сессия этой команде (значение по умолчанию — true). */
+export function shouldAutocreateSession(): boolean {
+  return sessionAutocreate;
+}
+
+/**
  * Включает one-shot режим (пропуск фонового health-check для подкоманд).
  * @param value true — подкоманда без агента.
  */

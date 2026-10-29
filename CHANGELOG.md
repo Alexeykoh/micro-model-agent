@@ -31,6 +31,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Read-only CLI больше не создаёт сессию и не запускает лавину удалений.**
+  `plugins list`, `model list`, `doctor`, `session list` и другие команды без
+  агента больше не вызывают `sessionManager.create()`: `cli/main.ts` относит
+  команду к классу «нужна сессия» (`web`, `serve`, `meet`, `agents`, one-shot/
+  REPL) или «не нужна». Автоочистка `maxSessions` больше не синхронна: она
+  планируется в фоне, удаляет не больше 20 сессий за прогон и при каталоге
+  больше 1000 сессий пропускается с предупреждением (`mma session prune`).
+  Это закрывает A-01: на реальном `~/.mma` с 97k сессий read-only команда
+  больше не роняет процесс `EFAULT` и не стирает историю. Спека:
+  `docs/specs/2026-10-29-readonly-session-autocreation-design.md`. Гварды:
+  `tests/cli/readonly-no-session.test.ts`, `tests/session/auto-prune.test.ts`.
 - **LSP на Windows снова отдаёт диагностику (был вечный `lsp-timeout`).**
   tsserver присылает URI как `file:///c%3A/…` (строчная буква диска, `%3A`), а
   документ открывался как `file:///C:/…`; `publishDiagnostics` не находил

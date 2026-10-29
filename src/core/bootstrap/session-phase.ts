@@ -18,6 +18,7 @@ import { ToolExecutor } from "../../tools/executor";
 import { HallucinationDetector } from "../../core/hallucination/detector";
 import { createToolContext, admissionDiagnosticSink, egressDiagnosticSink } from "./tool-context";
 import { SessionStore, SessionManager } from "../../modules/session/index";
+import { shouldAutocreateSession } from "./state";
 import { setEgressDiagnosticSink } from "../../modules/security/data-policy/egress-provider";
 import { ContextLogger } from "../agent/context-log";
 import { t } from "../../i18n/index";
@@ -123,10 +124,11 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
     projectDir: baseDir,
     maxSessions: config.session.maxSessions,
     isolation: config.sessionIsolation,
+    logger: { warn: (message) => logger.warn(message) },
   });
   bindSessionManager(() => sessionManager);
 
-  if (config.session.autoSave && !sessionManager.getActive()) {
+  if (config.session.autoSave && !sessionManager.getActive() && shouldAutocreateSession()) {
     sessionManager.create();
   }
 

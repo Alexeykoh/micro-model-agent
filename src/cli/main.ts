@@ -1,6 +1,6 @@
 // Точка входа CLI: parse, one-shot/REPL/web-ветки, JSON-режим, автоапдейт.
 import { createProgram } from "./commands";
-import { bootstrap, setOneShotMode, applyReasoningCliOverride } from "../core/bootstrap";
+import { bootstrap, setOneShotMode, setSessionAutocreate, applyReasoningCliOverride } from "../core/bootstrap";
 import { Repl } from "./repl";
 import { Renderer } from "../ui/renderer";
 import { resolveVerbosity } from "../ui/theme";
@@ -106,9 +106,17 @@ async function main(): Promise<void> {
     setOneShotMode(true);
   }
 
+  // A-01: read-only команды не должны создавать сессию. Команды, которым нужен
+  // агент/диалог, перечислены явно; всё остальное (plugins/model/config/session/
+  // map/doctor/security …) работает без новой сессии.
+  const commandNames = new Set(program.commands.map((c) => c.name()));
+  const SESSION_COMMANDS = new Set(["web", "serve", "meet", "agents"]);
+  const knownCommand = firstPositional ? commandNames.has(firstPositional) : false;
+  setSessionAutocreate(!knownCommand || SESSION_COMMANDS.has(firstPositional!));
+
   program.parse(process.argv);
 
-  const cmdNames = new Set(program.commands.map((c) => c.name()));
+  const cmdNames = commandNames;
   const opts = program.opts();
   // commander превращает `--no-agents-md` в отрицаемый `agentsMd`-bool
   // (дефолт true); ключа `noAgentsMd` нет.

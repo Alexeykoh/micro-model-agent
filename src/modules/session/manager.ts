@@ -22,7 +22,17 @@ export interface SessionManagerOptions {
   isolation?: SessionIsolationConfig;
   /** Конфиг шифрования файлов сессий */
   encryption?: SessionEncryptionConfig;
+  /** Логгер для фоновой автоочистки (необязательный: тесты/утилиты). */
+  logger?: { warn(message: string): void };
 }
+
+/**
+ * Автоочистка при create(): удаляем не больше пачки за прогон и не сканируем
+ * гигантские каталоги. 97k сессий (реальный ~/.mma) раньше означали синхронное
+ * удаление десятков тысяч каталогов прямо в create() → EFAULT (A-01).
+ */
+const AUTO_PRUNE_BATCH = 20;
+const AUTO_PRUNE_MAX_SCAN = 1000;
 
 /** Менеджер: активная сессия, контексты изоляции, maxSessions, prune пустых. */
 export class SessionManager {
@@ -87,7 +97,7 @@ export class SessionManager {
     };
     this.store.saveMeta(id, meta);
     this.activeId = id;
-    this.enforceMaxSessions();
+    this.scheduleEnforceMaxSessions();
     // Авто-прунинг пустых сессий из create() убран: в web параллельные вкладки
     // держат пустые сессии, и создание новой затирало бы их (вкладки уходили в
     // dead). Чистка — явная команда `session prune` (CLI/REPL).
@@ -340,15 +350,63 @@ export class SessionManager {
     return this.busySessions.has(id);
   }
 
+  private pruneScheduled = false;
+
+  /**
+   * Планирует автоочистку в фоне. Синхронный вызов в create() на большом
+   * каталоге сессий блокировал создание и падал на удалении (A-01).
+   */
+  private scheduleEnforceMaxSessions(): void {
+    if (this.pruneScheduled) return;
+    this.pruneScheduled = true;
+    const timer = setTimeout(() => {
+      this.pruneScheduled = false;
+      try {
+        this.enforceMaxSessions();
+      } catch (e) {
+        this.options.logger?.warn(
+          t("session.autoprune_failed", { error: e instanceof Error ? e.message : String(e) }),
+        );
+      }
+    }, 0);
+    (timer as { unref?: () => void }).unref?.();
+  }
+
+  /**
+   * Мягкий лимит: пачка старых сессий за прогон. Огромный каталог (сотни тысяч
+   * пустых сессий) не перебираем — подсказываем явный `session prune`.
+   */
   private enforceMaxSessions(): void {
     const max = this.options.maxSessions ?? 50;
     if (max <= 0) return;
+    const count = this.store.countSessions();
+    if (count <= max) return;
+    if (count > AUTO_PRUNE_MAX_SCAN) {
+      this.options.logger?.warn(
+        t("session.autoprune_skipped", {
+          count: String(count),
+          limit: String(AUTO_PRUNE_MAX_SCAN),
+        }),
+      );
+      return;
+    }
     const sessions = this.store.listSessions();
-    if (sessions.length > max) {
-      // Живые раннеры не трогаем: удаление сессии на ходе рвёт его работу.
-      const toDelete = sessions.slice(max).filter((s) => !this.busySessions.has(s.id));
-      for (const s of toDelete) {
+    if (sessions.length <= max) return;
+    // listSessions() — от новых к старым; хвост после `max` — самые старые.
+    const toDelete = sessions
+      .slice(max)
+      .filter((s) => !this.busySessions.has(s.id))
+      .slice(0, AUTO_PRUNE_BATCH);
+    for (const s of toDelete) {
+      try {
         this.delete(s.id);
+      } catch (e) {
+        this.options.logger?.warn(
+          t("session.autoprune_item_failed", {
+            id: s.id,
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        );
       }
     }
   }

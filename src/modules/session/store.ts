@@ -375,6 +375,12 @@ export class SessionStore {
     return readLogEntries(path, this.encryptor) ?? [];
   }
 
+  /** Число каталогов сессий без чтения меты (дешёвый вход для автоочистки). */
+  countSessions(): number {
+    if (!existsSync(this.baseDir)) return 0;
+    return readdirSync(this.baseDir, { withFileTypes: true }).filter((e) => e.isDirectory()).length;
+  }
+
   /** Список сессий по убыванию updatedAt. */
   listSessions(): SessionMeta[] {
     if (!existsSync(this.baseDir)) return [];

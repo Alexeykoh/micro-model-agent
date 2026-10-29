@@ -28,7 +28,7 @@ import { t } from "../i18n/index";
 export { applyReasoningCliOverride } from "./bootstrap/config-phase";
 export { applyProbedContext } from "./bootstrap/provider-phase";
 export { resolveBaseDir } from "./bootstrap/workspace-phase";
-export { agentsMdPaths, setOneShotMode } from "./bootstrap/state";
+export { agentsMdPaths, setOneShotMode, setSessionAutocreate } from "./bootstrap/state";
 export { buildSystemInfo } from "./system-prompt";
 
 /** Итог bootstrap: агент, конфиг, логгеры, модули, пробы. */
