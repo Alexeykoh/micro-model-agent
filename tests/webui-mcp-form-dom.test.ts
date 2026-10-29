@@ -17,10 +17,9 @@ function render(entry: Dict | null = null): HTMLElement {
   return form;
 }
 
-function field(form: HTMLElement, label: string): HTMLElement {
-  const nodes = Array.from(form.querySelectorAll<HTMLElement>(".pform-field"));
-  const found = nodes.find((n) => n.querySelector("label")?.textContent === label);
-  if (!found) throw new Error(`field not found: ${label}`);
+function field(form: HTMLElement, key: string): HTMLElement {
+  const found = form.querySelector<HTMLElement>(`.pform-field[data-field="${key}"]`);
+  if (!found) throw new Error(`field not found: ${key}`);
   return found;
 }
 

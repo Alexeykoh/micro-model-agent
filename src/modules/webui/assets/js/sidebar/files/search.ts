@@ -109,6 +109,10 @@ export function renderSearch(): void {
   if (!box) return;
   box.hidden = !active;
   box.textContent = "";
+  // A new query must start at the first hit even if the previous result list
+  // was scrolled: otherwise the user sees the middle/bottom and may not guess
+  // that the list even changed.
+  if (active) box.scrollTop = 0;
   if (!active) return;
   if (f.searchLoading) {
     box.appendChild(el("div", "fdim", t("web.files.loading")));

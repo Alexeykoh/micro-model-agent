@@ -179,6 +179,14 @@ describe("files content search DOM", () => {
     expect(doc("filesBody").textContent).toContain("const needle = 1");
   });
 
+  it("resets the results scroll position for a new query", async () => {
+    await search("needle");
+    results().scrollTop = 120;
+    await search("many");
+    // Without the reset, the new hit list can open mid-scroll and look empty.
+    expect(results().scrollTop).toBe(0);
+  });
+
   it("shows a localized empty state", async () => {
     await search("nothing-matches");
     expect(resultRows().length).toBe(0);

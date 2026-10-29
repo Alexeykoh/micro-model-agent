@@ -63,10 +63,18 @@ export function mcpForm(): HTMLElement {
     headers: el("textarea"),
     enabled: providerCheck(editing.enabled !== false),
   };
-  const nameField = mcpLiteralField("name", f.name);
-  const transportField = mcpLiteralField("transport", f.transport);
-  const commandField = mcpLiteralField("command", f.command);
-  const urlField = mcpLiteralField("url", f.url);
+  const nameField = mcpLiteralField(t("web.settings.mcp_field_name"), f.name, "name");
+  const transportField = mcpLiteralField(
+    t("web.settings.mcp_field_transport"),
+    f.transport,
+    "transport",
+  );
+  const commandField = mcpLiteralField(
+    t("web.settings.mcp_field_command"),
+    f.command,
+    "command",
+  );
+  const urlField = mcpLiteralField(t("web.settings.mcp_field_url"), f.url, "url");
   grid.appendChild(nameField);
   grid.appendChild(transportField);
   grid.appendChild(commandField);
@@ -79,11 +87,11 @@ export function mcpForm(): HTMLElement {
   const headerKeys = Array.isArray(editing.headerKeys) ? editing.headerKeys : [];
   f.env.placeholder = envKeys.length ? "stored: " + envKeys.join(", ") + " — blank keeps" : '{"TOKEN": "…"}';
   f.headers.placeholder = headerKeys.length ? "stored: " + headerKeys.join(", ") + " — blank keeps" : '{"Authorization": "…"}';
-  adv.appendChild(mcpLiteralField("args (JSON)", f.args));
-  adv.appendChild(mcpLiteralField("timeout (ms)", f.timeout));
-  adv.appendChild(mcpLiteralField("env (JSON)", f.env));
-  adv.appendChild(mcpLiteralField("headers (JSON)", f.headers));
-  adv.appendChild(mcpLiteralField("enabled", f.enabled));
+  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_args"), f.args, "args"));
+  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_timeout"), f.timeout, "timeout"));
+  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_env"), f.env, "env"));
+  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_headers"), f.headers, "headers"));
+  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_enabled"), f.enabled, "enabled"));
   box.appendChild(adv);
 
   // Only the field that transport actually uses is visible; advanced fields

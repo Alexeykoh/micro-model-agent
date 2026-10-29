@@ -79,10 +79,13 @@ export function renderLspChanged(host: HTMLElement): void {
   head.appendChild(el("span", "lsp-sec-note", t("web.sidebar.lsp_changed_desc")));
   box.appendChild(head);
 
-  const btn = el("button", "lsp-file-go", busy ? t("web.sidebar.lsp_changed_busy") : t("web.sidebar.lsp_changed_run")) as HTMLButtonElement;
+  const btn = el("button", "lsp-file-go") as HTMLButtonElement;
   btn.type = "button";
   btn.disabled = busy;
   btn.appendChild(icon("refresh"));
+  btn.appendChild(
+    document.createTextNode(busy ? t("web.sidebar.lsp_changed_busy") : t("web.sidebar.lsp_changed_run")),
+  );
   btn.addEventListener("click", () => void runChanged());
   box.appendChild(btn);
   if (busy) return;

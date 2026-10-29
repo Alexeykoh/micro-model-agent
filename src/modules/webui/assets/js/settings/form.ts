@@ -66,8 +66,9 @@ export function providerCheck(value: unknown): HTMLInputElement {
 }
 
 /** Labelled field whose label is a literal string (not an i18n key). */
-export function mcpLiteralField(label: string, input: HTMLElement): HTMLElement {
+export function mcpLiteralField(label: string, input: HTMLElement, fieldKey?: string): HTMLElement {
   const f = el("div", "pform-field");
+  if (fieldKey) f.dataset.field = fieldKey;
   const lab = el("label", "", label);
   f.appendChild(lab);
   input.setAttribute("aria-label", label);
