@@ -24,6 +24,8 @@ export interface PluginRecord {
   homepage?: string;
   source?: "builtin" | "global" | "project";
   builtin: boolean;
+  /** Системный хук модуля харнесса: не плагин, не показывается/не отключается. */
+  system: boolean;
   /** Загружен из черновиковой (самоавторской) директории — вычисляется из пути. */
   draft: boolean;
   /** Выключен пользователем (`config.plugins.disabled`). */
@@ -196,6 +198,7 @@ export function buildRecord(
     homepage,
     source: plugin.source,
     builtin: plugin.isBuiltin === true,
+    system: plugin.system === true,
     draft: isDraftPath(path),
     enabled: opts.enabled,
     path,

@@ -96,6 +96,9 @@ export function registerBuiltinPlugin(
 ): void {
   if (!plugin) return;
   plugin.isBuiltin = true;
+  // Хуки модулей — часть харнесса, не пользовательские плагины: UI их не
+  // показывает и не даёт выключать (иначе «отключил session» ломает сессии).
+  plugin.system = true;
   pm.register(plugin);
 }
 

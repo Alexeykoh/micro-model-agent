@@ -136,7 +136,9 @@ function pluginToggleError(
   enabled: unknown,
 ): ToggleError {
   if (typeof enabled !== "boolean") return { status: 400, error: "invalid-enabled" };
-  if (!plugins.getRecords().some((p) => p.name === name)) return { status: 404, error: "not_found" };
+  const record = plugins.getRecords().find((p) => p.name === name);
+  if (!record) return { status: 404, error: "not_found" };
+  if (record.system && enabled === false) return { status: 409, error: "system" };
   return null;
 }
 
@@ -184,11 +186,9 @@ function applyPluginToggle(
     sendJson(res, 400, { ok: false, error: "invalid-value" });
     return;
   }
-  // Шов `setConfigValue → pluginGateApplier` ставит bootstrap и применяет
-  // deny-list к реестру. Повторяем toggle напрямую, чтобы хендлер не зависел
-  // от установки шва: ответ всегда показывает фактическое состояние.
+  // Шов `setConfigValue → pluginGateApplier` может не быть установлен: повторяем
+  // toggle напрямую, чтобы ответ отражал фактическое состояние.
   plugins.setEnabled(name, enable);
-  // Ответ несёт свежие записи: панель и вкладка перерисовываются без GET.
   sendJson(res, 200, {
     ok: true,
     persisted: written.persisted,

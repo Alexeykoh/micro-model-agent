@@ -65,7 +65,6 @@ export interface SessionLogEntry {
   toolNames?: string[];
   /** DLP-агрегат хода (`egress_turn`): классы/PII/назначение, без значений. */
   egress?: EgressTurnSummary;
-  // Поля context-событий (снапшот / статистика итерации)
   window?: number;
   systemBudget?: number;
   reserveBudget?: number;
@@ -88,7 +87,6 @@ export interface SessionLogEntry {
     tokens: number;
     included: boolean;
   }>;
-  // Поля деталей компакции
   reason?: string;
   tokensBefore?: number;
   tokensAfter?: number;
@@ -101,7 +99,6 @@ export interface SessionLogEntry {
   summary?: string;
   /** Компакция: насколько упал объём (токены). Стадия — в `strategy`. */
   reducedBy?: number;
-  // Поля llm_usage / провенанса
   provider?: string;
   model?: string;
   promptTokens?: number;
@@ -120,7 +117,6 @@ export interface SessionLogEntry {
   cacheWriteTokens?: number;
   /** Источник кеш-данных: api | derived. */
   cacheSource?: string; progress?: { totalBatches: number; novelTools: number; duplicateBatches: number };
-  // Поля session_start
   environment?: Record<string, unknown>;
   lspProbe?: {
     ok: Array<{ language: string; durationMs: number }>;
@@ -129,10 +125,8 @@ export interface SessionLogEntry {
   };
   plugins?: string[];
   skills?: number;
-  // Поля baseline_typecheck
   passed?: boolean;
   message?: string;
-  // Поля error (диагностика INV-14); provenance — общий `source` (INV-13).
   operation?: string;
   errorKind?: string;
   cause?: string;
@@ -377,10 +371,10 @@ export class SessionStore {
 
   /** Число каталогов сессий без чтения меты (дешёвый вход для автоочистки). */
   countSessions(): number {
-    if (!existsSync(this.baseDir)) return 0;
-    return readdirSync(this.baseDir, { withFileTypes: true }).filter((e) => e.isDirectory()).length;
+    return existsSync(this.baseDir)
+      ? readdirSync(this.baseDir, { withFileTypes: true }).filter((e) => e.isDirectory()).length
+      : 0;
   }
-
   /** Список сессий по убыванию updatedAt. */
   listSessions(): SessionMeta[] {
     if (!existsSync(this.baseDir)) return [];

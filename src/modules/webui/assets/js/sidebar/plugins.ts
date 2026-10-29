@@ -55,7 +55,13 @@ async function togglePlugin(name: string, on: boolean): Promise<boolean> {
   });
   if (!res.ok || !res.data || res.data.ok !== true) {
     const err = (res.data && (res.data.error as string)) || String(res.status);
-    setIndicator(err === "not_found" ? t("cli.plugins.not_found", { name }) : t("web.plugins.toggle_failed"), true);
+    const key =
+      err === "not_found"
+        ? "cli.plugins.not_found"
+        : err === "system"
+          ? "web.plugins.core_no_disable"
+          : "web.plugins.toggle_failed";
+    setIndicator(err === "not_found" ? t(key, { name }) : t(key), true);
     return false;
   }
   adopt(res.data);
@@ -71,8 +77,7 @@ function adopt(payload: Dict): void {
   sb.plugins.failures = (payload.failures as Dict[]) || [];
 }
 
-function renderSummary(host: HTMLElement): void {
-  const records = sb.plugins.records;
+function renderSummary(host: HTMLElement, records: PluginRow[]): void {
   const off = records.filter((r) => !r.enabled).length;
   const failed = sb.plugins.failures.length;
   const active = records.length - off;
@@ -106,13 +111,20 @@ export function renderPlugins(): void {
     return;
   }
 
-  renderSummary(host);
-  const rows = sb.plugins.records;
+  // Системные хуки модулей (execution, lsp-check, session, indexer …) — не
+  // плагины: это часть харнесса, их код уже загружен и выключение меняет
+  // поведение, а не «выгружает плагин». Показываем только пользовательские.
+  const rows = (sb.plugins.records as PluginRow[]).filter((r) => !r.system);
+  const hidden = sb.plugins.records.length - rows.length;
+  renderSummary(host, rows);
+  if (hidden > 0) {
+    host.appendChild(el("div", "plg-hint", t("web.plugins.core_hidden", { count: String(hidden) })));
+  }
   if (rows.length === 0 && sb.plugins.failures.length === 0) {
     host.appendChild(el("div", "fdim", t("web.plugins.empty")));
   }
   // Встроенные — после внешних: пользователю важны свои плагины.
-  const ordered = (rows as PluginRow[]).sort(
+  const ordered = rows.sort(
     (a, b) => Number(!!a.builtin) - Number(!!b.builtin),
   );
   for (const row of ordered) {

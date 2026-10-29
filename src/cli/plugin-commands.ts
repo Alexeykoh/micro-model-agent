@@ -153,8 +153,15 @@ for (const draft of state.drafts) {
       .action(async (pluginName: string) => {
         const { pluginManager, config, configDir } = await bootstrap();
         const channel = getDefaultChannel();
-        if (!pluginManager.getPlugin(pluginName)) {
+        const record = pluginManager.getRecords().find((r) => r.name === pluginName);
+        if (!record) {
           fail(t("cli.plugins.not_found", { name: pluginName }));
+          return;
+        }
+        // Встроенный модуль (execution/lsp-check/session/indexer …) — часть
+        // харнесса, а не пользовательский плагин: выключать его нельзя.
+        if (!on && record.system) {
+          fail(t("cli.plugins.system_no_disable", { name: pluginName }));
           return;
         }
         // Единый путь записи: setConfigValue сам применит deny-list к живому

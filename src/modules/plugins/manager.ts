@@ -143,15 +143,7 @@ export class PluginManager {
   /** Версия MMA для гейта `minMmaVersion` при перезагрузке. */
   private mmaVersion?: string;
 
-  /**
-   * Поделить deny-list с другим менеджером (runner-клон в вебе). Сами плагины
-   * при этом остаются инстансами каждого менеджера: у раннера свой
-   * execution-плагин, привязанный к его трекеру.
-   *
-   * Вызвавший становится **источником** гейта: только он рассылает изменения
-   * инстансов (см. `adoptPlugin`). Иначе регистрация execution-плагина раннера
-   * растащила бы его по главному менеджеру и всем вкладкам.
-   */
+  /** Поделить deny-list с раннер-клоном в вебе: source — вызвавший. */
   shareGateWith(other: PluginManager): void {
     this.gate.peers.delete(this);
     this.gate = other.gate;
@@ -360,6 +352,9 @@ export class PluginManager {
    * выполнился. Disable останавливает поведение, а не исполнение импорта.
    */
   setEnabled(name: string, on: boolean): boolean {
+    const plugin = this.plugins.find((p) => p.name === name);
+    // Системный хук модуля нельзя выключить: это не плагин, а часть харнесса.
+    if (!on && plugin?.system) return false;
     const loaded = this.plugins.some((p) => p.name === name);
     if (on) this.gate.names.delete(name);
     else this.gate.names.add(name);
@@ -376,8 +371,9 @@ export class PluginManager {
    * веба, и подмена объекта тихо оставила бы их со старым deny-list.
    */
   setDisabledAll(names: string[]): void {
+    const system = new Set(this.plugins.filter((p) => p.system).map((p) => p.name));
     this.gate.names.clear();
-    for (const name of names) if (name) this.gate.names.add(name);
+    for (const name of names) if (name && !system.has(name)) this.gate.names.add(name);
     this.bumpGate();
   }
 

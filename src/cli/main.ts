@@ -1,6 +1,7 @@
 // Точка входа CLI: parse, one-shot/REPL/web-ветки, JSON-режим, автоапдейт.
 import { createProgram } from "./commands";
 import { bootstrap, setOneShotMode, setSessionAutocreate, applyReasoningCliOverride } from "../core/bootstrap";
+import { sessionNeededFor } from "./command-scope";
 import { Repl } from "./repl";
 import { Renderer } from "../ui/renderer";
 import { resolveVerbosity } from "../ui/theme";
@@ -99,24 +100,16 @@ async function main(): Promise<void> {
   }
   const onboardingStart =
     firstPositional === "meet" ? "meet" : firstPositional === "agents" ? "init" : null;
-  // One-shot для ЛЮБОГО первого позиционного аргумента, который не является
-  // подкомандой: свободный промпт тоже не должен поднимать фоновых детей
-  // (аудит §7.10).
+  // One-shot для любого первого позиционного аргумента, который не команда.
   if (firstPositional && !onboardingStart) {
     setOneShotMode(true);
   }
-
-  // A-01: read-only команды не должны создавать сессию. Команды, которым нужен
-  // агент/диалог, перечислены явно; всё остальное (plugins/model/config/session/
-  // map/doctor/security …) работает без новой сессии.
+  // A-01: read-only команды не должны создавать сессию (см. command-scope.ts).
   const commandNames = new Set(program.commands.map((c) => c.name()));
-  const SESSION_COMMANDS = new Set(["web", "serve", "meet", "agents"]);
-  const knownCommand = firstPositional ? commandNames.has(firstPositional) : false;
-  setSessionAutocreate(!knownCommand || SESSION_COMMANDS.has(firstPositional!));
+  setSessionAutocreate(sessionNeededFor(firstPositional, commandNames));
 
   program.parse(process.argv);
 
-  const cmdNames = commandNames;
   const opts = program.opts();
   // commander превращает `--no-agents-md` в отрицаемый `agentsMd`-bool
   // (дефолт true); ключа `noAgentsMd` нет.
@@ -189,7 +182,7 @@ async function main(): Promise<void> {
   }
 
   const isSubcommand =
-    program.args.length > 0 && cmdNames.has(program.args[0]) && !onboardingStart;
+    program.args.length > 0 && commandNames.has(program.args[0]) && !onboardingStart;
 
   if (isSubcommand) {
     return;
@@ -199,7 +192,7 @@ async function main(): Promise<void> {
   // промпт ("mma sesion list" → чат). На near-miss известной команды — warn и выход;
   // свободные промпты так не выглядят никогда.
   if (program.args.length > 0 && !onboardingStart) {
-    const suggestion = closestCommand(program.args[0], [...cmdNames]);
+    const suggestion = closestCommand(program.args[0], [...commandNames]);
     if (suggestion && suggestion !== program.args[0]) {
       getDefaultChannel().writeLine(
         pc.yellow(`${t("cli.unknown_command", { input: program.args[0], suggestion })}`),

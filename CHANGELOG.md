@@ -31,6 +31,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Вкладка «Плагины» больше не выдаёт модули харнесса за плагины.** В списке
+  были `execution`, `session`, `indexer`, `mcp_module`, `browser`, `skills`,
+  `lsp-check` — хуки модулей с тумблерами, хотя их код уже загружен и
+  «отключение» меняет поведение ядра (например, ломает сессии), а не выгружает
+  плагин. Теперь такие записи помечены `system`, скрыты из вкладки (с честной
+  строкой «встроенных модулей харнесса: N»), не отключаются из API
+  (`409 {"error":"system"}`), CLI (`EXIT=1`) и игнорируются в
+  `plugins.disabled`. Пользовательскими остаются внешние плагины и
+  опциональные встроенные (`notify`, `lint-on-write`, `angular11`). Спека:
+  `docs/specs/2026-10-29-plugin-core-separation-design.md`. Гварды:
+  `tests/modules/plugins/system-plugins.test.ts`,
+  `tests/webui-plugins-system.test.ts`.
 - **Read-only CLI больше не создаёт сессию и не запускает лавину удалений.**
   `plugins list`, `model list`, `doctor`, `session list` и другие команды без
   агента больше не вызывают `sessionManager.create()`: `cli/main.ts` относит
