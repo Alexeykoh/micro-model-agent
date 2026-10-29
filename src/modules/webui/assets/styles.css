@@ -1199,19 +1199,22 @@ body.light .sel > button { border: 1px solid var(--border); }
   color: var(--sec-h); font-weight: 600;
 }
 .lsp-sec-note { font-size: 10.5px; color: var(--dim-a); text-align: right; line-height: 1.3; }
-.lsp-file-row { display: flex; gap: 6px; align-items: stretch; }
-.lsp-file-path {
-  flex: 1 1 auto; min-width: 0; padding: 5px 8px;
-  background: var(--inp-bg); border: 1px solid var(--inp-border); border-radius: 6px;
-  color: var(--fg); font: inherit; font-size: 12px; outline: none;
+.lsp-file-row { display: flex; gap: 6px; align-items: center; }
+.lsp-file-name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  font-size: 11.5px; color: var(--fg);
 }
-.lsp-file-path::placeholder { color: var(--dim-a); }
-.lsp-file-path:focus { border-color: var(--inp-focus); box-shadow: 0 0 0 2px var(--input-shadow); }
 .lsp-file-go {
   flex: 0 0 auto; font: inherit; font-size: 12px; color: var(--accent);
   background: transparent; border: 1px solid var(--border-2); border-radius: 6px;
   padding: 4px 10px; cursor: pointer;
 }
+.lsp-file-refresh {
+  width: 26px; height: 26px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.lsp-file-refresh .svg-icon { width: 14px; height: 14px; }
 .lsp-file-go:hover:not(:disabled) { background: var(--hover-bg); }
 .lsp-file-go:disabled { color: var(--dim-b); cursor: default; }
 .lsp-file-progress { color: var(--dim-c); font-size: 11px; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }

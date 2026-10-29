@@ -10,7 +10,7 @@ import { sb } from "./state.js";
 import { mapKv } from "./map.js";
 import { appendToolchain } from "./lsp-toolchain.js";
 import { MUTED_REASONS, appendLspSummary } from "./lsp-summary.js";
-import { appendLspFileSection } from "./lsp-file.js";
+import { appendLspFileSection, followFilesSelection } from "./lsp-file.js";
 
 /** i18n-ключ ярлыка класса причины (`not-applicable` → `..._not_applicable`). */
 function lspReasonKey(reason: unknown): string {
@@ -273,10 +273,7 @@ async function runLspDoctor(): Promise<void> {
   }
 }
 
-/**
- * Ленивая загрузка вкладки LSP: срабатывает только когда вкладка активна.
- * Зовётся из `renderActiveState` (SSE `state`) и при переключении вкладки.
- */
+/** Ленивая загрузка вкладки LSP: только когда вкладка активна (SSE/switch). */
 export function sidebarLspState(): void {
   if (sb.active !== "lsp" || sb.lspUnavailable) return;
   if (!sb.lspLoaded) {
@@ -284,6 +281,7 @@ export function sidebarLspState(): void {
   } else if (sb.lspDiag === null && !sb.lspProbing) {
     void runLspDoctor();
   }
+  followFilesSelection();
 }
 
 /** SSE `lsp`: `start` — показать проверку, `done`/`error` — перечитать результат. */

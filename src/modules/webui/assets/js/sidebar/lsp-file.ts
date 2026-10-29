@@ -1,13 +1,12 @@
-// Секция «файл» вкладки LSP: диагностика одного файла (`POST /api/lsp/check`).
+// Секция «файл» вкладки LSP: диагностика файла, выбранного во вкладке «Файлы».
 //
-// Вынесено из `lsp.ts` (файл на потолке 300 строк): список серверов и проверка
-// файла — разные вопросы, и в одном файле они уже не помещаются.
-//
-// Визуально это отдельная секция с чертой: путь + короткая кнопка в одну строку,
-// результат — кликабельные строки «строка:колонка · уровень · текст». Клик
-// открывает файл во вкладке Files на этой строке (мост — `hooks.openFileAtLine`),
-// чтобы не тянуть `core.js` в этот модуль циклическим импортом.
-import { el } from "../dom.js";
+// Ручного ввода пути нет: он дублировал дерево и существовал только как
+// fallback из первой редакции спеки. Файл берётся из `sb.files.selectedPath`,
+// проверка запускается при открытии вкладки LSP (если файл сменился) и по
+// кнопке «проверить снова». Клик по строке открывает файл во вкладке Files на
+// этой строке (мост — `hooks.openFileAtLine`), чтобы не тянуть `core.js` в этот
+// модуль циклическим импортом.
+import { el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import type { Dict } from "../core/store/types.js";
@@ -23,13 +22,14 @@ let checking = false;
 let checkStarted = 0;
 let ticker: number | null = null;
 
-function pathInput(): string {
-  const fromFiles = sb.files.selectedPath;
-  return checkedPath || (typeof fromFiles === "string" ? fromFiles : "");
+/** Файл, выбранный в дереве Files (единственный источник пути). */
+function selectedPath(): string {
+  const p = sb.files.selectedPath;
+  return typeof p === "string" ? p : "";
 }
 
 /** Секунды, которые проверка уже идёт (0 до старта). */
-export function checkElapsedSec(): number {
+function checkElapsedSec(): number {
   return checking && checkStarted ? Math.max(0, Math.round((Date.now() - checkStarted) / 1000)) : 0;
 }
 
@@ -71,35 +71,29 @@ export function renderLspFile(box: HTMLElement): void {
   head.appendChild(el("span", "lsp-sec-note", t("web.sidebar.lsp_file_desc")));
   box.appendChild(head);
 
-  const row = el("div", "lsp-file-row");
-  const path = el("input", "lsp-file-path") as HTMLInputElement;
-  path.type = "text";
-  path.value = pathInput();
-  path.placeholder = t("web.sidebar.lsp_file_placeholder");
-  path.setAttribute("aria-label", t("web.sidebar.lsp_file_placeholder"));
-  path.spellcheck = false;
-  row.appendChild(path);
+  const path = selectedPath();
+  if (!path) {
+    box.appendChild(el("div", "lsp-hint", t("web.sidebar.lsp_file_no_selection")));
+    const open = el("button", "lsp-file-go", t("web.sidebar.lsp_file_open_files")) as HTMLButtonElement;
+    open.type = "button";
+    open.addEventListener("click", () => hooks.showFilesTab?.());
+    box.appendChild(open);
+    return;
+  }
 
-  const btn = el(
-    "button",
-    "lsp-file-go",
-    checking ? t("web.sidebar.lsp_file_check_short") : t("web.sidebar.lsp_file_check"),
-  ) as HTMLButtonElement;
-  btn.type = "button";
-  btn.disabled = checking || !path.value.trim();
-  btn.title = t("web.sidebar.lsp_file_check");
-  const run = () => void checkFile(path.value);
-  btn.addEventListener("click", run);
-  path.addEventListener("input", () => {
-    btn.disabled = checking || !path.value.trim();
-  });
-  path.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter" && path.value.trim()) {
-      ev.preventDefault();
-      run();
-    }
-  });
-  row.appendChild(btn);
+  const row = el("div", "lsp-file-row");
+  const name = el("span", "lsp-file-name", path);
+  name.title = path;
+  row.appendChild(name);
+
+  const refresh = el("button", "lsp-file-go lsp-file-refresh") as HTMLButtonElement;
+  refresh.type = "button";
+  refresh.disabled = checking;
+  refresh.title = t("web.sidebar.lsp_file_refresh");
+  refresh.setAttribute("aria-label", `${t("web.sidebar.lsp_file_refresh")}: ${path}`);
+  refresh.appendChild(icon("refresh"));
+  refresh.addEventListener("click", () => void checkFile(path));
+  row.appendChild(refresh);
   box.appendChild(row);
 
   if (checking) {
@@ -113,7 +107,11 @@ export function renderLspFile(box: HTMLElement): void {
     startTicker(box);
     return;
   }
-  if (lastResult) renderLspFileResult(box, lastResult);
+  if (lastResult && String(lastResult.path || "") === path) {
+    renderLspFileResult(box, lastResult);
+  } else {
+    box.appendChild(el("div", "lsp-hint", t("web.sidebar.lsp_file_not_checked_yet")));
+  }
 }
 
 /** Результат проверки: список диагностик или «ошибок нет»/причина отказа. */
@@ -180,9 +178,9 @@ function formatSec(ms: number): string {
   return t("web.sidebar.lsp_file_ms", { secs: (ms / 1000).toFixed(1) });
 }
 
-/** Запросить диагностику файла и перерисовать вкладку. */
+/** Проверить файл; при смене файла в «Файлах» результат заменяется. */
 export async function checkFile(rawPath?: string): Promise<void> {
-  const path = String(rawPath || pathInput()).trim();
+  const path = String(rawPath || selectedPath()).trim();
   if (!path) return;
   checkedPath = path;
   checking = true;
@@ -199,6 +197,18 @@ export async function checkFile(rawPath?: string): Promise<void> {
     stopTicker();
   }
   if (sb.lspEl) renderLspFileSection(sb.lspEl);
+}
+
+/**
+ * Открыли вкладку LSP: если выбран другой файл, проверяем его сразу — это и
+ * есть ответ на «что скажет LSP про этот файл», без ручного ввода пути.
+ */
+export function followFilesSelection(): void {
+  if (checking) return;
+  const path = selectedPath();
+  if (!path) return;
+  if (path === checkedPath && lastResult) return;
+  void checkFile(path);
 }
 
 /** Контейнер секции внутри вкладки: заголовок + содержимое. */

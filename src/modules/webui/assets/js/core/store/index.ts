@@ -40,6 +40,8 @@ export interface StoreHooks {
    * the caller does not have to know the viewer's scroll math.
    */
   openFileAtLine?: ((path: string, line: number) => void) | null;
+  /** Переключить сайдбар на вкладку «Файлы» (из пустого состояния LSP). */
+  showFilesTab?: (() => void) | null;
   /** Лента вкладки отрисована: связать исторические строки субагентов с прогонами. */
   afterHistory?: ((id: string) => void) | null;
   /** Перед заменой ленты в `#msgs` (закрывает вид субагента, если открыт). */

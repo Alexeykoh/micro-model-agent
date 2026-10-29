@@ -12,6 +12,12 @@ const i18n = await import("../src/modules/webui/assets/js/i18n.js");
 i18n.I18N.locale = "ru";
 i18n.I18N.dicts = {
   ru: {
+    "web.sidebar.lsp_file_title": "файл",
+    "web.sidebar.lsp_file_desc": "файл из вкладки «Файлы»",
+    "web.sidebar.lsp_file_no_selection": "Выбери файл во вкладке «Файлы» — покажу его диагностику.",
+    "web.sidebar.lsp_file_open_files": "Открыть «Файлы»",
+    "web.sidebar.lsp_file_not_checked_yet": "нажми «проверить снова»",
+    "web.sidebar.lsp_file_refresh": "проверить снова",
     "web.sidebar.lsp_file_clean": "ошибок нет",
     "web.sidebar.lsp_file_ms": "{secs} с",
     "web.sidebar.lsp_file_failed": "проверка не удалась",
@@ -26,6 +32,7 @@ i18n.I18N.dicts = {
 };
 
 const mod = await import("../src/modules/webui/assets/js/sidebar/lsp-file.js");
+const state = await import("../src/modules/webui/assets/js/sidebar/state.js");
 const store = await import("../src/modules/webui/assets/js/store.js");
 
 function box(): HTMLElement {
@@ -35,6 +42,30 @@ function box(): HTMLElement {
 }
 
 describe("LSP: секция проверки файла", () => {
+  it("без выбранного файла — подсказка и переход в «Файлы», без поля ввода", () => {
+    state.sb.files.selectedPath = null;
+    const b = box();
+    mod.renderLspFile(b);
+
+    expect(b.querySelector("input")).toBeNull();
+    expect(b.textContent).toContain("Файлы");
+    expect(b.querySelector(".lsp-file-go")).toBeTruthy();
+  });
+
+  it("берёт путь из вкладки «Файлы» и даёт кнопку проверки", () => {
+    state.sb.files.selectedPath = "src/a.ts";
+    try {
+      const b = box();
+      mod.renderLspFile(b);
+
+      expect(b.querySelector("input")).toBeNull();
+      expect(b.querySelector(".lsp-file-name")?.textContent).toBe("src/a.ts");
+      expect(b.querySelector(".lsp-file-refresh")).toBeTruthy();
+    } finally {
+      state.sb.files.selectedPath = null;
+    }
+  });
+
   it("показывает строку, колонку и текст диагностики", () => {
     const b = box();
     mod.renderLspFileResult(b, {
