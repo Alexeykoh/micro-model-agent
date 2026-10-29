@@ -4,7 +4,6 @@
 // (оба вынесены, чтобы файл остался под потолком ≤300 строк).
 import type { LspServerConfig } from "./types";
 import type { LspClient, LspProbeError } from "./client";
-import { findProjectRoot } from "./project-root";
 import { resolveNpxLaunch } from "./resolve";
 import type { ProjectToolchain } from "./toolchain";
 import type { LspFailureReason } from "./failure-reason";
