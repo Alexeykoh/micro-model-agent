@@ -107,10 +107,11 @@ describe("lsp_check: прогрев упал", () => {
       const module = new LspModule(CONFIG, client);
       const result = await module.getToolDefinitions()[0].handler(ctxFor(dir), { path: "src/a.ts" });
 
-      // Хвост stderr в отчёте (до 3 строк) — без него строка бесполезна.
+      // Хвост stderr в отчёте: начало + конец (фатальная строка), середина
+      // схлопывается — иначе предупреждения вытесняют причину падения.
       expect(result.output).toContain("SyntaxError: Unexpected token '?'");
-      expect(result.output).toContain("at wrapSafe");
-      expect(result.output).not.toContain("at Module._load");
+      expect(result.output).toContain("at Module._load");
+      expect(result.output).not.toContain("at wrapSafe");
       // Классификация учитывает stderr: подсказка про версию Node, а не сеть.
       expect(result.output).toContain("crashes on startup");
     } finally {

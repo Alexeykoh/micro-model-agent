@@ -131,6 +131,35 @@ LSP write check: src/a.ts in 12ms (0 error(s), 0 warning(s))
 синтаксически терпимы (незакрытый тег не диагностируют) — это поведение
 серверов, не mma.
 
+## Диагностика падения после старта
+
+`initialize` может пройти, а сервер умереть на `didOpen` — тогда `doctor` видит
+`ok`, а проверка файла падает с `LSP server exited`. Два следа в отчёте:
+
+- **Хвост stderr показывается началом и концом** (`stderrTailLines`): Node
+  печатает безобидные предупреждения (`DEP0190`) до фатальной строки, поэтому
+  «первые 3 строки» прятали причину. Панель рисует многострочно.
+- **Старый TypeScript в проекте.** `doctor` добавляет строку при
+  `typescript < 5`: tsserver 4.x не работает на современных Node (живой случай:
+  Angular 11 + TypeScript 4.1.2 → `LSP server exited` через 0.9 с при «ok» в
+  пробе). Лечение: `npm i -D typescript@5` в проекте **или** указать серверу
+  другой tsserver:
+
+  ```json
+  {
+    "lsp": {
+      "servers": {
+        "typescript": {
+          "initializationOptions": { "tsserver": { "path": "C:/tools/ts5/lib/tsserver.js" } }
+        }
+      }
+    }
+  }
+  ```
+
+  (`lsp.servers` в `~/.mma/config/lsp.json`; `initializationOptions` уходят в
+  LSP `initialize` как есть.)
+
 ## Границы
 
 - Кросс-процессного демона нет: пул живёт в процессе mma (на старте он теперь

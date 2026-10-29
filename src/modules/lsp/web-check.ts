@@ -91,7 +91,19 @@ function toWebDiagnostic(diag: LspDiagnostic): WebDiagnostic {
 function webFailureReason(acc: { notes: string[] }): string | undefined {
   const note = acc.notes.find((n) => n.trim().length > 0);
   if (!note) return undefined;
-  return note.replace(/^\[+|\]+$/g, "").replace(/\s+/g, " ").trim().slice(0, 300);
+  // Многострочный хвост stderr сохраняем построчно: панель рисует его с
+  // `white-space: pre-line`, а схлопывание в одну строку прятало фатальную
+  // строку в конце длинного предупреждения.
+  const lines = note
+    .replace(/^\[+/, "")
+    .replace(/\]+$/, "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const head = lines.slice(0, 1);
+  const tail = lines.slice(-4);
+  const picked = lines.length <= 5 ? lines : [...head, ...tail];
+  return picked.join("\n").slice(0, 900);
 }
 
 /** Проверить один файл; ошибки — данными, не исключениями. */

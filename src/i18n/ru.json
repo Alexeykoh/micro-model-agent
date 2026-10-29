@@ -415,6 +415,7 @@
   "lsp.hint_spawn": "Подсказка: не удалось запустить команду сервера — проверьте команду и PATH.",
   "lsp.hint_timeout": "Подсказка: сервер не инициализировался вовремя — возможно, медленный; увеличьте lsp.servers.<lang>.timeout.",
   "lsp.hint_node_too_old": "Подсказка: сервер падает на старте из-за версии Node (SyntaxError/ERR_REQUIRE_ESM до initialize): текущий typescript-language-server требует Node 18+ с 4.x, 20+ с 5.x, 22.22+ с 6.x. Обновите Node или поставьте совместимую сборку (команда выше).",
+  "lsp.hint_old_typescript": "TypeScript в проекте — {version}: tsserver 4.x падает после initialize на современных Node, поэтому doctor может видеть «ок», а проверка файла — «LSP server exited». Обновите: npm i -D typescript@5 (или укажите tsserver через initializationOptions.tsserver.path).",
   "cli.description": "Micro Models Agent — ИИ-агент для кодинга на малых моделях",
   "cli.init": "Запустить мастер настройки провайдера (устаревший алиас mma setup).",
   "cli.init_deprecated": "mma init устарела — используй mma setup",

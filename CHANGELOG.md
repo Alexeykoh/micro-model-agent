@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.18.2] - 2026-10-29
+
+### Added
+
+- **`initializationOptions` у LSP-сервера.** Поле `lsp.servers.<lang>.initializationOptions`
+  уходит в LSP `initialize` как есть. Так можно указать серверу другой
+  инструментарий без правки проекта: `{"tsserver": {"path": "…/ts5/lib/tsserver.js"}}`
+  заставляет `typescript-language-server` взять современный TypeScript вместо
+  старого из проекта.
+
+### Fixed
+
+- **Причина падения сервера больше не прячется за предупреждением.** Хвост
+  stderr показывался «первыми 3 строками», и Node-предупреждение (`DEP0190`)
+  вытесняло фатальную строку: в панели было видно только «LSP server exited
+  ... DeprecationWarning». Теперь показываются начало **и конец** хвоста
+  (первая + последние строки), панель рисует их многострочно (до 900 символов,
+  с прокруткой).
+- **`/lsp doctor` предупреждает про старый TypeScript в проекте.** При
+  `typescript < 5` в тулчейне добавляется строка: tsserver 4.x падает после
+  `initialize` на современных Node, поэтому doctor видит «ок» (проба не открывает
+  файл), а проверка файла — «LSP server exited». Ровно случай Angular 11 +
+  TypeScript 4.1.2.
+
 ## [0.18.1] - 2026-10-29
 
 ### Added

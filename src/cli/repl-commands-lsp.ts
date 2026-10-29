@@ -139,6 +139,17 @@ export function formatDoctor(diag: LspDiagnosis): string[] {
   if (actionable || diag.offline) {
     lines.push(pc.dim(`  ${glyph.detail} ${t("repl.lsp_doctor_hint")}`));
   }
+  // Старый TypeScript в проекте: tsserver 4.x падает на современных Node уже
+  // после initialize (doctor при этом видит «ок» — проба не открывает файл).
+  const tsVersion = diag.toolchain?.packages.typescript;
+  const tsMajor = tsVersion ? Number(/^[\^~>=<\sv]*(\d+)/.exec(tsVersion)?.[1] ?? "0") : 0;
+  if (tsVersion && tsMajor > 0 && tsMajor < 5) {
+    lines.push(
+      pc.yellow(
+        `  ${glyph.failure} ${t("lsp.hint_old_typescript", { version: tsVersion })}`,
+      ),
+    );
+  }
   return lines;
 }
 
