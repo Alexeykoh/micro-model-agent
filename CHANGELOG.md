@@ -41,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Fixed
 
 - **`/clear` из фоновой вкладки не пишется в чужой журнал.** Запись команды
-  адресуется сессии из запроса (`SessionManager.appendLogTo`), а не активной
+  адресуется сессии из запроса (`appendLog(entry, id)`), а не активной
   сессии сервера. Гвард: `tests/webui-command-log.test.ts`.
 - **Поиск по содержимому не показывает `*.tsbuildinfo`.** Сгенерированные
   артефакты исключены из обхода.
