@@ -90,7 +90,6 @@ Most agents (Devin, Cursor, Copilot) are glued to cloud models or pricey APIs �
 - **LLM backend:** any OpenAI-compatible server (LM Studio, Ollama, vLLM, llama.cpp, Together AI)
 
 ### One-line installer
-
 **Windows** (PowerShell):
 
 ```powershell
@@ -109,6 +108,31 @@ The installer detects your OS/architecture, downloads the matching release into
 `~/.mma`, verifies its `sha256`, and puts the `mma` launcher on `PATH`. Re-run the
 same command to update. See [docs/install.md](./docs/install.md) for layout, rollback
 and uninstall.
+
+### Manual install (no script)
+
+If the one-liner is blocked (corporate proxy, TLS interception, no shell) or you
+want the files in your own directory, download `mma-<os>-<arch>.tar.gz` from
+[Releases](https://github.com/Alexeykoh/micro-model-agent/releases/latest) and
+extract it — the archive already contains the bundled runtime:
+
+```powershell
+# Windows x64 (PowerShell; tar ships with Windows 10+)
+$dst = "$env:USERPROFILE\mma"
+New-Item -ItemType Directory -Force $dst | Out-Null
+tar -xzf "$env:USERPROFILE\Downloads\mma-win-x64.tar.gz" -C $dst
+& "$dst\runtime\bun.exe" "$dst\app\main.js" --version
+```
+
+```bash
+# macOS (Apple Silicon / Intel) and Linux (x64 / arm64)
+mkdir -p ~/mma
+tar -xzf ~/Downloads/mma-mac-arm64.tar.gz -C ~/mma     # or mma-mac-x64 / mma-linux-x64 / mma-linux-arm64
+~/mma/runtime/bun ~/mma/app/main.js --version
+```
+
+Checksum verification, `PATH` setup, update and Gatekeeper/SmartScreen notes:
+[docs/install.md § Manual install](./docs/install.md#manual-install-no-script).
 
 ### From source
 

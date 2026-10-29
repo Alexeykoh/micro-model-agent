@@ -119,6 +119,27 @@
             <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-linux-x64.tar.gz">Linux x64</a>
             <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest/download/mma-linux-arm64.tar.gz">Linux arm64</a>
           </div>
+          <details class="manual" id="manual">
+            <summary data-i18n="install.manual">Manual install from the tarball (no script)</summary>
+            <p class="note" data-i18n="install.manual_note">The archives already contain the runtime. Extract anywhere and run the launcher — no admin rights, no Node.js, no npm.</p>
+            <p class="manual-os">Windows (PowerShell)</p>
+            <pre><code>$dst = "$env:USERPROFILE\mma"
+New-Item -ItemType Directory -Force $dst | Out-Null
+tar -xzf "$env:USERPROFILE\Downloads\mma-win-x64.tar.gz" -C $dst
+&amp; "$dst\runtime\bun.exe" "$dst\app\main.js" --version</code></pre>
+            <p class="manual-os">macOS</p>
+            <pre><code>mkdir -p ~/mma
+tar -xzf ~/Downloads/mma-mac-arm64.tar.gz -C ~/mma
+~/mma/runtime/bun ~/mma/app/main.js --version</code></pre>
+            <p class="manual-os">Linux</p>
+            <pre><code>mkdir -p ~/mma
+tar -xzf ~/Downloads/mma-linux-x64.tar.gz -C ~/mma
+chmod +x ~/mma/runtime/bun
+~/mma/runtime/bun ~/mma/app/main.js --version</code></pre>
+            <p class="note">
+              <a class="link" href="https://github.com/Alexeykoh/micro-model-agent/blob/master/docs/install.md#manual-install-no-script" data-i18n="install.manual_more">Checksums, PATH setup, updates, Gatekeeper/SmartScreen</a>
+            </p>
+          </details>
           <p class="hero-src"><a class="link" href="https://github.com/Alexeykoh/micro-model-agent" data-i18n="hero.source">Read the source</a></p>
           <p class="hero-note" data-i18n="hero.note">Runs locally against LM Studio, Ollama, llama.cpp or vLLM — or against a hosted provider such as OpenRouter, OpenAI, Anthropic or OpenCode Zen. No cloud account required. Currently in beta — the interface and features are still changing.</p>
         </div>
