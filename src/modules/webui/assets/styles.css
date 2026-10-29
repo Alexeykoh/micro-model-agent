@@ -1075,6 +1075,36 @@ body.light .sel > button { border: 1px solid var(--border); }
 }
 .files-tree:focus-visible { outline: none; }
 .files-tree > * { flex-shrink: 0; }
+/* Поиск по содержимому (C-01): поле в тулбаре и список совпадений вместо
+   дерева. Строка результата — `путь:строка` + совпавшая строка. */
+.fsearch {
+  flex: 1 1 auto; min-width: 0; margin-left: 2px; height: 22px; padding: 0 6px;
+  border: 1px solid var(--border); border-radius: 4px; background: var(--surface);
+  color: var(--fg); font: inherit; font-size: 12px;
+}
+.fsearch:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.fsearch::placeholder { color: var(--dim-c); }
+.files-search-results {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 4px 12px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.files-search-results[hidden] { display: none; }
+.fsearch-row {
+  display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  padding: 4px 6px; border: 0; border-radius: 4px; background: transparent;
+  color: var(--muted); font: inherit; cursor: pointer;
+}
+.fsearch-row:hover { background: var(--hover-bg); }
+.fsearch-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.fsearch-path {
+  font-size: 11.5px; color: var(--dim-c); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.fsearch-text {
+  font-family: var(--mono, ui-monospace, monospace); font-size: 12px; color: var(--fg);
+  overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.fsearch-note { padding: 4px 6px; }
 /* An open file no longer hides the tree; only the explicit "viewer only" mode
    does (`.f-full`, toggled from the viewer header). */
 .frow.sel { background: var(--accent-bg); }

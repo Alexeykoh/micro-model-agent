@@ -21,12 +21,16 @@ export function iconize(btn: HTMLElement | null, name: string, key: string): voi
 /** Icons + localized tooltips; re-run on locale switch. */
 export function localizeChrome(): void {
   const f = sb.files;
-  iconize(f.collapseAllEl, "chevrons-down-up", "web.files.collapse_all");
-  iconize(f.expandAllEl, "chevrons-up-down", "web.files.expand_all");
+  iconize(f.collapseAllEl, "chevrons-down-up", "web.files.collapse_all");  iconize(f.expandAllEl, "chevrons-up-down", "web.files.expand_all");
   iconize(f.refreshEl, "refresh", "web.files.refresh");
   iconize(f.backEl, "arrow-left", "web.files.back");
   iconize(f.fwdEl, "arrow-right", "web.files.forward");
   iconize(f.detailAttachEl, "paperclip", "web.files.attach");
+  if (f.searchEl) {
+    const label = t("web.files.search_placeholder");
+    f.searchEl.placeholder = label;
+    f.searchEl.setAttribute("aria-label", label);
+  }
   const wide = viewerFull();
   iconize(f.wideEl, wide ? "panel-left" : "panel", wide ? "web.files.narrow" : "web.files.wide");
   iconize(document.getElementById("filesClose"), "x", "web.files.close");

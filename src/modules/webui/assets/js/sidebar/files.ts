@@ -23,6 +23,7 @@ import { initCrumbDeps, renderCrumbs, clearCrumbs } from "./files/crumbs.js";
 import { syncChrome, localizeChrome, iconize } from "./files/chrome.js";
 import { fetchFile, paintFile, paintLoading } from "./files/view.js";
 import { markAndScrollToLine } from "./files/line-mark.js";
+import { initSearch, resetSearch, renderSearch } from "./files/search.js";
 export { lineScrollTop } from "./files/line-mark.js";
 import {
   initExpandDeps,
@@ -59,8 +60,11 @@ export function initFiles(d: Partial<FilesDeps>): void {
   f.refreshEl = byId("filesRefresh");
   f.detailBodyEl = byId("filesBody");
   f.detailAttachEl = byId("filesAttach");
+  f.searchEl = byId<HTMLInputElement>("filesSearch");
+  f.searchResultsEl = byId("filesSearchResults");
   const close = byId<HTMLButtonElement>("filesClose");
 
+  initSearch({ openFile: (p, line) => void openFile(p, line) });
   initTreeDeps({
     ensureListing, toggleDir, openFile: (p) => void openFile(p),
     insertPath: deps.insertPath, markDirty, render: renderFilesTree,
@@ -131,6 +135,7 @@ export function sidebarFilesState(host: Dict): void {
     f.expandCapped = false;
     f.crumbsOpen = false;
     resetHistory(history);
+    resetSearch();
     if (f.detailEl) f.detailEl.hidden = true;
     setViewerFull(false);
     clearCrumbs();
@@ -167,6 +172,7 @@ function ensureListing(path: string): Promise<void> {
 /** Forces a re-render (locale switch → localized empty/loading/error labels). */
 export function refreshFilesTree(): void {
   localizeChrome();
+  renderSearch();
   markDirty();
   renderFilesTree();
 }

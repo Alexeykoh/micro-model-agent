@@ -35,6 +35,13 @@ export interface FileEntry {
   size?: number;
 }
 
+/** Одно совпадение поиска по содержимому (ответ `GET /api/search`). */
+export interface SearchHit {
+  path: string;
+  line: number;
+  text: string;
+}
+
 /** Состояние вкладки Files: DOM-узлы, раскрытые папки, кэш листингов. */
 export interface FilesView {
   /** Левая колонка: панель управления + дерево. */
@@ -76,6 +83,18 @@ export interface FilesView {
   expandCapped: boolean;
   /** Показывать все сегменты пути (крошки свёрнуты в `…` по умолчанию). */
   crumbsOpen: boolean;
+  /** Поле поиска по содержимому (C-01). */
+  searchEl: HTMLInputElement | null;
+  /** Список совпадений вместо дерева (пока запрос не пуст). */
+  searchResultsEl: HTMLElement | null;
+  /** Последний запрос; пустой — дерево видно, результаты скрыты. */
+  searchQuery: string;
+  searchResults: SearchHit[];
+  searchLoading: boolean;
+  searchError: boolean;
+  searchTruncated: boolean;
+  /** Счётчик запросов: ответ старого запроса не должен перебить новый. */
+  searchSeq: number;
 }
 
 /** Состояние вкладки Plugins: DOM-узел, записи реестра, отказы загрузки. */
@@ -187,6 +206,14 @@ export const sb: SidebarState = {
     expanding: false,
     expandCapped: false,
     crumbsOpen: false,
+    searchEl: null,
+    searchResultsEl: null,
+    searchQuery: "",
+    searchResults: [],
+    searchLoading: false,
+    searchError: false,
+    searchTruncated: false,
+    searchSeq: 0,
   },
   plugins: {
     bodyEl: null,

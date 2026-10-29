@@ -29,6 +29,7 @@ import { handleMcpList } from "./settings/mcp-list";
 import { handleProvidersApi } from "./settings/providers-api";
 import { handleFileApi } from "./file/file-api";
 import { handleFilesApi } from "./file/files-api";
+import { handleSearchApi } from "./file/search-api";
 import { handleSetupApi } from "./settings/setup-api";
 import { handleLspDoctorGet, handleLspCheckPost, handleLspCheckChangedPost, handleLspDoctorPost } from "./lsp/lsp-api";
 import { readJsonBody } from "./http/body";
@@ -142,7 +143,7 @@ const API_GROUPS: Array<(
   res: ServerResponse,
   reqUrl: URL,
   s: WebUiState,
-) => boolean> = [handleSetupApi, handleSessionsApi, handleSettingsApi, handleProvidersApi, handleFileApi, handleFilesApi];
+) => boolean> = [handleSetupApi, handleSessionsApi, handleSettingsApi, handleProvidersApi, handleFileApi, handleFilesApi, handleSearchApi];
 
 /** REST-хендлер `/api/*`; auth + same-origin уже проверены. */
 function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: WebUiState): void {
