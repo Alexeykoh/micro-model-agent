@@ -245,15 +245,10 @@ export function scrubError(err: unknown): string {
  */
 export function requestError(req: IncomingMessage, res: ServerResponse, err: unknown): void {
   if (err instanceof BodyTooLargeError) {
-    // Отвечаем 413 и **не** рвём сокет сразу: пока клиент дописывает тело,
-    // `req.destroy()` уходит как RST, и fetch видит «socket connection closed»
-    // вместо статуса (флейк в `webui-body-limits.test.ts`). Поэтому: ответ,
-    // `Connection: close`, дренаж остатка тела, а destroy — только когда
-    // ответ уже закрыт (или по таймауту-предохранителю).
-    res.writeHead(413, {
-      "Content-Type": "application/json; charset=utf-8",
-      Connection: "close",
-    });
+    // 413 без немедленного `req.destroy()`: пока клиент дописывает тело, destroy
+    // уходит как RST и fetch видит «socket closed» вместо статуса (флейк
+    // webui-body-limits). Дренаж + destroy после закрытия ответа.
+    res.writeHead(413, { "Content-Type": "application/json; charset=utf-8", Connection: "close" });
     res.end(JSON.stringify({ error: "body too large" }));
     req.resume();
     const kill = setTimeout(() => req.destroy(), 2000);
