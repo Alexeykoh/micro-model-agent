@@ -20,6 +20,13 @@ export type OnMeta = (meta: string, kind?: MetaKind) => void;
  */
 export type PromptBlockKind = "instructions" | "project-map";
 
+/**
+ * Профиль системного промпта (S-04). `service-job` — короткая поверхность для
+ * одной задачи сервиса: без карты проекта, скиллов, AGENTS.md и харнесс-директив.
+ * REPL/web/one-shot — `full`.
+ */
+export type PromptProfile = "full" | "service-job";
+
 /** Блок системного промпта: контент, приоритет, оценка токенов. */
 export interface PromptBlock {
   content: string;

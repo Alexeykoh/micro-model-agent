@@ -11,7 +11,8 @@ import { join } from "path";
 import { projectMmaDir } from "../../config/paths";
 import { PromptBuilder } from "../prompt-builder";
 import { resolvePromptOverflow, overflowHint, HINT_BLOCK_TOKENS } from "../prompt-overflow";
-import type { PromptBlock, PromptBlockKind } from "../types";
+import { buildServiceJobPrompt } from "../system-prompt";
+import type { PromptBlock, PromptBlockKind, PromptProfile } from "../types";
 import type { SessionLogger } from "../session-logger";
 import type { AgentDeps } from "../agent";
 import { t } from "../../i18n/index";
@@ -19,6 +20,8 @@ import { t } from "../../i18n/index";
 /** Мутабельный вид `Agent`, которым владеет фаза промпта. */
 export interface PromptPhaseHost {
   deps: AgentDeps;
+  /** Профиль промпта на текущий ход (`service-job` — без блоков харнесса). */
+  promptProfile: PromptProfile;
   /** Замены переполнения по kind (сжатые instructions/project-map). */
   promptOverrides: Map<PromptBlockKind, PromptBlock>;
   /** Малый всегда-включённый hint-блок о сжатии. */
@@ -40,7 +43,27 @@ export interface SystemPromptBuild {
 }
 
 /** Собирает системный промпт из блоков с учётом override-ов переполнения. */
-export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {  const { deps } = host;
+export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
+  const { deps } = host;
+  // S-04: service-job — своя короткая поверхность. Блоки харнесса (карта,
+  // скиллы, AGENTS.md, скрытые тулы) в job-режиме не отправляются вовсе.
+  if (host.promptProfile === "service-job") {
+    const tools = deps.toolExecutor.getToolDefinitions(deps.toolTags).map((t) => t.name);
+    const prompt = buildServiceJobPrompt(deps.config.model, tools);
+    return {
+      prompt,
+      excluded: [],
+      excludedBlocks: [],
+      blocks: [
+        {
+          label: "service-job",
+          priority: "high",
+          tokens: deps.llmProvider.countTokens(prompt),
+          included: true,
+        },
+      ],
+    };
+  }
   const systemBudget = Math.floor(
     deps.config.contextWindow * deps.config.contextBudget.systemPrompt,
   );

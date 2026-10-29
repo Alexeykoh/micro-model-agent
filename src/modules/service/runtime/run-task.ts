@@ -9,7 +9,7 @@
  * инструкция; ответ парсится/валидируется, при провале — один retry, иначе
  * `outputInvalid`.
  */
-import type { AgentResult, ToolEvent } from "../../../core/types";
+import type { AgentResult, PromptProfile, ToolEvent } from "../../../core/types";
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import { errMsg } from "../../../utils/error";
@@ -33,6 +33,26 @@ export interface RunTaskResult {
 
 /** Интерактивные тулы, запрещённые в job-режиме (спека §5.2). */
 const INTERACTIVE_TOOLS = new Set(["question", "approve"]);
+
+/**
+ * Job-скоуп хода (S-04): `job` без `toolAllowlist` получает **ноль** тулов и
+ * короткий профиль промпта. Возвращает восстановление — вызывать в `finally`,
+ * иначе следующий interactive-ход на том же раннере остался бы без тулов.
+ *
+ * Пустой массив — не «без ограничений», а «запрещено всё»: так его читает
+ * `ToolExecutor.allowedNames()`, и это же значение применяется как enforcement.
+ */
+export function applyTaskScope(runner: SessionRunner, task: TaskRecord): () => void {
+  if (task.mode !== "job") return () => {};
+  const priorAllow = runner.toolCtx.toolAllowlist;
+  const priorProfile: PromptProfile = runner.agent.promptProfile ?? "full";
+  runner.toolCtx.toolAllowlist = task.toolAllowlist?.length ? [...task.toolAllowlist] : [];
+  runner.agent.promptProfile = "service-job";
+  return () => {
+    runner.toolCtx.toolAllowlist = priorAllow;
+    runner.agent.promptProfile = priorProfile;
+  };
+}
 
 export interface RunTaskOptions {
   runner: SessionRunner;
@@ -69,9 +89,10 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
   });
 
   // Job-режим: попытка интерактивного тула или тула вне allowlist = tool_forbidden.
-  const allowSet =
-    task.mode === "job" && task.toolAllowlist ? new Set(task.toolAllowlist) : null;
+  // Пустой allowlist у job — тоже «ничего нельзя», поэтому набор строится всегда.
+  const allowSet = task.mode === "job" ? new Set(task.toolAllowlist ?? []) : null;
   let forbidden = false;
+  const restoreScope = applyTaskScope(runner, task);
 
   const callAgent = (text: string): Promise<AgentResult> =>
     runner.agent.run(
@@ -156,5 +177,7 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
       usage: { promptTokens: 0, completionTokens: 0, costUsd: 0 },
       error: errMsg(err),
     });
+  } finally {
+    restoreScope();
   }
 }

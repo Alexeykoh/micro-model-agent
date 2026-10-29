@@ -54,7 +54,7 @@ import type { LoopState } from "./agent/loop-state";
 import type { TokenTracker } from "./agent/token-tracker";
 import type { ContextLogger } from "./agent/context-log";
 import { ContextRenderer } from "./agent/context-renderer";
-import type { PromptBlockKind } from "./types";
+import type { PromptBlockKind, PromptProfile } from "./types";
 import type { Diagnostic } from "../output/types";
 
 /** Сток диагностик fail-open (INV-15). */
@@ -163,6 +163,8 @@ export class Agent {
   readonly reasoningState: ReasoningState;
   /** Счётчик текущей итерации (для кулдаунов тулов). */
   private _currentIteration = 0;
+  /** Профиль системного промпта (S-04); job-ход ставит `service-job`. */
+  promptProfile: PromptProfile = "full";
   /** Kind → блок-замена для instructions/project-map сверх бюджета (резолв раз до первого LLM-вызова). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается через PromptPhaseHost
   private promptOverrides = new Map<PromptBlockKind, PromptBlock>();

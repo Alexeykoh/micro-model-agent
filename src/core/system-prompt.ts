@@ -40,6 +40,26 @@ export function buildModelBlock(model: string): PromptBlock {
 }
 
 /**
+ * Короткий системный промпт service-job. Говорит модели ровно то, что она
+ * должна знать: кто она, на какой модели работает, какие тулы реально
+ * доступны (или что их нет), и что нельзя выдумывать работу.
+ * @param model активная модель (живой конфиг);
+ * @param tools имена тулов, видимых модели в этой задаче.
+ */
+export function buildServiceJobPrompt(model: string, tools: readonly string[]): string {
+  const toolLine = tools.length
+    ? `Available tools: ${tools.join(", ")}. Use them only when the task needs them.`
+    : "No tools are available in this job: you cannot read files, run commands or browse the web.";
+  return [
+    `You are MMA answering one service job. Active model: ${model}.`,
+    "Answer the request directly and completely, in the user's language.",
+    toolLine,
+    "Do not claim work you did not do: no invented file contents, command output or web pages.",
+    "If the task needs something unavailable, say so plainly instead of guessing.",
+  ].join("\n");
+}
+
+/**
  * Рендерит системный промпт (чистая функция).
  * @param config конфиг приложения; @param baseDir workspace;
  * @param profileCompressed сжатый профиль окружения.

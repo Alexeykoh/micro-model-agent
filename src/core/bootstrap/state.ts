@@ -59,7 +59,8 @@ let oneShotMode = false;
  * (`plugins list`, `model list`, `doctor`, `session list` …) сессию не
  * используют; раньше каждая такая команда плодила пустую сессию, а
  * `enforceMaxSessions` на следующем создании сносил десятки тысяч каталогов
- * (A-01). Одноразовый промпт, REPL, `web`, `serve`, `meet`, `agents` — создают.
+ * (A-01). Одноразовый промпт, REPL, `web`, `meet`, `agents` — создают; `serve`
+ * не создаёт (S-06): сессии появляются только через `POST /v1/sessions`.
  */
 let sessionAutocreate = true;
 

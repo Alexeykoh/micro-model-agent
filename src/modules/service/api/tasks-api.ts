@@ -276,7 +276,6 @@ async function startTask(s: AgentServiceState, task: TaskRecord): Promise<void> 
 
   if (task.mode === "interactive") installServicePromptIO(s, task, runner);
   logTaskContext(runner, task);
-  const restoreTools = restrictTools(runner, task);
 
   const forwarder = makeServiceForwarder({
     emit: (type, data, attempt) => emitEvent(s, task, type, data, attempt),
@@ -297,25 +296,10 @@ async function startTask(s: AgentServiceState, task: TaskRecord): Promise<void> 
     }
   } finally {
     disarmTimeout();
-    restoreTools();
     // Слот свободен: терминальный ход завершён; дренируем очередь сессии.
     s.pool.forceRelease(task.sessionId);
     drain(s, task.sessionId);
   }
-}
-
-/**
- * Job-режим: строгий allowlist тулов (спека §5.2, ось Authz). Строгий — теги и
- * alwaysOn не обходят (см. `ToolContext.toolAllowlist`). Возвращает функцию
- * восстановления прежнего значения после хода.
- */
-function restrictTools(runner: SessionRunner, task: TaskRecord): () => void {
-  if (task.mode !== "job" || !task.toolAllowlist?.length) return () => {};
-  const prior = runner.toolCtx.toolAllowlist;
-  runner.toolCtx.toolAllowlist = task.toolAllowlist;
-  return () => {
-    runner.toolCtx.toolAllowlist = prior;
-  };
 }
 
 /** Терминальный переход по итогу хода: отмена/таймаут/успех/провал. */

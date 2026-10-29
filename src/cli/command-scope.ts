@@ -1,8 +1,11 @@
 // Какие CLI-команды нуждаются в сессии (A-01). Read-only команды сессию не
 // создают; one-shot/REPL (нет подкоманды) и диалоговые поверхности — создают.
 
-/** Команды, которым нужен живой диалог/сессия. */
-export const SESSION_COMMANDS: ReadonlySet<string> = new Set(["web", "serve", "meet", "agents"]);
+/**
+ * Команды, которым нужен живой диалог/сессия. `serve` здесь НЕТ: сервис не
+ * диалог, сессии создаёт клиент через `POST /v1/sessions` (S-06).
+ */
+export const SESSION_COMMANDS: ReadonlySet<string> = new Set(["web", "meet", "agents"]);
 
 /**
  * Нужна ли сессия этой команде.

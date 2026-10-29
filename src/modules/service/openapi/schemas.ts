@@ -98,8 +98,8 @@ export const SCHEMAS: Record<string, JsonSchema> = {
         enum: ["interactive", "job"],
         default: "job",
         description:
-          "`job` — автономная (вопросы запрещены, работает `toolAllowlist`); " +
-          "`interactive` — вопросы через SSE + `/answer`.",
+          "`job` — автономная (вопросы запрещены); без `toolAllowlist` получает 0 тулов " +
+          "и короткий системный промпт. `interactive` — вопросы через SSE + `/answer`.",
       },
       output: ref("OutputSpec"),
       toolAllowlist: {
@@ -107,6 +107,7 @@ export const SCHEMAS: Record<string, JsonSchema> = {
         items: string(),
         description:
           "Только для `mode: job`. Строгий allowlist: теги и `alwaysOn` его НЕ обходят. " +
+          "Не передан — тулов нет вовсе (0 определений, короткий промпт). " +
           "Вызов интерактивного или неразрешённого тула → `failed` с `…/tool-forbidden`.",
       },
       timeoutMs: integer({ description: "Таймаут хода; по умолчанию — лимит рантайма." }),

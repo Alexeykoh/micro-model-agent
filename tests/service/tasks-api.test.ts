@@ -160,7 +160,12 @@ describe("tasks api", () => {
   it("submits a job, returns 202, and completes via pull", async () => {
     const url = await boot(makeDeps(fastAgent("hello")));
     const sid = await firstSessionId(url);
-    const res = await submit(url, sid, { input: "do it", mode: "job" });
+    const res = await submit(url, sid, {
+      input: "do it",
+      mode: "job",
+      // job без allowlist = 0 тулов (S-04), а fastAgent зовёт read_file.
+      toolAllowlist: ["read_file"],
+    });
     expect(res.status).toBe(202);
     expect(String(res.headers.location)).toMatch(/^\/v1\/tasks\/job_/);
     expect(["queued", "running"]).toContain(res.json.status);
@@ -174,7 +179,12 @@ describe("tasks api", () => {
   it("wait:true blocks until terminal", async () => {
     const url = await boot(makeDeps(fastAgent("done-now")));
     const sid = await firstSessionId(url);
-    const res = await submit(url, sid, { input: "x", mode: "job", wait: true });
+    const res = await submit(url, sid, {
+      input: "x",
+      mode: "job",
+      toolAllowlist: ["read_file"],
+      wait: true,
+    });
     expect(res.status).toBe(200);
     expect(res.json.status).toBe("succeeded");
     expect((res.json.result as { text: string }).text).toBe("done-now");
@@ -279,7 +289,12 @@ describe("tasks api", () => {
   it("supports output.format=text", async () => {
     const url = await boot(makeDeps(fastAgent("plain")));
     const sid = await firstSessionId(url);
-    const res = await submit(url, sid, { input: "x", wait: true, output: { format: "text" } });
+    const res = await submit(url, sid, {
+      input: "x",
+      wait: true,
+      output: { format: "text" },
+      toolAllowlist: ["read_file"],
+    });
     expect(res.json.status).toBe("succeeded");
     expect((res.json.result as { text: string }).text).toBe("plain");
   });
@@ -310,7 +325,12 @@ describe("tasks api", () => {
     const url = await boot(makeDeps(fastAgent("ok")));
     expect((await httpJson(`${url}/v1/tasks/job_x/cancel`, { method: "POST" })).status).toBe(404);
     const sid = await firstSessionId(url);
-    const done = await submit(url, sid, { input: "x", mode: "job", wait: true });
+    const done = await submit(url, sid, {
+      input: "x",
+      mode: "job",
+      wait: true,
+      toolAllowlist: ["read_file"],
+    });
     const again = await httpJson(`${url}/v1/tasks/${done.json.jobId}/cancel`, { method: "POST" });
     expect(again.status).toBe(200);
     expect(again.json.status).toBe("succeeded");
@@ -347,6 +367,7 @@ describe("tasks api", () => {
       mode: "job",
       wait: true,
       callbackUrl: "https://callback.test/hook",
+      toolAllowlist: ["read_file"],
     });
     expect(res.json.status).toBe("succeeded");
     for (let i = 0; i < 100 && calls.length === 0; i++) await new Promise((r) => setTimeout(r, 10));

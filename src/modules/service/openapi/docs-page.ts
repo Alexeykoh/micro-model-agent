@@ -153,7 +153,7 @@ document.querySelectorAll('[data-copy]').forEach(function (b) {
 function renderContractNotes(): string {
   return `<h2 id="contract">Как устроен контракт</h2>
 <ul class="small">
-<li><b>Задача = ход над сессией.</b> Не «параллельный воркер», а один ход агента: <code>job</code> — автономная (вопросы запрещены, работает строгий <code>toolAllowlist</code>: теги и <code>alwaysOn</code> его не обходят), <code>interactive</code> — вопросы через SSE + <code>POST /v1/tasks/{jobId}/answer</code>.</li>
+<li><b>Задача = ход над сессией.</b> Не «параллельный воркер», а один ход агента: <code>job</code> — автономная (вопросы запрещены; без <code>toolAllowlist</code> — 0 тулов и короткий промпт, с ним — строгий allowlist: теги и <code>alwaysOn</code> его не обходят), <code>interactive</code> — вопросы через SSE + <code>POST /v1/tasks/{jobId}/answer</code>.</li>
 <li><b>Pull — источник правды.</b> <code>GET /v1/tasks/{jobId}</code> отдаёт тот же Job-объект, что и webhook; SSE и колбэки — оптимизации. <code>Idempotency-Key</code> делает сабмит повторяемым (тот же <code>jobId</code>; другое тело → <code>409</code>).</li>
 <li><b>Ошибки — RFC 9457.</b> Ветвиться по стабильному <code>type</code>-URI (<code>…/queue-full</code>, <code>…/tool-forbidden</code>, <code>…/output-invalid</code>), а не по тексту <code>detail</code>. Есть <code>is_retriable</code> и <code>retry_after_ms</code>.</li>
 <li><b>Изоляция — процесс.</b> 1 тенант = 1 процесс со своим <code>MMA_CONFIG_DIR</code> и workspace; не выставляйте рантайм в интернет, держите свой control plane (он же терминирует end-user auth).</li>

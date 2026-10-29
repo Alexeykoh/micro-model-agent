@@ -280,7 +280,8 @@ describe("payloads match the declared schemas", () => {
     expect(checkShape(s, one.json, oneSchema)).toEqual({ missing: [], extra: [] });
 
     const submit = await call(url, "POST", `/v1/sessions/${sessionId}/tasks`, {
-      json: { input: "hi", mode: "job" },
+      // job без allowlist = 0 тулов (S-04); stubAgent зовёт read_file.
+      json: { input: "hi", mode: "job", toolAllowlist: ["read_file"] },
       headers: auth(),
     });
     const acceptedSchema = successSchema(s, "post", "/v1/sessions/{sessionId}/tasks", "202")!;
