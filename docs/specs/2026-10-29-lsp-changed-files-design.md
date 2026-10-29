@@ -3,6 +3,8 @@
 _Дата: 2026-10-29. Ветка: `fix/stress-register`. Закрывает прежний долг
 `lsp-project-diagnostics`: панель умела проверять только один файл._
 
+**Статус:** реализовано (`1cf3a648`); гварды `tests/modules/lsp/changed*.test.ts`, `tests/webui-lsp-changed.test.ts` зелёные.
+
 ## Решение
 
 Вкладка LSP получает секцию «изменённые»:
