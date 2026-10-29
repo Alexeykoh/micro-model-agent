@@ -11,6 +11,7 @@ import { mapKv } from "./map.js";
 import { appendToolchain } from "./lsp-toolchain.js";
 import { MUTED_REASONS, appendLspSummary } from "./lsp-summary.js";
 import { appendLspFileSection, followFilesSelection } from "./lsp-file.js";
+import { renderLspChanged } from "./lsp-changed.js";
 
 /** i18n-ключ ярлыка класса причины (`not-applicable` → `..._not_applicable`). */
 function lspReasonKey(reason: unknown): string {
@@ -142,7 +143,7 @@ export function renderLsp(): void {
   btn.type = "button";
   btn.disabled = sb.lspProbing || sb.lspUnavailable;
   btn.addEventListener("click", () => void runLspDoctor());
-  host.appendChild(btn); appendLspFileSection(host);
+  host.appendChild(btn); appendLspFileSection(host); renderLspChanged(host);
 }
 
 /** Информационный поп-ап: глобальные тумблеры + команды ручной установки. */

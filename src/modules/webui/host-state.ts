@@ -44,6 +44,13 @@ export interface WebLsp {
   /** Текущие флаги для ответа `GET /api/lsp/doctor`. */
   getFlags?(): { enabled: boolean; offline: boolean };
   /** Структурная диагностика одного файла (панель, `POST /api/lsp/check`). */
+  checkChangedForWeb?(baseDir: string): Promise<{
+    ok: boolean;
+    error?: string;
+    files: unknown[];
+    truncated?: boolean;
+    ms?: number;
+  }>;
   checkFileForWeb?(
     relPath: string,
     baseDir: string,

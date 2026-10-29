@@ -239,6 +239,8 @@ export interface WebUiState {
   lspDiagnose?: () => Promise<LspDiagnosis>;
   /** Структурная диагностика одного файла (`POST /api/lsp/check`); null — модуль не умеет. */
   lspCheckFile?: (relPath: string) => Promise<{ ok: boolean; path: string; diagnostics: unknown[]; truncated?: boolean; ms?: number; error?: string } | null>;
+  /** Диагностика изменённых файлов (`POST /api/lsp/check-changed`). */
+  lspCheckChanged?: () => Promise<{ ok: boolean; error?: string; files: unknown[]; truncated?: boolean; ms?: number } | null>;
   /** Последний результат диагностики LSP (кэш; `GET /api/lsp/doctor`). */
   lspDoctor?: LspDiagnosis;
   /** LSP-проба идёт прямо сейчас (single-flight). */
@@ -339,6 +341,7 @@ export type WorkspaceStore = Pick<
   | "refreshIndex"
   | "lspDiagnose"
   | "lspCheckFile"
+  | "lspCheckChanged"
   | "lspDoctor"
   | "lspProbing"
   | "lspSetEnabled"

@@ -170,7 +170,7 @@ describe("SessionManager", () => {
     expect(manager.get("unknown")).toBeNull();
   });
 
-  it("should enforce max sessions limit", () => {
+  it("should enforce max sessions limit (background prune)", async () => {
     const limitedManager = new SessionManager(store, {
       model: "m1",
       contextWindow: 1000,
@@ -182,6 +182,8 @@ describe("SessionManager", () => {
     limitedManager.create("S2");
     limitedManager.appendMessage({ role: "user", content: "m2", timestamp: new Date().toISOString() });
     limitedManager.create("S3");
+    // Автоочистка фоновая (A-01): create() не блокирует на удалении.
+    await new Promise((r) => setTimeout(r, 30));
     const list = limitedManager.list();
     expect(list).toHaveLength(2);
   });

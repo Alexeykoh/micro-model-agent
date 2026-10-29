@@ -4,6 +4,27 @@ import type { WorkspaceStore, SseTransport } from "../state";
 import { broadcast } from "../state";
 import { sendJson } from "../util";
 
+/**
+ * `POST /api/lsp/check-changed` — диагностика изменённых файлов рабочего дерева.
+ * Ответ всегда 200 с `ok:false` для «нет git/нет изменений»: панель показывает
+ * причину, а не ломается.
+ */
+export async function handleLspCheckChangedPost(
+  res: ServerResponse,
+  s: WorkspaceStore & SseTransport,
+): Promise<void> {
+  if (!s.lspCheckChanged) {
+    sendJson(res, 503, { ok: false, error: "unavailable" });
+    return;
+  }
+  const result = await s.lspCheckChanged();
+  if (!result) {
+    sendJson(res, 503, { ok: false, error: "unavailable" });
+    return;
+  }
+  sendJson(res, 200, result);
+}
+
 /** `GET /api/lsp/doctor` — последний результат диагностики + флаг активной пробы. */
 export function handleLspDoctorGet(res: ServerResponse, s: WorkspaceStore & SseTransport): void {
   if (!s.lspDiagnose) {

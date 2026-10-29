@@ -39,7 +39,6 @@ import {
 } from "./state";
 import { pushState } from "./session/session-status";
 import { emitSessions } from "./session/sessions-api";
-
 // Чистые снапшот-хелперы живут в `./host-state`; реэкспорт, чтобы существующие
 // импортёры (`webui-usage`, `webui-plan` тесты) не чинить.
 export {
@@ -187,6 +186,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     const base = deps.baseDir ?? process.cwd();
     state.lspDiagnose = () => lsp.diagnose(base);
     state.lspCheckFile = (rel) => lsp.checkFileForWeb?.(rel, base) ?? Promise.resolve(null);
+    state.lspCheckChanged = () => lsp.checkChangedForWeb?.(base) ?? Promise.resolve(null);
     state.lspSetEnabled = (v) => lsp.setEnabled?.(v);
     state.lspSetOffline = (v) => lsp.setOffline?.(v);
     state.lspFlags = () => lsp.getFlags?.() ?? { enabled: true, offline: false };

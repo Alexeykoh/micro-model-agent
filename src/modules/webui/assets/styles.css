@@ -1193,6 +1193,15 @@ body.light .sel > button { border: 1px solid var(--border); }
 /* LSP: second section - diagnostics of one file. A real divider keeps the two
    questions apart: "are servers alive" vs "what is wrong in this file". */
 .lsp-file { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.lsp-changed { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.lsp-changed-file {
+  display: flex; align-items: baseline; gap: 6px; width: calc(100% + 10px);
+  margin: 4px -5px 1px; padding: 2px 5px; border: 0; border-radius: 5px;
+  background: transparent; font: inherit; text-align: left; cursor: pointer;
+}
+.lsp-changed-file:hover, .lsp-changed-file:focus-visible { background: var(--hover-bg); }
+.lsp-changed-file .lsp-file-name { color: var(--fg); }
+.lsp-changed-file .lsp-diag-pos { margin-left: auto; }
 .lsp-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .lsp-sec-title {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;

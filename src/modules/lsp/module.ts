@@ -16,7 +16,8 @@ import type { LspConfig, LspServerConfig } from "./types";
 import { isErrorDiagnostic, isWarningDiagnostic } from "./types";
 import { collectCheckFiles } from "./check-tool";
 import { formatOneFileDiagnostics, renderCheckReport, type CheckAccumulator } from "./check-report";
-import { runWebCheck } from "./web-check";
+import { runWebCheck, type WebCheckDeps } from "./web-check";
+import { runChangedChecks } from "./changed-check";
 import { runCheckFiles } from "./check-run";
 import { diagnoseLspServers, type LspDiagnoseDeps } from "./diagnose";
 import { errMsg } from "../../utils";
@@ -52,34 +53,26 @@ export class LspModule implements AgentModule {
     this.client.setLogger(this.logger);
   }
 
-  /** Обновить логгер (напр. после смены сессии). */
   setLogger(logger: LspClientLogger | null): void {
     this.logger = logger;
     this.client.setLogger(logger);
   }
 
-  /** Глобальный тумблер LSP (живьём; плагин читает `this.config.enabled`). */
   setEnabled(enabled: boolean): void {
     this.config.enabled = enabled;
     this.client.setOffline(this.config.offline);
   }
 
-  /** Офлайн-режим живьём: не использовать npx (env `MMA_LSP_OFFLINE` сильнее). */
   setOffline(offline: boolean): void {
     this.config.offline = offline;
     this.client.setOffline(offline);
   }
 
-  /** Текущие глобальные флаги для UI (`GET /api/lsp/doctor`, вкладка LSP). */
   getFlags(): { enabled: boolean; offline: boolean } {
     return { enabled: this.config.enabled !== false, offline: this.config.offline === true };
   }
 
-  /**
-   * Поиск символов по имени через LSP `workspace/symbol` (для карты проекта).
-   * Best-effort: без сервера для языка / при отключённом LSP / ошибке — пустой
-   * список, чтобы вызывающий (IndexerModule) откатился на собственный индекс.
-   */
+  /** Поиск символов (`workspace/symbol`); без сервера — пустой список. */
   async workspaceSymbol(
     query: string,
     baseDir: string,
@@ -159,8 +152,6 @@ export class LspModule implements AgentModule {
       name: "lsp-check",
       priority: 15,
       onSessionEnd: () => {
-        // Мёртвые серверы в конце сессии — утечка процесса (npx → node →
-        // tsserver) на весь срок жизни хоста.
         void this.client.close();
       },
       onAfterTool: (_ctx, call, result) => this.checkAfterWrite(_ctx, call, result),
@@ -347,7 +338,16 @@ export class LspModule implements AgentModule {
 
   /** Веб-панель: структурная диагностика одного файла (jail + данные, не текст). */
   checkFileForWeb(relPath: string, baseDir: string) {
-    return runWebCheck(relPath, {
+    return runWebCheck(relPath, this.webDeps(baseDir));
+  }
+
+  /** Веб-панель: изменённые файлы рабочего дерева (bounded очередь). */
+  checkChangedForWeb(baseDir: string) {
+    return runChangedChecks(this.webDeps(baseDir));
+  }
+
+  private webDeps(baseDir: string): WebCheckDeps {
+    return {
       baseDir,
       config: this.config,
       client: this.client,
@@ -355,6 +355,6 @@ export class LspModule implements AgentModule {
       logger: this.logger,
       failureNote: (key, serverConfig, message, file) =>
         this.failureNote(key, serverConfig, message, file),
-    });
+    };
   }
 }

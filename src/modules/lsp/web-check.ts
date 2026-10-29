@@ -71,7 +71,11 @@ function toWebDiagnostic(diag: LspDiagnostic): WebDiagnostic {
 }
 
 /** Проверить один файл; ошибки — данными, не исключениями. */
-export async function runWebCheck(relPath: string, deps: WebCheckDeps): Promise<WebCheckResult> {
+export async function runWebCheck(
+  relPath: string,
+  deps: WebCheckDeps,
+  timeoutMs = WEB_CHECK_TIMEOUT_MS,
+): Promise<WebCheckResult> {
   const started = Date.now();
   const raw = String(relPath || "").trim();
   const path = raw.replace(/\\/g, "/");
@@ -92,7 +96,7 @@ export async function runWebCheck(relPath: string, deps: WebCheckDeps): Promise<
     health: deps.health,
     logger: deps.logger,
     failureNote: deps.failureNote,
-    timeoutMs: WEB_CHECK_TIMEOUT_MS,
+    timeoutMs,
   });
 
   const all = [...acc.errors, ...acc.warnings].map((e) => toWebDiagnostic(e.diag));

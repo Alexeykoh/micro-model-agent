@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Панель LSP проверяет изменённые файлы.** Секция «изменённые»: источник —
+  `git status` рабочего дерева, до 20 файлов, последовательная очередь на тёплом
+  соединении, пер-файловый бюджет 6 с и общий 20 с. Результат сгруппирован по
+  файлам, клик открывает строку во вкладке «Файлы»; нет git/изменений — честная
+  причина. API: `POST /api/lsp/check-changed`. Долг
+  `lsp-project-diagnostics` оплачен. Спека:
+  `docs/specs/2026-10-29-lsp-changed-files-design.md`. Гварды:
+  `tests/modules/lsp/changed.test.ts`, `changed-check.test.ts`,
+  `tests/webui-lsp-changed.test.ts`.
 - **Панель LSP проверяет конкретный файл.** Новая секция «файл»: путь берётся из
   вкладки «Файлы» или вводится вручную, результат — строки `строка:колонка` с
   уровнем и текстом, «ошибок нет» либо причина отказа. API:
