@@ -420,6 +420,7 @@
   "lsp.hint_spawn": "Hint: the server command failed to start — check the command and PATH.",
   "lsp.hint_timeout": "Hint: the server did not initialize in time — it may be slow; raise lsp.servers.<lang>.timeout.",
   "lsp.hint_node_too_old": "Hint: the server crashes on startup because of the Node version (SyntaxError/ERR_REQUIRE_ESM before initialize): current typescript-language-server needs Node 18+ from 4.x, 20+ from 5.x, 22.22+ from 6.x. Upgrade Node or install a compatible build (command above).",
+  "lsp.hint_old_typescript": "Project TypeScript is {version}: tsserver 4.x crashes after initialize on modern Node, so doctor can report ok while a file check says \"LSP server exited\". Upgrade: npm i -D typescript@5 (or pin tsserver via initializationOptions.tsserver.path).",
   "cli.description": "Micro Models Agent — AI coding agent for small models",
   "cli.init": "Run the provider setup wizard (deprecated alias of mma setup).",
   "cli.init_deprecated": "mma init is deprecated — use mma setup",

@@ -207,6 +207,11 @@ export class LspConnection {
       workspaceFolders: [{ uri: rootUri, name: "workspace" }],
       clientInfo: { name: "micro-models-agent", version: "lsp-connection/1" },
       capabilities: buildClientCapabilities(),
+      // Серверные опции (напр. `tsserver.path`): без них сервер выбирает
+      // старый TypeScript из проекта и падает после initialize.
+      ...(this.config.initializationOptions
+        ? { initializationOptions: this.config.initializationOptions }
+        : {}),
     };
   }
 

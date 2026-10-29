@@ -51,6 +51,13 @@ export interface LspServerConfig {
   enabled?: boolean;
   /** Маркеры корня проекта для языка (напр. ["package.json","tsconfig.json"]). */
   workspaceMarkers?: string[];
+  /**
+   * Произвольные `initializationOptions` сервера (LSP `initialize`).
+   * Нужны там, где сервер выбирает инструментарий сам: например,
+   * `initializationOptions.tsserver.path` для `typescript-language-server`
+   * заставляет его взять современный TypeScript вместо старого из проекта.
+   */
+  initializationOptions?: Record<string, unknown>;
 }
 
 /** Конфиг LSP: глобальный флаг, серверы, таймаут, офлайн-режим. */

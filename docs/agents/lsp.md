@@ -121,8 +121,40 @@ setTimeout(() => {
 7. **Пауза восстановления.** После 3 падений сервер ждёт 2→4→…→60 с;
    `/lsp status` показывает остаток, `doctor` — причину падения.
 
-## Если сервер работает, а агент «не видит»
+## Сервер проходит doctor, но умирает на проверке файла
 
+`doctor` делает только `spawn + initialize + shutdown`; проверка файла ещё
+открывает документ (`didOpen`). Сервер может умереть именно там:
+
+```
+LSP check failed for …/src/test.ts: LSP server exited
+… [DEP0190] DeprecationWarning …
+```
+
+Смотреть надо **хвост** stderr (в 0.18.2 показываются начало и конец). Частые
+причины и лечение:
+
+| Причина | Признак | Лечение |
+|---|---|---|
+| Старый TypeScript в проекте | в панели `Тулчейн typescript 4.1.2`; doctor пишет предупреждение | `npm i -D typescript@5` в проекте |
+| Нужен конкретный tsserver | проект нельзя трогать | `lsp.servers.typescript.initializationOptions.tsserver.path` в `~/.mma/config/lsp.json` |
+| Сервер упал на синтаксисе файла | повторяется только на одном файле | проверить файл сборкой/`tsc` |
+
+Пример `initializationOptions`:
+
+```json
+{
+  "lsp": {
+    "servers": {
+      "typescript": {
+        "initializationOptions": { "tsserver": { "path": "C:/tools/ts5/lib/tsserver.js" } }
+      }
+    }
+  }
+}
+```
+
+## Если сервер работает, а агент «не видит»
 Признаки: `doctor` — ok на нужном корне, `lsp-raw.mjs` — даёт диагностику, а
 `/lsp check` пишет «ещё запускается»/«failed».
 
