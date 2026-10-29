@@ -62,6 +62,7 @@ GET /api/search?q=<подстрока>
   `.gitignore`/`.mmaignore` (`loadIgnoreMatcher`), `apiHiddenGlobs` (D2/INV-D6).
 - Защищённые пути (`matchProtectedPath`: `.git/`, `.env*`, ключи) не читаются.
 - Бинарные файлы (NUL-байт) пропускаются (`decodeText` из `/api/file`).
+- Сгенерированные артефакты (`*.tsbuildinfo`) пропускаются: только шумят.
 - Результат — только строки из файлов, ни один файл не отдаётся целиком.
 
 ## Инварианты

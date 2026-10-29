@@ -30,9 +30,10 @@ export function appendCommandLog(
   line: string,
   success: boolean,
   result: string | string[],
+  sessionId?: string,
 ): void {
   const manager = state.sessionManager;
-  if (!manager?.appendLog) return;
+  if (!manager) return;
   const text = Array.isArray(result) ? result.join("\n") : result;
   const entry: SessionLogEntry = {
     ts: new Date().toISOString(),
@@ -45,7 +46,11 @@ export function appendCommandLog(
     message: redact(text),
   };
   try {
-    manager.appendLog(entry);
+    // Client-only commands carry the tab's own session id. When that session
+    // is not active (background tab, another turn running), write there rather
+    // than into the active session's journal.
+    if (sessionId && manager.get(sessionId)) manager.appendLog?.(entry, sessionId);
+    else manager.appendLog?.(entry);
   } catch {
     /* fail-open: journal must not fail the command */
   }

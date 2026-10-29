@@ -79,7 +79,7 @@ export function handleCommandPost(
           sendJson(res, 400, { error: "unknown_action" });
           return;
         }
-        appendCommandLog(s, clientLine, true, "client-side");
+        appendCommandLog(s, clientLine, true, "client-side", sessionId ?? undefined);
         sendJson(res, 202, { ok: true });
         return;
       }

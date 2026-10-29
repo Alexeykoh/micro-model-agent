@@ -82,6 +82,7 @@ describe("webui content search", () => {
     writeFileSync(join(ws, ".env"), "needle=secret");
     writeFileSync(join(ws, "secret.key"), "needle in key");
     writeFileSync(join(ws, "blob.bin"), Buffer.from("needle\u0000binary", "utf8"));
+    writeFileSync(join(ws, "tsconfig.tsbuildinfo"), '{"files":["needle"]}');
     writeFileSync(join(ws, "keep.txt"), "a needle here");
     await withSearchApi(ws, async (base) => {
       const body = (await (await doFetch(searchUrl(base, "needle"))).json()) as SearchBody;

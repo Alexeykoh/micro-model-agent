@@ -30,6 +30,8 @@ export const MAX_SEARCH_FILE_BYTES = 512 * 1024;
 export const MAX_SEARCH_MS = 2500;
 /** Предел текста одной совпавшей строки в ответе. */
 export const MAX_MATCH_TEXT = 200;
+/** Сгенерированные артефакты: в поиске по содержимому только шумят. */
+const GENERATED_FILE_SUFFIXES = [".tsbuildinfo"];
 
 /** Одно совпадение: путь, 1-based строка и её обрезанный текст. */
 export interface SearchHit {
@@ -148,6 +150,7 @@ async function walkDir(
     if (entry.isSymbolicLink() || !(entry.isDirectory() || entry.isFile())) continue;
     const isDir = entry.isDirectory();
     if (isDir ? isIgnoredDirName(entry.name) : isIgnoredFileName(entry.name)) continue;
+    if (!isDir && GENERATED_FILE_SUFFIXES.some((s) => entry.name.endsWith(s))) continue;
     if (matcher.ignores(relChild, isDir)) continue;
     if (matchAnyGlob(relChild, hiddenGlobs)) continue;
     if (matchProtectedPath(base, fullPath)) continue;

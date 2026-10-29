@@ -248,10 +248,12 @@ export class SessionManager {
     this.store.appendMessage(this.activeId, msg);
   }
 
-  /** Добавить запись в лог активной сессии (без активной — молча пропуск). */
-  appendLog(entry: SessionLogEntry): void {
-    if (!this.activeId) return;
-    this.store.appendSessionLog(this.activeId, entry);
+  /**
+   * Запись в лог активной или явно указанной сессии (B-35: фоновая вкладка).
+   * Без id и без активной — молча пропуск.
+   */
+  appendLog(entry: SessionLogEntry, id: string | null = this.activeId): void {
+    if (id) this.store.appendSessionLog(id, entry);
   }
 
   /**

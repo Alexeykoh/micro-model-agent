@@ -102,6 +102,42 @@ describe("webui: slash commands are journaled (B-35)", () => {
     expect(command?.message).toBe("client-side");
   });
 
+  it("writes a background tab's command to its own session, not the active one", async () => {
+    const m = manager();
+    const active = m.create("active");
+    const background = m.create("background");
+    m.setActive(active.id);
+    const s = createWebUiState();
+    s.sessionManager = m;
+    // A turn is running: the handler cannot switch the active session.
+    s.busy = true;
+    s.bridge = {
+      isBusy: () => true,
+      submit: () => Promise.resolve(),
+      interrupt: () => {},
+      getState: () => ({ busy: true }),
+      executeCommand: () => Promise.resolve(),
+    } as never;
+
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/command", {
+        sessionId: background.id,
+        action: "clear",
+      });
+      expect(res.status).toBe(202);
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const own = (m.loadSessionLog(background.id) as SessionLogEntry[]).find(
+      (e) => e.type === "command",
+    );
+    const foreign = (m.loadSessionLog(active.id) as SessionLogEntry[]).find(
+      (e) => e.type === "command",
+    );
+    expect(own?.content).toBe("/clear");
+    expect(foreign).toBeUndefined();
+  });
+
   it("an unknown client action is rejected, not guessed", async () => {
     const s = createWebUiState();
     s.sessionManager = manager();

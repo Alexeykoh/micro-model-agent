@@ -40,7 +40,8 @@ client-only form is added:
 ```
 
 The server **does not execute** the action. It appends a `command` record
-(`/clear` / `/new`, success, `client-side`) and answers `202 {ok:true}`.
+(`/clear` / `/new`, success, `client-side`) to the session named by `sessionId`
+(even when another session is active or busy), then answers `202 {ok:true}`.
 Unknown actions answer `400 {error:"unknown_action"}`. The web composer uses this
 after performing the local clear/new operation.
 
