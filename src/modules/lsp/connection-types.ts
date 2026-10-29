@@ -74,3 +74,12 @@ export interface LspConnectionDeps {
 
 /** Депы пула: всё, что нужно соединениям, кроме часов (их ведёт пул). */
 export type LspPoolDeps = Omit<LspConnectionDeps, "now">;
+
+/**
+ * Ошибка запуска/пробы сервера: к ней прикладывается хвост stderr упавшего
+ * процесса. Без него `SyntaxError` от несовместимого Node неотличим от
+ * «сервер не ответил» — и в doctor, и в `[LSP check failed]`.
+ */
+export interface LspProbeError extends Error {
+  stderrTail?: string;
+}

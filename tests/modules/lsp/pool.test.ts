@@ -111,4 +111,28 @@ describe("LspConnectionPool", () => {
     expect(pool.keys()).toHaveLength(0);
     await expect(pool.acquire("typescript", SERVER, ROOT)).rejects.toThrow(/disposed/i);
   });
+
+  it("attaches the crashed server's stderr to the acquire error", async () => {    // Сервер умирает до initialize: клиент видит только «connection closed»,
+    // причина — в его stderr. Пул обязан пробросить хвост, иначе
+    // `[LSP check failed]` бесполезен и для модели, и для человека.
+    const server = new FakeLspServer({ ignore: ["initialize"] });
+    const spawn = spawnOf(server);
+    const pool = new LspConnectionPool({
+      spawn: async (plan, cwd) => {
+        const proc = await spawn(plan, cwd);
+        server.stderr.write("SyntaxError: Unexpected token '?'\n");
+        return proc;
+      },
+      resolveLaunch: (config) => ({ command: config.command, args: config.args ?? [] }),
+      timeout: 40,
+    });
+
+    const error = (await pool.acquire("typescript", SERVER, ROOT).catch((e: unknown) => e)) as {
+      stderrTail?: string;
+    };
+
+    expect(error.stderrTail).toContain("SyntaxError");
+    expect(pool.keys()).toHaveLength(0);
+    await pool.dispose();
+  });
 });

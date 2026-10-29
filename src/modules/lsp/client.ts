@@ -10,6 +10,7 @@ import { readFileSync } from "fs";
 import { resolve as resolvePath } from "path";
 import type { LspDiagnostic, LspServerConfig } from "./types";
 import { LspConnection, type ServerProcessFactory, type LaunchPlan } from "./connection";
+import type { LspProbeError } from "./connection-types";
 import { LspConnectionPool } from "./pool";
 import { languageIdForPath } from "./language";
 import { pathToUri } from "./uri";
@@ -30,12 +31,10 @@ export interface CheckResult {
 }
 
 /**
- * Ошибка пробы: к ней прикладывается хвост stderr упавшего сервера. Без него
- * `SyntaxError` от несовместимого Node неотличим от «сервер не ответил».
+ * Ошибка пробы: к ней прикладывается хвост stderr упавшего сервера. Тип живёт
+ * в `connection-types` (им пользуются и проба, и пул).
  */
-export interface LspProbeError extends Error {
-  stderrTail?: string;
-}
+export type { LspProbeError } from "./connection-types";
 
 /** Зависимости клиента. Единственный способ инъекции (пул, спавн, логгер). */
 export interface LspClientDeps {
