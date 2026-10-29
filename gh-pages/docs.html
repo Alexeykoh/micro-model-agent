@@ -131,6 +131,49 @@
     <h3>macOS / Linux</h3>
 <pre><code>curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash</code></pre>
     <p>Откройте новый терминал и запустите <code>mma setup</code>, затем <code>mma</code>.</p>
+    <h3 id="manual-install">Ручная установка (без скрипта)</h3>
+    <p>Нужна, когда однострочник блокируется: корпоративный прокси с подменой сертификата, нет доступа к shell или файлы нужны в своём каталоге. Архивы — те же <code>mma-&lt;os&gt;-&lt;arch&gt;.tar.gz</code> с GitHub Releases, и внутри уже лежит Bun runtime: больше ничего ставить не нужно.</p>
+    <p><b>1. Скачайте архив</b> со страницы <a href="https://github.com/Alexeykoh/micro-model-agent/releases/latest">Releases</a>:</p>
+    <ul>
+      <li>Windows x64 — <code>mma-win-x64.tar.gz</code></li>
+      <li>macOS Apple Silicon — <code>mma-mac-arm64.tar.gz</code></li>
+      <li>macOS Intel — <code>mma-mac-x64.tar.gz</code></li>
+      <li>Linux x64 — <code>mma-linux-x64.tar.gz</code></li>
+      <li>Linux ARM64 — <code>mma-linux-arm64.tar.gz</code></li>
+    </ul>
+    <p><b>2. Проверьте контрольную сумму</b> (рекомендуется). В том же релизе <code>latest.json</code> содержит <code>sha256</code> и <code>size</code> для каждого архива.</p>
+<pre><code># macOS / Linux
+shasum -a 256 mma-mac-arm64.tar.gz     # или: sha256sum
+
+# Windows
+Get-FileHash -Algorithm SHA256 "$env:USERPROFILE\Downloads\mma-win-x64.tar.gz"</code></pre>
+    <p><b>3. Распакуйте и запустите.</b> Права администратора не нужны.</p>
+    <p><b>Windows (PowerShell 5.1+, <code>tar</code> есть в Windows 10+):</b></p>
+<pre><code>$dst = "$env:USERPROFILE\mma"
+New-Item -ItemType Directory -Force $dst | Out-Null
+tar -xzf "$env:USERPROFILE\Downloads\mma-win-x64.tar.gz" -C $dst
+&amp; "$dst\runtime\bun.exe" "$dst\app\main.js" --version</code></pre>
+    <p><b>macOS (arm64 или x64):</b></p>
+<pre><code>mkdir -p ~/mma
+tar -xzf ~/Downloads/mma-mac-arm64.tar.gz -C ~/mma
+~/mma/runtime/bun ~/mma/app/main.js --version</code></pre>
+    <p><b>Linux (x64 или arm64):</b></p>
+<pre><code>mkdir -p ~/mma
+tar -xzf ~/Downloads/mma-linux-x64.tar.gz -C ~/mma
+chmod +x ~/mma/runtime/bun
+~/mma/runtime/bun ~/mma/app/main.js --version</code></pre>
+    <p><b>4. Положите <code>mma</code> в PATH</b> (необязательно):</p>
+<pre><code># Windows: создать обёртку и добавить каталог в пользовательский PATH
+$bin = "$env:USERPROFILE\.local\bin"
+New-Item -ItemType Directory -Force $bin | Out-Null
+Set-Content "$bin\mma.cmd" -Encoding ASCII -Value "@echo off`r`n`"$env:USERPROFILE\mma\runtime\bun.exe`" `"$env:USERPROFILE\mma\app\main.js`" %*"
+
+# macOS / Linux
+mkdir -p ~/.local/bin
+printf '#!/bin/sh\nexec "%s/mma/runtime/bun" "%s/mma/app/main.js" "$@"\n' "$HOME" "$HOME" > ~/.local/bin/mma
+chmod +x ~/.local/bin/mma</code></pre>
+    <div class="callout"><b>Важно:</b> при ручной установке встроенный апдейтер не управляет файлами — он переключает версии только в <code>~/.mma</code>. Обновление = скачать новый архив и заменить каталог. Конфиг, сессии и память по-прежнему живут в <code>~/.mma</code> (меняется через <code>MMA_CONFIG_DIR</code>).</div>
+    <p>macOS может заблокировать неподписанный бинарник: разрешите в <i>Системные настройки → Конфиденциальность и безопасность</i> или выполните <code>xattr -dr com.apple.quarantine ~/mma/runtime/bun</code>. Windows SmartScreen может предупредить при первом запуске — релизы пока без подписи кода.</p>
     <h3>Что делает установщик</h3>
     <ol>
       <li>Определяет ОС/архитектуру: <code>win-x64</code>, <code>mac-arm64</code>, <code>mac-x64</code>, <code>linux-x64</code>, <code>linux-arm64</code>.</li>

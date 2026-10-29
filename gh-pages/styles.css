@@ -485,6 +485,15 @@ code { font-family: var(--mono); }
 .install-alt > span { color: var(--dim-c); }
 .install-alt a { color: var(--dim-a); border-bottom: 1px solid transparent; }
 .install-alt a:hover { color: var(--accent); border-bottom-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+/* Manual install (no script): collapsed by default, commands stay copyable. */
+.manual { margin-top: 12px; max-width: 72ch; }
+.manual summary { cursor: pointer; font-size: 13px; color: var(--dim-a); }
+.manual summary:hover { color: var(--accent); }
+.manual[open] summary { margin-bottom: 8px; }
+.manual .manual-os { margin: 12px 0 4px; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim-c); }
+.manual pre { margin: 0; padding: 10px 12px; border: 1px solid var(--border-2); border-radius: 8px; overflow-x: auto; background: var(--panel-2, rgba(0,0,0,.25)); }
+.manual pre code { font-size: 12.5px; line-height: 1.5; }
+.manual .note { margin-top: 10px; }
 .hero-src { margin-top: 18px; font-size: 13px; }
 .link { color: var(--accent); }
 .link:hover { text-decoration: underline; color: var(--accent); }
