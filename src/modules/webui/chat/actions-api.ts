@@ -7,6 +7,7 @@ import { cancelPendingQuestions } from "../session/prompt-io";
 import type { SessionStore, RuntimeState, WorkspaceStore, HttpTransport, SseTransport } from "../state";
 import { broadcast } from "../state";
 import { readBody, requestError, scrubError, sendJson } from "../util";
+import { appendCommandLog, CLIENT_COMMAND_LINES } from "./command-log";
 
 /** Достаёт `sessionId` вкладки-отправителя из JSON-тела (нет — null). */
 function extractSessionField(raw: string): string | null {
@@ -68,6 +69,20 @@ export function handleCommandPost(
       // no-op, а не 400.
       const line = typeof rec.line === "string" ? rec.line : "";
       const sessionId = maybeAdoptSession(s, extractSessionField(raw));
+      // Client-only commands (`/clear`, `/new`) execute in the browser; this
+      // dedicated action exists so the session journal still records them (B-35).
+      // The server does not clear anything here.
+      const action = typeof rec.action === "string" ? rec.action : "";
+      if (action) {
+        const clientLine = CLIENT_COMMAND_LINES[action];
+        if (!clientLine) {
+          sendJson(res, 400, { error: "unknown_action" });
+          return;
+        }
+        appendCommandLog(s, clientLine, true, "client-side");
+        sendJson(res, 202, { ok: true });
+        return;
+      }
       // Ошибка хоста не должна стать 5xx: POST лишь подтверждает приём,
       // вывод стримится по SSE событиями `command`. Но ошибка не должна и
       // пропасть — она уходит в ленту владельца-сессии (аудит §6.17).

@@ -1749,6 +1749,7 @@
   "web.settings.mcp_add": "добавить MCP-сервер",
   "web.settings.mcp_edit_title": "править MCP-сервер",
   "web.settings.mcp_required": "нужны имя и command (stdio) или URL (sse/http)",
+  "web.settings.mcp_transport_required": "выберите транспорт: stdio, sse или http",
   "web.settings.mcp_invalid": "неверное значение: timeout 1000–300000 мс, args/env/headers — JSON",
   "web.settings.lsp_servers": "LSP-серверы",
   "web.settings.no_lsp": "LSP-серверы не настроены",

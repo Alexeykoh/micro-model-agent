@@ -12,7 +12,8 @@ import { setIndicator } from "../dialog.js";
 import { controlFor, PANEL_SECTIONS } from "./controls.js";
 import { postConfig } from "./write.js";
 import { openSubDialog, closeSubDialog } from "./subdialog.js";
-import { mcpLiteralField, providerInput, providerSelect, providerCheck } from "./form.js";
+import { mcpLiteralField, providerInput, providerCheck } from "./form.js";
+import { mcpForm } from "./mcp-form.js";
 
 // Localized label for a registry key: `config.key.<canonical>`, falling back
 // to the raw key when no translation exists (so a new key is never blank).
@@ -624,47 +625,9 @@ function renderPluginsPanel(): void {
   renderSections("plugins", PANEL_SECTIONS.plugins || []);
 }
 
-// Inline MCP add/edit form. Secrets are never echoed by the API, so env/headers
-// start blank — leaving them blank on edit keeps the stored values (patch
-// semantics: absent keys are not touched).
-function mcpForm(): HTMLElement {
-  const mode = (settings.mcpForm && settings.mcpForm.mode) || "add";
-  const editing: Dict = (settings.mcpForm && settings.mcpForm.entry) || {};
-  const box = el("div", "pform");
-  const grid = el("div", "pform-grid");
-  const fName = providerInput(editing.name || "", "text", "my-server");
-  const fTransport = providerSelect(["stdio", "sse", "http"], editing.transport || "stdio");
-  const fCommand = providerInput(editing.command || "", "text", "npx");
-  const fUrl = providerInput(editing.url || "", "text", "https://…");
-  grid.appendChild(mcpLiteralField("name", fName));
-  grid.appendChild(mcpLiteralField("transport", fTransport));
-  grid.appendChild(mcpLiteralField("command", fCommand));
-  grid.appendChild(mcpLiteralField("url", fUrl));
-  box.appendChild(grid);
-  const adv = el("details", "pform-adv");
-  adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
-  const fArgs = providerInput(editing.args ? JSON.stringify(editing.args) : "", "text", '["--stdio"]');
-  const fTimeout = providerInput(editing.timeout != null ? String(editing.timeout) : "", "number", "30000");
-  const fEnabled = providerCheck(editing.enabled !== false);
-  adv.appendChild(mcpLiteralField("args (JSON)", fArgs));
-  adv.appendChild(mcpLiteralField("timeout (ms)", fTimeout));
-  const envKeys = Array.isArray(editing.envKeys) ? editing.envKeys : [];
-  const headerKeys = Array.isArray(editing.headerKeys) ? editing.headerKeys : [];
-  const fEnv = el("textarea");
-  fEnv.placeholder = envKeys.length ? "stored: " + envKeys.join(", ") + " — blank keeps" : '{"TOKEN": "…"}';
-  const fHeaders = el("textarea");
-  fHeaders.placeholder = headerKeys.length ? "stored: " + headerKeys.join(", ") + " — blank keeps" : '{"Authorization": "…"}';
-  adv.appendChild(mcpLiteralField("env (JSON)", fEnv));
-  adv.appendChild(mcpLiteralField("headers (JSON)", fHeaders));
-  adv.appendChild(mcpLiteralField("enabled", fEnabled));
-  box.appendChild(adv);
-  const f: Dict = { name: fName, transport: fTransport, command: fCommand, url: fUrl, args: fArgs, timeout: fTimeout, env: fEnv, headers: fHeaders, enabled: fEnabled };
-  const actions = el("div", "pform-actions");
-  actions.appendChild(link(t("web.settings.save"), "", () => void submitMcpForm(f, mode, editing)));
-  actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeSubDialog()));
-  box.appendChild(actions);
-  return box;
-}
+// Inline MCP add/edit form lives in `./mcp-form.js` (validation/error state is
+// part of the form, not the panel). Secrets are never echoed by the API, so
+// env/headers start blank — leaving them blank on edit keeps stored values.
 
 /** Open the MCP add/edit nested dialog. */
 function openMcpForm(mode: string, entry: Dict | null): void {
@@ -678,74 +641,6 @@ function openMcpForm(mode: string, entry: Dict | null): void {
       void loadPlugins();
     },
   );
-}
-
-function parseJsonMap(raw: string): { present: boolean; value: Dict | null } {
-  const text = raw.trim();
-  if (!text) return { present: false, value: null };
-  let parsed: unknown = null;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return { present: true, value: null };
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { present: true, value: null };
-  if (!Object.values(parsed).every((v) => typeof v === "string")) return { present: true, value: null };
-  return { present: true, value: parsed as Dict };
-}
-
-async function submitMcpForm(f: Dict, mode: string, editing: Dict): Promise<void> {
-  const name = f.name.value.trim();
-  const transport = f.transport.value || "stdio";
-  const command = f.command.value.trim();
-  const url = f.url.value.trim();
-  if (!name || (transport === "stdio" ? !command : !url)) {
-    setIndicator(t("web.settings.mcp_required"), true);
-    return;
-  }
-  const body: Dict = { name, transport };
-  if (command) body.command = command;
-  if (url) body.url = url;
-  const argsRaw = f.args.value.trim();
-  if (argsRaw) {
-    let args: unknown = null;
-    try {
-      args = JSON.parse(argsRaw);
-    } catch {
-      args = null;
-    }
-    if (!Array.isArray(args) || !args.every((x) => typeof x === "string")) {
-      setIndicator(t("web.settings.mcp_invalid"), true);
-      return;
-    }
-    body.args = args;
-  }
-  for (const key of ["env", "headers"]) {
-    const parsed = parseJsonMap(f[key].value);
-    if (parsed.present && !parsed.value) {
-      setIndicator(t("web.settings.mcp_invalid"), true);
-      return;
-    }
-    if (parsed.present) body[key] = parsed.value;
-  }
-  const timeoutRaw = f.timeout.value.trim();
-  if (timeoutRaw) {
-    const n = Number(timeoutRaw);
-    if (!Number.isInteger(n) || n < 1000 || n > 300000) {
-      setIndicator(t("web.settings.mcp_invalid"), true);
-      return;
-    }
-    body.timeout = n;
-  }
-  body.enabled = f.enabled.checked;
-  const target = mode === "edit" ? "/api/mcp/" + encodeURIComponent(editing.id || editing.name) : "/api/mcp";
-  const r = await api<Dict>(target, { method: mode === "edit" ? "PUT" : "POST", body });
-  if (r.ok && r.data && r.data.ok) {
-    setIndicator(t("web.settings.mcp_saved"), false);
-    closeSubDialog();
-  } else {
-    setIndicator((r.data && r.data.error) || t("web.settings.save_failed"), true);
-  }
 }
 
 function renderLspSection(list: HTMLElement): void {

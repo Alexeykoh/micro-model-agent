@@ -41,6 +41,7 @@ const ALLOWED_TYPES = new Set<string>([
   "error",
   "context",
   "service_task",
+  "command",
 ]);
 
 const DEFAULT_LIMIT = 100;

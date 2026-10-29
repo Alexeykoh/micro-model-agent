@@ -17,6 +17,7 @@ import { errMsg } from "../../../utils/error";
 import { memoryLines } from "./memory-commands";
 import { makeSettingsHandlers } from "../settings/commands-settings";
 import { activeMeta, applyConfigWrite, withConfig, type Handler, type Out } from "./commands-shared";
+import { appendCommandLog } from "./command-log";
 import { broadcast, type SessionStore, type ConfigStore, type WorkspaceStore, type SseTransport, type RuntimeState } from "../state";
 
 /**
@@ -89,16 +90,28 @@ export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise
     const parts = trimmed.slice(1).trim().split(/\s+/);
     const name = (parts.shift() ?? "").toLowerCase();
     if (!name) return;
+    // Capture what the user saw: one `command` record carries the line, the
+    // outcome and a short result (B-35). Error lines use the `↳` convention.
+    const result: string[] = [];
+    const emit: Out = (text) => {
+      result.push(text);
+      out(text);
+    };
+    let ok = true;
     const handler = handlers[name];
     if (!handler) {
-      out(`↳ unknown command: ${name}`);
-      return;
+      ok = false;
+      emit(`↳ unknown command: ${name}`);
+    } else {
+      try {
+        await handler(parts, emit);
+      } catch (err) {
+        ok = false;
+        emit(`↳ ${errMsg(err)}`);
+      }
+      if (result.some((text) => text.trimStart().startsWith("↳"))) ok = false;
     }
-    try {
-      await handler(parts, out);
-    } catch (err) {
-      out(`↳ ${errMsg(err)}`);
-    }
+    appendCommandLog(state, trimmed, ok, result);
   };
 }
 

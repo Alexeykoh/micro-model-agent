@@ -1776,6 +1776,7 @@
   "web.settings.mcp_add": "add MCP server",
   "web.settings.mcp_edit_title": "edit MCP server",
   "web.settings.mcp_required": "name plus command (stdio) or URL (sse/http) is required",
+  "web.settings.mcp_transport_required": "choose a transport: stdio, sse or http",
   "web.settings.mcp_invalid": "invalid value: timeout 1000–300000 ms, args/env/headers as JSON",
   "web.settings.lsp_servers": "LSP servers",
   "web.settings.no_lsp": "no LSP servers configured",

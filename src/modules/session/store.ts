@@ -33,7 +33,7 @@ export interface SessionLogEntry {
     | "reasoning_control" | "context_probe" | "output"
     | "critic_check" | "critic_verdict" | "critic_escalation"
     | DiagnosticEvent | "claim_retry" | "service_task" | "egress_turn"
-    | "egress_redacted" | "subagent"
+    | "egress_redacted" | "subagent" | "command"
     | OnboardingEvent;
   /** Источник записи (INV-13); `llm_usage` пишет origin отдельно (W11). */
   source: Source;

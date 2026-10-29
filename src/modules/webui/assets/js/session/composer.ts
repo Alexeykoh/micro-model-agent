@@ -18,6 +18,7 @@ import { setSessOpen } from "../core/menus.js";
 import { closeCmdk, updateCmdk, cmdkKeydown, initCmdk } from "./cmdk.js";
 import { renderQueueStrip, enqueuePending } from "./queue.js";
 import { initSessBar } from "./sess-bar.js";
+import { logClientCommand } from "./client-command-log.js";
 
 export { renderSessBar } from "./sess-bar.js";
 
@@ -271,13 +272,16 @@ async function send(): Promise<void> {
     renderAttachments();
     clearInput();
     const name = text.slice(1).split(/\s+/)[0].toLowerCase();
-    // `/clear` and `/new` never reach the server: both are pure browser-side
-    // feed/tab operations (the server has no feed to clear).
+    // `/clear` and `/new` are browser-side feed/tab operations (the server has
+    // no feed to clear). A dedicated action still tells the server, which only
+    // journals it — no server-side clear/switch happens (B-35).
     if (name === "clear") {
+      logClientCommand("clear", sessionId);
       clearFeed(feed);
       return;
     }
     if (name === "new") {
+      logClientCommand("new", sessionId);
       deps.newChatTab();
       return;
     }

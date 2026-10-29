@@ -39,6 +39,8 @@ export interface WebSessionManager {
    */
   create?(name?: string): SessionMeta;
   loadSessionLog?(id: string, opts?: { since?: string }): SessionLogEntry[];
+  /** Append a session log record to the active session (optional for stubs). */
+  appendLog?(entry: SessionLogEntry): void;
   getHistory?(id: string): SessionMessage[];
   /** Каталог сессии (для персиста web-метрик). Опционален — у лёгких стабов нет. */
   getSessionDirectory?(id: string): string;

@@ -21,13 +21,23 @@ export function providerInput(value: unknown, type?: string, placeholder?: strin
   return input;
 }
 
-/** `<select>` with a leading "—" option; keeps unknown stored values selectable. */
-export function providerSelect(options: string[], value: string | null | undefined): HTMLSelectElement {
+/**
+ * `<select>` with an optional leading "—" option; keeps unknown stored values
+ * selectable. `allowEmpty=false` is for required choices (e.g. MCP transport):
+ * an empty option there would silently mean "the default".
+ */
+export function providerSelect(
+  options: string[],
+  value: string | null | undefined,
+  allowEmpty = true,
+): HTMLSelectElement {
   const sel = el("select");
-  const none = el("option", "", "—");
-  none.value = "";
-  sel.appendChild(none);
-  const seen = new Set([""]);
+  if (allowEmpty) {
+    const none = el("option", "", "—");
+    none.value = "";
+    sel.appendChild(none);
+  }
+  const seen = new Set(allowEmpty ? [""] : []);
   options.forEach((v) => {
     seen.add(v);
     const o = el("option", "", v);
@@ -36,14 +46,14 @@ export function providerSelect(options: string[], value: string | null | undefin
     sel.appendChild(o);
   });
   // Keep a stored-but-unknown value selectable (e.g. a legacy provider type
-  // from hand-edited config) instead of silently resetting it to "—".
+  // from hand-edited config) instead of silently resetting it.
   if (value != null && value !== "" && !seen.has(value)) {
     const o = el("option", "", value);
     o.value = value;
     o.selected = true;
     sel.appendChild(o);
   }
-  if (value == null) sel.value = "";
+  if (value == null && allowEmpty) sel.value = "";
   return sel;
 }
 
