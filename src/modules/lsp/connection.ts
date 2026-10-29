@@ -12,6 +12,7 @@ import { killTree, type KillableProcess } from "../processes/registry";
 import { findHeaderEnd, isAcceptableFrameLength, parseContentLength } from "./framing";
 import { canonicalUri, pathToUri } from "./uri";
 import { buildClientCapabilities } from "./capabilities";
+import { settleEmptyDiagnostics, waitForRecord } from "./diagnostics-wait";
 import { languageIdForPath } from "./language";
 import type { LspClientLogger } from "./client-logger";
 import { errMsg } from "../../utils";
@@ -272,7 +273,12 @@ export class LspConnection {
     }
 
     if (!doc?.open) return null;
-    return this.freshDiagnostics(uri, version) ?? this.waitForPush(uri, version, timeoutMs);
+    const diagnostics =
+      this.freshDiagnostics(uri, version) ??
+      (await waitForRecord(() => this.diagnostics.get(uri), version, timeoutMs))?.diagnostics ??
+      null;
+    if (!diagnostics || diagnostics.length > 0) return diagnostics;
+    return (await settleEmptyDiagnostics(() => this.diagnostics.get(uri), version)) ?? diagnostics;
   }
 
   /** Диагностики запрошенной версии; null — устаревших/нет (аудит §8.3). */
@@ -297,22 +303,6 @@ export class LspConnection {
     this.diagnostics.set(uri, { version, diagnostics: items });
     this.touch();
     return items;
-  }
-
-  /** Push-модель: ждём `publishDiagnostics` актуальной версии до дедлайна. */
-  private async waitForPush(
-    uri: string,
-    version: number,
-    timeoutMs: number,
-  ): Promise<LspDiagnostic[] | null> {
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-      const record = this.diagnostics.get(uri);
-      if (record && record.version === version) return record.diagnostics;
-      const left = deadline - Date.now();
-      if (left <= 0) return null;
-      await delay(Math.min(left, 25));
-    }
   }
 
   /** Актуальный список диагностик без ожидания (для быстрых путей). */

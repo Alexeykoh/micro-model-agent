@@ -50,6 +50,32 @@ describe("LspConnection handshake", () => {
 });
 
 describe("LspConnection document sync", () => {
+  it("не принимает ранний пустой пуш за «ошибок нет»", async () => {
+    // tsserver: сначала v1 n=0, через ~140 мс — v1 с ошибками. Панель не должна
+    // показать «чисто» на первом пуше (живой Catalog.tsx, 2026-10-29).
+    const server = new FakeLspServer();
+    const conn = makeConnection(server);
+    await conn.open();
+    const uri = conn.syncDocument(FILE, "const a: number = 'x';");
+    setTimeout(() => {
+      server.writeToClient({
+        jsonrpc: "2.0",
+        method: "textDocument/publishDiagnostics",
+        params: {
+          uri,
+          diagnostics: [
+            { range: { start: { line: 0, character: 0 } }, severity: 1, message: "Type" },
+          ],
+          version: 1,
+        },
+      });
+    }, 120);
+
+    const diags = await conn.diagnosticsFor(uri, 2000);
+
+    expect(diags?.map((d) => d.message)).toEqual(["Type"]);
+  });
+
   it("принимает диагностику в записи сервера (`c%3A` vs `C:`)", async () => {
     const server = new FakeLspServer();
     const conn = makeConnection(server);
