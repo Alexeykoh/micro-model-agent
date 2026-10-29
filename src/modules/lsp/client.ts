@@ -29,6 +29,14 @@ export interface CheckResult {
   inconclusive: boolean;
 }
 
+/**
+ * Ошибка пробы: к ней прикладывается хвост stderr упавшего сервера. Без него
+ * `SyntaxError` от несовместимого Node неотличим от «сервер не ответил».
+ */
+export interface LspProbeError extends Error {
+  stderrTail?: string;
+}
+
 /** Зависимости клиента. Единственный способ инъекции (пул, спавн, логгер). */
 export interface LspClientDeps {
   logger?: LspClientLogger | null;
@@ -147,6 +155,12 @@ export class LspClient {
     });
     try {
       await connection.open();
+    } catch (e) {
+      // Хвост stderr — единственный след, если сервер упал до `initialize`
+      // (несовместимый Node, сломанный пакет). Бросаем дальше с ним.
+      const failure = e as LspProbeError;
+      failure.stderrTail = connection.stderrTail;
+      throw failure;
     } finally {
       await connection.shutdown();
     }

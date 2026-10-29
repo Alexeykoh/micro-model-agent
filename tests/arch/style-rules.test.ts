@@ -90,7 +90,8 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
   "src/modules/webui/assets/js/sidebar/plugins.ts": { count: 1, reason: "UI: запись в clipboard best-effort" },
   "src/modules/webui/assets/js/sidebar/lsp.ts": { count: 1, reason: "UI: запись в clipboard best-effort" },
   "src/modules/lsp/check-tool.ts": { count: 1, reason: "проба существования пути — отсутствие файла нормальный результат" },
-  "src/modules/lsp/check-run.ts": { count: 1, reason: "прогрев fail-open: отказ старта сервера не должен ломать саму проверку" },
+  // Прогрев `check-run.ts` больше не молчит: отказ старта сервера идёт в health
+  // и в отчёт как `[LSP check failed]` (см. spec 2026-10-29-lsp-node-version-diagnosis).
   "src/modules/lsp/connection.ts": { count: 1, reason: "best-effort запрос диагностики, сервер может не ответить" },
   "src/modules/updater/install-release.ts": {
     count: 2,

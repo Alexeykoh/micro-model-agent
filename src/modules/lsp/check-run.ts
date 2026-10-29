@@ -74,8 +74,19 @@ export async function runCheckFiles(
       deps.baseDir,
       serverConfig.workspaceMarkers ?? [],
     );
-    if (!(await warmWithin(deps, serverConfig, projectRoot))) {
-      acc.cold++;
+    const warmed = await warmWithin(deps, serverConfig, projectRoot);
+    if (!warmed.ok) {
+      if (!warmed.error) {
+        acc.cold++;
+        continue;
+      }
+      // Прогрев отвергся (spawn/initialize): это не «ещё запускается», а
+      // падение. Ошибка уходит в health и в отчёт — иначе сервер, который
+      // никогда не стартует (несовместимый Node), выглядит вечным холодным
+      // стартом, а `/lsp status` пишет «все серверы работают».
+      // DEBT(lsp-stderr-in-check): хвост stderr пул сюда не пробрасывает.
+      deps.health.warn(deps.logger, file, warmed.error);
+      acc.notes.push(deps.failureNote(key, serverConfig, warmed.error, file));
       continue;
     }
     try {
@@ -101,24 +112,38 @@ export async function runCheckFiles(
  * Ждёт тёплое соединение не дольше `CHECK_WARMUP_MS` (и серверного таймаута, если
  * он меньше). Прогрев не отменяется по таймауту: соединение доедет в пул в фоне,
  * поэтому повторный `lsp_check` увидит сервер тёплым.
+ *
+ * Три исхода различимы: тёплый (`ok`), упавший прогрев (`ok: false` + `error`) и
+ * всё ещё идущий (`ok: false` без `error`). Раньше первые два были одним
+ * `false`, и крах сервера печатался как «ещё запускается».
  */
 async function warmWithin(
   deps: CheckRunDeps,
   serverConfig: LspServerConfig,
   projectRoot: string,
-): Promise<boolean> {
-  if (deps.client.isWarm(serverConfig, projectRoot)) return true;
+): Promise<{ ok: boolean; error?: string }> {
+  if (deps.client.isWarm(serverConfig, projectRoot)) return { ok: true };
   const budget = Math.min(serverConfig.timeout ?? CHECK_WARMUP_MS, CHECK_WARMUP_MS);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<void>((resolve) => {
     timer = setTimeout(resolve, budget);
   });
+  let failure: string | null = null;
+  // Отказ прогрева запоминаем, а не бросаем: поздний отказ (после бюджета) не
+  // должен стать unhandled rejection.
+  const warm = deps.client.warmup(serverConfig, projectRoot).then(
+    () => {},
+    (e: unknown) => {
+      failure = errMsg(e);
+    },
+  );
   try {
-    await Promise.race([deps.client.warmup(serverConfig, projectRoot).catch(() => {}), timeout]);
+    await Promise.race([warm, timeout]);
   } finally {
     if (timer) clearTimeout(timer);
   }
-  return deps.client.isWarm(serverConfig, projectRoot);
+  if (deps.client.isWarm(serverConfig, projectRoot)) return { ok: true };
+  return failure ? { ok: false, error: failure } : { ok: false };
 }
 
 /** Сложить диагностики одного файла в аккумулятор (с type-env фильтром). */

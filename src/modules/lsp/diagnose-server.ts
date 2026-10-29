@@ -1,27 +1,19 @@
-// По-серверная диагностика LSP: классификация ошибок, команда установки,
-// гейты и реальная проба — вынесено из `diagnose.ts` (правило ≤300).
+// По-серверная диагностика LSP: гейты и реальная проба.
+//
+// Причина/классификация — `./failure-reason`, подсказки установки — `./install-hint`
+// (оба вынесены, чтобы файл остался под потолком ≤300 строк).
 import type { LspServerConfig } from "./types";
-import type { LspClient } from "./client";
+import type { LspClient, LspProbeError } from "./client";
 import { findProjectRoot } from "./project-root";
 import { resolveNpxLaunch } from "./resolve";
 import type { ProjectToolchain } from "./toolchain";
+import type { LspFailureReason } from "./failure-reason";
+import { classifyLspError } from "./failure-reason";
+import { installCommandFor } from "./install-hint";
 import { errMsg } from "../../utils";
 
-/**
- * Класс причины неисправности LSP-сервера. Единственный источник правды для
- * `/lsp doctor` и actionable-подсказок в `[LSP check failed]`.
- */
-export type LspFailureReason =
-  | "ok"
-  | "disabled"
-  | "not-applicable"
-  | "binary-missing"
-  | "offline"
-  | "network"
-  | "timeout"
-  | "spawn-failed"
-  | "server-error"
-  | "deadline";
+export { classifyLspError, type LspFailureReason } from "./failure-reason";
+export { installCommandFor, npxPackages } from "./install-hint";
 
 /** Диагностика одного сервера: применимость, резолв запуска, проба, причина. */
 export interface LspServerDiagnosis {
@@ -40,100 +32,13 @@ export interface LspServerDiagnosis {
   reason: LspFailureReason;
   error?: string;
   durationMs?: number;
+  /** Хвост stderr упавшего сервера (единственный след краха до `initialize`). */
+  stderrTail?: string;
   /**
    * Команда ручной установки сервера глобально (чтобы не гонять `npx` каждый
    * раз). `undefined` — ставить нечего или сервер уже глобальный.
    */
   installCommand?: string;
-}
-
-/**
- * Классифицировать ошибку запуска/инициализации LSP-сервера. Вынесено отдельно,
- * чтобы doctor и failure-путь модуля считали одинаково.
- */
-export function classifyLspError(
-  message: string,
-  opts: { npxFallback?: boolean } = {},
-): LspFailureReason {
-  if (/MMA_LSP_OFFLINE|auto-install is disabled/i.test(message)) return "offline";
-  if (/not found/i.test(message)) return "binary-missing";
-  if (/ENOENT|EINVAL|\bspawn\b/i.test(message)) return "spawn-failed";
-  if (/timeout/i.test(message)) return opts.npxFallback ? "network" : "timeout";
-  return "server-error";
-}
-
-/** Нативные установщики LSP-серверов, которым npx не подходит. */
-const NATIVE_INSTALL: Record<string, string> = {
-  "rust-analyzer": "rustup component add rust-analyzer",
-  gopls: 'go install golang.org/x/tools/gopls@latest',
-};
-
-/** Имя и версия npx-пакета: `typescript@5` → [`typescript`, `5`]. */
-function splitPackage(pkg: string): [name: string, version: string | undefined] {
-  const at = pkg.lastIndexOf("@");
-  return at > 0 ? [pkg.slice(0, at), pkg.slice(at + 1)] : [pkg, undefined];
-}
-
-/**
- * Подставить версию из тулчейна проекта к npx-пакету. Сервер, идущий через npx,
- * не должен тянуть «последнюю» версию, несовместимую с рантаймом проекта:
- * если проект объявляет версию этого пакета — берём её.
- */
-function pinPackage(pkg: string, toolchain?: ProjectToolchain): string {
-  const [name] = splitPackage(pkg);
-  const declared = toolchain?.packages[name];
-  if (!declared) return pkg;
-  const v = declared.replace(/^[\^~>=<v\s]+/, "").trim();
-  return v ? `${name}@${v}` : pkg;
-}
-
-/** Команда нативной установки с учётом объявленного тулчейна (rust channel). */
-function nativeInstallCommand(
-  server: LspServerConfig,
-  toolchain?: ProjectToolchain,
-): string | null {
-  const cmd = NATIVE_INSTALL[server.command] ?? null;
-  if (!cmd) return null;
-  if (server.command === "rust-analyzer") {
-    const channel = toolchain?.runtimes.find((r) => r.name === "rust")?.version;
-    return channel ? `${cmd} --toolchain ${channel}` : cmd;
-  }
-  return cmd;
-}
-
-/** Пакеты из npx-args (`--package X`), дедуп с сохранением порядка. */
-export function npxPackages(args: string[] | undefined): string[] {
-  const list = args ?? [];
-  const out: string[] = [];
-  for (let i = 0; i < list.length; i++) {
-    if (list[i] === "--package" && list[i + 1]) {
-      const pkg = list[i + 1];
-      if (!out.includes(pkg)) out.push(pkg);
-      i++;
-    }
-  }
-  return out;
-}
-
-/**
- * Команда ручной глобальной установки сервера. Заполняется только когда это
- * реально помогает: сервер идёт через `npx` (медленный старт) либо глобального
- * бинарника нет. Уже глобальный и работающий сервер — `null`. Версии пакетов и
- * для нативных серверов берутся из объявленного тулчейна проекта (все языки),
- * чтобы не советовать сборку под чужой рантайм.
- */
-export function installCommandFor(
-  server: LspServerConfig,
-  reason: LspFailureReason,
-  useNpxFallback: boolean,
-  toolchain?: ProjectToolchain,
-): string | null {
-  const useful =
-    useNpxFallback || reason === "binary-missing" || reason === "offline" || reason === "network";
-  if (!useful) return null;
-  const pkgs = npxPackages(server.args);
-  if (pkgs.length > 0) return `npm i -g ${pkgs.map((p) => pinPackage(p, toolchain)).join(" ")}`;
-  return nativeInstallCommand(server, toolchain);
 }
 
 /** Общий контекст диагностики (неизменяемый на прогон). */
@@ -238,7 +143,7 @@ async function probeServer(
   defaultTimeout: number,
   timeoutCap: number,
   npxFallback: boolean,
-): Promise<Pick<LspServerDiagnosis, "probed" | "ok" | "reason" | "error" | "durationMs">> {
+): Promise<Pick<LspServerDiagnosis, "probed" | "ok" | "reason" | "error" | "durationMs" | "stderrTail">> {
   const projectRoot = findProjectRoot(baseDir, baseDir, server.workspaceMarkers ?? []);
   const serverTimeout = Math.min(server.timeout ?? defaultTimeout, timeoutCap);
   const started = Date.now();
@@ -247,12 +152,17 @@ async function probeServer(
     return { probed: true, ok: true, reason: "ok", durationMs: Date.now() - started };
   } catch (e) {
     const msg = errMsg(e);
+    const stderrTail = (e as LspProbeError).stderrTail;
+    // Причина краха часто есть только в stderr: упавший сервер отвечает
+    // «connection closed», а не ошибкой рантайма.
+    const evidence = stderrTail ? `${msg}\n${stderrTail}` : msg;
     return {
       probed: true,
       ok: false,
-      reason: classifyLspError(msg, { npxFallback }),
+      reason: classifyLspError(evidence, { npxFallback }),
       error: msg,
       durationMs: Date.now() - started,
+      stderrTail,
     };
   }
 }

@@ -15,6 +15,7 @@ import {
   type ServerContext,
 } from "./diagnose-server";
 import { detectProjectToolchain, type ProjectToolchain } from "./toolchain";
+import { readNodeVersion, type NodeVersion } from "./node-version";
 
 // Классификация/установка/типы сервера живут в `./diagnose-server`; реэкспорт
 // для существующих импортёров (`./module`, `./index`, тесты).
@@ -29,6 +30,8 @@ export interface LspDiagnosis {
   servers: LspServerDiagnosis[];
   /** Объявленные версии тулчейна проекта (все языки) — что учтено в подсказках. */
   toolchain?: ProjectToolchain;
+  /** Версия Node из PATH: объясняет крах сервера на неподходящем рантайме. */
+  nodeVersion?: NodeVersion;
 }
 
 /** Зависимости диагностики (инжекции для тестов). */
@@ -46,6 +49,8 @@ export interface LspDiagnoseDeps {
   offline?: boolean;
   /** Инжектируемый тулчейн проекта (тесты); по умолчанию читается с диска. */
   toolchain?: ProjectToolchain;
+  /** Инжектируемая версия Node (тесты); по умолчанию `node --version`. */
+  nodeVersion?: NodeVersion | null;
   logger?: LspClientLogger;
 }
 
@@ -68,6 +73,7 @@ export async function diagnoseLspServers(
     ((dir: string, cfg: LspConfig) => collectCheckFiles(dir, cfg, LSP_DIAGNOSE_SCAN_LIMIT));
   const probePath = deps.findOnPath ?? findOnPath;
   const toolchain = deps.toolchain ?? detectProjectToolchain(baseDir);
+  const nodeVersion = deps.nodeVersion === undefined ? readNodeVersion() : deps.nodeVersion;
   const entries = Object.entries(config.servers);
 
   if (!config.enabled) {
@@ -76,6 +82,7 @@ export async function diagnoseLspServers(
       offline,
       projectRoot: baseDir,
       toolchain,
+      nodeVersion: nodeVersion ?? undefined,
       servers: entries.map(([language, server]) =>
         baseDiagnosis(language, server, { enabled: false, applicable: false, reason: "disabled" }),
       ),
@@ -110,5 +117,5 @@ export async function diagnoseLspServers(
     servers.push(await diagnoseServer(language, server, applicable.has(language), ctx));
   }
 
-  return { enabled: true, offline, projectRoot: baseDir, toolchain, servers };
+  return { enabled: true, offline, projectRoot: baseDir, toolchain, nodeVersion: nodeVersion ?? undefined, servers };
 }
