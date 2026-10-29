@@ -71,6 +71,24 @@ export async function reconfigure(host: ProviderPhaseHost, config: AppConfig): P
 }
 
 /**
+ * Смена окна по пробе — диагностика харнесса, а не сообщение пользователю:
+ * строка «Context probe: auto-set contextWindow…» попадала в ленту обычного
+ * режима (quiet). Через `diagnostic` она видна только в `verbose`.
+ */
+export function logContextProbeAutoSet(
+  logger: Pick<Logger, "diagnostic"> | undefined,
+  model: string,
+  actual: number,
+  configured: number,
+): void {
+  if (typeof logger?.diagnostic !== "function") return;
+  logger.diagnostic(
+    "info",
+    `Context probe: auto-set contextWindow from provider — model "${model}" serves ${actual} tokens (configured was ${configured}).`,
+  );
+}
+
+/**
  * Provider-first проба контекста активной записи при смене идентичности.
  * Fail-open; при `contextAuto: false` проба пропускается целиком.
  */
@@ -97,10 +115,12 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
         providerType: nextEndpoint.type,
       }));
     if (detected && detected.actual !== config.contextWindow) {
-      loggerOf(host)?.info(
-        `Context probe: auto-set contextWindow from provider — model "${detected.model}" serves ${detected.actual} tokens (configured was ${config.contextWindow}).`,
-      );
+      // Сначала применяем окно, потом пишем диагностику: сбой логгера не должен
+      // отменять уже принятую пробу (в тестах и сторонних логгерах нет
+      // `diagnostic`, и исключение раньше съедало присваивание).
+      const configured = config.contextWindow;
       config.contextWindow = detected.actual;
+      logContextProbeAutoSet(loggerOf(host), detected.model, detected.actual, configured);
     }
     host.lastProbeIdentity = nextId;
   } catch {

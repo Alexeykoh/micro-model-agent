@@ -22,10 +22,10 @@ describe("deriveSessionName", () => {
     expect(out.length).toBeLessThanOrEqual(61);
     expect(out.endsWith("…")).toBe(true);
   });
-  it("falls back to the date default when nothing remains", () => {
-    expect(deriveSessionName("https://only-a-url.example", "2026-09-25")).toBe(
-      "Session 2026-09-25",
-    );
+  it("falls back to the non-date default when nothing remains", () => {
+    // Имя без даты: ISO-дата в имени сессии редактировалась PII-фильтром
+    // (`Сессия <PII:…>`) в ответах `/v1/sessions` и выглядела как утечка.
+    expect(deriveSessionName("https://only-a-url.example")).toBe("New chat");
   });
 });
 

@@ -22,6 +22,8 @@ import {
 import { initCrumbDeps, renderCrumbs, clearCrumbs } from "./files/crumbs.js";
 import { syncChrome, localizeChrome, iconize } from "./files/chrome.js";
 import { fetchFile, paintFile, paintLoading } from "./files/view.js";
+import { markAndScrollToLine } from "./files/line-mark.js";
+export { lineScrollTop } from "./files/line-mark.js";
 import {
   initExpandDeps,
   collapseAll,
@@ -205,7 +207,7 @@ function toggleDir(path: string): void {
 }
 
 /** Opens a file in the read-only viewer and records it in the history. */
-export async function openFile(path: string): Promise<void> {
+export async function openFile(path: string, line?: number): Promise<void> {
   const f = sb.files;
   f.selectedPath = path;
   pushHistory(history, path);
@@ -216,6 +218,7 @@ export async function openFile(path: string): Promise<void> {
   markDirty();
   renderFilesTree();
   paintFile(f.detailBodyEl, path, await fetchFile(path));
+  if (typeof line === "number" && line > 0) markAndScrollToLine(f.detailBodyEl, line);
 }
 
 /**
@@ -236,11 +239,11 @@ function normalizePath(raw: string): string {
  * показывает его во вьюере. Переключение вкладки/дровера — на вызывающем
  * (app.js), чтобы `files.js` не тянул `core.js` (цикл импортов).
  */
-export async function openFileInTree(raw: string): Promise<void> {
+export async function openFileInTree(raw: string, line?: number): Promise<void> {
   const rel = normalizePath(raw);
   if (!rel) return;
   await revealFile(rel);
-  await openFile(rel);
+  await openFile(rel, line);
 }
 
 /** Closes the viewer and clears the selection (history is kept). */

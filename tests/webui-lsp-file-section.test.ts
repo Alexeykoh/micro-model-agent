@@ -1,4 +1,5 @@
-// Guard: секция «файл» вкладки LSP показывает диагностику, пустоту и отказы.
+// Guard: секция «файл» вкладки LSP показывает диагностику, пустоту и отказы,
+// а клик по строке открывает файл на этой строке (W3 спеки).
 //
 // B-41: панель раньше умела только «серверы живы»; теперь у неё есть проверка
 // конкретного файла, и результат обязан быть виден (включая пустой и отказы).
@@ -11,14 +12,21 @@ const i18n = await import("../src/modules/webui/assets/js/i18n.js");
 i18n.I18N.locale = "ru";
 i18n.I18N.dicts = {
   ru: {
-    "web.sidebar.lsp_file_clean": "ошибок нет: {path}",
+    "web.sidebar.lsp_file_clean": "ошибок нет",
+    "web.sidebar.lsp_file_ms": "{secs} с",
     "web.sidebar.lsp_file_failed": "проверка не удалась",
     "web.sidebar.lsp_file_outside_workspace": "путь вне проекта — не проверяю",
+    "web.sidebar.lsp_file_lsp_timeout": "сервер LSP не ответил за {secs} с — попробуй ещё раз",
     "web.sidebar.lsp_file_more": "ещё {count} диагностик(и) не показано",
+    "web.sidebar.lsp_file_open_line": "открыть {path} на строке {line}",
+    "web.sidebar.lsp_sev_error": "ошибка",
+    "web.sidebar.lsp_sev_warning": "предупреждение",
+    "web.sidebar.lsp_sev_info": "информация",
   },
 };
 
 const mod = await import("../src/modules/webui/assets/js/sidebar/lsp-file.js");
+const store = await import("../src/modules/webui/assets/js/store.js");
 
 function box(): HTMLElement {
   const el = win.document.querySelector("#box") as HTMLElement;
@@ -32,6 +40,7 @@ describe("LSP: секция проверки файла", () => {
     mod.renderLspFileResult(b, {
       ok: true,
       path: "src/a.ts",
+      ms: 640,
       diagnostics: [{ line: 5, column: 3, severity: "error", message: "Property 'has' missing" }],
     });
 
@@ -40,12 +49,44 @@ describe("LSP: секция проверки файла", () => {
     expect(b.querySelectorAll(".lsp-file-diag").length).toBe(1);
   });
 
-  it("пустой результат — «ошибок нет» с путём", () => {
+  it("различает уровень: warning — «!», error — «✗»", () => {
     const b = box();
-    mod.renderLspFileResult(b, { ok: true, path: "src/a.ts", diagnostics: [] });
+    mod.renderLspFileResult(b, {
+      ok: true,
+      path: "src/a.ts",
+      diagnostics: [
+        { line: 1, column: 1, severity: "error", message: "bad" },
+        { line: 2, column: 1, severity: "warning", message: "meh" },
+      ],
+    });
 
-    expect(b.textContent).toContain("src/a.ts");
+    const sev = [...b.querySelectorAll(".lsp-diag-sev")].map((n) => n.textContent);
+    expect(sev).toEqual(["✗", "!"]);
+  });
+
+  it("клик по диагностике открывает файл на этой строке", () => {
+    const calls: Array<[string, number]> = [];
+    store.hooks.openFileAtLine = (path, line) => calls.push([path, line]);
+    try {
+      const b = box();
+      mod.renderLspFileResult(b, {
+        ok: true,
+        path: "src/components/Products.tsx",
+        diagnostics: [{ line: 41, column: 7, severity: "error", message: "Property 'has'" }],
+      });
+      (b.querySelector(".lsp-file-diag") as HTMLButtonElement).click();
+      expect(calls).toEqual([["src/components/Products.tsx", 41]]);
+    } finally {
+      store.hooks.openFileAtLine = null;
+    }
+  });
+
+  it("пустой результат — «ошибок нет» и время проверки", () => {
+    const b = box();
+    mod.renderLspFileResult(b, { ok: true, path: "src/a.ts", diagnostics: [], ms: 640 });
+
     expect(b.textContent).toContain("ошибок нет");
+    expect(b.textContent).toContain("0.6");
   });
 
   it("отказ вне workspace объясняется", () => {
@@ -53,6 +94,19 @@ describe("LSP: секция проверки файла", () => {
     mod.renderLspFileResult(b, { ok: false, path: "../x", diagnostics: [], error: "outside-workspace" });
 
     expect(b.textContent).toContain("путь вне проекта");
+  });
+
+  it("таймаут показывает, сколько ждали, и причину", () => {
+    const b = box();
+    mod.renderLspFileResult(b, {
+      ok: false,
+      path: "src/a.ts",
+      diagnostics: [],
+      error: "lsp-timeout",
+      ms: 15000,
+    });
+
+    expect(b.textContent).toContain("не ответил за 15");
   });
 
   it("неизвестная причина падает в общий текст, а не в ключ", () => {

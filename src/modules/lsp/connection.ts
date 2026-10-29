@@ -10,7 +10,8 @@
 import type { LspDiagnostic, LspServerConfig } from "./types";
 import { killTree, type KillableProcess } from "../processes/registry";
 import { findHeaderEnd, isAcceptableFrameLength, parseContentLength } from "./framing";
-import { pathToUri } from "./uri";
+import { canonicalUri, pathToUri } from "./uri";
+import { buildClientCapabilities } from "./capabilities";
 import { languageIdForPath } from "./language";
 import type { LspClientLogger } from "./client-logger";
 import { errMsg } from "../../utils";
@@ -218,6 +219,7 @@ export class LspConnection {
   /** То же по готовому URI (используется `workspaceSymbol`-путями и тестами). */
   syncUri(uri: string, languageId: string, text: string): void {
     if (!this.isOpen) throw fatalError("LSP connection is not open");
+    uri = canonicalUri(uri);
     const current = this.documents.get(uri);
     if (current?.open && current.text === text) {
       this.touch();
@@ -245,6 +247,7 @@ export class LspConnection {
   }
 
   closeDocUri(uri: string): void {
+    uri = canonicalUri(uri);
     const doc = this.documents.get(uri);
     if (!doc?.open || !this.isOpen) return;
     this.documents.set(uri, { ...doc, open: false });
@@ -259,6 +262,7 @@ export class LspConnection {
    * - `null` — сервер молчит (таймаут/нет push) — ответа нет, это не «чисто».
    */  async diagnosticsFor(uri: string, timeoutMs: number): Promise<LspDiagnostic[] | null> {
     if (!this.isOpen) return null;
+    uri = canonicalUri(uri);
     const doc = this.documents.get(uri);
     const version = doc?.version ?? -1;
 
@@ -313,7 +317,7 @@ export class LspConnection {
 
   /** Актуальный список диагностик без ожидания (для быстрых путей). */
   peekDiagnostics(uri: string): DiagnosticRecord | null {
-    return this.diagnostics.get(uri) ?? null;
+    return this.diagnostics.get(canonicalUri(uri)) ?? null;
   }
 
   async request(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
@@ -479,7 +483,9 @@ export class LspConnection {
 
   private acceptDiagnostics(params: PublishDiagnosticsParams | undefined): void {
     if (!params?.uri || !Array.isArray(params.diagnostics)) return;
-    const uri = params.uri;
+    // Сервер присылает свой вариант file-URI (`e%3A` vs `E:`): без канонизации
+    // пуш не находил открытый документ и молча отбрасывался.
+    const uri = canonicalUri(params.uri);
     const doc = this.documents.get(uri);
     if (!doc?.open) return;
     // Пуш от старой версии документа — игнор (антиретро-правки).
@@ -517,17 +523,4 @@ export function poolKey(serverKey: string, projectRoot: string): string {
   return `${serverKey}\u0000${projectRoot}`;
 }
 
-/** Клиентские capabilities: ровно тот минимум, который нужен харнессу. */
-export function buildClientCapabilities(): Record<string, unknown> {
-  return {
-    // 3.17: смещение в позициях договаривается. utf-16 — единственный
-    // обязательный к поддержке, он и остаётся дефолтом.
-    general: { positionEncodings: ["utf-16"] },
-    textDocument: {
-      publishDiagnostics: { relatedInformation: true, versionSupport: true },
-      // 3.17 pull-модель: объявляем, что умеем принимать диагностики по запросу.
-      diagnostic: {},
-    },
-    workspace: { symbol: {} },
-  };
-}
+export { buildClientCapabilities };

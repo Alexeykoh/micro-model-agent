@@ -71,7 +71,7 @@ export class SessionManager {
   ): SessionMeta {
     const now = new Date().toISOString();
     const id = newSessionId();
-    const sessionName = name || t("session.default_name", { date: now.slice(0, 10) });
+    const sessionName = name || t("session.default_name");
     const meta: SessionMeta = {
       id,
       name: sessionName,

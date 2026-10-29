@@ -220,9 +220,9 @@ async function refresh(): Promise<void> {
 hooks.ensureTabState = ensureTabState;
 // Lets `tabs.js` reset the sidebar chrome when the last tab closes.
 hooks.renderActive = renderActiveState;
-// Lets feed file links open the Files tab (tree revealed to the file) without
-// importing the sidebar from the feed handlers.
+// Feed links and LSP diagnostics open the Files tab without importing it here.
 hooks.openFileInTree = (p) => { void openFilesTabFor(p); };
+hooks.openFileAtLine = (p, line) => { void openFilesTabFor(p, line); };
 
 function resyncAfterReconnect(): void {
   for (const tab of tabState.tabs) {

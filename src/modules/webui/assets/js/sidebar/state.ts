@@ -17,7 +17,7 @@ export const ICON_NAME: Record<string, string> = {
   trace: "activity",
   lsp: "code",
   files: "folder-tree",
-  subagents: "users",
+  subagents: "bot",
   plugins: "plug",
   mcp: "server",
 };

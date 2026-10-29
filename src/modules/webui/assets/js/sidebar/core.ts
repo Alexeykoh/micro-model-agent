@@ -37,6 +37,15 @@ const SETTINGS_ANCHOR: Record<string, string> = {
 
 let settingsBtn: HTMLElement | null = null;
 
+/**
+ * Icon for a sidebar tab. Subagents uses the robot head (`bot`) rather than
+ * Lucide `users`: the latter read as an account/multi-user feature, not as
+ * agents. Kept as one helper so the tab strip and the pane title cannot drift.
+ */
+export function tabIcon(id: string): Element {
+  return icon(ICON_NAME[id]);
+}
+
 /** Подпись кнопки: «открыть настройки · <имя панели>» на языке интерфейса. */
 function syncSettingsShortcut(tab: string): void {
   if (!settingsBtn) return;
@@ -66,7 +75,7 @@ export function setSidebarTab(id: string, persist = true): void {
   });
   if (sb.nameTextEl) sb.nameTextEl.textContent = t("web.sidebar.tab_" + effective);
   const nic = sb.nameEl && sb.nameEl.querySelector<HTMLElement>(".sb-ico");
-  if (nic) { nic.textContent = ""; nic.appendChild(icon(ICON_NAME[effective])); }
+  if (nic) { nic.textContent = ""; nic.appendChild(tabIcon(effective)); }
   syncSettingsShortcut(effective);
   if (effective === "lsp") sidebarLspState();
   if (effective === "files") renderFilesTree();
@@ -80,10 +89,10 @@ export function setSidebarTab(id: string, persist = true): void {
  * дровер на узком экране) и раскрыть дерево до файла. Единственная точка входа
  * для ссылок чата — сам `files.js` не знает про вкладки.
  */
-export async function openFilesTabFor(raw: string): Promise<void> {
+export async function openFilesTabFor(raw: string, line?: number): Promise<void> {
   setSidebarTab("files");
   if (mqNarrow() && !sidebarDrawerOpen()) setSidebarDrawer(true);
-  await openFileInTree(raw);
+  await openFileInTree(raw, line);
 }
 
 export function sidebarBusy(on: unknown): void {
@@ -144,7 +153,7 @@ export function initSidebar(): void {
   root.querySelectorAll<HTMLElement>(".sb-tab .sb-ico").forEach((span) => {
     const id = span.closest<HTMLElement>(".sb-tab")?.dataset.tab || "session";
     span.textContent = "";
-    span.appendChild(icon(ICON_NAME[id]));
+    span.appendChild(tabIcon(id));
   });
 
   root.querySelectorAll<HTMLElement>(".sb-tab").forEach((tab) => {

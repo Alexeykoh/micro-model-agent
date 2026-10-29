@@ -13,6 +13,13 @@ import { runCheckFiles } from "./check-run";
 
 /** Максимум диагностик в ответе панели. */
 export const WEB_CHECK_LIMIT = 200;
+/**
+ * Бюджет проверки файла из панели. Дольше, чем `lsp_check` агента (8 с):
+ * пользователь ждёт интерактивно и видит счётчик секунд, а холодная загрузка
+ * TS-проекта на этой машине занимает ~9.6 с — короткий бюджет отдавал
+ * `lsp-timeout` при живом сервере.
+ */
+export const WEB_CHECK_TIMEOUT_MS = 15_000;
 const MESSAGE_MAX = 300;
 
 export interface WebCheckDeps {
@@ -85,6 +92,7 @@ export async function runWebCheck(relPath: string, deps: WebCheckDeps): Promise<
     health: deps.health,
     logger: deps.logger,
     failureNote: deps.failureNote,
+    timeoutMs: WEB_CHECK_TIMEOUT_MS,
   });
 
   const all = [...acc.errors, ...acc.warnings].map((e) => toWebDiagnostic(e.diag));

@@ -64,4 +64,12 @@ describe("SessionManager: дефолты новых сессий следуют 
     expect(next.contextWindow).toBe(4096);
     expect(meta.model).toBe("old/model");
   });
+
+  it("имя по умолчанию не содержит ISO-дату (её редактировал PII-фильтр)", () => {
+    const meta = manager.create();
+
+    expect(meta.name.trim()).not.toBe("");
+    expect(meta.name).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(meta.nameSource).toBe("default");
+  });
 });

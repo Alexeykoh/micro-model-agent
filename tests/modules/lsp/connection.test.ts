@@ -50,6 +50,28 @@ describe("LspConnection handshake", () => {
 });
 
 describe("LspConnection document sync", () => {
+  it("принимает диагностику в записи сервера (`c%3A` vs `C:`)", async () => {
+    const server = new FakeLspServer();
+    const conn = makeConnection(server);
+    await conn.open();
+
+    conn.syncUri("file:///C:/repo/src/a.ts", "typescript", "const a = 1;");
+    server.writeToClient({
+      jsonrpc: "2.0",
+      method: "textDocument/publishDiagnostics",
+      params: {
+        uri: "file:///c%3A/repo/src/a.ts",
+        diagnostics: [
+          { range: { start: { line: 0, character: 0 } }, severity: 1, message: "boom" },
+        ],
+        version: 1,
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const rec = conn.peekDiagnostics("file:///C:/repo/src/a.ts");
+    expect(rec?.diagnostics.map((d) => d.message)).toEqual(["boom"]);
+  });
   it("opens a document once and pushes full text on change", async () => {
     const server = new FakeLspServer();
     const conn = makeConnection(server);

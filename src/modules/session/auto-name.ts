@@ -23,7 +23,7 @@ export const TITLE_MAX_TOKENS = 512;
 export const TITLE_TIMEOUT_MS = 60_000;
 
 /** Детерминированное мгновенное имя сессии из первого сообщения пользователя. */
-export function deriveSessionName(input: string, date?: string): string {
+export function deriveSessionName(input: string): string {
   const firstLine = input.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
   let s = firstLine
     .replace(/```[\s\S]*?```/g, " ")
@@ -35,7 +35,7 @@ export function deriveSessionName(input: string, date?: string): string {
     .replace(/[.,;:!?…]+$/u, "")
     .trim();
   if (!s) {
-    return t("session.default_name", { date: date ?? new Date().toISOString().slice(0, 10) });
+    return t("session.default_name");
   }
   if (s.length > MAX_NAME_LEN) {
     const cut = s.slice(0, MAX_NAME_LEN);

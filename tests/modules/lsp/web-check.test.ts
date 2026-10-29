@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runWebCheck, type WebCheckDeps } from "../../../src/modules/lsp/web-check";
+import { runWebCheck, WEB_CHECK_TIMEOUT_MS, type WebCheckDeps } from "../../../src/modules/lsp/web-check";
 import { DEFAULT_LSP_CONFIG } from "../../../src/modules/lsp/config";
 
 let dir: string;
@@ -104,5 +104,27 @@ describe("web LSP: диагностика одного файла", () => {
     expect(r.ok).toBe(false);
     expect(r.error).toBe("lsp-timeout");
     expect(r.diagnostics).toEqual([]);
+  });
+
+  it("панель ждёт файл дольше, чем агентский lsp_check", async () => {
+    // Живой прогон: на этой машине холодная проверка TS-файла занимает ~9.6 с,
+    // старый бюджет 8 с отдавал lsp-timeout при живом сервере.
+    let budget = 0;
+    await runWebCheck(
+      "src/a.ts",
+      deps({
+        client: {
+          isWarm: () => true,
+          warmup: async () => {},
+          checkFile: async (_f, _b, _s, _p, timeoutMs) => {
+            budget = Number(timeoutMs);
+            return { inconclusive: false, diagnostics: [] };
+          },
+        },
+      }),
+    );
+
+    expect(budget).toBe(WEB_CHECK_TIMEOUT_MS);
+    expect(WEB_CHECK_TIMEOUT_MS).toBeGreaterThan(8000);
   });
 });

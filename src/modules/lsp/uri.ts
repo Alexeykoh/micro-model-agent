@@ -24,6 +24,23 @@ export function uriToPath(uri: string): string {
   return WIN_DRIVE.test(decoded) ? decoded.replace(/^\//, "") : decoded;
 }
 
+/**
+ * Канонический ключ файла для внутренних карт (`documents`/`diagnostics`).
+ *
+ * Серверы на Windows присылают URI в своей записи: `file:///e%3A/projects/…`
+ * (строчная буква диска, `%3A`), а клиент открывает документ как
+ * `file:///E:/projects/…`. Сравнение строк не совпадало, `publishDiagnostics`
+ * молча отбрасывался, и любой `checkFile` уходил в таймаут (C-08: «сервер не
+ * ответил вовремя» на живом сервере). Ключ приводится к виду клиента: диск —
+ * строчный, percent-encoding — канонический.
+ */
+export function canonicalUri(uri: string): string {
+  if (!/^file:/i.test(uri)) return uri;
+  const path = uriToPath(uri);
+  const m = /^([a-zA-Z]):([\s\S]*)$/.exec(path);
+  return pathToUri(m ? `${m[1].toLowerCase()}:${m[2]}` : path);
+}
+
 function encodePathSegments(path: string): string {
   return path
     .split("/")

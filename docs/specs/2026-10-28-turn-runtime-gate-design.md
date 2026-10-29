@@ -63,9 +63,13 @@ status=done` шаг, **меняющий поведение/UI**, с `manual:` о
 `verify_evidence`:
 
 ```json
-{"type":"verify_evidence","source":"module:execution","step":2,
- "kind":"manual","text":"открыл /, видны 6 карточек, поиск «город» → 1"}
+{"type":"directive","source":"module:execution","event":"verify_evidence",
+ "step":2,"text":"открыл /, видны 6 карточек, поиск «город» → 1"}
 ```
+
+Фактический формат — запись `directive` (`SessionLogger.logDirective`) с
+`event: "verify_evidence"`, номером шага в поле `iteration` и наблюдением в
+`detail`; отдельного типа события `verify_evidence` нет.
 
 `audit` считает такой шаг подтверждённым, только если у него есть наблюдение.
 Нет записи → шаг попадает в `pendingSteps`, ответ помечается как
@@ -113,7 +117,7 @@ http:<url>~<подстрока>     → GET, 2xx и подстрока в тел
 |---|---|
 | `tests/execution/verify-evidence-class.test.ts` | `bun run build` = статическое, `bun test` = поведенческое, `http:` парсится |
 | `tests/execution/verify-behavior-step.test.ts` | шаг про UI с одним build-доказательством → отказ; с `http:` → проходит |
-| `tests/execution/manual-evidence-audit.test.ts` | `manual:` без записи → аудит не проходит; с записью → проходит; событие в `session.jsonl` |
+| `tests/execution/manual-evidence.test.ts` | `manual:` без записи → аудит не проходит; с записью → проходит; событие в `session.jsonl` |
 | `tests/tools/http-check.test.ts` | 2xx/не-2xx, `~marker`, таймаут, кап тела |
 
 ## План

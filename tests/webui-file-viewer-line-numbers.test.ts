@@ -11,6 +11,7 @@ import { setupHappyDom } from "./helpers/happy-dom";
 const win = setupHappyDom(`<div id="body"></div>`);
 
 const view = await import("../src/modules/webui/assets/js/sidebar/files/view.js");
+const files = await import("../src/modules/webui/assets/js/sidebar/files.js");
 
 describe("просмотр файла: номера строк", () => {
   it("жёлоб нумерует строки, код не меняется", () => {
@@ -51,5 +52,14 @@ describe("просмотр файла: номера строк", () => {
     expect(gutter).toContain("font-size: 11.5px");
     expect(code).toContain("white-space: pre;");
     expect(code).toContain("font-size: 11.5px");
+  });
+
+  it("переход из LSP прокручивает к строке (и подсветка есть в CSS)", () => {
+    // 10-я строка при line-height 17 и padding 8 в окне 300px.
+    expect(files.lineScrollTop(10, 17, 8, 300)).toBe(8 + 9 * 17 - 100);
+    expect(files.lineScrollTop(1, 17, 8, 300)).toBe(0);
+    const css = readFileSync("src/modules/webui/assets/styles.css", "utf8");
+    expect(css).toContain(".fv-line-mark");
+    expect(css).toContain("fvMarkFade");
   });
 });

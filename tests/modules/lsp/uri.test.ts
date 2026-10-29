@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pathToUri, uriToPath } from "../../../src/modules/lsp/uri";
+import { canonicalUri, pathToUri, uriToPath } from "../../../src/modules/lsp/uri";
 
 describe("pathToUri / uriToPath", () => {
   it("round-trips a POSIX path", () => {
@@ -49,5 +49,28 @@ describe("pathToUri / uriToPath", () => {
     // Ключевое: круг не съедает ведущий слэш у posix-пути.
     expect(uriToPath(pathToUri("/home/a/b.ts"))).toBe("/home/a/b.ts");
     expect(uriToPath(pathToUri("C:/a/b.ts"))).toBe("C:/a/b.ts");
+  });
+});
+
+describe("canonicalUri: одна запись файла для карт клиента", () => {
+  it("строчная буква диска и `%3A` сводятся к записи клиента", () => {
+    // tsserver на Windows присылает именно так; без этого push не находил
+    // открытый документ и всё уходило в lsp-timeout (C-08).
+    expect(canonicalUri("file:///c%3A/projects/a.ts")).toBe("file:///c:/projects/a.ts");
+    expect(canonicalUri("file:///C:/projects/a.ts")).toBe("file:///c:/projects/a.ts");
+  });
+
+  it("percent-encoding и пробелы переживают канонизацию", () => {
+    expect(canonicalUri("file:///C:/My%20Documents/a.ts")).toBe(
+      "file:///c:/My%20Documents/a.ts",
+    );
+    expect(canonicalUri("file:///C:/проекты/a.ts")).toBe(
+      "file:///c:/%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D1%8B/a.ts",
+    );
+  });
+
+  it("POSIX и не-file схемы не трогает", () => {
+    expect(canonicalUri("file:///home/a.ts")).toBe("file:///home/a.ts");
+    expect(canonicalUri("untitled:Untitled-1")).toBe("untitled:Untitled-1");
   });
 });

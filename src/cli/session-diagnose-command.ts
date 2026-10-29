@@ -46,7 +46,7 @@ export function registerDiagnoseCommand(session: Command, program: Command): voi
     .command("diagnose")
     .argument("<id>", t("cli.session_id_or_prefix"))
     .description(t("cli.diagnose_session"))
-    .addHelpText("after", "\n" + t("cli.diagnose_json_help"))
+    .addHelpText("after", `\n${t("cli.diagnose_json_help")}`)
     .action(async (id: string) => {
       if (program.opts<{ json?: boolean }>().json !== true) {
         // Отказ — не успех: иначе скрипт с `mma session diagnose` без --json

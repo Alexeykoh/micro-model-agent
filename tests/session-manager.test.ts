@@ -35,10 +35,12 @@ describe("SessionManager", () => {
     expect(meta.messageCount).toBe(0);
   });
 
-  it("should create session with auto-generated name if not provided", () => {
+  it("should create session with a non-date default name if not provided", () => {
     const meta = manager.create();
     expect(meta.id).toBeTruthy();
-    expect(meta.name).toMatch(/^Session \d{4}-\d{2}-\d{2}/);
+    // Дата в имени редактировалась PII-фильтром (`Session <PII:…>`).
+    expect(meta.name).toBe("New chat");
+    expect(meta.name).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 
   it("setEffectiveContext updates the active session's window and model", () => {

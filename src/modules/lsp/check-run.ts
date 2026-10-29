@@ -42,6 +42,8 @@ export interface CheckRunDeps {
   client: Pick<LspClient, "isWarm" | "warmup" | "checkFile">;
   health: LspHealth;
   logger: LspClientLogger | null;
+  /** Бюджет проверки одного файла; по умолчанию `CHECK_FILE_TIMEOUT_MS`. */
+  timeoutMs?: number;
   /** Заметка о сбое сервера (модуль форматирует её по своей политике). */
   failureNote(key: string, serverConfig: LspServerConfig, message: string, file: string): string;
 }
@@ -77,12 +79,13 @@ export async function runCheckFiles(
       continue;
     }
     try {
+      const budget = deps.timeoutMs ?? CHECK_FILE_TIMEOUT_MS;
       const result = await deps.client.checkFile(
         file,
         deps.baseDir,
         serverConfig,
         projectRoot,
-        Math.min(serverConfig.timeout ?? CHECK_FILE_TIMEOUT_MS, CHECK_FILE_TIMEOUT_MS),
+        Math.min(serverConfig.timeout ?? budget, budget),
       );
       deps.health.reset(key);
       collectDiagnostics(acc, file, deps.baseDir, result, projectRoot);

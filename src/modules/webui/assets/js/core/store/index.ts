@@ -34,6 +34,12 @@ export interface StoreHooks {
    * importing the sidebar, keeping the module DAG acyclic.
    */
   openFileInTree?: ((path: string) => void) | null;
+  /**
+   * Opens a file and scrolls the viewer to a 1-based line (LSP diagnostics).
+   * Same registration point as `openFileInTree`, with the line kept explicit so
+   * the caller does not have to know the viewer's scroll math.
+   */
+  openFileAtLine?: ((path: string, line: number) => void) | null;
   /** Лента вкладки отрисована: связать исторические строки субагентов с прогонами. */
   afterHistory?: ((id: string) => void) | null;
   /** Перед заменой ленты в `#msgs` (закрывает вид субагента, если открыт). */
