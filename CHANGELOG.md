@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-10-29
+
+### Fixed
+
+- **Причина падения LSP-сервера видна.** `/lsp doctor` печатает версию Node и до
+  трёх строк stderr упавшего сервера, а крах JS-рантайма (`SyntaxError`,
+  `ERR_REQUIRE_ESM`, `ERR_UNKNOWN_BUILTIN_MODULE` до `initialize`) получает
+  класс `node-too-old` и подсказку с пином совместимой сборки
+  (`typescript-language-server@3.3.2`) вместо повторной установки latest. Так
+  выглядел живой случай: Node 16 + `typescript-language-server` 6.x — npm ставит
+  его с одним `EBADENGINE`, сервер падает на старте, а doctor показывал «ок».
+- **`lsp_check` и веб-панель не путают «упало» и «ещё стартует».** Отказ
+  прогрева пула больше не проглатывается: файл помечается
+  `[LSP check failed for …]`, падение учитывается в `health` (3 подряд → сервер
+  отключается на сессию), `/lsp status` перестаёт писать «все серверы работают»
+  при пустом пуле. Честный холодный старт по-прежнему сообщается отдельно.
+- **Классификация краха рантайма идёт до таймаута и учитывает stderr.** Упавший
+  сервер отвечает клиенту «connection closed», а настоящая причина остаётся
+  только в его выводе — без этого `doctor` видел общий `server-error`.
+
+Спека: `docs/specs/2026-10-29-lsp-node-version-diagnosis-design.md`. Гварды:
+`tests/modules/lsp/node-version.test.ts`, `doctor-render.test.ts`,
+`probe-stderr.test.ts`, `check-warmup-failure.test.ts`.
+
 ## [0.17.1] - 2026-10-29
 
 ### Fixed
