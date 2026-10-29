@@ -41,15 +41,18 @@ describe("классификация доказательств", () => {
     }
   });
 
-  it("file-exists — статика, manual и http — поведение", () => {
+  it("file-exists — статика, manual, http и browser — поведение", () => {
     expect(classifyCheck(kindOf("file-exists:src/a.ts"))).toBe("static");
     expect(classifyCheck(kindOf("manual:открыл страницу, видны 6 карточек"))).toBe("behavioral");
     expect(classifyCheck(kindOf("http:http://127.0.0.1:5173/"))).toBe("behavioral");
     expect(classifyCheck(kindOf("http:http://127.0.0.1:5173/~Карточки"))).toBe("behavioral");
+    expect(classifyCheck(kindOf("browser:http://127.0.0.1:5173/"))).toBe("behavioral");
+    expect(classifyCheck(kindOf("browser:http://127.0.0.1:5173/~Карточки"))).toBe("behavioral");
   });
 
-  it("http: без url не парсится", () => {
+  it("http:/browser: без url не парсятся", () => {
     expect(parseCheck("http:")).toBeNull();
+    expect(parseCheck("browser:")).toBeNull();
   });
 });
 

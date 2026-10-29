@@ -7,7 +7,8 @@
  * - "file-exists:<path>" — жёстко проверяет StepVerifier на done;
  * - "command:<cmd>" — точная команда-доказательство шага (self-certified);
  * - "manual:<text>" — проверка глазами для UI/визуалки (self-certified);
- * - "http:<url>[~<подстрока>]" — GET-проба, исполняется на done.
+ * - "http:<url>[~<подстрока>]" — GET-проба, исполняется на done;
+ * - "browser:<url>[~<подстрока>]" — headless-проба страницы, исполняется на done.
  *
  * Доказательства делятся на статические (компилируется) и поведенческие
  * (работает). Шаг, меняющий поведение/UI, статикой не подтверждается —
@@ -19,9 +20,13 @@
 import { t } from "../../i18n/index";
 import type { ToolResult } from "../../tools/types";
 import { runHttpCheck } from "./http-check";
+import {
+  runBrowserCheck,
+  type BrowserProbeLauncher,
+} from "./browser-check";
 
-/** Вид контракта: файл, команда, ручная проверка, http-проба. */
-export type CheckKind = "file" | "command" | "manual" | "http";
+/** Вид контракта: файл, команда, ручная проверка, http- или browser-проба. */
+export type CheckKind = "file" | "command" | "manual" | "http" | "browser";
 
 /** Класс доказательства: статика (компилируется) или поведение (работает). */
 export type EvidenceClass = "static" | "behavioral";
@@ -38,6 +43,7 @@ const PREFIXES: Array<{ prefix: string; kind: CheckKind }> = [
   { prefix: "command:", kind: "command" },
   { prefix: "manual:", kind: "manual" },
   { prefix: "http:", kind: "http" },
+  { prefix: "browser:", kind: "browser" },
 ];
 
 /**
@@ -111,6 +117,7 @@ export function classifyCheck(parsed: ParsedCheck): EvidenceClass {
         : "behavioral";
     case "manual":
     case "http":
+    case "browser":
       return "behavioral";
   }
 }
@@ -142,7 +149,7 @@ export async function checkDoneEvidence(
   parsed: ParsedCheck,
   target: StepEvidenceTarget,
   stepId: number,
-  opts: { fetchImpl?: typeof fetch } = {},
+  opts: { fetchImpl?: typeof fetch; browserLauncher?: BrowserProbeLauncher } = {},
 ): Promise<{ note: string; blocked: ToolResult | null } | null> {
   if (parsed.kind === "http") {
     const res = await runHttpCheck(parsed.target, { fetchImpl: opts.fetchImpl });
@@ -160,6 +167,28 @@ export async function checkDoneEvidence(
           step: String(stepId),
           check: target.check || "",
           detail: res.reason || "failed",
+        }),
+      },
+    };
+  }
+  if (parsed.kind === "browser") {
+    const res = await runBrowserCheck(parsed.target, {
+      ...(opts.browserLauncher ? { launcher: opts.browserLauncher } : {}),
+    });
+    if (res.ok) {
+      return {
+        note: `\n${t("plan.browser_ok", { check: target.check || "", detail: res.line })}`,
+        blocked: null,
+      };
+    }
+    return {
+      note: "",
+      blocked: {
+        success: false,
+        output: t("plan.browser_failed", {
+          step: String(stepId),
+          check: target.check || "",
+          detail: `${res.line}; ${res.reason || "failed"}`,
         }),
       },
     };

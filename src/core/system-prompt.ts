@@ -164,10 +164,11 @@ export function buildSystemInfo(
     `PLAN QUALITY: each step = CONCRETE deliverables (exact paths, packages, commands).`,
     `No vague steps. 5-8 steps, init → verify.`,
     `Each step needs a 1:1 verification contract in "checks":`,
-    `"file-exists:<path>", "command:<exact command>", "http:<url>[~marker]" or "manual:<what>".`,
+    `"file-exists:<path>", "command:<exact command>", "http:<url>[~marker]",`,
+    `"browser:<url>[~marker]" or "manual:<what>".`,
     `For "check/fix errors" tasks each verification step names the exact proving command`,
     `("bun run build", "bun test", "lsp_check").`,
-    `UI/behaviour steps are not proven by build/typecheck alone: use a test/app command, http: or manual:.`,
+    `UI/behaviour steps are not proven by build/typecheck alone: use a test/app command, http:, browser: or manual:.`,
     `A step is done only after its check reports clean — then "plan_step step=N status=done".`,
   );
 
