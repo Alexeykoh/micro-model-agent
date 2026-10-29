@@ -68,6 +68,19 @@ export class LspConnectionPool {
   keys(): string[] {
     return [...this.entries.keys()];
   }
+
+  /**
+   * Что реально поднято: сервер, корень проекта и возраст соединения.
+   * Ответ на «сервер поднялся?» без догадок: пул — единственный источник правды.
+   */
+  keyStates(): Array<{ key: string; root: string; ageMs: number }> {
+    const now = this.now();
+    return [...this.entries.values()].map((entry) => ({
+      key: entry.connection.key.split("\u0000")[0] ?? entry.connection.key,
+      root: entry.projectRoot,
+      ageMs: Math.max(0, now - entry.openedAt),
+    }));
+  }
   /** Соединение-депы для конкретного соединения: часы — из пула. */
   private connectionDeps(): LspConnectionDeps {
     return { ...this.deps, now: this.now };
@@ -119,7 +132,7 @@ export class LspConnectionPool {
         await connection.shutdown();
         throw new Error("LSP pool disposed");
       }
-      this.entries.set(id, { connection, projectRoot });
+      this.entries.set(id, { connection, projectRoot, openedAt: this.now() });
       this.evictOverflow();
       return connection;
     })();
@@ -199,4 +212,6 @@ export class LspConnectionPool {
 interface PoolEntry {
   connection: LspConnection;
   projectRoot: string;
+  /** Когда соединение поднялось (для `/lsp status`: возраст). */
+  openedAt: number;
 }

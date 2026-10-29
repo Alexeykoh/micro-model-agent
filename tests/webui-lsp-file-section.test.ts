@@ -24,6 +24,7 @@ i18n.I18N.dicts = {
     "web.sidebar.lsp_file_outside_workspace": "путь вне проекта — не проверяю",
     "web.sidebar.lsp_file_lsp_timeout": "сервер LSP не ответил за {secs} с - попробуй ещё раз",
     "web.sidebar.lsp_file_unsupported": "для этого типа файла нет LSP-сервера",
+    "web.sidebar.lsp_file_starting": "сервер запускается (большой проект, до минуты)",
     "web.sidebar.lsp_file_more": "ещё {count} диагностик(и) не показано",
     "web.sidebar.lsp_file_open_line": "открыть {path} на строке {line}",
     "web.sidebar.lsp_sev_error": "ошибка",

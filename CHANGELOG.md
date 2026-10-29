@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-10-29
+
+### Added
+
+- **`/lsp status` показывает, что реально поднято:** `тёплый <сервер> · <корень> ·
+  <возраст>` по каждому живому соединению (или «тёплых серверов нет»). Прямой
+  ответ на «сервер поднялся?» без догадок.
+- **Прогрев LSP при старте хоста**, а не только на первом ходе: вкладка LSP и
+  первый выбранный файл в `mma web` (и REPL) больше не платят холодный старт.
+- **Панель не ждёт холодный старт 15 с.** Запрос возвращает `error: "starting"`
+  + `retryAfterMs`, панель сама повторяет запрос (до минуты) и показывает
+  счётчик. Для Angular/Next-проекта, где `initialize` идёт 15–60 с, это
+  заменяет ложное «сервер не ответил» на «сервер запускается».
+- **`docs/agents/lsp.md`** — процедура проверки по слоям (сервер → mma → агент)
+  с автономным скриптом рукопожатия LSP и разбором «почему тут быстро, а там
+  нет».
+
 ## [0.18.0] - 2026-10-29
 
 ### Added
@@ -49,7 +66,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   «заблокировано».
 
 Спека: `docs/specs/2026-10-29-lsp-reliability-design.md` (включая живую матрицу
-по форматам и `mma web`). Гварды: `tests/modules/lsp/session-warm.test.ts`,
+по форматам и `mma web`). Как проверить сервер по слоям: `docs/agents/lsp.md`. Гварды: `tests/modules/lsp/session-warm.test.ts`,
 `eager-warm.test.ts`, `health-backoff.test.ts`, `check-warmup-budget.test.ts`,
 `config-defaults.test.ts`, `tests/config/lsp-python-migration.test.ts`.
 

@@ -106,6 +106,11 @@ export class LspModule implements AgentModule {
     return this.client.liveConnections();
   }
 
+  /** Что именно поднято: сервер, корень проекта, возраст (для `/lsp status`). */
+  poolStates(): Array<{ key: string; root: string; ageMs: number }> {
+    return this.client.liveStates();
+  }
+
   /** Сводка пула: живые соединения, перезапуски, reap. */
   poolStats(): { live: number; restarts: number; reaped: number } {
     return this.client.stats();

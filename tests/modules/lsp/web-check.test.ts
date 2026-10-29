@@ -139,8 +139,31 @@ describe("web LSP: диагностика одного файла", () => {
     expect(r.diagnostics).toEqual([]);
   });
 
-  it("отдаёт причину падения сервера, а не только «не ответил»", async () => {
+  it("не держит запрос на холодном старте: отдаёт «starting» + retryAfterMs", async () => {
+    // Большой проект (Angular 11 монорепо) грузит tsserver 15–60 с: панель
+    // должна сама повторить запрос, а не получать «сервер не ответил» через 15 с.
+    const started = Date.now();
     const r = await runWebCheck(
+      "src/a.ts",
+      deps({
+        warmWaitMs: 50,
+        client: {
+          isWarm: () => false,
+          warmup: () => new Promise<void>(() => {}),
+          checkFile: async () => {
+            throw new Error("must not run while starting");
+          },
+        } as never,
+      }),
+    );
+
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe("starting");
+    expect(r.retryAfterMs).toBeGreaterThan(0);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it("отдаёт причину падения сервера, а не только «не ответил»", async () => {    const r = await runWebCheck(
       "src/a.ts",
       deps({
         failureNote: (_key: string, _cfg: unknown, message: string) => `[LSP check failed: ${message}]`,

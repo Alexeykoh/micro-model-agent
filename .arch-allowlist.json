@@ -51,7 +51,7 @@
     "src/modules/execution/verifier.ts": 393,
     "src/config/config.ts": 375,
     "src/tools/question.ts": 386,
-    "src/core/bootstrap/modules-phase.ts": 375,
+    "src/core/bootstrap/modules-phase.ts": 374,
     "src/modules/indexer/symbols.ts": 375,
     "src/modules/session/manager.ts": 356,
     "src/modules/processes/registry.ts": 351

@@ -42,6 +42,21 @@ doctor` раньше всегда пробовал `baseDir`. Отсюда «doc
 заметку прогона (упавший сервер со stderr, офлайн, пауза) вместо общего «сервер
 LSP не ответил».
 
+### 0b. Панель не ждёт холодный старт и знает, что поднято
+
+Большой проект (Angular 11 монорепо) грузит `tsserver` 15–60 с. Один HTTP-запрос
+столько ждать не должен: `runWebCheck` ждёт `WEB_WARM_WAIT_MS = 1.5 с` и
+возвращает `error: "starting"` + `retryAfterMs` (HTTP 200, это не ошибка
+клиента). Панель сама повторяет запрос каждые 2 с до минуты и показывает
+счётчик; пользователь видит «сервер запускается», а не «не ответил».
+
+`/lsp status` печатает **живые соединения** из пула: `тёплый <сервер> · <корень>
+· <возраст>` (`pool.keyStates()`), либо «тёплых серверов нет». Это прямой ответ
+на «сервер поднялся?»; до этого приходилось догадываться по `live`-счётчику.
+
+Прогрев запускается **при старте хоста** (`modules-phase.ts`), а не только в
+`onSessionStart`: вкладку LSP и файл в вебе открывают до первого сообщения.
+
 ### 1. Прогрев проекта на старте сессии
 
 `getPlugin().onSessionStart` → `warmProjectServers()` (новый `warmup.ts`):
@@ -140,6 +155,8 @@ LSP write check: src/a.ts in 12ms (0 error(s), 0 warning(s))
 | Миграция старого `npx pyright --stdio` в персисте | `tests/config/lsp-python-migration.test.ts` |
 | Формат без сервера — явная причина, не «не ответил» | `tests/modules/lsp/check-honesty.test.ts`, `web-check.test.ts`, `tests/webui-lsp-file-section.test.ts` |
 | Проверка не повторяется во время паузы | `tests/modules/lsp/check-warmup-failure.test.ts` |
+| Холодный старт в панели → `starting` + `retryAfterMs` за 1.5 с | `tests/modules/lsp/web-check.test.ts`, `tests/webui-lsp-check-api.test.ts` |
+| `/lsp status` знает, что реально поднято (сервер, корень, возраст) | `tests/modules/lsp/pool.test.ts` |
 
 ## Живая матрица (2026-10-29)
 
