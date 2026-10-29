@@ -197,8 +197,17 @@ describe("diagnoseLspServers", () => {
     expect(server.installCommand).toBe("npm i -g typescript-language-server@3.3.2 typescript@5");
   });
 
-  it("does not blame the Node version for a plain server error", async () => {
+  it("reports the npx version (node ↔ npm/npx pairing)", async () => {
     const d = await diagnoseLspServers(config({ typescript: TS_SERVER }), "C:/proj", {
+      collectFiles: async () => [file("a.ts")],
+      findOnPath: () => null,
+      npxVersion: "10.9.0",
+      client: { probe: async () => {} } as never,
+    });
+    expect(d.npxVersion).toBe("10.9.0");
+  });
+
+  it("does not blame the Node version for a plain server error", async () => {    const d = await diagnoseLspServers(config({ typescript: TS_SERVER }), "C:/proj", {
       collectFiles: async () => [file("a.ts")],
       findOnPath: () => "/usr/bin/tls",
       nodeVersion: { raw: "v22.11.0", major: 22 },

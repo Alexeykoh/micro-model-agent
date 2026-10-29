@@ -102,6 +102,11 @@ export class LspClient {
     return this.pool.keyStates();
   }
 
+  /** Как завершился последний процесс сервера по ключу (код/сигнал). */
+  lastExit(config: LspServerConfig, projectRoot: string): { code?: number | null; signal?: string | null } | null {
+    return this.pool.lastExit(serverKeyFor(config), projectRoot);
+  }
+
   /** Закрыть все соединения (конец сессии, `/lsp restart`). */
   async close(): Promise<void> {
     await this.pool.dispose();

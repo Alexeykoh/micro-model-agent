@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { formatDoctor } from "../../../src/cli/repl-commands-lsp";
 import { setLocale } from "../../../src/i18n/index";
 import type { LspDiagnosis } from "../../../src/modules/lsp/diagnose";
@@ -11,6 +11,8 @@ import type { LspDiagnosis } from "../../../src/modules/lsp/diagnose";
  */
 
 setLocale("en");
+// Локаль процесс-глобальна: другой файл в том же прогоне может выставить ru.
+beforeEach(() => setLocale("en"));
 
 // eslint-disable-next-line no-control-regex
 const stripAnsi = (s: string): string => s.replace(/\u001b\[[0-9;]*m/g, "");
@@ -60,6 +62,16 @@ describe("/lsp doctor", () => {
     expect(text).toContain("at wrapSafe");
     expect(text).toContain("at Module._compile");
     expect(text).not.toContain("node:internal");
+  });
+
+  it("shows the npx version next to Node", () => {
+    const lines = formatDoctor(diagnosis({ npxVersion: "10.9.0" })).map(stripAnsi);
+    expect(lines.some((l) => l.includes("npx") && l.includes("10.9.0"))).toBe(true);
+  });
+
+  it("says when npx itself does not run", () => {
+    const text = formatDoctor(diagnosis({ npxVersion: null })).map(stripAnsi).join("\n");
+    expect(text).toContain("does not run");
   });
 
   it("omits the Node line when the version is unknown", () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -14,6 +14,8 @@ import type { ToolContext } from "../../../src/tools/types";
  */
 
 setLocale("en");
+// Локаль процесс-глобальна: другой файл в том же прогоне может выставить ru.
+beforeEach(() => setLocale("en"));
 
 /** Таймаут сервера занижен, чтобы бюджет прогрева в тесте был短. */
 const CONFIG = {

@@ -108,9 +108,15 @@ export function formatDoctor(diag: LspDiagnosis): string[] {
   lines.push(`  ${t("repl.lsp_doctor_enabled")} · ${yes(diag.enabled, pc.green)}`);
   lines.push(`  ${t("repl.lsp_doctor_offline")} · ${yes(diag.offline, pc.yellow)}`);
   lines.push(`  ${t("repl.lsp_doctor_project")} · ${diag.projectRoot}`);
-  // Версия Node объясняет крах сервера на неподходящем рантайме.
+  // Версия Node объясняет крах сервера на неподходящем рантайме, npx — связку
+  // node↔npm (npx-серверы падают ещё до старта, если они из разных установок).
   if (diag.nodeVersion) {
     lines.push(`  ${t("repl.lsp_doctor_node")} · ${diag.nodeVersion.raw}`);
+  }
+  if (diag.npxVersion !== undefined) {
+    lines.push(
+      `  ${t("repl.lsp_doctor_npx")} · ${diag.npxVersion ?? t("repl.lsp_doctor_npx_missing")}`,
+    );
   }
 
   if (diag.servers.length === 0) {

@@ -15,7 +15,7 @@ import {
   type ServerContext,
 } from "./diagnose-server";
 import { detectProjectToolchain, type ProjectToolchain } from "./toolchain";
-import { readNodeVersion, type NodeVersion } from "./node-version";
+import { readNodeVersion, readVersion, type NodeVersion } from "./node-version";
 import { findProjectRoot } from "./project-root";
 
 /** Сколько разных корней на один язык пробуем в doctor (монорепо). */
@@ -36,6 +36,12 @@ export interface LspDiagnosis {
   toolchain?: ProjectToolchain;
   /** Версия Node из PATH: объясняет крах сервера на неподходящем рантайме. */
   nodeVersion?: NodeVersion;
+  /**
+   * Версия `npx` из PATH. npx-серверы зависят от связки node↔npm: если npx
+   * собран под другой Node, запуск падает ещё до сервера — это надо видеть, а
+   * не списывать на «сервер не отвечает». `null` — npx не запускается.
+   */
+  npxVersion?: string | null;
 }
 
 /** Зависимости диагностики (инжекции для тестов). */
@@ -55,6 +61,8 @@ export interface LspDiagnoseDeps {
   toolchain?: ProjectToolchain;
   /** Инжектируемая версия Node (тесты); по умолчанию `node --version`. */
   nodeVersion?: NodeVersion | null;
+  /** Инжектируемая версия npx (тесты); по умолчанию `npx --version`. */
+  npxVersion?: string | null;
   logger?: LspClientLogger;
 }
 
@@ -79,6 +87,11 @@ export async function diagnoseLspServers(
   const toolchain = deps.toolchain ?? detectProjectToolchain(baseDir);
   const nodeVersion = deps.nodeVersion === undefined ? readNodeVersion() : deps.nodeVersion;
   const entries = Object.entries(config.servers);
+  // npx читаем один раз: он нужен для npx-серверов и объясняет класс отказов
+  // «node и npm/npx из разных установок».
+  const usesNpx = entries.some(([, server]) => server.command === "npx");
+  const npxVersion =
+    deps.npxVersion !== undefined ? deps.npxVersion : usesNpx ? readVersion("npx") : null;
 
   if (!config.enabled) {
     return {
@@ -87,6 +100,7 @@ export async function diagnoseLspServers(
       projectRoot: baseDir,
       toolchain,
       nodeVersion: nodeVersion ?? undefined,
+      npxVersion,
       servers: entries.map(([language, server]) =>
         baseDiagnosis(language, server, { enabled: false, applicable: false, reason: "disabled" }),
       ),
@@ -144,5 +158,13 @@ export async function diagnoseLspServers(
     if (roots.length === 0) servers.push(await diagnoseServer(language, server, true, ctx));
   }
 
-  return { enabled: true, offline, projectRoot: baseDir, toolchain, nodeVersion: nodeVersion ?? undefined, servers };
+  return {
+    enabled: true,
+    offline,
+    projectRoot: baseDir,
+    toolchain,
+    nodeVersion: nodeVersion ?? undefined,
+    npxVersion,
+    servers,
+  };
 }
