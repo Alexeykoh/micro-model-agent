@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.18.6] - 2026-10-29
+
+### Fixed
+
+- **Сборка релиза для macOS arm64 снова находит раннер.** GitHub выводит
+  `macos-14` из эксплуатации (brownout 29–30 октября 2026): джоба `mac-arm64`
+  провисела 15 минут без выдачи раннера, и `publish` пропускался. Матрица
+  переведена на `macos-15` (arm64), пока label ещё поддерживается.
+
 ## [0.18.5] - 2026-10-29
 
 ### Fixed
