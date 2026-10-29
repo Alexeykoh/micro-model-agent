@@ -30,7 +30,9 @@ describe("LSP initialize: initializationOptions", () => {
     await conn.open();
 
     const init = parseWire(server.written).find((m) => m.method === "initialize");
-    expect((init?.params as { initializationOptions?: unknown }).initializationOptions).toEqual({
+    expect(init).toBeDefined();
+    const params = init?.params as { initializationOptions?: unknown } | undefined;
+    expect(params?.initializationOptions).toEqual({
       tsserver: { path: "/opt/typescript/lib/tsserver.js" },
     });
     await conn.shutdown();
