@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.18.3] - 2026-10-29
+
+### Fixed
+
+- **413 на слишком большое тело больше не рвёт сокет до чтения ответа.**
+  Сервер отвечал `413` и сразу уничтожал запрос; пока клиент дописывал тело, это
+  давало RST, и `fetch` падал с «socket connection was closed unexpectedly»
+  вместо статуса. Это флейк `webui-body-limits` в pre-push гейте (дважды
+  блокировал релиз). Теперь: `413` + `Connection: close`, дренаж остатка тела,
+  `destroy` — после закрытия ответа или по 2-секундному предохранителю.
+
 ## [0.18.2] - 2026-10-29
 
 ### Added
