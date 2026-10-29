@@ -5,7 +5,13 @@ import {
   MAX_CONSECUTIVE_LSP_FAILURES,
 } from "../../../src/modules/lsp/health";
 import type { LspServerConfig } from "../../../src/modules/lsp/types";
-import { LSP_RETRY_BASE_MS, LSP_RETRY_MAX_MS } from "../../../src/config/timeouts";
+import {
+  LSP_CRASH_GIVEUP_MS,
+  LSP_CRASH_LIMIT,
+  LSP_CRASH_WINDOW_MS,
+  LSP_RETRY_BASE_MS,
+  LSP_RETRY_MAX_MS,
+} from "../../../src/config/timeouts";
 
 /**
  * Сервер после серии падений уходит в паузу восстановления (2 с → 4 с → … → 60 с),
@@ -77,5 +83,30 @@ describe("LspHealth: пауза восстановления", () => {
     for (let i = 0; i < MAX_CONSECUTIVE_LSP_FAILURES; i++) health.recordFailure("ts", SERVER, "boom");
     expect(health.isDisabled("ts")).toBe(true);
     expect(health.isDisabled("css")).toBe(false);
+  });
+
+  it("stops retrying after too many crashes in the window (VS Code semantics)", () => {
+    const c = clock();
+    const health = new LspHealth(c.now);
+    let outcome = health.recordFailure("ts", SERVER, "boom");
+    // Набираем больше LSP_CRASH_LIMIT крахов внутри окна (первые два вызова
+    // только увеличивают счётчик — пауза начинается с третьего).
+    for (let i = 0; i <= LSP_CRASH_LIMIT + 1; i++) {
+      c.advance(1000);
+      outcome = health.recordFailure("ts", SERVER, "boom");
+    }
+    expect(outcome.blocked).toBe(true);
+    expect(outcome.text).toContain("crashed");
+    expect(outcome.retryInMs).toBe(LSP_CRASH_GIVEUP_MS);
+  });
+
+  it("forgets old crashes outside the window", () => {
+    const c = clock();
+    const health = new LspHealth(c.now);
+    for (let i = 0; i < MAX_CONSECUTIVE_LSP_FAILURES; i++) health.recordFailure("ts", SERVER, "boom");
+    // Окно истекло — серия начинается заново, без «give up».
+    c.advance(LSP_CRASH_WINDOW_MS + 1);
+    const outcome = health.recordFailure("ts", SERVER, "boom");
+    expect(outcome.retryInMs).toBeLessThan(LSP_CRASH_GIVEUP_MS);
   });
 });

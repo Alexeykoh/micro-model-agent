@@ -17,8 +17,19 @@ export interface ServerProcess {
   /** pid процесса сервера — нужен, чтобы убить ВСЁ дерево (аудит §8.1). */
   pid?: number;
   kill(signal?: number | string): boolean;
-  once(event: "exit", cb: () => void): void;
+  /**
+   * `exit` несёт код/сигнал: по спеке LSP код 0 = чистый выход после
+   * `shutdown`, 1 = выход без `shutdown` (крах). Без кода «сервер упал» и
+   * «сервер штатно завершился» неотличимы.
+   */
+  once(event: "exit", cb: (code?: number | null, signal?: string | null) => void): void;
   on(event: "error", cb: (error: Error) => void): void;
+}
+
+/** Как завершился процесс сервера. */
+export interface LspExitInfo {
+  code?: number | null;
+  signal?: string | null;
 }
 
 /** Как именно нужно стартовать процесс (после резолва npx/офлайна). */

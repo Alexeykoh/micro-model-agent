@@ -14,6 +14,23 @@ export interface NodeVersion {
 }
 
 /**
+ * Прочитать версию внешней команды (`node --version`, `npx --version`).
+ * `run` инжектируется для тестов; null — команда не запускается.
+ */
+export function readVersion(
+  command: string,
+  run: (cmd: string) => string = (cmd) =>
+    execSync(cmd, { stdio: "pipe", timeout: 3000 }).toString(),
+): string | null {
+  try {
+    const out = run(`${command} --version`).trim();
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Прочитать версию Node из PATH. `run` инжектируется для тестов.
  * null — node не найден/вывод не распознан (тогда и говорить нечего).
  */

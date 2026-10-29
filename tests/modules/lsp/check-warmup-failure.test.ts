@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -15,6 +15,10 @@ import type { ToolContext } from "../../../src/tools/types";
  */
 
 setLocale("en");
+
+// Локаль — процесс-глобальная: другой файл в том же прогоне может выставить ru,
+// и проверки английских строк станут ложно-красными.
+beforeEach(() => setLocale("en"));
 
 const CONFIG = {
   enabled: true,
@@ -145,6 +149,32 @@ describe("lsp_check: прогрев упал", () => {
       expect(warmups).toBe(attempts);
       expect(paused.output).toContain("cooldown");
       expect(paused.output).toContain("next attempt");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not report a cold start when the server died right after initialize", async () => {
+    const dir = project();
+    try {
+      const client = {
+        setOffline: () => {},
+        setLogger: () => {},
+        // Прогрев «успешен», но соединения нет: процесс поднялся и умер.
+        isWarm: () => false,
+        warmup: async () => {},
+        checkFile: () => {
+          throw new Error("checkFile must not run on a dead server");
+        },
+      } as unknown as LspClient;
+      const module = new LspModule(CONFIG, client);
+      const result = await module.getToolDefinitions()[0].handler(ctxFor(dir), { path: "src/a.ts" });
+
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("exited immediately after initialize");
+      // Не «ещё запускается»: иначе панель повторяет запрос и поднимает сервер
+      // каждые 2 секунды, пока не истечёт минута.
+      expect(result.output).not.toContain("still starting");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -47,7 +47,8 @@ function hasTypeEnvironment(projectRoot: string): boolean {
 export interface CheckRunDeps {
   baseDir: string;
   config: LspConfig;
-  client: Pick<LspClient, "isWarm" | "warmup" | "checkFile">;
+  client: Pick<LspClient, "isWarm" | "warmup" | "checkFile"> &
+    Partial<Pick<LspClient, "lastExit">>;
   health: LspHealth;
   logger: LspClientLogger | null;
   /** Бюджет проверки одного файла; по умолчанию `CHECK_FILE_TIMEOUT_MS`. */
@@ -190,12 +191,15 @@ async function warmWithin(
   const timeout = new Promise<void>((resolve) => {
     timer = setTimeout(resolve, budget);
   });
-  const state: { failure?: { message: string; stderrTail?: string } } = {};
+  const state: { failure?: { message: string; stderrTail?: string }; completed?: boolean } = {};
   // Отказ прогрева запоминаем, а не бросаем: поздний отказ (после бюджета) не
   // должен стать unhandled rejection.
   const warm = deps.client.warmup(serverConfig, projectRoot).then(
-    () => {},
+    () => {
+      state.completed = true;
+    },
     (e: unknown) => {
+      state.completed = true;
       state.failure = { message: errMsg(e), stderrTail: (e as LspProbeError).stderrTail };
     },
   );
@@ -206,7 +210,19 @@ async function warmWithin(
   }
   if (deps.client.isWarm(serverConfig, projectRoot)) return { ok: true };
   const failure = state.failure;
-  return failure ? { ok: false, error: failure.message, stderrTail: failure.stderrTail } : { ok: false };
+  if (failure) return { ok: false, error: failure.message, stderrTail: failure.stderrTail };
+  // Прогрев завершился «успешно», но тёплого соединения нет: процесс поднялся
+  // и умер сразу после `initialize` (частый случай — несовместимый с Node
+  // tsserver из проекта). Раньше это выглядело как вечный холодный старт, и
+  // панель бесконечно повторяла запрос, поднимая новый сервер каждые 2 с.
+  if (state.completed) {
+    const exit = deps.client.lastExit?.(serverConfig, projectRoot) ?? null;
+    const code = exit?.code ?? null;
+    const signal = exit?.signal ?? null;
+    const suffix = signal ? ` (signal ${signal})` : code !== null ? ` (code ${code})` : "";
+    return { ok: false, error: `${t("lsp.server_died_after_init")}${suffix}` };
+  }
+  return { ok: false };
 }
 
 /**

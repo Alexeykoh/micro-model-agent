@@ -19,12 +19,14 @@ import { errMsg } from "../../utils";
 import { LSP_DEFAULT_TIMEOUT_MS } from "../../config/timeouts";
 import { defaultSpawn, resolveLaunchPlan } from "./spawn";
 import { StderrRing } from "./stderr-ring";
+import { buildInitializeParams, exitReason, progressTextOf } from "./connection-intro";
 import type {
   DiagnosticRecord,
   DocumentDiagnosticReport,
   DocumentState,
   LaunchPlan,
   LspConnectionDeps,
+  LspExitInfo,
   PublishDiagnosticsParams,
   ServerProcess,
   ServerProcessFactory,
@@ -68,6 +70,10 @@ export class LspConnection {
   private supportsPull = false;
   private closing = false;
   private lastUsedAt = 0;
+  /** Как завершился процесс (код/сигнал) — по спеке 0 = чистый, 1 = крах. */
+  private exitInfo: LspExitInfo | null = null;
+  /** Последний `$/progress` от сервера (например, «загружаю проект»). */
+  private progressText: string | null = null;
   private readonly documents = new Map<string, DocumentState>();
   private readonly diagnostics = new Map<string, DiagnosticRecord>();
 
@@ -84,6 +90,14 @@ export class LspConnection {
   /** pid процесса сервера (undefined — сервер не запущен). */
   get processPid(): number | undefined {
     return this.process?.pid;
+  }
+
+  /** Код/сигнал завершения (null — не завершался). */
+  get lastExit(): LspExitInfo | null {
+    return this.exitInfo;
+  }
+  get lastProgress(): string | null {
+    return this.progressText;
   }
 
   /**
@@ -148,7 +162,7 @@ export class LspConnection {
     this.diagnostics.clear();
 
     const plan = this.resolveLaunch(this.config);
-    const params = this.initializeParams();
+    const params = buildInitializeParams(this.projectRoot, this.config);
     await this.spawnAndWire(plan);
     try {
       this.noteInitializeResult(await this.request("initialize", params, this.timeout));
@@ -182,7 +196,8 @@ export class LspConnection {
   private async spawnAndWire(plan: LaunchPlan): Promise<void> {
     const proc = await this.spawnProcess(plan, this.projectRoot);
     this.process = proc;
-    proc.once("exit", () => this.onServerExit(proc));
+    this.exitInfo = null;
+    proc.once("exit", (code, signal) => this.onServerExit(proc, code, signal));
     this.process.on("error", (error) => {
       this.logger?.debug(`LSP process error: ${errMsg(error)}`, { key: this.key });
     });
@@ -196,23 +211,6 @@ export class LspConnection {
     if (this.process.stdout) {
       this.process.stdout.on("data", (chunk) => this.handleData(chunk));
     }
-  }
-
-  /** Параметры `initialize`: корень, capabilities, clientInfo. */
-  initializeParams(): Record<string, unknown> {
-    const rootUri = pathToUri(this.projectRoot);
-    return {
-      processId: process.pid,
-      rootUri,
-      workspaceFolders: [{ uri: rootUri, name: "workspace" }],
-      clientInfo: { name: "micro-models-agent", version: "lsp-connection/1" },
-      capabilities: buildClientCapabilities(),
-      // Серверные опции (напр. `tsserver.path`): без них сервер выбирает
-      // старый TypeScript из проекта и падает после initialize.
-      ...(this.config.initializationOptions
-        ? { initializationOptions: this.config.initializationOptions }
-        : {}),
-    };
   }
 
   /** Показать серверу содержимое файла (didOpen или didChange-Full). */
@@ -364,7 +362,7 @@ export class LspConnection {
     this.supportsPull = Boolean(capabilities?.diagnosticProvider);
   }
 
-  private onServerExit(exited?: ServerProcess): void {
+  private onServerExit(exited?: ServerProcess, code?: number | null, signal?: string | null): void {
     // Выход СТАРОГО процесса не должен ронять новое соединение: ретрай
     // open() поднимает новый процесс, а exit предыдущего приходит позже
     // (аудит §8.4).
@@ -372,10 +370,16 @@ export class LspConnection {
       this.logger?.debug("LSP server exited (stale process)", { key: this.key });
       return;
     }
-    this.logger?.debug("LSP server exited", { key: this.key });
+    // Код выхода: 0 — чистый (после shutdown), 1/сигнал — крах.
+    this.exitInfo = { code: code ?? null, signal: signal ?? null };
+    this.logger?.debug(
+      `LSP server exited (code ${code ?? "?"}${signal ? `, signal ${signal}` : ""})`,
+      { key: this.key },
+    );
     this.teardown();
   }
 
+  /** Причина завершения для ошибок ожидающих запросов (код/сигнал). */
   private teardown(): void {
     const proc = this.process;
     this.process = null;
@@ -385,7 +389,7 @@ export class LspConnection {
     this.documents.clear();
     this.diagnostics.clear();
     for (const entry of this.pending.values()) {
-      entry.reject?.(fatalError("LSP server exited"));
+      entry.reject?.(fatalError(exitReason(this.exitInfo)));
     }
     this.pending.clear();
     if (proc) {
@@ -448,6 +452,11 @@ export class LspConnection {
     }
     if (method === "textDocument/publishDiagnostics") {
       this.acceptDiagnostics(message.params as PublishDiagnosticsParams | undefined);
+      return;
+    }
+    if (method === "$/progress") {
+      this.progressText = progressTextOf(message.params);
+      return;
     }
   }
 
@@ -503,6 +512,9 @@ export class LspConnection {
     try {
       proc.stdin.write(header + message);
     } catch (e) {
+      // DEBT(lsp-protocol-error-counter): протокольная ошибка записи только
+      // логируется — счётчика «≤3 подряд, потом shutdown» (как в
+      // vscode-languageclient DefaultErrorHandler.error) ещё нет.
       this.logger?.debug(`LSP write error: ${errMsg(e)}`);
     }
   }

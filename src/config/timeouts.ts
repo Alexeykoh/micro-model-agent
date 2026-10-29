@@ -87,6 +87,17 @@ export const LSP_CHECK_FILE_MS = 8_000;
 export const LSP_RETRY_BASE_MS = 2_000;
 /** Потолок паузы между попытками (не больше минуты). */
 export const LSP_RETRY_MAX_MS = 60_000;
+/**
+ * Окно «слишком частых крахов» (как `DefaultErrorHandler` в
+ * vscode-languageclient: 4 рестарта за 3 минуты, дальше — не перезапускаем).
+ * Без этого «пауза 60 с» повторялась бы бесконечно, засоряя лог и плодя
+ * процессы на битой установке (node ↔ npm/npx).
+ */
+export const LSP_CRASH_WINDOW_MS = 3 * 60_000;
+/** Сколько крахов в окне считаем «сервер не чинится сам». */
+export const LSP_CRASH_LIMIT = 4;
+/** Пауза после серии крахов: до явного `/lsp restart` сервер не трогаем. */
+export const LSP_CRASH_GIVEUP_MS = 10 * 60_000;
 /** Кап таймаута пробы LSP-сервера (probe). */
 export const LSP_PROBE_TIMEOUT_MS = 30_000;
 /** Общий дедлайн пробы LSP-серверов (probe). */

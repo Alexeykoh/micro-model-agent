@@ -6,8 +6,7 @@
 import type { LspClientLogger } from "./client-logger";
 import type { LspServerConfig } from "./types";
 import { classifyLspError, type LspFailureReason } from "./diagnose";
-import { LSP_RETRY_BASE_MS, LSP_RETRY_MAX_MS } from "../../config/timeouts";
-import { t } from "../../i18n/index";
+import { LSP_CRASH_GIVEUP_MS, LSP_CRASH_LIMIT, LSP_CRASH_WINDOW_MS, LSP_RETRY_BASE_MS, LSP_RETRY_MAX_MS } from "../../config/timeouts";import { t } from "../../i18n/index";
 import { errMsg } from "../../utils";
 
 /**
@@ -18,7 +17,9 @@ import { errMsg } from "../../utils";
  */
 export const MAX_CONSECUTIVE_LSP_FAILURES = 3;
 
-/** Пауза перед попыткой N (экспонента с потолком). */
+/**
+ * Пауза перед попыткой N (экспонента с потолком).
+ */
 export function retryDelayMs(failures: number): number {
   const step = Math.max(0, failures - MAX_CONSECUTIVE_LSP_FAILURES);
   return Math.min(LSP_RETRY_BASE_MS * 2 ** step, LSP_RETRY_MAX_MS);
@@ -65,6 +66,8 @@ export class LspHealth {
   private failures = new Map<string, number>();
   /** До какого времени сервер не пробуем (мс, часы инжектируются для тестов). */
   private blockedUntil = new Map<string, number>();
+  /** Времена падений по ключу: окно «N крахов за 3 минуты» (как в VS Code). */
+  private crashes = new Map<string, number[]>();
   private warming = new Set<string>();
 
   constructor(private readonly now: () => number = () => Date.now()) {}
@@ -91,6 +94,7 @@ export class LspHealth {
   reset(key: string): void {
     this.failures.set(key, 0);
     this.blockedUntil.delete(key);
+    this.crashes.delete(key);
   }
 
   /** Сбросить всё (например, после `/lsp restart`). */
@@ -114,10 +118,28 @@ export class LspHealth {
     const failures = (this.failures.get(key) ?? 0) + 1;
     this.failures.set(key, failures);
     if (failures >= MAX_CONSECUTIVE_LSP_FAILURES) {
+      // Окно крахов (как DefaultErrorHandler в vscode-languageclient): серия
+      // падений за короткое время — не бесконечный retry, а стоп с причиной.
+      const now = this.now();
+      const times = [...(this.crashes.get(key) ?? []), now].filter(
+        (t) => now - t <= LSP_CRASH_WINDOW_MS,
+      );
+      this.crashes.set(key, times);
+      if (times.length > LSP_CRASH_LIMIT) {
+        this.blockedUntil.set(key, now + LSP_CRASH_GIVEUP_MS);
+        return {
+          blocked: true,
+          retryInMs: LSP_CRASH_GIVEUP_MS,
+          text: `${t("lsp.unavailable")} ${t("lsp.crashed_too_often", {
+            count: String(times.length),
+            min: String(Math.round(LSP_CRASH_WINDOW_MS / 60000)),
+          })} ${message}`,
+        };
+      }
       // Одно громкое actionable-сообщение, дальше — пауза вместо спама на
       // каждую запись. По истечении паузы сервер пробуется снова.
       const delay = retryDelayMs(failures);
-      this.blockedUntil.set(key, this.now() + delay);
+      this.blockedUntil.set(key, now + delay);
       // Причина сохраняется: «пауза» без причины не отличает несовместимый
       // Node от сетевого таймаута.
       return { blocked: true, retryInMs: delay, text: `${t("lsp.unavailable")} ${message}` };
