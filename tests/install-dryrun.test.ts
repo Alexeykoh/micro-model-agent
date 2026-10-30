@@ -5,6 +5,13 @@ import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 
 const isWin = process.platform === "win32";
+// pwsh (PowerShell 7) — отдельный бинарь: Windows без него ставит только
+// powershell.exe. Проверяем наличие, а не платформу, иначе набор падает
+// «Executable not found in $PATH: pwsh» вместо осмысленного прогона.
+const hasPwsh = (() => {
+  const r = spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"], { stdio: "ignore" });
+  return !r.error && r.status === 0;
+})();
 const DRY_ENV = { ...process.env, MMA_INSTALL_DRY_RUN: "1" };
 
 describe("installer dry-run", () => {
@@ -17,7 +24,7 @@ describe("installer dry-run", () => {
     expect(res.stdout).toContain("mma-");
   });
 
-  it.skipIf(!isWin)("install.ps1 prints the Windows plan", () => {
+  it.skipIf(!isWin || !hasPwsh)("install.ps1 prints the Windows plan", () => {
     const res = spawnSync("pwsh", ["-NoProfile", "-File", "scripts/install.ps1"], {
       env: DRY_ENV,
       encoding: "utf8",

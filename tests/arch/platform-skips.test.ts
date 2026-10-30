@@ -119,7 +119,7 @@ export const SKIP_MANIFEST: Array<{ file: string; key: string; reason: string }>
   {
     file: "tests/install-dryrun.test.ts",
     key: "install.ps1 prints the Windows plan",
-    reason: "PowerShell-установщик запускается только на Windows хосте",
+    reason: "PowerShell-установщик требует Windows-хоста и бинаря pwsh в PATH",
   },
   {
     file: "tests/browser-session.test.ts",
@@ -159,7 +159,8 @@ export const SKIP_MANIFEST: Array<{ file: string; key: string; reason: string }>
   {
     file: "tests/tools/scope-check.test.ts",
     key: "works with Windows-style paths",
-    reason: "буква диска и backslash-разделитель — семантика win32; на posix это легальное имя файла",
+    reason:
+      "буква диска и backslash-разделитель — семантика win32; на posix это легальное имя файла",
   },
   {
     file: "tests/tools/scope-check.test.ts",
@@ -169,7 +170,7 @@ export const SKIP_MANIFEST: Array<{ file: string; key: string; reason: string }>
   {
     file: "tests/install-retry.test.ts",
     key: "install.ps1 (pwsh)",
-    reason: "PowerShell-установщик запускается только на Windows-хосте",
+    reason: "PowerShell 7 (pwsh) — отдельный бинарь: нужен Windows-хост и pwsh в PATH",
   },
   {
     file: "tests/install-retry.test.ts",
