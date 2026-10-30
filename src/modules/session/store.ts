@@ -31,7 +31,7 @@ export interface SessionLogEntry {
     | "tool_defs" | "audit" | "plan" | "directive" | "context"
     | "llm_usage" | "session_start" | "baseline_typecheck"
     | "reasoning_control" | "context_probe" | "output"
-    | "critic_check" | "critic_verdict" | "critic_escalation"
+    | "critic_check" | "critic_verdict" | "critic_escalation" | "gate_timing"
     | DiagnosticEvent | "claim_retry" | "service_task" | "egress_turn"
     | "egress_redacted" | "subagent" | "command"
     | OnboardingEvent;
@@ -57,7 +57,7 @@ export interface SessionLogEntry {
   /** Ref'ы сохранённых изображений — тулов или пользователя (для web replay). */
   images?: import("./image-store").ToolImageRef[];
   success?: boolean;
-  duration?: number;
+  duration?: number; gates?: { hallucination?: number; critic?: number; audit?: number };
   iteration?: number;
   contextTokens?: number;
   contextLimit?: number;

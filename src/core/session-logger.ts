@@ -460,18 +460,12 @@ export class SessionLogger {
    * `tool_attempt` — попытка тула завершилась отказом/исключением.
    * @param event тип события; @param diag единая диагностика (INV-14).
    */
-  logDiagnosticEvent(
-    event: DiagnosticEvent,
-    diag: Diagnostic,
-  ): void {
+  logDiagnosticEvent(event: DiagnosticEvent, diag: Diagnostic): void {
     this.appendDiagnostic(event, diag);
   }
 
   /** Общая запись Diagnostic: `content` = причина (совместимо со старыми читателями). */
-  private appendDiagnostic(
-    type: "error" | DiagnosticEvent,
-    diag: Diagnostic,
-  ): void {
+  private appendDiagnostic(type: "error" | DiagnosticEvent, diag: Diagnostic): void {
     const cause = diag.cause ? redactContextSecrets(diag.cause) : undefined;
     this.session?.appendLog({
       ts: new Date().toISOString(),
@@ -488,14 +482,20 @@ export class SessionLogger {
 
   /**
    * Пишет вердикт финального аудита.
-   * @param summary сводка аудита; @param iteration номер итерации.
+   * @param summary сводка аудита; @param iteration номер итерации; @param durationMs мс проверки (A15).
    */
-  logAudit(summary: string, iteration: number): void {
+  logAudit(summary: string, iteration: number, durationMs?: number): void {
     this.log({
       type: "audit",
       content: summary,
       iteration,
+      duration: durationMs,
     });
+  }
+
+  /** Агрегат гейтов хода (`gate_timing`): сколько стояли hallucination/critic/audit, мс (A15). */
+  logGateTiming(d: { iteration: number; total: number; gates: SessionLogEntry["gates"] }): void {
+    this.log({ type: "gate_timing", content: `gates ${d.total}ms`, iteration: d.iteration, duration: d.total, gates: d.gates });
   }
 
   /** Событие плана (создание, шаги, re-plan). */

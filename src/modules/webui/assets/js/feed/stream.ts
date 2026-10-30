@@ -6,8 +6,16 @@ import { streamStateFor } from "../store.js";
 import { verbosity } from "../format.js";
 import { mountMarkdown } from "../../md.js";
 import {
-  activeFeed, feedForEvent, clearBusy, clearEmpty, flushRun, showBusy,
-  appendTo, scroll, mdOpts, buildThinkBlock,
+  activeFeed,
+  feedForEvent,
+  clearBusy,
+  clearEmpty,
+  flushRun,
+  showBusy,
+  appendTo,
+  scroll,
+  mdOpts,
+  buildThinkBlock,
 } from "./core.js";
 
 // Text chunks arrive in bursts (several SSE `text` events per frame); writing
@@ -79,7 +87,8 @@ export function finishThink(feed?: HTMLElement | null): void {
     if (st.curThink.wrap) st.curThink.wrap.classList.remove("live");
     if (st.curThink.startedAt) {
       const dur = st.curThink.head.querySelector(".dur");
-      if (dur) dur.textContent = "· " + ((Date.now() - st.curThink.startedAt) / 1000).toFixed(1) + "s";
+      if (dur)
+        dur.textContent = "· " + ((Date.now() - st.curThink.startedAt) / 1000).toFixed(1) + "s";
     }
   }
   st.curThink = null;
@@ -127,9 +136,33 @@ export function onMeta(chunk: string, sid?: string, kind?: string): void {
 // Гейт забраковал уже отстримленный черновик (SSE `retract`): убираем его
 // из ленты до переответа, иначе финал встанет дублем следом
 // (ses_munvrcfz_na9ze3). Копипаст хода тоже чистим — отклонённого текста
-// в «copy / copy as markdown» быть не должно. Без видимого черновика
+// в «copy / copy as markdown» быть не должно. Вместо молчаливого исчезновения
+// остаётся видимая плашка «кто и почему» (A13): ответ не пропадает бесследно,
+// а штатная перепроверка не выглядит ошибкой. Без видимого черновика
 // (пустой ответ, только тулы) — тихо, без шумовой строки.
-export function onRetract(reason: string, sid?: string): void {
+export interface RetractDetails {
+  /** Кто отозвал: `critic` | `hallucination` | `audit` (нет у плагинов). */
+  source?: string;
+  /** Сырой локализованный текст метки (обратная совместимость). */
+  label?: string;
+  iteration?: number;
+}
+
+function retractSourceLabel(source?: string): string {
+  if (source === "critic") return t("web.feed.retract_source_critic");
+  if (source === "hallucination") return t("web.feed.retract_source_hallucination");
+  if (source === "audit") return t("web.feed.retract_source_audit");
+  return t("web.feed.retract_source_check");
+}
+
+/** Плашка отзыва: спокойная строка, не `warn` и не `errline`. */
+export function retractNote(reason: string, source?: string): HTMLElement {
+  const who = retractSourceLabel(source);
+  const why = (reason || "").trim() || t("web.feed.retract_no_reason");
+  return el("div", "metaln retract", t("web.feed.retract_line", { who, reason: why }));
+}
+
+export function onRetract(reason: string, sid?: string, info?: RetractDetails): void {
   const feed = feedForEvent(sid);
   if (!feed) return;
   clearBusy(feed);
@@ -146,7 +179,7 @@ export function onRetract(reason: string, sid?: string): void {
   }
   if (draftLen > 0) st.turnMd = st.turnMd.slice(0, Math.max(0, st.turnMd.length - draftLen));
   if (!hadDraft) return;
-  if (reason) appendTo(feed, el("div", "metaln", reason));
+  appendTo(feed, retractNote(reason, info?.source));
   if (feed === activeFeed()) scroll();
 }
 
@@ -171,5 +204,10 @@ msgs?.addEventListener("click", (e) => {
   const hidden = body.classList.toggle("hidden");
   head.setAttribute("aria-expanded", hidden ? "false" : "true");
   const tog = head.querySelector(".tog");
-  if (tog) setIcon(tog as HTMLElement, hidden ? "chevron-right" : "chevron-down", t(hidden ? "web.action.show" : "web.action.hide"));
+  if (tog)
+    setIcon(
+      tog as HTMLElement,
+      hidden ? "chevron-right" : "chevron-down",
+      t(hidden ? "web.action.show" : "web.action.hide"),
+    );
 });

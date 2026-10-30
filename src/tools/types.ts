@@ -186,7 +186,11 @@ export interface ToolContext {
     run(
       task: string,
       onChunk?: (chunk: string) => void,
-      onMeta?: (meta: string, kind?: "tool" | "status" | "retract") => void,
+      onMeta?: (
+        meta: string,
+        kind?: "tool" | "status" | "retract",
+        info?: import("../core/types").RetractInfo,
+      ) => void,
       onTool?: (ev: import("../core/types").ToolEvent) => void,
       onPhase?: (phase: import("../core/types").AgentPhase) => void,
       onReasoning?: (reasoning: string) => void,
@@ -234,7 +238,8 @@ export interface ToolResult {
   success: boolean;
   output: string;
   toolCallId?: string;
-  display?: string; data?: Record<string, unknown>; // data: machine-readable result signature
+  display?: string;
+  data?: Record<string, unknown>; // data: machine-readable result signature
   diff?: string;
   /**
    * Изображения, произведённые тулом (например, browser screenshot или
@@ -280,21 +285,4 @@ export interface ToolCall {
   name: string;
   arguments: Record<string, unknown>;
 }
-
-/** Хук плагина: перехват до/после выполнения тула. */
-export interface PluginHook {
-  name?: string;
-  priority?: number;
-  isBuiltin?: boolean;
-  /**
-   * Вернуть `false` — блокировать тул, строку — блокировать с причиной
-   * (видит модель), `true` — разрешить.
-   */
-  onBeforeTool?(ctx: ToolContext, call: ToolCall): boolean | string | Promise<boolean | string>;
-  onAfterTool?(ctx: ToolContext, call: ToolCall, result: ToolResult): void | Promise<void>;
-}
-
-/** Менеджер плагинов: доступ к зарегистрированным хукам. */
-export interface PluginManager {
-  getAllPlugins(): PluginHook[];
-}
+export type { PluginHook, PluginManager } from "./plugin-types";

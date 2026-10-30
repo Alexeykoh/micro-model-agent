@@ -1,4 +1,4 @@
-# TODO — Micro Models Agent
+﻿# TODO — Micro Models Agent
 
 > **Актуально на 2026-10-26** (`master` @ 0.12.6).
 >
@@ -290,7 +290,7 @@
 
 ### 1.9 Находки текущей сессии `ses_mvuy6zpc_otiooomxxrtseqcx` (0.18.6)
 
-- [ ] **A9 (P1) Инструмент плана не умеет смотреть за пределы рабочей директории — и это нужно
+- [x] **A9 (P1) Инструмент плана не умеет смотреть за пределы рабочей директории — и это нужно
       честно чинить, потому что пользователь может отключать ограничение.** Проявилось
       вживую: шаг плана «убрать `--headless` из `mcpServers.playwright.args`» +
       проверка `file-exists:%USERPROFILE%/.mma/config.json` → `plan_step` ответил
@@ -307,7 +307,7 @@
       Ветка `fix/plan-check-path-scope`; спека контракта проверок — как A1.
       Гейты: `tests/security/path-validator.test.ts`, новый
       `tests/modules/execution/plan-check-outside-base.test.ts`.
-- [ ] **A10 (P1, после A9) Обязательно проверить, что отключение ограничения на выход из
+- [x] **A10 (P1, после A9) Обязательно проверить, что отключение ограничения на выход из
       директории реально работает.** Сейчас связка не проверена целиком: в
       `path-validator.ts:58` проверка `isInsideDir(targetResolved, baseResolved)` стоит
       **до** ветки `if (!securityConfig?.enabled)`, то есть `security.paths.enabled=false`
@@ -318,7 +318,7 @@
       `baseDir` → операция проходит; и обратный кейс — с включённым ограничением →
       отказ с причиной. Гейт: `tests/tools/bash-scope.test.ts`,
       `tests/tools/enforcement-path.test.ts`, `tests/security/path-validator.test.ts`.
-- [ ] **A11 (P0) DLP, скорее всего, ломает запросы к провайдеру (400 Bad Request).**
+- [x] **A11 (P0) DLP, скорее всего, ломает запросы к провайдеру (400 Bad Request).**
       Живой лог: `Ошибка LLM: Ошибка LLM API 400 (Bad Request): Upstream request failed:
       [invalid_request_error] Invalid 'tools[24].***.name': string does not match pattern.
       Expected a string that matches the pattern '^[a-zA-Z0-9_-]+.`
@@ -337,7 +337,7 @@
       гейты: `tests/security/data-policy*.test.ts`,
       `tests/providers/sanitizing-provider.test.ts`, новый
       `tests/security/dlp-tool-name.test.ts`.
-- [ ] **A12 (P1) Переносы строк теряются на пути к модели и в `mma web`.**
+- [x] **A12 (P1) Переносы строк теряются на пути к модели и в `mma web`.**
       Нужно, чтобы текст уходил в модель **с сохранением переносов строк** (многострочный
       ввод из REPL и веба — как есть, без склейки в одну строку), и чтобы `mma web`
       **отображал** ответы и сообщения с переносами (включая списки/абзацы), а не одной
@@ -346,7 +346,7 @@
       Markdown в вебе и в терминале (паритет `tests/ui/md-terminal-parity.test.ts`).
       Ветка `fix/multiline-fidelity`; гейты: новый
       `tests/webui/multiline-roundtrip.test.ts`, `tests/ui/md-terminal-parity.test.ts`.
-- [ ] **A13 (P0) Отзыв черновика гейтом критика не визуализирован: непонятно, где ответ и
+- [x] **A13 (P0) Отзыв черновика гейтом критика не визуализирован: непонятно, где ответ и
       кто его отменил.** Сценарий пользователя: модель отдаёт ответ, он стримится в ленту →
       критик бракует → **ответ пропадает**, в трассировке повисает «черновик отозван» без
       объяснений. Не видно ни того, что это **критик** сработал, ни **почему**, ни того,
@@ -377,7 +377,7 @@
       `tests/arch/observability-coverage.test.ts`, `tests/webui-feed-lifecycle-dom.test.ts`,
       новый `tests/webui/retract-visible.test.ts` (лента + трассировка + состояние маскота
       при `retract`).
-- [ ] **A14 (P1) Трассировка: нет кнопки «наверх» и лента не перевёрнута (новое — внизу).**
+- [x] **A14 (P1) Трассировка: нет кнопки «наверх» и лента не перевёрнута (новое — внизу).**
       Сейчас `assets/js/sidebar/trace.ts` копит строки вниз и на **каждую** вставку
       докручивает `list.scrollTop = list.scrollHeight` — в `pushRow` (`:152`),
       `renderTrace` (`:117`), `replaceRow` (`:161`), `streamRow` (`:170`). Из-за этого
@@ -394,7 +394,7 @@
       гейты: `tests/webui-feed-lifecycle-dom.test.ts`, новый
       `tests/webui/trace-scroll.test.ts` (порядок новых сверху, кнопка наверх,
       автоскролл не дёргает при чтении истории).
-- [ ] **A15 (P0) Пост-обработка после ответа модели занимает ~120 с: пользователь смотрит
+- [x] **A15 (P0) Пост-обработка после ответа модели занимает ~120 с: пользователь смотрит
       на готовый ответ, который ещё не «утверждён».** Живое наблюдение: ответ виден в
       ленте, но финальный статус приходит только через ~120 с — это критик
       (`critic`), и он **блокирует** завершение хода. Факты из кода: шаг критика

@@ -13,7 +13,7 @@ import { broadcast } from "../state";
 import { syncBusy } from "./session-status";
 import { redactContextSecrets } from "../../../core/api";
 import { sanitizeOutputPlain } from "../../../ui/sanitize-output";
-import type { MetaKind, StopReason } from "../../../core/types";
+import type { MetaKind, RetractInfo, StopReason } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import type { HostStateSnapshot } from "../../../core/host";
 import type { TurnSummary } from "../../types";
@@ -84,7 +84,7 @@ export interface ReasoningInfo {
 /** Форвардер чанков петли в SSE-синк с буферизацией и сбросом busy. */
 export interface Forwarder {
   onText(chunk: string): void;
-  onMeta(chunk: string, kind?: MetaKind): void;
+  onMeta(chunk: string, kind?: MetaKind, info?: RetractInfo): void;
   onReasoning(chunk: string, info?: ReasoningInfo): void;
   onPhase(phase: string): void;
   onToolStart(call: ToolCall): void;
@@ -114,7 +114,11 @@ function imageUrlList(owner: string | null, result: ToolResult): string[] {
 export function makeForwarder(
   s: RuntimeState & SseTransport,
   sink: (ev: SseEvent) => void = (ev) => broadcast(ev, s),
-  opts: { flushMs?: number; onQueueDrained?: (owner: string | null) => void; ownerRef?: { current: string | null } } = {},
+  opts: {
+    flushMs?: number;
+    onQueueDrained?: (owner: string | null) => void;
+    ownerRef?: { current: string | null };
+  } = {},
 ): Forwarder {
   const flushMs = opts.flushMs ?? DEFAULT_FLUSH_MS;
   const buf = {
@@ -169,13 +173,24 @@ export function makeForwarder(
       buf.text += chunk;
       schedule();
     },
-    onMeta(chunk, kind) {
+    onMeta(chunk, kind, info) {
       // `retract` — гейт забраковал уже отстримленный черновик: отдельным
       // событием, чтобы клиент убрал черновик из ленты до переответа
       // (иначе финал встаёт дублем). В общий meta-буфер не кладём.
+      // `reason` — короткая причина для человека, `label` — сырой текст метки
+      // (обратная совместимость), `source`/`iteration` — связь с вердиктом.
       if (kind === "retract") {
         flush();
-        sink({ type: "retract", ts: Date.now(), reason: sanitizeOutputPlain(chunk) });
+        const label = sanitizeOutputPlain(chunk);
+        sink({
+          type: "retract",
+          ts: Date.now(),
+          reason: info?.reason ? sanitizeOutputPlain(info.reason) : label,
+          label,
+          ...(info?.source ? { source: info.source } : {}),
+          ...(info?.iteration !== undefined ? { iteration: info.iteration } : {}),
+          ...(info?.verdict ? { verdict: info.verdict } : {}),
+        });
         return;
       }
       // Тела тулов и строки статуса не должны делить одно SSE-событие: клиент
@@ -219,7 +234,9 @@ export function makeForwarder(
         name: call.name,
         success: result.success,
         durationMs,
-        output: sanitizeOutputPlain(redactContextSecrets(clipToolOutput(call.name, result.output || ""))),
+        output: sanitizeOutputPlain(
+          redactContextSecrets(clipToolOutput(call.name, result.output || "")),
+        ),
         ...(images.length ? { images } : {}),
       });
     },

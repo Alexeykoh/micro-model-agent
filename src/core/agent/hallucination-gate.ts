@@ -1,7 +1,10 @@
 /** Вентиль халлюцинаций: проверка финального ответа перед принятием. */
 import { pc } from "../../ui/colors";
 import { t } from "../../i18n/index";
-import type { HallucinationDetector, HallucinationCheckResult } from "../../core/hallucination/detector";
+import type {
+  HallucinationDetector,
+  HallucinationCheckResult,
+} from "../../core/hallucination/detector";
 import type { ArtifactState } from "../../core/hallucination/artifact-claim";
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../core/context/manager";

@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   BROWSER_BRIDGE_REQUEST_TIMEOUT_MS,
+  CRITIC_GATE_BUDGET_MS,
   HALLUCINATION_JUDGE_TIMEOUT_MS,
   LLM_REQUEST_TIMEOUT_MS,
 } from "../../src/config/timeouts";
@@ -39,7 +40,7 @@ export const WRAPPER_OVERHEAD_MS = 5000;
  */
 export const WRAPPED_SITES = {
   "critic.timeoutMs": { label: "critic.verify", inner: LLM_REQUEST_TIMEOUT_MS },
-  "browserBridge": { label: "browser.bridge", inner: BROWSER_BRIDGE_REQUEST_TIMEOUT_MS },
+  browserBridge: { label: "browser.bridge", inner: BROWSER_BRIDGE_REQUEST_TIMEOUT_MS },
 } as const;
 
 /**
@@ -47,7 +48,7 @@ export const WRAPPED_SITES = {
  * Список пуст по построению: его наполнение означало бы «мы не знаем, зачем это».
  */
 export const INTENTIONAL_SHORT_DEADLINES: Record<string, string> = {
-  "hallucinationJudge": "15 с: судья не должна висеть до провайдерского дедлайна, отказ = pass",
+  hallucinationJudge: "15 с: судья не должна висеть до провайдерского дедлайна, отказ = pass",
 };
 
 describe("gate: timeout relations (W2)", () => {
@@ -64,11 +65,9 @@ describe("gate: timeout relations (W2)", () => {
     // Судья намеренно короче обёртки — но «намеренно» должно быть записано,
     // иначе следующий читатель увидит нарушение инварианта и «исправит» его,
     // сделав проверку галлюцинаций двухминутной.
-    const short = [
-      "hallucinationJudge",
-      "subagent.timeoutMs",
-      "browserBridge",
-    ].filter((key) => key in INTENTIONAL_SHORT_DEADLINES);
+    const short = ["hallucinationJudge", "subagent.timeoutMs", "browserBridge"].filter(
+      (key) => key in INTENTIONAL_SHORT_DEADLINES,
+    );
     expect(
       short.every((key) => (INTENTIONAL_SHORT_DEADLINES[key] ?? "").trim().length > 20),
       "Каждое намеренно короткое ограничение должно быть с причиной.",
@@ -83,11 +82,28 @@ describe("gate: timeout relations (W2)", () => {
     expect(INTENTIONAL_SHORT_DEADLINES.hallucinationJudge).toBeTruthy();
   });
 
+  it("the critic turn budget is SHORTER than the provider deadline (A15)", () => {
+    // Два разных таймера, и это не противоречие: `critic.timeoutMs` — обёртка
+    // вокруг одного запроса (длиннее дедлайна), бюджет гейта — ожидание хода
+    // после уже доставленного ответа (короче). Если бюджет сравняется с
+    // дедлайном, ход снова начнёт стоять минутами.
+    expect(
+      CRITIC_GATE_BUDGET_MS,
+      `CRITIC_GATE_BUDGET_MS (${CRITIC_GATE_BUDGET_MS}) ≥ LLM_REQUEST_TIMEOUT_MS (${LLM_REQUEST_TIMEOUT_MS}): ` +
+        `пост-проверка снова сможет держать ход столько же, сколько сам запрос.`,
+    ).toBeLessThan(LLM_REQUEST_TIMEOUT_MS);
+    expect(CRITIC_GATE_BUDGET_MS).toBeGreaterThan(0);
+    // Гейт обязан брать бюджет из реестра таймаутов, а не из литерала в месте сборки.
+    const setup = readFileSync(join(REPO_ROOT, "src", "core", "agent", "loop-setup.ts"), "utf-8");
+    expect(setup).toContain("budgetMs: CRITIC_GATE_BUDGET_MS");
+  });
+
   it("the critic default REFERENCES the provider constant instead of repeating it", () => {
     // Сравнение дефолта с числом было бы тавтологией: смени константу — тест
     // останется зелёным, а инвариант перестанет держаться. Требуем ссылку.
     const defaults = readFileSync(join(REPO_ROOT, "src", "config", "defaults.ts"), "utf-8");
-    const criticBlock = /critic:\s*\{[\s\S]{0,900}?timeoutMs:\s*([^,\n]+)/.exec(defaults)?.[1] ?? "";
+    const criticBlock =
+      /critic:\s*\{[\s\S]{0,900}?timeoutMs:\s*([^,\n]+)/.exec(defaults)?.[1] ?? "";
     expect(criticBlock.trim(), "не нашли critic.timeoutMs в defaults.ts").not.toBe("");
     expect(
       criticBlock.trim(),

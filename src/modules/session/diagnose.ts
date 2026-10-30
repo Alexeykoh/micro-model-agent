@@ -14,6 +14,8 @@
  * поменялось поведение».
  */
 
+import { gateStall } from "./diagnose-gates";
+
 /** Пороги сигнатур. Числа здесь — контракт, а не магия в коде. */
 export const thresholds = {
   /** Компакций подряд без прогресса, после которых это стадл. */
@@ -24,6 +26,12 @@ export const thresholds = {
   securityBlockRepeat: 2,
   /** Повторов `claim_retry` одного класса. */
   claimRetryRepeat: 2,
+  /**
+   * Проход гейтов дольше этого — «ход стоял после уже доставленного ответа»
+   * (A15). 30 с: крик и аудит вместе должны укладываться в это с запасом, а
+   * 120-секундный хвост виден сразу.
+   */
+  gateStallMs: 30_000,
 } as const;
 
 /** Каталог сигнатур: порядок — порядок вывода. */
@@ -31,6 +39,7 @@ export const SIGNATURE_KINDS = [
   "compaction_stall",
   "prompt_block_dropped",
   "critic_degraded",
+  "gate_stall",
   "tool_failure_repeat",
   "security_block_repeat",
   "claim_retry",
@@ -167,7 +176,10 @@ function criticDegraded(entries: Entry[]): Signature | null {
 
 /** Повторяющиеся отказы тулов: группировка по имени тула. */
 function toolFailureRepeat(entries: Entry[]): Signature[] {
-  const failures = new Map<string, { count: number; first: string; last: string; sample: string }>();
+  const failures = new Map<
+    string,
+    { count: number; first: string; last: string; sample: string }
+  >();
   for (const e of byType(entries, "tool_result")) {
     if (e.success !== false) continue;
     const tool = str(e, "tool") ?? "unknown";
@@ -256,10 +268,11 @@ export function diagnoseSession(sessionId: string, entries: Entry[]): DiagnoseRe
     ...(compactionStall(entries) ? [compactionStall(entries)!] : []),
     ...droppedPromptBlocks(entries),
     ...(criticDegraded(entries) ? [criticDegraded(entries)!] : []),
+    ...gateStall(entries, thresholds.gateStallMs),
     ...toolFailureRepeat(entries),
     ...securityBlockRepeat(entries),
     ...claimRetries(entries),
-  ].sort((a, b) => (ORDER.get(a.kind)! - ORDER.get(b.kind)!) || b.count - a.count);
+  ].sort((a, b) => ORDER.get(a.kind)! - ORDER.get(b.kind)! || b.count - a.count);
 
   return {
     sessionId,

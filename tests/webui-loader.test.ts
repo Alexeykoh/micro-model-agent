@@ -4,8 +4,14 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
 import {
-  loaderStateFor, toolState, createFace, setFaceState, setGreetResolver,
-  MMART_NAME, initCursor, lspOutputSignal,
+  loaderStateFor,
+  toolState,
+  createFace,
+  setFaceState,
+  setGreetResolver,
+  MMART_NAME,
+  initCursor,
+  lspOutputSignal,
 } from "../src/modules/webui/assets/js/loader.js";
 import type { FaceState } from "../src/modules/webui/assets/js/loader.js";
 
@@ -31,7 +37,7 @@ describe("loaderStateFor", () => {
     expect(loaderStateFor({ type: "turn_end", success: true })).toBe("done");
     expect(loaderStateFor({ type: "turn_end", success: false })).toBe("error");
     expect(loaderStateFor({ type: "error" })).toBe("error");
-    expect(loaderStateFor({ type: "retract" })).toBe("error");
+    expect(loaderStateFor({ type: "retract" })).toBe("recheck");
     expect(loaderStateFor({ type: "question" })).toBe("ask");
     expect(loaderStateFor({ type: "text" })).toBe("type");
     expect(loaderStateFor({ type: "tool_start", name: "edit_file" })).toBe("edit");
@@ -98,18 +104,50 @@ describe("LSP mascot reactions", () => {
   });
 
   it("reads the LSP verdict out of a write/edit tool output", () => {
-    expect(loaderStateFor({ type: "tool_end", name: "write_file", success: true, output: "ok\n\n[LSP errors]:\n  a.ts(1,2): error: x" })).toBe("warn");
-    expect(loaderStateFor({ type: "tool_end", name: "edit_file", success: true, output: "ok\n\n[LSP warnings]:\n  a.ts(1,2): warning: y" })).toBe("edit");
-    expect(loaderStateFor({ type: "tool_end", name: "write_file", success: true, output: "written" })).toBe("create");
+    expect(
+      loaderStateFor({
+        type: "tool_end",
+        name: "write_file",
+        success: true,
+        output: "ok\n\n[LSP errors]:\n  a.ts(1,2): error: x",
+      }),
+    ).toBe("warn");
+    expect(
+      loaderStateFor({
+        type: "tool_end",
+        name: "edit_file",
+        success: true,
+        output: "ok\n\n[LSP warnings]:\n  a.ts(1,2): warning: y",
+      }),
+    ).toBe("edit");
+    expect(
+      loaderStateFor({ type: "tool_end", name: "write_file", success: true, output: "written" }),
+    ).toBe("create");
   });
 
   it("treats a dead server as an error, not as code errors", () => {
-    expect(loaderStateFor({ type: "tool_end", name: "write_file", success: true, output: "\n\n[LSP check failed]: spawn failed" })).toBe("error");
-    expect(loaderStateFor({ type: "tool_end", name: "write_file", success: true, output: "\n\n[LSP disabled: unavailable]" })).toBe("error");
+    expect(
+      loaderStateFor({
+        type: "tool_end",
+        name: "write_file",
+        success: true,
+        output: "\n\n[LSP check failed]: spawn failed",
+      }),
+    ).toBe("error");
+    expect(
+      loaderStateFor({
+        type: "tool_end",
+        name: "write_file",
+        success: true,
+        output: "\n\n[LSP disabled: unavailable]",
+      }),
+    ).toBe("error");
   });
 
   it("does not react to LSP markers on tool_start", () => {
-    expect(loaderStateFor({ type: "tool_start", name: "write_file", output: "[LSP errors]" })).toBe("create");
+    expect(loaderStateFor({ type: "tool_start", name: "write_file", output: "[LSP errors]" })).toBe(
+      "create",
+    );
   });
 
   it("parses the markers purely", () => {

@@ -9,14 +9,7 @@
  */
 
 /** Домены реестра таймаутов (для навигации по файлу). */
-export type TimeoutDomain =
-  | "llm"
-  | "tools"
-  | "mcp"
-  | "lsp"
-  | "browser"
-  | "webui"
-  | "misc";
+export type TimeoutDomain = "llm" | "tools" | "mcp" | "lsp" | "browser" | "webui" | "misc";
 
 /* ── llm ─────────────────────────────────────────────────────────────── */
 
@@ -24,6 +17,17 @@ export type TimeoutDomain =
 export const LLM_REQUEST_TIMEOUT_MS = 120000;
 /** Макс. ожидание собственного rate-limit слота перед сдачей (openai-compat). */
 export const LLM_MAX_RATE_WAIT_MS = 30_000;
+/**
+ * Потолок времени, которое **ход** стоит в гейте критика (весь verify-цикл,
+ * все проходы). Отдельный от `critic.timeoutMs`: тот — обёртка вокруг одного
+ * провайдерского запроса и обязан быть длиннее провайдерского дедлайна, этот —
+ * бюджет пользовательского ожидания после уже доставленного ответа (A15).
+ */
+export const CRITIC_GATE_BUDGET_MS = 45_000;
+/** Через сколько проверка критика сообщает о себе статус-строкой (тихий быстрый путь). */
+export const CRITIC_SLOW_NOTICE_MS = 2_000;
+/** Через сколько финальный аудит сообщает о себе статус-строкой. */
+export const AUDIT_SLOW_NOTICE_MS = 3_000;
 /** TTL кэша каталога models.dev: перечитывать после 24 часов (models-dev). */
 export const MODELS_DEV_CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 /** Дефолтный таймаут запроса каталога models.dev (models-dev, был инлайн `?? 10000`). */

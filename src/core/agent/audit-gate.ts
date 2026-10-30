@@ -5,6 +5,9 @@ import type { ContextManager } from "../../core/context/manager";
 import type { SessionLogger } from "../session-logger";
 import type { OnMeta } from "../types";
 import { MAX_AUDIT_RETRIES } from "./constants";
+import { announceRetract, auditRetractInfo } from "./draft-retract";
+import { noticeAfter } from "./slow-notice";
+import { AUDIT_SLOW_NOTICE_MS } from "../../config/timeouts";
 import type { LoopState } from "./loop-state";
 
 /** Результат финального аудита: покрытие плана и недостающие файлы. */
@@ -52,9 +55,7 @@ export interface AuditGateDeps {
  * переводит цикл в состояние auditFailed → success:false.
  */
 export class AuditGate {
-  constructor(
-    private readonly finalAudit: (() => Promise<FinalAuditResult | null>) | undefined,
-  ) {}
+  constructor(private readonly finalAudit: (() => Promise<FinalAuditResult | null>) | undefined) {}
 
   /**
    * Оценивает ответ через финальный аудит.
@@ -62,12 +63,27 @@ export class AuditGate {
    */
   async evaluate(deps: AuditGateDeps): Promise<AuditVerdict | null> {
     if (!this.finalAudit) return null;
-    const audit = await this.finalAudit();
+    // Финальный аудит может гонять тесты и tsc — в ленте это не должно
+    // выглядеть как зависший ход (A15): одна строка, только если реально ждём.
+    const stopNotice = noticeAfter(AUDIT_SLOW_NOTICE_MS, () =>
+      deps.onMeta?.(`\n${t("ui.audit_checking")}\n`, "status"),
+    );
+    const started = Date.now();
+    let audit: FinalAuditResult | null;
+    try {
+      // DEBT(audit-final-gate-full-test-run): раннер внутри аудита гоняет полный
+      // тест-сьют и tsc синхронно (капы 90 с + 90 с) — это главный вклад в
+      // пост-обработку хода. Фикс живёт в `src/modules/execution/`.
+      audit = await this.finalAudit();
+    } finally {
+      stopNotice();
+    }
+    const durationMs = Date.now() - started;
     if (!audit || audit.passed) return { action: "pass" };
 
     const { state, logger, contextManager } = deps;
     state.iterAuditRejection = true;
-    logger.diagnostic("warn", `Final audit incomplete: ${audit.summary}`);
+    logger.diagnostic("warn", `Final audit incomplete: ${audit.summary} (${durationMs}ms)`);
 
     const steps = audit.pendingSteps.slice(0, 5).join("; ") || "—";
     contextManager.addMessage({
@@ -77,7 +93,7 @@ export class AuditGate {
         steps,
       })}</system-summary>`,
     });
-    deps.slog.logAudit(audit.summary, deps.iteration);
+    deps.slog.logAudit(audit.summary, deps.iteration, durationMs);
 
     state.auditRetries++;
     state.lastAuditSummary = audit.summary;
@@ -95,7 +111,7 @@ export class AuditGate {
     // задачи: разрешаем одну повторность без халлюцинационного повтора.
     state.suppressRepetitionRetry = true;
     // Черновик уже в ленте — убираем до переответа, иначе дубль.
-    deps.onMeta?.(t("ui.draft_retracted"), "retract");
+    announceRetract(deps.onMeta, auditRetractInfo(audit.summary, deps.iteration));
     return { action: "reject" };
   }
 }

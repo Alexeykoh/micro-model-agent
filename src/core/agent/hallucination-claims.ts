@@ -11,6 +11,7 @@ import { checkArtifactClaims, checkUnverifiedOutput } from "../../core/hallucina
 import { checkWebClaims } from "../../core/hallucination/web-claims";
 import { checkClaimedFileCreation } from "../../core/hallucination/file-creation-claim";
 import { MAX_CLAIM_CHECK_RETRIES } from "./constants";
+import { announceRetract, claimRetractInfo } from "./draft-retract";
 import type { HallucinationGateDeps, HallucinationVerdict } from "./hallucination-gate";
 
 /**
@@ -60,7 +61,7 @@ export function lastToolEvidence(
  * (`retract`), чтобы убрать его до переответа. Плюс пишем `claim_retry` в сессию.
  */
 export function retractDraft(deps: HallucinationGateDeps, kind: string, reason: string): void {
-  deps.onMeta?.(t("ui.draft_retracted"), "retract");
+  announceRetract(deps.onMeta, claimRetractInfo(reason, kind, deps.state.iteration));
   deps.slog?.logClaimRetry({ kind, reason, iteration: deps.state.iteration });
 }
 

@@ -106,7 +106,9 @@ export function projectText(text: string, policy: ProjectPolicy): TextProjection
       end = pathEnd(text, f.end);
     }
     out += text.slice(cursor, f.start);
-    const token = pseudonym ? map.tokenFor(text.slice(f.start, end), f.dataClass) : MASK[f.dataClass];
+    const token = pseudonym
+      ? map.tokenFor(text.slice(f.start, end), f.dataClass)
+      : MASK[f.dataClass];
     out += token;
     const preview = f.dataClass === "secret" ? secretPreview(text.slice(f.start, end)) : undefined;
     tokens.push({ dataClass: f.dataClass, kind: f.kind, token, ...(preview ? { preview } : {}) });

@@ -1,4 +1,8 @@
-import { isPathInScope, isPathWritable } from "../../src/modules/security/path-validator";
+import {
+  isPathInScope,
+  isPathWritable,
+  validateWorkdir,
+} from "../../src/modules/security/path-validator";
 import { describe, it, expect } from "vitest";
 import { resolve } from "path";
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "fs";
@@ -7,6 +11,7 @@ import { tmpdir } from "os";
 
 /** Секция есть, но паттерны выключены явно — не то же самое, что «секции нет» (D8). */
 const DISABLED = { enabled: false, denied: [], allowed: [] };
+const ENABLED = { enabled: true, denied: [], allowed: [] };
 
 describe("Path Validator", () => {
   const baseDir = "/home/user/project";
@@ -26,8 +31,13 @@ describe("Path Validator", () => {
     it("does not treat sibling dir with shared prefix as in-scope", () => {
       const base = resolve("/home/user/project");
       const sibling = resolve("/home/user/project2/secret.txt");
-      expect(isPathInScope(base, sibling, undefined, { enabled: true, denied: [], allowed: [] }).allowed).toBe(false);
-      expect(isPathWritable(base, sibling, undefined, { enabled: true, denied: [], allowed: [] }).allowed).toBe(false);
+      expect(
+        isPathInScope(base, sibling, undefined, { enabled: true, denied: [], allowed: [] }).allowed,
+      ).toBe(false);
+      expect(
+        isPathWritable(base, sibling, undefined, { enabled: true, denied: [], allowed: [] })
+          .allowed,
+      ).toBe(false);
     });
 
     it("should block paths matching denied patterns", () => {
@@ -146,7 +156,14 @@ describe("cross-platform path-validator edge cases", () => {
   it("sibling prefix does not match subagent scope entry", () => {
     const base = "/home/user/project";
     const target = "/home/user/project-src/secret.txt";
-    expect(isPathInScope(base, target, { allowed_files: ["project-files"], read_only_files: ["project"] }, cfg).allowed).toBe(false);
+    expect(
+      isPathInScope(
+        base,
+        target,
+        { allowed_files: ["project-files"], read_only_files: ["project"] },
+        cfg,
+      ).allowed,
+    ).toBe(false);
     expect(isPathWritable(base, target, { allowed_files: ["project"] }, cfg).allowed).toBe(false);
   });
 
@@ -159,6 +176,44 @@ describe("cross-platform path-validator edge cases", () => {
     } finally {
       rmSync(tmpBase, { recursive: true, force: true });
     }
+  });
+});
+
+describe("path-validator: security.paths.enabled governs the baseDir jail (A10)", () => {
+  const base = resolve("/home/user/project");
+  const outside = resolve("/etc/passwd");
+
+  it("explicit enabled:false lifts the jail for read, write and bash workdir", () => {
+    expect(isPathInScope(base, outside, undefined, DISABLED).allowed).toBe(true);
+    expect(isPathWritable(base, outside, undefined, DISABLED).allowed).toBe(true);
+    expect(validateWorkdir(base, resolve("/tmp"), undefined, DISABLED).allowed).toBe(true);
+  });
+
+  it("undefined config stays fail-closed and keeps the jail", () => {
+    const read = isPathInScope(base, outside, undefined, undefined);
+    expect(read.allowed).toBe(false);
+    expect(read.reason).toContain("outside the base working directory");
+    expect(isPathWritable(base, outside, undefined, undefined).allowed).toBe(false);
+    expect(validateWorkdir(base, resolve("/tmp"), undefined, undefined).allowed).toBe(false);
+  });
+
+  it("enabled:true denies outside paths with an explicit reason, not 'not found'", () => {
+    const read = isPathInScope(base, outside, undefined, ENABLED);
+    expect(read.allowed).toBe(false);
+    expect(read.reason).toContain("outside the base working directory");
+    const workdir = validateWorkdir(base, resolve("/tmp"), undefined, ENABLED);
+    expect(workdir.allowed).toBe(false);
+    expect(workdir.reason).toContain("Workdir is outside the base working directory");
+  });
+
+  it("per-tool scope still applies with enabled:false, including absolute entries", () => {
+    const allowedOutside = resolve("/opt/data/report.txt");
+    const scope = { allowed_files: [allowedOutside], read_only_files: [] };
+    expect(isPathInScope(base, allowedOutside, scope, DISABLED).allowed).toBe(true);
+    expect(isPathWritable(base, allowedOutside, scope, DISABLED).allowed).toBe(true);
+
+    const otherOutside = resolve("/opt/data/other.txt");
+    expect(isPathInScope(base, otherOutside, scope, DISABLED).allowed).toBe(false);
   });
 });
 
@@ -176,14 +231,14 @@ describe("path-validator symlink containment", () => {
       writeFileSync(join(outside, "secret.txt"), "top secret");
 
       // Existing file reached through the symlink.
-      expect(isPathWritable(base, "link/secret.txt", undefined, DISABLED).allowed).toBe(false);
-      expect(isPathInScope(base, "link/secret.txt", undefined, DISABLED).allowed).toBe(false);
+      expect(isPathWritable(base, "link/secret.txt", undefined, ENABLED).allowed).toBe(false);
+      expect(isPathInScope(base, "link/secret.txt", undefined, ENABLED).allowed).toBe(false);
 
       // Not-yet-created file under the symlinked dir must also be blocked.
-      expect(isPathWritable(base, "link/new.txt", undefined, DISABLED).allowed).toBe(false);
+      expect(isPathWritable(base, "link/new.txt", undefined, ENABLED).allowed).toBe(false);
 
       // A direct child of baseDir is unaffected.
-      expect(isPathWritable(base, "ok.txt", undefined, DISABLED).allowed).toBe(true);
+      expect(isPathWritable(base, "ok.txt", undefined, ENABLED).allowed).toBe(true);
     } finally {
       rmSync(base, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });

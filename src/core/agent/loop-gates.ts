@@ -25,6 +25,17 @@ export type GatesOutcome =
   | { kind: "break" }
   | { kind: "return"; result: AgentResult };
 
+/**
+ * Сколько ход простоял в каждом гейте (мс). Заполняется по ходу: при раннем
+ * возврате (блокировка галлюцинацией) часть полей остаётся пустой — это и есть
+ * честная картина, а не нули (A15).
+ */
+export interface GateTimings extends Record<string, number | undefined> {
+  hallucination?: number;
+  critic?: number;
+  audit?: number;
+}
+
 /** Входные данные финальных гейтов одной итерации (без тулов). */
 export interface GatesInput {
   state: LoopState;
@@ -37,13 +48,17 @@ export interface GatesInput {
   hallucinationGate: HallucinationGate;
   criticGate: CriticGate;
   auditGate: AuditGate;
+  /** Куда сложить длительности гейтов (A15); без него — не измеряем. */
+  timings?: GateTimings;
 }
 
 /** Прогоняет hallucination/critic/audit и возвращает сигнал управления. */
 export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<GatesOutcome> {
   const { contextManager, logger, hallucinationDetector, config } = host;
   const { state, textContent, reasoningContent, input, slog, onChunk, onMeta } = inp;
+  const timings = inp.timings;
 
+  const hallucinationStarted = Date.now();
   const verdict = await inp.hallucinationGate.evaluate({
     state,
     textContent,
@@ -63,6 +78,7 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     // «claim проверен» и «проверять было нечем» неразличимы.
     onDiagnostic: host.onDiagnostic,
   });
+  if (timings) timings.hallucination = Date.now() - hallucinationStarted;
   if (verdict.action === "block") {
     return {
       kind: "return",
@@ -120,6 +136,7 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     );
   }
 
+  const criticStarted = Date.now();
   const criticAction = await inp.criticGate.evaluate({
     state,
     iteration: state.iteration,
@@ -134,11 +151,13 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     answerText: state.mutationsSinceCritic === 0 ? textContent : undefined,
     onMeta,
   });
+  if (timings) timings.critic = Date.now() - criticStarted;
   if (criticAction === "retry") {
     state.suppressRepetitionRetry = true;
     return { kind: "continue" };
   }
 
+  const auditStarted = Date.now();
   const auditVerdict = await inp.auditGate.evaluate({
     state,
     iteration: state.iteration,
@@ -148,6 +167,7 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     slog,
     onMeta,
   });
+  if (timings) timings.audit = Date.now() - auditStarted;
   if (auditVerdict === null || auditVerdict.action === "pass") {
     state.finalAnswerAccepted = true;
     return { kind: "break" };

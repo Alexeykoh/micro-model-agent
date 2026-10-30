@@ -309,6 +309,10 @@ body[data-font="large"] { font-size: 17px; }
   font-size: 12.5px; overflow-wrap: anywhere;
 }
 .metaln.warn { color: var(--yellow); }
+/* Отзыв черновика — штатная перепроверка, не ошибка: спокойный dim, глиф
+   действия остаётся акцентным. Не наследует `.warn`. */
+.metaln.retract { color: var(--dim-b); }
+.metaln.retract::before { content: "⟳ "; color: var(--cyan); }
 .act { display: flex; gap: 8px; min-width: 0; line-height: 1.35; }
 .act .lab { white-space: nowrap; }
 .act .args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -1021,6 +1025,10 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .trace-head { display: flex; justify-content: flex-end; padding: 8px 10px 0; flex: 0 0 auto; }
 .trace-head .linkbtn { color: var(--dim-a); font-size: 11.5px; cursor: pointer; }
 .trace-head .linkbtn:hover { color: var(--fg); }
+/* Свежие строки сверху, поэтому «к свежим» — это наверх. Кнопка уходит влево
+   от «Prompt» и появляется только когда читатель ушёл в историю. */
+.trace-head .trace-top { margin-right: auto; color: var(--accent); }
+.trace-head .trace-top[hidden] { display: none; }
 .trace-list { flex: 1; min-width: 0; min-height: 0; max-width: 100%; overflow-y: auto; overflow-x: hidden; padding: 6px 10px 12px; display: flex; flex-direction: column; gap: 1px; }
 /* Строки трассировки не сжимаются: иначе flex-column втискивает сотни
    событий в видимую высоту, скролл не появляется, а текст сплющивается
@@ -2389,6 +2397,20 @@ body.light .c-dim { --face-c: var(--panel); }
 .mdl.st-warn .eyes { animation: mdlGlance 2.6s var(--ease) infinite; }
 .mdl.st-warn .star { display: block; position: absolute; top: -2%; left: 74%; font-size: calc(var(--s) * .62); line-height: .8; font-weight: 700; color: var(--yellow); text-shadow: 0 0 10px color-mix(in srgb, var(--yellow) 45%, transparent); animation: mdlStar 1.8s ease-out infinite; }
 .mdl.st-warn .star::before { content: "!"; }
+/* recheck — гейт забраковал показанный черновик: модель перечитывает и
+   переписывает. Спокойнее warn: это сверка, а не тревога. */
+.mdl.st-recheck { animation: mdlTestPulse 1.8s ease-in-out infinite; }
+.mdl.st-recheck .eyes { animation: mdlGlance 2.2s var(--ease) infinite; }
+.mdl.st-recheck .eye { animation: mdlBlink 3s var(--ease) infinite; }
+.mdl.st-recheck .star {
+  display: block; position: absolute; top: -2%; left: 74%;
+  font-size: calc(var(--s) * 0.58); line-height: 0.8; font-weight: 700;
+  color: var(--cyan);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--cyan) 45%, transparent);
+  animation: mdlStar 2.2s ease-out infinite;
+}
+.mdl.st-recheck .star::before { content: "↺"; }
+
 /* compact */
 @keyframes mdlCompact { 0%, 100% { transform: scaleX(1); } 35% { transform: scaleX(.38); } 62% { transform: scaleX(1); } }
 .mdl.st-compact { animation: mdlCompact 2.4s ease-in-out infinite; }

@@ -27,6 +27,7 @@ export const TRACE_LOG_TYPES = [
   "critic_verdict",
   "critic_escalation",
   "critic_error",
+  "gate_timing",
   "verify_error",
   "tool_attempt",
   "claim_retry",
@@ -70,12 +71,7 @@ type StrKey =
   | "jobId";
 /** Числовые поля с именами 1:1. */
 type NumKey =
-  | "iteration"
-  | "promptTokens"
-  | "completionTokens"
-  | "totalTokens"
-  | "duration"
-  | "cycle";
+  "iteration" | "promptTokens" | "completionTokens" | "totalTokens" | "duration" | "cycle";
 const STR_FIELDS: readonly StrKey[] = [
   "status",
   "kind",
@@ -123,6 +119,8 @@ export interface LogTailEntry {
   toolCallId?: string;
   success?: boolean;
   duration?: number;
+  /** Разбивка простоя хода по гейтам (`gate_timing`, A15), мс. */
+  gates?: { hallucination?: number; critic?: number; audit?: number };
   title?: string;
   subtaskId?: string;
   expertTag?: string;
@@ -143,10 +141,21 @@ function copyNum(out: LogTailEntry, e: SessionLogEntry, f: NumKey): void {
   if (typeof v === "number") out[f] = v;
 }
 
+function copyGates(out: LogTailEntry, e: SessionLogEntry): void {
+  const g = e.gates;
+  if (!g || typeof g !== "object") return;
+  const gates: NonNullable<LogTailEntry["gates"]> = {};
+  for (const key of ["hallucination", "critic", "audit"] as const) {
+    if (typeof g[key] === "number") gates[key] = g[key];
+  }
+  out.gates = gates;
+}
+
 function pick(e: SessionLogEntry): LogTailEntry {
   const out: LogTailEntry = { ts: e.ts, type: e.type };
   for (const f of STR_FIELDS) copyStr(out, e, f);
   for (const f of NUM_FIELDS) copyNum(out, e, f);
+  copyGates(out, e);
   if (typeof e.success === "boolean") out.success = e.success;
   if (typeof e.recoverable === "boolean") out.recoverable = e.recoverable;
   // Единственное поле с разным именем: `tool_call_id` в логе → `toolCallId` на wire.
@@ -169,12 +178,10 @@ export function tailSessionLog(
   entries: SessionLogEntry[],
   opts: { types?: string[]; since?: string; limit?: number } = {},
 ): LogTailEntry[] {
-  const types = opts.types && opts.types.length > 0 ? new Set(opts.types) : new Set(TRACE_LOG_TYPES);
+  const types =
+    opts.types && opts.types.length > 0 ? new Set(opts.types) : new Set(TRACE_LOG_TYPES);
   const since = opts.since ? Date.parse(opts.since) : NaN;
-  const limit = Math.min(
-    Math.max(opts.limit ?? DEFAULT_LIMIT, 1),
-    MAX_LIMIT,
-  );
+  const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const out: LogTailEntry[] = [];
   for (const e of entries) {
     if (!ALLOWED_TYPES.has(e.type) || !types.has(e.type)) continue;

@@ -259,7 +259,7 @@ window.LP_I18N = {
     "mascot.pick": "Click a state",
     "mascot.more": "more",
     "mascot.less": "less",
-    "mascot.count": "22 states — the same set the web UI ships",
+    "mascot.count": "23 states — the same set the web UI ships",
     "ms.idle": "idle",
     "ms.think": "thinking",
     "ms.read": "reading",
@@ -281,6 +281,7 @@ window.LP_I18N = {
     "ms.load": "loading",
     "ms.check": "checking",
     "ms.warn": "warning",
+"ms.recheck": "re-checking",
     "ms.update": "updating",
 
     "mem.files": "What actually lands on disk",
@@ -593,7 +594,7 @@ window.LP_I18N = {
     "mascot.pick": "Нажми на состояние",
     "mascot.more": "ещё",
     "mascot.less": "свернуть",
-    "mascot.count": "22 состояния — тот же набор, что в приложении",
+    "mascot.count": "23 состояния — тот же набор, что в приложении",
     "ms.idle": "ожидает",
     "ms.think": "размышляет",
     "ms.read": "читает",
@@ -615,6 +616,7 @@ window.LP_I18N = {
     "ms.load": "ждёт ответа",
     "ms.check": "проверяет",
     "ms.warn": "предупреждение",
+"ms.recheck": "перепроверяю",
     "ms.update": "обновляется",
 
     "mem.files": "Что реально лежит на диске",

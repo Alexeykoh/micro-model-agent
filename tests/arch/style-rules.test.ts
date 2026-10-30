@@ -34,16 +34,23 @@ export const STYLE_RULES: Array<
   | { heading: string; baseline: string }
 > = [
   { heading: "Форматирование", guard: { file: "package.json", anchor: "format:check" } },
-  { heading: "Типизация", guard: { file: "tests/arch/double-honesty.test.ts", anchor: "countUnsafeCasts" } },
+  {
+    heading: "Типизация",
+    guard: { file: "tests/arch/double-honesty.test.ts", anchor: "countUnsafeCasts" },
+  },
   {
     heading: "Постепенное ужесточение tsconfig",
     baseline: "флаги tsconfig включаются по одному, отдельными PATCH — не проверяются гейтом",
   },
   {
     heading: "Асинхронность",
-    baseline: "прерываемость await и таймауты сетевых/дочерних процессов не проверяются автоматически",
+    baseline:
+      "прерываемость await и таймауты сетевых/дочерних процессов не проверяются автоматически",
   },
-  { heading: "Обработка ошибок", guard: { file: "tests/arch/style-rules.test.ts", anchor: "SILENT_CATCH_RE" } },
+  {
+    heading: "Обработка ошибок",
+    guard: { file: "tests/arch/style-rules.test.ts", anchor: "SILENT_CATCH_RE" },
+  },
   {
     heading: "Порядок в файле",
     baseline: "порядок секций не проверяется автоматически — только ревью",
@@ -74,28 +81,81 @@ export const HOST_CASTS: Record<string, string> = {
 
 /** Пустые `catch {}` / `.catch(() => {})` / `.catch(() => null)` на файл: бюджет, не список строк. */
 export const SILENT_CATCHES: Record<string, { count: number; reason: string }> = {
-  "src/cli/repl.ts": { count: 3, reason: "fire-and-forget запись/обновление REPL, ошибка не actionable" },
-  "src/core/hallucination/llm-judge.ts": { count: 1, reason: "эталон: consume-канал судьи, причина в комментарии рядом" },
-  "src/core/bootstrap/session-runner.ts": { count: 1, reason: "best-effort фоновая проба, сессия уже поднята" },
-  "src/core/bootstrap/session-phase.ts": { count: 1, reason: "best-effort фоновая операция bootstrap" },
-  "src/core/bootstrap/agent-phase.ts": { count: 1, reason: "best-effort фоновая операция bootstrap" },
-  "src/modules/browser/driver.ts": { count: 7, reason: "teardown браузера (page/context/browser.close) — best-effort" },
-  "src/modules/execution/browser-check.ts": { count: 1, reason: "teardown пробы (close) в finally: результат проверки уже сформирован, ошибка уборки не actionable" },
-  "src/modules/indexer/module.ts": { count: 2, reason: "фоновая перестройка индекса, ошибка видна из других сигналов" },
-  "src/modules/critic/client.ts": { count: 3, reason: "гонка дедлайна: гасим вторичные reject проигравших промисов, причина таймаута уже в critic_degraded" },
+  "src/cli/repl.ts": {
+    count: 3,
+    reason: "fire-and-forget запись/обновление REPL, ошибка не actionable",
+  },
+  "src/core/hallucination/llm-judge.ts": {
+    count: 1,
+    reason: "эталон: consume-канал судьи, причина в комментарии рядом",
+  },
+  "src/core/bootstrap/session-runner.ts": {
+    count: 1,
+    reason: "best-effort фоновая проба, сессия уже поднята",
+  },
+  "src/core/bootstrap/session-phase.ts": {
+    count: 1,
+    reason: "best-effort фоновая операция bootstrap",
+  },
+  "src/core/bootstrap/agent-phase.ts": {
+    count: 1,
+    reason: "best-effort фоновая операция bootstrap",
+  },
+  "src/modules/browser/driver.ts": {
+    count: 7,
+    reason: "teardown браузера (page/context/browser.close) — best-effort",
+  },
+  "src/modules/execution/browser-check.ts": {
+    count: 1,
+    reason:
+      "teardown пробы (close) в finally: результат проверки уже сформирован, ошибка уборки не actionable",
+  },
+  "src/modules/indexer/module.ts": {
+    count: 2,
+    reason: "фоновая перестройка индекса, ошибка видна из других сигналов",
+  },
+  "src/modules/critic/client.ts": {
+    count: 3,
+    reason:
+      "гонка дедлайна: гасим вторичные reject проигравших промисов, причина таймаута уже в critic_degraded",
+  },
+  "src/core/agent/critic-budget.ts": {
+    count: 1,
+    reason:
+      "гонка бюджета гейта: reject проигравшего промиса гасится, причина уже в critic_error (turn_budget)",
+  },
   "src/core/agent/turn-run.ts": { count: 1, reason: "фоновая запись, не блокирует ход" },
   "src/tools/mcp-call.ts": { count: 1, reason: "disconnect MCP-клиента при уборке — best-effort" },
-  "src/modules/mcp/module.ts": { count: 1, reason: "disconnect MCP-клиента при уборке — best-effort" },
-  "src/modules/webui/chat/actions-api.ts": { count: 2, reason: "UI: команда/индексация fire-and-forget, ошибка не блокирует чат" },
-  "src/modules/webui/assets/js/sidebar/plugins.ts": { count: 1, reason: "UI: запись в clipboard best-effort" },
-  "src/modules/webui/assets/js/sidebar/lsp.ts": { count: 1, reason: "UI: запись в clipboard best-effort" },
-  "src/modules/lsp/check-tool.ts": { count: 1, reason: "проба существования пути — отсутствие файла нормальный результат" },
+  "src/modules/mcp/module.ts": {
+    count: 1,
+    reason: "disconnect MCP-клиента при уборке — best-effort",
+  },
+  "src/modules/webui/chat/actions-api.ts": {
+    count: 2,
+    reason: "UI: команда/индексация fire-and-forget, ошибка не блокирует чат",
+  },
+  "src/modules/webui/assets/js/sidebar/plugins.ts": {
+    count: 1,
+    reason: "UI: запись в clipboard best-effort",
+  },
+  "src/modules/webui/assets/js/sidebar/lsp.ts": {
+    count: 1,
+    reason: "UI: запись в clipboard best-effort",
+  },
+  "src/modules/lsp/check-tool.ts": {
+    count: 1,
+    reason: "проба существования пути — отсутствие файла нормальный результат",
+  },
   // Прогрев `check-run.ts` больше не молчит: отказ старта сервера идёт в health
   // и в отчёт как `[LSP check failed]` (см. spec 2026-10-29-lsp-node-version-diagnosis).
-  "src/modules/lsp/connection.ts": { count: 1, reason: "best-effort запрос диагностики, сервер может не ответить" },
+  "src/modules/lsp/connection.ts": {
+    count: 1,
+    reason: "best-effort запрос диагностики, сервер может не ответить",
+  },
   "src/modules/updater/install-release.ts": {
     count: 2,
-    reason: "teardown после flip (tmp и отброшенный ярлык): установка применена, ошибка уборки не actionable",
+    reason:
+      "teardown после flip (tmp и отброшенный ярлык): установка применена, ошибка уборки не actionable",
   },
   "src/modules/updater/factory.ts": {
     count: 1,
@@ -169,10 +229,7 @@ describe("gate: style rules have a guard or a declared reason (W12)", () => {
     // Baseline 36 — зафиксирован 2026-10-15 (W12). Счётчик `as any` не
     // дублируется: тестовый — в `double-honesty.test.ts` (W9.2), этот — `src`.
     const BASELINE = 36;
-    const now = srcFiles.reduce(
-      (n, f) => n + countMatches(readFileSync(f, "utf-8"), CAST_RE),
-      0,
-    );
+    const now = srcFiles.reduce((n, f) => n + countMatches(readFileSync(f, "utf-8"), CAST_RE), 0);
     expect(
       now,
       `Кастов в src/ стало больше baseline (${BASELINE}): ${now}. Замени каст на narrowing/` +
@@ -191,7 +248,9 @@ describe("gate: style rules have a guard or a declared reason (W12)", () => {
         `поля и потерял обратную запись. Объяви причину в HOST_CASTS:\n${undeclared.join("\n")}`,
     ).toEqual([]);
     const stale = Object.keys(HOST_CASTS).filter((name) => !found.has(name));
-    expect(stale, `Объявление без каста (фаза переименована/убрана): ${stale.join(", ")}`).toEqual([]);
+    expect(stale, `Объявление без каста (фаза переименована/убрана): ${stale.join(", ")}`).toEqual(
+      [],
+    );
     for (const [name, reason] of Object.entries(HOST_CASTS)) {
       expect(reason.trim().length, `${name}: причина слишком короткая`).toBeGreaterThan(20);
     }
@@ -218,7 +277,10 @@ describe("gate: style rules have a guard or a declared reason (W12)", () => {
     const staleBudget = Object.keys(SILENT_CATCHES).filter(
       (rel) => countMatches(readFileSync(join(REPO_ROOT, rel), "utf-8"), SILENT_CATCH_RE) === 0,
     );
-    expect(staleBudget, `Бюджет объявляет файл без молчаливых catch: ${staleBudget.join(", ")}`).toEqual([]);
+    expect(
+      staleBudget,
+      `Бюджет объявляет файл без молчаливых catch: ${staleBudget.join(", ")}`,
+    ).toEqual([]);
   });
 
   it("source file names are kebab-case (Именование)", () => {

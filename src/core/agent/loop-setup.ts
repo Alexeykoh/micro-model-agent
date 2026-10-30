@@ -19,6 +19,7 @@ import { CriticClient, CRITIC_DEGRADED_PREFIX } from "../../modules/critic/clien
 import { buildCriticProvider } from "../../modules/critic/provider";
 import { CRITIC_READONLY_TOOLS } from "../../modules/critic/tools";
 import { buildEvidencePack } from "../../modules/critic/evidence";
+import { CRITIC_GATE_BUDGET_MS } from "../../config/timeouts";
 
 /** Мутабельный вид `Agent`, которым владеет настройка петли. */
 export interface LoopSetupHost {
@@ -119,23 +120,28 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     enabled: criticConfig.enabled,
     maxCalls: criticConfig.maxCalls,
     maxRepairCycles: criticConfig.maxRepairCycles,
-    verify: deps.criticOverride?.verify ?? (async (pack, signal) => {
-      // Сброс перед КАЖДЫМ вызовом: причина должна относиться к этой проверке.
-      lastCriticDegradation = undefined;
-      return criticClient.verify(pack, signal, {
-        // Read-only цикл: проверки бегут последовательно здесь (гейт await'ится
-        // между пакетами тулов), через общий executor с read-only allowlist.
-        runCheck: criticConfig.tools && deps.toolCtx
-          ? async (tool, args) => {
-              const res = await toolExecutor.executeByName(tool, args, {
-                ...deps.toolCtx!,
-                toolAllowlist: [...CRITIC_READONLY_TOOLS],
-              });
-              return { ok: res.success, output: res.output ?? "" };
-            }
-          : undefined,
-      });
-    }),
+    // Бюджет гейта: ответ уже доставлен, ждать проверку минутами нельзя (A15).
+    budgetMs: CRITIC_GATE_BUDGET_MS,
+    verify:
+      deps.criticOverride?.verify ??
+      (async (pack, signal) => {
+        // Сброс перед КАЖДЫМ вызовом: причина должна относиться к этой проверке.
+        lastCriticDegradation = undefined;
+        return criticClient.verify(pack, signal, {
+          // Read-only цикл: проверки бегут последовательно здесь (гейт await'ится
+          // между пакетами тулов), через общий executor с read-only allowlist.
+          runCheck:
+            criticConfig.tools && deps.toolCtx
+              ? async (tool, args) => {
+                  const res = await toolExecutor.executeByName(tool, args, {
+                    ...deps.toolCtx!,
+                    toolAllowlist: [...CRITIC_READONLY_TOOLS],
+                  });
+                  return { ok: res.success, output: res.output ?? "" };
+                }
+              : undefined,
+        });
+      }),
     degradationReason: () => lastCriticDegradation,
     buildPack: (d) =>
       buildEvidencePack({

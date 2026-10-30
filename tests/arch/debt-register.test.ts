@@ -29,7 +29,10 @@ export function parseRegister(md: string): DebtRow[] {
   for (const line of md.split(/\r?\n/)) {
     const m = ROW_RE.exec(line);
     if (!m) continue;
-    const cells = m[2].split("|").map((c) => c.trim()).filter((c) => c.length > 0);
+    const cells = m[2]
+      .split("|")
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
     rows.push({ id: m[1], fields: cells.length });
   }
   return rows;
@@ -60,7 +63,10 @@ function walk(dir: string, files: { path: string; text: string }[]): void {
     }
     if (!entry.isFile() || !FILE_RE.test(entry.name)) continue;
     const full = join(dir, entry.name);
-    files.push({ path: relative(REPO_ROOT, full).replace(/\\/g, "/"), text: readFileSync(full, "utf-8") });
+    files.push({
+      path: relative(REPO_ROOT, full).replace(/\\/g, "/"),
+      text: readFileSync(full, "utf-8"),
+    });
   }
 }
 
@@ -70,7 +76,9 @@ describe("debt register (rule 9, pay-once)", () => {
     const rows = parseRegister(readFileSync(REGISTER, "utf-8"));
     expect(rows.length).toBeGreaterThan(0);
     const bad = rows.filter((r) => r.fields < 5).map((r) => r.id);
-    expect(bad, `Debt rows missing fields (need why/exit/trigger/date): ${bad.join(", ")}`).toEqual([]);
+    expect(bad, `Debt rows missing fields (need why/exit/trigger/date): ${bad.join(", ")}`).toEqual(
+      [],
+    );
   });
 
   it("every DEBT(id) resolves to a register row, and every row is anchored", () => {
@@ -121,6 +129,10 @@ export const SIGNATURE_COVERAGE: Record<string, { file: string; reason: string }
   claim_retry: {
     file: "tests/core/agent-claim-check.test.ts",
     reason: "ретрай заявления фиксируется в логе хода",
+  },
+  gate_stall: {
+    file: "tests/core/session-diagnose.test.ts",
+    reason: "gate_timing дольше порога даёт сигнатуру с разбивкой по гейтам",
   },
 };
 

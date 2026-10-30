@@ -31,6 +31,7 @@ export { renderAttachments };
 import { renderQueueStrip, enqueuePending } from "./queue.js";
 import { initSessBar } from "./sess-bar.js";
 import { logClientCommand } from "./client-command-log.js";
+import { draftForModel } from "./draft.js";
 
 export { renderSessBar } from "./sess-bar.js";
 
@@ -140,10 +141,7 @@ export function insertIntoDraft(text: string): void {
   inp.focus();
 }
 
-/**
- * Отправить готовый промпт агенту от имени пользователя (кнопка «исправить»
- * в LSP: диагностика превращается в задачу). Черновик заменяется целиком.
- */
+/** Отправить готовый промпт от имени пользователя (кнопка «исправить» в LSP). */
 export function submitPrompt(text: string): void {
   if (!inp || !text.trim()) return;
   inp.value = text;
@@ -166,12 +164,14 @@ if (inp) inp.addEventListener("scroll", renderMentionMarks);
 renderMentionMarks();
 
 async function send(): Promise<void> {
-  const text = inp.value.trim();
+  // В модель и в ленту — исходный текст композера (контракт `draftForModel`).
+  const text = draftForModel(inp.value);
+  const trimmed = text.trim();
   const images = tabState.attachments.slice();
-  if (!text && !images.length) return;
+  if (!trimmed && !images.length) return;
   // Вкладок не осталось (пустой экран = «новый чат»): поднимаем свежую сессию,
   // иначе ход ушёл бы в закрытую активную сессию, а ответ не нашёл бы вкладку.
-  if (!deps.activeTab() && !text.startsWith("/")) {
+  if (!deps.activeTab() && !trimmed.startsWith("/")) {
     await deps.newChatTab();
   }
   const tab = deps.activeTab();
@@ -187,13 +187,13 @@ async function send(): Promise<void> {
     return;
   }
   clearEmpty(feed);
-  if (text.startsWith("/")) {
+  if (trimmed.startsWith("/")) {
     // Слэш-команда — не ход: закрываем текущий потоковый блок, чтобы её вывод
     // не слился с ответом.
     finishMd(feed);
     resetTurnText(feed);
     finishThink(feed);
-    appendTo(feed, userBlock(text));
+    appendTo(feed, userBlock(trimmed));
     scrollToBottom();
     if (tab) {
       tab.draft = "";
@@ -202,7 +202,7 @@ async function send(): Promise<void> {
     tabState.attachments = [];
     renderAttachments();
     clearInput();
-    const name = text.slice(1).split(/\s+/)[0].toLowerCase();
+    const name = trimmed.slice(1).split(/\s+/)[0].toLowerCase();
     // `/clear` and `/new` are browser-side feed/tab operations (the server has
     // no feed to clear). A dedicated action still tells the server, which only
     // journals it — no server-side clear/switch happens (B-35).
@@ -216,7 +216,7 @@ async function send(): Promise<void> {
       deps.newChatTab();
       return;
     }
-    const body: Record<string, unknown> = { line: text };
+    const body: Record<string, unknown> = { line: trimmed };
     if (sessionId) body.sessionId = sessionId;
     const r = await api("/api/command", { method: "POST", body });
     if (!r.ok) {

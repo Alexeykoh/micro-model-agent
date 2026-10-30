@@ -55,12 +55,14 @@ export class LineDispatcher {
 
     if (this.inMultiLine) {
       this.buffer += `\n${line}`;
-      if (!this.host.isMultiLineInput(this.buffer)) {
+      if (!this.host.isMultiLineInput(this.buffer.trim())) {
         this.inMultiLine = false;
-        const fullInput = this.buffer.trim();
+        // Контракт многострочности (спека 2026-10-30): текст уходит в модель
+        // как набран — отступы и пустые строки не срезаются.
+        const fullInput = this.buffer;
         this.buffer = "";
-        if (fullInput) {
-          if (fullInput.startsWith("/")) {
+        if (fullInput.trim()) {
+          if (fullInput.trimStart().startsWith("/")) {
             await this.host.executeCommand(fullInput);
             this.host.afterCommand();
           } else {
@@ -75,7 +77,7 @@ export class LineDispatcher {
 
     if (this.host.isMultiLineInput(trimmed)) {
       this.inMultiLine = true;
-      this.buffer = trimmed;
+      this.buffer = line;
       this.host.promptContinuation();
       return;
     }
@@ -89,7 +91,9 @@ export class LineDispatcher {
       await this.host.executeCommand(trimmed);
       this.host.afterCommand();
     } else {
-      await this.host.runAgent(trimmed);
+      // Строка набирается readline'ом целиком: отступ первой строки — часть
+      // пользовательского текста, не форматирование консоли.
+      await this.host.runAgent(line);
     }
   }
 }

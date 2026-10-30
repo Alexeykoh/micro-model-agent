@@ -76,7 +76,7 @@ export function echoWriteHint(echoWrite: string | null | undefined): string | un
  * @returns заблокированный результат или `undefined`, если можно исполнять.
  */
 export function assertWorkdirAllowed(ctx: ToolContext, workdir: string): ToolResult | undefined {
-  const check = validateWorkdir(ctx.baseDir, workdir, ctx.scope);
+  const check = validateWorkdir(ctx.baseDir, workdir, ctx.scope, ctx.config.security?.paths);
   if (check.allowed) return undefined;
   logSecurityBlock(
     ctx.sessionId,

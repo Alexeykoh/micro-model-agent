@@ -40,6 +40,10 @@ describe("AuditGate", () => {
     const onMeta = vi.fn();
     const verdict = await gate.evaluate(deps({ onMeta }));
     expect(verdict?.action).toBe("reject");
-    expect(onMeta).toHaveBeenCalledWith(expect.any(String), "retract");
+    expect(onMeta).toHaveBeenCalledWith(
+      expect.any(String),
+      "retract",
+      expect.objectContaining({ source: "audit", iteration: expect.any(Number) }),
+    );
   });
 });

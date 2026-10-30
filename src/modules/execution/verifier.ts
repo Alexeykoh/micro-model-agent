@@ -10,6 +10,9 @@ import { findExistingFile } from "./auditor";
 import { findTypecheckRoot } from "./audit-runners";
 import { killTree } from "../processes/kill-tree";
 import { settleChildClose } from "../../utils/child-run";
+import { resolveCheckPath } from "./check-path";
+import type { PathSecurityConfig } from "../../config/types";
+import type { ToolScope } from "../../tools/types";
 
 /** Один пункт проверки: прошёл ли + сообщение. */
 export interface VerificationItem {
@@ -44,15 +47,19 @@ export interface ManifestVerificationResult {
 /** Верификатор шагов плана: файлы, синтаксис, скрипты, tsc, критерии. */
 export class StepVerifier {
   private baseDir: string;
-  /**
-   * Отчёт о fail-open деградации (INV-15): проверка не выполнена, но шаг
-   * считался валидным. Без него «нет tsc» неотличимо от «синтаксис валиден».
-   */
+  /** Отчёт о fail-open деградации (INV-15): «нет tsc» ≠ «синтаксис валиден». */
   private onDegrade?: (operation: string, reason: string) => void;
+  /** Политика путей: тот же вердикт, что у тулов (INV-9/10); undefined — легаси. */
+  private pathSecurity?: PathSecurityConfig;
 
-  constructor(baseDir: string, onDegrade?: (operation: string, reason: string) => void) {
+  constructor(
+    baseDir: string,
+    onDegrade?: (operation: string, reason: string) => void,
+    pathSecurity?: PathSecurityConfig,
+  ) {
     this.baseDir = baseDir;
     this.onDegrade = onDegrade;
+    this.pathSecurity = pathSecurity;
   }
 
   /** Зафиксировать пропущенную (не выполненную) проверку, оставив причину. */
@@ -60,12 +67,11 @@ export class StepVerifier {
     this.onDegrade?.(operation, reason);
   }
 
-  /** Проверяет существование файла (с nested-резолвером findExistingFile). */
-  async checkFileExists(path: string): Promise<VerificationItem> {
-    // Nested-aware (тот же резолвер, что в verifyStep): проект в
-    // `baseDir/proj/` нельзя репортить пропавшим, если файл ниже.
-    const resolved = findExistingFile(this.baseDir, path);
-    const exists = !!resolved;
+  /** Проверяет существование файла (nested-резолвер + политика путей). */
+  async checkFileExists(path: string, scope?: ToolScope): Promise<VerificationItem> {
+    const check = resolveCheckPath(this.baseDir, path, scope, this.pathSecurity);
+    if (check.blocked) return { passed: false, message: check.blocked };
+    const exists = !!findExistingFile(this.baseDir, check.path);
     return {
       passed: exists,
       message: exists ? t("verify.file_exists", { path }) : t("verify.file_not_found", { path }),
@@ -113,13 +119,7 @@ export class StepVerifier {
     }
   }
 
-  /**
-   * Типчекает конкретный файл, резолвя корень проекта от РАСПОЛОЖЕНИЯ ФАЙЛА
-   * (не от baseDir агента). Для вложенных раскладок (`baseDir/proj/` со своим
-   * tsconfig.json) старая проверка от baseDir молча скипала каждую ошибку типов
-   * (было в ses_mst2r0r5: ноль type feedback за всю сессию). Маркеры зеркалят
-   * конфиг TypeScript LSP-сервера.
-   */
+  /** Типчекает файл от его расположения (вложенный tsconfig), а не от baseDir. */
   async runTypeCheckForFile(filePath: string): Promise<VerificationItem> {
     const projectRoot = findProjectRoot(filePath, this.baseDir, ["tsconfig.json", "package.json"]);
     const tsconfigPath = join(projectRoot, "tsconfig.json");
@@ -168,15 +168,7 @@ export class StepVerifier {
     return Promise.all(files.map((f) => this.checkFileExists(f)));
   }
 
-  /**
-   * Проверяет machine-readable success_criteria подзадачи ДО решения о merge
-   * (Plan 5.1). Поддержаны формы:
-   * - `file-exists:<path>`
-   * - `substring-in-file:<path>:<text>`
-   * - `command-exit-0:<command>`
-   * Остальное — LLM-only критерий: варнинг (не ошибка), чтобы Router всё равно
-   * видел его в контексте.
-   */
+  /** Критерии: `file-exists:`, `substring-in-file:`, `command-exit-0:`; прочее — warning. */
   async verifyCriteria(owner: { id: string; check?: string }): Promise<CriteriaResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -201,9 +193,7 @@ export class StepVerifier {
       if (kind === "substring-in-file") {
         const colon = rest.indexOf(":");
         if (colon <= 0) {
-          warnings.push(
-            `Step "${owner.id}": malformed substring-in-file criterion "${criterion}"`,
-          );
+          warnings.push(`Step "${owner.id}": malformed substring-in-file criterion "${criterion}"`);
           continue;
         }
         const path = rest.slice(0, colon);
@@ -242,7 +232,6 @@ export class StepVerifier {
 
     return { errors, warnings, details };
   }
-
 
   /** Верифицирует шаг: файлы из описания существуют (+синтаксис; delete — наоборот). */
   async verifyStep(stepDescription: string, kind?: StepKind): Promise<StepVerificationResult> {
@@ -386,7 +375,14 @@ export class StepVerifier {
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        settleChildClose(code, stdout, stderr, `Command failed with exit code ${code}`, resolve, reject);
+        settleChildClose(
+          code,
+          stdout,
+          stderr,
+          `Command failed with exit code ${code}`,
+          resolve,
+          reject,
+        );
       });
     });
   }

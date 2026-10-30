@@ -13,13 +13,9 @@ export interface PathValidationResult {
 }
 
 /**
- * Симлинк-контейнмент: resolve() симлинки НЕ резолвит, и симлинк
- * (или Windows-junction) внутри baseDir может указывать наружу.
- * Существующая цель обязана остаться внутри реального base. Для ещё не
- * созданного листа каноникализируется ближайший СУЩЕСТВУЮЩИЙ предок —
- * иначе `base/link/new.txt` проскочил бы, когда `link` смотрит наружу.
- * False (судить нельзя), если нет самого baseDir: чисто лексическая
- * проверка продолжает работать на виртуальных путях.
+ * Симлинк-контейнмент: resolve() симлинки не резолвит, цель может смотреть
+ * наружу. Для несуществующего листа каноникализируется ближайший предок.
+ * False, если нет самого baseDir (виртуальные пути/фикстуры).
  */
 function escapesViaSymlink(baseResolved: string, targetResolved: string): boolean {
   let realBase: string;
@@ -43,10 +39,12 @@ function escapesViaSymlink(baseResolved: string, targetResolved: string): boolea
   }
 }
 
-/**
- * Путь в разрешённом скоупе или нет.
- * Комбинирует глобальные настройки и per-tool скоуп.
- */
+/** Включён ли jail baseDir: `undefined` — fail-closed, явный `false` — снят. */
+export function isJailEnabled(securityConfig?: PathSecurityConfig): boolean {
+  return securityConfig?.enabled !== false;
+}
+
+/** Путь в разрешённом скоупе или нет: глобальные настройки + per-tool скоуп. */
 export function isPathInScope(
   baseDir: string,
   targetPath: string,
@@ -56,26 +54,33 @@ export function isPathInScope(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  // Сначала — внутри baseDir (сепараторо- и регистро-безопасно: соседний
-  // каталог с общим префиксом пройти не должен).
-  if (!isInsideDir(targetResolved, baseResolved)) {
-    return {
-      allowed: false,
-      reason: "Path is outside the base working directory",
-    };
-  }
-  if (escapesViaSymlink(baseResolved, targetResolved)) {
-    return {
-      allowed: false,
-      reason: "Path resolves outside the base working directory via symlink",
-    };
+  // Jail/symlink-контейнмент — только при включённом ограничении (A10):
+  // `enabled:false` обязан снимать и jail, иначе выключатель конфига врёт.
+  if (isJailEnabled(securityConfig)) {
+    // Сначала — внутри baseDir (сепараторо- и регистро-безопасно: соседний
+    // каталог с общим префиксом пройти не должен).
+    if (!isInsideDir(targetResolved, baseResolved)) {
+      return {
+        allowed: false,
+        reason: "Path is outside the base working directory (path restriction enabled)",
+      };
+    }
+    if (escapesViaSymlink(baseResolved, targetResolved)) {
+      return {
+        allowed: false,
+        reason:
+          "Path resolves outside the base working directory via symlink (path restriction enabled)",
+      };
+    }
   }
 
   // Fail-closed (D8): нет секции — не «разрешено всё»; enabled:false и скоуп — как были.
   if (!securityConfig?.enabled) {
     // Скоуп суб-агента действует всё равно
     if (scope) {
-      const isReadScope = scope.read_only_files.some((f: string) => matchesScopeEntry(targetResolved, resolve(baseDir, f)));
+      const isReadScope = scope.read_only_files.some((f: string) =>
+        matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+      );
       const isWriteScope = scope.allowed_files.some((f: string) =>
         matchesScopeEntry(targetResolved, resolve(baseDir, f)),
       );
@@ -86,7 +91,8 @@ export function isPathInScope(
         reason: "Path is not within the allowed scope for this sub-agent",
       };
     }
-    if (!securityConfig) return { allowed: false, reason: "No path security configuration (fail-closed)" };
+    if (!securityConfig)
+      return { allowed: false, reason: "No path security configuration (fail-closed)" };
     return { allowed: true };
   }
 
@@ -159,21 +165,26 @@ export function validateWorkdir(
   baseDir: string,
   workdir: string,
   scope?: ToolScope,
+  securityConfig?: PathSecurityConfig,
 ): PathValidationResult {
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(workdir));
 
-  if (!isInsideDir(targetResolved, baseResolved)) {
-    return {
-      allowed: false,
-      reason: "Workdir is outside the base working directory",
-    };
-  }
-  if (escapesViaSymlink(baseResolved, targetResolved)) {
-    return {
-      allowed: false,
-      reason: "Workdir resolves outside the base working directory via symlink",
-    };
+  // См. isPathInScope: явный enabled:false снимает jail и для cwd `bash`.
+  if (isJailEnabled(securityConfig)) {
+    if (!isInsideDir(targetResolved, baseResolved)) {
+      return {
+        allowed: false,
+        reason: "Workdir is outside the base working directory (path restriction enabled)",
+      };
+    }
+    if (escapesViaSymlink(baseResolved, targetResolved)) {
+      return {
+        allowed: false,
+        reason:
+          "Workdir resolves outside the base working directory via symlink (path restriction enabled)",
+      };
+    }
   }
 
   if (!scope) return { allowed: true };
@@ -201,21 +212,25 @@ export function isPathWritable(
   const baseResolved = resolve(baseDir);
   const targetResolved = resolve(baseDir, normalize(targetPath));
 
-  // Сначала — внутри baseDir (сепараторо- и регистро-безопасно: соседний
-  // каталог с общим префиксом пройти не должен).
-  if (!isInsideDir(targetResolved, baseResolved)) {
-    return {
-      allowed: false,
-      reason: "Path is outside the base working directory",
-    };
-  }
-  // Запись не следует за симлинком/junction наружу из baseDir (путь чтения
-  // проверял это всегда; путь записи раньше пропускал).
-  if (escapesViaSymlink(baseResolved, targetResolved)) {
-    return {
-      allowed: false,
-      reason: "Path resolves outside the base working directory via symlink",
-    };
+  // См. isPathInScope: jail/symlink-контейнмент только при включённом ограничении.
+  if (isJailEnabled(securityConfig)) {
+    // Сначала — внутри baseDir (сепараторо- и регистро-безопасно: соседний
+    // каталог с общим префиксом пройти не должен).
+    if (!isInsideDir(targetResolved, baseResolved)) {
+      return {
+        allowed: false,
+        reason: "Path is outside the base working directory (path restriction enabled)",
+      };
+    }
+    // Запись не следует за симлинком/junction наружу из baseDir (путь чтения
+    // проверял это всегда; путь записи раньше пропускал).
+    if (escapesViaSymlink(baseResolved, targetResolved)) {
+      return {
+        allowed: false,
+        reason:
+          "Path resolves outside the base working directory via symlink (path restriction enabled)",
+      };
+    }
   }
 
   // Fail-closed (D8): нет конфиг-секции = отказ, а не «пропускаем паттерны».
@@ -231,7 +246,8 @@ export function isPathWritable(
         reason: "Path is not within the allowed scope for this sub-agent",
       };
     }
-    if (!securityConfig) return { allowed: false, reason: "No path security configuration (fail-closed)" };
+    if (!securityConfig)
+      return { allowed: false, reason: "No path security configuration (fail-closed)" };
     return { allowed: true };
   }
 

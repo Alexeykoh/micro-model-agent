@@ -4,9 +4,20 @@ import type { Agent } from "../../../core/api";
 import type { AgentResult, ToolEvent } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import type { ExecutionModule } from "../../execution/module";
-import { broadcast, type UsageSnapshot, type SessionStore, type RuntimeState, type SseTransport } from "../state";
+import {
+  broadcast,
+  type UsageSnapshot,
+  type SessionStore,
+  type RuntimeState,
+  type SseTransport,
+} from "../state";
 import { pushState } from "./session-status";
-import { captureUsage, liveContextUsage, planEventFor, type LiveContextSource } from "../host-state";
+import {
+  captureUsage,
+  liveContextUsage,
+  planEventFor,
+  type LiveContextSource,
+} from "../host-state";
 import { saveSessionUsage } from "./session-usage";
 import type { Forwarder, ReasoningInfo } from "./forward";
 
@@ -134,13 +145,17 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
       const result = await agent.run(
         text,
         (chunk) => forwarder.onText(chunk),
-        (meta, kind) => forwarder.onMeta(meta, kind),
+        (meta, kind, info) => forwarder.onMeta(meta, kind, info),
         (ev) => {
           if (ev.type === "start") {
             forwarder.onToolStart(callFor(ev, ev.callId ?? startId(ev.tool)));
           } else {
             toolCalls++;
-            forwarder.onToolEnd(callFor(ev, ev.callId ?? endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
+            forwarder.onToolEnd(
+              callFor(ev, ev.callId ?? endId(ev.tool)),
+              resultFor(ev),
+              ev.duration ?? 0,
+            );
             // Закончивший `plan`/`todo`-тул освежает план-карточку ленты; сайдбар
             // живёт своей проекцией `/api/state`. Без `pushState` здесь снапшот
             // оставался с планом прошлого хода (или пустым) до конца хода: план
