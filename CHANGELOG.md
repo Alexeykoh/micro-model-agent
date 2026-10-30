@@ -6,6 +6,82 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-30
+
+### Added
+
+- **Отзыв черновика стал видимым и переживает перезагрузку.** В ленте —
+  свёрнутая пометка `↺ черновик отозван: критик` с тогглом «показать»:
+  причина, вердикт и итерация скрыты, как в блоке размышлений, и не
+  вываливаются в чат. Событие пишется в `session.jsonl` (`type:"retract"`,
+  `retractSource`/`verdict`/`iteration`), история выбрасывает забракованный
+  `assistant` и рисует тот же блок после reload. Гейты:
+  `tests/webui/retract-visible.test.ts`, `tests/core/critic-gate.test.ts`.
+- **У MMART два собственных состояния проверки.** `verify` («сверяю») — пока
+  критик/аудит проверяет готовый ответ; `recheck` — когда черновик отозван.
+  Оба спокойные, не `error`; гейты: `tests/webui-loader.test.ts`,
+  `tests/webui-assets.test.ts`.
+- **Trace: свежее сверху и кнопка «↑ свежее».** Лента перевёрнута, автоскролл
+  не дёргает читающего историю, стриминговые строки батчатся на кадр, есть
+  строка `gate_timing` («ход стоял в гейтах: N мс · критик · аудит»).
+  Гейт: `tests/webui/trace-scroll.test.ts`.
+- **`mma session diagnose`: сигнал `gate_stall`.** Показывает ходы, которые
+  долго стояли в гейтах, с разбивкой по hallucination/critic/audit
+  (гейт: `tests/core/session-diagnose.test.ts`).
+- **Финальный аудит больше не жжёт 90 с на каждом чат-ходе.** Тест-прогон
+  скипается, когда в ходе не было файловых мутаций; повторный аудит
+  неизменного дерева берётся из кэша по отпечатку; таймаут честно
+  `inconclusive`, а не `passed`. Бюджеты — в `src/config/timeouts.ts`,
+  спека `docs/specs/2026-10-30-audit-test-run-budget-design.md`.
+  Гейт: `tests/modules/execution/audit-test-budget.test.ts`.
+
+### Changed
+
+- **`security.paths.enabled=false` действительно снимает jail `baseDir`.**
+  Раньше выключение ограничения убирало allow/deny-паттерны, но путь вне
+  рабочей папки всё равно блокировался. Теперь выключено — можно читать и
+  писать вне `baseDir` (scope субагента и protected-пути работают всегда).
+  Гейты: `tests/security/path-validator.test.ts`, `tests/tools/enforcement-path.test.ts`,
+  `tests/tools/bash-scope.test.ts`.
+- **Проверки плана идут через единый path-validator.** `file-exists:`
+  раскрывает `~`/`%VAR%`, уважает `security.paths.enabled` и при запрете
+  называет причину («вне baseDir, ограничение включено»), а не «файла нет».
+  Спека `docs/specs/2026-10-30-plan-check-path-scope-design.md`.
+- **Критик: бюджет 45 с и без повторной проверки неизменного пакета.** Гейт
+  fail-open с записью причины, повторный вызов на идентичном входе не
+  делается; длительная проверка показывает статус-строку. Параллелить
+  critic/audit нельзя: аудит мутирует состояние плана.
+- **Системные модули в настройках — без выключенного тумблера.** Вместо
+  ложного affordance тихая пометка «системный модуль — всегда включён».
+  Гейт: `tests/webui-settings-system-modules.test.ts`.
+- **Многострочный текст не нормализуется.** Композер веба и REPL-диспетчер
+  больше не срезают отступы и пустые строки; единственная правка — `CRLF → LF`.
+  Спека `docs/specs/2026-10-30-multiline-fidelity-design.md`.
+- **Активный провайдер — один источник правды.** Список настроек читает живой
+  конфиг, а не устаревший снимок `/api/providers`; стартовый баннер тоже.
+  Спека `docs/specs/2026-10-30-webui-provider-single-source-design.md`.
+
+### Fixed
+
+- **DLP больше не ломает запрос 400 Bad Request, подменяя имя тула.**
+  `SESSIONNAME=Console` на Windows совпадал с `console` в имени
+  `mcp__playwright__browser_console_messages`, DLP менял `name` на
+  `<ENV:…>` — провайдер отвергал запрос. Теперь идентификаторы тулов
+  неприкосновенны (маскируется только текст), а невалидное имя не уходит
+  наружу. Спека `docs/specs/2026-10-30-dlp-tool-identifiers-design.md`.
+  Гейт: `tests/security/dlp-tool-name.test.ts`.
+- **Ответ больше не исчезает из ленты после отзыва.** Отзыв вызывался до
+  решения «нужен ли переответ»: при понижении повтора до принятия текст уже
+  был удалён, и ход заканчивался пустым экраном. Теперь retract только там,
+  где реально будет новый ответ или явная ошибка. Спека
+  `docs/specs/2026-10-30-retract-only-on-reanswer-design.md`.
+  Гейт: `tests/core/hallucination-retract.test.ts`.
+- **Статус-строки проверки не копятся в ленте** — одна актуальная, исчезает
+  на отзыве и в конце хода.
+- **Тесты установщика не падают без pwsh**: набор запускается по наличию
+  бинаря, включая MSIX-пакет (`tests/helpers/pwsh.ts`), и честно скипается,
+  если его нет.
+
 ## [0.18.6] - 2026-10-29
 
 ### Fixed
@@ -89,14 +165,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Added
 
 - **`/lsp status` показывает, что реально поднято:** `тёплый <сервер> · <корень> ·
-  <возраст>` по каждому живому соединению (или «тёплых серверов нет»). Прямой
+<возраст>` по каждому живому соединению (или «тёплых серверов нет»). Прямой
   ответ на «сервер поднялся?» без догадок.
 - **Прогрев LSP при старте хоста**, а не только на первом ходе: вкладка LSP и
   первый выбранный файл в `mma web` (и REPL) больше не платят холодный старт.
 - **Панель не ждёт холодный старт 15 с.** Запрос возвращает `error: "starting"`
-  + `retryAfterMs`, панель сама повторяет запрос (до минуты) и показывает
-  счётчик. Для Angular/Next-проекта, где `initialize` идёт 15–60 с, это
-  заменяет ложное «сервер не ответил» на «сервер запускается».
+  - `retryAfterMs`, панель сама повторяет запрос (до минуты) и показывает
+    счётчик. Для Angular/Next-проекта, где `initialize` идёт 15–60 с, это
+    заменяет ложное «сервер не ответил» на «сервер запускается».
 - **`docs/agents/lsp.md`** — процедура проверки по слоям (сервер → mma → агент)
   с автономным скриптом рукопожатия LSP и разбором «почему тут быстро, а там
   нет».
@@ -109,8 +185,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   фоне (один раз на процесс, последовательно, кап 40 файлов/5 с), поэтому первый
   `lsp_check` и первая запись идут на тёплом сервере, а не платят холодный старт.
 - **Структурные LSP-логи на уровне `info`.** `LSP warm project/start/ready/
-  warm_failed`, `LSP check … in Nms`, `LSP check skipped … still starting after
-  Nms`, `LSP write check …` с полями `op/server/root/durMs` — раньше транспорт
+warm_failed`, `LSP check … in Nms`, `LSP check skipped … still starting after
+Nms`, `LSP write check …` с полями `op/server/root/durMs` — раньше транспорт
   писал только `debug`, и пропуск проверки не оставлял следа.
 - **Пауза восстановления вместо «отключён навсегда».** После 3 подряд падений
   сервер ждёт 2 с → 4 с → … → 60 с и пробуется снова; `/lsp status` показывает
@@ -483,7 +559,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `<link rel="icon" href="/api/favicon">`. Гвард: `tests/webui-favicon.test.ts`.
 - **Вкладки `subagents` и `mcp` в сайдбаре `mma web`.** `TABS` остаётся единственным
   источником порядка и горячих клавиш (`Alt+1..8`): `session · files · lsp · trace ·
-  subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:id/subagents`
+subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:id/subagents`
   (прогоны живут в памяти): задача, агент, модель, длительность/итерации, статус; снимки
   мержатся в общие буферы, клик открывает тот же read-only транскрипт, что и строка в ленте.
   MCP читает новый `GET /api/mcp` (тот же `mcpList`, что у настроек) и переключает сервер
@@ -1150,10 +1226,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   - exposes `angular_scaffold` — generates classic boilerplate
     (component/pipe/module/service/directive/guard), files only; it never wires
     itself into an NgModule, and refuses to overwrite without `force: true`.
-  Disabled by seeding `angular11` into `DEFAULTS.plugins.disabled`; it is turned
-  on through the existing plugin gate (`mma plugins enable angular11`, `/plugins`,
-  web toggle). Registered next to `lint-on-write`/`notify`.
-  Spec: `docs/specs/2026-10-16-angular11-plugin-design.md`.
+    Disabled by seeding `angular11` into `DEFAULTS.plugins.disabled`; it is turned
+    on through the existing plugin gate (`mma plugins enable angular11`, `/plugins`,
+    web toggle). Registered next to `lint-on-write`/`notify`.
+    Spec: `docs/specs/2026-10-16-angular11-plugin-design.md`.
 
 ### Fixed
 
@@ -1166,10 +1242,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   load: the restore path treats it as garbage and falls back to the defaults.
 - **`angular11` plugin — false positives found by the live check**
   (2026-10-17: real Angular 11 workspace + `qwen/qwen3.5-9b`):
-  - `angular_check` no longer warns *"does not import CommonModule"* when a
+  - `angular_check` no longer warns _"does not import CommonModule"_ when a
     feature module imports a shared module that re-exports `CommonModule`
     (transitive `exports` closure is now resolved);
-  - `angular_check` suppresses the *"not declared in any NgModule"* finding when
+  - `angular_check` suppresses the _"not declared in any NgModule"_ finding when
     `declarations`/`imports` are given as arrays/spreads (`declarations: FOO`,
     `[...A, B]`) — the member list is unknowable there and the old code produced
     mass false positives; a genuinely undeclared class is still reported when
@@ -1250,7 +1326,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Compaction has one shared cooldown across trigger families**: the `overflow`,
   `quality` and `pending` triggers each counted their own cooldown, so they interleaved —
   overflow at iteration N and quality at N+1 produced a gap of 1 at a cooldown of 3 (the
-  same runaway as after-tool compaction before the C2 fix, but *across* families; it is
+  same runaway as after-tool compaction before the C2 fix, but _across_ families; it is
   visible in the W7 fixture as gaps 72→73 and 96→97). A single
   `LoopState.lastCompactionIteration` now gates every scheduled trigger, and reactive
   (context-length) compaction moves the same clock, so no two compactions — of any family —
@@ -1275,7 +1351,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   test or declared with a reason, and adds three counters: an `src/` cast baseline, a
   per-file budget of silent catches (25, each with a reason — the doc's rule #14), and a
   declaration of the ten `as unknown as *Host` seams in `src/core/agent.ts`. Those seams
-  are *not* removable: `PromptPhaseHost`/`TurnRunHost`/`ProviderPhaseHost` are live mutable
+  are _not_ removable: `PromptPhaseHost`/`TurnRunHost`/`ProviderPhaseHost` are live mutable
   views whose scalar fields the phase writes back into `Agent`, so a literal object would
   copy the field and silently drop the write — the compiler would check less, not more.
   They are therefore declared with that reason, and an undeclared one fails the gate.
@@ -1381,7 +1457,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Trace tab detail**: the trace pane now streams the model's reasoning as its
   own row (`thinking… N chars`) and shows a compaction before/after report —
   `tokens 12000→8000 (−4000), quality 70→88, messages 40→20, turns −18/+6,
-  summarize` — in both the row and the detail pane. Critic rows also surface the
+summarize` — in both the row and the detail pane. Critic rows also surface the
   verdict/escalation text and `critic_error` no longer vanishes.
 - **Context-quality breakdown**: the web “quality” row now shows a tooltip
   explaining the score — each factor (context load / compactions / errors /
@@ -1428,7 +1504,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   only `iteration`, so the detail pane (and row) were empty — worse when the
   verdict was `ok`, which is not logged at all. `CriticGate.logCheck` now writes
   a summary of the evidence it examined (`checked N tool call(s): write_file,
-  edit_file, …`), and the Trace row/detail renders it
+edit_file, …`), and the Trace row/detail renders it
   (`src/core/agent/critic-gate.ts`, `assets/js/sidebar/trace.ts`).
 - **LSP install hints now respect the project's toolchain (all languages)**: a
   new `detectProjectToolchain` reads declared runtime/package versions from
@@ -1560,7 +1636,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `ToolExecutor.execute()` applies `isUrlAllowed` (with session-override) to every
   declared `urlArgs` before the handler — fail-closed with `blocked: true` and a
   localized `tool.url_blocked` message. `attach_image` moved to `manual` (its
-  `source` is a path *or* a URL, decided in the handler). Guard:
+  `source` is a path _or_ a URL, decided in the handler). Guard:
   `tests/tools/enforcement-url.test.ts` (private/localhost, scheme, public,
   disabled policy, optional arg).
 - **Path enforcement at the tool-execution point (W2.2, INV-10)**: `ToolExecutor.execute()`
@@ -1639,7 +1715,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **W2 spec corrected (2026-10-13)**: `caps` is a declaration, not a gate; the
   enforced policies are tied to arguments (`pathArgs` → scope/protected,
   `urlArgs` → SSRF). The original `proc → security.bash.enabled` / `net →
-  security.network.enabled` mapping is wrong — those keys toggle *validation*,
+security.network.enabled` mapping is wrong — those keys toggle _validation_,
   not access — so it was dropped, and W2.4 became a consistency guard
   (`pathArgs` implies an `fs` cap, `urlArgs` implies a `net` cap).
 - **Output events name their source (INV-13)** (`src/output/`): `OutputEvent.source`
@@ -1939,7 +2015,7 @@ belongs, and user attachments are rendered properly and survive a page reload.
 
 - **Reasoning is quieter** (`assets/styles.css`): `.think` renders at `.72` opacity (hover / live restore full weight) and its header uses `--dim-b` instead of the much brighter `--think`, so "thinking" no longer competes with the answer.
 - **Jump-to-latest pill** (`assets/js/feed/core.ts`, `assets/styles.css`): anchored to `.input-area` (`bottom: calc(100% + 10px)`, same as `.menu`/`.cmdk`) instead of a hardcoded `bottom: 148px` on `.chat`, which drifted as the rail/textarea changed the composer height. Its entrance animation uses a new `popCenter` keyframe that keeps `translateX(-50%)` — plain `pop` ended at `transform: none` and made the pill flash in off-center before snapping to the middle.
-- **`images.*` settings** are no longer tool-only: config labels and the Settings → UI section were reworded from "tool images" to cover tool outputs *and* user attachments (en + ru).
+- **`images.*` settings** are no longer tool-only: config labels and the Settings → UI section were reworded from "tool images" to cover tool outputs _and_ user attachments (en + ru).
 
 ### Fixed
 
@@ -2307,7 +2383,7 @@ silently missing.
 
 ### Known limits (documented, not fixed)
 
-- **Draft approval does not cross processes.** The approval is a marker file, the loaded code lives in process memory: `mma plugins drafts revoke` from a terminal unloads the drafts in *that* process, and a running `mma web` only notices on restart or `POST /api/reload/plugins` (same in the other direction). Inside one process (the `define_capability` tool, the Plugins tab) it is live. Verified in a live run.
+- **Draft approval does not cross processes.** The approval is a marker file, the loaded code lives in process memory: `mma plugins drafts revoke` from a terminal unloads the drafts in _that_ process, and a running `mma web` only notices on restart or `POST /api/reload/plugins` (same in the other direction). Inside one process (the `define_capability` tool, the Plugins tab) it is live. Verified in a live run.
 - Disabling a plugin stops its hooks and tool contributions but does **not** undo the module import that already ran, and `permissions` is a declaration shown to the user rather than enforcement. Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
 - Approving a draft is still a decision, not a boundary: the code runs in the agent process with the harness's own reach (fs, network, `bash`). Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
 
@@ -2410,7 +2486,7 @@ gone.
 
 ### Fixed
 
-- **Auto-advance blocked by timestamp skew** (`src/modules/execution/module.ts`): `provablyStale` compares a step file's mtime against the plan's `createdAt`; the filesystem can record a file written right after plan creation a fraction of a millisecond *earlier* than `createdAt`, which falsely marked the file "pre-existing" and silently suppressed step auto-advance. A small tolerance now absorbs the skew (real stale files stay stale).
+- **Auto-advance blocked by timestamp skew** (`src/modules/execution/module.ts`): `provablyStale` compares a step file's mtime against the plan's `createdAt`; the filesystem can record a file written right after plan creation a fraction of a millisecond _earlier_ than `createdAt`, which falsely marked the file "pre-existing" and silently suppressed step auto-advance. A small tolerance now absorbs the skew (real stale files stay stale).
 
 ## [2.23.0] - 2026-10-07
 
@@ -2482,7 +2558,7 @@ model/task-specific tuning).
 - **Provider hot-swap** (`src/core/agent.ts`): `setProvider` now delegates to `reconfigure`, re-probing the active provider's context and resizing budgets (extracted `reprobeActiveProvider`); previously the window/budgets stayed at their startup value.
 - **Session metadata** (`src/modules/session/manager.ts`): new `setEffectiveContext` keeps `meta.contextWindow`/`model` in sync with the effective values; the per-session runner's `envReport` is rebuilt from its own config instead of the bootstrap snapshot.
 - **Plan `checks` self-repair** (`src/modules/execution/module.ts`): a `checks`/`steps` length mismatch no longer rejects plan creation — missing checks are padded with self-certified `manual:<step>` and extras are dropped. Rejection made a small model abandon planning entirely (two failed `create` calls → no plan at all in `ses_muwinhpk_2e69iq`).
-- **Reasoning escalation on loops** (`src/modules/reasoning/policy.ts`): a repeated identical tool call (stuck loop) now raises reasoning effort to `high` instead of lowering it to `low`. Consecutive *successful* routine writes still lower effort.
+- **Reasoning escalation on loops** (`src/modules/reasoning/policy.ts`): a repeated identical tool call (stuck loop) now raises reasoning effort to `high` instead of lowering it to `low`. Consecutive _successful_ routine writes still lower effort.
 
 ### Fixed
 
@@ -2709,7 +2785,7 @@ background-process leaks. Harness fixes only (no model/task-specific tuning).
 - **Web MCP CRUD** (`src/modules/webui/settings-api.ts`, `server.ts` route table): `POST /api/mcp` (create) + `PUT /api/mcp/:id` (full edit, `stdio→command` / `sse|http→url` required), `restartRequired: true`.
 - **Web LSP read/edit** (`src/modules/webui/settings-api.ts`): `GET /api/lsp` table + `PUT /api/lsp/:lang` (`enabled/timeout/command/args` only; add/remove stays JSON-only), `restartRequired: true`.
 - **Generic web settings controls** (`src/modules/webui/assets/js/settings-controls.js`): `controlFor` renders bool/enum/int/share/list/json per registry type.
-- **Settings information architecture** (`src/modules/webui/assets/js/settings-controls.js`, `index.html`, `settings.js`): `PANEL_SECTIONS` is the single source of truth mapping each panel to *named* sections, so a section title always describes the keys under it and no key sits in an "Advanced" bucket. Sidebar grew to 14 intent-named sections (network/browser/sessions split out; `advanced` keeps only diagnostics/retry/service), each panel renders titled cards with a one-line explanation, and the per-group count badges are gone.
+- **Settings information architecture** (`src/modules/webui/assets/js/settings-controls.js`, `index.html`, `settings.js`): `PANEL_SECTIONS` is the single source of truth mapping each panel to _named_ sections, so a section title always describes the keys under it and no key sits in an "Advanced" bucket. Sidebar grew to 14 intent-named sections (network/browser/sessions split out; `advanced` keeps only diagnostics/retry/service), each panel renders titled cards with a one-line explanation, and the per-group count badges are gone.
 - **Settings search** (`src/modules/webui/assets/js/settings.js`, `index.html`, `styles.css`): a search box over the same `PANEL_SECTIONS` table plus i18n labels; results show label + owning panel + dotted key, selection switches the panel and flashes the row (`Esc` clears).
 - **Structured editors for list/JSON keys** (`src/config/registry.ts` `ConfigKeyDef.editor`, `src/config/registry-extra.ts`, `src/modules/webui/assets/js/settings-controls.js`): registry metadata now tells the GUI how to render a value. `tags` = removable chips with an inline adder (bash/path/network rule lists, `tools.defaultTags`, `contentScan.dangerousPatterns`), `checkboxes` = multiselect over a fixed set (`auditNotifier.eventTypes`), `table` = typed record rows (`pricing.overrides`, `experts`, `modelCapabilities`). Tables validate the record client-side and never post a half-filled row; editors post JSON, and `parseConfigValue` accepts a JSON array for `list` keys so values containing commas (regexes like `a{1,3}`) survive.
 - **Memory add dialog** (`src/modules/webui/assets/js/settings.js`): adding a memory entry uses the shared nested dialog (category + multi-line note) instead of the cramped inline row.
@@ -3005,7 +3081,7 @@ background-process leaks. Harness fixes only (no model/task-specific tuning).
 
 ### Fixed
 
-- **Closing code fence without a trailing newline** (`src/ui/md-formatter.ts`): a final ```` ``` ```` at end of stream was rendered as code content; it now closes the block.
+- **Closing code fence without a trailing newline** (`src/ui/md-formatter.ts`): a final ` ``` ` at end of stream was rendered as code content; it now closes the block.
 - **Thought duration inside the answer** (`src/ui/renderer.ts`): the thinking block is closed when the final answer or the next tool starts, so `N.Ns` never lands inside the response text.
 - **Durations over a second** (`src/ui/theme.ts`): rendered as `1.4s` instead of `1400ms`.
 
