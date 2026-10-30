@@ -3,19 +3,31 @@
 // (activeTab, status mutation, new/close/open) arrive via `initComposer`, so it
 // does not import the tab hub. The mobile session sub-header lives in
 // `sess-bar.ts` (re-exported here for `tabs.ts`).
-import { inp, imgPicker, attachStrip, attachErr, sendBtn, el, icon, clearAnnounce } from "../dom.js";
+import { inp, sendBtn, el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { tabs as tabState, session, settings, MAX_IMAGES, MAX_IMAGE_BYTES } from "../store.js";
+import { tabs as tabState, session, settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { contextLabel } from "../format.js";
 import {
-  clearEmpty, activeFeed, liveFeed, appendTo, scrollToBottom, clearFeed,
-  finishMd, resetTurnText, finishThink, showBusy, userBlock,
+  clearEmpty,
+  activeFeed,
+  liveFeed,
+  appendTo,
+  scrollToBottom,
+  clearFeed,
+  finishMd,
+  resetTurnText,
+  finishThink,
+  showBusy,
+  userBlock,
 } from "../feed.js";
 import { setBusy } from "../rail.js";
 import { setSessOpen } from "../core/menus.js";
 import { closeCmdk, updateCmdk, cmdkKeydown, initCmdk } from "./cmdk.js";
+import { closeMentions, initMentions, mentionKeydown, updateMentions } from "./mentions.js";
+import { initAttachments, renderAttachments } from "./attachments.js";
+export { renderAttachments };
 import { renderQueueStrip, enqueuePending } from "./queue.js";
 import { initSessBar } from "./sess-bar.js";
 import { logClientCommand } from "./client-command-log.js";
@@ -46,10 +58,12 @@ let deps: ComposerDeps = {
 export function initComposer(d: Partial<ComposerDeps>): void {
   deps = { ...deps, ...d };
   initSessBar(d);
+  initAttachments({ activeTab: deps.activeTab, insertPath: insertIntoDraft });
 }
 
-// Composer supplies autogrow to the autocomplete leaf (function decl hoisted).
+// Composer supplies autogrow to the autocomplete leaves (function decl hoisted).
 initCmdk({ autogrow });
+initMentions({ autogrow });
 
 // Grow the composer with its content up to a max, then scroll.
 const INPUT_MAX_PX = 200;
@@ -57,86 +71,30 @@ function autogrow(): void {
   if (!inp) return;
   inp.style.height = "auto";
   inp.style.height = Math.min(inp.scrollHeight, INPUT_MAX_PX) + "px";
+  renderMentionMarks();
 }
 
-function setAttachError(msg: string): void {
-  if (!attachErr) return;
-  attachErr.textContent = msg;
-  attachErr.hidden = false;
-  clearTimeout(tabState.attachErrTimer);
-  tabState.attachErrTimer = setTimeout(() => {
-    attachErr.hidden = true;
-  }, 4000);
-}
+// Inline highlight mirror behind the textarea: `@path` tokens become a pill,
+// so a file reference reads as a mention instead of plain quoted text. The
+// mirror glyphs stay transparent; only the token background shows through.
+const inpMark = document.getElementById("inpMark");
+const MENTION_RE = /@[^\s@]+/g;
 
-export function renderAttachments(): void {
-  if (!attachStrip) return;
-  attachStrip.textContent = "";
-  attachStrip.hidden = tabState.attachments.length === 0;
-  tabState.attachments.forEach((src: string, i: number) => {
-    const thumb = el("div", "thumb");
-    const img = document.createElement("img");
-    img.alt = "";
-    img.src = src;
-    thumb.appendChild(img);
-    const rm = el("button", "rm");
-    rm.type = "button";
-    rm.title = t("web.attach.remove");
-    rm.setAttribute("aria-label", t("web.attach.remove"));
-    rm.appendChild(icon("x"));
-    rm.addEventListener("click", () => {
-      tabState.attachments.splice(i, 1);
-      renderAttachments();
-    });
-    thumb.appendChild(rm);
-    attachStrip.appendChild(thumb);
-  });
-  // Черновик аттачей живёт на активной вкладке (см. saveComposer/restoreComposer).
-  const owner = deps.activeTab();
-  if (owner) owner.attachments = tabState.attachments.slice();
-}
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(String(fr.result));
-    fr.onerror = () => reject(fr.error || new Error("read failed"));
-    fr.readAsDataURL(file);
-  });
-}
-
-async function addFiles(files: File[]): Promise<void> {
-  let err = "";
-  for (const file of files) {
-    if (!file || typeof file.type !== "string" || file.type.indexOf("image/") !== 0) {
-      err = t("web.attach.only_images");
-      continue;
-    }
-    if (tabState.attachments.length >= MAX_IMAGES) {
-      err = t("web.attach.too_many", { max: MAX_IMAGES });
-      break;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      err = t("web.attach.too_large");
-      continue;
-    }
-    try {
-      const url = await readAsDataUrl(file);
-      if (url.indexOf("data:image/") !== 0) {
-        err = t("web.attach.invalid");
-        continue;
-      }
-      if (tabState.attachments.length >= MAX_IMAGES) {
-        err = t("web.attach.too_many", { max: MAX_IMAGES });
-        break;
-      }
-      tabState.attachments.push(url);
-    } catch {
-      err = t("web.attach.read_failed");
-    }
+function renderMentionMarks(): void {
+  if (!inpMark) return;
+  inpMark.textContent = "";
+  const text = inp.value;
+  let cursor = 0;
+  for (let m = MENTION_RE.exec(text); m; m = MENTION_RE.exec(text)) {
+    const token = m[0];
+    // Только похожее на путь: `@user` не подсвечиваем.
+    if (!/[./\\]/.test(token)) continue;
+    if (m.index > cursor) inpMark.appendChild(document.createTextNode(text.slice(cursor, m.index)));
+    inpMark.appendChild(el("span", "mmark", token));
+    cursor = m.index + token.length;
   }
-  renderAttachments();
-  if (err) setAttachError(err);
+  if (cursor < text.length) inpMark.appendChild(document.createTextNode(text.slice(cursor)));
+  inpMark.scrollTop = inp.scrollTop;
 }
 
 export function saveComposer(): void {
@@ -153,61 +111,15 @@ export function restoreComposer(tab: Dict | null): void {
   renderAttachments();
   autogrow();
   closeCmdk();
+  closeMentions();
   renderQueueStrip();
-}
-
-// --- attachments input wiring --------------------------------------------
-if (imgPicker) {
-  imgPicker.addEventListener("change", () => {
-    addFiles(Array.from(imgPicker.files || []));
-    imgPicker.value = "";
-  });
-}
-const attachBtn = document.getElementById("attachBtn");
-if (attachBtn && imgPicker) {
-  attachBtn.addEventListener("click", () => imgPicker.click());
-}
-inp.addEventListener("paste", (e) => {
-  const items = e.clipboardData && e.clipboardData.items;
-  if (!items) return;
-  const files: File[] = [];
-  for (const it of items) {
-    if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
-      const f = it.getAsFile();
-      if (f) files.push(f);
-    }
-  }
-  if (files.length) {
-    e.preventDefault();
-    addFiles(files);
-  }
-});
-
-const inputArea = document.querySelector(".input-area");
-if (inputArea) {
-  ["dragenter", "dragover"].forEach((ev) => {
-    inputArea.addEventListener(ev, (e) => {
-      e.preventDefault();
-      inputArea.classList.add("dragover");
-    });
-  });
-  inputArea.addEventListener("dragleave", (e) => {
-    const de = e as DragEvent;
-    if (de.relatedTarget && inputArea.contains(de.relatedTarget as Node)) return;
-    inputArea.classList.remove("dragover");
-  });
-  inputArea.addEventListener("drop", (e) => {
-    e.preventDefault();
-    inputArea.classList.remove("dragover");
-    const dt = (e as DragEvent).dataTransfer;
-    if (dt && dt.files && dt.files.length) addFiles(Array.from(dt.files));
-  });
 }
 
 function clearInput(): void {
   inp.value = "";
   autogrow();
   closeCmdk();
+  closeMentions();
 }
 
 /**
@@ -224,7 +136,23 @@ export function insertIntoDraft(text: string): void {
   const owner = deps.activeTab();
   if (owner) owner.draft = inp.value;
   autogrow();
+  updateMentions();
   inp.focus();
+}
+
+/**
+ * Отправить готовый промпт агенту от имени пользователя (кнопка «исправить»
+ * в LSP: диагностика превращается в задачу). Черновик заменяется целиком.
+ */
+export function submitPrompt(text: string): void {
+  if (!inp || !text.trim()) return;
+  inp.value = text;
+  const owner = deps.activeTab();
+  if (owner) owner.draft = inp.value;
+  autogrow();
+  closeMentions();
+  inp.focus();
+  void send();
 }
 if (inp)
   inp.addEventListener("input", () => {
@@ -232,7 +160,10 @@ if (inp)
     if (owner) owner.draft = inp.value;
     autogrow();
     updateCmdk();
+    updateMentions();
   });
+if (inp) inp.addEventListener("scroll", renderMentionMarks);
+renderMentionMarks();
 
 async function send(): Promise<void> {
   const text = inp.value.trim();
@@ -296,9 +227,23 @@ async function send(): Promise<void> {
   if (feed && feed.querySelector(".startbanner") === null && feed.querySelector(".u") === null) {
     const banner = el("div", "startbanner");
     banner.appendChild(document.createTextNode(t("web.start.label") + " "));
-    banner.appendChild(el("b", "", (settings.config && settings.config.model) || session.host.model || "—"));
-    const sessionPart = session.host.sessionId ? " · " + t("web.start.session") + " " + String(session.host.sessionId) : "";
-    banner.appendChild(document.createTextNode(" · " + (session.host.provider || (settings.config && settings.config.provider && settings.config.provider.active) || "—") + " · " + contextLabel() + sessionPart));
+    banner.appendChild(
+      el("b", "", (settings.config && settings.config.model) || session.host.model || "—"),
+    );
+    const sessionPart = session.host.sessionId
+      ? " · " + t("web.start.session") + " " + String(session.host.sessionId)
+      : "";
+    banner.appendChild(
+      document.createTextNode(
+        " · " +
+          (session.host.provider ||
+            (settings.config && settings.config.provider && settings.config.provider.active) ||
+            "—") +
+          " · " +
+          contextLabel() +
+          sessionPart,
+      ),
+    );
     feed.insertBefore(banner, feed.firstChild);
   }
   // No client-side busy gate: a message sent while THIS session's turn runs is
@@ -306,7 +251,9 @@ async function send(): Promise<void> {
   // not append it mid-stream (it landed inside the live answer and scrolled
   // away); it stays pinned in the queue strip until its turn starts.
   const ownTurnRunning = !!(
-    tab && tab.kind === "session" && (session.runningSessionIds || []).includes(tab.id)
+    tab &&
+    tab.kind === "session" &&
+    (session.runningSessionIds || []).includes(tab.id)
   );
   let postedUser: HTMLElement | null = null;
   if (!ownTurnRunning) {
@@ -386,8 +333,9 @@ inp.addEventListener("keydown", (e) => {
   // Ignore keys that confirm an IME composition (CJK/RU input methods):
   // sending on that Enter would submit a half-composed message.
   if (e.isComposing || e.keyCode === 229) return;
-  // Slash-command autocomplete owns the arrows/Enter/Tab/Esc while open.
+  // Slash-command and `@`-mention autocomplete own arrows/Enter/Tab/Esc while open.
   if (cmdkKeydown(e)) return;
+  if (mentionKeydown(e)) return;
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     void send();

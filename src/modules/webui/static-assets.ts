@@ -17,6 +17,8 @@ export const STATIC_ASSETS: Record<string, { type: string; key: keyof WebUiAsset
   "/index.html": { type: "text/html; charset=utf-8", key: "html" },
   "/styles.css": { type: "text/css; charset=utf-8", key: "css" },
   "/console.css": { type: "text/css; charset=utf-8", key: "cssConsole" },
+  "/groovebox.css": { type: "text/css; charset=utf-8", key: "cssGroovebox" },
+  "/themes.css": { type: "text/css; charset=utf-8", key: "cssThemes" },
   "/app.js": { type: "text/javascript; charset=utf-8", key: "js" },
   "/setup.js": { type: "text/javascript; charset=utf-8", key: "setupJs" },
   "/md.js": { type: "text/javascript; charset=utf-8", key: "mdJs" },

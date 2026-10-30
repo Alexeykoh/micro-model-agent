@@ -30,6 +30,7 @@ export class BrowserModule implements AgentModule {
   getPlugin(): AgentPlugin {
     return {
       name: "browser",
+      description: "opens and drives a browser for pages that need JavaScript",
       onSessionEnd: () => {
         closeBrowserSession();
       },

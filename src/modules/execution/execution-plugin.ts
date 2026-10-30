@@ -34,7 +34,8 @@ const PLAN_NUDGE_THRESHOLD = 2;
  *  текущего шага для автопродвижения. Read-only осознанно исключены (см. вызов
  *  advance в onAfterTool ниже). */
 const FS_MUTATING_TOOLS = new Set([
-  "write_file", "append_file",
+  "write_file",
+  "append_file",
   "edit_file",
   "delete_file",
   "move_file",
@@ -155,6 +156,7 @@ export function stepTypecheckGate(
 export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
   return {
     name: "execution",
+    description: "plan tracking, stuck-turn recovery and turn audit",
     onBeforeThink: (ctx: any) => {
       // Идентификатор хода (монотонный маркер из ContextManager.beginTurn()).
       const turnSeq = typeof ctx?.turnSeq === "number" ? ctx.turnSeq : 0;
@@ -226,8 +228,8 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           : warnKey !== deps.state.lastStuckWarnKey ||
             // Кулдаун варнинга считаем ВНУТРИ хода: прошлый ход не должен
             // «выбрать» новый (§1.11).
-            (deps.state.lastStuckWarnTurn !== turnSeq ||
-              iter - deps.state.lastStuckWarnIter >= STUCK_WARN_REPEAT_EVERY);
+            deps.state.lastStuckWarnTurn !== turnSeq ||
+            iter - deps.state.lastStuckWarnIter >= STUCK_WARN_REPEAT_EVERY;
         if (logIt) {
           // Внутренняя диагностика петли (счётчики упавших тулов, шаги плана):
           // в чате видна только в режиме «подробно» (STYLE.md, quiet by default).
@@ -548,4 +550,3 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
     onTurnEnd: () => deps.archiveCompletedPlan(),
   };
 }
-

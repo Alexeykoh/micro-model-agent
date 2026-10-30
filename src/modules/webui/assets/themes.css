@@ -1,0 +1,1047 @@
+/* Extra themes for `mma web`.
+ *
+ * Each theme is a scoped token override (`body.<id>`) plus a CSS-only costume
+ * for the MMART mascot: `::before` is the headwear, `::after` the accessory.
+ * Layout rules stay in `styles.css`; this sheet only re-registers tokens and
+ * draws the seasonal decoration. The ambient pseudo-elements are fixed and
+ * non-interactive, so they never capture clicks. */
+
+/* ---- neon: cyberpunk magenta/cyan --------------------------------------- */
+body.neon {
+  color-scheme: dark;
+  --bg: #07060f;
+  --fg: #e8f7ff;
+  --panel: #0d0b1a;
+  --sb-bg: #090713;
+  --stab-bg: #090713;
+  --surface: #141029;
+  --input-surface: #100c1f;
+  --inp-bg: #0d0a1c;
+  --inp-border: #35205c;
+  --inp-focus: #ff3ec8;
+  --input-shadow: #ff3ec833;
+  --border: #251a44;
+  --border-2: #35205c;
+  --border-3: #251a44;
+  --muted: #b8c7e6;
+  --dim-a: #7d8ab3;
+  --dim-b: #5f6b91;
+  --dim-c: #5f6b91;
+  --accent: #ff3ec8;
+  --accent-bg: #2a0b26;
+  --green: #5cffc2;
+  --green-fill: #5cffc2;
+  --red: #ff5c7a;
+  --err: #ff5c7a;
+  --red-strong: #ff5c7a;
+  --yellow: #ffe066;
+  --purple: #b26bff;
+  --cyan: #3ee8ff;
+  --think: #7d8ab3;
+  --cmdout: #b8c7e6;
+  --meta: #7d8ab3;
+  --args: #7d8ab3;
+  --hover-bg: #1a1030;
+  --hover-bg-2: #150d27;
+  --x-hover-bg: #221640;
+  --u-fg: #f4e9ff;
+  --u-bg: #1a0f2e;
+  --u-border: #5a2a7a;
+  --ans: #c9d8ff;
+  --ans-bg: rgba(62, 232, 255, 0.04);
+  --toggle-off: #2a1c44;
+  --toggle-knob: #7d8ab3;
+  --scroll-thumb: #35205c;
+  --scroll-thumb-hover: #5f3a9a;
+  --stab-thumb: #35205c;
+  --stab-thumb-hover: #5f3a9a;
+  --pipe: #35205c;
+  --rule: #35205c;
+  --plan-line: #35205c;
+  --plan-bar-fg: #7d8ab3;
+  --sec-h: #7d8ab3;
+  --sec-h-hover: #3ee8ff;
+  --stab-fg: #5f6b91;
+  --overlay: rgba(2, 0, 8, 0.7);
+  --sb-backdrop: rgba(2, 0, 8, 0.6);
+  --shadow-menu: 0 10px 26px rgba(0, 0, 0, 0.5);
+  --shadow-dd: 0 12px 30px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 24px 60px rgba(0, 0, 0, 0.65);
+}
+body.neon.light {
+  color-scheme: light;
+  --bg: #f8f5ff;
+  --fg: #171126;
+  --panel: #ffffff;
+  --sb-bg: #f2ecff;
+  --stab-bg: #f2ecff;
+  --surface: #ece2ff;
+  --input-surface: #ffffff;
+  --inp-bg: #ffffff;
+  --inp-border: #d4bff0;
+  --inp-focus: #b8008a;
+  --input-shadow: #b8008a22;
+  --border: #ddd0f2;
+  --border-2: #cbb8e8;
+  --border-3: #ddd0f2;
+  --muted: #4b3f63;
+  --dim-a: #6d5f87;
+  --dim-b: #8b7ea3;
+  --dim-c: #8b7ea3;
+  --accent: #b8008a;
+  --accent-bg: #fae3f5;
+  --green: #0f7a5a;
+  --green-fill: #0f7a5a;
+  --red: #c62847;
+  --err: #c62847;
+  --red-strong: #c62847;
+  --yellow: #8a5a00;
+  --purple: #6f3fb5;
+  --cyan: #006b7a;
+  --think: #6d5f87;
+  --cmdout: #4b3f63;
+  --meta: #6d5f87;
+  --args: #6d5f87;
+  --hover-bg: #f0e6ff;
+  --hover-bg-2: #f6f0ff;
+  --x-hover-bg: #e8dbfa;
+  --u-fg: #171126;
+  --u-bg: #f1e6ff;
+  --u-border: #bfa6dc;
+  --ans: #2f2540;
+  --ans-bg: rgba(184, 0, 138, 0.04);
+  --toggle-off: #ddd0f2;
+  --toggle-knob: #6d5f87;
+  --scroll-thumb: #cbb8e8;
+  --scroll-thumb-hover: #a98fce;
+  --stab-thumb: #cbb8e8;
+  --stab-thumb-hover: #a98fce;
+  --pipe: #ddd0f2;
+  --rule: #ddd0f2;
+  --plan-line: #ddd0f2;
+  --plan-bar-fg: #6d5f87;
+  --sec-h: #6d5f87;
+  --sec-h-hover: #b8008a;
+  --stab-fg: #8b7ea3;
+  --overlay: rgba(23, 17, 38, 0.35);
+  --sb-backdrop: rgba(23, 17, 38, 0.2);
+  --shadow-menu: 0 8px 24px rgba(60, 20, 90, 0.16);
+  --shadow-dd: 0 10px 26px rgba(60, 20, 90, 0.2);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(60, 20, 90, 0.24);
+}
+/* scanlines + neon mascot visor/antenna */
+body.neon::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(62, 232, 255, 0.05) 0 1px, transparent 1px 4px);
+  opacity: 0.5;
+}
+
+/* ---- paper: warm ink and a red seal ------------------------------------- */
+body.paper {
+  color-scheme: dark;
+  --bg: #1b1712;
+  --fg: #f1e6cf;
+  --panel: #241f18;
+  --sb-bg: #1f1a14;
+  --stab-bg: #1f1a14;
+  --surface: #2c251c;
+  --input-surface: #2a231a;
+  --inp-bg: #241d15;
+  --inp-border: #57452f;
+  --inp-focus: #e0b36a;
+  --input-shadow: #e0b36a33;
+  --border: #3d3225;
+  --border-2: #57452f;
+  --border-3: #3d3225;
+  --muted: #d8c7a8;
+  --dim-a: #ad9878;
+  --dim-b: #8a765a;
+  --dim-c: #8a765a;
+  --accent: #e0b36a;
+  --accent-bg: #33281b;
+  --green: #9ccf8a;
+  --green-fill: #9ccf8a;
+  --red: #e06c5a;
+  --err: #e06c5a;
+  --red-strong: #e06c5a;
+  --yellow: #f0c96a;
+  --purple: #c9a0dc;
+  --cyan: #86c9c2;
+  --think: #ad9878;
+  --cmdout: #d8c7a8;
+  --meta: #ad9878;
+  --args: #ad9878;
+  --hover-bg: #33291e;
+  --hover-bg-2: #2b2319;
+  --x-hover-bg: #403325;
+  --u-fg: #fff4de;
+  --u-bg: #352a1e;
+  --u-border: #6f5638;
+  --ans: #e7d6b8;
+  --ans-bg: rgba(224, 179, 106, 0.04);
+  --toggle-off: #3d3225;
+  --toggle-knob: #ad9878;
+  --scroll-thumb: #4b3d2c;
+  --scroll-thumb-hover: #7a6245;
+  --stab-thumb: #4b3d2c;
+  --stab-thumb-hover: #7a6245;
+  --pipe: #4b3d2c;
+  --rule: #4b3d2c;
+  --plan-line: #4b3d2c;
+  --plan-bar-fg: #ad9878;
+  --sec-h: #ad9878;
+  --sec-h-hover: #f0c96a;
+  --stab-fg: #8a765a;
+  --overlay: rgba(12, 9, 6, 0.65);
+  --sb-backdrop: rgba(12, 9, 6, 0.5);
+  --shadow-menu: 0 8px 22px rgba(0, 0, 0, 0.35);
+  --shadow-dd: 0 10px 26px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+body.paper.light {
+  color-scheme: light;
+  --bg: #f7f0e2;
+  --fg: #2b241b;
+  --panel: #fffaf0;
+  --sb-bg: #f3ead9;
+  --stab-bg: #f3ead9;
+  --surface: #efe3ce;
+  --input-surface: #fffaf0;
+  --inp-bg: #fffaf0;
+  --inp-border: #d6c3a3;
+  --inp-focus: #a33a2c;
+  --input-shadow: #a33a2c22;
+  --border: #e2d3b9;
+  --border-2: #d6c3a3;
+  --border-3: #e2d3b9;
+  --muted: #5b4c38;
+  --dim-a: #7a674d;
+  --dim-b: #9a8668;
+  --dim-c: #9a8668;
+  --accent: #a33a2c;
+  --accent-bg: #f5ded7;
+  --green: #3f6f3a;
+  --green-fill: #3f6f3a;
+  --red: #a33a2c;
+  --err: #a33a2c;
+  --red-strong: #a33a2c;
+  --yellow: #8a5a00;
+  --purple: #6f4a8f;
+  --cyan: #2a6b66;
+  --think: #7a674d;
+  --cmdout: #5b4c38;
+  --meta: #7a674d;
+  --args: #7a674d;
+  --hover-bg: #efe2cb;
+  --hover-bg-2: #f5ebd8;
+  --x-hover-bg: #e8d8bc;
+  --u-fg: #2b241b;
+  --u-bg: #f2e5cd;
+  --u-border: #c9b18a;
+  --ans: #3a3025;
+  --ans-bg: rgba(163, 58, 44, 0.04);
+  --toggle-off: #e2d3b9;
+  --toggle-knob: #7a674d;
+  --scroll-thumb: #d6c3a3;
+  --scroll-thumb-hover: #b9a17c;
+  --stab-thumb: #d6c3a3;
+  --stab-thumb-hover: #b9a17c;
+  --pipe: #e2d3b9;
+  --rule: #e2d3b9;
+  --plan-line: #e2d3b9;
+  --plan-bar-fg: #7a674d;
+  --sec-h: #7a674d;
+  --sec-h-hover: #a33a2c;
+  --stab-fg: #9a8668;
+  --overlay: rgba(43, 36, 27, 0.35);
+  --sb-backdrop: rgba(43, 36, 27, 0.2);
+  --shadow-menu: 0 8px 22px rgba(80, 55, 20, 0.12);
+  --shadow-dd: 0 10px 26px rgba(80, 55, 20, 0.16);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(80, 55, 20, 0.2);
+}
+/* paper grain + round glasses + pencil */
+body.paper::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: repeating-radial-gradient(
+    circle at 12% 18%,
+    rgba(90, 65, 30, 0.05) 0 1px,
+    transparent 1px 5px
+  );
+  opacity: 0.7;
+}
+
+/* ---- contrast: WCAG-friendly black/white/amber -------------------------- */
+body.contrast {
+  color-scheme: dark;
+  --bg: #000000;
+  --fg: #ffffff;
+  --panel: #0a0a0a;
+  --sb-bg: #050505;
+  --stab-bg: #050505;
+  --surface: #141414;
+  --input-surface: #0a0a0a;
+  --inp-bg: #000000;
+  --inp-border: #ffffff;
+  --inp-focus: #ffd400;
+  --input-shadow: #ffd40055;
+  --border: #ffffff;
+  --border-2: #ffffff;
+  --border-3: #6b6b6b;
+  --muted: #ffffff;
+  --dim-a: #d7d7d7;
+  --dim-b: #bdbdbd;
+  --dim-c: #bdbdbd;
+  --accent: #ffd400;
+  --accent-bg: #332b00;
+  --green: #00ff88;
+  --green-fill: #00ff88;
+  --red: #ff5f5f;
+  --err: #ff5f5f;
+  --red-strong: #ff5f5f;
+  --yellow: #ffd400;
+  --purple: #d7a8ff;
+  --cyan: #66e8ff;
+  --think: #d7d7d7;
+  --cmdout: #ffffff;
+  --meta: #d7d7d7;
+  --args: #d7d7d7;
+  --hover-bg: #262600;
+  --hover-bg-2: #1a1a00;
+  --x-hover-bg: #333300;
+  --u-fg: #000000;
+  --u-bg: #ffffff;
+  --u-border: #ffd400;
+  --ans: #ffffff;
+  --ans-bg: rgba(255, 212, 0, 0.08);
+  --toggle-off: #3a3a3a;
+  --toggle-knob: #ffffff;
+  --scroll-thumb: #ffffff;
+  --scroll-thumb-hover: #ffd400;
+  --stab-thumb: #ffffff;
+  --stab-thumb-hover: #ffd400;
+  --pipe: #ffffff;
+  --rule: #ffffff;
+  --plan-line: #ffffff;
+  --plan-bar-fg: #ffffff;
+  --sec-h: #ffffff;
+  --sec-h-hover: #ffd400;
+  --stab-fg: #d7d7d7;
+  --overlay: rgba(0, 0, 0, 0.8);
+  --sb-backdrop: rgba(0, 0, 0, 0.7);
+  --shadow-menu: 0 0 0 2px #ffffff;
+  --shadow-dd: 0 0 0 2px #ffffff;
+  --shadow-modal: 0 0 0 2px #ffffff;
+}
+body.contrast.light {
+  color-scheme: light;
+  --bg: #ffffff;
+  --fg: #000000;
+  --panel: #ffffff;
+  --sb-bg: #f7f7f7;
+  --stab-bg: #f7f7f7;
+  --surface: #ececec;
+  --input-surface: #ffffff;
+  --inp-bg: #ffffff;
+  --inp-border: #000000;
+  --inp-focus: #7a5b00;
+  --input-shadow: #7a5b0044;
+  --border: #000000;
+  --border-2: #000000;
+  --border-3: #8a8a8a;
+  --muted: #000000;
+  --dim-a: #2a2a2a;
+  --dim-b: #444444;
+  --dim-c: #444444;
+  --accent: #7a5b00;
+  --accent-bg: #fff2bf;
+  --green: #006b3a;
+  --green-fill: #006b3a;
+  --red: #b00020;
+  --err: #b00020;
+  --red-strong: #b00020;
+  --yellow: #7a5b00;
+  --purple: #5b2a86;
+  --cyan: #005f73;
+  --think: #2a2a2a;
+  --cmdout: #000000;
+  --meta: #2a2a2a;
+  --args: #2a2a2a;
+  --hover-bg: #ffe89a;
+  --hover-bg-2: #fff2bf;
+  --x-hover-bg: #ffdf66;
+  --u-fg: #ffffff;
+  --u-bg: #000000;
+  --u-border: #7a5b00;
+  --ans: #000000;
+  --ans-bg: rgba(122, 91, 0, 0.06);
+  --toggle-off: #d0d0d0;
+  --toggle-knob: #000000;
+  --scroll-thumb: #000000;
+  --scroll-thumb-hover: #7a5b00;
+  --stab-thumb: #000000;
+  --stab-thumb-hover: #7a5b00;
+  --pipe: #000000;
+  --rule: #000000;
+  --plan-line: #000000;
+  --plan-bar-fg: #000000;
+  --sec-h: #000000;
+  --sec-h-hover: #7a5b00;
+  --stab-fg: #2a2a2a;
+  --overlay: rgba(0, 0, 0, 0.4);
+  --sb-backdrop: rgba(0, 0, 0, 0.25);
+  --shadow-menu: 0 0 0 2px #000000;
+  --shadow-dd: 0 0 0 2px #000000;
+  --shadow-modal: 0 0 0 2px #000000;
+}
+/* hard hat + safety stripe */
+
+/* ---- winter: snow + Santa hat + scarf ----------------------------------- */
+body.winter {
+  color-scheme: dark;
+  --bg: #071019;
+  --fg: #eaf6ff;
+  --panel: #0d1822;
+  --sb-bg: #0a141d;
+  --stab-bg: #0a141d;
+  --surface: #132433;
+  --input-surface: #0f1d29;
+  --inp-bg: #0c1822;
+  --inp-border: #2b4b63;
+  --inp-focus: #9fdcff;
+  --input-shadow: #9fdcff33;
+  --border: #1e3547;
+  --border-2: #2b4b63;
+  --border-3: #1e3547;
+  --muted: #c5dced;
+  --dim-a: #8fa9bd;
+  --dim-b: #6d879b;
+  --dim-c: #6d879b;
+  --accent: #9fdcff;
+  --accent-bg: #142c3d;
+  --green: #8fe3c0;
+  --green-fill: #8fe3c0;
+  --red: #ff8fa3;
+  --err: #ff8fa3;
+  --red-strong: #ff8fa3;
+  --yellow: #ffe08a;
+  --purple: #c7b3ff;
+  --cyan: #8fe9ff;
+  --think: #8fa9bd;
+  --cmdout: #c5dced;
+  --meta: #8fa9bd;
+  --args: #8fa9bd;
+  --hover-bg: #172c3d;
+  --hover-bg-2: #122432;
+  --x-hover-bg: #1e3b50;
+  --u-fg: #f2fbff;
+  --u-bg: #14293a;
+  --u-border: #3a6382;
+  --ans: #d4e9f8;
+  --ans-bg: rgba(159, 220, 255, 0.04);
+  --toggle-off: #24425a;
+  --toggle-knob: #8fa9bd;
+  --scroll-thumb: #2b4b63;
+  --scroll-thumb-hover: #4b7493;
+  --stab-thumb: #2b4b63;
+  --stab-thumb-hover: #4b7493;
+  --pipe: #2b4b63;
+  --rule: #2b4b63;
+  --plan-line: #2b4b63;
+  --plan-bar-fg: #8fa9bd;
+  --sec-h: #8fa9bd;
+  --sec-h-hover: #eaf6ff;
+  --stab-fg: #6d879b;
+  --overlay: rgba(3, 10, 16, 0.7);
+  --sb-backdrop: rgba(3, 10, 16, 0.6);
+  --shadow-menu: 0 10px 26px rgba(0, 10, 20, 0.45);
+  --shadow-dd: 0 12px 30px rgba(0, 10, 20, 0.5);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 24px 60px rgba(0, 10, 20, 0.6);
+}
+body.winter.light {
+  color-scheme: light;
+  --bg: #f4fbff;
+  --fg: #102534;
+  --panel: #ffffff;
+  --sb-bg: #eaf6fd;
+  --stab-bg: #eaf6fd;
+  --surface: #e2f1fa;
+  --input-surface: #ffffff;
+  --inp-bg: #ffffff;
+  --inp-border: #b9d7e8;
+  --inp-focus: #006b9a;
+  --input-shadow: #006b9a22;
+  --border: #cfe5f2;
+  --border-2: #b9d7e8;
+  --border-3: #cfe5f2;
+  --muted: #3f5a6b;
+  --dim-a: #5f7a8b;
+  --dim-b: #7f99a9;
+  --dim-c: #7f99a9;
+  --accent: #006b9a;
+  --accent-bg: #dcf1fb;
+  --green: #147a5a;
+  --green-fill: #147a5a;
+  --red: #b0243c;
+  --err: #b0243c;
+  --red-strong: #b0243c;
+  --yellow: #7a5b00;
+  --purple: #5b3f9a;
+  --cyan: #006b7a;
+  --think: #5f7a8b;
+  --cmdout: #3f5a6b;
+  --meta: #5f7a8b;
+  --args: #5f7a8b;
+  --hover-bg: #e4f3fc;
+  --hover-bg-2: #eef8fe;
+  --x-hover-bg: #d8ecf8;
+  --u-fg: #102534;
+  --u-bg: #e4f3fc;
+  --u-border: #a8cadc;
+  --ans: #1f3a4a;
+  --ans-bg: rgba(0, 107, 154, 0.04);
+  --toggle-off: #cfe5f2;
+  --toggle-knob: #5f7a8b;
+  --scroll-thumb: #b9d7e8;
+  --scroll-thumb-hover: #8db6cc;
+  --stab-thumb: #b9d7e8;
+  --stab-thumb-hover: #8db6cc;
+  --pipe: #cfe5f2;
+  --rule: #cfe5f2;
+  --plan-line: #cfe5f2;
+  --plan-bar-fg: #5f7a8b;
+  --sec-h: #5f7a8b;
+  --sec-h-hover: #006b9a;
+  --stab-fg: #7f99a9;
+  --overlay: rgba(16, 37, 52, 0.35);
+  --sb-backdrop: rgba(16, 37, 52, 0.2);
+  --shadow-menu: 0 8px 24px rgba(20, 60, 90, 0.12);
+  --shadow-dd: 0 10px 26px rgba(20, 60, 90, 0.16);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(20, 60, 90, 0.2);
+}
+/* snow + Santa hat + scarf */
+
+/* ---- spring: blossom + flower crown ------------------------------------- */
+body.spring {
+  color-scheme: dark;
+  --bg: #0f1711;
+  --fg: #edfff0;
+  --panel: #142018;
+  --sb-bg: #101b13;
+  --stab-bg: #101b13;
+  --surface: #1d2d22;
+  --input-surface: #17251c;
+  --inp-bg: #132017;
+  --inp-border: #345540;
+  --inp-focus: #ff9ec4;
+  --input-shadow: #ff9ec433;
+  --border: #263d2d;
+  --border-2: #345540;
+  --border-3: #263d2d;
+  --muted: #c8e6cf;
+  --dim-a: #92b39b;
+  --dim-b: #71927a;
+  --dim-c: #71927a;
+  --accent: #ff9ec4;
+  --accent-bg: #32202a;
+  --green: #9be59b;
+  --green-fill: #9be59b;
+  --red: #ff9a9a;
+  --err: #ff9a9a;
+  --red-strong: #ff9a9a;
+  --yellow: #f4e08a;
+  --purple: #d9b3ff;
+  --cyan: #9be8e0;
+  --think: #92b39b;
+  --cmdout: #c8e6cf;
+  --meta: #92b39b;
+  --args: #92b39b;
+  --hover-bg: #203628;
+  --hover-bg-2: #1a2c21;
+  --x-hover-bg: #294433;
+  --u-fg: #f4fff6;
+  --u-bg: #1d3325;
+  --u-border: #4a7357;
+  --ans: #d8f0dd;
+  --ans-bg: rgba(255, 158, 196, 0.04);
+  --toggle-off: #2e4a37;
+  --toggle-knob: #92b39b;
+  --scroll-thumb: #345540;
+  --scroll-thumb-hover: #54805f;
+  --stab-thumb: #345540;
+  --stab-thumb-hover: #54805f;
+  --pipe: #345540;
+  --rule: #345540;
+  --plan-line: #345540;
+  --plan-bar-fg: #92b39b;
+  --sec-h: #92b39b;
+  --sec-h-hover: #ff9ec4;
+  --stab-fg: #71927a;
+  --overlay: rgba(6, 12, 8, 0.65);
+  --sb-backdrop: rgba(6, 12, 8, 0.55);
+  --shadow-menu: 0 10px 26px rgba(0, 15, 5, 0.4);
+  --shadow-dd: 0 12px 30px rgba(0, 15, 5, 0.45);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 24px 60px rgba(0, 15, 5, 0.55);
+}
+body.spring.light {
+  color-scheme: light;
+  --bg: #fdf8fb;
+  --fg: #233028;
+  --panel: #ffffff;
+  --sb-bg: #f7f2f7;
+  --stab-bg: #f7f2f7;
+  --surface: #f0e9f1;
+  --input-surface: #ffffff;
+  --inp-bg: #ffffff;
+  --inp-border: #dccbdb;
+  --inp-focus: #b02a68;
+  --input-shadow: #b02a6822;
+  --border: #e6d8e5;
+  --border-2: #dccbdb;
+  --border-3: #e6d8e5;
+  --muted: #4f5f54;
+  --dim-a: #6f7f74;
+  --dim-b: #8f9f94;
+  --dim-c: #8f9f94;
+  --accent: #b02a68;
+  --accent-bg: #fae3ee;
+  --green: #2f7a3f;
+  --green-fill: #2f7a3f;
+  --red: #a83232;
+  --err: #a83232;
+  --red-strong: #a83232;
+  --yellow: #7a5b00;
+  --purple: #6b3f9a;
+  --cyan: #1f6f6a;
+  --think: #6f7f74;
+  --cmdout: #4f5f54;
+  --meta: #6f7f74;
+  --args: #6f7f74;
+  --hover-bg: #f6e9f3;
+  --hover-bg-2: #fbf2f8;
+  --x-hover-bg: #f0dceb;
+  --u-fg: #233028;
+  --u-bg: #f7e6f1;
+  --u-border: #d3aec6;
+  --ans: #33443a;
+  --ans-bg: rgba(176, 42, 104, 0.04);
+  --toggle-off: #e6d8e5;
+  --toggle-knob: #6f7f74;
+  --scroll-thumb: #dccbdb;
+  --scroll-thumb-hover: #bca5ba;
+  --stab-thumb: #dccbdb;
+  --stab-thumb-hover: #bca5ba;
+  --pipe: #e6d8e5;
+  --rule: #e6d8e5;
+  --plan-line: #e6d8e5;
+  --plan-bar-fg: #6f7f74;
+  --sec-h: #6f7f74;
+  --sec-h-hover: #b02a68;
+  --stab-fg: #8f9f94;
+  --overlay: rgba(35, 48, 40, 0.35);
+  --sb-backdrop: rgba(35, 48, 40, 0.2);
+  --shadow-menu: 0 8px 24px rgba(80, 30, 60, 0.12);
+  --shadow-dd: 0 10px 26px rgba(80, 30, 60, 0.16);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(80, 30, 60, 0.2);
+}
+/* petals + flower crown + sprout */
+
+/* ---- summer: sun, straw hat and shades ---------------------------------- */
+body.summer {
+  color-scheme: dark;
+  --bg: #04141a;
+  --fg: #f2fdff;
+  --panel: #081f29;
+  --sb-bg: #061921;
+  --stab-bg: #061921;
+  --surface: #0d2b38;
+  --input-surface: #0a2430;
+  --inp-bg: #071e28;
+  --inp-border: #1f5568;
+  --inp-focus: #ffd34d;
+  --input-shadow: #ffd34d33;
+  --border: #123a48;
+  --border-2: #1f5568;
+  --border-3: #123a48;
+  --muted: #c3e8ef;
+  --dim-a: #87b4c0;
+  --dim-b: #67939f;
+  --dim-c: #67939f;
+  --accent: #ffd34d;
+  --accent-bg: #332b0d;
+  --green: #7ef0a3;
+  --green-fill: #7ef0a3;
+  --red: #ff9a7a;
+  --err: #ff9a7a;
+  --red-strong: #ff9a7a;
+  --yellow: #ffd34d;
+  --purple: #c9a8ff;
+  --cyan: #4fe3d7;
+  --think: #87b4c0;
+  --cmdout: #c3e8ef;
+  --meta: #87b4c0;
+  --args: #87b4c0;
+  --hover-bg: #123441;
+  --hover-bg-2: #0d2935;
+  --x-hover-bg: #194656;
+  --u-fg: #f5feff;
+  --u-bg: #113342;
+  --u-border: #2c6a80;
+  --ans: #d2f0f6;
+  --ans-bg: rgba(79, 227, 215, 0.04);
+  --toggle-off: #1a4757;
+  --toggle-knob: #87b4c0;
+  --scroll-thumb: #1f5568;
+  --scroll-thumb-hover: #2f809b;
+  --stab-thumb: #1f5568;
+  --stab-thumb-hover: #2f809b;
+  --pipe: #1f5568;
+  --rule: #1f5568;
+  --plan-line: #1f5568;
+  --plan-bar-fg: #87b4c0;
+  --sec-h: #87b4c0;
+  --sec-h-hover: #ffd34d;
+  --stab-fg: #67939f;
+  --overlay: rgba(1, 8, 12, 0.65);
+  --sb-backdrop: rgba(1, 8, 12, 0.55);
+  --shadow-menu: 0 10px 26px rgba(0, 15, 20, 0.45);
+  --shadow-dd: 0 12px 30px rgba(0, 15, 20, 0.5);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 24px 60px rgba(0, 15, 20, 0.6);
+}
+body.summer.light {
+  color-scheme: light;
+  --bg: #f6fdff;
+  --fg: #11323a;
+  --panel: #ffffff;
+  --sb-bg: #eaf8fb;
+  --stab-bg: #eaf8fb;
+  --surface: #e2f4f7;
+  --input-surface: #ffffff;
+  --inp-bg: #ffffff;
+  --inp-border: #b8dde5;
+  --inp-focus: #9a6b00;
+  --input-shadow: #9a6b0022;
+  --border: #ceeaf0;
+  --border-2: #b8dde5;
+  --border-3: #ceeaf0;
+  --muted: #3f5f66;
+  --dim-a: #5f7f86;
+  --dim-b: #7f9fa6;
+  --dim-c: #7f9fa6;
+  --accent: #9a6b00;
+  --accent-bg: #fff0bf;
+  --green: #1a7f4f;
+  --green-fill: #1a7f4f;
+  --red: #b03a2a;
+  --err: #b03a2a;
+  --red-strong: #b03a2a;
+  --yellow: #9a6b00;
+  --purple: #5b3f9a;
+  --cyan: #006b7a;
+  --think: #5f7f86;
+  --cmdout: #3f5f66;
+  --meta: #5f7f86;
+  --args: #5f7f86;
+  --hover-bg: #e3f5f8;
+  --hover-bg-2: #eefafc;
+  --x-hover-bg: #d6eef3;
+  --u-fg: #11323a;
+  --u-bg: #e3f5f8;
+  --u-border: #a6cfd9;
+  --ans: #1f444c;
+  --ans-bg: rgba(154, 107, 0, 0.04);
+  --toggle-off: #ceeaf0;
+  --toggle-knob: #5f7f86;
+  --scroll-thumb: #b8dde5;
+  --scroll-thumb-hover: #8cbcc7;
+  --stab-thumb: #b8dde5;
+  --stab-thumb-hover: #8cbcc7;
+  --pipe: #ceeaf0;
+  --rule: #ceeaf0;
+  --plan-line: #ceeaf0;
+  --plan-bar-fg: #5f7f86;
+  --sec-h: #5f7f86;
+  --sec-h-hover: #9a6b00;
+  --stab-fg: #7f9fa6;
+  --overlay: rgba(17, 50, 58, 0.35);
+  --sb-backdrop: rgba(17, 50, 58, 0.2);
+  --shadow-menu: 0 8px 24px rgba(10, 50, 60, 0.12);
+  --shadow-dd: 0 10px 26px rgba(10, 50, 60, 0.16);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(10, 50, 60, 0.2);
+}
+/* warm sun glow + straw hat + shades */
+
+/* ---- autumn: leaves + witch hat + scarf --------------------------------- */
+body.autumn {
+  color-scheme: dark;
+  --bg: #170d08;
+  --fg: #fff1de;
+  --panel: #24150d;
+  --sb-bg: #1c100a;
+  --stab-bg: #1c100a;
+  --surface: #332014;
+  --input-surface: #2a1a10;
+  --inp-bg: #21130b;
+  --inp-border: #5c3a1f;
+  --inp-focus: #ff9a3d;
+  --input-shadow: #ff9a3d33;
+  --border: #432a1a;
+  --border-2: #5c3a1f;
+  --border-3: #432a1a;
+  --muted: #e8cfb2;
+  --dim-a: #b8926d;
+  --dim-b: #947153;
+  --dim-c: #947153;
+  --accent: #ff9a3d;
+  --accent-bg: #3a210d;
+  --green: #b8d17a;
+  --green-fill: #b8d17a;
+  --red: #e4644f;
+  --err: #e4644f;
+  --red-strong: #e4644f;
+  --yellow: #ffc857;
+  --purple: #d0a0d8;
+  --cyan: #a8c9a0;
+  --think: #b8926d;
+  --cmdout: #e8cfb2;
+  --meta: #b8926d;
+  --args: #b8926d;
+  --hover-bg: #3a2414;
+  --hover-bg-2: #2e1c0f;
+  --x-hover-bg: #4a2f1a;
+  --u-fg: #fff5e6;
+  --u-bg: #3a2414;
+  --u-border: #74462a;
+  --ans: #f0d8bb;
+  --ans-bg: rgba(255, 154, 61, 0.04);
+  --toggle-off: #4a2f1a;
+  --toggle-knob: #b8926d;
+  --scroll-thumb: #5c3a1f;
+  --scroll-thumb-hover: #8a5a30;
+  --stab-thumb: #5c3a1f;
+  --stab-thumb-hover: #8a5a30;
+  --pipe: #5c3a1f;
+  --rule: #5c3a1f;
+  --plan-line: #5c3a1f;
+  --plan-bar-fg: #b8926d;
+  --sec-h: #b8926d;
+  --sec-h-hover: #ffc857;
+  --stab-fg: #947153;
+  --overlay: rgba(10, 5, 2, 0.7);
+  --sb-backdrop: rgba(10, 5, 2, 0.6);
+  --shadow-menu: 0 10px 26px rgba(15, 5, 0, 0.45);
+  --shadow-dd: 0 12px 30px rgba(15, 5, 0, 0.5);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 24px 60px rgba(15, 5, 0, 0.6);
+}
+body.autumn.light {
+  color-scheme: light;
+  --bg: #fffaf2;
+  --fg: #33200f;
+  --panel: #ffffff;
+  --sb-bg: #fbf1e4;
+  --stab-bg: #fbf1e4;
+  --surface: #f5e7d5;
+  --input-surface: #ffffff;
+  --inp-bg: #ffffff;
+  --inp-border: #e0c6a6;
+  --inp-focus: #a3480f;
+  --input-shadow: #a3480f22;
+  --border: #ecd9c2;
+  --border-2: #e0c6a6;
+  --border-3: #ecd9c2;
+  --muted: #5f4028;
+  --dim-a: #7f5f42;
+  --dim-b: #9f8064;
+  --dim-c: #9f8064;
+  --accent: #a3480f;
+  --accent-bg: #fbe3d0;
+  --green: #4f6f2a;
+  --green-fill: #4f6f2a;
+  --red: #a83220;
+  --err: #a83220;
+  --red-strong: #a83220;
+  --yellow: #8a5a00;
+  --purple: #6b3f8f;
+  --cyan: #3f6f6a;
+  --think: #7f5f42;
+  --cmdout: #5f4028;
+  --meta: #7f5f42;
+  --args: #7f5f42;
+  --hover-bg: #f8e9d8;
+  --hover-bg-2: #fcf3e8;
+  --x-hover-bg: #f2ddc7;
+  --u-fg: #33200f;
+  --u-bg: #f7e6d2;
+  --u-border: #d3b28d;
+  --ans: #402b18;
+  --ans-bg: rgba(163, 72, 15, 0.04);
+  --toggle-off: #ecd9c2;
+  --toggle-knob: #7f5f42;
+  --scroll-thumb: #e0c6a6;
+  --scroll-thumb-hover: #c4a17c;
+  --stab-thumb: #e0c6a6;
+  --stab-thumb-hover: #c4a17c;
+  --pipe: #ecd9c2;
+  --rule: #ecd9c2;
+  --plan-line: #ecd9c2;
+  --plan-bar-fg: #7f5f42;
+  --sec-h: #7f5f42;
+  --sec-h-hover: #a3480f;
+  --stab-fg: #9f8064;
+  --overlay: rgba(51, 32, 15, 0.35);
+  --sb-backdrop: rgba(51, 32, 15, 0.2);
+  --shadow-menu: 0 8px 24px rgba(90, 45, 10, 0.12);
+  --shadow-dd: 0 10px 26px rgba(90, 45, 10, 0.16);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(90, 45, 10, 0.2);
+}
+/* leaves + witch hat + scarf */
+
+/* Shared ambient drift; disabled for users who ask for less motion. */
+  to {
+    background-position:
+      0 320px,
+      40px 380px;
+  }
+}
+
+/* Mascot accessories: one emoji pinned to the head, overlapping the face.
+   Emoji scale with `--s`, so they stay legible on the 22px composer face. */
+body.neon .mdl::after,
+body.paper .mdl::after,
+body.contrast .mdl::after,
+body.winter .mdl::after,
+body.spring .mdl::after,
+body.summer .mdl::after,
+body.autumn .mdl::after {
+  position: absolute;
+  z-index: 5;
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  line-height: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+body.neon .mdl::after {
+  content: "🕶️";
+  top: 6%;
+  left: 50%;
+  transform: translateX(-50%) rotate(-4deg);
+  font-size: max(15px, calc(var(--s) * 0.5));
+}
+body.paper .mdl::after {
+  content: "✒️";
+  right: 0;
+  bottom: 0;
+  transform: rotate(18deg);
+  font-size: max(15px, calc(var(--s) * 0.52));
+}
+body.contrast .mdl::after {
+  content: "⛑️";
+  top: 2%;
+  left: 50%;
+  transform: translateX(-50%) rotate(-6deg);
+  font-size: max(15px, calc(var(--s) * 0.55));
+}
+body.winter .mdl::after {
+  content: "🧣";
+  right: 0;
+  bottom: 0;
+  transform: rotate(10deg);
+  font-size: max(15px, calc(var(--s) * 0.55));
+}
+body.spring .mdl::after {
+  content: "🌸";
+  top: 2%;
+  right: 0;
+  transform: rotate(12deg);
+  font-size: max(15px, calc(var(--s) * 0.55));
+}
+body.summer .mdl::after {
+  content: "👒";
+  top: 4%;
+  left: 50%;
+  transform: translateX(-50%) rotate(-10deg);
+  font-size: max(15px, calc(var(--s) * 0.6));
+}
+body.autumn .mdl::after {
+  content: "🍁";
+  top: 2%;
+  right: 0;
+  transform: rotate(16deg);
+  font-size: max(15px, calc(var(--s) * 0.58));
+}
+
+/* Falling weather: a sparse emoji field built by `settings/weather.ts`.
+   Each particle owns one transform/opacity animation; randomized CSS vars
+   make the lanes, sizes and speeds feel organic instead of tiled. */
+.wx-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.wx-layer[hidden] { display: none; }
+.wx-p {
+  position: absolute;
+  top: 0;
+  left: var(--x, 50%);
+  font-size: var(--size, 14px);
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  line-height: 1;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: wx-fall var(--dur, 14s) linear var(--delay, 0s) infinite;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
+}
+@keyframes wx-fall {
+  0% {
+    transform: translate3d(0, -12vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  9% { opacity: var(--o, 0.5); }
+  50% {
+    transform: translate3d(var(--dx, 0), 52vh, 0) rotate(calc(var(--rot, 120deg) * 0.5));
+  }
+  88% { opacity: var(--o, 0.5); }
+  100% {
+    transform: translate3d(calc(var(--dx, 0) * -0.6), 112vh, 0) rotate(var(--rot, 120deg));
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wx-layer { display: none; }
+}
+
+/* Seasonal themes follow console's flat terminal register: sharp corners,
+   no drop shadows, no glassy chrome. The palette and falling weather carry
+   the season; the surface stays a terminal. */
+body.winter,
+body.spring,
+body.summer,
+body.autumn {
+  --shadow-menu: none;
+  --shadow-dd: none;
+  --shadow-modal: 0 0 0 1px var(--border);
+}
+body.winter *,
+body.winter *::before,
+body.winter *::after,
+body.spring *,
+body.spring *::before,
+body.spring *::after,
+body.summer *,
+body.summer *::before,
+body.summer *::after,
+body.autumn *,
+body.autumn *::before,
+body.autumn *::after {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}

@@ -12,6 +12,7 @@ import { t } from "../i18n.js";
 import type { Dict } from "../core/store/types.js";
 import { hooks } from "../store.js";
 import { sb } from "./state.js";
+import { fixButton } from "./lsp-fix.js";
 
 /** Сколько диагностик показываем (сервер тоже капит, это второй предохранитель). */
 const SHOW_LIMIT = 50;
@@ -47,7 +48,8 @@ function startTicker(box: HTMLElement): void {
   stopTicker();
   const paint = () => {
     const node = box.querySelector<HTMLElement>(".lsp-file-progress");
-    if (node) node.textContent = t("web.sidebar.lsp_file_checking", { secs: String(checkElapsedSec()) });
+    if (node)
+      node.textContent = t("web.sidebar.lsp_file_checking", { secs: String(checkElapsedSec()) });
   };
   paint();
   ticker = window.setInterval(paint, 500);
@@ -76,7 +78,11 @@ export function renderLspFile(box: HTMLElement): void {
   const path = selectedPath();
   if (!path) {
     box.appendChild(el("div", "lsp-hint", t("web.sidebar.lsp_file_no_selection")));
-    const open = el("button", "lsp-file-go", t("web.sidebar.lsp_file_open_files")) as HTMLButtonElement;
+    const open = el(
+      "button",
+      "lsp-file-go",
+      t("web.sidebar.lsp_file_open_files"),
+    ) as HTMLButtonElement;
     open.type = "button";
     open.addEventListener("click", () => hooks.showFilesTab?.());
     box.appendChild(open);
@@ -128,9 +134,7 @@ export function renderLspFileResult(box: HTMLElement, res: Dict): void {
     const hint = el("div", "lsp-file-state bad");
     hint.appendChild(el("span", "lsp-g fail", "!"));
     hint.appendChild(
-      document.createTextNode(
-        " " + (text === key ? t("web.sidebar.lsp_file_failed") : text),
-      ),
+      document.createTextNode(" " + (text === key ? t("web.sidebar.lsp_file_failed") : text)),
     );
     if (spent && String(res.error) !== "lsp-timeout") {
       hint.appendChild(el("span", "lsp-file-ms", formatSec(ms)));
@@ -154,7 +158,10 @@ export function renderLspFileResult(box: HTMLElement, res: Dict): void {
   const list = el("div", "lsp-diag-list");
   diags.slice(0, SHOW_LIMIT).forEach((d) => {
     const line = Number(d.line) || 1;
-    const row = el("button", "lsp-file-diag sev-" + String(d.severity || "info")) as HTMLButtonElement;
+    const row = el(
+      "button",
+      "lsp-file-diag sev-" + String(d.severity || "info"),
+    ) as HTMLButtonElement;
     row.type = "button";
     row.title = t("web.sidebar.lsp_file_open_line", { path, line: String(line) });
     row.setAttribute("aria-label", row.title);
@@ -169,6 +176,7 @@ export function renderLspFileResult(box: HTMLElement, res: Dict): void {
     list.appendChild(row);
   });
   box.appendChild(list);
+  box.appendChild(fixButton(path, diags));
   if (diags.length > SHOW_LIMIT) {
     box.appendChild(
       el(

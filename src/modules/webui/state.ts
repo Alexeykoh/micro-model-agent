@@ -54,6 +54,13 @@ export interface WebUiAssets {
    * на базовом `styles.css`. Опциональна ради лёгких тестовых фикстур.
    */
   cssConsole?: string;
+  /**
+   * Тема «groovebox» (`/groovebox.css`) — вариация console с акцентной
+   * палитрой. Опциональна по той же причине, что и `cssConsole`.
+   */
+  cssGroovebox?: string;
+  /** Пакет дополнительных тем (`/themes.css`): neon/paper/contrast + сезоны. */
+  cssThemes?: string;
   js: string;
   /**
    * Скрипт визарда первого запуска (`/setup.js`). Опционален, чтобы лёгкие

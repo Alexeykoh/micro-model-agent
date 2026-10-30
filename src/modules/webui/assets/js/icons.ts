@@ -143,4 +143,18 @@ export const ICONS: Record<string, IconSpec> = {
   bulb: [
     ["path",{d:"M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"}], ["path",{d:"M9 18h6"}], ["path",{d:"M10 22h4"}],
   ],
+  // LSP "fix" affordance: a wrench reads as repair, not as another refresh.
+  wrench: [
+    ["path",{d:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"}],
+  ],
+  // Files toolbar: collapse-all shrinks, expand-all grows (distinct glyphs,
+  // unlike the mirrored chevrons they replace).
+  "minimize-2": [
+    ["path",{d:"m14 10 7-7"}], ["path",{d:"M20 10h-6V4"}],
+    ["path",{d:"m3 21 7-7"}], ["path",{d:"M4 14h6v6"}],
+  ],
+  "maximize-2": [
+    ["path",{d:"m14 10 7-7"}], ["path",{d:"M20 4h-6v6"}],
+    ["path",{d:"m3 21 7-7"}], ["path",{d:"M4 20h6v-6"}],
+  ],
 };

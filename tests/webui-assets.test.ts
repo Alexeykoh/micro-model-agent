@@ -517,7 +517,7 @@ describe("webui assets", () => {
     expect(a.css).toContain(".sb-tab.on");
     // Sidebar has a fixed width; opening a detail never resizes it, and the
     // detail sits on the left of the list (row-reverse).
-    expect(a.css).toContain("width: 679px");
+    expect(a.css).toContain("width: clamp(340px, 38vw, 679px)");
     expect(a.css).toContain("#pane-trace { flex-direction: row-reverse;");
     expect(a.css).toContain(".trc-detail");
     expect(a.js).toContain("initSidebar()");

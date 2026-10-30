@@ -76,7 +76,7 @@ export class SkillsModule implements AgentModule {
   }
 
   /** Пересканировать каталоги навыков на живом инстансе (для `reload()`). */
-reloadSources(): { added: number; removed: number } {
+  reloadSources(): { added: number; removed: number } {
     if (!this.sources) return { added: 0, removed: 0 };
     const loader = new SkillsLoader();
     return this.reload(() =>
@@ -195,6 +195,7 @@ reloadSources(): { added: number; removed: number } {
   getPlugin(): AgentPlugin {
     return {
       name: "skills",
+      description: "discovers and loads agent skills",
       onSessionStart: (_ctx: any) => {},
       onBeforeThink: (_ctx: any) => {},
     };

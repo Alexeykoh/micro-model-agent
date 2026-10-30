@@ -36,6 +36,7 @@ export class SessionModule implements AgentModule {
   getPlugin(): AgentPlugin {
     return {
       name: "session",
+      description: "session lifecycle and transcript logging",
     };
   }
 }

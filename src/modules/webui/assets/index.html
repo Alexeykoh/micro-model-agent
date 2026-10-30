@@ -7,6 +7,8 @@
   <link rel="icon" href="/api/favicon">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/console.css">
+  <link rel="stylesheet" href="/groovebox.css">
+  <link rel="stylesheet" href="/themes.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -21,7 +23,9 @@
       var light = theme === "light" ||
         (theme === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
       if (light) document.body.classList.add("light");
-      if ((localStorage.getItem("mma-ui-theme") || "console") === "console") document.body.classList.add("console");
+      var ui = localStorage.getItem("mma-ui-theme") || "console";
+      var uiThemes = ["console", "groovebox", "neon", "paper", "contrast", "winter", "spring", "summer", "autumn"];
+      if (uiThemes.indexOf(ui) >= 0) document.body.classList.add(ui);
     } catch (e) { /* ignore */ }
   })();
 </script>
@@ -117,7 +121,10 @@
       <div class="composer">
         <div class="composer-main">
           <button class="attach-btn" id="attachBtn" type="button" title="attach image" aria-label="attach image">◧</button>
-          <textarea class="inp" id="inp" rows="1" placeholder="message… (/ for commands)"></textarea>
+          <div class="inp-wrap">
+            <div class="inp-mark" id="inpMark" aria-hidden="true"></div>
+            <textarea class="inp" id="inp" rows="1" placeholder="message… (@ for files, / for commands)"></textarea>
+          </div>
           <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
         </div>
         <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span></div>

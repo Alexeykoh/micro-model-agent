@@ -34,7 +34,7 @@ import {
   sidebarSubagentEvent, sidebarMcpEvent,
   openFilesTabFor,
 } from "./js/sidebar.js";
-import { insertIntoDraft } from "./js/session/composer.js";
+import { insertIntoDraft, submitPrompt } from "./js/session/composer.js";
 import { drainQueuedTurn } from "./js/session/queue.js";
 import { initCursor, createFace, setFaceState, loaderStateFor, setGreetResolver } from "./js/loader.js";
 import type { FaceState } from "./js/loader.js";
@@ -223,7 +223,7 @@ hooks.renderActive = renderActiveState;
 hooks.openFileInTree = (p) => { void openFilesTabFor(p); };
 hooks.openFileAtLine = (p, line) => { void openFilesTabFor(p, line); };
 hooks.showFilesTab = () => { void openFilesTabFor(""); };
-
+hooks.askAgent = (text) => submitPrompt(text);
 function resyncAfterReconnect(): void {
   for (const tab of tabState.tabs) {
     if (tab.kind !== "session") continue;
@@ -535,7 +535,7 @@ async function boot(): Promise<void> {
     initSidebarDrawer();
     initSubagentView();
     applySidebarI18n();
-    initFiles({ insertPath: (p) => insertIntoDraft("`" + p + "` ") });
+    initFiles({ insertPath: (p) => insertIntoDraft("@" + p + " ") });
     await loadModels();
     await loadProviders();
     await loadSessions();

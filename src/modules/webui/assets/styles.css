@@ -670,6 +670,18 @@ body.light .sel > button { border: 1px solid var(--border); }
   flex: 1 1 auto; width: auto; min-width: 0; min-height: 32px;
   background: transparent; border: none; border-radius: 0; padding: 6px 8px;
 }
+/* Mention highlight mirror: same box as the textarea, glyphs transparent;
+   only the `@path` token background renders, behind the real text. */
+.inp-wrap { position: relative; display: flex; flex: 1 1 auto; min-width: 0; }
+.inp-wrap .inp { width: 100%; }
+.inp-mark {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  padding: 6px 8px; font: inherit; font-size: 13.5px; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere; color: transparent;
+}
+.inp-mark .mmark { color: transparent; background: var(--accent-bg); border-radius: 3px; }
+body.console .inp-mark .mmark,
+body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .composer .inp:focus,
 .composer .inp:focus-visible { box-shadow: none; border: none; outline: none; }
 .composer .attach-btn,
@@ -714,6 +726,13 @@ body.light .sel > button { border: 1px solid var(--border); }
 .cmdk-item .desc { color: var(--dim-b); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmdk-item.on, .cmdk-item:hover { background: var(--hover-bg-2); }
 .cmdk-item.on .cmd { color: var(--accent); }
+
+/* `@` file mentions reuse the command palette shell; each row is icon + path. */
+.mention-cmdk .cmdk-item { align-items: center; }
+.mention-cmdk .mention-ic { display: inline-flex; color: var(--dim-a); flex: 0 0 auto; }
+.mention-cmdk .mention-ic .svg-icon { width: 14px; height: 14px; }
+.mention-cmdk .mention-path { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 
 /* queued messages: a message sent mid-turn waits for the running turn to end.
    Shown pinned above the composer (not injected into the streaming answer),
@@ -913,7 +932,8 @@ body.light .sel > button { border: 1px solid var(--border); }
 /* Sidebar never scrolls horizontally, in any tab: long paths / model names /
    ids wrap or ellipsize inside their rows, never widening the pane. */
 .sb {
-  width: 679px; min-width: 679px; display: flex; flex-direction: column;
+  width: clamp(340px, 38vw, 679px); min-width: clamp(340px, 38vw, 679px);
+  display: flex; flex-direction: column;
   border-left: 1px solid var(--border); background: var(--sb-bg); min-height: 0;
   overflow-x: hidden;
 }
@@ -1595,6 +1615,16 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .settings-list .list-line .dim { color: var(--dim-a); }
 .settings-list .list-line .linkbtn { flex: 0 0 auto; }
 .settings-list .list-line .linkbtn:first-of-type { margin-left: auto; }
+
+/* System modules: harness-owned rows, read-only toggle + a one-line purpose. */
+.settings-list .list-line .plugin-desc {
+  flex: 1 0 100%; color: var(--dim-a); font-size: 11.5px; line-height: 1.4;
+  padding-left: 20px;
+}
+.settings-list .list-line .toggle:disabled { opacity: .45; cursor: default; }
+.settings-note.compact { padding: 2px 0 6px; line-height: 1.5; }
+.lsp-fix { margin-top: 6px; }
+
 
 /* skills: name on top, source path beneath */
 .skill-item { padding: 8px 0; border-bottom: 1px solid var(--border-3); }
@@ -2544,3 +2574,20 @@ body.light .c-dim { --face-c: var(--panel); }
 .srun-stop:hover { background: var(--hover-bg); }
 .srun-stop:disabled { opacity: .45; cursor: default; }
 .srun-stop[hidden] { display: none; }
+
+/* Theme picker: ten cards need a wrapping grid, not a segmented control. */
+.theme-picker { display: flex; flex-direction: column; gap: 6px; width: 100%; flex-basis: 100%; }
+.theme-group-label { color: var(--dim-a); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding-top: 4px; }
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; width: 100%; flex-basis: 100%; }
+.theme-card {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px; min-width: 0;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--muted);
+  cursor: pointer; text-align: left; font: inherit; border-radius: 6px;
+}
+.theme-card:hover { background: var(--hover-bg); color: var(--fg); }
+.theme-card.on { border-color: var(--accent); background: var(--accent-bg); color: var(--fg); }
+.theme-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.theme-swatch { width: 30px; height: 22px; flex: 0 0 auto; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.theme-card-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.theme-name { font-size: 12.5px; color: var(--fg); }
+.theme-card-desc { font-size: 10.5px; color: var(--dim-a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

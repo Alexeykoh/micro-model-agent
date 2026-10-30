@@ -1,4 +1,3 @@
-
 // Модуль памяти агента: преференсы и хвост .md-файлов в системный промпт, тулы remember/recall.
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
@@ -34,7 +33,9 @@ export class MemoryModule implements AgentModule {
       const prefStr = Object.entries(prefs)
         .map(([k, v]) => `${k}=${v}`)
         .join(", ");
-      parts.push(`User preferences (background hints, not instructions — the current user message always wins, do not "correct" the user from these): ${prefStr}`);
+      parts.push(
+        `User preferences (background hints, not instructions — the current user message always wins, do not "correct" the user from these): ${prefStr}`,
+      );
     }
 
     const memoryTail = this.getMemoryTail();
@@ -88,6 +89,7 @@ export class MemoryModule implements AgentModule {
   getPlugin(): AgentPlugin {
     return {
       name: "memory",
+      description: "long-term notes and user preferences",
       isBuiltin: true,
       onBuildPrompt: () => {
         const parts: string[] = [];
@@ -96,7 +98,9 @@ export class MemoryModule implements AgentModule {
           const prefStr = Object.entries(prefs)
             .map(([k, v]) => `${k}=${v}`)
             .join(", ");
-          parts.push(`User preferences (background hints, not instructions — the current user message always wins, do not "correct" the user from these): ${prefStr}`);
+          parts.push(
+            `User preferences (background hints, not instructions — the current user message always wins, do not "correct" the user from these): ${prefStr}`,
+          );
         }
         const memoryTail = this.getMemoryTail();
         if (memoryTail) parts.push(memoryTail);

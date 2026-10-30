@@ -1,4 +1,3 @@
-
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { ProjectMapInfo } from "../../core/host";
@@ -6,7 +5,7 @@ import type { ToolDefinition, ToolContext, ToolResult } from "../../tools/types"
 import { Indexer, DEFAULT_MAX_FILES } from "./walker";
 import { IndexCache } from "./cache";
 import { buildProjectProfileLine } from "./project-profile";
-import { rankFiles, rankSymbols, matchOutline, } from "./rank";
+import { rankFiles, rankSymbols, matchOutline } from "./rank";
 import { buildFileGraph } from "./graph";
 import { formatMapReport } from "./map-report";
 import type { IndexResult, IndexedFile } from "./walker";
@@ -23,10 +22,7 @@ export interface SymbolLocationHit {
 }
 
 /** Внешний источник определений символа (LSP); null-совместим с фолбэком на индекс. */
-export type SymbolProvider = (
-  query: string,
-  language: string,
-) => Promise<SymbolLocationHit[]>;
+export type SymbolProvider = (query: string, language: string) => Promise<SymbolLocationHit[]>;
 
 /** Опции модуля индексатора: корень проекта, каталог кэша, кап файлов. */
 export interface IndexerModuleOptions {
@@ -349,6 +345,7 @@ export class IndexerModule implements AgentModule {
   getPlugin(): AgentPlugin {
     return {
       name: "indexer",
+      description: "workspace file index used by search and the project map",
       onSessionStart: () => {
         this.buildIndex().catch(() => {});
         this.watch();

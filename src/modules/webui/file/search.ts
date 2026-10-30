@@ -43,8 +43,7 @@ const GENERATED_FILE_SUFFIXES = [".tsbuildinfo"];
  * `content` — совпадение в строке (1-based `line` + обрезанный `text`).
  */
 export type SearchHit =
-  | { kind: "path"; path: string }
-  | { kind: "content"; path: string; line: number; text: string };
+  { kind: "path"; path: string } | { kind: "content"; path: string; line: number; text: string };
 
 /** Результат поиска: строки + признаки упора в кап. */
 export interface SearchResult {
@@ -60,6 +59,8 @@ export interface SearchOptions {
   maxFiles?: number;
   maxBytes?: number;
   maxMs?: number;
+  /** Только совпадения по имени/пути — файлы не читаются (`@`-автодополнение). */
+  namesOnly?: boolean;
 }
 
 interface WalkState {
@@ -74,6 +75,7 @@ interface WalkState {
   maxResults: number;
   maxFiles: number;
   maxBytes: number;
+  namesOnly: boolean;
 }
 
 /** Читает файл игноров из корня; fail-open (null — правила не применяются). */
@@ -86,11 +88,7 @@ function readIgnoreFile(path: string): string | null {
 }
 
 /** Ищет `needle` (lowercase) по строкам уже декодированного текста. */
-function collectHits(
-  relPath: string,
-  text: string,
-  state: WalkState,
-): void {
+function collectHits(relPath: string, text: string, state: WalkState): void {
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     if (!lines[i].toLowerCase().includes(state.needle)) continue;
@@ -175,6 +173,8 @@ async function walkDir(
         return false;
       }
     }
+    // Автодополнению `@` нужны только пути: не читаем содержимое.
+    if (state.namesOnly) continue;
     if (state.scanned >= state.maxFiles) {
       state.truncated = true;
       return false;
@@ -226,6 +226,7 @@ export async function searchWorkspace(
     maxResults: opts.maxResults ?? MAX_SEARCH_RESULTS,
     maxFiles: opts.maxFiles ?? MAX_SEARCH_FILES,
     maxBytes: opts.maxBytes ?? MAX_SEARCH_BYTES,
+    namesOnly: opts.namesOnly === true,
   };
   await walkDir(base, base, "", matcher, hiddenGlobs, state);
   // Имена всегда первыми; общий лимит делится между двумя видами совпадений.

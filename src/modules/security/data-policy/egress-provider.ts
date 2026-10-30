@@ -8,6 +8,7 @@
  * записей процесса (INV-D11) — ре-гидратация работает и после failover.
  */
 import type { AppConfig } from "../../../config/types";
+import { isIpPrivate } from "../ip-guard";
 import type { PolicyContext } from "./context";
 import { createGuard } from "./guard";
 import { DEFAULT_DATA_POLICY } from "./defaults";
@@ -48,13 +49,66 @@ export function isLoopbackHost(host: string): boolean {
   );
 }
 
-/** Доверенный ли хост: loopback или точное совпадение в allowlist. */
+/**
+ * Хост в локальной сети/VPN: приватные и служебные диапазоны IPv4/IPv6.
+ * Такой провайдер (LM Studio/Ollama на другой машине, Hamachi, Tailscale-LAN)
+ * не является внешним egress — пути к проекту ему нужны как есть. Hamachi
+ * исторически раздаёт адреса из 25.0.0.0/8, поэтому он тоже локальный.
+ */
+export function isLocalNetworkHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (isIpPrivate(h)) return true;
+  // Hamachi legacy 25/8 (не покрыт стандартными private-диапазонами).
+  return /^25\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
+}
+
+/** IPv4-литерал → 32-битное число; не литерал — undefined. */
+function ipv4ToInt(value: string): number | undefined {
+  const parts = value.split(".");
+  if (parts.length !== 4) return undefined;
+  let out = 0;
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return undefined;
+    const n = Number(part);
+    if (n < 0 || n > 255) return undefined;
+    out = (out << 8) | n;
+  }
+  return out >>> 0;
+}
+
+/** Совпадает ли IPv4-хост с CIDR-записью (`10.0.0.0/8`). */
+function matchesIpv4Cidr(host: string, cidr: string): boolean {
+  const [base, bitsRaw] = cidr.split("/");
+  if (bitsRaw === undefined) return false;
+  const bits = Number(bitsRaw);
+  if (!Number.isInteger(bits) || bits < 0 || bits > 32) return false;
+  const hostInt = ipv4ToInt(host);
+  const baseInt = ipv4ToInt(base);
+  if (hostInt === undefined || baseInt === undefined) return false;
+  if (bits === 0) return true;
+  const mask = (0xffffffff << (32 - bits)) >>> 0;
+  return (hostInt & mask) === (baseInt & mask);
+}
+
+/** Запись allowlist совпала с хостом: точное имя, `*.corp`/`.corp` или IP/CIDR. */
+function hostMatchesEntry(host: string, entry: string): boolean {
+  const listed = (hostOf(entry) ?? entry).toLowerCase().replace(/^\[|\]$/g, "");
+  if (!listed) return false;
+  if (listed === host) return true;
+  // Маска подсети (`10.0.0.0/8`) — только для IP-литералов.
+  if (listed.includes("/") && matchesIpv4Cidr(host, listed)) return true;
+  // Маска домена: `*.corp` или `.corp` (spec §6, «маска .corp»).
+  const suffix = listed.startsWith("*.") ? listed.slice(1) : listed.startsWith(".") ? listed : "";
+  return suffix.length > 1 && host.endsWith(suffix);
+}
+
+/**
+ * Доверенный ли хост: loopback, локальная сеть/VPN или совпадение в allowlist
+ * (точное имя, `*.corp`/`.corp`, IP или CIDR).
+ */
 export function isTrustedHost(host: string, trustedHosts: readonly string[]): boolean {
-  if (isLoopbackHost(host)) return true;
-  return trustedHosts.some((entry) => {
-    const listed = hostOf(entry) ?? entry.toLowerCase().replace(/^\[|\]$/g, "");
-    return listed === host;
-  });
+  if (isLoopbackHost(host) || isLocalNetworkHost(host)) return true;
+  return trustedHosts.some((entry) => hostMatchesEntry(host, entry));
 }
 
 /** Зависимости фабрики: живой конфиг + машинный контекст workspace. */
@@ -99,7 +153,8 @@ export function createProviderEgressFactory(
       target,
       ctx: deps.ctx,
       map,
-      onDiagnostic: (d) => diagnosticSink?.(entry.sessionId ? { ...d, sessionId: entry.sessionId } : d),
+      onDiagnostic: (d) =>
+        diagnosticSink?.(entry.sessionId ? { ...d, sessionId: entry.sessionId } : d),
     });
   };
 }
