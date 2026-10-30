@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **MCP-серверы на Windows больше не теряются молча.** Голое имя (`npx`,
+  `npm`) — это `.cmd`-шим, который `spawn` не находит (`ENOENT`), поэтому
+  discovery падал, сервер попадал в `failedServers`, и все `mcp__*`-тулы
+  исчезали из набора на всю сессию (при этом промпт утверждал, что MCP
+  доступен). Запуск stdio-серверов теперь идёт через общий
+  `src/utils/spawn-command.ts` (резолв шима по PATH и `shell` для
+  `.cmd`/`.bat`), PATH берётся из `env` сервера с учётом Windows-регистра
+  (`Path`). `disconnect` добивает дерево (`killTree`), а не только
+  `cmd.exe`. Тест: `tests/mcp-spawn.test.ts` (падал с `ENOENT 'probe-mcp'`
+  до правки).
+
 ## [0.19.0] - 2026-10-30
 
 ### Added
