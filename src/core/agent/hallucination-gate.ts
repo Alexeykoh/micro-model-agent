@@ -95,8 +95,9 @@ export class HallucinationGate {
     }
 
     if (result.status === "retry") {
-      // Черновик уже отстримлен — убираем до переответа (иначе дубль в ленте).
-      retractDraft(deps, result.kind ?? "retry", result.reason ?? "");
+      // Retract решается в `applyRetry`: повтор может быть понижен до
+      // предупреждения (аудит уже переспрашивал) — тогда ответ принимается,
+      // и удалять его из ленты нельзя (иначе ход кончается пустым экраном).
       return this.applyRetry(deps, textContent, result);
     }
 
@@ -150,6 +151,8 @@ export class HallucinationGate {
         "warn",
         `Hallucination retries exhausted (${MAX_HALLUCINATION_RETRIES}), returning error`,
       );
+      // Ответ заменяется ошибкой — черновик не должен остаться висеть.
+      retractDraft(deps, result.kind ?? "retry", result.reason ?? "");
       return { action: "block", reason: t("hall.max_retries_exhausted") };
     }
     state.hallucinationRetries++;
@@ -157,6 +160,8 @@ export class HallucinationGate {
       "warn",
       `Hallucination retry (${state.hallucinationRetries}/${MAX_HALLUCINATION_RETRIES}): ${result.reason}`,
     );
+    // Только здесь и сейчас: следом действительно будет новый ответ.
+    retractDraft(deps, result.kind ?? "retry", result.reason ?? "");
     if (textContent) {
       deps.contextManager.addMessage({ role: "assistant", content: textContent });
     }
