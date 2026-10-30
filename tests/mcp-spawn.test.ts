@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { spawnSpec } from "../src/utils/spawn-command";
-import { spawnEnvPath } from "../src/modules/mcp/stdio-spawn";
+import { spawnEnv, spawnEnvPath } from "../src/modules/mcp/stdio-spawn";
 import { MCPClient } from "../src/modules/mcp/client";
 
 describe("spawnSpec", () => {
@@ -50,7 +50,7 @@ describe("spawnSpec", () => {
   });
 });
 
-describe("spawnEnvPath", () => {
+describe("spawnEnvPath / spawnEnv", () => {
   it("prefers the configured env, then Windows `Path` over a POSIX `PATH`", () => {
     const posix = "/c/Users/x:/usr/bin";
     const win = "C:\\Temp\\shim;C:\\Windows";
@@ -61,6 +61,21 @@ describe("spawnEnvPath", () => {
     expect(spawnEnvPath({ PATH: posix, Path: win }, { Path: "C:\\cfg" }, "win32")).toBe("C:\\cfg");
     expect(spawnEnvPath({ PATH: posix, Path: win }, { PATH: "/cfg" }, "win32")).toBe("/cfg");
     expect(spawnEnvPath({ PATH: "/usr/bin" }, undefined, "linux")).toBe("/usr/bin");
+  });
+
+  it("keeps exactly one PATH key on Windows (cmd.exe takes the first one)", () => {
+    const win = "C:\\Temp\\shim;C:\\Windows";
+    const { env, pathEnv } = spawnEnv({ PATH: "/c/posix", Path: win, HOME: "x" }, undefined, "win32");
+    expect(pathEnv).toBe(win);
+    expect(env.Path).toBe(win);
+    expect(env.PATH).toBeUndefined();
+    expect(env.HOME).toBe("x");
+  });
+
+  it("leaves the env alone on non-Windows", () => {
+    const { env, pathEnv } = spawnEnv({ PATH: "/usr/bin", Path: "/legacy" }, undefined, "linux");
+    expect(pathEnv).toBe("/usr/bin");
+    expect(env).toEqual({ PATH: "/usr/bin", Path: "/legacy" });
   });
 });
 
