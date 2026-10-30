@@ -9,10 +9,9 @@ import { killTree } from "../processes/kill-tree";
  * Какое значение PATH отдавать резолву шима.
  *
  * Явный `env` из конфига главнее процесса. В остальном на Windows `Path`
- * приоритетнее `PATH`: под git-bash/MSYS `PATH` приходит в POSIX-форме
- * (`/c/…:/usr/bin`), и `resolveSpawnCommand` (он делит строку по `;`) не находит
- * в ней `.cmd`-шим — ровно тот дефект, который чинил spawn-command. В env-блоке
- * Windows оба ключа несут одну переменную, поэтому `Path` — исходная форма.
+ * приоритетнее `PATH`: под git-bash/MSYS `PATH` бывает в POSIX-форме
+ * (`/c/…:/usr/bin`), и `resolveSpawnCommand` (он делит строку по `;`) не
+ * находит `.cmd`-шим в такой строке.
  */
 export function spawnEnvPath(
   env: NodeJS.ProcessEnv,
@@ -27,18 +26,41 @@ export function spawnEnvPath(
 }
 
 /**
+ * Среда для спавна + выбранный PATH.
+ *
+ * В env-блоке Windows `PATH` и `Path` — одна переменная. Если оставить оба ключа
+ * (обычное дело под git-bash: `PATH` от bash + `Path` от системы/конфига),
+ * `cmd.exe` может взять первую запись — без каталога шима, и получит
+ * «не является внутренней или внешней командой». Поэтому на Windows оставляем
+ * ровно один ключ с выбранным значением; на прочих платформах не трогаем.
+ */
+export function spawnEnv(
+  mergedEnv: NodeJS.ProcessEnv,
+  override: NodeJS.ProcessEnv | undefined,
+  platformName: string,
+): { env: NodeJS.ProcessEnv; pathEnv: string } {
+  const env: NodeJS.ProcessEnv = { ...mergedEnv };
+  const pathEnv = spawnEnvPath(env, override, platformName);
+  if (platformName === "win32" && pathEnv) {
+    delete env.PATH;
+    delete env.Path;
+    env.Path = pathEnv;
+  }
+  return { env, pathEnv };
+}
+
+/**
  * Спавн MCP-сервера. Голое имя (`npx`, `npm`) на Windows — это `.cmd`-шим,
  * который `spawn` не находит (ENOENT) и не запускает без shell (EINVAL):
  * резолв и `shell: true` делает `spawnSpec`.
  */
 export function spawnMcpServer(config: MCPServerConfig): ChildProcess {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...config.env };
-  const spec = spawnSpec(
-    config.command!,
-    config.args || [],
-    undefined,
-    spawnEnvPath(env, config.env, process.platform),
+  const { env, pathEnv } = spawnEnv(
+    { ...process.env, ...config.env },
+    config.env,
+    process.platform,
   );
+  const spec = spawnSpec(config.command!, config.args || [], undefined, pathEnv);
   return spawn(spec.command, spec.args, {
     env,
     stdio: ["pipe", "pipe", "pipe"],
