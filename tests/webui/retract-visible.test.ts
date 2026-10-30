@@ -31,6 +31,7 @@ i18n.I18N.dicts = {
 const store = await import("../../src/modules/webui/assets/js/store.js");
 const core = await import("../../src/modules/webui/assets/js/feed/core.js");
 const stream = await import("../../src/modules/webui/assets/js/feed/stream.js");
+const feedTurn = await import("../../src/modules/webui/assets/js/feed/turn.js");
 const loader = await import("../../src/modules/webui/assets/js/loader.js");
 const sidebarState = await import("../../src/modules/webui/assets/js/sidebar/state.js");
 const trace = await import("../../src/modules/webui/assets/js/sidebar/trace.js");
@@ -118,10 +119,39 @@ describe("feed: the retracted draft leaves a visible, calm note", () => {
     );
   });
 
-  it("stays quiet when there was no streamed draft to retract", () => {
+  it("still shows the note when no draft was streamed (the gate is the only signal)", () => {
     const feed = mountTab("S4");
     stream.onRetract("missing tests", "S4", { source: "critic" });
-    expect(feed.querySelector(".metaln.retract")).toBeNull();
+    expect(feed.querySelector(".metaln.retract")?.textContent).toBe(
+      "draft retracted: critic — missing tests",
+    );
+  });
+
+  it("removes a draft that streaming already finalized (live flow: phase done + status)", () => {
+    const feed = mountTab("S5");
+    stream.onText("finalized draft answer", "S5");
+    // Живой порядок: сначала статус гейта закрывает markdown-сегмент, потом
+    // приходит retract — черновик к этому моменту уже не `curMd`.
+    stream.onMeta("\n↳ checking the result…\n", "S5", "status");
+    stream.finishMd(feed);
+    stream.onRetract("not delivered", "S5", { source: "critic", iteration: 1 });
+    expect(feed.textContent).not.toContain("finalized draft answer");
+    expect(feed.querySelector(".metaln.retract")?.textContent).toBe(
+      "draft retracted: critic — not delivered",
+    );
+    // Статус проверки не остаётся висеть после отзыва.
+    expect(feed.querySelectorAll(".metaln.status")).toHaveLength(0);
+  });
+});
+
+describe("feed: verification status is transient", () => {
+  it("keeps only the latest status line and drops it on turn end", () => {
+    const feed = mountTab("S6");
+    stream.onMeta("\n↳ checking the result…\n", "S6", "status");
+    stream.onMeta("\n↳ checking the plan and tests…\n", "S6", "status");
+    expect(feed.querySelectorAll(".metaln.status")).toHaveLength(1);
+    feedTurn.resetTurnText(feed);
+    expect(feed.querySelectorAll(".metaln.status")).toHaveLength(0);
   });
 });
 

@@ -73,8 +73,12 @@ export function onText(chunk: string, sid?: string): void {
     st.curMd = mountMarkdown(feed, mdOpts(true));
     st.curMd.root.classList.add("streaming");
     st.turnRoots.push(st.curMd.root);
+    // Новый ответ — новая цель для отзыва: прошлый уже принят/убран.
+    st.lastAnswerRoot = st.curMd.root;
+    st.lastAnswerText = "";
   }
   st.curText += chunk;
+  st.lastAnswerText += chunk;
   st.turnMd += chunk;
   st.pendingText += chunk;
   scheduleText(feed);
@@ -128,9 +132,21 @@ export function onMeta(chunk: string, sid?: string, kind?: string): void {
   if (!feed || !text) return;
   clearEmpty(feed);
   finishMd(feed);
+  // Статус живёт только пока идёт проверка/шаг: иначе «проверяю результат…»
+  // копится в ленте на каждом ходу. Показываем одну актуальную строку.
+  if (kind === "status") clearStatusLines(feed);
   const warn = text.indexOf("⚠") !== -1 || text.indexOf("✗") !== -1;
-  appendTo(feed, el("div", warn ? "metaln warn" : "metaln", text));
+  const cls = ["metaln", warn ? "warn" : "", kind === "status" ? "status" : ""]
+    .filter(Boolean)
+    .join(" ");
+  appendTo(feed, el("div", cls, text));
   if (feed === activeFeed()) scroll();
+}
+
+/** Убирает временные статус-строки конкретной ленты (см. `onMeta`). */
+export function clearStatusLines(feed?: HTMLElement | null): void {
+  if (!feed) return;
+  feed.querySelectorAll(".metaln.status").forEach((n) => n.remove());
 }
 
 // Гейт забраковал уже отстримленный черновик (SSE `retract`): убираем его
@@ -138,8 +154,11 @@ export function onMeta(chunk: string, sid?: string, kind?: string): void {
 // (ses_munvrcfz_na9ze3). Копипаст хода тоже чистим — отклонённого текста
 // в «copy / copy as markdown» быть не должно. Вместо молчаливого исчезновения
 // остаётся видимая плашка «кто и почему» (A13): ответ не пропадает бесследно,
-// а штатная перепроверка не выглядит ошибкой. Без видимого черновика
-// (пустой ответ, только тулы) — тихо, без шумовой строки.
+// а штатная перепроверка не выглядит ошибкой.
+//
+// Живой прогон (2026-10-30) показал: к моменту отзыва стриминг уже закрыт —
+// статус-строка гейта вызывает `finishMd`, да и `phase: done` приходит раньше.
+// Поэтому цель отзыва — `lastAnswerRoot`, а не только открытый `curMd`.
 export interface RetractDetails {
   /** Кто отозвал: `critic` | `hallucination` | `audit` (нет у плагинов). */
   source?: string;
@@ -167,9 +186,9 @@ export function onRetract(reason: string, sid?: string, info?: RetractDetails): 
   if (!feed) return;
   clearBusy(feed);
   const st = streamStateFor(feed);
-  const draftRoot = st.curMd ? st.curMd.root : null;
-  const hadDraft = !!draftRoot || (st.curText != null && st.curText !== "");
-  const draftLen = st.curText ? st.curText.length : 0;
+  // Открытый сегмент важнее закрытого: если ответ ещё стримится, режем его.
+  const draftRoot = st.curMd ? st.curMd.root : st.lastAnswerRoot;
+  const draftLen = st.curMd && st.curText ? st.curText.length : st.lastAnswerText.length;
   finishMd(feed);
   finishThink(feed);
   if (draftRoot) {
@@ -178,7 +197,9 @@ export function onRetract(reason: string, sid?: string, info?: RetractDetails): 
     draftRoot.remove();
   }
   if (draftLen > 0) st.turnMd = st.turnMd.slice(0, Math.max(0, st.turnMd.length - draftLen));
-  if (!hadDraft) return;
+  st.lastAnswerRoot = null;
+  st.lastAnswerText = "";
+  clearStatusLines(feed);
   appendTo(feed, retractNote(reason, info?.source));
   if (feed === activeFeed()) scroll();
 }

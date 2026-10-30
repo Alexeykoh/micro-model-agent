@@ -13,6 +13,14 @@ import type { Dict, MdHandle, ThinkState, ToolNode } from "./types.js";
 export interface FeedStreamState {
   curText: string | null;
   curMd: MdHandle | null;
+  /**
+   * Последний ответ ассистента, даже если его Markdown-сегмент уже закрыт
+   * (`finishMd` перед статус-строкой или гейтом). По нему `retract` убирает
+   * именно забракованный ответ, а не пустое место: к моменту отзыва стриминг
+   * уже завершён, и `curMd` обнулён.
+   */
+  lastAnswerRoot: HTMLElement | null;
+  lastAnswerText: string;
   turnMd: string;
   turnRoots: HTMLElement[];
   curThink: ThinkState | null;
@@ -49,6 +57,8 @@ function createStreamState(): FeedStreamState {
   return {
     curText: null,
     curMd: null,
+    lastAnswerRoot: null,
+    lastAnswerText: "",
     turnMd: "",
     turnRoots: [],
     curThink: null,
