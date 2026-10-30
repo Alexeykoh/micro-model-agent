@@ -1,6 +1,6 @@
 ﻿# TODO — Micro Models Agent
 
-> **Актуально на 2026-10-26** (`master` @ 0.12.6).
+> **Актуально на 2026-10-30** (`master` @ 0.18.6).
 >
 > Этот файл — только **открытая** работа. Закрытые пункты здесь не хранятся:
 > история — в `CHANGELOG.md`, `docs/agents/feature-history.md` и коммитах.
@@ -17,7 +17,7 @@
       на ход работы субагента с возможностью вернуться назад. Одновременно может
       работать много субагентов: переключение между ходами + возврат в родительский
       чат без потери состояния. _(0.11.0: SSE `subagent`, `GET
-      /api/sessions/:id/subagents`, спека `2026-10-23-subagent-run-view-design`.)_
+/api/sessions/:id/subagents`, спека `2026-10-23-subagent-run-view-design`.)_
 - [x] **Trace: поп-ап системного промпта** — кнопка `Prompt` в Trace открывает
       поп-ап с текстом, числом токенов и составом блоков. API
       `GET /api/sessions/:id/system-prompt` отдаёт `available:false`, пока у
@@ -35,9 +35,9 @@
       `tests/providers/sanitizing-provider.test.ts`, `tests/webui/egress-filter.test.ts`,
       `tests/service/egress-filter.test.ts`.
 - [ ] **Остаточные векторы вне плана** (отдельная задача, нужен шов/спека):
-      payload `tools/web-search.ts:66` (запрос уходит в DuckDuckGo как есть),
-      payload `modules/mcp/client.ts`, обход через base64/split известного значения,
-      DNS-подмена trust (документировать IP/CIDR), NER (ФИО/адреса).
+      payload `tools/web-search.ts:74` (запрос уходит в DuckDuckGo как есть, DLP его
+      не трогает), payload `modules/mcp/client.ts`, обход через base64/split известного
+      значения, DNS-подмена trust (документировать IP/CIDR), NER (ФИО/адреса).
       Долги по теме — в `docs/agents/debt.md` (`at-rest-pii`, `file-content-taint`,
       `api-hidden-globs-text-scope`, `file-content-bypass-non-path-tools`,
       `data-policy-projection-lifecycle`, `streaming-tail-holdback`,
@@ -69,7 +69,7 @@
       активной сессии.
 - [x] **W7 — конфиг:** сделано 2026-10-21 — v1-конфиг конвертируется (не удаляется),
       атомарная шифрованная запись доменов со слиянием чужих изменений, `/config
-      reset` для json/list, failover с моделью целевого провайдера и общие лимиты
+reset` для json/list, failover с моделью целевого провайдера и общие лимиты
       запросов, гейт занятости в веб-настройках, реальные коды возврата CLI,
       честный setup-мастер, ротация лога/оборванный хвост/prune без живых
       раннеров, гашение фоновых детей при выходе.
@@ -142,8 +142,8 @@
 
 ### 1.4 Раздутые файлы (долг `split-bloated-files`)
 
-- [ ] Опустить файлы из `.arch-allowlist.json` до ≤300 строк — **54 осталось**
-      (было 84; снято 30: разрезано 27, уменьшено без разрезания 3). Полный список и приоритет:
+- [ ] Опустить файлы из `.arch-allowlist.json` до ≤300 строк — **53 осталось**
+      (было 84; снято 31: разрезано 28, уменьшено 3). Полный список и приоритет:
       [`docs/plans/2026-10-13-split-bloated-files-progress.md`](./docs/plans/2026-10-13-split-bloated-files-progress.md).
       По 1–2 файла за задачу; гейт — `tests/arch/file-size.test.ts`.
 
@@ -153,7 +153,9 @@
       (`contentHash`, 8 hex; одинаковый текст с разных URL даёт один hash).
       _(2026-10-26, WS4.5; гейт `tests/tools/web-fetch.test.ts`.)_
 - [ ] Режим компакции `llm`: `contextBudget.compactionSummary` допускает только
-      `off|ledger`, файл `compaction-summary.ts` не реализован (там же, WS5).
+      `off|ledger` (`src/config/registry-extra.ts:182`). Файл
+      `src/core/compaction-summary.ts` **есть и используется** в `ledger`-режиме —
+      не хватает именно LLM-режима (сводка моделью) и его проводки в конфиг.
 - [x] Правило «systemic-сбой только при ≥3 различных падающих тулах»: общий
       вывод в память гейтится `countDistinctFailingTools`, конкретные причины
       (`edit_file` anchor) пишутся отдельно. _(2026-10-26, WS9a;
@@ -166,8 +168,10 @@
 - [x] `src/core/system-prompt.ts`: директивы уложены в ≤120 символов (склейка `+`
       сохраняет текст); гейт `tests/core/system-prompt-line-length.test.ts`.
       _(Исправлено 2026-10-26.)_
-- [ ] StuckDetector: нет классификации `scope_drift`/`empty_output` — надёжного сигнала нет
-      (`src/modules/execution/stuck-detector.ts` знает только `timeout`/`repeat`/`error_loop`).
+- [x] StuckDetector: классификации `scope_drift`/`empty_output` **сняты как задача** —
+      надёжного сигнала нет (в `src/modules/execution/stuck-signals.ts:21` зафиксировано,
+      почему эти виды удалены). Возвращаться — только с новым источником улик.
+      _(Проверено 2026-10-30.)_
 - [x] `src/core/hallucination/factual.ts`: пункт был устаревшим — тёплый кэш
       (`checkIndex`/`indexHas`) консультируется **до** cooldown-ветки (код с 2026-10-01),
       рескан остаётся rate-limited. Отдельная правка не нужна. _(Проверено 2026-10-26.)_
@@ -256,25 +260,35 @@
       затем ветка `fix/subagent-scope-entries`. Гейты: `tests/security/path-validator.test.ts`,
       `tests/tools/enforcement-path.test.ts`.
 - [ ] **A2 (P0) `glob` в субагенте врёт «Нет совпадений», скрыв всё скоупом.** 14/14 вызовов
-      детей дали пустую выдачу при 780+ файлах у родителя; `visible === 0` возвращается раньше,
-      чем печатается `file.glob_hidden` (`src/tools/glob-tool.ts:60-62`). Ветка
-      `fix/glob-scope-honest-empty`; гейт `tests/tools/glob-scope.test.ts` («скрытое ≠ пусто»).
+      детей дали пустую выдачу при 780+ файлах у родителя. Причина жива: при
+      `visible.length === 0` тул сразу возвращает `file.no_matches`
+      (`src/tools/glob-tool.ts:60-62`), а счётчик `hidden` и строка `file.glob_hidden`
+      появляются только в непустой ветке (`:67`). Ветка `fix/glob-scope-honest-empty`;
+      гейт `tests/tools/glob-scope.test.ts` («скрытое ≠ пусто»).
 - [ ] **A3 (P1) Пустой `path` обходит enforcement.** `executor.ts:175` пропускает `""`, а
       `list_dir` резолвит `""` в корень проекта (`safeResolvePath`). Ветка
       `fix/empty-path-arg`; гейт `tests/tools/enforcement-path.test.ts` — `list_dir("")` в
       закрытом скоупе → отказ.
-- [ ] **A4 (P1) Журнал прогона субагента без аргументов тулов.** У всех 60 записей
-      `content:"tool"` поля `args` нет — нельзя восстановить, с каким путём упал вызов.
-      Писать `args` с редактированием секретов; гейт `tests/tools/subagent-session-log.test.ts`.
+- [ ] **A4 (P1) Журнал прогона субагента без аргументов тулов.** Поле `args` теперь есть
+      в SSE-событии `tool_start` (`subagent-observer.ts`), но в `session.jsonl` запись
+      `content:"tool"` пишется только из `tool_end` и **аргументов не несёт**
+      (`src/tools/subagent-session-log.ts:46-55`). Нельзя восстановить, с каким путём
+      упал вызов. Писать `args` из `tool_start` с редактированием секретов; гейт
+      `tests/tools/subagent-session-log.test.ts`.
 - [ ] **A5 (P1) Счётчики антифлейлинга общие для родителя и детей.** Дети накрутили
-      «bash упал 14 раз» → 15 → 21 у родителя, у которого было 2 вызова; `stuckDetector`
-      мутируется через общий `pluginManager` форка (`execution-plugin.ts:439/465/472`), а
-      `FAILING_FIRST_WORDS` (`src/tools/bash.ts:516`) вообще на процесс. Состояние — на прогон,
-      варнинг — один раз на изменение счётчика. Ветка `fix/flail-counters-per-run`; гейт
-      `tests/modules/execution/stuck-turn-scope.test.ts`.
+      «bash упал 14 раз» → 15 → 21 у родителя, у которого было 2 вызова. Причина жива:
+      `ToolExecutor.fork()` передаёт дочернему исполнителю **тот же** `pluginManager`
+      (`src/tools/executor.ts:77`), где живёт один `stuckDetector`; а
+      `FAILING_FIRST_WORDS` (`src/tools/bash.ts:41`) — модульная Map на процесс.
+      Состояние — на прогон, варнинг — один раз на изменение счётчика. Ветка
+      `fix/flail-counters-per-run`; гейт `tests/modules/execution/stuck-turn-scope.test.ts`.
 - [ ] **A6 (P1) Критик эскалирует числа без провенанса; его проверки невидимы в журнале.**
       «заявлен 1487, а на самом деле >4000» (индекс против диска с `node_modules`) дало
-      `critical` и 3 лишние итерации. Требовать evidence (тул + аргументы + скоуп) для числовых
+      `critical` и 3 лишние итерации. Живая сессия `ses_mvv8mr4z`: критик дважды дал
+      `concern` «weather facts lack web grounding», хотя `web_browse` вызывался и его вывод
+      есть в пакете (`gatherTurnToolEvents` отдаёт до 600 симв. output). То есть данных
+      ему хватает — не хватает **требования подкрепить вердикт уликой** (тул + аргументы +
+      скоуп) и записи самих проверок в журнал. Требовать evidence для числовых/фактических
       утверждений, логировать проверки критика, не эскалировать `critical` без провенанса.
       Ветка `fix/critic-evidence-provenance`; гейты `tests/modules/critic/*`,
       `tests/arch/observability-coverage.test.ts`.
@@ -283,9 +297,11 @@
       `toolsOk/toolsFailed/filesRead/filesWritten/blocked`; `filesRead === 0` на аналитической
       задаче → `success:false` с причиной. Ветка `feat/subagent-run-health` (вместе с A4);
       гейт `tests/tools/subagent-session-log.test.ts` + новый `subagent-empty-run.test.ts`.
-- [ ] **A8 (P2) Заголовок сессии падает на reasoning-модели.** Бюджет 512 тратится на
-      рассуждения, восстановление `f17e8499` живёт только в петле агента. Прогнать title-gen
-      через `truncated_no_content` (повтор с выключенным reasoning и удвоенным бюджетом) или
+- [ ] **A8 (P2) Заголовок сессии падает на reasoning-модели.** `TITLE_MAX_TOKENS = 512`
+      (`src/modules/session/auto-name.ts:15`) тратится на рассуждения; recovery
+      `truncated_no_content` живёт только в петле агента, а `generateSessionTitle` ловит
+      ошибку и возвращает `null` (тихий WARN). Прогнать title-gen через
+      `truncated_no_content` (повтор с выключенным reasoning и удвоенным бюджетом) или
       тихий фолбэк без WARN. Ветка `fix/session-title-truncation`.
 
 ### 1.9 Находки текущей сессии `ses_mvuy6zpc_otiooomxxrtseqcx` (0.18.6)
@@ -320,8 +336,8 @@
       `tests/tools/enforcement-path.test.ts`, `tests/security/path-validator.test.ts`.
 - [x] **A11 (P0) DLP, скорее всего, ломает запросы к провайдеру (400 Bad Request).**
       Живой лог: `Ошибка LLM: Ошибка LLM API 400 (Bad Request): Upstream request failed:
-      [invalid_request_error] Invalid 'tools[24].***.name': string does not match pattern.
-      Expected a string that matches the pattern '^[a-zA-Z0-9_-]+.`
+[invalid_request_error] Invalid 'tools[24].***.name': string does not match pattern.
+Expected a string that matches the pattern '^[a-zA-Z0-9_-]+.`
       (request_id `85485dad-8344-4c2f-9b70-3cb46546d8fa`). Провайдер отвергает **имя
       инструмента**: вместо `^[a-zA-Z0-9_-]+$` пришло `***`. Механика подозревается
       явно: `sanitizeChat()` (`modules/security/data-policy/guard.ts:99`) гонит через
@@ -428,11 +444,10 @@
 
 ## 2. Действия пользователя (не задачи для агента)
 
-- [ ] Вернуть `contextWindow 64000` в реальном конфиге (`~/.mma`) — сейчас 32768:
-      `/config contextWindow 64000`.
-- [ ] Playwright MCP сейчас **не прописан** в `~/.config/opencode/opencode.jsonc`
-      (там только `$schema`). Если он нужен — сначала добавить сервер, потом
-      перезапускать opencode.
+- [ ] Вернуть `contextWindow 64000` в реальном конфиге (`~/.mma`) — сейчас 32768
+      (проверено 2026-10-30): `/config contextWindow 64000`.
+- [x] Playwright MCP прописан в `~/.config/opencode/opencode.jsonc` (проверено
+      2026-10-30) — действий не требуется.
 
 ---
 
@@ -475,7 +490,7 @@
 - [ ] **Compliance (EU AI Act).** Append-only логи + подпись, high-risk артефакты
       (risk file, lineage, oversight-панель, adversarial-лог Art.15), retention ≥6 мес.
 - [ ] **Внутренние хвосты.** `noExplicitAny` warn-ratchet → error; coverage-threshold
-      в CI; остаток раздутых файлов (п. 1.3).
+      в CI; остаток раздутых файлов (п. 1.4).
 
 ---
 
@@ -484,7 +499,7 @@
 - [ ] Подобрать литературу по верификации/критикам (вторая половина пункта
       «контр-агент для проверки работы»; сам контр-агент сделан — `src/modules/critic/`).
 - [ ] Долги из [`docs/agents/debt.md`](./docs/agents/debt.md) — каждый оплачивается
-      по своему триггеру (правило 9). Активных записей: 21.
+      по своему триггеру (правило 9). Активных записей: 24.
 
 ---
 
