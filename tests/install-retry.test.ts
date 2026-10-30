@@ -4,6 +4,7 @@
 // установка идёт во временный MMA_HOME. Сценарии повторяют реальный сбой
 // (оборванная загрузка на медленном канале) — до правки скрипт на них падал.
 import { spawn, spawnSync } from "node:child_process";
+import { resolvePwsh } from "./helpers/pwsh";
 import { createHash, randomBytes } from "node:crypto";
 import {
   mkdirSync,
@@ -21,13 +22,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const isWin = process.platform === "win32";
-/** Есть ли бинарь в PATH: `spawnSync` без исключений. */
-const hasShell = (cmd: string): boolean => {
-  const r = spawnSync(cmd, ["-NoProfile", "-Command", "exit 0"], { stdio: "ignore" });
-  return !r.error && r.status === 0;
-};
-// pwsh (PowerShell 7) не входит в Windows по умолчанию; powershell.exe — входит.
-const hasPwsh = hasShell("pwsh");
+const pwsh = resolvePwsh();
 const root = process.cwd();
 const version = "0.0.1";
 const platformKeys = ["win-x64", "win-arm64", "linux-x64", "linux-arm64", "mac-x64", "mac-arm64"];
@@ -367,7 +362,7 @@ function ps1Suite(shell: string): () => void {
   };
 }
 
-describe.skipIf(!isWin || !hasPwsh)("install.ps1 (pwsh)", ps1Suite("pwsh"));
+describe.skipIf(!isWin || !pwsh)("install.ps1 (pwsh)", ps1Suite(pwsh || "pwsh"));
 describe.skipIf(!isWin)("install.ps1 (powershell.exe)", ps1Suite("powershell.exe"));
 
 describe.skipIf(isWin)("install.sh", () => {
