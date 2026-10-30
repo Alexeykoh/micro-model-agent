@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { spawnSpec } from "../src/utils/spawn-command";
+import { spawnEnvPath } from "../src/modules/mcp/stdio-spawn";
 import { MCPClient } from "../src/modules/mcp/client";
 
 describe("spawnSpec", () => {
@@ -46,6 +47,20 @@ describe("spawnSpec", () => {
       args: ["a"],
       shell: false,
     });
+  });
+});
+
+describe("spawnEnvPath", () => {
+  it("prefers the configured env, then Windows `Path` over a POSIX `PATH`", () => {
+    const posix = "/c/Users/x:/usr/bin";
+    const win = "C:\\Temp\\shim;C:\\Windows";
+    // git-bash: `PATH` — POSIX-форма, `Path` — исходная Windows-форма.
+    expect(spawnEnvPath({ PATH: posix, Path: win }, undefined, "win32")).toBe(win);
+    expect(spawnEnvPath({ PATH: posix }, undefined, "win32")).toBe(posix);
+    // Явный env из конфига главнее процесса (в любой форме).
+    expect(spawnEnvPath({ PATH: posix, Path: win }, { Path: "C:\\cfg" }, "win32")).toBe("C:\\cfg");
+    expect(spawnEnvPath({ PATH: posix, Path: win }, { PATH: "/cfg" }, "win32")).toBe("/cfg");
+    expect(spawnEnvPath({ PATH: "/usr/bin" }, undefined, "linux")).toBe("/usr/bin");
   });
 });
 
