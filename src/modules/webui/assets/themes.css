@@ -903,121 +903,28 @@ body.autumn.light {
 }
 /* leaves + witch hat + scarf */
 
-/* Shared ambient drift; disabled for users who ask for less motion. */
-  to {
-    background-position:
-      0 320px,
-      40px 380px;
-  }
-}
-
 /* Mascot accessories: one emoji pinned to the head, overlapping the face.
    Emoji scale with `--s`, so they stay legible on the 22px composer face. */
-body.neon .mdl::after,
-body.paper .mdl::after,
-body.contrast .mdl::after,
+/* Seasonal mascot emoji: large, bottom-right, slightly overhanging the face.
+   No box, no rotation drift — the glyph is the accessory, not a sticker. */
 body.winter .mdl::after,
 body.spring .mdl::after,
 body.summer .mdl::after,
 body.autumn .mdl::after {
   position: absolute;
+  right: -32%;
+  bottom: -12%;
   z-index: 5;
   font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  font-size: clamp(12px, calc(var(--s) * 0.55), 70px);
   line-height: 1;
   pointer-events: none;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
 }
-body.neon .mdl::after {
-  content: "🕶️";
-  top: 6%;
-  left: 50%;
-  transform: translateX(-50%) rotate(-4deg);
-  font-size: max(15px, calc(var(--s) * 0.5));
-}
-body.paper .mdl::after {
-  content: "✒️";
-  right: 0;
-  bottom: 0;
-  transform: rotate(18deg);
-  font-size: max(15px, calc(var(--s) * 0.52));
-}
-body.contrast .mdl::after {
-  content: "⛑️";
-  top: 2%;
-  left: 50%;
-  transform: translateX(-50%) rotate(-6deg);
-  font-size: max(15px, calc(var(--s) * 0.55));
-}
-body.winter .mdl::after {
-  content: "🧣";
-  right: 0;
-  bottom: 0;
-  transform: rotate(10deg);
-  font-size: max(15px, calc(var(--s) * 0.55));
-}
-body.spring .mdl::after {
-  content: "🌸";
-  top: 2%;
-  right: 0;
-  transform: rotate(12deg);
-  font-size: max(15px, calc(var(--s) * 0.55));
-}
-body.summer .mdl::after {
-  content: "👒";
-  top: 4%;
-  left: 50%;
-  transform: translateX(-50%) rotate(-10deg);
-  font-size: max(15px, calc(var(--s) * 0.6));
-}
-body.autumn .mdl::after {
-  content: "🍁";
-  top: 2%;
-  right: 0;
-  transform: rotate(16deg);
-  font-size: max(15px, calc(var(--s) * 0.58));
-}
-
-/* Falling weather: a sparse emoji field built by `settings/weather.ts`.
-   Each particle owns one transform/opacity animation; randomized CSS vars
-   make the lanes, sizes and speeds feel organic instead of tiled. */
-.wx-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 2;
-  overflow: hidden;
-  pointer-events: none;
-}
-.wx-layer[hidden] { display: none; }
-.wx-p {
-  position: absolute;
-  top: 0;
-  left: var(--x, 50%);
-  font-size: var(--size, 14px);
-  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
-  line-height: 1;
-  opacity: 0;
-  will-change: transform, opacity;
-  animation: wx-fall var(--dur, 14s) linear var(--delay, 0s) infinite;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
-}
-@keyframes wx-fall {
-  0% {
-    transform: translate3d(0, -12vh, 0) rotate(0deg);
-    opacity: 0;
-  }
-  9% { opacity: var(--o, 0.5); }
-  50% {
-    transform: translate3d(var(--dx, 0), 52vh, 0) rotate(calc(var(--rot, 120deg) * 0.5));
-  }
-  88% { opacity: var(--o, 0.5); }
-  100% {
-    transform: translate3d(calc(var(--dx, 0) * -0.6), 112vh, 0) rotate(var(--rot, 120deg));
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .wx-layer { display: none; }
-}
+body.winter .mdl::after { content: "🧣"; }
+body.spring .mdl::after { content: "🌸"; }
+body.summer .mdl::after { content: "👒"; }
+body.autumn .mdl::after { content: "🍁"; }
 
 /* Seasonal themes follow console's flat terminal register: sharp corners,
    no drop shadows, no glassy chrome. The palette and falling weather carry
