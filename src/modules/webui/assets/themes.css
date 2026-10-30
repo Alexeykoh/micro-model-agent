@@ -952,3 +952,44 @@ body.autumn *::after {
   border-radius: 0 !important;
   box-shadow: none !important;
 }
+
+/* Falling weather: sparse emoji field built by `settings/weather.ts`.
+   Randomized CSS vars give each particle its own lane, speed and drift. */
+.wx-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.wx-layer[hidden] { display: none; }
+.wx-p {
+  position: absolute;
+  top: 0;
+  left: var(--x, 50%);
+  font-size: var(--size, 14px);
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  line-height: 1;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: wx-fall var(--dur, 14s) linear var(--delay, 0s) infinite;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
+}
+@keyframes wx-fall {
+  0% {
+    transform: translate3d(0, -12vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  9% { opacity: var(--o, 0.5); }
+  50% {
+    transform: translate3d(var(--dx, 0), 52vh, 0) rotate(calc(var(--rot, 120deg) * 0.5));
+  }
+  88% { opacity: var(--o, 0.5); }
+  100% {
+    transform: translate3d(calc(var(--dx, 0) * -0.6), 112vh, 0) rotate(var(--rot, 120deg));
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wx-layer { display: none; }
+}

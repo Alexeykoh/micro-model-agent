@@ -4,6 +4,8 @@
 // The mascot is called **MMART** (MMA + art): clicking it pops a localized
 // greeting bubble. See docs/specs/2026-10-08-loader-webui-design.md.
 
+import { populateFx } from "./loader-fx.js";
+
 export type FaceState =
   | "idle" | "think" | "read" | "find" | "web" | "edit" | "type" | "create"
   | "run" | "tests" | "compact" | "plan" | "ask" | "done" | "error" | "stop"
@@ -170,9 +172,11 @@ export function createFace(state: FaceState = "think", size: FaceSize | null = n
   for (let i = 0; i < 4; i++) keys.appendChild(el("i"));
   const dust = el("span", "dust");
   for (let i = 0; i < 3; i++) dust.appendChild(el("i"));
+  const fx = el("span", "fx");
+  for (let i = 0; i < 6; i++) fx.appendChild(el("i"));
   face.append(
-    eyes, orb, keys, el("span", "grow"), el("span", "fly"),
-    dust, el("span", "q", "?"), el("span", "spark", "✦"), el("span", "star"),
+    eyes, orb, keys, el("span", "grow"), el("span", "fly"), fx,
+    el("span", "sweep"), dust, el("span", "q", "?"), el("span", "spark", "✦"), el("span", "star"),
     el("span", "mdl-tip"),
   );
   setFaceState(face, state);
@@ -184,6 +188,7 @@ export function setFaceState(face: HTMLElement | null, state: FaceState): void {
   const size = face.dataset.size || "";
   face.className = "mdl" + (size ? " " + size : "") + " " + FACE_CLASS[state];
   face.dataset.state = state;
+  populateFx(face, state);
   // Drop any leftover cursor-tracking offsets/tilt so the new state starts clean.
   if (!FACE_CLASS[state].includes("track")) {
     face.style.setProperty("--ex", "0px");
