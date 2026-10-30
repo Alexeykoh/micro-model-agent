@@ -1,8 +1,9 @@
 // MCP-клиент: JSON-RPC поверх stdio/sse/http, listTools/callTool, таймауты.
-import { spawn, type ChildProcess } from "child_process";
+import { type ChildProcess } from "child_process";
 import type { MCPServerConfig } from "./registry";
 import { defaultOutputBus } from "../../output";
 import { MCP_HTTP_TIMEOUT_MS as HTTP_TIMEOUT_MS } from "../../config/timeouts";
+import { spawnMcpServer, stopMcpServer } from "./stdio-spawn";
 
 /**
  * Accept-заголовок для MCP Streamable HTTP: сервер отвечает 406, если клиент
@@ -161,10 +162,8 @@ export class MCPClient {
 
   private connectStdio(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const child = spawn(this.config.command!, this.config.args || [], {
-        env: { ...process.env, ...this.config.env },
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      // Windows: `npx` → `npx.cmd`; резолв шима и shell — в spawnMcpServer.
+      const child = spawnMcpServer(this.config);
 
       let _resolved = false;
       child.on("error", (err) => {
@@ -420,7 +419,8 @@ export class MCPClient {
       this.abortController?.abort();
       this.abortController = null;
     } else if (this.process) {
-      this.process.kill();
+      // cmd.exe → npx → node: kill() бьёт оболочку, killTree добивает дерево.
+      stopMcpServer(this.process);
       this.process = null;
     }
     this._connected = false;
