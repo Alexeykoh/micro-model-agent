@@ -594,12 +594,11 @@ function renderPluginsPanel(): void {
     const desc = pluginDescription(p);
     if (desc) line.appendChild(el("span", "plugin-desc", desc));
     if (locked) {
-      // Системный модуль — часть харнесса: тумблер показан, но заблокирован.
-      const toggle = makeToggle(p.enabled !== false, () => {});
-      toggle.disabled = true;
-      toggle.title = t("web.settings.plugins_system_locked");
-      toggle.setAttribute("aria-label", toggle.title);
-      line.appendChild(toggle);
+      // Системный модуль — часть харнесса: тумблер был бы ложным affordance
+      // (его нельзя нажать). Состояние уже видно глифом `✓/–`, остаётся
+      // тихая пометка «системный · всегда включён».
+      const note = el("span", "src system-note", t("web.settings.plugins_system_locked"));
+      line.appendChild(note);
     } else {
       // Живой тумблер вместо статуса: тот же контракт, что у строки MCP ниже.
       // `onFlip` ничего не возвращает — состояние перерисовывается из ответа.

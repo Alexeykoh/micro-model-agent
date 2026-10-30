@@ -4,6 +4,7 @@
 // установка идёт во временный MMA_HOME. Сценарии повторяют реальный сбой
 // (оборванная загрузка на медленном канале) — до правки скрипт на них падал.
 import { spawn, spawnSync } from "node:child_process";
+import { resolvePwsh } from "./helpers/pwsh";
 import { createHash, randomBytes } from "node:crypto";
 import {
   mkdirSync,
@@ -21,6 +22,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const isWin = process.platform === "win32";
+const pwsh = resolvePwsh();
 const root = process.cwd();
 const version = "0.0.1";
 const platformKeys = ["win-x64", "win-arm64", "linux-x64", "linux-arm64", "mac-x64", "mac-arm64"];
@@ -175,7 +177,10 @@ function seedPartial(home: string): number {
 }
 
 /** env с PATH, в который уже входит bin: установщик не должен править rc/реестр. */
-function envWithPath(values: Record<string, string | undefined>, pathValue: string): NodeJS.ProcessEnv {
+function envWithPath(
+  values: Record<string, string | undefined>,
+  pathValue: string,
+): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries({ ...process.env, ...values })) {
     if (key.toLowerCase() !== "path") env[key] = value;
@@ -323,7 +328,9 @@ function ps1Suite(shell: string): () => void {
       expect(res.ranges).toBeGreaterThanOrEqual(1);
       assertInstalled(home);
       // Успешная установка убирает 78-мегабайтный архив из кэша.
-      expect(statSync(join(home, "download", artifactName), { throwIfNoEntry: false })).toBeUndefined();
+      expect(
+        statSync(join(home, "download", artifactName), { throwIfNoEntry: false }),
+      ).toBeUndefined();
       expect(half).toBeGreaterThan(0);
     });
 
@@ -355,7 +362,7 @@ function ps1Suite(shell: string): () => void {
   };
 }
 
-describe.skipIf(!isWin)("install.ps1 (pwsh)", ps1Suite("pwsh"));
+describe.skipIf(!isWin || !pwsh)("install.ps1 (pwsh)", ps1Suite(pwsh || "pwsh"));
 describe.skipIf(!isWin)("install.ps1 (powershell.exe)", ps1Suite("powershell.exe"));
 
 describe.skipIf(isWin)("install.sh", () => {
@@ -395,6 +402,8 @@ describe.skipIf(isWin)("install.sh", () => {
     expect(res.stdout).toContain("resuming at");
     expect(res.ranges).toBeGreaterThanOrEqual(1);
     assertInstalled(home);
-    expect(statSync(join(home, "download", artifactName), { throwIfNoEntry: false })).toBeUndefined();
+    expect(
+      statSync(join(home, "download", artifactName), { throwIfNoEntry: false }),
+    ).toBeUndefined();
   });
 });
