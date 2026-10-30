@@ -114,21 +114,19 @@ async function registerCoreModules(
   moduleRegistry: ModuleRegistry,
 ): Promise<CoreModules> {
   const { config, dir, baseDir, hallucinationDetector } = input;
-
   const execModule = new ExecutionModule(
     baseDir,
     config.stuckThreshold,
     config.errorWebSearch?.threshold ?? 5,
+    undefined,
+    undefined,
+    config.security?.paths,
   );
   execModule.setAutoAdvance(config.execution?.autoAdvance ?? true);
-  // План следует за сессией: стартовая сессия грузит СВОЙ слот. Старый
-  // глобальный active.json поднимается только для возобновлённой сессии с
-  // историей — иначе он просачивался в свежий (автосозданный) чат.
-  // REPL рисует чеклист только на plan/todo-событиях — без спроса не печатаем.
+  // План следует за сессией: стартовая грузит СВОЙ слот, не чужой active.json.
   restoreStartupPlanFrom(execModule, input.sessionManager);
   moduleRegistry.register(execModule);
   execModule.setHallucinationDetector(hallucinationDetector);
-
   const sessionModule = new SessionModule(input.sessionManager);
   moduleRegistry.register(sessionModule);
 
@@ -157,7 +155,11 @@ async function registerCoreModules(
 function startLanguageModules(
   input: ModulesPhaseInput,
   moduleRegistry: ModuleRegistry,
-): { lspModule: LspModule; startupCheck: Promise<PromptBlock | null>; browserModule?: BrowserModule } {
+): {
+  lspModule: LspModule;
+  startupCheck: Promise<PromptBlock | null>;
+  browserModule?: BrowserModule;
+} {
   const { config, logger, baseDir, exitOnComplete } = input;
 
   let browserModule: BrowserModule | undefined;
@@ -191,10 +193,7 @@ function startLanguageModules(
 }
 
 /** Тулы модулей в реестр + builtin/external плагины в менеджер. */
-function registerModuleToolsAndPlugins(
-  input: ModulesPhaseInput,
-  moduleHost: ModuleHost,
-): void {
+function registerModuleToolsAndPlugins(input: ModulesPhaseInput, moduleHost: ModuleHost): void {
   const { logger, baseDir, toolRegistry, pluginManager } = input;
 
   // Единый источник определений тулов — хост (INV-2): владельца проставляет
@@ -212,7 +211,8 @@ function registerModuleToolsAndPlugins(
     registerBuiltinPlugin(pluginManager, plugin);
   }
 
-  for (const builtin of [angular11Plugin, lintOnWritePlugin, notifyPlugin]) pluginManager.register(builtin);
+  for (const builtin of [angular11Plugin, lintOnWritePlugin, notifyPlugin])
+    pluginManager.register(builtin);
 
   const pluginLoader = new PluginLoader();
   const globalPluginsDir = resolveGlobalPluginsDir();

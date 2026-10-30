@@ -5,8 +5,15 @@
  * ошибкой, если `failClosed`; иначе fail-open с записью.
  */
 import type { PolicyContext } from "./context";
-import type { DataPolicyConfig, DataClass, EgressGuard, EgressTarget, GuardDiagnostic } from "./types";
+import type {
+  DataPolicyConfig,
+  DataClass,
+  EgressGuard,
+  EgressTarget,
+  GuardDiagnostic,
+} from "./types";
 import { projectDeep, projectText, type ProjectPolicy } from "./project";
+import { projectToolDefs, restoreToolNames } from "./project-tools";
 import { rehydrate, TokenMap } from "./tokens";
 
 /** Типизированная ошибка пресечения (recoverable-диагностика, INV-D4). */
@@ -31,11 +38,7 @@ export interface CreateGuardOptions {
 
 /** image_url-часть сообщения: URL/data-URL может нести локальный путь/PII. */
 function isImagePart(value: unknown): boolean {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    (value as { type?: unknown }).type === "image_url"
-  );
+  return !!value && typeof value === "object" && (value as { type?: unknown }).type === "image_url";
 }
 
 /**
@@ -112,11 +115,25 @@ export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unkn
         let toolsOut = tools;
         let changed = msgProj.changed || stripped.removed;
         if (tools) {
-          const toolProj = projectDeep(tools, policy);
-          toolsOut = toolProj.messages;
+          // Идентификаторы тулов неприкосновенны (INV-DLP-9): отдельная
+          // проекция, а не слепой `projectDeep` по всей структуре (A11).
+          const toolProj = projectToolDefs(tools, policy);
+          const repaired = restoreToolNames(tools, toolProj.tools);
+          toolsOut = repaired.tools;
           sumStats(stats, toolProj.stats);
           tokens.push(...toolProj.tokens);
           changed = changed || toolProj.changed;
+          // Защитный барьер: если имя всё же изменилось — оно уже восстановлено,
+          // но факт обязан попасть в диагностику (не молча, INV-15).
+          for (const issue of repaired.issues) {
+            diag({
+              operation: "sanitizeChat",
+              kind: "tool-name-integrity",
+              outcome: "passed",
+              count: 1,
+              cause: issue,
+            });
+          }
         }
         if (changed) {
           diag({

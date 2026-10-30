@@ -10,9 +10,17 @@ import { imageCard } from "./image-card.js";
 import { egressBadge } from "./egress.js";
 import type { Dict } from "../core/store/types.js";
 import {
-  feedHasContent, clearEmpty, scrollToBottom, activeFeed, liveFeed,
-  mdOpts, buildThinkBlock, appendActionsRow, userBlock,
+  feedHasContent,
+  clearEmpty,
+  scrollToBottom,
+  activeFeed,
+  liveFeed,
+  mdOpts,
+  buildThinkBlock,
+  appendActionsRow,
+  userBlock,
 } from "./core.js";
+import { buildRetractBlock } from "./retract-block.js";
 
 function renderAssistantText(feed: HTMLElement, text: unknown): void {
   const raw = String(text == null ? "" : text);
@@ -98,6 +106,14 @@ function renderHistory(feed: HTMLElement, entries: Dict[]): void {
       case "reasoning":
         renderThinkBlock(feed, entry.text || "");
         break;
+      case "retract":
+        feed.appendChild(
+          buildRetractBlock(entry.source, String(entry.text || ""), {
+            verdict: entry.verdict,
+            iteration: entry.iteration,
+          }).wrap,
+        );
+        break;
       case "tool_call":
         renderHistoryAct(feed, entry, statusNodes);
         break;
@@ -133,7 +149,9 @@ export async function loadHistory(tab: Dict): Promise<{ gone: boolean } | undefi
     clearEmpty(tab.feed);
     tab.feed.appendChild(placeholder);
   }
-  const r = await api<{ history?: Dict[] }>("/api/sessions/" + encodeURIComponent(tab.id) + "/history");
+  const r = await api<{ history?: Dict[] }>(
+    "/api/sessions/" + encodeURIComponent(tab.id) + "/history",
+  );
   tab.historyLoading = false;
   placeholder.remove();
   tab.historyLoaded = true;
@@ -144,7 +162,8 @@ export async function loadHistory(tab: Dict): Promise<{ gone: boolean } | undefi
     // транзиент: одна строка и повтор при следующем открытии.
     if (r.status === 404) return { gone: true };
     tab.historyFailed = true;
-    if (!feedHasContent(tab.feed)) tab.feed.appendChild(el("div", "detail", t("web.history.unavailable")));
+    if (!feedHasContent(tab.feed))
+      tab.feed.appendChild(el("div", "detail", t("web.history.unavailable")));
     return { gone: false };
   }
   // A live session already rendered its content over SSE: don't duplicate it.

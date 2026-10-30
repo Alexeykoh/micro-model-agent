@@ -25,7 +25,8 @@ describe("critic degrade is visible in the feed", () => {
       logger: { warn: vi.fn(), info: vi.fn(), diagnostic: vi.fn() } as never,
       contextManager: { addMessage: vi.fn() } as never,
       slog: {
-        logCritic: (name: string, data: Record<string, unknown> = {}) => events.push({ name, data }),
+        logCritic: (name: string, data: Record<string, unknown> = {}) =>
+          events.push({ name, data }),
         logDiagnosticEvent: (name: string, data: Record<string, unknown>) =>
           events.push({ name, data }),
       } as never,
@@ -52,7 +53,7 @@ describe("critic degrade is visible in the feed", () => {
     const d = gateDeps();
     await gate("call_timeout (125000ms)").evaluate(d.deps);
     expect(d.metas).toHaveLength(1);
-    expect(d.metas[0].kind).toBe("status");
+    expect(d.metas[0].kind).toBe("progress");
     expect(d.metas[0].text).toContain(t("ui.critic_reason.timeout"));
     expect(d.metas[0].text).not.toContain("125000"); // техническая причина остаётся в логе
   });
@@ -91,9 +92,7 @@ describe("critic degrade is visible in the feed", () => {
     expect(criticDegradeClass("llm_error: provider down")).toBe("llm");
     expect(criticDegradeClass("no verdict returned")).toBe("none");
     expect(criticDegradeClass(undefined)).toBe("none");
-    expect(criticDegradeLine("checks_loop_failed: boom")).toContain(
-      t("ui.critic_reason.checks"),
-    );
+    expect(criticDegradeLine("checks_loop_failed: boom")).toContain(t("ui.critic_reason.checks"));
   });
 
   it("reaches the browser as a status meta event (not quiet-gated as a tool body)", () => {

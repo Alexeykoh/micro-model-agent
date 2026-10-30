@@ -228,8 +228,8 @@ function nearBottom(): boolean {
 // for the whole turn, since every later `scroll()` would see `nearBottom()`
 // as false and skip.
 let follow = true;
-
 export function scroll(force?: boolean): void {
+  if (!msgs) return; // общий тест-процесс без #msgs
   if (force || follow || nearBottom()) {
     msgs.scrollTop = msgs.scrollHeight;
     follow = true;

@@ -97,7 +97,9 @@ function logCallBodies(src: string): string[] {
   return bodies;
 }
 
-const storeSrc = readFileSync(join(SRC, "modules", "session", "store.ts"), "utf-8");
+// Схема журнала вынесена из store.ts в log-types.ts (правило 6); гейт читает
+// файл-владелец схемы, а не конкретный путь.
+const storeSrc = readFileSync(join(SRC, "modules", "session", "log-types.ts"), "utf-8");
 
 describe("gate: session provenance (W11)", () => {
   it("the schema makes `source` mandatory and typed as Source", () => {
@@ -113,11 +115,9 @@ describe("gate: session provenance (W11)", () => {
     // имени события мимо типов. Внутри союза `type` шаблонов быть не должно.
     const union =
       /export interface SessionLogEntry \{([\s\S]*?)module\?:/.exec(storeSrc)?.[1] ?? "";
-    expect(union, "не нашли союз `type` в store.ts").not.toBe("");
+    expect(union, "не нашли союз `type` в log-types.ts").not.toBe("");
     expect(union, "в союзе `type` вернулся открытый шаблон `${string}`").not.toContain("${string}");
-    expect(storeSrc, "события онбординга снова не перечислены явно").toContain(
-      "OnboardingEvent",
-    );
+    expect(storeSrc, "события онбординга снова не перечислены явно").toContain("OnboardingEvent");
   });
 
   it("usage origin is not smuggled into the provenance field", () => {
@@ -137,10 +137,7 @@ describe("gate: session provenance (W11)", () => {
         }
       }
     }
-    expect(
-      missing,
-      `Записи лога без source (INV-13):\n${missing.join("\n")}`,
-    ).toEqual([]);
+    expect(missing, `Записи лога без source (INV-13):\n${missing.join("\n")}`).toEqual([]);
   });
 
   it("the fixture anonymiser preserves provenance instead of dropping it", () => {
@@ -174,7 +171,12 @@ describe("gate: session provenance — runtime (W11)", () => {
     logger.logAssistant("a", "r", [{ id: "c", name: "bash", arguments: {} }], 1);
     logger.logToolDefs(1, ["bash"], 1);
     logger.logToolCall({ id: "c", name: "bash", arguments: {} }, 1);
-    logger.logToolResult({ id: "c", name: "bash", arguments: {} }, { success: true, output: "x" }, 1, 1);
+    logger.logToolResult(
+      { id: "c", name: "bash", arguments: {} },
+      { success: true, output: "x" },
+      1,
+      1,
+    );
     logger.logCompaction({ reason: "overflow", iteration: 1 });
     logger.logContext({
       kind: "start",
@@ -201,9 +203,7 @@ describe("gate: session provenance — runtime (W11)", () => {
     logger.logCritic("critic_verdict", { summary: "s" });
 
     expect(logs.length).toBeGreaterThan(10);
-    const unattributed = logs.filter(
-      (e) => typeof e.source !== "string" || e.source.length === 0,
-    );
+    const unattributed = logs.filter((e) => typeof e.source !== "string" || e.source.length === 0);
     expect(
       unattributed.map((e) => e.type),
       "записи без provenance в прогоне через logger",

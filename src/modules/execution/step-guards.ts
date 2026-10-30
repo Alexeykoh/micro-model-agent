@@ -1,5 +1,5 @@
 // Done-гарды шага и их цепочка (вынесено из step-update.ts, правило 6).
-import type { ToolResult } from "../../tools/types";
+import type { ToolResult, ToolScope } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { getPlanProgress, type PlanStep } from "./planner";
 import type { PlanTracker } from "./tracker";
@@ -68,28 +68,34 @@ async function verifyCheckContract(
   deps: PlanToolDeps,
   target: PlanStep,
   stepId: number,
+  scope?: ToolScope,
 ): Promise<{ note: string; blocked: ToolResult | null }> {
   if (!target.check) return { note: "", blocked: null };
   const parsed = parseCheck(target.check);
   if (parsed?.kind === "file") {
-    const res = await deps.verifier.checkFileExists(parsed.target);
+    const res = await deps.verifier.checkFileExists(parsed.target, scope);
     const ok = target.kind === "delete" ? !res.passed : res.passed;
     if (!ok) {
       return {
         note: "",
         blocked: {
           success: false,
-          output: t("plan.check_failed", {
+          output: `${t("plan.check_failed", {
             step: String(stepId),
             check: target.check,
-          }),
+          })}\n${res.message}`,
         },
       };
     }
     return { note: "", blocked: null };
   }
   if (parsed) {
-    return (await checkDoneEvidence(parsed, target, stepId)) ?? { note: `\n${t("plan.check_self_certified", { check: target.check })}`, blocked: null };
+    return (
+      (await checkDoneEvidence(parsed, target, stepId)) ?? {
+        note: `\n${t("plan.check_self_certified", { check: target.check })}`,
+        blocked: null,
+      }
+    );
   }
   return { note: "", blocked: null };
 }
@@ -145,10 +151,7 @@ function checkIdempotentDone(
  * было: step 5 done раньше шагов 1-4, затем аудит "5/5 steps done, 5 files
  * missing").
  */
-function enforceStepOrder(
-  tracker: PlanTracker,
-  stepId: number,
-): ToolResult | null {
+function enforceStepOrder(tracker: PlanTracker, stepId: number): ToolResult | null {
   const blockers = tracker
     .getPlan()
     .steps.filter((s) => s.id < stepId && s.status !== "done" && s.status !== "skipped");
@@ -226,6 +229,8 @@ export interface StepGuardCtx {
   target: PlanStep;
   stepId: number;
   status: string;
+  /** Per-tool скоуп субагента: действует и на file-exists проверку. */
+  scope?: ToolScope;
   /** Заметка самосертификации, накопленная check-гардом. */
   checkNote: string;
 }
@@ -263,7 +268,7 @@ async function guardKindAndCheck(c: StepGuardCtx): Promise<ToolResult | null> {
   // delete, оценивает файловый check как delete.
   const resolved = autoResolveStepKind(c.deps, c.tracker, c.target, c.stepId);
   if (resolved) return resolved;
-  const check = await verifyCheckContract(c.deps, c.target, c.stepId);
+  const check = await verifyCheckContract(c.deps, c.target, c.stepId, c.scope);
   if (check.blocked) return check.blocked;
   c.checkNote = check.note;
   return null;

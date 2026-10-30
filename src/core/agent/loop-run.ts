@@ -15,7 +15,7 @@ import { createLoopModules, type LoopSetupHost } from "./loop-setup";
 import { runIterationPrologue, type IterationPrologueHost } from "./iteration-prologue";
 import { runLlmPhase, type LlmPhaseHost } from "./loop-llm";
 import { runToolBatchPhase, type BatchHost } from "./loop-batch";
-import { runFinalGates } from "./loop-gates";
+import { runFinalGates, type GateTimings } from "./loop-gates";
 import { gatherTurnToolEvents } from "./critic-events";
 import { buildLoopResult, type LoopResultHost } from "./loop-result";
 import { accumulateToolTargets } from "./loop-nudges";
@@ -126,6 +126,8 @@ export async function executeAgentLoop(
       continue;
     }
 
+    const timings: GateTimings = {};
+    const gatesStarted = Date.now();
     const gates = await runFinalGates(ctx.deps, {
       state,
       textContent,
@@ -137,6 +139,14 @@ export async function executeAgentLoop(
       hallucinationGate,
       criticGate,
       auditGate,
+      timings,
+    });
+    // Агрегат простоя хода в гейтах (A15): одна запись на проход — по ней видно,
+    // где именно уходят секунды после уже доставленного ответа.
+    slog.logGateTiming({
+      iteration: state.iteration,
+      total: Date.now() - gatesStarted,
+      gates: timings,
     });
     if (gates.kind === "continue") continue;
     if (gates.kind === "break") break;
@@ -153,6 +163,7 @@ export async function executeAgentLoop(
     const text = await ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
     // INV-C7: форс-финал тоже проходит через критика. Иначе самый длинный
     // (и самый рискованный) ход остаётся единственным непроверенным.
+    const forcedCriticStarted = Date.now();
     const action = await criticGate.evaluate({
       state,
       iteration: state.iteration,
@@ -165,6 +176,12 @@ export async function executeAgentLoop(
       beforeFinish: true,
       answerText: text,
       onMeta,
+    });
+    const forcedCriticMs = Date.now() - forcedCriticStarted;
+    slog.logGateTiming({
+      iteration: state.iteration,
+      total: forcedCriticMs,
+      gates: { critic: forcedCriticMs },
     });
     if (action === "retry") {
       // Критик потребовал починки: один форс-вызов с его требованием.

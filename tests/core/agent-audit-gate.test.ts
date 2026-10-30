@@ -15,7 +15,7 @@ function deps(overrides: Record<string, unknown> = {}) {
       diagnostic: vi.fn(),
     },
     contextManager: { addMessage: vi.fn() },
-    slog: { logAudit: vi.fn() },
+    slog: { logAudit: vi.fn(), logRetract: vi.fn() },
     ...overrides,
   } as any;
 }
@@ -40,6 +40,33 @@ describe("AuditGate", () => {
     const onMeta = vi.fn();
     const verdict = await gate.evaluate(deps({ onMeta }));
     expect(verdict?.action).toBe("reject");
-    expect(onMeta).toHaveBeenCalledWith(expect.any(String), "retract");
+    expect(onMeta).toHaveBeenCalledWith(
+      expect.any(String),
+      "retract",
+      expect.objectContaining({ source: "audit", iteration: expect.any(Number) }),
+    );
+  });
+
+  it("logs a skipped test run even when the verdict is pass (INV-15)", async () => {
+    const slog = { logAudit: vi.fn() };
+    const gate = new AuditGate(async () => ({
+      passed: true,
+      done: 1,
+      total: 1,
+      pendingSteps: [] as string[],
+      missingFiles: [] as string[],
+      summary: "Task complete",
+      testNote: "skipped: no file mutations this turn",
+    }));
+
+    const verdict = await gate.evaluate(deps({ slog }));
+
+    expect(verdict?.action).toBe("pass");
+    expect(slog.logAudit).toHaveBeenCalledWith(
+      "Task complete",
+      3,
+      expect.any(Number),
+      "skipped: no file mutations this turn",
+    );
   });
 });

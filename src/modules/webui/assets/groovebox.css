@@ -1,0 +1,188 @@
+/* Groovebox theme — console's terminal layout with a drum-machine palette.
+ *
+ * Browser-local (Settings → UI), toggled by `body.groovebox` (see
+ * `settings/panels.ts` + the pre-paint script in `index.html`). Layout and
+ * component rules come from `styles.css`; this sheet only re-registers design
+ * tokens and adds a few hardware-panel accents. It intentionally styles the
+ * same token names as `console.css`, so a switch between the two never leaves
+ * a stale value behind. */
+
+body.groovebox {
+  color-scheme: dark;
+
+  --bg: #120e16;
+  --fg: #eadff2;
+  --panel: #191220;
+  --sb-bg: #150f1b;
+  --stab-bg: #150f1b;
+  --surface: #201728;
+  --input-surface: #1d1424;
+  --inp-bg: #180f1f;
+  --inp-border: #3d2a4a;
+  --inp-focus: #ff7ac6;
+  --input-shadow: #ff7ac633;
+
+  --border: #2d2036;
+  --border-2: #3a2946;
+  --border-3: #2d2036;
+
+  --muted: #c9b8d4;
+  --dim-a: #9c86ab;
+  --dim-b: #7d688c;
+  --dim-c: #7d688c;
+
+  --accent: #ff7ac6;
+  --accent-bg: #2a1933;
+
+  --green: #7ee787;
+  --green-fill: #7ee787;
+  --red: #ff8a80;
+  --err: #ff8a80;
+  --red-strong: #ff8a80;
+  --yellow: #ffd166;
+  --purple: #c792ea;
+  --cyan: #6fe3ff;
+
+  --think: #9c86ab;
+  --cmdout: #c9b8d4;
+  --meta: #9c86ab;
+  --args: #9c86ab;
+
+  --hover-bg: #281c31;
+  --hover-bg-2: #221729;
+  --x-hover-bg: #32223c;
+
+  --u-fg: #fff2fb;
+  --u-bg: #241730;
+  --u-border: #693d78;
+
+  --ans: #d8c8e2;
+  --ans-bg: rgba(255, 122, 198, 0.04);
+
+  --toggle-off: #34253d;
+  --toggle-knob: #9c86ab;
+  --scroll-thumb: #3a2946;
+  --scroll-thumb-hover: #6a4d7c;
+  --stab-thumb: #3a2946;
+  --stab-thumb-hover: #6a4d7c;
+  --pipe: #3a2946;
+  --rule: #3a2946;
+
+  --plan-line: #3a2946;
+  --plan-bar-fg: #9c86ab;
+  --sec-h: #9c86ab;
+  --sec-h-hover: #ffd166;
+  --stab-fg: #7d688c;
+
+  --overlay: rgba(8, 4, 12, 0.65);
+  --sb-backdrop: rgba(8, 4, 12, 0.55);
+  --shadow-menu: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-dd: 0 12px 30px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+/* Groovebox, light mode — printed-panel contrast, same accents. */
+body.groovebox.light {
+  color-scheme: light;
+
+  --bg: #fbf6ff;
+  --fg: #241a2c;
+  --panel: #ffffff;
+  --sb-bg: #f6eefc;
+  --stab-bg: #f6eefc;
+  --surface: #f0e6f8;
+  --input-surface: #ffffff;
+  --inp-bg: #ffffff;
+  --inp-border: #d9c6e6;
+  --inp-focus: #c2187a;
+  --input-shadow: #c2187a22;
+  --border: #e3d5ec;
+  --border-2: #d7c5e3;
+  --border-3: #e3d5ec;
+  --muted: #55435f;
+  --dim-a: #76617f;
+  --dim-b: #94809d;
+  --dim-c: #94809d;
+  --accent: #c2187a;
+  --accent-bg: #f8e3f2;
+  --green: #1a7f37;
+  --green-fill: #1a7f37;
+  --red: #c62828;
+  --err: #c62828;
+  --red-strong: #c62828;
+  --yellow: #8a5a00;
+  --purple: #6f3fb5;
+  --cyan: #0c6b7d;
+  --think: #76617f;
+  --cmdout: #55435f;
+  --meta: #76617f;
+  --args: #76617f;
+  --hover-bg: #f3e8fa;
+  --hover-bg-2: #f8f0fc;
+  --x-hover-bg: #ecddf5;
+  --u-fg: #241a2c;
+  --u-bg: #f5e8fb;
+  --u-border: #c9a9dd;
+  --ans: #372a41;
+  --ans-bg: rgba(194, 24, 122, 0.04);
+  --toggle-off: #e0d1ea;
+  --toggle-knob: #76617f;
+  --scroll-thumb: #d7c5e3;
+  --scroll-thumb-hover: #b79bc8;
+  --stab-thumb: #d7c5e3;
+  --stab-thumb-hover: #b79bc8;
+  --pipe: #e3d5ec;
+  --rule: #e3d5ec;
+  --plan-line: #e3d5ec;
+  --plan-bar-fg: #76617f;
+  --sec-h: #76617f;
+  --sec-h-hover: #c2187a;
+  --stab-fg: #94809d;
+  --overlay: rgba(36, 26, 44, 0.35);
+  --sb-backdrop: rgba(36, 26, 44, 0.2);
+  --shadow-menu: 0 8px 24px rgba(73, 36, 98, 0.12);
+  --shadow-dd: 0 10px 26px rgba(73, 36, 98, 0.16);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(73, 36, 98, 0.2);
+}
+
+/* Hardware voice: monospace, small radii, panel-like edges. */
+body.groovebox,
+body.groovebox *,
+body.groovebox *::before,
+body.groovebox *::after {
+  font-family:
+    "IBM Plex Mono", ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+
+/* Prompt motif: same shell caret as console, tinted with the accent. */
+body.groovebox .composer-main::before {
+  content: "\203A";
+  color: var(--accent);
+  padding: 0 8px 0 4px;
+  align-self: center;
+}
+
+/* Step-sequencer ticks along the composer's top edge. */
+body.groovebox .composer {
+  position: relative;
+  border-color: var(--border-2);
+}
+body.groovebox .composer::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: -1px;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 12px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* The active/selected accent reads as illuminated hardware. */
+body.groovebox .cmdk-item.on,
+body.groovebox .menu .mi:hover {
+  box-shadow: inset 2px 0 0 var(--accent) !important;
+}

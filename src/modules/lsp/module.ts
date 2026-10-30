@@ -42,7 +42,12 @@ export class LspModule implements AgentModule {
   /** Прогрев в фоне уже запущен (один на процесс/сессию). */
   private warmStarted = false;
 
-  constructor(config?: Partial<LspConfig>, client?: LspClient, logger?: LspClientLogger, baseDir?: string) {
+  constructor(
+    config?: Partial<LspConfig>,
+    client?: LspClient,
+    logger?: LspClientLogger,
+    baseDir?: string,
+  ) {
     this.config = { ...DEFAULT_LSP_CONFIG, ...config };
     this.client = client ?? new LspClient();
     this.client.setOffline(this.config.offline);
@@ -172,6 +177,7 @@ export class LspModule implements AgentModule {
   getPlugin(): AgentPlugin {
     return {
       name: "lsp-check",
+      description: "language-server diagnostics after edits",
       priority: 15,
       // Серверы поднимаются заранее: первый lsp_check/запись не платит холодный
       // старт и не упирается в бюджет ожидания.
@@ -269,17 +275,20 @@ export class LspModule implements AgentModule {
     const files = await collectCheckFiles(resolved, this.config);
     const acc = await this.checkFiles(files, ctx);
     const report = renderCheckReport(acc);
-    this.log(`LSP check ${path}: ${acc.checked}/${files.length} file(s), ` +
-      `${acc.errors.length} error(s), ${acc.warnings.length} warning(s), cold ${acc.cold}`, {
-      op: "check",
-      path,
-      files: files.length,
-      checked: acc.checked,
-      errors: acc.errors.length,
-      warnings: acc.warnings.length,
-      cold: acc.cold,
-      inconclusive: acc.inconclusive,
-    });
+    this.log(
+      `LSP check ${path}: ${acc.checked}/${files.length} file(s), ` +
+        `${acc.errors.length} error(s), ${acc.warnings.length} warning(s), cold ${acc.cold}`,
+      {
+        op: "check",
+        path,
+        files: files.length,
+        checked: acc.checked,
+        errors: acc.errors.length,
+        warnings: acc.warnings.length,
+        cold: acc.cold,
+        inconclusive: acc.inconclusive,
+      },
+    );
     return report;
   }
 

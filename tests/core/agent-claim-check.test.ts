@@ -51,7 +51,14 @@ describe("HallucinationGate success-claim check", () => {
     const gate = new HallucinationGate(detectorStub);
     const first = await gate.evaluate(deps);
     expect(first.action).toBe("retry");
-    expect(added.some((m) => m.content.includes("process") || m.content.includes("claim") || m.content.includes("успех"))).toBe(true);
+    expect(
+      added.some(
+        (m) =>
+          m.content.includes("process") ||
+          m.content.includes("claim") ||
+          m.content.includes("успех"),
+      ),
+    ).toBe(true);
 
     const second = await gate.evaluate(deps);
     expect(second.action).toBe("accept");
@@ -102,7 +109,11 @@ describe("HallucinationGate success-claim check", () => {
     const gate = new HallucinationGate(detectorStub);
     const verdict = await gate.evaluate({ ...deps, onMeta, slog: { logClaimRetry } });
     expect(verdict.action).toBe("retry");
-    expect(onMeta).toHaveBeenCalledWith(expect.any(String), "retract");
+    expect(onMeta).toHaveBeenCalledWith(
+      expect.any(String),
+      "retract",
+      expect.objectContaining({ source: "hallucination", verdict: "success" }),
+    );
     expect(logClaimRetry).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "success", iteration: expect.any(Number) }),
     );

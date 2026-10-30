@@ -23,6 +23,8 @@ export const ICON_NAME: Record<string, string> = {
 };
 export const TRACE_CAP = 500;
 export const MAX_OUTPUT_CHARS = 20000;
+/** Порог, ниже которого простой в гейтах (`gate_timing`) не заслуживает строки. */
+export const TRACE_GATE_NOTICE_MS = 3000;
 
 // One Trace row. Fields are loosely typed on purpose — the entry is built from
 // heterogeneous SSE/log payloads (`sidebarTraceEvent`/`appendLogEntry`).
@@ -37,8 +39,7 @@ export interface FileEntry {
 
 /** Одно совпадение поиска (ответ `GET /api/search`): имя/путь или строка. */
 export type SearchHit =
-  | { kind: "path"; path: string }
-  | { kind: "content"; path: string; line: number; text: string };
+  { kind: "path"; path: string } | { kind: "content"; path: string; line: number; text: string };
 
 /** Состояние вкладки Files: DOM-узлы, раскрытые папки, кэш листингов. */
 export interface FilesView {
@@ -253,9 +254,17 @@ export function mqMobile(): boolean {
 }
 
 export function readStored(): string | null {
-  try { return localStorage.getItem(TAB_KEY); } catch { return null; }
+  try {
+    return localStorage.getItem(TAB_KEY);
+  } catch {
+    return null;
+  }
 }
 
 export function storeTab(id: string): void {
-  try { localStorage.setItem(TAB_KEY, id); } catch { /* private mode */ }
+  try {
+    localStorage.setItem(TAB_KEY, id);
+  } catch {
+    /* private mode */
+  }
 }

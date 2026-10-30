@@ -44,7 +44,8 @@ import type { SilentLogger } from "./state";
 import {
   buildRunnerDynamicBlocks,
   buildRunnerExecutor,
-  buildRunnerPlugins,  buildRunnerRegistry,
+  buildRunnerPlugins,
+  buildRunnerRegistry,
   buildRunnerToolCtx,
 } from "./session-runner-scope";
 import { registerOwnedTools } from "../module-host";
@@ -169,9 +170,8 @@ export function createSessionRunnerFactory(
     // чужой activeId не трогает. Нет сессии — бросает (коллер уже вернул 404).
     const pinned = sessionManager.forkPinned(sessionId);
 
-    // Живой конфиг — источник правды. Раннер, поднятый ПОСЛЕ смены модели/
-    // провайдера, обязан собрать провайдера из него, а не из bootstrap-снимка
-    // (`reconfigure` догоняет лишь закешированные раннеры).
+    // Живой конфиг — источник правды. Раннер после смены модели/провайдера
+    // обязан собрать провайдера из него, а не из bootstrap-снимка.
     const config = configRef.current ?? bootConfig;
     const { manager: providerManager, provider: llmProvider } = buildActiveProvider(
       config,
@@ -196,6 +196,9 @@ export function createSessionRunnerFactory(
       baseDir,
       config.stuckThreshold,
       config.errorWebSearch?.threshold ?? 5,
+      undefined,
+      undefined,
+      config.security?.paths,
     );
     runnerExec.setAutoAdvance(config.execution?.autoAdvance ?? true);
     // Только слот своей сессии (без legacy-adopt — его сделал main на старте).
@@ -445,11 +448,7 @@ function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
  * Подхват истории существующей сессии (зеркало REPL /resume): новый раннер
  * старой сессии стартует не с пустого контекста, а с её истории из стора.
  */
-function seedRunnerHistory(
-  agent: Agent,
-  sessionManager: SessionManager,
-  sessionId: string,
-): void {
+function seedRunnerHistory(agent: Agent, sessionManager: SessionManager, sessionId: string): void {
   try {
     const history = sessionManager.getHistory(sessionId);
     if (history.length > 0) agent.setContext(history);

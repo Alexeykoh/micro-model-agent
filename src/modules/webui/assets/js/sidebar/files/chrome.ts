@@ -21,7 +21,8 @@ export function iconize(btn: HTMLElement | null, name: string, key: string): voi
 /** Icons + localized tooltips; re-run on locale switch. */
 export function localizeChrome(): void {
   const f = sb.files;
-  iconize(f.collapseAllEl, "chevrons-down-up", "web.files.collapse_all");  iconize(f.expandAllEl, "chevrons-up-down", "web.files.expand_all");
+  iconize(f.collapseAllEl, "minimize-2", "web.files.collapse_all");
+  iconize(f.expandAllEl, "maximize-2", "web.files.expand_all");
   iconize(f.refreshEl, "refresh", "web.files.refresh");
   iconize(f.backEl, "arrow-left", "web.files.back");
   iconize(f.fwdEl, "arrow-right", "web.files.forward");
@@ -52,7 +53,9 @@ export function syncChrome(history: ViewerHistory): void {
   if (!tree) return;
   const note = tree.querySelector(".fcapped");
   if (f.expandCapped && !note) {
-    tree.appendChild(el("div", "fdim wn fcapped", t("web.files.expand_capped", { n: EXPAND_DIR_CAP })));
+    tree.appendChild(
+      el("div", "fdim wn fcapped", t("web.files.expand_capped", { n: EXPAND_DIR_CAP })),
+    );
   } else if (!f.expandCapped && note) {
     note.remove();
   }

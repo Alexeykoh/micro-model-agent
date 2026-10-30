@@ -246,9 +246,10 @@ export class MCPModule implements AgentModule {
             .map((d) => `  - ${sanitizeToolName(serverName, d.toolName)}: ${d.description}`);
           return {
             success: true,
-            output: tools.length > 0
-              ? `Connected to "${serverName}". Tools:\n${tools.join("\n")}`
-              : `Connected to "${serverName}" (no tools discovered)`,
+            output:
+              tools.length > 0
+                ? `Connected to "${serverName}". Tools:\n${tools.join("\n")}`
+                : `Connected to "${serverName}" (no tools discovered)`,
           };
         },
       });
@@ -260,6 +261,7 @@ export class MCPModule implements AgentModule {
   getPlugin(): AgentPlugin {
     return {
       name: "mcp_module",
+      description: "connects MCP servers and exposes their tools",
       priority: 0,
       onSessionEnd: async () => {
         for (const [serverName, client] of this.connections) {
@@ -268,7 +270,9 @@ export class MCPModule implements AgentModule {
           } catch (e: any) {
             // Best-effort cleanup на конце сессии: упавший disconnect не
             // должен ронять shutdown, но обязан остаться в диагностике.
-            logger.warn(`disconnect from "${serverName}" failed`, { error: String(e?.message ?? e) });
+            logger.warn(`disconnect from "${serverName}" failed`, {
+              error: String(e?.message ?? e),
+            });
           }
         }
       },

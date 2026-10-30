@@ -27,6 +27,7 @@ const KIND_LABELS: Record<(typeof SIGNATURE_KINDS)[number], string> = {
   compaction_stall: "разбег компакции",
   prompt_block_dropped: "блок промпта не влез в бюджет",
   critic_degraded: "критик деградировал",
+  gate_stall: "ход стоял в пост-проверке",
   tool_failure_repeat: "повторные падения тула",
   security_block_repeat: "повторная блокировка",
   claim_retry: "ход уходил в ретрай",
@@ -60,7 +61,10 @@ export function registerDiagnoseCommand(session: Command, program: Command): voi
         fail(t("session.not_found", { id }));
         return;
       }
-      const report = diagnoseSession(meta.id, sessionManager.loadSessionLog(meta.id) as unknown as Record<string, unknown>[]);
+      const report = diagnoseSession(
+        meta.id,
+        sessionManager.loadSessionLog(meta.id) as unknown as Record<string, unknown>[],
+      );
 
       if (report.signatures.length === 0) {
         getDefaultChannel().writeLine(t("diagnose.clean", { id: meta.id }));

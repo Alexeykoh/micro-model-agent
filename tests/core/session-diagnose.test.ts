@@ -59,6 +59,28 @@ describe("session diagnose (W5)", () => {
     }
   });
 
+  it("flags a turn that stood in the post-answer gates (gate_stall)", () => {
+    // A15: ответ уже в ленте, а ход висит — сигнатура показывает, где именно.
+    const entry = (duration: number, gates: Record<string, number>) => ({
+      ts: "2026-10-30T10:00:00.000Z",
+      type: "gate_timing",
+      content: `gates ${duration}ms`,
+      duration,
+      gates,
+    });
+    expect(
+      diagnoseSession("ses_fast", [entry(4_000, { hallucination: 100, critic: 3_900 })]).signatures,
+    ).toEqual([]);
+    const report = diagnoseSession("ses_slow", [
+      entry(121_000, { hallucination: 200, critic: 20_000, audit: 100_800 }),
+    ]);
+    const sig = report.signatures.find((s) => s.kind === "gate_stall");
+    expect(sig, "121 с в пост-проверке обязан быть стоп-сигналом").toBeDefined();
+    expect(sig?.count).toBe(1);
+    // Разбивка по гейтам — в detail, иначе непонятно, кто виноват.
+    expect(sig?.detail).toContain("audit");
+  });
+
   it("returns no signatures for a clean session instead of throwing", () => {
     const report = diagnoseSession("ses_clean", [
       { ts: "2026-10-15T10:00:00.000Z", type: "user", content: "hi" },
@@ -89,11 +111,7 @@ describe("session diagnose (W5)", () => {
       success: false,
       content: `[SECURITY BLOCKED] Command is not allowed: Operator "${op}" is not allowed`,
     });
-    const report = diagnoseSession("ses_repeat", [
-      blocked("|"),
-      blocked("|"),
-      blocked(">"),
-    ]);
+    const report = diagnoseSession("ses_repeat", [blocked("|"), blocked("|"), blocked(">")]);
     const sig = report.signatures.find((s) => s.kind === "security_block_repeat");
     expect(sig).toBeDefined();
     expect(sig?.count).toBe(2);

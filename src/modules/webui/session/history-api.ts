@@ -33,7 +33,8 @@ export type HistoryKind =
   | "plan"
   | "context"
   | "error"
-  | "egress";
+  | "egress"
+  | "retract";
 
 /** Нормализованная запись для браузера; `kind` выбирает визуальную форму. */
 export interface HistoryEntry {
@@ -50,6 +51,10 @@ export interface HistoryEntry {
   images?: string[];
   /** DLP-агрегат хода (`kind: "egress"`). */
   egress?: EgressTurnSummary;
+  /** Отзыв черновика (`kind: "retract"`): кто, вердикт и итерация. */
+  source?: string;
+  verdict?: string;
+  iteration?: number;
 }
 
 function scrub(text: string | undefined): string | undefined {
@@ -57,9 +62,14 @@ function scrub(text: string | undefined): string | undefined {
 }
 
 /** URL сохранённой картинки тула; без sessionId/refs — undefined. */
-function imagesOf(e: { images?: Array<{ file: string }> }, sessionId?: string): string[] | undefined {
+function imagesOf(
+  e: { images?: Array<{ file: string }> },
+  sessionId?: string,
+): string[] | undefined {
   if (!sessionId || !e.images?.length) return undefined;
-  const urls = e.images.map((r) => `/api/sessions/${encodeURIComponent(sessionId)}/images/${encodeURIComponent(r.file)}`);
+  const urls = e.images.map(
+    (r) => `/api/sessions/${encodeURIComponent(sessionId)}/images/${encodeURIComponent(r.file)}`,
+  );
   return urls.length ? urls : undefined;
 }
 
@@ -102,6 +112,15 @@ function mapLogEntry(e: SessionLogEntry, sessionId?: string): HistoryEntry | nul
       return { ts: e.ts, kind: "error", text: scrub(e.content) };
     case "egress_turn":
       return e.egress ? { ts: e.ts, kind: "egress", egress: e.egress } : null;
+    case "retract":
+      return {
+        ts: e.ts,
+        kind: "retract",
+        text: scrub(e.content),
+        source: e.retractSource,
+        verdict: e.verdict,
+        iteration: e.iteration,
+      };
     default:
       // system (текст системного промпта из slog.logSystem) и context
       // (снапшоты "context snapshot at session start") — внутренняя
@@ -147,14 +166,30 @@ export function normalizeHistory(
   const out: HistoryEntry[] = [];
   for (const e of entries) {
     const mapped = mapLogEntry(e, sessionId);
-    if (mapped) out.push(mapped);
+    if (!mapped) continue;
+    if (mapped.kind === "retract") {
+      // Забракованный черновик уже записан как `assistant` (критик/аудит
+      // логируют текст до отзыва). В живой ленте он удаляется — история должна
+      // совпадать: убираем последний ответ и ставим сворачиваемую пометку.
+      for (let i = out.length - 1; i >= 0; i--) {
+        if (out[i].kind === "assistant") {
+          out.splice(i, 1);
+          break;
+        }
+      }
+    }
+    out.push(mapped);
   }
   const source = out.length > 0 ? out : fromMessages(fallback);
   return tail > 0 ? source.slice(-tail) : source;
 }
 
 /** `GET /api/sessions/:id/history` — 200 транскрипт, 404 чужой, 503 неввязанный. */
-export function handleSessionHistory(res: ServerResponse, id: string, s: SessionStore & HttpTransport): void {
+export function handleSessionHistory(
+  res: ServerResponse,
+  id: string,
+  s: SessionStore & HttpTransport,
+): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
     return;

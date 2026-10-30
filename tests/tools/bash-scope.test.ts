@@ -25,8 +25,30 @@ function makeCtx(baseDir: string, extra: Record<string, unknown> = {}) {
 
 describe("bash: workdir jail", () => {
   it("blocks a workdir outside the base directory", async () => {
-    const ctx = makeCtx(project);
+    const ctx = makeCtx(project, {
+      config: { security: { paths: { enabled: true, denied: [], allowed: [] } } },
+    });
     const res = await bashTool.handler(ctx, { command: "dir", workdir: dirname(project) });
+    expect(res.success).toBe(false);
+    expect(res.output).toContain("[SECURITY BLOCKED]");
+    expect(res.output).toContain("path restriction enabled");
+  });
+
+  it("allows a workdir outside base when security.paths.enabled=false (A10)", async () => {
+    const ctx = makeCtx(project, {
+      config: { security: { paths: { enabled: false, denied: [], allowed: [] } } },
+    });
+    const res = await bashTool.handler(ctx, { command: "echo hello", workdir: dirname(project) });
+    expect(res.success).toBe(true);
+    expect(res.output).toContain("hello");
+  });
+
+  it("still requires writable scope for bash when the jail is lifted", async () => {
+    const ctx = makeCtx(project, {
+      config: { security: { paths: { enabled: false, denied: [], allowed: [] } } },
+      scope: { allowed_files: [], read_only_files: ["src"] },
+    });
+    const res = await bashTool.handler(ctx, { command: "echo hello", workdir: dirname(project) });
     expect(res.success).toBe(false);
     expect(res.output).toContain("[SECURITY BLOCKED]");
   });
@@ -72,7 +94,10 @@ describe("bash: workdir jail", () => {
     const ctx = makeCtx(project, {
       scope: { allowed_files: ["src"], read_only_files: [] },
     });
-    const res = await bashTool.handler(ctx, { command: "echo hello", workdir: join(project, "src") });
+    const res = await bashTool.handler(ctx, {
+      command: "echo hello",
+      workdir: join(project, "src"),
+    });
     expect(res.success).toBe(true);
     expect(res.output).toContain("hello");
   });

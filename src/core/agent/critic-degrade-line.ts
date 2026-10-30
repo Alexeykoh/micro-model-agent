@@ -10,13 +10,14 @@
 import { t } from "../../i18n/index";
 
 /** Класс отказа верификации: то, что пользователь видит вместо технической строки. */
-export type CriticDegradeClass = "timeout" | "unparseable" | "checks" | "llm" | "none";
+export type CriticDegradeClass = "timeout" | "budget" | "unparseable" | "checks" | "llm" | "none";
 
 /**
  * Префикс причины (как его пишет клиент критика в `CRITIC_DEGRADED_PREFIX`)
  * → класс. Порядок не важен: префиксы не пересекаются.
  */
 const CLASS_BY_PREFIX: ReadonlyArray<readonly [string, CriticDegradeClass]> = [
+  ["turn_budget", "budget"],
   ["call_timeout", "timeout"],
   ["unparseable_verdict", "unparseable"],
   ["checks_loop_failed", "checks"],

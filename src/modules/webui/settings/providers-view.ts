@@ -39,8 +39,20 @@ export interface ProviderPresetView {
  * настоящий builtin-пресет `lmstudio` и здесь больше не дублируется.)
  */
 const LOCAL_PRESETS: ProviderPresetView[] = [
-  { id: "ollama", type: "openai-compat", name: "ollama", label: "Ollama (localhost:11434)", baseUrl: "http://localhost:11434/v1" },
-  { id: "vllm", type: "openai-compat", name: "vllm", label: "vLLM (localhost:8000)", baseUrl: "http://localhost:8000/v1" },
+  {
+    id: "ollama",
+    type: "openai-compat",
+    name: "ollama",
+    label: "Ollama (localhost:11434)",
+    baseUrl: "http://localhost:11434/v1",
+  },
+  {
+    id: "vllm",
+    type: "openai-compat",
+    name: "vllm",
+    label: "vLLM (localhost:8000)",
+    baseUrl: "http://localhost:8000/v1",
+  },
 ];
 
 /** Встроенные пресеты с фиксированными base URL (у хостедных он есть). */
@@ -87,5 +99,13 @@ export function buildProviderViews(config: AppConfig): {
     }
     return view;
   });
-  return { entries, active: provider.active || provider.type, presets: buildProviderPresets() };
+  const labels = entries.map((e) => e.label);
+  // Активное имя обязано указывать на существующую запись: легаси `type`
+  // (например `lmstudio` при активном `opencode-go`) давал «ни одного
+  // активного» в UI и расходился с чипом композера.
+  const active =
+    provider.active && labels.includes(provider.active)
+      ? provider.active
+      : (labels[0] ?? provider.type);
+  return { entries, active, presets: buildProviderPresets() };
 }

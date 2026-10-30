@@ -81,7 +81,10 @@ function fileRow(e: FileEntry, childPath: string, depth: number): HTMLElement {
   const f = sb.files;
   const isDir = e.type === "dir";
   const sel = !isDir && f.selectedPath === childPath;
-  const row = el("div", `frow${isDir ? " dir" : ""}${sel ? " sel" : ""}${f.cursor === childPath ? " cursor" : ""}`);
+  const row = el(
+    "div",
+    `frow${isDir ? " dir" : ""}${sel ? " sel" : ""}${f.cursor === childPath ? " cursor" : ""}`,
+  );
   row.dataset.path = childPath;
   row.dataset.kind = e.type;
   row.dataset.depth = String(depth);
@@ -121,6 +124,14 @@ function fileRow(e: FileEntry, childPath: string, depth: number): HTMLElement {
     deps.markDirty();
     if (isDir) deps.toggleDir(childPath);
     else deps.openFile(childPath);
+  });
+  // Shift+drag a row into the composer to insert `@path` (see composer drop).
+  row.draggable = true;
+  row.addEventListener("dragstart", (ev) => {
+    if (!ev.dataTransfer) return;
+    ev.dataTransfer.setData("application/x-mma-path", childPath);
+    ev.dataTransfer.setData("text/plain", childPath);
+    ev.dataTransfer.effectAllowed = "copy";
   });
   return row;
 }

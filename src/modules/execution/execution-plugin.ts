@@ -34,7 +34,8 @@ const PLAN_NUDGE_THRESHOLD = 2;
  *  текущего шага для автопродвижения. Read-only осознанно исключены (см. вызов
  *  advance в onAfterTool ниже). */
 const FS_MUTATING_TOOLS = new Set([
-  "write_file", "append_file",
+  "write_file",
+  "append_file",
   "edit_file",
   "delete_file",
   "move_file",
@@ -84,6 +85,8 @@ export interface ExecutionPluginState {
    * Done-gate плана реджектит "done", пока файлы шага здесь.
    */
   typecheckFailures: Map<string, string>;
+  /** За текущий ход был успешный вызов, способный изменить файлы дерева. */
+  mutatedThisTurn: boolean;
 }
 
 /** Зависимости плагина: детектор, трекер, стор, гейты (владеет всем модуль). */
@@ -155,6 +158,7 @@ export function stepTypecheckGate(
 export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
   return {
     name: "execution",
+    description: "plan tracking, stuck-turn recovery and turn audit",
     onBeforeThink: (ctx: any) => {
       // Идентификатор хода (монотонный маркер из ContextManager.beginTurn()).
       const turnSeq = typeof ctx?.turnSeq === "number" ? ctx.turnSeq : 0;
@@ -226,8 +230,8 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
           : warnKey !== deps.state.lastStuckWarnKey ||
             // Кулдаун варнинга считаем ВНУТРИ хода: прошлый ход не должен
             // «выбрать» новый (§1.11).
-            (deps.state.lastStuckWarnTurn !== turnSeq ||
-              iter - deps.state.lastStuckWarnIter >= STUCK_WARN_REPEAT_EVERY);
+            deps.state.lastStuckWarnTurn !== turnSeq ||
+            iter - deps.state.lastStuckWarnIter >= STUCK_WARN_REPEAT_EVERY;
         if (logIt) {
           // Внутренняя диагностика петли (счётчики упавших тулов, шаги плана):
           // в чате видна только в режиме «подробно» (STYLE.md, quiet by default).
@@ -369,6 +373,9 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       }
     },
     onAfterTool: (ctx: any, call: any, result: any) => {
+      // Файловая мутация хода → финальному аудиту есть что ломать тестами.
+      // bash/browser/mcp считаются консервативно: успех мог писать на диск.
+      if (result.success && FS_MUTATING_TOOLS.has(call.name)) deps.state.mutatedThisTurn = true;
       // Запоминаем каждый вызов bash (успех или нет): детекция рассуждает,
       // напр., о повторных прогонах с пустым выводом.
       if (call.name === "bash") {
@@ -545,7 +552,10 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
     },
     // Граница хода: завершённый авто-advance'ом план архивируется здесь, а не
     // посреди работы (модель не видит «нет активного плана» в своём же ходу).
-    onTurnEnd: () => deps.archiveCompletedPlan(),
+    // Флаг мутаций сбрасывается здесь же: бюджет финального аудита — на ход.
+    onTurnEnd: () => {
+      deps.archiveCompletedPlan();
+      deps.state.mutatedThisTurn = false;
+    },
   };
 }
-

@@ -33,7 +33,8 @@ export function handleSearchApi(
     sendJson(res, 400, { error: "query_too_long", limit: MAX_SEARCH_QUERY });
     return true;
   }
-  void serveSearch(res, base, q, apiHiddenGlobs(s.config));
+  const namesOnly = reqUrl.searchParams.get("names") === "1";
+  void serveSearch(res, base, q, apiHiddenGlobs(s.config), namesOnly);
   return true;
 }
 
@@ -43,6 +44,7 @@ async function serveSearch(
   base: string,
   query: string,
   hiddenGlobs: readonly string[],
+  namesOnly = false,
 ): Promise<void> {
   const resolved = await resolveWorkspacePath(base, ".");
   if (!resolved.ok) {
@@ -50,7 +52,7 @@ async function serveSearch(
     return;
   }
   try {
-    const result = await searchWorkspace(resolved.baseReal, query, hiddenGlobs);
+    const result = await searchWorkspace(resolved.baseReal, query, hiddenGlobs, { namesOnly });
     sendJson(res, 200, result);
   } catch {
     // Обход не должен выглядеть пустым успехом: ошибка видна клиенту.

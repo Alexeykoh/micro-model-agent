@@ -24,7 +24,11 @@ function requireManualEvidence(c: StepGuardCtx, note: string): ToolResult | null
 }
 
 /** Обновляет шаг плана через цепочку done-гардов; на последнем шаге — авто-архив. */
-export async function updatePlanStep(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+export async function updatePlanStep(
+  deps: PlanToolDeps,
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
   const tracker = deps.trackerRef.current!;
   const stepId = Number(args.step);
   const target = tracker.getStep(stepId);
@@ -37,6 +41,7 @@ export async function updatePlanStep(deps: PlanToolDeps, ctx: ToolContext, args:
     target,
     stepId,
     status: String(args.status || "done"),
+    scope: ctx.scope,
     checkNote: "",
   };
   for (const guard of STEP_GUARDS) {
@@ -68,9 +73,7 @@ export async function updatePlanStep(deps: PlanToolDeps, ctx: ToolContext, args:
   const planSteps = tracker.getPlan().steps ?? [];
   const planHasFiles = planSteps.some((s) => deps.hasStepDeliverables(s));
   const vacuousGate = status === "done" && planHasFiles && !deps.hasStepDeliverables(target);
-  const vacuousNote = vacuousGate
-    ? `\n${t("plan.no_deliverables", { step: String(stepId) })}`
-    : "";
+  const vacuousNote = vacuousGate ? `\n${t("plan.no_deliverables", { step: String(stepId) })}` : "";
 
   // Это обновление закрыло последний шаг → авто-архив. Рвёт петлю, где готовый
   // план остаётся активным и якорит модель на "продолжай шаг N, НЕ создавай

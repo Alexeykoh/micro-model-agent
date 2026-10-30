@@ -78,6 +78,8 @@ export function loadAssets(): WebUiAssets {
     html: read("index.html", "<!DOCTYPE html><h1>MMA web assets missing</h1>"),
     css: read("styles.css", "/* missing */"),
     cssConsole: read("console.css", ""),
+    cssGroovebox: read("groovebox.css", ""),
+    cssThemes: read("themes.css", ""),
     js: read("app.js", "// missing"),
     setupJs: read("setup.js", "// missing"),
     mdJs: read("md.js", "// missing"),

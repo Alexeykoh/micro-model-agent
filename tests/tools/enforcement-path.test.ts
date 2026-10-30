@@ -19,7 +19,7 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
 
   function makeExecutor(
     scope?: ToolContext["scope"],
-    config: unknown = { security: { paths: { enabled: false, denied: [], allowed: [] } } },
+    config: unknown = { security: { paths: { enabled: true, denied: [], allowed: [] } } },
   ): ToolExecutor {
     const ctx = {
       config: config as any,
@@ -37,7 +37,10 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
     return new ToolExecutor(registry, ctx, { getAllPlugins: () => [] });
   }
 
-  function register(security: ToolSecurityDecl, handler = vi.fn(async () => ({ success: true, output: "ok" }))): void {
+  function register(
+    security: ToolSecurityDecl,
+    handler = vi.fn(async () => ({ success: true, output: "ok" })),
+  ): void {
     const def: ToolDefinition = {
       name: "t",
       description: "d",
@@ -51,17 +54,52 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
   it("blocks a write path outside the base directory before the handler runs", async () => {
     const handler = vi.fn(async () => ({ success: true, output: "ok" }));
     register({ caps: [{ fs: "write" }], pathArgs: ["path"] }, handler);
-    const result = await makeExecutor().execute({ id: "1", name: "t", arguments: { path: "../escape.txt" } });
+    const result = await makeExecutor().execute({
+      id: "1",
+      name: "t",
+      arguments: { path: "../escape.txt" },
+    });
     expect(result.success).toBe(false);
     expect(result.blocked).toBe(true);
     expect(result.output).toContain("Path not allowed");
+    expect(result.output).toContain("path restriction enabled");
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("security.paths.enabled=false lifts the jail for read and write (A10)", async () => {
+    const outside = join(baseDir, "..", "outside.txt");
+    const disabled = { security: { paths: { enabled: false, denied: [], allowed: [] } } };
+
+    const readHandler = vi.fn(async () => ({ success: true, output: "ok" }));
+    register({ caps: [{ fs: "read" }], pathArgs: ["path"] }, readHandler);
+    const read = await makeExecutor(undefined, disabled).execute({
+      id: "1",
+      name: "t",
+      arguments: { path: outside },
+    });
+    expect(read.success).toBe(true);
+    expect(readHandler).toHaveBeenCalledOnce();
+
+    const writeHandler = vi.fn(async () => ({ success: true, output: "ok" }));
+    registry = new ToolRegistry();
+    register({ caps: [{ fs: "write" }], pathArgs: ["path"] }, writeHandler);
+    const write = await makeExecutor(undefined, disabled).execute({
+      id: "2",
+      name: "t",
+      arguments: { path: outside },
+    });
+    expect(write.success).toBe(true);
+    expect(writeHandler).toHaveBeenCalledOnce();
   });
 
   it("allows a path inside the base directory", async () => {
     const handler = vi.fn(async () => ({ success: true, output: "ok" }));
     register({ caps: [{ fs: "write" }], pathArgs: ["path"] }, handler);
-    const result = await makeExecutor().execute({ id: "1", name: "t", arguments: { path: "inside.txt" } });
+    const result = await makeExecutor().execute({
+      id: "1",
+      name: "t",
+      arguments: { path: "inside.txt" },
+    });
     expect(result.success).toBe(true);
     expect(handler).toHaveBeenCalledOnce();
   });
@@ -81,7 +119,11 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
   it("blocks a protected path for writable tools (always-on)", async () => {
     const handler = vi.fn(async () => ({ success: true, output: "ok" }));
     register({ caps: [{ fs: "write" }], pathArgs: ["path"] }, handler);
-    const result = await makeExecutor().execute({ id: "1", name: "t", arguments: { path: ".env" } });
+    const result = await makeExecutor().execute({
+      id: "1",
+      name: "t",
+      arguments: { path: ".env" },
+    });
     expect(result.blocked).toBe(true);
     expect(result.output).toContain("[PROTECTED PATH]");
     expect(handler).not.toHaveBeenCalled();
@@ -90,7 +132,11 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
   it("does NOT apply protected-path blocking to read-only tools", async () => {
     const handler = vi.fn(async () => ({ success: true, output: "ok" }));
     register({ caps: [{ fs: "read" }], pathArgs: ["path"] }, handler);
-    const result = await makeExecutor().execute({ id: "1", name: "t", arguments: { path: ".env" } });
+    const result = await makeExecutor().execute({
+      id: "1",
+      name: "t",
+      arguments: { path: ".env" },
+    });
     expect(result.success).toBe(true);
     expect(handler).toHaveBeenCalledOnce();
   });
@@ -98,7 +144,11 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
   it("applies the sub-agent scope to path args", async () => {
     register({ caps: [{ fs: "read" }], pathArgs: ["path"] });
     const executor = makeExecutor({ allowed_files: ["ok.txt"], read_only_files: [] });
-    const blocked = await executor.execute({ id: "1", name: "t", arguments: { path: "other.txt" } });
+    const blocked = await executor.execute({
+      id: "1",
+      name: "t",
+      arguments: { path: "other.txt" },
+    });
     expect(blocked.blocked).toBe(true);
     const allowed = await executor.execute({ id: "2", name: "t", arguments: { path: "ok.txt" } });
     expect(allowed.success).toBe(true);
@@ -111,7 +161,11 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
       register({ caps: [{ fs: "write" }], pathArgs: ["path"] }, async (ctx) => {
         rmSync(join(baseDir, "inside"), { recursive: true, force: true });
         try {
-          symlinkSync(outside, join(baseDir, "inside"), process.platform === "win32" ? "junction" : "dir");
+          symlinkSync(
+            outside,
+            join(baseDir, "inside"),
+            process.platform === "win32" ? "junction" : "dir",
+          );
         } catch {
           // Симлинки недоступны (права Windows) — проверять нечего.
           return { success: true, output: "symlink-unavailable" };

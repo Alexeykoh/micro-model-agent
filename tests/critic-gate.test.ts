@@ -20,20 +20,40 @@ function deps(overrides: Partial<any> = {}) {
 }
 
 const okVerdict = { status: "ok" as const, summary: "", issues: [] };
-const concern = { status: "concern" as const, summary: "gap", issues: [{ severity: "concern" as const, claim: "c", problem: "p" }] };
-const critical = { status: "critical" as const, summary: "broken", issues: [{ severity: "critical" as const, claim: "c", problem: "p" }] };
+const concern = {
+  status: "concern" as const,
+  summary: "gap",
+  issues: [{ severity: "concern" as const, claim: "c", problem: "p" }],
+};
+const critical = {
+  status: "critical" as const,
+  summary: "broken",
+  issues: [{ severity: "critical" as const, claim: "c", problem: "p" }],
+};
 
 describe("CriticGate", () => {
   it("skips when disabled or no mutations", async () => {
     const verify = vi.fn();
-    const gate = new CriticGate({ enabled: false, maxCalls: 4, maxRepairCycles: 1, verify, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: false,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify,
+      buildPack: (d: any) => d,
+    });
     expect(await gate.evaluate(deps())).toBe("pass");
     expect(verify).not.toHaveBeenCalled();
   });
 
   it("skips chat-only runs without spending the critic budget", async () => {
     const verify = vi.fn(async () => concern);
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify,
+      buildPack: (d: any) => d,
+    });
     const d = deps({ toolEvents: [] });
     expect(await gate.evaluate(d)).toBe("pass");
     expect(verify).not.toHaveBeenCalled();
@@ -42,13 +62,25 @@ describe("CriticGate", () => {
   });
 
   it("returns pass on ok verdict", async () => {
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => okVerdict,
+      buildPack: (d: any) => d,
+    });
     expect(await gate.evaluate(deps())).toBe("pass");
   });
 
   it("logs a degraded verdict record when the critic returns nothing", async () => {
     // Fail-open, но «critic_check» без следа о вердикте читается как pass.
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => null, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => null,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("pass");
     const verdictCall = d.slog.logCritic.mock.calls.find((c: any[]) => c[0] === "critic_verdict");
@@ -67,7 +99,13 @@ describe("CriticGate", () => {
   });
 
   it("does not log a degraded record for a real ok verdict", async () => {
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => okVerdict,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     await gate.evaluate(d);
     const verdictCall = d.slog.logCritic.mock.calls.find((c: any[]) => c[0] === "critic_verdict");
@@ -77,7 +115,13 @@ describe("CriticGate", () => {
   it("injects advice and demands a new answer on concern", async () => {
     // Раньше совет инжектился в уже завершающийся ход: модель его не видела,
     // и вердикт оставался без последствий (INV-C6).
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => concern, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => concern,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("retry");
     expect(d.contextManager.addMessage).toHaveBeenCalledTimes(1);
@@ -91,7 +135,13 @@ describe("CriticGate", () => {
       issues: [{ severity: "critical" as const, claim: "different fresh claim", problem: "p" }],
     };
     const verify = vi.fn(async () => critical);
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("retry");
     verify.mockResolvedValue(second);
@@ -107,7 +157,13 @@ describe("CriticGate", () => {
       summary: "broken!",
       issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p" }],
     };
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => first, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => first,
+      buildPack: (d: any) => d,
+    });
     // Ручной набор: жалоба уже видена (другой кейс), бюджет цел.
     const d = deps();
     d.state.seenCriticIssues.add(
@@ -120,7 +176,13 @@ describe("CriticGate", () => {
   });
 
   it("repairs on critical, bounded by maxRepairCycles", async () => {
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => critical, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => critical,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("retry");
     // Ремонт потрачен: следующая такая же жалоба — это повтор (совет «смени
@@ -130,18 +192,34 @@ describe("CriticGate", () => {
   });
 
   it("emits retract on repair so clients drop the streamed draft", async () => {
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => critical, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => critical,
+      buildPack: (d: any) => d,
+    });
     const onMeta = vi.fn();
     const d = deps({ onMeta });
     expect(await gate.evaluate(d)).toBe("retry");
-    expect(onMeta).toHaveBeenCalledWith(expect.any(String), "retract");
+    expect(onMeta).toHaveBeenCalledWith(
+      expect.any(String),
+      "retract",
+      expect.objectContaining({ source: "critic", iteration: expect.any(Number) }),
+    );
   });
 
   it("diagnoses fail-open verify errors instead of a silent lone critic_check", async () => {
     const verify = vi.fn(async () => {
       throw new Error("boom");
     });
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("pass");
     expect(d.logger.diagnostic).toHaveBeenCalledWith("warn", expect.stringContaining("fail-open"));
@@ -152,7 +230,13 @@ describe("CriticGate", () => {
   });
 
   it("dedupes identical issues (second identical verdict adds nothing)", async () => {
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => concern, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => concern,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("retry");
     const added = (d.contextManager.addMessage as any).mock.calls.length;
@@ -163,17 +247,32 @@ describe("CriticGate", () => {
 
   it("stops after maxCalls", async () => {
     const verify = vi.fn(async () => concern);
-    const gate = new CriticGate({ enabled: true, maxCalls: 1, maxRepairCycles: 1, verify, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 1,
+      maxRepairCycles: 1,
+      verify,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     await gate.evaluate(d);
     expect(await gate.evaluate(d)).toBe("pass");
   });
 
   it("logs critic_check whenever a check actually runs", async () => {
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => okVerdict,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     await gate.evaluate(d);
-    expect(d.slog.logCritic).toHaveBeenCalledWith("critic_check", expect.objectContaining({ beforeFinish: true, mutations: 3 }));
+    expect(d.slog.logCritic).toHaveBeenCalledWith(
+      "critic_check",
+      expect.objectContaining({ beforeFinish: true, mutations: 3 }),
+    );
     // Субъект проверки виден в Trace: без сводки строка `critic_check` пуста.
     expect(d.slog.logCritic).toHaveBeenCalledWith(
       "critic_check",
@@ -182,7 +281,13 @@ describe("CriticGate", () => {
   });
 
   it("logs one critic_verdict entry per non-ok verdict and keeps it out of the chat", async () => {
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => critical, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => critical,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("retry");
     const names = d.slog.logCritic.mock.calls.map((c: any[]) => c[0]);
@@ -191,11 +296,20 @@ describe("CriticGate", () => {
       "critic_verdict",
       expect.objectContaining({ status: "critical", issueCount: 1, summary: "broken" }),
     );
-    expect(d.logger.diagnostic).toHaveBeenCalledWith("info", expect.stringContaining("Critic critical: broken"));
+    expect(d.logger.diagnostic).toHaveBeenCalledWith(
+      "info",
+      expect.stringContaining("Critic critical: broken"),
+    );
   });
 
   it("does not log a verdict (or diagnostic line) for ok verdicts", async () => {
-    const gate = new CriticGate({ enabled: true, maxCalls: 4, maxRepairCycles: 1, verify: async () => okVerdict, buildPack: (d: any) => d });
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      verify: async () => okVerdict,
+      buildPack: (d: any) => d,
+    });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("pass");
     const names = d.slog.logCritic.mock.calls.map((c: any[]) => c[0]);
@@ -227,8 +341,18 @@ describe("gatherTurnToolEvents", () => {
       ],
     } as any);
     expect(events).toHaveLength(2);
-    expect(events[0]).toEqual({ tool: "write_file", args: { path: "result.txt", content: "HELLO" }, ok: true, output: "Written result.txt" });
-    expect(events[1]).toEqual({ tool: "bash", args: { command: "bun test" }, ok: false, output: "1 fail" });
+    expect(events[0]).toEqual({
+      tool: "write_file",
+      args: { path: "result.txt", content: "HELLO" },
+      ok: true,
+      output: "Written result.txt",
+    });
+    expect(events[1]).toEqual({
+      tool: "bash",
+      args: { command: "bun test" },
+      ok: false,
+      output: "1 fail",
+    });
   });
 
   it("skips non-tool messages and non-string content", () => {
@@ -246,7 +370,14 @@ describe("gatherTurnToolEvents", () => {
   it("sees only tool events since the run marker (no leak from previous questions)", () => {
     const history = [
       { role: "user", content: "какая погода в минске?", seq: 0 },
-      { role: "tool", name: "web_search", content: "sunny", success: true, arguments: { query: "погода" }, seq: 1 },
+      {
+        role: "tool",
+        name: "web_search",
+        content: "sunny",
+        success: true,
+        arguments: { query: "погода" },
+        seq: 1,
+      },
       { role: "assistant", content: "Погода хорошая", seq: 2 },
       { role: "user", content: "покажи пример кода react", seq: 3 },
       { role: "assistant", content: "```tsx const a = 1 ```", seq: 4 },
@@ -258,11 +389,23 @@ describe("gatherTurnToolEvents", () => {
   it("keeps current-run tool events after the marker", () => {
     const history = [
       { role: "tool", name: "web_search", content: "old", success: true, seq: 0 },
-      { role: "tool", name: "write_file", content: "ok", success: true, arguments: { path: "a.ts" }, seq: 5 },
+      {
+        role: "tool",
+        name: "write_file",
+        content: "ok",
+        success: true,
+        arguments: { path: "a.ts" },
+        seq: 5,
+      },
     ];
     const events = gatherTurnToolEvents({ getActiveHistory: () => history } as any, 1);
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({ tool: "write_file", args: { path: "a.ts" }, ok: true, output: "ok" });
+    expect(events[0]).toEqual({
+      tool: "write_file",
+      args: { path: "a.ts" },
+      ok: true,
+      output: "ok",
+    });
   });
 
   it("marker beyond all seqs yields empty; non-positive marker yields all", () => {

@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "path";
 import { detectTestResults } from "../../tools/bash";
 import { processRegistry } from "../processes";
 import { resolveTscCommand } from "../lsp/project-root";
+import { AUDIT_TEST_RUN_BUDGET_MS, AUDIT_TYPECHECK_BUDGET_MS } from "../../config/timeouts";
 
 /** Каталоги, где тестовые файлы не ищем. */
 export const SKIP_DIRS = new Set([
@@ -70,16 +71,33 @@ export function resolveTestCommand(dir: string): string {
 }
 
 /** Результат тестового прогона: был ли прогон, прошёл ли, счётчики, детали, команда. */
+export type TestRunStatus =
+  /** Раннер отработал и все найденные тесты прошли. */
+  | "passed"
+  /** Раннер отработал, есть упавшие тесты. */
+  | "failed"
+  /** Прогон не доведён (таймаут, нет сводки) — вердикт «не знаем», не «прошло». */
+  | "inconclusive"
+  /** Прогон не запускался: сломать тесты было нечем (нет мутаций за ход). */
+  | "skipped";
+
+/** Итог прогона: статус, счётчики, причина и длительность. */
 export interface TestRunCheck {
   /** Реальный тестовый прогон вообще выполнялся. */
   checked: boolean;
-  /** Все найденные тесты прошли. */
+  /** Все найденные тесты прошли. `false` у failed/inconclusive/skipped. */
   passed: boolean;
+  /** Честный статус: блокирует завершение только `failed`. */
+  status: TestRunStatus;
   failed: number;
   passedCount: number;
   /** Короткий список упавших тестов (до 5) или сводка раннера. */
   detail: string;
   command: string;
+  /** Сколько занял прогон, мс (0 у skipped/cached). */
+  durationMs: number;
+  /** Результат взят из кэша неизменного дерева — раннер не запускался. */
+  cached?: boolean;
 }
 
 /** Рекурсивный поиск тестового файла с капом глубины и ранним выходом. */
@@ -115,23 +133,50 @@ function extractFailingNames(output: string, limit = 5): string[] {
   return names;
 }
 
-/** Прогоняет тесты проекта (90s) и разбирает сводку раннера. Таймаут — inconclusive. */
-export async function runTests(baseDir: string): Promise<TestRunCheck> {
+/**
+ * Прогоняет тесты проекта в пределах бюджета аудита и разбирает сводку раннера.
+ *
+ * Таймаут/отсутствие сводки — `inconclusive`, а не «прошло»: завершение на нём
+ * не блокируется, но вердикт честный (спека 2026-10-30).
+ *
+ * @param baseDir корень проекта; @param opts.budgetMs переопределение бюджета (тесты).
+ * @returns статус, счётчики, причина inconclusive и длительность.
+ */
+export async function runTests(
+  baseDir: string,
+  opts: { budgetMs?: number } = {},
+): Promise<TestRunCheck> {
+  const started = Date.now();
+  const budgetMs = opts.budgetMs ?? AUDIT_TEST_RUN_BUDGET_MS;
   const command = resolveTestCommand(baseDir);
   const entry = processRegistry.start(command, baseDir);
-  const exited = await processRegistry.waitForExit(entry.id, 90_000);
+  const exited = await processRegistry.waitForExit(entry.id, budgetMs);
   const output = entry.log.join("\n");
+  const spawnError = entry.spawnError;
   processRegistry.remove(entry.id);
+  const durationMs = Date.now() - started;
+  const base = { checked: true, command, durationMs };
 
   if (!exited) {
-    // Таймаут — успех/фейл незавершённого прогона утверждать не можем.
+    // Раннер не довершён: результат неизвестен, «прошло» утверждать нельзя.
     return {
-      checked: true,
-      passed: true, // don't block completion on an inconclusive run
+      ...base,
+      passed: false,
+      status: "inconclusive",
       failed: 0,
       passedCount: 0,
-      detail: `test run timed out after 90s — result unknown`,
-      command,
+      detail: `inconclusive: runner did not finish within ${Math.round(budgetMs / 1000)}s — result unknown, not a pass`,
+    };
+  }
+  if (spawnError) {
+    // Раннер вообще не стартовал — это не фейл тестов и не успех.
+    return {
+      ...base,
+      passed: false,
+      status: "inconclusive",
+      failed: 0,
+      passedCount: 0,
+      detail: `inconclusive: runner failed to start (${spawnError.slice(0, 150)})`,
     };
   }
 
@@ -139,29 +184,41 @@ export async function runTests(baseDir: string): Promise<TestRunCheck> {
   if (!run) {
     // Нет узнаваемой сводки раннера. Ненулевой exit — прогон (или раннер) упал:
     // аудит его пропускать не должен; репортим "как минимум один фейл", т.к.
-    // посчитать не можем. Exit 0 с неузнанным выводом — checked, но inconclusive.
+    // посчитать не можем. Exit 0 с неузнанным выводом — прогон не доказан.
+    if (entry.exitCode === 0) {
+      return {
+        ...base,
+        passed: false,
+        status: "inconclusive",
+        failed: 0,
+        passedCount: 0,
+        detail: `inconclusive: exit 0 without a recognized runner summary — ${output.slice(0, 200).trim()}`,
+      };
+    }
     return {
-      checked: true,
-      passed: entry.exitCode === 0,
-      failed: entry.exitCode === 0 ? 0 : 1,
+      ...base,
+      passed: false,
+      status: "failed",
+      failed: 1,
       passedCount: 0,
       detail: output.slice(0, 200).trim(),
-      command,
     };
   }
 
   const names = extractFailingNames(output);
   return {
-    checked: true,
+    ...base,
     passed: run.failed === 0,
+    status: run.failed === 0 ? "passed" : "failed",
     failed: run.failed,
     passedCount: run.passed,
     detail: names.length
       ? names.join("; ")
       : run.summary || `${run.failed} failed / ${run.passed} passed`,
-    command,
   };
 }
+
+/** Кап числа файлов в отпечатке дерева: больше — отпечаток не считаем (кэш off). */
 
 /** Первая строка `error TS…` из вывода tsc, или null если нет/inconclusive. */
 export function parseTypecheckErrors(output: string): string | null {
@@ -199,18 +256,19 @@ export function findTypecheckRoot(baseDir: string, existingFiles: string[] = [])
   return best?.root ?? null;
 }
 
-/** Прогоняет `tsc --noEmit --skipLibCheck` (90s). Null, если проверить нельзя/таймаут. */
+/** Прогоняет `tsc --noEmit --skipLibCheck` (бюджет аудита). Null, если проверить нельзя/таймаут. */
 export async function runTypecheck(baseDir: string): Promise<string | null> {
   // Локальный tsc напрямую: npx-обёртка добавляет секунды и без локального
   // пакета уходит в сеть. Нет tsc — проверка невозможна, не блокируем.
   const tsc = resolveTscCommand(baseDir);
   if (!tsc) return null;
   const entry = processRegistry.start(`${tsc} --noEmit --skipLibCheck`, baseDir);
-  const exited = await processRegistry.waitForExit(entry.id, 90_000);
+  const exited = await processRegistry.waitForExit(entry.id, AUDIT_TYPECHECK_BUDGET_MS);
   const output = entry.log.join("\n");
   processRegistry.remove(entry.id);
-  // Таймаут или вывод без строк `error TS` (нет typescript / не та рабочая
-  // папка) — inconclusive, завершение на этом не блокируем.
+  // DEBT(audit-typecheck-inconclusive): таймаут tsc и «ошибок нет» одинаково
+  // возвращают null — в сводке/`session.jsonl` они неразличимы (INV-15).
+  // Оплата — отдельная волна: нужен тип результата вместо string|null.
   if (!exited) return null;
   return parseTypecheckErrors(output);
 }

@@ -13,7 +13,7 @@ import { getMessageText } from "../../llm/provider";
 import type { ContentPart } from "../../llm/provider";
 import type { Plan } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
-import type { NetworkSecurityConfig } from "../../config/types";
+import type { NetworkSecurityConfig, PathSecurityConfig } from "../../config/types";
 import { performWebSearch, type SearchResult } from "../../tools/web-search";
 import { createPlanToolDefinitions } from "./plan-tool";
 import { parseKinds, parseChecks } from "./plan-parse";
@@ -50,7 +50,7 @@ export type WebSearchRunner = (
  * STUCK_RECOVERY_COOLDOWN-итераций, но в onAfterTool нет счётчика итераций
  * (контекст экзекутора) — та же анти-спам защита, но по времени. Инжектится
  * через конструктор для тестов (0 отключает).
-  */
+ */
 
 /**
  * Тулы, которым можно при активном шаге плана БЕЗ проверки step-alignment.
@@ -64,7 +64,6 @@ export type WebSearchRunner = (
  * hard-block'нуть легитимную запись на 3-м вызове (было: "3 вызовов подряд вне
  * текущего шага", пока агент писал deliverable текущего же шага).
  */
-
 
 /** Execution-модуль: план, stuck-детектор, аудитор, гейты выравнивания и автопоиск ошибок. */
 export class ExecutionModule implements AgentModule {
@@ -141,6 +140,7 @@ export class ExecutionModule implements AgentModule {
     mutationsWithoutPlan: 0,
     planNudgeSent: false,
     typecheckFailures: new Map<string, string>(),
+    mutatedThisTurn: false,
   };
 
   /**
@@ -185,10 +185,13 @@ export class ExecutionModule implements AgentModule {
     webSearchThreshold = 5,
     searchRunner: WebSearchRunner = performWebSearch,
     errorSearchCooldownMs = ERROR_SEARCH_MIN_INTERVAL_MS,
+    pathSecurity?: PathSecurityConfig,
   ) {
     this.baseDir = baseDir;
-    this.verifier = new StepVerifier(baseDir, (operation, reason) =>
-      this.reportDegrade(operation, reason),
+    this.verifier = new StepVerifier(
+      baseDir,
+      (operation, reason) => this.reportDegrade(operation, reason),
+      pathSecurity,
     );
     this.stuckDetector = new StuckDetector(stuckThreshold, 3, webSearchThreshold);
     this.auditor = new Auditor(baseDir);
@@ -432,10 +435,6 @@ export class ExecutionModule implements AgentModule {
   }
 
   /**
-   * Финальный аудит перед правом агента заявить "готово". Null без активного
-   * плана; иначе — готовность плана + существование артефактов.
-   */
-  /**
    * Evidence-based автозакрытие пендинг шагов с deliverables на диске. Мелкие
    * модели рутинно доделывают работу, но забывают бухгалтерию `plan update`
    * (было в ses_mthn3c2a: 2/5 шагов done при всех артефактах на месте — audit-gate
@@ -581,6 +580,7 @@ export class ExecutionModule implements AgentModule {
       auditor: this.auditor,
       store: this.store,
       auditSkipsRemaining: this._auditSkipsRemaining,
+      mutatedThisTurn: this.state.mutatedThisTurn,
       setAuditSkipsRemaining: (n) => {
         this._auditSkipsRemaining = n;
       },
@@ -613,8 +613,6 @@ export class ExecutionModule implements AgentModule {
     };
   }
 
-
-
   /**
    * Файловые токены из описания шага, не резолвящиеся в реальный файл.
    * Тот же общий экстрактор токенов (allow-list реальных расширений, URL
@@ -646,7 +644,6 @@ export class ExecutionModule implements AgentModule {
   private hasStepDeliverables(step: { description: string }): boolean {
     return extractFileLikeTokens(stripUrls(step.description)).length > 0;
   }
-
 
   /**
    * Модельно-видимое actionable-сообщение «нет активного плана». Содержит

@@ -3,6 +3,7 @@ import type { PolicyContext } from "../../src/modules/security/data-policy/conte
 import { DEFAULT_DATA_POLICY } from "../../src/modules/security/data-policy/defaults";
 import {
   createProviderEgressFactory,
+  isLocalNetworkHost,
   isLoopbackHost,
   isTrustedHost,
   providerHost,
@@ -30,6 +31,33 @@ describe("provider host/trust verdict (§6.2)", () => {
     expect(isTrustedHost("ollama.corp", ["http://ollama.corp:11434"])).toBe(true);
     expect(isTrustedHost("evil.corp", ["ollama.corp"])).toBe(false);
   });
+
+  it("локальная сеть/VPN доверенная: private RFC1918, CGNAT и Hamachi 25/8", () => {
+    for (const host of [
+      "10.1.2.3",
+      "172.16.0.9",
+      "192.168.1.20",
+      "100.64.0.5",
+      "169.254.10.10",
+      "25.6.252.64",
+      "fd00::1",
+      "fe80::1",
+    ]) {
+      expect(isLocalNetworkHost(host)).toBe(true);
+      expect(isTrustedHost(host, [])).toBe(true);
+    }
+    expect(isLocalNetworkHost("8.8.8.8")).toBe(false);
+    expect(isLocalNetworkHost("api.openai.com")).toBe(false);
+  });
+
+  it("allowlist понимает CIDR и маску домена (§6)", () => {
+    expect(isTrustedHost("25.6.252.64", ["25.0.0.0/8"])).toBe(true);
+    expect(isTrustedHost("192.168.7.9", ["192.168.0.0/16"])).toBe(true);
+    expect(isTrustedHost("192.169.0.1", ["192.168.0.0/16"])).toBe(false);
+    expect(isTrustedHost("ollama.corp", ["*.corp"])).toBe(true);
+    expect(isTrustedHost("a.b.corp", [".corp"])).toBe(true);
+    expect(isTrustedHost("corp.example", ["*.corp"])).toBe(false);
+  });
 });
 
 describe("createProviderEgressFactory", () => {
@@ -40,9 +68,9 @@ describe("createProviderEgressFactory", () => {
 
   it("loopback-запись получает доверенный guard, внешняя — нет", () => {
     const factory = createProviderEgressFactory(deps());
-    expect(factory({ type: "openai-compat", baseUrl: "http://localhost:1234/v1" })?.target.trusted).toBe(
-      true,
-    );
+    expect(
+      factory({ type: "openai-compat", baseUrl: "http://localhost:1234/v1" })?.target.trusted,
+    ).toBe(true);
     expect(
       factory({ type: "openai-compat", baseUrl: "https://api.openai.com/v1" })?.target.trusted,
     ).toBe(false);

@@ -6,10 +6,16 @@ import { streamStateFor, tabs as tabState, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { categoryOf, labelOf, argText, formatMs, verbosity } from "../format.js";
 import {
-  activeFeed, feedForEvent, clearBusy, clearEmpty,
-  appendTo, appendActionsRow, flushRun, scrollToBottom,
+  activeFeed,
+  feedForEvent,
+  clearBusy,
+  clearEmpty,
+  appendTo,
+  appendActionsRow,
+  flushRun,
+  scrollToBottom,
 } from "./core.js";
-import { finishMd, finishThink } from "./stream.js";
+import { finishMd, finishThink, clearStatusLines } from "./stream.js";
 import { finishToolEnd, appendImageCards } from "./tool-render.js";
 import { egressBadge } from "./egress.js";
 import { createFace } from "../loader.js";
@@ -87,8 +93,7 @@ export function onTurnEnd(data: Dict): void {
     return;
   }
   if (data.success === false) {
-    const reason =
-      data.error || (data.interrupted ? t("web.turn.stopped") : t("web.turn.failed"));
+    const reason = data.error || (data.interrupted ? t("web.turn.stopped") : t("web.turn.failed"));
     const cls = data.interrupted ? "warnline" : "errline";
     const glyph = data.interrupted ? "⚠ " : "✗ ";
     appendTo(feed, el("div", cls, glyph + reason));
@@ -125,6 +130,11 @@ export function resetTurnText(feed?: HTMLElement | null): void {
   const st = streamStateFor(feed);
   st.turnMd = "";
   st.turnRoots = [];
+  // Статусы проверки живут только внутри хода: в конце убираем, чтобы
+  // «проверяю результат…» не копилось в ленте (найдено живым прогоном).
+  clearStatusLines(feed);
+  st.lastAnswerRoot = null;
+  st.lastAnswerText = "";
 }
 
 export function onErrorEvent(data: Dict): void {

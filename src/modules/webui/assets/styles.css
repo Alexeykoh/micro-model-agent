@@ -309,6 +309,10 @@ body[data-font="large"] { font-size: 17px; }
   font-size: 12.5px; overflow-wrap: anywhere;
 }
 .metaln.warn { color: var(--yellow); }
+/* Отзыв черновика — штатная перепроверка, не ошибка: спокойный dim, глиф
+   действия остаётся акцентным. Не наследует `.warn`. */
+.metaln.retract { color: var(--dim-b); }
+.metaln.retract::before { content: "⟳ "; color: var(--cyan); }
 .act { display: flex; gap: 8px; min-width: 0; line-height: 1.35; }
 .act .lab { white-space: nowrap; }
 .act .args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -670,6 +674,18 @@ body.light .sel > button { border: 1px solid var(--border); }
   flex: 1 1 auto; width: auto; min-width: 0; min-height: 32px;
   background: transparent; border: none; border-radius: 0; padding: 6px 8px;
 }
+/* Mention highlight mirror: same box as the textarea, glyphs transparent;
+   only the `@path` token background renders, behind the real text. */
+.inp-wrap { position: relative; display: flex; flex: 1 1 auto; min-width: 0; }
+.inp-wrap .inp { width: 100%; }
+.inp-mark {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  padding: 6px 8px; font: inherit; font-size: 13.5px; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere; color: transparent;
+}
+.inp-mark .mmark { color: transparent; background: var(--accent-bg); border-radius: 3px; }
+body.console .inp-mark .mmark,
+body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .composer .inp:focus,
 .composer .inp:focus-visible { box-shadow: none; border: none; outline: none; }
 .composer .attach-btn,
@@ -714,6 +730,13 @@ body.light .sel > button { border: 1px solid var(--border); }
 .cmdk-item .desc { color: var(--dim-b); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmdk-item.on, .cmdk-item:hover { background: var(--hover-bg-2); }
 .cmdk-item.on .cmd { color: var(--accent); }
+
+/* `@` file mentions reuse the command palette shell; each row is icon + path. */
+.mention-cmdk .cmdk-item { align-items: center; }
+.mention-cmdk .mention-ic { display: inline-flex; color: var(--dim-a); flex: 0 0 auto; }
+.mention-cmdk .mention-ic .svg-icon { width: 14px; height: 14px; }
+.mention-cmdk .mention-path { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 
 /* queued messages: a message sent mid-turn waits for the running turn to end.
    Shown pinned above the composer (not injected into the streaming answer),
@@ -913,7 +936,8 @@ body.light .sel > button { border: 1px solid var(--border); }
 /* Sidebar never scrolls horizontally, in any tab: long paths / model names /
    ids wrap or ellipsize inside their rows, never widening the pane. */
 .sb {
-  width: 679px; min-width: 679px; display: flex; flex-direction: column;
+  width: clamp(340px, 38vw, 679px); min-width: clamp(340px, 38vw, 679px);
+  display: flex; flex-direction: column;
   border-left: 1px solid var(--border); background: var(--sb-bg); min-height: 0;
   overflow-x: hidden;
 }
@@ -1001,6 +1025,10 @@ body.light .sel > button { border: 1px solid var(--border); }
 .trace-head { display: flex; justify-content: flex-end; padding: 8px 10px 0; flex: 0 0 auto; }
 .trace-head .linkbtn { color: var(--dim-a); font-size: 11.5px; cursor: pointer; }
 .trace-head .linkbtn:hover { color: var(--fg); }
+/* Свежие строки сверху, поэтому «к свежим» — это наверх. Кнопка уходит влево
+   от «Prompt» и появляется только когда читатель ушёл в историю. */
+.trace-head .trace-top { margin-right: auto; color: var(--accent); }
+.trace-head .trace-top[hidden] { display: none; }
 .trace-list { flex: 1; min-width: 0; min-height: 0; max-width: 100%; overflow-y: auto; overflow-x: hidden; padding: 6px 10px 12px; display: flex; flex-direction: column; gap: 1px; }
 /* Строки трассировки не сжимаются: иначе flex-column втискивает сотни
    событий в видимую высоту, скролл не появляется, а текст сплющивается
@@ -1595,6 +1623,16 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .settings-list .list-line .dim { color: var(--dim-a); }
 .settings-list .list-line .linkbtn { flex: 0 0 auto; }
 .settings-list .list-line .linkbtn:first-of-type { margin-left: auto; }
+
+/* System modules: harness-owned rows, read-only toggle + a one-line purpose. */
+.settings-list .list-line .plugin-desc {
+  flex: 1 0 100%; color: var(--dim-a); font-size: 11.5px; line-height: 1.4;
+  padding-left: 20px;
+}
+.settings-list .list-line .toggle:disabled { opacity: .45; cursor: default; }
+.settings-note.compact { padding: 2px 0 6px; line-height: 1.5; }
+.lsp-fix { margin-top: 6px; }
+
 
 /* skills: name on top, source path beneath */
 .skill-item { padding: 8px 0; border-bottom: 1px solid var(--border-3); }
@@ -2359,6 +2397,26 @@ body.light .c-dim { --face-c: var(--panel); }
 .mdl.st-warn .eyes { animation: mdlGlance 2.6s var(--ease) infinite; }
 .mdl.st-warn .star { display: block; position: absolute; top: -2%; left: 74%; font-size: calc(var(--s) * .62); line-height: .8; font-weight: 700; color: var(--yellow); text-shadow: 0 0 10px color-mix(in srgb, var(--yellow) 45%, transparent); animation: mdlStar 1.8s ease-out infinite; }
 .mdl.st-warn .star::before { content: "!"; }
+/* recheck — гейт забраковал показанный черновик: модель перечитывает и
+   переписывает. Спокойнее warn: это сверка, а не тревога. */
+.mdl.st-recheck { animation: mdlTestPulse 1.8s ease-in-out infinite; }
+.mdl.st-recheck .eyes { animation: mdlGlance 2.2s var(--ease) infinite; }
+.mdl.st-recheck .eye { animation: mdlBlink 3s var(--ease) infinite; }
+.mdl.st-recheck .star {
+  display: block; position: absolute; top: -2%; left: 74%;
+  font-size: calc(var(--s) * 0.58); line-height: 0.8; font-weight: 700;
+  color: var(--cyan);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--cyan) 45%, transparent);
+  animation: mdlStar 2.2s ease-out infinite;
+}
+.mdl.st-recheck .star::before { content: "↺"; }
+/* verify — гейт проверяет уже готовый ответ: спокойное «сверяю», не error. */
+.mdl.st-verify { animation: mdlTestPulse 2.4s ease-in-out infinite; }
+.mdl.st-verify .eyes { animation: mdlGlance 1.6s var(--ease) infinite alternate; }
+.mdl.st-verify .eye { animation: mdlBlink 4s var(--ease) infinite; }
+.mdl.st-verify .star { display: block; position: absolute; top: -2%; left: 74%; font-size: calc(var(--s) * .52); line-height: .8; font-weight: 700; color: var(--accent); text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent); animation: mdlStar 2.4s ease-out infinite; }
+.mdl.st-verify .star::before { content: "⌕"; }
+
 /* compact */
 @keyframes mdlCompact { 0%, 100% { transform: scaleX(1); } 35% { transform: scaleX(.38); } 62% { transform: scaleX(1); } }
 .mdl.st-compact { animation: mdlCompact 2.4s ease-in-out infinite; }
@@ -2544,3 +2602,310 @@ body.light .c-dim { --face-c: var(--panel); }
 .srun-stop:hover { background: var(--hover-bg); }
 .srun-stop:disabled { opacity: .45; cursor: default; }
 .srun-stop[hidden] { display: none; }
+
+/* Theme picker: ten cards need a wrapping grid, not a segmented control. */
+.theme-picker { display: flex; flex-direction: column; gap: 6px; width: 100%; flex-basis: 100%; }
+.theme-group-label { color: var(--dim-a); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding-top: 4px; }
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; width: 100%; flex-basis: 100%; }
+.theme-card {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px; min-width: 0;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--muted);
+  cursor: pointer; text-align: left; font: inherit; border-radius: 6px;
+}
+.theme-card:hover { background: var(--hover-bg); color: var(--fg); }
+.theme-card.on { border-color: var(--accent); background: var(--accent-bg); color: var(--fg); }
+.theme-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.theme-swatch { width: 30px; height: 22px; flex: 0 0 auto; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+.theme-card-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.theme-name { font-size: 12.5px; color: var(--fg); }
+.theme-card-desc { font-size: 10.5px; color: var(--dim-a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* ---- MMART effect layers: per-state detail -------------------------------
+   `.fx` holds up to six glyph/particle slots; `loader-fx.ts` fills the text
+   only where a state needs characters. All motion is transform/opacity. */
+.mdl .fx,
+.mdl .sweep { display: none; }
+.mdl .fx i {
+  position: absolute;
+  font-style: normal;
+  line-height: 1;
+  color: var(--eye-c);
+  opacity: 0;
+  pointer-events: none;
+}
+.mdl.sm .fx i:nth-child(n + 3),
+.mdl.xs .fx i:nth-child(n + 3) { display: none; }
+
+/* type: letters fly up-right from the keyboard area */
+.mdl.st-type .keys { display: none; }
+.mdl.st-type .fx { display: block; position: absolute; inset: 0; z-index: 6; }
+.mdl.st-type .fx i {
+  left: 50%;
+  bottom: 14%;
+  font-size: max(7px, calc(var(--s) * 0.16));
+  font-weight: 600;
+  animation: mdlGlyph 1.6s ease-out infinite;
+}
+.mdl.st-type .fx i:nth-child(1) { --gx: calc(var(--s) * -0.28); --gy: calc(var(--s) * -0.9); animation-delay: 0s; }
+.mdl.st-type .fx i:nth-child(2) { --gx: calc(var(--s) * 0.1); --gy: calc(var(--s) * -0.78); animation-delay: 0.18s; }
+.mdl.st-type .fx i:nth-child(3) { --gx: calc(var(--s) * 0.34); --gy: calc(var(--s) * -1.02); animation-delay: 0.36s; }
+.mdl.st-type .fx i:nth-child(4) { --gx: calc(var(--s) * -0.48); --gy: calc(var(--s) * -1.12); animation-delay: 0.54s; }
+.mdl.st-type .fx i:nth-child(5) { --gx: calc(var(--s) * -0.04); --gy: calc(var(--s) * -1.28); animation-delay: 0.72s; }
+.mdl.st-type .fx i:nth-child(6) { --gx: calc(var(--s) * 0.5); --gy: calc(var(--s) * -1.3); animation-delay: 0.9s; }
+@keyframes mdlGlyph {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.4) rotate(0deg); }
+  14% { opacity: 0.95; }
+  68% { opacity: 0.7; }
+  100% { opacity: 0; transform: translate(var(--gx, 0), var(--gy, -20%)) scale(1) rotate(14deg); }
+}
+
+/* edit: short strokes and a caret at the writing edge */
+.mdl.st-edit .keys { display: none; }
+.mdl.st-edit .fx { display: block; position: absolute; left: 24%; right: 24%; bottom: 10%; height: 32%; z-index: 6; }
+.mdl.st-edit .fx i {
+  bottom: 0;
+  width: max(1.5px, calc(var(--s) * 0.025));
+  height: 34%;
+  background: var(--eye-c);
+  border-radius: 2px;
+  animation: mdlStroke 1.3s ease-in-out infinite;
+}
+.mdl.st-edit .fx i:nth-child(1) { left: 4%; animation-delay: 0s; }
+.mdl.st-edit .fx i:nth-child(2) { left: 24%; animation-delay: 0.12s; }
+.mdl.st-edit .fx i:nth-child(3) { left: 44%; animation-delay: 0.24s; }
+.mdl.st-edit .fx i:nth-child(4) { left: 64%; animation-delay: 0.36s; }
+.mdl.st-edit .fx i:nth-child(5) { left: 84%; animation-delay: 0.48s; }
+.mdl.st-edit .fx i:nth-child(6) { display: none; }
+@keyframes mdlStroke {
+  0%, 100% { opacity: 0; transform: translateY(5px) scaleY(0.25); }
+  35%, 70% { opacity: 0.9; transform: translateY(0) scaleY(1); }
+}
+
+/* read: a scanning line travels down the page */
+.mdl.st-read .sweep {
+  display: block;
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 20%;
+  height: 1px;
+  z-index: 4;
+  background: linear-gradient(90deg, transparent, var(--eye-c), transparent);
+  animation: mdlSweep 2.8s ease-in-out infinite;
+}
+@keyframes mdlSweep {
+  0% { opacity: 0; transform: translateY(0); }
+  14% { opacity: 0.9; }
+  84% { opacity: 0.55; }
+  100% { opacity: 0; transform: translateY(calc(var(--s) * 0.56)); }
+}
+
+/* find: expanding rings from the centre */
+.mdl.st-find .fx { display: block; position: absolute; inset: 0; z-index: 4; }
+.mdl.st-find .fx i {
+  left: 50%;
+  top: 50%;
+  width: 16%;
+  height: 16%;
+  border: 1px solid var(--eye-c);
+  border-radius: 999px !important;
+  animation: mdlRing 1.8s ease-out infinite;
+}
+.mdl.st-find .fx i:nth-child(2) { animation-delay: 0.45s; }
+.mdl.st-find .fx i:nth-child(3) { animation-delay: 0.9s; }
+.mdl.st-find .fx i:nth-child(n + 4) { display: none; }
+@keyframes mdlRing {
+  0% { opacity: 0.85; transform: translate(-50%, -50%) scale(0.25); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(2.8); }
+}
+
+/* web: packets orbit the @ */
+.mdl.st-web .fx { display: block; position: absolute; inset: 0; z-index: 4; }
+.mdl.st-web .fx i {
+  left: 50%;
+  top: 50%;
+  width: 7%;
+  height: 7%;
+  border-radius: 999px !important;
+  background: var(--yellow);
+  animation: mdlOrbit 1.8s linear infinite;
+}
+.mdl.st-web .fx i:nth-child(1) { --a: 0deg; }
+.mdl.st-web .fx i:nth-child(2) { --a: 120deg; animation-delay: -0.6s; }
+.mdl.st-web .fx i:nth-child(3) { --a: 240deg; animation-delay: -1.2s; }
+.mdl.st-web .fx i:nth-child(n + 4) { display: none; }
+@keyframes mdlOrbit {
+  from { transform: rotate(var(--a, 0deg)) translateX(calc(var(--s) * 0.38)); }
+  to { transform: rotate(calc(var(--a, 0deg) + 360deg)) translateX(calc(var(--s) * 0.38)); }
+}
+
+/* run: speed lines behind the bounce */
+.mdl.st-run .fx { display: block; position: absolute; left: -10%; top: 18%; width: 24%; height: 62%; z-index: 3; }
+.mdl.st-run .fx i {
+  left: 0;
+  width: max(1.5px, calc(var(--s) * 0.025));
+  height: 14%;
+  border-radius: 2px;
+  background: var(--eye-c);
+  animation: mdlSpeed 0.75s linear infinite;
+}
+.mdl.st-run .fx i:nth-child(1) { top: 0; animation-delay: 0s; }
+.mdl.st-run .fx i:nth-child(2) { top: 34%; animation-delay: 0.15s; }
+.mdl.st-run .fx i:nth-child(3) { top: 68%; animation-delay: 0.3s; }
+.mdl.st-run .fx i:nth-child(n + 4) { display: none; }
+@keyframes mdlSpeed {
+  0% { opacity: 0; transform: translateX(5px) scaleY(0.35); }
+  22% { opacity: 0.8; }
+  100% { opacity: 0; transform: translateX(calc(var(--s) * -0.22)) scaleY(1); }
+}
+
+/* tests: pass/fail marks pop in sequence */
+.mdl.st-tests .fx { display: block; position: absolute; inset: 0; z-index: 5; }
+.mdl.st-tests .fx i {
+  right: 6%;
+  top: 8%;
+  font-size: max(7px, calc(var(--s) * 0.2));
+  font-weight: 700;
+  animation: mdlMark 1.6s ease-out infinite;
+}
+.mdl.st-tests .fx i:nth-child(1) { animation-delay: 0s; }
+.mdl.st-tests .fx i:nth-child(2) { top: 36%; right: 0; animation-delay: 0.4s; }
+.mdl.st-tests .fx i:nth-child(3) { top: 64%; right: 6%; animation-delay: 0.8s; }
+.mdl.st-tests .fx i:nth-child(n + 4) { display: none; }
+@keyframes mdlMark {
+  0% { opacity: 0; transform: translateY(4px) scale(0.4); }
+  22% { opacity: 1; transform: translateY(0) scale(1); }
+  70% { opacity: 0.9; }
+  100% { opacity: 0; transform: translateY(calc(var(--s) * -0.12)) scale(1); }
+}
+
+/* check: LSP sweep plus brackets */
+.mdl.st-check .sweep {
+  display: block;
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 24%;
+  height: 1px;
+  z-index: 4;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: mdlSweep 2.4s ease-in-out infinite;
+}
+.mdl.st-check .fx { display: block; position: absolute; right: 2%; bottom: 8%; z-index: 5; }
+.mdl.st-check .fx i { font-size: max(7px, calc(var(--s) * 0.2)); color: var(--cyan); animation: mdlMark 1.8s ease-out infinite; }
+.mdl.st-check .fx i:nth-child(2) { animation-delay: 0.3s; }
+.mdl.st-check .fx i:nth-child(n + 3) { display: none; }
+
+/* warn: amber underline pulses */
+.mdl.st-warn .sweep {
+  display: block;
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  bottom: 8%;
+  height: 2px;
+  z-index: 4;
+  background: var(--yellow);
+  transform-origin: left center;
+  animation: mdlWarnBar 2.2s ease-in-out infinite;
+}
+@keyframes mdlWarnBar { 0%, 100% { opacity: 0.35; transform: scaleX(0.25); } 40%, 70% { opacity: 1; transform: scaleX(1); } }
+
+/* error: cross marks replace the old star */
+.mdl.st-error .star { display: none; }
+.mdl.st-error .fx { display: block; position: absolute; inset: 0; z-index: 5; }
+.mdl.st-error .fx i {
+  right: 4%;
+  top: 10%;
+  font-size: max(7px, calc(var(--s) * 0.22));
+  font-weight: 700;
+  color: var(--red);
+  animation: mdlCross 1.7s ease-out infinite;
+}
+.mdl.st-error .fx i:nth-child(2) { top: 42%; right: -4%; animation-delay: 0.5s; }
+.mdl.st-error .fx i:nth-child(n + 3) { display: none; }
+@keyframes mdlCross { 0%, 100% { opacity: 0; transform: scale(0.4) rotate(-20deg); } 20%, 70% { opacity: 1; transform: scale(1) rotate(0); } }
+
+/* done: confetti burst */
+.mdl.st-done .fx { display: block; position: absolute; inset: 0; z-index: 5; }
+.mdl.st-done .fx i {
+  left: 50%;
+  top: 50%;
+  font-size: max(7px, calc(var(--s) * 0.18));
+  font-weight: 700;
+  color: var(--green);
+  animation: mdlConfetti 2s ease-out infinite;
+}
+.mdl.st-done .fx i:nth-child(1) { --cx: -0.55; --cy: -0.7; animation-delay: 0s; }
+.mdl.st-done .fx i:nth-child(2) { --cx: 0.5; --cy: -0.8; animation-delay: 0.18s; }
+.mdl.st-done .fx i:nth-child(3) { --cx: -0.7; --cy: 0.1; animation-delay: 0.36s; }
+.mdl.st-done .fx i:nth-child(4) { --cx: 0.62; --cy: 0.2; animation-delay: 0.54s; }
+.mdl.st-done .fx i:nth-child(5) { --cx: -0.2; --cy: -1; animation-delay: 0.72s; }
+.mdl.st-done .fx i:nth-child(6) { --cx: 0.2; --cy: 0.45; animation-delay: 0.9s; }
+@keyframes mdlConfetti {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  18% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--s) * var(--cx, 0.5)), calc(-50% + var(--s) * var(--cy, -0.5))) scale(1) rotate(40deg); }
+}
+
+/* queued: three dots march */
+.mdl.st-queued .fx {
+  display: flex;
+  position: absolute;
+  left: 50%;
+  bottom: -12%;
+  transform: translateX(-50%);
+  gap: max(2px, calc(var(--s) * 0.045));
+  z-index: 4;
+}
+.mdl.st-queued .fx i {
+  position: static;
+  display: block;
+  width: max(2px, calc(var(--s) * 0.06));
+  height: max(2px, calc(var(--s) * 0.06));
+  border-radius: 999px !important;
+  background: var(--eye-c);
+  animation: mdlQueue 1.1s ease-in-out infinite;
+}
+.mdl.st-queued .fx i:nth-child(2) { animation-delay: 0.14s; }
+.mdl.st-queued .fx i:nth-child(3) { animation-delay: 0.28s; }
+.mdl.st-queued .fx i:nth-child(n + 4) { display: none; }
+@keyframes mdlQueue { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
+
+/* compact: zip lines squeeze in from both sides */
+.mdl.st-compact .fx { display: block; position: absolute; inset: 0; z-index: 4; }
+.mdl.st-compact .fx i {
+  top: 50%;
+  width: 16%;
+  height: 1px;
+  background: var(--eye-c);
+  animation: mdlZip 2.4s ease-in-out infinite;
+}
+.mdl.st-compact .fx i:nth-child(1) { left: -6%; animation-delay: 0s; }
+.mdl.st-compact .fx i:nth-child(2) { right: -6%; animation-delay: 0s; }
+.mdl.st-compact .fx i:nth-child(3) { left: -2%; top: 28%; animation-delay: 0.1s; }
+.mdl.st-compact .fx i:nth-child(4) { right: -2%; top: 72%; animation-delay: 0.1s; }
+.mdl.st-compact .fx i:nth-child(n + 5) { display: none; }
+@keyframes mdlZip { 0%, 100% { opacity: 0; transform: scaleX(0.2); } 35%, 65% { opacity: 0.85; transform: scaleX(1); } }
+
+/* plan: three steps connect in order */
+.mdl.st-plan .fx { display: block; position: absolute; inset: 0; z-index: 4; }
+.mdl.st-plan .fx i {
+  width: 5%;
+  height: 5%;
+  border-radius: 999px !important;
+  background: var(--accent);
+  left: 18%;
+  top: 76%;
+  animation: mdlSteps 3.6s steps(1, end) infinite;
+}
+.mdl.st-plan .fx i:nth-child(2) { animation-delay: 1.2s; }
+.mdl.st-plan .fx i:nth-child(3) { animation-delay: 2.4s; }
+.mdl.st-plan .fx i:nth-child(n + 4) { display: none; }
+@keyframes mdlSteps {
+  0% { opacity: 0; transform: translate(0, 0); }
+  10%, 30% { opacity: 1; transform: translate(0, 0); }
+  34% { opacity: 0; transform: translate(calc(var(--s) * 0.28), calc(var(--s) * -0.3)); }
+  38%, 100% { opacity: 0; }
+}

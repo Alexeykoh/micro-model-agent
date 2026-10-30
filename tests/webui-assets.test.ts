@@ -57,11 +57,10 @@ describe("webui assets", () => {
       ["/md.js", a.mdJs],
       ["/smd.js", a.smdJs],
       ["/hljs.js", a.hljsJs],
-      ...Object.entries(a.jsModules ?? {}).map(
-        ([k, v]) => ["/" + k, v] as [string, string],
-      ),
+      ...Object.entries(a.jsModules ?? {}).map(([k, v]) => ["/" + k, v] as [string, string]),
     ];
-    const specRe = /(?:import|export)[^;]*?from\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']/g;
+    const specRe =
+      /(?:import|export)[^;]*?from\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']/g;
     const resolve = (from: string, spec: string): string | null => {
       if (!spec.startsWith(".")) return null;
       const base = from.split("/").slice(0, -1);
@@ -202,8 +201,10 @@ describe("webui assets", () => {
 
   it("listens for the dedicated reasoning event", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId, {');
-    expect(js(a)).toContain('["meta", (d) => onMeta(d.chunk || "", d.sessionId, d.kind)]');
+    expect(js(a)).toMatch(/\[\s*"reasoning"\s*,\s*\(d\)\s*=>\s*onReasoning\(/);
+    expect(js(a)).toMatch(
+      /\[\s*"meta"\s*,\s*\(d\)\s*=>\s*onMeta\(d\.chunk \|\| "", d\.sessionId, d\.kind\)\s*\]/,
+    );
     expect(js(a)).not.toContain("finishMeta");
   });
 
@@ -212,6 +213,13 @@ describe("webui assets", () => {
     expect(js(a)).toContain("metaln");
     expect(a.css).toContain(".metaln");
     expect(a.css).toContain(".metaln.warn");
+  });
+
+  it("switches the mascot to its own verify state while a gate checks", () => {
+    const a = loadAssets();
+    expect(js(a)).toContain('d?.kind === "progress"');
+    expect(js(a)).toContain('loaderStateFor({ type: "verify" })');
+    expect(a.css).toContain(".mdl.st-verify");
   });
 
   it("quiet-gates tool-body meta in the feed, keeping status visible", () => {
@@ -246,14 +254,16 @@ describe("webui assets", () => {
     expect(a.js).toContain("restoreTabs");
     expect(tabs).toContain("mma-open-tabs");
     expect(js(a)).toMatch(/openTab\(ids\[0\]/);
-    expect(js(a)).toMatch(/!feedHasContent\(tab\.feed\) \|\| tab\.historyFailed\)\s*tab\.historyLoaded = false;/);
+    expect(js(a)).toMatch(
+      /!feedHasContent\(tab\.feed\) \|\| tab\.historyFailed\)\s*tab\.historyLoaded = false;/,
+    );
   });
 
   it("marks tabs of server-deleted sessions dead instead of retry-looping", () => {
     const a = loadAssets();
     // 404 activate/history → dead card, no silent desync.
     expect(js(a)).toContain("markTabDead");
-    expect(js(a)).toContain('r.status === 404');
+    expect(js(a)).toContain("r.status === 404");
     // Status dots know the dead state.
     expect(js(a)).toContain('dead: "✗"');
     expect(js(a)).toContain("web.session.gone");
@@ -272,7 +282,7 @@ describe("webui assets", () => {
 
   it("wires the setup wizard to the /api/setup endpoints and app boot hook", () => {
     const a = loadAssets();
-    expect(a.setupJs).toContain('window.MmaSetup');
+    expect(a.setupJs).toContain("window.MmaSetup");
     expect(a.setupJs).toContain('"/api/setup"');
     expect(a.setupJs).toContain('"/api/setup/scan"');
     expect(a.setupJs).toContain('"/api/setup/models"');
@@ -319,7 +329,9 @@ describe("webui assets", () => {
     const a = loadAssets();
     expect(a.mdJs).toContain('from "./js/md-normalize.js"');
     expect(a.jsModules["js/md-normalize.js"]).toContain("MdNormalizer");
-    expect(a.css).toContain(".md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.62; }");
+    expect(a.css).toContain(
+      ".md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.62; }",
+    );
     expect(a.css).toContain(".md p { margin: 9px 0; }");
     expect(a.css).toContain(".md ul, .md ol { margin: 8px 0; padding-left: 24px; }");
     // Soft breaks must flow as spaces (CommonMark), not preserved as hard newlines.
@@ -478,7 +490,7 @@ describe("webui assets", () => {
 
   it("uses one shared EventSource so all tabs stream live (no per-session reconnect)", () => {
     const a = loadAssets();
-    expect(a.js).toContain('new EventSource(sseUrl)');
+    expect(js(a)).toContain("new EventSource(sseUrl)");
     expect(a.js).not.toContain("syncSseSession");
     expect(a.js).not.toContain('params.push("session="');
   });
@@ -497,11 +509,11 @@ describe("webui assets", () => {
     const a = loadAssets();
     const sidebar = sidebarSources(a) || "";
     expect(sidebar).toContain("sidebarSessionId");
-    expect(a.js).toContain("sidebarOwns(");
-    expect(a.js).toContain("sidebarSessionId()");
+    expect(js(a)).toContain("sidebarOwns(");
+    expect(js(a)).toContain("sidebarSessionId()");
     // Background sessions must not advance the sidebar turn counter or clear
     // its live indicator.
-    expect(a.js).toMatch(/if \(sidebarOwns\(d\)\) \{\s*sidebarTurnEnd\(/);
+    expect(js(a)).toMatch(/if \(sidebarOwns\(d\)\) \{\s*sidebarTurnEnd\(/);
   });
 
   it("wires the sidebar tabs (session / files / lsp / trace) with master-detail", () => {
@@ -517,12 +529,12 @@ describe("webui assets", () => {
     expect(a.css).toContain(".sb-tab.on");
     // Sidebar has a fixed width; opening a detail never resizes it, and the
     // detail sits on the left of the list (row-reverse).
-    expect(a.css).toContain("width: 679px");
+    expect(a.css).toContain("width: clamp(340px, 38vw, 679px)");
     expect(a.css).toContain("#pane-trace { flex-direction: row-reverse;");
     expect(a.css).toContain(".trc-detail");
     expect(a.js).toContain("initSidebar()");
-    expect(a.js).toContain("sidebarTraceEvent(");
-    expect(a.js).toContain("sidebarMapState(");
+    expect(js(a)).toContain("sidebarTraceEvent(");
+    expect(js(a)).toContain("sidebarMapState(");
     expect(sidebarSources(a)).toContain("/api/index");
     expect(sidebarSources(a)).toBeTruthy();
     // No horizontal scroll in any tab: sidebar panes clip on x, values wrap.
@@ -545,7 +557,14 @@ describe("webui assets", () => {
       .map((s) => s.trim().replace(/"/g, ""))
       .filter(Boolean);
     expect(order).toEqual([
-      "session", "files", "lsp", "trace", "subagents", "plugins", "mcp", "map",
+      "session",
+      "files",
+      "lsp",
+      "trace",
+      "subagents",
+      "plugins",
+      "mcp",
+      "map",
     ]);
     const htmlOrder = [...a.html.matchAll(/data-tab="([a-z]+)"/g)].map((m) => m[1]);
     expect(htmlOrder).toEqual(order);
@@ -579,7 +598,9 @@ describe("webui assets", () => {
     expect(a.css).toContain(".frow.cursor { background: var(--hover-bg); }");
     // Tree indentation: one source of truth. An inline `padding-left` from JS
     // overrode the `padding` shorthand, so the left gutter drifted from the right.
-    expect(a.css).toContain("padding-left: calc(var(--files-gutter) + var(--indent, 0) * var(--files-indent));");
+    expect(a.css).toContain(
+      "padding-left: calc(var(--files-gutter) + var(--indent, 0) * var(--files-indent));",
+    );
     const filesTreeSource = a.jsModules?.["js/sidebar/files/tree.js"] || "";
     expect(filesTreeSource).not.toContain("style.paddingLeft");
     expect(filesTreeSource).toContain("--indent");
@@ -618,6 +639,25 @@ describe("webui assets", () => {
     expect(a.html).toContain('<div class="trace-main">');
     expect(a.html).toMatch(/class="trace-main"[\s\S]*id="tracePromptBtn"[\s\S]*id="traceList"/);
     expect(a.css).toContain(".trace-main { display: flex; flex-direction: column;");
+  });
+
+  // A14: свежие строки сверху, автоскролл без чтения `scrollHeight` и кнопка
+  // «к свежим» для читателя истории; `gate_timing` (A15) доходит до Trace.
+  it("reverses the Trace list, batches rows and offers a way back to fresh ones", () => {
+    const a = loadAssets();
+    expect(a.html).toContain('id="traceTopBtn"');
+    expect(a.css).toContain(".trace-head .trace-top");
+    const sidebar = sidebarSources(a);
+    expect(sidebar).toContain("insertBefore(row, head.nextSibling)");
+    expect(sidebar).not.toContain("scrollTop = list.scrollHeight");
+    expect(sidebar).not.toContain("dataset.lastTurn");
+    expect(sidebar).toContain("gate_timing");
+    expect(sidebar).toContain("TRACE_GATE_NOTICE_MS");
+    const scroll = a.jsModules?.["js/sidebar/trace-scroll.js"] || "";
+    expect(scroll).toContain("flushTraceFrame");
+    expect(scroll).toContain("requestAnimationFrame");
+    // Читатель истории не приклеен: приклеивание только у свежей кромки.
+    expect(scroll).toContain("traceAtFreshEdge");
   });
 
   it("keeps the activity rail on one compact line", () => {
@@ -687,7 +727,9 @@ describe("webui assets", () => {
     // Yellow is reserved for real warnings; excluded = dashed neutral + label.
     expect(a.css).not.toContain(".prompt-block.excluded { border-color: var(--yellow)");
     expect(a.css).toContain("border-style: dashed");
-    expect(a.css).toContain(".prompt-block.excluded { border-style: dashed; border-color: var(--dim-c); color: var(--dim-a); }");
+    expect(a.css).toContain(
+      ".prompt-block.excluded { border-style: dashed; border-color: var(--dim-c); color: var(--dim-a); }",
+    );
     expect(a.css).toContain(".prompt-hint");
   });
 
@@ -748,8 +790,8 @@ describe("webui assets", () => {
     expect(sidebar).toContain("sidebarLspState(");
     expect(sidebar).toContain("sidebarLspEvent(");
     expect(sidebar).toContain("web.sidebar.lsp_reason_");
-    expect(a.js).toContain("sidebarLspEvent(");
-    expect(a.js).toContain("sidebarLspState(");
+    expect(js(a)).toContain("sidebarLspEvent(");
+    expect(js(a)).toContain("sidebarLspState(");
     expect(a.css).toContain(".lsp-g.fail");
   });
 
@@ -798,8 +840,8 @@ describe("webui assets", () => {
     const a = loadAssets();
     expect(a.css).toContain('.sb-tab[data-tab="trace"]');
     expect(a.js).toContain("applySidebarI18n(");
-    expect(a.js).toContain('sidebarTraceEvent("error"');
-    expect(a.js).toContain("sidebarTurnEnd(");
+    expect(js(a)).toContain('sidebarTraceEvent("error"');
+    expect(js(a)).toContain("sidebarTurnEnd(");
   });
 
   // The sidebar used to be one shape: a fixed 679px column down to 760px, then a
@@ -834,8 +876,8 @@ describe("webui assets", () => {
     expect(a.css).toContain(".files-splitter { display: none; }");
     // The tree width is a custom property, so the drawer can ignore it.
     expect(a.css).toContain("width: var(--files-tree-w, 240px);");
-    expect(sidebar).toContain("setProperty(\"--files-tree-w\"");
-    expect(sidebar).not.toContain('nodes.side.style.width');
+    expect(sidebar).toContain('setProperty("--files-tree-w"');
+    expect(sidebar).not.toContain("nodes.side.style.width");
   });
 
   // The drawer is a modal surface: a class toggle alone left no backdrop, no
@@ -847,7 +889,7 @@ describe("webui assets", () => {
     expect(src).toContain("initSidebarDrawer");
     expect(src).toContain('addEventListener("change", syncToViewport)');
     expect(src).toContain('setAttribute("role", "dialog")');
-    expect(src).toContain('aria-modal');
+    expect(src).toContain("aria-modal");
     expect(src).toContain("trapTab(");
     expect(src).toContain("overlayOpen()");
     expect(src).toContain("--sb-inset");

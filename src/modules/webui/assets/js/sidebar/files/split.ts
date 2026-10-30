@@ -21,6 +21,7 @@ let nodes: SplitNodes = { pane: null, side: null, splitter: null };
 let width = readStoredWidth();
 let full = false;
 let wired = false;
+let observer: ResizeObserver | null = null;
 
 function readStoredWidth(): number {
   try {
@@ -30,9 +31,18 @@ function readStoredWidth(): number {
   }
 }
 
+function treeMax(): number {
+  // Keep at least 220px for the viewer; the sidebar itself is clamped by CSS
+  // (`clamp(340px, 38vw, 679px)`), so a persisted 480px tree can otherwise
+  // consume the whole split on a narrow desktop.
+  const pane = nodes.pane?.clientWidth || 0;
+  if (!pane) return TREE_MAX;
+  return Math.max(TREE_MIN, Math.min(TREE_MAX, Math.round(pane - 220)));
+}
+
 function clampWidth(px: number): number {
-  if (!Number.isFinite(px) || px <= 0) return TREE_DEFAULT;
-  return Math.min(TREE_MAX, Math.max(TREE_MIN, Math.round(px)));
+  if (!Number.isFinite(px) || px <= 0) return Math.min(TREE_DEFAULT, treeMax());
+  return Math.min(treeMax(), Math.max(TREE_MIN, Math.round(px)));
 }
 
 function persistWidth(): void {
@@ -52,6 +62,13 @@ export function initSplit(d: Partial<SplitNodes>): void {
   nodes = { ...nodes, ...d };
   if (wired || !nodes.splitter) return;
   wired = true;
+  window.addEventListener("resize", applySplit);
+  if (nodes.pane && !observer && typeof ResizeObserver !== "undefined") {
+    // The tab can boot before the pane has a measured width; re-clamp as
+    // soon as the split gets its real size (drawer resize, window resize).
+    observer = new ResizeObserver(() => applySplit());
+    observer.observe(nodes.pane);
+  }
   const handle = nodes.splitter;
   handle.addEventListener("pointerdown", (ev) => {
     ev.preventDefault();
@@ -83,6 +100,7 @@ export function initSplit(d: Partial<SplitNodes>): void {
 
 /** Pushes width/visibility into the DOM. Idempotent. */
 export function applySplit(): void {
+  width = clampWidth(width);
   if (nodes.side) {
     // Custom property, not an inline `width`: the ≤1024px drawer stacks the
     // tree above the viewer and must be able to ignore the dragged width.

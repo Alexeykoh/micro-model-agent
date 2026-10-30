@@ -151,8 +151,9 @@ describe("Agent in-loop critic", () => {
     expect(result.success).toBe(true);
     expect(result.text).toBe("final answer");
     // critical → ремонт (1) → повтор той же жалобы → совет «смени подход» (2).
-    // Дальше бюджеты исчерпаны, ответ принимается.
-    expect(verify).toHaveBeenCalledTimes(3);
+    // Третьей проверки нет: модель ответила тем же текстом, советный цикл
+    // израсходован — новый вызов добавить ничего не может (A15).
+    expect(verify).toHaveBeenCalledTimes(2);
     expect(t.provider.chat).toHaveBeenCalledTimes(4);
     expect(userSummaries(t.messages).length).toBe(3);
   });
@@ -192,9 +193,9 @@ describe("Agent in-loop critic", () => {
     await agent.run("do work");
 
     const calls = (t.deps.logger.diagnostic as any).mock.calls as any[];
-    expect(calls.some((c) => c[0] === "info" && String(c[1]).includes("Critic critical: broken"))).toBe(
-      true,
-    );
+    expect(
+      calls.some((c) => c[0] === "info" && String(c[1]).includes("Critic critical: broken")),
+    ).toBe(true);
     expect(calls.some((c) => String(c[1]).includes("repairing"))).toBe(false);
   });
 });

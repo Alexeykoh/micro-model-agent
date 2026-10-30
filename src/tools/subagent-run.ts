@@ -19,22 +19,10 @@ import { setSubagentRunStop } from "./subagent-registry";
 import type { SubagentUsageRecord } from "./subagent-runs";
 import { createSubagentWatchdog } from "./subagent-watchdog";
 import { finalizeSubagentSuccess } from "./subagent-result";
+import { buildSubagentSystemPrompt } from "./subagent-prompt";
 // Реэкспорт для существующих импортёров/тестов (лимиты переехали в отдельный файл).
 export { MAX_TOKENS_MAX, MAX_TOKENS_MIN, parseMaxTokens } from "./subagent-limits";
-/** Фиксированный системный промпт (KV-cache дружит при stableSystemPrompt). */
-export const SUBAGENT_SYSTEM_PROMPT_TEMPLATE = `You are a sub-agent working on a specific task. You have your own context window and tool set.
-
-Workflow rules:
-- Prefer small, focused steps. Verify your own work (typecheck/tests) before finishing.
-- For large outputs, write the result to a file with write_file instead of reproducing it in your answer.
-- If the task is big and decomposable, delegate parts to the subagent tool instead of doing everything in one context.
-- When you finish, return a concise final answer; do not repeat file contents verbatim if you already wrote them to disk.`;
-
-/** Собирает системный промпт субагента (стабильный или с контекстом). */
-function buildSubagentSystemPrompt(context: string, stable: boolean): string {
-  if (stable) return SUBAGENT_SYSTEM_PROMPT_TEMPLATE;
-  return `You are a sub-agent working on a specific task. ${context ? `Context: ${context}` : ""}`;
-}
+export { buildSubagentSystemPrompt, SUBAGENT_SYSTEM_PROMPT_TEMPLATE } from "./subagent-prompt";
 
 /** Спавнит изолированного субагента и возвращает его результат. */
 export async function runSubagent(
@@ -54,7 +42,7 @@ export async function runSubagent(
   // Лимит глубины рекурсии. Глубину читаем из SHARED-контекста исполнителя
   // (его видят вложенные субагенты) — `ctx.recursionDepth` снапшотился раз.
   const executor = ctx.toolExecutor;
-  const parentDepth = executor?.getRecursionDepth?.() ?? (ctx.recursionDepth ?? 0);
+  const parentDepth = executor?.getRecursionDepth?.() ?? ctx.recursionDepth ?? 0;
   const maxDepth = securityConfig?.maxRecursionDepth ?? 3;
   const currentDepth = parentDepth;
 
@@ -117,7 +105,9 @@ export async function runSubagent(
       }),
     };
   }
-  const provider = cap ? withTokenCap(baseProvider, cap, { maxExplicit: MAX_TOKENS_MAX }) : baseProvider;
+  const provider = cap
+    ? withTokenCap(baseProvider, cap, { maxExplicit: MAX_TOKENS_MAX })
+    : baseProvider;
 
   // Оборонительный гард: запрошенные tool_tags ни с чем не мэтчатся — у
   // субагента ноль тулов, и он галлюцинирует вместо действий.
@@ -235,9 +225,9 @@ export async function runSubagent(
           watchdog.touch();
           observer.callbacks.onChunk(chunk);
         },
-        (meta, kind) => {
+        (meta, kind, info) => {
           watchdog.touch();
-          observer.callbacks.onMeta(meta, kind);
+          observer.callbacks.onMeta(meta, kind, info);
         },
         (ev) => {
           watchdog.touch();
@@ -264,7 +254,12 @@ export async function runSubagent(
         return { success: false, output: timeoutReason };
       }
       if (!result.success) {
-        let output = formatSubagentFailure(String(result.error), result.text, expertTag, expertModel ?? ctx.config.model);
+        let output = formatSubagentFailure(
+          String(result.error),
+          result.text,
+          expertTag,
+          expertModel ?? ctx.config.model,
+        );
         const scopeReq = scopeCollector.toScopeRequest();
         if (scopeReq) output += `\n${formatScopeRequest(scopeReq)}`;
         observer.finish(

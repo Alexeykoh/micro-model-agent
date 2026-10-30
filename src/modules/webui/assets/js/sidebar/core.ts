@@ -3,8 +3,20 @@
 import { icon } from "../dom.js";
 import { hooks, session } from "../store.js";
 import { t } from "../i18n.js";
-import { sb, TABS, ICON_NAME, paneEl, mqMobile, mqNarrow, PHONE_MQ, readStored, storeTab, type TraceEntry } from "./state.js";
+import {
+  sb,
+  TABS,
+  ICON_NAME,
+  paneEl,
+  mqMobile,
+  mqNarrow,
+  PHONE_MQ,
+  readStored,
+  storeTab,
+  type TraceEntry,
+} from "./state.js";
 import { collapseDetail, renderList, renderDetail } from "./trace.js";
+import { initTraceScroll, traceScrollI18n } from "./trace-scroll.js";
 import { sidebarDrawerOpen, setSidebarDrawer } from "./drawer.js";
 import { sidebarMapState, sidebarMapIndicator } from "./map.js";
 import { renderLsp, sidebarLspState } from "./lsp.js";
@@ -75,7 +87,10 @@ export function setSidebarTab(id: string, persist = true): void {
   });
   if (sb.nameTextEl) sb.nameTextEl.textContent = t("web.sidebar.tab_" + effective);
   const nic = sb.nameEl && sb.nameEl.querySelector<HTMLElement>(".sb-ico");
-  if (nic) { nic.textContent = ""; nic.appendChild(tabIcon(effective)); }
+  if (nic) {
+    nic.textContent = "";
+    nic.appendChild(tabIcon(effective));
+  }
   syncSettingsShortcut(effective);
   if (effective === "lsp") sidebarLspState();
   if (effective === "files") renderFilesTree();
@@ -104,10 +119,15 @@ export function applySidebarI18n(): void {
   if (!sb.el) return;
   TABS.forEach((id) => {
     const tab = sb.el?.querySelector<HTMLElement>('.sb-tab[data-tab="' + id + '"]');
-    if (tab) { const label = t("web.sidebar.tab_" + id); tab.title = label; tab.setAttribute("aria-label", label); }
+    if (tab) {
+      const label = t("web.sidebar.tab_" + id);
+      tab.title = label;
+      tab.setAttribute("aria-label", label);
+    }
   });
   setSidebarTab(sb.active, false);
   renderList();
+  traceScrollI18n();
   if (sb.selected) {
     const entry = sb.trace.find((x: TraceEntry) => x.id === sb.selected);
     if (entry) renderDetail(entry);
@@ -132,10 +152,7 @@ export function initSidebar(): void {
   if (settingsBtn) {
     settingsBtn.appendChild(icon("settings"));
     settingsBtn.addEventListener("click", () => {
-      hooks.openSettingsAt?.(
-        SETTINGS_PANEL[sb.active] || "general",
-        SETTINGS_ANCHOR[sb.active],
-      );
+      hooks.openSettingsAt?.(SETTINGS_PANEL[sb.active] || "general", SETTINGS_ANCHOR[sb.active]);
     });
   }
   sb.mapEl = document.getElementById("mapBody");
@@ -148,6 +165,7 @@ export function initSidebar(): void {
   sb.detailBody = document.getElementById("detailBody");
   sb.detailClose = document.getElementById("detailClose");
   if (sb.detailClose) sb.detailClose.addEventListener("click", collapseDetail);
+  initTraceScroll();
   initPromptPopup();
 
   root.querySelectorAll<HTMLElement>(".sb-tab .sb-ico").forEach((span) => {

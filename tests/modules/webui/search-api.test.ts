@@ -32,7 +32,9 @@ function searchUrl(base: string, q: string, extra = ""): string {
 }
 
 interface SearchBody {
-  results: ({ kind: "path"; path: string } | { kind: "content"; path: string; line: number; text: string })[];
+  results: (
+    { kind: "path"; path: string } | { kind: "content"; path: string; line: number; text: string }
+  )[];
   truncated: boolean;
   ms: number;
   scanned: number;
@@ -184,7 +186,13 @@ describe("webui content search", () => {
   it("applies ignores and protected paths to name hits too", async () => {
     const ws = makeWorkspace();
     for (const dir of ["node_modules", "dist", ".git"]) mkdirSync(join(ws, dir));
-    for (const rel of ["node_modules/vault.js", "dist/vault.txt", ".git/vault", "vault.key", ".env.vault"]) {
+    for (const rel of [
+      "node_modules/vault.js",
+      "dist/vault.txt",
+      ".git/vault",
+      "vault.key",
+      ".env.vault",
+    ]) {
       writeFileSync(join(ws, rel), "hidden");
     }
     writeFileSync(join(ws, ".gitignore"), "ignoredfile.txt\n");
@@ -205,6 +213,19 @@ describe("webui content search", () => {
       { kind: "path", path: "hit-1.txt" },
     ]);
     expect(result.truncated).toBe(true);
+  });
+
+  it("names=1 returns path hits only and does not read file contents", async () => {
+    const ws = makeWorkspace();
+    writeFileSync(join(ws, "src-needle.ts"), "unrelated body\n");
+    writeFileSync(join(ws, "body.txt"), "needle only in content\n");
+    await withSearchApi(ws, async (base) => {
+      const body = (await (
+        await doFetch(searchUrl(base, "needle", "&names=1"))
+      ).json()) as SearchBody;
+      expect(body.results).toEqual([{ kind: "path", path: "src-needle.ts" }]);
+      expect(body.scanned).toBe(0);
+    });
   });
 
   it("answers 503 without a workspace", async () => {
