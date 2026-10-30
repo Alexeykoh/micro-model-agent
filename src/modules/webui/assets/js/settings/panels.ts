@@ -5,14 +5,12 @@
 import { el, icon, link, inlineTextNodes, makeToggle } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { settings, getPath, THEME_KEY } from "../store.js";
+import { settings, getPath } from "../store.js";
 import { getUpdateInfo } from "../update-state.js";
 import type { Dict } from "../core/store/types.js";
 import { setIndicator } from "../dialog.js";
 import { controlFor, PANEL_SECTIONS } from "./controls.js";
-import { UI_THEME_IDS } from "./themes.js";
-import { buildThemePicker } from "./theme-picker.js";
-import { applyThemeWeather } from "./weather.js";
+import { buildThemeCard } from "./theme-panel.js";
 import { postConfig } from "./write.js";
 import { openSubDialog, closeSubDialog } from "./subdialog.js";
 import { mcpLiteralField, providerInput, providerCheck } from "./form.js";
@@ -232,78 +230,15 @@ export function groupHeader(label: string, count?: number | null): HTMLElement {
   return head;
 }
 
-// --- UI panel (mode + theme, browser-local) ------------------------------
-const UI_THEME_KEY = "mma-ui-theme";
-
-/** Color mode: dark | light | auto (browser-local). */
-export function currentTheme(): string {
-  return localStorage.getItem(THEME_KEY) || "auto";
-}
-
-/** UI theme id (browser-local; `console` is the default). */
-export function currentUiTheme(): string {
-  return localStorage.getItem(UI_THEME_KEY) || "console";
-}
-
+// --- UI panel (mode + theme) ----------------------------------------------
+// Тема — серверная настройка (`ui.themeMode`/`ui.theme`), карточка и запись
+// живут в `theme-panel.ts`; здесь только разметка панели.
 function renderUiPanel(): void {
   const container = document.querySelector<HTMLElement>('[data-panel="ui"]');
   if (!container) return;
   container.textContent = "";
-  const segFor = (
-    values: string[],
-    current: () => string,
-    onPick: (v: string) => void,
-  ): HTMLElement => {
-    const seg = el("span", "seg");
-    values.forEach((value) => {
-      const b = el("button", current() === value ? "on" : "", value);
-      b.type = "button";
-      b.setAttribute("aria-pressed", current() === value ? "true" : "false");
-      b.addEventListener("click", () => onPick(value));
-      seg.appendChild(b);
-    });
-    return seg;
-  };
-  const modeSeg = segFor(["dark", "light", "auto"], currentTheme, applyTheme);
-  const picker = buildThemePicker(currentUiTheme(), applyUiTheme);
-  // Both are browser-local preferences (localStorage), not config keys, so they
-  // get their own card before the generated sections.
-  const card = el("div", "settings-section");
-  const head = el("div", "sec-head");
-  head.appendChild(el("span", "sec-title", t("web.settings.sec.ui.theme")));
-  card.appendChild(head);
-  const desc = t("web.settings.sec.ui.theme.desc");
-  if (desc !== "web.settings.sec.ui.theme.desc") card.appendChild(el("div", "sec-desc", desc));
-  const body = el("div", "sec-body");
-  body.appendChild(row(t("web.settings.mode"), modeSeg));
-  body.appendChild(row(t("web.settings.theme"), picker));
-  card.appendChild(body);
-  container.appendChild(card);
+  container.appendChild(buildThemeCard(renderUiPanel, row));
   renderSections("ui", PANEL_SECTIONS.ui || []);
-}
-
-export function applyTheme(theme: string): void {
-  localStorage.setItem(THEME_KEY, theme);
-  const light =
-    theme === "light" ||
-    (theme === "auto" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: light)").matches);
-  document.body.classList.toggle("light", !!light);
-  renderUiPanel();
-}
-
-export function applyUiTheme(theme: string): void {
-  localStorage.setItem(UI_THEME_KEY, theme);
-  for (const id of UI_THEME_IDS) document.body.classList.toggle(id, id === theme);
-  applyThemeWeather(theme);
-  renderUiPanel();
-}
-
-if (window.matchMedia) {
-  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
-    if (currentTheme() === "auto") applyTheme("auto");
-  });
 }
 
 // --- Security panel ------------------------------------------------------

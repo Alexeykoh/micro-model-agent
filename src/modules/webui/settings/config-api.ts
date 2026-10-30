@@ -17,6 +17,15 @@ import { buildReasoningView } from "./reasoning-view";
 import type { ConfigStore, RuntimeState, HttpTransport, SseTransport, WorkspaceStore } from "../state";
 import { broadcast } from "../state";
 
+/**
+ * Ключи, которые можно писать во время хода. У них `effects: []` — reconfigure
+ * живого раннера не запускается, риска из аудита §7.9 нет. Сейчас это тема
+ * веб-UI: пользователь переключает оформление и во время ответа модели, и
+ * терять выбор (409) из-за этого нельзя (INV-T3 спеки
+ * `2026-10-30-webui-theme-persistence-design.md`).
+ */
+const BUSY_EXEMPT_KEYS: ReadonlySet<string> = new Set(["ui.theme", "ui.themeMode"]);
+
 /** Запись реестра для UI настроек. */
 export interface ConfigRegistryEntry {
   key: string;
@@ -116,13 +125,6 @@ export function handleConfigPost(
     sendJson(res, 503, { error: "config_unavailable" });
     return;
   }
-  // Во время хода reconfigure рискует живым раннером (resize/подмена
-  // провайдера) — отклоняем запись до `turn_end`. Чтение (`GET /api/config`)
-  // не затронуто.
-  if (s.busy) {
-    sendJson(res, 409, { ok: false, error: "busy" });
-    return;
-  }
   const config = s.config;
   readJsonBody(req, s.maxBodyBytes)
     .then(async (rec) => {
@@ -134,6 +136,13 @@ export function handleConfigPost(
       const rawValue = toRawValue(rec.value);
       if (!key || rawValue === null) {
         sendJson(res, 400, { ok: false, error: "invalid-value" });
+        return;
+      }
+      // Во время хода reconfigure рискует живым раннером (resize/подмена
+      // провайдера) — отклоняем запись до `turn_end`. Чтение (`GET /api/config`)
+      // не затронуто; тема — исключение (см. `BUSY_EXEMPT_KEYS`).
+      if (s.busy && !BUSY_EXEMPT_KEYS.has(key)) {
+        sendJson(res, 409, { ok: false, error: "busy" });
         return;
       }
 

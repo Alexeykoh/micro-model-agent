@@ -1774,8 +1774,10 @@ Open source on GitHub (`Alexeykoh/micro-model-agent`); distribution is **GitHub 
 
 ### Web Themes: mode × theme (0.3.0)
 
-`mma web` has two independent, browser-local visual axes (both `localStorage`, applied
-live from Settings → UI and before first paint by the inline script in `index.html`):
+`mma web` has two independent visual axes (both applied live from Settings → UI
+and before first paint by the inline script in `index.html`). They started as
+`localStorage`-only; since «Web Theme Persistence» below the server config is the
+source of truth and `localStorage` is just the pre-paint cache:
 
 - **Mode** — `dark | light | auto` (`mma-theme`), toggles `body.light` (`applyTheme`).
 - **Theme** — `flat | console` (`mma-ui-theme`), toggles `body.console` (`applyUiTheme`);
@@ -1806,6 +1808,34 @@ line (path / MoE / version / update) now renders.
 - **Install**: `POST /api/update` → `WebUiState.updaterInstall` (set in
   `web-command` from the updater) → `Updater.install()`; `undefined` when no
   updater. Shared fact for the chrome: `assets/js/update-state.ts` (leaf).
+
+### Web Theme Persistence (unreleased, ветка `feat/webui-theme-persistence`)
+
+Тема слетала после каждого перезапуска `mma web`/`web:dev`: `localStorage`
+привязан к origin, а сервер по умолчанию слушает порт 0 (`web-command.ts` →
+`server.ts`), поэтому origin менялся вместе с портом. Спека:
+`docs/specs/2026-10-30-webui-theme-persistence-design.md` (INV-T1…T5).
+
+- **Источник правды — конфиг.** `ui.themeMode` (`dark | light | auto`) и
+  `ui.theme` (10 скинов) добавлены в `registry-extra.ts` с `effects: []`,
+  дефолты `auto`/`console`. Запись идёт обычным `POST /api/config`
+  (валидация, атомарный save, broadcast), без отдельного `webui-prefs.json`.
+- **Кэш — только для первого кадра.** Inline-скрипт `index.html` по-прежнему
+  читает `localStorage`, но `loadConfig()` применяет конфиг через
+  `syncThemeFromConfig()` и переписывает кэш; на новом origin возможна
+  короткая вспышка дефолта (осознанно, INV-T2).
+- **Ход не блокирует переключение.** `ui.theme*` — исключение из гейта
+  занятости (`BUSY_EXEMPT_KEYS` в `settings/config-api.ts`): у ключей нет
+  reconfigure, а менять тему во время ответа модели — нормальный сценарий.
+- **Миграция.** Если сервер на дефолте, а кэш отличается, значение один раз
+  доливается в конфиг после первого `loadConfig()` (`migrateThemeCache`);
+  иначе апгрейд вернул бы всем `console`/`auto`.
+- **Файлы.** Чистые правила — `settings/theme-state.ts`, применение —
+  `settings/theme.ts`, карточка и POST — `settings/theme-panel.ts`
+  (`panels.ts` похудел с 880 до 814 строк, потолок в `.arch-allowlist.json`
+  снижен). Гейты: `tests/webui-theme-state.test.ts`,
+  `tests/webui-themes.test.ts` (enum реестра = `UI_THEMES`),
+  `tests/webui-busy-guard.test.ts`, `tests/config-registry-extra.test.ts`.
 
 ### Current Version: 0.3.2 (beta)
 

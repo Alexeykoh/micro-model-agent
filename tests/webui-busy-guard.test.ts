@@ -36,6 +36,23 @@ describe("веб-настройки: гейт занятости", () => {
     });
   });
 
+  // INV-T3: тема — UI-настройка без effects, её меняют и во время ответа.
+  it("allows theme writes while a turn is running", async () => {
+    const s = createWebUiState();
+    s.config = structuredClone(DEFAULTS) as AppConfig;
+    s.busy = true;
+    await withServer(s, async (base) => {
+      const skin = await postJson(base, "/api/config", { key: "ui.theme", value: "paper" });
+      expect(skin.status).toBe(200);
+      expect(skin.json.ok).toBe(true);
+      expect(s.config?.ui.theme).toBe("paper");
+
+      const mode = await postJson(base, "/api/config", { key: "ui.themeMode", value: "light" });
+      expect(mode.status).toBe(200);
+      expect(s.config?.ui.themeMode).toBe("light");
+    });
+  });
+
   it("allows provider writes when idle", async () => {
     const s = createWebUiState();
     s.config = structuredClone(DEFAULTS) as AppConfig;

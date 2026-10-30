@@ -13,6 +13,7 @@ import { setIndicator } from "../dialog.js";
 import { saveErrorText } from "./save-error.js";
 import { setLayout } from "../rail.js";
 import { reasoningStatus } from "./reasoning-status.js";
+import { syncThemeFromConfig } from "./theme.js";
 
 function setSelButton(btn: HTMLElement | null, label: string, value: string): void {
   if (!btn) return;
@@ -399,6 +400,8 @@ export async function loadConfig(): Promise<void> {
   settings.config = r.data.config || {};
   settings.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
   settings.webToken = typeof r.data.webToken === "string" ? r.data.webToken : null;
+  // Тема — серверная настройка: конфиг важнее кэша и локального выбора.
+  syncThemeFromConfig();
   applyFontSize();
   renderSelectors();
   writeHooks.renderSettings?.();
@@ -442,9 +445,10 @@ export function setStaleBar(stale: unknown, force?: boolean): boolean | null {
   return lastStale;
 }
 
-// Web chat font size (`ui.fontSize`, server config — unlike the theme, which
-// is a browser-local preference). Applied as `body[data-font]` so the switch
-// is instant and survives re-renders; unknown values fall back to the default.
+// Web chat font size (`ui.fontSize`). Like the theme (`ui.theme`, see
+// `theme.ts`), it is a server config key. Applied as `body[data-font]` so the
+// switch is instant and survives re-renders; unknown values fall back to the
+// default.
 export function applyFontSize(value?: string): void {
   const v = value || (settings.config && settings.config.ui && settings.config.ui.fontSize) || "comfortable";
   const known = v === "compact" || v === "large" ? v : "comfortable";

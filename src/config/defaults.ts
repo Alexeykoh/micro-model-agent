@@ -192,6 +192,8 @@ export const DEFAULTS: AppConfig = {
     verbose: false,
     verbosity: "quiet",
     fontSize: "comfortable",
+    theme: "console",
+    themeMode: "auto",
   },
   mcpServers: {},
   security: DEFAULT_SECURITY_CONFIG,

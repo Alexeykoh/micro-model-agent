@@ -8,6 +8,7 @@
 //   form      — tiny form primitives (inputs/selects/checkboxes)
 // `app.js` imports the public surface from here.
 export * from "./settings/write.js";
+export * from "./settings/theme.js";
 export * from "./settings/panels.js";
 export * from "./settings/providers.js";
 export * from "./settings/modal.js";

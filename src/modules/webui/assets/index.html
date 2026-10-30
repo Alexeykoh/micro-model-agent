@@ -17,6 +17,9 @@
 
 <script>
   // Apply the stored theme before the boot splash paints (no dark flash on light).
+  // This is only a CACHE mirror of the server config (`ui.theme`/`ui.themeMode`):
+  // the authoritative value arrives with `GET /api/config` and is applied by
+  // `app.js`, so a stale/empty cache can never override the server.
   (function () {
     try {
       var theme = localStorage.getItem("mma-theme") || "auto";

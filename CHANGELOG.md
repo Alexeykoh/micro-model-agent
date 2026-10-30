@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Тема веб-UI теперь хранится в конфиге и переживает перезапуск.** Раньше
+  режим (`dark | light | auto`) и скин жили только в `localStorage`, а
+  `mma web` по умолчанию слушает случайный порт — значит, менялся origin, и
+  тема слетала после каждого рестарта. Теперь это серверные ключи
+  `ui.themeMode` и `ui.theme` (реестр, i18n, атомарный `saveConfig`), а
+  `localStorage` остался кэшем для отрисовки до первого `GET /api/config`.
+  Переключение темы не блокируется идущим ходом (у ключей нет effects), а
+  старый браузерный выбор один раз доливается в конфиг, если сервер ещё на
+  дефолте. Тесты: `tests/webui-theme-state.test.ts`,
+  `tests/webui-busy-guard.test.ts`, `tests/webui-themes.test.ts`,
+  `tests/config-registry-extra.test.ts`. Спека:
+  `docs/specs/2026-10-30-webui-theme-persistence-design.md`.
+
 ### Fixed
 
 - **MCP-серверы на Windows больше не теряются молча.** Голое имя (`npx`,

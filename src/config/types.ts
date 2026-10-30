@@ -1,6 +1,7 @@
 // Типы конфига AppConfig: провайдеры, бюджет, критик, безопасность, UI.
 import type { ContextBudget } from "./types-budget";
 import type { ServiceConfig } from "./types-service";
+import type { ThemeMode, UiThemeId } from "./theme-ids";
 
 /** Как провайдер предоставляет кеширование промпта. */
 export type CacheMechanism = "auto" | "explicit" | "local" | "none";
@@ -276,6 +277,16 @@ export interface UiConfig {
    * `compact` = 13px, `comfortable` = 15px (дефолт), `large` = 17px.
    */
   fontSize?: "compact" | "comfortable" | "large";
+  /**
+   * Скин веб-UI (`mma web`). Хранится в конфиге, а не только в браузере: тема
+   * переживает перезапуск сервера, хотя у `localStorage` меняется origin
+   * (порт по умолчанию случайный). В браузере значение дублируется кэшем —
+   * только для отрисовки до первого `GET /api/config`. Каталог id и подписи —
+   * во фронтенде (`assets/js/settings/themes.ts`).
+   */
+  theme?: UiThemeId;
+  /** Режим оформления веб-UI: `dark` | `light` | системный `auto`. */
+  themeMode?: ThemeMode;
 }
 
 export interface BashSecurityConfig {
