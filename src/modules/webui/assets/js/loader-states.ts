@@ -38,34 +38,76 @@ export const FACE_CLASS: Record<FaceState, string> = {
   // Гейт забраковал уже показанный черновик → модель перечитывает и
   // переписывает. Это штатная перепроверка, а не сбой: recon-цвет, взгляд вбок.
   recheck: "c-recon st-recheck squint",
+  verify: "c-recon st-verify squint",
 };
 
 // Tool name → loader state (matches STYLE.md tool categories). Every core
 // tool has a state, so the face never falls back to a generic "run" for a
 // known behavioural category (ask, research, memory, introspection).
 const TOOL_STATE: Record<string, FaceState> = {
-  read_file: "read", list_dir: "read", file_info: "read",
-  load_skill: "read", session_info: "read",
-  grep: "find", glob: "find", project_map: "find", chunk_query: "find",
-  history: "find", recall: "find", search_history: "find",
-  web_search: "web", web_fetch: "web", download_file: "web", web_browse: "web",
-  write_file: "create", create_dir: "create",
-  define_capability: "create", remember: "create",
-  edit_file: "edit", move_file: "edit", delete_file: "edit", attach_image: "edit",
-  bash: "run", pipeline_run: "run", process_wait: "run", process_kill: "run",
-  browser: "run", subagent: "run", mcp_call: "run", enable_tools: "run",
-  plan: "plan", todo: "plan", verify: "plan",
+  read_file: "read",
+  list_dir: "read",
+  file_info: "read",
+  load_skill: "read",
+  session_info: "read",
+  grep: "find",
+  glob: "find",
+  project_map: "find",
+  chunk_query: "find",
+  history: "find",
+  recall: "find",
+  search_history: "find",
+  web_search: "web",
+  web_fetch: "web",
+  download_file: "web",
+  web_browse: "web",
+  write_file: "create",
+  create_dir: "create",
+  define_capability: "create",
+  remember: "create",
+  edit_file: "edit",
+  move_file: "edit",
+  delete_file: "edit",
+  attach_image: "edit",
+  bash: "run",
+  pipeline_run: "run",
+  process_wait: "run",
+  process_kill: "run",
+  browser: "run",
+  subagent: "run",
+  mcp_call: "run",
+  enable_tools: "run",
+  plan: "plan",
+  todo: "plan",
+  verify: "plan",
   lsp_check: "check",
   set_thinking: "think",
-  approve: "ask", question: "ask",
+  approve: "ask",
+  question: "ask",
   meet_done: "done",
 };
 
 export interface LoaderSignal {
   type:
-    | "phase" | "tool_start" | "tool_end" | "text" | "question" | "turn_end" | "error"
-    | "retract" | "index" | "setup_done" | "update"
-    | "usage" | "state" | "config" | "files" | "sessions" | "plugins" | "log";
+    | "phase"
+    | "tool_start"
+    | "tool_end"
+    | "text"
+    | "question"
+    | "turn_end"
+    | "error"
+    | "retract"
+    | "index"
+    | "setup_done"
+    | "update"
+    | "verify"
+    | "usage"
+    | "state"
+    | "config"
+    | "files"
+    | "sessions"
+    | "plugins"
+    | "log";
   name?: string;
   phase?: string;
   success?: boolean;
@@ -95,13 +137,22 @@ export function toolState(name: string): FaceState {
 // Pure mapping used by both the feed and the rail.
 export function loaderStateFor(s: LoaderSignal): FaceState {
   switch (s.type) {
-    case "turn_end": return s.success === false ? "error" : "done";
-    case "error": return "error";
+    case "turn_end":
+      return s.success === false ? "error" : "done";
+    case "error":
+      return "error";
     // A retracted draft is a rejected claim, not a broken harness: the face
     // shows a calm "re-read and rewrite" mood, never the error face.
-    case "retract": return "recheck";
-    case "question": return "ask";
-    case "text": return "type";
+    case "retract":
+      return "recheck";
+    // Гейт (критик/аудит) проверяет уже показанный ответ: своё спокойное
+    // состояние, а не `think` (модель не думает) и не `error` (это штатно).
+    case "verify":
+      return "verify";
+    case "question":
+      return "ask";
+    case "text":
+      return "type";
     case "tool_start":
     case "tool_end": {
       const name = s.name || "";
@@ -117,17 +168,26 @@ export function loaderStateFor(s: LoaderSignal): FaceState {
       return toolState(name);
     }
     // Re-indexing is a workspace-wide search.
-    case "index": return "find";
-    case "setup_done": return "done";
+    case "index":
+      return "find";
+    case "setup_done":
+      return "done";
     // Unlike the broadcasts below, an update is news for the user — the mascot
     // celebrates it. The persistent part lives in the footer chip (snapshot).
-    case "update": return "update";
+    case "update":
+      return "update";
     // Background broadcasts (usage/state/config/files/sessions/plugins/log)
     // carry no agent activity: the face must NOT move on them, they map to
     // idle and callers are expected to drop the event instead of animating.
-    case "usage": case "state": case "config": case "files":
-    case "sessions": case "plugins": case "log":
+    case "usage":
+    case "state":
+    case "config":
+    case "files":
+    case "sessions":
+    case "plugins":
+    case "log":
       return "idle";
-    default: return "think";
+    default:
+      return "think";
   }
 }

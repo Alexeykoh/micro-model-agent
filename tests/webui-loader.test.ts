@@ -38,6 +38,9 @@ describe("loaderStateFor", () => {
     expect(loaderStateFor({ type: "turn_end", success: false })).toBe("error");
     expect(loaderStateFor({ type: "error" })).toBe("error");
     expect(loaderStateFor({ type: "retract" })).toBe("recheck");
+    // Пока гейт проверяет готовый ответ — своё состояние, не think/error.
+    expect(loaderStateFor({ type: "verify" })).toBe("verify");
+    expect(loaderStateFor({ type: "verify" })).not.toBe("error");
     expect(loaderStateFor({ type: "question" })).toBe("ask");
     expect(loaderStateFor({ type: "text" })).toBe("type");
     expect(loaderStateFor({ type: "tool_start", name: "edit_file" })).toBe("edit");

@@ -236,8 +236,8 @@ async function send(): Promise<void> {
     banner.appendChild(
       document.createTextNode(
         " · " +
-          (session.host.provider ||
-            (settings.config && settings.config.provider && settings.config.provider.active) ||
+          ((settings.config && settings.config.provider && settings.config.provider.active) ||
+            session.host.provider ||
             "—") +
           " · " +
           contextLabel() +

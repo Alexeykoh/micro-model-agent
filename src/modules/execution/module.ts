@@ -140,6 +140,7 @@ export class ExecutionModule implements AgentModule {
     mutationsWithoutPlan: 0,
     planNudgeSent: false,
     typecheckFailures: new Map<string, string>(),
+    mutatedThisTurn: false,
   };
 
   /**
@@ -434,10 +435,6 @@ export class ExecutionModule implements AgentModule {
   }
 
   /**
-   * Финальный аудит перед правом агента заявить "готово". Null без активного
-   * плана; иначе — готовность плана + существование артефактов.
-   */
-  /**
    * Evidence-based автозакрытие пендинг шагов с deliverables на диске. Мелкие
    * модели рутинно доделывают работу, но забывают бухгалтерию `plan update`
    * (было в ses_mthn3c2a: 2/5 шагов done при всех артефактах на месте — audit-gate
@@ -583,6 +580,7 @@ export class ExecutionModule implements AgentModule {
       auditor: this.auditor,
       store: this.store,
       auditSkipsRemaining: this._auditSkipsRemaining,
+      mutatedThisTurn: this.state.mutatedThisTurn,
       setAuditSkipsRemaining: (n) => {
         this._auditSkipsRemaining = n;
       },

@@ -28,6 +28,21 @@ export const CRITIC_GATE_BUDGET_MS = 45_000;
 export const CRITIC_SLOW_NOTICE_MS = 2_000;
 /** Через сколько финальный аудит сообщает о себе статус-строкой. */
 export const AUDIT_SLOW_NOTICE_MS = 3_000;
+/**
+ * Бюджет полного тест-прогона финального аудита.
+ *
+ * Не «результат», а потолок ожидания: по истечении прогон помечается
+ * `inconclusive` (не «прошёл»), завершение на нём не блокируется, но факт
+ * виден в `session.jsonl` (спека `2026-10-30-audit-test-run-budget-design`).
+ * 90 с сохранены из прежнего инлайна: меняется не политика ожидания, а
+ * честность вердикта и отсутствие прогона, когда сломать тесты нечем.
+ */
+export const AUDIT_TEST_RUN_BUDGET_MS = 90_000;
+/**
+ * Бюджет `tsc --noEmit` финального аудита (см.
+ * DEBT(audit-typecheck-inconclusive) в `audit-runners.ts`).
+ */
+export const AUDIT_TYPECHECK_BUDGET_MS = 90_000;
 /** TTL кэша каталога models.dev: перечитывать после 24 часов (models-dev). */
 export const MODELS_DEV_CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 /** Дефолтный таймаут запроса каталога models.dev (models-dev, был инлайн `?? 10000`). */

@@ -21,6 +21,8 @@ export interface FinalAuditResult {
   pendingSteps: string[];
   missingFiles: string[];
   summary: string;
+  /** Пометка тестового прогона (скип/inconclusive/кэш) для лога, либо null. */
+  testNote?: string | null;
 }
 
 /** Мутабельный вид `ExecutionModule`, которым владеет финальный аудит. */
@@ -31,6 +33,8 @@ export interface FinalAuditHost {
   auditor: Auditor;
   store: PlanStore;
   auditSkipsRemaining: number;
+  /** За текущий ход были успешные файловые мутации (бюджет тест-прогона). */
+  mutatedThisTurn: boolean;
   setAuditSkipsRemaining(n: number): void;
   flushSessionPlan(): void;
 }
@@ -98,7 +102,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
     if (!d.completedPlan) return null;
     const plan = d.completedPlan;
     const autoClosed = autoCloseEvidenceSteps(d, plan);
-    const audit = await d.auditor.audit(plan);
+    const audit = await d.auditor.audit(plan, { mutated: d.mutatedThisTurn });
     const pendingSteps = plan.steps.flatMap((s) =>
       isUnconfirmed(s) ? [`${s.id}. ${s.description}`] : [],
     );
@@ -114,6 +118,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
       pendingSteps,
       missingFiles: audit.missingFiles,
       summary: audit.summary,
+      testNote: audit.testNote,
     };
   }
   if (d.auditSkipsRemaining > 0) {
@@ -126,7 +131,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
     d.store.saveActive(plan);
     d.flushSessionPlan();
   }
-  const audit = await d.auditor.audit(plan);
+  const audit = await d.auditor.audit(plan, { mutated: d.mutatedThisTurn });
   const pendingSteps = plan.steps.flatMap((s) =>
     isUnconfirmed(s) ? [`${s.id}. ${s.description}`] : [],
   );
@@ -138,5 +143,6 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
     pendingSteps,
     missingFiles: audit.missingFiles,
     summary: audit.summary,
+    testNote: audit.testNote,
   };
 }

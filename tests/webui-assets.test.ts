@@ -201,8 +201,10 @@ describe("webui assets", () => {
 
   it("listens for the dedicated reasoning event", () => {
     const a = loadAssets();
-    expect(js(a)).toContain('["reasoning", (d) => onReasoning(d.chunk || "", d.sessionId, {');
-    expect(js(a)).toContain('["meta", (d) => onMeta(d.chunk || "", d.sessionId, d.kind)]');
+    expect(js(a)).toMatch(/\[\s*"reasoning"\s*,\s*\(d\)\s*=>\s*onReasoning\(/);
+    expect(js(a)).toMatch(
+      /\[\s*"meta"\s*,\s*\(d\)\s*=>\s*onMeta\(d\.chunk \|\| "", d\.sessionId, d\.kind\)\s*\]/,
+    );
     expect(js(a)).not.toContain("finishMeta");
   });
 
@@ -211,6 +213,13 @@ describe("webui assets", () => {
     expect(js(a)).toContain("metaln");
     expect(a.css).toContain(".metaln");
     expect(a.css).toContain(".metaln.warn");
+  });
+
+  it("switches the mascot to its own verify state while a gate checks", () => {
+    const a = loadAssets();
+    expect(js(a)).toContain('d?.kind === "progress"');
+    expect(js(a)).toContain('loaderStateFor({ type: "verify" })');
+    expect(a.css).toContain(".mdl.st-verify");
   });
 
   it("quiet-gates tool-body meta in the feed, keeping status visible", () => {

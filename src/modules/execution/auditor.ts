@@ -6,18 +6,23 @@ import { t } from "../../i18n/index";
 import type { Plan } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { toForwardSlash } from "../../tools/path-utils";
-import {
-  SKIP_DIRS,
-  findTestFile,
-  findTypecheckRoot,
-  runTests,
-  runTypecheck,
-} from "./audit-runners";
+import { SKIP_DIRS, findTypecheckRoot, runTypecheck } from "./audit-runners";
 import type { TestRunCheck } from "./audit-runners";
+import { resolveTestRun, testRunNote } from "./audit-test-run";
 
 export { parseTypecheckErrors } from "./audit-runners";
 
 const MASS_EDIT_THRESHOLD = 10;
+
+/** Опции аудита, которые знает вызывающий (контракт — спека бюджета тестов). */
+export interface AuditOptions {
+  /**
+   * Были ли за ход успешные файловые мутации. `false` — полный тест-прогон
+   * скипается (`skipped: no file mutations this turn`); `undefined` — неизвестно,
+   * проверяем (обратная совместимость).
+   */
+  mutated?: boolean;
+}
 
 /** Кап глубины обхода поддерева для резолва файлов. */
 const RESOLVE_MAX_DEPTH = 8;
@@ -91,9 +96,7 @@ export function findExistingFile(baseDir: string, filePath: string): string | nu
         walk(full, depth + 1);
       } else if (
         e.name.toLowerCase() === name ||
-        toForwardSlash(full)
-          .toLowerCase()
-          .endsWith(`/${suffix}`)
+        toForwardSlash(full).toLowerCase().endsWith(`/${suffix}`)
       ) {
         found = full;
         return;
@@ -116,6 +119,8 @@ export interface AuditResult {
   summary: string;
   massEditWarning: string | null;
   testRun: TestRunCheck | null;
+  /** Пометка прогона для лога/сводки: скип, inconclusive, кэш (иначе null). */
+  testNote: string | null;
   /** Первая строка `error TS…` из реального `tsc --noEmit`, или null. */
   typecheckError: string | null;
 }
@@ -128,8 +133,11 @@ export class Auditor {
     this.baseDir = baseDir;
   }
 
-  /** Аудитит план: файлы done-шагов, реальный прогон тестов, typecheck, сводка. */
-  async audit(plan: Plan): Promise<AuditResult> {
+  /**
+   * Аудитит план: файлы done-шагов, реальный прогон тестов, typecheck, сводка.
+   * @param plan план задачи; @param opts мутации хода (см. `AuditOptions`).
+   */
+  async audit(plan: Plan, opts: AuditOptions = {}): Promise<AuditResult> {
     // Существования требуем только с файлов шагов, которые модель заявила
     // готовыми. Скипнутые/пендинг шаги в "missing files" вклада не дают
     // (было: проза скипнутого шага с "type.ts" вечно реджектила готовую
@@ -178,22 +186,13 @@ export class Auditor {
       }
     }
 
-    // Реальный прогон тестов: слову модели (и exit-кодам) не верим — реально
-    // исполняем тесты и смотрим сводку раннера. Ловит финальные "all 7
-    // passing ✅", прячущие 3 упавших.
-    //
-    // Решение EVIDENCE-based (тестовый файл есть на диске), не классификация
-    // прозы шагов по ключевым словам: правило #10 запрещает выводить требования
-    // из слов "test"/"тест" (план с тестами, но без такого слова, скипал аудит;
-    // постороннее "testing" форсило 90s-прогон).
-    let testRun: TestRunCheck | null = null;
-    if (findTestFile(this.baseDir)) {
-      try {
-        testRun = await runTests(this.baseDir);
-      } catch {
-        testRun = null; // сбой инфры — на нём не блокируемся
-      }
-    }
+    // Реальный прогон тестов: слову модели (и exit-кодам) не верим — смотрим
+    // сводку раннера. Решение EVIDENCE-based (тестовый файл на диске), не по
+    // словам шага (правило #10). Бюджет (спека 2026-10-30): без файловых
+    // мутаций за ход прогон не нужен, неизменное дерево — из кэша, таймаут —
+    // inconclusive (не «прошло»).
+    const testRun = await resolveTestRun(this.baseDir, { mutated: opts.mutated });
+    const testNote = testRunNote(testRun);
 
     // Реальный typecheck: аудит ловит "сборка сломана", даже если все файлы на
     // месте (было: удаление .js оставило .tsx-исходники с 11 tsc-ошибками, а
@@ -232,7 +231,9 @@ export class Auditor {
       });
     }
 
-    const testsFailing = testRun !== null && !testRun.passed;
+    // Блокирует только реальный фейл: `inconclusive` и `skipped` — не фейл,
+    // завершение на них по-прежнему не блокируется (но видно в `testNote`).
+    const testsFailing = testRun !== null && testRun.status === "failed";
     const typecheckFailing = typecheckError !== null;
     const passed =
       missingFiles.length === 0 && leftoverFiles.length === 0 && !testsFailing && !typecheckFailing;
@@ -292,6 +293,7 @@ export class Auditor {
       summary,
       massEditWarning,
       testRun,
+      testNote,
       typecheckError,
     };
   }

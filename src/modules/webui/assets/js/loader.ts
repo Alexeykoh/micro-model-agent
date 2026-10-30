@@ -11,13 +11,33 @@ export { loaderStateFor, lspOutputSignal, toolState } from "./loader-states.js";
 export type { LoaderSignal } from "./loader-states.js";
 
 export type FaceState =
-  | "idle" | "think" | "read" | "find" | "web" | "edit" | "type" | "create"
-  | "run" | "tests" | "compact" | "plan" | "ask" | "done" | "error" | "stop"
-  | "queued" | "boot" | "load" | "update"
+  | "idle"
+  | "think"
+  | "read"
+  | "find"
+  | "web"
+  | "edit"
+  | "type"
+  | "create"
+  | "run"
+  | "tests"
+  | "compact"
+  | "plan"
+  | "ask"
+  | "done"
+  | "error"
+  | "stop"
+  | "queued"
+  | "boot"
+  | "load"
+  | "update"
   // LSP: идёт статическая проверка / сервер вернул ошибки.
-  | "check" | "warn"
+  | "check"
+  | "warn"
   // Гейт забраковал черновик: идёт штатная перепроверка/переответ.
-  | "recheck";
+  // Долгая проверка результата гейтом: спокойное «сверяю», не think/error.
+  | "recheck"
+  | "verify";
 
 export type FaceSize = "sm" | "lg" | "xs";
 
@@ -55,8 +75,17 @@ export function createFace(state: FaceState = "think", size: FaceSize | null = n
   const fx = el("span", "fx");
   for (let i = 0; i < 6; i++) fx.appendChild(el("i"));
   face.append(
-    eyes, orb, keys, el("span", "grow"), el("span", "fly"), fx,
-    el("span", "sweep"), dust, el("span", "q", "?"), el("span", "spark", "✦"), el("span", "star"),
+    eyes,
+    orb,
+    keys,
+    el("span", "grow"),
+    el("span", "fly"),
+    fx,
+    el("span", "sweep"),
+    dust,
+    el("span", "q", "?"),
+    el("span", "spark", "✦"),
+    el("span", "star"),
     el("span", "mdl-tip"),
   );
   setFaceState(face, state);

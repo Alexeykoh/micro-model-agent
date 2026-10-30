@@ -78,7 +78,7 @@ describe("critic latency budget (A15)", () => {
     expect(err?.data.cause).toContain("turn_budget");
     // Лента знает, что проверки не было.
     expect(d.metas).toHaveLength(1);
-    expect(d.metas[0].kind).toBe("status");
+    expect(d.metas[0].kind).toBe("progress");
   });
 
   it("does not call the verifier again on an unchanged pack with nothing new to say", async () => {

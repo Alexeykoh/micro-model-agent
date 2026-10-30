@@ -17,6 +17,7 @@ import { isWarn, phaseLabel, rowLabel, gateBreakdown } from "./trace-labels.js";
 import { renderDetail } from "./trace-detail.js";
 import { sidebarSubagentsSessionChanged } from "./subagents.js";
 import { resetTraceScroll, scheduleTrace, traceAtFreshEdge, traceFollow } from "./trace-scroll.js";
+import { appendLogEntry as appendLogRow } from "./trace-log.js";
 
 export { renderDetail } from "./trace-detail.js";
 
@@ -428,94 +429,7 @@ export async function sidebarPullLog(): Promise<void> {
 }
 
 export function appendLogEntry(e: Dict): void {
-  if (!e || typeof e.type !== "string") return;
-  switch (e.type) {
-    case "gate_timing": {
-      // A15: сколько ход простоял в гейтах. Шум не плодим — только заметные
-      // простои; строка связывает «ответ уже виден» с пост-обработкой.
-      const ms = typeof e.duration === "number" ? e.duration : 0;
-      if (ms < TRACE_GATE_NOTICE_MS) break;
-      const gates = e.gates && typeof e.gates === "object" ? e.gates : {};
-      pushRow(
-        append({
-          kind: "gate",
-          duration: ms,
-          gates,
-          iteration: e.iteration,
-          text: gateBreakdown(ms, gates),
-        }),
-      );
-      break;
-    }
-    case "critic_check":
-      pushRow(
-        append({ kind: "critic", status: "check", text: e.content || "", iteration: e.iteration }),
-      );
-      break;
-    case "critic_verdict":
-      pushRow(
-        append({
-          kind: "critic",
-          status: e.status || "",
-          text: e.content || "",
-          iteration: e.iteration,
-        }),
-      );
-      break;
-    case "critic_escalation":
-      pushRow(
-        append({
-          kind: "critic",
-          status: "escalation",
-          text: e.content || "",
-          iteration: e.iteration,
-        }),
-      );
-      break;
-    case "critic_error":
-      pushRow(
-        append({
-          kind: "critic",
-          status: "error",
-          text: e.content || e.error || "",
-          iteration: e.iteration,
-        }),
-      );
-      break;
-    case "compaction":
-      pushRow(append({ kind: "compaction", text: e.content || "", iteration: e.iteration }));
-      break;
-    case "context_probe":
-      pushRow(append({ kind: "probe", text: e.content || "" }));
-      break;
-    case "llm_usage": {
-      const toks =
-        typeof e.totalTokens === "number"
-          ? e.totalTokens
-          : (e.promptTokens || 0) + (e.completionTokens || 0);
-      const who = [e.model || e.provider, toks ? toks + " tok" : ""].filter(Boolean).join(" · ");
-      pushRow(append({ kind: "usage", text: who, iteration: e.iteration }));
-      break;
-    }
-    case "audit":
-      pushRow(append({ kind: "audit", text: e.content || "", iteration: e.iteration }));
-      break;
-    case "claim_retry":
-      pushRow(
-        append({
-          kind: "claim",
-          subkind: e.kind || "",
-          text: e.content || "",
-          iteration: e.iteration,
-        }),
-      );
-      break;
-    case "output":
-      pushRow(append({ kind: "output", text: e.content || "", iteration: e.iteration }));
-      break;
-    default:
-      break;
-  }
+  appendLogRow(e, { append, pushRow });
 }
 
 export function collapseDetail(): void {

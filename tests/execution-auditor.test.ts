@@ -512,10 +512,12 @@ describe("bad", () => { it("fails", () => { expect(1).toBe(2); }); });\n`,
     const spy = vi.spyOn(auditRunners, "runTests").mockResolvedValue({
       checked: true,
       passed: false,
+      status: "failed",
       failed: -1,
       passedCount: 0,
       detail: "unknown",
       command: "bun test",
+      durationMs: 5,
     });
 
     const plan = PlanCreator.createPlan(

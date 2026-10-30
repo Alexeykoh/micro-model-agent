@@ -39,6 +39,15 @@ export function auditRetractInfo(summary: string, iteration: number): RetractInf
 }
 
 /** Единственная точка эмита `retract`: сырой текст метки + структура. */
-export function announceRetract(onMeta: OnMeta | undefined, info: RetractInfo): void {
+export function announceRetract(
+  onMeta: OnMeta | undefined,
+  info: RetractInfo,
+  slog?: { logRetract(info: RetractInfo): void },
+): void {
+  // Live-событие не переживает перезагрузку — пишем его в журнал сессии,
+  // чтобы история показывала тот же блок, а не осиротевший черновик.
+  // Тест-двойники логгера могут не иметь метода: отсутствие записи не должно
+  // ронять сам отзыв.
+  if (typeof slog?.logRetract === "function") slog.logRetract(info);
   onMeta?.(t("ui.draft_retracted"), "retract", info);
 }

@@ -85,6 +85,8 @@ export interface ExecutionPluginState {
    * Done-gate плана реджектит "done", пока файлы шага здесь.
    */
   typecheckFailures: Map<string, string>;
+  /** За текущий ход был успешный вызов, способный изменить файлы дерева. */
+  mutatedThisTurn: boolean;
 }
 
 /** Зависимости плагина: детектор, трекер, стор, гейты (владеет всем модуль). */
@@ -371,6 +373,9 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
       }
     },
     onAfterTool: (ctx: any, call: any, result: any) => {
+      // Файловая мутация хода → финальному аудиту есть что ломать тестами.
+      // bash/browser/mcp считаются консервативно: успех мог писать на диск.
+      if (result.success && FS_MUTATING_TOOLS.has(call.name)) deps.state.mutatedThisTurn = true;
       // Запоминаем каждый вызов bash (успех или нет): детекция рассуждает,
       // напр., о повторных прогонах с пустым выводом.
       if (call.name === "bash") {
@@ -547,6 +552,10 @@ export function createExecutionPlugin(deps: ExecutionPluginDeps): AgentPlugin {
     },
     // Граница хода: завершённый авто-advance'ом план архивируется здесь, а не
     // посреди работы (модель не видит «нет активного плана» в своём же ходу).
-    onTurnEnd: () => deps.archiveCompletedPlan(),
+    // Флаг мутаций сбрасывается здесь же: бюджет финального аудита — на ход.
+    onTurnEnd: () => {
+      deps.archiveCompletedPlan();
+      deps.state.mutatedThisTurn = false;
+    },
   };
 }

@@ -6,7 +6,7 @@
  * `end` (успех, ошибка, прерывание). Вынесено из `subagent-run.ts` (правило 6).
  */
 import type { ToolContext } from "./types";
-import type { AgentResult, RetractInfo, ToolEvent } from "../core/types";
+import type { AgentResult, MetaKind, RetractInfo, ToolEvent } from "../core/types";
 import {
   emitSubagentEvent,
   newSubagentRunId,
@@ -20,7 +20,7 @@ import { finishSubagentRun, registerSubagentRun } from "./subagent-registry";
 /** Колбэки, которые получает дочерний `Agent.run`. */
 export interface SubagentCallbacks {
   onChunk: (chunk: string) => void;
-  onMeta: (meta: string, kind?: "tool" | "status" | "retract", info?: RetractInfo) => void;
+  onMeta: (meta: string, kind?: MetaKind, info?: RetractInfo) => void;
   onTool: (ev: ToolEvent) => void;
   onPhase: (phase: "thinking" | "done") => void;
   onReasoning: (reasoning: string) => void;

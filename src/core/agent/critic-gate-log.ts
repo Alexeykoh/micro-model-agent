@@ -83,7 +83,7 @@ export function logDegraded(
   // Лента обязана знать, что верификации НЕ было: молчаливый pass неотличим
   // от «проверил и сказал ок». Техническая причина остаётся выше — в логе
   // сессии и app-логе; в чат идёт класс причины (STYLE, одна строка).
-  deps.onMeta?.(`\n${criticDegradeLine(reason)}\n`, "status");
+  deps.onMeta?.(`\n${criticDegradeLine(reason)}\n`, "progress");
 }
 
 /** Не-ok вердикт: всегда с длительностью — по ней видно цену проверки. */

@@ -423,7 +423,7 @@ export function renderModelPanel(): void {
     const n = providerName(e);
     return n && n !== "—";
   });
-  const activeName = (settings.providers && settings.providers.active) || cfg.provider?.active || cfg.provider?.type || "—";
+  const activeName = (cfg.provider && (cfg.provider.active || cfg.provider.type)) || (settings.providers && settings.providers.active) || "—";
   const provList = el("div", "provider-list");
   entries.forEach((entry) => {
     const name = providerName(entry);

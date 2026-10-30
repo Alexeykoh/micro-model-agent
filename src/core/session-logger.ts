@@ -2,7 +2,7 @@
 import type { SessionManager } from "../modules/session/manager";
 import type { SessionLogEntry } from "../modules/session/store";
 import { moduleOf, type Diagnostic, type DiagnosticEvent } from "../output";
-import type { ToolCall } from "./types";
+import type { ToolCall, RetractInfo } from "./types";
 import type { PrefixDelta } from "./agent/prefix-monitor";
 import type { CacheUsage } from "../llm/cache-usage";
 import type { Logger } from "../logger/app-logger";
@@ -10,6 +10,7 @@ import { setAuditSessionDir } from "../modules/security/audit-log";
 import { sanitizeLogMessageTargeted } from "../modules/security/data-sanitizer";
 import { redactContextSecrets } from "./agent/context-log";
 import { toolChannelEvent } from "./session-log-events";
+import { gateTimingEntry, retractEntry, sessionStartEntry } from "./session-log-entries";
 import {
   decodeDataUrl,
   saveToolImage,
@@ -480,22 +481,15 @@ export class SessionLogger {
     });
   }
 
-  /**
-   * Пишет вердикт финального аудита.
-   * @param summary сводка аудита; @param iteration номер итерации; @param durationMs мс проверки (A15).
-   */
-  logAudit(summary: string, iteration: number, durationMs?: number): void {
-    this.log({
-      type: "audit",
-      content: summary,
-      iteration,
-      duration: durationMs,
-    });
+  /** Пишет вердикт финального аудита; `tests` — пометка тест-прогона (INV-15). */
+  logAudit(summary: string, iteration: number, durationMs?: number, tests?: string): void {
+    const extra = tests ? { tests } : {};
+    this.log({ type: "audit", content: summary, iteration, duration: durationMs, ...extra });
   }
 
   /** Агрегат гейтов хода (`gate_timing`): сколько стояли hallucination/critic/audit, мс (A15). */
   logGateTiming(d: { iteration: number; total: number; gates: SessionLogEntry["gates"] }): void {
-    this.log({ type: "gate_timing", content: `gates ${d.total}ms`, iteration: d.iteration, duration: d.total, gates: d.gates });
+    this.log(gateTimingEntry(d));
   }
 
   /** Событие плана (создание, шаги, re-plan). */
@@ -535,14 +529,7 @@ export class SessionLogger {
         // Ошибка чтения — всё равно пишем
       }
     }
-    this.log({
-      type: "session_start",
-      content: "session started",
-      environment: data.environment,
-      lspProbe: data.lspProbe,
-      plugins: data.plugins,
-      skills: data.skills,
-    });
+    this.log(sessionStartEntry(data));
   }
 
   /**
@@ -590,6 +577,11 @@ export class SessionLogger {
       kind: data.kind,
       iteration: data.iteration,
     });
+  }
+
+  /** Отзыв черновика (`retract`): reason/source/verdict/iteration; живёт и в истории. */
+  logRetract(info: RetractInfo): void {
+    this.log(retractEntry(info));
   }
 
   /** Пишет событие критика (контр-агент). */

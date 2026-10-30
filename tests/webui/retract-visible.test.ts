@@ -10,8 +10,12 @@ const i18n = await import("../../src/modules/webui/assets/js/i18n.js");
 i18n.I18N.locale = "en";
 i18n.I18N.dicts = {
   en: {
-    "web.feed.retract_line": "draft retracted: {who} — {reason}",
+    "web.feed.retract_head": "draft retracted: {who}",
     "web.feed.retract_no_reason": "re-checking the answer",
+    "web.feed.retract_verdict": "verdict: {status}",
+    "web.feed.retract_iteration": "iteration {n}",
+    "web.action.show": "show",
+    "web.action.hide": "hide",
     "web.feed.retract_source_critic": "critic",
     "web.feed.retract_source_hallucination": "fact check",
     "web.feed.retract_source_audit": "plan audit",
@@ -36,6 +40,7 @@ const loader = await import("../../src/modules/webui/assets/js/loader.js");
 const sidebarState = await import("../../src/modules/webui/assets/js/sidebar/state.js");
 const trace = await import("../../src/modules/webui/assets/js/sidebar/trace.js");
 const { makeForwarder } = await import("../../src/modules/webui/session/forward.js");
+const { normalizeHistory } = await import("../../src/modules/webui/session/history-api.js");
 const { createWebUiState } = await import("../../src/modules/webui/state.js");
 
 function mountTab(id: string): HTMLElement {
@@ -49,6 +54,32 @@ function mountTab(id: string): HTMLElement {
 }
 
 beforeEach(() => {
+  // Другие тест-файлы в том же процессе перезаписывают глобальный словарь —
+  // возвращаем свои строки перед каждым кейсом.
+  i18n.I18N.locale = "en";
+  i18n.I18N.dicts = {
+    en: {
+      "web.feed.retract_head": "draft retracted: {who}",
+      "web.feed.retract_no_reason": "re-checking the answer",
+      "web.feed.retract_verdict": "verdict: {status}",
+      "web.feed.retract_iteration": "iteration {n}",
+      "web.action.show": "show",
+      "web.action.hide": "hide",
+      "web.feed.retract_source_critic": "critic",
+      "web.feed.retract_source_hallucination": "fact check",
+      "web.feed.retract_source_audit": "plan audit",
+      "web.feed.retract_source_check": "verification",
+      "web.sidebar.trace_retract": "draft retracted",
+      "web.sidebar.trace_retract_src": "draft retracted · {source}",
+      "web.sidebar.detail_source": "source",
+      "web.sidebar.detail_retract_normal":
+        "normal re-check: the gate dropped the draft before the re-answer (not a failure)",
+      "web.sidebar.detail_turn": "turn",
+      "web.sidebar.detail_time": "time",
+      "web.sidebar.detail_iteration": "iteration",
+      "web.sidebar.trace_turn": "turn {n}",
+    },
+  };
   store.tabs.tabs = [];
   store.tabs.activeTabId = "";
   store.tabs.liveTabId = "";
@@ -84,46 +115,59 @@ describe("SSE contract: retract carries who/why/iteration", () => {
   });
 });
 
-describe("feed: the retracted draft leaves a visible, calm note", () => {
-  it("drops the draft but shows who retracted it and why", () => {
+describe("feed: the retracted draft leaves a collapsed note", () => {
+  it("drops the draft, shows only a header and keeps the reason behind the toggle", () => {
     const feed = mountTab("S1");
     stream.onText("half-written answer", "S1");
     stream.onRetract("missing tests", "S1", {
       source: "critic",
       label: "↳ draft rejected by verification, refining…",
       iteration: 3,
+      verdict: "critical",
     });
     expect(feed.textContent).not.toContain("half-written answer");
-    const note = feed.querySelector<HTMLElement>(".metaln.retract");
-    expect(note).not.toBeNull();
-    expect(note?.textContent).toBe("draft retracted: critic — missing tests");
+    const block = feed.querySelector<HTMLElement>(".retract-block");
+    expect(block).not.toBeNull();
+    const head = block!.querySelector<HTMLElement>(".think-h");
+    const body = block!.querySelector<HTMLElement>(".think-body");
+    // В ленте — только пометка, без прозы критика.
+    expect(head?.textContent).toContain("draft retracted: critic");
+    expect(head?.textContent).not.toContain("missing tests");
+    expect(body?.classList.contains("hidden")).toBe(true);
+    expect(body?.textContent).toContain("missing tests");
+    expect(body?.textContent).toContain("verdict: critical");
+    expect(body?.textContent).toContain("iteration 3");
     // Штатная перепроверка не выглядит ошибкой.
-    expect(note?.classList.contains("warn")).toBe(false);
+    expect(block?.classList.contains("warn")).toBe(false);
   });
 
   it("names the hallucination gate differently from the critic", () => {
     const feed = mountTab("S2");
     stream.onText("draft", "S2");
     stream.onRetract("unsupported figure", "S2", { source: "hallucination" });
-    const note = feed.querySelector<HTMLElement>(".metaln.retract");
-    expect(note?.textContent).toBe("draft retracted: fact check — unsupported figure");
-    expect(note?.textContent).not.toContain("critic");
+    const head = feed.querySelector(".retract-block .think-h");
+    expect(head?.textContent).toContain("draft retracted: fact check");
+    expect(head?.textContent).not.toContain("critic");
+    expect(feed.querySelector(".retract-block .think-body")?.textContent).toContain(
+      "unsupported figure",
+    );
   });
 
   it("falls back to a neutral source and a human reason when no structure arrives", () => {
     const feed = mountTab("S3");
     stream.onText("draft", "S3");
     stream.onRetract("refining", "S3");
-    expect(feed.querySelector(".metaln.retract")?.textContent).toBe(
-      "draft retracted: verification — refining",
+    expect(feed.querySelector(".retract-block .think-h")?.textContent).toContain(
+      "draft retracted: verification",
     );
+    expect(feed.querySelector(".retract-block .think-body")?.textContent).toContain("refining");
   });
 
   it("still shows the note when no draft was streamed (the gate is the only signal)", () => {
     const feed = mountTab("S4");
     stream.onRetract("missing tests", "S4", { source: "critic" });
-    expect(feed.querySelector(".metaln.retract")?.textContent).toBe(
-      "draft retracted: critic — missing tests",
+    expect(feed.querySelector(".retract-block .think-h")?.textContent).toContain(
+      "draft retracted: critic",
     );
   });
 
@@ -136,11 +180,42 @@ describe("feed: the retracted draft leaves a visible, calm note", () => {
     stream.finishMd(feed);
     stream.onRetract("not delivered", "S5", { source: "critic", iteration: 1 });
     expect(feed.textContent).not.toContain("finalized draft answer");
-    expect(feed.querySelector(".metaln.retract")?.textContent).toBe(
-      "draft retracted: critic — not delivered",
+    expect(feed.querySelector(".retract-block .think-h")?.textContent).toContain(
+      "draft retracted: critic",
     );
     // Статус проверки не остаётся висеть после отзыва.
     expect(feed.querySelectorAll(".metaln.status")).toHaveLength(0);
+  });
+});
+
+describe("history: the rejected draft is dropped and the note survives reload", () => {
+  it("drops the assistant draft recorded before the retract event", () => {
+    const out = normalizeHistory(
+      [
+        { ts: "t1", source: "core", type: "user", content: "do it" },
+        { ts: "t2", source: "core", type: "assistant", content: "done, file created" },
+        {
+          ts: "t3",
+          source: "core",
+          type: "retract",
+          content: "file does not exist",
+          retractSource: "critic",
+          verdict: "critical",
+          iteration: 1,
+        } as never,
+        { ts: "t4", source: "core", type: "assistant", content: "honest answer" },
+      ],
+      0,
+    );
+    expect(out.map((e) => e.kind)).toEqual(["user", "retract", "assistant"]);
+    expect(out[1]).toMatchObject({
+      kind: "retract",
+      text: "file does not exist",
+      source: "critic",
+      verdict: "critical",
+      iteration: 1,
+    });
+    expect(out[2].text).toBe("honest answer");
   });
 });
 

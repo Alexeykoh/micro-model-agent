@@ -9,7 +9,7 @@ export type AgentState = "INIT" | "THINK" | "ACT" | "OBSERVE" | "OUTPUT" | "ERRO
  * уже отстримленный черновик и переспрашивает модель: потребители убирают
  * черновик из ленты (иначе финал встанет дублем следом).
  */
-export type MetaKind = "tool" | "status" | "retract";
+export type MetaKind = "tool" | "status" | "retract" | "progress";
 
 /** Кто отозвал уже отстримленный черновик (штатная перепроверка, не сбой). */
 export type RetractSource = "critic" | "hallucination" | "audit";

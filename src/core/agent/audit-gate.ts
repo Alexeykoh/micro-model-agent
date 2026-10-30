@@ -18,6 +18,8 @@ export interface FinalAuditResult {
   pendingSteps: string[];
   missingFiles: string[];
   summary: string;
+  /** Пометка тестового прогона (скип/inconclusive/кэш) для `session.jsonl`. */
+  testNote?: string | null;
 }
 
 /** Вердикт аудита: принять ответ, переспросить или завершить неуспехом. */
@@ -66,20 +68,24 @@ export class AuditGate {
     // Финальный аудит может гонять тесты и tsc — в ленте это не должно
     // выглядеть как зависший ход (A15): одна строка, только если реально ждём.
     const stopNotice = noticeAfter(AUDIT_SLOW_NOTICE_MS, () =>
-      deps.onMeta?.(`\n${t("ui.audit_checking")}\n`, "status"),
+      deps.onMeta?.(`\n${t("ui.audit_checking")}\n`, "progress"),
     );
     const started = Date.now();
     let audit: FinalAuditResult | null;
     try {
-      // DEBT(audit-final-gate-full-test-run): раннер внутри аудита гоняет полный
-      // тест-сьют и tsc синхронно (капы 90 с + 90 с) — это главный вклад в
-      // пост-обработку хода. Фикс живёт в `src/modules/execution/`.
       audit = await this.finalAudit();
     } finally {
       stopNotice();
     }
     const durationMs = Date.now() - started;
-    if (!audit || audit.passed) return { action: "pass" };
+    if (!audit || audit.passed) {
+      // INV-15: скип/кэш/неокончательный тест-прогон обязаны быть видны в
+      // журнале даже при вердикте «принят» (спека 2026-10-30).
+      if (audit?.testNote) {
+        deps.slog.logAudit(audit.summary, deps.iteration, durationMs, audit.testNote);
+      }
+      return { action: "pass" };
+    }
 
     const { state, logger, contextManager } = deps;
     state.iterAuditRejection = true;
@@ -93,7 +99,7 @@ export class AuditGate {
         steps,
       })}</system-summary>`,
     });
-    deps.slog.logAudit(audit.summary, deps.iteration, durationMs);
+    deps.slog.logAudit(audit.summary, deps.iteration, durationMs, audit.testNote ?? undefined);
 
     state.auditRetries++;
     state.lastAuditSummary = audit.summary;
@@ -111,7 +117,7 @@ export class AuditGate {
     // задачи: разрешаем одну повторность без халлюцинационного повтора.
     state.suppressRepetitionRetry = true;
     // Черновик уже в ленте — убираем до переответа, иначе дубль.
-    announceRetract(deps.onMeta, auditRetractInfo(audit.summary, deps.iteration));
+    announceRetract(deps.onMeta, auditRetractInfo(audit.summary, deps.iteration), deps.slog);
     return { action: "reject" };
   }
 }

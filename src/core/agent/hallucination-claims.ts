@@ -7,7 +7,10 @@ import {
   checkSuccessClaim as detectSuccessClaim,
   type ClaimContradiction,
 } from "../../core/hallucination/success-claim";
-import { checkArtifactClaims, checkUnverifiedOutput } from "../../core/hallucination/artifact-claim";
+import {
+  checkArtifactClaims,
+  checkUnverifiedOutput,
+} from "../../core/hallucination/artifact-claim";
 import { checkWebClaims } from "../../core/hallucination/web-claims";
 import { checkClaimedFileCreation } from "../../core/hallucination/file-creation-claim";
 import { MAX_CLAIM_CHECK_RETRIES } from "./constants";
@@ -43,17 +46,19 @@ export function lastToolEvidence(
     });
     return [];
   }
-  return history
-    .filter((m) => m.role === "tool")
-    // Только ход, начавшийся после `criticHistoryMark` (маркер из beginTurn).
-    .filter((m) => (fromSeq > 0 ? seqOf(m) >= fromSeq : true))
-    .slice(-10)
-    .map((m) => ({
-      name: m.name,
-      ok: m.success,
-      text: typeof m.content === "string" ? m.content : JSON.stringify(m.content) ?? "",
-    }))
-    .filter((m) => m.text.trim().length > 0);
+  return (
+    history
+      .filter((m) => m.role === "tool")
+      // Только ход, начавшийся после `criticHistoryMark` (маркер из beginTurn).
+      .filter((m) => (fromSeq > 0 ? seqOf(m) >= fromSeq : true))
+      .slice(-10)
+      .map((m) => ({
+        name: m.name,
+        ok: m.success,
+        text: typeof m.content === "string" ? m.content : (JSON.stringify(m.content) ?? ""),
+      }))
+      .filter((m) => m.text.trim().length > 0)
+  );
 }
 
 /**
@@ -61,7 +66,7 @@ export function lastToolEvidence(
  * (`retract`), чтобы убрать его до переответа. Плюс пишем `claim_retry` в сессию.
  */
 export function retractDraft(deps: HallucinationGateDeps, kind: string, reason: string): void {
-  announceRetract(deps.onMeta, claimRetractInfo(reason, kind, deps.state.iteration));
+  announceRetract(deps.onMeta, claimRetractInfo(reason, kind, deps.state.iteration), deps.slog);
   deps.slog?.logClaimRetry({ kind, reason, iteration: deps.state.iteration });
 }
 
@@ -122,9 +127,7 @@ export function checkClaims(
       kind: "success",
     },
     {
-      remaining: deps.artifacts?.length
-        ? MAX_CLAIM_CHECK_RETRIES - state.artifactClaimRetries
-        : 0,
+      remaining: deps.artifacts?.length ? MAX_CLAIM_CHECK_RETRIES - state.artifactClaimRetries : 0,
       bump: () => state.artifactClaimRetries++,
       detect: () => checkArtifactClaims(text, deps.artifacts ?? []),
       reason: (c) => t("hall.claim_artifact", { path: c.path ?? "", detail: c.snippet }),

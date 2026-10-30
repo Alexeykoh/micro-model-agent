@@ -36,7 +36,6 @@
     "src/modules/lsp/module.ts": 360,
     "src/modules/webui/assets/js/settings/providers.ts": 488,
     "src/core/bootstrap/session-runner.ts": 487,
-    "src/modules/session/store.ts": 431,
     "src/tools/syntax-validator.ts": 461,
     "src/modules/webui/assets/js/settings/write.ts": 458,
     "src/modules/webui/assets/js/session/composer.ts": 385,

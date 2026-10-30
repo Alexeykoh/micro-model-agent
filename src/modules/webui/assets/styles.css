@@ -2410,6 +2410,12 @@ body.light .c-dim { --face-c: var(--panel); }
   animation: mdlStar 2.2s ease-out infinite;
 }
 .mdl.st-recheck .star::before { content: "↺"; }
+/* verify — гейт проверяет уже готовый ответ: спокойное «сверяю», не error. */
+.mdl.st-verify { animation: mdlTestPulse 2.4s ease-in-out infinite; }
+.mdl.st-verify .eyes { animation: mdlGlance 1.6s var(--ease) infinite alternate; }
+.mdl.st-verify .eye { animation: mdlBlink 4s var(--ease) infinite; }
+.mdl.st-verify .star { display: block; position: absolute; top: -2%; left: 74%; font-size: calc(var(--s) * .52); line-height: .8; font-weight: 700; color: var(--accent); text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent); animation: mdlStar 2.4s ease-out infinite; }
+.mdl.st-verify .star::before { content: "⌕"; }
 
 /* compact */
 @keyframes mdlCompact { 0%, 100% { transform: scaleX(1); } 35% { transform: scaleX(.38); } 62% { transform: scaleX(1); } }

@@ -150,7 +150,7 @@ export class CriticGate {
     const budget = this.opts.budgetMs;
     // Долгая проверка перестаёт молчать: одна строка, только если реально ждём.
     const stopNotice = noticeAfter(CRITIC_SLOW_NOTICE_MS, () =>
-      deps.onMeta?.(`\n${t("ui.critic_checking")}\n`, "status"),
+      deps.onMeta?.(`\n${t("ui.critic_checking")}\n`, "progress"),
     );
     const started = Date.now();
     try {
@@ -214,7 +214,7 @@ export class CriticGate {
   ): void {
     this.adviceCycles++;
     // Черновик уже в ленте — убираем до переответа, иначе дубль.
-    announceRetract(deps.onMeta, criticRetractInfo(verdict, issues, deps.iteration));
+    announceRetract(deps.onMeta, criticRetractInfo(verdict, issues, deps.iteration), deps.slog);
     deps.contextManager.addMessage({
       role: "user",
       content: `<system-summary>${
@@ -234,7 +234,7 @@ export class CriticGate {
   ): void {
     deps.state.criticRepairCycles++;
     // Черновик уже в ленте — убираем до переответа, иначе дубль.
-    announceRetract(deps.onMeta, criticRetractInfo(verdict, fresh, deps.iteration));
+    announceRetract(deps.onMeta, criticRetractInfo(verdict, fresh, deps.iteration), deps.slog);
     deps.slog.logCritic("critic_escalation", {
       summary: verdict.summary,
       cycle: deps.state.criticRepairCycles,

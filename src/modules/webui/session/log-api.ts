@@ -28,6 +28,7 @@ export const TRACE_LOG_TYPES = [
   "critic_escalation",
   "critic_error",
   "gate_timing",
+  "retract",
   "verify_error",
   "tool_attempt",
   "claim_retry",

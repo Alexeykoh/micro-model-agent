@@ -17,6 +17,7 @@ import {
   mdOpts,
   buildThinkBlock,
 } from "./core.js";
+import { buildRetractBlock } from "./retract-block.js";
 
 // Text chunks arrive in bursts (several SSE `text` events per frame); writing
 // and scrolling on every one thrashes layout and stacks overlapping `tkIn`
@@ -134,9 +135,13 @@ export function onMeta(chunk: string, sid?: string, kind?: string): void {
   finishMd(feed);
   // Статус живёт только пока идёт проверка/шаг: иначе «проверяю результат…»
   // копится в ленте на каждом ходу. Показываем одну актуальную строку.
-  if (kind === "status") clearStatusLines(feed);
+  if (kind === "status" || kind === "progress") clearStatusLines(feed);
   const warn = text.indexOf("⚠") !== -1 || text.indexOf("✗") !== -1;
-  const cls = ["metaln", warn ? "warn" : "", kind === "status" ? "status" : ""]
+  const cls = [
+    "metaln",
+    warn ? "warn" : "",
+    kind === "status" || kind === "progress" ? "status" : "",
+  ]
     .filter(Boolean)
     .join(" ");
   appendTo(feed, el("div", cls, text));
@@ -165,6 +170,7 @@ export interface RetractDetails {
   /** Сырой локализованный текст метки (обратная совместимость). */
   label?: string;
   iteration?: number;
+  verdict?: string;
 }
 
 function retractSourceLabel(source?: string): string {
@@ -174,11 +180,16 @@ function retractSourceLabel(source?: string): string {
   return t("web.feed.retract_source_check");
 }
 
-/** Плашка отзыва: спокойная строка, не `warn` и не `errline`. */
-export function retractNote(reason: string, source?: string): HTMLElement {
-  const who = retractSourceLabel(source);
-  const why = (reason || "").trim() || t("web.feed.retract_no_reason");
-  return el("div", "metaln retract", t("web.feed.retract_line", { who, reason: why }));
+/**
+ * Пометка отзыва: свёрнутый блок, как размышления. В ленте видно только
+ * «черновик отозван: критик»; причина/вердикт/итерация — за тогглом.
+ */
+export function retractNote(
+  reason: string,
+  source?: string,
+  meta?: { verdict?: string; iteration?: number },
+): HTMLElement {
+  return buildRetractBlock(source, reason, meta).wrap;
 }
 
 export function onRetract(reason: string, sid?: string, info?: RetractDetails): void {
@@ -200,7 +211,13 @@ export function onRetract(reason: string, sid?: string, info?: RetractDetails): 
   st.lastAnswerRoot = null;
   st.lastAnswerText = "";
   clearStatusLines(feed);
-  appendTo(feed, retractNote(reason, info?.source));
+  appendTo(
+    feed,
+    retractNote(reason, info?.source, {
+      verdict: info?.verdict,
+      iteration: info?.iteration,
+    }),
+  );
   if (feed === activeFeed()) scroll();
 }
 
