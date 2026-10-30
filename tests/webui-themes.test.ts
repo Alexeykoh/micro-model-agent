@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { UI_THEME_IDS, UI_THEMES } from "../src/modules/webui/assets/js/settings/themes.js";
+import { resolveConfigKey } from "../src/config/registry";
 
 const root = join(import.meta.dirname, "..");
 const asset = (name: string): string =>
@@ -53,5 +54,15 @@ describe("webui themes", () => {
     }
     // No hand-drawn hats: they were the crooked part.
     expect(css).not.toMatch(/body\.(winter|spring|summer|autumn) \.mdl::before/);
+  });
+
+  it("config registry lists exactly the picker themes (INV-T4)", () => {
+    const themeDef = resolveConfigKey("ui.theme");
+    const modeDef = resolveConfigKey("ui.themeMode");
+    expect(themeDef?.enumValues).toEqual(UI_THEMES.map((t) => t.id));
+    expect(modeDef?.enumValues).toEqual(["dark", "light", "auto"]);
+    // Тема — серверная настройка без reconfigure: её пишут и во время хода.
+    expect(themeDef?.effects).toEqual([]);
+    expect(modeDef?.effects).toEqual([]);
   });
 });

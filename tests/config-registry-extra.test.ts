@@ -100,6 +100,24 @@ describe("registry keys", () => {
     expect(cfg.ui.fontSize).toBe("large");
   });
 
+  it("defaults the web theme to console/auto and validates both keys", () => {
+    const cfg = freshCfg();
+    expect(cfg.ui.theme).toBe("console");
+    expect(cfg.ui.themeMode).toBe("auto");
+    expect(resolveConfigKey("ui.theme")?.effects).toEqual([]);
+    expect(resolveConfigKey("ui.themeMode")?.effects).toEqual([]);
+
+    expect(setConfigValue(cfg, "ui.theme", "paper").ok).toBe(true);
+    expect(cfg.ui.theme).toBe("paper");
+    expect(setConfigValue(cfg, "ui.theme", "banana").ok).toBe(false);
+    expect(cfg.ui.theme).toBe("paper");
+
+    expect(setConfigValue(cfg, "ui.themeMode", "light").ok).toBe(true);
+    expect(cfg.ui.themeMode).toBe("light");
+    expect(setConfigValue(cfg, "ui.themeMode", "dim").ok).toBe(false);
+    expect(cfg.ui.themeMode).toBe("light");
+  });
+
   it("validates regex, record and enum shapes", () => {
     const cfg = freshCfg();
     expect(setConfigValue(cfg, "security.contentScan.dangerousPatterns", '["eval\\\\("]').ok).toBe(true);

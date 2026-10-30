@@ -19,6 +19,7 @@ import { restoreTabs } from "./js/session/restore-tabs.js";
 import {
   renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
   loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyUiTheme, currentUiTheme, applyFontSize, setConnStatus, setStaleBar,
+  migrateThemeCache, postConfig,
 } from "./js/settings.js";
 import {
   initRail, setPlan as railPlan, railEvent, applyRailI18n,
@@ -397,6 +398,10 @@ async function boot(): Promise<void> {
     renderSelectors();
     renderSettings();
     await loadConfig();
+    // Апгрейд: до этой версии тема жила только в localStorage. Если сервер ещё
+    // на дефолте, доливаем выбор браузера в конфиг (INV-T5) и перерисовываем
+    // панель, чтобы подсветка совпала с применённым значением.
+    if (await migrateThemeCache((key, value) => postConfig(key, value, false))) renderSettings();
     initRail(settings.config && settings.config.ui ? settings.config.ui.activityRail : undefined);
     initComposerFace();
     initSidebar();

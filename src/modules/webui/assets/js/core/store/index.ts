@@ -14,7 +14,6 @@ export { feed, tabs, settings, session };
 export { streamStateFor } from "./feed.js";
 export type { FeedSlice, FeedStreamState } from "./feed.js";
 
-export const THEME_KEY = "mma-theme";
 export const MAX_IMAGES = 10;
 export const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
 

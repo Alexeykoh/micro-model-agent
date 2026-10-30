@@ -6,6 +6,7 @@ import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security"; import { DATA_POLICY_DEFS } from "./registry-data-policy";
 import { SERVICE_DEFS } from "./registry-service";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
+import { THEME_MODES, UI_THEME_IDS, type ThemeMode, type UiThemeId } from "./theme-ids";
 
 type ReasoningBound = "low" | "medium" | "high";
 
@@ -332,6 +333,15 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [ ...DATA_POLICY_DEFS,
   enumOf("ui.fontSize", "ui", ["compact", "comfortable", "large"] as const, false,
     (c) => c.ui.fontSize ?? "comfortable",
     (c, v) => { c.ui.fontSize = v as "compact" | "comfortable" | "large"; }),
+  // Тема — серверная настройка веб-UI (см. docs/specs/2026-10-30-webui-theme-
+  // persistence-design.md): `localStorage` держит только кэш для pre-paint.
+  // Эффектов нет, поэтому ключи правятся и во время хода (INV-T3).
+  enumOf("ui.theme", "ui", UI_THEME_IDS, false,
+    (c) => c.ui.theme ?? "console",
+    (c, v) => { c.ui.theme = v as UiThemeId; }),
+  enumOf("ui.themeMode", "ui", THEME_MODES, false,
+    (c) => c.ui.themeMode ?? "auto",
+    (c, v) => { c.ui.themeMode = v as ThemeMode; }),
 
   int("retry.maxRetries", "agent", 0, 10, 1, false,
     (c) => c.retry.maxRetries,
