@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-30
+
 ### Added
 
 - **Тема веб-UI теперь хранится в конфиге и переживает перезапуск.** Раньше
