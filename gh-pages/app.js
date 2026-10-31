@@ -82,34 +82,18 @@
   }
 
   /* ---- MMART faces ---- */
-  var STATES = ["track", "think", "read", "find", "web", "edit", "type", "create", "run",
-              "tests", "compact", "plan", "ask", "done", "error", "stop", "queued", "boot",
-              "load", "check", "warn", "update"];
   function mountFace(el) {
-    if (el && !el.querySelector(".eyes")) {
-      el.innerHTML = '<span class="eyes"><i class="eye left"></i><i class="eye right"></i></span>' +
-        '<span class="orb"><i></i></span>' +
-        '<span class="keys"><i></i><i></i><i></i><i></i></span>' +
-        '<span class="grow"></span><span class="fly"></span>' +
-        '<span class="dust"><i></i><i></i><i></i></span>' +
-        '<span class="q"></span><span class="spark"></span><span class="star"></span>';
-    }
+    if (!el || !window.MMART) return;
+    var state = "idle";
+    el.className.split(/\s+/).forEach(function (c) {
+      if (c.indexOf("st-") === 0) state = c.slice(3);
+    });
+    window.MMART.attach(el, state);
   }
   function initHeroFace(el) {
     if (!el) return;
-    var eyes = el.querySelector(".eyes");
-    if (!reduce) {
-      addEventListener("mousemove", function (e) {
-        var r = el.getBoundingClientRect();
-        var ex = Math.max(-1, Math.min(1, (e.clientX - (r.left + r.width / 2)) / 460));
-        var ey = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height / 2)) / 460));
-        eyes.style.left = (ex * 12).toFixed(1) + "%";
-        eyes.style.top = "calc(" + (ey * 12).toFixed(1) + "% + var(--ey, 0px))";
-      }, { passive: true });
-    }
     el.addEventListener("click", function () {
-      el.classList.add("blink-once");
-      setTimeout(function () { el.classList.remove("blink-once"); }, 180);
+      if (window.MMART) window.MMART.poke(el);
     });
   }
 
@@ -121,9 +105,8 @@
   };
   function setFaceState(state) {
     var f = document.getElementById("compFace");
-    if (!f) return;
-    STATES.forEach(function (s) { f.classList.remove("st-" + s); });
-    f.classList.add("st-" + (state || "track"));
+    if (!f || !window.MMART) return;
+    window.MMART.setState(f, state === "track" ? "idle" : state);
   }
 
   /* The companion reacts to what you actually do, then returns to whatever the
@@ -390,9 +373,7 @@
         var st = b.getAttribute("data-state");
         plain.forEach(function (x) { x.classList.remove("on"); });
         b.classList.add("on");
-        STATES.forEach(function (s) { big.classList.remove("st-" + s); });
-        if (st === "track") big.classList.add("track");
-        else { big.classList.remove("track"); big.classList.add("st-" + st); }
+        if (window.MMART) window.MMART.setState(big, st === "track" ? "idle" : st);
         paintBig(b);
         if (nameEl) nameEl.textContent = lpT(b.getAttribute("data-label"));
         pulseFace(st === "track" ? "find" : st, 1700);
@@ -460,6 +441,11 @@
 
     document.querySelectorAll(".mdl").forEach(mountFace);
     initHeroFace(document.getElementById("heroFace"));
+    if (!reduce) {
+      addEventListener("mousemove", function (e) {
+        if (window.MMART) window.MMART.lookAt(e.clientX, e.clientY);
+      }, { passive: true });
+    }
     initGreeting();
     initMascot();
     initBudget();

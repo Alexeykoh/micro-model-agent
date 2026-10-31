@@ -1,7 +1,34 @@
 // Face states and their single mapping table (extracted from `loader.ts`,
 // rule ≤300). One place maps tools/lifecycle signals → face state, so the feed
 // and the rail can never diverge.
-import type { FaceSize, FaceState } from "./loader.js";
+
+export type FaceState =
+  | "idle"
+  | "think"
+  | "read"
+  | "find"
+  | "web"
+  | "edit"
+  | "type"
+  | "create"
+  | "run"
+  | "tests"
+  | "compact"
+  | "plan"
+  | "ask"
+  | "done"
+  | "error"
+  | "stop"
+  | "queued"
+  | "boot"
+  | "load"
+  | "update"
+  | "check"
+  | "warn"
+  | "recheck"
+  | "verify";
+
+export type FaceSize = "sm" | "lg" | "xs";
 
 // state → modifier classes (color + animation + mood). Kept in one place so
 // the feed and the rail can never diverge.

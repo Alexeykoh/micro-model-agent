@@ -1,7 +1,7 @@
 # Loader Faces in the Web UI — Design
 
-- **Status:** draft → implementation
-- **Date:** 2026-10-08
+- **Status:** implemented (Canvas 2D renderer since 2026-10-31)
+- **Date:** 2026-10-08 (canvas amendment: 2026-10-31)
 - **Scope:** `mma web` frontend (`src/modules/webui/assets/**`)
 - **Prototype:** `tmp/loader/app.html` (18 states, common `loader.css` + `loader.js`)
 
@@ -23,28 +23,34 @@ No new dependency, no emoji-in-chat (STYLE.md), no change to SSE/REST contracts.
 
 - Terminal REPL / one-shot output (STYLE.md glyphs stay).
 - Replacing `session.jsonl` semantics or server events.
-- Sound, canvas, WebGL. Pure DOM + CSS animations.
+- Sound, WebGL. Pixels are Canvas 2D (§ Canvas renderer); DOM + CSS keep only
+  layout, the greeting bubble and the state-class contract.
 - Reworking the feed's event routing.
 
 ## Component
 
-One face = one `<span class="mdl">` with two eyes `.eye`. Extra effects
-(`.orb`, `.key` particles, `.q`, `.star`, `.fly`, `.dust`) are children shown
-only for their state (CSS, not JS toggling).
+One face = one `<span class="mdl has-canvas">` that sizes/positions a single
+`<canvas>`; `mascot-canvas.ts` draws body, eyes and props. The wrapper keeps
+the state classes and the greeting bubble, so every call site and test hook
+(`createFace`, `setFaceState`, `.mdl.tip`, `.track`/`.poke`) is unchanged.
 
 ```html
-<span class="mdl sm c-recon st-read">
-  <span class="eyes"><i class="eye left"></i><i class="eye right"></i></span>
+<span class="mdl has-canvas sm c-recon st-read">
+  <canvas class="mdl-cv"></canvas>
+  <span class="mdl-tip"></span>
 </span>
 ```
 
-- **Size** via `--s` (`sm:22 lg:76`, default 64). Eyes/layout scale from it.
-- **Color** via `.c-*` (recon/mutate/exec/ok/warn/err/active/dim) → sets
-  `--face-c`/`--eye-c`. Palette from existing tokens.
-- **State** via `.st-*` → eyes/body animation + extras.
-- **Idle** (`.track`) follows the cursor and the body tilts (`--ex/--ey/--tilt`
-  set by `loader.ts`); `.poke` = click anywhere → blink once (guarded).
-- Everything killed by the existing `prefers-reduced-motion` block.
+- **Size** via `--s` (`sm:22 lg:76`, default 64). The canvas is 180% of the
+  wrapper and centred, so the body fills ~90% of the old face box and effects
+  live in the surrounding ring (same visual footprint as the CSS extras).
+- **Color** via `.c-*`: the renderer reads the live CSS tokens and enforces
+  eye ≥ 4.5:1, face ≥ 3:1 (dim stays low-contrast by design and keeps its
+  border).
+- **State** via `.st-*` → `STATE_CFG` (eyes + pose + prop + effects).
+- **Idle** (`.track`) follows the cursor through `mascotLookAt`; `.poke` =
+  blink once via `mascotPokeAll`.
+- **Reduced motion**: a representative static frame, no rAF.
 
 ### State table (18)
 
@@ -120,17 +126,56 @@ debug-only `?loaderSpeed=` URL param.
 Reuse existing strings where possible. New keys (en+ru): `web.loader.boot`,
 `web.loader.connecting`, `web.setup.testing`. Nothing user-facing hard-coded.
 
-## Accessibility & motion
+## Canvas renderer (2026-10-31)
+
+The renderer moved from CSS keyframes to Canvas 2D without changing the public
+contract. Modules:
+
+- `mascot-canvas.ts` — attach API, shared rAF loop, spring pose, reduced motion,
+  instance pruning.
+- `mascot-pose.ts` — one table: state → eyes/pose/lean/props/effects + body
+  dynamics and blink.
+- `mascot-draw.ts` — body, eyes, composition, transition crossfade.
+- `mascot-fx.ts` / `mascot-props.ts` / `mascot-props-work.ts` — ambient effects
+  and semantic props.
+- `mascot-palette.ts` — CSS-token palette + contrast guard.
+- `mascot-types.ts` / `mascot-util.ts` — shared types and helpers.
+
+Invariants:
+
+1. **Face is never occluded.** Foreground props/effects are clipped by an
+   even-odd hole of the body silhouette; they may sit flush, never overlap.
+2. **One loop for every face.** `requestAnimationFrame` is shared; offscreen
+   faces pause via `IntersectionObserver`; removed faces are pruned.
+3. **DPR ≤ 2**, transparent canvas, no background fill.
+4. **Level of detail by size**: `< 50 px` body + eyes only; `50–90 px` adds
+   ambient effects; `≥ 90 px` adds props. The composer (40 px) stays clean.
+5. **Contrast**: eye ≥ 4.5:1, face ≥ 3:1, measured from the live tokens.
+6. **State change** blends colours, body dynamics, eye shape and effects over
+   0.36 s; the spring carries the current velocity.
+7. **Corners follow the theme**: the body radius is read from the wrapper's
+   computed `border-radius`. Seasonal themes set `border-radius: 0 !important`
+   on every element, so the canvas renders a square body there instead of
+   hard-coding the squircle.
+8. **Landing page**: `gh-pages/mascot-canvas.js` is generated from these modules
+   by `bun run build:landing-mascot` (no build step at serve time) and exposed
+   as `window.MMART`; `tests/arch/landing-mascot.test.ts` guards the wiring.
+
+
 
 - Face is decorative: `aria-hidden="true"`; the textual phase label remains the
   accessible status (`role="status"`).
-- All animations are opacity/transform-only and disabled under
-  `prefers-reduced-motion: reduce` (global kill-switch already present).
+- All motion is drawn on canvas and disabled under
+  `prefers-reduced-motion: reduce` (the renderer draws a static frame and stops
+  the rAF loop).
 
 ## Files touched
 
-- `src/modules/webui/assets/js/loader.ts` — component + `loaderStateFor`.
-- `src/modules/webui/assets/styles.css` — `.mdl` component + boot splash.
+- `src/modules/webui/assets/js/loader.ts` - component + `loaderStateFor`.
+- `src/modules/webui/assets/js/loader-states.ts` - `FaceState`/`FaceSize` +
+  `FACE_CLASS`.
+- `src/modules/webui/assets/js/mascot-*.ts` - canvas renderer (see above).
+- `src/modules/webui/assets/styles.css` - `.mdl` wrapper + canvas sizing.
 - `src/modules/webui/assets/index.html` — `#bootSplash` markup.
 - `src/modules/webui/assets/app.ts` — boot splash lifecycle; `.mdl.track` cursor.
 - `src/modules/webui/assets/js/feed/core.ts` — `showBusy` face.
@@ -141,8 +186,8 @@ Reuse existing strings where possible. New keys (en+ru): `web.loader.boot`,
 
 ## Tests
 
-- `tests/webui-loader.test.ts` — `loaderStateFor` mapping table; face DOM
-  builder; `setBusyState` swaps classes without recreating eyes.
+- `tests/webui-loader.test.ts` - `loaderStateFor` mapping table; canvas face
+  builder; `setFaceState` swaps classes without recreating the canvas.
 - Extend `tests/webui-assets.test.ts` guards — `#bootSplash` present, `.mdl`
   CSS present, no emoji in chat strings.
 - `tsc -p tsconfig.frontend.json` + `bun run quality`.

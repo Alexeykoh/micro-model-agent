@@ -1,45 +1,15 @@
-// Loader faces — a small squircle "agent presence": eyes + extra effects,
-// driven entirely by CSS state classes. One component for the boot splash,
-// the in-feed busy line, the activity rail and the first-run wizard.
+// Loader faces — a small squircle "agent presence". One component for the boot
+// splash, the in-feed busy line, the activity rail and the first-run wizard.
 // The mascot is called **MMART** (MMA + art): clicking it pops a localized
-// greeting bubble. See docs/specs/2026-10-08-loader-webui-design.md.
+// greeting bubble. Rendering is Canvas 2D (`mascot-canvas.ts`); the wrapper
+// keeps the state classes, size and greeting bubble.
+// See docs/specs/2026-10-08-loader-webui-design.md.
 
-import { populateFx } from "./loader-fx.js";
-import { FACE_CLASS } from "./loader-states.js";
+import { attachMascot, mascotLookAt, mascotPokeAll, type MascotHandle } from "./mascot-canvas.js";
+import { FACE_CLASS, type FaceSize, type FaceState } from "./loader-states.js";
 
 export { loaderStateFor, lspOutputSignal, toolState } from "./loader-states.js";
-export type { LoaderSignal } from "./loader-states.js";
-
-export type FaceState =
-  | "idle"
-  | "think"
-  | "read"
-  | "find"
-  | "web"
-  | "edit"
-  | "type"
-  | "create"
-  | "run"
-  | "tests"
-  | "compact"
-  | "plan"
-  | "ask"
-  | "done"
-  | "error"
-  | "stop"
-  | "queued"
-  | "boot"
-  | "load"
-  | "update"
-  // LSP: идёт статическая проверка / сервер вернул ошибки.
-  | "check"
-  | "warn"
-  // Гейт забраковал черновик: идёт штатная перепроверка/переответ.
-  // Долгая проверка результата гейтом: спокойное «сверяю», не think/error.
-  | "recheck"
-  | "verify";
-
-export type FaceSize = "sm" | "lg" | "xs";
+export type { FaceSize, FaceState, LoaderSignal } from "./loader-states.js";
 
 // ---- MMART: the mascot's identity and its greeting bubble ----
 export const MMART_NAME = "MMART";
@@ -57,37 +27,17 @@ function el(tag: string, cls?: string, text?: string): HTMLElement {
   return node;
 }
 
-// A face always carries every extra element; CSS shows only the ones its
-// state uses, so `setFaceState` never touches the DOM structure.
+const handles = new WeakMap<HTMLElement, MascotHandle>();
+
 export function createFace(state: FaceState = "think", size: FaceSize | null = null): HTMLElement {
   const face = el("span");
   face.setAttribute("aria-hidden", "true");
   face.dataset.size = size || "";
-  const eyes = el("span", "eyes");
-  eyes.appendChild(el("i", "eye left"));
-  eyes.appendChild(el("i", "eye right"));
-  const orb = el("span", "orb");
-  orb.appendChild(el("i"));
-  const keys = el("span", "keys");
-  for (let i = 0; i < 4; i++) keys.appendChild(el("i"));
-  const dust = el("span", "dust");
-  for (let i = 0; i < 3; i++) dust.appendChild(el("i"));
-  const fx = el("span", "fx");
-  for (let i = 0; i < 6; i++) fx.appendChild(el("i"));
-  face.append(
-    eyes,
-    orb,
-    keys,
-    el("span", "grow"),
-    el("span", "fly"),
-    fx,
-    el("span", "sweep"),
-    dust,
-    el("span", "q", "?"),
-    el("span", "spark", "✦"),
-    el("span", "star"),
-    el("span", "mdl-tip"),
-  );
+  const canvas = document.createElement("canvas");
+  canvas.className = "mdl-cv";
+  face.appendChild(canvas);
+  face.appendChild(el("span", "mdl-tip"));
+  handles.set(face, attachMascot(canvas, state));
   setFaceState(face, state);
   return face;
 }
@@ -95,23 +45,15 @@ export function createFace(state: FaceState = "think", size: FaceSize | null = n
 export function setFaceState(face: HTMLElement | null, state: FaceState): void {
   if (!face) return;
   const size = face.dataset.size || "";
-  face.className = "mdl" + (size ? " " + size : "") + " " + FACE_CLASS[state];
+  face.className = "mdl has-canvas" + (size ? " " + size : "") + " " + FACE_CLASS[state];
   face.dataset.state = state;
-  populateFx(face, state);
-  // Drop any leftover cursor-tracking offsets/tilt so the new state starts clean.
-  if (!FACE_CLASS[state].includes("track")) {
-    face.style.setProperty("--ex", "0px");
-    face.style.setProperty("--ey", "0px");
-    face.style.setProperty("--tilt", "0deg");
-  }
+  handles.get(face)?.setState(state);
 }
 
 // ---- cursor tracking, click-to-blink and the MMART greeting for idle faces
 // (`.track` / `.poke`) ----
 const tipTimers = new WeakMap<HTMLElement, number>();
 
-// Pop the localized greeting above the face. Repeated clicks restart the
-// timer instead of stacking, so the bubble can never stick open.
 function showGreeting(m: HTMLElement): void {
   const tip = m.querySelector<HTMLElement>(".mdl-tip");
   if (!tip) return;
@@ -128,36 +70,6 @@ function showGreeting(m: HTMLElement): void {
   );
 }
 
-function trackTargets(sel: string): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>(sel));
-}
-
-function lookAt(x: number, y: number): void {
-  for (const m of trackTargets(".mdl.track")) {
-    const r = m.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
-    const dx = x - cx;
-    const dy = y - cy;
-    const dist = Math.hypot(dx, dy) || 1;
-    const maxShift = r.width * 0.16;
-    const reach = Math.min(1, dist / 140);
-    const nx = dx / dist;
-    const ny = dy / dist;
-    m.style.setProperty("--ex", (nx * maxShift * reach).toFixed(1) + "px");
-    m.style.setProperty("--ey", (ny * maxShift * reach).toFixed(1) + "px");
-    m.style.setProperty("--tilt", (nx * 6 * reach).toFixed(2) + "deg");
-  }
-}
-
-function resetLook(): void {
-  for (const m of trackTargets(".mdl.track")) {
-    m.style.setProperty("--ex", "0px");
-    m.style.setProperty("--ey", "0px");
-    m.style.setProperty("--tilt", "0deg");
-  }
-}
-
 // The click landed on the face itself (its own parts count). Anything else in
 // the document only lets it blink — the greeting is not a page-wide easter egg.
 function clickOnFace(e: MouseEvent): HTMLElement | null {
@@ -171,26 +83,40 @@ let cursorWired = false;
 export function initCursor(): void {
   if (cursorWired || typeof window === "undefined") return;
   cursorWired = true;
-  window.addEventListener("mousemove", (e) => lookAt(e.clientX, e.clientY));
-  window.addEventListener("mouseleave", resetLook);
+  window.addEventListener("mousemove", (e) => mascotLookAt(e.clientX, e.clientY));
+  window.addEventListener("mouseleave", () => mascotLookAt(-10000, -10000));
   // Click anywhere → idle faces blink. Every click restarts the blink, so fast
   // clicking keeps up (no lock-out guard).
-  let pokeTimer: number | null = null;
   window.addEventListener("click", (e) => {
-    const targets = trackTargets(".mdl.poke");
-    if (targets.length) {
-      for (const m of targets) {
-        m.classList.remove("blink-once");
-        void m.offsetWidth; // restart the CSS animation
-        m.classList.add("blink-once");
-      }
-      if (pokeTimer !== null) window.clearTimeout(pokeTimer);
-      pokeTimer = window.setTimeout(() => {
-        for (const m of targets) m.classList.remove("blink-once");
-        pokeTimer = null;
-      }, 130);
-    }
+    mascotPokeAll();
     const hit = clickOnFace(e);
     if (hit) showGreeting(hit);
   });
 }
+
+// Static `.mdl` markup in index.html (boot splash, sidebar loader) is upgraded
+// to canvas as soon as this module loads, so no CSS-only face survives.
+function stateFromClasses(el: HTMLElement): FaceState {
+  for (const cls of el.classList) {
+    if (!cls.startsWith("st-")) continue;
+    for (const key of Object.keys(FACE_CLASS) as FaceState[]) {
+      if (FACE_CLASS[key].split(" ").includes(cls)) return key;
+    }
+  }
+  return "idle";
+}
+
+function upgradeStaticFaces(): void {
+  if (typeof document === "undefined") return;
+  for (const host of Array.from(document.querySelectorAll<HTMLElement>(".mdl:not(.has-canvas)"))) {
+    const size = host.classList.contains("lg") ? "lg" : host.classList.contains("sm") ? "sm" : host.classList.contains("xs") ? "xs" : null;
+    const face = createFace(stateFromClasses(host), size);
+    for (const cls of host.classList) {
+      if (cls === "mdl" || cls === "lg" || cls === "sm" || cls === "xs" || cls.startsWith("c-") || cls.startsWith("st-") || cls === "track" || cls === "poke" || cls === "blink") continue;
+      face.classList.add(cls);
+    }
+    host.replaceWith(face);
+  }
+}
+
+upgradeStaticFaces();
