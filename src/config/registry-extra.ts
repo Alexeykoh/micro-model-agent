@@ -5,6 +5,7 @@ import { REBUILD } from "./effects";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_SECURITY_CONFIG } from "./security"; import { DATA_POLICY_DEFS } from "./registry-data-policy";
 import { SERVICE_DEFS } from "./registry-service";
+import { SOUND_DEFS } from "./registry-sounds";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { THEME_MODES, UI_THEME_IDS, type ThemeMode, type UiThemeId } from "./theme-ids";
 
@@ -157,7 +158,7 @@ export const AUDIT_EVENT_TYPES: readonly AuditEventType[] = [
 ];
 
 /** Доп. дефы реестра; мержится в DEFINITIONS конкатом (см. registry.ts). */
-export const EXTRA_DEFS: ConfigKeyDef[] = [ ...DATA_POLICY_DEFS,
+export const EXTRA_DEFS: ConfigKeyDef[] = [ ...DATA_POLICY_DEFS, ...SOUND_DEFS,
   bool("provider.fallback", "provider", false,
     (c) => c.provider.fallback ?? false,
     (c, v) => { c.provider.fallback = v as boolean; }),
