@@ -6,7 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-31
+
 ### Added
+
+- **MMART переехал на Canvas 2D.** Все лица в `mma web` (лента, рейл,
+  композер, splash, setup, субагенты) рисуются одним общим рендерером:
+  пружинная поза, смысловые предметы по состоянию (клавиатура, документ,
+  чек-лист, лупа, браузер), эффекты вне силуэта, кроссфейд переходов.
+  Палитра читает живые CSS-токены и держит контраст (глаза >= 4.5:1, лицо
+  >= 3:1); радиус скругления следует теме, включая квадратные сезонные.
+  API `createFace`/`setFaceState`/`FaceState` не изменился. Лендинг
+  использует тот же движок через `gh-pages/mascot-canvas.js`
+  (`bun run build:landing-mascot`). Тесты: `tests/webui-loader.test.ts`,
+  `tests/arch/landing-mascot.test.ts`.
 
 - **Системный промпт v3 (W1–W3, частично).** Ядро собирается из фактов
   (`PromptEnvironmentFacts`): Bun/shell/LSP/autoPlan/команды проекта, а не
