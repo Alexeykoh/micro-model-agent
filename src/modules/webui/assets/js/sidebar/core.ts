@@ -27,8 +27,8 @@ import { renderMcp, sidebarMcpState } from "./mcp.js";
 import { applyPromptI18n, initPromptPopup } from "./prompt.js";
 
 /**
- * Куда ведёт контекстная «шестерёнка» из шапки сайдбара. Одна кнопка вместо
- * шести дублей: пользователь всегда видит настройки текущей вкладки.
+ * Куда ведёт контекстная кнопка настроек из полосы вкладок. Одна кнопка
+ * вместо шести дублей: пользователь всегда видит настройки текущей вкладки.
  */
 const SETTINGS_PANEL: Record<string, string> = {
   session: "sessions",
@@ -150,7 +150,9 @@ export function initSidebar(): void {
   sb.nameTextEl = document.getElementById("sbNameText");
   settingsBtn = document.getElementById("sbSettings");
   if (settingsBtn) {
-    settingsBtn.appendChild(icon("settings"));
+    // `sliders`, not `settings`: the global settings gear sits in the topbar
+    // above this row, and two identical gears read as the same destination.
+    settingsBtn.appendChild(icon("sliders"));
     settingsBtn.addEventListener("click", () => {
       hooks.openSettingsAt?.(SETTINGS_PANEL[sb.active] || "general", SETTINGS_ANCHOR[sb.active]);
     });

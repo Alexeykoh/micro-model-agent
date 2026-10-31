@@ -736,7 +736,14 @@ describe("webui assets", () => {
   it("offers one context-aware settings shortcut for every sidebar tab", () => {
     const a = loadAssets();
     expect(a.html).toContain('id="sbSettings"');
+    // The shortcut lives in the tab strip, pinned after the tab list — not in
+    // the title row under the global topbar gear, where the two were confused.
+    expect(a.html).toMatch(/class="sb-tabs-bar"[\s\S]*id="sbSettings"[\s\S]*class="sb-name"/);
+    const sbNameBlock = (a.html.split('class="sb-name"')[1] || "").split('class="sb-pane"')[0];
+    expect(sbNameBlock).not.toContain('id="sbSettings"');
     const core = a.jsModules?.["js/sidebar/core.js"] || "";
+    expect(a.jsModules?.["js/icons.js"] || "").toContain("sliders:");
+    expect(core).toContain('icon("sliders")');
     expect(core).toContain("const SETTINGS_PANEL");
     for (const mapping of [
       'session: "sessions"',
