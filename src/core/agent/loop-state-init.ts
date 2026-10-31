@@ -70,6 +70,8 @@ export function createLoopState(): LoopState {
     apiCostUsd: 0,
     estimatedPromptTokensTotal: 0,
     totalLlmDuration: 0,
+    llmSpeedCalls: [],
+    totalLlmDecodeMs: 0,
     cacheCachedTotal: 0,
     cacheUncachedTotal: 0,
     cacheWriteTotal: 0,

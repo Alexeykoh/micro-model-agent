@@ -60,7 +60,8 @@ export async function finalizeWithoutTools(
   // Форс-вызов тоже тратит токены и время — учитываем в метриках и стоимости.
   const llmStart = Date.now();
   const baseline = tokenTracker.beginIteration(state, contextManager.getEstimatedTokens());
-  const text = await streamFinalAnswer(host, state, tokenTracker, baseline, onChunk);
+  const final = await streamFinalAnswer(host, state, tokenTracker, baseline, onChunk);
+  const text = final.text;
   const durationMs = Date.now() - llmStart;
   state.totalLlmDuration += durationMs;
   tokenTracker.addCompletionChars(state, text.length);
@@ -72,6 +73,7 @@ export async function finalizeWithoutTools(
       contextManager.getEstimatedTokens(),
       state.iteration,
       durationMs,
+      final.decodeMs,
       slog,
     );
   }
@@ -92,16 +94,18 @@ export async function streamFinalAnswer(
   tokenTracker: TokenTracker,
   baseline: { promptBefore: number; completionBefore: number },
   onChunk?: (chunk: string) => void,
-): Promise<string> {
+): Promise<{ text: string; decodeMs: number }> {
   const { contextManager, logger, llmProvider, pluginManager } = host.deps;
   const history = repairToolCallPairing(contextManager.getActiveHistory());
   let text = "";
+  let firstTokenAt = 0;
   try {
     for await (const chunk of llmProvider.chat(history, [], host.abortSignal, {
       sessionId: host.deps.sessionManager?.getActiveMeta()?.id,
     })) {
       if (host.isShutdownRequested()) break;
       if (chunk.type === "text" && chunk.content) {
+        if (!firstTokenAt) firstTokenAt = Date.now();
         text += chunk.content;
         const out = pluginManager.runOnText(
           { iteration: state.iteration, logger, contextManager },
@@ -116,5 +120,5 @@ export async function streamFinalAnswer(
   } catch (e) {
     logger.diagnostic("warn", `finalizeWithoutTools failed: ${errMsg(e)}`);
   }
-  return text;
+  return { text, decodeMs: firstTokenAt ? Math.max(1, Date.now() - firstTokenAt) : 0 };
 }

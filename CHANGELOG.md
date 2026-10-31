@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Скорость генерации токенов в `mma web`.** Живое `≈ N tok/s` в строке
+  активности над композером и итоговый чип `N tok/s` после хода (тултип —
+  разбивка по LLM-вызовам). Скорость считается по `completionTokens` за время
+  декодирования (от первого контентного чанка, без префилла/TTFT); если
+  провайдер отдал ответ одним чанком, замер отбрасывается, а не показывается
+  физически невозможное число. Живая цифра — оценка по скользящему окну из
+  SSE-текста, итог — точный из `AgentResult.llmSpeed` и переживает перезагрузку
+  через `UsageSnapshot`. Тесты: `tests/core/token-speed.test.ts`,
+  `tests/webui-speed-dom.test.ts`, `tests/webui-assets.test.ts`. Спека:
+  `docs/specs/2026-10-31-token-speed-design.md`.
+
 ## [0.21.0] - 2026-10-30
 
 ### Added

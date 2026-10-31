@@ -26,6 +26,7 @@ describe("TokenTracker.logUsage provenance", () => {
       50,
       1,
       10,
+      400,
       { logLlmUsage } as never,
     );
 
@@ -34,10 +35,15 @@ describe("TokenTracker.logUsage provenance", () => {
       expect.objectContaining({
         provider: "live",
         model: "qwen/qwen3.5-9b",
+        decodeMs: 400,
         progress: { totalBatches: 3, novelTools: 1, duplicateBatches: 1 },
       }),
     );
     expect(record).toHaveBeenCalledWith(100, 20, "live", undefined);
+    expect(state.llmSpeedCalls).toEqual([
+      { completionTokens: 20, decodeMs: 400, source: "api" },
+    ]);
+    expect(state.totalLlmDecodeMs).toBe(400);
   });
 
   it("uses provider-reported cost instead of token estimate", () => {
@@ -57,7 +63,7 @@ describe("TokenTracker.logUsage provenance", () => {
       costUsd: 0.00001414,
     });
 
-    tracker.logUsage(state, baseline, "ok", 2000, 1, 10, { logLlmUsage } as never);
+    tracker.logUsage(state, baseline, "ok", 2000, 1, 10, 8, { logLlmUsage } as never);
 
     expect(recordActual).toHaveBeenCalledWith(0.00001414, "opencode-go", state.cacheUsage);
     expect(record).not.toHaveBeenCalled();

@@ -85,6 +85,8 @@ export async function runLlmPhase(
   let malformedToolArgs = 0;
 
   const llmStart = Date.now();
+  // Первый контентный чанк: от него меряем decode-скорость (без префилла/TTFT).
+  let firstTokenAt = 0;
   // Сырая оценка на момент отправки — вход калибровки по реальному usage.
   const estimateAtSend = contextManager.getEstimatedTokens();
   const messageCountAtSend = contextManager.getMessageCount?.() ?? 0;
@@ -141,6 +143,7 @@ export async function runLlmPhase(
     )) {
       if (host.isShutdownRequested()) break;
       if (chunk.type === "text" && chunk.content) {
+        if (!firstTokenAt) firstTokenAt = Date.now();
         if (emittedReasoning && !textContent) {
           onReasoning?.("\n\n");
         }
@@ -152,6 +155,7 @@ export async function runLlmPhase(
         onChunk?.(textOut);
       }
       if (chunk.type === "reasoning" && chunk.content) {
+        if (!firstTokenAt) firstTokenAt = Date.now();
         reasoningContent += chunk.content;
         if (config.showReasoning) {
           const metaOut = pluginManager.runOnMeta(
@@ -165,6 +169,7 @@ export async function runLlmPhase(
         }
       }
       if (chunk.type === "tool_call" && chunk.toolCall) {
+        if (!firstTokenAt) firstTokenAt = Date.now();
         sawToolCall = true;
         let parsedArgs: Record<string, unknown>;
         try {
@@ -238,26 +243,19 @@ export async function runLlmPhase(
   state.truncationRetries = 0;
 
   // Совокупная длина ответа — метрики валидны, даже когда бэкенд опускает usage.
-  tokenTracker.addCompletionChars(state, (textContent || reasoningContent).length);
-  logger.logLLMResponse(
-    config.model,
-    (textContent || reasoningContent).length,
-    Date.now() - llmStart,
-    undefined,
-    "agent",
-  );
-  state.totalLlmDuration += Date.now() - llmStart;
-
-  // Per-call лог usage + стоимость (фолбэк на локальные оценки при отсутствии usage).
-  tokenTracker.logUsage(
+  const answer = textContent || reasoningContent;
+  tokenTracker.addCompletionChars(state, answer.length);
+  const llmDuration = tokenTracker.finishCall(
     state,
     baseline,
-    textContent || reasoningContent,
+    answer,
     contextManager.getEstimatedTokens(),
     state.iteration,
-    Date.now() - llmStart,
+    llmStart,
+    firstTokenAt,
     slog,
   );
+  logger.logLLMResponse(config.model, answer.length, llmDuration, undefined, "agent");
 
   if (host.isShutdownRequested()) return { kind: "break" };
 

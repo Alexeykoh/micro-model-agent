@@ -209,6 +209,21 @@ export interface ContextQualityBreakdown {
  */
 export type StopReason = "duplicate" | "failed_batches" | "max_iters" | "silent" | "stalled";
 
+/** Скорость одного LLM-вызова: completion-токены за время декодирования. */
+export interface LlmCallSpeed {
+  completionTokens: number;
+  /** От первого контентного чанка до конца вызова (мс), без префилла/TTFT. */
+  decodeMs: number;
+  source: "api" | "estimate";
+}
+
+/** Агрегат скорости генерации за ход: Σ токенов / Σ decodeMs. */
+export interface LlmSpeedSnapshot {
+  completionTokens: number;
+  decodeMs: number;
+  calls: LlmCallSpeed[];
+}
+
 /** Итог прогона: успех, текст, токены, стоимость, качество контекста. */
 export interface AgentResult {
   success: boolean;
@@ -269,4 +284,6 @@ export interface AgentResult {
   durationMs?: number;
   /** Длительность LLM-вызовов в мс (без исполнения тулов). */
   llmDurationMs?: number;
+  /** Скорость генерации за ход (decode без префилла); нет, если нечего считать. */
+  llmSpeed?: LlmSpeedSnapshot;
 }

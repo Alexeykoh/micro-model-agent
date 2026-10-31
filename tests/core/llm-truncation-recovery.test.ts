@@ -107,6 +107,7 @@ function phaseArgs(host: LlmPhaseHost) {
       beginIteration: () => ({}),
       recordApiUsage: () => {},
       addCompletionChars: () => {},
+      finishCall: () => 0,
       logUsage: () => {},
     } as never,
     reasoningResolver: resolver,
