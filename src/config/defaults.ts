@@ -194,6 +194,8 @@ export const DEFAULTS: AppConfig = {
     fontSize: "comfortable",
     theme: "console",
     themeMode: "auto",
+    // Мастер выключен: звук не появляется сам после апгрейда (quiet by default).
+    sounds: { enabled: false, done: true, question: true, failed: true },
   },
   mcpServers: {},
   security: DEFAULT_SECURITY_CONFIG,

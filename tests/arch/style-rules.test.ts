@@ -142,6 +142,10 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
     count: 1,
     reason: "UI: запись в clipboard best-effort",
   },
+  "src/modules/webui/assets/js/sounds.ts": {
+    count: 2,
+    reason: "UI: разблокировка AudioContext — браузер может отклонить resume, звук fail-open (INV-S4)",
+  },
   "src/modules/lsp/check-tool.ts": {
     count: 1,
     reason: "проба существования пути — отсутствие файла нормальный результат",
