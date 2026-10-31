@@ -94,7 +94,7 @@ describe("gate: guidance ↔ enforcement (W1)", () => {
       expect(isCommandAllowed(`${wrapper} -Command Get-ChildItem`, bash).allowed, wrapper).toBe(false);
     }
     const prompt = readFileSync(join(REPO_ROOT, "src", "core", "system-prompt.ts"), "utf-8");
-    const bashTool = readFileSync(join(REPO_ROOT, "src", "tools", "bash.ts"), "utf-8");
+    const bashTool = readFileSync(join(REPO_ROOT, "src", "tools", "bash-description.ts"), "utf-8");
     // W1b: платформенный факт дублируется в двух местах; PowerShell должен
     // упоминаться только в негативном контексте.
     for (const [name, text] of [["system-prompt", prompt], ["bash.ts", bashTool]] as const) {
@@ -103,7 +103,7 @@ describe("gate: guidance ↔ enforcement (W1)", () => {
   });
 
   it("the prompt never recommends an operator the validator blocks", () => {
-    const bashTool = readFileSync(join(REPO_ROOT, "src", "tools", "bash.ts"), "utf-8");
+    const bashTool = readFileSync(join(REPO_ROOT, "src", "tools", "bash-description.ts"), "utf-8");
     // Операторы из декларации тула выдёргиваются из строки «Chaining and shell
     // operators (| > >> ; &&) are blocked» — без детектора отрицания скан падает
     // на собственном тексте, где они перечислены как ЗАПРЕЩЁННЫЕ. Разделитель —

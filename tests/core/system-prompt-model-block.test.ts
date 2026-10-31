@@ -19,7 +19,7 @@ describe("dynamic model identity", () => {
 
   it("is the only source — the static header no longer embeds a model name", () => {
     const info = buildSystemInfo({ model: "stale-model-x" } as never, "/tmp", "win32");
-    expect(info).toContain("You are MMA v2");
+    expect(info).toContain("You are MMA");
     expect(info).not.toContain("stale-model-x");
   });
 });

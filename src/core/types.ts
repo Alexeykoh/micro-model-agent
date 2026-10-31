@@ -60,6 +60,11 @@ export interface PromptBlock {
   estimatedTokens: number;
   kind?: PromptBlockKind;
   /**
+   * Блок имеет смысл только при активном теге тулов (напр. `browser`).
+   * `undefined`/пусто — блок не зависит от сужения набора.
+   */
+  requiresTags?: string[];
+  /**
    * Блок работает неполно (INV-6/17): не влез в бюджет, модуль деградировал и т.п.
    * `reason` — почему, для лога и `/sysprompt`.
    */

@@ -39,6 +39,7 @@ import { estimateTokens } from "../../llm/token-counter";
 import type { PromptBlock } from "../types";
 import { readMmaVersion } from "../version";
 import { dryRunOverflow, overflowHint } from "../prompt-overflow";
+import { filterBlocksForTags } from "../prompt-builder";
 import { isOneShotMode, loadAgentsMdBlocks, registerBuiltinPlugin } from "./state";
 import { ModuleHost, registerOwnedTools } from "../module-host";
 import { restoreStartupPlanFrom } from "./startup-plan";
@@ -294,7 +295,6 @@ function buildStaticPromptBlocks(
  */
 function dryRunStartupOverflow(input: ModulesPhaseInput, promptBlocks: PromptBlock[]): void {
   const { config, logger, dir, toolRegistry, activeToolTags, skillsModule, indexerModule } = input;
-
   const dynamicBlocks: PromptBlock[] = [];
   const skillsBlock = skillsModule.getSystemPromptBlock();
   if (skillsBlock) dynamicBlocks.push(skillsBlock);
@@ -310,7 +310,7 @@ function dryRunStartupOverflow(input: ModulesPhaseInput, promptBlocks: PromptBlo
     });
   }
   const systemBudget = Math.floor(config.contextWindow * config.contextBudget.systemPrompt);
-  const dry = dryRunOverflow([...promptBlocks, ...dynamicBlocks], systemBudget);
+  const dry = dryRunOverflow(filterBlocksForTags([...promptBlocks, ...dynamicBlocks], activeToolTags), systemBudget);
   if (dry.overflow.length === 0) return;
   const overflowTokens = dry.overflow.reduce((s, b) => s + b.estimatedTokens, 0);
   const needed = dry.includedTokens + overflowTokens;

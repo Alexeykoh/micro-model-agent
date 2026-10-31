@@ -35,6 +35,21 @@ const PRIORITY_ORDER: Record<string, number> = {
 };
 
 /**
+ * Убирает блоки, которым нужен неактивный тег тулов (напр. `browser`).
+ * Пустой/неизвестный набор — legacy-режим «все тулы», блоки не фильтруются.
+ */
+export function filterBlocksForTags(
+  blocks: PromptBlock[],
+  activeTags: string[] | undefined,
+): PromptBlock[] {
+  if (!activeTags || activeTags.length === 0) return blocks;
+  const active = new Set(activeTags);
+  return blocks.filter(
+    (block) => !block.requiresTags?.length || block.requiresTags.some((tag) => active.has(tag)),
+  );
+}
+
+/**
  * Метка блока для лога: `владелец: имя` (`indexer: project map`), а не
  * обрезанная первая строка контента (INV-17). `label` блока приоритетнее
  * автовывода из контента.

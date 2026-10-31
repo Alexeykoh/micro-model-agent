@@ -9,7 +9,7 @@
  */
 import { join } from "path";
 import { projectMmaDir } from "../../config/paths";
-import { PromptBuilder } from "../prompt-builder";
+import { PromptBuilder, filterBlocksForTags } from "../prompt-builder";
 import { resolvePromptOverflow, overflowHint, HINT_BLOCK_TOKENS } from "../prompt-overflow";
 import { buildServiceJobPrompt } from "../system-prompt";
 import type { PromptBlock, PromptBlockKind, PromptProfile } from "../types";
@@ -70,8 +70,8 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
   const builder = new PromptBuilder(systemBudget);
   const applyOverrides = (blocks: PromptBlock[]): PromptBlock[] =>
     blocks.map((b) => (b.kind && host.promptOverrides.has(b.kind) ? host.promptOverrides.get(b.kind)! : b));
-  builder.addBlocks(applyOverrides(deps.promptBlocks));
-  const dynamic = deps.getDynamicPromptBlocks?.() ?? [];
+  builder.addBlocks(applyOverrides(filterBlocksForTags(deps.promptBlocks, deps.toolTags)));
+  const dynamic = filterBlocksForTags(deps.getDynamicPromptBlocks?.() ?? [], deps.toolTags);
   const stableDynamic = freezeProjectMap(host, applyOverrides(dynamic));
   if (stableDynamic.length > 0) {
     builder.addBlocks(stableDynamic);
