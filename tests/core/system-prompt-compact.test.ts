@@ -24,8 +24,8 @@ function fixedPrompt(): string {
 
 describe("system prompt: compact core", () => {
   it("fits the compact-core budget", () => {
-    // 1200 — фактический потолок после W3; цель 900 остаётся ориентиром для W4.
-    expect(estimateTokens(fixedPrompt())).toBeLessThanOrEqual(1200);
+    // Ядро без security/windows: ~904 токена; 950 — гейт, цель 900 почти достигнута.
+    expect(estimateTokens(fixedPrompt())).toBeLessThanOrEqual(950);
   });
 
   it("matches the golden snapshot", () => {
