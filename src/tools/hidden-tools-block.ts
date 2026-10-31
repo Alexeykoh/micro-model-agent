@@ -1,6 +1,9 @@
 /** Блок системного промпта о скрытых tag-фильтром тулах. */
-import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
+
+/** Модельный заголовок — английский, без локали пользователя. */
+const HIDDEN_TOOLS_HEADER =
+  "Additional tools (enable on demand via enable_tools or route to subagent tool_tags):";
 
 /**
  * Компактный блок системного промпта со скрытыми тулами. Модель должна знать
@@ -31,7 +34,7 @@ export function buildHiddenToolsBlock(allTools: ToolDefinition[], activeTags: st
     }
   }
 
-  const lines: string[] = [t("tools.hidden_header")];
+  const lines: string[] = [HIDDEN_TOOLS_HEADER];
   for (const [tag, tools] of [...byTag.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const names = [...new Set(tools.map((tool) => tool.name))].sort().join(", ");
     lines.push(`- [${tag}] ${names}`);

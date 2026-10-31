@@ -184,11 +184,15 @@ export class SkillsModule implements AgentModule {
     if (this.availableSkills.length === 0) return null;
     const limit = 40;
     const shown = this.availableSkills.slice(0, limit);
-    const lines = ["[Available Skills]", t("skill.prompt_hint")];
+    const lines = [
+      "[Available Skills]",
+      'Skills extend your knowledge. Load one with "load_skill" when it matches the task;',
+      'if the skill you need is not listed, call "load_skill" with a query.',
+    ];
     for (const skill of shown) lines.push(`- ${skill.name}`);
     const hidden = this.availableSkills.length - shown.length;
     if (hidden > 0) {
-      lines.push(t("skill.catalog_more", { count: String(hidden) }));
+      lines.push(`…and ${hidden} more — call "load_skill" with a query to search by task.`);
     }
     const content = lines.join("\n");
     return {

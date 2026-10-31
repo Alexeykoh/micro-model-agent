@@ -89,17 +89,16 @@ describe("gate: guidance ↔ enforcement (W1)", () => {
     expect(isCommandAllowed("git status --short", bash).allowed).toBe(true);
   });
 
-  it("shell wrappers are blocked and the prompt names them", () => {
+  it("shell wrappers are blocked and the bash description names them", () => {
     for (const wrapper of ["powershell", "pwsh", "cmd"]) {
       expect(isCommandAllowed(`${wrapper} -Command Get-ChildItem`, bash).allowed, wrapper).toBe(false);
     }
-    const prompt = readFileSync(join(REPO_ROOT, "src", "core", "system-prompt.ts"), "utf-8");
-    const bashTool = readFileSync(join(REPO_ROOT, "src", "tools", "bash-description.ts"), "utf-8");
-    // W1b: платформенный факт дублируется в двух местах; PowerShell должен
-    // упоминаться только в негативном контексте.
-    for (const [name, text] of [["system-prompt", prompt], ["bash.ts", bashTool]] as const) {
-      expect(text.includes("cmd.exe"), `${name}: не называет cmd.exe`).toBe(true);
-    }
+    const bashDescription = readFileSync(
+      join(REPO_ROOT, "src", "tools", "bash-description.ts"),
+      "utf-8",
+    );
+    // Платформенный факт живёт в описании тула (одно место), а не в ядре промпта.
+    expect(bashDescription.includes("cmd.exe"), "bash-description: не называет cmd.exe").toBe(true);
   });
 
   it("the prompt never recommends an operator the validator blocks", () => {

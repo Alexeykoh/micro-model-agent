@@ -40,9 +40,9 @@ describe("system prompt: environment facts", () => {
     expect(text).toContain("bun test");
   });
 
-  it("uses cmd.exe notes only for the cmd shell", () => {
+  it("does not duplicate platform shell facts in the core (bash description owns them)", () => {
     expect(prompt({ platform: "linux", shell: "sh" })).not.toContain("cmd.exe");
-    expect(prompt({ platform: "win32", shell: "cmd" })).toContain("cmd.exe");
+    expect(prompt({ platform: "win32", shell: "cmd" })).not.toContain("cmd.exe");
   });
 
   it("drops the plan section when autoPlan is off", () => {

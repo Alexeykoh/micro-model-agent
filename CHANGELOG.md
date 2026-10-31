@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Системный промпт v3 (W1–W3, частично).** Ядро собирается из фактов
+  (`PromptEnvironmentFacts`): Bun/shell/LSP/autoPlan/команды проекта, а не
+  константы. Скрытые тегами тулы не рекламируются (`requiresTags`); план и
+  загруженные скиллы уходят в `tail`; каталог скиллов — компактные имена,
+  `load_skill` умеет `query`; выброшенные по бюджету блоки видны в
+  `omittedBlocksNote`. Ядро сжато ~1892 → ~1229 токенов. Спека:
+  `docs/specs/2026-10-31-system-prompt-v3-design.md`. W4 — цель 900 и дедуп.
+
 - **Скорость генерации токенов в `mma web`.** Живое `≈ N tok/s` в строке
   активности над композером и итоговый чип `N tok/s` после хода (тултип —
   разбивка по LLM-вызовам). Скорость считается по `completionTokens` за время
