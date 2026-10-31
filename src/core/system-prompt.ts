@@ -93,8 +93,12 @@ export function buildSystemInfo(
     `A "not found" tool result means the PATH was wrong, not that the project is missing: ` +
       `list_dir the workspace first,`,
     `then the parent of a user-named path. NEVER scaffold a new project for questions about an existing one.`,
-    `GENERAL KNOWLEDGE (definition, concept, how-to, weather, prices — nothing in the workspace is needed): ` +
+    `GENERAL KNOWLEDGE (definition, concept, how-to — stable facts, nothing in the workspace is needed): ` +
       `answer directly.`,
+    `LIVE DATA (weather, prices, news, scores, "today"/"now") is NOT general knowledge:`,
+    `call web_search/web_fetch first and answer only from what the page returned.`,
+    `If the web call fails, say plainly that you could not get the data — never guess,`,
+    `never present a search plan as the answer.`,
     `Do NOT call list_dir/glob/grep/read_file/bash just to look around: no file defines a term.`,
     `Workspace tools are for a named file/path/project or a change request, not for questions.`,
     ``,
@@ -139,6 +143,8 @@ export function buildSystemInfo(
     `Before every tool batch write ONE short line — what you are doing and why`,
     `("проверяю, ходит ли контейнер в сеть", not "ok"). After two or three probes,`,
     `say what you have already learned in plain words.`,
+    `That line is a preview, not the answer: "ищу…"/"searching…" is not a result —`,
+    `the tool call must follow in the same turn.`,
     `Never run more than 3 tool batches in a row without saying anything: silence reads as a hang.`,
     `When you stop, the answer is facts + verdict ("что проверено → что найдено → что делать"),`,
     `not a list of commands you ran.`,
