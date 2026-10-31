@@ -5,7 +5,7 @@
 // rail/face wiring; this module only owns the stream.
 import type { Dict } from "./core/store/types.js";
 import type { SseDeps } from "./sse-deps.js";
-
+import { noteChunk as speedChunk } from "./speed.js";
 export function connectSSE(deps: SseDeps): void {
   const {
     token,
@@ -139,8 +139,8 @@ export function connectSSE(deps: SseDeps): void {
     es.addEventListener(ev, (e) => {
       const d = parse(e);
       if (!d) return;
-      if (ev === "plan") railPlan(d);
-      else railEvent(ev, d.name);
+      if (ev === "text") speedChunk(d.sessionId, d.chunk || "");
+      if (ev === "plan") railPlan(d); else railEvent(ev, d.name);
     });
   }
   // Composer face: one persistent mascot that always reflects the live state.

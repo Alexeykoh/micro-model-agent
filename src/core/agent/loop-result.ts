@@ -34,6 +34,16 @@ export function buildLoopResult(
   const budget = contextManager.getBudget();
   const usageTokens = tokenTracker.resolveFinal(state);
   const cacheStats = computeCacheStats(state, host.costTracker.saved);
+  // Скорость генерации: Σ completion / Σ decode. Копируем записи, чтобы
+  // результат не делил мутабельный массив состояния с будущими прогонами.
+  const llmSpeed =
+    state.llmSpeedCalls.length > 0 && state.totalLlmDecodeMs > 0
+      ? {
+          completionTokens: state.llmSpeedCalls.reduce((n, c) => n + c.completionTokens, 0),
+          decodeMs: state.totalLlmDecodeMs,
+          calls: state.llmSpeedCalls.map((c) => ({ ...c })),
+        }
+      : undefined;
 
   const stopError =
     state.stopReason && !state.finalAnswerAccepted
@@ -69,6 +79,7 @@ export function buildLoopResult(
       contextQuality: contextManager.getQuality(),
       contextQualityBreakdown: contextManager.getQualityBreakdown?.(),
       contextBreakdown: contextManager.getBreakdown?.(),
+      llmSpeed,
     };
   }
 
@@ -99,5 +110,6 @@ export function buildLoopResult(
     contextQualityBreakdown: contextManager.getQualityBreakdown?.(),
     contextBreakdown: contextManager.getBreakdown?.(),
     llmDurationMs: state.totalLlmDuration,
+    llmSpeed,
   };
 }

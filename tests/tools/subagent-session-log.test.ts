@@ -145,7 +145,7 @@ describe("subagent session log", () => {
       (u) => seen.push({ origin: u.origin, totalTokens: u.totalTokens }),
     );
     const baseline = tracker.beginIteration(state, 500);
-    tracker.logUsage(state, baseline, "ответ", 500, 1, 10, {
+    tracker.logUsage(state, baseline, "ответ", 500, 1, 10, 5, {
       logLlmUsage: () => {},
     } as never);
     expect(seen).toHaveLength(1);

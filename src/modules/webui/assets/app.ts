@@ -8,7 +8,7 @@ import {
   onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
   onTurnEnd, onErrorEvent, onCommandOutput, onLog, onPlan, onQuestion,
   onRetract,
-  showEmptyFeed, renderPlan, renderUsage, renderEnvironment, renderWorkspace,
+  showEmptyFeed, renderPlan, renderUsage, renderEnvironment, renderWorkspace, renderSpeed,
   feedHasContent, loadHistory,
 } from "./js/feed.js";
 import {
@@ -118,9 +118,9 @@ function renderActiveState(): void {
   if (!tabState.tabs.length) showEmptyFeed();
   renderPlan(tab?.livePlan ?? host.plan); // живой план (событие plan) важнее снапшота
   railPlan(session.busy && host ? (tab?.livePlan ?? host.plan) : null);
-  renderUsage(host);
-  // Late provider auto-detect may change the effective window after boot —
-  // the snapshot carries it so the topbar follows without a config re-fetch.
+  renderUsage(host); renderSpeed(host);
+  // Late provider auto-detect may change the effective window after boot — the
+  // snapshot carries it so the topbar follows without a config re-fetch.
   if (typeof host.contextWindow === "number" && settings.config &&
       settings.config.contextWindow !== host.contextWindow) {
     settings.config.contextWindow = host.contextWindow;

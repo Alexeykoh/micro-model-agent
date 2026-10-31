@@ -767,6 +767,20 @@ describe("webui assets", () => {
     expect(a.css).toContain(".mcp-settings");
   });
 
+  it("shows generation speed in the rail and a final chip", () => {
+    const a = loadAssets();
+    // Live value lives in the activity rail; the final per-turn number is a
+    // chip in the composer selectors row (both above the input field).
+    expect(a.html).toContain('id="railSpeed"');
+    expect(a.html).toContain('id="speedChip"');
+    expect(a.jsModules?.["js/speed.js"] || "").toContain("SPEED_WINDOW_MS");
+    expect(a.jsModules?.["js/speed.js"] || "").toContain("speedView");
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("speedView");
+    expect(a.jsModules?.["js/sse.js"] || "").toContain("speedChunk");
+    expect(a.jsModules?.["js/feed/speed-chip.js"] || "").toContain("renderSpeed");
+    expect(a.css).toContain(".speed-chip");
+  });
+
   it("imports every sidebar helper it calls (no undefined render crash)", () => {
     const a = loadAssets();
     const src = a.js;

@@ -2,7 +2,7 @@
 import type { PrefixDelta, PromptSnapshot } from "./prefix-monitor";
 import type { CacheUsage } from "../../llm/cache-usage";
 import type { ArtifactChurnState } from "./artifact-progress";
-import type { StopReason } from "../types";
+import type { StopReason, LlmCallSpeed } from "../types";
 
 /**
  * Состояние одного запуска агентного цикла (executeSingleAgentLoop).
@@ -191,8 +191,8 @@ export interface LoopState {
   cacheWriteTotal: number;
   /** Источник кеш-данных за прогон. */
   cacheSource: "api" | "derived" | "none";
-  /** Суммарная длительность LLM-вызовов (мс) — выставляется в AgentResult. */
-  totalLlmDuration: number;
+  /** Суммарная длительность LLM-вызовов; скорость: записи вызовов и decode-время. */
+  totalLlmDuration: number; llmSpeedCalls: LlmCallSpeed[]; totalLlmDecodeMs: number;
 
   /** Снимок промпта прошлой итерации для оценки стабильности префикса. */
   prevPrompt?: PromptSnapshot;

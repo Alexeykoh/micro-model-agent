@@ -121,6 +121,8 @@ export interface SessionLogEntry {
   /** Origin измерения/решения (`usage`: api|estimate), НЕ provenance записи. */
   origin?: string;
   durationMs?: number;
+  /** Время декодирования вызова (без префилла/TTFT), мс. */
+  decodeMs?: number;
   /** Стабильность префикса промпта (0..1), client-side монитор кеша. */
   cacheStable?: number;
   /** Причина расхождения префикса: system/tools/history/volatile/none/unknown. */
