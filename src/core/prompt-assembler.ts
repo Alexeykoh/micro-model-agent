@@ -16,7 +16,10 @@ import { estimateTokens } from "../llm/token-counter";
 export interface DynamicBlocksParams {
   /** Активная модель (блок идентичности). */
   model: string;
-  skillsModule: { getSystemPromptBlock(): PromptBlock | null };
+  skillsModule: {
+    getSystemPromptBlock(): PromptBlock | null;
+    getPromptBlocks?(): PromptBlock[];
+  };
   /** Сессионный модуль — у раннера он свой (id/имя его сессии). */
   sessionModule: { getSystemPromptBlock(): PromptBlock | null };
   indexerModule: { getSystemPromptBlock(): PromptBlock | null };
@@ -39,8 +42,12 @@ export function assembleDynamicPromptBlocks(p: DynamicBlocksParams): PromptBlock
   const blocks: PromptBlock[] = [];
   // Идентичность активной модели — динамическая (переживает смену модели).
   blocks.push(buildModelBlock(p.model));
-  const skillsBlock = p.skillsModule.getSystemPromptBlock();
-  if (skillsBlock) blocks.push({ source: "skills", ...skillsBlock });
+  const skillBlocks =
+    p.skillsModule.getPromptBlocks?.() ??
+    [p.skillsModule.getSystemPromptBlock()].filter((b): b is PromptBlock => Boolean(b));
+  for (const block of skillBlocks) {
+    blocks.push({ source: "skills", ...block });
+  }
   const sessionBlock = p.sessionModule.getSystemPromptBlock();
   if (sessionBlock) blocks.push({ source: "session", ...sessionBlock });
   const mapBlock = p.indexerModule.getSystemPromptBlock();

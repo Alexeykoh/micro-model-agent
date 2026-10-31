@@ -89,14 +89,15 @@ describe("скиллы: промпт и загрузчик", () => {
     expect(skills.map((s) => s.name).sort()).toEqual(["a", "b"]);
   });
 
-  it("the prompt block lists the description without a token counter", () => {
+  it("the catalog lists names, not descriptions (compact)", () => {
     const loader = new SkillsLoader();
     const dir = mkdtempSync(join(tmpdir(), "mma-skill-prompt-"));
     writeSkill(dir, "x", "---\nname: x\ndescription: short description\n---\nbody");
     const module = new SkillsModule(loader.loadFromDir(dir), 10_000);
     const block = module.getSystemPromptBlock();
     expect(block).not.toBeNull();
-    expect(block?.content).toContain("- x: short description");
+    expect(block?.content).toContain("- x");
+    expect(block?.content).not.toContain("short description");
     expect(block?.content).not.toMatch(/--- x \(\d+ tokens\) ---/);
   });
 

@@ -3,12 +3,22 @@
 // Вынесено из `module.ts`: это чистое представление индекса, а не состояние
 // модуля (правило 6 AGENTS).
 import { dirname } from "path";
-import { t } from "../../i18n/index";
 import { toForwardSlash } from "../../tools/path-utils";
 import { estimateTokens } from "../../llm/token-counter";
 import { selectByRank } from "./rank";
 import { selectMapFiles } from "./map-select";
 import type { IndexResult } from "./walker";
+
+/** Модельные заголовки карты — английские, без локали пользователя. */
+const MAP_LABELS = {
+  header: "Project map",
+  topDirectories: "Top directories",
+  files: "Files",
+  empty: "No indexed files",
+  more: (count: number) => `... and ${count} more files`,
+  truncated: (max: number) => `[!] Index truncated at ${max} files`,
+  duplicates: (names: string) => `Duplicate basenames (verify the real source): ${names}`,
+};
 
 /** Опции отчёта. */
 export interface MapReportOptions {
@@ -92,20 +102,20 @@ export function formatMapReport(result: IndexResult, opts: MapReportOptions): st
 
   const more =
     result.files.length > listed.length
-      ? `\n${t("indexer.and_more", { count: result.files.length - listed.length })}`
+      ? `\n${MAP_LABELS.more(result.files.length - listed.length)}`
       : "";
 
   const duplicates = findDuplicateBasenames(result);
   const truncated = result.files.length >= opts.maxFiles;
 
   return [
-    `${t("indexer.map_header")} (${opts.baseDir})`,
+    `${MAP_LABELS.header} (${opts.baseDir})`,
     opts.summary,
-    ...(truncated ? [t("indexer.truncated", { max: String(opts.maxFiles) })] : []),
+    ...(truncated ? [MAP_LABELS.truncated(opts.maxFiles)] : []),
     ...(opts.stackLine ? [opts.stackLine] : []),
-    `${t("indexer.top_directories")}: ${topDirs}`,
-    ...(duplicates.length > 0 ? [t("indexer.duplicates", { names: duplicates.join(", ") })] : []),
-    `${t("indexer.files")}:${fileLines.length > 0 ? "" : ` ${t("indexer.empty")}`}`,
+    `${MAP_LABELS.topDirectories}: ${topDirs}`,
+    ...(duplicates.length > 0 ? [MAP_LABELS.duplicates(duplicates.join(", "))] : []),
+    `${MAP_LABELS.files}:${fileLines.length > 0 ? "" : ` ${MAP_LABELS.empty}`}`,
     ...fileLines,
     more,
   ].join("\n");
