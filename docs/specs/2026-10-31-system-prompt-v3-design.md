@@ -399,13 +399,13 @@ budget`, пишется `prompt_degraded` (или `context_degraded`) с при�
   `omittedBlocksNote` сообщает о выброшенных по бюджету блоках. Остаток W2:
   ядро ≤900, `degraded` для карты/памяти, полный budget-гейт.
 - **W3 — сделано** в ветке `feat/system-prompt-v3`: ядро сжато с 1892 до
-  ~993 токенов с security (~904 без) — hard cap 1000 достигнут, цель 900 почти;
-  Windows/bash/plan/runtime-детали ушли в описания тулов, `WORK RULES`/часть
-  `SCOPE` — в `plan`/`AGENTS.md`; модельные блоки `session`/`hidden tools`/
-  `skills catalog`/`project-map` — английские; добавлены snapshot и runtime
-  line-size guard (`system-prompt-compact.test.ts`).
-- **Остаток W4:** цель 900 с включённым security (~993), дальнейший дедуп с
-  `AGENTS.md`/тулами, удаление неиспользуемых i18n-ключей.
+  **896 токенов** без security (цель 900 достигнута) и ~993 с security
+  (config-зависимый policy-блок); Windows/bash/plan/runtime-детали ушли в
+  описания тулов, `WORK RULES`/часть `SCOPE` — в `plan`/`AGENTS.md`; модельные
+  блоки `session`/`hidden tools`/`skills catalog`/`project-map` — английские;
+  добавлены snapshot и runtime line-size guard (`system-prompt-compact.test.ts`).
+- **Остаток W4:** `approve` token flow (DEBT), погода/цены (отдельная ветка),
+  удаление неиспользуемых i18n-ключей.
 - **Зависимость:** живое правило `LIVE DATA` для погоды/цен приходит из ветки
   `fix/weather-grounding-guidance` (`2026-10-31-live-data-grounding-guidance-design.md`);
   эта ветка его не дублирует.

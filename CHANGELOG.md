@@ -13,8 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   константы. Скрытые тегами тулы не рекламируются (`requiresTags`); план и
   загруженные скиллы уходят в `tail`; каталог скиллов — компактные имена,
   `load_skill` умеет `query`; выброшенные по бюджету блоки видны в
-  `omittedBlocksNote`. Ядро сжато ~1892 → ~993 токенов (с security).
-  Спека: `docs/specs/2026-10-31-system-prompt-v3-design.md`. W4 — цель 900.
+  `omittedBlocksNote`. Ядро сжато ~1892 → **896** токенов (993 с security).
+  Спека: `docs/specs/2026-10-31-system-prompt-v3-design.md`.
 
 - **Скорость генерации токенов в `mma web`.** Живое `≈ N tok/s` в строке
   активности над композером и итоговый чип `N tok/s` после хода (тултип —

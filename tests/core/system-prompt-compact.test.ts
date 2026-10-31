@@ -24,8 +24,8 @@ function fixedPrompt(): string {
 
 describe("system prompt: compact core", () => {
   it("fits the compact-core budget", () => {
-    // Ядро без security/windows: ~904 токена; 950 — гейт, цель 900 почти достигнута.
-    expect(estimateTokens(fixedPrompt())).toBeLessThanOrEqual(950);
+    // Ядро без config-зависимого security: 896 токенов — цель 900 достигнута.
+    expect(estimateTokens(fixedPrompt())).toBeLessThanOrEqual(900);
   });
 
   it("matches the golden snapshot", () => {
