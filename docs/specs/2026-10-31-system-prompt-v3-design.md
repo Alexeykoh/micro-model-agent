@@ -393,10 +393,13 @@ budget`, пишется `prompt_degraded` (или `context_degraded`) с при�
   protected paths больше не обещают `approve`; plan-секция только при `autoPlan`;
   `plan_step` убран из runtime-блока; `bash`-описание по платформе; тесты
   `system-prompt-facts`, `prompt-facts`, `prompt-block-tags`, `bash-description-platform`.
-- **W2/W3 — не начаты:** компактный каталог скиллов и split catalog/loaded,
-  `degraded`+`overflow-note`, порядок блоков под prefix-cache, дедуп с описаниями
-  тулов, английские модельные блоки, snapshot/семантические тесты, обновление
-  `docs/agents/*`.
+- **W2 — частично** в ветке `feat/system-prompt-budget`: каталог и тела скиллов
+  разделены (`getPromptBlocks`), каталог — имена (≤40 + «N more»), `load_skill`
+  принимает `query` для поиска, `plan`/`loaded-skills` уходят в `tail`,
+  `omittedBlocksNote` сообщает о выброшенных по бюджету блоках. Остаток W2:
+  ядро ≤900, `degraded` для карты/памяти, полный budget-гейт.
+- **W3 — не начата:** компактное ядро/дедуп с описаниями тулов, английские
+  модельные блоки, snapshot/семантические тесты, обновление `docs/agents/*`.
 - **Зависимость:** живое правило `LIVE DATA` для погоды/цен приходит из ветки
   `fix/weather-grounding-guidance` (`2026-10-31-live-data-grounding-guidance-design.md`);
   эта ветка его не дублирует.

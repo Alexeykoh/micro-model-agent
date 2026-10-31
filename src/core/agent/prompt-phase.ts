@@ -9,7 +9,7 @@
  */
 import { join } from "path";
 import { projectMmaDir } from "../../config/paths";
-import { PromptBuilder, filterBlocksForTags } from "../prompt-builder";
+import { PromptBuilder, filterBlocksForTags, omittedBlocksNote } from "../prompt-builder";
 import { resolvePromptOverflow, overflowHint, HINT_BLOCK_TOKENS } from "../prompt-overflow";
 import { buildServiceJobPrompt } from "../system-prompt";
 import type { PromptBlock, PromptBlockKind, PromptProfile } from "../types";
@@ -98,11 +98,22 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
     builder.addBlock(host.overflowHintBlock);
   }
   const result = builder.build();
+  const note = omittedBlocksNote(result.excludedBlocks);
+  if (!note) {
+    return {
+      prompt: result.prompt,
+      excluded: result.excluded,
+      excludedBlocks: result.excludedBlocks,
+      blocks: result.blocks,
+    };
+  }
+  builder.addBlock(note);
+  const withNote = builder.build();
   return {
-    prompt: result.prompt,
-    excluded: result.excluded,
-    excludedBlocks: result.excludedBlocks,
-    blocks: result.blocks,
+    prompt: withNote.prompt,
+    excluded: withNote.excluded,
+    excludedBlocks: withNote.excludedBlocks,
+    blocks: withNote.blocks,
   };
 }
 

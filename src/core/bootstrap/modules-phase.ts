@@ -296,8 +296,7 @@ function buildStaticPromptBlocks(
 function dryRunStartupOverflow(input: ModulesPhaseInput, promptBlocks: PromptBlock[]): void {
   const { config, logger, dir, toolRegistry, activeToolTags, skillsModule, indexerModule } = input;
   const dynamicBlocks: PromptBlock[] = [];
-  const skillsBlock = skillsModule.getSystemPromptBlock();
-  if (skillsBlock) dynamicBlocks.push(skillsBlock);
+  for (const block of skillsModule.getPromptBlocks()) dynamicBlocks.push(block);
   const mapBlock = indexerModule.getSystemPromptBlock();
   if (mapBlock) dynamicBlocks.push(mapBlock);
   const hiddenToolsBlock = buildHiddenToolsBlock(toolRegistry.getAll(), activeToolTags);

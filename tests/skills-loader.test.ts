@@ -105,6 +105,49 @@ describe("SkillsModule.getSystemPromptBlock", () => {
   });
 });
 
+describe("SkillsModule.getPromptBlocks (catalog + loaded, W2)", () => {
+  const makeSkills = (n = 2) =>
+    Array.from({ length: n }, (_, i) => ({
+      name: `skill-${i}`,
+      description: `Description for skill ${i} with many many many words that should not be in the compact catalog`,
+      keywords: [],
+      content: `content ${i}`,
+    }));
+
+  it("splits catalog and loaded bodies into separate blocks", () => {
+    const mod = new SkillsModule(makeSkills() as any, 1000);
+    expect(mod.getPromptBlocks()).toHaveLength(1);
+    mod.loadByName("skill-0");
+    const blocks = mod.getPromptBlocks();
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]!.content).toContain("[Available Skills]");
+    expect(blocks[1]!.content).toContain("[Loaded Skills]");
+  });
+
+  it("catalog lists names, not full descriptions", () => {
+    const mod = new SkillsModule(makeSkills() as any, 1000);
+    const catalog = mod.getCatalogBlock()!;
+    expect(catalog.content).toContain("- skill-0");
+    expect(catalog.content).not.toContain("Description for skill 0");
+  });
+
+  it("caps the catalog and reports how many skills are hidden", () => {
+    const mod = new SkillsModule(makeSkills(45) as any, 1000);
+    const catalog = mod.getCatalogBlock()!;
+    expect(catalog.content).toContain("- skill-39");
+    expect(catalog.content).not.toContain("- skill-40");
+    expect(catalog.degraded?.reason).toContain("5 more");
+  });
+
+  it("puts loaded skills in the volatile tail with low priority", () => {
+    const mod = new SkillsModule(makeSkills() as any, 1000);
+    mod.loadByName("skill-0");
+    const loaded = mod.getLoadedBlock()!;
+    expect(loaded.priority).toBe("low");
+    expect(loaded.tail).toBe(true);
+  });
+});
+
 describe("SkillsModule plugin", () => {
   const makeSkills = () => [
     {

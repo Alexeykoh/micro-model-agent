@@ -1,5 +1,6 @@
 /** Сборщик системного промпта: блоки по приоритету в бюджет токенов. */
 import type { PromptBlock } from "./types";
+import { estimateTokens } from "../llm/token-counter";
 
 /** Диагностика блока: владелец, метка, приоритет, токены, вошёл ли в бюджет. */
 export interface BlockBuildInfo {
@@ -63,8 +64,34 @@ function blockLabel(block: PromptBlock): string {
 }
 
 /**
+ * Заметка о блоках, выброшенных по бюджету (INV-6/17). `instructions` и
+ * `project-map` обрабатывает резолвер переполнения отдельно — их не дублируем.
+ * @param excludedBlocks блоки, не вошедшие в промпт.
+ * @returns essential-блок с причиной или null, если сообщать нечего.
+ */
+export function omittedBlocksNote(excludedBlocks: PromptBlock[]): PromptBlock | null {
+  const relevant = excludedBlocks.filter((block) => !block.kind);
+  if (relevant.length === 0) return null;
+  const lines = [`[Prompt note] Omitted due to the system-prompt budget:`];
+  for (const block of relevant.slice(0, 5)) {
+    lines.push(`- ${blockLabel(block)}: ${block.estimatedTokens} tok`);
+  }
+  if (relevant.length > 5) lines.push(`- +${relevant.length - 5} more`);
+  const content = lines.join("\n");
+  return {
+    source: "core",
+    label: "omitted blocks",
+    content,
+    priority: "high",
+    essential: true,
+    estimatedTokens: estimateTokens(content),
+  };
+}
+
+/**
  * Собирает системный промпт из блоков: essential всегда, остальные по
- * приоритету, пока влезают в бюджет.
+ * приоритету, пока влезают в бюджет. Блоки с `tail` идут в конец — их
+ * изменение не рвёт prefix-cache стабильных секций.
  */
 export class PromptBuilder {
   private blocks: PromptBlock[] = [];
@@ -97,18 +124,18 @@ export class PromptBuilder {
    * @returns промпт, исключённое и поблочная разбивка.
    */
   build(): BuildResult {
-    const essential: PromptBlock[] = [];
-    const nonEssential: PromptBlock[] = [];
-
-    for (const block of this.blocks) {
-      if (block.essential) {
-        essential.push(block);
-      } else {
-        nonEssential.push(block);
-      }
-    }
-
-    nonEssential.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+    const essential = this.blocks.filter((block) => block.essential);
+    const nonEssential = this.blocks
+      .filter((block) => !block.essential)
+      .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+    // Стабильный префикс → per-turn → волатильный хвост. Essential-tail
+    // (план) — последним: он меняется на каждом шаге.
+    const ordered = [
+      ...essential.filter((block) => !block.tail),
+      ...nonEssential.filter((block) => !block.tail),
+      ...nonEssential.filter((block) => block.tail),
+      ...essential.filter((block) => block.tail),
+    ];
 
     let usedTokens = 0;
     const included: string[] = [];
@@ -116,23 +143,9 @@ export class PromptBuilder {
     const excludedBlocks: PromptBlock[] = [];
     const blocks: BlockBuildInfo[] = [];
 
-    for (const block of essential) {
-      included.push(block.content);
-      usedTokens += block.estimatedTokens;
-      blocks.push({
-        source: block.source,
-        label: blockLabel(block),
-        priority: block.priority,
-        essential: true,
-        tokens: block.estimatedTokens,
-        included: true,
-        reason: block.degraded?.reason,
-      });
-    }
-
-    for (const block of nonEssential) {
+    for (const block of ordered) {
       const tokens = block.estimatedTokens;
-      const fits = usedTokens + tokens <= this.budget;
+      const fits = block.essential || usedTokens + tokens <= this.budget;
       let reason = block.degraded?.reason;
       if (fits) {
         included.push(block.content);
@@ -146,7 +159,7 @@ export class PromptBuilder {
         source: block.source,
         label: blockLabel(block),
         priority: block.priority,
-        essential: false,
+        essential: block.essential,
         tokens,
         included: fits,
         reason,
