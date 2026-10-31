@@ -60,8 +60,10 @@ function srcText(): string {
 }
 
 function faceStates(): string[] {
+  // The union lives in `loader-states.ts` (moved out of `loader.ts` when the
+  // canvas renderer took over the pixels).
   const loader = readFileSync(
-    join(REPO_ROOT, "src/modules/webui/assets/js/loader.ts"),
+    join(REPO_ROOT, "src/modules/webui/assets/js/loader-states.ts"),
     "utf-8",
   );
   const union = loader.match(/export type FaceState\s*=([\s\S]*?);/);

@@ -181,3 +181,12 @@ html.light .c-dim { --face-c: var(--panel); }
 @media (prefers-reduced-motion: reduce) {
   .mdl, .mdl * { animation: none !important; }
 }
+
+/* Canvas renderer (bundle: mascot-canvas.js) */
+html .mdl.has-canvas { background: transparent; border-color: transparent; box-shadow: none; animation: none; }
+html .mdl.has-canvas canvas {
+  position: absolute; left: 50%; top: 50%;
+  width: 180%; height: 180%; transform: translate(-50%, -50%);
+  display: block; pointer-events: none;
+}
+html.light .mdl.has-canvas { box-shadow: none; }

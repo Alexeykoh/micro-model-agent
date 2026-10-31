@@ -170,33 +170,33 @@ describe("LSP mascot reactions", () => {
     expect(css).not.toContain(".mdl.st-warn { animation: mdlRun");
   });
 
-  it("carries the star element the warn state needs", () => {
+  it("renders warn as a canvas face", () => {
     const face = createFace("warn", "lg");
-    expect(face.querySelector(".star")).not.toBeNull();
+    expect(face.querySelector("canvas.mdl-cv")).not.toBeNull();
+    expect(face.classList.contains("has-canvas")).toBe(true);
     expect(face.dataset.state).toBe("warn");
   });
 });
 
 describe("createFace / setFaceState", () => {
-  it("builds eyes + every extra, hidden by default", () => {
+  it("builds a canvas face with the greeting tip", () => {
     const face = createFace("think", "sm");
     expect(face.classList.contains("mdl")).toBe(true);
     expect(face.classList.contains("sm")).toBe(true);
-    expect(face.querySelectorAll(".eye").length).toBe(2);
-    expect(face.querySelector(".orb")).not.toBeNull();
-    expect(face.querySelector(".keys")).not.toBeNull();
-    expect(face.querySelector(".star")).not.toBeNull();
+    expect(face.classList.contains("has-canvas")).toBe(true);
+    expect(face.querySelector("canvas.mdl-cv")).not.toBeNull();
+    expect(face.querySelector(".mdl-tip")).not.toBeNull();
   });
 
-  it("swaps state classes without recreating the eyes", () => {
+  it("swaps state classes without recreating the canvas", () => {
     const face = createFace("think", "sm");
-    const eyes = face.querySelector(".eyes");
+    const canvas = face.querySelector("canvas");
     setFaceState(face, "error");
     expect(face.dataset.state).toBe("error");
     expect(face.classList.contains("st-error")).toBe(true);
     expect(face.classList.contains("mdl")).toBe(true);
     expect(face.classList.contains("sm")).toBe(true);
-    expect(face.querySelector(".eyes")).toBe(eyes);
+    expect(face.querySelector("canvas")).toBe(canvas);
   });
 
   it("keeps size when state changes to one without it", () => {
@@ -245,7 +245,7 @@ describe("MMART greeting", () => {
     document.body.appendChild(face);
     document.body.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
     expect(face.classList.contains("show-tip")).toBe(false);
-    face.querySelector(".eyes")?.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+    face.querySelector("canvas")?.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
     expect(face.classList.contains("show-tip")).toBe(true);
   });
 

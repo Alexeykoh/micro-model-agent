@@ -2294,6 +2294,16 @@ body.light {
 }
 body.light .mdl { box-shadow: 0 2px 6px rgba(31, 35, 40, .16), 0 10px 22px rgba(31, 35, 40, .12); }
 .mdl.lg { --s: 76px; } .mdl.sm { --s: 22px; } .mdl.xs { --s: 15px; border-radius: 30%; }
+/* Canvas faces: the wrapper only sizes/positions; every pixel is in the canvas.
+   `body` in the selector beats the per-state `.mdl.st-*` animations so the
+   wrapper never scales/rotates (the canvas animates the body instead). */
+body .mdl.has-canvas { background: transparent; border-color: transparent; box-shadow: none; animation: none; }
+body .mdl.has-canvas canvas {
+  position: absolute; left: 50%; top: 50%;
+  width: 180%; height: 180%; transform: translate(-50%, -50%);
+  display: block; pointer-events: none;
+}
+body.light .mdl.has-canvas { box-shadow: none; }
 .mdl .eyes {
   display: flex; align-items: center; justify-content: center; gap: max(3px, var(--eye-gap));
   position: relative; top: calc(var(--s) * -.06 + var(--ey, 0px)); left: var(--ex, 0px);
@@ -2650,9 +2660,9 @@ body.light .c-dim { --face-c: var(--panel); }
 .theme-card-desc { font-size: 10.5px; color: var(--dim-a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 
-/* ---- MMART effect layers: per-state detail -------------------------------
-   `.fx` holds up to six glyph/particle slots; `loader-fx.ts` fills the text
-   only where a state needs characters. All motion is transform/opacity. */
+/* ---- MMART legacy effect layer (DOM) -------------------------------------
+   Canvas faces render their own effects in `mascot-fx.ts`; these rules remain
+   for the static splash fallback and the class contract used by tests. */
 .mdl .fx,
 .mdl .sweep { display: none; }
 .mdl .fx i {
