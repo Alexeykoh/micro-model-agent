@@ -279,14 +279,15 @@ export interface UiConfig {
   fontSize?: "compact" | "comfortable" | "large";
   /**
    * Скин веб-UI (`mma web`). Хранится в конфиге, а не только в браузере: тема
-   * переживает перезапуск сервера, хотя у `localStorage` меняется origin
-   * (порт по умолчанию случайный). В браузере значение дублируется кэшем —
+   * переживает перезапуск сервера. В браузере значение дублируется кэшем —
    * только для отрисовки до первого `GET /api/config`. Каталог id и подписи —
    * во фронтенде (`assets/js/settings/themes.ts`).
    */
   theme?: UiThemeId;
   /** Режим оформления веб-UI: `dark` | `light` | системный `auto`. */
   themeMode?: ThemeMode;
+  /** Звуки веб-UI: мастер и флаги событий (spec 2026-10-31-webui-sounds). */
+  sounds?: { enabled?: boolean; done?: boolean; question?: boolean; failed?: boolean };
 }
 
 export interface BashSecurityConfig {

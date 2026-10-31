@@ -4,7 +4,6 @@ import type { PromptBlock } from "../../core/types";
 import { SkillsLoader, type SkillMeta } from "./loader";
 import { t } from "../../i18n/index";
 import { estimateTokens } from "../../llm/token-counter";
-import { truncateWords } from "../../utils/truncate";
 
 /** Итог загрузки скилла по имени (успех, сообщение, сам скилл). */
 export interface LoadResult {
@@ -154,40 +153,75 @@ export class SkillsModule implements AgentModule {
     return skill ? skill.content : null;
   }
 
-  /** Системный блок: каталог доступных + тела загруженных скиллов. */
+  /** Системный блок: каталог + тела загруженных (совместимый вход). */
   getSystemPromptBlock(): PromptBlock | null {
-    const lines: string[] = [];
-
-    if (this.availableSkills.length > 0) {
-      lines.push("[Available Skills]");
-      lines.push(t("skill.prompt_hint"));
-      for (const skill of this.availableSkills) {
-        lines.push(`- ${skill.name}: ${truncateWords(skill.description, 120)}`);
-      }
-    }
-
-    if (this.loadedSkills.size > 0) {
-      lines.push("");
-      lines.push("[Loaded Skills]");
-      for (const skill of this.loadedSkills.values()) {
-        // Без счётчика токенов: он меняется от сессии к сессии и ломает
-        // prompt-cache (как метрика в терминале).
-        lines.push(`--- ${skill.name} ---`);
-        lines.push(skill.content);
-        lines.push("");
-      }
-    }
-
-    if (lines.length === 0) return null;
-
-    const content = lines.join("\n");
-    const tokens = this.estimateTokens(content);
-
+    const blocks = this.getPromptBlocks();
+    if (blocks.length === 0) return null;
+    const content = blocks.map((b) => b.content).join("\n\n");
     return {
       content,
       priority: "high",
       essential: false,
-      estimatedTokens: tokens,
+      estimatedTokens: this.estimateTokens(content),
+    };
+  }
+
+  /**
+   * Каталог и тела — отдельными блоками: каталог должен влезать сам, а тела
+   * скиллов — уходить в хвост и деградировать независимо (W2 спеки v3).
+   */
+  getPromptBlocks(): PromptBlock[] {
+    const blocks: PromptBlock[] = [];
+    const catalog = this.getCatalogBlock();
+    if (catalog) blocks.push(catalog);
+    const loaded = this.getLoadedBlock();
+    if (loaded) blocks.push(loaded);
+    return blocks;
+  }
+
+  /** Компактный каталог: имена, а не 120-словные описания. */
+  getCatalogBlock(): PromptBlock | null {
+    if (this.availableSkills.length === 0) return null;
+    const limit = 40;
+    const shown = this.availableSkills.slice(0, limit);
+    const lines = [
+      "[Available Skills]",
+      'Skills extend your knowledge. Load one with "load_skill" when it matches the task;',
+      'if the skill you need is not listed, call "load_skill" with a query.',
+    ];
+    for (const skill of shown) lines.push(`- ${skill.name}`);
+    const hidden = this.availableSkills.length - shown.length;
+    if (hidden > 0) {
+      lines.push(`…and ${hidden} more — call "load_skill" with a query to search by task.`);
+    }
+    const content = lines.join("\n");
+    return {
+      content,
+      label: "skills catalog",
+      priority: "normal",
+      essential: false,
+      estimatedTokens: this.estimateTokens(content),
+      degraded: hidden > 0 ? { reason: `${hidden} more skills not listed` } : undefined,
+    };
+  }
+
+  /** Тела загруженных скиллов: низкий приоритет и хвост промпта. */
+  getLoadedBlock(): PromptBlock | null {
+    if (this.loadedSkills.size === 0) return null;
+    const lines = ["[Loaded Skills]"];
+    for (const skill of this.loadedSkills.values()) {
+      lines.push(`--- ${skill.name} ---`);
+      lines.push(skill.content);
+      lines.push("");
+    }
+    const content = lines.join("\n");
+    return {
+      content,
+      label: "loaded skills",
+      priority: "low",
+      essential: false,
+      estimatedTokens: this.estimateTokens(content),
+      tail: true,
     };
   }
 

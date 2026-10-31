@@ -3,9 +3,22 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync
 import { join } from "path";
 import { tmpdir } from "os";
 import { bootstrap, buildSystemInfo, resolveBaseDir } from "../../src/core/bootstrap";
+import { fallbackPromptFacts } from "../../src/core/prompt-facts";
 import { Logger } from "../../src/logger/app-logger";
 import { defaultOutputBus, type OutputEvent } from "../../src/output";
 import { resetProbeCache } from "../../src/modules/reasoning/probe";
+
+function bunFacts() {
+  return {
+    ...fallbackPromptFacts({ model: "test-model" } as never, "/tmp", "win32 shell=cmd"),
+    tools: { bun: "present" as const, git: "unknown" as const, python: "unknown" as const },
+    project: {
+      packageManager: "bun" as const,
+      testCommand: "bun test",
+      languages: [],
+    },
+  };
+}
 
 function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "mma-bootstrap-"));
@@ -284,7 +297,12 @@ describe("bootstrap", () => {
   }, 30_000);
 
   it("advertises Bun as the runtime for TypeScript scripts", () => {
-    const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32 shell=cmd");
+    const info = buildSystemInfo(
+      { model: "test-model" } as any,
+      "/tmp",
+      "win32 shell=cmd",
+      bunFacts(),
+    );
     expect(info).toContain("Bun is available");
     expect(info).toContain("bun test");
   });
@@ -353,7 +371,7 @@ describe("bootstrap", () => {
   });
 
   it("has a session-start baseline protocol for code tasks (Wave 2, Task 4)", () => {
-    const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32");
+    const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32", bunFacts());
     expect(info).toContain("SESSION START");
     expect(info).toContain("list_dir");
     expect(info).toContain("bun test");

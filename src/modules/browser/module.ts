@@ -20,6 +20,9 @@ export class BrowserModule implements AgentModule {
       priority: "normal",
       essential: false,
       estimatedTokens: 80,
+      // Блок говорит «у тебя есть браузер» — только когда браузер реально
+      // виден модели; иначе модуль не рекламирует скрытый тул.
+      requiresTags: ["browser"],
     };
   }
 

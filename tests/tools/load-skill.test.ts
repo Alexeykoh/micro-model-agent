@@ -14,7 +14,31 @@ describe("loadSkillTool", () => {
     expect(tool.name).toBe("load_skill");
     expect(tool.description).toBeTruthy();
     expect(tool.parameters.properties).toHaveProperty("name");
-    expect(tool.parameters.required).toContain("name");
+    expect(tool.parameters.properties).toHaveProperty("query");
+    expect(tool.parameters.required).not.toContain("name");
+  });
+
+  it("should search skills by query without loading", async () => {
+    const skills = [
+      {
+        name: "docker-expert",
+        description: "Docker containers and images",
+        keywords: ["docker"],
+        content: "docker content",
+      },
+      {
+        name: "git-expert",
+        description: "Git branching and rebasing",
+        keywords: ["git"],
+        content: "git content",
+      },
+    ];
+    const skillsModule = new SkillsModule(skills as any, 2000);
+    const tool = createLoadSkillTool(skillsModule);
+    const result = await tool.handler({} as any, { query: "docker" });
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("docker-expert");
+    expect(result.output).not.toContain("docker content");
   });
 
   it("should reject call without name", async () => {

@@ -84,6 +84,7 @@
         <div class="rail-l1">
           <span class="lab" id="railPhase">✦ thinking</span>
           <span class="s" aria-hidden="true">·</span><span class="time" id="railTime" aria-hidden="true">0.0s</span>
+          <span class="speed" id="railSpeed" aria-hidden="true"></span>
           <span class="s" aria-hidden="true">·</span><span class="st" id="railSteps" aria-hidden="true">no plan</span>
           <span class="right" id="railEsc" aria-hidden="true">Esc — stop</span>
         </div>
@@ -116,6 +117,7 @@
           <button id="selReasoningBtn">reasoning: <b>—</b> ▾</button>
           <div class="menu" id="selReasoningMenu"></div>
         </div>
+        <span class="speed-chip" id="speedChip" hidden></span>
       </div>
       <input type="file" id="imgPicker" accept="image/*" multiple hidden>
       <div class="attach-strip" id="attachStrip" hidden></div>
@@ -137,6 +139,7 @@
   </div>
 
   <div class="sb">
+    <div class="sb-tabs-bar">
     <div class="sb-tabs" role="tablist" aria-label="sidebar">
       <button class="sb-tab on" type="button" role="tab" data-tab="session" aria-selected="true" aria-controls="pane-session" title="Session">
         <span class="sb-ico" data-icon="session" aria-hidden="true"></span>
@@ -171,7 +174,9 @@
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
     </div>
-    <div class="sb-name" id="sbName"><span class="sb-ico" data-icon="session" aria-hidden="true"></span><span id="sbNameText">Session</span><button class="linkbtn sb-settings" type="button" id="sbSettings" title="settings" aria-label="settings"></button></div>
+    <button class="linkbtn sb-settings" type="button" id="sbSettings" title="settings" aria-label="settings"></button>
+    </div>
+    <div class="sb-name" id="sbName"><span class="sb-ico" data-icon="session" aria-hidden="true"></span><span id="sbNameText">Session</span></div>
 
     <div class="sb-pane" id="pane-session" role="tabpanel" data-pane="session">
       <div class="sb-loadface" aria-hidden="true"><span class="mdl c-dim st-think"><span class="eyes"><i class="eye left"></i><i class="eye right"></i></span></span></div>

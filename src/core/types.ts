@@ -60,6 +60,16 @@ export interface PromptBlock {
   estimatedTokens: number;
   kind?: PromptBlockKind;
   /**
+   * Блок имеет смысл только при активном теге тулов (напр. `browser`).
+   * `undefined`/пусто — блок не зависит от сужения набора.
+   */
+  requiresTags?: string[];
+  /**
+   * Блок меняется внутри хода (план, загруженные скиллы). Ставится в хвост
+   * системного промпта, чтобы не рвать prefix-cache стабильных секций.
+   */
+  tail?: boolean;
+  /**
    * Блок работает неполно (INV-6/17): не влез в бюджет, модуль деградировал и т.п.
    * `reason` — почему, для лога и `/sysprompt`.
    */
@@ -209,6 +219,21 @@ export interface ContextQualityBreakdown {
  */
 export type StopReason = "duplicate" | "failed_batches" | "max_iters" | "silent" | "stalled";
 
+/** Скорость одного LLM-вызова: completion-токены за время декодирования. */
+export interface LlmCallSpeed {
+  completionTokens: number;
+  /** От первого контентного чанка до конца вызова (мс), без префилла/TTFT. */
+  decodeMs: number;
+  source: "api" | "estimate";
+}
+
+/** Агрегат скорости генерации за ход: Σ токенов / Σ decodeMs. */
+export interface LlmSpeedSnapshot {
+  completionTokens: number;
+  decodeMs: number;
+  calls: LlmCallSpeed[];
+}
+
 /** Итог прогона: успех, текст, токены, стоимость, качество контекста. */
 export interface AgentResult {
   success: boolean;
@@ -269,4 +294,6 @@ export interface AgentResult {
   durationMs?: number;
   /** Длительность LLM-вызовов в мс (без исполнения тулов). */
   llmDurationMs?: number;
+  /** Скорость генерации за ход (decode без префилла); нет, если нечего считать. */
+  llmSpeed?: LlmSpeedSnapshot;
 }

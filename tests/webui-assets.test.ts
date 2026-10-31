@@ -736,7 +736,14 @@ describe("webui assets", () => {
   it("offers one context-aware settings shortcut for every sidebar tab", () => {
     const a = loadAssets();
     expect(a.html).toContain('id="sbSettings"');
+    // The shortcut lives in the tab strip, pinned after the tab list — not in
+    // the title row under the global topbar gear, where the two were confused.
+    expect(a.html).toMatch(/class="sb-tabs-bar"[\s\S]*id="sbSettings"[\s\S]*class="sb-name"/);
+    const sbNameBlock = (a.html.split('class="sb-name"')[1] || "").split('class="sb-pane"')[0];
+    expect(sbNameBlock).not.toContain('id="sbSettings"');
     const core = a.jsModules?.["js/sidebar/core.js"] || "";
+    expect(a.jsModules?.["js/icons.js"] || "").toContain("sliders:");
+    expect(core).toContain('icon("sliders")');
     expect(core).toContain("const SETTINGS_PANEL");
     for (const mapping of [
       'session: "sessions"',
@@ -758,6 +765,20 @@ describe("webui assets", () => {
     expect(mcp).toContain("web.mcp.open_settings");
     expect(mcp).toContain('"settings-mcp"');
     expect(a.css).toContain(".mcp-settings");
+  });
+
+  it("shows generation speed in the rail and a final chip", () => {
+    const a = loadAssets();
+    // Live value lives in the activity rail; the final per-turn number is a
+    // chip in the composer selectors row (both above the input field).
+    expect(a.html).toContain('id="railSpeed"');
+    expect(a.html).toContain('id="speedChip"');
+    expect(a.jsModules?.["js/speed.js"] || "").toContain("SPEED_WINDOW_MS");
+    expect(a.jsModules?.["js/speed.js"] || "").toContain("speedView");
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("speedView");
+    expect(a.jsModules?.["js/sse.js"] || "").toContain("speedChunk");
+    expect(a.jsModules?.["js/feed/speed-chip.js"] || "").toContain("renderSpeed");
+    expect(a.css).toContain(".speed-chip");
   });
 
   it("imports every sidebar helper it calls (no undefined render crash)", () => {

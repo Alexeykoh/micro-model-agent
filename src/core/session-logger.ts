@@ -418,6 +418,8 @@ export class SessionLogger {
       totalTokens: number;
       source: "api" | "estimate";
       durationMs: number;
+      /** Время декодирования (без префилла/TTFT), мс. */
+      decodeMs?: number;
       /** Стабильность префикса промпта (client-side монитор кеша). */
       prefix?: PrefixDelta;
       /** Кеш-статистика вызова от провайдера. */
@@ -436,6 +438,7 @@ export class SessionLogger {
       totalTokens: usage.totalTokens,
       origin: usage.source,
       durationMs: usage.durationMs,
+      decodeMs: usage.decodeMs,
       cacheStable: usage.prefix ? Number(usage.prefix.stableRatio.toFixed(4)) : undefined,
       cacheCause: usage.prefix?.cause,
       cachedTokens: usage.cache?.cachedTokens,

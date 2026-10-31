@@ -76,6 +76,37 @@ export class TokenTracker {
   }
 
   /**
+   * Конец LLM-вызова: считает полную длительность и decode (от первого
+   * контентного чанка), пишет per-call usage. Возвращает `durationMs`.
+   */
+  finishCall(
+    state: LoopState,
+    baseline: { promptBefore: number; completionBefore: number; costBefore?: number },
+    textContent: string,
+    contextTokens: number,
+    iteration: number,
+    startedAt: number,
+    firstTokenAt: number,
+    slog: SessionLogger,
+  ): number {
+    const end = Date.now();
+    const durationMs = end - startedAt;
+    state.totalLlmDuration += durationMs;
+    const decodeMs = firstTokenAt ? Math.max(1, end - firstTokenAt) : 0;
+    this.logUsage(
+      state,
+      baseline,
+      textContent,
+      contextTokens,
+      iteration,
+      durationMs,
+      decodeMs,
+      slog,
+    );
+    return durationMs;
+  }
+
+  /**
    * Per-call лог usage + запись стоимости. Источник "api", когда бэкенд
    * отдал цифры; иначе локальная оценка (контекст для prompt, chars/4 для
    * completion) — лог должен отличать реальные числа от эвристики.
@@ -87,6 +118,8 @@ export class TokenTracker {
     contextTokens: number,
     iteration: number,
     durationMs: number,
+    /** Время декодирования: от первого контентного чанка до конца вызова. */
+    decodeMs: number,
     slog: SessionLogger,
   ): void {
     const usagePrompt = state.apiPromptTokens - baseline.promptBefore;
@@ -95,6 +128,21 @@ export class TokenTracker {
       usagePrompt > 0 || usageCompletion > 0 ? "api" : "estimate";
     const prompt = source === "api" ? usagePrompt : contextTokens;
     const completion = source === "api" ? usageCompletion : estimateTokens(textContent);
+
+    // Скорость вызова: decode без префилла. Провайдер может отдать весь ответ
+    // одним чанком — тогда decode почти нулевой и tok/s физически невозможен
+    // (тысячи токенов/с). Такие замеры не пишем: лучше нет числа, чем ложь.
+    const MAX_PLAUSIBLE_TPS = 1000;
+    const minDecodeMs = completion > 0 ? (completion / MAX_PLAUSIBLE_TPS) * 1000 : 1;
+    const decode = decodeMs >= minDecodeMs ? decodeMs : 0;
+    if (decode > 0) {
+      state.llmSpeedCalls.push({
+        completionTokens: completion,
+        decodeMs: Math.max(1, decode),
+        source,
+      });
+      state.totalLlmDecodeMs += Math.max(1, decode);
+    }
 
     // Накопление кеш-токенов за прогон (для AgentResult.cache).
     if (state.cacheUsage) {
@@ -113,6 +161,7 @@ export class TokenTracker {
       totalTokens: prompt + completion,
       source,
       durationMs,
+      decodeMs,
       prefix: state.prefixDelta,
       cache: state.cacheUsage,
       progress: {
@@ -130,6 +179,7 @@ export class TokenTracker {
       totalTokens: prompt + completion,
       origin: source,
       durationMs,
+      decodeMs,
       iteration,
       provider: prov.provider,
       model: prov.model,

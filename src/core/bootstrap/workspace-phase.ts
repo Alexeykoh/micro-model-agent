@@ -8,6 +8,7 @@
 import { join, resolve } from "path";
 import { statSync } from "fs";
 import { buildSystemInfo } from "../system-prompt";
+import { collectPromptFacts } from "../prompt-facts";
 import { collectEnvironment, logEnvironment } from "../environment";
 import type { EnvironmentReport } from "../environment";
 import { IndexerModule } from "../../modules/indexer/index";
@@ -162,7 +163,17 @@ export async function setupWorkspacePhase(
 
   // SystemInfo собирается здесь из готового профиля (в исходнике — сразу
   // после создания pluginManager; сайд-эффектов чтения профиля тут уже нет).
-  const systemInfoContent = buildSystemInfo(config, baseDir, profile.compress());
+  const systemInfoContent = buildSystemInfo(
+    config,
+    baseDir,
+    profile.compress(),
+    collectPromptFacts({
+      config,
+      baseDir,
+      envReport,
+      activeToolTags: config.tools?.defaultTags,
+    }),
+  );
   const systemInfoPrompt: PromptBlock = {
     source: "core",
     label: "system",

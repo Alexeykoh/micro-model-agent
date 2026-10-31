@@ -8,18 +8,13 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import {
-  makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent,
-  loadHistory, syncUrl, scrollToBottom, clearBusy, mountFeed,
-} from "../feed.js";
+import { makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent, loadHistory, syncUrl, scrollToBottom, clearBusy, mountFeed } from "../feed.js";
 import { setIndicator } from "../dialog.js";
 import { sidebarSessionChanged, setSessionLoading } from "../sidebar.js";
 import { setSessOpen } from "../core/menus.js";
+import { notifyTabStatus } from "../sounds.js";
 import { closeCmdk } from "./cmdk.js";
-import {
-  saveComposer, restoreComposer, renderAttachments, renderSessBar,
-  initComposer,
-} from "./composer.js";
+import { saveComposer, restoreComposer, renderAttachments, renderSessBar, initComposer } from "./composer.js";
 import { renderSessionsDropdown, initSessionsMenu } from "./sessions-menu.js";
 
 export { reflectBusy } from "./composer.js";
@@ -28,11 +23,7 @@ export { renderSessionsDropdown } from "./sessions-menu.js";
 
 // Статусы вкладок: working — идёт ход, waiting — ждёт ответа (question),
 // queued — стоит в очереди, failed — ход упал, dead — сессии нет.
-import {
-  nextTabStatus,
-  statusTitle as statusTitleOf,
-  TAB_DOT,
-} from "./tab-status.js";
+import { nextTabStatus, statusTitle as statusTitleOf, TAB_DOT } from "./tab-status.js";
 
 // Открытые session-вкладки переживают перезагрузку страницы (F5 не терял остальные).
 const OPEN_TABS_KEY = "mma-open-tabs";
@@ -87,11 +78,14 @@ export function setTabStatus(id: string | null | undefined, status: string): voi
   if (!id) return;
   const tab = tabState.tabs.find((x) => x.id === id);
   if (!tab || tab.status === status || tab.dead) return;
+  const prev = tab.status;
   tab.status = status;
   // Метка «с какого момента ждём»: по ней зависший вопрос помечается failed.
   if (status === "waiting") tab.waitingSince = Date.now();
   else tab.waitingSince = 0;
   renderTabstrip();
+  // Единственная точка звукового сигнала для переходов из SSE (INV-S1/S2).
+  notifyTabStatus(prev, status);
 }
 
 /**
@@ -381,7 +375,11 @@ export function reconcileTabStatuses(): void {
     if (tab.kind !== "session") return;
     const next = nextTabStatus(tab, running, queued, now);
     if (!next) return;
+    const prev = tab.status;
     tab.status = next;
+    // Сверка с серверным `state` — вторая (и последняя) точка сигнала: звук
+    // не может разойтись с фактическим статусом вкладки.
+    notifyTabStatus(prev, next);
     changed = true;
   });
   if (changed) renderTabstrip();

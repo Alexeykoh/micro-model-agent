@@ -26,6 +26,8 @@ export interface SubagentUsageRecord {
   /** `api` — цифры провайдера, `estimate` — локальная оценка. */
   origin?: string;
   durationMs?: number;
+  /** Время декодирования вызова (без префилла/TTFT), мс. */
+  decodeMs?: number;
   iteration?: number;
   provider?: string;
   model?: string;

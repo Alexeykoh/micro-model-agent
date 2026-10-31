@@ -467,6 +467,8 @@ export class ExecutionModule implements AgentModule {
       priority: "critical",
       essential: true,
       estimatedTokens: 200,
+      // Меняется на каждом plan_step — в хвост, чтобы не рвать prefix-cache.
+      tail: true,
     };
   }
 

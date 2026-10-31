@@ -2,7 +2,7 @@
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
 import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
-import type { ContextBreakdown, ContextQualityBreakdown } from "./types";
+import type { ContextBreakdown, ContextQualityBreakdown, LlmSpeedSnapshot } from "./types";
 
 /**
  * Статус шага плана для хоста. `skipped` не входит в контракт —
@@ -54,6 +54,8 @@ export interface HostStateSnapshot {
   contextQualityBreakdown?: ContextQualityBreakdown;
   /** Сегментная разбивка контекста (system/tools/history/reserve/free). */
   contextBreakdown?: ContextBreakdown;
+  /** Скорость генерации последнего хода (decode без префилла). */
+  llmSpeed?: LlmSpeedSnapshot;
   /**
    * Проба контекста LM Studio (фактический vs настроенный). Нет, пока проба
    * в пути или провайдер не опрашивается; `null` — проба пустая.

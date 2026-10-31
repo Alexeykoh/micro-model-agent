@@ -3,6 +3,7 @@ import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
 import type { SkillsModule } from "../modules/skills/module";
 import { estimateTokens } from "../llm/token-counter";
+import { truncateWords } from "../utils/truncate";
 
 /** Расстояние Левенштейна (для fuzzy-подсказки имён скиллов). */
 function levenshtein(a: string, b: string): number {
@@ -54,7 +55,7 @@ export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition 
     // Роутинг скиллов — вне сужения (P5): модель использует только видимый скилл.
     alwaysOn: true,
     description:
-      "Load a skill by name. Skills provide specialized instructions and workflows. When loaded, the skill content is injected into the system prompt (not conversation history) so it persists through context compaction. Load a skill whenever it matches the task — the [Available Skills] list in the system prompt is authoritative.",
+      "Load a skill by name, or search available skills by query. Skills provide specialized instructions and workflows. When loaded, the skill content is injected into the system prompt (not conversation history) so it persists through context compaction. Load a skill whenever it matches the task — the [Available Skills] list in the system prompt is authoritative. If the skill is not listed, pass \"query\" to search by task.",
     parameters: {
       type: "object",
       properties: {
@@ -62,14 +63,33 @@ export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition 
           type: "string",
           description: "Exact skill name to load (see [Available Skills] for names)",
         },
+        query: {
+          type: "string",
+          description: "Search available skills by task/keyword; returns matches without loading",
+        },
       },
-      required: ["name"],
+      required: [],
     },
     handler: async (_ctx, args) => {
       const name = args.name ? String(args.name) : undefined;
+      const query = args.query ? String(args.query) : undefined;
+
+      if (!name && !query) {
+        return { success: false, output: t("tool.invalid_params") };
+      }
 
       if (!name) {
-        return { success: false, output: t("tool.invalid_params") };
+        const matches = skillsModule.search(query!).slice(0, 8);
+        if (matches.length === 0) {
+          return { success: false, output: t("tool.skill_search_none", { query: query! }) };
+        }
+        const list = matches
+          .map((s) => `- ${s.name}: ${truncateWords(s.description, 12)}`)
+          .join("\n");
+        return {
+          success: true,
+          output: t("tool.skill_search_results", { query: query!, list }),
+        };
       }
 
       const result = skillsModule.loadByName(name);

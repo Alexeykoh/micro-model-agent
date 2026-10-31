@@ -205,6 +205,16 @@ interface SecurityConfig {
 
 Default configuration is defined in `src/config/security.ts` and merged with user settings in `src/config/defaults.ts`.
 
+### System Prompt
+
+`src/core/system-prompt.ts` builds the static core from `PromptEnvironmentFacts`
+(`src/core/prompt-facts.ts`): Bun, shell, LSP, `autoPlan`, test/typecheck commands, MCP
+and local time are facts, not constants. The prompt never advertises a tool hidden by
+tag narrowing: `PromptBlock.requiresTags` gates blocks (e.g. `browser`), and
+`PromptBuilder` puts `tail` blocks (active plan, loaded skills) last so per-step changes
+do not break the prefix cache. Blocks excluded by budget produce `omittedBlocksNote`
+(INV-6/17). Contract: `docs/specs/2026-10-31-system-prompt-v3-design.md`.
+
 #### Backward Compatibility
 
 Security is **disabled by default** (`SecurityConfig.enabled: false`):

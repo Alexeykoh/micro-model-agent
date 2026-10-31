@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PromptBuilder } from "../src/core/prompt-builder";
+import { PromptBuilder, omittedBlocksNote } from "../src/core/prompt-builder";
 
 describe("PromptBuilder", () => {
   it("should include essential blocks regardless of budget", () => {
@@ -132,5 +132,52 @@ describe("PromptBuilder", () => {
     expect(info.included).toBe(false);
     expect(info.label).toBe("indexer: project map");
     expect(info.reason).toBe("budget: 2400 tok did not fit");
+  });
+
+  it("puts volatile tail blocks after stable blocks", () => {
+    const builder = new PromptBuilder(1000);
+    builder.addBlock({
+      content: "plan",
+      priority: "critical",
+      essential: true,
+      estimatedTokens: 10,
+      tail: true,
+    });
+    builder.addBlock({
+      content: "core",
+      priority: "critical",
+      essential: true,
+      estimatedTokens: 10,
+    });
+    const prompt = builder.build().prompt;
+    expect(prompt.indexOf("core")).toBeLessThan(prompt.indexOf("plan"));
+  });
+
+  it("builds an omitted-blocks note only for non-kind blocks", () => {
+    const note = omittedBlocksNote([
+      {
+        content: "skills",
+        source: "skills",
+        label: "catalog",
+        priority: "normal",
+        essential: false,
+        estimatedTokens: 240,
+      },
+    ]);
+    expect(note).not.toBeNull();
+    expect(note!.content).toContain("skills: catalog");
+    expect(note!.essential).toBe(true);
+    const kindOnly = omittedBlocksNote([
+      {
+        content: "map",
+        source: "indexer",
+        label: "project map",
+        priority: "normal",
+        essential: false,
+        estimatedTokens: 240,
+        kind: "project-map",
+      },
+    ]);
+    expect(kindOnly).toBeNull();
   });
 });

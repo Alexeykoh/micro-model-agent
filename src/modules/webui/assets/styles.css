@@ -590,6 +590,15 @@ body.light .codeblock { border: 1px solid var(--border); }
 /* ---- composer: selectors, attachments, input, autocomplete ---- */
 .input-area { margin: 14px 22px 16px; position: relative; }
 .selectors { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; min-width: 0; align-items: center; }
+/* Final speed of the last turn: dim, right-aligned, hidden without data. */
+.speed-chip {
+  margin-left: auto; color: var(--dim-a); font-size: 11.5px;
+  cursor: default; white-space: nowrap;
+}
+.speed-tip { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; }
+.speed-tip-h { color: var(--fg); }
+.speed-tip-row { color: var(--dim-a); }
+.speed-tip-note { color: var(--yellow); }
 .sel { position: relative; min-width: 0; max-width: 100%; }
 .sel > button {
   font: inherit; font-size: 12.5px; cursor: pointer;
@@ -884,6 +893,9 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 }
 .rail-l1 .s, .rail-l1 .right { color: var(--dim-a); }
 .rail-l1 .right { margin-left: auto; font-size: 11.5px; }
+/* Live generation speed: separator appears only when the value exists. */
+.rail-l1 .speed { color: var(--dim-a); font-size: 11.5px; }
+.rail-l1 .speed:not(:empty)::before { content: '·'; margin-right: 8px; color: var(--dim-a); }
 .rail-l2 { display: flex; gap: 8px; align-items: baseline; font-size: 11.5px; color: var(--dim-a); flex-wrap: wrap; min-width: 0; }
 .rail-l2 .last { color: var(--args); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
@@ -964,7 +976,22 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .sec.usage-sec { flex: 0 1 auto; max-height: 45%; }
 
 /* ---- sidebar tabs ---- */
-.sb-tabs { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+/* On narrow phones the tab strip scrolls; the context-aware settings shortcut
+   is pinned to the right edge outside the scroller, behind a hairline divider.
+   It reads as "settings for the active tab" and cannot be mistaken for the
+   global gear in the topbar (see SETTINGS_PANEL in sidebar/core.ts). */
+.sb-tabs-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.sb-tabs {
+  display: flex; gap: 6px; flex: 1 1 auto; min-width: 0;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
+}
+.sb-tabs::-webkit-scrollbar { height: 4px; }
+.sb-tabs::-webkit-scrollbar-track { background: transparent; }
+.sb-tabs::-webkit-scrollbar-thumb { background: var(--stab-thumb); border-radius: 2px; }
+.sb-tabs::-webkit-scrollbar-thumb:hover { background: var(--stab-thumb-hover); }
 .sb-tab {
   position: relative; width: 34px; height: 34px; flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center; padding: 0;
@@ -990,14 +1017,16 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
   letter-spacing: .03em; border-bottom: 1px solid var(--border);
 }
 .sb-name .sb-ico svg { width: 14px; height: 14px; color: var(--accent); }
-/* Context-aware settings shortcut in the sidebar title row: one affordance for
-   every tab, destination follows the active tab (see SETTINGS_PANEL). */
-.sb-settings {
-  margin-left: auto; padding: 2px; display: inline-flex; align-items: center;
-  color: var(--dim-b); cursor: pointer;
+/* Context-aware settings shortcut pinned to the right of the tab strip: one
+   affordance for every tab, destination follows the active tab. */
+.sb-tabs-bar .sb-settings {
+  flex: 0 0 auto; height: 34px; padding: 0 2px 0 10px;
+  border-left: 1px solid var(--border-2);
+  display: inline-flex; align-items: center;
+  color: var(--dim-b); cursor: pointer; text-decoration: none;
 }
-.sb-settings:hover { color: var(--accent); }
-.sb-settings .svg-icon { width: 15px; height: 15px; }
+.sb-tabs-bar .sb-settings:hover { color: var(--accent); text-decoration: none; }
+.sb-settings .svg-icon { width: 16px; height: 16px; }
 .mcp-settings { margin-top: 8px; color: var(--accent); font-size: 11.5px; cursor: pointer; }
 
 .sb-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; max-width: 100%; overflow-x: hidden; }

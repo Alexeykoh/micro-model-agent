@@ -9,6 +9,7 @@
 // `app.js`/`tabs.js` import the public surface from here.
 export * from "./feed/core.js";
 export * from "./feed/sidebar.js";
+export * from "./feed/speed-chip.js";
 export * from "./feed/history.js";
 export * from "./feed/plan.js";
 export * from "./feed/question.js";
