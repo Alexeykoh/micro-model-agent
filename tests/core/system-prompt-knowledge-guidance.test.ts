@@ -51,6 +51,8 @@ describe("system prompt: живые данные требуют веб-обос�
   });
 
   it("строка «ищу…» — превью, а не ответ", () => {
-    expect(prompt()).toContain("preview, not the answer");
+    // v3 сжал блок NARRATION; запрет «план поиска вместо ответа» остался в
+    // правиле про живые данные.
+    expect(prompt()).toContain("never present a search plan as the answer");
   });
 });
