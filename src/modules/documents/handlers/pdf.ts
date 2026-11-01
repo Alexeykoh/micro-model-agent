@@ -93,8 +93,10 @@ export const pdfHandler: DocumentHandler = {
     const ir = emptyIR("pdf", bytes.length);
     ir.meta.title = source.display;
     // Копия: pdfjs забирает (detach) переданный буфер — исходный `bytes` и его
-    // length должны остаться валидными для вызывающей стороны.
-    const task = getDocument({ data: bytes.slice() });
+    // length должны остаться валидными для вызывающей стороны. Заодно
+    // нормализация типа: `new Uint8Array` всегда даёт обычный `Uint8Array`,
+    // даже если источник отдал Node `Buffer` (pdfjs 6 его отвергает).
+    const task = getDocument({ data: new Uint8Array(bytes) });
     try {
       const doc = await task.promise;
       ir.meta.pages = doc.numPages;
