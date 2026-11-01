@@ -697,7 +697,7 @@ it("tool ledger keeps its dedup set bounded and re-admits evicted keys", () => {
 > Задача 3.5 закрыта ранее механизмами INV-10/INV-11 (enforcement `pathArgs`
 > и тегов — в `ToolExecutor.execute()`).
 > Открытый хвост: маркер `[APPROVED]` не авторитетен —
-> `DEBT(approve-marker-not-authoritative)` в `docs/agents/debt.md`.
+> долг `approve-marker-not-authoritative` в `docs/agents/debt.md`.
 
 ## Task 3.1: `bash` уважает scope и workdir (§4.1)
 

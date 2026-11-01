@@ -9,6 +9,7 @@ import type { DraftHost } from "../../modules/plugins/drafts";
 import type { AppConfig, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { ToolContext } from "../../tools/types";
+import { ApprovalStore } from "../approvals";
 import { subagentLogEntry } from "../../tools/subagent-session-log";
 import type { Diagnostic } from "../../output/types";
 import { moduleOf } from "../../output";
@@ -180,6 +181,9 @@ export function createToolContext(input: ToolContextInput): ToolContext {
       const entry = subagentLogEntry(event);
       if (entry) sessionManager.appendLog(entry);
     },
+    // Одноразовые разрешения `approve`: общее состояние для тула (минтит) и
+    // enforcement в `ToolExecutor` (потребляет). Живёт столько же, сколько контекст.
+    approvals: new ApprovalStore(),
   } as ToolContext;
 
   // `config` — ЖИВОЙ геттер поверх общего configRef: тулы и валидаторы видят
