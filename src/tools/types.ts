@@ -133,6 +133,13 @@ export interface ToolContext {
   /** Контекст сессии для изоляции. */
   sessionContext?: import("../modules/security/session-isolation").SessionContext;
   /**
+   * Одноразовые разрешения `approve` на запись в защищённый путь. Хранилище
+   * создаёт bootstrap (per-process), минтит разрешение только тул `approve`
+   * после ответа пользователя, а читает enforcement (`checkToolPath`); текст
+   * модели не участвует (закрытый долг `approve-marker-not-authoritative`).
+   */
+  approvals?: import("../core/approvals").ApprovalStore;
+  /**
    * ID выполняемого tool call. Ставит исполнитель, чтобы долгие тулы
    * (напр. bash) можно было убить по таймауту.
    */

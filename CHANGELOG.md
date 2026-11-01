@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Подтверждение `approve` стало авторитетным для защищённых путей.**
+  Подтверждение — состояние, а не текст: `ApprovalStore` хранит одноразовые
+  разрешения (путь + описание + TTL 5 мин), минтит их только хендлер `approve`
+  (новый параметр `path`), а enforcement `checkToolPath` потребляет ровно один
+  раз на вызов тула. `[APPROVED]` в тексте модели не разрешает ничего; факт
+  потребления пишется в `audit.jsonl` как `security_approval`. Гвард:
+  `tests/tools/approve-token.test.ts`. Спека:
+  `docs/specs/2026-11-01-approve-token-design.md`.
+
 ### Fixed
 
 - **LSP-пул восстанавливается после конца сессии/аборта хода.** `LspClient.close()`

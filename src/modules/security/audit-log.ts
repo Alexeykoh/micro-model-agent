@@ -14,7 +14,8 @@ export interface AuditLogEntry {
     | "file_delete"
     | "bash_command"
     | "network_request"
-    | "security_block";
+    | "security_block"
+    | "security_approval";
   tool?: string;
   path?: string;
   command?: string;
@@ -196,5 +197,24 @@ export function logSecurityBlock(
     success: false,
     reason,
     details,
+  });
+}
+
+/** Залогировать потребление одноразового разрешения `approve`. */
+export function logSecurityApproval(
+  sessionId: string | undefined,
+  token: string,
+  action: string,
+  path: string,
+  toolCallId: string,
+): void {
+  logAudit({
+    timestamp: new Date().toISOString(),
+    sessionId,
+    action: "security_approval",
+    path,
+    success: true,
+    reason: `approval ${token} consumed`,
+    details: `${action} (tool call ${toolCallId})`,
   });
 }

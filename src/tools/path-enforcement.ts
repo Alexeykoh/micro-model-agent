@@ -1,8 +1,10 @@
-// Политика путей тула: одна проверка для enforcement и TOCTOU-реcheck.
+// Политика путей тула: одна проверка для enforcement и TOCTOU-recheck.
 // Живёт в `src/tools/`, потому что это шов исполнителя, а не модуль политики.
 import type { ToolContext, ToolResult, ToolSecurityDecl } from "./types";
 import { isPathInScope, isPathWritable } from "../modules/security/path-validator";
-import { protectedPathBlock } from "../modules/security/protected-paths";
+import { matchProtectedPath, protectedPathBlock } from "../modules/security/protected-paths";
+import { logSecurityApproval } from "../modules/security/audit-log";
+import { safeResolvePath } from "./path-utils";
 import { t } from "../i18n/index";
 
 /** Пишущий ли тул (по объявленным caps). */
@@ -10,6 +12,29 @@ export function isWritableTool(security: ToolSecurityDecl | undefined): boolean 
   return (security?.caps ?? []).some(
     (c) => "fs" in c && (c.fs === "write" || c.fs === "any"),
   );
+}
+
+/**
+ * Защищённый путь: одноразовое разрешение `approve` пропускает ровно одну
+ * операцию. Разрешение живёт в `ctx.approvals` (его минтит только хендлер
+ * `approve` после ответа пользователя), поэтому текст модели — в том числе
+ * `[APPROVED]` — на решение не влияет.
+ *
+ * @returns `null`, если запись разрешена; иначе блок с директивой.
+ */
+function protectedWriteBlock(
+  ctx: ToolContext,
+  value: string,
+  toolCallId: string,
+): ToolResult | null {
+  if (!matchProtectedPath(ctx.baseDir, value)) return null;
+  const grant = ctx.approvals?.consume(safeResolvePath(ctx.baseDir, value), toolCallId);
+  if (grant) {
+    logSecurityApproval(ctx.sessionId, grant.token, grant.action, value, toolCallId);
+    return null;
+  }
+  const prot = protectedPathBlock(ctx, value, value);
+  return prot ? { ...prot, blocked: true, toolCallId } : null;
 }
 
 /**
@@ -27,8 +52,8 @@ export function checkToolPath(
 ): ToolResult | null {
   const writable = isWritableTool(security);
   if (writable) {
-    const prot = protectedPathBlock(ctx, value, value);
-    if (prot) return { ...prot, blocked: true, toolCallId };
+    const prot = protectedWriteBlock(ctx, value, toolCallId);
+    if (prot) return prot;
   }
   const check = writable
     ? isPathWritable(ctx.baseDir, value, ctx.scope, ctx.config.security?.paths)
