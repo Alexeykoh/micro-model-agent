@@ -512,16 +512,24 @@ export class ContextManager {
     return this.getHistoryTokens();
   }
 
+  /** Ёмкость истории: окно минус reserve, system и тулы; не выше конфигурной доли. */
+  getHistoryLimit(): number {
+    const available =
+      this.contextWindow - this.budget.responseReserve - this.systemTokens() - this.toolTokens;
+    return Math.max(0, Math.min(this.budget.history, available));
+  }
+
   /** True, если истории нужна компакция (бюджет превышен или интервал + загрузка). */
   needsCompaction(): boolean {
     const historyTokens = this.historyTokensForThresholds();
-    if (historyTokens > this.budget.history * this.compactionThreshold) return true;
+    if (historyTokens > this.getHistoryLimit() * this.compactionThreshold) return true;
 
     // Интервал итераций уплотняет только значимо загруженную историю.
     // Уплотнять слабозагруженный контекст — терять рабочее состояние без
     // бюджетной причины (см. `compactionMinLoad`).
     if (this.iterationsSinceCompaction < COMPACTION_INTERVAL) return false;
-    const load = this.budget.history > 0 ? historyTokens / this.budget.history : 0;
+    const limit = this.getHistoryLimit();
+    const load = limit > 0 ? historyTokens / limit : historyTokens > 0 ? 1 : 0;
     return load >= this.compactionMinLoad;
   }
 
@@ -533,7 +541,8 @@ export class ContextManager {
   needsIntervalCompaction(): boolean {
     if (this.iterationsSinceCompaction < COMPACTION_INTERVAL) return false;
     const historyTokens = this.historyTokensForThresholds();
-    const load = this.budget.history > 0 ? historyTokens / this.budget.history : 0;
+    const limit = this.getHistoryLimit();
+    const load = limit > 0 ? historyTokens / limit : historyTokens > 0 ? 1 : 0;
     return load >= this.compactionMinLoad;
   }
 
@@ -1072,9 +1081,11 @@ export class ContextManager {
     const calibrated = this.calibrator.calibrate(raw, messageCount);
     // С бюджетом истории сравниваем ТОЛЬКО историю: system и тулы имеют свои
     // бюджеты, иначе переполнение объявляется раньше времени (§3.1 аудита).
+    // Предел — ёмкость с учётом измеренных тулов, иначе порог разрешает
+    // промпт больше окна (спека 2026-11-01-compaction-history-capacity).
     const historyTokens = Math.max(0, calibrated - this.systemTokens() - this.toolTokens);
     return {
-      allowed: !implausible && historyTokens > this.budget.history,
+      allowed: !implausible && historyTokens > this.getHistoryLimit(),
       raw,
       calibrated: historyTokens,
       implausible,

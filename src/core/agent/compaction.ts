@@ -115,7 +115,7 @@ export class CompactionService {
     state.lastCompactionIteration = state.iteration;
     const compacted = this.compactV2(
       state,
-      `overflow (${check.calibrated} > ${contextManager.getBudget().history})`,
+      `overflow (${check.calibrated} > ${contextManager.getHistoryLimit()})`,
     );
     if (!compacted.compacted) {
       this.deps.logger.diagnostic?.(

@@ -21,6 +21,7 @@ function makeDeps(overflowAllowed: boolean) {
       calibrated: 100,
     }),
     getBudget: () => ({ history: 1000 }),
+    getHistoryLimit: () => 1000,
     getContextTokens: () => 900,
     getToolResultKeep: () => 6,
     compactAdaptive: () => null,
