@@ -42,6 +42,8 @@ export interface LspClientDeps {
   offline?: boolean;
   /** Готовый пул (тесты); иначе строится из spawn/resolveLaunch. */
   pool?: LspConnectionPool;
+  /** Фабрика пула (тесты): нужна, чтобы проверить пересоздание после close(). */
+  poolFactory?: () => LspConnectionPool;
   /** Фабрика процесса сервера (тесты). */
   spawn?: ServerProcessFactory;
   /** Резолв команды запуска (тесты). */
@@ -64,9 +66,15 @@ export class LspClient {
    */
   private get pool(): LspConnectionPool {
     if (!this.poolInstance) {
-      this.poolInstance = this.deps.pool ?? new LspConnectionPool(this.deps);
+      this.poolInstance = this.createPool();
     }
     return this.poolInstance;
+  }
+
+  /** Создать пул: тестовая фабрика → готовый инстанс → обычный пул. */
+  private createPool(): LspConnectionPool {
+    if (this.deps.poolFactory) return this.deps.poolFactory();
+    return this.deps.pool ?? new LspConnectionPool(this.deps);
   }
 
   /** Назначить логгер (null — молчать). */
@@ -107,9 +115,11 @@ export class LspClient {
     return this.pool.lastExit(serverKeyFor(config), projectRoot);
   }
 
-  /** Закрыть все соединения (конец сессии, `/lsp restart`). */
+  /** Закрыть все соединения (конец сессии, `/lsp restart`). Клиент остаётся живым. */
   async close(): Promise<void> {
-    await this.pool.dispose();
+    const pool = this.poolInstance;
+    this.poolInstance = null;
+    if (pool) await pool.dispose();
   }
 
   /**

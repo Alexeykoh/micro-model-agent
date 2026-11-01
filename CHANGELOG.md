@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **LSP-пул восстанавливается после конца сессии/аборта хода.** `LspClient.close()`
+  закрывал пул терминально, а `LspModule.getPlugin().onSessionEnd` вызывает его на
+  конце сессии: следующий `lsp_check` в том же процессе падал
+  `LSP pool disposed`, вкладка LSP висела в «проверяется…». Теперь `close()`
+  обнуляет `poolInstance`, и следующий `checkFile`/`warmup`/`diagnose` создаёт
+  новый пул. Гвард: `tests/modules/lsp/pool-recovery.test.ts`. Спека:
+  `docs/specs/2026-11-01-lsp-pool-recovery-design.md`.
+
 ## [0.22.0] - 2026-10-31
 
 ### Added
