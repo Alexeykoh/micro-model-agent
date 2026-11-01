@@ -719,7 +719,8 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [ ...DATA_POLICY_DEFS, ...SOUND_DEFS,
     (c, v) => { c.experts = v as AppConfig["experts"]; },
     (v) => isRecord(v) && Object.values(v).every((e) =>
       isRecord(e) &&
-      typeof e.model === "string" &&
+      (e.model === undefined || typeof e.model === "string") &&
+      (e.provider === undefined || typeof e.provider === "string") &&
       Array.isArray(e.tool_tags) &&
       e.tool_tags.every((t) => typeof t === "string") &&
       (e.max_attempts === undefined || (typeof e.max_attempts === "number" && Number.isFinite(e.max_attempts))) &&
@@ -728,7 +729,8 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [ ...DATA_POLICY_DEFS, ...SOUND_DEFS,
       kind: "table",
       columns: [
         { key: "name" },
-        { key: "model", optionsSource: "models" },
+        { key: "provider", optional: true, optionsSource: "providers", resets: ["model"], emptyLabelKey: "web.settings.active_provider" },
+        { key: "model", optional: true, optionsSource: "models", dependsOn: "provider", emptyLabelKey: "web.settings.inherit_model" },
         { key: "tool_tags", array: true },
         { key: "max_attempts", type: "number", optional: true },
         { key: "description", optional: true },

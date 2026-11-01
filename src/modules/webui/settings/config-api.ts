@@ -224,10 +224,27 @@ export function handleConfigPost(
     });
 }
 
-/** `GET /api/models` — id моделей активного провайдера. */
-export function handleModelsGet(res: ServerResponse, s: ConfigStore & RuntimeState & HttpTransport & SseTransport): void {
+/** `GET /api/models[?provider=<name>]` — id моделей провайдера (по умолчанию активного). */
+export function handleModelsGet(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: ConfigStore & RuntimeState & HttpTransport & SseTransport,
+): void {
   if (!s.knownModels) {
     sendJson(res, 503, { error: "models_unavailable" });
+    return;
+  }
+  // `?provider=` — модели конкретной записи (страница экспертов): первый
+  // запрос к незакешированной записи отвечает `loading: true`.
+  let provider: string | null = null;
+  try {
+    provider = new URL(req.url ?? "/", "http://localhost").searchParams.get("provider");
+  } catch {
+    /* битый URL — активный провайдер */
+  }
+  if (provider && s.knownModelsFor) {
+    const resolved = s.knownModelsFor(provider);
+    sendJson(res, 200, { models: resolved.models, loading: resolved.loading, provider });
     return;
   }
   // `reasoning` аддитивен и выводится на запрос из живого конфига, так что ряд

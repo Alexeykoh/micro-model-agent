@@ -73,10 +73,12 @@ export async function runSubagent(
   // сконфигурированного эксперта.
   let toolTags = explicitTags;
   let expertModel: string | undefined;
+  let expertProvider: string | undefined;
   if (expertTag) {
     const lookup = lookupExpertTag(ctx, expertTag);
     if (lookup.refusal) return { success: false, output: lookup.refusal };
     expertModel = lookup.expert?.model;
+    expertProvider = lookup.expert?.provider;
     if (!toolTags || toolTags.length === 0) toolTags = lookup.expert?.tool_tags;
   }
 
@@ -85,10 +87,12 @@ export async function runSubagent(
   }
 
   // Модель эксперта (если задан expert_tag) исполняется на выделенном
-  // провайдере поверх активного; иначе — общий провайдер родителя.
+  // провайдере поверх активного (или на записи `experts[tag].provider`);
+  // пустая модель эксперта — общий провайдер родителя (INV-E1/E2).
   const baseProvider = resolveExpertProvider(
     ctx.config,
     expertModel,
+    expertProvider,
     ctx.llmProvider,
     ctx.logger,
     () => ctx.sessionId,
@@ -163,7 +167,10 @@ export async function runSubagent(
     };
 
     // Сабагент идёт тем же одиночным циклом, что и родитель.
-    const subConfig = { ...ctx.config };
+    // `model` — модель, на которой реально исполняется дочерний агент: иначе
+    // токен-каунтер, цена и `logLLMRequest` маркируют вызовы активной моделью
+    // родителя (INV-E3).
+    const subConfig = { ...ctx.config, model: expertModel?.trim() || ctx.config.model };
     // Usage подпотока уходит в наблюдатель, а он создаётся ниже: ref замыкается
     // на него к моменту первого LLM-вызова (спека `2026-10-27-subagent-run-journal-design`).
     let reportUsage: ((usage: SubagentUsageRecord) => void) | undefined;

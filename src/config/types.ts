@@ -210,13 +210,9 @@ export interface ToolsConfig {
   grepEngine?: "auto" | "rg" | "grep" | "js";
 }
 
-export interface ExpertConfig {
-  model: string;
-  tool_tags: string[];
-  max_attempts?: number;
-  /** Однострочная сводка возможностей эксперта для промпта. */
-  description?: string;
-}
+import type { ExpertConfig } from "./types-experts";
+
+export type { ExpertConfig };
 
 export interface MCPHeader {
   [key: string]: string;

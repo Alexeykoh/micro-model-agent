@@ -227,10 +227,10 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     });
   }
 
-  // Список моделей: явный источник побеждает; иначе фоновый кеш за активным
-  // провайдером (рефреш на каждый reconfigure).
+  // Список моделей: явный источник побеждает; иначе фоновый кеш (рефреш на reconfigure).
   const modelCache = deps.knownModels ? null : makeModelCache(deps.agent, deps.config);
   state.knownModels = deps.knownModels ?? modelCache!.get;
+  state.knownModelsFor = modelCache?.getFor;
   if (modelCache) void modelCache.refresh();
   state.reconfigure = makeReconfigure(
     state,

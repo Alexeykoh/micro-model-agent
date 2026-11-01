@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Эксперт субагента: выбор провайдера и модели в настройках.** У
+  `experts[tag]` появилось опциональное поле `provider` (имя записи
+  `provider.entries[]`), а `model` стало опциональным: пусто — активная модель
+  агента. В вебе таблица экспертов получила два выпадающих списка —
+  провайдер и модель этого провайдера (`GET /api/models?provider=<name>` +
+  ленивый кеш по записям), с пунктами «активный провайдер» / «как у агента».
+  Спека: `docs/specs/2026-11-01-experts-model-selection-design.md`.
+  Гварды: `tests/config/experts-model-migration.test.ts`,
+  `tests/tools/subagent-same-model.test.ts`,
+  `tests/webui-models-per-provider.test.ts`.
+
 - **Подтверждение `approve` стало авторитетным для защищённых путей.**
   Подтверждение — состояние, а не текст: `ApprovalStore` хранит одноразовые
   разрешения (путь + описание + TTL 5 мин), минтит их только хендлер `approve`
@@ -18,6 +29,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `docs/specs/2026-11-01-approve-token-design.md`.
 
 ### Fixed
+
+- **Субагент больше не идёт на «чужой» модели.** Дефолты пинили всех экспертов
+  на `qwen/qwen3.5-9b`: после смены модели в вебе `subagent { expert_tag }`
+  исполнялся на прежней модели. Теперь эксперт наследует активную модель, а
+  миграция персиста снимает устаревший дефолтный пин. Заодно дочерний агент
+  видит в конфиге фактическую модель эксперта — токены, цена и
+  `logLLMRequest` больше не маркируют вызовы моделью родителя (INV-E3).
 
 - **LSP-пул восстанавливается после конца сессии/аборта хода.** `LspClient.close()`
   закрывал пул терминально, а `LspModule.getPlugin().onSessionEnd` вызывает его на

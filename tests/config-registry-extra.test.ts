@@ -189,8 +189,20 @@ describe("registry editor metadata", () => {
   it("declares table editors with typed columns", () => {
     for (const key of TABLE_KEYS) expect(editorKind(key), key).toBe("table");
     const cols = resolveConfigKey("experts")?.editor?.columns ?? [];
-    expect(cols.map((c) => c.key)).toEqual(["name", "model", "tool_tags", "max_attempts", "description"]);
+    expect(cols.map((c) => c.key)).toEqual([
+      "name",
+      "provider",
+      "model",
+      "tool_tags",
+      "max_attempts",
+      "description",
+    ]);
     expect(cols.find((c) => c.key === "tool_tags")?.array).toBe(true);
+    // Модель эксперта зависит от выбранного провайдера и опциональна (inherit).
+    const model = cols.find((c) => c.key === "model");
+    expect(model?.optional).toBe(true);
+    expect(model?.dependsOn).toBe("provider");
+    expect(cols.find((c) => c.key === "provider")?.optional).toBe(true);
   });
 
   it("labels every option and column in both locales", () => {

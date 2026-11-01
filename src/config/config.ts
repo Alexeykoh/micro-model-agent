@@ -15,6 +15,7 @@ import { ConfigEncryptor } from "../modules/security/encryption";
 import { loadDomainFiles, saveDomainFiles } from "./domains";
 import {
   applyCriticTimeoutMigration,
+  applyExpertModelMigration,
   normalizeLspServerArgs,
   reportShortCriticTimeout,
 } from "./migrate-legacy";
@@ -252,6 +253,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   const globalData = migrated ? null : loadJSON(globalPath);
   if (globalData) {
     applyCriticTimeoutMigration(globalData as Partial<AppConfig>);
+    applyExpertModelMigration(globalData as Partial<AppConfig>);
     config = deepMerge(config, globalData as Partial<AppConfig>);
     legacyDetected = true;
   }
@@ -272,6 +274,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   const domainConfig = loadDomainFiles(options.configDir);
   if (domainConfig) {
     applyCriticTimeoutMigration(domainConfig);
+    applyExpertModelMigration(domainConfig);
     config = deepMerge(config, domainConfig);
     legacyDetected = false;
   }
@@ -280,6 +283,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   const projectData = loadJSON(options.projectConfigPath);
   if (projectData) {
     applyCriticTimeoutMigration(projectData as Partial<AppConfig>);
+    applyExpertModelMigration(projectData as Partial<AppConfig>);
     config = deepMerge(config, projectData as Partial<AppConfig>);
   }
 

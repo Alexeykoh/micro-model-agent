@@ -214,6 +214,12 @@ export interface WebUiState {
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
   /**
+   * Модели именованной записи провайдера (`GET /api/models?provider=`).
+   * Первый запрос к незакешированной записи отвечает `loading: true` и
+   * запускает фоновый `listModels()`; клиент перезапрашивает.
+   */
+  knownModelsFor?: (name: string) => { models: string[]; loading: boolean };
+  /**
    * Перечитывает статические веб-ассеты с диска на запрос. Вяжет `module.ts`,
    * чтобы правки `assets/*` подхватывались без рестарта `mma web`; тесты могут
    * не ставить и полагаться на фиксированный снапшот из `startServer`.
@@ -338,7 +344,7 @@ export type SessionStore = Pick<
 /** Роль: конфиг (живой объект, запись, reconfigure, список моделей). */
 export type ConfigStore = Pick<
   WebUiState,
-  "config" | "saveConfig" | "reconfigure" | "knownModels"
+  "config" | "saveConfig" | "reconfigure" | "knownModels" | "knownModelsFor"
 >;
 
 /** Роль: рабочее окружение и настройки (workspace, память, скиллы, плагины, LSP, setup). */

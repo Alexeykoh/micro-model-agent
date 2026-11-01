@@ -2,7 +2,7 @@
 // Extracted from `settings.js`. `postConfig` is the single write path used by
 // the panels and the provider form; the settings shell (modal) registers the
 // render callbacks via `setWriteHooks`, so this module never imports upward.
-import { el, icon, link, connStatus, staleBar } from "../dom.js";
+import { el, icon, link } from "../dom.js";
 import { api } from "../api.js";
 import { t, loadI18n } from "../i18n.js";
 import { settings, session, setPath, getPath, hooks } from "../store.js";
@@ -409,40 +409,18 @@ export async function loadConfig(): Promise<void> {
 
 export async function loadModels(): Promise<void> {
   const r = await api<{ models?: Dict[]; reasoning?: Dict }>("/api/models");
-  if (!r.ok || !r.data) return;
+  if (!r.ok || !r.data) {
+    // Попытка была: иначе редактор экспертов будет ретраить список на каждый
+    // рендер (офлайн-провайдер неотличим от «ещё не загружено»).
+    settings.modelsReady = true;
+    return;
+  }
   settings.models = Array.isArray(r.data.models) ? r.data.models : [];
+  settings.modelsReady = true;
   // Reasoning support rides along with the model list (one round-trip):
   // the 4th selector row renders from this, never from a separate GET.
   if (r.data.reasoning && typeof r.data.reasoning === "object") session.reasoning = r.data.reasoning;
   renderSelectors();
-}
-
-// Connection-state banner: shown while the SSE stream is down. The server
-// never replays events, so a reconnect only resyncs the state slices — the feed keeps
-// whatever the live session already rendered (no duplication).
-export function setConnStatus(disconnected: unknown): void {
-  if (!connStatus) return;
-  connStatus.hidden = !disconnected;
-  connStatus.textContent = disconnected ? "⋯ " + t("web.conn.reconnecting") : "";
-}
-
-// Stale-translations banner: dict files on disk are newer than the running
-// server process, so the chrome may show raw keys. Rebuilt only on a state
-// change (not on every 2s poll) to keep the reload-button focus stable;
-// `force` re-renders the label after a locale switch.
-let lastStale: boolean | null = null;
-export function setStaleBar(stale: unknown, force?: boolean): boolean | null {
-  if (!staleBar) return null;
-  // undefined = перерисовать последнее состояние (смена локали).
-  const on = stale === undefined ? !!lastStale : !!stale;
-  if (!force && on === lastStale) return lastStale;
-  lastStale = on;
-  staleBar.hidden = !on;
-  staleBar.textContent = "";
-  if (!on) return lastStale;
-  staleBar.appendChild(el("span", "", "⚠ " + t("web.i18n.stale") + " "));
-  staleBar.appendChild(link(t("web.i18n.reload"), "", () => location.reload()));
-  return lastStale;
 }
 
 // Web chat font size (`ui.fontSize`). Like the theme (`ui.theme`, see

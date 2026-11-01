@@ -7,6 +7,7 @@ import { readMmaVersion } from "../core/version";
 import { EXTRA_DEFS } from "./registry-extra";
 import { REBUILD, type ConfigEffect } from "./effects";
 import { Logger } from "../logger/app-logger";
+import type { ConfigEditorSpec } from "./editor-spec";
 
 const logger = new Logger("warn", "config");
 
@@ -47,37 +48,7 @@ export type ConfigErrorReason = "unknown-key" | "read-only" | "invalid-value";
 /** Причина отказа доли бюджета: вне диапазона / сумма переполнена. */
 export type ConfigRangeReason = "range" | "combined";
 
-/**
- * Как GUI должен редактировать ключ `list`/`json`. Реестр остаётся единственным
- * источником правды о ТОМ, что хранит ключ; здесь лишь подсказка показа
- * (строка через запятую годится для `tools.defaultTags`, но неверна для
- * regex с запятыми). Без значения — plain-input (list) или JSON-textarea (json).
- */
-export interface ConfigEditorSpec {
-  /**
-   * `tags` — чипсы строк; `checkboxes` — мультивыбор; `table` — строки записей;
-   * `select` — выпадающий список, наполняемый из живого источника
-   * (`optionsSource`), а не из статического `enumValues`.
-   */
-  kind: "tags" | "checkboxes" | "table" | "select";
-  /** Живой источник опций для `select` (модели/провайдеры из `/api`). */
-  optionsSource?: "models" | "providers";
-  /** Допустимые значения для `checkboxes`. */
-  options?: readonly string[];
-  /** Колонки для `table`. Первая колонка — ключ записи. */
-  columns?: ReadonlyArray<{
-    key: string;
-    /** `number` — числовой инпут, `bool` — чекбокс. Дефолт: текст. */
-    type?: "string" | "number" | "bool";
-    optional?: boolean;
-    /** Текстовая колонка со значением-списком (правится через запятую). */
-    array?: boolean;
-    /** Колонка-`select`, наполняемая из живого источника опций. */
-    optionsSource?: "models" | "providers";
-  }>;
-  /** Свободный хинт в добавлялке строк (напр. пример regex). */
-  placeholder?: string;
-}
+export type { ConfigEditorSpec } from "./editor-spec";
 
 export interface ConfigKeyDef {
   /** Канонический ключ — буквальный путь config.json. */
