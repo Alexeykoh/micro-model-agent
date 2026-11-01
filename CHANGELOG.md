@@ -16,6 +16,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   новый пул. Гвард: `tests/modules/lsp/pool-recovery.test.ts`. Спека:
   `docs/specs/2026-11-01-lsp-pool-recovery-design.md`.
 
+- **`document_read` на PDF больше не падает с `Buffer`.** `fileSource()` читал файл
+  через `fs.readFile`, который отдаёт Node `Buffer`; `Buffer` — подкласс
+  `Uint8Array`, поэтому typecheck этого не видел, а pdfjs 6 отвергает `Buffer`
+  явно (`Please provide binary data as Uint8Array, rather than Buffer`). Теперь
+  источник отдаёт настоящий `Uint8Array` (вид без копии), а PDF-обработчик
+  нормализует вход через `new Uint8Array(bytes)`. Гвард:
+  `tests/documents/source-bytes.test.ts`. Спека:
+  `docs/specs/2026-11-01-document-source-bytes-design.md`.
+
 ## [0.22.0] - 2026-10-31
 
 ### Added

@@ -3,19 +3,33 @@
  * байтов по запросу обработчика. Байты читаются ровно один раз на разбор —
  * `registry.parse` (head) и обработчик делят один и тот же промис.
  */
+import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { t } from "../../i18n/index";
 import type { DocSource } from "./handler";
+
+/**
+ * `readFile` возвращает Node `Buffer` — подкласс `Uint8Array`, поэтому тип
+ * `Uint8Array` его пропускает, а рантайм нет: pdfjs 6 отвергает `Buffer` явно
+ * («Please provide binary data as `Uint8Array`»). Отдаём настоящий `Uint8Array` —
+ * вид на те же байты без копии, `byteOffset`/`byteLength` сохраняются.
+ */
+function toByteView(bytes: Uint8Array): Uint8Array {
+  if (!Buffer.isBuffer(bytes)) return bytes;
+  return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
 
 /** Источник документа по пути относительно baseDir. */
 export function fileSource(baseDir: string, raw: string): DocSource {
   const path = resolve(baseDir, raw);
   let cached: Promise<Uint8Array> | undefined;
   const bytes = (): Promise<Uint8Array> => {
-    cached ??= readFile(path).catch((err: unknown) => {
-      throw new Error(readError(raw, err));
-    });
+    cached ??= readFile(path)
+      .then(toByteView)
+      .catch((err: unknown) => {
+        throw new Error(readError(raw, err));
+      });
     return cached;
   };
   return { path, display: raw, ext: extname(path).toLowerCase(), bytes };
