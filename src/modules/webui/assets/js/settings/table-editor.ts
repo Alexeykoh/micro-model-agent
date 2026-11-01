@@ -31,6 +31,9 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
     error: "",
   }));
   const wrap = el("div", "tablectl ctl-block");
+  // Одна автоматическая догрузка моделей на провайдера за жизнь редактора:
+  // без этого «список ещё грузится» зацикливал бы перерисовку.
+  const autoLoadTried = new Set<string>();
   const head = el("div", "table-head");
   columns.forEach((c) => head.appendChild(el("span", "table-th", ctx.fieldLabel(c.key))));
   wrap.appendChild(head);
@@ -107,11 +110,16 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
     // render a dropdown so the user picks an id instead of typing it.
     if (col.optionsSource) {
       const source = col.optionsSource;
-      const opts: string[] =
-        source === "providers" ? ctx.providerOptions || [] : ctx.modelOptions || [];
+      // `dependsOn` narrows a model list to the row's chosen provider: the
+      // expert can be pinned to a model of a *different* provider entry.
+      const dependent = col.dependsOn ? String(row.val[col.dependsOn] || "") : "";
+      let opts: string[];
+      if (source === "providers") opts = ctx.providerOptions || [];
+      else if (col.dependsOn && ctx.modelOptionsFor) opts = ctx.modelOptionsFor(dependent);
+      else opts = ctx.modelOptions || [];
       const cur = v == null ? "" : String(v);
       const sel = el("select");
-      const none = el("option", "", "—");
+      const none = el("option", "", col.emptyLabelKey ? t(String(col.emptyLabelKey)) : "—");
       none.value = "";
       sel.appendChild(none);
       const seen = new Set([""]);
@@ -131,10 +139,26 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
       }
       sel.value = cur || "";
       sel.setAttribute("aria-label", `${row.name}: ${ctx.fieldLabel(col.key)}`);
+      // Provider-scoped model list may still be loading: fetch once, then
+      // repaint with the real options (the select stays usable meanwhile).
+      // `loadModelsFor` false = загрузка уже идёт: второй `draw()` не нужен.
+      if (col.dependsOn && ctx.hasModelsFor && !ctx.hasModelsFor(dependent)) {
+        if (!autoLoadTried.has(dependent)) {
+          autoLoadTried.add(dependent);
+          void Promise.resolve(ctx.loadModelsFor?.(dependent)).then((loaded) => {
+            if (loaded) draw();
+          });
+        }
+      }
       sel.addEventListener("change", () => {
         if (sel.value) row.val[col.key] = sel.value;
         else delete row.val[col.key];
-        sync();
+        // Provider switch invalidates dependent values (a model of the old
+        // provider would otherwise stay in the record invisibly).
+        for (const key of col.resets || []) delete row.val[key];
+        // Явная смена провайдера — новый шанс на догрузку моделей.
+        autoLoadTried.clear();
+        if (sync() && Array.isArray(col.resets) && col.resets.length) draw();
       });
       return sel;
     }

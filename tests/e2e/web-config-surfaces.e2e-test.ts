@@ -373,6 +373,43 @@ describe("web e2e: config surfaces", () => {
   );
 
   e2e(
+    "experts table offers provider and model dropdowns with inherit defaults",
+    async () => {
+      const dir = artifactsDirFor("cfg-experts-selects");
+      await withE2E(dir, async (_srv, { page, errors }: Launched) => {
+        await openSettings(page);
+        await openPanel(page, "agent");
+        const row = page.locator('[data-panel="agent"] .table-row[data-key="code"]');
+        await expect.poll(() => row.count(), { timeout: 10_000 }).toBe(1);
+        // provider + model selects (the expert can be pinned to another entry).
+        expect(await row.locator("select").count()).toBe(2);
+        // Empty options are explicit: "active provider" and "same as agent".
+        const empties = await row.locator('select option[value=""]').allInnerTexts();
+        expect(empties.join(" | ")).toMatch(/provider/i);
+        expect(empties.join(" | ")).toMatch(/agent/i);
+        // Switching the provider kicks off a model-list load for that entry.
+        // The panel must stay responsive: a draw()↔loadModelsFor() loop used to
+        // freeze the renderer while the list was loading.
+        const provSel = row.locator("select").first();
+        const values = await provSel
+          .locator("option")
+          .evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value).filter(Boolean));
+        if (values.length) await provSel.selectOption(values[0]);
+        await page.click('#setMenu [data-p="context"]');
+        await expect
+          .poll(() => page.locator('[data-panel="context"]').isVisible(), { timeout: 10_000 })
+          .toBe(true);
+        writeArtifacts(dir, "cfg-experts-selects", {
+          html: await page.content(),
+          consoleErrors: errors,
+        });
+        expect(errors).toEqual([]);
+      });
+    },
+    180_000,
+  );
+
+  e2e(
     "settings search finds a deep key and navigates to its panel",
     async () => {
       const dir = artifactsDirFor("cfg-search");

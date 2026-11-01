@@ -110,6 +110,67 @@ export function applyCriticTimeoutMigration(raw: { critic?: RawCritic } | null |
   );
 }
 
+/** Прежний дефолт `experts[*].model` (до спеки 2026-11-01): пин на модель по умолчанию. */
+export const LEGACY_EXPERT_DEFAULT_MODEL = "qwen/qwen3.5-9b";
+
+/** Сырой эксперт из персиста: модель могла быть авто-дефолтом. */
+interface RawExpert {
+  model?: unknown;
+  provider?: unknown;
+}
+
+/** Итог миграции персиста экспертов. */
+export interface ExpertModelMigration {
+  migrated: boolean;
+  /** Теги, у которых снят авто-дефолтный пин. */
+  tags: string[];
+}
+
+/**
+ * Снимает устаревший авто-дефолтный пин модели у экспертов: `model`, равная
+ * `LEGACY_EXPERT_DEFAULT_MODEL`, означает «дефолт той версии», а не выбор
+ * пользователя. Мутирует переданный объект (он ещё не смержен с DEFAULTS).
+ *
+ * `provider` без модели — немая настройка (INV-E1): пин не снимаем, чтобы
+ * предупреждение о нём увидел тот, кто её поставил.
+ */
+export function migratePersistedExpertModels(
+  raw: { experts?: Record<string, RawExpert> } | null | undefined,
+): ExpertModelMigration {
+  const experts = raw?.experts;
+  if (!experts) return { migrated: false, tags: [] };
+  const tags: string[] = [];
+  for (const [tag, expert] of Object.entries(experts)) {
+    if (!expert || typeof expert !== "object") continue;
+    if (expert.model !== LEGACY_EXPERT_DEFAULT_MODEL) continue;
+    const provider = typeof expert.provider === "string" ? expert.provider.trim() : "";
+    if (provider) continue;
+    delete expert.model;
+    tags.push(tag);
+  }
+  return { migrated: tags.length > 0, tags };
+}
+
+/** Лог миграции экспертов — один раз за процесс (иначе шумит на каждый старт). */
+let expertModelMigrationLogged = false;
+
+/**
+ * Применяет миграцию экспертов к сырому персисту и пишет запись в лог.
+ * Идемпотентно: после снятия пина условие миграции уже не выполняется.
+ */
+export function applyExpertModelMigration(
+  raw: { experts?: Record<string, RawExpert> } | null | undefined,
+): void {
+  const state = migratePersistedExpertModels(raw);
+  if (!state.migrated || expertModelMigrationLogged) return;
+  expertModelMigrationLogged = true;
+  defaultOutputBus.log(
+    "info",
+    "module:config",
+    t("config.experts_model_migrated", { tags: state.tags.join(", ") }),
+  );
+}
+
 /** Состояние ЭФФЕКТИВНОГО таймаута после слияния конфигов. */
 export interface CriticTimeoutCheck {
   /** Эффективный таймаут одного вызова критика, мс. */

@@ -10,6 +10,31 @@ the rules needed to avoid breaking things; this file keeps the detailed record.
 
 ---
 
+### Эксперты: наследование модели и выбор «провайдер → модель» (2026-11-01)
+
+Дефект: `experts[*].model` был обязательным и в дефолтах стоял
+`qwen/qwen3.5-9b`, поэтому субагент с `expert_tag` шёл на этой модели, даже если
+в вебе выбрана другая (`resolveExpertProvider` строил выделенный провайдер при
+любом несовпадении). Смена активной модели пин экспертов не трогала.
+
+Что сделано (спека [2026-11-01-experts-model-selection-design](../specs/2026-11-01-experts-model-selection-design.md)):
+
+- `ExpertConfig.model` и `.provider` — опциональны. Пусто = активная модель /
+  активный провайдер; пин — осознанный выбор. `provider` без модели — немая
+  настройка: warn + активная модель (контракт `critic.provider`).
+- Миграция персиста снимает пин, равный прежнему дефолту `qwen/qwen3.5-9b`;
+  пользовательское значение сохраняется (`migratePersistedExpertModels`).
+- Субагент получает `subConfig.model` фактической модели эксперта: токены,
+  цена и `logLLMRequest` больше не маркируют вызовы моделью родителя.
+- Веб: таблица экспертов — колонки `provider` (записи `provider.entries[]`) и
+  `model` (модели выбранного провайдера, `GET /api/models?provider=`);
+  пустые пункты — «активный провайдер» / «как у агента». Кеш по провайдерам
+  ленивый: первый запрос отвечает `loading: true`.
+
+Гварды: `tests/config/experts.test.ts`, `tests/config/experts-model-migration.test.ts`,
+`tests/modules/execution/expert-provider.test.ts`,
+`tests/tools/subagent-same-model.test.ts`, `tests/webui-models-per-provider.test.ts`.
+
 ## Quick Reference
 
 ### Agent Loop States

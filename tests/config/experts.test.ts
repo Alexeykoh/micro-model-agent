@@ -47,12 +47,33 @@ describe("getExpertConfig", () => {
   it("returns expert config for known tag", () => {
     const expert = getExpertConfig(DEFAULTS, "code");
     expect(expert).toBeDefined();
-    expect(expert!.model).toBe("qwen/qwen3.5-9b");
+    // Модель эксперта по умолчанию не задана: он идёт на активной модели
+    // агента (спека 2026-11-01-experts-model-selection-design, INV-E1).
+    expect(expert!.model).toBeUndefined();
+    expect(expert!.provider).toBeUndefined();
   });
 
   it("returns undefined for unknown tag", () => {
     const expert = getExpertConfig(DEFAULTS, "nonexistent");
     expect(expert).toBeUndefined();
+  });
+});
+
+describe("expert model/provider are optional", () => {
+  it("accepts an expert without model or provider", () => {
+    const c: AppConfig = {
+      ...DEFAULTS,
+      experts: { plain: { tool_tags: ["file"] } },
+    };
+    expect(validateExpertConfig(c, KNOWN_TAGS)).toHaveLength(0);
+  });
+
+  it("accepts a provider pin without a model (ignored with a warning at runtime)", () => {
+    const c: AppConfig = {
+      ...DEFAULTS,
+      experts: { pinned: { provider: "remote", tool_tags: ["file"] } },
+    };
+    expect(validateExpertConfig(c, KNOWN_TAGS)).toHaveLength(0);
   });
 });
 

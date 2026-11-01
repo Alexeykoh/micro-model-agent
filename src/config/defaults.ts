@@ -59,27 +59,26 @@ export const DEFAULTS: AppConfig = {
     enableOnDemand: true,
     grepEngine: "auto",
   },
+  // Модель эксперта намеренно не задана: по умолчанию он идёт на активной
+  // модели агента. Пин (`model`/`provider`) — осознанный выбор пользователя
+  // (спека `2026-11-01-experts-model-selection-design`, INV-E1).
   experts: {
     code: {
-      model: DEFAULT_MODEL,
       tool_tags: ["file", "code", "shell"],
       max_attempts: 3,
       description: "file operations, code editing, shell commands",
     },
     research: {
-      model: DEFAULT_MODEL,
       tool_tags: ["research"],
       max_attempts: 3,
       description: "web search, web fetch, web browse, history search",
     },
     browser: {
-      model: DEFAULT_MODEL,
       tool_tags: ["browser", "vision"],
       max_attempts: 3,
       description: "browser automation, screenshots",
     },
     vision: {
-      model: DEFAULT_MODEL,
       tool_tags: ["browser", "vision", "file"],
       max_attempts: 2,
       description: "browser + file reading for visual tasks",

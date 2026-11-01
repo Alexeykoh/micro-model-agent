@@ -118,7 +118,7 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "GET /api/commands": (_req, res) => {
     sendJson(res, 200, { commands: webCommandList() });
   },
-  "GET /api/models": (_req, res, s) => handleModelsGet(res, s),
+  "GET /api/models": (req, res, s) => handleModelsGet(req, res, s),
   "POST /api/command": (req, res, s) => handleCommandPost(req, res, s),
   "POST /api/interrupt": (req, res, s) => handleInterruptPost(req, res, s),
   "POST /api/index": (_req, res, s) => handleIndexPost(res, s),
