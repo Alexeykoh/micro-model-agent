@@ -36,6 +36,7 @@ function harness(opts: { overflowAllowed?: () => boolean } = {}) {
       implausible: false,
     }),
     getBudget: () => ({ history: 100 }),
+    getHistoryLimit: () => 100,
     getContextTokens: () => 100000,
     getQuality: () => 0,
     getCompactionCount: () => 1,

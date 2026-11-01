@@ -25,6 +25,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `tests/documents/source-bytes.test.ts`. Спека:
   `docs/specs/2026-11-01-document-source-bytes-design.md`.
 
+- **Порог компакции учитывает измеренные схемы тулов.** `budget.history` считался
+  как `window − systemBudget − reserve` и не знал про `toolTokens`: на окне 32K с
+  9K тулов жёсткий порог разрешал промпт больше окна (живой прогон: `overflow
+  (41300 > 24577)` при фактическом контексте 1.6× окна). Теперь триггеры
+  сравнивают историю с ёмкостью `min(budget.history, window − reserve − system −
+  tools)`, а лог печатает именно этот предел. Конфигурная доля и cap вывода тулов
+  не изменились. Гвард: `tests/core/compaction-tool-budget.test.ts`. Спека:
+  `docs/specs/2026-11-01-compaction-history-capacity-design.md`.
+
 ## [0.22.0] - 2026-10-31
 
 ### Added
