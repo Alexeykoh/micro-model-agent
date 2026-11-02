@@ -513,15 +513,15 @@ drawer, клавиатура. Что работает (не трогать): к�
 
 #### P1 — баги и блокеры
 
-- [ ] **U1. У поля ввода нет видимой индикации фокуса — вообще.** Проверено:
-      `.composer` совпадает с `:focus-within` (`matches: true`), но вычисленные
-      стили не меняются — `border-color: rgb(214,214,207)` (как в покое),
-      `box-shadow: none`, у `.inp` — `outline: none`. Причина: тема `light console`
-      задаёт `--input-shadow: transparent` (`assets/console.css:23` и `:96`), а
-      единственное кольцо живёт на `box-shadow: 0 0 0 2px var(--input-shadow)`
-      (`assets/styles.css:681`). Пользователь с клавиатуры не видит, где печатает.
-      Ветка `fix/webui-composer-focus`; гейт — тест/проверка контраста фокуса
-      (кольцо не может быть `transparent`).
+- [x] **U1. У поля ввода нет видимой индикации фокуса — вообще.** _(Сделано 2026-11-03,
+      ветка `fix/webui-composer-focus`: тема console больше не задаёт `--input-shadow:
+      transparent` (accent с alpha ~45% в тёмной и светлой), а reset темы
+      (`body.console * { box-shadow: none !important }`) получил явное исключение для
+      `:focus-within`/`:focus` композера, поля ввода и поиска настроек. Живая проверка
+      в браузере: `box-shadow: rgba(208,206,204,0.45) 0 0 0 2px`. Гейт
+      `tests/webui-focus-ring.test.ts` — кольцо не может быть прозрачным.)_
+      Проверено: `.composer` совпадает с `:focus-within`, но вычисленные стили не
+      менялись — `--input-shadow: transparent`.
 - [ ] **U2. Просмотр README ломает внешние картинки — 10 ошибок CSP.** Политика
       `img-src 'self' data: blob:` (`src/modules/webui/util.ts:93`) блокирует
       бейджи `img.shields.io`: `Loading the image … violates … "img-src …"` ×10,
