@@ -12,6 +12,7 @@ import { ToolExecutor } from "../../tools/executor";
 import { ToolRegistry } from "../../tools/registry";
 import { PluginManager } from "../../modules/plugins/manager";
 import type { ToolContext, ToolDefinition } from "../../tools/types";
+import { ApprovalStore } from "../approvals";
 import { subagentLogEntry } from "../../tools/subagent-session-log";
 import type { DraftHost } from "../../modules/plugins/drafts";
 import type { PromptBlock } from "../types";
@@ -116,6 +117,10 @@ export function buildRunnerToolCtx(input: RunnerToolCtxInput): {
     activeToolTags: runnerTags,
     recursionDepth: 0,
     fileOperationsCount: 0,
+    // Одноразовые разрешения `approve` — на раннер (как в session-phase).
+    // Без этого approve молча не минтил grant, и запись в защищённый путь
+    // оставалась заблокированной даже после «Да» (найдено живым прогоном).
+    approvals: new ApprovalStore(),
     sessionHistory: {
       append: async (type: string, content: unknown) => {
         sessionManager.appendMessage({
