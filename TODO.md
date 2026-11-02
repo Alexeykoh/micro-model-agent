@@ -357,12 +357,12 @@ reset` для json/list, failover с моделью целевого прова�
       `tests/tools/subagent-empty-run.test.ts`, `tests/tools/subagent-health.test.ts`.)_
       Раньше 5/5 прогонов отдавали `success:true` при 38 падениях из 60 вызовов и
       0 чтений у двух.
-- [ ] **A8 (P2) Заголовок сессии падает на reasoning-модели.** `TITLE_MAX_TOKENS = 512`
-      (`src/modules/session/auto-name.ts:15`) тратится на рассуждения; recovery
-      `truncated_no_content` живёт только в петле агента, а `generateSessionTitle` ловит
-      ошибку и возвращает `null` (тихий WARN). Прогнать title-gen через
-      `truncated_no_content` (повтор с выключенным reasoning и удвоенным бюджетом) или
-      тихий фолбэк без WARN. Ветка `fix/session-title-truncation`.
+- [x] **A8 (P2) Заголовок сессии падает на reasoning-модели.** _(Сделано 2026-11-03:
+      `generateSessionTitle` делает один повтор с удвоенным бюджетом
+      (`TITLE_MAX_TOKENS * 2`) и `reasoningEffort: "none"`, если первая попытка вернула
+      пустой текст (тот же recovery, что `truncated_no_content`); отказ после повтора
+      пишется тихо (`logSilent`). `TitleChat` принимает опции бюджета/reasoning.
+      Гейт `tests/session-auto-name.test.ts`.)_
 
 ### 1.9 Находки текущей сессии `ses_mvuy6zpc_otiooomxxrtseqcx` (0.18.6)
 
