@@ -7,6 +7,7 @@
  * `2026-10-27-subagent-run-journal-design`).
  */
 import type { SessionLogEntry } from "../modules/session/store";
+import { redactContextSecrets } from "../core/agent/context-log";
 import type { SubagentRunEvent } from "./subagent-runs";
 
 /** Задача в журнале — одной строкой: журнал должен грепаться, а не читаться. */
@@ -15,11 +16,33 @@ const TASK_MAX = 120;
 const OUTPUT_MAX = 200;
 /** Текст ошибки прогона. */
 const ERROR_MAX = 300;
+/** Значение аргумента тула в журнале: путь виден, тело файла — нет. */
+const ARG_MAX = 200;
 
 function clip(text: string | undefined, max: number): string | undefined {
   if (!text) return undefined;
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
+/**
+ * Аргументы тула для журнала: строковые значения ужаты до одной строки
+ * `ARG_MAX`, секреты отредактированы тем же правилом, что и тела сообщений
+ * (INV-DLP: оригиналы в лог не попадают).
+ */
+function journalArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (typeof value === "string") out[key] = clip(value, ARG_MAX);
+    else if (Array.isArray(value)) {
+      out[key] = value.slice(0, 20).map((v) => (typeof v === "string" ? clip(v, ARG_MAX) : v));
+    } else out[key] = value;
+  }
+  try {
+    return JSON.parse(redactContextSecrets(JSON.stringify(out))) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -42,6 +65,16 @@ export function subagentLogEntry(event: SubagentRunEvent): SessionLogEntry | und
           ...(event.agent ? { agent: event.agent } : {}),
           ...(event.model ? { model: event.model } : {}),
         },
+      };
+    case "tool_start":
+      // Аргументы — с самого начала вызова: по `tool_end` не понять, с каким
+      // путём/файлом он упал (сессия ses_mvqwky8y). Секреты редактируются.
+      return {
+        ...base,
+        subagent: event.runId,
+        content: "tool_start",
+        tool: event.tool,
+        args: journalArgs(event.args),
       };
     case "tool_end":
       return {
@@ -86,8 +119,8 @@ export function subagentLogEntry(event: SubagentRunEvent): SessionLogEntry | und
         ...(event.error ? { summary: clip(event.error, ERROR_MAX) } : {}),
       };
     default:
-      // text / reasoning / note / phase / tool_start: тела не журналируем —
-      // в журнал идут только факты, нужные для разбора прогона.
+      // text / reasoning / note / phase: тела не журналируем — в журнал идут
+      // только факты, нужные для разбора прогона.
       return undefined;
   }
 }
