@@ -12,6 +12,9 @@
  */
 export const FILE_CONTENT_SENTINEL = "⟦mma:file-content⟧\n";
 
+/** Маска, которой заменяется tainted-сообщение на внешнем egress. */
+export const FILE_CONTENT_MASK = "[FILE]";
+
 /** Пометить содержимое как file-content. */
 export function tagFileContent(content: string): string {
   return content.startsWith(FILE_CONTENT_SENTINEL)

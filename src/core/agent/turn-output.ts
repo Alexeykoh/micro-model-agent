@@ -9,6 +9,7 @@ import type { LoopState } from "./loop-state";
 import type { TokenTracker } from "./token-tracker";
 import type { SessionLogger } from "../session-logger";
 import { repairToolCallPairing } from "./tool-pairing";
+import { contextLogGuard } from "./context-egress";
 import { t } from "../../i18n/index";
 import { errMsg } from "../../utils";
 
@@ -96,7 +97,16 @@ export async function streamFinalAnswer(
   onChunk?: (chunk: string) => void,
 ): Promise<{ text: string; decodeMs: number }> {
   const { contextManager, logger, llmProvider, pluginManager } = host.deps;
-  const history = repairToolCallPairing(contextManager.getActiveHistory());
+  // Taint (T3): форс-финал идёт по тому же правилу, что и обычная итерация.
+  const trusted = contextLogGuard(host.deps.config)?.target.trusted ?? false;
+  if (typeof contextManager.setEgressTrusted === "function") {
+    contextManager.setEgressTrusted(trusted);
+  }
+  const egressHistory =
+    typeof contextManager.getHistoryForEgress === "function"
+      ? contextManager.getHistoryForEgress(trusted)
+      : contextManager.getActiveHistory();
+  const history = repairToolCallPairing(egressHistory);
   let text = "";
   let firstTokenAt = 0;
   try {

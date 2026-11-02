@@ -15,11 +15,12 @@ export { extractTriedAndFailed };
 /** Сообщение истории: роль, контент, tool-метаданные. */
 import type { Message } from "./message";
 export type { Message } from "./message";
+import { MessageBookkeeping, maskTaintedMessage } from "./message-bookkeeping";
 
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import { DEFAULTS } from "../../config/defaults";
 import type { TokenCounter } from "../../llm/token-counter";
-import { estimateMessageTokens, messageSignature } from "./estimation";
+import { CachedTokenEstimator } from "./token-cache";
 import { reassertStandingDirectives } from "./standing-directives";
 import { PendingImageQueue } from "./pending-images";
 import {
@@ -167,8 +168,8 @@ export class ContextManager {
    * (`body.messages = opts.messages`), и лишнее поле могло бы ломать строгие
    * OpenAI-совместимые бэкенды. WeakMap не сериализуется и следует за объектом.
    */
-  private nextSeq = 0;
-  private seqByMessage = new WeakMap<object, number>();
+  /** seq, taint и доверие egress (вынесено в `message-bookkeeping`). */
+  private book = new MessageBookkeeping();
   /** Калибратор оценки по реальному usage провайдера. */
   private calibrator: ContextCalibrator;
   /** Опции калибратора — чтобы пересоздать при clear(). */
@@ -425,36 +426,29 @@ export class ContextManager {
       };
     }
     this.messages.push(this.stampSeq(msg));
+    this.book.note(this.messages[this.messages.length - 1]);
     // OO-3/OO-8: адреса-находки пишутся сразу (сырой контент), правка — stale.
     observeToolResult(this.ledger, msg);
     const tokens = this.getEstimatedTokens();
     if (tokens > this.peakTokens) this.peakTokens = tokens;
   }
 
-  /**
-   * Кладёт картинку в очередь на аттач к следующему user-сообщению.
-   */
+  /** Кладёт картинку в очередь на аттач к следующему user-сообщению. */
   addPendingImage(part: ContentPart): void {
     this.pendingImages.add(part);
   }
 
-  /**
-   * True, если есть картинки, ждущие аттача.
-   */
+  /** True, если есть картинки, ждущие аттача. */
   hasPendingImages(): boolean {
     return this.pendingImages.has();
   }
 
-  /**
-   * Возвращает pending-картинки, не очищая очередь.
-   */
+  /** Возвращает pending-картинки, не очищая очередь. */
   getPendingImages(): ContentPart[] {
     return this.pendingImages.list();
   }
 
-  /**
-   * Очищает pending-картинки (напр., юзер шлёт чисто текстовое сообщение).
-   */
+  /** Очищает pending-картинки (напр., юзер шлёт чисто текстовое сообщение). */
   clearPendingImages(): void {
     this.pendingImages.clear();
   }
@@ -474,28 +468,11 @@ export class ContextManager {
     return this.messages.length;
   }
 
-  // Токенный кэш на сообщение. Сообщения считаются иммутабельными после
-  // добавления, но защищаемся от in-place мутаций (напр. поздний аттач
-  // картинок): кэш хранит сигнатуру контента и пересчитывает при её смене.
-  // Это устраняет класс багов «оценка выросла на +44K, добавлено 2 сообщения».
-  private tokenCache = new WeakMap<Message, { sig: string; tokens: number }>();
-
-  /** Дешёвая сигнатура содержания сообщения (детект мутации без токенизации). */
-  private messageSignature(m: Message): string {
-    return messageSignature(m);
-  }
+  // Токенный кэш: сигнатура контента + пересчёт при мутации (вынесено).
+  private tokenCache = new CachedTokenEstimator();
 
   private estimateMessageTokensCached(m: Message): number {
-    const sig = this.messageSignature(m);
-    const cached = this.tokenCache.get(m);
-    if (cached !== undefined && cached.sig === sig) return cached.tokens;
-    const tokens = this.estimateMessageTokens(m);
-    this.tokenCache.set(m, { sig, tokens });
-    return tokens;
-  }
-
-  private estimateMessageTokens(m: Message): number {
-    return estimateMessageTokens(m, this.tokenCounter);
+    return this.tokenCache.estimate(m, this.tokenCounter ?? null);
   }
 
   /**
@@ -982,18 +959,38 @@ export class ContextManager {
    * `seqOf >= маркера`. Устойчиво к компакции — выжившие сообщения не меняют seq.
    */
   beginTurn(): number {
-    return this.nextSeq;
+    return this.book.beginTurn();
   }
 
-  /** Монотонный seq сообщения (0, если штамп не ставился — напр. system до старта). */
+  /** Монотонный seq сообщения; `-1` — сообщение не из этого контекста. */
   seqOf(msg: object): number {
-    return this.seqByMessage.get(msg) ?? 0;
+    return this.book.seqOf(msg);
   }
 
-  /** Ставит монотонный seq в WeakMap и возвращает сообщение. */
+  /** Доверие цели egress на ход (T2): taint наследует только локальная модель. */
+  setEgressTrusted(trusted: boolean): void {
+    this.book.setEgressTrusted(trusted);
+  }
+
+  /** Помечено ли сообщение как производное от защищённого содержимого (INV-T1). */
+  isTainted(msg: Message): boolean {
+    return this.book.isTainted(msg);
+  }
+
+  /** Индексы tainted-сообщений, выровненные с `getActiveHistory()` (T3). */
+  taintedIndexes(): boolean[] {
+    return this.book.taintedIndexes(this.messages);
+  }
+
+  /** История для egress (T3): на внешней цели tainted-записи маскируются. */
+  getHistoryForEgress(trusted: boolean): Message[] {
+    if (trusted) return [...this.messages];
+    return this.messages.map((m) => (this.book.isTainted(m) ? maskTaintedMessage(m) : m));
+  }
+
+  /** Ставит монотонный seq в реестр и возвращает сообщение. */
   private stampSeq<T extends Message>(msg: T): T {
-    this.seqByMessage.set(msg, this.nextSeq++);
-    return msg;
+    return this.book.stamp(msg);
   }
 
   /**
@@ -1004,6 +1001,7 @@ export class ContextManager {
   clear(): void {
     this.messages = [];
     this.compactedBlock = null;
+    this.book.reset();
     // Pending-картинки прошлого хода не должны утечь в следующий (§3.5).
     this.pendingImages.clear();
     this.toolLedger = [];

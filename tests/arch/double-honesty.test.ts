@@ -66,6 +66,10 @@ export const UNCOVERED_CONTEXT_METHODS: Record<string, string> = {
   wasLastJumpImplausible: "диагностика калибровки; веб-панель качества",
   getSnapshot: "снапшот контекста для HostStateSnapshot; веб-поверхность, не цикл",
   setProgressDiagnosticSink: "сеттер трекера no-progress; ставится в createContextManager",
+  setEgressTrusted: "taint: доверие цели egress; ставится в iteration-prologue, дабл taint не моделирует",
+  isTainted: "taint: производность записи; юнит-тест tests/security/taint.test.ts",
+  taintedIndexes: "taint: индексы для egress; дабл не ведёт taint",
+  getHistoryForEgress: "taint: маска на внешнем egress; юнит-тест tests/security/taint.test.ts",
 };
 
 /** Public methods declared on `ContextManager`, as an object literal. */
