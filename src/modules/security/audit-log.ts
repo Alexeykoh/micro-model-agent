@@ -1,6 +1,7 @@
 // Аудит-лог: запись действий агента в audit.jsonl (глобально или в каталог сессии).
 import { existsSync, mkdirSync, appendFileSync } from "fs";
 import { globalAuditNotifier } from "./audit-notifier";
+import { emitSecurityEvent, securityEventFromAudit } from "./security-events";
 import { auditLogFile, globalLogsDir } from "../../config/paths";
 
 /** Запись аудита: кто/что/когда, успех, причина блокировки. */
@@ -36,6 +37,7 @@ function ensureDir(dir: string): void {
   }
 }
 
+/** Каталог аудита для сессии. */
 function getAuditDir(sessionId?: string): string {
   if (sessionId) {
     const dir = _sessionDirs.get(sessionId);
@@ -94,6 +96,14 @@ export function logAudit(entry: AuditLogEntry): void {
     globalAuditNotifier.notify(entry);
   } catch {
     // молча: падение нотификации не должно ломать агента
+  }
+
+  // Живой журнал защиты (U22): не зависит от конфига нотификатора.
+  try {
+    const ev = securityEventFromAudit(entry);
+    if (ev) emitSecurityEvent(ev);
+  } catch {
+    // молча: журнал не должен ломать агента
   }
 }
 

@@ -6,6 +6,7 @@ import { handleSessionHistory } from "./history-api";
 import { handleSessionImage } from "./images-api";
 import { handleSessionLog } from "./log-api";
 import { handleSubagentRunsGet, handleSubagentInterrupt } from "./subagent-api";
+import { handleSessionSecurity } from "./security-api";
 import { handleSystemPromptGet } from "./system-prompt-api";
 import type { SessionStore, RuntimeState, HttpTransport, SseTransport } from "../state";
 
@@ -51,6 +52,13 @@ export function handleSessionItem(
   if (p.endsWith("/system-prompt")) {
     const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/system-prompt".length));
     handleSystemPromptGet(res, id, s.pool);
+    return true;
+  }
+  if (p.endsWith("/security")) {
+    // U22: журнал защиты (бэкфилл из audit.jsonl сессии + живой буфер).
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/security".length));
+    const query = new URL(req.url ?? "", "http://localhost").searchParams;
+    handleSessionSecurity(res, id, query.get("limit"), s.sessionManager?.getSessionDirectory?.(id));
     return true;
   }
   if (p.includes("/images/")) {

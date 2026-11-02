@@ -32,6 +32,7 @@ export interface SseDeps {
   sidebarFilesChanged: typeof import("./sidebar.js").sidebarFilesChanged;
   sidebarPluginsEvent: typeof import("./sidebar.js").sidebarPluginsEvent;
   sidebarMcpEvent: typeof import("./sidebar.js").sidebarMcpEvent;
+  sidebarSecurityEvent: typeof import("./sidebar.js").sidebarSecurityEvent;
   railPlan: typeof import("./rail.js").setPlan;
   railEvent: typeof import("./rail.js").railEvent;
   faceEvent: (state: import("./loader.js").FaceState) => void;

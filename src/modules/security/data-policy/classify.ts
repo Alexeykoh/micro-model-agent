@@ -2,6 +2,9 @@
  * Классификатор: сводит находки всех детекторов в неперекрывающийся набор.
  * При пересечении приоритет: secret > path > machine/env > pii (длиннее/увереннее
  * выигрывает при равном приоритете).
+ * Детектор base64-обёртки (бывший долг `encoded-value-bypass`) живёт в
+ * `detectors/encoded.ts`: матчим исходный текст, а base64 разбирает отдельный
+ * детектор по каноническим блокам.
  */
 import type { PolicyContext } from "./context";
 import type { DataClass, Finding } from "./types";
@@ -9,6 +12,8 @@ import { detectPaths } from "./detectors/paths";
 import { detectMachine } from "./detectors/machine";
 import { detectSecrets } from "./detectors/secrets";
 import { detectPii } from "./detectors/pii";
+import { detectEncoded } from "./detectors/encoded";
+import { detectJoined } from "./detectors/joined";
 
 const PRIORITY: Record<DataClass, number> = {
   secret: 5,
@@ -48,6 +53,8 @@ export function classify(text: string, ctx: PolicyContext): Finding[] {
     ...detectPaths(text, ctx),
     ...detectMachine(text, ctx),
     ...detectPii(text),
+    ...detectEncoded(text, ctx),
+    ...detectJoined(text, ctx),
   ];
   return dedupe(all);
 }

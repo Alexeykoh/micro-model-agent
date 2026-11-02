@@ -55,8 +55,6 @@ import { SessionLogger } from "../core/session-logger";
 import { exitMeetMode } from "../modules/onboarding/mode";
 import { formatPlanChecklist, stepContextForTool } from "../ui/plan-view";
 import type { ExecutionModule } from "../modules/execution/module";
-import { formatCost } from "../modules/pricing/prices";
-import { formatCacheLine, type CacheReport } from "./cache-line";
 import { probeProviders, targetsFromProviders } from "../modules/providers/health";
 import { formatWarning } from "../ui/md-formatter";
 import {
@@ -71,29 +69,11 @@ import { createPromptIO, type PromptIO } from "../tools/prompt-io";
 import type { ContextProbeResult } from "../llm/model-loader";
 import { MMA_DIR_NAME, projectMmaDir, globalPluginsDir } from "../config/paths";
 import { MMA_ENV, readEnv } from "../config/env";
-
-/** Рендерит бар использования контекста с компакциями и качеством. */
-function formatContextBar(
-  used: number,
-  limit: number,
-  compactions?: number,
-  quality?: number,
-): string {
-  const pct = Math.min(100, Math.round((used / limit) * 100));
-  const barLen = 20;
-  const filled = Math.round((pct / 100) * barLen);
-  const bar = pc.green("█".repeat(filled)) + pc.dim("░".repeat(barLen - filled));
-  const pctStr = pct >= 75 ? pc.yellow(`${pct}%`) : pc.dim(`${pct}%`);
-  let line = `  ${bar}  ${pctStr}  ${pc.dim(`(${used} / ${limit} tokens)`)}`;
-  if (compactions !== undefined) {
-    line += pc.dim(`  compactions: ${compactions}`);
-  }
-  if (quality !== undefined) {
-    const qColor = quality >= 70 ? pc.green : quality >= 40 ? pc.yellow : pc.red;
-    line += `  ${qColor(`quality: ${quality}%`)}`;
-  }
-  return line;
-}
+import {
+  renderContextBar,
+  reportDlpRedactions,
+  type ContextBarResult,
+} from "./context-bar";
 
 export { createHostBridge };
 
@@ -840,6 +820,7 @@ export class Repl implements ReplContext, Host {
         (reasoning) => renderer.reasoning(reasoning),
       );
       renderer.flush();
+      reportDlpRedactions(this.output, this.sessionManager);
       if (result.provider && result.model) {
         renderer.footer(
           result.model,
@@ -857,7 +838,12 @@ export class Repl implements ReplContext, Host {
       if (!result.success) {
         this.output.writeLine(pc.red(`${t("error.prefix")}${result.error}`), "stderr");
       }
-      this.showContextBar(result);
+      this.lastCompactionShown = renderContextBar({
+        output: this.output,
+        ui: this.config.ui,
+        lastCompactionShown: this.lastCompactionShown,
+        result: result satisfies ContextBarResult,
+      });
       // Закрываем ход агента: разделитель перед следующим промптом визуально
       // разводит соседние сообщения юзера/агента.
       this.output.writeLine(`\n${divider()}`);
@@ -1124,63 +1110,6 @@ export class Repl implements ReplContext, Host {
 
   private lastCompactionShown = 0;
 
-  private showContextBar(result: {
-    contextUsed?: number;
-    contextLimit?: number;
-    compactionCount?: number;
-    contextQuality?: number;
-    promptTokens?: number;
-    completionTokens?: number;
-    totalTokens?: number;
-    totalCost?: number;
-    cache?: CacheReport;
-  }): void {
-    if (
-      result.contextUsed === undefined ||
-      result.contextLimit === undefined ||
-      result.contextLimit <= 0
-    ) {
-      return;
-    }
-
-    const ui = this.config.ui;
-    if (ui?.showContextStats) {
-      this.output.writeLine("");
-      const ctxLine = formatContextBar(
-        result.contextUsed,
-        result.contextLimit,
-        result.compactionCount,
-        result.contextQuality,
-      );
-      this.output.writeLine(ctxLine);
-      if (result.totalTokens !== undefined && result.totalTokens > 0) {
-        const apiLine = pc.dim(
-          t("repl.api_line", {
-            prompt: String(result.promptTokens),
-            completion: String(result.completionTokens),
-            total: String(result.totalTokens),
-          }),
-        );
-        this.output.writeLine(apiLine);
-      }
-      if (result.totalCost !== undefined && result.totalCost > 0) {
-        this.output.writeLine(
-          pc.yellow(`  ${t("repl.cost", { cost: formatCost(result.totalCost) })}`),
-        );
-      }
-      const cacheLine = formatCacheLine(result.cache);
-      if (cacheLine) {
-        this.output.writeLine(pc.dim(`  ${cacheLine}`));
-      }
-    } else if (ui?.showCompaction && result.compactionCount !== undefined) {
-      if (result.compactionCount > this.lastCompactionShown) {
-        this.lastCompactionShown = result.compactionCount;
-        this.output.writeLine(
-          pc.dim(`\n  ⟳ ${t("repl.compacted", { count: String(result.compactionCount) })}`),
-        );
-      }
-    }
-  }
 
   async start(): Promise<void> {
     this.running = true;

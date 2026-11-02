@@ -32,7 +32,7 @@ import {
   applySidebarI18n,
   initFiles, sidebarFilesState, sidebarFilesChanged,
   sidebarPluginsState, sidebarPluginsEvent, initSidebarDrawer,
-  sidebarSubagentEvent, sidebarMcpEvent,
+  sidebarSubagentEvent, sidebarMcpEvent, sidebarSecurityEvent,
   openFilesTabFor,
 } from "./js/sidebar.js";
 import { insertIntoDraft, submitPrompt } from "./js/session/composer.js";
@@ -272,7 +272,7 @@ function connectSSE(): void {
     sidebarLspEvent,
     sidebarFilesChanged,
     sidebarPluginsEvent,
-    sidebarMcpEvent,
+    sidebarMcpEvent, sidebarSecurityEvent,
     railPlan,
     railEvent,
     faceEvent,

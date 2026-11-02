@@ -14,6 +14,7 @@ import { redactContextSecrets } from "../../../core/api";
 import { stripAnsi } from "../../../ui/line-math";
 import { sendJson } from "../util";
 import type { SessionStore } from "../state";
+import type { LlmRequestSnapshot } from "../../../llm/request-snapshot";
 
 /** Диагностические типы по умолчанию (живой Trace докачивает именно их). */
 export const TRACE_LOG_TYPES = [
@@ -32,6 +33,7 @@ export const TRACE_LOG_TYPES = [
   "verify_error",
   "tool_attempt",
   "claim_retry",
+  "llm_request",
 ] as const;
 
 /** Всё, что роут вообще готов отдать (закрытый список, не `*`). */
@@ -130,6 +132,8 @@ export interface LogTailEntry {
   principalId?: string;
   runId?: string;
   jobId?: string;
+  /** Снимок исходящего запроса (`llm_request`, U20). */
+  llmRequest?: LlmRequestSnapshot;
 }
 
 function copyStr(out: LogTailEntry, e: SessionLogEntry, f: StrKey): void {
@@ -163,6 +167,7 @@ function pick(e: SessionLogEntry): LogTailEntry {
   if (typeof e.tool_call_id === "string") out.toolCallId = e.tool_call_id;
   const text = scrub(e.content ?? e.summary ?? e.message);
   if (text !== undefined) out.content = text;
+  if (e.llmRequest && typeof e.llmRequest === "object") out.llmRequest = e.llmRequest;
   return out;
 }
 

@@ -15,6 +15,7 @@ import type { Diagnostic } from "../../output/types";
 import { moduleOf } from "../../output";
 import type { GuardDiagnostic } from "../../modules/security/data-policy/types";
 import { recordEgressTurn } from "../../modules/security/data-policy/turn-journal";
+import { emitSecurityEvent } from "../../modules/security/security-events";
 
 /** Зависимости сборки ToolContext. */
 export interface ToolContextInput {
@@ -99,6 +100,19 @@ export function egressDiagnosticSink(
           module: "security.data-policy",
           operation: diag.operation,
         });
+        emitSecurityEvent({
+          ts: new Date().toISOString(),
+          class: "dlp",
+          severity: "medium",
+          summary: `DLP: секретов ${secrets}`,
+          action: "egress_redacted",
+          success: true,
+          ...(diag.sessionId ? { sessionId: diag.sessionId } : {}),
+          tool: diag.operation,
+          ...(egressTargetSuffix(diag.target).trim()
+            ? { details: egressTargetSuffix(diag.target).trim() }
+            : {}),
+        });
       }
       return;
     }
@@ -113,6 +127,17 @@ export function egressDiagnosticSink(
       errorKind: blocked ? "blocked" : "degraded",
       cause: diag.cause,
       recoverable: !blocked,
+    });
+    emitSecurityEvent({
+      ts: new Date().toISOString(),
+      class: "dlp",
+      severity: blocked ? "high" : "medium",
+      summary: blocked ? "DLP: вызов прерван" : "DLP: fail-open",
+      action: blocked ? "egress_blocked" : "egress_degraded",
+      success: !blocked,
+      ...(diag.sessionId ? { sessionId: diag.sessionId } : {}),
+      tool: diag.operation,
+      ...(diag.cause ? { reason: diag.cause } : {}),
     });
   };
 }

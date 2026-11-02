@@ -11,6 +11,8 @@ import { backoffDelay } from "../utils/retry";
 import { StreamState } from "./stream-state";
 import { parseChunkUsage } from "./usage-parse";
 import { extractProviderErrorText } from "./provider-error";
+import { captureRequestSnapshot } from "./request-snapshot";
+import { buildRequestBody } from "./request-body";
 import {
   LLM_REQUEST_TIMEOUT_MS as REQUEST_TIMEOUT_MS,
   LLM_MAX_RATE_WAIT_MS as MAX_RATE_WAIT_MS,
@@ -77,80 +79,6 @@ interface ToolCallAcc {
   id: string;
   name: string;
   arguments: string;
-}
-
-/** Уровень под контракт `reasoning_effort`: "default" не шлём, "max"→"high",
- *  "none" — только при объявленном выключателе и механизме-поле (strict 400). */
-function normalizeReasoningEffort(
-  level: string | undefined,
-  strategy: ReasoningStrategy,
-  reasoningOff: boolean,
-): string | undefined {
-  if (!level || level === "default") return undefined;
-  if (level === "none") {
-    return reasoningOff && strategy === "openai-effort" ? "none" : undefined;
-  }
-  if (level === "max") return "high";
-  return level;
-}
-
-function buildRequestBody(opts: {
-  model: string;
-  messages: unknown[];
-  tools?: ToolDefinition[];
-  stream: boolean;
-  maxTokens?: number;
-  reasoningEffort?: string;
-  reasoningStrategy?: ReasoningStrategy;
-  reasoningOff?: boolean;
-  /** Подсказки кеша (llama.cpp `cache_prompt`). */
-  cachePrompt?: boolean;
-  /** Ключ кеша для OpenAI (`prompt_cache_key`). */
-  promptCacheKey?: string;
-  /** Идентификатор для sticky-маршрутизации OpenRouter (`session_id`). */
-  sessionId?: string;
-  /** Запросить финальный usage-чанк в стриме (`stream_options.include_usage`). */
-  streamUsage?: boolean;
-}): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    model: opts.model,
-    messages: opts.messages,
-    stream: opts.stream,
-  };
-  if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;
-  if (opts.cachePrompt) body.cache_prompt = true;
-  if (opts.promptCacheKey) body.prompt_cache_key = opts.promptCacheKey;
-  if (opts.sessionId) body.session_id = opts.sessionId;
-  if (opts.stream && opts.streamUsage) body.stream_options = { include_usage: true };
-
-  // Применяем effort через стратегию провайдера (уровень нормализуется под
-  // контракт OpenAI: low|medium|high).
-  const strategy = opts.reasoningStrategy ?? "openai-effort";
-  const effort = normalizeReasoningEffort(opts.reasoningEffort, strategy, opts.reasoningOff === true);
-
-  if (strategy === "openai-effort") {
-    if (effort) body.reasoning_effort = effort;
-  } else if (strategy === "template-kwarg") {
-    body.chat_template_kwargs = { enable_thinking: opts.reasoningEffort !== "none" };
-  } else if (strategy === "prompt-tag") {
-    // Шлём reasoning_effort в теле (модели с API-поддержкой) И тег /no_think
-    // в сообщение (модели только с prompt-сигналами; тег ставит `chat()`).
-    if (effort) body.reasoning_effort = effort;
-  }
-  // "none" = не поддерживается, пропуск
-
-  if (opts.tools && opts.tools.length > 0) {
-    body.tools = opts.tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      },
-    }));
-    body.tool_choice = "auto";
-  }
-  return body;
 }
 
 /** Провайдер OpenAI-совместимого API (стрим + non-stream фолбэки, ретраи). */
@@ -384,6 +312,13 @@ export class OpenAICompatProvider implements LLMProvider {
       reasoningEffort: options?.reasoningEffort,
       reasoningStrategy: this.reasoningStrategy,
       messagesCount: messages.length,
+    });
+    // U20: снимок того, что реально уйдёт в сеть (после DLP-проекции).
+    captureRequestSnapshot(body, {
+      model: this.model,
+      baseUrl: this.config.baseUrl,
+      stream: true,
+      sessionId: options?.sessionId ?? this.getSessionId?.(),
     });
     const { headers, abortSignal, cleanup, isTimeout, flagTimeout, controller } =
       this.buildRequestSetup(signal, REQUEST_TIMEOUT_MS, options?.sessionId);
@@ -737,6 +672,13 @@ export class OpenAICompatProvider implements LLMProvider {
       reasoningStrategy: this.reasoningStrategy,
       reasoningOff: this.reasoningOff,
       ...this.cacheHints(options?.sessionId),
+    });
+    // U20: снимок non-stream вызова — то же тело, что уйдёт в сеть.
+    captureRequestSnapshot(body, {
+      model: this.model,
+      baseUrl: this.config.baseUrl,
+      stream: false,
+      sessionId: options?.sessionId ?? this.getSessionId?.(),
     });
 
     const { headers, abortSignal, cleanup, isTimeout } = this.buildRequestSetup(

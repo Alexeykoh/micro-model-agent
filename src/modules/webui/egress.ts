@@ -8,9 +8,8 @@
  * Событие до записи не меняется: редакция идёт над копией для конкретного
  * клиента. Карта токенов наружу не попадает.
  *
- * DEBT(api-hidden-globs-text-scope): `apiHiddenGlobs` дают 404 на файловых
- * эндпоинтах; в произвольном тексте SSE/JSON скрытый сегмент может пережить
- * prefix-редакцию — нужен field-aware матчинг известных path-полей.
+ * Скрытые пути (`apiHiddenGlobs`) маскируются в тексте целиком, а не только
+ * корнем: `projectText` разворачивает находку до конца пути и заменяет её.
  */
 import type { ServerResponse } from "node:http";
 import { homedir, hostname, userInfo } from "node:os";

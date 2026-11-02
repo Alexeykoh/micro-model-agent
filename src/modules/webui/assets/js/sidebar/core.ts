@@ -25,6 +25,8 @@ import { renderPlugins, sidebarPluginsState } from "./plugins.js";
 import { renderSubagents, sidebarSubagentsState } from "./subagents.js";
 import { renderMcp, sidebarMcpState } from "./mcp.js";
 import { applyPromptI18n, initPromptPopup } from "./prompt.js";
+import { initSecurityPanel, sidebarSecurityState } from "./security.js";
+import { initRequestPopup } from "./request-popup.js";
 
 /**
  * Куда ведёт контекстная кнопка настроек из полосы вкладок. Одна кнопка
@@ -35,6 +37,7 @@ const SETTINGS_PANEL: Record<string, string> = {
   files: "context",
   lsp: "plugins",
   trace: "ui",
+  security: "context",
   subagents: "agent",
   plugins: "plugins",
   mcp: "plugins",
@@ -97,6 +100,7 @@ export function setSidebarTab(id: string, persist = true): void {
   if (effective === "plugins") sidebarPluginsState();
   if (effective === "subagents") sidebarSubagentsState();
   if (effective === "mcp") sidebarMcpState();
+  if (effective === "security") sidebarSecurityState();
 }
 
 /**
@@ -169,6 +173,8 @@ export function initSidebar(): void {
   if (sb.detailClose) sb.detailClose.addEventListener("click", collapseDetail);
   initTraceScroll();
   initPromptPopup();
+  initRequestPopup();
+  initSecurityPanel();
 
   root.querySelectorAll<HTMLElement>(".sb-tab .sb-ico").forEach((span) => {
     const id = span.closest<HTMLElement>(".sb-tab")?.dataset.tab || "session";

@@ -38,6 +38,36 @@ export interface Finding {
   hidden?: boolean;
 }
 
+/** Поверхность исходящего запроса, на которой найдено значение. */
+export type EgressSurface = "message" | "tool";
+
+/**
+ * Позиционная находка редакции (U21): где именно в исходящем запросе DLP
+ * вычистил значение. Оригинала и token id здесь нет (INV-DLP-1): `replacement` —
+ * только метка маски, `preview` — маскированный отпечаток секрета.
+ */
+export interface EgressHit {
+  dataClass: DataClass;
+  kind: string;
+  surface: EgressSurface;
+  /** Индекс сообщения (`surface: "message"`). */
+  messageIdx?: number;
+  /** Роль сообщения (`user`, `system`, `assistant`, `tool`). */
+  role?: string;
+  /** Имя тула (`surface: "tool"`). */
+  tool?: string;
+  /** Путь к строке внутри сообщения/дефиниции: `content`, `description`, … */
+  field?: string;
+  /** Начало диапазона в исходной строке (код-поинты). */
+  start: number;
+  /** Конец диапазона (эксклюзивный). */
+  end: number;
+  /** Чем заменено: метка маски/псевдонима, без id (`[PII]`, `‹PATH›`). */
+  replacement: string;
+  /** Маскированный отпечаток значения (только секреты). */
+  preview?: string;
+}
+
 /** Псевдоним одной находки: только для дедупликации в журнале хода. */
 export interface EgressTokenRef {
   dataClass: DataClass;
@@ -68,6 +98,8 @@ export interface GuardDiagnostic {
   stats?: Partial<Record<DataClass, number>>;
   /** Псевдонимы находок; наружу (SSE/история/лог) не попадают. */
   tokens?: EgressTokenRef[];
+  /** Позиционные находки редакции за вызов (без оригиналов, U21). */
+  hits?: EgressHit[];
 }
 
 /**
@@ -93,6 +125,13 @@ export interface EgressTurnSummary {
   kinds: Partial<Record<DataClass, string[]>>;
   /** Детализация секретов: тип + маскированные отпечатки (INV-DLP-6…8). */
   secrets?: SecretKindSummary[];
+  /**
+   * Позиционная детализация (U21): где именно вычищено значение. Капнуто
+   * `MAX_TURN_HITS`; избыток виден в `hitsTruncated`.
+   */
+  hits?: EgressHit[];
+  /** Сколько находок не поместилось в кап `hits`. */
+  hitsTruncated?: number;
   /** Назначение: внешний/локальный провайдер + хост. */
   targets: Array<{ kind: "provider"; trusted: boolean; host?: string }>;
 }

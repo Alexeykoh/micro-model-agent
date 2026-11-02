@@ -6,6 +6,7 @@ import {
   noteEgressTarget,
   recordEgressTurn,
   resetEgressTurnJournal,
+  takePassiveEgress,
 } from "../../src/modules/security/data-policy/turn-journal";
 import { egressDiagnosticSink } from "../../src/core/bootstrap/tool-context";
 import type { SessionManager } from "../../src/modules/session/index";
@@ -32,6 +33,19 @@ const pathToken = (id: string) => ({ dataClass: "path" as const, kind: "windows-
 
 beforeEach(() => {
   resetEgressTurnJournal();
+});
+
+describe("пассивный агрегат для CLI (dlp-cli-redaction-notice)", () => {
+  it("без beginEgressTurn копит редакцию и отдаёт её один раз", () => {
+    recordEgressTurn(redacted("cli", [pathToken("a"), pathToken("b")]));
+    const first = takePassiveEgress("cli");
+    expect(first?.total).toBe(2);
+    expect(takePassiveEgress("cli")).toBeUndefined();
+  });
+
+  it("чистый ход не даёт строки", () => {
+    expect(takePassiveEgress("cli")).toBeUndefined();
+  });
 });
 
 describe("журнал DLP за ход", () => {

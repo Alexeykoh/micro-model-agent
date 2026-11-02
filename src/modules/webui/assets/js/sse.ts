@@ -6,6 +6,7 @@
 import type { Dict } from "./core/store/types.js";
 import type { SseDeps } from "./sse-deps.js";
 import { noteChunk as speedChunk } from "./speed.js";
+import { attachSidebarSse } from "./sse-sidebar.js";
 export function connectSSE(deps: SseDeps): void {
   const {
     token,
@@ -36,6 +37,7 @@ export function connectSSE(deps: SseDeps): void {
     sidebarFilesChanged,
     sidebarPluginsEvent,
     sidebarMcpEvent,
+    sidebarSecurityEvent,
     railPlan,
     railEvent,
     faceEvent,
@@ -219,38 +221,14 @@ export function connectSSE(deps: SseDeps): void {
     if (d && d.sessionId)
       setTabStatus(d.sessionId, d.success === false && !d.interrupted ? "failed" : "idle");
   });
-  // Sidebar Trace: live per-session event log. Feed handlers stay untouched.
-  // Tool/text/phase/plan/question/error stream live; status/log/retract/index
-  // ride the same SSE bus; critic/compaction/probe/usage/audit/claim rows
-  // arrive via the session-log supplement Trace pulls on every turn_end.
-  for (const ev of [
-    "tool_start",
-    "tool_end",
-    "phase",
-    "plan",
-    "question",
-    "meta",
-    "log",
-    "retract",
-    "index",
-  ]) {
-    es.addEventListener(ev, (e) => {
-      const d = parse(e);
-      if (d && sidebarOwns(d)) sidebarTraceEvent(ev, d);
-    });
-  }
-  es.addEventListener("text", (e) => {
-    const d = parse(e);
-    if (d && sidebarOwns(d)) sidebarTraceEvent("text", d);
-  });
-  es.addEventListener("reasoning", (e) => {
-    const d = parse(e);
-    if (d && sidebarOwns(d)) sidebarTraceEvent("reasoning", d);
-  });
-  // LSP tab: server emits `lsp {phase}` around an on-demand diagnosis.
-  es.addEventListener("lsp", (e) => {
-    const d = parse(e);
-    if (d) sidebarLspEvent(d);
+  // Sidebar Trace / Security / LSP: живые события вкладок (вынесено в
+  // `sse-sidebar.ts`, чтобы этот файл оставался ≤300 строк).
+  attachSidebarSse(es, {
+    parse,
+    owns: sidebarOwns,
+    sidebarTraceEvent,
+    sidebarSecurityEvent,
+    sidebarLspEvent,
   });
   // Files tab: workspace watcher fired — re-read the expanded directories.
   es.addEventListener("files", () => sidebarFilesChanged());

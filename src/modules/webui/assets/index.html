@@ -157,6 +157,10 @@
         <span class="sb-ico" data-icon="trace" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="security" aria-selected="false" aria-controls="pane-security" title="Security">
+        <span class="sb-ico" data-icon="security" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
       <button class="sb-tab" type="button" role="tab" data-tab="subagents" aria-selected="false" aria-controls="pane-subagents" title="Subagents">
         <span class="sb-ico" data-icon="subagents" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
@@ -232,6 +236,13 @@
     <div class="sb-pane" id="pane-mcp" role="tabpanel" data-pane="mcp" hidden>
       <div class="sec map-sec">
         <div class="sec-body" id="mcpBody"></div>
+      </div>
+    </div>
+
+    <div class="sb-pane" id="pane-security" role="tabpanel" data-pane="security" hidden>
+      <div class="sec-sec">
+        <div class="sec-filters" id="securityFilters" role="group"></div>
+        <div class="sec-list" id="securityList" role="log" aria-live="polite"></div>
       </div>
     </div>
 

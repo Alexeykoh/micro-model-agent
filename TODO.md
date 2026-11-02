@@ -34,14 +34,30 @@
       404 на скрытые пути, DLP-вебхук. Гейты: `tests/security/data-policy*.test.ts`,
       `tests/providers/sanitizing-provider.test.ts`, `tests/webui/egress-filter.test.ts`,
       `tests/service/egress-filter.test.ts`.
-- [ ] **Остаточные векторы вне плана** (отдельная задача, нужен шов/спека):
-      payload `tools/web-search.ts:74` (запрос уходит в DuckDuckGo как есть, DLP его
-      не трогает), payload `modules/mcp/client.ts`, обход через base64/split известного
-      значения, DNS-подмена trust (документировать IP/CIDR), NER (ФИО/адреса).
-      Долги по теме — в `docs/agents/debt.md` (`at-rest-pii`, `file-content-taint`,
-      `api-hidden-globs-text-scope`, `file-content-bypass-non-path-tools`,
+- [x] **Payload `web_search`** — запрос проецируется до сети (`projectOutboundText`,
+      маска без псевдонимов, fail-closed при ошибке классификатора). _(2026-11-02,
+      гейт `tests/security/outbound-projection.test.ts`.)_
+- [x] **Base64/hex/percent/fullwidth/гомоглифы/zero-width, split** — детекторы
+      `detectors/encoded.ts` + `detectors/joined.ts` (значения и секреты в склейке,
+      карта позиций обратно в оригинал). _(2026-11-02, гварды
+      `tests/security/encoded-value.test.ts`, `tests/security/dlp-adversarial.test.ts`,
+      `tests/providers/dlp-canary.test.ts`.)_ Произвольный текстовый паттерн,
+      разорванный без разделителя, остаётся residual risk.
+- [x] **Скрытый glob в тексте** — `apiHiddenGlobs`/`providerBlockGlobs` маскируют
+      путь целиком в SSE args/output и истории, а не только на файловых эндпоинтах.
+      _(2026-11-02, гейт `tests/security/api-hidden-globs.test.ts`.)_
+- [x] **CLI: строка о редакции** — `◇ DLP: скрыто значений — N (классы)` после хода.
+      _(2026-11-02, пассивный агрегат журнала.)_
+- [x] **DNS-подмена trust** — задокументировано: доверие по конфигу и распарсенному
+      хосту, IP/CIDR-записи как рекомендация (спека 2026-10-19, §«Остаточное»).
+- [ ] **Payload MCP** (`modules/mcp/client.ts`) — MCP-сервер интеграции; нужен
+      taint-контракт (`file-content-taint`), отдельная задача.
+- [ ] **NER (ФИО/адреса)** — не реализовано.
+- Остальные долги темы — [`docs/agents/debt.md`](./docs/agents/debt.md)
+      (`at-rest-pii`, `file-content-taint`, `file-content-bypass-non-path-tools`,
       `data-policy-projection-lifecycle`, `streaming-tail-holdback`,
-      `research-by-checksum`, `dlp-cli-redaction-notice`).
+      `research-by-checksum`); `api-hidden-globs-text-scope`, `encoded-value-bypass`,
+      `web-search-payload-dlp`, `dlp-cli-redaction-notice` — оплачены 2026-11-02.
 
 ### 1.3 Аудит модулей harness (план `docs/plans/2026-10-12-harness-module-audit-fixes.md`)
 
@@ -573,6 +589,13 @@ LSP, Трассировка, Субагенты, Плагины, MCP, Карта
 
 ### 1.11 Прозрачность DLP в WebUI (что ушло провайдеру и что именно отредактировано)
 
+> **Сделано 2026-11-02** в ветке `feat/dlp-transparency-and-coverage` (спека
+> `docs/specs/2026-11-02-dlp-transparency-and-coverage-design.md`): U20/U21/U22
+> реализованы и проверены живым прогоном `mma web` с провайдером `opencode-go`
+> (снимок запроса, позиции редакции с переходом, вкладка «Безопасность»).
+> Остаток направления — волна 2 (покрытие egress): §1.2 и долги
+> `web-search-payload-dlp`/`encoded-value-bypass`.
+
 Цель: пользователь **сам** убеждается, что безопасность работает — видит ровно тот
 запрос, который ушёл провайдеру, и конкретные места редакции, а не только счётчики.
 Оба пункта меняют контракт (форма события в `session.jsonl`, поля SSE, форма
@@ -580,7 +603,7 @@ LSP, Трассировка, Субагенты, Плагины, MCP, Карта
 оба обязаны соблюдать INV-DLP-1/6/8: **оригиналы и token id в UI и лог не попадают**,
 только маскированные значения, классы и позиции.
 
-- [ ] **U20 (P1) Trace: поп-ап «Запрос провайдеру» — что реально ушло в модель.**
+- [x] **U20 (P1) Trace: поп-ап «Запрос провайдеру» — что реально ушло в модель.**
       Сейчас Trace показывает события хода, но не сам request/response-пакет: нельзя
       проверить ни состав промпта, ни то, что DLP действительно вычистил данные.
       Требуется: (1) снимок **исходящего** запроса в точке провайдера — после
@@ -602,7 +625,7 @@ LSP, Трассировка, Субагенты, Плагины, MCP, Карта
       `tests/providers/sanitizing-provider.test.ts`, `tests/security/data-policy*.test.ts`,
       новый `tests/webui/llm-request-snapshot.test.ts` (снимок не содержит
       оригиналов, кап соблюдён, поп-ап строится из события).
-- [ ] **U21 (P1) Чат: клик по категории DLP → конкретные места редакции.**
+- [x] **U21 (P1) Чат: клик по категории DLP → конкретные места редакции.**
       Сейчас бейдж DLP агрегатный (класс → вид → счётчик → маскированный отпечаток
       секрета и назначение — `assets/js/feed/egress.ts:1-2`, форма
       `EgressTurnSummary` в `src/modules/security/data-policy/types.ts:87`): видно
@@ -621,7 +644,7 @@ LSP, Трассировка, Субагенты, Плагины, MCP, Карта
       вызовом модели (перекрёстно с U20). Ветка `feat/dlp-redaction-details`;
       гейты: `tests/webui-dlp-indicator.test.ts`, `tests/security/data-policy*.test.ts`,
       новый `tests/webui/dlp-hits.test.ts` (позиции и метки приходят, оригиналов нет).
-- [ ] **U22 (P1) Сайдбар: вкладка «Безопасность» — живой журнал отловов.** Нужна
+- [x] **U22 (P1) Сайдбар: вкладка «Безопасность» — живой журнал отловов.** Нужна
       отдельная вкладка рядом с Trace, где в реальном времени видно, что поймала
       защита: свежее сверху, у каждой строки — время, глиф класса (block / DLP /
       approval / SSRF), короткая суть и цель (тул, путь, URL, хост); клик по строке
@@ -738,7 +761,7 @@ response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов,
 - [ ] Подобрать литературу по верификации/критикам (вторая половина пункта
       «контр-агент для проверки работы»; сам контр-агент сделан — `src/modules/critic/`).
 - [ ] Долги из [`docs/agents/debt.md`](./docs/agents/debt.md) — каждый оплачивается
-      по своему триггеру (правило 9). Активных записей: 24.
+      по своему триггеру (правило 9). Активных записей: 21.
 
 ---
 

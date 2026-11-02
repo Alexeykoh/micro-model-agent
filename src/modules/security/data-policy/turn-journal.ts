@@ -10,6 +10,7 @@
  */
 import type {
   DataClass,
+  EgressHit,
   EgressTarget,
   EgressTurnSummary,
   GuardDiagnostic,
@@ -23,6 +24,12 @@ interface Bucket {
   /** Маскированные отпечатки секретов: внутренний вид → уникальные значения. */
   secretPreviews: Map<string, Set<string>>;
   targets: Map<string, EgressTurnSummary["targets"][number]>;
+  /** Позиционные находки редакции (U21): уникальные по месту. */
+  hits: EgressHit[];
+  /** Ключи уже учтённых находок — дедуп между вызовами хода. */
+  hitKeys: Set<string>;
+  /** Сколько находок не поместилось в кап. */
+  hitsDropped: number;
 }
 
 /** Публичные виды секретов: внутренние id паттернов наружу не выходят. */
@@ -36,6 +43,14 @@ const SECRET_KIND_PUBLIC: Record<string, string> = {
 /** Кап отпечатков на вид: агрегат не должен расти вместе с ходом (INV-DLP-8). */
 const MAX_SECRET_PREVIEWS = 6;
 
+/** Кап позиционных находок на ход (U21): агрегат, а не лог (INV-DLP-8). */
+const MAX_TURN_HITS = 24;
+
+/** Ключ уникальности находки: место + диапазон, без значений. */
+function hitKey(h: EgressHit): string {
+  return [h.dataClass, h.kind, h.surface, h.messageIdx ?? "", h.tool ?? "", h.field ?? "", h.start, h.end].join("\0");
+}
+
 function publicSecretKind(kind: string): string {
   const mapped = SECRET_KIND_PUBLIC[kind];
   if (mapped) return mapped;
@@ -43,6 +58,8 @@ function publicSecretKind(kind: string): string {
 }
 
 const buckets = new Map<string, Bucket>();
+/** Пассивный бакет: редакция без явного `beginEgressTurn` (CLI/one-shot). */
+const passiveBuckets = new Map<string, Bucket>();
 /** Последнее известное назначение сессии — чтобы чистый ход тоже знал target. */
 const knownTargets = new Map<string, EgressTurnSummary["targets"][number]>();
 
@@ -67,6 +84,9 @@ function freshBucket(sessionId: string): Bucket {
     maskedMax: new Map(),
     secretPreviews: new Map(),
     targets: new Map(),
+    hits: [],
+    hitKeys: new Set(),
+    hitsDropped: 0,
   };
   const known = knownTargets.get(sessionId);
   if (known) bucket.targets.set(targetKey(known), known);
@@ -95,9 +115,20 @@ export function recordEgressTurn(diag: GuardDiagnostic): void {
   const sessionId = diag.sessionId;
   if (!sessionId) return;
   const bucket = buckets.get(sessionId);
-  if (!bucket) return;
+  if (bucket) {
+    accumulate(bucket, diag);
+    return;
+  }
+  // Нет открытого хода (CLI/one-shot): копим пассивно, чтобы REPL мог показать
+  // одну строку о редакции в конце хода (`takePassiveEgress`).
+  const passive = passiveBuckets.get(sessionId) ?? freshBucket(sessionId);
+  accumulate(passive, diag);
+  passiveBuckets.set(sessionId, passive);
+}
 
-  addTarget(bucket, diag.target);
+/** Сложить одну диагностику в бакет (общая часть хода и пассивного режима). */
+function accumulate(bucket: Bucket, diag: GuardDiagnostic): void {
+  if (diag.target) addTarget(bucket, diag.target);
   const perCall = new Map<string, number>();
   for (const ref of diag.tokens ?? []) {
     if (isTokenized(ref.token)) {
@@ -121,6 +152,18 @@ export function recordEgressTurn(diag: GuardDiagnostic): void {
   // max, не сумма: title-gen повторяет те же значения в том же ходу.
   for (const [key, n] of perCall) {
     bucket.maskedMax.set(key, Math.max(bucket.maskedMax.get(key) ?? 0, n));
+  }
+
+  // Позиционные находки (U21): дедуп по месту, кап на ход.
+  for (const hit of diag.hits ?? []) {
+    const key = hitKey(hit);
+    if (bucket.hitKeys.has(key)) continue;
+    if (bucket.hits.length >= MAX_TURN_HITS) {
+      bucket.hitsDropped += 1;
+      continue;
+    }
+    bucket.hitKeys.add(key);
+    bucket.hits.push(hit);
   }
 }
 
@@ -179,6 +222,8 @@ function summaryOf(bucket: Bucket): EgressTurnSummary {
     stats,
     kinds: kindsOut,
     ...(secrets.length ? { secrets } : {}),
+    ...(bucket.hits.length ? { hits: bucket.hits } : {}),
+    ...(bucket.hitsDropped ? { hitsTruncated: bucket.hitsDropped } : {}),
     targets: [...bucket.targets.values()],
   };
 }
@@ -191,8 +236,21 @@ export function endEgressTurn(sessionId: string): EgressTurnSummary | undefined 
   return summaryOf(bucket);
 }
 
+/**
+ * Забрать пассивный агрегат (CLI): ход не открывал журнал, но редакция была.
+ * `undefined` — нечего показывать (чисто или ещё не копили).
+ */
+export function takePassiveEgress(sessionId: string): EgressTurnSummary | undefined {
+  const bucket = passiveBuckets.get(sessionId);
+  if (!bucket) return undefined;
+  passiveBuckets.delete(sessionId);
+  const summary = summaryOf(bucket);
+  return summary.total > 0 ? summary : undefined;
+}
+
 /** Только для тестов: сбросить журнал и известные цели. */
 export function resetEgressTurnJournal(): void {
   buckets.clear();
+  passiveBuckets.clear();
   knownTargets.clear();
 }

@@ -10,13 +10,21 @@
  *   свойств не трогаются: значение обязано оставаться валидным по схеме.
  */
 import { projectText, type ProjectPolicy } from "./project";
-import type { DataClass, EgressTokenRef } from "./types";
+import type { DataClass, EgressHit, EgressTokenRef } from "./types";
 
 /** Накопитель редакции. */
 interface Acc {
   changed: boolean;
   stats: Partial<Record<DataClass, number>>;
   tokens: EgressTokenRef[];
+  /** Приёмник позиционных находок; отсутствует — хит-трекинг не нужен. */
+  sink?: (hit: EgressHit) => void;
+  /**
+   * Находки текущей дефиниции до подписи именем тула. Имя читается уже с
+   * **результата** проекции: чтение геттера `name` до проекции сместило бы
+   * последовательность чтений и сломало бы барьер имени (A11).
+   */
+  rawHits: EgressHit[];
 }
 
 /** Ключи схемы, чьи значения — вложенные схемы (объект или массив схем). */
@@ -56,34 +64,72 @@ const TOOL_SCHEMA_KEYS = new Set([
 /** Допустимое имя тула у OpenAI-совместимых провайдеров. */
 export const TOOL_NAME_RE = /^[A-Za-z0-9_-]+$/;
 
-function projectString(text: string, policy: ProjectPolicy, acc: Acc): string {
+function projectString(
+  text: string,
+  policy: ProjectPolicy,
+  acc: Acc,
+  field?: string,
+): string {
   const r = projectText(text, policy);
   if (r.changed) acc.changed = true;
   for (const [k, n] of Object.entries(r.stats)) {
     acc.stats[k as DataClass] = (acc.stats[k as DataClass] ?? 0) + (n ?? 0);
   }
   acc.tokens.push(...r.tokens);
+  for (const red of r.redactions) {
+    acc.rawHits.push({
+      dataClass: red.dataClass,
+      kind: red.kind,
+      surface: "tool",
+      ...(field ? { field } : {}),
+      start: red.start,
+      end: red.end,
+      replacement: red.replacement,
+      ...(red.preview ? { preview: red.preview } : {}),
+    });
+  }
   return r.text;
+}
+
+/** Имя дефиниции из **результата** проекции (плоская или OpenAI-форма). */
+function projectedName(def: unknown): string | undefined {
+  if (!def || typeof def !== "object" || Array.isArray(def)) return undefined;
+  const rec = def as Record<string, unknown>;
+  if (typeof rec.name === "string") return rec.name;
+  const fn = rec.function;
+  if (fn && typeof fn === "object" && !Array.isArray(fn)) {
+    const name = (fn as Record<string, unknown>).name;
+    return typeof name === "string" ? name : undefined;
+  }
+  return undefined;
 }
 
 /**
  * Спроецировать JSON-схему аргументов тула. Всё, что не описание и не
  * вложенная схема, сохраняется как есть — редакция не должна ломать валидность.
  */
-function projectSchema(node: unknown, policy: ProjectPolicy, acc: Acc): unknown {
-  if (Array.isArray(node)) return node.map((item) => projectSchema(item, policy, acc));
+function projectSchema(
+  node: unknown,
+  policy: ProjectPolicy,
+  acc: Acc,
+  path: string,
+): unknown {
+  if (Array.isArray(node)) return node.map((item) => projectSchema(item, policy, acc, path));
   if (!node || typeof node !== "object") return node;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
     if (FREE_TEXT_KEYS.has(key)) {
-      out[key] = typeof value === "string" ? projectString(value, policy, acc) : value;
+      out[key] = typeof value === "string"
+        ? projectString(value, policy, acc, path ? `${path}.${key}` : key)
+        : value;
       continue;
     }
     if (SCHEMA_MAPS.has(key)) {
       if (value && typeof value === "object" && !Array.isArray(value)) {
         const map: Record<string, unknown> = {};
         for (const [prop, sub] of Object.entries(value as Record<string, unknown>)) {
-          map[prop] = projectSchema(sub, policy, acc);
+          const child = path ? `${path}.${key}.${prop}` : `${key}.${prop}`;
+          map[prop] = projectSchema(sub, policy, acc, child);
         }
         out[key] = map;
       } else {
@@ -92,7 +138,7 @@ function projectSchema(node: unknown, policy: ProjectPolicy, acc: Acc): unknown 
       continue;
     }
     if (SCHEMA_NODES.has(key)) {
-      out[key] = projectSchema(value, policy, acc);
+      out[key] = projectSchema(value, policy, acc, path ? `${path}.${key}` : key);
       continue;
     }
     // `enum`/`const`/`pattern`/`format`/`default`/`required`/… — без редакции.
@@ -102,20 +148,22 @@ function projectSchema(node: unknown, policy: ProjectPolicy, acc: Acc): unknown 
 }
 
 /** Спроецировать одну дефиницию тула (плоскую или OpenAI-совместимую). */
-function projectToolNode(def: unknown, policy: ProjectPolicy, acc: Acc): unknown {
+function projectToolNode(def: unknown, policy: ProjectPolicy, acc: Acc, path: string): unknown {
   if (!def || typeof def !== "object" || Array.isArray(def)) return def;
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(def as Record<string, unknown>)) {
     if (key === "function" && value && typeof value === "object" && !Array.isArray(value)) {
-      out[key] = projectToolNode(value, policy, acc);
+      out[key] = projectToolNode(value, policy, acc, path);
       continue;
     }
     if (FREE_TEXT_KEYS.has(key)) {
-      out[key] = typeof value === "string" ? projectString(value, policy, acc) : value;
+      out[key] = typeof value === "string"
+        ? projectString(value, policy, acc, path ? `${path}.${key}` : key)
+        : value;
       continue;
     }
     if (TOOL_SCHEMA_KEYS.has(key)) {
-      out[key] = projectSchema(value, policy, acc);
+      out[key] = projectSchema(value, policy, acc, key);
       continue;
     }
     // `name`, `type`, `strict`, … — идентификаторы, не текст для маскировки.
@@ -136,10 +184,26 @@ export interface ToolProjection<T> {
  * Проекция массива дефиниций тулов (E1). Полиморфна по форме: плоская
  * `{name, description, parameters}` и OpenAI-совместимая
  * `{type, function: {name, description, parameters}}`.
+ *
+ * `sink` получает позиционные находки (U21): имя тула + поле схемы.
  */
-export function projectToolDefs<T>(tools: readonly T[], policy: ProjectPolicy): ToolProjection<T> {
-  const acc: Acc = { changed: false, stats: {}, tokens: [] };
-  const out = tools.map((tool) => projectToolNode(tool, policy, acc) as T);
+export function projectToolDefs<T>(
+  tools: readonly T[],
+  policy: ProjectPolicy,
+  sink?: (hit: EgressHit) => void,
+): ToolProjection<T> {
+  const acc: Acc = { changed: false, stats: {}, tokens: [], sink, rawHits: [] };
+  const out = tools.map((tool) => {
+    const projected = projectToolNode(tool, policy, acc, "");
+    const name = projectedName(projected);
+    if (sink && acc.rawHits.length > 0) {
+      const hits = acc.rawHits.splice(0);
+      for (const hit of hits) {
+        sink({ ...hit, ...(name ? { tool: name } : {}) });
+      }
+    }
+    return projected as T;
+  });
   return { tools: out, changed: acc.changed, stats: acc.stats, tokens: acc.tokens };
 }
 

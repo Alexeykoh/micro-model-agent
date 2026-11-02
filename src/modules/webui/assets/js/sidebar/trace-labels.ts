@@ -88,6 +88,8 @@ export function rowLabel(entry: TraceEntry): string {
       return t("web.sidebar.trace_output");
     case "gate":
       return gateLabel(entry);
+    case "request":
+      return t("web.request.row");
     default:
       return labelOf(entry.name);
   }

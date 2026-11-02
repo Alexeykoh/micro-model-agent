@@ -46,6 +46,75 @@ interface SecretKind {
   previews: string[];
 }
 
+/** Позиционная находка редакции (U21); старые записи истории её не имеют. */
+interface DlpHit {
+  dataClass: string;
+  kind: string;
+  surface: string;
+  messageIdx?: number;
+  role?: string;
+  tool?: string;
+  field?: string;
+  start: number;
+  end: number;
+  replacement: string;
+}
+
+/** Позиции редакции из агрегата; поле опционально (обратная совместимость). */
+function hitsOf(summary: Dict): DlpHit[] {
+  if (!Array.isArray(summary.hits)) return [];
+  return summary.hits
+    .filter((x): x is Dict => !!x && typeof x === "object")
+    .map((x) => ({
+      dataClass: String(x.dataClass ?? ""),
+      kind: String(x.kind ?? ""),
+      surface: String(x.surface ?? "message"),
+      messageIdx: typeof x.messageIdx === "number" ? x.messageIdx : undefined,
+      role: typeof x.role === "string" ? x.role : undefined,
+      tool: typeof x.tool === "string" ? x.tool : undefined,
+      field: typeof x.field === "string" ? x.field : undefined,
+      start: num(x.start),
+      end: num(x.end),
+      replacement: String(x.replacement ?? ""),
+    }))
+    .filter((x) => x.dataClass && x.replacement);
+}
+
+/** Подпись места: «сообщение 3 · user» / «тул write_file». */
+function hitWhere(hit: DlpHit): string {
+  if (hit.surface === "tool") {
+    return t("web.dlp.hit_tool", { tool: hit.tool ?? t("web.dlp.hit_tool_unknown") });
+  }
+  const n = (hit.messageIdx ?? 0) + 1;
+  return hit.role
+    ? t("web.dlp.hit_message", { n, role: hit.role })
+    : t("web.dlp.hit_message_roleless", { n });
+}
+
+function hitRow(hit: DlpHit): HTMLElement {
+  const row = el("button", "dlp-hit");
+  row.type = "button";
+  const place = el("span", "dlp-hit-where", hitWhere(hit));
+  const span = el("span", "dlp-hit-span", hit.field ? `${hit.field}[${hit.start}–${hit.end}]` : String(hit.start));
+  const repl = el("span", "dlp-hit-repl", hit.replacement);
+  row.appendChild(place);
+  row.appendChild(el("span", "dlp-hit-sep", "·"));
+  row.appendChild(span);
+  row.appendChild(el("span", "dlp-hit-arrow", "→"));
+  row.appendChild(repl);
+  // Переход к тексту запроса: лента не знает индексов сообщений запроса,
+  // поэтому открываем снимок исходящего запроса (U20) на нужном сообщении.
+  row.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    document.dispatchEvent(
+      new CustomEvent("mma:open-request", {
+        detail: { messageIdx: hit.messageIdx, tool: hit.tool },
+      }),
+    );
+  });
+  return row;
+}
+
 /** Детализация секретов из агрегата; старые записи истории её не имеют. */
 function secretsOf(summary: Dict): SecretKind[] {
   if (!Array.isArray(summary.secrets)) return [];
@@ -85,6 +154,7 @@ function detailsNode(summary: Dict): HTMLElement {
   if (total === 0) wrap.appendChild(el("div", "detail", t("web.dlp.empty")));
 
   const secrets = secretsOf(summary);
+  const hits = hitsOf(summary);
   for (const dataClass of CLASSES) {
     const count = statsOf(summary, dataClass);
     if (count <= 0) continue;
@@ -100,7 +170,17 @@ function detailsNode(summary: Dict): HTMLElement {
     if (dataClass === "secret") {
       for (const secret of secrets) wrap.appendChild(secretRow(secret));
     }
+    const classHits = hits.filter((h) => h.dataClass === dataClass);
+    if (classHits.length) {
+      const list = el("div", "dlp-hits");
+      list.appendChild(el("div", "dlp-hits-title", t("web.dlp.hits_title")));
+      for (const hit of classHits) list.appendChild(hitRow(hit));
+      wrap.appendChild(list);
+    }
   }
+
+  const truncated = num(summary.hitsTruncated);
+  if (truncated > 0) wrap.appendChild(el("div", "dlp-truncated", t("web.dlp.hits_truncated", { count: truncated })));
 
   const targets = targetsOf(summary);
   if (targets.length) {
