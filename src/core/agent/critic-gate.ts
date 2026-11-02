@@ -2,6 +2,7 @@
 import { t } from "../../i18n/index";
 import type { CriticIssue, CriticVerdict } from "../../modules/critic/types";
 import { normalizedSignature, syntheticIssue } from "../../modules/critic/issue-key";
+import { withProvenance } from "../../modules/critic/provenance";
 import type { CriticAction, CriticGateDeps, CriticGateOptions } from "./critic-contract";
 import { announceRetract, criticRetractInfo } from "./draft-retract";
 import { packFingerprint, evidenceSignature, runWithBudget } from "./critic-budget";
@@ -98,7 +99,6 @@ export class CriticGate {
 
     const outcome = await this.verifySafely(deps);
     this.lastFingerprint = fingerprint;
-    if (outcome.verdict) this.lastVerdict = outcome.verdict;
     if (!outcome.verdict) {
       // Вердикта нет — но «critic_check» без записи о verdict неотличим от
       // pass при разборе сессии. Пишем явный отказ: critic_verdict degraded
@@ -110,46 +110,46 @@ export class CriticGate {
       });
       return "pass";
     }
-    if (outcome.verdict.status === "ok") {
+    // `critical` без улики в жалобах → `concern` (A6): repair не тратим.
+    const provenance = withProvenance(outcome.verdict);
+    const verdict = provenance.verdict;
+    this.lastVerdict = verdict;
+    if (verdict.status === "ok") {
       this.lastVerdictNonOk = false;
       return "pass";
     }
 
-    // Не-ok вердикт не теряется: `issues` могли не распарситься (чужие имена
-    // полей, пустой список), но status + summary — достаточное основание.
-    const issues =
-      outcome.verdict.issues.length > 0
-        ? outcome.verdict.issues
-        : [syntheticIssue(outcome.verdict)];
+    // Не-ok вердикт не теряется: issues могли не распарситься, но status +
+    // summary — достаточное основание.
+    const issues = verdict.issues.length > 0 ? verdict.issues : [syntheticIssue(verdict)];
     // Повтор уже виденной жалобы — считаем ДО takeFreshIssues (он пополняет набор).
     const isRepeat = isRepeatedVerdict(deps.state, issues);
     const fresh = this.takeFreshIssues(deps.state, issues);
-    // Логируем НЕ-ok вердикт всегда: «critic_check» без следа о вердикте
+    // Логируем НЕ-ok вердикт всегда: `critic_check` без следа о вердикте
     // читается как «проверил и сказал ок» (INV-C2).
-    logVerdict(deps, outcome.verdict, issues.length, outcome.durationMs);
+    logVerdict(deps, verdict, issues.length, outcome.durationMs, provenance.downgraded);
     this.lastVerdictNonOk = true;
 
-    // Повтор тех же жалоб: ремонт не тратим, но модель должна услышать, что
-    // прошлая попытка не прошла (иначе повтор уходит в тишину).
+    // Повтор тех же жалоб: ремонт не тратим, но модель должна услышать причину.
     if (fresh.length === 0) {
       if (this.canAdvise()) {
-        this.injectAdvice(deps, outcome.verdict, issues, true);
+        this.injectAdvice(deps, verdict, issues, true);
         return "retry";
       }
       return "pass";
     }
 
-    if (this.shouldRepair(deps, outcome.verdict, isRepeat)) {
-      this.injectRepair(deps, outcome.verdict, fresh, outcome.durationMs);
+    if (this.shouldRepair(deps, verdict, isRepeat)) {
+      this.injectRepair(deps, verdict, fresh, outcome.durationMs);
       return "retry";
     }
     // `concern` (или critical без бюджета ремонта): совет ДОХОДИТ до модели
     // — иначе инъекция мертва, и вердикт остаётся без последствий (INV-C6).
-    if (outcome.verdict.status === "concern" && this.canAdvise()) {
-      this.injectAdvice(deps, outcome.verdict, fresh, false);
+    if (verdict.status === "concern" && this.canAdvise()) {
+      this.injectAdvice(deps, verdict, fresh, false);
       return "retry";
     }
-    logExhausted(deps, outcome.verdict);
+    logExhausted(deps, verdict);
     return "pass";
   }
 

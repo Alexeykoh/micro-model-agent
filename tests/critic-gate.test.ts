@@ -28,7 +28,7 @@ const concern = {
 const critical = {
   status: "critical" as const,
   summary: "broken",
-  issues: [{ severity: "critical" as const, claim: "c", problem: "p" }],
+  issues: [{ severity: "critical" as const, claim: "c", problem: "p", evidence: "test fixture" }],
 };
 
 describe("CriticGate", () => {
@@ -132,7 +132,7 @@ describe("CriticGate", () => {
     const second = {
       status: "critical" as const,
       summary: "still broken",
-      issues: [{ severity: "critical" as const, claim: "different fresh claim", problem: "p" }],
+      issues: [{ severity: "critical" as const, claim: "different fresh claim", problem: "p", evidence: "test fixture" }],
     };
     const verify = vi.fn(async () => critical);
     const gate = new CriticGate({
@@ -161,7 +161,7 @@ describe("CriticGate", () => {
     const first = {
       status: "critical" as const,
       summary: "broken!",
-      issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p" }],
+      issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p", evidence: "test fixture" }],
     };
     const gate = new CriticGate({
       enabled: true,

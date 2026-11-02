@@ -127,24 +127,19 @@ export async function runSubagent(
   // родителя навсегда.
   const parentScope = executor?.getScope?.() ?? ctx.scope;
   const appliedScope = scope || { allowed_files: [], read_only_files: [] };
-  // Свой менеджер плагинов у ребёнка (A5): иначе детектор застревания и
-  // счётчики флейлинга родителя видят падения ребёнка как свои. Форк с
-  // отдельным контекстом даёт и отдельные счётчики `bash`.
+  // Свой менеджер плагинов у ребёнка (A5): иначе застревание и счётчики
+  // флейлинга родителя видят падения ребёнка как свои; форк даёт и свой
+  // контекст для счётчиков bash.
   const subPluginManager = new PluginManager();
   const scopeCollector = new ScopeDenialCollector();
   subPluginManager.register(scopeCollector.plugin, "builtin");
   const childExecutor = executor?.fork?.(subPluginManager);
-  // Compare-and-restore: параллельный сабагент мог тем временем поставить
-  // свой скоуп — чужого свежего владельца не затирать.
   const restoreScope = () => {
-    if (childExecutor?.getScope?.() === appliedScope) {
-      childExecutor.setScope(parentScope);
-    }
+    if (childExecutor?.getScope?.() === appliedScope) childExecutor.setScope(parentScope);
   };
 
   try {
-    // Изолированный контекст сабагента; project-леджер (contextBudget.notesPath)
-    // намеренно НЕ подключается — сабагент не делит durable адреса с родителем.
+    // Изолированный контекст сабагента; project-леджер (notesPath) не подключается.
     const subContextManager = new ContextManager(
       ctx.config.contextWindow,
       ctx.config.contextBudget,
