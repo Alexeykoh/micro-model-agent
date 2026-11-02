@@ -2059,8 +2059,11 @@ button.toggle:disabled { opacity: .5; cursor: default; }
 }
 
 @media (max-width: 760px) {
-  .bar-top { gap: 8px; padding: 8px 10px; }
-  .bar-sub {
+  .bar-top { gap: 6px; padding: 8px 10px; }
+  /* U4: одна панель по умолчанию. Строка сессии нужна только когда открыто
+     несколько вкладок — там prev/next/close реально переключают. */
+  .bar-sub { display: none; }
+  body.multi-tab .bar-sub {
     display: flex; gap: 2px; align-items: center;
     padding: 5px 10px; background: var(--panel); border-bottom: 1px solid var(--border);
     color: var(--muted); font-size: 12.5px;
