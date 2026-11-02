@@ -38,16 +38,29 @@ export function setBashGraceMs(ms: number): void {
  * долбящую запрещённый Unix в cmd.exe (head/cat/grep/…), первые разы
  * подсказываем; после HARD_BLOCK_THRESHOLD подряд — жёсткий стоп с STOP
  * вместо вечного повтора хинта (наблюдено: `head` 5×, `Select-String` 3×).
+ *
+ * Счётчики — на контекст прогона (WeakMap по `ctx`), а не на процесс: иначе
+ * падения субагента копились в счётчике родителя (сессия ses_mvzp8cuk: «bash
+ * упал 15 раз» у хода с двумя вызовами). Форк исполнителя даёт свой контекст —
+ * значит, свой счётчик.
  */
-const FAILING_FIRST_WORDS = new Map<string, number>();
 const HARD_BLOCK_THRESHOLD = 3;
-// Module-level Map живёт весь процесс: при смене сессии (REPL /new, /resume)
-// сбрасываем счётчики, чтобы старые падения не влияли на новую задачу.
-let lastFailureSessionId: string | undefined;
+let FAILING_FIRST_WORDS = new WeakMap<object, Map<string, number>>();
+
+/** Счётчик падений текущего прогона (контекста вызова). */
+function failureCounters(ctx: unknown): Map<string, number> {
+  const key = (ctx ?? {}) as object;
+  let counters = FAILING_FIRST_WORDS.get(key);
+  if (!counters) {
+    counters = new Map();
+    FAILING_FIRST_WORDS.set(key, counters);
+  }
+  return counters;
+}
 
 /** Тестовый хук: сбросить счётчики подряд-падений. */
 export function resetBashFailureTracking(): void {
-  FAILING_FIRST_WORDS.clear();
+  FAILING_FIRST_WORDS = new WeakMap();
 }
 
 /**
@@ -505,17 +518,14 @@ function decorateCommandOutput(opts: {
   // модель писала `cat` — его и знает UNIX_TO_WIN_HINTS. Ключ по транслированному
   // слову делал `cat` невидимым для хинта/блока (наблюдено: cat 4+ раз).
   if (platform() === "win32") {
-    if (ctx.sessionId !== lastFailureSessionId) {
-      lastFailureSessionId = ctx.sessionId;
-      FAILING_FIRST_WORDS.clear();
-    }
+    const failing = failureCounters(ctx);
     const originalFirstWord = originalCommand.trim().split(/\s+/)[0]?.split(/[\\/]/).pop();
     if (originalFirstWord && originalFirstWord in UNIX_TO_WIN_HINTS) {
       if (code === 0) {
-        FAILING_FIRST_WORDS.delete(originalFirstWord);
+        failing.delete(originalFirstWord);
       } else {
-        const failures = (FAILING_FIRST_WORDS.get(originalFirstWord) || 0) + 1;
-        FAILING_FIRST_WORDS.set(originalFirstWord, failures);
+        const failures = (failing.get(originalFirstWord) || 0) + 1;
+        failing.set(originalFirstWord, failures);
         if (failures >= HARD_BLOCK_THRESHOLD) {
           output = `STOP using "${originalFirstWord}" — it does not work in this cmd.exe shell and has failed ${failures} times in a row. ${UNIX_TO_WIN_HINTS[originalFirstWord]}`;
         } else {

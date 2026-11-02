@@ -127,11 +127,18 @@ export async function runSubagent(
   // родителя навсегда.
   const parentScope = executor?.getScope?.() ?? ctx.scope;
   const appliedScope = scope || { allowed_files: [], read_only_files: [] };
+  // Свой менеджер плагинов у ребёнка (A5): иначе детектор застревания и
+  // счётчики флейлинга родителя видят падения ребёнка как свои. Форк с
+  // отдельным контекстом даёт и отдельные счётчики `bash`.
+  const subPluginManager = new PluginManager();
+  const scopeCollector = new ScopeDenialCollector();
+  subPluginManager.register(scopeCollector.plugin, "builtin");
+  const childExecutor = executor?.fork?.(subPluginManager);
   // Compare-and-restore: параллельный сабагент мог тем временем поставить
   // свой скоуп — чужого свежего владельца не затирать.
   const restoreScope = () => {
-    if (ctx.toolExecutor?.getScope?.() === appliedScope) {
-      ctx.toolExecutor.setScope(parentScope);
+    if (childExecutor?.getScope?.() === appliedScope) {
+      childExecutor.setScope(parentScope);
     }
   };
 
@@ -142,18 +149,16 @@ export async function runSubagent(
       ctx.config.contextWindow,
       ctx.config.contextBudget,
     );
-    const subPluginManager = new PluginManager();
-    const scopeCollector = new ScopeDenialCollector();
-    subPluginManager.register(scopeCollector.plugin, "builtin");
     const hallucinationDetector = new HallucinationDetector(ctx.baseDir, provider);
 
-    ctx.toolExecutor.setScope(appliedScope);
+    childExecutor?.setScope?.(appliedScope);
     if (ctx.contextManager?.hasTaint?.()) subContextManager.taintAll?.();
     // Cleanup на исполнителе — рестор скоупа при таймауте/аборте, даже если
     // `finally` агента не отработал (брошенный промис).
     ctx.cleanup = restoreScope;
     ctx.recursionDepth = currentDepth + 1;
     executor?.setRecursionDepth?.(currentDepth + 1);
+    childExecutor?.setRecursionDepth?.(currentDepth + 1);
 
     const systemPrompt: PromptBlock = {
       content: buildSubagentSystemPrompt(
@@ -176,7 +181,7 @@ export async function runSubagent(
     const subDeps = {
       config: subConfig,
       llmProvider: provider,
-      toolExecutor: ctx.toolExecutor,
+      toolExecutor: childExecutor ?? ctx.toolExecutor,
       pluginManager: subPluginManager,
       contextManager: subContextManager,
       hallucinationDetector,
