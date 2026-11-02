@@ -3052,3 +3052,10 @@ body.light .c-dim { --face-c: var(--panel); }
   text-decoration: none; font-size: 13px;
 }
 .skip-link:focus-visible { top: 8px; outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* U12: keyboard hints are meaningless on touch — show the send button instead. */
+#hintTouch { display: none; }
+@media (pointer: coarse), (max-width: 760px) {
+  #hintEnter, #hintShift, #hintAttach, #hintEsc { display: none; }
+  #hintTouch { display: inline; }
+}
