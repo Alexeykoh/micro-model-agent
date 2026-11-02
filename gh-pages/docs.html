@@ -469,10 +469,14 @@ mma security enable-audit</code></pre>
     <h2 id="data-policy">DLP и данные</h2>
     <p>Корпоративная политика данных (<code>security.dataPolicy</code>) фильтрует egress к провайдеру, скрывает пути от API, маскирует секреты и может требовать локального провайдера. При <code>failClosed</code> сомнительный запрос не уходит наружу.</p>
     <ul>
-      <li><code>apiHiddenGlobs</code> — 404 на скрытые пути в web/serve.</li>
-      <li><code>providerBlockGlobs</code> — что нельзя отправлять модели.</li>
-      <li>Шифрование сессий: <code>mma security enable-encryption</code>; ключ хранится вне сессий.</li>
-      <li>Аудит: события безопасности и уведомления (<code>auditNotifier</code>).</li>
+      <li><code>apiHiddenGlobs</code> — 404 на скрытые пути в web/serve; в SSE-событиях и истории такой путь маскируется целиком, а не только корнем.</li>
+      <li><code>providerBlockGlobs</code> — что нельзя отправлять внешней модели (включая вывод <code>bash</code> и MCP-тулов с объявленными путями).</li>
+      <li><strong>Видимость:</strong> бейдж DLP под ответом показывает <em>где именно</em> вычищено (сообщение/тул, поле, диапазон), Trace — поп-ап «Запрос провайдеру» (system → messages → tools, после редакции и до сети), вкладка «Безопасность» — живой журнал block/DLP/approval/SSRF.</li>
+      <li><strong>Taint:</strong> текст, произведённый локальной моделью по защищённым файлам, помечается; при переключении на внешнего провайдера он уходит как <code>[FILE]</code>, а не содержимым. Флаг переживает компакцию и resume.</li>
+      <li><strong>Обфускация:</strong> base64/base64url, hex, percent (в т.ч. двойной), split по пробелам и кавычкам, zero-width, fullwidth и кириллические гомоглифы распознаются до отправки.</li>
+      <li><strong>NER без модели:</strong> ФИО только с отчеством, адрес — только с маркером улицы и номером дома (ложные срабатывания важнее пропусков).</li>
+      <li>Шифрование сессий (opt-in): <code>mma security enable-encryption</code>; журнал, tail и history пишутся зашифрованными. Память — гибрид: авто-записи агента шифруются, ручные заметки и <code>preferences.json</code> остаются открытыми.</li>
+      <li>Аудит: события безопасности, <code>taint_degraded</code>, уведомления (<code>auditNotifier</code>).</li>
     </ul>
 
     <h2 id="service">Service API</h2>

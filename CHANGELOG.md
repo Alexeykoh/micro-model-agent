@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-02
+
 ### Added
 
 - **DLP: гибридная память at-rest, кеш проекции, env в bash, seed субагента.**
