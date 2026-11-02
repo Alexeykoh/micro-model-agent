@@ -337,16 +337,18 @@ reset` для json/list, failover с моделью целевого прова�
       а не модульный Map процесса. Гейт `tests/tools/executor-fork-plugins.test.ts`.)_
       Раньше ребёнок накручивал «bash упал 14 раз» → 15 → 21 у родителя, у которого
       было 2 вызова.
-- [ ] **A6 (P1) Критик эскалирует числа без провенанса; его проверки невидимы в журнале.**
+- [x] **A6 (P1) Критик эскалирует числа без провенанса; его проверки невидимы в журнале.**
+      _(Сделано 2026-11-03: спека
+      [`2026-11-03-critic-evidence-provenance-design`](../specs/2026-11-03-critic-evidence-provenance-design.md),
+      ветка `fix/critic-evidence-provenance`. `critical` с перечисленными жалобами без
+      `evidence` понижается до `concern` (жалоба доходит советом, repair не тратится), в
+      журнале — `critic_verdict { downgraded: "no_evidence" }`; `critic_check` несёт
+      `evidence` — `tool(ключевой аргумент)`, до 8 событий. Гейты:
+      `tests/modules/critic/provenance.test.ts`, `tests/core/critic-gate-evidence.test.ts`,
+      `tests/arch/observability-coverage.test.ts`.)_
       «заявлен 1487, а на самом деле >4000» (индекс против диска с `node_modules`) дало
       `critical` и 3 лишние итерации. Живая сессия `ses_mvv8mr4z`: критик дважды дал
-      `concern` «weather facts lack web grounding», хотя `web_browse` вызывался и его вывод
-      есть в пакете (`gatherTurnToolEvents` отдаёт до 600 симв. output). То есть данных
-      ему хватает — не хватает **требования подкрепить вердикт уликой** (тул + аргументы +
-      скоуп) и записи самих проверок в журнал. Требовать evidence для числовых/фактических
-      утверждений, логировать проверки критика, не эскалировать `critical` без провенанса.
-      Ветка `fix/critic-evidence-provenance`; гейты `tests/modules/critic/*`,
-      `tests/arch/observability-coverage.test.ts`.
+      `concern` «weather facts lack web grounding», хотя `web_browse` вызывался.
 - [ ] **A7 (P1) Результат субагента не несёт здоровья прогона.** 5/5 прогонов `success:true`
       при 38 падениях из 60 вызовов и 0 чтений у двух. В результат и в `end`-событие:
       `toolsOk/toolsFailed/filesRead/filesWritten/blocked`; `filesRead === 0` на аналитической

@@ -142,7 +142,7 @@ describe("Agent in-loop critic", () => {
     const verify = vi.fn(async () => ({
       status: "critical" as const,
       summary: "broken",
-      issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file" }],
+      issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file", evidence: "test fixture" }],
     }));
     const t = createMockDeps({ criticOverride: { verify } } as any);
     const agent = new Agent(t.deps);
@@ -190,7 +190,7 @@ describe("Agent in-loop critic", () => {
     const verify = vi.fn(async () => ({
       status: "critical" as const,
       summary: "broken",
-      issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file" }],
+      issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file", evidence: "test fixture" }],
     }));
     const t = createMockDeps({ criticOverride: { verify } } as any);
     const agent = new Agent(t.deps);

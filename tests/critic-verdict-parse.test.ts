@@ -124,7 +124,7 @@ describe("critic gate keeps a non-ok verdict (W2, INV-C2)", () => {
       verify: async () => ({
         status: "critical" as const,
         summary: "broken",
-        issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p" }],
+        issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p", evidence: "test fixture" }],
       }),
       buildPack: (x: never) => x,
     });

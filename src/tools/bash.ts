@@ -34,27 +34,17 @@ export function setBashGraceMs(ms: number): void {
 }
 
 /**
- * Подряд идущие падения по первому слову команды (сброс при успехе). Модель,
- * долбящую запрещённый Unix в cmd.exe (head/cat/grep/…), первые разы
- * подсказываем; после HARD_BLOCK_THRESHOLD подряд — жёсткий стоп с STOP
- * вместо вечного повтора хинта (наблюдено: `head` 5×, `Select-String` 3×).
- *
- * Счётчики — на контекст прогона (WeakMap по `ctx`), а не на процесс: иначе
- * падения субагента копились в счётчике родителя (сессия ses_mvzp8cuk: «bash
- * упал 15 раз» у хода с двумя вызовами). Форк исполнителя даёт свой контекст —
- * значит, свой счётчик.
+ * Падения по первому слову (сброс при успехе): после HARD_BLOCK_THRESHOLD — STOP.
+ * Счётчики на контекст прогона (WeakMap), не на процесс: иначе падения
+ * субагента копились в счётчике родителя (A5).
  */
 const HARD_BLOCK_THRESHOLD = 3;
 let FAILING_FIRST_WORDS = new WeakMap<object, Map<string, number>>();
-
 /** Счётчик падений текущего прогона (контекста вызова). */
 function failureCounters(ctx: unknown): Map<string, number> {
   const key = (ctx ?? {}) as object;
   let counters = FAILING_FIRST_WORDS.get(key);
-  if (!counters) {
-    counters = new Map();
-    FAILING_FIRST_WORDS.set(key, counters);
-  }
+  if (!counters) FAILING_FIRST_WORDS.set(key, (counters = new Map()));
   return counters;
 }
 
