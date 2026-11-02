@@ -586,10 +586,12 @@ LSP, Трассировка, Субагенты, Плагины, MCP, Карта
       `#0f0f10`, светлая — `#f7f7f4`). Живая проверка: переключение режима меняет
       и `color-scheme`, и meta; нативные скроллбары/адресная строка следуют теме.
       Гейт `tests/webui-color-scheme.test.ts`.)_
-- [ ] **U11. Нет skip-link и landmark `<main>`.** `main`/`role=main` в DOM нет,
-      skip-link отсутствует. Каждый переход — Tab через топ-бар, вкладки и 8
-      иконок сайдбара. Фикс: `<main>` вокруг чата + «к сообщениям». Ветка
-      `fix/webui-landmarks`.
+- [x] **U11. Нет skip-link и landmark `<main>`.** _(Сделано 2026-11-03, ветка
+      `fix/webui-landmarks`: чат обёрнут в `<main class="chat" id="main">`,
+      первым Tab-стопом идёт `a.skip-link` («skip to messages»), `#msgs` получил
+      `tabindex="-1"` — Enter переносит фокус к сообщениям. Живая проверка: первый
+      Tab — видимая ссылка (top 8px), Enter → `document.activeElement === #msgs`,
+      ошибок консоли 0. Гейт `tests/webui-landmarks.test.ts`.)_
 - [ ] **U12. Подсказка над полем — только для десктопа.** «Enter — отправить ·
       Shift+Enter — новая строка · Ctrl+V — вложить» показывается и на 390px,
       где этих клавиш нет. Фикс: текст по `pointer: coarse` («кнопка ↑ —

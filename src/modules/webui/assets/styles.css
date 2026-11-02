@@ -3043,3 +3043,12 @@ body.light .c-dim { --face-c: var(--panel); }
   /* Composer chips are the densest row on a phone. */
   .sel > button, .chip, .linkbtn { min-height: 32px; }
 }
+
+/* U11: keyboard users skip the top bar, tabs and sidebar straight to messages. */
+.skip-link {
+  position: fixed; left: 8px; top: -48px; z-index: 1000;
+  padding: 8px 12px; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  text-decoration: none; font-size: 13px;
+}
+.skip-link:focus-visible { top: 8px; outline: 2px solid var(--accent); outline-offset: 2px; }
