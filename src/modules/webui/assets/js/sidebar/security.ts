@@ -47,10 +47,11 @@ function classLabel(cls: string): string {
   return label === key ? cls : label;
 }
 
+/** Текстовые глифы классов (без эмодзи — STYLE.md). */
 function classGlyph(cls: string): string {
-  if (cls === "dlp") return "🛡";
+  if (cls === "dlp") return "◇";
   if (cls === "ssrf") return "⇄";
-  if (cls === "approval") return "✋";
+  if (cls === "approval") return "✓";
   return "⊘";
 }
 

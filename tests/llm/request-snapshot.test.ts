@@ -80,6 +80,29 @@ describe("снимок исходящего запроса (U20)", () => {
     expect(snap.truncated).toBe(true);
   });
 
+  it("не отдаёт token id: псевдоним DLP заменяется меткой класса", () => {
+    const snap = buildRequestSnapshot(
+      {
+        messages: [
+          { role: "system", content: "root <PATH:7788799a4d82> kept" },
+          { role: "tool", content: "file <PATH:7788799a4d82>\\src\\a.ts and <HOST:abc>" },
+        ],
+        tools: [
+          {
+            type: "function",
+            function: { name: "read_file", description: "see <PATH:deadbeef>" },
+          },
+        ],
+      },
+      { model: "m", stream: true },
+    );
+    const text = JSON.stringify(snap);
+    expect(text).not.toContain("7788799a4d82");
+    expect(text).not.toContain("deadbeef");
+    expect(text).toContain("‹PATH›");
+    expect(text).toContain("‹HOST›");
+  });
+
   it("не строит снимок без подписчиков и доставляет его подписчику", () => {
     const got: LlmRequestSnapshot[] = [];
     expect(captureRequestSnapshot(body, { model: "m", stream: true })).toBeUndefined();

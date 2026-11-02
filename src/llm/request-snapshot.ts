@@ -120,6 +120,18 @@ function textOfPart(part: unknown): string {
   return "";
 }
 
+/**
+ * Псевдоним DLP (`<PATH:7788799a4d82>`) → метка класса (`‹PATH›`).
+ *
+ * Снимок снимается после проекции, поэтому в тексте стоят псевдонимы с id. Но
+ * id — ключ обратимости: с картой токенов он возвращает оригинал. В UI и
+ * `session.jsonl` id попадать не должен (INV-DLP-1), поэтому снимок несёт
+ * только метку класса.
+ */
+export function maskTokenIds(text: string): string {
+  return text.replace(/<\s*([A-Za-z][A-Za-z-]*)\s*:[^>]*>/g, "‹$1›");
+}
+
 /** Нормализовать `content` сообщения в строку. */
 function textOfContent(content: unknown): string {
   if (typeof content === "string") return content;
@@ -156,7 +168,7 @@ export function buildRequestSnapshot(
     if (!raw || typeof raw !== "object") continue;
     const rec = raw as Record<string, unknown>;
     const role = typeof rec.role === "string" ? rec.role : "user";
-    const text = textOfContent(rec.content);
+    const text = maskTokenIds(textOfContent(rec.content));
     if (role === "system") {
       systemParts.push(text);
       continue;
@@ -182,7 +194,10 @@ export function buildRequestSnapshot(
       const rec = fn as Record<string, unknown>;
       const name = typeof rec.name === "string" ? rec.name : "";
       if (!name) continue;
-      const desc = typeof rec.description === "string" ? clip(rec.description, SNAPSHOT_LIMITS.toolDescription) : undefined;
+      const desc =
+        typeof rec.description === "string"
+          ? clip(maskTokenIds(rec.description), SNAPSHOT_LIMITS.toolDescription)
+          : undefined;
       if (desc?.clipped) truncated = true;
       tools.push({
         name,
