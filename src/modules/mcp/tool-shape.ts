@@ -16,6 +16,25 @@ export const MCP_TOOL_SECURITY: ToolSecurityDecl = {
   },
 };
 
+/** Поля схемы, которые считаем путями (D6: матчим только известные path-поля). */
+const PATH_PROPERTY_RE =
+  /^(path|paths|file|files|file_?path|filepath|file_?name|filename|dir|directory|root)$/i;
+
+/**
+ * Security-декларация MCP-тула: `manual` (сервер произволен) + `pathArgs`,
+ * выведенные из input-схемы. С `pathArgs` executor тегирует вывод как
+ * `file-content`, если сервер прочитал путь под `providerBlockGlobs` — иначе
+ * содержимое защищённого файла уходило внешнему провайдеру как обычный текст.
+ */
+export function mcpToolSecurity(inputSchema: Record<string, unknown>): ToolSecurityDecl {
+  const props = inputSchema?.properties;
+  if (!props || typeof props !== "object" || Array.isArray(props)) return MCP_TOOL_SECURITY;
+  const pathArgs = Object.keys(props as Record<string, unknown>).filter((key) =>
+    PATH_PROPERTY_RE.test(key),
+  );
+  return pathArgs.length > 0 ? { ...MCP_TOOL_SECURITY, pathArgs } : MCP_TOOL_SECURITY;
+}
+
 /** Тул, найденный на MCP-сервере. */
 export interface DiscoveredTool {
   serverName: string;

@@ -54,8 +54,15 @@
       наследование ответом локальной модели и сводкой компакции, маска `[FILE]` на
       внешнем egress (включая аргументы `tool_calls`), восстановление при resume с
       `taint_degraded`. Спека: `docs/specs/2026-11-02-local-provider-taint-design.md`.
-      Остаётся вне объёма: bash/MCP/плагины как источники taint
-      (`file-content-bypass-non-path-tools`) и субагенты.
+      Остаётся вне объёма: плагины как источники taint и переменные/подстановки
+      в `bash` (эвристика по токенам команды).
+- [x] **bash и MCP как источники `file-content`** — вывод `bash` тегируется, если
+      токен команды попадает под block-glob; MCP-тулы получают `pathArgs` из
+      input-схемы. _(2026-11-02, гейты `tests/tools/file-content-tag-shell.test.ts`,
+      `tests/modules/mcp/tool-security.test.ts`.)_
+- [x] **Taint субагента** — ответ дочернего прогона, читавшего защищённые файлы,
+      помечает родительский tool-результат tainted. _(2026-11-02,
+      `tests/security/taint.test.ts`.)_
 - [ ] **Payload MCP** (`modules/mcp/client.ts`) — MCP-сервер интеграции; нужен
       taint-контракт (`file-content-taint`), отдельная задача.
 - [ ] **NER (ФИО/адреса)** — не реализовано.

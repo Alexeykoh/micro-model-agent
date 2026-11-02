@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **DLP: bash/MCP как источники `file-content` и taint субагентов.** Вывод `bash`
+  помечается защищённым, если токен команды попадает под `providerBlockGlobs`
+  (`cat secret/.env` → `[FILE]` для внешнего провайдера); MCP-тулы получают
+  `pathArgs`, выведенные из input-схемы, поэтому их чтение защищённых файлов
+  тегируется автоматически. Ответ субагента, чей дочерний контекст был tainted,
+  помечает родительский tool-результат tainted — производный текст не утекает при
+  смене провайдера. Гварды: `tests/tools/file-content-tag-shell.test.ts`,
+  `tests/modules/mcp/tool-security.test.ts`, `tests/security/taint.test.ts`.
+
 - **DLP: taint T4–T5 — компакция, resume и диагностика.** Сводка компакции
   (обычной и hard-drop) наследует taint сжатого ввода; при resume taint
   восстанавливается эвристически по sentinel'у `file-content` с границами хода по

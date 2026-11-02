@@ -244,6 +244,8 @@ export interface ToolContext {
 export interface ToolResult {
   success: boolean;
   output: string;
+  /** Производный от защищённого содержимого (ответ субагента): контекст пометит taint. */
+  taint?: boolean;
   toolCallId?: string;
   display?: string;
   data?: Record<string, unknown>; // data: machine-readable result signature

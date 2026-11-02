@@ -3,7 +3,7 @@ import type { ToolContext, ToolCall, ToolResult, PluginManager, PluginHook } fro
 import type { ToolRegistry, RegisteredTool } from "./registry";
 import { killByCallId } from "../modules/processes/runner";
 import { checkToolPath } from "./path-enforcement";
-import { tagBlockedFileContent } from "./file-content-tag";
+import { tagBlockedFileContent, tagShellFileContent } from "./file-content-tag";
 import { isUrlAllowed } from "../modules/security/network-validator";
 import { filterToolsByTags } from "./filter-tools";
 import { admitFromContext } from "./admission";
@@ -377,6 +377,10 @@ export class ToolExecutor {
     // DLP §4.8: результат по пути из `providerBlockGlobs` тегируется
     // `file-content`; egress-guard решит, отдавать его (локально) или резать.
     result = tagBlockedFileContent(tool, call, result, this.ctx);
+    // `bash`: путь в самой команде (§4.8) — тоже источник file-content.
+    result = tagShellFileContent(tool, call, result, this.ctx);
+    // Субагент: его ответ производен от защищённых файлов дочернего контекста.
+    if (result.taint) this.ctx.contextManager?.markNextToolTainted?.();
 
     // Admission (OO-1/OO-7): результат больше admitMaxTokens не входит в
     // контекст дословно — спилл + дескриптор. Одна точка для всех тулов;
