@@ -242,11 +242,13 @@ export function sidebarSessionChanged(sid: string | null | undefined): void {
   sb.reasonEntry = null;
   sb.turn = 0;
   sb.seq = 0;
-  // Trace живой: старые ходы чужой сессии не докачиваем, только новые события.
-  sb.logCursor = new Date().toISOString();
+  // Догоняем историю сессии (U3): курсор с начала лога, а не «сейчас».
+  // Раньше открытая старая сессия показывала «событий пока нет».
+  sb.logCursor = null;
   sb.logPulling = false;
   collapseDetail();
   renderList();
+  void sidebarPullLog();
   sidebarSubagentsSessionChanged();
   sidebarSecuritySessionChanged();
   clearRequestMemo();
