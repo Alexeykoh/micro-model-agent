@@ -37,9 +37,12 @@
 - [x] **Payload `web_search`** — запрос проецируется до сети (`projectOutboundText`,
       маска без псевдонимов, fail-closed при ошибке классификатора). _(2026-11-02,
       гейт `tests/security/outbound-projection.test.ts`.)_
-- [x] **Base64-обёртка известного значения** — детектор `detectors/encoded.ts`.
-      _(2026-11-02, гейт `tests/security/encoded-value.test.ts`.)_ Split остаётся
-      residual risk: признак склейки неотличим от обычного текста.
+- [x] **Base64/hex/percent/fullwidth/гомоглифы/zero-width, split** — детекторы
+      `detectors/encoded.ts` + `detectors/joined.ts` (значения и секреты в склейке,
+      карта позиций обратно в оригинал). _(2026-11-02, гварды
+      `tests/security/encoded-value.test.ts`, `tests/security/dlp-adversarial.test.ts`,
+      `tests/providers/dlp-canary.test.ts`.)_ Произвольный текстовый паттерн,
+      разорванный без разделителя, остаётся residual risk.
 - [x] **Скрытый glob в тексте** — `apiHiddenGlobs`/`providerBlockGlobs` маскируют
       путь целиком в SSE args/output и истории, а не только на файловых эндпоинтах.
       _(2026-11-02, гейт `tests/security/api-hidden-globs.test.ts`.)_

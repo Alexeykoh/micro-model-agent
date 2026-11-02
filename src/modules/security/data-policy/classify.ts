@@ -13,6 +13,7 @@ import { detectMachine } from "./detectors/machine";
 import { detectSecrets } from "./detectors/secrets";
 import { detectPii } from "./detectors/pii";
 import { detectEncoded } from "./detectors/encoded";
+import { detectJoined } from "./detectors/joined";
 
 const PRIORITY: Record<DataClass, number> = {
   secret: 5,
@@ -53,6 +54,7 @@ export function classify(text: string, ctx: PolicyContext): Finding[] {
     ...detectMachine(text, ctx),
     ...detectPii(text),
     ...detectEncoded(text, ctx),
+    ...detectJoined(text, ctx),
   ];
   return dedupe(all);
 }

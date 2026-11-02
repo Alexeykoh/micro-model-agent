@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **DLP: adversarial-корпус и защита от обфускации.** Значения, спрятанные в
+  base64/base64url/hex/percent (в т.ч. двойном), найденные в «склеенном» тексте
+  (split по пробелам/кавычкам/`+`/переводам строк, zero-width, JSON-удвоенные
+  слэши, fullwidth, кириллические гомоглифы) теперь ловятся до egress; маска
+  встаёт на исходный диапазон по карте позиций. Плюс canary-гейт через
+  `SanitizingProvider`: 6 представлений пути не доходят до провайдера.
+  Гварды: `tests/security/dlp-adversarial.test.ts`,
+  `tests/providers/dlp-canary.test.ts`.
+
 - **DLP: волна 2 — покрытие egress.** Поисковый запрос `web_search` проецируется
   до сети (`projectOutboundText`: маска без псевдонимов, при `failClosed` запрос
   не уходит), base64-обёртка известного значения ловится отдельным детектором

@@ -161,7 +161,7 @@ interface SecurityEvent {
 | payload `web_search` | запрос через guard перед DuckDuckGo (цель `api`, external) | ✅ `projectOutboundText`, `tests/security/outbound-projection.test.ts` |
 | `modules/mcp/client.ts` | payload MCP-тулов через `filterClient` | ⏳ нужен taint-контракт |
 | hidden-сегмент в SSE args/output | field-aware матчинг `apiHiddenGlobs` по `args.path`/выходу | ✅ `projectText` разворачивает путь до конца, `tests/security/api-hidden-globs.test.ts` |
-| base64/split | детектор «известное значение в base64» в `classify` | ✅ base64 (`detectors/encoded.ts`); split — residual risk |
+| base64/hex/percent/split | детекторы закодированных и «склеенных» значений | ✅ `detectors/encoded.ts` + `detectors/joined.ts` (полныйwidth, гомоглифы, zero-width, JSON-экранирование); гейты `dlp-adversarial`, `dlp-canary` |
 | DNS-подмена trust | документировать IP/CIDR allowlist (поддержка уже есть в `hostMatchesEntry`) | ✅ спека 2026-10-19, §«Остаточное» |
 | CLI-уведомление о редакции | долг `dlp-cli-redaction-notice` | ✅ строка после хода (`takePassiveEgress`) |
 

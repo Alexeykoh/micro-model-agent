@@ -10,6 +10,7 @@ import type { DataPolicyConfig } from "./types";
 import { isTaggedFileContent, untagFileContent } from "./file-content";
 import { secretPreview } from "./detectors/secrets";
 import { matchAnyGlob, relativeTo } from "./path-policy";
+import { decodePercentText } from "./detectors/joined";
 import { resolve } from "node:path";
 import { TokenMap } from "./tokens";
 
@@ -101,7 +102,10 @@ function pathHiddenByPolicy(
         ? []
         : config.providerBlockGlobs;
   if (!globs.length) return false;
-  const rel = relativeTo(ctx.baseDir, resolve(ctx.baseDir, pathText));
+  // Границы сравниваем по нормализованному пути: percent-encoding и удвоенные
+  // обратные слэши (JSON) не должны прятать скрытый файл от glob-матчинга.
+  const decoded = decodePercentText(pathText).replace(/\\\\/g, "\\");
+  const rel = relativeTo(ctx.baseDir, resolve(ctx.baseDir, decoded));
   return matchAnyGlob(rel, globs) !== undefined;
 }
 
