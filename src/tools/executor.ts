@@ -58,11 +58,15 @@ export class ToolExecutor {
    * Изолированная копия исполнителя для КОНКУРЕНТНОГО вызова одного тула.
    * Клонирует ToolContext по дескрипторам (сохраняя живые геттеры config/
    * sessionId/capabilities), даёт собственные scope/recursionDepth/cleanup/
-   * activeCallId, но РАЗДЕЛЯЕТ мемо, реестр и менеджер плагинов. Нужен, потому
-   * что один инстанс `ToolExecutor` не конкурентно-безопасен: последовательный
-   * путь так и держать, параллельный — через fork на каждый вызов.
+   * activeCallId, но РАЗДЕЛЯЕТ мемо, реестр и (по умолчанию) менеджер плагинов.
+   * Нужен, потому что один инстанс `ToolExecutor` не конкурентно-безопасен:
+   * последовательный путь так и держать, параллельный — через fork на каждый вызов.
+   *
+   * @param pluginManager свой менеджер — для субагента: иначе состояние плагинов
+   *   (детектор застревания, счётчики флейлинга) считается общим с родителем,
+   *   и падения ребёнка выглядят как падения родителя (A5).
    */
-  fork(): ToolExecutor {
+  fork(pluginManager: PluginManager = this.pluginManager): ToolExecutor {
     const clone = Object.create(
       Object.getPrototypeOf(this.ctx),
       Object.getOwnPropertyDescriptors(this.ctx),
@@ -74,7 +78,7 @@ export class ToolExecutor {
     const fork = new ToolExecutor(
       this.registry,
       clone,
-      this.pluginManager,
+      pluginManager,
       this.memo,
       this.hookLock,
     );
