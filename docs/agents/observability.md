@@ -131,4 +131,11 @@ Fail-open считается не по факту `catch`, а по контра�
 - `tests/critic-gate.test.ts` — `critic_error` пишется при отказе критика (throw и null).
 - `tests/session-logger.test.ts` — `logDiagnosticEvent` персистит форму `Diagnostic`.
 - `tests/core/compaction-progress.test.ts` — `context_degraded` при серии компакций без роста леджера.
+## Taint
+
+- `taint_degraded` — taint восстановлен эвристически при resume (нет метаданных
+  прошлой сессии): границы хода по `user`, источник — sentinel `file-content`.
+  На внешнем egress такие записи маскируются как `[FILE]`.
+  Гвард: `tests/security/taint-t4.test.ts` (T5 спеки `2026-11-02-local-provider-taint-design`).
+
 - `tests/output/source-filled.test.ts` — источник события непуст (INV-13).

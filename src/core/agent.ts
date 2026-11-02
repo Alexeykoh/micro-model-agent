@@ -522,12 +522,9 @@ export class Agent {
     this.systemPromptAdded = true;
     for (const msg of messages) {
       if (msg.role === "system") continue;
-      contextManager.addMessage({
-        role: msg.role as Message["role"],
-        content: msg.content,
-        name: msg.name,
-      });
+      contextManager.addMessage({ role: msg.role as Message["role"], content: msg.content, name: msg.name });
     }
+    const tainted = contextManager.rehydrateTaint?.() ?? 0; if (tainted > 0) this.deps.onDiagnostic?.({ source: "core", operation: "taint.rehydrate", kind: "degraded", cause: `resume_heuristic: ${tainted}`, recoverable: true });
   }
 
   /**

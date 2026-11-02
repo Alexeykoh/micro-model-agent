@@ -70,6 +70,7 @@ export const UNCOVERED_CONTEXT_METHODS: Record<string, string> = {
   isTainted: "taint: производность записи; юнит-тест tests/security/taint.test.ts",
   taintedIndexes: "taint: индексы для egress; дабл не ведёт taint",
   getHistoryForEgress: "taint: маска на внешнем egress; юнит-тест tests/security/taint.test.ts",
+  rehydrateTaint: "taint: восстановление при resume; юнит-тест tests/security/taint-t4.test.ts",
 };
 
 /** Public methods declared on `ContextManager`, as an object literal. */
