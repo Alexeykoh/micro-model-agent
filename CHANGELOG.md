@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **DLP: taint локального провайдера (T1–T3).** Контекст теперь знает, какие
+  записи производны от `file-content`: тегированный результат тула помечается по
+  стабильному `seq`, ответ доверенной (локальной) модели наследует taint, а при
+  egress к внешней цели такие записи заменяются `[FILE]` (включая аргументы
+  `tool_calls`) — до `sanitizeChat`. Доверенная цель получает оригинал, локальная
+  работа не деградирует. Спека: `docs/specs/2026-11-02-local-provider-taint-design.md`
+  (T4 — компакция/resume, T5 — диагностика). Гвард: `tests/security/taint.test.ts`.
+
 - **DLP: adversarial-корпус и защита от обфускации.** Значения, спрятанные в
   base64/base64url/hex/percent (в т.ч. двойном), найденные в «склеенном» тексте
   (split по пробелам/кавычкам/`+`/переводам строк, zero-width, JSON-удвоенные

@@ -122,9 +122,21 @@ export function runIterationPrologue(
   compactionService.compactIfNeeded(state);
 
   host.refreshSystemPrompt();
+  // Taint (T2/T3): доверие текущей цели решает, наследует ли ответ taint, а
+  // на внешней цели tainted-записи маскируются до `repairToolCallPairing`.
+  const egressGuard = contextLogGuard(config);
+  const egressTrusted = egressGuard?.target.trusted ?? false;
+  // Моки контекста в тестах могут не знать про taint — деградируем безопасно.
+  if (typeof contextManager.setEgressTrusted === "function") {
+    contextManager.setEgressTrusted(egressTrusted);
+  }
+  const egressHistory =
+    typeof contextManager.getHistoryForEgress === "function"
+      ? contextManager.getHistoryForEgress(egressTrusted)
+      : contextManager.getActiveHistory();
   // Позиционная нормализация истории перед отправкой: вклинившийся user или
   // осиротевший tool ломает контракт OpenAI и даёт 400 у строгих провайдеров.
-  const history = repairToolCallPairing(contextManager.getActiveHistory());
+  const history = repairToolCallPairing(egressHistory);
 
   // Монитор стабильности префикса: считаем до запроса, пишем в llm_usage после.
   const promptSnapshot = buildPromptSnapshot(history, allToolsForBudget);
@@ -137,8 +149,7 @@ export function runIterationPrologue(
       // DLP (E1): снимок показывает то, что уйдёт провайдеру (токены вместо
       // путей/PII). Карта токенов общая с провайдером (INV-D11).
       const guard = contextLogGuard(config);
-      const projected = guard?.sanitizeChat(history, allToolsForBudget);
-      deps.contextLogger.record(
+      const projected = guard?.sanitizeChat(history, allToolsForBudget);      deps.contextLogger.record(
         (projected?.messages ?? history) as typeof history,
         (projected?.tools ?? allToolsForBudget) as typeof allToolsForBudget,
         {
