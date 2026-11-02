@@ -135,7 +135,11 @@ export class MessageBookkeeping {
   /** История для egress: на внешней цели tainted-записи маскируются (T3). */
   historyForEgress(messages: Message[], trusted: boolean): Message[] {
     if (trusted) return [...messages];
-    return messages.map((m) => (this.isTainted(m) ? maskTaintedMessage(m) : m));
+    // Тегированный tool-вывод маскирует guard (и считает класс `file-content`
+    // в журнале); здесь — только производный текст без sentinel'а.
+    return messages.map((m) =>
+      this.isTainted(m) && !isTaggedFileContent(m.content) ? maskTaintedMessage(m) : m,
+    );
   }
 
   /** Сброс всей истории (clear менеджера). */

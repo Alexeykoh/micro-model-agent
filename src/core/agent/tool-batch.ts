@@ -1,5 +1,6 @@
 /** Исполнитель пакета тулов: жизненный цикл вызовов за итерацию. */
 import { t } from "../../i18n/index";
+import { visibleFileContent } from "../../modules/security/data-policy/file-content";
 import type { AppConfig } from "../../config/types";
 import type { ContextManager } from "../../core/context/manager";
 import type { HallucinationDetector } from "../../core/hallucination/detector";
@@ -432,7 +433,7 @@ export class ToolBatchExecutor {  constructor(private readonly deps: ToolBatchDe
       // 2026-10-26-tool-digest-channel-design).
       if (digestMode === "full" || (digestMode === "failures" && !result.success)) {
         summaries.push(
-          `[Tool: ${call.name}${summarizeToolArgs(call.arguments)} → ${truncatedOutput.slice(0, 200)}]`,
+          `[Tool: ${call.name}${summarizeToolArgs(call.arguments)} → ${visibleFileContent(truncatedOutput, 200)}]`,
         );
       }
 

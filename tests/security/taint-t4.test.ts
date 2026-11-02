@@ -72,7 +72,11 @@ describe("T4: resume", () => {
     const count = cm.rehydrateTaint();
     expect(count).toBe(2);
     expect(cm.taintedIndexes()).toEqual([false, true, true]);
-    expect(JSON.stringify(cm.getHistoryForEgress(false))).not.toContain("SECRET-CONTENT");
+    // Производный ответ замаскирован здесь; тегированный tool-вывод — guard'ом.
+    const history = cm.getHistoryForEgress(false);
+    const assistant = history.find((m) => m.role === "assistant");
+    expect(JSON.stringify(assistant)).not.toContain("SECRET-CONTENT");
+    expect(JSON.stringify(assistant)).toContain(FILE_CONTENT_MASK);
   });
 
   it("чистая история не даёт taint", () => {
