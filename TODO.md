@@ -579,12 +579,13 @@ LSP, Трассировка, Субагенты, Плагины, MCP, Карта
       работают программно (папка раскрывается), но скринридер видит дерево
       недоступных элементов без объявления выбора. Фикс: roving tabindex +
       `aria-selected`/`aria-level`/`aria-expanded`. Ветка `fix/webui-tree-a11y`.
-- [ ] **U10. Тема не сообщается браузеру.** `<html>` — `color-scheme: normal`
-      (задаётся только на `body.neon` и т.п. в `assets/themes.css`),
-      `<meta name="theme-color">` отсутствует (в `index.html` только JS
-      `matchMedia`). Следствие: нативные скроллбары и контролы не темнеют,
-      мобильный браузер держит белую полосу в тёмной теме. Ветка
-      `fix/webui-color-scheme`.
+- [x] **U10. Тема не сообщается браузеру.** _(Сделано 2026-11-03, ветка
+      `fix/webui-color-scheme`: `<meta name="theme-color">` объявлен до первой
+      отрисовки, pre-paint-скрипт и `applyTheme` выставляют
+      `documentElement.style.colorScheme` и цвет хрома по режиму (тёмная —
+      `#0f0f10`, светлая — `#f7f7f4`). Живая проверка: переключение режима меняет
+      и `color-scheme`, и meta; нативные скроллбары/адресная строка следуют теме.
+      Гейт `tests/webui-color-scheme.test.ts`.)_
 - [ ] **U11. Нет skip-link и landmark `<main>`.** `main`/`role=main` в DOM нет,
       skip-link отсутствует. Каждый переход — Tab через топ-бар, вкладки и 8
       иконок сайдбара. Фикс: `<main>` вокруг чата + «к сообщениям». Ветка

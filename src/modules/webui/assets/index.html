@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f0f10">
   <title>MMA Web</title>
   <link rel="icon" href="/api/favicon">
   <link rel="stylesheet" href="/styles.css">
@@ -26,6 +27,11 @@
       var light = theme === "light" ||
         (theme === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
       if (light) document.body.classList.add("light");
+      // U10: браузеру сообщаем схему и цвет хрома до первой отрисовки —
+      // иначе нативные скроллбары и адресная строка остаются светлыми.
+      document.documentElement.style.colorScheme = light ? "light" : "dark";
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", light ? "#f7f7f4" : "#0f0f10");
       var ui = localStorage.getItem("mma-ui-theme") || "console";
       var uiThemes = ["console", "groovebox", "neon", "paper", "contrast", "winter", "spring", "summer", "autumn"];
       if (uiThemes.indexOf(ui) >= 0) document.body.classList.add(ui);

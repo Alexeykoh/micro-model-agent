@@ -75,7 +75,14 @@ export function applyTheme(theme: string): void {
   const mode = isThemeMode(theme) ? theme : DEFAULT_THEME_MODE;
   appliedMode = mode;
   cacheSet(THEME_MODE_KEY, mode);
-  document.body.classList.toggle("light", isLight(mode));
+  const light = isLight(mode);
+  document.body.classList.toggle("light", light);
+  // U10: нативная схема и цвет хрома следуют за темой (скроллбары, адресная
+  // строка на мобильном не должны оставаться светлыми в тёмной теме).
+  document.documentElement.style.colorScheme = light ? "light" : "dark";
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", light ? "#f7f7f4" : "#0f0f10");
 }
 
 /** Применяет скин и зеркалит его в кэш. Невалидный id → дефолт. */
