@@ -150,6 +150,24 @@ function setAttr(data: Dict, type: unknown, value: unknown): void {
     const url = safeUrl(value, type === smd.SRC);
     if (url && node) {
       if (type === smd.SRC) {
+        // Внешние картинки не грузим (U2): CSP `img-src 'self' data: blob:`
+        // их всё равно заблокирует, а запрос к чужому хосту — ещё и утечка
+        // IP/времени чтения. Вместо `<img>` — ссылка с подписью (alt/хост).
+        if (isExternalImage(url)) {
+          const link = document.createElement("a");
+          link.className = "md-img-ext";
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.title = url;
+          while (node.firstChild) link.appendChild(node.firstChild);
+          if (!link.textContent?.trim()) {
+            link.appendChild(document.createTextNode(new URL(url).host));
+          }
+          node.replaceWith(link);
+          data.nodes[data.index] = link;
+          return;
+        }
         node.setAttribute("src", url);
         node.setAttribute("alt", "");
       } else {
@@ -163,6 +181,19 @@ function setAttr(data: Dict, type: unknown, value: unknown): void {
     return;
   }
   smd.default_set_attr(data as unknown as SmdData, type as never, value as string);
+}
+
+/**
+ * Картинка с чужого хоста: `data:image` — не сеть, same-origin — наш сервер
+ * (`/api/file`, иконки). Всё остальное — внешнее и не грузится (U2).
+ */
+function isExternalImage(url: string): boolean {
+  if (/^data:image\//i.test(url)) return false;
+  try {
+    return new URL(url, location.href).origin !== location.origin;
+  } catch {
+    return true;
+  }
 }
 
 export interface MdHandle {

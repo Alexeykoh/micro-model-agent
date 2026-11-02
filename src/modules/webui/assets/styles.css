@@ -407,6 +407,10 @@ body.light .code { border: 1px solid var(--border); }
 .md a { color: var(--accent); text-decoration: none; }
 .md a:hover { text-decoration: underline; }
 .md img { max-width: 100%; border-radius: 4px; }
+/* Внешние картинки не грузятся (U2): вместо `<img>` — ссылка-чип с подписью. */
+.md .md-img-ext { display: inline-flex; align-items: baseline; gap: 4px; color: var(--dim-a); border-bottom: 1px dashed var(--rule); }
+.md .md-img-ext::before { content: "🖼"; font-size: .9em; }
+.md .md-img-ext:hover { color: var(--accent); text-decoration: none; }
 .md code {
   background: var(--surface); color: var(--fg); padding: 1px 5px;
   border-radius: 3px; font-size: .92em;
