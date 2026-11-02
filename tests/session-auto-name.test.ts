@@ -65,6 +65,17 @@ describe("generateSessionTitle", () => {
     expect(reasons).toEqual(["aborted"]);
   });
 
+  it("retries once with a doubled budget when reasoning ate the title (A8)", async () => {
+    const budgets: number[] = [];
+    const chat = async (_prompt: string, _signal?: AbortSignal, opts?: { maxTokens?: number }) => {
+      budgets.push(opts?.maxTokens ?? 0);
+      return budgets.length === 1 ? "" : "Заголовок сессии";
+    };
+    const title = await generateSessionTitle("что угодно", chat, 1000);
+    expect(title).toBe("Заголовок сессии");
+    expect(budgets).toEqual([TITLE_MAX_TOKENS, TITLE_MAX_TOKENS * 2]);
+  });
+
   it("бюджет заголовка переживает reasoning-токены", () => {
     // 48 не хватало: замер живо — 48 → пусто, 128 → заголовок. Держим запас.
     expect(TITLE_MAX_TOKENS).toBeGreaterThanOrEqual(256);
