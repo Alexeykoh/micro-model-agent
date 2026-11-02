@@ -318,10 +318,13 @@ reset` для json/list, failover с моделью целевого прова�
       появляются только в непустой ветке (`:67`). _(Сделано 2026-11-02 той же веткой:
       пустая выдача теперь несёт `glob_hidden`; гейт `tests/tools/glob-scope.test.ts`
       — «скрытое ≠ пусто».)_
-- [ ] **A3 (P1) Пустой `path` обходит enforcement.** `executor.ts:175` пропускает `""`, а
-      `list_dir` резолвит `""` в корень проекта (`safeResolvePath`). Ветка
-      `fix/empty-path-arg`; гейт `tests/tools/enforcement-path.test.ts` — `list_dir("")` в
-      закрытом скоупе → отказ.
+- [x] **A3 (P1) Пустой `path` обходит enforcement.** `executor.ts:175` пропускал `""`, а
+      `list_dir` резолвит `""` в корень проекта (`safeResolvePath`). _(Закрыто 2026-11-02:
+      гвард «обязательный path-аргумент не пустой» из 1.12 (`enforcePathArgs` по
+      `parameters.required`) уже закрывает это — пустая и пробельная строка блокируются
+      до хендлера (`tool.path_arg_invalid`). Добавлен регресс-гейт:
+      `tests/tools/enforcement-path.test.ts` — `path: ""`/`"   "` при закрытом скоупе
+      → `blocked`, хендлер не вызван.)_
 - [ ] **A4 (P1) Журнал прогона субагента без аргументов тулов.** Поле `args` теперь есть
       в SSE-событии `tool_start` (`subagent-observer.ts`), но в `session.jsonl` запись
       `content:"tool"` пишется только из `tool_end` и **аргументов не несёт**

@@ -131,6 +131,35 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
     expect(result.output).toContain("path");
   });
 
+  it("blocks a required path arg that is empty or whitespace (A3)", async () => {
+    const handler = vi.fn(async () => ({ success: true, output: "ok" }));
+    const def: ToolDefinition = {
+      name: "t",
+      description: "d",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
+      handler,
+    };
+    registry.register(def, "core");
+
+    // Закрытый скоуп: `""` резолвился бы в корень проекта и обходил бы его.
+    for (const path of ["", "   "]) {
+      const result = await makeExecutor({ allowed_files: ["src"], read_only_files: [] }).execute({
+        id: "1",
+        name: "t",
+        arguments: { path },
+      });
+      expect(result.success).toBe(false);
+      expect(result.blocked).toBe(true);
+      expect(result.output).toContain("path");
+    }
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("still allows an optional path arg to be omitted", async () => {
     const handler = vi.fn(async () => ({ success: true, output: "ok" }));
     const def: ToolDefinition = {
