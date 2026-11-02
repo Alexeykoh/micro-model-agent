@@ -440,6 +440,35 @@ Expected a string that matches the pattern '^[a-zA-Z0-9_-]+.`
       `tests/arch/timeout-relations.test.ts`, `tests/arch/llm-call-options.test.ts`,
       новый `tests/modules/critic/latency-budget.test.ts`.
 
+### 1.10 mma web — тестовые прогоны 2026-11-02
+
+Отчёт: [`docs/agents/web-agent-test-report-2026-11-02.md`](./docs/agents/web-agent-test-report-2026-11-02.md).
+Три живых прогона в браузере: nemotron (34 находки, сайт без стилей), MiMo (`400 Upstream
+response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов, корзина и фильтры
+проверены вживую).
+
+- [x] **MCP-тулы убраны из дефолтного набора** — тег `mcp` вместо `code`/`research`;
+      65 → 40 тулов, MiMo перестал падать на втором ходе. Гейт:
+      `tests/mcp-tool-tags.test.ts`.
+- [x] **Guard обязательного path-аргумента** — `path: undefined` больше не создаёт файл
+      `undefined`: fail-closed в `ToolExecutor.enforcePathArgs` по `parameters.required` +
+      защита в `write_file`/`edit_file`. Гейт: `tests/tools/enforcement-path.test.ts`.
+- [ ] **Pre-write `checkDraft` через LSP** — типы проверять до записи (`LspConnection.syncDocument`
+      + `diagnosticsFor`), при ошибке не писать файл или откатывать. Долг F-18/F-19.
+- [ ] **Post-build гейт для веб-задач** — после `build` проверять, что CSS содержит
+      utilities (`.grid`, `.flex`, `--tw-`) и страница не пустая. Долг F-30/F-34.
+- [ ] **Финальный гейт по `typecheckFailures` без плана** — сейчас ошибки типов блокируют
+      только `plan_step done`. Долг F-21.
+- [ ] **Localhost-проверки для веб-разработки** — `web_fetch`/`browser` блокируют localhost,
+      `node`/`powershell` в blacklist; агенту нужен штатный путь проверить свой dev-сервер.
+      Долг D-09.
+- [ ] **`--isolated` для MCP Playwright** — иначе «Browser is already in use», когда
+      тестировщик держит свой Playwright. Долг D-10.
+- [ ] **Локальные изображения/заглушки** вместо внешнего picsum (403 в тестовой сети).
+      Долг D-12.
+- [ ] **Вложенный `AGENTS.md` и `.mma/`** — mma не читает `site/AGENTS.md` Next 16, а
+      `.mma/` в корне ломает `create-next-app .`. Долг F-01/F-06.
+
 ---
 
 ## 2. Действия пользователя (не задачи для агента)
