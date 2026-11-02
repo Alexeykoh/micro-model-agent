@@ -17,10 +17,12 @@ interface DrawerNodes {
   btn: HTMLButtonElement | null;
   backdrop: HTMLElement | null;
   panel: HTMLElement | null;
+  /** Контент под drawer'ом: на время открытия — `inert` (U5). */
+  content: HTMLElement | null;
   bars: HTMLElement[];
 }
 
-let nodes: DrawerNodes = { btn: null, backdrop: null, panel: null, bars: [] };
+let nodes: DrawerNodes = { btn: null, backdrop: null, panel: null, content: null, bars: [] };
 let wired = false;
 let isOpen = false;
 let restoreFocusTo: HTMLElement | null = null;
@@ -69,6 +71,8 @@ export function setSidebarDrawer(open: boolean): void {
     // element is a plain column in the layout, not a modal.
     nodes.panel?.setAttribute("role", "dialog");
     nodes.panel?.setAttribute("aria-modal", "true");
+    // U5: фон не фокусируется и не читается скринридером, пока открыт drawer.
+    nodes.content?.setAttribute("inert", "");
     const active = nodes.panel?.querySelector<HTMLElement>('.sb-tab.on') ||
       nodes.panel?.querySelector<HTMLElement>(FOCUSABLE);
     active?.focus();
@@ -76,6 +80,7 @@ export function setSidebarDrawer(open: boolean): void {
     nodes.panel?.removeAttribute("role");
     nodes.panel?.removeAttribute("aria-modal");
     nodes.panel?.style.removeProperty("--sb-inset");
+    nodes.content?.removeAttribute("inert");
     const back = restoreFocusTo || nodes.btn;
     restoreFocusTo = null;
     back?.focus?.();
@@ -104,6 +109,7 @@ function syncToViewport(): void {
   nodes.panel?.removeAttribute("role");
   nodes.panel?.removeAttribute("aria-modal");
   nodes.panel?.style.removeProperty("--sb-inset");
+  nodes.content?.removeAttribute("inert");
   restoreFocusTo = null;
 }
 
@@ -127,6 +133,7 @@ export function initSidebarDrawer(): void {
     // Queried, not taken from `sb.el`: the drawer must find its own panel
     // without depending on `initSidebar()` having run first.
     panel: document.querySelector<HTMLElement>(".sb"),
+    content: document.querySelector<HTMLElement>(".chat"),
     bars: [".bar-top", ".bar-sub"]
       .map((sel) => document.querySelector<HTMLElement>(sel))
       .filter((el): el is HTMLElement => !!el),
