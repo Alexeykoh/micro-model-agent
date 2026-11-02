@@ -41,13 +41,19 @@ export interface ToolContextInput {
  * выглядели бы как один.
  */
 
-/** Операции проверки заявлений и судьи деградируют под своим именем. */
-const OPERATION_SIGNALS: Record<string, "hallucination_judge_degraded"> = {
+/** Операции проверки заявлений/taint деградируют под своим именем. */
+const OPERATION_SIGNALS: Record<
+  string,
+  "hallucination_judge_degraded" | "taint_degraded"
+> = {
   "hallucination.judge": "hallucination_judge_degraded",
   "hallucination.evidence": "hallucination_judge_degraded",
+  "taint.rehydrate": "taint_degraded",
 };
 
-function signalForOperation(operation: string): "admission_degraded" | "hallucination_judge_degraded" {
+function signalForOperation(
+  operation: string,
+): "admission_degraded" | "hallucination_judge_degraded" | "taint_degraded" {
   return OPERATION_SIGNALS[operation] ?? "admission_degraded";
 }
 export function admissionDiagnosticSink(

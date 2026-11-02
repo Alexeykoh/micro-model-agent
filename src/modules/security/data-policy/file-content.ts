@@ -7,8 +7,8 @@
  * Тег живёт в самой строке, поэтому переживает клонирование сообщений
  * (`repairToolCallPairing`), компакцию и resume из `session.jsonl`.
  *
- * DEBT(file-content-taint): доверенный провайдер видит содержимое, и его
- * производный текст/сводка компакции тега уже не несут.
+ * Производный текст (ответ/сводка) отслеживается taint'ом контекста (T1–T5
+ * спеки `2026-11-02-local-provider-taint-design.md`).
  */
 export const FILE_CONTENT_SENTINEL = "⟦mma:file-content⟧\n";
 

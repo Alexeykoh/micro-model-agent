@@ -6,8 +6,8 @@
  *
  * Вынесено из `executor.ts` (правило 6: файл на потолке гейта).
  *
- * DEBT(file-content-bypass-non-path-tools): `bash`/MCP/плагины не объявляют
- * `pathArgs`, поэтому их вывод не тегируется (только regex-редакция).
+ * Не покрыто: `bash`/MCP/плагины не объявляют `pathArgs`, поэтому их вывод не
+ * тегируется (только regex-редакция). DEBT(file-content-bypass-non-path-tools).
  */
 import type { ToolContext, ToolCall, ToolResult } from "./types";
 import type { RegisteredTool } from "./registry";

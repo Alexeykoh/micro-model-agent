@@ -83,6 +83,41 @@ export class MessageBookkeeping {
     }
   }
 
+  /** Пометить запись tainted напрямую (сводка компакции, наследующая ввод). */
+  markTainted(msg: object): void {
+    this.taintedSeqs.add(this.seqOf(msg));
+  }
+
+  /**
+   * Восстановить taint из истории (resume): консервативно, как если бы ввод
+   * прошлых ходов был локальным. Границы хода — `user`-сообщения.
+   * Возвращает число помеченных записей (для диагностики T5).
+   */
+  rehydrate(messages: readonly TaintableMessage[]): number {
+    this.taintedSeqs.clear();
+    this.turnHadTaint = false;
+    const prevTrusted = this.trusted;
+    this.trusted = true;
+    let count = 0;
+    for (const msg of messages) {
+      if (msg.role === "user") this.turnHadTaint = false;
+      this.note(msg);
+      if (this.isTainted(msg as object)) {
+        count += 1;
+        // Tainted-сводка компакции продолжает «заражать» последующие ответы.
+        this.turnHadTaint = true;
+      }
+    }
+    this.trusted = prevTrusted;
+    return count;
+  }
+
+  /** История для egress: на внешней цели tainted-записи маскируются (T3). */
+  historyForEgress(messages: Message[], trusted: boolean): Message[] {
+    if (trusted) return [...messages];
+    return messages.map((m) => (this.isTainted(m) ? maskTaintedMessage(m) : m));
+  }
+
   /** Сброс всей истории (clear менеджера). */
   reset(): void {
     this.next = 0;

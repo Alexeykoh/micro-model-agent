@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **DLP: taint T4–T5 — компакция, resume и диагностика.** Сводка компакции
+  (обычной и hard-drop) наследует taint сжатого ввода; при resume taint
+  восстанавливается эвристически по sentinel'у `file-content` с границами хода по
+  `user` и записывается `taint_degraded` (`resume_heuristic: N`). Долг
+  `file-content-taint` оплачен; спека закрыта.
+  Гвард: `tests/security/taint-t4.test.ts`.
+
 - **DLP: taint локального провайдера (T1–T3).** Контекст теперь знает, какие
   записи производны от `file-content`: тегированный результат тула помечается по
   стабильному `seq`, ответ доверенной (локальной) модели наследует taint, а при

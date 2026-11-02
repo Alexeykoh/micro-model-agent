@@ -15,7 +15,7 @@ export { extractTriedAndFailed };
 /** Сообщение истории: роль, контент, tool-метаданные. */
 import type { Message } from "./message";
 export type { Message } from "./message";
-import { MessageBookkeeping, maskTaintedMessage } from "./message-bookkeeping";
+import { MessageBookkeeping } from "./message-bookkeeping";
 
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import { DEFAULTS } from "../../config/defaults";
@@ -555,6 +555,8 @@ export class ContextManager {
       role: "user",
       content: `<system-summary>${this.compactedBlock}</system-summary>`,
     });
+    // T4: сводка производна от сжатого ввода — taint переходит.
+    if (oldTurns.some((m) => this.book.isTainted(m))) this.book.markTainted(summary);
 
     const firstSystem = this.messages.find((m) => m.role === "system");
     // Чистим протухшие system-summary из свежих ходов против вложенности
@@ -852,7 +854,8 @@ export class ContextManager {
       role: "user",
       content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context] ${headBlock}</system-summary>`,
     });
-    this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...tail];
+    // T4: hard-drop тоже производен от выброшенного ввода.
+    if (head.some((m) => this.book.isTainted(m))) this.book.markTainted(summary);    this.messages = [...(firstSystem ? [firstSystem] : []), summary, ...tail];
     this.iterationsSinceCompaction = 0;
     this.calibrator.invalidate();
     this.lastEstimateRaw = 0;
@@ -967,26 +970,22 @@ export class ContextManager {
     return this.book.seqOf(msg);
   }
 
-  /** Доверие цели egress на ход (T2): taint наследует только локальная модель. */
-  setEgressTrusted(trusted: boolean): void {
-    this.book.setEgressTrusted(trusted);
-  }
+  /** Доверие цели egress на ход (T2). */
+  setEgressTrusted(trusted: boolean): void { this.book.setEgressTrusted(trusted); }
 
-  /** Помечено ли сообщение как производное от защищённого содержимого (INV-T1). */
-  isTainted(msg: Message): boolean {
-    return this.book.isTainted(msg);
-  }
+  /** Помечено ли сообщение как производное (INV-T1). */
+  isTainted(msg: Message): boolean { return this.book.isTainted(msg); }
 
-  /** Индексы tainted-сообщений, выровненные с `getActiveHistory()` (T3). */
-  taintedIndexes(): boolean[] {
-    return this.book.taintedIndexes(this.messages);
-  }
+  /** Индексы tainted-сообщений, выровненные с историей (T3). */
+  taintedIndexes(): boolean[] { return this.book.taintedIndexes(this.messages); }
 
   /** История для egress (T3): на внешней цели tainted-записи маскируются. */
   getHistoryForEgress(trusted: boolean): Message[] {
-    if (trusted) return [...this.messages];
-    return this.messages.map((m) => (this.book.isTainted(m) ? maskTaintedMessage(m) : m));
+    return this.book.historyForEgress(this.messages, trusted);
   }
+
+  /** Восстановить taint из загруженной истории (T4); число — для `taint_degraded`. */
+  rehydrateTaint(): number { return this.book.rehydrate(this.messages); }
 
   /** Ставит монотонный seq в реестр и возвращает сообщение. */
   private stampSeq<T extends Message>(msg: T): T {

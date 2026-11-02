@@ -27,6 +27,7 @@ export type DiagnosticEvent =
   | "hallucination_judge_degraded"
   | "egress_blocked"
   | "egress_degraded"
+  | "taint_degraded"
   | "stall_detected";
 
 /**
