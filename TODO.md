@@ -63,14 +63,22 @@
 - [x] **Taint субагента** — ответ дочернего прогона, читавшего защищённые файлы,
       помечает родительский tool-результат tainted. _(2026-11-02,
       `tests/security/taint.test.ts`.)_
-- [ ] **Payload MCP** (`modules/mcp/client.ts`) — MCP-сервер интеграции; нужен
-      taint-контракт (`file-content-taint`), отдельная задача.
-- [ ] **NER (ФИО/адреса)** — не реализовано.
+- [x] **Payload MCP** — аргументы тулов проецируются до сети, если сервер
+      внешний (`http`/`sse` на не-loopback); `stdio` и приватная сеть — доверенные.
+      _(2026-11-02, `projectOutboundDeep`, гейт `tests/modules/mcp/tool-security.test.ts`.)_
+- [x] **NER (ФИО/адреса)** — строгие формы: ФИО только с отчеством, адрес только
+      с маркером улицы и номером дома. _(2026-11-02,
+      `tests/security/pii-natural.test.ts`.)_ Имя без отчества и адрес без номера —
+      residual risk.
+- [x] **At-rest (журнал сессий)** — opt-in `sessionEncryption`: `session.jsonl`,
+      tail и history шифруются, чтение прозрачно. _(2026-11-02,
+      `tests/security/at-rest-encryption.test.ts`.)_ Память остаётся plaintext —
+      долг `memory-at-rest`.
 - Остальные долги темы — [`docs/agents/debt.md`](./docs/agents/debt.md)
-      (`at-rest-pii`, `file-content-taint`, `file-content-bypass-non-path-tools`,
-      `data-policy-projection-lifecycle`, `streaming-tail-holdback`,
-      `research-by-checksum`); `api-hidden-globs-text-scope`, `encoded-value-bypass`,
-      `web-search-payload-dlp`, `dlp-cli-redaction-notice` — оплачены 2026-11-02.
+      (`memory-at-rest`, `data-policy-projection-lifecycle`,
+      `streaming-tail-holdback`, `research-by-checksum`); `api-hidden-globs-text-scope`,
+      `encoded-value-bypass`, `web-search-payload-dlp`, `dlp-cli-redaction-notice`,
+      `file-content-taint`, `at-rest-pii` — оплачены.
 
 ### 1.3 Аудит модулей harness (план `docs/plans/2026-10-12-harness-module-audit-fixes.md`)
 

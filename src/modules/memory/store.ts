@@ -1,4 +1,6 @@
 // Хранилище памяти: append-only .md-категории и preferences.json в каталоге.
+// DEBT(memory-at-rest): файлы памяти пользовательские и редактируемые, поэтому
+// хранятся открытым текстом даже при включённом шифровании журналов.
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, statSync } from "fs";
 import { join } from "path";
 import { MemorySearch } from "./search";

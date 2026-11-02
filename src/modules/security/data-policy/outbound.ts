@@ -10,7 +10,8 @@
  * признака.
  */
 import type { PolicyContext } from "./context";
-import { projectText } from "./project";
+import { projectDeep, projectText } from "./project";
+import { isTrustedHost } from "./egress-provider";
 import type { DataClass, DataPolicyConfig, EgressTarget } from "./types";
 import { TokenMap } from "./tokens";
 
@@ -39,4 +40,39 @@ export function projectOutboundText(
     map: new TokenMap(),
   });
   return { text: projected.text, changed: projected.changed, stats: projected.stats };
+}
+
+/**
+ * Спроецировать произвольную структуру (аргументы MCP-тула) для внешней цели.
+ * Маска без псевдонимов: удалённый сервер не участвует в ре-гидратации.
+ */
+export function projectOutboundDeep<T>(
+  value: T,
+  config: DataPolicyConfig,
+  target: EgressTarget,
+  ctx: PolicyContext,
+): { value: T; changed: boolean; stats: Partial<Record<DataClass, number>> } {
+  if (!config.enabled) return { value, changed: false, stats: {} };
+  const projected = projectDeep(value, {
+    config: { ...config, pseudonymize: false },
+    target,
+    ctx,
+    map: new TokenMap(),
+  });
+  return { value: projected.messages, changed: projected.changed, stats: projected.stats };
+}
+
+/**
+ * Внешний MCP-сервер: транспорт `http`/`sse` на не-доверенный хост. `stdio` —
+ * локальный процесс, `loopback`/приватная сеть — доверенные (как у провайдера).
+ * Не распарсили URL — считаем внешним (fail-closed, INV-D4).
+ */
+export function isExternalServiceUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return !isTrustedHost(host, []);
+  } catch {
+    return true;
+  }
 }

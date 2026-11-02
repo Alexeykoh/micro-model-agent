@@ -7,6 +7,8 @@ import { MCPClient } from "./client";
 import { MCPRegistry, type MCPServerConfig } from "./registry";
 import { Logger } from "../../logger/app-logger";
 import { MCP_DISCOVERY_TIMEOUT_MS as DISCOVERY_TIMEOUT_MS } from "../../config/timeouts";
+import { machinePolicyContext } from "../security/data-policy/context";
+import { isExternalServiceUrl, projectOutboundDeep } from "../security/data-policy/outbound";
 import {
   MCP_TOOL_SECURITY,
   mcpToolSecurity,
@@ -203,7 +205,7 @@ export class MCPModule implements AgentModule {
         parameters: convertInputSchema(d.inputSchema),
         tags: ["mcp"],
         security: mcpToolSecurity(d.inputSchema),
-        handler: async (_ctx, args) => {
+        handler: async (ctx, args) => {
           const client = this.connections.get(d.serverName);
           if (!client?.isConnected()) {
             return {
@@ -212,7 +214,14 @@ export class MCPModule implements AgentModule {
             };
           }
           try {
-            const result = await client.callTool(d.toolName, args);
+            // Внешний MCP: аргументы проецируются до сети (без псевдонимов).
+            const dp = ctx.config?.security?.dataPolicy;
+            const cfg = this.serverConfigs.get(d.serverName);
+            const callArgs =
+              dp?.enabled && isExternalServiceUrl(cfg?.url)
+                ? projectOutboundDeep(args, dp, { kind: "api", trusted: false }, machinePolicyContext(ctx.baseDir)).value
+                : args;
+            const result = await client.callTool(d.toolName, callArgs);
             return {
               success: true,
               output: typeof result === "string" ? result : JSON.stringify(result, null, 2),

@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **DLP: at-rest (opt-in), NER и проекция аргументов внешних MCP.** При
+  `sessionEncryption.enabled` журнал сессии, его tail и history шифруются на
+  диске (чтение прозрачно); тест сканирует файлы сессии и не находит ни PII, ни
+  секрета. Добавлены детекторы ФИО (только с отчеством) и адресов (маркер улицы +
+  номер дома) без модели. Аргументы MCP-тулов проецируются перед вызовом
+  внешнего сервера (`http`/`sse` на не-loopback); `stdio` и приватная сеть
+  остаются доверенными. Память пока plaintext — долг `memory-at-rest`.
+  Гварды: `tests/security/at-rest-encryption.test.ts`,
+  `tests/security/pii-natural.test.ts`, `tests/modules/mcp/tool-security.test.ts`.
+
 - **DLP: bash/MCP как источники `file-content` и taint субагентов.** Вывод `bash`
   помечается защищённым, если токен команды попадает под `providerBlockGlobs`
   (`cat secret/.env` → `[FILE]` для внешнего провайдера); MCP-тулы получают
