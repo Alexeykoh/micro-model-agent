@@ -18,6 +18,7 @@ import {
 } from "../modules/security/data-policy/defaults";
 import { tagFileContent } from "../modules/security/data-policy/file-content";
 import { hiddenReason } from "../modules/security/data-policy/path-policy";
+import { homedir } from "node:os";
 
 /** Пометить результат, если объявленный path-аргумент попал под block-glob. */
 export function tagBlockedFileContent(
@@ -56,13 +57,27 @@ function commandPathTokens(command: string): string[] {
     .filter((token) => token.length > 1 && !token.startsWith("-") && /[\\/.]/.test(token));
 }
 
+/** Раскрыть переменные окружения и `~` в токене (только для проверки пути). */
+function expandToken(token: string): string[] {
+  const out = new Set<string>([token]);
+  const expanded = token.replace(
+    /\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?|%([A-Za-z_][A-Za-z0-9_]*)%/g,
+    (all, unix: string | undefined, win: string | undefined) =>
+      process.env[unix ?? win ?? ""] ?? all,
+  );
+  out.add(expanded);
+  if (token.startsWith("~")) out.add(`${homedir()}${token.slice(1)}`);
+  return [...out];
+}
+
 /**
  * `bash` не объявляет `pathArgs`, но команда называет файлы. Если хоть один
- * токен попадает под block-globs, весь вывод помечается `file-content`:
- * `cat secret/.env` уйдёт внешнему провайдеру как `[FILE]`, а не текстом.
+ * токен (с раскрытыми `$VAR`/`%VAR%`/`~`) попадает под block-globs, весь вывод
+ * помечается `file-content`: `cat secret/.env` уйдёт внешнему провайдеру как
+ * `[FILE]`, а не текстом.
  *
- * Эвристика консервативная: переменные и подстановки не раскрываются — это
- * residual risk, а не гарантия.
+ * Эвристика консервативная: командные подстановки (`$(…)`) не вычисляются —
+ * это residual risk, а не гарантия.
  */
 export function tagShellFileContent(
   tool: RegisteredTool,
@@ -81,8 +96,10 @@ export function tagShellFileContent(
   const command = call.arguments.command;
   if (typeof command !== "string" || command.trim() === "") return result;
   for (const token of commandPathTokens(command)) {
-    if (hiddenReason(token, ctx.baseDir, globs)) {
-      return { ...result, output: tagFileContent(result.output) };
+    for (const candidate of expandToken(token)) {
+      if (hiddenReason(candidate, ctx.baseDir, globs)) {
+        return { ...result, output: tagFileContent(result.output) };
+      }
     }
   }
   return result;

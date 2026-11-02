@@ -10,6 +10,7 @@ import type { DataPolicyConfig } from "./types";
 import { isTaggedFileContent, untagFileContent } from "./file-content";
 import { secretPreview } from "./detectors/secrets";
 import { matchAnyGlob, relativeTo } from "./path-policy";
+import { cachedProjection, rememberProjection } from "./projection-cache";
 import { decodePercentText } from "./detectors/joined";
 import { resolve } from "node:path";
 import { TokenMap } from "./tokens";
@@ -109,12 +110,23 @@ function pathHiddenByPolicy(
   return matchAnyGlob(rel, globs) !== undefined;
 }
 
-/** Спроецировать одну строку. */
+/**
+ * Спроецировать одну строку (с кешем на карту токенов, `projection-cache.ts`).
+ */
 export function projectText(text: string, policy: ProjectPolicy): TextProjection {
-  const { config, target, ctx, map } = policy;
-  if (!text || !config.enabled) {
+  if (!text || !policy.config.enabled) {
     return { text, changed: false, stats: {}, findings: [], tokens: [], redactions: [] };
   }
+  const cached = cachedProjection(policy.map, policy, text);
+  if (cached) return cached;
+  const result = computeProjection(text, policy);
+  rememberProjection(policy.map, policy, text, result);
+  return result;
+}
+
+/** Чистая проекция без кеша. */
+function computeProjection(text: string, policy: ProjectPolicy): TextProjection {
+  const { config, target, ctx, map } = policy;
   // §4.8: содержимое из-block пути режется по пути, а не по PII-паттернам.
   // Доверенный (локальный) egress получает оригинал без служебного тега.
   if (isTaggedFileContent(text)) {

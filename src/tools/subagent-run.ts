@@ -149,7 +149,7 @@ export async function runSubagent(
     subPluginManager.register(scopeCollector.plugin, "builtin");
     const hallucinationDetector = new HallucinationDetector(ctx.baseDir, provider);
 
-    ctx.toolExecutor.setScope(appliedScope);
+    ctx.toolExecutor.setScope(appliedScope); if (ctx.contextManager?.hasTaint?.()) subContextManager.taintAll?.();
     // Cleanup на исполнителе — рестор скоупа при таймауте/аборте, даже если
     // `finally` агента не отработал (брошенный промис).
     ctx.cleanup = restoreScope;

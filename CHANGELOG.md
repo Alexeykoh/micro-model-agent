@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **DLP: гибридная память at-rest, кеш проекции, env в bash, seed субагента.**
+  Авто-записи агента в памяти шифруются на месте (`[enc]…[/enc]`), ручные строки
+  и `preferences.json` остаются открытыми; чтение и поиск расшифровывают. Проекция
+  текста мемоизируется на карту токенов: замер **4.7 мс → 0.007 мс** на сообщение
+  1.9 КБ, ключ включает политику и glob-списки (смена конфига не отдаёт старый
+  результат). `bash` раскрывает `$VAR`/`%VAR%`/`~` для проверки пути; субагент
+  наследует taint родителя при спавне. Контракт плагинов (`security.pathArgs`)
+  описан в `docs/agents/tools.md`. Долги `memory-at-rest` и
+  `data-policy-projection-lifecycle` оплачены.
+  Гварды: `tests/modules/memory/at-rest.test.ts`,
+  `tests/security/projection-cache.test.ts`,
+  `tests/tools/file-content-tag-shell.test.ts`, `tests/security/taint.test.ts`.
+
 - **DLP: at-rest (opt-in), NER и проекция аргументов внешних MCP.** При
   `sessionEncryption.enabled` журнал сессии, его tail и history шифруются на
   диске (чтение прозрачно); тест сканирует файлы сессии и не находит ни PII, ни

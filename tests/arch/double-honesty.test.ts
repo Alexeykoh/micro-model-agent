@@ -73,6 +73,7 @@ export const UNCOVERED_CONTEXT_METHODS: Record<string, string> = {
   rehydrateTaint: "taint: восстановление при resume; юнит-тест tests/security/taint-t4.test.ts",
   hasTaint: "taint: признак производности для субагента; дабл taint не ведёт (tests/security/taint.test.ts)",
   markNextToolTainted: "taint: пометка результата субагента; дабл не ведёт taint",
+  taintAll: "taint: seed субагента из tainted-родителя; дабл taint не ведёт",
 };
 
 /** Public methods declared on `ContextManager`, as an object literal. */

@@ -13,9 +13,11 @@ export interface SearchResult {
 /** Поисковик по каталогу памяти (создаётся под запрос, состояния нет). */
 export class MemorySearch {
   private memoryDir: string;
+  private readonly decode: (text: string) => string;
 
-  constructor(memoryDir: string) {
+  constructor(memoryDir: string, decode: (text: string) => string = (t) => t) {
     this.memoryDir = memoryDir;
+    this.decode = decode;
   }
 
   /** Ищет подстроку (без учёта регистра) по .md-файлам и преференсам. */
@@ -27,7 +29,7 @@ export class MemorySearch {
       const path = join(this.memoryDir, `${name}.md`);
       if (!existsSync(path)) continue;
 
-      const content = readFileSync(path, "utf-8");
+      const content = this.decode(readFileSync(path, "utf-8"));
       const lines = content.split("\n");
 
       for (const line of lines) {

@@ -33,6 +33,7 @@ import { skillsModuleDef } from "../../modules/skills/lifecycle";
 import { documentsModuleDef } from "../../modules/documents";
 import { MemoryModule } from "../../modules/memory/module";
 import { MemoryStore } from "../../modules/memory/store";
+import { setMemoryEncryptor } from "../../modules/memory/at-rest"; import { SessionFileEncryptor } from "../../modules/security/session-encryption";
 import { t } from "../../i18n/index";
 import { assembleDynamicPromptBlocks } from "../prompt-assembler";
 import { estimateTokens } from "../../llm/token-counter";
@@ -141,7 +142,7 @@ async function registerCoreModules(
 
   // Общий глобальный стор памяти — один инстанс у модуля памяти и цикла,
   // поэтому UI (`mma web` `/memory`) читают/пишут живые данные.
-  const memoryStore = new MemoryStore(join(dir, "memory"));
+  const memoryStore = new MemoryStore(join(dir, "memory")); setMemoryEncryptor(new SessionFileEncryptor(config.security?.sessionEncryption));
   const memoryModule = new MemoryModule(memoryStore);
   moduleRegistry.register(memoryModule);
 
