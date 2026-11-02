@@ -17,7 +17,7 @@ import {
 } from "./files/history.js";
 import { initFilesKeys, focusTreeRow, initGlobalFilesKeys } from "./files/keys.js";
 import {
-  initTreeDeps, renderDir, paintCursor, visibleRows, revealInTree, revealFile,
+  initTreeDeps, renderDir, paintCursor, ensureRovingTabindex, visibleRows, revealInTree, revealFile,
 } from "./files/tree.js";
 import { initCrumbDeps, renderCrumbs, clearCrumbs } from "./files/crumbs.js";
 import { syncChrome, localizeChrome, iconize } from "./files/chrome.js";
@@ -196,6 +196,7 @@ export function renderFilesTree(): void {
     return;
   }
   renderDir(tree, "", 0);
+  ensureRovingTabindex(tree);
   syncChrome(history);
 }
 
