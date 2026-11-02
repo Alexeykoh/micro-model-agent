@@ -108,6 +108,16 @@ export function logVerdict(
 
 /** Бюджеты исчерпаны: вердикт залогирован, ответ принимается как есть. */
 export function logExhausted(deps: CriticGateDeps, verdict: CriticVerdict): void {
+  // Принятие не-ok вердикта — событие, а не только app-лог: иначе разбор
+  // сессии видит `critical`, затем молчаливый финал и не может ответить,
+  // почему ответ ушёл (живая сессия ses_mvzp8cuk).
+  deps.slog.logCritic("critic_verdict", {
+    status: verdict.status,
+    summary: verdict.summary,
+    accepted: true,
+    exhausted: true,
+    iteration: deps.iteration,
+  });
   deps.logger.diagnostic(
     "warn",
     `Critic ${verdict.status}: ${verdict.summary} - budget exhausted, accepting the answer`,

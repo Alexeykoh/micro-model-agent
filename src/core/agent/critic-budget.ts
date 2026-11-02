@@ -67,9 +67,16 @@ export async function runWithBudget<T>(
  * текст ответа (хеш ловит правку при той же длине).
  */
 export function packFingerprint(deps: CriticGateDeps): string {
-  const events = deps.toolEvents.map((e) => `${e.tool}:${e.ok ? 1 : 0}:${e.output?.length ?? 0}`);
   const answer = deps.answerText ?? "";
-  return `${events.join(",")}|${answer.length}|${hash32(answer)}`;
+  return `${evidenceSignature(deps)}|${answer.length}|${hash32(answer)}`;
+}
+
+/**
+ * Подпись улик — только тул-события хода, без текста ответа. По ней видно,
+ * появилась ли после вердикта новая работа (иначе переписанный текст — не улика).
+ */
+export function evidenceSignature(deps: CriticGateDeps): string {
+  return deps.toolEvents.map((e) => `${e.tool}:${e.ok ? 1 : 0}:${e.output?.length ?? 0}`).join(",");
 }
 
 /** Дешёвый 32-битный хеш (FNV-1a): только для сравнения, не для безопасности. */
