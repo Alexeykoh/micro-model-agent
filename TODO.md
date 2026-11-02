@@ -325,12 +325,12 @@ reset` для json/list, failover с моделью целевого прова�
       до хендлера (`tool.path_arg_invalid`). Добавлен регресс-гейт:
       `tests/tools/enforcement-path.test.ts` — `path: ""`/`"   "` при закрытом скоупе
       → `blocked`, хендлер не вызван.)_
-- [ ] **A4 (P1) Журнал прогона субагента без аргументов тулов.** Поле `args` теперь есть
-      в SSE-событии `tool_start` (`subagent-observer.ts`), но в `session.jsonl` запись
-      `content:"tool"` пишется только из `tool_end` и **аргументов не несёт**
-      (`src/tools/subagent-session-log.ts:46-55`). Нельзя восстановить, с каким путём
-      упал вызов. Писать `args` из `tool_start` с редактированием секретов; гейт
-      `tests/tools/subagent-session-log.test.ts`.
+- [x] **A4 (P1) Журнал прогона субагента без аргументов тулов.** _(Сделано 2026-11-02:
+      `subagentLogEntry` пишет запись `content:"tool_start"` с аргументами (`path` и др.)
+      из события `tool_start`; строковые значения ужаты до 200 симв., секреты
+      редактируются `redactContextSecrets`. Гейт
+      `tests/tools/subagent-session-log.test.ts`. Раньше по журналу нельзя было понять,
+      с каким путём упал вызов.)_
 - [ ] **A5 (P1) Счётчики антифлейлинга общие для родителя и детей.** Дети накрутили
       «bash упал 14 раз» → 15 → 21 у родителя, у которого было 2 вызова. Причина жива:
       `ToolExecutor.fork()` передаёт дочернему исполнителю **тот же** `pluginManager`
