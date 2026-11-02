@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **DLP: прозрачность редакции и покрытие egress (U20–U22).** Пользователь видит
+  ровно тот запрос, который ушёл провайдеру, и конкретные места редакции:
+  `EgressHit` несёт класс, поверхность (сообщение/тул), индекс/роль, поле, диапазон
+  и метку замены (без оригиналов и token id, кап 24 на ход); снимок запроса
+  (`LlmRequestSnapshot`) снимается **после** DLP-проекции и **до** сети, лениво
+  (подписчиков нет — не строится), пишется в `session.jsonl` как `llm_request`
+  и отдаётся SSE; Trace получает строку «запрос» с поп-апом `system → messages →
+  tools` и «копировать JSON», а клик по позиции в бейдже DLP открывает тот же
+  снимок на нужном сообщении. Вкладка «Безопасность» — живой журнал отловов
+  (`security_block`/`security_approval`/DLP) поверх нового внутрипроцессного
+  потока `security-events` + бэкфилл из `audit.jsonl` **своей** сессии.
+  Спека: `docs/specs/2026-11-02-dlp-transparency-and-coverage-design.md`.
+  Гварды: `tests/security/dlp-hits.test.ts`, `tests/llm/request-snapshot.test.ts`,
+  `tests/webui/llm-request-snapshot.test.ts`, `tests/webui/security-log.test.ts`.
+
+- **Отдельный `buildRequestBody`.** Сборка тела запроса вынесена из
+  `openai-compat.ts` в `src/llm/request-body.ts` (правило 6: файл на потолке),
+  поведение не изменилось.
 - **Эксперт субагента: выбор провайдера и модели в настройках.** У
   `experts[tag]` появилось опциональное поле `provider` (имя записи
   `provider.entries[]`), а `model` стало опциональным: пусто — активная модель

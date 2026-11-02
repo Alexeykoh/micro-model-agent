@@ -71,6 +71,8 @@ export async function performWebSearch(
   requestTimeoutMs?: number,
   fetchImpl: typeof fetch = fetch,
 ): Promise<WebSearchOutcome> {
+  // DEBT(web-search-payload-dlp): запрос уходит в поисковый бэкенд как есть —
+  // DLP проекцирует только egress к провайдеру и API, не к внешнему сервису.
   const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
   const validation = isUrlAllowed(url, networkConfig);
   if (!validation.allowed) {

@@ -2,6 +2,9 @@
  * Классификатор: сводит находки всех детекторов в неперекрывающийся набор.
  * При пересечении приоритет: secret > path > machine/env > pii (длиннее/увереннее
  * выигрывает при равном приоритете).
+ *
+ * DEBT(encoded-value-bypass): матчим исходный текст, поэтому base64- или
+ * split-представление известного значения не ловится (реестр долгов, §DLP).
  */
 import type { PolicyContext } from "./context";
 import type { DataClass, Finding } from "./types";

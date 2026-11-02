@@ -21,7 +21,7 @@ import { WebHost } from "../../core/web-host";
 import { loadAssets } from "./assets";
 import { makeWebCommands } from "./chat/commands";
 import { makeReconfigure } from "./settings/reconfigure";
-import { installOutputForwarding } from "./log-forward";
+import { installWebForwarding } from "./event-forward";
 import { installWebPromptIO, type PromptIORegistry } from "./session/prompt-io";
 import { startServer, stopServer } from "./server";
 import { makeModelCache } from "./settings/model-cache";
@@ -238,9 +238,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     modelCache ? () => modelCache.refresh() : undefined,
   );
 
-  // OutputBus → SSE (предупреждения/ошибки процесса). Ходы идут раннерами
-  // (см. turns.ts), main-агент в web ходы не обслуживает.
-  const stopOutputForwarding = installOutputForwarding(state);
+  // Глобальные шины → SSE: лог/предупреждения, снимок запроса (U20), журнал
+  // защиты (U22). Ходы идут раннерами (см. turns.ts), main-агент их не ведёт.
+  const stopForwarding = installWebForwarding(state);
 
   // Context probe: резолвится в фоне; `undefined`, пока не устоялся, чтобы
   // сайдбар рисовал прочерк "pending", не стопая старт.
@@ -292,7 +292,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
       detachIndexWatcher();
       detachRenameListener?.();
       cancelPendingQuestions(state);
-      stopOutputForwarding();
+      stopForwarding();
       state.pool.clear();
       stopServer(state);
     },

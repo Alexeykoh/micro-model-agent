@@ -9,10 +9,11 @@ import type {
   DataPolicyConfig,
   DataClass,
   EgressGuard,
+  EgressHit,
   EgressTarget,
   GuardDiagnostic,
 } from "./types";
-import { projectDeep, projectText, type ProjectPolicy } from "./project";
+import { projectDeep, projectText, type HitLocator, type ProjectPolicy } from "./project";
 import { projectToolDefs, restoreToolNames } from "./project-tools";
 import { rehydrate, TokenMap } from "./tokens";
 
@@ -40,6 +41,18 @@ export interface CreateGuardOptions {
 function isImagePart(value: unknown): boolean {
   return !!value && typeof value === "object" && (value as { type?: unknown }).type === "image_url";
 }
+
+/** Роль сообщения по индексу — для локатора позиционных находок (U21). */
+function messageRole(container: unknown, idx: number): string | undefined {
+  if (!Array.isArray(container)) return undefined;
+  const msg = container[idx];
+  if (!msg || typeof msg !== "object") return undefined;
+  const role = (msg as Record<string, unknown>).role;
+  return typeof role === "string" ? role : undefined;
+}
+
+/** Кап позиционных находок на один вызов: журнал хода капнет их ещё раз. */
+const MAX_HITS_PER_CALL = 64;
 
 /**
  * Вырезать image_url-части (E1, только для внешнего egress без явного
@@ -103,13 +116,36 @@ export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unkn
       if (!config.enabled) return { messages, tools, changed: false, stats: {} };
       try {
         const stats: Partial<Record<DataClass, number>> = {};
+        const hits: EgressHit[] = [];
+        const hitSink = (h: EgressHit): void => {
+          if (hits.length < MAX_HITS_PER_CALL) hits.push(h);
+        };
         // Внешнему провайдеру изображения уходят только по явному разрешению
         // (INV-D2): иначе URL/data-URL изображения — ещё один канал утечки.
         const stripped =
           !target.trusted && !config.allowImagesToExternal
             ? stripImageParts(messages)
             : { value: messages, removed: false };
-        const msgProj = projectDeep(stripped.value, policy);
+        const msgProj = projectDeep(stripped.value, policy, {
+          sink: hitSink,
+          locator: (path): HitLocator => {
+            const idx =
+              path[0] === "messages" && typeof path[1] === "number"
+                ? path[1]
+                : typeof path[0] === "number"
+                  ? path[0]
+                  : undefined;
+            if (idx !== undefined) {
+              const role = messageRole(stripped.value, idx);
+              return {
+                surface: "message",
+                messageIdx: idx,
+                ...(role ? { role } : {}),
+              };
+            }
+            return { surface: "message" };
+          },
+        });
         sumStats(stats, msgProj.stats);
         const tokens = [...msgProj.tokens];
         let toolsOut = tools;
@@ -117,7 +153,7 @@ export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unkn
         if (tools) {
           // Идентификаторы тулов неприкосновенны (INV-DLP-9): отдельная
           // проекция, а не слепой `projectDeep` по всей структуре (A11).
-          const toolProj = projectToolDefs(tools, policy);
+          const toolProj = projectToolDefs(tools, policy, hitSink);
           const repaired = restoreToolNames(tools, toolProj.tools);
           toolsOut = repaired.tools;
           sumStats(stats, toolProj.stats);
@@ -143,6 +179,7 @@ export function createGuard(opts: CreateGuardOptions): EgressGuard<unknown, unkn
             count: Object.values(stats).reduce((a, b) => a + b, 0),
             stats,
             tokens,
+            ...(hits.length ? { hits } : {}),
           });
         }
         return { messages: msgProj.messages, tools: toolsOut, changed, stats };

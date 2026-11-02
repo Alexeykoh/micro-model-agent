@@ -15,7 +15,9 @@ import {
 } from "./state.js";
 import { isWarn, phaseLabel, rowLabel, gateBreakdown } from "./trace-labels.js";
 import { renderDetail } from "./trace-detail.js";
+import { openRequestDialog, rememberRequest, clearRequestMemo } from "./request-popup.js";
 import { sidebarSubagentsSessionChanged } from "./subagents.js";
+import { sidebarSecuritySessionChanged } from "./security.js";
 import { resetTraceScroll, scheduleTrace, traceAtFreshEdge, traceFollow } from "./trace-scroll.js";
 import { appendLogEntry as appendLogRow } from "./trace-log.js";
 
@@ -32,6 +34,10 @@ function rowArgs(entry: TraceEntry): string {
   if (entry.kind === "text" || entry.kind === "reasoning" || entry.kind === "phase") return "";
   // У `gate_timing` вся суть уже в подписи строки — разбивка живёт в детали.
   if (entry.kind === "gate") return "";
+  if (entry.kind === "request") {
+    const req = entry.request;
+    return req && typeof req === "object" ? String((req as Dict).model || "") : "";
+  }
   if (entry.kind === "plan") {
     const idx = typeof entry.currentIndex === "number" ? entry.currentIndex : 0;
     const total = Array.isArray(entry.steps) ? entry.steps.length : 0;
@@ -69,6 +75,12 @@ function renderRow(entry: TraceEntry): HTMLElement {
   if (args) row.appendChild(el("span", "args", args));
   if (entry.durationMs) row.appendChild(el("span", "t", formatMs(entry.durationMs)));
   row.addEventListener("click", () => {
+    // Снимок исходящего запроса (U20) — не деталь строки, а поп-ап: там
+    // system/messages/tools целиком, в узкую панель они не влезают.
+    if (entry.kind === "request") {
+      openRequestDialog(entry.request);
+      return;
+    }
     if (sb.selected === entry.id) {
       collapseDetail();
       return;
@@ -236,6 +248,8 @@ export function sidebarSessionChanged(sid: string | null | undefined): void {
   collapseDetail();
   renderList();
   sidebarSubagentsSessionChanged();
+  sidebarSecuritySessionChanged();
+  clearRequestMemo();
 }
 
 /** Сессия, которой сейчас принадлежит сайдбар (dataset.sid), или null. */
@@ -310,6 +324,14 @@ export function sidebarTraceEvent(kind: string, data: Dict): void {
         }),
       );
       break;
+    case "llm_request": {
+      const request = data.request;
+      if (!request || typeof request !== "object") break;
+      // Последний снимок — для перехода из бейджа DLP (U21).
+      rememberRequest(request);
+      pushRow(append({ kind: "request", request }));
+      break;
+    }
     case "question":
       pushRow(append({ kind: "question", text: data.question || data.text || "" }));
       break;

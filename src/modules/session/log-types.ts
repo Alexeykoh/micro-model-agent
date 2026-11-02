@@ -1,6 +1,7 @@
 // Типы записи session-журнала (вынесено из store.ts, правило 6: ≤300 строк).
 import type { DiagnosticEvent, Source } from "../../output";
 import type { EgressTurnSummary } from "../security/data-policy/types";
+import type { LlmRequestSnapshot } from "../../llm/request-snapshot";
 
 /** События онбординга (`meet`/`init`) — явный союз вместо `onboarding_${string}` (W11). */
 export type OnboardingEvent =
@@ -42,6 +43,7 @@ export interface SessionLogEntry {
     | "service_task"
     | "egress_turn"
     | "egress_redacted"
+    | "llm_request"
     | "subagent"
     | "command"
     | OnboardingEvent;
@@ -79,6 +81,8 @@ export interface SessionLogEntry {
   toolNames?: string[];
   /** DLP-агрегат хода (`egress_turn`): классы/PII/назначение, без значений. */
   egress?: EgressTurnSummary;
+  /** Снимок исходящего запроса (`llm_request`, U20): после DLP, до сети. */
+  llmRequest?: LlmRequestSnapshot;
   window?: number;
   systemBudget?: number;
   reserveBudget?: number;

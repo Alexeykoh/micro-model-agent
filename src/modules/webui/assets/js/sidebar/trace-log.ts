@@ -99,6 +99,11 @@ export function appendLogEntry(e: Dict, sink: TraceLogSink): void {
     case "output":
       sink.pushRow(sink.append({ kind: "output", text: e.content || "", iteration: e.iteration }));
       break;
+    case "llm_request":
+      if (e.llmRequest && typeof e.llmRequest === "object") {
+        sink.pushRow(sink.append({ kind: "request", request: e.llmRequest, iteration: e.iteration }));
+      }
+      break;
     default:
       break;
   }

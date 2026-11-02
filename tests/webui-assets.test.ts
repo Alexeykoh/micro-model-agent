@@ -561,6 +561,7 @@ describe("webui assets", () => {
       "files",
       "lsp",
       "trace",
+      "security",
       "subagents",
       "plugins",
       "mcp",

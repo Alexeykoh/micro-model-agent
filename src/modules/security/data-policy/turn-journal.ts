@@ -10,6 +10,7 @@
  */
 import type {
   DataClass,
+  EgressHit,
   EgressTarget,
   EgressTurnSummary,
   GuardDiagnostic,
@@ -23,6 +24,12 @@ interface Bucket {
   /** Маскированные отпечатки секретов: внутренний вид → уникальные значения. */
   secretPreviews: Map<string, Set<string>>;
   targets: Map<string, EgressTurnSummary["targets"][number]>;
+  /** Позиционные находки редакции (U21): уникальные по месту. */
+  hits: EgressHit[];
+  /** Ключи уже учтённых находок — дедуп между вызовами хода. */
+  hitKeys: Set<string>;
+  /** Сколько находок не поместилось в кап. */
+  hitsDropped: number;
 }
 
 /** Публичные виды секретов: внутренние id паттернов наружу не выходят. */
@@ -35,6 +42,14 @@ const SECRET_KIND_PUBLIC: Record<string, string> = {
 
 /** Кап отпечатков на вид: агрегат не должен расти вместе с ходом (INV-DLP-8). */
 const MAX_SECRET_PREVIEWS = 6;
+
+/** Кап позиционных находок на ход (U21): агрегат, а не лог (INV-DLP-8). */
+const MAX_TURN_HITS = 24;
+
+/** Ключ уникальности находки: место + диапазон, без значений. */
+function hitKey(h: EgressHit): string {
+  return [h.dataClass, h.kind, h.surface, h.messageIdx ?? "", h.tool ?? "", h.field ?? "", h.start, h.end].join("\0");
+}
 
 function publicSecretKind(kind: string): string {
   const mapped = SECRET_KIND_PUBLIC[kind];
@@ -67,6 +82,9 @@ function freshBucket(sessionId: string): Bucket {
     maskedMax: new Map(),
     secretPreviews: new Map(),
     targets: new Map(),
+    hits: [],
+    hitKeys: new Set(),
+    hitsDropped: 0,
   };
   const known = knownTargets.get(sessionId);
   if (known) bucket.targets.set(targetKey(known), known);
@@ -121,6 +139,18 @@ export function recordEgressTurn(diag: GuardDiagnostic): void {
   // max, не сумма: title-gen повторяет те же значения в том же ходу.
   for (const [key, n] of perCall) {
     bucket.maskedMax.set(key, Math.max(bucket.maskedMax.get(key) ?? 0, n));
+  }
+
+  // Позиционные находки (U21): дедуп по месту, кап на ход.
+  for (const hit of diag.hits ?? []) {
+    const key = hitKey(hit);
+    if (bucket.hitKeys.has(key)) continue;
+    if (bucket.hits.length >= MAX_TURN_HITS) {
+      bucket.hitsDropped += 1;
+      continue;
+    }
+    bucket.hitKeys.add(key);
+    bucket.hits.push(hit);
   }
 }
 
@@ -179,6 +209,8 @@ function summaryOf(bucket: Bucket): EgressTurnSummary {
     stats,
     kinds: kindsOut,
     ...(secrets.length ? { secrets } : {}),
+    ...(bucket.hits.length ? { hits: bucket.hits } : {}),
+    ...(bucket.hitsDropped ? { hitsTruncated: bucket.hitsDropped } : {}),
     targets: [...bucket.targets.values()],
   };
 }
