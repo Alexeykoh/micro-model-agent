@@ -1,10 +1,12 @@
 /** Веб-поиск (DuckDuckGo HTML): тул и shared-функция для автопоиска ошибок. */
 import { t } from "../i18n/index";
-import type { ToolDefinition } from "./types";
+import type { ToolDefinition, ToolContext } from "./types";
 import type { NetworkSecurityConfig } from "../config/types";
 import { isUrlAllowed, sanitizeUrl } from "../modules/security/network-validator";
 import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
+import { machinePolicyContext } from "../modules/security/data-policy/context";
+import { projectOutboundText } from "../modules/security/data-policy/outbound";
 import { readMmaVersion } from "../core/version";
 import { wrapUntrusted } from "./web-content";
 
@@ -71,8 +73,7 @@ export async function performWebSearch(
   requestTimeoutMs?: number,
   fetchImpl: typeof fetch = fetch,
 ): Promise<WebSearchOutcome> {
-  // DEBT(web-search-payload-dlp): запрос уходит в поисковый бэкенд как есть —
-  // DLP проекцирует только egress к провайдеру и API, не к внешнему сервису.
+  // DLP (E1-семантика): запрос уже спроецирован `projectSearchQuery`.
   const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
   const validation = isUrlAllowed(url, networkConfig);
   if (!validation.allowed) {
@@ -131,6 +132,28 @@ function formatResults(results: SearchResult[]): string {
 }
 
 /** Ищет в вебе (заголовки + сниппеты); поисковики открывать не надо. */
+/**
+ * DLP: запрос уходит во внешний поисковик — маскируем его до сети.
+ * Семантика E1 (классы, `minConfidence`, флаг `egress.secrets`), но без
+ * псевдонимов: отдать поисковику token id бессмысленно и раскрывает ключ.
+ * Ошибка классификатора при `failClosed` не выпускает запрос вообще —
+ * «не смогли проверить» не равно «можно отправлять» (INV-D4).
+ */
+export function projectSearchQuery(raw: string, ctx: ToolContext): string {
+  const policy = ctx.config?.security?.dataPolicy;
+  if (!policy?.enabled || !raw) return raw;
+  try {
+    return projectOutboundText(
+      raw,
+      policy,
+      { kind: "api", trusted: false },
+      machinePolicyContext(ctx.baseDir),
+    ).text;
+  } catch {
+    return policy.failClosed ? "[query hidden by DLP]" : raw;
+  }
+}
+
 export const webSearchTool: ToolDefinition = {
   name: "web_search",
   security: { caps: [{ net: true }] },
@@ -153,7 +176,8 @@ export const webSearchTool: ToolDefinition = {
     if (ctx.config?.webSearch?.enabled === false) {
       return { success: false, output: t("tool.web_search_disabled") };
     }
-    const query = String(args.query || "");
+    const rawQuery = String(args.query || "");
+    const query = projectSearchQuery(rawQuery, ctx);
     const numResults = Number(args.numResults) || 5;
 
     const securityConfig = ctx.sessionContext

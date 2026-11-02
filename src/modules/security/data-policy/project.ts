@@ -9,6 +9,8 @@ import type { DataClass, EgressHit, EgressSurface, EgressTarget, EgressTokenRef,
 import type { DataPolicyConfig } from "./types";
 import { isTaggedFileContent, untagFileContent } from "./file-content";
 import { secretPreview } from "./detectors/secrets";
+import { matchAnyGlob, relativeTo } from "./path-policy";
+import { resolve } from "node:path";
 import { TokenMap } from "./tokens";
 
 const MASK: Record<DataClass, string> = {
@@ -79,6 +81,30 @@ function pathEnd(text: string, pos: number): number {
   return i;
 }
 
+/**
+ * Путь скрыт от этой цели по glob-списку? `apiHiddenGlobs` — для API-клиента,
+ * `providerBlockGlobs` — для внешнего провайдера (D2). Скрытый путь маскируется
+ * **целиком**, а не только корнем: иначе в `tool_start.args`/`tool_end.output`
+ * остаётся хвост `<PATH>\secret\a.txt` (долг `api-hidden-globs-text-scope`).
+ * Сравнение — по нормализованному относительному пути, без FS-чтения.
+ */
+function pathHiddenByPolicy(
+  pathText: string,
+  config: DataPolicyConfig,
+  target: EgressTarget,
+  ctx: PolicyContext,
+): boolean {
+  const globs =
+    target.kind === "api"
+      ? config.apiHiddenGlobs
+      : target.trusted
+        ? []
+        : config.providerBlockGlobs;
+  if (!globs.length) return false;
+  const rel = relativeTo(ctx.baseDir, resolve(ctx.baseDir, pathText));
+  return matchAnyGlob(rel, globs) !== undefined;
+}
+
 /** Спроецировать одну строку. */
 export function projectText(text: string, policy: ProjectPolicy): TextProjection {
   const { config, target, ctx, map } = policy;
@@ -133,13 +159,25 @@ export function projectText(text: string, policy: ProjectPolicy): TextProjection
     let end = f.end;
     // pathMode:prefix — для путей, начинающихся с известного корня, сохраняем остаток.
     const pseudonym = config.pseudonymize && f.dataClass !== "secret";
-    if (config.pathMode === "full" && f.dataClass === "path") {
-      end = pathEnd(text, f.end);
+    const pathFinding = f.dataClass === "path";
+    let hiddenPath = false;
+    if (pathFinding) {
+      // Классификатор отдаёт префикс корня; скрытость и «полный» режим
+      // решаются по целому пути (остаток за префиксом входит в находку).
+      const fullEnd = pathEnd(text, f.end);
+      hiddenPath = pathHiddenByPolicy(
+        text.slice(f.start, fullEnd),
+        config,
+        target,
+        ctx,
+      );
+      if (hiddenPath || config.pathMode === "full") end = fullEnd;
     }
     out += text.slice(cursor, f.start);
-    const token = pseudonym
-      ? map.tokenFor(text.slice(f.start, end), f.dataClass)
-      : MASK[f.dataClass];
+    const token =
+      pseudonym && !hiddenPath
+        ? map.tokenFor(text.slice(f.start, end), f.dataClass)
+        : MASK[f.dataClass];
     out += token;
     const preview = f.dataClass === "secret" ? secretPreview(text.slice(f.start, end)) : undefined;
     tokens.push({ dataClass: f.dataClass, kind: f.kind, token, ...(preview ? { preview } : {}) });
@@ -149,7 +187,7 @@ export function projectText(text: string, policy: ProjectPolicy): TextProjection
       start: f.start,
       end,
       // token id (`<PATH:abc>`) наружу не уходит (INV-DLP-1): показываем метку.
-      replacement: pseudonym ? `‹${f.dataClass.toUpperCase()}›` : MASK[f.dataClass],
+      replacement: pseudonym && !hiddenPath ? `‹${f.dataClass.toUpperCase()}›` : MASK[f.dataClass],
       ...(preview ? { preview } : {}),
     });
     cursor = end;

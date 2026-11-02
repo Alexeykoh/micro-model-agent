@@ -2001,6 +2001,7 @@
   "web.dlp.destination": "Назначение",
   "web.dlp.external": "внешний провайдер",
   "web.dlp.local": "локальный провайдер",
+  "ui.dlp_redacted": "DLP: скрыто значений — {count} ({classes})",
   "web.dlp.hits_title": "Где именно:",
   "web.dlp.hit_message": "сообщение {n} · {role}",
   "web.dlp.hit_message_roleless": "сообщение {n}",

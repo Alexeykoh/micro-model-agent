@@ -58,6 +58,8 @@ function publicSecretKind(kind: string): string {
 }
 
 const buckets = new Map<string, Bucket>();
+/** Пассивный бакет: редакция без явного `beginEgressTurn` (CLI/one-shot). */
+const passiveBuckets = new Map<string, Bucket>();
 /** Последнее известное назначение сессии — чтобы чистый ход тоже знал target. */
 const knownTargets = new Map<string, EgressTurnSummary["targets"][number]>();
 
@@ -113,9 +115,20 @@ export function recordEgressTurn(diag: GuardDiagnostic): void {
   const sessionId = diag.sessionId;
   if (!sessionId) return;
   const bucket = buckets.get(sessionId);
-  if (!bucket) return;
+  if (bucket) {
+    accumulate(bucket, diag);
+    return;
+  }
+  // Нет открытого хода (CLI/one-shot): копим пассивно, чтобы REPL мог показать
+  // одну строку о редакции в конце хода (`takePassiveEgress`).
+  const passive = passiveBuckets.get(sessionId) ?? freshBucket(sessionId);
+  accumulate(passive, diag);
+  passiveBuckets.set(sessionId, passive);
+}
 
-  addTarget(bucket, diag.target);
+/** Сложить одну диагностику в бакет (общая часть хода и пассивного режима). */
+function accumulate(bucket: Bucket, diag: GuardDiagnostic): void {
+  if (diag.target) addTarget(bucket, diag.target);
   const perCall = new Map<string, number>();
   for (const ref of diag.tokens ?? []) {
     if (isTokenized(ref.token)) {
@@ -223,8 +236,21 @@ export function endEgressTurn(sessionId: string): EgressTurnSummary | undefined 
   return summaryOf(bucket);
 }
 
+/**
+ * Забрать пассивный агрегат (CLI): ход не открывал журнал, но редакция была.
+ * `undefined` — нечего показывать (чисто или ещё не копили).
+ */
+export function takePassiveEgress(sessionId: string): EgressTurnSummary | undefined {
+  const bucket = passiveBuckets.get(sessionId);
+  if (!bucket) return undefined;
+  passiveBuckets.delete(sessionId);
+  const summary = summaryOf(bucket);
+  return summary.total > 0 ? summary : undefined;
+}
+
 /** Только для тестов: сбросить журнал и известные цели. */
 export function resetEgressTurnJournal(): void {
   buckets.clear();
+  passiveBuckets.clear();
   knownTargets.clear();
 }

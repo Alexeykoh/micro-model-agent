@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **DLP: волна 2 — покрытие egress.** Поисковый запрос `web_search` проецируется
+  до сети (`projectOutboundText`: маска без псевдонимов, при `failClosed` запрос
+  не уходит), base64-обёртка известного значения ловится отдельным детектором
+  (`detectors/encoded.ts`), скрытые по `apiHiddenGlobs`/`providerBlockGlobs` пути
+  маскируются целиком в любом тексте (SSE args/output, история), а CLI после хода
+  печатает одну строку о редакции. Машинный контекст политики стал одним
+  (`machinePolicyContext`) для E1-фабрики и web-тулов. Гварды:
+  `tests/security/outbound-projection.test.ts`, `tests/security/encoded-value.test.ts`,
+  `tests/security/api-hidden-globs.test.ts`, `tests/security/egress-turn-journal.test.ts`.
+
 - **DLP: прозрачность редакции и покрытие egress (U20–U22).** Пользователь видит
   ровно тот запрос, который ушёл провайдеру, и конкретные места редакции:
   `EgressHit` несёт класс, поверхность (сообщение/тул), индекс/роль, поле, диапазон

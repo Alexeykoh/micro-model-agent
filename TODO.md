@@ -34,14 +34,27 @@
       404 на скрытые пути, DLP-вебхук. Гейты: `tests/security/data-policy*.test.ts`,
       `tests/providers/sanitizing-provider.test.ts`, `tests/webui/egress-filter.test.ts`,
       `tests/service/egress-filter.test.ts`.
-- [ ] **Остаточные векторы вне плана** (отдельная задача, нужен шов/спека):
-      payload `tools/web-search.ts:74` (запрос уходит в DuckDuckGo как есть, DLP его
-      не трогает), payload `modules/mcp/client.ts`, обход через base64/split известного
-      значения, DNS-подмена trust (документировать IP/CIDR), NER (ФИО/адреса).
-      Долги по теме — в `docs/agents/debt.md` (`at-rest-pii`, `file-content-taint`,
-      `api-hidden-globs-text-scope`, `file-content-bypass-non-path-tools`,
+- [x] **Payload `web_search`** — запрос проецируется до сети (`projectOutboundText`,
+      маска без псевдонимов, fail-closed при ошибке классификатора). _(2026-11-02,
+      гейт `tests/security/outbound-projection.test.ts`.)_
+- [x] **Base64-обёртка известного значения** — детектор `detectors/encoded.ts`.
+      _(2026-11-02, гейт `tests/security/encoded-value.test.ts`.)_ Split остаётся
+      residual risk: признак склейки неотличим от обычного текста.
+- [x] **Скрытый glob в тексте** — `apiHiddenGlobs`/`providerBlockGlobs` маскируют
+      путь целиком в SSE args/output и истории, а не только на файловых эндпоинтах.
+      _(2026-11-02, гейт `tests/security/api-hidden-globs.test.ts`.)_
+- [x] **CLI: строка о редакции** — `◇ DLP: скрыто значений — N (классы)` после хода.
+      _(2026-11-02, пассивный агрегат журнала.)_
+- [x] **DNS-подмена trust** — задокументировано: доверие по конфигу и распарсенному
+      хосту, IP/CIDR-записи как рекомендация (спека 2026-10-19, §«Остаточное»).
+- [ ] **Payload MCP** (`modules/mcp/client.ts`) — MCP-сервер интеграции; нужен
+      taint-контракт (`file-content-taint`), отдельная задача.
+- [ ] **NER (ФИО/адреса)** — не реализовано.
+- Остальные долги темы — [`docs/agents/debt.md`](./docs/agents/debt.md)
+      (`at-rest-pii`, `file-content-taint`, `file-content-bypass-non-path-tools`,
       `data-policy-projection-lifecycle`, `streaming-tail-holdback`,
-      `research-by-checksum`, `dlp-cli-redaction-notice`).
+      `research-by-checksum`); `api-hidden-globs-text-scope`, `encoded-value-bypass`,
+      `web-search-payload-dlp`, `dlp-cli-redaction-notice` — оплачены 2026-11-02.
 
 ### 1.3 Аудит модулей harness (план `docs/plans/2026-10-12-harness-module-audit-fixes.md`)
 
@@ -745,7 +758,7 @@ response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов,
 - [ ] Подобрать литературу по верификации/критикам (вторая половина пункта
       «контр-агент для проверки работы»; сам контр-агент сделан — `src/modules/critic/`).
 - [ ] Долги из [`docs/agents/debt.md`](./docs/agents/debt.md) — каждый оплачивается
-      по своему триггеру (правило 9). Активных записей: 24.
+      по своему триггеру (правило 9). Активных записей: 21.
 
 ---
 

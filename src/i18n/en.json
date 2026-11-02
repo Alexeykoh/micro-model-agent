@@ -2028,6 +2028,7 @@
   "web.dlp.destination": "Destination",
   "web.dlp.external": "external provider",
   "web.dlp.local": "local provider",
+  "ui.dlp_redacted": "DLP: redacted values — {count} ({classes})",
   "web.dlp.hits_title": "Where exactly:",
   "web.dlp.hit_message": "message {n} · {role}",
   "web.dlp.hit_message_roleless": "message {n}",
