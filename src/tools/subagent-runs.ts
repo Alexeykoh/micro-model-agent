@@ -108,6 +108,8 @@ export interface SubagentRunEnd {
   output?: string;
   error?: string;
   usage?: SubagentRunUsage;
+  /** Здоровье прогона (A7): тулы, чтения, запись, блоки. */
+  health?: import("./subagent-health").RunHealth;
 }
 
 /** Любое событие прогона. */

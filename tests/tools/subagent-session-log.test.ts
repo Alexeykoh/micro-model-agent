@@ -83,12 +83,15 @@ describe("subagent session log", () => {
       iterations: 4,
       durationMs: 5000,
       error: "e".repeat(900),
+      health: { toolsOk: 3, toolsFailed: 2, filesRead: 1, filesWritten: 0, blocked: 1 },
     })!;
     expect(entry.content).toBe("end");
     expect(entry.status).toBe("failed");
     expect(entry.success).toBe(false);
     expect(entry.iteration).toBe(4);
     expect(entry.summary!.length).toBeLessThanOrEqual(300);
+    // A7: здоровье прогона видно в журнале.
+    expect(entry).toMatchObject({ toolsOk: 3, toolsFailed: 2, filesRead: 1, blocked: 1 });
   });
 
   it("writes tool args at tool_start with clipped values and redacted secrets (A4)", () => {
