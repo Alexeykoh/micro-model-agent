@@ -522,12 +522,14 @@ drawer, клавиатура. Что работает (не трогать): к�
       `tests/webui-focus-ring.test.ts` — кольцо не может быть прозрачным.)_
       Проверено: `.composer` совпадает с `:focus-within`, но вычисленные стили не
       менялись — `--input-shadow: transparent`.
-- [ ] **U2. Просмотр README ломает внешние картинки — 10 ошибок CSP.** Политика
-      `img-src 'self' data: blob:` (`src/modules/webui/util.ts:93`) блокирует
-      бейджи `img.shields.io`: `Loading the image … violates … "img-src …"` ×10,
-      в чате битые иконки, консоль красная. Ветка `fix/webui-md-images`: либо
-      разрешить конкретные хосты, либо заменять внешние `<img>` плейсхолдером
-      с подписью `alt` (безопаснее).
+- [x] **U2. Просмотр README ломает внешние картинки — 10 ошибок CSP.** _(Сделано
+      2026-11-03, ветка `fix/webui-md-images`: внешние `<img>` не грузятся вовсе —
+      в `md.ts` (SRC) картинка с чужого origin заменяется ссылкой-чипом
+      `a.md-img-ext` с alt/хостом (CSP `img-src 'self' data: blob:` остаётся
+      строгой, запросов к чужим хостам нет). Живая проверка: README показывает
+      чипы «License: MIT» / «Status: beta», `<img>` — 0, ошибок консоли — 0.
+      Гейт `tests/webui-md-render.test.ts`.)_
+      Политика `img-src 'self' data: blob:` блокировала бейджи `img.shields.io`.
 - [ ] **U3. Trace пуст для исторических сессий.** `sidebarSessionChanged()` ставит
       `sb.logCursor = new Date().toISOString()` (`assets/js/sidebar/trace.ts:234`),
       поэтому в открытой старой сессии видно «событий пока нет», хотя
