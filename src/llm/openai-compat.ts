@@ -549,9 +549,18 @@ export class OpenAICompatProvider implements LLMProvider {
           }
         }
       }
-      if (st.usage) {
+      // `done` без usage, но с finish_reason — штатный финал стрима: цикл
+      // агента берёт отсюда `finishReason` (раньше поле терялось, и в
+      // `session.jsonl` не было ни `finish`, ни признака обрезки).
+      const finishReason =
+        st.lastFinishReason === "stop" ||
+        st.lastFinishReason === "length" ||
+        st.lastFinishReason === "tool_calls"
+          ? st.lastFinishReason
+          : undefined;
+      if (st.usage || finishReason) {
         onEmit();
-        yield { type: "done", usage: st.usage };
+        yield { type: "done", usage: st.usage, finishReason };
       }
 
       // finish_reason "length": completion упёрся в лимит токенов. Незаконченный
