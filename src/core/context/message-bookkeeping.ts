@@ -39,6 +39,8 @@ export class MessageBookkeeping {
   private turnHadTaint = false;
   private trusted = false;
   private pendingToolTaint = false;
+  /** Одноразовый seed (спавн субагента из tainted-родителя). */
+  private seedTaint = false;
 
   /** Следующая tool-запись помечается tainted (ответ субагента). */
   markNextToolTainted(): void {
@@ -58,8 +60,14 @@ export class MessageBookkeeping {
 
   /** Маркер хода: следующий seq. Новый ход сбрасывает наследование taint. */
   beginTurn(): number {
-    this.turnHadTaint = false;
+    this.turnHadTaint = this.seedTaint;
     return this.next;
+  }
+
+  /** Пометить контекст tainted целиком до первого хода (seed субагента). */
+  taintAll(): void {
+    this.seedTaint = true;
+    this.turnHadTaint = true;
   }
 
   /** Доверие цели egress: только локальная модель даёт производный taint. */
@@ -137,5 +145,7 @@ export class MessageBookkeeping {
     this.taintedSeqs.clear();
     this.turnHadTaint = false;
     this.trusted = false;
+    this.seedTaint = false;
+    this.pendingToolTaint = false;
   }
 }

@@ -1,9 +1,10 @@
 // Хранилище памяти: append-only .md-категории и preferences.json в каталоге.
-// DEBT(memory-at-rest): файлы памяти пользовательские и редактируемые, поэтому
-// хранятся открытым текстом даже при включённом шифровании журналов.
+// At-rest — гибрид: авто-записи агента шифруются на месте (`at-rest.ts`), ручные
+// строки и `preferences.json` остаются открытыми (их правит человек).
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, statSync } from "fs";
 import { join } from "path";
 import { MemorySearch } from "./search";
+import { decryptMemoryText, encryptMemoryEntry } from "./at-rest";
 
 const MEMORY_FILES = ["conventions", "decisions", "errors", "facts"];
 
@@ -48,18 +49,19 @@ export class MemoryStore {
     return join(this.memoryDir, `${name}.md`);
   }
 
-  /** Читает весь файл категории (пусто, если файла нет). */
+  /** Читает весь файл категории (пусто, если файла нет); авто-записи расшифрованы. */
   read(name: string): string {
     const path = this.fileFor(name);
     if (!existsSync(path)) return "";
-    return readFileSync(path, "utf-8");
+    return decryptMemoryText(readFileSync(path, "utf-8"));
   }
 
   /** Дописывает запись с таймстампом в файл категории. */
   append(name: string, entry: string): void {
     const path = this.fileFor(name);
     const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
-    const formatted = `- **${timestamp}** — ${entry}\n`;
+    const body = encryptMemoryEntry(entry);
+    const formatted = `- **${timestamp}** — ${body}\n`;
     appendFileSync(path, formatted, "utf-8");
     this.trimFile(path);
   }
@@ -85,9 +87,9 @@ export class MemoryStore {
     writeFileSync(path, `${header}${tail}`, "utf-8");
   }
 
-  /** Ищет подстроку по всем файлам памяти. */
+  /** Ищет подстроку по всем файлам памяти (авто-записи расшифровываются). */
   search(query: string): Array<{ file: string; match: string }> {
-    const searchModule = new MemorySearch(this.memoryDir);
+    const searchModule = new MemorySearch(this.memoryDir, decryptMemoryText);
     return searchModule.query(query);
   }
 

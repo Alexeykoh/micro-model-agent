@@ -72,13 +72,25 @@
       residual risk.
 - [x] **At-rest (журнал сессий)** — opt-in `sessionEncryption`: `session.jsonl`,
       tail и history шифруются, чтение прозрачно. _(2026-11-02,
-      `tests/security/at-rest-encryption.test.ts`.)_ Память остаётся plaintext —
-      долг `memory-at-rest`.
+      `tests/security/at-rest-encryption.test.ts`.)_
+- [x] **At-rest памяти (гибрид)** — авто-записи агента шифруются на месте
+      (`[enc]…[/enc]`), ручные строки и `preferences.json` остаются открытыми;
+      чтение и поиск расшифровывают. _(2026-11-02,
+      `tests/modules/memory/at-rest.test.ts`.)_
+- [x] **Перф: кеш проекции** — замер 4.7 → 0.007 мс на сообщение 1.9 КБ, ключ
+      включает политику и glob-списки. _(2026-11-02,
+      `tests/security/projection-cache.test.ts`.)_
+- [x] **Плагины: контракт `pathArgs`** — вывод тегируется только при объявленных
+      путях; контракт описан в `docs/agents/tools.md`. _(2026-11-02.)_
+- [x] **Taint при спавне субагента** — если родитель tainted, ребёнок стартует
+      tainted (seed переживает `beginTurn`). _(2026-11-02,
+      `tests/security/taint.test.ts`.)_
 - Остальные долги темы — [`docs/agents/debt.md`](./docs/agents/debt.md)
-      (`memory-at-rest`, `data-policy-projection-lifecycle`,
-      `streaming-tail-holdback`, `research-by-checksum`); `api-hidden-globs-text-scope`,
-      `encoded-value-bypass`, `web-search-payload-dlp`, `dlp-cli-redaction-notice`,
-      `file-content-taint`, `at-rest-pii` — оплачены.
+      (`file-content-bypass-non-path-tools` — плагины без объявления и подстановки
+      `bash`, `streaming-tail-holdback`, `research-by-checksum`);
+      `api-hidden-globs-text-scope`, `encoded-value-bypass`, `web-search-payload-dlp`,
+      `dlp-cli-redaction-notice`, `file-content-taint`, `at-rest-pii`,
+      `memory-at-rest`, `data-policy-projection-lifecycle` — оплачены.
 
 ### 1.3 Аудит модулей harness (план `docs/plans/2026-10-12-harness-module-audit-fixes.md`)
 
@@ -782,7 +794,7 @@ response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов,
 - [ ] Подобрать литературу по верификации/критикам (вторая половина пункта
       «контр-агент для проверки работы»; сам контр-агент сделан — `src/modules/critic/`).
 - [ ] Долги из [`docs/agents/debt.md`](./docs/agents/debt.md) — каждый оплачивается
-      по своему триггеру (правило 9). Активных записей: 20.
+      по своему триггеру (правило 9). Активных записей: 18.
 
 ---
 

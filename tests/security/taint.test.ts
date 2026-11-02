@@ -90,6 +90,15 @@ describe("T2: производный ответ наследует taint тол�
 });
 
 describe("T-субагент: taint переносится через результат", () => {
+  it("taintAll засеивает контекст: первый же ответ после beginTurn tainted", () => {
+    const cm = manager();
+    cm.taintAll();
+    cm.setEgressTrusted(true);
+    cm.beginTurn();
+    cm.addMessage(assistantMsg("derived from parent"));
+    expect(cm.taintedIndexes()).toEqual([true]);
+  });
+
   it("markNextToolTainted помечает следующее tool-сообщение", () => {
     const cm = manager();
     cm.markNextToolTainted();

@@ -412,3 +412,18 @@ Repeated deterministic reads do not re-run (each repeat used to cost a full LLM 
 - **`cacheable` flag** on `ToolDefinition` (`src/tools/types.ts`) — the executor (`src/tools/executor.ts`) memoizes successful results keyed by session + tool + arguments (120s TTL, 100 entries). Marked: `read_file`, `list_dir`, `glob`, `grep`, `file_info`. Any non-cacheable execution wipes the memo (even a failed command can half-apply).
 - **`manualMemo` + `isMemoizableCommand`** (`src/tools/bash.ts`) — bash manages its own entries because cacheability is per-command: single read-only invocations (`npm view`, `git status/log/diff`, `dir`/`ls`, `echo`, `--version` queries; never compound `&||<>;` commands, never `background:true`) are served from the memo; anything else invalidates it. Only successes are stored (failures may be transient).
 - The repetitive-call warning (`StuckDetector`) points `process_log` poll loops at `process_wait` (`exec.repetitive_process_log_hint`).
+
+
+## Плагины и DLP (`file-content`)
+
+Инструмент плагина участвует в защите содержимого только если объявляет пути:
+
+```ts
+security: { caps: ["filesystem.read"], pathArgs: ["path"] }
+```
+
+С `pathArgs` executor тегирует вывод как `file-content`, если путь попадает под
+`providerBlockGlobs`: внешний провайдер увидит `[FILE]`, локальный — оригинал.
+Без объявления вывод плагина считается обычным текстом (остаётся только
+regex-редакция секретов). Угадывать пути за плагин нельзя — это привело бы к
+ложным тегам и овер-маскированию.

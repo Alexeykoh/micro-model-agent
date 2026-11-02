@@ -49,6 +49,19 @@ describe("bash как источник file-content", () => {
     expect(run("ls --color=auto -la").tagged).toBe(false);
   });
 
+  it("переменные окружения и ~ раскрываются для проверки пути", () => {
+    process.env.MMA_TEST_SECRET_DIR = "C:\\work\\proj\\secret";
+    try {
+      expect(run("cat $MMA_TEST_SECRET_DIR/a.txt").tagged).toBe(true);
+      expect(run("cat ${MMA_TEST_SECRET_DIR}/a.txt").tagged).toBe(true);
+      expect(run("type %MMA_TEST_SECRET_DIR%\\a.txt").tagged).toBe(true);
+    } finally {
+      delete process.env.MMA_TEST_SECRET_DIR;
+    }
+    // `~` раскрывается в домашний каталог; .env* под block-glob.
+    expect(run("cat ~/.env").tagged).toBe(true);
+  });
+
   it("другие тулы не трогает", () => {
     expect(run("cat secret/.env", other).tagged).toBe(false);
   });
