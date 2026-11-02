@@ -1,8 +1,9 @@
 // Валидация путей: джейл baseDir, симлинки, deny/allow-паттерны, скоуп суб-агента.
 import { resolve, normalize, dirname } from "path";
 import { realpathSync } from "fs";
-import { isInsideDir, matchesScopeEntry } from "../../tools/path-utils";
+import { isInsideDir } from "../../tools/path-utils";
 import { matchesGlobPattern } from "./path-glob";
+import { scopeReason, matchesScopeEntry } from "./scope";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
 
@@ -79,16 +80,16 @@ export function isPathInScope(
     // Скоуп суб-агента действует всё равно
     if (scope) {
       const isReadScope = scope.read_only_files.some((f: string) =>
-        matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+        matchesScopeEntry(targetResolved, f, baseDir),
       );
       const isWriteScope = scope.allowed_files.some((f: string) =>
-        matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+        matchesScopeEntry(targetResolved, f, baseDir),
       );
       if (isWriteScope) return { allowed: true };
       if (isReadScope) return { allowed: true, reason: "Read-only file" };
       return {
         allowed: false,
-        reason: "Path is not within the allowed scope for this sub-agent",
+        reason: scopeReason("allowed", scope.allowed_files, scope.read_only_files),
       };
     }
     if (!securityConfig)
@@ -131,10 +132,10 @@ export function isPathInScope(
   }
 
   const isRead = scope.read_only_files.some((f: string) =>
-    matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+    matchesScopeEntry(targetResolved, f, baseDir),
   );
   const isWrite = scope.allowed_files.some((f: string) =>
-    matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+    matchesScopeEntry(targetResolved, f, baseDir),
   );
 
   if (isWrite) return { allowed: true };
@@ -142,7 +143,7 @@ export function isPathInScope(
 
   return {
     allowed: false,
-    reason: "Path is not within the allowed scope for this sub-agent",
+    reason: scopeReason("allowed", scope.allowed_files, scope.read_only_files),
   };
 }
 
@@ -238,12 +239,12 @@ export function isPathWritable(
     // Скоуп суб-агента действует всё равно
     if (scope) {
       const isWriteScope = scope.allowed_files.some((f: string) =>
-        matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+        matchesScopeEntry(targetResolved, f, baseDir),
       );
       if (isWriteScope) return { allowed: true };
       return {
         allowed: false,
-        reason: "Path is not within the allowed scope for this sub-agent",
+        reason: scopeReason("writable", scope.allowed_files, scope.read_only_files),
       };
     }
     if (!securityConfig)
@@ -286,13 +287,13 @@ export function isPathWritable(
   }
 
   const isWrite = scope.allowed_files.some((f: string) =>
-    matchesScopeEntry(targetResolved, resolve(baseDir, f)),
+    matchesScopeEntry(targetResolved, f, baseDir),
   );
 
   if (isWrite) return { allowed: true };
 
   return {
     allowed: false,
-    reason: "Path is not within the writable scope for this sub-agent",
+    reason: scopeReason("writable", scope.allowed_files, scope.read_only_files),
   };
 }

@@ -2,7 +2,7 @@
 // Вынесен из `path-validator.ts`: матчер — самостоятельный шов, его правила
 // (регистр, basename-паттерны) тестируются отдельно от проверки скоупа.
 import { resolve, relative } from "path";
-import { isInsideDir, toForwardSlash } from "../../tools/path-utils";
+import { toForwardSlash } from "../../tools/path-utils";
 
 /**
  * Регистр путей: на win32 ФС регистронезависима — сравниваем свёрнутыми.
@@ -12,13 +12,59 @@ function foldCase(value: string): string {
   return process.platform === "win32" ? value.toLowerCase() : value;
 }
 
-/** Glob (`*`, `?`) → регулярка; на win32 — регистронезависимая. */
-function globToRegExp(pattern: string): RegExp {
-  const regexPattern = pattern
-    .replace(/\*/g, "[^/\\\\]*")
-    .replace(/\?/g, ".")
-    .replace(/\./g, "\\.");
-  return new RegExp(`^${regexPattern}$`, process.platform === "win32" ? "i" : "");
+/** Экранирование regex-спецсимволов; glob-метасимволы обрабатываются отдельно. */
+function escapeRegexChar(ch: string): string {
+  return /[.+^${}()|[\]\\]/.test(ch) ? `\\${ch}` : ch;
+}
+
+/**
+ * Glob → регулярка; на win32 — регистронезависимая.
+ *
+ * Грамматика:
+ * - `**\/` — ноль и более сегментов (`a/**\/b` ловит и `a/b`, и `a/x/b`);
+ * - `**` в конце (`src/**`) — сам каталог и всё под ним;
+ * - `**` внутри — любые символы, включая `/`;
+ * - `*` — в пределах сегмента, `?` — один символ;
+ * - хвостовой `/` — каталог и всё под ним.
+ *
+ * Прежняя реализация разбирала `**` как «префикс + суффикс» и не понимала
+ * шаблон вида `src/**\/*.ts` (суффикс сравнивался буквально): такие паттерны
+ * молча не совпадали — и в конфиге, и в скоупе субагента.
+ */
+export function globToRegExp(pattern: string): RegExp {
+  const folded = foldCase(toForwardSlash(pattern));
+  const dirPattern = folded.endsWith("/");
+  let body = dirPattern ? folded.slice(0, -1) : folded;
+  // `src/**` должен совпадать и с самим `src` — иначе deny/скоуп-паттерн
+  // пропускает каталог без детей (а обход дерева начинается с него).
+  const tailRecursive = body.endsWith("/**");
+  if (tailRecursive) body = body.slice(0, -"/**".length);
+
+  let re = "";
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch === "*" && body[i + 1] === "*") {
+      i++;
+      if (body[i + 1] === "/") {
+        i++;
+        re += "(?:[^/]+/)*";
+      } else {
+        re += ".*";
+      }
+      continue;
+    }
+    if (ch === "*") {
+      re += "[^/]*";
+      continue;
+    }
+    if (ch === "?") {
+      re += "[^/]";
+      continue;
+    }
+    re += escapeRegexChar(ch);
+  }
+  if (dirPattern || tailRecursive) re += "(?:/.*)?";
+  return new RegExp(`^${re}$`, process.platform === "win32" ? "i" : "");
 }
 
 /** Есть ли совпадение хотя бы с одним паттерном списка. */
@@ -49,71 +95,18 @@ export function matchesGlobPattern(targetPath: string, baseDir: string, pattern:
   // `startsWith` ронял бы сравнение (путь внутри baseDir выглядел бы
   // абсолютным — паттерн не срабатывал).
   const relPath = foldCase(toForwardSlash(relative(resolvedBaseDir, resolvedTargetPath)));
-  const foldedPattern = foldCase(pattern);
+  const foldedPattern = foldCase(toForwardSlash(pattern)).replace(/^\.\//, "");
 
-  // Паттерны с ** (рекурсивный матчинг каталогов)
-  if (foldedPattern.includes("**")) {
-    const cleaned = foldedPattern.replace(/\/$/, "");
-    const [rawPrefix, rawSuffix] = cleaned.split("**");
-    const prefix = rawPrefix.replace(/\/$/, "");
-    const suffix = rawSuffix.replace(/^\//, "");
-
-    // Префикс: всё до ** обязано совпасть с началом пути
-    if (prefix) {
-      const prefixParts = prefix.split("/").filter(Boolean);
-      const relParts = relPath.split("/");
-      for (let i = 0; i < prefixParts.length; i++) {
-        if (relParts[i] !== prefixParts[i]) return false;
-      }
-    }
-
-    // ** в конце матчит всё
-    if (!suffix) return true;
-
-    // Суффикс против оставшихся сегментов
-    const suffixParts = suffix.split("/").filter(Boolean);
-    const relParts = relPath.split("/");
-    for (
-      let start = prefix ? prefix.split("/").filter(Boolean).length : 0;
-      start <= relParts.length - suffixParts.length;
-      start++
-    ) {
-      let match = true;
-      for (let j = 0; j < suffixParts.length; j++) {
-        if (suffixParts[j] === "*") continue;
-        if (relParts[start + j] !== suffixParts[j]) {
-          match = false;
-          break;
-        }
-      }
-      if (match) return true;
-    }
-    return false;
-  }
-
-  // Паттерны каталогов (с / на конце) без **
-  if (foldedPattern.endsWith("/")) {
-    const dirPattern = foldedPattern.slice(0, -1);
-    const resolvedDirPattern = resolve(baseDir, dirPattern);
-    return isInsideDir(resolvedTargetPath, resolvedDirPattern);
-  }
-
-  // Паттерн без сепаратора — шаблон имени файла (см. докблок).
+  // Паттерн без сепаратора — шаблон имени файла (см. докблок): `*.key`
+  // ловит и вложенные пути, иначе deny-паттерн обходился каталогом выше.
   if (!foldedPattern.includes("/")) {
     const basename = relPath.split("/").pop() ?? "";
-    if (foldedPattern.includes("*")) return globToRegExp(foldedPattern).test(basename);
+    if (foldedPattern.includes("*") || foldedPattern.includes("?")) {
+      return globToRegExp(foldedPattern).test(basename);
+    }
     return basename === foldedPattern;
   }
 
-  // Паттерн * (один уровень) с сепаратором
-  if (foldedPattern.includes("*")) {
-    return globToRegExp(foldedPattern).test(relPath);
-  }
-
-  // Точное совпадение (на win32 регистронезависимо — там FS такая)
-  const exactTarget = resolve(baseDir, foldedPattern);
-  if (process.platform === "win32") {
-    return resolvedTargetPath.toLowerCase() === exactTarget.toLowerCase();
-  }
-  return resolvedTargetPath === exactTarget;
+  // Всё остальное — по относительному пути целиком.
+  return globToRegExp(foldedPattern).test(relPath);
 }

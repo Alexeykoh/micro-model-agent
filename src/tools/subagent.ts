@@ -38,12 +38,13 @@ export const subagentTool: ToolDefinition = {
         type: "array",
         items: { type: "string" },
         description:
-          "Files/directories the sub-agent can read and write. Restricts file tools (read_file, write_file, grep path) and is the write permission for shell; it does NOT restrict the shell's view — bash/grep see the whole project (see tool_tags to deny shell).",
+          'Project-relative paths, globs (e.g. "src/**/*.ts", "**/*.md") or "**" for the whole workspace. Files/directories the sub-agent can read and write. Restricts file tools (read_file, write_file, grep path) and is the write permission for shell; it does NOT restrict the shell\'s view — bash/grep see the whole project (see tool_tags to deny shell).',
       },
       read_only_files: {
         type: "array",
         items: { type: "string" },
-        description: "Files/directories the sub-agent can read but not write",
+        description:
+          'Project-relative paths, globs (e.g. "docs/**") or "**" for the whole workspace. Files/directories the sub-agent can read but not write',
       },
       max_tokens: {
         type: "number",

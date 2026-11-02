@@ -30,15 +30,6 @@ export function isInsideDir(targetPath: string, dirPath: string): boolean {
 }
 
 /**
- * True, если targetPath — сам scope-entry или внутри него. Проверка
- * сепараторов и регистра — как в isInsideDir.
- */
-export function matchesScopeEntry(targetResolved: string, entryResolved: string): boolean {
-  if (targetResolved === entryResolved) return true;
-  return isInsideDir(targetResolved, entryResolved);
-}
-
-/**
  * Резолв пользовательского пути от baseDir.
  *
  * Чинит типовые ошибки модели:

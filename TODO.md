@@ -1,6 +1,6 @@
 # TODO — Micro Models Agent
 
-> **Актуально на 2026-10-30** (`master` @ 0.18.6).
+> **Актуально на 2026-11-02** (`master` @ 0.23.0).
 >
 > Этот файл — только **открытая** работа. Закрытые пункты здесь не хранятся:
 > история — в `CHANGELOG.md`, `docs/agents/feature-history.md` и коммитах.
@@ -302,18 +302,22 @@ reset` для json/list, failover с моделью целевого прова�
 [`docs/plans/2026-10-27-agent-errors-session-analysis.md`](./docs/plans/2026-10-27-agent-errors-session-analysis.md).
 Порядок — по приоритету; каждый пункт отдельной веткой, с тестом, падающим до правки.
 
-- [ ] **A1 (P0) `allowed_files` с glob-формой закрывает субагенту весь доступ.** `…/**/*`
+- [x] **A1 (P0) `allowed_files` с glob-формой закрывает субагенту весь доступ.** `…/**/*`
       не сопоставляется ни с чем: `matchesScopeEntry` (`src/tools/path-utils.ts:36`) сравнивает
-      префиксы. В сессии 4 субагента не прочитали ни одного файла. Нужна **спека** контракта
-      скоупа (нормализация glob → каталог / отказ с внятной причиной / маркер «весь workspace»),
-      затем ветка `fix/subagent-scope-entries`. Гейты: `tests/security/path-validator.test.ts`,
-      `tests/tools/enforcement-path.test.ts`.
-- [ ] **A2 (P0) `glob` в субагенте врёт «Нет совпадений», скрыв всё скоупом.** 14/14 вызовов
+      префиксы. В сессии 4 субагента не прочитали ни одного файла. _(Сделано 2026-11-02:
+      спека [`2026-11-02-subagent-scope-entries-design`](../specs/2026-11-02-subagent-scope-entries-design.md),
+      ветка `fix/subagent-scope-entries` — матчер скоупа в `src/modules/security/scope.ts`,
+      `globToRegExp` переписан под честную грамматику `**`+суффикс, невалидные записи
+      отвергаются с причиной, причина отказа называет состав скоупа. Гейты:
+      `tests/security/scope-entries.test.ts`, `tests/security/scope-glob-entries.test.ts`,
+      `tests/tools/subagent-scope.test.ts`, `tests/security/path-validator.test.ts`.)_
+- [x] **A2 (P0) `glob` в субагенте врёт «Нет совпадений», скрыв всё скоупом.** 14/14 вызовов
       детей дали пустую выдачу при 780+ файлах у родителя. Причина жива: при
       `visible.length === 0` тул сразу возвращает `file.no_matches`
       (`src/tools/glob-tool.ts:60-62`), а счётчик `hidden` и строка `file.glob_hidden`
-      появляются только в непустой ветке (`:67`). Ветка `fix/glob-scope-honest-empty`;
-      гейт `tests/tools/glob-scope.test.ts` («скрытое ≠ пусто»).
+      появляются только в непустой ветке (`:67`). _(Сделано 2026-11-02 той же веткой:
+      пустая выдача теперь несёт `glob_hidden`; гейт `tests/tools/glob-scope.test.ts`
+      — «скрытое ≠ пусто».)_
 - [ ] **A3 (P1) Пустой `path` обходит enforcement.** `executor.ts:175` пропускает `""`, а
       `list_dir` резолвит `""` в корень проекта (`safeResolvePath`). Ветка
       `fix/empty-path-arg`; гейт `tests/tools/enforcement-path.test.ts` — `list_dir("")` в

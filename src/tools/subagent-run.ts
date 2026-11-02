@@ -1,6 +1,6 @@
 // Исполнение тула `subagent` (определение — в `subagent.ts`; правило ≤300).
 import { t } from "../i18n/index";
-import type { ToolContext, ToolScope, ToolResult } from "./types";
+import type { ToolContext, ToolResult } from "./types";
 import { Agent } from "../core/agent";
 import { ContextManager } from "../core/context/manager";
 import { HallucinationDetector } from "../core/hallucination/detector";
@@ -8,6 +8,7 @@ import { PluginManager } from "../modules/plugins/manager";
 import type { PromptBlock } from "../core/types";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
+import { prepareScope } from "./subagent-scope";
 import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
 import { resolveExpertProvider } from "../modules/execution/expert-provider";
 import { withTokenCap } from "../llm/token-cap";
@@ -59,13 +60,10 @@ export async function runSubagent(
     };
   }
 
-  const scope: ToolScope | undefined =
-    args.allowed_files || args.read_only_files
-      ? {
-          allowed_files: (args.allowed_files as string[]) || [],
-          read_only_files: (args.read_only_files as string[]) || [],
-        }
-      : ctx.scope;
+  // Контракт записи скоупа (спека 2026-11-02-subagent-scope-entries §A).
+  const prepared = prepareScope(args, ctx.scope);
+  if (prepared.error) return { success: false, output: prepared.error };
+  const scope = prepared.scope;
 
   const explicitTags = args.tool_tags ? (args.tool_tags as string[]) : undefined;
   const expertTag = args.expert_tag ? String(args.expert_tag) : undefined;
@@ -149,7 +147,8 @@ export async function runSubagent(
     subPluginManager.register(scopeCollector.plugin, "builtin");
     const hallucinationDetector = new HallucinationDetector(ctx.baseDir, provider);
 
-    ctx.toolExecutor.setScope(appliedScope); if (ctx.contextManager?.hasTaint?.()) subContextManager.taintAll?.();
+    ctx.toolExecutor.setScope(appliedScope);
+    if (ctx.contextManager?.hasTaint?.()) subContextManager.taintAll?.();
     // Cleanup на исполнителе — рестор скоупа при таймауте/аборте, даже если
     // `finally` агента не отработал (брошенный промис).
     ctx.cleanup = restoreScope;
@@ -279,7 +278,8 @@ export async function runSubagent(
         return { success: false, output };
       }
 
-      const finished = finalizeSubagentSuccess(result, args, ctx, observer); return subContextManager.hasTaint?.() ? { ...finished, taint: true } : finished;
+      const finished = finalizeSubagentSuccess(result, args, ctx, observer);
+      return subContextManager.hasTaint?.() ? { ...finished, taint: true } : finished;
     } catch (err) {
       const error = watchdog.message() ?? (err instanceof Error ? err.message : String(err));
       observer.finish("failed", 0, undefined, error);
