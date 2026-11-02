@@ -3033,3 +3033,13 @@ body.light .c-dim { --face-c: var(--panel); }
 .secd-row { display: flex; gap: 10px; align-items: baseline; }
 .secd-lab { color: var(--dim, #888); min-width: 90px; font-size: 12px; }
 .secd-val { white-space: pre-wrap; word-break: break-word; font-family: var(--mono, monospace); font-size: 12px; }
+
+/* U6: touch targets. Phones and coarse pointers get at least 32x32 for icon
+   buttons and tab close (18x18 before), and a taller sidebar tab strip. */
+@media (pointer: coarse), (max-width: 760px) {
+  .icon-btn { min-width: 32px; min-height: 32px; height: 32px; }
+  .stab .stab-x { width: 32px; height: 32px; }
+  .sb-tab { min-height: 40px; }
+  /* Composer chips are the densest row on a phone. */
+  .sel > button, .chip, .linkbtn { min-height: 32px; }
+}
