@@ -4,7 +4,8 @@ import type { CriticIssue, CriticVerdict } from "../../modules/critic/types";
 import { normalizedSignature, syntheticIssue } from "../../modules/critic/issue-key";
 import type { CriticAction, CriticGateDeps, CriticGateOptions } from "./critic-contract";
 import { announceRetract, criticRetractInfo } from "./draft-retract";
-import { packFingerprint, runWithBudget } from "./critic-budget";
+import { packFingerprint, evidenceSignature, runWithBudget } from "./critic-budget";
+import { injectActDirective, stalledAfterVerdict } from "./critic-act";
 import { noticeAfter } from "./slow-notice";
 import { CRITIC_SLOW_NOTICE_MS } from "../../config/timeouts";
 import type { LoopState } from "./loop-state";
@@ -31,6 +32,12 @@ interface VerifyOutcome {
 const MAX_CRITIC_ADVICE_CYCLES = 1;
 
 /**
+ * Кап «действуй, а не описывай» кругов за ход: один раз даём модели явную
+ * команду вызвать тул. Второй раз — принимаем ответ честно (с записью).
+ */
+const MAX_CRITIC_ACT_CYCLES = 1;
+
+/**
  * Вентиль критика: триггерит проверку по работе хода, инжектит вердикт в
  * контекст. Fail-open: сломанный/перебюджетный критик никогда не блокирует
  * агента.
@@ -38,8 +45,14 @@ const MAX_CRITIC_ADVICE_CYCLES = 1;
 export class CriticGate {
   /** Счётчик советных кругов за ход (гейт живёт один ход). */
   private adviceCycles = 0;
+  /** Счётчик «действуй» кругов за ход. */
+  private actCycles = 0;
   /** Отпечаток входа прошлой проверки — база для отказа от повторного вызова. */
   private lastFingerprint: string | undefined;
+  /** Подпись улик (только тул-события) прошлой проверки. */
+  private lastEvidenceKey: string | undefined;
+  /** Прошлый не-ok вердикт: нужен для понуждения к действию и честной записи. */
+  private lastVerdict: CriticVerdict | undefined;
   /**
    * Прошлый вердикт был не-ok, и все его жалобы уже показаны модели. Повторная
    * проверка того же входа добавить нечего: тот же набор жалоб уже в наборе.
@@ -62,12 +75,30 @@ export class CriticGate {
       return "pass";
     }
 
+    // Новых улик нет: после не-ok вердикта модель не вызвала ни одного тула,
+    // только переписала текст. Тот же evidence даст тот же вердикт, но за
+    // полную цену (живая сессия ses_mvzp8cuk: 19 с и снова «critical»).
+    const evidenceKey = evidenceSignature(deps);
+    if (
+      stalledAfterVerdict(
+        this.lastVerdict,
+        this.lastEvidenceKey,
+        evidenceKey,
+        deps.toolEvents.length,
+      )
+    ) {
+      this.lastEvidenceKey = evidenceKey;
+      return this.afterStall(deps);
+    }
+    this.lastEvidenceKey = evidenceKey;
+
     logCheck(deps, this.opts.budgetMs);
     deps.state.criticCalls++;
     deps.state.mutationsSinceCritic = 0;
 
     const outcome = await this.verifySafely(deps);
     this.lastFingerprint = fingerprint;
+    if (outcome.verdict) this.lastVerdict = outcome.verdict;
     if (!outcome.verdict) {
       // Вердикта нет — но «critic_check» без записи о verdict неотличим от
       // pass при разборе сессии. Пишем явный отказ: critic_verdict degraded
@@ -128,6 +159,24 @@ export class CriticGate {
    */
   private canSkip(fingerprint: string): boolean {
     return this.lastFingerprint === fingerprint && this.lastVerdictNonOk && !this.canAdvise();
+  }
+
+  /**
+   * После не-ok вердикта улики не изменились — повторная проверка не нужна.
+   * Само решение — в `critic-act.ts` (правило ≤300).
+   */
+  private afterStall(deps: CriticGateDeps): CriticAction {
+    const verdict = this.lastVerdict;
+    if (!verdict) return "pass";
+    if (this.actCycles < MAX_CRITIC_ACT_CYCLES) {
+      this.actCycles++;
+      injectActDirective(deps, verdict, this.actCycles);
+      return "retry";
+    }
+    // Бюджет исчерпан: ответ уходит, но в журнале остаётся след, что вердикт
+    // остался не-ok (иначе «критик сказал critical» и «ход принят» не сходятся).
+    logExhausted(deps, verdict);
+    return "pass";
   }
 
   /** Починка положена только свежему critical в пределах repair-бюджета. */
