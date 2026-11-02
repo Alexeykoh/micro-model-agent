@@ -117,6 +117,16 @@ export function subagentLogEntry(event: SubagentRunEvent): SessionLogEntry | und
             }
           : {}),
         ...(event.error ? { summary: clip(event.error, ERROR_MAX) } : {}),
+        // Здоровье прогона (A7): по журналу видно, работал ли прогон вообще.
+        ...(event.health
+          ? {
+              toolsOk: event.health.toolsOk,
+              toolsFailed: event.health.toolsFailed,
+              filesRead: event.health.filesRead,
+              filesWritten: event.health.filesWritten,
+              blocked: event.health.blocked,
+            }
+          : {}),
       };
     default:
       // text / reasoning / note / phase: тела не журналируем — в журнал идут
