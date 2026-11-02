@@ -139,7 +139,7 @@ interface EgressGuard { /* §3.1 спеки */ }
    до W2, но интерфейс полный).
 9. Конфиг: `DataPolicyConfig` в `src/config/types.ts`; ключи `security.dataPolicy.*` в
    `registry-extra.ts`; i18n `en`/`ru` (symmetрично).
-10. `docs/agents/debt.md` — записи `DEBT(research-by-checksum)`, `DEBT(at-rest-pii)`.
+10. `docs/agents/debt.md` — записи `DEBT(research-by-checksum)`, `at-rest-pii (оплачен 2026-11-02)`.
 
 **Тесты (red-first):**
 - `tests/security/pii-rf-by.test.ts` — валид/невалид для каждого checksum.
@@ -275,7 +275,7 @@ quality` зелёный. **Не подключаем ни к провайдер�
 
 ## 6. Долг и остаточные риски (переносим из спеки §14)
 
-- `DEBT(at-rest-pii)` — PII в `session.jsonl`/memory открыто; привязать к
+- `at-rest-pii (оплачен 2026-11-02)` — PII в `session.jsonl`/memory открыто; привязать к
   `sessionEncryption`. Триггер: политика контура.
 - `DEBT(research-by-checksum)` — контрольные суммы УНП РБ и ID РБ; до этого
   пониженный `confidence`. Триггер: W1.
