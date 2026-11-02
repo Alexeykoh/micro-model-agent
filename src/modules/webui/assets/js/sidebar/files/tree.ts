@@ -42,7 +42,23 @@ export function visibleRows(): HTMLElement[] {
  */
 export function paintCursor(): void {
   const cur = sb.files.cursor;
-  visibleRows().forEach((r) => r.classList.toggle("cursor", r.dataset.path === cur));
+  for (const r of visibleRows()) {
+    const on = r.dataset.path === cur;
+    r.classList.toggle("cursor", on);
+    r.tabIndex = on ? 0 : -1;
+  }
+}
+
+/**
+ * Roving tabindex (U9): ровно одна строка дерева достижима Tab'ом — строка
+ * курсора, а если курсора нет — первая. Остальные `tabindex="-1"` и
+ * доступны стрелками (обработчик клавиш уже работает).
+ */
+export function ensureRovingTabindex(root: HTMLElement): void {
+  const rows = Array.from(root.querySelectorAll<HTMLElement>(".frow"));
+  if (rows.length === 0) return;
+  const cur = rows.find((r) => r.dataset.path === sb.files.cursor) ?? rows[0];
+  for (const r of rows) r.tabIndex = r === cur ? 0 : -1;
 }
 
 /** Renders one directory's rows (recurses into expanded subdirectories). */
@@ -93,6 +109,7 @@ function fileRow(e: FileEntry, childPath: string, depth: number): HTMLElement {
   row.tabIndex = -1;
   row.setAttribute("role", "treeitem");
   row.setAttribute("aria-label", e.name);
+  row.setAttribute("aria-level", String(depth + 1));
   if (isDir) row.setAttribute("aria-expanded", String(f.expanded.has(childPath)));
   else row.setAttribute("aria-selected", String(sel));
   // Шеврон-колонка есть только у папок: пустой спан у файла читался как
