@@ -200,7 +200,7 @@ export class MCPModule implements AgentModule {
         name: uniqueName(sanitizeToolName(d.serverName, d.toolName)),
         description: `${d.description} [MCP server: ${d.serverName}]`,
         parameters: convertInputSchema(d.inputSchema),
-        tags: ["code", "research"],
+        tags: ["mcp"],
         security: MCP_TOOL_SECURITY,
         handler: async (_ctx, args) => {
           const client = this.connections.get(d.serverName);
@@ -234,7 +234,7 @@ export class MCPModule implements AgentModule {
         name: uniqueName(sanitizeToolName(serverName, "connect")),
         description: `Connect to MCP server "${serverName}" and discover its tools`,
         parameters: { type: "object", properties: {} },
-        tags: ["code", "research"],
+        tags: ["mcp"],
         security: MCP_TOOL_SECURITY,
         handler: async (_ctx, _args) => {
           const client = await this.ensureConnected(serverName);

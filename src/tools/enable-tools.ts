@@ -14,7 +14,7 @@ export const enableToolsTool: ToolDefinition = {
   security: { caps: [] },
   icon: "🔌",
   description:
-    "Enable hidden tool categories for the current session. Only the essential tools (file/code/shell) are active by default. Call this with the tags you need and they become available from the next turn. Available tags: file, code, shell, research, browser, vision, image, memory, core. Returns the newly available tools. To run a task in a separate context instead, use subagent with tool_tags.",
+    "Enable hidden tool categories for the current session. Only the essential tools (file/code/shell) are active by default. Call this with the tags you need and they become available from the next turn. Available tags: file, code, shell, research, browser, vision, image, memory, mcp, core. Returns the newly available tools. To run a task in a separate context instead, use subagent with tool_tags.",
   alwaysOn: true,
   parameters: {
     type: "object",

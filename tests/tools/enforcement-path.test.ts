@@ -104,6 +104,58 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
+  it("blocks a required path arg that is missing or non-string", async () => {
+    const handler = vi.fn(async () => ({ success: true, output: "ok" }));
+    const def: ToolDefinition = {
+      name: "t",
+      description: "d",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
+      handler,
+    };
+    registry.register(def, "core");
+
+    const result = await makeExecutor().execute({
+      id: "1",
+      name: "t",
+      arguments: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.blocked).toBe(true);
+    expect(handler).not.toHaveBeenCalled();
+    expect(result.output).toContain("path");
+  });
+
+  it("still allows an optional path arg to be omitted", async () => {
+    const handler = vi.fn(async () => ({ success: true, output: "ok" }));
+    const def: ToolDefinition = {
+      name: "t",
+      description: "d",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+      },
+      security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
+      handler,
+    };
+    registry.register(def, "core");
+
+    const result = await makeExecutor().execute({
+      id: "1",
+      name: "t",
+      arguments: {},
+    });
+
+    expect(result.success).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+
   it("fails closed when the config has no security section (D8)", async () => {
     const handler = vi.fn(async () => ({ success: true, output: "ok" }));
     register({ caps: [{ fs: "write" }], pathArgs: ["path"] }, handler);

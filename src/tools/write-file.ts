@@ -29,7 +29,13 @@ export const writeFileTool: ToolDefinition = {
     required: ["path", "content"],
   },
   handler: async (ctx, args) => {
-    const path = String(args.path);
+    if (typeof args.path !== "string" || args.path.trim() === "") {
+      return {
+        success: false,
+        output: t("tool.path_arg_invalid", { tool: "write_file", arg: "path" }),
+      };
+    }
+    const path = args.path;
     const resolved = safeResolvePath(ctx.baseDir, path);
 
     // Allowlist записи (аудит §4.4) — единая точка для мутирующих тулов.

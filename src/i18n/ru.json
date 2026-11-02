@@ -124,6 +124,7 @@
   "tool.not_allowed": "Инструмент недоступен в этом режиме: {name}",
   "tool.tags_blocked": "Инструмент не включён текущими тегами: {name}",
   "tool.path_blocked": "Путь недоступен: {path}{reason}",
+  "tool.path_arg_invalid": "Тул {tool}: обязательный аргумент пути \"{arg}\" отсутствует или пуст",
   "tool.url_blocked": "URL недоступен: {url}{reason}",
   "tool.blocked": "Заблокировано плагином: {plugin}",
   "tool.ui.security_blocked": "Заблокировано политикой безопасности",

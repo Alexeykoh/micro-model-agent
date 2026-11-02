@@ -125,6 +125,7 @@
   "tool.not_allowed": "Tool not allowed in this mode: {name}",
   "tool.tags_blocked": "Tool not enabled by current tool tags: {name}",
   "tool.path_blocked": "Path not allowed: {path}{reason}",
+  "tool.path_arg_invalid": "Tool {tool}: required path argument \"{arg}\" is missing or empty",
   "tool.url_blocked": "URL not allowed: {url}{reason}",
   "tool.blocked": "Blocked by plugin: {plugin}",
   "tool.ui.security_blocked": "Blocked by security policy",

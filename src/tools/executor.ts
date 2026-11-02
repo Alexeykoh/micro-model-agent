@@ -168,11 +168,26 @@ export class ToolExecutor {
   private enforcePathArgs(tool: RegisteredTool, call: ToolCall): ToolResult | null {
     const pathArgs = tool.security?.pathArgs;
     if (!pathArgs || pathArgs.length === 0) return null;
+    const requiredRaw = tool.parameters.required;
+    const required = Array.isArray(requiredRaw)
+      ? requiredRaw.filter((v): v is string => typeof v === "string")
+      : [];
     for (const argName of pathArgs) {
       const raw = call.arguments[argName];
       const values = Array.isArray(raw) ? raw : [raw];
       for (const value of values) {
-        if (typeof value !== "string" || value.trim() === "") continue;
+        if (typeof value !== "string" || value.trim() === "") {
+          // Обязательный path-аргумент не должен доходить до хендлера:
+          // `String(undefined)` создавал файл с именем "undefined".
+          if (required.includes(argName)) {
+            return {
+              success: false,
+              blocked: true,
+              output: t("tool.path_arg_invalid", { tool: tool.name, arg: argName }),
+            };
+          }
+          continue;
+        }
         const blocked = checkToolPath(this.ctx, tool.security, value, call.id);
         if (blocked) return blocked;
       }
