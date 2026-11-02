@@ -31,3 +31,14 @@ export function isTaggedFileContent(value: unknown): boolean {
 export function untagFileContent(value: string): string {
   return value.slice(FILE_CONTENT_SENTINEL.length);
 }
+
+/**
+ * Текст защищённого содержимого для **производных каналов** (дайджест тула,
+ * события критика, evidence галлюцинаций): `[FILE]` вместо оригинала.
+ * Живой прогон показал утечку: `role:"tool"` маскировался, а копия в
+ * `<system-summary>[Tool: …]` уходила внешнему провайдеру открытой.
+ */
+export function visibleFileContent(value: string, cap?: number): string {
+  if (isTaggedFileContent(value)) return FILE_CONTENT_MASK;
+  return cap === undefined ? value : value.slice(0, cap);
+}

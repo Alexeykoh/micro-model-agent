@@ -1,6 +1,7 @@
 // Сбор событий тулов текущего захода для evidence-пакета критика.
 //
 // Вынесено из `critic-gate.ts` (файл был на пределе правила «≤300 строк»).
+import { visibleFileContent } from "../../modules/security/data-policy/file-content";
 
 /** Хвост вывода тула в evidence-событии (ограничен — у критика свой бюджет). */
 const MAX_EVENT_OUTPUT_CHARS = 600;
@@ -45,7 +46,10 @@ export function gatherTurnToolEvents(
     // вывод — пробрасываем оба, чтобы критик видел ЧТО тронуто и ЧТО вернулось.
     // Без аргументов пакет слеп (changedFiles/commands пусты) и критик
     // вынужден вернуть "ok" за отсутствием улик.
-    const output = typeof m.content === "string" ? m.content.slice(-MAX_EVENT_OUTPUT_CHARS) : undefined;
+    const output =
+      typeof m.content === "string"
+        ? visibleFileContent(m.content.slice(-MAX_EVENT_OUTPUT_CHARS))
+        : undefined;
     events.push({ tool: m.name, args: m.arguments, ok: m.success, output });
   }
   return events;

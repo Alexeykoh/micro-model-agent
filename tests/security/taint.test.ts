@@ -127,9 +127,13 @@ describe("T3: внешний egress маскирует tainted-записи", ()
 
   it("внешняя цель получает [FILE] вместо содержимого и аргументов", () => {
     const history = tainted().getHistoryForEgress(false);
-    const text = JSON.stringify(history);
-    expect(text).not.toContain(CANARY);
-    expect(text).toContain(FILE_CONTENT_MASK);
+    // Тегированный tool-вывод остаётся под guard'ом (он же считает класс);
+    // производный ответ уже замаскирован здесь.
+    const tool = history.find((m) => m.role === "tool") as Message;
+    expect(tool.content).toContain("⟦mma:file-content⟧");
+    const assistant = JSON.stringify(history.find((m) => m.role === "assistant"));
+    expect(assistant).not.toContain(CANARY);
+    expect(assistant).toContain(FILE_CONTENT_MASK);
     const call = history.find((m) => m.role === "assistant") as Message & {
       tool_calls: Array<{ function: { arguments: string } }>;
     };

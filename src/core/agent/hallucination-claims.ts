@@ -3,6 +3,7 @@
 // перепроверок (fail-open), чтобы съеденный бюджет одной проверки не экранировал
 // другую ложь в том же ответе.
 import { t } from "../../i18n/index";
+import { visibleFileContent } from "../../modules/security/data-policy/file-content";
 import {
   checkSuccessClaim as detectSuccessClaim,
   type ClaimContradiction,
@@ -55,7 +56,7 @@ export function lastToolEvidence(
       .map((m) => ({
         name: m.name,
         ok: m.success,
-        text: typeof m.content === "string" ? m.content : (JSON.stringify(m.content) ?? ""),
+        text: typeof m.content === "string" ? visibleFileContent(m.content) : (JSON.stringify(m.content) ?? ""),
       }))
       .filter((m) => m.text.trim().length > 0)
   );
