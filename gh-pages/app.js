@@ -434,6 +434,274 @@
   }
 
   /* ---- boot ---- */
+  /* ---- mobile navigation (burger) ---- */
+  function initBurger() {
+    var btn = document.getElementById("burgerBtn");
+    var nav = document.getElementById("siteLinks");
+    if (!btn || !nav) return;
+    function setOpen(open) {
+      document.body.classList.toggle("nav-open", open);
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    btn.addEventListener("click", function () {
+      setOpen(!document.body.classList.contains("nav-open"));
+    });
+    nav.addEventListener("click", function (e) {
+      if (e.target.closest("a")) setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") setOpen(false);
+    });
+    document.addEventListener("click", function (e) {
+      if (!document.body.classList.contains("nav-open")) return;
+      if (!e.target.closest(".nav-in")) setOpen(false);
+    });
+    addEventListener("resize", function () {
+      if (innerWidth > 1180) setOpen(false);
+    }, { passive: true });
+  }
+
+  /* ---- infinite live demo of the web chat ---- */
+  function initLiveDemo() {
+    var feed = document.getElementById("liveFeed");
+    if (!feed) return;
+    var pauseBtn = document.getElementById("livePause");
+    var speedBtn = document.getElementById("liveSpeed");
+    var resetBtn = document.getElementById("liveReset");
+    var paused = false, speed = 1, timer = null, seq = 0;
+    var T = window.lpT || function (k) { return k; };
+    var FILES = [
+      "src/core/agent.ts", "src/core/context/manager.ts", "src/tools/executor.ts",
+      "src/modules/webui/assets/app.ts", "src/modules/security/data-policy/guard.ts",
+      "src/modules/mcp/module.ts", "src/cli/repl.ts"
+    ];
+    var COMMANDS = ["bun test", "bun run quality", "bun run build:prod", "git status --short"];
+    var WEIGHTS = [
+      ["msg", 24], ["think", 18], ["read", 13], ["edit", 12], ["create", 9],
+      ["run", 7], ["plan", 3], ["ask", 6], ["sec", 5], ["img", 4], ["dlp", 3]
+    ];
+
+    function pick() {
+      var total = 0, i;
+      for (i = 0; i < WEIGHTS.length; i++) total += WEIGHTS[i][1];
+      var r = Math.random() * total;
+      for (i = 0; i < WEIGHTS.length; i++) {
+        r -= WEIGHTS[i][1];
+        if (r <= 0) return WEIGHTS[i][0];
+      }
+      return "msg";
+    }
+    function el(tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text !== undefined) n.textContent = text;
+      return n;
+    }
+    function file() { return FILES[Math.floor(Math.random() * FILES.length)]; }
+    function cmd() { return COMMANDS[Math.floor(Math.random() * COMMANDS.length)]; }
+    function atBottom() { return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 48; }
+    function add(node) {
+      var stick = atBottom();
+      seq++;
+      node.dataset.seq = String(seq);
+      feed.appendChild(node);
+      while (feed.children.length > 28) feed.removeChild(feed.firstChild);
+      if (stick) feed.scrollTop = feed.scrollHeight;
+    }
+    function toolLine(kind, glyph, text, ok) {
+      var row = el("div", "wl-tool");
+      row.appendChild(el("span", "wl-g", glyph));
+      row.appendChild(el("span", "wl-tool-name", kind));
+      row.appendChild(el("span", "wl-tool-arg", text));
+      row.appendChild(el("span", ok ? "wl-ok" : "wl-run", ok ? "✓" : "…"));
+      return row;
+    }
+    function render(kind) {
+      if (kind === "msg") {
+        return el("div", "wl-msg", T("live.m" + (1 + Math.floor(Math.random() * 4))));
+      }
+      if (kind === "think") {
+        var d = document.createElement("details");
+        d.className = "wl-think";
+        var s = document.createElement("summary");
+        s.textContent = T("live.think") + " · " + (0.4 + Math.random() * 3).toFixed(1) + "s";
+        d.appendChild(s);
+        d.appendChild(el("p", "", T("live.t" + (1 + Math.floor(Math.random() * 2)))));
+        return d;
+      }
+      if (kind === "read") return toolLine("read_file", "◇", file(), true);
+      if (kind === "edit") return toolLine("edit_file", "◇", file(), true);
+      if (kind === "create") return toolLine("write_file", "✚", file(), true);
+      if (kind === "run") return toolLine("bash", "◇", cmd(), true);
+      if (kind === "plan") {
+        var card = el("div", "wl-plan");
+        card.appendChild(el("b", "", T("live.plan")));
+        var ol = document.createElement("ol");
+        ["live.plan1", "live.plan2", "live.plan3"].forEach(function (k) { ol.appendChild(el("li", "", T(k))); });
+        card.appendChild(ol);
+        return card;
+      }
+      if (kind === "ask") {
+        var q = el("div", "wl-q");
+        q.appendChild(el("p", "wl-q-t", "? " + T("live.q")));
+        var opts = el("div", "wl-q-opts");
+        ["live.qa", "live.qb"].forEach(function (k) {
+          var b = el("button", "wl-opt", T(k));
+          b.type = "button";
+          b.addEventListener("click", function () {
+            q.replaceWith(el("div", "wl-msg wl-answered", "✓ " + T("live.qdone") + ": " + T(k)));
+          });
+          opts.appendChild(b);
+        });
+        q.appendChild(opts);
+        return q;
+      }
+      if (kind === "sec") {
+        var sec = el("div", "wl-sec");
+        sec.appendChild(el("span", "wl-g", "⊘"));
+        sec.appendChild(el("span", "wl-sec-t", "block · .env"));
+        var det = el("button", "wl-more", "?");
+        det.type = "button";
+        var body = el("div", "wl-sec-body");
+        body.hidden = true;
+        body.textContent = T("live.sec");
+        det.addEventListener("click", function () { body.hidden = !body.hidden; });
+        sec.appendChild(det);
+        var wrap = el("div", "wl-sec-wrap");
+        wrap.appendChild(sec);
+        wrap.appendChild(body);
+        return wrap;
+      }
+      if (kind === "img") {
+        var fig = el("div", "wl-img");
+        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", "0 0 160 90");
+        svg.setAttribute("aria-hidden", "true");
+        var r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        r.setAttribute("x", "2"); r.setAttribute("y", "2"); r.setAttribute("width", "156");
+        r.setAttribute("height", "86"); r.setAttribute("rx", "8");
+        r.setAttribute("fill", "none"); r.setAttribute("stroke", "currentColor");
+        var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        p.setAttribute("d", "M18 66l30-28 22 20 18-14 34 26");
+        p.setAttribute("fill", "none"); p.setAttribute("stroke", "currentColor");
+        svg.appendChild(r); svg.appendChild(p);
+        fig.appendChild(svg);
+        fig.appendChild(el("span", "wl-cap", T("live.img")));
+        return fig;
+      }
+      /* dlp */
+      var b = el("button", "wl-dlp", "DLP · " + (3 + Math.floor(Math.random() * 4)));
+      b.type = "button";
+      var pop = el("div", "wl-dlp-pop");
+      pop.hidden = true;
+      var hits = [
+        T("live.dlph1"), T("live.dlph2"), T("live.dlph3")
+      ];
+      hits.forEach(function (h) { pop.appendChild(el("div", "wl-dlp-hit", h)); });
+      b.addEventListener("click", function () { pop.hidden = !pop.hidden; });
+      var box = el("div", "wl-dlp-box");
+      box.appendChild(b);
+      box.appendChild(pop);
+      return box;
+    }
+    function tick() {
+      timer = null;
+      if (paused) return;
+      add(render(pick()));
+      timer = setTimeout(tick, (900 + Math.random() * 1300) / speed);
+    }
+    function start() { if (!timer) tick(); }
+    function stop() { if (timer) { clearTimeout(timer); timer = null; } }
+    function syncPause() {
+      if (pauseBtn) {
+        pauseBtn.textContent = paused ? T("live.resume") : T("live.pause");
+        pauseBtn.setAttribute("aria-pressed", paused ? "true" : "false");
+      }
+    }
+    if (pauseBtn) pauseBtn.addEventListener("click", function () {
+      paused = !paused;
+      syncPause();
+      if (paused) stop(); else start();
+    });
+    if (speedBtn) speedBtn.addEventListener("click", function () {
+      speed = speed === 1 ? 2 : speed === 2 ? 4 : 1;
+      speedBtn.textContent = speed + "×";
+    });
+    if (resetBtn) resetBtn.addEventListener("click", function () {
+      feed.textContent = "";
+      seq = 0;
+      paused = false; syncPause();
+      stop(); start();
+    });
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) stop(); else if (!paused) start();
+    });
+    syncPause();
+    start();
+  }
+
+  /* ---- cache & cost calculator ---- */
+  function initCostCalc() {
+    var rootEl = document.getElementById("costCalc");
+    if (!rootEl) return;
+    var pIn = document.getElementById("cPrompt"), oIn = document.getElementById("cOut"), cIn = document.getElementById("cCache");
+    if (!pIn || !oIn || !cIn) return;
+    var pv = document.getElementById("cPromptV"), ov = document.getElementById("cOutV"),
+        cv = document.getElementById("cCacheV"), costEl = document.getElementById("cCost"),
+        savedEl = document.getElementById("cSaved");
+    var IN = 0.15 / 1e6, OUT = 0.6 / 1e6, CACHE = IN * 0.1;
+    function k(n) {
+      if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
+      if (n >= 1e3) return Math.round(n / 1e3) + "K";
+      return String(n);
+    }
+    function money(v) {
+      if (v === 0) return "$0";
+      return v < 0.01 ? "$" + v.toFixed(5) : "$" + v.toFixed(4);
+    }
+    function upd() {
+      var p = +pIn.value, o = +oIn.value, cache = +cIn.value / 100;
+      var cost = p * (1 - cache) * IN + p * cache * CACHE + o * OUT;
+      var base = p * IN + o * OUT;
+      pv.textContent = k(p); ov.textContent = k(o); cv.textContent = Math.round(cache * 100) + "%";
+      costEl.textContent = money(cost);
+      savedEl.textContent = base > 0 ? Math.round((1 - cost / base) * 100) + "%" : "0%";
+    }
+    [pIn, oIn, cIn].forEach(function (el) { el.addEventListener("input", upd); });
+    upd();
+  }
+
+  /* ---- local vs cloud monthly cost ---- */
+  function initCompareCalc() {
+    var box = document.getElementById("cmpCalc");
+    if (!box) return;
+    var calls = document.getElementById("mCalls"), tokens = document.getElementById("mTokens");
+    if (!calls || !tokens) return;
+    var callsV = document.getElementById("mCallsV"), tokensV = document.getElementById("mTokensV");
+    var cloudEl = document.getElementById("mCloud"), localEl = document.getElementById("mLocal");
+    var IN = 0.15 / 1e6, OUT = 0.6 / 1e6, OUT_SHARE = 0.08;
+    function k(n) {
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+      if (n >= 1e3) return Math.round(n / 1e3) + "K";
+      return String(n);
+    }
+    function money(v) {
+      if (v < 1) return "$" + v.toFixed(2);
+      return "$" + Math.round(v).toLocaleString("en-US");
+    }
+    function upd() {
+      var c = +calls.value, t = +tokens.value;
+      var perCall = t * (1 - OUT_SHARE) * IN + t * OUT_SHARE * OUT;
+      var month = perCall * c * 30;
+      callsV.textContent = String(c);
+      tokensV.textContent = k(t);
+      cloudEl.textContent = money(month);
+      localEl.textContent = "$0";
+    }
+    [calls, tokens].forEach(function (el) { el.addEventListener("input", upd); });
+    upd();
+  }
+
   function boot() {
     setConsole(currentConsole());
     setTheme(currentTheme());
@@ -457,6 +725,10 @@
     initToTop();
     initCopy();
     initInstall();
+    initBurger();
+    initLiveDemo();
+    initCostCalc();
+    initCompareCalc();
 
     var replay = document.getElementById("termReplay");
     if (replay) replay.addEventListener("click", function () { typeTerminal(!reduce); pulseFace("type", 1800); });

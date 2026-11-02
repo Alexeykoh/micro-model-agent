@@ -35,13 +35,15 @@
 <body>
 
 <header class="top">
-  <button class="iconbtn menu-btn" id="menuBtn" aria-label="Разделы документации" aria-expanded="false">☰</button>
+  <button class="iconbtn menu-btn" id="menuBtn" aria-label="Разделы документации" aria-controls="side" aria-expanded="false">☰</button>
   <a class="brand" href="index.html"><span class="mdl sm c-recon track" id="docsFace" aria-hidden="true"></span><span>MMA <span class="sub">docs</span></span></a>
   <div class="spacer"></div>
-  <div class="search">
+  <div class="search desktop-search">
     <input id="docSearch" type="search" autocomplete="off" spellcheck="false"
-           placeholder="Поиск по документации…" aria-label="Поиск по документации">
+           placeholder="Поиск по документации…" aria-label="Поиск по документации" role="combobox"
+           aria-expanded="false" aria-controls="docResults">
     <kbd>/</kbd>
+    <div class="search-results" id="docResults" role="listbox" aria-label="Результаты поиска" hidden></div>
   </div>
   <button class="iconbtn" id="consoleBtn" type="button" aria-label="Тема console/flat" aria-pressed="true">console</button>
   <button class="iconbtn" id="themeBtn" aria-label="Сменить тему" title="Светлая / тёмная тема">◐</button>
@@ -50,6 +52,12 @@
 
 <div class="layout">
   <aside class="side" id="side">
+    <div class="side-search">
+      <input id="sideSearch" type="search" autocomplete="off" spellcheck="false"
+             placeholder="Поиск по документации…" aria-label="Поиск по документации" role="combobox"
+             aria-expanded="false" aria-controls="sideResults">
+      <div class="search-results" id="sideResults" role="listbox" aria-label="Результаты поиска" hidden></div>
+    </div>
     <h4>Начало</h4>
     <a href="#overview">Обзор</a>
     <a href="#install">Установка</a>
@@ -101,6 +109,7 @@
     <a href="#faq">FAQ</a>
     <p class="meta">MMA <span id="docsVer">v0.11.2</span> · beta<br>MIT License</p>
   </aside>
+  <div class="scrim" id="scrim" hidden></div>
 
   <main>
   <article>
@@ -708,19 +717,33 @@ mma config show         # действующий конфиг (секреты с
   paintTheme();
   paintConsole();
 
+  /* ---- mobile nav drawer ---- */
   var menuBtn = document.getElementById("menuBtn");
+  var side = document.getElementById("side");
+  var scrim = document.getElementById("scrim");
+  function drawerOpen() { return document.body.classList.contains("side-open"); }
+  function setDrawer(open, restoreFocus) {
+    document.body.classList.toggle("side-open", open);
+    if (scrim) scrim.hidden = !open;
+    if (menuBtn) menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (side) side.setAttribute("aria-hidden", open || window.innerWidth > 980 ? "false" : "true");
+    if (!open && restoreFocus && menuBtn) menuBtn.focus();
+  }
   menuBtn && menuBtn.addEventListener("click", function () {
-    var open = document.body.classList.toggle("side-open");
-    menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    setDrawer(!drawerOpen(), false);
+  });
+  scrim && scrim.addEventListener("click", function () { setDrawer(false, true); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && drawerOpen()) setDrawer(false, true);
   });
   document.querySelectorAll(".side a").forEach(function (a) {
     a.addEventListener("click", function () {
-      if (window.innerWidth <= 980) {
-        document.body.classList.remove("side-open");
-        menuBtn && menuBtn.setAttribute("aria-expanded", "false");
-      }
+      if (window.innerWidth <= 980) setDrawer(false, false);
     });
   });
+  addEventListener("resize", function () {
+    if (window.innerWidth > 980 && drawerOpen()) setDrawer(false, false);
+  }, { passive: true });
 
   // Copy buttons for code blocks.
   document.querySelectorAll("pre").forEach(function (pre) {
@@ -748,34 +771,160 @@ mma config show         # действующий конфиг (секреты с
     pre.appendChild(btn);
   });
 
-  // Search filters the section list; Enter jumps to the first match.
-  var search = document.getElementById("docSearch");
+  /* ---- full-text search over headings and sections ---- */
   var links = Array.prototype.slice.call(document.querySelectorAll(".side a[href^='#']"));
-  function filter() {
-    var q = (search.value || "").trim().toLowerCase();
-    links.forEach(function (a) {
-      a.classList.toggle("hidden", !!q && a.textContent.toLowerCase().indexOf(q) === -1);
-    });
-    document.querySelectorAll(".side h4").forEach(function (h) {
-      var any = false, el = h.nextElementSibling;
-      while (el && el.tagName !== "H4") {
-        if (el.tagName === "A" && !el.classList.contains("hidden")) any = true;
-        el = el.nextElementSibling;
-      }
-      h.classList.toggle("hidden", !!q && !any);
+  var headings = Array.prototype.slice.call(document.querySelectorAll("article h2[id]"));
+  var index = headings.map(function (h) {
+    var parts = [h.textContent];
+    var node = h.nextElementSibling;
+    while (node && node.tagName !== "H2") {
+      if (/^(H3|P|LI|PRE|TD|TH|DIV)$/.test(node.tagName)) parts.push(node.textContent);
+      node = node.nextElementSibling;
+    }
+    var id = h.id;
+    var link = byIdHref(id);
+    return {
+      id: id,
+      title: h.textContent.trim(),
+      label: link ? link.textContent.trim() : h.textContent.trim(),
+      text: parts.join(" ").replace(/\s+/g, " ").toLowerCase()
+    };
+  });
+  function byIdHref(id) {
+    for (var i = 0; i < links.length; i++) {
+      if (links[i].getAttribute("href") === "#" + id) return links[i];
+    }
+    return null;
+  }
+  function esc(s) {
+    return s.replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
     });
   }
-  search && search.addEventListener("input", filter);
-  search && search.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") {
-      var first = links.find(function (a) { return !a.classList.contains("hidden"); });
-      if (first) { location.hash = first.getAttribute("href"); first.click(); }
+  function snippet(text, terms) {
+    var flat = text.replace(/\s+/g, " ");
+    var at = -1;
+    terms.some(function (t) {
+      at = flat.toLowerCase().indexOf(t);
+      return at !== -1;
+    });
+    if (at < 0) return esc(flat.slice(0, 110)) + (flat.length > 110 ? "…" : "");
+    var start = Math.max(0, at - 42);
+    var cut = flat.slice(start, start + 130);
+    return (start > 0 ? "…" : "") + esc(cut) + (start + 130 < flat.length ? "…" : "");
+  }
+  function runQuery(q) {
+    var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+    return index.map(function (item) {
+      var title = item.title.toLowerCase();
+      var score = 0;
+      terms.forEach(function (t) {
+        if (title.indexOf(t) !== -1) score += 12;
+        else if (item.text.indexOf(t) !== -1) score += 3;
+        else score = -1e9;
+      });
+      return { item: item, score: score };
+    }).filter(function (r) { return r.score > 0; })
+      .sort(function (a, b) { return b.score - a.score; })
+      .slice(0, 8);
+  }
+  function mountSearch(input, results) {
+    if (!input || !results) return null;
+    var active = -1;
+    function close() {
+      results.hidden = true;
+      results.textContent = "";
+      active = -1;
+      input.setAttribute("aria-expanded", "false");
     }
-    if (e.key === "Escape") { search.value = ""; filter(); search.blur(); }
-  });
+    function go(id) {
+      var target = document.getElementById(id);
+      close();
+      if (window.innerWidth <= 980) setDrawer(false, false);
+      if (target) {
+        if (history.replaceState) history.replaceState(null, "", "#" + id);
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        target.setAttribute("tabindex", "-1");
+        target.focus({ preventScroll: true });
+      }
+    }
+    function paint(rows, terms) {
+      results.textContent = "";
+      if (!rows.length) {
+        var empty = document.createElement("div");
+        empty.className = "search-empty";
+        empty.textContent = "Ничего не найдено";
+        results.appendChild(empty);
+      }
+      rows.forEach(function (row, i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "search-item";
+        b.setAttribute("role", "option");
+        b.dataset.id = row.item.id;
+        b.innerHTML = '<span class="si-t">' + esc(row.item.label) + '</span>' +
+          '<span class="si-s">' + snippet(row.item.text, terms) + "</span>";
+        b.addEventListener("click", function () { go(row.item.id); });
+        b.addEventListener("pointermove", function () { setActive(i); });
+        results.appendChild(b);
+      });
+      results.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+      active = -1;
+    }
+    function setActive(i) {
+      var items = results.querySelectorAll(".search-item");
+      if (!items.length) return;
+      active = (i + items.length) % items.length;
+      items.forEach(function (n, k) { n.classList.toggle("on", k === active); });
+      items[active].scrollIntoView({ block: "nearest" });
+    }
+    function onInput() {
+      var q = input.value.trim();
+      if (!q) { close(); return; }
+      var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+      var rows = runQuery(q);
+      paint(rows, terms);
+    }
+    input.addEventListener("input", onInput);
+    input.addEventListener("focus", function () { if (input.value.trim()) onInput(); });
+    input.addEventListener("keydown", function (e) {
+      var items = results.querySelectorAll(".search-item");
+      if (e.key === "ArrowDown") { e.preventDefault(); if (items.length) setActive(active + 1); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); if (items.length) setActive(active - 1); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        var pick = active >= 0 && items[active] ? items[active] : items[0];
+        if (pick) go(pick.dataset.id);
+      } else if (e.key === "Escape") {
+        e.stopPropagation();
+        if (!results.hidden) { close(); }
+        else { input.value = ""; input.blur(); }
+      }
+    });
+    document.addEventListener("click", function (e) {
+      if (!results.hidden && !results.contains(e.target) && e.target !== input) close();
+    });
+    return { close: close, input: input };
+  }
+  mountSearch(document.getElementById("docSearch"), document.getElementById("docResults"));
+  mountSearch(document.getElementById("sideSearch"), document.getElementById("sideResults"));
+  var search = document.getElementById("docSearch");
+  var sideSearchInput = document.getElementById("sideSearch");
   document.addEventListener("keydown", function (e) {
-    if (e.key === "/" && document.activeElement !== search && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) {
-      e.preventDefault(); search && search.focus();
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (e.key === "/" && !/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) {
+      e.preventDefault();
+      if (window.innerWidth <= 980) {
+        setDrawer(true, false);
+        if (sideSearchInput) sideSearchInput.focus();
+      } else if (search) search.focus();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      var t2 = window.innerWidth <= 980 ? sideSearchInput : search;
+      if (t2) { if (window.innerWidth <= 980) setDrawer(true, false); t2.focus(); }
     }
   });
 

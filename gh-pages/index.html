@@ -67,7 +67,10 @@
         <span class="mdl sm c-recon track" id="navFace" aria-hidden="true"></span>
         <span class="brand-txt">MMA</span>
       </a>
-      <nav class="links">
+      <button class="burger" id="burgerBtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="siteLinks">
+        <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+      </button>
+      <nav class="links" id="siteLinks">
         <a href="#why" data-i18n="nav.why">Why</a>
         <a href="#terminal" data-i18n="nav.terminal">Interfaces</a>
         <a href="#context" data-i18n="nav.context">Context</a>
@@ -194,6 +197,18 @@ chmod +x ~/mma/runtime/bun
           <pre class="term-body" id="termBody"
                data-lines="term.l1,term.l2,term.l3,term.l4,term.l5,term.l6,term.l7,term.l8,term.l9"><span class="ln cmd">$ mma "fix the failing tests"</span><span class="ln meta">qwen3.5-9b · lmstudio · 32K · plugins 2 · mcp 1</span><span class="ln plan">◇ plan · 3 steps</span><span class="ln cmd">◇ reading file · test/core.spec.ts</span><span class="ln cmd">◇ reading file · src/core.ts</span><span class="ln cmd">◇ editing file · src/core.ts  ✓</span><span class="ln cmd">◇ running command · bun test  ✓ 14 passed</span><span class="ln think">✦ thinking · 2.1s</span><span class="ln ok">✓ done · 3/3 steps · 6.2K tok · 18%</span></pre>
         </div>
+        <div class="weblive" id="liveDemo">
+          <div class="wl-bar">
+            <span class="wl-cap" data-i18n="live.caption">mma web · live demo</span>
+            <span class="wl-ctl">
+              <button class="wl-btn" id="livePause" type="button" data-i18n="live.pause">pause</button>
+              <button class="wl-btn" id="liveSpeed" type="button" aria-label="Speed">1×</button>
+              <button class="wl-btn" id="liveReset" type="button" aria-label="Reset">↺</button>
+            </span>
+          </div>
+          <div class="wl-feed" id="liveFeed" aria-live="polite"></div>
+          <p class="wl-hint" data-i18n="live.hint">Blocks arrive on their own — a plan is rare, messages and reasoning are common. Click a question, a thinking block or the DLP badge.</p>
+        </div>
         <div class="web-note">
           <span class="mdl sm c-exec track" id="webFace" aria-hidden="true"></span>
           <p><b data-i18n="web.caption">mma web · parallel sessions</b> <span data-i18n="web.note">The browser interface is a second host over the same Agent — per-session runners, so several tasks run at once, and six panes: session, files, lsp, trace, plugins and map.</span></p>
@@ -268,6 +283,33 @@ chmod +x ~/mma/runtime/bun
               </div>
             </div>
             <p class="note" data-i18n="ctx.note">Compaction fires at 75% of the history budget, and the last six exchanges always stay intact. A quality score with a floor prevents the compaction death-spiral.</p>
+            <div class="calc" id="costCalc">
+              <div class="calc-h" data-i18n="calc.title">Cache &amp; cost</div>
+              <label class="calc-row"><span data-i18n="calc.prompt">prompt tokens</span>
+                <input id="cPrompt" type="range" min="1000" max="200000" step="1000" value="20000">
+                <b id="cPromptV">20K</b></label>
+              <label class="calc-row"><span data-i18n="calc.output">output tokens</span>
+                <input id="cOut" type="range" min="100" max="8000" step="100" value="1000">
+                <b id="cOutV">1K</b></label>
+              <label class="calc-row"><span data-i18n="calc.cache">cache hit</span>
+                <input id="cCache" type="range" min="0" max="100" step="5" value="0">
+                <b id="cCacheV">0%</b></label>
+              <div class="calc-out"><span data-i18n="calc.cost">cost / call</span> <b id="cCost">$0.00</b>
+                <span data-i18n="calc.saved">saved</span> <b id="cSaved">0%</b></div>
+              <p class="calc-note" data-i18n="calc.note">Example prices: $0.15 / 1M input, $0.60 / 1M output, cache read at 10% of input.</p>
+            </div>
+            <div class="calc" id="cmpCalc">
+              <div class="calc-h" data-i18n="cmp.title">Local vs cloud / month</div>
+              <label class="calc-row"><span data-i18n="cmp.calls">calls per day</span>
+                <input id="mCalls" type="range" min="1" max="400" step="1" value="40">
+                <b id="mCallsV">40</b></label>
+              <label class="calc-row"><span data-i18n="cmp.tokens">tokens per call</span>
+                <input id="mTokens" type="range" min="2000" max="120000" step="2000" value="24000">
+                <b id="mTokensV">24K</b></label>
+              <div class="calc-out"><span data-i18n="cmp.cloud">cloud</span> <b id="mCloud">$0</b>
+                <span data-i18n="cmp.local">local</span> <b id="mLocal">$0</b></div>
+              <p class="calc-note" data-i18n="cmp.note">Local runs on your hardware: no per-token bill, only electricity. Cloud uses the same example prices as above.</p>
+            </div>
           </div>
           <div class="col">
             <h3 class="sub" data-i18n="ctx.anchor.title">Anchors, re-injected after every compaction</h3>
