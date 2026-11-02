@@ -89,6 +89,23 @@ describe("T2: производный ответ наследует taint тол�
   });
 });
 
+describe("T-субагент: taint переносится через результат", () => {
+  it("markNextToolTainted помечает следующее tool-сообщение", () => {
+    const cm = manager();
+    cm.markNextToolTainted();
+    cm.addMessage(toolMsg("subagent answer without sentinel"));
+    expect(cm.taintedIndexes()).toEqual([true]);
+  });
+
+  it("флаг одноразовый: второе tool-сообщение чистое", () => {
+    const cm = manager();
+    cm.markNextToolTainted();
+    cm.addMessage(toolMsg("first"));
+    cm.addMessage(toolMsg("second"));
+    expect(cm.taintedIndexes()).toEqual([true, false]);
+  });
+});
+
 describe("T3: внешний egress маскирует tainted-записи", () => {
   function tainted(): ContextManager {
     const cm = manager();

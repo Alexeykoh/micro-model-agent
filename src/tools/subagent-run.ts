@@ -279,7 +279,7 @@ export async function runSubagent(
         return { success: false, output };
       }
 
-      return finalizeSubagentSuccess(result, args, ctx, observer);
+      const finished = finalizeSubagentSuccess(result, args, ctx, observer); return subContextManager.hasTaint?.() ? { ...finished, taint: true } : finished;
     } catch (err) {
       const error = watchdog.message() ?? (err instanceof Error ? err.message : String(err));
       observer.finish("failed", 0, undefined, error);

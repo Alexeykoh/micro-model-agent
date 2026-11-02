@@ -986,6 +986,8 @@ export class ContextManager {
 
   /** Восстановить taint из загруженной истории (T4); число — для `taint_degraded`. */
   rehydrateTaint(): number { return this.book.rehydrate(this.messages); }
+  hasTaint(): boolean { return this.book.taintedIndexes(this.messages).some(Boolean); }
+  markNextToolTainted(): void { this.book.markNextToolTainted(); }
 
   /** Ставит монотонный seq в реестр и возвращает сообщение. */
   private stampSeq<T extends Message>(msg: T): T {

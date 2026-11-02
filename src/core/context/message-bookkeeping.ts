@@ -38,6 +38,12 @@ export class MessageBookkeeping {
   private taintedSeqs = new Set<number>();
   private turnHadTaint = false;
   private trusted = false;
+  private pendingToolTaint = false;
+
+  /** Следующая tool-запись помечается tainted (ответ субагента). */
+  markNextToolTainted(): void {
+    this.pendingToolTaint = true;
+  }
 
   /** Монотонный seq; `-1` — объект не из этой истории. */
   seqOf(msg: object): number {
@@ -73,6 +79,12 @@ export class MessageBookkeeping {
 
   /** Пометить запись по происхождению (T1 — тул с тегом, T2 — производный ответ). */
   note(msg: TaintableMessage): void {
+    if (msg.role === "tool" && this.pendingToolTaint) {
+      this.pendingToolTaint = false;
+      this.taintedSeqs.add(this.seqOf(msg as object));
+      this.turnHadTaint = true;
+      return;
+    }
     if (msg.role === "tool" && isTaggedFileContent(getMessageText(msg.content as string | ContentPart[]))) {
       this.taintedSeqs.add(this.seqOf(msg as object));
       this.turnHadTaint = true;

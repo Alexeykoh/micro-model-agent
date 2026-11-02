@@ -9,6 +9,7 @@ import { Logger } from "../../logger/app-logger";
 import { MCP_DISCOVERY_TIMEOUT_MS as DISCOVERY_TIMEOUT_MS } from "../../config/timeouts";
 import {
   MCP_TOOL_SECURITY,
+  mcpToolSecurity,
   sanitizeToolName,
   convertInputSchema,
   buildMcpPromptBlock,
@@ -201,7 +202,7 @@ export class MCPModule implements AgentModule {
         description: `${d.description} [MCP server: ${d.serverName}]`,
         parameters: convertInputSchema(d.inputSchema),
         tags: ["mcp"],
-        security: MCP_TOOL_SECURITY,
+        security: mcpToolSecurity(d.inputSchema),
         handler: async (_ctx, args) => {
           const client = this.connections.get(d.serverName);
           if (!client?.isConnected()) {
