@@ -111,7 +111,11 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
       "teardown пробы (close) в finally: результат проверки уже сформирован, ошибка уборки не actionable",
   },
   "src/modules/indexer/module.ts": {
-    count: 2,
+    count: 1,
+    reason: "фоновая перестройка индекса, ошибка видна из других сигналов",
+  },
+  "src/modules/indexer/watch.ts": {
+    count: 1,
     reason: "фоновая перестройка индекса, ошибка видна из других сигналов",
   },
   "src/modules/critic/client.ts": {
