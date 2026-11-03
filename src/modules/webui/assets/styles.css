@@ -450,7 +450,12 @@ body.light .codeblock { border: 1px solid var(--border); }
 .hljs-strong { font-weight: 700; }
 
 /* per-message copy actions */
-.msg-actions { display: flex; gap: 12px; margin: 3px 0 6px; }
+.msg-actions { display: flex; gap: 12px; margin: 3px 0 6px; opacity: 0; transition: opacity .12s ease; }
+/* U17: copy links under every answer were permanent noise (two text rows per
+   message). Reveal them on hover/focus, like `.copy-btn`; touch keeps them
+   visible because there is no hover. */
+.feed:hover .msg-actions, .msg-actions:hover, .msg-actions:focus-within { opacity: 1; }
+@media (pointer: coarse) { .msg-actions { opacity: 1; } }
 .act-btn { font: inherit; font-size: 11.5px; color: var(--dim-b); background: none; border: 0; padding: 0; cursor: pointer; }
 .act-btn:hover { color: var(--fg); }
 
