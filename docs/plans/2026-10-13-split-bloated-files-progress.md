@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **62** (разрезано 59 + уменьшено 3) |
-| Осталось | **22** |
+| Снято из allowlist | **63** (разрезано 60 + уменьшено 3) |
+| Осталось | **21** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 22 |
+| — из них крупные (≥ 561 стр.) | 21 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -26,7 +26,7 @@
 Флагманы `agent.ts` (561) и `execution/module.ts` (688) уже частично разрезаны ранее
 (фазы `core/agent/*`, модули `execution/*`); остаток — оболочка/публичный API.
 
-## Осталось «не крупные» (22) — режем сейчас
+## Осталось «не крупные» (21) — режем сейчас
 
 В порядке возрастания размера:
 
@@ -50,11 +50,10 @@
 | `src/modules/webui/assets/js/settings/providers.ts` | 488 | UI провайдеров |
 | `src/modules/security/security-policies.ts` | 492 | таблицы политик |
 | `src/modules/indexer/module.ts` | 497 | индексатор |
-| `src/tools/executor.ts` | 515 | enforcement/hook-обвязка |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 | `src/modules/plugins/manager.ts` | 541 | реестр плагинов |
 
-## Осталось крупные (22) — отдельными волнами
+## Осталось крупные (21) — отдельными волнами
 
 `src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156 ·
 `src/core/context/manager.ts` 1101 · `src/llm/openai-compat.ts` 951 ·
@@ -69,7 +68,7 @@
 `src/config/types.ts` 574 ·
 `src/modules/webui/assets/app.ts` 569 · `src/core/agent.ts` 561.
 
-## Уже разрезано (37, запись снята из allowlist)
+## Уже разрезано (38, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -114,6 +113,7 @@
 | `cli/main.ts` | `cli/main-oneshot.ts`, `cli/main-web.ts`, `cli/auto-update.ts`, `cli/log-visibility.ts` |
 | `modules/webui/assets/js/sidebar/trace.ts` | `.../sidebar/trace-rows.ts`, `trace-buffer.ts`, `trace-backfill.ts` |
 | `modules/certification/scenarios.ts` | `modules/certification/scenarios-*.ts` (5 групп + общий тип) |
+| `tools/executor.ts` | `tools/executor-security.ts`, `executor-hooks.ts`, `executor-call.ts`, `executor-result.ts`, `executor-memo.ts` |
 
 ## Как проверить
 

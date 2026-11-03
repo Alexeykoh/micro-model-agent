@@ -1,23 +1,19 @@
 /** Исполнитель тулов: allowlist, плагины, таймауты, мемо read-only. */
-import type { ToolContext, ToolCall, ToolResult, PluginManager, PluginHook } from "./types";
-import type { ToolRegistry, RegisteredTool } from "./registry";
-import { killByCallId } from "../modules/processes/runner";
-import { checkToolPath } from "./path-enforcement";
-import { tagBlockedFileContent, tagShellFileContent } from "./file-content-tag";
-import { isUrlAllowed } from "../modules/security/network-validator";
+import type { ToolContext, ToolCall, ToolResult, PluginManager } from "./types";
+import type { ToolRegistry } from "./registry";
 import { filterToolsByTags } from "./filter-tools";
-import { admitFromContext } from "./admission";
-import { stableArgsKey } from "./args-key";
 import { AsyncLock } from "./async-lock";
-import { getSessionSecurityConfig } from "../modules/security/session-isolation";
-import { DEFAULT_SECURITY_CONFIG } from "../config/security";
 import { t } from "../i18n/index";
+import { ToolMemo } from "./executor-memo";
 import {
-  TOOL_EXECUTION_TIMEOUT_MS,
-  TOOL_MEMO_TTL_MS as MEMO_TTL_MS,
-} from "../config/timeouts";
-
-const MEMO_MAX_ENTRIES = 100;
+  allowedToolNames,
+  enforcePathArgs,
+  enforceUrlArgs,
+  createPathGuard,
+} from "./executor-security";
+import { runBeforeToolPlugins, runAfterToolPlugins } from "./executor-hooks";
+import { runToolWithTimeout } from "./executor-call";
+import { finalizeToolResult, logToolResult } from "./executor-result";
 
 /** Исполнитель: реестр, контекст, плагины, сессионное мемо. */
 export class ToolExecutor {
@@ -26,12 +22,8 @@ export class ToolExecutor {
   private pluginManager: PluginManager;
   /** Сериализатор плагин-хуков, общий для родителя и его форков. */
   private hookLock: AsyncLock;
-  /**
-   * Сессионное мемо детерминированных read-only результатов
-   * (`ToolDefinition.cacheable` + ручные записи `manualMemo`-тулов вроде bash).
-   * Ключ: `sessionId::name::stableArgs`.
-   */
-  private memo = new Map<string, { result: ToolResult; at: number }>();
+  /** Сессионное мемо read-only результатов; у форков общее хранилище. */
+  private memo: ToolMemo;
 
   constructor(
     registry: ToolRegistry,
@@ -50,7 +42,7 @@ export class ToolExecutor {
     this.registry = registry;
     this.ctx = ctx;
     this.pluginManager = pluginManager;
-    this.memo = memo;
+    this.memo = new ToolMemo(() => this.ctx.sessionId, memo);
     this.hookLock = hookLock;
   }
 
@@ -74,7 +66,7 @@ export class ToolExecutor {
       this.registry,
       clone,
       pluginManager,
-      this.memo,
+      this.memo.entries,
       this.hookLock,
     );
     // subagent читает ctx.toolExecutor и передаёт его дочернему агенту: он
@@ -116,119 +108,27 @@ export class ToolExecutor {
     return this.registry.has(name);
   }
 
-  private memoKey(name: string, args: Record<string, unknown>): string {
-    return `${this.ctx.sessionId ?? ""}::${name}::${JSON.stringify(stableArgsKey(args))}`;
-  }
-
   /**
    * Чтение мемо для `manualMemo`-тулов (bash). Возвращает откреплённую копию —
    * `toolCallId` вызывающий ставит сам.
    */
   memoGet(name: string, args: Record<string, unknown>): ToolResult | undefined {
-    const hit = this.memo.get(this.memoKey(name, args));
-    if (!hit) return undefined;
-    if (Date.now() - hit.at > MEMO_TTL_MS) {
-      this.memo.delete(this.memoKey(name, args));
-      return undefined;
-    }
-    return { ...hit.result };
+    return this.memo.get(name, args);
   }
 
   /** Запись в мемо для `manualMemo`-тулов. Хранит откреплённую копию. */
   memoSet(name: string, args: Record<string, unknown>, result: ToolResult): void {
-    const key = this.memoKey(name, args);
-    if (!this.memo.has(key) && this.memo.size >= MEMO_MAX_ENTRIES) {
-      const oldest = this.memo.keys().next();
-      if (!oldest.done) this.memo.delete(oldest.value);
-    }
-    this.memo.set(key, { result: { ...result }, at: Date.now() });
+    this.memo.set(name, args, result);
   }
 
   /** Сброс мемо — после всего, что могло мутировать состояние. */
   memoInvalidate(): void {
-    this.memo.clear();
-  }
-
-  /**
-   * Имена разрешённых тулов множеством, `null` — без ограничений.
-   * `undefined` — без ограничений; `[]` — запрещено всё.
-   */
-  private allowedNames(): Set<string> | null {
-    const allow = this.ctx.toolAllowlist;
-    return allow ? new Set(allow) : null;
-  }
-
-  /**
-   * Политика путей по объявленным `pathArgs` (INV-10): scope (чтение/запись) и
-   * protected-пути (только для записи, always-on). Fail-closed: блокировка
-   * возвращает `blocked: true` до вызова хендлера.
-   * @returns заблокированный `ToolResult` или `null`, если можно исполнять.
-   */
-  private enforcePathArgs(tool: RegisteredTool, call: ToolCall): ToolResult | null {
-    const pathArgs = tool.security?.pathArgs;
-    if (!pathArgs || pathArgs.length === 0) return null;
-    const requiredRaw = tool.parameters.required;
-    const required = Array.isArray(requiredRaw)
-      ? requiredRaw.filter((v): v is string => typeof v === "string")
-      : [];
-    for (const argName of pathArgs) {
-      const raw = call.arguments[argName];
-      const values = Array.isArray(raw) ? raw : [raw];
-      for (const value of values) {
-        if (typeof value !== "string" || value.trim() === "") {
-          // Обязательный path-аргумент не должен доходить до хендлера:
-          // `String(undefined)` создавал файл с именем "undefined".
-          if (required.includes(argName)) {
-            return {
-              success: false,
-              blocked: true,
-              output: t("tool.path_arg_invalid", { tool: tool.name, arg: argName }),
-            };
-          }
-          continue;
-        }
-        const blocked = checkToolPath(this.ctx, tool.security, value, call.id);
-        if (blocked) return blocked;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * SSRF-политика по объявленным `urlArgs` (INV-10): `isUrlAllowed` с учётом
-   * session-override. Fail-closed; пустой/нестроковый URL пропускается (тул сам
-   * решает, обязателен ли он).
-   * @returns заблокированный `ToolResult` или `null`.
-   */
-  private enforceUrlArgs(tool: RegisteredTool, call: ToolCall): ToolResult | null {
-    const urlArgs = tool.security?.urlArgs;
-    if (!urlArgs || urlArgs.length === 0) return null;
-    const config = (this.ctx.config ?? {}) as import("../config/types").AppConfig;
-    const netCfg = this.ctx.sessionContext
-      ? getSessionSecurityConfig(config, this.ctx.sessionContext).network
-      : config.security?.network || DEFAULT_SECURITY_CONFIG.network;
-    for (const argName of urlArgs) {
-      const raw = call.arguments[argName];
-      if (typeof raw !== "string" || raw.trim() === "") continue;
-      const check = isUrlAllowed(raw, netCfg);
-      if (!check.allowed) {
-        return {
-          success: false,
-          blocked: true,
-          output: t("tool.url_blocked", {
-            url: raw,
-            reason: check.reason ? ` — ${check.reason}` : "",
-          }),
-          toolCallId: call.id,
-        };
-      }
-    }
-    return null;
+    this.memo.invalidate();
   }
 
   /** Выполнить tool call: allowlist → плагины → хендлер → post-хуки. */
   async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
-    const allow = this.allowedNames();
+    const allow = allowedToolNames(this.ctx);
     if (allow && !allow.has(call.name)) {
       return {
         success: false,
@@ -261,20 +161,13 @@ export class ToolExecutor {
     // Enforcement политик тула — ОДНА точка (INV-9/10): scope/protected по
     // объявленным `pathArgs`, SSRF по `urlArgs` — ДО хендлера. Хендлер политику
     // не повторяет.
-    const pathBlock = this.enforcePathArgs(tool, call);
+    const pathBlock = enforcePathArgs(this.ctx, tool, call);
     if (pathBlock) return pathBlock;
-    const urlBlock = this.enforceUrlArgs(tool, call);
+    const urlBlock = enforceUrlArgs(this.ctx, tool, call);
     if (urlBlock) return urlBlock;
 
     // TOCTOU-хук: мутирующий тул повторяет проверку прямо перед операцией.
-    // Для тулов без путей хук снят, чтобы контекст не нёс чужую политику.
-    this.ctx.pathGuard =
-      tool.security?.pathArgs && tool.security.pathArgs.length > 0
-        ? {
-            recheck: (path) =>
-              checkToolPath(this.ctx, tool.security, path, call.id) ?? undefined,
-          }
-        : undefined;
+    this.ctx.pathGuard = createPathGuard(this.ctx, tool, call);
 
     // Плагин-хуки сериализованы общим hookLock: параллельные форки-сиблинги
     // не гоняют общее состояние плагинов (stuck-detector, lint, lsp) конкурентно.
@@ -283,7 +176,7 @@ export class ToolExecutor {
     const plugins = this.pluginManager.getAllPlugins();
     const beforePlugins = plugins.some((p) => p.onBeforeTool);
     const blocked = beforePlugins
-      ? await this.hookLock.run(() => this.runBeforeToolPlugins(call, plugins))
+      ? await this.hookLock.run(() => runBeforeToolPlugins(this.ctx, call, plugins))
       : null;
     if (blocked) return blocked;
 
@@ -299,70 +192,7 @@ export class ToolExecutor {
         // Интерактивные тулы ждут ввода — без таймаута.
         result = memoHit ?? (await tool.handler(this.ctx, call.arguments));
       } else {
-        const timeoutMs =
-          typeof tool.timeoutMs === "function"
-            ? tool.timeoutMs(this.ctx)
-            : (tool.timeoutMs ?? TOOL_EXECUTION_TIMEOUT_MS);
-        const failFast = (message: string) => {
-          // Убить долгоживущий дочерний процесс этого вызова.
-          killByCallId(call.id, this.ctx.sessionId);
-          // Тул-специфичный cleanup (напр. восстановление скоупа subagent) —
-          // до reject, чтобы общее состояние восстановилось и при abandonment.
-          const cleanup = this.ctx.cleanup;
-          if (cleanup) {
-            cleanup();
-            // Сбрасывать, только если более новый вызов не подменил тем временем.
-            if (this.ctx.cleanup === cleanup) this.ctx.cleanup = undefined;
-          }
-          return new Error(message);
-        };
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        let onAbort: (() => void) | undefined;
-        const timeoutPromise = new Promise<ToolResult>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(
-              failFast(
-                t("tool.timeout", {
-                  name: call.name,
-                  seconds: Math.round(timeoutMs / 1000),
-                }),
-              ),
-            );
-          }, timeoutMs);
-        });
-        const racePromises: Promise<ToolResult>[] = [
-          memoHit ? Promise.resolve(memoHit) : tool.handler(this.ctx, call.arguments),
-          timeoutPromise,
-        ];
-        if (signal) {
-          const abortPromise = new Promise<ToolResult>((_, reject) => {
-            onAbort = () => reject(failFast(t("tool.aborted", { name: call.name })));
-            if (signal.aborted) {
-              onAbort();
-            } else {
-              signal.addEventListener("abort", onAbort, { once: true });
-            }
-          });
-          racePromises.push(abortPromise);
-        }
-        try {
-          result = await Promise.race(racePromises);
-        } finally {
-          // Остановить таймер и снять abort-слушатель, чтобы они не сработали
-          // против контекста/cleanup УЖЕ ДРУГОГО вызова.
-          if (timer !== undefined) clearTimeout(timer);
-          if (onAbort && signal) signal.removeEventListener("abort", onAbort);
-          // У проигравших промисов потребителя после settled race нет (их
-          // kill/cleanup-эффекты уже применены в failFast). Залогировать
-          // reject и отцепить, чтобы не всплыл как unhandled rejection.
-          for (const p of racePromises.slice(1)) {
-            p.catch((e: Error) => {
-              this.ctx.logger.debug(
-                `Tool ${call.name}: discarded race loser: ${e.message}`,
-              );
-            });
-          }
-        }
+        result = await runToolWithTimeout(this.ctx, tool, call, signal, memoHit);
       }
       result.toolCallId = call.id;
     } catch (e: any) {
@@ -373,30 +203,8 @@ export class ToolExecutor {
       };
     }
 
-    // DLP §4.8: результат по пути из `providerBlockGlobs` тегируется
-    // `file-content`; egress-guard решит, отдавать его (локально) или резать.
-    result = tagBlockedFileContent(tool, call, result, this.ctx);
-    // `bash`: путь в самой команде (§4.8) — тоже источник file-content.
-    result = tagShellFileContent(tool, call, result, this.ctx);
-    // Субагент: его ответ производен от защищённых файлов дочернего контекста.
-    if (result.taint) this.ctx.contextManager?.markNextToolTainted?.();
-
-    // Admission (OO-1/OO-7): результат больше admitMaxTokens не входит в
-    // контекст дословно — спилл + дескриптор. Одна точка для всех тулов;
-    // хендлер политику не реализует. Мемо ниже сохраняет уже admitted результат.
-    result = admitFromContext(result, this.ctx, call);
-
-    if (!memoHit) {
-      // Успешные детерминированные чтения мемоизируются; всё остальное, что
-      // реально выполнялось, могло мутировать состояние (даже упавшая команда
-      // применяется наполовину) — мемо сбрасывается. `manualMemo` (bash) ведут
-      // свои записи сами.
-      if (tool.cacheable && result.success) {
-        this.memoSet(call.name, call.arguments, result);
-      } else if (!tool.cacheable && !tool.manualMemo) {
-        this.memoInvalidate();
-      }
-    }
+    result = finalizeToolResult(this.ctx, tool, call, result);
+    this.memo.update(tool, call, result, memoHit);
 
     // После аборта работа тула отбрасывается (цикл агента завершается без
     // рендера/логирования), поэтому медленные post-плагины (LSP, lint, tsc)
@@ -406,67 +214,13 @@ export class ToolExecutor {
     if (signal?.aborted) {
       this.ctx.logger.debug(`Tool ${call.name}: abort, skipping onAfterTool plugins`);
     } else if (afterPlugins) {
-      await this.hookLock.run(() => this.runAfterToolPlugins(call, result, signal, plugins));
+      await this.hookLock.run(() =>
+        runAfterToolPlugins(this.ctx, call, result, signal, plugins),
+      );
     }
 
-    this.ctx.logger.logToolCall(
-      call.name,
-      JSON.stringify(call.arguments)?.slice(0, 200) ?? "",
-      result.success ? "OK" : `FAIL: ${result.output?.slice(0, 200)}`,
-    );
-    this.ctx.logger.logToolOutput(call.name, result.output ?? "", result.success ? 0 : 1);
-    this.ctx.logger.debug(`Tool ${call.name}: ${result.success ? "OK" : "FAIL"}`);
+    logToolResult(this.ctx, call, result);
     return result;
-  }
-
-  /**
-   * Прогон `onBeforeTool` по всем плагинам (под hookLock). Возвращает
-   * blocked-результат, если плагин отклонил вызов, иначе `null`.
-   */
-  private async runBeforeToolPlugins(
-    call: ToolCall,
-    plugins: PluginHook[],
-  ): Promise<ToolResult | null> {
-    for (const plugin of plugins) {
-      if (!plugin.onBeforeTool) continue;
-      try {
-        const proceed = await plugin.onBeforeTool(this.ctx, call);
-        if (proceed === false || typeof proceed === "string") {
-          const pluginName =
-            (plugin as { name?: string }).name || plugin.constructor?.name || "unknown";
-          const reason = typeof proceed === "string" ? proceed : undefined;
-          return {
-            success: false,
-            blocked: true,
-            output: reason
-              ? t("tool.blocked_reason", { plugin: pluginName, reason })
-              : t("tool.blocked", { plugin: pluginName }),
-            toolCallId: call.id,
-          };
-        }
-      } catch (e: any) {
-        this.ctx.logger.warn(`Plugin onBeforeTool error: ${e.message}`);
-      }
-    }
-    return null;
-  }
-
-  /** Прогон `onAfterTool` по всем плагинам (под hookLock; `signal` в ctx хука). */
-  private async runAfterToolPlugins(
-    call: ToolCall,
-    result: ToolResult,
-    signal: AbortSignal | undefined,
-    plugins: PluginHook[],
-  ): Promise<void> {
-    const pluginCtx = signal ? { ...this.ctx, signal } : this.ctx;
-    for (const plugin of plugins) {
-      if (!plugin.onAfterTool) continue;
-      try {
-        await plugin.onAfterTool(pluginCtx, call, result);
-      } catch (e: any) {
-        this.ctx.logger.warn(`Plugin onAfterTool error: ${e.message}`);
-      }
-    }
   }
 
   /** Определения тулов с учётом allowlist (для схемы LLM). */
@@ -476,7 +230,7 @@ export class ToolExecutor {
     parameters: Record<string, unknown>;
     boundedOutput?: boolean;
   }> {
-    const allow = this.allowedNames();
+    const allow = allowedToolNames(this.ctx);
     if (allow) {
       return this.registry
         .getAll()
