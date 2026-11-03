@@ -18,6 +18,17 @@ function sidebarSources(a: WebUiAssets): string {
     .join("\n");
 }
 
+// Setup wizard is the `setup.js` entry + `setup-*.js` step modules; the browser
+// loads the same graph, so endpoint guards search the whole family.
+function setupSources(a: WebUiAssets): string {
+  return [
+    a.setupJs ?? "",
+    ...Object.entries(a.jsModules ?? {})
+      .filter(([k]) => k.startsWith("setup-"))
+      .map(([, v]) => v),
+  ].join("\n");
+}
+
 describe("webui assets", () => {
   it("loads html/css/js from disk", () => {
     const a = loadAssets();
@@ -282,12 +293,13 @@ describe("webui assets", () => {
 
   it("wires the setup wizard to the /api/setup endpoints and app boot hook", () => {
     const a = loadAssets();
+    const setup = setupSources(a);
     expect(a.setupJs).toContain("window.MmaSetup");
-    expect(a.setupJs).toContain('"/api/setup"');
-    expect(a.setupJs).toContain('"/api/setup/scan"');
-    expect(a.setupJs).toContain('"/api/setup/models"');
-    expect(a.setupJs).toContain('"/api/setup/test"');
-    expect(a.setupJs).toContain('"/api/setup/locale"');
+    expect(setup).toContain('"/api/setup"');
+    expect(setup).toContain('"/api/setup/scan"');
+    expect(setup).toContain('"/api/setup/models"');
+    expect(setup).toContain('"/api/setup/test"');
+    expect(setup).toContain('"/api/setup/locale"');
     expect(js(a)).toContain("window.MmaSetup");
   });
 

@@ -46,7 +46,7 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
   "src/modules/security/network-validator.ts": "the policy itself: fetchValidated revalidates every hop",
   "src/modules/webui/assets/js/api.ts": "same-origin relative path in the browser",
   "src/modules/webui/assets/js/sidebar/files/view.ts": "same-origin relative path in the browser",
-  "src/modules/webui/assets/setup.ts": "same-origin relative path in the browser",
+  "src/modules/webui/assets/setup-api.ts": "same-origin relative path in the browser",
 };
 
 /** Возвращает `path:line` для каждого `fetch(` вне политики и вне allowlist. */
