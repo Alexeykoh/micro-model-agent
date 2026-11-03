@@ -97,7 +97,7 @@
 Исполнен частично — волны architecture-v2 закрыли часть находок, но сам план в `master`
 не слит. Открытые пункты (список с обоснованием — в шапке плана):
 
-- [ ] **W3 — безопасность путей и вывода:** ~~`validateWorkdir`~~ (сделано 2026-10-21:
+- [x] **W3 — безопасность путей и вывода:** ~~`validateWorkdir`~~ (сделано 2026-10-21:
       workdir-jail в `bash`) · ~~ADS/регистр/TOCTOU в `matchProtectedPath`~~ (ADS и
       регистр — сделано; TOCTOU — сделано 2026-10-26: `pathGuard.recheck` перед
       операцией во всех мутирующих файловых тулах, гейт
@@ -108,7 +108,9 @@
       ~~нет `src/ui/sanitize-output.ts`~~ (сделано) ·
       ~~нет `certutil`/`bitsadmin`/`takeown`/`wscript`/`shred` в
       `security-policies.ts`~~ (сделано: единый `security-lists.ts`) ·
-      маркера `[APPROVED]` нет — `DEBT(approve-marker-not-authoritative)`.
+      маркер `[APPROVED]` больше не нужен: разрешение — `ApprovalStore` +
+      recheck в `ToolExecutor`, долг `approve-marker-not-authoritative` оплачен
+      2026-11-01 (`docs/specs/2026-11-01-approve-token-design.md`).
 - [x] **W6 — web-сервис:** сделано 2026-10-21 — security-заголовки и auth на
       статику, капы тела по маршруту (1 МБ / 768 МБ для сообщений), кап записи
       памяти, SSRF-защита проб провайдера + rate-limit, честные коды ошибок
