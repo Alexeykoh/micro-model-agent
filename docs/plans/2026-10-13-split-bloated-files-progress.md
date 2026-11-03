@@ -10,15 +10,18 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **53** (разрезано 50 + уменьшено 3) |
-| Осталось | **31** |
-| — из них «не крупные» (< 561 стр.) | 8 |
+| Снято из allowlist | **54** (разрезано 51 + уменьшено 3) |
+| Осталось | **30** |
+| — из них «не крупные» (< 561 стр.) | 7 |
 | — из них крупные (≥ 561 стр.) | 23 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
 > `execution-plugin.ts` (539) и `lsp/connection.ts` (533) перешли из крупных
 > в «не крупные». Размеры в таблицах ниже — снимок на 2026-10-13.
+>
+> **Сверка 2026-11-03:** `webui/state.ts` разрезан (445 → 215) на
+> `webui/state-contracts.ts`, `webui/state-session.ts`, `webui/state-sse.ts`.
 
 Флагманы `agent.ts` (561) и `execution/module.ts` (688) уже частично разрезаны ранее
 (фазы `core/agent/*`, модули `execution/*`); остаток — оболочка/публичный API.
@@ -41,7 +44,6 @@
 | `src/modules/indexer/walker.ts` | 406 | обход ФС |
 | `src/modules/webui/assets/js/session/tabs.ts` | 413 | вкладки сессий |
 | `src/modules/lsp/module.ts` | 415 | lifecycle LSP |
-| `src/modules/webui/state.ts` | 416 | god-state (роли уже есть) |
 | `src/modules/session/store.ts` | 431 | IO сессий |
 | `src/modules/webui/assets/js/settings/write.ts` | 453 | запись настроек |
 | `src/core/bootstrap/session-runner.ts` | 487 | раннер сессии |
@@ -80,6 +82,7 @@
 | `output/channel.ts` | `output/default-channel.ts` |
 | `core/module-host.ts` | `core/module-host-order.ts` |
 | `modules/webui/module.ts` | `modules/webui/context-probe.ts` |
+| `modules/webui/state.ts` | `modules/webui/state-contracts.ts`, `state-session.ts`, `state-sse.ts` |
 | `modules/execution/plan-store.ts` | `modules/execution/plan-store-io.ts` |
 | `modules/service/openapi/schemas.ts` | `modules/service/openapi/schema-primitives.ts` |
 | `core/bootstrap/session-phase.ts` | `core/bootstrap/tool-context.ts` |

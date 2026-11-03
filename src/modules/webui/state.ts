@@ -1,122 +1,27 @@
 // Общее мутабельное состояние модуля `mma web`: сервер, SSE-клиенты, busy-слот,
 // коллабораторы bootstrap. Транспортно-ориентировано: меты сессий, планов и
-// истории здесь нет.
+// истории здесь нет. Контракты коллабораторов и SSE вынесены в `state-*` и
+// реэкспортированы ниже — внешние импорты не меняются.
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
 import type { UsageSnapshot } from "../../core/host-state";
-import type { AppConfig } from "../../config/types";
-import type { PluginLoadFailure, PluginRecord } from "../plugins/records";
-import type { SessionMeta, SessionMessage } from "../session/types";
-import type { SessionLogEntry } from "../session/store";
 import { RunPool } from "./session/session-pool";
-import type { MemoryStore } from "../memory/store";
 import type { SetupDisplay } from "../setup/answers";
-import type { LspDiagnosis } from "../lsp/diagnose";
 import { SubagentRunStore } from "./session/subagent-runs";
 import { MAX_BODY_BYTES } from "./limits";
 import { readEnv } from "../../config/env";
+import type { WebUiWiring } from "./state-contracts";
 
-/**
- * Структурное подмножество `SessionManager` для веб-REST. Узкость даёт реальному
- * менеджеру удовлетворять его неявно, а тестам — стабить без кастов. Читалки
- * истории опциональны, чтобы лёгкие стабы только на list/activate/delete
- * оставались валидны; эндпоинт истории без них отвечает пустым транскриптом.
- * Сервер держит явный `WebUiState`, чтобы тесты гонялись герметично на свежем
- * объекте, а не на процесс-глобальном дефолте.
- */
-export interface WebSessionManager {
-  list(): SessionMeta[];
-  get(id: string): SessionMeta | null;
-  getActive(): string | null;
-  setActive(id: string): void;
-  /** Сброс активной сессии (закрытие последней вкладки). Опционален для стабов. */
-  clearActive?(): void;
-  delete(id: string): void;
-  /**
-   * Создаёт новую сессию (опционально именованную), возвращает мету. Опционален,
-   * чтобы стабы только на list/activate/delete оставались валидны; эндпоинт
-   * создания без него отвечает 503.
-   */
-  create?(name?: string): SessionMeta;
-  loadSessionLog?(id: string, opts?: { since?: string }): SessionLogEntry[];
-  /** Append a session log record to the active or an explicit session. */
-  appendLog?(entry: SessionLogEntry, id?: string): void;
-  getHistory?(id: string): SessionMessage[];
-  /** Каталог сессии (для персиста web-метрик). Опционален — у лёгких стабов нет. */
-  getSessionDirectory?(id: string): string;
-}
-/** Статические веб-ассеты (снапшот на старт; live-перечитывание — через `assetSource`). */
-export interface WebUiAssets {
-  html: string;
-  css: string;
-  /**
-   * Альтернативная тема (`/console.css`). Пустая/отсутствует — фронт работает
-   * на базовом `styles.css`. Опциональна ради лёгких тестовых фикстур.
-   */
-  cssConsole?: string;
-  /**
-   * Тема «groovebox» (`/groovebox.css`) — вариация console с акцентной
-   * палитрой. Опциональна по той же причине, что и `cssConsole`.
-   */
-  cssGroovebox?: string;
-  /** Пакет дополнительных тем (`/themes.css`): neon/paper/contrast + сезоны. */
-  cssThemes?: string;
-  js: string;
-  /**
-   * Скрипт визарда первого запуска (`/setup.js`). Опционален, чтобы лёгкие
-   * тестовые фикстуры только под чат оставались валидны.
-   */
-  setupJs?: string;
-  /** Стриминговый Markdown-модуль (`/md.js`). */
-  mdJs?: string;
-  /** Вендоренный парсер streaming-markdown (`/smd.js`, ESM). */
-  smdJs?: string;
-  /** Вендоренный бандл highlight.js (`/hljs.js`, кладёт `window.hljs`). */
-  hljsJs?: string;
-  /**
-   * Разделённые фронтенд-модули (`/js/*.js`, относительные импорты из `/app.js`).
-   * Опциональны, чтобы лёгкие фикстуры только под чат оставались валидны.
-   * Ключи — пути без ведущего слеша (`js/api.js`).
-   */
-  jsModules?: Record<string, string>;
-}
-
-/**
- * Структурные подмножества модулей скиллов/плагинов для REST настроек.
- * Сужение даёт реальным модулям удовлетворять их неявно, а тестам — стабить
- * без кастов (`SkillsModule`/`PluginManager` структурно совместимы).
- */
-/** Скилл для REST настроек (имя, описание, путь). */
-export interface WebSkillInfo {
-  name: string;
-  description?: string;
-  sourcePath?: string;
-}
-
-/** Подмножество модуля скиллов для страницы настроек. */
-export interface WebSkillsModule {
-  getAvailable(): WebSkillInfo[];
-  getLoaded(): WebSkillInfo[];
-  /** Пересканировать каталоги навыков (reload); undefined — не умеет. */
-  reloadSources?(): { added: number; removed: number };
-}
-
-/**
- * Подмножество менеджера плагинов для REST и вкладки Plugins.
- *
- * Раньше здесь жил свой бедный `WebPluginInfo` (имя/версия/источник), а ответ
- * собирался полями вручную — из-за чего `enabled` был захардкожен в `true`.
- * Теперь вид приходит один, из ядра: `PluginManager` удовлетворяет роли
- * структурно, дублировать типы не нужно.
- */
-export interface WebPluginManager {
-  getRecords(): PluginRecord[];
-  getFailures(): PluginLoadFailure[];
-  /** Живой тумблер; false — плагина нет (в ответе уже будет 404). */
-  setEnabled(name: string, on: boolean): boolean;
-  /** Перечитать каталоги с диска (выгрузка + сброс кэша модулей + чтение). */
-  reload(): { unloaded: number; loaded: number; failed: number; staleTs: number };
-}
+export type { QueuedMessage, WebSessionManager } from "./state-session";
+export type {
+  WebPluginManager,
+  WebSkillInfo,
+  WebSkillsModule,
+  WebUiAssets,
+  WebUiWiring,
+} from "./state-contracts";
+export { broadcast } from "./state-sse";
+export type { SseEvent, SseTransport } from "./state-sse";
 
 /**
  * Метрики usage последнего хода — определены в `core/host-state` вместе с
@@ -124,24 +29,8 @@ export interface WebPluginManager {
  */
 export type { UsageSnapshot } from "../../core/host-state";
 
-/** Одно входящее сообщение, ждущее конца текущего хода (`POST /api/message` при busy). */
-export interface QueuedMessage {
-  /** Стабильный id в пуле: адресат отмены/принудительного старта. */
-  id: string;
-  text: string;
-  images: string[];
-  /**
-   * Сессия-владелец сообщения. Заполняется из `POST /api/message {sessionId}`
-   * (фолбэк — тогда-активная); дренаж переключается на неё перед стартом хода,
-   * чтобы сообщение из вкладки B не уехало в сессию A (v2, per-session очередь).
-   */
-  sessionId: string | null;
-  /** Когда принято (для сортировки/диагностики; порядок — порядок прихода). */
-  ts: number;
-}
-
 /** Состояние веб-модуля: сервер, клиенты, мост хоста, коллабораторы REST. */
-export interface WebUiState {
+export interface WebUiState extends WebUiWiring {
   server: Server | null;
   starting: Promise<string> | null;
   url: string;
@@ -195,43 +84,6 @@ export interface WebUiState {
    */
   activeSessionId?: string;
   /**
-   * Коллабораторы bootstrap для REST конфига/сессий/моделей. Вяжет `module.ts`;
-   * опциональны, чтобы тесты гоняли точки изолированно (отсутствующий даёт 503,
-   * никогда — краш).
-   */
-  config?: AppConfig;
-  sessionManager?: WebSessionManager;
-  /**
-   * Execution-модуль для привязки плана к сессии: смена/создание сессии
-   * переключает трекер (`switchSession`), удаление — чистит слот
-   * (`forgetSession`). Узкий Pick, чтобы тесты стабились без модуля.
-   */
-  execModule?: {
-    switchSession(id: string | null): void;
-    forgetSession(id: string): void;
-  };
-  saveConfig?: (config: AppConfig, key?: string) => void;
-  reconfigure?: (config: AppConfig) => void | Promise<void>;
-  knownModels?: () => string[];
-  /**
-   * Модели именованной записи провайдера (`GET /api/models?provider=`).
-   * Первый запрос к незакешированной записи отвечает `loading: true` и
-   * запускает фоновый `listModels()`; клиент перезапрашивает.
-   */
-  knownModelsFor?: (name: string) => { models: string[]; loading: boolean };
-  /**
-   * Перечитывает статические веб-ассеты с диска на запрос. Вяжет `module.ts`,
-   * чтобы правки `assets/*` подхватывались без рестарта `mma web`; тесты могут
-   * не ставить и полагаться на фиксированный снапшот из `startServer`.
-   */
-  assetSource?: () => WebUiAssets;
-  /** Рабочий каталог агента (`-d`) для секции «окружение» сайдбара и `/status`. */
-  workspace?: string;
-  /** Загруженные источники AGENTS.md (проект + глобальный) или `disabled` через `--no-agents-md`. */
-  agentsMd?: { files: string[]; disabled: boolean };
-  /** Статистика карты проекта (`null`, пока обход индекса не кончился). */
-  projectMapStats?: () => { files: number; symbols: number; tokens: number } | null;
-  /**
    * Монотонный счётчик изменений файлов workspace (инкремент — колбэк вотчера
    * индексатора). Едет в снапшот как `filesRevision`; клиент вкладки Files
    * перечитывает раскрытые папки при росте (фолбэк к SSE `files`).
@@ -243,46 +95,6 @@ export interface WebUiState {
    * открытой вкладке. `undefined` — апдейта нет либо он уже поставлен.
    */
   updateAvailable?: { current: string; latest: string };
-  /**
-   * Установка доступного апдейта по кнопке в web (`POST /api/update`).
-   * `undefined` — апдейтер в этом режиме не собран (dev или выключен).
-   */
-  updaterInstall?: () => Promise<{ success: boolean; installed?: string; error?: string }>;
-  /** Ручной пересбор индекса карты проекта (`POST /api/index`). */
-  refreshIndex?: () => Promise<void>;
-  /** Диагностика LSP по требованию (вкладка LSP, `POST /api/lsp/doctor`). */
-  lspDiagnose?: () => Promise<LspDiagnosis>;
-  /** Структурная диагностика одного файла (`POST /api/lsp/check`); null — модуль не умеет. */
-  lspCheckFile?: (relPath: string) => Promise<{ ok: boolean; path: string; diagnostics: unknown[]; truncated?: boolean; ms?: number; error?: string } | null>;
-  /** Диагностика изменённых файлов (`POST /api/lsp/check-changed`). */
-  lspCheckChanged?: () => Promise<{ ok: boolean; error?: string; files: unknown[]; truncated?: boolean; ms?: number } | null>;
-  /** Последний результат диагностики LSP (кэш; `GET /api/lsp/doctor`). */
-  lspDoctor?: LspDiagnosis;
-  /** LSP-проба идёт прямо сейчас (single-flight). */
-  lspProbing?: boolean;
-  /** Живой тумблер глобального LSP (`config.lsp.enabled`) для `/api/config`. */
-  lspSetEnabled?: (enabled: boolean) => void;
-  /** Живой тумблер офлайн-режима (`config.lsp.offline`) для `/api/config`. */
-  lspSetOffline?: (offline: boolean) => void;
-  /** Текущие флаги LSP-модуля (ответ `GET /api/lsp/doctor`). */
-  lspFlags?: () => { enabled: boolean; offline: boolean };
-  /**
-   * Глобальный стор памяти, общий с агентом (владелец — `bootstrap`).
-   * Вяжет `module.ts`; опционален, чтобы тесты гоняли диспатч команд без
-   * файловой системы — тогда `/memory` отвечает "unavailable".
-   */
-  memory?: MemoryStore;
-  /**
-   * Реестр скиллов из bootstrap (`BootstrapResult.skillsModule`) для страницы
-   * настроек "Skills". Отсутствует → `GET /api/skills` отвечает 503.
-   */
-  skills?: WebSkillsModule;
-  /**
-   * Менеджер плагинов из bootstrap (`BootstrapResult.pluginManager`) для
-   * страницы "Plugins · MCP". Отсутствует → `GET /api/plugins` отвечает 503.
-   * MCP-серверы читаются из `config.mcpServers`.
-   */
-  plugins?: WebPluginManager;
   /**
    * Висящие интерактивные вопросы (`question`/`approve`) по id SSE-`question`.
    * Веб-`PromptIO` регистрирует здесь резолвер, `POST /api/answer` его закрывает;
@@ -309,10 +121,8 @@ export interface WebUiState {
  * Роли `WebUiState`: доменные модули принимают узкий срез, который реально
  * используют, а не весь god-object. Композиция живёт в `WebUiState`; транспорт
  * и оркестратор (`server.ts`/`util.ts`/`module.ts`) по-прежнему видят её целиком.
+ * `SseTransport` — в `state-sse.ts` (там же `broadcast`), реэкспорт выше.
  */
-
-/** Роль: SSE-рассылка (буфер клиентов). */
-export type SseTransport = Pick<WebUiState, "clients">;
 
 /** Роль: HTTP-транспорт (хост/токен/капы/хвост истории/куки). */
 export type HttpTransport = Pick<
@@ -403,35 +213,3 @@ export function createWebUiState(): WebUiState {
 }
 
 export { activeUsage } from "./session/usage-cache";
-
-/** SSE-событие: тип, время, произвольный пейлоад. */
-export interface SseEvent {
-  type: string;
-  ts: number;
-  [k: string]: unknown;
-}
-
-/**
- * Шлёт событие SSE-клиентам с backpressure-дропом зависших.
- *
- * Доставляем КАЖДОЕ событие всем клиентам: одно браузерное окно держит
- * несколько вкладок-сессий, и фоновая вкладка должна стримиться живьём, а не
- * молчать до переключения. Раскладка по вкладкам — на клиенте (`feedForEvent`
- * по `sessionId`). Авто-штампа `activeSessionId` нет: сессионные события несут
- * свой `sessionId` явно, глобальные (`state`/`index`) идут без него.
- */
-export function broadcast(ev: SseEvent, s: SseTransport): void {
-  const payload = `event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`;
-  for (const client of [...s.clients]) {
-    // Backpressure: `false` — буфер сокета полон (медленный/виснущий читатель).
-    // Дропаем клиента, а не копим события безгранично.
-    try {
-      if (!client.write(payload)) {
-        s.clients.delete(client);
-        client.end();
-      }
-    } catch {
-      s.clients.delete(client);
-    }
-  }
-}
