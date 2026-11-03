@@ -25,7 +25,6 @@
     "src/config/types.ts": 587,
     "src/modules/webui/assets/app.ts": 443,
     "src/core/agent.ts": 561,
-    "src/modules/execution/execution-plugin.ts": 561,
     "src/modules/security/security-policies.ts": 492,
     "src/modules/plugins/manager.ts": 541,
     "src/modules/mcp/client.ts": 539,

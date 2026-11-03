@@ -10,9 +10,9 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **40** (разрезано 37 + уменьшено 3) |
-| Осталось | **44** |
-| — из них «не крупные» (< 561 стр.) | 21 |
+| Снято из allowlist | **41** (разрезано 38 + уменьшено 3) |
+| Осталось | **43** |
+| — из них «не крупные» (< 561 стр.) | 20 |
 | — из них крупные (≥ 561 стр.) | 23 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
@@ -23,7 +23,7 @@
 Флагманы `agent.ts` (561) и `execution/module.ts` (688) уже частично разрезаны ранее
 (фазы `core/agent/*`, модули `execution/*`); остаток — оболочка/публичный API.
 
-## Осталось «не крупные» (31) — режем сейчас
+## Осталось «не крупные» (30) — режем сейчас
 
 В порядке возрастания размера:
 
@@ -57,7 +57,6 @@
 | `src/modules/webui/assets/js/sidebar/trace.ts` | 517 | trace-вкладка |
 | `src/core/agent/context-log.ts` | 519 | diff-лог |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
-| `src/modules/execution/execution-plugin.ts` | 539 | хуки/обработка тулов |
 | `src/modules/mcp/client.ts` | 539 | JSON-RPC/транспорт |
 | `src/modules/plugins/manager.ts` | 541 | реестр плагинов |
 
@@ -76,7 +75,7 @@
 `src/modules/certification/scenarios.ts` 591 · `src/config/types.ts` 574 ·
 `src/modules/webui/assets/app.ts` 569 · `src/core/agent.ts` 561.
 
-## Уже разрезано (27, запись снята из allowlist)
+## Уже разрезано (28, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -110,6 +109,7 @@
 | `modules/service/openapi/operations.ts` | `modules/service/openapi/operation-types.ts` |
 | `cli/completer.ts` | `cli/completer-providers.ts` |
 | `modules/webui/settings/providers-api.ts` | `modules/webui/settings/providers-input.ts` |
+| `modules/execution/execution-plugin.ts` | `modules/execution/plugin-state.ts`, `plugin-plan.ts`, `plugin-think.ts`, `plugin-tool.ts` |
 
 ## Как проверить
 
