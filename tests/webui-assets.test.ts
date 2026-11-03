@@ -252,7 +252,7 @@ describe("webui assets", () => {
     const tabs = a.jsModules?.["js/session/tabs.js"] || "";
     expect(js(a)).toContain("readSavedTabs");
     expect(a.js).toContain("restoreTabs");
-    expect(tabs).toContain("mma-open-tabs");
+    expect(js(a)).toContain("mma-open-tabs");
     expect(js(a)).toMatch(/openTab\(ids\[0\]/);
     expect(js(a)).toMatch(
       /!feedHasContent\(tab\.feed\) \|\| tab\.historyFailed\)\s*tab\.historyLoaded = false;/,

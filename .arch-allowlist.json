@@ -28,7 +28,6 @@
     "src/modules/webui/assets/js/sidebar/trace.ts": 525,
     "src/modules/webui/assets/js/settings/providers.ts": 488,
     "src/core/bootstrap/session-runner.ts": 487,
-    "src/modules/webui/assets/js/session/tabs.ts": 413,
     "src/core/bootstrap/modules-phase.ts": 374
   }
 }
