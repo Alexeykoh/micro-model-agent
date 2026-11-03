@@ -10,9 +10,9 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **51** (разрезано 48 + уменьшено 3) |
-| Осталось | **33** |
-| — из них «не крупные» (< 561 стр.) | 10 |
+| Снято из allowlist | **52** (разрезано 49 + уменьшено 3) |
+| Осталось | **32** |
+| — из них «не крупные» (< 561 стр.) | 9 |
 | — из них крупные (≥ 561 стр.) | 23 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
@@ -23,7 +23,7 @@
 Флагманы `agent.ts` (561) и `execution/module.ts` (688) уже частично разрезаны ранее
 (фазы `core/agent/*`, модули `execution/*`); остаток — оболочка/публичный API.
 
-## Осталось «не крупные» (24) — режем сейчас
+## Осталось «не крупные» (23) — режем сейчас
 
 В порядке возрастания размера:
 
@@ -43,7 +43,6 @@
 | `src/modules/lsp/module.ts` | 415 | lifecycle LSP |
 | `src/modules/webui/state.ts` | 416 | god-state (роли уже есть) |
 | `src/modules/session/store.ts` | 431 | IO сессий |
-| `src/cli/main.ts` | 437 | парсинг опций/маршрут |
 | `src/modules/webui/assets/js/settings/write.ts` | 453 | запись настроек |
 | `src/core/bootstrap/session-runner.ts` | 487 | раннер сессии |
 | `src/modules/webui/assets/js/settings/providers.ts` | 488 | UI провайдеров |
@@ -69,7 +68,7 @@
 `src/modules/certification/scenarios.ts` 591 · `src/config/types.ts` 574 ·
 `src/modules/webui/assets/app.ts` 569 · `src/core/agent.ts` 561.
 
-## Уже разрезано (34, запись снята из allowlist)
+## Уже разрезано (35, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -110,6 +109,7 @@
 | `tools/syntax-validator.ts` | `tools/syntax-xml.ts` |
 | `modules/plugins/builtin/lint-on-write.ts` | `.../builtin/lint-run.ts`, `.../builtin/lint-format.ts` |
 | `modules/webui/assets/js/feed/core.ts` | `.../feed/blocks.ts`, `.../feed/busy.ts` |
+| `cli/main.ts` | `cli/main-oneshot.ts`, `cli/main-web.ts`, `cli/auto-update.ts`, `cli/log-visibility.ts` |
 
 ## Как проверить
 

@@ -163,7 +163,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 ### Internal Diagnostics (2.11.0)
 
 - **`Logger.diagnostic(level, msg, meta)`** (`src/logger/app-logger.ts`) — единственная точка для внутренних диагностик петли (hallucination-retry, audit/compaction-инсайды, nudge'и на повторный вызов тула, MoE/critic-внутренности, `LLM warning`). Файловая запись (`<session>/*.log`, `app.jsonl`) не меняется; событие в `OutputBus` получает `data: { diagnostic: true }`.
-- **Терминал:** `OutputChannel.setShowDiagnostics(show)` (дефолт `false`) дропает события с `data.diagnostic` ещё в `onEvent`. Флаг включается только при `ui.verbosity === "verbose"`: на старте — `applyLogVisibility()` (`src/cli/main.ts`), в сессии — `/config ui.verbosity` (`repl-commands.ts`); там же правило для `info`-логов (тоже только verbose).
+- **Терминал:** `OutputChannel.setShowDiagnostics(show)` (дефолт `false`) дропает события с `data.diagnostic` ещё в `onEvent`. Флаг включается только при `ui.verbosity === "verbose"`: на старте — `applyLogVisibility()` (`src/cli/log-visibility.ts`), в сессии — `/config ui.verbosity` (`repl-commands.ts`); там же правило для `info`-логов (тоже только verbose).
 - **Web:** `log-forward.ts` пробрасывает `diagnostic` в SSE `log`; `feed.js onLog` рендерит строку только при `verbosity() === "verbose"`.
 - **В чате остаётся только пользовательское**: prompt overflow, `error.provider_build`, `env.killed_processes`, `moe.no_orchestrator`/`moe.plan_failed` — они шлются обычным `logger.warn/info`, а не `diagnostic`.
 - **Вердикт критика в чат не рисуется** — `Renderer.criticVerdict` и SSE `critic` удалены (см. Counter-Agent).
@@ -1156,7 +1156,7 @@ quality-gate и выглядят аккуратно.
   (`fetch` + `execFile`) — связь была ложной. Убрана; `mma serve` выигрывает тем же.
 - **Одна точка сборки:** `createUpdater({config, entryPath, logger, onNotice})`
   (`src/modules/updater/factory.ts`) — dev-гард `isDevEntryPath`, чтение версии и
-  проброс событий одинаковы для терминала и веба. `cli/main.ts` → `busLogger()`,
+  проброс событий одинаковы для терминала и веба. `cli/auto-update.ts` → `busLogger()`,
   `cli/web-command.ts` → `startWebUpdater()` (гасится `updater?.stop()` на shutdown).
 - **SSE `update`:** `{type:"update", ts, phase: available|installed|failed, current,
   latest?, error?}` — глобальное событие без `sessionId` (как `index`/`files`).
