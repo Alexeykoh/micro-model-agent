@@ -92,14 +92,14 @@ describe("trace: свежие строки сверху", () => {
 
     // Ход не разрезан: заголовок всегда первый узел своего блока.
     expect((list.firstElementChild as HTMLElement).classList.contains("trace-turn")).toBe(true);
-    expect(heads(list)).toEqual(["turn 2", "turn 1"]);
+    expect(heads(list).map((h) => h.replace(/ · .*$/, ""))).toEqual(["turn 2", "turn 1"]);
     // Внутри хода свежие события выше старых.
     expect(rowTexts(list)[0]).toContain("third");
     expect(rowTexts(list)[1]).toContain("second");
     expect(rowTexts(list)[2]).toContain("first");
     // Заголовок свежего хода стоит выше всех своих строк.
     const nodes = [...list.children] as HTMLElement[];
-    expect(nodes[0].textContent).toBe("turn 2");
+    expect(nodes[0].textContent).toMatch(/^turn 2/);
     expect(nodes[1].textContent).toContain("third");
     expect(nodes[nodes.length - 1].textContent).toContain("first");
   });
@@ -111,7 +111,7 @@ describe("trace: свежие строки сверху", () => {
     trace.sidebarTraceEvent("log", { text: "two", level: "info" });
     trace.renderList();
 
-    expect(heads(list)).toEqual(["turn 2", "turn 1"]);
+    expect(heads(list).map((h) => h.replace(/ · .*$/, ""))).toEqual(["turn 2", "turn 1"]);
     expect(list.scrollTop).toBe(0);
   });
 
@@ -130,9 +130,9 @@ describe("trace: свежие строки сверху", () => {
       trace.sidebarTraceEvent("text", { chunk: "llo" });
       // Один кадр на пачку чанков, строка ещё не перерисована.
       expect(frames).toHaveLength(1);
-      expect(rowTexts(list)[0]).not.toContain("5");
+      expect(rowTexts(list)[0]).not.toContain("5 chars");
       frames[0]();
-      expect(rowTexts(list)[0]).toContain("5");
+      expect(rowTexts(list)[0]).toContain("5 chars");
     } finally {
       g.requestAnimationFrame = prevRaf;
       g.cancelAnimationFrame = prevCaf;
