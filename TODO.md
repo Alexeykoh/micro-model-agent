@@ -191,8 +191,8 @@ reset` для json/list, failover с моделью целевого прова�
 
 ### 1.4 Раздутые файлы (долг `split-bloated-files`)
 
-- [ ] Опустить файлы из `.arch-allowlist.json` до ≤300 строк — **16 осталось**
-      (было 84; снято 68: разрезано 65, уменьшено 3). Полный список и приоритет:
+- [ ] Опустить файлы из `.arch-allowlist.json` до ≤300 строк — **14 осталось**
+      (было 84; снято 70: разрезано 67, уменьшено 3). Полный список и приоритет:
       [`docs/plans/2026-10-13-split-bloated-files-progress.md`](./docs/plans/2026-10-13-split-bloated-files-progress.md).
       По 1–2 файла за задачу; гейт — `tests/arch/file-size.test.ts`.
 
