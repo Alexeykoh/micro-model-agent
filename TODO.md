@@ -793,9 +793,12 @@ response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов,
       только `plan_step done`. _(2026-11-03: `runFinalAudit` при отсутствии плана и
       непустой карте `typecheckFailures` возвращает `passed:false` с файлами в
       `pendingSteps`; гейт `tests/modules/execution/final-typecheck-gate.test.ts`.)_ Долг F-21.
-- [ ] **Localhost-проверки для веб-разработки** — `web_fetch`/`browser` блокируют localhost,
+- [x] **Localhost-проверки для веб-разработки** — `web_fetch`/`browser` блокируют localhost,
       `node`/`powershell` в blacklist; агенту нужен штатный путь проверить свой dev-сервер.
-      Долг D-09.
+      _(2026-11-03: `security.network.allowLoopback` (по умолчанию `false`) разрешает
+      только loopback (`localhost`, `127.0.0.0/8`, `::1`) для web-тулов; приватные сети
+      и прочие denied-домены остаются заблокированы. `verify browser:` пока политику
+      не применяет — отдельный долг. Спека `2026-11-03-loopback-web-access-design`.)_ Долг D-09.
 - [x] **`--isolated` для MCP Playwright** — иначе «Browser is already in use», когда
       тестировщик держит свой Playwright. _(2026-11-03: зафиксировано в
       `docs/agents/testing.md` — `args: ["@playwright/mcp@latest", "--isolated"]`.)_ Долг D-10.
