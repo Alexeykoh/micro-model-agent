@@ -7,7 +7,6 @@
     "src/core/context/manager.ts": 1129,
     "src/llm/openai-compat.ts": 956,
     "src/modules/execution/stuck-detector.ts": 886,
-    "src/modules/webui/assets/js/settings/panels.ts": 814,
     "src/tools/bash.ts": 799,
     "src/config/registry-extra.ts": 780,
     "src/core/agent/tool-batch.ts": 772,

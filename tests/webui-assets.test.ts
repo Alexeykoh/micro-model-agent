@@ -771,7 +771,7 @@ describe("webui assets", () => {
     expect(core).toContain("hooks.openSettingsAt?.");
     // LSP/MCP land on their group inside the shared Plugins panel, not at its top.
     expect(core).toContain('mcp: "settings-mcp"');
-    expect(a.jsModules?.["js/settings/panels.js"] || "").toContain('id: "settings-mcp"');
+    expect(a.jsModules?.["js/settings/panels-plugins.js"] || "").toContain('id: "settings-mcp"');
     expect(a.css).toContain(".sb-settings");
     // MCP is the one tab whose primary action (add/edit a server) lives in
     // settings — give it an explicit CTA, not only the title-row icon.

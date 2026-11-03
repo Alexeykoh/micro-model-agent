@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **72** (разрезано 69 + уменьшено 3) |
-| Осталось | **12** |
+| Снято из allowlist | **73** (разрезано 70 + уменьшено 3) |
+| Осталось | **11** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 12 |
+| — из них крупные (≥ 561 стр.) | 11 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -60,7 +60,6 @@
 
 `src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156 ·
 `src/core/context/manager.ts` 1101 · `src/llm/openai-compat.ts` 951 ·
-`src/modules/webui/assets/js/settings/panels.ts` 880 ·
 `src/tools/bash.ts` 799 ·
 `src/core/agent/tool-batch.ts` 771 · `src/modules/execution/stuck-detector.ts` 766 ·
 `src/config/registry-extra.ts` 755 ·
@@ -118,6 +117,7 @@
 | `modules/webui/settings/settings-api.ts` | `settings-api-plugins.ts`, `settings-api-mcp.ts`, `settings-api-mcp-write.ts`, `settings-api-lsp.ts`, `settings-api-write.ts`, `settings-api-fields.ts` |
 | `ui/renderer.ts` | `ui/renderer-args.ts`, `renderer-body.ts`, `renderer-card.ts`, `renderer-format.ts`, `renderer-quiet.ts`, `renderer-thought.ts` |
 | `modules/webui/assets/setup.ts` | `setup-api.ts`, `setup-actions.ts`, `setup-context.ts`, `setup-dom.ts`, `setup-i18n.ts`, `setup-render.ts`, `setup-review.ts`, `setup-security[-fields].ts`, `setup-state.ts`, `setup-steps-model.ts`, `setup-steps-provider.ts` |
+| `modules/webui/assets/js/settings/panels.ts` | `.../settings/panels-shared.ts`, `panels-memory.ts`, `panels-skills.ts`, `panels-lsp.ts`, `panels-plugins.ts` |
 
 ## Как проверить
 
