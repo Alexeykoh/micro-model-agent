@@ -12,7 +12,7 @@ import { collectPromptFacts } from "../prompt-facts";
 import { collectEnvironment, logEnvironment } from "../environment";
 import type { EnvironmentReport } from "../environment";
 import { IndexerModule } from "../../modules/indexer/index";
-import { SkillsLoader, SkillsModule } from "../../modules/skills/index";
+import { SkillsLoader, SkillsModule, SkillUsage } from "../../modules/skills/index";
 import { ToolRegistry, registerAllTools } from "../../tools/index";
 import { PluginManager } from "../../modules/plugins/manager";
 import { createDraftHost, pendingDrafts, type DraftHostWithLoad } from "../../modules/plugins/draft-host";
@@ -24,7 +24,7 @@ import { homedir } from "os";
 import type { AppConfig } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { PromptBlock } from "../types";
-import { projectMmaDir } from "../../config/paths";
+import { globalMmaDir, projectMmaDir } from "../../config/paths";
 
 /**
  * Резолвит workspace агента. Несуществующий `-d` (классика: шелл режет по
@@ -132,11 +132,18 @@ export async function setupWorkspacePhase(
   const availableSkills = skillsLoader.loadFromAllSources(builtinDir, globalDir, projectSkillsDir);
 
   const skillsBudget = Math.floor(config.contextWindow * config.skills.budget);
-  const skillsModule = new SkillsModule(availableSkills, skillsBudget, {
-    builtinDir,
-    globalDir,
-    projectDir: projectSkillsDir,
-  });
+  // Usage counters live in the global dir: the top-10 catalog survives restarts.
+  const skillUsage = new SkillUsage(globalMmaDir());
+  const skillsModule = new SkillsModule(
+    availableSkills,
+    skillsBudget,
+    {
+      builtinDir,
+      globalDir,
+      projectDir: projectSkillsDir,
+    },
+    skillUsage,
+  );
 
   const toolRegistry = new ToolRegistry();
   registerAllTools(toolRegistry, skillsModule, {

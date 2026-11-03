@@ -2,6 +2,8 @@
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import { SkillsLoader, type SkillMeta } from "./loader";
+import { buildCatalogBlock } from "./catalog";
+import type { SkillUsage } from "./usage";
 import { t } from "../../i18n/index";
 import { estimateTokens } from "../../llm/token-counter";
 
@@ -29,11 +31,19 @@ export class SkillsModule implements AgentModule {
   private currentTokens = 0;
   /** Каталоги для `reload()`; без них пересканировать навыки нечем. */
   private sources?: SkillSources;
+  /** Счётчики использования: каталог в промпте показывает топ-10. */
+  private usage?: SkillUsage;
 
-  constructor(availableSkills: SkillMeta[], budget: number, sources?: SkillSources) {
+  constructor(
+    availableSkills: SkillMeta[],
+    budget: number,
+    sources?: SkillSources,
+    usage?: SkillUsage,
+  ) {
     this.availableSkills = availableSkills;
     this.budget = budget;
     this.sources = sources;
+    this.usage = usage;
   }
 
   /**
@@ -179,30 +189,9 @@ export class SkillsModule implements AgentModule {
     return blocks;
   }
 
-  /** Компактный каталог: имена, а не 120-словные описания. */
+  /** Компактный каталог: топ-10 по использованию, имена без описаний. */
   getCatalogBlock(): PromptBlock | null {
-    if (this.availableSkills.length === 0) return null;
-    const limit = 40;
-    const shown = this.availableSkills.slice(0, limit);
-    const lines = [
-      "[Available Skills]",
-      'Skills extend your knowledge. Load one with "load_skill" when it matches the task;',
-      'if the skill you need is not listed, call "load_skill" with a query.',
-    ];
-    for (const skill of shown) lines.push(`- ${skill.name}`);
-    const hidden = this.availableSkills.length - shown.length;
-    if (hidden > 0) {
-      lines.push(`…and ${hidden} more — call "load_skill" with a query to search by task.`);
-    }
-    const content = lines.join("\n");
-    return {
-      content,
-      label: "skills catalog",
-      priority: "normal",
-      essential: false,
-      estimatedTokens: this.estimateTokens(content),
-      degraded: hidden > 0 ? { reason: `${hidden} more skills not listed` } : undefined,
-    };
+    return buildCatalogBlock(this.availableSkills, this.usage);
   }
 
   /** Тела загруженных скиллов: низкий приоритет и хвост промпта. */
@@ -263,6 +252,7 @@ export class SkillsModule implements AgentModule {
 
     this.loadedSkills.set(skill.name, skill);
     this.currentTokens += tokens;
+    this.usage?.recordLoad(skill.name);
 
     return {
       success: true,
