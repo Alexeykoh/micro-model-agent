@@ -5,13 +5,16 @@ import type { RetractInfo } from "./types";
 
 type LogEntry = Omit<SessionLogEntry, "ts" | "source">;
 
-/** `session_start`: окружение, LSP-проба, плагины, скиллы. */
-export function sessionStartEntry(data: {
+/** Параметры стартовой записи `session_start`. */
+export interface SessionStartData {
   environment?: Record<string, unknown>;
   lspProbe?: SessionLogEntry["lspProbe"];
   plugins?: string[];
   skills?: number;
-}): LogEntry {
+}
+
+/** `session_start`: окружение, LSP-проба, плагины, скиллы. */
+export function sessionStartEntry(data: SessionStartData): LogEntry {
   return {
     type: "session_start",
     content: "session started",

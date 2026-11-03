@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **64** (разрезано 61 + уменьшено 3) |
-| Осталось | **20** |
+| Снято из allowlist | **66** (разрезано 63 + уменьшено 3) |
+| Осталось | **18** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 20 |
+| — из них крупные (≥ 561 стр.) | 18 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -52,7 +52,7 @@
 | `src/modules/indexer/module.ts` | 497 | индексатор |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 
-## Осталось крупные (21) — отдельными волнами
+## Осталось крупные (18) — отдельными волнами
 
 `src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156 ·
 `src/core/context/manager.ts` 1101 · `src/llm/openai-compat.ts` 951 ·
@@ -60,12 +60,11 @@
 `src/modules/webui/assets/setup.ts` 863 · `src/tools/bash.ts` 799 ·
 `src/core/agent/tool-batch.ts` 771 · `src/modules/execution/stuck-detector.ts` 766 ·
 `src/config/registry-extra.ts` 755 · `src/modules/webui/settings/settings-api.ts` 738 ·
-`src/modules/execution/plan-actions.ts` 735 · `src/config/registry.ts` 707 ·
+`src/config/registry.ts` 707 ·
 `src/ui/renderer.ts` 693 · `src/modules/execution/module.ts` 688 ·
-`src/cli/commands.ts` 685 · `src/core/session-logger.ts` 603 ·
 `src/modules/service/api/tasks-api.ts` 596 ·
 `src/config/types.ts` 574 ·
-`src/modules/webui/assets/app.ts` 569 · `src/core/agent.ts` 561.
+`src/core/agent.ts` 561.
 
 ## Уже разрезано (40, запись снята из allowlist)
 
