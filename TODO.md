@@ -782,8 +782,13 @@ response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов,
       сервер проверяет черновик `write_file`/`edit_file`, ошибки типов блокируют
       вызов (`lsp.draft_blocked`), холодный — fail-open с прогревом в фоне.
       Гейт `tests/modules/lsp/pre-write-check.test.ts`.)_ Долг F-18/F-19.
-- [ ] **Post-build гейт для веб-задач** — после `build` проверять, что CSS содержит
-      utilities (`.grid`, `.flex`, `--tw-`) и страница не пустая. Долг F-30/F-34.
+- [x] **Post-build гейт для веб-задач** — после `build` проверять, что CSS содержит
+      utilities (`.grid`, `.flex`, `--tw-`) и страница не пустая. _(2026-11-03:
+      check-kind `web-build:<dir>` — `checkWebBuild` ищет CSS/`index.html` в артефакте,
+      требует Tailwind-утилиты и непустую страницу; путь резолвится через
+      path-validator. Спека `docs/specs/2026-11-03-web-build-gate-design.md`, гейты
+      `tests/modules/execution/web-build-check.test.ts`,
+      `tests/execution/plan-checks-web-build.test.ts`.)_ Долг F-30/F-34.
 - [x] **Финальный гейт по `typecheckFailures` без плана** — сейчас ошибки типов блокируют
       только `plan_step done`. _(2026-11-03: `runFinalAudit` при отсутствии плана и
       непустой карте `typecheckFailures` возвращает `passed:false` с файлами в
