@@ -39,14 +39,14 @@ export const rememberTool: ToolDefinition = {
     },
     required: ["category"],
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     const category = String(args.category || "");
     if (!CATEGORIES.includes(category)) {
       return { success: false, output: t("tool.invalid_params") };
     }
 
     const memoryDir = globalMemoryDir();
-    const store = new MemoryStore(memoryDir);
+    const store = new MemoryStore(memoryDir, ctx.config.memory?.validator);
 
     try {
       if (category === "preferences") {
@@ -66,7 +66,13 @@ export const rememberTool: ToolDefinition = {
       if (!entry) {
         return { success: false, output: t("tool.remember.entry_required") };
       }
-      store.append(category, entry);
+      const result = store.append(category, entry);
+      if (!result.accepted) {
+        return {
+          success: false,
+          output: t("tool.remember.rejected", { reason: result.reason || "invalid entry" }),
+        };
+      }
       return {
         success: true,
         output: t("tool.remember.entry", { category, entry }),

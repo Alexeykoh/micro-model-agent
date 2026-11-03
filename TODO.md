@@ -227,12 +227,16 @@ reset` для json/list, failover с моделью целевого прова�
 
 ### 1.6 Качество памяти и самообучение (план `docs/superpowers/plans/2026-08-12-memory-quality-and-learning.md`)
 
-План **открыт** — ни одна из трёх фаз не реализована. Из плана выполнено одно:
+План **в работе**: Phase A (валидатор памяти) закрыта 2026-11-03; Phase B
+(обучение) и Phase C (языковые адаптеры) открыты. Из плана ранее выполнено
 `SessionManager.loadSessionLog`.
 
-- [ ] **Фаза 1 — валидатор памяти:** `src/modules/memory/validator.ts` + `MemoryValidator`
-      (запись не валидируется: `append()`/`appendRule()` не возвращают `ValidationResult`),
-      интеграция в `remember`-тул (нет `tool.remember.rejected`), конфиг `memory.validator`.
+- [x] **Фаза 1 — валидатор памяти.** _(Сделано 2026-11-03, спека
+      `docs/specs/2026-11-03-memory-validator-design.md`: `MemoryValidator` +
+      гейт в `MemoryStore.append/appendRule` (`ValidationResult`, файл не
+      трогается при отказе), `remember` отвечает `tool.remember.rejected`,
+      ключи `memory.validator.*` в `DEFAULTS`/`registry-memory.ts`. Гейты:
+      `tests/modules/memory/validator.test.ts`, `store-gate.test.ts`, `tests/i18n.test.ts`.)_
 - [ ] **Фаза 2 — обучение:** `src/modules/learning/**` (`types/trace/validator/generator/cli/module`),
       подкоманда `mma learn`, регистрация `LearningModule` в bootstrap.
 - [ ] **Фаза 3 — языковые адаптеры:** `language-adapters.ts` — валидатор работает только

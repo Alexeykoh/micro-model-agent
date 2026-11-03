@@ -518,6 +518,9 @@ export interface PluginsConfig {
 /** Agent Service API v1: HTTP-сервис (`mma serve`) поверх того же ядра. */
 export type { ServiceConfig } from "./types-service";
 
+export type { MemoryValidatorConfig } from "./memory-types";
+import type { MemoryValidatorConfig } from "./memory-types";
+
 export interface AppConfig {
   version: string;
   model: string;
@@ -540,6 +543,8 @@ export interface AppConfig {
    */
   contextAuto?: boolean;
   contextBudget: ContextBudget;
+  /** Детерминированный гейт качества записей памяти (TODO §1.6, Phase A). */
+  memory?: { validator?: Partial<MemoryValidatorConfig> };
   instructions: InstructionsConfig;
   modelLoad: ModelLoadConfig;
   retry: RetryConfig;

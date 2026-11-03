@@ -142,7 +142,7 @@ async function registerCoreModules(
 
   // Общий глобальный стор памяти — один инстанс у модуля памяти и цикла,
   // поэтому UI (`mma web` `/memory`) читают/пишут живые данные.
-  const memoryStore = new MemoryStore(join(dir, "memory")); setMemoryEncryptor(new SessionFileEncryptor(config.security?.sessionEncryption));
+  const memoryStore = new MemoryStore(join(dir, "memory"), config.memory?.validator); setMemoryEncryptor(new SessionFileEncryptor(config.security?.sessionEncryption));
   const memoryModule = new MemoryModule(memoryStore);
   moduleRegistry.register(memoryModule);
 
