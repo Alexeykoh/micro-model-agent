@@ -19,8 +19,7 @@ body.console {
   --input-surface: #121213;
   --inp-bg: #0f0f10;
   --inp-border: #2a2a2b;
-  --inp-focus: #d0cecc;
-  --input-shadow: #d0cecc73;
+  --inp-focus: #8a8686;
 
   --border: #1f1f20;
   --border-2: #262627;
@@ -92,8 +91,7 @@ body.console.light {
   --input-surface: #ffffff;
   --inp-bg: #ffffff;
   --inp-border: #d6d6cf;
-  --inp-focus: #1b1b19;
-  --input-shadow: #1b1b1973;
+  --inp-focus: #6a6a64;
   --border: #dcdcd6;
   --border-2: #d2d2cb;
   --border-3: #dcdcd6;
@@ -148,19 +146,19 @@ body.console,
 body.console *,
 body.console *::before,
 body.console *::after {
-  font-family: "IBM Plex Mono", ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace !important;
+  font-family:
+    "IBM Plex Mono", ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace !important;
   border-radius: 0 !important;
   box-shadow: none !important;
 }
 
-/* Focus stays visible: the reset above flattens every shadow, but a keyboard
- * user must see where typing goes (U1). The ring is the focus indicator, not a
- * soft shadow — it uses the accent token and survives `box-shadow: none`. */
+/* Focus stays visible: a 1px border shift, no soft ring. The explicit 2px
+ * `--input-shadow` halo read as a glaring frame around the composer, so it is
+ * gone — the accent-tinted border alone says where typing goes (U1). */
 body.console .composer:focus-within,
 body.console .inp:focus,
 body.console .set-search:focus-within {
   border-color: var(--inp-focus) !important;
-  box-shadow: 0 0 0 2px var(--input-shadow) !important;
 }
 
 /* Prompt motif: the composer reads as a shell prompt. */
