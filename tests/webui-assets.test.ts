@@ -446,14 +446,14 @@ describe("webui assets", () => {
   it("scopes /api/state to the active tab and renders from per-tab snapshots", () => {
     const a = loadAssets();
     const tabs = a.jsModules?.["js/session/tabs.js"] || "";
-    expect(a.js).toContain("/api/state?session=");
+    expect(js(a)).toContain("/api/state?session=");
     expect(a.js).toContain("hooks.ensureTabState = ensureTabState");
     // Switch sets the client-active session immediately and resets Trace.
     expect(tabs).toContain("session.activeSessionId = id");
     expect(tabs).toContain("sidebarSessionChanged(id)");
     expect(tabs).toContain("hooks.ensureTabState?.(id)");
     // Guard against a stale response clobbering a newer tab.
-    expect(a.js).toMatch(/tabState\.activeTabId !== sid\)\s*return;/);
+    expect(js(a)).toMatch(/tabState\.activeTabId !== sid\)\s*return;/);
   });
 
   it("resets the session when the last tab is closed", () => {
@@ -501,7 +501,7 @@ describe("webui assets", () => {
     const tabs = a.jsModules?.["js/session/tabs.js"] || "";
     expect(sidebar).toContain("setSessionLoading");
     expect(tabs).toContain("setSessionLoading(true)");
-    expect(a.js).toContain("setSessionLoading(false)");
+    expect(js(a)).toContain("setSessionLoading(false)");
     expect(a.css).toContain(".sb.sb-loading #pane-session");
   });
 
@@ -626,7 +626,7 @@ describe("webui assets", () => {
     expect(sidebar).toContain("sidebarPluginsState(");
     expect(sidebar).toContain("sidebarPluginsEvent(");
     // Imports of the tab come through the barrel only (see DAG guard).
-    expect(a.js).toContain("sidebarPluginsState,");
+    expect(js(a)).toContain("sidebarPluginsState,");
     expect(a.css).toContain(".plg-row");
     expect(a.css).toContain(".plg-tag");
     // Hotkeys are derived from `TABS`: the last tab is reachable by Alt+8.
