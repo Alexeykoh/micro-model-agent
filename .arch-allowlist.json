@@ -46,7 +46,6 @@
     "src/modules/webui/assets/js/session/tabs.ts": 413,
     "src/core/agent/loop-llm.ts": 334,
     "src/modules/execution/verifier.ts": 393,
-    "src/tools/question.ts": 386,
     "src/core/bootstrap/modules-phase.ts": 374,
     "src/modules/session/manager.ts": 356
   }
