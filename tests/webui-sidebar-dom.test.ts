@@ -133,4 +133,15 @@ describe("sidebar DOM behaviour", () => {
       expect(lab?.dataset.lab).toBe(tab.dataset.tab);
     }
   });
+
+  // U15: a trace row without a time cannot be matched to the answer.
+  it("stamps a trace row and its turn header with wall-clock time", () => {
+    sidebar.sidebarSessionChanged("ses_T");
+    sidebar.sidebarTraceEvent("tool_start", { toolCallId: "c3", name: "grep", args: { q: "x" } });
+    const stamp = rows()[0].querySelector<HTMLElement>(".ts");
+    expect(stamp?.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(stamp?.title).toMatch(/^\+\d+\.\d+s$/);
+    const header = win.document.querySelector<HTMLElement>(".trace-turn");
+    expect(header?.textContent).toMatch(/\d{2}:\d{2}:\d{2}/);
+  });
 });
