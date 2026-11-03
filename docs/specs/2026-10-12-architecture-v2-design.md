@@ -185,8 +185,9 @@ boot, фазы хода, цепочка enforcement, поток наблюдае
 - **`INV-23. Нет файла, который держит состояние и оркестрирует, и собирает зависимости.**
   `src/core/agent.ts` — ~1620 строк, 23 приватных метода, внутри собирает critic-провайдера,
   critic tool-loop и evidence-pack. Правило «≤300 строк» теперь проверяется
-  (`tests/arch/file-size.test.ts` + `.arch-allowlist.json`), но раздутые файлы (их 83,
-  флагман — `agent.ts`) ещё не разбиты: `DEBT(split-bloated-files)`.
+  (`tests/arch/file-size.test.ts` + `.arch-allowlist.json`), и на 2026-11-03 список
+  пуст: каждый файл ≤300. Разбиение последних двух — `repl.ts`/`repl-commands.ts` —
+  закрыло долг `split-bloated-files` (журнал: `docs/plans/2026-10-13-split-bloated-files-progress.md`).
 
 ---
 
