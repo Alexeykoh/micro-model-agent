@@ -527,9 +527,9 @@ describe("webui assets", () => {
     expect(a.html).toContain('id="traceDetail"');
     expect(a.html).toContain('id="mapBody"');
     expect(a.css).toContain(".sb-tab.on");
-    // Sidebar has a fixed width; opening a detail never resizes it, and the
-    // detail sits on the left of the list (row-reverse).
-    expect(a.css).toContain("width: clamp(340px, 38vw, 679px)");
+    // U7: the sidebar column is resizable (`--sb-w`) with the old fixed clamp
+    // as the fallback; opening a detail still never resizes it.
+    expect(a.css).toContain("var(--sb-w, clamp(340px, 38vw, 679px))");
     expect(a.css).toContain("#pane-trace { flex-direction: row-reverse;");
     expect(a.css).toContain(".trc-detail");
     expect(a.js).toContain("initSidebar()");

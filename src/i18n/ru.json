@@ -1328,6 +1328,8 @@
   "web.sidebar.tab_plugins": "Плагины",
   "web.sidebar.tab_subagents": "Субагенты",
   "web.sidebar.tab_mcp": "MCP",
+  "web.sidebar.resize": "ширина сайдбара",
+  "web.sidebar.resize_hint": "потяните, чтобы изменить ширину сайдбара",
   "web.sidebar.open_settings": "открыть настройки",
   "web.sidebar.lsp_what": "LSP — диагностика уровня редактора",
   "web.sidebar.lsp_status": "статус",

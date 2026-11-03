@@ -121,4 +121,16 @@ describe("sidebar DOM behaviour", () => {
     expect(rows().length).toBe(1);
     expect(rows()[0].textContent).toContain("12");
   });
+
+  // U7: the tab strip used to be icon-only - similar glyphs with no words.
+  it("renders a text label inside every sidebar tab", () => {
+    const tabs = win.document.querySelectorAll<HTMLElement>(".sb-tab");
+    expect(tabs.length).toBeGreaterThan(0);
+    for (const tab of tabs) {
+      const lab = tab.querySelector<HTMLElement>(".sb-lab");
+      expect(lab).not.toBeNull();
+      expect(lab?.textContent?.length).toBeGreaterThan(0);
+      expect(lab?.dataset.lab).toBe(tab.dataset.tab);
+    }
+  });
 });

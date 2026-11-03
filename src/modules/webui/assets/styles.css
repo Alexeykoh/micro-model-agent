@@ -952,11 +952,30 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 /* Sidebar never scrolls horizontally, in any tab: long paths / model names /
    ids wrap or ellipsize inside their rows, never widening the pane. */
 .sb {
-  width: clamp(340px, 38vw, 679px); min-width: clamp(340px, 38vw, 679px);
+  /* U7: the column width is user-resizable (`--sb-w`, see sidebar/resize.ts)
+     and falls back to the old viewport-relative clamp until it is dragged. */
+  position: relative;
+  width: var(--sb-w, clamp(340px, 38vw, 679px));
+  min-width: var(--sb-w, clamp(340px, 38vw, 679px));
   display: flex; flex-direction: column;
   border-left: 1px solid var(--border); background: var(--sb-bg); min-height: 0;
   overflow-x: hidden;
 }
+/* Drag handle on the chat/sidebar boundary. A transparent 8px hit area with a
+   hairline that only appears on hover/focus - it must not read as a border. */
+.sb-resizer {
+  position: absolute; left: -4px; top: 0; bottom: 0; width: 8px;
+  z-index: 5; cursor: col-resize; touch-action: none;
+  background: transparent; border: 0; padding: 0;
+}
+.sb-resizer::after {
+  content: ""; position: absolute; left: 3px; top: 0; bottom: 0; width: 2px;
+  background: transparent; transition: background .12s ease;
+}
+.sb-resizer:hover::after, .sb-resizer:focus-visible::after,
+body.sb-resizing .sb-resizer::after { background: var(--accent); }
+.sb-resizer:focus-visible { outline: none; }
+body.sb-resizing { cursor: col-resize; user-select: none; }
 .sec {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   max-width: 100%; overflow-x: hidden;
@@ -989,22 +1008,27 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
   padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .sb-tabs {
-  display: flex; gap: 6px; flex: 1 1 auto; min-width: 0;
-  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
+  display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0;
+  overflow: visible;
 }
 .sb-tabs::-webkit-scrollbar { height: 4px; }
 .sb-tabs::-webkit-scrollbar-track { background: transparent; }
 .sb-tabs::-webkit-scrollbar-thumb { background: var(--stab-thumb); border-radius: 2px; }
 .sb-tabs::-webkit-scrollbar-thumb:hover { background: var(--stab-thumb-hover); }
 .sb-tab {
-  position: relative; width: 34px; height: 34px; flex: 0 0 auto;
-  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  position: relative; width: auto; height: 32px; min-width: 64px; flex: 0 1 auto;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 0 8px;
   border: 1px solid var(--border-2); border-radius: 6px;
   background: transparent; color: var(--stab-fg); cursor: pointer; font: inherit;
+  font-size: 12px;
 }
 .sb-tab:hover { color: var(--fg); background: var(--hover-bg); }
 .sb-tab.on { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
-.sb-tab .sb-ico svg { width: 17px; height: 17px; }
+.sb-tab .sb-ico svg { width: 15px; height: 15px; }
+/* U7: an icon-only strip was unreadable - nine similar glyphs, no words.
+   Labels are always visible; the strip wraps instead of scrolling sideways. */
+.sb-lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-tab .sb-ico, .sb-name .sb-ico { display: inline-flex; align-items: center; justify-content: center; }
 .sb-tab .sb-dot {
   position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%;
@@ -2023,6 +2047,8 @@ button.toggle:disabled { opacity: .5; cursor: default; }
     visibility: hidden; transform: translateX(100%);
     transition: transform .22s ease, visibility 0s linear .22s;
   }
+  /* The drawer width belongs to CSS, not to a dragged column width. */
+  .sb-resizer { display: none; }
   body.sb-open .sb {
     visibility: visible; transform: none;
     transition: transform .22s ease, visibility 0s;
