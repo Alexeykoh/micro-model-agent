@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **81** (разрезано 78 + уменьшено 3) |
-| Осталось | **3** |
+| Снято из allowlist | **82** (разрезано 79 + уменьшено 3) |
+| Осталось | **2** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 3 |
+| — из них крупные (≥ 561 стр.) | 2 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -56,12 +56,18 @@
 > `openai-errors.ts`, `openai-models.ts`, `openai-prompt-tag.ts`,
 > `openai-rate-limit.ts`; запись снята из allowlist.
 
-> **Сверка 2026-11-03 (седьмая):** `core/context/manager.ts` разрезан (1129 → 243)
+> **Сверка 2026-11-03 (седьмая):** `core/context/manager.ts` разрезан (1129 → 248)
 > на `manager-types.ts` (формы данных), `manager-state.ts` (состояние/тюнинг),
 > `manager-estimate.ts` (токены/калибровка/пороги), `manager-quality.ts` (качество),
 > `manager-history.ts` (история/ход/clear), `manager-compaction.ts` (компакция/чистка),
 > `manager-compaction-stages.ts` (адаптивные стадии), `manager-compaction-block.ts`
 > (блок сводки/граница среза), `manager-snapshot.ts` (снапшот); запись снята из allowlist.
+>
+> **Сверка 2026-11-03 (восьмая):** `ui/line-editor.ts` разрезан (1156 → 288)
+> на `line-editor-types.ts` (публичные типы), `line-editor-buffer.ts` (буфер и правка),
+> `line-editor-nav.ts` (навигация/история), `line-editor-render.ts` (кадр + DSR-якорь),
+> `line-editor-keys.ts` (разбор клавиш), `line-editor-completion.ts` (Tab-комплит),
+> `line-editor-input.ts` (paste-машина/submit/ctrl); запись снята из allowlist.
 
 `execution/module.ts` (бывший флагман 688) теперь оболочка-композиция ≤300:
 план/сессия и тексты — в `plan-session.ts`/`deliverables.ts`, хосты — в
@@ -93,9 +99,9 @@
 | `src/modules/indexer/module.ts` | 497 | индексатор |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 
-## Осталось крупные (3) — отдельными волнами
+## Осталось крупные (2) — отдельными волнами
 
-`src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156.
+`src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187.
 
 ## Уже разрезано (44, запись снята из allowlist)
 
