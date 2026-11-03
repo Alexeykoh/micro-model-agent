@@ -227,8 +227,8 @@ reset` для json/list, failover с моделью целевого прова�
 
 ### 1.6 Качество памяти и самообучение (план `docs/superpowers/plans/2026-08-12-memory-quality-and-learning.md`)
 
-План **в работе**: Phase A (валидатор памяти) закрыта 2026-11-03; Phase B
-(обучение) и Phase C (языковые адаптеры) открыты. Из плана ранее выполнено
+План **в работе**: Phase A (валидатор памяти) и Phase C (языковые адаптеры)
+закрыты 2026-11-03; Phase B (обучение) открыта. Из плана ранее выполнено
 `SessionManager.loadSessionLog`.
 
 - [x] **Фаза 1 — валидатор памяти.** _(Сделано 2026-11-03, спека
@@ -239,8 +239,13 @@ reset` для json/list, failover с моделью целевого прова�
       `tests/modules/memory/validator.test.ts`, `store-gate.test.ts`, `tests/i18n.test.ts`.)_
 - [ ] **Фаза 2 — обучение:** `src/modules/learning/**` (`types/trace/validator/generator/cli/module`),
       подкоманда `mma learn`, регистрация `LearningModule` в bootstrap.
-- [ ] **Фаза 3 — языковые адаптеры:** `language-adapters.ts` — валидатор работает только
-      по ветке TS (`src/modules/execution/verifier.ts:298`).
+- [x] **Фаза 3 — языковые адаптеры.** _(Сделано 2026-11-03, спека
+      `docs/specs/2026-11-03-language-adapters-design.md`: `adapterForExt` +
+      `checkSyntax` — Python/Ruby/PHP/shell через компилятор, JSON через
+      `JSON.parse`; отсутствующий бинарник деградирует fail-open, ошибка
+      синтаксиса даёт `passed:false`. Гейты:
+      `tests/modules/execution/language-adapters.test.ts`,
+      `tests/verify-language-adapters.test.ts`.)_
 
 ### 1.7 Субагенты — находки живой сессии `ses_mvoac9q9_ukjrorvcgjrkhyrv`
 

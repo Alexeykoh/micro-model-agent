@@ -1,6 +1,6 @@
 // Верификатор шагов: файлы, синтаксис, скрипты, typecheck, success_criteria.
 import { existsSync, readFileSync } from "fs";
-import { resolve, extname, dirname, join } from "path";
+import { resolve, join } from "path";
 import { spawn } from "child_process";
 import { t } from "../../i18n/index";
 import type { StepKind } from "./planner";
@@ -11,6 +11,7 @@ import { findTypecheckRoot } from "./audit-runners";
 import { killTree } from "../processes/kill-tree";
 import { settleChildClose } from "../../utils/child-run";
 import { resolveCheckPath } from "./check-path";
+import { checkSyntax } from "./syntax-check";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
 
@@ -284,62 +285,15 @@ export class StepVerifier {
     };
   }
 
-  private async validateSyntax(filePath: string): Promise<boolean> {
-    const ext = extname(filePath);
-
-    if (ext === ".ts" || ext === ".tsx" || ext === ".cts" || ext === ".mts") {
-      // Локальный tsc, а не npx: npx без локального пакета уходит в сеть и
-      // висит секундами. Нет tsc — пропускаем проверку (как и раньше «not
-      // found → true»), но мгновенно.
-      const tsc = resolveTscCommand(dirname(filePath));
-      if (!tsc) {
-        this.degrade(
-          "verify.syntax",
-          `typescript compiler not found; syntax not checked for ${filePath}`,
-        );
-        return true;
-      }
-      try {
-        // Путь в кавычках — команды идут через shell и ломаются на пробелах.
-        await this.runAsync(`${tsc} --noEmit --skipLibCheck "${filePath}"`, this.baseDir, 20000);
-        return true;
-      } catch (err: any) {
-        if (
-          err.status === 127 ||
-          err.message.includes("not found") ||
-          err.message.includes("ENOENT")
-        ) {
-          this.degrade(
-            "verify.syntax",
-            `syntax check could not run for ${filePath}: ${String(err.message).slice(0, 200)}`,
-          );
-          return true;
-        }
-        const stderr = err.stderr?.toString() || "";
-        if (stderr.includes("error TS") && !stderr.includes("Cannot find module")) {
-          return false;
-        }
-        this.degrade(
-          "verify.syntax",
-          `syntax check inconclusive for ${filePath}: ${stderr.slice(0, 200) || err.message}`,
-        );
-        return true;
-      }
-    }
-
-    if (ext === ".js" || ext === ".jsx" || ext === ".cjs" || ext === ".mjs") {
-      try {
-        await this.runAsync(`node --check "${filePath}"`, this.baseDir, 5000);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
-    return true;
+  private validateSyntax(filePath: string): Promise<boolean> {
+    return checkSyntax(filePath, {
+      baseDir: this.baseDir,
+      run: (command, cwd, timeoutMs) => this.runAsync(command, cwd, timeoutMs),
+      degrade: (operation, reason) => this.degrade(operation, reason),
+    });
   }
 
-  /**
+/**
    * Запускает команду асинхронно (не блокируя event loop) и резолвится на
    * выходе. На ненулевой exit или таймаут — reject с захваченными stderr/stdout.
    */
