@@ -30,6 +30,39 @@ function catClass(kind: string, name: string): string {
   return "meta";
 }
 
+/** Wall-clock `HH:MM:SS` for a trace row (U15). */
+function clock(ts: unknown): string {
+  if (typeof ts !== "number" || !Number.isFinite(ts)) return "";
+  const d = new Date(ts);
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+/** Seconds since the first row of the same turn (`+2.4s`). */
+function turnOffset(entry: TraceEntry): string {
+  const first = sb.trace.find((e) => e.turn === entry.turn);
+  const start = typeof first?.ts === "number" ? first.ts : entry.ts;
+  if (typeof entry.ts !== "number" || typeof start !== "number") return "";
+  return `+${((entry.ts - start) / 1000).toFixed(1)}s`;
+}
+
+/** Right-hand time cell; `title` carries the offset inside the turn. */
+function appendStamp(row: HTMLElement, entry: TraceEntry): void {
+  const text = clock(entry.ts);
+  if (!text) return;
+  const stamp = el("span", "ts", text);
+  const offset = turnOffset(entry);
+  if (offset) stamp.title = offset;
+  row.appendChild(stamp);
+}
+
+/** Turn header carries the wall-clock start of that turn. */
+function turnTitle(turn: number, ts?: unknown): string {
+  const label = t("web.sidebar.trace_turn", { n: turn });
+  const time = clock(ts);
+  return time ? `${label} · ${time}` : label;
+}
+
 function rowArgs(entry: TraceEntry): string {
   if (entry.kind === "text" || entry.kind === "reasoning" || entry.kind === "phase") return "";
   // У `gate_timing` вся суть уже в подписи строки — разбивка живёт в детали.
@@ -74,6 +107,7 @@ function renderRow(entry: TraceEntry): HTMLElement {
   const args = rowArgs(entry);
   if (args) row.appendChild(el("span", "args", args));
   if (entry.durationMs) row.appendChild(el("span", "t", formatMs(entry.durationMs)));
+  appendStamp(row, entry);
   row.addEventListener("click", () => {
     // Снимок исходящего запроса (U20) — не деталь строки, а поп-ап: там
     // system/messages/tools целиком, в узкую панель они не влезают.
@@ -115,7 +149,7 @@ export function renderList(): void {
     const entry = sb.trace[i];
     if (entry.turn !== shownTurn) {
       shownTurn = entry.turn;
-      const h = el("div", "trace-turn", t("web.sidebar.trace_turn", { n: entry.turn }));
+      const h = el("div", "trace-turn", turnTitle(entry.turn, entry.ts));
       sb.headerByTurn.set(entry.turn, h);
       list.appendChild(h);
     }
@@ -129,7 +163,9 @@ export function renderList(): void {
 function append(entry: TraceEntry): TraceEntry {
   entry.id = ++sb.seq;
   entry.turn = sb.turn;
-  entry.ts = Date.now();
+  // U15: a log-backfilled row carries the original `ts`; live rows use now.
+  entry.ts =
+    typeof entry.ts === "number" && Number.isFinite(entry.ts) ? entry.ts : Date.now();
   sb.trace.push(entry);
   while (sb.trace.length > TRACE_CAP) {
     const old = sb.trace.shift();
@@ -152,7 +188,8 @@ function append(entry: TraceEntry): TraceEntry {
 }
 
 function turnHeader(turn: number): HTMLElement {
-  const h = el("div", "trace-turn", t("web.sidebar.trace_turn", { n: turn }));
+  const first = sb.trace.find((e) => e.turn === turn);
+  const h = el("div", "trace-turn", turnTitle(turn, first?.ts));
   sb.headerByTurn.set(turn, h);
   return h;
 }
@@ -219,6 +256,7 @@ function flushStreamRows(): void {
     row.textContent = "";
     row.appendChild(el("span", "g", glyph));
     row.appendChild(el("span", "lab", rowLabel(entry)));
+    appendStamp(row, entry);
   }
 }
 
@@ -453,7 +491,12 @@ export async function sidebarPullLog(): Promise<void> {
 }
 
 export function appendLogEntry(e: Dict): void {
-  appendLogRow(e, { append, pushRow });
+  // U15: keep the log's own timestamp, so a backfilled historical trace shows
+  // when events actually happened instead of "all at the moment of opening".
+  const raw = typeof e.ts === "string" ? Date.parse(e.ts) : typeof e.ts === "number" ? e.ts : NaN;
+  const appendAt = (entry: Dict): Dict =>
+    Number.isFinite(raw) ? append({ ...entry, ts: raw }) : append(entry);
+  appendLogRow(e, { append: appendAt, pushRow });
 }
 
 export function collapseDetail(): void {

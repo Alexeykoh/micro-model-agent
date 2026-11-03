@@ -1103,7 +1103,12 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .trc.execute .g { color: var(--accent); } .trc.meta .g { color: var(--meta); } .trc.phase .g { color: var(--think); }
 .trc .lab { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
 .trc .args { color: var(--args); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
-.trc .t { color: var(--dim-b); margin-left: auto; flex: 0 0 auto; }
+.trc .t { color: var(--dim-b); flex: 0 0 auto; }
+/* U15: time column on the right, tabular digits so rows line up. */
+.trc .ts {
+  color: var(--dim-b); flex: 0 0 auto; margin-left: auto;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+}
 .trc.warn .g, .trc.warn .lab { color: var(--yellow); }
 .trc.phase .lab { color: var(--think); }
 .trc.reasoning .g, .trc.reasoning .lab { color: var(--think); }
