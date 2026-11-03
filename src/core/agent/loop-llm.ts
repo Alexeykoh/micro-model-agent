@@ -9,7 +9,7 @@
  * `break` — остановить цикл, `return` — завершить ход результатом.
  */
 import type { AgentDeps } from "../agent";
-import type { AgentPhase, AgentResult, LLMResponse, OnMeta, OnPhase, ReasoningPhaseInfo } from "../types";
+import type { AgentPhase, AgentResult, OnMeta, OnPhase, ReasoningPhaseInfo } from "../types";
 import type { ToolCall, ToolDefinition } from "../../tools/types";
 import type { LoopState } from "./loop-state";
 import { clearIterationSignals } from "./loop-state";
@@ -21,6 +21,8 @@ import type { ReasoningState } from "../../tools/set-thinking";
 import { handleLlmError } from "./loop-llm-errors";
 import { issueDirective, clearDirective } from "./directives";
 import { detectRepeatedToolCall } from "./loop-repeat";
+import { consumeLlmStream, createLlmStreamResult } from "./loop-llm-stream";
+import { buildLlmResponse, finalizeLlmUsage, recordLlmOutput } from "./loop-llm-usage";
 
 /** Мутабельный вид `Agent`, которым владеет фаза LLM. */
 export interface LlmPhaseHost {
@@ -73,20 +75,10 @@ export async function runLlmPhase(
 ): Promise<LlmPhaseOutcome> {
   const { deps } = host;
   const { state, slog, input, history, allToolsForBudget, tokenTracker, reasoningResolver } = inp;
-  const { contextManager, pluginManager, logger, llmProvider, config } = deps;
+  const { contextManager, pluginManager, logger, config } = deps;
   const { onChunk, onReasoning, onPhase } = inp;
 
-  let textContent = "";
-  let reasoningContent = "";
-  const toolCalls: ToolCall[] = [];
-  let sawToolCall = false;
-  let sawUsage = false;
-  let emittedReasoning = false;
-  let malformedToolArgs = 0;
-
   const llmStart = Date.now();
-  // Первый контентный чанк: от него меряем decode-скорость (без префилла/TTFT).
-  let firstTokenAt = 0;
   // Сырая оценка на момент отправки — вход калибровки по реальному usage.
   const estimateAtSend = contextManager.getEstimatedTokens();
   const messageCountAtSend = contextManager.getMessageCount?.() ?? 0;
@@ -125,97 +117,30 @@ export async function runLlmPhase(
     contextManager.thinkingLevel = reasoning.level;
   }
 
+  // Аккумулятор создаётся до стрима: при обрыве по ошибке частичный текст
+  // остаётся виден обработчику (длина ответа в логе).
+  const stream = createLlmStreamResult();
   try {
-    for await (const chunk of llmProvider.chat(
-      history,
-      allToolsForBudget as ToolDefinition[],
-      host.getAbortSignal(),
-      reasoning.level
-        ? {
-            reasoningEffort: reasoning.level,
-            ...(maxTokensOverride !== undefined ? { maxTokens: maxTokensOverride } : {}),
-            sessionId: deps.sessionManager?.getActiveMeta()?.id,
-          }
-        : {
-            ...(maxTokensOverride !== undefined ? { maxTokens: maxTokensOverride } : {}),
-            sessionId: deps.sessionManager?.getActiveMeta()?.id,
-          },
-    )) {
-      if (host.isShutdownRequested()) break;
-      if (chunk.type === "text" && chunk.content) {
-        if (!firstTokenAt) firstTokenAt = Date.now();
-        if (emittedReasoning && !textContent) {
-          onReasoning?.("\n\n");
-        }
-        textContent += chunk.content;
-        const textOut = pluginManager.runOnText(
-          { iteration: state.iteration, logger, contextManager },
-          chunk.content,
-        );
-        onChunk?.(textOut);
-      }
-      if (chunk.type === "reasoning" && chunk.content) {
-        if (!firstTokenAt) firstTokenAt = Date.now();
-        reasoningContent += chunk.content;
-        if (config.showReasoning) {
-          const metaOut = pluginManager.runOnMeta(
-            { iteration: state.iteration, logger, contextManager },
-            chunk.content,
-          );
-          if (metaOut) {
-            onReasoning?.(metaOut);
-          }
-          emittedReasoning = true;
-        }
-      }
-      if (chunk.type === "tool_call" && chunk.toolCall) {
-        if (!firstTokenAt) firstTokenAt = Date.now();
-        sawToolCall = true;
-        let parsedArgs: Record<string, unknown>;
-        try {
-          parsedArgs = JSON.parse(chunk.toolCall.arguments);
-        } catch {
-          // Битый JSON аргументов раньше молча превращался в `{}` — модель звала
-          // тул с пустыми параметрами и не понимала причины. Логируем и сообщаем.
-          parsedArgs = {};
-          malformedToolArgs++;
-          logger.diagnostic(
-            "warn",
-            `Invalid JSON in tool_call arguments for "${chunk.toolCall.name}" (${chunk.toolCall.arguments.length} chars) — passing {}`,
-          );
-          slog.logError({
-            source: `tool:${chunk.toolCall.name}`,
-            operation: "tool.args_parse",
-            kind: "degraded",
-            cause: `invalid JSON arguments (${chunk.toolCall.arguments.length} chars), passing {}`,
-            detail: { toolCallId: chunk.toolCall.id },
-          });
-        }
-        toolCalls.push({
-          id: chunk.toolCall.id,
-          name: chunk.toolCall.name,
-          arguments: parsedArgs,
-        });
-      }
-      if (chunk.type === "done" && chunk.finishReason) {
-        state.lastFinishReason = chunk.finishReason;
-      }
-      if (chunk.type === "done" && chunk.usage) {
-        // chat() вызывается ОДИН раз за итерацию — каждый `done` относится к тому
-        // же запросу (usage-only + non-streaming fallback дают два done).
-        // ЗАМЕНЯЕМ running-суммы, иначе один запрос посчитается дважды.
-        tokenTracker.recordApiUsage(state, baseline, chunk.usage);
-        if (chunk.usage.promptTokens > 0) {
-          sawUsage = true;
-          contextManager.calibrate?.(chunk.usage.promptTokens, estimateAtSend, messageCountAtSend);
-        }
-      }
-      if (chunk.type === "warning" && chunk.content) {
-        // Нефатальное уведомление провайдера (напр., ответ срезан cap'ом).
-        logger.diagnostic("warn", `LLM warning: ${chunk.content}`);
-        onChunk?.(`\n\n> ⚠️ ${chunk.content}\n`);
-      }
-    }
+    await consumeLlmStream(
+      {
+        deps,
+        state,
+        slog,
+        tokenTracker,
+        baseline,
+        estimateAtSend,
+        messageCountAtSend,
+        history,
+        tools: allToolsForBudget as ToolDefinition[],
+        reasoningLevel: reasoning.level,
+        maxTokensOverride,
+        isShutdownRequested: () => host.isShutdownRequested(),
+        getAbortSignal: () => host.getAbortSignal(),
+        onChunk,
+        onReasoning,
+      },
+      stream,
+    );
   } catch (err) {
     return handleLlmError({
       isShutdownRequested: () => host.isShutdownRequested(),
@@ -226,7 +151,7 @@ export async function runLlmPhase(
       pluginManager,
       contextManager,
       model: config.model,
-      textLength: textContent.length,
+      textLength: stream.textContent.length,
       llmStart,
     });
   } finally {
@@ -234,7 +159,7 @@ export async function runLlmPhase(
   }
 
   // Провайдер не отдал usage — калибровка помечается stale (>1 вызова).
-  if (!sawUsage) contextManager.noteMissingUsage?.();
+  if (!stream.sawUsage) contextManager.noteMissingUsage?.();
 
   // Ответ пришёл — условие директивы «ответь сразу» больше не выполняется
   // (иначе она осталась бы стоящей и возвращалась после каждой компакции),
@@ -242,61 +167,39 @@ export async function runLlmPhase(
   clearDirective(contextManager, "truncated");
   state.truncationRetries = 0;
 
-  // Совокупная длина ответа — метрики валидны, даже когда бэкенд опускает usage.
-  const answer = textContent || reasoningContent;
-  tokenTracker.addCompletionChars(state, answer.length);
-  const llmDuration = tokenTracker.finishCall(
+  finalizeLlmUsage({
     state,
-    baseline,
-    answer,
-    contextManager.getEstimatedTokens(),
-    state.iteration,
-    llmStart,
-    firstTokenAt,
     slog,
-  );
-  logger.logLLMResponse(config.model, answer.length, llmDuration, undefined, "agent");
+    tokenTracker,
+    contextManager,
+    logger,
+    model: config.model,
+    baseline,
+    stream,
+    llmStart,
+  });
 
   if (host.isShutdownRequested()) return { kind: "break" };
 
   // Сообщаем модели, что аргументы тула были невалидным JSON: иначе она видит
   // лишь «пустой» вызов и не знает, что нужно повторить корректно.
-  if (malformedToolArgs > 0) {
+  if (stream.malformedToolArgs > 0) {
     contextManager.addMessage({
       role: "user",
-      content: `<system-summary>${malformedToolArgs} tool call(s) in your last response had invalid JSON arguments and were executed with empty parameters. Re-issue them with valid JSON.</system-summary>`,
+      content: `<system-summary>${stream.malformedToolArgs} tool call(s) in your last response had invalid JSON arguments and were executed with empty parameters. Re-issue them with valid JSON.</system-summary>`,
     });
   }
 
-  let llmResponse: LLMResponse | null = null;
-  if (sawToolCall) {
-    llmResponse = { type: "tool_call", calls: toolCalls };
-  } else if (textContent) {
-    llmResponse = { type: "text", content: textContent };
-  } else if (reasoningContent) {
-    llmResponse = { type: "reasoning", content: reasoningContent };
-  }
-  pluginManager.runOnAfterThink({ iteration: state.iteration, logger, contextManager }, llmResponse);
-
-  // Аннотация вывода модели в context-log (отдельным [OUTPUT]-блоком).
-  if (deps.contextLogger && (reasoningContent || textContent || toolCalls.length > 0)) {
-    try {
-      deps.contextLogger.recordOutput({
-        iteration: state.iteration,
-        ts: new Date().toISOString(),
-        reasoning: reasoningContent || undefined,
-        text: textContent || undefined,
-        toolCalls: toolCalls.map((tc) => ({ name: tc.name, arguments: tc.arguments })),
-      });
-    } catch {
-      // Логирование контекста не должно ронять агент.
-    }
-  }
+  pluginManager.runOnAfterThink(
+    { iteration: state.iteration, logger, contextManager },
+    buildLlmResponse(stream),
+  );
+  recordLlmOutput(deps.contextLogger, state, stream);
 
   // Детекция повторных одинаковых тулов (структурная). Сигнал питает reasoning
   // policy для понижения effort на рутине.
-  if (sawToolCall) {
-    const repeat = detectRepeatedToolCall(state, toolCalls, deps.exitOnComplete === true);
+  if (stream.sawToolCall) {
+    const repeat = detectRepeatedToolCall(state, stream.toolCalls, deps.exitOnComplete === true);
     if (repeat.repeated) {
       logger.diagnostic(
         "info",
@@ -328,5 +231,11 @@ export async function runLlmPhase(
     }
   }
 
-  return { kind: "ok", textContent, reasoningContent, toolCalls, sawToolCall };
+  return {
+    kind: "ok",
+    textContent: stream.textContent,
+    reasoningContent: stream.reasoningContent,
+    toolCalls: stream.toolCalls,
+    sawToolCall: stream.sawToolCall,
+  };
 }

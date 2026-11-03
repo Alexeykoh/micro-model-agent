@@ -44,7 +44,6 @@
     "src/modules/plugins/builtin/lint-on-write.ts": 435,
     "src/modules/webui/assets/js/feed/core.ts": 435,
     "src/modules/webui/assets/js/session/tabs.ts": 413,
-    "src/core/agent/loop-llm.ts": 334,
     "src/modules/execution/verifier.ts": 393,
     "src/core/bootstrap/modules-phase.ts": 374,
     "src/modules/session/manager.ts": 356
