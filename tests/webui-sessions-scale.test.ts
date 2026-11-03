@@ -67,4 +67,11 @@ describe("sessions list scale (U14)", () => {
     expect(CSS).toContain(".dd-menu .pin-btn.on");
     expect(CSS).toContain(".sess-prune code");
   });
+
+  // Follow-up from the live UI: "ЗАКРЕПЛЁННЫЕ" looked like just another row.
+  it("separates section headers from session rows", () => {
+    expect(CSS).toMatch(/\.dd-menu \.h\s*\{[^}]*font-weight:\s*600/);
+    expect(CSS).toMatch(/\.dd-menu \.h\s*\{[^}]*letter-spacing:\s*\.09em/);
+    expect(CSS).toMatch(/\.dd-menu \.h ~ \.h\s*\{[^}]*border-top:\s*1px solid/);
+  });
 });
