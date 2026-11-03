@@ -61,6 +61,8 @@ export function initFiles(d: Partial<FilesDeps>): void {
   f.detailBodyEl = byId("filesBody");
   f.detailAttachEl = byId("filesAttach");
   f.searchEl = byId<HTMLInputElement>("filesSearch");
+  f.searchClearEl = byId<HTMLButtonElement>("filesSearchClear");
+  f.searchHeadEl = byId("filesHeadTitle");
   f.searchResultsEl = byId("filesSearchResults");
   const close = byId<HTMLButtonElement>("filesClose");
 
