@@ -2188,7 +2188,16 @@ button.toggle:disabled { opacity: .5; cursor: default; }
     flex: none; flex-wrap: wrap; white-space: normal;
   }
   .rail-wrap.l-meta { width: 100%; flex-basis: 100%; }
-  .selectors { gap: 6px; }
+  /* U19: four chips (provider / model / context / reasoning) wrapped into two
+     rows on a phone. Keep one row: the label prefix is redundant once the
+     value is visible and the menu is one tap away (title carries the full
+     "label: value"), the model chip takes the leftover width and ellipsizes. */
+  .selectors { gap: 6px; flex-wrap: nowrap; align-items: center; }
+  .sel { flex: 0 0 auto; }
+  .sel[data-sel="model"] { flex: 1 1 0; min-width: 0; }
+  .sel > button { font-size: 0; gap: 4px; padding: 4px 7px; }
+  .sel > button b { font-size: 12px; max-width: 100%; }
+  .composer-face { display: none; }
   .composer-main { gap: 4px; }
   /* phones have no Enter/Shift+Enter/Esc/Ctrl+V — hints only take up space.
      Spans only (not the whole row): the `meta` rail layout lives inside

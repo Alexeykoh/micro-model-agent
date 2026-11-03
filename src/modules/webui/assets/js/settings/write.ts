@@ -20,6 +20,10 @@ function setSelButton(btn: HTMLElement | null, label: string, value: string): vo
   btn.textContent = label + ":";
   btn.appendChild(el("b", "", value));
   btn.appendChild(icon("chevron-down"));
+  // U19: on a phone the text prefix is hidden (one-row chips), so the full
+  // "label: value" must live somewhere: title + accessible name.
+  btn.title = label + ": " + value;
+  btn.setAttribute("aria-label", btn.title);
 }
 
 function menuItem(label: string, sub: string, active: boolean, onClick: () => void): HTMLButtonElement {
