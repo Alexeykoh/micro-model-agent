@@ -2006,6 +2006,26 @@ button.stab-x:hover { color: var(--red-strong); }
 }
 .dd-menu .del-btn:hover { color: var(--red-strong); background: var(--x-hover-bg); }
 .dd-menu .del-btn .svg-icon { width: 15px; height: 15px; }
+/* U14: long session lists. Rendering 60+ rows is cheap, but `content-visibility`
+   keeps paint cost flat when the dropdown holds hundreds. */
+.dd-menu .si-row { content-visibility: auto; contain-intrinsic-size: auto 30px; }
+.dd-menu .pin-btn {
+  flex: 0 0 auto; width: 24px; height: 28px; padding: 0; margin: 0 0 0 2px;
+  color: var(--dim-b); background: none; border: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: 13px; border-radius: 4px;
+}
+.dd-menu .pin-btn:hover { color: var(--fg); background: var(--hover-bg); }
+.dd-menu .pin-btn.on { color: var(--yellow); }
+.dd-menu .si-row.pinned .dd-row-main { color: var(--fg); }
+.sess-prune {
+  padding: 6px 8px; color: var(--dim-a); font-size: 11.5px; line-height: 1.4;
+}
+.sess-prune code {
+  display: block; margin-top: 3px; color: var(--fg);
+  font-family: var(--mono, ui-monospace, monospace); font-size: 11px;
+  overflow-wrap: anywhere;
+}
 .dd-menu .dd-err { color: var(--yellow); font-size: 11.5px; padding: 6px 8px; }
 
 /* Text actions (`use`/`edit`/`forget`/`add`, session delete) as focusable buttons. */
