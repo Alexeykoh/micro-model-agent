@@ -71,7 +71,7 @@ describe("memory single source of truth", () => {
   });
 
   it("caps the memory tail to the most recent entries", () => {
-    const store = new MemoryStore(dir);
+    const store = new MemoryStore(dir, { enabled: false });
     const mod = new MemoryModule(store);
     for (let i = 1; i <= 10; i++) {
       store.append("errors", `old failure ${i}`);
