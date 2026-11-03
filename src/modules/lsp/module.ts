@@ -16,7 +16,7 @@ import { renderCheckReport, type CheckAccumulator } from "./check-report";
 import { runWebCheck, type WebCheckDeps } from "./web-check";
 import { runChangedChecks } from "./changed-check";
 import { runCheckFiles } from "./check-run";
-import { runWriteCheck, type WriteCheckDeps } from "./write-check";
+import { runWriteCheck, runPreWriteCheck, type WriteCheckDeps } from "./write-check";
 import { warmProjectServers } from "./warmup";
 import { diagnoseLspServers, type LspDiagnoseDeps } from "./diagnose";
 import { errMsg } from "../../utils";
@@ -185,11 +185,17 @@ export class LspModule implements AgentModule {
       onSessionEnd: () => {
         void this.client.close();
       },
+      onBeforeTool: (ctx, call) => this.checkBeforeWrite(ctx, call),
       onAfterTool: (ctx, call, result) => this.checkAfterWrite(ctx, call, result),
     };
   }
 
   /** Пост-проверка записи (вынесена в `write-check.ts`). */
+  /** Pre-write draft check (see `runPreWriteCheck`). */
+  private checkBeforeWrite(ctx: ToolContext, call: ToolCall): Promise<string | boolean> {
+    return runPreWriteCheck(this.writeDeps(), ctx, call).then((r) => r ?? true);
+  }
+
   private checkAfterWrite(ctx: ToolContext, call: ToolCall, result: ToolResult): Promise<void> {
     return runWriteCheck(this.writeDeps(), ctx, call, result);
   }
