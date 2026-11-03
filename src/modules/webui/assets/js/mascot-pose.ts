@@ -155,6 +155,12 @@ export const STATE_CFG: Record<FaceState, StateCfg> = {
     props: [{ type: "checklist", mode: "scan", rows: 3 }],
     fx: [{ type: "corners", when: "behind", r: 0.46, speed: 0.3, alpha: 0.2 }],
   },
+  // U13: disabled LSP - a calm "would check" face, no alarm: nothing broke.
+  lspoff: {
+    eye: "squint", blink: 4.4, wave: "breathe", pose: P({ eW: 0.17, eH: 0.2 }), lean: 0,
+    props: [{ type: "badge", ch: "–", x: 0.35, y: -0.15, size: 0.1 }],
+    fx: [{ type: "aura", when: "behind", alpha: 0.16 }],
+  },
   edit: {
     eye: "narrow", blink: 3.4, wave: "edit", pose: P({ eW: 0.155, eH: 0.28, eX: 0.025 }), lean: 0.02,
     drift: { x: 0.016, y: 0.01, speed: 1.7 },

@@ -1037,6 +1037,9 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .sb-tab[data-indicator="live"] .sb-dot { opacity: 1; animation: sbPulse 1s ease-in-out infinite; }
 .sb-tab[data-indicator="busy"] .sb-dot { opacity: 1; background: var(--accent); }
 .sb-tab[data-indicator="stale"] .sb-dot { opacity: 1; background: var(--yellow); }
+/* U13: LSP off/offline is a persistent state, not activity - steady dot. */
+.sb-tab[data-indicator="off"] .sb-dot,
+.sb-tab[data-indicator="offline"] .sb-dot { opacity: 1; background: var(--yellow); }
 @keyframes sbPulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
 
 .sb-name {
@@ -1315,6 +1318,18 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .lsp-info-btn .svg-icon { width: 14px; height: 14px; }
 .lsp-toggle { align-items: center; }
 .lsp-hint { color: var(--dim-c); font-size: 11px; line-height: 1.4; margin: 2px 0 6px; overflow-wrap: anywhere; }
+/* U13: an explicit off/offline banner - the pane used to look the same as
+   "not checked yet", so a disabled LSP was easy to miss. */
+.lsp-banner {
+  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  margin: 4px 0 8px; padding: 7px 9px; border-radius: 6px;
+  border: 1px solid var(--border-2); background: var(--panel);
+  color: var(--fg); font-size: 12px; line-height: 1.4;
+}
+.lsp-banner.off { border-color: color-mix(in srgb, var(--yellow) 55%, var(--border-2)); }
+.lsp-banner-g { color: var(--yellow); font-weight: 700; }
+.lsp-banner-text { flex: 1 1 160px; min-width: 0; }
+.lsp-banner-btn { flex: 0 0 auto; }
 .lsp-info { padding: 2px 0; }
 .lsp-install-title { color: var(--dim-b); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin: 10px 0 4px; }
 .lsp-install { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin: 3px 0; }

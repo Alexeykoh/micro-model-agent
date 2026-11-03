@@ -18,6 +18,60 @@ function lspReasonKey(reason: unknown): string {
   return "web.sidebar.lsp_reason_" + String(reason || "").replace(/-/g, "_");
 }
 
+/**
+ * U13: the tab and the pane must say out loud when LSP is not working, instead
+ * of looking identical to "healthy but not checked yet". `unavailable` means
+ * the module itself is off (e.g. `mma serve` without LSP).
+ */
+export function lspStatusFlags(
+  diag: Dict | null,
+  unavailable = false,
+): { disabled: boolean; offline: boolean } {
+  if (unavailable) return { disabled: true, offline: false };
+  if (!diag) return { disabled: false, offline: false };
+  return { disabled: diag.enabled === false, offline: diag.offline === true };
+}
+
+/** Paints the off/offline dot on the LSP tab and updates its accessible name. */
+function syncLspIndicator(): void {
+  const tab = sb.el?.querySelector<HTMLElement>('.sb-tab[data-tab="lsp"]');
+  if (!tab) return;
+  const flags = lspStatusFlags(sb.lspDiag, sb.lspUnavailable);
+  const state = flags.disabled ? "off" : flags.offline ? "offline" : "";
+  tab.dataset.indicator = state;
+  const base = t("web.sidebar.tab_lsp");
+  const suffix = flags.disabled
+    ? t("web.sidebar.lsp_off")
+    : flags.offline
+      ? t("web.sidebar.lsp_offline")
+      : "";
+  const label = suffix ? `${base} · ${suffix}` : base;
+  tab.title = label;
+  tab.setAttribute("aria-label", label);
+}
+
+/** Visible banner at the top of the LSP pane when checks cannot run normally. */
+function appendStatusBanner(host: HTMLElement, diag: Dict | null): void {
+  const flags = lspStatusFlags(diag, sb.lspUnavailable);
+  if (!flags.disabled && !flags.offline) return;
+  const banner = el("div", "lsp-banner " + (flags.disabled ? "off" : "offline"));
+  const glyph = el("span", "lsp-banner-g", flags.disabled ? "–" : "⏻");
+  glyph.setAttribute("aria-hidden", "true");
+  banner.appendChild(glyph);
+  banner.appendChild(
+    el(
+      "span",
+      "lsp-banner-text",
+      t(flags.disabled ? "web.sidebar.lsp_banner_disabled" : "web.sidebar.lsp_banner_offline"),
+    ),
+  );
+  const setup = el("button", "linkbtn lsp-banner-btn", t("web.sidebar.lsp_configure"));
+  setup.type = "button";
+  setup.addEventListener("click", openLspInfoDialog);
+  banner.appendChild(setup);
+  host.appendChild(banner);
+}
+
 /** Глиф и класс строки сервера по классу причины. */
 function lspGlyph(reason: string | undefined): [string, string] {
   if (reason === "ok") return ["✓", "ok"];
@@ -77,6 +131,7 @@ function lspMutedRow(reason: string, list: Dict[]): HTMLElement {
 export function renderLsp(): void {
   const host = sb.lspEl;
   if (!host) return;
+  syncLspIndicator();
   host.textContent = "";
   const head = el("div", "lsp-head");
   head.appendChild(el("span", "lsp-what", t("web.sidebar.lsp_what")));
@@ -88,6 +143,7 @@ export function renderLsp(): void {
   infoBtn.addEventListener("click", openLspInfoDialog);
   head.appendChild(infoBtn);
   host.appendChild(head);
+  appendStatusBanner(host, sb.lspDiag);
 
   if (sb.lspUnavailable) {
     host.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_unavailable")));
