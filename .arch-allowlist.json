@@ -15,7 +15,6 @@
     "src/core/agent/tool-batch.ts": 772,
     "src/config/registry.ts": 707,
     "src/ui/renderer.ts": 693,
-    "src/modules/service/api/tasks-api.ts": 690,
     "src/modules/execution/module.ts": 688,
     "src/config/types.ts": 587,
     "src/core/agent.ts": 561

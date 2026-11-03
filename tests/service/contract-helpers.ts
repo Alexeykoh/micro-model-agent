@@ -264,6 +264,9 @@ export function emittedEventTypes(serviceDir: string): string[] {
     "runtime/event-bridge.ts",
     "runtime/prompt-io.ts",
     "api/tasks-api.ts",
+    "api/tasks-submit.ts",
+    "api/tasks-runner.ts",
+    "api/tasks-control.ts",
   ];
   const found = new Set<string>();
   const patterns = [

@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **66** (разрезано 63 + уменьшено 3) |
-| Осталось | **18** |
+| Снято из allowlist | **67** (разрезано 64 + уменьшено 3) |
+| Осталось | **17** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 18 |
+| — из них крупные (≥ 561 стр.) | 17 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -52,7 +52,7 @@
 | `src/modules/indexer/module.ts` | 497 | индексатор |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 
-## Осталось крупные (18) — отдельными волнами
+## Осталось крупные (17) — отдельными волнами
 
 `src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156 ·
 `src/core/context/manager.ts` 1101 · `src/llm/openai-compat.ts` 951 ·
@@ -62,11 +62,10 @@
 `src/config/registry-extra.ts` 755 · `src/modules/webui/settings/settings-api.ts` 738 ·
 `src/config/registry.ts` 707 ·
 `src/ui/renderer.ts` 693 · `src/modules/execution/module.ts` 688 ·
-`src/modules/service/api/tasks-api.ts` 596 ·
 `src/config/types.ts` 574 ·
 `src/core/agent.ts` 561.
 
-## Уже разрезано (40, запись снята из allowlist)
+## Уже разрезано (41, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -113,6 +112,7 @@
 | `modules/certification/scenarios.ts` | `modules/certification/scenarios-*.ts` (5 групп + общий тип) |
 | `tools/executor.ts` | `tools/executor-security.ts`, `executor-hooks.ts`, `executor-call.ts`, `executor-result.ts`, `executor-memo.ts` |
 | `modules/plugins/manager.ts` | `modules/plugins/manager-catalog.ts`, `manager-tools.ts`, `manager-hooks.ts`, `manager-reload.ts`, `manager-types.ts` |
+| `modules/service/api/tasks-api.ts` | `api/tasks-submit.ts`, `tasks-runner.ts`, `tasks-control.ts`, `tasks-job.ts` |
 
 ## Как проверить
 
