@@ -4,8 +4,6 @@
     "src/cli/repl.ts": 1498,
     "src/cli/repl-commands.ts": 1204,
     "src/ui/line-editor.ts": 1156,
-    "src/core/context/manager.ts": 1129,
-    "src/llm/openai-compat.ts": 956,
-    "src/tools/bash.ts": 799
+    "src/core/context/manager.ts": 1129
   }
 }

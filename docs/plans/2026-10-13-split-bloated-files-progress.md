@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **78** (разрезано 75 + уменьшено 3) |
-| Осталось | **6** |
+| Снято из allowlist | **80** (разрезано 77 + уменьшено 3) |
+| Осталось | **4** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 6 |
+| — из них крупные (≥ 561 стр.) | 4 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -42,6 +42,19 @@
 > `deliverables.ts` (файловые деливераблы, текст задачи, «нет плана»),
 > `module-hosts.ts` (хосты шагов/аудита/выравнивания/автопоиска); запись снята
 > из allowlist.
+
+> **Сверка 2026-11-03 (пятая):** `tools/bash.ts` разрезан (799 → 217) на
+> `bash-parse.ts` (разбор/Windows-адаптации), `bash-process.ts` (запуск и фон),
+> `bash-output.ts` (хинты/декор вывода), `bash-memo.ts` (мемо read-only),
+> `bash-failures.ts` (счётчики падений); запись снята из allowlist.
+>
+> **Сверка 2026-11-03 (шестая):** `llm/openai-compat.ts` разрезан (956 → 276) на
+> `openai-stream.ts` (движок стрима), `openai-stream-final.ts` (финал/обрезка),
+> `openai-sse.ts` (SSE/NDJSON и tool-call-дельты), `openai-nonstream.ts`
+> (non-stream запрос), `openai-completion.ts` (разбор ответа/usage),
+> `openai-request.ts` (заголовки/таймауты/ретраи), `openai-config.ts`,
+> `openai-errors.ts`, `openai-models.ts`, `openai-prompt-tag.ts`,
+> `openai-rate-limit.ts`; запись снята из allowlist.
 
 `execution/module.ts` (бывший флагман 688) теперь оболочка-композиция ≤300:
 план/сессия и тексты — в `plan-session.ts`/`deliverables.ts`, хосты — в
@@ -73,11 +86,10 @@
 | `src/modules/indexer/module.ts` | 497 | индексатор |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 
-## Осталось крупные (6) — отдельными волнами
+## Осталось крупные (4) — отдельными волнами
 
 `src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156 ·
-`src/core/context/manager.ts` 1101 · `src/llm/openai-compat.ts` 951 ·
-`src/tools/bash.ts` 799.
+`src/core/context/manager.ts` 1101.
 
 ## Уже разрезано (44, запись снята из allowlist)
 
