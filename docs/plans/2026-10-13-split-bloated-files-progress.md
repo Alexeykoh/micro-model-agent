@@ -10,9 +10,9 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **48** (разрезано 45 + уменьшено 3) |
-| Осталось | **36** |
-| — из них «не крупные» (< 561 стр.) | 13 |
+| Снято из allowlist | **49** (разрезано 46 + уменьшено 3) |
+| Осталось | **35** |
+| — из них «не крупные» (< 561 стр.) | 12 |
 | — из них крупные (≥ 561 стр.) | 23 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
@@ -23,7 +23,7 @@
 Флагманы `agent.ts` (561) и `execution/module.ts` (688) уже частично разрезаны ранее
 (фазы `core/agent/*`, модули `execution/*`); остаток — оболочка/публичный API.
 
-## Осталось «не крупные» (27) — режем сейчас
+## Осталось «не крупные» (26) — режем сейчас
 
 В порядке возрастания размера:
 
@@ -47,7 +47,6 @@
 | `src/modules/webui/assets/js/feed/core.ts` | 435 | лента/скролл |
 | `src/cli/main.ts` | 437 | парсинг опций/маршрут |
 | `src/modules/webui/assets/js/settings/write.ts` | 453 | запись настроек |
-| `src/tools/syntax-validator.ts` | 461 | парсер-фолбэки |
 | `src/core/bootstrap/session-runner.ts` | 487 | раннер сессии |
 | `src/modules/webui/assets/js/settings/providers.ts` | 488 | UI провайдеров |
 | `src/modules/security/security-policies.ts` | 492 | таблицы политик |
@@ -72,7 +71,7 @@
 `src/modules/certification/scenarios.ts` 591 · `src/config/types.ts` 574 ·
 `src/modules/webui/assets/app.ts` 569 · `src/core/agent.ts` 561.
 
-## Уже разрезано (31, запись снята из allowlist)
+## Уже разрезано (32, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -110,6 +109,7 @@
 | `core/agent/context-log.ts` | `core/agent/context-log-diff.ts` |
 | `modules/mcp/client.ts` | `modules/mcp/stdio-transport.ts`, `http-transport.ts`, `sse-transport.ts` |
 | `modules/webui/assets/js/session/composer.ts` | `.../session/composer-draft.ts` |
+| `tools/syntax-validator.ts` | `tools/syntax-xml.ts` |
 
 ## Как проверить
 
