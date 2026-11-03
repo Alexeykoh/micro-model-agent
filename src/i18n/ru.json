@@ -2183,6 +2183,8 @@
   "web.files.tree_width": "Ширина дерева",
   "web.files.expand_capped": "Развёрнуто до лимита в {n} папок.",
   "web.files.search_placeholder": "поиск по файлам и содержимому",
+  "web.files.search_clear": "очистить поиск",
+  "web.files.head": "файлы проекта",
   "web.files.search_no_results": "Совпадений нет.",
   "web.files.search_error": "Поиск не удался.",
   "web.files.search_truncated": "Показаны первые {n} совпадений — уточните запрос.",

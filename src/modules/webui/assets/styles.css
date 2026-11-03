@@ -1128,7 +1128,20 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   max-width: 100%; overflow: hidden;
 }
 .files-side[hidden] { display: none; }
-.files-bar { display: flex; gap: 2px; padding: 6px 6px 2px; flex-shrink: 0; align-items: center; }
+/* U8: the search field used to share one row with three icon buttons, so at
+   the default 240px tree width it showed "поиск по фай…". The header carries
+   the tree controls; search gets its own full-width row and a visible clear. */
+.files-head {
+  display: flex; align-items: center; gap: 6px; padding: 8px 8px 2px;
+  flex-shrink: 0; min-width: 0;
+}
+.files-head-title {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--sec-h);
+}
+.files-actions { display: flex; gap: 2px; flex: 0 0 auto; }
+.files-search-row { display: flex; gap: 4px; align-items: center; padding: 2px 8px 6px; flex-shrink: 0; }
+.files-search-row .fsearch { margin-left: 0; height: 26px; }
 /* Иконочные кнопки панели дерева и шапки просмотра: 24px цель, 14px глиф.
    Мелкие linkbtn-глифы (◧/✕) были нечитаемы и не попадали в клик. */
 .fbtn {
@@ -1173,6 +1186,7 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 }
 .fsearch:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .fsearch::placeholder { color: var(--dim-c); }
+.fsearch-clear { width: 24px; height: 24px; flex: 0 0 auto; }
 .files-search-results {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 4px 12px;
   display: flex; flex-direction: column; gap: 1px;

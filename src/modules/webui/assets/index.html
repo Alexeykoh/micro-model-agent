@@ -259,11 +259,17 @@
     <div class="sb-pane" id="pane-files" role="tabpanel" data-pane="files" hidden>
       <div class="files-body">
         <div class="files-side" id="filesSide">
-          <div class="files-bar" id="filesBar">
-            <button class="fbtn" type="button" id="filesCollapseAll" aria-label="collapse all"></button>
-            <button class="fbtn" type="button" id="filesExpandAll" aria-label="expand all"></button>
-            <button class="fbtn" type="button" id="filesRefresh" aria-label="refresh"></button>
+          <div class="files-head" id="filesHead">
+            <span class="files-head-title" id="filesHeadTitle">Files</span>
+            <div class="files-actions">
+              <button class="fbtn" type="button" id="filesCollapseAll" aria-label="collapse all"></button>
+              <button class="fbtn" type="button" id="filesExpandAll" aria-label="expand all"></button>
+              <button class="fbtn" type="button" id="filesRefresh" aria-label="refresh"></button>
+            </div>
+          </div>
+          <div class="files-search-row" id="filesSearchRow">
             <input class="fsearch" id="filesSearch" type="search" autocomplete="off" spellcheck="false" placeholder="search" aria-label="search" />
+            <button class="fbtn fsearch-clear" type="button" id="filesSearchClear" aria-label="clear search" hidden></button>
           </div>
           <div class="files-tree" id="filesTree" role="tree" tabindex="0" aria-label="files"></div>
           <div class="files-search-results" id="filesSearchResults" hidden></div>

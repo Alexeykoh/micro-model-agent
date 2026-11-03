@@ -14,11 +14,17 @@ const HTML = `
     <div class="sb-pane" id="pane-files" role="tabpanel" hidden>
       <div class="files-body">
         <div class="files-side" id="filesSide">
-          <div class="files-bar" id="filesBar">
-            <button class="fbtn" type="button" id="filesCollapseAll"></button>
-            <button class="fbtn" type="button" id="filesExpandAll"></button>
-            <button class="fbtn" type="button" id="filesRefresh"></button>
+          <div class="files-head" id="filesHead">
+            <span class="files-head-title" id="filesHeadTitle">Files</span>
+            <div class="files-actions">
+              <button class="fbtn" type="button" id="filesCollapseAll"></button>
+              <button class="fbtn" type="button" id="filesExpandAll"></button>
+              <button class="fbtn" type="button" id="filesRefresh"></button>
+            </div>
+          </div>
+          <div class="files-search-row" id="filesSearchRow">
             <input class="fsearch" id="filesSearch" type="search" />
+            <button class="fbtn fsearch-clear" type="button" id="filesSearchClear" hidden></button>
           </div>
           <div class="files-tree" id="filesTree" tabindex="0"></div>
           <div class="files-search-results" id="filesSearchResults" hidden></div>
@@ -87,6 +93,8 @@ i18n.I18N.dicts = {
     "web.files.no_workspace": "no workspace",
     "web.files.expand_capped": "expanded up to the limit of {n} folders.",
     "web.files.search_placeholder": "search files or contents",
+    "web.files.search_clear": "clear search",
+    "web.files.head": "project files",
     "web.files.search_no_results": "no matches",
     "web.files.search_error": "search failed",
     "web.files.search_truncated": "showing the first {n} matches",
@@ -226,6 +234,25 @@ describe("files content search DOM", () => {
   it("localizes the placeholder", () => {
     expect(input().placeholder).toBe("search files or contents");
     expect(input().getAttribute("aria-label")).toBe("search files or contents");
+  });
+
+  // U8: search was squeezed between icons and only Escape cleared it.
+  it("has a dedicated search row and a visible clear button", async () => {
+    expect(doc("filesHeadTitle").textContent).toBe("project files");
+    const clear = doc("filesSearchClear");
+    expect(clear.getAttribute("aria-label")).toBe("clear search");
+    expect(clear.hidden).toBe(true);
+    input().value = "needle";
+    input().dispatchEvent(new win.Event("input", { bubbles: true }));
+    expect(clear.hidden).toBe(false);
+    await search("needle");
+    expect(doc("filesTree").hidden).toBe(true);
+    clear.click();
+    await flush();
+    expect(input().value).toBe("");
+    expect(clear.hidden).toBe(true);
+    expect(doc("filesTree").hidden).toBe(false);
+    expect(results().hidden).toBe(true);
   });
 
   it("alerts truncated result sets", async () => {

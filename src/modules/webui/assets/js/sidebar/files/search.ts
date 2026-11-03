@@ -31,7 +31,10 @@ export function initSearch(d: Partial<SearchDeps>): void {
   deps = { ...deps, ...d };
   const input = sb.files.searchEl;
   if (!input) return;
-  input.addEventListener("input", () => schedule(input.value));
+  input.addEventListener("input", () => {
+    syncClear();
+    schedule(input.value);
+  });
   input.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") {
       ev.preventDefault();
@@ -39,11 +42,34 @@ export function initSearch(d: Partial<SearchDeps>): void {
       void runSearch(input.value);
     } else if (ev.key === "Escape" && input.value) {
       ev.preventDefault();
-      input.value = "";
-      cancelPending();
-      void runSearch("");
+      clearSearch();
     }
   });
+  const clear = sb.files.searchClearEl;
+  if (clear) {
+    // U8: a visible way out. Escape worked, but nothing on screen said so.
+    clear.addEventListener("click", () => {
+      clearSearch();
+      input.focus();
+    });
+  }
+  syncClear();
+}
+
+/** Clears the field and the results, restoring the tree. */
+function clearSearch(): void {
+  cancelPending();
+  const input = sb.files.searchEl;
+  if (input) input.value = "";
+  void runSearch("");
+  syncClear();
+}
+
+/** Shows the clear button only while there is something to clear. */
+function syncClear(): void {
+  const f = sb.files;
+  if (!f.searchClearEl) return;
+  f.searchClearEl.hidden = !(f.searchEl?.value ?? "").trim();
 }
 
 function cancelPending(): void {
@@ -106,6 +132,7 @@ export function renderSearch(): void {
   const f = sb.files;
   const box = f.searchResultsEl;
   const active = Boolean(f.searchQuery);
+  syncClear();
   if (f.treeEl) f.treeEl.hidden = active;
   if (!box) return;
   box.hidden = !active;

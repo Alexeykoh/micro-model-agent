@@ -85,6 +85,10 @@ export interface FilesView {
   crumbsOpen: boolean;
   /** Поле поиска по имени и содержимому (C-01). */
   searchEl: HTMLInputElement | null;
+  /** U8: visible clear button for the search field. */
+  searchClearEl: HTMLButtonElement | null;
+  /** U8: inner header title of the Files tab. */
+  searchHeadEl: HTMLElement | null;
   /** Список совпадений вместо дерева (пока запрос не пуст). */
   searchResultsEl: HTMLElement | null;
   /** Последний запрос; пустой — дерево видно, результаты скрыты. */
@@ -207,6 +211,8 @@ export const sb: SidebarState = {
     expandCapped: false,
     crumbsOpen: false,
     searchEl: null,
+    searchClearEl: null,
+    searchHeadEl: null,
     searchResultsEl: null,
     searchQuery: "",
     searchResults: [],
