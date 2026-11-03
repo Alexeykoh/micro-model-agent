@@ -1,537 +1,101 @@
-// MCP-клиент: JSON-RPC поверх stdio/sse/http, listTools/callTool, таймауты.
-import { type ChildProcess } from "child_process";
+// MCP-клиент: диспетчер по транспорту (stdio/http/sse), listTools/callTool.
+// Протоколы вынесены в транспорты (правило ≤300): client только выбирает путь.
 import type { MCPServerConfig } from "./registry";
-import { defaultOutputBus } from "../../output";
-import { MCP_HTTP_TIMEOUT_MS as HTTP_TIMEOUT_MS } from "../../config/timeouts";
-import { spawnMcpServer, stopMcpServer } from "./stdio-spawn";
-
-/**
- * Accept-заголовок для MCP Streamable HTTP: сервер отвечает 406, если клиент
- * не принимает оба media type.
- */
-const MCP_ACCEPT_HEADER = "application/json, text/event-stream";
+import { StdioTransport } from "./stdio-transport";
+import { HttpTransport } from "./http-transport";
+import { SseTransport } from "./sse-transport";
+import type { MCPToolInfo } from "./protocol";
 
 /** MCP-клиент: коннект по транспорту, listTools, callTool. */
 export class MCPClient {
   readonly serverName: string;
   private config: MCPServerConfig;
-  private process: ChildProcess | null = null;
-  private _connected = false;
-  private abortController: AbortController | null = null;
-  /** In-flight SSE-вызовы по JSON-RPC id (один слот мешал конкурентные
-   *  вызовы и матчил ответы по любому id — теперь слот на вызов). */
-  private ssePending = new Map<
-    number,
-    { resolve: (value: unknown) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }
-  >();
-  private sseSeq = 0;
+  private stdio: StdioTransport;
+  private http: HttpTransport;
+  private sse: SseTransport;
 
   constructor(config: MCPServerConfig) {
     this.config = config;
     this.serverName = config.name;
+    this.stdio = new StdioTransport(config);
+    this.http = new HttpTransport(config);
+    this.sse = new SseTransport(config);
+  }
+
+  /** HTTP-транспорт (POST без постоянного соединения). */
+  private isHttp(): boolean {
+    return this.config.transport === "http";
+  }
+
+  /** SSE-транспорт: явный `sse` или заданный `url` (http проверяется раньше). */
+  private isSse(): boolean {
+    return this.config.transport === "sse" || !!this.config.url;
   }
 
   /** Подключён ли клиент. */
   isConnected(): boolean {
-    return this._connected;
+    if (this.isHttp()) return this.http.isConnected();
+    if (this.isSse()) return this.sse.isConnected();
+    return this.stdio.isConnected();
   }
 
   /** Подключиться по транспорту из конфига (http/sse/stdio). */
   async connect(): Promise<void> {
-    if (this._connected) return;
+    if (this.isConnected()) return;
 
-    if (this.config.transport === "http") {
-      this._connected = true;
+    if (this.isHttp()) {
+      this.http.connect();
       return;
     }
-    if (this.config.transport === "sse" || this.config.url) {
-      return this.connectSSE();
+    if (this.isSse()) {
+      return this.sse.connect();
     }
-    return this.connectStdio();
-  }
-
-  private async connectSSE(): Promise<void> {
-    const url = this.config.url;
-    if (!url) throw new Error("SSE transport requires a url");
-
-    this.abortController = new AbortController();
-    const timeout = setTimeout(
-      () => this.abortController?.abort(),
-      this.config.timeout || HTTP_TIMEOUT_MS,
-    );
-
-    try {
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Accept: "text/event-stream",
-          ...this.config.headers,
-        },
-        signal: this.abortController.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        throw new Error(`SSE connection failed: ${response.status} ${response.statusText}`);
-      }
-
-      this._connected = true;
-
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      const buffer = "";
-
-      this.readSSE(reader, decoder, buffer);
-    } catch (err) {
-      clearTimeout(timeout);
-      throw err;
-    }
-  }
-
-  private async readSSE(
-    reader: ReadableStreamDefaultReader<Uint8Array>,
-    decoder: TextDecoder,
-    buffer: string,
-  ): Promise<void> {
-    try {
-      while (this._connected) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        let eventType = "";
-        let data = "";
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            data = line.slice(6);
-          } else if (line === "") {
-            if (eventType === "message" && data) {
-              this.handleSSEMessage(data);
-            }
-            eventType = "";
-            data = "";
-          }
-        }
-      }
-    } catch (err: any) {
-      if (err.name !== "AbortError") {
-        this.handleSSEError(err);
-      }
-    }
-    this._connected = false;
-  }
-
-  private handleSSEMessage(data: string): void {
-    try {
-      const msg = JSON.parse(data);
-      if (msg.id !== undefined) {
-        const pending = this.ssePending.get(msg.id);
-        if (pending) {
-          this.ssePending.delete(msg.id);
-          clearTimeout(pending.timer);
-          if (msg.error) pending.reject(new Error(msg.error.message));
-          else pending.resolve(msg.result);
-        }
-      }
-    } catch (e) {
-      // Хартбиты/комменты — не JSON: ожидаемый шум, но логируем, чтобы
-      // реально битый стрим был виден в диагностике.
-      defaultOutputBus.log(
-        "error",
-        "module:mcp",
-        `[MCPClient] Unparseable SSE message: ${String(data).slice(0, 120)} ${e instanceof Error ? e.message : String(e)}`,
-        { persist: true },
-      );
-    }
-  }
-
-  private handleSSEError(err: Error): void {
-    for (const [, pending] of this.ssePending) {
-      clearTimeout(pending.timer);
-      pending.reject(err);
-    }
-    this.ssePending.clear();
-  }
-
-  private connectStdio(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // Windows: `npx` → `npx.cmd`; резолв шима и shell — в spawnMcpServer.
-      const child = spawnMcpServer(this.config);
-
-      let _resolved = false;
-      child.on("error", (err) => {
-        this._connected = false;
-        if (!_resolved) {
-          _resolved = true;
-          reject(err);
-        }
-      });
-
-      child.on("exit", (code) => {
-        this._connected = false;
-        if (code !== 0 && !_resolved) {
-          _resolved = true;
-          reject(new Error(`MCP server exited with code ${code}`));
-        }
-      });
-
-      child.on("spawn", () => {
-        this._connected = true;
-        this.process = child;
-        // MCP-handshake: настоящие серверы требуют `initialize` перед
-        // tools/list и tools/call.
-        this.stdioRequest(
-          "initialize",
-          {
-            protocolVersion: "2024-11-05",
-            capabilities: {},
-            clientInfo: { name: "mma", version: "1.0.0" },
-          },
-          10000,
-        )
-          .then(() => {
-            child.stdin?.write(
-              `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
-            );
-          })
-          .then(() => {
-            _resolved = true;
-            resolve();
-          })
-          .catch((err) => {
-            this._connected = false;
-            if (!_resolved) {
-              _resolved = true;
-              reject(err);
-            }
-          });
-      });
-    });
-  }
-
-  /** Неразобранный хвост stdio-ответов (частичная строка). */
-  private stdioBuffer = "";
-  /** Монотонный id stdio-запросов (Date.now() коллизил на вызовах в одну мс). */
-  private stdioRequestSeq = 0;
-
-  /**
-   * JSON-RPC запрос поверх stdio: таймаут, обработка exit и построчный парсинг
-   * с учётом буфера (нотификации и чужие ответы между запросом и ответом
-   * матчинг больше не ломают).
-   */
-  private stdioRequest<T>(method: string, params?: unknown, timeoutMs?: number): Promise<T> {
-    const proc = this.process;
-    if (!proc?.stdout || !proc.stdin) {
-      return Promise.reject(new Error("Not connected to MCP server"));
-    }
-    const stdout = proc.stdout;
-    const timeout = timeoutMs ?? this.config.timeout ?? 30000;
-
-    return new Promise<T>((resolve, reject) => {
-      const request = {
-        jsonrpc: "2.0",
-        id: ++this.stdioRequestSeq,
-        method,
-        ...(params !== undefined ? { params } : {}),
-      };
-
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      let settled = false;
-      const finish = (fn: () => void) => {
-        if (settled) return;
-        settled = true;
-        if (timer !== undefined) clearTimeout(timer);
-        stdout.off("data", onData);
-        proc.off("exit", onExit);
-        fn();
-      };
-      const onData = (data: Buffer) => {
-        this.stdioBuffer += data.toString();
-        let idx: number;
-        while ((idx = this.stdioBuffer.indexOf("\n")) !== -1 && !settled) {
-          const line = this.stdioBuffer.slice(0, idx).trim();
-          this.stdioBuffer = this.stdioBuffer.slice(idx + 1);
-          if (!line) continue;
-          let msg: {
-            id?: number;
-            error?: { message: string };
-            result?: T;
-          };
-          try {
-            msg = JSON.parse(line);
-          } catch {
-            continue;
-          }
-          if (msg.id !== request.id) continue; // нотификация или чужой ответ
-          finish(() => {
-            if (msg.error) {
-              reject(new Error(msg.error!.message));
-            } else {
-              resolve(msg.result as T);
-            }
-          });
-          return;
-        }
-      };
-      const onExit = () => {
-        finish(() => reject(new Error(`MCP server exited before responding to ${method}`)));
-      };
-
-      stdout.on("data", onData);
-      proc.once("exit", onExit);
-      timer = setTimeout(() => {
-        finish(() => reject(new Error(`MCP ${method} timeout`)));
-      }, timeout);
-
-      proc.stdin!.write(`${JSON.stringify(request)}\n`);
-    });
+    return this.stdio.connect();
   }
 
   /** Список тулов сервера (автоконнект; транспорт выбирается из конфига). */
-  async listTools(): Promise<
-    Array<{
-      name: string;
-      description?: string;
-      inputSchema?: Record<string, unknown>;
-    }>
-  > {
-    if (!this._connected) {
+  async listTools(): Promise<MCPToolInfo[]> {
+    if (!this.isConnected()) {
       await this.connect();
     }
 
-    if (this.config.transport === "http") {
-      return this.listToolsHTTP();
+    if (this.isHttp()) {
+      return this.http.listTools();
     }
-    if (this.config.transport === "sse" || this.config.url) {
-      return this.listToolsSSE();
-    }
-    return this.listToolsStdio();
-  }
-
-  private async listToolsHTTP(): Promise<
-    Array<{
-      name: string;
-      description?: string;
-      inputSchema?: Record<string, unknown>;
-    }>
-  > {
-    const request = {
-      jsonrpc: "2.0",
-      id: Date.now(),
-      method: "tools/list",
-    };
-
-    const response = await fetch(this.config.url!, {
-      method: "POST",
-      headers: {
-        Accept: MCP_ACCEPT_HEADER,
-        "Content-Type": "application/json",
-        ...this.config.headers,
-      },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(this.config.timeout || HTTP_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`MCP listTools failed: ${response.status} ${text}`);
+    if (this.isSse()) {
+      return this.sse.listTools();
     }
 
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message);
-    }
-    return result.result?.tools || [];
-  }
-
-  private async listToolsSSE(): Promise<
-    Array<{
-      name: string;
-      description?: string;
-      inputSchema?: Record<string, unknown>;
-    }>
-  > {
-    const request = {
-      jsonrpc: "2.0",
-      id: Date.now(),
-      method: "tools/list",
-    };
-
-    const response = await fetch(this.config.url!, {
-      method: "POST",
-      headers: {
-        Accept: MCP_ACCEPT_HEADER,
-        "Content-Type": "application/json",
-        ...this.config.headers,
-      },
-      body: JSON.stringify(request),
-      signal: this.abortController?.signal,
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`MCP listTools failed: ${response.status} ${text}`);
-    }
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message);
-    }
-    return result.result?.tools || [];
-  }
-
-  private async listToolsStdio(): Promise<
-    Array<{
-      name: string;
-      description?: string;
-      inputSchema?: Record<string, unknown>;
-    }>
-  > {
-    if (!this.process) {
-      throw new Error("Not connected to MCP server");
-    }
-
-    const result = await this.stdioRequest<{
-      tools?: Array<{
-        name: string;
-        description?: string;
-        inputSchema?: Record<string, unknown>;
-      }>;
-    }>("tools/list");
-
+    const result = await this.stdio.request<{ tools?: MCPToolInfo[] }>("tools/list");
     return result?.tools || [];
   }
 
-  /** Отключиться: http — флаг, sse — abort, stdio — kill процесса. */
+  /** Отключиться: http/sse — сброс/abort, stdio — kill процесса. */
   async disconnect(): Promise<void> {
-    if (this.config.transport === "http") {
-      this._connected = false;
+    if (this.isHttp()) {
+      this.http.disconnect();
       return;
     }
-    if (this.config.transport === "sse" || this.config.url) {
-      this.abortController?.abort();
-      this.abortController = null;
-    } else if (this.process) {
-      // cmd.exe → npx → node: kill() бьёт оболочку, killTree добивает дерево.
-      stopMcpServer(this.process);
-      this.process = null;
+    if (this.isSse()) {
+      this.sse.disconnect();
+      return;
     }
-    this._connected = false;
+    this.stdio.disconnect();
   }
 
   /** Вызвать тул (без коннекта — ошибка; транспорт из конфига). */
   async callTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-    if (!this._connected) {
+    if (!this.isConnected()) {
       throw new Error("Not connected to MCP server");
     }
 
-    if (this.config.transport === "http") {
-      return this.callToolHTTP(toolName, args);
+    if (this.isHttp()) {
+      return this.http.callTool(toolName, args);
     }
-    if (this.config.transport === "sse" || this.config.url) {
-      return this.callToolSSE(toolName, args);
+    if (this.isSse()) {
+      return this.sse.callTool(toolName, args);
     }
-    return this.callToolStdio(toolName, args);
-  }
-
-  private async callToolHTTP(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-    const request = {
-      jsonrpc: "2.0",
-      id: Date.now(),
-      method: "tools/call",
-      params: {
-        name: toolName,
-        arguments: args,
-      },
-    };
-
-    const response = await fetch(this.config.url!, {
-      method: "POST",
-      headers: {
-        Accept: MCP_ACCEPT_HEADER,
-        "Content-Type": "application/json",
-        ...this.config.headers,
-      },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(this.config.timeout || HTTP_TIMEOUT_MS),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`MCP call failed: ${response.status} ${text}`);
-    }
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message);
-    }
-    return result.result || result;
-  }
-
-  private async callToolSSE(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-    const id = ++this.sseSeq;
-    const request = {
-      jsonrpc: "2.0",
-      id,
-      method: "tools/call",
-      params: {
-        name: toolName,
-        arguments: args,
-      },
-    };
-
-    return new Promise((resolve, reject) => {
-      const settle = (fn: () => void) => {
-        const pending = this.ssePending.get(id);
-        if (!pending) return;
-        this.ssePending.delete(id);
-        clearTimeout(pending.timer);
-        fn();
-      };
-      const timeout = this.config.timeout || 30000;
-      const timer = setTimeout(() => settle(() => reject(new Error("MCP call timeout"))), timeout);
-      this.ssePending.set(id, { resolve, reject, timer });
-
-      fetch(this.config.url!, {
-        method: "POST",
-        headers: {
-          Accept: MCP_ACCEPT_HEADER,
-          "Content-Type": "application/json",
-          ...this.config.headers,
-        },
-        body: JSON.stringify(request),
-        signal: this.abortController?.signal,
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            const text = await response.text().catch(() => "");
-            settle(() => reject(new Error(`MCP POST failed: ${response.status} ${text}`)));
-            return;
-          }
-          const result = await response.json();
-          settle(() =>
-            result.error ? reject(new Error(result.error.message)) : resolve(result.result || result),
-          );
-        })
-        .catch((err) => {
-          if (err.name !== "AbortError") settle(() => reject(err));
-        });
-    });
-  }
-
-  private callToolStdio(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-    if (!this.process) {
-      throw new Error("Not connected to MCP server");
-    }
-
-    return this.stdioRequest("tools/call", {
+    return this.stdio.request("tools/call", {
       name: toolName,
       arguments: args,
     });
