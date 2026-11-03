@@ -1,78 +1,22 @@
 // Feed container + sticky-scroll + read-only run folding for `mma web`.
 // Extracted from `feed.js`; the streaming/turn/history handlers stay there and
 // import these primitives. `feed.js` re-exports this module's public surface.
-import { msgs, el, icon, setIcon } from "../dom.js";
-import { t, pluralCount } from "../i18n.js";
-import { streamStateFor, tabs as tabState, hooks } from "../store.js";
-import type { FeedStreamState } from "../store.js";
-import { formatMs, verbosity } from "../format.js";
-import { copyText } from "../../md.js";
-import { createFace } from "../loader.js";
+import { msgs, el, icon } from "../dom.js";
+import { t } from "../i18n.js";
+import { tabs as tabState, hooks } from "../store.js";
 import { getUpdateInfo, isUpdateDismissed } from "../update-state.js";
 import { updateCard } from "./update-card.js";
+import { copyAction } from "./blocks.js";
 
 // ---------------------------------------------------------------------------
-// Shared render helpers used by the stream/turn/history clusters. They live
-// here (the base module every cluster imports) so those clusters never need to
-// import one another.
+// Shared render helpers used by the stream/turn/history clusters. Pure visual
+// builders (Markdown options, reasoning block, copy button) live in
+// `blocks.ts`; the container primitives stay here so those clusters never need
+// to import one another.
 // ---------------------------------------------------------------------------
 
-export interface MdOpts {
-  copyLabel: string;
-  copiedLabel: string;
-  copyFailedLabel: string;
-  animate: boolean;
-}
-
-// Options passed to the streaming Markdown renderer: localized code-block copy
-// labels. Highlighting is applied by `md.js` once a fence closes. `animate`
-// wraps live-streamed text chunks in `span.tk` (CSS `tkIn` fade); history
-// render and code blocks skip it.
-export function mdOpts(animate?: boolean): MdOpts {
-  return {
-    copyLabel: t("web.code.copy"),
-    copiedLabel: t("web.code.copied"),
-    copyFailedLabel: t("web.code.copy_failed"),
-    animate: animate === true,
-  };
-}
-
-export interface ThinkBlock {
-  wrap: HTMLElement;
-  head: HTMLButtonElement;
-  body: HTMLElement;
-}
-
-// Build the collapsible reasoning block. The global `.think-h` click handler
-// depends on this exact structure: wrap > [head, body], body carries `hidden`.
-// `live` marks an in-progress block (pulsing label); history renders static.
-// `info` — фактическая ступень текущей итерации (SSE `reasoning.level`, INV-R9).
-export function buildThinkBlock(
-  withDur: boolean,
-  live?: boolean,
-  info?: { level?: string; source?: string },
-): ThinkBlock {
-  const wrap = el("div", "think" + (live === false ? "" : " live"));
-  const head = el("button", "think-h");
-  head.type = "button";
-  head.setAttribute("aria-expanded", "false");
-  head.appendChild(el("span", "g", "✦"));
-  head.appendChild(el("span", "lab", t("web.action.thinking")));
-  if (info?.level) {
-    const lvl = el("span", "lvl");
-    lvl.append(icon("bulb", "lvl-ico"), el("span", "lvl-t", info.level));
-    if (info.source) lvl.title = info.source;
-    head.appendChild(lvl);
-  }
-  if (withDur) head.appendChild(el("span", "dur", ""));
-  const tog = el("span", "tog");
-  setIcon(tog, "chevron-right", t("web.action.show"));
-  head.appendChild(tog);
-  const body = el("div", "think-body hidden");
-  wrap.appendChild(head);
-  wrap.appendChild(body);
-  return { wrap, head, body };
-}
+export { mdOpts, buildThinkBlock, copyAction } from "./blocks.js";
+export type { MdOpts, ThinkBlock } from "./blocks.js";
 
 // Build the user-message block. Attachments form a strip ABOVE the text, so the
 // reading order is "what was attached" → "what was asked"; the `> ` prompt
@@ -122,21 +66,6 @@ function attachmentLabel(src: string): string {
   if (data) return data[1];
   const clean = src.split(/[?#]/)[0];
   return clean.split(/[\\/]/).pop() || src;
-}
-
-// Per-message copy action button (whole response as plain text / as Markdown).
-export function copyAction(payload: string, labelKey: string): HTMLButtonElement {
-  const btn = el("button", "act-btn", t(labelKey));
-  btn.type = "button";
-  btn.addEventListener("click", () => {
-    copyText(payload).then((ok: boolean) => {
-      btn.textContent = ok ? "✓ " + t("web.code.copied") : "⚠ " + t("web.code.copy_failed");
-      window.setTimeout(() => {
-        btn.textContent = t(labelKey);
-      }, 1400);
-    });
-  });
-  return btn;
 }
 
 // Copy-actions row appended after a completed assistant answer.
@@ -348,88 +277,4 @@ function trimFeed(feed: HTMLElement): void {
 export function clearEmpty(feed: HTMLElement | null): void {
   const empty = feed && feed.querySelector(".empty");
   if (empty) empty.remove();
-}
-
-export function clearBusy(feed?: HTMLElement | null): void {
-  feed = feed || liveFeed();
-  if (!feed) return;
-  const st = streamStateFor(feed);
-  if (st.busyTimer) {
-    clearInterval(st.busyTimer);
-    st.busyTimer = null;
-  }
-  const line = feed.querySelector(".busy");
-  if (line) line.remove();
-}
-
-// Show the in-feed "thinking" line. Called immediately after a successful
-// `/api/message` POST (202) so the wait during a slow first-run
-// summarization is visible before the first `phase` event arrives; the
-// normal event flow (`onText`/`onPhase`/`onTurnEnd`) clears it.
-export function showBusy(feed?: HTMLElement | null): void {
-  feed = feed || liveFeed();
-  if (!feed) return;
-  const st = streamStateFor(feed);
-  // The delayed post-send call must not flash a spinner over a stream that
-  // already started (fast first token).
-  if (st.curMd || st.curThink) return;
-  clearEmpty(feed);
-  if (feed.querySelector(".busy")) return;
-  if (st.busyTimer) {
-    clearInterval(st.busyTimer);
-    st.busyTimer = null;
-  }
-  const line = el("div", "busy");
-  line.appendChild(createFace("think", "sm"));
-  line.appendChild(el("span", "lab", t("web.action.thinking")));
-  const time = el("span", "busytime", "· 0s");
-  line.appendChild(time);
-  line.appendChild(el("span", "", "· " + t("web.input.esc")));
-  appendTo(feed, line);
-  const started = Date.now();
-  st.busyTimer = setInterval(() => {
-    if (!line.parentNode) {
-      clearInterval(st.busyTimer);
-      st.busyTimer = null;
-      return;
-    }
-    time.textContent = "· " + Math.round((Date.now() - started) / 1000) + "s";
-  }, 1000);
-}
-
-export function flushRun(feed?: HTMLElement | null): void {
-  feed = feed || liveFeed();
-  if (!feed) return;
-  const st = streamStateFor(feed);
-  if (st.runCount <= 0) {
-    resetRun(st);
-    return;
-  }
-  // Quiet: a run of successful read-only actions folds into one summary line,
-  // replacing the per-action lines (mirrors `Renderer.flushRecon`). `normal`
-  // and `verbose` keep the individual action lines and add nothing.
-  if (verbosity() === "quiet" && st.runReconOnly && st.runFails === 0 && st.runCount > 1) {
-    // Fade the folded lines out instead of snapping them away.
-    const folding = st.runNodes.slice();
-    folding.forEach((node) => node.classList.add("fold-out"));
-    window.setTimeout(() => folding.forEach((node) => node.remove()), 160);
-    const line = el("div", "grouped");
-    line.appendChild(el("span", "pipe", "│"));
-    const dur = formatMs(st.runDuration);
-    line.appendChild(
-      document.createTextNode(
-        " " + pluralCount("web.action.actions", st.runCount) + " ✓" + (dur ? " · " + dur : ""),
-      ),
-    );
-    appendTo(feed, line);
-  }
-  resetRun(st);
-}
-
-function resetRun(st: FeedStreamState): void {
-  st.runCount = 0;
-  st.runFails = 0;
-  st.runReconOnly = true;
-  st.runNodes = [];
-  st.runDuration = 0;
 }

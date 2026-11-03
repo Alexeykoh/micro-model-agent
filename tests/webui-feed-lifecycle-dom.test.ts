@@ -12,6 +12,8 @@ i18n.I18N.dicts = { en: {} };
 
 const store = await import("../src/modules/webui/assets/js/store.js");
 const core = await import("../src/modules/webui/assets/js/feed/core.js");
+// Busy/run-folding moved to `feed/busy.ts` (core no longer imports it).
+const busy = await import("../src/modules/webui/assets/js/feed/busy.js");
 const turn = await import("../src/modules/webui/assets/js/feed/turn.js");
 const storeCore = await import("../src/modules/webui/assets/js/core/store/index.js");
 
@@ -26,11 +28,11 @@ function mountTab(id: string): HTMLElement {
 describe("фронтенд: жизненный цикл ленты", () => {
   it("closing a tab clears its busy timer", () => {
     const feed = mountTab("S1");
-    core.showBusy(feed);
+    busy.showBusy(feed);
     const st = storeCore.streamStateFor(feed);
     expect(st.busyTimer).toBeTruthy();
 
-    core.clearBusy(feed);
+    busy.clearBusy(feed);
 
     expect(st.busyTimer).toBeFalsy();
     expect(feed.querySelector(".busy")).toBeNull();
