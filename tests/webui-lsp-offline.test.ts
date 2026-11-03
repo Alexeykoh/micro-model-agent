@@ -26,7 +26,7 @@ g.location = win.location;
 g.localStorage = win.localStorage;
 
 const { FACE_CLASS } = await import("../src/modules/webui/assets/js/loader-states.js");
-const { lspStatusFlags } = await import("../src/modules/webui/assets/js/sidebar/lsp.js");
+const { lspStatusFlags } = await import("../src/modules/webui/assets/js/sidebar/lsp-status.js");
 
 describe("LSP off/offline indication (U13)", () => {
   it("maps diagnosis to disabled/offline flags", () => {
