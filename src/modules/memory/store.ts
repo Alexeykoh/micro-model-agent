@@ -64,11 +64,11 @@ export class MemoryStore {
 
   /** Дописывает запись с таймстампом в файл категории. */
   append(name: string, entry: string): ValidationResult {
+    const path = this.fileFor(name);
     if (this.validator) {
       const check = this.validator.validate(name, entry);
       if (!check.accepted) return check;
     }
-    const path = this.fileFor(name);
     const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
     const body = encryptMemoryEntry(entry);
     const formatted = `- **${timestamp}** — ${body}\n`;
