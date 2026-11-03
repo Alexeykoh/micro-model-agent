@@ -23,7 +23,6 @@
     "src/config/types.ts": 587,
     "src/core/agent.ts": 561,
     "src/modules/plugins/manager.ts": 541,
-    "src/tools/executor.ts": 535,
-    "src/modules/webui/assets/js/sidebar/trace.ts": 525
+    "src/tools/executor.ts": 535
   }
 }

@@ -1,131 +1,28 @@
 // Trace tab for `mma web`: live per-session event buffer with master-detail
 // expansion, plus the log-supplement fetch. Split out of `sidebar.js`.
+// Row rendering lives in `trace-rows.ts`, buffer/stream batching in
+// `trace-buffer.ts`, log backfill in `trace-backfill.ts`.
 import { el } from "../dom.js";
-import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { labelOf, categoryOf, argText, formatMs } from "../format.js";
 import type { Dict } from "../core/store/types.js";
+import { sb, paneEl, MAX_OUTPUT_CHARS } from "./state.js";
+import { renderRow, turnTitle, collapseDetail } from "./trace-rows.js";
 import {
-  sb,
-  paneEl,
-  TRACE_CAP,
-  TRACE_GATE_NOTICE_MS,
-  MAX_OUTPUT_CHARS,
-  type TraceEntry,
-} from "./state.js";
-import { isWarn, phaseLabel, rowLabel, gateBreakdown } from "./trace-labels.js";
-import { renderDetail } from "./trace-detail.js";
-import { openRequestDialog, rememberRequest, clearRequestMemo } from "./request-popup.js";
+  append,
+  pushRow,
+  replaceRow,
+  resetStreamRows,
+  updateTextRow,
+  updateReasonRow,
+} from "./trace-buffer.js";
 import { sidebarSubagentsSessionChanged } from "./subagents.js";
 import { sidebarSecuritySessionChanged } from "./security.js";
-import { resetTraceScroll, scheduleTrace, traceAtFreshEdge, traceFollow } from "./trace-scroll.js";
-import { appendLogEntry as appendLogRow } from "./trace-log.js";
+import { resetTraceScroll } from "./trace-scroll.js";
+import { rememberRequest, clearRequestMemo } from "./request-popup.js";
+import { sidebarPullLog, appendLogEntry } from "./trace-backfill.js";
 
 export { renderDetail } from "./trace-detail.js";
-
-function catClass(kind: string, name: string): string {
-  if (kind === "tool" || kind === "tool_fail") return categoryOf(name);
-  if (kind === "phase") return "phase";
-  if (kind === "reasoning") return "reasoning";
-  return "meta";
-}
-
-/** Wall-clock `HH:MM:SS` for a trace row (U15). */
-function clock(ts: unknown): string {
-  if (typeof ts !== "number" || !Number.isFinite(ts)) return "";
-  const d = new Date(ts);
-  const p = (n: number): string => String(n).padStart(2, "0");
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
-
-/** Seconds since the first row of the same turn (`+2.4s`). */
-function turnOffset(entry: TraceEntry): string {
-  const first = sb.trace.find((e) => e.turn === entry.turn);
-  const start = typeof first?.ts === "number" ? first.ts : entry.ts;
-  if (typeof entry.ts !== "number" || typeof start !== "number") return "";
-  return `+${((entry.ts - start) / 1000).toFixed(1)}s`;
-}
-
-/** Right-hand time cell; `title` carries the offset inside the turn. */
-function appendStamp(row: HTMLElement, entry: TraceEntry): void {
-  const text = clock(entry.ts);
-  if (!text) return;
-  const stamp = el("span", "ts", text);
-  const offset = turnOffset(entry);
-  if (offset) stamp.title = offset;
-  row.appendChild(stamp);
-}
-
-/** Turn header carries the wall-clock start of that turn. */
-function turnTitle(turn: number, ts?: unknown): string {
-  const label = t("web.sidebar.trace_turn", { n: turn });
-  const time = clock(ts);
-  return time ? `${label} · ${time}` : label;
-}
-
-function rowArgs(entry: TraceEntry): string {
-  if (entry.kind === "text" || entry.kind === "reasoning" || entry.kind === "phase") return "";
-  // У `gate_timing` вся суть уже в подписи строки — разбивка живёт в детали.
-  if (entry.kind === "gate") return "";
-  if (entry.kind === "request") {
-    const req = entry.request;
-    return req && typeof req === "object" ? String((req as Dict).model || "") : "";
-  }
-  if (entry.kind === "plan") {
-    const idx = typeof entry.currentIndex === "number" ? entry.currentIndex : 0;
-    const total = Array.isArray(entry.steps) ? entry.steps.length : 0;
-    if (!total) return "";
-    return t("web.rail.step_of", { cur: Math.min(idx + 1, total), total });
-  }
-  if (entry.kind === "question") return entry.text || "";
-  // Диагностические строки несут смысл в одной строке (статус/лог/ретракт/
-  // индекс/критик/компакция/проба/usage/аудит/claim/вывод).
-  if (
-    entry.text &&
-    typeof entry.text === "string" &&
-    entry.kind !== "tool" &&
-    entry.kind !== "tool_fail"
-  ) {
-    const line =
-      entry.text
-        .split("\n")
-        .map((l: string) => l.trim())
-        .find((l: string) => l.length > 0) || "";
-    return line.slice(0, 160);
-  }
-  return argText(entry.args);
-}
-
-function renderRow(entry: TraceEntry): HTMLElement {
-  const cls = ["trc", catClass(entry.kind, entry.name)];
-  if (isWarn(entry)) cls.push("warn");
-  if (sb.selected === entry.id) cls.push("sel");
-  const row = el("div", cls.join(" "));
-  row.dataset.id = String(entry.id);
-  row.appendChild(el("span", "g", isWarn(entry) ? "⚠" : entry.kind === "question" ? "?" : "◇"));
-  row.appendChild(el("span", "lab", rowLabel(entry)));
-  const args = rowArgs(entry);
-  if (args) row.appendChild(el("span", "args", args));
-  if (entry.durationMs) row.appendChild(el("span", "t", formatMs(entry.durationMs)));
-  appendStamp(row, entry);
-  row.addEventListener("click", () => {
-    // Снимок исходящего запроса (U20) — не деталь строки, а поп-ап: там
-    // system/messages/tools целиком, в узкую панель они не влезают.
-    if (entry.kind === "request") {
-      openRequestDialog(entry.request);
-      return;
-    }
-    if (sb.selected === entry.id) {
-      collapseDetail();
-      return;
-    }
-    if (sb.listEl) sb.listEl.querySelectorAll(".trc.sel").forEach((n) => n.classList.remove("sel"));
-    sb.selected = entry.id;
-    row.classList.add("sel");
-    renderDetail(entry);
-  });
-  return row;
-}
+export { collapseDetail, sidebarPullLog, appendLogEntry };
 
 export function renderList(): void {
   const list = sb.listEl;
@@ -133,8 +30,7 @@ export function renderList(): void {
   list.textContent = "";
   sb.nodeById.clear();
   sb.headerByTurn.clear();
-  streamQueue.clear();
-  streamFlushQueued = false;
+  resetStreamRows();
   if (sb.selected && !sb.trace.some((e) => e.id === sb.selected)) sb.selected = null;
   if (sb.trace.length === 0) {
     list.appendChild(el("div", "trace-turn", t("web.sidebar.trace_empty")));
@@ -158,114 +54,6 @@ export function renderList(): void {
     list.appendChild(row);
   }
   resetTraceScroll();
-}
-
-function append(entry: TraceEntry): TraceEntry {
-  entry.id = ++sb.seq;
-  entry.turn = sb.turn;
-  // U15: a log-backfilled row carries the original `ts`; live rows use now.
-  entry.ts =
-    typeof entry.ts === "number" && Number.isFinite(entry.ts) ? entry.ts : Date.now();
-  sb.trace.push(entry);
-  while (sb.trace.length > TRACE_CAP) {
-    const old = sb.trace.shift();
-    if (!old) break;
-    const node = sb.nodeById.get(old.id);
-    if (node) {
-      node.remove();
-      sb.nodeById.delete(old.id);
-    }
-    if (old.toolCallId != null) sb.callIndex.delete(old.toolCallId);
-    if (!sb.trace.some((e) => e.turn === old.turn)) {
-      const h = sb.headerByTurn.get(old.turn);
-      if (h) {
-        h.remove();
-        sb.headerByTurn.delete(old.turn);
-      }
-    }
-  }
-  return entry;
-}
-
-function turnHeader(turn: number): HTMLElement {
-  const first = sb.trace.find((e) => e.turn === turn);
-  const h = el("div", "trace-turn", turnTitle(turn, first?.ts));
-  sb.headerByTurn.set(turn, h);
-  return h;
-}
-
-/**
- * Новая строка входит в начало списка. Если её ход — самый свежий (его
- * заголовок уже первый узел), строка встаёт сразу под заголовком: внутри хода
- * свежие события выше, а заголовок остаётся на месте.
- */
-function pushRow(entry: TraceEntry): void {
-  const list = sb.listEl;
-  if (!list) return;
-  const pinned = traceAtFreshEdge();
-  // Пустая лента показывает заглушку; первая настоящая строка её вытесняет —
-  // иначе «no events yet» остаётся в самом низу перевёрнутого списка.
-  if (sb.trace.length === 1 && list.childElementCount === 1) list.textContent = "";
-  const row = renderRow(entry);
-  sb.nodeById.set(entry.id, row);
-  const head = list.firstElementChild as HTMLElement | null;
-  if (head && head === sb.headerByTurn.get(entry.turn)) {
-    list.insertBefore(row, head.nextSibling);
-  } else {
-    list.insertBefore(row, list.firstChild);
-    list.insertBefore(turnHeader(entry.turn), row);
-  }
-  traceFollow(pinned);
-}
-
-function replaceRow(entry: TraceEntry): void {
-  const old = sb.nodeById.get(entry.id);
-  if (!old || !old.parentNode) {
-    pushRow(entry);
-    return;
-  }
-  const pinned = traceAtFreshEdge();
-  const next = renderRow(entry);
-  sb.nodeById.set(entry.id, next);
-  old.replaceWith(next);
-  traceFollow(pinned);
-}
-
-// Стриминговые строки обновляются пачкой: один пересчёт и один скролл на кадр,
-// а не на каждый чанк текста (было `scrollTop = scrollHeight` на токен).
-const streamQueue = new Map<number, { entry: TraceEntry; glyph: string }>();
-let streamFlushQueued = false;
-
-function streamRow(entry: TraceEntry, glyph: string): void {
-  streamQueue.set(entry.id, { entry, glyph });
-  if (!streamFlushQueued) {
-    streamFlushQueued = true;
-    scheduleTrace(flushStreamRows);
-  }
-  traceFollow(traceAtFreshEdge());
-}
-
-function flushStreamRows(): void {
-  streamFlushQueued = false;
-  if (streamQueue.size === 0) return;
-  const items = [...streamQueue.values()];
-  streamQueue.clear();
-  for (const { entry, glyph } of items) {
-    const row = sb.nodeById.get(entry.id);
-    if (!row) continue;
-    row.textContent = "";
-    row.appendChild(el("span", "g", glyph));
-    row.appendChild(el("span", "lab", rowLabel(entry)));
-    appendStamp(row, entry);
-  }
-}
-
-function updateTextRow(entry: TraceEntry): void {
-  streamRow(entry, "✦");
-}
-
-function updateReasonRow(entry: TraceEntry): void {
-  streamRow(entry, "✻");
 }
 
 // ---- public API ----
@@ -461,46 +249,4 @@ export function sidebarTraceEvent(kind: string, data: Dict): void {
     default:
       break;
   }
-}
-
-/**
- * Докачка диагностических событий из session-лога (критик, компакция,
- * проба контекста, usage, аудит, claim-retry, вывод). Отдельных SSE-продюсеров
- * нет — данные уже лежат в логе с `iteration`; тянем инкремент по курсору на
- * каждый `turn_end`. Живые tool/text-строки не дублируются (другие kinds).
- */
-export async function sidebarPullLog(): Promise<void> {
-  const sid = sb.el && sb.el.dataset.sid;
-  if (!sid || sb.logPulling) return;
-  sb.logPulling = true;
-  try {
-    let url = "/api/sessions/" + encodeURIComponent(sid) + "/log?limit=100";
-    if (sb.logCursor) url += "&since=" + encodeURIComponent(sb.logCursor);
-    const r = await api<{ log?: Dict[] }>(url);
-    if (!r.ok || !r.data || !Array.isArray(r.data.log)) return;
-    for (const e of r.data.log) {
-      if (typeof e.ts === "string" && (sb.logCursor === null || e.ts > sb.logCursor))
-        sb.logCursor = e.ts;
-      appendLogEntry(e);
-    }
-  } catch {
-    /* best-effort supplement: Trace живёт и без докачки */
-  } finally {
-    sb.logPulling = false;
-  }
-}
-
-export function appendLogEntry(e: Dict): void {
-  // U15: keep the log's own timestamp, so a backfilled historical trace shows
-  // when events actually happened instead of "all at the moment of opening".
-  const raw = typeof e.ts === "string" ? Date.parse(e.ts) : typeof e.ts === "number" ? e.ts : NaN;
-  const appendAt = (entry: Dict): Dict =>
-    Number.isFinite(raw) ? append({ ...entry, ts: raw }) : append(entry);
-  appendLogRow(e, { append: appendAt, pushRow });
-}
-
-export function collapseDetail(): void {
-  sb.selected = null;
-  if (sb.detailEl) sb.detailEl.hidden = true;
-  if (sb.listEl) sb.listEl.querySelectorAll(".trc.sel").forEach((n) => n.classList.remove("sel"));
 }
