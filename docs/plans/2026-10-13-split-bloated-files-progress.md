@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **61** (разрезано 58 + уменьшено 3) |
-| Осталось | **23** |
+| Снято из allowlist | **62** (разрезано 59 + уменьшено 3) |
+| Осталось | **22** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 23 |
+| — из них крупные (≥ 561 стр.) | 22 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -54,7 +54,7 @@
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 | `src/modules/plugins/manager.ts` | 541 | реестр плагинов |
 
-## Осталось крупные (23) — отдельными волнами
+## Осталось крупные (22) — отдельными волнами
 
 `src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156 ·
 `src/core/context/manager.ts` 1101 · `src/llm/openai-compat.ts` 951 ·
@@ -66,10 +66,10 @@
 `src/ui/renderer.ts` 693 · `src/modules/execution/module.ts` 688 ·
 `src/cli/commands.ts` 685 · `src/core/session-logger.ts` 603 ·
 `src/modules/service/api/tasks-api.ts` 596 ·
-`src/modules/certification/scenarios.ts` 591 · `src/config/types.ts` 574 ·
+`src/config/types.ts` 574 ·
 `src/modules/webui/assets/app.ts` 569 · `src/core/agent.ts` 561.
 
-## Уже разрезано (36, запись снята из allowlist)
+## Уже разрезано (37, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -113,6 +113,7 @@
 | `modules/webui/assets/js/feed/core.ts` | `.../feed/blocks.ts`, `.../feed/busy.ts` |
 | `cli/main.ts` | `cli/main-oneshot.ts`, `cli/main-web.ts`, `cli/auto-update.ts`, `cli/log-visibility.ts` |
 | `modules/webui/assets/js/sidebar/trace.ts` | `.../sidebar/trace-rows.ts`, `trace-buffer.ts`, `trace-backfill.ts` |
+| `modules/certification/scenarios.ts` | `modules/certification/scenarios-*.ts` (5 групп + общий тип) |
 
 ## Как проверить
 
