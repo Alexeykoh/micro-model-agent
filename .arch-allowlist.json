@@ -6,7 +6,6 @@
     "src/ui/line-editor.ts": 1156,
     "src/core/context/manager.ts": 1129,
     "src/llm/openai-compat.ts": 956,
-    "src/modules/execution/stuck-detector.ts": 886,
     "src/tools/bash.ts": 799,
     "src/modules/execution/module.ts": 688,
     "src/core/agent.ts": 561
