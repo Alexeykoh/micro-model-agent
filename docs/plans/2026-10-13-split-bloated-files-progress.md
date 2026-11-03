@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **77** (разрезано 74 + уменьшено 3) |
-| Осталось | **7** |
+| Снято из allowlist | **78** (разрезано 75 + уменьшено 3) |
+| Осталось | **6** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 7 |
+| — из них крупные (≥ 561 стр.) | 6 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -36,9 +36,16 @@
 > `agent/deps.ts` (AgentDeps), `agent/hosts.ts` (хосты фаз), `agent/surface.ts`
 > (провенанс/история/teardown/доступы), `agent/agent-base.ts` (поверхность
 > агента); запись снята из allowlist.
+>
+> **Сверка 2026-11-03 (четвёртая):** `execution/module.ts` разрезан (688 → 297)
+> на `plan-session.ts` (план, per-session слот, завершённый план, промпт-блок),
+> `deliverables.ts` (файловые деливераблы, текст задачи, «нет плана»),
+> `module-hosts.ts` (хосты шагов/аудита/выравнивания/автопоиска); запись снята
+> из allowlist.
 
-Флагман `execution/module.ts` (688) уже частично разрезан ранее (модули
-`execution/*`); остаток — оболочка/публичный API.
+`execution/module.ts` (бывший флагман 688) теперь оболочка-композиция ≤300:
+план/сессия и тексты — в `plan-session.ts`/`deliverables.ts`, хосты — в
+`module-hosts.ts`.
 
 ## Осталось «не крупные» (20) — режем сейчас
 
@@ -66,12 +73,11 @@
 | `src/modules/indexer/module.ts` | 497 | индексатор |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 
-## Осталось крупные (7) — отдельными волнами
+## Осталось крупные (6) — отдельными волнами
 
 `src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156 ·
 `src/core/context/manager.ts` 1101 · `src/llm/openai-compat.ts` 951 ·
-`src/tools/bash.ts` 799 ·
-`src/modules/execution/module.ts` 688.
+`src/tools/bash.ts` 799.
 
 ## Уже разрезано (44, запись снята из allowlist)
 

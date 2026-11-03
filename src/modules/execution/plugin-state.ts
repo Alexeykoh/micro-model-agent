@@ -97,6 +97,27 @@ export interface ExecutionPluginDeps {
   maybeSearchError: (ctx: any, call: any) => void;
 }
 
+/** Начальное состояние плагина: сидирует кулдауны теми же офсетами, с которыми плагин сравнивает. */
+export function createExecutionPluginState(): ExecutionPluginState {
+  return {
+    lastRecoveryIteration: -STUCK_RECOVERY_COOLDOWN,
+    lastTurnResetIteration: -1,
+    lastRecoveryTurn: -1,
+    lastStuckWarnTurn: -1,
+    consecutivePlanWarnings: 0,
+    lastStepId: -1,
+    stuckNotified: false,
+    lastStuckWarnKey: "",
+    lastStuckWarnIter: -STUCK_WARN_REPEAT_EVERY,
+    escalationDirectiveSent: false,
+    depsGateHints: new Map<number, number>(),
+    mutationsWithoutPlan: 0,
+    planNudgeSent: false,
+    typecheckFailures: new Map<string, string>(),
+    mutatedThisTurn: false,
+  };
+}
+
 export function resetStepFlags(state: ExecutionPluginState, stepId: number): void {
   state.consecutivePlanWarnings = 0;
   state.lastStepId = stepId;
