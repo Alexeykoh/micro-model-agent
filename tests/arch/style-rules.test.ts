@@ -13,16 +13,20 @@ import { fileURLToPath } from "node:url";
  * для стиля. Плюс три конкретных счётчика, у которых гварда не было:
  *
  *   1. `as any` / `as unknown as` в `src/` — baseline, только уменьшается;
- *   2. `as unknown as *Host` в `src/core/agent.ts` — НЕ запрещены, а объявлены:
- *      это мутабельные живые виды `Agent` (фаза пишет поля обратно), литерал их
- *      бы скопировал и потерял запись. Объявлять надо именно поэтому;
+ *   2. `as unknown as *Host` в `src/core/agent.ts` и `agent/agent-base.ts` — НЕ
+ *      запрещены, а объявлены: это мутабельные живые виды `Agent` (фаза пишет
+ *      поля обратно), литерал их бы скопировал и потерял запись. Объявлять надо
+ *      именно поэтому;
  *   3. пустых `catch {}` / `.catch(() => {})` — бюджет на файл, новый провал
  *      сверх бюджета краснеет.
  */
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const STYLE_DOC = join(REPO_ROOT, "docs", "agents", "code-style.md");
-const AGENT_TS = join(REPO_ROOT, "src", "core", "agent.ts");
+const AGENT_TS = [
+  join(REPO_ROOT, "src", "core", "agent.ts"),
+  join(REPO_ROOT, "src", "core", "agent", "agent-base.ts"),
+];
 const SRC = join(REPO_ROOT, "src");
 
 /**
@@ -245,9 +249,11 @@ describe("gate: style rules have a guard or a declared reason (W12)", () => {
     ).toBeLessThanOrEqual(BASELINE);
   });
 
-  it("every `as unknown as *Host` in agent.ts is declared with a reason", () => {
+  it("every `as unknown as *Host` in the agent surface is declared with a reason", () => {
     const found = new Set(
-      [...readFileSync(AGENT_TS, "utf-8").matchAll(HOST_CAST_RE)].map((m) => m[1]),
+      AGENT_TS.flatMap((file) =>
+        [...readFileSync(file, "utf-8").matchAll(HOST_CAST_RE)].map((m) => m[1]),
+      ),
     );
     const undeclared = [...found].filter((name) => !(name in HOST_CASTS));
     expect(
