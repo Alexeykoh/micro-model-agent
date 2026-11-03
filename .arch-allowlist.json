@@ -20,7 +20,6 @@
     "src/modules/execution/module.ts": 688,
     "src/core/session-logger.ts": 606,
     "src/config/types.ts": 587,
-    "src/core/agent.ts": 561,
-    "src/modules/plugins/manager.ts": 541
+    "src/core/agent.ts": 561
   }
 }
