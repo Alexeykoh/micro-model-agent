@@ -36,6 +36,7 @@ import {
   openFilesTabFor,
 } from "./js/sidebar.js";
 import { insertIntoDraft, submitPrompt } from "./js/session/composer.js";
+import { initShortcuts } from "./js/shortcuts.js";
 import { drainQueuedTurn } from "./js/session/queue.js";
 import { initCursor, createFace, setFaceState, loaderStateFor, setGreetResolver } from "./js/loader.js";
 import type { FaceState } from "./js/loader.js";
@@ -308,8 +309,8 @@ function applyStaticI18n(): void {
   setText("sessRecentHeader", t("web.sessions.recent"));
   setText("hintEnter", t("web.input.enter"));
   setText("hintShift", t("web.input.shift_enter"));
-  setText("hintEsc", t("web.input.esc"));
-  setText("hintAttach", t("web.input.attach"));
+  setText("hintEsc", t("web.input.esc")); setText("hintAttach", t("web.input.attach"));
+  setText("hintShort", t("web.input.shortcuts"));
   setText("bootCap", t("web.loader.boot"));
   // MMART's click bubble: bound lazily (not at import) so `loader.ts` stays
   // import-safe under `bun test`, and re-bound here after a locale switch.
@@ -404,8 +405,7 @@ async function boot(): Promise<void> {
     if (await migrateThemeCache((key, value) => postConfig(key, value, false))) renderSettings();
     initRail(settings.config && settings.config.ui ? settings.config.ui.activityRail : undefined);
     initComposerFace();
-    initSidebar();
-    initSidebarDrawer();
+    initSidebar(); initSidebarDrawer(); initShortcuts();
     initSubagentView();
     applySidebarI18n();
     initFiles({ insertPath: (p) => insertIntoDraft("@" + p + " ") });

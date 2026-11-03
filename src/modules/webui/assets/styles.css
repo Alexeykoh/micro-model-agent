@@ -3121,6 +3121,6 @@ body.light .c-dim { --face-c: var(--panel); }
 /* U12: keyboard hints are meaningless on touch — show the send button instead. */
 #hintTouch { display: none; }
 @media (pointer: coarse), (max-width: 760px) {
-  #hintEnter, #hintShift, #hintAttach, #hintEsc { display: none; }
+  #hintEnter, #hintShift, #hintAttach, #hintEsc, #hintShort { display: none; }
   #hintTouch { display: inline; }
 }
