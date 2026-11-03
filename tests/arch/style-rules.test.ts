@@ -89,7 +89,7 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
     count: 1,
     reason: "эталон: consume-канал судьи, причина в комментарии рядом",
   },
-  "src/core/bootstrap/session-runner.ts": {
+  "src/core/bootstrap/session-runner-wiring.ts": {
     count: 1,
     reason: "best-effort фоновая проба, сессия уже поднята",
   },
