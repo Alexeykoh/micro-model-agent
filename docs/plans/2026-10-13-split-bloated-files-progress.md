@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **82** (разрезано 79 + уменьшено 3) |
-| Осталось | **2** |
+| Снято из allowlist | **83** (разрезано 80 + уменьшено 3) |
+| Осталось | **1** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 2 |
+| — из них крупные (≥ 561 стр.) | 1 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -69,6 +69,15 @@
 > `line-editor-keys.ts` (разбор клавиш), `line-editor-completion.ts` (Tab-комплит),
 > `line-editor-input.ts` (paste-машина/submit/ctrl); запись снята из allowlist.
 
+> **Сверка 2026-11-03 (девятая):** `cli/repl.ts` разрезан (1418 → 299) на
+> `repl-history.ts` (история), `repl-prompt.ts` (промпт/одалживание терминала),
+> `repl-keys.ts` (спецклавиши/вставка), `repl-completer.ts` (Tab-комплит),
+> `repl-run.ts` (ход агента), `repl-listeners.ts` (строки/SIGINT/resize),
+> `repl-dispatch.ts` (handler-map команд), `repl-host.ts` (`Host`/мост),
+> `repl-session.ts` (`/reload`, stop, синк сессии), `repl-banner.ts`/`repl-start.ts`
+> (баннер и старт), `repl-editor.ts` (ввод), `repl-dispatcher.ts` (очередь строк);
+> запись снята из allowlist.
+
 `execution/module.ts` (бывший флагман 688) теперь оболочка-композиция ≤300:
 план/сессия и тексты — в `plan-session.ts`/`deliverables.ts`, хосты — в
 `module-hosts.ts`.
@@ -99,9 +108,9 @@
 | `src/modules/indexer/module.ts` | 497 | индексатор |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 
-## Осталось крупные (2) — отдельными волнами
+## Осталось крупные (1) — отдельной волной
 
-`src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187.
+`src/cli/repl-commands.ts` 1187.
 
 ## Уже разрезано (44, запись снята из allowlist)
 

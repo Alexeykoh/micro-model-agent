@@ -85,9 +85,9 @@ export const HOST_CASTS: Record<string, string> = {
 
 /** Пустые `catch {}` / `.catch(() => {})` / `.catch(() => null)` на файл: бюджет, не список строк. */
 export const SILENT_CATCHES: Record<string, { count: number; reason: string }> = {
-  "src/cli/repl.ts": {
+  "src/cli/repl-start.ts": {
     count: 3,
-    reason: "fire-and-forget запись/обновление REPL, ошибка не actionable",
+    reason: "fire-and-forget фоновая запись/проба на старте REPL, ошибка не actionable",
   },
   "src/core/hallucination/llm-judge.ts": {
     count: 1,
