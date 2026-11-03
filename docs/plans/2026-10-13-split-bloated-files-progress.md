@@ -10,9 +10,9 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **47** (разрезано 44 + уменьшено 3) |
-| Осталось | **37** |
-| — из них «не крупные» (< 561 стр.) | 14 |
+| Снято из allowlist | **48** (разрезано 45 + уменьшено 3) |
+| Осталось | **36** |
+| — из них «не крупные» (< 561 стр.) | 13 |
 | — из них крупные (≥ 561 стр.) | 23 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
@@ -23,7 +23,7 @@
 Флагманы `agent.ts` (561) и `execution/module.ts` (688) уже частично разрезаны ранее
 (фазы `core/agent/*`, модули `execution/*`); остаток — оболочка/публичный API.
 
-## Осталось «не крупные» (28) — режем сейчас
+## Осталось «не крупные» (27) — режем сейчас
 
 В порядке возрастания размера:
 
@@ -43,7 +43,6 @@
 | `src/modules/lsp/module.ts` | 415 | lifecycle LSP |
 | `src/modules/webui/state.ts` | 416 | god-state (роли уже есть) |
 | `src/modules/session/store.ts` | 431 | IO сессий |
-| `src/modules/webui/assets/js/session/composer.ts` | 433 | ввод/отправка |
 | `src/modules/plugins/builtin/lint-on-write.ts` | 435 | линт-плагин |
 | `src/modules/webui/assets/js/feed/core.ts` | 435 | лента/скролл |
 | `src/cli/main.ts` | 437 | парсинг опций/маршрут |
@@ -73,7 +72,7 @@
 `src/modules/certification/scenarios.ts` 591 · `src/config/types.ts` 574 ·
 `src/modules/webui/assets/app.ts` 569 · `src/core/agent.ts` 561.
 
-## Уже разрезано (30, запись снята из allowlist)
+## Уже разрезано (31, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -110,6 +109,7 @@
 | `modules/execution/execution-plugin.ts` | `modules/execution/plugin-state.ts`, `plugin-plan.ts`, `plugin-think.ts`, `plugin-tool.ts` |
 | `core/agent/context-log.ts` | `core/agent/context-log-diff.ts` |
 | `modules/mcp/client.ts` | `modules/mcp/stdio-transport.ts`, `http-transport.ts`, `sse-transport.ts` |
+| `modules/webui/assets/js/session/composer.ts` | `.../session/composer-draft.ts` |
 
 ## Как проверить
 
