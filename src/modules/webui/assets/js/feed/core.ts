@@ -163,8 +163,8 @@ function emptyView(): HTMLElement {
   const wrap = el("div", "empty");
   wrap.appendChild(el("span", "g", "✦"));
   wrap.appendChild(document.createTextNode(" " + t("web.empty.title")));
-  wrap.appendChild(document.createElement("br"));
-  wrap.appendChild(el("span", "hint", t("web.empty.hint")));
+  // U18: no second copy of the composer placeholder - the field right below
+  // already says where to type and what `/`, `@` and the selectors do.
   const upd = getUpdateInfo();
   if (upd && !isUpdateDismissed()) wrap.appendChild(updateCard(upd));
   return wrap;
