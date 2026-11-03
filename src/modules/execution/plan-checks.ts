@@ -1,18 +1,21 @@
-// Контракты верификации шагов: file-exists/command/manual/http + парсер.
+// Контракты верификации шагов: file-exists/command/manual/http/browser/web-build + парсер.
 /**
  * Контракты верификации шагов ("checks").
  *
  * Check — однострочный контракт на шаг, объявляется при create/re-plan.
- * Четыре префикса:
+ * Префиксы:
  * - "file-exists:<path>" — жёстко проверяет StepVerifier на done;
  * - "command:<cmd>" — точная команда-доказательство шага (self-certified);
  * - "manual:<text>" — проверка глазами для UI/визуалки (self-certified);
  * - "http:<url>[~<подстрока>]" — GET-проба, исполняется на done;
- * - "browser:<url>[~<подстрока>]" — headless-проба страницы, исполняется на done.
+ * - "browser:<url>[~<подстрока>]" — headless-проба страницы, исполняется на done;
+ * - "web-build:<dir>" — артефакт сборки: CSS с utilities и непустой index.html.
  *
  * Доказательства делятся на статические (компилируется) и поведенческие
  * (работает). Шаг, меняющий поведение/UI, статикой не подтверждается —
  * см. `checkDoneEvidence` и спеку `2026-10-28-turn-runtime-gate-design.md`.
+ * `web-build:` — не «работает», но и не голый build: он читает собранный
+ * артефакт, поэтому закрывает класс «сборка зелёная, страница пустая».
  *
  * Чистые хелперы, общие для валидатора (module.parseChecks) и done-gate
  * (plan-actions.updateStep).
@@ -24,9 +27,10 @@ import {
   runBrowserCheck,
   type BrowserProbeLauncher,
 } from "./browser-check";
+import { checkWebBuild } from "./web-build-check";
 
-/** Вид контракта: файл, команда, ручная проверка, http- или browser-проба. */
-export type CheckKind = "file" | "command" | "manual" | "http" | "browser";
+/** Вид контракта: файл, команда, ручная проверка, http/browser-проба, сборка. */
+export type CheckKind = "file" | "command" | "manual" | "http" | "browser" | "web-build";
 
 /** Класс доказательства: статика (компилируется) или поведение (работает). */
 export type EvidenceClass = "static" | "behavioral";
@@ -34,7 +38,7 @@ export type EvidenceClass = "static" | "behavioral";
 /** Распарсенный check: вид + цель. */
 export interface ParsedCheck {
   kind: CheckKind;
-  /** Путь после "file-exists:", команда после "command:", текст после "manual:", url после "http:". */
+  /** Путь/команда/текст/url после префикса; у "web-build:" — каталог сборки. */
   target: string;
 }
 
@@ -44,6 +48,7 @@ const PREFIXES: Array<{ prefix: string; kind: CheckKind }> = [
   { prefix: "manual:", kind: "manual" },
   { prefix: "http:", kind: "http" },
   { prefix: "browser:", kind: "browser" },
+  { prefix: "web-build:", kind: "web-build" },
 ];
 
 /**
@@ -119,6 +124,10 @@ export function classifyCheck(parsed: ParsedCheck): EvidenceClass {
     case "http":
     case "browser":
       return "behavioral";
+    case "web-build":
+      // Не рантайм, но и не «скомпилировалось»: проверяется содержимое
+      // собранного артефакта (CSS/HTML), поэтому UI-шаг этим не отсекается.
+      return "behavioral";
   }
 }
 
@@ -149,8 +158,47 @@ export async function checkDoneEvidence(
   parsed: ParsedCheck,
   target: StepEvidenceTarget,
   stepId: number,
-  opts: { fetchImpl?: typeof fetch; browserLauncher?: BrowserProbeLauncher } = {},
+  opts: {
+    fetchImpl?: typeof fetch;
+    browserLauncher?: BrowserProbeLauncher;
+    /** База для `web-build:`: каталог сборки резолвится внутри неё. */
+    baseDir?: string;
+  } = {},
 ): Promise<{ note: string; blocked: ToolResult | null } | null> {
+  if (parsed.kind === "web-build") {
+    const baseDir = opts.baseDir;
+    if (!baseDir) {
+      return {
+        note: "",
+        blocked: {
+          success: false,
+          output: t("plan.web_build_failed", {
+            step: String(stepId),
+            dir: parsed.target,
+            reason: "no base directory for web-build check",
+          }),
+        },
+      };
+    }
+    const res = checkWebBuild(baseDir, parsed.target);
+    if (res.ok) {
+      return {
+        note: `\n${t("plan.web_build_ok", { dir: parsed.target })}`,
+        blocked: null,
+      };
+    }
+    return {
+      note: "",
+      blocked: {
+        success: false,
+        output: t("plan.web_build_failed", {
+          step: String(stepId),
+          dir: parsed.target,
+          reason: res.reason || "failed",
+        }),
+      },
+    };
+  }
   if (parsed.kind === "http") {
     const res = await runHttpCheck(parsed.target, { fetchImpl: opts.fetchImpl });
     if (res.ok) {
