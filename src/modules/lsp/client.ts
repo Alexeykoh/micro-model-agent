@@ -157,6 +157,23 @@ export class LspClient {
     return { diagnostics: diagnostics ?? [], inconclusive: diagnostics === null };
   }
 
+  /** Как `checkFile`, но проверяет присланный черновик, не трогая диск. */
+  async checkContent(
+    filePath: string,
+    content: string,
+    config: LspServerConfig,
+    projectRoot: string,
+    timeoutMs?: number,
+  ): Promise<CheckResult> {
+    const timeout = timeoutMs ?? config.timeout ?? LSP_DEFAULT_TIMEOUT_MS;
+    const absolute = resolvePath(filePath);
+    const uri = pathToUri(absolute);
+    const connection = await this.pool.acquire(serverKeyFor(config), config, projectRoot);
+    connection.syncUri(uri, languageIdForPath(absolute), content);
+    const diagnostics = await connection.diagnosticsFor(uri, timeout);
+    return { diagnostics: diagnostics ?? [], inconclusive: diagnostics === null };
+  }
+
   /**
    * Лёгкая проба «сервер реально стартует»: spawn + initialize + shutdown.
    * Для баннера REPL и `/lsp doctor` — мёртвый сервер виден заранее, а не
