@@ -7,28 +7,27 @@
 //
 // Спавн впрыскивается через `ServerProcessFactory`, поэтому тесты гоняют
 // настоящее фреймирование на фейковом сервере без child_process.
+//
+// Транспорт — в `rpc.ts`, документы и диагностики — в `documents.ts`,
+// жизненный цикл процесса — в `server-lifecycle.ts` (правило 6).
 import type { LspDiagnostic, LspServerConfig } from "./types";
-import { killTree, type KillableProcess } from "../processes/registry";
-import { findHeaderEnd, isAcceptableFrameLength, parseContentLength } from "./framing";
-import { canonicalUri, pathToUri } from "./uri";
+import { pathToUri } from "./uri";
 import { buildClientCapabilities } from "./capabilities";
-import { settleEmptyDiagnostics, waitForRecord } from "./diagnostics-wait";
 import { languageIdForPath } from "./language";
 import type { LspClientLogger } from "./client-logger";
-import { errMsg } from "../../utils";
 import { LSP_DEFAULT_TIMEOUT_MS } from "../../config/timeouts";
 import { defaultSpawn, resolveLaunchPlan } from "./spawn";
 import { StderrRing } from "./stderr-ring";
-import { buildInitializeParams, exitReason, progressTextOf } from "./connection-intro";
+import { progressTextOf } from "./connection-intro";
+import { DocumentStore } from "./documents";
+import { RpcChannel } from "./rpc";
+import { ServerLifecycle } from "./server-lifecycle";
 import type {
   DiagnosticRecord,
-  DocumentDiagnosticReport,
-  DocumentState,
   LaunchPlan,
   LspConnectionDeps,
   LspExitInfo,
   PublishDiagnosticsParams,
-  ServerProcess,
   ServerProcessFactory,
 } from "./connection-types";
 
@@ -49,33 +48,14 @@ export type {
   ServerStdout,
 } from "./connection-types";
 
-/** Ошибка соединения. `fatal` — соединение мертво, переиспользовать нельзя. */
-export type LspConnectionError = Error & { fatal?: boolean };
-
-function fatalError(message: string): LspConnectionError {
-  const error = new Error(message) as LspConnectionError;
-  error.fatal = true;
-  return error;
-}
-
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+// Ошибки соединения — в `connection-errors.ts`; реэкспорт для импортёров.
+export type { LspConnectionError } from "./connection-errors";
 
 /** Один процесс сервера: JSON-RPC, синк документов, реестр диагностик. */
 export class LspConnection {
-  private process: ServerProcess | null = null;
-  private readonly pending = new Map<number, PendingEntry>();
-  private nextId = 1;
-  private buffer = Buffer.alloc(0);
-  private initialized = false;
-  private supportsPull = false;
-  private closing = false;
-  private lastUsedAt = 0;
-  /** Как завершился процесс (код/сигнал) — по спеке 0 = чистый, 1 = крах. */
-  private exitInfo: LspExitInfo | null = null;
   /** Последний `$/progress` от сервера (например, «загружаю проект»). */
   private progressText: string | null = null;
-  private readonly documents = new Map<string, DocumentState>();
-  private readonly diagnostics = new Map<string, DiagnosticRecord>();
+  private lastUsedAt = 0;
 
   private readonly logger: LspClientLogger | null;
   private readonly offline: boolean | undefined;
@@ -83,18 +63,21 @@ export class LspConnection {
   private readonly resolveLaunch: (config: LspServerConfig) => LaunchPlan;
   private readonly timeout: number;
   private readonly now: () => number;
+  private readonly store: DocumentStore;
+  private readonly rpc: RpcChannel;
+  private readonly lifecycle: ServerLifecycle;
 
   /** Ключ соединения в пуле: `serverKey \0 projectRoot`. */
   readonly key: string;
 
   /** pid процесса сервера (undefined — сервер не запущен). */
   get processPid(): number | undefined {
-    return this.process?.pid;
+    return this.lifecycle.processPid;
   }
 
   /** Код/сигнал завершения (null — не завершался). */
   get lastExit(): LspExitInfo | null {
-    return this.exitInfo;
+    return this.lifecycle.lastExit;
   }
   get lastProgress(): string | null {
     return this.progressText;
@@ -119,8 +102,8 @@ export class LspConnection {
 
   constructor(
     serverKey: string,
-    private readonly projectRoot: string,
-    private readonly config: LspServerConfig,
+    projectRoot: string,
+    config: LspServerConfig,
     deps: LspConnectionDeps = {},
   ) {
     this.logger = deps.logger ?? null;
@@ -133,10 +116,41 @@ export class LspConnection {
     this.resolveLaunch =
       deps.resolveLaunch ??
       ((cfg: LspServerConfig) => resolveLaunchPlan(cfg, this.offline, this.logger));
+    this.store = new DocumentStore({
+      isOpen: () => this.lifecycle.isOpen,
+      supportsPull: () => this.lifecycle.supportsDiagnosticsPull,
+      request: (method, params, timeoutMs) => this.rpc.request(method, params, timeoutMs),
+      notify: (method, params) => this.rpc.notify(method, params),
+      touch: () => this.touch(),
+    });
+    this.rpc = new RpcChannel({
+      getProcess: () => this.lifecycle.processRef,
+      logger: this.logger,
+      key: this.key,
+      onNotification: (method, params) => this.handleNotification(method, params),
+      onMessage: (message) => this.handleMessage(message),
+    });
+    this.lifecycle = new ServerLifecycle({
+      config,
+      projectRoot,
+      timeout: this.timeout,
+      logger: this.logger,
+      key: this.key,
+      spawn: this.spawnProcess,
+      resolveLaunch: this.resolveLaunch,
+      rpc: this.rpc,
+      clearState: () => {
+        this.rpc.resetBuffer();
+        this.store.clear();
+      },
+      onStdout: (chunk) => this.handleData(chunk),
+      onStderr: (chunk) => this.appendStderr(chunk),
+      touch: () => this.touch(),
+    });
   }
 
   get isOpen(): boolean {
-    return this.process !== null && this.initialized;
+    return this.lifecycle.isOpen;
   }
 
   /** Время последнего использования (для idle-reap и LRU в пуле). */
@@ -150,67 +164,17 @@ export class LspConnection {
 
   /** Открытые сейчас документы (для статуса UI). */
   openDocumentUris(): string[] {
-    return [...this.documents.values()].filter((doc) => doc.open).map((doc) => doc.uri);
+    return this.store.openUris();
   }
 
   /** Запустить сервер и выполнить рукопожатие `initialize` (+ `initialized`). */
-  async open(): Promise<void> {
-    if (this.isOpen) return;
-    this.closing = false;
-    this.buffer = Buffer.alloc(0);
-    this.documents.clear();
-    this.diagnostics.clear();
-
-    const plan = this.resolveLaunch(this.config);
-    const params = buildInitializeParams(this.projectRoot, this.config);
-    await this.spawnAndWire(plan);
-    try {
-      this.noteInitializeResult(await this.request("initialize", params, this.timeout));
-    } catch (e) {
-      // npx-докачка на холодном кеше вылетает за таймаут — один ретрай.
-      this.logger?.warn(`LSP initialize failed (attempt 1): ${errMsg(e)}`, {
-        command: this.config.command,
-        projectRoot: this.projectRoot,
-      });
-      this.teardown();
-      await this.spawnAndWire(plan);
-      try {
-        this.noteInitializeResult(await this.request("initialize", params, this.timeout));
-      } catch (retryErr) {
-        this.logger?.error(`LSP initialize failed (attempt 2, giving up): ${errMsg(retryErr)}`, {
-          command: this.config.command,
-          projectRoot: this.projectRoot,
-        });
-        this.teardown();
-        throw retryErr;
-      }
-    }
-
-    // `initialized` обязателен: без него часть серверов не шлёт диагностики.
-    this.notify("initialized", {});
-    this.initialized = true;
-    this.touch();
+  open(): Promise<void> {
+    return this.lifecycle.open();
   }
 
-  /** Спавн процесса и подписка на его события (exit/error/stdout/stderr). */
-  private async spawnAndWire(plan: LaunchPlan): Promise<void> {
-    const proc = await this.spawnProcess(plan, this.projectRoot);
-    this.process = proc;
-    this.exitInfo = null;
-    proc.once("exit", (code, signal) => this.onServerExit(proc, code, signal));
-    this.process.on("error", (error) => {
-      this.logger?.debug(`LSP process error: ${errMsg(error)}`, { key: this.key });
-    });
-    if (this.process.stderr) {
-      // stderr сервера ЧИТАЕМ: иначе «болтливый» сервер (npm-предупреждения,
-      // краш-логи) забивает пайп и встаёт (аудит §8.2).
-      this.process.stderr.on("data", (chunk: Buffer) => {
-        this.appendStderr(chunk.toString());
-      });
-    }
-    if (this.process.stdout) {
-      this.process.stdout.on("data", (chunk) => this.handleData(chunk));
-    }
+  /** Корректно закрыть: `shutdown` → `exit` → пауза → tree-kill. */
+  shutdown(): Promise<void> {
+    return this.lifecycle.shutdown();
   }
 
   /** Показать серверу содержимое файла (didOpen или didChange-Full). */
@@ -222,27 +186,7 @@ export class LspConnection {
 
   /** То же по готовому URI (используется `workspaceSymbol`-путями и тестами). */
   syncUri(uri: string, languageId: string, text: string): void {
-    if (!this.isOpen) throw fatalError("LSP connection is not open");
-    uri = canonicalUri(uri);
-    const current = this.documents.get(uri);
-    if (current?.open && current.text === text) {
-      this.touch();
-      return;
-    }
-    if (!current?.open) {
-      this.documents.set(uri, { uri, languageId, version: 1, text, open: true });
-      this.notify("textDocument/didOpen", {
-        textDocument: { uri, languageId, version: 1, text },
-      });
-      return;
-    }
-    const next: DocumentState = { ...current, version: current.version + 1, text };
-    this.documents.set(uri, next);
-    this.notify("textDocument/didChange", {
-      textDocument: { uri, version: next.version },
-      contentChanges: [{ text }],
-    });
-    this.touch();
+    this.store.sync(uri, languageId, text);
   }
 
   /** `didClose` — парная к `didOpen` нотификация; чистит и диагностики. */
@@ -251,278 +195,47 @@ export class LspConnection {
   }
 
   closeDocUri(uri: string): void {
-    uri = canonicalUri(uri);
-    const doc = this.documents.get(uri);
-    if (!doc?.open || !this.isOpen) return;
-    this.documents.set(uri, { ...doc, open: false });
-    this.diagnostics.delete(uri);
-    this.notify("textDocument/didClose", { textDocument: { uri } });
-    this.touch();
+    this.store.close(uri);
   }
 
   /**
    * Диагностика документа. Возвращает:
    * - список (в т.ч. пустой) — это ответ сервера;
    * - `null` — сервер молчит (таймаут/нет push) — ответа нет, это не «чисто».
-   */  async diagnosticsFor(uri: string, timeoutMs: number): Promise<LspDiagnostic[] | null> {
-    if (!this.isOpen) return null;
-    uri = canonicalUri(uri);
-    const doc = this.documents.get(uri);
-    const version = doc?.version ?? -1;
-
-    if (this.supportsPull) {
-      const pulled = await this.pullDiagnostics(uri, version, timeoutMs);
-      if (pulled) return pulled;
-    }
-
-    if (!doc?.open) return null;
-    const diagnostics =
-      this.freshDiagnostics(uri, version) ??
-      (await waitForRecord(() => this.diagnostics.get(uri), version, timeoutMs))?.diagnostics ??
-      null;
-    if (!diagnostics || diagnostics.length > 0) return diagnostics;
-    return (await settleEmptyDiagnostics(() => this.diagnostics.get(uri), version)) ?? diagnostics;
-  }
-
-  /** Диагностики запрошенной версии; null — устаревших/нет (аудит §8.3). */
-  private freshDiagnostics(uri: string, version: number): LspDiagnostic[] | null {
-    const record = this.diagnostics.get(uri);
-    return record && record.version === version ? record.diagnostics : null;
-  }
-
-  /** Pull-модель: явный `textDocument/diagnostic` (сервер объявил support). */
-  private async pullDiagnostics(
-    uri: string,
-    version: number,
-    timeoutMs: number,
-  ): Promise<LspDiagnostic[] | null> {
-    const report = (await this.request(
-      "textDocument/diagnostic",
-      { textDocument: { uri } },
-      timeoutMs,
-    ).catch(() => null)) as DocumentDiagnosticReport | null;
-    if (report?.kind !== "full") return null;
-    const items = report.items ?? [];
-    this.diagnostics.set(uri, { version, diagnostics: items });
-    this.touch();
-    return items;
+   */
+  diagnosticsFor(uri: string, timeoutMs: number): Promise<LspDiagnostic[] | null> {
+    return this.store.diagnosticsFor(uri, timeoutMs);
   }
 
   /** Актуальный список диагностик без ожидания (для быстрых путей). */
   peekDiagnostics(uri: string): DiagnosticRecord | null {
-    return this.diagnostics.get(canonicalUri(uri)) ?? null;
+    return this.store.peek(uri);
   }
 
-  async request(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
-    if (!this.process) throw fatalError(`LSP request ${method}: no process`);
-    const id = this.nextId++;
-    const message = JSON.stringify({ jsonrpc: "2.0", id, method, params });
-    const entry: PendingEntry = { resolve: null, reject: null };
-    const promise = new Promise<unknown>((resolve, reject) => {
-      entry.resolve = resolve;
-      entry.reject = reject;
-    });
-    this.pending.set(id, entry);
-    this.write(message);
-    const timer = setTimeout(() => {
-      if (this.pending.delete(id)) {
-        entry.reject?.(new Error(`LSP request timeout: ${method}`));
-      }
-    }, timeoutMs);
-    try {
-      return await promise;
-    } finally {
-      clearTimeout(timer);
-    }
+  request(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
+    return this.rpc.request(method, params, timeoutMs);
   }
 
-  /** Корректно закрыть: `shutdown` → `exit` → пауза → tree-kill. */
-  async shutdown(): Promise<void> {
-    if (this.closing) return;
-    this.closing = true;
-    try {
-      if (this.process && this.initialized) {
-        // Ответ shutdown ждём, чтобы сервер успел закрыть файлы до kill.
-        await this.request("shutdown", null, 3000).catch((e) => {
-          this.logger?.debug(`LSP shutdown request failed: ${errMsg(e)}`);
-        });
-        this.notify("exit", null);
-        await delay(150);
-      }
-    } catch (e) {
-      this.logger?.debug(`LSP shutdown error: ${errMsg(e)}`);
-    } finally {
-      this.teardown();
-    }
-  }
-
-  /** Запомнить возможности сервера из ответа `initialize`. */
-  private noteInitializeResult(result: unknown): void {
-    const capabilities = (result as { capabilities?: Record<string, unknown> } | null)?.capabilities;
-    this.supportsPull = Boolean(capabilities?.diagnosticProvider);
-  }
-
-  private onServerExit(exited?: ServerProcess, code?: number | null, signal?: string | null): void {
-    // Выход СТАРОГО процесса не должен ронять новое соединение: ретрай
-    // open() поднимает новый процесс, а exit предыдущего приходит позже
-    // (аудит §8.4).
-    if (exited && this.process && exited !== this.process) {
-      this.logger?.debug("LSP server exited (stale process)", { key: this.key });
-      return;
-    }
-    // Код выхода: 0 — чистый (после shutdown), 1/сигнал — крах.
-    this.exitInfo = { code: code ?? null, signal: signal ?? null };
-    this.logger?.debug(
-      `LSP server exited (code ${code ?? "?"}${signal ? `, signal ${signal}` : ""})`,
-      { key: this.key },
-    );
-    this.teardown();
-  }
-
-  /** Причина завершения для ошибок ожидающих запросов (код/сигнал). */
-  private teardown(): void {
-    const proc = this.process;
-    this.process = null;
-    this.initialized = false;
-    this.supportsPull = false;
-    this.buffer = Buffer.alloc(0);
-    this.documents.clear();
-    this.diagnostics.clear();
-    for (const entry of this.pending.values()) {
-      entry.reject?.(fatalError(exitReason(this.exitInfo)));
-    }
-    this.pending.clear();
-    if (proc) {
-      try {
-        killTree(proc as unknown as KillableProcess);
-      } catch (e) {
-        // Провал гашения — это событие, а не шум: сервер может остаться жить
-        // (аудит §8.1).
-        this.logger?.warn(`lsp.kill_failed: ${errMsg(e)}`);
-      }
-    }
-  }
-
+  /** Принять кусок stdout (тесты гоняют фрейминг байт-в-байт). */
   private handleData(chunk: Buffer): void {
-    this.buffer = this.buffer.length
-      ? Buffer.concat([this.buffer, chunk])
-      : Buffer.from(chunk);
-    this.parse();
+    this.rpc.handleData(chunk);
   }
 
-  private parse(): void {
-    for (;;) {
-      const found = findHeaderEnd(this.buffer);
-      if (!found) return;
-      const header = this.buffer.subarray(0, found.headerEnd).toString("utf8");
-      const length = parseContentLength(header);
-      // Битый/абсурдный заголовок: пропускаем его секцию, иначе зациклимся.
-      if (length === null || !isAcceptableFrameLength(length)) {
-        this.buffer = this.buffer.subarray(found.headerEnd);
-        continue;
-      }
-      const bodyStart = found.headerEnd;
-      if (this.buffer.length < bodyStart + length) return;
-      const body = this.buffer.subarray(bodyStart, bodyStart + length).toString("utf8");
-      this.buffer = this.buffer.subarray(bodyStart + length);
-      let message: Record<string, unknown>;
-      try {
-        message = JSON.parse(body) as Record<string, unknown>;
-      } catch (e) {
-        this.logger?.debug(`LSP JSON parse error: ${errMsg(e)}`);
-        continue;
-      }
-      this.handleMessage(message);
-    }
-  }
-
+  /** Разобрать сообщение сервера (тесты подменяют, чтобы видеть поток). */
   private handleMessage(message: Record<string, unknown>): void {
-    const method = typeof message.method === "string" ? message.method : null;
-    const id = typeof message.id === "number" || typeof message.id === "string" ? message.id : null;
+    this.rpc.dispatch(message);
+  }
 
-    // Ответ на наш запрос.
-    if (method === null) {
-      this.resolvePending(id, message);
-      return;
-    }
-    // Запрос от сервера к нам.
-    if (id !== null) {
-      this.replyToServerRequest(method, id);
-      return;
-    }
+  /** Нотификации сервера: диагностики (push) и прогресс. */
+  private handleNotification(method: string, params: unknown): void {
     if (method === "textDocument/publishDiagnostics") {
-      this.acceptDiagnostics(message.params as PublishDiagnosticsParams | undefined);
+      this.store.acceptDiagnostics(params as PublishDiagnosticsParams | undefined);
       return;
     }
     if (method === "$/progress") {
-      this.progressText = progressTextOf(message.params);
-      return;
+      this.progressText = progressTextOf(params);
     }
   }
-
-  /** Найти и завершить ожидающий запрос по id (результат или ошибка). */
-  private resolvePending(id: number | string | null, message: Record<string, unknown>): void {
-    if (id === null) return;
-    const entry = this.pending.get(id as number);
-    if (!entry) return;
-    this.pending.delete(id as number);
-    if (message.error) {
-      const error = message.error as { message?: unknown };
-      entry.reject?.(new Error(String(error.message ?? "LSP error")));
-    } else {
-      entry.resolve?.(message.result);
-    }
-  }
-
-  /**
-   * Ответить на запрос сервера: молчание подвешивает его
-   * (`workspace/configuration`, `client/registerCapability`). `initialize`
-   * пропускаем — это не server->client запрос на этом этапе.
-   */
-  private replyToServerRequest(method: string, id: number | string): void {
-    if (method === "initialize") return;
-    this.write(JSON.stringify({ jsonrpc: "2.0", id, result: null }));
-    this.logger?.debug(`LSP answered server->client request: ${method}`, { key: this.key });
-  }
-
-  private acceptDiagnostics(params: PublishDiagnosticsParams | undefined): void {
-    if (!params?.uri || !Array.isArray(params.diagnostics)) return;
-    // Сервер присылает свой вариант file-URI (`e%3A` vs `E:`): без канонизации
-    // пуш не находил открытый документ и молча отбрасывался.
-    const uri = canonicalUri(params.uri);
-    const doc = this.documents.get(uri);
-    if (!doc?.open) return;
-    // Пуш от старой версии документа — игнор (антиретро-правки).
-    if (params.version !== undefined && params.version < doc.version) return;
-    // Сохраняем ВЕРСИЮ, за которую сервер считал: текущая версия документа могла
-    // уехать вперёд, и тогда диагностики помечались бы как свежие (аудит §8.3).
-    const version = params.version ?? doc.version;
-    this.diagnostics.set(uri, { version, diagnostics: params.diagnostics });
-    this.touch();
-  }
-
-  private notify(method: string, params: unknown): void {
-    this.write(JSON.stringify({ jsonrpc: "2.0", method, params }));
-  }
-
-  private write(message: string): void {
-    const proc = this.process;
-    if (!proc?.stdin?.writable) return;
-    const header = `Content-Length: ${Buffer.byteLength(message)}\r\n\r\n`;
-    try {
-      proc.stdin.write(header + message);
-    } catch (e) {
-      // DEBT(lsp-protocol-error-counter): протокольная ошибка записи только
-      // логируется — счётчика «≤3 подряд, потом shutdown» (как в
-      // vscode-languageclient DefaultErrorHandler.error) ещё нет.
-      this.logger?.debug(`LSP write error: ${errMsg(e)}`);
-    }
-  }
-}
-
-interface PendingEntry {
-  resolve: ((value: unknown) => void) | null;
-  reject: ((reason: Error) => void) | null;
 }
 
 /** Ключ записи в пуле: идентичность сервера + корень проекта. */
