@@ -156,7 +156,7 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
   },
   // Прогрев `check-run.ts` больше не молчит: отказ старта сервера идёт в health
   // и в отчёт как `[LSP check failed]` (см. spec 2026-10-29-lsp-node-version-diagnosis).
-  "src/modules/lsp/connection.ts": {
+  "src/modules/lsp/documents.ts": {
     count: 1,
     reason: "best-effort запрос диагностики, сервер может не ответить",
   },
