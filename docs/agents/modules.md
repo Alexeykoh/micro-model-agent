@@ -363,7 +363,7 @@ Self-update is a fire-and-forget background check — it never blocks startup.
 - **Source:** `src/modules/updater/` (`checker.ts`, `module.ts`, `factory.ts`). `createUpdater()`
   (`factory.ts`) is the single construction point for both surfaces; all errors are swallowed
   (best-effort). Notifications go through i18n keys `updater.*`.
-- **Surfaces:** terminal (`main.ts` → `startAutoUpdate()`, printed via `OutputBus`) and
+- **Surfaces:** terminal (`cli/auto-update.ts` → `startAutoUpdate()`, printed via `OutputBus`) and
   `mma web` (`web-command.ts` → `startWebUpdater()`). Web has no stdout, so it reports through
   SSE `update` (`phase: available|installed|failed`), which makes MMART react; the persistent
   half is `HostStateSnapshot.updateAvailable` → footer chip `↑ <latest>`. `mma serve` also
