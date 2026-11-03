@@ -10,10 +10,14 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **83** (разрезано 80 + уменьшено 3) |
-| Осталось | **1** |
+| Снято из allowlist | **84** (разрезано 81 + уменьшено 3) |
+| Осталось | **0** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 1 |
+| — из них крупные (≥ 561 стр.) | 0 |
+
+> **Allowlist пуст:** каждый файл в `src/` ≤300 строк; записей в
+> `.arch-allowlist.json` больше нет, гейт `tests/arch/file-size.test.ts`
+> держит правило без исключений.
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -78,11 +82,24 @@
 > (баннер и старт), `repl-editor.ts` (ввод), `repl-dispatcher.ts` (очередь строк);
 > запись снята из allowlist.
 
+> **Сверка 2026-11-03 (десятая):** `cli/repl-commands.ts` разрезан (1187 → 87) на
+> `repl-commands-run.ts` (`/run`, `/image`), `repl-commands-config.ts` (`/config`,
+> `/reasoning`, `/verbose`, `/status`, `/wizard`, `/sysprompt`, `/map`),
+> `repl-commands-provider.ts` (`/provider`, `/model`), `repl-commands-context.ts`
+> (`/context`), `repl-commands-agent.ts` (`/security`, `/reload`, `/plugins`),
+> `repl-commands-session.ts` (сессии), `repl-commands-export.ts` (`/export`),
+> `repl-commands-migrate.ts` (`/config migrate`), `repl-commands-shared.ts`
+> (общие помощники); карта хендлеров и имена команд не менялись, запись снята
+> из allowlist — **список пуст**.
+
 `execution/module.ts` (бывший флагман 688) теперь оболочка-композиция ≤300:
 план/сессия и тексты — в `plan-session.ts`/`deliverables.ts`, хосты — в
 `module-hosts.ts`.
 
-## Осталось «не крупные» (20) — режем сейчас
+## Осталось «не крупные» (0) — исторический снимок
+
+Таблица ниже — снимок 2026-10-13; все перечисленные файлы уже ≤300 и сняты из
+allowlist. Список оставлен как журнал швов, а не как очередь работ.
 
 В порядке возрастания размера:
 
@@ -108,11 +125,12 @@
 | `src/modules/indexer/module.ts` | 497 | индексатор |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 
-## Осталось крупные (1) — отдельной волной
+## Осталось крупные (0)
 
-`src/cli/repl-commands.ts` 1187.
+Обе последние группы разрезаны: `cli/repl.ts` (сверка девятая) и
+`cli/repl-commands.ts` (сверка десятая).
 
-## Уже разрезано (44, запись снята из allowlist)
+## Уже разрезано (46, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -165,6 +183,8 @@
 | `modules/webui/assets/setup.ts` | `setup-api.ts`, `setup-actions.ts`, `setup-context.ts`, `setup-dom.ts`, `setup-i18n.ts`, `setup-render.ts`, `setup-review.ts`, `setup-security[-fields].ts`, `setup-state.ts`, `setup-steps-model.ts`, `setup-steps-provider.ts` |
 | `modules/webui/assets/js/settings/panels.ts` | `.../settings/panels-shared.ts`, `panels-memory.ts`, `panels-skills.ts`, `panels-lsp.ts`, `panels-plugins.ts` |
 | `config/registry-extra.ts` | `registry-extra-factories.ts`, `registry-extra-{provider,agent,features,security,capabilities}.ts` |
+| `cli/repl.ts` | `repl-{history,prompt,keys,completer,run,listeners,dispatch,host,session,banner,start,editor,dispatcher}.ts` |
+| `cli/repl-commands.ts` | `repl-commands-{run,config,provider,context,agent,session,export,migrate,shared}.ts` |
 
 ## Как проверить
 

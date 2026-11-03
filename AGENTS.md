@@ -210,15 +210,12 @@ recovery-директивы и кап файлов памяти), `tests/core/co
 
 ### 6. Не расширять файл «заодно»
 
-Правило ≤300 строк действует там, где есть чистый шов. Файлы >300 строк —
-в `.arch-allowlist.json` с причиной и датой. Снятие из списка — отдельная задача
-(см. W5 спеки architecture v2 для `agent.ts`).
+Правило ≤300 строк действует там, где есть чистый шов. Файл >300 строк — повод
+разрезать, а не «дописать»: запись в `.arch-allowlist.json` — явный долг, и его
+потолок только уменьшается.
 
-Осознанные исключения сейчас: `src/core/agent.ts` (разбор в W5) · `src/cli/repl.ts` ·
-`src/ui/line-editor.ts` (DSR-протокол) · `src/modules/execution/stuck-detector.ts` ·
-`src/modules/execution/module.ts` · `src/config/registry-extra.ts` и
-`src/modules/webui/settings-api.ts` (плоские таблицы) · `src/modules/webui/turns.ts`
-(цикл хода с per-session состоянием).
+Осознанных исключений сейчас нет: `.arch-allowlist.json` пуст, каждый файл ≤300
+строк. Гейт — `tests/arch/file-size.test.ts`.
 
 ### 7. Определение «готово»
 
