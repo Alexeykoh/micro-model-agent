@@ -126,7 +126,7 @@ describe("gate: timeout relations (W2)", () => {
     // Решение D7: границы реестра НЕ меняем — короткий таймаут критика это
     // законный выбор пользователя (он осознанно режет проверку). Поднимать
     // `min` до провайдерского дедлайна значило бы отнять у него этот выбор.
-    const registry = readFileSync(join(REPO_ROOT, "src", "config", "registry.ts"), "utf-8");
+    const registry = readFileSync(join(REPO_ROOT, "src", "config", "registry-defs-agent.ts"), "utf-8");
     const entry = /key:\s*"critic\.timeoutMs"[\s\S]{0,400}?min:\s*(\d+)/.exec(registry)?.[1];
     expect(entry, "не нашли critic.timeoutMs в реестре").toBeDefined();
     // Но не меньше секунды: меньше — уже не таймаут, а «не дождаться».

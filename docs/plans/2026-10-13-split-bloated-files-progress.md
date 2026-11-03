@@ -10,10 +10,10 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **70** (разрезано 67 + уменьшено 3) |
-| Осталось | **14** |
+| Снято из allowlist | **72** (разрезано 69 + уменьшено 3) |
+| Осталось | **12** |
 | — из них «не крупные» (< 561 стр.) | 0 |
-| — из них крупные (≥ 561 стр.) | 14 |
+| — из них крупные (≥ 561 стр.) | 12 |
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
@@ -21,7 +21,11 @@
 > в «не крупные». Размеры в таблицах ниже — снимок на 2026-10-13.
 >
 > **Сверка 2026-11-03:** `webui/state.ts` разрезан (445 → 215) на
-> `webui/state-contracts.ts`, `webui/state-session.ts`, `webui/state-sse.ts`.
+> `webui/state-contracts.ts`, `webui/state-session.ts`, `webui/state-sse.ts`;
+> `config/types.ts` разрезан (585 → 149) на `types-provider.ts`,
+> `types-reasoning.ts`, `types-security.ts`, `types-runtime.ts`;
+> `config/registry.ts` разрезан (678 → 218) на `registry-key-def.ts`,
+> `registry-defs-{agent,meta,security}.ts`, `registry-parse.ts`.
 
 Флагманы `agent.ts` (561) и `execution/module.ts` (688) уже частично разрезаны ранее
 (фазы `core/agent/*`, модули `execution/*`); остаток — оболочка/публичный API.
@@ -52,7 +56,7 @@
 | `src/modules/indexer/module.ts` | 497 | индексатор |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
 
-## Осталось крупные (14) — отдельными волнами
+## Осталось крупные (12) — отдельными волнами
 
 `src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156 ·
 `src/core/context/manager.ts` 1101 · `src/llm/openai-compat.ts` 951 ·
@@ -60,9 +64,7 @@
 `src/tools/bash.ts` 799 ·
 `src/core/agent/tool-batch.ts` 771 · `src/modules/execution/stuck-detector.ts` 766 ·
 `src/config/registry-extra.ts` 755 ·
-`src/config/registry.ts` 707 ·
 `src/modules/execution/module.ts` 688 ·
-`src/config/types.ts` 574 ·
 `src/core/agent.ts` 561.
 
 ## Уже разрезано (44, запись снята из allowlist)
