@@ -1885,6 +1885,7 @@
   "web.input.shift_enter": "Shift+Enter — новая строка",
   "web.input.esc": "Esc — стоп",
   "web.input.attach": "Ctrl+V — вложить",
+  "web.input.shortcuts": "Ctrl+K — сессии · Ctrl+P — файлы",
   "web.input.send": "отправить",
   "web.input.stop": "остановить",
   "web.input.queued": "в очереди · позиция {n}",
