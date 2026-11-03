@@ -10,7 +10,7 @@ describe("MemoryStore", () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "mma-mem-"));
-    store = new MemoryStore(tmpDir);
+    store = new MemoryStore(tmpDir, { enabled: false });
   });
 
   afterEach(() => {
