@@ -18,7 +18,6 @@
     "src/ui/renderer.ts": 693,
     "src/modules/service/api/tasks-api.ts": 690,
     "src/modules/execution/module.ts": 688,
-    "src/core/session-logger.ts": 606,
     "src/config/types.ts": 587,
     "src/core/agent.ts": 561
   }
