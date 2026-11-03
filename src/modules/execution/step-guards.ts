@@ -91,7 +91,7 @@ async function verifyCheckContract(
   }
   if (parsed) {
     return (
-      (await checkDoneEvidence(parsed, target, stepId)) ?? {
+      (await checkDoneEvidence(parsed, target, stepId, { baseDir: deps.baseDir })) ?? {
         note: `\n${t("plan.check_self_certified", { check: target.check })}`,
         blocked: null,
       }

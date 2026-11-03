@@ -22,8 +22,9 @@ export interface PlanStep {
   kind?: StepKind;
   /** Машиночитаемый контракт верификации шага, объявляется при
    *  create/re-plan: "file-exists:<path>" (жёстко проверяется на done),
-   *  "command:<cmd>", "http:<url>[~маркер]" или "browser:<url>[~маркер]"
-   *  (исполняются на done), "manual:<что проверить глазами>" (self-certified).
+   *  "command:<cmd>", "http:<url>[~маркер]", "browser:<url>[~маркер]" или
+   *  "web-build:<dir>" (исполняются на done), "manual:<что проверить глазами>"
+   *  (self-certified).
    *  Отсутствует только у планов, созданных до checks (back-compat). */
   check?: string;
   note?: string;
