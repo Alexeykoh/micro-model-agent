@@ -92,6 +92,14 @@ export const DEFAULTS: AppConfig = {
   // Авто-детект окна у провайдера включён: проба на старте/смене модели
   // уточняет настроенное значение (см. contextAuto в types.ts).
   contextAuto: true,
+  memory: {
+    validator: {
+      enabled: true,
+      minChars: 15,
+      minWords: 3,
+      similarityThreshold: 0.8,
+    },
+  },
   contextBudget: {
     systemPrompt: 0.1,
     responseReserve: 0.15,
