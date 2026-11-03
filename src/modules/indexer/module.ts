@@ -1,28 +1,27 @@
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { ProjectMapInfo } from "../../core/host";
-import type { ToolDefinition, ToolContext, ToolResult } from "../../tools/types";
-import { Indexer, DEFAULT_MAX_FILES } from "./walker";
+import type { ToolDefinition } from "../../tools/types";
+import { Indexer, DEFAULT_MAX_FILES, type IndexResult, type IndexedFile } from "./walker";
 import { IndexCache } from "./cache";
 import { buildProjectProfileLine } from "./project-profile";
 import { rankFiles, rankSymbols, matchOutline } from "./rank";
-import { buildFileGraph } from "./graph";
 import { formatMapReport } from "./map-report";
-import type { IndexResult, IndexedFile } from "./walker";
 import { t } from "../../i18n/index";
-import { toForwardSlash } from "../../tools/path-utils";
-import { estimateTokens } from "../../llm/token-counter";
+import {
+  estimateTokens,
+  formatFindResults,
+  formatSymbolResults,
+  formatOutlineResult,
+  computeRanks,
+  buildMapInfo,
+  emptyMapInfo,
+} from "./format";
+import { createProjectMapTool, type MapToolHost } from "./map-tool";
+import { IndexWatch } from "./watch";
+import type { SymbolProvider } from "./provider";
 
-/** Локация символа, отданная внешним провайдером (LSP workspace/symbol). */
-export interface SymbolLocationHit {
-  path: string;
-  line: number;
-  name: string;
-  kind: string;
-}
-
-/** Внешний источник определений символа (LSP); null-совместим с фолбэком на индекс. */
-export type SymbolProvider = (query: string, language: string) => Promise<SymbolLocationHit[]>;
+export type { SymbolLocationHit, SymbolProvider } from "./provider";
 
 /** Опции модуля индексатора: корень проекта, каталог кэша, кап файлов. */
 export interface IndexerModuleOptions {
@@ -36,28 +35,15 @@ export interface IndexerModuleOptions {
   mapTokenBudget?: number;
 }
 
-/** Макс. файлов в блоке карты проекта (фолбэк без графа; см. map-select). */
-const _MAP_FILE_LIMIT = 80;
-
 /** Дефолтный токен-бюджет списка файлов карты. */
 const MAP_TOKEN_BUDGET = 1500;
-
-/** Суффикс `— <сигнатура>` к строке символа (пусто, если сигнатуры нет). */
-function signatureSuffix(signature?: string): string {
-  return signature ? ` — ${signature}` : "";
-}
-
-/** Макс. строк в результатах find/symbol (хвост — счётчиком). */
-const FIND_LIMIT = 50;
-
-/** Макс. символов в outline одного файла. */
-const OUTLINE_LIMIT = 80;
 
 /** Модуль индексатора: кэш, карта проекта для промпта, тул project_map, вотчер. */
 export class IndexerModule implements AgentModule {
   name = "indexer";
 
   private indexer: Indexer;
+  private watcher: IndexWatch;
   private cache: IndexCache;
   private baseDir: string;
   private maxFiles: number;
@@ -71,8 +57,6 @@ export class IndexerModule implements AgentModule {
   /** Флаг принудительной пересборки (refresh): кэш берётся только для reuse. */
   private forceRebuild = false;
   private builtAt: number | null = null;
-  private watcherActive = false;
-  private rebuildTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: IndexerModuleOptions) {
     this.baseDir = opts.baseDir;
@@ -82,6 +66,7 @@ export class IndexerModule implements AgentModule {
       maxFiles: this.maxFiles,
       respectGitignore: opts.respectGitignore,
     });
+    this.watcher = new IndexWatch(this.indexer, () => this.refresh());
     // Кэш привязан к корню проекта + сигнатуре дерева: совпала — отдаём индекс
     // без обхода. На расхождении `walk(prev)` делает инкрементальный пересбор
     // (совпавшие `size`/`mtimeMs` не читаются, изменённые — перечитываются),
@@ -174,62 +159,19 @@ export class IndexerModule implements AgentModule {
 
   /** Человеко/модельно-читаемый результат `find` (общий для тула и `mma map`). */
   formatFind(query: string): string {
-    const matches = this.find(query);
-    if (matches.length === 0) {
-      return t("indexer.no_matches", { query });
-    }
-    const shown = matches.slice(0, FIND_LIMIT);
-    const lines = shown
-      .map((f) => {
-        const path = toForwardSlash(f.path);
-        const exports = f.exports.length > 0 ? `: ${f.exports.join(", ")}` : "";
-        return `- ${path}${exports}`;
-      })
-      .join("\n");
-    const more =
-      matches.length > shown.length
-        ? `\n${t("indexer.find_more", { count: matches.length - shown.length })}`
-        : "";
-    return t("indexer.find_results", { count: matches.length, results: lines + more });
+    return formatFindResults(this.find(query), query);
   }
 
   /** Ранжированный список мест определения символа (`path:line name (kind)`). */
   formatSymbols(query: string): string {
     if (!this.index) return t("indexer.not_indexed");
-    const hits = rankSymbols(this.index.files, query);
-    if (hits.length === 0) return t("indexer.no_matches", { query });
-    const shown = hits.slice(0, FIND_LIMIT);
-    const lines = shown
-      .map(
-        (h) =>
-          `- ${toForwardSlash(h.file.path)}:${h.line} ${h.name} (${h.kind})${signatureSuffix(h.signature)}`,
-      )
-      .join("\n");
-    const more =
-      hits.length > shown.length
-        ? `\n${t("indexer.find_more", { count: hits.length - shown.length })}`
-        : "";
-    return t("indexer.symbol_results", { count: hits.length, results: lines + more });
+    return formatSymbolResults(rankSymbols(this.index.files, query), query);
   }
 
   /** Оглавление файла: символы с номерами строк (без чтения тела). */
   formatOutline(query: string): string {
     if (!this.index) return t("indexer.not_indexed");
-    const file = matchOutline(this.index.files, query);
-    if (!file) return t("indexer.no_matches", { query });
-    const path = toForwardSlash(file.path);
-    if (file.symbols.length === 0) {
-      return `${path}\n${t("indexer.outline_empty")}`;
-    }
-    const shown = file.symbols.slice(0, OUTLINE_LIMIT);
-    const lines = shown
-      .map((s) => `  ${s.line}: ${s.name} (${s.kind})${signatureSuffix(s.signature)}`)
-      .join("\n");
-    const more =
-      file.symbols.length > shown.length
-        ? `\n${t("indexer.find_more", { count: file.symbols.length - shown.length })}`
-        : "";
-    return `${path}\n${lines}${more}`;
+    return formatOutlineResult(matchOutline(this.index.files, query), query);
   }
 
   /** Точный текст карты проекта для системного промпта (null без индекса). */
@@ -243,31 +185,12 @@ export class IndexerModule implements AgentModule {
    * веб-вкладка Files по нему перечитывает раскрытые папки.
    */
   watch(onSettled?: () => void): void {
-    this.unwatch();
-    try {
-      this.indexer.watch((_event, filename) => {
-        if (!filename) return;
-        if (this.rebuildTimeout) clearTimeout(this.rebuildTimeout);
-        this.rebuildTimeout = setTimeout(() => {
-          void this.refresh()
-            .catch(() => {})
-            .finally(() => onSettled?.());
-        }, 2000);
-      });
-      this.watcherActive = true;
-    } catch {
-      // Вотчинг best-effort; ручной refresh всё равно работает.
-    }
+    this.watcher.start(onSettled);
   }
 
   /** Отписывается от вотчера и чистит дебаунс-таймер. */
   unwatch(): void {
-    this.watcherActive = false;
-    if (this.rebuildTimeout) {
-      clearTimeout(this.rebuildTimeout);
-      this.rebuildTimeout = null;
-    }
-    this.indexer.unwatch();
+    this.watcher.stop();
   }
 
   /** Блок системного промпта с картой проекта (null без индекса). */
@@ -278,7 +201,7 @@ export class IndexerModule implements AgentModule {
       content,
       priority: "normal",
       essential: false,
-      estimatedTokens: this.estimateTokens(content),
+      estimatedTokens: estimateTokens(content),
       kind: "project-map",
     };
   }
@@ -290,42 +213,20 @@ export class IndexerModule implements AgentModule {
    */
   mapInfo(): ProjectMapInfo {
     if (!this.index) {
-      return {
-        indexed: false,
+      return emptyMapInfo({
         indexing: this.indexing,
-        files: 0,
-        symbols: 0,
-        tokens: 0,
-        updatedAt: this.builtAt,
-        languages: [],
-        watcher: this.watcherActive,
-      };
+        builtAt: this.builtAt,
+        watcher: this.watcher.active,
+      });
     }
     if (this.mapCache && this.mapCache.index === this.index) {
-      return { ...this.mapCache.value, indexing: this.indexing, watcher: this.watcherActive };
+      return { ...this.mapCache.value, indexing: this.indexing, watcher: this.watcher.active };
     }
-    const symbols = this.index.files.reduce((n, f) => n + f.exports.length, 0);
-    const langMap = new Map<string, { files: number; symbols: number }>();
-    for (const f of this.index.files) {
-      const lang = f.language;
-      const cur = langMap.get(lang) ?? { files: 0, symbols: 0 };
-      cur.files += 1;
-      cur.symbols += f.exports.length;
-      langMap.set(lang, cur);
-    }
-    const languages = [...langMap.entries()]
-      .map(([language, v]) => ({ language, ...v }))
-      .sort((a, b) => b.files - a.files || a.language.localeCompare(b.language))
-      .slice(0, 8);
-    const value: ProjectMapInfo = {
-      indexed: true,
-      files: this.index.files.length,
-      symbols,
-      tokens: this.estimateTokens(this.formatMap(this.index)),
-      updatedAt: this.builtAt,
-      languages,
-      watcher: this.watcherActive,
-    };
+    const value = buildMapInfo(this.index.files, {
+      tokens: estimateTokens(this.formatMap(this.index)),
+      builtAt: this.builtAt,
+      watcher: this.watcher.active,
+    });
     this.mapCache = { index: this.index, value };
     return { ...value, indexing: this.indexing };
   }
@@ -338,7 +239,7 @@ export class IndexerModule implements AgentModule {
 
   /** Определения тулов модуля (project_map). */
   getToolDefinitions(): ToolDefinition[] {
-    return [this.createProjectMapTool()];
+    return [createProjectMapTool(this.mapToolHost())];
   }
 
   /** Плагин модуля: индекс + вотчер на старт сессии, отписка на конец. */
@@ -368,127 +269,32 @@ export class IndexerModule implements AgentModule {
     });
   }
 
-  private estimateTokens(content: string): number {
-    return estimateTokens(content);
-  }
-
   /** PageRank-ранги файлов, кэшированные на объект индекса (граф дёшев, но не на поллинг). */
   private getRanks(result: IndexResult): Map<string, number> {
     if (this.rankCache?.index === result) return this.rankCache.ranks;
-    const { ranks } = buildFileGraph(result.files);
+    const ranks = computeRanks(result);
     this.rankCache = { index: result, ranks };
     return ranks;
   }
 
-  private createProjectMapTool(): ToolDefinition {
+  /** Узкий срез модуля для `project_map` (без кэша/вотчера/полей). */
+  private mapToolHost(): MapToolHost {
     return {
-      name: "project_map",
-      security: { caps: [{ fs: "read" }] },
-      icon: "🗺️",
-      alwaysOn: true,
-      description: t("indexer.project_map_desc"),
-      parameters: {
-        type: "object",
-        properties: {
-          action: {
-            type: "string",
-            enum: ["summary", "refresh", "find", "symbol", "outline"],
-            description: t("indexer.project_map_action_desc"),
-          },
-          query: {
-            type: "string",
-            description: t("indexer.project_map_query_desc"),
-          },
-        },
-        required: ["action"],
-      },
-      handler: async (_ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> =>
-        this.runMapAction(String(args.action || "summary"), String(args.query || "")),
+      baseDir: this.baseDir,
+      buildIndex: () => this.buildIndex(),
+      refresh: () => this.refresh(),
+      getIndex: () => this.index,
+      summarize: (result) => this.indexer.summarize(result),
+      hasIndexedSymbols: (query) => this.hasIndexedSymbols(query),
+      getSymbolProvider: () => this.symbolProvider,
+      preferredLanguage: () => this.mapInfo().languages?.[0]?.language ?? "typescript",
+      formatFind: (query) => this.formatFind(query),
+      formatSymbols: (query) => this.formatSymbols(query),
+      formatOutline: (query) => this.formatOutline(query),
     };
   }
 
-  /** Диспетчер действий `project_map` (handler-map, правило #17). */
-  private runMapAction(action: string, rawQuery: string): Promise<ToolResult> | ToolResult {
-    const query = rawQuery.trim();
-    switch (action) {
-      case "refresh":
-        return this.refreshMap();
-      case "find":
-        return this.queryResult(query, () => this.formatFind(query));
-      case "symbol":
-        return this.symbolResult(query);
-      case "outline":
-        return this.queryResult(query, () => this.formatOutline(query));
-      default:
-        return this.summaryMap();
-    }
-  }
-
-  /** `refresh`: пересборка индекса + сводка и профиль стека. */
-  private async refreshMap(): Promise<ToolResult> {
-    const result = await this.refresh();
-    const summary = result ? this.indexer.summarize(result) : t("indexer.empty");
-    const stackLine = result ? buildProjectProfileLine(this.baseDir) : null;
-    const output = summary && stackLine ? `${summary}\n${stackLine}` : summary;
-    return this.makeResult(t("indexer.refreshed", { summary: output }));
-  }
-
-  /** `summary`: гарантирует индекс и отдаёт сводку + профиль стека. */
-  private async summaryMap(): Promise<ToolResult> {
-    if (!this.index) await this.buildIndex();
-    if (!this.index) return this.makeResult(t("indexer.not_indexed"));
-    const summary = this.indexer.summarize(this.index);
-    const stackLine = buildProjectProfileLine(this.baseDir);
-    const output = summary && stackLine ? `${summary}\n${stackLine}` : summary;
-    return this.makeResult(t("indexer.summary", { summary: output }));
-  }
-
-  /**
-   * `symbol`: сначала индекс (быстро, без процессов). Если совпадений нет —
-   * запрашивает внешний провайдер (LSP `workspace/symbol`) и форматирует его
-   * локации; ошибка/пусто → откат на индексный ответ.
-   */
-  private async symbolResult(query: string): Promise<ToolResult> {
-    if (!query) return { success: false, output: t("tool.invalid_params") };
-    if (!this.index) await this.buildIndex();
-    const indexed = this.index ? rankSymbols(this.index.files, query) : [];
-    if (indexed.length > 0) return this.makeResult(this.formatSymbols(query));
-    if (this.symbolProvider) {
-      const language = this.mapInfo().languages?.[0]?.language ?? "typescript";
-      let hits: SymbolLocationHit[] = [];
-      try {
-        hits = await this.symbolProvider(query, language);
-      } catch {
-        hits = [];
-      }
-      if (hits.length > 0) return this.makeResult(this.formatLspSymbols(hits));
-    }
-    if (!this.index) return this.makeResult(t("indexer.not_indexed"));
-    return this.makeResult(this.formatSymbols(query));
-  }
-
-  /** Формат локаций внешнего провайдера (`path:line name (kind)`). */
-  private formatLspSymbols(hits: SymbolLocationHit[]): string {
-    const shown = hits.slice(0, FIND_LIMIT);
-    const lines = shown
-      .map((h) => `- ${toForwardSlash(h.path)}:${h.line} ${h.name} (${h.kind})`)
-      .join("\n");
-    const more =
-      hits.length > shown.length
-        ? `\n${t("indexer.find_more", { count: hits.length - shown.length })}`
-        : "";
-    return t("indexer.symbol_results", { count: hits.length, results: lines + more });
-  }
-
-  /** Поисковое действие: проверяет запрос и индекс, отдаёт готовый текст. */
-  private async queryResult(query: string, format: () => string): Promise<ToolResult> {
-    if (!query) return { success: false, output: t("tool.invalid_params") };
-    if (!this.index) await this.buildIndex();
-    if (!this.index) return this.makeResult(t("indexer.not_indexed"));
-    return this.makeResult(format());
-  }
-
-  private makeResult(output: string): ToolResult {
-    return { success: true, output, display: output };
+  private hasIndexedSymbols(query: string): boolean {
+    return this.index ? rankSymbols(this.index.files, query).length > 0 : false;
   }
 }
