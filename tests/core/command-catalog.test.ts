@@ -76,6 +76,13 @@ describe("каталог команд", () => {
     // объявления `name:` во всех файлах регистрации с каталогом.
     const sources = [
       "src/cli/repl-commands.ts",
+      "src/cli/repl-commands-run.ts",
+      "src/cli/repl-commands-config.ts",
+      "src/cli/repl-commands-provider.ts",
+      "src/cli/repl-commands-context.ts",
+      "src/cli/repl-commands-agent.ts",
+      "src/cli/repl-commands-session.ts",
+      "src/cli/repl-commands-export.ts",
       "src/cli/onboarding-commands.ts",
       "src/cli/repl-commands-lsp.ts",
       "src/cli/repl-commands-skills.ts",
