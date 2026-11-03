@@ -95,3 +95,7 @@ URL dev-сервера разрешены. Это снимает ложный в
    Отдельная задача — провести `runBrowserCheck` через `checkBrowserUrl`.
 4. **Флаг не влияет на `allowPrivateOutbound`**; комбинация обоих флагов открывает и LAN,
    и loopback, что ожидаемо и явно.
+
+## Долг
+
+DEBT(verify-browser-url-policy): `verify browser:` пока не применяет сетевую политику; зафиксировано в docs/agents/debt.md.
