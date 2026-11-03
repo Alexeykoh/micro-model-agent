@@ -2564,6 +2564,8 @@
   "config.desc.security.network.maxResponseSize": "Максимум байт исходящего ответа (1024-1000000).",
   "config.key.security.network.allowPrivateOutbound": "приватные callback-адреса",
   "config.desc.security.network.allowPrivateOutbound": "Разрешить loopback/приватные адреса в исходящих вызовах самого агента (webhook аудита, callback задачи). По умолчанию запрещено: адресат приходит из конфига или тела запроса.",
+  "config.key.security.network.allowLoopback": "loopback-доступ веб-тулов",
+  "config.desc.security.network.allowLoopback": "Разрешить веб-тулам ходить только на loopback (localhost, 127.0.0.1, ::1) — проверить свой dev-сервер. Приватная LAN и запрещённые домены остаются закрыты. По умолчанию выключено.",
   "config.key.security.contentScan.dangerousPatterns": "опасные паттерны",
   "config.desc.security.contentScan.dangerousPatterns": "Регулярные выражения, которые ищутся в содержимом файлов перед записью.",
   "config.key.security.auditNotifier.enabled": "аудит-уведомитель",

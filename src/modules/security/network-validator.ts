@@ -1,7 +1,7 @@
 // Валидация URL: SSRF-защита, allow/deny-домены, fetch с ручными редиректами.
 import type { NetworkSecurityConfig } from "../../config/types";
 import { sanitizeLogMessage } from "./data-sanitizer";
-import { isIpLiteral, isIpPrivate } from "./ip-guard";
+import { isIpLiteral, isIpPrivate, isLoopbackHost } from "./ip-guard";
 import { resolvesToPrivate, type DnsResolver } from "./dns-guard";
 
 /** Итог проверки URL: разрешено/запрет с причиной. */
@@ -11,7 +11,7 @@ export interface NetworkValidationResult {
 }
 
 /** Проверка приватных адресов живёт в `ip-guard.ts` (её же использует DNS-гард). */
-export { isIpPrivate } from "./ip-guard";
+export { isIpPrivate, isLoopbackHost } from "./ip-guard";
 
 /** Разрешён ли URL по конфигу (схема, SSRF, deny/allow-домены). */
 export function isUrlAllowed(
@@ -31,7 +31,10 @@ export function isUrlAllowed(
     if (scheme !== "http:" && scheme !== "https:") {
       return { allowed: false, reason: `Scheme "${scheme}" is not allowed` };
     }
-    if (isIpPrivate(domain)) {
+    // `allowLoopback` — узкое исключение для своего dev-сервера: снимает
+    // private-IP блок только для loopback и только дефолтные loopback-deny.
+    const loopback = securityConfig.allowLoopback === true && isLoopbackHost(domain);
+    if (isIpPrivate(domain) && !loopback) {
       return { allowed: false, reason: `Private address "${domain}" is blocked (SSRF)` };
     }
 
@@ -39,6 +42,9 @@ export function isUrlAllowed(
     if (securityConfig.deniedDomains?.length) {
       for (const deniedDomain of securityConfig.deniedDomains) {
         const denied = deniedDomain.toLowerCase();
+        // Дефолтный deny-list перечисляет localhost/127.0.0.1/::1; при
+        // `allowLoopback` эти записи не должны закрывать loopback-хост.
+        if (loopback && isLoopbackHost(denied)) continue;
         if (domain === denied || domain.endsWith(`.${denied}`)) {
           return { allowed: false, reason: `Domain "${domain}" is denied` };
         }

@@ -310,6 +310,8 @@ export interface NetworkSecurityConfig {
   maxResponseSize: number;
   /** Loopback/приватные адреса в вызовах каркаса (W13, D5); deny по умолчанию. */
   allowPrivateOutbound?: boolean;
+  /** Loopback веб-тулов (localhost/127.0.0.1/::1) для dev-сервера; по умолчанию false. */
+  allowLoopback?: boolean;
 }
 
 /** Мастер-выключатель веб-поиска: при false web_search отвечает "disabled". */
@@ -551,12 +553,8 @@ export interface AppConfig {
   maxToolIterations: number;
   stuckThreshold: number;
   autoPlan: boolean;
-  /** Настройки execution-модуля (владение статусом плана). */
+  /** Настройки execution-модуля: autoAdvance — автопометка done по файлам (дефолт true). */
   execution?: {
-    /**
-     * Харнесс автоматически помечает шаг done по факту существования файловых
-     * деливераблов. При false — только nudge, статус ставит модель. Дефолт true.
-     */
     autoAdvance?: boolean;
   };
   showReasoning: boolean;

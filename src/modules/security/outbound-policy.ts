@@ -16,7 +16,7 @@
  */
 import type { NetworkSecurityConfig } from "../../config/types";
 import type { Diagnostic } from "../../output/types";
-import { isIpPrivate, type NetworkValidationResult } from "./network-validator";
+import { isIpPrivate, isLoopbackHost, type NetworkValidationResult } from "./network-validator";
 
 /** Вход проверки исходящего вызова. */
 export interface OutboundPolicyOptions {
@@ -81,7 +81,10 @@ export function checkOutboundUrl(
 
   const host = parsed.hostname.toLowerCase();
   const allowPrivate = opts.networkConfig?.allowPrivateOutbound === true;
-  if (isIpPrivate(host) && !allowPrivate) {
+  // `allowLoopback` — то же узкое исключение, что и в `isUrlAllowed`: только
+  // loopback-адреса, а не приватная LAN.
+  const loopback = opts.networkConfig?.allowLoopback === true && isLoopbackHost(host);
+  if (isIpPrivate(host) && !allowPrivate && !loopback) {
     return deny(`private address "${host}" is blocked (SSRF)`);
   }
 
@@ -93,6 +96,7 @@ export function checkOutboundUrl(
     // Дефолтный deny-list перечисляет те же loopback-адреса, что и SSRF-проверка.
     // Явный `allowPrivateOutbound` снимает оба — иначе флаг был бы недостижим.
     if (allowPrivate && isIpPrivate(d)) continue;
+    if (loopback && isLoopbackHost(d)) continue;
     if (host === d || host.endsWith(`.${d}`)) return deny(`domain "${host}" is denied`);
   }
 
