@@ -777,10 +777,11 @@ response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов,
 - [ ] **Localhost-проверки для веб-разработки** — `web_fetch`/`browser` блокируют localhost,
       `node`/`powershell` в blacklist; агенту нужен штатный путь проверить свой dev-сервер.
       Долг D-09.
-- [ ] **`--isolated` для MCP Playwright** — иначе «Browser is already in use», когда
-      тестировщик держит свой Playwright. Долг D-10.
-- [ ] **Локальные изображения/заглушки** вместо внешнего picsum (403 в тестовой сети).
-      Долг D-12.
+- [x] **`--isolated` для MCP Playwright** — иначе «Browser is already in use», когда
+      тестировщик держит свой Playwright. _(2026-11-03: зафиксировано в
+      `docs/agents/testing.md` — `args: ["@playwright/mcp@latest", "--isolated"]`.)_ Долг D-10.
+- [x] **Локальные изображения/заглушки** вместо внешнего picsum (403 в тестовой сети).
+      _(2026-11-03: правило в `docs/agents/testing.md` — локальный SVG/заглушка в проекте.)_ Долг D-12.
 - [ ] **Вложенный `AGENTS.md` и `.mma/`** — mma не читает `site/AGENTS.md` Next 16, а
       `.mma/` в корне ломает `create-next-app .`. Долг F-01/F-06.
 
