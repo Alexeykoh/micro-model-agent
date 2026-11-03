@@ -29,7 +29,8 @@ const POLICY_CALL_RE = /\b(fetchValidated|fetchOutbound|checkOutboundUrl)\s*\(/;
  * a user/model-supplied destination. Trimmed reason → test failure.
  */
 export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
-  "src/llm/openai-compat.ts": "provider endpoint from config (baseUrl + path)",
+  "src/llm/openai-request.ts": "provider endpoint from config (baseUrl + path)",
+  "src/llm/openai-models.ts": "provider /models endpoint from config baseUrl",
   "src/llm/provider-budget.ts": "same provider endpoint, budget probe",
   "src/llm/provider-context.ts": "ollama probe from config baseUrl",
   "src/llm/model-loader.ts": "ollama load endpoint from config baseUrl",
