@@ -35,6 +35,8 @@ export interface FinalAuditHost {
   auditSkipsRemaining: number;
   /** За текущий ход были успешные файловые мутации (бюджет тест-прогона). */
   mutatedThisTurn: boolean;
+  /** Не пустой там, где turn были файловые мутации (ошибка типов = не готово). */
+  typecheckFailures: ReadonlyMap<string, string>;
   setAuditSkipsRemaining(n: number): void;
   flushSessionPlan(): void;
 }
@@ -99,7 +101,21 @@ export function isUnconfirmed(s: PlanStep): boolean {
 export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult | null> {
   // Нет активного трекера: аудитим последний завершённый план вместо bail.
   if (!d.tracker) {
-    if (!d.completedPlan) return null;
+    if (!d.completedPlan) {
+      // Final typecheck gate without a plan: a turn that left files broken in
+      // `tsc` must not end with "success". The map is filled by the execution
+      // plugin from write/edit results and cleared by a clean re-write.
+      if (d.typecheckFailures.size === 0) return null;
+      const files = [...d.typecheckFailures.keys()];
+      return {
+        passed: false,
+        done: 0,
+        total: 0,
+        pendingSteps: files.map((f) => `${f}: typecheck failed`),
+        missingFiles: [],
+        summary: `project typecheck failed in ${files.length} file(s)`,
+      };
+    }
     const plan = d.completedPlan;
     const autoClosed = autoCloseEvidenceSteps(d, plan);
     const audit = await d.auditor.audit(plan, { mutated: d.mutatedThisTurn });

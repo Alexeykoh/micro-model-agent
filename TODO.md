@@ -777,12 +777,18 @@ response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов,
 - [x] **Guard обязательного path-аргумента** — `path: undefined` больше не создаёт файл
       `undefined`: fail-closed в `ToolExecutor.enforcePathArgs` по `parameters.required` +
       защита в `write_file`/`edit_file`. Гейт: `tests/tools/enforcement-path.test.ts`.
-- [ ] **Pre-write `checkDraft` через LSP** — типы проверять до записи (`LspConnection.syncDocument`
-      + `diagnosticsFor`), при ошибке не писать файл или откатывать. Долг F-18/F-19.
+- [x] **Pre-write `checkDraft` через LSP** — типы проверять до записи (`LspConnection.syncDocument`
+      + `diagnosticsFor`), при ошибке не писать файл или откатывать. _(2026-11-03:
+      `runPreWriteCheck` в `lsp/write-check.ts` + `LspClient.checkContent`; тёплый
+      сервер проверяет черновик `write_file`/`edit_file`, ошибки типов блокируют
+      вызов (`lsp.draft_blocked`), холодный — fail-open с прогревом в фоне.
+      Гейт `tests/modules/lsp/pre-write-check.test.ts`.)_ Долг F-18/F-19.
 - [ ] **Post-build гейт для веб-задач** — после `build` проверять, что CSS содержит
       utilities (`.grid`, `.flex`, `--tw-`) и страница не пустая. Долг F-30/F-34.
-- [ ] **Финальный гейт по `typecheckFailures` без плана** — сейчас ошибки типов блокируют
-      только `plan_step done`. Долг F-21.
+- [x] **Финальный гейт по `typecheckFailures` без плана** — сейчас ошибки типов блокируют
+      только `plan_step done`. _(2026-11-03: `runFinalAudit` при отсутствии плана и
+      непустой карте `typecheckFailures` возвращает `passed:false` с файлами в
+      `pendingSteps`; гейт `tests/modules/execution/final-typecheck-gate.test.ts`.)_ Долг F-21.
 - [ ] **Localhost-проверки для веб-разработки** — `web_fetch`/`browser` блокируют localhost,
       `node`/`powershell` в blacklist; агенту нужен штатный путь проверить свой dev-сервер.
       Долг D-09.

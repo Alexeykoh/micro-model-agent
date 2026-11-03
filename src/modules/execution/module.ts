@@ -579,6 +579,7 @@ export class ExecutionModule implements AgentModule {
       baseDir: this.baseDir,
       tracker: this.tracker,
       completedPlan: this.completedPlan,
+      typecheckFailures: this.state.typecheckFailures,
       auditor: this.auditor,
       store: this.store,
       auditSkipsRemaining: this._auditSkipsRemaining,
