@@ -96,10 +96,14 @@ describe("webui sounds: wiring", () => {
   });
 
   it("both tab-status paths go through the notifier (INV-S1)", () => {
-    const source = readFileSync(
-      resolve(REPO_ROOT, "src/modules/webui/assets/js/session/tabs.ts"),
-      "utf8",
-    );
+    // Status transitions live in two files after the tabs split (rule 6):
+    // `setTabStatus` in the hub and `reconcileTabStatuses` in the strip.
+    const source = [
+      "src/modules/webui/assets/js/session/tabs.ts",
+      "src/modules/webui/assets/js/session/tabs-strip.ts",
+    ]
+      .map((rel) => readFileSync(resolve(REPO_ROOT, rel), "utf8"))
+      .join("\n");
     const calls = source.match(/notifyTabStatus\s*\(/g) ?? [];
     expect(calls.length).toBeGreaterThanOrEqual(2);
   });
