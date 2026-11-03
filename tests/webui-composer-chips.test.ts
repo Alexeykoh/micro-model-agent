@@ -12,7 +12,7 @@ const CSS = readFileSync(
   "utf-8",
 );
 const WRITE = readFileSync(
-  new URL("../src/modules/webui/assets/js/settings/write.ts", import.meta.url),
+  new URL("../src/modules/webui/assets/js/settings/selectors-write.ts", import.meta.url),
   "utf-8",
 );
 

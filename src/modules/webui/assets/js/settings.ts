@@ -1,5 +1,6 @@
 // Settings barrel. The implementation is split by concern under `./settings/`:
-//   write     — `postConfig` funnel, composer selectors, config/model loaders
+//   write         — `postConfig` funnel, config/model loaders
+//   selectors-write — composer selector chips/menus (registers into `write`)
 //   panels    — generic section rendering + ui/security/memory/skills/plugins panels
 //   providers — provider form + model & provider panel
 //   modal     — settings overlay, tablist, `renderSettings`, open/close/escape
@@ -8,6 +9,7 @@
 //   form      — tiny form primitives (inputs/selects/checkboxes)
 // `app.js` imports the public surface from here.
 export * from "./settings/write.js";
+export * from "./settings/selectors-write.js";
 export * from "./settings/connection.js";
 export * from "./settings/theme.js";
 export * from "./settings/panels.js";
