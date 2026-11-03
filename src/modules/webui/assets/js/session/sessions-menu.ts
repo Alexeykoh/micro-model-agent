@@ -42,6 +42,8 @@ let sessSearchWired = false;
 
 // U14: pinned sessions live in localStorage (survive a server restart, scoped
 // to this browser) and are rendered in their own section above `recent`.
+// DEBT(webui-sessions-project-groups): no project field in `/api/sessions`, so
+// the list cannot be grouped by project yet.
 import { isSessionPinned, pinnedSessionIds, toggleSessionPin as flipPin } from "./pins.js";
 import { renderPruneNotice } from "./prune-notice.js";
 
