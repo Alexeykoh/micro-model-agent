@@ -72,3 +72,4 @@
 - [pre-write check](./2026-11-03-pre-write-check-design.md)
 - [skill usage top](./2026-11-03-skill-usage-top-design.md)
 - [web build gate](./2026-11-03-web-build-gate-design.md)
+- [webui latency](./2026-11-04-webui-latency-design.md)
