@@ -60,7 +60,7 @@ terminal (streaming / modal / quiet) and every machine surface see the same data
 
 ### Host Seam (REPL / Web)
 
-> **Source:** `src/core/host.ts`, `src/core/web-host.ts`, `src/modules/webui/`. Design: [docs/specs/2026-09-23-mma-web/design.md](../specs/2026-09-23-mma-web/design.md).
+> **Source:** `src/core/host.ts`, `src/core/web-host.ts`, `src/modules/webui/`. Design: [docs/archive/specs/2026/2026-09-23-mma-web/design.md](../archive/specs/2026/2026-09-23-mma-web/design.md).
 
 `Host` (`src/core/host.ts`) extends the plugin-facing `HostBridge`
 (`{isBusy, submit(text,{images}), interrupt, subscribeOutput}`) with
@@ -127,7 +127,7 @@ hook in `Agent.run()` (so REPL, web and one-shot all behave the same):
 
 ### Security Module
 
-> **Spec:** `docs/specs/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.
+> **Spec:** `docs/archive/specs/2025/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.
 > **Status:** **Phase 1 implemented** (Bash command validation, path restrictions, network filtering, content scanning, subagent recursion control).
 
 The security module provides multiple layers of protection:
@@ -291,7 +291,7 @@ Purpose: distinguish "this model works with MMA on this backend" from "untested"
 
 ### Agent-Level MoE
 
-> **Spec:** `docs/specs/2025-07-30-agent-level-moe.md` — Router + Expert-Agent + Expert-Tools, hierarchical recursive decomposition.
+> **Spec:** `docs/archive/specs/2025/2025-07-30-agent-level-moe.md` — Router + Expert-Agent + Expert-Tools, hierarchical recursive decomposition.
 >
 > Status: **partially implemented (MVP)**. When `moe.enabled: true` is set in config and an orchestrator model is configured, the agent uses a Router → plan → validate → execute (parallel waves) → verify/merge flow. Falls back to single-agent when MoE fails or is disabled.
 >
@@ -319,7 +319,7 @@ Purpose: distinguish "this model works with MMA on this backend" from "untested"
 
 ## Counter-Agent (In-Loop Critic)
 
-> **Spec:** `docs/specs/2026-09-25-session-autoname-and-critic-design.md` §4.
+> **Spec:** `docs/archive/specs/2026/2026-09-25-session-autoname-and-critic-design.md` §4.
 
 An evidence-grounded, event-triggered LLM verifier ("counter-agent") that reviews the single agent's
 in-progress work. It is a loop gate like `AuditGate`/`HallucinationGate` — the MoE path is untouched.

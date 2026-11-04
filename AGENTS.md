@@ -49,12 +49,12 @@ bun run mma "<промпт>"   # прогнать агента вживую
 **CLI:** `bun run mma setup` (мастер провайдера) · `mma meet` · `mma agents init` ·
 `mma session list|show|delete`.
 
-| | |
-|---|---|
-| **Runtime** | Bun + TypeScript (strict, NodeNext) |
-| **Тесты** | vitest через `bun test` |
-| **Линт** | Biome (linter only; формат — Prettier) |
-| **Фронтенд** | TypeScript в `src/modules/webui/assets/**`, отдельный `tsconfig.frontend.json` |
+|                 |                                                                                |
+| --------------- | ------------------------------------------------------------------------------ |
+| **Runtime**     | Bun + TypeScript (strict, NodeNext)                                            |
+| **Тесты**       | vitest через `bun test`                                                        |
+| **Линт**        | Biome (linter only; формат — Prettier)                                         |
+| **Фронтенд**    | TypeScript в `src/modules/webui/assets/**`, отдельный `tsconfig.frontend.json` |
 | **Зависимости** | commander, js-tiktoken, jsonrepair, picocolors, playwright, string-width, yaml |
 
 ---
@@ -310,6 +310,7 @@ scope/protected-пути, SSRF, rate-limit (W2, INV-9/10). Хендлер тул
 ```
 INIT → THINK → OBSERVE → VERIFY → OUTPUT → ERROR
 ```
+
 Развилки нет: `Agent.run` вызывает петлю ровно один раз, все гейты (hallucination →
 critic → audit) стоят внутри. MoE удалён 2026-10-12 — он был вторым путём исполнения
 и обходил гейты ([спека](./docs/specs/2026-10-12-remove-moe-design.md)).
@@ -320,19 +321,19 @@ critic → audit) стоят внутри. MoE удалён 2026-10-12 — он 
 
 ## Карта кода
 
-| Область | Путь | Что знать перед правкой |
-|---|---|---|
-| Петля агента | `src/core/agent.ts`, `src/core/agent/*` | разбор на фазы — W5 спеки |
-| Контекст/компакция | `src/core/context/` (переехал из `modules/`, W4) | `getContextTokens()` — единственный вход порогов |
-| Провайдеры | `src/modules/providers/` | резолв активной **записи** из `entries[]`, не legacy-полей |
-| Конфиг | `src/config/registry.ts` + `registry-extra.ts` | `registry.ts` grandfathered; новые дефы — в `-extra` |
-| Тулы | `src/tools/` | `ToolExecutor` — единственный путь исполнения |
-| Модули | `src/modules/*` | подключаются в bootstrap-фазах `src/core/bootstrap/` |
-| Терминал | `src/ui/`, `src/output/` | `OutputChannel` — единственный владелец терминала |
-| Веб | `src/modules/webui/` | SSE + REST; состояние event-sourced |
-| Сервис | `src/modules/service/` | HTTP API v1; `1 тенант = 1 процесс` |
-| Плагины | `src/modules/plugins/` | контракт экспортируется из `src/index.ts` |
-| Репл/CLI | `src/cli/` | каталог команд — `src/core/commands/` |
+| Область            | Путь                                             | Что знать перед правкой                                    |
+| ------------------ | ------------------------------------------------ | ---------------------------------------------------------- |
+| Петля агента       | `src/core/agent.ts`, `src/core/agent/*`          | разбор на фазы — W5 спеки                                  |
+| Контекст/компакция | `src/core/context/` (переехал из `modules/`, W4) | `getContextTokens()` — единственный вход порогов           |
+| Провайдеры         | `src/modules/providers/`                         | резолв активной **записи** из `entries[]`, не legacy-полей |
+| Конфиг             | `src/config/registry.ts` + `registry-extra.ts`   | `registry.ts` grandfathered; новые дефы — в `-extra`       |
+| Тулы               | `src/tools/`                                     | `ToolExecutor` — единственный путь исполнения              |
+| Модули             | `src/modules/*`                                  | подключаются в bootstrap-фазах `src/core/bootstrap/`       |
+| Терминал           | `src/ui/`, `src/output/`                         | `OutputChannel` — единственный владелец терминала          |
+| Веб                | `src/modules/webui/`                             | SSE + REST; состояние event-sourced                        |
+| Сервис             | `src/modules/service/`                           | HTTP API v1; `1 тенант = 1 процесс`                        |
+| Плагины            | `src/modules/plugins/`                           | контракт экспортируется из `src/index.ts`                  |
+| Репл/CLI           | `src/cli/`                                       | каталог команд — `src/core/commands/`                      |
 
 ---
 
@@ -395,27 +396,29 @@ manual? }`** (INV-9/10; поле обязательно — enforcement в `Tool
 
 ## Документация
 
-| Документ | О чём |
-|---|---|
-| [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) | **Целевая архитектура, инварианты INV-1…23, план миграции** |
-| [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | Схемы boot/ход/enforcement/наблюдаемость/конфиг + матрица контрактов |
-| [remove-moe](./docs/specs/2026-10-12-remove-moe-design.md) | Удаление MoE: что снято, что осталось, порядок шагов |
-| [handoff](./docs/plans/2026-10-12-architecture-v2-handoff.md) | **Точка входа для следующей сессии**: статус W0–W2, порядок волн, открытые решения |
-| [debt.md](./docs/agents/debt.md) | **Реестр долгов (pay-once)**: что отложено, критерий выхода, триггер (правило 9) |
-| [observability.md](./docs/agents/observability.md) | Инвентарь fail-open путей и их сигналов (INV-15) |
-| [w1-module-host](./docs/specs/2026-10-13-w1-module-host-design.md) | Контракт `ModuleHost`, миграция модулей, гейт (INV-2/5/7/8/16) |
-| [w2-enforcement](./docs/specs/2026-10-13-w2-enforcement-design.md) | Единая точка enforcement, `ToolSecurityDecl` (INV-9/10) |
-| [reasoning-strategy](./docs/specs/2026-10-15-reasoning-strategy-design.md) | Стратегия reasoning — свойство провайдера (INV-R1…R5, W3) |
-| [architecture.md](./docs/agents/architecture.md) | Текущее состояние: Output, Host-seam, Security, контракт `LLMProvider` |
-| [code-style.md](./docs/agents/code-style.md) | Форматирование, типы, async/error, именование, i18n |
-| [tools.md](./docs/agents/tools.md) | Question/Browser, изображения, сужение набора, процессы |
-| [modules.md](./docs/agents/modules.md) | Сессии, project map, UI-рендер, плагины, бюджет, стоимость |
-| [execution.md](./docs/agents/execution.md) | Гарантии петли, состояния, оркестратор, MoE, галлюцинации |
-| [testing.md](./docs/agents/testing.md) | Тесты из консоли, веб через Playwright, сертификация моделей |
-| [service-api.md](./docs/agents/service-api.md) | `mma serve`: endpoints, envelope, конфиг, ошибки, webhook |
-| [versioning.md](./docs/agents/versioning.md) | Правила версий, релизный процесс |
-| [STYLE.md](./docs/design/ui/STYLE.md) | **Канон** стиля чат-вывода |
-| [feature-history.md](./docs/agents/feature-history.md) | Как реализовывались фичи (вынесено из AGENTS.md 2026-10-12) |
+| Документ                                                                         | О чём                                                                              |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [docs/README.md](./docs/README.md)                                               | **Карта документации**: что читать, что нормативно, где история                    |
+| [CONTRIBUTING.md](./CONTRIBUTING.md)                                             | Как контрибьютить: ветки, гейты, PR                                                |
+| [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md)             | **Целевая архитектура, инварианты INV-1…23, план миграции**                        |
+| [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | Схемы boot/ход/enforcement/наблюдаемость/конфиг + матрица контрактов               |
+| [remove-moe](./docs/specs/2026-10-12-remove-moe-design.md)                       | Удаление MoE: что снято, что осталось, порядок шагов                               |
+| [handoff](./docs/plans/2026-10-12-architecture-v2-handoff.md)                    | **Точка входа для следующей сессии**: статус W0–W2, порядок волн, открытые решения |
+| [debt.md](./docs/agents/debt.md)                                                 | **Реестр долгов (pay-once)**: что отложено, критерий выхода, триггер (правило 9)   |
+| [observability.md](./docs/agents/observability.md)                               | Инвентарь fail-open путей и их сигналов (INV-15)                                   |
+| [w1-module-host](./docs/specs/2026-10-13-w1-module-host-design.md)               | Контракт `ModuleHost`, миграция модулей, гейт (INV-2/5/7/8/16)                     |
+| [w2-enforcement](./docs/specs/2026-10-13-w2-enforcement-design.md)               | Единая точка enforcement, `ToolSecurityDecl` (INV-9/10)                            |
+| [reasoning-strategy](./docs/specs/2026-10-15-reasoning-strategy-design.md)       | Стратегия reasoning — свойство провайдера (INV-R1…R5, W3)                          |
+| [architecture.md](./docs/agents/architecture.md)                                 | Текущее состояние: Output, Host-seam, Security, контракт `LLMProvider`             |
+| [code-style.md](./docs/agents/code-style.md)                                     | Форматирование, типы, async/error, именование, i18n                                |
+| [tools.md](./docs/agents/tools.md)                                               | Question/Browser, изображения, сужение набора, процессы                            |
+| [modules.md](./docs/agents/modules.md)                                           | Сессии, project map, UI-рендер, плагины, бюджет, стоимость                         |
+| [execution.md](./docs/agents/execution.md)                                       | Гарантии петли, состояния, оркестратор, MoE, галлюцинации                          |
+| [testing.md](./docs/agents/testing.md)                                           | Тесты из консоли, веб через Playwright, сертификация моделей                       |
+| [service-api.md](./docs/agents/service-api.md)                                   | `mma serve`: endpoints, envelope, конфиг, ошибки, webhook                          |
+| [versioning.md](./docs/agents/versioning.md)                                     | Правила версий, релизный процесс                                                   |
+| [STYLE.md](./docs/design/ui/STYLE.md)                                            | **Канон** стиля чат-вывода                                                         |
+| [feature-history.md](./docs/agents/feature-history.md)                           | Как реализовывались фичи (вынесено из AGENTS.md 2026-10-12)                        |
 
 ---
 

@@ -87,7 +87,7 @@ ERROR   → retry or escalate
 
 ## RLM-Inspired Features (pass-by-reference + chunked queries)
 
-> **Spec:** `docs/specs/2026-08-12-rlm-inspired-design.md` — ports Recursive Language Models (arXiv:2512.24601) mechanics: sub-agent results by reference, and programmatic chunked processing of oversized inputs.
+> **Spec:** `docs/archive/specs/2026/2026-08-12-rlm-inspired-design.md` — ports Recursive Language Models (arXiv:2512.24601) mechanics: sub-agent results by reference, and programmatic chunked processing of oversized inputs.
 
 **Status:** implemented (all 9 tasks).
 

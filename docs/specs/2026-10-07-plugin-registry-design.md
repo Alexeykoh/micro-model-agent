@@ -649,7 +649,7 @@ export interface WebPluginManager {
    процессе агента с доступом к `ctx.config` (включая `provider.entries[].apiKey`), к `bash`,
    к сети. Ни disable, ни `permissions`, ни консенс в фазе 6 этого не меняют — они про
    наблюдаемость и осознанность. Настоящая изоляция (worker/`isolated-vm`/подпись+consent из
-   `docs/specs/2026-09-28-production-readiness-design.md:89-100`) — отдельная работа, вне этой
+   `docs/archive/specs/2026/2026-09-28-production-readiness-design.md:89-100`) — отдельная работа, вне этой
    спеки. Фиксируем как явное «нет», чтобы не выдавать `permissions` за защиту.
 2. **Секретные метаданные.** `homepage`/`author`/`description` попадают в UI и в
    `mma plugins list`; `path` — абсолютный путь. Ничего секретного там нет по замыслу, но при

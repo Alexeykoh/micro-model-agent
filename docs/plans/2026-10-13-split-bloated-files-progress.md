@@ -1,7 +1,7 @@
 # Прогресс `split-bloated-files` (правило 6 · INV-23)
 
 **Дата:** 2026-10-13 · **Ветка:** `docs/architecture-v2`
-**Гейт:** `tests/arch/file-size.test.ts` + [.arch-allowlist.json](../../../.arch-allowlist.json)
+**Гейт:** `tests/arch/file-size.test.ts` + [.arch-allowlist.json](../../.arch-allowlist.json)
 (потолки только уменьшаются; при ≤300 запись **обязана** быть снята).
 **Долг:** [`docs/agents/debt.md`](../agents/debt.md) → `split-bloated-files`.
 

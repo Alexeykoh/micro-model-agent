@@ -2,7 +2,7 @@
 
 **Ветка:** `docs/waves-bcde-audit` (от `master` @ `dc12778`)
 **Основание:** `TODO.md` → P1 «Аудит волн B/C/D/E»; продолжение `docs/analysis/2026-08-29-agent-logic-audit.md`
-и плана `docs/superpowers/plans/2026-08-26-model-control-fixes.md` (там уже закрыты Round 1–4 и волны 1–9).
+и плана `docs/archive/plans/2026/superpowers/plans/2026-08-26-model-control-fixes.md` (там уже закрыты Round 1–4 и волны 1–9).
 **Метод:** 4 параллельных read-only аудита по волнам, с проверкой call-sites (`rg`) и severity 1–5
 (5 — критично: потеря данных/безопасность/агент не работает). Ранее закрытые находки не переоткрывались.
 

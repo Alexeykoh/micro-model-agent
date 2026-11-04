@@ -135,7 +135,7 @@
 - **Симптом:** модели с reasoning (Qwen3.5-9B, DeepSeek-R1) всегда генерируют reasoning_content
   даже при `reasoning_effort: "none"`, т.к. llama.cpp/xinference не передают effort-параметр
   в бэкенд. Prompt-tag стратегия (`/no_think`) может быть проигнорирована.
-- **Где проявилось:** реализация dynamic reasoning control (spec `docs/specs/2026-08-25-dynamic-reasoning-control.ru.md`).
+- **Где проявилось:** реализация dynamic reasoning control (spec `docs/archive/specs/2026/2026-08-25-dynamic-reasoning-control.ru.md`).
 - **Реакция harness:** three-layer design:
   1. **EffortMechanism** — probe при старте проверяет, уважает ли бэкенд effort-сигнал.
      Если нет → prompt-tag (`/no_think`) как fallback.

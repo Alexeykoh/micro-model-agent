@@ -406,6 +406,6 @@ W1 — отдельная ветка `feat/documents-substrate` от `master`; W
 - [architecture v2](./2026-10-12-architecture-v2-design.md) — целевой каркас, INV-1…23
 - [w1-module-host](./2026-10-13-w1-module-host-design.md) — контракт `ModuleDef`/`ModuleHost`
 - [w2-enforcement](./2026-10-13-w2-enforcement-design.md) — `ToolSecurityDecl` в `ToolExecutor`
-- [out-of-context-corpus](./2026-10-14-out-of-context-corpus-design.md) — корпусный Q&A (W5 пересекается)
+- [out-of-context-corpus](../archive/specs/2026/2026-10-14-out-of-context-corpus-design.md) — корпусный Q&A (W5 пересекается)
 - [debt.md](../agents/debt.md) — реестр долгов (правило 9)
 - [modules.md](../agents/modules.md) — текущее устройство индексатора/памяти/веба

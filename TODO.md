@@ -22,7 +22,7 @@
       поп-ап с текстом, числом токенов и составом блоков. API
       `GET /api/sessions/:id/system-prompt` отдаёт `available:false`, пока у
       сессии нет живого раннера. _(2026-10-26, спека
-      `docs/specs/2026-10-26-webui-system-prompt-popup-design.md`.)_
+      `docs/archive/specs/2026/2026-10-26-webui-system-prompt-popup-design.md`.)_
 
 > Остальные WebUI-пункты (очередь сообщений, кнопки «отправить сейчас»/«отменить»,
 > Files-tab, event-sourced состояние, модуляризация) — **закрыты**, см. `CHANGELOG.md`.
@@ -276,7 +276,7 @@ reset` для json/list, failover с моделью целевого прова�
       `vision`) должны быть видны в описании тула, а не только в тексте ошибки.
 - [x] **Проверить, почему не завершается работа с субагентами.** _(сделано 2026-10-27 в ветке
       `fix/subagent-reliability`: спека
-      [`2026-10-27-subagent-reliability-design`](../specs/2026-10-27-subagent-reliability-design.md) —
+      [`2026-10-27-subagent-reliability-design`](./docs/archive/specs/2026/2026-10-27-subagent-reliability-design.md) —
       джейл `bash` = `baseDir` (§A), обрыв до ответа восстанавливается одним повтором
       с выключенным reasoning и удвоенным бюджетом (§B). Гейты:
       `tests/tools/bash-scope.test.ts`, `tests/core/llm-truncation-recovery.test.ts`,
@@ -318,7 +318,7 @@ reset` для json/list, failover с моделью целевого прова�
 - [x] **A1 (P0) `allowed_files` с glob-формой закрывает субагенту весь доступ.** `…/**/*`
       не сопоставляется ни с чем: `matchesScopeEntry` (`src/tools/path-utils.ts:36`) сравнивает
       префиксы. В сессии 4 субагента не прочитали ни одного файла. _(Сделано 2026-11-02:
-      спека [`2026-11-02-subagent-scope-entries-design`](../specs/2026-11-02-subagent-scope-entries-design.md),
+      спека [`2026-11-02-subagent-scope-entries-design`](./docs/specs/2026-11-02-subagent-scope-entries-design.md),
       ветка `fix/subagent-scope-entries` — матчер скоупа в `src/modules/security/scope.ts`,
       `globToRegExp` переписан под честную грамматику `**`+суффикс, невалидные записи
       отвергаются с причиной, причина отказа называет состав скоупа. Гейты:
@@ -352,7 +352,7 @@ reset` для json/list, failover с моделью целевого прова�
       было 2 вызова.
 - [x] **A6 (P1) Критик эскалирует числа без провенанса; его проверки невидимы в журнале.**
       _(Сделано 2026-11-03: спека
-      [`2026-11-03-critic-evidence-provenance-design`](../specs/2026-11-03-critic-evidence-provenance-design.md),
+      [`2026-11-03-critic-evidence-provenance-design`](./docs/specs/2026-11-03-critic-evidence-provenance-design.md),
       ветка `fix/critic-evidence-provenance`. `critical` с перечисленными жалобами без
       `evidence` понижается до `concern` (жалоба доходит советом, repair не тратится), в
       журнале — `critic_verdict { downgraded: "no_evidence" }`; `critic_check` несёт
@@ -769,7 +769,7 @@ drawer, клавиатура. Что работает (не трогать): к�
 
 ### 1.12 mma web — тестовые прогоны 2026-11-02
 
-Отчёт: [`docs/agents/web-agent-test-report-2026-11-02.md`](./docs/agents/web-agent-test-report-2026-11-02.md).
+Отчёт: [`docs/archive/reports/web-agent-test-report-2026-11-02.md`](./docs/archive/reports/web-agent-test-report-2026-11-02.md).
 Три живых прогона в браузере: nemotron (34 находки, сайт без стилей), MiMo (`400 Upstream
 response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов, корзина и фильтры
 проверены вживую).
@@ -824,7 +824,7 @@ response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов,
 
 ## 3. Дорожная карта до продакшена
 
-> Полный gap-анализ: [`docs/specs/2026-09-28-production-readiness-design.md`](./docs/specs/2026-09-28-production-readiness-design.md).
+> Полный gap-анализ: [`docs/archive/specs/2026/2026-09-28-production-readiness-design.md`](./docs/archive/specs/2026/2026-09-28-production-readiness-design.md).
 > Пункты — отдельные ветки от `master`; каждый требует зелёных `bun test` + `bun run quality`.
 
 ### P0 — без этого в прод нельзя

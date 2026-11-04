@@ -32,7 +32,7 @@
 
 ## File map
 
-- Create: `src/config/registry-extra.ts` (new `ConfigKeyDef[]` + merge), `tests/config-registry-extra.test.ts`, `src/modules/webui/assets/js/settings-controls.js`, `tests/webui-config-extra.test.ts`, `tests/webui-mcp-crud.test.ts`, `tests/webui-lsp.test.ts`, `docs/specs/2026-09-27-full-config-surfaces-design.md` (this plan's design, 1 page).
+- Create: `src/config/registry-extra.ts` (new `ConfigKeyDef[]` + merge), `tests/config-registry-extra.test.ts`, `src/modules/webui/assets/js/settings-controls.js`, `tests/webui-config-extra.test.ts`, `tests/webui-mcp-crud.test.ts`, `tests/webui-lsp.test.ts`, `docs/archive/specs/2026/2026-09-27-full-config-surfaces-design.md` (this plan's design, 1 page).
 - Modify: `src/config/registry.ts` (import + concat only, ≤10 lines), `src/cli/repl-commands.ts` (handler-map additions: `/security`), `src/cli/completer.ts` (new key names), `src/cli/commands.ts` (`mma config set` → route through `setConfigValue` validation + keep raw fallback under `--force`), `src/modules/webui/assets/js/settings.js` (SECTION_KEYS + import controls), `src/modules/webui/settings-api.ts` (MCP create/edit + LSP), `src/modules/webui/server.ts` (route table only), `src/modules/webui/providers-api.ts` (cache/retry/completion fields), `src/i18n/en.json`, `src/i18n/ru.json`, `AGENTS.md`, `CHANGELOG.md`.
 - Test: `bun test tests/config-registry-extra.test.ts`, `bun test tests/webui-config-extra.test.ts`, then full `bun test`, `tsc --noEmit`, `bun run quality`.
 
@@ -41,7 +41,7 @@
 ### Task 1: Branch + design spec + baseline
 
 **Files:**
-- Create: `docs/specs/2026-09-27-full-config-surfaces-design.md`
+- Create: `docs/archive/specs/2026/2026-09-27-full-config-surfaces-design.md`
 - Modify: none
 - Test: none (gate check)
 
@@ -84,7 +84,7 @@ Expected: no output (clean).
 - [x] **Step 4: Commit**
 
 ```bash
-git add docs/specs/2026-09-27-full-config-surfaces-design.md
+git add docs/archive/specs/2026/2026-09-27-full-config-surfaces-design.md
 git commit -m "docs: design full config surfaces terminal+web"
 ```
 

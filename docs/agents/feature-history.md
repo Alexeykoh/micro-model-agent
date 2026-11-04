@@ -92,7 +92,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Session ↔ Plan Binding (2.12.0)
 
-Спека: [docs/specs/2026-09-29-session-plan-binding-design.md](./docs/specs/2026-09-29-session-plan-binding-design.md).
+Спека: [docs/archive/specs/2026/2026-09-29-session-plan-binding-design.md](../archive/specs/2026/2026-09-29-session-plan-binding-design.md).
 
 - **План следует за сессией:** активный план лежит в per-session слоте
   `.mma/plans/sessions/<sessionId>/active.json` (`PlanStore.save/load/clearSessionActive`;
@@ -353,7 +353,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Onboarding Commands (2.1.0)
 
-Дизайн: [docs/specs/2026-09-23-onboarding-meet-init-design.md](./docs/specs/2026-09-23-onboarding-meet-init-design.md); план: [docs/plans/2026-09-23-onboarding-meet-init.md](./docs/plans/2026-09-23-onboarding-meet-init.md).
+Дизайн: [docs/archive/specs/2026/2026-09-23-onboarding-meet-init-design.md](../archive/specs/2026/2026-09-23-onboarding-meet-init-design.md); план: [docs/plans/2026-09-23-onboarding-meet-init.md](./docs/plans/2026-09-23-onboarding-meet-init.md).
 
 - **`meet` / «Познакомимся»** (`src/modules/onboarding/meet.ts`, `mode.ts`, `prompts.ts`) — LLM-интервью о профиле использования (домен, имя, язык, стиль ответов, привычки, «не делать без спроса»), пишет **только в глобальную память** (`~/.mma/memory/preferences.json`, `facts.md`) через `remember`. REPL-режим: вход по `[Y/n]` после setup, `/meet` (алиас `/познакомимся`) или `mma meet`; выход — по sentinel-тулу `meet_done`. Домен-нейтрально (разработка, умный дом, ассистент, …), 1–3 вопроса за ход, turn cap, `Esc` — выход без записи.
 - **`agents init`** (`src/modules/onboarding/init.ts`) — LLM генерирует/улучшает `AGENTS.md` для любого workspace (код, доки, заметки, конфиги): скан через project map/read-only тулы, точечные вопросы, запись в `<baseDir>/AGENTS.md`; существующий файл улучшается **in place** с diff и подтверждением.
@@ -379,7 +379,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Browser Mode (`mma web`) (2.2.0, Phase 3 — 2.4.0)
 
-Дизайн: [docs/specs/2026-09-23-mma-web/design.md](./docs/specs/2026-09-23-mma-web/design.md).
+Дизайн: [docs/archive/specs/2026/2026-09-23-mma-web/design.md](../archive/specs/2026/2026-09-23-mma-web/design.md).
 
 - **`mma web [--port N] [--host H] [--token T] [--no-open]`** — браузерный чат **без TTY**: тот же `bootstrap()`/`Agent`/сессии, вторая реализация `Host` (`WebHost`, `src/core/web-host.ts`) поверх `src/modules/webui/`. Терминальный REPL не меняется; терминал и веб — отдельные процессы.
 - **Env:** `MMA_WEBUI_PORT` (default random), `MMA_WEBUI_HOST` (`127.0.0.1`), `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
@@ -397,10 +397,10 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Вопросы:** в web-режиме `question`/`approve` зарегистрированы и используют web-`PromptIO` (SSE `question` + `POST /api/answer`); в терминале остаются выключены. Мультивыбор (подсказка + send) и «own answer…» (`CUSTOM_INDEX = -1` → follow-up free-text) поддержаны.
 - **i18n:** `GET /api/i18n` отдаёт словари, chrome веб-UI локализуется и переключается при смене `locale`; SSE-reconnect с ресинком; статика с `Cache-Control: no-store`.
 - **Настройки:** адаптивная модалка; локализованные подписи конфига (`config.key.*`) и enum (`config.enum.*`); read-only `version`; Security-тумблеры (`security.enabled/paths.enabled/contentScan.enabled/sessionEncryption.enabled`) + маскированный web-токен; провайдеры `GET/POST /api/providers` + `DELETE /api/providers/:name`; MCP `POST /api/mcp/:id` (применяется со следующего запуска); плагины — read-only (enable/disable через файлы).
-- **Панель «Модель и провайдер» (2.7.0):** две секции `.settings-section` — «Модель» (поиск + скроллируемый `.model-list`, активная выделена) и «Провайдеры» (кнопка `.sec-add` в шапке секции, строка `.provider-item` с бейджем `[активный]`, dim-строкой метаданных и чипсами `make active`/`edit`/`delete`). Дублирующей строки «активный провайдер» нет. Форма добавления/правки (`providerForm`) открывается **inline** в секции (без новых модалок), обязательные поля сверху, опциональные (context/priority/rpm/parallel) — в `<details> «дополнительно»`; `datalist` подсказывает типы провайдеров и base URL. Спек: `docs/specs/2026-09-25-webui-provider-settings-design.md`.
+- **Панель «Модель и провайдер» (2.7.0):** две секции `.settings-section` — «Модель» (поиск + скроллируемый `.model-list`, активная выделена) и «Провайдеры» (кнопка `.sec-add` в шапке секции, строка `.provider-item` с бейджем `[активный]`, dim-строкой метаданных и чипсами `make active`/`edit`/`delete`). Дублирующей строки «активный провайдер» нет. Форма добавления/правки (`providerForm`) открывается **inline** в секции (без новых модалок), обязательные поля сверху, опциональные (context/priority/rpm/parallel) — в `<details> «дополнительно»`; `datalist` подсказывает типы провайдеров и base URL. Спек: `docs/archive/specs/2026/2026-09-25-webui-provider-settings-design.md`.
 - **Multi-provider (2.7.0):** `provider.models[name]` помнит последнюю модель каждого провайдера (`setConfigValue` в `src/config/registry.ts`): `model` → запись под активным, `provider.active` → восстановление; веб `postConfig` после смены провайдера/модели перечитывает `/api/config` + `/api/models`. Имена провайдеров уникальны (`providerNameTaken`, `src/modules/providers/naming.ts`): коллизия label/type → `409 name-conflict` в web и `cli.provider_name_conflict` в CLI; правка из web шлёт `originalName`, поэтому запись может сохранить своё имя. Удаление активного по-прежнему запрещено (`active-provider`) — сначала переключись.
 - **Пресеты провайдеров в форме (2.7.0):** `GET /api/providers` отдаёт `presets` (`buildProviderPresets`): `BUILTIN_PROVIDERS` с фиксированными `baseUrl` + именованные локальные (**LM Studio / Ollama / vLLM** → `openai-compat` с известными URL). В форме `providerForm` селект «шаблон» одним кликом заполняет `type`/`name`/`baseUrl` — ни хостед, ни локальный провайдер не требуют вводить URL руками (`web.settings.provider_preset/provider_custom`).
-- **Activity rail (над композером, unreleased):** индикатор занятости агента (`js/rail.js`, leaf-модуль, подписан на свои слушатели SSE в `app.js` + `setBusy` в `reflectBusy`): живёт весь `busy`-период (in-feed `.busy` гаснет на первом `text`), без плана — indeterminate-сканер + вспышка на каждое `tool_*`/`text`/`plan`, с планом MoE — честный `done/total` и засечки шагов; фаза (thinking/tool/composing), таймер, счётчики тулов/событий, последний тул (`labelOf` из `format.js`). Раскладки `ui.activityRail` = `off|line`(default)|`meta|full` (меняются live в Settings → Chat output и через `/config`); спека: [docs/specs/2026-09-27-activity-rail-design.md](./docs/specs/2026-09-27-activity-rail-design.md).
+- **Activity rail (над композером, unreleased):** индикатор занятости агента (`js/rail.js`, leaf-модуль, подписан на свои слушатели SSE в `app.js` + `setBusy` в `reflectBusy`): живёт весь `busy`-период (in-feed `.busy` гаснет на первом `text`), без плана — indeterminate-сканер + вспышка на каждое `tool_*`/`text`/`plan`, с планом MoE — честный `done/total` и засечки шагов; фаза (thinking/tool/composing), таймер, счётчики тулов/событий, последний тул (`labelOf` из `format.js`). Раскладки `ui.activityRail` = `off|line`(default)|`meta|full` (меняются live в Settings → Chat output и через `/config`); спека: [docs/archive/specs/2026/2026-09-27-activity-rail-design.md](../archive/specs/2026/2026-09-27-activity-rail-design.md).
 - **Chat motion + sticky autoscroll (unreleased, ветка `fix/web-autoscroll`):** только opacity/transform, 100–200мс, всё гаснет под `prefers-reduced-motion` (существующий kill-switch в `styles.css`). Новое: entrance `rise` строк ленты (`.feed > *`), `▌`-каретка стрима (`.md.streaming::after` + имеющийся `blink`), пульс живых ярлыков (`.busy .lab`, `.think.live .think-h .lab`, `.rail-l1 .lab`, `.act.running .lab` — `live` снимает `finishThink`, `running` снимает `onToolEnd`/`onTurnEnd`, иначе «думаю» выглядит зависшим после хода), `pop` меню/диалогов, hover-переходы, `fade` сворачивания quiet-ран (`fold-out` + 160мс перед `remove`), edge-fades транскрипта (классы `scrolled/unfollowed` из скролл-хука), пилюля «↓ к новому» (`web.scroll.latest`, en+ru). Скролл липкий: флаг `follow` (`feed.js`) — у края пинимся на каждый аппенд, при уходе вверх не дёргаем; форс-пин на отправке/открытии таба/загрузке истории (`scrollToBottom`, экспорт в `tabs.js`); спиннер `showBusy` задержан на 180мс и не вспыхивает поверх стартовавшего стрима.
 - **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
 - **Структура после рефакторинга 2026-09-26:** backend — `body.ts` (`parseJsonBody`/`readJsonBody`, единый парсинг POST), `persist.ts` (`persistAndReconfigure`), `server.ts` — таблица `API_ROUTES` + `API_GROUPS` (правило #17), `host-state.ts` (снапшот/usage/plan), `run-agent.ts` (турн-раннер), `model-cache.ts`, `providers-view.ts` (read-модели); каждый файл ≤300 строк, `maxClients` живёт в `createWebUiState()`. Фронтенд — ES-модули `assets/js/` (с 2.17.1 на TS): `app.ts` (~240: boot/SSE/renderState) + `dom`/`api`/`i18n`/`store`/`format`/`feed`/`tabs`/`settings`/`dialog`; сервер отдаёт `/js/*` (`jsModules`, live-reload как остальная статика). DAG ацикличен: app → settings → tabs → {feed, dialog}; связь локали — хук `hooks.applyStaticI18n`. Дедуп: `planStepMark`, `makeToggle` (dom), `trapTab` (dialog), очередь тостов в `setIndicator`, `web.command.*` i18n для `/help`+`/api/commands`. План: [docs/plans/2026-09-26-webui-decompose.md](./docs/plans/2026-09-26-webui-decompose.md).
@@ -408,7 +408,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Web First-Run Setup (2.6.0)
 
-Дизайн: [docs/specs/2026-09-25-web-first-run-design.md](./docs/specs/2026-09-25-web-first-run-design.md).
+Дизайн: [docs/archive/specs/2026/2026-09-25-web-first-run-design.md](../archive/specs/2026/2026-09-25-web-first-run-design.md).
 
 - **Общее ядро setup** (`src/modules/setup/`): `answers.ts` (`SetupAnswers`, `SETUP_LANGUAGES`,
   `SETUP_DEFAULTS`, `buildSetupDisplay()`), `apply.ts` (`applyAnswersToConfig` + `SECURITY_BASH_BLOCKLIST`),
@@ -601,7 +601,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 ### WebUI Modularization (unreleased, phases 5–6)
 
 План: [docs/plans/2026-10-02-webui-modularization.md](./docs/plans/2026-10-02-webui-modularization.md);
-спека: [docs/specs/2026-10-02-webui-modularization-design.md](./docs/specs/2026-10-02-webui-modularization-design.md).
+спека: [docs/archive/specs/2026/2026-10-02-webui-modularization-design.md](../archive/specs/2026/2026-10-02-webui-modularization-design.md).
 Внутренний рефакторинг, контракты (SSE/REST/сессии/конфиг/plugin API) не менялись.
 
 - **Фронтенд-раскладка (barrel + подпапки).** `assets/js/feed.ts` — barrel над
@@ -629,7 +629,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 
 ### WebUI Frontend TypeScript Migration (2.17.1)
 
-Спека: [docs/specs/2026-10-04-webui-frontend-ts-design.md](./docs/specs/2026-10-04-webui-frontend-ts-design.md);
+Спека: [docs/archive/specs/2026/2026-10-04-webui-frontend-ts-design.md](../archive/specs/2026/2026-10-04-webui-frontend-ts-design.md);
 план: [docs/plans/2026-10-04-webui-frontend-ts.md](./docs/plans/2026-10-04-webui-frontend-ts.md).
 Весь наш браузерный фронтенд переведён на TypeScript со `strict: true`; контракты
 (URL/имена файлов, REST/SSE/сессии/конфиг) не менялись.
@@ -653,7 +653,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 
 ### npm Build Optimization (2.17.1)
 
-Спека: [docs/specs/2026-10-04-npm-build-optimization-design.md](./docs/specs/2026-10-04-npm-build-optimization-design.md);
+Спека: [docs/archive/specs/2026/2026-10-04-npm-build-optimization-design.md](../archive/specs/2026/2026-10-04-npm-build-optimization-design.md);
 план: [docs/plans/2026-10-04-npm-build-optimization.md](./docs/plans/2026-10-04-npm-build-optimization.md).
 Прод-пакет **8.17 MB → 1.73 MB**, `main.js` **7.68 MB → 1.11 MB**. Контракты не менялись.
 
@@ -711,7 +711,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 
 ### Harness Hardening (2.19.0)
 
-Спека: [docs/specs/2026-10-05-harness-hardening-design.md](./docs/specs/2026-10-05-harness-hardening-design.md).
+Спека: [docs/archive/specs/2026/2026-10-05-harness-hardening-design.md](../archive/specs/2026/2026-10-05-harness-hardening-design.md).
 Правки харнесса (не модели), обобщённые; фазы 0→4, по коммиту на фазу.
 
 - **Калибровка контекста** (`src/core/agent/context-calibration.ts`): оценка токенов
@@ -817,8 +817,8 @@ read-only петля без стопа, рассинхрон провайдер�
 
 Вкладка **Files** в сайдбаре `mma web`: ленивое дерево файлов workspace, read-only просмотр
 в приложении и attach файла в чат вставкой пути. Спеки:
-[2026-10-07-webui-files-tab-design.md](./docs/specs/2026-10-07-webui-files-tab-design.md),
-[2026-10-08-webui-files-split-design.md](./docs/specs/2026-10-08-webui-files-split-design.md).
+[2026-10-07-webui-files-tab-design.md](../archive/specs/2026/2026-10-07-webui-files-tab-design.md),
+[2026-10-08-webui-files-split-design.md](../archive/specs/2026/2026-10-08-webui-files-split-design.md).
 
 - **Листинг** (`src/modules/webui/file/files-api.ts`): новый `GET /api/files?path=<rel>` — JSON
   одной директории (папки сверху, затем файлы; кап `MAX_DIR_ENTRIES`, флаг `truncated`).
@@ -875,7 +875,7 @@ read-only петля без стопа, рассинхрон провайдер�
 
 ### Web Tool Images (2.28.0)
 
-Спека: [docs/specs/2026-10-07-web-tool-images-design.md](./docs/specs/2026-10-07-web-tool-images-design.md);
+Спека: [docs/archive/specs/2026/2026-10-07-web-tool-images-design.md](../archive/specs/2026/2026-10-07-web-tool-images-design.md);
 план: [docs/plans/2026-10-07-web-tool-images.md](./docs/plans/2026-10-07-web-tool-images.md).
 Показ реальных изображений тулов (`browser` screenshot, `attach_image`) в ленте `mma web`
 вместо статичной заглушки, которая никогда не заполнялась.
@@ -911,7 +911,7 @@ read-only петля без стопа, рассинхрон провайдер�
 
 ### Event-Sourced Web State (2.24.0)
 
-Спека: [docs/specs/2026-10-07-web-event-sourced-state-design.md](./docs/specs/2026-10-07-web-event-sourced-state-design.md);
+Спека: [docs/archive/specs/2026/2026-10-07-web-event-sourced-state-design.md](../archive/specs/2026/2026-10-07-web-event-sourced-state-design.md);
 план: [docs/plans/2026-10-07-web-event-sourced-state.md](./docs/plans/2026-10-07-web-event-sourced-state.md).
 Убран двойной контур синхронизации сайдбара (SSE-счётчики + 2с-полл `/api/state`).
 
@@ -936,7 +936,7 @@ read-only петля без стопа, рассинхрон провайдер�
 
 ### Parallel Subagents in a Tool Batch (2.25.0)
 
-Спека: [docs/specs/2026-10-07-parallel-subagents-design.md](./docs/specs/2026-10-07-parallel-subagents-design.md).
+Спека: [docs/archive/specs/2026/2026-10-07-parallel-subagents-design.md](../archive/specs/2026/2026-10-07-parallel-subagents-design.md).
 Разбор живой сессии `ses_muxqw12h_6uk4cq`: два `subagent`-вызова одного хода шли строго
 последовательно (сумма длительностей), хотя описание тула обещало «parallel work».
 
@@ -1104,7 +1104,7 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Честные ограничения (зафиксированы в доках и UI):** disable ≠ sandbox (модуль уже
   `require`-нут, код верхнего уровня уже выполнился); `permissions` — декларация для показа, а не
   enforcement. Настоящая изоляция/доверие — открытый P1 в
-  `docs/specs/2026-09-28-production-readiness-design.md`.
+  `docs/archive/specs/2026/2026-09-28-production-readiness-design.md`.
 - **Тесты:** `tests/plugin-records.test.ts`, `tests/plugin-enabled.test.ts`,
   `tests/plugin-reload.test.ts`, `tests/plugin-tools.test.ts`, `tests/plugin-drafts.test.ts`,
   `tests/skills-reload.test.ts`,
@@ -1116,7 +1116,7 @@ read-only петля без стопа, рассинхрон провайдер�
 
 ### Plugin Draft Quality (2.29.1)
 
-Спека: [docs/specs/2026-10-07-plugin-draft-quality-design.md](./docs/specs/2026-10-07-plugin-draft-quality-design.md);
+Спека: [docs/archive/specs/2026/2026-10-07-plugin-draft-quality-design.md](../archive/specs/2026/2026-10-07-plugin-draft-quality-design.md);
 план: [docs/plans/2026-10-07-plugin-draft-quality.md](./docs/plans/2026-10-07-plugin-draft-quality.md).
 Черновики `define_capability` (код, который пишет малая модель) теперь проходят
 quality-gate и выглядят аккуратно.
@@ -1146,7 +1146,7 @@ quality-gate и выглядят аккуратно.
 локальный `package.json` был `2.37.0`, npm `latest` — `2.36.0`, поэтому `semverGt()`
 честно возвращал «апдейта нет» (система не предлагает обновление назад). Второй —
 настоящий: в вебе автообновление **никогда не работало**, а панель настроек это
-скрывала. Спека: [docs/specs/2026-10-09-updater-web-design.md](./docs/specs/2026-10-09-updater-web-design.md).
+скрывала. Спека: [docs/archive/specs/2026/2026-10-09-updater-web-design.md](../archive/specs/2026/2026-10-09-updater-web-design.md).
 
 - **Причина мёртвого веба:** `runWeb` идёт с `exitOnComplete=true`
   (`web-command.ts:65`), а `main.ts:280` читал `exitOnComplete ? undefined :
@@ -1191,7 +1191,7 @@ quality-gate и выглядят аккуратно.
 
 ### MoE Indicator (2.30.0)
 
-Спека: [docs/specs/2026-10-08-moe-indicator-design.md](./docs/specs/2026-10-08-moe-indicator-design.md).
+Спека: [docs/archive/specs/2026/2026-10-08-moe-indicator-design.md](../archive/specs/2026/2026-10-08-moe-indicator-design.md).
 Пользователь видит, что ход ведёт оркестрация: одна строка в чате на ход + чип
 режима в футере `mma web`.
 
@@ -1393,7 +1393,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 
 ### MMART — the Web Mascot (Loader Faces, unreleased)
 
-Спека: [docs/specs/2026-10-08-loader-webui-design.md](./docs/specs/2026-10-08-loader-webui-design.md).
+Спека: [docs/archive/specs/2026/2026-10-08-loader-webui-design.md](../archive/specs/2026/2026-10-08-loader-webui-design.md).
 Агент получил «лицо» (squircle + анимированные глаза), одно на все поверхности.
 **Маскот называется MMART** (MMA + art) — экспорт `MMART_NAME` в `loader.ts`.
 
@@ -1488,7 +1488,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 
 Разбор для TUI показал: фронтенд-независимого ядра достаточно, но три шва
 упирались в терминал. Все три закрыты; поведение пользователя не менялось.
-**TUI по итогам разбора отложен** (спека `docs/specs/2026-10-10-tui-frontend-design.md`,
+**TUI по итогам разбора отложен** (спека `docs/archive/specs/2026/2026-10-10-tui-frontend-design.md`,
 §0): без постоянной панели он = REPL в альт-экране, что отнимает scrollback
 и не окупается. Но сами швы полезны независимо — `mma serve` импортировал
 проекцию состояния из веб-модуля, и это теперь исправлено. Спека TUI — не
@@ -1532,7 +1532,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 
 Разбор сессии `ses_mv0pirf5_hnmbxj` (`qwen3.8-9b-distill`, `mma web`): чисто read-only
 аналитическая задача была убита стражем на 24-й итерации, когда модель уже собиралась
-ответить. Спека: [docs/specs/2026-10-09-readonly-guard-finalize-design.md](./docs/specs/2026-10-09-readonly-guard-finalize-design.md);
+ответить. Спека: [docs/archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md](../archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md);
 план: [docs/plans/2026-10-09-readonly-guard-finalize.md](./docs/plans/2026-10-09-readonly-guard-finalize.md).
 
 - **Прогресс = новое действие, а не мутация** (`src/core/agent/tool-batch.ts`): батч
@@ -1565,7 +1565,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 server: каждый `checkFile` (каждая запись файла, каждый файл `lsp_check`, 5 файлов
 стартового чека) спавнил `npx → node → tsserver` и убивал его после первой публикации
 диагностик. Плюс несоответствия спеке 3.17. Спека:
-[docs/specs/2026-10-09-lsp-persistent-client-design.md](./docs/specs/2026-10-09-lsp-persistent-client-design.md).
+[docs/archive/specs/2026/2026-10-09-lsp-persistent-client-design.md](../archive/specs/2026/2026-10-09-lsp-persistent-client-design.md).
 
 - **Тёплые соединения** (`src/modules/lsp/connection.ts`, `pool.ts`): одно соединение =
   один процесс сервера, ключ `(serverKey, projectRoot)`. Документы синкатся
@@ -1600,7 +1600,7 @@ server: каждый `checkFile` (каждая запись файла, кажд
 
 ### Web: favicon, Subagents/MCP tabs, compact rail (unreleased, ветка `feat/webui-sidebar-favicon`)
 
-Спека: [2026-10-27-webui-sidebar-favicon-design.md](../specs/2026-10-27-webui-sidebar-favicon-design.md).
+Спека: [2026-10-27-webui-sidebar-favicon-design.md](../archive/specs/2026/2026-10-27-webui-sidebar-favicon-design.md).
 
 - **Favicon** (`webui/favicon.ts`, `index.html`): `GET /api/favicon` ищет
   `favicon.{ico,png,svg,webp,gif}` в корне и типовых static-каталогах workspace

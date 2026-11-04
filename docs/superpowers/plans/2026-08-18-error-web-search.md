@@ -15,7 +15,7 @@
 
 **Tech Stack:** Bun + TypeScript, vitest (`bun test`), конфиг 3-слойный (defaults→global→project), i18n `t()` (en+ru).
 
-**Spec:** `docs/specs/2026-08-18-error-web-search-design.md`
+**Spec:** `docs/archive/specs/2026/2026-08-18-error-web-search-design.md`
 
 ---
 
@@ -1219,7 +1219,7 @@ Expected: сборка успешна.
 Добавить запись `51 =` в начало нумерованного списка версий (перед записью про 0.41.1):
 
 ```markdown
-- **51** = error web search (по обсуждению; спек `docs/specs/2026-08-18-error-web-search-design.md`): при ≥ 5 повторениях одной сигнатуры ошибки (`тул::нормализованный текст`) плагин `execution` автоматически ищет её в интернете. `performWebSearch()` вынесена из тула `web_search` (`src/tools/web-search.ts`) и используется и тулом, и плагином; мастер-выключатель `webSearch.enabled` отключает и тул, и авто-поиск; независимый `errorWebSearch.enabled` отключает только авто-поиск. Запуск fire-and-forget из `onAfterTool` (не блокирует цикл), результат инжектится как `<system-summary>` через `pendingMessages`. Гейты: `isSearchableError` (не ищем «exit code 1» без деталей), 1 поиск на сигнатуру, кап `maxSearchesPerSession` (3), 1 уточнённый повтор при пустых результатах, cooldown 30s. Запрос строится из до 3 строк ошибки + рантайм/фреймворк из шага/bash (`buildSearchQuery`), пути/позиции вырезаются. Конфиг `errorWebSearch.{enabled,threshold(5),maxResults(5),maxQueryChars(200),maxSearchesPerSession(3),requestTimeoutMs(10000)}`. Новые i18n: `exec.error_search_results/failed/no_query`, `tool.web_search_disabled` (en+ru). Новый файл `tests/execution-web-search.test.ts` (9 кейсов). Version: **0.42.0** (MINOR — новый конфиг + поведение + i18n ключи).
+- **51** = error web search (по обсуждению; спек `docs/archive/specs/2026/2026-08-18-error-web-search-design.md`): при ≥ 5 повторениях одной сигнатуры ошибки (`тул::нормализованный текст`) плагин `execution` автоматически ищет её в интернете. `performWebSearch()` вынесена из тула `web_search` (`src/tools/web-search.ts`) и используется и тулом, и плагином; мастер-выключатель `webSearch.enabled` отключает и тул, и авто-поиск; независимый `errorWebSearch.enabled` отключает только авто-поиск. Запуск fire-and-forget из `onAfterTool` (не блокирует цикл), результат инжектится как `<system-summary>` через `pendingMessages`. Гейты: `isSearchableError` (не ищем «exit code 1» без деталей), 1 поиск на сигнатуру, кап `maxSearchesPerSession` (3), 1 уточнённый повтор при пустых результатах, cooldown 30s. Запрос строится из до 3 строк ошибки + рантайм/фреймворк из шага/bash (`buildSearchQuery`), пути/позиции вырезаются. Конфиг `errorWebSearch.{enabled,threshold(5),maxResults(5),maxQueryChars(200),maxSearchesPerSession(3),requestTimeoutMs(10000)}`. Новые i18n: `exec.error_search_results/failed/no_query`, `tool.web_search_disabled` (en+ru). Новый файл `tests/execution-web-search.test.ts` (9 кейсов). Version: **0.42.0** (MINOR — новый конфиг + поведение + i18n ключи).
 ```
 
 - [x] **Step 6: Коммит**

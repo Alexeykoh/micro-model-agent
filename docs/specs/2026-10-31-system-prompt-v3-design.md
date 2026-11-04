@@ -4,7 +4,7 @@ _Дата: 2026-10-31. Ветка: `spec/system-prompt-v3`. Статус: Draft 
 
 Уточняет и заменяет практику «добавим ещё одну директиву в `buildSystemInfo`».
 Опирается на [architecture v2](./2026-10-12-architecture-v2-design.md) (INV-6, INV-16,
-INV-17), [prompt caching](./2026-09-17-prompt-caching-budget.md) и
+INV-17), [prompt caching](../archive/specs/2026/2026-09-17-prompt-caching-budget.md) и
 [реестр долгов](../agents/debt.md).
 
 ## 1. Что наблюдается
@@ -383,7 +383,7 @@ budget`, пишется `prompt_degraded` (или `context_degraded`) с при�
 - `src/tools/executor.ts` (`tool.tags_blocked`), `src/tools/path-enforcement.ts`
   (protected paths).
 - `docs/agents/debt.md` — `approve-marker-not-authoritative`.
-- `docs/specs/2026-09-17-prompt-caching-budget.md` — prefix stability.
+- `docs/archive/specs/2026/2026-09-17-prompt-caching-budget.md` — prefix stability.
 
 ## 14. Статус реализации
 

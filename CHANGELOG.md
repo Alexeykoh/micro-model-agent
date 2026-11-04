@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **Документация разделена на живую и архивную.** Активные контракты и работы
+  последней недели остаются в `docs/specs/`, завершённые спеки и планы переехали в
+  `docs/archive/<год>/` без удаления. Добавлены карта документации
+  (`docs/README.md`), `CONTRIBUTING.md`, шаблоны issue/PR и тест
+  `tests/docs-link-check.test.ts`, который ловит битые ссылки после переносов.
+
 ## [0.24.0] - 2026-11-04
 
 ### Fixed
@@ -115,7 +123,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   (`LlmRequestSnapshot`) снимается **после** DLP-проекции и **до** сети, лениво
   (подписчиков нет — не строится), пишется в `session.jsonl` как `llm_request`
   и отдаётся SSE; Trace получает строку «запрос» с поп-апом `system → messages →
-  tools` и «копировать JSON», а клик по позиции в бейдже DLP открывает тот же
+tools` и «копировать JSON», а клик по позиции в бейдже DLP открывает тот же
   снимок на нужном сообщении. Вкладка «Безопасность» — живой журнал отловов
   (`security_block`/`security_approval`/DLP) поверх нового внутрипроцессного
   потока `security-events` + бэкфилл из `audit.jsonl` **своей** сессии.
@@ -175,9 +183,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Порог компакции учитывает измеренные схемы тулов.** `budget.history` считался
   как `window − systemBudget − reserve` и не знал про `toolTokens`: на окне 32K с
   9K тулов жёсткий порог разрешал промпт больше окна (живой прогон: `overflow
-  (41300 > 24577)` при фактическом контексте 1.6× окна). Теперь триггеры
+(41300 > 24577)` при фактическом контексте 1.6× окна). Теперь триггеры
   сравнивают историю с ёмкостью `min(budget.history, window − reserve − system −
-  tools)`, а лог печатает именно этот предел. Конфигурная доля и cap вывода тулов
+tools)`, а лог печатает именно этот предел. Конфигурная доля и cap вывода тулов
   не изменились. Гвард: `tests/core/compaction-tool-budget.test.ts`. Спека:
   `docs/specs/2026-11-01-compaction-history-capacity-design.md`.
 
@@ -190,11 +198,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   пружинная поза, смысловые предметы по состоянию (клавиатура, документ,
   чек-лист, лупа, браузер), эффекты вне силуэта, кроссфейд переходов.
   Палитра читает живые CSS-токены и держит контраст (глаза >= 4.5:1, лицо
-  >= 3:1); радиус скругления следует теме, включая квадратные сезонные.
-  API `createFace`/`setFaceState`/`FaceState` не изменился. Лендинг
-  использует тот же движок через `gh-pages/mascot-canvas.js`
-  (`bun run build:landing-mascot`). Тесты: `tests/webui-loader.test.ts`,
-  `tests/arch/landing-mascot.test.ts`.
+
+  > = 3:1); радиус скругления следует теме, включая квадратные сезонные.
+  > API `createFace`/`setFaceState`/`FaceState` не изменился. Лендинг
+  > использует тот же движок через `gh-pages/mascot-canvas.js`
+  > (`bun run build:landing-mascot`). Тесты: `tests/webui-loader.test.ts`,
+  > `tests/arch/landing-mascot.test.ts`.
 
 - **Системный промпт v3 (W1–W3, частично).** Ядро собирается из фактов
   (`PromptEnvironmentFacts`): Bun/shell/LSP/autoPlan/команды проекта, а не
@@ -340,7 +349,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   этого не читается (видны и большие, и бинарные файлы), и на них действуют те
   же игноры и защита путей. Клик открывает файл с начала; совпадения
   содержимого по-прежнему открываются на строке. Спека:
-  `docs/specs/2026-10-29-webui-files-name-search-design.md`.
+  `docs/archive/specs/2026/2026-10-29-webui-files-name-search-design.md`.
 
 ## [0.18.4] - 2026-10-29
 
@@ -458,7 +467,7 @@ Nms`, `LSP write check …` с полями `op/server/root/durMs` — рань�
   паузу (`[LSP check failed … Следующая попытка через N с]`), а не только
   «заблокировано».
 
-Спека: `docs/specs/2026-10-29-lsp-reliability-design.md` (включая живую матрицу
+Спека: `docs/archive/specs/2026/2026-10-29-lsp-reliability-design.md` (включая живую матрицу
 по форматам и `mma web`). Как проверить сервер по слоям: `docs/agents/lsp.md`. Гварды: `tests/modules/lsp/session-warm.test.ts`,
 `eager-warm.test.ts`, `health-backoff.test.ts`, `check-warmup-budget.test.ts`,
 `config-defaults.test.ts`, `tests/config/lsp-python-migration.test.ts`.
@@ -480,7 +489,7 @@ Nms`, `LSP write check …` с полями `op/server/root/durMs` — рань�
   по-прежнему передаёт свои 6 с на файл, а следующий файл уже идёт на тёплом
   сервере.
 
-Спека: `docs/specs/2026-10-29-lsp-node-version-diagnosis-design.md`. Гварды:
+Спека: `docs/archive/specs/2026/2026-10-29-lsp-node-version-diagnosis-design.md`. Гварды:
 `tests/modules/lsp/check-warmup-budget.test.ts`, `check-warmup-failure.test.ts`,
 `pool.test.ts`.
 
@@ -504,7 +513,7 @@ Nms`, `LSP write check …` с полями `op/server/root/durMs` — рань�
   сервер отвечает клиенту «connection closed», а настоящая причина остаётся
   только в его выводе — без этого `doctor` видел общий `server-error`.
 
-Спека: `docs/specs/2026-10-29-lsp-node-version-diagnosis-design.md`. Гварды:
+Спека: `docs/archive/specs/2026/2026-10-29-lsp-node-version-diagnosis-design.md`. Гварды:
 `tests/modules/lsp/node-version.test.ts`, `doctor-render.test.ts`,
 `probe-stderr.test.ts`, `check-warmup-failure.test.ts`.
 
@@ -534,7 +543,7 @@ Nms`, `LSP write check …` с полями `op/server/root/durMs` — рань�
   файлам, клик открывает строку во вкладке «Файлы»; нет git/изменений — честная
   причина. API: `POST /api/lsp/check-changed`. Долг
   `lsp-project-diagnostics` оплачен. Спека:
-  `docs/specs/2026-10-29-lsp-changed-files-design.md`. Гварды:
+  `docs/archive/specs/2026/2026-10-29-lsp-changed-files-design.md`. Гварды:
   `tests/modules/lsp/changed.test.ts`, `changed-check.test.ts`,
   `tests/webui-lsp-changed.test.ts`.
 - **Панель LSP проверяет конкретный файл.** Новая секция «файл»: путь берётся из
@@ -554,7 +563,7 @@ Nms`, `LSP write check …` с полями `op/server/root/durMs` — рань�
   проверка TS-файла занимает ~9.6 с, и короткий бюджет отдавал `lsp-timeout`
   при живом сервере. Живьём в `mma_test`: `../.env` → 400 «путь вне проекта».
   Спека:
-  `docs/specs/2026-10-28-webui-lsp-file-diagnostics-design.md`. Гварды:
+  `docs/archive/specs/2026/2026-10-28-webui-lsp-file-diagnostics-design.md`. Гварды:
   `tests/modules/lsp/web-check.test.ts`, `tests/webui-lsp-check-api.test.ts`,
   `tests/webui-lsp-file-section.test.ts`.
 
@@ -591,7 +600,7 @@ Nms`, `LSP write check …` с полями `op/server/root/durMs` — рань�
   (`409 {"error":"system"}`), CLI (`EXIT=1`) и игнорируются в
   `plugins.disabled`. Пользовательскими остаются внешние плагины и
   опциональные встроенные (`notify`, `lint-on-write`, `angular11`). Спека:
-  `docs/specs/2026-10-29-plugin-core-separation-design.md`. Гварды:
+  `docs/archive/specs/2026/2026-10-29-plugin-core-separation-design.md`. Гварды:
   `tests/modules/plugins/system-plugins.test.ts`,
   `tests/webui-plugins-system.test.ts`.
 - **Read-only CLI больше не создаёт сессию и не запускает лавину удалений.**
@@ -603,7 +612,7 @@ Nms`, `LSP write check …` с полями `op/server/root/durMs` — рань�
   больше 1000 сессий пропускается с предупреждением (`mma session prune`).
   Это закрывает A-01: на реальном `~/.mma` с 97k сессий read-only команда
   больше не роняет процесс `EFAULT` и не стирает историю. Спека:
-  `docs/specs/2026-10-29-readonly-session-autocreation-design.md`. Гварды:
+  `docs/archive/specs/2026/2026-10-29-readonly-session-autocreation-design.md`. Гварды:
   `tests/cli/readonly-no-session.test.ts`, `tests/session/auto-prune.test.ts`.
 - **LSP на Windows снова отдаёт диагностику (был вечный `lsp-timeout`).**
   tsserver присылает URI как `file:///c%3A/…` (строчная буква диска, `%3A`), а
@@ -833,7 +842,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   (регион/лицензия модели) переключает на следующую запись наряду с
   `404/429/5xx`; `400/401/422` по-прежнему не переключают — это ошибка запроса
   или ключа, смена провайдера её не лечит. Спека:
-  `docs/specs/2026-10-27-provider-failover-design.md`.
+  `docs/archive/specs/2026/2026-10-27-provider-failover-design.md`.
   Гварды: `tests/openai-compat.test.ts`, `tests/providers/fallback-model.test.ts`.
   Долг `llm-provider-error-invisible-to-user` оплачен.
 
@@ -856,7 +865,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   успех, длительность, голова вывода), `usage` (per-call токены с `origin`),
   `end` (статус, итерации, длительность, ошибка). Историю хода по-прежнему пишет
   только родитель — подпоток не трогает `user`/`assistant` и `meta`. Спека:
-  `docs/specs/2026-10-27-subagent-run-journal-design.md`.
+  `docs/archive/specs/2026/2026-10-27-subagent-run-journal-design.md`.
   Гвард: `tests/tools/subagent-session-log.test.ts`. Долг
   `subagent-run-invisible-in-session-log` оплачен.
 
@@ -880,7 +889,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   джейлится только в `baseDir` (плюс symlink-контейнмент), а скоуп остаётся
   правом записи: без `allowed_files` shell субагенту не даётся, файловые тулы
   по-прежнему ограничены скоупом. Спека:
-  `docs/specs/2026-10-27-subagent-reliability-design.md` §A.
+  `docs/archive/specs/2026/2026-10-27-subagent-reliability-design.md` §A.
   Гвард: `tests/tools/bash-scope.test.ts`.
 
 - **Обрыв генерации до первого символа ответа больше не считается «длинным
@@ -893,7 +902,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   в контекст ставится директива «ответь сразу», бюджет удваивается
   (`min(limit×2, 32000)`). `withTokenCap` перестал клампить явный лимит вниз,
   иначе эскалация не доходила до провайдера. Спека:
-  `docs/specs/2026-10-27-subagent-reliability-design.md` §B.
+  `docs/archive/specs/2026/2026-10-27-subagent-reliability-design.md` §B.
   Гварды: `tests/core/llm-truncation-recovery.test.ts`,
   `tests/openai-compat.test.ts`, `tests/tools/subagent-max-tokens.test.ts`.
 
@@ -950,7 +959,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   `full` (дефолт, текущее поведение), `failures` (только упавшие вызовы),
   `off`. Пустая сводка больше не отправляется.
   Гвард: `tests/core/tool-digest-policy.test.ts`.
-  Spec: `docs/specs/2026-10-26-tool-digest-channel-design.md`.
+  Spec: `docs/archive/specs/2026/2026-10-26-tool-digest-channel-design.md`.
 
 ## [0.13.2] - 2026-10-26
 
@@ -1149,7 +1158,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   Теперь гейт эмитит одну статус-строку `↳ проверка не состоялась · <класс причины>`
   (таймаут, нераспознанный вердикт, сбой проверок, ошибка проверяющей модели); полная
   техническая причина остаётся в `critic_error`. Fail-open не изменился.
-  Спека: `docs/specs/2026-10-24-critic-degrade-feed-design.md`.
+  Спека: `docs/archive/specs/2026/2026-10-24-critic-degrade-feed-design.md`.
 
 ### Fixed
 
@@ -1186,7 +1195,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
 - Новые ключи конфига в web-settings и i18n: `subagent.maxDurationMs`, обновлённые
   описания `subagent.timeoutMs`; новые строки `tool.subagent_idle_timeout`,
   `tool.subagent_max_duration`.
-- Спека: `docs/specs/2026-10-23-subagent-progress-watchdog-design.md`.
+- Спека: `docs/archive/specs/2026/2026-10-23-subagent-progress-watchdog-design.md`.
 
 ### Fixed
 
@@ -1248,7 +1257,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   прошлых ходов после reload (до 9 ячеек), клик по маскоту открывает прогон.
   Сетка сжимается по числу ячеек (2 маскота = 2 колонки, без пустого слота),
   а строки истории после reload тоже получают MMART своего прогона.
-  Спека: `docs/specs/2026-10-23-subagent-run-view-design.md`.
+  Спека: `docs/archive/specs/2026/2026-10-23-subagent-run-view-design.md`.
   Гварды: `tests/tools/subagent-runs-events.test.ts`,
   `tests/webui-subagent-runs-store.test.ts`,
   `tests/webui-subagent-api.test.ts`,
@@ -1468,7 +1477,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
     Disabled by seeding `angular11` into `DEFAULTS.plugins.disabled`; it is turned
     on through the existing plugin gate (`mma plugins enable angular11`, `/plugins`,
     web toggle). Registered next to `lint-on-write`/`notify`.
-    Spec: `docs/specs/2026-10-16-angular11-plugin-design.md`.
+    Spec: `docs/archive/specs/2026/2026-10-16-angular11-plugin-design.md`.
 
 ### Fixed
 
@@ -1683,7 +1692,7 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   `SECURITY BLOCKED` patterns, and claim retries. Read-only by construction, and
   `--json` is required so the output format stays a contract. The signature
   catalog lives in `docs/agents/observability.md`. Spec:
-  `docs/specs/2026-10-15-session-diagnose-design.md`, plan wave W5.
+  `docs/archive/specs/2026/2026-10-15-session-diagnose-design.md`, plan wave W5.
 - **Outbound network policy (SSRF)**: calls the harness makes on its own — the
   audit webhook and the `/v1/tasks` push callback — now go through one policy
   point (`src/modules/security/outbound-policy.ts`) instead of raw `fetch`. It is
@@ -1704,7 +1713,7 @@ summarize` — in both the row and the detail pane. Critic rows also surface the
   breakdown is computed server-side (`ContextManager.getQualityBreakdown()`) and
   carried through `AgentResult`/`HostStateSnapshot` (`contextQualityBreakdown`),
   so the number and its explanation cannot drift. Spec:
-  `docs/specs/2026-10-14-context-quality-breakdown-design.md`.
+  `docs/archive/specs/2026/2026-10-14-context-quality-breakdown-design.md`.
 
 ### Changed
 
@@ -1762,7 +1771,7 @@ edit_file, …`), and the Trace row/detail renders it
   Fixed the chat freeze while an update card was shown: the empty-feed refresh
   matched a tab feed's nested `.empty` and detached the live feed
   (`#msgs .empty` → `#msgs > .empty`). Spec:
-  `docs/specs/2026-10-14-webui-update-flow-design.md`.
+  `docs/archive/specs/2026/2026-10-14-webui-update-flow-design.md`.
 - **`mma web` boot hang (stuck on “connecting…” )**: the split-out `md-copy.ts`
   was imported as `./md-copy.js` by `md.js`, but the server only served explicit
   top-level keys plus `/js/*.js`, so `/md-copy.js` returned 404 and the whole ESM
@@ -1788,7 +1797,7 @@ edit_file, …`), and the Trace row/detail renders it
   stale on edits, renders them in the compaction block, and emits `context_degraded`
   when compactions make no progress (INV-15). Config: `contextBudget.admitMaxTokens`,
   `contextBudget.notesPath`, `contextBudget.ledgerMax`. Spec:
-  `docs/specs/2026-10-14-out-of-context-corpus-design.md`.
+  `docs/archive/specs/2026/2026-10-14-out-of-context-corpus-design.md`.
 - **`scan_corpus` tool (OO-4/OO-9)**: answers a question over MANY files —
   hierarchical, fanout-bounded map over `runChunkQuery` + recursive reduce; child
   files are scope- and protected-path-filtered and the walk is symlink-safe.
@@ -2623,8 +2632,8 @@ silently missing.
 ### Known limits (documented, not fixed)
 
 - **Draft approval does not cross processes.** The approval is a marker file, the loaded code lives in process memory: `mma plugins drafts revoke` from a terminal unloads the drafts in _that_ process, and a running `mma web` only notices on restart or `POST /api/reload/plugins` (same in the other direction). Inside one process (the `define_capability` tool, the Plugins tab) it is live. Verified in a live run.
-- Disabling a plugin stops its hooks and tool contributions but does **not** undo the module import that already ran, and `permissions` is a declaration shown to the user rather than enforcement. Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
-- Approving a draft is still a decision, not a boundary: the code runs in the agent process with the harness's own reach (fs, network, `bash`). Real isolation and code trust remain open work (see `docs/specs/2026-09-28-production-readiness-design.md`, P1).
+- Disabling a plugin stops its hooks and tool contributions but does **not** undo the module import that already ran, and `permissions` is a declaration shown to the user rather than enforcement. Real isolation and code trust remain open work (see `docs/archive/specs/2026/2026-09-28-production-readiness-design.md`, P1).
+- Approving a draft is still a decision, not a boundary: the code runs in the agent process with the harness's own reach (fs, network, `bash`). Real isolation and code trust remain open work (see `docs/archive/specs/2026/2026-09-28-production-readiness-design.md`, P1).
 
 ## [2.28.0] - 2026-10-07
 
@@ -2889,9 +2898,9 @@ background-process leaks. Harness fixes only (no model/task-specific tuning).
 
 ### Changed
 
-- **npm package build optimized (internal)**: the CLI bundle externalizes its dependencies (`bun build --packages external`) and the whole `dist` is minified with esbuild (`scripts/optimize-dist.ts`; no source maps, identifier mangling) — package **8.17 MB → 1.73 MB**, `main.js` **7.68 MB → 1.11 MB**. `build:prod` now cleans `dist` first (portable `scripts/clean.ts`), the frontend build skips empty type-only outputs, and nothing is downloaded at runtime (all deps ship via `npm install`). `token-counter.ts` switches to `js-tiktoken/lite` + `cl100k_base` (~1.1 MB vs ~5.6 MB) and `estimateTokens` is recalibrated for cl100k. Spec: `docs/specs/2026-10-04-npm-build-optimization-design.md`.
+- **npm package build optimized (internal)**: the CLI bundle externalizes its dependencies (`bun build --packages external`) and the whole `dist` is minified with esbuild (`scripts/optimize-dist.ts`; no source maps, identifier mangling) — package **8.17 MB → 1.73 MB**, `main.js` **7.68 MB → 1.11 MB**. `build:prod` now cleans `dist` first (portable `scripts/clean.ts`), the frontend build skips empty type-only outputs, and nothing is downloaded at runtime (all deps ship via `npm install`). `token-counter.ts` switches to `js-tiktoken/lite` + `cl100k_base` (~1.1 MB vs ~5.6 MB) and `estimateTokens` is recalibrated for cl100k. Spec: `docs/archive/specs/2026/2026-10-04-npm-build-optimization-design.md`.
 
-- **WebUI frontend migrated to TypeScript (internal)**: every first-party browser module under `src/modules/webui/assets` is now `.ts` (`app.ts`, `md.ts`, `setup.ts`, `js/**/*.ts`) checked with `strict: true` via a new `tsconfig.frontend.json` (`typecheck:frontend`, added to `quality`); the backend `tsconfig.json` excludes `assets/**`. `loadAssets()` transpiles `.ts` on the fly with `Bun.Transpiler` (dev/tests, no build step), while `scripts/build-frontend.ts` emits ready `.js` into `dist/assets` for `build:prod` (same file names and module graph). `allowJs` remains only for the vendored `smd.js`. No SSE/REST/session/config/plugin/URL contract change. Spec: `docs/specs/2026-10-04-webui-frontend-ts-design.md`; plan: `docs/plans/2026-10-04-webui-frontend-ts.md`.
+- **WebUI frontend migrated to TypeScript (internal)**: every first-party browser module under `src/modules/webui/assets` is now `.ts` (`app.ts`, `md.ts`, `setup.ts`, `js/**/*.ts`) checked with `strict: true` via a new `tsconfig.frontend.json` (`typecheck:frontend`, added to `quality`); the backend `tsconfig.json` excludes `assets/**`. `loadAssets()` transpiles `.ts` on the fly with `Bun.Transpiler` (dev/tests, no build step), while `scripts/build-frontend.ts` emits ready `.js` into `dist/assets` for `build:prod` (same file names and module graph). `allowJs` remains only for the vendored `smd.js`. No SSE/REST/session/config/plugin/URL contract change. Spec: `docs/archive/specs/2026/2026-10-04-webui-frontend-ts-design.md`; plan: `docs/plans/2026-10-04-webui-frontend-ts.md`.
 
 - **Web turns always use a per-session runner** (`src/modules/webui/turns.ts`, `module.ts`, `server.ts`, `state.ts`, `session-pool.ts`): the legacy single-agent bridge path (`hasFactory()` branches, global-FIFO drain, `drainQueueTurn`, `submitLegacy`) is removed. Every `POST /api/message` requires a session and a runner factory (`503 no_session` / `503 no_runner`), runs in that session's slot with per-session queueing, and reuses the same runner path as the parallel executor. SSE is delivered to **every** client (one browser window = several tabs; a background session must stream live); tab routing is client-side (`feedForEvent` by `sessionId`), and `broadcast` no longer auto-stamps `activeSessionId`. The main agent stays for CLI/REPL and host commands/plugins (`Host.submit` is unsupported in web). Tests: `tests/webui-server.test.ts`, `tests/webui-auth.test.ts`, `tests/webui-sse-routing.test.ts`.
 
@@ -2984,7 +2993,7 @@ background-process leaks. Harness fixes only (no model/task-specific tuning).
 
 ### Added
 
-- **Session-bound plans** (`src/modules/execution/plan-store.ts`, `module.ts`, `src/core/bootstrap/modules-phase.ts`, `src/cli/repl-commands.ts`, `src/modules/webui/sessions-api.ts`, `state.ts`, `module.ts`, `assets/js/tabs.js`): the active plan is now stored per session (`.mma/plans/sessions/<sessionId>/active.json`) instead of a single project-global `active.json`. Switching sessions (`/resume`, `/new`, `POST /api/sessions/activate` / `POST /api/sessions`) moves the `ExecutionModule` tracker to that session's plan (new sessions start plan-less, `/resume` prints a `◇ <plan>` status line); deleting a session drops its plan slot. Plan tools writing past `setPlan` (`abort`/`switch`/`delete`/`purge`) and internal saves mirror the slot, so an aborted plan never resurrects on return. Drafts/archive stay a shared library; the legacy global plan is adopted by the active session on first start after upgrade. Web sidebar refreshes immediately after tab switch instead of waiting for the 2s poll. Spec: `docs/specs/2026-09-29-session-plan-binding-design.md`.
+- **Session-bound plans** (`src/modules/execution/plan-store.ts`, `module.ts`, `src/core/bootstrap/modules-phase.ts`, `src/cli/repl-commands.ts`, `src/modules/webui/sessions-api.ts`, `state.ts`, `module.ts`, `assets/js/tabs.js`): the active plan is now stored per session (`.mma/plans/sessions/<sessionId>/active.json`) instead of a single project-global `active.json`. Switching sessions (`/resume`, `/new`, `POST /api/sessions/activate` / `POST /api/sessions`) moves the `ExecutionModule` tracker to that session's plan (new sessions start plan-less, `/resume` prints a `◇ <plan>` status line); deleting a session drops its plan slot. Plan tools writing past `setPlan` (`abort`/`switch`/`delete`/`purge`) and internal saves mirror the slot, so an aborted plan never resurrects on return. Drafts/archive stay a shared library; the legacy global plan is adopted by the active session on first start after upgrade. Web sidebar refreshes immediately after tab switch instead of waiting for the 2s poll. Spec: `docs/archive/specs/2026/2026-09-29-session-plan-binding-design.md`.
 
 ### Fixed
 
@@ -2998,18 +3007,18 @@ background-process leaks. Harness fixes only (no model/task-specific tuning).
 
 - **Memory-aware `question` tool in the core set** (`src/tools/question.ts`, `src/tools/index.ts`, `src/core/system-prompt.ts`, `src/i18n/en.json`, `src/i18n/ru.json`): single/multi-choice and free-text prompts now registered in `registerAllTools()` (visible in REPL and web UI; `approve` registered alongside for explicit Yes/No — reject returns `success:false` so the loop treats it as a failure signal). The handler pre-checks agent memory itself (`splitByMemory` over `MemoryStore.search`, fail-open) — questions memory already answers are reported, not asked; answers live only in the session (persist via `remember` only when asked to); at most `MAX_QUESTIONS_PER_CALL = 3` unknown questions per call with a re-call note. System prompt carries a one-line `ASK RULE`; REPL rendering already matched `STYLE.md`, web rendering reuses `feed.js onQuestion`.
 
-- **Activity rail above the composer** (`src/modules/webui/assets/js/rail.js`, `index.html`, `styles.css`, `app.js`, `tabs.js`, `settings.js`): an indicator that lives for the whole turn — indeterminate scanner with phase/elapsed/tool & event counters when no plan exists, honest `done/total` progress with step ticks when an MoE plan is active, and a short flash on every real SSE event (`tool_start`/`tool_end`/`text`/`plan`). Layouts `off|line|meta|full` via the new config key `ui.activityRail` (default `line`), editable in `/config` and web Settings → Chat output and applied live; en/ru localized, `prefers-reduced-motion` respected, phase announced politely (`role="status"`, timer/counters `aria-hidden`). Spec: `docs/specs/2026-09-27-activity-rail-design.md`.
+- **Activity rail above the composer** (`src/modules/webui/assets/js/rail.js`, `index.html`, `styles.css`, `app.js`, `tabs.js`, `settings.js`): an indicator that lives for the whole turn — indeterminate scanner with phase/elapsed/tool & event counters when no plan exists, honest `done/total` progress with step ticks when an MoE plan is active, and a short flash on every real SSE event (`tool_start`/`tool_end`/`text`/`plan`). Layouts `off|line|meta|full` via the new config key `ui.activityRail` (default `line`), editable in `/config` and web Settings → Chat output and applied live; en/ru localized, `prefers-reduced-motion` respected, phase announced politely (`role="status"`, timer/counters `aria-hidden`). Spec: `docs/archive/specs/2026/2026-09-27-activity-rail-design.md`.
 
 - **Web chat font size** (`src/config/types.ts`, `defaults.ts`, `registry-extra.ts`, `src/modules/webui/assets/styles.css`, `assets/js/settings.js`, `app.js`, `src/i18n/en.json`, `ru.json`): new `ui.fontSize` key (`compact` = 13px / `comfortable` = 15px / `large` = 17px, default `comfortable`), editable via `/config`, `mma config set` and web Settings → Chat output; applied live through `body[data-font]` without a reload (unknown values fall back to the default). Web-only — the terminal is unaffected.
 
-- **Composer selector switches with loaders + 4th reasoning selector** (`src/modules/webui/reasoning-view.ts`, `config-api.ts`, `assets/js/settings.js`, `store.js`, `index.html`, `styles.css`, `src/i18n/en.json`, `ru.json`): switching provider/model/context/reasoning now paints a pending mark (`⋯` + `aria-busy`, all selector menus inert) from click until config + model list are re-read (provider/model re-reads run in parallel; context/reasoning skip the model round-trip), with single-flight (double-click answers `web.selectors.switch_busy`) and a stale-guard so a slow A→B→A never repaints over the fresh state; boot shows the same mark instead of bare `—`. `GET /api/models` additively carries `reasoning: {strategy, supported, mode}` (strategy from the active provider preset via entries, `supported` from the probe cache, `null` until probed), rendered as a 4th row showing only supported levels (`openai-effort` → full set, `prompt-tag`/`template-kwarg` → coarse set without `medium`/`max`); `strategy: "none"` hides the row, a failed probe shows an honest `off` mark with a shortcut to Settings → Reasoning. Spec: `docs/specs/2026-09-28-web-selector-loaders-reasoning-design.md`.
+- **Composer selector switches with loaders + 4th reasoning selector** (`src/modules/webui/reasoning-view.ts`, `config-api.ts`, `assets/js/settings.js`, `store.js`, `index.html`, `styles.css`, `src/i18n/en.json`, `ru.json`): switching provider/model/context/reasoning now paints a pending mark (`⋯` + `aria-busy`, all selector menus inert) from click until config + model list are re-read (provider/model re-reads run in parallel; context/reasoning skip the model round-trip), with single-flight (double-click answers `web.selectors.switch_busy`) and a stale-guard so a slow A→B→A never repaints over the fresh state; boot shows the same mark instead of bare `—`. `GET /api/models` additively carries `reasoning: {strategy, supported, mode}` (strategy from the active provider preset via entries, `supported` from the probe cache, `null` until probed), rendered as a 4th row showing only supported levels (`openai-effort` → full set, `prompt-tag`/`template-kwarg` → coarse set without `medium`/`max`); `strategy: "none"` hides the row, a failed probe shows an honest `off` mark with a shortcut to Settings → Reasoning. Spec: `docs/archive/specs/2026/2026-09-28-web-selector-loaders-reasoning-design.md`.
 
 ### Changed
 
 - **Internal loop diagnostics are verbose-only** (`src/logger/app-logger.ts`, `src/output/channel.ts`, `src/cli/main.ts`, `src/cli/repl-commands.ts`): new `Logger.diagnostic(level, msg, meta)` marks loop internals (hallucination retries, audit/compaction notes, repeated-tool nudges, MoE/critic internals, `LLM warning`) with `data.diagnostic` on the output bus. `OutputChannel.setShowDiagnostics()` drops them unless `ui.verbosity === "verbose"`, so chat shows user-facing notices only; file logging (`.log`, `app.jsonl`) is unchanged and diagnostics stay diagnosable. `/config ui.verbosity` now also hides `info` logs outside verbose, matching the startup rule.
 - **Critic verdict no longer renders in chat** (`src/core/agent/critic-gate.ts`, `src/ui/renderer.ts`, `src/modules/webui/forward.ts`, `assets/app.js`, `assets/js/feed.js`): `Renderer.criticVerdict`, the SSE `critic` event, the `onCritic` UI callback and the `ui.critic_*`/`web.critic_*` i18n keys are removed. The verdict remains in `session.jsonl` (`critic_check`/`critic_verdict`/`critic_escalation`) and as a verbose diagnostic line; model-facing repair/advice still goes through `<system-summary>` only.
 - **Hallucination uncertainty line follows the same rule** (`src/core/agent/hallucination-gate.ts`): the `[⚠️ Uncertainty]` meta line is rendered only in verbose mode; the model still receives the retry context.
-- **Web quiet hides model-facing tool bodies** (`src/core/types.ts`, `src/core/agent/tool-batch.ts`, `src/modules/webui/forward.ts`, `run-agent.ts`, `assets/app.js`, `assets/js/feed.js`, `src/tools/question.ts`): `onMeta` carries an optional `MetaKind` (`tool` for display/output/diff/failure-gist from `ToolBatch`, `status` otherwise); the SSE `meta` event tags tool bodies with `kind: "tool"` (status events stay wire-identical) and `feed.js onMeta` drops them in `quiet`, mirroring the terminal renderer. `question` returns `display: ""` so its model directives (memory/session/batch rules) never echo — the model still gets the full `output` in `role:"tool"`. Plan/file/question cards and the single `↳` failure cause are unaffected. Spec: `docs/specs/2026-09-28-web-quiet-tool-meta-design.md`.
+- **Web quiet hides model-facing tool bodies** (`src/core/types.ts`, `src/core/agent/tool-batch.ts`, `src/modules/webui/forward.ts`, `run-agent.ts`, `assets/app.js`, `assets/js/feed.js`, `src/tools/question.ts`): `onMeta` carries an optional `MetaKind` (`tool` for display/output/diff/failure-gist from `ToolBatch`, `status` otherwise); the SSE `meta` event tags tool bodies with `kind: "tool"` (status events stay wire-identical) and `feed.js onMeta` drops them in `quiet`, mirroring the terminal renderer. `question` returns `display: ""` so its model directives (memory/session/batch rules) never echo — the model still gets the full `output` in `role:"tool"`. Plan/file/question cards and the single `↳` failure cause are unaffected. Spec: `docs/archive/specs/2026/2026-09-28-web-quiet-tool-meta-design.md`.
 - **System prompt routes questions through tools, not plain text** (`src/core/system-prompt.ts`, `src/tools/question.ts`): observed in `ses_mukw2cxn` — the model asked a choice question as a chat dash-list instead of calling `question`, so no interactive buttons appeared. `SCOPE`/`STOP AND ASK` now mandate the `question` tool (options when variants are known), `PROTECTED PATHS` mandates `approve`; plain text remains only as a headless fallback. The `question` description itself now forbids plain-text choice lists.
 - **Web default font size 13px → 15px** (`src/modules/webui/assets/styles.css`): the `body` base size moves to the new `comfortable` step; `compact` restores the old 13px via `body[data-font]`.
 
@@ -3070,7 +3079,7 @@ background-process leaks. Harness fixes only (no model/task-specific tuning).
 - **code block chrome** (`md.js`): every fence gets a dim header with its lowercase language label and a copy button (`navigator.clipboard` with an `execCommand` fallback), enabled only once the block is complete; success shows `✓`.
 - **per-message copy** (`app.js`): each assistant message/turn gets `copy` and `copy as markdown` actions. New i18n keys `web.code.copy/copied/copy_failed`, `web.msg.copy/copy_md` (en+ru).
 - **new web assets/routes**: `/md.js`, `/smd.js`, `/hljs.js` (`WebUiAssets.mdJs/smdJs/hljsJs`, `STATIC_ASSETS`); `index.html` loads `hljs.js` (defer) and boots `app.js` as an ES module.
-- **web settings — model/provider panel redesign** (`src/modules/webui/assets/app.js`, `styles.css`): the panel is split into titled sections **Model** (search + scrollable catalog, active marked) and **Providers** (add button in the section header, one entry per provider with an active badge, metadata line and `make active`/`edit`/`delete` chips). The duplicate "active provider" row is gone; the add/edit form opens inline with required fields first and optional context/priority/rpm/parallel collapsed under "advanced", plus type/base-URL suggestions. New i18n keys `web.settings.section_models/section_providers/provider_add_title/provider_edit_title/provider_advanced/provider_make_active/providers_empty` (en+ru). Design: `docs/specs/2026-09-25-webui-provider-settings-design.md`.
+- **web settings — model/provider panel redesign** (`src/modules/webui/assets/app.js`, `styles.css`): the panel is split into titled sections **Model** (search + scrollable catalog, active marked) and **Providers** (add button in the section header, one entry per provider with an active badge, metadata line and `make active`/`edit`/`delete` chips). The duplicate "active provider" row is gone; the add/edit form opens inline with required fields first and optional context/priority/rpm/parallel collapsed under "advanced", plus type/base-URL suggestions. New i18n keys `web.settings.section_models/section_providers/provider_add_title/provider_edit_title/provider_advanced/provider_make_active/providers_empty` (en+ru). Design: `docs/archive/specs/2026/2026-09-25-webui-provider-settings-design.md`.
 - **per-provider model memory** (`src/config/registry.ts`, `src/config/types.ts`): the model you last used with a provider is stored in `provider.models[name]` (written on every `model` change) and restored when you switch back via `provider.active` — the global `config.model` no longer silently carries over a model the new backend does not serve. Additive config field, no migration.
 - **provider name guard** (`src/modules/providers/naming.ts`, `src/modules/webui/providers-api.ts`, CLI add): a new/renamed provider must not collide with another entry's `label` or `type`; conflicts are rejected (`409 name-conflict`, `cli.provider_name_conflict`) instead of silently editing the wrong entry. Web edits send `originalName` so an entry can keep its own name.
 - **one-click provider presets in the settings form** (`src/modules/webui/providers-api.ts`, `assets/app.js`): `GET /api/providers` now returns `presets` (the builtin providers with their fixed base URLs, plus named local endpoints **LM Studio / Ollama / vLLM** that map to `openai-compat` with their well-known URLs) and the add/edit form shows a **preset** select that fills `type`, `label` and `baseUrl` in one click — neither hosted nor local providers require typing a URL by hand. New i18n keys `web.settings.provider_preset/provider_custom` (en+ru).
