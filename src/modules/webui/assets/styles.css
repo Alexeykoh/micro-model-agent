@@ -3220,3 +3220,33 @@ body.light .c-dim { --face-c: var(--panel); }
   #hintEnter, #hintShift, #hintAttach, #hintEsc, #hintShort { display: none; }
   #hintTouch { display: inline; }
 }
+
+/* First-run setup: agent intro on the language step. Appended here to keep the
+   diff focused (the legacy block above is intentionally not Prettier-formatted). */
+.setup-intro { margin: 0 0 22px; }
+.setup-intro-lead { margin: 0 0 6px; font-size: 13.5px; line-height: 1.5; }
+.setup-intro-line { margin: 0 0 14px; color: var(--dim-a); font-size: 12.5px; line-height: 1.5; }
+.setup-intro-needs-title { margin: 0 0 7px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--dim-b); }
+.setup-intro-needs { list-style: none; margin: 0 0 14px; padding: 0; display: grid; grid-template-columns: max-content 1fr; column-gap: 14px; row-gap: 6px; }
+.setup-intro-needs .need { display: contents; }
+.setup-intro-needs .k { color: var(--fg); font-size: 12.5px; line-height: 1.45; }
+.setup-intro-needs .k::after { content: "\0020\2014\0020"; color: var(--dim-b); }
+.setup-intro-needs .d { color: var(--dim-a); font-size: 12.5px; line-height: 1.45; }
+.setup-intro-foot { margin: 0; padding-top: 12px; border-top: 1px solid var(--rule); color: var(--dim-a); font-size: 12px; }
+/* Hints: one <p> per sentence/step so the text does not read as a wall. */
+.setup-hint { margin: 0 0 14px; }
+.setup-hint-line { color: var(--dim-a); font-size: 12.5px; line-height: 1.55; margin: 0 0 5px; }
+.setup-hint-line:last-child { margin-bottom: 0; }
+/* Keep the wizard footer reachable on tall content and small screens. */
+.setup-actions { position: sticky; bottom: 0; z-index: 2; padding: 14px 0 4px; background: var(--bg); }
+@media (max-width: 560px) {
+  .setup-gate { padding: 24px 16px; }
+  .setup-intro-needs { grid-template-columns: 1fr; row-gap: 8px; }
+  .setup-intro-needs .need { display: block; }
+  .setup-intro-needs .k::after { content: ""; }
+  .setup-intro-needs .d { display: block; }
+  .setup-actions { padding-bottom: 12px; }
+}
+@media (max-height: 720px) {
+  .setup-gate { padding-top: 24px; padding-bottom: 16px; }
+}

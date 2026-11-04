@@ -8,6 +8,7 @@ import { closePopup, renderSecurity } from "./setup-security.js";
 import { STEPS } from "./setup-state.js";
 import { renderContext, renderModel } from "./setup-steps-model.js";
 import { renderKey, renderLanguage, renderProvider } from "./setup-steps-provider.js";
+import { renderIntro } from "./setup-intro.js";
 
 export function render(ctx: SetupContext): void {
   closePopup();
@@ -18,6 +19,7 @@ export function render(ctx: SetupContext): void {
   wrap.appendChild(title);
   wrap.appendChild(h("p", "setup-sub", tr("web.setup.subtitle")));
   wrap.appendChild(renderSteps(ctx));
+  if (STEPS[ctx.state.step] === "language") wrap.appendChild(renderIntro());
   wrap.appendChild(renderBody(ctx));
   wrap.appendChild(renderActions(ctx));
   ctx.gate.replaceChildren();

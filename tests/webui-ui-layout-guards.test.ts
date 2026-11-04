@@ -7,7 +7,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync(new URL("../src/modules/webui/assets/styles.css", import.meta.url), "utf-8");
+const css = readFileSync(
+  new URL("../src/modules/webui/assets/styles.css", import.meta.url),
+  "utf-8",
+);
 const lspChanged = readFileSync(
   new URL("../src/modules/webui/assets/js/sidebar/lsp-changed.ts", import.meta.url),
   "utf-8",
@@ -31,5 +34,14 @@ describe("web UI layout guards", () => {
     const label = lspChanged.indexOf("document.createTextNode");
     expect(icon).toBeGreaterThan(-1);
     expect(label).toBeGreaterThan(icon);
+  });
+
+  it("keeps the setup footer reachable and the intro responsive", () => {
+    const actionRules = [...css.matchAll(/\.setup-actions\s*\{([^}]*)\}/g)].map((m) => m[1]);
+    expect(actionRules.some((r) => /position:\s*sticky/i.test(r) && /bottom:\s*0/i.test(r))).toBe(
+      true,
+    );
+    expect(css).toContain(".setup-intro-needs { grid-template-columns: 1fr; row-gap: 8px; }");
+    expect(css).toMatch(/@media \(max-width: 560px\)\s*\{[\s\S]*?\.setup-intro-needs/);
   });
 });
