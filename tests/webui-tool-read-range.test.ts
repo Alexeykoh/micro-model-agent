@@ -29,7 +29,7 @@ function mountTab(id: string): HTMLElement {
   return feed as HTMLElement;
 }
 
-const read = (feed: HTMLElement, id: string, offset?: number, limit?: number): void => {
+const read = (id: string, offset?: number, limit?: number): void => {
   const args: Record<string, number> = {};
   if (offset !== undefined) args.offset = offset;
   if (limit !== undefined) args.limit = limit;
@@ -57,30 +57,30 @@ beforeEach(() => {
 describe("read_file rows show the read range", () => {
   it("renders the inclusive line range from offset + limit", () => {
     const feed = mountTab("S");
-    read(feed, "t1", 926, 70);
+    read("t1", 926, 70);
     expect(feed.textContent).toContain("docs/spec.md");
     expect(feed.textContent).toContain("lines 926–995");
   });
 
   it("keeps two reads of the same file distinguishable", () => {
     const feed = mountTab("S");
-    read(feed, "t1", 380, 160);
-    read(feed, "t2", 869, 100);
+    read("t1", 380, 160);
+    read("t2", 869, 100);
     const ranges = Array.from(feed.querySelectorAll(".filerow .range")).map((n) => n.textContent);
     expect(ranges).toEqual(["lines 380–539", "lines 869–968"]);
   });
 
   it("shows a limit-only read as starting at line 1 and a bare offset as 'from line'", () => {
     const feed = mountTab("S");
-    read(feed, "t1", undefined, 45);
-    read(feed, "t2", 120);
+    read("t1", undefined, 45);
+    read("t2", 120);
     const ranges = Array.from(feed.querySelectorAll(".filerow .range")).map((n) => n.textContent);
     expect(ranges).toEqual(["lines 1–45", "from line 120"]);
   });
 
   it("adds no range when the call read the default slice", () => {
     const feed = mountTab("S");
-    read(feed, "t1");
+    read("t1");
     expect(feed.querySelector(".filerow")).not.toBeNull();
     expect(feed.querySelector(".filerow .range")).toBeNull();
   });

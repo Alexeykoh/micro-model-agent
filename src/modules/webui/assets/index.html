@@ -46,13 +46,23 @@
 <div class="setup-gate" id="setupGate" hidden></div>
 
 <div class="splash" id="bootSplash" role="status" aria-live="polite">
-  <span class="mdl bs-face c-dim st-load" aria-hidden="true"></span>
+  <span class="mdl bs-face c-dim st-load" aria-hidden="true"><span class="eyes"><i class="eye left"></i><i class="eye right"></i></span></span>
   <div class="bs-cap">
     <div class="l1" id="bootCap">connecting…</div>
     <div class="l2">micro-models-agent</div>
   </div>
   <div class="bs-prog" aria-hidden="true"><i></i></div>
 </div>
+<script>
+  // Hard failsafe: a module error or a stalled import must not trap the page
+  // behind the splash forever (the app's own 2 s cap needs app.js to run).
+  window.setTimeout(function () {
+    var s = document.getElementById("bootSplash");
+    if (!s || s.hidden) return;
+    s.classList.add("hide");
+    window.setTimeout(function () { s.hidden = true; }, 500);
+  }, 8000);
+</script>
 
 <div class="bar-top">
   <button class="icon-btn primary" id="newChat" title="new chat" aria-label="new chat">+</button>

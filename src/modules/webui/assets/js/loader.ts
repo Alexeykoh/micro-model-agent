@@ -109,13 +109,17 @@ function stateFromClasses(el: HTMLElement): FaceState {
 function upgradeStaticFaces(): void {
   if (typeof document === "undefined") return;
   for (const host of Array.from(document.querySelectorAll<HTMLElement>(".mdl:not(.has-canvas)"))) {
-    const size = host.classList.contains("lg") ? "lg" : host.classList.contains("sm") ? "sm" : host.classList.contains("xs") ? "xs" : null;
-    const face = createFace(stateFromClasses(host), size);
-    for (const cls of host.classList) {
-      if (cls === "mdl" || cls === "lg" || cls === "sm" || cls === "xs" || cls.startsWith("c-") || cls.startsWith("st-") || cls === "track" || cls === "poke" || cls === "blink") continue;
-      face.classList.add(cls);
+    try {
+      const size = host.classList.contains("lg") ? "lg" : host.classList.contains("sm") ? "sm" : host.classList.contains("xs") ? "xs" : null;
+      const face = createFace(stateFromClasses(host), size);
+      for (const cls of host.classList) {
+        if (cls === "mdl" || cls === "lg" || cls === "sm" || cls === "xs" || cls.startsWith("c-") || cls.startsWith("st-") || cls === "track" || cls === "poke" || cls === "blink") continue;
+        face.classList.add(cls);
+      }
+      host.replaceWith(face);
+    } catch {
+      // Keep the static face; a canvas bug must never brick the shell.
     }
-    host.replaceWith(face);
   }
 }
 
