@@ -10,7 +10,7 @@
 import { t } from "../../../i18n/index";
 import type { ToolDefinition, ToolResult } from "../../../tools/types";
 import { buildDataUrl, MAX_VISION_BYTES, rasterMime } from "../media";
-import { parseSelector, renderDocumentRead, type ReadOutcome } from "../read";
+import { parseSelector, renderDocumentRead, selectorDisplay, type ReadOutcome } from "../read";
 import { parseCtx, type DocumentRegistry } from "../registry";
 import { fileSource } from "../source";
 import { causeOf, failResult, rejectResult } from "./run";
@@ -81,7 +81,7 @@ export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
 
         const outcome = renderDocumentRead(ir, selector);
         if (!outcome.ok) throw new Error(failureMessage(outcome));
-        return { success: true, output: outcome.text };
+        return { success: true, output: outcome.text, display: selectorDisplay(selector) };
       } catch (err) {
         return failResult(ctx, "document_read", causeOf(err));
       }

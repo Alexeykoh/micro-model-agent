@@ -175,6 +175,8 @@
   "documents.read_desc": "Прочитать срез документа (весь, раздел по заголовку или диапазон блоков).",
   "documents.path_desc": "Путь к документу относительно корня рабочей папки",
   "documents.selector_desc": "Срез: all, section:<заголовок> или blocks:<от>-<до> (по умолчанию all)",
+  "documents.read_blocks": "блоки {from}-{to}",
+  "documents.read_section": "раздел «{title}»",
   "documents.error": "Не удалось прочитать документ: {reason}",
   "documents.file_not_found": "Файл не найден: {path}",
   "documents.section_not_found": "Раздел «{title}» не найден. Доступные разделы: {available}",
