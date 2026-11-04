@@ -8,7 +8,7 @@
 
 `command: npm run build` — статическое доказательство: exit code 0 означает, что
 сборщик не упал, но не означает, что артефакт пригоден. В живых прогонах
-([web-agent-test-report-2026-11-02](../../agents/web-agent-test-report-2026-11-02.md))
+([web-agent-test-report-2026-11-02](../archive/reports/web-agent-test-report-2026-11-02.md))
 встречались оба класса:
 
 - CSS собран, но Tailwind-утилиты не сгенерированы (неверный `content`/`@source`) —

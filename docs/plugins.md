@@ -142,7 +142,7 @@ mma plugins enable my-plugin
 > декларация для показа пользователю, а не enforcement: плагин исполняется в процессе агента
 > и де факто имеет те же возможности (включая `bash`, сеть и доступ к конфигу с ключами
 > провайдера). Настоящая изоляция и доверие к коду — открытая работа
-> (`docs/specs/2026-09-28-production-readiness-design.md`, §P1).
+> (`docs/archive/specs/2026/2026-09-28-production-readiness-design.md`, §P1).
 
 Плагин, который не загрузился, не исчезает: он виден как отказ с причиной в одну строку
 (`mma plugins list`, вкладка Plugins, `GET /api/plugins` → `failures`).

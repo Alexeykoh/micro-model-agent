@@ -7,7 +7,7 @@
 
 **Связанные документы:**
 [architecture v2](./2026-10-12-architecture-v2-design.md) ·
-[production readiness](./2026-09-28-production-readiness-design.md) ·
+[production readiness](../archive/specs/2026/2026-09-28-production-readiness-design.md) ·
 [corporate data policy](./2026-10-19-corporate-data-policy-design.md) ·
 [DLP transparency](./2026-11-02-dlp-transparency-and-coverage-design.md) ·
 [service API](../agents/service-api.md) ·
@@ -114,7 +114,7 @@ enterprise-платформа**. Это разные продукты, и сме
 ## 3. Текущее состояние: что уже есть
 
 Раздел фиксирует **факты**, а не намерения. Полная инвентаризация — в
-[production readiness](./2026-09-28-production-readiness-design.md) и спеках DLP.
+[production readiness](../archive/specs/2026/2026-09-28-production-readiness-design.md) и спеках DLP.
 
 ### 3.1. Сильные стороны (их нельзя потерять при рефакторинге)
 
@@ -1407,8 +1407,8 @@ models:
 **Внутренние**
 
 - [architecture v2](./2026-10-12-architecture-v2-design.md), [schematics](./2026-10-12-architecture-v2-schematics.md)
-- [production readiness](./2026-09-28-production-readiness-design.md)
+- [production readiness](../archive/specs/2026/2026-09-28-production-readiness-design.md)
 - [corporate data policy](./2026-10-19-corporate-data-policy-design.md)
-- [DLP transparency](./2026-11-02-dlp-transparency-and-coverage-design.md), [secret masking](./2026-10-20-dlp-secret-masking-precision-design.md)
+- [DLP transparency](./2026-11-02-dlp-transparency-and-coverage-design.md), [secret masking](../archive/specs/2026/2026-10-20-dlp-secret-masking-precision-design.md)
 - [outbound policy](./2026-10-15-outbound-policy-design.md), [local provider taint](./2026-11-02-local-provider-taint-design.md)
 - [service API](../agents/service-api.md), [observability](../agents/observability.md), [debt](../agents/debt.md)

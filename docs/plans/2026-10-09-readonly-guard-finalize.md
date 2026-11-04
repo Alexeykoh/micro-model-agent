@@ -11,7 +11,7 @@
 
 **Tech Stack:** Bun + TypeScript, vitest (`bun test`), Biome, `tsc --noEmit`.
 
-**Spec:** `docs/specs/2026-10-09-readonly-guard-finalize-design.md`
+**Spec:** `docs/archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md`
 
 ---
 

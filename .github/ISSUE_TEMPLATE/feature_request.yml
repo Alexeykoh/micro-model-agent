@@ -1,0 +1,43 @@
+name: Идея
+description: Новая возможность или улучшение
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую проблему решаем
+      description: Опишите ситуацию, а не сразу решение.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предлагаемое решение
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы
+      description: Что ещё рассматривали и почему не подходит.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Область
+      options:
+        - ядро агента
+        - провайдеры
+        - тулы
+        - web UI
+        - service API
+        - CLI/REPL
+        - документация
+        - другое
+    validations:
+      required: true
+  - type: checkboxes
+    id: breaking
+    attributes:
+      label: Совместимость
+      options:
+        - label: Изменение ломает существующий контракт (нужна спека)

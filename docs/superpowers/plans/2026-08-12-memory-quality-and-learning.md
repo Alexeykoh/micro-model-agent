@@ -100,7 +100,7 @@ Existing entries are read from `<memoryDir>/<category>.md` lines starting with `
 
 ## Phase B — Self-Learning (Phase 1: Skills)
 
-> **Spec:** `docs/specs/2026-08-11-self-learning-design.md` (Phase 2 — gated error learning — design-only, NOT implemented).
+> **Spec:** `docs/archive/specs/2026/2026-08-11-self-learning-design.md` (Phase 2 — gated error learning — design-only, NOT implemented).
 
 ### Task 7: Learning types + TraceReader
 

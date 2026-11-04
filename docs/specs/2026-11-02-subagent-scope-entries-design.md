@@ -152,7 +152,7 @@ Path is not within the allowed scope for this sub-agent (scope: src/**/*, docs)
 ## Вне объёма
 
 - `bash`/`grep` и их видимость — см. спеку
-  [`2026-10-27-subagent-reliability-design`](./2026-10-27-subagent-reliability-design.md) §A
+  [`2026-10-27-subagent-reliability-design`](../archive/specs/2026/2026-10-27-subagent-reliability-design.md) §A
   (граница shell — `baseDir`, ограничитель — набор тулов).
 - `security.paths.denied/allowed` — семантика не меняется.
 - Замороженный промпт/описание тулов вне `subagent` — не трогаем.

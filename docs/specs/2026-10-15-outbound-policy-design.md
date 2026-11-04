@@ -1,6 +1,6 @@
 # Политика исходящих вызовов (outbound policy)
 
-**Дата:** 2026-10-15 · **Волна:** W13 плана `docs/plans/2026-10-15-harness-bug-detection-plan.md`
+**Дата:** 2026-10-15 · **Волна:** W13 плана `docs/archive/plans/2026/2026-10-15-harness-bug-detection-plan.md`
 · **Статус:** утверждена (решение D5)
 
 ## 1. Проблема

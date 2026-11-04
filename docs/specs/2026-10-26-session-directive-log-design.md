@@ -1,7 +1,7 @@
 # Честный `session.jsonl`: что модель видела, а не только что она вызвала
 
 **Дата:** 2026-10-26 · **Ветка:** `feat/session-directive-log`
-**Связь:** [видимость хода](./2026-10-26-session-visibility-design.md) §1
+**Связь:** [видимость хода](../archive/specs/2026/2026-10-26-session-visibility-design.md) §1
 («Не входит»), INV-13 (каждое событие несёт `source`), INV-15,
 правило 1 AGENTS.md (измерение «модель»)
 

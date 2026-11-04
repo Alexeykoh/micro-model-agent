@@ -13,7 +13,7 @@
 
 **Tech Stack:** Bun + TypeScript, vitest (`bun test`), commander, OutputChannel/STYLE.md, i18n (`t()`), existing memory module.
 
-**Spec:** [docs/specs/2026-09-23-onboarding-meet-init-design.md](../specs/2026-09-23-onboarding-meet-init-design.md)
+**Spec:** [docs/archive/specs/2026/2026-09-23-onboarding-meet-init-design.md](../archive/specs/2026/2026-09-23-onboarding-meet-init-design.md)
 
 ---
 
