@@ -104,10 +104,7 @@ body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
-  /* keep anchor targets clear of the fixed nav AND the notch/Dynamic Island */
-  scroll-padding-top: calc(72px + env(safe-area-inset-top, 0px));
-  /* reserve the fixed nav's height (safe-area included) */
-  padding-top: calc(58px + env(safe-area-inset-top, 0px));
+  scroll-padding-top: 24px;
 }
 a {
   color: inherit;
@@ -261,38 +258,7 @@ code {
   transform: none;
 }
 
-/* ---------- nav ---------- */
-.nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 50;
-  padding-top: env(safe-area-inset-top, 0px);
-  /* No background/backdrop-filter on the sticky element itself: iOS 26 Safari
-     samples those to tint the browser chrome (Liquid Glass) and gets it wrong.
-     The glass lives on a pseudo-element, which Safari ignores when sampling. */
-  background: transparent;
-  border-bottom: 1px solid var(--border);
-}
-.nav::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-}
-.nav-in {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  height: 58px;
-  flex-wrap: nowrap;
-}
+/* ---------- brand ---------- */
 .brand {
   display: inline-flex;
   align-items: center;
@@ -303,21 +269,35 @@ code {
   font-weight: 700;
   letter-spacing: 0.02em;
 }
-/* Desktop sidebar: every section link lives here, so the header never has to
-   fit eleven items in one row. */
+/* Sidebar: brand, section links and the header actions all live here. */
 .side {
   position: fixed;
   z-index: 45;
-  top: calc(58px + env(safe-area-inset-top, 0px));
+  top: 0;
   left: 0;
   bottom: 0;
   width: 248px;
   box-sizing: border-box;
-  padding: 18px 12px calc(24px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 12px
+    calc(24px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--bg);
   border-right: 1px solid var(--border);
+}
+.side .brand {
+  padding: 2px 10px 4px;
+}
+.side-actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 4px 0;
+  border-top: 1px solid var(--border);
 }
 .side-links {
   display: flex;
@@ -327,6 +307,7 @@ code {
 .side-links a {
   display: flex;
   align-items: center;
+  gap: 10px;
   min-height: 38px;
   padding: 0 12px;
   border-left: 2px solid transparent;
@@ -334,6 +315,16 @@ code {
   font-size: 13px;
   color: var(--dim-a);
   white-space: nowrap;
+}
+.side .ico {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .side-links a:hover {
   color: var(--fg);
@@ -395,8 +386,8 @@ code {
   position: relative;
   overflow: clip;
   border-bottom: 1px solid var(--border);
-  min-height: calc(100vh - 58px - env(safe-area-inset-top, 0px));
-  min-height: calc(100svh - 58px - env(safe-area-inset-top, 0px));
+  min-height: 100vh;
+  min-height: 100svh;
   display: grid;
   grid-template-rows: 1fr auto;
 }
@@ -1862,19 +1853,23 @@ code {
 /* ---- landing: mobile burger + drawer ---- */
 .burger {
   display: none;
+  position: fixed;
+  z-index: 90;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: calc(12px + env(safe-area-inset-left, 0px));
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 4px;
   width: 40px;
   height: 40px;
-  margin-left: auto;
   padding: 0;
   border: 1px solid var(--border-2);
   border-radius: 8px;
-  background: transparent;
+  background: var(--bg);
   color: var(--fg);
   cursor: pointer;
+  transition: opacity 0.18s var(--ease);
 }
 .burger span {
   display: block;
@@ -1891,13 +1886,10 @@ code {
   .burger {
     display: inline-flex;
   }
-  .nav .ctl {
-    margin-left: 0;
-  }
   .side {
     width: min(84vw, 320px);
     z-index: 80;
-    padding-top: 12px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
     transform: translateX(-100%);
     transition: transform 0.22s var(--ease);
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
@@ -1908,6 +1900,10 @@ code {
   }
   body.nav-open .side {
     transform: none;
+  }
+  body.nav-open .burger {
+    opacity: 0;
+    pointer-events: none;
   }
   body.nav-open::after {
     content: "";
