@@ -141,35 +141,61 @@ function renderHistory(feed: HTMLElement, entries: Dict[]): void {
   });
 }
 
+/** Скелетон ленты: строки-заглушки, пока история не едет (INV-W8). */
+function feedSkeleton(): HTMLElement {
+  const wrap = el("div", "feed-skel");
+  for (const width of ["88%", "62%", "74%", "46%"]) {
+    const line = el("i");
+    line.style.width = width;
+    wrap.appendChild(line);
+  }
+  return wrap;
+}
+
 export async function loadHistory(tab: Dict): Promise<{ gone: boolean } | undefined> {
   if (!tab || tab.historyLoaded || tab.historyLoading) return { gone: !!tab.dead };
   tab.historyLoading = true;
   const placeholder = el("div", "detail", t("web.history.loading"));
+  const skeleton = feedSkeleton();
+  // Скелетон — только на пустой ленте: непустая уже показывает контент, а
+  // `aria-busy` честно сообщает скринридеру, что данные ещё едут.
   if (!feedHasContent(tab.feed)) {
     clearEmpty(tab.feed);
     tab.feed.appendChild(placeholder);
+    tab.feed.appendChild(skeleton);
   }
-  const r = await api<{ history?: Dict[] }>(
-    "/api/sessions/" + encodeURIComponent(tab.id) + "/history",
-  );
-  tab.historyLoading = false;
-  placeholder.remove();
-  tab.historyLoaded = true;
-  tab.historyFailed = false;
-  if (!r.ok || !r.data || !Array.isArray(r.data.history)) {
-    // 404 — сессии нет на сервере (удалена/подчищена): таб мёртв, ретраи
-    // бесполезны, их размечает вызывающий (markTabDead). Остальное —
-    // транзиент: одна строка и повтор при следующем открытии.
-    if (r.status === 404) return { gone: true };
-    tab.historyFailed = true;
-    if (!feedHasContent(tab.feed))
-      tab.feed.appendChild(el("div", "detail", t("web.history.unavailable")));
-    return { gone: false };
+  tab.feed.setAttribute("aria-busy", "true");
+  try {
+    const r = await api<{ history?: Dict[] }>(
+      "/api/sessions/" + encodeURIComponent(tab.id) + "/history",
+    );
+    // Скелетон и подсказка — не контент: снимаем их ДО проверки на дубль
+    // (`feedHasContent` считает `.detail` содержимым и блокировал рендер).
+    placeholder.remove();
+    skeleton.remove();
+    tab.historyLoaded = true;
+    tab.historyFailed = false;
+    if (!r.ok || !r.data || !Array.isArray(r.data.history)) {
+      // 404 — сессии нет на сервере (удалена/подчищена): таб мёртв, ретраи
+      // бесполезны, их размечает вызывающий (markTabDead). Остальное —
+      // транзиент: одна строка и повтор при следующем открытии.
+      if (r.status === 404) return { gone: true };
+      tab.historyFailed = true;
+      if (!feedHasContent(tab.feed))
+        tab.feed.appendChild(el("div", "detail", t("web.history.unavailable")));
+      return { gone: false };
+    }
+    // A live session already rendered its content over SSE: don't duplicate it.
+    if (feedHasContent(tab.feed)) return;
+    renderHistory(tab.feed, r.data.history);
+    if (!r.data.history.length) tab.feed.appendChild(el("div", "detail", t("web.history.empty")));
+    if (tab.feed === activeFeed()) scrollToBottom();
+    else if (tab.feed === liveFeed()) scrollToBottom();
+  } finally {
+    // Ошибка чтения не должна оставить `historyLoading` и скелетон навсегда.
+    tab.historyLoading = false;
+    placeholder.remove();
+    skeleton.remove();
+    tab.feed.removeAttribute("aria-busy");
   }
-  // A live session already rendered its content over SSE: don't duplicate it.
-  if (feedHasContent(tab.feed)) return;
-  renderHistory(tab.feed, r.data.history);
-  if (!r.data.history.length) tab.feed.appendChild(el("div", "detail", t("web.history.empty")));
-  if (tab.feed === activeFeed()) scrollToBottom();
-  else if (tab.feed === liveFeed()) scrollToBottom();
 }

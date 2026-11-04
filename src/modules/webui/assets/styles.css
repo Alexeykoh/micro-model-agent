@@ -274,6 +274,16 @@ body[data-font="large"] { font-size: 17px; }
    are constrained to the content box, so scroller padding would offset them
    from the header/composer edges. */
 .feed { display: flex; flex-direction: column; gap: 11px; padding: 18px 0; }
+/* Скелетон ленты на время догрузки истории (INV-W8): строки-заглушки вместо
+   пустого экрана, чтобы переключение вкладки было видно, а не «зависло». */
+.feed-skel { display: flex; flex-direction: column; gap: 11px; padding: 4px 0; }
+.feed-skel i {
+  display: block; height: 14px; border-radius: 7px;
+  background: linear-gradient(90deg, var(--track), var(--hover-bg), var(--track));
+  background-size: 200% 100%;
+  animation: skelSweep 1.2s linear infinite;
+}
+@keyframes skelSweep { to { background-position: -200% 0; } }
 .feed > * { flex-shrink: 0; min-height: fit-content; }
 .u {
   color: var(--u-fg); background: var(--u-bg); border-left: 2px solid var(--u-border);
@@ -627,13 +637,19 @@ body.light .sel > button { border: 1px solid var(--border); }
 .sel > button b { font-weight: 400; color: var(--purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sel > button .svg-icon { width: 13px; height: 13px; color: var(--dim-a); }
 /* Selector switch pending (boot + provider/model/context/reasoning writes):
-   buttons and menus go inert while the `⋯` mark shows. The mark is a static
-   glyph via `::after` — no animation, so `prefers-reduced-motion` needs no
-   special case and no label rewrites desync the DOM. */
+   buttons and menus go inert while the mark shows. A5: the mark is a spinner
+   via `::after`, and after a second it becomes a wait counter — no label
+   rewrites, so the DOM never desyncs from the write funnel. */
 .selectors[data-pending] .sel > button,
 .selectors[data-pending] .menu { pointer-events: none; }
 .sel > button.pending { cursor: wait; }
-.sel > button.pending b::after { content: " ⋯"; color: var(--dim-b); }
+.sel > button.pending b::after {
+  content: "◐"; color: var(--dim-b); display: inline-block;
+  animation: spin 1s linear infinite;
+}
+.sel > button.pending b[data-wait]::after {
+  content: attr(data-wait); animation: none; font-variant-numeric: tabular-nums;
+}
 .menu {
   display: none; position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 30;
   background: var(--panel); border: 1px solid var(--border-2); border-radius: 6px;
@@ -684,6 +700,11 @@ body.light .sel > button { border: 1px solid var(--border); }
 }
 .inp:focus { border-color: var(--inp-focus); box-shadow: 0 0 0 2px var(--input-shadow); }
 .input-area.busy .composer { opacity: .75; }
+/* Переключение вкладки (INV-W8): ввод и отправка замолкают, пока не пришли
+   данные сессии; курсор честно показывает ожидание. */
+.input-area.switching .composer { opacity: .6; cursor: progress; }
+.input-area.switching .inp { cursor: progress; caret-color: transparent; }
+.input-area.switching .send-btn { cursor: progress; }
 .inp::placeholder { color: var(--dim-a); }
 .inp-meta { display: flex; gap: 14px; margin-top: 4px; padding: 0 6px; color: var(--dim-b); font-size: 11.5px; flex-wrap: wrap; }
 
@@ -2112,6 +2133,15 @@ button.toggle:disabled { opacity: .5; cursor: default; }
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
+  /* INV-W9 (A4): признаки загрузки не выключаются — только замедляются.
+     Селекторы специфичнее `*`, поэтому побеждают при равном `!important`. */
+  .busy .spin,
+  .feed-skel i,
+  .stab .dot.st-working,
+  .sel > button.pending b::after {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
 /* ---- responsive layout ----
@@ -2642,6 +2672,9 @@ body.light .c-dim { --face-c: var(--panel); }
 
 @media (prefers-reduced-motion: reduce) {
   .mdl, .mdl * { animation: none !important; }
+  /* INV-W9 (A4): глаза лоадера продолжают моргать — признак жизни, не декор. */
+  .mdl.st-load .eye,
+  .mdl.st-boot .eye { animation: mdlWake 3.4s ease-in-out infinite !important; }
 }
 
 /* ---- boot / loading splash ---- */
@@ -2657,8 +2690,8 @@ body.light .c-dim { --face-c: var(--panel); }
 #bootSplash .bs-cap .l1 { font-size: 13.5px; color: var(--muted); }
 #bootSplash .bs-cap .l2 { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--dim-b); margin-top: 6px; }
 #bootSplash .bs-prog { width: 210px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
-#bootSplash .bs-prog i { display: block; height: 100%; width: 40%; border-radius: 2px; background: linear-gradient(90deg, var(--think), var(--accent)); animation: mdlBar 1.4s ease-in-out infinite; }
-@keyframes mdlBar { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+/* A3: заполнение отражает реальную стадию boot — `--p` ставит `bootStage`. */
+#bootSplash .bs-prog i { display: block; height: 100%; width: var(--p, 40%); border-radius: 2px; background: linear-gradient(90deg, var(--think), var(--accent)); transition: width .35s ease; }
 
 /* --- Update availability: gear dot, feed card, settings row --- */
 .icon-btn.has-upd { position: relative; }

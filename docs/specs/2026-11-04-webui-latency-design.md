@@ -119,7 +119,9 @@ _Заменяет план волн из сессии аудита; правки
 Режим пониженной анимации замедляет и упрощает движение, но не отменяет признак
 прогресса. Индикатор прогресса либо обновляет текст/число, либо остаётся
 анимированным замедленно. Boot показывает реальную стадию и заполнение, а не
-статичную полосу на 40 %.
+статичную полосу на 40 %. Маска при этом остаётся маской (инвариант B-31):
+кап 2 с продлевается каждой стадией, но при зависании между стадиями сплэш
+исчезает ровно через 2 с.
 
 ## 4. Волны
 
@@ -160,13 +162,16 @@ _Заменяет план волн из сессии аудита; правки
 
 ### Волна A — индикация и отзывчивость (без изменения API)
 
-| Шаг | Файлы                                                                         | Что делается                                                                                                                                |
-| --- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| A1  | `assets/js/session/tabs.ts`, `assets/js/feed/history.ts`, `assets/styles.css` | скелетон ленты + `aria-busy`; composer блокируется, пока `historyLoading`                                                                   |
-| A2  | `assets/js/session/tabs.ts`                                                   | `tab.loadSeq` — результат применяется только к актуальной загрузке активной вкладки                                                         |
-| A3  | `assets/app.ts`, `assets/index.html`, `assets/app-i18n.ts`                    | стадии boot: `bootCap` и заполнение `bs-prog` из реального прогресса (`--p`)                                                                |
-| A4  | `assets/styles.css`, `assets/js/mascot-canvas.ts`                             | `prefers-reduced-motion` замедляет индикаторы (whitelist `.anim-essential`) вместо их отключения; rAF продолжает рисовать фазу, без пружины |
-| A5  | `assets/js/settings/write.ts`, `assets/styles.css`                            | `pending` — спиннер + прошедшее время после 1 с вместо статичного `?`; `aria-busy` на селекторах                                            |
+| Шаг | Файлы                                                                                                                                                    | Что делается                                                                                                                                                 |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A1  | `assets/js/session/tabs.ts`, `assets/js/feed/history.ts`, `assets/js/sidebar/trace.ts`, `assets/js/session/switch-state.ts` (новый), `assets/styles.css` | скелетон ленты + `aria-busy`; composer блокируется, пока данные не пришли                                                                                    |
+| A2  | `assets/js/session/tab-switch.ts` (новый), `assets/js/session/tabs.ts`                                                                                   | номер переключения (`nextSwitchSeq`) — устаревший ответ `activate` не применяется к глобальному состоянию                                                    |
+| A3  | `assets/app.ts`, `assets/index.html`, `assets/app-i18n.ts`, `assets/styles.css`                                                                          | стадии boot: `bootCap` и заполнение `bs-prog` из реального прогресса (`--p`); кап 2 с продлевается стадией                                                   |
+| A4  | `assets/styles.css`, `assets/js/mascot-canvas.ts`                                                                                                        | `prefers-reduced-motion` замедляет индикаторы вместо отключения (восстанавливающие правила после общего глушения); rAF продолжает рисовать фазу, без пружины |
+| A5  | `assets/js/settings/pending-wait.ts` (новый), `assets/js/settings/selectors-write.ts`, `assets/styles.css`                                               | спиннер + прошедшее время после 1 с вместо статичного `⋯`; `write.ts` закреплён за волной B                                                                  |
+
+`write.ts` (A5 в первой редакции) в волну A не входит: файл меняет волна B
+(`postConfig`), поэтому индикатор ожидания читает DOM, а не состояние воронки.
 
 ## 5. Зависимости и порядок
 
@@ -182,21 +187,23 @@ A честно показывает загрузку, но «подвисани�
 
 ## 6. Гейты (тест падал бы до правки)
 
-| Проверка                                       | Что ловит                                                                                             |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `tests/webui/asset-snapshot.test.ts`           | повторный `assetSource()` не перечитывает файлы; правка файла видна после TTL                         |
-| `tests/webui/static-assets.test.ts`            | неизвестный `.js` → `404` и завершённый ответ (до правки — таймаут); `If-None-Match` → `304` без тела |
-| `tests/session/list-sessions-cache.test.ts`    | TTL/инвалидация, число `stat` не зависит от числа каталогов                                           |
-| `tests/session/isolation-temp-lazy.test.ts`    | `createSessionContext` не пишет на диск; `getSessionTempDir` создаёт; `cleanup` удаляет               |
-| `tests/session/orphan-prune.test.ts`           | каталог без меты/истории удаляется, каталог с логом — нет                                             |
-| `tests/providers/list-models-timeout.test.ts`  | зависший провайдер → отказ за ≈ 4 с                                                                   |
-| `tests/core/probe-parallel.test.ts`            | суммарное время пробы ≈ max, а не сумма                                                               |
-| `tests/core/probe-identity-cache.test.ts`      | вторая проба той же идентичности не ходит в сеть                                                      |
-| `tests/webui/reconfigure-single-probe.test.ts` | 8 раннеров → одна проба                                                                               |
-| `tests/webui/config-post-no-network.test.ts`   | `POST /api/config` отвечает при висящем `listModels`                                                  |
-| `tests/webui/models-event.test.ts`             | событие `models` уходит после фонового обновления                                                     |
-| `tests/webui/tab-switch-busy.test.ts`          | composer заблокирован, лента `aria-busy`; устаревшая загрузка не применяется                          |
-| `tests/ui/reduced-motion-indicator.test.ts`    | при `reduce` индикатор прогресса обновляется                                                          |
+| Проверка                                       | Что ловит                                                                                                      |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `tests/webui/asset-snapshot.test.ts`           | повторный `assetSource()` не перечитывает файлы; правка файла видна после TTL                                  |
+| `tests/webui/static-assets.test.ts`            | неизвестный `.js` → `404` и завершённый ответ (до правки — таймаут); `If-None-Match` → `304` без тела          |
+| `tests/session/list-sessions-cache.test.ts`    | TTL/инвалидация, число `stat` не зависит от числа каталогов                                                    |
+| `tests/session/isolation-temp-lazy.test.ts`    | `createSessionContext` не пишет на диск; `getSessionTempDir` создаёт; `cleanup` удаляет                        |
+| `tests/session/orphan-prune.test.ts`           | каталог без меты/истории удаляется, каталог с логом — нет                                                      |
+| `tests/providers/list-models-timeout.test.ts`  | зависший провайдер → отказ за ≈ 4 с                                                                            |
+| `tests/core/probe-parallel.test.ts`            | суммарное время пробы ≈ max, а не сумма                                                                        |
+| `tests/core/probe-identity-cache.test.ts`      | вторая проба той же идентичности не ходит в сеть                                                               |
+| `tests/webui/reconfigure-single-probe.test.ts` | 8 раннеров → одна проба                                                                                        |
+| `tests/webui/config-post-no-network.test.ts`   | `POST /api/config` отвечает при висящем `listModels`                                                           |
+| `tests/webui/models-event.test.ts`             | событие `models` уходит после фонового обновления                                                              |
+| `tests/webui-tab-switch-guard.test.ts`         | composer заблокирован, лента `aria-busy`; устаревший `activate` не применяется; скелетон снимается в `finally` |
+| `tests/webui-boot-stages.test.ts`              | стадии boot до сетевых шагов, `--p` вместо статичных 40 %, кап 2 с не нарушен                                  |
+| `tests/webui-loading-indicators.test.ts`       | скелетон, `switching`, спиннер `◐` + `data-wait`, индикаторы живут при `reduce`                                |
+| `tests/webui-pending-wait.dom.test.ts`         | счётчик появляется после секунды и исчезает с концом записи                                                    |
 
 ## 7. Риски и открытые вопросы
 

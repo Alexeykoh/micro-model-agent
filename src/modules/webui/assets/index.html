@@ -55,13 +55,15 @@
 </div>
 <script>
   // Hard failsafe: a module error or a stalled import must not trap the page
-  // behind the splash forever (the app's own 2 s cap needs app.js to run).
+  // behind the splash forever (the app's own cap needs app.js to run).
+  // 12 s: a live boot extends the cap with its stages (A3), but without
+  // app.js the splash still goes away on its own.
   window.setTimeout(function () {
     var s = document.getElementById("bootSplash");
     if (!s || s.hidden) return;
     s.classList.add("hide");
     window.setTimeout(function () { s.hidden = true; }, 500);
-  }, 8000);
+  }, 12000);
 </script>
 
 <div class="bar-top">

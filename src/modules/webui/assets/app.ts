@@ -4,7 +4,7 @@
 // `app-i18n.ts` (both split out under file-size rule 6).
 import { icon } from "./js/dom.js";
 import { token } from "./js/api.js";
-import { hasCachedI18n, loadI18n } from "./js/i18n.js";
+import { hasCachedI18n, loadI18n, t } from "./js/i18n.js";
 import { settings, session, hooks } from "./js/store.js";
 import { mergeUsage } from "./js/state-sync.js";
 import {
@@ -156,11 +156,39 @@ function connectSSE(): void {
   });
 }
 
+/**
+ * A3 (INV-W9): стадия и заполнение на сплэше. Подпись была одной строкой
+ * «connecting…», а полоса стояла на 40 % — при медленном сервере страница
+ * выглядела зависшей, и непонятно, грузится она или встала.
+ *
+ * Маска остаётся маской (B-31: гаснет через 2 с тишины), но каждая стадия
+ * продлевает кап: пока boot реально идёт, виден прогресс; при зависании
+ * между стадиями маска исчезает ровно через 2 с, как и раньше.
+ */
+let splashHideTimer = 0;
+
+function refreshSplashCap(): void {
+  window.clearTimeout(splashHideTimer);
+  splashHideTimer = window.setTimeout(hideBootSplash, 2000);
+}
+
+function bootStage(key: string, pct: number): void {
+  const cap = document.getElementById("bootCap");
+  if (cap) {
+    cap.dataset.stage = key;
+    cap.textContent = t(key);
+  }
+  document
+    .querySelector<HTMLElement>("#bootSplash .bs-prog i")
+    ?.style.setProperty("--p", `${pct}%`);
+  refreshSplashCap();
+}
+
 async function boot(): Promise<void> {
   initCursor();
   // Splash is a mask, not a gate: cap it at 2 s. Arm the cap *before* the
   // setup probe, otherwise a slow /api/setup pins the splash forever.
-  window.setTimeout(hideBootSplash, 2000);
+  splashHideTimer = window.setTimeout(hideBootSplash, 2000);
   // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
   const initialSession = new URLSearchParams(location.search).get("session");
   // First-run wizard owns the screen when the server reports a virgin config;
@@ -187,6 +215,7 @@ async function boot(): Promise<void> {
     await loadCommands();
     // Server truth wins; with a warm cache this repaint changes nothing.
     applyStaticI18n();
+    bootStage("web.loader.step.config", 25);
     await loadConfig();
     // Апгрейд: до этой версии тема жила только в localStorage. Если сервер ещё
     // на дефолте, доливаем выбор браузера в конфиг (INV-T5) и перерисовываем
@@ -198,12 +227,17 @@ async function boot(): Promise<void> {
     initSubagentView();
     applySidebarI18n();
     initFiles({ insertPath: (p) => insertIntoDraft("@" + p + " ") });
+    bootStage("web.loader.step.models", 45);
     await loadModels();
+    bootStage("web.loader.step.providers", 60);
     await loadProviders();
+    bootStage("web.loader.step.sessions", 75);
     await loadSessions();
+    bootStage("web.loader.step.plugins", 85);
     await loadMemory();
     await loadSkills();
     await loadPlugins();
+    bootStage("web.loader.step.workspace", 93);
     // Reopen remembered tabs first; `refresh()` auto-opens the server-active
     // session only when no tab is active yet, so a restored set is not clobbered.
     restoreTabs(initialSession);

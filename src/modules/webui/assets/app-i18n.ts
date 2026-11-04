@@ -27,7 +27,9 @@ export function applyStaticI18n(): void {
   setText("hintShift", t("web.input.shift_enter"));
   setText("hintEsc", t("web.input.esc")); setText("hintAttach", t("web.input.attach"));
   setText("hintShort", t("web.input.shortcuts"));
-  setText("bootCap", t("web.loader.boot"));
+  // Стадия boot (A3) важнее общей подписи: её не затираем при локализации.
+  const bootCap = document.getElementById("bootCap");
+  if (bootCap && !bootCap.dataset.stage) bootCap.textContent = t("web.loader.boot");
   // MMART's click bubble: bound lazily (not at import) so `loader.ts` stays
   // import-safe under `bun test`, and re-bound here after a locale switch.
   setGreetResolver(() => t("web.loader.greet"));

@@ -4,6 +4,7 @@
 // `trace-buffer.ts`, log backfill in `trace-backfill.ts`.
 import { el } from "../dom.js";
 import { t } from "../i18n.js";
+import { setSwitching } from "../session/switch-state.js";
 import type { Dict } from "../core/store/types.js";
 import { sb, paneEl, MAX_OUTPUT_CHARS } from "./state.js";
 import { renderRow, turnTitle, collapseDetail } from "./trace-rows.js";
@@ -88,8 +89,10 @@ export function sidebarSessionId(): string | null {
 /**
  * Индикатор загрузки секции «Session» (plan/usage). Ставится на переключении
  * вкладки/новой сессии, снимается первым полным снапшотом (`applyState`).
+ * Тот же флаг блокирует composer и ставит `aria-busy` ленте (INV-W8).
  */
 export function setSessionLoading(on: unknown): void {
+  setSwitching(!!on);
   if (!sb.el) return;
   sb.el.classList.toggle("sb-loading", !!on);
   const pane = paneEl("session");

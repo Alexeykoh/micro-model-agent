@@ -10,7 +10,7 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import { makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent, loadHistory, syncUrl, scrollToBottom, clearBusy, mountFeed } from "../feed.js";
+import { makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent, syncUrl, scrollToBottom, clearBusy, mountFeed } from "../feed.js";
 import { setIndicator } from "../dialog.js";
 import { sidebarSessionChanged, setSessionLoading } from "../sidebar.js";
 import { setSessOpen } from "../core/menus.js";
@@ -20,6 +20,7 @@ import { saveComposer, restoreComposer, renderAttachments, initComposer } from "
 import { renderSessionsDropdown, initSessionsMenu } from "./sessions-menu.js";
 import { persistTabs } from "./tabs-persist.js";
 import { renderTabstrip, initTabstrip } from "./tabs-strip.js";
+import { activateServerSession, nextSwitchSeq } from "./tab-switch.js";
 
 export { reflectBusy } from "./composer.js";
 export { loadCommands } from "./cmdk.js";
@@ -125,6 +126,7 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
     persistTabs();
     return;
   }
+  const seq = nextSwitchSeq();
   tabState.activeTabId = id;
   tabState.liveTabId = id;
   // Сайдбар следует за вкладкой сразу: активная сессия — эта, Trace сбрасывается
@@ -158,21 +160,16 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
     // historyFailed (транзиентная ошибка прошлого захода) — тоже повод
     // повторить; мёртвые (404) сюда не доходят — их держит tab.dead выше.
     if (!feedHasContent(tab.feed) || tab.historyFailed) tab.historyLoaded = false;
-    // Индикатор загрузки секции Session до первого полного снапшота.
-    setSessionLoading(true);
+    // Индикатор — только пока снапшота нет (INV-W8): данные уже на руках,
+    // блокировать ввод и рисовать скелетон нечего. Снимает его первый полный
+    // снапшот (`renderActiveState`) либо догрузка истории ниже.
+    if (!tab.state) setSessionLoading(true);
     // План следует за сессией: сервер переключает трекер на activate. 404 —
     // сессия исчезла: помечаем вкладку мёртвой вместо рассинхрона сайдбара.
-    api("/api/sessions/activate", { method: "POST", body: { id } }).then((r) => {
-      if (r.status === 404) {
-        markTabDead(id);
-        void loadSessions();
-        return;
-      }
-      void loadSessions();
-    });
-    loadHistory(tab).then((st) => {
-      if (st && st.gone) markTabDead(tab.id);
-      hooks.afterHistory?.(tab.id); // история → строки субагентов + MMART
+    activateServerSession(tab, seq, {
+      loadSessions,
+      markTabDead,
+      afterHistory: (id) => hooks.afterHistory?.(id),
     });
   }
   syncUrl();
@@ -194,6 +191,8 @@ export function closeTab(id: string): void {
   }
   tabState.tabs = tabState.tabs.filter((x) => x.id !== id);
   if (closingActive) {
+    // Переключение: activate ответившей вкладки уже неактуален.
+    nextSwitchSeq();
     const next = tabState.tabs[Math.min(i, tabState.tabs.length - 1)];
     if (next) {
       tabState.activeTabId = next.id;

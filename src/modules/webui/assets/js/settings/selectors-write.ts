@@ -5,6 +5,7 @@
 // which keeps the frontend import graph acyclic.
 import { el, icon, link } from "../dom.js";
 import { t } from "../i18n.js";
+import { initPendingWait } from "./pending-wait.js";
 import { settings, session, getPath } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { contextLabel, matchesQuery } from "../format.js";
@@ -289,3 +290,5 @@ document.querySelectorAll<HTMLElement>("[data-sel]").forEach((sel) => {
 });
 
 setSelectorRenderer(renderSelectors);
+// A5: счётчик ожидания переключателя — следит за классом `pending` сам.
+initPendingWait();
