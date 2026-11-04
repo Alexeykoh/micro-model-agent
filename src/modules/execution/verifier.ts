@@ -1,6 +1,6 @@
 // Верификатор шагов: файлы, синтаксис, скрипты, typecheck, success_criteria.
-import { existsSync, readFileSync } from "fs";
-import { resolve, extname, dirname, join } from "path";
+import { existsSync } from "fs";
+import { resolve, join } from "path";
 import { spawn } from "child_process";
 import { t } from "../../i18n/index";
 import type { StepKind } from "./planner";
@@ -11,22 +11,13 @@ import { findTypecheckRoot } from "./audit-runners";
 import { killTree } from "../processes/kill-tree";
 import { settleChildClose } from "../../utils/child-run";
 import { resolveCheckPath } from "./check-path";
+import { checkSyntax } from "./syntax-check";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
+import { evaluateCriteria } from "./verifier-criteria";
+import type { CriteriaResult, VerificationItem } from "./verifier-criteria";
 
-/** Один пункт проверки: прошёл ли + сообщение. */
-export interface VerificationItem {
-  passed: boolean;
-  message: string;
-}
-
-/** Результат проверки machine-readable success_criteria одной подзадачи. */
-export interface CriteriaResult {
-  errors: string[];
-  /** LLM-only критерии (не машиночитаемые) — отдаются варнингами. */
-  warnings: string[];
-  details: VerificationItem[];
-}
+export type { CriteriaResult, VerificationItem } from "./verifier-criteria";
 
 /** Результат верификации шага: прошёл, синтаксис валиден, фейлы, флаг "без файлов". */
 export interface StepVerificationResult {
@@ -170,67 +161,11 @@ export class StepVerifier {
 
   /** Критерии: `file-exists:`, `substring-in-file:`, `command-exit-0:`; прочее — warning. */
   async verifyCriteria(owner: { id: string; check?: string }): Promise<CriteriaResult> {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const details: VerificationItem[] = [];
-
-    for (const criterion of [owner.check].filter((c): c is string => !!c)) {
-      const sep = criterion.indexOf(":");
-      if (sep <= 0) {
-        warnings.push(`Step "${owner.id}": non-machine criterion "${criterion}" (LLM-only)`);
-        continue;
-      }
-      const kind = criterion.slice(0, sep);
-      const rest = criterion.slice(sep + 1);
-
-      if (kind === "file-exists") {
-        const check = await this.checkFileExists(rest);
-        details.push(check);
-        if (!check.passed) errors.push(`[${owner.id}] ${check.message}`);
-        continue;
-      }
-
-      if (kind === "substring-in-file") {
-        const colon = rest.indexOf(":");
-        if (colon <= 0) {
-          warnings.push(`Step "${owner.id}": malformed substring-in-file criterion "${criterion}"`);
-          continue;
-        }
-        const path = rest.slice(0, colon);
-        const needle = rest.slice(colon + 1);
-        const resolved = resolve(this.baseDir, path);
-        if (!existsSync(resolved)) {
-          const item = { passed: false, message: t("verify.file_not_found", { path }) };
-          details.push(item);
-          errors.push(`[${owner.id}] ${item.message}`);
-          continue;
-        }
-        const content = readFileSync(resolved, "utf-8");
-        const passed = content.includes(needle);
-        details.push({ passed, message: `substring "${needle}" in ${path}: ${passed}` });
-        if (!passed) errors.push(`[${owner.id}] "${needle}" not found in ${path}`);
-        continue;
-      }
-
-      if (kind === "command-exit-0") {
-        try {
-          await this.runAsync(rest, this.baseDir, 30_000);
-          details.push({ passed: true, message: `command ok: ${rest}` });
-        } catch (e: any) {
-          const item = {
-            passed: false,
-            message: `command failed: ${rest} (${String(e.message).slice(0, 200)})`,
-          };
-          details.push(item);
-          errors.push(`[${owner.id}] ${item.message}`);
-        }
-        continue;
-      }
-
-      warnings.push(`Step "${owner.id}": unknown criterion kind "${kind}" (LLM-only)`);
-    }
-
-    return { errors, warnings, details };
+    return evaluateCriteria(owner, {
+      baseDir: this.baseDir,
+      checkFileExists: (path) => this.checkFileExists(path),
+      run: (command, cwd, timeoutMs) => this.runAsync(command, cwd, timeoutMs),
+    });
   }
 
   /** Верифицирует шаг: файлы из описания существуют (+синтаксис; delete — наоборот). */
@@ -284,62 +219,15 @@ export class StepVerifier {
     };
   }
 
-  private async validateSyntax(filePath: string): Promise<boolean> {
-    const ext = extname(filePath);
-
-    if (ext === ".ts" || ext === ".tsx" || ext === ".cts" || ext === ".mts") {
-      // Локальный tsc, а не npx: npx без локального пакета уходит в сеть и
-      // висит секундами. Нет tsc — пропускаем проверку (как и раньше «not
-      // found → true»), но мгновенно.
-      const tsc = resolveTscCommand(dirname(filePath));
-      if (!tsc) {
-        this.degrade(
-          "verify.syntax",
-          `typescript compiler not found; syntax not checked for ${filePath}`,
-        );
-        return true;
-      }
-      try {
-        // Путь в кавычках — команды идут через shell и ломаются на пробелах.
-        await this.runAsync(`${tsc} --noEmit --skipLibCheck "${filePath}"`, this.baseDir, 20000);
-        return true;
-      } catch (err: any) {
-        if (
-          err.status === 127 ||
-          err.message.includes("not found") ||
-          err.message.includes("ENOENT")
-        ) {
-          this.degrade(
-            "verify.syntax",
-            `syntax check could not run for ${filePath}: ${String(err.message).slice(0, 200)}`,
-          );
-          return true;
-        }
-        const stderr = err.stderr?.toString() || "";
-        if (stderr.includes("error TS") && !stderr.includes("Cannot find module")) {
-          return false;
-        }
-        this.degrade(
-          "verify.syntax",
-          `syntax check inconclusive for ${filePath}: ${stderr.slice(0, 200) || err.message}`,
-        );
-        return true;
-      }
-    }
-
-    if (ext === ".js" || ext === ".jsx" || ext === ".cjs" || ext === ".mjs") {
-      try {
-        await this.runAsync(`node --check "${filePath}"`, this.baseDir, 5000);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
-    return true;
+  private validateSyntax(filePath: string): Promise<boolean> {
+    return checkSyntax(filePath, {
+      baseDir: this.baseDir,
+      run: (command, cwd, timeoutMs) => this.runAsync(command, cwd, timeoutMs),
+      degrade: (operation, reason) => this.degrade(operation, reason),
+    });
   }
 
-  /**
+/**
    * Запускает команду асинхронно (не блокируя event loop) и резолвится на
    * выходе. На ненулевой exit или таймаут — reject с захваченными stderr/stdout.
    */

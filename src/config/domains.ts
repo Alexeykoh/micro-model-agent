@@ -23,6 +23,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
     "contextWindow",
     "contextAuto",
     "contextBudget",
+    "memory",
     "instructions",
     "indexer",
     "modelLoad",

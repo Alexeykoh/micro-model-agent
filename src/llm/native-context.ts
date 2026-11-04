@@ -94,13 +94,22 @@ async function probeOllamaShow(
   timeoutMs: number,
 ): Promise<number | null> {
   const short = model.split(":")[0];
-  for (const name of [model, short]) {
-    const show = await fetchJson(`${origin}/api/show`, timeoutMs, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    const info = (show as { model_info?: Record<string, unknown>; modelInfo?: Record<string, unknown> } | null);
+  // Оба имени — параллельно: порядок имён задаёт приоритет ответа.
+  const names = short === model || short === "" ? [model] : [model, short];
+  const shows = await Promise.all(
+    names.map((name) =>
+      fetchJson(`${origin}/api/show`, timeoutMs, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }),
+    ),
+  );
+  for (const show of shows) {
+    const info = show as {
+      model_info?: Record<string, unknown>;
+      modelInfo?: Record<string, unknown>;
+    } | null;
     const bag = info?.model_info ?? info?.modelInfo;
     if (bag && typeof bag === "object") {
       const n = contextFromModelInfo(bag as Record<string, unknown>);
@@ -117,11 +126,14 @@ export async function probeOllama(
   timeoutMs: number,
 ): Promise<number | null> {
   // `/api/show` сообщает контекст модели (напр. `llama.context_length` в
-  // `model_info`), даже когда `/api/ps` размерных полей не несёт.
-  return (
-    (await probeOllamaPs(origin, model, timeoutMs)) ??
-    (await probeOllamaShow(origin, model, timeoutMs))
-  );
+  // `model_info`), даже когда `/api/ps` размерных полей не несёт. Оба источника
+  // гоняются параллельно (приоритет у `/api/ps`): медленный `/api/show` не
+  // должен удваивать время пробы Ollama.
+  const [ps, show] = await Promise.all([
+    probeOllamaPs(origin, model, timeoutMs),
+    probeOllamaShow(origin, model, timeoutMs),
+  ]);
+  return ps ?? show;
 }
 
 /** Сервер llama.cpp: одномодельный `/props` несёт загруженный `n_ctx`. */

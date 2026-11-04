@@ -136,6 +136,9 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     // снимается только явным флагом, иначе callbackUrl из тела /v1/tasks
     // становится blind SSRF.
     allowPrivateOutbound: false,
+    // Loopback для веб-тулов (localhost/127.0.0.1/::1) — отдельный, более узкий
+    // флаг: проверка своего dev-сервера не открывает приватную LAN.
+    allowLoopback: false,
   },
   // Максимум глубины рекурсии субагентов.
   maxRecursionDepth: 3,

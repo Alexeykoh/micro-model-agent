@@ -67,18 +67,12 @@ export const STATE_CFG: Record<FaceState, StateCfg> = {
   boot: {
     eye: "pill", blink: 3.4, wave: "float", pose: P({ sx: 0.94, sy: 0.94 }), lean: 0,
     props: [{ type: "bar" }],
-    fx: [
-      { type: "corners", when: "behind", r: 0.44, speed: 1.5, alpha: 0.6 },
-      { type: "orbit", when: "front", n: 3, r0: 0.38, r1: 0.46, speed: 0.7, size: 0.012, alpha: 0.5 },
-    ],
+    fx: [{ type: "corners", when: "behind", r: 0.44, speed: 1.5, alpha: 0.6 }],
   },
   load: {
     eye: "wake", blink: 0, wave: "float", pose: P(), lean: 0,
     props: [{ type: "bar" }],
-    fx: [
-      { type: "corners", when: "front", r: 0.46, speed: 0.5, alpha: 0.35 },
-      { type: "orbit", when: "behind", n: 3, r0: 0.4, r1: 0.5, speed: 0.35, size: 0.012, alpha: 0.35 },
-    ],
+    fx: [{ type: "corners", when: "front", r: 0.46, speed: 0.5, alpha: 0.35 }],
   },
   stop: {
     eye: "sleep", blink: 0, wave: null, pose: P({ sy: 0.93, y: 0.02 }), lean: 0,
@@ -154,6 +148,12 @@ export const STATE_CFG: Record<FaceState, StateCfg> = {
     drift: { x: 0.03, y: 0.008, speed: 0.35 },
     props: [{ type: "checklist", mode: "scan", rows: 3 }],
     fx: [{ type: "corners", when: "behind", r: 0.46, speed: 0.3, alpha: 0.2 }],
+  },
+  // U13: disabled LSP - a calm "would check" face, no alarm: nothing broke.
+  lspoff: {
+    eye: "squint", blink: 4.4, wave: "breathe", pose: P({ eW: 0.17, eH: 0.2 }), lean: 0,
+    props: [{ type: "badge", ch: "–", x: 0.35, y: -0.15, size: 0.1 }],
+    fx: [{ type: "aura", when: "behind", alpha: 0.16 }],
   },
   edit: {
     eye: "narrow", blink: 3.4, wave: "edit", pose: P({ eW: 0.155, eH: 0.28, eX: 0.025 }), lean: 0.02,

@@ -21,15 +21,33 @@ export interface ProbeIdentity {
   model: string;
   baseUrl: string;
   active?: string;
+  /** Тип записи (`lmstudio`, `openai-compat`, …) — часть идентичности (INV-W6). */
+  type?: string;
 }
 
 /** Снимок идентичности активной записи (сравнение по значению, не по ссылке). */
 export function probeIdentityOf(config: AppConfig): ProbeIdentity {
+  const endpoint = activeProviderEndpoint(config.provider);
   return {
     model: config.model,
-    baseUrl: activeProviderEndpoint(config.provider).baseUrl,
+    baseUrl: endpoint.baseUrl,
     active: config.provider?.active,
+    type: endpoint.type,
   };
+}
+
+/** Ключ кеша измеренного окна: `baseUrl + model + type` (INV-W6). */
+function probeCacheKey(id: ProbeIdentity): string {
+  return `${id.baseUrl}|${id.model}|${id.type ?? ""}`;
+}
+
+/** Опции применения нового конфига. */
+export interface ReconfigureOptions {
+  /**
+   * false — пропустить context-probe (INV-W6: проба один раз на операцию,
+   * не на раннер; кешированные раннеры пула идут с `probe: false`).
+   */
+  probe?: boolean;
 }
 
 /** Мутабельный вид `Agent`, которым владеет провайдерная фаза. */
@@ -38,6 +56,9 @@ export interface ProviderPhaseHost {
   costTracker: CostTracker;
   lastProbeIdentity: ProbeIdentity;
   probePassed: boolean;
+  /** Кеш «идентичность → измеренный contextWindow» (INV-W6): повторное
+   *  переключение на ту же идентичность сети не касается. */
+  probeWindowCache: Map<string, number>;
 }
 
 /** Логгер хоста (у `AgentDeps.logger` есть `.warn`/`.info`). */
@@ -48,10 +69,15 @@ function loggerOf(host: ProviderPhaseHost): Logger {
 /**
  * Применяет новый конфиг живьём: provider-first проба контекста, пересборка
  * провайдера, ресайз бюджетов, обновление стоимости.
+ * @param opts `probe: false` — пропустить context-probe (см. {@link ReconfigureOptions}).
  */
-export async function reconfigure(host: ProviderPhaseHost, config: AppConfig): Promise<void> {
+export async function reconfigure(
+  host: ProviderPhaseHost,
+  config: AppConfig,
+  opts: ReconfigureOptions = {},
+): Promise<void> {
   const { deps } = host;
-  await reprobeActiveProvider(host, config);
+  if (opts.probe !== false) await reprobeActiveProvider(host, config);
   const built = buildActiveProvider(config, deps.logger, {
     getSessionId: () => deps.sessionManager?.getActiveMeta()?.id,
   });
@@ -91,6 +117,10 @@ export function logContextProbeAutoSet(
 /**
  * Provider-first проба контекста активной записи при смене идентичности.
  * Fail-open; при `contextAuto: false` проба пропускается целиком.
+ *
+ * Измеренное окно кешируется по идентичности (`baseUrl + model + type`, INV-W6):
+ * возврат на уже измеренную идентичность сети не касается. Кешируются только
+ * успешные измерения — молчащий бэкенд остаётся пробируемым.
  */
 async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig): Promise<void> {
   try {
@@ -99,28 +129,39 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
     const identityChanged =
       prevId.model !== nextId.model ||
       prevId.baseUrl !== nextId.baseUrl ||
-      prevId.active !== nextId.active;
+      prevId.active !== nextId.active ||
+      prevId.type !== nextId.type;
     if (!identityChanged) return;
     if (config.contextAuto === false) {
       host.lastProbeIdentity = nextId;
       return;
     }
-    const nextEndpoint = activeProviderEndpoint(config.provider);
-    const { probeModel, probeProviderContext } = await import("../../llm/model-loader");
-    const lmProbe = await probeModel(nextEndpoint.baseUrl, config.model);
-    const detected =
-      (lmProbe ? { model: lmProbe.model, actual: lmProbe.contextLength } : null) ??
-      (await probeProviderContext(nextEndpoint.baseUrl, config.model, {
+    const cacheKey = probeCacheKey(nextId);
+    let measured: number | undefined = host.probeWindowCache.get(cacheKey);
+    let fresh: { model: string; actual: number } | null = null;
+    if (measured === undefined) {
+      const nextEndpoint = activeProviderEndpoint(config.provider);
+      const { probeProviderContext } = await import("../../llm/model-loader");
+      // Один сетевой запрос: `probeProviderContext` сам спрашивает LM Studio
+      // native первым источником — отдельный `probeModel` здесь дублировал его.
+      const detected = await probeProviderContext(nextEndpoint.baseUrl, config.model, {
         apiKey: nextEndpoint.apiKey,
         providerType: nextEndpoint.type,
-      }));
-    if (detected && detected.actual !== config.contextWindow) {
+      });
+      if (detected) {
+        measured = detected.actual;
+        fresh = detected;
+        host.probeWindowCache.set(cacheKey, measured);
+      }
+    }
+    if (measured !== undefined && measured !== config.contextWindow) {
       // Сначала применяем окно, потом пишем диагностику: сбой логгера не должен
       // отменять уже принятую пробу (в тестах и сторонних логгерах нет
       // `diagnostic`, и исключение раньше съедало присваивание).
       const configured = config.contextWindow;
-      config.contextWindow = detected.actual;
-      logContextProbeAutoSet(loggerOf(host), detected.model, detected.actual, configured);
+      config.contextWindow = measured;
+      // Окно из кеша не логируем: это не новое измерение с провайдера.
+      if (fresh) logContextProbeAutoSet(loggerOf(host), fresh.model, measured, configured);
     }
     host.lastProbeIdentity = nextId;
   } catch {

@@ -13,7 +13,7 @@ B (узкие контракты вместо god-object `WebUiState`/`S`), C (�
 чистым швам). Поведение сохраняется: SSE/REST/сессии/конфиг/plugin API — без смены контрактов
 по умолчанию.
 
-**Spec:** [docs/specs/2026-10-02-webui-modularization-design.md](../specs/2026-10-02-webui-modularization-design.md)
+**Spec:** [docs/archive/specs/2026/2026-10-02-webui-modularization-design.md](../archive/specs/2026/2026-10-02-webui-modularization-design.md)
 
 **Branch:** `refactor/webui-modularize` (от `master` @ `066a215`).
 

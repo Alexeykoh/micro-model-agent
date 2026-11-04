@@ -1,7 +1,7 @@
 # Прогресс `split-bloated-files` (правило 6 · INV-23)
 
 **Дата:** 2026-10-13 · **Ветка:** `docs/architecture-v2`
-**Гейт:** `tests/arch/file-size.test.ts` + [.arch-allowlist.json](../../../.arch-allowlist.json)
+**Гейт:** `tests/arch/file-size.test.ts` + [.arch-allowlist.json](../../.arch-allowlist.json)
 (потолки только уменьшаются; при ≤300 запись **обязана** быть снята).
 **Долг:** [`docs/agents/debt.md`](../agents/debt.md) → `split-bloated-files`.
 
@@ -10,20 +10,96 @@
 | | Кол-во |
 |---|---|
 | Было в allowlist (старт) | 84 |
-| Снято из allowlist | **30** (разрезано 27 + уменьшено 3) |
-| Осталось | **54** |
-| — из них «не крупные» (< 561 стр.) | 31 |
-| — из них крупные (≥ 561 стр.) | 23 |
+| Снято из allowlist | **84** (разрезано 81 + уменьшено 3) |
+| Осталось | **0** |
+| — из них «не крупные» (< 561 стр.) | 0 |
+| — из них крупные (≥ 561 стр.) | 0 |
+
+> **Allowlist пуст:** каждый файл в `src/` ≤300 строк; записей в
+> `.arch-allowlist.json` больше нет, гейт `tests/arch/file-size.test.ts`
+> держит правило без исключений.
 
 > **Сверка 2026-10-26:** `path-validator.ts`, `webui/server.ts` и
 > `webui/settings/setup-api.ts` уже ≤300 и сняты из allowlist без разрезания;
 > `execution-plugin.ts` (539) и `lsp/connection.ts` (533) перешли из крупных
 > в «не крупные». Размеры в таблицах ниже — снимок на 2026-10-13.
+>
+> **Сверка 2026-11-03:** `webui/state.ts` разрезан (445 → 215) на
+> `webui/state-contracts.ts`, `webui/state-session.ts`, `webui/state-sse.ts`;
+> `config/types.ts` разрезан (585 → 149) на `types-provider.ts`,
+> `types-reasoning.ts`, `types-security.ts`, `types-runtime.ts`;
+> `config/registry.ts` разрезан (678 → 218) на `registry-key-def.ts`,
+> `registry-defs-{agent,meta,security}.ts`, `registry-parse.ts`.
+>
+> **Сверка 2026-11-03 (вторая):** `core/agent/tool-batch.ts` разрезан (750 → 244)
+> на `tool-batch-calls.ts`, `tool-batch-signals.ts`, `tool-batch-effects.ts`;
+> `execution/stuck-detector.ts` разрезан (766 → 173) на `stuck-tracker.ts`,
+> `stuck-observations.ts`, `stuck-recovery.ts`, `stuck-hints.ts`.
+>
+> **Сверка 2026-11-03 (третья):** `core/agent.ts` разрезан (561 → 180) на
+> `agent/deps.ts` (AgentDeps), `agent/hosts.ts` (хосты фаз), `agent/surface.ts`
+> (провенанс/история/teardown/доступы), `agent/agent-base.ts` (поверхность
+> агента); запись снята из allowlist.
+>
+> **Сверка 2026-11-03 (четвёртая):** `execution/module.ts` разрезан (688 → 297)
+> на `plan-session.ts` (план, per-session слот, завершённый план, промпт-блок),
+> `deliverables.ts` (файловые деливераблы, текст задачи, «нет плана»),
+> `module-hosts.ts` (хосты шагов/аудита/выравнивания/автопоиска); запись снята
+> из allowlist.
 
-Флагманы `agent.ts` (561) и `execution/module.ts` (688) уже частично разрезаны ранее
-(фазы `core/agent/*`, модули `execution/*`); остаток — оболочка/публичный API.
+> **Сверка 2026-11-03 (пятая):** `tools/bash.ts` разрезан (799 → 217) на
+> `bash-parse.ts` (разбор/Windows-адаптации), `bash-process.ts` (запуск и фон),
+> `bash-output.ts` (хинты/декор вывода), `bash-memo.ts` (мемо read-only),
+> `bash-failures.ts` (счётчики падений); запись снята из allowlist.
+>
+> **Сверка 2026-11-03 (шестая):** `llm/openai-compat.ts` разрезан (956 → 276) на
+> `openai-stream.ts` (движок стрима), `openai-stream-final.ts` (финал/обрезка),
+> `openai-sse.ts` (SSE/NDJSON и tool-call-дельты), `openai-nonstream.ts`
+> (non-stream запрос), `openai-completion.ts` (разбор ответа/usage),
+> `openai-request.ts` (заголовки/таймауты/ретраи), `openai-config.ts`,
+> `openai-errors.ts`, `openai-models.ts`, `openai-prompt-tag.ts`,
+> `openai-rate-limit.ts`; запись снята из allowlist.
 
-## Осталось «не крупные» (31) — режем сейчас
+> **Сверка 2026-11-03 (седьмая):** `core/context/manager.ts` разрезан (1129 → 248)
+> на `manager-types.ts` (формы данных), `manager-state.ts` (состояние/тюнинг),
+> `manager-estimate.ts` (токены/калибровка/пороги), `manager-quality.ts` (качество),
+> `manager-history.ts` (история/ход/clear), `manager-compaction.ts` (компакция/чистка),
+> `manager-compaction-stages.ts` (адаптивные стадии), `manager-compaction-block.ts`
+> (блок сводки/граница среза), `manager-snapshot.ts` (снапшот); запись снята из allowlist.
+>
+> **Сверка 2026-11-03 (восьмая):** `ui/line-editor.ts` разрезан (1156 → 288)
+> на `line-editor-types.ts` (публичные типы), `line-editor-buffer.ts` (буфер и правка),
+> `line-editor-nav.ts` (навигация/история), `line-editor-render.ts` (кадр + DSR-якорь),
+> `line-editor-keys.ts` (разбор клавиш), `line-editor-completion.ts` (Tab-комплит),
+> `line-editor-input.ts` (paste-машина/submit/ctrl); запись снята из allowlist.
+
+> **Сверка 2026-11-03 (девятая):** `cli/repl.ts` разрезан (1418 → 299) на
+> `repl-history.ts` (история), `repl-prompt.ts` (промпт/одалживание терминала),
+> `repl-keys.ts` (спецклавиши/вставка), `repl-completer.ts` (Tab-комплит),
+> `repl-run.ts` (ход агента), `repl-listeners.ts` (строки/SIGINT/resize),
+> `repl-dispatch.ts` (handler-map команд), `repl-host.ts` (`Host`/мост),
+> `repl-session.ts` (`/reload`, stop, синк сессии), `repl-banner.ts`/`repl-start.ts`
+> (баннер и старт), `repl-editor.ts` (ввод), `repl-dispatcher.ts` (очередь строк);
+> запись снята из allowlist.
+
+> **Сверка 2026-11-03 (десятая):** `cli/repl-commands.ts` разрезан (1187 → 87) на
+> `repl-commands-run.ts` (`/run`, `/image`), `repl-commands-config.ts` (`/config`,
+> `/reasoning`, `/verbose`, `/status`, `/wizard`, `/sysprompt`, `/map`),
+> `repl-commands-provider.ts` (`/provider`, `/model`), `repl-commands-context.ts`
+> (`/context`), `repl-commands-agent.ts` (`/security`, `/reload`, `/plugins`),
+> `repl-commands-session.ts` (сессии), `repl-commands-export.ts` (`/export`),
+> `repl-commands-migrate.ts` (`/config migrate`), `repl-commands-shared.ts`
+> (общие помощники); карта хендлеров и имена команд не менялись, запись снята
+> из allowlist — **список пуст**.
+
+`execution/module.ts` (бывший флагман 688) теперь оболочка-композиция ≤300:
+план/сессия и тексты — в `plan-session.ts`/`deliverables.ts`, хосты — в
+`module-hosts.ts`.
+
+## Осталось «не крупные» (0) — исторический снимок
+
+Таблица ниже — снимок 2026-10-13; все перечисленные файлы уже ≤300 и сняты из
+allowlist. Список оставлен как журнал швов, а не как очередь работ.
 
 В порядке возрастания размера:
 
@@ -41,42 +117,20 @@
 | `src/modules/indexer/walker.ts` | 406 | обход ФС |
 | `src/modules/webui/assets/js/session/tabs.ts` | 413 | вкладки сессий |
 | `src/modules/lsp/module.ts` | 415 | lifecycle LSP |
-| `src/modules/webui/state.ts` | 416 | god-state (роли уже есть) |
 | `src/modules/session/store.ts` | 431 | IO сессий |
-| `src/modules/webui/assets/js/session/composer.ts` | 433 | ввод/отправка |
-| `src/modules/plugins/builtin/lint-on-write.ts` | 435 | линт-плагин |
-| `src/modules/webui/assets/js/feed/core.ts` | 435 | лента/скролл |
-| `src/cli/main.ts` | 437 | парсинг опций/маршрут |
 | `src/modules/webui/assets/js/settings/write.ts` | 453 | запись настроек |
-| `src/tools/syntax-validator.ts` | 461 | парсер-фолбэки |
 | `src/core/bootstrap/session-runner.ts` | 487 | раннер сессии |
 | `src/modules/webui/assets/js/settings/providers.ts` | 488 | UI провайдеров |
 | `src/modules/security/security-policies.ts` | 492 | таблицы политик |
 | `src/modules/indexer/module.ts` | 497 | индексатор |
-| `src/tools/executor.ts` | 515 | enforcement/hook-обвязка |
-| `src/modules/webui/assets/js/sidebar/trace.ts` | 517 | trace-вкладка |
-| `src/core/agent/context-log.ts` | 519 | diff-лог |
 | `src/modules/lsp/connection.ts` | 533 | транспорт/жизненный цикл |
-| `src/modules/execution/execution-plugin.ts` | 539 | хуки/обработка тулов |
-| `src/modules/mcp/client.ts` | 539 | JSON-RPC/транспорт |
-| `src/modules/plugins/manager.ts` | 541 | реестр плагинов |
 
-## Осталось крупные (23) — отдельными волнами
+## Осталось крупные (0)
 
-`src/cli/repl.ts` 1471 · `src/cli/repl-commands.ts` 1187 · `src/ui/line-editor.ts` 1156 ·
-`src/core/context/manager.ts` 1101 · `src/llm/openai-compat.ts` 951 ·
-`src/modules/webui/assets/js/settings/panels.ts` 880 ·
-`src/modules/webui/assets/setup.ts` 863 · `src/tools/bash.ts` 799 ·
-`src/core/agent/tool-batch.ts` 771 · `src/modules/execution/stuck-detector.ts` 766 ·
-`src/config/registry-extra.ts` 755 · `src/modules/webui/settings/settings-api.ts` 738 ·
-`src/modules/execution/plan-actions.ts` 735 · `src/config/registry.ts` 707 ·
-`src/ui/renderer.ts` 693 · `src/modules/execution/module.ts` 688 ·
-`src/cli/commands.ts` 685 · `src/core/session-logger.ts` 603 ·
-`src/modules/service/api/tasks-api.ts` 596 ·
-`src/modules/certification/scenarios.ts` 591 · `src/config/types.ts` 574 ·
-`src/modules/webui/assets/app.ts` 569 · `src/core/agent.ts` 561.
+Обе последние группы разрезаны: `cli/repl.ts` (сверка девятая) и
+`cli/repl-commands.ts` (сверка десятая).
 
-## Уже разрезано (27, запись снята из allowlist)
+## Уже разрезано (46, запись снята из allowlist)
 
 Дополнительно без разрезания уменьшены до ≤300: `path-validator.ts`,
 `webui/server.ts`, `webui/settings/setup-api.ts`.
@@ -88,6 +142,7 @@
 | `output/channel.ts` | `output/default-channel.ts` |
 | `core/module-host.ts` | `core/module-host-order.ts` |
 | `modules/webui/module.ts` | `modules/webui/context-probe.ts` |
+| `modules/webui/state.ts` | `modules/webui/state-contracts.ts`, `state-session.ts`, `state-sse.ts` |
 | `modules/execution/plan-store.ts` | `modules/execution/plan-store-io.ts` |
 | `modules/service/openapi/schemas.ts` | `modules/service/openapi/schema-primitives.ts` |
 | `core/bootstrap/session-phase.ts` | `core/bootstrap/tool-context.ts` |
@@ -110,6 +165,26 @@
 | `modules/service/openapi/operations.ts` | `modules/service/openapi/operation-types.ts` |
 | `cli/completer.ts` | `cli/completer-providers.ts` |
 | `modules/webui/settings/providers-api.ts` | `modules/webui/settings/providers-input.ts` |
+| `modules/execution/execution-plugin.ts` | `modules/execution/plugin-state.ts`, `plugin-plan.ts`, `plugin-think.ts`, `plugin-tool.ts` |
+| `core/agent/context-log.ts` | `core/agent/context-log-diff.ts` |
+| `modules/mcp/client.ts` | `modules/mcp/stdio-transport.ts`, `http-transport.ts`, `sse-transport.ts` |
+| `modules/webui/assets/js/session/composer.ts` | `.../session/composer-draft.ts` |
+| `tools/syntax-validator.ts` | `tools/syntax-xml.ts` |
+| `modules/plugins/builtin/lint-on-write.ts` | `.../builtin/lint-run.ts`, `.../builtin/lint-format.ts` |
+| `modules/webui/assets/js/feed/core.ts` | `.../feed/blocks.ts`, `.../feed/busy.ts` |
+| `cli/main.ts` | `cli/main-oneshot.ts`, `cli/main-web.ts`, `cli/auto-update.ts`, `cli/log-visibility.ts` |
+| `modules/webui/assets/js/sidebar/trace.ts` | `.../sidebar/trace-rows.ts`, `trace-buffer.ts`, `trace-backfill.ts` |
+| `modules/certification/scenarios.ts` | `modules/certification/scenarios-*.ts` (5 групп + общий тип) |
+| `tools/executor.ts` | `tools/executor-security.ts`, `executor-hooks.ts`, `executor-call.ts`, `executor-result.ts`, `executor-memo.ts` |
+| `modules/plugins/manager.ts` | `modules/plugins/manager-catalog.ts`, `manager-tools.ts`, `manager-hooks.ts`, `manager-reload.ts`, `manager-types.ts` |
+| `modules/service/api/tasks-api.ts` | `api/tasks-submit.ts`, `tasks-runner.ts`, `tasks-control.ts`, `tasks-job.ts` |
+| `modules/webui/settings/settings-api.ts` | `settings-api-plugins.ts`, `settings-api-mcp.ts`, `settings-api-mcp-write.ts`, `settings-api-lsp.ts`, `settings-api-write.ts`, `settings-api-fields.ts` |
+| `ui/renderer.ts` | `ui/renderer-args.ts`, `renderer-body.ts`, `renderer-card.ts`, `renderer-format.ts`, `renderer-quiet.ts`, `renderer-thought.ts` |
+| `modules/webui/assets/setup.ts` | `setup-api.ts`, `setup-actions.ts`, `setup-context.ts`, `setup-dom.ts`, `setup-i18n.ts`, `setup-render.ts`, `setup-review.ts`, `setup-security[-fields].ts`, `setup-state.ts`, `setup-steps-model.ts`, `setup-steps-provider.ts` |
+| `modules/webui/assets/js/settings/panels.ts` | `.../settings/panels-shared.ts`, `panels-memory.ts`, `panels-skills.ts`, `panels-lsp.ts`, `panels-plugins.ts` |
+| `config/registry-extra.ts` | `registry-extra-factories.ts`, `registry-extra-{provider,agent,features,security,capabilities}.ts` |
+| `cli/repl.ts` | `repl-{history,prompt,keys,completer,run,listeners,dispatch,host,session,banner,start,editor,dispatcher}.ts` |
+| `cli/repl-commands.ts` | `repl-commands-{run,config,provider,context,agent,session,export,migrate,shared}.ts` |
 
 ## Как проверить
 

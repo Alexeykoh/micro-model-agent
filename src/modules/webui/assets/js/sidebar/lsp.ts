@@ -12,11 +12,13 @@ import { appendToolchain } from "./lsp-toolchain.js";
 import { MUTED_REASONS, appendLspSummary } from "./lsp-summary.js";
 import { appendLspFileSection, followFilesSelection } from "./lsp-file.js";
 import { renderLspChanged } from "./lsp-changed.js";
+import { applyLspIndicator, appendStatusBanner } from "./lsp-status.js";
 
 /** i18n-ключ ярлыка класса причины (`not-applicable` → `..._not_applicable`). */
 function lspReasonKey(reason: unknown): string {
   return "web.sidebar.lsp_reason_" + String(reason || "").replace(/-/g, "_");
 }
+
 
 /** Глиф и класс строки сервера по классу причины. */
 function lspGlyph(reason: string | undefined): [string, string] {
@@ -77,18 +79,17 @@ function lspMutedRow(reason: string, list: Dict[]): HTMLElement {
 export function renderLsp(): void {
   const host = sb.lspEl;
   if (!host) return;
+  applyLspIndicator(sb.el, sb.lspDiag, sb.lspUnavailable);
   host.textContent = "";
   const head = el("div", "lsp-head");
   head.appendChild(el("span", "lsp-what", t("web.sidebar.lsp_what")));
-  const infoBtn = el("button", "lsp-info-btn");
-  infoBtn.type = "button";
-  infoBtn.title = t("web.sidebar.lsp_info");
-  infoBtn.setAttribute("aria-label", t("web.sidebar.lsp_info"));
+  const infoBtn = el("button", "lsp-info-btn"); infoBtn.type = "button";
+  infoBtn.title = t("web.sidebar.lsp_info"); infoBtn.setAttribute("aria-label", t("web.sidebar.lsp_info"));
   infoBtn.appendChild(icon("info"));
   infoBtn.addEventListener("click", openLspInfoDialog);
   head.appendChild(infoBtn);
   host.appendChild(head);
-
+  appendStatusBanner(host, sb.lspDiag, sb.lspUnavailable, openLspInfoDialog);
   if (sb.lspUnavailable) {
     host.appendChild(mapKv(t("web.sidebar.lsp_status"), t("web.sidebar.lsp_unavailable")));
     return;

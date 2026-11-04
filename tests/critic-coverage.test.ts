@@ -242,7 +242,9 @@ describe("critic advice reaches the model (W5, INV-C6)", () => {
       verify: async () => ({
         status: "critical" as const,
         summary: "broken",
-        issues: [{ severity: "critical" as const, claim: "c", problem: "p" }],
+        // A6: a `critical` claim must carry evidence, otherwise it is downgraded
+        // to `concern` and spends the advice budget instead of the repair one.
+        issues: [{ severity: "critical" as const, claim: "c", problem: "p", evidence: "grep c src/" }],
       }),
       buildPack: (x: never) => x,
     });

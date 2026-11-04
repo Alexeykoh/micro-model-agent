@@ -20,7 +20,14 @@ const ASSET_DIR_CANDIDATES = [
   join(here, "..", "..", "src", "modules", "webui", "assets"),
 ];
 
-const ASSET_DIR = ASSET_DIR_CANDIDATES.find((d) => existsSync(join(d, "index.html")));
+export const ASSET_DIR = ASSET_DIR_CANDIDATES.find((d) => existsSync(join(d, "index.html")));
+
+/**
+ * true — каталог ассетов содержит исходники фронта (`.ts` рядом с `index.html`),
+ * то есть режим `web:dev`. В бандле `dist/assets` перечислен только собранный
+ * `.js`, поэтому отпечаток дерева там не нужен: ассеты бандла неизменны.
+ */
+export const ASSET_IS_SOURCE = ASSET_DIR !== undefined && existsSync(join(ASSET_DIR, "app.ts"));
 
 /** Грузит все ассеты в память (с заглушками, если каталог не найден). */
 export function loadAssets(): WebUiAssets {

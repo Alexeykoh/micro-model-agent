@@ -1,6 +1,6 @@
 // Вебовый хук `reconfigure` — вынесен из `module.ts` (правило #1).
 import type { AppConfig } from "../../../config/types";
-import type { RuntimeState, SessionStore, SseTransport } from "../state";
+import { broadcast, type RuntimeState, type SessionStore, type SseTransport } from "../state";
 import { pushState } from "../session/session-status";
 
 /**
@@ -8,7 +8,7 @@ import { pushState } from "../session/session-status";
  * без конструирования настоящего `Agent` (а то потянет всю петлю).
  */
 export interface WebReconfigurableAgent {
-  reconfigure(config: AppConfig): void | Promise<void>;
+  reconfigure(config: AppConfig, opts?: { probe?: boolean }): void | Promise<void>;
   readonly contextManager: { getBudget(): { history: number } };
 }
 
@@ -24,12 +24,16 @@ export function makeReconfigure(
   after?: () => Promise<void> | void,
 ): (config: AppConfig) => Promise<void> {
   return async (config) => {
+    const windowBefore = config.contextWindow;
     await agent.reconfigure(config);
+    const probeChanged = config.contextWindow !== windowBefore;
     // Конфиг shared-объект, но бюджеты/провайдер живут в агентах: догоняем
     // всех закешированных раннеров (best-effort, по одному — редкая операция).
+    // Проба — один раз на операцию (INV-W6): раннеры применяют конфиг с
+    // `{ probe: false }`, сетевую context-probe делает только основной агент.
     for (const id of state.pool.runnerIds()) {
       try {
-        await state.pool.getRunner(id)?.agent.reconfigure(config);
+        await state.pool.getRunner(id)?.agent.reconfigure(config, { probe: false });
       } catch {
         /* результат reconfigure сохраняем, даже если раннер упал */
       }
@@ -41,15 +45,28 @@ export function makeReconfigure(
     for (const id of Object.keys(state.sessionUsage)) {
       state.sessionUsage[id] = { ...state.sessionUsage[id], contextLimit: limit };
     }
-  // Провайдер мог смениться: сначала рефрешим список моделей под провайдера,
-  // чтобы follow-up `/api/models` клиента увидел модели нового провайдера.
-    if (after) {
-      try {
-        await after();
-      } catch {
-        /* результат reconfigure сохраняем, даже если рефреш моделей упал */
-      }
-    }
+    // Провайдер мог смениться: рефреш списка моделей уходит в ФОН (INV-W5 —
+    // сеть не входит в путь ответа `POST /api/config`), а его результат клиент
+    // получает событиями `models` (и `config`, если проба подправила окно).
     pushState(state);
+    if (after) void refreshModelsInBackground(state, after, probeChanged);
   };
+}
+
+/**
+ * Фоновый рефреш списка моделей: результат сообщается SSE-событиями, а не
+ * HTTP-ответом. Провал рефреша не отменяет уже применённый reconfigure.
+ */
+async function refreshModelsInBackground(
+  state: SseTransport,
+  after: () => Promise<void> | void,
+  probeChanged: boolean,
+): Promise<void> {
+  try {
+    await after();
+  } catch {
+    /* результат reconfigure сохраняем, даже если рефреш моделей упал */
+  }
+  broadcast({ type: "models", ts: Date.now() }, state);
+  if (probeChanged) broadcast({ type: "config", ts: Date.now() }, state);
 }

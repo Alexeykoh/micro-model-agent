@@ -18,6 +18,17 @@ function sidebarSources(a: WebUiAssets): string {
     .join("\n");
 }
 
+// Setup wizard is the `setup.js` entry + `setup-*.js` step modules; the browser
+// loads the same graph, so endpoint guards search the whole family.
+function setupSources(a: WebUiAssets): string {
+  return [
+    a.setupJs ?? "",
+    ...Object.entries(a.jsModules ?? {})
+      .filter(([k]) => k.startsWith("setup-"))
+      .map(([, v]) => v),
+  ].join("\n");
+}
+
 describe("webui assets", () => {
   it("loads html/css/js from disk", () => {
     const a = loadAssets();
@@ -252,7 +263,7 @@ describe("webui assets", () => {
     const tabs = a.jsModules?.["js/session/tabs.js"] || "";
     expect(js(a)).toContain("readSavedTabs");
     expect(a.js).toContain("restoreTabs");
-    expect(tabs).toContain("mma-open-tabs");
+    expect(js(a)).toContain("mma-open-tabs");
     expect(js(a)).toMatch(/openTab\(ids\[0\]/);
     expect(js(a)).toMatch(
       /!feedHasContent\(tab\.feed\) \|\| tab\.historyFailed\)\s*tab\.historyLoaded = false;/,
@@ -282,12 +293,13 @@ describe("webui assets", () => {
 
   it("wires the setup wizard to the /api/setup endpoints and app boot hook", () => {
     const a = loadAssets();
+    const setup = setupSources(a);
     expect(a.setupJs).toContain("window.MmaSetup");
-    expect(a.setupJs).toContain('"/api/setup"');
-    expect(a.setupJs).toContain('"/api/setup/scan"');
-    expect(a.setupJs).toContain('"/api/setup/models"');
-    expect(a.setupJs).toContain('"/api/setup/test"');
-    expect(a.setupJs).toContain('"/api/setup/locale"');
+    expect(setup).toContain('"/api/setup"');
+    expect(setup).toContain('"/api/setup/scan"');
+    expect(setup).toContain('"/api/setup/models"');
+    expect(setup).toContain('"/api/setup/test"');
+    expect(setup).toContain('"/api/setup/locale"');
     expect(js(a)).toContain("window.MmaSetup");
   });
 
@@ -330,10 +342,12 @@ describe("webui assets", () => {
     expect(a.mdJs).toContain('from "./js/md-normalize.js"');
     expect(a.jsModules["js/md-normalize.js"]).toContain("MdNormalizer");
     expect(a.css).toContain(
-      ".md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.62; }",
+      ".md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.68; }",
     );
-    expect(a.css).toContain(".md p { margin: 9px 0; }");
-    expect(a.css).toContain(".md ul, .md ol { margin: 8px 0; padding-left: 24px; }");
+    expect(a.css).toContain(".md p { margin: 11px 0; }");
+    expect(a.css).toContain(".md ul, .md ol { margin: 10px 0; padding-left: 26px; }");
+    // The answer block itself breathes: wider padding and a softer corner.
+    expect(a.css).toContain("padding: 12px 18px 14px;");
     // Soft breaks must flow as spaces (CommonMark), not preserved as hard newlines.
     expect(a.css).not.toMatch(/\.md p \{[^}]*white-space: pre-wrap/);
   });
@@ -446,14 +460,14 @@ describe("webui assets", () => {
   it("scopes /api/state to the active tab and renders from per-tab snapshots", () => {
     const a = loadAssets();
     const tabs = a.jsModules?.["js/session/tabs.js"] || "";
-    expect(a.js).toContain("/api/state?session=");
+    expect(js(a)).toContain("/api/state?session=");
     expect(a.js).toContain("hooks.ensureTabState = ensureTabState");
     // Switch sets the client-active session immediately and resets Trace.
     expect(tabs).toContain("session.activeSessionId = id");
     expect(tabs).toContain("sidebarSessionChanged(id)");
     expect(tabs).toContain("hooks.ensureTabState?.(id)");
     // Guard against a stale response clobbering a newer tab.
-    expect(a.js).toMatch(/tabState\.activeTabId !== sid\)\s*return;/);
+    expect(js(a)).toMatch(/tabState\.activeTabId !== sid\)\s*return;/);
   });
 
   it("resets the session when the last tab is closed", () => {
@@ -501,7 +515,7 @@ describe("webui assets", () => {
     const tabs = a.jsModules?.["js/session/tabs.js"] || "";
     expect(sidebar).toContain("setSessionLoading");
     expect(tabs).toContain("setSessionLoading(true)");
-    expect(a.js).toContain("setSessionLoading(false)");
+    expect(js(a)).toContain("setSessionLoading(false)");
     expect(a.css).toContain(".sb.sb-loading #pane-session");
   });
 
@@ -527,9 +541,9 @@ describe("webui assets", () => {
     expect(a.html).toContain('id="traceDetail"');
     expect(a.html).toContain('id="mapBody"');
     expect(a.css).toContain(".sb-tab.on");
-    // Sidebar has a fixed width; opening a detail never resizes it, and the
-    // detail sits on the left of the list (row-reverse).
-    expect(a.css).toContain("width: clamp(340px, 38vw, 679px)");
+    // U7: the sidebar column is resizable (`--sb-w`) with the old fixed clamp
+    // as the fallback; opening a detail still never resizes it.
+    expect(a.css).toContain("var(--sb-w, clamp(340px, 38vw, 679px))");
     expect(a.css).toContain("#pane-trace { flex-direction: row-reverse;");
     expect(a.css).toContain(".trc-detail");
     expect(a.js).toContain("initSidebar()");
@@ -578,7 +592,8 @@ describe("webui assets", () => {
     expect(a.html).toContain('class="files-body"');
     expect(a.html).toContain('id="filesSide"');
     expect(a.html).toContain('class="files-splitter"');
-    expect(a.html).toContain('id="filesBar"');
+    expect(a.html).toContain('id="filesHead"');
+    expect(a.html).toContain('id="filesSearchClear"');
     expect(a.html).toContain('id="filesCrumbs"');
     expect(a.html).toContain('id="filesBack"');
     expect(a.html).toContain('id="filesFwd"');
@@ -625,7 +640,7 @@ describe("webui assets", () => {
     expect(sidebar).toContain("sidebarPluginsState(");
     expect(sidebar).toContain("sidebarPluginsEvent(");
     // Imports of the tab come through the barrel only (see DAG guard).
-    expect(a.js).toContain("sidebarPluginsState,");
+    expect(js(a)).toContain("sidebarPluginsState,");
     expect(a.css).toContain(".plg-row");
     expect(a.css).toContain(".plg-tag");
     // Hotkeys are derived from `TABS`: the last tab is reachable by Alt+8.
@@ -758,7 +773,7 @@ describe("webui assets", () => {
     expect(core).toContain("hooks.openSettingsAt?.");
     // LSP/MCP land on their group inside the shared Plugins panel, not at its top.
     expect(core).toContain('mcp: "settings-mcp"');
-    expect(a.jsModules?.["js/settings/panels.js"] || "").toContain('id: "settings-mcp"');
+    expect(a.jsModules?.["js/settings/panels-plugins.js"] || "").toContain('id: "settings-mcp"');
     expect(a.css).toContain(".sb-settings");
     // MCP is the one tab whose primary action (add/edit a server) lives in
     // settings — give it an explicit CTA, not only the title-row icon.

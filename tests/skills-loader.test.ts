@@ -131,12 +131,12 @@ describe("SkillsModule.getPromptBlocks (catalog + loaded, W2)", () => {
     expect(catalog.content).not.toContain("Description for skill 0");
   });
 
-  it("caps the catalog and reports how many skills are hidden", () => {
+  it("caps the catalog at the top 10 and reports how many skills are hidden", () => {
     const mod = new SkillsModule(makeSkills(45) as any, 1000);
     const catalog = mod.getCatalogBlock()!;
-    expect(catalog.content).toContain("- skill-39");
-    expect(catalog.content).not.toContain("- skill-40");
-    expect(catalog.degraded?.reason).toContain("5 more");
+    expect(catalog.content).toContain("- skill-9");
+    expect(catalog.content).not.toContain("- skill-10");
+    expect(catalog.degraded?.reason).toContain("35 more");
   });
 
   it("puts loaded skills in the volatile tail with low priority", () => {

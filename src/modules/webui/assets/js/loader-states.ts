@@ -26,7 +26,8 @@ export type FaceState =
   | "check"
   | "warn"
   | "recheck"
-  | "verify";
+  | "verify"
+  | "lspoff";
 
 export type FaceSize = "sm" | "lg" | "xs";
 
@@ -66,6 +67,10 @@ export const FACE_CLASS: Record<FaceState, string> = {
   // переписывает. Это штатная перепроверка, а не сбой: recon-цвет, взгляд вбок.
   recheck: "c-recon st-recheck squint",
   verify: "c-recon st-verify squint",
+  // U13: LSP is switched off - the check did not run at all. That is a
+  // configuration state, not a broken harness (and not code errors): a calm,
+  // dim "would check" face instead of the red error face.
+  lspoff: "c-dim st-check squint",
 };
 
 // Tool name → loader state (matches STYLE.md tool categories). Every core
@@ -150,9 +155,10 @@ export interface LoaderSignal {
  * - `errors` — сервер вернул error'ы (рабочая обратная связь);
  * - `failed` — сервер недоступен или отключён (проблема харнесса, не кода).
  */
-export function lspOutputSignal(output: string | undefined): "errors" | "failed" | null {
+export function lspOutputSignal(output: string | undefined): "errors" | "failed" | "disabled" | null {
   if (!output) return null;
-  if (output.includes("[LSP check failed") || output.includes("[LSP disabled")) return "failed";
+  if (output.includes("[LSP disabled")) return "disabled";
+  if (output.includes("[LSP check failed")) return "failed";
   if (output.includes("[LSP errors]")) return "errors";
   return null;
 }
@@ -191,6 +197,7 @@ export function loaderStateFor(s: LoaderSignal): FaceState {
       if (s.type === "tool_end") {
         if (lsp === "errors") return "warn";
         if (lsp === "failed") return "error";
+        if (lsp === "disabled") return "lspoff";
       }
       return toolState(name);
     }

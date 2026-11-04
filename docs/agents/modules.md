@@ -242,7 +242,7 @@ Unlike trace-server (read-only), web-ui is **bidirectional**: the browser sends 
 
 ## Web mode (`mma web`)
 
-> **Source:** `src/modules/webui/` (`state.ts`, `server.ts`, `forward.ts`, `module.ts`, `assets.ts`, `util.ts`, `body.ts`, `persist.ts`, `host-state.ts` здесь — тонкая web-обвязка: сама проекция снапшота (`buildHostState`/`captureUsage`/`liveContextUsage`/`planEventFor`/`UsageSnapshot`) живёт в `src/core/host-state.ts`, потому что её читает и `mma serve`, и будет читать TUI; в webui остались только структурные подмножества `WebIndexer`/`WebLsp` и web-only флаг `i18nStale`., `model-cache.ts`, `commands.ts`, `commands-settings.ts`, `commands-shared.ts`, `memory-commands.ts`, `config-api.ts`, `settings-api.ts`, `sessions-api.ts`, `providers-api.ts`, `providers-view.ts`, `setup-api.ts`, `history-api.ts`, `file-api.ts`, `answer-api.ts`, `prompt-io.ts`, `assets/**` — TypeScript frontend: `app.ts` + `js/{dom,api,i18n,store,format,feed,tabs,settings,dialog}.ts`) + `src/cli/web-command.ts`, `src/core/web-host.ts`. Design: [docs/specs/2026-09-23-mma-web/design.md](../specs/2026-09-23-mma-web/design.md). Refactor plan: [docs/plans/2026-09-26-webui-decompose.md](../plans/2026-09-26-webui-decompose.md); TS migration: [docs/specs/2026-10-04-webui-frontend-ts-design.md](../specs/2026-10-04-webui-frontend-ts-design.md).
+> **Source:** `src/modules/webui/` (`state.ts`, `server.ts`, `forward.ts`, `module.ts`, `assets.ts`, `util.ts`, `body.ts`, `persist.ts`, `host-state.ts` здесь — тонкая web-обвязка: сама проекция снапшота (`buildHostState`/`captureUsage`/`liveContextUsage`/`planEventFor`/`UsageSnapshot`) живёт в `src/core/host-state.ts`, потому что её читает и `mma serve`, и будет читать TUI; в webui остались только структурные подмножества `WebIndexer`/`WebLsp` и web-only флаг `i18nStale`., `model-cache.ts`, `commands.ts`, `commands-settings.ts`, `commands-shared.ts`, `memory-commands.ts`, `config-api.ts`, `settings-api.ts`, `sessions-api.ts`, `providers-api.ts`, `providers-view.ts`, `setup-api.ts`, `history-api.ts`, `file-api.ts`, `answer-api.ts`, `prompt-io.ts`, `assets/**` — TypeScript frontend: `app.ts` + `js/{dom,api,i18n,store,format,feed,tabs,settings,dialog}.ts`) + `src/cli/web-command.ts`, `src/core/web-host.ts`. Design: [docs/archive/specs/2026/2026-09-23-mma-web/design.md](../archive/specs/2026/2026-09-23-mma-web/design.md). Refactor plan: [docs/plans/2026-09-26-webui-decompose.md](../plans/2026-09-26-webui-decompose.md); TS migration: [docs/archive/specs/2026/2026-10-04-webui-frontend-ts-design.md](../archive/specs/2026/2026-10-04-webui-frontend-ts-design.md).
 
 `mma web [--port N] [--host H] [--token T] [--no-open]` runs the agent **without a TTY**, as a full alternative to the terminal REPL: same `bootstrap()`, same `Agent`, same config and sessions, a second renderer (browser) instead of `LineEditor`. The terminal REPL stays fully supported and unchanged; terminal and web are separate processes (separate sessions if run at once).
 
@@ -319,7 +319,7 @@ When a model has a known price, MMA shows the session's running cost **together 
 
 ## Prompt Caching & Cache Metrics
 
-> **Source:** `src/llm/cache-usage.ts`, `src/core/agent/prefix-monitor.ts`, `src/cli/cache-line.ts`, `src/modules/providers/cache.ts`. Design: [docs/specs/2026-09-17-prompt-caching-budget.md](../specs/2026-09-17-prompt-caching-budget.md).
+> **Source:** `src/llm/cache-usage.ts`, `src/core/agent/prefix-monitor.ts`, `src/cli/cache-line.ts`, `src/modules/providers/cache.ts`. Design: [docs/archive/specs/2026/2026-09-17-prompt-caching-budget.md](../archive/specs/2026/2026-09-17-prompt-caching-budget.md).
 
 Agent loops resend the whole context every iteration; providers reuse the KV cache of the matching prompt prefix. MMA makes that reuse **measurable and cheaper** across cloud and local backends without vendor lock-in.
 
@@ -363,7 +363,7 @@ Self-update is a fire-and-forget background check — it never blocks startup.
 - **Source:** `src/modules/updater/` (`checker.ts`, `module.ts`, `factory.ts`). `createUpdater()`
   (`factory.ts`) is the single construction point for both surfaces; all errors are swallowed
   (best-effort). Notifications go through i18n keys `updater.*`.
-- **Surfaces:** terminal (`main.ts` → `startAutoUpdate()`, printed via `OutputBus`) and
+- **Surfaces:** terminal (`cli/auto-update.ts` → `startAutoUpdate()`, printed via `OutputBus`) and
   `mma web` (`web-command.ts` → `startWebUpdater()`). Web has no stdout, so it reports through
   SSE `update` (`phase: available|installed|failed`), which makes MMART react; the persistent
   half is `HostStateSnapshot.updateAvailable` → footer chip `↑ <latest>`. `mma serve` also

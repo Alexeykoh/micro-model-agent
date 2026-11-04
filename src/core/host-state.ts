@@ -15,7 +15,7 @@ import type { HostStateSnapshot, ProjectMapInfo } from "./host";
 import type { SessionManager } from "../modules/session/manager";
 import type { ExecutionModule } from "../modules/execution/module";
 import { planSnapshotFromModule, adaptActivePlan } from "./host-plan";
-import { readMmaVersion } from "./version";
+import { isDevBuild, readMmaVersion } from "./version";
 
 /**
  * Метрики usage последнего хода из `AgentResult` для `HostStateSnapshot`.
@@ -160,6 +160,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     contextProbe: deps.contextProbe,
     workspace: deps.workspace,
     version: readMmaVersion(),
+    dev: isDevBuild(),
     updateAvailable: deps.updateAvailable,
     instructions: deps.instructions,
     projectMap: deps.projectMap ?? undefined,

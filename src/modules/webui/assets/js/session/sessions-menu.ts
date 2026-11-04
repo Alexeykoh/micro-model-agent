@@ -40,6 +40,22 @@ let sessionsErrTimer: any = null;
 let sessQuery = "";
 let sessSearchWired = false;
 
+// U14: pinned sessions live in localStorage (survive a server restart, scoped
+// to this browser) and are rendered in their own section above `recent`.
+// DEBT(webui-sessions-project-groups): no project field in `/api/sessions`, so
+// the list cannot be grouped by project yet.
+import { isSessionPinned, pinnedSessionIds, toggleSessionPin as flipPin } from "./pins.js";
+import { renderPruneNotice } from "./prune-notice.js";
+
+/** Toggles the pin and re-renders the dropdown; returns the new state. */
+export function toggleSessionPin(id: string): boolean {
+  const on = flipPin(id);
+  renderSessionsDropdown();
+  return on;
+}
+
+export { isSessionPinned };
+
 // One-time wiring for the static `#sessSearch` input: placeholder follows the
 // locale on every render, listeners attach once. Returns the input or null.
 function ensureSessSearch(): HTMLInputElement | null {
@@ -83,20 +99,26 @@ function ensureSessSearch(): HTMLInputElement | null {
 export function renderSessionsDropdown(): void {
   ensureSessSearch();
   const activeList = document.getElementById("sessActiveList");
+  const pinnedList = document.getElementById("sessPinnedList");
   const recentList = document.getElementById("sessRecentList");
   const activeHeader = document.getElementById("sessActiveHeader");
+  const pinnedHeader = document.getElementById("sessPinnedHeader");
   const recentHeader = document.getElementById("sessRecentHeader");
-  if (!activeList || !recentList) return;
+  if (!activeList || !recentList || !pinnedList) return;
+  if (pinnedHeader) pinnedHeader.textContent = t("web.sessions.pinned");
   activeList.textContent = "";
+  pinnedList.textContent = "";
   recentList.textContent = "";
   const q = sessQuery.trim();
   const activeId = session.activeSessionId;
+  const pinned = pinnedSessionIds();
   const sorted = session.sessions.slice().sort((a: Dict, b: Dict) => {
     const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
     const bt = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
     return bt - at;
   }).filter((s: Dict) => matchesQuery((s.name || "") + " " + String(s.id || ""), q));
   let activePlaced = false;
+  let pinnedPlaced = false;
   let recentPlaced = false;
   sorted.forEach((s: Dict) => {
     const isActive = s.id === activeId;
@@ -104,11 +126,15 @@ export function renderSessionsDropdown(): void {
     if (isActive && !activePlaced) {
       activeList.appendChild(row);
       activePlaced = true;
+    } else if (!isActive && pinned.has(String(s.id))) {
+      pinnedList.appendChild(row);
+      pinnedPlaced = true;
     } else {
       recentList.appendChild(row);
       recentPlaced = true;
     }
   });
+  if (pinnedHeader) pinnedHeader.hidden = !pinnedPlaced;
   if (q) {
     // Filtered view: empty sections hide with their headers; zero hits total
     // show a single no-matches row instead of the unfiltered placeholders.
@@ -128,25 +154,42 @@ export function renderSessionsDropdown(): void {
       recentList.appendChild(el("div", "si", t("web.sessions.none")));
     }
   }
+  renderPruneNotice(session.sessions.length, Boolean(q));
   if (session.sessionsError) {
     recentList.appendChild(el("div", "dd-err", session.sessionsError));
   }
 }
 
+
 function sessionRow(s: Dict, isActive: boolean): HTMLElement {
   const row = el("div", "si si-row" + (isActive ? " on" : ""));
-  const name = s.name || String(s.id);
+  const id = String(s.id);
+  const isPinned = pinnedSessionIds().has(id);
+  if (isPinned) row.classList.add("pinned");
+  const name = s.name || id;
   const main = el("button", "dd-row-main");
   main.type = "button";
   main.setAttribute("aria-label", name);
-  main.appendChild(el("span", "id", String(s.id)));
+  main.appendChild(el("span", "id", id));
   main.appendChild(el("span", "name", name));
   main.appendChild(el("span", "meta", relTime(s.updatedAt)));
   main.addEventListener("click", () => {
     setSessOpen(false);
-    deps.openTab(s.id, name, "session", true);
+    deps.openTab(id, name, "session", true);
   });
   row.appendChild(main);
+  // U14: pin keeps a session above the always-growing `recent` list.
+  const pin = el("button", "pin-btn" + (isPinned ? " on" : ""), isPinned ? "★" : "☆");
+  pin.type = "button";
+  const pinLabel = t(isPinned ? "web.sessions.unpin" : "web.sessions.pin");
+  pin.title = pinLabel;
+  pin.setAttribute("aria-label", pinLabel + ": " + name);
+  pin.setAttribute("aria-pressed", isPinned ? "true" : "false");
+  pin.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleSessionPin(id);
+  });
+  row.appendChild(pin);
   // The active session can't be removed server-side (409), so it has no
   // delete control at all.
   if (!isActive) {
@@ -158,7 +201,7 @@ function sessionRow(s: Dict, isActive: boolean): HTMLElement {
     del.setAttribute("aria-label", label + ": " + name);
     del.addEventListener("click", (e) => {
       e.stopPropagation();
-      confirmDeleteSession(s.id, name);
+      confirmDeleteSession(id, name);
     });
     row.appendChild(del);
   }

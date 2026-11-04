@@ -83,12 +83,36 @@ describe("subagent session log", () => {
       iterations: 4,
       durationMs: 5000,
       error: "e".repeat(900),
+      health: { toolsOk: 3, toolsFailed: 2, filesRead: 1, filesWritten: 0, blocked: 1 },
     })!;
     expect(entry.content).toBe("end");
     expect(entry.status).toBe("failed");
     expect(entry.success).toBe(false);
     expect(entry.iteration).toBe(4);
     expect(entry.summary!.length).toBeLessThanOrEqual(300);
+    // A7: здоровье прогона видно в журнале.
+    expect(entry).toMatchObject({ toolsOk: 3, toolsFailed: 2, filesRead: 1, blocked: 1 });
+  });
+
+  it("writes tool args at tool_start with clipped values and redacted secrets (A4)", () => {
+    const entry = subagentLogEntry({
+      kind: "tool_start",
+      runId: RUN,
+      callId: "c1",
+      tool: "read_file",
+      args: {
+        path: "src/App.tsx",
+        content: "x".repeat(1000),
+        token: `ghp_${"a".repeat(30)}`,
+      },
+    })!;
+    expect(entry.content).toBe("tool_start");
+    expect(entry.tool).toBe("read_file");
+    const args = entry.args as Record<string, unknown>;
+    expect(args.path).toBe("src/App.tsx");
+    expect(String(args.content).length).toBeLessThanOrEqual(200);
+    expect(String(args.token)).toContain("[REDACTED]");
+    expect(String(args.token)).not.toContain("a".repeat(30));
   });
 
   it("does not journal text, reasoning, notes or phases", () => {
@@ -97,7 +121,6 @@ describe("subagent session log", () => {
       { kind: "reasoning", runId: RUN, chunk: "think" },
       { kind: "note", runId: RUN, chunk: "status" },
       { kind: "phase", runId: RUN, phase: "thinking" },
-      { kind: "tool_start", runId: RUN, callId: "c1", tool: "read_file", args: {} },
     ];
     for (const event of skipped) expect(subagentLogEntry(event)).toBeUndefined();
   });

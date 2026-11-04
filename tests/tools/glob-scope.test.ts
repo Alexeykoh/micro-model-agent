@@ -58,4 +58,20 @@ describe("glob: скоуп и защищённые пути", () => {
     expect(res.success).toBe(true);
     expect(res.output).toContain("hidden by scope/security");
   });
+
+  it("скрытое скоупом не выглядит как «нет совпадений» (A2)", async () => {
+    const ctx = makeCtx({ scope: { allowed_files: ["src"], read_only_files: [] } });
+    const res = await globTool.handler(ctx, { pattern: "secrets/**" });
+    expect(res.success).toBe(true);
+    expect(res.output).toContain("No matches");
+    expect(res.output).toContain("hidden by scope/security");
+  });
+
+  it("пустая выдача без скрытых путей — только «нет совпадений»", async () => {
+    const ctx = makeCtx();
+    const res = await globTool.handler(ctx, { pattern: "**/*.nope" });
+    expect(res.success).toBe(true);
+    expect(res.output).toContain("No matches");
+    expect(res.output).not.toContain("hidden by scope/security");
+  });
 });

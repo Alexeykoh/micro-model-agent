@@ -13,16 +13,20 @@ import { fileURLToPath } from "node:url";
  * для стиля. Плюс три конкретных счётчика, у которых гварда не было:
  *
  *   1. `as any` / `as unknown as` в `src/` — baseline, только уменьшается;
- *   2. `as unknown as *Host` в `src/core/agent.ts` — НЕ запрещены, а объявлены:
- *      это мутабельные живые виды `Agent` (фаза пишет поля обратно), литерал их
- *      бы скопировал и потерял запись. Объявлять надо именно поэтому;
+ *   2. `as unknown as *Host` в `src/core/agent.ts` и `agent/agent-base.ts` — НЕ
+ *      запрещены, а объявлены: это мутабельные живые виды `Agent` (фаза пишет
+ *      поля обратно), литерал их бы скопировал и потерял запись. Объявлять надо
+ *      именно поэтому;
  *   3. пустых `catch {}` / `.catch(() => {})` — бюджет на файл, новый провал
  *      сверх бюджета краснеет.
  */
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const STYLE_DOC = join(REPO_ROOT, "docs", "agents", "code-style.md");
-const AGENT_TS = join(REPO_ROOT, "src", "core", "agent.ts");
+const AGENT_TS = [
+  join(REPO_ROOT, "src", "core", "agent.ts"),
+  join(REPO_ROOT, "src", "core", "agent", "agent-base.ts"),
+];
 const SRC = join(REPO_ROOT, "src");
 
 /**
@@ -81,15 +85,15 @@ export const HOST_CASTS: Record<string, string> = {
 
 /** Пустые `catch {}` / `.catch(() => {})` / `.catch(() => null)` на файл: бюджет, не список строк. */
 export const SILENT_CATCHES: Record<string, { count: number; reason: string }> = {
-  "src/cli/repl.ts": {
+  "src/cli/repl-start.ts": {
     count: 3,
-    reason: "fire-and-forget запись/обновление REPL, ошибка не actionable",
+    reason: "fire-and-forget фоновая запись/проба на старте REPL, ошибка не actionable",
   },
   "src/core/hallucination/llm-judge.ts": {
     count: 1,
     reason: "эталон: consume-канал судьи, причина в комментарии рядом",
   },
-  "src/core/bootstrap/session-runner.ts": {
+  "src/core/bootstrap/session-runner-wiring.ts": {
     count: 1,
     reason: "best-effort фоновая проба, сессия уже поднята",
   },
@@ -111,7 +115,11 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
       "teardown пробы (close) в finally: результат проверки уже сформирован, ошибка уборки не actionable",
   },
   "src/modules/indexer/module.ts": {
-    count: 2,
+    count: 1,
+    reason: "фоновая перестройка индекса, ошибка видна из других сигналов",
+  },
+  "src/modules/indexer/watch.ts": {
+    count: 1,
     reason: "фоновая перестройка индекса, ошибка видна из других сигналов",
   },
   "src/modules/critic/client.ts": {
@@ -152,7 +160,7 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
   },
   // Прогрев `check-run.ts` больше не молчит: отказ старта сервера идёт в health
   // и в отчёт как `[LSP check failed]` (см. spec 2026-10-29-lsp-node-version-diagnosis).
-  "src/modules/lsp/connection.ts": {
+  "src/modules/lsp/documents.ts": {
     count: 1,
     reason: "best-effort запрос диагностики, сервер может не ответить",
   },
@@ -241,9 +249,11 @@ describe("gate: style rules have a guard or a declared reason (W12)", () => {
     ).toBeLessThanOrEqual(BASELINE);
   });
 
-  it("every `as unknown as *Host` in agent.ts is declared with a reason", () => {
+  it("every `as unknown as *Host` in the agent surface is declared with a reason", () => {
     const found = new Set(
-      [...readFileSync(AGENT_TS, "utf-8").matchAll(HOST_CAST_RE)].map((m) => m[1]),
+      AGENT_TS.flatMap((file) =>
+        [...readFileSync(file, "utf-8").matchAll(HOST_CAST_RE)].map((m) => m[1]),
+      ),
     );
     const undeclared = [...found].filter((name) => !(name in HOST_CASTS));
     expect(

@@ -21,8 +21,11 @@ describe("model list: подсказка соответствует поверх
   });
 
   it("CLI печатает cli.model_hint_cli, REPL — cli.model_hint", () => {
-    const cli = readFileSync("src/cli/commands.ts", "utf8");
-    const repl = readFileSync("src/cli/repl-commands.ts", "utf8");
+    // Гейт читает файл-владелец подсказки: `model list` переехал в
+    // `cli/model-commands.ts` при разрезании `cli/commands.ts` (правило 6),
+    // а REPL-группа `/model` — в `cli/repl-commands-provider.ts`.
+    const cli = readFileSync("src/cli/model-commands.ts", "utf8");
+    const repl = readFileSync("src/cli/repl-commands-provider.ts", "utf8");
 
     expect(cli).toContain('t("cli.model_hint_cli")');
     expect(cli).not.toContain('t("cli.model_hint")');

@@ -10,7 +10,7 @@
 
 **Tech Stack:** Bun + TS, vitest, happy-dom.
 
-**Spec:** [docs/specs/2026-10-07-web-event-sourced-state-design.md](../specs/2026-10-07-web-event-sourced-state-design.md)
+**Spec:** [docs/archive/specs/2026/2026-10-07-web-event-sourced-state-design.md](../archive/specs/2026/2026-10-07-web-event-sourced-state-design.md)
 
 ---
 

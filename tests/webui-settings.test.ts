@@ -14,7 +14,7 @@ import { stubPlugins } from "./helpers/webui-plugins";
 async function withMemory(fn: (store: MemoryStore, dir: string) => Promise<void>): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "webui-settings-"));
   try {
-    await fn(new MemoryStore(dir), dir);
+    await fn(new MemoryStore(dir, { enabled: false }), dir);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

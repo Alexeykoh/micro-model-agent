@@ -124,15 +124,16 @@ describe("critic gate keeps a non-ok verdict (W2, INV-C2)", () => {
       verify: async () => ({
         status: "critical" as const,
         summary: "broken",
-        issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p" }],
+        issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p", evidence: "test fixture" }],
       }),
       buildPack: (x: never) => x,
     });
     expect(await gate.evaluate(d.deps)).toBe("retry");
     const messagesAfterFirst = d.messages.length;
-    // Тот же вердикт второй раз: повтор (ремонт не тратим), вердикт виден.
+    // Тот же пакет второй раз: критик не вызывается (та же улика), вместо
+    // второй «проверки» — директива «действуй». Вердикт в журнале один.
     expect(await gate.evaluate(d.deps)).toBe("retry");
-    expect(d.events.filter((e) => e === "critic_verdict").length).toBe(2);
-    expect(d.messages.length).toBeGreaterThanOrEqual(messagesAfterFirst);
+    expect(d.events.filter((e) => e === "critic_verdict").length).toBe(1);
+    expect(d.messages.length).toBeGreaterThan(messagesAfterFirst);
   });
 });

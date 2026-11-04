@@ -16,3 +16,6 @@ certification/report-*.json
 .playwright-mcp/
 
 tmp/
+
+# Local agent scratch space (plans, notes) — not shared project config.
+.opencode/plans/

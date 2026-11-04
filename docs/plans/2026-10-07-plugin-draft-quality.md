@@ -1,6 +1,6 @@
 # Plugin draft quality & styling — план
 
-> Спека: [docs/specs/2026-10-07-plugin-draft-quality-design.md](../specs/2026-10-07-plugin-draft-quality-design.md).
+> Спека: [docs/archive/specs/2026/2026-10-07-plugin-draft-quality-design.md](../archive/specs/2026/2026-10-07-plugin-draft-quality-design.md).
 
 **Goal:** малая модель не может записать синтаксически битый черновик, а вид
 сгенерированного файла причёсан; провал загрузки возвращается модели с причиной

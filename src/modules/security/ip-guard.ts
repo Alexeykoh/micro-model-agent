@@ -131,6 +131,50 @@ export function isIpPrivate(hostname: string): boolean {
   return isPrivateIpv4(nums);
 }
 
+/**
+ * Loopback-хост в любой канонической записи: `localhost`, `127.0.0.0/8`
+ * (включая сокращённые/целые/hex-формы вида `127.1`), `::1` и IPv4-mapped
+ * loopback. Скобки IPv6-литерала и хвостовая точка FQDN снимаются.
+ *
+ * Это единственный предикат «loopback» для сети: `allowLoopback` снимает
+ * запрет ровно для него и ни для какого другого приватного адреса.
+ */
+export function isLoopbackHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().trim().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+
+  if (h === "localhost") return true;
+
+  if (h.includes(":")) {
+    const g = expandIpv6(h);
+    if (!g) return false;
+    if (g.slice(0, 7).every((n) => n === 0) && g[7] === 1) return true; // ::1
+    // IPv4-mapped loopback (::ffff:127.0.0.1) в любой форме раскрытия.
+    const high = g.slice(0, 6);
+    if (
+      high.includes(0xffff) &&
+      high.every((n) => n === 0 || n === 0xffff)
+    ) {
+      return ((g[6] >> 8) & 255) === 127;
+    }
+    return false;
+  }
+
+  if (!h.includes(".")) {
+    const n = parseIpNumber(h);
+    return n !== null && n >= 0 && n <= 0xffffffff && ((n >>> 24) & 255) === 127;
+  }
+
+  const parts = h.split(".");
+  const nums: number[] = [];
+  for (const part of parts) {
+    const n = parseIpNumber(part);
+    if (n === null || n > 255) return false;
+    nums.push(n);
+  }
+  while (nums.length < 4) nums.splice(nums.length - 1, 0, 0);
+  return nums.length === 4 && nums[0] === 127;
+}
+
 /** Является ли строка IP-литералом (а не доменным именем). */
 export function isIpLiteral(hostname: string): boolean {
   const h = hostname.toLowerCase().trim().replace(/^\[|\]$/g, "");

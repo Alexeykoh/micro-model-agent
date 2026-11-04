@@ -14,6 +14,8 @@
 #   MMA_INSTALL_BASE    mirror / release base (default: GitHub Releases)
 #   MMA_HOME            install root (default: %USERPROFILE%\.mma)
 #   MMA_INSTALL_DRY_RUN=1  print the plan without network or writes
+#   MMA_INSTALL_NO_PATH=1  do not change the user PATH (CI/tests/corporate)
+#   MMA_NPM_PREFIX      override `npm prefix -g` for legacy-shim detection
 $ErrorActionPreference = "Stop"
 # PS 5.1 redraws a progress bar per block: that alone makes an 80 MB download slow.
 $ProgressPreference = "SilentlyContinue"
@@ -24,12 +26,109 @@ try {
 $MmaRepo = "Alexeykoh/micro-model-agent"
 $Base = if ($env:MMA_INSTALL_BASE) { $env:MMA_INSTALL_BASE.TrimEnd('/') } else { "https://github.com/$MmaRepo/releases/latest/download" }
 $MmaHome = if ($env:MMA_HOME) { $env:MMA_HOME } else { Join-Path $env:USERPROFILE ".mma" }
+$binDir = Join-Path $MmaHome "bin"
+$launcher = Join-Path $binDir "mma.cmd"
 $Dry = $env:MMA_INSTALL_DRY_RUN -eq "1"
+$NoPath = $env:MMA_INSTALL_NO_PATH -eq "1"
 # A flaky or slow link must not require a manual re-run of the installer.
 $Attempts = 3
 
+# --- look & feel ----------------------------------------------------------
+# Colours and animation are strictly best-effort: redirected output (CI, pipes,
+# WinForms hosts) stays plain so logs and tests never contain escape codes.
+$Esc = [char]27
+$Interactive = -not [Console]::IsOutputRedirected -and -not $env:CI
+$Vt = $Interactive -and ($Host.UI.SupportsVirtualTerminal -or $env:WT_SESSION -or $env:TERM)
+function Color([string]$sgr) {
+  if ($Vt) { return "$Esc[$sgr" }
+  return ""
+}
+$Accent = Color "38;5;183m"
+$OkColor = Color "38;5;150m"
+$Dim = Color "38;5;245m"
+$ErrColor = Color "38;5;203m"
+$Bold = Color "1m"
+$Reset = Color "0m"
+$Faces = @{
+  idle = " []      []  "
+  blink = " --      --  "
+  happy = " ^       ^   "
+  sad = " x       x   "
+}
+
+function Show-Mascot([string]$face) {
+  $eyes = $Faces[$face]
+  if (-not $eyes) { $eyes = $Faces["idle"] }
+  Write-Host ""
+  Write-Host "  $Accent+-------------+$Reset  $Bold MMA installer$Reset"
+  Write-Host "  $Accent|$eyes|$Reset  $Dim GitHub Releases - $key$Reset"
+  Write-Host "  $Accent+-------------+$Reset  $Dim home: $MmaHome$Reset"
+  Write-Host ""
+}
+
 function Say([string]$m) { Write-Host "mma: $m" }
-function Die([string]$m) { Write-Error "mma: $m"; exit 1 }
+function Die([string]$m) {
+  if ($Interactive) { Show-Mascot "sad" }
+  Write-Error "mma: $m"
+  exit 1
+}
+
+# True when $path is $dir itself or lives under it (case-insensitive on Windows).
+function Test-Under([string]$path, [string]$dir) {
+  if (-not $path -or -not $dir) { return $false }
+  $p = $path.Replace('/', '\').TrimEnd('\')
+  $d = $dir.Replace('/', '\').TrimEnd('\')
+  return ($p -ieq $d) -or $p.StartsWith("$d\", [StringComparison]::OrdinalIgnoreCase)
+}
+
+# PATH scan instead of Get-Command: Get-Command caches discovery, so it would
+# report the pre-install resolution right after PATH is updated.
+function Find-MmaOnPath([string]$pathValue) {
+  foreach ($dir in ($pathValue -split ';')) {
+    if (-not $dir) { continue }
+    foreach ($name in @("mma.exe", "mma.cmd", "mma.bat", "mma.ps1")) {
+      $candidate = Join-Path $dir $name
+      if (Test-Path $candidate -PathType Leaf) { return $candidate }
+    }
+  }
+  return $null
+}
+
+# npm prefix for legacy detection: explicit override first, then `npm prefix -g`.
+# A missing npm is not an error: then we simply cannot classify the shim as npm.
+function Get-NpmPrefix() {
+  if ($env:MMA_NPM_PREFIX) { return $env:MMA_NPM_PREFIX.TrimEnd('\', '/') }
+  if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { return $null }
+  try {
+    $prefix = & npm prefix -g 2>$null | Select-Object -First 1
+    if ($prefix) { return ([string]$prefix).Trim().TrimEnd('\', '/') }
+  } catch { }
+  return $null
+}
+
+# Retire (rename, never delete) the npm launchers that shadow `mma`. Reversible:
+# the backup name is printed. This is the only reliable way to win when the npm
+# prefix sits in the MACHINE PATH, where user-PATH order cannot help.
+function Retire-LegacyNpmShims([string]$prefix) {
+  $moved = @()
+  foreach ($name in @("mma.cmd", "mma.ps1", "mma")) {
+    $path = Join-Path $prefix $name
+    if (-not (Test-Path $path -PathType Leaf)) { continue }
+    $backup = "$path.legacy-npm.bak"
+    try {
+      if (Test-Path $backup) { Remove-Item $backup -Force }
+      Move-Item $path $backup -ErrorAction Stop
+      $moved += $path
+      Say "retired legacy npm launcher: $path (backup: $backup)"
+    } catch {
+      Say "warning: cannot move $path ($($_.Exception.Message)); remove it with: npm rm -g micro-models-agent"
+    }
+  }
+  if ($moved.Count -gt 0) {
+    Say "after the new mma works, clean up npm: npm rm -g micro-models-agent"
+  }
+  return $moved
+}
 
 # --- detect platform -------------------------------------------------------
 $pa = $env:PROCESSOR_ARCHITECTURE
@@ -43,12 +142,39 @@ if (-not $arch) { Die "unsupported architecture: $pa" }
 $key = "win-$arch"
 $artifact = "mma-$key.tar.gz"
 
+Show-Mascot "idle"
+
+# --- legacy preflight ------------------------------------------------------
+# Detect a shadowing `mma` BEFORE install: the new launcher does not exist yet,
+# so any hit outside $binDir is a legacy copy. Classification as npm needs the
+# npm prefix; without npm we still warn but never touch the file.
+$legacyMma = Find-MmaOnPath $env:Path
+$npmPrefix = $null
+$legacyIsNpm = $false
+if ($legacyMma -and -not (Test-Under $legacyMma $binDir)) {
+  $npmPrefix = Get-NpmPrefix
+  $legacyIsNpm = Test-Under $legacyMma $npmPrefix
+}
+
 if ($Dry) {
   Say "dry-run: platform=$key"
   Say "dry-run: manifest=$Base/latest.json"
   Say "dry-run: artifact=$Base/$artifact"
-  Say "dry-run: install=$MmaHome\versions\<version> ; current=$MmaHome\current ; bin=$MmaHome\bin\mma.cmd"
+  Say "dry-run: install=$MmaHome\versions\<version> ; current=$MmaHome\current ; bin=$launcher"
+  if ($legacyMma) { Say "dry-run: legacy=$legacyMma" } else { Say "dry-run: legacy=none" }
+  if ($legacyIsNpm) { Say "dry-run: npm-prefix=$npmPrefix" }
+  if ($NoPath) {
+    Say "dry-run: path=unchanged (MMA_INSTALL_NO_PATH=1); add manually: $binDir"
+  } else {
+    Say "dry-run: path=prepend $binDir to the user PATH"
+  }
   exit 0
+}
+
+if ($legacyIsNpm) {
+  Say "found legacy npm install: $legacyMma"
+} elseif ($legacyMma) {
+  Say "another mma is on PATH: $legacyMma"
 }
 
 # --- transport -------------------------------------------------------------
@@ -102,11 +228,12 @@ function Get-Artifact([string]$uri, [string]$out, [long]$size, [string]$sha) {
       }
       try {
         if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-          # --progress-bar: a silent 78 MB download looks frozen. --speed-limit
-          # aborts a stalled transfer so the retry loop resumes instead of
-          # hanging until the user gives up.
+          # `--progress-bar` when a human watches; `-sS` keeps CI/test logs
+          # clean while still surfacing real errors. --speed-limit aborts a
+          # stalled transfer so the retry loop resumes instead of hanging.
+          $bar = if ($Interactive) { "--progress-bar" } else { "-sS" }
           $curlArgs = @(
-            "-fL", "--progress-bar", "--connect-timeout", "30",
+            "-fL", $bar, "--connect-timeout", "30",
             "--speed-limit", "2048", "--speed-time", "60", "-o", $out
           )
           if ($have -gt 0) { $curlArgs += @("-C", "-") }
@@ -116,6 +243,7 @@ function Get-Artifact([string]$uri, [string]$out, [long]$size, [string]$sha) {
         } else {
           # Windows PowerShell cannot resume with Invoke-WebRequest: start over.
           if (Test-Path $out) { Remove-Item $out -Force }
+          Say "downloading (no progress available) ..."
           Invoke-WebRequest -Uri $uri -OutFile $out -UseBasicParsing
         }
       } catch {
@@ -199,7 +327,6 @@ try {
   }
 
   $versions = Join-Path $MmaHome "versions"
-  $binDir = Join-Path $MmaHome "bin"
   New-Item -ItemType Directory -Force -Path $versions, $binDir | Out-Null
   $target = Join-Path $versions $version
   $staging = Join-Path $versions "$version.tmp"
@@ -243,20 +370,51 @@ try {
   $content = "@echo off`r`n`"$MmaHome\current\runtime\bun.exe`" `"$MmaHome\current\app\main.js`" %*`r`n"
   Set-Content -Path $launcher -Value $content -Encoding ASCII
 
-  # The session PATH counts too: when the caller already added bin (CI, tests,
-  # a re-run in the same window) the user registry must not be touched.
-  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-  if (($userPath -notlike "*$binDir*") -and ($env:Path -notlike "*$binDir*")) {
-    $newPath = if ([string]::IsNullOrEmpty($userPath)) { $binDir } else { "$userPath;$binDir" }
-    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-    Say "added $binDir to user PATH (restart your terminal)"
-  }
+  # The new launcher exists now, so the old npm one is redundant. Retire it even
+  # when PATH order looks fine: the npm prefix may live in the MACHINE PATH,
+  # which every user-PATH change loses to.
+  if ($legacyIsNpm) { Retire-LegacyNpmShims $npmPrefix | Out-Null }
 
+  # --- PATH: bin must be FIRST, not appended -------------------------------
+  if ($NoPath) {
+    Say "PATH not changed (MMA_INSTALL_NO_PATH=1); add manually: $binDir"
+  } else {
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $entries = @()
+    if ($userPath) { $entries = @($userPath.Split(';') | Where-Object { $_ -ne "" }) }
+    $first = $entries[0]
+    $alreadyFirst = $first -and ($first.TrimEnd('\') -ieq $binDir.TrimEnd('\'))
+    if (-not $alreadyFirst) {
+      $kept = @($entries | Where-Object { -not ($_.TrimEnd('\') -ieq $binDir.TrimEnd('\')) })
+      $newPath = (@($binDir) + $kept) -join ';'
+      [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+      Say "put $binDir first on the user PATH (restart your terminal)"
+    }
+  }
+  # Session PATH counts for the verification below (and for a re-run in the
+  # same window); it never touches the registry when MMA_INSTALL_NO_PATH=1.
+  $env:Path = "$binDir;$env:Path"
+
+  # --- verify --------------------------------------------------------------
   $bun = Join-Path $current "runtime\bun.exe"
   $mainJs = Join-Path $current "app\main.js"
+  $resolved = Find-MmaOnPath $env:Path
+  if ($resolved -and (Test-Under $resolved $binDir)) {
+    Say "verified: mma -> $resolved"
+  } elseif ($resolved) {
+    Say "warning: mma still resolves to $resolved instead of $launcher"
+    if (Test-Under $resolved $npmPrefix) {
+      Say "run: npm rm -g micro-models-agent"
+    } else {
+      Say "move $binDir before $(Split-Path -Parent $resolved) on PATH"
+    }
+  } else {
+    Say "note: mma is not resolvable in this session; open a new terminal"
+  }
   if ((Test-Path $bun) -and (Test-Path $mainJs)) {
     try { & $bun $mainJs --version | Out-Null } catch { }
   }
+  Show-Mascot "happy"
   Say "installed MMA $version"
   # The verified tarball is no longer needed; a failed run keeps it for resume.
   Remove-Item $tar -Force -ErrorAction SilentlyContinue

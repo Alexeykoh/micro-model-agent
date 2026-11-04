@@ -201,7 +201,7 @@ class Mascot {
       cfg: this.cfg, prevCfg: this.prevCfg,
       colors: this.colors, prevColors: this.prevColors,
       state: this.state, prevState: this.prevState,
-      pose: this.pose, time: reduced ? 0.9 : this.time, entry: this.entry,
+      pose: this.pose, time: this.time, entry: this.entry,
       seed: this.seed, prevSeed: this.prevSeed,
       mix: reduced ? 1 : this.mix, pulse: this.pulse,
       trackX: this.trackX, trackY: this.trackY, blinkOnce: this.blinkOnce,
@@ -218,8 +218,13 @@ class Mascot {
 }
 
 // ---------- shared loop ----------
+// A4 (INV-W9): при `prefers-reduced-motion` цикл НЕ останавливается — лоадер
+// обязан оставаться живым признаком загрузки. Двигается только фаза (моргание),
+// кадр обновляется реже, пружинные переходы поз отключены в `setState`.
+const REDUCED_FRAME_MS = 100;
 let raf = 0;
 let last = 0;
+let lastReducedDraw = 0;
 let frames = 0;
 function loop(now: number): void {
   const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
@@ -228,22 +233,19 @@ function loop(now: number): void {
   if (++frames % 120 === 0) {
     for (const m of instances) if (!m.canvas.isConnected) m.destroy();
   }
+  const drawNow = !reduced || now - lastReducedDraw >= REDUCED_FRAME_MS;
+  if (drawNow) lastReducedDraw = now;
   for (const m of instances) {
     if (!m.visible) continue;
     m.advance(dt);
-    m.draw();
+    if (drawNow) m.draw();
   }
   raf = requestAnimationFrame(loop);
 }
 function start(): void {
-  if (raf || reduced || typeof requestAnimationFrame !== "function") return;
+  if (raf || typeof requestAnimationFrame !== "function") return;
   last = 0;
   raf = requestAnimationFrame(loop);
-}
-function stop(): void {
-  if (!raf || typeof cancelAnimationFrame !== "function") return;
-  cancelAnimationFrame(raf);
-  raf = 0;
 }
 
 export function attachMascot(canvas: HTMLCanvasElement, state: FaceState): MascotHandle {
@@ -267,8 +269,7 @@ if (typeof window !== "undefined") {
   const mq = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   mq?.addEventListener("change", (e) => {
     reduced = e.matches;
-    if (reduced) stop();
-    else start();
+    start(); // A4: цикл живёт и при `reduce` — перерисовываем в новом режиме
     for (const m of instances) m.draw();
   });
   if (typeof MutationObserver === "function" && document.body) {

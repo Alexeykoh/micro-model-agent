@@ -3,7 +3,9 @@
 //
 // UX contract (B-37): validation errors render inside the form next to Save
 // (aria-live), `command`/`url` are shown per transport, and transport is a real
-// choice with no empty option.
+// choice with no empty option. The layout is a two-column grid: identity and
+// transport on the first row, the transport-specific endpoint full-width, and
+// JSON maps in a wide, readable "additional" block.
 import { el, link } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
@@ -21,7 +23,7 @@ interface McpFields {
   transport: HTMLSelectElement;
   command: HTMLInputElement;
   url: HTMLInputElement;
-  args: HTMLInputElement;
+  args: HTMLTextAreaElement;
   timeout: HTMLInputElement;
   env: HTMLTextAreaElement;
   headers: HTMLTextAreaElement;
@@ -46,35 +48,67 @@ function errorWriter(box: HTMLElement): (msg: string) => void {
   };
 }
 
+/** Multi-line JSON editor: monospace, no spellcheck, room for one object. */
+function jsonArea(value: string, placeholder: string): HTMLTextAreaElement {
+  const area = el("textarea");
+  area.className = "pform-json";
+  area.rows = 3;
+  area.spellcheck = false;
+  area.value = value;
+  area.placeholder = placeholder;
+  return area;
+}
+
+/** Checkbox row: label + optional hint on the right, control on the left. */
+function toggleField(label: string, input: HTMLInputElement, hint: string): HTMLElement {
+  const row = el("label", "pform-toggle pform-wide");
+  row.appendChild(input);
+  const body = el("span", "pform-toggle-body");
+  body.appendChild(el("span", "pform-toggle-label", label));
+  if (hint) body.appendChild(el("span", "pform-hint", hint));
+  row.appendChild(body);
+  input.setAttribute("aria-label", label);
+  return row;
+}
+
 /** Inline MCP add/edit form body, rendered inside the nested dialog. */
 export function mcpForm(): HTMLElement {
   const mode = (settings.mcpForm && settings.mcpForm.mode) || "add";
   const editing: Dict = (settings.mcpForm && settings.mcpForm.entry) || {};
-  const box = el("div", "pform");
-  const grid = el("div", "pform-grid");
+  const box = el("div", "pform pform-mcp");
+  const grid = el("div", "pform-grid pform-grid-2");
   const f: McpFields = {
     name: providerInput(editing.name || "", "text", "my-server"),
     transport: providerSelect([...TRANSPORTS], editing.transport || "stdio", false),
     command: providerInput(editing.command || "", "text", "npx"),
     url: providerInput(editing.url || "", "text", "https://…"),
-    args: providerInput(editing.args ? JSON.stringify(editing.args) : "", "text", '["--stdio"]'),
-    timeout: providerInput(editing.timeout != null ? String(editing.timeout) : "", "number", "30000"),
-    env: el("textarea"),
-    headers: el("textarea"),
+    args: jsonArea(editing.args ? JSON.stringify(editing.args) : "", '["--stdio"]'),
+    timeout: providerInput(
+      editing.timeout != null ? String(editing.timeout) : "",
+      "number",
+      "30000",
+    ),
+    env: jsonArea("", '{"TOKEN": "…"}'),
+    headers: jsonArea("", '{"Authorization": "…"}'),
     enabled: providerCheck(editing.enabled !== false),
   };
-  const nameField = mcpLiteralField(t("web.settings.mcp_field_name"), f.name, "name");
+  const nameField = mcpLiteralField(t("web.settings.mcp_field_name"), f.name, "name", {
+    hint: t("web.settings.mcp_hint_name"),
+  });
   const transportField = mcpLiteralField(
     t("web.settings.mcp_field_transport"),
     f.transport,
     "transport",
+    { hint: t("web.settings.mcp_hint_transport") },
   );
-  const commandField = mcpLiteralField(
-    t("web.settings.mcp_field_command"),
-    f.command,
-    "command",
-  );
-  const urlField = mcpLiteralField(t("web.settings.mcp_field_url"), f.url, "url");
+  const commandField = mcpLiteralField(t("web.settings.mcp_field_command"), f.command, "command", {
+    wide: true,
+    hint: t("web.settings.mcp_hint_command"),
+  });
+  const urlField = mcpLiteralField(t("web.settings.mcp_field_url"), f.url, "url", {
+    wide: true,
+    hint: t("web.settings.mcp_hint_url"),
+  });
   grid.appendChild(nameField);
   grid.appendChild(transportField);
   grid.appendChild(commandField);
@@ -82,16 +116,44 @@ export function mcpForm(): HTMLElement {
   box.appendChild(grid);
 
   const adv = el("details", "pform-adv");
+  adv.open = true;
   adv.appendChild(el("summary", "", t("web.settings.provider_advanced")));
+  const advGrid = el("div", "pform-grid pform-grid-2");
   const envKeys = Array.isArray(editing.envKeys) ? editing.envKeys : [];
   const headerKeys = Array.isArray(editing.headerKeys) ? editing.headerKeys : [];
-  f.env.placeholder = envKeys.length ? "stored: " + envKeys.join(", ") + " — blank keeps" : '{"TOKEN": "…"}';
-  f.headers.placeholder = headerKeys.length ? "stored: " + headerKeys.join(", ") + " — blank keeps" : '{"Authorization": "…"}';
-  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_args"), f.args, "args"));
-  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_timeout"), f.timeout, "timeout"));
-  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_env"), f.env, "env"));
-  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_headers"), f.headers, "headers"));
-  adv.appendChild(mcpLiteralField(t("web.settings.mcp_field_enabled"), f.enabled, "enabled"));
+  f.env.placeholder = envKeys.length
+    ? "stored: " + envKeys.join(", ") + " — blank keeps"
+    : '{"TOKEN": "…"}';
+  f.headers.placeholder = headerKeys.length
+    ? "stored: " + headerKeys.join(", ") + " — blank keeps"
+    : '{"Authorization": "…"}';
+  advGrid.appendChild(
+    mcpLiteralField(t("web.settings.mcp_field_args"), f.args, "args", {
+      wide: true,
+      hint: t("web.settings.mcp_hint_args"),
+    }),
+  );
+  advGrid.appendChild(
+    mcpLiteralField(t("web.settings.mcp_field_timeout"), f.timeout, "timeout", {
+      hint: t("web.settings.mcp_hint_timeout"),
+    }),
+  );
+  advGrid.appendChild(
+    mcpLiteralField(t("web.settings.mcp_field_env"), f.env, "env", {
+      wide: true,
+      hint: t("web.settings.mcp_hint_env"),
+    }),
+  );
+  advGrid.appendChild(
+    mcpLiteralField(t("web.settings.mcp_field_headers"), f.headers, "headers", {
+      wide: true,
+      hint: t("web.settings.mcp_hint_headers"),
+    }),
+  );
+  advGrid.appendChild(
+    toggleField(t("web.settings.mcp_field_enabled"), f.enabled, t("web.settings.mcp_hint_enabled")),
+  );
+  adv.appendChild(advGrid);
   box.appendChild(adv);
 
   // Only the field that transport actually uses is visible; advanced fields
@@ -116,7 +178,9 @@ export function mcpForm(): HTMLElement {
   box.addEventListener("change", clearError);
 
   const actions = el("div", "pform-actions");
-  actions.appendChild(link(t("web.settings.save"), "", () => void submitMcpForm(f, mode, editing, showError)));
+  actions.appendChild(
+    link(t("web.settings.save"), "", () => void submitMcpForm(f, mode, editing, showError)),
+  );
   actions.appendChild(link(t("web.settings.cancel"), "dim", () => closeSubDialog()));
   box.appendChild(actions);
   return box;
@@ -131,8 +195,12 @@ function parseJsonMap(raw: string): { present: boolean; value: Dict | null } {
   } catch {
     return { present: true, value: null };
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { present: true, value: null };
-  if (!Object.values(parsed).every((v) => typeof v === "string")) return { present: true, value: null };
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { present: true, value: null };
+  }
+  if (!Object.values(parsed).every((v) => typeof v === "string")) {
+    return { present: true, value: null };
+  }
   return { present: true, value: parsed as Dict };
 }
 
@@ -191,7 +259,8 @@ async function submitMcpForm(
     body.timeout = n;
   }
   body.enabled = f.enabled.checked;
-  const target = mode === "edit" ? "/api/mcp/" + encodeURIComponent(editing.id || editing.name) : "/api/mcp";
+  const target =
+    mode === "edit" ? "/api/mcp/" + encodeURIComponent(editing.id || editing.name) : "/api/mcp";
   const r = await api<Dict>(target, { method: mode === "edit" ? "PUT" : "POST", body });
   if (r.ok && r.data && r.data.ok) {
     setIndicator(t("web.settings.mcp_saved"), false);

@@ -16,6 +16,7 @@ import {
   type SubagentUsageRecord,
 } from "./subagent-runs";
 import { finishSubagentRun, registerSubagentRun } from "./subagent-registry";
+import { EMPTY_HEALTH, recordToolOutcome, type RunHealth } from "./subagent-health";
 
 /** Колбэки, которые получает дочерний `Agent.run`. */
 export interface SubagentCallbacks {
@@ -40,6 +41,8 @@ export interface SubagentObserverInfo {
 export interface SubagentObserver {
   runId: string;
   callbacks: SubagentCallbacks;
+  /** Накопленное здоровье прогона (A7): тулы, чтения, запись, блоки. */
+  health(): RunHealth;
   start(): void;
   finish(
     status: SubagentRunStatus,
@@ -59,6 +62,7 @@ export function createSubagentObserver(
   const startedAt = Date.now();
   let ended = false;
   let toolSeq = 0;
+  const health: RunHealth = { ...EMPTY_HEALTH };
   // `Agent.run` не несёт id вызова, если поверхность их не дала — LIFO по имени.
   const pendingIds = new Map<string, string[]>();
   const emit = (event: SubagentRunEvent): void => emitSubagentEvent(ctx, event);
@@ -93,6 +97,7 @@ export function createSubagentObserver(
         ...(ev.duration !== undefined ? { durationMs: ev.duration } : {}),
         ...(ev.output !== undefined ? { output: ev.output } : {}),
       });
+      recordToolOutcome(health, ev.tool, !ev.error, ev.output);
     },
     onPhase: (phase) => emit({ kind: "phase", runId, phase }),
     onReasoning: (reasoning) => emit({ kind: "reasoning", runId, chunk: reasoning }),
@@ -102,6 +107,9 @@ export function createSubagentObserver(
   return {
     runId,
     callbacks,
+    health(): RunHealth {
+      return { ...health };
+    },
     start(): void {
       registerSubagentRun({
         runId,
@@ -142,6 +150,7 @@ export function createSubagentObserver(
         ...(output !== undefined ? { output } : {}),
         ...(error !== undefined ? { error } : {}),
         ...(usage ? { usage } : {}),
+        health: { ...health },
       });
     },
   };

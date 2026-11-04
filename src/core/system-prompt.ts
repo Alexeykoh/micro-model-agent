@@ -215,6 +215,11 @@ export function buildSystemInfo(
         `Denied network domains: ${domains}${sec.network.deniedDomains.length > 10 ? ", …" : ""}.`,
       );
     }
+    if (sec.network?.enabled && sec.network.allowLoopback) {
+      secLines.push(
+        "Loopback dev-server URLs (localhost, 127.0.0.1, ::1) are allowed for web tools.",
+      );
+    }
     if (secLines.length > 1) {
       lines.push(...secLines);
     }

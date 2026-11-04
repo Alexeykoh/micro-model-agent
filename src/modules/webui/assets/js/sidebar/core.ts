@@ -27,6 +27,7 @@ import { renderMcp, sidebarMcpState } from "./mcp.js";
 import { applyPromptI18n, initPromptPopup } from "./prompt.js";
 import { initSecurityPanel, sidebarSecurityState } from "./security.js";
 import { initRequestPopup } from "./request-popup.js";
+import { initSidebarResize, applySidebarResizeI18n } from "./resize.js";
 
 /**
  * Куда ведёт контекстная кнопка настроек из полосы вкладок. Одна кнопка
@@ -127,8 +128,11 @@ export function applySidebarI18n(): void {
       const label = t("web.sidebar.tab_" + id);
       tab.title = label;
       tab.setAttribute("aria-label", label);
+      const lab = tab.querySelector<HTMLElement>(".sb-lab");
+      if (lab) lab.textContent = label;
     }
   });
+  applySidebarResizeI18n();
   setSidebarTab(sb.active, false);
   renderList();
   traceScrollI18n();
@@ -181,6 +185,20 @@ export function initSidebar(): void {
     span.textContent = "";
     span.appendChild(tabIcon(id));
   });
+
+  // U7: an icon-only strip made the tabs guesswork. The label is a real text
+  // node inside the button, so it is exposed to sighted users and screen
+  // readers alike; `applySidebarI18n` rewrites it on a locale switch.
+  root.querySelectorAll<HTMLElement>(".sb-tab").forEach((tab) => {
+    if (tab.querySelector(".sb-lab")) return;
+    const label = document.createElement("span");
+    label.className = "sb-lab";
+    label.setAttribute("data-lab", tab.dataset.tab || "session");
+    label.textContent = t("web.sidebar.tab_" + (tab.dataset.tab || "session"));
+    tab.appendChild(label);
+  });
+
+  initSidebarResize(root, document.getElementById("sbResizer"));
 
   root.querySelectorAll<HTMLElement>(".sb-tab").forEach((tab) => {
     tab.addEventListener("click", () => setSidebarTab(tab.dataset.tab || "session"));

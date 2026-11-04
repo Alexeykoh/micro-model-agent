@@ -24,7 +24,7 @@ function tempDir(): string {
 
 describe("memory file cap", () => {
   it("keeps the freshest tail and the header", () => {
-    const store = new MemoryStore(tempDir());
+    const store = new MemoryStore(tempDir(), { enabled: false });
     for (let i = 0; i < 500; i++) {
       store.appendRule("errors", `rule ${i}`, "cause", "solution");
     }

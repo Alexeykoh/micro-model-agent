@@ -6,6 +6,22 @@ import type { CriticVerdict } from "../../modules/critic/types";
 import type { CriticGateDeps } from "./critic-contract";
 import { criticDegradeLine } from "./critic-degrade-line";
 
+/** Ключи аргументов, которые показывают предмет проверки (не тело файла). */
+const EVIDENCE_ARG_KEYS = ["path", "from", "to", "command", "url", "pattern"];
+
+/** Улики одной строкой: `tool(path)` — до 8 событий, значение обрезано. */
+function evidenceDigest(toolEvents: CriticGateDeps["toolEvents"]): string {
+  return toolEvents
+    .slice(0, 8)
+    .map((e) => {
+      const key = EVIDENCE_ARG_KEYS.map((k) => e.args?.[k]).find(
+        (v): v is string => typeof v === "string" && v.trim() !== "",
+      );
+      return key ? `${e.tool}(${key.replace(/\s+/g, " ").slice(0, 60)})` : e.tool;
+    })
+    .join(", ");
+}
+
 /** Субъект проверки + действующий бюджет — до вызова LLM. */
 export function logCheck(deps: CriticGateDeps, budgetMs?: number): void {
   // Сводка субъекта проверки: без неё строка `critic_check` в Trace пуста —
@@ -20,6 +36,8 @@ export function logCheck(deps: CriticGateDeps, budgetMs?: number): void {
     beforeFinish: deps.beforeFinish,
     mutations: deps.state.mutationsSinceCritic,
     tools: tools.slice(0, 8),
+    // Что именно видел критик (A6): имя тула + ключевой аргумент, без тел.
+    ...(deps.toolEvents.length > 0 ? { evidence: evidenceDigest(deps.toolEvents) } : {}),
     summary,
     // Бюджет виден в логе: иначе непонятно, каким потолком резало проверку.
     budgetMs,
@@ -86,12 +104,16 @@ export function logDegraded(
   deps.onMeta?.(`\n${criticDegradeLine(reason)}\n`, "progress");
 }
 
-/** Не-ok вердикт: всегда с длительностью — по ней видно цену проверки. */
+/**
+ * Не-ok вердикт: всегда с длительностью — по ней видно цену проверки.
+ * @param downgraded причина понижения статуса (A6), попадает в журнал.
+ */
 export function logVerdict(
   deps: CriticGateDeps,
   verdict: CriticVerdict,
   count: number,
   durationMs: number,
+  downgraded?: string,
 ): void {
   deps.slog.logCritic("critic_verdict", {
     status: verdict.status,
@@ -99,6 +121,7 @@ export function logVerdict(
     issueCount: count,
     iteration: deps.iteration,
     duration: durationMs,
+    ...(downgraded ? { downgraded } : {}),
   });
   deps.logger.diagnostic(
     "info",
@@ -108,6 +131,16 @@ export function logVerdict(
 
 /** Бюджеты исчерпаны: вердикт залогирован, ответ принимается как есть. */
 export function logExhausted(deps: CriticGateDeps, verdict: CriticVerdict): void {
+  // Принятие не-ok вердикта — событие, а не только app-лог: иначе разбор
+  // сессии видит `critical`, затем молчаливый финал и не может ответить,
+  // почему ответ ушёл (живая сессия ses_mvzp8cuk).
+  deps.slog.logCritic("critic_verdict", {
+    status: verdict.status,
+    summary: verdict.summary,
+    accepted: true,
+    exhausted: true,
+    iteration: deps.iteration,
+  });
   deps.logger.diagnostic(
     "warn",
     `Critic ${verdict.status}: ${verdict.summary} - budget exhausted, accepting the answer`,

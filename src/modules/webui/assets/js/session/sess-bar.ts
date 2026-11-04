@@ -36,6 +36,8 @@ const sessTools = document.getElementById("sessTools");
 const sessDD = document.getElementById("sessDD");
 const barTop = document.querySelector(".bar-top");
 const newChatBtn = document.getElementById("newChat");
+const toggleBtn = document.getElementById("toggleSidebar");
+const settingsBtn = document.getElementById("openSettings");
 // Anchor remembering the desktop slot of the + / list controls.
 const topToolsAnchor = document.createComment("top-tools");
 if (barTop && newChatBtn) barTop.insertBefore(topToolsAnchor, newChatBtn);
@@ -60,6 +62,9 @@ export function renderSessBar(): void {
   sessNextBtn.disabled = tabState.tabs.length < 2;
   sessCloseBtn.disabled = !has;
   sessNameBtn.disabled = !has;
+  // U4: на телефоне строка сессии (prev/next/close) нужна только при
+  // нескольких вкладках; с одной — одна панель.
+  document.body.classList.toggle("multi-tab", tabState.tabs.length > 1);
   // Tab open/close/switch re-renders the pinned queue strip for the new active
   // tab (the last tab closing must drop its rows).
   renderQueueStrip();
@@ -70,10 +75,17 @@ export function renderSessBar(): void {
 function placeTopTools(): void {
   if (!barTop || !sessTools || !newChatBtn || !sessDD) return;
   if (window.matchMedia("(max-width: 760px)").matches) {
-    sessTools.append(newChatBtn, sessDD);
+    // U4: одна панель на телефоне. Все кнопки живут в верхней полосе рядом с
+    // вкладками; строка сессии (.bar-sub) на мобильном скрыта.
+    barTop.appendChild(newChatBtn);
+    barTop.appendChild(sessDD);
+    if (toggleBtn) barTop.appendChild(toggleBtn);
+    if (settingsBtn) barTop.appendChild(settingsBtn);
   } else {
     barTop.insertBefore(newChatBtn, topToolsAnchor);
     barTop.insertBefore(sessDD, topToolsAnchor);
+    if (toggleBtn) barTop.appendChild(toggleBtn);
+    if (settingsBtn) barTop.appendChild(settingsBtn);
   }
 }
 

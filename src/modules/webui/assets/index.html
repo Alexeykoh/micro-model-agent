@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f0f10">
   <title>MMA Web</title>
   <link rel="icon" href="/api/favicon">
   <link rel="stylesheet" href="/styles.css">
@@ -15,6 +16,8 @@
 </head>
 <body>
 
+<a class="skip-link" href="#msgs">skip to messages</a>
+
 <script>
   // Apply the stored theme before the boot splash paints (no dark flash on light).
   // This is only a CACHE mirror of the server config (`ui.theme`/`ui.themeMode`):
@@ -26,6 +29,13 @@
       var light = theme === "light" ||
         (theme === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
       if (light) document.body.classList.add("light");
+      // U10: браузеру сообщаем схему и цвет хрома до первой отрисовки —
+      // иначе нативные скроллбары и адресная строка остаются светлыми.
+      document.documentElement.style.colorScheme = light ? "light" : "dark";
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", light ? "#f7f7f4" : "#0f0f10");
+      var locale = localStorage.getItem("mma-locale");
+      if (locale === "en" || locale === "ru") document.documentElement.lang = locale;
       var ui = localStorage.getItem("mma-ui-theme") || "console";
       var uiThemes = ["console", "groovebox", "neon", "paper", "contrast", "winter", "spring", "summer", "autumn"];
       if (uiThemes.indexOf(ui) >= 0) document.body.classList.add(ui);
@@ -36,13 +46,25 @@
 <div class="setup-gate" id="setupGate" hidden></div>
 
 <div class="splash" id="bootSplash" role="status" aria-live="polite">
-  <span class="mdl bs-face c-dim st-load" aria-hidden="true"></span>
+  <span class="mdl bs-face c-dim st-load" aria-hidden="true"><span class="eyes"><i class="eye left"></i><i class="eye right"></i></span></span>
   <div class="bs-cap">
     <div class="l1" id="bootCap">connecting…</div>
     <div class="l2">micro-models-agent</div>
   </div>
   <div class="bs-prog" aria-hidden="true"><i></i></div>
 </div>
+<script>
+  // Hard failsafe: a module error or a stalled import must not trap the page
+  // behind the splash forever (the app's own cap needs app.js to run).
+  // 12 s: a live boot extends the cap with its stages (A3), but without
+  // app.js the splash still goes away on its own.
+  window.setTimeout(function () {
+    var s = document.getElementById("bootSplash");
+    if (!s || s.hidden) return;
+    s.classList.add("hide");
+    window.setTimeout(function () { s.hidden = true; }, 500);
+  }, 12000);
+</script>
 
 <div class="bar-top">
   <button class="icon-btn primary" id="newChat" title="new chat" aria-label="new chat">+</button>
@@ -52,8 +74,11 @@
       <input class="searchbox" id="sessSearch" type="search" autocomplete="off" spellcheck="false" placeholder="search sessions…" aria-label="search sessions">
       <div class="h" id="sessActiveHeader">active</div>
       <div id="sessActiveList"></div>
+      <div class="h" id="sessPinnedHeader" hidden>pinned</div>
+      <div id="sessPinnedList"></div>
       <div class="h" id="sessRecentHeader">recent</div>
       <div id="sessRecentList"></div>
+      <div class="sess-prune" id="sessPrune" hidden></div>
       <div class="sep"></div>
       <button class="act" type="button" id="sessNew">+ new session</button>
       <button class="act" type="button" id="sessRefresh">↻ refresh</button>
@@ -75,8 +100,8 @@
 </div>
 
 <div class="layout">
-  <div class="chat">
-    <div class="msgs" id="msgs" role="log" aria-label="conversation"></div>
+  <main class="chat" id="main">
+    <div class="msgs" id="msgs" role="log" aria-label="conversation" tabindex="-1"></div>
     <div class="visually-hidden" id="live" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <div class="input-area">
@@ -132,13 +157,15 @@
           </div>
           <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
         </div>
-        <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span></div>
+        <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span><span id="hintShort">Ctrl+K — sessions · Ctrl+P — files</span><span id="hintTouch">tap ↑ — send</span></div>
       </div>
       <div class="ws-line" id="wsLine" hidden></div>
     </div>
-  </div>
+  </main>
 
   <div class="sb">
+    <div class="sb-resizer" id="sbResizer" role="separator" aria-orientation="vertical"
+         aria-label="sidebar width" tabindex="0" title="drag to resize the sidebar"></div>
     <div class="sb-tabs-bar">
     <div class="sb-tabs" role="tablist" aria-label="sidebar">
       <button class="sb-tab on" type="button" role="tab" data-tab="session" aria-selected="true" aria-controls="pane-session" title="Session">
@@ -249,11 +276,17 @@
     <div class="sb-pane" id="pane-files" role="tabpanel" data-pane="files" hidden>
       <div class="files-body">
         <div class="files-side" id="filesSide">
-          <div class="files-bar" id="filesBar">
-            <button class="fbtn" type="button" id="filesCollapseAll" aria-label="collapse all"></button>
-            <button class="fbtn" type="button" id="filesExpandAll" aria-label="expand all"></button>
-            <button class="fbtn" type="button" id="filesRefresh" aria-label="refresh"></button>
+          <div class="files-head" id="filesHead">
+            <span class="files-head-title" id="filesHeadTitle">Files</span>
+            <div class="files-actions">
+              <button class="fbtn" type="button" id="filesCollapseAll" aria-label="collapse all"></button>
+              <button class="fbtn" type="button" id="filesExpandAll" aria-label="expand all"></button>
+              <button class="fbtn" type="button" id="filesRefresh" aria-label="refresh"></button>
+            </div>
+          </div>
+          <div class="files-search-row" id="filesSearchRow">
             <input class="fsearch" id="filesSearch" type="search" autocomplete="off" spellcheck="false" placeholder="search" aria-label="search" />
+            <button class="fbtn fsearch-clear" type="button" id="filesSearchClear" aria-label="clear search" hidden></button>
           </div>
           <div class="files-tree" id="filesTree" role="tree" tabindex="0" aria-label="files"></div>
           <div class="files-search-results" id="filesSearchResults" hidden></div>
@@ -359,7 +392,7 @@
 </div>
 
 <script defer src="/hljs.js"></script>
-<script src="/setup.js"></script>
+<script type="module" src="/setup.js"></script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>

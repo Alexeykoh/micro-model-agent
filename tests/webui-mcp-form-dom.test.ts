@@ -149,3 +149,17 @@ describe("MCP form: transport-aware fields (B-37)", () => {
     }
   });
 });
+
+describe("MCP form: readable layout", () => {
+  it("uses a two-column shell, full-width endpoint/JSON maps and field hints", () => {
+    const form = render({ name: "playwright", transport: "stdio", command: "npx" });
+    expect(form.classList.contains("pform-mcp")).toBe(true);
+    expect(form.querySelector(".pform-grid-2")).not.toBeNull();
+    expect(field(form, "command").classList.contains("pform-wide")).toBe(true);
+    expect(field(form, "url").classList.contains("pform-wide")).toBe(true);
+    expect(field(form, "args").querySelector("textarea")).not.toBeNull();
+    expect(field(form, "args").classList.contains("pform-wide")).toBe(true);
+    expect(field(form, "name").querySelector(".pform-hint")).not.toBeNull();
+    expect(form.querySelector(".pform-toggle input[type=checkbox]")).not.toBeNull();
+  });
+});

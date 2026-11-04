@@ -7,10 +7,12 @@
  * проброс уведомлений одинаковы для обеих поверхностей.
  */
 import { realpathSync } from "node:fs";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { readMmaVersion } from "../../core/version";
 import { defaultOutputBus } from "../../output";
 import { isDevEntryPath } from "./dev-detect";
+import { checkPathShadowing, classifyInstall } from "../../core/install-path";
+import { t } from "../../i18n/index";
 import { Updater, type UpdaterDeps } from "./checker";
 import { pruneStaleVersions } from "./versions";
 import { UpdaterModule, type UpdaterLogger, type UpdateNotice } from "./module";
@@ -30,6 +32,8 @@ export interface CreateUpdaterOptions {
   onNotice?: (notice: UpdateNotice) => void;
   /** Логгер терминала; по умолчанию — no-op (веб не печатает в stdout). */
   logger?: UpdaterLogger;
+  /** PATH для проверки теневого `mma` (тесты; по умолчанию `process.env.PATH`). */
+  pathEnv?: string;
   /** Инжектируемые зависимости апдейтера (тесты, кастомные окружения). */
   deps?: UpdaterDeps;
 }
@@ -47,13 +51,21 @@ export interface CreateUpdaterOptions {
 export function createUpdater(opts: CreateUpdaterOptions): UpdaterModule | undefined {
   const dev = isDevEntryPath(opts.entryPath);
   try {
+    const logger = opts.logger ?? quietLogger();
     const updater = new Updater(readMmaVersion(), opts.deps);
-    const module = new UpdaterModule(
-      opts.config,
-      updater,
-      opts.logger ?? quietLogger(),
-      opts.onNotice,
-    );
+    const installRoot = updater.getInstallRoot();
+    if (classifyInstall(opts.entryPath, installRoot) === "release") {
+      const shadow = checkPathShadowing(installRoot, opts.pathEnv ?? process.env.PATH ?? "");
+      if (shadow.shadowed && shadow.resolved) {
+        logger.warn(
+          t("updater.path_shadowed", {
+            resolved: shadow.resolved,
+            bin: join(installRoot, "bin"),
+          }),
+        );
+      }
+    }
+    const module = new UpdaterModule(opts.config, updater, logger, opts.onNotice);
     if (dev) module.setInstallEnabled(false);
     pruneAfterRestart(updater, opts.entryPath);
     module.start();
@@ -74,8 +86,7 @@ export function createUpdater(opts: CreateUpdaterOptions): UpdaterModule | undef
 function pruneAfterRestart(updater: Updater, entryPath: string): void {
   const root = resolve(updater.getInstallRoot());
   const entry = resolve(entryPath);
-  const norm = (p: string): string =>
-    process.platform === "win32" ? p.toLowerCase() : p;
+  const norm = (p: string): string => (process.platform === "win32" ? p.toLowerCase() : p);
   if (!norm(entry).startsWith(`${norm(root)}${sep}`)) return;
   void pruneStaleVersions({ root, keep: [runningVersionDir(entry)] }).catch(() => {});
 }

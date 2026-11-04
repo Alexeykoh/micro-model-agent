@@ -121,4 +121,27 @@ describe("sidebar DOM behaviour", () => {
     expect(rows().length).toBe(1);
     expect(rows()[0].textContent).toContain("12");
   });
+
+  // U7: the tab strip used to be icon-only - similar glyphs with no words.
+  it("renders a text label inside every sidebar tab", () => {
+    const tabs = win.document.querySelectorAll<HTMLElement>(".sb-tab");
+    expect(tabs.length).toBeGreaterThan(0);
+    for (const tab of tabs) {
+      const lab = tab.querySelector<HTMLElement>(".sb-lab");
+      expect(lab).not.toBeNull();
+      expect(lab?.textContent?.length).toBeGreaterThan(0);
+      expect(lab?.dataset.lab).toBe(tab.dataset.tab);
+    }
+  });
+
+  // U15: a trace row without a time cannot be matched to the answer.
+  it("stamps a trace row and its turn header with wall-clock time", () => {
+    sidebar.sidebarSessionChanged("ses_T");
+    sidebar.sidebarTraceEvent("tool_start", { toolCallId: "c3", name: "grep", args: { q: "x" } });
+    const stamp = rows()[0].querySelector<HTMLElement>(".ts");
+    expect(stamp?.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(stamp?.title).toMatch(/^\+\d+\.\d+s$/);
+    const header = win.document.querySelector<HTMLElement>(".trace-turn");
+    expect(header?.textContent).toMatch(/\d{2}:\d{2}:\d{2}/);
+  });
 });

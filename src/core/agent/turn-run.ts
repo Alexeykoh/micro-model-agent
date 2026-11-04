@@ -121,11 +121,11 @@ export async function runTurn(
     if (meta && (meta.nameSource ?? "default") !== "manual") {
       sessionManager.rename(meta.id, deriveSessionName(input), "auto");
       if (config.session.autoName !== false) {
-        const chat: TitleChat = async (prompt, signal) => {
+        const chat: TitleChat = async (prompt, signal, options) => {
           let text = "";
           for await (const chunk of llmProvider.chat([{ role: "user", content: prompt }], undefined, signal, {
-            maxTokens: TITLE_MAX_TOKENS,
-            reasoningEffort: "none",
+            maxTokens: options?.maxTokens ?? TITLE_MAX_TOKENS,
+            reasoningEffort: options?.reasoningEffort ?? "none",
             sessionId: meta?.id,
           })) {
             if (chunk.type === "text" && chunk.content) text += chunk.content;

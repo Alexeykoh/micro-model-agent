@@ -6,22 +6,15 @@ import { LspClient, type LspClientLogger } from "./client";
 import { getServerForLanguage, DEFAULT_LSP_CONFIG } from "./config";
 import type { LspSymbolLocation } from "./symbols";
 import { findProjectRoot } from "./project-root";
-import { isPathInScope } from "../security/path-validator";
-import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
-import { safeResolvePath } from "../../tools/path-utils";
-import { t } from "../../i18n/index";
-import type { LspConfig, LspServerConfig } from "./types";
-import { collectCheckFiles } from "./check-tool";
-import { renderCheckReport, type CheckAccumulator } from "./check-report";
+import type { LspConfig } from "./types";
+import { createLspCheckToolDefinitions, lspFailureNote } from "./check-tool-def";
 import { runWebCheck, type WebCheckDeps } from "./web-check";
 import { runChangedChecks } from "./changed-check";
-import { runCheckFiles } from "./check-run";
-import { runWriteCheck, type WriteCheckDeps } from "./write-check";
+import { runWriteCheck, runPreWriteCheck, type WriteCheckDeps } from "./write-check";
 import { warmProjectServers } from "./warmup";
 import { diagnoseLspServers, type LspDiagnoseDeps } from "./diagnose";
 import { errMsg } from "../../utils";
 import { LspHealth } from "./health";
-import { existsSync } from "fs";
 /**
  * Диагностики резолва модулей, бессмысленные без type-окружения. В голом
  * каталоге (без tsconfig.json / node_modules) TS-сервер рапортует
@@ -185,11 +178,17 @@ export class LspModule implements AgentModule {
       onSessionEnd: () => {
         void this.client.close();
       },
+      onBeforeTool: (ctx, call) => this.checkBeforeWrite(ctx, call),
       onAfterTool: (ctx, call, result) => this.checkAfterWrite(ctx, call, result),
     };
   }
 
   /** Пост-проверка записи (вынесена в `write-check.ts`). */
+  /** Pre-write draft check (see `runPreWriteCheck`). */
+  private checkBeforeWrite(ctx: ToolContext, call: ToolCall): Promise<string | boolean> {
+    return runPreWriteCheck(this.writeDeps(), ctx, call).then((r) => r ?? true);
+  }
+
   private checkAfterWrite(ctx: ToolContext, call: ToolCall, result: ToolResult): Promise<void> {
     return runWriteCheck(this.writeDeps(), ctx, call, result);
   }
@@ -215,108 +214,19 @@ export class LspModule implements AgentModule {
     }
   }
 
-  /**
-   * Тул диагностики по требованию. Проверки LSP шли только после write/edit
-   * (плагин выше), и read-only задача «проверь проект на ошибки» получала
-   * НОЛЬ фидбэка от компилятора — модель сканировала файлы через read_file и
-   * не узнавала, компилируется ли код (наблюдалось: ses_msvuao0h — задача
-   * "проверь на ошибки" без build, без lsp, с декларацией успеха). `lsp_check`
-   * даёт модели способ спросить статические диагностики по требованию.
-   */
+  /** Тул диагностики по требованию (`lsp_check`; см. `check-tool-def.ts`). */
   getToolDefinitions(): ToolDefinition[] {
-    return [
-      {
-        name: "lsp_check",
-        security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
-        icon: "🩺",
-        description:
-          'Run static checks (LSP diagnostics) on a file or directory. For "check for errors" tasks: pass a file to check it, or a directory to check its source files (capped at 15). Returns [LSP errors] / [LSP warnings] for files with a configured LSP server.',
-        tags: ["code", "check"],
-        alwaysOn: true,
-        boundedOutput: true,
-        timeoutMs: 90000,
-        parameters: {
-          type: "object",
-          properties: {
-            path: {
-              type: "string",
-              description: "File or directory to check",
-            },
-          },
-          required: ["path"],
-        },
-        handler: async (ctx, args) => this.runCheck(ctx, args),
-      },
-    ];
+    return createLspCheckToolDefinitions(this.checkToolDeps());
   }
 
-  private async runCheck(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
-    if (!this.config.enabled) {
-      return { success: false, output: t("lsp.check_disabled") };
-    }
-    const path = String(args.path ?? "");
-    if (!path) return { success: false, output: t("lsp.check_no_path") };
-
-    const resolved = safeResolvePath(ctx.baseDir, path);
-    const securityPaths = ctx.config?.security?.paths || DEFAULT_SECURITY_CONFIG.paths;
-    const scopeCheck = isPathInScope(ctx.baseDir, resolved, ctx.scope, securityPaths);
-    if (!scopeCheck.allowed) {
-      return {
-        success: false,
-        output: t("file.path_not_allowed", {
-          path: `${path} — ${scopeCheck.reason}`,
-        }),
-      };
-    }
-    if (!existsSync(resolved)) {
-      return { success: false, output: t("lsp.check_notfound", { path }) };
-    }
-
-    const files = await collectCheckFiles(resolved, this.config);
-    const acc = await this.checkFiles(files, ctx);
-    const report = renderCheckReport(acc);
-    this.log(
-      `LSP check ${path}: ${acc.checked}/${files.length} file(s), ` +
-        `${acc.errors.length} error(s), ${acc.warnings.length} warning(s), cold ${acc.cold}`,
-      {
-        op: "check",
-        path,
-        files: files.length,
-        checked: acc.checked,
-        errors: acc.errors.length,
-        warnings: acc.warnings.length,
-        cold: acc.cold,
-        inconclusive: acc.inconclusive,
-      },
-    );
-    return report;
-  }
-
-  /** Проверить файлы через вынесенный прогон (см. `check-run.ts`). */
-  private async checkFiles(files: string[], ctx: ToolContext): Promise<CheckAccumulator> {
-    return runCheckFiles(files, {
-      baseDir: ctx.baseDir,
+  private checkToolDeps() {
+    return {
       config: this.config,
       client: this.client,
       health: this.health,
       logger: this.logger,
-      failureNote: (key, serverConfig, message, file) =>
-        this.failureNote(key, serverConfig, message, file),
-    });
-  }
-
-  /** Заметка о сбое сервера для `lsp_check`: сама ошибка + пауза, если включилась. */
-  private failureNote(
-    key: string,
-    serverConfig: LspServerConfig,
-    message: string,
-    file: string,
-  ): string {
-    const failure = this.health.recordFailure(key, serverConfig, message);
-    const retry = failure.blocked
-      ? `\n${t("lsp.blocked_retry", { sec: String(Math.ceil(failure.retryInMs / 1000)) })}`
-      : "";
-    return `[LSP check failed for ${file}: ${failure.text}${retry}]`;
+      log: (msg: string, meta?: Record<string, unknown>) => this.log(msg, meta),
+    };
   }
 
   /** Веб-панель: структурная диагностика одного файла (jail + данные, не текст). */
@@ -337,7 +247,7 @@ export class LspModule implements AgentModule {
       health: this.health,
       logger: this.logger,
       failureNote: (key, serverConfig, message, file) =>
-        this.failureNote(key, serverConfig, message, file),
+        lspFailureNote(this.health, key, serverConfig, message, file),
     };
   }
 }

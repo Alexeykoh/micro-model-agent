@@ -94,6 +94,17 @@ describe("config registry", () => {
     expect(cfg.showReasoning).toBe(true);
   });
 
+  it("round-trips security.network.allowLoopback (off by default, no reconfigure)", () => {
+    const cfg = freshConfig();
+    const read = getConfigValue(cfg, "security.network.allowLoopback");
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(read.display).toBe("off");
+    const res = setConfigValue(cfg, "security.network.allowLoopback", "on");
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.effects).toEqual([]);
+    expect(cfg.security?.network.allowLoopback).toBe(true);
+  });
+
   it("sets reasoning.mode enum", () => {
     const cfg = freshConfig();
     const res = setConfigValue(cfg, "reasoning.mode", "high");

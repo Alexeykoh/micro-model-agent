@@ -7,7 +7,7 @@ import type { StateCfg } from "./mascot-pose.js";
 import { bodyDynamics, blinkFactor } from "./mascot-pose.js";
 import { drawFx } from "./mascot-fx.js";
 import { drawProp } from "./mascot-props.js";
-import { clamp, lerp, mixHex, rgba, seedAt, smooth, TAU } from "./mascot-util.js";
+import { clamp, lerp, mixHex, rgba, seedAt, smooth } from "./mascot-util.js";
 
 const BODY = 0.5;
 
@@ -172,14 +172,6 @@ export function renderFace(s: DrawInput): void {
   const bw = u * BODY * sx * shapeScale;
   const bh = u * BODY * sy * shapeScale;
   const rad = Math.min(bw, bh) * s.radius;
-
-  const shadow = ctx.createRadialGradient(bx, by + bh * 0.55, 1, bx, by + bh * 0.55, bw * 0.75);
-  shadow.addColorStop(0, col.isLight ? "rgba(27,29,34,.20)" : "rgba(0,0,0,.45)");
-  shadow.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = shadow;
-  ctx.beginPath();
-  ctx.ellipse(bx, by + bh * 0.55, bw * 0.72, bh * 0.22, 0, 0, TAU);
-  ctx.fill();
 
   ctx.save();
   ctx.translate(bx, by);

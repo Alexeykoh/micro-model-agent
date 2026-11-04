@@ -1,48 +1,43 @@
-import { msgs, inp, connStatus, setIcon, icon } from "./js/dom.js";
-import { api, token } from "./js/api.js";
-import { I18N, t, loadI18n } from "./js/i18n.js";
-import { tabs as tabState, session, settings, hooks } from "./js/store.js";
-import { routeState, mergeUsage, storeSnapshot, applyCounters, shouldHydrateAutoOpen } from "./js/state-sync.js";
-import type { Dict } from "./js/core/store/types.js";
+// App shell composition root: boots the chat, wires the SSE stream to every
+// surface, and hooks the tab hub back into the state projection. The projection
+// itself lives in `app-state.ts` and the static-chrome localization in
+// `app-i18n.ts` (both split out under file-size rule 6).
+import { icon } from "./js/dom.js";
+import { token } from "./js/api.js";
+import { hasCachedI18n, loadI18n, t } from "./js/i18n.js";
+import { settings, session, hooks } from "./js/store.js";
+import { mergeUsage } from "./js/state-sync.js";
 import {
   onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
   onTurnEnd, onErrorEvent, onCommandOutput, onLog, onPlan, onQuestion,
-  onRetract,
-  showEmptyFeed, renderPlan, renderUsage, renderEnvironment, renderWorkspace, renderSpeed,
-  feedHasContent, loadHistory,
+  onRetract, showEmptyFeed, renderUsage,
 } from "./js/feed.js";
-import {
-  openTab, updateTabName, renderSessionsDropdown, reflectBusy, loadSessions,
-  loadCommands, setTabStatus, reconcileTabStatuses,
-} from "./js/session/tabs.js";
+import { renderSessionsDropdown, loadCommands, loadSessions, setTabStatus } from "./js/session/tabs.js";
 import { restoreTabs } from "./js/session/restore-tabs.js";
 import {
   renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
-  loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyUiTheme, currentUiTheme, applyFontSize, setConnStatus, setStaleBar,
+  loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyUiTheme, currentUiTheme, applyFontSize, setConnStatus,
   migrateThemeCache, postConfig,
 } from "./js/settings.js";
+import { initRail, setPlan as railPlan, railEvent } from "./js/rail.js";
 import {
-  initRail, setPlan as railPlan, railEvent, applyRailI18n,
-} from "./js/rail.js";
-import {
-  initSidebar, sidebarSessionChanged, sidebarMapState,
-  sidebarTraceEvent, sidebarTurnEnd, sidebarBusy, sidebarMapIndicator,
-  sidebarPullLog, sidebarSessionId, setSessionLoading,
-  sidebarLspState, sidebarLspEvent,
-  applySidebarI18n,
-  initFiles, sidebarFilesState, sidebarFilesChanged,
-  sidebarPluginsState, sidebarPluginsEvent, initSidebarDrawer,
-  sidebarSubagentEvent, sidebarMcpEvent, sidebarSecurityEvent,
-  openFilesTabFor,
+  initSidebar, initSidebarDrawer, initFiles, applySidebarI18n, openFilesTabFor,
+  sidebarSessionId, sidebarTurnEnd, sidebarBusy, sidebarPullLog,
+  sidebarSubagentEvent, sidebarTraceEvent, sidebarLspEvent, sidebarFilesChanged,
+  sidebarPluginsEvent, sidebarMcpEvent, sidebarSecurityEvent,
 } from "./js/sidebar.js";
 import { insertIntoDraft, submitPrompt } from "./js/session/composer.js";
+import { initShortcuts } from "./js/shortcuts.js";
 import { drainQueuedTurn } from "./js/session/queue.js";
-import { initCursor, createFace, setFaceState, loaderStateFor, setGreetResolver } from "./js/loader.js";
+import { initCursor, createFace, setFaceState, loaderStateFor } from "./js/loader.js";
 import type { FaceState } from "./js/loader.js";
-import { setUpdateInfo } from "./js/update-state.js";
 import { applyUpdateEvent } from "./js/update-ui.js";
 import { connectSSE as wireSse } from "./js/sse.js";
 import { initSubagentView, onSubagentEvent } from "./js/feed/subagent.js";
+import {
+  applyState, ensureTabState, refresh, renderActiveState, resyncAfterReconnect,
+} from "./app-state.js";
+import { applyStaticI18n } from "./app-i18n.js";
 
 declare global {
   interface Window {
@@ -54,9 +49,6 @@ declare global {
 // agent state, falling back to the idle (cursor-following) face between turns.
 let composerFace: HTMLElement | null = null;
 let composerToken = 0;
-// Last seen latest-update version; guards the empty-feed refresh from running
-// on every state tick.
-let lastUpdLatest = "";
 
 function faceEvent(state: FaceState): void {
   composerToken++;
@@ -103,120 +95,6 @@ document.querySelectorAll<HTMLElement>("[data-collapse]").forEach((head) => {
   });
 });
 
-// Track the workspace file-change counter: a rise (missed SSE fallback) makes
-// the Files tab re-read its expanded directories.
-let lastFilesRevision = -1;
-
-// Renders the active tab's stored snapshot into the sidebar chrome. `session.host`
-// mirrors it for the render helpers (plan/usage/env/…), which read it directly.
-function renderActiveState(): void {
-  const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId) || null;
-  const host = (tab && tab.state) || {};
-  session.host = host;
-  const sid = host.sessionId || (tab && tab.id) || null;
-  session.activeSessionId = sid;
-  if (!tabState.tabs.length) showEmptyFeed();
-  renderPlan(tab?.livePlan ?? host.plan); // живой план (событие plan) важнее снапшота
-  railPlan(session.busy && host ? (tab?.livePlan ?? host.plan) : null);
-  renderUsage(host); renderSpeed(host);
-  // Late provider auto-detect may change the effective window after boot — the
-  // snapshot carries it so the topbar follows without a config re-fetch.
-  if (typeof host.contextWindow === "number" && settings.config &&
-      settings.config.contextWindow !== host.contextWindow) {
-    settings.config.contextWindow = host.contextWindow;
-    renderSelectors();
-  }
-  renderEnvironment(host);
-  sidebarMapState(host);
-  sidebarMapIndicator(host);
-  sidebarLspState();
-  sidebarFilesState(host);
-  sidebarPluginsState();
-  const rev = typeof host.filesRevision === "number" ? host.filesRevision : undefined;
-  if (rev !== undefined && rev !== lastFilesRevision) {
-    const first = lastFilesRevision === -1;
-    lastFilesRevision = rev;
-    if (!first && rev > 0) sidebarFilesChanged();
-  }
-  sidebarSessionChanged(sid);
-  renderWorkspace(host);
-  // Update fact is global (not per-tab): publish it to the chrome readers and
-  // badge the settings gear; refresh an empty feed so the update card appears.
-  const updLatest = host.updateAvailable?.latest ?? "";
-  setUpdateInfo(host.updateAvailable || null);
-  const gear = document.getElementById("openSettings");
-  if (gear) gear.classList.toggle("has-upd", !!host.updateAvailable);
-  if (updLatest !== lastUpdLatest) {
-    lastUpdLatest = updLatest;
-    // Settings render before the first state arrives; refresh so the General
-    // "about" row picks up the dot + update button.
-    renderSettings();
-    // Only the TOP-LEVEL empty view (no open tab) may be rebuilt here. A tab's
-    // feed owns its own `.empty`; matching it re-rendered `#msgs` and detached
-    // the live tab feed, which froze the chat while an update card was shown.
-    if (document.querySelector("#msgs > .empty")) showEmptyFeed();
-  }
-  renderSessionsDropdown();
-  setSessionLoading(false);
-  setStaleBar(!!host.i18nStale);
-}
-
-// Applies an SSE `state` payload to the per-tab store; re-renders when it
-// targets the active tab (or is global). Counters always refresh tab badges.
-function applyState(d: Dict): void {
-  const renderActive = routeState(d);
-  reflectBusy();
-  reconcileTabStatuses();
-  if (d.state && typeof d.state.sessionId === "string") {
-    updateTabName(d.state.sessionId, d.state.sessionName);
-  }
-  if (renderActive) renderActiveState();
-}
-
-async function fetchState(sessionId: string | null): Promise<Dict | null> {
-  const url = sessionId ? "/api/state?session=" + encodeURIComponent(sessionId) : "/api/state";
-  const r = await api<{ state?: Dict; busy?: unknown }>(url);
-  return r.ok && r.data ? r.data : null;
-}
-
-// Renders a tab from its cached snapshot; fetches once when it has none.
-async function ensureTabState(id: string): Promise<void> {
-  const tab = tabState.tabs.find((x) => x.id === id);
-  if (!tab) return;
-  if (tab.state) {
-    if (tabState.activeTabId === id) renderActiveState();
-    return;
-  }
-  const data = await fetchState(id);
-  if (!data) return;
-  storeSnapshot(data.state);
-  if (tabState.activeTabId !== id) return;
-  applyCounters(data);
-  renderActiveState();
-}
-
-// Boot/reconnect: refresh the active tab (auto-opening the server-active
-// session on first load). Steady-state updates arrive via SSE `state`.
-async function refresh(): Promise<void> {
-  const sid = tabState.activeTabId;
-  const data = await fetchState(sid);
-  if (!data) return;
-  // Guard: a switch during the fetch must not clobber the new tab.
-  if (tabState.activeTabId !== sid) return;
-  const snapshot = data.state;
-  if (!sid && snapshot && snapshot.sessionId &&
-      !tabState.tabs.some((x) => x.id === snapshot.sessionId)) {
-    // An existing session (has messages) must hydrate its transcript — opening
-    // it as "live" left the feed empty (no first message / earlier turns) until
-    // new SSE; a brand-new session stays live (nothing to fetch).
-    const hasHistory = shouldHydrateAutoOpen(session.sessions, snapshot.sessionId);
-    openTab(snapshot.sessionId, snapshot.sessionName || String(snapshot.sessionId), "session", hasHistory);
-  }
-  storeSnapshot(snapshot);
-  applyCounters(data);
-  renderActiveState();
-}
-
 // Lets `tabs.js` render a switched-to tab (cached snapshot or one REST fetch)
 // without importing app.
 hooks.ensureTabState = ensureTabState;
@@ -226,20 +104,6 @@ hooks.openFileInTree = (p) => { void openFilesTabFor(p); };
 hooks.openFileAtLine = (p, line) => { void openFilesTabFor(p, line); };
 hooks.showFilesTab = () => { void openFilesTabFor(""); };
 hooks.askAgent = (text) => submitPrompt(text);
-function resyncAfterReconnect(): void {
-  for (const tab of tabState.tabs) {
-    if (tab.kind !== "session") continue;
-    tab.state = null;
-    void ensureTabState(tab.id);
-  }
-  void refresh();
-  void loadSessions();
-  const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
-  if (tab && tab.kind === "session" && !feedHasContent(tab.feed)) {
-    tab.historyLoaded = false;
-    void loadHistory(tab);
-  }
-}
 
 // One live EventSource for the whole browser window (`js/sse.ts` owns the
 // stream; app.ts is the composition root that injects every surface).
@@ -292,88 +156,39 @@ function connectSSE(): void {
   });
 }
 
-// Re-apply the dictionary to static chrome after a locale switch. Dynamic
-// feeds (tool output, model text) are localized server-side and untouched.
-function applyStaticI18n(): void {
-  document.documentElement.lang = I18N.locale;
-  const setText = (id: string, text: string) => {
-    const node = document.getElementById(id);
-    if (node) node.textContent = text;
-  };
-  setText("planHeaderLabel", t("web.sidebar.plan"));
-  setText("usageHeaderLabel", t("web.sidebar.session") + " · " + t("web.sidebar.usage"));
-  setText("envHeaderLabel", t("web.sidebar.env"));
-  setText("settingsTitle", t("web.settings.title"));
-  setText("sessActiveHeader", t("web.sessions.active"));
-  setText("sessRecentHeader", t("web.sessions.recent"));
-  setText("hintEnter", t("web.input.enter"));
-  setText("hintShift", t("web.input.shift_enter"));
-  setText("hintEsc", t("web.input.esc"));
-  setText("hintAttach", t("web.input.attach"));
-  setText("bootCap", t("web.loader.boot"));
-  // MMART's click bubble: bound lazily (not at import) so `loader.ts` stays
-  // import-safe under `bun test`, and re-bound here after a locale switch.
-  setGreetResolver(() => t("web.loader.greet"));
-  // A bubble already open must restate the greeting in the new locale.
-  const greetTip = composerFace?.querySelector<HTMLElement>(".mdl-tip");
-  if (greetTip) greetTip.textContent = t("web.loader.greet");
+/**
+ * A3 (INV-W9): стадия и заполнение на сплэше. Подпись была одной строкой
+ * «connecting…», а полоса стояла на 40 % — при медленном сервере страница
+ * выглядела зависшей, и непонятно, грузится она или встала.
+ *
+ * Маска остаётся маской (B-31: гаснет через 2 с тишины), но каждая стадия
+ * продлевает кап: пока boot реально идёт, виден прогресс; при зависании
+ * между стадиями маска исчезает ровно через 2 с, как и раньше.
+ */
+let splashHideTimer = 0;
 
-  // Chrome controls: Lucide icon + label, plus matching title/aria-label.
-  const controls: Record<string, [string, string]> = {
-    newChat: ["plus", t("web.topbar.new_chat")],
-    sessBtn: ["menu", t("web.topbar.all_sessions")],
-    toggleSidebar: ["panel", t("web.topbar.sidebar")],
-    openSettings: ["settings", t("web.topbar.settings")],
-    attachBtn: ["image", t("web.attach.title")],
-    closeSettings: ["x", t("web.topbar.close")],
-    sessNew: ["plus", t("web.sessions.new")],
-    sessRefresh: ["refresh", t("web.sessions.refresh")],
-    sessPrev: ["chevron-left", t("web.sessbar.prev")],
-    sessNext: ["chevron-right", t("web.sessbar.next")],
-    sessClose: ["x", t("web.topbar.close")],
-  };
-  Object.keys(controls).forEach((id) => {
-    const node = document.getElementById(id);
-    if (!node) return;
-    const [name, label] = controls[id];
-    // Text-bearing buttons keep their label; icon-only ones don't add one.
-    const withLabel = id === "closeSettings" || id === "sessNew" || id === "sessRefresh";
-    setIcon(node, name, withLabel ? label : null);
-    node.title = label;
-    node.setAttribute("aria-label", label);
-  });
-  const settingsIcon = document.getElementById("settingsIcon");
-  if (settingsIcon) setIcon(settingsIcon, "settings", null);
-  if (inp) {
-    inp.placeholder = t("web.input.placeholder");
-    inp.setAttribute("aria-label", t("web.input.placeholder"));
-  }
-
-  document.querySelectorAll<HTMLElement>("#setMenu .mi").forEach((mi) => {
-    const p = mi.dataset.p;
-    if (p) mi.textContent = t("web.settings." + p);
-  });
-  const settingsSearch = document.getElementById("setSearch");
-  if (settingsSearch) {
-    settingsSearch.setAttribute("placeholder", t("web.settings.search_placeholder"));
-    settingsSearch.setAttribute("aria-label", t("web.settings.search_placeholder"));
-  }
-  document.querySelectorAll(".content-col .panel").forEach((panel) => {
-    const h3 = panel.querySelector("h3");
-    const name = panel.id.replace(/^p-/, "");
-    if (h3 && name) h3.textContent = t("web.settings." + name);
-  });
-
-  renderSelectors();
-  renderSessionsDropdown();
-  applyRailI18n();
-  applySidebarI18n();
-  if (msgs.querySelector(".empty")) showEmptyFeed();
-  if (connStatus && !connStatus.hidden) setConnStatus(true);
-  setStaleBar(undefined, true);
+function refreshSplashCap(): void {
+  window.clearTimeout(splashHideTimer);
+  splashHideTimer = window.setTimeout(hideBootSplash, 2000);
 }
+
+function bootStage(key: string, pct: number): void {
+  const cap = document.getElementById("bootCap");
+  if (cap) {
+    cap.dataset.stage = key;
+    cap.textContent = t(key);
+  }
+  document
+    .querySelector<HTMLElement>("#bootSplash .bs-prog i")
+    ?.style.setProperty("--p", `${pct}%`);
+  refreshSplashCap();
+}
+
 async function boot(): Promise<void> {
   initCursor();
+  // Splash is a mask, not a gate: cap it at 2 s. Arm the cap *before* the
+  // setup probe, otherwise a slow /api/setup pins the splash forever.
+  splashHideTimer = window.setTimeout(hideBootSplash, 2000);
   // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
   const initialSession = new URLSearchParams(location.search).get("session");
   // First-run wizard owns the screen when the server reports a virgin config;
@@ -385,18 +200,22 @@ async function boot(): Promise<void> {
       /* wizard failure must never brick the chat boot */
     }
   }
-  // Splash is a mask, not a gate: cap at 2 s; data loads progressively behind it.
-  window.setTimeout(hideBootSplash, 2000);
   try {
-    await loadI18n();
-    await loadCommands();
+    // Paint theme + language from the local mirror before any network round-trip:
+    // otherwise the splash shows EN/dark and only then switches to the saved
+    // RU/light — a visible flash on every reload.
     applyTheme(currentTheme());
     applyUiTheme(currentUiTheme());
     applyFontSize();
-    applyStaticI18n();
+    if (hasCachedI18n()) applyStaticI18n();
     showEmptyFeed();
     renderSelectors();
     renderSettings();
+    await loadI18n();
+    await loadCommands();
+    // Server truth wins; with a warm cache this repaint changes nothing.
+    applyStaticI18n();
+    bootStage("web.loader.step.config", 25);
     await loadConfig();
     // Апгрейд: до этой версии тема жила только в localStorage. Если сервер ещё
     // на дефолте, доливаем выбор браузера в конфиг (INV-T5) и перерисовываем
@@ -404,17 +223,21 @@ async function boot(): Promise<void> {
     if (await migrateThemeCache((key, value) => postConfig(key, value, false))) renderSettings();
     initRail(settings.config && settings.config.ui ? settings.config.ui.activityRail : undefined);
     initComposerFace();
-    initSidebar();
-    initSidebarDrawer();
+    initSidebar(); initSidebarDrawer(); initShortcuts();
     initSubagentView();
     applySidebarI18n();
     initFiles({ insertPath: (p) => insertIntoDraft("@" + p + " ") });
+    bootStage("web.loader.step.models", 45);
     await loadModels();
+    bootStage("web.loader.step.providers", 60);
     await loadProviders();
+    bootStage("web.loader.step.sessions", 75);
     await loadSessions();
+    bootStage("web.loader.step.plugins", 85);
     await loadMemory();
     await loadSkills();
     await loadPlugins();
+    bootStage("web.loader.step.workspace", 93);
     // Reopen remembered tabs first; `refresh()` auto-opens the server-active
     // session only when no tab is active yet, so a restored set is not clobbered.
     restoreTabs(initialSession);
@@ -425,10 +248,14 @@ async function boot(): Promise<void> {
       // without SSE no streamed answers, tools or loaders reach the page.
       console.error("initial refresh failed", err);
     }
+  } catch (err) {
+    // A failed boot must still open the SSE stream: otherwise the page stays
+    // inert, and the splash/failsafe is the only thing the user sees.
+    console.error("boot failed", err);
   } finally {
     hideBootSplash();
+    connectSSE();
   }
-  connectSSE();
 }
 // Fade the boot splash out and drop it from the layout. Idempotent.
 function hideBootSplash(): void {

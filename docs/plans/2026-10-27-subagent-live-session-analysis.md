@@ -121,7 +121,7 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
 Поверхности получают события через `ctx.subagentRuns` (в памяти), durable-следа нет.
 
 **Исправлено** в ветке `feat/subagent-run-journal` (спека
-[`2026-10-27-subagent-run-journal-design`](../specs/2026-10-27-subagent-run-journal-design.md)):
+[`2026-10-27-subagent-run-journal-design`](../archive/specs/2026/2026-10-27-subagent-run-journal-design.md)):
 прогон пишет в `session.jsonl` записи `type: "subagent"` с `subagent: <runId>` —
 `start`/`tool`/`usage` (с `origin`)/`end`. Гейт:
 `tests/tools/subagent-session-log.test.ts`. Долг
@@ -149,7 +149,7 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
 не хватало переключения. Оно было **сломано**: `llmStatus` не выставлялся на
 `!response.ok`, поэтому `403`/`404` до политики failover не доходили, а `403` и
 не считался переключаемым. **Исправлено** в ветке `fix/provider-failover`
-(спека [`2026-10-27-provider-failover-design`](../specs/2026-10-27-provider-failover-design.md)):
+(спека [`2026-10-27-provider-failover-design`](../archive/specs/2026/2026-10-27-provider-failover-design.md)):
 статус доезжает из обоих путей, `403` переключает. Долг
 `llm-provider-error-invisible-to-user` оплачен.
 
@@ -177,7 +177,7 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
 ## 4. Порядок работ (каждый пункт — своя ветка, правило 3)
 
 1. **D1, D2, D3** — сделано в ветке `fix/subagent-reliability` по спеке
-   [`2026-10-27-subagent-reliability-design`](../specs/2026-10-27-subagent-reliability-design.md):
+   [`2026-10-27-subagent-reliability-design`](../archive/specs/2026/2026-10-27-subagent-reliability-design.md):
    джейл `bash` в субагенте = `baseDir` (скоуп остался правом записи), обрыв до
    ответа классифицируется как `truncated_no_content` и восстанавливается одним
    повтором с выключенным reasoning и удвоенным бюджетом, описание `max_tokens`
@@ -186,7 +186,7 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
    `tests/tools/subagent-max-tokens.test.ts`.
 2. **D4** — сделано в ветке `feat/subagent-run-journal`: прогон субагента пишет в
    `session.jsonl` записи `type: "subagent"` (старт, тулы, usage с `origin`, конец).
-   Спека: [`2026-10-27-subagent-run-journal-design`](../specs/2026-10-27-subagent-run-journal-design.md);
+   Спека: [`2026-10-27-subagent-run-journal-design`](../archive/specs/2026/2026-10-27-subagent-run-journal-design.md);
    гейт: `tests/tools/subagent-session-log.test.ts`.
 3. **D5** — сделано в ветке `fix/subagent-expert-tag-schema`: `registerAllTools`
    вписывает `config.experts` в описание тула и в `expert_tag`, отказ на неизвестный
@@ -195,7 +195,7 @@ allowed_files: ["X"], max_tokens: 900, tool_tags: ["file"])` → `llm_truncated`
 4. **D6** — сделано в ветке `fix/provider-failover`: HTTP-статус доезжает до
    `LlmError` из стрима и non-stream, `403` (регион/лицензия) считается
    переключаемым наряду с `404/429/5xx`. Спека:
-   [`2026-10-27-provider-failover-design`](../specs/2026-10-27-provider-failover-design.md);
+   [`2026-10-27-provider-failover-design`](../archive/specs/2026/2026-10-27-provider-failover-design.md);
    гейты: `tests/openai-compat.test.ts`, `tests/providers/fallback-model.test.ts`.
 5. **D7** — сделано в ветке `fix/lsp-check-cold-start`: бюджет прогрева 4 с, проверка
    файла 8 с, честный отчёт о непроверенных файлах; гейт

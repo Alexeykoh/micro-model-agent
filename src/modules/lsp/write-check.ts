@@ -1,7 +1,7 @@
 // Пост-проверка записи: диагностики после `write_file`/`edit_file`, прогрев в
 // фоне. Вынесено из `module.ts` (правило 6 AGENTS): это отдельный шов, а модуль
 // держал на себе и тул, и хук, и состояние пула.
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import type { ToolCall, ToolContext, ToolResult } from "../../tools/types";
 import type { CheckResult, LspClient } from "./client";
@@ -31,6 +31,85 @@ export interface WriteCheckDeps {
   logger: LspClientLogger | null;
   /** Структурный лог модуля (app.jsonl, уровень info). */
   log(event: string, meta?: Record<string, unknown>): void;
+}
+
+/**
+ * Pre-write gate: check the DRAFT through a warm LSP before the file changes.
+ * Returns a block message for `onBeforeTool`, or null to allow the write.
+ * Cold servers are warmed in the background and the write is allowed (fail-open,
+ * same rule as the post-write check: a 30 s cold start must not block a turn).
+ */
+export async function runPreWriteCheck(
+  deps: WriteCheckDeps,
+  ctx: ToolContext,
+  call: ToolCall,
+): Promise<string | null> {
+  if (!deps.config.enabled) return null;
+  if (call.name !== "write_file" && call.name !== "edit_file") return null;
+  const filePath = String(call.arguments.path ?? "");
+  if (!filePath) return null;
+  const fullPath = resolve(ctx.baseDir, filePath);
+  const serverConfig = getServerForFile(fullPath, deps.config);
+  if (!serverConfig) return null;
+  const key = serverKeyFor(serverConfig);
+  if (deps.health.isDisabled(key)) return null;
+  const projectRoot = findProjectRoot(fullPath, ctx.baseDir, serverConfig.workspaceMarkers ?? []);
+  const target: CheckTarget = { fullPath, serverConfig, key, projectRoot };
+  if (!deps.client.isWarm(serverConfig, projectRoot)) {
+    warmInBackground(deps, target);
+    return null;
+  }
+  const draft = draftContent(call, fullPath);
+  if (draft === null) return null;
+  const started = Date.now();
+  try {
+    const check = await deps.client.checkContent(
+      fullPath,
+      draft,
+      serverConfig,
+      projectRoot,
+      WRITE_CHECK_TIMEOUT_MS,
+    );
+    deps.health.reset(key);
+    const errors = check.diagnostics.filter(isErrorDiagnostic);
+    deps.log(
+      `LSP pre-write check: ${fullPath} in ${Date.now() - started}ms (${errors.length} error(s))`,
+      { op: "pre_write_check", server: key, file: fullPath, durMs: Date.now() - started, errors: errors.length },
+    );
+    if (errors.length === 0) return null;
+    return t("lsp.draft_blocked", {
+      path: filePath,
+      problems: formatOneFileDiagnostics(errors, fullPath),
+    });
+  } catch (e) {
+    deps.health.warn(deps.logger, fullPath, errMsg(e));
+    deps.log(`LSP pre-write check failed: ${fullPath} - ${errMsg(e)}`, {
+      op: "pre_write_check_failed",
+      server: key,
+      file: fullPath,
+      error: errMsg(e),
+    });
+    return null;
+  }
+}
+
+/** The content the tool is about to write; null when it cannot be reconstructed. */
+function draftContent(call: ToolCall, fullPath: string): string | null {
+  if (call.name === "write_file") {
+    return typeof call.arguments.content === "string" ? call.arguments.content : null;
+  }
+  const oldStr = typeof call.arguments.old === "string" ? call.arguments.old : "";
+  const newStr = typeof call.arguments.new === "string" ? call.arguments.new : "";
+  if (!oldStr || !existsSync(fullPath)) return null;
+  try {
+    const current = readFileSync(fullPath, "utf-8");
+    const norm = current.replace(/\r\n/g, "\n");
+    const idx = norm.indexOf(oldStr.replace(/\r\n/g, "\n"));
+    if (idx === -1) return null;
+    return norm.slice(0, idx) + newStr + norm.slice(idx + oldStr.replace(/\r\n/g, "\n").length);
+  } catch {
+    return null;
+  }
 }
 
 interface CheckTarget {

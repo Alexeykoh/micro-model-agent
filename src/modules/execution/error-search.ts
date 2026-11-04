@@ -7,9 +7,22 @@ import type { ToolContext, ToolCall } from "../../tools/types";
 import type { StuckDetector } from "./stuck-detector";
 import { isSearchableError, buildSearchQuery } from "./stuck-detector";
 import type { PlanTracker } from "./tracker";
-import type { WebSearchRunner } from "./module";
+import type { NetworkSecurityConfig } from "../../config/types";
+import type { SearchResult } from "../../tools/web-search";
 import { getSessionSecurityConfig } from "../security/session-isolation";
 import { t } from "../../i18n/index";
+
+/**
+ * Инжектированный раннер поиска. По умолчанию performWebSearch (общий с тулом
+ * web_search), чтобы тесты подменяли моком. `requestTimeoutMs` переопределяет
+ * сетевой таймаут (errorWebSearch.requestTimeoutMs).
+ */
+export type WebSearchRunner = (
+  query: string,
+  numResults: number,
+  networkConfig: NetworkSecurityConfig | undefined,
+  requestTimeoutMs?: number,
+) => Promise<{ success: boolean; results: SearchResult[]; error?: string; blocked?: boolean }>;
 
 /** Мутабельный вид `ExecutionModule`, которым владеет автопоиск ошибок. */
 export interface ErrorSearchHost {

@@ -8,13 +8,12 @@ import { categoryOf, labelOf, argText, formatMs, verbosity } from "../format.js"
 import {
   activeFeed,
   feedForEvent,
-  clearBusy,
   clearEmpty,
   appendTo,
   appendActionsRow,
-  flushRun,
   scrollToBottom,
 } from "./core.js";
+import { clearBusy, flushRun } from "./busy.js";
 import { finishMd, finishThink, clearStatusLines } from "./stream.js";
 import { finishToolEnd, appendImageCards } from "./tool-render.js";
 import { egressBadge } from "./egress.js";

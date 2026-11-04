@@ -3,7 +3,7 @@
 > **Статус:** исполнено (2026-10-20) — image-store, `ToolResult.imageFiles`/`imageRefs`,
 > персист картинок в логе, `images-api`, lightbox и image-card в UI. Чекбоксы проставлены по факту.
 
-> [docs/specs/2026-10-07-web-tool-images-design.md](../specs/2026-10-07-web-tool-images-design.md).
+> [docs/archive/specs/2026/2026-10-07-web-tool-images-design.md](../archive/specs/2026/2026-10-07-web-tool-images-design.md).
 
 **Goal:** реальные изображения тулов (`browser` screenshot, `attach_image`) в ленте
 `mma web` — миниатюра + лайтбокс, с персистом, replay и ротацией.

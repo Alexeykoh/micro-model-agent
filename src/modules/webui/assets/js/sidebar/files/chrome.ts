@@ -32,6 +32,8 @@ export function localizeChrome(): void {
     f.searchEl.placeholder = label;
     f.searchEl.setAttribute("aria-label", label);
   }
+  if (f.searchHeadEl) f.searchHeadEl.textContent = t("web.files.head");
+  iconize(f.searchClearEl, "x", "web.files.search_clear");
   const wide = viewerFull();
   iconize(f.wideEl, wide ? "panel-left" : "panel", wide ? "web.files.narrow" : "web.files.wide");
   iconize(document.getElementById("filesClose"), "x", "web.files.close");

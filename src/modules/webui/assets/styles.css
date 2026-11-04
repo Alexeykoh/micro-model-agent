@@ -39,7 +39,7 @@
   --u-bg: #221c2e;
   --u-border: #c4a8ec;
   --ans: #a5adb6;
-  --ans-bg: rgba(196, 168, 236, 0.06);
+  --ans-bg: rgba(196, 168, 236, 0.09);
   --toggle-off: #2e2e2e;
   --toggle-knob: #a3a3a3;
   --scroll-thumb: #2e2e2e;
@@ -117,7 +117,7 @@ body.light {
   --u-bg: #ddf4ff;
   --u-border: #0969da;
   --ans: #424a53;
-  --ans-bg: rgba(9, 105, 218, 0.055);
+  --ans-bg: rgba(9, 105, 218, 0.075);
   --toggle-off: #d0d7de;
   --toggle-knob: #6e7781;
   --scroll-thumb: #d0d7de;
@@ -239,7 +239,15 @@ body[data-font="large"] { font-size: 17px; }
   box-shadow: var(--shadow-dd);
 }
 .dd.open .dd-menu { display: block; }
-.dd-menu .h { color: var(--dim-c); font-size: 11.5px; padding: 4px 8px; text-transform: uppercase; letter-spacing: .04em; }
+/* Section headers must read as structure, not as another row: smaller, bolder,
+   wider tracking, and a rule above every header after the first (U14 follow-up). */
+.dd-menu .h {
+  color: var(--dim-c); font-size: 10.5px; padding: 6px 8px 3px;
+  text-transform: uppercase; letter-spacing: .09em; font-weight: 600;
+}
+.dd-menu .h ~ .h {
+  margin-top: 4px; border-top: 1px solid var(--border-2); padding-top: 9px;
+}
 .dd-menu .si {
   display: flex; gap: 10px; align-items: baseline; padding: 7px 8px; border-radius: 4px;
   cursor: pointer; color: var(--muted); font-size: 12.5px;
@@ -266,6 +274,16 @@ body[data-font="large"] { font-size: 17px; }
    are constrained to the content box, so scroller padding would offset them
    from the header/composer edges. */
 .feed { display: flex; flex-direction: column; gap: 11px; padding: 18px 0; }
+/* Скелетон ленты на время догрузки истории (INV-W8): строки-заглушки вместо
+   пустого экрана, чтобы переключение вкладки было видно, а не «зависло». */
+.feed-skel { display: flex; flex-direction: column; gap: 11px; padding: 4px 0; }
+.feed-skel i {
+  display: block; height: 14px; border-radius: 7px;
+  background: linear-gradient(90deg, var(--track), var(--hover-bg), var(--track));
+  background-size: 200% 100%;
+  animation: skelSweep 1.2s linear infinite;
+}
+@keyframes skelSweep { to { background-position: -200% 0; } }
 .feed > * { flex-shrink: 0; min-height: fit-content; }
 .u {
   color: var(--u-fg); background: var(--u-bg); border-left: 2px solid var(--u-border);
@@ -384,41 +402,45 @@ body.light .code { border: 1px solid var(--border); }
 .feed > .md, .feed > .ans {
   border-left: 2px solid var(--accent);
   background: var(--ans-bg);
-  padding: 7px 12px;
-  border-radius: 0 4px 4px 0;
+  padding: 12px 18px 14px;
+  border-radius: 0 6px 6px 0;
 }
-.md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.62; }
+.md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.68; }
 .md > * { flex-shrink: 0; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
-.md p { margin: 9px 0; }
+.md p { margin: 11px 0; }
 .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
-  color: var(--fg); font-weight: 600; line-height: 1.3; margin: 18px 0 8px;
+  color: var(--fg); font-weight: 600; line-height: 1.3; margin: 22px 0 10px;
 }
 .md h1 { font-size: 1.5em; }
 .md h2 { font-size: 1.28em; }
 .md h3 { font-size: 1.12em; }
 .md h4, .md h5, .md h6 { font-size: 1em; }
-.md ul, .md ol { margin: 8px 0; padding-left: 24px; }
-.md li { margin: 3px 0; }
+.md ul, .md ol { margin: 10px 0; padding-left: 26px; }
+.md li { margin: 5px 0; }
 .md li > p { margin: 3px 0; }
-.md blockquote { margin: 10px 0; padding: 2px 0 2px 12px; border-left: 2px solid var(--pipe); color: var(--dim-a); }
-.md hr { border: 0; border-top: 1px solid var(--rule); margin: 16px 0; }
+.md blockquote { margin: 14px 0; padding: 4px 14px; border-left: 2px solid var(--pipe); border-radius: 0 4px 4px 0; color: var(--dim-a); }
+.md hr { border: 0; border-top: 1px solid var(--rule); margin: 22px 0; }
 .md a { color: var(--accent); text-decoration: none; }
 .md a:hover { text-decoration: underline; }
 .md img { max-width: 100%; border-radius: 4px; }
+/* Внешние картинки не грузятся (U2): вместо `<img>` — ссылка-чип с подписью. */
+.md .md-img-ext { display: inline-flex; align-items: baseline; gap: 4px; color: var(--dim-a); border-bottom: 1px dashed var(--rule); }
+.md .md-img-ext::before { content: "🖼"; font-size: .9em; }
+.md .md-img-ext:hover { color: var(--accent); text-decoration: none; }
 .md code {
-  background: var(--surface); color: var(--fg); padding: 1px 5px;
+  background: var(--surface); color: var(--fg); padding: 2px 6px;
   border-radius: 3px; font-size: .92em;
 }
 .md pre code { background: none; padding: 0; border-radius: 0; font-size: inherit; }
 .md input[type="checkbox"] { margin-right: 4px; vertical-align: middle; }
-.md table { border-collapse: collapse; margin: 10px 0; font-size: .95em; }
-.md th { color: var(--fg); font-weight: 600; text-align: left; padding: 6px 14px 6px 0; border-bottom: 1px solid var(--border); }
-.md td { color: var(--ans); padding: 5px 14px 5px 0; border-top: 1px solid var(--border-3); }
+.md table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: .95em; }
+.md th { color: var(--fg); font-weight: 600; text-align: left; vertical-align: top; padding: 8px 18px 8px 0; border-bottom: 1px solid var(--border); }
+.md td { color: var(--ans); vertical-align: top; padding: 7px 18px 7px 0; border-top: 1px solid var(--border-3); }
 
 /* fenced code block: dim header (language · copy) + code body */
-.codeblock { margin: 10px 0; background: var(--surface); border-radius: 4px; overflow: hidden; }
+.codeblock { margin: 14px 0; background: var(--surface); border-radius: 4px; overflow: hidden; }
 body.light .codeblock { border: 1px solid var(--border); }
 .cb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 8px 3px 12px; font-size: 11.5px; color: var(--dim-b); }
 .cb-lang { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -446,7 +468,12 @@ body.light .codeblock { border: 1px solid var(--border); }
 .hljs-strong { font-weight: 700; }
 
 /* per-message copy actions */
-.msg-actions { display: flex; gap: 12px; margin: 3px 0 6px; }
+.msg-actions { display: flex; gap: 12px; margin: 3px 0 6px; opacity: 0; transition: opacity .12s ease; }
+/* U17: copy links under every answer were permanent noise (two text rows per
+   message). Reveal them on hover/focus, like `.copy-btn`; touch keeps them
+   visible because there is no hover. */
+.feed:hover .msg-actions, .msg-actions:hover, .msg-actions:focus-within { opacity: 1; }
+@media (pointer: coarse) { .msg-actions { opacity: 1; } }
 .act-btn { font: inherit; font-size: 11.5px; color: var(--dim-b); background: none; border: 0; padding: 0; cursor: pointer; }
 .act-btn:hover { color: var(--fg); }
 
@@ -610,13 +637,19 @@ body.light .sel > button { border: 1px solid var(--border); }
 .sel > button b { font-weight: 400; color: var(--purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sel > button .svg-icon { width: 13px; height: 13px; color: var(--dim-a); }
 /* Selector switch pending (boot + provider/model/context/reasoning writes):
-   buttons and menus go inert while the `⋯` mark shows. The mark is a static
-   glyph via `::after` — no animation, so `prefers-reduced-motion` needs no
-   special case and no label rewrites desync the DOM. */
+   buttons and menus go inert while the mark shows. A5: the mark is a spinner
+   via `::after`, and after a second it becomes a wait counter — no label
+   rewrites, so the DOM never desyncs from the write funnel. */
 .selectors[data-pending] .sel > button,
 .selectors[data-pending] .menu { pointer-events: none; }
 .sel > button.pending { cursor: wait; }
-.sel > button.pending b::after { content: " ⋯"; color: var(--dim-b); }
+.sel > button.pending b::after {
+  content: "◐"; color: var(--dim-b); display: inline-block;
+  animation: spin 1s linear infinite;
+}
+.sel > button.pending b[data-wait]::after {
+  content: attr(data-wait); animation: none; font-variant-numeric: tabular-nums;
+}
 .menu {
   display: none; position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 30;
   background: var(--panel); border: 1px solid var(--border-2); border-radius: 6px;
@@ -667,6 +700,11 @@ body.light .sel > button { border: 1px solid var(--border); }
 }
 .inp:focus { border-color: var(--inp-focus); box-shadow: 0 0 0 2px var(--input-shadow); }
 .input-area.busy .composer { opacity: .75; }
+/* Переключение вкладки (INV-W8): ввод и отправка замолкают, пока не пришли
+   данные сессии; курсор честно показывает ожидание. */
+.input-area.switching .composer { opacity: .6; cursor: progress; }
+.input-area.switching .inp { cursor: progress; caret-color: transparent; }
+.input-area.switching .send-btn { cursor: progress; }
 .inp::placeholder { color: var(--dim-a); }
 .inp-meta { display: flex; gap: 14px; margin-top: 4px; padding: 0 6px; color: var(--dim-b); font-size: 11.5px; flex-wrap: wrap; }
 
@@ -686,9 +724,12 @@ body.light .sel > button { border: 1px solid var(--border); }
 /* Mention highlight mirror: same box as the textarea, glyphs transparent;
    only the `@path` token background renders, behind the real text. */
 .inp-wrap { position: relative; display: flex; flex: 1 1 auto; min-width: 0; }
-.inp-wrap .inp { width: 100%; }
+/* The mirror paints the @path pill behind the real textarea. Without an
+   explicit stack the absolutely positioned overlay wins and its background
+   hides the path itself — the field reads as an empty grey bar. */
+.inp-wrap .inp { position: relative; z-index: 1; width: 100%; }
 .inp-mark {
-  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
   padding: 6px 8px; font: inherit; font-size: 13.5px; line-height: 1.5;
   white-space: pre-wrap; overflow-wrap: anywhere; color: transparent;
 }
@@ -717,6 +758,7 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .ws-line .ws-k { color: var(--dim-b); margin-right: 6px; flex: none; }
 .ws-line .ws-v { color: var(--dim-a); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: anywhere; }
 .ws-line .ws-ver { color: var(--dim-b); margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
+.ws-line .ws-dev { color: var(--accent); margin-left: 6px; flex: none; font-weight: 600; letter-spacing: .04em; }
 /* Available update chip — green, sits right before the installed version so
    `↑ 2.37.0  mma 2.36.0` reads as "newer is available, this is what you run". */
 .ws-line .ws-upd { color: var(--green); margin-left: auto; flex: none; font-weight: 600; font-variant-numeric: tabular-nums; cursor: help; }
@@ -948,11 +990,30 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 /* Sidebar never scrolls horizontally, in any tab: long paths / model names /
    ids wrap or ellipsize inside their rows, never widening the pane. */
 .sb {
-  width: clamp(340px, 38vw, 679px); min-width: clamp(340px, 38vw, 679px);
+  /* U7: the column width is user-resizable (`--sb-w`, see sidebar/resize.ts)
+     and falls back to the old viewport-relative clamp until it is dragged. */
+  position: relative;
+  width: var(--sb-w, clamp(340px, 38vw, 679px));
+  min-width: var(--sb-w, clamp(340px, 38vw, 679px));
   display: flex; flex-direction: column;
   border-left: 1px solid var(--border); background: var(--sb-bg); min-height: 0;
   overflow-x: hidden;
 }
+/* Drag handle on the chat/sidebar boundary. A transparent 8px hit area with a
+   hairline that only appears on hover/focus - it must not read as a border. */
+.sb-resizer {
+  position: absolute; left: -4px; top: 0; bottom: 0; width: 8px;
+  z-index: 5; cursor: col-resize; touch-action: none;
+  background: transparent; border: 0; padding: 0;
+}
+.sb-resizer::after {
+  content: ""; position: absolute; left: 3px; top: 0; bottom: 0; width: 2px;
+  background: transparent; transition: background .12s ease;
+}
+.sb-resizer:hover::after, .sb-resizer:focus-visible::after,
+body.sb-resizing .sb-resizer::after { background: var(--accent); }
+.sb-resizer:focus-visible { outline: none; }
+body.sb-resizing { cursor: col-resize; user-select: none; }
 .sec {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   max-width: 100%; overflow-x: hidden;
@@ -985,22 +1046,27 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
   padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .sb-tabs {
-  display: flex; gap: 6px; flex: 1 1 auto; min-width: 0;
-  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
+  display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0;
+  overflow: visible;
 }
 .sb-tabs::-webkit-scrollbar { height: 4px; }
 .sb-tabs::-webkit-scrollbar-track { background: transparent; }
 .sb-tabs::-webkit-scrollbar-thumb { background: var(--stab-thumb); border-radius: 2px; }
 .sb-tabs::-webkit-scrollbar-thumb:hover { background: var(--stab-thumb-hover); }
 .sb-tab {
-  position: relative; width: 34px; height: 34px; flex: 0 0 auto;
-  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  position: relative; width: auto; height: 32px; min-width: 64px; flex: 0 1 auto;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 0 8px;
   border: 1px solid var(--border-2); border-radius: 6px;
   background: transparent; color: var(--stab-fg); cursor: pointer; font: inherit;
+  font-size: 12px;
 }
 .sb-tab:hover { color: var(--fg); background: var(--hover-bg); }
 .sb-tab.on { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
-.sb-tab .sb-ico svg { width: 17px; height: 17px; }
+.sb-tab .sb-ico svg { width: 15px; height: 15px; }
+/* U7: an icon-only strip was unreadable - nine similar glyphs, no words.
+   Labels are always visible; the strip wraps instead of scrolling sideways. */
+.sb-lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-tab .sb-ico, .sb-name .sb-ico { display: inline-flex; align-items: center; justify-content: center; }
 .sb-tab .sb-dot {
   position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%;
@@ -1009,6 +1075,9 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .sb-tab[data-indicator="live"] .sb-dot { opacity: 1; animation: sbPulse 1s ease-in-out infinite; }
 .sb-tab[data-indicator="busy"] .sb-dot { opacity: 1; background: var(--accent); }
 .sb-tab[data-indicator="stale"] .sb-dot { opacity: 1; background: var(--yellow); }
+/* U13: LSP off/offline is a persistent state, not activity - steady dot. */
+.sb-tab[data-indicator="off"] .sb-dot,
+.sb-tab[data-indicator="offline"] .sb-dot { opacity: 1; background: var(--yellow); }
 @keyframes sbPulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
 
 .sb-name {
@@ -1072,7 +1141,12 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .trc.execute .g { color: var(--accent); } .trc.meta .g { color: var(--meta); } .trc.phase .g { color: var(--think); }
 .trc .lab { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
 .trc .args { color: var(--args); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
-.trc .t { color: var(--dim-b); margin-left: auto; flex: 0 0 auto; }
+.trc .t { color: var(--dim-b); flex: 0 0 auto; }
+/* U15: time column on the right, tabular digits so rows line up. */
+.trc .ts {
+  color: var(--dim-b); flex: 0 0 auto; margin-left: auto;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+}
 .trc.warn .g, .trc.warn .lab { color: var(--yellow); }
 .trc.phase .lab { color: var(--think); }
 .trc.reasoning .g, .trc.reasoning .lab { color: var(--think); }
@@ -1100,7 +1174,20 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
   max-width: 100%; overflow: hidden;
 }
 .files-side[hidden] { display: none; }
-.files-bar { display: flex; gap: 2px; padding: 6px 6px 2px; flex-shrink: 0; align-items: center; }
+/* U8: the search field used to share one row with three icon buttons, so at
+   the default 240px tree width it showed "поиск по фай…". The header carries
+   the tree controls; search gets its own full-width row and a visible clear. */
+.files-head {
+  display: flex; align-items: center; gap: 6px; padding: 8px 8px 2px;
+  flex-shrink: 0; min-width: 0;
+}
+.files-head-title {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--sec-h);
+}
+.files-actions { display: flex; gap: 2px; flex: 0 0 auto; }
+.files-search-row { display: flex; gap: 4px; align-items: center; padding: 2px 8px 6px; flex-shrink: 0; }
+.files-search-row .fsearch { margin-left: 0; height: 26px; }
 /* Иконочные кнопки панели дерева и шапки просмотра: 24px цель, 14px глиф.
    Мелкие linkbtn-глифы (◧/✕) были нечитаемы и не попадали в клик. */
 .fbtn {
@@ -1145,6 +1232,7 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 }
 .fsearch:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .fsearch::placeholder { color: var(--dim-c); }
+.fsearch-clear { width: 24px; height: 24px; flex: 0 0 auto; }
 .files-search-results {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 4px 12px;
   display: flex; flex-direction: column; gap: 1px;
@@ -1273,6 +1361,18 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .lsp-info-btn .svg-icon { width: 14px; height: 14px; }
 .lsp-toggle { align-items: center; }
 .lsp-hint { color: var(--dim-c); font-size: 11px; line-height: 1.4; margin: 2px 0 6px; overflow-wrap: anywhere; }
+/* U13: an explicit off/offline banner - the pane used to look the same as
+   "not checked yet", so a disabled LSP was easy to miss. */
+.lsp-banner {
+  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  margin: 4px 0 8px; padding: 7px 9px; border-radius: 6px;
+  border: 1px solid var(--border-2); background: var(--panel);
+  color: var(--fg); font-size: 12px; line-height: 1.4;
+}
+.lsp-banner.off { border-color: color-mix(in srgb, var(--yellow) 55%, var(--border-2)); }
+.lsp-banner-g { color: var(--yellow); font-weight: 700; }
+.lsp-banner-text { flex: 1 1 160px; min-width: 0; }
+.lsp-banner-btn { flex: 0 0 auto; }
 .lsp-info { padding: 2px 0; }
 .lsp-install-title { color: var(--dim-b); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin: 10px 0 4px; }
 .lsp-install { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin: 3px 0; }
@@ -1783,6 +1883,29 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .pform-adv summary { cursor: pointer; font-size: 11.5px; color: var(--dim-a); text-transform: uppercase; letter-spacing: .04em; }
 .pform-adv .pform-grid { margin-top: 12px; }
 
+/* MCP form: identity + transport on the first row, the endpoint and every
+   JSON map full-width. The old auto-fit grid squeezed the command and args
+   into clipped 3-column cells. */
+.pform-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pform-wide { grid-column: 1 / -1; }
+.pform-field[hidden] { display: none; }
+.pform-field input[type="checkbox"] { width: auto; align-self: flex-start; }
+.pform-field textarea {
+  background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
+  color: var(--fg); font: inherit; font-size: 12.5px; padding: 6px 8px; width: 100%; min-width: 0;
+  resize: vertical; line-height: 1.5;
+}
+.pform-json { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; min-height: 64px; }
+.pform-hint { color: var(--dim-a); font-size: 11px; line-height: 1.4; }
+.pform-toggle { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
+.pform-toggle input[type="checkbox"] { width: auto; flex: 0 0 auto; margin: 3px 0 0; accent-color: var(--accent); }
+.pform-toggle-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pform-toggle-label { font-size: 12.5px; color: var(--fg); }
+#subOverlay:has(.pform-mcp) .modal-sub { width: min(760px, 94vw); }
+@media (max-width: 560px) {
+  .pform-grid-2 { grid-template-columns: 1fr; }
+}
+
 /* titled groups inside "advanced" (retry numbers / cache flags) */
 .pform-checks { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .pform-checks-title {
@@ -1939,6 +2062,26 @@ button.stab-x:hover { color: var(--red-strong); }
 }
 .dd-menu .del-btn:hover { color: var(--red-strong); background: var(--x-hover-bg); }
 .dd-menu .del-btn .svg-icon { width: 15px; height: 15px; }
+/* U14: long session lists. Rendering 60+ rows is cheap, but `content-visibility`
+   keeps paint cost flat when the dropdown holds hundreds. */
+.dd-menu .si-row { content-visibility: auto; contain-intrinsic-size: auto 30px; }
+.dd-menu .pin-btn {
+  flex: 0 0 auto; width: 24px; height: 28px; padding: 0; margin: 0 0 0 2px;
+  color: var(--dim-b); background: none; border: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: 13px; border-radius: 4px;
+}
+.dd-menu .pin-btn:hover { color: var(--fg); background: var(--hover-bg); }
+.dd-menu .pin-btn.on { color: var(--yellow); }
+.dd-menu .si-row.pinned .dd-row-main { color: var(--fg); }
+.sess-prune {
+  padding: 6px 8px; color: var(--dim-a); font-size: 11.5px; line-height: 1.4;
+}
+.sess-prune code {
+  display: block; margin-top: 3px; color: var(--fg);
+  font-family: var(--mono, ui-monospace, monospace); font-size: 11px;
+  overflow-wrap: anywhere;
+}
 .dd-menu .dd-err { color: var(--yellow); font-size: 11.5px; padding: 6px 8px; }
 
 /* Text actions (`use`/`edit`/`forget`/`add`, session delete) as focusable buttons. */
@@ -1990,6 +2133,15 @@ button.toggle:disabled { opacity: .5; cursor: default; }
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
+  /* INV-W9 (A4): признаки загрузки не выключаются — только замедляются.
+     Селекторы специфичнее `*`, поэтому побеждают при равном `!important`. */
+  .busy .spin,
+  .feed-skel i,
+  .stab .dot.st-working,
+  .sel > button.pending b::after {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
 /* ---- responsive layout ----
@@ -2019,6 +2171,8 @@ button.toggle:disabled { opacity: .5; cursor: default; }
     visibility: hidden; transform: translateX(100%);
     transition: transform .22s ease, visibility 0s linear .22s;
   }
+  /* The drawer width belongs to CSS, not to a dragged column width. */
+  .sb-resizer { display: none; }
   body.sb-open .sb {
     visibility: visible; transform: none;
     transition: transform .22s ease, visibility 0s;
@@ -2055,8 +2209,11 @@ button.toggle:disabled { opacity: .5; cursor: default; }
 }
 
 @media (max-width: 760px) {
-  .bar-top { gap: 8px; padding: 8px 10px; }
-  .bar-sub {
+  .bar-top { gap: 6px; padding: 8px 10px; }
+  /* U4: одна панель по умолчанию. Строка сессии нужна только когда открыто
+     несколько вкладок — там prev/next/close реально переключают. */
+  .bar-sub { display: none; }
+  body.multi-tab .bar-sub {
     display: flex; gap: 2px; align-items: center;
     padding: 5px 10px; background: var(--panel); border-bottom: 1px solid var(--border);
     color: var(--muted); font-size: 12.5px;
@@ -2116,7 +2273,16 @@ button.toggle:disabled { opacity: .5; cursor: default; }
     flex: none; flex-wrap: wrap; white-space: normal;
   }
   .rail-wrap.l-meta { width: 100%; flex-basis: 100%; }
-  .selectors { gap: 6px; }
+  /* U19: four chips (provider / model / context / reasoning) wrapped into two
+     rows on a phone. Keep one row: the label prefix is redundant once the
+     value is visible and the menu is one tap away (title carries the full
+     "label: value"), the model chip takes the leftover width and ellipsizes. */
+  .selectors { gap: 6px; flex-wrap: nowrap; align-items: center; }
+  .sel { flex: 0 0 auto; }
+  .sel[data-sel="model"] { flex: 1 1 0; min-width: 0; }
+  .sel > button { font-size: 0; gap: 4px; padding: 4px 7px; }
+  .sel > button b { font-size: 12px; max-width: 100%; }
+  .composer-face { display: none; }
   .composer-main { gap: 4px; }
   /* phones have no Enter/Shift+Enter/Esc/Ctrl+V — hints only take up space.
      Spans only (not the whole row): the `meta` rail layout lives inside
@@ -2355,7 +2521,6 @@ body.light .c-warn { --eye-c: #fff8e6; } body.light .c-err { --eye-c: #ffecec; }
 body.light .c-dim { --face-c: var(--panel); }
 
 @keyframes mdlBreathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.012); } }
-@keyframes mdlSpin { to { transform: rotate(360deg); } }
 @keyframes mdlBlink { 0%, 90%, 100% { transform: scaleY(1); } 94% { transform: scaleY(.08); } 97% { transform: scaleY(1); } }
 .mdl.blink .eye { animation: mdlBlink 3.8s var(--ease) infinite; }
 .mdl.narrow .eye { height: calc(var(--s) * .26); width: calc(var(--s) * .155); }
@@ -2499,7 +2664,7 @@ body.light .c-dim { --face-c: var(--panel); }
 .mdl.st-queued .eyes { animation: mdlGlance 4.4s ease-in-out infinite; }
 /* boot */
 @keyframes mdlBootBlink { 0%, 84%, 100% { transform: scaleY(1); } 88% { transform: scaleY(.1); } 90% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
-.mdl.st-boot { border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--eye-c) 55%, transparent); animation: mdlSpin 2.8s linear infinite; }
+/* Boot keeps the same squircle as every other face: no dashed ring, no spin. */
 .mdl.st-boot .eye { border-radius: 50%; animation: mdlBootBlink 3.4s var(--ease) infinite; }
 /* loading mascot: waking eyes (closed → open) */
 @keyframes mdlWake { 0%, 10% { transform: scaleY(.08); } 30%, 72% { transform: scaleY(1); } 82% { transform: scaleY(.08); } 90%, 100% { transform: scaleY(1); } }
@@ -2507,6 +2672,9 @@ body.light .c-dim { --face-c: var(--panel); }
 
 @media (prefers-reduced-motion: reduce) {
   .mdl, .mdl * { animation: none !important; }
+  /* INV-W9 (A4): глаза лоадера продолжают моргать — признак жизни, не декор. */
+  .mdl.st-load .eye,
+  .mdl.st-boot .eye { animation: mdlWake 3.4s ease-in-out infinite !important; }
 }
 
 /* ---- boot / loading splash ---- */
@@ -2522,8 +2690,8 @@ body.light .c-dim { --face-c: var(--panel); }
 #bootSplash .bs-cap .l1 { font-size: 13.5px; color: var(--muted); }
 #bootSplash .bs-cap .l2 { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--dim-b); margin-top: 6px; }
 #bootSplash .bs-prog { width: 210px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
-#bootSplash .bs-prog i { display: block; height: 100%; width: 40%; border-radius: 2px; background: linear-gradient(90deg, var(--think), var(--accent)); animation: mdlBar 1.4s ease-in-out infinite; }
-@keyframes mdlBar { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+/* A3: заполнение отражает реальную стадию boot — `--p` ставит `bootStage`. */
+#bootSplash .bs-prog i { display: block; height: 100%; width: var(--p, 40%); border-radius: 2px; background: linear-gradient(90deg, var(--think), var(--accent)); transition: width .35s ease; }
 
 /* --- Update availability: gear dot, feed card, settings row --- */
 .icon-btn.has-upd { position: relative; }
@@ -2559,7 +2727,7 @@ body.light .c-dim { --face-c: var(--panel); }
 .upd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 
 /* ── Subagent run view ───────────────────────────────────────────────────
-   Клик по строке subagent открывает read-only ленту прогона (TODO §1.1).
+   Клик по строке subagent открывает read-only ленту прогона (архив TODO 2026-11-04, §1.1).
    Родительская лента остаётся смонтированной «за кадром»; композер и rail
    скрыты, потому что субагенту нельзя отправлять сообщения. */
 .chat.srun-open .input-area { display: none; }
@@ -3026,3 +3194,59 @@ body.light .c-dim { --face-c: var(--panel); }
 .secd-row { display: flex; gap: 10px; align-items: baseline; }
 .secd-lab { color: var(--dim, #888); min-width: 90px; font-size: 12px; }
 .secd-val { white-space: pre-wrap; word-break: break-word; font-family: var(--mono, monospace); font-size: 12px; }
+
+/* U6: touch targets. Phones and coarse pointers get at least 32x32 for icon
+   buttons and tab close (18x18 before), and a taller sidebar tab strip. */
+@media (pointer: coarse), (max-width: 760px) {
+  .icon-btn { min-width: 32px; min-height: 32px; height: 32px; }
+  .stab .stab-x { width: 32px; height: 32px; }
+  .sb-tab { min-height: 40px; }
+  /* Composer chips are the densest row on a phone. */
+  .sel > button, .chip, .linkbtn { min-height: 32px; }
+}
+
+/* U11: keyboard users skip the top bar, tabs and sidebar straight to messages. */
+.skip-link {
+  position: fixed; left: 8px; top: -48px; z-index: 1000;
+  padding: 8px 12px; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  text-decoration: none; font-size: 13px;
+}
+.skip-link:focus-visible { top: 8px; outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* U12: keyboard hints are meaningless on touch — show the send button instead. */
+#hintTouch { display: none; }
+@media (pointer: coarse), (max-width: 760px) {
+  #hintEnter, #hintShift, #hintAttach, #hintEsc, #hintShort { display: none; }
+  #hintTouch { display: inline; }
+}
+
+/* First-run setup: agent intro on the language step. Appended here to keep the
+   diff focused (the legacy block above is intentionally not Prettier-formatted). */
+.setup-intro { margin: 0 0 22px; }
+.setup-intro-lead { margin: 0 0 6px; font-size: 13.5px; line-height: 1.5; }
+.setup-intro-line { margin: 0 0 14px; color: var(--dim-a); font-size: 12.5px; line-height: 1.5; }
+.setup-intro-needs-title { margin: 0 0 7px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--dim-b); }
+.setup-intro-needs { list-style: none; margin: 0 0 14px; padding: 0; display: grid; grid-template-columns: max-content 1fr; column-gap: 14px; row-gap: 6px; }
+.setup-intro-needs .need { display: contents; }
+.setup-intro-needs .k { color: var(--fg); font-size: 12.5px; line-height: 1.45; }
+.setup-intro-needs .k::after { content: "\0020\2014\0020"; color: var(--dim-b); }
+.setup-intro-needs .d { color: var(--dim-a); font-size: 12.5px; line-height: 1.45; }
+.setup-intro-foot { margin: 0; padding-top: 12px; border-top: 1px solid var(--rule); color: var(--dim-a); font-size: 12px; }
+/* Hints: one <p> per sentence/step so the text does not read as a wall. */
+.setup-hint { margin: 0 0 14px; }
+.setup-hint-line { color: var(--dim-a); font-size: 12.5px; line-height: 1.55; margin: 0 0 5px; }
+.setup-hint-line:last-child { margin-bottom: 0; }
+/* Keep the wizard footer reachable on tall content and small screens. */
+.setup-actions { position: sticky; bottom: 0; z-index: 2; padding: 14px 0 4px; background: var(--bg); }
+@media (max-width: 560px) {
+  .setup-gate { padding: 24px 16px; }
+  .setup-intro-needs { grid-template-columns: 1fr; row-gap: 8px; }
+  .setup-intro-needs .need { display: block; }
+  .setup-intro-needs .k::after { content: ""; }
+  .setup-intro-needs .d { display: block; }
+  .setup-actions { padding-bottom: 12px; }
+}
+@media (max-height: 720px) {
+  .setup-gate { padding-top: 24px; padding-bottom: 16px; }
+}

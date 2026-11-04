@@ -8,15 +8,13 @@ import { mountMarkdown } from "../../md.js";
 import {
   activeFeed,
   feedForEvent,
-  clearBusy,
   clearEmpty,
-  flushRun,
-  showBusy,
   appendTo,
   scroll,
   mdOpts,
   buildThinkBlock,
 } from "./core.js";
+import { clearBusy, flushRun, showBusy } from "./busy.js";
 import { buildRetractBlock } from "./retract-block.js";
 
 // Text chunks arrive in bursts (several SSE `text` events per frame); writing

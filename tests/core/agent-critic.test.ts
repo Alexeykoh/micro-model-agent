@@ -142,7 +142,7 @@ describe("Agent in-loop critic", () => {
     const verify = vi.fn(async () => ({
       status: "critical" as const,
       summary: "broken",
-      issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file" }],
+      issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file", evidence: "test fixture" }],
     }));
     const t = createMockDeps({ criticOverride: { verify } } as any);
     const agent = new Agent(t.deps);
@@ -150,12 +150,16 @@ describe("Agent in-loop critic", () => {
 
     expect(result.success).toBe(true);
     expect(result.text).toBe("final answer");
-    // critical → ремонт (1) → повтор той же жалобы → совет «смени подход» (2).
-    // Третьей проверки нет: модель ответила тем же текстом, советный цикл
-    // израсходован — новый вызов добавить ничего не может (A15).
-    expect(verify).toHaveBeenCalledTimes(2);
+    // critical → ремонт (1). Дальше модель повторяет тот же текст, не вызвав
+    // ни одного тула: это не новая улика, поэтому второй проверки нет — один
+    // раз выдаётся директива «действуй», затем ответ принимается
+    // (сессия ses_mvzp8cuk: 19 с на тот же вердикт).
+    expect(verify).toHaveBeenCalledTimes(1);
     expect(t.provider.chat).toHaveBeenCalledTimes(4);
-    expect(userSummaries(t.messages).length).toBe(3);
+    const summaries = userSummaries(t.messages).map((m) => String(m.content));
+    // Директива «действуй» реально дошла до модели (а не осталась в логе).
+    expect(summaries.some((s) => s.includes("No tool was called since that check"))).toBe(true);
+    expect(summaries.length).toBe(3);
   });
 
   it("accepts normally when the critic returns ok", async () => {
@@ -186,7 +190,7 @@ describe("Agent in-loop critic", () => {
     const verify = vi.fn(async () => ({
       status: "critical" as const,
       summary: "broken",
-      issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file" }],
+      issues: [{ severity: "critical" as const, claim: "missing", problem: "missing file", evidence: "test fixture" }],
     }));
     const t = createMockDeps({ criticOverride: { verify } } as any);
     const agent = new Agent(t.deps);

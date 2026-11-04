@@ -1,70 +1,37 @@
-// Tabs hub: tab model/strip/status, openTab/closeTab, session loaders.
+// Tabs hub: tab model, openTab/closeTab, session loaders. The strip DOM lives
+// in `tabs-strip.ts` and open-tab persistence in `tabs-persist.ts` (file-size
+// rule 6); both are leaves, wired back through `initTabstrip`.
 // Owns session-state hydration (loaders render their own chrome). The session
 // dropdown, composer and slash-autocomplete are siblings under `./session/`;
 // they receive the tab operations they need via their `init*` functions, so
 // this hub is the only importer and the frontend DAG stays acyclic.
-import { msgs, inp, tabstripEl, el, icon, link } from "../dom.js";
+import { inp, el, link } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import { makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent, loadHistory, syncUrl, scrollToBottom, clearBusy, mountFeed } from "../feed.js";
+import { makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent, syncUrl, scrollToBottom, clearBusy, mountFeed } from "../feed.js";
 import { setIndicator } from "../dialog.js";
 import { sidebarSessionChanged, setSessionLoading } from "../sidebar.js";
 import { setSessOpen } from "../core/menus.js";
 import { notifyTabStatus } from "../sounds.js";
 import { closeCmdk } from "./cmdk.js";
-import { saveComposer, restoreComposer, renderAttachments, renderSessBar, initComposer } from "./composer.js";
+import { saveComposer, restoreComposer, renderAttachments, initComposer } from "./composer.js";
 import { renderSessionsDropdown, initSessionsMenu } from "./sessions-menu.js";
+import { persistTabs } from "./tabs-persist.js";
+import { renderTabstrip, initTabstrip } from "./tabs-strip.js";
+import { activateServerSession, nextSwitchSeq } from "./tab-switch.js";
 
 export { reflectBusy } from "./composer.js";
 export { loadCommands } from "./cmdk.js";
 export { renderSessionsDropdown } from "./sessions-menu.js";
+export { readSavedTabs } from "./tabs-persist.js";
+export type { SavedTabs } from "./tabs-persist.js";
+export { reconcileTabStatuses } from "./tabs-strip.js";
 
 // Статусы вкладок: working — идёт ход, waiting — ждёт ответа (question),
 // queued — стоит в очереди, failed — ход упал, dead — сессии нет.
-import { nextTabStatus, statusTitle as statusTitleOf, TAB_DOT } from "./tab-status.js";
-
-// Открытые session-вкладки переживают перезагрузку страницы (F5 не терял остальные).
-const OPEN_TABS_KEY = "mma-open-tabs";
-
-/** Сохранённый набор вкладок для восстановления после перезагрузки. */
-export interface SavedTabs {
-  ids: string[];
-  active: string | null;
-}
-
-function persistTabs(): void {
-  try {
-    const ids = tabState.tabs
-      .filter((x: Dict) => x.kind === "session" && !x.dead)
-      .map((x: Dict) => String(x.id));
-    const active = tabState.tabs.find((x: Dict) => x.id === tabState.activeTabId);
-    const payload: SavedTabs = {
-      ids,
-      active: active && active.kind === "session" && !active.dead ? String(active.id) : null,
-    };
-    localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(payload));
-  } catch {
-    /* storage disabled (private mode) — persistence is best-effort */
-  }
-}
-
-/** Читает сохранённый набор вкладок (пустой при отсутствии/поломке). */
-export function readSavedTabs(): SavedTabs {
-  try {
-    const raw = localStorage.getItem(OPEN_TABS_KEY);
-    if (!raw) return { ids: [], active: null };
-    const parsed = JSON.parse(raw) as Partial<SavedTabs>;
-    const ids = Array.isArray(parsed.ids)
-      ? parsed.ids.filter((x): x is string => typeof x === "string")
-      : [];
-    const active = typeof parsed.active === "string" ? parsed.active : null;
-    return { ids, active };
-  } catch {
-    return { ids: [], active: null };
-  }
-}
+import { statusTitle as statusTitleOf } from "./tab-status.js";
 
 // Per-tab composer + status (общепринято: черновик свой у каждой сессии).
 // `draft`/`attachments` живут на табе и переживают переключения (single `#inp`
@@ -110,75 +77,6 @@ export function markTabDead(id: string): void {
   if (tab.feed === activeFeed()) scrollToBottom();
   renderTabstrip();
 }
-
-function renderTabstrip(): void {
-  tabstripEl.textContent = "";
-  tabState.tabs.forEach((item: Dict) => {
-    const on = item.id === tabState.activeTabId;
-    const label = item.name || item.id;
-    // The id lives in the tooltip (and the sidebar copy button), not inline,
-    // so the session name keeps the tab width.
-    const tip = item.kind === "session" ? String(item.id) : label;
-    const tab = el("div", "stab" + (on ? " on" : ""));
-    tab.setAttribute("role", "tab");
-    tab.setAttribute("tabindex", on ? "0" : "-1");
-    tab.setAttribute("aria-selected", on ? "true" : "false");
-    tab.setAttribute("aria-label", label);
-    tab.title = tip;
-    if (item.status && item.status !== "idle") {
-      const dot = el("span", "dot st-" + item.status, TAB_DOT[item.status] || "●");
-      dot.title = statusTitleOf(item.status);
-      dot.setAttribute("aria-label", statusTitleOf(item.status));
-      tab.appendChild(dot);
-    }
-    const nameEl = el("span", "name", label);
-    nameEl.title = tip;
-    tab.appendChild(nameEl);
-    const x = el("button", "stab-x");
-    x.type = "button";
-    x.title = t("web.topbar.close");
-    x.setAttribute("aria-label", t("web.topbar.close") + ": " + label);
-    x.appendChild(icon("x"));
-    x.addEventListener("click", (e) => {
-      e.stopPropagation();
-      closeTab(item.id);
-    });
-    tab.appendChild(x);
-    const open = () => openTab(item.id, item.name, item.kind, true);
-    tab.addEventListener("click", open);
-    tab.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        open();
-      }
-    });
-    tabstripEl.appendChild(tab);
-  });
-  scrollActiveTabIntoView();
-  renderSessBar();
-}
-
-// Keep the active tab visible, aligned to its START so the beginning of the
-// session name stays readable (aligning the end would cut the name off,
-// which is exactly what phones showed when tapping a tab on the right).
-function scrollActiveTabIntoView(): void {
-  const active = tabstripEl.querySelector<HTMLElement>(".stab.on");
-  if (!active) return;
-  const left = Math.max(0, active.offsetLeft - 4);
-  if (left < tabstripEl.scrollLeft || left + active.offsetWidth > tabstripEl.scrollLeft + tabstripEl.clientWidth) {
-    tabstripEl.scrollLeft = left;
-  }
-}
-
-tabstripEl.addEventListener(
-  "wheel",
-  (e) => {
-    if (e.deltaY === 0) return;
-    e.preventDefault();
-    tabstripEl.scrollLeft += e.deltaY;
-  },
-  { passive: false },
-);
 
 // Mirror the active session into `?session=` so a page refresh restores it.
 // Only the active tab is persisted; the token param is preserved as-is.
@@ -228,6 +126,7 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
     persistTabs();
     return;
   }
+  const seq = nextSwitchSeq();
   tabState.activeTabId = id;
   tabState.liveTabId = id;
   // Сайдбар следует за вкладкой сразу: активная сессия — эта, Trace сбрасывается
@@ -261,21 +160,16 @@ export function openTab(id: string, name?: string, kind?: string, server?: boole
     // historyFailed (транзиентная ошибка прошлого захода) — тоже повод
     // повторить; мёртвые (404) сюда не доходят — их держит tab.dead выше.
     if (!feedHasContent(tab.feed) || tab.historyFailed) tab.historyLoaded = false;
-    // Индикатор загрузки секции Session до первого полного снапшота.
-    setSessionLoading(true);
+    // Индикатор — только пока снапшота нет (INV-W8): данные уже на руках,
+    // блокировать ввод и рисовать скелетон нечего. Снимает его первый полный
+    // снапшот (`renderActiveState`) либо догрузка истории ниже.
+    if (!tab.state) setSessionLoading(true);
     // План следует за сессией: сервер переключает трекер на activate. 404 —
     // сессия исчезла: помечаем вкладку мёртвой вместо рассинхрона сайдбара.
-    api("/api/sessions/activate", { method: "POST", body: { id } }).then((r) => {
-      if (r.status === 404) {
-        markTabDead(id);
-        void loadSessions();
-        return;
-      }
-      void loadSessions();
-    });
-    loadHistory(tab).then((st) => {
-      if (st && st.gone) markTabDead(tab.id);
-      hooks.afterHistory?.(tab.id); // история → строки субагентов + MMART
+    activateServerSession(tab, seq, {
+      loadSessions,
+      markTabDead,
+      afterHistory: (id) => hooks.afterHistory?.(id),
     });
   }
   syncUrl();
@@ -297,6 +191,8 @@ export function closeTab(id: string): void {
   }
   tabState.tabs = tabState.tabs.filter((x) => x.id !== id);
   if (closingActive) {
+    // Переключение: activate ответившей вкладки уже неактуален.
+    nextSwitchSeq();
     const next = tabState.tabs[Math.min(i, tabState.tabs.length - 1)];
     if (next) {
       tabState.activeTabId = next.id;
@@ -360,31 +256,6 @@ async function newChatTab(): Promise<void> {
 
 document.getElementById("newChat")?.addEventListener("click", () => void newChatTab());
 
-/**
- * Сверяет бейджи вкладок с серверным per-session статусом (SSE `state`):
- * бегущая → working, в очереди → queued, прочие working/queued → idle.
- * `waiting` дольше STALE_WAITING_MS без подтверждения — зависший вопрос
- * (аудит §6.16).
- */
-export function reconcileTabStatuses(): void {
-  const running = session.runningSessionIds || [];
-  const queued = session.queued || {};
-  const now = Date.now();
-  let changed = false;
-  tabState.tabs.forEach((tab: Dict) => {
-    if (tab.kind !== "session") return;
-    const next = nextTabStatus(tab, running, queued, now);
-    if (!next) return;
-    const prev = tab.status;
-    tab.status = next;
-    // Сверка с серверным `state` — вторая (и последняя) точка сигнала: звук
-    // не может разойтись с фактическим статусом вкладки.
-    notifyTabStatus(prev, next);
-    changed = true;
-  });
-  if (changed) renderTabstrip();
-}
-
 export async function loadSessions(): Promise<void> {
   const r = await api<{ sessions?: Dict[] }>("/api/sessions");
   if (!r.ok || !r.data) return;
@@ -398,6 +269,10 @@ document.addEventListener("click", () => {
   closeCmdk();
 });
 
+// The strip renders the model we own; it gets the tab operations it calls back
+// into (no import back into this hub). Wired first, before any consumer that
+// might redraw the strip.
+initTabstrip({ openTab, closeTab });
 // Wire the sibling modules with the tab operations they call back into.
 initComposer({
   activeTab,

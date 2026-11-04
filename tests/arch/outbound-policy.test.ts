@@ -29,14 +29,16 @@ const POLICY_CALL_RE = /\b(fetchValidated|fetchOutbound|checkOutboundUrl)\s*\(/;
  * a user/model-supplied destination. Trimmed reason → test failure.
  */
 export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
-  "src/llm/openai-compat.ts": "provider endpoint from config (baseUrl + path)",
+  "src/llm/openai-request.ts": "provider endpoint from config (baseUrl + path)",
+  "src/llm/openai-models.ts": "provider /models endpoint from config baseUrl",
   "src/llm/provider-budget.ts": "same provider endpoint, budget probe",
   "src/llm/provider-context.ts": "ollama probe from config baseUrl",
   "src/llm/model-loader.ts": "ollama load endpoint from config baseUrl",
   "src/llm/models-dev.ts": "hardcoded models.dev registry URL",
   "src/llm/native-context.ts": "native context endpoint from provider config",
   "src/modules/providers/preflight.ts": "provider endpoint from config (baseUrl)",
-  "src/modules/mcp/client.ts": "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
+  "src/modules/mcp/http-transport.ts": "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
+  "src/modules/mcp/sse-transport.ts": "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
   "src/modules/updater/checker.ts": "GitHub releases URL, hardcoded",
   "src/modules/updater/archive.ts": "GitHub release asset URL from latest.json (manifest-validated)",
   "src/modules/service/runtime/webhook.ts": "Validated by checkCallbackUrl (https/SSRF) before fetch; redirect: manual",
@@ -45,7 +47,7 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
   "src/modules/security/network-validator.ts": "the policy itself: fetchValidated revalidates every hop",
   "src/modules/webui/assets/js/api.ts": "same-origin relative path in the browser",
   "src/modules/webui/assets/js/sidebar/files/view.ts": "same-origin relative path in the browser",
-  "src/modules/webui/assets/setup.ts": "same-origin relative path in the browser",
+  "src/modules/webui/assets/setup-api.ts": "same-origin relative path in the browser",
 };
 
 /** Возвращает `path:line` для каждого `fetch(` вне политики и вне allowlist. */

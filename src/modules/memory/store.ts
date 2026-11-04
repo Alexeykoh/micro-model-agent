@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, sta
 import { join } from "path";
 import { MemorySearch } from "./search";
 import { decryptMemoryText, encryptMemoryEntry } from "./at-rest";
+import { MemoryValidator, type ValidatorOptions, type ValidationResult } from "./validator";
 
 const MEMORY_FILES = ["conventions", "decisions", "errors", "facts"];
 
@@ -18,9 +19,14 @@ export const MAX_MEMORY_FILE_CHARS = 24_000;
 /** Хранилище памяти: категории-заметки с дописыванием и ключ-значение преференсов. */
 export class MemoryStore {
   private memoryDir: string;
+  private validator: MemoryValidator | null;
 
-  constructor(memoryDir: string) {
+  constructor(memoryDir: string, validatorOpts?: ValidatorOptions) {
     this.memoryDir = memoryDir;
+    this.validator =
+      validatorOpts?.enabled === false
+        ? null
+        : new MemoryValidator(memoryDir, validatorOpts);
     this.ensureDir();
     for (const name of MEMORY_FILES) {
       const path = join(this.memoryDir, `${name}.md`);
@@ -57,13 +63,18 @@ export class MemoryStore {
   }
 
   /** Дописывает запись с таймстампом в файл категории. */
-  append(name: string, entry: string): void {
+  append(name: string, entry: string): ValidationResult {
     const path = this.fileFor(name);
+    if (this.validator) {
+      const check = this.validator.validate(name, entry);
+      if (!check.accepted) return check;
+    }
     const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
     const body = encryptMemoryEntry(entry);
     const formatted = `- **${timestamp}** — ${body}\n`;
     appendFileSync(path, formatted, "utf-8");
     this.trimFile(path);
+    return { accepted: true };
   }
 
   /**
@@ -141,8 +152,12 @@ export class MemoryStore {
   }
 
   /** Дописывает структурированное правило «паттерн/причина/решение». */
-  appendRule(category: string, pattern: string, cause: string, solution: string): void {
+  appendRule(category: string, pattern: string, cause: string, solution: string): ValidationResult {
+    if (this.validator) {
+      const check = this.validator.validateRule(category, pattern, cause, solution);
+      if (!check.accepted) return check;
+    }
     const entry = `**pattern:** ${pattern}\n  **cause:** ${cause}\n  **solution:** ${solution}`;
-    this.append(category, entry);
+    return this.append(category, entry);
   }
 }

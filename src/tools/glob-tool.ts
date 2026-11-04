@@ -46,8 +46,7 @@ export const globTool: ToolDefinition = {
     for (const match of results) {
       const abs = resolve(ctx.baseDir, match);
       const outOfScope =
-        ctx.scope !== undefined &&
-        !isPathInScope(ctx.baseDir, abs, ctx.scope, pathsCfg).allowed;
+        ctx.scope !== undefined && !isPathInScope(ctx.baseDir, abs, ctx.scope, pathsCfg).allowed;
       const isDenied = denied.length > 0 && matchesAnyGlob(abs, ctx.baseDir, denied);
       const isProtected = matchProtectedPath(ctx.baseDir, abs) !== undefined;
       if (outOfScope || isDenied || isProtected) {
@@ -57,14 +56,16 @@ export const globTool: ToolDefinition = {
       visible.push(match);
     }
 
+    const hiddenNote = hidden > 0 ? `\n${t("file.glob_hidden", { count: String(hidden) })}` : "";
+    // «Скрыто скоупом» ≠ «нет совпадений» (A2): молчаливое «No matches» заставляет
+    // субагента думать, что файлов нет, и он галлюцинирует вместо правки скоупа.
     if (visible.length === 0) {
-      return { success: true, output: t("file.no_matches") };
+      return { success: true, output: t("file.no_matches") + hiddenNote };
     }
     const truncated =
       visible.length > MAX_PREVIEW_LINES
         ? `\n... (${visible.length - MAX_PREVIEW_LINES} more files)`
         : "";
-    const hiddenNote = hidden > 0 ? `\n${t("file.glob_hidden", { count: String(hidden) })}` : "";
     return {
       success: true,
       output: visible.slice(0, MAX_PREVIEW_LINES).join("\n") + truncated + hiddenNote,

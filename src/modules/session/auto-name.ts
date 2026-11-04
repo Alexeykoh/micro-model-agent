@@ -57,8 +57,18 @@ export function sanitizeTitle(raw: string): string | null {
   return cleaned.length > MAX_NAME_LEN ? `${cleaned.slice(0, MAX_NAME_LEN).trim()}…` : cleaned;
 }
 
+/** Опции одного вызова заголовка (первая попытка / повтор после обрыва). */
+export interface TitleChatOptions {
+  maxTokens?: number;
+  reasoningEffort?: "none";
+}
+
 /** Тип chat-функции для генерации заголовка (инжектится, тестируемо). */
-export type TitleChat = (prompt: string, signal?: AbortSignal) => Promise<string>;
+export type TitleChat = (
+  prompt: string,
+  signal?: AbortSignal,
+  options?: TitleChatOptions,
+) => Promise<string>;
 
 /** Собрать промпт заголовка из отрывка сообщения (первые 1000 символов). */
 export function buildTitlePrompt(input: string): string {
@@ -81,13 +91,26 @@ export async function generateSessionTitle(
 ): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const prompt = buildTitlePrompt(input);
   try {
-    const raw = await chat(buildTitlePrompt(input), controller.signal);
+    const raw = await chat(prompt, controller.signal, {
+      maxTokens: TITLE_MAX_TOKENS,
+      reasoningEffort: "none",
+    });
     const title = sanitizeTitle(raw);
-    // Пустой ответ — не «нет заголовка», а состоявшийся отказ (чаще всего
-    // finish_reason=length съел бюджет). Молчать о нём нельзя (INV-15).
-    if (!title) onFail?.(`empty title (${raw.trim().slice(0, 60) || "no text"})`);
-    return title;
+    if (title) return title;
+    // Обрыв по бюджету (reasoning съел completion): тот же recovery, что в петле
+    // агента (`truncated_no_content`) — один повтор с удвоенным бюджетом.
+    const retryRaw = await chat(prompt, controller.signal, {
+      maxTokens: TITLE_MAX_TOKENS * 2,
+      reasoningEffort: "none",
+    });
+    const retried = sanitizeTitle(retryRaw);
+    // Пустой ответ после повтора — состоявшийся отказ (INV-15).
+    if (!retried) {
+      onFail?.(`empty title (${(retryRaw || raw).trim().slice(0, 60) || "no text"})`);
+    }
+    return retried;
   } catch (err) {
     onFail?.(err instanceof Error ? err.message : String(err));
     return null;

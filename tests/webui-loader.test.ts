@@ -137,6 +137,10 @@ describe("LSP mascot reactions", () => {
         output: "\n\n[LSP check failed]: spawn failed",
       }),
     ).toBe("error");
+  });
+
+  // U13: a disabled LSP did not check anything - a calm dim state, not "error".
+  it("shows a disabled LSP as a calm off state", () => {
     expect(
       loaderStateFor({
         type: "tool_end",
@@ -144,7 +148,7 @@ describe("LSP mascot reactions", () => {
         success: true,
         output: "\n\n[LSP disabled: unavailable]",
       }),
-    ).toBe("error");
+    ).toBe("lspoff");
   });
 
   it("does not react to LSP markers on tool_start", () => {
@@ -156,7 +160,7 @@ describe("LSP mascot reactions", () => {
   it("parses the markers purely", () => {
     expect(lspOutputSignal("[LSP errors]:")).toBe("errors");
     expect(lspOutputSignal("[LSP check failed]: x")).toBe("failed");
-    expect(lspOutputSignal("[LSP disabled: x]")).toBe("failed");
+    expect(lspOutputSignal("[LSP disabled: x]")).toBe("disabled");
     expect(lspOutputSignal("[LSP warnings]:")).toBeNull();
     expect(lspOutputSignal("plain output")).toBeNull();
     expect(lspOutputSignal(undefined)).toBeNull();
@@ -208,9 +212,22 @@ describe("createFace / setFaceState", () => {
 });
 
 describe("boot splash asset", () => {
-  it("index.html declares #bootSplash", () => {
+  it("index.html declares #bootSplash with a static face before JS", () => {
     const html = readFileSync("src/modules/webui/assets/index.html", "utf8");
     expect(html).toContain('id="bootSplash"');
+    // The canvas upgrade needs the ESM graph; the static fallback must already
+    // look like a face instead of an empty bordered square.
+    expect(html).toContain('<span class="eyes"><i class="eye left"></i>');
+    expect(html).toContain("Hard failsafe");
+  });
+
+  it("arms the splash cap before the setup probe", () => {
+    const app = readFileSync("src/modules/webui/assets/app.ts", "utf8");
+    const cap = app.indexOf("setTimeout(hideBootSplash, 2000)");
+    const probe = app.indexOf("MmaSetup.maybeOpen");
+    expect(cap).toBeGreaterThan(-1);
+    expect(probe).toBeGreaterThan(-1);
+    expect(cap).toBeLessThan(probe);
   });
   it("styles.css defines the loader component", () => {
     const css = readFileSync("src/modules/webui/assets/styles.css", "utf8");

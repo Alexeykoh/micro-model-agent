@@ -7,7 +7,7 @@
 [corporate-data-policy](./2026-10-19-corporate-data-policy-design.md) ·
 [architecture v2](./2026-10-12-architecture-v2-design.md) ·
 [STYLE](../design/ui/STYLE.md) ·
-TODO §1.2 (остаточные векторы), §1.11 (U20–U22)
+архив TODO 2026-11-04: §1.2 (остаточные векторы), §1.11 (U20–U22)
 
 ---
 

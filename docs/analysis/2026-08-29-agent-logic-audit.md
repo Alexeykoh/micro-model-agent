@@ -6,8 +6,8 @@
 > `modules/hallucination/*`, `modules/reasoning/*`, `tools/executor.ts`, `tools/subagent.ts`,
 > `modules/execution/{moe-executor,plan-tool,stuck-detector}.ts`, `config/config.ts`, `cli/main.ts`.
 >
-> Источники известных проблем: `TODO.md`, `docs/superpowers/plans/2026-08-26-model-control-fixes.md`
-> (39 находок / 35 задач / волны 1–9), `docs/superpowers/plans/2026-08-26-moe-completion.md`.
+> Источники известных проблем: `TODO.md`, `docs/archive/plans/2026/superpowers/plans/2026-08-26-model-control-fixes.md`
+> (39 находок / 35 задач / волны 1–9), `docs/archive/plans/2026/superpowers/plans/2026-08-26-moe-completion.md`.
 
 ---
 

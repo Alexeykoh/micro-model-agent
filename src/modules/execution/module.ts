@@ -1,78 +1,50 @@
 // Execution-модуль: трекер плана, stuck-детектор, аудитор, гейты, автопоиск ошибок.
-import type { AgentModule } from "../types";
+// Оболочка-композиция (правило 6): план/сессия — `plan-session.ts`, деливераблы
+// и тексты плана — `deliverables.ts`, тулы — `plan-tool.ts`, хуки — `execution-plugin.ts`.
+import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import type { ToolDefinition, ToolContext, ToolCall } from "../../tools/types";
-import type { AgentPlugin } from "../types";
-import { t } from "../../i18n/index";
-import { PlanTracker } from "./tracker";
 import { StepVerifier } from "./verifier";
 import { StuckDetector } from "./stuck-detector";
-import { Auditor, findExistingFile } from "./auditor";
-import { PlanStore } from "./plan-store";
-import { getMessageText } from "../../llm/provider";
-import type { ContentPart } from "../../llm/provider";
+import { Auditor } from "./auditor";
+import type { PlanStore } from "./plan-store";
+import type { PlanTracker } from "./tracker";
 import type { Plan } from "./planner";
-import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
-import type { NetworkSecurityConfig, PathSecurityConfig } from "../../config/types";
-import { performWebSearch, type SearchResult } from "../../tools/web-search";
+import type { PathSecurityConfig } from "../../config/types";
+import { performWebSearch } from "../../tools/web-search";
 import { createPlanToolDefinitions } from "./plan-tool";
 import { parseKinds, parseChecks } from "./plan-parse";
-import {
-  createExecutionPlugin,
-  STUCK_RECOVERY_COOLDOWN,
-  STUCK_WARN_REPEAT_EVERY,
-  type ExecutionPluginState,
-} from "./execution-plugin";
+import { createExecutionPluginState, type ExecutionPluginState } from "./plugin-state";
 import { EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS as ERROR_SEARCH_MIN_INTERVAL_MS } from "../../config/timeouts";
-import { advancePlanIfStepComplete, type StepAdvanceDeps } from "./step-advance";
-import { runFinalAudit, type FinalAuditHost } from "./final-audit";
-import { checkPlanAlignment, type PlanAlignmentHost } from "./plan-alignment";
-import { maybeSearchError, type ErrorSearchHost } from "./error-search";
+import { runFinalAudit } from "./final-audit";
+import { maybeSearchError, type WebSearchRunner } from "./error-search";
+import {
+  errorSearchHost,
+  executionPlugin,
+  finalAuditHost,
+  type ExecutionHostView,
+} from "./module-hosts";
 import type { Diagnostic } from "../../output/types";
+import { PlanSession, type PendingMessage } from "./plan-session";
+import {
+  getTaskText,
+  hasStepDeliverables,
+  missingStepDeliverables,
+  noActivePlanMessage,
+  stillExistingDeliverables,
+} from "./deliverables";
 
 /** Реэкспорт для потребителей (тесты): реализация — в `step-advance.ts`. */
 export { provablyStale } from "./step-advance";
 
-/**
- * Инжектированный раннер поиска. По умолчанию performWebSearch (общий с тулом
- * web_search), чтобы тесты подменяли моком. `requestTimeoutMs` переопределяет
- * сетевой таймаут (errorWebSearch.requestTimeoutMs).
- */
-export type WebSearchRunner = (
-  query: string,
-  numResults: number,
-  networkConfig: NetworkSecurityConfig | undefined,
-  requestTimeoutMs?: number,
-) => Promise<{ success: boolean; results: SearchResult[]; error?: string; blocked?: boolean }>;
-
-/**
- * Минимальный интервал между автопоисками ошибок. Спек просил кап
- * STUCK_RECOVERY_COOLDOWN-итераций, но в onAfterTool нет счётчика итераций
- * (контекст экзекутора) — та же анти-спам защита, но по времени. Инжектится
- * через конструктор для тестов (0 отключает).
- */
-
-/**
- * Тулы, которым можно при активном шаге плана БЕЗ проверки step-alignment.
- * Либо не трогают ФС, либо структурно/read-only инспекции, нужные агенту в
- * любой точке (диагностика, индекс/поиск, память, интроспекция процессов,
- * интерактивные промпты). К текущему шагу пинятся только файл-мутирующие.
- *
- * `lsp_check` и `project_map` здесь явно: оба alwaysOn, а системный промпт
- * ТРЕБУЕТ `lsp_check` после каждой записи (включая переписи файлов уже
- * закрытых шагов). Без них каждый диагностический вызов жёг plan-warning и мог
- * hard-block'нуть легитимную запись на 3-м вызове (было: "3 вызовов подряд вне
- * текущего шага", пока агент писал deliverable текущего же шага).
- */
+/** Реэкспорт для потребителей: реализация типа — в `error-search.ts`. */
+export type { WebSearchRunner } from "./error-search";
 
 /** Execution-модуль: план, stuck-детектор, аудитор, гейты выравнивания и автопоиск ошибок. */
 export class ExecutionModule implements AgentModule {
   name = "execution";
-  private tracker: PlanTracker | null = null;
-  /** Сессия-владелец текущего трекера. План следует за сессией: смена
-   *  сессии через switchSession() персистит трекер в слот старой сессии
-   *  и загружает план новой (см. docs/specs/2026-09-29-session-plan-binding-design.md). */
-  private sessionId: string | null = null;
+  /** План, его per-session слот и завершённый план (см. `plan-session.ts`). */
+  private plan: PlanSession;
   private verifier: StepVerifier;
   /**
    * Диагностический sink (INV-15, W0.6): пишет `verify_error`, когда проверка
@@ -82,32 +54,19 @@ export class ExecutionModule implements AgentModule {
   private diagnosticSink?: (event: "verify_error", diag: Diagnostic) => void;
   private stuckDetector: StuckDetector;
   private auditor: Auditor;
-  private store: PlanStore;
   private baseDir: string;
-  // Пропуск первого аудита после восстановления плана с диска — даём юзеру
-  // шанс сменить тему, прежде чем audit-gate зафиксируется.
-  private _auditSkipsRemaining = 0;
-  /**
-   * Последний план, ЗАВЕРШЁННЫЙ и авто-архивированный. `plan update` на
-   * финальном шаге чистит трекер — раньше runFinalAudit() возвращал null и
-   * молча скипал финальный аудит (тесты + tsc + файлы) готовой задачи.
-   * Храним завершённый план, чтобы audit-gate отработал.
-   */
-  private completedPlan: Plan | null = null;
   /**
    * Авто-advance шагов по файловым деливераблам (config execution.autoAdvance).
    * При false харнесс только подталкивает модель закрыть шаг самому.
    */
   private autoAdvance = true;
-  /** План завершён в этом ходу — архивировать на границе хода (onTurnEnd). */
-  private pendingAutoArchive = false;
   /**
    * Отложенные <system-summary>. Инжектятся onBeforeTool/onAfterTool, но
    * флашатся в onBeforeThink — никогда не встают между assistant tool_call и
    * его tool-результатами (рвёт спаривание и хоронит варнинги, на которые
    * модель должна реагировать).
    */
-  private pendingMessages: Array<{ role: "user"; content: string }> = [];
+  private pendingMessages: PendingMessage[] = [];
   // Per-командные счётчики фейлов запрещённых Windows-команд (grep/sed/ls/
   // find/… через тул bash). Hard stop после второго фейла evidence-based
   // (реальные фейлы команд), не классификация задач (правило #10).
@@ -116,6 +75,12 @@ export class ExecutionModule implements AgentModule {
   private searchesThisSession = 0;
   private retryWebSearchSignatures = new Set<string>();
   private lastErrorSearchAt = 0;
+  /**
+   * Минимальный интервал между автопоисками ошибок. Спек просил кап
+   * STUCK_RECOVERY_COOLDOWN-итераций, но в onAfterTool нет счётчика итераций
+   * (контекст экзекутора) — та же анти-спам защита, но по времени. Инжектится
+   * через конструктор для тестов (0 отключает).
+   */
   private readonly errorSearchCooldownMs: number;
   private hallucinationDetector: { getConsistencyCheck(): { getDeletedFiles(): string[] } } | null =
     null;
@@ -125,59 +90,7 @@ export class ExecutionModule implements AgentModule {
    * фабрике плагина — плагин пишет deps.state.* напрямую, записи видны модулю
    * без write-back.
    */
-  private state: ExecutionPluginState = {
-    lastRecoveryIteration: -STUCK_RECOVERY_COOLDOWN,
-    lastTurnResetIteration: -1,
-    lastRecoveryTurn: -1,
-    lastStuckWarnTurn: -1,
-    consecutivePlanWarnings: 0,
-    lastStepId: -1,
-    stuckNotified: false,
-    lastStuckWarnKey: "",
-    lastStuckWarnIter: -STUCK_WARN_REPEAT_EVERY,
-    escalationDirectiveSent: false,
-    depsGateHints: new Map<number, number>(),
-    mutationsWithoutPlan: 0,
-    planNudgeSent: false,
-    typecheckFailures: new Map<string, string>(),
-    mutatedThisTurn: false,
-  };
-
-  /**
-   * Read/write доступ к трекеру, общий для фабрик plan-tool и execution-plugin.
-   * Abort тула `plan` чистит его (current = null) — сеттер держит this.tracker
-   * в синхроне. Геттеры литерала биндят `this` на литерал, поэтому инстанс
-   * захвачен замыканием. Сеттер зеркалит per-session слот: план-тулы пишут
-   * через trackerRef напрямую, минуя setPlan — без хука слот протух бы и
-   * воскрешал отменённый план возвратом в сессию. IO fail-open.
-   */
-  private trackerRef: {
-    get current(): PlanTracker | null;
-    set current(v: PlanTracker | null);
-  } = (() => {
-    const self = this;
-    return {
-      get current(): PlanTracker | null {
-        return self.tracker;
-      },
-      set current(v: PlanTracker | null) {
-        self.tracker = v;
-        self.flushSessionPlan();
-      },
-    };
-  })();
-
-  /** Зеркалит текущий трекер в слот активной сессии (null → clear).
-   *  Вызывать после прямых присвоений this.tracker вне setPlan/switchSession. */
-  private flushSessionPlan(): void {
-    if (!this.sessionId) return;
-    try {
-      if (this.tracker) this.store.saveSessionActive(this.sessionId, this.tracker.getPlan());
-      else this.store.clearSessionActive(this.sessionId);
-    } catch {
-      // fail-open: per-session слот не должен ронять тулы/гейты
-    }
-  }
+  private state: ExecutionPluginState = createExecutionPluginState();
 
   constructor(
     baseDir: string,
@@ -188,6 +101,7 @@ export class ExecutionModule implements AgentModule {
     pathSecurity?: PathSecurityConfig,
   ) {
     this.baseDir = baseDir;
+    this.plan = new PlanSession(baseDir);
     this.verifier = new StepVerifier(
       baseDir,
       (operation, reason) => this.reportDegrade(operation, reason),
@@ -195,7 +109,6 @@ export class ExecutionModule implements AgentModule {
     );
     this.stuckDetector = new StuckDetector(stuckThreshold, 3, webSearchThreshold);
     this.auditor = new Auditor(baseDir);
-    this.store = new PlanStore(baseDir);
     this.searchRunner = searchRunner;
     this.errorSearchCooldownMs = errorSearchCooldownMs;
   }
@@ -216,111 +129,24 @@ export class ExecutionModule implements AgentModule {
     });
   }
 
-  /** Ставит план активным (синхрон указателя, персист, сброс завершённого/скипов). */
+  /** Ставит план активным (реализация — `plan-session.ts`). */
   setPlan(plan: Plan): void {
-    this.tracker = new PlanTracker(plan);
-    // Указатель мимо done/skipped шагов восстановленного/перепланированного
-    // плана: display ("current: step N") и off-track alignment матчатся с
-    // реальностью, а не вечно указывают на шаг 1.
-    this.tracker.syncCurrentStep();
-    this.store.saveActive(plan);
-    if (this.sessionId) {
-      try {
-        this.store.saveSessionActive(this.sessionId, plan);
-      } catch {
-        // fail-open: per-session слот не должен ронять создание плана
-      }
-    }
-    this.completedPlan = null; // новый план вытесняет завершённый
-    this._auditSkipsRemaining = 0; // план явно создан — взводим audit-gate
+    this.plan.setPlan(plan);
   }
 
-  /** Персистит мутацию существующего плана (статус шага, todo, kind-switch):
-   *  глобальный active.json плюс слот активной сессии. `setPlan` покрывает
-   *  создание/переключение, но прямые `store.saveActive` из план-тулов слот не
-   *  зеркалили — после reload сайдбар показывал устаревшие статусы шагов. */
+  /** Персистит мутацию существующего плана (реализация — `plan-session.ts`). */
   persistPlan(plan: Plan): void {
-    this.store.saveActive(plan);
-    if (!this.sessionId) return;
-    try {
-      this.store.saveSessionActive(this.sessionId, plan);
-    } catch {
-      // fail-open: слот не должен ронять мутацию плана
-    }
+    this.plan.persistPlan(plan);
   }
 
-  /** Переключает трекер на план другой сессии. Персистит текущий трекер
-   *  в слот старой сессии, загружает план новой сессии. Завершённый на диске
-   *  план — в архив, как в restorePlan. */
+  /** Переключает трекер на план другой сессии (реализация — `plan-session.ts`). */
   switchSession(id: string | null): void {
-    const prev = this.sessionId;
-    if (prev === id) return;
-    // Персист уходящей стороны. Стартовый трекер без sessionId (restorePlan
-    // до известной сессии) усыновляется новой сессией, а не теряется.
-    //
-    // Уходящий слот НЕ чистим, когда своего трекера нет: отсутствие плана в
-    // ЭТОМ инстансе не значит, что у сессии нет плана — в web план сессии
-    // принадлежит её per-session раннеру, а общий модуль UI лишь читает слот.
-    // Старый `clear` на пустом трекере стирал чужой живой слот (репорт:
-    // «план не появляется в сайдбаре» после переключения/создания сессии).
-    // Опустение слота владелец фиксирует сам — `flushSessionPlan` при
-    // обнулении трекера (abort/архив), а не сторонним наблюдателем.
-    if (this.tracker) {
-      try {
-        this.store.saveSessionActive(prev ?? id ?? "", this.tracker.getPlan());
-      } catch {
-        // fail-open: битый id слота / ФС — трекер в памяти остаётся
-      }
-    }
-    this.sessionId = id;
-    this.completedPlan = null;
-    if (!id) {
-      this.tracker = null;
-      this._auditSkipsRemaining = 0;
-      return;
-    }
-    let plan: Plan | null = null;
-    try {
-      plan = this.store.loadSessionActive(id);
-    } catch {
-      plan = null;
-    }
-    if (!plan) {
-      this.tracker = null;
-      this._auditSkipsRemaining = 0;
-      return;
-    }
-    const restored = new PlanTracker(plan);
-    if (restored.isComplete()) {
-      this.store.archivePlan(plan);
-      try {
-        this.store.clearSessionActive(id);
-      } catch {
-        /* best-effort */
-      }
-      this.tracker = null;
-      return;
-    }
-    this.tracker = restored;
-    this.tracker.syncCurrentStep();
-    this._auditSkipsRemaining = 1; // как восстановленный план
+    this.plan.switchSession(id);
   }
 
-  /** Забывает сессию: чистит её слот плана. Удаляемая сессия не может быть
-   *  текущей (web гардит 409), но REPL /delete — может: тогда сбрасываем
-   *  и трекер, чтобы не висел план-призрак. */
+  /** Забывает сессию: чистит её слот плана (реализация — `plan-session.ts`). */
   forgetSession(id: string): void {
-    try {
-      this.store.clearSessionActive(id);
-    } catch {
-      /* best-effort */
-    }
-    if (this.sessionId === id) {
-      this.sessionId = null;
-      this.tracker = null;
-      this.completedPlan = null;
-      this._auditSkipsRemaining = 0;
-    }
+    this.plan.forgetSession(id);
   }
 
   /** Вяжет детектор галлюцинаций: тул plan проверяет удалённость файлов (auto-switch kind gate). */
@@ -330,15 +156,14 @@ export class ExecutionModule implements AgentModule {
     this.hallucinationDetector = detector;
   }
 
-  /** Запоминает последний завершённый план: финальный аудит проверит его и
-   *  после очистки трекера авто-архивом. */
+  /** Запоминает завершённый план для финального аудита (реализация — `plan-session.ts`). */
   recordCompleted(plan: Plan): void {
-    this.completedPlan = plan;
+    this.plan.recordCompleted(plan);
   }
 
   /** Забывает завершённый план (abort/delete/purge — аудитить нечего). */
   clearCompleted(): void {
-    this.completedPlan = null;
+    this.plan.clearCompleted();
   }
 
   /** Включает/выключает авто-advance шагов (config execution.autoAdvance). */
@@ -346,73 +171,34 @@ export class ExecutionModule implements AgentModule {
     this.autoAdvance = enabled;
   }
 
-  /**
-   * Архивирует завершённый план на границе хода (onTurnEnd). Раньше архив
-   * происходил посреди хода в advancePlanIfStepComplete — модель продолжала
-   * звать plan_step/re-plan и получала «нет активного плана». Теперь план
-   * живёт до конца хода, а при архивации модель получает явное уведомление.
-   */
+  /** Архивирует завершённый план на границе хода (реализация — `plan-session.ts`). */
   archiveCompletedPlan(): void {
-    if (!this.pendingAutoArchive && !(this.tracker && this.tracker.isComplete())) return;
-    const tracker = this.tracker;
-    if (!tracker) {
-      this.pendingAutoArchive = false;
-      return;
-    }
-    const completed = tracker.getPlan();
-    this.store.archivePlan(completed);
-    this.recordCompleted(completed); // final audit still verifies it
-    this.tracker = null;
-    this.pendingAutoArchive = false;
-    this.flushSessionPlan();
-    const settled = completed.steps.filter(
-      (s) => s.status === "done" || s.status === "skipped",
-    ).length;
-    this.pendingMessages.push({
-      role: "user",
-      content: `<system-summary>${t("plan.completed_archived", {
-        id: completed.id,
-        done: String(settled),
-        total: String(completed.steps.length),
-      })}</system-summary>`,
-    });
+    this.plan.archiveCompletedPlan(this.pendingMessages);
   }
 
-  /** Восстанавливает активный план с диска. False, если нет/уже завершён (тогда в архив). */
+  /** Восстанавливает активный план с диска (реализация — `plan-session.ts`). */
   restorePlan(): boolean {
-    const plan = this.store.loadActive();
-    if (!plan) return false;
-    const restored = new PlanTracker(plan);
-    // План, уже завершённый на момент сохранения, активным не возвращается —
-    // архивируем, чтобы не якорил агента (восстановленные готовые планы давали
-    // петлю "continue step 4" на рестарте).
-    if (restored.isComplete()) {
-      this.store.archivePlan(plan);
-      this.tracker = null;
-      return false;
-    }
-    this.tracker = restored;
-    // Двигаем к первому недонесённому шагу
-    this.tracker.syncCurrentStep();
-    this._auditSkipsRemaining = 1; // восстановленный план — один свободный проход
-    return true;
+    return this.plan.restorePlan();
   }
 
   /** Трекер (null без активного плана). */
   getTracker(): PlanTracker | null {
-    return this.tracker;
+    return this.plan.getTracker();
   }
 
-  /** Текущий трекаемый план (единый источник правды для UI).
-   *  Null в свежей сессии — план с диска восстанавливается только при resume
-   *  сессии с историей, REPL протухших планов не видит. */
+  /** Set-able вид трекера, общий с план-тулами (реализация — `plan-session.ts`). */
+  get trackerRef(): { current: PlanTracker | null } {
+    return this.plan.trackerRef;
+  }
+
+  /** Текущий трекаемый план (единый источник правды для UI). */
   getActivePlan(): Plan | null {
-    return this.tracker?.getPlan() ?? null;
+    return this.plan.getActivePlan();
   }
 
   /** Стор планов. */
   getStore(): PlanStore {
-    return this.store;
+    return this.plan.store;
   }
 
   /** Stuck-детектор. */
@@ -420,33 +206,11 @@ export class ExecutionModule implements AgentModule {
     return this.stuckDetector;
   }
 
-  /**
-   * Автопоиск в вебе повторяющейся ошибки (≥ порога errorWebSearch одинаковых
-   * сигнатур). Поиск fire-and-forget (результат тула не блокирует), результаты
-   * очередятся <system-summary> в pendingMessages.
-   *
-   * Гейты: мастер-свитч webSearch + свитч errorWebSearch → повторная сигнатура
-   * → не-исканная (или ретрайная) → сессионный кап → содержательный текст ошибки →
-   * кулдаун. Один поиск на сигнатуру; пустые результаты — один ретрай
-   * (размаркировка раз), затем сигнатура считается исканной.
-   */
+  /** Автопоиск в вебе повторяющейся ошибки (реализация — `error-search.ts`). */
   maybeSearchError(ctx: ToolContext, call: ToolCall): void {
-    maybeSearchError(this.errorSearchHost(), ctx, call);
+    maybeSearchError(errorSearchHost(this.hostView()), ctx, call);
   }
 
-  /**
-   * Evidence-based автозакрытие пендинг шагов с deliverables на диске. Мелкие
-   * модели рутинно доделывают работу, но забывают бухгалтерию `plan update`
-   * (было в ses_mthn3c2a: 2/5 шагов done при всех артефактах на месте — audit-gate
-   * реджектил корректный финальный ответ и жёг retry-бюджет на бухгалтерию, не
-   * на работу).
-   *
-   * Стандарт ТОТ ЖЕ, что аудитор применяет к done-шагам: каждый файлоподобный
-   * токен описания резолвится в существующий файл. Шаги без файловых токенов
-   * остаются пендинг (верифицировать нечего).
-   */
-
-  /** Финальный аудит активного/завершённого плана: файлы, тесты, tsc, пендинги. Null — аудитить нечего. */
   /** Финальный аудит активного/завершённого плана (реализация — `final-audit.ts`). */
   async runFinalAudit(): Promise<{
     passed: boolean;
@@ -456,72 +220,37 @@ export class ExecutionModule implements AgentModule {
     missingFiles: string[];
     summary: string;
   } | null> {
-    return runFinalAudit(this.finalAuditHost());
+    return runFinalAudit(finalAuditHost(this.hostView()));
   }
 
-  /** Блок системного промпта с чеклистом плана (null без активного/незавершённого). */
+  /** Блок системного промпта с чеклистом плана (реализация — `plan-session.ts`). */
   getSystemPromptBlock(): PromptBlock | null {
-    if (!this.tracker || this.tracker.isComplete()) return null;
-    return {
-      content: this.tracker.toPromptBlock(),
-      priority: "critical",
-      essential: true,
-      estimatedTokens: 200,
-      // Меняется на каждом plan_step — в хвост, чтобы не рвать prefix-cache.
-      tail: true,
-    };
+    return this.plan.getSystemPromptBlock();
   }
 
-  /**
-   * Короткая строка "текущий план" для сводки компакции. Null без активного
-   * плана. Для 9B-моделей важна явная инструкция "continue it, do NOT create
-   * a new plan" — после компакции блок плана виден, но модель всё равно
-   * пересоздаёт план (было: ses_msvuao0h).
-   *
-   * Готовый план в сводке — "план done, можно новый", а НЕ "continue step 4,
-   * do NOT create a new plan", якоривший петлю ses_msxjbnm4.
-   */
+  /** Строка "текущий план" для сводки компакции (реализация — `plan-session.ts`). */
   getPlanSummary(): string | null {
-    if (!this.tracker) return null;
-    const plan = this.tracker.getPlan();
-    const done = plan.steps.filter((s) => s.status === "done").length;
-    const total = plan.steps.length;
-    if (this.tracker.isComplete()) {
-      return t("exec.plan_summary_complete", {
-        id: plan.id,
-        title: plan.title,
-        done: String(done),
-        total: String(total),
-      });
-    }
-    const current = this.tracker.getCurrentStepIndex() + 1;
-    return t("exec.plan_summary_continue", {
-      id: plan.id,
-      title: plan.title,
-      done: String(done),
-      total: String(total),
-      current: String(current),
-    });
+    return this.plan.getPlanSummary();
   }
 
   /** Определения тулов модуля (plan/todo/verify через фабрику plan-tool). */
   getToolDefinitions(): ToolDefinition[] {
     return createPlanToolDefinitions({
-      store: this.store,
+      store: this.plan.store,
       verifier: this.verifier,
-      trackerRef: this.trackerRef,
-      preserveActive: () => this.preserveActive(),
+      trackerRef: this.plan.trackerRef,
+      preserveActive: () => this.plan.preserveActive(),
       setPlan: (p) => this.setPlan(p),
       persistPlan: (p) => this.persistPlan(p),
       recordCompleted: (p) => this.recordCompleted(p),
       clearCompleted: () => this.clearCompleted(),
-      hasStepDeliverables: (s) => this.hasStepDeliverables(s),
-      missingStepDeliverables: (s) => this.missingStepDeliverables(s),
-      stillExistingDeliverables: (s) => this.stillExistingDeliverables(s),
+      hasStepDeliverables: (s) => hasStepDeliverables(s),
+      missingStepDeliverables: (s) => missingStepDeliverables(this.baseDir, s),
+      stillExistingDeliverables: (s) => stillExistingDeliverables(this.baseDir, s),
       parseKinds: (a, st) => parseKinds(a, st),
       parseChecks: (a, st) => parseChecks(a, st),
-      getTaskText: (c) => this.getTaskText(c),
-      noActivePlanMessage: () => this.noActivePlanMessage(),
+      getTaskText: (c) => getTaskText(c),
+      noActivePlanMessage: () => noActivePlanMessage(this.plan.store),
       typecheckFailures: this.state.typecheckFailures,
       baseDir: this.baseDir,
       wasFileDeleted: this.hallucinationDetector
@@ -533,79 +262,24 @@ export class ExecutionModule implements AgentModule {
 
   /** Плагин модуля (хуки цикла из фабрики execution-plugin). */
   getPlugin(): AgentPlugin {
-    return createExecutionPlugin({
-      stuckDetector: this.stuckDetector,
-      trackerRef: this.trackerRef,
-      pendingMessages: this.pendingMessages,
-      forbiddenBashFailures: this.forbiddenBashFailures,
-      state: this.state,
-      store: this.store,
-      checkPlanAlignment: (call) => checkPlanAlignment(this.planAlignmentHost(), call),
-      advancePlanIfStepComplete: (sl) => advancePlanIfStepComplete(this.stepAdvanceDeps(), sl),
-      archiveCompletedPlan: () => this.archiveCompletedPlan(),
-      maybeSearchError: (ctx, call) => this.maybeSearchError(ctx, call),
-    });
+    return executionPlugin(() => this.hostView(), this.forbiddenBashFailures);
   }
 
-  private preserveActive(): void {
-    if (!this.tracker) return;
-    const plan = this.tracker.getPlan();
-    if (plan.steps.every((s) => s.status === "done" || s.status === "skipped")) {
-      this.store.archivePlan(plan);
-    } else {
-      this.store.saveDraft(plan);
-    }
-  }
-
-  /** Хост шаг-гейта (INV-23): текущее состояние модуля для `step-advance.ts`. */
-  private stepAdvanceDeps(): StepAdvanceDeps {
+  /** Снимок состояния модуля для хостов хуков (INV-23, см. `module-hosts.ts`). */
+  private hostView(): ExecutionHostView {
     return {
       baseDir: this.baseDir,
-      tracker: this.tracker,
-      store: this.store,
-      depsGateHints: this.state.depsGateHints,
+      plan: this.plan,
+      auditor: this.auditor,
+      state: this.state,
       pendingMessages: this.pendingMessages,
       autoAdvance: this.autoAdvance,
-      flushSessionPlan: () => this.flushSessionPlan(),
-      setPendingAutoArchive: () => {
-        this.pendingAutoArchive = true;
-      },
-    };
-  }
-
-  /** Хост финального аудита (INV-23) для `final-audit.ts`. */
-  private finalAuditHost(): FinalAuditHost {
-    return {
-      baseDir: this.baseDir,
-      tracker: this.tracker,
-      completedPlan: this.completedPlan,
-      auditor: this.auditor,
-      store: this.store,
-      auditSkipsRemaining: this._auditSkipsRemaining,
-      mutatedThisTurn: this.state.mutatedThisTurn,
-      setAuditSkipsRemaining: (n) => {
-        this._auditSkipsRemaining = n;
-      },
-      flushSessionPlan: () => this.flushSessionPlan(),
-    };
-  }
-
-  /** Хост гейта выравнивания (INV-23) для `plan-alignment.ts`. */
-  private planAlignmentHost(): PlanAlignmentHost {
-    return { tracker: this.tracker };
-  }
-
-  /** Хост автопоиска ошибок (INV-23) для `error-search.ts`. */
-  private errorSearchHost(): ErrorSearchHost {
-    return {
       stuckDetector: this.stuckDetector,
-      tracker: this.tracker,
-      pendingMessages: this.pendingMessages,
-      retrySignatures: this.retryWebSearchSignatures,
       searchRunner: this.searchRunner,
       errorSearchCooldownMs: this.errorSearchCooldownMs,
       searchesThisSession: this.searchesThisSession,
       lastErrorSearchAt: this.lastErrorSearchAt,
+      retryWebSearchSignatures: this.retryWebSearchSignatures,
       setSearchesThisSession: (n) => {
         this.searchesThisSession = n;
       },
@@ -613,75 +287,4 @@ export class ExecutionModule implements AgentModule {
         this.lastErrorSearchAt = n;
       },
     };
-  }
-
-  /**
-   * Файловые токены из описания шага, не резолвящиеся в реальный файл.
-   * Тот же общий экстрактор токенов (allow-list реальных расширений, URL
-   * вырезаны) и subtree-резолвер аудитора: "bicycles.ts" находит
-   * "bicycle-shop/src/data/bicycles.ts", а hostname в описании — никогда
-   * missing deliverable. Шаги без файловых токенов (чистые команды, прогоны
-   * проверок) неверифицируемы.
-   */
-  private missingStepDeliverables(step: { description: string }): string[] {
-    const tokens = extractFileLikeTokens(stripUrls(step.description));
-    if (tokens.length === 0) return [];
-    return tokens.filter((p) => !findExistingFile(this.baseDir, p));
-  }
-
-  /**
-   * Файловые токены из описания шага, всё ещё резолвящиеся в реальный файл.
-   * Инверсия missingStepDeliverables — для гейта delete-шагов ("done" значит
-   * файлы пропали).
-   */
-  private stillExistingDeliverables(step: { description: string }): string[] {
-    const tokens = extractFileLikeTokens(stripUrls(step.description));
-    if (tokens.length === 0) return [];
-    return tokens.filter((p) => findExistingFile(this.baseDir, p));
-  }
-
-  /** Есть ли в описании шага хоть один реальный файловый токен. Шаги без
-   *  токенов (чистые команды, прогоны проверок) не автоверифицируются —
-   *  done-gate для них vacuous. */
-  private hasStepDeliverables(step: { description: string }): boolean {
-    return extractFileLikeTokens(stripUrls(step.description)).length > 0;
-  }
-
-  /**
-   * Модельно-видимое actionable-сообщение «нет активного плана». Содержит
-   * сведения о последнем завершённом плане и действие для продолжения — вместо
-   * голого «No active plan», на котором 9B зацикливалась после авто-архива.
-   */
-  private noActivePlanMessage(): string {
-    const last = this.store.listArchived().at(-1);
-    if (!last) return t("plan.no_active");
-    const done = last.steps.filter((s) => s.status === "done" || s.status === "skipped").length;
-    return t("plan.no_active_with_last", {
-      id: last.id,
-      title: last.title,
-      done: String(done),
-      total: String(last.steps.length),
-    });
-  }
-
-  /**
-   * Достаёт исходную формулировку задачи из первого user-сообщения истории.
-   * Нужно для валидации покрытия плана против требований.
-   */
-  private getTaskText(ctx: any): string {
-    const manager = ctx?.contextManager;
-    if (!manager) return "";
-    const history = manager.getActiveHistory();
-    // Первое user-сообщение может быть инжектированным <system-summary>
-    // (блок компакции) — это НЕ задача. Покрытие сравнивает план с реальной
-    // инструкцией модели (было: протухший файловый список сводки компакции дал
-    // bogus-варнинг "в плане не хватает файлов").
-    const firstUser = history.find((m: { role: string; content: string | ContentPart[] }) => {
-      if (m.role !== "user") return false;
-      const text = getMessageText(m.content);
-      return !text.startsWith("<system-summary>") && !text.includes("[Compressed:");
-    });
-    if (!firstUser) return "";
-    return getMessageText(firstUser.content).trim();
-  }
-}
+  }}

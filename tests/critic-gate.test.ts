@@ -28,7 +28,7 @@ const concern = {
 const critical = {
   status: "critical" as const,
   summary: "broken",
-  issues: [{ severity: "critical" as const, claim: "c", problem: "p" }],
+  issues: [{ severity: "critical" as const, claim: "c", problem: "p", evidence: "test fixture" }],
 };
 
 describe("CriticGate", () => {
@@ -128,11 +128,11 @@ describe("CriticGate", () => {
     expect(d.state.criticRepairCycles).toBe(0);
   });
 
-  it("passes (no retry) on critical once the repair budget is spent", async () => {
+  it("nudges to act once on critical without new evidence, then passes", async () => {
     const second = {
       status: "critical" as const,
       summary: "still broken",
-      issues: [{ severity: "critical" as const, claim: "different fresh claim", problem: "p" }],
+      issues: [{ severity: "critical" as const, claim: "different fresh claim", problem: "p", evidence: "test fixture" }],
     };
     const verify = vi.fn(async () => critical);
     const gate = new CriticGate({
@@ -144,18 +144,24 @@ describe("CriticGate", () => {
     });
     const d = deps();
     expect(await gate.evaluate(d)).toBe("retry");
+    // Ремонт израсходован, новых тулов нет: второй проверки не платим —
+    // один раз требуем действия (ses_mvzp8cuk: 19 с на тот же вердикт).
     verify.mockResolvedValue(second);
-    expect(await gate.evaluate(d)).toBe("pass");
+    expect(await gate.evaluate(d)).toBe("retry");
+    expect(verify).toHaveBeenCalledTimes(1);
     expect(d.state.criticRepairCycles).toBe(1);
     const names = d.slog.logCritic.mock.calls.map((c: any[]) => c[0]);
-    expect(names.filter((n: string) => n === "critic_escalation")).toHaveLength(1);
+    expect(names.filter((n: string) => n === "critic_escalation")).toHaveLength(2);
+    // Бюджет «действуй» исчерпан — ответ принимается.
+    expect(await gate.evaluate(d)).toBe("pass");
+    expect(verify).toHaveBeenCalledTimes(1);
   });
 
   it("does not spend the repair budget on a near-identical repeat", async () => {
     const first = {
       status: "critical" as const,
       summary: "broken!",
-      issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p" }],
+      issues: [{ severity: "critical" as const, claim: "Missing file.", problem: "p", evidence: "test fixture" }],
     };
     const gate = new CriticGate({
       enabled: true,

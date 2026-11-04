@@ -3,6 +3,7 @@
  * `blocks:<a>-<b>` (нумерация — по блокам IR, а не по строкам). Рендер блока
  * в текст — формат-агностичный.
  */
+import { t } from "../../i18n/index";
 import { boundText, DEFAULT_DOC_LIMITS } from "./bound";
 import type { DocBlock, DocumentIR } from "./ir";
 
@@ -29,6 +30,19 @@ export function parseSelector(sel: string): Selector {
   return { kind: "unknown", arg: s };
 }
 
+/**
+ * Человекочитаемая метка среза для строки тула: «блоки 10-25», «раздел B».
+ * `all` — пусто: полное чтение не нуждается в уточнении.
+ */
+export function selectorDisplay(sel: Selector): string {
+  if (sel.kind === "blocks") {
+    const [from, to] = sel.arg;
+    return t("documents.read_blocks", { from: String(from), to: String(to) });
+  }
+  if (sel.kind === "section") return t("documents.read_section", { title: sel.arg });
+  return "";
+}
+
 /** Текстовое представление одного блока. */
 function blockText(b: DocBlock): string {
   switch (b.kind) {
@@ -50,7 +64,9 @@ function blockText(b: DocBlock): string {
 /** Блок-заголовок раздела с совпадением без учёта регистра; иначе `null`. */
 function findSection(ir: DocumentIR, title: string): { start: number; level: number } | null {
   const want = title.trim().toLowerCase();
-  const start = ir.blocks.findIndex((b) => b.kind === "heading" && b.text.trim().toLowerCase() === want);
+  const start = ir.blocks.findIndex(
+    (b) => b.kind === "heading" && b.text.trim().toLowerCase() === want,
+  );
   const block = start >= 0 ? ir.blocks[start] : undefined;
   if (!block || block.kind !== "heading") return null;
   return { start, level: block.level };
