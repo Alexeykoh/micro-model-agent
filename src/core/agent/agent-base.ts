@@ -23,6 +23,7 @@ import {
   setProvider as phaseSetProvider,
   type ProbeIdentity,
   type ProviderPhaseHost,
+  type ReconfigureOptions,
 } from "./provider-phase";
 import {
   buildSystemPrompt as phaseBuildSystemPrompt,
@@ -74,6 +75,9 @@ export class AgentBase {
    *  в конструкторе (строки до мутаций). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается через ProviderPhaseHost
   private lastProbeIdentity: ProbeIdentity;
+  /** Кеш «идентичность → измеренный contextWindow» (INV-W6); пишется фазой. */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается/пишется через ProviderPhaseHost
+  private probeWindowCache = new Map<string, number>();
   /** Сжатые инструкции; снимок карты проекта на ход (см. PromptPhaseHost). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается/пишется через PromptPhaseHost
   private overflowHintBlock: PromptBlock | null = null;
@@ -207,9 +211,10 @@ export class AgentBase {
   /**
    * Применяет новый конфиг живьём (фаза провайдера): context-probe, пересборка
    * провайдера, ресайз бюджетов, стоимость. Реализация — `provider-phase.ts`.
+   * @param opts `probe: false` — пропустить context-probe (INV-W6).
    */
-  async reconfigure(config: AppConfig): Promise<void> {
-    await phaseReconfigure(this as unknown as ProviderPhaseHost, config);
+  async reconfigure(config: AppConfig, opts?: ReconfigureOptions): Promise<void> {
+    await phaseReconfigure(this as unknown as ProviderPhaseHost, config, opts);
   }
 
   /**
