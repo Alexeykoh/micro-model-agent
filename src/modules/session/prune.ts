@@ -2,6 +2,8 @@
 //
 // Вынесено из `manager.ts`: правило «сессия пустая» — чистая функция над
 // стором (аудит §7.15).
+import { existsSync, readdirSync, rmSync, type Dirent } from "node:fs";
+import { join } from "node:path";
 import { getMessageText } from "../../llm/provider";
 import type { SessionStore } from "./store";
 import type { SessionMessage } from "./types";
@@ -49,4 +51,58 @@ export function pruneEmptySessions(
     }
   }
   return deleted;
+}
+
+/**
+ * Каталог-сирота: ровно один вход — пустой каталог `temp` (INV-W4). Так
+ * оставался след эагерного создания `temp` в `createSessionContext`. Мета, логи
+ * или любые другие файлы означают живую либо оборванную сессию — их не трогаем.
+ * Пустой каталог тоже не трогаем: так выглядит `create()` между `mkdirSync` и
+ * записью меты.
+ */
+function isOrphanSessionDir(dir: string): boolean {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  if (entries.length !== 1) return false;
+  const only = entries[0];
+  if (!only.isDirectory() || only.name !== "temp") return false;
+  try {
+    return readdirSync(join(dir, "temp"), { withFileTypes: true }).length === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Удалить каталоги-сирот в каталоге хранилища сессий (INV-W4). Консервативно:
+ * удаляется только каталог, содержащий ровно один пустой `temp`, поэтому гонка
+ * с `create()` исключена — тот пишет мету, а `temp` больше не создаётся заранее.
+ *
+ * @returns число удалённых каталогов.
+ */
+export function pruneOrphanSessionDirs(baseDir: string): number {
+  if (!existsSync(baseDir)) return 0;
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(baseDir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  let removed = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(baseDir, entry.name);
+    if (!isOrphanSessionDir(dir)) continue;
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      removed += 1;
+    } catch {
+      // Fail-open: каталог занят — останется до следующего прогона.
+    }
+  }
+  return removed;
 }

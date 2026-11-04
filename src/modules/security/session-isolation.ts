@@ -1,6 +1,6 @@
 // Изоляция сессий: свой temp-каталог, свои security-оверрайды, скоуп путей.
 import { join, resolve } from "path";
-import { mkdirSync, existsSync } from "fs";
+import { mkdirSync, existsSync, rmSync } from "fs";
 import type { SecurityConfig, AppConfig } from "../../config/types";
 import { DEFAULT_SECURITY_CONFIG } from "../../config/security";
 import { isInsideDir } from "../../tools/path-utils";
@@ -31,15 +31,27 @@ export const DEFAULT_SESSION_ISOLATION: SessionIsolationConfig = {
 export interface SessionContext {
   /** Уникальный id сессии */
   sessionId: string;
-  /** Временный каталог сессии */
+  /** Временный каталог сессии (создаётся лениво — `getSessionTempDir`, INV-W4) */
   tempDir: string;
+  /**
+   * Изолировать временные файлы. `false` — `getSessionTempDir` не создаёт
+   * каталог, а возвращает путь как есть.
+   */
+  isolateTempFiles: boolean;
   /** Security-оверрайды сессии */
   securityOverrides?: Partial<SecurityConfig>;
   /** Рабочий каталог сессии */
   workingDir: string;
 }
 
-/** Создать контекст сессии с изоляцией (temp-каталог 0700). */
+/**
+ * Контекст сессии с изоляцией.
+ *
+ * На диск НЕ пишется (INV-W4): раньше здесь создавался `temp`, и в
+ * `~/.mma/sessions` накопились тысячи каталогов, содержащих только пустой
+ * `temp` — они же раздували `countSessions()` и гасили автоочистку.
+ * Каталог создаётся при первом обращении (`getSessionTempDir`).
+ */
 export function createSessionContext(
   sessionId: string,
   projectDir: string,
@@ -47,22 +59,12 @@ export function createSessionContext(
   securityOverrides?: Partial<SecurityConfig>,
 ): SessionContext {
   const config = { ...DEFAULT_SESSION_ISOLATION, ...isolationConfig };
-
-  // Временный каталог сессии
   const baseDir = config.baseDir || join(globalSessionsDir(), sessionId);
-  const tempDir = join(baseDir, "temp");
-
-  if (config.isolateTempFiles && !existsSync(tempDir)) {
-    try {
-      mkdirSync(tempDir, { recursive: true, mode: 0o700 });
-    } catch {
-      // Каталог не создался — работаем без изоляции
-    }
-  }
 
   return {
     sessionId,
-    tempDir,
+    tempDir: join(baseDir, "temp"),
+    isolateTempFiles: config.isolateTempFiles,
     securityOverrides,
     workingDir: projectDir,
   };
@@ -94,14 +96,31 @@ export function getSessionSecurityConfig(
   };
 }
 
-/** Временный каталог сессии. */
+/**
+ * Временный каталог сессии, создавая его при первом обращении (INV-W4).
+ * Пустой каталог ради «на всякий случай» не создаём: он и есть источник
+ * сирот в `~/.mma/sessions`.
+ */
 export function getSessionTempDir(sessionContext: SessionContext): string {
+  if (!sessionContext.isolateTempFiles || existsSync(sessionContext.tempDir)) {
+    return sessionContext.tempDir;
+  }
+  try {
+    mkdirSync(sessionContext.tempDir, { recursive: true, mode: 0o700 });
+  } catch {
+    // Каталог не создался — работаем без изоляции
+  }
   return sessionContext.tempDir;
 }
 
-/** Убрать временные данные сессии (пока no-op — чистит ОС). */
-export function cleanupSessionTempDir(_sessionContext: SessionContext): void {
-  // Заглушка: рекурсивное удаление не реализовано, чистит ОС.
+/** Убрать временные данные сессии; отсутствующий каталог — не ошибка. */
+export function cleanupSessionTempDir(sessionContext: SessionContext): void {
+  if (!existsSync(sessionContext.tempDir)) return;
+  try {
+    rmSync(sessionContext.tempDir, { recursive: true, force: true });
+  } catch {
+    // Fail-open: чистка не должна ронять завершение сессии; ОС подчистит позже.
+  }
 }
 
 /**

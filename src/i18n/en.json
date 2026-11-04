@@ -94,6 +94,7 @@
   "session.autoprune_skipped": "Session auto-prune skipped: {count} sessions in the store (threshold {limit}). Run `mma session prune --dry-run`, then `mma session prune`.",
   "session.autoprune_failed": "Session auto-prune failed: {error}",
   "session.autoprune_item_failed": "Could not delete session {id}: {error}",
+  "session.orphans_pruned": "Removed {count} orphan session directories (empty temp folders without a session record).",
   "session.renamed": "Session renamed to: {name}",
   "session.created": "Created session: {name}",
   "session.resumed": "Resumed session: {name}",

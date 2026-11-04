@@ -1,7 +1,10 @@
 // Изменяемое состояние менеджера сессий: контексты изоляции, «занятые» сессии,
 // автоочистка по лимиту. Вынесено из `manager.ts` (правило 6): здесь живёт
 // состояние и его правила, а `SessionManager` остаётся фасадом над стором.
-import type { SessionContext, SessionIsolationConfig } from "../../modules/security/session-isolation";
+import type {
+  SessionContext,
+  SessionIsolationConfig,
+} from "../../modules/security/session-isolation";
 import {
   createSessionContext,
   DEFAULT_SESSION_ISOLATION,
@@ -11,7 +14,8 @@ import type { SessionStore } from "./store";
 import type { SessionMeta, SessionMessage } from "./types";
 import { normalizeSecurityOverrides } from "./security-overrides";
 import { autoPruneSessions, scheduleAutoPrune } from "./auto-prune";
-import { isEmptySession, pruneEmptySessions } from "./prune";
+import { isEmptySession, pruneEmptySessions, pruneOrphanSessionDirs } from "./prune";
+import { t } from "../../i18n/index";
 
 /** Подписчики переименования: свой список, у сиблинга — ещё и главный менеджер. */
 export class RenameHub {
@@ -117,7 +121,22 @@ export class ManagerState {
 
   /** Удалить все пустые сессии, кроме `excludeId`. Не бросает. */
   pruneEmpty(excludeId: string | undefined, remove: (id: string) => void): string[] {
+    this.pruneOrphanDirs();
     return pruneEmptySessions(this.store, excludeId, remove);
+  }
+
+  /**
+   * Чистка каталогов-сирот (INV-W4): след эагерного создания `temp`. Идёт в
+   * фоне (`scheduleAutoPrune`) либо вместе с явной `session prune`, поэтому
+   * старт и ответы HTTP не ждут удаления тысяч каталогов.
+   */
+  private pruneOrphanDirs(): void {
+    try {
+      const removed = pruneOrphanSessionDirs(this.store.baseDirPath());
+      if (removed > 0) this.warn(t("session.orphans_pruned", { count: String(removed) }));
+    } catch {
+      // Fail-open: чистка сирот не должна срывать автоочистку сессий.
+    }
   }
 
   /** Планирует автоочистку в фоне (A-01). */
@@ -139,6 +158,7 @@ export class ManagerState {
   }
 
   private enforceMaxSessions(remove: (id: string) => void): void {
+    this.pruneOrphanDirs();
     autoPruneSessions({
       max: this.options.maxSessions ?? 50,
       count: () => this.store.countSessions(),

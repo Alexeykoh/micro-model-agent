@@ -9,14 +9,15 @@ import {
   appendFileSync,
 } from "fs";
 import { join } from "path";
-import { gzipSync, gunzipSync } from "zlib";
+import { gzipSync } from "zlib";
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
+import { readHistoryFile, readRotatedHistory } from "./history-io";
 import { appendLogEntry, readLogEntries } from "./log-file";
 import type { SessionLogEntry } from "./log-types";
+import { SessionListCache } from "./list-cache";
 export type { SessionLogEntry, OnboardingEvent } from "./log-types";
-
 
 /** Файловое хранилище сессий: meta.json, history.jsonl, session.jsonl. */
 export class SessionStore {
@@ -24,12 +25,24 @@ export class SessionStore {
   private encryptor: SessionFileEncryptor | null = null;
   // In-memory кеш меты — иначе O(N²) чтений диска на appendMessage.
   private _metaCache = new Map<string, SessionMeta>();
+  /** Кеш списка сессий и отрицательных мет (INV-W3, см. `list-cache.ts`). */
+  private readonly listCache: SessionListCache;
 
-  constructor(baseDir: string, encryptionConfig?: SessionEncryptionConfig) {
+  constructor(
+    baseDir: string,
+    encryptionConfig?: SessionEncryptionConfig,
+    opts?: { cacheTtlMs?: number },
+  ) {
     this.baseDir = baseDir;
+    this.listCache = new SessionListCache(opts?.cacheTtlMs);
     if (encryptionConfig?.enabled) {
       this.encryptor = new SessionFileEncryptor(encryptionConfig);
     }
+  }
+
+  /** Каталог хранилища (нужен прунингу сирот, INV-W4). */
+  baseDirPath(): string {
+    return this.baseDir;
   }
 
   /** Каталог сессии по id. */
@@ -85,6 +98,8 @@ export class SessionStore {
   /** Сохранить мету (кеш + диск 0600, опционально шифр). */
   saveMeta(id: string, meta: SessionMeta): void {
     this._metaCache.set(id, meta);
+    this.listCache.forget(id);
+    this.listCache.invalidate();
     const dir = this.sessionDir(id);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const content = JSON.stringify(meta, null, 2);
@@ -98,19 +113,29 @@ export class SessionStore {
     }
   }
 
-  /** Загрузить мету (кеш, иначе диск); нет/битая — null. */
+  /**
+   * Загрузить мету (кеш, иначе диск); нет/битая — null. Отрицательный ответ
+   * кешируется (INV-W3, `list-cache.ts`): каталогов на порядок больше, чем мет.
+   */
   loadMeta(id: string): SessionMeta | null {
     const cached = this._metaCache.get(id);
     if (cached) return cached;
+    const now = Date.now();
+    if (this.listCache.missingSince(id, now)) return null;
     const path = this.metaPath(id);
-    if (!existsSync(path)) return null;
+    if (!existsSync(path)) {
+      this.listCache.markMissing(id, now);
+      return null;
+    }
     try {
       const raw = readFileSync(path, "utf-8");
       const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
       const meta = JSON.parse(content) as SessionMeta;
       this._metaCache.set(id, meta);
+      this.listCache.forget(id);
       return meta;
     } catch {
+      this.listCache.markMissing(id, now);
       return null;
     }
   }
@@ -155,59 +180,14 @@ export class SessionStore {
 
   /** Загрузить историю (битые строки пропускаются); нет файла — []. */
   loadHistory(id: string): SessionMessage[] {
-    const path = this.historyPath(id);
-    if (!existsSync(path)) return [];
-    try {
-      const raw = readFileSync(path, "utf-8");
-      const lines = raw.split("\n").filter(Boolean);
-      const parseLine = (line: string): SessionMessage | null => {
-        try {
-          return JSON.parse(line) as SessionMessage;
-        } catch {
-          return null;
-        }
-      };
-      if (this.encryptor?.isEnabled()) {
-        return lines
-          .map((line) => {
-            try {
-              return this.encryptor!.decryptFileContent(line);
-            } catch {
-              return null;
-            }
-          })
-          .filter((l): l is string => l !== null)
-          .map(parseLine)
-          .filter((m): m is SessionMessage => m !== null);
-      }
-      return lines.map(parseLine).filter((m): m is SessionMessage => m !== null);
-    } catch {
-      return [];
-    }
+    const enc = this.encryptor;
+    const decrypt = enc?.isEnabled() ? (line: string) => enc.decryptFileContent(line) : undefined;
+    return readHistoryFile(this.historyPath(id), decrypt);
   }
 
-  /**
-   * История ротированной сессии из `<baseDir>/<id>.jsonl.gz`. Нет gz — [].
-   */
+  /** История ротированной сессии из `<baseDir>/<id>.jsonl.gz`. Нет gz — []. */
   loadRotatedHistory(id: string): SessionMessage[] {
-    const gzPath = join(this.baseDir, `${id}.jsonl.gz`);
-    if (!existsSync(gzPath)) return [];
-    try {
-      const content = gunzipSync(readFileSync(gzPath)).toString("utf-8");
-      return content
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          try {
-            return JSON.parse(line) as SessionMessage;
-          } catch {
-            return null;
-          }
-        })
-        .filter((m): m is SessionMessage => m !== null);
-    } catch {
-      return [];
-    }
+    return readRotatedHistory(join(this.baseDir, `${id}.jsonl.gz`));
   }
 
   /** Добавить запись в session-лог. */
@@ -230,24 +210,33 @@ export class SessionStore {
       ? readdirSync(this.baseDir, { withFileTypes: true }).filter((e) => e.isDirectory()).length
       : 0;
   }
-  /** Список сессий по убыванию updatedAt. */
+  /**
+   * Список сессий по убыванию updatedAt (INV-W3). Скан кешируется
+   * (`list-cache.ts`) и сбрасывается `saveMeta`/`deleteSession`; возвращается
+   * копия — кешем управлять может только стор.
+   */
   listSessions(): SessionMeta[] {
-    if (!existsSync(this.baseDir)) return [];
-    const entries = readdirSync(this.baseDir, { withFileTypes: true });
+    const now = Date.now();
+    const cached = this.listCache.peek(now);
+    if (cached) return cached.slice();
     const sessions: SessionMeta[] = [];
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
+    if (existsSync(this.baseDir)) {
+      for (const entry of readdirSync(this.baseDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
         const meta = this.loadMeta(entry.name);
         if (meta) sessions.push(meta);
       }
+      sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     }
-    sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    return sessions;
+    this.listCache.remember(sessions, now);
+    return sessions.slice();
   }
 
   /** Удалить сессию (кеш + каталог). */
   deleteSession(id: string): void {
     this._metaCache.delete(id);
+    this.listCache.forget(id);
+    this.listCache.invalidate();
     const dir = this.sessionDir(id);
     if (existsSync(dir)) {
       rmSync(dir, { recursive: true, force: true });

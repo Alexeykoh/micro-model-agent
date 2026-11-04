@@ -114,8 +114,14 @@ export interface WebUiWiring {
    * Перечитывает статические веб-ассеты с диска на запрос. Вяжет `module.ts`,
    * чтобы правки `assets/*` подхватывались без рестарта `mma web`; тесты могут
    * не ставить и полагаться на фиксированный снапшот из `startServer`.
+   * Фактически отдаёт кешированный снапшот — см. `createAssetSource` (INV-W1).
    */
   assetSource?: () => WebUiAssets;
+  /**
+   * ETag снапшота ассетов для `If-None-Match` (INV-W1): повторная загрузка
+   * страницы отдаёт `304` без тела. `undefined` — без ETag.
+   */
+  assetEtag?: () => string | undefined;
   /** Рабочий каталог агента (`-d`) для секции «окружение» сайдбара и `/status`. */
   workspace?: string;
   /** Загруженные источники AGENTS.md (проект + глобальный) или `disabled` через `--no-agents-md`. */

@@ -92,8 +92,10 @@ _Заменяет план волн из сессии аудита; правки
 
 **INV-W4. Каталог сессии создаётся при первом использовании.**
 `createSessionContext` не пишет на диск. `getSessionTempDir` создаёт `temp`
-при первом обращении. `cleanupSessionTempDir` удаляет каталог. Каталог без
-`meta.json`, `history.jsonl` и `session.jsonl` — сирота и удаляется прунингом.
+при первом обращении. `cleanupSessionTempDir` удаляет каталог. Сирота — каталог
+содержит ровно один пустой `temp` (нет меты, логов и посторонних файлов);
+такой каталог удаляет `pruneOrphanSessionDirs`. Пустой каталог не трогаем:
+так выглядит `create()` между `mkdirSync` и записью меты.
 
 **INV-W5. Сеть не входит в путь ответа `POST /api/config`.**
 Ответ уходит после персиста и локального применения конфига. Обновление списка
@@ -126,12 +128,17 @@ _Заменяет план волн из сессии аудита; правки
 
 ### Волна C — серверный P0 (без изменения API)
 
-| Шаг | Файлы                                                                   | Что делается                                                                                 |
-| --- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| C1  | `webui/assets.ts`, `webui/module.ts`                                    | `createAssetSource()`: снапшот + отпечаток + TTL; `module.ts` ставит его вместо `loadAssets` |
-| C2  | `webui/static-assets.ts`                                                | `404` вместо «висящего» ответа; `ETag` + `Cache-Control: no-cache` на статике                |
-| C3  | `session/store.ts`                                                      | кеш `listSessions` + инвалидация на `saveMeta` / `deleteSession`                             |
-| C4  | `security/session-isolation.ts`, `session/store.ts`, `session/prune.ts` | ленивый `temp`, рабочий `cleanupSessionTempDir`, прунинг каталогов-сирот                     |
+| Шаг | Файлы                                                                           | Что делается                                                                                        |
+| --- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| C1  | `webui/assets.ts`, `webui/asset-cache.ts` (новый), `webui/module.ts`            | `createAssetSource()`: снапшот + отпечаток дерева + TTL; `module.ts` ставит его вместо `loadAssets` |
+| C2  | `webui/static-assets.ts`, `webui/state-contracts.ts`                            | `404` вместо «висящего» ответа; `ETag` + `Cache-Control: no-cache` на статике                       |
+| C3  | `session/store.ts`, `session/list-cache.ts` (новый)                             | кеш `listSessions` + кеш отрицательных мет; инвалидация на `saveMeta` / `deleteSession`             |
+| C4  | `security/session-isolation.ts`, `session/prune.ts`, `session/manager-state.ts` | ленивый `temp`, рабочий `cleanupSessionTempDir`, `pruneOrphanSessionDirs`                           |
+
+`store.ts` после C3/C4 разрезан по правилу 6 (≤300 строк): чтение истории
+переехало в `session/history-io.ts`, TTL-кеш реестра — в `session/list-cache.ts`.
+Публичный контракт `SessionStore` не изменился; добавлен только `baseDirPath()`
+(нужен прунингу сирот).
 
 Ожидаемый эффект: загрузка страницы — с секунд до сотен миллисекунд (168 из
 174 запросов становятся `304` без тела); меню сессий — с 150 мс до < 1 мс.
@@ -175,22 +182,21 @@ A честно показывает загрузку, но «подвисани�
 
 ## 6. Гейты (тест падал бы до правки)
 
-| Проверка                                       | Что ловит                                                                               |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `tests/webui/asset-snapshot.test.ts`           | повторный `assetSource()` не перечитывает файлы; правка файла видна после TTL           |
-| `tests/webui/static-unknown-js.test.ts`        | неизвестный `.js` → `404` и завершённый ответ (до правки — таймаут)                     |
-| `tests/webui/static-etag.test.ts`              | `If-None-Match` → `304`, пустое тело                                                    |
-| `tests/session/list-sessions-cache.test.ts`    | TTL/инвалидация, число `stat` не зависит от числа каталогов                             |
-| `tests/session/isolation-temp-lazy.test.ts`    | `createSessionContext` не пишет на диск; `getSessionTempDir` создаёт; `cleanup` удаляет |
-| `tests/session/orphan-prune.test.ts`           | каталог без меты/истории удаляется, каталог с логом — нет                               |
-| `tests/providers/list-models-timeout.test.ts`  | зависший провайдер → отказ за ≈ 4 с                                                     |
-| `tests/core/probe-parallel.test.ts`            | суммарное время пробы ≈ max, а не сумма                                                 |
-| `tests/core/probe-identity-cache.test.ts`      | вторая проба той же идентичности не ходит в сеть                                        |
-| `tests/webui/reconfigure-single-probe.test.ts` | 8 раннеров → одна проба                                                                 |
-| `tests/webui/config-post-no-network.test.ts`   | `POST /api/config` отвечает при висящем `listModels`                                    |
-| `tests/webui/models-event.test.ts`             | событие `models` уходит после фонового обновления                                       |
-| `tests/webui/tab-switch-busy.test.ts`          | composer заблокирован, лента `aria-busy`; устаревшая загрузка не применяется            |
-| `tests/ui/reduced-motion-indicator.test.ts`    | при `reduce` индикатор прогресса обновляется                                            |
+| Проверка                                       | Что ловит                                                                                             |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `tests/webui/asset-snapshot.test.ts`           | повторный `assetSource()` не перечитывает файлы; правка файла видна после TTL                         |
+| `tests/webui/static-assets.test.ts`            | неизвестный `.js` → `404` и завершённый ответ (до правки — таймаут); `If-None-Match` → `304` без тела |
+| `tests/session/list-sessions-cache.test.ts`    | TTL/инвалидация, число `stat` не зависит от числа каталогов                                           |
+| `tests/session/isolation-temp-lazy.test.ts`    | `createSessionContext` не пишет на диск; `getSessionTempDir` создаёт; `cleanup` удаляет               |
+| `tests/session/orphan-prune.test.ts`           | каталог без меты/истории удаляется, каталог с логом — нет                                             |
+| `tests/providers/list-models-timeout.test.ts`  | зависший провайдер → отказ за ≈ 4 с                                                                   |
+| `tests/core/probe-parallel.test.ts`            | суммарное время пробы ≈ max, а не сумма                                                               |
+| `tests/core/probe-identity-cache.test.ts`      | вторая проба той же идентичности не ходит в сеть                                                      |
+| `tests/webui/reconfigure-single-probe.test.ts` | 8 раннеров → одна проба                                                                               |
+| `tests/webui/config-post-no-network.test.ts`   | `POST /api/config` отвечает при висящем `listModels`                                                  |
+| `tests/webui/models-event.test.ts`             | событие `models` уходит после фонового обновления                                                     |
+| `tests/webui/tab-switch-busy.test.ts`          | composer заблокирован, лента `aria-busy`; устаревшая загрузка не применяется                          |
+| `tests/ui/reduced-motion-indicator.test.ts`    | при `reduce` индикатор прогресса обновляется                                                          |
 
 ## 7. Риски и открытые вопросы
 
@@ -204,9 +210,10 @@ A честно показывает загрузку, но «подвисани�
    Это осознанный обмен: текущее поведение (15 с на каждое переключение) хуже.
 4. **`ETag` vs правки на лету.** В dev `no-cache` заставляет браузер перепроверять
    каждый ассет; при совпадении отпечатка это `304` без тела — дешевле, чем сейчас.
-5. **Прунинг сирот необратим.** Удаляем только каталоги, где нет `meta.json`,
-   `history.jsonl` и `session.jsonl`. Существующие 3 841 сирота чистятся один раз
-   при старте, в фоне.
+5. **Прунинг сирот необратим.** Удаляется только каталог с одним пустым `temp`
+   (мета, логи и посторонние файлы — барьер). Существующие 3 856 сирот чистятся
+   в фоне: на первом `create()` (фон автоочистки) либо по `session prune`;
+   старт и HTTP-ответы удаление не ждут.
 6. **A4 и доступность.** Замедленная анимация — компромисс; для пользователей с
    вестибулярными расстройствами безопаснее текстовый прогресс (A3, A5), анимация
    остаётся вторичным признаком.

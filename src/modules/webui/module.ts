@@ -18,7 +18,7 @@ import type { Host } from "../../core/host";
 import { CONFIG_FILE, persistConfigChange as persistConfig } from "../../config/persist";
 import { buildSetupDisplay } from "../setup/answers";
 import { WebHost } from "../../core/web-host";
-import { loadAssets } from "./assets";
+import { createAssetSource } from "./asset-cache";
 import { makeWebCommands } from "./chat/commands";
 import { makeReconfigure } from "./settings/reconfigure";
 import { installWebForwarding } from "./event-forward";
@@ -118,10 +118,7 @@ function activeExecModule(
 ): ExecutionModule | undefined {
   try {
     const active =
-      sessionId ??
-      state.sessionManager?.getActive?.() ??
-      state.activeSessionId ??
-      null;
+      sessionId ?? state.sessionManager?.getActive?.() ?? state.activeSessionId ?? null;
     if (active) {
       const runner = state.pool.getRunner(active);
       if (runner) return runner.execModule;
@@ -280,9 +277,12 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   });
 
   state.bridge = host;
-  // Ассеты отдаём свежими с диска, чтобы правки `assets/*` не требовали рестарта сервера.
-  state.assetSource = loadAssets;
-  const url = startServer(loadAssets(), state);
+  // Снапшот ассетов вместо пересборки на каждый запрос (INV-W1): правки
+  // `assets/*` цепляются по отпечатку дерева, рестарт не нужен.
+  const assets = createAssetSource();
+  state.assetSource = assets.get;
+  state.assetEtag = assets.etag;
+  const url = startServer(assets.get(), state);
 
   return {
     state,
