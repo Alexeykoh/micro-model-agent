@@ -1,11 +1,12 @@
 # TODO — Micro Models Agent
 
-> **Актуально на 2026-11-02** (`master` @ 0.23.0).
+> **Актуально на 2026-11-04** (`dev` @ 0.24.0).
 >
-> Этот файл — только **открытая** работа. Закрытые пункты здесь не хранятся:
-> история — в `CHANGELOG.md`, `docs/agents/feature-history.md` и коммитах.
+> Источник правды по открытой работе — галочки `- [ ]`. Пункты `- [x]` остаются
+> рядом как короткая история до закрытия раздела целиком.
+> Долгосрочная история — в `CHANGELOG.md`, `docs/agents/feature-history.md` и коммитах.
 > Отложенные решения — единым списком в [`docs/agents/debt.md`](./docs/agents/debt.md)
-> (правило 9, pay-once); выполненные планы — в [`docs/plans/`](./docs/plans).
+> (правило 9, pay-once); планы — в [`docs/plans/`](./docs/plans), закрытые — в архиве.
 
 ---
 
@@ -86,11 +87,11 @@
       tainted (seed переживает `beginTurn`). _(2026-11-02,
       `tests/security/taint.test.ts`.)_
 - Остальные долги темы — [`docs/agents/debt.md`](./docs/agents/debt.md)
-      (`file-content-bypass-non-path-tools` — плагины без объявления и подстановки
-      `bash`, `streaming-tail-holdback`, `research-by-checksum`);
-      `api-hidden-globs-text-scope`, `encoded-value-bypass`, `web-search-payload-dlp`,
-      `dlp-cli-redaction-notice`, `file-content-taint`, `at-rest-pii`,
-      `memory-at-rest`, `data-policy-projection-lifecycle` — оплачены.
+  (`file-content-bypass-non-path-tools` — плагины без объявления и подстановки
+  `bash`, `streaming-tail-holdback`, `research-by-checksum`);
+  `api-hidden-globs-text-scope`, `encoded-value-bypass`, `web-search-payload-dlp`,
+  `dlp-cli-redaction-notice`, `file-content-taint`, `at-rest-pii`,
+  `memory-at-rest`, `data-policy-projection-lifecycle` — оплачены.
 
 ### 1.3 Аудит модулей harness (план `docs/plans/2026-10-12-harness-module-audit-fixes.md`)
 
@@ -364,7 +365,7 @@ reset` для json/list, failover с моделью целевого прова�
       `concern` «weather facts lack web grounding», хотя `web_browse` вызывался.
 - [x] **A7 (P1) Результат субагента не несёт здоровья прогона.** _(Сделано 2026-11-03:
       `RunHealth` в `src/tools/subagent-health.ts` — `toolsOk/toolsFailed/filesRead/
-      filesWritten/blocked`; попадает в `end`-событие, журнал и строку результата
+    filesWritten/blocked`; попадает в `end`-событие, журнал и строку результата
       `[run health: …]`; аналитическая задача без единого чтения → `success:false` с
       причиной. Гейты: `tests/tools/subagent-session-log.test.ts`,
       `tests/tools/subagent-empty-run.test.ts`, `tests/tools/subagent-health.test.ts`.)_
@@ -528,7 +529,7 @@ drawer, клавиатура. Что работает (не трогать): к�
 
 - [x] **U1. У поля ввода нет видимой индикации фокуса — вообще.** _(Сделано 2026-11-03,
       ветка `fix/webui-composer-focus`: тема console больше не задаёт `--input-shadow:
-      transparent` (accent с alpha ~45% в тёмной и светлой), а reset темы
+    transparent` (accent с alpha ~45% в тёмной и светлой), а reset темы
       (`body.console * { box-shadow: none !important }`) получил явное исключение для
       `:focus-within`/`:focus` композера, поля ввода и поиска настроек. Живая проверка
       в браузере: `box-shadow: rgba(208,206,204,0.45) 0 0 0 2px`. Гейт
@@ -566,7 +567,7 @@ drawer, клавиатура. Что работает (не трогать): к�
       Escape фокус на переключателе.)_
 - [x] **U6. Тач-таргеты меньше 44px — 77 элементов из 673 (390px).** _(Сделано
       2026-11-03, ветка `fix/webui-touch-targets`: при `@media (pointer: coarse),
-      (max-width: 760px)` — `.icon-btn` ≥32×32, `.stab-x` 32×32 (было 18×18),
+    (max-width: 760px)` — `.icon-btn` ≥32×32, `.stab-x` 32×32 (было 18×18),
       `.sb-tab` ≥40px, чипы композера (`.sel > button`, `.chip`, `.linkbtn`) ≥32px.
       Живая проверка 390×844: интерактивных целей меньше 28×28 — **0** (было 77),
       горизонтального скролла нет; на 1280px размеры прежние.)_
@@ -766,7 +767,6 @@ drawer, клавиатура. Что работает (не трогать): к�
       новый `tests/webui/security-log.test.ts` (событие приходит из `logAudit`,
       кап соблюдён, порядок «свежее сверху», бэкфилл истории, оригиналов нет).
 
-
 ### 1.12 mma web — тестовые прогоны 2026-11-02
 
 Отчёт: [`docs/agents/web-agent-test-report-2026-11-02.md`](./docs/agents/web-agent-test-report-2026-11-02.md).
@@ -780,8 +780,7 @@ response was not valid JSON`), DeepSeek (styled-сайт, 30 маршрутов,
 - [x] **Guard обязательного path-аргумента** — `path: undefined` больше не создаёт файл
       `undefined`: fail-closed в `ToolExecutor.enforcePathArgs` по `parameters.required` +
       защита в `write_file`/`edit_file`. Гейт: `tests/tools/enforcement-path.test.ts`.
-- [x] **Pre-write `checkDraft` через LSP** — типы проверять до записи (`LspConnection.syncDocument`
-      + `diagnosticsFor`), при ошибке не писать файл или откатывать. _(2026-11-03:
+- [x] **Pre-write `checkDraft` через LSP** — типы проверять до записи (`LspConnection.syncDocument` + `diagnosticsFor`), при ошибке не писать файл или откатывать. _(2026-11-03:
       `runPreWriteCheck` в `lsp/write-check.ts` + `LspClient.checkContent`; тёплый
       сервер проверяет черновик `write_file`/`edit_file`, ошибки типов блокируют
       вызов (`lsp.draft_blocked`), холодный — fail-open с прогревом в фоне.

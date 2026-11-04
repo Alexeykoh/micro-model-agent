@@ -3,5 +3,4 @@ node_modules/
 .mma/
 _testing/
 bun.lock
-package-lock.json
 *.jsonl

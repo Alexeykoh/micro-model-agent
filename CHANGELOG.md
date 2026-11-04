@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **Репозиторий приведён к одному пакетному менеджеру.** Удалён `package-lock.json`
+  (проект собирается и тестируется через Bun), добавлены `.editorconfig` и
+  `packageManager: bun@1.3.14` в `package.json`.
+
+### Removed
+
+- **Остатки неиспользуемой инфраструктуры.** Удалены `.gitea/workflows/quality.yml`
+  (Gitea не используется) и личный план `.opencode/plans/`; каталог `.opencode/plans/`
+  добавлен в `.gitignore`.
+
 ## [0.24.0] - 2026-11-04
 
 ### Fixed
@@ -115,7 +127,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   (`LlmRequestSnapshot`) снимается **после** DLP-проекции и **до** сети, лениво
   (подписчиков нет — не строится), пишется в `session.jsonl` как `llm_request`
   и отдаётся SSE; Trace получает строку «запрос» с поп-апом `system → messages →
-  tools` и «копировать JSON», а клик по позиции в бейдже DLP открывает тот же
+tools` и «копировать JSON», а клик по позиции в бейдже DLP открывает тот же
   снимок на нужном сообщении. Вкладка «Безопасность» — живой журнал отловов
   (`security_block`/`security_approval`/DLP) поверх нового внутрипроцессного
   потока `security-events` + бэкфилл из `audit.jsonl` **своей** сессии.
@@ -175,9 +187,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Порог компакции учитывает измеренные схемы тулов.** `budget.history` считался
   как `window − systemBudget − reserve` и не знал про `toolTokens`: на окне 32K с
   9K тулов жёсткий порог разрешал промпт больше окна (живой прогон: `overflow
-  (41300 > 24577)` при фактическом контексте 1.6× окна). Теперь триггеры
+(41300 > 24577)` при фактическом контексте 1.6× окна). Теперь триггеры
   сравнивают историю с ёмкостью `min(budget.history, window − reserve − system −
-  tools)`, а лог печатает именно этот предел. Конфигурная доля и cap вывода тулов
+tools)`, а лог печатает именно этот предел. Конфигурная доля и cap вывода тулов
   не изменились. Гвард: `tests/core/compaction-tool-budget.test.ts`. Спека:
   `docs/specs/2026-11-01-compaction-history-capacity-design.md`.
 
@@ -190,11 +202,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   пружинная поза, смысловые предметы по состоянию (клавиатура, документ,
   чек-лист, лупа, браузер), эффекты вне силуэта, кроссфейд переходов.
   Палитра читает живые CSS-токены и держит контраст (глаза >= 4.5:1, лицо
-  >= 3:1); радиус скругления следует теме, включая квадратные сезонные.
-  API `createFace`/`setFaceState`/`FaceState` не изменился. Лендинг
-  использует тот же движок через `gh-pages/mascot-canvas.js`
-  (`bun run build:landing-mascot`). Тесты: `tests/webui-loader.test.ts`,
-  `tests/arch/landing-mascot.test.ts`.
+
+  > = 3:1); радиус скругления следует теме, включая квадратные сезонные.
+  > API `createFace`/`setFaceState`/`FaceState` не изменился. Лендинг
+  > использует тот же движок через `gh-pages/mascot-canvas.js`
+  > (`bun run build:landing-mascot`). Тесты: `tests/webui-loader.test.ts`,
+  > `tests/arch/landing-mascot.test.ts`.
 
 - **Системный промпт v3 (W1–W3, частично).** Ядро собирается из фактов
   (`PromptEnvironmentFacts`): Bun/shell/LSP/autoPlan/команды проекта, а не
