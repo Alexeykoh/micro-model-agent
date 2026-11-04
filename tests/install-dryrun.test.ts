@@ -20,6 +20,11 @@ describe("installer dry-run", () => {
     expect(res.stdout).toContain("dry-run");
     expect(res.stdout).toContain("latest.json");
     expect(res.stdout).toContain("mma-");
+    expect(res.stdout).toContain("+-------------+");
+    expect(res.stdout).toContain("dry-run: legacy=");
+    expect(res.stdout).toContain("dry-run: path=");
+    // stdout is a pipe here: no escape codes must leak into logs/CI.
+    expect(res.stdout).not.toContain("\u001b");
   });
 
   it.skipIf(!isWin || !pwsh)("install.ps1 prints the Windows plan", () => {
@@ -31,5 +36,9 @@ describe("installer dry-run", () => {
     expect(res.stdout).toContain("dry-run");
     expect(res.stdout).toContain("latest.json");
     expect(res.stdout).toContain("mma-win-");
+    expect(res.stdout).toContain("+-------------+");
+    expect(res.stdout).toContain("dry-run: legacy=");
+    expect(res.stdout).toContain("dry-run: path=");
+    expect(res.stdout).not.toContain("\u001b");
   });
 });

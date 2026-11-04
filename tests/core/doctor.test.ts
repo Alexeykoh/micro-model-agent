@@ -16,6 +16,7 @@ describe("doctor report", () => {
     const report = buildDoctorReport({ config: cfg(), configDir: "C:/tmp", baseDir: "C:/work" });
     expect(report.sections.map((s) => s.title)).toEqual([
       "Environment",
+      "Install",
       "Provider",
       "Modules",
       "Plugins",

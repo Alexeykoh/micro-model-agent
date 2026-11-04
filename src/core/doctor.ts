@@ -7,9 +7,11 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import type { AppConfig } from "../config/types";
+import { globalMmaDir } from "../config/paths";
 import type { EnvironmentReport } from "./environment";
 import type { ModuleHost } from "./module-host";
 import type { PluginManager } from "../modules/plugins/manager";
+import { checkPathShadowing, classifyInstall } from "./install-path";
 
 /** Итог секции: `fail` делает весь отчёт «не ок». */
 export type DoctorStatus = "ok" | "warn" | "fail";
@@ -37,6 +39,10 @@ export interface DoctorInput {
   pluginManager?: PluginManager;
   /** LSP-модуль (может быть не подключён — тогда секция помечает это). */
   lsp?: { getFlags?(): { enabled: boolean; offline: boolean } } | null;
+  /** Точка входа текущего процесса (по умолчанию `process.argv[1]`). */
+  entryPath?: string;
+  /** PATH для проверки теневого `mma` (по умолчанию `process.env.PATH`). */
+  envPath?: string;
 }
 
 const RANK: Record<DoctorStatus, number> = { ok: 0, warn: 1, fail: 2 };
@@ -50,6 +56,7 @@ function worst(a: DoctorStatus, b: DoctorStatus): DoctorStatus {
 export function buildDoctorReport(input: DoctorInput): DoctorReport {
   const sections: DoctorSection[] = [
     environmentSection(input),
+    installSection(input),
     providerSection(input.config),
     modulesSection(input.moduleHost),
     pluginsSection(input.pluginManager),
@@ -96,6 +103,31 @@ function environmentSection(input: DoctorInput): DoctorSection {
   return { title: "Environment", status: r.warnings.length > 0 ? "warn" : "ok", lines };
 }
 
+function installSection(input: DoctorInput): DoctorSection {
+  const entry = input.entryPath ?? process.argv[1] ?? "";
+  const root = globalMmaDir();
+  const kind = classifyInstall(entry, root);
+  const lines = [`entry: ${entry || "(unknown)"}`, `install: ${root}`, `running: ${kind}`];
+  let status: DoctorStatus = "ok";
+  if (kind === "npm") {
+    status = "warn";
+    lines.push(
+      "warning: legacy npm build — install the GitHub release, then: npm rm -g micro-models-agent",
+    );
+  }
+  if (kind === "release") {
+    const shadow = checkPathShadowing(root, input.envPath ?? process.env.PATH ?? "");
+    lines.push(`mma on PATH: ${shadow.resolved ?? "not found"}`);
+    if (shadow.shadowed) {
+      status = "warn";
+      lines.push(
+        "warning: PATH resolves mma outside this install — open a new terminal, or remove the old launcher: npm rm -g micro-models-agent",
+      );
+    }
+  }
+  return { title: "Install", status, lines };
+}
+
 function providerSection(config: AppConfig): DoctorSection {
   const p = config.provider;
   const active = p?.active || p?.type || "unknown";
@@ -117,7 +149,10 @@ function modulesSection(host?: ModuleHost): DoctorSection {
   const health = host.health();
   let status: DoctorStatus = "ok";
   const lines = health.map(({ name, health: h }) => {
-    status = worst(status, h.status === "failed" ? "fail" : h.status === "degraded" ? "warn" : "ok");
+    status = worst(
+      status,
+      h.status === "failed" ? "fail" : h.status === "degraded" ? "warn" : "ok",
+    );
     return `${name}: ${h.status}${h.reason ? ` — ${h.reason}` : ""}`;
   });
   if (lines.length === 0) lines.push("(no modules registered)");
@@ -156,7 +191,11 @@ function lspSection(
 function configSection(input: DoctorInput): DoctorSection {
   const domainDir = join(input.configDir, "config");
   const legacy = join(input.configDir, "config.json");
-  const stored = existsSync(domainDir) ? "domain files" : existsSync(legacy) ? "legacy config.json" : "defaults (not saved)";
+  const stored = existsSync(domainDir)
+    ? "domain files"
+    : existsSync(legacy)
+      ? "legacy config.json"
+      : "defaults (not saved)";
   const lines = [
     `dir: ${input.configDir}`,
     `stored: ${stored}`,

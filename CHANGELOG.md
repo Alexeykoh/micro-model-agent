@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Переход с legacy npm-сборки на GitHub-Releases.** Установщик находит npm-шим
+  (`npm prefix -g` или `MMA_NPM_PREFIX`), переименовывает его в `*.legacy-npm.bak`
+  (без удаления), ставит `~/.mma/bin` в начало `PATH`, проверяет фактический
+  резолв `mma` и печатает `npm rm -g micro-models-agent`. `mma doctor` получил
+  секцию `Install`, а новая установка предупреждает о теневом `mma` на `PATH`
+  (`updater.path_shadowed`). Данные в `~/.mma` не трогаются.
+- **Маскот и живая загрузка в установщике.** ASCII-маскот MMART, акцентный цвет,
+  полоса загрузки с процентами и MB (`install.sh`) и состояния happy/sad; при
+  `NO_COLOR`, CI или перенаправленном выводе — plain-текст.
+  `MMA_INSTALL_NO_PATH=1` отключает правку `PATH`.
+
 ### Changed
 
 - **Документация разделена на живую и архивную.** Активные контракты и работы

@@ -1214,6 +1214,7 @@
   "ctx.delta_neg": "ctx -{tokens}  ",
   "ctx.delta_zero": "ctx +0",
   "updater.check_error": "Update check failed: {error}",
+  "updater.path_shadowed": "mma on PATH resolves to {resolved}, not this install ({bin}). Open a new terminal; if it persists, remove the old launcher: npm rm -g micro-models-agent",
   "updater.available": "Update available: {current} → {latest}.\n{hint}",
   "updater.auto_install_hint": "↳ Update from the web panel (settings → about) or turn on auto-install: /config updater.autoInstall true. Manually: {cmd}",
   "updater.installing": "Downloading {latest} (current: {current})…",

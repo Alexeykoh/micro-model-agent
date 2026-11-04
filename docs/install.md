@@ -25,6 +25,30 @@ mma setup     # provider / model / context wizard
 mma           # interactive REPL
 ```
 
+## Migrating from an npm install
+
+Older versions were published to npm (`npm i -g micro-models-agent`). That channel
+is frozen, so an npm-based install does not update itself to the GitHub release.
+The installer detects the old launcher and moves it out of the way:
+
+- a shadowing `mma` under the npm prefix is renamed to `mma.legacy-npm.bak`
+  (nothing is deleted);
+- `~/.mma/bin` is put **first** on the user `PATH`, not appended;
+- the installer resolves `mma` again and prints `verified: mma -> …`; if another
+  launcher still wins, it prints the exact fix.
+
+After the new `mma` works, remove the old package:
+
+```bash
+npm rm -g micro-models-agent
+```
+
+Your data is untouched: config, sessions, memory and plugins live in the shared
+`~/.mma` directory, and old `config.json` formats are migrated on load.
+
+Set `MMA_INSTALL_NO_PATH=1` to skip the `PATH` change (CI, corporate images) —
+the installer then prints the exact line to add manually.
+
 ## Manual install (no script)
 
 Use this when the one-liner is blocked — a corporate proxy with TLS interception,
@@ -118,7 +142,7 @@ chmod +x ~/.local/bin/mma
   activates versions under `~/.mma`. To update, download the new tarball and
   replace your directory (or switch to the installer later).
 - macOS Gatekeeper may block an unsigned binary: allow it in
-  *System Settings → Privacy & Security*, or run
+  _System Settings → Privacy & Security_, or run
   `xattr -dr com.apple.quarantine ~/mma/runtime/bun`.
 - Windows SmartScreen may warn on the first run — release binaries are not
   code-signed yet.
@@ -193,17 +217,22 @@ first use. If the browser tool reports a missing browser:
 
 ## Environment variables
 
-| Variable               | Meaning                                                      |
-| ---------------------- | ------------------------------------------------------------ |
-| `MMA_INSTALL_BASE`     | Override the release base URL (mirror / pinned release).     |
-| `MMA_HOME`             | Install root (default `~/.mma`).                             |
-| `MMA_INSTALL_DRY_RUN=1`| Print the installer plan without network or writes.          |
-| `MMA_CONFIG_DIR`       | Override the agent data directory (config, sessions, memory).|
+| Variable                | Meaning                                                       |
+| ----------------------- | ------------------------------------------------------------- |
+| `MMA_INSTALL_BASE`      | Override the release base URL (mirror / pinned release).      |
+| `MMA_HOME`              | Install root (default `~/.mma`).                              |
+| `MMA_INSTALL_DRY_RUN=1` | Print the installer plan without network or writes.           |
+| `MMA_INSTALL_NO_PATH=1` | Do not change `PATH` (CI, corporate images, tests).           |
+| `MMA_NPM_PREFIX`        | Override `npm prefix -g` when detecting a legacy npm install. |
+| `MMA_CONFIG_DIR`        | Override the agent data directory (config, sessions, memory). |
 
 ## Troubleshooting
 
+- **`mma` runs an old version after installing** — the old launcher still wins on
+  `PATH`. Open a new terminal, run `mma doctor`, and remove the legacy package:
+  `npm rm -g micro-models-agent`.
 - **`mma` not found after install** — open a new terminal so `PATH` refreshes.
-  On Windows the installer updates the *user* `PATH`.
+  On Windows the installer updates the _user_ `PATH`.
 - **Checksum mismatch** — the download was truncated or a mirror is stale.
   Retry; if it persists, check `MMA_INSTALL_BASE`.
 - **macOS Gatekeeper / Windows SmartScreen warning** — release binaries are not
