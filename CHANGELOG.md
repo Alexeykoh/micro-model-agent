@@ -16,6 +16,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Репозиторий приведён к одному пакетному менеджеру.** Удалён `package-lock.json`
   (проект собирается и тестируется через Bun), добавлены `.editorconfig` и
   `packageManager: bun@1.3.14` в `package.json`.
+- **`TODO.md` сокращён до открытой работы.** 17 открытых пунктов остались,
+  закрытые сохранены снимком в `docs/archive/todo-2026-11-04.md`; нумерация
+  разделов, на которую ссылаются код и спеки, не менялась. Активный план
+  обучения перенесён из `docs/superpowers/` в `docs/plans/`, остальные планы
+  этого воркфлоу — в архив.
 
 ### Removed
 

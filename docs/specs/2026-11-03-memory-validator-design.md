@@ -1,7 +1,7 @@
 # Memory quality gate (validator) — design
 
 > **Дата:** 2026-11-03. Закрывает Phase A плана
-> `docs/superpowers/plans/2026-08-12-memory-quality-and-learning.md` (TODO §1.6).
+> `docs/plans/2026-08-12-memory-quality-and-learning.md` (TODO §1.6).
 > Контракт: `MemoryStore.append/appendRule` возвращают `ValidationResult`; запись
 > в `*.md` происходит только при `accepted: true`.
 

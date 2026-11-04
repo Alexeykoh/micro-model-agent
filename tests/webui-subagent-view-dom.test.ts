@@ -1,5 +1,5 @@
 // DOM-контур вида субагента: клик по строке, живой рендер, возврат без потери
-// родительской ленты (TODO §1.1, спека 2026-10-23-subagent-run-view-design).
+// родительской ленты (архив TODO §1.1, спека 2026-10-23-subagent-run-view-design).
 import { describe, it, expect } from "vitest";
 import { setupHappyDom } from "./helpers/happy-dom";
 

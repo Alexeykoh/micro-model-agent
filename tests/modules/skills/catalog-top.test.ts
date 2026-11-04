@@ -8,7 +8,7 @@ import type { SkillMeta } from "../../../src/modules/skills/loader";
 
 /**
  * Каталог `[Available Skills]` показывает только топ-10 по использованию,
- * остальные — строкой «and N more» (TODO §1.10, спека
+ * остальные — строкой «and N more» (архив TODO §1.10, спека
  * `2026-11-03-skill-usage-top-design.md`).
  */
 
