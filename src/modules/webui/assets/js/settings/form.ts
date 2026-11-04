@@ -13,7 +13,11 @@ export function pfield(labelKey: string, input: HTMLElement): HTMLElement {
 }
 
 /** Plain text/number/password input with optional placeholder. */
-export function providerInput(value: unknown, type?: string, placeholder?: string): HTMLInputElement {
+export function providerInput(
+  value: unknown,
+  type?: string,
+  placeholder?: string,
+): HTMLInputElement {
   const input = el("input");
   input.type = type || "text";
   if (placeholder) input.placeholder = placeholder;
@@ -65,13 +69,27 @@ export function providerCheck(value: unknown): HTMLInputElement {
   return input;
 }
 
+export interface LiteralFieldOptions {
+  /** Full-width row inside the two-column grid. */
+  wide?: boolean;
+  /** Short helper line under the control. */
+  hint?: string;
+}
+
 /** Labelled field whose label is a literal string (not an i18n key). */
-export function mcpLiteralField(label: string, input: HTMLElement, fieldKey?: string): HTMLElement {
+export function mcpLiteralField(
+  label: string,
+  input: HTMLElement,
+  fieldKey?: string,
+  opts: LiteralFieldOptions = {},
+): HTMLElement {
   const f = el("div", "pform-field");
   if (fieldKey) f.dataset.field = fieldKey;
+  if (opts.wide) f.classList.add("pform-wide");
   const lab = el("label", "", label);
   f.appendChild(lab);
   input.setAttribute("aria-label", label);
   f.appendChild(input);
+  if (opts.hint) f.appendChild(el("div", "pform-hint", opts.hint));
   return f;
 }

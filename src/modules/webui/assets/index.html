@@ -34,6 +34,8 @@
       document.documentElement.style.colorScheme = light ? "light" : "dark";
       var meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.setAttribute("content", light ? "#f7f7f4" : "#0f0f10");
+      var locale = localStorage.getItem("mma-locale");
+      if (locale === "en" || locale === "ru") document.documentElement.lang = locale;
       var ui = localStorage.getItem("mma-ui-theme") || "console";
       var uiThemes = ["console", "groovebox", "neon", "paper", "contrast", "winter", "spring", "summer", "autumn"];
       if (uiThemes.indexOf(ui) >= 0) document.body.classList.add(ui);
@@ -44,13 +46,23 @@
 <div class="setup-gate" id="setupGate" hidden></div>
 
 <div class="splash" id="bootSplash" role="status" aria-live="polite">
-  <span class="mdl bs-face c-dim st-load" aria-hidden="true"></span>
+  <span class="mdl bs-face c-dim st-load" aria-hidden="true"><span class="eyes"><i class="eye left"></i><i class="eye right"></i></span></span>
   <div class="bs-cap">
     <div class="l1" id="bootCap">connecting…</div>
     <div class="l2">micro-models-agent</div>
   </div>
   <div class="bs-prog" aria-hidden="true"><i></i></div>
 </div>
+<script>
+  // Hard failsafe: a module error or a stalled import must not trap the page
+  // behind the splash forever (the app's own 2 s cap needs app.js to run).
+  window.setTimeout(function () {
+    var s = document.getElementById("bootSplash");
+    if (!s || s.hidden) return;
+    s.classList.add("hide");
+    window.setTimeout(function () { s.hidden = true; }, 500);
+  }, 8000);
+</script>
 
 <div class="bar-top">
   <button class="icon-btn primary" id="newChat" title="new chat" aria-label="new chat">+</button>

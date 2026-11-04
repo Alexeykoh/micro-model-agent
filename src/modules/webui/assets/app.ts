@@ -4,7 +4,7 @@
 // `app-i18n.ts` (both split out under file-size rule 6).
 import { icon } from "./js/dom.js";
 import { token } from "./js/api.js";
-import { loadI18n } from "./js/i18n.js";
+import { hasCachedI18n, loadI18n } from "./js/i18n.js";
 import { settings, session, hooks } from "./js/store.js";
 import { mergeUsage } from "./js/state-sync.js";
 import {
@@ -158,6 +158,9 @@ function connectSSE(): void {
 
 async function boot(): Promise<void> {
   initCursor();
+  // Splash is a mask, not a gate: cap it at 2 s. Arm the cap *before* the
+  // setup probe, otherwise a slow /api/setup pins the splash forever.
+  window.setTimeout(hideBootSplash, 2000);
   // Read the requested session before `showEmptyFeed()` → `syncUrl()` can strip it.
   const initialSession = new URLSearchParams(location.search).get("session");
   // First-run wizard owns the screen when the server reports a virgin config;
@@ -169,18 +172,21 @@ async function boot(): Promise<void> {
       /* wizard failure must never brick the chat boot */
     }
   }
-  // Splash is a mask, not a gate: cap at 2 s; data loads progressively behind it.
-  window.setTimeout(hideBootSplash, 2000);
   try {
-    await loadI18n();
-    await loadCommands();
+    // Paint theme + language from the local mirror before any network round-trip:
+    // otherwise the splash shows EN/dark and only then switches to the saved
+    // RU/light — a visible flash on every reload.
     applyTheme(currentTheme());
     applyUiTheme(currentUiTheme());
     applyFontSize();
-    applyStaticI18n();
+    if (hasCachedI18n()) applyStaticI18n();
     showEmptyFeed();
     renderSelectors();
     renderSettings();
+    await loadI18n();
+    await loadCommands();
+    // Server truth wins; with a warm cache this repaint changes nothing.
+    applyStaticI18n();
     await loadConfig();
     // Апгрейд: до этой версии тема жила только в localStorage. Если сервер ещё
     // на дефолте, доливаем выбор браузера в конфиг (INV-T5) и перерисовываем
@@ -208,10 +214,14 @@ async function boot(): Promise<void> {
       // without SSE no streamed answers, tools or loaders reach the page.
       console.error("initial refresh failed", err);
     }
+  } catch (err) {
+    // A failed boot must still open the SSE stream: otherwise the page stays
+    // inert, and the splash/failsafe is the only thing the user sees.
+    console.error("boot failed", err);
   } finally {
     hideBootSplash();
+    connectSSE();
   }
-  connectSSE();
 }
 // Fade the boot splash out and drop it from the layout. Idempotent.
 function hideBootSplash(): void {

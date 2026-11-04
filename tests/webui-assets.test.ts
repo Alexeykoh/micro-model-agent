@@ -342,10 +342,12 @@ describe("webui assets", () => {
     expect(a.mdJs).toContain('from "./js/md-normalize.js"');
     expect(a.jsModules["js/md-normalize.js"]).toContain("MdNormalizer");
     expect(a.css).toContain(
-      ".md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.62; }",
+      ".md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.68; }",
     );
-    expect(a.css).toContain(".md p { margin: 9px 0; }");
-    expect(a.css).toContain(".md ul, .md ol { margin: 8px 0; padding-left: 24px; }");
+    expect(a.css).toContain(".md p { margin: 11px 0; }");
+    expect(a.css).toContain(".md ul, .md ol { margin: 10px 0; padding-left: 26px; }");
+    // The answer block itself breathes: wider padding and a softer corner.
+    expect(a.css).toContain("padding: 12px 18px 14px;");
     // Soft breaks must flow as spaces (CommonMark), not preserved as hard newlines.
     expect(a.css).not.toMatch(/\.md p \{[^}]*white-space: pre-wrap/);
   });

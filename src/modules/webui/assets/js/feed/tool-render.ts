@@ -6,7 +6,7 @@ import { streamStateFor, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import {
   FILE_TOOLS, OPENABLE_TOOLS, LINK_TOOLS,
-  categoryOf, labelOf, formatMs, verbosity, firstOutputLine, hiddenText, isHiddenText,
+  categoryOf, labelOf, formatMs, verbosity, firstOutputLine, hiddenText, isHiddenText, readRangeText,
 } from "../format.js";
 import { copyText } from "../../md.js";
 import { imageCard } from "./image-card.js";
@@ -103,6 +103,13 @@ function cardFor(name: string, args: Dict, sid: string | undefined, ok: boolean)
       const s = el("span", "tail", shown || rawPath);
       s.title = hidden ? shown : rawPath;
       row.appendChild(s);
+    }
+    const range = readRangeText(name, args);
+    if (range) {
+      row.appendChild(el("span", "sep", " · "));
+      const r = el("span", "tail range", range);
+      r.title = t("web.tool.lines_title");
+      row.appendChild(r);
     }
     const copyBtn = el("button", "copy-btn");
     copyBtn.type = "button";
