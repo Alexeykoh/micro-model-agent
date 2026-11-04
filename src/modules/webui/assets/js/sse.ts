@@ -7,6 +7,11 @@ import type { Dict } from "./core/store/types.js";
 import type { SseDeps } from "./sse-deps.js";
 import { noteChunk as speedChunk } from "./speed.js";
 import { attachSidebarSse } from "./sse-sidebar.js";
+// The model list is refreshed in the background after a provider/model switch
+// (INV-W5); the server announces the result with a `models` event, so the
+// selector repaints without a second GET racing the refresh. Direct import
+// (not via `SseDeps`) keeps the composition root in `app.ts` untouched.
+import { loadModels } from "./settings/write.js";
 export function connectSSE(deps: SseDeps): void {
   const {
     token,
@@ -240,6 +245,11 @@ export function connectSSE(deps: SseDeps): void {
   // the open Settings panel and the composer selectors never show a stale value.
   es.addEventListener("config", () => {
     void loadConfig();
+  });
+  // The model list finished its background refresh (provider/model switch) —
+  // re-read it so the selectors repaint with the new provider's models.
+  es.addEventListener("models", () => {
+    void loadModels();
   });
   es.addEventListener("command", (e) => {
     const d = parse(e);

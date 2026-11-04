@@ -124,13 +124,11 @@ export async function postConfig(key: string, value: unknown, refreshSettings?: 
       if (hooks.applyStaticI18n) hooks.applyStaticI18n();
       writeHooks.renderSettings?.();
     }
-    // A provider switch restores the per-provider model; a model change
-    // updates that provider's remembered model. Both are independent GETs,
-    // so re-read them in parallel. Context/reasoning switches only need the
-    // config back (no extra model round-trip).
-    if (key === "provider.active" || key === "model") {
-      await Promise.all([loadConfig(), loadModels()]);
-    } else if (isSelector) {
+    // A provider/model switch re-reads only the config: the refreshed model
+    // list arrives with the server's `models` SSE event (INV-W5), so an
+    // immediate `loadModels()` would race the background refresh and repaint
+    // the stale list. Context/reasoning switches likewise only need config.
+    if (isSelector) {
       await loadConfig();
     }
     // Stale reply (a newer switch started while this one was in flight):
