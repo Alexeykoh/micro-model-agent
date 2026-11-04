@@ -35,9 +35,7 @@ describe("workspace footer line", () => {
     expect(line.querySelector(".ws-k")?.textContent).toBe("dir");
     expect(line.querySelector(".ws-v")?.textContent).toBe("E:\\projects\\demo");
     expect(line.querySelector(".ws-ver")?.textContent).toBe("mma 2.29.1");
-    expect(line.querySelector(".ws-ver")?.getAttribute("title")).toBe(
-      "micro-models-agent 2.29.1",
-    );
+    expect(line.querySelector(".ws-ver")?.getAttribute("title")).toBe("micro-models-agent 2.29.1");
   });
 
   it("shows the version even without a workspace path", () => {
@@ -110,5 +108,22 @@ describe("workspace footer line", () => {
     expect(line.querySelector(".ws-upd")?.textContent).toBe("↑ 2.37.0");
     expect(line.querySelector(".ws-ver")?.textContent).toBe("mma 2.36.0");
     expect(line.children.length).toBe(4);
+  });
+
+  it("marks a local dev build next to the version", () => {
+    draw({ version: "0.23.0", dev: true, devTitle: "local dev build" });
+    const dev = line.querySelector(".ws-dev");
+    expect(dev?.textContent).toBe("dev");
+    expect(dev?.getAttribute("title")).toBe("local dev build");
+    expect(line.querySelector(".ws-ver")?.textContent).toBe("mma 0.23.0");
+  });
+
+  it("shows the dev marker without a version and rebuilds when it disappears", () => {
+    draw({ dev: true });
+    expect(line.hidden).toBe(false);
+    expect(line.querySelector(".ws-dev")).not.toBeNull();
+
+    draw({ version: "0.23.0" });
+    expect(line.querySelector(".ws-dev")).toBeNull();
   });
 });

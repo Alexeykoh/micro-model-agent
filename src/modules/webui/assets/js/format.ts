@@ -78,6 +78,23 @@ export function argText(args: unknown): string {
   }
 }
 
+/**
+ * Human range of a `read_file` call: "926–995", "from line 926", "1–70".
+ * Two identical file rows are then distinguishable (same file, different range).
+ */
+export function readRangeText(name: string, args: unknown): string {
+  if (name !== "read_file" || !args || typeof args !== "object") return "";
+  const rec = args as Record<string, unknown>;
+  const offset = Number(rec.offset);
+  const limit = Number(rec.limit);
+  const hasOffset = Number.isFinite(offset) && offset > 0;
+  const hasLimit = Number.isFinite(limit) && limit > 0;
+  if (hasOffset && hasLimit) return t("web.tool.lines", { from: offset, to: offset + limit - 1 });
+  if (hasOffset) return t("web.tool.lines_from", { from: offset });
+  if (hasLimit) return t("web.tool.lines", { from: 1, to: limit });
+  return "";
+}
+
 export function formatMs(ms: number | null | undefined): string {
   if (typeof ms !== "number" || !isFinite(ms)) return "";
   return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : Math.round(ms) + "ms";

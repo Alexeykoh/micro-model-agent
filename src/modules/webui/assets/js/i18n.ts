@@ -15,6 +15,51 @@ export interface I18nPayload {
 
 export const I18N: I18nState = { locale: "en", dicts: {} };
 
+// Mirrors of the last server payload. The pre-paint boot reads them so the
+// splash never flashes EN/dark before the saved RU/light UI.
+const CACHE_KEY = "mma-i18n";
+const LOCALE_KEY = "mma-locale";
+
+function cacheGet(key: string): string | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function cacheSet(key: string, value: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
+  } catch {
+    /* private mode / quota: the cache is an optimisation, never a dependency */
+  }
+}
+
+/** Hydrates {@link I18N} from localStorage; true when a usable cache existed. */
+export function hydrateI18nCache(): boolean {
+  const raw = cacheGet(CACHE_KEY);
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw) as I18nPayload;
+    if (!parsed || typeof parsed.locale !== "string" || !parsed.dicts || typeof parsed.dicts !== "object") {
+      return false;
+    }
+    I18N.locale = parsed.locale;
+    I18N.dicts = parsed.dicts;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** True when a dictionary is already available (cache hit or server reply). */
+export function hasCachedI18n(): boolean {
+  return Object.keys(I18N.dicts).length > 0;
+}
+
+hydrateI18nCache();
+
 export function t(key: string, params?: Record<string, string | number>): string {
   const dict = I18N.dicts[I18N.locale] || I18N.dicts.en || {};
   const en = I18N.dicts.en || {};
@@ -52,5 +97,7 @@ export async function loadI18n(): Promise<void> {
   if (r.ok && r.data) {
     I18N.locale = r.data.locale || "en";
     I18N.dicts = r.data.dicts || {};
+    cacheSet(LOCALE_KEY, I18N.locale);
+    cacheSet(CACHE_KEY, JSON.stringify({ locale: I18N.locale, dicts: I18N.dicts }));
   }
 }

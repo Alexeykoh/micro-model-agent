@@ -39,7 +39,7 @@
   --u-bg: #221c2e;
   --u-border: #c4a8ec;
   --ans: #a5adb6;
-  --ans-bg: rgba(196, 168, 236, 0.06);
+  --ans-bg: rgba(196, 168, 236, 0.09);
   --toggle-off: #2e2e2e;
   --toggle-knob: #a3a3a3;
   --scroll-thumb: #2e2e2e;
@@ -117,7 +117,7 @@ body.light {
   --u-bg: #ddf4ff;
   --u-border: #0969da;
   --ans: #424a53;
-  --ans-bg: rgba(9, 105, 218, 0.055);
+  --ans-bg: rgba(9, 105, 218, 0.075);
   --toggle-off: #d0d7de;
   --toggle-knob: #6e7781;
   --scroll-thumb: #d0d7de;
@@ -392,26 +392,26 @@ body.light .code { border: 1px solid var(--border); }
 .feed > .md, .feed > .ans {
   border-left: 2px solid var(--accent);
   background: var(--ans-bg);
-  padding: 7px 12px;
-  border-radius: 0 4px 4px 0;
+  padding: 12px 18px 14px;
+  border-radius: 0 6px 6px 0;
 }
-.md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.62; }
+.md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.68; }
 .md > * { flex-shrink: 0; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
-.md p { margin: 9px 0; }
+.md p { margin: 11px 0; }
 .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
-  color: var(--fg); font-weight: 600; line-height: 1.3; margin: 18px 0 8px;
+  color: var(--fg); font-weight: 600; line-height: 1.3; margin: 22px 0 10px;
 }
 .md h1 { font-size: 1.5em; }
 .md h2 { font-size: 1.28em; }
 .md h3 { font-size: 1.12em; }
 .md h4, .md h5, .md h6 { font-size: 1em; }
-.md ul, .md ol { margin: 8px 0; padding-left: 24px; }
-.md li { margin: 3px 0; }
+.md ul, .md ol { margin: 10px 0; padding-left: 26px; }
+.md li { margin: 5px 0; }
 .md li > p { margin: 3px 0; }
-.md blockquote { margin: 10px 0; padding: 2px 0 2px 12px; border-left: 2px solid var(--pipe); color: var(--dim-a); }
-.md hr { border: 0; border-top: 1px solid var(--rule); margin: 16px 0; }
+.md blockquote { margin: 14px 0; padding: 4px 14px; border-left: 2px solid var(--pipe); border-radius: 0 4px 4px 0; color: var(--dim-a); }
+.md hr { border: 0; border-top: 1px solid var(--rule); margin: 22px 0; }
 .md a { color: var(--accent); text-decoration: none; }
 .md a:hover { text-decoration: underline; }
 .md img { max-width: 100%; border-radius: 4px; }
@@ -420,17 +420,17 @@ body.light .code { border: 1px solid var(--border); }
 .md .md-img-ext::before { content: "🖼"; font-size: .9em; }
 .md .md-img-ext:hover { color: var(--accent); text-decoration: none; }
 .md code {
-  background: var(--surface); color: var(--fg); padding: 1px 5px;
+  background: var(--surface); color: var(--fg); padding: 2px 6px;
   border-radius: 3px; font-size: .92em;
 }
 .md pre code { background: none; padding: 0; border-radius: 0; font-size: inherit; }
 .md input[type="checkbox"] { margin-right: 4px; vertical-align: middle; }
-.md table { border-collapse: collapse; margin: 10px 0; font-size: .95em; }
-.md th { color: var(--fg); font-weight: 600; text-align: left; padding: 6px 14px 6px 0; border-bottom: 1px solid var(--border); }
-.md td { color: var(--ans); padding: 5px 14px 5px 0; border-top: 1px solid var(--border-3); }
+.md table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: .95em; }
+.md th { color: var(--fg); font-weight: 600; text-align: left; vertical-align: top; padding: 8px 18px 8px 0; border-bottom: 1px solid var(--border); }
+.md td { color: var(--ans); vertical-align: top; padding: 7px 18px 7px 0; border-top: 1px solid var(--border-3); }
 
 /* fenced code block: dim header (language · copy) + code body */
-.codeblock { margin: 10px 0; background: var(--surface); border-radius: 4px; overflow: hidden; }
+.codeblock { margin: 14px 0; background: var(--surface); border-radius: 4px; overflow: hidden; }
 body.light .codeblock { border: 1px solid var(--border); }
 .cb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 8px 3px 12px; font-size: 11.5px; color: var(--dim-b); }
 .cb-lang { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -703,9 +703,12 @@ body.light .sel > button { border: 1px solid var(--border); }
 /* Mention highlight mirror: same box as the textarea, glyphs transparent;
    only the `@path` token background renders, behind the real text. */
 .inp-wrap { position: relative; display: flex; flex: 1 1 auto; min-width: 0; }
-.inp-wrap .inp { width: 100%; }
+/* The mirror paints the @path pill behind the real textarea. Without an
+   explicit stack the absolutely positioned overlay wins and its background
+   hides the path itself — the field reads as an empty grey bar. */
+.inp-wrap .inp { position: relative; z-index: 1; width: 100%; }
 .inp-mark {
-  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
   padding: 6px 8px; font: inherit; font-size: 13.5px; line-height: 1.5;
   white-space: pre-wrap; overflow-wrap: anywhere; color: transparent;
 }
@@ -734,6 +737,7 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .ws-line .ws-k { color: var(--dim-b); margin-right: 6px; flex: none; }
 .ws-line .ws-v { color: var(--dim-a); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: anywhere; }
 .ws-line .ws-ver { color: var(--dim-b); margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
+.ws-line .ws-dev { color: var(--accent); margin-left: 6px; flex: none; font-weight: 600; letter-spacing: .04em; }
 /* Available update chip — green, sits right before the installed version so
    `↑ 2.37.0  mma 2.36.0` reads as "newer is available, this is what you run". */
 .ws-line .ws-upd { color: var(--green); margin-left: auto; flex: none; font-weight: 600; font-variant-numeric: tabular-nums; cursor: help; }
@@ -1858,6 +1862,29 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .pform-adv summary { cursor: pointer; font-size: 11.5px; color: var(--dim-a); text-transform: uppercase; letter-spacing: .04em; }
 .pform-adv .pform-grid { margin-top: 12px; }
 
+/* MCP form: identity + transport on the first row, the endpoint and every
+   JSON map full-width. The old auto-fit grid squeezed the command and args
+   into clipped 3-column cells. */
+.pform-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pform-wide { grid-column: 1 / -1; }
+.pform-field[hidden] { display: none; }
+.pform-field input[type="checkbox"] { width: auto; align-self: flex-start; }
+.pform-field textarea {
+  background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
+  color: var(--fg); font: inherit; font-size: 12.5px; padding: 6px 8px; width: 100%; min-width: 0;
+  resize: vertical; line-height: 1.5;
+}
+.pform-json { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; min-height: 64px; }
+.pform-hint { color: var(--dim-a); font-size: 11px; line-height: 1.4; }
+.pform-toggle { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
+.pform-toggle input[type="checkbox"] { width: auto; flex: 0 0 auto; margin: 3px 0 0; accent-color: var(--accent); }
+.pform-toggle-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pform-toggle-label { font-size: 12.5px; color: var(--fg); }
+#subOverlay:has(.pform-mcp) .modal-sub { width: min(760px, 94vw); }
+@media (max-width: 560px) {
+  .pform-grid-2 { grid-template-columns: 1fr; }
+}
+
 /* titled groups inside "advanced" (retry numbers / cache flags) */
 .pform-checks { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .pform-checks-title {
@@ -2464,7 +2491,6 @@ body.light .c-warn { --eye-c: #fff8e6; } body.light .c-err { --eye-c: #ffecec; }
 body.light .c-dim { --face-c: var(--panel); }
 
 @keyframes mdlBreathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.012); } }
-@keyframes mdlSpin { to { transform: rotate(360deg); } }
 @keyframes mdlBlink { 0%, 90%, 100% { transform: scaleY(1); } 94% { transform: scaleY(.08); } 97% { transform: scaleY(1); } }
 .mdl.blink .eye { animation: mdlBlink 3.8s var(--ease) infinite; }
 .mdl.narrow .eye { height: calc(var(--s) * .26); width: calc(var(--s) * .155); }
@@ -2608,7 +2634,7 @@ body.light .c-dim { --face-c: var(--panel); }
 .mdl.st-queued .eyes { animation: mdlGlance 4.4s ease-in-out infinite; }
 /* boot */
 @keyframes mdlBootBlink { 0%, 84%, 100% { transform: scaleY(1); } 88% { transform: scaleY(.1); } 90% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
-.mdl.st-boot { border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--eye-c) 55%, transparent); animation: mdlSpin 2.8s linear infinite; }
+/* Boot keeps the same squircle as every other face: no dashed ring, no spin. */
 .mdl.st-boot .eye { border-radius: 50%; animation: mdlBootBlink 3.4s var(--ease) infinite; }
 /* loading mascot: waking eyes (closed → open) */
 @keyframes mdlWake { 0%, 10% { transform: scaleY(.08); } 30%, 72% { transform: scaleY(1); } 82% { transform: scaleY(.08); } 90%, 100% { transform: scaleY(1); } }

@@ -24,5 +24,17 @@ export function readMmaVersion(): string {
   return "0.0.0";
 }
 
+/**
+ * True, когда код запущен из дерева исходников (`src/`), а не из собранного
+ * `dist/`. Нужен UI, чтобы честно пометить локальную dev-сборку.
+ */
+export function isDevBuild(): boolean {
+  try {
+    return /[\\/]src[\\/]/.test(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
 /** Устаревший алиас — используй readMmaVersion(). */
 export const readVersion = readMmaVersion;

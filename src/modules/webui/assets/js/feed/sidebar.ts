@@ -236,6 +236,8 @@ export function renderWorkspace(h: Dict): void {
       workspace: typeof h.workspace === "string" ? hiddenText(h.workspace) : h.workspace,
       version: h.version,
       updateAvailable: h.updateAvailable || undefined,
+      dev: h.dev === true,
+      devTitle: t("web.env.dev_title"),
       dirLabel: t("web.env.dir"),
       updateTitle: t("web.update.chip_title", { latest: h.updateAvailable?.latest ?? "" }),
     },

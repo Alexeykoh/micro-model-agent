@@ -10,6 +10,10 @@ export interface FooterInput {
   version?: string;
   /** Доступный апдейт (`current` → `latest`); чип с подсказкой-командой. */
   updateAvailable?: { current: string; latest: string };
+  /** Локальная dev-сборка (запуск из src/, а не из dist/). */
+  dev?: boolean;
+  /** Локализованный title для метки dev. */
+  devTitle?: string;
   /** Локализованная подпись «dir». */
   dirLabel: string;
   /** Локализованный title чипа апдейта. */
@@ -31,16 +35,18 @@ export function renderFooter(
     workspace = "",
     version = "",
     updateAvailable = undefined,
+    dev = false,
     dirLabel,
     updateTitle = "",
+    devTitle = "",
   } = input;
-  const key = `${workspace} ${version} ${updateAvailable?.latest ?? ""}`;
+  const key = `${workspace} ${version} ${dev ? "dev" : ""} ${updateAvailable?.latest ?? ""}`;
   // Перестраиваем только на смену входа: `renderState` дёргает рендер на каждый
   // снимок состояния (план/usage/фаза), а DOM-трогать там нечего.
   if (el.dataset.key === key) return;
   el.dataset.key = key;
   el.textContent = "";
-  el.hidden = !workspace && !version && !updateAvailable;
+  el.hidden = !workspace && !version && !updateAvailable && !dev;
   if (workspace) {
     el.appendChild(make("span", "ws-k", dirLabel));
     const v = make("span", "ws-v", workspace);
@@ -59,5 +65,10 @@ export function renderFooter(
     const v = make("span", "ws-ver", `mma ${version}`);
     v.title = `micro-models-agent ${version}`;
     el.appendChild(v);
+  }
+  if (dev) {
+    const d = make("span", "ws-dev", "dev");
+    d.title = devTitle;
+    el.appendChild(d);
   }
 }

@@ -4,7 +4,7 @@
 // `app-i18n.ts` (both split out under file-size rule 6).
 import { icon } from "./js/dom.js";
 import { token } from "./js/api.js";
-import { loadI18n } from "./js/i18n.js";
+import { hasCachedI18n, loadI18n } from "./js/i18n.js";
 import { settings, session, hooks } from "./js/store.js";
 import { mergeUsage } from "./js/state-sync.js";
 import {
@@ -172,15 +172,20 @@ async function boot(): Promise<void> {
   // Splash is a mask, not a gate: cap at 2 s; data loads progressively behind it.
   window.setTimeout(hideBootSplash, 2000);
   try {
-    await loadI18n();
-    await loadCommands();
+    // Paint theme + language from the local mirror before any network round-trip:
+    // otherwise the splash shows EN/dark and only then switches to the saved
+    // RU/light — a visible flash on every reload.
     applyTheme(currentTheme());
     applyUiTheme(currentUiTheme());
     applyFontSize();
-    applyStaticI18n();
+    if (hasCachedI18n()) applyStaticI18n();
     showEmptyFeed();
     renderSelectors();
     renderSettings();
+    await loadI18n();
+    await loadCommands();
+    // Server truth wins; with a warm cache this repaint changes nothing.
+    applyStaticI18n();
     await loadConfig();
     // Апгрейд: до этой версии тема жила только в localStorage. Если сервер ещё
     // на дефолте, доливаем выбор браузера в конфиг (INV-T5) и перерисовываем
