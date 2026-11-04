@@ -17,8 +17,16 @@ export function h(tag: string, cls?: string | null, text?: string | number | nul
 export function stepBody(name: string): HTMLElement {
   const box = h("div", "setup-step");
   box.appendChild(h("h2", "setup-step-title", tr("web.setup." + name + ".title")));
-  const hint = tr("web.setup." + name + ".hint");
-  if (hint !== "web.setup." + name + ".hint") box.appendChild(h("p", "setup-hint", hint));
+  const key = "web.setup." + name + ".hint";
+  const hint = tr(key);
+  if (hint !== key) {
+    // One paragraph per line: a single <p> with \n reads as a wall of text.
+    const lines = h("div", "setup-hint");
+    for (const line of hint.split("\n")) {
+      if (line.trim()) lines.appendChild(h("p", "setup-hint-line", line));
+    }
+    box.appendChild(lines);
+  }
   return box;
 }
 
