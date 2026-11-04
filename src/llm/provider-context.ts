@@ -136,7 +136,25 @@ export interface ProviderContextOpts {
 }
 
 /**
- * Пробует все источники по порядку, возвращает первый давший окно.
+ * Лукап каталога models.dev — последний шанс; его сбой не должен отменять уже
+ * измеренные локальные источники (пробы идут параллельно, см. `Promise.all`).
+ */
+async function probeModelsDevSafe(
+  baseUrl: string,
+  model: string,
+  providerType: string | undefined,
+): Promise<number | null> {
+  try {
+    return await probeModelsDev(baseUrl, model, providerType);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Пробует все источники ПАРАЛЛЕЛЬНО и возвращает первый по прежнему приоритету
+ * (LM Studio → Ollama → llama.cpp → OpenAI-compat → models.dev): суммарное
+ * время пробы ≈ max по источникам, а не их сумма (волна B).
  * @param baseUrl базовый URL провайдера; @param model имя модели;
  * @param opts ключ/таймаут/тип; @returns окно контекста либо null (fail-open).
  */
@@ -148,15 +166,19 @@ export async function probeProviderContext(
   const timeoutMs = opts.timeoutMs ?? 3000;
   const origin = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
   try {
-    const lm = await probeModel(baseUrl, model, timeoutMs);
+    const [lm, ollama, llama, compat, catalog] = await Promise.all([
+      probeModel(baseUrl, model, timeoutMs),
+      probeOllama(origin, model, timeoutMs),
+      probeLlamaCpp(origin, timeoutMs),
+      probeOpenAICompatModels(baseUrl, model, opts.apiKey, timeoutMs),
+      // Каталог ловится отдельно: его сбой не должен отменять уже измеренные
+      // локальные источники (раньше это была последняя проба цепочки).
+      probeModelsDevSafe(baseUrl, model, opts.providerType),
+    ]);
     if (lm) return { model: lm.model, actual: lm.contextLength };
-    const ollama = await probeOllama(origin, model, timeoutMs);
     if (ollama !== null) return { model, actual: ollama };
-    const llama = await probeLlamaCpp(origin, timeoutMs);
     if (llama !== null) return { model, actual: llama };
-    const compat = await probeOpenAICompatModels(baseUrl, model, opts.apiKey, timeoutMs);
     if (compat !== null) return { model, actual: compat };
-    const catalog = await probeModelsDev(baseUrl, model, opts.providerType);
     if (catalog !== null) return { model, actual: catalog };
   } catch {
     // Fail-open: любая ошибка пробы оставляет настроенный contextWindow.
