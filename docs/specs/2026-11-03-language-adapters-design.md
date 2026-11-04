@@ -1,7 +1,7 @@
 # Language adapters for the syntax verifier — design
 
 > **Дата:** 2026-11-03. Phase C плана
-> `docs/superpowers/plans/2026-08-12-memory-quality-and-learning.md` (TODO §1.6).
+> `docs/plans/2026-08-12-memory-quality-and-learning.md` (TODO §1.6).
 
 ## Проблема
 

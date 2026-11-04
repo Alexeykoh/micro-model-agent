@@ -2694,7 +2694,7 @@ body.light .c-dim { --face-c: var(--panel); }
 .upd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 
 /* ── Subagent run view ───────────────────────────────────────────────────
-   Клик по строке subagent открывает read-only ленту прогона (TODO §1.1).
+   Клик по строке subagent открывает read-only ленту прогона (архив TODO 2026-11-04, §1.1).
    Родительская лента остаётся смонтированной «за кадром»; композер и rail
    скрыты, потому что субагенту нельзя отправлять сообщения. */
 .chat.srun-open .input-area { display: none; }

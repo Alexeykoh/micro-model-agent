@@ -20,7 +20,7 @@ CLI (main.ts → commands.ts / repl.ts)
 
 ### Output Architecture
 
-> **Spec/plan:** `docs/superpowers/plans/2026-09-18-output-architecture-refactor.md`
+> **Spec/plan:** `docs/archive/plans/2026/superpowers/plans/2026-09-18-output-architecture-refactor.md`
 
 All terminal output flows through `src/output/` as events, so the mode of the
 terminal (streaming / modal / quiet) and every machine surface see the same data.

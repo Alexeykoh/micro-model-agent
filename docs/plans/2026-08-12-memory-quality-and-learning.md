@@ -1,20 +1,20 @@
 # Memory Quality Gate + Self-Learning — Unified Implementation Plan
 
-> **Статус:** **открыт** (сверка 2026-10-20) — ни одна из трёх фаз не реализована.
-> Отсутствуют: `src/modules/memory/validator.ts` и `MemoryValidator` (запись в память не
-> валидируется, `append()`/`appendRule()` не возвращают `ValidationResult`), интеграция
-> в `remember`-тул (нет `tool.remember.rejected`), конфиг `memory.validator`,
-> `src/modules/learning/**` (`types/trace/validator/generator/cli/module`), подкоманда
-> `mma learn`, регистрация `LearningModule` в bootstrap, `language-adapters.ts`
-> (валидатор работает только по ветке TS — `src/modules/execution/verifier.ts:298`).
-> Из плана выполнено одно: `SessionManager.loadSessionLog`.
-> Список открытых пунктов продублирован в [`TODO.md`](../../../TODO.md) §1.6.
+> **Статус:** **в работе** (сверка 2026-11-04) — Phase A (валидатор памяти) и
+> Phase C (языковые адаптеры) закрыты 2026-11-03, см.
+> [`2026-11-03-memory-validator-design.md`](../specs/2026-11-03-memory-validator-design.md)
+> и [`2026-11-03-language-adapters-design.md`](../specs/2026-11-03-language-adapters-design.md).
+> Открыта Phase B (обучение): `src/modules/learning/**`
+> (`types/trace/validator/generator/cli/module`), подкоманда `mma learn`,
+> регистрация `LearningModule` в bootstrap. Ранее из плана выполнен
+> `SessionManager.loadSessionLog`.
+> Список открытых пунктов — в [`TODO.md`](../../TODO.md) §1.6.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Two independent upgrades to make persistent memory trustworthy and self-improving:
 
-1. **Memory quality gate** — prevent garbage, duplicates, and low-quality entries from polluting persistent memory (`conventions.md`, `decisions.md`, `errors.md`, `facts.md`). Kills the self-reinforcing memory-corruption loop ("Agent Memory Broke"): for a 9B model, garbage written to memory becomes future prompt input → progressive corruption. Deterministic validation at *save time*, not generation time.
+1. **Memory quality gate** — prevent garbage, duplicates, and low-quality entries from polluting persistent memory (`conventions.md`, `decisions.md`, `errors.md`, `facts.md`). Kills the self-reinforcing memory-corruption loop ("Agent Memory Broke"): for a 9B model, garbage written to memory becomes future prompt input → progressive corruption. Deterministic validation at _save time_, not generation time.
 2. **Self-learning** — turn successful sessions into reusable `SKILL.md` files via `mma learn` CLI (nudge) + an in-session auto-suggestion directive, with a strict 1-LLM-call budget and deterministic validation.
 
 **Merged from:** `2026-08-11-memory-quality-gate.md` + `2026-08-11-self-learning.md` (both superseded, removed) + the still-useful `detectLanguage` idea from `2026-08-04-language-support-verifier.md` (folded into Task 14, optional).
@@ -22,7 +22,7 @@
 **Already implemented — do NOT re-do:**
 
 - `SessionStore.loadSessionLog()` exists (`src/modules/session/store.ts:212`). Task 10 only adds a thin `SessionManager` delegate.
-- `Auditor.runTests()` (R4, v0.28.15) already runs language-agnostic test checks (`findTestFile` + `bun test`). Task 14 must not duplicate that; it only adds syntax adapters to the *Verifier*.
+- `Auditor.runTests()` (R4, v0.28.15) already runs language-agnostic test checks (`findTestFile` + `bun test`). Task 14 must not duplicate that; it only adds syntax adapters to the _Verifier_.
 - `agent.ts:689` already constructs `MemoryStore` and calls `appendRule` — Task 5 only wires the returned `ValidationResult`.
 
 **Tech Stack:** TypeScript strict, vitest (`bun test`), `tsc --noEmit`. i18n rule #8 (en+ru parity) for every new user-facing string.
@@ -49,11 +49,22 @@ Rules (all deterministic):
 Key signatures:
 
 ```ts
-export interface ValidationResult { accepted: boolean; reason?: string }
+export interface ValidationResult {
+  accepted: boolean;
+  reason?: string;
+}
 export class MemoryValidator {
-  constructor(memoryDir: string, opts?: { minChars?: number; minWords?: number; similarityThreshold?: number })
-  validate(category: string, entry: string): ValidationResult
-  validateRule(category: string, pattern: string, cause: string, solution: string): ValidationResult
+  constructor(
+    memoryDir: string,
+    opts?: { minChars?: number; minWords?: number; similarityThreshold?: number },
+  );
+  validate(category: string, entry: string): ValidationResult;
+  validateRule(
+    category: string,
+    pattern: string,
+    cause: string,
+    solution: string,
+  ): ValidationResult;
 }
 ```
 
