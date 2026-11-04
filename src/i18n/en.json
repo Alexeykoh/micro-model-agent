@@ -180,6 +180,8 @@
   "documents.read_desc": "Read a slice of a document (all, a section by title, or a block range).",
   "documents.path_desc": "Path to the document, relative to the workspace root",
   "documents.selector_desc": "Slice: all, section:<title>, or blocks:<from>-<to> (default: all)",
+  "documents.read_blocks": "blocks {from}-{to}",
+  "documents.read_section": "section “{title}”",
   "documents.error": "Could not read the document: {reason}",
   "documents.file_not_found": "File not found: {path}",
   "documents.section_not_found": "Section \"{title}\" not found. Available sections: {available}",

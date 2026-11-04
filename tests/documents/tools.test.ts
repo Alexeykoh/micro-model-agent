@@ -56,29 +56,66 @@ describe("doc tools", () => {
     const onDiagnostic = vi.fn();
     await documentMapTool(reg).handler(ctx(onDiagnostic), { path: "nope.csv" });
     expect(onDiagnostic).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "module:documents", kind: "failed", operation: "document_map" }),
+      expect.objectContaining({
+        source: "module:documents",
+        kind: "failed",
+        operation: "document_map",
+      }),
     );
   });
   it("неподдерживаемый формат — запись module:documents failed (INV-D5)", async () => {
     const onDiagnostic = vi.fn();
     await documentMapTool(reg).handler(ctx(onDiagnostic), { path: "c.xyz" });
     expect(onDiagnostic).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "module:documents", kind: "failed", operation: "document_map" }),
+      expect.objectContaining({
+        source: "module:documents",
+        kind: "failed",
+        operation: "document_map",
+      }),
     );
   });
   it("document_read: найденный раздел", async () => {
-    const res = await documentReadTool(mdReg).handler(ctx(), { path: "b.md", selector: "section:B" });
+    const res = await documentReadTool(mdReg).handler(ctx(), {
+      path: "b.md",
+      selector: "section:B",
+    });
     expect(res.success).toBe(true);
     expect(String(res.output)).toContain("world");
   });
+  it("document_read: display называет диапазон блоков", async () => {
+    const res = await documentReadTool(mdReg).handler(ctx(), {
+      path: "b.md",
+      selector: "blocks:2-3",
+    });
+    expect(res.success).toBe(true);
+    expect(res.display).toBe(t("documents.read_blocks", { from: "2", to: "3" }));
+  });
+  it("document_read: display называет раздел", async () => {
+    const res = await documentReadTool(mdReg).handler(ctx(), {
+      path: "b.md",
+      selector: "section:B",
+    });
+    expect(res.display).toBe(t("documents.read_section", { title: "B" }));
+  });
+  it("document_read: полное чтение не добавляет display", async () => {
+    const res = await documentReadTool(mdReg).handler(ctx(), { path: "b.md" });
+    expect(res.display).toBe("");
+  });
   it("document_read: отсутствующий раздел — явный fail-open со списком и записью", async () => {
     const onDiagnostic = vi.fn();
-    const bad = await documentReadTool(mdReg).handler(ctx(onDiagnostic), { path: "b.md", selector: "section:nope" });
+    const bad = await documentReadTool(mdReg).handler(ctx(onDiagnostic), {
+      path: "b.md",
+      selector: "section:nope",
+    });
     expect(bad.success).toBe(false);
     expect(String(bad.output)).toContain("nope");
     expect(String(bad.output)).not.toContain(dir);
     expect(onDiagnostic).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "module:documents", kind: "failed", operation: "document_read" }),
+      expect.objectContaining({
+        source: "module:documents",
+        kind: "failed",
+        operation: "document_read",
+      }),
     );
   });
   it("тулы несут security.fs=read и pathArgs", () => {
@@ -99,7 +136,11 @@ describe("document_read: vision-путь растра (W4)", () => {
     expect(String(res.output)).toBe(t("documents.needs_vision", { path: "p.png" }));
     expect(res.images).toBeUndefined();
     expect(onDiagnostic).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "module:documents", kind: "failed", operation: "document_read" }),
+      expect.objectContaining({
+        source: "module:documents",
+        kind: "failed",
+        operation: "document_read",
+      }),
     );
   });
 
@@ -144,16 +185,25 @@ describe("document_read: vision-путь растра (W4)", () => {
     );
     expect(res.success).toBe(false);
     expect(res.images).toBeUndefined();
-    expect(String(res.output)).toBe(t("documents.image_too_large", { path: "big.png", limit: "5 MiB" }));
+    expect(String(res.output)).toBe(
+      t("documents.image_too_large", { path: "big.png", limit: "5 MiB" }),
+    );
     expect(onDiagnostic).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "module:documents", kind: "failed", operation: "document_read" }),
+      expect.objectContaining({
+        source: "module:documents",
+        kind: "failed",
+        operation: "document_read",
+      }),
     );
   });
 
   it("document_map растра отдаёт метаданные (figure), без картинки", async () => {
-    const res = await documentMapTool(imgReg).handler(visionCtx({ capabilities: { vision: true } }), {
-      path: "p.png",
-    });
+    const res = await documentMapTool(imgReg).handler(
+      visionCtx({ capabilities: { vision: true } }),
+      {
+        path: "p.png",
+      },
+    );
     expect(res.success).toBe(true);
     expect(String(res.output)).toContain("figures: 1");
     expect(String(res.output)).toContain("format: png");

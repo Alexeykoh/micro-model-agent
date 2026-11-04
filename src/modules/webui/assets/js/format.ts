@@ -5,25 +5,54 @@ import { settings } from "./store.js";
 
 export const CATEGORIES: Record<string, string[]> = {
   recon: [
-    "read_file", "list_dir", "glob", "grep", "file_info", "project_map",
-    "chunk_query", "web_search", "web_fetch", "history", "recall",
-    "process_list", "process_log",
+    "read_file",
+    "document_read",
+    "list_dir",
+    "glob",
+    "grep",
+    "file_info",
+    "project_map",
+    "chunk_query",
+    "web_search",
+    "web_fetch",
+    "history",
+    "recall",
+    "process_list",
+    "process_log",
   ],
-  mutate: [
-    "write_file", "edit_file", "create_dir", "delete_file", "move_file",
-    "attach_image",
-  ],
+  mutate: ["write_file", "edit_file", "create_dir", "delete_file", "move_file", "attach_image"],
   execute: [
-    "bash", "process_kill", "pipeline_run", "browser", "download_file",
-    "subagent", "mcp_call",
+    "bash",
+    "process_kill",
+    "pipeline_run",
+    "browser",
+    "download_file",
+    "subagent",
+    "mcp_call",
   ],
   meta: [
-    "plan", "plan_step", "todo", "verify", "lsp_check", "enable_tools", "set_thinking",
-    "load_skill", "remember",
+    "plan",
+    "plan_step",
+    "todo",
+    "verify",
+    "lsp_check",
+    "enable_tools",
+    "set_thinking",
+    "load_skill",
+    "remember",
   ],
 };
 
-export const FILE_TOOLS = ["read_file", "write_file", "edit_file", "list_dir", "delete_file", "move_file", "file_info"];
+export const FILE_TOOLS = [
+  "read_file",
+  "document_read",
+  "write_file",
+  "edit_file",
+  "list_dir",
+  "delete_file",
+  "move_file",
+  "file_info",
+];
 // Tools whose `path` argument points at a readable file the viewer can open.
 // `list_dir` is a directory, `delete_file`/`move_file` leave the file gone.
 export const OPENABLE_TOOLS = ["read_file", "write_file", "edit_file", "file_info"];
@@ -61,7 +90,20 @@ export function hiddenText(text: string): string {
 export function argText(args: unknown): string {
   if (!args || typeof args !== "object") return "";
   const rec = args as Record<string, unknown>;
-  const keys = ["path", "file", "dir", "command", "query", "url", "pattern", "name", "id", "text", "prompt", "task"];
+  const keys = [
+    "path",
+    "file",
+    "dir",
+    "command",
+    "query",
+    "url",
+    "pattern",
+    "name",
+    "id",
+    "text",
+    "prompt",
+    "task",
+  ];
   for (const key of keys) {
     if (typeof rec[key] === "string" && rec[key]) return hiddenText(rec[key] as string);
   }
@@ -79,12 +121,29 @@ export function argText(args: unknown): string {
 }
 
 /**
- * Human range of a `read_file` call: "926–995", "from line 926", "1–70".
- * Two identical file rows are then distinguishable (same file, different range).
+ * Human slice of a `document_read` call: "blocks 10–25" / "section B".
+ * `all` (or a missing selector) reads everything — no slice to show.
+ */
+function documentRangeText(selector: unknown): string {
+  if (typeof selector !== "string") return "";
+  const s = selector.trim();
+  const blocks = /^blocks:(\d+)-(\d+)$/i.exec(s);
+  if (blocks) return t("documents.read_blocks", { from: blocks[1], to: blocks[2] });
+  const section = /^section:(.+)$/i.exec(s);
+  if (section) return t("documents.read_section", { title: section[1].trim() });
+  return "";
+}
+
+/**
+ * Human range of a read call: `read_file` → "926–995" / "from line 926" /
+ * "1–70"; `document_read` → "blocks 10–25" / "section B". Two identical file
+ * rows are then distinguishable (same file, different slice).
  */
 export function readRangeText(name: string, args: unknown): string {
-  if (name !== "read_file" || !args || typeof args !== "object") return "";
+  if (!args || typeof args !== "object") return "";
   const rec = args as Record<string, unknown>;
+  if (name === "document_read") return documentRangeText(rec.selector);
+  if (name !== "read_file") return "";
   const offset = Number(rec.offset);
   const limit = Number(rec.limit);
   const hasOffset = Number.isFinite(offset) && offset > 0;
@@ -123,9 +182,15 @@ export function firstOutputLine(text: string | null | undefined): string {
 // Case-insensitive substring match for dropdown filters (model / session
 // search). Empty query matches everything; non-strings stringify safely.
 export function matchesQuery(haystack: unknown, q: unknown): boolean {
-  const needle = String(q == null ? "" : q).trim().toLowerCase();
+  const needle = String(q == null ? "" : q)
+    .trim()
+    .toLowerCase();
   if (!needle) return true;
-  return String(haystack == null ? "" : haystack).toLowerCase().indexOf(needle) !== -1;
+  return (
+    String(haystack == null ? "" : haystack)
+      .toLowerCase()
+      .indexOf(needle) !== -1
+  );
 }
 
 export function relTime(ts: string | number | null | undefined): string {
