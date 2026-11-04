@@ -3,6 +3,9 @@
 // to skip the updater entirely (`exitOnComplete` disabled it), which left the
 // four `updater.*` toggles in the settings panel dead.
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createUpdater } from "../src/modules/updater/factory";
 import type { UpdateNotice } from "../src/modules/updater/module";
 import type { UpdaterConfig } from "../src/config/types";
@@ -94,6 +97,30 @@ describe("createUpdater", () => {
     expect(notices).toHaveLength(0);
     mod!.stop();
   });
+
+  it("warns when PATH resolves mma outside the running install", () => {
+    const root = mkdtempSync(join(tmpdir(), "mma-shadow-"));
+    try {
+      const foreign = join(root, "foreign");
+      mkdirSync(foreign, { recursive: true });
+      const fakeMma = join(foreign, process.platform === "win32" ? "mma.cmd" : "mma");
+      writeFileSync(fakeMma, process.platform === "win32" ? "@echo off\r\n" : "#!/bin/sh\n");
+      if (process.platform !== "win32") chmodSync(fakeMma, 0o755);
+      const warnings: string[] = [];
+      const installRoot = join(root, "home", ".mma");
+      const mod = createUpdater({
+        config: cfg({ enabled: false }),
+        entryPath: join(installRoot, "current", "app", "main.js"),
+        deps: { installRoot },
+        pathEnv: foreign,
+        logger: { info: () => {}, warn: (m) => warnings.push(m), error: () => {} },
+      });
+      expect(warnings.join("\n")).toContain("mma on PATH resolves to");
+      mod!.stop();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("web updater wiring (source contract)", () => {
@@ -103,7 +130,9 @@ describe("web updater wiring (source contract)", () => {
     // `exitOnComplete` exists to decide who owns stdin; the updater never
     // touches stdin (fetch + execFile), so gating it on that flag silently
     // killed web updates while the settings panel still showed the toggles.
-    expect(web).toContain("exitOnComplete=true: в веб-режиме интерактивный промпт stdin не владеет.");
+    expect(web).toContain(
+      "exitOnComplete=true: в веб-режиме интерактивный промпт stdin не владеет.",
+    );
     expect(web).not.toMatch(/exitOnComplete\s*\?\s*undefined\s*:\s*startAutoUpdate/);
     expect(web).not.toMatch(/updater.*exitOnComplete\s*\?/);
   });

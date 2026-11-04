@@ -1214,6 +1214,7 @@
   "bash.posix_workdir_hint": "workdir \"{workdir}\" — POSIX-путь, но это оболочка Windows cmd.exe. Используй Windows-путь или не указывай workdir, чтобы взять корень workspace ({baseDir}).",
   "bash.workdir_blocked": "[SECURITY BLOCKED] Рабочий каталог запрещён: {reason}. Используй каталог внутри {baseDir}.",
   "updater.check_error": "Ошибка проверки обновления: {error}",
+  "updater.path_shadowed": "mma в PATH указывает на {resolved}, а не на эту установку ({bin}). Открой новый терминал; если не помогло — удали старый лаунчер: npm rm -g micro-models-agent",
   "updater.available": "Доступно обновление {current} → {latest}.\n{hint}",
   "updater.auto_install_hint": "↳ Обнови в веб-панели (настройки → о программе) или включи автоустановку: /config updater.autoInstall true. Вручную: {cmd}",
   "updater.installing": "Скачиваю {latest} (сейчас {current})…",

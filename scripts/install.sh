@@ -10,6 +10,8 @@
 #   MMA_INSTALL_BASE    mirror / release base (default: GitHub Releases)
 #   MMA_HOME            install root (default: ~/.mma)
 #   MMA_INSTALL_DRY_RUN=1  print the plan without network or writes
+#   MMA_INSTALL_NO_PATH=1  do not change PATH (CI/tests/corporate)
+#   MMA_NPM_PREFIX      override `npm prefix -g` for legacy-shim detection
 set -eu
 
 MMA_REPO="Alexeykoh/micro-model-agent"
@@ -17,11 +19,121 @@ BASE="${MMA_INSTALL_BASE:-https://github.com/${MMA_REPO}/releases/latest/downloa
 BASE="${BASE%/}"
 MMA_HOME="${MMA_HOME:-$HOME/.mma}"
 DRY="${MMA_INSTALL_DRY_RUN:-0}"
+NO_PATH="${MMA_INSTALL_NO_PATH:-0}"
 # Оборванный или побитый канал не должен требовать ручного перезапуска скрипта.
 ATTEMPTS=3
 
 say() { printf 'mma: %s\n' "$*"; }
 die() { printf 'mma: %s\n' "$*" >&2; exit 1; }
+
+# --- look & feel ----------------------------------------------------------
+# Colours and animation are strictly best-effort: a pipe/CI/NO_COLOR stays
+# plain, so logs and tests never contain escape codes.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
+  ANIMATED=1
+  C_ACCENT="$(printf '\033[38;5;183m')"
+  C_OK="$(printf '\033[38;5;150m')"
+  C_DIM="$(printf '\033[38;5;245m')"
+  C_ERR="$(printf '\033[38;5;203m')"
+  C_BOLD="$(printf '\033[1m')"
+  C_RESET="$(printf '\033[0m')"
+else
+  ANIMATED=0
+  C_ACCENT=""
+  C_OK=""
+  C_DIM=""
+  C_ERR=""
+  C_BOLD=""
+  C_RESET=""
+fi
+
+banner() {
+  printf '\n'
+  printf '  %s+-------------+%s  %sMMA installer%s\n' "$C_ACCENT" "$C_RESET" "$C_BOLD" "$C_RESET"
+  printf '  %s| []      []  |%s  %sGitHub Releases - %s%s\n' "$C_ACCENT" "$C_RESET" "$C_DIM" "$key" "$C_RESET"
+  printf '  %s+-------------+%s  %shome: %s%s\n' "$C_ACCENT" "$C_RESET" "$C_DIM" "$MMA_HOME" "$C_RESET"
+  printf '\n'
+}
+
+# One-line progress bar: 26 cells, percentage, sizes. The mascot stays above,
+# the bar updates in place so a slow link looks alive instead of frozen.
+draw_bar() { # done total label
+  [ "$ANIMATED" = "1" ] || return 0
+  total="${2:-0}"
+  done_now="${1:-0}"
+  width=26
+  if [ "$total" -gt 0 ]; then pct=$((done_now * 100 / total)); else pct=0; fi
+  [ "$pct" -gt 100 ] && pct=100
+  fill=$((pct * width / 100))
+  bar=""
+  i=0
+  while [ "$i" -lt "$width" ]; do
+    if [ "$i" -lt "$fill" ]; then bar="$bar#"; else bar="$bar-"; fi
+    i=$((i + 1))
+  done
+  printf '\r  %s[%s]%s %3d%%  %s%s/%s MB  %s%s' \
+    "$C_ACCENT" "$bar" "$C_RESET" "$pct" "$C_DIM" "$(mb "$done_now")" "$(mb "$total")" "$3" "$C_RESET"
+}
+
+# True when $1 is $2 itself or lives under it.
+under() {
+  [ -n "${1:-}" ] && [ -n "${2:-}" ] || return 1
+  case "$1" in "$2" | "$2"/*) return 0 ;; *) return 1 ;; esac
+}
+
+# PATH scan for an executable `mma` (no caches: `command -v` is fine in sh, but
+# the same helper is reused for the post-install check).
+find_mma_on_path() {
+  old_ifs="$IFS"
+  IFS=:
+  for dir in ${PATH:-}; do
+    [ -n "$dir" ] || continue
+    if [ -f "$dir/mma" ] && [ -x "$dir/mma" ]; then
+      IFS="$old_ifs"
+      printf '%s\n' "$dir/mma"
+      return 0
+    fi
+  done
+  IFS="$old_ifs"
+  return 1
+}
+
+# npm prefix for legacy detection: explicit override first, then `npm prefix -g`.
+get_npm_prefix() {
+  if [ -n "${MMA_NPM_PREFIX:-}" ]; then
+    printf '%s\n' "${MMA_NPM_PREFIX%/}"
+    return 0
+  fi
+  if command -v npm >/dev/null 2>&1; then
+    prefix="$(npm prefix -g 2>/dev/null | head -n1 || true)"
+    if [ -n "$prefix" ]; then
+      printf '%s\n' "${prefix%/}"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# Retire (rename, never delete) npm launchers shadowing `mma`. Reversible: the
+# backup name is printed. Needed because the npm prefix may sit in the system
+# PATH, where a user-PATH prepend cannot win.
+retire_legacy_npm_shims() { # prefix
+  moved=0
+  for path in "$1/mma" "$1/bin/mma"; do
+    [ -e "$path" ] || [ -L "$path" ] || continue
+    backup="$path.legacy-npm.bak"
+    rm -f "$backup"
+    if mv "$path" "$backup" 2>/dev/null; then
+      say "retired legacy npm launcher: $path (backup: $backup)"
+      moved=1
+    else
+      say "warning: cannot move $path; remove it with: npm rm -g micro-models-agent"
+    fi
+  done
+  if [ "$moved" = "1" ]; then
+    say "after the new mma works, clean up npm: npm rm -g micro-models-agent"
+  fi
+}
 
 # --- detect platform -------------------------------------------------------
 os="$(uname -s)"
@@ -39,27 +151,59 @@ esac
 key="${oskey}-${archkey}"
 artifact="mma-${key}.tar.gz"
 
+banner
+
+# --- legacy preflight ------------------------------------------------------
+# The new launcher does not exist yet, so any `mma` outside $MMA_HOME/bin is a
+# legacy copy. Classification as npm needs the npm prefix; without npm we still
+# warn but never touch the file.
+legacy_mma="$(find_mma_on_path || true)"
+npm_prefix=""
+legacy_is_npm=0
+if [ -n "$legacy_mma" ] && ! under "$legacy_mma" "$MMA_HOME/bin"; then
+  npm_prefix="$(get_npm_prefix || true)"
+  if under "$legacy_mma" "$npm_prefix"; then legacy_is_npm=1; fi
+fi
+
 # --- fetch -----------------------------------------------------------------
 # Одна попытка; если недокачанный файл уже есть, curl продолжит с него.
 # wget докачку с конкретным `-O` не поддерживает — там файл качается заново.
 fetch_once() { # url outfile [progress] -> non-zero on failure
   progress="${3:-}"
   if command -v curl >/dev/null 2>&1; then
-    if [ "$progress" = "1" ]; then
-      # --progress-bar: молчаливые 78 МБ выглядят как зависание.
-      bar="--progress-bar"
-    else
-      bar="-sS"
-    fi
-    if [ -f "$2" ]; then
-      # shellcheck disable=SC2086 # $bar — один флаг
-      curl -fL $bar -C - --connect-timeout 30 --speed-limit 2048 --speed-time 60 "$1" -o "$2"
-    else
+    resume=""
+    if [ -f "$2" ]; then resume="-C -"; fi
+    if [ "$progress" = "1" ] && [ "$ANIMATED" = "1" ]; then
       # shellcheck disable=SC2086
-      curl -fL $bar --connect-timeout 30 --speed-limit 2048 --speed-time 60 "$1" -o "$2"
+      curl -fL -sS $resume --connect-timeout 30 --speed-limit 2048 --speed-time 60 "$1" -o "$2" &
+      pid=$!
+      while kill -0 "$pid" 2>/dev/null; do
+        have="$(size_of "$2" 2>/dev/null || printf 0)"
+        draw_bar "$have" "${PROGRESS_TOTAL:-0}" download
+        sleep 1
+      done
+      if wait "$pid"; then status=0; else status=$?; fi
+      draw_bar "${PROGRESS_TOTAL:-0}" "${PROGRESS_TOTAL:-0}" download
+      printf '\n'
+      return "$status"
     fi
+    # shellcheck disable=SC2086
+    curl -fL -sS $resume --connect-timeout 30 --speed-limit 2048 --speed-time 60 "$1" -o "$2"
   elif command -v wget >/dev/null 2>&1; then
     rm -f "$2"
+    if [ "$progress" = "1" ] && [ "$ANIMATED" = "1" ]; then
+      wget -q --timeout=30 -O "$2" "$1" &
+      pid=$!
+      while kill -0 "$pid" 2>/dev/null; do
+        have="$(size_of "$2" 2>/dev/null || printf 0)"
+        draw_bar "$have" "${PROGRESS_TOTAL:-0}" download
+        sleep 1
+      done
+      if wait "$pid"; then status=0; else status=$?; fi
+      draw_bar "${PROGRESS_TOTAL:-0}" "${PROGRESS_TOTAL:-0}" download
+      printf '\n'
+      return "$status"
+    fi
     wget -q --timeout=30 -O "$2" "$1"
   else
     die "neither curl nor wget is available"
@@ -93,6 +237,7 @@ sha256_of() {
 # Скачивание с докачкой и повтором. Недокачанный файл продолжается с места
 # обрыва; побитый (не сошёлся sha256) выбрасывается и качается заново.
 fetch_verified() { # url outfile expected_size expected_sha label
+  PROGRESS_TOTAL="$3"
   if [ -f "$2" ]; then
     have="$(size_of "$2" 2>/dev/null || printf 0)"
     if [ "$have" -gt 0 ] && [ "$have" -lt "$3" ]; then
@@ -149,7 +294,24 @@ if [ "$DRY" = "1" ]; then
   say "dry-run: manifest=$BASE/latest.json"
   say "dry-run: artifact=$BASE/$artifact"
   say "dry-run: install=$MMA_HOME/versions/<version> ; current=$MMA_HOME/current ; bin=$MMA_HOME/bin/mma"
+  if [ -n "$legacy_mma" ]; then
+    say "dry-run: legacy=$legacy_mma"
+  else
+    say "dry-run: legacy=none"
+  fi
+  if [ "$legacy_is_npm" = "1" ]; then say "dry-run: npm-prefix=$npm_prefix"; fi
+  if [ "$NO_PATH" = "1" ]; then
+    say "dry-run: path=unchanged (MMA_INSTALL_NO_PATH=1); add manually: export PATH=\"$MMA_HOME/bin:\$PATH\""
+  else
+    say "dry-run: path=prepend $MMA_HOME/bin to shell rc"
+  fi
   exit 0
+fi
+
+if [ "$legacy_is_npm" = "1" ]; then
+  say "found legacy npm install: $legacy_mma"
+elif [ -n "$legacy_mma" ]; then
+  say "another mma is on PATH: $legacy_mma"
 fi
 
 say "fetching manifest ..."
@@ -206,27 +368,56 @@ printf '#!/usr/bin/env sh\nexec "%s/current/runtime/bun" "%s/current/app/main.js
   "$MMA_HOME" "$MMA_HOME" > "$MMA_HOME/bin/mma"
 chmod +x "$MMA_HOME/bin/mma"
 
-# --- PATH ------------------------------------------------------------------
-case ":${PATH:-}:" in
-  *":$MMA_HOME/bin:"*) ;;
-  *)
-    line="export PATH=\"$MMA_HOME/bin:\$PATH\""
-    added=0
-    for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
-      [ -f "$rc" ] || continue
-      if ! grep -qF "$MMA_HOME/bin" "$rc" 2>/dev/null; then
-        printf '\n# Added by MMA installer\n%s\n' "$line" >> "$rc"
-        added=1
+# --- legacy shim + PATH ----------------------------------------------------
+# The new launcher exists now, so the old npm one is redundant. Retire it even
+# when PATH order looks fine: the npm prefix may sit in the SYSTEM PATH, where
+# a user-PATH/shell-rc prepend cannot win.
+if [ "$legacy_is_npm" = "1" ]; then retire_legacy_npm_shims "$npm_prefix"; fi
+
+if [ "$NO_PATH" = "1" ]; then
+  say "PATH not changed (MMA_INSTALL_NO_PATH=1); add manually: export PATH=\"$MMA_HOME/bin:\$PATH\""
+else
+  case ":${PATH:-}:" in
+    *":$MMA_HOME/bin:"*) ;;
+    *)
+      line="export PATH=\"$MMA_HOME/bin:\$PATH\""
+      added=0
+      for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+        [ -f "$rc" ] || continue
+        if ! grep -qF "$MMA_HOME/bin" "$rc" 2>/dev/null; then
+          printf '\n# Added by MMA installer\n%s\n' "$line" >> "$rc"
+          added=1
+        fi
+      done
+      if [ "$added" = "0" ]; then
+        say "add to PATH: $line"
       fi
-    done
-    if [ "$added" = "0" ]; then
-      say "add to PATH: $line"
-    fi
-    ;;
-esac
+      ;;
+  esac
+fi
+# Session PATH for the verification below; the parent shell is unaffected.
+PATH="$MMA_HOME/bin:${PATH:-}"
+export PATH
 
 # --- verify ----------------------------------------------------------------
 rm -f "$tarball"
+resolved="$(find_mma_on_path || true)"
+if [ -n "$resolved" ] && under "$resolved" "$MMA_HOME/bin"; then
+  say "verified: mma -> $resolved"
+elif [ -n "$resolved" ]; then
+  say "warning: mma still resolves to $resolved instead of $MMA_HOME/bin/mma"
+  if under "$resolved" "$npm_prefix"; then
+    say "run: npm rm -g micro-models-agent"
+  else
+    say "move $MMA_HOME/bin before $(dirname "$resolved") on PATH"
+  fi
+else
+  say "note: mma is not resolvable in this session; open a new terminal"
+fi
+if [ "$ANIMATED" = "1" ]; then
+  printf '\r  %s[%s]%s %s100%%  ready%s\n' \
+    "$C_OK" "##########################" "$C_RESET" "$C_OK" "$C_RESET"
+fi
 if "$MMA_HOME/current/runtime/bun" "$MMA_HOME/current/app/main.js" --version >/dev/null 2>&1; then
   say "installed MMA $version"
 else

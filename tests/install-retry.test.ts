@@ -7,6 +7,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { resolvePwsh } from "./helpers/pwsh";
 import { createHash, randomBytes } from "node:crypto";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -233,17 +234,23 @@ async function installWith(
 ): Promise<InstallOutcome> {
   const harness = await startServer(mode);
   const home = existingHome ?? freshHome();
+  const npmPrefix = join(home, "npm");
+  mkdirSync(npmPrefix, { recursive: true });
   const values: Record<string, string> = {
     MMA_INSTALL_BASE: harness.base,
     MMA_HOME: home,
     MMA_DOWNLOAD_DIR: join(home, "download"),
     HOME: join(home, "home"),
     MMA_INSTALL_DRY_RUN: "0",
+    // Tests must never rewrite the developer's user PATH or touch the real npm
+    // prefix: both are pinned to the temporary home.
+    MMA_INSTALL_NO_PATH: "1",
+    MMA_NPM_PREFIX: npmPrefix,
   };
   const res = await runProcess(
     cmd,
     args,
-    envWithPath(values, `${join(home, "bin")}${sep}${process.env.PATH ?? ""}`),
+    envWithPath(values, `${join(home, "bin")}${sep}${npmPrefix}${sep}${process.env.PATH ?? ""}`),
   );
   const outcome = {
     status: res.status,
@@ -359,6 +366,24 @@ function ps1Suite(shell: string): () => void {
         holder.kill();
       }
     });
+
+    it("выводит из игры legacy npm-шим и проверяет резолв", testTimeout, async () => {
+      const home = freshHome();
+      const npmPrefix = join(home, "npm");
+      mkdirSync(npmPrefix, { recursive: true });
+      const legacy = join(npmPrefix, "mma.cmd");
+      writeFileSync(legacy, "@echo off\r\necho legacy\r\n");
+      const res = await install("ok", home);
+      expect(res.status, res.stdout).toBe(0);
+      expect(res.stdout).toContain(`found legacy npm install: ${legacy}`);
+      expect(res.stdout).toContain("retired legacy npm launcher");
+      expect(res.stdout).toContain("npm rm -g micro-models-agent");
+      expect(res.stdout).toContain("verified: mma ->");
+      // Обратимо: старый шим переименован, а не удалён.
+      expect(statSync(legacy, { throwIfNoEntry: false })).toBeUndefined();
+      expect(statSync(`${legacy}.legacy-npm.bak`)?.isFile()).toBe(true);
+      assertInstalled(home);
+    });
   };
 }
 
@@ -405,5 +430,23 @@ describe.skipIf(isWin)("install.sh", () => {
     expect(
       statSync(join(home, "download", artifactName), { throwIfNoEntry: false }),
     ).toBeUndefined();
+  });
+
+  it("выводит из игры legacy npm-шим и проверяет резолв", testTimeout, async () => {
+    const home = freshHome();
+    const npmPrefix = join(home, "npm");
+    mkdirSync(npmPrefix, { recursive: true });
+    const legacy = join(npmPrefix, "mma");
+    writeFileSync(legacy, "#!/bin/sh\necho legacy\n");
+    chmodSync(legacy, 0o755);
+    const res = await install("ok", home);
+    expect(res.status, res.stdout).toBe(0);
+    expect(res.stdout).toContain(`found legacy npm install: ${legacy}`);
+    expect(res.stdout).toContain("retired legacy npm launcher");
+    expect(res.stdout).toContain("npm rm -g micro-models-agent");
+    expect(res.stdout).toContain("verified: mma ->");
+    expect(statSync(legacy, { throwIfNoEntry: false })).toBeUndefined();
+    expect(statSync(`${legacy}.legacy-npm.bak`, { throwIfNoEntry: false })?.isFile()).toBe(true);
+    assertInstalled(home);
   });
 });
