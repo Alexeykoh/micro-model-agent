@@ -9,6 +9,12 @@ export interface ListModelsOptions {
 }
 
 /**
+ * Таймаут списка моделей (INV-W7): недоступный хост не должен держать
+ * HTTP-ответ открыт (раньше fetch висел до TCP-таймаута ОС — минуты).
+ */
+export const LIST_MODELS_TIMEOUT_MS = 4_000;
+
+/**
  * Список моделей провайдера (`/models`: id/name/model).
  * @returns имена моделей; @throws при недоступности провайдера.
  */
@@ -26,6 +32,7 @@ export async function listProviderModels(opts: ListModelsOptions): Promise<strin
     const response = await fetch(url, {
       method: "GET",
       headers,
+      signal: AbortSignal.timeout(LIST_MODELS_TIMEOUT_MS),
     });
 
     if (!response.ok) {
