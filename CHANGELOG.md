@@ -13,6 +13,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `docs/archive/<год>/` без удаления. Добавлены карта документации
   (`docs/README.md`), `CONTRIBUTING.md`, шаблоны issue/PR и тест
   `tests/docs-link-check.test.ts`, который ловит битые ссылки после переносов.
+- **Репозиторий приведён к одному пакетному менеджеру.** Удалён `package-lock.json`
+  (проект собирается и тестируется через Bun), добавлены `.editorconfig` и
+  `packageManager: bun@1.3.14` в `package.json`.
+
+### Removed
+
+- **Остатки неиспользуемой инфраструктуры.** Удалены `.gitea/workflows/quality.yml`
+  (Gitea не используется) и личный план `.opencode/plans/`; каталог `.opencode/plans/`
+  добавлен в `.gitignore`.
 
 ## [0.24.0] - 2026-11-04
 
