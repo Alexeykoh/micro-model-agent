@@ -59,27 +59,45 @@ export class DocumentStore {
 
   /** Показать серверу содержимое файла (didOpen или didChange-Full). */
   sync(uri: string, languageId: string, text: string): void {
+    this.applySync(uri, languageId, text, false);
+  }
+
+  /**
+   * Синк черновика pre-write проверки. Буфер помечается как черновик: если
+   * запись заблокирована, `refreshFromDisk` вернёт серверу содержимое диска.
+   */
+  syncDraft(uri: string, languageId: string, text: string): void {
+    this.applySync(uri, languageId, text, true);
+  }
+
+  private applySync(uri: string, languageId: string, text: string, draft: boolean): void {
     if (!this.deps.isOpen()) throw fatalError("LSP connection is not open");
     uri = canonicalUri(uri);
     const current = this.documents.get(uri);
     if (current?.open && current.text === text) {
       // Текст тот же, но файл мог быть перезаписан с тем же содержимым:
       // обновляем отпечаток, чтобы refresh не перечитывал его вечно.
-      this.documents.set(uri, { ...current, diskStamp: diskStampOf(uri) });
+      this.documents.set(uri, { ...current, draft, diskStamp: diskStampOf(uri) });
       this.deps.touch();
       return;
     }
     const diskStamp = diskStampOf(uri);
     if (!current?.open) {
       this.revision++;
-      this.documents.set(uri, { uri, languageId, version: 1, text, open: true, diskStamp });
+      this.documents.set(uri, { uri, languageId, version: 1, text, open: true, diskStamp, draft });
       this.deps.notify("textDocument/didOpen", {
         textDocument: { uri, languageId, version: 1, text },
       });
       return;
     }
     this.revision++;
-    const next: DocumentState = { ...current, version: current.version + 1, text, diskStamp };
+    const next: DocumentState = {
+      ...current,
+      version: current.version + 1,
+      text,
+      diskStamp,
+      draft,
+    };
     this.documents.set(uri, next);
     this.deps.notify("textDocument/didChange", {
       textDocument: { uri, version: next.version },
@@ -102,14 +120,21 @@ export class DocumentStore {
     for (const [uri, doc] of [...this.documents]) {
       if (!doc.open) continue;
       const stamp = diskStampOf(uri);
-      if (!stamp || stamp === doc.diskStamp) continue;
+      const externalChange = stamp !== undefined && stamp !== doc.diskStamp;
+      // Черновик pre-write проверки перечитываем всегда: mtime диска не менялся,
+      // если запись была заблокирована, но буфер сервера остался черновым.
+      if (!externalChange && !doc.draft) continue;
       let text: string;
       try {
         text = readFileSync(uriToPath(uri), "utf-8");
       } catch {
+        if (doc.draft) {
+          this.close(uri);
+          changed = true;
+        }
         continue;
       }
-      if (text === doc.text) {
+      if (text === doc.text && !doc.draft) {
         this.documents.set(uri, { ...doc, diskStamp: stamp });
         continue;
       }

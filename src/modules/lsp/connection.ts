@@ -189,6 +189,11 @@ export class LspConnection {
     this.store.sync(uri, languageId, text);
   }
 
+  /** Синк черновика pre-write проверки (не содержимое диска). */
+  syncDraftUri(uri: string, languageId: string, text: string): void {
+    this.store.syncDraft(uri, languageId, text);
+  }
+
   /**
    * Перечитать открытые документы, изменённые на диске вне write-хуков.
    * Возвращает true, если что-то пересинкано.

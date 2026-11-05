@@ -156,7 +156,8 @@ LSP и индексатор (волна W8) держат: `tests/modules/lsp/con
 `tests/modules/lsp/check-honesty.test.ts` (честность `lsp_check`),
 `tests/modules/lsp/check-cold-start.test.ts` (холодный старт не ждёт 30 с),
 `tests/modules/lsp/cache-invalidation.test.ts` (правка файлов мимо write-хуков
-пересинкается, кэш диагностик не отдаётся после изменения другого файла),
+пересинкается, кэш диагностик не отдаётся после изменения другого файла,
+заблокированный pre-write черновик не остаётся в сервере),
 `tests/cli/provider-add-limits.test.ts` (лимиты провайдера),
 `tests/modules/indexer/incremental-rebuild.test.ts` (инкрементальная пересборка).
 

@@ -174,7 +174,7 @@ export class LspClient {
     const uri = pathToUri(absolute);
     const connection = await this.pool.acquire(serverKeyFor(config), config, projectRoot);
     connection.refreshDocuments();
-    connection.syncUri(uri, languageIdForPath(absolute), content);
+    connection.syncDraftUri(uri, languageIdForPath(absolute), content);
     const diagnostics = await connection.diagnosticsFor(uri, timeout);
     return { diagnostics: diagnostics ?? [], inconclusive: diagnostics === null };
   }

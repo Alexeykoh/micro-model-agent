@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { LspClient } from "../../../src/modules/lsp/client";
@@ -30,6 +30,24 @@ function didChangeUris(server: FakeLspServer): string[] {
       const params = message.params as { textDocument?: { uri?: string } } | undefined;
       return params?.textDocument?.uri ?? "";
     });
+}
+
+/** Последний текст, отправленный серверу для URI (didOpen или didChange). */
+function lastSyncedText(server: FakeLspServer, uri: string): string | undefined {
+  let text: string | undefined;
+  for (const message of parseWire(server.written)) {
+    if (message.method !== "textDocument/didChange" && message.method !== "textDocument/didOpen")
+      continue;
+    const params = message.params as
+      | {
+          textDocument?: { uri?: string; text?: string };
+          contentChanges?: Array<{ text?: string }>;
+        }
+      | undefined;
+    if (params?.textDocument?.uri !== uri) continue;
+    text = params.contentChanges?.[0]?.text ?? params.textDocument?.text;
+  }
+  return text;
 }
 
 function pushDiagnostics(server: FakeLspServer, uri: string, message: string): void {
@@ -107,6 +125,47 @@ describe("LSP diagnostics cache invalidation", () => {
       // Сервер не переопубликовал `a` → файл не затронут, прежний вердикт верен.
       expect(result.inconclusive).toBe(false);
       expect(result.diagnostics).toEqual([]);
+    } finally {
+      await client.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("restores a blocked pre-write draft from disk on the next check", async () => {
+    const { dir, a, b } = setup();
+    const server = new FakeLspServer();
+    const client = makeClient(server);
+    try {
+      await client.checkFile(b, dir, SERVER, dir, 500);
+      // Черновик, который так и не записали (pre-write заблокировал запись).
+      await client.checkContent(b, "export const draftOnly = 1;\n", SERVER, dir, 200);
+
+      await client.checkFile(a, dir, SERVER, dir, 200);
+
+      // Серверу вернули содержимое диска, а не несуществующий черновик.
+      expect(lastSyncedText(server, canonicalUri(pathToUri(b)))).toBe(readFileSync(b, "utf-8"));
+    } finally {
+      await client.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("closes a draft document that has no file on disk", async () => {
+    const { dir, a } = setup();
+    const server = new FakeLspServer();
+    const client = makeClient(server);
+    const missing = join(dir, "missing.ts");
+    try {
+      await client.checkContent(missing, "export const pending = 1;\n", SERVER, dir, 200);
+      await client.checkFile(a, dir, SERVER, dir, 200);
+
+      const wire = parseWire(server.written);
+      const closed = wire.some((message) => {
+        if (message.method !== "textDocument/didClose") return false;
+        const params = message.params as { textDocument?: { uri?: string } } | undefined;
+        return params?.textDocument?.uri === canonicalUri(pathToUri(missing));
+      });
+      expect(closed).toBe(true);
     } finally {
       await client.close();
       rmSync(dir, { recursive: true, force: true });
