@@ -106,7 +106,10 @@ export function createSessionRunnerFactory(
     const { manager: providerManager, provider: llmProvider } = buildActiveProvider(
       config,
       logger,
-      { getSessionId: () => pinned.getActiveMeta()?.id ?? sessionId },
+      {
+        getSessionId: () => pinned.getActiveMeta()?.id ?? sessionId,
+        onDiagnostic: admissionDiagnosticSink(pinned),
+      },
     );
 
     // Свой Logger на раннер: посессионный `.log` и `sessionDir` (app.jsonl) —
