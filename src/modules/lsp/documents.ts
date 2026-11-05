@@ -2,6 +2,7 @@
 //
 // Вынесено из `connection.ts` (правило 6): здесь только состояние документов и
 // диагностик, транспорт и жизненный цикл процесса остаются в соединении.
+import { readFileSync, statSync } from "fs";
 import type {
   DiagnosticRecord,
   DocumentDiagnosticReport,
@@ -9,9 +10,19 @@ import type {
   PublishDiagnosticsParams,
 } from "./connection-types";
 import { fatalError } from "./connection-errors";
-import { settleEmptyDiagnostics, waitForRecord } from "./diagnostics-wait";
+import { settleEmptyDiagnostics, waitForRecord, PROJECT_SETTLE_MS } from "./diagnostics-wait";
 import type { LspDiagnostic } from "./types";
-import { canonicalUri } from "./uri";
+import { canonicalUri, uriToPath } from "./uri";
+
+/** Отпечаток файла на диске: `mtimeMs:size`; undefined — файла нет/не file-URI. */
+function diskStampOf(uri: string): string | undefined {
+  try {
+    const info = statSync(uriToPath(uri));
+    return `${info.mtimeMs}:${info.size}`;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface DocumentStoreDeps {
   /** Соединение поднято и прошло `initialize`. */
@@ -29,6 +40,8 @@ export interface DocumentStoreDeps {
 export class DocumentStore {
   private readonly documents = new Map<string, DocumentState>();
   private readonly diagnostics = new Map<string, DiagnosticRecord>();
+  /** Растёт на каждом фактическом `didOpen`/`didChange`. */
+  private revision = 0;
 
   constructor(private readonly deps: DocumentStoreDeps) {}
 
@@ -36,6 +49,7 @@ export class DocumentStore {
   clear(): void {
     this.documents.clear();
     this.diagnostics.clear();
+    this.revision = 0;
   }
 
   /** Открытые сейчас документы (для статуса UI). */
@@ -45,27 +59,89 @@ export class DocumentStore {
 
   /** Показать серверу содержимое файла (didOpen или didChange-Full). */
   sync(uri: string, languageId: string, text: string): void {
+    this.applySync(uri, languageId, text, false);
+  }
+
+  /**
+   * Синк черновика pre-write проверки. Буфер помечается как черновик: если
+   * запись заблокирована, `refreshFromDisk` вернёт серверу содержимое диска.
+   */
+  syncDraft(uri: string, languageId: string, text: string): void {
+    this.applySync(uri, languageId, text, true);
+  }
+
+  private applySync(uri: string, languageId: string, text: string, draft: boolean): void {
     if (!this.deps.isOpen()) throw fatalError("LSP connection is not open");
     uri = canonicalUri(uri);
     const current = this.documents.get(uri);
     if (current?.open && current.text === text) {
+      // Текст тот же, но файл мог быть перезаписан с тем же содержимым:
+      // обновляем отпечаток, чтобы refresh не перечитывал его вечно.
+      this.documents.set(uri, { ...current, draft, diskStamp: diskStampOf(uri) });
       this.deps.touch();
       return;
     }
+    const diskStamp = diskStampOf(uri);
     if (!current?.open) {
-      this.documents.set(uri, { uri, languageId, version: 1, text, open: true });
+      this.revision++;
+      this.documents.set(uri, { uri, languageId, version: 1, text, open: true, diskStamp, draft });
       this.deps.notify("textDocument/didOpen", {
         textDocument: { uri, languageId, version: 1, text },
       });
       return;
     }
-    const next: DocumentState = { ...current, version: current.version + 1, text };
+    this.revision++;
+    const next: DocumentState = {
+      ...current,
+      version: current.version + 1,
+      text,
+      diskStamp,
+      draft,
+    };
     this.documents.set(uri, next);
     this.deps.notify("textDocument/didChange", {
       textDocument: { uri, version: next.version },
       contentChanges: [{ text }],
     });
     this.deps.touch();
+  }
+
+  /**
+   * Перечитать открытые документы, изменённые на диске вне write-хуков
+   * (`bash`, форматтер, git). LSP-сервер считает открытый буфер истиной и
+   * игнорирует изменения файла на диске, поэтому без этого проверка любого
+   * файла возвращала диагностики по устаревшим зависимостям.
+   *
+   * Возвращает true, если хотя бы один документ пересинкан.
+   */
+  refreshFromDisk(): boolean {
+    if (!this.deps.isOpen()) return false;
+    let changed = false;
+    for (const [uri, doc] of [...this.documents]) {
+      if (!doc.open) continue;
+      const stamp = diskStampOf(uri);
+      const externalChange = stamp !== undefined && stamp !== doc.diskStamp;
+      // Черновик pre-write проверки перечитываем всегда: mtime диска не менялся,
+      // если запись была заблокирована, но буфер сервера остался черновым.
+      if (!externalChange && !doc.draft) continue;
+      let text: string;
+      try {
+        text = readFileSync(uriToPath(uri), "utf-8");
+      } catch {
+        if (doc.draft) {
+          this.close(uri);
+          changed = true;
+        }
+        continue;
+      }
+      if (text === doc.text && !doc.draft) {
+        this.documents.set(uri, { ...doc, diskStamp: stamp });
+        continue;
+      }
+      this.sync(uri, doc.languageId, text);
+      changed = true;
+    }
+    return changed;
   }
 
   /** `didClose` — парная к `didOpen` нотификация; чистит и диагностики. */
@@ -96,12 +172,36 @@ export class DocumentStore {
     }
 
     if (!doc?.open) return null;
-    const diagnostics =
-      this.freshDiagnostics(uri, version) ??
-      (await waitForRecord(() => this.diagnostics.get(uri), version, timeoutMs))?.diagnostics ??
-      null;
+    const record = this.diagnostics.get(uri);
+    let diagnostics: LspDiagnostic[] | null;
+    if (record && record.version === version) {
+      if (record.validatedRevision < this.revision) {
+        // Запись посчитана до правки другого файла. Сервер переопубликует
+        // диагностику только затронутых файлов, поэтому ждём ограниченное окно:
+        // не дождались — файл не затронут, прежняя запись остаётся верной.
+        await waitForRecord(
+          () => this.diagnostics.get(uri),
+          version,
+          Math.min(timeoutMs, PROJECT_SETTLE_MS),
+          record,
+        );
+        this.validateAll();
+      }
+      diagnostics = this.diagnostics.get(uri)?.diagnostics ?? record.diagnostics;
+    } else {
+      diagnostics =
+        (await waitForRecord(() => this.diagnostics.get(uri), version, timeoutMs))?.diagnostics ??
+        null;
+    }
     if (!diagnostics || diagnostics.length > 0) return diagnostics;
     return (await settleEmptyDiagnostics(() => this.diagnostics.get(uri), version)) ?? diagnostics;
+  }
+
+  /** После окна ожидания все принятые записи подтверждены на текущей ревизии. */
+  private validateAll(): void {
+    for (const [uri, record] of this.diagnostics) {
+      this.diagnostics.set(uri, { ...record, validatedRevision: this.revision });
+    }
   }
 
   /** Актуальный список диагностик без ожидания (для быстрых путей). */
@@ -119,17 +219,19 @@ export class DocumentStore {
     if (!doc?.open) return;
     // Пуш от старой версии документа — игнор (антиретро-правки).
     if (params.version !== undefined && params.version < doc.version) return;
+    // DEBT(lsp-versionless-push): typescript-language-server не присылает
+    // version, поэтому поздно пришедший пуш от старого текста нельзя отличить
+    // от нового — он помечается текущей версией (см. docs/agents/debt.md).
     // Сохраняем ВЕРСИЮ, за которую сервер считал: текущая версия документа могла
     // уехать вперёд, и тогда диагностики помечались бы как свежие (аудит §8.3).
     const version = params.version ?? doc.version;
-    this.diagnostics.set(uri, { version, diagnostics: params.diagnostics });
+    this.diagnostics.set(uri, {
+      version,
+      revision: this.revision,
+      validatedRevision: this.revision,
+      diagnostics: params.diagnostics,
+    });
     this.deps.touch();
-  }
-
-  /** Диагностики запрошенной версии; null — устаревших/нет (аудит §8.3). */
-  private freshDiagnostics(uri: string, version: number): LspDiagnostic[] | null {
-    const record = this.diagnostics.get(uri);
-    return record && record.version === version ? record.diagnostics : null;
   }
 
   /** Pull-модель: явный `textDocument/diagnostic` (сервер объявил support). */
@@ -143,7 +245,12 @@ export class DocumentStore {
       .catch(() => null)) as DocumentDiagnosticReport | null;
     if (report?.kind !== "full") return null;
     const items = report.items ?? [];
-    this.diagnostics.set(uri, { version, diagnostics: items });
+    this.diagnostics.set(uri, {
+      version,
+      revision: this.revision,
+      validatedRevision: this.revision,
+      diagnostics: items,
+    });
     this.deps.touch();
     return items;
   }
