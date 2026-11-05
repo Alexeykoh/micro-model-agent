@@ -6,6 +6,7 @@
 // `⚠ plugin "execution" onBeforeThink threw {"error":"TypeError: …"}`.
 import { describe, it, expect } from "vitest";
 import { PluginDispatcher } from "../../../src/modules/plugins/dispatch";
+import { createPluginLog } from "../../../src/modules/plugins/log";
 import { defaultOutputBus } from "../../../src/output/bus";
 import type { OutputEvent } from "../../../src/output/types";
 import type { AgentPlugin } from "../../../src/modules/types";
@@ -21,7 +22,7 @@ describe("диагностика падений плагинов", () => {
           throw new TypeError("ctx.sessionLog?.directive is not a function");
         },
       };
-      const dispatcher = new PluginDispatcher(() => [broken]);
+      const dispatcher = new PluginDispatcher(() => [broken], createPluginLog());
       dispatcher.runOnBeforeThink({ iteration: 1 });
     } finally {
       off();
@@ -38,7 +39,7 @@ describe("диагностика падений плагинов", () => {
     const off = defaultOutputBus.subscribe((ev) => events.push(ev));
     try {
       const ok: AgentPlugin = { name: "ok", onBeforeThink: () => undefined };
-      new PluginDispatcher(() => [ok]).runOnBeforeThink({ iteration: 1 });
+      new PluginDispatcher(() => [ok], createPluginLog()).runOnBeforeThink({ iteration: 1 });
     } finally {
       off();
     }

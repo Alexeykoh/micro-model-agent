@@ -3,11 +3,8 @@
 // только от провайдера активного набора, а не от остального состояния реестра.
 import type { AgentPlugin } from "../types";
 import type { ToolRegistry } from "../../tools/registry";
-import {
-  syncPluginTools,
-  detachPluginTools,
-  type PluginToolSyncResult,
-} from "./tools";
+import { syncPluginTools, detachPluginTools, type PluginToolSyncResult } from "./tools";
+import type { PluginLog } from "./log";
 
 /** Вклад плагинов в подключённые реестры тулов (главный + раннеры сессий). */
 export class PluginToolSync {
@@ -15,7 +12,10 @@ export class PluginToolSync {
   /** Конфликты последней синхронизации — для `mma plugins show` и тестов. */
   private conflicts: PluginToolSyncResult["conflicts"] = [];
 
-  constructor(private readonly active: () => AgentPlugin[]) {}
+  constructor(
+    private readonly active: () => AgentPlugin[],
+    private readonly log: PluginLog,
+  ) {}
 
   /**
    * Подключить реестр и сразу синхронизировать: реестр мог быть собран до
@@ -41,7 +41,7 @@ export class PluginToolSync {
   sync(): PluginToolSyncResult {
     const result: PluginToolSyncResult = { added: [], removed: [], kept: [], conflicts: [] };
     for (const registry of this.registries) {
-      const one = syncPluginTools(this.active(), registry);
+      const one = syncPluginTools(this.active(), registry, this.log);
       result.added.push(...one.added);
       result.removed.push(...one.removed);
       result.kept.push(...one.kept);
