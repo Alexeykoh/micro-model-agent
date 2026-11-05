@@ -87,12 +87,9 @@ export class SessionManager {
   get(id: string): SessionMeta | null {
     return this.store.loadMeta(id);
   }
-
-  /** Мета с причиной: «нет» и «повреждена» различимы (INV-15). */
   getWithStatus(id: string): import("./read-status").SessionRead<SessionMeta> {
     return this.store.loadMetaWithStatus(id);
   }
-
   /** Удалить сессию (+ контекст, сброс активной). */
   delete(id: string): void {
     this.state.forgetContext(id);
@@ -235,7 +232,6 @@ export class SessionManager {
     }
   }
 
-  /** session-лог с различением «пусто»/«не прочитан» (INV-15). */
   loadSessionLogWithStatus(
     id: string,
     opts: { since?: string } = {},
@@ -246,7 +242,6 @@ export class SessionManager {
       return { status: "unreadable", cause: err instanceof Error ? err.message : String(err) };
     }
   }
-
   /** История активной сессии ([] — нет активной). */
   loadHistory(): SessionMessage[] {
     if (!this.activeId) return [];

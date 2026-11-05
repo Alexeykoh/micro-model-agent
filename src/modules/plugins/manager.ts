@@ -11,6 +11,8 @@ import { PluginToolSync } from "./manager-tools";
 import { PluginHooks } from "./manager-hooks";
 import { reloadPluginDirs } from "./manager-reload";
 import type { PluginDirs, PluginInfo, RegisterResult, ReloadReport } from "./manager-types";
+import type { Logger } from "../../logger/app-logger";
+import { setPluginLogger } from "./log";
 
 export { reloadPluginDirs, unloadPluginsForReboot } from "./manager-reload";
 export type { PluginDirs, PluginInfo, RegisterResult, ReloadReport } from "./manager-types";
@@ -34,6 +36,13 @@ interface PluginGate {
 
 /** Реестр плагинов: гейт, записи, тулы и хуки (см. `manager-*`). */
 export class PluginManager extends PluginHooks {
+  constructor(logger?: Logger) {
+    super();
+    // Хуки и загрузчик пишут через этот логгер: модульный `new Logger` терял
+    // записи, потому что не получал каталоги bootstrap.
+    setPluginLogger(logger);
+  }
+
   private gate: PluginGate = { names: new Set(), version: 0, peers: new Set([this]) };
   /** Кэш плоских записей; инвалидируется на любое изменение реестра. */
   private recordsCache: PluginRecord[] | null = null;

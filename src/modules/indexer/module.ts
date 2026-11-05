@@ -33,6 +33,7 @@ export interface IndexerModuleOptions {
   respectGitignore?: boolean;
   /** Токен-бюджет списка файлов карты (PageRank-отбор; см. selectByRank). */
   mapTokenBudget?: number;
+  logger?: import("../../logger/app-logger").Logger;
 }
 
 /** Дефолтный токен-бюджет списка файлов карты. */
@@ -41,7 +42,6 @@ const MAP_TOKEN_BUDGET = 1500;
 /** Модуль индексатора: кэш, карта проекта для промпта, тул project_map, вотчер. */
 export class IndexerModule implements AgentModule {
   name = "indexer";
-
   private indexer: Indexer;
   private watcher: IndexWatch;
   private cache: IndexCache;
@@ -54,10 +54,8 @@ export class IndexerModule implements AgentModule {
   private mapCache: { index: IndexResult; value: ProjectMapInfo } | null = null;
   private buildPromise: Promise<IndexResult | null> | null = null;
   private indexing = false;
-  /** Флаг принудительной пересборки (refresh): кэш берётся только для reuse. */
-  private forceRebuild = false;
+  private forceRebuild = false; // refresh: кэш берётся только для reuse
   private builtAt: number | null = null;
-
   constructor(opts: IndexerModuleOptions) {
     this.baseDir = opts.baseDir;
     this.maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES;
@@ -65,6 +63,7 @@ export class IndexerModule implements AgentModule {
     this.indexer = new Indexer(opts.baseDir, {
       maxFiles: this.maxFiles,
       respectGitignore: opts.respectGitignore,
+      logger: opts.logger,
     });
     this.watcher = new IndexWatch(this.indexer, () => this.refresh());
     // Кэш привязан к корню проекта + сигнатуре дерева: совпала — отдаём индекс

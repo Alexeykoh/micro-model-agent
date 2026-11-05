@@ -25,7 +25,7 @@ function formatHits(hits: SearchHit[]): string {
 }
 
 /** Тул `document_find`: поиск по корпусу с ленивой сборкой/освежением индекса (INV-D5/D6). */
-export function documentFindTool(registry: DocumentRegistry, logger: Logger): ToolDefinition {
+export function documentFindTool(registry: DocumentRegistry, logger?: Logger): ToolDefinition {
   return {
     name: "document_find",
     security: { caps: [{ fs: "read" }], pathArgs: ["dir"] },
@@ -59,11 +59,16 @@ export function documentFindTool(registry: DocumentRegistry, logger: Logger): To
         let entries: DocEntry[];
         if (!cached || cached.length === 0) {
           // Нет/пуст кэш — полная сборка по инвентарю (INV-D5).
-          entries = (await buildEntries(inv.items, { baseDir: ctx.baseDir, registry, logger: log })).entries;
+          entries = (await buildEntries(inv.items, { baseDir: ctx.baseDir, registry, logger: log }))
+            .entries;
           if (entries.length > 0) cache.save(entries, signature);
         } else {
           // Сверка с инвентарём: переиспользовать/пересобрать/удалить (INV-D4/D5).
-          const rec = await reconcile(cached, inv.items, { baseDir: ctx.baseDir, registry, logger: log });
+          const rec = await reconcile(cached, inv.items, {
+            baseDir: ctx.baseDir,
+            registry,
+            logger: log,
+          });
           entries = rec.entries;
           // Пустой снимок не сохраняем: иначе каталог выглядит пустым навсегда.
           if (rec.changed > 0 && entries.length > 0) cache.save(entries, signature);
@@ -78,7 +83,10 @@ export function documentFindTool(registry: DocumentRegistry, logger: Logger): To
         }
         const hits = searchChunks(entries, query, FIND_LIMIT);
         if (hits.length === 0) {
-          return { success: true, output: boundText(t("documents.no_matches", { query }), DEFAULT_DOC_LIMITS) };
+          return {
+            success: true,
+            output: boundText(t("documents.no_matches", { query }), DEFAULT_DOC_LIMITS),
+          };
         }
         return { success: true, output: boundText(formatHits(hits), DEFAULT_DOC_LIMITS) };
       } catch (err) {

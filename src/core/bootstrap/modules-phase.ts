@@ -31,7 +31,8 @@ import { skillsModuleDef } from "../../modules/skills/lifecycle";
 import { documentsModuleDef } from "../../modules/documents";
 import { MemoryModule } from "../../modules/memory/module";
 import { MemoryStore } from "../../modules/memory/store";
-import { setMemoryEncryptor } from "../../modules/memory/at-rest"; import { SessionFileEncryptor } from "../../modules/security/session-encryption";
+import { setMemoryEncryptor } from "../../modules/memory/at-rest";
+import { SessionFileEncryptor } from "../../modules/security/session-encryption";
 import type { PromptBlock } from "../types";
 import { readMmaVersion } from "../version";
 import { isOneShotMode, registerBuiltinPlugin } from "./state";
@@ -122,6 +123,7 @@ async function registerCoreModules(
     undefined,
     undefined,
     config.security?.paths,
+    input.logger.child("execution"),
   );
   execModule.setAutoAdvance(config.execution?.autoAdvance ?? true);
   // План следует за сессией: стартовая грузит СВОЙ слот, не чужой active.json.
@@ -133,7 +135,7 @@ async function registerCoreModules(
 
   moduleRegistry.register(input.indexerModule);
 
-  const mcpModule = new MCPModule(config);
+  const mcpModule = new MCPModule(config, input.logger.child("mcp"));
   // Жизненный цикл MCP — в общем ModuleHost (INV-2/5/8): `initialize()` и таймаут
   // объявляет контракт (`mcpModuleDef`), а не bootstrap. MCP остаётся в
   // ModuleRegistry для сбора тулов/плагинов (единый путь сбора — шаг W1.3+).
@@ -141,7 +143,8 @@ async function registerCoreModules(
 
   // Общий глобальный стор памяти — один инстанс у модуля памяти и цикла,
   // поэтому UI (`mma web` `/memory`) читают/пишут живые данные.
-  const memoryStore = new MemoryStore(join(dir, "memory"), config.memory?.validator); setMemoryEncryptor(new SessionFileEncryptor(config.security?.sessionEncryption));
+  const memoryStore = new MemoryStore(join(dir, "memory"), config.memory?.validator);
+  setMemoryEncryptor(new SessionFileEncryptor(config.security?.sessionEncryption));
   const memoryModule = new MemoryModule(memoryStore);
   moduleRegistry.register(memoryModule);
 

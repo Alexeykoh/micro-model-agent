@@ -132,6 +132,7 @@ export function createSessionRunnerFactory(
       undefined,
       undefined,
       config.security?.paths,
+      runnerLogger.child("execution"),
     );
     runnerExec.setAutoAdvance(config.execution?.autoAdvance ?? true);
     // Только слот своей сессии (без legacy-adopt — его сделал main на старте).
@@ -162,7 +163,7 @@ export function createSessionRunnerFactory(
     // Реестр/плагины/исполнитель — свои (разделяются только stateless
     // определения тулов и ctx-чистые инстансы плагинов).
     const registry = buildRunnerRegistry(toolRegistry, runnerExec);
-    const runnerPlugins = buildRunnerPlugins(pluginManager, runnerExec);
+    const runnerPlugins = buildRunnerPlugins(pluginManager, runnerExec, logger.child("plugins"));
     // Тулы плагинов в клон реестра: `buildRunnerRegistry` копирует определения
     // на момент спавна, а плагин мог подгрузиться или быть выключен позже.
     runnerPlugins.attachToolRegistry(registry);

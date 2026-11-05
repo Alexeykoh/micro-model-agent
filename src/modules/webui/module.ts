@@ -94,10 +94,8 @@ export interface WebUiDeps {
   token?: string;
   /** Virgin-конфиг: гейтить чат за браузерным визардом первого запуска. */
   setupRequired?: boolean;
-  /** Логгер процесса: причины ошибок REST попадают в app.jsonl. */
   logger?: import("../../logger/app-logger").Logger;
 }
-
 /** Хендл запущенного веб-UI: состояние, хост, URL, стоп. */
 export interface WebUiHandle {
   state: WebUiState;
@@ -143,7 +141,6 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   // зависит только от пресетов провайдеров, поэтому заполняется всегда.
   state.setupRequired = deps.setupRequired ?? false;
   state.setup = buildSetupDisplay();
-
   // Коллабораторы REST конфига/сессий/моделей. `state.config` — алиас живого
   // объекта конфига, так что записи `/api/config` мутят тот же объект, что
   // читает агент после `reconfigure`.

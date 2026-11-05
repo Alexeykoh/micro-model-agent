@@ -141,15 +141,11 @@ export class SessionStore {
     }
   }
 
-  /**
-   * Мета с различением «нет» и «не прочитана» (INV-15). Повреждённая мета
-   * больше не выглядит как удалённая сессия: `list()` может пропустить её,
-   * но потребитель с id получает причину.
-   */
+  /** Мета с причиной: повреждённая не выглядит удалённой (INV-15). */
   loadMetaWithStatus(id: string): SessionRead<SessionMeta> {
     const cached = this._metaCache.get(id);
-    if (cached) return { status: "ok", value: cached };
     const path = this.metaPath(id);
+    if (cached) return { status: "ok", value: cached };
     if (!existsSync(path)) return { status: "missing" };
     try {
       const raw = readFileSync(path, "utf-8");
@@ -162,7 +158,6 @@ export class SessionStore {
       return { status: "unreadable", cause: readCause(err) };
     }
   }
-
   /** Мета строго с диска, мимо _metaCache (там, где важнее точность счётчика). */
   private readMetaFromDisk(id: string): SessionMeta | null {
     const path = this.metaPath(id);
@@ -226,11 +221,7 @@ export class SessionStore {
     const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
     return readLogEntries(path, this.encryptor) ?? [];
   }
-
-  /**
-   * session-лог с различением «нет файла»/«не прочитан» (INV-15). `since`
-   * сохраняет инкрементальный хвост; `truncated` — оборванная последняя строка.
-   */
+  /** session-лог с причиной: «нет файла» ≠ «не прочитан» (INV-15). */
   loadSessionLogWithStatus(
     id: string,
     opts: { since?: string } = {},
@@ -238,7 +229,6 @@ export class SessionStore {
     const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
     return readLogEntriesResult(path, this.encryptor);
   }
-
   /** Число каталогов сессий без чтения меты (дешёвый вход для автоочистки). */
   countSessions(): number {
     return existsSync(this.baseDir)
