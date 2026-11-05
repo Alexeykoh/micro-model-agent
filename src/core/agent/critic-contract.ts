@@ -2,7 +2,7 @@
 // `critic-gate.ts` (правило ≤300); реэкспортируется оттуда для совместимости.
 import type { Logger } from "../../logger/app-logger";
 import type { ContextManager } from "../../core/context/manager";
-import type { CriticVerdict, EvidencePack } from "../../modules/critic/types";
+import type { CriticStage, CriticVerdict, EvidencePack } from "../../modules/critic/types";
 import type { SessionLogger } from "../session-logger";
 import type { OnMeta } from "../types";
 import type { LoopState } from "./loop-state";
@@ -50,7 +50,11 @@ export interface CriticGateOptions {
    * ДРУГОЙ таймер: обёртка вокруг одного провайдерского запроса.
    */
   budgetMs?: number;
-  verify: (pack: EvidencePack, signal?: AbortSignal) => Promise<CriticVerdict | null>;
+  verify: (
+    pack: EvidencePack,
+    signal?: AbortSignal,
+    onStage?: (stage: CriticStage) => void,
+  ) => Promise<CriticVerdict | null>;
   buildPack: (deps: CriticGateDeps) => EvidencePack;
   signal?: AbortSignal;
   /**

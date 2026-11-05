@@ -16,6 +16,7 @@ import { moduleOf } from "../../output";
 import type { GuardDiagnostic } from "../../modules/security/data-policy/types";
 import { recordEgressTurn } from "../../modules/security/data-policy/turn-journal";
 import { emitSecurityEvent } from "../../modules/security/security-events";
+import { logAudit } from "../../modules/security/audit-log";
 
 /** Зависимости сборки ToolContext. */
 export interface ToolContextInput {
@@ -118,6 +119,22 @@ export function admissionDiagnosticSink(
  * Маршрутизация — по `diag.sessionId`, который штампует фабрика guard'а: sink
  * остаётся процесс-глобальным, а параллельные сессии больше не смешиваются.
  */
+/**
+ * Подпись последней DLP-редакции на сессию. LLM делает несколько вызовов за
+ * ход; один и тот же профиль (операция + классы) не должен повторяться в
+ * журнале защиты на каждый вызов. Появился новый класс — событие снова видно.
+ */
+const dlpSeen = new Map<string, string>();
+
+/** Сводка классов без значений: `path×2, pii×1`. */
+function statsLabel(stats: GuardDiagnostic["stats"]): string {
+  return Object.entries(stats ?? {})
+    .filter(([, count]) => (count ?? 0) > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([cls, count]) => `${cls}×${count}`)
+    .join(", ");
+}
+
 export function egressDiagnosticSink(
   sessionManager: SessionManager,
 ): (diag: GuardDiagnostic) => void {
@@ -136,19 +153,27 @@ export function egressDiagnosticSink(
           module: "security.data-policy",
           operation: diag.operation,
         });
-        emitSecurityEvent({
-          ts: new Date().toISOString(),
-          class: "dlp",
-          severity: "medium",
-          summary: `DLP: секретов ${secrets}`,
-          action: "egress_redacted",
-          success: true,
-          ...(diag.sessionId ? { sessionId: diag.sessionId } : {}),
-          tool: diag.operation,
-          ...(egressTargetSuffix(diag.target).trim()
-            ? { details: egressTargetSuffix(diag.target).trim() }
-            : {}),
-        });
+      }
+      // В журнал «Безопасность» → DLP попадает КАЖДАЯ редакция (пути, PII,
+      // секреты), а не только секреты: иначе подкладка DLP пуста при обычной
+      // редакции путей/PII, хотя бейдж DLP в ленте показывает находки.
+      const label = statsLabel(diag.stats);
+      if (label) {
+        const sessionKey = diag.sessionId ?? "global";
+        const signature = `${diag.operation}|${label}`;
+        if (dlpSeen.get(sessionKey) !== signature) {
+          dlpSeen.set(sessionKey, signature);
+          // audit.jsonl — источник истории для журнала после перезагрузки.
+          logAudit({
+            timestamp: new Date().toISOString(),
+            ...(diag.sessionId ? { sessionId: diag.sessionId } : {}),
+            action: "dlp_redaction",
+            tool: diag.operation,
+            success: true,
+            details: `${label}${egressTargetSuffix(diag.target)}`,
+            ...(secrets > 0 ? { reason: "secret redacted" } : {}),
+          });
+        }
       }
       return;
     }

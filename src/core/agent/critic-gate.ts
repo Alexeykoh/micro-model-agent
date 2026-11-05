@@ -5,10 +5,10 @@ import { normalizedSignature, syntheticIssue } from "../../modules/critic/issue-
 import { withProvenance } from "../../modules/critic/provenance";
 import type { CriticAction, CriticGateDeps, CriticGateOptions } from "./critic-contract";
 import { announceRetract, criticRetractInfo } from "./draft-retract";
-import { packFingerprint, evidenceSignature, runWithBudget } from "./critic-budget";
+import { packFingerprint, evidenceSignature } from "./critic-budget";
 import { injectActDirective, stalledAfterVerdict } from "./critic-act";
-import { noticeAfter } from "./slow-notice";
-import { CRITIC_SLOW_NOTICE_MS } from "../../config/timeouts";
+import { buildCriticReport, emitCriticReport } from "./critic-report";
+import { verifySafely as runCriticVerify } from "./critic-verify";
 import type { LoopState } from "./loop-state";
 import { isRepeatedVerdict, renderIssues } from "./critic-issues";
 import { logCheck, logDegraded, logExhausted, logSkipped, logVerdict } from "./critic-gate-log";
@@ -16,14 +16,6 @@ import { logCheck, logDegraded, logExhausted, logSkipped, logVerdict } from "./c
 export type { CriticAction, CriticGateDeps, CriticGateOptions } from "./critic-contract";
 
 export { normalizedSignature } from "../../modules/critic/issue-key";
-
-/** Итог одной проверки: вердикт (или null), причина отказа, признак таймаута, мс. */
-interface VerifyOutcome {
-  verdict: CriticVerdict | null;
-  error?: string;
-  timedOut: boolean;
-  durationMs: number;
-}
 
 /**
  * Жёсткий кап СОВЕТНЫХ кругов за ход (не конфиг — такой же внутренний
@@ -97,8 +89,19 @@ export class CriticGate {
     deps.state.criticCalls++;
     deps.state.mutationsSinceCritic = 0;
 
-    const outcome = await this.verifySafely(deps);
+    const outcome = await runCriticVerify(deps, {
+      verify: this.opts.verify,
+      buildPack: this.opts.buildPack,
+      budgetMs: this.opts.budgetMs,
+      signal: this.opts.signal,
+    });
     this.lastFingerprint = fingerprint;
+    // Прерывание пользователем — не деградация: ход уже останавливается, а
+    // «проверка не выполнена» в ленте выглядело бы как сбой проверки.
+    if (outcome.aborted) {
+      deps.logger.diagnostic("info", "Critic check aborted by user");
+      return "pass";
+    }
     if (!outcome.verdict) {
       // Вердикта нет — но «critic_check» без записи о verdict неотличим от
       // pass при разборе сессии. Пишем явный отказ: critic_verdict degraded
@@ -108,11 +111,22 @@ export class CriticGate {
         durationMs: outcome.durationMs,
         degradationReason: this.opts.degradationReason,
       });
+      emitCriticReport(
+        deps,
+        buildCriticReport(null, outcome.stages, outcome.durationMs, outcome.timedOut),
+      );
       return "pass";
     }
     // `critical` без улики в жалобах → `concern` (A6): repair не тратим.
     const provenance = withProvenance(outcome.verdict);
     const verdict = provenance.verdict;
+    // Отчёт эмитим ДО решения о repair: «проверил и сказал ок» тоже должен
+    // оставлять раскрываемый след (что смотрел и сколько это заняло). Статус —
+    // уже после понижения, чтобы блок и `critic_verdict` не расходились.
+    emitCriticReport(
+      deps,
+      buildCriticReport(verdict, outcome.stages, outcome.durationMs, outcome.timedOut),
+    );
     this.lastVerdict = verdict;
     if (verdict.status === "ok") {
       this.lastVerdictNonOk = false;
@@ -192,39 +206,6 @@ export class CriticGate {
   /** Остался ли ещё один советный круг. */
   private canAdvise(): boolean {
     return this.adviceCycles < MAX_CRITIC_ADVICE_CYCLES;
-  }
-
-  /** Fail-open: битый/перебюджетный критик не блокирует агента. */
-  private async verifySafely(deps: CriticGateDeps): Promise<VerifyOutcome> {
-    const budget = this.opts.budgetMs;
-    // Долгая проверка перестаёт молчать: одна строка, только если реально ждём.
-    const stopNotice = noticeAfter(CRITIC_SLOW_NOTICE_MS, () =>
-      deps.onMeta?.(`\n${t("ui.critic_checking")}\n`, "progress"),
-    );
-    const started = Date.now();
-    try {
-      const out = await runWithBudget(
-        (signal) => this.opts.verify(this.opts.buildPack(deps), signal),
-        budget,
-        this.opts.signal,
-      );
-      if (out.timedOut) {
-        // Ход не ждёт провайдера, который не слушает signal. Отказ записан:
-        // молчаливый pass неотличим от «проверил и сказал ок».
-        const cause = `turn_budget (${budget}ms)`;
-        deps.logger.diagnostic("warn", `Critic verify exceeded gate budget (fail-open): ${cause}`);
-        return { verdict: null, error: cause, timedOut: true, durationMs: out.durationMs };
-      }
-      return { verdict: out.value, timedOut: false, durationMs: out.durationMs };
-    } catch (err) {
-      // Одинокий critic_check без вердикта неотличим от pass — фиксируем
-      // fail-open диагностикой, чтобы разбор сессии не упирался в "критик завис?".
-      const cause = String((err as Error)?.message ?? err);
-      deps.logger.diagnostic("warn", `Critic verify failed (fail-open): ${cause}`);
-      return { verdict: null, error: cause, timedOut: false, durationMs: Date.now() - started };
-    } finally {
-      stopNotice();
-    }
   }
 
   private shouldRun(deps: CriticGateDeps): boolean {

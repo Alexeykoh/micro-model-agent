@@ -67,9 +67,14 @@ export interface AuditLike {
 
 /** Короткая суть события: тул/путь/URL — без содержимого. */
 function summaryOf(entry: AuditLike, cls: SecurityClass): string {
+  // DLP-запись несёт готовую сводку (классы/счётчики) в `details`; путь/URL
+  // здесь не цель, поэтому не подставляем `tool` (это имя операции).
+  if (cls === "dlp") {
+    const detail = (entry.details ?? "").replace(/\s+/g, " ").trim();
+    return detail ? `DLP: ${detail.slice(0, 120)}` : "DLP";
+  }
   const target = entry.url ?? entry.path ?? entry.command ?? entry.tool ?? "";
-  const base =
-    cls === "dlp" ? "DLP" : cls === "ssrf" ? "SSRF" : cls === "approval" ? "approval" : "block";
+  const base = cls === "ssrf" ? "SSRF" : cls === "approval" ? "approval" : "block";
   return target ? `${base}: ${target}` : base;
 }
 
@@ -83,9 +88,21 @@ export function securityEventFromAudit(entry: AuditLike): SecurityEvent | null {
   let cls: SecurityClass | null = null;
   if (entry.action === "security_block") cls = entry.url ? "ssrf" : "block";
   else if (entry.action === "security_approval") cls = "approval";
+  // DLP-редакция — самостоятельный класс журнала (вкладка «Безопасность» →
+  // DLP). Раньше сюда попадали только секреты через прямой emit, поэтому
+  // фильтр DLP оставался пустым при редакции путей/PII.
+  else if (entry.action === "dlp_redaction") cls = "dlp";
   if (!cls) return null;
   const severity: SecuritySeverity =
-    cls === "ssrf" ? "high" : cls === "approval" ? "medium" : entry.success ? "low" : "medium";
+    cls === "ssrf"
+      ? "high"
+      : cls === "dlp"
+        ? "medium"
+        : cls === "approval"
+          ? "medium"
+          : entry.success
+            ? "low"
+            : "medium";
   return {
     ts: entry.timestamp,
     class: cls,

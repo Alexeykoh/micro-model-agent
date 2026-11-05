@@ -30,6 +30,7 @@ export function connectSSE(deps: SseDeps): void {
     onTurnEnd,
     onLog,
     onRetract,
+    onCritic,
     onErrorEvent,
     onCommandOutput,
     onSubagentEvent,
@@ -123,6 +124,7 @@ export function connectSSE(deps: SseDeps): void {
       },
     ],
     ["log", onLog],
+    ["critic", (d) => onCritic(d as Dict, d.sessionId)],
     [
       "retract",
       (d) =>

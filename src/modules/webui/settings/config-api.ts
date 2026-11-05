@@ -4,7 +4,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../../i18n/index";
 import { serializeConfigForWire } from "../../../config/redact";
-import { configDefs, resolveConfigKey, setConfigValue, type ConfigKeyDef } from "../../../config/registry";
+import {
+  configDefs,
+  resolveConfigKey,
+  setConfigValue,
+  type ConfigKeyDef,
+} from "../../../config/registry";
 import { configVersion } from "../../../config/persist";
 import { needsRebuild } from "../../../config/effects";
 import type { AppConfig } from "../../../config/types";
@@ -14,7 +19,13 @@ import { persistAndReconfigure } from "../http/persist";
 import { applyAutoContext, type AutoContextResult } from "./context-auto";
 import { rawFromValue } from "../../../cli/config-mutations";
 import { buildReasoningView } from "./reasoning-view";
-import type { ConfigStore, RuntimeState, HttpTransport, SseTransport, WorkspaceStore } from "../state";
+import type {
+  ConfigStore,
+  RuntimeState,
+  HttpTransport,
+  SseTransport,
+  WorkspaceStore,
+} from "../state";
 import { broadcast } from "../state";
 
 /**
@@ -82,7 +93,10 @@ function maskToken(token: string | null): string | null {
 }
 
 /** `GET /api/config` — отредактированный живой конфиг + реестр ключей. */
-export function handleConfigGet(res: ServerResponse, s: ConfigStore & RuntimeState & HttpTransport & SseTransport): void {
+export function handleConfigGet(
+  res: ServerResponse,
+  s: ConfigStore & RuntimeState & HttpTransport & SseTransport,
+): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
     return;
@@ -170,11 +184,17 @@ export function handleConfigPost(
         s.lspDoctor = undefined;
       }
 
-      // Включение auto у контекста спрашивает провайдера ДО персиста/reconfigure:
-      // иначе юзер увидел бы «auto» со старым числом, а бюджеты пересчитались бы
-      // только на ближайшем старте. Fail-open — при молчащем бэкенде окно прежнее.
+      // Окно контекста в режиме auto принадлежит провайдеру, поэтому его надо
+      // перепробить не только при включении auto, но и при смене модели или
+      // провайдера: иначе после свитча остаётся окно прошлой модели (или 32K
+      // дефолт), пока не случится следующий reconfigure. Fail-open — при
+      // молчащем бэкенде окно прежнее.
+      const autoContextSwitch = key === "model" || key === "provider.active";
+      const wantsAutoProbe =
+        (key === "contextAuto" && result.value === true) ||
+        (autoContextSwitch && config.contextAuto !== false);
       let autoProbe: AutoContextResult | undefined;
-      if (key === "contextAuto" && result.value === true) {
+      if (wantsAutoProbe) {
         autoProbe = await applyAutoContext(config);
         // TOCTOU: пока мы ждали проб, мог начаться ход. Reconfigure живого
         // раннера опасен — откатываем значение и отвечаем 409 (аудит §7.9).

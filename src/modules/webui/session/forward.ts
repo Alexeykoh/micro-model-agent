@@ -193,6 +193,26 @@ export function makeForwarder(
         });
         return;
       }
+      // Итог проверки критика — отдельным событием со структурой: в ленте он
+      // рендерится свёрнутым блоком (детали по умолчанию скрыты), а терминал
+      // видит только `chunk` (одну строку) и не заливается текстом.
+      if (kind === "critic" && info?.critic) {
+        flush();
+        const report = info.critic;
+        sink({
+          type: "critic",
+          ts: Date.now(),
+          status: report.status,
+          durationMs: report.durationMs,
+          passes: report.passes,
+          issues: report.issues,
+          checks: report.checks,
+          ...(report.summary ? { summary: sanitizeOutputPlain(report.summary) } : {}),
+          ...(report.timedOut ? { timedOut: true } : {}),
+          ...(info.verdict ? { verdict: info.verdict } : {}),
+        });
+        return;
+      }
       // Тела тулов и строки статуса не должны делить одно SSE-событие: клиент
       // quiet-гейтит `kind: "tool"`, а статус показывает всегда. При смене kind
       // сначала флашим, чтобы каждое событие несло чистый kind. События статуса

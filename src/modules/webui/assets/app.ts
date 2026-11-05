@@ -2,40 +2,94 @@
 // surface, and hooks the tab hub back into the state projection. The projection
 // itself lives in `app-state.ts` and the static-chrome localization in
 // `app-i18n.ts` (both split out under file-size rule 6).
-import { icon } from "./js/dom.js";
 import { token } from "./js/api.js";
 import { hasCachedI18n, loadI18n, t } from "./js/i18n.js";
 import { settings, session, hooks } from "./js/store.js";
 import { mergeUsage } from "./js/state-sync.js";
 import {
-  onText, onReasoning, onMeta, onPhase, onToolStart, onToolEnd,
-  onTurnEnd, onErrorEvent, onCommandOutput, onLog, onPlan, onQuestion,
-  onRetract, showEmptyFeed, renderUsage,
+  onText,
+  onReasoning,
+  onMeta,
+  onPhase,
+  onToolStart,
+  onToolEnd,
+  onTurnEnd,
+  onErrorEvent,
+  onCommandOutput,
+  onLog,
+  onPlan,
+  onQuestion,
+  onRetract,
+  onCritic,
+  showEmptyFeed,
+  renderUsage,
 } from "./js/feed.js";
-import { renderSessionsDropdown, loadCommands, loadSessions, setTabStatus } from "./js/session/tabs.js";
+import {
+  renderSessionsDropdown,
+  loadCommands,
+  loadSessions,
+  setTabStatus,
+} from "./js/session/tabs.js";
 import { restoreTabs } from "./js/session/restore-tabs.js";
 import {
-  renderSelectors, renderSettings, loadConfig, loadModels, loadProviders,
-  loadMemory, loadSkills, loadPlugins, applyTheme, currentTheme, applyUiTheme, currentUiTheme, applyFontSize, setConnStatus,
-  migrateThemeCache, postConfig,
+  renderSelectors,
+  renderSettings,
+  loadConfig,
+  loadModels,
+  loadProviders,
+  loadMemory,
+  loadSkills,
+  loadPlugins,
+  applyTheme,
+  currentTheme,
+  applyUiTheme,
+  currentUiTheme,
+  applyFontSize,
+  setConnStatus,
+  migrateThemeCache,
+  postConfig,
 } from "./js/settings.js";
 import { initRail, setPlan as railPlan, railEvent } from "./js/rail.js";
 import {
-  initSidebar, initSidebarDrawer, initFiles, applySidebarI18n, openFilesTabFor,
-  sidebarSessionId, sidebarTurnEnd, sidebarBusy, sidebarPullLog,
-  sidebarSubagentEvent, sidebarTraceEvent, sidebarLspEvent, sidebarFilesChanged,
-  sidebarPluginsEvent, sidebarMcpEvent, sidebarSecurityEvent,
+  initSidebar,
+  initSidebarDrawer,
+  initFiles,
+  applySidebarI18n,
+  openFilesTabFor,
+  sidebarSessionId,
+  sidebarTurnEnd,
+  sidebarBusy,
+  sidebarPullLog,
+  sidebarSubagentEvent,
+  sidebarTraceEvent,
+  sidebarLspEvent,
+  sidebarFilesChanged,
+  sidebarPluginsEvent,
+  sidebarMcpEvent,
+  sidebarSecurityEvent,
 } from "./js/sidebar.js";
 import { insertIntoDraft, submitPrompt } from "./js/session/composer.js";
 import { initShortcuts } from "./js/shortcuts.js";
 import { drainQueuedTurn } from "./js/session/queue.js";
-import { initCursor, createFace, setFaceState, loaderStateFor } from "./js/loader.js";
+import { initCursor, loaderStateFor, setFaceState } from "./js/loader.js";
+import {
+  composerFaceElement,
+  composerFaceEvent,
+  composerFaceToken,
+  initComposerFace,
+  settleComposerFaceIdle,
+} from "./js/composer-face.js";
+import { initCollapsibleSections } from "./js/collapse.js";
 import type { FaceState } from "./js/loader.js";
 import { applyUpdateEvent } from "./js/update-ui.js";
 import { connectSSE as wireSse } from "./js/sse.js";
 import { initSubagentView, onSubagentEvent } from "./js/feed/subagent.js";
 import {
-  applyState, ensureTabState, refresh, renderActiveState, resyncAfterReconnect,
+  applyState,
+  ensureTabState,
+  refresh,
+  renderActiveState,
+  resyncAfterReconnect,
 } from "./app-state.js";
 import { applyStaticI18n } from "./app-i18n.js";
 
@@ -45,64 +99,33 @@ declare global {
   }
 }
 
-// Persistent face in the composer's selectors row: always reflects the current
-// agent state, falling back to the idle (cursor-following) face between turns.
-let composerFace: HTMLElement | null = null;
-let composerToken = 0;
-
-function faceEvent(state: FaceState): void {
-  composerToken++;
-  setFaceState(composerFace, state);
-}
-
-function initComposerFace(): void {
-  const host = document.getElementById("composerFace");
-  if (!host) return;
-  composerFace = createFace("idle", "sm");
-  host.replaceChildren(composerFace);
-}
-
 // App-shell hooks for the update chrome (`js/update-ui.ts`): MMART reaction,
 // settle-back-to-idle, and a post-install chrome refresh.
 const updateHooks = {
-  face: (state: FaceState) => faceEvent(state),
-  settleIdle: () => {
-    const token = composerToken;
-    window.setTimeout(() => { if (token === composerToken) setFaceState(composerFace, "idle"); }, 4000);
-  },
+  face: (state: FaceState) => composerFaceEvent(state),
+  settleIdle: () => settleComposerFaceIdle(),
   refreshChrome: () => {
     renderSettings();
     if (document.querySelector("#msgs > .empty")) showEmptyFeed();
   },
 };
 
-document.querySelectorAll<HTMLElement>("[data-collapse]").forEach((head) => {
-  const initArrow = head.querySelector(".arrow");
-  if (initArrow) {
-    initArrow.textContent = "";
-    initArrow.appendChild(icon("chevron-down"));
-  }
-  head.addEventListener("click", () => {
-    const body = head.nextElementSibling;
-    if (!body) return;
-    const collapsed = body.classList.toggle("collapsed");
-    head.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    const arrow = head.querySelector(".arrow");
-    if (arrow) {
-      arrow.textContent = "";
-      arrow.appendChild(icon(collapsed ? "chevron-right" : "chevron-down"));
-    }
-  });
-});
+initCollapsibleSections();
 
 // Lets `tabs.js` render a switched-to tab (cached snapshot or one REST fetch)
 // without importing app.
 hooks.ensureTabState = ensureTabState;
 // Lets `tabs.js` reset the sidebar chrome when the last tab closes.
 hooks.renderActive = renderActiveState;
-hooks.openFileInTree = (p) => { void openFilesTabFor(p); };
-hooks.openFileAtLine = (p, line) => { void openFilesTabFor(p, line); };
-hooks.showFilesTab = () => { void openFilesTabFor(""); };
+hooks.openFileInTree = (p) => {
+  void openFilesTabFor(p);
+};
+hooks.openFileAtLine = (p, line) => {
+  void openFilesTabFor(p, line);
+};
+hooks.showFilesTab = () => {
+  void openFilesTabFor("");
+};
 hooks.askAgent = (text) => submitPrompt(text);
 
 // One live EventSource for the whole browser window (`js/sse.ts` owns the
@@ -123,6 +146,7 @@ function connectSSE(): void {
     onTurnEnd,
     onLog,
     onRetract,
+    onCritic,
     onErrorEvent,
     onCommandOutput,
     onSubagentEvent,
@@ -136,13 +160,14 @@ function connectSSE(): void {
     sidebarLspEvent,
     sidebarFilesChanged,
     sidebarPluginsEvent,
-    sidebarMcpEvent, sidebarSecurityEvent,
+    sidebarMcpEvent,
+    sidebarSecurityEvent,
     railPlan,
     railEvent,
-    faceEvent,
+    faceEvent: composerFaceEvent,
     loaderStateFor,
-    composerFace,
-    getComposerToken: () => composerToken,
+    composerFace: composerFaceElement(),
+    getComposerToken: composerFaceToken,
     setFaceState,
     applyUpdateEvent,
     updateHooks,
@@ -195,7 +220,10 @@ async function boot(): Promise<void> {
   // it reloads the page once setup completes, so skip the chat boot entirely.
   if (window.MmaSetup) {
     try {
-      if (await window.MmaSetup.maybeOpen()) { hideBootSplash(); return; }
+      if (await window.MmaSetup.maybeOpen()) {
+        hideBootSplash();
+        return;
+      }
     } catch {
       /* wizard failure must never brick the chat boot */
     }
@@ -223,7 +251,9 @@ async function boot(): Promise<void> {
     if (await migrateThemeCache((key, value) => postConfig(key, value, false))) renderSettings();
     initRail(settings.config && settings.config.ui ? settings.config.ui.activityRail : undefined);
     initComposerFace();
-    initSidebar(); initSidebarDrawer(); initShortcuts();
+    initSidebar();
+    initSidebarDrawer();
+    initShortcuts();
     initSubagentView();
     applySidebarI18n();
     initFiles({ insertPath: (p) => insertIntoDraft("@" + p + " ") });
@@ -262,9 +292,9 @@ function hideBootSplash(): void {
   const splash = document.getElementById("bootSplash");
   if (!splash || splash.hidden) return;
   splash.classList.add("hide");
-  window.setTimeout(() => { splash.hidden = true; }, 500);
+  window.setTimeout(() => {
+    splash.hidden = true;
+  }, 500);
 }
-
 hooks.applyStaticI18n = applyStaticI18n;
-
 void boot();

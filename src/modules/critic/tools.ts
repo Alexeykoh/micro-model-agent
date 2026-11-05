@@ -13,7 +13,13 @@ import type { CriticVerdict, RawCriticChecks } from "./types";
  */
 
 /** Read-only тулы, доступные критику. Записи/shell/web/память исключены by design. */
-export const CRITIC_READONLY_TOOLS = ["read_file", "grep", "glob", "file_info", "list_dir"] as const;
+export const CRITIC_READONLY_TOOLS = [
+  "read_file",
+  "grep",
+  "glob",
+  "file_info",
+  "list_dir",
+] as const;
 
 /** Жёсткий кап проверок на вердикт (внутренний дефолт, не конфиг — спек §4.3). */
 export const MAX_CRITIC_CHECKS = 3;
@@ -47,7 +53,9 @@ export function isAllowedCriticTool(tool: string): boolean {
  * Чужое — неизвестные тулы, не-объектные args — молча дропается:
  * критик теряет только глубину верификации, не корректность.
  */
-export function parseChecks(source: CriticVerdict | RawCriticChecks | null | undefined): CriticCheck[] {
+export function parseChecks(
+  source: CriticVerdict | RawCriticChecks | null | undefined,
+): CriticCheck[] {
   const raw = Array.isArray(source) ? source : source?.checks;
   if (!raw || !Array.isArray(raw)) return [];
   const out: CriticCheck[] = [];
@@ -76,13 +84,23 @@ function asCriticCheck(c: unknown): CriticCheck | null {
  */
 export async function runCriticChecks(
   checks: CriticCheck[],
-  runCheck: (tool: string, args: Record<string, unknown>) => Promise<{ ok: boolean; output: string }>,
+  runCheck: (
+    tool: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ) => Promise<{ ok: boolean; output: string }>,
+  signal?: AbortSignal,
 ): Promise<CriticCheckResult[]> {
   const out: CriticCheckResult[] = [];
   for (const c of checks.slice(0, MAX_CRITIC_CHECKS)) {
+    if (signal?.aborted) break;
     try {
-      const r = await runCheck(c.tool, c.args);
-      out.push({ tool: c.tool, ok: r.ok, output: (r.output ?? "").slice(0, MAX_CHECK_OUTPUT_CHARS) });
+      const r = await runCheck(c.tool, c.args, signal);
+      out.push({
+        tool: c.tool,
+        ok: r.ok,
+        output: (r.output ?? "").slice(0, MAX_CHECK_OUTPUT_CHARS),
+      });
     } catch (err) {
       out.push({
         tool: c.tool,
@@ -96,7 +114,5 @@ export async function runCriticChecks(
 
 /** Рендерит результаты проверок строками доказательств, видимых критику. */
 export function renderCheckResults(results: CriticCheckResult[]): string {
-  return results
-    .map((r) => `${r.ok ? "✓" : "✗"} ${r.tool} » ${r.output}`)
-    .join("\n");
+  return results.map((r) => `${r.ok ? "✓" : "✗"} ${r.tool} » ${r.output}`).join("\n");
 }

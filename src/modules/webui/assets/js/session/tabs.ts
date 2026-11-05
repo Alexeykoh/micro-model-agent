@@ -10,8 +10,18 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import { makeFeed, showEmptyFeed, activeFeed, appendTo, feedHasContent, syncUrl, scrollToBottom, clearBusy, mountFeed } from "../feed.js";
-import { setIndicator } from "../dialog.js";
+import {
+  makeFeed,
+  showEmptyFeed,
+  activeFeed,
+  appendTo,
+  feedHasContent,
+  syncUrl,
+  scrollToBottom,
+  clearBusy,
+  mountFeed,
+} from "../feed.js";
+import { createNewChatTab } from "./new-chat.js";
 import { sidebarSessionChanged, setSessionLoading } from "../sidebar.js";
 import { setSessOpen } from "../core/menus.js";
 import { notifyTabStatus } from "../sounds.js";
@@ -96,7 +106,13 @@ export function updateTabName(id: string, name: string): void {
   }
 }
 
-export function openTab(id: string, name?: string, kind?: string, server?: boolean, activate = true): void {
+export function openTab(
+  id: string,
+  name?: string,
+  kind?: string,
+  server?: boolean,
+  activate = true,
+): void {
   if (activate) saveComposer();
   let tab = tabState.tabs.find((x) => x.id === id);
   if (!tab) {
@@ -186,7 +202,10 @@ export function closeTab(id: string): void {
   // тикать в закрытом feed (аудит §6.14).
   if (closing.feed) clearBusy(closing.feed as HTMLElement);
   // Вкладка уходит, а ход/вопрос — нет: прерываем ход ДО деактивации (§6.8).
-  if (closing.kind === "session" && (closing.status === "working" || closing.status === "waiting")) {
+  if (
+    closing.kind === "session" &&
+    (closing.status === "working" || closing.status === "waiting")
+  ) {
     void api("/api/interrupt", { method: "POST", body: { sessionId: closing.id } });
   }
   tabState.tabs = tabState.tabs.filter((x) => x.id !== id);
@@ -237,21 +256,8 @@ function resetToEmpty(): void {
   void api("/api/sessions/deactivate", { method: "POST", body: {} });
 }
 
-async function newChatTab(): Promise<void> {
-  const r = await api<{ session?: Dict }>("/api/sessions", { method: "POST", body: {} });
-  if (r.ok && r.data && r.data.session && r.data.session.id) {
-    const meta = r.data.session;
-    openTab(meta.id, meta.name || String(meta.id), "session", false);
-    await loadSessions();
-    // Новая сессия — без плана: снапшот под ?session=<id> чистит сайдбар.
-    setSessionLoading(true);
-    return;
-  }
-  // Server-side creation failed (no manager / offline): keep a local-only tab
-  // so the user is not blocked, but surface the failure.
-  tabState.newSeq++;
-  openTab("new" + tabState.newSeq, t("web.empty.title"), "new", false);
-  setIndicator(t("web.sessions.create_failed"), true);
+export function newChatTab(): Promise<void> {
+  return createNewChatTab({ openTab, loadSessions });
 }
 
 document.getElementById("newChat")?.addEventListener("click", () => void newChatTab());

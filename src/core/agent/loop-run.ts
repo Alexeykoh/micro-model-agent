@@ -140,6 +140,7 @@ export async function executeAgentLoop(
       criticGate,
       auditGate,
       timings,
+      isShutdownRequested: () => ctx.isShutdownRequested(),
     });
     // Агрегат простоя хода в гейтах (A15): одна запись на проход — по ней видно,
     // где именно уходят секунды после уже доставленного ответа.
@@ -164,6 +165,16 @@ export async function executeAgentLoop(
     // INV-C7: форс-финал тоже проходит через критика. Иначе самый длинный
     // (и самый рискованный) ход остаётся единственным непроверенным.
     const forcedCriticStarted = Date.now();
+    // Прерванный ход не проверяем: пользователь уже остановил работу.
+    if (ctx.isShutdownRequested()) {
+      state.stopReason = reason;
+      return buildLoopResult(
+        ctx.loopResultHost(),
+        state,
+        tokenTracker,
+        state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted,
+      );
+    }
     const action = await criticGate.evaluate({
       state,
       iteration: state.iteration,

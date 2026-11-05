@@ -52,8 +52,8 @@ describe("critic degrade is visible in the feed", () => {
   it("emits one status line carrying the cause class", async () => {
     const d = gateDeps();
     await gate("call_timeout (125000ms)").evaluate(d.deps);
-    expect(d.metas).toHaveLength(1);
-    expect(d.metas[0].kind).toBe("progress");
+    // Строка причины + свёрнутый блок проверки (детали под тогглом).
+    expect(d.metas.map((m) => m.kind)).toEqual(["progress", "critic"]);
     expect(d.metas[0].text).toContain(t("ui.critic_reason.timeout"));
     expect(d.metas[0].text).not.toContain("125000"); // техническая причина остаётся в логе
   });
@@ -76,7 +76,8 @@ describe("critic degrade is visible in the feed", () => {
       buildPack: (x: never) => x,
     });
     await okGate.evaluate(d.deps);
-    expect(d.metas).toHaveLength(0);
+    // Деградации нет, но итог проверки остаётся раскрываемым блоком.
+    expect(d.metas.map((m) => m.kind)).toEqual(["critic"]);
   });
 
   it("stays silent when the critic is disabled", async () => {
