@@ -219,6 +219,9 @@ export class DocumentStore {
     if (!doc?.open) return;
     // Пуш от старой версии документа — игнор (антиретро-правки).
     if (params.version !== undefined && params.version < doc.version) return;
+    // DEBT(lsp-versionless-push): typescript-language-server не присылает
+    // version, поэтому поздно пришедший пуш от старого текста нельзя отличить
+    // от нового — он помечается текущей версией (см. docs/agents/debt.md).
     // Сохраняем ВЕРСИЮ, за которую сервер считал: текущая версия документа могла
     // уехать вперёд, и тогда диагностики помечались бы как свежие (аудит §8.3).
     const version = params.version ?? doc.version;
