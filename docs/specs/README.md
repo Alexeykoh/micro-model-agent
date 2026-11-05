@@ -38,7 +38,6 @@
 - [agent service API](./2026-10-08-agent-service-api-design.md)
 - [webui sidebar tabs](./2026-09-30-webui-sidebar-tabs-design.md)
 - [lsp doctor](./2026-10-02-lsp-doctor-design.md)
-- [enterprise deployment](./2026-11-03-enterprise-deployment-design.md)
 
 ## Активные работы
 
