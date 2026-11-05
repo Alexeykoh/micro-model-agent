@@ -7,7 +7,13 @@ import { streamStateFor } from "../store.js";
 import type { FeedStreamState } from "../store.js";
 import { formatMs, verbosity } from "../format.js";
 import { createFace } from "../loader.js";
-import { liveFeed, clearEmpty, appendTo } from "./core.js";
+import {
+  activityLabel,
+  activityStart,
+  activitySubscribe,
+  activityTimeText,
+} from "../core/activity.js";
+import { liveFeed, clearEmpty, appendTo, sessionIdForFeed } from "./core.js";
 
 export function clearBusy(feed?: HTMLElement | null): void {
   feed = feed || liveFeed();
@@ -17,6 +23,10 @@ export function clearBusy(feed?: HTMLElement | null): void {
     clearInterval(st.busyTimer);
     st.busyTimer = null;
   }
+  if (st.busyUnsub) {
+    st.busyUnsub();
+    st.busyUnsub = null;
+  }
   const line = feed.querySelector(".busy");
   if (line) line.remove();
 }
@@ -25,6 +35,9 @@ export function clearBusy(feed?: HTMLElement | null): void {
 // `/api/message` POST (202) so the wait during a slow first-run
 // summarization is visible before the first `phase` event arrives; the
 // normal event flow (`onText`/`onPhase`/`onTurnEnd`) clears it.
+//
+// Подпись и время берутся из общего состояния хода (`core/activity.ts`):
+// строка в ленте и рельс над композером показывают одну фазу и одни секунды.
 export function showBusy(feed?: HTMLElement | null): void {
   feed = feed || liveFeed();
   if (!feed) return;
@@ -38,22 +51,40 @@ export function showBusy(feed?: HTMLElement | null): void {
     clearInterval(st.busyTimer);
     st.busyTimer = null;
   }
+  if (st.busyUnsub) {
+    st.busyUnsub();
+    st.busyUnsub = null;
+  }
+  const key = sessionIdForFeed(feed);
+  // Часы хода: старт с момента, когда стало понятно, что ход идёт (первое
+  // событие хода или эта строка). Лента и рельс считают от одного старта.
+  activityStart(key);
   const line = el("div", "busy");
   line.appendChild(createFace("think", "sm"));
-  line.appendChild(el("span", "lab", t("web.action.thinking")));
-  const time = el("span", "busytime", "· 0s");
+  const lab = el("span", "lab", activityLabel(key));
+  line.appendChild(lab);
+  const time = el("span", "busytime", "· " + activityTimeText(key));
   line.appendChild(time);
   line.appendChild(el("span", "", "· " + t("web.input.esc")));
   appendTo(feed, line);
-  const started = Date.now();
-  st.busyTimer = setInterval(() => {
+  const update = (): void => {
     if (!line.parentNode) {
-      clearInterval(st.busyTimer);
-      st.busyTimer = null;
+      // Строку убрали из ленты (например, подрезка) — таймер и подписку гасим.
+      if (st.busyTimer) {
+        clearInterval(st.busyTimer);
+        st.busyTimer = null;
+      }
+      if (st.busyUnsub) {
+        st.busyUnsub();
+        st.busyUnsub = null;
+      }
       return;
     }
-    time.textContent = "· " + Math.round((Date.now() - started) / 1000) + "s";
-  }, 1000);
+    lab.textContent = activityLabel(key);
+    time.textContent = "· " + activityTimeText(key);
+  };
+  st.busyUnsub = activitySubscribe(key, update);
+  st.busyTimer = setInterval(update, 1000);
 }
 
 export function flushRun(feed?: HTMLElement | null): void {

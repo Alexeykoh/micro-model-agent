@@ -9,7 +9,7 @@ import type { AgentPlugin } from "../types";
 import type { ToolDefinition } from "../../tools/types";
 import type { ToolRegistry } from "../../tools/registry";
 import { upsertOwnedTool } from "../../core/module-host";
-import { pluginLogger } from "./log";
+import type { PluginLog } from "./log";
 import { detectHooks } from "./records";
 import {
   ownerByTag,
@@ -68,13 +68,16 @@ function stateOf(registry: ToolRegistry): AppliedState {
 }
 
 /** Прочитать `getToolDefinitions()`: падение метода не должно ронять харнесс. */
-function readToolDefinitions(plugin: AgentPlugin): { list?: unknown[]; problem?: string } {
+function readToolDefinitions(
+  log: PluginLog,
+  plugin: AgentPlugin,
+): { list?: unknown[]; problem?: string } {
   if (typeof plugin.getToolDefinitions !== "function") return {};
   let raw: unknown;
   try {
     raw = plugin.getToolDefinitions.call(plugin);
   } catch (e) {
-    pluginLogger()?.diagnostic("warn", `plugin "${plugin.name}" getToolDefinitions threw`, {
+    log.diagnostic("warn", `plugin "${plugin.name}" getToolDefinitions threw`, {
       error: String(e),
     });
     return {};
@@ -85,10 +88,10 @@ function readToolDefinitions(plugin: AgentPlugin): { list?: unknown[]; problem?:
 }
 
 /** Собрать вклад одного плагина; исключения изоляция хуков (`safeInvoke`). */
-function collectPluginTools(plugin: AgentPlugin): PluginContribution {
+function collectPluginTools(log: PluginLog, plugin: AgentPlugin): PluginContribution {
   const conflicts: PluginToolConflict[] = [];
   const tools: PreparedTool[] = [];
-  const { list, problem } = readToolDefinitions(plugin);
+  const { list, problem } = readToolDefinitions(log, plugin);
   if (problem) {
     conflicts.push({ plugin: plugin.name, tool: "-", reason: "invalid", detail: problem });
     return { tools, conflicts };
@@ -164,6 +167,7 @@ function acceptContribution(
  * Возвращает конфликты отдельно — их показываем, а не роняем синхронизацию.
  */
 function desiredFromPlugins(
+  log: PluginLog,
   plugins: AgentPlugin[],
   registry: ToolRegistry,
   state: AppliedState,
@@ -180,7 +184,7 @@ function desiredFromPlugins(
   }
 
   for (const plugin of plugins) {
-    const contribution = collectPluginTools(plugin);
+    const contribution = collectPluginTools(log, plugin);
     // Любое замечание — мусор в определении или падение самого метода: вклад
     // отбрасывается целиком (см. контракт функции).
     const { accepted, conflict } =
@@ -234,15 +238,14 @@ function applyDesired(
 export function syncPluginTools(
   plugins: AgentPlugin[],
   registry: ToolRegistry,
+  log: PluginLog,
 ): PluginToolSyncResult {
   const state = stateOf(registry);
-  const { desired, conflicts } = desiredFromPlugins(plugins, registry, state);
+  const { desired, conflicts } = desiredFromPlugins(log, plugins, registry, state);
   const { added, removed, kept } = applyDesired(registry, state, desired);
 
   for (const conflict of conflicts) {
-    pluginLogger()?.warn(
-      `plugin "${conflict.plugin}" tool "${conflict.tool}" skipped: ${conflict.detail}`,
-    );
+    log.warn(`plugin "${conflict.plugin}" tool "${conflict.tool}" skipped: ${conflict.detail}`);
   }
   return { added, removed, kept, conflicts };
 }

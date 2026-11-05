@@ -1,7 +1,10 @@
 /**
- * Логгер плагинной подсистемы. Ставит `PluginManager` из `ModuleCtx`: файловые
- * каталоги и источник `module:plugins` живут у bootstrap-логгера, а не у
- * модульного логгера без каталогов, чьи записи терялись.
+ * Логгер плагинной подсистемы. Приходит из bootstrap (`ModuleCtx`/конструктор
+ * `PluginManager`) и принадлежит конкретному менеджеру.
+ *
+ * Раньше логгер был глобальным «текущим»: любой `new PluginManager()` (в том
+ * числе лёгкий менеджер субагента или pipeline) перетирал его, и предупреждения
+ * одного менеджера уезжали в каталог чужой сессии — или терялись совсем.
  */
 import type { Logger } from "../../logger/app-logger";
 import { defaultOutputBus } from "../../output/bus";
@@ -12,9 +15,13 @@ export interface PluginLog {
   diagnostic(level: "info" | "warn" | "error", msg: string, meta?: Record<string, unknown>): void;
 }
 
-let current: Logger | null = null;
+/** Источник логгера: всё, что умеет `warn`/`diagnostic` (в т.ч. `Logger`). */
+export type PluginLogSource = Pick<Logger, "warn" | "diagnostic">;
 
-/** Лёгкие тестовые менеджеры без проводки всё равно видят сигнал в шине. */
+/**
+ * Лёгкие тестовые менеджеры без проводки всё равно видят сигнал в шине.
+ * Шина — терминал, но не тишина: причина отказа не теряется.
+ */
 const busLog: PluginLog = {
   warn: (msg, meta) => {
     defaultOutputBus.log("warn", "module:plugins", msg, { diagnostic: true, ...meta });
@@ -24,12 +31,11 @@ const busLog: PluginLog = {
   },
 };
 
-/** Подключить логгер модуля (вызывает конструктор `PluginManager`). */
-export function setPluginLogger(logger: Logger | null | undefined): void {
-  current = logger ?? null;
-}
-
-/** Текущий логгер; без проводки — шина (терминал), не тишина. */
-export function pluginLogger(): PluginLog {
-  return current ?? busLog;
+/** Логгер конкретного менеджера: свой на каждый `PluginManager`. */
+export function createPluginLog(logger?: PluginLogSource | null): PluginLog {
+  if (!logger) return busLog;
+  return {
+    warn: (msg, meta) => logger.warn(msg, meta),
+    diagnostic: (level, msg, meta) => logger.diagnostic(level, msg, meta),
+  };
 }

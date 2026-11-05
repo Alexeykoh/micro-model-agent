@@ -10,6 +10,14 @@ import { t, pluralCount } from "./i18n.js";
 import { labelOf } from "./format.js";
 import { session } from "./store.js";
 import { resetSpeed, speedText, speedView } from "./speed.js";
+import {
+  activityCurrentKey,
+  activityLabel,
+  activityLookup,
+  activityPhase,
+  activitySubscribeAll,
+  activityTimeText,
+} from "./core/activity.js";
 import type { Dict } from "./core/store/types.js";
 
 const LAYOUTS = ["off", "line", "meta", "full"];
@@ -29,15 +37,13 @@ let lastEl: HTMLElement | null = null;
 let lastSepEl: HTMLElement | null = null;
 let layout = "line";
 let busy = false;
-let startedAt = 0;
 let tools = 0;
 let events = 0;
 let lastTool = "";
-let sawText = false;
-let pendingTool = false;
 let plan: Dict | null = null;
 // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
 let timer: any = null;
+let unsubActivity: (() => void) | null = null;
 let notchesFor = 0;
 
 // Step boundaries are drawn from the real plan length: a single notch sits on
@@ -53,18 +59,42 @@ function renderNotches(total: number): void {
   }
 }
 
+/**
+ * Чью фазу показывает рельс. Он один на окно, а ходы могут идти параллельно:
+ * берём активную вкладку, если её ход идёт, иначе — последнюю активную
+ * сессию. Фаза и время — те же, что видит строка «думаю» в ленте.
+ */
+function railKey(): string {
+  const active = session.activeSessionId || "";
+  const current = activityCurrentKey();
+  if (active && activityLookup(active)?.busy) return active;
+  if (current && activityLookup(current)?.busy) return current;
+  return active || current;
+}
+
 function render(): void {
-  if (!root || !labEl || !timeEl || !trackEl || !fillEl || !stepsEl || !toolsEl || !eventsEl || !lastEl || !escEl) {
+  if (
+    !root ||
+    !labEl ||
+    !timeEl ||
+    !trackEl ||
+    !fillEl ||
+    !stepsEl ||
+    !toolsEl ||
+    !eventsEl ||
+    !lastEl ||
+    !escEl
+  ) {
     return;
   }
   root.hidden = layout === "off" || !busy;
   if (root.hidden) return;
-  const phase = pendingTool ? "tool" : sawText ? "composing" : "thinking";
+  const key = railKey();
+  const phase = activityPhase(key);
   root.classList.toggle("phase-tool", phase === "tool");
   root.classList.toggle("phase-compose", phase === "composing");
-  labEl.textContent = "✦ " + (phase === "tool" ? t("web.rail.working")
-    : phase === "composing" ? t("web.rail.composing") : t("web.action.thinking"));
-  timeEl.textContent = ((Date.now() - startedAt) / 1000).toFixed(1) + "s";
+  labEl.textContent = "✦ " + activityLabel(key);
+  timeEl.textContent = activityTimeText(key);
   if (speedEl) {
     const sp = speedView(session.activeSessionId);
     speedEl.textContent = sp ? speedText(sp.value, sp.estimated) : "";
@@ -75,7 +105,10 @@ function render(): void {
     trackEl.dataset.mode = "plan";
     renderNotches(steps.length);
     fillEl.style.setProperty("--prog", String((done / steps.length) * 100));
-    stepsEl.textContent = t("web.rail.step_of", { cur: Math.min(done + 1, steps.length), total: steps.length });
+    stepsEl.textContent = t("web.rail.step_of", {
+      cur: Math.min(done + 1, steps.length),
+      total: steps.length,
+    });
   } else {
     trackEl.dataset.mode = "scan";
     stepsEl.textContent = t("web.rail.no_plan");
@@ -114,6 +147,9 @@ export function initRail(cfgLayout?: unknown): void {
   lastSepEl = root.querySelector<HTMLElement>(".last-sep");
   setLayout(cfgLayout);
   startTimer();
+  // Смена фазы перерисовывает рельс сразу, а не через такт таймера.
+  if (unsubActivity) unsubActivity();
+  unsubActivity = activitySubscribeAll(render);
 }
 
 /** Таймер рендера рельса: только когда рельс включён и ход идёт. */
@@ -149,12 +185,9 @@ export function setLayout(next: unknown): void {
 export function setBusy(on: unknown): void {
   const next = !!on;
   if (next && !busy) {
-    startedAt = Date.now();
     tools = 0;
     events = 0;
     lastTool = "";
-    sawText = false;
-    pendingTool = false;
     plan = null;
     resetSpeed(session.activeSessionId);
   }
@@ -171,11 +204,16 @@ export function setPlan(p: Dict | null): void {
   render();
 }
 
+// Счётчики рельса (тулы/события/последний тул) — его собственные; фаза и
+// время хода живут в `core/activity.ts`, чтобы лента и рельс не расходились.
 export function railEvent(kind: string, name: string): void {
   events += 1;
-  if (kind === "tool_start") { pendingTool = true; lastTool = labelOf(name); }
-  else if (kind === "tool_end") { pendingTool = false; tools += 1; lastTool = labelOf(name); }
-  else if (kind === "text") sawText = true;
+  if (kind === "tool_start") {
+    lastTool = labelOf(name);
+  } else if (kind === "tool_end") {
+    tools += 1;
+    lastTool = labelOf(name);
+  }
   flash();
   render();
 }

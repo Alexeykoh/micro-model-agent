@@ -5,10 +5,15 @@ import type { AgentPlugin, HostBridge, TurnSummary } from "../types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { AgentPhase, LLMResponse } from "../../core/types";
 import { PluginDispatcher } from "./dispatch";
+import type { PluginLog } from "./log";
 
 /** База `PluginManager`: диспатчер хуков и его публичная поверхность. */
 export abstract class PluginHooks {
-  private readonly dispatcher = new PluginDispatcher(() => this.active());
+  private readonly dispatcher: PluginDispatcher;
+
+  constructor(log: PluginLog) {
+    this.dispatcher = new PluginDispatcher(() => this.active(), log);
+  }
 
   /** Текущий активный набор плагинов (реализует наследник). */
   protected abstract active(): AgentPlugin[];
