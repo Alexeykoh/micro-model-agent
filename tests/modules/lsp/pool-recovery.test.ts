@@ -9,6 +9,7 @@ function makePool(onDispose: () => void) {
   const connection = {
     key: "fake",
     syncUri: vi.fn(),
+    refreshDocuments: vi.fn(() => false),
     diagnosticsFor: vi.fn(async () => []),
   };
   return {

@@ -48,11 +48,21 @@ export interface DocumentState {
   version: number;
   text: string;
   open: boolean;
+  /** Отпечаток файла на диске (`mtimeMs:size`) в момент синка; нет файла — undefined. */
+  diskStamp?: string;
 }
 
 /** Запись диагностик документа: версия, на которой они посчитаны. */
 export interface DiagnosticRecord {
   version: number;
+  /**
+   * Ревизия документов соединения на момент получения записи. Запись старее
+   * текущей ревизии посчитана до правки другого файла и может быть устаревшей
+   * (диагностики кэшируются по версии одного документа).
+   */
+  revision: number;
+  /** Ревизия, на которой запись в последний раз подтверждена как актуальная. */
+  validatedRevision: number;
   diagnostics: import("./types").LspDiagnostic[];
 }
 
