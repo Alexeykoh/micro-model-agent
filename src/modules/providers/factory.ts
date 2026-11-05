@@ -3,9 +3,22 @@
 import type { AppConfig, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
+import type { Diagnostic } from "../../output/types";
 import { ProviderManager } from "./manager";
 import { FallbackProvider } from "./fallback";
 import { sharedRateLimiter } from "../../llm/shared-rate-limiter";
+
+/** Сигнал успешного failover: ход продолжился, но уже на другом провайдере. */
+export function failoverDiagnostic(from: string, to: string, error: Error): Diagnostic {
+  return {
+    source: "module:providers",
+    operation: "provider.failover",
+    kind: "degraded",
+    cause: error.message.slice(0, 300),
+    recoverable: true,
+    detail: { from, to },
+  };
+}
 
 export interface BuiltProvider {
   manager: ProviderManager;
@@ -25,7 +38,12 @@ export interface BuiltProvider {
 export function buildActiveProvider(
   config: AppConfig,
   logger?: Logger,
-  opts?: { getSessionId?: () => string | undefined; probeCapabilities?: () => ModelCapabilities | undefined },
+  opts?: {
+    getSessionId?: () => string | undefined;
+    probeCapabilities?: () => ModelCapabilities | undefined;
+    /** Сток диагностик: failover обязан быть виден в `session.jsonl`. */
+    onDiagnostic?: (diag: Diagnostic) => void;
+  },
 ): BuiltProvider {
   const manager = new ProviderManager(config.provider, {
     contextWindow: config.contextWindow,
@@ -45,6 +63,9 @@ export function buildActiveProvider(
   if (config.provider.fallback && manager.listNames().length > 1) {
     provider = new FallbackProvider(manager, (from, to, error) => {
       logger?.warn(`provider failover: ${from} -> ${to} (${error.message.slice(0, 120)})`);
+      // Терминал/app.jsonl недостаточно: ход продолжился на другом провайдере,
+      // и разбор сессии обязан это показать.
+      opts?.onDiagnostic?.(failoverDiagnostic(from, to, error));
     });
   }
   return { manager, provider };

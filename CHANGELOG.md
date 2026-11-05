@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Наблюдаемость INV-15: новые домены сигналов.** `DiagnosticEvent` получил
+  `provider_degraded`, `provider_failover`, `tool_degraded`, `session_degraded`,
+  `module_degraded`, `hook_degraded`, `config_degraded`, `delivery_degraded` и
+  `ssrf_degraded`; Trace в `mma web` читает их из runtime-списка, а не из
+  ручного whitelist. Сигнатура выводится из операции, `admission_degraded`
+  больше не поглощает чужие домены.
+
+### Fixed
+
+- **Ошибки провайдера и сессии больше не исчезают.** Preflight и health-проба
+  сохраняют причину (`401`, DNS, таймаут) в `app.jsonl`; успешный failover и
+  сбой context-probe пишутся в `session.jsonl`; исключение хендлера тула даёт
+  `tool_attempt`; нечитаемый `session.jsonl`/`meta.json` отвечает `500` с
+  причиной вместо пустого Trace/транскрипта; логгеры модулей привязаны к
+  каталогам bootstrap, а не теряются в терминале.
+- **Остаток наблюдаемости (W5–W6) и пять ложных успехов** зарегистрированы в
+  `docs/agents/debt.md` (`observability-w5-w6`, `observability-false-success`).
+
 - **Переход с legacy npm-сборки на GitHub-Releases.** Установщик находит npm-шим
   (`npm prefix -g` или `MMA_NPM_PREFIX`), переименовывает его в `*.legacy-npm.bak`
   (без удаления), ставит `~/.mma/bin` в начало `PATH`, проверяет фактический

@@ -3,12 +3,10 @@
 // а гейт, тулы, записи и хуки остаются у фасада `PluginManager`.
 import type { AgentPlugin } from "../types";
 import { semverGt } from "../updater/checker";
-import { Logger } from "../../logger/app-logger";
 import { firstLine, validatePluginMeta, type PluginLoadFailure } from "./records";
+import { pluginLogger } from "./log";
 import { isInsideDir } from "../../tools/path-utils";
 import type { RegisterResult } from "./manager-types";
-
-const logger = new Logger("warn", "plugins");
 
 /** События каталога, на которые реагирует фасад (кэш, тулы, peers гейта). */
 export interface CatalogObserver {
@@ -184,10 +182,14 @@ function safeUnload(plugin: AgentPlugin, ctx?: unknown): void {
     const out = plugin.onUnload(ctx);
     if (out instanceof Promise) {
       out.catch((e: unknown) => {
-        logger.diagnostic("warn", `plugin "${plugin.name}" onUnload rejected`, { error: String(e) });
+        pluginLogger()?.diagnostic("warn", `plugin "${plugin.name}" onUnload rejected`, {
+          error: String(e),
+        });
       });
     }
   } catch (e) {
-    logger.diagnostic("warn", `plugin "${plugin.name}" onUnload threw`, { error: String(e) });
+    pluginLogger()?.diagnostic("warn", `plugin "${plugin.name}" onUnload threw`, {
+      error: String(e),
+    });
   }
 }

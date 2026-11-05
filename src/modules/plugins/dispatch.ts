@@ -7,9 +7,7 @@
 import type { AgentPlugin, HostBridge, TurnSummary } from "../types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { AgentPhase, LLMResponse } from "../../core/types";
-import { Logger } from "../../logger/app-logger";
-
-const logger = new Logger("warn", "plugins");
+import { pluginLogger } from "./log";
 
 /** Откуда диспетчер берёт текущий активный набор. */
 export type PluginsProvider = () => AgentPlugin[];
@@ -26,13 +24,17 @@ function safeInvoke(plugin: AgentPlugin, hookName: string, fn: () => unknown): u
       // Промис реджектится УЖЕ ПОСЛЕ выхода из этого try/catch — вешаем catch
       // сразу, иначе изоляцию ломает необработанный unhandledRejection.
       out.catch((e: unknown) => {
-        logger.diagnostic("warn", `plugin "${plugin.name}" ${hookName} rejected`, { error: String(e) });
+        pluginLogger()?.diagnostic("warn", `plugin "${plugin.name}" ${hookName} rejected`, {
+          error: String(e),
+        });
       });
       return undefined;
     }
     return out;
   } catch (e) {
-    logger.diagnostic("warn", `plugin "${plugin.name}" ${hookName} threw`, { error: String(e) });
+    pluginLogger()?.diagnostic("warn", `plugin "${plugin.name}" ${hookName} threw`, {
+      error: String(e),
+    });
     return undefined;
   }
 }
@@ -73,7 +75,8 @@ export class PluginDispatcher {
   runOnBuildPrompt(): (string | null)[] {
     return this.active().map(
       (p) =>
-        (safeInvoke(p, "onBuildPrompt", () => p.onBuildPrompt?.() ?? null) as string | null) ?? null,
+        (safeInvoke(p, "onBuildPrompt", () => p.onBuildPrompt?.() ?? null) as string | null) ??
+        null,
     );
   }
 
@@ -92,7 +95,9 @@ export class PluginDispatcher {
           // молча не заблокировать, если путь когда-нибудь задействуют.
           if (result === false || typeof result === "string") return false;
         } catch (e) {
-          logger.diagnostic("warn", `plugin "${plugin.name}" onBeforeTool failed`, { error: String(e) });
+          pluginLogger()?.diagnostic("warn", `plugin "${plugin.name}" onBeforeTool failed`, {
+            error: String(e),
+          });
         }
       }
     }
@@ -107,7 +112,9 @@ export class PluginDispatcher {
         try {
           await plugin.onAfterTool(ctx, call, result);
         } catch (e) {
-          logger.diagnostic("warn", `plugin "${plugin.name}" onAfterTool failed`, { error: String(e) });
+          pluginLogger()?.diagnostic("warn", `plugin "${plugin.name}" onAfterTool failed`, {
+            error: String(e),
+          });
         }
       }
     }
@@ -121,7 +128,9 @@ export class PluginDispatcher {
         try {
           await plugin.onError(ctx, error);
         } catch (e) {
-          logger.diagnostic("warn", `plugin "${plugin.name}" onError failed`, { error: String(e) });
+          pluginLogger()?.diagnostic("warn", `plugin "${plugin.name}" onError failed`, {
+            error: String(e),
+          });
         }
       }
     }

@@ -20,7 +20,7 @@ export function buildProviderCommands(program: Command): void {
     .description(t("cli.provider_check"))
     .option("--timeout <ms>", t("cli.probe_timeout"))
     .action(async (opts: { timeout?: string }) => {
-      const { config, agent } = await bootstrap();
+      const { config, agent, logger } = await bootstrap();
       const providers = agent.listProviders();
       const targets = targetsFromProviders(
         providers.length > 0
@@ -45,6 +45,12 @@ export function buildProviderCommands(program: Command): void {
         const mark = r.ok ? pc.green("✓") : pc.red("✗");
         const detail = r.ok ? pc.dim(`${r.ms}ms, ${r.models} models`) : pc.red(r.error ?? "failed");
         getDefaultChannel().writeLine(` ${mark} ${r.name.padEnd(16)} ${detail}`);
+        if (!r.ok) {
+          logger.logSilent(
+            "warn",
+            `Provider health probe failed: ${r.name} (${r.ms}ms): ${r.error ?? "no details"}`,
+          );
+        }
       }
     });
   provider

@@ -23,9 +23,9 @@ const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "coverage"]);
 
 /** Members of the closed `DiagnosticEvent` union, parsed from the source. */
 export function parseDiagnosticEvents(source: string): string[] {
-  const union = /export type DiagnosticEvent\s*=([\s\S]*?);/.exec(source);
-  if (!union) throw new Error("DiagnosticEvent union not found in src/output/types.ts");
-  return [...union[1].matchAll(/"([a-z0-9_]+)"/g)].map((m) => m[1]);
+  const array = /export const DIAGNOSTIC_EVENTS\s*=\s*\[([\s\S]*?)\]\s*as const;/.exec(source);
+  if (!array) throw new Error("DIAGNOSTIC_EVENTS array not found in src/output/types.ts");
+  return [...array[1].matchAll(/"([a-z0-9_]+)"/g)].map((m) => m[1]);
 }
 
 function walk(dir: string, out: string[]): void {
@@ -82,7 +82,7 @@ describe("architecture: fail-open observability (INV-15, W10)", () => {
 
   it("scanner flags a signature no test mentions", () => {
     const kinds = parseDiagnosticEvents(
-      'export type DiagnosticEvent = | "critic_error" | "brand_new_signal";',
+      'export const DIAGNOSTIC_EVENTS = ["critic_error", "brand_new_signal"] as const;',
     );
     expect(kinds).toEqual(["critic_error", "brand_new_signal"]);
   });

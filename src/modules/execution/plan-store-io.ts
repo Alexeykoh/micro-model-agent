@@ -2,11 +2,9 @@
 // из `plan-store.ts`, правило ≤300). Без знания о доменах active/draft/archive.
 import { readFileSync, writeFileSync, renameSync, rmSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
-import { Logger } from "../../logger/app-logger";
+import type { Logger } from "../../logger/app-logger";
 import type { Plan } from "./planner";
 import { errMsg } from "../../utils";
-
-const log = new Logger("info", "plan-store");
 
 /** Статус плана: активный, черновик, архив. */
 export type PlanStatus = "active" | "draft" | "archived";
@@ -43,7 +41,7 @@ export function readPlanFile(path: string, fallbackBaseDir: string): Plan | null
 }
 
 /** Атомарная запись плана: крах посреди записи не оставит обрезанный файл. */
-export function writePlanFile(path: string, plan: Plan): void {
+export function writePlanFile(path: string, plan: Plan, logger?: Logger): void {
   // Имя tmp уникально на процесс: два `mma` на общем `.mma/plans/active.json`
   // не уводят друг у друга `.tmp` (ENOENT).
   const tmpPath = `${path}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
@@ -56,7 +54,7 @@ export function writePlanFile(path: string, plan: Plan): void {
     } catch {
       /* best-effort очистка */
     }
-    log.warn(`failed to persist plan to ${path}`, { error: errMsg(e) });
+    logger?.warn(`failed to persist plan to ${path}`, { error: errMsg(e) });
     throw e;
   }
 }

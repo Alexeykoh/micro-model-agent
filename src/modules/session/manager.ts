@@ -2,7 +2,10 @@
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionStore, SessionLogEntry } from "./store";
 import { t } from "../../i18n/index";
-import type { SessionIsolationConfig, SessionContext } from "../../modules/security/session-isolation";
+import type {
+  SessionIsolationConfig,
+  SessionContext,
+} from "../../modules/security/session-isolation";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { newSessionId } from "./id";
 import type { SessionManagerOptions } from "./manager-options";
@@ -84,7 +87,9 @@ export class SessionManager {
   get(id: string): SessionMeta | null {
     return this.store.loadMeta(id);
   }
-
+  getWithStatus(id: string): import("./read-status").SessionRead<SessionMeta> {
+    return this.store.loadMetaWithStatus(id);
+  }
   /** Удалить сессию (+ контекст, сброс активной). */
   delete(id: string): void {
     this.state.forgetContext(id);
@@ -227,6 +232,16 @@ export class SessionManager {
     }
   }
 
+  loadSessionLogWithStatus(
+    id: string,
+    opts: { since?: string } = {},
+  ): import("./read-status").SessionRead<SessionLogEntry[]> {
+    try {
+      return this.store.loadSessionLogWithStatus(id, opts);
+    } catch (err) {
+      return { status: "unreadable", cause: err instanceof Error ? err.message : String(err) };
+    }
+  }
   /** История активной сессии ([] — нет активной). */
   loadHistory(): SessionMessage[] {
     if (!this.activeId) return [];

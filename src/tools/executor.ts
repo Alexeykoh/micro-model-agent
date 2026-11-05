@@ -196,6 +196,17 @@ export class ToolExecutor {
       }
       result.toolCallId = call.id;
     } catch (e: any) {
+      // INV-15: исключение хендлера — это деградация исполнения, а не
+      // содержательный отказ тула. Сигнал пишем здесь: `tool-batch-calls`
+      // исключения уже не увидит, оно превращено в failed-результат.
+      this.ctx.onDiagnostic?.({
+        source: `tool:${call.name}`,
+        operation: "tool.execute",
+        kind: "failed",
+        cause: e?.message ?? String(e),
+        recoverable: true,
+        detail: { toolCallId: call.id },
+      });
       result = {
         success: false,
         output: `${t("error.prefix")}${e.message}`,
@@ -214,9 +225,7 @@ export class ToolExecutor {
     if (signal?.aborted) {
       this.ctx.logger.debug(`Tool ${call.name}: abort, skipping onAfterTool plugins`);
     } else if (afterPlugins) {
-      await this.hookLock.run(() =>
-        runAfterToolPlugins(this.ctx, call, result, signal, plugins),
-      );
+      await this.hookLock.run(() => runAfterToolPlugins(this.ctx, call, result, signal, plugins));
     }
 
     logToolResult(this.ctx, call, result);

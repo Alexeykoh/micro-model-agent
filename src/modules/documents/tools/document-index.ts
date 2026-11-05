@@ -14,7 +14,7 @@ import type { DocumentRegistry } from "../registry";
 import { causeOf, failResult, rejectResult } from "./run";
 
 /** Тул `document_index`: пересборка индекса корпуса в каталоге (INV-D5/D6). */
-export function documentIndexTool(registry: DocumentRegistry, logger: Logger): ToolDefinition {
+export function documentIndexTool(registry: DocumentRegistry, logger?: Logger): ToolDefinition {
   return {
     name: "document_index",
     security: { caps: [{ fs: "read" }], pathArgs: ["dir"] },

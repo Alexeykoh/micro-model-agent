@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createWebUiState } from "../src/modules/webui/state";
 import { tailSessionLog } from "../src/modules/webui/session/log-api";
 import type { SessionLogEntry } from "../src/modules/session/store";
@@ -22,7 +22,8 @@ const LOG: SessionLogEntry[] = [
   entry("claim_retry", "2026-10-01T10:00:04.000Z", {
     kind: "success",
     iteration: 2,
-    content: "Ответ заявляет об успехе, но свежий результат тула указывает на проблему (plan: boom)",
+    content:
+      "Ответ заявляет об успехе, но свежий результат тула указывает на проблему (plan: boom)",
   }),
   entry("critic_verdict", "2026-10-01T10:00:05.000Z", { status: "concern", content: "looks thin" }),
   entry("compaction", "2026-10-01T10:00:06.000Z", { content: "compacted" }),
@@ -110,6 +111,28 @@ describe("handleSessionLog route", () => {
       expect(plain.status).toBe(200);
       const full = (await plain.json()) as { log: unknown[] };
       expect(full.log).toHaveLength(5);
+    });
+  });
+});
+
+describe("handleSessionLog: нечитаемый журнал", () => {
+  it("отвечает 500 и пишет причину, а не пустой Trace", async () => {
+    const s = createWebUiState();
+    const logSilent = vi.fn();
+    s.logger = { logSilent } as unknown as typeof s.logger;
+    s.sessionManager = {
+      get: () => ({ id: "s1" }),
+      getWithStatus: () => ({ status: "ok", value: { id: "s1" } }),
+      loadSessionLogWithStatus: () => ({ status: "unreadable", cause: "EACCES" }),
+    } as unknown as typeof s.sessionManager;
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/sessions/s1/log`);
+      expect(res.status).toBe(500);
+      expect(await res.json()).toMatchObject({ error: "read_failed" });
+      expect(logSilent).toHaveBeenCalledWith(
+        "warn",
+        expect.stringContaining("session.log.read: s1 unreadable — EACCES"),
+      );
     });
   });
 });

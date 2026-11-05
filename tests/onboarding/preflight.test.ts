@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { preflightProvider, resolveProviderTarget } from "../../src/modules/providers/preflight";
+import { describe, it, expect, vi } from "vitest";
+import {
+  preflightFromConfig,
+  preflightProvider,
+  resolveProviderTarget,
+} from "../../src/modules/providers/preflight";
 
 describe("preflightProvider", () => {
   it("reports ok when a model responds", async () => {
@@ -23,16 +27,25 @@ describe("preflightProvider", () => {
   it("reports provider error", async () => {
     const res = await preflightProvider(
       { baseUrl: "http://x/v1", apiKey: "k", model: "m" },
-      { probe: async () => { throw new Error("ECONNREFUSED"); } },
+      {
+        probe: async () => {
+          throw new Error("ECONNREFUSED");
+        },
+      },
     );
     expect(res.ok).toBe(false);
     expect(res.reason).toBe("unreachable");
+    expect(res.error).toBe("ECONNREFUSED");
   });
 
   it("reports timeout when the probe times out", async () => {
     const res = await preflightProvider(
       { baseUrl: "http://x/v1", apiKey: "k", model: "m" },
-      { probe: async () => { throw new Error("timeout after 3000ms"); } },
+      {
+        probe: async () => {
+          throw new Error("timeout after 3000ms");
+        },
+      },
     );
     expect(res.ok).toBe(false);
     expect(res.reason).toBe("timeout");
@@ -41,7 +54,11 @@ describe("preflightProvider", () => {
   it("reports unreachable for a non-ok HTTP response", async () => {
     const res = await preflightProvider(
       { baseUrl: "http://x/v1", apiKey: "k", model: "m" },
-      { probe: async () => { throw new Error("HTTP 401"); } },
+      {
+        probe: async () => {
+          throw new Error("HTTP 401");
+        },
+      },
     );
     expect(res.ok).toBe(false);
     expect(res.reason).toBe("unreachable");
@@ -57,9 +74,40 @@ describe("preflightProvider", () => {
   });
 });
 
+describe("preflightFromConfig: причина отказа", () => {
+  it("пишет сырую причину в лог, а не только в терминал", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error("ECONNREFUSED");
+    }) as typeof fetch;
+    try {
+      const logSilent = vi.fn();
+      const res = await preflightFromConfig({
+        config: {
+          provider: { type: "openai", baseUrl: "http://127.0.0.1:1/v1", apiKey: "" },
+          model: "m",
+        },
+        logger: { logSilent },
+      });
+      expect(res.ok).toBe(false);
+      expect(res.error).toBe("ECONNREFUSED");
+      expect(logSilent).toHaveBeenCalledWith(
+        "warn",
+        expect.stringContaining("Provider preflight failed"),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 describe("resolveProviderTarget", () => {
   it("uses the legacy fields when there are no entries", () => {
-    const target = resolveProviderTarget({ type: "openai", baseUrl: "http://legacy/v1", apiKey: "lk" });
+    const target = resolveProviderTarget({
+      type: "openai",
+      baseUrl: "http://legacy/v1",
+      apiKey: "lk",
+    });
     expect(target).toEqual({ baseUrl: "http://legacy/v1", apiKey: "lk" });
   });
 

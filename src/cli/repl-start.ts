@@ -88,9 +88,7 @@ export async function start(host: ReplStartHost): Promise<void> {
       const pre = await preflightFromConfig(host);
       if (pre.ok) {
         host.output.writeLine(pc.dim(`${t("repl.meet_offer")} ${t("repl.meet_offer_hint")}`));
-        const answer = (
-          await new Promise<string>((resolve) => host.rl.question("[Y/n] ", resolve))
-        )
+        const answer = (await new Promise<string>((resolve) => host.rl.question("[Y/n] ", resolve)))
           .trim()
           .toLowerCase();
         const yes =
@@ -147,11 +145,16 @@ export async function start(host: ReplStartHost): Promise<void> {
     )
       .then((results) => {
         for (const r of results) {
-          if (!r.ok && r.name !== host.config.provider.active) {
-            host.output.writeLine(
-              formatWarning(t("repl.provider_down", { name: r.name, error: r.error ?? "" })),
-            );
-          }
+          if (r.ok) continue;
+          // INV-15: отказ health-пробы не должен жить только в терминале —
+          // иначе разбор сессии не отличает мёртвый primary от «не пробовали».
+          host.logger?.logSilent(
+            "warn",
+            `Provider health probe failed: ${r.name} (${r.ms}ms): ${r.error ?? "no details"}`,
+          );
+          host.output.writeLine(
+            formatWarning(t("repl.provider_down", { name: r.name, error: r.error ?? "" })),
+          );
         }
       })
       .catch(() => {});

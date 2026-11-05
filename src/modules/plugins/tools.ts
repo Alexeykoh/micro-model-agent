@@ -8,8 +8,8 @@
 import type { AgentPlugin } from "../types";
 import type { ToolDefinition } from "../../tools/types";
 import type { ToolRegistry } from "../../tools/registry";
-import { Logger } from "../../logger/app-logger";
 import { upsertOwnedTool } from "../../core/module-host";
+import { pluginLogger } from "./log";
 import { detectHooks } from "./records";
 import {
   ownerByTag,
@@ -22,8 +22,6 @@ import {
 
 // Имена/мета/валидация живут в `./tool-defs`; реэкспорт для импортёров.
 export { pluginToolTag, pluginToolName } from "./tool-defs";
-
-const logger = new Logger("warn", "plugins");
 
 /** Плейсхолдер владельца имени, занятого ядром (в сообщении — «the harness»). */
 const CORE_OWNER = "<harness>";
@@ -76,7 +74,7 @@ function readToolDefinitions(plugin: AgentPlugin): { list?: unknown[]; problem?:
   try {
     raw = plugin.getToolDefinitions.call(plugin);
   } catch (e) {
-    logger.diagnostic("warn", `plugin "${plugin.name}" getToolDefinitions threw`, {
+    pluginLogger()?.diagnostic("warn", `plugin "${plugin.name}" getToolDefinitions threw`, {
       error: String(e),
     });
     return {};
@@ -221,7 +219,8 @@ function applyDesired(
   for (const [name, tool] of desired) {
     const before = state.owner.get(name);
     state.owner.set(name, tool.plugin);
-    upsertOwnedTool(registry, tool.def, `plugin:${tool.plugin}`);    if (before) kept.push(name);
+    upsertOwnedTool(registry, tool.def, `plugin:${tool.plugin}`);
+    if (before) kept.push(name);
     else added.push(name);
   }
   return { added, removed, kept };
@@ -241,7 +240,7 @@ export function syncPluginTools(
   const { added, removed, kept } = applyDesired(registry, state, desired);
 
   for (const conflict of conflicts) {
-    logger.warn(
+    pluginLogger()?.warn(
       `plugin "${conflict.plugin}" tool "${conflict.tool}" skipped: ${conflict.detail}`,
     );
   }

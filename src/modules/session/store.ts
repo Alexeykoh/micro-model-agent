@@ -14,7 +14,8 @@ import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
 import { readHistoryFile, readRotatedHistory } from "./history-io";
-import { appendLogEntry, readLogEntries } from "./log-file";
+import { appendLogEntry, readLogEntries, readLogEntriesResult } from "./log-file";
+import { readCause, type SessionRead } from "./read-status";
 import type { SessionLogEntry } from "./log-types";
 import { SessionListCache } from "./list-cache";
 export type { SessionLogEntry, OnboardingEvent } from "./log-types";
@@ -140,6 +141,23 @@ export class SessionStore {
     }
   }
 
+  /** Мета с причиной: повреждённая не выглядит удалённой (INV-15). */
+  loadMetaWithStatus(id: string): SessionRead<SessionMeta> {
+    const cached = this._metaCache.get(id);
+    const path = this.metaPath(id);
+    if (cached) return { status: "ok", value: cached };
+    if (!existsSync(path)) return { status: "missing" };
+    try {
+      const raw = readFileSync(path, "utf-8");
+      const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
+      const meta = JSON.parse(content) as SessionMeta;
+      this._metaCache.set(id, meta);
+      this.listCache.forget(id);
+      return { status: "ok", value: meta };
+    } catch (err) {
+      return { status: "unreadable", cause: readCause(err) };
+    }
+  }
   /** Мета строго с диска, мимо _metaCache (там, где важнее точность счётчика). */
   private readMetaFromDisk(id: string): SessionMeta | null {
     const path = this.metaPath(id);
@@ -203,7 +221,14 @@ export class SessionStore {
     const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
     return readLogEntries(path, this.encryptor) ?? [];
   }
-
+  /** session-лог с причиной: «нет файла» ≠ «не прочитан» (INV-15). */
+  loadSessionLogWithStatus(
+    id: string,
+    opts: { since?: string } = {},
+  ): SessionRead<SessionLogEntry[]> {
+    const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
+    return readLogEntriesResult(path, this.encryptor);
+  }
   /** Число каталогов сессий без чтения меты (дешёвый вход для автоочистки). */
   countSessions(): number {
     return existsSync(this.baseDir)

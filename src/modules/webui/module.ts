@@ -94,8 +94,8 @@ export interface WebUiDeps {
   token?: string;
   /** Virgin-конфиг: гейтить чат за браузерным визардом первого запуска. */
   setupRequired?: boolean;
+  logger?: import("../../logger/app-logger").Logger;
 }
-
 /** Хендл запущенного веб-UI: состояние, хост, URL, стоп. */
 export interface WebUiHandle {
   state: WebUiState;
@@ -141,11 +141,11 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   // зависит только от пресетов провайдеров, поэтому заполняется всегда.
   state.setupRequired = deps.setupRequired ?? false;
   state.setup = buildSetupDisplay();
-
   // Коллабораторы REST конфига/сессий/моделей. `state.config` — алиас живого
   // объекта конфига, так что записи `/api/config` мутят тот же объект, что
   // читает агент после `reconfigure`.
   state.config = deps.config;
+  state.logger = deps.logger;
   state.sessionManager = deps.sessionManager;
   state.execModule = deps.execModule;
   // Живое переименование сессии (детерминированное авто-имя и асинхронный

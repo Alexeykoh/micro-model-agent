@@ -18,17 +18,34 @@ export type DiagnosticKind = "ok" | "degraded" | "failed" | "skipped" | "blocked
  * Типы событий-диагностик fail-open (INV-15): отдельные записи `SessionLogEntry`
  * для деградировавших путей. Общая ошибка `"error"` сюда не входит.
  */
-export type DiagnosticEvent =
-  | "critic_error"
-  | "verify_error"
-  | "tool_attempt"
-  | "admission_degraded"
-  | "context_degraded"
-  | "hallucination_judge_degraded"
-  | "egress_blocked"
-  | "egress_degraded"
-  | "taint_degraded"
-  | "stall_detected";
+export const DIAGNOSTIC_EVENTS = [
+  "critic_error",
+  "verify_error",
+  "tool_attempt",
+  "admission_degraded",
+  "context_degraded",
+  "hallucination_judge_degraded",
+  "egress_blocked",
+  "egress_degraded",
+  "taint_degraded",
+  "stall_detected",
+  "provider_degraded",
+  "provider_failover",
+  "tool_degraded",
+  "session_degraded",
+  "module_degraded",
+  "hook_degraded",
+  "config_degraded",
+  "delivery_degraded",
+  "ssrf_degraded",
+] as const;
+
+/**
+ * Закрытый union сигналов fail-open (INV-15). Runtime-список нужен поверхностям:
+ * Trace и гейты читают его, а не дублируют имена руками (иначе записанный
+ * сигнал невидим в UI).
+ */
+export type DiagnosticEvent = (typeof DIAGNOSTIC_EVENTS)[number];
 
 /**
  * Единый объект ошибки/диагностики (INV-14): не строка, а `source` + `operation`
@@ -43,10 +60,7 @@ export type Diagnostic = {
   operation: string;
   recoverable?: boolean;
   detail?: Record<string, unknown>;
-} & (
-  | { kind: "ok"; cause?: string }
-  | { kind: Exclude<DiagnosticKind, "ok">; cause: string }
-);
+} & ({ kind: "ok"; cause?: string } | { kind: Exclude<DiagnosticKind, "ok">; cause: string });
 
 /** Событие вывода: продюсеры эмитят, стоки рисуют/сохраняют. */
 export interface OutputEvent {

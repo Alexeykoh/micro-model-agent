@@ -195,19 +195,40 @@ export function handleSessionHistory(
     return;
   }
   const manager = s.sessionManager;
-  if (!id || !manager.get(id)) {
+  if (!id) {
+    sendJson(res, 404, { error: "not_found" });
+    return;
+  }
+  const meta = manager.getWithStatus?.(id);
+  if (meta?.status === "unreadable") {
+    s.logger?.logSilent("warn", `session.history.read: meta unreadable for ${id} — ${meta.cause}`);
+    sendJson(res, 500, { error: "read_failed", reason: "session meta unreadable" });
+    return;
+  }
+  if (meta ? meta.status === "missing" : !manager.get(id)) {
     sendJson(res, 404, { error: "not_found" });
     return;
   }
   let log: SessionLogEntry[] = [];
   let messages: SessionMessage[] = [];
   try {
-    log = manager.loadSessionLog?.(id) ?? [];
+    const read = manager.loadSessionLogWithStatus?.(id);
+    if (read?.status === "unreadable") {
+      // Нечитаемая сессия (в т.ч. мисматч шифрования) — 500 с причиной, а не
+      // пустой транскрипт: «не прочитано» неотличимо от «нечего показывать».
+      s.logger?.logSilent("warn", `session.history.read: ${id} unreadable — ${read.cause}`);
+      sendJson(res, 500, { error: "read_failed", reason: "session log unreadable" });
+      return;
+    }
+    log = read?.status === "ok" ? read.value : (manager.loadSessionLog?.(id) ?? []);
     if (log.length === 0) messages = manager.getHistory?.(id) ?? [];
-  } catch {
-    // Нечитаемая сессия (в т.ч. мисматч шифрования): пустой транскрипт вместо провала всей страницы.
-    log = [];
-    messages = [];
+  } catch (err) {
+    s.logger?.logSilent(
+      "warn",
+      `session.history.read: ${id} threw — ${err instanceof Error ? err.message : String(err)}`,
+    );
+    sendJson(res, 500, { error: "read_failed", reason: "session log unreadable" });
+    return;
   }
   sendJson(res, 200, { id, history: normalizeHistory(log, s.historyTail, messages, id) });
 }

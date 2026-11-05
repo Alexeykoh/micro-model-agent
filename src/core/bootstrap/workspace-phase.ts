@@ -15,7 +15,11 @@ import { IndexerModule } from "../../modules/indexer/index";
 import { SkillsLoader, SkillsModule, SkillUsage } from "../../modules/skills/index";
 import { ToolRegistry, registerAllTools } from "../../tools/index";
 import { PluginManager } from "../../modules/plugins/manager";
-import { createDraftHost, pendingDrafts, type DraftHostWithLoad } from "../../modules/plugins/draft-host";
+import {
+  createDraftHost,
+  pendingDrafts,
+  type DraftHostWithLoad,
+} from "../../modules/plugins/draft-host";
 import { setPluginGateApplier } from "../../config/registry";
 import { estimateTokens } from "../../llm/token-counter";
 import type { UserProfile } from "../../modules/user-profile/profile";
@@ -108,6 +112,7 @@ export async function setupWorkspacePhase(
     maxFiles: config.indexer?.maxFiles,
     respectGitignore: config.indexer?.respectGitignore,
     mapTokenBudget: config.indexer?.mapTokenBudget,
+    logger: logger.child("indexer"),
   });
   try {
     // Строим (или грузим из кэша) индекс проекта. На большом workspace первый
@@ -151,7 +156,7 @@ export async function setupWorkspacePhase(
     expertTags: Object.keys(config.experts ?? {}),
   });
 
-  const pluginManager = new PluginManager();
+  const pluginManager = new PluginManager(logger.child("plugins"));
   // Живой вкл/выкл: `setConfigValue("plugins.disabled", …)` (REPL, CLI, веб) сам
   // дёргает менеджер через этот шов — иначе поверхности разъезжаются.
   setPluginGateApplier((names) => pluginManager.setDisabledAll(names));
