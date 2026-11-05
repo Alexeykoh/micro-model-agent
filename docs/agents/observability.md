@@ -30,20 +30,24 @@
 
 Сигналы ниже заведены спекой
 [observability gaps](../specs/2026-11-05-observability-gaps-design.md). Тип —
-домен отказа, `operation` — место. Реализация идёт волнами W1–W6; до неё запись
-означает «контракт объявлен», а не «путь покрыт».
+домен отказа, `operation` — место. Реализация идёт волнами W1–W6; колонка
+«статус» говорит, что уже покрыто кодом, а не только объявлено.
 
-| Сигнал              | Домен                                              | Где появится                                                              |
-| ------------------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
-| `provider_degraded` | провайдер/транспорт LLM                            | пробы контекста/capabilities/health/preflight, retry, stream fallback     |
-| `provider_failover` | переключение на другого провайдера                 | `providers/factory.ts`, `managed.ts`                                      |
-| `tool_degraded`     | отказ внутри тула (ФС, процесс, скан, изображения) | `tools/*`, `modules/processes`, `security/audit-log`                      |
-| `session_degraded`  | чтение/подъём сессии                               | `webui/session/*`, `session/store.ts`, runner bootstrap                   |
-| `module_degraded`   | жизненный цикл модуля                              | `mcp`, `lsp`, `indexer`, `skills`, `memory`, `browser`, `updater`, `plan` |
-| `hook_degraded`     | плагинный хук/загрузка/выгрузка                    | `plugins/dispatch.ts`, `manager-catalog.ts`, `tools.ts`                   |
-| `config_degraded`   | конфиг до создания сессии                          | `cli/main.ts`, `config/domains.ts`                                        |
-| `delivery_degraded` | доставка/ввод                                      | `service/webhook`, `service/question`                                     |
-| `ssrf_degraded`     | SSRF-гард деградировал и пропустил                 | `security/dns-guard.ts`                                                   |
+| Сигнал              | Домен                                              | Где появится                                                              | Статус                                                                                                                   |
+| ------------------- | -------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `provider_degraded` | провайдер/транспорт LLM                            | пробы контекста/capabilities/health/preflight, retry, stream fallback     | частично: `provider.context_probe` (`core/agent/provider-phase.ts`); health/preflight — записью в `app.jsonl`            |
+| `provider_failover` | переключение на другого провайдера                 | `providers/factory.ts`, `managed.ts`                                      | ✅ реализовано (`providers/factory.ts`, `failoverDiagnostic`)                                                            |
+| `tool_degraded`     | отказ внутри тула (ФС, процесс, скан, изображения) | `tools/*`, `modules/processes`, `security/audit-log`                      | объявлено                                                                                                                |
+| `session_degraded`  | чтение/подъём сессии                               | `webui/session/*`, `session/store.ts`, runner bootstrap                   | объявлено; чтение сессии в вебе различает `missing`/`unreadable` (`SessionRead`) и отдаёт 500, но без structured-сигнала |
+| `module_degraded`   | жизненный цикл модуля                              | `mcp`, `lsp`, `indexer`, `skills`, `memory`, `browser`, `updater`, `plan` | объявлено                                                                                                                |
+| `hook_degraded`     | плагинный хук/загрузка/выгрузка                    | `plugins/dispatch.ts`, `manager-catalog.ts`, `tools.ts`                   | объявлено                                                                                                                |
+| `config_degraded`   | конфиг до создания сессии                          | `cli/main.ts`, `config/domains.ts`                                        | объявлено                                                                                                                |
+| `delivery_degraded` | доставка/ввод                                      | `service/webhook`, `service/question`                                     | объявлено                                                                                                                |
+| `ssrf_degraded`     | SSRF-гард деградировал и пропустил                 | `security/dns-guard.ts`                                                   | объявлено                                                                                                                |
+
+Отдельный сигнал исключения хендлера тула — `tool_attempt`
+(`tools/executor.ts`, операция `tool.execute`): он эмитится в `catch`
+исполнителя, чтобы падение не выглядело как содержательный отказ тула.
 
 ### Как подключён `verify_error`
 
