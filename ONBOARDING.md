@@ -1,9 +1,9 @@
 # Онбординг: как устроен MMA
 
 Карта проекта для нового разработчика: как работает агент, из чего состоит и что уже
-умеет. Без деталей — детали в [AGENTS.md](../AGENTS.md) и
-[architecture v2](./specs/2026-10-12-architecture-v2-design.md). Установка и процесс —
-в [CONTRIBUTING.md](../CONTRIBUTING.md).
+умеет. Без деталей — детали в [AGENTS.md](./AGENTS.md) и
+[architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md). Установка и процесс —
+в [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Что это
 
@@ -189,44 +189,44 @@ bun run quality          # typecheck + фронтенд + арх-гейты + li
 - Изменение поведения = тест, который падал бы без правки.
 - Меняется контракт (данные, граница модуля, событие, конфиг) — сначала спека в
   `docs/specs/`, потом код.
-- Отложенный костыль — запись в [debt.md](./agents/debt.md), а не «потом».
+- Отложенный костыль — запись в [debt.md](./docs/agents/debt.md), а не «потом».
 
 ## Аббревиатуры
 
-| Сокращение | Расшифровка                         | Что значит в проекте                                                                     |
-| ---------- | ----------------------------------- | ---------------------------------------------------------------------------------------- |
-| MMA        | Micro Models Agent                  | Название проекта и бинаря (`mma`)                                                        |
-| LLM        | Large Language Model                | Большая языковая модель — внешний «мозг» агента                                          |
-| API        | Application Programming Interface   | Программный интерфейс: провайдера, `mma serve`, модулей                                  |
-| CLI        | Command Line Interface              | Запуск из терминала: `mma …`, `mma web`, `mma serve`                                     |
-| REPL       | Read–Eval–Print Loop                | Интерактивный режим: ввод → ответ → приглашение                                          |
-| TUI        | Terminal User Interface             | Полноэкранный интерфейс; в MMA **запрещён**                                              |
-| SSE        | Server-Sent Events                  | Поток событий сервер → браузер, на нём веб-UI                                            |
-| REST       | Representational State Transfer     | Обычный HTTP-API: методы и пути                                                          |
-| JSONL      | JSON Lines                          | Файл, где каждая строка — отдельный JSON; так пишется `session.jsonl`                    |
-| MCP        | Model Context Protocol              | Протокол подключения внешних серверов с тулами                                           |
-| LSP        | Language Server Protocol            | Протокол языковых серверов; даёт диагностику кода                                        |
-| DLP        | Data Loss Prevention                | Защита от утечки данных: маскировка секретов, путей, PII перед отправкой                 |
-| PII        | Personally Identifiable Information | Персональные данные: телефон, e-mail, СНИЛС, ИНН и т.п.                                  |
-| NER        | Named Entity Recognition            | Распознавание сущностей в тексте (нужно поиску PII)                                      |
-| egress     | Исходящий трафик                    | Всё, что уходит с машины: запросы к провайдеру и API                                     |
-| SSRF       | Server-Side Request Forgery         | Атака запросом сервера во внутреннюю сеть; от неё стоит guard                            |
-| RLM        | Recursive Language Model            | Приём: результат по ссылке в файл и чанкирование вместо таскания в контекст              |
-| MoE        | Mixture of Experts                  | Удалён: давал второй путь исполнения в обход гейтов                                      |
-| DAG        | Directed Acyclic Graph              | Граф без циклов; так задаются шаги пайплайна                                             |
-| i18n       | Internationalization                | Локализация: строки через `t()`, файлы `en.json` / `ru.json`                             |
-| INV-N      | Invariant N                         | Нормативный инвариант из [architecture v2](./specs/2026-10-12-architecture-v2-design.md) |
-| E2E        | End-to-End                          | Сквозной тест через реальный интерфейс (только по команде)                               |
-| fallback   | Запасной путь                       | Если основной способ не сработал — пробуем следующий                                     |
-| failover   | Переключение при отказе             | Основной провайдер лёг — работаем через следующий                                        |
-| evidence   | Доказательство                      | Факты из тулов, на которые опирается критик                                              |
+| Сокращение | Расшифровка                         | Что значит в проекте                                                                          |
+| ---------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| MMA        | Micro Models Agent                  | Название проекта и бинаря (`mma`)                                                             |
+| LLM        | Large Language Model                | Большая языковая модель — внешний «мозг» агента                                               |
+| API        | Application Programming Interface   | Программный интерфейс: провайдера, `mma serve`, модулей                                       |
+| CLI        | Command Line Interface              | Запуск из терминала: `mma …`, `mma web`, `mma serve`                                          |
+| REPL       | Read–Eval–Print Loop                | Интерактивный режим: ввод → ответ → приглашение                                               |
+| TUI        | Terminal User Interface             | Полноэкранный интерфейс; в MMA **запрещён**                                                   |
+| SSE        | Server-Sent Events                  | Поток событий сервер → браузер, на нём веб-UI                                                 |
+| REST       | Representational State Transfer     | Обычный HTTP-API: методы и пути                                                               |
+| JSONL      | JSON Lines                          | Файл, где каждая строка — отдельный JSON; так пишется `session.jsonl`                         |
+| MCP        | Model Context Protocol              | Протокол подключения внешних серверов с тулами                                                |
+| LSP        | Language Server Protocol            | Протокол языковых серверов; даёт диагностику кода                                             |
+| DLP        | Data Loss Prevention                | Защита от утечки данных: маскировка секретов, путей, PII перед отправкой                      |
+| PII        | Personally Identifiable Information | Персональные данные: телефон, e-mail, СНИЛС, ИНН и т.п.                                       |
+| NER        | Named Entity Recognition            | Распознавание сущностей в тексте (нужно поиску PII)                                           |
+| egress     | Исходящий трафик                    | Всё, что уходит с машины: запросы к провайдеру и API                                          |
+| SSRF       | Server-Side Request Forgery         | Атака запросом сервера во внутреннюю сеть; от неё стоит guard                                 |
+| RLM        | Recursive Language Model            | Приём: результат по ссылке в файл и чанкирование вместо таскания в контекст                   |
+| MoE        | Mixture of Experts                  | Удалён: давал второй путь исполнения в обход гейтов                                           |
+| DAG        | Directed Acyclic Graph              | Граф без циклов; так задаются шаги пайплайна                                                  |
+| i18n       | Internationalization                | Локализация: строки через `t()`, файлы `en.json` / `ru.json`                                  |
+| INV-N      | Invariant N                         | Нормативный инвариант из [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) |
+| E2E        | End-to-End                          | Сквозной тест через реальный интерфейс (только по команде)                                    |
+| fallback   | Запасной путь                       | Если основной способ не сработал — пробуем следующий                                          |
+| failover   | Переключение при отказе             | Основной провайдер лёг — работаем через следующий                                             |
+| evidence   | Доказательство                      | Факты из тулов, на которые опирается критик                                                   |
 
 ## Что читать дальше
 
-- [mma-features-overview.md](./mma-features-overview.md) — тот же список возможностей подробнее.
-- [architecture v2](./specs/2026-10-12-architecture-v2-design.md) — целевой каркас и инварианты.
-- [agents/architecture.md](./agents/architecture.md) — текущее состояние подсистем.
-- [agents/execution.md](./agents/execution.md) — гарантии петли и гейты.
-- [agents/tools.md](./agents/tools.md) — контракт тулов.
-- [agents/modules.md](./agents/modules.md) — модули по одному.
-- [STYLE.md](./design/ui/STYLE.md) — как выглядит вывод.
+- [mma-features-overview.md](./docs/mma-features-overview.md) — тот же список возможностей подробнее.
+- [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) — целевой каркас и инварианты.
+- [agents/architecture.md](./docs/agents/architecture.md) — текущее состояние подсистем.
+- [agents/execution.md](./docs/agents/execution.md) — гарантии петли и гейты.
+- [agents/tools.md](./docs/agents/tools.md) — контракт тулов.
+- [agents/modules.md](./docs/agents/modules.md) — модули по одному.
+- [STYLE.md](./docs/design/ui/STYLE.md) — как выглядит вывод.
