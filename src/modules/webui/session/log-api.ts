@@ -11,6 +11,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { SessionLogEntry } from "../../session/store";
 import { redactContextSecrets } from "../../../core/api";
+import { DIAGNOSTIC_EVENTS } from "../../../output";
 import { stripAnsi } from "../../../ui/line-math";
 import { sendJson } from "../util";
 import type { SessionStore } from "../state";
@@ -27,17 +28,15 @@ export const TRACE_LOG_TYPES = [
   "critic_check",
   "critic_verdict",
   "critic_escalation",
-  "critic_error",
   "gate_timing",
   "retract",
-  "verify_error",
-  "tool_attempt",
   "claim_retry",
   "llm_request",
+  ...DIAGNOSTIC_EVENTS,
 ] as const;
 
 /** Всё, что роут вообще готов отдать (закрытый список, не `*`). */
-const ALLOWED_TYPES = new Set<string>([
+export const ALLOWED_TYPES = new Set<string>([
   ...TRACE_LOG_TYPES,
   "tool_call",
   "tool_result",
@@ -46,6 +45,7 @@ const ALLOWED_TYPES = new Set<string>([
   "context",
   "service_task",
   "command",
+  ...DIAGNOSTIC_EVENTS,
 ]);
 
 const DEFAULT_LIMIT = 100;

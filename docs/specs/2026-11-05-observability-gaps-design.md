@@ -193,7 +193,6 @@ export type DiagnosticEvent = (typeof DIAGNOSTIC_EVENTS)[number];
 - новые члены `DiagnosticEvent`, `DIAGNOSTIC_EVENTS`, `SessionRead`;
 - `OPERATION_SIGNALS` и `admissionDiagnosticSink`;
 - `TRACE_LOG_TYPES`/`ALLOWED_TYPES` из union;
-- привязка логгеров модулей;
 - обновление `docs/agents/observability.md` (инвентарь + новые сигналы) и
   `debt.md` (`lsp-session-log-events` расширяется на `exit`, `lsp_check_degraded`;
   чтение леджера — отдельная строка или часть `ledger-write-diagnostics`).
@@ -266,6 +265,10 @@ export type DiagnosticEvent = (typeof DIAGNOSTIC_EVENTS)[number];
 | Memory  | prefs read, validator, encrypt/decrypt, `health()`                            | `module_degraded`                                       |
 | Browser | direct launch, bridge spawn, wait load, cookies, close, `health()`            | `module_degraded`                                       |
 | Plugins | hook/load/unload/tool-def + логгер из `ModuleCtx`                             | `hook_degraded`                                         |
+
+W4 также выполняет §3.1: модульные `new Logger(...)` заменяются на `ModuleCtx.logger`
+(или инъекцию конструктором), гейт `tests/arch/module-logger-binding.test.ts`
+включается с пустым allowlist.
 
 Тесты: `tests/modules/mcp/lifecycle-signal.test.ts`,
 `tests/modules/lsp/check-signal.test.ts`, `tests/modules/indexer/signal.test.ts`,
