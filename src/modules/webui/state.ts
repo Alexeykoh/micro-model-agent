@@ -148,7 +148,13 @@ export type RuntimeState = Pick<
 /** Роль: сессии (менеджер, план-трекер, usage). */
 export type SessionStore = Pick<
   WebUiState,
-  "sessionManager" | "execModule" | "sessionUsage" | "usage" | "activeSessionId" | "subagentRuns"
+  | "sessionManager"
+  | "execModule"
+  | "sessionUsage"
+  | "usage"
+  | "activeSessionId"
+  | "subagentRuns"
+  | "logger"
 >;
 
 /** Роль: конфиг (живой объект, запись, reconfigure, список моделей). */

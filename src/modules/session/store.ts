@@ -14,7 +14,8 @@ import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
 import { readHistoryFile, readRotatedHistory } from "./history-io";
-import { appendLogEntry, readLogEntries } from "./log-file";
+import { appendLogEntry, readLogEntries, readLogEntriesResult } from "./log-file";
+import { readCause, type SessionRead } from "./read-status";
 import type { SessionLogEntry } from "./log-types";
 import { SessionListCache } from "./list-cache";
 export type { SessionLogEntry, OnboardingEvent } from "./log-types";
@@ -140,6 +141,28 @@ export class SessionStore {
     }
   }
 
+  /**
+   * Мета с различением «нет» и «не прочитана» (INV-15). Повреждённая мета
+   * больше не выглядит как удалённая сессия: `list()` может пропустить её,
+   * но потребитель с id получает причину.
+   */
+  loadMetaWithStatus(id: string): SessionRead<SessionMeta> {
+    const cached = this._metaCache.get(id);
+    if (cached) return { status: "ok", value: cached };
+    const path = this.metaPath(id);
+    if (!existsSync(path)) return { status: "missing" };
+    try {
+      const raw = readFileSync(path, "utf-8");
+      const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
+      const meta = JSON.parse(content) as SessionMeta;
+      this._metaCache.set(id, meta);
+      this.listCache.forget(id);
+      return { status: "ok", value: meta };
+    } catch (err) {
+      return { status: "unreadable", cause: readCause(err) };
+    }
+  }
+
   /** Мета строго с диска, мимо _metaCache (там, где важнее точность счётчика). */
   private readMetaFromDisk(id: string): SessionMeta | null {
     const path = this.metaPath(id);
@@ -202,6 +225,18 @@ export class SessionStore {
     // Инкрементальное чтение: с курсором берём только хвост (аудит §6.13).
     const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
     return readLogEntries(path, this.encryptor) ?? [];
+  }
+
+  /**
+   * session-лог с различением «нет файла»/«не прочитан» (INV-15). `since`
+   * сохраняет инкрементальный хвост; `truncated` — оборванная последняя строка.
+   */
+  loadSessionLogWithStatus(
+    id: string,
+    opts: { since?: string } = {},
+  ): SessionRead<SessionLogEntry[]> {
+    const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
+    return readLogEntriesResult(path, this.encryptor);
   }
 
   /** Число каталогов сессий без чтения меты (дешёвый вход для автоочистки). */

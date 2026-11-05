@@ -2,7 +2,10 @@
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionStore, SessionLogEntry } from "./store";
 import { t } from "../../i18n/index";
-import type { SessionIsolationConfig, SessionContext } from "../../modules/security/session-isolation";
+import type {
+  SessionIsolationConfig,
+  SessionContext,
+} from "../../modules/security/session-isolation";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { newSessionId } from "./id";
 import type { SessionManagerOptions } from "./manager-options";
@@ -83,6 +86,11 @@ export class SessionManager {
   /** Мета по id (null — нет). */
   get(id: string): SessionMeta | null {
     return this.store.loadMeta(id);
+  }
+
+  /** Мета с причиной: «нет» и «повреждена» различимы (INV-15). */
+  getWithStatus(id: string): import("./read-status").SessionRead<SessionMeta> {
+    return this.store.loadMetaWithStatus(id);
   }
 
   /** Удалить сессию (+ контекст, сброс активной). */
@@ -224,6 +232,18 @@ export class SessionManager {
       return this.store.loadSessionLog(id, opts);
     } catch {
       return [];
+    }
+  }
+
+  /** session-лог с различением «пусто»/«не прочитан» (INV-15). */
+  loadSessionLogWithStatus(
+    id: string,
+    opts: { since?: string } = {},
+  ): import("./read-status").SessionRead<SessionLogEntry[]> {
+    try {
+      return this.store.loadSessionLogWithStatus(id, opts);
+    } catch (err) {
+      return { status: "unreadable", cause: err instanceof Error ? err.message : String(err) };
     }
   }
 

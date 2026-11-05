@@ -212,7 +212,17 @@ export function handleSessionLog(
     return;
   }
   const manager = s.sessionManager;
-  if (!id || !manager.get(id)) {
+  if (!id) {
+    sendJson(res, 404, { error: "not_found" });
+    return;
+  }
+  const meta = manager.getWithStatus?.(id);
+  if (meta?.status === "unreadable") {
+    s.logger?.logSilent("warn", `session.log.read: meta unreadable for ${id} — ${meta.cause}`);
+    sendJson(res, 500, { error: "read_failed", reason: "session meta unreadable" });
+    return;
+  }
+  if (meta ? meta.status === "missing" : !manager.get(id)) {
     sendJson(res, 404, { error: "not_found" });
     return;
   }
@@ -225,13 +235,32 @@ export function handleSessionLog(
   const rawLimit = q.get("limit");
   const limit = rawLimit === null || rawLimit.trim() === "" ? undefined : Number(rawLimit);
   let log: SessionLogEntry[] = [];
+  let truncated = false;
   try {
     // С курсором читаем только хвост лога (инкрементально, аудит §6.13).
     const since = q.get("since") ?? undefined;
-    log = manager.loadSessionLog?.(id, since ? { since } : {}) ?? [];
-  } catch {
+    const read = manager.loadSessionLogWithStatus?.(id, since ? { since } : {});
+    if (read?.status === "unreadable") {
+      // INV-15: нечитаемый журнал — не пустой Trace. Иначе разбор полёта
+      // показывает «записей нет» и прячет повреждение/мисматч шифрования.
+      s.logger?.logSilent("warn", `session.log.read: ${id} unreadable — ${read.cause}`);
+      sendJson(res, 500, { error: "read_failed", reason: "session log unreadable" });
+      return;
+    }
+    if (read?.status === "ok") {
+      log = read.value;
+      truncated = read.truncated === true;
+    } else if (read?.status !== "missing") {
+      log = manager.loadSessionLog?.(id, since ? { since } : {}) ?? [];
+    }
+  } catch (err) {
     // Нечитаемая сессия: пустой хвост вместо провала всей страницы.
-    log = [];
+    s.logger?.logSilent(
+      "warn",
+      `session.log.read: ${id} threw — ${err instanceof Error ? err.message : String(err)}`,
+    );
+    sendJson(res, 500, { error: "read_failed", reason: "session log unreadable" });
+    return;
   }
   sendJson(res, 200, {
     id,
@@ -240,5 +269,6 @@ export function handleSessionLog(
       since: q.get("since") ?? undefined,
       limit: limit !== undefined && Number.isFinite(limit) ? limit : undefined,
     }),
+    ...(truncated ? { truncated: true } : {}),
   });
 }

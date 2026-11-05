@@ -7,6 +7,7 @@ import { appendFileSync, existsSync, readFileSync, renameSync, rmSync, statSync 
 import { appendLogTail } from "./log-tail";
 import type { SessionFileEncryptor } from "../security/session-encryption";
 import type { SessionLogEntry } from "./store";
+import { readCause, type SessionRead } from "./read-status";
 
 /** Порог ротации session.jsonl (старый лог уезжает в .jsonl.1). */
 export const SESSION_LOG_MAX_BYTES = 8 * 1024 * 1024;
@@ -23,9 +24,7 @@ export function appendLogEntry(
   encryptor?: SessionFileEncryptor | null,
 ): void {
   const line = JSON.stringify(entry);
-  const payload = encryptor?.isEnabled()
-    ? `${encryptor.encryptFileContent(line)}\n`
-    : `${line}\n`;
+  const payload = encryptor?.isEnabled() ? `${encryptor.encryptFileContent(line)}\n` : `${line}\n`;
   rotateIfLarge(logPath);
   appendFileSync(logPath, payload, { encoding: "utf-8", mode: 0o600 });
   // Хвост: последние строки лога отдельно — по нему Trace читает инкрементально.
@@ -52,12 +51,25 @@ export function readLogEntries(
   logPath: string,
   encryptor?: SessionFileEncryptor | null,
 ): (SessionLogEntry[] & { truncatedTail?: boolean }) | null {
-  if (!existsSync(logPath)) return null;
+  const result = readLogEntriesResult(logPath, encryptor);
+  return result.status === "ok" ? result.value : null;
+}
+
+/**
+ * Чтение с тремя состояниями (INV-15): файла нет, файл не читается, файл
+ * прочитан (возможно, с оборванным хвостом). Верхние слои больше не могут
+ * превратить повреждение в пустой список «по умолчанию».
+ */
+export function readLogEntriesResult(
+  logPath: string,
+  encryptor?: SessionFileEncryptor | null,
+): SessionRead<SessionLogEntry[]> {
+  if (!existsSync(logPath)) return { status: "missing" };
   try {
     const raw = readFileSync(logPath, "utf-8");
     const lines = raw.split("\n").filter(Boolean);
     const decrypted = encryptor?.isEnabled() ? decryptLines(lines, encryptor) : lines;
-    const entries: (SessionLogEntry[] & { truncatedTail?: boolean }) = decrypted
+    const entries: SessionLogEntry[] & { truncatedTail?: boolean } = decrypted
       .map((line) => {
         try {
           return JSON.parse(line) as SessionLogEntry;
@@ -66,10 +78,13 @@ export function readLogEntries(
         }
       })
       .filter((e): e is SessionLogEntry => e !== null);
-    if (raw.length > 0 && !raw.endsWith("\n")) entries.truncatedTail = true;
-    return entries;
-  } catch {
-    return null;
+    const truncated = raw.length > 0 && !raw.endsWith("\n");
+    if (truncated) entries.truncatedTail = true;
+    return truncated
+      ? { status: "ok", value: entries, truncated }
+      : { status: "ok", value: entries };
+  } catch (err) {
+    return { status: "unreadable", cause: readCause(err) };
   }
 }
 
