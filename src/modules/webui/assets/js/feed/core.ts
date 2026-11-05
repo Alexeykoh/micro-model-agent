@@ -24,7 +24,9 @@ export type { MdOpts, ThinkBlock } from "./blocks.js";
 // or many attachments; images become thumbnails, anything else a file chip.
 export function userBlock(text: string, attachments?: string[] | null): HTMLElement {
   const node = el("div", "u");
-  const atts = (attachments || []).filter((s): s is string => typeof s === "string" && s.length > 0);
+  const atts = (attachments || []).filter(
+    (s): s is string => typeof s === "string" && s.length > 0,
+  );
   if (atts.length) {
     const strip = el("div", "u-attach");
     for (const src of atts) strip.appendChild(attachmentNode(src));
@@ -119,7 +121,10 @@ export function clearFeed(feed: HTMLElement | null): void {
   follow = true;
   hideToLatest();
   const tab = tabState.tabs.find((x) => x.feed === feed);
-  if (tab) { tab.planCard = null; tab.livePlan = null; }
+  if (tab) {
+    tab.planCard = null;
+    tab.livePlan = null;
+  }
   if (feed === activeFeed()) scroll();
 }
 
@@ -132,7 +137,9 @@ export function activeFeed(): HTMLElement | null {
 }
 
 export function liveFeed(): HTMLElement | null {
-  const tab = tabState.tabs.find((x) => x.id === tabState.liveTabId) || tabState.tabs.find((x) => x.id === tabState.activeTabId);
+  const tab =
+    tabState.tabs.find((x) => x.id === tabState.liveTabId) ||
+    tabState.tabs.find((x) => x.id === tabState.activeTabId);
   return tab ? tab.feed : null;
 }
 
@@ -144,6 +151,16 @@ export function feedForEvent(sessionId?: string | null): HTMLElement | null {
     if (tab) return tab.feed;
   }
   return liveFeed();
+}
+
+/**
+ * Id сессии, которой принадлежит лента (`""` — вкладка не сессионная).
+ * Ключ состояния хода: по нему лента и рельс читают одну и ту же фазу.
+ */
+export function sessionIdForFeed(feed: HTMLElement | null): string {
+  if (!feed) return "";
+  const tab = tabState.tabs.find((x) => x.feed === feed);
+  return tab && tab.kind === "session" ? String(tab.id) : "";
 }
 
 function nearBottom(): boolean {
@@ -197,7 +214,9 @@ export function feedHasContent(feed: HTMLElement): boolean {
   // недоступна") не должны провоцировать повторный fetch при каждом открытии
   // вкладки — иначе каждый клик плодит ещё одну строку (сессия удалена,
   // сервер отвечает 404, а фид "пуст" снова и снова).
-  return !!feed.querySelector(".u, .md, .ans, .code, .act, .think, .metaln, .errline, .sysline, .detail");
+  return !!feed.querySelector(
+    ".u, .md, .ans, .code, .act, .think, .metaln, .errline, .sysline, .detail",
+  );
 }
 
 export function syncUrl(): void {
