@@ -114,8 +114,12 @@ describe("webui content search", () => {
       const body = (await (await doFetch(searchUrl(base, "needle"))).json()) as SearchBody;
       expect(body.results.length).toBe(MAX_SEARCH_RESULTS);
       expect(body.truncated).toBe(true);
-      expect(body.results[0].line).toBe(1);
-      expect(body.results[MAX_SEARCH_RESULTS - 1].line).toBe(MAX_SEARCH_RESULTS);
+      const capped = body.results as Extract<
+        SearchBody["results"][number],
+        { kind: "content" }
+      >[];
+      expect(capped[0].line).toBe(1);
+      expect(capped[MAX_SEARCH_RESULTS - 1].line).toBe(MAX_SEARCH_RESULTS);
     });
   });
 
@@ -175,9 +179,11 @@ describe("webui content search", () => {
     await withSearchApi(ws, async (base) => {
       const body = (await (await doFetch(searchUrl(base, "needle"))).json()) as SearchBody;
       expect(body.results).toEqual([
+        // Same relevance tier (name-prefix match): the shortest path ranks
+        // first, then alphabetical among equal-length names.
+        { kind: "path", path: "needle.ts" },
         { kind: "path", path: "needle.big" },
         { kind: "path", path: "needle.bin" },
-        { kind: "path", path: "needle.ts" },
         { kind: "content", path: "needle.ts", line: 1, text: "needle" },
       ]);
     });
