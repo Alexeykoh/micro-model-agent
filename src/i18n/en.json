@@ -1370,6 +1370,7 @@
   "web.sidebar.resize": "sidebar width",
   "web.sidebar.resize_hint": "drag to resize the sidebar",
   "web.sidebar.open_settings": "open settings",
+  "web.sidebar.more": "show more tabs",
   "web.sidebar.lsp_what": "LSP — editor-grade diagnostics",
   "web.sidebar.lsp_status": "status",
   "web.sidebar.lsp_toolchain": "toolchain",

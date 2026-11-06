@@ -1370,6 +1370,7 @@
   "web.sidebar.resize": "ширина сайдбара",
   "web.sidebar.resize_hint": "потяните, чтобы изменить ширину сайдбара",
   "web.sidebar.open_settings": "открыть настройки",
+  "web.sidebar.more": "показать остальные вкладки",
   "web.sidebar.lsp_what": "LSP — диагностика уровня редактора",
   "web.sidebar.lsp_status": "статус",
   "web.sidebar.lsp_toolchain": "тулчейн",

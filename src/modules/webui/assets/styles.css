@@ -1123,6 +1123,16 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   background: transparent; color: var(--stab-fg); cursor: pointer; font: inherit;
   font-size: 12px;
 }
+/* Компактный набор вкладок: свёрнутые скрыты, кнопка-стрелка раскрывает их. */
+.sb-tab.sb-hidden { display: none; }
+.sb-tab-toggle {
+  width: 32px; min-width: 32px; height: 32px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-2); border-radius: 6px;
+  background: transparent; color: var(--stab-fg); cursor: pointer; font: inherit;
+}
+.sb-tab-toggle:hover { color: var(--fg); background: var(--hover-bg); }
+.sb-tab-toggle svg { width: 15px; height: 15px; }
 .sb-tab:hover { color: var(--fg); background: var(--hover-bg); }
 .sb-tab.on { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
 .sb-tab .sb-ico svg { width: 15px; height: 15px; }
