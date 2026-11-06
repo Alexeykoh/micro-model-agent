@@ -17,7 +17,7 @@ import {
   SECURITY_HEADERS,
 } from "./util";
 import { handleMessagePost } from "./session/turns";
-import { handleQueueCancel, handleQueueStart } from "./session/queue-api";
+import { handleQueueCancel, handleQueueStart, handleQueueEdit } from "./session/queue-api";
 import { handleCommandPost, handleInterruptPost, handleIndexPost } from "./chat/actions-api";
 import { handleConfigGet, handleConfigPost, handleModelsGet } from "./settings/config-api";
 import { handleI18nGet } from "./i18n/i18n-api";
@@ -112,6 +112,7 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "POST /api/message": (req, res, s) => handleMessagePost(req, res, s),
   "POST /api/queue/cancel": (req, res, s) => handleQueueCancel(req, res, s),
   "POST /api/queue/start": (req, res, s) => handleQueueStart(req, res, s),
+  "POST /api/queue/edit": (req, res, s) => handleQueueEdit(req, res, s),
   "GET /api/config": (_req, res, s) => handleConfigGet(res, s),
   "POST /api/config": (req, res, s) => handleConfigPost(req, res, s),
   "POST /api/answer": (req, res, s) => handleAnswerPost(req, res, s),
