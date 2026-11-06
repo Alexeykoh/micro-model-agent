@@ -165,7 +165,6 @@ export function parseSetupAnswers(rec: Record<string, unknown>): SetupAnswers | 
     securityPathsRestrict: rec.securityPathsRestrict as boolean,
     securityDetail: parseSecurityDetail(rec.securityDetail),
   };
-  // Звуки уведомлений — необязательное поле; если передано, только boolean.
   if (typeof rec.soundsEnabled === "boolean") out.soundsEnabled = rec.soundsEnabled;
   return out;
 }

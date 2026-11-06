@@ -118,13 +118,9 @@ initCollapsibleSections();
 hooks.ensureTabState = ensureTabState;
 // Lets `tabs.js` reset the sidebar chrome when the last tab closes.
 hooks.renderActive = renderActiveState;
-hooks.openFileInTree = (p) => {
-  openMainPreview(p);
-};
-hooks.openFileAtLine = (p, line) => {
-  void line; // line-highlight lands with the sidebar reveal, not the main pane
-  openMainPreview(p);
-};
+// `line` здесь не подсвечивается: переход к строке живёт в сайдбаре (`openFilesTabFor`).
+hooks.openFileInTree = (p) => openMainPreview(p);
+hooks.openFileAtLine = (p) => openMainPreview(p);
 hooks.showFilesTab = () => {
   void openFilesTabFor("");
 };
