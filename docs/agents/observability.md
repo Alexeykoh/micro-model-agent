@@ -26,6 +26,29 @@
 | `context_degraded`             | Серия компакций без роста durable-леджера (модель сжимает историю, ничего не узнавая): сигнал вырожденной петли, ход продолжается                                                                                                                                 | `src/core/context/compaction-progress.ts` (`CompactionProgressTracker`) → `ContextManager.setProgressDiagnosticSink` → `context-factory.ts` (`contextDegradedSink`) | ✅ реализовано |
 | `hallucination_judge_degraded` | LLM-судья противоречий не ответила (провайдер упал, таймаут, неразборчивый ответ): вердикт вырождается в `pass`, ход продолжается                                                                                                                                 | `src/core/hallucination/llm-judge.ts` (catch в `validate`) → `LLMJudge.onDiagnostic` → `session-phase.ts` / `session-runner.ts` (`admissionDiagnosticSink`)         | ✅ реализовано |
 
+### Контракт W0: новые домены (2026-11-05)
+
+Сигналы ниже заведены спекой
+[observability gaps](../specs/2026-11-05-observability-gaps-design.md). Тип —
+домен отказа, `operation` — место. Реализация идёт волнами W1–W6; колонка
+«статус» говорит, что уже покрыто кодом, а не только объявлено.
+
+| Сигнал              | Домен                                              | Где появится                                                              | Статус                                                                                                                   |
+| ------------------- | -------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `provider_degraded` | провайдер/транспорт LLM                            | пробы контекста/capabilities/health/preflight, retry, stream fallback     | частично: `provider.context_probe` (`core/agent/provider-phase.ts`); health/preflight — записью в `app.jsonl`            |
+| `provider_failover` | переключение на другого провайдера                 | `providers/factory.ts`, `managed.ts`                                      | ✅ реализовано (`providers/factory.ts`, `failoverDiagnostic`)                                                            |
+| `tool_degraded`     | отказ внутри тула (ФС, процесс, скан, изображения) | `tools/*`, `modules/processes`, `security/audit-log`                      | объявлено                                                                                                                |
+| `session_degraded`  | чтение/подъём сессии                               | `webui/session/*`, `session/store.ts`, runner bootstrap                   | объявлено; чтение сессии в вебе различает `missing`/`unreadable` (`SessionRead`) и отдаёт 500, но без structured-сигнала |
+| `module_degraded`   | жизненный цикл модуля                              | `mcp`, `lsp`, `indexer`, `skills`, `memory`, `browser`, `updater`, `plan` | объявлено                                                                                                                |
+| `hook_degraded`     | плагинный хук/загрузка/выгрузка                    | `plugins/dispatch.ts`, `manager-catalog.ts`, `tools.ts`                   | объявлено                                                                                                                |
+| `config_degraded`   | конфиг до создания сессии                          | `cli/main.ts`, `config/domains.ts`                                        | объявлено                                                                                                                |
+| `delivery_degraded` | доставка/ввод                                      | `service/webhook`, `service/question`                                     | объявлено                                                                                                                |
+| `ssrf_degraded`     | SSRF-гард деградировал и пропустил                 | `security/dns-guard.ts`                                                   | объявлено                                                                                                                |
+
+Отдельный сигнал исключения хендлера тула — `tool_attempt`
+(`tools/executor.ts`, операция `tool.execute`): он эмитится в `catch`
+исполнителя, чтобы падение не выглядело как содержательный отказ тула.
+
 ### Как подключён `verify_error`
 
 `StepVerifier` получает колбэк `onDegrade(operation, reason)` при создании
@@ -131,6 +154,7 @@ Fail-open считается не по факту `catch`, а по контра�
 - `tests/critic-gate.test.ts` — `critic_error` пишется при отказе критика (throw и null).
 - `tests/session-logger.test.ts` — `logDiagnosticEvent` персистит форму `Diagnostic`.
 - `tests/core/compaction-progress.test.ts` — `context_degraded` при серии компакций без роста леджера.
+
 ## Taint
 
 - `taint_degraded` — taint восстановлен эвристически при resume (нет метаданных

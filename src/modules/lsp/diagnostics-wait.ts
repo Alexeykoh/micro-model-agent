@@ -15,6 +15,12 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  */
 export const SETTLE_EMPTY_MS = 250;
 
+/**
+ * Окно после правки другого файла: сервер переопубликует диагностику только
+ * затронутых файлов. Не дождались — файл не затронут, кэш верен.
+ */
+export const PROJECT_SETTLE_MS = 1000;
+
 type ReadRecord = () => DiagnosticRecord | undefined;
 
 /** Ждём запись диагностик нужной версии (опционально — отличную от прежней). */

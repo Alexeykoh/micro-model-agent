@@ -3,6 +3,7 @@
 // god-state не разрасталось чужими формами; `state.ts` реэкспортирует их,
 // поэтому публичная поверхность не меняется.
 import type { AppConfig } from "../../config/types";
+import type { Logger } from "../../logger/app-logger";
 import type { LspDiagnosis } from "../lsp/diagnose";
 import type { MemoryStore } from "../memory/store";
 import type { PluginLoadFailure, PluginRecord } from "../plugins/records";
@@ -91,6 +92,8 @@ export interface WebPluginManager {
  */
 export interface WebUiWiring {
   config?: AppConfig;
+  /** Логгер для ошибок чтения/настроек, у которых нет активной сессии. */
+  logger?: Logger;
   sessionManager?: WebSessionManager;
   /**
    * Execution-модуль для привязки плана к сессии: смена/создание сессии

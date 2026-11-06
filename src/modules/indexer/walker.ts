@@ -11,16 +11,10 @@ import {
 } from "fs";
 import { createHash } from "node:crypto";
 import { join, relative, extname } from "path";
-import { Logger } from "../../logger/app-logger";
-import {
-  languageIdForExt,
-  extractSymbolsDetailed,
-  extractImports,
-} from "./symbols";
+import type { Logger } from "../../logger/app-logger";
+import { languageIdForExt, extractSymbolsDetailed, extractImports } from "./symbols";
 import { loadIgnoreMatcher, type IgnoreMatcher } from "./gitignore";
 import { t } from "../../i18n/index";
-
-const logger = new Logger("warn", "indexer");
 
 /** Дефолтный кап файлов, если вызывающий не задал (см. `config.indexer.maxFiles`). */
 export const DEFAULT_MAX_FILES = 1000;
@@ -51,10 +45,12 @@ export class Indexer {
   private maxFiles: number;
   private ignores: IgnoreMatcher;
   private watcher: FSWatcher | FSWatcher[] | null = null;
+  private logger?: Logger;
 
   constructor(baseDir: string, opts: IndexerOptions = {}) {
     this.baseDir = baseDir;
     this.maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES;
+    this.logger = opts.logger;
     this.ignores =
       opts.respectGitignore === false
         ? { ignores: () => false }
@@ -113,11 +109,11 @@ export class Indexer {
       try {
         watchers.push(watch(dir, callback));
       } catch (e) {
-        logger.warn(`watch failed for ${dir}: ${(e as Error).message}`);
+        this.logger?.warn(`watch failed for ${dir}: ${(e as Error).message}`);
       }
     }
     if (watchers.length === 0) {
-      logger.warn("file watcher unavailable: no directories could be watched");
+      this.logger?.warn("file watcher unavailable: no directories could be watched");
     }
     return watchers;
   }
@@ -203,7 +199,7 @@ export class Indexer {
       return true;
     } catch (e) {
       // Запись пропала или нечитаема — пропускаем, индексируем остальные.
-      logger.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
+      this.logger?.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
       return false;
     }
   }
@@ -252,7 +248,7 @@ export class Indexer {
         totalSize += stat.size;
       } catch (e) {
         // Чтение упало после успешного stat — пропускаем файл, берём остальные.
-        logger.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
+        this.logger?.warn(t("env.index_skip_unreadable", { path: relPath }), { error: String(e) });
       }
     });
 

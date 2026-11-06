@@ -25,6 +25,8 @@ export interface IndexResult {
 export interface IndexerOptions {
   maxFiles?: number;
   respectGitignore?: boolean;
+  /** Логгер модуля: без него предупреждения обхода не персистятся. */
+  logger?: import("../../logger/app-logger").Logger;
 }
 
 /** Читает файл игноров из корня проекта; null при любой ошибке (fail-open). */

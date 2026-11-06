@@ -11,7 +11,11 @@ import type { AppConfig, ProviderEntry, ReasoningStrategy } from "../../config/t
 import type { AgentDeps } from "../agent";
 import type { CostTracker } from "../../modules/pricing/index";
 import type { Logger } from "../../logger/app-logger";
-import { ProviderManager, activeProviderEndpoint, reasoningStrategyForProvider } from "../../modules/providers/manager";
+import {
+  ProviderManager,
+  activeProviderEndpoint,
+  reasoningStrategyForProvider,
+} from "../../modules/providers/manager";
 import { buildActiveProvider } from "../../modules/providers/factory";
 import { t } from "../../i18n/index";
 import { errMsg } from "../../utils/error";
@@ -80,6 +84,7 @@ export async function reconfigure(
   if (opts.probe !== false) await reprobeActiveProvider(host, config);
   const built = buildActiveProvider(config, deps.logger, {
     getSessionId: () => deps.sessionManager?.getActiveMeta()?.id,
+    onDiagnostic: deps.onDiagnostic,
   });
   const newProvider = built.provider;
   deps.llmProvider = newProvider;
@@ -164,8 +169,22 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
       if (fresh) logContextProbeAutoSet(loggerOf(host), fresh.model, measured, configured);
     }
     host.lastProbeIdentity = nextId;
-  } catch {
+  } catch (err) {
     // Проба — best-effort, переключение модели/провайдера не блокируем никогда.
+    // INV-15: «не смогли измерить» не должно выглядеть как «окно такое и есть».
+    const cause = errMsg(err);
+    host.deps.onDiagnostic?.({
+      source: "module:providers",
+      operation: "provider.context_probe",
+      kind: "degraded",
+      cause,
+      recoverable: true,
+      detail: { model: config.model },
+    });
+    loggerOf(host).diagnostic(
+      "warn",
+      `Context probe failed for "${config.model}" — keeping configured contextWindow: ${cause}`,
+    );
   }
 }
 
@@ -190,6 +209,7 @@ export async function setProvider(
   const { deps } = host;
   const { manager } = buildActiveProvider(deps.config, deps.logger, {
     getSessionId: () => deps.sessionManager?.getActiveMeta()?.id,
+    onDiagnostic: deps.onDiagnostic,
   });
   manager.switch(name, model);
   deps.config.provider = manager.toConfig();

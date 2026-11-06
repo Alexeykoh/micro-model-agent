@@ -1,7 +1,7 @@
 // Персист планов: active/drafts/archive в .mma/plans + миграция legacy plan.json.
 import { existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
-import { Logger } from "../../logger/app-logger";
+import type { Logger } from "../../logger/app-logger";
 import type { Plan } from "./planner";
 import { errMsg } from "../../utils";
 import { projectMmaDir } from "../../config/paths";
@@ -13,8 +13,6 @@ import {
   type PlanStatus,
   type PlanMeta,
 } from "./plan-store-io";
-
-const log = new Logger("info", "plan-store");
 
 const LEGACY_FILE = "plan.json";
 
@@ -29,7 +27,10 @@ export class PlanStore {
   private archiveDir: string;
   private legacyPath: string;
 
-  constructor(baseDir: string) {
+  constructor(
+    baseDir: string,
+    private logger?: Logger,
+  ) {
     const mmaDir = projectMmaDir(baseDir);
     if (!existsSync(mmaDir)) mkdirSync(mmaDir, { recursive: true });
 
@@ -68,7 +69,7 @@ export class PlanStore {
     const p = this.sessionActivePath(sessionId);
     const dir = join(this.sessionsDir(), sessionId);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writePlanFile(p, plan);
+    writePlanFile(p, plan, this.logger);
   }
 
   /** Загружает активный план сессии. Пустая/новая сессия — null.
@@ -91,7 +92,7 @@ export class PlanStore {
 
   /** Сохраняет активный план. */
   saveActive(plan: Plan): void {
-    writePlanFile(this.activePath(), plan);
+    writePlanFile(this.activePath(), plan, this.logger);
   }
 
   /** Загружает активный план (с миграцией legacy .mma/plan.json). Null, если нет. */
@@ -109,7 +110,7 @@ export class PlanStore {
         try {
           rmSync(this.legacyPath, { force: true });
         } catch (err) {
-          log.warn("Failed to remove migrated legacy plan.json", {
+          this.logger?.warn("Failed to remove migrated legacy plan.json", {
             path: this.legacyPath,
             error: errMsg(err),
           });
@@ -130,7 +131,7 @@ export class PlanStore {
 
   /** Сохраняет план в черновики. */
   saveDraft(plan: Plan): void {
-    writePlanFile(join(this.draftsDir, `${plan.id}.json`), plan);
+    writePlanFile(join(this.draftsDir, `${plan.id}.json`), plan, this.logger);
   }
 
   /** Загружает черновик по id. Null, если нет. */
@@ -154,7 +155,7 @@ export class PlanStore {
 
   /** Архивирует план (убирает из черновиков/активного при совпадении). */
   archivePlan(plan: Plan): void {
-    writePlanFile(join(this.archiveDir, `${plan.id}.json`), plan);
+    writePlanFile(join(this.archiveDir, `${plan.id}.json`), plan, this.logger);
     // Убираем из черновиков, если там был
     this.removeDraft(plan.id);
     // Если архивируемый был активным — чистим active

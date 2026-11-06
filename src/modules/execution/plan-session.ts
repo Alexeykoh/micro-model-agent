@@ -44,8 +44,8 @@ export class PlanSession {
    */
   readonly trackerRef: { current: PlanTracker | null };
 
-  constructor(baseDir: string) {
-    this.store = new PlanStore(baseDir);
+  constructor(baseDir: string, logger?: import("../../logger/app-logger").Logger) {
+    this.store = new PlanStore(baseDir, logger);
     const self = this;
     this.trackerRef = {
       get current(): PlanTracker | null {

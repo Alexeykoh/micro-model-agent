@@ -11,7 +11,7 @@ import type { Logger } from "../../logger/app-logger";
 import type { ToolContext } from "../../tools/types";
 import { ApprovalStore } from "../approvals";
 import { subagentLogEntry } from "../../tools/subagent-session-log";
-import type { Diagnostic } from "../../output/types";
+import type { Diagnostic, DiagnosticEvent } from "../../output/types";
 import { moduleOf } from "../../output";
 import type { GuardDiagnostic } from "../../modules/security/data-policy/types";
 import { recordEgressTurn } from "../../modules/security/data-policy/turn-journal";
@@ -41,24 +41,54 @@ export interface ToolContextInput {
  * выглядели бы как один.
  */
 
-/** Операции проверки заявлений/taint деградируют под своим именем. */
-const OPERATION_SIGNALS: Record<
-  string,
-  "hallucination_judge_degraded" | "taint_degraded"
-> = {
+/**
+ * Специальные операции: сигнатура не выводится из домена. Всё остальное —
+ * по префиксу (ниже). Неизвестная операция больше не маскируется под
+ * `admission_degraded`: это скрывало бы домен отказа.
+ */
+const OPERATION_SIGNALS: Record<string, DiagnosticEvent> = {
+  admit: "admission_degraded",
   "hallucination.judge": "hallucination_judge_degraded",
   "hallucination.evidence": "hallucination_judge_degraded",
   "taint.rehydrate": "taint_degraded",
+  "tool.execute": "tool_attempt",
+  "tool.syntax_precheck": "verify_error",
+  "context.compaction": "context_degraded",
+  "ssrf.dns": "ssrf_degraded",
 };
 
-function signalForOperation(
-  operation: string,
-): "admission_degraded" | "hallucination_judge_degraded" | "taint_degraded" {
-  return OPERATION_SIGNALS[operation] ?? "admission_degraded";
+/** Домен → сигнал: операция несёт место, тип — подсистему (INV-15). */
+const OPERATION_PREFIXES: Array<[string, DiagnosticEvent]> = [
+  ["provider.", "provider_degraded"],
+  ["llm.", "provider_degraded"],
+  ["tool.", "tool_degraded"],
+  ["session.", "session_degraded"],
+  ["mcp.", "module_degraded"],
+  ["lsp.", "module_degraded"],
+  ["index.", "module_degraded"],
+  ["skill.", "module_degraded"],
+  ["memory.", "module_degraded"],
+  ["browser.", "module_degraded"],
+  ["updater.", "module_degraded"],
+  ["plan.", "module_degraded"],
+  ["webui.", "module_degraded"],
+  ["document_", "module_degraded"],
+  ["config.", "config_degraded"],
+  ["service.", "delivery_degraded"],
+  ["plugin.", "hook_degraded"],
+  ["context.", "context_degraded"],
+];
+
+/** Сигнатура диагностики по операции; неизвестная — `tool_degraded`. */
+export function signalForOperation(operation: string): DiagnosticEvent {
+  const exact = OPERATION_SIGNALS[operation];
+  if (exact) return exact;
+  const prefix = OPERATION_PREFIXES.find(([p]) => operation.startsWith(p));
+  return prefix?.[1] ?? "tool_degraded";
 }
 export function admissionDiagnosticSink(
   sessionManager: SessionManager,
-  event?: "admission_degraded" | "hallucination_judge_degraded",
+  event?: DiagnosticEvent,
 ): (diag: Diagnostic) => void {
   return (diag: Diagnostic) => {
     sessionManager.appendLog({

@@ -7,9 +7,7 @@
 import type { AgentPlugin, HostBridge, TurnSummary } from "../types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { AgentPhase, LLMResponse } from "../../core/types";
-import { Logger } from "../../logger/app-logger";
-
-const logger = new Logger("warn", "plugins");
+import type { PluginLog } from "./log";
 
 /** Откуда диспетчер берёт текущий активный набор. */
 export type PluginsProvider = () => AgentPlugin[];
@@ -19,20 +17,29 @@ export type PluginsProvider = () => AgentPlugin[];
  * броски и асинхронные реджекты логгируются и глотаются — один битый плагин
  * не должен ронять агента и остальные плагины.
  */
-function safeInvoke(plugin: AgentPlugin, hookName: string, fn: () => unknown): unknown {
+function safeInvoke(
+  log: PluginLog,
+  plugin: AgentPlugin,
+  hookName: string,
+  fn: () => unknown,
+): unknown {
   try {
     const out = fn();
     if (out instanceof Promise) {
       // Промис реджектится УЖЕ ПОСЛЕ выхода из этого try/catch — вешаем catch
       // сразу, иначе изоляцию ломает необработанный unhandledRejection.
       out.catch((e: unknown) => {
-        logger.diagnostic("warn", `plugin "${plugin.name}" ${hookName} rejected`, { error: String(e) });
+        log.diagnostic("warn", `plugin "${plugin.name}" ${hookName} rejected`, {
+          error: String(e),
+        });
       });
       return undefined;
     }
     return out;
   } catch (e) {
-    logger.diagnostic("warn", `plugin "${plugin.name}" ${hookName} threw`, { error: String(e) });
+    log.diagnostic("warn", `plugin "${plugin.name}" ${hookName} threw`, {
+      error: String(e),
+    });
     return undefined;
   }
 }
@@ -41,6 +48,7 @@ function safeInvoke(plugin: AgentPlugin, hookName: string, fn: () => unknown): u
 export class PluginDispatcher {
   constructor(
     private readonly active: PluginsProvider,
+    private readonly log: PluginLog,
     private bridgeHost: HostBridge | null = null,
   ) {}
 
@@ -65,7 +73,7 @@ export class PluginDispatcher {
   private fanout(rawCtx: any, hook: string, invoke: (plugin: AgentPlugin, ctx: any) => void): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.active()) {
-      safeInvoke(plugin, hook, () => invoke(plugin, ctx));
+      safeInvoke(this.log, plugin, hook, () => invoke(plugin, ctx));
     }
   }
 
@@ -73,7 +81,8 @@ export class PluginDispatcher {
   runOnBuildPrompt(): (string | null)[] {
     return this.active().map(
       (p) =>
-        (safeInvoke(p, "onBuildPrompt", () => p.onBuildPrompt?.() ?? null) as string | null) ?? null,
+        (safeInvoke(this.log, p, "onBuildPrompt", () => p.onBuildPrompt?.() ?? null) as
+          string | null) ?? null,
     );
   }
 
@@ -92,7 +101,9 @@ export class PluginDispatcher {
           // молча не заблокировать, если путь когда-нибудь задействуют.
           if (result === false || typeof result === "string") return false;
         } catch (e) {
-          logger.diagnostic("warn", `plugin "${plugin.name}" onBeforeTool failed`, { error: String(e) });
+          this.log.diagnostic("warn", `plugin "${plugin.name}" onBeforeTool failed`, {
+            error: String(e),
+          });
         }
       }
     }
@@ -107,7 +118,9 @@ export class PluginDispatcher {
         try {
           await plugin.onAfterTool(ctx, call, result);
         } catch (e) {
-          logger.diagnostic("warn", `plugin "${plugin.name}" onAfterTool failed`, { error: String(e) });
+          this.log.diagnostic("warn", `plugin "${plugin.name}" onAfterTool failed`, {
+            error: String(e),
+          });
         }
       }
     }
@@ -121,7 +134,9 @@ export class PluginDispatcher {
         try {
           await plugin.onError(ctx, error);
         } catch (e) {
-          logger.diagnostic("warn", `plugin "${plugin.name}" onError failed`, { error: String(e) });
+          this.log.diagnostic("warn", `plugin "${plugin.name}" onError failed`, {
+            error: String(e),
+          });
         }
       }
     }
@@ -165,7 +180,7 @@ export class PluginDispatcher {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.active()) {
       if (plugin.onText) {
-        const next = safeInvoke(plugin, "onText", () => plugin.onText!(ctx, out));
+        const next = safeInvoke(this.log, plugin, "onText", () => plugin.onText!(ctx, out));
         if (typeof next === "string") out = next;
       }
     }
@@ -178,7 +193,7 @@ export class PluginDispatcher {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.active()) {
       if (plugin.onMeta) {
-        const next = safeInvoke(plugin, "onMeta", () => plugin.onMeta!(ctx, out));
+        const next = safeInvoke(this.log, plugin, "onMeta", () => plugin.onMeta!(ctx, out));
         if (typeof next === "string") out = next;
       }
     }

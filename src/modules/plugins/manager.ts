@@ -11,6 +11,8 @@ import { PluginToolSync } from "./manager-tools";
 import { PluginHooks } from "./manager-hooks";
 import { reloadPluginDirs } from "./manager-reload";
 import type { PluginDirs, PluginInfo, RegisterResult, ReloadReport } from "./manager-types";
+import type { Logger } from "../../logger/app-logger";
+import { createPluginLog, type PluginLog } from "./log";
 
 export { reloadPluginDirs, unloadPluginsForReboot } from "./manager-reload";
 export type { PluginDirs, PluginInfo, RegisterResult, ReloadReport } from "./manager-types";
@@ -34,6 +36,28 @@ interface PluginGate {
 
 /** Реестр плагинов: гейт, записи, тулы и хуки (см. `manager-*`). */
 export class PluginManager extends PluginHooks {
+  /** Логгер этого менеджера: свой на сессию, глобального «текущего» нет. */
+  private readonly log: PluginLog;
+  private readonly toolSync: PluginToolSync;
+  private readonly catalog: PluginCatalog;
+
+  constructor(logger?: Logger) {
+    const log = createPluginLog(logger);
+    super(log);
+    this.log = log;
+    this.toolSync = new PluginToolSync(() => this.active(), log);
+    this.catalog = new PluginCatalog(
+      {
+        changed: () => this.afterChange(),
+        toolsChanged: () => this.afterToolsChange(),
+        recordsChanged: () => this.invalidateRecords(),
+        broadcast: (plugin) => this.broadcastPlugin(plugin),
+        broadcastRemoval: (name) => this.broadcastRemoval(name),
+      },
+      log,
+    );
+  }
+
   private gate: PluginGate = { names: new Set(), version: 0, peers: new Set([this]) };
   /** Кэш плоских записей; инвалидируется на любое изменение реестра. */
   private recordsCache: PluginRecord[] | null = null;
@@ -44,14 +68,6 @@ export class PluginManager extends PluginHooks {
   private dirs?: PluginDirs;
   /** Версия MMA для гейта `minMmaVersion` при перезагрузке. */
   private mmaVersion?: string;
-  private readonly toolSync = new PluginToolSync(() => this.active());
-  private readonly catalog = new PluginCatalog({
-    changed: () => this.afterChange(),
-    toolsChanged: () => this.afterToolsChange(),
-    recordsChanged: () => this.invalidateRecords(),
-    broadcast: (plugin) => this.broadcastPlugin(plugin),
-    broadcastRemoval: (name) => this.broadcastRemoval(name),
-  });
 
   /** Поделить deny-list с раннер-клоном в вебе: source — вызвавший. */
   shareGateWith(other: PluginManager): void {

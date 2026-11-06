@@ -7,6 +7,8 @@ import type { Dict } from "./core/store/types.js";
 import type { SseDeps } from "./sse-deps.js";
 import { noteChunk as speedChunk } from "./speed.js";
 import { attachSidebarSse } from "./sse-sidebar.js";
+import { activityPhase } from "./core/activity.js";
+import { activityKey, attachActivityStream } from "./core/activity-stream.js";
 // The model list is refreshed in the background after a provider/model switch
 // (INV-W5); the server announces the result with a `models` event, so the
 // selector repaints without a second GET racing the refresh. Direct import
@@ -86,6 +88,10 @@ export function connectSSE(deps: SseDeps): void {
   // Sidebar Trace follows its own session: drop events stamped with a different
   // sessionId (background runners). Events without one are global/legacy.
   const sidebarOwns = (d: Dict) => !d.sessionId || d.sessionId === sidebarSessionId();
+  // Фаза хода — общий источник правды для ленты и рельса
+  // (`core/activity.ts`). Подписка идёт ДО таблицы обработчиков: фаза должна
+  // обновиться раньше отрисовки строки «думаю».
+  attachActivityStream(es, parse);
   // SSE event → feed handler table. `command`/`state`/`error` need envelope
   // checks and stay bespoke below; everything else is `parse → null-guard → call`.
   const handlers: Array<[string, (d: Dict) => void]> = [
@@ -147,7 +153,8 @@ export function connectSSE(deps: SseDeps): void {
       const d = parse(e);
       if (!d) return;
       if (ev === "text") speedChunk(d.sessionId, d.chunk || "");
-      if (ev === "plan") railPlan(d); else railEvent(ev, d.name);
+      if (ev === "plan") railPlan(d);
+      else railEvent(ev, d.name);
     });
   }
   // Composer face: one persistent mascot that always reflects the live state.
@@ -175,7 +182,8 @@ export function connectSSE(deps: SseDeps): void {
   }
   es.addEventListener("phase", (e) => {
     const d = parse(e);
-    const phase = d && typeof d.phase === "string" ? d.phase : "";
+    // Маскот смотрит на ту же фазу, что и рельс: пишет — «печатает», тул — «бежит».
+    const phase = d ? activityPhase(activityKey(d)) : "thinking";
     faceEvent(phase === "composing" ? "type" : phase === "tool" ? "run" : "think");
   });
   es.addEventListener("reasoning", () => faceEvent("think"));
@@ -197,7 +205,10 @@ export function connectSSE(deps: SseDeps): void {
   // carry no `faceEvent` — they are not agent activity and must not move MMART.
   es.addEventListener("retract", () => faceEvent(loaderStateFor({ type: "retract" })));
   // Гейт проверяет готовый ответ: своё состояние, не think/error.
-  es.addEventListener("meta", (e) => { const d = parse(e); if (d?.kind === "progress") faceEvent(loaderStateFor({ type: "verify" })); });
+  es.addEventListener("meta", (e) => {
+    const d = parse(e);
+    if (d?.kind === "progress") faceEvent(loaderStateFor({ type: "verify" }));
+  });
   es.addEventListener("index", () => faceEvent("find"));
   es.addEventListener("setup_done", () => faceEvent("done"));
   // An available version is news for the user, so MMART reacts — unlike the

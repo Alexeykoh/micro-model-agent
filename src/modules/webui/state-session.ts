@@ -28,6 +28,13 @@ export interface WebSessionManager {
    */
   create?(name?: string): SessionMeta;
   loadSessionLog?(id: string, opts?: { since?: string }): SessionLogEntry[];
+  /** Лог с причиной: `unreadable` не превращается в пустой Trace (INV-15). */
+  loadSessionLogWithStatus?(
+    id: string,
+    opts?: { since?: string },
+  ): import("../session/read-status").SessionRead<SessionLogEntry[]>;
+  /** Мета с причиной: повреждённая сессия не отвечает `404 not_found`. */
+  getWithStatus?(id: string): import("../session/read-status").SessionRead<SessionMeta>;
   /** Append a session log record to the active or an explicit session. */
   appendLog?(entry: SessionLogEntry, id?: string): void;
   getHistory?(id: string): SessionMessage[];

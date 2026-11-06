@@ -68,8 +68,9 @@ export function buildRunnerRegistry(
 export function buildRunnerPlugins(
   mainPlugins: PluginManager,
   runnerExec: ExecutionModule,
+  logger?: import("../../logger/app-logger").Logger,
 ): PluginManager {
-  const runnerPlugins = new PluginManager();
+  const runnerPlugins = new PluginManager(logger);
   runnerPlugins.shareGateWith(mainPlugins);
   for (const plugin of mainPlugins.getAllPlugins()) {
     if (RUNNER_EXCLUDED_PLUGINS.has(plugin.name)) continue;

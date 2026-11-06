@@ -31,6 +31,8 @@ export interface FeedStreamState {
   runDuration: number;
   // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
   busyTimer: any;
+  /** Отписка от обновления фазы хода для строки «думаю» (см. `core/activity.ts`). */
+  busyUnsub: (() => void) | null;
   pendingArgs: Map<string, Dict>;
   toolNodes: Map<string, ToolNode>;
   // Buffered streaming text for the next animation frame (per feed).
@@ -68,6 +70,7 @@ function createStreamState(): FeedStreamState {
     runNodes: [],
     runDuration: 0,
     busyTimer: null,
+    busyUnsub: null,
     pendingArgs: new Map(),
     toolNodes: new Map(),
     pendingText: "",

@@ -99,9 +99,10 @@ export class ExecutionModule implements AgentModule {
     searchRunner: WebSearchRunner = performWebSearch,
     errorSearchCooldownMs = ERROR_SEARCH_MIN_INTERVAL_MS,
     pathSecurity?: PathSecurityConfig,
+    logger?: import("../../logger/app-logger").Logger,
   ) {
     this.baseDir = baseDir;
-    this.plan = new PlanSession(baseDir);
+    this.plan = new PlanSession(baseDir, logger);
     this.verifier = new StepVerifier(
       baseDir,
       (operation, reason) => this.reportDegrade(operation, reason),
@@ -287,4 +288,5 @@ export class ExecutionModule implements AgentModule {
         this.lastErrorSearchAt = n;
       },
     };
-  }}
+  }
+}

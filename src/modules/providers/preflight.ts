@@ -17,6 +17,8 @@ export interface PreflightResult {
   ok: boolean;
   reason: PreflightReason;
   ms: number;
+  /** Сырая причина отказа (401/DNS/таймаут) — для журнала, не для чата. */
+  error?: string;
 }
 
 export interface PreflightOptions {
@@ -48,16 +50,25 @@ export function resolveProviderTarget(provider: {
 /** Минимальная форма для preflight активного провайдера из конфига. */
 export interface PreflightContext {
   config: { provider: ProviderConfig; model: string };
+  /** Куда записать причину отказа: app.jsonl/session.jsonl, не только в чат. */
+  logger?: { logSilent(level: "debug" | "info" | "warn" | "error", msg: string): void };
 }
 
 /** Резолв активного провайдера из конфига, затем его preflight. */
-export function preflightFromConfig(ctx: PreflightContext): Promise<PreflightResult> {
+export async function preflightFromConfig(ctx: PreflightContext): Promise<PreflightResult> {
   const target = resolveProviderTarget(ctx.config.provider);
-  return preflightProvider({
+  const result = await preflightProvider({
     baseUrl: target.baseUrl,
     apiKey: target.apiKey,
     model: ctx.config.model,
   });
+  if (!result.ok) {
+    ctx.logger?.logSilent(
+      "warn",
+      `Provider preflight failed for "${ctx.config.model}" (${result.reason}, ${result.ms}ms): ${result.error ?? "no details"}`,
+    );
+  }
+  return result;
 }
 
 /**
@@ -69,10 +80,7 @@ export function preflightFromConfig(ctx: PreflightContext): Promise<PreflightRes
 export const PROBE_ANSWERED = "ok";
 
 /** Минимальная дешёвая chat-проба: подтверждает, что модель загружена. */
-export async function probeChat(
-  cfg: PreflightConfig,
-  timeoutMs: number,
-): Promise<string> {
+export async function probeChat(cfg: PreflightConfig, timeoutMs: number): Promise<string> {
   const url = `${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -117,11 +125,13 @@ export async function preflightProvider(
   try {
     const text = await probe(cfg, timeoutMs);
     const ms = Date.now() - start;
-    return text ? { ok: true, reason: "ok", ms } : { ok: false, reason: "no-model", ms };
+    return text
+      ? { ok: true, reason: "ok", ms }
+      : { ok: false, reason: "no-model", ms, error: "provider returned no content" };
   } catch (err) {
     const ms = Date.now() - start;
     const message = errMsg(err);
     const reason: PreflightReason = /abort|timeout/i.test(message) ? "timeout" : "unreachable";
-    return { ok: false, reason, ms };
+    return { ok: false, reason, ms, error: message };
   }
 }

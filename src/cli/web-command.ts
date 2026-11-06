@@ -124,6 +124,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     toolCtx,
     contextProbe,
     spawnSessionRunner,
+    logger,
   } = await bootstrap(...webBootstrapArgs(opts));
 
   if (virgin) {
@@ -152,6 +153,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     host: opts.host,
     token: opts.token,
     setupRequired: virgin,
+    logger,
     spawnRunner: spawnSessionRunner,
   });
 

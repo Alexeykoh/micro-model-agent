@@ -5,7 +5,7 @@ import type { ToolDefinition } from "../../tools/types";
 import type { AppConfig } from "../../config/types";
 import { MCPClient } from "./client";
 import { MCPRegistry, type MCPServerConfig } from "./registry";
-import { Logger } from "../../logger/app-logger";
+import type { Logger } from "../../logger/app-logger";
 import { MCP_DISCOVERY_TIMEOUT_MS as DISCOVERY_TIMEOUT_MS } from "../../config/timeouts";
 import { machinePolicyContext } from "../security/data-policy/context";
 import { isExternalServiceUrl, projectOutboundDeep } from "../security/data-policy/outbound";
@@ -17,8 +17,6 @@ import {
   buildMcpPromptBlock,
   type DiscoveredTool,
 } from "./tool-shape";
-
-const logger = new Logger("warn", "mcp");
 
 /** Модуль MCP: конфиги при init, коннект лениво, тул-дефиниции из найденного. */
 export class MCPModule implements AgentModule {
@@ -32,7 +30,11 @@ export class MCPModule implements AgentModule {
   /** Серверы с упавшим первичным discovery — не ретраятся. */
   private failedServers: Set<string> = new Set();
 
-  constructor(private config: AppConfig) {}
+  constructor(
+    private config: AppConfig,
+    /** Логгер bootstrap-модуля: привязан к каталогам, иначе warn не персистится. */
+    private logger?: Logger,
+  ) {}
 
   /**
    * Зарегистрировать конфиги MCP-серверов БЕЗ коннекта. Коннект и discovery
@@ -116,9 +118,11 @@ export class MCPModule implements AgentModule {
         } catch (e: any) {
           timedOut = true;
           this.failedServers.add(serverName);
-          logger.warn(`MCP server "${serverName}" init failed: ${e.message}`);
+          this.logger?.warn(`MCP server "${serverName}" init failed: ${e.message}`);
           await client.disconnect().catch((err: unknown) => {
-            logger.warn(`cleanup disconnect for "${serverName}" failed`, { error: String(err) });
+            this.logger?.warn(`cleanup disconnect for "${serverName}" failed`, {
+              error: String(err),
+            });
           });
         } finally {
           if (timer) clearTimeout(timer);
@@ -165,7 +169,7 @@ export class MCPModule implements AgentModule {
       return client;
     } catch (e: any) {
       this.failedServers.add(serverName);
-      logger.warn(`MCP connect failed for "${serverName}": ${e.message}`);
+      this.logger?.warn(`MCP connect failed for "${serverName}": ${e.message}`);
       await client.disconnect().catch(() => {});
       return null;
     }
@@ -219,7 +223,12 @@ export class MCPModule implements AgentModule {
             const cfg = this.serverConfigs.get(d.serverName);
             const callArgs =
               dp?.enabled && isExternalServiceUrl(cfg?.url)
-                ? projectOutboundDeep(args, dp, { kind: "api", trusted: false }, machinePolicyContext(ctx.baseDir)).value
+                ? projectOutboundDeep(
+                    args,
+                    dp,
+                    { kind: "api", trusted: false },
+                    machinePolicyContext(ctx.baseDir),
+                  ).value
                 : args;
             const result = await client.callTool(d.toolName, callArgs);
             return {
@@ -280,7 +289,7 @@ export class MCPModule implements AgentModule {
           } catch (e: any) {
             // Best-effort cleanup на конце сессии: упавший disconnect не
             // должен ронять shutdown, но обязан остаться в диагностике.
-            logger.warn(`disconnect from "${serverName}" failed`, {
+            this.logger?.warn(`disconnect from "${serverName}" failed`, {
               error: String(e?.message ?? e),
             });
           }

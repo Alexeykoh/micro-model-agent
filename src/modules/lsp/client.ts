@@ -111,7 +111,10 @@ export class LspClient {
   }
 
   /** Как завершился последний процесс сервера по ключу (код/сигнал). */
-  lastExit(config: LspServerConfig, projectRoot: string): { code?: number | null; signal?: string | null } | null {
+  lastExit(
+    config: LspServerConfig,
+    projectRoot: string,
+  ): { code?: number | null; signal?: string | null } | null {
     return this.pool.lastExit(serverKeyFor(config), projectRoot);
   }
 
@@ -152,6 +155,7 @@ export class LspClient {
     const absolute = resolvePath(filePath);
     const uri = pathToUri(absolute);
     const connection = await this.pool.acquire(serverKeyFor(config), config, projectRoot);
+    connection.refreshDocuments();
     connection.syncUri(uri, languageIdForPath(absolute), readFileOrEmpty(absolute));
     const diagnostics = await connection.diagnosticsFor(uri, timeout);
     return { diagnostics: diagnostics ?? [], inconclusive: diagnostics === null };
@@ -169,7 +173,8 @@ export class LspClient {
     const absolute = resolvePath(filePath);
     const uri = pathToUri(absolute);
     const connection = await this.pool.acquire(serverKeyFor(config), config, projectRoot);
-    connection.syncUri(uri, languageIdForPath(absolute), content);
+    connection.refreshDocuments();
+    connection.syncDraftUri(uri, languageIdForPath(absolute), content);
     const diagnostics = await connection.diagnosticsFor(uri, timeout);
     return { diagnostics: diagnostics ?? [], inconclusive: diagnostics === null };
   }
