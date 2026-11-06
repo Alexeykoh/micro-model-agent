@@ -3300,6 +3300,11 @@ body.light .c-dim { --face-c: var(--panel); }
 }
 
 .critic-block .critic-summary { color: var(--fg); margin-bottom: 6px; white-space: normal; }
+/* Шапка свёрнутого критика: на узкой ширине длинная строка (web.feed.critic_head
+   + статус) не должна наезжать на тоггл — глиф и тоггл фиксированы, лейбл
+   сжимается до эллипсиса (тот же паттерн, что у .trc .lab). */
+.critic-block .think-h .g, .critic-block .think-h .tog { flex: 0 0 auto; }
+.critic-block .think-h .lab { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .critic-block .critic-meta { color: var(--dim-c); margin-bottom: 8px; }
 .critic-block .critic-sub { color: var(--dim-c); margin: 8px 0 4px; text-transform: uppercase; letter-spacing: .04em; font-size: 10.5px; }
 .critic-block .critic-none { color: var(--dim-c); }
