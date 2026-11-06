@@ -115,6 +115,12 @@ export interface WebUiState extends WebUiWiring {
    * раннеры ставят `ToolContext.subagentRuns` на время хода.
    */
   subagentRuns: SubagentRunStore;
+  /**
+   * Серверный кеш git-снимка (чипы + вкладка Changes): `buildHostState`
+   * синхронный, поэтому здесь живёт последний снимок, а пересборку ведёт
+   * TTL/single-flight из `git/snapshot-cache`. Поллинга нет.
+   */
+  gitCache?: import("./git/snapshot-cache").GitCacheState;
 }
 
 /**

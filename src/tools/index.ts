@@ -22,6 +22,7 @@ import { deleteFileTool } from "./delete-file";
 import { moveFileTool } from "./move-file";
 import { fileInfoTool } from "./file-info";
 import { bashTool } from "./bash";
+import { gitTool } from "./git";
 import { processListTool } from "./process-list";
 import { processLogTool } from "./process-log";
 import { processKillTool } from "./process-kill";
@@ -70,6 +71,7 @@ export {
   moveFileTool,
   fileInfoTool,
   bashTool,
+  gitTool,
   subagentTool,
   subagentListTool,
   subagentStopTool,
@@ -117,6 +119,7 @@ export function registerAllTools(
     moveFileTool,
     fileInfoTool,
     bashTool,
+    gitTool,
     subagentTool,
     subagentListTool,
     subagentStopTool,

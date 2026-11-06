@@ -8,13 +8,7 @@
  * оба на `turn_end`. Гард хоста смотрит на `agentRunning` (не `busy`), чтобы
  * собственный `submit` владельца не отвергался резервом сервера.
  */
-import type { Agent } from "../../core/api";
-import type { SessionRunner } from "../../core/bootstrap/session-runner";
-import type { AppConfig } from "../../config/types";
-import type { SessionManager } from "../session/manager";
 import type { ExecutionModule } from "../execution/module";
-import type { MemoryStore } from "../memory/store";
-import type { Host } from "../../core/host";
 import { CONFIG_FILE, persistConfigChange as persistConfig } from "../../config/persist";
 import { buildSetupDisplay } from "../setup/answers";
 import { WebHost } from "../../core/web-host";
@@ -22,19 +16,18 @@ import { createAssetSource } from "./asset-cache";
 import { makeWebCommands } from "./chat/commands";
 import { makeReconfigure } from "./settings/reconfigure";
 import { installWebForwarding } from "./event-forward";
-import { installWebPromptIO, type PromptIORegistry } from "./session/prompt-io";
+import { installWebPromptIO } from "./session/prompt-io";
 import { startServer, stopServer } from "./server";
 import { makeModelCache } from "./settings/model-cache";
-import { buildHostState, type WebIndexer, type WebLsp } from "./host-state";
+import { buildHostState } from "./host-state";
 import { attachIndexWatcher } from "./index-watcher";
+import { createGitCache, gitPeek } from "./git/snapshot-cache";
 import { trackContextProbe, type ProbeValue } from "./context-probe";
 import { cancelPendingQuestions } from "./session/prompt-io";
 import {
   activeUsage,
   broadcast,
   createWebUiState,
-  type WebPluginManager,
-  type WebSkillsModule,
   type WebUiState,
 } from "./state";
 import { pushState } from "./session/session-status";
@@ -50,59 +43,11 @@ export {
   type WebLsp,
 } from "./host-state";
 
-/** Входы старта веб-UI: агент, конфиг, менеджеры, окружение. */
-export interface WebUiDeps {
-  agent: Agent;
-  config: AppConfig;
-  sessionManager?: SessionManager;
-  execModule?: ExecutionModule;
-  /** Shared-глобальный стор памяти (из bootstrap) для `/memory` в вебе. */
-  memory?: MemoryStore;
-  /** Реестр скиллов (из bootstrap) для страницы настроек "Skills". */
-  skills?: WebSkillsModule;
-  /** Менеджер плагинов (из bootstrap) для страницы "Plugins · MCP". */
-  plugins?: WebPluginManager;
-  toolRegistry?: PromptIORegistry;
-  toolCtx?: { exitOnComplete?: boolean };
-  /** Каталог конфига bootstrap — чтобы `/api/config` писал куда надо. */
-  configDir?: string;
-  /** Рабочий каталог агента (`-d`) для секции «окружение» сайдбара. */
-  baseDir?: string;
-  /** Загруженные источники AGENTS.md; `disabled` при `--no-agents-md`. */
-  agentsMd?: { files: string[]; disabled: boolean };
-  /** Модуль карты проекта (индекс) для статистики сайдбара. */
-  indexer?: WebIndexer;
-  /** Модуль LSP (диагностика) для вкладки LSP сайдбара. */
-  lsp?: WebLsp;
-  /**
-   * Промис context-probe bootstrap (загруженный контекст LM Studio). Резолвится
-   * лениво и светится в сайдбаре; на старте не await'ится, чтобы медленный проб
-   * не задерживал бинд сервера.
-   */
-  contextProbe?: Promise<{ model: string; actual: number } | null>;
-  /** Id моделей активного провайдера (дефолт — фоновый кеш). */
-  knownModels?: () => string[];
-  /**
-   * Фабрика per-session раннеров из bootstrap (свой агент/контекст/трекер).
-   * Есть — настоящий параллелизм слотов; нет (тесты, старые вызывающие) —
-   * legacy single-flight на общем агенте.
-   */
-  spawnRunner?: (sessionId: string) => SessionRunner;
-  /** Оверрайд адреса бинда (дефолт — дефолт состояния / env). */
-  host?: string;
-  /** Оверрайд токена (обязателен для не-loopback бинда). */
-  token?: string;
-  /** Virgin-конфиг: гейтить чат за браузерным визардом первого запуска. */
-  setupRequired?: boolean;
-  logger?: import("../../logger/app-logger").Logger;
-}
-/** Хендл запущенного веб-UI: состояние, хост, URL, стоп. */
-export interface WebUiHandle {
-  state: WebUiState;
-  host: Host;
-  url: Promise<string>;
-  stop(): void;
-}
+// Контракты старта (`WebUiDeps`/`WebUiHandle`) — в `./module-contracts`
+// (правило 6: модуль остаётся Wiring-файлом). Реэкспорт сохраняет публичный
+// импорт `from "./module"` для bootstrap и тестов.
+export type { WebUiDeps, WebUiHandle } from "./module-contracts";
+import type { WebUiDeps, WebUiHandle } from "./module-contracts";
 
 /**
  * Execution-модуль для сайдбара: живой трекер раннера серверно-активной
@@ -159,6 +104,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.skills = deps.skills;
   state.plugins = deps.plugins;
   state.workspace = deps.baseDir;
+  state.gitCache = createGitCache();
   state.agentsMd = deps.agentsMd;
   if (deps.indexer) {
     state.projectMapStats = () => deps.indexer?.stats() ?? null;
@@ -193,6 +139,11 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   // Колбэк уведомляет Files (`filesRevision` + `files`) и пушит state (B-40).
   const detachIndexWatcher = attachIndexWatcher(deps.indexer, () => {
     state.filesRevision += 1;
+    // Рост rev — сигнал git-кешу пересобраться; снимок добирается фоном,
+    // и по готовности пушим state, чтобы чипы обновились без reload.
+    if (state.gitCache && deps.baseDir) {
+      gitPeek(state.gitCache, deps.baseDir, state.filesRevision, () => pushState(state));
+    }
     broadcast({ type: "files", ts: Date.now(), phase: "changed" }, state);
     pushState(state);
   });
@@ -270,6 +221,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           instructions: deps.agentsMd,
           projectMap: deps.indexer?.mapInfo?.(),
           filesRevision: state.filesRevision,
+          git: state.gitCache && deps.baseDir
+            ? gitPeek(state.gitCache, deps.baseDir, state.filesRevision)
+            : null,
           sessionId,
         },
         state.busy,

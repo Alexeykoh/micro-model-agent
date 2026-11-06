@@ -8,7 +8,7 @@ export const TAB_KEY = "mma-sidebar-tab";
 // order of the hotkeys too. Usage frequency first (what you look at while a
 // turn runs), diagnostics in the middle, the project-wide map last: it is the
 // one tab you open deliberately rather than by reflex.
-export const TABS = ["session", "files", "lsp", "trace", "security", "subagents", "plugins", "mcp", "map"];
+export const TABS = ["session", "files", "git", "lsp", "trace", "security", "subagents", "plugins", "mcp", "map"];
 // Иконки вкладок подобраны так, чтобы читаться в 17px: плотные lucide-иконки
 // (складная карта, стетоскоп, пазл) на таком размере сливаются в пятно.
 export const ICON_NAME: Record<string, string> = {
@@ -18,6 +18,7 @@ export const ICON_NAME: Record<string, string> = {
   security: "shield",
   lsp: "code",
   files: "folder-tree",
+  git: "git-branch",
   subagents: "bot",
   plugins: "plug",
   mcp: "server",

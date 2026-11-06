@@ -1,10 +1,12 @@
 // Sidebar renders owned by the feed module: usage panel, workspace path and the
 // environment section. Extracted from `feed.js` (re-exported there).
-import { usageEl, envEl, wsLine, el, icon, attachTooltip } from "../dom.js";
+import { usageEl, envEl, wsLine, wsGitEl, el, icon, attachTooltip } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
-import { feed, settings } from "../store.js";
+import { feed, settings, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { renderFooter } from "../footer.js";
+import { renderGitChips as renderChips } from "./git-chips.js";
+import { sidebarGitIndicator, openGitChangesTab } from "../sidebar.js";
 import { fmtTokens, hiddenText } from "../format.js";
 import { copyText } from "../../md.js";
 

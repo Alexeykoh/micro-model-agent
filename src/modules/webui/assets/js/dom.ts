@@ -10,6 +10,7 @@ export const planCountEl = document.getElementById("planCount") as HTMLElement;
 export const usageEl = document.getElementById("usage") as HTMLElement;
 export const envEl = document.getElementById("env") as HTMLElement;
 export const wsLine = document.getElementById("wsLine") as HTMLElement;
+export const wsGitEl = document.getElementById("wsGit") as HTMLElement | null;
 export const saveIndicator = document.getElementById("saveIndicator") as HTMLElement;
 export const attachStrip = document.getElementById("attachStrip") as HTMLElement;
 export const attachErr = document.getElementById("attachErr") as HTMLElement;

@@ -160,6 +160,7 @@
         <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span><span id="hintShort">Ctrl+K — sessions · Ctrl+P — files</span><span id="hintTouch">tap ↑ — send</span></div>
       </div>
       <div class="ws-line" id="wsLine" hidden></div>
+      <div class="ws-git" id="wsGit" hidden></div>
     </div>
   </main>
 
@@ -174,6 +175,10 @@
       </button>
       <button class="sb-tab" type="button" role="tab" data-tab="files" aria-selected="false" aria-controls="pane-files" title="Files">
         <span class="sb-ico" data-icon="files" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="git" aria-selected="false" aria-controls="pane-git" title="Changes">
+        <span class="sb-ico" data-icon="git" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
       <button class="sb-tab" type="button" role="tab" data-tab="lsp" aria-selected="false" aria-controls="pane-lsp" title="LSP">
@@ -306,6 +311,12 @@
       </div>
     </div>
   </div>
+
+    <div class="sb-pane" id="pane-git" role="tabpanel" data-pane="git" hidden>
+      <div class="sec">
+        <div class="sec-body" id="gitBody"></div>
+      </div>
+    </div>
 </div>
 
 <!-- Drawer backdrop for ≤1024px, where the sidebar overlays the chat

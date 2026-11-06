@@ -12,6 +12,7 @@ export * from "./sidebar/request-popup.js";
 export * from "./sidebar/map.js";
 export * from "./sidebar/lsp.js";
 export * from "./sidebar/files.js";
+export * from "./sidebar/git.js";
 export * from "./sidebar/plugins.js";
 export * from "./sidebar/subagents.js";
 export * from "./sidebar/mcp.js";

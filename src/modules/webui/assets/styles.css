@@ -764,6 +764,49 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .ws-line .ws-upd { color: var(--green); margin-left: auto; flex: none; font-weight: 600; font-variant-numeric: tabular-nums; cursor: help; }
 .ws-line .ws-upd + .ws-ver { margin-left: 10px; }
 
+/* Git chips under the composer (спека git-workflow §6.3/§7). Порядок слева
+   направо: branch → worktree → dirty → sync → tag; ветка не скрывается,
+   схлопывание делает CSS (рантайм-ширину не считаем). */
+.ws-git { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto; }
+.ws-git[hidden] { display: none; }
+.gchip { display: inline-flex; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 0; font-variant-numeric: tabular-nums; color: var(--dim-a); white-space: nowrap; }
+.gchip .gchip-full { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gchip .gchip-min { display: none; }
+.gchip-branch { color: var(--fg); flex: 0 1 auto; }
+.gchip-dirty { color: var(--yellow); }
+.gchip-sync { color: var(--accent); }
+.gchip-tag, .gchip-wt { color: var(--dim-b); }
+.gchip-link { cursor: pointer; }
+.gchip-link:hover { text-decoration: underline; }
+/* Средний экран: компактные формы (●3, ⌂2, ↑↓); тег прячется (в title). */
+@media (max-width: 899px) {
+  .gchip .gchip-full { display: none; }
+  .gchip .gchip-min { display: inline; }
+  .gchip-branch .gchip-full { display: inline; }
+  .gchip-tag { display: none; }
+}
+/* Телефон: только ветка + ●N; worktree/sync — в title. */
+@media (max-width: 639px) {
+  .gchip-wt, .gchip-sync { display: none; }
+}
+
+/* Changes tab (sidebar, read-only v1): список → diff как стек внутри панели. */
+.git-head { display: flex; align-items: baseline; gap: 8px; padding: 2px 0 8px; font-size: 12.5px; }
+.git-branch { color: var(--fg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.git-count { color: var(--dim-b); margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
+.git-row { display: flex; align-items: baseline; gap: 7px; width: 100%; text-align: left; background: none; border: 0; color: inherit; font: inherit; padding: 3px 4px; border-radius: 3px; cursor: pointer; }
+.git-row:hover { background: var(--hover-bg); }
+.git-st { flex: none; width: 1.2em; text-align: center; font-weight: 700; color: var(--dim-b); }
+.git-st.st-m { color: var(--yellow); }
+.git-st.st-a, .git-st.st-q { color: var(--green); }
+.git-st.st-d { color: var(--red); }
+.git-st.st-r { color: var(--accent); }
+.git-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.git-diff-view { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.git-diff-head { display: flex; align-items: center; gap: 8px; padding: 0 0 6px; }
+.git-diff-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim-a); font-size: 12px; }
+.git-diff-pre { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 8px; background: var(--surface); border: 1px solid var(--border-2); border-radius: 4px; font-size: 12px; line-height: 1.45; white-space: pre; tab-size: 4; }
+
 /* slash-command autocomplete popup (above the composer) */
 .cmdk {
   position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); z-index: 40;
@@ -1074,6 +1117,7 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 }
 .sb-tab[data-indicator="live"] .sb-dot { opacity: 1; animation: sbPulse 1s ease-in-out infinite; }
 .sb-tab[data-indicator="busy"] .sb-dot { opacity: 1; background: var(--accent); }
+.sb-tab[data-indicator="dirty"] .sb-dot { opacity: 1; background: var(--yellow); }
 .sb-tab[data-indicator="stale"] .sb-dot { opacity: 1; background: var(--yellow); }
 /* U13: LSP off/offline is a persistent state, not activity - steady dot. */
 .sb-tab[data-indicator="off"] .sb-dot,
