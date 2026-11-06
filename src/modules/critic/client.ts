@@ -1,11 +1,13 @@
 // Клиент контр-агента: верификация пакета доказательств с опциональным read-only контуром.
 import type { LLMProvider, Message } from "../../llm/provider";
 import { LLM_REQUEST_TIMEOUT_MS } from "../../config/timeouts";
-import type { CriticVerdict, EvidencePack } from "./types";
-import { parseChecks, runCriticChecks, renderCheckResults, CRITIC_READONLY_TOOLS } from "./tools";
-import { extractChecks, parseVerdictDetailed } from "./verdict";
+import type { CriticRunCheck, CriticStage, CriticVerdict, EvidencePack } from "./types";
+import { parseVerdictDetailed } from "./verdict";
+import { verifyWithChecks } from "./client-checks";
+import { describe, renderPack, truncate } from "./client-render";
 
 export { parseVerdict, parseVerdictDetailed, type ParsedVerdict } from "./verdict";
+export type { CriticRunCheck, CriticStage } from "./types";
 
 export const CRITIC_SYSTEM_PROMPT = `You are a strict but fair verifier ("counter-agent") reviewing an AI agent's in-progress work.
 Rules:
@@ -41,6 +43,12 @@ export interface CriticClientOptions {
    * каждый отказ обязан быть виден в логе (§5.8 аудита).
    */
   onDiagnostic?: (message: string) => void;
+  /**
+   * Живой прогресс проверки: какой проход идёт, какие проверки запрошены и чем
+   * закончился каждый шаг. Нужен, чтобы «проверяю результат…» не висело
+   * безымянно минутами (что именно и сколько).
+   */
+  onStage?: (stage: CriticStage) => void;
 }
 
 /**
@@ -70,17 +78,11 @@ class CriticCallTimeout extends Error {
   }
 }
 
-/** Раннер одной проверки критика: тул + args → успех и вывод. */
-export interface CriticRunCheck {
-  (tool: string, args: Record<string, unknown>): Promise<{ ok: boolean; output: string }>;
-}
-
-const CHECK_REQUEST_INSTRUCTION = `If your verdict is concern/critical and a read-only file check could confirm or refute an issue, request up to 3 checks by adding "checks":[{"tool":"...","args":{...}}] to your JSON. Available tools ONLY: ${CRITIC_READONLY_TOOLS.join(", ")} (read-only; no writes, shell, web, or memory exist — do not request anything else). Checks run locally and their outputs return to you for a FINAL verdict. If no check would help, omit "checks".`;
-
-const FINAL_VERDICT_INSTRUCTION = `Check outputs above are ground truth from the workspace. Reply with your FINAL verdict as JSON (same shape, no more "checks"): confirm each issue the checks support, drop the ones they refute, and set status accordingly.`;
-
 /** Клиент критика: судит пакет доказательств, при concern/critical — до 3 read-only проверок. */
 export class CriticClient {
+  /** Прогресс текущего вызова `verify` (не переживает ход). */
+  private stageSink: ((stage: CriticStage) => void) | undefined;
+
   constructor(private readonly opts: CriticClientOptions) {}
 
   isEnabled(): boolean {
@@ -100,21 +102,48 @@ export class CriticClient {
   async verify(
     pack: EvidencePack,
     signal?: AbortSignal,
-    opts?: { runCheck?: CriticRunCheck },
+    opts?: { runCheck?: CriticRunCheck; onStage?: (stage: CriticStage) => void },
   ): Promise<CriticVerdict | null> {
+    this.stageSink = opts?.onStage ?? this.opts.onStage;
     try {
       const messages: Message[] = [
         { role: "system", content: CRITIC_SYSTEM_PROMPT },
         { role: "user", content: renderPack(pack) },
       ];
+      this.stage({ stage: "verdict", pass: 1 });
       const firstRaw = await this.chat(messages, signal);
       const first = this.parseVerdictChecked(firstRaw, "pass-1");
+      this.stage({ stage: "verdict", pass: 1, verdict: first ?? undefined });
       if (!first || first.status === "ok" || !opts?.runCheck) return first;
-      return await this.verifyWithChecks(messages, firstRaw, first, signal, opts.runCheck);
+      return await verifyWithChecks(
+        {
+          chat: (m, s) => this.chat(m, s),
+          parseVerdictChecked: (raw, stage) => this.parseVerdictChecked(raw, stage),
+          stage: (event) => this.stage(event),
+          degrade: (reason) => this.degrade(reason),
+        },
+        messages,
+        firstRaw,
+        first,
+        signal,
+        opts.runCheck,
+      );
     } catch (err) {
+      // Отмена пользователем — не деградация: причина уже видна в ленте (Esc).
+      if (signal?.aborted) return null;
       // Причину таймаута уже записал `chat`; перекрывать её `llm_error` нельзя.
       if (!(err instanceof CriticCallTimeout)) this.degrade(`llm_error: ${describe(err)}`);
       return null;
+    } finally {
+      this.stageSink = undefined;
+    }
+  }
+
+  private stage(event: CriticStage): void {
+    try {
+      this.stageSink?.(event);
+    } catch {
+      /* прогресс не имеет права уронить проверку */
     }
   }
 
@@ -138,51 +167,6 @@ export class CriticClient {
 
   private degrade(reason: string): void {
     this.opts.onDiagnostic?.(`${CRITIC_DEGRADED_PREFIX}${reason}`);
-  }
-
-  /**
-   * Проходы 2–3: запрашиваем ограниченные read-only проверки (доп. LLM-вызовы
-   * только если первый вердикт actionable), выполняем их и заземляем финальный
-   * вердикт на выводах. История сохраняется, чтобы "твой вердикт" резолвился в проход 1.
-   * Любой сбой — откат к вердикту прохода 1.
-   */
-  private async verifyWithChecks(
-    messages: Message[],
-    firstRaw: string,
-    first: CriticVerdict,
-    signal: AbortSignal | undefined,
-    runCheck: CriticRunCheck,
-  ): Promise<CriticVerdict> {
-    try {
-      messages.push({ role: "assistant", content: firstRaw });
-      messages.push({ role: "user", content: CHECK_REQUEST_INSTRUCTION });
-      const checksRaw = await this.chat(messages, signal);
-      // Проверки читаются независимо от `status`: ответ `{"checks":[...]}`
-      // без статуса — валидный запрос, а не «неразбираемый вердикт».
-      const checks = parseChecks(extractChecks(checksRaw));
-      if (checks.length === 0) {
-        // Проверок не запрошено — вердикт прохода 1 остаётся в силе. Это не
-        // деградация: вердикт у нас есть, потерялась только глубина проверки.
-        this.opts.onDiagnostic?.("critic_checks_unparsed: no checks requested in pass-2");
-        return first;
-      }
-      const results = await runCriticChecks(checks, runCheck);
-      if (results.length === 0) return first;
-
-      messages.push({ role: "assistant", content: checksRaw });
-      messages.push({
-        role: "user",
-        content: `CHECK RESULTS (ground truth):\n${renderCheckResults(results)}\n\n${FINAL_VERDICT_INSTRUCTION}`,
-      });
-      const final = this.parseVerdictChecked(await this.chat(messages, signal), "pass-3");
-      return final ?? first;
-    } catch (err) {
-      // Fail-open к вердикту прохода 1 — но обрыв виден в логе.
-      if (!(err instanceof CriticCallTimeout)) {
-        this.degrade(`checks_loop_failed: ${describe(err)}`);
-      }
-      return first;
-    }
   }
 
   /**
@@ -220,8 +204,8 @@ export class CriticClient {
     const onAbort = () => controller.abort();
     signal?.addEventListener("abort", onAbort);
     if (signal?.aborted) controller.abort();
-    const iterator = this.opts
-      .provider.chat(messages, undefined, controller.signal, {
+    const iterator = this.opts.provider
+      .chat(messages, undefined, controller.signal, {
         maxTokens: this.effectiveMaxTokens(),
         reasoningEffort: "none",
       })
@@ -253,43 +237,4 @@ export class CriticClient {
       if (closed) closed.catch(() => {});
     }
   }
-}
-
-/** Строка веб-обоснования для пакета критика (attempted/verified + unverified claims). */
-function renderWebGrounding(g: EvidencePack["webGrounding"]): string {
-  if (!g) return "WEB GROUNDING: (none)";
-  const claims = g.unverifiedClaims ? `, unverifiedClaims=[${g.unverifiedClaims.join(", ")}]` : "";
-  return `WEB GROUNDING: attempted=${g.attempted}, verified=${g.verified}${claims}`;
-}
-
-function renderPack(pack: EvidencePack): string {
-  const cmdLines = pack.commands.map((c) => {
-    const base = `${c.command} (exit ${c.exitCode ?? "?"})`;
-    return c.output ? `${base}\n  output: ${c.output}` : base;
-  });
-  const files = (pack.fileExcerpts ?? []).map((f) => `--- ${f.path} ---\n${f.excerpt}`);
-  return [
-    `TASK: ${pack.task}`,
-    pack.planSummary ? `PLAN: ${pack.planSummary}` : "",
-    `CHANGED FILES: ${pack.changedFiles.join(", ") || "(none)"}`,
-    `COMMANDS: ${cmdLines.join("; ") || "(none)"}`,
-    renderWebGrounding(pack.webGrounding),
-    "TOOL TRAIL:",
-    pack.toolDigest || "(empty)",
-    files.length > 0 ? `FILE CONTENTS:\n${files.join("\n")}` : "",
-    pack.answerExcerpt ? `ANSWER (the agent's chat delivery — may satisfy the task without files):\n${pack.answerExcerpt}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-/** Текст ошибки/исключения одной строкой. */
-function describe(err: unknown): string {
-  return String((err as Error)?.message ?? err);
-}
-
-/** Обрезка для диагностики — логи не должны расти от сырого ответа модели. */
-function truncate(text: string, max: number): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
 }

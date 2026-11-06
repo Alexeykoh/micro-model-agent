@@ -4,9 +4,7 @@ import { DEFAULTS } from "../src/config/defaults";
 import { readMmaVersion } from "../src/core/version";
 import type { AppConfig } from "../src/config/types";
 import type { SessionMeta } from "../src/modules/session/types";
-import { withServer, postJson, doFetch, } from "./helpers/webui-server";
-
-
+import { withServer, postJson, doFetch } from "./helpers/webui-server";
 
 function testConfig(): AppConfig {
   const config = structuredClone(DEFAULTS);
@@ -56,7 +54,6 @@ function fakeSessions(initial: SessionMeta[], activeId: string | null): WebSessi
   };
 }
 
-
 describe("webui config/session/model REST", () => {
   it("GET /api/config returns redacted config + registry with enums", async () => {
     const s = createWebUiState();
@@ -66,7 +63,13 @@ describe("webui config/session/model REST", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         config: AppConfig;
-        registry: Array<{ key: string; aliases: string[]; valueType: string; group: string; enum?: string[] }>;
+        registry: Array<{
+          key: string;
+          aliases: string[];
+          valueType: string;
+          group: string;
+          enum?: string[];
+        }>;
       };
       expect(body.config.provider.apiKey).toBe("***");
       expect(body.config.model).toBe("original-model");
@@ -159,7 +162,8 @@ describe("webui config/session/model REST", () => {
     });
   });
 
-  it("POST /api/config rejects writes while a turn is running (409 busy)", async () => {    const s = createWebUiState();
+  it("POST /api/config rejects writes while a turn is running (409 busy)", async () => {
+    const s = createWebUiState();
     s.config = testConfig();
     let saved = 0;
     let reconfigured = 0;
@@ -364,6 +368,47 @@ describe("webui config/session/model REST", () => {
     }
   });
 
+  it("POST /api/config {model} re-probes the provider window while auto is on", async () => {
+    const s = createWebUiState();
+    s.config = autoConfig();
+    s.config.contextAuto = true;
+    s.config.model = "old-model";
+    s.saveConfig = () => {};
+    s.reconfigure = () => {};
+    const restore = stubProviderFetch();
+    try {
+      await withServer(s, async (base) => {
+        const res = await postJson(base, "/api/config", { key: "model", value: "stub-model" });
+        expect(res.status).toBe(200);
+        expect(res.json.probed).toBe(true);
+        expect(res.json.contextWindow).toBe(65536);
+        expect(s.config?.model).toBe("stub-model");
+        expect(s.config?.contextWindow).toBe(65536);
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it("POST /api/config {model} keeps the window when auto is off", async () => {
+    const s = createWebUiState();
+    s.config = autoConfig();
+    s.config.contextAuto = false;
+    s.saveConfig = () => {};
+    s.reconfigure = () => {};
+    const restore = stubProviderFetch();
+    try {
+      await withServer(s, async (base) => {
+        const res = await postJson(base, "/api/config", { key: "model", value: "stub-model" });
+        expect(res.status).toBe(200);
+        expect(res.json.probed).toBeUndefined();
+        expect(s.config?.contextWindow).toBe(32768);
+      });
+    } finally {
+      restore();
+    }
+  });
+
   it("POST /api/config {contextWindow} pins the window and turns auto off", async () => {
     const s = createWebUiState();
     s.config = testConfig();
@@ -380,10 +425,7 @@ describe("webui config/session/model REST", () => {
   });
   it("GET /api/sessions lists sessions; activate + delete hit the manager", async () => {
     const s = createWebUiState();
-    s.sessionManager = fakeSessions(
-      [meta("s1", "one", true), meta("s2", "two", false)],
-      "s1",
-    );
+    s.sessionManager = fakeSessions([meta("s1", "one", true), meta("s2", "two", false)], "s1");
 
     await withServer(s, async (base) => {
       const list = await doFetch(`${base}/api/sessions`);
@@ -465,7 +507,10 @@ describe("webui config/session/model REST", () => {
       expect(res.json.ok).toBe(true);
       expect(s.config?.security?.enabled).toBe(true);
 
-      const paths = await postJson(base, "/api/config", { key: "security.paths.enabled", value: true });
+      const paths = await postJson(base, "/api/config", {
+        key: "security.paths.enabled",
+        value: true,
+      });
       expect(paths.status).toBe(200);
       expect(s.config?.security?.paths.enabled).toBe(true);
     });

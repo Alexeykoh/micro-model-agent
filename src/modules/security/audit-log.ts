@@ -16,7 +16,8 @@ export interface AuditLogEntry {
     | "bash_command"
     | "network_request"
     | "security_block"
-    | "security_approval";
+    | "security_approval"
+    | "dlp_redaction";
   tool?: string;
   path?: string;
   command?: string;

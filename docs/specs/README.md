@@ -73,3 +73,5 @@
 - [web build gate](./2026-11-03-web-build-gate-design.md)
 - [webui latency](./2026-11-04-webui-latency-design.md)
 - [observability gaps](./2026-11-05-observability-gaps-design.md)
+- [webui activity phase](./2026-11-05-webui-activity-phase-design.md)
+- [critic transparency and fixes](./2026-11-05-critic-transparency-and-fixes-design.md)

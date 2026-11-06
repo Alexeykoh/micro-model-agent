@@ -89,15 +89,19 @@ export class ToolExecutor {
     name: string,
     args: Record<string, unknown>,
     ctx?: ToolContext,
+    signal?: AbortSignal,
   ): Promise<ToolResult> {
     const prevCtx = this.ctx;
     if (ctx) this.ctx = ctx;
     try {
-      return await this.execute({
-        id: `redirect_${Date.now()}`,
-        name,
-        arguments: args,
-      });
+      return await this.execute(
+        {
+          id: `redirect_${Date.now()}`,
+          name,
+          arguments: args,
+        },
+        signal,
+      );
     } finally {
       this.ctx = prevCtx;
     }

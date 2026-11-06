@@ -12,6 +12,7 @@ const tabSwitch = read("src/modules/webui/assets/js/session/tab-switch.ts");
 const switchState = read("src/modules/webui/assets/js/session/switch-state.ts");
 const trace = read("src/modules/webui/assets/js/sidebar/trace.ts");
 const history = read("src/modules/webui/assets/js/feed/history.ts");
+const newChat = read("src/modules/webui/assets/js/session/new-chat.ts");
 
 describe("tab switch: guard and blocking (INV-W8)", () => {
   it("openTab and closeTab bump the switch sequence", () => {
@@ -46,5 +47,16 @@ describe("tab switch: guard and blocking (INV-W8)", () => {
     expect(history).toContain('tab.feed.removeAttribute("aria-busy")');
     // Индикатор ставится только пока снапшота нет — данные уже на руках.
     expect(tabs).toContain("if (!tab.state) setSessionLoading(true);");
+  });
+
+  it("new chat sets the skeleton before openTab, never after (no stuck switching)", () => {
+    // Регрессия: `newChatTab` ставил setSessionLoading(true) ПОСЛЕ openTab.
+    // openTab уже успевал снять загрузку, а поздний вызов оставлял composer
+    // в `switching` (readOnly + cursor: progress) — новый чат «висел».
+    const setIdx = newChat.indexOf("setSessionLoading(true)");
+    const openIdx = newChat.indexOf("deps.openTab(meta.id");
+    expect(setIdx).toBeGreaterThan(-1);
+    expect(openIdx).toBeGreaterThan(-1);
+    expect(setIdx).toBeLessThan(openIdx);
   });
 });

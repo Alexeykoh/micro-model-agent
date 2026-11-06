@@ -18,4 +18,5 @@ export * from "./feed/history.js";
 export * from "./feed/plan.js";
 export * from "./feed/question.js";
 export * from "./feed/stream.js";
+export * from "./feed/critic-block.js";
 export * from "./feed/turn.js";

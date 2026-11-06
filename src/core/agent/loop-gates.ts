@@ -50,6 +50,8 @@ export interface GatesInput {
   auditGate: AuditGate;
   /** Куда сложить длительности гейтов (A15); без него — не измеряем. */
   timings?: GateTimings;
+  /** Пользователь прервал ход: после критика не гоняем аудит. */
+  isShutdownRequested?: () => boolean;
 }
 
 /** Прогоняет hallucination/critic/audit и возвращает сигнал управления. */
@@ -79,6 +81,8 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     onDiagnostic: host.onDiagnostic,
   });
   if (timings) timings.hallucination = Date.now() - hallucinationStarted;
+  // Прерванный ход не должен дальше тратить LLM-вызовы на критика/аудит.
+  if (inp.isShutdownRequested?.()) return { kind: "break" };
   if (verdict.action === "block") {
     return {
       kind: "return",
@@ -152,6 +156,8 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     onMeta,
   });
   if (timings) timings.critic = Date.now() - criticStarted;
+  // Остановка во время критика: аудит — ещё один LLM-вызов, его пропускаем.
+  if (inp.isShutdownRequested?.()) return { kind: "break" };
   if (criticAction === "retry") {
     state.suppressRepetitionRetry = true;
     return { kind: "continue" };
