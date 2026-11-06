@@ -15,7 +15,7 @@ function soundDef(key: SoundKey): ConfigKeyDef {
     valueType: "bool",
     effects: [],
     get: (c: AppConfig) =>
-      c.ui.sounds?.[key] ?? DEFAULTS.ui.sounds?.[key] ?? (key !== "enabled"),
+      c.ui.sounds?.[key] ?? DEFAULTS.ui.sounds?.[key] ?? true,
     set: (c: AppConfig, v: unknown) => {
       c.ui.sounds ??= structuredClone(DEFAULTS.ui.sounds!);
       c.ui.sounds[key] = v as boolean;
