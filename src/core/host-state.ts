@@ -12,6 +12,7 @@
 import type { AppConfig } from "../config/types";
 import type { AgentResult, ContextBreakdown, ContextQualityBreakdown, LlmSpeedSnapshot } from "./types";
 import type { HostStateSnapshot, ProjectMapInfo } from "./host";
+import type { GitSnapshot } from "../tools/git-core";
 import type { SessionManager } from "../modules/session/manager";
 import type { ExecutionModule } from "../modules/execution/module";
 import { planSnapshotFromModule, adaptActivePlan } from "./host-plan";
@@ -50,6 +51,8 @@ export interface HostStateInput {
   projectMap?: ProjectMapInfo | null;
   /** Счётчик изменений файлов workspace (см. `HostStateSnapshot.filesRevision`). */
   filesRevision?: number;
+  /** Снимок git из серверного кеша (чипы/вкладка Changes); undefined — не собирали. */
+  git?: GitSnapshot | null;
   /** Конкретная сессия; без неё — активная. */
   sessionId?: string;
   /** Доступный апдейт (текущая → свежая версия) для чипа в футере. */
@@ -165,6 +168,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     instructions: deps.instructions,
     projectMap: deps.projectMap ?? undefined,
     filesRevision: deps.filesRevision,
+    git: deps.git,
     i18nStale: deps.i18nStale,
     plan: planSnapshotFromModule(adaptActivePlan(deps.execModule?.getActivePlan())),
   };

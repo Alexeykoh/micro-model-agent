@@ -136,6 +136,13 @@ export const ICONS: Record<string, IconSpec> = {
   folder: [
     ["path", { d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" }],
   ],
+  // Ветка git для вкладки Changes: две точки на стволе + ответвление.
+  "git-branch": [
+    ["path", { d: "M6 3v12" }],
+    ["circle", { cx: 18, cy: 6, r: 3 }],
+    ["circle", { cx: 6, cy: 18, r: 3 }],
+    ["path", { d: "M18 9a9 9 0 0 1-9 9" }],
+  ],
   file: [
     ["path", { d: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" }],
     ["path", { d: "M14 2v4a2 2 0 0 0 2 2h4" }],

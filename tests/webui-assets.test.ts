@@ -576,6 +576,7 @@ describe("webui assets", () => {
     expect(order).toEqual([
       "session",
       "files",
+      "git",
       "lsp",
       "trace",
       "security",
