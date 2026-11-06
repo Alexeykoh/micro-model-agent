@@ -69,6 +69,7 @@ import {
   sidebarSecurityEvent,
 } from "./js/sidebar.js";
 import { insertIntoDraft, submitPrompt } from "./js/session/composer.js";
+import { openMainPreview } from "./js/main-preview.js";
 import { initShortcuts } from "./js/shortcuts.js";
 import { drainQueuedTurn } from "./js/session/queue.js";
 import { initCursor, loaderStateFor, setFaceState } from "./js/loader.js";
@@ -118,10 +119,11 @@ hooks.ensureTabState = ensureTabState;
 // Lets `tabs.js` reset the sidebar chrome when the last tab closes.
 hooks.renderActive = renderActiveState;
 hooks.openFileInTree = (p) => {
-  void openFilesTabFor(p);
+  openMainPreview(p);
 };
 hooks.openFileAtLine = (p, line) => {
-  void openFilesTabFor(p, line);
+  void line; // line-highlight lands with the sidebar reveal, not the main pane
+  openMainPreview(p);
 };
 hooks.showFilesTab = () => {
   void openFilesTabFor("");

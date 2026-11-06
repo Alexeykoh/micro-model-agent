@@ -101,6 +101,13 @@
 
 <div class="layout">
   <main class="chat" id="main">
+    <div class="main-preview" id="mainPreview" hidden>
+      <div class="mp-head">
+        <span class="mp-path" id="mainPreviewPath"></span>
+        <button class="fbtn mp-close" type="button" id="mainPreviewClose" aria-label="close preview"></button>
+      </div>
+      <div class="mp-body" id="mainPreviewBody"></div>
+    </div>
     <div class="msgs" id="msgs" role="log" aria-label="conversation" tabindex="-1"></div>
     <div class="visually-hidden" id="live" role="status" aria-live="polite" aria-atomic="true"></div>
 
