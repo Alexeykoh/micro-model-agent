@@ -176,6 +176,10 @@
         <span class="sb-ico" data-icon="files" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
       </button>
+      <button class="sb-tab" type="button" role="tab" data-tab="git" aria-selected="false" aria-controls="pane-git" title="Changes">
+        <span class="sb-ico" data-icon="git" aria-hidden="true"></span>
+        <span class="sb-dot" aria-hidden="true"></span>
+      </button>
       <button class="sb-tab" type="button" role="tab" data-tab="lsp" aria-selected="false" aria-controls="pane-lsp" title="LSP">
         <span class="sb-ico" data-icon="lsp" aria-hidden="true"></span>
         <span class="sb-dot" aria-hidden="true"></span>
@@ -303,6 +307,12 @@
           </div>
           <div class="detail-b" id="filesBody"></div>
         </div>
+      </div>
+    </div>
+
+    <div class="sb-pane" id="pane-git" role="tabpanel" data-pane="git" hidden>
+      <div class="sec">
+        <div class="sec-body" id="gitBody"></div>
       </div>
     </div>
   </div>

@@ -21,6 +21,7 @@ import { sidebarDrawerOpen, setSidebarDrawer } from "./drawer.js";
 import { sidebarMapState, sidebarMapIndicator } from "./map.js";
 import { renderLsp, sidebarLspState } from "./lsp.js";
 import { renderFilesTree, refreshFilesTree, openFileInTree } from "./files.js";
+import { renderGit, sidebarGitState } from "./git.js";
 import { renderPlugins, sidebarPluginsState } from "./plugins.js";
 import { renderSubagents, sidebarSubagentsState } from "./subagents.js";
 import { renderMcp, sidebarMcpState } from "./mcp.js";
@@ -98,6 +99,7 @@ export function setSidebarTab(id: string, persist = true): void {
   syncSettingsShortcut(effective);
   if (effective === "lsp") sidebarLspState();
   if (effective === "files") renderFilesTree();
+  if (effective === "git") sidebarGitState();
   if (effective === "plugins") sidebarPluginsState();
   if (effective === "subagents") sidebarSubagentsState();
   if (effective === "mcp") sidebarMcpState();
@@ -118,6 +120,19 @@ export async function openFilesTabFor(raw: string, line?: number): Promise<void>
 export function sidebarBusy(on: unknown): void {
   const tab = sb.el && sb.el.querySelector<HTMLElement>('.sb-tab[data-tab="trace"]');
   if (tab) tab.dataset.indicator = on ? "live" : "";
+}
+
+/**
+ * Точка на вкладке Changes: сколько файлов изменено в рабочем дереве.
+ * Механика та же, что у trace (`data-indicator`), но значение — `dirty`,
+ * чтобы в узком сайдбаре было видно «есть незакоммиченное» без открытия.
+ */
+export function sidebarGitIndicator(dirty: unknown): void {
+  const tab = sb.el && sb.el.querySelector<HTMLElement>('.sb-tab[data-tab="git"]');
+  if (!tab) return;
+  const n = typeof dirty === "number" && dirty > 0 ? dirty : 0;
+  tab.dataset.indicator = n > 0 ? "dirty" : "";
+  if (n > 0) tab.title = t("web.git.count", { count: String(n) });
 }
 
 export function applySidebarI18n(): void {
@@ -143,6 +158,7 @@ export function applySidebarI18n(): void {
   sidebarMapState(session.host);
   renderLsp();
   refreshFilesTree();
+  renderGit();
   renderPlugins();
   renderSubagents();
   renderMcp();

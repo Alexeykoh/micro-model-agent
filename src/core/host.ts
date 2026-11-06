@@ -3,6 +3,9 @@ import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
 import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
 import type { ContextBreakdown, ContextQualityBreakdown, LlmSpeedSnapshot } from "./types";
+// Только тип (не исполнение): снимок собирает web-обвязка из `tools/git-core`
+// (спека git-workflow §2: ядро git не дёргает; тут контракт поля).
+import type { GitSnapshot } from "../tools/git-core";
 
 /**
  * Статус шага плана для хоста. `skipped` не входит в контракт —
@@ -85,6 +88,12 @@ export interface HostStateSnapshot {
   instructions?: { files: string[]; disabled: boolean };
   /** Статистика карты проекта; `indexed:false`, пока обход не завершён. */
   projectMap?: ProjectMapInfo;
+  /**
+   * Снимок git workspace (ветка/dirty/worktree/теги) для чипов и вкладки
+   * Changes. Заполняет web-обвязка из кеша (`buildHostState` синхронный —
+   * здесь всегда последний снимок, не живой вызов). `null` — не репозиторий.
+   */
+  git?: GitSnapshot | null;
   /**
    * Монотонный счётчик изменений файлов workspace (вотчер индексатора).
    * Клиент вкладки Files перечитывает раскрытые папки при его росте — это

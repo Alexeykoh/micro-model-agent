@@ -1,10 +1,12 @@
 // Sidebar renders owned by the feed module: usage panel, workspace path and the
 // environment section. Extracted from `feed.js` (re-exported there).
+// Git-бейдж под композером вынесен в `feed/git-badges.ts` (правило 6).
 import { usageEl, envEl, wsLine, el, icon, attachTooltip } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
-import { feed, settings } from "../store.js";
+import { feed, settings, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { renderFooter } from "../footer.js";
+import { paintGitChips } from "./git-badges.js";
 import { fmtTokens, hiddenText } from "../format.js";
 import { copyText } from "../../md.js";
 
@@ -228,21 +230,10 @@ export function probeLoadedText(
   return { text, cls: low ? "wn" : "" };
 }
 
-// Workspace path and agent version under the composer.
+// Workspace path and agent version under the composer. Git-бейдж рисуется
+// здесь же, в той же строке (`paintGitChips`), а не отдельным блоком снизу.
 export function renderWorkspace(h: Dict): void {
-  renderFooter(
-    wsLine,
-    {
-      workspace: typeof h.workspace === "string" ? hiddenText(h.workspace) : h.workspace,
-      version: h.version,
-      updateAvailable: h.updateAvailable || undefined,
-      dev: h.dev === true,
-      devTitle: t("web.env.dev_title"),
-      dirLabel: t("web.env.dir"),
-      updateTitle: t("web.update.chip_title", { latest: h.updateAvailable?.latest ?? "" }),
-    },
-    el,
-  );
+  paintGitChips(h);
 }
 
 // Environment (sidebar): stacked name/value items — AGENTS.md sources, map size.
