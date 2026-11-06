@@ -2318,6 +2318,8 @@
   "web.setup.step.model": "Model",
   "web.setup.step.context": "Context",
   "web.setup.step.security": "Security",
+  "web.setup.security.sounds": "Notification sounds",
+  "web.setup.security.sounds_desc": "Play a chime in the web UI when a turn finishes or asks a question",
   "web.setup.step.review": "Review",
   "web.setup.language.title": "Choose your language",
   "web.setup.language.hint": "Interface language. You can change it later in settings.",

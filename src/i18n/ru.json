@@ -2318,6 +2318,8 @@
   "web.setup.step.model": "Модель",
   "web.setup.step.context": "Контекст",
   "web.setup.step.security": "Безопасность",
+  "web.setup.security.sounds": "Звуки уведомлений",
+  "web.setup.security.sounds_desc": "Проигрывать сигнал в веб-интерфейсе, когда ход завершился или агент задаёт вопрос",
   "web.setup.step.review": "Проверка",
   "web.setup.language.title": "Выберите язык",
   "web.setup.language.hint": "Язык интерфейса. Можно сменить позже в настройках.",
