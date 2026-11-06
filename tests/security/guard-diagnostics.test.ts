@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionManager } from "../../src/modules/session/index";
-import { egressDiagnosticSink } from "../../src/core/bootstrap/tool-context";
+import { egressDiagnosticSink } from "../../src/core/bootstrap/egress-sink";
 import { createGuard, EgressBlockedError } from "../../src/modules/security/data-policy/guard";
 import { DEFAULT_DATA_POLICY } from "../../src/modules/security/data-policy/defaults";
 import type { GuardDiagnostic } from "../../src/modules/security/data-policy/types";
@@ -29,7 +29,11 @@ describe("egress guard diagnostics (INV-15)", () => {
     const diags: GuardDiagnostic[] = [];
     expect(() => guard(true, diags).filterClient(circular())).toThrow(EgressBlockedError);
     expect(diags).toContainEqual(
-      expect.objectContaining({ outcome: "aborted", operation: "filterClient", cause: expect.any(String) }),
+      expect.objectContaining({
+        outcome: "aborted",
+        operation: "filterClient",
+        cause: expect.any(String),
+      }),
     );
   });
 
@@ -38,7 +42,11 @@ describe("egress guard diagnostics (INV-15)", () => {
     const payload = circular();
     expect(guard(false, diags).filterClient(payload)).toBe(payload);
     expect(diags).toContainEqual(
-      expect.objectContaining({ outcome: "passed", operation: "filterClient", cause: expect.any(String) }),
+      expect.objectContaining({
+        outcome: "passed",
+        operation: "filterClient",
+        cause: expect.any(String),
+      }),
     );
   });
 
@@ -48,9 +56,26 @@ describe("egress guard diagnostics (INV-15)", () => {
       appendLog: (entry: { type: string; cause?: string }) => entries.push(entry),
     } as unknown as SessionManager;
     const sink = egressDiagnosticSink(fake);
-    sink({ module: "security.data-policy", operation: "sanitizeChat", kind: "egress", outcome: "aborted", cause: "boom" });
-    sink({ module: "security.data-policy", operation: "sanitizeChat", kind: "egress", outcome: "passed", cause: "soft" });
-    sink({ module: "security.data-policy", operation: "sanitizeChat", kind: "egress", outcome: "redacted" });
+    sink({
+      module: "security.data-policy",
+      operation: "sanitizeChat",
+      kind: "egress",
+      outcome: "aborted",
+      cause: "boom",
+    });
+    sink({
+      module: "security.data-policy",
+      operation: "sanitizeChat",
+      kind: "egress",
+      outcome: "passed",
+      cause: "soft",
+    });
+    sink({
+      module: "security.data-policy",
+      operation: "sanitizeChat",
+      kind: "egress",
+      outcome: "redacted",
+    });
     expect(entries.map((e) => e.type)).toEqual(["egress_blocked", "egress_degraded"]);
     expect(entries[0].cause).toBe("boom");
   });
