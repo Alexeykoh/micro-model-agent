@@ -19,6 +19,7 @@ import { setPlan as railPlan } from "./js/rail.js";
 import {
   sidebarSessionChanged, sidebarMapState, sidebarMapIndicator, setSessionLoading,
   sidebarLspState, sidebarFilesState, sidebarPluginsState, sidebarFilesChanged,
+  sidebarGitChanged,
 } from "./js/sidebar.js";
 import { setUpdateInfo } from "./js/update-state.js";
 
@@ -59,7 +60,12 @@ export function renderActiveState(): void {
   if (rev !== undefined && rev !== lastFilesRevision) {
     const first = lastFilesRevision === -1;
     lastFilesRevision = rev;
-    if (!first && rev > 0) sidebarFilesChanged();
+    if (!first && rev > 0) {
+      sidebarFilesChanged();
+      // Git working-tree changed too: re-read the Changes tab list (was a
+      // dead export — nothing called it, so the tab went stale after edits).
+      sidebarGitChanged();
+    }
   }
   sidebarSessionChanged(sid);
   renderWorkspace(host);
