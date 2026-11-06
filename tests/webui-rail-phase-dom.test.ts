@@ -3,7 +3,7 @@
 // Раньше строка «думаю» в ленте жила своей фазой и своим таймером, а рельс
 // над композером — своими. На длинном ходе они расходились: лента писала
 // «думаю», рельс «пишу», а секунды считались от разных стартов.
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { setupHappyDom } from "./helpers/happy-dom";
 
 const win = setupHappyDom(`
@@ -68,6 +68,10 @@ function busyTime(feed: HTMLElement): string {
 }
 
 describe("фронтенд: фаза хода одна для ленты и рельса", () => {
+  // Рельс живёт на своём таймере: гасим его после каждого теста, иначе
+  // интервал остаётся в процессе и сдвигает таймеры соседних тестов.
+  afterEach(() => rail.setBusy(false));
+
   it("лента и рельс показывают одну фазу на длинном ходе", () => {
     const feed = mountTab("S1");
     store.session.activeSessionId = "S1";
