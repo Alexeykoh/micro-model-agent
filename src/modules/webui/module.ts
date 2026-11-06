@@ -105,6 +105,11 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.plugins = deps.plugins;
   state.workspace = deps.baseDir;
   state.gitCache = createGitCache();
+  // Прогрев: первый снимок собирается до первого запроса клиента, а результат
+  // пушится (иначе бейдж под композером ждал бы второго тика состояния).
+  if (deps.baseDir) {
+    gitPeek(state.gitCache, deps.baseDir, state.filesRevision, () => pushState(state));
+  }
   state.agentsMd = deps.agentsMd;
   if (deps.indexer) {
     state.projectMapStats = () => deps.indexer?.stats() ?? null;
@@ -222,7 +227,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           projectMap: deps.indexer?.mapInfo?.(),
           filesRevision: state.filesRevision,
           git: state.gitCache && deps.baseDir
-            ? gitPeek(state.gitCache, deps.baseDir, state.filesRevision)
+            ? gitPeek(state.gitCache, deps.baseDir, state.filesRevision, () => pushState(state))
             : null,
           sessionId,
         },

@@ -1,12 +1,12 @@
 // Sidebar renders owned by the feed module: usage panel, workspace path and the
 // environment section. Extracted from `feed.js` (re-exported there).
-import { usageEl, envEl, wsLine, wsGitEl, el, icon, attachTooltip } from "../dom.js";
+// Git-бейдж под композером вынесен в `feed/git-badges.ts` (правило 6).
+import { usageEl, envEl, wsLine, el, icon, attachTooltip } from "../dom.js";
 import { I18N, t, pluralCount } from "../i18n.js";
 import { feed, settings, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { renderFooter } from "../footer.js";
-import { renderGitChips as renderChips } from "./git-chips.js";
-import { sidebarGitIndicator, openGitChangesTab } from "../sidebar.js";
+import { paintGitChips } from "./git-badges.js";
 import { fmtTokens, hiddenText } from "../format.js";
 import { copyText } from "../../md.js";
 
@@ -230,7 +230,7 @@ export function probeLoadedText(
   return { text, cls: low ? "wn" : "" };
 }
 
-// Workspace path and agent version under the composer.
+// Workspace path, agent version and the git badge under the composer.
 export function renderWorkspace(h: Dict): void {
   renderFooter(
     wsLine,
@@ -245,6 +245,7 @@ export function renderWorkspace(h: Dict): void {
     },
     el,
   );
+  paintGitChips(h);
 }
 
 // Environment (sidebar): stacked name/value items — AGENTS.md sources, map size.
