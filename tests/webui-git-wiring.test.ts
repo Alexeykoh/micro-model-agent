@@ -38,12 +38,12 @@ describe("git chips wiring (INV-G3)", () => {
     expect(badges).toMatch(/h\.git/);
   });
 
-  it("toggles the #wsGit container so chips are actually visible", () => {
+  it("renders the badge inside the footer line, not in its own block", () => {
     const badges = read(BADGES);
-    // `hidden` в разметке + отсутствие сброса = чипы невидимы при любом git.
-    expect(badges, "#wsGit остаётся скрытым навсегда").toMatch(
-      /wsGitEl\.hidden\s*=\s*wsGitEl\.childElementCount\s*===\s*0/,
-    );
+    // Отдельный контейнер давал вторую строку — бейдж должен рисоваться
+    // тем же `renderFooter`, что путь и версия.
+    expect(badges, "git рисуется не в строке футера").toMatch(/renderFooter\(\s*wsLine,/);
+    expect(badges).toMatch(/git:\s*snap/);
   });
 
   it("drives the tab indicator from the same snapshot", () => {
@@ -100,10 +100,9 @@ describe("changes tab markup (INV-G3)", () => {
     expect(pane, "pane-git лежит вне .sb").toBeLessThan(close);
   });
 
-  it("has a tab button wired to that pane and a chips container", () => {
+  it("has a tab button wired to that pane", () => {
     const html = read(HTML);
     expect(html).toMatch(/data-tab="git"[^>]*aria-controls="pane-git"/);
-    expect(html).toMatch(/id="wsGit"/);
     expect(html).toMatch(/id="gitBody"/);
   });
 });

@@ -764,42 +764,34 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .ws-line .ws-upd { color: var(--green); margin-left: auto; flex: none; font-weight: 600; font-variant-numeric: tabular-nums; cursor: help; }
 .ws-line .ws-upd + .ws-ver { margin-left: 10px; }
 
-/* Git chips under the composer (спека git-workflow §6.3/§7). Порядок слева
-   направо: branch → worktree → dirty → sync → tag; ветка не скрывается,
-   схлопывание делает CSS (рантайм-ширину не считаем). Внешний вид повторяет
-   эталонную «пилюлю» интерфейса (`.think-h .lvl`): рамка + фон + радиус, иначе
-   строка читается как серый текст, а не как бейджи состояния. */
-.ws-git { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; margin-top: 5px; padding: 0 2px; font-size: 11px; }
-.ws-git[hidden] { display: none; }
-.gchip {
+/* Git-состояние в строке футера (спека git-workflow §6.3/§7): ветка и число
+   изменений стоят В ТОЙ ЖЕ строке, что `dir` и версия — отдельный блок давал
+   «столбик» из двух строк. Вид — эталонная «пилюля» интерфейса
+   (`.think-h .lvl`): рамка + фон + радиус, иначе это читалось как серый текст. */
+.ws-line .gchip {
   display: inline-flex; align-items: center; gap: 4px;
-  min-width: 0; max-width: 22rem;
+  flex: 0 1 auto; min-width: 0; max-width: 16rem;
   padding: 1px 8px; border: 1px solid var(--border-2); border-radius: 999px;
   background: var(--hover-bg-2);
   color: var(--dim-a); font-size: 11px; line-height: 1.6;
   font-variant-numeric: tabular-nums; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
 }
-.gchip .gchip-full { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.gchip .gchip-min { display: none; }
-/* Ветка — основная: читается первой и не схлопывается. */
-.gchip-branch { color: var(--fg); background: var(--surface); border-color: var(--border-2); font-weight: 600; }
+/* Ветка — основная: читается первой, не схлопывается раньше счётчика. */
+.ws-line .gchip-branch { color: var(--fg); background: var(--surface); font-weight: 600; flex-shrink: 1; }
 /* Есть незакоммиченное — акцент рамкой, а не только цветом текста. */
-.gchip-dirty { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 45%, var(--border-2)); }
-.gchip-sync { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border-2)); }
-.gchip-tag { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--border-2)); }
-.gchip-wt { color: var(--dim-b); }
-.gchip-link { cursor: pointer; }
-.gchip-link:hover { background: var(--hover-bg); color: var(--fg); }
-.gchip-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-@media (max-width: 899px) {
-  .gchip .gchip-full { display: none; }
-  .gchip .gchip-min { display: inline; }
-  .gchip-branch .gchip-full { display: inline; }
-  .gchip-tag { display: none; }
+.ws-line .gchip-dirty {
+  color: var(--yellow); flex-shrink: 0;
+  border-color: color-mix(in srgb, var(--yellow) 45%, var(--border-2));
 }
+.ws-line .gchip-sync { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border-2)); }
+.ws-line .gchip-tag { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--border-2)); }
+.ws-line .gchip-link { cursor: pointer; }
+.ws-line .gchip-link:hover { background: var(--hover-bg); color: var(--fg); }
+.ws-line .gchip-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Телефон: счётчик изменений уходит в компактную форму, строка не рвётся. */
 @media (max-width: 639px) {
-  .gchip-wt, .gchip-sync { display: none; }
-  .ws-git { gap: 4px; }
+  .ws-line .gchip { max-width: 9rem; }
 }
 
 /* Changes tab (sidebar, read-only v1): список → diff как стек внутри панели. */

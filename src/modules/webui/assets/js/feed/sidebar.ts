@@ -230,21 +230,9 @@ export function probeLoadedText(
   return { text, cls: low ? "wn" : "" };
 }
 
-// Workspace path, agent version and the git badge under the composer.
+// Workspace path and agent version under the composer. Git-бейдж рисуется
+// здесь же, в той же строке (`paintGitChips`), а не отдельным блоком снизу.
 export function renderWorkspace(h: Dict): void {
-  renderFooter(
-    wsLine,
-    {
-      workspace: typeof h.workspace === "string" ? hiddenText(h.workspace) : h.workspace,
-      version: h.version,
-      updateAvailable: h.updateAvailable || undefined,
-      dev: h.dev === true,
-      devTitle: t("web.env.dev_title"),
-      dirLabel: t("web.env.dir"),
-      updateTitle: t("web.update.chip_title", { latest: h.updateAvailable?.latest ?? "" }),
-    },
-    el,
-  );
   paintGitChips(h);
 }
 
