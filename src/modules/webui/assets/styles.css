@@ -766,28 +766,40 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 
 /* Git chips under the composer (спека git-workflow §6.3/§7). Порядок слева
    направо: branch → worktree → dirty → sync → tag; ветка не скрывается,
-   схлопывание делает CSS (рантайм-ширину не считаем). */
-.ws-git { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto; }
+   схлопывание делает CSS (рантайм-ширину не считаем). Внешний вид повторяет
+   эталонную «пилюлю» интерфейса (`.think-h .lvl`): рамка + фон + радиус, иначе
+   строка читается как серый текст, а не как бейджи состояния. */
+.ws-git { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; margin-top: 5px; padding: 0 2px; font-size: 11px; }
 .ws-git[hidden] { display: none; }
-.gchip { display: inline-flex; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 0; font-variant-numeric: tabular-nums; color: var(--dim-a); white-space: nowrap; }
+.gchip {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-width: 0; max-width: 22rem;
+  padding: 1px 8px; border: 1px solid var(--border-2); border-radius: 999px;
+  background: var(--hover-bg-2);
+  color: var(--dim-a); font-size: 11px; line-height: 1.6;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
 .gchip .gchip-full { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .gchip .gchip-min { display: none; }
-.gchip-branch { color: var(--fg); flex: 0 1 auto; }
-.gchip-dirty { color: var(--yellow); }
-.gchip-sync { color: var(--accent); }
-.gchip-tag, .gchip-wt { color: var(--dim-b); }
+/* Ветка — основная: читается первой и не схлопывается. */
+.gchip-branch { color: var(--fg); background: var(--surface); border-color: var(--border-2); font-weight: 600; }
+/* Есть незакоммиченное — акцент рамкой, а не только цветом текста. */
+.gchip-dirty { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 45%, var(--border-2)); }
+.gchip-sync { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border-2)); }
+.gchip-tag { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--border-2)); }
+.gchip-wt { color: var(--dim-b); }
 .gchip-link { cursor: pointer; }
-.gchip-link:hover { text-decoration: underline; }
-/* Средний экран: компактные формы (●3, ⌂2, ↑↓); тег прячется (в title). */
+.gchip-link:hover { background: var(--hover-bg); color: var(--fg); }
+.gchip-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (max-width: 899px) {
   .gchip .gchip-full { display: none; }
   .gchip .gchip-min { display: inline; }
   .gchip-branch .gchip-full { display: inline; }
   .gchip-tag { display: none; }
 }
-/* Телефон: только ветка + ●N; worktree/sync — в title. */
 @media (max-width: 639px) {
   .gchip-wt, .gchip-sync { display: none; }
+  .ws-git { gap: 4px; }
 }
 
 /* Changes tab (sidebar, read-only v1): список → diff как стек внутри панели. */
