@@ -303,10 +303,13 @@ describe("webui assets", () => {
     expect(js(a)).toContain("window.MmaSetup");
   });
 
-  it("wires the Agent settings panel (experts + critic keys) without a critic SSE handler", () => {
+  it("wires the Agent settings panel (experts + critic keys) and the collapsed critic block", () => {
     const a = loadAssets();
-    expect(js(a)).not.toContain('["critic"');
-    expect(js(a)).not.toContain("onCritic");
+    // 2026-11-05: критик получил собственное SSE-событие и свёрнутый блок.
+    expect(js(a)).toContain('["critic"');
+    expect(js(a)).toContain("onCritic");
+    expect(js(a)).toContain("critic-block");
+    expect(js(a)).toContain('"think-body hidden"');
     expect(js(a)).toContain("critic.enabled");
     expect(js(a)).toContain("experts");
     // MoE removed 2026-10-12: no MoE keys or chips anywhere in the assets.

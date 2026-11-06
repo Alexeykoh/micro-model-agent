@@ -9,15 +9,21 @@
  */
 import type { CriticGateDeps } from "./critic-contract";
 
-/** Итог работы под бюджетом: значение (или null при таймауте) и потраченное время. */
+/** Итог работы под бюджетом: значение (или null при таймауте/отмене) и время. */
 export interface BudgetOutcome<T> {
   value: T | null;
   timedOut: boolean;
+  /** Пользователь прервал ход: ждать `work` и писать деградацию нельзя. */
+  aborted?: boolean;
   durationMs: number;
 }
 
 /**
  * Выполняет `work` под дедлайном `budgetMs`, отменяя его через `signal`.
+ *
+ * Внешняя отмена (Esc/Ctrl+C, web interrupt) завершает гонку СРАЗУ, а не после
+ * бюджета: провайдер/тул, который не слушает signal, иначе держал бы ход до
+ * конца бюджета — именно так критик было нельзя остановить.
  * @param work работа, принимающая сигнал отмены
  * @param budgetMs потолок, мс; `undefined`/`0` — без дедлайна (поведение v1)
  * @param outer внешний сигнал сессии (отмена пользователем)
@@ -28,31 +34,39 @@ export async function runWithBudget<T>(
   outer?: AbortSignal,
 ): Promise<BudgetOutcome<T>> {
   const controller = new AbortController();
-  const onOuterAbort = () => controller.abort();
-  outer?.addEventListener("abort", onOuterAbort);
-  if (outer?.aborted) controller.abort();
-
   const started = Date.now();
   const run = work(controller.signal);
   // Отказ после уже проигранной гонки не должен стать unhandled.
   run.catch(() => {});
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let resolveAbort: (() => void) | undefined;
+  const aborted = new Promise<BudgetOutcome<T>>((resolve) => {
+    resolveAbort = () => {
+      controller.abort();
+      resolve({ value: null, timedOut: false, aborted: true, durationMs: Date.now() - started });
+    };
+  });
+  const onOuterAbort = () => resolveAbort?.();
+  outer?.addEventListener("abort", onOuterAbort);
+  if (outer?.aborted) onOuterAbort();
+
   try {
+    const runPromise = run.then((value) => ({
+      value,
+      timedOut: false,
+      durationMs: Date.now() - started,
+    }));
     if (!budgetMs || budgetMs <= 0) {
-      const value = await run;
-      return { value, timedOut: false, durationMs: Date.now() - started };
+      return await Promise.race([runPromise, aborted]);
     }
-    const settled = await Promise.race<{ value: T | null; timedOut: boolean }>([
-      run.then((value) => ({ value, timedOut: false })),
-      new Promise((resolve) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          resolve({ value: null, timedOut: true });
-        }, budgetMs);
-      }),
-    ]);
-    return { ...settled, durationMs: Date.now() - started };
+    const timedOut = new Promise<BudgetOutcome<T>>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve({ value: null, timedOut: true, durationMs: Date.now() - started });
+      }, budgetMs);
+    });
+    return await Promise.race([runPromise, timedOut, aborted]);
   } finally {
     clearTimeout(timer);
     outer?.removeEventListener("abort", onOuterAbort);

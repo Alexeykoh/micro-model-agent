@@ -31,7 +31,13 @@ function renderSelectors(): void {
 // Selector keys (`provider/model/context/contextAuto/reasoning`) share the switch treatment:
 // pending paint + single-flight + parallel re-reads. Settings-panel writes
 // bypass it (plain POST + save toast).
-const SELECTOR_KEYS = ["provider.active", "model", "contextWindow", "contextAuto", "reasoning.mode"];
+const SELECTOR_KEYS = [
+  "provider.active",
+  "model",
+  "contextWindow",
+  "contextAuto",
+  "reasoning.mode",
+];
 
 // Monotonic id for selector switches: a slow A→B→A pair must not let the
 // stale reply repaint over the fresh one.
@@ -80,7 +86,11 @@ export function paintSelectorPending(): void {
   });
 }
 
-export async function postConfig(key: string, value: unknown, refreshSettings?: boolean): Promise<boolean> {
+export async function postConfig(
+  key: string,
+  value: unknown,
+  refreshSettings?: boolean,
+): Promise<boolean> {
   const isSelector = SELECTOR_KEYS.indexOf(key) !== -1;
   if (isSelector && pendingKey !== null) {
     setIndicator(t("web.selectors.switch_busy"), true);
@@ -99,7 +109,8 @@ export async function postConfig(key: string, value: unknown, refreshSettings?: 
   try {
     const r = await api<Dict>("/api/config", { method: "POST", body: { key, value } });
     if (!r.ok || !r.data || !r.data.ok) {
-      const err = (r.data && (r.data.error || r.data.reason)) || r.status || t("web.settings.save_failed");
+      const err =
+        (r.data && (r.data.error || r.data.reason)) || r.status || t("web.settings.save_failed");
       setIndicator(saveErrorText(err, key), true);
       return false;
     }
@@ -109,12 +120,16 @@ export async function postConfig(key: string, value: unknown, refreshSettings?: 
     if (key === "contextAuto" && r.data.probed === false) {
       setIndicator(t("web.selectors.auto_failed"), true);
     } else {
-      setIndicator(persisted ? t("web.settings.saved") : (r.data.warning || "not persisted"), !persisted);
+      setIndicator(
+        persisted ? t("web.settings.saved") : r.data.warning || "not persisted",
+        !persisted,
+      );
     }
     if (settings.config && r.data.value !== undefined) setPath(settings.config, key, r.data.value);
     // Итог пробы едет в ответе — подложим в локальную копию сразу, не дожидаясь
-    // GET (сбой реконфига не должен оставить меню с устаревшим окном).
-    if (key === "contextAuto" && settings.config && typeof r.data.contextWindow === "number") {
+    // GET (сбой реконфига не должен оставить меню с устаревшим окном). В auto
+    // это бывает и на смене модели/провайдера, а не только на contextAuto.
+    if (settings.config && typeof r.data.contextWindow === "number") {
       setPath(settings.config, "contextWindow", r.data.contextWindow);
     }
     if (key === "ui.activityRail") setLayout(String(r.data.value));
@@ -170,7 +185,8 @@ export async function loadModels(): Promise<void> {
   settings.modelsReady = true;
   // Reasoning support rides along with the model list (one round-trip):
   // the 4th selector row renders from this, never from a separate GET.
-  if (r.data.reasoning && typeof r.data.reasoning === "object") session.reasoning = r.data.reasoning;
+  if (r.data.reasoning && typeof r.data.reasoning === "object")
+    session.reasoning = r.data.reasoning;
   renderSelectors();
 }
 
@@ -179,7 +195,10 @@ export async function loadModels(): Promise<void> {
 // switch is instant and survives re-renders; unknown values fall back to the
 // default.
 export function applyFontSize(value?: string): void {
-  const v = value || (settings.config && settings.config.ui && settings.config.ui.fontSize) || "comfortable";
+  const v =
+    value ||
+    (settings.config && settings.config.ui && settings.config.ui.fontSize) ||
+    "comfortable";
   const known = v === "compact" || v === "large" ? v : "comfortable";
   if (known === "comfortable") document.body.removeAttribute("data-font");
   else document.body.setAttribute("data-font", known);

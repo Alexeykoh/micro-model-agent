@@ -13,9 +13,6 @@ import { ApprovalStore } from "../approvals";
 import { subagentLogEntry } from "../../tools/subagent-session-log";
 import type { Diagnostic, DiagnosticEvent } from "../../output/types";
 import { moduleOf } from "../../output";
-import type { GuardDiagnostic } from "../../modules/security/data-policy/types";
-import { recordEgressTurn } from "../../modules/security/data-policy/turn-journal";
-import { emitSecurityEvent } from "../../modules/security/security-events";
 
 /** Зависимости сборки ToolContext. */
 export interface ToolContextInput {
@@ -106,83 +103,6 @@ export function admissionDiagnosticSink(
       recoverable: diag.recoverable,
     });
   };
-}
-
-/**
- * Сигнал DLP-egress (INV-15): `aborted` — fail-closed прервал вызов,
- * `degraded` — осознанный fail-open. Пишется в лог активной сессии; `redacted`
- * (штатная редакция) — тоже оставляет след, но только когда редакция
- * **необратима** (класс `secret`): псевдонимизированные пути/PII восстанавливаются
- * и дают запись на каждый вызов LLM, их счётчик живёт в бейдже webui (INV-DLP-2).
- *
- * Маршрутизация — по `diag.sessionId`, который штампует фабрика guard'а: sink
- * остаётся процесс-глобальным, а параллельные сессии больше не смешиваются.
- */
-export function egressDiagnosticSink(
-  sessionManager: SessionManager,
-): (diag: GuardDiagnostic) => void {
-  return (diag: GuardDiagnostic) => {
-    recordEgressTurn(diag);
-    if (diag.outcome === "redacted") {
-      // INV-S4: необратимая редакция видна в `session.jsonl` — только метаданные
-      // (счётчик и вид цели), без оригиналов и без token id (INV-DLP-1).
-      const secrets = diag.stats?.secret ?? 0;
-      if (secrets > 0) {
-        sessionManager.appendLog({
-          ts: new Date().toISOString(),
-          type: "egress_redacted",
-          content: `DLP: отредактировано секретов — ${secrets}${egressTargetSuffix(diag.target)}`,
-          source: "module:security.data-policy",
-          module: "security.data-policy",
-          operation: diag.operation,
-        });
-        emitSecurityEvent({
-          ts: new Date().toISOString(),
-          class: "dlp",
-          severity: "medium",
-          summary: `DLP: секретов ${secrets}`,
-          action: "egress_redacted",
-          success: true,
-          ...(diag.sessionId ? { sessionId: diag.sessionId } : {}),
-          tool: diag.operation,
-          ...(egressTargetSuffix(diag.target).trim()
-            ? { details: egressTargetSuffix(diag.target).trim() }
-            : {}),
-        });
-      }
-      return;
-    }
-    const blocked = diag.outcome === "aborted";
-    sessionManager.appendLog({
-      ts: new Date().toISOString(),
-      type: blocked ? "egress_blocked" : "egress_degraded",
-      content: diag.cause ?? diag.operation,
-      source: "module:security.data-policy",
-      module: "security.data-policy",
-      operation: diag.operation,
-      errorKind: blocked ? "blocked" : "degraded",
-      cause: diag.cause,
-      recoverable: !blocked,
-    });
-    emitSecurityEvent({
-      ts: new Date().toISOString(),
-      class: "dlp",
-      severity: blocked ? "high" : "medium",
-      summary: blocked ? "DLP: вызов прерван" : "DLP: fail-open",
-      action: blocked ? "egress_blocked" : "egress_degraded",
-      success: !blocked,
-      ...(diag.sessionId ? { sessionId: diag.sessionId } : {}),
-      tool: diag.operation,
-      ...(diag.cause ? { reason: diag.cause } : {}),
-    });
-  };
-}
-
-/** Вид цели для журнала редакции: хост и доверие (без путей и значений). */
-function egressTargetSuffix(target: GuardDiagnostic["target"]): string {
-  if (target?.kind !== "provider") return "";
-  const host = target.host ?? "?";
-  return ` (провайдер: ${host}, ${target.trusted ? "доверенный" : "внешний"})`;
 }
 
 /**

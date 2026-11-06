@@ -8,7 +8,7 @@ import {
   resetEgressTurnJournal,
   takePassiveEgress,
 } from "../../src/modules/security/data-policy/turn-journal";
-import { egressDiagnosticSink } from "../../src/core/bootstrap/tool-context";
+import { egressDiagnosticSink } from "../../src/core/bootstrap/egress-sink";
 import type { SessionManager } from "../../src/modules/session/index";
 
 const providerTarget = { kind: "provider" as const, trusted: false, host: "api.openai.com" };
@@ -29,7 +29,11 @@ function redacted(
   };
 }
 
-const pathToken = (id: string) => ({ dataClass: "path" as const, kind: "windows-abs", token: `<PATH:${id}>` });
+const pathToken = (id: string) => ({
+  dataClass: "path" as const,
+  kind: "windows-abs",
+  token: `<PATH:${id}>`,
+});
 
 beforeEach(() => {
   resetEgressTurnJournal();
@@ -55,7 +59,11 @@ describe("журнал DLP за ход", () => {
     recordEgressTurn(redacted("s1", [pathToken("a"), pathToken("b")]));
 
     const summary = endEgressTurn("s1");
-    expect(summary).toMatchObject({ total: 2, stats: { path: 2 }, kinds: { path: ["windows-abs"] } });
+    expect(summary).toMatchObject({
+      total: 2,
+      stats: { path: 2 },
+      kinds: { path: ["windows-abs"] },
+    });
     expect(summary?.targets).toEqual([providerTarget]);
   });
 
@@ -76,8 +84,12 @@ describe("журнал DLP за ход", () => {
 
   it("внутренние id секретов не утекают в агрегат", () => {
     beginEgressTurn("s1");
-    recordEgressTurn(redacted("s1", [{ dataClass: "secret", kind: "secret:0", token: "[SECRET]" }]));
-    recordEgressTurn(redacted("s1", [{ dataClass: "secret", kind: "secret:2", token: "[SECRET]" }]));
+    recordEgressTurn(
+      redacted("s1", [{ dataClass: "secret", kind: "secret:0", token: "[SECRET]" }]),
+    );
+    recordEgressTurn(
+      redacted("s1", [{ dataClass: "secret", kind: "secret:2", token: "[SECRET]" }]),
+    );
 
     const summary = endEgressTurn("s1");
     expect(summary?.total).toBe(2);
@@ -130,7 +142,9 @@ describe("журнал DLP за ход", () => {
   it("виды одного класса суммируются по max каждого вида", () => {
     beginEgressTurn("s1");
     recordEgressTurn(redacted("s1", [{ dataClass: "secret", kind: "api-key", token: "[SECRET]" }]));
-    recordEgressTurn(redacted("s1", [{ dataClass: "secret", kind: "password", token: "[SECRET]" }]));
+    recordEgressTurn(
+      redacted("s1", [{ dataClass: "secret", kind: "password", token: "[SECRET]" }]),
+    );
 
     expect(endEgressTurn("s1")?.total).toBe(2);
   });

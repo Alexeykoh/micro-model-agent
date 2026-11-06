@@ -1,33 +1,10 @@
 /** Базовые типы ядра: состояния, тулы, ответы LLM, результаты. */
+import type { MetaKind, RetractInfo } from "./types-meta";
 /** Состояние агентного цикла. */
 export type AgentState = "INIT" | "THINK" | "ACT" | "OBSERVE" | "OUTPUT" | "ERROR";
 
-/**
- * Вид мета-канала: тела тулов (`display`/`output`/`diff`/сводка из `ToolBatch`)
- * — model-facing, в quiet-чатах скрываются; настоящий статус (статистика
- * контекста, компакция, варнинги) виден всегда. `retract` — гейт забраковал
- * уже отстримленный черновик и переспрашивает модель: потребители убирают
- * черновик из ленты (иначе финал встанет дублем следом).
- */
-export type MetaKind = "tool" | "status" | "retract" | "progress";
-
-/** Кто отозвал уже отстримленный черновик (штатная перепроверка, не сбой). */
-export type RetractSource = "critic" | "hallucination" | "audit";
-
-/**
- * Структурированные детали отзыва черновика (`kind: "retract"`). Сырой текст
- * метки остаётся первым аргументом `OnMeta`: терминал и старые потребители
- * `meta` не меняются, а лента/Trace получают виновника, причину и итерацию.
- */
-export interface RetractInfo {
-  source: RetractSource;
-  /** Короткая причина: summary/issue критика, claim или причина повтора. */
-  reason?: string;
-  /** Итерация петли — ключ связи с `critic_verdict`/`claim_retry` в логе. */
-  iteration?: number;
-  /** Статус/вид вердикта (`critical`, `concern`, `success`, `artifact`, …). */
-  verdict?: string;
-}
+export type { CriticReport, CriticReportCheck, CriticReportIssue } from "./types-critic";
+export type { MetaKind, RetractInfo, RetractSource } from "./types-meta";
 
 /** Колбэк UI-статуса; `kind` по умолчанию `"status"`. */
 export type OnMeta = (meta: string, kind?: MetaKind, info?: RetractInfo) => void;

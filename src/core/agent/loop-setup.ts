@@ -124,19 +124,25 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     budgetMs: CRITIC_GATE_BUDGET_MS,
     verify:
       deps.criticOverride?.verify ??
-      (async (pack, signal) => {
+      (async (pack, signal, onStage) => {
         // Сброс перед КАЖДЫМ вызовом: причина должна относиться к этой проверке.
         lastCriticDegradation = undefined;
         return criticClient.verify(pack, signal, {
+          onStage,
           // Read-only цикл: проверки бегут последовательно здесь (гейт await'ится
           // между пакетами тулов), через общий executor с read-only allowlist.
           runCheck:
             criticConfig.tools && deps.toolCtx
-              ? async (tool, args) => {
-                  const res = await toolExecutor.executeByName(tool, args, {
-                    ...deps.toolCtx!,
-                    toolAllowlist: [...CRITIC_READONLY_TOOLS],
-                  });
+              ? async (tool, args, checkSignal) => {
+                  const res = await toolExecutor.executeByName(
+                    tool,
+                    args,
+                    {
+                      ...deps.toolCtx!,
+                      toolAllowlist: [...CRITIC_READONLY_TOOLS],
+                    },
+                    checkSignal,
+                  );
                   return { ok: res.success, output: res.output ?? "" };
                 }
               : undefined,

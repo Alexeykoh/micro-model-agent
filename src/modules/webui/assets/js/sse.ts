@@ -7,8 +7,8 @@ import type { Dict } from "./core/store/types.js";
 import type { SseDeps } from "./sse-deps.js";
 import { noteChunk as speedChunk } from "./speed.js";
 import { attachSidebarSse } from "./sse-sidebar.js";
-import { activityPhase } from "./core/activity.js";
-import { activityKey, attachActivityStream } from "./core/activity-stream.js";
+import { attachFaceSse } from "./sse-face.js";
+import { attachActivityStream } from "./core/activity-stream.js";
 // The model list is refreshed in the background after a provider/model switch
 // (INV-W5); the server announces the result with a `models` event, so the
 // selector repaints without a second GET racing the refresh. Direct import
@@ -30,6 +30,7 @@ export function connectSSE(deps: SseDeps): void {
     onTurnEnd,
     onLog,
     onRetract,
+    onCritic,
     onErrorEvent,
     onCommandOutput,
     onSubagentEvent,
@@ -123,6 +124,7 @@ export function connectSSE(deps: SseDeps): void {
       },
     ],
     ["log", onLog],
+    ["critic", (d) => onCritic(d as Dict, d.sessionId)],
     [
       "retract",
       (d) =>
@@ -157,66 +159,17 @@ export function connectSSE(deps: SseDeps): void {
       else railEvent(ev, d.name);
     });
   }
-  // Composer face: one persistent mascot that always reflects the live state.
-  const faceTypes: Array<[string, "tool_start" | "tool_end" | "text" | "question" | "error"]> = [
-    ["tool_start", "tool_start"],
-    ["tool_end", "tool_end"],
-    ["text", "text"],
-    ["question", "question"],
-    ["error", "error"],
-  ];
-  for (const [ev, type] of faceTypes) {
-    es.addEventListener(ev, (e) => {
-      const d = parse(e);
-      if (!d) return;
-      faceEvent(
-        loaderStateFor({
-          type,
-          name: typeof d.name === "string" ? d.name : "",
-          success: d.success !== false,
-          // Нужен только для tool_end: по выводу маскот ловит LSP-реакцию.
-          ...(type === "tool_end" && typeof d.output === "string" ? { output: d.output } : {}),
-        }),
-      );
-    });
-  }
-  es.addEventListener("phase", (e) => {
-    const d = parse(e);
-    // Маскот смотрит на ту же фазу, что и рельс: пишет — «печатает», тул — «бежит».
-    const phase = d ? activityPhase(activityKey(d)) : "thinking";
-    faceEvent(phase === "composing" ? "type" : phase === "tool" ? "run" : "think");
-  });
-  es.addEventListener("reasoning", () => faceEvent("think"));
-  es.addEventListener("plan", () => faceEvent("plan"));
-  es.addEventListener("turn_end", (e) => {
-    const d = parse(e);
-    // An interrupted turn (`success:false, interrupted:true`) is a user stop, not
-    // a failure — settle the face to "done", never "error".
-    faceEvent(d && d.success === false && !d.interrupted ? "error" : "done");
-    const faceToken = getComposerToken();
-    window.setTimeout(() => {
-      if (faceToken === getComposerToken()) setFaceState(composerFace, "idle");
-    }, 1500);
-  });
-  // Remaining agent-facing SSE: a retracted draft is a normal re-check (the
-  // gate asked the model to rewrite), re-indexing as workspace search, first-run
-  // completion as done. Background broadcasts
-  // (`usage`/`state`/`config`/`files`/`sessions`/`plugins`/`log`) deliberately
-  // carry no `faceEvent` — they are not agent activity and must not move MMART.
-  es.addEventListener("retract", () => faceEvent(loaderStateFor({ type: "retract" })));
-  // Гейт проверяет готовый ответ: своё состояние, не think/error.
-  es.addEventListener("meta", (e) => {
-    const d = parse(e);
-    if (d?.kind === "progress") faceEvent(loaderStateFor({ type: "verify" }));
-  });
-  es.addEventListener("index", () => faceEvent("find"));
-  es.addEventListener("setup_done", () => faceEvent("done"));
-  // An available version is news for the user, so MMART reacts — unlike the
-  // background broadcasts above. The face settles back to idle: the persistent
-  // half of the notice is the footer chip (snapshot), which needs no animation.
-  es.addEventListener("update", (e) => {
-    const d = parse(e);
-    if (d) applyUpdateEvent(d, updateHooks);
+  // Composer face (MMART): one persistent mascot that reflects the live state
+  // (`sse-face.ts`, чтобы этот файл оставался ≤300 строк).
+  attachFaceSse(es, {
+    parse,
+    faceEvent,
+    loaderStateFor,
+    composerFace,
+    getComposerToken,
+    setFaceState,
+    applyUpdateEvent,
+    updateHooks,
   });
   // Per-tab status dots: its own listeners — feed handlers stay untouched
   // (source-level guards pin the handler table above). Working streams mark the

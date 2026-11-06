@@ -18,6 +18,7 @@ export interface SseDeps {
   onTurnEnd: typeof import("./feed.js").onTurnEnd;
   onLog: typeof import("./feed.js").onLog;
   onRetract: typeof import("./feed.js").onRetract;
+  onCritic: typeof import("./feed.js").onCritic;
   onErrorEvent: typeof import("./feed.js").onErrorEvent;
   onCommandOutput: typeof import("./feed.js").onCommandOutput;
   onSubagentEvent: typeof import("./feed/subagent.js").onSubagentEvent;

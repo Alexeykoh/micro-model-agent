@@ -31,7 +31,11 @@ afterEach(() => {
 
 describe("security-события из аудита (U22)", () => {
   it("блок пути — block, блок с URL — ssrf", () => {
-    const base = { timestamp: "2026-11-02T10:00:00.000Z", action: "security_block", success: false };
+    const base = {
+      timestamp: "2026-11-02T10:00:00.000Z",
+      action: "security_block",
+      success: false,
+    };
     expect(securityEventFromAudit({ ...base, path: "C:\\x\\.env" })?.class).toBe("block");
     const ssrf = securityEventFromAudit({ ...base, url: "http://169.254.169.254/" });
     expect(ssrf?.class).toBe("ssrf");
@@ -58,6 +62,34 @@ describe("security-события из аудита (U22)", () => {
     expect(
       securityEventFromAudit({ timestamp: "t", action: "tool_call", success: true }),
     ).toBeNull();
+  });
+
+  it("DLP-редакция попадает в класс dlp и несёт сводку без значений", () => {
+    const ev = securityEventFromAudit({
+      timestamp: "2026-11-02T10:00:00.000Z",
+      action: "dlp_redaction",
+      success: true,
+      tool: "sanitizeChat",
+      details: "path×2, pii×1 (провайдер: api.example, внешний)",
+    });
+    expect(ev?.class).toBe("dlp");
+    expect(ev?.severity).toBe("medium");
+    expect(ev?.summary).toContain("path×2");
+    expect(ev?.summary).toContain("провайдер");
+    expect(ev?.summary).not.toContain("sk-");
+  });
+
+  it("DLP-редакция из audit.jsonl переживает бэкфилл (класс dlp)", () => {
+    logAudit({
+      timestamp: new Date().toISOString(),
+      sessionId: "s1",
+      action: "dlp_redaction",
+      success: true,
+      tool: "sanitizeChat",
+      details: "path×1",
+    });
+    const merged = mergeSecurityEvents("s1", 100, dir);
+    expect(merged.some((ev) => ev.class === "dlp")).toBe(true);
   });
 
   it("logAudit отдаёт событие подписчику и не несёт секретов", () => {

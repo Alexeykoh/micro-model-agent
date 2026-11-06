@@ -26,6 +26,23 @@ export interface CriticVerdict {
   checks?: RawCriticChecks;
 }
 
+/** Событие прогресса проверки (какой проход идёт и что уже найдено). */
+export interface CriticStage {
+  stage: "verdict" | "checks" | "final";
+  /** Номер LLM-прохода (1 — первый вердикт). */
+  pass: number;
+  verdict?: CriticVerdict;
+  checks?: RawCriticChecks;
+  results?: Array<{ tool: string; ok: boolean; output: string }>;
+}
+
+/** Раннер одной read-only проверки: тул + args (+ общий сигнал отмены). */
+export type CriticRunCheck = (
+  tool: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+) => Promise<{ ok: boolean; output: string }>;
+
 /** Пакет доказательств: задача, план, изменённые файлы, команды, дайджест тулов. */
 export interface EvidencePack {
   task: string;

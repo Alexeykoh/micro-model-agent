@@ -76,9 +76,30 @@ describe("critic latency budget (A15)", () => {
     expect(typeof verdict?.data.duration).toBe("number");
     const err = d.events.find((e) => e.name === "critic_error");
     expect(err?.data.cause).toContain("turn_budget");
-    // Лента знает, что проверки не было.
-    expect(d.metas).toHaveLength(1);
-    expect(d.metas[0].kind).toBe("progress");
+    // Лента знает, что проверки не было: строка причины + свёрнутый отчёт.
+    expect(d.metas.map((m) => m.kind)).toEqual(["progress", "critic"]);
+  });
+
+  it("stops immediately on the outer abort signal, even if verify ignores it", async () => {
+    const d = gateDeps();
+    const outer = new AbortController();
+    const gate = new CriticGate({
+      enabled: true,
+      maxCalls: 4,
+      maxRepairCycles: 1,
+      budgetMs: 60_000,
+      verify: () => new Promise(() => {}),
+      buildPack: (x: never) => x,
+      signal: outer.signal,
+    });
+
+    const started = Date.now();
+    setTimeout(() => outer.abort(), 20);
+    expect(await gate.evaluate(d.deps)).toBe("pass");
+    // Не ждём 60-секундный бюджет и не пишем «деградацию» на ручную отмену.
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(d.events.find((e) => e.name === "critic_error")).toBeUndefined();
+    expect(d.metas).toHaveLength(0);
   });
 
   it("does not call the verifier again on an unchanged pack with nothing new to say", async () => {
