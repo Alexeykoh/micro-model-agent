@@ -54,6 +54,18 @@ typecheck, loopback, `--isolated`, локальные заглушки) закр
       `tests/core/agent-pause.test.ts`, `tests/webui-pause.test.ts`,
       `tests/webui-pause-dom.test.ts`. Не-durable (в памяти процесса) —
       durable `interrupt()` остаётся в P1 дорожной карты.
+- [x] **Цепочка базовых веток в чипе `⎇` (строка под полем ввода)** — чип ветки
+      в футере (`footer.ts:buildGitChips`) теперь показывает путь наследования
+      суxo, стрелками: `⎇ main → dev → feat/x`; полная цепочка дублируется в
+      title чипа (`from: …`). Источник — reflog создания ветки
+      (`branch: Created from <ref>`, фолбэк `Created from HEAD` — первый вход
+      в ветку из reflog HEAD): модуль `src/modules/webui/git/base-branch.ts`,
+      цепочка строится рекурсивно (кап глубины 6, защита от цикла) и
+      мемоизируется в кеше снимков (`snapshot-cache.ts:baseMemo`) — запись
+      создания неизменна, git не спрашивается каждый тик. Невестно/не-репо/
+      detached — чип остаётся `⎇ feat` без выдумывания. Гварды —
+      `tests/modules/webui/git-base-branch.test.ts` (реальный git во временном
+      репозитории) + кейсы чипа в `tests/webui-workspace-footer.test.ts`.
 - [x] **Заголовок вкладки браузера — имя текущего чата** — `mma web` держал
       статичный `<title>MMA Web</title>`. Теперь `document.title` следует за
       активной сессионной вкладкой: `<имя чата> · MMA`, без активной сессии /

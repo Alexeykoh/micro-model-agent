@@ -4,20 +4,49 @@
 // исполняется: здесь последний снимок, а обновление — по TTL и по росту
 // `filesRevision` (инвалидация вотчером). Поллинга git нет.
 import { gitSnapshot, GIT_SNAPSHOT_TTL_MS, type GitSnapshot } from "../../../tools/git-core";
+import { baseChain } from "./base-branch";
+
+/**
+ * Снимок для веба: к `git-core`-снимку добавлена цепочка базовых веток
+ * (`base` — непосредственный родитель, `chain` — путь от корня). Считается
+ * один раз на имя ветки (запись создания в reflog неизменна) и живёт в `memo`.
+ */
+export type WebGitSnapshot = GitSnapshot & { base?: string; chain?: string[] };
 
 export interface GitCacheState {
-  snapshot: GitSnapshot | null;
+  snapshot: WebGitSnapshot | null;
   /** Момент последней успешной сборки (epoch ms). */
   builtAt: number;
   /** `filesRevision` на момент сборки — рост инвалидирует снимок. */
   rev: number;
   /** Полёт single-flight: параллельные вызовы ждут одну сборку. */
   inflight: Promise<GitSnapshot> | null;
+  /** Мемо `ветка → родитель` между пересборками (git-вызовы не повторяем). */
+  baseMemo: Map<string, string>;
 }
 
 /** Пустой кеш (стабы тестов создают его литералом). */
 export function createGitCache(): GitCacheState {
-  return { snapshot: null, builtAt: 0, rev: -1, inflight: null };
+  return { snapshot: null, builtAt: 0, rev: -1, inflight: null, baseMemo: new Map() };
+}
+
+/**
+ * Обогатить снимок цепочкой предков. Fail-open: любой сбой/неизвестность —
+ * прежний снимок без `base` (чип остаётся `⎇ branch`, молча).
+ */
+async function withBase(
+  cwd: string,
+  snap: GitSnapshot,
+  memo: Map<string, string>,
+): Promise<WebGitSnapshot> {
+  if (!snap.repo || !snap.branch || snap.detached) return snap;
+  try {
+    const chain = await baseChain(cwd, snap.branch, memo);
+    if (!chain.length) return snap;
+    return { ...snap, base: chain[chain.length - 1], chain };
+  } catch {
+    return snap;
+  }
 }
 
 /**
@@ -33,6 +62,7 @@ export async function gitSnapshotCached(cache: GitCacheState, cwd: string, rev: 
   if (!stale) return cache.snapshot;
   if (!cache.inflight) {
     cache.inflight = gitSnapshot(cwd)
+      .then((snap) => withBase(cwd, snap, cache.baseMemo))
       .then((snap) => {
         cache.snapshot = snap;
         cache.builtAt = Date.now();
@@ -75,6 +105,7 @@ export function gitPeek(
     (repo && Date.now() - cache.builtAt > GIT_SNAPSHOT_TTL_MS);
   if (stale && !cache.inflight) {
     cache.inflight = gitSnapshot(cwd)
+      .then((snap) => withBase(cwd, snap, cache.baseMemo))
       .then((snap) => {
         cache.snapshot = snap;
         cache.builtAt = Date.now();
