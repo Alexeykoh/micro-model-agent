@@ -49,7 +49,8 @@ typecheck, loopback, `--isolated`, локальные заглушки) закр
       `feat/webui-ux-1-13` по спеке
       [`docs/specs/2026-11-06-webui-pause-resume-design.md`](./docs/specs/2026-11-06-webui-pause-resume-design.md):
       гейт на границе итераций (`loop-run.ts`), `POST /api/pause`, проекция
-      `pausedIds` в SSE `state`, кнопка в рельсе хода. Тесты:
+      `pausedIds` в SSE `state`, кнопка в композере перед стоп/отправкой
+      (`#pauseBtn`, иконки pause/play — как у send-кнопки). Тесты:
       `tests/core/agent-pause.test.ts`, `tests/webui-pause.test.ts`,
       `tests/webui-pause-dom.test.ts`. Не-durable (в памяти процесса) —
       durable `interrupt()` остаётся в P1 дорожной карты.

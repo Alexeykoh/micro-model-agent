@@ -118,7 +118,6 @@
           <span class="s" aria-hidden="true">·</span><span class="time" id="railTime" aria-hidden="true">0.0s</span>
           <span class="speed" id="railSpeed" aria-hidden="true"></span>
           <span class="s" aria-hidden="true">·</span><span class="st" id="railSteps" aria-hidden="true">no plan</span>
-          <button class="rail-pause" type="button" id="railPause" hidden></button>
           <span class="right" id="railEsc" aria-hidden="true">Esc — stop</span>
         </div>
         <div class="rl-track" id="railTrack" data-mode="scan">
@@ -163,6 +162,7 @@
             <div class="inp-mark" id="inpMark" aria-hidden="true"></div>
             <textarea class="inp" id="inp" rows="1" placeholder="message… (@ for files, / for commands)"></textarea>
           </div>
+          <button class="pause-btn" id="pauseBtn" type="button" hidden aria-label="pause"></button>
           <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
         </div>
         <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span><span id="hintShort">Ctrl+K — sessions · Ctrl+P — files</span><span id="hintTouch">tap ↑ — send</span></div>

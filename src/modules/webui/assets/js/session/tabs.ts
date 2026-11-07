@@ -32,9 +32,10 @@ import { persistTabs } from "./tabs-persist.js";
 import { renderTabstrip, initTabstrip } from "./tabs-strip.js";
 import { activateServerSession, nextSwitchSeq } from "./tab-switch.js";
 
-// Кнопка паузы в рельсе: обновляется на каждую перерисовку полоски вкладок
-// (смена активной вкладки/статуса) — `session/pause.ts` рисует из проекции
-// `state` (running/paused), сам модуль вешает слушатель на `#railPause`.
+// Кнопка паузы в композере (перед стоп/отправкой): обновляется на каждую
+// перерисовку полоски вкладок (смена активной вкладки/статуса) —
+// `session/pause.ts` рисует из проекции `state` (running/paused), сам модуль
+// вешает слушатель на `#pauseBtn`.
 import "./pause.js";
 export { reflectBusy } from "./composer.js";
 export { loadCommands } from "./cmdk.js";

@@ -754,16 +754,25 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .composer .inp:focus,
 .composer .inp:focus-visible { box-shadow: none; border: none; outline: none; }
 .composer .attach-btn,
-.composer .send-btn {
+.composer .send-btn,
+.composer .pause-btn {
   flex: 0 0 auto; width: 32px; height: 32px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; background: none; border: none; border-radius: 6px;
   color: var(--muted);
 }
 .composer .attach-btn:hover,
-.composer .send-btn:hover { background: var(--hover-bg); color: var(--fg); }
+.composer .send-btn:hover,
+.composer .pause-btn:hover { background: var(--hover-bg); color: var(--fg); }
 .composer .send-btn { color: var(--accent); }
 .composer .send-btn.busy { color: var(--yellow); }
+/* Пауза — сосед стопа в композере: тот же размер/поведение; в состоянии
+   «на паузе» подкрашивается акцентом, чтобы «ход ждёт» читалось без подписи. */
+.composer .pause-btn { color: var(--muted); }
+.composer .pause-btn[hidden] { display: none; }
+.composer .pause-btn.paused { color: var(--accent); }
+.composer .pause-btn:disabled { opacity: .5; cursor: default; }
+.composer .pause-btn .svg-icon { width: 15px; height: 15px; }
 .composer .send-btn:disabled { opacity: .5; cursor: default; }
 .composer .svg-icon { width: 17px; height: 17px; }
 

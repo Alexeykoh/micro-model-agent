@@ -75,8 +75,10 @@ if (ctx.isShutdownRequested()) break;
 
 ### Клиент (`src/modules/webui/assets/js/`)
 
-- Новый лист `session/pause.ts`: кнопка `#pauseBtn` в `.bar-sub` (`#sessTools`),
-  `⏸ пауза` / `▶ продолжить` (`web.pause.*`), клик → `POST /api/pause`;
+- Новый лист `session/pause.ts`: кнопка `#pauseBtn` в композере, непосредственно
+  перед `#sendBtn` (стоп/отправка — управление ходом ищут у края поля ввода),
+  иконочный вид как у send-кнопки: `pause`/`play` (таблица `icons.ts`), подпись
+  в `title`/`aria-label` (`web.pause.*`), клик → `POST /api/pause`;
   состояние рисует из `session.runningSessionIds` + `session.pausedIds`.
 - Поле `pausedIds: string[]` в `core/store/session.ts`; заполняет `state-sync.ts`
   из события `state`.

@@ -1,13 +1,18 @@
 // DOM coverage for the pause button (`session/pause.ts`): visibility follows
-// the server-projected running/paused state (INV-P5), a click POSTs the
-// opposite action to /api/pause.
+// the server-projected running/paused state (INV-P5); the icon-button sits in
+// the composer before send, shows pause/play via aria-label, and a click POSTs
+// the opposite action to /api/pause.
 import { describe, it, expect, beforeEach } from "vitest";
 import { setupHappyDom } from "./helpers/happy-dom";
 
 const win = setupHappyDom(
-  `<div id="msgs" class="msgs"></div><div class="rail-wrap" id="railWrap"><div class="rail-l1">
-   <button class="rail-pause" id="railPause" hidden></button></div></div>`,
+  `<div id="msgs" class="msgs"></div><div class="composer"><div class="composer-main">
+   <button class="pause-btn" id="pauseBtn" hidden aria-label="pause"></button>
+   <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
+   </div></div>`,
 );
+(globalThis as unknown as Record<string, unknown>).DOMParser =
+  (win as unknown as Record<string, unknown>).DOMParser;
 
 const i18n = await import("../src/modules/webui/assets/js/i18n.js");
 i18n.I18N.locale = "en";
@@ -19,7 +24,7 @@ const store = await import("../src/modules/webui/assets/js/store.js");
 const pause = await import("../src/modules/webui/assets/js/session/pause.js");
 
 function btn(): HTMLButtonElement {
-  return win.document.getElementById("railPause") as unknown as HTMLButtonElement;
+  return win.document.getElementById("pauseBtn") as unknown as HTMLButtonElement;
 }
 
 function mountTab(id: string): void {
@@ -36,9 +41,10 @@ beforeEach(() => {
   store.session.pausedIds = [];
   btn().hidden = true;
   btn().replaceChildren();
+  btn().classList.remove("paused");
 });
 
-describe("pause button in the rail", () => {
+describe("pause button in the composer (next to send/stop)", () => {
   it("hidden when the own session is not running", () => {
     mountTab("A");
     pause.refreshPauseButton();
@@ -49,16 +55,25 @@ describe("pause button in the rail", () => {
     expect(btn().hidden).toBe(true);
   });
 
-  it("shows pause for a running turn and resume once the server reports it paused", () => {
+  it("shows the pause icon for a running turn and the play icon once paused", () => {
     mountTab("A");
     store.session.runningSessionIds = ["A"];
     pause.refreshPauseButton();
     expect(btn().hidden).toBe(false);
-    expect(btn().textContent).toContain("pause");
+    expect(btn().getAttribute("aria-label")).toBe("pause");
+    expect(btn().querySelector("svg")).not.toBeNull(); // иконка, не текст
+    expect(btn().classList.contains("paused")).toBe(false);
 
     store.session.pausedIds = ["A"];
     pause.refreshPauseButton();
-    expect(btn().textContent).toContain("resume");
+    expect(btn().getAttribute("aria-label")).toBe("resume");
+    expect(btn().classList.contains("paused")).toBe(true);
+  });
+
+  it("sits before the send button in the composer row", () => {
+    const main = win.document.querySelector(".composer-main");
+    const nodes = Array.from(main?.children ?? []).map((n) => n.id);
+    expect(nodes).toEqual(["pauseBtn", "sendBtn"]);
   });
 
   it("click posts the opposite action for the active session", async () => {

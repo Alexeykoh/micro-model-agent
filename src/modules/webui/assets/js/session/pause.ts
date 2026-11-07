@@ -1,15 +1,19 @@
-// Кнопка паузы хода в рельсе (`#railPause`, спека webui-pause-resume).
+// Кнопка паузы хода в композере (`#pauseBtn`, перед кнопкой стоп/отправки;
+// спека webui-pause-resume).
 //
-// Рельс виден ровно пока ход своей сессии бежит — та же область, где «Esc —
-// stop». Клик шлёт `POST /api/pause {sessionId, action}`; состояние рисует
-// `⏸ пауза` / `▶ продолжить` по серверной проекции `pausedIds` (SSE `state`),
-// а не по локальному флагу: сервер — источник правды (INV-P5).
+// Семантика размещения: «управление ходом» живёт у края поля ввода, там же,
+// где stop — пользователь ищет паузу рядом со стопом, а не в рельсе статуса.
+// Вид — иконочный, как у send-кнопки: pause (две черты) / play (треугольник),
+// подпись только в title/aria-label. Состояние рисуется по серверной проекции
+// `pausedIds` (SSE `state`), а не по локальному флагу: сервер — источник
+// правды (INV-P5).
+import { icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, session } from "../store.js";
 
 function btnEl(): HTMLButtonElement | null {
-  return document.getElementById("railPause") as HTMLButtonElement | null;
+  return document.getElementById("pauseBtn") as HTMLButtonElement | null;
 }
 
 /** Ход какой сессии показывать: активная сессионная вкладка. */
@@ -20,7 +24,7 @@ function ownSessionId(): string | null {
 
 /**
  * Перерисовать кнопку по серверной проекции: видима только когда ход своей
- * сессии бежит; подпись — пауза или продолжить. Идемпотентна, дёргается из
+ * сессии бежит; иконка — pause или play. Идемпотентна, дёргается из
  * renderTabstrip (смена вкладки/статуса) и из проекции `state`.
  */
 export function refreshPauseButton(): void {
@@ -32,9 +36,12 @@ export function refreshPauseButton(): void {
   btn.hidden = !running;
   if (!running) return;
   const label = paused ? t("web.pause.resume") : t("web.pause.hold");
-  btn.textContent = (paused ? "▶ " : "⏸ ") + label;
+  // Тот же способ, что у send-кнопки: икона + title/aria, без текстовой подписи.
+  btn.textContent = "";
+  btn.appendChild(icon(paused ? "play" : "pause"));
   btn.title = label;
   btn.setAttribute("aria-label", label);
+  btn.classList.toggle("paused", paused);
 }
 
 async function toggle(): Promise<void> {
@@ -53,5 +60,5 @@ async function toggle(): Promise<void> {
   refreshPauseButton();
 }
 
-const railBtn = btnEl();
-if (railBtn) railBtn.addEventListener("click", () => void toggle());
+const composerBtn = btnEl();
+if (composerBtn) composerBtn.addEventListener("click", () => void toggle());
