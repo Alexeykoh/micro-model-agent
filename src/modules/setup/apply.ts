@@ -4,6 +4,7 @@
  * Общий для терминального визарда (`src/cli/setup-order.ts` реэкспортит) и
  * браузерного (`src/modules/webui/setup-api.ts`) — единый путь записи в `AppConfig`.
  */
+import { DEFAULTS } from "../../config/defaults";
 import type { AppConfig } from "../../config/types";
 import type { SetupAnswers, SetupSecurityDetail } from "./answers";
 
@@ -65,6 +66,13 @@ export function applyAnswersToConfigWithWarnings(
   }
   config.maxToolIterations = a.maxToolIterations;
   config.locale = a.locale;
+  // Звуки уведомлений веб-UI: ответ визарда пишется в ui.sounds.enabled, если
+  // шаг задан. Отсутствующее поле оставляет дефолт (`enabled: true`).
+  if (a.soundsEnabled !== undefined) {
+    const sounds = config.ui.sounds ?? structuredClone(DEFAULTS.ui.sounds!);
+    sounds.enabled = a.soundsEnabled;
+    config.ui.sounds = sounds;
+  }
   // Мультиконфиги резолвят активный провайдер из `entries[]`, так что ответы
   // пишутся на активную запись — без потери соседей и тюнинга записи
   // (cache, retry, rateLimits). Осознанный кастомный label сохраняется,

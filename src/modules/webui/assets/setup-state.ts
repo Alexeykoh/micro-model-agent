@@ -43,6 +43,7 @@ export function createSetupState(): SetupState {
       securityBashBlock: false,
       securityFlagsBlock: false,
       securityPathsRestrict: true,
+      soundsEnabled: true,
       securityDetail: { bash: {}, paths: {}, flags: {}, network: {}, advanced: {} },
     },
   };

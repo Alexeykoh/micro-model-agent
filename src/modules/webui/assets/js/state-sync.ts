@@ -9,6 +9,7 @@ export function applyCounters(d: Dict): void {
   session.runningSessionId = d.runningSessionId || null;
   session.runningSessionIds =
     d.runningSessionIds || (session.runningSessionId ? [session.runningSessionId] : []);
+  session.pausedIds = Array.isArray(d.pausedIds) ? (d.pausedIds as string[]) : [];
   session.queued = d.queued || {};
   session.queuedIds = d.queuedIds || {};
 }

@@ -8,6 +8,7 @@ import { tabs as tabState } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { closeCmdk, updateCmdk } from "./cmdk.js";
 import { closeMentions, updateMentions } from "./mentions.js";
+import { historyKey, recordFor, downFor, upFor } from "./prompt-history.js";
 import { renderAttachments } from "./attachments.js";
 import { renderQueueStrip } from "./queue.js";
 
@@ -123,3 +124,48 @@ if (inp)
   });
 if (inp) inp.addEventListener("scroll", renderMentionMarks);
 renderMentionMarks();
+
+/**
+ * Листание истории стрелками ▲/▼ (UI-половина; чистая логика — в
+ * `prompt-history.ts`). Перехватываем только когда каретка стоит на первой
+ * строке (▲) или на последней (▼): в середине текста стрелки остаются
+ * обычной навигацией. Попапы cmdk/mentions гейтят в вызывающем обработчике
+ * ДО этого хелпера. Возвращает true, если событие потреблено.
+ */
+export function browseHistory(e: KeyboardEvent): boolean {
+  if (!inp) return false;
+  if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return false;
+  if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return false;
+  const v = inp.value;
+  const caret = inp.selectionStart ?? 0;
+  const up = e.key === "ArrowUp";
+  if (up ? v.slice(0, caret).includes("\n") : v.slice(caret).includes("\n")) return false;
+  const key = historyKey(deps.activeTab());
+  const next = up ? upFor(key, v) : downFor(key);
+  if (next === null) return false; // листать нечего — обычное поведение
+  e.preventDefault();
+  inp.value = next;
+  const owner = deps.activeTab();
+  if (owner) owner.draft = next;
+  const at = up ? 0 : next.length;
+  inp.selectionStart = inp.selectionEnd = at;
+  autogrow();
+  inp.focus();
+  return true;
+}
+
+/** Записать отправленный текст в историю активной сессии. */
+export function recordSent(text: string): void {
+  recordFor(historyKey(deps.activeTab()), text);
+}
+
+/** Сбросить черновик и вложения активной вкладки (общий для send-веток). */
+export function dropDraft(tab: Dict | null): void {
+  if (tab) {
+    tab.draft = "";
+    tab.attachments = [];
+  }
+  tabState.attachments = [];
+  renderAttachments();
+  clearInput();
+}

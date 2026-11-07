@@ -15,6 +15,7 @@ import type { Dict } from "../core/store/types.js";
 import { appendTo, userBlock } from "../feed.js";
 import { api } from "../api.js";
 import { setIndicator } from "../dialog.js";
+import { openQueueEdit } from "./queue-edit.js";
 
 /** A queued message: text plus already-downscaled attachment data-URLs. */
 export interface PendingMessage {
@@ -56,6 +57,23 @@ export function removePending(tab: Dict | null, id: string): boolean {
   if (i === -1) return false;
   queue.splice(i, 1);
   return true;
+}
+
+/** Replaces a local pending message's text by server id (after a saved edit). */
+function updatePendingText(tab: Dict | null, id: string, text: string): boolean {
+  if (!tab || !id) return false;
+  const item = pendingQueue(tab).find((m) => m.id === id);
+  if (!item) return false;
+  item.text = text;
+  return true;
+}
+
+/** Opens the edit popup for a queued row and syncs the local copy on save. */
+function editRow(tab: Dict, id: string, current: string): void {
+  openQueueEdit(tab, id, current, (_sid, _id, text) => {
+    updatePendingText(tab, _id, text);
+    renderQueueStrip();
+  });
 }
 
 /** Moves a local pending message to the head; false — unknown id. */
@@ -207,6 +225,8 @@ export function renderQueueStrip(): void {
     line.appendChild(el("span", "qi-g", "↳"));
     line.appendChild(el("span", "qi-text", row.item ? row.item.text : t("web.queue.unknown")));
     if (row.id) {
+      // Click the row text to edit the queued message (text is the source).
+      line.addEventListener("click", () => editRow(tab, row.id, row.item ? row.item.text : ""));
       const actions = el("span", "qi-actions");
       actions.append(actionButton("start", tab, row.id), actionButton("cancel", tab, row.id));
       line.appendChild(actions);

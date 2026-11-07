@@ -41,6 +41,11 @@ export class Agent extends AgentBase {
   /** Гард одноразового асинхронного резолва переполнения в run(). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: пишется через TurnRunHost
   private overflowResolved = false;
+  /** Пауза хода на границе итераций (INV-P1, спека webui-pause-resume). */
+  private pauseRequested = false;
+  /** Резолвер ждущего гейта; один waiter на ход (агент не reentrant). */
+  private pauseResolve: (() => void) | null = null;
+  private pauseWait: Promise<void> | null = null;
 
   /** Общий вид хоста фаз (INV-23). */
   private hostView(): AgentHostView {
@@ -73,6 +78,44 @@ export class Agent extends AgentBase {
     slog?: SessionLogger,
   ): Promise<string> {
     return phaseFinalizeWithoutTools(turnOutputHost(this.hostView()), state, tokenTracker, onChunk, slog);
+  }
+
+  /**
+   * Пауза хода на границе итераций: текущая итерация (LLM-стрим и батч
+   * тулов) доходит до конца целиком, следующий вызов модели не начнётся до
+   * resume(). Не durable — рестарт процесса теряет паузу (спека
+   * docs/specs/2026-11-06-webui-pause-resume-design.md §1).
+   */
+  pause(): void {
+    if (this.shutdownRequested) return;
+    this.pauseRequested = true;
+  }
+
+  /** Снимает паузу и будит ждущий гейт; идемпотентна. */
+  resume(): void {
+    this.pauseRequested = false;
+    const resolve = this.pauseResolve;
+    this.pauseResolve = null;
+    this.pauseWait = null;
+    if (resolve) resolve();
+  }
+
+  /** Приостановлен ли ход сейчас (проект `pausedIds` в SSE `state`). */
+  isPaused(): boolean {
+    return this.pauseRequested;
+  }
+
+  /**
+   * Гейт границы итераций: no-op без паузы; иначе один shared waiter —
+   * повторный вызов во время паузы не плодит обещания.
+   */
+  private waitWhilePaused(): Promise<void> {
+    if (!this.pauseRequested) return Promise.resolve();
+    if (this.pauseWait) return this.pauseWait;
+    this.pauseWait = new Promise<void>((resolve) => {
+      this.pauseResolve = resolve;
+    });
+    return this.pauseWait;
   }
 
   /**
@@ -110,6 +153,7 @@ export class Agent extends AgentBase {
           this._currentIteration = n;
         },
         isShutdownRequested: () => this.shutdownRequested,
+        waitWhilePaused: () => this.waitWhilePaused(),
         loopSetupHost: () => loopSetupHost(view),
         iterationPrologueHost: () => iterationPrologueHost(view),
         llmPhaseHost: () => llmPhaseHost(view),
@@ -173,6 +217,9 @@ export class Agent extends AgentBase {
         requestShutdown: () => {
           this.shutdownRequested = true;
           this.abortController?.abort();
+          // INV-P3: стоп не может зависнуть на паузе — будим гейт, цикл
+          // выйдет по isShutdownRequested().
+          this.resume();
         },
       },
       sessionId,

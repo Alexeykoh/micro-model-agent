@@ -29,6 +29,7 @@ import { applyPromptI18n, initPromptPopup } from "./prompt.js";
 import { initSecurityPanel, sidebarSecurityState } from "./security.js";
 import { initRequestPopup } from "./request-popup.js";
 import { initSidebarResize, applySidebarResizeI18n } from "./resize.js";
+import { initCompactTabs, syncCompactActive } from "./compact-tabs.js";
 
 /**
  * Куда ведёт контекстная кнопка настроек из полосы вкладок. Одна кнопка
@@ -97,6 +98,7 @@ export function setSidebarTab(id: string, persist = true): void {
     nic.appendChild(tabIcon(effective));
   }
   syncSettingsShortcut(effective);
+  syncCompactActive(effective);
   if (effective === "lsp") sidebarLspState();
   if (effective === "files") renderFilesTree();
   if (effective === "git") sidebarGitState();
@@ -215,6 +217,7 @@ export function initSidebar(): void {
   });
 
   initSidebarResize(root, document.getElementById("sbResizer"));
+  initCompactTabs(root);
 
   root.querySelectorAll<HTMLElement>(".sb-tab").forEach((tab) => {
     tab.addEventListener("click", () => setSidebarTab(tab.dataset.tab || "session"));

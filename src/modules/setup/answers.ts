@@ -57,6 +57,8 @@ export interface SetupAnswers {
   securityBashBlock: boolean;
   securityFlagsBlock: boolean;
   securityPathsRestrict: boolean;
+  /** Звуки уведомлений веб-UI по умолчанию (`ui.sounds.enabled`). */
+  soundsEnabled?: boolean;
   /** Опционально: детали из поп-апов (только браузерный визард). */
   securityDetail?: SetupSecurityDetail;
 }

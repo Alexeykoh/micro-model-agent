@@ -25,6 +25,8 @@ export interface LoopRunCtx {
   deps: AgentDeps;
   setIteration(n: number): void;
   isShutdownRequested(): boolean;
+  /** Гейт паузы на границе итераций (INV-P1, спека webui-pause-resume). */
+  waitWhilePaused(): Promise<void>;
   loopSetupHost(): LoopSetupHost;
   iterationPrologueHost(): IterationPrologueHost;
   llmPhaseHost(): LlmPhaseHost;
@@ -78,6 +80,11 @@ export async function executeAgentLoop(
   );
 
   while (state.iteration < config.maxToolIterations && !ctx.isShutdownRequested()) {
+    // INV-P1: пауза разворачивается только здесь, на границе итераций —
+    // LLM-стрим и батч тулов не разрезаются. После выхода из ожидания
+    // перечитываем shutdown: стоп будит гейт (INV-P3), цикл обязан выйти.
+    await ctx.waitWhilePaused();
+    if (ctx.isShutdownRequested()) break;
     state.iteration++;
     ctx.setIteration(state.iteration);
     contextManager.noteIteration();

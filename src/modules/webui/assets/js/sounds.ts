@@ -24,7 +24,7 @@ export interface SoundPrefs {
 
 /** Дефолты совпадают с `DEFAULTS.ui.sounds` (см. src/config/defaults.ts). */
 export const DEFAULT_SOUND_PREFS: SoundPrefs = {
-  enabled: false,
+  enabled: true,
   done: true,
   question: true,
   failed: true,

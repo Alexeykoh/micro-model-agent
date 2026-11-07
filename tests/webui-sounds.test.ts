@@ -24,7 +24,7 @@ describe("webui sounds: prefs", () => {
     expect(resolveSoundPrefs(null)).toEqual(DEFAULT_SOUND_PREFS);
     expect(resolveSoundPrefs("nope")).toEqual(DEFAULT_SOUND_PREFS);
     expect(resolveSoundPrefs({ enabled: "yes", done: 1 })).toEqual(DEFAULT_SOUND_PREFS);
-    expect(DEFAULT_SOUND_PREFS.enabled).toBe(false);
+    expect(DEFAULT_SOUND_PREFS.enabled).toBe(true);
   });
 
   it("keeps explicit booleans, including a disabled event", () => {

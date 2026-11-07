@@ -117,6 +117,13 @@ export const ICONS: Record<string, IconSpec> = {
     ["line", { x1: 9, y1: 3, x2: 9, y2: 21 }],
   ],
   square: [["rect", { width: 14, height: 14, x: 5, y: 5, rx: 2 }]],
+  // Пауза/возобновление хода (кнопка рядом со стоп в композере). Lucide-форма:
+  // штриховые фигуры, currentColor — как у остальной таблицы.
+  pause: [
+    ["rect", { x: 6, y: 4, width: 4, height: 16, rx: 1 }],
+    ["rect", { x: 14, y: 4, width: 4, height: 16, rx: 1 }],
+  ],
+  play: [["polygon", { points: "6 4 18 12 6 20" }]],
   copy: [
     ["rect", { width: 14, height: 14, x: 8, y: 8, rx: 2, ry: 2 }],
     ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }],

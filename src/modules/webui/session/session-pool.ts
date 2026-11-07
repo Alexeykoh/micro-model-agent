@@ -191,6 +191,9 @@ export class RunPool {
     return this.slotFor(id).queue.promote(messageId);
   }
 
+  editQueued(id: string | null, messageId: string, text: string): QueuedMessage | undefined {
+    return this.slotFor(id).queue.edit(messageId, text);
+  }
   /** Забирает голову очереди слота (undefined — пусто). */
   shift(id: string | null): QueuedMessage | undefined {
     return this.slotFor(id).queue.shift();
