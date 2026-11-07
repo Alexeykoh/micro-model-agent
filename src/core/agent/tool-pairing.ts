@@ -66,12 +66,12 @@ export function repairToolCallPairing(messages: Message[]): Message[] {
       continue;
     }
 
-    if (msg.role === "tool" && msg.tool_call_id) {
-      if (pending.some((c) => c.id === msg.tool_call_id)) {
+    if (msg.role === "tool") {
+      if (msg.tool_call_id && pending.some((c) => c.id === msg.tool_call_id)) {
         out.push(msg);
         pending = pending.filter((c) => c.id !== msg.tool_call_id);
       }
-      // Осиротевший tool (нет объявленного вызова) — отбросить.
+      // Осиротевший tool (нет объявленного вызова, в т.ч. пустой id) — отбросить.
       continue;
     }
 

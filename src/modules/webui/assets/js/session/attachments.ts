@@ -109,21 +109,25 @@ const attachBtn = document.getElementById("attachBtn");
 if (attachBtn && imgPicker) {
   attachBtn.addEventListener("click", () => imgPicker.click());
 }
-inp.addEventListener("paste", (e) => {
-  const items = e.clipboardData && e.clipboardData.items;
-  if (!items) return;
-  const files: File[] = [];
-  for (const it of items) {
-    if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
-      const f = it.getAsFile();
-      if (f) files.push(f);
+// Guard по конвенции файла (imgPicker/attachBtn выше): без #inp (чужой
+// тестовый DOM) модуль обязан импортироваться, а не падать на top-level.
+if (inp) {
+  inp.addEventListener("paste", (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (const it of items) {
+      if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
     }
-  }
-  if (files.length) {
-    e.preventDefault();
-    addFiles(files);
-  }
-});
+    if (files.length) {
+      e.preventDefault();
+      addFiles(files);
+    }
+  });
+}
 
 const inputArea = document.querySelector(".input-area");
 if (inputArea) {
