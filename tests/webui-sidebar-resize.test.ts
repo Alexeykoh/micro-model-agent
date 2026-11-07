@@ -49,14 +49,13 @@ describe("sidebar resize behaviour (U7)", () => {
     g.window = win;
     g.document = win.document;
     g.localStorage = win.localStorage;
+    g.location = win.location;
     win.document.body.innerHTML =
       '<div class="sb" id="sb"><div class="sb-resizer" id="sbResizer"></div></div>';
     sb = win.document.getElementById("sb") as HTMLElement;
     sep = win.document.getElementById("sbResizer") as HTMLElement;
     // Fresh module per test: `wired` is module-level.
-    resize = await import(
-      `../src/modules/webui/assets/js/sidebar/resize.js?t=${Math.random()}`
-    );
+    resize = await import(`../src/modules/webui/assets/js/sidebar/resize.js?t=${Math.random()}`);
   });
 
   it("clamps a dragged width into [min, viewport max]", () => {
@@ -88,7 +87,11 @@ describe("sidebar resize behaviour (U7)", () => {
     resize.setSidebarWidth(400);
     const press = (key: string): void => {
       sep.dispatchEvent(
-        new win.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }) as unknown as Event,
+        new win.KeyboardEvent("keydown", {
+          key,
+          bubbles: true,
+          cancelable: true,
+        }) as unknown as Event,
       );
     };
     press("ArrowLeft");

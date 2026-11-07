@@ -73,7 +73,10 @@ describe("LspModule: прогрев на старте сессии", () => {
       };
       const module = new LspModule(cfg as never, fakeClient([]), logger, dir);
       module.getPlugin().onSessionStart?.({});
-      await new Promise((r) => setTimeout(r, 50));
+      const deadline = Date.now() + 5000;
+      while (!warmMsgs.some((m) => m.startsWith("LSP ready: ts-ls")) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
 
       expect(warmMsgs.some((m) => m.startsWith("LSP warm project:"))).toBe(true);
       expect(warmMsgs.some((m) => m.startsWith("LSP warm start: ts-ls"))).toBe(true);
