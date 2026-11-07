@@ -24,6 +24,20 @@ export function initTabstrip(deps: { openTab: OpenTab; closeTab: CloseTab }): vo
   closeTabImpl = deps.closeTab;
 }
 
+/**
+ * Заголовок вкладки браузера = имя текущего чата (спека-задача §1.13).
+ * Чистая функция: активная сессионная вкладка даёт «<имя> · MMA», всё
+ * остальное (нет вкладок, локальный «new», дровер-панели) — базовый
+ * «MMA Web». Точка применения — `renderTabstrip`: через неё проходят и
+ * переключение активной вкладки (`openTab`/`closeTab`), и переименование
+ * (`updateTabName` — автонейминг сервера приходит именно туда), поэтому
+ * title следует за фактическим состоянием без отдельного прохода.
+ */
+export function pageTitle(active: Dict | null): string {
+  const name = active && active.kind === "session" && !active.dead ? String(active.name || "") : "";
+  return name.trim() ? name.trim() + " · MMA" : "MMA Web";
+}
+
 export function renderTabstrip(): void {
   tabstripEl.textContent = "";
   tabState.tabs.forEach((item: Dict) => {
@@ -67,6 +81,8 @@ export function renderTabstrip(): void {
     });
     tabstripEl.appendChild(tab);
   });
+  // Заголовок вкладки браузера следует за активной сессией (см. pageTitle).
+  document.title = pageTitle(tabState.tabs.find((x: Dict) => x.id === tabState.activeTabId) || null);
   scrollActiveTabIntoView();
   renderSessBar();
   // Кнопка паузы живёт в композере и зависит от активной вкладки + статуса хода:

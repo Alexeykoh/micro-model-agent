@@ -54,6 +54,14 @@ typecheck, loopback, `--isolated`, локальные заглушки) закр
       `tests/core/agent-pause.test.ts`, `tests/webui-pause.test.ts`,
       `tests/webui-pause-dom.test.ts`. Не-durable (в памяти процесса) —
       durable `interrupt()` остаётся в P1 дорожной карты.
+- [x] **Заголовок вкладки браузера — имя текущего чата** — `mma web` держал
+      статичный `<title>MMA Web</title>`. Теперь `document.title` следует за
+      активной сессионной вкладкой: `<имя чата> · MMA`, без активной сессии /
+      для мёртвой вкладки — базовый `MMA Web`. Точка синхронизации одна —
+      `renderTabstrip` (`src/modules/webui/assets/js/session/tabs-strip.ts`,
+      чистая функция `pageTitle`): через неё проходят и переключение вкладок,
+      и переименование (автонейминг сервера приходит в `updateTabName`).
+      Гвард — `tests/webui-doc-title-dom.test.ts`.
 - [x] **Звуки уведомлений — включить по умолчанию + пункт в первой настройке** —
       сейчас `ui.sounds.enabled` выключен по умолчанию: дефолт в
       `src/config/defaults.ts:205` (`sounds: { enabled: false, done: true,
