@@ -145,9 +145,12 @@ export function handleInterruptPost(
  */
 export function interruptSlot(s: SessionStore & RuntimeState & WorkspaceStore & HttpTransport & SseTransport, sessionId: string): void {
   const runner = s.pool.getRunner(sessionId);
-  // INV-P3 (страховка): стоп будит паузу — висящий waiter не держит слот.
-  if (runner) runner.agent.resume();
-  if (runner) runner.agent.shutdown(sessionId);
+  if (runner) {
+    // INV-P3 (страховка): стоп будит паузу — висящий waiter не держит слот.
+    // `?.` — легаси/тестовые агенты без паузы останавливаются прежним путём.
+    runner.agent.resume?.();
+    runner.agent.shutdown(sessionId);
+  }
   cancelPendingQuestions(s, sessionId);
 }
 

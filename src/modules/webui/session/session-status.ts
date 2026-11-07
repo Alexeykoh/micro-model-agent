@@ -32,7 +32,9 @@ export function sessionStatus(s: RuntimeState): {
   const pausedIds: string[] = [];
   for (const id of running) {
     // Пауза живёт на агенте раннера; кэша нет — бегущих слотов мало.
-    if (s.pool.getRunner(id)?.agent.isPaused()) pausedIds.push(id);
+    // `?.()` — честный вызов: тестовые/легаси стабы агента могут не иметь
+    // метода, проекция состояния не обязана падать из-за этого.
+    if (s.pool.getRunner(id)?.agent.isPaused?.()) pausedIds.push(id);
   }
   return {
     busy: s.busy,
