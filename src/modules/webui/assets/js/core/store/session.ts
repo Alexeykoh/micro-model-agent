@@ -10,6 +10,8 @@ export interface SessionSlice {
   activeSessionId: string | null;
   runningSessionId: string | null;
   runningSessionIds: string[];
+  /** Сессии с приостановленным ходом (SSE `state`, INV-P5). */
+  pausedIds: string[];
   queued: Record<string, number>;
   /** Server ids of each session's FIFO, in order (for queue actions). */
   queuedIds: Record<string, string[]>;
@@ -23,8 +25,9 @@ export const session: SessionSlice = {
   host: {},
   busy: false,
   activeSessionId: null,
-  runningSessionId: null,
   runningSessionIds: [],
+  runningSessionId: null,
+  pausedIds: [],
   queued: {},
   queuedIds: {},
   sessionsError: null,

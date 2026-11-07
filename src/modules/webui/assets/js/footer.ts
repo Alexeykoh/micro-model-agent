@@ -11,6 +11,13 @@ export interface FooterGit {
   ahead?: number;
   behind?: number;
   tags?: string[];
+  /**
+   * Базовая ветка (непосредственный родитель по reflog создания) и полная
+   * цепочка предков от корня (`["main","dev"]` для `feat`). Пусто — неизвестно:
+   * чип остаётся просто `⎇ feat`, ничего не выдумываем.
+   */
+  base?: string;
+  chain?: string[];
 }
 
 /** Вход футера: всё, что нужно знать о текущем ходе. */
@@ -123,6 +130,14 @@ export function buildGitChips(git: FooterGit | null, labels?: FooterInput["gitLa
 
   const branch = git.branch || "";
   const head = git.detached ? `${detachedLabel}@${branch}` : branch || "—";
+  // Цепочка наследования стрелками (сухо, как просил пользователь):
+  // `⎇ main → dev → feat`. Без известной базы — прежний одиночный `⎇ feat`.
+  const path =
+    !git.detached && git.chain?.length
+      ? [...git.chain, branch].join(" → ")
+      : !git.detached && git.base
+        ? `${git.base} → ${branch}`
+        : head;
   const extra: string[] = [];
   const ahead = git.ahead ?? 0;
   const behind = git.behind ?? 0;
@@ -130,8 +145,8 @@ export function buildGitChips(git: FooterGit | null, labels?: FooterInput["gitLa
   if (git.tags?.length) extra.push(`◇ ${git.tags.join(", ")}`);
   chips.push({
     cls: "gchip gchip-branch",
-    text: `⎇ ${head}`,
-    title: ["branch: " + head, ...extra].join("\n"),
+    text: `⎇ ${path}`,
+    title: ["branch: " + head, ...(path === head ? [] : ["from: " + path]), ...extra].join("\n"),
   });
 
   const dirty = git.dirty ?? 0;

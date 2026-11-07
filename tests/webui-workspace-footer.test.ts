@@ -110,6 +110,30 @@ describe("workspace footer line", () => {
     expect(line.children.length).toBe(4);
   });
 
+  it("renders the branch chip with the inheritance chain as arrows", () => {
+    draw({
+      git: { repo: true, branch: "feat/x", dirty: 0, chain: ["main", "dev"] },
+      gitLabels: { changes: "changes", detached: "detached" },
+    });
+    const chip = line.querySelector(".gchip-branch");
+    // Сухо, стрелками: путь от корня до текущей ветки прямо на чипе.
+    expect(chip?.textContent).toBe("⎇ main → dev → feat/x");
+    expect(chip?.getAttribute("title")).toContain("branch: feat/x");
+    expect(chip?.getAttribute("title")).toContain("from: main → dev → feat/x");
+  });
+
+  it("falls back to base → branch when only the direct parent is known", () => {
+    draw({ git: { repo: true, branch: "feat", base: "dev" }, gitLabels: { changes: "c", detached: "d" } });
+    expect(line.querySelector(".gchip-branch")?.textContent).toBe("⎇ dev → feat");
+  });
+
+  it("keeps the plain branch chip when the base is unknown or detached", () => {
+    draw({ git: { repo: true, branch: "solo" }, gitLabels: { changes: "c", detached: "d" } });
+    expect(line.querySelector(".gchip-branch")?.textContent).toBe("⎇ solo");
+    draw({ git: { repo: true, branch: "abc123", detached: true, chain: ["main"] }, gitLabels: { changes: "c", detached: "det" } });
+    expect(line.querySelector(".gchip-branch")?.textContent).toBe("⎇ det@abc123");
+  });
+
   it("marks a local dev build next to the version", () => {
     draw({ version: "0.23.0", dev: true, devTitle: "local dev build" });
     const dev = line.querySelector(".ws-dev");

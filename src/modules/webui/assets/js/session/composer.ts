@@ -34,9 +34,11 @@ import { logClientCommand } from "./client-command-log.js";
 import { draftForModel } from "./draft.js";
 import {
   autogrow,
-  clearInput,
+  browseHistory,
+  dropDraft,
   initComposerDraft,
   insertIntoDraft,
+  recordSent,
   restoreComposer,
   saveComposer,
   submitPrompt,
@@ -110,13 +112,7 @@ async function send(): Promise<void> {
     finishThink(feed);
     appendTo(feed, userBlock(trimmed));
     scrollToBottom();
-    if (tab) {
-      tab.draft = "";
-      tab.attachments = [];
-    }
-    tabState.attachments = [];
-    renderAttachments();
-    clearInput();
+    dropDraft(tab);
     const name = trimmed.slice(1).split(/\s+/)[0].toLowerCase();
     // `/clear` and `/new` are browser-side feed/tab operations (the server has
     // no feed to clear). A dedicated action still tells the server, which only
@@ -176,13 +172,7 @@ async function send(): Promise<void> {
     appendTo(feed, postedUser);
     scrollToBottom();
   }
-  if (tab) {
-    tab.draft = "";
-    tab.attachments = [];
-  }
-  tabState.attachments = [];
-  renderAttachments();
-  clearInput();
+  dropDraft(tab);
   if (sessionId && !ownTurnRunning) deps.setTabStatus(sessionId, "working");
   const body: Record<string, unknown> = { text };
   if (images.length) body.images = images;
@@ -203,6 +193,9 @@ async function send(): Promise<void> {
     if (sessionId) deps.setTabStatus(sessionId, "failed");
     return;
   }
+  // Принято сервером (старт или очередь) — ход уходит в историю стрелок ▲/▼.
+  // Отклонённый сабмит не пишется: черновик вернулся в поле.
+  recordSent(text);
   if (r.data && r.data.noop) {
     // Пустой сабмит — сервер вернул no-op с подсказкой, хода нет.
     if (postedUser) postedUser.remove();
@@ -251,6 +244,9 @@ inp.addEventListener("keydown", (e) => {
   // Slash-command and `@`-mention autocomplete own arrows/Enter/Tab/Esc while open.
   if (cmdkKeydown(e)) return;
   if (mentionKeydown(e)) return;
+  // ▲/▼ на границах текста — история отправленных ходов (в середине
+  // многострочного черновика остаются обычной навигацией).
+  if (browseHistory(e)) return;
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     void send();

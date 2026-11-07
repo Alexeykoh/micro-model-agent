@@ -59,6 +59,17 @@ export class SlotQueue {
     return message;
   }
 
+  /**
+   * Меняет текст сообщения в очереди, сохраняя его позицию. Возвращает
+   * сообщение; undefined — такого id уже нет.
+   */
+  edit(messageId: string, text: string): QueuedMessage | undefined {
+    const message = this.items.find((m) => m.id === messageId);
+    if (!message) return undefined;
+    message.text = text;
+    return message;
+  }
+
   /** Забирает голову очереди (undefined — пусто). */
   shift(): QueuedMessage | undefined {
     return this.items.shift();

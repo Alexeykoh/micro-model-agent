@@ -615,6 +615,21 @@ body.light .codeblock { border: 1px solid var(--border); }
 .to-latest[hidden] { display: none; }
 
 /* ---- composer: selectors, attachments, input, autocomplete ---- */
+/* Предпросмотр файла в основном окне (как вкладка IDE): панель заменяет фид
+   чата, пока открыта. Тело переиспользует глобальные классы .fv/.fpre/.fmd. */
+.main-preview {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; min-width: 0;
+}
+.main-preview[hidden] { display: none; }
+.mp-head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 22px;
+  border-bottom: 1px solid var(--line); flex: 0 0 auto;
+}
+.mp-path {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 12.5px; color: var(--dim-b); font-family: var(--mono, monospace);
+}
+.mp-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 22px; min-width: 0; }
 .input-area { margin: 14px 22px 16px; position: relative; }
 .selectors { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; min-width: 0; align-items: center; }
 /* Final speed of the last turn: dim, right-aligned, hidden without data. */
@@ -739,16 +754,25 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .composer .inp:focus,
 .composer .inp:focus-visible { box-shadow: none; border: none; outline: none; }
 .composer .attach-btn,
-.composer .send-btn {
+.composer .send-btn,
+.composer .pause-btn {
   flex: 0 0 auto; width: 32px; height: 32px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; background: none; border: none; border-radius: 6px;
   color: var(--muted);
 }
 .composer .attach-btn:hover,
-.composer .send-btn:hover { background: var(--hover-bg); color: var(--fg); }
+.composer .send-btn:hover,
+.composer .pause-btn:hover { background: var(--hover-bg); color: var(--fg); }
 .composer .send-btn { color: var(--accent); }
 .composer .send-btn.busy { color: var(--yellow); }
+/* Пауза — сосед стопа в композере: тот же размер/поведение; в состоянии
+   «на паузе» подкрашивается акцентом, чтобы «ход ждёт» читалось без подписи. */
+.composer .pause-btn { color: var(--muted); }
+.composer .pause-btn[hidden] { display: none; }
+.composer .pause-btn.paused { color: var(--accent); }
+.composer .pause-btn:disabled { opacity: .5; cursor: default; }
+.composer .pause-btn .svg-icon { width: 15px; height: 15px; }
 .composer .send-btn:disabled { opacity: .5; cursor: default; }
 .composer .svg-icon { width: 17px; height: 17px; }
 
@@ -1092,28 +1116,57 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
+/* Адаптивная полоса вкладок: `.sb-tabs` — контейнер; подписи показываются
+   только когда для них хватает места (container queries, пороги ниже).
+   Не переносим и не режем: при тесноте — только иконки, а если и иконки не
+   влазят (раскрытый набор на узком сайдбаре) — полоса листается по
+   горизонтали. Это осознанная правка U7 («labels always visible») по явному
+   требованию; активная вкладка не теряет подпись — она всегда в `.sb-name`. */
 .sb-tabs {
-  display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0;
-  overflow: visible;
+  container: sbtabs / inline-size;
+  display: flex; flex-wrap: nowrap; gap: 6px; flex: 1 1 auto; min-width: 0;
+  overflow-x: auto; overflow-y: hidden;
 }
 .sb-tabs::-webkit-scrollbar { height: 4px; }
 .sb-tabs::-webkit-scrollbar-track { background: transparent; }
 .sb-tabs::-webkit-scrollbar-thumb { background: var(--stab-thumb); border-radius: 2px; }
 .sb-tabs::-webkit-scrollbar-thumb:hover { background: var(--stab-thumb-hover); }
 .sb-tab {
-  position: relative; width: auto; height: 32px; min-width: 64px; flex: 0 1 auto;
+  position: relative; width: auto; height: 32px; flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 0 8px;
   border: 1px solid var(--border-2); border-radius: 6px;
   background: transparent; color: var(--stab-fg); cursor: pointer; font: inherit;
   font-size: 12px;
 }
+/* Компактный набор вкладок: свёрнутые скрыты, кнопка-стрелка раскрывает их. */
+.sb-tab.sb-hidden { display: none; }
+.sb-tab-toggle {
+  width: 32px; min-width: 32px; height: 32px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-2); border-radius: 6px;
+  background: transparent; color: var(--stab-fg); cursor: pointer; font: inherit;
+}
+.sb-tab-toggle:hover { color: var(--fg); background: var(--hover-bg); }
+.sb-tab-toggle svg { width: 15px; height: 15px; }
 .sb-tab:hover { color: var(--fg); background: var(--hover-bg); }
 .sb-tab.on { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
 .sb-tab .sb-ico svg { width: 15px; height: 15px; }
-/* U7: an icon-only strip was unreadable - nine similar glyphs, no words.
-   Labels are always visible; the strip wraps instead of scrolling sideways. */
-.sb-lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Подпись видна только когда для неё хватает места (замена U7 по явному
+   требованию): по умолчанию — только иконки; контейнерные пороги включают
+   текст, когда полоса широкая. Ничего не обрезается (нет ellipsis) и не
+   переносится (nowrap у самой строки, flex-wrap:nowrap у полосы). Пороги
+   считаются по ширине `.sb-tabs` (контейнер): свёрнутый набор (4 вкладки +
+   стрелка) с текстом умещается от ~450px; раскрытый (все 10 вкладок) —
+   почти никогда, поэтому порог 880px (реально недостижимый в сайдбаре:
+   текст включится только на гипотетически широкой полосе). */
+.sb-lab { display: none; white-space: nowrap; }
+@container sbtabs (min-width: 450px) {
+  .sb-tabs:not(.sb-expanded) .sb-lab { display: inline; }
+}
+@container sbtabs (min-width: 880px) {
+  .sb-tabs.sb-expanded .sb-lab { display: inline; }
+}
 .sb-tab .sb-ico, .sb-name .sb-ico { display: inline-flex; align-items: center; justify-content: center; }
 .sb-tab .sb-dot {
   position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%;
@@ -3300,6 +3353,11 @@ body.light .c-dim { --face-c: var(--panel); }
 }
 
 .critic-block .critic-summary { color: var(--fg); margin-bottom: 6px; white-space: normal; }
+/* Шапка свёрнутого критика: на узкой ширине длинная строка (web.feed.critic_head
+   + статус) не должна наезжать на тоггл — глиф и тоггл фиксированы, лейбл
+   сжимается до эллипсиса (тот же паттерн, что у .trc .lab). */
+.critic-block .think-h .g, .critic-block .think-h .tog { flex: 0 0 auto; }
+.critic-block .think-h .lab { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .critic-block .critic-meta { color: var(--dim-c); margin-bottom: 8px; }
 .critic-block .critic-sub { color: var(--dim-c); margin: 8px 0 4px; text-transform: uppercase; letter-spacing: .04em; font-size: 10.5px; }
 .critic-block .critic-none { color: var(--dim-c); }

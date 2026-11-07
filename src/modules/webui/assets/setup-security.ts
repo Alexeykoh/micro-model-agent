@@ -37,6 +37,23 @@ export function renderSecurity(ctx: SetupContext): HTMLElement {
     box.appendChild(row);
   });
 
+  // Звуки уведомлений веб-UI: отдельный тумблер без тонкой настройки.
+  const soundRow = h("div", "setup-sec-row");
+  const soundLabel = h("label", "setup-toggle");
+  const soundCb = h("input");
+  soundCb.type = "checkbox";
+  soundCb.checked = Boolean(ctx.state.answers.soundsEnabled);
+  soundCb.addEventListener("change", () => {
+    ctx.state.answers.soundsEnabled = soundCb.checked;
+  });
+  soundLabel.appendChild(soundCb);
+  const soundTexts = h("span", "setup-toggle-texts");
+  soundTexts.appendChild(h("span", "t", tr("web.setup.security.sounds")));
+  soundTexts.appendChild(h("span", "d", tr("web.setup.security.sounds_desc")));
+  soundLabel.appendChild(soundTexts);
+  soundRow.appendChild(soundLabel);
+  box.appendChild(soundRow);
+
   const advRow = h("div", "setup-sec-row");
   const advTexts = h("span", "setup-toggle setup-adv-label");
   advTexts.appendChild(h("span", "t", tr("web.setup.security.advanced")));

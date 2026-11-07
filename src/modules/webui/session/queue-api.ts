@@ -5,7 +5,7 @@
 // может стартовать, и индекс уже указывал бы на другое сообщение.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { parseJsonBody } from "../http/body";
-import { readBody, requestError, sendJson } from "../util";
+import { readBody, requestError, sendJson, MAX_MESSAGE_CHARS } from "../util";
 import type {
   SessionStore,
   RuntimeState,
@@ -107,4 +107,36 @@ export function handleQueueStart(req: IncomingMessage, res: ServerResponse, s: Q
     const started = finishTurn(s, sessionId);
     sendJson(res, 200, { ok: true, started });
   });
+}
+
+/**
+ * `POST /api/queue/edit {sessionId, id, text}` — меняет текст запланированного
+ * сообщения, сохраняя позицию в очереди. Иначе после `turn_end` в ленту ушёл бы
+ * старый текст: серверная запись — источник правды.
+ */
+export function handleQueueEdit(req: IncomingMessage, res: ServerResponse, s: QueueState): void {
+  if (s.setupRequired) {
+    sendJson(res, 409, { error: "setup_required" });
+    return;
+  }
+  readBody(req, s.maxBodyBytes)
+    .then((raw) => {
+      const rec = parseJsonBody(raw);
+      const sessionId = typeof rec?.sessionId === "string" ? rec.sessionId.trim() : "";
+      const id = typeof rec?.id === "string" ? rec.id.trim() : "";
+      const text = typeof rec?.text === "string" ? rec.text.slice(0, MAX_MESSAGE_CHARS) : "";
+      if (!sessionId || !id || text.trim().length === 0) {
+        sendJson(res, 400, { error: "bad_request" });
+        return;
+      }
+      if (!s.pool.editQueued(sessionId, id, text)) {
+        sendJson(res, 404, { error: "not_queued" });
+        return;
+      }
+      pushState(s, sessionId);
+      sendJson(res, 200, { ok: true });
+    })
+    .catch((err: unknown) => {
+      requestError(req, res, err);
+    });
 }

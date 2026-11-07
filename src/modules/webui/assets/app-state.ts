@@ -19,8 +19,10 @@ import { setPlan as railPlan } from "./js/rail.js";
 import {
   sidebarSessionChanged, sidebarMapState, sidebarMapIndicator, setSessionLoading,
   sidebarLspState, sidebarFilesState, sidebarPluginsState, sidebarFilesChanged,
+  sidebarGitChanged,
 } from "./js/sidebar.js";
 import { setUpdateInfo } from "./js/update-state.js";
+import { refreshPauseButton } from "./js/session/pause.js";
 
 // Track the workspace file-change counter: a rise (missed SSE fallback) makes
 // the Files tab re-read its expanded directories.
@@ -59,9 +61,17 @@ export function renderActiveState(): void {
   if (rev !== undefined && rev !== lastFilesRevision) {
     const first = lastFilesRevision === -1;
     lastFilesRevision = rev;
-    if (!first && rev > 0) sidebarFilesChanged();
+    if (!first && rev > 0) {
+      sidebarFilesChanged();
+      // Git working-tree changed too: re-read the Changes tab list (was a
+      // dead export — nothing called it, so the tab went stale after edits).
+      sidebarGitChanged();
+    }
   }
   sidebarSessionChanged(sid);
+  // Пауза — поле проекции `state`: перерисовать кнопку на каждый снимок
+  // (переключение вкладок обновляет её через renderTabstrip).
+  refreshPauseButton();
   renderWorkspace(host);
   // Update fact is global (not per-tab): publish it to the chrome readers and
   // badge the settings gear; refresh an empty feed so the update card appears.
