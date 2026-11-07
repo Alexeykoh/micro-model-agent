@@ -1956,6 +1956,8 @@
   "web.queue.cancel": "Отменить сообщение в очереди",
   "web.queue.start_failed": "Не удалось запустить сообщение из очереди",
   "web.queue.cancel_failed": "Не удалось отменить сообщение в очереди",
+  "web.pause.hold": "пауза",
+  "web.pause.resume": "продолжить",
   "web.queue.edit_title": "Изменить сообщение в очереди",
   "web.queue.edit_save": "Сохранить",
   "web.queue.edit_failed": "Не удалось сохранить сообщение в очереди",

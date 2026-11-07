@@ -22,6 +22,7 @@ import {
   sidebarGitChanged,
 } from "./js/sidebar.js";
 import { setUpdateInfo } from "./js/update-state.js";
+import { refreshPauseButton } from "./js/session/pause.js";
 
 // Track the workspace file-change counter: a rise (missed SSE fallback) makes
 // the Files tab re-read its expanded directories.
@@ -68,6 +69,9 @@ export function renderActiveState(): void {
     }
   }
   sidebarSessionChanged(sid);
+  // Пауза — поле проекции `state`: перерисовать кнопку на каждый снимок
+  // (переключение вкладок обновляет её через renderTabstrip).
+  refreshPauseButton();
   renderWorkspace(host);
   // Update fact is global (not per-tab): publish it to the chrome readers and
   // badge the settings gear; refresh an empty feed so the update card appears.

@@ -9,6 +9,7 @@ import { tabs as tabState, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { renderSessBar } from "./composer.js";
 import { notifyTabStatus } from "../sounds.js";
+import { refreshPauseButton } from "./pause.js";
 import { nextTabStatus, statusTitle as statusTitleOf, TAB_DOT } from "./tab-status.js";
 
 type OpenTab = (id: string, name?: string, kind?: string, server?: boolean, activate?: boolean) => void;
@@ -68,6 +69,10 @@ export function renderTabstrip(): void {
   });
   scrollActiveTabIntoView();
   renderSessBar();
+  // Кнопка паузы живёт в рельсе и зависит от активной вкладки + статуса хода:
+  // перерисовка полоски — та же точка синхронизации (pause.ts сам не знает
+  // про вкладки, DAG остаётся ацикличным).
+  refreshPauseButton();
 }
 
 // Keep the active tab visible, aligned to its START so the beginning of the

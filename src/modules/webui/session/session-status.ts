@@ -23,15 +23,23 @@ export function sessionStatus(s: RuntimeState): {
   queueLen: number;
   runningSessionId: string | null;
   runningSessionIds: string[];
+  /** Сессии с приостановленным ходом — кнопка «продолжить» (INV-P5). */
+  pausedIds: string[];
   queued: Record<string, number>;
   queuedIds: Record<string, string[]>;
 } {
   const running = s.pool.busyIds();
+  const pausedIds: string[] = [];
+  for (const id of running) {
+    // Пауза живёт на агенте раннера; кэша нет — бегущих слотов мало.
+    if (s.pool.getRunner(id)?.agent.isPaused()) pausedIds.push(id);
+  }
   return {
     busy: s.busy,
     queueLen: s.pool.totalQueued(),
     runningSessionId: running[0] ?? null,
     runningSessionIds: running,
+    pausedIds,
     queued: s.pool.queuedCounts(),
     queuedIds: s.pool.queuedIdsBySession(),
   };

@@ -1983,6 +1983,8 @@
   "web.queue.cancel": "Cancel queued message",
   "web.queue.start_failed": "Could not start the queued message",
   "web.queue.cancel_failed": "Could not cancel the queued message",
+  "web.pause.hold": "pause",
+  "web.pause.resume": "resume",
   "web.queue.edit_title": "Edit queued message",
   "web.queue.edit_save": "Save",
   "web.queue.edit_failed": "Could not save the queued message",

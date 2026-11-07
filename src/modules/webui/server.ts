@@ -18,7 +18,7 @@ import {
 } from "./util";
 import { handleMessagePost } from "./session/turns";
 import { handleQueueCancel, handleQueueStart, handleQueueEdit } from "./session/queue-api";
-import { handleCommandPost, handleInterruptPost, handleIndexPost } from "./chat/actions-api";
+import { handleCommandPost, handleInterruptPost, handleIndexPost, handlePausePost } from "./chat/actions-api";
 import { handleConfigGet, handleConfigPost, handleModelsGet } from "./settings/config-api";
 import { handleI18nGet } from "./i18n/i18n-api";
 import { webCommandList } from "./chat/commands";
@@ -123,6 +123,7 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "GET /api/models": (req, res, s) => handleModelsGet(req, res, s),
   "POST /api/command": (req, res, s) => handleCommandPost(req, res, s),
   "POST /api/interrupt": (req, res, s) => handleInterruptPost(req, res, s),
+  "POST /api/pause": (req, res, s) => handlePausePost(req, res, s),
   "POST /api/index": (_req, res, s) => handleIndexPost(res, s),
   "POST /api/update": (_req, res, s) => handleUpdatePost(res, s),
   "POST /api/mcp": (req, res, s) => handleMcpCreate(req, res, s),
