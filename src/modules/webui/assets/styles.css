@@ -1107,16 +1107,23 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
+/* Адаптивная полоса вкладок: `.sb-tabs` — контейнер; подписи показываются
+   только когда для них хватает места (container queries, пороги ниже).
+   Не переносим и не режем: при тесноте — только иконки, а если и иконки не
+   влазят (раскрытый набор на узком сайдбаре) — полоса листается по
+   горизонтали. Это осознанная правка U7 («labels always visible») по явному
+   требованию; активная вкладка не теряет подпись — она всегда в `.sb-name`. */
 .sb-tabs {
-  display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0;
-  overflow: visible;
+  container: sbtabs / inline-size;
+  display: flex; flex-wrap: nowrap; gap: 6px; flex: 1 1 auto; min-width: 0;
+  overflow-x: auto; overflow-y: hidden;
 }
 .sb-tabs::-webkit-scrollbar { height: 4px; }
 .sb-tabs::-webkit-scrollbar-track { background: transparent; }
 .sb-tabs::-webkit-scrollbar-thumb { background: var(--stab-thumb); border-radius: 2px; }
 .sb-tabs::-webkit-scrollbar-thumb:hover { background: var(--stab-thumb-hover); }
 .sb-tab {
-  position: relative; width: auto; height: 32px; min-width: 64px; flex: 0 1 auto;
+  position: relative; width: auto; height: 32px; flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 0 8px;
   border: 1px solid var(--border-2); border-radius: 6px;
@@ -1136,9 +1143,21 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .sb-tab:hover { color: var(--fg); background: var(--hover-bg); }
 .sb-tab.on { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
 .sb-tab .sb-ico svg { width: 15px; height: 15px; }
-/* U7: an icon-only strip was unreadable - nine similar glyphs, no words.
-   Labels are always visible; the strip wraps instead of scrolling sideways. */
-.sb-lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Подпись видна только когда для неё хватает места (замена U7 по явному
+   требованию): по умолчанию — только иконки; контейнерные пороги включают
+   текст, когда полоса широкая. Ничего не обрезается (нет ellipsis) и не
+   переносится (nowrap у самой строки, flex-wrap:nowrap у полосы). Пороги
+   считаются по ширине `.sb-tabs` (контейнер): свёрнутый набор (4 вкладки +
+   стрелка) с текстом умещается от ~450px; раскрытый (все 10 вкладок) —
+   почти никогда, поэтому порог 880px (реально недостижимый в сайдбаре:
+   текст включится только на гипотетически широкой полосе). */
+.sb-lab { display: none; white-space: nowrap; }
+@container sbtabs (min-width: 450px) {
+  .sb-tabs:not(.sb-expanded) .sb-lab { display: inline; }
+}
+@container sbtabs (min-width: 880px) {
+  .sb-tabs.sb-expanded .sb-lab { display: inline; }
+}
 .sb-tab .sb-ico, .sb-name .sb-ico { display: inline-flex; align-items: center; justify-content: center; }
 .sb-tab .sb-dot {
   position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%;

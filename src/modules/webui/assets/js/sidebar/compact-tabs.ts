@@ -15,11 +15,15 @@ export const PRIORITY_TABS: readonly string[] = ["session", "files", "git", "sub
 const HIDDEN = "sb-hidden";
 
 let btn: HTMLButtonElement | null = null;
+let bar: HTMLElement | null = null;
 let extras: HTMLElement[] = [];
 let expanded = false;
 
 function paint(): void {
   if (!btn) return;
+  // Раскрытый набор — другой порог подписей в CSS (container query читает
+  // `.sb-expanded`): десять вкладок с текстом не вмещаются почти никогда.
+  if (bar) bar.classList.toggle("sb-expanded", expanded);
   for (const tab of extras) tab.classList.toggle(HIDDEN, !expanded);
   // Иконка двусторонняя: «вправо» — свернуто (нажми, чтоб раскрыть),
   // «влево» — раскрыто (нажми, чтоб свернуть).
@@ -33,7 +37,7 @@ function paint(): void {
  * вкладка — из свёрнутых (запомненный stored tab), панель сразу раскрыта.
  */
 export function initCompactTabs(root: HTMLElement): void {
-  const bar = root.querySelector<HTMLElement>(".sb-tabs");
+  bar = root.querySelector<HTMLElement>(".sb-tabs");
   if (!bar || btn) return;
   extras = Array.from(root.querySelectorAll<HTMLElement>(".sb-tab")).filter(
     (tab) => !PRIORITY_TABS.includes(tab.dataset.tab || "session"),
