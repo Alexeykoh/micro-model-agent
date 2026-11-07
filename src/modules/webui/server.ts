@@ -17,8 +17,8 @@ import {
   SECURITY_HEADERS,
 } from "./util";
 import { handleMessagePost } from "./session/turns";
-import { handleQueueCancel, handleQueueStart } from "./session/queue-api";
-import { handleCommandPost, handleInterruptPost, handleIndexPost } from "./chat/actions-api";
+import { handleQueueCancel, handleQueueStart, handleQueueEdit } from "./session/queue-api";
+import { handleCommandPost, handleInterruptPost, handleIndexPost, handlePausePost } from "./chat/actions-api";
 import { handleConfigGet, handleConfigPost, handleModelsGet } from "./settings/config-api";
 import { handleI18nGet } from "./i18n/i18n-api";
 import { webCommandList } from "./chat/commands";
@@ -112,6 +112,7 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "POST /api/message": (req, res, s) => handleMessagePost(req, res, s),
   "POST /api/queue/cancel": (req, res, s) => handleQueueCancel(req, res, s),
   "POST /api/queue/start": (req, res, s) => handleQueueStart(req, res, s),
+  "POST /api/queue/edit": (req, res, s) => handleQueueEdit(req, res, s),
   "GET /api/config": (_req, res, s) => handleConfigGet(res, s),
   "POST /api/config": (req, res, s) => handleConfigPost(req, res, s),
   "POST /api/answer": (req, res, s) => handleAnswerPost(req, res, s),
@@ -122,6 +123,7 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "GET /api/models": (req, res, s) => handleModelsGet(req, res, s),
   "POST /api/command": (req, res, s) => handleCommandPost(req, res, s),
   "POST /api/interrupt": (req, res, s) => handleInterruptPost(req, res, s),
+  "POST /api/pause": (req, res, s) => handlePausePost(req, res, s),
   "POST /api/index": (_req, res, s) => handleIndexPost(res, s),
   "POST /api/update": (_req, res, s) => handleUpdatePost(res, s),
   "POST /api/mcp": (req, res, s) => handleMcpCreate(req, res, s),

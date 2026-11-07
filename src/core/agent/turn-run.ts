@@ -17,6 +17,10 @@ import { ensureSessionStart } from "./session-start";import type { SystemPromptB
 export interface TurnRunHost {
   deps: AgentDeps;
   shutdownRequested: boolean;
+  /** Пауза хода: пишется через Agent.pause/resume, сбрасывается здесь (INV-P4). */
+  pauseRequested: boolean;
+  pauseResolve: (() => void) | null;
+  pauseWait: Promise<void> | null;
   abortController: AbortController | null;
   systemPromptAdded: boolean;
   overflowResolved: boolean;
@@ -51,6 +55,11 @@ export async function runTurn(
   const { deps } = host;
   // Сброс флага shutdown от прошлого прерывания; свежий контроллер на ход.
   host.shutdownRequested = false;
+  // INV-P4: пауза не течёт за границу хода — остаточный флаг прошлого прогона
+  // не должен вешать следующий (спека webui-pause-resume).
+  host.pauseRequested = false;
+  host.pauseResolve = null;
+  host.pauseWait = null;
   host.abortController = new AbortController();
   // Снимок карты проекта обновляется НА ГРАНИЦЕ ХОДА: внутри хода системный
   // промпт имутабелен, иначе KV-кеш рвётся на каждой записи файла (аудит §8.7).

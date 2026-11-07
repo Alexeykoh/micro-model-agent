@@ -204,6 +204,36 @@ function pathMatches(relPath: string, needle: string): boolean {
 }
 
 /**
+ * Ступень релевантности имени/пути для `@`-автодополнения: совпадение по префиксу
+ * имени сильнее подстроки имени, а та сильнее подстроки пути (заголовок TODO §1.13
+ * — самый подходящий файл не должен тонуть в алфавитном обходе). Меньше — выше.
+ */
+function relevanceTier(relPath: string, needle: string): number {
+  const name = relPath.slice(relPath.lastIndexOf("/") + 1).toLowerCase();
+  if (name.startsWith(needle)) return 1;
+  if (name.includes(needle)) return 2;
+  return 3;
+}
+
+/**
+ * Порядок pathHits по релевантности: tier → кратчайший путь → имя → путь.
+ * Внутри одинаково релевантных совпадений порядок совпадает с алфавитом обхода
+ * (стабильный localeCompare), поэтому существующие ожидания не меняются.
+ */
+function byRelevance(needle: string): (a: SearchHit, b: SearchHit) => number {
+  const pa = (h: SearchHit) => (h.kind === "path" ? h.path : "");
+  return (a, b) => {
+    const ra = relevanceTier(pa(a), needle);
+    const rb = relevanceTier(pa(b), needle);
+    if (ra !== rb) return ra - rb;
+    if (a.path.length !== b.path.length) return a.path.length - b.path.length;
+    const na = pa(a).slice(pa(a).lastIndexOf("/") + 1);
+    const nb = pa(b).slice(pa(b).lastIndexOf("/") + 1);
+    return na.localeCompare(nb) || pa(a).localeCompare(pa(b));
+  };
+}
+
+/**
  * Ищет подстроку (без учёта регистра) по имени/пути и по тексту файлов
  * workspace `base`. `hiddenGlobs` — активные `security.dataPolicy.apiHiddenGlobs`.
  */
@@ -229,8 +259,11 @@ export async function searchWorkspace(
     namesOnly: opts.namesOnly === true,
   };
   await walkDir(base, base, "", matcher, hiddenGlobs, state);
-  // Имена всегда первыми; общий лимит делится между двумя видами совпадений.
-  const merged = [...state.pathHits, ...state.results];
+  // Имена всегда первыми, но среди них — по релевантности запроса (не по алфавиту
+  // обхода): `@`-автодополнение должно ставить самый вероятный файл наверх.
+  const rankedPathHits = state.pathHits.slice().sort(byRelevance(state.needle));
+  // Общий лимит делится между двумя видами совпадений.
+  const merged = [...rankedPathHits, ...state.results];
   if (merged.length > state.maxResults) {
     merged.length = state.maxResults;
     state.truncated = true;

@@ -171,6 +171,10 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
     securityPathsRestrict = pathsAnswer !== "n" && pathsAnswer !== "no";
   }
 
+  // Notification sounds (web UI): on by default — a bare Enter keeps them.
+  const soundsAnswer = (await ask(rl, t("setup.sounds_enable"), "Y")).toLowerCase();
+  const soundsEnabled = soundsAnswer !== "n" && soundsAnswer !== "no";
+
   if (ownRl) {
     // Деттачим ридер промпта и ставим stdin на паузу, чтобы raw-режимный
     // LineEditor REPL захватил его чисто (без leftover readline/raw-состояния).
@@ -188,6 +192,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
     securityBashBlock,
     securityFlagsBlock,
     securityPathsRestrict,
+    soundsEnabled,
   };
 
   getDefaultChannel().writeLine(pc.green(pc.bold(t("setup.complete"))));
@@ -199,6 +204,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
     [t("setup.context_window"), String(contextWindow)],
     [t("setup.max_iters"), String(maxIterations)],
     [t("setup.ui_lang"), locale],
+    [t("setup.sounds_enable"), soundsEnabled ? "on" : "off"],
   ];
   for (const [label, value] of summary) {
     getDefaultChannel().writeLine(`  ${pc.yellow(label.trim())}: ${pc.white(value)}`);

@@ -152,7 +152,7 @@ export function parseSetupAnswers(rec: Record<string, unknown>): SetupAnswers | 
   }
 
   const apiKey = typeof rec.apiKey === "string" && rec.apiKey.trim() ? rec.apiKey.trim() : "not-needed";
-  return {
+  const out: SetupAnswers = {
     provider,
     apiBase,
     apiKey,
@@ -165,6 +165,8 @@ export function parseSetupAnswers(rec: Record<string, unknown>): SetupAnswers | 
     securityPathsRestrict: rec.securityPathsRestrict as boolean,
     securityDetail: parseSecurityDetail(rec.securityDetail),
   };
+  if (typeof rec.soundsEnabled === "boolean") out.soundsEnabled = rec.soundsEnabled;
+  return out;
 }
 
 /** `GET /api/setup` — нужен ли сетап, плюс статика визарда. */

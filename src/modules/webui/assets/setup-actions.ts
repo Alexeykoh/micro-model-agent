@@ -74,6 +74,7 @@ async function finishSetup(ctx: SetupContext, btn: HTMLButtonElement): Promise<v
       securityBashBlock: ctx.state.answers.securityBashBlock,
       securityFlagsBlock: ctx.state.answers.securityFlagsBlock,
       securityPathsRestrict: ctx.state.answers.securityPathsRestrict,
+      soundsEnabled: ctx.state.answers.soundsEnabled,
       securityDetail: ctx.state.answers.securityDetail,
     },
   });
