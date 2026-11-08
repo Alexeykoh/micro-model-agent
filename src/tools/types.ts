@@ -103,6 +103,7 @@ export interface ToolContext {
    * читают это вместо угадывания по имени модели.
    */
   capabilities?: import("../config/types").ModelCapabilities;
+  capabilitiesProbeRef?: { probe?: import("../config/types").ModelCapabilities };
   sessionHistory?: {
     append(type: string, content: unknown): Promise<void>;
   };

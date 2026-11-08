@@ -148,8 +148,7 @@ export async function runSubagent(
 
     childExecutor?.setScope?.(appliedScope);
     if (ctx.contextManager?.hasTaint?.()) subContextManager.taintAll?.();
-    // Cleanup на исполнителе — рестор скоупа при таймауте/аборте, даже если
-    // `finally` агента не отработал (брошенный промис).
+    // Cleanup на исполнителе — рестор скоупа при таймауте/аборте.
     ctx.cleanup = restoreScope;
     ctx.recursionDepth = currentDepth + 1;
     executor?.setRecursionDepth?.(currentDepth + 1);
@@ -177,6 +176,7 @@ export async function runSubagent(
       config: subConfig,
       llmProvider: provider,
       toolExecutor: childExecutor ?? ctx.toolExecutor,
+      capabilitiesProbeRef: ctx.capabilitiesProbeRef,
       pluginManager: subPluginManager,
       contextManager: subContextManager,
       hallucinationDetector,

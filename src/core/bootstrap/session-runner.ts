@@ -109,6 +109,7 @@ export function createSessionRunnerFactory(
       {
         getSessionId: () => pinned.getActiveMeta()?.id ?? sessionId,
         onDiagnostic: admissionDiagnosticSink(pinned),
+        probeCapabilities: () => capabilitiesProbeRef.probe,
       },
     );
 
@@ -234,6 +235,7 @@ export function createSessionRunnerFactory(
       toolCtx,
       contextProbePromise,
       registry,
+      capabilitiesProbeRef,
     });
     seedRunnerHistory(agent, pinned, sessionId);
 

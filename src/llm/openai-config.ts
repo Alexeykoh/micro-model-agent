@@ -43,5 +43,7 @@ export interface OpenAICompatConfig {
   reasoningStrategy?: ReasoningStrategy;
   /** Эндпоинт умеет выключать reasoning (`reasoning_effort: "none"` легитимен). */
   reasoningOff?: boolean;
+  /** Объявленные значения effort; пусто = канонические (INV-R7). */
+  reasoningLevels?: string[];
   logger?: import("../logger/app-logger").Logger;
 }

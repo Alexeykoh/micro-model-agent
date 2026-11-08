@@ -99,6 +99,7 @@ describe("probeModel", () => {
       tools: true,
       reasoningStrategy: "openai-effort",
       reasoningOff: true,
+      reasoningLevels: [],
     });
   });
 

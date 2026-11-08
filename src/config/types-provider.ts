@@ -52,6 +52,8 @@ export interface ModelCapabilities {
   reasoningStrategy?: ReasoningStrategy;
   /** Эндпоинт умеет выключать reasoning (native `reasoning.allowed_options` ∋ off). */
   reasoningOff?: boolean;
+  /** Объявленные эндпоинтом значения `reasoning_effort` (INV-R7). */
+  reasoningLevels?: string[];
 }
 
 /** Одна настроенная запись провайдера (из возможных многих). */

@@ -8,7 +8,7 @@
 import { Agent } from "../agent";
 import type { AgentDeps } from "../agent";
 import { moduleOf } from "../../output";
-import type { AppConfig, ReasoningStrategy } from "../../config/types";
+import type { AppConfig, ReasoningStrategy, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderManager } from "../../modules/providers/manager";
@@ -87,6 +87,8 @@ export interface AgentPhaseInput {
   toolCtx: ToolContext;
   /** Фоновая context-probe (поздний reconfigure). */
   contextProbePromise: Promise<ContextProbeResult | null>;
+  /** Живая проба возможностей для пересборки провайдера (INV-R2). */
+  capabilitiesProbeRef: { probe?: ModelCapabilities };
 }
 
 /**
@@ -128,6 +130,7 @@ export async function assembleAgent(
     execModule,
     toolCtx,
     contextProbePromise,
+    capabilitiesProbeRef,
   } = input;
 
   // Fail-open верификатора плана (INV-15/W0.6): `verify_error` пишем в session.jsonl
@@ -173,6 +176,7 @@ export async function assembleAgent(
     contextLogger,
     reasoningProbe: () => reasoningProbePromise,
     reasoningStrategy,
+    capabilitiesProbeRef,
     planSummary: () => execModule.getPlanSummary(),
     toolCtx,
     // INV-15: деградации проверки заявлений идут в сессию тем же стоком,

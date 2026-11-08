@@ -18,6 +18,18 @@ describe("reasoningStatus (INV-R7)", () => {
     expect(reasoningStatus({ strategy: "prompt-tag", supported: null }).noteKey).toBeNull();
   });
 
+  it("shows only the levels the provider declared (INV-R7)", () => {
+    expect(reasoningStatus({ strategy: "openai-effort", levels: ["none", "low", "medium", "high"] }).levels).toEqual([
+      "auto", "default", "none", "low", "medium", "high",
+    ]);
+  });
+
+  it("uses only auto/default when the endpoint declared an empty level set (LM Studio)", () => {
+    // LM Studio declares off/on only — усилий нет, но выключение умеет.
+    expect(reasoningStatus({ strategy: "openai-effort", levels: [] }).levels).toEqual(["auto", "default"]);
+    expect(reasoningStatus({ strategy: "openai-effort", levels: [] }).noteKey).toBeNull();
+  });
+
   it("keeps the full level set for effort-aware backends and collapses the rest", () => {
     expect(reasoningStatus({ strategy: "openai-effort" }).levels).toEqual([
       "auto", "default", "none", "low", "medium", "high", "max",
