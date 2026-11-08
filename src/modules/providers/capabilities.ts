@@ -20,6 +20,8 @@ export interface PresetCapabilities {
   reasoningStrategy?: import("../../config/types").ReasoningStrategy;
   /** Эндпоинт умеет выключать reasoning (нижний слой). */
   reasoningOff?: boolean;
+  /** Объявленные значения effort (нижний слой, INV-R7). */
+  reasoningLevels?: string[];
 }
 
 /**
@@ -45,6 +47,7 @@ export function resolveModelCapabilities(
         tools: preset.tools,
         reasoningStrategy: preset.reasoningStrategy,
         reasoningOff: preset.reasoningOff,
+        reasoningLevels: preset.reasoningLevels,
       }
     : { ...DEFAULT_MODEL_CAPABILITIES };
   return { ...base, ...(probe ?? {}), ...(override ?? {}) };

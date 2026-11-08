@@ -29,6 +29,11 @@ function stubDeps(config: AppConfig) {
   };
 }
 
+/** Agent принимает полный AgentDeps; стаб покрывает только используемые поля. */
+function makeAgent(deps: object): Agent {
+  return new Agent(deps as any);
+}
+
 /** LM Studio stub: only "new-model" is known, loaded with 65536. */
 function mockLmStudio() {
   global.fetch = (async (url: unknown) => {
@@ -65,7 +70,7 @@ describe("agent reconfigure probe", () => {
     mockLmStudio();
     const config = testConfig();
     const deps = stubDeps(config);
-    const agent = new Agent(deps as any);
+    const agent = makeAgent(deps);
     // Every write path (REPL/web) mutates the live config, then passes the
     // SAME object to reconfigure — prev/next comparison would see no change.
     config.model = "new-model";
@@ -78,6 +83,33 @@ describe("agent reconfigure probe", () => {
     );
   });
 
+  it("reprobes provider with discovered capabilities (INV-R2)", async () => {
+    mockLmStudio();
+    const config = testConfig();
+    const deps = {
+      ...stubDeps(config),
+      capabilitiesProbeRef: {
+        probe: {
+          reasoningStrategy: "openai-effort" as const,
+          reasoningOff: true,
+          reasoningLevels: ["low", "medium", "xhigh"],
+        },
+      },
+    };
+    const agent = makeAgent(deps);
+    config.model = "new-model";
+    await agent.reconfigure(config);
+    // Стратегия и экземпляр провайдера обязаны видеть discovery, а не пресет
+    // (`prompt-tag`), иначе `none` молча превращается в `/no_think`.
+    expect(deps.reasoningStrategy).toBe("openai-effort");
+    const provider = deps.llmProvider as unknown as {
+      reasoningStrategy?: string;
+      reasoningLevels?: string[];
+    };
+    expect(provider.reasoningStrategy).toBe("openai-effort");
+    expect(provider.reasoningLevels).toEqual(["low", "medium", "xhigh"]);
+  });
+
   it("skips the probe when only an unrelated key changed", async () => {
     let fetchCalls = 0;
     global.fetch = (async () => {
@@ -86,7 +118,7 @@ describe("agent reconfigure probe", () => {
     }) as any;
     const config = testConfig();
     const deps = stubDeps(config);
-    const agent = new Agent(deps as any);
+    const agent = makeAgent(deps);
     config.maxToolIterations = 99;
     await agent.reconfigure(config);
     expect(fetchCalls).toBe(0);
@@ -97,7 +129,7 @@ describe("agent reconfigure probe", () => {
     mockLmStudio();
     const config = testConfig();
     const deps = stubDeps(config);
-    const agent = new Agent(deps as any);
+    const agent = makeAgent(deps);
     config.model = "new-model";
     await agent.reconfigure(config);
     expect(config.contextWindow).toBe(65536);

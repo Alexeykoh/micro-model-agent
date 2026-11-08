@@ -7,16 +7,58 @@
 import type { ToolDefinition } from "./provider";
 import type { ReasoningStrategy } from "../config/types";
 
-/** Уровень под контракт `reasoning_effort`: "default" не шлём, "max"→"high",
- *  "none" — только при объявленном выключателе и механизме-поле (strict 400). */
+/** Ранг канонических уровней для проекции на объявленные эндпоинтом (INV-R7). */
+const EFFORT_RANK: Record<string, number> = {
+  none: 0,
+  minimal: 1,
+  low: 2,
+  medium: 3,
+  high: 4,
+  xhigh: 5,
+  max: 6,
+};
+
+/** Ближайший поддерживаемый уровень: не ниже запрошенного, иначе высший. */
+function projectLevel(level: string, supported: string[]): string {
+  if (supported.includes(level)) return level;
+  const alias = level === "max" ? "high" : level;
+  if (supported.includes(alias)) return alias;
+  const target = EFFORT_RANK[level] ?? -1;
+  let highest = supported[0];
+  let highestRank = Number.NEGATIVE_INFINITY;
+  let above: string | undefined;
+  let aboveRank = Number.POSITIVE_INFINITY;
+  for (const candidate of supported) {
+    const rank = EFFORT_RANK[candidate];
+    if (rank === undefined) continue;
+    if (rank >= target && rank < aboveRank) {
+      above = candidate;
+      aboveRank = rank;
+    }
+    if (rank > highestRank) {
+      highest = candidate;
+      highestRank = rank;
+    }
+  }
+  return above ?? highest;
+}
+
+/** Уровень под контракт `reasoning_effort`: "default" не шлём,
+ *  "none" — только при объявленном выключателе и механизме-поле (strict 400),
+ *  остальные проецируются на объявленные эндпоинтом уровни (INV-R7). */
 export function normalizeReasoningEffort(
   level: string | undefined,
   strategy: ReasoningStrategy,
   reasoningOff: boolean,
+  reasoningLevels?: string[],
 ): string | undefined {
   if (!level || level === "default") return undefined;
   if (level === "none") {
     return reasoningOff && strategy === "openai-effort" ? "none" : undefined;
+  }
+  if (reasoningLevels) {
+    if (reasoningLevels.length === 0) return undefined; // declared but no granular levels
+    return projectLevel(level, reasoningLevels);
   }
   if (level === "max") return "high";
   return level;
@@ -32,6 +74,8 @@ export interface RequestBodyOptions {
   reasoningEffort?: string;
   reasoningStrategy?: ReasoningStrategy;
   reasoningOff?: boolean;
+  /** Объявленные эндпоинтом значения effort (INV-R7). */
+  reasoningLevels?: string[];
   /** Подсказки кеша (llama.cpp `cache_prompt`). */
   cachePrompt?: boolean;
   /** Ключ кеша для OpenAI (`prompt_cache_key`). */
@@ -58,7 +102,12 @@ export function buildRequestBody(opts: RequestBodyOptions): Record<string, unkno
   // Применяем effort через стратегию провайдера (уровень нормализуется под
   // контракт OpenAI: low|medium|high).
   const strategy = opts.reasoningStrategy ?? "openai-effort";
-  const effort = normalizeReasoningEffort(opts.reasoningEffort, strategy, opts.reasoningOff === true);
+  const effort = normalizeReasoningEffort(
+    opts.reasoningEffort,
+    strategy,
+    opts.reasoningOff === true,
+    opts.reasoningLevels,
+  );
 
   if (strategy === "openai-effort") {
     if (effort) body.reasoning_effort = effort;

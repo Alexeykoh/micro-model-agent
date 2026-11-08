@@ -1,6 +1,7 @@
 // Нативные пробы контекста бэкендов (Ollama / llama.cpp / OpenAI-compat
 // /models / models.dev) — вынесено из `provider-context.ts` (правило ≤300).
 import { lookupModelsDevContext } from "./models-dev";
+import type { ReasoningStrategy } from "../config/types";
 
 /** Числовые context-подобные поля, что может нести запись `/models`. */
 const CONTEXT_KEYS = [
@@ -146,6 +147,43 @@ export async function probeLlamaCpp(origin: string, timeoutMs: number): Promise<
   const gen = bag.default_generation_settings;
   if (gen && typeof gen === "object") {
     return pickContextField(gen as Record<string, unknown>);
+  }
+  return null;
+}
+
+/** Механизм reasoning, объявленный llama.cpp в `/props` (INV-R6). */
+export interface LlamaCppReasoningCaps {
+  strategy: ReasoningStrategy;
+  reasoningOff: boolean;
+  /** Объявленные значения `reasoning_effort` (INV-R7). */
+  levels?: string[];
+}
+
+/**
+ * llama.cpp `/props.chat_template_caps`: сервер сам сообщает, умеет ли он
+ * `reasoning_effort` и какие значения принимает. Фолбэк — `enable_thinking`
+ * в шаблоне (kwarg выключает thinking). Null = механизм не объявлен.
+ */
+export async function probeLlamaCppReasoning(
+  origin: string,
+  timeoutMs: number,
+): Promise<LlamaCppReasoningCaps | null> {
+  const props = await fetchJson(`${origin}/props`, timeoutMs);
+  if (!props || typeof props !== "object") return null;
+  const bag = props as Record<string, unknown>;
+  const caps = bag.chat_template_caps;
+  if (caps && typeof caps === "object") {
+    const c = caps as Record<string, unknown>;
+    if (c.supports_reasoning_effort === true) {
+      const levels = Array.isArray(c.reasoning_effort_levels)
+        ? c.reasoning_effort_levels.filter((v): v is string => typeof v === "string")
+        : undefined;
+      // llama.cpp принимает "none" как выключатель (проверено вживую).
+      return { strategy: "openai-effort", reasoningOff: true, levels };
+    }
+  }
+  if (typeof bag.chat_template === "string" && bag.chat_template.includes("enable_thinking")) {
+    return { strategy: "template-kwarg", reasoningOff: true };
   }
   return null;
 }

@@ -87,10 +87,28 @@ describe("buildReasoningView", () => {
     rememberReasoningMechanism("http://localhost:1234/v1", "qwen/qwen3.5-9b", {
       strategy: "openai-effort",
       reasoningOff: true,
+      levels: ["low", "medium", "xhigh"],
     });
     const withAgent = buildReasoningView(config);
     expect(withAgent.strategy).toBe("openai-effort");
     expect(withAgent.reasoningOff).toBe(true);
+    // UI показывает только реальные уровни эндпоинта (xhigh → high).
+    expect(withAgent.levels).toEqual(["none", "low", "medium", "high"]);
+  });
+
+  it("shows only 'none' when the endpoint declares a toggle-only off/on set (LM Studio)", () => {
+    const config = testConfig();
+    config.provider.type = "lmstudio";
+    config.provider.baseUrl = "http://localhost:1234/v1";
+    config.model = "qwen/qwen3.5-9b";
+    rememberReasoningMechanism("http://localhost:1234/v1", "qwen/qwen3.5-9b", {
+      strategy: "openai-effort",
+      reasoningOff: true,
+      levels: ["off", "on"],
+    });
+    const view = buildReasoningView(config);
+    expect(view.strategy).toBe("openai-effort");
+    expect(view.levels).toEqual(["none"]);
   });
 
   it("reports the configured reasoning mode", () => {
@@ -119,6 +137,7 @@ describe("GET /api/models reasoning shape", () => {
         reasoningOff: false,
         supported: null,
         mode: "auto",
+        levels: null,
       });
     });
   });

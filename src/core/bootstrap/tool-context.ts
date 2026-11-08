@@ -165,6 +165,9 @@ export function createToolContext(input: ToolContextInput): ToolContext {
     // Одноразовые разрешения `approve`: общее состояние для тула (минтит) и
     // enforcement в `ToolExecutor` (потребляет). Живёт столько же, сколько контекст.
     approvals: new ApprovalStore(),
+    // Живая пробы для субагентов: их агент при эксперте-модели получает ту
+    // же discovery-решение, что и родитель (INV-R2/INV-R8).
+    capabilitiesProbeRef: capabilitiesRef,
   } as ToolContext;
 
   // `config` — ЖИВОЙ геттер поверх общего configRef: тулы и валидаторы видят

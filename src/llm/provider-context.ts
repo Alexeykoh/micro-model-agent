@@ -16,9 +16,20 @@ import type { ModelCapabilities } from "../config/types";
 import {
   probeOllama,
   probeLlamaCpp,
+  probeLlamaCppReasoning,
   probeOpenAICompatModels,
   probeModelsDev,
 } from "./native-context";
+
+/** Канонические effort-уровни харнесса, которые эндпоинт может объявить. */
+const EFFORT_OPTION: Record<string, true> = {
+  low: true,
+  medium: true,
+  high: true,
+  minimal: true,
+  xhigh: true,
+  max: true,
+};
 
 /** Итог стартовой context-probe: с чем модель РЕАЛЬНО загружена. */
 export interface ContextProbeResult {
@@ -105,12 +116,62 @@ export async function probeModel(
       capabilities ??= {};
       capabilities.reasoningStrategy = "openai-effort";
       capabilities.reasoningOff = true;
+      // Объявленный список уровней effort — авторитетен (INV-R7). LM Studio
+      // обычно отдаёт только `["off","on"]`: гранулярных уровней нет, и пустой
+      // массив означает «выключение есть, усилий нет» — UI покажет только
+      // `none`, а не выдуманные low/medium/high/max.
+      const effort = raw.reasoning.allowed_options.filter((o) => o in EFFORT_OPTION);
+      capabilities.reasoningLevels = effort;
     }
 
     return { model: found.key ?? found.name ?? model, contextLength, capabilities };
   } catch {
     return null;
   }
+}
+
+/** Итог native-пробы возможностей: модель, окно (если LM Studio) и capabilities. */
+export interface NativeProbeResult {
+  model: string;
+  /** Длина контекста загруженного инстанса (LM Studio); иначе undefined. */
+  contextLength?: number;
+  capabilities?: ModelCapabilities;
+}
+
+/**
+ * Единая native-проба возможностей ДО сборки провайдера (INV-R2/R6): LM Studio
+ * (`/api/v1/models`) и llama.cpp (`/props.chat_template_caps`) опрашиваются
+ * параллельно. Механизм reasoning нужен экземпляру провайдера сразу, поэтому
+ * эта проба, в отличие от context-probe, не фоновая.
+ */
+export async function probeNativeCapabilities(
+  baseUrl: string,
+  model: string,
+  timeoutMs = 3000,
+  providerType?: string,
+): Promise<NativeProbeResult | null> {
+  const origin = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
+  // `/props` — локальный llama.cpp; хостед-типы не опрашиваем синхронно, иначе
+  // старт платит лишний сетевой round-trip к публичному эндпоинту.
+  const llamaEligible =
+    providerType === undefined || providerType === "openai-compat" || providerType === "lmstudio";
+  const [lm, llama] = await Promise.all([
+    probeModel(baseUrl, model, timeoutMs),
+    llamaEligible ? probeLlamaCppReasoning(origin, timeoutMs) : Promise.resolve(null),
+  ]);
+  if (!lm && !llama) return null;
+  const capabilities: ModelCapabilities = { ...(lm?.capabilities ?? {}) };
+  if (llama) {
+    capabilities.reasoningStrategy = llama.strategy;
+    capabilities.reasoningOff = llama.reasoningOff;
+    capabilities.reasoningLevels = llama.levels;
+  }
+  const hasCaps = Object.values(capabilities).some((v) => v !== undefined);
+  return {
+    model: lm?.model ?? model,
+    contextLength: lm?.contextLength,
+    capabilities: hasCaps ? capabilities : undefined,
+  };
 }
 
 /**

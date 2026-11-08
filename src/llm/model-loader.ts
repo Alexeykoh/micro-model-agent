@@ -23,12 +23,18 @@ export interface LoadResult {
 // реэкспорт отсюда, чтобы существующие импорты не ломать.
 export {
   probeModel,
+  probeNativeCapabilities,
   getLoadedContextLength,
   probeProviderContext,
   type ContextProbeResult,
   type ModelProbeResult,
+  type NativeProbeResult,
   type ProviderContextOpts,
 } from "./provider-context";
+export {
+  probeLlamaCppReasoning,
+  type LlamaCppReasoningCaps,
+} from "./native-context";
 
 interface LmStudioLoadResponse {
   load_time_seconds?: number;

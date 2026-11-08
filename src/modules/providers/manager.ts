@@ -243,6 +243,7 @@ export class ProviderManager {
       ...spec.capabilities,
       reasoningStrategy: caps.reasoningStrategy ?? spec.capabilities.reasoningStrategy,
       reasoningOff: caps.reasoningOff ?? spec.capabilities.reasoningOff,
+      reasoningLevels: caps.reasoningLevels ?? spec.capabilities.reasoningLevels,
       cache: resolveCacheCapability(spec, entry.cache),
     };
   }
@@ -269,11 +270,7 @@ export function presetOf(type: string): { label: string; baseUrl: string } | und
  */
 export function activeProviderEndpoint(
   config?: Pick<ProviderConfig, "entries" | "active" | "type" | "baseUrl" | "apiKey">,
-): {
-  baseUrl: string;
-  apiKey?: string;
-  type: string;
-} {
+): { baseUrl: string; apiKey?: string; type: string } {
   const entries = Array.isArray(config?.entries) ? config.entries : [];
   const active =
     entries.find((e) => e.label === config?.active || e.type === config?.active) ?? entries[0];

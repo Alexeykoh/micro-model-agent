@@ -24,6 +24,32 @@ export interface ReasoningView {
   supported: boolean | null;
   /** Текущий `config.reasoning.mode` (дефолт `"auto"`). */
   mode: string;
+  /** Уровни, реально доступные у провайдера+модели (INV-R7); null = не объявлены. */
+  levels: string[] | null;
+}
+
+/** Канонические уровни харнесса в порядке возрастания (без auto/default). */
+const CANONICAL_ORDER = ["none", "low", "medium", "high", "max"];
+/** Нестандартные значения эндпоинта → канонический уровень харнесса. */
+const LEVEL_ALIASES: Record<string, string> = { xhigh: "high" };
+
+/**
+ * Список уровней для селектора: только то, что объявил эндпоинт (INV-R7).
+ * `none` показываем, когда выключение вообще выразимо (off-switch или тег/kwarg).
+ */
+function visibleLevels(
+  declared: string[] | undefined,
+  strategy: ReasoningStrategy,
+  reasoningOff: boolean,
+): string[] | null {
+  if (declared === undefined) return null;
+  const canOff = reasoningOff || strategy === "prompt-tag" || strategy === "template-kwarg";
+  const offered = new Set<string>();
+  if (canOff) offered.add("none");
+  for (const value of declared) offered.add(LEVEL_ALIASES[value] ?? value);
+  // Пустой массив — declared but no granular effort levels (LM Studio off/on).
+  if (offered.size === 0) return canOff ? ["none"] : [];
+  return CANONICAL_ORDER.filter((lvl) => offered.has(lvl));
 }
 
 /**
@@ -51,5 +77,10 @@ export function buildReasoningView(config: AppConfig): ReasoningView {
     reasoningOff,
     supported: cached === undefined ? null : cached,
     mode: config.reasoning?.mode ?? "auto",
+    levels: visibleLevels(
+      remembered?.levels ?? preset.reasoningLevels,
+      strategy,
+      reasoningOff,
+    ),
   };
 }

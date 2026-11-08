@@ -12,6 +12,7 @@ async function captureBody(
   reasoningEffort: string | undefined,
   reasoningStrategy: ReasoningStrategy,
   reasoningOff = false,
+  reasoningLevels?: string[],
 ): Promise<Record<string, unknown>> {
   // Стратегия — свойство ЭКЗЕМПЛЯРА (INV-R1), а не опция вызова.
   const provider = new OpenAICompatProvider({
@@ -19,6 +20,7 @@ async function captureBody(
     baseUrl: "https://opencode.ai/zen/go/v1",
     reasoningStrategy,
     reasoningOff,
+    reasoningLevels,
   });
 
   let body: Record<string, unknown> = {};
@@ -83,6 +85,25 @@ describe("reasoning_effort normalization", () => {
     const body = await captureBody("none", "prompt-tag");
     const messages = body.messages as Array<{ content: string }>;
     expect(String(messages.at(-1)?.content)).toContain("/no_think");
+  });
+
+  it("projects 'high'/'max' onto declared levels (INV-R7)", async () => {
+    const levels = ["low", "medium", "xhigh"];
+    expect((await captureBody("high", "openai-effort", true, levels)).reasoning_effort).toBe(
+      "xhigh",
+    );
+    expect((await captureBody("max", "openai-effort", true, levels)).reasoning_effort).toBe(
+      "xhigh",
+    );
+    expect((await captureBody("medium", "openai-effort", true, levels)).reasoning_effort).toBe(
+      "medium",
+    );
+  });
+
+  it("drops the field when the endpoint declared no granular levels (LM Studio off/on)", async () => {
+    // allowed_options = [off, on] → уровней усилий нет; low не проецируется.
+    const body = await captureBody("low", "openai-effort", true, []);
+    expect(body.reasoning_effort).toBeUndefined();
   });
 
   it("template-kwarg toggles enable_thinking", async () => {

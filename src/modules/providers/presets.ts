@@ -24,6 +24,7 @@ function openaiCompat(opts: ProviderOptions) {
     cache: opts.capabilities?.cache,
     reasoningStrategy: opts.capabilities?.reasoningStrategy,
     reasoningOff: opts.capabilities?.reasoningOff,
+    reasoningLevels: opts.capabilities?.reasoningLevels,
     logger: opts.logger,
   });
 }

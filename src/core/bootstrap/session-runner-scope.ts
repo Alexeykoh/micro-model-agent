@@ -158,6 +158,7 @@ export function buildRunnerToolCtx(input: RunnerToolCtxInput): {
       const entry = subagentLogEntry(event);
       if (entry) sessionManager.appendLog(entry);
     },
+    capabilitiesProbeRef: input.capabilitiesProbeRef,
   } as ToolContext;
   Object.defineProperty(toolCtx, "config", {
     get: () => configRef.current,

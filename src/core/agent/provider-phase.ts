@@ -85,6 +85,7 @@ export async function reconfigure(
   const built = buildActiveProvider(config, deps.logger, {
     getSessionId: () => deps.sessionManager?.getActiveMeta()?.id,
     onDiagnostic: deps.onDiagnostic,
+    probeCapabilities: () => deps.capabilitiesProbeRef?.probe,
   });
   const newProvider = built.provider;
   deps.llmProvider = newProvider;
@@ -193,7 +194,7 @@ function applyReasoningStrategy(host: ProviderPhaseHost, provider: AppConfig["pr
   const cfg = host.deps.config;
   const strategy: ReasoningStrategy = reasoningStrategyForProvider(
     provider,
-    undefined,
+    host.deps.capabilitiesProbeRef?.probe,
     cfg.modelCapabilities?.[cfg.model],
   );
   host.deps.reasoningStrategy = strategy;

@@ -78,6 +78,12 @@ export interface AgentDeps {
   reasoningProbe?: () => Promise<boolean>;
   /** Стратегия выражения reasoning effort на этом провайдере. */
   reasoningStrategy?: import("../../config/types").ReasoningStrategy;
+  /**
+   * Живая проба возможностей (INV-R2): пересборка провайдера при `reconfigure`
+   * и смене модели обязана видеть те же discovery-данные, что и bootstrap,
+   * иначе экземпляр откатывается к пресету и молча теряет `reasoning_effort`.
+   */
+  capabilitiesProbeRef?: { probe?: import("../../config/types").ModelCapabilities };
   /** Каталог конфига — для хинта «подними окно контекста» в варнингах. */
   configDir?: string;
   /**

@@ -4,6 +4,8 @@
 export interface ReasoningStatusInfo {
   strategy?: string;
   supported?: boolean | null;
+  /** Уровни, объявленные провайдером (INV-R7); null/undefined = не объявлены. */
+  levels?: string[] | null;
 }
 
 export interface ReasoningStatus {
@@ -25,6 +27,13 @@ const REASONING_LEVELS_COARSE = ["auto", "default", "none", "low", "high"];
 export function reasoningStatus(info: ReasoningStatusInfo): ReasoningStatus {
   return {
     noteKey: info.supported === false ? "reasoning.probe_failed" : null,
-    levels: info.strategy === "openai-effort" ? REASONING_LEVELS_FULL : REASONING_LEVELS_COARSE,
+    // Объявленные эндпоинтом уровни — единственный источник списка (INV-R7);
+    // без объявления — прежняя эвристика по механизму. Пустой массив — «уже есть
+    // off-switch, но усилий у бэкенда нет»: меню только auto/default/none.
+    levels: Array.isArray(info.levels)
+      ? ["auto", "default", ...(info.levels ?? [])]
+      : info.strategy === "openai-effort"
+        ? REASONING_LEVELS_FULL
+        : REASONING_LEVELS_COARSE,
   };
 }
