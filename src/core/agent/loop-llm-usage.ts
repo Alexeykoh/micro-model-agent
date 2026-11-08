@@ -33,8 +33,10 @@ export interface LlmUsageInput {
  */
 export function finalizeLlmUsage(inp: LlmUsageInput): number {
   const { state, slog, tokenTracker, contextManager, logger, model, baseline, stream } = inp;
-  // Совокупная длина ответа — метрики валидны, даже когда бэкенд опускает usage.
-  const answer = stream.textContent || stream.reasoningContent;
+  // Совокупная длина ответа: текст + reasoning. Отдельно reasoning важен для
+  // т/с: раньше text || reasoning терял размышления, когда был ответ, и
+  // estimate скорости занижалась (провайдер без usage — LM Studio/llama.cpp).
+  const answer = stream.textContent + stream.reasoningContent;
   tokenTracker.addCompletionChars(state, answer.length);
   const llmDuration = tokenTracker.finishCall(
     state,

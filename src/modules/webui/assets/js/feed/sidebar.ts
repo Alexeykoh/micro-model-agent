@@ -162,6 +162,7 @@ export function renderUsage(h: Dict): void {
   const cfg = settings.config || {};
   const sig = JSON.stringify([
     h.sessionId, h.model, h.contextUsed, h.contextLimit, h.contextWindow, h.cacheHitRate, h.costUsd,
+    h.promptTokensTotal, h.completionTokensTotal, h.cachedTokensTotal,
     h.compactionCount, h.contextQuality, h.contextQualityBreakdown, h.contextProbe, h.contextBreakdown, cfg.model, cfg.contextWindow,
     I18N.locale,
   ]);
@@ -185,6 +186,23 @@ export function renderUsage(h: Dict): void {
     usageEl.appendChild(contextSegBar(h, used, limit));
     usageEl.appendChild(contextLegend(h));
   }
+  // Накопленные токены сессии (входящие/исходящие/кэшированные). Персистятся
+  // на сервере (web-usage.json), переживают reload/restart; здесь только вид.
+  usageEl.appendChild(usageRow(
+    t("web.usage.tokens_in"),
+    typeof h.promptTokensTotal === "number" ? fmtTokens(h.promptTokensTotal) : "—",
+    typeof h.promptTokensTotal === "number" ? "" : "dim",
+  ));
+  usageEl.appendChild(usageRow(
+    t("web.usage.tokens_out"),
+    typeof h.completionTokensTotal === "number" ? fmtTokens(h.completionTokensTotal) : "—",
+    typeof h.completionTokensTotal === "number" ? "" : "dim",
+  ));
+  usageEl.appendChild(usageRow(
+    t("web.usage.tokens_cached"),
+    typeof h.cachedTokensTotal === "number" ? fmtTokens(h.cachedTokensTotal) : "—",
+    typeof h.cachedTokensTotal === "number" ? "" : "dim",
+  ));
   // Перегрузка окна: процент обрезан на 100 %, поэтому показываем явно.
   if (h.contextBreakdown && h.contextBreakdown.overcommitted) {
     usageEl.appendChild(usageRow(t("web.usage.context_overcommitted"), "⚠", "wn"));

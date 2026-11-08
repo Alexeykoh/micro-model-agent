@@ -10,7 +10,7 @@ export const SPEED_WINDOW_MS = 1500;
 /** A gap this long means the model stopped writing: drop the window. */
 export const SPEED_PAUSE_MS = 1500;
 /** Fallback token estimate when the provider does not report usage. */
-const CHARS_PER_TOKEN = 4;
+export const CHARS_PER_TOKEN = 4;
 
 interface Sample {
   at: number;
@@ -78,6 +78,14 @@ export function speedView(id: string | null | undefined, now = Date.now()): Spee
   const span = Math.max(now - e.samples[0].at, 250);
   const value = chars / CHARS_PER_TOKEN / (span / 1000);
   return value > 0 ? { value, estimated: true } : null;
+}
+
+/** tok/s for a reasoning block from its accumulated streamed chars. */
+export function thinkRate(chars: number, elapsedMs: number): number | null {
+  if (!chars || chars <= 0 || elapsedMs <= 0) return null;
+  const span = Math.max(elapsedMs, 250);
+  const value = chars / CHARS_PER_TOKEN / (span / 1000);
+  return value > 0 ? value : null;
 }
 
 /** One formatter for the rail and the final chip. */

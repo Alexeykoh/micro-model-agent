@@ -16,6 +16,8 @@ import {
 } from "./core.js";
 import { clearBusy, flushRun, showBusy } from "./busy.js";
 import { buildRetractBlock } from "./retract-block.js";
+import type { ThinkState } from "../core/store/types.js";
+import { speedText, thinkRate } from "../speed.js";
 
 // Text chunks arrive in bursts (several SSE `text` events per frame); writing
 // and scrolling on every one thrashes layout and stacks overlapping `tkIn`
@@ -83,16 +85,38 @@ export function onText(chunk: string, sid?: string): void {
   scheduleText(feed);
 }
 
+/** Header text for a think block: duration + estimated tok/s when computable. */
+export function thinkDurText(chars: number, startedAt: number, now = Date.now()): string {
+  const sec = ((now - startedAt) / 1000).toFixed(1);
+  const rate = thinkRate(chars, now - startedAt);
+  return rate != null ? `· ${sec}s · ${speedText(rate, true)}` : `· ${sec}s`;
+}
+
+function updateThinkHeader(feed: HTMLElement): void {
+  const st = streamStateFor(feed);
+  if (!st.curThink) return;
+  if (!st.curThink.wrap.isConnected) {
+    if (st.curThink.timer) {
+      clearInterval(st.curThink.timer);
+      st.curThink.timer = undefined;
+    }
+    return;
+  }
+  const dur = st.curThink.head.querySelector(".dur");
+  if (dur) dur.textContent = thinkDurText(st.curThink.chars ?? 0, st.curThink.startedAt, Date.now());
+}
+
 export function finishThink(feed?: HTMLElement | null): void {
   if (!feed) return;
   const st = streamStateFor(feed);
   if (st.curThink) {
-    if (st.curThink.wrap) st.curThink.wrap.classList.remove("live");
-    if (st.curThink.startedAt) {
-      const dur = st.curThink.head.querySelector(".dur");
-      if (dur)
-        dur.textContent = "· " + ((Date.now() - st.curThink.startedAt) / 1000).toFixed(1) + "s";
+    if (st.curThink.timer) {
+      clearInterval(st.curThink.timer);
+      st.curThink.timer = undefined;
     }
+    if (st.curThink.wrap) st.curThink.wrap.classList.remove("live");
+    const dur = st.curThink.head.querySelector(".dur");
+    if (dur) dur.textContent = thinkDurText(st.curThink.chars ?? 0, st.curThink.startedAt, Date.now());
   }
   st.curThink = null;
 }
@@ -112,9 +136,18 @@ export function onReasoning(
     flushRun(feed);
     const { wrap, head, body } = buildThinkBlock(true, undefined, info);
     appendTo(feed, wrap);
-    st.curThink = { wrap, head, body, startedAt: Date.now() };
+    const think: ThinkState = { wrap, head, body, startedAt: Date.now(), chars: 0, timer: undefined };
+    st.curThink = think;
+    // Live tick: пока модель думает, заголовок показывает растущие секунды и
+    // оценку т/с (пользователь видит, что процесс идёт).
+    think.timer = setInterval(() => updateThinkHeader(feed), 250);
   }
-  st.curThink.body.textContent += chunk;
+  const think = st.curThink;
+  if (think) {
+    think.chars = (think.chars ?? 0) + chunk.length;
+    think.body.textContent += chunk;
+  }
+  updateThinkHeader(feed);
   if (feed === activeFeed()) scroll();
 }
 

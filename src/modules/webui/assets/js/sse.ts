@@ -159,6 +159,13 @@ export function connectSSE(deps: SseDeps): void {
       else railEvent(ev, d.name);
     });
   }
+  // Live tok/s в рельсе: reasoning — тоже генерация, иначе во время фазы
+  // размышлений скорость пуста (до первого text). Счётчик событий рельса тут
+  // не трогаем — только скорость.
+  es.addEventListener("reasoning", (e) => {
+    const d = parse(e);
+    if (d) speedChunk(d.sessionId, d.chunk || "");
+  });
   // Composer face (MMART): one persistent mascot that reflects the live state
   // (`sse-face.ts`, чтобы этот файл оставался ≤300 строк).
   attachFaceSse(es, {
