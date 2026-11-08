@@ -883,6 +883,28 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .queue-item .qi-pos { color: var(--dim-b); flex: none; }
 .queue-item .qi-dim { color: var(--dim-a); }
 
+/* Queue edit popup (`session/queue-edit.ts`, UX spec 2026-11-07): textarea in the
+   composer field language, actions via .btn/.btn.primary, error in the error
+   role, counter via .inp-meta, dim attachments note. */
+.queue-edit { display: flex; flex-direction: column; gap: 10px; }
+.queue-edit .qe-text {
+  /* 8 visible lines: 8 × 1.5 line-height = 12em at the field's 13.5px font. */
+  width: 100%; padding: 12px 14px; resize: vertical; min-height: 12em;
+  background: var(--inp-bg); border: 1px solid var(--inp-border); border-radius: 6px;
+  color: var(--fg); font: inherit; font-size: 13.5px; line-height: 1.5; outline: none;
+}
+.queue-edit .qe-text:focus { border-color: var(--inp-focus); box-shadow: 0 0 0 2px var(--input-shadow); }
+.queue-edit .qe-text::placeholder { color: var(--dim-a); }
+.queue-edit .inp-meta { margin-top: 0; padding: 0; }
+.queue-edit .qe-count { color: var(--dim-b); font-size: 11.5px; }
+.queue-edit .qe-count.warn { color: var(--yellow); }
+.queue-edit .qe-imgs { font-size: 11px; color: var(--dim-a); }
+.queue-edit .qe-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.queue-edit .qe-actions .btn { padding: 5px 14px; border: 1px solid var(--border); border-radius: 6px; background: none; }
+.queue-edit .qe-actions .btn.primary { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.queue-edit .qe-err { color: var(--red-strong); font-size: 12px; }
+.queue-item .qi-dim { color: var(--dim-a); }
+
 /* Queue edit popup (`session/queue-edit.ts`, UX spec docs/specs/2026-11-07-…):
    textarea in the composer field language, actions via .btn/.btn.primary,
    error in the error role, counter via .inp-meta. */
