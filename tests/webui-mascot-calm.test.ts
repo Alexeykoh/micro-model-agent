@@ -13,6 +13,10 @@ describe("calm boot mascot", () => {
     expect(STATE_CFG.boot.fx.some((f) => f.type === "orbit")).toBe(false);
   });
 
+  it("has no corner brackets on load (stray marks at the splash edges)", () => {
+    expect(STATE_CFG.load.fx.some((f) => f.type === "corners")).toBe(false);
+  });
+
   it("has no dashed ring/spin on the boot state", () => {
     expect(css).not.toContain("mdlSpin");
     expect(css).not.toMatch(/\.mdl\.st-boot \{[^}]*border-radius: 50%/);
