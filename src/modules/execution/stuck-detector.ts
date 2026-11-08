@@ -148,6 +148,7 @@ export class StuckDetector extends StuckTracker {
     this.lastFailedTool = "";
     this.lastErrorOutput = "";
     this.recentToolCalls = [];
+    this.readOnlyStreak = 0;
     this.fileRewriteCount.clear();
     this.escalationCount = 0;
     this.observations.reset();

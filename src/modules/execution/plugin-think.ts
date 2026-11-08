@@ -94,7 +94,8 @@ export function runBeforeThink(deps: ExecutionPluginDeps, ctx: any): void {
     deps.stuckDetector.isStuck() ||
     deps.stuckDetector.hasRepetitiveToolCalls() ||
     deps.stuckDetector.hasBashFlailing() ||
-    deps.stuckDetector.hasConsecutiveFailures()
+    deps.stuckDetector.hasConsecutiveFailures() ||
+    deps.stuckDetector.hasReadOnlyStreak()
   ) {
     const currentIter = typeof ctx.iteration === "number" ? ctx.iteration : 0;
     // Кулдаун recovery — внутри хода: прошлый ход на 30 итераций не должен

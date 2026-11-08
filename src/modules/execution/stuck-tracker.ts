@@ -14,6 +14,19 @@ import { StuckObservations } from "./stuck-observations";
 /** Окно исходов (ok/fail) для оценки «пошли фейлы» (§1.3 аудита). */
 const RECENT_OUTCOMES_WINDOW = 6;
 
+/** Тулы разведки: не меняют ФС и не выполняют код. */
+export const READ_ONLY_TOOLS = new Set([
+  "read_file", "list_dir", "glob", "grep", "file_info", "project_map", "chunk_query",
+  "web_search", "web_browse", "web_fetch", "recall", "process_list", "process_log",
+]);
+
+/**
+ * Порог read-only стриков: столько чтений/поисков подряд без единой правки,
+ * выполнения или вопроса — мягкая директива «правь или спроси». Выше
+ * документированной легитимной разведки (12 файлов в analytic-шаге).
+ */
+export const READ_ONLY_STREAK_THRESHOLD = 16;
+
 /** Детектор застревания: счётчики итераций, ошибок, повторов, петель, эскалаций. */
 export class StuckTracker {
   threshold: number;
@@ -38,6 +51,8 @@ export class StuckTracker {
   readonly escalationThreshold = 3;
   fileRewriteCount: Map<string, number> = new Map();
   readonly fileRewriteThreshold = 3;
+  /** Подряд read-only вызовов без правки/выполнения/вопроса (ses_mw7z4mav). */
+  readOnlyStreak = 0;
   readonly observations: StuckObservations;
 
   constructor(threshold = 6, errorThreshold = 3, webSearchThreshold = 5) {
@@ -54,13 +69,25 @@ export class StuckTracker {
     }
   }
 
-  /** Отмечает вызов тула (для детекции повторов). */
+  /** Отмечает вызов тула (для детекции повторов и read-only стриков). */
   recordToolCall(name: string, args: Record<string, unknown>): void {
     const argsKey = canonicalArgsKey(name, args);
     this.recentToolCalls.push({ name, argsKey });
     if (this.recentToolCalls.length > this.maxRecentCalls) {
       this.recentToolCalls.shift();
     }
+    if (READ_ONLY_TOOLS.has(name)) this.readOnlyStreak++;
+    else this.readOnlyStreak = 0;
+  }
+
+  /** True, если чтений/поисков подряд набралось на порог. */
+  hasReadOnlyStreak(): boolean {
+    return this.readOnlyStreak >= READ_ONLY_STREAK_THRESHOLD;
+  }
+
+  /** Число подряд read-only вызовов. */
+  getReadOnlyStreak(): number {
+    return this.readOnlyStreak;
   }
 
   /** Отмечает ошибку тула (счётчики + сигнатура для автопоиска). */
@@ -254,6 +281,7 @@ export class StuckTracker {
     this.lastFailedTool = "";
     this.lastErrorOutput = "";
     this.recentToolCalls = [];
+    this.readOnlyStreak = 0;
     this.fileRewriteCount.clear();
     this.observations.reset();
     // escalationCount храним — иначе агент "геймит" детекцию, маркируя шаг

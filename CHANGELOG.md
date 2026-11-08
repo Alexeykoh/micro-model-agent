@@ -14,6 +14,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `done` не закрывает. Создание с нуля считается изменением, легаси-план без
   снапшота блокируется с требованием `re-plan`. Спека:
   `docs/specs/2026-11-08-plan-file-modified-check-design.md`.
+- **Read-only стрик-гард: 16 чтений подряд без правки.** `StuckDetector` считает
+  серию read-only вызовов (`read_file`/`grep`/`glob`/…) без единой правки,
+  запуска или вопроса; на пороге 16 инжектится мягкая recovery-директива
+  «редактируй файл или задай вопрос». Раньше успешные чтения гасили stuck-счётчик,
+  и петля разведки была невидима (сессия `ses_mw7z4mav`). Спека:
+  `docs/specs/2026-11-08-read-only-streak-guard-design.md`.
 
 ## [0.24.5] - 2026-11-08
 

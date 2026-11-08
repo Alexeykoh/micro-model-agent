@@ -326,11 +326,11 @@ describe("StuckDetector", () => {
     expect(detector.getStuckReason()).toContain("process_wait");
   });
 
-  it("no longer reports a read-only loop (removed in favour of repetition)", () => {
+  it("reports a read-only streak after 16 reads (ses_mw7z4mav guard)", () => {
     const d = new StuckDetector(6, 3, 5);
     for (let i = 0; i < 20; i++) d.recordToolCall("read_file", { path: `f${i}.ts` });
-    expect(d.getStuckReason()).toBe("");
-    expect(d.classifyFailure(20)).toBeNull();
+    expect(d.getStuckReason()).not.toBe("");
+    expect(d.classifyFailure(20)).not.toBeNull();
   });
 });
 

@@ -26,7 +26,8 @@ export type FailureType =
   | "timeout" // no progress across N iterations on the current step
   | "repeat" // identical tool call (same args) repeated
   | "error_loop" // one tool, or consecutive calls, failing repeatedly
-  | "bash_flailing"; // rotating failing shell commands
+  | "bash_flailing" // rotating failing shell commands
+  | "read_only_streak"; // many successful reads/searches with no edit or run
 
 /** Классификация фейла: тип, тул, счётчик, итерация (0 — неизвестна). */
 export interface FailureClassification {

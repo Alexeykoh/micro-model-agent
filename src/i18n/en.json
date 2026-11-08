@@ -1023,6 +1023,8 @@
   "skill.prompt_fallback": "If load_skill fails because a skill is too large, continue the task without it — do not stop.",
   "skill.loaded_content": "[Skill loaded: {name}]\n{content}\n\nUse this knowledge to answer the user's question.",
   "exec.stuck": "No progress on step {stepId} ({description}) for {iterations} iterations.",
+  "exec.read_only_streak": "{count} read-only tool calls in a row (reads/searches) with no edit, run, or question in between.",
+  "exec.read_only_streak_recovery": "You have made {count} read-only tool calls in a row without editing any file, running anything, or asking the user. Reading more will not move the task forward — edit the file now (write_file/edit_file), or ask the user a short clarifying question if the edit target is still unclear. Do not call read/search tools again until you have changed something or asked.",
   "exec.stuck_recovery": "Step {stepId} — \"{description}\" — has had no progress for {iterations} iterations. Try a different approach: review what this step needs, check if dependencies are installed, or create files directly via write_file instead of shell commands. After completing the step call plan_step step={stepId} status=done.",
   "exec.tool_errors": "Tool {tool} failed {count} times. Consider using a different tool.",
   "exec.tool_errors_recovery": "Tool {tool} has failed {count} times in a row. Try an alternative: create files directly via write_file, use a different command, or if nothing works — skip this step via plan_step step=N status=skipped with a note explaining why.",
