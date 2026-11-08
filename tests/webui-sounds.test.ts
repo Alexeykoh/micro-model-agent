@@ -33,6 +33,7 @@ describe("webui sounds: prefs", () => {
       done: false,
       question: true,
       failed: true,
+      volume: 50,
     });
   });
 });

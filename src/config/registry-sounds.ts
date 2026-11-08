@@ -23,10 +23,29 @@ function soundDef(key: SoundKey): ConfigKeyDef {
   };
 }
 
-/** Четыре ключа звука: мастер + события (INV-S5). */
+function volumeDef(): ConfigKeyDef {
+  return {
+    key: "ui.sounds.volume",
+    aliases: [],
+    domain: "ui",
+    valueType: "int",
+    min: 0,
+    max: 100,
+    step: 5,
+    effects: [],
+    get: (c: AppConfig) => c.ui.sounds?.volume ?? DEFAULTS.ui.sounds?.volume ?? 50,
+    set: (c: AppConfig, v: unknown) => {
+      c.ui.sounds ??= structuredClone(DEFAULTS.ui.sounds!);
+      c.ui.sounds.volume = Number(v);
+    },
+  };
+}
+
+/** Ключи звука: мастер + события + громкость. */
 export const SOUND_DEFS: ConfigKeyDef[] = [
   soundDef("enabled"),
   soundDef("done"),
   soundDef("question"),
   soundDef("failed"),
+  volumeDef(),
 ];

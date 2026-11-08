@@ -156,7 +156,7 @@ export interface UiConfig {
   /** Режим оформления веб-UI: `dark` | `light` | системный `auto`. */
   themeMode?: ThemeMode;
   /** Звуки веб-UI: мастер и флаги событий (spec 2026-10-31-webui-sounds). */
-  sounds?: { enabled?: boolean; done?: boolean; question?: boolean; failed?: boolean };
+  sounds?: { enabled?: boolean; done?: boolean; question?: boolean; failed?: boolean; volume?: number };
 }
 
 /** Мастер-выключатель веб-поиска: при false web_search отвечает "disabled". */

@@ -4,6 +4,7 @@
 // `checkboxes`/`table`) live in `./editors.js`. Never uses innerHTML — all user
 // or config data goes through `textContent` (XSS rule).
 import { el, makeToggle } from "../dom.js";
+import { playCue } from "../sounds.js";
 import type { Dict } from "../core/store/types.js";
 import { tagsEditor, checkboxEditor, tableEditor } from "./editors.js";
 
@@ -99,6 +100,26 @@ export function controlFor(def: Dict, value: unknown, ctx: Dict): HTMLElement {
     });
     sel.addEventListener("change", () => ctx.post(sel.value));
     return sel;
+  }
+  if (def.key === "ui.sounds.volume") {
+    const wrap = el("div", "volume-ctl");
+    const minus = el("button", "btn volume-btn", "-");
+    const input = textInput(ctx.label, value == null ? "50%" : String(value) + "%");
+    input.type = "text";
+    input.readOnly = true;
+    const plus = el("button", "btn volume-btn", "+");
+    const postVal = (n: number): void => {
+      const clamped = Math.max(0, Math.min(100, Math.round(n / 10) * 10));
+      input.value = clamped + "%";
+      ctx.post(clamped);
+      try { playCue("done", clamped); } catch { /* ignore */ }
+    };
+    minus.addEventListener("click", () => postVal(Number(String(input.value).replace("%", "")) - 10));
+    plus.addEventListener("click", () => postVal(Number(String(input.value).replace("%", "")) + 10));
+    wrap.appendChild(minus);
+    wrap.appendChild(input);
+    wrap.appendChild(plus);
+    return wrap;
   }
   if (def.valueType === "int") {
     const input = textInput(ctx.label, value == null ? "" : String(value));
@@ -218,7 +239,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   ],
   ui: [
     { id: "ui.chat", titleKey: "web.settings.sec.ui.chat", descKey: "web.settings.sec.ui.chat.desc", keys: ["ui.fontSize", "ui.activityRail", "ui.spinner", "ui.showContextStats", "ui.showCompaction"] },
-    { id: "ui.sounds", titleKey: "web.settings.sec.ui.sounds", descKey: "web.settings.sec.ui.sounds.desc", keys: ["ui.sounds.enabled", "ui.sounds.done", "ui.sounds.question", "ui.sounds.failed"] },
+    { id: "ui.sounds", titleKey: "web.settings.sec.ui.sounds", descKey: "web.settings.sec.ui.sounds.desc", keys: ["ui.sounds.enabled", "ui.sounds.done", "ui.sounds.question", "ui.sounds.failed", "ui.sounds.volume"] },
     { id: "ui.images", titleKey: "web.settings.sec.ui.images", descKey: "web.settings.sec.ui.images.desc", keys: ["images.maxCount", "images.maxBytes"] },
   ],
   security: [
