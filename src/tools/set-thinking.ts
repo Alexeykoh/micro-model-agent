@@ -4,7 +4,7 @@ import type { ReasoningLevel, ReasoningConfig } from "../config/types";
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
 
 /** Допустимые уровни reasoning. */
-const VALID_LEVELS: ReasoningLevel[] = ["default", "none", "low", "medium", "high", "max"];
+const VALID_LEVELS: ReasoningLevel[] = ["default", "none", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 /** Состояние reasoning: уровень, итерация оверрайда, ручной флаг. */
 export interface ReasoningState {
@@ -40,7 +40,7 @@ export function createSetThinkingTool(
       properties: {
         level: {
           type: "string",
-          enum: ["none", "low", "high", "max"],
+          enum: ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
           description: "Reasoning effort level to set",
         },
         reason: {
@@ -76,7 +76,7 @@ export function createSetThinkingTool(
 
       // Кламп в настроенные границы.
       let level = requested as ReasoningLevel;
-      const levelOrder: ReasoningLevel[] = ["none", "low", "medium", "high", "max"];
+      const levelOrder: ReasoningLevel[] = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
       const minIdx = levelOrder.indexOf(config.min);
       const maxIdx = levelOrder.indexOf(config.max);
       const reqIdx = levelOrder.indexOf(level);

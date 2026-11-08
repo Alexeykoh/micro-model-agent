@@ -19,7 +19,7 @@ const EFFORT_RANK: Record<string, number> = {
 };
 
 /** Ближайший поддерживаемый уровень: не ниже запрошенного, иначе высший. */
-function projectLevel(level: string, supported: string[]): string {
+export function projectLevel(level: string, supported: string[]): string {
   if (supported.includes(level)) return level;
   const alias = level === "max" ? "high" : level;
   if (supported.includes(alias)) return alias;

@@ -1,7 +1,7 @@
 // Типы reasoning: уровни усилия, стратегия провайдера и политика auto.
 
-/** Уровни reasoning-усилия, совместимые с opencode + OpenAI API. */
-export type ReasoningLevel = "default" | "none" | "low" | "medium" | "high" | "max";
+/** Уровни reasoning-усилия, совместимые с opencode + OpenAI API + llama.cpp chat_template_caps. */
+export type ReasoningLevel = "default" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 /**
  * Как провайдер выражает reasoning-усилие в запросе API.

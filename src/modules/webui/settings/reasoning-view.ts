@@ -28,14 +28,15 @@ export interface ReasoningView {
   levels: string[] | null;
 }
 
-/** Канонические уровни харнесса в порядке возрастания (без auto/default). */
-const CANONICAL_ORDER = ["none", "low", "medium", "high", "max"];
-/** Нестандартные значения эндпоинта → канонический уровень харнесса. */
-const LEVEL_ALIASES: Record<string, string> = { xhigh: "high" };
+/** Признанные имена усилий эндпоинтов (зеркало EFFORT_OPTION из provider-context). */
+const EFFORT_NAMES = new Set(["minimal", "low", "medium", "high", "xhigh", "max"]);
 
 /**
- * Список уровней для селектора: только то, что объявил эндпоинт (INV-R7).
- * `none` показываем, когда выключение вообще выразимо (off-switch или тег/kwarg).
+ * Список уровней для селектора: только то, что объявил эндпоинт (INV-R7),
+ * своими именами и в серверном порядке. `none` — выключатель (когда он
+ * вообще выразим: off-switch или тег/kwarg). Никаких канонических алиасов
+ * (`xhigh → high`): показываем ровно то, что отдаёт сервер. Не-усилия
+ * (`off`/`on` из LM Studio) усилий не несут — только выключатель.
  */
 function visibleLevels(
   declared: string[] | undefined,
@@ -44,12 +45,14 @@ function visibleLevels(
 ): string[] | null {
   if (declared === undefined) return null;
   const canOff = reasoningOff || strategy === "prompt-tag" || strategy === "template-kwarg";
-  const offered = new Set<string>();
-  if (canOff) offered.add("none");
-  for (const value of declared) offered.add(LEVEL_ALIASES[value] ?? value);
+  const offered: string[] = [];
+  if (canOff) offered.push("none");
+  for (const value of declared) {
+    if (EFFORT_NAMES.has(value) && !offered.includes(value)) offered.push(value);
+  }
   // Пустой массив — declared but no granular effort levels (LM Studio off/on).
-  if (offered.size === 0) return canOff ? ["none"] : [];
-  return CANONICAL_ORDER.filter((lvl) => offered.has(lvl));
+  if (offered.length === 0) return canOff ? ["none"] : [];
+  return offered;
 }
 
 /**

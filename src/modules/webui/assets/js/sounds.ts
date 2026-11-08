@@ -108,7 +108,7 @@ const TONES: Record<SoundCue, ReadonlyArray<readonly [number, number, number]>> 
   ],
 };
 
-const CUE_GAIN = 0.05;
+const CUE_GAIN = 0.12;
 
 let audio: AudioContext | null = null;
 let unlockArmed = false;
